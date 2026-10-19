@@ -955,6 +955,8 @@ dependencies = [
  "earcutr",
  "eframe",
  "glam",
+ "miniz_oxide 0.8.9",
+ "png",
  "rayon",
  "rfd",
 ]

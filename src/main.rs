@@ -6,6 +6,7 @@ mod csg;
 mod geom;
 mod model;
 mod render;
+mod rvt;
 mod scene;
 mod step;
 
@@ -17,10 +18,12 @@ fn main() {
     // Mode console : ifc_viewer --stats fichier.ifc
     if args.first().map(|s| s.as_str()) == Some("--stats") {
         let Some(path) = args.get(1) else {
-            eprintln!("Usage : ifc_viewer --stats <fichier.ifc>");
+            eprintln!("Usage : ifc_viewer --stats <fichier.ifc|.rvt|.rfa|.rte>");
             std::process::exit(2);
         };
-        std::process::exit(stats(PathBuf::from(path)));
+        let path = PathBuf::from(path);
+        let code = if rvt::is_revit_path(&path) { rvt_stats(&path) } else { stats(path) };
+        std::process::exit(code);
     }
 
     let path = args.first().map(PathBuf::from);
@@ -97,4 +100,53 @@ fn stats(path: PathBuf) -> i32 {
             1
         }
     }
+}
+
+fn rvt_stats(path: &std::path::Path) -> i32 {
+    let info = match rvt::load(path) {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("Erreur : {e}");
+            return 1;
+        }
+    };
+    println!("Fichier      : {}", info.file_name);
+    println!("Type         : {} Revit {}", info.kind, info.format().unwrap_or("?"));
+    println!("Taille       : {:.1} Mo", info.file_size as f64 / 1e6);
+    for (k, v) in &info.basic {
+        println!("  {:<34} {v}", rvt::basic_label(k));
+    }
+    if let Some(t) = &info.title {
+        println!("Titre        : {t}");
+    }
+    if let Some(c) = &info.category {
+        println!("Catégorie    : {c}");
+    }
+    for g in info.groups.iter().chain(&info.family_types) {
+        println!("[{}]", g.title);
+        for p in &g.params {
+            println!("  {:<34} {}{}", p.name, p.value, p.units.as_deref().map(|u| format!(" {u}")).unwrap_or_default());
+        }
+    }
+    if !info.external_refs.is_empty() {
+        println!("Références externes :");
+        for r in &info.external_refs {
+            println!("  {:<24} {}  ({})", r.kind, r.path, r.load_state);
+        }
+    }
+    let preview = match info.preview_png.as_deref() {
+        None => "absente".to_string(),
+        Some(p) => match rvt::decode_png_rgba(p) {
+            Some((w, h, _)) => format!("PNG {w} x {h} px ({} octets)", p.len()),
+            None => format!("PNG illisible ({} octets)", p.len()),
+        },
+    };
+    println!("Vignette     : {preview}");
+    let n = info.streams.iter().filter(|s| !s.1).count();
+    println!("Flux OLE     : {n}");
+    for w in &info.warnings {
+        println!("Avertissement : {w}");
+    }
+    println!("Géométrie    : non lisible (format propriétaire) — exporter en IFC depuis Revit");
+    0
 }
