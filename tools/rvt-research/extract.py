@@ -3,9 +3,12 @@
 Usage : python -I extract.py <fichier.rvt|.rfa|.rte> <dossier_sortie> [--quiet]
 
 Pour chaque flux : copie brute (<flux>.raw) et, s'il contient des membres gzip,
-leur concaténation décompressée (<flux>.bin). Chaque membre est décodé en deflate
-brut (sans contrôle zlib) puis comparé au CRC32 et à ISIZE de son trailer gzip.
-Un membre « KO » a été décodé, mais son contenu ne correspond pas au trailer.
+leur concaténation décompressée (<flux>.bin). Avant décompression, les blocs de
+353 octets que Revit intercale tous les 64 896 octets de données sont retirés
+(voir unpad). Chaque membre est décodé en deflate brut puis comparé au CRC32 et
+à ISIZE de son trailer gzip. Un membre « KO » ne correspond pas à son trailer.
+
+--brut : ne retire pas les blocs intercalés (comportement d'avant le 20/10/2026).
 """
 import os, re, struct, sys, zlib
 
@@ -13,6 +16,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from cfb import CFB
 
 GZIP = re.compile(rb'\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x0b')
+DATA, PAD = 64896, 353
+
+
+def unpad(b):
+    """Retire les blocs intercalés : le flux est une suite de tranches de 65 249
+    octets, 64 896 de données puis 353 d'un bloc commençant par 00 x0."""
+    return b''.join(b[i:i + DATA] for i in range(0, len(b), DATA + PAD))
 
 
 def members(b):
@@ -35,6 +45,7 @@ def members(b):
 def main():
     src, dst = sys.argv[1], sys.argv[2]
     quiet = '--quiet' in sys.argv
+    brut = '--brut' in sys.argv
     os.makedirs(dst, exist_ok=True)
     c = CFB(src)
     print('CFB v%d, secteur %d, mini-secteur %d, seuil %d' % (c.major, c.ss, c.mss, c.mini_cutoff))
@@ -44,7 +55,7 @@ def main():
         b = c.read(d)
         name = path.strip('/').replace('/', '_')
         open(os.path.join(dst, name + '.raw'), 'wb').write(b)
-        ms = members(b)
+        ms = members(b if brut else unpad(b))
         if not ms:
             print('%-34s %12d o  (pas de gzip)' % (path, len(b)))
             continue
