@@ -18,9 +18,10 @@ par Autodesk. Les points non vérifiés sont signalés comme tels. Méthode d'es
 | Champs des objets | **lus en entier** par un lecteur générique piloté par le schéma : 100 % des enregistrements sur les fichiers 2016, 2022, 2025, 2026 et 2027 essayés, hors données d'add-ins (§ 7) |
 | Murs | type, niveaux, ligne (droite ou arc), hauteur et décalages extraits ; identiques à Revit sur 75 murs de deux projets et deux essais (§ 7) |
 | Autres éléments | niveaux, types de murs (épaisseur), dalles, instances de familles (type, hôte, position, repère), pièces : identiques à Revit sur deux projets (§ 7) |
-| Géométrie calculée (`GElement`) | B-rep des murs lu et maillé (faces planes et cylindriques, trous) ; volume, aire et faces identiques à Revit sur 59 murs et 3 essais (§ 7) ; pas encore dans le viewer |
+| Géométrie calculée (`GElement`) | B-rep des murs lu et maillé (faces planes et cylindriques, trous) ; volume, aire et faces identiques à Revit sur 59 murs et 3 essais (§ 7) |
+| Viewer Rust | **murs affichés** à l'ouverture d'un `.rvt`, sans export IFC (`src/rvt/`, § 8) ; mêmes sommets et volumes que `geometrie.py` |
 
-Pour afficher la géométrie dans le viewer aujourd'hui : exporter en IFC depuis
+Le viewer n'affiche que les murs. Pour les autres éléments : exporter en IFC depuis
 Revit (testé avec RiveTT, IFC4 RV et IFC2x3 CV2, tous deux lus par le viewer).
 
 ## Fichiers étudiés
@@ -591,6 +592,25 @@ python -I tools/rvt-research/schema.py sortie/Formats_Latest.bin schema.json
 python -I tools/rvt-research/inflate_ref.py "fichier.rvt" Formats/Latest
 ```
 
+**Portage Rust** (viewer, 21/10/2026) : `src/rvt/objets.rs` (`extract.unpad`,
+`objets.sections`, `records`, `elem_table`), `schema.rs` (`ClassTable`), `champs.rs`
+(`Lecteur`), `geometrie.rs` (`maillage`, `controle`), `maquette.rs` (`champs.murs`,
+`elements.niveaux`, `elements.types_murs`, puis modèle IFC synthétique pour
+l'arborescence et les propriétés). Seuls les murs (`SWall`, `ArcWall`) sont lus.
+
+| Fichier | Format | Murs maillés par le viewer |
+|---|---|---|
+| E04, E09, E11 | 2026 | 1 / 1 chacun ; sommets, volume, aire, faces et triangles identiques à `geometrie.py` |
+| `Projet1.rvt` | 2026 | 59 / 59, identiques à `geometrie.py` (257,974 221 m³, 3 768 triangles) |
+| `Saint-cast-Le-Guildo.rvt` | 2025 | 16 / 16 |
+| `GABARIT JBA.rte` | 2016 | 12 / 12 |
+| `Essai projet 2027 astra.rvt` | 2027 | 39 / 39 |
+| `Saint-Malo_avenue aristide briand_46.rvt` | 2026 | 2 235 / 2 235, lecture en 2,3 s |
+| `Kerreutv9.rvt` | 2022 | 95 / 108 : 2 boucles discontinues et 11 `GElement` sans solide fermé, mêmes échecs que `geometrie.py` |
+
+Tests (`cargo test`) : E04 (volume, boîte) et `Projet1.rvt` (59 murs, volume total),
+sautés si les fichiers d'essai sont absents.
+
 ## 9. Pistes pour la suite
 
 1. **Autres éléments** : faits pour niveaux, types de murs, dalles, instances et
@@ -600,7 +620,9 @@ python -I tools/rvt-research/inflate_ref.py "fichier.rvt" Formats/Latest
 2. **Géométrie calculée** : décodée et validée pour les murs (§ 7). Suite :
    surfaces restantes (`SurfRev`, `RuledSurf`, `HermiteSurf`…), `GInstance` des
    instances de familles (géométrie du type et placement), comparaison des dalles
-   et pièces avec Revit, puis portage en Rust pour afficher un RVT sans export IFC.
+   et pièces avec Revit. Portage Rust fait pour les murs (§ 8) ; à étendre aux
+   dalles, pièces et instances au fur et à mesure de leur validation, puis couleurs
+   par matériau (`GFace.m_renderStyleId`, nom et couleur des `MaterialElem` à décoder).
 3. **Objets hors `ElemTable`** : confirmer qu'il s'agit du contenu des familles
    (`Global/ContentDocuments`, 40 Mo décompressés dans le projet 2027).
 4. **Inconnus restants** : u32 des enregistrements 0x66, `ElementHeader`, octets de
