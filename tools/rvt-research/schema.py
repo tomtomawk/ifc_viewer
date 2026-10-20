@@ -2,9 +2,9 @@
 
 Usage : python -I schema.py <Formats_Latest.bin> [sortie.json]
 
-Le fichier .bin est produit par extract.py. L'analyse s'arrête au premier
-enregistrement incohérent : sur les fichiers testés, c'est l'endroit où la
-décompression diverge (voir docs/LISEZMOI-RVT.md).
+Le fichier .bin est produit par extract.py. La liste des classes se termine par
+un nom vide ; une erreur avant cette fin signale un enregistrement non compris.
+Lu en entier sur les formats 2016, 2026 et 2027.
 """
 import json, struct, sys
 
@@ -80,6 +80,8 @@ class Schema:
         s.u16()
         while s.o < len(s.b) - 4:
             start = s.o
+            if struct.unpack_from('<H', s.b, s.o)[0] == 0:  # nom vide : fin de la liste
+                break
             c = {'name': s.name16(), 'offset': start}
             s.body(c); c['extra'] = s.u16()
             s.top.append(c)
