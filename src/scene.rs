@@ -92,7 +92,7 @@ pub fn load(path: &Path, progress: &dyn Fn(String)) -> Result<Scene, String> {
     Ok(scene)
 }
 
-fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> Scene {
+pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> Scene {
     let mut gmin = DVec3::splat(f64::MAX);
     let mut gmax = DVec3::splat(f64::MIN);
     for g in &geoms {

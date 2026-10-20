@@ -17,7 +17,8 @@ use std::sync::{Arc, Mutex};
 enum LoadMsg {
     Progress(String),
     Done(Result<Box<Scene>, String>),
-    Revit(Result<Box<RvtInfo>, String>),
+    /// Métadonnées, puis scène des murs (ou raison de son absence).
+    Revit(Result<(Box<RvtInfo>, Result<Box<Scene>, String>), String>),
 }
 
 /// Classes masquées à l'ouverture.
@@ -39,8 +40,12 @@ pub struct ViewerApp {
     gl: Option<Arc<glow::Context>>,
     renderer: Arc<Mutex<Option<Renderer>>>,
     scene: Option<Scene>,
-    /// Fichier Revit affiché (métadonnées seules) à la place de la vue 3D.
+    /// Métadonnées du fichier Revit ouvert.
     rvt: Option<RvtInfo>,
+    /// Fiche Revit affichée à la place de la vue 3D.
+    rvt_sheet: bool,
+    /// Lecture des murs du fichier Revit : résumé si la scène en vient, sinon raison de l'échec.
+    rvt_geom: Result<String, String>,
     rvt_preview: Option<egui::TextureHandle>,
     loading: Option<Receiver<LoadMsg>>,
     status: String,
@@ -79,6 +84,8 @@ impl ViewerApp {
             renderer: Arc::new(Mutex::new(renderer)),
             scene: None,
             rvt: None,
+            rvt_sheet: false,
+            rvt_geom: Err(String::new()),
             rvt_preview: None,
             loading: None,
             status: "Ouvrir un fichier IFC ou Revit (Ctrl+O), ou le glisser dans la fenêtre.".into(),
@@ -117,7 +124,13 @@ impl ViewerApp {
                 };
                 if is_revit_file(&path) {
                     progress(format!("Lecture des métadonnées Revit de {}…", path.display()));
-                    let _ = tx.send(LoadMsg::Revit(rvt::load(&path).map(Box::new)));
+                    let res = rvt::load(&path).map(|info| {
+                        let titre = info.title.clone().unwrap_or_else(|| info.file_name.clone());
+                        let format = info.format().unwrap_or("?").to_string();
+                        let scene = rvt::maquette::load_scene(&path, &titre, &format, &progress).map(Box::new);
+                        (Box::new(info), scene)
+                    });
+                    let _ = tx.send(LoadMsg::Revit(res));
                 } else {
                     let res = scene::load(&path, &progress).map(Box::new);
                     let _ = tx.send(LoadMsg::Done(res));
@@ -137,14 +150,28 @@ impl ViewerApp {
                     self.install_scene(*scene);
                     return;
                 }
-                LoadMsg::Revit(Ok(info)) => {
+                LoadMsg::Revit(Ok((info, scene))) => {
                     self.loading = None;
-                    self.status = format!(
-                        "{} — {} Revit {} — métadonnées seules, géométrie non lisible",
-                        info.file_name,
-                        info.kind,
-                        info.format().unwrap_or("?")
-                    );
+                    let head = format!("{} — {} Revit {}", info.file_name, info.kind, info.format().unwrap_or("?"));
+                    match scene {
+                        Ok(scene) => {
+                            let summary = format!(
+                                "{} murs, {} triangles, lus dans le fichier en {:.2} s",
+                                scene.objects.len(),
+                                scene.triangles,
+                                scene.load_ms as f64 / 1000.0
+                            );
+                            self.install_scene(*scene);
+                            self.status = format!("{head} — {summary} — autres éléments non lus");
+                            self.rvt_geom = Ok(summary);
+                            self.rvt_sheet = false;
+                        }
+                        Err(e) => {
+                            self.status = format!("{head} — métadonnées seules ({e})");
+                            self.rvt_geom = Err(e);
+                            self.rvt_sheet = true;
+                        }
+                    }
                     self.rvt_preview = None;
                     self.rvt = Some(*info);
                     return;
@@ -173,6 +200,7 @@ impl ViewerApp {
             scene.load_ms as f64 / 1000.0,
         );
         self.rvt = None;
+        self.rvt_sheet = false;
         self.rvt_preview = None;
         self.camera = Camera::default();
         self.camera.scene_radius = (scene.max - scene.min).length() * 0.5;
@@ -276,7 +304,7 @@ impl ViewerApp {
         if let Some(p) = rfd::FileDialog::new()
             .add_filter("IFC et Revit", &["ifc", "IFC", "rvt", "rfa", "rte", "rft"])
             .add_filter("IFC", &["ifc", "IFC"])
-            .add_filter("Revit (métadonnées)", &["rvt", "rfa", "rte", "rft"])
+            .add_filter("Revit (murs et métadonnées)", &["rvt", "rfa", "rte", "rft"])
             .pick_file()
         {
             self.open(p, ctx);
@@ -290,6 +318,9 @@ impl ViewerApp {
         ui.horizontal(|ui| {
             if ui.button("Ouvrir…").on_hover_text("Ctrl+O").clicked() {
                 self.open_dialog(&ctx);
+            }
+            if self.rvt.is_some() && self.rvt_geom.is_ok() {
+                ui.toggle_value(&mut self.rvt_sheet, "Fiche Revit").on_hover_text("Métadonnées du fichier Revit");
             }
             ui.separator();
             let has = self.scene.is_some();
@@ -695,12 +726,20 @@ impl ViewerApp {
                 .stroke(egui::Stroke::new(1.0, Color32::from_rgb(222, 196, 120)))
                 .inner_margin(8.0)
                 .corner_radius(4.0)
-                .show(ui, |ui| {
-                    ui.label(
-                        "Métadonnées seules : la géométrie d'un fichier Revit est stockée dans un format propriétaire \
-                         que le viewer ne lit pas. Pour la 3D, exporter le modèle en IFC depuis Revit \
-                         (Fichier › Exporter › IFC), puis ouvrir le fichier .ifc.",
-                    );
+                .show(ui, |ui| match &self.rvt_geom {
+                    Ok(summary) => {
+                        ui.label(format!(
+                            "Vue 3D : murs seuls ({summary}), avec la géométrie calculée par Revit (jonctions et \
+                             ouvertures comprises). Dalles, toits, portes, fenêtres et autres familles ne sont pas encore \
+                             lus : pour un modèle complet, exporter en IFC depuis Revit (Fichier › Exporter › IFC)."
+                        ));
+                    }
+                    Err(e) => {
+                        ui.label(format!(
+                            "Métadonnées seules : pas de murs affichables ({e}). Pour la 3D, exporter le modèle en IFC \
+                             depuis Revit (Fichier › Exporter › IFC), puis ouvrir le fichier .ifc."
+                        ));
+                    }
                 });
             ui.add_space(8.0);
 
@@ -813,9 +852,15 @@ impl ViewerApp {
             }
         });
         if close {
-            self.rvt = None;
-            self.rvt_preview = None;
-            self.status = "Ouvrir un fichier IFC ou Revit (Ctrl+O), ou le glisser dans la fenêtre.".into();
+            if self.rvt_geom.is_ok() {
+                // Retour à la vue 3D des murs.
+                self.rvt_sheet = false;
+            } else {
+                self.rvt = None;
+                self.rvt_sheet = false;
+                self.rvt_preview = None;
+                self.status = "Ouvrir un fichier IFC ou Revit (Ctrl+O), ou le glisser dans la fenêtre.".into();
+            }
         }
     }
 
@@ -1007,7 +1052,7 @@ impl eframe::App for ViewerApp {
 
         egui::Panel::top("top").show(ui, |ui| self.top_bar(ui));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
-        if self.rvt.is_some() {
+        if self.rvt.is_some() && self.rvt_sheet {
             egui::CentralPanel::default().show(ui, |ui| self.revit_view(ui));
         } else {
             egui::Panel::left("left").resizable(true).default_size(320.0).show(ui, |ui| self.left_panel(ui));

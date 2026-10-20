@@ -1,12 +1,22 @@
-//! Métadonnées des fichiers Revit (.rvt, .rfa, .rte, .rft).
+//! Fichiers Revit (.rvt, .rfa, .rte, .rft) : métadonnées et murs.
 //!
-//! Un fichier Revit est un conteneur OLE (Compound File Binary). La géométrie,
-//! dans `Partitions/*` et `Global/*`, est sérialisée dans un format propriétaire
-//! non décodé ici. Sont lus les flux descriptifs :
+//! Un fichier Revit est un conteneur OLE (Compound File Binary). Sont lus ici les
+//! flux descriptifs :
 //! - `BasicFileInfo` : version, build, partage de projet, chemins (UTF-16) ;
 //! - `ProjectInformation` (ZIP, projets) ou `PartAtom` (familles) : XML Atom ;
 //! - `TransmissionData` : références externes (XML UTF-16) ;
 //! - `RevitPreview4.0` : vignette PNG.
+//!
+//! Les éléments, dans `Partitions/*`, sont lus par les sous-modules (format décrit
+//! dans docs/LISEZMOI-RVT.md) : décompression et cadrage (`objets`), schéma de classes
+//! (`schema`), champs des objets (`champs`), géométrie calculée (`geometrie`), murs et
+//! scène du viewer (`maquette`).
+
+mod champs;
+pub mod geometrie;
+pub mod maquette;
+mod objets;
+mod schema;
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -165,10 +175,28 @@ impl Cfb {
         out
     }
 
+    /// Contenu d'une chaîne de secteurs ; les suites de secteurs contigus (cas
+    /// courant) sont lues d'un bloc.
     fn chain_bytes(&mut self, start: u32) -> Result<Vec<u8>, String> {
-        let mut out = Vec::new();
-        for s in Self::chain(&self.fat, start) {
-            out.extend(self.sector(s)?);
+        let chain = Self::chain(&self.fat, start);
+        let mut out = Vec::with_capacity(chain.len() * self.sector_size);
+        let mut i = 0;
+        while i < chain.len() {
+            let mut j = i + 1;
+            while j < chain.len() && chain[j] == chain[j - 1] + 1 {
+                j += 1;
+            }
+            let (first, n) = (chain[i], j - i);
+            if first as u64 + n as u64 > self.n_sectors as u64 {
+                return Err(format!("Secteur OLE {} hors du fichier", first as u64 + n as u64 - 1));
+            }
+            let o = out.len();
+            out.resize(o + n * self.sector_size, 0);
+            self.f
+                .seek(SeekFrom::Start((first as u64 + 1) * self.sector_size as u64))
+                .and_then(|_| self.f.read_exact(&mut out[o..]))
+                .map_err(|e| format!("Lecture du secteur {first} : {e}"))?;
+            i = j;
         }
         Ok(out)
     }
@@ -207,9 +235,13 @@ impl Cfb {
             let mut found = None;
             let mut guard = 0;
             while let Some(i) = stack.pop() {
-                guard += 1;
-                if i == NO_STREAM || i as usize >= self.dirs.len() || guard > self.dirs.len() {
+                if i == NO_STREAM || i as usize >= self.dirs.len() {
                     continue;
+                }
+                // Garde-fou contre un arbre cyclique : chaque entrée est visitée au plus une fois.
+                guard += 1;
+                if guard > self.dirs.len() {
+                    break;
                 }
                 let d = &self.dirs[i as usize];
                 if d.name.eq_ignore_ascii_case(part) {

@@ -147,6 +147,51 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
     for w in &info.warnings {
         println!("Avertissement : {w}");
     }
-    println!("Géométrie    : non lisible (format propriétaire) — exporter en IFC depuis Revit");
+    let t0 = std::time::Instant::now();
+    let m = match rvt::maquette::lire(path, &|s| eprintln!("{s}")) {
+        Ok(m) => m,
+        Err(e) => {
+            println!("Géométrie    : illisible ({e})");
+            return 0;
+        }
+    };
+    println!("Niveaux      : {}", m.niveaux.len());
+    for n in &m.niveaux {
+        println!("  {:<34} {} mm", n.nom, step::format_real((n.altitude * 10.0).round() / 10.0));
+    }
+    let lus: Vec<_> = m.murs.iter().filter_map(|w| Some((w, w.geometrie.as_ref().ok()?.controle()))).collect();
+    let fermes = lus.iter().filter(|(_, c)| c.non_appariees == 0).count();
+    println!("Murs         : {} ({} maillés, dont {fermes} fermés)", m.murs.len(), lus.len());
+    if !lus.is_empty() {
+        let (mut mn, mut mx) = (glam::DVec3::splat(f64::MAX), glam::DVec3::splat(f64::MIN));
+        for (_, c) in &lus {
+            mn = mn.min(c.min);
+            mx = mx.max(c.max);
+        }
+        let size = (mx - mn) / 1000.0;
+        println!("Triangles    : {}", lus.iter().map(|(_, c)| c.triangles).sum::<usize>());
+        println!("Volume murs  : {:.6} m3", lus.iter().map(|(_, c)| c.volume_m3).sum::<f64>());
+        println!("Emprise      : {:.2} x {:.2} x {:.2} m", size.x, size.y, size.z);
+    }
+    if m.murs.len() <= 100 {
+        for w in &m.murs {
+            let ty = m.types.get(&w.type_id).map(|t| t.nom.as_str()).unwrap_or("?");
+            match &w.geometrie {
+                Ok(g) => {
+                    let c = g.controle();
+                    println!("  {:>10} {:<8} {:>12.6} m3 {:>5} tri.  {ty}", w.id, w.classe, c.volume_m3, c.triangles);
+                }
+                Err(e) => println!("  {:>10} {:<8} non maillé : {e}", w.id, w.classe),
+            }
+        }
+    } else {
+        for w in m.murs.iter().filter(|w| w.geometrie.is_err()) {
+            println!("  {:>10} {:<8} non maillé : {}", w.id, w.classe, w.geometrie.as_ref().err().unwrap());
+        }
+    }
+    if !m.illisibles.is_empty() {
+        println!("Objets illisibles : {}", m.illisibles.len());
+    }
+    println!("Durée géom.  : {} ms", t0.elapsed().as_millis());
     0
 }
