@@ -245,6 +245,30 @@ murs contraints, groupes non placés, pièces non placées et surfaces portées 
 - Résultats reportés dans LISEZMOI § 7 et § 8 ; valeurs de référence reprises dans
   les tests de `src/rvt/maquette.rs`.
 
+### C13 — Géométrie des familles (faite le 21/10)
+
+- Structure du `GInstance` lue sur une porte de `Projet1.rvt`, puis règles des
+  `GFilter` établies en cherchant le sous-ensemble de solides du type dont la somme
+  égale le volume donné par Revit (porte 257 051 : 0,145 647 contre 0,145 65 m³ ;
+  fenêtre 257 071 : objets invisibles, bits 0xE0 de `GInfo.m_flags`).
+- Références Revit : scripts RiveTT `rvt-reference-familles` (réutilisable : volume
+  des solides directs et des instances, boîte, `GetTotalTransform`, miroir, pour
+  toutes les instances de modèle), `rvt-reference-solides` (volume solide par
+  solide), `rvt-reference-garde-corps`, `rvt-reference-cotes-portes` (paramètres
+  d'instance et de type).
+- Convention du repère tranchée par `GetTotalTransform` (214 / 214) : la comparaison
+  des boîtes ne suffisait pas, celle de Revit comptant aussi les lignes 2D.
+- Paramétrage de `SurfRev` choisi par l'écart des arêtes (nul contre 204 mm).
+- Facettisation des faces courbes comparée sur l'arbre de Kerreut (−51 % au départ) :
+  découpe des arêtes au milieu (80 000 à 200 000 triangles, mauvaise convergence),
+  puis grille intérieure et bascules de Delaunay retenue (−0,36 %, 4 300 triangles).
+- Cotes des portes : la largeur et la hauteur annoncées sont celles du panneau
+  (paramètres de type `FAMILY_WIDTH_PARAM`, `FAMILY_HEIGHT_PARAM`), relevées dans
+  `FamilySymbol.m_pParams` (remarque de l'utilisateur, vérifiée contre l'API).
+- Capture d'écran du viewer (fenêtre OpenGL) impossible depuis PowerShell
+  (`CopyFromScreen`, `PrintWindow` : fenêtre blanche, y compris avec un IFC) :
+  l'affichage reste à vérifier à l'écran.
+
 ### C9 — Variantes ciblées (Revit, prochaine session)
 
 Quand le lecteur bute sur un champ, produire deux fichiers qui ne diffèrent que
@@ -269,6 +293,7 @@ pas seulement le schéma.
 | C5 | atteint par C7 : tous les membres décodés avec CRC exact |
 | C8 | atteint : niveau et mur lus en entier ; 100 % des enregistrements sur 5 fichiers |
 | C12 | atteint : toits, escaliers, grilles et matériaux identiques à Revit ; volumes des sols, toits, escaliers et pièces identiques à 10⁻⁵ m³ |
+| C13 | atteint : 373 instances sur 448 de volume identique à Revit, 404 à moins de 1 % ; garde-corps 16 / 16 |
 
 Après chaque campagne : résultats reportés dans `LISEZMOI-RVT.md` (faits observés,
 hypothèses écartées), scripts RiveTT conservés, fichiers d'essai hors dépôt.

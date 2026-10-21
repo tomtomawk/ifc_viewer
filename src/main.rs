@@ -192,25 +192,34 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
     let bilan = |nom: &str, gs: &mut dyn Iterator<Item = &rvt::maquette::Geometrie>| {
         let (mut n, mut ok, mut vol) = (0, 0, 0.0);
         let mut causes: std::collections::BTreeMap<String, usize> = Default::default();
+        let mut partiels: std::collections::BTreeMap<String, usize> = Default::default();
+        // cause sans les ids d'éléments, pour regrouper
+        let cle = |e: &str| e.split(|c: char| c.is_ascii_digit()).collect::<Vec<_>>().join("#");
         for g in gs {
             n += 1;
             match g {
                 Ok(g) => {
                     ok += 1;
                     vol += g.controle().volume_m3;
+                    for e in &g.echecs {
+                        *partiels.entry(cle(e)).or_default() += 1;
+                    }
                 }
-                // cause sans les ids d'éléments, pour regrouper
-                Err(e) => *causes.entry(e.split(|c: char| c.is_ascii_digit()).collect::<Vec<_>>().join("#")).or_default() += 1,
+                Err(e) => *causes.entry(cle(e)).or_default() += 1,
             }
         }
         println!("{nom:<13}: {n} ({ok} maillés, {vol:.6} m3)");
         for (c, k) in &causes {
             println!("    non maillés : {k:>5}  {c}");
         }
+        for (c, k) in &partiels {
+            println!("    solides écartés : {k:>5}  {c}");
+        }
     };
     bilan("Sols/plafonds", &mut m.dalles.iter().map(|x| &x.geometrie));
     bilan("Toits", &mut m.toits.iter().map(|x| &x.geometrie));
     bilan("Escaliers", &mut m.escaliers.iter().map(|x| &x.geometrie));
+    bilan("Garde-corps", &mut m.garde_corps.iter().map(|x| &x.geometrie));
     bilan("Pièces", &mut m.pieces.iter().filter(|p| p.genre == "piece" && p.point.is_some()).map(|x| &x.geometrie));
     for genre in ["piece", "surface", "zone"] {
         let n = m.pieces.iter().filter(|p| p.genre == genre).count();

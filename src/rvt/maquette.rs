@@ -8,9 +8,9 @@
 //!
 //! La géométrie de tous les éléments est le solide calculé par Revit (`GElement`,
 //! section 0x67), maillé par [`geometrie::maillage`] ; la couleur d'une face est celle
-//! de son matériau (`GFace.m_renderStyleId` = id d'un `MaterialElem`). La géométrie
-//! des familles (`GInstance`) n'est pas décodée : une instance n'a de maillage que si
-//! elle porte son propre solide.
+//! de son matériau (`GFace.m_renderStyleId` = id d'un `MaterialElem`). Les familles
+//! (`GInstance`) prennent la géométrie de leur type, placée par leur repère et filtrée
+//! comme dans une vue 3D en détail fin ([`geometrie::Bibliotheque`]).
 
 use super::champs::{self, Obj, Record, Val};
 use super::geometrie::{self, FT, Maillage};
@@ -35,6 +35,8 @@ const FLOOR_HEIGHTABOVELEVEL_PARAM: i64 = -1_001_951;
 const CEILING_HEIGHTABOVELEVEL_PARAM: i64 = -1_002_300;
 const ROOF_LEVEL_OFFSET_PARAM: i64 = -1_001_701;
 const ALL_MODEL_MARK: i64 = -1_001_203;
+const FAMILY_WIDTH_PARAM: i64 = -1_001_301;
+const FAMILY_HEIGHT_PARAM: i64 = -1_001_300;
 const ROOM_NAME: i64 = -1_006_900;
 const ROOM_NUMBER: i64 = -1_006_901;
 const ROOM_DEPARTMENT: i64 = -1_006_907;
@@ -76,6 +78,11 @@ pub struct TypeElem {
     pub epaisseur: Option<f64>,
     /// Famille d'un type de famille (`FamilySymbol.m_familyId`), −1 sinon.
     pub famille: i64,
+    /// Largeur et hauteur en mm (paramètres de type `FAMILY_WIDTH_PARAM` et
+    /// `FAMILY_HEIGHT_PARAM`, lus dans `FamilySymbol.m_pParams`) : pour une porte ou une
+    /// fenêtre, les cotes du panneau, pas l'encombrement de la famille (huisserie).
+    pub largeur: Option<f64>,
+    pub hauteur: Option<f64>,
 }
 
 pub struct Famille {
@@ -186,6 +193,16 @@ pub struct Instance {
     pub geometrie: Geometrie,
 }
 
+/// Garde-corps (classes dérivées de `BaseRailing`) : main courante et barreaux, dans
+/// son `GElement` et les types qu'il place (`GInstance`).
+pub struct GardeCorps {
+    pub id: i64,
+    /// Type de garde-corps (`m_stairsRailingAttrId`).
+    pub type_id: i64,
+    pub niveau: i64,
+    pub geometrie: Geometrie,
+}
+
 /// Pièce, surface ou zone (`RoomElem`).
 pub struct Piece {
     pub id: i64,
@@ -211,6 +228,7 @@ pub struct Maquette {
     pub dalles: Vec<Dalle>,
     pub toits: Vec<Toit>,
     pub escaliers: Vec<Escalier>,
+    pub garde_corps: Vec<GardeCorps>,
     pub grilles: Vec<Grille>,
     pub instances: Vec<Instance>,
     pub pieces: Vec<Piece>,
@@ -232,6 +250,7 @@ enum Sorte {
     Escalier,
     /// Volée ou palier d'escalier.
     Volee,
+    GardeCorps,
     Grille,
     Instance,
     Piece,
@@ -240,7 +259,7 @@ enum Sorte {
 impl Sorte {
     /// Éléments dont on lit le complément 0x67 (géométrie).
     fn a_geometrie(self) -> bool {
-        matches!(self, Sorte::Mur | Sorte::Dalle | Sorte::Toit | Sorte::Volee | Sorte::Instance | Sorte::Piece)
+        matches!(self, Sorte::Mur | Sorte::Dalle | Sorte::Toit | Sorte::Volee | Sorte::GardeCorps | Sorte::Instance | Sorte::Piece)
     }
 
     fn de(sch: &Schema, id: u16, name: &str) -> Option<Sorte> {
@@ -252,6 +271,7 @@ impl Sorte {
             "Grid" => Sorte::Grille,
             "RoomElem" => Sorte::Piece,
             _ if h("Level") => Sorte::Niveau,
+            _ if h("BaseRailing") => Sorte::GardeCorps,
             _ if h("Symbol") => Sorte::Type,
             _ if h("Family") => Sorte::Famille,
             _ if h("Floor") || h("Ceiling") => Sorte::Dalle,
@@ -281,123 +301,117 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         .collect();
     parts.sort();
 
+    // types (Symbol) : leur GElement porte la géométrie des GInstance (familles, marches
+    // d'escalier assemblé `StairsTriserSymbol`…)
+    let classes_types: std::collections::HashSet<u16> = sch.classes.iter().filter(|c| sch.inherits(c.id, "Symbol")).map(|c| c.id).collect();
+    let mut types_famille: std::collections::HashSet<i64> = Default::default();
     let mut objets: HashMap<i64, (Sorte, Vec<u8>)> = HashMap::new();
     let mut complements: HashMap<i64, Vec<u8>> = HashMap::new();
+    let mut geometries_types: HashMap<i64, Vec<u8>> = HashMap::new();
     for (k, (_, p)) in parts.iter().enumerate() {
         progress(format!("Partition {} / {} ({p})…", k + 1, parts.len()));
         let raw = cfb.read(p)?.ok_or_else(|| format!("flux {p} illisible"))?;
         let sec = sections(&raw).map_err(|e| format!("{p} : {e}"))?;
         let vide = Vec::new();
         for (eid, body) in records(sec.get(&0x66).unwrap_or(&vide), true, ids8).map_err(|e| format!("{p}, section 0x66 : {e}"))? {
-            if let Some(&s) = champs::class_id(body).and_then(|c| sortes.get(&c)).filter(|_| table.contains(&eid)) {
+            let Some(c) = champs::class_id(body).filter(|_| table.contains(&eid)) else { continue };
+            if classes_types.contains(&c) {
+                types_famille.insert(eid);
+            }
+            if let Some(&s) = sortes.get(&c) {
                 objets.insert(eid, (s, body.to_vec()));
             }
         }
         for (eid, body) in records(sec.get(&0x67).unwrap_or(&vide), true, ids8).map_err(|e| format!("{p}, section 0x67 : {e}"))? {
             if objets.get(&eid).is_some_and(|o| o.0.a_geometrie()) {
                 complements.insert(eid, body.to_vec());
+            } else if types_famille.contains(&eid) {
+                geometries_types.insert(eid, body.to_vec());
             }
         }
     }
 
+    // Les niveaux d'abord (altitudes), puis chaque objet est lu et réduit aussitôt à ses
+    // champs utiles : garder tous les enregistrements lus coûtait 6 Go à Saint-Malo.
     progress(format!("Lecture de {} objets…", objets.len()));
     let mut ids: Vec<i64> = objets.keys().copied().collect();
     ids.sort_unstable();
-    let lectures: Vec<(i64, Sorte, Result<Record, String>)> = ids
-        .par_iter()
-        .map(|eid| {
-            let (s, body) = &objets[eid];
-            (*eid, *s, champs::read(&sch, body))
-        })
-        .collect();
+    let lire_objet = |eid: &i64| -> Option<Result<(Sorte, Record), (i64, String)>> {
+        let (s, body) = &objets[eid];
+        match champs::read(&sch, body) {
+            Ok(r) if place(&r.root) => Some(Ok((*s, r))),
+            Ok(_) => None,
+            Err(e) => Some(Err((*eid, e))),
+        }
+    };
     let mut illisibles = Vec::new();
-    let mut lus: Vec<(i64, Sorte, Record)> = Vec::new();
-    for (eid, s, r) in lectures {
-        match r {
-            Ok(r) if place(&r.root) => lus.push((eid, s, r)),
-            Ok(_) => {}
-            Err(e) => illisibles.push((eid, e)),
+    let mut niveaux = Vec::new();
+    for eid in ids.iter().filter(|e| objets[e].0 == Sorte::Niveau) {
+        match lire_objet(eid) {
+            Some(Ok((_, r))) => niveaux.extend(niveau(*eid, &r)),
+            Some(Err(e)) => illisibles.push(e),
+            None => {}
         }
     }
-    let de = |s: Sorte| lus.iter().filter(move |x| x.1 == s).map(|(eid, _, r)| (*eid, r));
-
-    let mut niveaux: Vec<Niveau> = de(Sorte::Niveau)
-        .filter_map(|(eid, r)| {
-            let z = r.field_body(&r.root, "m_pSurface")?.get("m_origin")?.reals()?.get(2).copied()?;
-            Some(Niveau { id: eid, nom: r.root.get("m_text")?.str()?.to_string(), altitude: z * FT })
-        })
-        .collect();
     niveaux.sort_by(|a, b| a.altitude.total_cmp(&b.altitude).then(a.id.cmp(&b.id)));
     let altitude: HashMap<i64, f64> = niveaux.iter().map(|n| (n.id, n.altitude)).collect();
-
-    let types = de(Sorte::Type)
-        .filter_map(|(eid, r)| {
-            let nom = r.field_body(&r.root, "m_symbolInfo")?.get("m_name")?.str()?.to_string();
-            let epaisseur = r.field_body(&r.root, "m_pCompoundStructure").map(|cs| {
-                let couches = cs.get("m_layers").map(Val::list).unwrap_or_default();
-                couches.iter().filter_map(|c| c.obj()?.get("m_layerWidth")?.real()).sum::<f64>() * FT
-            });
-            Some((eid, TypeElem { nom, epaisseur, famille: id_of(&r.root, "m_familyId") }))
-        })
+    let extraits: Vec<Result<Extrait, (i64, String)>> = ids
+        .par_iter()
+        .filter(|e| objets[e].0 != Sorte::Niveau)
+        .filter_map(|eid| Some(lire_objet(eid)?.map(|(s, r)| extraire(*eid, s, &r, &altitude))))
         .collect();
+    drop(objets);
 
-    let familles = de(Sorte::Famille)
-        .filter_map(|(eid, r)| Some((eid, Famille { nom: r.root.get("m_name")?.str()?.to_string(), categorie: id_of(&r.root, "m_categoryId") })))
-        .collect();
-
-    let materiaux = de(Sorte::Materiau)
-        .filter_map(|(eid, r)| {
-            let m = r.field_body(&r.root, "m_pMaterial")?;
-            // COLORREF : rouge dans l'octet de poids faible
-            let c = m.get("m_color").and_then(Val::int).unwrap_or(0x7F7F7F);
-            let couleur = [c as u8, (c >> 8) as u8, (c >> 16) as u8];
-            Some((eid, Materiau { nom: m.get("m_name")?.str()?.to_string(), couleur, transparence: m.get("m_transparency").and_then(Val::real).unwrap_or(0.0) }))
-        })
-        .collect();
-
-    let murs: Vec<Mur> = de(Sorte::Mur).map(|(eid, r)| mur(eid, r, &altitude)).collect();
-    let traces: HashMap<i64, Trace> = murs.iter().filter_map(|m| Some((m.id, m.trace?))).collect();
-
-    let dalles: Vec<Dalle> = de(Sorte::Dalle)
-        .map(|(eid, r)| {
-            let o = &r.root;
-            let (champ_type, k) = if o.class_name() == "Ceiling" { ("m_ceilingAttributesId", CEILING_HEIGHTABOVELEVEL_PARAM) } else { ("m_floorAttributesId", FLOOR_HEIGHTABOVELEVEL_PARAM) };
-            let p = params(r, o);
-            Dalle { id: eid, classe: o.class_name().to_string(), type_id: id_of(o, champ_type), niveau: id_of(o, "m_assocLevelId"), decalage: reel_p(&p, k) * FT, geometrie: Err(String::new()) }
-        })
-        .collect();
-
-    let toits: Vec<Toit> = de(Sorte::Toit)
-        .map(|(eid, r)| {
-            let o = &r.root;
-            let p = params(r, o);
-            Toit { id: eid, classe: o.class_name().to_string(), type_id: id_of(o, "m_roofAttributesId"), niveau: id_of(o, "m_assocLevelId"), decalage: reel_p(&p, ROOF_LEVEL_OFFSET_PARAM) * FT, geometrie: Err(String::new()) }
-        })
-        .collect();
-
-    let volees: HashMap<i64, i64> = de(Sorte::Volee).map(|(eid, r)| (eid, id_of(&r.root, "m_stairsId"))).collect();
-    let escaliers: Vec<Escalier> = de(Sorte::Escalier).map(|(eid, r)| escalier(eid, r, &altitude, &volees)).collect();
-
-    let grilles: Vec<Grille> = de(Sorte::Grille).filter_map(|(eid, r)| grille(eid, r)).collect();
-
-    let mut instances_de_vue = 0;
-    let mut instances = Vec::new();
-    for (eid, r) in de(Sorte::Instance) {
-        if id_of(&r.root, "m_ownerDBViewId") != -1 {
-            instances_de_vue += 1;
-        } else {
-            instances.push(instance(eid, r, &altitude, &traces));
+    let (mut types, mut familles, mut materiaux) = (HashMap::new(), HashMap::new(), HashMap::new());
+    let (mut murs, mut dalles, mut toits, mut escaliers, mut grilles, mut pieces) = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let (mut volees, mut instances, mut instances_de_vue, mut garde_corps) = (HashMap::new(), Vec::new(), 0, Vec::new());
+    for x in extraits {
+        match x {
+            Err(e) => illisibles.push(e),
+            Ok(Extrait::Rien) => {}
+            Ok(Extrait::Type(id, t)) => drop(types.insert(id, t)),
+            Ok(Extrait::Famille(id, f)) => drop(familles.insert(id, f)),
+            Ok(Extrait::Materiau(id, m)) => drop(materiaux.insert(id, m)),
+            Ok(Extrait::Mur(m)) => murs.push(m),
+            Ok(Extrait::Dalle(d)) => dalles.push(d),
+            Ok(Extrait::Toit(t)) => toits.push(t),
+            Ok(Extrait::Escalier(e)) => escaliers.push(e),
+            Ok(Extrait::Volee(id, esc)) => drop(volees.insert(id, esc)),
+            Ok(Extrait::GardeCorps(g)) => garde_corps.push(g),
+            Ok(Extrait::Grille(g)) => grilles.push(g),
+            Ok(Extrait::Instance(i, h)) => instances.push((i, h)),
+            Ok(Extrait::InstanceDeVue) => instances_de_vue += 1,
+            Ok(Extrait::Piece(p)) => pieces.push(p),
         }
     }
-
-    let pieces: Vec<Piece> = de(Sorte::Piece).map(|(eid, r)| piece(eid, r, &altitude)).collect();
+    // volées et paliers rattachés par m_stairsId ; point des instances hébergées par un mur
+    for e in &mut escaliers {
+        let mut parties: BTreeSet<i64> = e.parties.iter().copied().collect();
+        parties.extend(volees.iter().filter(|&(_, &s)| s == e.id).map(|(&v, _)| v));
+        parties.retain(|p| volees.contains_key(p));
+        e.parties = parties.into_iter().collect();
+    }
+    let traces: HashMap<i64, Trace> = murs.iter().filter_map(|m| Some((m.id, m.trace?))).collect();
+    let instances: Vec<Instance> = instances
+        .into_iter()
+        .map(|(mut i, hote)| {
+            if let (Some(t), Some((h, elevation))) = (traces.get(&i.hote), hote) {
+                let q = t.point(h);
+                i.point = DVec3::new(q.x, q.y, altitude.get(&i.niveau).copied().unwrap_or(0.0) + elevation);
+            }
+            i
+        })
+        .collect();
 
     // Géométrie, en parallèle.
     let mut a_mailler: Vec<i64> = murs.iter().map(|m| m.id).chain(dalles.iter().map(|d| d.id)).chain(toits.iter().map(|t| t.id)).collect();
     a_mailler.extend(escaliers.iter().flat_map(|e| e.parties.iter().copied()));
+    a_mailler.extend(garde_corps.iter().map(|g| g.id));
     a_mailler.extend(instances.iter().map(|i| i.id).chain(pieces.iter().map(|p| p.id)));
     progress(format!("Géométrie de {} éléments…", a_mailler.len()));
-    let mut geoms: HashMap<i64, Geometrie> = a_mailler.par_iter().map(|&eid| (eid, maillage(&sch, &complements, eid))).collect();
+    progress(format!("Géométrie de {} types ({} Mo)…", geometries_types.len(), geometries_types.values().map(Vec::len).sum::<usize>() >> 20));
+    let bib = geometrie::Bibliotheque::new(&sch, &geometries_types);
+    let mut geoms: HashMap<i64, Geometrie> = a_mailler.par_iter().map(|&eid| (eid, maillage(&sch, &complements, &bib, eid))).collect();
     let mut prendre = |eid: i64| geoms.remove(&eid).unwrap_or_else(|| Err("non maillé".into()));
 
     let mut m = Maquette {
@@ -409,6 +423,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         dalles,
         toits,
         escaliers,
+        garde_corps,
         grilles,
         instances,
         pieces,
@@ -425,6 +440,9 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         x.geometrie = prendre(x.id);
     }
     for x in &mut m.instances {
+        x.geometrie = prendre(x.id);
+    }
+    for x in &mut m.garde_corps {
         x.geometrie = prendre(x.id);
     }
     for x in &mut m.pieces {
@@ -447,10 +465,10 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     Ok(m)
 }
 
-/// Maillage du complément 0x67 d'un élément.
-fn maillage(sch: &Schema, complements: &HashMap<i64, Vec<u8>>, eid: i64) -> Geometrie {
+/// Maillage du complément 0x67 d'un élément, géométrie de ses familles comprise.
+fn maillage(sch: &Schema, complements: &HashMap<i64, Vec<u8>>, bib: &geometrie::Bibliotheque, eid: i64) -> Geometrie {
     let b = complements.get(&eid).ok_or_else(|| format!("élément {eid} sans enregistrement 0x67"))?;
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| champs::read(sch, b).and_then(|rec| geometrie::maillage(&rec, false))))
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| champs::read(sch, b).and_then(|rec| geometrie::maillage(&rec, false, bib))))
         .unwrap_or_else(|_| Err("erreur interne".into()))
         .and_then(|g| if g.faces.is_empty() { Err("aucun solide fermé dans le GElement".into()) } else { Ok(g) })
 }
@@ -482,10 +500,8 @@ fn params<'r, 's>(r: &'r Record<'s>, o: &Obj<'s>) -> HashMap<i64, &'r Val<'s>> {
     for k in ["m_pParamValueSetDouble", "m_pParamValueSetInt", "m_pParamValueSetAString", "m_pParamValueSetElementId"] {
         let Some(ps) = r.field_body(o, k) else { continue };
         for x in ps.get("m_paramSet").map(Val::list).unwrap_or_default() {
-            if let Some(x) = x.obj() {
-                if let (Some(id), Some(v)) = (x.get("m_paramId").and_then(Val::element_id), x.get("m_value")) {
-                    out.insert(id, v);
-                }
+            if let Some((id, v)) = x.obj().and_then(|x| Some((x.get("m_paramId").and_then(Val::element_id)?, x.get("m_value")?))) {
+                out.insert(id, v);
             }
         }
     }
@@ -546,9 +562,88 @@ fn mur(id: i64, r: &Record, altitude: &HashMap<i64, f64>) -> Mur {
     m
 }
 
-/// Volées et paliers : listes `m_runAndLandings` des cellules de l'escalier et
-/// `m_runsAndLandings`, plus les parties dont `m_stairsId` désigne l'escalier.
-fn escalier(id: i64, r: &Record, altitude: &HashMap<i64, f64>, volees: &HashMap<i64, i64>) -> Escalier {
+/// Objet lu, réduit aux champs utiles.
+enum Extrait {
+    Rien,
+    Type(i64, TypeElem),
+    Famille(i64, Famille),
+    Materiau(i64, Materiau),
+    Mur(Mur),
+    Dalle(Dalle),
+    Toit(Toit),
+    Escalier(Escalier),
+    /// Volée ou palier et son escalier (`m_stairsId`).
+    Volee(i64, i64),
+    GardeCorps(GardeCorps),
+    Grille(Grille),
+    /// Instance et, si elle est hébergée, (`m_hostParam`, `m_elevation` en mm) pour
+    /// placer son point sur la ligne de l'hôte.
+    Instance(Instance, Option<(f64, f64)>),
+    InstanceDeVue,
+    Piece(Piece),
+}
+
+fn niveau(id: i64, r: &Record) -> Option<Niveau> {
+    let z = r.field_body(&r.root, "m_pSurface")?.get("m_origin")?.reals()?.get(2).copied()?;
+    Some(Niveau { id, nom: r.root.get("m_text")?.str()?.to_string(), altitude: z * FT })
+}
+
+fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>) -> Extrait {
+    let o = &r.root;
+    let ou_rien = |x: Option<Extrait>| x.unwrap_or(Extrait::Rien);
+    match s {
+        Sorte::Niveau => Extrait::Rien,
+        Sorte::Type => ou_rien((|| {
+            let nom = r.field_body(o, "m_symbolInfo")?.get("m_name")?.str()?.to_string();
+            let epaisseur = r.field_body(o, "m_pCompoundStructure").map(|cs| {
+                let couches = cs.get("m_layers").map(Val::list).unwrap_or_default();
+                couches.iter().filter_map(|c| c.obj()?.get("m_layerWidth")?.real()).sum::<f64>() * FT
+            });
+            let mut valeurs = HashMap::new();
+            if let Some(pp) = r.field_body(o, "m_pParams") {
+                for x in pp.get("m_params").map(Val::list).unwrap_or_default() {
+                    if let Some((id, v)) = x.obj().and_then(|x| Some((x.get("m_paramId").and_then(Val::element_id)?, x.get("m_value").and_then(Val::real)?))) {
+                        valeurs.insert(id, v * FT);
+                    }
+                }
+            }
+            let (largeur, hauteur) = (valeurs.get(&FAMILY_WIDTH_PARAM).copied(), valeurs.get(&FAMILY_HEIGHT_PARAM).copied());
+            Some(Extrait::Type(eid, TypeElem { nom, epaisseur, famille: id_of(o, "m_familyId"), largeur, hauteur }))
+        })()),
+        Sorte::Famille => ou_rien((|| Some(Extrait::Famille(eid, Famille { nom: o.get("m_name")?.str()?.to_string(), categorie: id_of(o, "m_categoryId") })))()),
+        Sorte::Materiau => ou_rien((|| {
+            let m = r.field_body(o, "m_pMaterial")?;
+            // COLORREF : rouge dans l'octet de poids faible
+            let c = m.get("m_color").and_then(Val::int).unwrap_or(0x7F7F7F);
+            let couleur = [c as u8, (c >> 8) as u8, (c >> 16) as u8];
+            Some(Extrait::Materiau(eid, Materiau { nom: m.get("m_name")?.str()?.to_string(), couleur, transparence: m.get("m_transparency").and_then(Val::real).unwrap_or(0.0) }))
+        })()),
+        Sorte::Mur => Extrait::Mur(mur(eid, r, altitude)),
+        Sorte::Dalle => {
+            let (champ_type, k) = if o.class_name() == "Ceiling" { ("m_ceilingAttributesId", CEILING_HEIGHTABOVELEVEL_PARAM) } else { ("m_floorAttributesId", FLOOR_HEIGHTABOVELEVEL_PARAM) };
+            let p = params(r, o);
+            Extrait::Dalle(Dalle { id: eid, classe: o.class_name().to_string(), type_id: id_of(o, champ_type), niveau: id_of(o, "m_assocLevelId"), decalage: reel_p(&p, k) * FT, geometrie: Err(String::new()) })
+        }
+        Sorte::Toit => {
+            let p = params(r, o);
+            Extrait::Toit(Toit { id: eid, classe: o.class_name().to_string(), type_id: id_of(o, "m_roofAttributesId"), niveau: id_of(o, "m_assocLevelId"), decalage: reel_p(&p, ROOF_LEVEL_OFFSET_PARAM) * FT, geometrie: Err(String::new()) })
+        }
+        Sorte::Escalier => Extrait::Escalier(escalier(eid, r, altitude)),
+        Sorte::Volee => Extrait::Volee(eid, id_of(o, "m_stairsId")),
+        Sorte::GardeCorps => Extrait::GardeCorps(GardeCorps { id: eid, type_id: id_of(o, "m_stairsRailingAttrId"), niveau: id_of(o, "m_assocLevelId"), geometrie: Err(String::new()) }),
+        Sorte::Grille => ou_rien(grille(eid, r).map(Extrait::Grille)),
+        Sorte::Instance if id_of(o, "m_ownerDBViewId") != -1 => Extrait::InstanceDeVue,
+        Sorte::Instance => {
+            let (i, h) = instance(eid, r);
+            Extrait::Instance(i, h)
+        }
+        Sorte::Piece => Extrait::Piece(piece(eid, r, altitude)),
+    }
+}
+
+/// Volées et paliers listés par l'escalier (`m_runAndLandings` de ses cellules,
+/// `m_runsAndLandings`) ; `lire` y ajoute les parties dont `m_stairsId` le désigne.
+fn escalier(id: i64, r: &Record, altitude: &HashMap<i64, f64>) -> Escalier {
     let o = &r.root;
     let mut parties = BTreeSet::new();
     for c in cellules(r, o).into_iter().chain([o]) {
@@ -556,8 +651,6 @@ fn escalier(id: i64, r: &Record, altitude: &HashMap<i64, f64>, volees: &HashMap<
             parties.extend(c.get(k).map(Val::list).unwrap_or_default().iter().filter_map(Val::element_id));
         }
     }
-    parties.extend(volees.iter().filter(|&(_, &s)| s == id).map(|(&v, _)| v));
-    parties.retain(|p| volees.contains_key(p));
     let (bas, haut) = (id_of(o, "m_baseLevelId"), id_of(o, "m_topLevelId"));
     let hauteur = match (altitude.get(&bas), altitude.get(&haut)) {
         (Some(b), Some(h)) => h + reel(o, "m_topLevelOffset").unwrap_or(0.0) * FT - b - reel(o, "m_baseLevelOffset").unwrap_or(0.0) * FT,
@@ -588,23 +681,27 @@ fn grille(id: i64, r: &Record) -> Option<Grille> {
     Some(Grille { id, nom: o.get("m_text")?.str()?.to_string(), debut, fin, arc })
 }
 
-fn instance(id: i64, r: &Record, altitude: &HashMap<i64, f64>, traces: &HashMap<i64, Trace>) -> Instance {
+/// Instance, son point valant `m_instOrigin` ; pour une instance hébergée, aussi
+/// (`m_hostParam`, `m_elevation` en mm), le point étant replacé par `lire` sur la ligne
+/// du mur hôte.
+fn instance(id: i64, r: &Record) -> (Instance, Option<(f64, f64)>) {
     let o = &r.root;
     let p = params(r, o);
-    let (hote, niveau) = (id_of(o, "m_hostId"), id_of(o, "m_assocLevelId"));
-    let point = match (traces.get(&hote), reel(o, "m_hostParam")) {
-        (Some(t), Some(h)) => {
-            let q = t.point(h);
-            DVec3::new(q.x, q.y, altitude.get(&niveau).copied().unwrap_or(0.0) + reel(o, "m_elevation").unwrap_or(0.0) * FT)
-        }
-        _ => o.get("m_instOrigin").and_then(vec3).unwrap_or_default() * FT,
-    };
     let mut repere = texte_p(&p, ALL_MODEL_MARK);
     if repere.is_empty() {
         // les portes rangent leur repère dans FamInstSpec.m_doorNumber
         repere = r.field_body(o, "m_oFamInstSpec").and_then(|s| s.get("m_doorNumber")?.str()).unwrap_or_default().to_string();
     }
-    Instance { id, type_id: id_of(o, "m_masterSymbolId"), hote, niveau, point, repere, geometrie: Err(String::new()) }
+    let i = Instance {
+        id,
+        type_id: id_of(o, "m_masterSymbolId"),
+        hote: id_of(o, "m_hostId"),
+        niveau: id_of(o, "m_assocLevelId"),
+        point: o.get("m_instOrigin").and_then(vec3).unwrap_or_default() * FT,
+        repere,
+        geometrie: Err(String::new()),
+    };
+    (i, reel(o, "m_hostParam").map(|h| (h, reel(o, "m_elevation").unwrap_or(0.0) * FT)))
 }
 
 fn piece(id: i64, r: &Record, altitude: &HashMap<i64, f64>) -> Piece {
@@ -726,13 +823,18 @@ pub fn load_scene(path: &Path, titre: &str, format: &str, progress: &dyn Fn(Stri
     let file_name = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let mut s = scene(&m, titre, file_name, format);
     let pieces: Vec<&Piece> = m.pieces.iter().filter(|p| p.genre == "piece" && p.point.is_some()).collect();
+    let toutes = m.murs.iter().map(|x| &x.geometrie).chain(m.dalles.iter().map(|x| &x.geometrie)).chain(m.toits.iter().map(|x| &x.geometrie));
+    let toutes = toutes.chain(m.escaliers.iter().map(|x| &x.geometrie)).chain(m.instances.iter().map(|x| &x.geometrie)).chain(m.garde_corps.iter().map(|x| &x.geometrie));
+    let solides_ko: usize = toutes.filter_map(|g| g.as_ref().ok()).map(|g| g.echecs.len()).sum();
     for (nom, n) in [
         ("Murs Revit non maillés", murs_ko),
         ("Sols et plafonds Revit non maillés", ko(&mut m.dalles.iter().map(|x| &x.geometrie))),
         ("Toits Revit non maillés", ko(&mut m.toits.iter().map(|x| &x.geometrie))),
         ("Escaliers Revit non maillés", ko(&mut m.escaliers.iter().map(|x| &x.geometrie))),
+        ("Garde-corps Revit non maillés", ko(&mut m.garde_corps.iter().map(|x| &x.geometrie))),
         ("Pièces Revit sans volume", ko(&mut pieces.iter().map(|x| &x.geometrie))),
-        ("Familles Revit sans géométrie décodée (GInstance)", ko(&mut m.instances.iter().map(|x| &x.geometrie))),
+        ("Familles Revit sans géométrie 3D", ko(&mut m.instances.iter().map(|x| &x.geometrie))),
+        ("Solides Revit non décodés dans des éléments affichés", solides_ko),
         ("Objets Revit illisibles", m.illisibles.len()),
     ] {
         if n > 0 {
@@ -743,8 +845,8 @@ pub fn load_scene(path: &Path, titre: &str, format: &str, progress: &dyn Fn(Stri
     Ok(s)
 }
 
-/// Produits de la scène : murs, sols, plafonds, toits, escaliers, instances de
-/// familles, pièces placées et grilles.
+/// Produits de la scène : murs, sols, plafonds, toits, escaliers, garde-corps, instances
+/// de familles, pièces placées et grilles.
 fn produits(m: &Maquette) -> Vec<Produit<'_>> {
     let nom_niveau: HashMap<i64, &str> = m.niveaux.iter().map(|l| (l.id, l.nom.as_str())).collect();
     let niveau = |l: i64| nom_niveau.get(&l).map(|s| s.to_string()).unwrap_or_else(|| l.to_string());
@@ -829,6 +931,19 @@ fn produits(m: &Maquette) -> Vec<Produit<'_>> {
             geometrie: &x.geometrie,
         });
     }
+    for x in &m.garde_corps {
+        let nt = nom_type(x.type_id);
+        out.push(Produit {
+            id: x.id,
+            classe: "IFCRAILING",
+            nom: format!("{nt} [{}]", x.id),
+            type_id: x.type_id,
+            nom_type: nt.clone(),
+            niveau: x.niveau,
+            props: vec![("Type", Value::Str(format!("{nt} [{}]", x.type_id))), ("Niveau", Value::Str(niveau(x.niveau)))],
+            geometrie: &x.geometrie,
+        });
+    }
     for x in &m.instances {
         let (cat, classe) = m.categorie(x);
         let nt = m.nom_type_instance(x);
@@ -838,6 +953,15 @@ fn produits(m: &Maquette) -> Vec<Produit<'_>> {
             ("Niveau", Value::Str(niveau(x.niveau))),
             ("Point d'insertion", point_mm(x.point)),
         ];
+        if let Some(t) = m.types.get(&x.type_id) {
+            // cotes du panneau (paramètres de type), pas l'encombrement de la famille
+            if let Some(l) = t.largeur.filter(|&l| l > 0.0) {
+                props.push(("Largeur (panneau)", mm(l)));
+            }
+            if let Some(h) = t.hauteur.filter(|&h| h > 0.0) {
+                props.push(("Hauteur (panneau)", mm(h)));
+            }
+        }
         if x.hote != -1 {
             props.push(("Hôte (ElementId)", Value::Str(x.hote.to_string())));
         }
@@ -1065,11 +1189,30 @@ mod tests {
         assert_eq!((par_cat("Portes"), par_cat("Fenêtres"), par_cat("Barreaux")), (43, 26, 33));
         let porte = m.instances.iter().find(|i| i.id == 257051).unwrap();
         assert_eq!(m.nom_type_instance(porte), "Int. Simple : PP (0.83m x 2.04m)");
+        // cotes du panneau : paramètres de type Largeur et Hauteur (Revit : 830 × 2 040)
+        let t = &m.types[&porte.type_id];
+        assert_eq!((t.largeur.map(f64::round), t.hauteur.map(f64::round)), (Some(830.0), Some(2040.0)));
         assert_eq!((porte.hote, porte.niveau, porte.repere.as_str()), (257007, 608, "P4"));
         assert!(porte.point.distance(DVec3::new(1500.0, 0.0, 0.0)) < 1e-3, "point {:?}", porte.point);
         let fenetre = m.instances.iter().find(|i| i.id == 257071).unwrap();
         assert_eq!(fenetre.repere, "F1");
         assert!(fenetre.point.distance(DVec3::new(2200.0, 0.0, 1500.0)) < 1e-3, "point {:?}", fenetre.point);
+
+        // Géométrie des familles (Revit, détail fin) : porte 0,14565 m³, fenêtre
+        // 0,022169 m³ (ouverture invisible écartée), 102 instances 4,453885 m³.
+        let vol = |i: &Instance| i.geometrie.as_ref().unwrap_or_else(|e| panic!("instance {} : {e}", i.id)).controle().volume_m3;
+        proche(vol(porte), 0.14565, 1e-5, "volume de porte");
+        proche(vol(fenetre), 0.022169, 1e-5, "volume de fenêtre");
+        let total: f64 = m.instances.iter().map(vol).sum();
+        proche(total, 4.453885, 1e-3, "volume des instances");
+
+        // Garde-corps : 11, volumes identiques à Revit (main courante et barreaux).
+        assert_eq!(m.garde_corps.len(), 11);
+        let gc = m.garde_corps.iter().find(|g| g.id == 256986).unwrap();
+        assert_eq!(m.types[&gc.type_id].nom, "Type Bateau");
+        proche(gc.geometrie.as_ref().unwrap().controle().volume_m3, 0.098736, 1e-5, "volume de garde-corps");
+        let total: f64 = m.garde_corps.iter().map(|g| g.geometrie.as_ref().unwrap().controle().volume_m3).sum();
+        proche(total, 0.821724, 1e-5, "volume des garde-corps");
 
         let s = scene(&m, "Projet1", "Projet1.rvt".into(), "2026");
         assert!(s.objects.len() > 59);
@@ -1100,11 +1243,26 @@ mod tests {
             proche(t.geometrie.as_ref().unwrap().controle().volume_m3, v, 1e-5, "volume de toit");
         }
         assert_eq!(m.types[&m.toits[0].type_id].nom, "ARC_Toit_Couverture(2)_Chevron(6)");
+        // porte « PP (1.03m x 2.04m) » : Largeur 1 030, Hauteur 2 040 dans Revit (absente de
+        // la table de types de la famille, présente dans FamilySymbol.m_pParams)
+        let porte = m.instances.iter().find(|i| i.id == 9911769).unwrap();
+        let t = &m.types[&porte.type_id];
+        assert_eq!((t.nom.as_str(), t.largeur.map(f64::round), t.hauteur.map(f64::round)), ("PP (1.03m x 2.04m)", Some(1030.0), Some(2040.0)));
         let e = m.escaliers.iter().find(|e| e.id == 9911889).unwrap();
         assert_eq!((e.niveau_bas, e.niveau_haut, e.contremarches, e.parties.as_slice()), (512913, 512914, 15, &[9911890][..]));
         proche(e.hauteur_contremarche, 180.0, 1e-6, "contremarche");
         proche(e.giron, 240.0, 1e-6, "giron");
         proche(e.hauteur, 2700.0, 1e-6, "hauteur");
+        // escalier assemblé : marches dans le type `StairsTriserSymbol` (GInstance)
+        proche(e.geometrie.as_ref().unwrap().controle().volume_m3, 0.195419, 1e-5, "volume d'escalier");
+
+        // Familles : 342 instances sur 346 maillées (les 4 autres n'ont pas de solide dans
+        // Revit) ; arbre aux surfaces de révolution, 6,566407 m³ dans Revit (−51 % sans
+        // points intérieurs).
+        assert_eq!(m.instances.iter().filter(|i| i.geometrie.is_ok()).count(), 342);
+        let arbre = m.instances.iter().find(|i| i.id == 9692487).unwrap();
+        let v = arbre.geometrie.as_ref().unwrap().controle().volume_m3;
+        assert!((v - 6.566407).abs() / 6.566407 < 0.01, "volume de l'arbre {v}");
     }
 
     /// Essai E12 : trois grilles créées dans Revit 2026 (A droite, B2 oblique, Courbe en
@@ -1126,3 +1284,7 @@ mod tests {
         assert!(g("A").arc.is_none());
     }
 }
+
+
+
+

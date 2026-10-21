@@ -76,8 +76,32 @@ def noeuds(n, chemin='', cat=-1):
             yield from noeuds(p['corps'], '%s/%d' % (chemin, i), cat)
 
 
+def courbe(c, t):
+    """Point (pieds) d'une GLine, d'un GArc ou d'une GHermiteSpline à son paramètre propre t.
+    GHermiteSpline : nœuds (m_iParametr = abscisse curviligne, m_iPoint, m_iTangent unitaire),
+    Hermite cubique de pas h entre deux nœuds, tangentes × h."""
+    k = c['_classe']
+    if k == 'GLine':
+        return [o + t * d for o, d in zip(c['m_origin'], c['m_dirVec'])]
+    if k == 'GArc':
+        return [ci + c['m_radius'] * (math.cos(t) * x + math.sin(t) * y) for ci, x, y in zip(c['m_center'], c['m_xVec'], c['m_yVec'])]
+    if k == 'GHermiteSpline':
+        ns, i = c['m_NodeArray'], 0
+        while i + 2 < len(ns) and t > ns[i + 1]['m_iParametr']:
+            i += 1
+        a, b = ns[i], ns[i + 1]
+        h = b['m_iParametr'] - a['m_iParametr']
+        x = (t - a['m_iParametr']) / h
+        h00, h10, h01, h11 = 2 * x ** 3 - 3 * x ** 2 + 1, x ** 3 - 2 * x ** 2 + x, -2 * x ** 3 + 3 * x ** 2, x ** 3 - x ** 2
+        return [h00 * p0 + h10 * h * m0 + h01 * p1 + h11 * h * m1
+                for p0, m0, p1, m1 in zip(a['m_iPoint'], a['m_iTangent'], b['m_iPoint'], b['m_iTangent'])]
+    raise Inconnu('courbe %s non décodée' % k)
+
+
 def point(s, u, v):
-    """Point (pieds) de la surface s au paramètre (u, v)."""
+    """Point (pieds) de la surface s au paramètre (u, v). RuledSurf : u ∈ [0, 1] le long des
+    deux profils (entre leurs m_endParams), v ∈ [0, 1] de l'un à l'autre. SurfRev : profil
+    au paramètre v dans le repère local, tourné de u autour de m_zVec."""
     k = s['_classe']
     if k == 'Plane':
         return [o + u * x + v * y for o, x, y in zip(s['m_origin'], s['m_xVec'], s['m_yVec'])]
@@ -85,6 +109,19 @@ def point(s, u, v):
         r, cu, su = s['m_radius'], math.cos(u), math.sin(u)
         return [c + r * (cu * x + su * y) + v * z
                 for c, x, y, z in zip(s['m_center'], s['m_xVec'], s['m_yVec'], s['m_zVec'])]
+    if k == 'RuledSurf':
+        def profil(nom, pt):
+            c = s[nom]
+            if not c:
+                return s[pt]
+            t0, t1 = c['corps']['m_endParams']
+            return courbe(c['corps'], t0 + u * (t1 - t0))
+        a, b = profil('m_pProfileCurve1', 'm_Point1'), profil('m_pProfileCurve2', 'm_Point2')
+        return [x + v * (y - x) for x, y in zip(a, b)]
+    if k == 'SurfRev':
+        a, b, h = courbe(s['m_pProfileCurve']['corps'], v)
+        A, B = a * math.cos(u) - b * math.sin(u), a * math.sin(u) + b * math.cos(u)
+        return [o + A * x + B * y + h * z for o, x, y, z in zip(s['m_center'], s['m_xVec'], s['m_yVec'], s['m_zVec'])]
     raise Inconnu('surface %s non décodée (champs : %s)' % (k, ', '.join(f for f in s if f != '_classe')))
 
 
@@ -140,18 +177,28 @@ def _dans(p, poly):
 
 
 def _coupe(p, q, a, b):
-    """Les segments pq et ab se coupent-ils en dehors de leurs extrémités communes ?"""
+    """Les segments pq et ab se coupent-ils en dehors de leurs extrémités communes ? Un sommet
+    de ab posé à l'intérieur de pq compte aussi (pont passant par le coin d'un trou aligné)."""
+    l2 = (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2
+    for x in (a, b):
+        if x not in (p, q) and l2 > 0:
+            t = ((x[0] - p[0]) * (q[0] - p[0]) + (x[1] - p[1]) * (q[1] - p[1])) / l2
+            if 0 < t < 1 and abs(_cross(p, q, x)) <= 1e-9 * l2:
+                return True
     if p in (a, b) or q in (a, b):
         return False
     d1, d2, d3, d4 = _cross(p, q, a), _cross(p, q, b), _cross(a, b, p), _cross(a, b, q)
     return d1 * d2 < 0 and d3 * d4 < 0
 
 
-def trianguler(uv, xyz, polys):
-    """Triangles (indices) d'une face plane ou réglée : polys = boucles en indices
-    de uv / xyz, extérieures dans un sens, trous dans l'autre. Oreilles coupées dans
-    le plan (u, v), la plus courte diagonale 3D d'abord ; chaque triangle garde le
-    sens de parcours des boucles (donc de la normale sortante)."""
+def trianguler(uv, xyz, polys, P=None):
+    """Triangles (indices) d'une face : polys = boucles en indices de uv / xyz,
+    extérieures dans un sens, trous dans l'autre. Oreilles coupées dans le plan (u, v) ;
+    d'abord la diagonale de plus petite flèche sur la surface P(u, v) (arrondie à 1e-6 pi :
+    nulle sur un plan et le long des génératrices), puis la plus courte en 3D ; chaque
+    triangle garde le sens de parcours des boucles (donc de la normale sortante). Décisions
+    sur des (u, v) arrondis à 1e-9 pi (sommets alignés à 1e-14 près)"""
+    uv = [(round(u, 9), round(v, 9)) for u, v in uv]
     aires = [_aire([uv[i] for i in p]) for p in polys]
     sg = 1 if aires[max(range(len(polys)), key=lambda k: abs(aires[k]))] > 0 else -1
     ext = [p for p, a in zip(polys, aires) if a * sg > 0]
@@ -182,6 +229,9 @@ def trianguler(uv, xyz, polys):
                        for p in poly):
                     continue
                 d = _dist(xyz[a], xyz[c])
+                if P is not None:
+                    pm = P((uv[a][0] + uv[c][0]) / 2, (uv[a][1] + uv[c][1]) / 2)
+                    d = (round(_dist(pm, [(x + y) / 2 for x, y in zip(xyz[a], xyz[c])]) * 1e6), d)
                 if best is None or d < best[0]:
                     best = (d, i)
             if best is None:
@@ -195,6 +245,104 @@ def trianguler(uv, xyz, polys):
         if len(poly) == 3 and abs(_cross(*[uv[i] for i in poly])) > 1e-12:
             tris.append(tuple(poly))
     return tris
+
+
+TOLERANCE = 2 / FT          # flèche maximale des faces courbes densifiées (pieds)
+TOLERANCE_SOMMET = 5e-4     # écart toléré entre arêtes consécutives d'une boucle (pieds)
+GRILLE_MAX = 64
+
+
+def _incercle(a, b, c, d):
+    a, b, c = [(q[0] - d[0], q[1] - d[1]) for q in (a, b, c)]
+    la, lb, lc = [q[0] ** 2 + q[1] ** 2 for q in (a, b, c)]
+    return a[0] * (b[1] * lc - lb * c[1]) - a[1] * (b[0] * lc - lb * c[0]) + la * (b[0] * c[1] - b[1] * c[0])
+
+
+def densifier(uv, xyz, polys, tris, P):
+    """Points intérieurs d'une face courbe (comme src/rvt/geometrie.rs) : grille (u, v) dont
+    le pas garde la flèche sous TOLERANCE, chaque point inséré dans son triangle puis
+    bascules de Delaunay dans un (u, v) mis à l'échelle 3D ; arêtes du contour fixes."""
+    if not tris:
+        return uv, xyz, tris
+    us, vs = [q[0] for q in uv], [q[1] for q in uv]
+    u0, u1, v0, v1 = min(us), max(us), min(vs), max(vs)
+    if u1 - u0 < 1e-12 or v1 - v0 < 1e-12:
+        return uv, xyz, tris
+
+    def segments(axe_u):
+        a, b, fixes = (u0, u1, (v0, (v0 + v1) / 2, v1)) if axe_u else (v0, v1, (u0, (u0 + u1) / 2, u1))
+        at = (lambda t, f: (t, f)) if axe_u else (lambda t, f: (f, t))
+        n = 1
+        while n < GRILLE_MAX:
+            if all(_dist(P(*at(a + (b - a) * (k + .5) / n, f)),
+                         [(x + y) / 2 for x, y in zip(P(*at(a + (b - a) * k / n, f)), P(*at(a + (b - a) * (k + 1) / n, f)))]) <= TOLERANCE
+                   for f in fixes for k in range(n)):
+                return n
+            n *= 2
+        return GRILLE_MAX
+
+    nu, nv = segments(True), segments(False)
+    if nu < 2 or nv < 2:
+        return uv, xyz, tris
+    um, vm, h = (u0 + u1) / 2, (v0 + v1) / 2, 1e-4
+    ku = max(_dist(P(um + h * (u1 - u0), vm), P(um - h * (u1 - u0), vm)) / (2 * h * (u1 - u0)), 1e-9)
+    kv = max(_dist(P(um, vm + h * (v1 - v0)), P(um, vm - h * (v1 - v0))) / (2 * h * (v1 - v0)), 1e-9)
+    uv, xyz, tris = list(uv), list(xyz), [list(t) for t in tris]
+
+    def S(i):
+        return (uv[i][0] * ku, uv[i][1] * kv)
+
+    sens = 1 if sum(_cross(S(t[0]), S(t[1]), S(t[2])) for t in tris) > 0 else -1
+    bord = {frozenset((q[i], q[(i + 1) % len(q)])) for q in polys for i in range(len(q))}
+    aretes = {}
+
+    def poser(ti, t):
+        if ti < len(tris):
+            for j in range(3):
+                e = (tris[ti][j], tris[ti][(j + 1) % 3])
+                if aretes.get(e) == ti:
+                    del aretes[e]
+            tris[ti] = t
+        else:
+            tris.append(t)
+        for j in range(3):
+            aretes[(t[j], t[(j + 1) % 3])] = ti
+
+    for ti, t in enumerate(list(tris)):
+        poser(ti, t)
+    contours = [[uv[i] for i in q] for q in polys]
+    du, dv = (u1 - u0) / nu, (v1 - v0) / nv
+    for i in range(1, nu):
+        for j in range(1, nv):
+            q = (u0 + du * i, v0 + dv * j)
+            if sum(_dans(q, c) for c in contours) % 2 == 0:
+                continue
+            if any(abs(c[0] - q[0]) < .3 * du and abs(c[1] - q[1]) < .3 * dv for cc in contours for c in cc):
+                continue
+            sq = (q[0] * ku, q[1] * kv)
+            ti = next((ti for ti, t in enumerate(tris) if all(sens * _cross(S(t[m]), S(t[(m + 1) % 3]), sq) > 0 for m in range(3))), None)
+            if ti is None:
+                continue
+            pi = len(uv)
+            uv.append(q)
+            xyz.append(P(*q))
+            a, b, c = tris[ti]
+            n = len(tris)
+            poser(ti, [a, b, pi])
+            poser(n, [b, c, pi])
+            poser(n + 1, [c, a, pi])
+            pile = [(a, b), (b, c), (c, a)]
+            while pile:
+                x, y = pile.pop()
+                if frozenset((x, y)) in bord or (x, y) not in aretes or (y, x) not in aretes:
+                    continue
+                t1, t2 = aretes[(x, y)], aretes[(y, x)]
+                o = next(z for z in tris[t2] if z not in (x, y))
+                if sens * _incercle(S(x), S(y), S(pi), S(o)) > 0:
+                    poser(t1, [x, o, pi])
+                    poser(t2, [o, y, pi])
+                    pile += [(x, o), (o, y)]
+    return uv, xyz, tris
 
 
 def solides(path, eid, tout=False):
@@ -218,18 +366,25 @@ def solides(path, eid, tout=False):
                 polys.append([])
                 for (k, ar), (_, suiv) in zip(b, b[1:] + b[:1]):
                     # contrôle du sens de parcours : fin de chaque arête = début de la suivante
-                    if _dist(point(s, *ar[-1]), point(s, *suiv[0])) > 1e-6:
+                    if _dist(point(s, *ar[-1]), point(s, *suiv[0])) > TOLERANCE_SOMMET:
                         raise Inconnu('boucle de la face %d discontinue' % fp['num'])
                     aretes.add(k)
                     for p in ar[:-1]:
                         polys[-1].append(len(uv)); uv.append(p)
             xyz = [point(s, u, v) for u, v in uv]
+            P = lambda u, v, s=s: point(s, u, v)
+            tris = trianguler(uv, xyz, polys, P)
+            if s['_classe'] != 'Plane':
+                uv, xyz, tris = densifier(uv, xyz, polys, tris, P)
             mm = [tuple(c * FT for c in q) for q in xyz]
             faces.append({'surface': s['_classe'], 'materiau': _eid(f['m_renderStyleId']),
                           'boucles': [[mm[i] for i in p] for p in polys],
-                          'triangles': [tuple(mm[i] for i in t) for t in trianguler(uv, xyz, polys)]})
+                          'triangles': [tuple(mm[i] for i in t) for t in tris]})
         ferme = all(_ref(objs[k]['m_pFace'][1]) for k in aretes)
-        if ferme or tout:
+        # solide fermé de volume négatif : vide de famille (réservation), ignoré
+        vol = sum(a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])
+                  for f in faces for a, b, c in f['triangles'])
+        if (ferme and vol >= 0) or tout:
             out.append({'chemin': chemin, 'categorie': cat, 'ferme': ferme, 'faces': faces})
     return out
 

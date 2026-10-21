@@ -18,13 +18,12 @@ par Autodesk. Les points non vérifiés sont signalés comme tels. Méthode d'es
 | Champs des objets | **lus en entier** par un lecteur générique piloté par le schéma : 100 % des enregistrements sur les fichiers 2016, 2022, 2025, 2026 et 2027 essayés, hors données d'add-ins (§ 7) |
 | Murs | type, niveaux, ligne (droite ou arc), hauteur et décalages extraits ; identiques à Revit sur 75 murs de deux projets et deux essais (§ 7) |
 | Autres éléments | niveaux, types (nom, épaisseur), familles (nom, catégorie), matériaux (nom, couleur, transparence), sols et plafonds, toits, escaliers (niveaux, contremarches, giron, volées), grilles, instances de familles (type, hôte, position, repère), pièces : identiques à Revit sur trois projets et un essai (§ 7) |
-| Géométrie calculée (`GElement`) | B-rep lu et maillé pour murs, sols, plafonds, toits, volées et paliers d'escalier, pièces et instances portant leur propre solide (faces planes, cylindriques et réglées, trous ; vides de familles écartés) ; volumes identiques à Revit pour 59 murs, 21 sols, 10 toits, 2 escaliers et 58 pièces (§ 7) |
-| Viewer Rust | à l'ouverture d'un `.rvt`, sans export IFC (`src/rvt/`, § 8) : **murs, sols, plafonds, toits, escaliers et pièces affichés**, colorés par matériau ; instances de familles et grilles dans l'arborescence avec leurs propriétés |
+| Géométrie calculée (`GElement`) | B-rep lu et maillé pour murs, sols, plafonds, toits, escaliers, garde-corps, pièces et **familles** (faces planes, cylindriques, réglées et de révolution, trous ; vides écartés) ; volumes identiques à Revit pour 59 murs, 21 sols sur 22, 10 toits, 4 escaliers, 16 garde-corps et 59 pièces (§ 7) |
+| Familles (`GInstance`) | géométrie du type placée par le repère de l'instance, filtrée comme une vue 3D en détail fin ; 373 instances sur 448 de volume identique à Revit, 404 à moins de 1 % (§ 7, « Familles ») |
+| Viewer Rust | à l'ouverture d'un `.rvt`, sans export IFC (`src/rvt/`, § 8) : **murs, sols, plafonds, toits, escaliers, garde-corps, portes, fenêtres, mobilier et autres familles, pièces affichés**, colorés par matériau ; grilles dans l'arborescence avec leurs propriétés |
 
-La géométrie des familles (`GInstance` : portes, fenêtres, mobilier…) n'est pas
-encore décodée : les instances apparaissent dans l'arborescence mais pas en 3D,
-sauf celles qui portent leur propre solide. Pour les voir : exporter en IFC depuis
-Revit (testé avec RiveTT, IFC4 RV et IFC2x3 CV2, tous deux lus par le viewer).
+Non décodés : surfaces `HermiteSurf` et courbes `GEllipse` (solides écartés,
+comptés), éléments 2D propres aux vues.
 
 ## Fichiers étudiés
 
@@ -445,7 +444,9 @@ d'élément). Emplacements établis :
 | pièce | `RoomElem` sans `m_areaSchemeId` ni `m_zoneSchemeId` | `ROOM_NAME` (−1 006 900), `ROOM_NUMBER` (−1 006 901), `ROOM_DEPARTMENT` (−1 006 907), niveau `m_assocLevelId`, point `m_point` (x, y seulement, en pieds ; z = altitude du niveau) ; pièce non placée : `m_bIsLocationless` = 1 |
 | surface (plan de surfaces) | `RoomElem` avec `m_areaSchemeId` | mêmes paramètres |
 | zone | `RoomElem` avec `m_zoneSchemeId` | idem |
-| type (tout type) | dérivées de `Symbol` | nom `m_symbolInfo` → `SymbolInfo.m_name` (types de sols `FloorAttributes`, de toits `RoofAttributes`, d'escaliers `StairsType`, de familles `FamilySymbol`…) ; type de famille : famille `FamilySymbol.m_familyId` |
+| type (tout type) | dérivées de `Symbol` | nom `m_symbolInfo` → `SymbolInfo.m_name` (types de sols `FloorAttributes`, de toits `RoofAttributes`, d'escaliers `StairsType`, de familles `FamilySymbol`…) ; type de famille : famille `FamilySymbol.m_familyId`, paramètres de type `FamilySymbol.m_pParams` → `m_params` (`m_paramId`, `m_value`) |
+| cotes d'une porte, d'une fenêtre | `FamilySymbol.m_pParams` | `Largeur` `FAMILY_WIDTH_PARAM` (−1 001 301) et `Hauteur` `FAMILY_HEIGHT_PARAM` (−1 001 300) du type : les **cotes du panneau**, pas l'encombrement de la famille (huisserie comprise) ; « PP (1.03m x 2.04m) » de Kerreut : 1 030 × 2 040 mm comme Revit. La table `Family.m_pFamilyTypes` n'est pas fiable pour cela (type absent, valeurs anciennes) |
+| garde-corps | dérivées de `BaseRailing` | type `m_stairsRailingAttrId`, niveau `m_assocLevelId` ; main courante et barreaux dans son `GElement` (`GInstance` des types) |
 | famille | `Family` | nom `m_name`, catégorie `m_categoryId` (BuiltInCategory : portes −2 000 023, fenêtres −2 000 014, mobilier −2 000 080…) |
 | matériau | `MaterialElem` | `m_pMaterial` → `Material` : nom `m_name`, couleur `m_color` (COLORREF, rouge dans l'octet faible : 0x7A8C8E = 142-140-122), transparence `m_transparency` (0 à 1 ; Revit affiche ×100) |
 | plafond | `Ceiling` | type `m_ceilingAttributesId`, niveau `m_assocLevelId`, décalage `CEILING_HEIGHTABOVELEVEL_PARAM` (−1 002 300) |
@@ -487,10 +488,11 @@ lues par `src/rvt/maquette.rs` :
 | Donnée | `Projet1.rvt` (2026) | `Kerreut 2025.rvt` (2025) | `Langan.rvt` (2025) | E12 (2026) |
 |---|---|---|---|---|
 | matériaux (nom, couleur, transparence) | 18 / 18 | 80 / 80 en nombre | 80 en nombre | — |
-| sols et plafonds (type, niveau, décalage, volume) | 6 / 6 | 15 / 16 (1 boucle discontinue) | aucun | — |
+| sols et plafonds (type, niveau, décalage, volume) | 6 / 6 | 16 / 16 (un volume à 7·10⁻⁶ près : boucle à 0,01 mm près) | aucun | — |
 | toits (niveau, décalage, volume) | aucun | 10 / 10 | 2 en nombre | — |
-| escaliers (niveaux, contremarches, hauteur, giron, volées) | 2 / 2, volume compris | 2 / 2, sans volume (voir les limites) | aucun | — |
-| pièces (volume du `GElement`) | 39 / 39 | 18 / 19 (1 boucle discontinue) | 1 / 1 | — |
+| escaliers (niveaux, contremarches, hauteur, giron, volées, volume) | 2 / 2 | 2 / 2 (marches du type `StairsTriserSymbol`) | aucun | — |
+| garde-corps (type, volume) | 11 / 11 | 5 / 5 | aucun | — |
+| pièces (volume du `GElement`) | 39 / 39 | 19 / 19 | 1 / 1 | — |
 | instances (hôte, point, repère) | 12 / 12 vérifiées | 6 / 6 vérifiées | 2 / 2 | — |
 | catégories des instances (portes, fenêtres, barreaux) | 43, 26, 33 comme Revit | — | — | — |
 | grilles (nom, extrémités, centre et rayon) | aucune | aucune | aucune | 3 / 3 |
@@ -530,6 +532,7 @@ faibles (numéros d'objet des pointeurs, § « Champs d'un objet »).
 | `CylSurf` (→ `Surface`) | `m_center`, `m_xVec`, `m_yVec`, `m_zVec`, `m_radius` ; point(u, v) = centre + r·(cos u·x + sin u·y) + v·z |
 | `RuledSurf` (→ `Surface`) | `m_pProfileCurve1`, `m_pProfileCurve2` (courbes de profil ; absente : `m_Point1` / `m_Point2`), enveloppe [0, 1] × [0, 1] ; point(u, v) = C1(u) + v·(C2(u) − C1(u)), Cᵢ(u) = point de la courbe au paramètre t0 + u·(t1 − t0) de ses `m_endParams` |
 | `GHermiteSpline` (→ `GCurve`) | `m_NodeArray` : nœuds `m_iParametr` (abscisse curviligne), `m_iPoint`, `m_iTangent` (unitaire) ; entre deux nœuds, Hermite cubique de pas h = écart des paramètres, tangentes multipliées par h |
+| `SurfRev` (→ `Surface`) | `m_center`, `m_xVec`, `m_yVec`, `m_zVec`, `m_pProfileCurve` (courbe dans le repère local) ; point(u, v) = profil(v) tourné de l'angle u autour de z : (a cos u − b sin u)·x + (a sin u + b cos u)·y + c·z, (a, b, c) = profil au paramètre propre v. Écart des arêtes nul sur une poignée de porte de `Projet1.rvt` (204 mm avec u et v inversés) |
 
 **Règles établies** (E04, E09, E11, `Projet1.rvt`) :
 
@@ -577,6 +580,23 @@ faibles (numéros d'objet des pointeurs, § « Champs d'un objet »).
    intérieurs seulement : la spline de Revit approche l'hélice exacte. Les sommets
    ne sont alors pas fusionnés (maillage visuellement fermé, 4 arêtes non
    appariées).
+9. *Continuité des boucles* : la fin d'une arête et le début de la suivante
+   coïncident à 3·10⁻¹¹ mm pour les murs, mais seulement à 0,007–0,017 mm dans
+   certaines familles (douche de Saint-Malo) ou dalles et pièces (Kerreut). Le
+   contrôle se fait à la tolérance de sommet de Revit, 0,0005 pi (0,15 mm) : il
+   débloque 1 sol et 1 pièce de Kerreut, 4 pièces de Saint-Malo, 211 solides de
+   familles.
+10. *Faces courbes* : la triangulation du seul contour aplatit les faces doublement
+   courbes (demi-sphère de la couronne d'un arbre : −51 % de volume) et, avec le
+   critère « plus courte diagonale », les cylindres fins (pieds de chaise). Les
+   oreilles sont choisies d'abord par la flèche de la diagonale sur la surface (nulle
+   sur un plan et le long des génératrices), puis par la longueur ; une face non
+   plane reçoit ensuite une grille de points intérieurs (pas réglé pour une flèche
+   de 2 mm, 64 points par axe au plus) insérée avec bascules de Delaunay, les arêtes
+   du contour restant fixes. Arbre : −0,36 % au lieu de −51 %. Les décisions de la
+   triangulation se font sur des (u, v) arrondis à 10⁻⁹ pi : des coins de trous
+   alignés à 10⁻¹⁴ près faisaient échouer le pontage des trous (fenêtre de
+   `BIBLIO.rvt`).
 
 **Maillage** (`geometrie.py`) : par face, triangulation dans le plan (u, v) par
 oreilles, trous reliés au contour par un pont, plus courte diagonale 3D d'abord
@@ -599,17 +619,73 @@ l'épaisseur du solide. Sans référence Revit, les 39 murs de
 `Essai projet 2027 astra.rvt` donnent aussi des maillages fermés.
 
 **Limites.** Surfaces décodées : `Plane`, `CylSurf`, `RuledSurf` (profils `GLine`,
-`GArc`, `GHermiteSpline`). Non décodées : `ConeSurf`, `HermiteSurf`, `OffsetSurf`,
-`SurfRev`, `TempImportNurbsSurf`, `SharedSurface`. Dans `Projet1.rvt`, 397 des 398
-`GElement` (murs, pièces, dalles, garde-corps…) se lisent sans erreur ; l'échec est
-un `SurfRev` (profil `m_pProfileCurve`) d'un `FamilySymbol`. Les `GElement` des
-instances de familles ne contiennent en général pas de solide mais un `GInstance`
-(`m_instanceInfo`, `m_oEmbeddedSymbolGRep`…) qui renvoie à la géométrie du type :
-non décodé (176 instances sur 346 dans `Kerreut 2025.rvt`, 3 055 sur 3 116 à
-Saint-Malo). Il en va de même des escaliers de `Kerreut 2025.rvt` et `Colombes.rvt`
-(volées sans solide propre), des garde-corps et des murs-rideaux. Quelques faces
-ont une boucle discontinue (1 sol et 1 pièce de Kerreut, 4 pièces de Saint-Malo) :
-non résolu. Triangulation en O(n³) par face, à revoir pour de grandes faces.
+`GArc`, `GHermiteSpline`), `SurfRev`. Non décodées : `ConeSurf`, `HermiteSurf` (lits
+de Kerreut), `OffsetSurf`, `TempImportNurbsSurf`, `SharedSurface`, et la courbe
+`GEllipse` ; un solide qui en porte est écarté et compté (`Maillage::echecs`), le
+reste de l'élément est affiché. Les arêtes restent celles de Revit : sur des tubes
+de 1 cm (chaises de Kerreut), leur échantillonnage grossier fait perdre 10 à 30 %
+du volume de ces pièces (−4 % sur la chaise). Un mur-rideau n'a pas de solide
+propre : ses panneaux et meneaux sont des instances, affichées. Triangulation en
+O(n³) par face, à revoir pour de grandes faces.
+
+### Familles (`GInstance`)
+
+Le `GElement` d'une instance de famille (et de certains autres éléments : volées
+d'escalier assemblé, garde-corps) contient un `GInstance` au lieu d'un solide :
+
+| Champ | Rôle |
+|---|---|
+| `m_instanceInfo` (pointeur, `InstanceInfo` → `InstInfoBase`) | `m_Trf` : repère de l'instance ; `m_symbolId` : type dont le `GElement` (section 0x67 du `Symbol`) porte la géométrie |
+| `m_oEmbeddedSymbolGRep` | géométrie incorporée à l'instance, à la place de celle du type |
+| `m_bHasScale` | toujours 0 dans le corpus |
+
+- *Repère* : p' = `m_or` + R·p, la colonne j de `m_3x3` (composantes `m_3x3[i][j]`)
+  étant l'axe j ; 214 instances tournées de Kerreut sur 214 conformes à
+  `GetTotalTransform` de l'API, origine identique pour les 346. Un repère miroir
+  (déterminant négatif) inverse le sens des triangles.
+- *Type* : le `m_symbolId` désigne souvent un type propre à l'instance (porte coupée
+  par son mur : 257 052 pour l'instance 257 051 de `Projet1.rvt`, type maître
+  104 714), un `FamilySymbol` ou un autre `Symbol` (`StairsTriserSymbol` : marches
+  d'un escalier assemblé). Les `GInstance` s'imbriquent (familles imbriquées).
+- *Filtres de vue* : l'arbre du type mêle les représentations de toutes les vues
+  dans des `GFilter` à conditions (`m_oConditions`). Pour retrouver
+  `get_Geometry(Options { DetailLevel = Fine })`, sans vue : `GConditionDir` et
+  `GConditionCut` sont vraies si niées (`m_negateDirCondition` = 1 : vue non
+  parallèle à l'axe, élément non coupé), `GConditionInt` de `m_param` 3 compare le
+  niveau de détail (`m_comp` 0 : différent, 3 : égal ; `m_value` 1 grossier, 3 fin),
+  toutes les conditions d'un filtre devant être vraies. Les autres classes
+  (`GConditionViewType`, `GConditionVModeType`…) sont tenues pour vraies ;
+  `GConditionInt` de `m_param` 1 (sens inconnu, 40 nœuds dans `Projet1.rvt`) donne le
+  même volume vraie ou fausse sur la porte 257 050, seul cas essayé.
+- *Objets invisibles* : un nœud dont `GInfo.m_flags` porte les bits 0xE0 est écarté
+  (`Options.IncludeNonVisibleObjects` = faux) : volume d'ouverture d'une fenêtre,
+  sous-catégorie masquée. Fenêtre 257 071 de `Projet1.rvt` : 0,031 44 m³ sans cette
+  règle, 0,022 169 m³ avec, comme Revit.
+- *Vides* : solide fermé de volume négatif écarté (§ « Règles établies », 7).
+
+Exemple, porte 257 051 de `Projet1.rvt` : 10 solides dans le type, dont 7 retenus
+(huisserie, battant détaillé `GConditionInt` ≠ 1 plutôt que simplifié = 1,
+quincaillerie = 3, représentations « non coupé » plutôt que « coupé ») ;
+0,145 647 m³ contre 0,145 65 m³ dans Revit.
+
+**Validation contre Revit 2026** (script RiveTT `rvt-reference-familles` : volume des
+solides de `get_Geometry`, détail fin, boîte et repère de chaque instance) :
+
+| | `Projet1.rvt` (2026) | `Kerreut 2025.rvt` (2025) |
+|---|---|---|
+| instances | 102 | 346 |
+| volume identique (10⁻⁴ près) | 99 | 274 |
+| à moins de 1 % (faces de révolution, tubes) | 3 | 28 |
+| à moins de 5 % (chaises : tubes de 1 cm ; porte de garage : `GEllipse`) | — | 33 |
+| plus de 5 % (lits : `HermiteSurf` écartées ; receveur de douche : faces sans boucle) | — | 7 |
+| sans solide, comme dans Revit | — | 4 |
+| volume total | 4,453 347 m³ (Revit 4,453 885) | 53,632 m³ (Revit 54,487) |
+| boîte englobante | identique ou contenue dans celle de Revit pour toutes (celle de Revit compte aussi les lignes 2D) | idem |
+
+Saint-Malo : 2 585 instances sur 3 116 maillées ; les autres sont des symboles
+(cercles et gabarits PMR), vides (gaines, décaissés), panneaux vides ou plantes
+sans volume. Garde-corps : 11 / 11 et 5 / 5 de volume identique à Revit, 96 / 118
+maillés à Saint-Malo.
 
 ### Contenu repéré
 
@@ -633,6 +709,7 @@ Python 3 sans dépendance externe :
 | `champs.py` | lecture des champs d'un élément (`fichier id`), couverture du lecteur (`--couverture`), extraction des murs (`--murs`) |
 | `elements.py` | niveaux, types de murs, dalles, instances, pièces, surfaces (`fichier niveaux pieces…`) ; objet aplati en `chemin = valeur` (`--plat id`) |
 | `geometrie.py` | géométrie calculée d'un élément (`fichier id`) : solides B-rep, sommets, faces et triangles en mm, contrôle (boîte, volume, aire, fermeture, écart des arêtes), export OBJ (`--obj`), plans de référence (`--tout`) |
+| `familles.py` | géométrie d'une instance de famille (`fichier id…`) : volume, triangles, boîte en mm ; `--trace id` : solides retenus ou écartés (filtre, invisible, non décodé) et pourquoi |
 
 ```bash
 python -I tools/rvt-research/objets.py "fichier.rvt" --classe SWall
@@ -641,6 +718,7 @@ python -I tools/rvt-research/champs.py "fichier.rvt" 2797
 python -I tools/rvt-research/elements.py "fichier.rvt" niveaux pieces
 python -I tools/rvt-research/elements.py "fichier.rvt" --plat 2797
 python -I tools/rvt-research/geometrie.py "fichier.rvt" 2797 --obj mur.obj
+python -I tools/rvt-research/familles.py "fichier.rvt" --trace 257051
 python -I tools/rvt-research/extract.py "fichier.rvt" sortie/
 python -I tools/rvt-research/schema.py sortie/Formats_Latest.bin schema.json
 python -I tools/rvt-research/inflate_ref.py "fichier.rvt" Formats/Latest
@@ -648,50 +726,59 @@ python -I tools/rvt-research/inflate_ref.py "fichier.rvt" Formats/Latest
 
 **Portage Rust** (viewer, 21/10/2026) : `src/rvt/objets.rs` (`extract.unpad`,
 `objets.sections`, `records`, `elem_table`), `schema.rs` (`ClassTable`), `champs.rs`
-(`Lecteur`), `geometrie.rs` (`maillage`, `controle`, plus `RuledSurf` et
-`GHermiteSpline`), `maquette.rs` (`champs.murs`, `elements.*`, plus toits,
-escaliers, grilles, familles et matériaux, puis modèle IFC synthétique pour
-l'arborescence et les propriétés). Objets lus en parallèle, géométrie de tous les
-éléments en parallèle.
+(`Lecteur`), `geometrie.rs` (`maillage`, `controle`, surfaces réglées et de
+révolution, splines d'Hermite, densification des faces courbes, familles :
+`Bibliotheque` calcule une fois la géométrie de chaque type et la partage entre
+ses instances), `maquette.rs` (`champs.murs`, `elements.*`, plus toits, escaliers,
+garde-corps, grilles, familles et matériaux, puis modèle IFC synthétique pour
+l'arborescence et les propriétés). Les niveaux sont lus d'abord, puis chaque objet
+est lu et réduit aussitôt à ses champs utiles, en parallèle : garder tous les
+enregistrements lus portait le pic mémoire de Saint-Malo à 6,2 Go, ramené à 2,1 Go.
+Géométrie de tous les éléments en parallèle.
 
 Dans la scène : murs `IFCWALL`, sols `IFCSLAB`, plafonds `IFCCOVERING`, toits
-`IFCROOF`, escaliers `IFCSTAIR` (volées et paliers réunis), pièces placées
-`IFCSPACE` (masquées par défaut, comme dans un IFC), instances selon leur catégorie
-(`IFCDOOR`, `IFCWINDOW`, `IFCFURNITURE`…, `IFCBUILDINGELEMENTPROXY` sinon), grilles
-`IFCGRID` (propriétés seulement). Couleur de chaque face : celle de son matériau,
-transparence comprise (plafonnée à 90 %). Les instances propres à une vue
-(cartouches, composants de détail, annotations) sont ignorées.
+`IFCROOF`, escaliers `IFCSTAIR` (volées et paliers réunis), garde-corps
+`IFCRAILING`, pièces placées `IFCSPACE` (masquées par défaut, comme dans un IFC),
+instances selon leur catégorie (`IFCDOOR`, `IFCWINDOW`, `IFCFURNITURE`…,
+`IFCBUILDINGELEMENTPROXY` sinon) avec leur géométrie de famille, grilles `IFCGRID`
+(propriétés seulement). Portes et fenêtres : « Largeur (panneau) » et « Hauteur
+(panneau) », paramètres de type. Couleur de chaque face : celle de son matériau,
+transparence comprise (plafonnée à 90 %) ; 99 % des triangles des familles ont un
+matériau connu, les autres (« par catégorie ») prennent la couleur de la classe.
+Les instances propres à une vue (cartouches, composants de détail, annotations)
+sont ignorées.
 
 | Fichier | Format | Maillés par le viewer (`--stats`) |
 |---|---|---|
 | E04, E09, E11 | 2026 | murs 1 / 1 chacun ; sommets, volume, aire, faces et triangles identiques à `geometrie.py` |
-| `Projet1.rvt` | 2026 | murs 59 / 59 (257,974 221 m³, 3 768 triangles), sols 6 / 6, escaliers 2 / 2, pièces 39 / 39 |
-| `Kerreut 2025.rvt` | 2025 | murs 95 / 108, sols et plafonds 15 / 16, toits 10 / 10, escaliers 0 / 2, pièces 18 / 19, instances 170 / 346 |
-| `Langan.rvt`, `BIBLIO.rvt`, `Guidel.rvt` | 2025 | murs 16 / 16, 20 / 21, 5 / 5 ; toits 2 / 2, —, 1 / 1 |
+| `Projet1.rvt` | 2026 | murs 59 / 59 (257,974 221 m³, 3 768 triangles), sols 6 / 6, escaliers 2 / 2, garde-corps 11 / 11, pièces 39 / 39, instances 102 / 102 |
+| `Kerreut 2025.rvt` | 2025 | murs 97 / 108, sols et plafonds 16 / 16, toits 10 / 10, escaliers 2 / 2, garde-corps 5 / 5, pièces 19 / 19, instances 342 / 346 |
+| `Langan.rvt`, `BIBLIO.rvt`, `Guidel.rvt` | 2025 | murs 16 / 16, 20 / 21, 5 / 5 ; toits 2 / 2, —, 1 / 1 ; instances 2 / 2, 65 / 73, — |
 | `Saint-cast-Le-Guildo.rvt` | 2025 | murs 16 / 16 (fichier absent du poste le 21/10, non relancé) |
 | `GABARIT JBA.rte` | 2016 | murs 12 / 12 (non relancé le 21/10) |
-| `Colombes.rvt` | 2022 | murs 41 / 41, sols 3 / 3, toits 4 / 4, escaliers 0 / 2, pièces 9 / 10 |
-| `Essai projet 2027 astra.rvt` | 2027 | murs 39 / 39, sols 4 / 4, escaliers 1 / 1 |
-| `Saint-Malo_avenue aristide briand_46.rvt` et sa version 2027 `Phase2_Lecture.rvt` | 2026, 2027 | résultats identiques : murs 2 219 / 2 235 (16 sans solide fermé), sols et plafonds 91 / 92, toits 10 / 10, escaliers 14 / 14, pièces 133 / 137 ; lecture complète en 4 à 6 s |
-| `Kerreutv9.rvt` | 2022 | murs 95 / 108 : 2 boucles discontinues et 11 `GElement` sans solide fermé, mêmes échecs que `geometrie.py` |
+| `Colombes.rvt` | 2022 | murs 41 / 41, sols 3 / 3, toits 4 / 4, escaliers 2 / 2, garde-corps 1 / 3, pièces 9 / 10, instances 49 / 49 |
+| `Essai projet 2027 astra.rvt` | 2027 | murs 39 / 39, sols 4 / 4, escaliers 1 / 1, instances 12 / 12, garde-corps 0 / 4 |
+| `Saint-Malo_avenue aristide briand_46.rvt` et sa version 2027 `Phase2_Lecture.rvt` | 2026, 2027 | résultats identiques : murs 2 219 / 2 235 (16 murs-rideaux sans solide propre), sols et plafonds 92 / 92, toits 10 / 10, escaliers 14 / 14, garde-corps 96 / 118, pièces 137 / 137, instances 2 585 / 3 116 ; lecture complète en 4 s |
+| `Kerreutv9.rvt` | 2022 | comme `Kerreut 2025.rvt` (même maquette) |
 
 Tests (`cargo test`) : E04 (volume, boîte), `Projet1.rvt` (59 murs, matériaux, sols,
-escaliers, pièces, instances), `Kerreut 2025.rvt` (toits, escalier) et E12
-(grilles), sautés si les fichiers sont absents. Dossiers : `RVT_ESSAIS` (défaut
-`C:\Users\theba\Desktop\Revit`) et `RVT_CORPUS` (défaut
-`C:\Users\theba\Documents\Thomas\ARCHI PERSO`).
+escaliers, garde-corps, pièces, instances et leur géométrie, cotes d'une porte),
+`Kerreut 2025.rvt` (toits, escalier assemblé, familles, arbre aux surfaces de
+révolution, cotes d'une porte) et E12 (grilles), sautés si les fichiers sont
+absents. Dossiers : `RVT_ESSAIS` (défaut `C:\Users\theba\Desktop\Revit`) et
+`RVT_CORPUS` (défaut `C:\Users\theba\Documents\Thomas\ARCHI PERSO`).
 
 ## 9. Pistes pour la suite
 
 1. **Autres éléments** : faits et portés en Rust pour niveaux, types, familles,
-   matériaux, sols, plafonds, toits, escaliers, grilles, instances et pièces (§ 7,
-   § 8). Restent les garde-corps (`BaseRailing`), les murs-rideaux, la position des
-   éléments 2D de vue, les surfaces (validées seulement en nombre) et les paramètres
-   en général (seuls quelques BuiltInParameter précis sont lus).
-2. **Géométrie** : priorité au `GInstance` (géométrie du type de famille et
-   placement) : portes, fenêtres, mobilier, escaliers assemblés, garde-corps et
-   murs-rideaux en dépendent. Puis surfaces restantes (`SurfRev`, `HermiteSurf`…)
-   et boucles discontinues.
+   matériaux, sols, plafonds, toits, escaliers, garde-corps, grilles, instances et
+   pièces (§ 7, § 8). Restent la position des éléments 2D de vue, les surfaces
+   (validées seulement en nombre) et les paramètres en général (seuls quelques
+   BuiltInParameter précis sont lus ; les paramètres de type sont dans
+   `FamilySymbol.m_pParams`, les noms des paramètres de famille restent à trouver).
+2. **Géométrie** : surfaces `HermiteSurf`, `ConeSurf`, `OffsetSurf` et courbe
+   `GEllipse` ; faces sans boucle (receveur de douche de Kerreut : maillage ouvert) ;
+   22 garde-corps de Saint-Malo sans solide.
 3. **Objets hors `ElemTable`** : confirmer qu'il s'agit du contenu des familles
    (`Global/ContentDocuments`, 40 Mo décompressés dans le projet 2027).
 4. **Inconnus restants** : u32 des enregistrements 0x66, `ElementHeader`, octets de
