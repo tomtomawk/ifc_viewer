@@ -1,7 +1,10 @@
-//! Interface egui : arborescence, classes, propriétés et vue 3D.
+//! Interface egui, disposée comme Revit : propriétés à gauche, vue au centre,
+//! arborescence du projet à droite (vues, nomenclatures, feuilles, familles, groupes et
+//! liens d'un fichier Revit ; arborescence spatiale et classes d'un IFC).
 
 use crate::camera::{Camera, MAX_PITCH};
 use crate::model::pretty_type;
+use crate::pilote::{self, Requete};
 use crate::render::{FrameParams, Renderer};
 use crate::rvt::{self, RvtInfo};
 use crate::scene::{self, Scene};
@@ -11,7 +14,7 @@ use eframe::glow;
 use glam::{Vec2, Vec3};
 use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
-use std::sync::mpsc::{Receiver, channel};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 
 enum LoadMsg {
@@ -30,10 +33,37 @@ const SPATIAL: &[&str] = &[
     "IFCSPATIALZONE", "IFCEXTERNALSPATIALELEMENT",
 ];
 
+/// Onglets de l'arborescence.
 #[derive(PartialEq, Clone, Copy)]
 enum LeftTab {
+    /// Navigateur de projet de Revit.
+    Projet,
+    /// Arborescence spatiale.
     Tree,
     Classes,
+}
+
+/// Action demandée depuis le navigateur de projet, appliquée après son tracé.
+enum ActionNav {
+    Selection(Id),
+    Activer(usize),
+    IsolerType(Id),
+}
+
+/// Rubrique du navigateur de projet d'un genre de vue (ordre de Revit) ; None pour les
+/// nomenclatures et les feuilles, qui ont leur propre branche.
+fn rubrique(genre: &str) -> Option<(u8, &'static str)> {
+    Some(match genre {
+        "Plan d'étage" => (0, "Plans d'étage"),
+        "Plan de plafond" => (1, "Plans de plafond"),
+        "Vue 3D" => (2, "Vues 3D"),
+        "Élévation" => (3, "Élévations"),
+        "Coupe" => (4, "Coupes"),
+        "Vue de dessin" => (5, "Vues de dessin"),
+        "Légende" => (6, "Légendes"),
+        "Nomenclature" | "Feuille" => return None,
+        _ => (7, "Autres vues"),
+    })
 }
 
 pub struct ViewerApp {
@@ -62,6 +92,15 @@ pub struct ViewerApp {
     left_tab: LeftTab,
     filter: String,
     show_unsupported: bool,
+    /// Vue Revit ouverte (indice dans `Navigateur::vues`).
+    vue_active: Option<usize>,
+    /// Commandes du serveur MCP (voir `pilote.rs`) et celles en attente de traitement.
+    pilote: Option<Receiver<Requete>>,
+    requetes: Vec<Requete>,
+    /// Réponses des ouvertures demandées par le pilote, envoyées en fin de chargement.
+    attente_ouverture: Vec<Sender<String>>,
+    /// Zone de la vue 3D dans la fenêtre (points), pour les captures.
+    rect_vue: egui::Rect,
 }
 
 impl ViewerApp {
@@ -102,6 +141,11 @@ impl ViewerApp {
             left_tab: LeftTab::Tree,
             filter: String::new(),
             show_unsupported: false,
+            vue_active: None,
+            pilote: pilote::demarrer(cc.egui_ctx.clone()),
+            requetes: Vec::new(),
+            attente_ouverture: Vec::new(),
+            rect_vue: egui::Rect::NOTHING,
         };
         if let Some(p) = path {
             app.open(p, &cc.egui_ctx);
@@ -156,13 +200,13 @@ impl ViewerApp {
                     match scene {
                         Ok(scene) => {
                             let summary = format!(
-                                "{} murs, {} triangles, lus dans le fichier en {:.2} s",
+                                "{} objets, {} triangles, lus dans le fichier en {:.2} s",
                                 scene.objects.len(),
                                 scene.triangles,
                                 scene.load_ms as f64 / 1000.0
                             );
                             self.install_scene(*scene);
-                            self.status = format!("{head} — {summary} — autres éléments non lus");
+                            self.status = format!("{head} — {summary}");
                             self.rvt_geom = Ok(summary);
                             self.rvt_sheet = false;
                         }
@@ -227,6 +271,8 @@ impl ViewerApp {
             self.camera.fit(mn, mx);
         }
         self.visible = vec![true; scene.objects.len()];
+        self.vue_active = None;
+        self.left_tab = if scene.navigateur.is_some() { LeftTab::Projet } else { LeftTab::Tree };
         self.scene = Some(scene);
         self.visibility_dirty = true;
     }
@@ -399,6 +445,10 @@ impl ViewerApp {
                 ui.colored_label(Color32::from_rgb(200, 40, 40), format!("Erreur : {e}"));
                 ui.separator();
             }
+            if let Some(v) = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)) {
+                ui.label(RichText::new(format!("1 : {}", v.echelle)).strong());
+                ui.separator();
+            }
             ui.label(&self.status);
             if let Some(s) = &self.scene {
                 if !s.unsupported.is_empty() {
@@ -415,23 +465,38 @@ impl ViewerApp {
         });
     }
 
+    /// Arborescence du projet (panneau de droite, comme dans Revit).
     fn left_panel(&mut self, ui: &mut egui::Ui) {
+        let nom = self.scene.as_ref().map(|s| s.file_name.clone()).unwrap_or_default();
+        ui.label(RichText::new(if nom.is_empty() { "Arborescence du projet".to_string() } else { format!("Arborescence du projet - {nom}") }).strong());
+        let a_nav = self.scene.as_ref().is_some_and(|s| s.navigateur.is_some());
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.left_tab, LeftTab::Tree, "Arborescence");
+            if a_nav {
+                ui.selectable_value(&mut self.left_tab, LeftTab::Projet, "Projet");
+            }
+            ui.selectable_value(&mut self.left_tab, LeftTab::Tree, if a_nav { "Modèle" } else { "Arborescence" });
             ui.selectable_value(&mut self.left_tab, LeftTab::Classes, "Classes");
         });
-        ui.add(egui::TextEdit::singleline(&mut self.filter).hint_text("Filtrer (nom, classe, GlobalId)"));
+        if !a_nav && self.left_tab == LeftTab::Projet {
+            self.left_tab = LeftTab::Tree;
+        }
+        ui.add(egui::TextEdit::singleline(&mut self.filter).hint_text("Rechercher"));
         ui.separator();
         if self.scene.is_none() {
             ui.label(RichText::new("Aucun modèle chargé").weak());
             return;
         }
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            if self.left_tab == LeftTab::Projet {
+                self.navigateur_ui(ui);
+                return;
+            }
             if !self.filter.trim().is_empty() {
                 self.filtered_list(ui);
                 return;
             }
             match self.left_tab {
+                LeftTab::Projet => {}
                 LeftTab::Tree => {
                     let roots = self.tree_roots();
                     for r in roots {
@@ -442,6 +507,184 @@ impl ViewerApp {
             }
         });
         self.reveal = None;
+    }
+
+    /// Navigateur de projet de Revit : vues par genre et type, nomenclatures, feuilles et
+    /// vues qu'elles portent, familles par catégorie, groupes, liens. Clic : propriétés ;
+    /// double-clic : ouvrir la vue (ou isoler les instances d'un type).
+    fn navigateur_ui(&mut self, ui: &mut egui::Ui) {
+        let Some(s) = self.scene.as_ref() else { return };
+        let Some(nav) = s.navigateur.as_ref() else { return };
+        let q = self.filter.trim().to_lowercase();
+        let garde = |t: &str| q.is_empty() || t.to_lowercase().contains(&q);
+        let ouvert = !q.is_empty();
+        let (selection, active) = (self.selected, self.vue_active);
+        let mut action = None;
+        let feuille = |ui: &mut egui::Ui, label: String, entite: Option<Id>, vue: Option<usize>, action: &mut Option<ActionNav>| {
+            let actif = vue.is_some() && vue == active;
+            let texte = if actif { RichText::new(label).strong() } else { RichText::new(label) };
+            let r = ui.selectable_label(entite.is_some() && entite == selection, texte);
+            if r.double_clicked() {
+                *action = vue.map(ActionNav::Activer).or_else(|| entite.map(ActionNav::IsolerType));
+            } else if r.clicked() {
+                if let Some(e) = entite {
+                    *action = Some(ActionNav::Selection(e));
+                }
+            }
+        };
+        let titre_vue = |v: &crate::scene::NavVue| if v.nom.is_empty() { format!("{} [{}]", v.genre, v.revit_id) } else { v.nom.clone() };
+        // Vues (tout) : rubriques dans l'ordre de Revit, puis type de vue
+        let mut rubriques: BTreeMap<(u8, &str, String), Vec<usize>> = BTreeMap::new();
+        for (i, v) in nav.vues.iter().enumerate() {
+            if let Some((ordre, nom)) = rubrique(&v.genre) {
+                if garde(&titre_vue(v)) {
+                    rubriques.entry((ordre, nom, v.type_vue.clone())).or_default().push(i);
+                }
+            }
+        }
+        egui::CollapsingHeader::new(RichText::new("Vues (tout)").strong()).id_salt("nav-vues").default_open(true).open(ouvert.then_some(true)).show(ui, |ui| {
+            for ((_, nom, type_vue), mut vues) in rubriques {
+                vues.sort_by_key(|&i| titre_vue(&nav.vues[i]).to_lowercase());
+                // « Élévations (Élévation 1) » : type entre parenthèses s'il diffère du genre
+                let genre = &nav.vues[vues[0]].genre;
+                let titre = if type_vue.is_empty() || type_vue.eq_ignore_ascii_case(genre) { nom.to_string() } else { format!("{nom} ({type_vue})") };
+                egui::CollapsingHeader::new(titre.clone()).id_salt(("nav-rub", titre)).default_open(true).open(ouvert.then_some(true)).show(ui, |ui| {
+                    for i in vues {
+                        feuille(ui, titre_vue(&nav.vues[i]), nav.vues[i].entite, Some(i), &mut action);
+                    }
+                });
+            }
+        });
+        let mut nomenclatures: Vec<usize> = (0..nav.vues.len()).filter(|&i| nav.vues[i].genre == "Nomenclature" && garde(&nav.vues[i].nom)).collect();
+        nomenclatures.sort_by_key(|&i| nav.vues[i].nom.to_lowercase());
+        egui::CollapsingHeader::new(RichText::new(format!("Nomenclatures/Quantités (tout) ({})", nomenclatures.len())).strong()).id_salt("nav-nom").open(ouvert.then_some(true)).show(ui, |ui| {
+            for i in nomenclatures {
+                feuille(ui, nav.vues[i].nom.clone(), nav.vues[i].entite, Some(i), &mut action);
+            }
+        });
+        let mut feuilles: Vec<usize> = (0..nav.vues.len()).filter(|&i| nav.vues[i].genre == "Feuille").collect();
+        feuilles.sort_by_key(|&i| (nav.vues[i].numero.clone(), nav.vues[i].nom.clone()));
+        let indice: std::collections::HashMap<i64, usize> = nav.vues.iter().enumerate().map(|(i, v)| (v.revit_id, i)).collect();
+        egui::CollapsingHeader::new(RichText::new(format!("Feuilles (tout) ({})", feuilles.len())).strong()).id_salt("nav-feuilles").open(ouvert.then_some(true)).show(ui, |ui| {
+            for i in feuilles {
+                let f = &nav.vues[i];
+                let titre = if f.numero.is_empty() { titre_vue(f) } else { format!("{} - {}", f.numero, f.nom) };
+                let placees: Vec<usize> = f.placees.iter().filter_map(|v| indice.get(v).copied()).collect();
+                if !garde(&titre) && !placees.iter().any(|&j| garde(&nav.vues[j].nom)) {
+                    continue;
+                }
+                if placees.is_empty() {
+                    feuille(ui, titre, f.entite, Some(i), &mut action);
+                } else {
+                    let id = ui.make_persistent_id(("nav-feuille", f.revit_id));
+                    egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, ouvert)
+                        .show_header(ui, |ui| feuille(ui, titre, f.entite, Some(i), &mut action))
+                        .body(|ui| {
+                            for j in placees {
+                                feuille(ui, titre_vue(&nav.vues[j]), nav.vues[j].entite, Some(j), &mut action);
+                            }
+                        });
+                }
+            }
+        });
+        // Familles : catégorie, famille, types
+        let mut par_cat: BTreeMap<&str, Vec<&crate::scene::NavFamille>> = BTreeMap::new();
+        for f in &nav.familles {
+            if garde(&f.nom) || garde(&f.categorie) || f.types.iter().any(|t| garde(&t.0)) {
+                par_cat.entry(f.categorie.as_str()).or_default().push(f);
+            }
+        }
+        egui::CollapsingHeader::new(RichText::new("Familles").strong()).id_salt("nav-familles").open(ouvert.then_some(true)).show(ui, |ui| {
+            for (cat, fams) in par_cat {
+                egui::CollapsingHeader::new(cat).id_salt(("nav-cat", cat)).open(ouvert.then_some(true)).show(ui, |ui| {
+                    for f in fams {
+                        egui::CollapsingHeader::new(&f.nom).id_salt(("nav-fam", cat, &f.nom)).open(ouvert.then_some(true)).show(ui, |ui| {
+                            for (t, e) in &f.types {
+                                let label = if e.is_some() { t.clone() } else { format!("{t} (non utilisé)") };
+                                feuille(ui, label, *e, None, &mut action);
+                            }
+                        });
+                    }
+                });
+            }
+        });
+        let groupes: Vec<&String> = nav.groupes.iter().filter(|g| garde(g)).collect();
+        egui::CollapsingHeader::new(RichText::new(format!("Groupes ({})", groupes.len())).strong()).id_salt("nav-groupes").open(ouvert.then_some(true)).show(ui, |ui| {
+            for g in groupes {
+                ui.label(g.as_str());
+            }
+        });
+        let liens: Vec<String> = self.rvt.iter().flat_map(|r| r.external_refs.iter()).filter(|e| e.kind.contains("Revit")).map(|e| e.path.clone()).collect();
+        egui::CollapsingHeader::new(RichText::new(format!("Liens Revit ({})", liens.len())).strong()).id_salt("nav-liens").show(ui, |ui| {
+            for l in liens {
+                ui.label(l);
+            }
+        });
+        match action {
+            Some(ActionNav::Selection(e)) => self.select(Some(e), false),
+            Some(ActionNav::Activer(i)) => self.activer_vue(i),
+            Some(ActionNav::IsolerType(t)) => {
+                if let Some(s) = &self.scene {
+                    let objs: Vec<u32> = s.objects.iter().enumerate().filter(|(_, o)| s.model.type_of.get(&o.id) == Some(&t)).map(|(i, _)| i as u32).collect();
+                    self.select(Some(t), false);
+                    self.isolate(objs.clone());
+                    self.frame_objects(&objs);
+                }
+            }
+            None => {}
+        }
+    }
+
+    /// Ouvre une vue Revit comme dans Revit : caméra orthographique orientée selon la
+    /// vue ; plan : son niveau seul ; coupe, élévation : tout le modèle ; vue de dessin,
+    /// feuille, légende : ses éléments 2D ; vue 3D : modèle entier. Les éléments 2D de la
+    /// vue sont affichés.
+    fn activer_vue(&mut self, i: usize) {
+        let Some(s) = &self.scene else { return };
+        let Some(v) = s.navigateur.as_ref().and_then(|n| n.vues.get(i)) else { return };
+        let annot = v.entite.map(|e| self.objects_under(e)).unwrap_or_default();
+        let modele: Vec<u32> = (0..s.objects.len() as u32).filter(|&o| &*s.objects[o as usize].class != "IFCANNOTATION").collect();
+        let (objs, cadre): (Vec<u32>, Vec<u32>) = match v.genre.as_str() {
+            "Vue 3D" => (Vec::new(), modele.iter().copied().filter(|&o| !HIDDEN_BY_DEFAULT.contains(&&*s.objects[o as usize].class)).collect()),
+            "Plan d'étage" | "Plan de plafond" => {
+                let etage: Vec<u32> = modele.iter().copied().filter(|&o| v.etage.is_some() && s.objects[o as usize].storey == v.etage).collect();
+                let tous = etage.iter().chain(&annot).copied().collect();
+                (tous, if etage.is_empty() { modele.clone() } else { etage })
+            }
+            "Coupe" | "Élévation" => (modele.iter().chain(&annot).copied().collect(), modele.clone()),
+            "Nomenclature" => {
+                if let Some(e) = v.entite {
+                    self.select(Some(e), false);
+                }
+                return;
+            }
+            _ => (annot.clone(), annot.clone()),
+        };
+        let (d, haut, entite) = (v.direction.as_vec3(), v.haut.as_vec3(), v.entite);
+        self.vue_active = Some(i);
+        self.hidden_objects.clear();
+        self.hidden_storeys.clear();
+        // visibilité propre à chaque vue : celle par défaut, puis les objets isolés
+        self.hidden_classes = HIDDEN_BY_DEFAULT.iter().map(|s| s.to_string()).collect();
+        if objs.is_empty() {
+            self.isolated = None;
+            self.visibility_dirty = true;
+        } else {
+            self.isolate(objs);
+        }
+        // caméra : regarde vers −direction ; vue de dessus orientée par le haut de la vue
+        self.camera.ortho = true;
+        if d.length() > 0.5 {
+            let d = d.normalize();
+            self.camera.pitch = d.z.clamp(-1.0, 1.0).asin().clamp(-MAX_PITCH, MAX_PITCH);
+            self.camera.yaw = if d.z.abs() > 0.999 { (-haut.y).atan2(-haut.x) } else { d.y.atan2(d.x) };
+        }
+        if !cadre.is_empty() {
+            self.frame_objects(&cadre);
+        }
+        if let Some(e) = entite {
+            self.select(Some(e), false);
+        }
     }
 
     fn tree_roots(&self) -> Vec<Id> {
@@ -634,8 +877,18 @@ impl ViewerApp {
         }
     }
 
+    /// Propriétés de l'élément sélectionné (panneau de gauche, comme dans Revit).
     fn right_panel(&mut self, ui: &mut egui::Ui) {
         ui.heading("Propriétés");
+        if let (Some(s), Some(id)) = (&self.scene, self.selected) {
+            // en-tête façon Revit : classe et type de l'élément
+            let ty = s.model.type_of.get(&id).map(|t| s.model.name(*t)).filter(|t| !t.is_empty());
+            let classe = pretty_type(s.model.ty(id)).trim_start_matches("Ifc").to_string();
+            ui.label(RichText::new(match ty {
+                Some(t) => format!("{classe} : {t}"),
+                None => classe,
+            }).color(Color32::from_gray(70)));
+        }
         ui.separator();
         let (Some(s), Some(id)) = (&self.scene, self.selected) else {
             ui.label(RichText::new("Sélectionner un élément dans la vue ou l'arborescence.").weak());
@@ -749,9 +1002,9 @@ impl ViewerApp {
                 .show(ui, |ui| match &self.rvt_geom {
                     Ok(summary) => {
                         ui.label(format!(
-                            "Vue 3D : murs seuls ({summary}), avec la géométrie calculée par Revit (jonctions et \
-                             ouvertures comprises). Dalles, toits, portes, fenêtres et autres familles ne sont pas encore \
-                             lus : pour un modèle complet, exporter en IFC depuis Revit (Fichier › Exporter › IFC)."
+                            "Vue 3D : {summary}, avec la géométrie calculée par Revit (murs, sols, toits, familles, \
+                             escaliers…), vues et éléments 2D. Les paramètres et le contenu des nomenclatures ne sont \
+                             pas encore lus : pour les données complètes, exporter en IFC depuis Revit."
                         ));
                     }
                     Err(e) => {
@@ -902,6 +1155,10 @@ impl ViewerApp {
 
     fn viewport(&mut self, ui: &mut egui::Ui) {
         let rect = ui.available_rect_before_wrap();
+        // fenêtre réduite : on garde la dernière zone, taille des captures hors écran
+        if rect.is_positive() {
+            self.rect_vue = rect;
+        }
         let resp = ui.allocate_rect(rect, Sense::click_and_drag());
         let aspect = rect.width() / rect.height().max(1.0);
         let ndc = |p: egui::Pos2| {
@@ -998,14 +1255,7 @@ impl ViewerApp {
 
         self.update_visibility();
 
-        let params = FrameParams {
-            mvp: self.camera.view_proj(aspect),
-            eye: self.camera.eye(),
-            view_dir: self.camera.forward(),
-            ortho: self.camera.ortho,
-            selected: self.selected_object().unwrap_or(u32::MAX),
-            background: [0.925, 0.933, 0.945],
-        };
+        let params = self.frame_params(aspect);
         let renderer = self.renderer.clone();
         let callback = egui::PaintCallback {
             rect,
@@ -1018,6 +1268,13 @@ impl ViewerApp {
         };
         ui.painter().add(callback);
 
+        // onglet de la vue ouverte, comme dans Revit
+        if let Some(v) = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)) {
+            let texte = if v.nom.is_empty() { v.genre.clone() } else { format!("{} : {}", v.genre, v.nom) };
+            let galet = egui::Rect::from_min_size(rect.left_top() + egui::vec2(6.0, 6.0), egui::vec2(texte.len() as f32 * 7.2 + 20.0, 22.0));
+            ui.painter().rect_filled(galet, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 230));
+            ui.painter().text(galet.left_center() + egui::vec2(10.0, 0.0), egui::Align2::LEFT_CENTER, texte, egui::FontId::proportional(14.0), Color32::from_gray(40));
+        }
         if self.scene.is_none() {
             let msg = if self.loading.is_some() { self.status.clone() } else { "Glisser un fichier .ifc ou .rvt ici\nou Ctrl+O".to_string() };
             ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, msg, egui::FontId::proportional(20.0), Color32::from_gray(110));
@@ -1029,6 +1286,350 @@ impl ViewerApp {
                 egui::FontId::proportional(15.0),
                 Color32::from_gray(60),
             );
+        }
+    }
+}
+
+// ------------------------------------------------------------------ pilotage
+
+impl ViewerApp {
+    /// Traite les commandes du pilote ; répond aux ouvertures terminées.
+    fn piloter(&mut self, ctx: &egui::Context) {
+        if self.loading.is_none() && !self.attente_ouverture.is_empty() {
+            let etat = match &self.error {
+                Some(e) => pilote::erreur(e),
+                None => self.etat(),
+            };
+            for tx in self.attente_ouverture.drain(..) {
+                let _ = tx.send(etat.clone());
+            }
+        }
+        for r in std::mem::take(&mut self.requetes) {
+            let reponse = match r.commande.as_str() {
+                "ouvrir" => {
+                    let p = PathBuf::from(r.argument.trim_matches('"'));
+                    if p.is_file() {
+                        self.open(p, ctx);
+                        self.attente_ouverture.push(r.reponse);
+                        continue;
+                    }
+                    pilote::erreur(&format!("fichier introuvable : {}", r.argument))
+                }
+                "capture" => {
+                    self.capture(ctx, &r.argument, r.reponse);
+                    continue;
+                }
+                _ => self.commande(ctx, &r.commande, &r.argument),
+            };
+            let _ = r.reponse.send(reponse);
+        }
+    }
+
+    fn frame_params(&self, aspect: f32) -> FrameParams {
+        FrameParams {
+            mvp: self.camera.view_proj(aspect),
+            eye: self.camera.eye(),
+            view_dir: self.camera.forward(),
+            ortho: self.camera.ortho,
+            selected: self.selected_object().unwrap_or(u32::MAX),
+            background: [0.925, 0.933, 0.945],
+        }
+    }
+
+    /// Capture en PNG, argument « vue|fenetre [LxH] chemin ». La vue 3D est rendue hors
+    /// écran, à la taille de la vue ou à celle demandée, même fenêtre réduite ; la
+    /// fenêtre entière (interface comprise) est lue à l'image suivante.
+    fn capture(&mut self, ctx: &egui::Context, argument: &str, reponse: Sender<String>) {
+        let (zone, reste) = argument.trim().split_once(' ').unwrap_or((argument, ""));
+        let mut reste = reste.trim();
+        let mut taille = None;
+        if let Some((t, apres)) = reste.split_once(' ') {
+            if let Some((Ok(l), Ok(h))) = t.split_once('x').map(|(l, h)| (l.parse::<u32>(), h.parse::<u32>())) {
+                taille = Some((l, h));
+                reste = apres.trim();
+            }
+        }
+        let chemin = reste.trim_matches('"').to_string();
+        if chemin.is_empty() {
+            let _ = reponse.send(pilote::erreur("usage : capture vue|fenetre [LxH] <chemin.png>"));
+            return;
+        }
+        let ecrire = move |l: usize, h: usize, rgba: &[u8]| {
+            let res = pilote::png(l, h, rgba).and_then(|png| std::fs::write(&chemin, png).map_err(|e| e.to_string()));
+            match res {
+                Ok(()) => pilote::succes(&[("chemin", pilote::texte(&chemin)), ("largeur", l.to_string()), ("hauteur", h.to_string())]),
+                Err(e) => pilote::erreur(&e),
+            }
+        };
+        if zone == "fenetre" {
+            // egui_glow ne lit pas une fenêtre de taille nulle (réduite)
+            if ctx.input(|i| i.viewport().minimized.unwrap_or(false)) {
+                let _ = reponse.send(pilote::erreur("fenêtre réduite : seule la vue 3D se capture (zone « vue »)"));
+                return;
+            }
+            ctx.request_screenshot(move |image| {
+                let [w, h] = image.size;
+                let rgba: Vec<u8> = image.pixels.iter().flat_map(|p| [p.r(), p.g(), p.b(), 255]).collect();
+                let _ = reponse.send(ecrire(w, h, &rgba));
+            });
+            ctx.request_repaint();
+            return;
+        }
+        let ppp = ctx.pixels_per_point();
+        let (l, h) = taille.unwrap_or(((self.rect_vue.width() * ppp).round() as u32, (self.rect_vue.height() * ppp).round() as u32));
+        let (l, h) = (l.clamp(16, 4096), h.clamp(16, 4096));
+        self.update_visibility();
+        let params = self.frame_params(l as f32 / h as f32);
+        let res = match (&self.gl, self.renderer.lock().unwrap().as_ref()) {
+            (Some(gl), Some(r)) => r.capture(gl, &params, l as i32, h as i32),
+            _ => Err("rendu OpenGL indisponible".into()),
+        };
+        let _ = reponse.send(match res {
+            Ok(rgba) => ecrire(l as usize, h as usize, &rgba),
+            Err(e) => pilote::erreur(&e),
+        });
+    }
+
+    /// État du viewer : fichier, vue, caméra, visibilité, sélection.
+    fn etat(&self) -> String {
+        use pilote::{liste, objet, texte};
+        let mut p = vec![
+            ("fichier", self.scene.as_ref().map(|s| texte(&s.file_name)).unwrap_or_else(|| "null".into())),
+            ("statut", texte(&self.status)),
+            ("chargement", self.loading.is_some().to_string()),
+            ("fiche_revit", (self.rvt.is_some() && self.rvt_sheet).to_string()),
+        ];
+        if let Some(e) = &self.error {
+            p.push(("erreur_chargement", texte(e)));
+        }
+        if let Some(s) = &self.scene {
+            p.push(("schema", texte(&s.model.file.schema)));
+            p.push(("objets", s.objects.len().to_string()));
+            p.push(("objets_visibles", self.visible.iter().filter(|v| **v).count().to_string()));
+            p.push(("triangles", s.triangles.to_string()));
+            p.push(("vues_revit", s.navigateur.as_ref().map_or(0, |n| n.vues.len()).to_string()));
+        }
+        if let Some(v) = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)) {
+            p.push(("vue", objet(&[("indice", self.vue_active.unwrap_or(0).to_string()), ("genre", texte(&v.genre)), ("nom", texte(&v.nom)), ("echelle", v.echelle.to_string())])));
+        }
+        let c = &self.camera;
+        p.push((
+            "camera",
+            objet(&[
+                ("lacet_deg", format!("{:.2}", c.yaw.to_degrees())),
+                ("tangage_deg", format!("{:.2}", c.pitch.to_degrees())),
+                ("distance", format!("{:.3}", c.dist)),
+                ("cible", format!("[{:.3},{:.3},{:.3}]", c.target.x, c.target.y, c.target.z)),
+                ("ortho", c.ortho.to_string()),
+            ]),
+        ));
+        let mut masquees: Vec<&String> = self.hidden_classes.iter().collect();
+        masquees.sort();
+        p.push(("classes_masquees", liste(masquees.into_iter().map(|c| texte(c)))));
+        p.push(("isolement", self.isolated.as_ref().map_or("null".into(), |i| i.len().to_string())));
+        if let Some(id) = self.selected {
+            p.push(("selection", self.decrire(id)));
+        }
+        p.push(("vue_px", format!("[{:.0},{:.0}]", self.rect_vue.width(), self.rect_vue.height())));
+        pilote::succes(&p)
+    }
+
+    fn decrire(&self, id: Id) -> String {
+        let Some(s) = &self.scene else { return "null".into() };
+        pilote::objet(&[("id", id.to_string()), ("classe", pilote::texte(s.model.ty(id))), ("nom", pilote::texte(&s.model.name(id)))])
+    }
+
+    /// Entité désignée par « #123 », « 123 » ou, à défaut, la sélection.
+    fn entite(&self, argument: &str) -> Result<Id, String> {
+        let s = self.scene.as_ref().ok_or("aucun fichier ouvert")?;
+        let a = argument.trim().trim_start_matches('#');
+        let id = if a.is_empty() { self.selected.ok_or("aucune sélection")? } else { a.parse::<Id>().map_err(|_| format!("id invalide : {argument}"))? };
+        if s.model.get(id).is_none() {
+            return Err(format!("entité #{id} absente"));
+        }
+        Ok(id)
+    }
+
+    fn commande(&mut self, ctx: &egui::Context, commande: &str, argument: &str) -> String {
+        use pilote::{erreur, liste, objet, succes, texte};
+        match commande {
+            "etat" => self.etat(),
+            "taille" => {
+                let v: Vec<f32> = argument.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+                let [l, h] = v[..] else { return erreur("usage : taille <largeur> <hauteur>") };
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(l, h)));
+                succes(&[])
+            }
+            "reduire" | "restaurer" => {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(commande == "reduire"));
+                succes(&[])
+            }
+            "quitter" => {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                succes(&[])
+            }
+            "fiche" => {
+                self.rvt_sheet = self.rvt.is_some() && argument != "non";
+                self.etat()
+            }
+            "onglet" => {
+                self.left_tab = match argument {
+                    "projet" => LeftTab::Projet,
+                    "classes" => LeftTab::Classes,
+                    _ => LeftTab::Tree,
+                };
+                self.etat()
+            }
+            "vues" => {
+                let Some(nav) = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()) else { return erreur("pas de vues Revit") };
+                let vues = nav.vues.iter().enumerate().map(|(i, v)| {
+                    objet(&[("indice", i.to_string()), ("genre", texte(&v.genre)), ("type", texte(&v.type_vue)), ("nom", texte(&v.nom)), ("echelle", v.echelle.to_string()), ("numero", texte(&v.numero))])
+                });
+                succes(&[("vues", liste(vues))])
+            }
+            "vue" => {
+                let Some(nav) = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()) else { return erreur("pas de vues Revit") };
+                let a = argument.to_lowercase();
+                let nom = |v: &scene::NavVue| format!("{} : {}", v.genre, v.nom).to_lowercase();
+                let i = argument
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|&i| i < nav.vues.len())
+                    .or_else(|| nav.vues.iter().position(|v| v.nom.to_lowercase() == a || nom(v) == a))
+                    .or_else(|| nav.vues.iter().position(|v| nom(v).contains(&a)));
+                let Some(i) = i else { return erreur(&format!("vue introuvable : {argument}")) };
+                self.rvt_sheet = false;
+                self.activer_vue(i);
+                self.etat()
+            }
+            "camera" => {
+                let c = &mut self.camera;
+                match argument {
+                    "dessus" => {
+                        c.pitch = MAX_PITCH;
+                        c.yaw = -std::f32::consts::FRAC_PI_2;
+                    }
+                    "face" => {
+                        c.pitch = 0.0;
+                        c.yaw = -std::f32::consts::FRAC_PI_2;
+                    }
+                    "iso" => {
+                        c.pitch = 0.6;
+                        c.yaw = -2.3;
+                    }
+                    "ortho" => c.ortho = true,
+                    "perspective" => c.ortho = false,
+                    "cadrer" => self.fit_all(),
+                    _ => {
+                        let v: Vec<f32> = argument.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+                        if v.len() < 2 {
+                            return erreur("usage : camera dessus|face|iso|cadrer|ortho|perspective, ou camera <lacet°> <tangage°> [distance]");
+                        }
+                        c.yaw = v[0].to_radians();
+                        c.pitch = v[1].to_radians().clamp(-MAX_PITCH, MAX_PITCH);
+                        if let Some(&d) = v.get(2) {
+                            c.dist = d.max(1e-3);
+                        }
+                    }
+                }
+                self.etat()
+            }
+            "zoom" => {
+                let Ok(f) = argument.parse::<f32>() else { return erreur("usage : zoom <facteur> (2 = deux fois plus près)") };
+                self.camera.zoom(1.0 / f.max(1e-3), None);
+                self.etat()
+            }
+            "afficher" | "masquer" => {
+                for c in argument.split([' ', ',']).filter(|c| !c.is_empty()) {
+                    let c = c.to_uppercase();
+                    if commande == "afficher" {
+                        self.hidden_classes.remove(&c);
+                    } else {
+                        self.hidden_classes.insert(c);
+                    }
+                }
+                self.visibility_dirty = true;
+                self.etat()
+            }
+            "tout_afficher" => {
+                self.hidden_objects.clear();
+                self.hidden_storeys.clear();
+                self.isolated = None;
+                self.vue_active = None;
+                self.visibility_dirty = true;
+                self.etat()
+            }
+            "classes" => {
+                let Some(s) = &self.scene else { return erreur("aucun fichier ouvert") };
+                let mut n: BTreeMap<&str, usize> = BTreeMap::new();
+                for o in &s.objects {
+                    *n.entry(&*o.class).or_default() += 1;
+                }
+                let classes = n.into_iter().map(|(c, k)| objet(&[("classe", texte(c)), ("objets", k.to_string()), ("visible", (!self.hidden_classes.contains(c)).to_string())]));
+                succes(&[("classes", liste(classes))])
+            }
+            "elements" => {
+                // elements [CLASSE|*] [texte du nom]
+                let Some(s) = &self.scene else { return erreur("aucun fichier ouvert") };
+                let (classe, texte_nom) = argument.split_once(' ').unwrap_or((argument, ""));
+                let (classe, texte_nom) = (classe.to_uppercase(), texte_nom.to_lowercase());
+                let mut out = Vec::new();
+                for o in &s.objects {
+                    if (!classe.is_empty() && classe != "*" && *o.class != *classe) || (!texte_nom.is_empty() && !s.model.name(o.id).to_lowercase().contains(&texte_nom)) {
+                        continue;
+                    }
+                    out.push(self.decrire(o.id));
+                    if out.len() == 300 {
+                        break;
+                    }
+                }
+                succes(&[("elements", liste(out))])
+            }
+            "selectionner" => match self.entite(argument) {
+                Ok(id) => {
+                    self.select(Some(id), false);
+                    self.etat()
+                }
+                Err(e) => erreur(&e),
+            },
+            "isoler" | "cadrer" => match self.entite(argument) {
+                Ok(id) => {
+                    let o = self.objects_under(id);
+                    if o.is_empty() {
+                        return erreur("pas de géométrie");
+                    }
+                    if commande == "isoler" {
+                        self.isolate(o.clone());
+                    }
+                    self.frame_objects(&o);
+                    self.etat()
+                }
+                Err(e) => erreur(&e),
+            },
+            "proprietes" => match self.entite(argument) {
+                Ok(id) => {
+                    let m = &self.scene.as_ref().unwrap().model;
+                    let paires = |v: Vec<(String, String)>| objet(&v.iter().map(|(k, v)| (k.as_str(), texte(v))).collect::<Vec<_>>());
+                    let groupes: Vec<String> = m.property_groups(id).into_iter().map(|g| objet(&[("nom", texte(&g.name)), ("proprietes", paires(g.props))])).collect();
+                    succes(&[("entite", self.decrire(id)), ("attributs", paires(m.attributes(id))), ("groupes", liste(groupes))])
+                }
+                Err(e) => erreur(&e),
+            },
+            "objet" => {
+                // objet x y : position dans la vue, de 0 à 1 depuis le coin haut gauche
+                let v: Vec<f32> = argument.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+                let (&[x, y], Some(s)) = (&v[..], &self.scene) else { return erreur("usage : objet <x 0..1> <y 0..1>") };
+                let aspect = self.rect_vue.width() / self.rect_vue.height().max(1.0);
+                let (o, d) = self.camera.ray(x * 2.0 - 1.0, 1.0 - y * 2.0, aspect);
+                match s.pick(o, d, &self.visible) {
+                    Some((obj, t)) => {
+                        let p = o + d * t;
+                        succes(&[("entite", self.decrire(s.objects[obj as usize].id)), ("point", format!("[{:.3},{:.3},{:.3}]", p.x, p.y, p.z))])
+                    }
+                    None => succes(&[("entite", "null".into())]),
+                }
+            }
+            _ => erreur(&format!("commande inconnue : {commande}")),
         }
     }
 }
@@ -1061,6 +1662,7 @@ impl eframe::App for ViewerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.poll_loading();
+        self.piloter(&ctx);
 
         let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
         if let Some(p) = dropped.into_iter().next() {
@@ -1075,11 +1677,24 @@ impl eframe::App for ViewerApp {
         if self.rvt.is_some() && self.rvt_sheet {
             egui::CentralPanel::default().show(ui, |ui| self.revit_view(ui));
         } else {
-            egui::Panel::left("left").resizable(true).default_size(320.0).show(ui, |ui| self.left_panel(ui));
-            egui::Panel::right("right").resizable(true).default_size(340.0).show(ui, |ui| self.right_panel(ui));
+            // disposition de Revit : propriétés à gauche, arborescence du projet à droite
+            egui::Panel::left("proprietes").resizable(true).default_size(300.0).show(ui, |ui| self.right_panel(ui));
+            egui::Panel::right("arborescence").resizable(true).default_size(320.0).show(ui, |ui| self.left_panel(ui));
             egui::CentralPanel::no_frame().show(ui, |ui| self.viewport(ui));
         }
         self.unsupported_window(&ctx);
+    }
+
+    /// Appelé même fenêtre réduite : relève les commandes du pilote et demande alors le
+    /// tracé complet, que `ui` les traite et qu'une capture ait des pixels.
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Some(rx) = &self.pilote {
+            self.requetes.extend(rx.try_iter());
+        }
+        if !self.requetes.is_empty() || !self.attente_ouverture.is_empty() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaintWhileHidden);
+            ctx.request_repaint();
+        }
     }
 
     fn on_exit(&mut self, gl: Option<&glow::Context>) {

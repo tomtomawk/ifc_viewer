@@ -36,6 +36,45 @@ pub struct SceneObject {
     pub max: Vec3,
 }
 
+/// Arborescence du projet d'un fichier Revit, comme le navigateur de projet de Revit :
+/// vues, nomenclatures, feuilles, familles et groupes.
+#[derive(Default)]
+pub struct Navigateur {
+    pub vues: Vec<NavVue>,
+    pub familles: Vec<NavFamille>,
+    pub groupes: Vec<String>,
+}
+
+/// Vue, nomenclature ou feuille.
+pub struct NavVue {
+    pub revit_id: i64,
+    /// Entité de la vue dans le modèle (propriétés ; ses éléments 2D en enfants).
+    pub entite: Option<Id>,
+    /// Genre (« Plan d'étage », « Élévation », « Feuille »…).
+    pub genre: String,
+    /// Nom du type de vue (« Élévation 1 »), vide s'il n'y en a pas.
+    pub type_vue: String,
+    pub nom: String,
+    /// Dénominateur de l'échelle.
+    pub echelle: f64,
+    /// Numéro d'une feuille.
+    pub numero: String,
+    /// Orientation de la vue : haut et direction vers l'observateur.
+    pub haut: DVec3,
+    pub direction: DVec3,
+    /// Étage d'un plan.
+    pub etage: Option<Id>,
+    /// Vues placées sur une feuille (ids Revit).
+    pub placees: Vec<i64>,
+}
+
+/// Famille (chargeable ou système) et ses types (nom, entité du type s'il est utilisé).
+pub struct NavFamille {
+    pub categorie: String,
+    pub nom: String,
+    pub types: Vec<(String, Option<Id>)>,
+}
+
 pub struct Scene {
     pub model: IfcModel,
     pub vertices: Vec<Vertex>,
@@ -49,6 +88,8 @@ pub struct Scene {
     pub unsupported: Vec<(String, usize)>,
     pub load_ms: u128,
     pub file_name: String,
+    /// Arborescence du projet (fichiers Revit).
+    pub navigateur: Option<Navigateur>,
 }
 
 pub fn load(path: &Path, progress: &dyn Fn(String)) -> Result<Scene, String> {
@@ -197,6 +238,7 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
         unsupported: vec![],
         load_ms: 0,
         file_name,
+        navigateur: None,
     }
 }
 

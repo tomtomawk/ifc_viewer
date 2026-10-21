@@ -20,7 +20,7 @@ use super::vues::{self, Contenu, Element2D, Motif, TypeRegion, Vue};
 use super::Cfb;
 use crate::geom::{Ligne, Part, ProductGeom, Rgba, class_color};
 use crate::model::IfcModel;
-use crate::scene::{self, Scene};
+use crate::scene::{self, NavFamille, NavVue, Navigateur, Scene};
 use crate::step::{Entity, Id, IdMap, StepFile, Value, format_real};
 use glam::DVec3;
 use rayon::prelude::*;
@@ -95,6 +95,8 @@ pub struct Niveau {
 /// types de familles…).
 pub struct TypeElem {
     pub nom: String,
+    /// Classe Revit du type (`BasicWallType`, `FloorAttributes`, `FamilySymbol`…).
+    pub classe: String,
     /// Somme des couches de la structure composée, en mm (types de murs, sols et toits ;
     /// absente pour les murs-rideaux et les murs empilés).
     pub epaisseur: Option<f64>,
@@ -802,7 +804,7 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>) -> Ext
                 }
             }
             let (largeur, hauteur) = (valeurs.get(&FAMILY_WIDTH_PARAM).copied(), valeurs.get(&FAMILY_HEIGHT_PARAM).copied());
-            Some(Extrait::Type(eid, TypeElem { nom, epaisseur, famille: id_of(o, "m_familyId"), largeur, hauteur }))
+            Some(Extrait::Type(eid, TypeElem { nom, classe: o.class_name().to_string(), epaisseur, famille: id_of(o, "m_familyId"), largeur, hauteur }))
         })()),
         Sorte::Famille => ou_rien((|| Some(Extrait::Famille(eid, Famille { nom: o.get("m_name")?.str()?.to_string(), categorie: id_of(o, "m_categoryId"), parent: id_of(o, "m_famId") })))()),
         Sorte::Materiau => ou_rien((|| {
@@ -1452,6 +1454,7 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
         par_vue.entry(e.vue).or_default().push(e);
     }
     let nom_vue: HashMap<i64, &str> = m.vues.iter().map(|v| (v.id, v.nom.as_str())).collect();
+    let mut entite_vue: HashMap<i64, Id> = HashMap::new();
     for v in m.vues.iter().filter(|v| !v.gabarit && v.genre != "Arborescence") {
         let mut props = vec![
             ("ElementId", Value::Str(v.id.to_string())),
@@ -1472,6 +1475,7 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
         props.push(("Éléments 2D", Value::Str(elems.len().to_string())));
         let nom = if v.nom.is_empty() { format!("{} [{}]", v.genre, v.id) } else { format!("{} : {}", v.genre, v.nom) };
         let id_vue = b.add("IFCANNOTATION", vec![gid("RVTVUE", v.id), n.clone(), Value::Str(nom), n.clone(), Value::Str(v.genre.into()), n.clone(), Value::Ref(shape)]);
+        entite_vue.insert(v.id, id_vue);
         let pset = b.pset("RVTPSETV", v.id, "Revit", props);
         b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEFV", v.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id_vue)]), Value::Ref(pset)]);
         contenus.entry(etage.get(&v.niveau).copied().unwrap_or(projet)).or_default().push(Value::Ref(id_vue));
@@ -1528,8 +1532,11 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
     for (k, (s, items)) in contenus.into_iter().enumerate() {
         b.add("IFCRELCONTAINEDINSPATIALSTRUCTURE", vec![gid("RVTCONT", k as i64), n.clone(), n.clone(), n.clone(), Value::List(items), Value::Ref(s)]);
     }
+    let entite_type: HashMap<i64, Id> = types.iter().map(|(&(t, _), &e)| (t, e)).collect();
+    let nav = navigateur(m, &entite_vue, &entite_type, &etage);
     let model = IfcModel::new(StepFile { schema: format!("REVIT {format}"), entities: b.entities });
     let mut s = scene::assemble(model, geoms, file_name);
+    s.navigateur = Some(nav);
     for (nom, k) in [
         ("Faces à motif de surface de dessin (taille d'écran dans Revit), non tracé en 3D", motifs_dessin),
         ("Faces à motif de surface non tracé (limite de traits atteinte)", motifs_omis),
@@ -1539,6 +1546,83 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
         }
     }
     s
+}
+
+/// Famille système (catégorie, famille) d'une classe de type, comme dans le navigateur
+/// de Revit ; None pour les types qu'il ne montre pas sous « Familles ».
+fn famille_systeme(classe: &str) -> Option<(&'static str, &'static str)> {
+    Some(match classe {
+        "BasicWallType" => ("Murs", "Mur de base"),
+        "NewCurtainWallType" | "CurtainWallType" => ("Murs", "Mur-rideau"),
+        "StackedWallType" => ("Murs", "Mur empilé"),
+        "FloorAttributes" => ("Sols", "Sol"),
+        "CeilingAttributes" => ("Plafonds", "Plafond composé"),
+        "RoofAttributes" => ("Toits", "Toit de base"),
+        "StairsType" => ("Escaliers", "Escalier assemblé"),
+        "StairsRunType" => ("Escaliers", "Volée"),
+        "StairsLandingType" => ("Escaliers", "Palier"),
+        "BaseRailingSym" | "StairsRailingAttr" => ("Garde-corps", "Garde-corps"),
+        "ToposolidType" => ("Toposolides", "Toposolide"),
+        "GridAttributes" => ("Quadrillages", "Quadrillage"),
+        "LevelAttributes" => ("Niveaux", "Niveau"),
+        "TextNoteAttributes" => ("Annotations", "Note textuelle"),
+        "FilledRegionAttributes" => ("Annotations", "Zone remplie"),
+        _ => return None,
+    })
+}
+
+/// Arborescence du projet : vues (hors gabarits), feuilles et vues qu'elles portent,
+/// familles chargées par catégorie puis familles système, groupes.
+fn navigateur(m: &Maquette, entite_vue: &HashMap<i64, Id>, entite_type: &HashMap<i64, Id>, etage: &HashMap<i64, Id>) -> Navigateur {
+    let mut placees: HashMap<i64, Vec<i64>> = HashMap::new();
+    for e in &m.elements_2d {
+        if let Contenu::FenetreDeVue { vue, .. } = &e.contenu {
+            placees.entry(e.vue).or_default().push(*vue);
+        }
+    }
+    let nom_type = |t: i64| m.types.get(&t).map(|x| x.nom.clone()).unwrap_or_default();
+    let vues = m
+        .vues
+        .iter()
+        .filter(|v| !v.gabarit && v.genre != "Arborescence")
+        .map(|v| NavVue {
+            revit_id: v.id,
+            entite: entite_vue.get(&v.id).copied(),
+            genre: v.genre.to_string(),
+            type_vue: nom_type(v.type_vue),
+            nom: v.nom.clone(),
+            echelle: v.echelle,
+            numero: v.numero.clone(),
+            haut: v.haut,
+            direction: v.direction,
+            etage: etage.get(&v.niveau).copied(),
+            placees: placees.remove(&v.id).unwrap_or_default(),
+        })
+        .collect();
+    // familles chargées (catégorie, famille, types), puis familles système
+    let mut par_famille: BTreeMap<(String, String), Vec<(String, Option<Id>)>> = BTreeMap::new();
+    for (&id, f) in m.familles.iter().filter(|(_, f)| f.parent == -1) {
+        let cle = (m.nom_categorie(f.categorie), f.nom.clone());
+        let mut ts: Vec<(String, Option<Id>)> = m.types.iter().filter(|(_, t)| t.famille == id).map(|(&tid, t)| (t.nom.clone(), entite_type.get(&tid).copied())).collect();
+        ts.sort();
+        par_famille.entry(cle).or_default().extend(ts);
+    }
+    for (&tid, t) in &m.types {
+        if let Some((cat, fam)) = famille_systeme(&t.classe) {
+            par_famille.entry((cat.to_string(), fam.to_string())).or_default().push((t.nom.clone(), entite_type.get(&tid).copied()));
+        }
+    }
+    let familles = par_famille
+        .into_iter()
+        .map(|((categorie, nom), mut types)| {
+            types.sort();
+            types.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1);
+            NavFamille { categorie, nom, types }
+        })
+        .collect();
+    let mut groupes: Vec<String> = m.types.values().filter(|t| t.classe == "ElementGroupType").map(|t| t.nom.clone()).collect();
+    groupes.sort();
+    Navigateur { vues, familles, groupes }
 }
 
 /// Nombre maximal de traits de motifs de surface dans une scène.
@@ -1934,6 +2018,42 @@ mod tests {
         let r0 = hauteurs[0].rem_euclid(200.0);
         let hors = hauteurs.iter().filter(|h| ((*h - r0).rem_euclid(200.0) + 1e-3) % 200.0 > 2e-3).count();
         assert!(hors * 10 < hauteurs.len(), "{hors} joints hors de la trame sur {}", hauteurs.len());
+    }
+
+    /// Arborescence du projet comme dans Revit : `FEN_2PF.rfa` (plans, plafond, vue 3D,
+    /// élévations « Élévation 1 », familles) et `Projet1.rvt` (feuilles numérotées avec
+    /// leurs vues placées, nomenclatures).
+    #[test]
+    fn navigateur_projet() {
+        if let Some(p) = essai("", "FEN_2PF.rfa") {
+            let m = lire(&p, &|_| {}).unwrap();
+            let nav = scene(&m, "FEN_2PF", "FEN_2PF.rfa".into(), "2026").navigateur.unwrap();
+            let mut vues: Vec<(String, String, String)> = nav.vues.iter().map(|v| (v.genre.clone(), v.type_vue.clone(), v.nom.clone())).collect();
+            vues.sort();
+            let attendu = [
+                ("Plan d'étage", "Plan d'étage", "Niveau de réf."),
+                ("Plan de plafond", "Plan de plafond", "Niveau de réf."),
+                ("Vue 3D", "Vue 3D", "Vue 1"),
+                ("Élévation", "Elévation 1", "Droite"),
+                ("Élévation", "Elévation 1", "Extérieur"),
+                ("Élévation", "Elévation 1", "Gauche"),
+                ("Élévation", "Elévation 1", "Intérieur"),
+            ];
+            assert_eq!(vues, attendu.map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string())));
+            assert!(nav.vues.iter().all(|v| v.entite.is_some()));
+            assert!(nav.familles.iter().any(|f| f.categorie == "Murs" && f.nom == "Mur de base"));
+        }
+        let Some(p) = essai("Archives", "Projet1.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        let nav = scene(&m, "Projet1", "Projet1.rvt".into(), "2026").navigateur.unwrap();
+        let f = nav.vues.iter().find(|v| v.numero == "A101").unwrap();
+        assert_eq!((f.genre.as_str(), f.nom.as_str()), ("Feuille", "RDC - Plan et cotations"));
+        let placee = nav.vues.iter().find(|v| v.revit_id == f.placees[0]).unwrap();
+        assert_eq!(placee.nom, "RDC - Présentation");
+        assert_eq!(nav.vues.iter().filter(|v| v.genre == "Nomenclature").count(), 8);
+        assert_eq!(nav.vues.iter().filter(|v| v.genre == "Feuille").count(), 5);
+        let portes = nav.familles.iter().filter(|f| f.categorie == "Portes").count();
+        assert!(portes > 0);
     }
 
     /// Essai C14 F04 : la fenêtre chargée dans le projet vide et placée deux fois dans un
