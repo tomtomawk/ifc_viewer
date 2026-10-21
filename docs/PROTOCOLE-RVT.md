@@ -304,6 +304,20 @@ Précautions : documents ouverts en arrière-plan et fermés sans enregistrer ; 
 fichier de l'utilisateur ouvert dans l'interface n'est jamais modifié ; les essais
 qui pouvaient échouer (W1) passés à la fin, un par appel.
 
+### C15 — Topographie (faite le 21/10, soir)
+
+Recherche des classes de topographie dans le schéma (`SiteSurface`, `Toposolid`,
+`ToposolidType`, `BuildingPad`, `SiteContourElem`, `FacetedTopology*`), puis de leurs
+instances dans tout le corpus (42 fichiers, comptage par le lecteur Rust) :
+toposolides dans Saint-Malo et son ancienne version, deux `SiteSurface` dans
+`LOT2.rvt`, membres d'un groupe non placé. Pour la `SiteSurface`, essai E15 créé
+dans Revit 2026 (surface de 42 points et sous-région, script
+`rvt-essai-e15-surface-topo`), référence `rvt-reference-toposurfaces`. Référence
+Revit par le script RiveTT `rvt-reference-toposolides` (document ouvert en
+arrière-plan, fermé sans enregistrer), comparée automatiquement au décodage
+(`geometrie.py`, puis le lecteur Rust). Travail fait sur la branche `topographie`
+(worktree séparé), en parallèle d'une autre session.
+
 ### C9 — Variantes ciblées (Revit, prochaine session)
 
 Quand le lecteur bute sur un champ, produire deux fichiers qui ne diffèrent que
@@ -329,6 +343,7 @@ pas seulement le schéma.
 | C8 | atteint : niveau et mur lus en entier ; 100 % des enregistrements sur 5 fichiers |
 | C12 | atteint : toits, escaliers, grilles et matériaux identiques à Revit ; volumes des sols, toits, escaliers et pièces identiques à 10⁻⁵ m³ |
 | C13 | atteint : 373 instances sur 448 de volume identique à Revit, 404 à moins de 1 % ; garde-corps 16 / 16 |
+| C15 | atteint : surface topographique et sous-région d'E15 identiques à Revit (points, sommets, triangles, aire, boîte) ; 40 toposolides de Saint-Malo lus et maillés, nombre de faces, type, niveau, décalage et boîte identiques pour les 40 ; volume et aire identiques à 10⁻⁵ près pour 37, à 4·10⁻⁴ au plus pour les 3 autres (faces cylindriques facettées : bordures courbes) ; total 45 414,805 m³ contre 45 414,807 m³ |
 | C14 | atteint : 11 formes de `FEN_2PF.rfa` sur 13 de volume identique à Revit, le coffre à −0,35 %, la combinaison évidée sans solide comme dans Revit ; motifs, types de régions et motifs des matériaux identiques à Revit ; vues et éléments 2D identiques sur E13, la famille et `Projet1.rvt` ; flux réencodés à l'identique ; quatre fichiers modifiés acceptés par Revit |
 
 Après chaque campagne : résultats reportés dans `LISEZMOI-RVT.md` (faits observés,
