@@ -33,6 +33,11 @@ pub struct Vue {
     pub famille: i64,
     /// Cadrage (`Viewer.m_boundedSpace`) : origine, axes, longueur sur chaque axe (mm).
     pub cadrage: Option<(DVec3, [DVec3; 3], [f64; 3])>,
+    /// Type de vue (`m_dbViewTypeId`, un `DBViewType` : « Plan d'étage », « Élévation
+    /// 1 »…), −1 s'il n'y en a pas.
+    pub type_vue: i64,
+    /// Numéro d'une feuille (`m_sheetNumber`).
+    pub numero: String,
 }
 
 pub enum Contenu {
@@ -108,6 +113,8 @@ pub fn vue(id: i64, r: &Record) -> Option<Vue> {
         gabarit: o.get("m_isTemplate").and_then(Val::int) == Some(1),
         famille: id_of(o, "m_famId"),
         cadrage: None,
+        type_vue: id_of(o, "m_dbViewTypeId"),
+        numero: o.get("m_sheetNumber").and_then(Val::str).unwrap_or_default().to_string(),
     })
 }
 

@@ -974,6 +974,21 @@ Ajouts du 21/10 au soir : `vues.rs` (vues et éléments 2D), formes des document
 famille dans `maquette.rs` (`Forme`), `--stats` qui liste formes, vues et éléments
 2D.
 
+**Interface façon Revit** (22/10) : propriétés à gauche, vue au centre, arborescence
+du projet à droite. Onglet « Projet » (fichiers Revit) : *Vues (tout)* par rubrique
+(plans d'étage, plans de plafond, vues 3D, élévations, coupes, vues de dessin,
+légendes) et type de vue (`DBView.m_dbViewTypeId` → nom du `DBViewType`, par exemple
+« Élévation 1 »), *Nomenclatures/Quantités*, *Feuilles* (numéro `m_sheetNumber`, vues
+placées par leurs fenêtres de vue), *Familles* par catégorie puis famille et types
+(familles chargées, puis familles système d'après la classe du type : `BasicWallType`
+→ Murs / Mur de base…), *Groupes* (`ElementGroupType`), *Liens Revit*
+(`TransmissionData`). Clic : propriétés ; double-clic sur une vue : elle s'ouvre
+(caméra orthographique orientée par `m_viewDir` et `m_vertDir` ; plan : son niveau
+seul ; coupe, élévation : tout le modèle ; vue de dessin, feuille : ses éléments 2D),
+avec son nom en onglet et son échelle dans la barre d'état ; double-clic sur un type :
+ses instances isolées. Onglets « Modèle » (arborescence spatiale) et « Classes »
+inchangés ; champ « Rechercher » commun.
+
 Dans la scène : murs `IFCWALL`, sols `IFCSLAB`, plafonds `IFCCOVERING`, toits
 `IFCROOF`, escaliers `IFCSTAIR` (volées et paliers réunis), garde-corps
 `IFCRAILING`, pièces placées `IFCSPACE` (masquées par défaut, comme dans un IFC),
@@ -1011,7 +1026,9 @@ révolution, cotes d'une porte), E12 (grilles), `FEN_2PF.rfa` (formes, vues, cot
 textes), C14 F04 (fenêtres placées), E13 (vues et 2D, objets de la scène), Kerreut
 (hachures ; motifs de surface : orientation et trame des joints), découpage des
 hachures sur un carré et texte RTF (sans fichier), sautés si les fichiers sont absents.
-`--stats` donne aussi le bilan de la scène (objets, triangles, traits des motifs). Dossiers : `RVT_ESSAIS` (défaut `C:\Users\theba\Desktop\Revit`) et
+`--stats` donne aussi le bilan de la scène (objets, triangles, traits des motifs).
+Test de l'arborescence du projet : vues de `FEN_2PF.rfa` (genre, type, nom),
+feuilles numérotées de `Projet1.rvt` et leurs vues placées, nomenclatures. Dossiers : `RVT_ESSAIS` (défaut `C:\Users\theba\Desktop\Revit`) et
 `RVT_CORPUS` (défaut `C:\Users\theba\Documents\Thomas\ARCHI PERSO`).
 
 ## 9. Pistes pour la suite
