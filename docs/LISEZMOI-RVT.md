@@ -1,6 +1,6 @@
 # Format Revit (.rvt) : état du décodage
 
-Notes de rétro-ingénierie du 19–20 octobre 2026. Elles décrivent ce qui a été
+Notes de rétro-ingénierie du 19–21 octobre 2026. Elles décrivent ce qui a été
 **observé** sur des fichiers réels, pas une spécification : rien n'est documenté
 par Autodesk. Les points non vérifiés sont signalés comme tels. Méthode d'essai :
 [PROTOCOLE-RVT.md](PROTOCOLE-RVT.md).
@@ -17,11 +17,13 @@ par Autodesk. Les points non vérifiés sont signalés comme tels. Méthode d'es
 | Partitions `Partitions/*` | **cadrage complet** : 3 sections, un enregistrement par élément ; inventaire identique à Revit (§ 7) |
 | Champs des objets | **lus en entier** par un lecteur générique piloté par le schéma : 100 % des enregistrements sur les fichiers 2016, 2022, 2025, 2026 et 2027 essayés, hors données d'add-ins (§ 7) |
 | Murs | type, niveaux, ligne (droite ou arc), hauteur et décalages extraits ; identiques à Revit sur 75 murs de deux projets et deux essais (§ 7) |
-| Autres éléments | niveaux, types de murs (épaisseur), dalles, instances de familles (type, hôte, position, repère), pièces : identiques à Revit sur deux projets (§ 7) |
-| Géométrie calculée (`GElement`) | B-rep des murs lu et maillé (faces planes et cylindriques, trous) ; volume, aire et faces identiques à Revit sur 59 murs et 3 essais (§ 7) |
-| Viewer Rust | **murs affichés** à l'ouverture d'un `.rvt`, sans export IFC (`src/rvt/`, § 8) ; mêmes sommets et volumes que `geometrie.py` |
+| Autres éléments | niveaux, types (nom, épaisseur), familles (nom, catégorie), matériaux (nom, couleur, transparence), sols et plafonds, toits, escaliers (niveaux, contremarches, giron, volées), grilles, instances de familles (type, hôte, position, repère), pièces : identiques à Revit sur trois projets et un essai (§ 7) |
+| Géométrie calculée (`GElement`) | B-rep lu et maillé pour murs, sols, plafonds, toits, volées et paliers d'escalier, pièces et instances portant leur propre solide (faces planes, cylindriques et réglées, trous ; vides de familles écartés) ; volumes identiques à Revit pour 59 murs, 21 sols, 10 toits, 2 escaliers et 58 pièces (§ 7) |
+| Viewer Rust | à l'ouverture d'un `.rvt`, sans export IFC (`src/rvt/`, § 8) : **murs, sols, plafonds, toits, escaliers et pièces affichés**, colorés par matériau ; instances de familles et grilles dans l'arborescence avec leurs propriétés |
 
-Le viewer n'affiche que les murs. Pour les autres éléments : exporter en IFC depuis
+La géométrie des familles (`GInstance` : portes, fenêtres, mobilier…) n'est pas
+encore décodée : les instances apparaissent dans l'arborescence mais pas en 3D,
+sauf celles qui portent leur propre solide. Pour les voir : exporter en IFC depuis
 Revit (testé avec RiveTT, IFC4 RV et IFC2x3 CV2, tous deux lus par le viewer).
 
 ## Fichiers étudiés
@@ -40,8 +42,10 @@ ouvert dans Revit 2027 via RiveTT).
 | `Projet1.rvt` | projet | 2026 | 8,8 Mo |
 | `GABARIT JBA.rte` | gabarit | 2016 | 4,1 Mo |
 | `Saint-cast-Le-Guildo.rvt` | projet d'agence | 2025 | 52,0 Mo |
-| `Kerreutv9.rvt` | projet d'agence | 2022 | 138,2 Mo |
-| `Essais-format/2026/*.rvt` | essais produits par RiveTT (protocole) | 2026 | 0,5 à 1,6 Mo |
+| `Kerreut 2025.rvt`, `Langan.rvt`, `BIBLIO.rvt`, `Guidel.rvt` | projets d'agence (`Documents\Thomas\ARCHI PERSO`) | 2025 | — |
+| `Kerreutv9.rvt`, `Colombes.rvt` | projets d'agence | 2022 | 138,2 Mo (Kerreutv9) |
+| `Phase2_Lecture.rvt` | projet de Saint-Malo enregistré en 2027 (`Recettes\`) | 2027 | — |
+| `Essais-format/2026/*.rvt` | essais produits par RiveTT (protocole), dont E12 (grilles) | 2026 | 0,5 à 1,6 Mo |
 
 ## 1. Conteneur OLE
 
@@ -438,9 +442,21 @@ d'élément). Emplacements établis :
 | type de mur | dérivées de `WallType` (`BasicWallType`…) | nom `Symbol.m_symbolInfo` → `SymbolInfo.m_name` ; épaisseur = somme des `CompoundStructureLayer.m_layerWidth` de `HostObjAttr.m_pCompoundStructure` (absente pour murs-rideaux et murs empilés) |
 | dalle | `Floor` | type `m_floorAttributesId`, niveau `m_assocLevelId`, décalage `FLOOR_HEIGHTABOVELEVEL_PARAM` (−1 001 951), cotes `m_bottom` / `m_top` |
 | instance de famille | `FamilyInstance` | type `m_masterSymbolId` (le `Symbol` de l'API ; `m_pInstanceInfo.m_symbolId` est autre chose), hôte `m_hostId`, niveau `m_assocLevelId`, direction `m_RefDir`, repère `ALL_MODEL_MARK` (−1 001 203) ou, pour une porte, `FamInstSpec.m_doorNumber` |
-| pièce | `RoomElem` sans `m_areaSchemeId` ni `m_zoneSchemeId` | `ROOM_NAME` (−1 006 900), `ROOM_NUMBER` (−1 006 901), `ROOM_DEPARTMENT` (−1 006 907), niveau `m_assocLevelId`, point `m_point` ; pièce non placée : `m_bIsLocationless` = 1 |
+| pièce | `RoomElem` sans `m_areaSchemeId` ni `m_zoneSchemeId` | `ROOM_NAME` (−1 006 900), `ROOM_NUMBER` (−1 006 901), `ROOM_DEPARTMENT` (−1 006 907), niveau `m_assocLevelId`, point `m_point` (x, y seulement, en pieds ; z = altitude du niveau) ; pièce non placée : `m_bIsLocationless` = 1 |
 | surface (plan de surfaces) | `RoomElem` avec `m_areaSchemeId` | mêmes paramètres |
 | zone | `RoomElem` avec `m_zoneSchemeId` | idem |
+| type (tout type) | dérivées de `Symbol` | nom `m_symbolInfo` → `SymbolInfo.m_name` (types de sols `FloorAttributes`, de toits `RoofAttributes`, d'escaliers `StairsType`, de familles `FamilySymbol`…) ; type de famille : famille `FamilySymbol.m_familyId` |
+| famille | `Family` | nom `m_name`, catégorie `m_categoryId` (BuiltInCategory : portes −2 000 023, fenêtres −2 000 014, mobilier −2 000 080…) |
+| matériau | `MaterialElem` | `m_pMaterial` → `Material` : nom `m_name`, couleur `m_color` (COLORREF, rouge dans l'octet faible : 0x7A8C8E = 142-140-122), transparence `m_transparency` (0 à 1 ; Revit affiche ×100) |
+| plafond | `Ceiling` | type `m_ceilingAttributesId`, niveau `m_assocLevelId`, décalage `CEILING_HEIGHTABOVELEVEL_PARAM` (−1 002 300) |
+| toit | dérivées de `RoofBase` (`ProfileRoof` = toit par tracé, `FootPrintRoof` de l'API) | type `m_roofAttributesId`, niveau `m_assocLevelId`, décalage `ROOF_LEVEL_OFFSET_PARAM` (−1 001 701) ; contour `ProfileRoof.m_curveLoops`, faces de référence inclinées `RoofBase.m_pRefLayerFaces` |
+| escalier | `StairsElement` | type `m_typeId`, niveaux `m_baseLevelId` / `m_topLevelId` et décalages `m_baseLevelOffset` / `m_topLevelOffset`, `m_actualNumberOfRisers`, `m_actualRiserHeight`, `m_actualTreadDepth` ; volées et paliers : listes `m_runAndLandings` des cellules (`Element.m_cellList`) ; `m_stairsHeight` n'est pas la hauteur réelle (3 048 mm pour 3 000 dans `Projet1.rvt`) |
+| volée, palier | dérivées de `StairsRunAndLanding` (`StairsRun`, `StairsLanding`) | escalier `m_stairsId` (souvent −1 : le lien est dans la liste de l'escalier) ; géométrie dans leur `GElement` |
+| grille | `Grid` (→ `DatumPlane`) | nom `m_text` ; plan vertical `m_pSurface` (`Plane` pour une grille droite, `CylSurf` pour une grille courbe) ; trace = point(u, 0) pour u entre les bornes de `Surface.m_Envelope` |
+
+Les ids de paramètres (BuiltInParameter) et de catégories (BuiltInCategory) sont
+ceux de l'API publique de Revit, relevés dans Revit 2026 par un script RiveTT ; les
+noms de catégories sont ceux de l'interface française.
 
 **Position d'une instance** (la `LocationPoint` de l'API) :
 - hébergée par un mur : point de la ligne du mur au paramètre `m_hostParam`
@@ -462,6 +478,25 @@ d'élément). Emplacements établis :
 | dalles (type, niveau, décalage) | 6 / 6 | aucune dans le projet |
 | instances de modèle (type, hôte, niveau, position, repère) | 102 / 102 | 19 / 19 |
 | pièces (nom, numéro, service, niveau, position) | 39 / 39 | 24 / 24, dont 17 non placées |
+
+**Seconde campagne, portage Rust** (21/10/2026, script RiveTT
+`rvt-reference-elements` : documents ouverts en arrière-plan dans Revit 2026 et
+fermés sans enregistrer ; le fichier 2025 est mis à niveau à l'ouverture). Valeurs
+lues par `src/rvt/maquette.rs` :
+
+| Donnée | `Projet1.rvt` (2026) | `Kerreut 2025.rvt` (2025) | `Langan.rvt` (2025) | E12 (2026) |
+|---|---|---|---|---|
+| matériaux (nom, couleur, transparence) | 18 / 18 | 80 / 80 en nombre | 80 en nombre | — |
+| sols et plafonds (type, niveau, décalage, volume) | 6 / 6 | 15 / 16 (1 boucle discontinue) | aucun | — |
+| toits (niveau, décalage, volume) | aucun | 10 / 10 | 2 en nombre | — |
+| escaliers (niveaux, contremarches, hauteur, giron, volées) | 2 / 2, volume compris | 2 / 2, sans volume (voir les limites) | aucun | — |
+| pièces (volume du `GElement`) | 39 / 39 | 18 / 19 (1 boucle discontinue) | 1 / 1 | — |
+| instances (hôte, point, repère) | 12 / 12 vérifiées | 6 / 6 vérifiées | 2 / 2 | — |
+| catégories des instances (portes, fenêtres, barreaux) | 43, 26, 33 comme Revit | — | — | — |
+| grilles (nom, extrémités, centre et rayon) | aucune | aucune | aucune | 3 / 3 |
+
+Volumes identiques à 10⁻⁵ m³ près. Les éléments non lus le sont avec une erreur
+explicite ; aucune valeur fausse n'a été relevée.
 
 ### Géométrie calculée (`GElement`, section 0x67)
 
@@ -493,6 +528,8 @@ faibles (numéros d'objet des pointeurs, § « Champs d'un objet »).
 | `EdgePnt` | `uv[2]` : le point en (u, v) sur chacune des deux faces de l'arête |
 | `Plane` (→ `Surface`) | `m_origin`, `m_xVec`, `m_yVec` ; point(u, v) = origine + u·x + v·y |
 | `CylSurf` (→ `Surface`) | `m_center`, `m_xVec`, `m_yVec`, `m_zVec`, `m_radius` ; point(u, v) = centre + r·(cos u·x + sin u·y) + v·z |
+| `RuledSurf` (→ `Surface`) | `m_pProfileCurve1`, `m_pProfileCurve2` (courbes de profil ; absente : `m_Point1` / `m_Point2`), enveloppe [0, 1] × [0, 1] ; point(u, v) = C1(u) + v·(C2(u) − C1(u)), Cᵢ(u) = point de la courbe au paramètre t0 + u·(t1 − t0) de ses `m_endParams` |
+| `GHermiteSpline` (→ `GCurve`) | `m_NodeArray` : nœuds `m_iParametr` (abscisse curviligne), `m_iPoint`, `m_iTangent` (unitaire) ; entre deux nœuds, Hermite cubique de pas h = écart des paramètres, tangentes multipliées par h |
 
 **Règles établies** (E04, E09, E11, `Projet1.rvt`) :
 
@@ -526,6 +563,20 @@ faibles (numéros d'objet des pointeurs, § « Champs d'un objet »).
    257 010 de `Projet1.rvt`). Seules comptent les arêtes atteintes par les
    boucles ; une `Geometry` est un solide si toutes ont deux faces, une feuille
    sinon (plans de référence).
+7. *Vides* : un solide fermé de volume négatif est un vide de famille
+   (réservation). Gaine `EQS_Gaine` de Saint-Malo (instance 10 107 759) : boîte de
+   6 faces, −5,6156 m³ ; l'API de Revit donne le même volume négatif et
+   `InstanceVoidCutUtils.IsVoidInstanceCuttingElement` = vrai. Ces solides ne sont
+   pas affichés (19 dans Saint-Malo). Le bit 0x04 de `m_faceFlags_v9` est présent
+   sur presque toutes les faces et ne les distingue pas.
+8. *Surfaces réglées* : paramétrage vérifié par l'écart des arêtes partagées avec
+   des faces planes, nul pour un sol de `Kerreut 2025.rvt` (10 102 578, volume
+   1,100 868 m³ comme Revit) ; l'autre ordre (u entre les courbes) donne 7 m
+   d'écart. Sur une volée hélicoïdale de Saint-Malo (profils `GHermiteSpline`),
+   l'écart avec les faces cylindriques est de 0,06 mm au plus, aux points
+   intérieurs seulement : la spline de Revit approche l'hélice exacte. Les sommets
+   ne sont alors pas fusionnés (maillage visuellement fermé, 4 arêtes non
+   appariées).
 
 **Maillage** (`geometrie.py`) : par face, triangulation dans le plan (u, v) par
 oreilles, trous reliés au contour par un pont, plus courte diagonale 3D d'abord
@@ -547,15 +598,18 @@ ouverts en arrière-plan et fermés sans enregistrer, le 21/10/2026) :
 l'épaisseur du solide. Sans référence Revit, les 39 murs de
 `Essai projet 2027 astra.rvt` donnent aussi des maillages fermés.
 
-**Limites.** Surfaces décodées : `Plane`, `CylSurf`. Non décodées : `ConeSurf`,
-`HermiteSurf`, `OffsetSurf`, `RuledSurf`, `SurfRev`, `TempImportNurbsSurf`,
-`SharedSurface`. Dans `Projet1.rvt`, 397 des 398 `GElement` (murs, pièces, dalles,
-garde-corps…) se lisent sans erreur ; l'échec est un `SurfRev` (profil
-`m_pProfileCurve`) d'un `FamilySymbol`. Les `GElement` des instances de familles
-ne contiennent pas de solide mais un `GInstance` (`m_instanceInfo`,
-`m_oEmbeddedSymbolGRep`…) qui renvoie à la géométrie du type : non décodé.
-Dalles et pièces : maillées, pas encore comparées à Revit. Triangulation en
-O(n³) par face : suffisante pour des murs, à revoir pour de grandes faces.
+**Limites.** Surfaces décodées : `Plane`, `CylSurf`, `RuledSurf` (profils `GLine`,
+`GArc`, `GHermiteSpline`). Non décodées : `ConeSurf`, `HermiteSurf`, `OffsetSurf`,
+`SurfRev`, `TempImportNurbsSurf`, `SharedSurface`. Dans `Projet1.rvt`, 397 des 398
+`GElement` (murs, pièces, dalles, garde-corps…) se lisent sans erreur ; l'échec est
+un `SurfRev` (profil `m_pProfileCurve`) d'un `FamilySymbol`. Les `GElement` des
+instances de familles ne contiennent en général pas de solide mais un `GInstance`
+(`m_instanceInfo`, `m_oEmbeddedSymbolGRep`…) qui renvoie à la géométrie du type :
+non décodé (176 instances sur 346 dans `Kerreut 2025.rvt`, 3 055 sur 3 116 à
+Saint-Malo). Il en va de même des escaliers de `Kerreut 2025.rvt` et `Colombes.rvt`
+(volées sans solide propre), des garde-corps et des murs-rideaux. Quelques faces
+ont une boucle discontinue (1 sol et 1 pièce de Kerreut, 4 pièces de Saint-Malo) :
+non résolu. Triangulation en O(n³) par face, à revoir pour de grandes faces.
 
 ### Contenu repéré
 
@@ -594,36 +648,75 @@ python -I tools/rvt-research/inflate_ref.py "fichier.rvt" Formats/Latest
 
 **Portage Rust** (viewer, 21/10/2026) : `src/rvt/objets.rs` (`extract.unpad`,
 `objets.sections`, `records`, `elem_table`), `schema.rs` (`ClassTable`), `champs.rs`
-(`Lecteur`), `geometrie.rs` (`maillage`, `controle`), `maquette.rs` (`champs.murs`,
-`elements.niveaux`, `elements.types_murs`, puis modèle IFC synthétique pour
-l'arborescence et les propriétés). Seuls les murs (`SWall`, `ArcWall`) sont lus.
+(`Lecteur`), `geometrie.rs` (`maillage`, `controle`, plus `RuledSurf` et
+`GHermiteSpline`), `maquette.rs` (`champs.murs`, `elements.*`, plus toits,
+escaliers, grilles, familles et matériaux, puis modèle IFC synthétique pour
+l'arborescence et les propriétés). Objets lus en parallèle, géométrie de tous les
+éléments en parallèle.
 
-| Fichier | Format | Murs maillés par le viewer |
+Dans la scène : murs `IFCWALL`, sols `IFCSLAB`, plafonds `IFCCOVERING`, toits
+`IFCROOF`, escaliers `IFCSTAIR` (volées et paliers réunis), pièces placées
+`IFCSPACE` (masquées par défaut, comme dans un IFC), instances selon leur catégorie
+(`IFCDOOR`, `IFCWINDOW`, `IFCFURNITURE`…, `IFCBUILDINGELEMENTPROXY` sinon), grilles
+`IFCGRID` (propriétés seulement). Couleur de chaque face : celle de son matériau,
+transparence comprise (plafonnée à 90 %). Les instances propres à une vue
+(cartouches, composants de détail, annotations) sont ignorées.
+
+| Fichier | Format | Maillés par le viewer (`--stats`) |
 |---|---|---|
-| E04, E09, E11 | 2026 | 1 / 1 chacun ; sommets, volume, aire, faces et triangles identiques à `geometrie.py` |
-| `Projet1.rvt` | 2026 | 59 / 59, identiques à `geometrie.py` (257,974 221 m³, 3 768 triangles) |
-| `Saint-cast-Le-Guildo.rvt` | 2025 | 16 / 16 |
-| `GABARIT JBA.rte` | 2016 | 12 / 12 |
-| `Essai projet 2027 astra.rvt` | 2027 | 39 / 39 |
-| `Saint-Malo_avenue aristide briand_46.rvt` | 2026 | 2 235 / 2 235, lecture en 2,3 s |
-| `Kerreutv9.rvt` | 2022 | 95 / 108 : 2 boucles discontinues et 11 `GElement` sans solide fermé, mêmes échecs que `geometrie.py` |
+| E04, E09, E11 | 2026 | murs 1 / 1 chacun ; sommets, volume, aire, faces et triangles identiques à `geometrie.py` |
+| `Projet1.rvt` | 2026 | murs 59 / 59 (257,974 221 m³, 3 768 triangles), sols 6 / 6, escaliers 2 / 2, pièces 39 / 39 |
+| `Kerreut 2025.rvt` | 2025 | murs 95 / 108, sols et plafonds 15 / 16, toits 10 / 10, escaliers 0 / 2, pièces 18 / 19, instances 170 / 346 |
+| `Langan.rvt`, `BIBLIO.rvt`, `Guidel.rvt` | 2025 | murs 16 / 16, 20 / 21, 5 / 5 ; toits 2 / 2, —, 1 / 1 |
+| `Saint-cast-Le-Guildo.rvt` | 2025 | murs 16 / 16 (fichier absent du poste le 21/10, non relancé) |
+| `GABARIT JBA.rte` | 2016 | murs 12 / 12 (non relancé le 21/10) |
+| `Colombes.rvt` | 2022 | murs 41 / 41, sols 3 / 3, toits 4 / 4, escaliers 0 / 2, pièces 9 / 10 |
+| `Essai projet 2027 astra.rvt` | 2027 | murs 39 / 39, sols 4 / 4, escaliers 1 / 1 |
+| `Saint-Malo_avenue aristide briand_46.rvt` et sa version 2027 `Phase2_Lecture.rvt` | 2026, 2027 | résultats identiques : murs 2 219 / 2 235 (16 sans solide fermé), sols et plafonds 91 / 92, toits 10 / 10, escaliers 14 / 14, pièces 133 / 137 ; lecture complète en 4 à 6 s |
+| `Kerreutv9.rvt` | 2022 | murs 95 / 108 : 2 boucles discontinues et 11 `GElement` sans solide fermé, mêmes échecs que `geometrie.py` |
 
-Tests (`cargo test`) : E04 (volume, boîte) et `Projet1.rvt` (59 murs, volume total),
-sautés si les fichiers d'essai sont absents.
+Tests (`cargo test`) : E04 (volume, boîte), `Projet1.rvt` (59 murs, matériaux, sols,
+escaliers, pièces, instances), `Kerreut 2025.rvt` (toits, escalier) et E12
+(grilles), sautés si les fichiers sont absents. Dossiers : `RVT_ESSAIS` (défaut
+`C:\Users\theba\Desktop\Revit`) et `RVT_CORPUS` (défaut
+`C:\Users\theba\Documents\Thomas\ARCHI PERSO`).
 
 ## 9. Pistes pour la suite
 
-1. **Autres éléments** : faits pour niveaux, types de murs, dalles, instances et
-   pièces (§ 7). Restent le contour des dalles et des pièces, les toits, escaliers,
-   garde-corps, murs-rideaux, la position des éléments 2D de vue, et les surfaces
-   (validées seulement en nombre).
-2. **Géométrie calculée** : décodée et validée pour les murs (§ 7). Suite :
-   surfaces restantes (`SurfRev`, `RuledSurf`, `HermiteSurf`…), `GInstance` des
-   instances de familles (géométrie du type et placement), comparaison des dalles
-   et pièces avec Revit. Portage Rust fait pour les murs (§ 8) ; à étendre aux
-   dalles, pièces et instances au fur et à mesure de leur validation, puis couleurs
-   par matériau (`GFace.m_renderStyleId`, nom et couleur des `MaterialElem` à décoder).
+1. **Autres éléments** : faits et portés en Rust pour niveaux, types, familles,
+   matériaux, sols, plafonds, toits, escaliers, grilles, instances et pièces (§ 7,
+   § 8). Restent les garde-corps (`BaseRailing`), les murs-rideaux, la position des
+   éléments 2D de vue, les surfaces (validées seulement en nombre) et les paramètres
+   en général (seuls quelques BuiltInParameter précis sont lus).
+2. **Géométrie** : priorité au `GInstance` (géométrie du type de famille et
+   placement) : portes, fenêtres, mobilier, escaliers assemblés, garde-corps et
+   murs-rideaux en dépendent. Puis surfaces restantes (`SurfRev`, `HermiteSurf`…)
+   et boucles discontinues.
 3. **Objets hors `ElemTable`** : confirmer qu'il s'agit du contenu des familles
    (`Global/ContentDocuments`, 40 Mo décompressés dans le projet 2027).
 4. **Inconnus restants** : u32 des enregistrements 0x66, `ElementHeader`, octets de
-   fin des flux gzip, bloc de 353 octets (rôle inconnu, nécessaire pour écrire).
+   fin des flux gzip, bloc de 353 octets (rôle inconnu, nécessaire pour écrire ;
+   rvt-rs le nomme « checksum/ECC trailer » d'après une analyse tierce, sans savoir
+   le recalculer non plus, § 10).
+
+## 10. Comparaison avec rvt-rs (licence Apache-2.0)
+
+[rvt-rs](https://github.com/DrunkOnJava/rvt-rs) (Griffin Long, crate `rvt` 0.6.0,
+Apache-2.0) est un lecteur Rust de RVT développé indépendamment. Il a été **consulté
+partiellement, comme référence de comparaison seulement**, le 21/10/2026 :
+
+- consulté : `src/compression.rs`, pour confirmer le bloc de 353 octets tous les
+  64 896 octets (même règle que § 4, trouvée ici de notre côté le 20/10), et la
+  liste des modules d'éléments, pour savoir quelles catégories il couvre ;
+- **aucun code, aucune table ni aucune donnée de rvt-rs n'est repris** dans ce
+  dépôt. Les catégories ajoutées le 21/10 (toits, escaliers, grilles, matériaux)
+  ont été décodées ici à partir du schéma `Formats/Latest` (noms de classes et de
+  champs) et validées contre l'API de Revit par RiveTT ; les ids de paramètres et de
+  catégories viennent de l'API publique de Revit ;
+- pas d'export IFC ni de versions antérieures à 2024 tirés de rvt-rs.
+
+Différence de méthode : rvt-rs extrait la plupart des éléments par motifs d'octets
+dans les partitions et recalcule la géométrie depuis les axes et esquisses ; ce
+dépôt lit tous les objets par le schéma et reprend le solide calculé par Revit
+(`GElement`). Si du code de rvt-rs devait être repris un jour, il faudrait
+conserver sa licence et son avis `NOTICE` pour les fichiers concernés.

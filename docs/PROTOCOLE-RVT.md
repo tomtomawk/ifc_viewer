@@ -224,6 +224,27 @@ enregistrer). Les écarts du projet réel ont révélé quatre règles : hauteur
 murs contraints, groupes non placés, pièces non placées et surfaces portées par
 `RoomElem`, position des instances hébergées (LISEZMOI § 7).
 
+### C12 — Toits, escaliers, grilles, matériaux ; portage Rust (faite le 21/10)
+
+- Repérage des classes par le schéma seul : inventaire des objets courants par
+  chaîne d'héritage (`ProfileRoof < RoofBase`, `StairsElement`, `StairsRun <
+  StairsRunAndLanding`, `Grid < DatumPlane`, `MaterialElem`, `Family`,
+  `FamilySymbol`), puis `elements.plat` sur un exemple de chaque.
+- Corpus utilisé (formats 2025 à 2027) : `Projet1.rvt`, `Kerreut 2025.rvt`,
+  `Langan.rvt` (toits), `Saint-Malo…rvt` et `Phase2_Lecture.rvt` (escaliers
+  hélicoïdaux, gaines). Aucune grille dans le corpus : essai **E12_grilles.rvt**
+  créé depuis V0 par le script RiveTT `rvt-essai-e12-grilles` (grille A droite
+  (0 ; 0) → (12 345,6 ; 0), B2 oblique (1 000 ; −2 000) → (4 000 ; 7 000), Courbe
+  en arc de centre (5 000 ; 3 000) et rayon 4 000 mm, de 0 à 90°).
+- Références Revit : script RiveTT réutilisable `rvt-reference-elements`
+  (ids BuiltInParameter, matériaux, sols, plafonds, toits, escaliers, grilles,
+  pièces, catégories et exemples d'instances, volumes des solides) ;
+  `rvt-reference-gaine` pour les solides vides (`InstanceVoidCutUtils`).
+- Surfaces réglées et splines d'Hermite : paramétrage choisi par l'écart des arêtes
+  partagées avec des faces déjà décodées (variantes comparées, LISEZMOI § 7).
+- Résultats reportés dans LISEZMOI § 7 et § 8 ; valeurs de référence reprises dans
+  les tests de `src/rvt/maquette.rs`.
+
 ### C9 — Variantes ciblées (Revit, prochaine session)
 
 Quand le lecteur bute sur un champ, produire deux fichiers qui ne diffèrent que
@@ -247,6 +268,7 @@ pas seulement le schéma.
 | C4 | octets distinctifs gabarit/projet identifiés |
 | C5 | atteint par C7 : tous les membres décodés avec CRC exact |
 | C8 | atteint : niveau et mur lus en entier ; 100 % des enregistrements sur 5 fichiers |
+| C12 | atteint : toits, escaliers, grilles et matériaux identiques à Revit ; volumes des sols, toits, escaliers et pièces identiques à 10⁻⁵ m³ |
 
 Après chaque campagne : résultats reportés dans `LISEZMOI-RVT.md` (faits observés,
 hypothèses écartées), scripts RiveTT conservés, fichiers d'essai hors dépôt.

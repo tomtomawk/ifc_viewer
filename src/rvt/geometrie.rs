@@ -69,8 +69,12 @@ fn eid(o: &Obj, name: &str) -> i64 {
     o.get(name).and_then(Val::element_id).unwrap_or(-1)
 }
 
-/// Point (pieds) de la surface s au paramètre (u, v).
-pub fn point(s: &Obj, u: f64, v: f64) -> Result<DVec3, String> {
+/// Point (pieds) de la surface s au paramètre (u, v). Surface réglée (`RuledSurf`) :
+/// u ∈ [0, 1] parcourt les deux courbes de profil entre leurs `m_endParams`, v ∈ [0, 1]
+/// va de la première à la seconde (une courbe absente est remplacée par `m_Point1` ou
+/// `m_Point2`) ; vérifié par l'écart nul des arêtes partagées avec les faces planes et
+/// par le volume d'un sol de Kerreut 2025 (1,100868 m³ dans Revit).
+pub fn point(rec: &Record, s: &Obj, u: f64, v: f64) -> Result<DVec3, String> {
     match s.class_name() {
         "Plane" => Ok(vec3(s, "m_origin")? + u * vec3(s, "m_xVec")? + v * vec3(s, "m_yVec")?),
         "CylSurf" => {
@@ -78,7 +82,57 @@ pub fn point(s: &Obj, u: f64, v: f64) -> Result<DVec3, String> {
             let (su, cu) = u.sin_cos();
             Ok(vec3(s, "m_center")? + r * (cu * vec3(s, "m_xVec")? + su * vec3(s, "m_yVec")?) + v * vec3(s, "m_zVec")?)
         }
+        "RuledSurf" => {
+            let profil = |c: &str, p: &str| match rec.field_body(s, c) {
+                Some(c) => point_courbe(c, u),
+                None => vec3(s, p),
+            };
+            let (a, b) = (profil("m_pProfileCurve1", "m_Point1")?, profil("m_pProfileCurve2", "m_Point2")?);
+            Ok(a + v * (b - a))
+        }
         k => err(format!("surface {k} non décodée")),
+    }
+}
+
+/// Point (pieds) d'une `GLine`, d'un `GArc` ou d'une `GHermiteSpline` au paramètre
+/// normalisé s ∈ [0, 1] entre ses `m_endParams`.
+///
+/// `GHermiteSpline` : nœuds (`m_iParametr`, `m_iPoint`, `m_iTangent`), le paramètre
+/// étant l'abscisse curviligne et la tangente unitaire ; entre deux nœuds, Hermite
+/// cubique de pas h = écart des paramètres, tangentes × h. Sur une volée hélicoïdale de
+/// Saint-Malo, les arêtes partagées avec les faces cylindriques s'écartent d'au plus
+/// 0,06 mm (la spline approche l'hélice exacte), contre 21 mm sans le facteur h.
+fn point_courbe(c: &Obj, s: f64) -> Result<DVec3, String> {
+    let t = match c.get("m_endParams").and_then(Val::reals).as_deref() {
+        Some(&[t0, t1]) => t0 + s * (t1 - t0),
+        _ => return err(format!("{}.m_endParams : 2 réels attendus", c.class_name())),
+    };
+    match c.class_name() {
+        "GLine" => Ok(vec3(c, "m_origin")? + t * vec3(c, "m_dirVec")?),
+        "GArc" => {
+            let (st, ct) = t.sin_cos();
+            Ok(vec3(c, "m_center")? + real(c, "m_radius")? * (ct * vec3(c, "m_xVec")? + st * vec3(c, "m_yVec")?))
+        }
+        "GHermiteSpline" => {
+            let noeuds = c.get("m_NodeArray").map(Val::list).unwrap_or_default();
+            let noeud = |i: usize| -> Result<(f64, DVec3, DVec3), String> {
+                let n = noeuds.get(i).and_then(Val::obj).ok_or("GHermiteSpline : nœud illisible")?;
+                Ok((real(n, "m_iParametr")?, vec3(n, "m_iPoint")?, vec3(n, "m_iTangent")?))
+            };
+            if noeuds.len() < 2 {
+                return err("GHermiteSpline : moins de 2 nœuds");
+            }
+            let mut i = 0;
+            while i + 2 < noeuds.len() && t > noeud(i + 1)?.0 {
+                i += 1;
+            }
+            let ((t0, p0, m0), (t1, p1, m1)) = (noeud(i)?, noeud(i + 1)?);
+            let h = t1 - t0;
+            let x = (t - t0) / h;
+            let (x2, x3) = (x * x, x * x * x);
+            Ok((2.0 * x3 - 3.0 * x2 + 1.0) * p0 + (x3 - 2.0 * x2 + x) * h * m0 + (3.0 * x2 - 2.0 * x3) * p1 + (x3 - x2) * h * m1)
+        }
+        k => err(format!("courbe {k} non décodée")),
     }
 }
 
@@ -311,7 +365,7 @@ pub fn faces(rec: &Record, tout: bool) -> Result<Vec<Face>, String> {
                     let suiv = &b[(i + 1) % b.len()].1;
                     // contrôle du sens de parcours : fin de chaque arête = début de la suivante
                     let (fin, debut) = (ar.last().unwrap(), suiv[0]);
-                    if point(s, fin.x, fin.y)?.distance(point(s, debut.x, debut.y)?) > 1e-6 {
+                    if point(rec, s, fin.x, fin.y)?.distance(point(rec, s, debut.x, debut.y)?) > 1e-6 {
                         return err(format!("boucle de la face {} discontinue", fb.num));
                     }
                     aretes.insert(*k);
@@ -322,7 +376,7 @@ pub fn faces(rec: &Record, tout: bool) -> Result<Vec<Face>, String> {
                 }
                 polys.push(poly);
             }
-            let xyz = uv.iter().map(|p| point(s, p.x, p.y)).collect::<Result<Vec<_>, _>>()?;
+            let xyz = uv.iter().map(|p| point(rec, s, p.x, p.y)).collect::<Result<Vec<_>, _>>()?;
             let mm: Vec<DVec3> = xyz.iter().map(|q| *q * FT).collect();
             faces.push(Face {
                 materiau: eid(f, "m_renderStyleId"),
@@ -330,7 +384,10 @@ pub fn faces(rec: &Record, tout: bool) -> Result<Vec<Face>, String> {
             });
         }
         let ferme = aretes.iter().all(|&k| rec.by_num(k).is_some_and(|e| refs(&e.obj, "m_pFace")[1].is_some_and(|f| f != 0)));
-        if ferme || tout {
+        // Un solide fermé de volume négatif est un vide (réservation d'une famille :
+        // l'API de Revit lui donne le même volume négatif et le dit coupant) ; ignoré.
+        let volume: f64 = faces.iter().flat_map(|f| &f.triangles).map(|[a, b, c]| a.dot(b.cross(*c))).sum();
+        if tout || (ferme && volume >= 0.0) {
             out.extend(faces);
         }
     }
@@ -361,8 +418,12 @@ pub fn maillage(rec: &Record, tout: bool) -> Result<Maillage, String> {
 }
 
 impl Maillage {
-    pub fn triangles(&self) -> impl Iterator<Item = [DVec3; 3]> + '_ {
-        self.faces.iter().flat_map(|f| f.triangles.iter().map(|t| t.map(|i| self.sommets[i])))
+    /// Ajoute les faces d'un autre maillage (volées et paliers d'un escalier) ; les
+    /// sommets ne sont pas fusionnés.
+    pub fn ajouter(&mut self, autre: Maillage) {
+        let n = self.sommets.len();
+        self.sommets.extend(autre.sommets);
+        self.faces.extend(autre.faces.into_iter().map(|f| FaceMaillee { materiau: f.materiau, triangles: f.triangles.into_iter().map(|t| t.map(|i| i + n)).collect() }));
     }
 
     /// Boîte englobante (mm), volume (m³, théorème de la divergence), aire (m²) et

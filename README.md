@@ -1,7 +1,7 @@
 # IFC Viewer (Rust)
 
 Visionneuse IFC native, écrite de zéro : parseur STEP, géométrie et rendu OpenGL. Aucune dépendance IFC externe.
-Ouvre aussi les fichiers Revit (`.rvt`) : murs lus directement dans le fichier, sans export IFC.
+Ouvre aussi les fichiers Revit (`.rvt`) : murs, sols, toits, escaliers, pièces, instances et grilles lus directement dans le fichier, sans export IFC.
 
 ## Utilisation
 
@@ -9,7 +9,7 @@ Ouvre aussi les fichiers Revit (`.rvt`) : murs lus directement dans le fichier, 
 cargo run --release -- chemin\vers\fichier.ifc
 cargo run --release -- --stats chemin\vers\fichier.ifc   # mode console : comptages, volumes, entités ignorées
 cargo run --release -- chemin\vers\projet.rvt
-cargo run --release -- --stats chemin\vers\projet.rvt    # métadonnées, niveaux, murs, volume de chaque mur
+cargo run --release -- --stats chemin\vers\projet.rvt    # métadonnées, niveaux, éléments par catégorie, volumes, causes d'échec
 ```
 
 Ouverture aussi possible par Ctrl+O ou par glisser-déposer.
@@ -33,7 +33,7 @@ Ouverture aussi possible par Ctrl+O ou par glisser-déposer.
 - Profils : rectangle (creux), cercle (creux), ellipse, I, L, U, T, C, Z, arbitraire avec ou sans vides, dérivé, composite. Courbes : polyligne, IfcIndexedPolyCurve (arcs), composite, cercle/ellipse rognés, B-spline (rationnelle).
 - Ouvertures (IfcRelVoidsElement) soustraites par CSG BSP : les portes et fenêtres sont visibles dans les murs.
 - Grandes coordonnées (géoréférencement) : le rendu est recentré pour éviter les tremblements en f32.
-- Revit (`.rvt`, `.rte`, formats 2016 à 2027) : murs droits et courbes avec la géométrie calculée par Revit (jonctions et ouvertures comprises), rangés par niveau, avec type, contraintes, hauteur et volume ; métadonnées (version, informations projet, références externes, vignette) dans la « Fiche Revit ». Familles (`.rfa`) : métadonnées seules. Format : [docs/LISEZMOI-RVT.md](docs/LISEZMOI-RVT.md).
+- Revit (`.rvt`, `.rte`, formats 2016 à 2027) : murs, sols, plafonds, toits, escaliers et pièces avec la géométrie calculée par Revit (jonctions et ouvertures comprises), colorés par matériau, rangés par niveau, avec type, contraintes, hauteurs, décalages et volume ; instances de familles (catégorie, type, hôte, point, repère) et grilles dans l'arborescence ; métadonnées (version, informations projet, références externes, vignette) dans la « Fiche Revit ». Familles (`.rfa`) : métadonnées seules. Format : [docs/LISEZMOI-RVT.md](docs/LISEZMOI-RVT.md).
 
 ## Architecture
 
@@ -51,14 +51,14 @@ Ouverture aussi possible par Ctrl+O ou par glisser-déposer.
 | `src/rvt/objets.rs` | Revit : retrait des blocs intercalés, décompression, cadrage des partitions, table des éléments |
 | `src/rvt/schema.rs` | Revit : schéma de classes `Formats/Latest` |
 | `src/rvt/champs.rs` | Revit : lecteur générique des objets, piloté par le schéma |
-| `src/rvt/geometrie.rs` | Revit : B-rep `GElement` → triangles (faces planes et cylindriques, trous) |
-| `src/rvt/maquette.rs` | Revit : niveaux, types et murs, traduits en modèle IFC synthétique pour l'affichage |
+| `src/rvt/geometrie.rs` | Revit : B-rep `GElement` → triangles (faces planes, cylindriques et réglées, trous ; vides écartés) |
+| `src/rvt/maquette.rs` | Revit : niveaux, types, familles, matériaux et éléments, traduits en modèle IFC synthétique pour l'affichage |
 
 ## Limites connues
 
 - Les surfaces NURBS des IfcAdvancedBrep sont approchées par leurs arêtes : les faces fortement courbes sont facettisées grossièrement.
 - La CSG est sautée pour les hôtes de plus de 6 000 triangles ou les ouvertures de plus de 3 000 triangles (performance) ; l'élément est alors affiché plein.
-- Revit : seuls les murs (`SWall`, `ArcWall`) sont affichés ; dalles, toits, escaliers, portes, fenêtres et autres familles ne sont pas encore lus. Surfaces décodées : plans et cylindres. Un mur portant une autre surface, ou sans solide fermé (murs-rideaux), n'est pas affiché et est compté dans les entités ignorées. GlobalId synthétiques (`RVT` + ElementId).
+- Revit : la géométrie des familles (`GInstance` : portes, fenêtres, mobilier, escaliers assemblés, garde-corps, murs-rideaux) n'est pas décodée ; ces éléments sont listés sans 3D, sauf les instances portant leur propre solide. Surfaces décodées : plans, cylindres et surfaces réglées. Un élément portant une autre surface, ou sans solide fermé, n'est pas affiché et est compté dans les entités ignorées. GlobalId synthétiques (`RVT` + ElementId).
 - Non pris en charge : IfcSurfaceCurveSweptAreaSolid, IfcFixedReferenceSweptAreaSolid, IfcSectionedSolid, alignements IFC4X3, textures. Les entités ignorées sont listées dans la barre d'état et dans `--stats`.
 
 ## Tests
@@ -70,4 +70,6 @@ cargo run --release -- --stats samples/test_ifc4.ifc
 
 `samples/test_ifc4.ifc` couvre mur percé, dalle à profil avec arc indexé, item mappé coloré, faces triangulées et découpe par demi-espace ; les volumes attendus sont en commentaire dans le fichier.
 
-Les tests Revit (`src/rvt/maquette.rs`) lisent des fichiers hors dépôt : `Essais-format\2026\E04_mur.rvt` (6,711 562 m³, boîte 12 345,6 × 200 × 2 718,2 mm, validés contre Revit 2026) et `Archives\Projet1.rvt` (59 murs). Dossier par défaut `C:\Users\theba\Desktop\Revit`, remplaçable par la variable `RVT_ESSAIS` ; fichier absent : test sauté avec un message.
+Les tests Revit (`src/rvt/maquette.rs`) lisent des fichiers hors dépôt, avec des valeurs relevées dans Revit 2026 : `Essais-format\2026\E04_mur.rvt` (6,711 562 m³, boîte 12 345,6 × 200 × 2 718,2 mm), `Essais-format\2026\E12_grilles.rvt` (3 grilles), `Archives\Projet1.rvt` (59 murs, matériaux, sols, escaliers, pièces, instances) et `Kerreut 2025.rvt` du corpus d'agence (10 toits, escaliers). Dossiers par défaut `C:\Users\theba\Desktop\Revit` et `C:\Users\theba\Documents\Thomas\ARCHI PERSO`, remplaçables par les variables `RVT_ESSAIS` et `RVT_CORPUS` ; fichier absent : test sauté avec un message.
+
+Le décodage RVT est fait dans ce dépôt ; [rvt-rs](https://github.com/DrunkOnJava/rvt-rs) (Apache-2.0) n'a été consulté que partiellement, comme référence de comparaison, sans reprise de code (détail : [docs/LISEZMOI-RVT.md](docs/LISEZMOI-RVT.md) § 10).
