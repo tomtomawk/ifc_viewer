@@ -239,6 +239,7 @@ impl ViewerApp {
         let Some(scene) = &self.scene else { return };
         let mut opaque = Vec::new();
         let mut transp = Vec::new();
+        let mut lines = Vec::new();
         for (i, o) in scene.objects.iter().enumerate() {
             let vis = !self.hidden_classes.contains(&*o.class)
                 && !self.hidden_objects.contains(&(i as u32))
@@ -248,10 +249,11 @@ impl ViewerApp {
             if vis {
                 opaque.extend(o.opaque.start..o.opaque.start + o.opaque.count);
                 transp.extend(o.transparent.start..o.transparent.start + o.transparent.count);
+                lines.extend(o.lines.start..o.lines.start + o.lines.count);
             }
         }
         if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
-            r.upload_indices(gl, &opaque, &transp);
+            r.upload_indices(gl, &opaque, &transp, &lines);
         }
     }
 
@@ -362,6 +364,7 @@ impl ViewerApp {
                     ("Espaces", &["IFCSPACE"][..]),
                     ("Ouvertures", &["IFCOPENINGELEMENT", "IFCOPENINGSTANDARDCASE"][..]),
                     ("Annotations", &["IFCANNOTATION"][..]),
+                    ("Motifs", &["IFCSURFACEFEATURE"][..]),
                 ] {
                     let mut shown = !self.hidden_classes.contains(classes[0]);
                     if ui.checkbox(&mut shown, label).changed() {

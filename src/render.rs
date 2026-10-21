@@ -32,8 +32,14 @@ flat in uint v_selected;
 uniform vec3 u_eye;
 uniform bool u_ortho;
 uniform vec3 u_view_dir;
+uniform bool u_flat;
 out vec4 o_color;
 void main() {
+    if (u_flat) {
+        vec3 l = v_selected == 1u ? mix(v_c.rgb, vec3(1.0, 0.55, 0.1), 0.65) : v_c.rgb;
+        o_color = vec4(l, 1.0);
+        return;
+    }
     vec3 n = normalize(v_n);
     vec3 vd = u_ortho ? -u_view_dir : normalize(u_eye - v_pos);
     if (dot(n, vd) < 0.0) n = -n;
@@ -56,13 +62,16 @@ pub struct Renderer {
     vbo: glow::Buffer,
     ebo_opaque: glow::Buffer,
     ebo_transp: glow::Buffer,
+    ebo_lines: glow::Buffer,
     n_opaque: i32,
     n_transp: i32,
+    n_lines: i32,
     u_mvp: Option<glow::UniformLocation>,
     u_sel: Option<glow::UniformLocation>,
     u_eye: Option<glow::UniformLocation>,
     u_ortho: Option<glow::UniformLocation>,
     u_view_dir: Option<glow::UniformLocation>,
+    u_flat: Option<glow::UniformLocation>,
 }
 
 pub struct FrameParams {
@@ -108,6 +117,7 @@ impl Renderer {
             let vbo = gl.create_buffer()?;
             let ebo_opaque = gl.create_buffer()?;
             let ebo_transp = gl.create_buffer()?;
+            let ebo_lines = gl.create_buffer()?;
             gl.bind_vertex_array(Some(vao));
             gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo));
             let stride = std::mem::size_of::<Vertex>() as i32;
@@ -128,13 +138,16 @@ impl Renderer {
                 u_eye: gl.get_uniform_location(program, "u_eye"),
                 u_ortho: gl.get_uniform_location(program, "u_ortho"),
                 u_view_dir: gl.get_uniform_location(program, "u_view_dir"),
+                u_flat: gl.get_uniform_location(program, "u_flat"),
                 program,
                 vao,
                 vbo,
                 ebo_opaque,
                 ebo_transp,
+                ebo_lines,
                 n_opaque: 0,
                 n_transp: 0,
+                n_lines: 0,
             })
         }
     }
@@ -147,20 +160,25 @@ impl Renderer {
         }
         self.n_opaque = 0;
         self.n_transp = 0;
+        self.n_lines = 0;
     }
 
-    pub fn upload_indices(&mut self, gl: &glow::Context, opaque: &[u32], transp: &[u32]) {
+    /// Indices des triangles opaques, transparents et des traits (paires) à tracer.
+    pub fn upload_indices(&mut self, gl: &glow::Context, opaque: &[u32], transp: &[u32], lines: &[u32]) {
         unsafe {
             gl.bind_vertex_array(Some(self.vao));
             gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_opaque));
             gl.buffer_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, as_bytes(opaque), glow::DYNAMIC_DRAW);
             gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_transp));
             gl.buffer_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, as_bytes(transp), glow::DYNAMIC_DRAW);
+            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_lines));
+            gl.buffer_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, as_bytes(lines), glow::DYNAMIC_DRAW);
             gl.bind_vertex_array(None);
             gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
         }
         self.n_opaque = opaque.len() as i32;
         self.n_transp = transp.len() as i32;
+        self.n_lines = lines.len() as i32;
     }
 
     pub fn paint(&self, gl: &glow::Context, p: &FrameParams, viewport: [i32; 4]) {
@@ -189,6 +207,13 @@ impl Renderer {
                 gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_opaque));
                 gl.draw_elements(glow::TRIANGLES, self.n_opaque, glow::UNSIGNED_INT, 0);
             }
+            if self.n_lines > 0 {
+                // traits sans ombrage ; les faces sont repoussées par le décalage de polygone
+                gl.uniform_1_i32(self.u_flat.as_ref(), 1);
+                gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_lines));
+                gl.draw_elements(glow::LINES, self.n_lines, glow::UNSIGNED_INT, 0);
+                gl.uniform_1_i32(self.u_flat.as_ref(), 0);
+            }
             if self.n_transp > 0 {
                 gl.enable(glow::BLEND);
                 gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
@@ -211,6 +236,7 @@ impl Renderer {
             gl.delete_buffer(self.vbo);
             gl.delete_buffer(self.ebo_opaque);
             gl.delete_buffer(self.ebo_transp);
+            gl.delete_buffer(self.ebo_lines);
         }
     }
 }

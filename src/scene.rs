@@ -30,6 +30,8 @@ pub struct SceneObject {
     pub storey: Option<Id>,
     pub opaque: Range,
     pub transparent: Range,
+    /// Sommets des traits (paires, tracés en lignes).
+    pub lines: Range,
     pub min: Vec3,
     pub max: Vec3,
 }
@@ -96,25 +98,23 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
     let mut gmin = DVec3::splat(f64::MAX);
     let mut gmax = DVec3::splat(f64::MIN);
     for g in &geoms {
-        for p in &g.parts {
-            for t in &p.tris {
-                for v in t {
-                    gmin = gmin.min(*v);
-                    gmax = gmax.max(*v);
-                }
-            }
+        let traits = g.lignes.iter().flat_map(|l| l.segs.iter().flatten());
+        for v in g.parts.iter().flat_map(|p| p.tris.iter().flatten()).chain(traits) {
+            gmin = gmin.min(*v);
+            gmax = gmax.max(*v);
         }
     }
     let origin = if gmin.x <= gmax.x { (gmin + gmax) * 0.5 } else { DVec3::ZERO };
 
     let mut opaque: Vec<Vertex> = Vec::new();
     let mut transp: Vec<Vertex> = Vec::new();
+    let mut lignes: Vec<Vertex> = Vec::new();
     let mut objects = Vec::with_capacity(geoms.len());
     let mut triangles = 0;
 
     for g in &geoms {
         let obj = objects.len() as u32;
-        let (o0, t0) = (opaque.len() as u32, transp.len() as u32);
+        let (o0, t0, l0) = (opaque.len() as u32, transp.len() as u32, lignes.len() as u32);
         let mut mn = Vec3::splat(f32::MAX);
         let mut mx = Vec3::splat(f32::MIN);
         for p in &g.parts {
@@ -137,6 +137,15 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
                 triangles += 1;
             }
         }
+        for l in &g.lignes {
+            let color = l.color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8);
+            for v in l.segs.iter().flatten() {
+                let p = (*v - origin).as_vec3();
+                mn = mn.min(p);
+                mx = mx.max(p);
+                lignes.push(Vertex { pos: p.to_array(), normal: [0, 0, 0, 0], color, obj });
+            }
+        }
         if mn.x > mx.x {
             continue;
         }
@@ -146,17 +155,21 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
             storey: model.storey_of(g.id),
             opaque: Range { start: o0, count: opaque.len() as u32 - o0 },
             transparent: Range { start: t0, count: transp.len() as u32 - t0 },
+            lines: Range { start: l0, count: lignes.len() as u32 - l0 },
             min: mn,
             max: mx,
         });
     }
 
-    // Tampon unique : opaques puis transparents.
+    // Tampon unique : opaques, transparents, puis sommets des traits.
     let shift = opaque.len() as u32;
+    let shift_l = shift + transp.len() as u32;
     for o in &mut objects {
         o.transparent.start += shift;
+        o.lines.start += shift_l;
     }
     opaque.extend(transp);
+    opaque.extend(lignes);
     let vertices = opaque;
 
     let mut min = Vec3::splat(f32::MAX);

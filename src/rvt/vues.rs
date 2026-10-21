@@ -9,7 +9,7 @@
 //! une feuille, celles de la vue (mm du papier pour une feuille).
 
 use super::champs::{Obj, Record, Val};
-use super::geometrie::FT;
+use super::geometrie::{FT, MotifFace};
 use super::maquette::Geometrie;
 use glam::DVec3;
 
@@ -411,6 +411,35 @@ pub fn hachures(triangles: &[[DVec3; 3]], m: &Motif, echelle: f64, droite: DVec3
     let uv = |p: DVec3| [p.dot(droite), p.dot(haut)];
     let tris: Vec<[[f64; 2]; 3]> = triangles.iter().map(|t| t.map(uv)).collect();
     let f = if m.modele { 1.0 } else { echelle };
+    let pt = |q: [f64; 2]| q[0] * droite + q[1] * haut + w * n;
+    hachures_plan(&tris, m, f, max).into_iter().map(|[a, b]| [pt(a), pt(b)]).collect()
+}
+
+/// Traits d'un motif de modèle sur une face plane (triangles en mm), calé comme dans
+/// Revit par `cal` (point (x, y) du motif en origine + x·u + y·v) et décalés de `ecart`
+/// mm vers l'extérieur de la face ; au plus `max` traits, en mètres.
+pub fn motif_sur_face(tris: &[[DVec3; 3]], cal: &MotifFace, m: &Motif, ecart: f64, max: usize) -> Vec<[DVec3; 2]> {
+    let Some(t0) = tris.first() else { return Vec::new() };
+    let n = (t0[1] - t0[0]).cross(t0[2] - t0[0]).normalize_or_zero();
+    let (uu, uv, vv) = (cal.u.dot(cal.u), cal.u.dot(cal.v), cal.v.dot(cal.v));
+    let det = uu * vv - uv * uv;
+    if det.abs() < 1e-12 || n == DVec3::ZERO {
+        return Vec::new();
+    }
+    // coordonnées du motif d'un point de la face (moindres carrés dans le plan de u, v)
+    let plan = |p: DVec3| {
+        let r = p - cal.origine;
+        let (a, b) = (r.dot(cal.u), r.dot(cal.v));
+        [(vv * a - uv * b) / det, (uu * b - uv * a) / det]
+    };
+    let t2: Vec<[[f64; 2]; 3]> = tris.iter().map(|t| t.map(plan)).collect();
+    let pt = |q: [f64; 2]| (cal.origine + q[0] * cal.u + q[1] * cal.v + n * ecart) / 1000.0;
+    hachures_plan(&t2, m, 1.0, max).into_iter().map(|[a, b]| [pt(a), pt(b)]).collect()
+}
+
+/// Cœur de [`hachures`] dans le plan du motif : triangles en (x, y), mesures du motif
+/// multipliées par `f` ; segments en (x, y).
+pub fn hachures_plan(tris: &[[[f64; 2]; 3]], m: &Motif, f: f64, max: usize) -> Vec<[[f64; 2]; 2]> {
     let mut out = Vec::new();
     for g in &m.grilles {
         let (dec, gl) = (g.decalage * f, g.glissement * f);
@@ -458,7 +487,7 @@ pub fn hachures(triangles: &[[DVec3; 3]], m: &Motif, echelle: f64, droite: DVec3
                     morceaux.push((a, b));
                 }
                 for (a, b) in morceaux {
-                    let pt = |t: f64| (p[0] + t * d[0]) * droite + (p[1] + t * d[1]) * haut + w * n;
+                    let pt = |t: f64| [p[0] + t * d[0], p[1] + t * d[1]];
                     out.push([pt(a), pt(b)]);
                     if out.len() >= max {
                         return out;

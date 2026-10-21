@@ -27,11 +27,27 @@ pub struct Face {
     pub materiau: i64,
     /// Triangles en pieds, sens direct autour de la normale sortante.
     pub triangles: Vec<[DVec3; 3]>,
+    /// Motif de surface d'une face plane, calé comme dans Revit.
+    pub motif: Option<MotifFace>,
+}
+
+/// Motif de surface d'une face (`GFace.m_pGFilling` : `GFilling.m_patternId`,
+/// `m_fillColor`, `m_placer`) : le point (x, y) du motif est en origine + x·u + y·v.
+/// Dans une `Face` : origine en pieds, u et v en pieds par pied du motif ; dans une
+/// `FaceMaillee` : origine en mm, u et v en mm par mm.
+#[derive(Clone, Copy, Debug)]
+pub struct MotifFace {
+    pub motif: i64,
+    pub couleur: [u8; 3],
+    pub origine: DVec3,
+    pub u: DVec3,
+    pub v: DVec3,
 }
 
 pub struct FaceMaillee {
     pub materiau: i64,
     pub triangles: Vec<[usize; 3]>,
+    pub motif: Option<MotifFace>,
 }
 
 /// Maillage indexé, sommets fusionnés à 10⁻⁶ mm.
@@ -529,9 +545,40 @@ impl Parcours<'_, '_, '_> {
                     if miroir { [a, c, b] } else { [a, b, c] }
                 })
                 .collect();
-            self.faces.push(Face { materiau: f.materiau, triangles });
+            let motif = f.motif.map(|m| MotifFace { origine: t.r * m.origine + t.o, u: t.r * m.u, v: t.r * m.v, ..m });
+            self.faces.push(Face { materiau: f.materiau, triangles, motif });
         }
     }
+}
+
+/// Motif de surface d'une face plane : remplissage `m_pGFilling` (motif, couleur) et
+/// placement `FillPatternPlacer` (origine et direction du motif dans l'espace (u, v) du
+/// plan, échelle, miroir), ramenés en un repère 3D (pieds).
+fn motif_face(rec: &Record, f: &Obj, s: &Obj) -> Option<MotifFace> {
+    if s.class_name() != "Plane" {
+        return None;
+    }
+    let g = rec.field_body(f, "m_pGFilling")?;
+    let motif = g.get("m_patternId").and_then(Val::element_id).filter(|&m| m != -1)?;
+    let c = g.get("m_fillColor").and_then(Val::int).unwrap_or(0);
+    let pl = g.get("m_placer")?.obj()?;
+    let deux = |n: &str| -> Option<DVec2> {
+        match pl.get(n)?.reals().as_deref() {
+            Some(&[a, b]) => Some(DVec2::new(a, b)),
+            _ => None,
+        }
+    };
+    let (o, d) = (deux("m_origin")?, deux("m_dir")?.normalize_or_zero());
+    let e = pl.get("m_scale").and_then(Val::real).filter(|&e| e > 0.0).unwrap_or(1.0);
+    let b = if pl.get("m_isMirrored").and_then(Val::int) == Some(1) { DVec2::new(d.y, -d.x) } else { d.perp() };
+    let (po, x, y) = (vec3(s, "m_origin").ok()?, vec3(s, "m_xVec").ok()?, vec3(s, "m_yVec").ok()?);
+    Some(MotifFace {
+        motif,
+        couleur: [c as u8, (c >> 8) as u8, (c >> 16) as u8],
+        origine: po + o.x * x + o.y * y,
+        u: e * (d.x * x + d.y * y),
+        v: e * (b.x * x + b.y * y),
+    })
 }
 
 /// Faces (pieds) d'une `Geometry` si c'est un solide fermé de volume positif ; une
@@ -571,7 +618,7 @@ fn solide(rec: &Record, n: &Obj, tout: bool) -> Result<Option<Vec<Face>>, String
         if s.class_name() != "Plane" {
             densifier(&mut uv, &mut xyz, &polys, &mut tris, &surface);
         }
-        faces.push(Face { materiau: eid(f, "m_renderStyleId"), triangles: tris.into_iter().map(|t| t.map(|i| xyz[i])).collect() });
+        faces.push(Face { materiau: eid(f, "m_renderStyleId"), triangles: tris.into_iter().map(|t| t.map(|i| xyz[i])).collect(), motif: motif_face(rec, f, s) });
     }
     let ferme = aretes.iter().all(|&k| rec.by_num(k).is_some_and(|e| refs(&e.obj, "m_pFace")[1].is_some_and(|f| f != 0)));
     // Un solide fermé de volume négatif est un vide (réservation d'une famille : l'API de
@@ -734,7 +781,8 @@ pub fn maillage(rec: &Record, tout: bool, bib: &Bibliotheque) -> Result<Maillage
                 })
             })
             .collect();
-        m.faces.push(FaceMaillee { materiau: f.materiau, triangles });
+        let motif = f.motif.map(|x| MotifFace { origine: x.origine * FT, ..x });
+        m.faces.push(FaceMaillee { materiau: f.materiau, triangles, motif });
     }
     Ok(m)
 }
@@ -746,7 +794,7 @@ impl Maillage {
         let n = self.sommets.len();
         self.sommets.extend(autre.sommets);
         self.echecs.extend(autre.echecs);
-        self.faces.extend(autre.faces.into_iter().map(|f| FaceMaillee { materiau: f.materiau, triangles: f.triangles.into_iter().map(|t| t.map(|i| i + n)).collect() }));
+        self.faces.extend(autre.faces.into_iter().map(|f| FaceMaillee { materiau: f.materiau, triangles: f.triangles.into_iter().map(|t| t.map(|i| i + n)).collect(), motif: f.motif }));
     }
 
     /// Boîte englobante (mm), volume (m³, théorème de la divergence), aire (m²) et

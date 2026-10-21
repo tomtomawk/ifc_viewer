@@ -25,7 +25,7 @@ par Autodesk. Les points non vérifiés sont signalés comme tels. Méthode d'es
 | Documents de famille (`.rfa`) | extrusions, raccords, révolutions, balayages et combinaisons lus et affichés ; volumes identiques à Revit (§ 7, « Documents de famille ») |
 | Familles chargées dans un projet | document embarqué dans la partition, ids renumérotés, désigné par `Family.m_oFamDoc` (§ 7) |
 | Vues et éléments 2D | vues (genre, échelle, niveau, repère, cadrage), traits, arcs, textes, cotes, régions remplies, fenêtres de vue : identiques à Revit sur trois fichiers (§ 7, « Vues et éléments 2D ») |
-| Hachures | motifs de remplissage (grilles, tirets), types de régions remplies et motifs des matériaux identiques à Revit (219 motifs et 80 matériaux de Kerreut) ; régions tracées unies ou hachurées dans le viewer (§ 7, « Hachures ») |
+| Hachures | motifs de remplissage (grilles, tirets), types de régions remplies et motifs des matériaux identiques à Revit (219 motifs et 80 matériaux de Kerreut) ; régions tracées unies ou hachurées dans le viewer ; **motifs de surface des matériaux dessinés sur les faces 3D**, calés face par face comme dans Revit (§ 7, « Hachures ») |
 | **Écriture** | fichier modifié par nos outils (texte, couleur de matériau, largeur d'un type) **ouvert par Revit 2026**, valeurs relues par l'API (§ 11) |
 | Viewer Rust | à l'ouverture d'un `.rvt` ou d'un `.rfa`, sans export IFC (`src/rvt/`, § 8) : **murs, sols, plafonds, toits, escaliers, garde-corps, portes, fenêtres, mobilier et autres familles, pièces, formes de famille affichés**, colorés par matériau ; vues et éléments 2D (masqués par défaut) ; grilles dans l'arborescence avec leurs propriétés |
 
@@ -888,9 +888,32 @@ Viewer : une région est tracée avec son arrière-plan uni s'il y en a un, puis
 premier plan uni (face colorée) ou hachuré : chaque grille donne des traits parallèles
 découpés sur la face (triangles), tirets compris, à l'échelle de la vue pour un motif
 de dessin, en rubans de 0,13 mm sur le papier, à la couleur de premier plan. Kerreut :
-6 745 traits pour 70 régions ; Saint-Malo : 14 344 traits pour 31 régions. Les motifs
-des matériaux sont dans les propriétés (« Motifs des matériaux ») mais pas encore
-dessinés sur les faces 3D.
+6 745 traits pour 70 régions ; Saint-Malo : 14 344 traits pour 31 régions.
+
+**Motifs de surface sur les faces 3D.** Le calage d'un motif est stocké face par face
+dans le `GElement` : `GFace.m_pGFilling` → `GFilling` : motif `m_patternId` (celui de
+surface du matériau ; −1 sur certaines faces), couleur `m_fillColor` (celle du motif
+de surface du matériau), et `m_placer` → `FillPatternPlacer` : origine `m_origin` et
+direction `m_dir` du motif dans l'espace (u, v) de la surface, `m_scale`,
+`m_isMirrored`, `m_placedDraft`. Pour une face plane (`Plane` : origine, `m_xVec`,
+`m_yVec`), le point (x, y) du motif est en origine du plan + (o + e·(x·d + y·d⊥))
+dans le repère (`m_xVec`, `m_yVec`), d⊥ changé de signe si le motif est en miroir ;
+dans une famille, ce repère suit celui de l'instance. Contrôle sur Kerreut : sur les
+murs en « Blocs 200x400 » (motif de modèle 819), les joints de la grille à 0° sont
+horizontaux, ceux de la grille à 90° verticaux, aucun trait oblique, et les joints
+horizontaux tombent sur les multiples de 200 mm comptés depuis l'origine du projet,
+y compris pour des murs décalés de +100 ou −500 mm (calage par défaut de Revit pour un
+motif de modèle). Le calage n'a pas été comparé à une vue de Revit.
+
+Viewer : seuls les **motifs de modèle** sont dessinés (un motif de dessin est à taille
+d'écran constante dans Revit ; les faces concernées sont comptées : 59 à Kerreut), et
+seulement sur les faces planes. Les traits sont tracés en **lignes d'un pixel**
+(`GL_LINES`, ajoutées au moteur de rendu : `ProductGeom::lignes`, plage `lines` des
+objets de scène), décalés de 1 mm vers l'extérieur de la face, à la couleur du motif ;
+ils forment un objet `IFCSURFACEFEATURE` « Motifs de surface » rattaché à l'élément
+(case « Motifs » de la barre d'outils), avec un plafond de 1,5 million de traits par
+scène. Kerreut : 21 éléments, 6 849 traits ; Saint-Malo : 82 éléments, 24 175 traits
+(scène construite en 0,5 s) ; `Projet1.rvt` : 3 éléments, 28 721 traits.
 
 ### Contenu repéré
 
@@ -986,8 +1009,9 @@ escaliers, garde-corps, pièces, instances et leur géométrie, cotes d'une port
 `Kerreut 2025.rvt` (toits, escalier assemblé, familles, arbre aux surfaces de
 révolution, cotes d'une porte), E12 (grilles), `FEN_2PF.rfa` (formes, vues, cotes et
 textes), C14 F04 (fenêtres placées), E13 (vues et 2D, objets de la scène), Kerreut
-(hachures), découpage des hachures sur un carré et texte RTF (sans fichier), sautés si
-les fichiers sont absents. Dossiers : `RVT_ESSAIS` (défaut `C:\Users\theba\Desktop\Revit`) et
+(hachures ; motifs de surface : orientation et trame des joints), découpage des
+hachures sur un carré et texte RTF (sans fichier), sautés si les fichiers sont absents.
+`--stats` donne aussi le bilan de la scène (objets, triangles, traits des motifs). Dossiers : `RVT_ESSAIS` (défaut `C:\Users\theba\Desktop\Revit`) et
 `RVT_CORPUS` (défaut `C:\Users\theba\Documents\Thomas\ARCHI PERSO`).
 
 ## 9. Pistes pour la suite

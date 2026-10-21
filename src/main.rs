@@ -278,5 +278,14 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
         println!("Objets illisibles : {}", m.illisibles.len());
     }
     println!("Durée géom.  : {} ms", t0.elapsed().as_millis());
+    // scène du viewer : objets, triangles, traits (motifs de surface)
+    let t1 = std::time::Instant::now();
+    let s = rvt::maquette::scene(&m, "", String::new(), "");
+    let traits: u32 = s.objects.iter().map(|o| o.lines.count / 2).sum();
+    let motifs = s.objects.iter().filter(|o| &*o.class == "IFCSURFACEFEATURE").count();
+    println!("Scène        : {} objets, {} triangles, {traits} traits ({motifs} objets de motifs), {} ms", s.objects.len(), s.triangles, t1.elapsed().as_millis());
+    for (nom, n) in &s.unsupported {
+        println!("  {nom} : {n}");
+    }
     0
 }

@@ -15,9 +15,16 @@ pub struct Part {
     pub tris: Vec<Tri>,
 }
 
+/// Traits d'une couleur, tracés en lignes d'un pixel.
+pub struct Ligne {
+    pub color: Rgba,
+    pub segs: Vec<[DVec3; 2]>,
+}
+
 pub struct ProductGeom {
     pub id: Id,
     pub parts: Vec<Part>,
+    pub lignes: Vec<Ligne>,
 }
 
 /// Compteurs d'entités géométriques non prises en charge.
@@ -110,7 +117,7 @@ pub fn product_geometry(m: &IfcModel, stats: &GeomStats, id: Id) -> Option<Produ
         }
     }
     parts.retain(|p| !p.tris.is_empty());
-    Some(ProductGeom { id, parts })
+    Some(ProductGeom { id, parts, lignes: Vec::new() })
 }
 
 fn bbox(tris: &[Tri]) -> (DVec3, DVec3) {

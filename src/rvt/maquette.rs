@@ -18,7 +18,7 @@ use super::objets::{elem_table, inflate, records, sections, unpad};
 use super::schema::Schema;
 use super::vues::{self, Contenu, Element2D, Motif, TypeRegion, Vue};
 use super::Cfb;
-use crate::geom::{Part, ProductGeom, Rgba, class_color};
+use crate::geom::{Ligne, Part, ProductGeom, Rgba, class_color};
 use crate::model::IfcModel;
 use crate::scene::{self, Scene};
 use crate::step::{Entity, Id, IdMap, StepFile, Value, format_real};
@@ -1271,6 +1271,8 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
     let mut types: HashMap<(i64, &str), Id> = HashMap::new();
     let mut contenus: BTreeMap<Id, Vec<Value>> = BTreeMap::new();
     let mut geoms = Vec::new();
+    // traits des motifs de surface : plafond (2 sommets de 24 octets par trait)
+    let (mut traits_motifs, mut motifs_omis, mut motifs_dessin) = (0usize, 0usize, 0usize);
     for p in produits(m) {
         let id = b.add(p.classe, vec![gid("RVT", p.id), n.clone(), Value::Str(p.nom.clone()), n.clone(), Value::Str(p.nom_type.clone()), n.clone(), Value::Ref(shape), Value::Str(p.id.to_string())]);
         let mut props = vec![("ElementId", Value::Str(p.id.to_string()))];
@@ -1308,7 +1310,32 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
                 .into_iter()
                 .map(|(k, tris)| Part { color: if p.classe == "IFCSPACE" { defaut } else { m.materiaux.get(&k).map(couleur).unwrap_or(defaut) }, tris })
                 .collect();
-            geoms.push(ProductGeom { id, parts });
+            geoms.push(ProductGeom { id, parts, lignes: Vec::new() });
+            // motifs de surface des matériaux (motifs de modèle), calés face par face
+            let mut par_couleur: BTreeMap<[u8; 3], Vec<[DVec3; 2]>> = BTreeMap::new();
+            for f in &g.faces {
+                let Some(cal) = f.motif else { continue };
+                match m.motifs.get(&cal.motif) {
+                    Some(x) if x.modele && !x.grilles.is_empty() => {
+                        if traits_motifs >= MAX_TRAITS_MOTIFS {
+                            motifs_omis += 1;
+                            continue;
+                        }
+                        let tris: Vec<[DVec3; 3]> = f.triangles.iter().map(|t| t.map(|i| g.sommets[i])).collect();
+                        let s = vues::motif_sur_face(&tris, &cal, x, 1.0, MAX_TRAITS_MOTIFS - traits_motifs);
+                        traits_motifs += s.len();
+                        par_couleur.entry(cal.couleur).or_default().extend(s);
+                    }
+                    Some(x) if !x.modele && !x.grilles.is_empty() => motifs_dessin += 1,
+                    _ => {}
+                }
+            }
+            if !par_couleur.is_empty() {
+                let f = b.add("IFCSURFACEFEATURE", vec![gid("RVTMOTIF", p.id), n.clone(), Value::Str(format!("Motifs de surface [{}]", p.id)), n.clone(), n.clone(), n.clone(), Value::Ref(shape)]);
+                b.add("IFCRELAGGREGATES", vec![gid("RVTAGGM", p.id), n.clone(), n.clone(), n.clone(), Value::Ref(id), Value::List(vec![Value::Ref(f)])]);
+                let lignes = par_couleur.into_iter().map(|(c, segs)| Ligne { color: [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0, 1.0], segs }).collect();
+                geoms.push(ProductGeom { id: f, parts: Vec::new(), lignes });
+            }
         }
         if p.type_id != -1 {
             let classe_type: &str = p.classe;
@@ -1415,7 +1442,7 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
                 parts.extend(region(m, *type_id, g, v));
             }
             if !parts.is_empty() {
-                geoms.push(ProductGeom { id, parts });
+                geoms.push(ProductGeom { id, parts, lignes: Vec::new() });
             }
             enfants.push(Value::Ref(id));
         }
@@ -1427,8 +1454,20 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
         b.add("IFCRELCONTAINEDINSPATIALSTRUCTURE", vec![gid("RVTCONT", k as i64), n.clone(), n.clone(), n.clone(), Value::List(items), Value::Ref(s)]);
     }
     let model = IfcModel::new(StepFile { schema: format!("REVIT {format}"), entities: b.entities });
-    scene::assemble(model, geoms, file_name)
+    let mut s = scene::assemble(model, geoms, file_name);
+    for (nom, k) in [
+        ("Faces à motif de surface de dessin (taille d'écran dans Revit), non tracé en 3D", motifs_dessin),
+        ("Faces à motif de surface non tracé (limite de traits atteinte)", motifs_omis),
+    ] {
+        if k > 0 {
+            s.unsupported.push((nom.into(), k));
+        }
+    }
+    s
 }
+
+/// Nombre maximal de traits de motifs de surface dans une scène.
+const MAX_TRAITS_MOTIFS: usize = 1_500_000;
 
 #[cfg(test)]
 mod tests {
@@ -1781,6 +1820,45 @@ mod tests {
         // ARC_MAT_PIERRE : coupe 3 245 428, surface 963 733 (couleur 3C3C3C)
         let pierre = &m.materiaux[&9241118];
         assert_eq!((pierre.motifs[0].0, pierre.motifs[2].0, pierre.motifs[2].1), (3245428, 963733, [0x3c, 0x3c, 0x3c]));
+    }
+
+    /// Motifs de surface de `Kerreut 2025.rvt` : faces planes calées par leur
+    /// `FillPatternPlacer` ; sur un mur en « Blocs 200x400 » (motif 819), les joints de
+    /// la grille à 0° sont horizontaux et espacés de 200 mm.
+    #[test]
+    fn kerreut_motifs_surface() {
+        let Some(p) = corpus(r"PERROS-GUIREC - rue de Kerreut\01-TRAVAIL\Kerreut 2025.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        let blocs = &m.motifs[&819];
+        assert!(blocs.modele && blocs.grilles.len() == 2);
+        let (mut faces, mut horizontaux, mut verticaux, mut autres) = (0, 0, 0, 0);
+        let mut hauteurs: Vec<f64> = Vec::new();
+        for g in m.murs.iter().filter_map(|x| x.geometrie.as_ref().ok()) {
+            for f in g.faces.iter().filter(|f| f.motif.is_some_and(|c| c.motif == 819)) {
+                let tris: Vec<[DVec3; 3]> = f.triangles.iter().map(|t| t.map(|i| g.sommets[i])).collect();
+                let n = (tris[0][1] - tris[0][0]).cross(tris[0][2] - tris[0][0]).normalize();
+                if n.z.abs() > 1e-6 {
+                    continue; // face non verticale
+                }
+                faces += 1;
+                for [a, b] in vues::motif_sur_face(&tris, &f.motif.unwrap(), blocs, 0.0, 100_000) {
+                    let d = (b - a).normalize();
+                    if d.z.abs() < 1e-6 {
+                        horizontaux += 1;
+                        hauteurs.push(a.z * 1000.0);
+                    } else if d.z.abs() > 1.0 - 1e-6 {
+                        verticaux += 1;
+                    } else {
+                        autres += 1;
+                    }
+                }
+            }
+        }
+        assert!(faces > 0 && horizontaux > 0 && verticaux > 0 && autres == 0, "{faces} faces, {horizontaux} / {verticaux} / {autres}");
+        // joints horizontaux : altitudes à un multiple de 200 mm près d'un même décalage
+        let r0 = hauteurs[0].rem_euclid(200.0);
+        let hors = hauteurs.iter().filter(|h| ((*h - r0).rem_euclid(200.0) + 1e-3) % 200.0 > 2e-3).count();
+        assert!(hors * 10 < hauteurs.len(), "{hors} joints hors de la trame sur {}", hauteurs.len());
     }
 
     /// Essai C14 F04 : la fenêtre chargée dans le projet vide et placée deux fois dans un
