@@ -1,6 +1,7 @@
 # Format Revit (.rvt) : état du décodage
 
-Notes de rétro-ingénierie du 19–21 octobre 2026. Elles décrivent ce qui a été
+Notes de rétro-ingénierie du 19–21 octobre 2026 (campagne C14 du 21 au soir :
+familles, vues et 2D, écriture). Elles décrivent ce qui a été
 **observé** sur des fichiers réels, pas une spécification : rien n'est documenté
 par Autodesk. Les points non vérifiés sont signalés comme tels. Méthode d'essai :
 [PROTOCOLE-RVT.md](PROTOCOLE-RVT.md).
@@ -12,6 +13,7 @@ par Autodesk. Les points non vérifiés sont signalés comme tels. Méthode d'es
 | Conteneur OLE (CFB) | lu entièrement, validé par l'API Windows |
 | Métadonnées (version, projet, références, vignette) | décodées, intégrées au viewer (`src/rvt.rs`) |
 | Décompression | **résolue** (§ 4) : blocs de 353 octets intercalés tous les 64 896 octets ; 100 % des membres gzip décodés avec CRC exact (formats 2016, 2026, 2027) |
+| Code correcteur (blocs de 353 octets, fin des flux) | **décodé** (§ 4 bis) : CRC courts entrelacés, réencodage identique octet pour octet de tous les flux essayés (2026, 2027) |
 | Schéma de classes `Formats/Latest` | **lu en entier** : 4 690 classes et 12 558 champs (2026), 4 757 et 13 080 (2027) ; identifiants de classe établis |
 | Table des éléments `Global/ElemTable` | structure établie (en-tête, enregistrements de 40 octets) ; un champ non identifié |
 | Partitions `Partitions/*` | **cadrage complet** : 3 sections, un enregistrement par élément ; inventaire identique à Revit (§ 7) |
@@ -20,10 +22,16 @@ par Autodesk. Les points non vérifiés sont signalés comme tels. Méthode d'es
 | Autres éléments | niveaux, types (nom, épaisseur), familles (nom, catégorie), matériaux (nom, couleur, transparence), sols et plafonds, toits, escaliers (niveaux, contremarches, giron, volées), grilles, instances de familles (type, hôte, position, repère), pièces : identiques à Revit sur trois projets et un essai (§ 7) |
 | Géométrie calculée (`GElement`) | B-rep lu et maillé pour murs, sols, plafonds, toits, escaliers, garde-corps, pièces et **familles** (faces planes, cylindriques, réglées et de révolution, trous ; vides écartés) ; volumes identiques à Revit pour 59 murs, 21 sols sur 22, 10 toits, 4 escaliers, 16 garde-corps et 59 pièces (§ 7) |
 | Familles (`GInstance`) | géométrie du type placée par le repère de l'instance, filtrée comme une vue 3D en détail fin ; 373 instances sur 448 de volume identique à Revit, 404 à moins de 1 % (§ 7, « Familles ») |
-| Viewer Rust | à l'ouverture d'un `.rvt`, sans export IFC (`src/rvt/`, § 8) : **murs, sols, plafonds, toits, escaliers, garde-corps, portes, fenêtres, mobilier et autres familles, pièces affichés**, colorés par matériau ; grilles dans l'arborescence avec leurs propriétés |
+| Documents de famille (`.rfa`) | extrusions, raccords, révolutions, balayages et combinaisons lus et affichés ; volumes identiques à Revit (§ 7, « Documents de famille ») |
+| Familles chargées dans un projet | document embarqué dans la partition, ids renumérotés, désigné par `Family.m_oFamDoc` (§ 7) |
+| Vues et éléments 2D | vues (genre, échelle, niveau, repère, cadrage), traits, arcs, textes, cotes, régions remplies, fenêtres de vue : identiques à Revit sur trois fichiers (§ 7, « Vues et éléments 2D ») |
+| **Écriture** | fichier modifié par nos outils (texte, couleur de matériau, largeur d'un type) **ouvert par Revit 2026**, valeurs relues par l'API (§ 11) |
+| Viewer Rust | à l'ouverture d'un `.rvt` ou d'un `.rfa`, sans export IFC (`src/rvt/`, § 8) : **murs, sols, plafonds, toits, escaliers, garde-corps, portes, fenêtres, mobilier et autres familles, pièces, formes de famille affichés**, colorés par matériau ; vues et éléments 2D (masqués par défaut) ; grilles dans l'arborescence avec leurs propriétés |
 
 Non décodés : surfaces `HermiteSurf` et courbes `GEllipse` (solides écartés,
-comptés), éléments 2D propres aux vues.
+comptés) ; parmi les éléments 2D, étiquettes, symboles et composants de détail
+(comptés, non tracés). Les 64 octets qui suivent chaque document d'une partition
+(§ 7) ne sont pas recalculés : Revit ne les contrôle pas à l'ouverture.
 
 ## Fichiers étudiés
 
@@ -45,6 +53,8 @@ ouvert dans Revit 2027 via RiveTT).
 | `Kerreutv9.rvt`, `Colombes.rvt` | projets d'agence | 2022 | 138,2 Mo (Kerreutv9) |
 | `Phase2_Lecture.rvt` | projet de Saint-Malo enregistré en 2027 (`Recettes\`) | 2027 | — |
 | `Essais-format/2026/*.rvt` | essais produits par RiveTT (protocole), dont E12 (grilles) | 2026 | 0,5 à 1,6 Mo |
+| `FEN_2PF.rfa`, `Projet vide.rvt` | famille de fenêtre de l'agence (6 types) et projet issu du gabarit, fournis le 21/10 | 2026 | 0,7 et 1,6 Mo |
+| `Essais-format/2026/C14/*` | campagne C14 : F00 à F04 (projet vide, famille chargée, mur, fenêtre placée une puis deux fois), E13 (vues et 2D), W0 à W6 (écriture) | 2026 | 0,7 à 2,1 Mo |
 
 ## 1. Conteneur OLE
 
@@ -120,19 +130,39 @@ paramètres et `units="mm"`).
 
 - `Global/*` : 8 octets de préfixe (entier, ex. 0, 1 ou 5), puis un membre gzip
   standard (`1F 8B 08 00 00000000 00 0B`). `Formats/Latest` n'a pas de préfixe.
-- `Partitions/N` : 12 octets d'en-tête de partition (`09 00 00 00 00 00 00 00`
-  puis un u32), puis des membres gzip, chacun précédé d'un en-tête de 32 octets
-  (8 × u32, notés h0 à h7). Relevé **après retrait des blocs intercalés** (§ 4)
-  sur les 7 088 membres de `Essai projet 2027 astra.rvt`, sens **non établi** :
-  - h4 = longueur du membre gzip + 8 dans 83 % des cas ; les autres membres sont
-    suivis de données hors gzip (non étudiées) ;
-  - les 16 bits hauts de h0 reprennent les 16 bits bas du h4 précédent dans les mêmes 83 % ;
-  - h2 = 4 (90 %), 5, 6 ou 7 ; h6 = 0x65, 0x66 ou 0x67 ;
-  - h5 est inférieur à la taille décompressée dans 97 % des cas.
+- `Partitions/N` : 8 octets d'en-tête de partition (`09 00 00 00 00 00 00 00`), puis
+  des documents et leurs membres gzip. Cadrage établi le 21/10/2026 (campagne C14),
+  après retrait des blocs intercalés (§ 4) :
+
+  ```
+  partition = u32 9, u32 0, document*, ContentMarker de clôture
+  document  = ContentMarker, membre+, membre vide, 3F 0F u32 64 [64 octets],
+              u32 34 "Data generated by Autodesk® Revit®" (UTF-16)
+  ContentMarker = u16 0x3A3, pointeur de ContentKey (u32 0 : document principal ;
+              sinon u32 FFFFFFFF, u16 0x3A2, puis le GUID du document embarqué),
+              u32 nombre d'éléments (−1 pour la clôture)
+  membre    = 28 0F, u32 h2, u32 n, u32 g + 8, u32 somme des corps, u32 section,
+              u32 0, gzip (g octets), 21 0F, u32 g + 8
+  ```
+
+  n est le nombre d'enregistrements du membre (un membre commence toujours sur un
+  début d'enregistrement), la somme des corps celle de leurs longueurs (la taille
+  décompressée moins 16 octets par enregistrement en 0x65, 20 en 0x66 et 0x67), la
+  section 0x65, 0x66 ou 0x67 (§ 7) ; h2 vaut 4 (90 %), 5, 6 ou 7 (sens non établi,
+  recopié tel quel). Le lien `21 0F` répète g + 8 avant l'en-tête suivant : ancienne
+  lecture « les 16 bits hauts de h0 reprennent le h4 précédent ». Le membre vide (n,
+  g et somme nuls) clôt un document. Les 64 octets qui suivent ne sont égaux ni au
+  SHA-512, ni au SHA3-512, ni au BLAKE2b des données ou des membres du document ;
+  Revit ne les vérifie pas à l'ouverture (essais W2b, W4).
 
   Les membres décompressés font généralement un peu moins de 128 Ko (jusqu'à 131 088 octets).
 - Chaque flux gzip est suivi, après son trailer, de quelques dizaines d'octets à
-  forte entropie (35 à 704 observés), sans rôle identifié.
+  forte entropie (35 à 704 observés) : zéros de remplissage et CRC du dernier
+  morceau (§ 4 bis).
+- Le premier u32 des enregistrements 0x66 et 0x67 de `Partitions/*` est l'**Adler-32
+  du corps** de l'enregistrement (400 / 400 vérifiés, puis tous ceux qu'écrit
+  `ecriture.py`) ; `Adler32::checkAndRepair` de `Utility.dll` s'en sert pour réparer
+  un enregistrement endommagé.
 
 ## 4. Décompression : les blocs intercalés (résolu le 20/10/2026)
 
@@ -142,8 +172,8 @@ Chaque flux OLE compressé (`Formats/Latest`, `Global/*`, `Partitions/*`) est
 découpé en tranches de **65 249 octets : 64 896 octets de données, puis un bloc
 de 353 octets** à retirer. Le bloc commence par `00` suivi d'un octet multiple de
 0x10 (`00 00` à `00 F0`) ; les 351 octets suivants sont à forte entropie et
-diffèrent d'un bloc à l'autre (rôle inconnu). Une fois ces blocs retirés, les
-membres gzip sont standard.
+diffèrent d'un bloc à l'autre : c'est un code correcteur, décrit au § 4 bis. Une
+fois ces blocs retirés, les membres gzip sont standard.
 
 ```
 flux = [64 896 données][353 bloc][64 896 données][353 bloc]…[reste des données]
@@ -194,6 +224,58 @@ suivantes (sortie trop longue, texte brouillé).
 | Fenêtre deflate partagée entre membres consécutifs | `zdict` = sortie du membre précédent, 112 membres KO | aucun corrigé |
 | Séquence de 2 octets échappée à l'écriture | recherche d'un motif absent sur 8,2 Mo compressés | aucun motif absent |
 | zlib modifié | chaînes de version dans les DLL de Revit 2026 | zlib 1.3.1 et 1.3.2 standard (`Utility.dll`…) |
+
+## 4 bis. Code correcteur (décodé le 21/10/2026)
+
+Les blocs de 353 octets et la fin des flux compressés sont les CRC d'une couche
+d'écriture de Revit (classes `CRCFile` / `CRCIO` de `Utility.dll`, avec
+`setPreambleSize`, `startCheckingCRC`). Revit les **contrôle** : un fichier dont ces
+octets sont mis à zéro est refusé (`CorruptModelException`, `CArchiveException 105`,
+essai W1) ; une erreur de quelques bits est, elle, corrigée en silence.
+
+**Méthode.** Mise en évidence en boîte noire (tailles quantifiées ; écart linéaire :
+deux paires de flux d'écart de données identique ont le même écart de fin, 10 cas
+sur 10), puis lecture du code machine de `Utility.dll` (Revit 2026,
+`dumpbin /DISASM` de Visual Studio 2022) **à des fins d'interopérabilité** : seules
+les fonctions de `CRCIO` et les initialiseurs des codes ont été lus ; l'algorithme est
+réécrit dans `tools/rvt-research/crcbloc.py`, aucun code n'est repris.
+
+**Codes.** Huit CRC réfléchis (valeur initiale 0, sans inversion finale), choisis
+selon la longueur D du morceau de données :
+
+| Largeur w | Polynôme réfléchi | Longueur L d'un mot (bits) | Pas k | Données D (octets) |
+|---:|---:|---:|---:|---|
+| 11 | 0x500 | 2 047 | 2 | plus de 5 081 (morceau plein : 64 896) |
+| 9 | 0x110 | 511 | 2 | 1 275 à 5 081 |
+| 7 | 0x60 | 127 | 2 | 549 à 1 274 |
+| 6 | 0x30 | 63 | 2 | 257 à 548 |
+| 5 | 0x14 | 31 | 2 | 106 à 256 |
+| 4 | 0x0C | 15 | 2 | 41 à 105 |
+| 3 | 0x5 | 7 | 2 | 8 à 40 |
+| 2 | 0x3 | 3 | 4 | 7 et moins |
+
+Les seuils sont calculés par Revit au chargement à partir des rapports w / L (même
+calcul dans `crcbloc._seuils`).
+
+**Disposition d'un mot** (bits rangés poids faible d'abord dans chaque octet) :
+- n registres CRC, n ≥ 65. Avec b la largeur du champ de remplissage (bits
+  nécessaires pour compter ⌈max(L·k, 65) / 8⌉ octets) et B = 8·D + b : si
+  B ≤ (L − w) × 65, mot de ⌈B / 65⌉ + w bits par registre et n = 65 ; sinon mots de
+  L bits et n = ⌈B / (L − w)⌉, arrondi pour que n − 65 soit multiple de k ;
+- zone de données de (longueur − w) × n bits : les D octets, des zéros, puis le
+  champ de b bits qui donne le nombre d'octets de zéros ;
+- le bit i de la zone entre dans le registre i mod n ; le bit j du registre r est
+  rangé au bit (zone + r + j·n). Le mot fait ⌈longueur × n / 8⌉ octets.
+
+Morceau plein : CRC-11, n = 255, 255 × 2 047 bits = 521 985 bits = **65 249 octets
+= 64 896 + 353** ; 3 bits de zéros et le champ de 9 bits (valeur 0) suivent les
+données, d'où les 12 bits nuls `00 x0` en tête de chaque bloc.
+
+**Validation.** `crcbloc.py` réencode à l'identique, octet pour octet, tous les flux
+compressés de `FEN_2PF.rfa`, `V0.rvt`, `F01_charge.rvt`, `OUVERTURE_FAMILLE_TEST.rfa`
+(2027), `CAR_A4_Entête projet.rfa` (2027) et `Projet1.rvt` (62 flux). Un bit modifié
+dans les données change 1 octet de données et 6 octets du bloc (les 11 bits d'un
+registre, espacés de 255 bits).
 
 ## 5. Schéma de classes (`Formats/Latest`)
 
@@ -339,8 +421,95 @@ tombe exactement sur la fin de chaque section dans tous les fichiers essayés
 
 Les partitions contiennent **plus d'objets que `ElemTable`** : 587 083 contre
 33 235 dans le projet 2027 (tous les ids de `ElemTable` y sont). Les objets en plus
-sont très probablement le contenu des familles chargées (98 000 `CategoryElem`,
-100 000 `GStyleElem`) ; non vérifié.
+sont le **contenu des familles chargées**, vérifié le 21/10/2026 (campagne C14,
+ci-dessous).
+
+### Familles chargées dans un projet (campagne C14)
+
+Série en chaîne depuis `Projet vide.rvt` (script RiveTT `rvt-essais-c14-famille`) :
+F00 réenregistré, F01 `FEN_2PF.rfa` chargée, F02 un mur, F03 la fenêtre placée à
+2 345,6 mm (allège 912,3 mm), F04 une seconde fenêtre.
+
+- **Chargement** (F00 → F01) : 37 éléments du projet ajoutés (`Family` 257 028, six
+  `FamilySymbol` et leurs `FamSymSurrogate`, sous-catégories, matériaux, motifs).
+  Le document de la famille est recopié **en entier** dans la partition du projet,
+  comme document embarqué (`ContentMarker` avec clé, cadrage ci-dessus), après ceux
+  des 33 familles déjà chargées : 1 131 objets (contre 2 804 dans le `.rfa` : les
+  styles inutilisés sont retirés), **renumérotés** dans l'espace d'ids du projet
+  (257 275 à 258 405). `Family.m_oFamDoc.m_contentDocGUID` désigne le document
+  embarqué et `m_oFamDoc.m_big2SmallMap2` fait la correspondance d'ids ;
+  `Global/ContentDocuments` décrit chaque document embarqué (`ContentMarker`,
+  `ContentRec` : auteur, historique) et grossit de 88 Ko décompressés. La famille
+  imbriquée de la fenêtre (marque de ligne de coupe, 224 objets) devient un document
+  embarqué de plus.
+- **Avant placement**, le type n'a pas de géométrie : `FamilySymbol` 258 431 de
+  1,7 Ko, complément 0x67 `SerializedDummy`.
+- **Placement** (F02 → F03) : l'instance (`FamilyInstance` 258 460, `GElement` de
+  300 octets : un `GInstance`), le type activé (258 431 passe à 40 Ko et reçoit un
+  `GElement` de 133 Ko) et un type propre à l'instance (258 461, coupé par le mur).
+  Le mur n'est découpé qu'à la transaction suivante : son solide vaut encore
+  3,564 m³ dans F03 et 2,968 736 m³ (deux baies) dans F04, comme dans l'API.
+- Contrôle : instance 0,110 297 m³ lue contre 0,110 441 m³ dans Revit (écart du seul
+  coffre de volet roulant, face cylindrique concave à 24 facettes).
+
+### Documents de famille (`.rfa`)
+
+Le viewer n'affichait pour `FEN_2PF.rfa` que le mur hôte du gabarit : la géométrie
+d'une famille est faite de **formes**, absentes du lecteur. Classes et règles,
+établies sur `FEN_2PF.rfa` et validées par le script RiveTT
+`rvt-reference-formes-famille` (`get_Geometry` en détail fin) :
+
+| Objet | Classe | Données |
+|---|---|---|
+| forme | dérivées de `GenSweep` : `ExtrusionElem`, `BlendElem`, `RevolutionElem`, `SweepElem`, `SweptBlendElem`, `FormElem`, `FreeFormElement` | `m_cutting` (1 : vide), sous-catégorie `m_categoryId`, matériau `m_materialId` (−1 : par catégorie), visibilité `m_famElemVisibility.m_flags` ; solide dans son `GElement` |
+| combinaison | `FamilyGeomCombination` (→ `GeomCombination`) | `m_svMap` : forme pleine (`first`) et vides (`second.m_set`) ; le `GElement` porte le **solide résultant** |
+| sous-catégorie | `CategoryElem` | nom `m_pCategory` → `Category.m_name` ; matériau par `GStyleElem.m_pGStyle` → `GStyle.m_materialElemId`, déjà appliqué aux faces du `GElement` |
+| famille imbriquée | `Family` avec `m_famId` ≠ −1 | soit son contenu est rangé en ligne dans le document (`Element.m_famId` = la famille imbriquée : têtes de coupe et de niveau), soit c'est un document embarqué (`m_oFamDoc`) |
+
+Comme dans Revit : une forme membre d'une combinaison n'a pas de géométrie propre (0
+solide), un vide non plus ; la combinaison entièrement évidée 9 900 072 n'a aucun
+solide. Formes retenues : 6 extrusions pleines hors combinaison et 7 combinaisons ;
+volumes identiques à 10⁻⁶ m³ près sauf le coffre (0,040 471 contre 0,040 615 m³) ;
+total 0,117 767 contre 0,117 91 m³. Les formes ne sont lues que dans un document de
+famille (flux `PartAtom`) : dans un projet, celles d'une famille in situ sont déjà
+dans la géométrie de son instance. Bits de `m_famElemVisibility` : 0x10 et 0x20
+avant/arrière et gauche/droite (ordre non tranché), 0x08 dessus/dessous, 0x2000 à
+0x8000 niveaux de détail ; non utilisés (toutes les formes sont visibles en 3D dans
+l'éditeur de familles).
+
+Types de la famille : `Family.m_pFamilyTypes` → `m_pairs` (nom, `params.m_params` :
+`m_paramId` et `m_value` réel, `m_int`, `m_elemId`, `m_str` ou formule
+`m_oExpression`). `Largeur` = `DOOR_WIDTH` (−1 001 301), `Hauteur` (−1 001 300).
+
+### Vues et éléments 2D
+
+Outil `vues.py`, portage `src/rvt/vues.rs`. Validé contre l'API de Revit 2026
+(script RiveTT `rvt-reference-vues-2d`) sur l'essai **E13** (créé depuis F02 par
+`rvt-essai-e13-vues2d` : ligne et arc de détail, texte `ZZ_TEXTE_PLAN`, cote,
+région remplie, vue de dessin `ZZ_DESSIN`, coupe `ZZ_COUPE`, feuille `ZZ_FEUILLE`
+avec une fenêtre de vue), sur `FEN_2PF.rfa` et `Projet1.rvt`.
+
+| Objet | Classe | Données |
+|---|---|---|
+| vue | dérivées de `DBView` | nom `m_viewName`, échelle 1 / `m_scale`, origine `m_origin`, repère `m_horzDir` (droite), `m_vertDir` (haut), `m_viewDir` (vers l'observateur), niveau d'un plan `m_genElemId`, gabarit `m_isTemplate` |
+| genre | `DBViewPlan.m_planViewType` 1 plan d'étage, 2 plan de plafond ; `DBViewSection.m_sectionViewType` 0 coupe, 1 ou 2 élévation ; `DBView3d` ; `DBViewAnonDrafting` vue de dessin ; **`DBViewDrafting` feuille** (nom historique) ; `DBViewSchedule` nomenclature | — |
+| cadrage | marqueur de vue, dérivées de `Viewer` (`Section`, `Viewer3d`…) | `m_dbViewId`, `m_boundedSpace` : origine `m_orig`, axes `m_basis`, longueur `m_boundOffset[i][0]` sur chaque axe |
+| élément 2D | tout `Element` avec `m_ownerDBViewId` ≠ −1 | coordonnées du modèle (plans, coupes : dans le plan de la vue) ou de la vue (vue de dessin ; feuille : mm du papier) |
+| trait | `CurveElem` | `m_pCurveDriver` → `m_pCrv` (`GLine`, `GArc`) ; le `GElement` porte la même courbe |
+| texte | `TextNote` | point `m_orig`, `m_baseVec`, `m_upVec`, largeur `m_lineWidth` (papier) ; texte `m_arrTextFragments[].m_text` ou RTF `m_oSavedRtfData.m_arrRtfStream` (familles) |
+| cote | `LinearDimString`, `RadialDim`… | ligne `m_pDimLine` (`GLine`), segments `m_ArrSegInfo` (valeur `m_values[0].m_value`, milieu `m_origin`), points de référence `m_refPnts`, références `m_witnessRefs` |
+| région remplie | `FilledRegion` | esquisse `m_sketchId` (`m_absorbedCurves`), face plane ouverte dans son `GElement` |
+| fenêtre de vue | `Viewport` | vue `m_dbViewId`, feuille `m_ownerDBViewId`, `m_offset`, `m_scale` (le centre de la boîte de l'API, 400 ; 300, n'est pas `m_offset`, 370 ; 300 : il dépend de l'étendue de la vue) |
+
+Résultats : E13 identique à Revit (19 vues ; ligne (1 000 ; −1 000) → (3 456,7 ;
+−1 000) ; arc de centre (4 000 ; −2 000) et rayon 765,4 ; texte à (1 234,5 ;
+−2 345,6) ; cote de 2 456,7 mm ; contour de la région ; les deux cotes temporaires
+de la région, `OST_WeakDims`, 2 000 et 1 000 mm ; cadrage de la coupe 4 000 × 3 000
+× 1 000 mm). `FEN_2PF.rfa` : 8 vues, 26 cotes (valeurs et lignes) et 4 textes comme
+Revit, une fois écartés les éléments des familles imbriquées. `Projet1.rvt` :
+31 vues, 4 cotes, 4 fenêtres de vue comme Revit (39 étiquettes de pièces et 3
+chemins d'escalier comptés, non tracés). Saint-Malo : 188 vues, 1 595 éléments 2D ;
+Kerreut : 106 vues, 1 699 éléments 2D.
 
 **Validation** contre Revit 2026 sur `Projet1.rvt` (comptes RiveTT / outil
 `objets.py`) : murs 59 / 59 `SWall`, niveaux 3 / 3 `Level`, pièces 39 / 39
@@ -710,6 +879,9 @@ Python 3 sans dépendance externe :
 | `elements.py` | niveaux, types de murs, dalles, instances, pièces, surfaces (`fichier niveaux pieces…`) ; objet aplati en `chemin = valeur` (`--plat id`) |
 | `geometrie.py` | géométrie calculée d'un élément (`fichier id`) : solides B-rep, sommets, faces et triangles en mm, contrôle (boîte, volume, aire, fermeture, écart des arêtes), export OBJ (`--obj`), plans de référence (`--tout`) |
 | `familles.py` | géométrie d'une instance de famille (`fichier id…`) : volume, triangles, boîte en mm ; `--trace id` : solides retenus ou écartés (filtre, invisible, non décodé) et pourquoi |
+| `vues.py` | vues et éléments 2D (`fichier [--vues] [--elements] [--json f]`) |
+| `crcbloc.py` | code correcteur des flux (§ 4 bis) : `encoder_flux`, `decoder_flux` ; en ligne de commande, réencode chaque flux d'un fichier et compare |
+| `ecriture.py` | réécriture d'un fichier (§ 11) : conteneur OLE, `--champ ID CHEMIN VALEUR`, `--texte ID ANCIEN NOUVEAU`, essais `--blocs-zero`, `--signature` |
 
 ```bash
 python -I tools/rvt-research/objets.py "fichier.rvt" --classe SWall
@@ -722,6 +894,9 @@ python -I tools/rvt-research/familles.py "fichier.rvt" --trace 257051
 python -I tools/rvt-research/extract.py "fichier.rvt" sortie/
 python -I tools/rvt-research/schema.py sortie/Formats_Latest.bin schema.json
 python -I tools/rvt-research/inflate_ref.py "fichier.rvt" Formats/Latest
+python -I tools/rvt-research/vues.py "fichier.rvt" --json vues.json
+python -I tools/rvt-research/crcbloc.py "fichier.rfa"
+python -I tools/rvt-research/ecriture.py "source.rfa" "sortie.rfa" --champ 2555139 .m_pMaterial.m_color 0x0000FF
 ```
 
 **Portage Rust** (viewer, 21/10/2026) : `src/rvt/objets.rs` (`extract.unpad`,
@@ -736,12 +911,21 @@ est lu et réduit aussitôt à ses champs utiles, en parallèle : garder tous le
 enregistrements lus portait le pic mémoire de Saint-Malo à 6,2 Go, ramené à 2,1 Go.
 Géométrie de tous les éléments en parallèle.
 
+Ajouts du 21/10 au soir : `vues.rs` (vues et éléments 2D), formes des documents de
+famille dans `maquette.rs` (`Forme`), `--stats` qui liste formes, vues et éléments
+2D.
+
 Dans la scène : murs `IFCWALL`, sols `IFCSLAB`, plafonds `IFCCOVERING`, toits
 `IFCROOF`, escaliers `IFCSTAIR` (volées et paliers réunis), garde-corps
 `IFCRAILING`, pièces placées `IFCSPACE` (masquées par défaut, comme dans un IFC),
 instances selon leur catégorie (`IFCDOOR`, `IFCWINDOW`, `IFCFURNITURE`…,
 `IFCBUILDINGELEMENTPROXY` sinon) avec leur géométrie de famille, grilles `IFCGRID`
-(propriétés seulement). Portes et fenêtres : « Largeur (panneau) » et « Hauteur
+(propriétés seulement), formes d'un `.rfa` dans la classe de la catégorie de la
+famille (`IFCWINDOW` pour une fenêtre), une vue par nœud `IFCANNOTATION` (dans son
+niveau pour un plan) avec ses éléments 2D en enfants, tracés dans le plan de la vue
+(traits et cotes en rubans de 0,25 mm sur le papier, cadre des textes, régions) et
+masqués par défaut (case « Annotations » ; affichés d'office pour une famille 2D
+comme un cartouche). Portes et fenêtres : « Largeur (panneau) » et « Hauteur
 (panneau) », paramètres de type. Couleur de chaque face : celle de son matériau,
 transparence comprise (plafonnée à 90 %) ; 99 % des triangles des familles ont un
 matériau connu, les autres (« par catégorie ») prennent la couleur de la classe.
@@ -764,7 +948,8 @@ sont ignorées.
 Tests (`cargo test`) : E04 (volume, boîte), `Projet1.rvt` (59 murs, matériaux, sols,
 escaliers, garde-corps, pièces, instances et leur géométrie, cotes d'une porte),
 `Kerreut 2025.rvt` (toits, escalier assemblé, familles, arbre aux surfaces de
-révolution, cotes d'une porte) et E12 (grilles), sautés si les fichiers sont
+révolution, cotes d'une porte), E12 (grilles), `FEN_2PF.rfa` (formes, vues, cotes et
+textes), C14 F04 (fenêtres placées) et E13 (vues et 2D), sautés si les fichiers sont
 absents. Dossiers : `RVT_ESSAIS` (défaut `C:\Users\theba\Desktop\Revit`) et
 `RVT_CORPUS` (défaut `C:\Users\theba\Documents\Thomas\ARCHI PERSO`).
 
@@ -781,10 +966,14 @@ absents. Dossiers : `RVT_ESSAIS` (défaut `C:\Users\theba\Desktop\Revit`) et
    22 garde-corps de Saint-Malo sans solide.
 3. **Objets hors `ElemTable`** : confirmer qu'il s'agit du contenu des familles
    (`Global/ContentDocuments`, 40 Mo décompressés dans le projet 2027).
-4. **Inconnus restants** : u32 des enregistrements 0x66, `ElementHeader`, octets de
-   fin des flux gzip, bloc de 353 octets (rôle inconnu, nécessaire pour écrire ;
-   rvt-rs le nomme « checksum/ECC trailer » d'après une analyse tierce, sans savoir
-   le recalculer non plus, § 10).
+4. **Inconnus restants** : `ElementHeader`, h2 des membres, les 64 octets de fin de
+   document (non contrôlés à l'ouverture). Résolus le 21/10 : u32 des enregistrements
+   (Adler-32), bloc de 353 octets et fin des flux (code correcteur, § 4 bis).
+5. **Écriture** (§ 11) : porter `crcbloc.py` et `ecriture.py` en Rust ; écrire des
+   éléments nouveaux (pas seulement modifier des champs existants), ce qui demande
+   un sérialiseur complet (inverse du lecteur) et la mise à jour de `ElemTable`.
+6. **2D** : étiquettes, symboles, composants de détail ; position exacte des
+   fenêtres de vue sur la feuille ; tracé des textes.
 
 ## 10. Comparaison avec rvt-rs (licence Apache-2.0)
 
@@ -807,3 +996,28 @@ dans les partitions et recalcule la géométrie depuis les axes et esquisses ; c
 dépôt lit tous les objets par le schéma et reprend le solide calculé par Revit
 (`GElement`). Si du code de rvt-rs devait être repris un jour, il faudrait
 conserver sa licence et son avis `NOTICE` pour les fichiers concernés.
+
+## 11. Écriture (campagne C14, 21/10/2026)
+
+Chaîne d'écriture de `tools/rvt-research/ecriture.py` : décoder le flux
+(`crcbloc.decoder_flux`), modifier un enregistrement 0x66 (valeur repérée par le
+lecteur, qui note la position de chaque champ simple), recalculer son Adler-32,
+recompresser son membre gzip, mettre à jour g + 8 et la somme des corps de son
+en-tête et le lien `21 0F` suivant, réencoder le flux (`crcbloc.encoder_flux`) et
+réécrire le conteneur OLE (même arborescence, nouveaux secteurs).
+
+Essais depuis `FEN_2PF.rfa`, ouverts dans Revit 2026 en arrière-plan par le script
+RiveTT `rvt-essai-ouverture` (intercepteur de boîtes de dialogue, fermeture sans
+enregistrer) :
+
+| Essai | Modification | Revit |
+|---|---|---|
+| W0 | conteneur OLE réécrit, flux identiques | ouvert ; 2 341 éléments, 19 formes, 6 types |
+| W1 | CRC des flux mis à zéro | **refusé** : `CorruptModelException` (`CArchiveException 105`) après 15 s de tentative de réparation |
+| W2b | un bit des 64 octets de fin de document inversé, CRC recalculés | ouvert |
+| W4 | texte « Extérieur » remplacé par `ZZ_ECRIT_A` | ouvert ; `TextNote.Text` = `ZZ_ECRIT_A` |
+| W5 | couleur du matériau `ARC_MAT_BETON` : 0xB4B4B4 → 0x0000FF | ouvert ; `Material.Color` = 255, 0, 0 |
+| W6 | largeur du type `120x250ht` : 1 200 → 1 400 mm (`m_pFamilyTypes`) | ouvert ; `Largeur` = 1 400 mm ; type activé et régénéré : boîte −720 → 720 mm, 0,145 39 m³ (0,130 054 avant) |
+
+Aucune boîte de dialogue, aucun avertissement. Les modifications de longueur
+(texte plus court de 2 octets dans W4) sont acceptées.

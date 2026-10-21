@@ -17,6 +17,7 @@ pub mod geometrie;
 pub mod maquette;
 mod objets;
 mod schema;
+pub mod vues;
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -473,7 +474,7 @@ pub fn decode_text(b: &[u8]) -> String {
     }
 }
 
-fn cp1252(c: u8) -> char {
+pub(crate) fn cp1252(c: u8) -> char {
     const HIGH: [char; 32] = [
         '€', '\u{81}', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', '\u{8D}', 'Ž', '\u{8F}', '\u{90}', '‘', '’', '“', '”',
         '•', '–', '—', '˜', '™', 'š', '›', 'œ', '\u{9D}', 'ž', 'Ÿ',

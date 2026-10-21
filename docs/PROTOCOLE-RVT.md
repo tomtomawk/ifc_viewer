@@ -22,6 +22,7 @@ intervention : fichiers dans `C:\Users\theba\Desktop\Revit\Essais-format\2026\`.
 | C7 croissance de `ElemTable` (ajoutée) | faite | seuil net à 64 Ko compressés → règle des blocs intercalés |
 | C11 autres éléments et projets réels (ajoutée le 21/10) | faite | niveaux, types de murs, dalles, instances, pièces extraits (`elements.py`) et identiques à Revit sur `Projet1.rvt` (2026) et `Saint-cast-Le-Guildo.rvt` (2025) ; lecteur étendu aux formats 2022 et 2025 (ids 32 bits jusqu'en 2022) |
 | C8 lecteur d'objets | faite | lecteur générique : tous les enregistrements lus sur les fichiers 2016, 2026 et 2027 essayés, sauf 6 données d'add-ins sur 587 082 ; murs droits et courbes extraits, identiques à Revit |
+| C14 familles, vues et 2D, écriture (21/10, soir) | faite | famille chargée = document embarqué ; formes des `.rfa` affichées ; vues et éléments 2D lus ; code correcteur décodé ; fichiers écrits par nos outils ouverts par Revit (LISEZMOI § 4 bis, § 7, § 11) |
 
 Le blocage de décompression est levé : le flux est fait de tranches de 64 896
 octets de données séparées par des blocs de 353 octets à retirer (LISEZMOI § 4).
@@ -269,6 +270,35 @@ murs contraints, groupes non placés, pièces non placées et surfaces portées 
   (`CopyFromScreen`, `PrintWindow` : fenêtre blanche, y compris avec un IFC) :
   l'affichage reste à vérifier à l'écran.
 
+### C14 — Familles, vues et 2D, écriture (faite le 21/10, soir)
+
+Session Revit 2026 ouverte par l'utilisateur sur `FEN_2PF.rfa`, écriture autorisée ;
+fichiers dans `Essais-format\2026\C14\`.
+
+1. **Famille seule** : inventaire de `FEN_2PF.rfa` (19 extrusions, 7 combinaisons,
+   un mur hôte) ; référence Revit `rvt-reference-formes-famille` (forme par forme :
+   pleine ou vide, sous-catégorie, visibilité, membres des combinaisons, volume).
+2. **Projet vide → famille chargée → placée** (`rvt-essais-c14-famille`) : F00 à F04
+   en une session, chaque étape enregistrée à part ; comparaison des enregistrements
+   (id, classe, Adler-32) entre fichiers successifs. Résultats : LISEZMOI § 7,
+   « Familles chargées dans un projet ».
+3. **Vues et 2D** : essai E13 créé depuis F02 (`rvt-essai-e13-vues2d`) avec des
+   sentinelles (ligne (1 000 ; −1 000) → (3 456,7 ; −1 000), arc de rayon 765,4 mm,
+   texte `ZZ_TEXTE_PLAN`, vue de dessin `ZZ_DESSIN`, coupe `ZZ_COUPE`, feuille
+   `ZZ_FEUILLE`) ; référence `rvt-reference-vues-2d` (vues et éléments propres à une
+   vue, avec ou sans détail) sur E13, `FEN_2PF.rfa` et `Projet1.rvt`.
+4. **Écriture** : W0 (conteneur réécrit) puis W1 (CRC à zéro, refusé) ont montré que
+   le bloc de 353 octets est contrôlé ; décodage du code correcteur (boîte noire,
+   puis lecture du code machine de `Utility.dll` pour l'interopérabilité),
+   réimplémenté dans `crcbloc.py` et vérifié par réencodage identique ; W2b, W4, W5,
+   W6 ouverts par `rvt-essai-ouverture` (intercepte les boîtes de dialogue) et
+   relus par l'API ; `rvt-reference-types-famille` régénère chaque type de la
+   famille et en donne le volume et la boîte.
+
+Précautions : documents ouverts en arrière-plan et fermés sans enregistrer ; le
+fichier de l'utilisateur ouvert dans l'interface n'est jamais modifié ; les essais
+qui pouvaient échouer (W1) passés à la fin, un par appel.
+
 ### C9 — Variantes ciblées (Revit, prochaine session)
 
 Quand le lecteur bute sur un champ, produire deux fichiers qui ne diffèrent que
@@ -294,6 +324,7 @@ pas seulement le schéma.
 | C8 | atteint : niveau et mur lus en entier ; 100 % des enregistrements sur 5 fichiers |
 | C12 | atteint : toits, escaliers, grilles et matériaux identiques à Revit ; volumes des sols, toits, escaliers et pièces identiques à 10⁻⁵ m³ |
 | C13 | atteint : 373 instances sur 448 de volume identique à Revit, 404 à moins de 1 % ; garde-corps 16 / 16 |
+| C14 | atteint : formes de `FEN_2PF.rfa` de volume identique à Revit (12 / 13, le coffre à −0,35 %) ; vues et éléments 2D identiques sur E13, la famille et `Projet1.rvt` ; flux réencodés à l'identique ; quatre fichiers modifiés acceptés par Revit |
 
 Après chaque campagne : résultats reportés dans `LISEZMOI-RVT.md` (faits observés,
 hypothèses écartées), scripts RiveTT conservés, fichiers d'essai hors dépôt.
@@ -306,6 +337,9 @@ hypothèses écartées), scripts RiveTT conservés, fichiers d'essai hors dépô
 | `tools/rvt-research/extract.py` | extraction et contrôle OK/KO |
 | `tools/rvt-research/schema.py` | schéma de classes |
 | `tools/rvt-research/inflate_ref.py` | décodeur deflate instrumentable |
+| `tools/rvt-research/crcbloc.py` | code correcteur : réencodage et contrôle des flux |
+| `tools/rvt-research/ecriture.py` | réécriture d'un fichier (champ, texte, essais) |
+| `tools/rvt-research/vues.py` | vues et éléments 2D |
 
 ```bash
 python -I tools/rvt-research/rvtdiff.py V0.rvt E04.rvt --cherche ZZ_MUR_B 12345.6 2718.2

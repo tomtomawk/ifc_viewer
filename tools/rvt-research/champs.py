@@ -33,9 +33,10 @@ class Fin(Exception):
 
 
 class Lecteur:
-    def __init__(s, sch, b, trace=False):
+    def __init__(s, sch, b, trace=False, positions=None):
         s.sch, s.b, s.o, s.trace, s.depth = sch, b, 0, trace, 0
         s.pending = []          # pointeurs rencontrés, dans l'ordre : {num, classe, chemin, corps}
+        s.positions = positions  # {chemin: (position, format)} des valeurs simples, si demandé
 
     def take(s, fmt, n):
         if s.o + n > len(s.b):
@@ -80,6 +81,8 @@ class Lecteur:
     def one(s, f, path):
         t, sub = f['type'], f['sub'] & 0x0F
         if t in SIMPLE:
+            if s.positions is not None:
+                s.positions[path] = (s.o, SIMPLE[t][0])
             v = s.take(*SIMPLE[t])
             if t == 0x01 and v > 1:
                 raise Fin('booléen %d à %d' % (v, s.o - 1))

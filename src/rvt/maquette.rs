@@ -16,6 +16,7 @@ use super::champs::{self, Obj, Record, Val};
 use super::geometrie::{self, FT, Maillage};
 use super::objets::{elem_table, inflate, records, sections, unpad};
 use super::schema::Schema;
+use super::vues::{self, Contenu, Element2D, Vue};
 use super::Cfb;
 use crate::geom::{Part, ProductGeom, Rgba, class_color};
 use crate::model::IfcModel;
@@ -59,6 +60,26 @@ const CATEGORIES: &[(i64, &str, &str)] = &[
     (-2_001_040, "Tableaux/Baies", "IFCBUILDINGELEMENTPROXY"),
 ];
 
+/// Sous-catégories prédéfinies des formes de famille (BuiltInCategory), noms relevés
+/// dans Revit 2026 sur `FEN_2PF.rfa` ; les sous-catégories créées par l'utilisateur
+/// sont des `CategoryElem` du document.
+const SOUS_CATEGORIES: &[(i64, &str)] = &[(-2_000_016, "Verre"), (-2_000_018, "Cadre/Meneau"), (-2_000_020, "Appui/Linteau")];
+
+/// Nom français d'une classe de forme de famille.
+fn nom_forme(classe: &str) -> &str {
+    match classe {
+        "ExtrusionElem" => "Extrusion",
+        "BlendElem" => "Raccord",
+        "RevolutionElem" => "Révolution",
+        "SweepElem" => "Balayage",
+        "SweptBlendElem" => "Raccord balayé",
+        "FamilyGeomCombination" => "Combinaison",
+        "FreeFormElement" => "Forme libre",
+        "FormElem" => "Forme",
+        c => c,
+    }
+}
+
 /// Maillage du `GElement`, en mm, ou raison de son absence.
 pub type Geometrie = Result<Maillage, String>;
 
@@ -89,6 +110,30 @@ pub struct Famille {
     pub nom: String,
     /// Catégorie (BuiltInCategory).
     pub categorie: i64,
+    /// Famille hôte d'une famille imbriquée (`Element.m_famId`), −1 pour la famille d'un
+    /// document `.rfa` ou une famille chargée dans un projet.
+    pub parent: i64,
+}
+
+/// Forme d'un document de famille (`.rfa`) : extrusion, raccord, révolution, balayage…
+/// (classes dérivées de `GenSweep`, pleines), ou combinaison de formes
+/// (`FamilyGeomCombination`) dont le `GElement` porte le solide résultant. Dans Revit,
+/// une forme membre d'une combinaison n'a pas de géométrie propre et un vide n'en a
+/// pas non plus : ni l'une ni l'autre n'est gardée.
+pub struct Forme {
+    pub id: i64,
+    pub classe: String,
+    /// Sous-catégorie (`GenSweep.m_categoryId` : BuiltInCategory ou id d'un
+    /// `CategoryElem`), −1 pour une combinaison.
+    pub sous_categorie: i64,
+    /// Matériau imposé (`GenSweep.m_materialId`), −1 : par catégorie.
+    pub materiau: i64,
+    /// Famille propriétaire (`Element.m_famId`).
+    pub famille: i64,
+    pub niveau: i64,
+    /// Combinaison : forme pleine puis vides (`GeomCombination.m_svMap`).
+    pub membres: Vec<i64>,
+    pub geometrie: Geometrie,
 }
 
 pub struct Materiau {
@@ -232,6 +277,15 @@ pub struct Maquette {
     pub grilles: Vec<Grille>,
     pub instances: Vec<Instance>,
     pub pieces: Vec<Piece>,
+    /// Formes et combinaisons d'un document de famille.
+    pub formes: Vec<Forme>,
+    /// Noms des sous-catégories définies dans le document (`CategoryElem`), lus pour
+    /// un document de famille.
+    pub categories: HashMap<i64, String>,
+    /// Vues du document (hors familles imbriquées).
+    pub vues: Vec<Vue>,
+    /// Éléments 2D propres à une vue : traits, textes, cotes, régions, fenêtres de vue.
+    pub elements_2d: Vec<Element2D>,
     /// Instances propres à une vue, ignorées.
     pub instances_de_vue: usize,
     /// Objets retenus mais illisibles (données d'add-ins…).
@@ -254,12 +308,30 @@ enum Sorte {
     Grille,
     Instance,
     Piece,
+    /// Forme ou combinaison d'un document de famille.
+    Forme,
+    /// Sous-catégorie (`CategoryElem`), pour un document de famille.
+    Categorie,
+    /// Vue (classes dérivées de `DBView`).
+    Vue,
+    /// Cadrage d'une vue (`Viewer`).
+    Viewer,
+    /// Élément 2D d'une vue (trait, texte, cote, fenêtre de vue).
+    Annotation,
+    /// Région remplie (2D, avec géométrie).
+    Region,
 }
 
 impl Sorte {
     /// Éléments dont on lit le complément 0x67 (géométrie).
     fn a_geometrie(self) -> bool {
-        matches!(self, Sorte::Mur | Sorte::Dalle | Sorte::Toit | Sorte::Volee | Sorte::GardeCorps | Sorte::Instance | Sorte::Piece)
+        matches!(self, Sorte::Mur | Sorte::Dalle | Sorte::Toit | Sorte::Volee | Sorte::GardeCorps | Sorte::Instance | Sorte::Piece | Sorte::Forme | Sorte::Region)
+    }
+
+    /// Sortes lues seulement dans un document de famille : dans un projet, les formes
+    /// des familles in situ sont déjà dans la géométrie de leur instance.
+    fn de_famille(self) -> bool {
+        matches!(self, Sorte::Forme | Sorte::Categorie)
     }
 
     fn de(sch: &Schema, id: u16, name: &str) -> Option<Sorte> {
@@ -278,6 +350,13 @@ impl Sorte {
             _ if h("RoofBase") => Sorte::Toit,
             _ if h("StairsRunAndLanding") => Sorte::Volee,
             _ if h("FamilyInstance") => Sorte::Instance,
+            "CategoryElem" => Sorte::Categorie,
+            // marqueurs de vue (Section, Elevation, Viewer3d…) : cadrage de leur vue
+            _ if h("Viewer") => Sorte::Viewer,
+            "FilledRegion" => Sorte::Region,
+            "CurveElem" | "TextNote" | "LinearDimString" | "RadialDim" | "AngularDim" | "ArcLengthDim" | "Viewport" => Sorte::Annotation,
+            _ if h("DBView") => Sorte::Vue,
+            _ if h("GenSweep") || h("FamilyGeomCombination") => Sorte::Forme,
             _ => return None,
         })
     }
@@ -287,6 +366,8 @@ impl Sorte {
 /// géométrie.
 pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> {
     let mut cfb = Cfb::open(path)?;
+    // document de famille : flux PartAtom (un projet ou un gabarit a ProjectInformation)
+    let est_famille = cfb.entries().iter().any(|(p, dir, _)| !dir && p == "/PartAtom");
     let raw = cfb.read("Formats/Latest")?.ok_or("flux Formats/Latest absent")?;
     let sch = Schema::parse(&inflate(&unpad(&raw)).map_err(|e| format!("Formats/Latest : {e}"))?)?;
     let ids8 = sch.ids8();
@@ -318,7 +399,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
             if classes_types.contains(&c) {
                 types_famille.insert(eid);
             }
-            if let Some(&s) = sortes.get(&c) {
+            if let Some(&s) = sortes.get(&c).filter(|s| est_famille || !s.de_famille()) {
                 objets.insert(eid, (s, body.to_vec()));
             }
         }
@@ -365,6 +446,8 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     let (mut types, mut familles, mut materiaux) = (HashMap::new(), HashMap::new(), HashMap::new());
     let (mut murs, mut dalles, mut toits, mut escaliers, mut grilles, mut pieces) = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
     let (mut volees, mut instances, mut instances_de_vue, mut garde_corps) = (HashMap::new(), Vec::new(), 0, Vec::new());
+    let (mut formes, mut categories) = (Vec::new(), HashMap::new());
+    let (mut vues, mut cadrages, mut elements_2d) = (Vec::new(), HashMap::new(), Vec::new());
     for x in extraits {
         match x {
             Err(e) => illisibles.push(e),
@@ -382,8 +465,28 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
             Ok(Extrait::Instance(i, h)) => instances.push((i, h)),
             Ok(Extrait::InstanceDeVue) => instances_de_vue += 1,
             Ok(Extrait::Piece(p)) => pieces.push(p),
+            Ok(Extrait::Forme(f)) => formes.push(f),
+            Ok(Extrait::Categorie(id, nom)) => drop(categories.insert(id, nom)),
+            Ok(Extrait::Vue(v)) => vues.push(v),
+            Ok(Extrait::Cadrage(v, c)) => drop(cadrages.insert(v, c)),
+            Ok(Extrait::Element2D(e)) => elements_2d.push(e),
         }
     }
+    // vues et éléments 2D du document : ceux des familles imbriquées rangées en ligne
+    // dans un .rfa (symboles d'annotation) sont écartés
+    let du_document = |f: i64| f == -1 || familles.get(&f).is_some_and(|x: &Famille| x.parent == -1);
+    vues.retain(|v: &Vue| du_document(v.famille));
+    for v in &mut vues {
+        v.cadrage = cadrages.remove(&v.id);
+    }
+    vues.sort_by_key(|v| v.id);
+    let ids_vues: std::collections::HashSet<i64> = vues.iter().map(|v| v.id).collect();
+    elements_2d.retain(|e: &Element2D| du_document(e.famille) && ids_vues.contains(&e.vue));
+    elements_2d.sort_by_key(|e| e.id);
+    // formes affichées : hors combinaisons (le solide est celui de la combinaison) et
+    // hors familles imbriquées (symboles d'annotation)
+    let membres: std::collections::HashSet<i64> = formes.iter().flat_map(|f: &Forme| f.membres.iter().copied()).collect();
+    formes.retain(|f| !membres.contains(&f.id) && (f.famille == -1 || familles.get(&f.famille).is_some_and(|x: &Famille| x.parent == -1)));
     // volées et paliers rattachés par m_stairsId ; point des instances hébergées par un mur
     for e in &mut escaliers {
         let mut parties: BTreeSet<i64> = e.parties.iter().copied().collect();
@@ -408,10 +511,14 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     a_mailler.extend(escaliers.iter().flat_map(|e| e.parties.iter().copied()));
     a_mailler.extend(garde_corps.iter().map(|g| g.id));
     a_mailler.extend(instances.iter().map(|i| i.id).chain(pieces.iter().map(|p| p.id)));
+    a_mailler.extend(formes.iter().map(|f| f.id));
+    a_mailler.extend(elements_2d.iter().filter(|e| matches!(e.contenu, Contenu::Region)).map(|e| e.id));
     progress(format!("Géométrie de {} éléments…", a_mailler.len()));
     progress(format!("Géométrie de {} types ({} Mo)…", geometries_types.len(), geometries_types.values().map(Vec::len).sum::<usize>() >> 20));
     let bib = geometrie::Bibliotheque::new(&sch, &geometries_types);
-    let mut geoms: HashMap<i64, Geometrie> = a_mailler.par_iter().map(|&eid| (eid, maillage(&sch, &complements, &bib, eid))).collect();
+    let regions: std::collections::HashSet<i64> = elements_2d.iter().filter(|e| matches!(e.contenu, Contenu::Region)).map(|e| e.id).collect();
+    // une région remplie est une face ouverte (feuille), pas un solide
+    let mut geoms: HashMap<i64, Geometrie> = a_mailler.par_iter().map(|&eid| (eid, maillage(&sch, &complements, &bib, eid, regions.contains(&eid)))).collect();
     let mut prendre = |eid: i64| geoms.remove(&eid).unwrap_or_else(|| Err("non maillé".into()));
 
     let mut m = Maquette {
@@ -427,6 +534,10 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         grilles,
         instances,
         pieces,
+        formes,
+        categories,
+        vues,
+        elements_2d,
         instances_de_vue,
         illisibles,
     };
@@ -448,6 +559,12 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     for x in &mut m.pieces {
         x.geometrie = prendre(x.id);
     }
+    for x in &mut m.formes {
+        x.geometrie = prendre(x.id);
+    }
+    for x in m.elements_2d.iter_mut().filter(|e| matches!(e.contenu, Contenu::Region)) {
+        x.geometrie = prendre(x.id);
+    }
     for x in &mut m.escaliers {
         let mut tout: Option<Maillage> = None;
         let mut erreur = String::from("aucune volée ni palier");
@@ -465,10 +582,11 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     Ok(m)
 }
 
-/// Maillage du complément 0x67 d'un élément, géométrie de ses familles comprise.
-fn maillage(sch: &Schema, complements: &HashMap<i64, Vec<u8>>, bib: &geometrie::Bibliotheque, eid: i64) -> Geometrie {
+/// Maillage du complément 0x67 d'un élément, géométrie de ses familles comprise ;
+/// `feuilles` : garder aussi les faces ouvertes (régions remplies).
+fn maillage(sch: &Schema, complements: &HashMap<i64, Vec<u8>>, bib: &geometrie::Bibliotheque, eid: i64, feuilles: bool) -> Geometrie {
     let b = complements.get(&eid).ok_or_else(|| format!("élément {eid} sans enregistrement 0x67"))?;
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| champs::read(sch, b).and_then(|rec| geometrie::maillage(&rec, false, bib))))
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| champs::read(sch, b).and_then(|rec| geometrie::maillage(&rec, feuilles, bib))))
         .unwrap_or_else(|_| Err("erreur interne".into()))
         .and_then(|g| if g.faces.is_empty() { Err("aucun solide fermé dans le GElement".into()) } else { Ok(g) })
 }
@@ -581,6 +699,12 @@ enum Extrait {
     Instance(Instance, Option<(f64, f64)>),
     InstanceDeVue,
     Piece(Piece),
+    Forme(Forme),
+    Categorie(i64, String),
+    Vue(Vue),
+    /// Cadrage (origine, axes, longueurs) de la vue d'un `Viewer`.
+    Cadrage(i64, (DVec3, [DVec3; 3], [f64; 3])),
+    Element2D(Element2D),
 }
 
 fn niveau(id: i64, r: &Record) -> Option<Niveau> {
@@ -610,7 +734,7 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>) -> Ext
             let (largeur, hauteur) = (valeurs.get(&FAMILY_WIDTH_PARAM).copied(), valeurs.get(&FAMILY_HEIGHT_PARAM).copied());
             Some(Extrait::Type(eid, TypeElem { nom, epaisseur, famille: id_of(o, "m_familyId"), largeur, hauteur }))
         })()),
-        Sorte::Famille => ou_rien((|| Some(Extrait::Famille(eid, Famille { nom: o.get("m_name")?.str()?.to_string(), categorie: id_of(o, "m_categoryId") })))()),
+        Sorte::Famille => ou_rien((|| Some(Extrait::Famille(eid, Famille { nom: o.get("m_name")?.str()?.to_string(), categorie: id_of(o, "m_categoryId"), parent: id_of(o, "m_famId") })))()),
         Sorte::Materiau => ou_rien((|| {
             let m = r.field_body(o, "m_pMaterial")?;
             // COLORREF : rouge dans l'octet de poids faible
@@ -638,7 +762,37 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>) -> Ext
             Extrait::Instance(i, h)
         }
         Sorte::Piece => Extrait::Piece(piece(eid, r, altitude)),
+        Sorte::Forme => ou_rien(forme(eid, r).map(Extrait::Forme)),
+        Sorte::Categorie => ou_rien((|| Some(Extrait::Categorie(eid, r.field_body(o, "m_pCategory")?.get("m_name")?.str()?.to_string())))()),
+        Sorte::Vue => ou_rien(vues::vue(eid, r).map(Extrait::Vue)),
+        Sorte::Viewer => ou_rien(vues::cadrage(r).map(|(v, o, a, b)| Extrait::Cadrage(v, (o, a, b)))),
+        Sorte::Annotation | Sorte::Region => ou_rien(vues::element(eid, r).map(Extrait::Element2D)),
     }
+}
+
+/// Forme pleine ou combinaison ; None pour un vide (`GenSweep.m_cutting` = 1).
+fn forme(id: i64, r: &Record) -> Option<Forme> {
+    let o = &r.root;
+    if o.get("m_cutting").and_then(Val::int) == Some(1) {
+        return None;
+    }
+    let mut membres = Vec::new();
+    for x in o.get("m_svMap").map(Val::list).unwrap_or_default() {
+        let Some(x) = x.obj() else { continue };
+        membres.extend(x.get("first").and_then(Val::element_id));
+        let vides = x.get("second").and_then(Val::obj).and_then(|s| s.get("m_set")).map(Val::list).unwrap_or_default();
+        membres.extend(vides.iter().filter_map(Val::element_id));
+    }
+    Some(Forme {
+        id,
+        classe: o.class_name().to_string(),
+        sous_categorie: id_of(o, "m_categoryId"),
+        materiau: id_of(o, "m_materialId"),
+        famille: id_of(o, "m_famId"),
+        niveau: id_of(o, "m_assocLevelId"),
+        membres,
+        geometrie: Err(String::new()),
+    })
 }
 
 /// Volées et paliers listés par l'escalier (`m_runAndLandings` de ses cellules,
@@ -736,11 +890,25 @@ fn piece(id: i64, r: &Record, altitude: &HashMap<i64, f64>) -> Piece {
 impl Maquette {
     /// Nom et classe IFC de la catégorie d'une instance (par sa famille).
     pub fn categorie(&self, inst: &Instance) -> (String, &'static str) {
-        let cat = self.types.get(&inst.type_id).and_then(|t| self.familles.get(&t.famille)).map(|f| f.categorie).unwrap_or(-1);
+        self.categorie_famille(self.types.get(&inst.type_id).map(|t| t.famille).unwrap_or(-1))
+    }
+
+    /// Nom et classe IFC de la catégorie d'une famille.
+    pub fn categorie_famille(&self, famille: i64) -> (String, &'static str) {
+        let cat = self.familles.get(&famille).map(|f| f.categorie).unwrap_or(-1);
         match CATEGORIES.iter().find(|c| c.0 == cat) {
             Some(&(_, nom, classe)) => (nom.to_string(), classe),
             None => (format!("Catégorie {cat}"), "IFCBUILDINGELEMENTPROXY"),
         }
+    }
+
+    /// Nom d'une catégorie ou sous-catégorie : celle du document, prédéfinie, ou son id.
+    pub fn nom_categorie(&self, id: i64) -> String {
+        if let Some(n) = self.categories.get(&id) {
+            return n.clone();
+        }
+        let predefinie = SOUS_CATEGORIES.iter().map(|&(i, n)| (i, n)).chain(CATEGORIES.iter().map(|&(i, n, _)| (i, n))).find(|&(i, _)| i == id);
+        predefinie.map(|(_, n)| n.to_string()).unwrap_or_else(|| format!("Catégorie {id}"))
     }
 
     /// « Famille : type » d'une instance.
@@ -812,10 +980,13 @@ pub fn load_scene(path: &Path, titre: &str, format: &str, progress: &dyn Fn(Stri
     let mailles = m.murs.len() - murs_ko
         + m.dalles.iter().filter(|x| x.geometrie.is_ok()).count()
         + m.toits.iter().filter(|x| x.geometrie.is_ok()).count()
-        + m.escaliers.iter().filter(|x| x.geometrie.is_ok()).count();
+        + m.escaliers.iter().filter(|x| x.geometrie.is_ok()).count()
+        + m.instances.iter().filter(|x| x.geometrie.is_ok()).count()
+        + m.formes.iter().filter(|x| x.geometrie.is_ok()).count()
+        + m.elements_2d.iter().filter(|x| !matches!(x.contenu, Contenu::FenetreDeVue { .. })).count();
     if mailles == 0 {
         return Err(match m.murs.len() {
-            0 => "aucun mur, sol, toit ou escalier dans le fichier".into(),
+            0 => "aucun mur, sol, toit, escalier, famille, forme ni élément 2D dans le fichier".into(),
             n => format!("aucun des {n} murs n'a pu être maillé"),
         });
     }
@@ -825,6 +996,7 @@ pub fn load_scene(path: &Path, titre: &str, format: &str, progress: &dyn Fn(Stri
     let pieces: Vec<&Piece> = m.pieces.iter().filter(|p| p.genre == "piece" && p.point.is_some()).collect();
     let toutes = m.murs.iter().map(|x| &x.geometrie).chain(m.dalles.iter().map(|x| &x.geometrie)).chain(m.toits.iter().map(|x| &x.geometrie));
     let toutes = toutes.chain(m.escaliers.iter().map(|x| &x.geometrie)).chain(m.instances.iter().map(|x| &x.geometrie)).chain(m.garde_corps.iter().map(|x| &x.geometrie));
+    let toutes = toutes.chain(m.formes.iter().map(|x| &x.geometrie));
     let solides_ko: usize = toutes.filter_map(|g| g.as_ref().ok()).map(|g| g.echecs.len()).sum();
     for (nom, n) in [
         ("Murs Revit non maillés", murs_ko),
@@ -834,6 +1006,7 @@ pub fn load_scene(path: &Path, titre: &str, format: &str, progress: &dyn Fn(Stri
         ("Garde-corps Revit non maillés", ko(&mut m.garde_corps.iter().map(|x| &x.geometrie))),
         ("Pièces Revit sans volume", ko(&mut pieces.iter().map(|x| &x.geometrie))),
         ("Familles Revit sans géométrie 3D", ko(&mut m.instances.iter().map(|x| &x.geometrie))),
+        ("Formes de famille sans solide (entièrement évidées)", ko(&mut m.formes.iter().map(|x| &x.geometrie))),
         ("Solides Revit non décodés dans des éléments affichés", solides_ko),
         ("Objets Revit illisibles", m.illisibles.len()),
     ] {
@@ -846,7 +1019,7 @@ pub fn load_scene(path: &Path, titre: &str, format: &str, progress: &dyn Fn(Stri
 }
 
 /// Produits de la scène : murs, sols, plafonds, toits, escaliers, garde-corps, instances
-/// de familles, pièces placées et grilles.
+/// de familles, formes d'un document de famille, pièces placées et grilles.
 fn produits(m: &Maquette) -> Vec<Produit<'_>> {
     let nom_niveau: HashMap<i64, &str> = m.niveaux.iter().map(|l| (l.id, l.nom.as_str())).collect();
     let niveau = |l: i64| nom_niveau.get(&l).map(|s| s.to_string()).unwrap_or_else(|| l.to_string());
@@ -970,6 +1143,21 @@ fn produits(m: &Maquette) -> Vec<Produit<'_>> {
         }
         out.push(Produit { id: x.id, classe, nom: format!("{nt} [{}]", x.id), type_id: x.type_id, nom_type: nt, niveau: x.niveau, props, geometrie: &x.geometrie });
     }
+    for x in &m.formes {
+        let (cat, classe) = m.categorie_famille(x.famille);
+        let mut props = vec![("Classe Revit", Value::Str(x.classe.clone())), ("Catégorie", Value::Str(cat))];
+        if x.sous_categorie != -1 {
+            props.push(("Sous-catégorie", Value::Str(m.nom_categorie(x.sous_categorie))));
+        }
+        if x.materiau != -1 {
+            let nom = m.materiaux.get(&x.materiau).map(|x| x.nom.clone()).unwrap_or_else(|| x.materiau.to_string());
+            props.push(("Matériau", Value::Str(nom)));
+        }
+        if !x.membres.is_empty() {
+            props.push(("Formes combinées (ElementId)", Value::Str(x.membres.iter().map(i64::to_string).collect::<Vec<_>>().join(", "))));
+        }
+        out.push(Produit { id: x.id, classe, nom: format!("{} [{}]", nom_forme(&x.classe), x.id), type_id: -1, nom_type: String::new(), niveau: x.niveau, props, geometrie: &x.geometrie });
+    }
     for x in m.pieces.iter().filter(|p| p.genre == "piece" && p.point.is_some()) {
         let mut props = vec![("Nom", Value::Str(x.nom.clone())), ("Numéro", Value::Str(x.numero.clone())), ("Niveau", Value::Str(niveau(x.niveau)))];
         if !x.service.is_empty() {
@@ -1064,6 +1252,73 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
         let pset = b.pset("RVTPSET", g.id, "Revit", props);
         b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF", g.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
         contenus.entry(projet).or_default().push(Value::Ref(id));
+    }
+    // Vues : un nœud par vue (dans le niveau d'un plan, sinon dans le projet), ses
+    // éléments 2D en enfants, tracés dans le plan de la vue (masqués par défaut).
+    let mut par_vue: BTreeMap<i64, Vec<&Element2D>> = BTreeMap::new();
+    for e in &m.elements_2d {
+        par_vue.entry(e.vue).or_default().push(e);
+    }
+    let nom_vue: HashMap<i64, &str> = m.vues.iter().map(|v| (v.id, v.nom.as_str())).collect();
+    for v in m.vues.iter().filter(|v| !v.gabarit && v.genre != "Arborescence") {
+        let mut props = vec![
+            ("ElementId", Value::Str(v.id.to_string())),
+            ("Classe Revit", Value::Str(v.classe.clone())),
+            ("Genre", Value::Str(v.genre.into())),
+            ("Échelle", Value::Str(format!("1:{}", v.echelle))),
+            ("Origine", point_mm(v.origine)),
+            ("Direction de vue", Value::Str(format!("{:.4} ; {:.4} ; {:.4}", v.direction.x, v.direction.y, v.direction.z))),
+            ("Droite, haut", Value::Str(format!("{:.4} ; {:.4} ; {:.4} / {:.4} ; {:.4} ; {:.4}", v.droite.x, v.droite.y, v.droite.z, v.haut.x, v.haut.y, v.haut.z))),
+        ];
+        if let Some(niv) = m.niveaux.iter().find(|l| l.id == v.niveau) {
+            props.push(("Niveau", Value::Str(niv.nom.clone())));
+        }
+        if let Some((_, _, l)) = v.cadrage {
+            props.push(("Cadrage", Value::Str(format!("{} × {} × {} mm", format_real(l[0].round()), format_real(l[1].round()), format_real(l[2].round())))));
+        }
+        let elems = par_vue.get(&v.id).map(Vec::as_slice).unwrap_or_default();
+        props.push(("Éléments 2D", Value::Str(elems.len().to_string())));
+        let nom = if v.nom.is_empty() { format!("{} [{}]", v.genre, v.id) } else { format!("{} : {}", v.genre, v.nom) };
+        let id_vue = b.add("IFCANNOTATION", vec![gid("RVTVUE", v.id), n.clone(), Value::Str(nom), n.clone(), Value::Str(v.genre.into()), n.clone(), Value::Ref(shape)]);
+        let pset = b.pset("RVTPSETV", v.id, "Revit", props);
+        b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEFV", v.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id_vue)]), Value::Ref(pset)]);
+        contenus.entry(etage.get(&v.niveau).copied().unwrap_or(projet)).or_default().push(Value::Ref(id_vue));
+        let normale = if v.direction.length() > 0.5 { v.direction.normalize() } else { DVec3::Z };
+        let mut enfants = Vec::new();
+        for e in elems {
+            let (genre, couleur, mut props): (&str, Rgba, Vec<(&str, Value)>) = match &e.contenu {
+                Contenu::Trait(p) => ("Trait", [0.12, 0.12, 0.12, 1.0], vec![("Longueur", mm(p.windows(2).map(|w| w[0].distance(w[1])).sum()))]),
+                Contenu::Texte { texte, point, .. } => ("Texte", [0.80, 0.35, 0.10, 0.45], vec![("Texte", Value::Str(texte.clone())), ("Point", point_mm(*point))]),
+                Contenu::Cote { segments, .. } => {
+                    let valeurs = segments.iter().map(|s| format!("{} mm", format_real((s.0 * 10.0).round() / 10.0))).collect::<Vec<_>>().join(" + ");
+                    ("Cote", [0.10, 0.35, 0.80, 1.0], vec![("Valeur", Value::Str(valeurs))])
+                }
+                Contenu::Region => ("Région remplie", [0.45, 0.45, 0.45, 0.6], vec![]),
+                Contenu::FenetreDeVue { vue, echelle, decalage } => {
+                    let nv = nom_vue.get(vue).map(|s| s.to_string()).unwrap_or_else(|| vue.to_string());
+                    ("Fenêtre de vue", [0.5, 0.5, 0.5, 1.0], vec![("Vue placée", Value::Str(nv)), ("Échelle", Value::Str(format!("1:{}", (1.0 / echelle).round()))), ("Décalage", point_mm(*decalage))])
+                }
+            };
+            props.splice(0..0, [("ElementId", Value::Str(e.id.to_string())), ("Classe Revit", Value::Str(e.classe.clone())), ("Vue", Value::Str(v.nom.clone()))]);
+            let titre = match &e.contenu {
+                Contenu::Texte { texte, .. } => format!("{genre} « {} » [{}]", texte.lines().next().unwrap_or_default(), e.id),
+                _ => format!("{genre} [{}]", e.id),
+            };
+            let id = b.add("IFCANNOTATION", vec![gid("RVT2D", e.id), n.clone(), Value::Str(titre), n.clone(), Value::Str(genre.into()), n.clone(), Value::Ref(shape)]);
+            let pset = b.pset("RVTPSET2D", e.id, "Revit", props);
+            b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF2D", e.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
+            let mut tris = vues::trace(e, normale, v.echelle);
+            if let (Contenu::Region, Ok(g)) = (&e.contenu, &e.geometrie) {
+                tris.extend(g.faces.iter().flat_map(|f| f.triangles.iter().map(|t| t.map(|i| g.sommets[i] / 1000.0))));
+            }
+            if !tris.is_empty() {
+                geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }] });
+            }
+            enfants.push(Value::Ref(id));
+        }
+        if !enfants.is_empty() {
+            b.add("IFCRELAGGREGATES", vec![gid("RVTAGGV", v.id), n.clone(), n.clone(), n.clone(), Value::Ref(id_vue), Value::List(enfants)]);
+        }
     }
     for (k, (s, items)) in contenus.into_iter().enumerate() {
         b.add("IFCRELCONTAINEDINSPATIALSTRUCTURE", vec![gid("RVTCONT", k as i64), n.clone(), n.clone(), n.clone(), Value::List(items), Value::Ref(s)]);
@@ -1282,6 +1537,122 @@ mod tests {
         let (c, r) = g("Courbe").arc.unwrap();
         assert!(c.distance(pt(5000.0, 3000.0)) < 1e-6 && (r - 4000.0).abs() < 1e-6);
         assert!(g("A").arc.is_none());
+    }
+
+    /// Famille de fenêtre `FEN_2PF.rfa` : formes affichées comme dans Revit 2026 (pleines
+    /// hors combinaison, combinaisons ; membres et vides écartés), volumes de
+    /// `get_Geometry` relevés par le script RiveTT `rvt-reference-formes-famille`.
+    #[test]
+    fn fenetre_rfa_formes() {
+        let Some(p) = essai("", "FEN_2PF.rfa") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        let ids: BTreeSet<i64> = m.formes.iter().map(|f| f.id).collect();
+        let attendus = [9900043, 9900072, 9900099, 9900103, 9900142, 9900181, 9900224, 9900236, 9900237, 9900258, 9900428, 9900429, 9900436];
+        assert_eq!(ids, attendus.into_iter().collect());
+        let vol = |id: i64| m.formes.iter().find(|f| f.id == id).unwrap().geometrie.as_ref().map(|g| g.controle().volume_m3);
+        for (id, v) in [(9900043, 0.0094), (9900099, 0.01264), (9900103, 0.00264), (9900224, 0.006528), (9900236, 0.004373), (9900428, 0.00788), (9900258, 0.00972)] {
+            proche(vol(id).unwrap(), v, 2e-6, &format!("volume de la forme {id}"));
+        }
+        // combinaison entièrement évidée : aucun solide, comme dans Revit
+        assert!(vol(9900072).is_err());
+        // coffre de volet roulant (face cylindrique concave à 24 facettes) : 0,040615 m³ dans Revit
+        assert!((vol(9900142).unwrap() - 0.040615).abs() / 0.040615 < 0.005);
+        let total: f64 = m.formes.iter().filter_map(|f| f.geometrie.as_ref().ok()).map(|g| g.controle().volume_m3).sum();
+        assert!((total - 0.11791).abs() / 0.11791 < 0.002, "volume total {total}");
+        assert_eq!(m.categorie_famille(m.formes[0].famille).1, "IFCWINDOW");
+        assert_eq!(m.nom_categorie(9880506), "VR");
+        assert_eq!(m.murs.len(), 1);
+    }
+
+    /// Essai E13 : vues et éléments 2D créés dans Revit 2026 (script RiveTT
+    /// `rvt-essai-e13-vues2d`), valeurs relevées par `rvt-reference-vues-2d`.
+    #[test]
+    fn e13_vues_2d() {
+        let Some(p) = essai(r"Essais-format\2026\C14", "E13_vues2d.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        assert_eq!(m.vues.len(), 19);
+        let vue = |id: i64| m.vues.iter().find(|v| v.id == id).unwrap();
+        let coupe = vue(258483);
+        assert_eq!((coupe.nom.as_str(), coupe.genre, coupe.echelle), ("ZZ_COUPE", "Coupe", 100.0));
+        assert!(coupe.origine.distance(DVec3::new(3500.0, -2000.0, -150.0)) < 1e-6);
+        assert!(coupe.direction.distance(DVec3::X) < 1e-9);
+        let (_, _, l) = coupe.cadrage.unwrap();
+        assert!((l[0] - 4000.0).abs() < 1e-6 && (l[1] - 3000.0).abs() < 1e-6 && (l[2] - 1000.0).abs() < 1e-6);
+        assert_eq!((vue(609).genre, vue(609).niveau), ("Plan d'étage", 608));
+        assert_eq!((vue(258471).genre, vue(258471).echelle), ("Vue de dessin", 10.0));
+        assert_eq!(vue(258491).genre, "Feuille");
+        let el = |id: i64| &m.elements_2d.iter().find(|e| e.id == id).unwrap().contenu;
+        let pt = |x, y| DVec3::new(x, y, 0.0);
+        match el(258460) {
+            Contenu::Trait(p) => assert!(p[0].distance(pt(1000.0, -1000.0)) < 1e-6 && p[1].distance(pt(3456.7, -1000.0)) < 1e-6),
+            _ => panic!("ligne"),
+        }
+        match el(258461) {
+            Contenu::Trait(p) => assert!(p[0].distance(pt(4765.4, -2000.0)) < 1e-6 && p.last().unwrap().distance(pt(3234.6, -2000.0)) < 1e-6 && p.len() > 30),
+            _ => panic!("arc"),
+        }
+        match el(258462) {
+            Contenu::Texte { texte, point, .. } => assert!(texte == "ZZ_TEXTE_PLAN" && point.distance(pt(1234.5, -2345.6)) < 1e-6),
+            _ => panic!("texte"),
+        }
+        match el(258463) {
+            Contenu::Cote { segments, origine, .. } => assert!(segments.len() == 1 && (segments[0].0 - 2456.7).abs() < 1e-6 && origine.distance(pt(1000.0, -1500.0)) < 1e-6),
+            _ => panic!("cote"),
+        }
+        match el(258496) {
+            Contenu::FenetreDeVue { vue, echelle, .. } => assert!(*vue == 609 && (*echelle - 0.01).abs() < 1e-12),
+            _ => panic!("fenêtre de vue"),
+        }
+        // région remplie de 2 000 × 1 000 mm : face plane de son GElement
+        let r = m.elements_2d.iter().find(|e| e.id == 258466).unwrap();
+        let g = r.geometrie.as_ref().unwrap();
+        let aire: f64 = g.faces.iter().flat_map(|f| &f.triangles).map(|t| (g.sommets[t[1]] - g.sommets[t[0]]).cross(g.sommets[t[2]] - g.sommets[t[0]]).length() / 2.0).sum();
+        proche(aire, 2_000_000.0, 1e-3, "aire de la région");
+        let mut classes: Vec<&str> = m.elements_2d.iter().map(|e| e.classe.as_str()).collect();
+        classes.sort_unstable();
+        classes.dedup_by(|a, b| a == b);
+        assert_eq!(m.elements_2d.len(), 14, "{classes:?}");
+    }
+
+    /// Vues et éléments 2D de `FEN_2PF.rfa` : 8 vues, 26 cotes et 4 textes comme dans
+    /// Revit (ceux des familles imbriquées écartés), textes lus dans leur RTF.
+    #[test]
+    fn fenetre_rfa_vues() {
+        let Some(p) = essai("", "FEN_2PF.rfa") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        assert_eq!(m.vues.len(), 8);
+        let cotes: HashMap<i64, Vec<f64>> = m
+            .elements_2d
+            .iter()
+            .filter_map(|e| match &e.contenu {
+                Contenu::Cote { segments, .. } => Some((e.id, segments.iter().map(|s| s.0).collect())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(cotes.len(), 26);
+        for (id, v) in [(9899425, vec![1200.0]), (9899435, vec![2040.0]), (9899422, vec![600.0, 600.0]), (9900193, vec![1020.0, 1020.0])] {
+            assert!(cotes[&id].iter().zip(&v).all(|(a, b)| (a - b).abs() < 1e-6) && cotes[&id].len() == v.len(), "cote {id} : {:?}", cotes[&id]);
+        }
+        let textes: Vec<&str> = m.elements_2d.iter().filter_map(|e| if let Contenu::Texte { texte, .. } = &e.contenu { Some(texte.as_str()) } else { None }).collect();
+        assert_eq!(textes, ["Extérieur", "Intérieur", "Extérieur", "Extérieur"]);
+    }
+
+    /// Essai C14 F04 : la fenêtre chargée dans le projet vide et placée deux fois dans un
+    /// mur ; volume de chaque instance 0,110441 m³ dans Revit (coffre : −0,35 %).
+    #[test]
+    fn c14_fenetres_placees() {
+        let Some(p) = essai(r"Essais-format\2026\C14", "F04_deux.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        assert!(m.formes.is_empty(), "les formes des familles chargées ne sont pas des éléments du projet");
+        assert_eq!(m.instances.len(), 2);
+        for i in &m.instances {
+            let v = i.geometrie.as_ref().unwrap().controle().volume_m3;
+            assert!((v - 0.110441).abs() / 0.110441 < 0.002, "instance {} : {v}", i.id);
+            assert_eq!(m.categorie(i).1, "IFCWINDOW");
+        }
+        let i = m.instances.iter().find(|i| i.id == 258460).unwrap();
+        assert!(i.point.distance(DVec3::new(2345.6, 0.0, 912.3)) < 1e-6, "{:?}", i.point);
+        proche(m.murs[0].geometrie.as_ref().unwrap().controle().volume_m3, 2.968736, 1e-6, "volume du mur percé");
     }
 }
 

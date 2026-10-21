@@ -210,6 +210,22 @@ impl ViewerApp {
         self.hidden_storeys.clear();
         self.isolated = None;
         self.hidden_classes = HIDDEN_BY_DEFAULT.iter().map(|s| s.to_string()).collect();
+        // fichier sans objet visible par défaut (famille 2D de Revit : traits et textes
+        // seulement) : on montre les annotations
+        if scene.objects.iter().all(|o| self.hidden_classes.contains(&*o.class)) {
+            self.hidden_classes.remove("IFCANNOTATION");
+        }
+        // cadrage sur les objets visibles par défaut (les vues de dessin et les feuilles
+        // d'un projet Revit sont loin du modèle)
+        let (mut mn, mut mx) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+        for o in scene.objects.iter().filter(|o| !self.hidden_classes.contains(&*o.class)) {
+            mn = mn.min(o.min);
+            mx = mx.max(o.max);
+        }
+        if mn.x <= mx.x {
+            self.camera.scene_radius = (mx - mn).length() * 0.5;
+            self.camera.fit(mn, mx);
+        }
         self.visible = vec![true; scene.objects.len()];
         self.scene = Some(scene);
         self.visibility_dirty = true;
@@ -345,6 +361,7 @@ impl ViewerApp {
                 for (label, classes) in [
                     ("Espaces", &["IFCSPACE"][..]),
                     ("Ouvertures", &["IFCOPENINGELEMENT", "IFCOPENINGSTANDARDCASE"][..]),
+                    ("Annotations", &["IFCANNOTATION"][..]),
                 ] {
                     let mut shown = !self.hidden_classes.contains(classes[0]);
                     if ui.checkbox(&mut shown, label).changed() {

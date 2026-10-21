@@ -235,6 +235,22 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
         println!("  {c:<34} {n}");
     }
     println!("Instances de vue (ignorées) : {}", m.instances_de_vue);
+    bilan("Formes", &mut m.formes.iter().map(|x| &x.geometrie));
+    for f in &m.formes {
+        let g = f.geometrie.as_ref().map(|g| format!("{:.6} m3", g.controle().volume_m3)).unwrap_or_else(|e| e.clone());
+        let sc = if f.sous_categorie == -1 { String::new() } else { m.nom_categorie(f.sous_categorie) };
+        println!("  {:>10} {:<22} {:<16} {g}", f.id, f.classe, sc);
+    }
+    println!("Vues         : {}", m.vues.len());
+    for v in &m.vues {
+        let n2d = m.elements_2d.iter().filter(|e| e.vue == v.id).count();
+        println!("  {:>10} {:<16} 1:{:<5} {:>4} él. 2D  {}{}", v.id, v.genre, v.echelle, n2d, v.nom, if v.gabarit { " (gabarit)" } else { "" });
+    }
+    let mut c2d: std::collections::BTreeMap<&str, usize> = Default::default();
+    for e in &m.elements_2d {
+        *c2d.entry(e.classe.as_str()).or_default() += 1;
+    }
+    println!("Éléments 2D  : {} {:?}", m.elements_2d.len(), c2d);
     println!("Grilles      : {}", m.grilles.len());
     for g in &m.grilles {
         println!("  {:<34} ({:.1} ; {:.1}) → ({:.1} ; {:.1}){}", g.nom, g.debut.x, g.debut.y, g.fin.x, g.fin.y, g.arc.map(|(_, r)| format!(", rayon {r:.1}")).unwrap_or_default());
