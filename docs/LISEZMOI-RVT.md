@@ -25,6 +25,7 @@ par Autodesk. Les points non vérifiés sont signalés comme tels. Méthode d'es
 | Documents de famille (`.rfa`) | extrusions, raccords, révolutions, balayages et combinaisons lus et affichés ; volumes identiques à Revit (§ 7, « Documents de famille ») |
 | Familles chargées dans un projet | document embarqué dans la partition, ids renumérotés, désigné par `Family.m_oFamDoc` (§ 7) |
 | Vues et éléments 2D | vues (genre, échelle, niveau, repère, cadrage), traits, arcs, textes, cotes, régions remplies, fenêtres de vue : identiques à Revit sur trois fichiers (§ 7, « Vues et éléments 2D ») |
+| Hachures | motifs de remplissage (grilles, tirets), types de régions remplies et motifs des matériaux identiques à Revit (219 motifs et 80 matériaux de Kerreut) ; régions tracées unies ou hachurées dans le viewer (§ 7, « Hachures ») |
 | **Écriture** | fichier modifié par nos outils (texte, couleur de matériau, largeur d'un type) **ouvert par Revit 2026**, valeurs relues par l'API (§ 11) |
 | Viewer Rust | à l'ouverture d'un `.rvt` ou d'un `.rfa`, sans export IFC (`src/rvt/`, § 8) : **murs, sols, plafonds, toits, escaliers, garde-corps, portes, fenêtres, mobilier et autres familles, pièces, formes de famille affichés**, colorés par matériau ; vues et éléments 2D (masqués par défaut) ; grilles dans l'arborescence avec leurs propriétés |
 
@@ -856,6 +857,41 @@ Saint-Malo : 2 585 instances sur 3 116 maillées ; les autres sont des symboles
 sans volume. Garde-corps : 11 / 11 et 5 / 5 de volume identique à Revit, 96 / 118
 maillés à Saint-Malo.
 
+### Hachures
+
+Où elles sont : une région remplie (`FilledRegion`) désigne son type par `m_attrId` ;
+le type (`FilledRegionAttributes`, dérivé de `Symbol`) donne le motif de premier plan
+`m_fillPatternElemId`, le motif d'arrière-plan `m_backgroundPatternElemId` et sa
+couleur `m_backgroundPatternColor` ; la couleur de premier plan est celle de la
+sous-catégorie propre au type (`m_lineAndTextAttr.m_categoryId` → `GStyleElem` de
+type 1 → `GStyle.m_color`, avec `m_penNumber`). Les matériaux portent quatre motifs
+et leurs couleurs : `Material.m_cutPatternId`, `m_cutBackgroundPatternId`,
+`m_surfacePatternId`, `m_surfaceBackgroundPatternId` (+ `…Color`).
+
+Un motif est un `FillPatternElem` → `FillPattern` : nom `m_name`, cible `m_fpTarget`
+(0 dessin, mesures sur le papier ; 1 modèle), et des grilles `m_gridsArr` →
+`FillGrid` : angle `m_angle` (radians), origine `m_origin` (u, v), `m_deltas` =
+(glissement le long des traits d'une ligne à la suivante, **décalage** entre deux
+traits), tirets `m_segs` (longueurs alternées trait / blanc ; vide : trait continu).
+Sans grille : motif uni (« Uni », `<Remplissage de solide>` dans l'API).
+
+Validation contre l'API de Revit 2026 (scripts RiveTT `rvt-reference-hachures` :
+`FillPattern.GetFillGrids()`, `FilledRegionType` ; `rvt-reference-motifs-materiaux` :
+`Material.CutForegroundPatternId`…) :
+
+| Fichier | Motifs | Types de régions | Matériaux | Régions |
+|---|---|---|---|---|
+| E13 (2026) | 78 / 78 | 1 / 1 | 9 / 9 | 1 unie, comme Revit |
+| `Kerreut 2025.rvt` | 219 / 219 | 10 / 10 | 80 / 80 | 20 unies, 70 hachurées, 3 sans type (id −1 dans l'API), comme Revit |
+
+Viewer : une région est tracée avec son arrière-plan uni s'il y en a un, puis son
+premier plan uni (face colorée) ou hachuré : chaque grille donne des traits parallèles
+découpés sur la face (triangles), tirets compris, à l'échelle de la vue pour un motif
+de dessin, en rubans de 0,13 mm sur le papier, à la couleur de premier plan. Kerreut :
+6 745 traits pour 70 régions ; Saint-Malo : 14 344 traits pour 31 régions. Les motifs
+des matériaux sont dans les propriétés (« Motifs des matériaux ») mais pas encore
+dessinés sur les faces 3D.
+
 ### Contenu repéré
 
 `Global/Latest` contient le nom des niveaux (`ZZ_NIV_A` y apparaît après
@@ -949,8 +985,9 @@ Tests (`cargo test`) : E04 (volume, boîte), `Projet1.rvt` (59 murs, matériaux,
 escaliers, garde-corps, pièces, instances et leur géométrie, cotes d'une porte),
 `Kerreut 2025.rvt` (toits, escalier assemblé, familles, arbre aux surfaces de
 révolution, cotes d'une porte), E12 (grilles), `FEN_2PF.rfa` (formes, vues, cotes et
-textes), C14 F04 (fenêtres placées) et E13 (vues et 2D), sautés si les fichiers sont
-absents. Dossiers : `RVT_ESSAIS` (défaut `C:\Users\theba\Desktop\Revit`) et
+textes), C14 F04 (fenêtres placées), E13 (vues et 2D, objets de la scène), Kerreut
+(hachures), découpage des hachures sur un carré et texte RTF (sans fichier), sautés si
+les fichiers sont absents. Dossiers : `RVT_ESSAIS` (défaut `C:\Users\theba\Desktop\Revit`) et
 `RVT_CORPUS` (défaut `C:\Users\theba\Documents\Thomas\ARCHI PERSO`).
 
 ## 9. Pistes pour la suite

@@ -44,8 +44,9 @@ pub enum Contenu {
     /// Cote : ligne (origine, direction), valeur et milieu de chaque segment (mm), points
     /// de référence.
     Cote { origine: DVec3, direction: Option<DVec3>, segments: Vec<(f64, DVec3)>, points: Vec<DVec3> },
-    /// Région remplie : face plane de son `GElement`.
-    Region,
+    /// Région remplie : face plane de son `GElement`, type (`m_attrId`, un
+    /// `FilledRegionAttributes`).
+    Region { type_id: i64 },
     /// Fenêtre de vue d'une feuille : vue placée, décalage sur la feuille (mm), échelle.
     FenetreDeVue { vue: i64, decalage: DVec3, echelle: f64 },
 }
@@ -242,7 +243,7 @@ pub fn element(id: i64, r: &Record) -> Option<Element2D> {
             let points = o.get("m_refPnts").map(Val::list).unwrap_or_default().iter().filter_map(|p| vec3(Some(p))).map(|p| p * FT).collect();
             Contenu::Cote { origine: origine.or_else(|| segments.first().map(|s| s.1))?, direction, segments, points }
         }
-        "FilledRegion" => Contenu::Region,
+        "FilledRegion" => Contenu::Region { type_id: id_of(o, "m_attrId") },
         "Viewport" => Contenu::FenetreDeVue { vue: id_of(o, "m_dbViewId"), decalage: vec3(o.get("m_offset"))? * FT, echelle: o.get("m_scale").and_then(Val::real).unwrap_or(1.0) },
         _ => return None,
     };
@@ -302,7 +303,210 @@ pub fn trace(e: &Element2D, n: DVec3, echelle: f64) -> Vec<[DVec3; 3]> {
                 }
             }
         }
-        Contenu::Region | Contenu::FenetreDeVue { .. } => {}
+        Contenu::Region { .. } | Contenu::FenetreDeVue { .. } => {}
     }
     out
+}
+
+// ------------------------------------------------------------------ Hachures
+
+/// Famille de lignes parallèles d'un motif de remplissage (`FillGrid`), en mm : angle
+/// (radians), origine, décalage entre deux lignes (`m_deltas[1]`), glissement le long
+/// des lignes d'une ligne à la suivante (`m_deltas[0]`), tirets (longueurs alternées
+/// trait / blanc, `m_segs` ; vide : trait continu).
+pub struct GrilleMotif {
+    pub angle: f64,
+    pub origine: [f64; 2],
+    pub glissement: f64,
+    pub decalage: f64,
+    pub tirets: Vec<f64>,
+}
+
+/// Motif de remplissage (`FillPatternElem` → `FillPattern`) ; sans grille : uni.
+pub struct Motif {
+    pub nom: String,
+    /// Motif de modèle (`m_fpTarget` = 1, mesures en mm du modèle), sinon de dessin (mm
+    /// du papier, à multiplier par l'échelle de la vue).
+    pub modele: bool,
+    pub grilles: Vec<GrilleMotif>,
+}
+
+/// Type de région remplie (`FilledRegionAttributes`) : motifs de premier plan et
+/// d'arrière-plan ; la couleur de premier plan est celle de sa sous-catégorie
+/// (`m_lineAndTextAttr.m_categoryId`, couleur du `GStyle`).
+pub struct TypeRegion {
+    pub nom: String,
+    pub avant: i64,
+    pub arriere: i64,
+    pub couleur_arriere: [u8; 3],
+    pub categorie: i64,
+}
+
+pub fn motif(r: &Record) -> Option<Motif> {
+    let fp = r.field_body(&r.root, "m_pFillPattern")?;
+    let mut grilles = Vec::new();
+    for g in fp.get("m_gridsArr").map(Val::list).unwrap_or_default() {
+        let Some(g) = r.deref(g).map(|b| &b.obj) else { continue };
+        let o = g.get("m_origin")?.reals()?;
+        let d = g.get("m_deltas")?.reals()?;
+        grilles.push(GrilleMotif {
+            angle: g.get("m_angle")?.real()?,
+            origine: [*o.first()? * FT, *o.get(1)? * FT],
+            glissement: *d.first()? * FT,
+            decalage: *d.get(1)? * FT,
+            tirets: g.get("m_segs").and_then(Val::reals).unwrap_or_default().iter().map(|s| s.abs() * FT).collect(),
+        });
+    }
+    Some(Motif { nom: fp.get("m_name").and_then(Val::str).unwrap_or_default().to_string(), modele: fp.get("m_fpTarget").and_then(Val::int) == Some(1), grilles })
+}
+
+pub fn type_region(r: &Record) -> Option<TypeRegion> {
+    let o = &r.root;
+    let c = o.get("m_backgroundPatternColor").and_then(Val::int).unwrap_or(0xFFFFFF);
+    Some(TypeRegion {
+        nom: r.field_body(o, "m_symbolInfo")?.get("m_name")?.str()?.to_string(),
+        avant: id_of(o, "m_fillPatternElemId"),
+        arriere: id_of(o, "m_backgroundPatternElemId"),
+        couleur_arriere: [c as u8, (c >> 8) as u8, (c >> 16) as u8],
+        categorie: o.get("m_lineAndTextAttr").and_then(Val::obj).map(|a| id_of(a, "m_categoryId")).unwrap_or(-1),
+    })
+}
+
+/// Intervalles de t où p + t·d est dans le triangle (a, b, c) du plan (u, v).
+fn dans_triangle(p: [f64; 2], d: [f64; 2], t: [[f64; 2]; 3]) -> Option<(f64, f64)> {
+    let aire = (t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[1][1] - t[0][1]) * (t[2][0] - t[0][0]);
+    if aire.abs() < 1e-12 {
+        return None;
+    }
+    let (mut t0, mut t1) = (f64::MIN, f64::MAX);
+    for i in 0..3 {
+        let (a, b) = (t[i], t[(i + 1) % 3]);
+        // demi-plan intérieur : signe(aire) × ((b − a) × (x − a)) ≥ 0
+        let (ex, ey) = (b[0] - a[0], b[1] - a[1]);
+        let f0 = aire.signum() * (ex * (p[1] - a[1]) - ey * (p[0] - a[0]));
+        let f1 = aire.signum() * (ex * d[1] - ey * d[0]);
+        if f1.abs() < 1e-15 {
+            if f0 < 0.0 {
+                return None;
+            }
+        } else {
+            let t = -f0 / f1;
+            if f1 > 0.0 {
+                t0 = t0.max(t);
+            } else {
+                t1 = t1.min(t);
+            }
+        }
+    }
+    (t0 < t1).then_some((t0, t1))
+}
+
+/// Traits d'un motif de hachures découpés sur une région (triangles en mm), dans le
+/// repère (droite, haut) de la vue ; motif de dessin mis à l'échelle de la vue.
+/// Segments en mm, au plus `max` par région.
+pub fn hachures(triangles: &[[DVec3; 3]], m: &Motif, echelle: f64, droite: DVec3, haut: DVec3, max: usize) -> Vec<[DVec3; 2]> {
+    let Some(p0) = triangles.first().map(|t| t[0]) else { return Vec::new() };
+    let n = droite.cross(haut);
+    let w = p0.dot(n);
+    let uv = |p: DVec3| [p.dot(droite), p.dot(haut)];
+    let tris: Vec<[[f64; 2]; 3]> = triangles.iter().map(|t| t.map(uv)).collect();
+    let f = if m.modele { 1.0 } else { echelle };
+    let mut out = Vec::new();
+    for g in &m.grilles {
+        let (dec, gl) = (g.decalage * f, g.glissement * f);
+        if dec.abs() < 1e-6 {
+            continue;
+        }
+        let (d, nr) = ([g.angle.cos(), g.angle.sin()], [-g.angle.sin(), g.angle.cos()]);
+        let o = [g.origine[0] * f, g.origine[1] * f];
+        let s: Vec<f64> = tris.iter().flatten().map(|q| (q[0] - o[0]) * nr[0] + (q[1] - o[1]) * nr[1]).collect();
+        let (smin, smax) = s.iter().fold((f64::MAX, f64::MIN), |(a, b), &x| (a.min(x), b.max(x)));
+        let (k0, k1) = ((smin / dec).floor() as i64, (smax / dec).ceil() as i64);
+        if k1 < k0 || (k1 - k0) as usize > max {
+            continue;
+        }
+        let tirets: Vec<f64> = g.tirets.iter().map(|x| x * f).collect();
+        let periode: f64 = tirets.iter().sum();
+        for k in k0..=k1 {
+            let p = [o[0] + k as f64 * (dec * nr[0] + gl * d[0]), o[1] + k as f64 * (dec * nr[1] + gl * d[1])];
+            let mut iv: Vec<(f64, f64)> = tris.iter().filter_map(|t| dans_triangle(p, d, *t)).collect();
+            iv.sort_by(|a, b| a.0.total_cmp(&b.0));
+            // réunion des intervalles des triangles voisins
+            let mut union: Vec<(f64, f64)> = Vec::new();
+            for (a, b) in iv {
+                match union.last_mut() {
+                    Some(l) if a <= l.1 + 1e-6 => l.1 = l.1.max(b),
+                    _ => union.push((a, b)),
+                }
+            }
+            for (a, b) in union {
+                let mut morceaux = Vec::new();
+                if periode > 1e-6 {
+                    // tirets : phase 0 au point p de la ligne
+                    let mut m0 = (a / periode).floor() * periode;
+                    while m0 < b && morceaux.len() < max {
+                        let mut x = m0;
+                        for (i, l) in tirets.iter().enumerate() {
+                            if i % 2 == 0 && x + l > a && x < b {
+                                morceaux.push((x.max(a), (x + l).min(b)));
+                            }
+                            x += l;
+                        }
+                        m0 += periode;
+                    }
+                } else {
+                    morceaux.push((a, b));
+                }
+                for (a, b) in morceaux {
+                    let pt = |t: f64| (p[0] + t * d[0]) * droite + (p[1] + t * d[1]) * haut + w * n;
+                    out.push([pt(a), pt(b)]);
+                    if out.len() >= max {
+                        return out;
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn carre() -> Vec<[DVec3; 3]> {
+        let p = |x, y| DVec3::new(x, y, 0.0);
+        vec![[p(0.0, 0.0), p(1000.0, 0.0), p(1000.0, 1000.0)], [p(0.0, 0.0), p(1000.0, 1000.0), p(0.0, 1000.0)]]
+    }
+
+    fn longueur(s: &[[DVec3; 2]]) -> f64 {
+        s.iter().map(|[a, b]| a.distance(*b)).sum()
+    }
+
+    /// Hachures découpées sur un carré de 1 m : longueur totale = aire / espacement.
+    #[test]
+    fn hachures_carre() {
+        let g = |angle: f64, tirets: Vec<f64>| GrilleMotif { angle: angle.to_radians(), origine: [0.0, 0.0], glissement: 0.0, decalage: 3.0, tirets };
+        // motif de dessin de 3 mm à 1:100 : 300 mm entre les traits
+        let diag = Motif { nom: "Diagonale haut".into(), modele: false, grilles: vec![g(45.0, vec![])] };
+        let l = longueur(&hachures(&carre(), &diag, 100.0, DVec3::X, DVec3::Y, 10_000));
+        assert!((l - 1e6 / 300.0).abs() < 300.0 * 2f64.sqrt(), "{l}");
+        // traits horizontaux sur les lignes 0, 300, 600, 900 : 4 × 1 000 mm
+        let horiz = Motif { nom: "h".into(), modele: false, grilles: vec![g(0.0, vec![])] };
+        let s = hachures(&carre(), &horiz, 100.0, DVec3::X, DVec3::Y, 10_000);
+        assert!((longueur(&s) - 4000.0).abs() < 1e-6, "{}", longueur(&s));
+        // tirets de 1 mm et blancs de 1 mm (100 mm à 1:100) : la moitié
+        let tir = Motif { nom: "t".into(), modele: false, grilles: vec![g(0.0, vec![1.0, 1.0])] };
+        assert!((longueur(&hachures(&carre(), &tir, 100.0, DVec3::X, DVec3::Y, 10_000)) - 2000.0).abs() < 1e-6);
+        // motif de modèle : pas d'échelle (3 mm entre les traits)
+        let modele = Motif { nom: "m".into(), modele: true, grilles: vec![g(90.0, vec![])] };
+        assert_eq!(hachures(&carre(), &modele, 100.0, DVec3::X, DVec3::Y, 100_000).len(), 334);
+    }
+
+    #[test]
+    fn rtf_simple() {
+        // RTF d'une note de texte de FEN_2PF.rfa (fins de ligne omises)
+        let rtf = br"{\rtf1\ansi\ansicpg1252\deff0\nouicompat\deflang1033{\fonttbl{\f0\fnil\fcharset0 Arial;}}{\colortbl ;\red0\green0\blue0;}{\*\generator Riched20 10.0.18362}\viewkind4\uc1 \pard\cf1\fs48 Ext\'e9rieur\par}";
+        assert_eq!(texte_rtf(rtf), "Extérieur");
+    }
 }

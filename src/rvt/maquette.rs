@@ -16,7 +16,7 @@ use super::champs::{self, Obj, Record, Val};
 use super::geometrie::{self, FT, Maillage};
 use super::objets::{elem_table, inflate, records, sections, unpad};
 use super::schema::Schema;
-use super::vues::{self, Contenu, Element2D, Vue};
+use super::vues::{self, Contenu, Element2D, Motif, TypeRegion, Vue};
 use super::Cfb;
 use crate::geom::{Part, ProductGeom, Rgba, class_color};
 use crate::model::IfcModel;
@@ -142,6 +142,9 @@ pub struct Materiau {
     pub couleur: [u8; 3],
     /// 0 opaque, 1 transparent (Revit affiche ×100).
     pub transparence: f64,
+    /// Motifs de coupe et de surface, premier plan puis arrière-plan (ids de
+    /// `FillPatternElem`, −1 : aucun), avec leurs couleurs.
+    pub motifs: [(i64, [u8; 3]); 4],
 }
 
 /// Courbe de positionnement (`GLine`, `GArc`) en mm, dans l'espace de paramètres de
@@ -286,6 +289,13 @@ pub struct Maquette {
     pub vues: Vec<Vue>,
     /// Éléments 2D propres à une vue : traits, textes, cotes, régions, fenêtres de vue.
     pub elements_2d: Vec<Element2D>,
+    /// Motifs de remplissage (hachures), par id de `FillPatternElem`.
+    pub motifs: HashMap<i64, Motif>,
+    /// Types de régions remplies (`FilledRegionAttributes`).
+    pub types_regions: HashMap<i64, TypeRegion>,
+    /// Couleur de projection de chaque catégorie ou sous-catégorie (`GStyleElem` de
+    /// type 1 → `GStyle.m_color`).
+    pub couleurs_categories: HashMap<i64, [u8; 3]>,
     /// Instances propres à une vue, ignorées.
     pub instances_de_vue: usize,
     /// Objets retenus mais illisibles (données d'add-ins…).
@@ -320,6 +330,12 @@ enum Sorte {
     Annotation,
     /// Région remplie (2D, avec géométrie).
     Region,
+    /// Motif de remplissage (`FillPatternElem`).
+    Motif,
+    /// Type de région remplie (`FilledRegionAttributes`).
+    TypeRegion,
+    /// Style graphique d'une catégorie (`GStyleElem`).
+    Style,
 }
 
 impl Sorte {
@@ -342,6 +358,8 @@ impl Sorte {
             "StairsElement" => Sorte::Escalier,
             "Grid" => Sorte::Grille,
             "RoomElem" => Sorte::Piece,
+            // type de région remplie : un Symbol, lu à part (motifs et couleurs)
+            "FilledRegionAttributes" => Sorte::TypeRegion,
             _ if h("Level") => Sorte::Niveau,
             _ if h("BaseRailing") => Sorte::GardeCorps,
             _ if h("Symbol") => Sorte::Type,
@@ -354,6 +372,8 @@ impl Sorte {
             // marqueurs de vue (Section, Elevation, Viewer3d…) : cadrage de leur vue
             _ if h("Viewer") => Sorte::Viewer,
             "FilledRegion" => Sorte::Region,
+            "FillPatternElem" => Sorte::Motif,
+            "GStyleElem" => Sorte::Style,
             "CurveElem" | "TextNote" | "LinearDimString" | "RadialDim" | "AngularDim" | "ArcLengthDim" | "Viewport" => Sorte::Annotation,
             _ if h("DBView") => Sorte::Vue,
             _ if h("GenSweep") || h("FamilyGeomCombination") => Sorte::Forme,
@@ -448,6 +468,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     let (mut volees, mut instances, mut instances_de_vue, mut garde_corps) = (HashMap::new(), Vec::new(), 0, Vec::new());
     let (mut formes, mut categories) = (Vec::new(), HashMap::new());
     let (mut vues, mut cadrages, mut elements_2d) = (Vec::new(), HashMap::new(), Vec::new());
+    let (mut motifs, mut types_regions, mut couleurs_categories) = (HashMap::new(), HashMap::new(), HashMap::new());
     for x in extraits {
         match x {
             Err(e) => illisibles.push(e),
@@ -470,6 +491,9 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
             Ok(Extrait::Vue(v)) => vues.push(v),
             Ok(Extrait::Cadrage(v, c)) => drop(cadrages.insert(v, c)),
             Ok(Extrait::Element2D(e)) => elements_2d.push(e),
+            Ok(Extrait::Motif(id, x)) => drop(motifs.insert(id, x)),
+            Ok(Extrait::TypeRegion(id, x)) => drop(types_regions.insert(id, x)),
+            Ok(Extrait::Style(cat, c)) => drop(couleurs_categories.insert(cat, c)),
         }
     }
     // vues et éléments 2D du document : ceux des familles imbriquées rangées en ligne
@@ -512,11 +536,11 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     a_mailler.extend(garde_corps.iter().map(|g| g.id));
     a_mailler.extend(instances.iter().map(|i| i.id).chain(pieces.iter().map(|p| p.id)));
     a_mailler.extend(formes.iter().map(|f| f.id));
-    a_mailler.extend(elements_2d.iter().filter(|e| matches!(e.contenu, Contenu::Region)).map(|e| e.id));
+    a_mailler.extend(elements_2d.iter().filter(|e| matches!(e.contenu, Contenu::Region { .. })).map(|e| e.id));
     progress(format!("Géométrie de {} éléments…", a_mailler.len()));
     progress(format!("Géométrie de {} types ({} Mo)…", geometries_types.len(), geometries_types.values().map(Vec::len).sum::<usize>() >> 20));
     let bib = geometrie::Bibliotheque::new(&sch, &geometries_types);
-    let regions: std::collections::HashSet<i64> = elements_2d.iter().filter(|e| matches!(e.contenu, Contenu::Region)).map(|e| e.id).collect();
+    let regions: std::collections::HashSet<i64> = elements_2d.iter().filter(|e| matches!(e.contenu, Contenu::Region { .. })).map(|e| e.id).collect();
     // une région remplie est une face ouverte (feuille), pas un solide
     let mut geoms: HashMap<i64, Geometrie> = a_mailler.par_iter().map(|&eid| (eid, maillage(&sch, &complements, &bib, eid, regions.contains(&eid)))).collect();
     let mut prendre = |eid: i64| geoms.remove(&eid).unwrap_or_else(|| Err("non maillé".into()));
@@ -538,6 +562,9 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         categories,
         vues,
         elements_2d,
+        motifs,
+        types_regions,
+        couleurs_categories,
         instances_de_vue,
         illisibles,
     };
@@ -562,7 +589,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     for x in &mut m.formes {
         x.geometrie = prendre(x.id);
     }
-    for x in m.elements_2d.iter_mut().filter(|e| matches!(e.contenu, Contenu::Region)) {
+    for x in m.elements_2d.iter_mut().filter(|e| matches!(e.contenu, Contenu::Region { .. })) {
         x.geometrie = prendre(x.id);
     }
     for x in &mut m.escaliers {
@@ -705,6 +732,10 @@ enum Extrait {
     /// Cadrage (origine, axes, longueurs) de la vue d'un `Viewer`.
     Cadrage(i64, (DVec3, [DVec3; 3], [f64; 3])),
     Element2D(Element2D),
+    Motif(i64, Motif),
+    TypeRegion(i64, TypeRegion),
+    /// Couleur de projection (catégorie, rouge vert bleu).
+    Style(i64, [u8; 3]),
 }
 
 fn niveau(id: i64, r: &Record) -> Option<Niveau> {
@@ -740,7 +771,17 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>) -> Ext
             // COLORREF : rouge dans l'octet de poids faible
             let c = m.get("m_color").and_then(Val::int).unwrap_or(0x7F7F7F);
             let couleur = [c as u8, (c >> 8) as u8, (c >> 16) as u8];
-            Some(Extrait::Materiau(eid, Materiau { nom: m.get("m_name")?.str()?.to_string(), couleur, transparence: m.get("m_transparency").and_then(Val::real).unwrap_or(0.0) }))
+            let motif = |id: &str, c: &str| {
+                let c = m.get(c).and_then(Val::int).unwrap_or(0);
+                (id_of(m, id), [c as u8, (c >> 8) as u8, (c >> 16) as u8])
+            };
+            let motifs = [
+                motif("m_cutPatternId", "m_cutPatternColor"),
+                motif("m_cutBackgroundPatternId", "m_cutBackgroundPatternColor"),
+                motif("m_surfacePatternId", "m_surfacePatternColor"),
+                motif("m_surfaceBackgroundPatternId", "m_surfaceBackgroundPatternColor"),
+            ];
+            Some(Extrait::Materiau(eid, Materiau { nom: m.get("m_name")?.str()?.to_string(), couleur, transparence: m.get("m_transparency").and_then(Val::real).unwrap_or(0.0), motifs }))
         })()),
         Sorte::Mur => Extrait::Mur(mur(eid, r, altitude)),
         Sorte::Dalle => {
@@ -767,6 +808,16 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>) -> Ext
         Sorte::Vue => ou_rien(vues::vue(eid, r).map(Extrait::Vue)),
         Sorte::Viewer => ou_rien(vues::cadrage(r).map(|(v, o, a, b)| Extrait::Cadrage(v, (o, a, b)))),
         Sorte::Annotation | Sorte::Region => ou_rien(vues::element(eid, r).map(Extrait::Element2D)),
+        Sorte::Motif => ou_rien(vues::motif(r).map(|x| Extrait::Motif(eid, x))),
+        Sorte::TypeRegion => ou_rien(vues::type_region(r).map(|x| Extrait::TypeRegion(eid, x))),
+        Sorte::Style => ou_rien((|| {
+            // style de projection (type 1) : couleur COLORREF, rouge dans l'octet faible
+            if o.get("m_gstyleType").and_then(Val::int) != Some(1) {
+                return None;
+            }
+            let c = r.field_body(o, "m_pGStyle")?.get("m_color")?.int()?;
+            Some(Extrait::Style(id_of(o, "m_categoryId"), [c as u8, (c >> 8) as u8, (c >> 16) as u8]))
+        })()),
     }
 }
 
@@ -968,6 +1019,39 @@ impl Builder {
         let refs = props.into_iter().map(|(n, v)| Value::Ref(self.add("IFCPROPERTYSINGLEVALUE", vec![Value::Str(n.into()), Value::Null, v]))).collect();
         self.add("IFCPROPERTYSET", vec![gid(prefix, owner), Value::Null, Value::Str(name.into()), Value::Null, Value::List(refs)])
     }
+}
+
+/// Tracé d'une région remplie : arrière-plan uni s'il y en a un, puis premier plan uni
+/// (face colorée) ou hachures (traits de 0,13 mm sur le papier, découpés sur la face) ;
+/// région sans type connu : face grise translucide.
+fn region(m: &Maquette, type_id: i64, g: &Maillage, v: &Vue) -> Vec<Part> {
+    let face: Vec<[DVec3; 3]> = g.faces.iter().flat_map(|f| f.triangles.iter().map(|t| t.map(|i| g.sommets[i]))).collect();
+    let en_m = |tris: &[[DVec3; 3]]| tris.iter().map(|t| t.map(|p| p / 1000.0)).collect::<Vec<_>>();
+    let Some(t) = m.types_regions.get(&type_id) else { return vec![Part { color: [0.45, 0.45, 0.45, 0.6], tris: en_m(&face) }] };
+    let rgb = |c: [u8; 3], a: f32| [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0, a];
+    let avant = m.couleurs_categories.get(&t.categorie).copied().unwrap_or([0, 0, 0]);
+    let normale = v.droite.cross(v.haut).normalize_or_zero();
+    let mut parts = Vec::new();
+    match m.motifs.get(&t.arriere) {
+        Some(x) if x.grilles.is_empty() => parts.push(Part { color: rgb(t.couleur_arriere, 1.0), tris: en_m(&face) }),
+        _ => parts.push(Part { color: [0.85, 0.85, 0.85, 0.25], tris: en_m(&face) }),
+    }
+    match m.motifs.get(&t.avant) {
+        Some(x) if x.grilles.is_empty() => parts.push(Part { color: rgb(avant, 1.0), tris: en_m(&face) }),
+        Some(x) => {
+            // traits légèrement décollés de la face, vers l'observateur
+            let ecart = normale * (0.05 * v.echelle);
+            let mut tris = Vec::new();
+            for [a, b] in vues::hachures(&face, x, v.echelle, v.droite, v.haut, 20_000) {
+                vues::ruban(&[a + ecart, b + ecart], normale, 0.13 * v.echelle, &mut tris);
+            }
+            if !tris.is_empty() {
+                parts.push(Part { color: rgb(avant, 1.0), tris });
+            }
+        }
+        None => {}
+    }
+    parts
 }
 
 /// Lit le fichier et construit la scène du viewer. Erreur si aucun élément n'a pu être
@@ -1193,10 +1277,16 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
         props.extend(p.props);
         match p.geometrie {
             Ok(g) => {
-                let mut mats: Vec<&str> = g.faces.iter().filter_map(|f| m.materiaux.get(&f.materiau)).map(|x| x.nom.as_str()).collect();
-                mats.sort_unstable();
-                mats.dedup();
-                props.push(("Matériaux des faces", Value::Str(mats.join(", "))));
+                let mut mats: Vec<&Materiau> = g.faces.iter().filter_map(|f| m.materiaux.get(&f.materiau)).collect();
+                mats.sort_unstable_by(|a, b| a.nom.cmp(&b.nom));
+                mats.dedup_by(|a, b| a.nom == b.nom);
+                props.push(("Matériaux des faces", Value::Str(mats.iter().map(|x| x.nom.as_str()).collect::<Vec<_>>().join(", "))));
+                // motifs de coupe et de surface (premier plan) de chaque matériau
+                let nom_motif = |id: i64| m.motifs.get(&id).map(|x| x.nom.as_str()).unwrap_or("aucun");
+                let motifs: Vec<String> = mats.iter().filter(|x| x.motifs[0].0 != -1 || x.motifs[2].0 != -1).map(|x| format!("{} : coupe {}, surface {}", x.nom, nom_motif(x.motifs[0].0), nom_motif(x.motifs[2].0))).collect();
+                if !motifs.is_empty() {
+                    props.push(("Motifs des matériaux", Value::Str(motifs.join(" ; "))));
+                }
             }
             Err(e) => props.push(("Géométrie", Value::Str(e.clone()))),
         }
@@ -1293,7 +1383,16 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
                     let valeurs = segments.iter().map(|s| format!("{} mm", format_real((s.0 * 10.0).round() / 10.0))).collect::<Vec<_>>().join(" + ");
                     ("Cote", [0.10, 0.35, 0.80, 1.0], vec![("Valeur", Value::Str(valeurs))])
                 }
-                Contenu::Region => ("Région remplie", [0.45, 0.45, 0.45, 0.6], vec![]),
+                Contenu::Region { type_id } => {
+                    let t = m.types_regions.get(type_id);
+                    let nom_motif = |id: i64| m.motifs.get(&id).map(|x| x.nom.clone()).unwrap_or_else(|| "aucun".into());
+                    let mut p = vec![("Type", Value::Str(t.map(|t| t.nom.clone()).unwrap_or_else(|| type_id.to_string())))];
+                    if let Some(t) = t {
+                        p.push(("Motif de premier plan", Value::Str(nom_motif(t.avant))));
+                        p.push(("Motif d'arrière-plan", Value::Str(nom_motif(t.arriere))));
+                    }
+                    ("Région remplie", [0.45, 0.45, 0.45, 0.6], p)
+                }
                 Contenu::FenetreDeVue { vue, echelle, decalage } => {
                     let nv = nom_vue.get(vue).map(|s| s.to_string()).unwrap_or_else(|| vue.to_string());
                     ("Fenêtre de vue", [0.5, 0.5, 0.5, 1.0], vec![("Vue placée", Value::Str(nv)), ("Échelle", Value::Str(format!("1:{}", (1.0 / echelle).round()))), ("Décalage", point_mm(*decalage))])
@@ -1307,12 +1406,16 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
             let id = b.add("IFCANNOTATION", vec![gid("RVT2D", e.id), n.clone(), Value::Str(titre), n.clone(), Value::Str(genre.into()), n.clone(), Value::Ref(shape)]);
             let pset = b.pset("RVTPSET2D", e.id, "Revit", props);
             b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF2D", e.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
-            let mut tris = vues::trace(e, normale, v.echelle);
-            if let (Contenu::Region, Ok(g)) = (&e.contenu, &e.geometrie) {
-                tris.extend(g.faces.iter().flat_map(|f| f.triangles.iter().map(|t| t.map(|i| g.sommets[i] / 1000.0))));
-            }
+            let tris = vues::trace(e, normale, v.echelle);
+            let mut parts = Vec::new();
             if !tris.is_empty() {
-                geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }] });
+                parts.push(Part { color: couleur, tris });
+            }
+            if let (Contenu::Region { type_id }, Ok(g)) = (&e.contenu, &e.geometrie) {
+                parts.extend(region(m, *type_id, g, v));
+            }
+            if !parts.is_empty() {
+                geoms.push(ProductGeom { id, parts });
             }
             enfants.push(Value::Ref(id));
         }
@@ -1612,6 +1715,11 @@ mod tests {
         classes.sort_unstable();
         classes.dedup_by(|a, b| a == b);
         assert_eq!(m.elements_2d.len(), 14, "{classes:?}");
+        // scène : un objet tracé par élément 2D (sauf la fenêtre de vue), dans le plan de la vue
+        let s = scene(&m, "E13", "E13_vues2d.rvt".into(), "2026");
+        let annot: Vec<_> = s.objects.iter().filter(|o| &*o.class == "IFCANNOTATION").collect();
+        assert_eq!(annot.len(), 13, "objets 2D tracés");
+        assert!(annot.iter().all(|o| o.opaque.count + o.transparent.count > 0));
     }
 
     /// Vues et éléments 2D de `FEN_2PF.rfa` : 8 vues, 26 cotes et 4 textes comme dans
@@ -1635,6 +1743,44 @@ mod tests {
         }
         let textes: Vec<&str> = m.elements_2d.iter().filter_map(|e| if let Contenu::Texte { texte, .. } = &e.contenu { Some(texte.as_str()) } else { None }).collect();
         assert_eq!(textes, ["Extérieur", "Intérieur", "Extérieur", "Extérieur"]);
+    }
+
+    /// Hachures de `Kerreut 2025.rvt` : 219 motifs et types de régions identiques à Revit
+    /// (script RiveTT `rvt-reference-hachures`) ; 93 régions : 20 unies, 70 hachurées et
+    /// 3 sans type, comme dans l'API ; motifs de coupe et de surface des matériaux
+    /// (`rvt-reference-motifs-materiaux`).
+    #[test]
+    fn kerreut_hachures() {
+        let Some(p) = corpus(r"PERROS-GUIREC - rue de Kerreut\01-TRAVAIL\Kerreut 2025.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        assert_eq!(m.motifs.len(), 219);
+        let (mut unies, mut hachurees, mut sans_type, mut traits) = (0, 0, 0, 0);
+        for e in &m.elements_2d {
+            let Contenu::Region { type_id } = &e.contenu else { continue };
+            let Some(t) = m.types_regions.get(type_id) else {
+                sans_type += 1;
+                continue;
+            };
+            match m.motifs.get(&t.avant) {
+                Some(x) if !x.grilles.is_empty() => {
+                    let g = e.geometrie.as_ref().unwrap();
+                    let v = m.vues.iter().find(|v| v.id == e.vue).unwrap();
+                    let face: Vec<[DVec3; 3]> = g.faces.iter().flat_map(|f| f.triangles.iter().map(|t| t.map(|i| g.sommets[i]))).collect();
+                    traits += vues::hachures(&face, x, v.echelle, v.droite, v.haut, 20_000).len();
+                    hachurees += 1;
+                }
+                _ => unies += 1,
+            }
+        }
+        assert_eq!((unies, hachurees, sans_type), (20, 70, 3));
+        assert!(traits > 1000, "{traits} traits");
+        // motif 11 « Diagonale haut » : 45°, 3,175 mm (1/8 po) entre les traits, sur le papier
+        let d = &m.motifs[&11];
+        assert_eq!(d.nom, "Diagonale haut");
+        assert!(!d.modele && d.grilles.len() == 1 && (d.grilles[0].angle.to_degrees() - 45.0).abs() < 1e-9 && (d.grilles[0].decalage - 3.175).abs() < 1e-9);
+        // ARC_MAT_PIERRE : coupe 3 245 428, surface 963 733 (couleur 3C3C3C)
+        let pierre = &m.materiaux[&9241118];
+        assert_eq!((pierre.motifs[0].0, pierre.motifs[2].0, pierre.motifs[2].1), (3245428, 963733, [0x3c, 0x3c, 0x3c]));
     }
 
     /// Essai C14 F04 : la fenêtre chargée dans le projet vide et placée deux fois dans un

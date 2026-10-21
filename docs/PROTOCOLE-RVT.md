@@ -295,6 +295,11 @@ fichiers dans `Essais-format\2026\C14\`.
    relus par l'API ; `rvt-reference-types-famille` régénère chaque type de la
    famille et en donne le volume et la boîte.
 
+5. **Hachures** (même session, à la demande de l'utilisateur) : motifs, types de
+   régions et motifs des matériaux décodés par le schéma, puis comparés en entier aux
+   références `rvt-reference-hachures` et `rvt-reference-motifs-materiaux` (résultat
+   gardé par RiveTT dans un fichier, comparaison automatique) sur E13 et Kerreut.
+
 Précautions : documents ouverts en arrière-plan et fermés sans enregistrer ; le
 fichier de l'utilisateur ouvert dans l'interface n'est jamais modifié ; les essais
 qui pouvaient échouer (W1) passés à la fin, un par appel.
@@ -324,7 +329,7 @@ pas seulement le schéma.
 | C8 | atteint : niveau et mur lus en entier ; 100 % des enregistrements sur 5 fichiers |
 | C12 | atteint : toits, escaliers, grilles et matériaux identiques à Revit ; volumes des sols, toits, escaliers et pièces identiques à 10⁻⁵ m³ |
 | C13 | atteint : 373 instances sur 448 de volume identique à Revit, 404 à moins de 1 % ; garde-corps 16 / 16 |
-| C14 | atteint : formes de `FEN_2PF.rfa` de volume identique à Revit (12 / 13, le coffre à −0,35 %) ; vues et éléments 2D identiques sur E13, la famille et `Projet1.rvt` ; flux réencodés à l'identique ; quatre fichiers modifiés acceptés par Revit |
+| C14 | atteint : 11 formes de `FEN_2PF.rfa` sur 13 de volume identique à Revit, le coffre à −0,35 %, la combinaison évidée sans solide comme dans Revit ; motifs, types de régions et motifs des matériaux identiques à Revit ; vues et éléments 2D identiques sur E13, la famille et `Projet1.rvt` ; flux réencodés à l'identique ; quatre fichiers modifiés acceptés par Revit |
 
 Après chaque campagne : résultats reportés dans `LISEZMOI-RVT.md` (faits observés,
 hypothèses écartées), scripts RiveTT conservés, fichiers d'essai hors dépôt.

@@ -251,6 +251,24 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
         *c2d.entry(e.classe.as_str()).or_default() += 1;
     }
     println!("Éléments 2D  : {} {:?}", m.elements_2d.len(), c2d);
+    // régions remplies : unies, hachurées (nombre de traits découpés), sans type connu
+    let (mut unies, mut hachurees, mut traits, mut sans_type) = (0, 0, 0, 0);
+    for e in &m.elements_2d {
+        let rvt::vues::Contenu::Region { type_id } = &e.contenu else { continue };
+        let (Some(t), Some(v), Ok(g)) = (m.types_regions.get(type_id), m.vues.iter().find(|v| v.id == e.vue), &e.geometrie) else {
+            sans_type += 1;
+            continue;
+        };
+        match m.motifs.get(&t.avant) {
+            Some(x) if !x.grilles.is_empty() => {
+                let face: Vec<[glam::DVec3; 3]> = g.faces.iter().flat_map(|f| f.triangles.iter().map(|t| t.map(|i| g.sommets[i]))).collect();
+                traits += rvt::vues::hachures(&face, x, v.echelle, v.droite, v.haut, 20_000).len();
+                hachurees += 1;
+            }
+            _ => unies += 1,
+        }
+    }
+    println!("Motifs       : {} ; types de régions : {} ; régions unies {unies}, hachurées {hachurees} ({traits} traits), sans type {sans_type}", m.motifs.len(), m.types_regions.len());
     println!("Grilles      : {}", m.grilles.len());
     for g in &m.grilles {
         println!("  {:<34} ({:.1} ; {:.1}) → ({:.1} ; {:.1}){}", g.nom, g.debut.x, g.debut.y, g.fin.x, g.fin.y, g.arc.map(|(_, r)| format!(", rayon {r:.1}")).unwrap_or_default());
