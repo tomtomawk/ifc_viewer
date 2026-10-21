@@ -229,6 +229,57 @@ impl Renderer {
         }
     }
 
+    /// Rendu hors écran (tampon de trame multiéchantillonné) en pixels RGBA opaques, ligne
+    /// du haut en premier : captures du pilote, fenêtre réduite comprise.
+    pub fn capture(&self, gl: &glow::Context, p: &FrameParams, largeur: i32, hauteur: i32) -> Result<Vec<u8>, String> {
+        let mut pixels = vec![0u8; (largeur * hauteur * 4) as usize];
+        unsafe {
+            let (ms, res) = (gl.create_framebuffer()?, gl.create_framebuffer()?);
+            let (couleur_ms, profondeur_ms, couleur) = (gl.create_renderbuffer()?, gl.create_renderbuffer()?, gl.create_renderbuffer()?);
+            let echantillons = gl.get_parameter_i32(glow::MAX_SAMPLES).clamp(1, 4);
+            gl.bind_renderbuffer(glow::RENDERBUFFER, Some(couleur_ms));
+            gl.renderbuffer_storage_multisample(glow::RENDERBUFFER, echantillons, glow::RGBA8, largeur, hauteur);
+            gl.bind_renderbuffer(glow::RENDERBUFFER, Some(profondeur_ms));
+            gl.renderbuffer_storage_multisample(glow::RENDERBUFFER, echantillons, glow::DEPTH_COMPONENT24, largeur, hauteur);
+            gl.bind_renderbuffer(glow::RENDERBUFFER, Some(couleur));
+            gl.renderbuffer_storage(glow::RENDERBUFFER, glow::RGBA8, largeur, hauteur);
+            gl.bind_framebuffer(glow::FRAMEBUFFER, Some(res));
+            gl.framebuffer_renderbuffer(glow::FRAMEBUFFER, glow::COLOR_ATTACHMENT0, glow::RENDERBUFFER, Some(couleur));
+            gl.bind_framebuffer(glow::FRAMEBUFFER, Some(ms));
+            gl.framebuffer_renderbuffer(glow::FRAMEBUFFER, glow::COLOR_ATTACHMENT0, glow::RENDERBUFFER, Some(couleur_ms));
+            gl.framebuffer_renderbuffer(glow::FRAMEBUFFER, glow::DEPTH_ATTACHMENT, glow::RENDERBUFFER, Some(profondeur_ms));
+            let complet = gl.check_framebuffer_status(glow::FRAMEBUFFER) == glow::FRAMEBUFFER_COMPLETE;
+            if complet {
+                gl.viewport(0, 0, largeur, hauteur);
+                self.paint(gl, p, [0, 0, largeur, hauteur]);
+                gl.disable(glow::SCISSOR_TEST);
+                gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(ms));
+                gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(res));
+                gl.blit_framebuffer(0, 0, largeur, hauteur, 0, 0, largeur, hauteur, glow::COLOR_BUFFER_BIT, glow::NEAREST);
+                gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(res));
+                gl.pixel_store_i32(glow::PACK_ALIGNMENT, 1);
+                gl.read_pixels(0, 0, largeur, hauteur, glow::RGBA, glow::UNSIGNED_BYTE, glow::PixelPackData::Slice(Some(&mut pixels)));
+            }
+            gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+            gl.bind_renderbuffer(glow::RENDERBUFFER, None);
+            gl.delete_framebuffer(ms);
+            gl.delete_framebuffer(res);
+            gl.delete_renderbuffer(couleur_ms);
+            gl.delete_renderbuffer(profondeur_ms);
+            gl.delete_renderbuffer(couleur);
+            if !complet {
+                return Err("tampon de trame hors écran incomplet".into());
+            }
+        }
+        // OpenGL lit de bas en haut
+        let ligne = (largeur * 4) as usize;
+        let mut out: Vec<u8> = pixels.chunks_exact(ligne).rev().flatten().copied().collect();
+        for a in out.iter_mut().skip(3).step_by(4) {
+            *a = 255;
+        }
+        Ok(out)
+    }
+
     pub fn destroy(&self, gl: &glow::Context) {
         unsafe {
             gl.delete_program(self.program);

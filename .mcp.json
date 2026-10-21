@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ifc-viewer": {
+      "command": "python",
+      "args": ["tools/viewer-mcp/serveur.py"]
+    }
+  }
+}

@@ -5,6 +5,7 @@ mod camera;
 mod csg;
 mod geom;
 mod model;
+mod pilote;
 mod render;
 mod rvt;
 mod scene;
