@@ -217,6 +217,14 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
         }
     };
     bilan("Sols/plafonds", &mut m.dalles.iter().map(|x| &x.geometrie));
+    bilan("Toposolides", &mut m.toposolides.iter().map(|x| &x.geometrie));
+    for t in &m.toposolides {
+        if let Ok(g) = &t.geometrie {
+            let c = g.controle();
+            let nom = m.types.get(&t.type_id).map(|x| x.nom.as_str()).unwrap_or("?");
+            println!("  {:>10} {:<22} niveau {:>9} décalage {:>9.1} mm  {:.6} m3  {:.4} m2  {} faces", t.id, nom, t.niveau, t.decalage, c.volume_m3, c.aire_m2, g.faces.len());
+        }
+    }
     bilan("Toits", &mut m.toits.iter().map(|x| &x.geometrie));
     bilan("Escaliers", &mut m.escaliers.iter().map(|x| &x.geometrie));
     bilan("Garde-corps", &mut m.garde_corps.iter().map(|x| &x.geometrie));

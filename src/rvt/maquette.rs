@@ -35,6 +35,7 @@ const WALL_TOP_OFFSET: i64 = -1_001_109;
 const FLOOR_HEIGHTABOVELEVEL_PARAM: i64 = -1_001_951;
 const CEILING_HEIGHTABOVELEVEL_PARAM: i64 = -1_002_300;
 const ROOF_LEVEL_OFFSET_PARAM: i64 = -1_001_701;
+const TOPOSOLID_HEIGHTABOVELEVEL_PARAM: i64 = -1_155_255;
 const ALL_MODEL_MARK: i64 = -1_001_203;
 const FAMILY_WIDTH_PARAM: i64 = -1_001_301;
 const FAMILY_HEIGHT_PARAM: i64 = -1_001_300;
@@ -172,7 +173,7 @@ pub struct Mur {
     pub geometrie: Geometrie,
 }
 
-/// Sol (`Floor`) ou plafond (`Ceiling`).
+/// Sol (`Floor`), plafond (`Ceiling`) ou toposolide (`Toposolid`, terrain depuis 2024).
 pub struct Dalle {
     pub id: i64,
     pub classe: String,
@@ -274,6 +275,10 @@ pub struct Maquette {
     pub materiaux: HashMap<i64, Materiau>,
     pub murs: Vec<Mur>,
     pub dalles: Vec<Dalle>,
+    /// Toposolides (terrain) : type `m_TypeId`, niveau (souvent −1 : toposolide issu
+    /// d'une subdivision ou d'un site sans niveau), décalage
+    /// `TOPOSOLID_HEIGHTABOVELEVEL_PARAM`.
+    pub toposolides: Vec<Dalle>,
     pub toits: Vec<Toit>,
     pub escaliers: Vec<Escalier>,
     pub garde_corps: Vec<GardeCorps>,
@@ -310,6 +315,8 @@ enum Sorte {
     Famille,
     Materiau,
     Dalle,
+    /// Toposolide (terrain).
+    Toposolide,
     Toit,
     Escalier,
     /// Volée ou palier d'escalier.
@@ -341,7 +348,7 @@ enum Sorte {
 impl Sorte {
     /// Éléments dont on lit le complément 0x67 (géométrie).
     fn a_geometrie(self) -> bool {
-        matches!(self, Sorte::Mur | Sorte::Dalle | Sorte::Toit | Sorte::Volee | Sorte::GardeCorps | Sorte::Instance | Sorte::Piece | Sorte::Forme | Sorte::Region)
+        matches!(self, Sorte::Mur | Sorte::Dalle | Sorte::Toposolide | Sorte::Toit | Sorte::Volee | Sorte::GardeCorps | Sorte::Instance | Sorte::Piece | Sorte::Forme | Sorte::Region)
     }
 
     /// Sortes lues seulement dans un document de famille : dans un projet, les formes
@@ -365,6 +372,8 @@ impl Sorte {
             _ if h("Symbol") => Sorte::Type,
             _ if h("Family") => Sorte::Famille,
             _ if h("Floor") || h("Ceiling") => Sorte::Dalle,
+            // dérive de CeilingAndFloor, pas de Floor : géométrie B-rep comme un sol
+            _ if h("Toposolid") => Sorte::Toposolide,
             _ if h("RoofBase") => Sorte::Toit,
             _ if h("StairsRunAndLanding") => Sorte::Volee,
             _ if h("FamilyInstance") => Sorte::Instance,
@@ -465,6 +474,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
 
     let (mut types, mut familles, mut materiaux) = (HashMap::new(), HashMap::new(), HashMap::new());
     let (mut murs, mut dalles, mut toits, mut escaliers, mut grilles, mut pieces) = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let mut toposolides = Vec::new();
     let (mut volees, mut instances, mut instances_de_vue, mut garde_corps) = (HashMap::new(), Vec::new(), 0, Vec::new());
     let (mut formes, mut categories) = (Vec::new(), HashMap::new());
     let (mut vues, mut cadrages, mut elements_2d) = (Vec::new(), HashMap::new(), Vec::new());
@@ -478,6 +488,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
             Ok(Extrait::Materiau(id, m)) => drop(materiaux.insert(id, m)),
             Ok(Extrait::Mur(m)) => murs.push(m),
             Ok(Extrait::Dalle(d)) => dalles.push(d),
+            Ok(Extrait::Toposolide(d)) => toposolides.push(d),
             Ok(Extrait::Toit(t)) => toits.push(t),
             Ok(Extrait::Escalier(e)) => escaliers.push(e),
             Ok(Extrait::Volee(id, esc)) => drop(volees.insert(id, esc)),
@@ -532,6 +543,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
 
     // Géométrie, en parallèle.
     let mut a_mailler: Vec<i64> = murs.iter().map(|m| m.id).chain(dalles.iter().map(|d| d.id)).chain(toits.iter().map(|t| t.id)).collect();
+    a_mailler.extend(toposolides.iter().map(|t| t.id));
     a_mailler.extend(escaliers.iter().flat_map(|e| e.parties.iter().copied()));
     a_mailler.extend(garde_corps.iter().map(|g| g.id));
     a_mailler.extend(instances.iter().map(|i| i.id).chain(pieces.iter().map(|p| p.id)));
@@ -552,6 +564,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         materiaux,
         murs,
         dalles,
+        toposolides,
         toits,
         escaliers,
         garde_corps,
@@ -572,6 +585,9 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         x.geometrie = prendre(x.id);
     }
     for x in &mut m.dalles {
+        x.geometrie = prendre(x.id);
+    }
+    for x in &mut m.toposolides {
         x.geometrie = prendre(x.id);
     }
     for x in &mut m.toits {
@@ -715,6 +731,7 @@ enum Extrait {
     Materiau(i64, Materiau),
     Mur(Mur),
     Dalle(Dalle),
+    Toposolide(Dalle),
     Toit(Toit),
     Escalier(Escalier),
     /// Volée ou palier et son escalier (`m_stairsId`).
@@ -788,6 +805,10 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>) -> Ext
             let (champ_type, k) = if o.class_name() == "Ceiling" { ("m_ceilingAttributesId", CEILING_HEIGHTABOVELEVEL_PARAM) } else { ("m_floorAttributesId", FLOOR_HEIGHTABOVELEVEL_PARAM) };
             let p = params(r, o);
             Extrait::Dalle(Dalle { id: eid, classe: o.class_name().to_string(), type_id: id_of(o, champ_type), niveau: id_of(o, "m_assocLevelId"), decalage: reel_p(&p, k) * FT, geometrie: Err(String::new()) })
+        }
+        Sorte::Toposolide => {
+            let p = params(r, o);
+            Extrait::Toposolide(Dalle { id: eid, classe: o.class_name().to_string(), type_id: id_of(o, "m_TypeId"), niveau: id_of(o, "m_assocLevelId"), decalage: reel_p(&p, TOPOSOLID_HEIGHTABOVELEVEL_PARAM) * FT, geometrie: Err(String::new()) })
         }
         Sorte::Toit => {
             let p = params(r, o);
@@ -1063,6 +1084,7 @@ pub fn load_scene(path: &Path, titre: &str, format: &str, progress: &dyn Fn(Stri
     let murs_ko = ko(&mut m.murs.iter().map(|x| &x.geometrie));
     let mailles = m.murs.len() - murs_ko
         + m.dalles.iter().filter(|x| x.geometrie.is_ok()).count()
+        + m.toposolides.iter().filter(|x| x.geometrie.is_ok()).count()
         + m.toits.iter().filter(|x| x.geometrie.is_ok()).count()
         + m.escaliers.iter().filter(|x| x.geometrie.is_ok()).count()
         + m.instances.iter().filter(|x| x.geometrie.is_ok()).count()
@@ -1079,12 +1101,14 @@ pub fn load_scene(path: &Path, titre: &str, format: &str, progress: &dyn Fn(Stri
     let mut s = scene(&m, titre, file_name, format);
     let pieces: Vec<&Piece> = m.pieces.iter().filter(|p| p.genre == "piece" && p.point.is_some()).collect();
     let toutes = m.murs.iter().map(|x| &x.geometrie).chain(m.dalles.iter().map(|x| &x.geometrie)).chain(m.toits.iter().map(|x| &x.geometrie));
+    let toutes = toutes.chain(m.toposolides.iter().map(|x| &x.geometrie));
     let toutes = toutes.chain(m.escaliers.iter().map(|x| &x.geometrie)).chain(m.instances.iter().map(|x| &x.geometrie)).chain(m.garde_corps.iter().map(|x| &x.geometrie));
     let toutes = toutes.chain(m.formes.iter().map(|x| &x.geometrie));
     let solides_ko: usize = toutes.filter_map(|g| g.as_ref().ok()).map(|g| g.echecs.len()).sum();
     for (nom, n) in [
         ("Murs Revit non maillés", murs_ko),
         ("Sols et plafonds Revit non maillés", ko(&mut m.dalles.iter().map(|x| &x.geometrie))),
+        ("Toposolides Revit non maillés", ko(&mut m.toposolides.iter().map(|x| &x.geometrie))),
         ("Toits Revit non maillés", ko(&mut m.toits.iter().map(|x| &x.geometrie))),
         ("Escaliers Revit non maillés", ko(&mut m.escaliers.iter().map(|x| &x.geometrie))),
         ("Garde-corps Revit non maillés", ko(&mut m.garde_corps.iter().map(|x| &x.geometrie))),
@@ -1129,6 +1153,15 @@ fn produits(m: &Maquette) -> Vec<Produit<'_>> {
             ],
             geometrie: &x.geometrie,
         });
+    }
+    for x in &m.toposolides {
+        let nt = nom_type(x.type_id);
+        let mut props = vec![("Classe Revit", Value::Str(x.classe.clone())), ("Type", Value::Str(format!("{nt} [{}]", x.type_id)))];
+        if x.niveau != -1 {
+            props.push(("Niveau", Value::Str(niveau(x.niveau))));
+            props.push(("Hauteur par rapport au niveau", mm(x.decalage)));
+        }
+        out.push(Produit { id: x.id, classe: "IFCGEOGRAPHICELEMENT", nom: format!("{nt} [{}]", x.id), type_id: x.type_id, nom_type: nt.clone(), niveau: x.niveau, props, geometrie: &x.geometrie });
     }
     for x in &m.dalles {
         let nt = nom_type(x.type_id);
@@ -1877,6 +1910,28 @@ mod tests {
         let i = m.instances.iter().find(|i| i.id == 258460).unwrap();
         assert!(i.point.distance(DVec3::new(2345.6, 0.0, 912.3)) < 1e-6, "{:?}", i.point);
         proche(m.murs[0].geometrie.as_ref().unwrap().controle().volume_m3, 2.968736, 1e-6, "volume du mur percé");
+    }
+
+    /// Toposolides de Saint-Malo : 40 terrains, bordures et revêtements, volumes de
+    /// `get_Geometry` relevés par le script RiveTT `rvt-reference-toposolides`.
+    #[test]
+    fn saint_malo_toposolides() {
+        let Some(p) = essai("", "Saint-Malo_avenue aristide briand_46.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        assert_eq!(m.toposolides.len(), 40);
+        assert!(m.toposolides.iter().all(|t| t.geometrie.is_ok()));
+        let t = |id: i64| m.toposolides.iter().find(|t| t.id == id).unwrap();
+        let vol = |id: i64| t(id).geometrie.as_ref().unwrap().controle().volume_m3;
+        // terrain « Contexte 300 » (1 133 faces) : 44 893,385 424 m³ dans Revit
+        assert!((vol(10126070) - 44893.385424).abs() / 44893.385424 < 1e-6, "{}", vol(10126070));
+        assert_eq!(t(10126070).geometrie.as_ref().unwrap().faces.len(), 1133);
+        for (id, v) in [(10477748, 20.05992), (11226899, 3.011512), (11020967, 121.657792), (11167178, 0.799032), (11013412, 0.025601)] {
+            assert!((vol(id) - v).abs() / v < 1e-4, "toposolide {id} : {} au lieu de {v}", vol(id));
+        }
+        // niveau et décalage (TOPOSOLID_HEIGHTABOVELEVEL_PARAM) : −100 mm sur le niveau 512 913
+        assert_eq!((t(11226899).niveau, t(11226899).type_id), (512913, 10049174));
+        proche(t(11226899).decalage, -100.0, 1e-6, "décalage");
+        assert_eq!(m.types[&10049174].nom, "Terre20");
     }
 }
 
