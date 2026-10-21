@@ -345,6 +345,21 @@ def densifier(uv, xyz, polys, tris, P):
     return uv, xyz, tris
 
 
+def polymaillage(n):
+    """Face d'un maillage à facettes (GPolyMesh : surface topographique).
+    m_pFacetedTopology est une FacetedTopologyN dont les bits de N donnent le format
+    (schéma) : 1 indices i32 (i16 sinon), 2 points f32 décalés de m_offset, 4 points
+    f64 (f32 sinon) ; 8 et suivants ajoutent visibilité des arêtes et (u, v), non lus.
+    Facettes triangulaires (m_facetsArr, 3 indices)."""
+    ft = n['m_pFacetedTopology']['corps']
+    if 'm_pointsArr' not in ft:
+        raise Inconnu('%s : points absents (format non décodé)' % ft['_classe'])
+    off = ft.get('m_offset', [0.0, 0.0, 0.0])
+    mm = [tuple((c + o) * FT for c, o in zip(p, off)) for p in ft['m_pointsArr']]
+    tris = [tuple(mm[i] for i in t) for t in ft['m_facetsArr']]
+    return {'surface': 'GPolyMesh', 'materiau': _eid(n['m_materialID']), 'boucles': [], 'triangles': tris}
+
+
 def solides(path, eid, tout=False):
     """B-rep de l'élément : liste de {'chemin', 'categorie', 'ferme', 'faces'} ; une
     face = {'surface', 'materiau', 'boucles': [[(x, y, z) mm…]], 'triangles':
@@ -354,6 +369,10 @@ def solides(path, eid, tout=False):
     root, objs = gelement(path, eid)
     out = []
     for chemin, cat, n in noeuds(root):
+        if n['_classe'] == 'GPolyMesh':
+            # surface topographique : une feuille, rendue dans tous les cas
+            out.append({'chemin': chemin, 'categorie': cat, 'ferme': False, 'faces': [polymaillage(n)]})
+            continue
         if 'm_pFaces' not in n:
             continue
         faces, aretes = [], set()

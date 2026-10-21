@@ -225,6 +225,13 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
             println!("  {:>10} {:<22} niveau {:>9} décalage {:>9.1} mm  {:.6} m3  {:.4} m2  {} faces", t.id, nom, t.niveau, t.decalage, c.volume_m3, c.aire_m2, g.faces.len());
         }
     }
+    bilan("Surfaces topographiques", &mut m.surfaces_topo.iter().map(|x| &x.geometrie));
+    for s in &m.surfaces_topo {
+        if let Ok(g) = &s.geometrie {
+            let c = g.controle();
+            println!("  {:>10} hôte {:>9}  {} points  {} sommets  {} triangles  {:.6} m2  boîte {:.3?} – {:.3?} mm", s.id, s.hote, s.points, g.sommets.len(), c.triangles, c.aire_m2, c.min, c.max);
+        }
+    }
     bilan("Toits", &mut m.toits.iter().map(|x| &x.geometrie));
     bilan("Escaliers", &mut m.escaliers.iter().map(|x| &x.geometrie));
     bilan("Garde-corps", &mut m.garde_corps.iter().map(|x| &x.geometrie));

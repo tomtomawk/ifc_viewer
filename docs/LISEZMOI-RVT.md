@@ -19,7 +19,7 @@ par Autodesk. Les points non vérifiés sont signalés comme tels. Méthode d'es
 | Partitions `Partitions/*` | **cadrage complet** : 3 sections, un enregistrement par élément ; inventaire identique à Revit (§ 7) |
 | Champs des objets | **lus en entier** par un lecteur générique piloté par le schéma : 100 % des enregistrements sur les fichiers 2016, 2022, 2025, 2026 et 2027 essayés, hors données d'add-ins (§ 7) |
 | Murs | type, niveaux, ligne (droite ou arc), hauteur et décalages extraits ; identiques à Revit sur 75 murs de deux projets et deux essais (§ 7) |
-| Autres éléments | niveaux, types (nom, épaisseur), familles (nom, catégorie), matériaux (nom, couleur, transparence), sols et plafonds, toposolides (terrain), toits, escaliers (niveaux, contremarches, giron, volées), grilles, instances de familles (type, hôte, position, repère), pièces : identiques à Revit sur trois projets et un essai (§ 7) |
+| Autres éléments | niveaux, types (nom, épaisseur), familles (nom, catégorie), matériaux (nom, couleur, transparence), sols et plafonds, toposolides et surfaces topographiques (terrain), toits, escaliers (niveaux, contremarches, giron, volées), grilles, instances de familles (type, hôte, position, repère), pièces : identiques à Revit sur trois projets et un essai (§ 7) |
 | Géométrie calculée (`GElement`) | B-rep lu et maillé pour murs, sols, plafonds, toits, escaliers, garde-corps, pièces et **familles** (faces planes, cylindriques, réglées et de révolution, trous ; vides écartés) ; volumes identiques à Revit pour 59 murs, 21 sols sur 22, 10 toits, 4 escaliers, 16 garde-corps et 59 pièces (§ 7) |
 | Familles (`GInstance`) | géométrie du type placée par le repère de l'instance, filtrée comme une vue 3D en détail fin ; 373 instances sur 448 de volume identique à Revit, 404 à moins de 1 % (§ 7, « Familles ») |
 | Documents de famille (`.rfa`) | extrusions, raccords, révolutions, balayages et combinaisons lus et affichés ; volumes identiques à Revit (§ 7, « Documents de famille ») |
@@ -53,7 +53,7 @@ ouvert dans Revit 2027 via RiveTT).
 | `Kerreut 2025.rvt`, `Langan.rvt`, `BIBLIO.rvt`, `Guidel.rvt` | projets d'agence (`Documents\Thomas\ARCHI PERSO`) | 2025 | — |
 | `Kerreutv9.rvt`, `Colombes.rvt` | projets d'agence | 2022 | 138,2 Mo (Kerreutv9) |
 | `Phase2_Lecture.rvt` | projet de Saint-Malo enregistré en 2027 (`Recettes\`) | 2027 | — |
-| `Essais-format/2026/*.rvt` | essais produits par RiveTT (protocole), dont E12 (grilles) | 2026 | 0,5 à 1,6 Mo |
+| `Essais-format/2026/*.rvt` | essais produits par RiveTT (protocole), dont E12 (grilles), E15 (surface topographique) | 2026 | 0,5 à 1,6 Mo |
 | `FEN_2PF.rfa`, `Projet vide.rvt` | famille de fenêtre de l'agence (6 types) et projet issu du gabarit, fournis le 21/10 | 2026 | 0,7 et 1,6 Mo |
 | `Essais-format/2026/C14/*` | campagne C14 : F00 à F04 (projet vide, famille chargée, mur, fenêtre placée une puis deux fois), E13 (vues et 2D), W0 à W6 (écriture) | 2026 | 0,7 à 2,1 Mo |
 
@@ -625,6 +625,7 @@ d'élément). Emplacements établis :
 | volée, palier | dérivées de `StairsRunAndLanding` (`StairsRun`, `StairsLanding`) | escalier `m_stairsId` (souvent −1 : le lien est dans la liste de l'escalier) ; géométrie dans leur `GElement` |
 | grille | `Grid` (→ `DatumPlane`) | nom `m_text` ; plan vertical `m_pSurface` (`Plane` pour une grille droite, `CylSurf` pour une grille courbe) ; trace = point(u, 0) pour u entre les bornes de `Surface.m_Envelope` |
 | toposolide (terrain, 2024+) | `Toposolid` (→ `CeilingAndFloor`, **pas** `Floor`) | type `m_TypeId` (`ToposolidType`, nom par `m_symbolInfo`), niveau `m_assocLevelId` (−1 pour un toposolide sans niveau : contexte importé, subdivision), décalage `TOPOSOLID_HEIGHTABOVELEVEL_PARAM` (−1 155 255) ; toposolide hôte d'une subdivision `m_hostTopoId` ; géométrie : B-rep du `GElement` comme un sol |
+| surface topographique (avant 2024) | `SiteSurface` (→ `Element`) | sous-région : `m_hostId` (−1 pour une surface) ; sous-régions d'une surface : `m_siteAreas` ; points saisis : `m_fixedVerts` du premier `TriangulationDriverMemento` de `m_drivers[0].m_pMementos` (`m_loc` jusqu'en 2022, `m_locXYZ.m_xyz` en 2024 et suivants) ; géométrie : `GPolyMesh` du `GElement` |
 
 Les ids de paramètres (BuiltInParameter) et de catégories (BuiltInCategory) sont
 ceux de l'API publique de Revit, relevés dans Revit 2026 par un script RiveTT ; les
@@ -858,15 +859,19 @@ Saint-Malo : 2 585 instances sur 3 116 maillées ; les autres sont des symboles
 sans volume. Garde-corps : 11 / 11 et 5 / 5 de volume identique à Revit, 96 / 118
 maillés à Saint-Malo.
 
-### Topographie (toposolides)
+### Topographie (toposolides et surfaces topographiques)
 
 Seuls des **toposolides** sont présents dans le corpus : 40 dans Saint-Malo (terrain
 « Contexte 300 », subdivisions « Contexte 5 » et « Enrobé 5 », bordures, terre,
-béton), aucun dans les autres projets ; les anciennes surfaces topographiques
-(`SiteSurface`, `TopographySurface` de l'API) n'apparaissent dans aucun fichier
-parcouru. Le toposolide dérivant de `CeilingAndFloor` et non de `Floor`, il n'était
-pas lu ; sa géométrie (`GElement`) se maille par le chemin B-rep existant, y compris le
-terrain de 1 133 faces (faces planes et cylindriques).
+béton) et 22 dans son ancienne version `Appartement_T2_MCP_Test.rvt` (22 / 22
+maillés), aucun dans les autres projets. Les anciennes surfaces topographiques
+(`SiteSurface`, `TopographySurface` de l'API) n'existent dans le corpus que dans
+`LOT2.rvt` (2022) : deux, membres d'un type de groupe jamais placé
+(`m_unplacedOwnerId` = un `ElementGroupType`) ; Revit 2026 n'en renvoie aucune, le
+lecteur les écarte comme tout élément non placé. Le toposolide dérivant de
+`CeilingAndFloor` et non de `Floor`, il n'était pas lu ; sa géométrie (`GElement`) se
+maille par le chemin B-rep existant, y compris le terrain de 1 133 faces (faces planes
+et cylindriques).
 
 Validation contre l'API de Revit 2026 (script RiveTT `rvt-reference-toposolides` :
 volume et aire des solides de `get_Geometry`, nombre de faces, boîte, type, niveau,
@@ -879,6 +884,40 @@ suffit à l'affichage.
 Viewer : classe `IFCGEOGRAPHICELEMENT`, faces colorées par matériau, motifs de surface
 compris ; `--stats` donne le bilan « Toposolides ». Saint-Malo : 40 / 40 maillés,
 45 414,8 m³.
+
+**Surface topographique** (`SiteSurface`). L'enregistrement 0x66 porte la
+triangulation dans `m_drivers` : `TriangulationDriver.m_pMementos`, une suite d'états
+`TriangulationDriverMemento` (sommets fixes `m_fixedVerts`, arêtes imposées, contour
+`m_boundary`, maillage `m_pMesh`). Le premier état donne les points saisis
+(`GetPoints` de l'API) ; une surface qui porte une sous-région en a un second, dont les
+sommets ajoutent les intersections avec le contour de la sous-région. `m_manager`
+(`ContourManager`) garde en cache les courbes de niveau (polylignes par altitude,
+non lues).
+
+La géométrie (0x67) est un `GElement` à un `GFilter` et un `GPolyMesh` : maillage à
+facettes, matériau `m_materialID` (le paramètre `MATERIAL_ID_PARAM` de l'API),
+topologie `m_pFacetedTopology` de classe `FacetedTopologyN`. D'après le schéma, les
+bits de N donnent le format : 1 indices i32 (i16 sinon), 2 points f32 décalés de
+`m_offset`, 4 points f64 (f32 sinon), 8 visibilité des arêtes, 16 et 32 coordonnées
+(u, v) ; les variantes « t » (`FacetedTopology0t`…) n'ont aucun champ enregistré, non
+rencontrées. Facettes triangulaires (`m_facetsArr`, 3 indices) ; une surface et sa
+sous-région ne se recouvrent pas : le maillage de la surface est évidé au contour de
+la sous-région.
+
+Validation sur l'essai **E15** (`Essais-format/2026/E15_surface_topo.rvt`, créé depuis
+V0 par le script RiveTT `rvt-essai-e15-surface-topo` : surface de 42 points en
+relief, matériau 90, sous-région rectangulaire de 12 × 10 m), comparé au script
+`rvt-reference-toposurfaces` (`GetPoints`, maillage de `get_Geometry`, boîte,
+paramètres) :
+
+| Élément | Points | Sommets | Triangles | Aire | Boîte |
+|---|---|---|---|---|---|
+| surface 2797 | 42 / 42, écart nul | 58 / 58 | 84 / 84 | 829,698725 m² dans les deux cas | identique |
+| sous-région 2840 (hôte 2797) | 24 / 24, écart nul | 24 / 24 | 26 / 26 | 120,73165 m² dans les deux cas | identique |
+
+Viewer : classe `IFCGEOGRAPHICELEMENT` (« Surface topographique » ou « Sous-région »,
+propriétés surface hôte et nombre de points), couleur du matériau ; `--stats` donne le
+bilan « Surfaces topographiques ».
 
 ### Hachures
 
@@ -1033,7 +1072,7 @@ escaliers, garde-corps, pièces, instances et leur géométrie, cotes d'une port
 révolution, cotes d'une porte), E12 (grilles), `FEN_2PF.rfa` (formes, vues, cotes et
 textes), C14 F04 (fenêtres placées), E13 (vues et 2D, objets de la scène), Kerreut
 (hachures ; motifs de surface : orientation et trame des joints), Saint-Malo
-(toposolides), découpage des
+(toposolides), E15 (surface topographique et sous-région), découpage des
 hachures sur un carré et texte RTF (sans fichier), sautés si les fichiers sont absents.
 `--stats` donne aussi le bilan de la scène (objets, triangles, traits des motifs). Dossiers : `RVT_ESSAIS` (défaut `C:\Users\theba\Desktop\Revit`) et
 `RVT_CORPUS` (défaut `C:\Users\theba\Documents\Thomas\ARCHI PERSO`).

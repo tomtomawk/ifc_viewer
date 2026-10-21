@@ -184,6 +184,17 @@ pub struct Dalle {
     pub geometrie: Geometrie,
 }
 
+/// Surface topographique (`SiteSurface`, `TopographySurface` de l'API : le terrain
+/// d'avant les toposolides de 2024) ou sous-région (`m_hostId`, −1 sans hôte) ;
+/// géométrie : maillage à facettes (`GPolyMesh`) du `GElement`.
+pub struct SurfaceTopo {
+    pub id: i64,
+    pub hote: i64,
+    /// Points saisis (`GetPoints` de l'API).
+    pub points: usize,
+    pub geometrie: Geometrie,
+}
+
 /// Toit (classes dérivées de `RoofBase` : `ProfileRoof` pour un toit par tracé…).
 pub struct Toit {
     pub id: i64,
@@ -279,6 +290,8 @@ pub struct Maquette {
     /// d'une subdivision ou d'un site sans niveau), décalage
     /// `TOPOSOLID_HEIGHTABOVELEVEL_PARAM`.
     pub toposolides: Vec<Dalle>,
+    /// Surfaces topographiques et sous-régions (`SiteSurface`, fichiers d'avant 2024).
+    pub surfaces_topo: Vec<SurfaceTopo>,
     pub toits: Vec<Toit>,
     pub escaliers: Vec<Escalier>,
     pub garde_corps: Vec<GardeCorps>,
@@ -317,6 +330,8 @@ enum Sorte {
     Dalle,
     /// Toposolide (terrain).
     Toposolide,
+    /// Surface topographique ou sous-région (`SiteSurface`).
+    SurfaceTopo,
     Toit,
     Escalier,
     /// Volée ou palier d'escalier.
@@ -348,7 +363,7 @@ enum Sorte {
 impl Sorte {
     /// Éléments dont on lit le complément 0x67 (géométrie).
     fn a_geometrie(self) -> bool {
-        matches!(self, Sorte::Mur | Sorte::Dalle | Sorte::Toposolide | Sorte::Toit | Sorte::Volee | Sorte::GardeCorps | Sorte::Instance | Sorte::Piece | Sorte::Forme | Sorte::Region)
+        matches!(self, Sorte::Mur | Sorte::Dalle | Sorte::Toposolide | Sorte::SurfaceTopo | Sorte::Toit | Sorte::Volee | Sorte::GardeCorps | Sorte::Instance | Sorte::Piece | Sorte::Forme | Sorte::Region)
     }
 
     /// Sortes lues seulement dans un document de famille : dans un projet, les formes
@@ -365,6 +380,7 @@ impl Sorte {
             "StairsElement" => Sorte::Escalier,
             "Grid" => Sorte::Grille,
             "RoomElem" => Sorte::Piece,
+            "SiteSurface" => Sorte::SurfaceTopo,
             // type de région remplie : un Symbol, lu à part (motifs et couleurs)
             "FilledRegionAttributes" => Sorte::TypeRegion,
             _ if h("Level") => Sorte::Niveau,
@@ -474,7 +490,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
 
     let (mut types, mut familles, mut materiaux) = (HashMap::new(), HashMap::new(), HashMap::new());
     let (mut murs, mut dalles, mut toits, mut escaliers, mut grilles, mut pieces) = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
-    let mut toposolides = Vec::new();
+    let (mut toposolides, mut surfaces_topo) = (Vec::new(), Vec::new());
     let (mut volees, mut instances, mut instances_de_vue, mut garde_corps) = (HashMap::new(), Vec::new(), 0, Vec::new());
     let (mut formes, mut categories) = (Vec::new(), HashMap::new());
     let (mut vues, mut cadrages, mut elements_2d) = (Vec::new(), HashMap::new(), Vec::new());
@@ -489,6 +505,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
             Ok(Extrait::Mur(m)) => murs.push(m),
             Ok(Extrait::Dalle(d)) => dalles.push(d),
             Ok(Extrait::Toposolide(d)) => toposolides.push(d),
+            Ok(Extrait::SurfaceTopo(x)) => surfaces_topo.push(x),
             Ok(Extrait::Toit(t)) => toits.push(t),
             Ok(Extrait::Escalier(e)) => escaliers.push(e),
             Ok(Extrait::Volee(id, esc)) => drop(volees.insert(id, esc)),
@@ -543,7 +560,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
 
     // Géométrie, en parallèle.
     let mut a_mailler: Vec<i64> = murs.iter().map(|m| m.id).chain(dalles.iter().map(|d| d.id)).chain(toits.iter().map(|t| t.id)).collect();
-    a_mailler.extend(toposolides.iter().map(|t| t.id));
+    a_mailler.extend(toposolides.iter().map(|t| t.id).chain(surfaces_topo.iter().map(|x| x.id)));
     a_mailler.extend(escaliers.iter().flat_map(|e| e.parties.iter().copied()));
     a_mailler.extend(garde_corps.iter().map(|g| g.id));
     a_mailler.extend(instances.iter().map(|i| i.id).chain(pieces.iter().map(|p| p.id)));
@@ -565,6 +582,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         murs,
         dalles,
         toposolides,
+        surfaces_topo,
         toits,
         escaliers,
         garde_corps,
@@ -588,6 +606,9 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         x.geometrie = prendre(x.id);
     }
     for x in &mut m.toposolides {
+        x.geometrie = prendre(x.id);
+    }
+    for x in &mut m.surfaces_topo {
         x.geometrie = prendre(x.id);
     }
     for x in &mut m.toits {
@@ -732,6 +753,7 @@ enum Extrait {
     Mur(Mur),
     Dalle(Dalle),
     Toposolide(Dalle),
+    SurfaceTopo(SurfaceTopo),
     Toit(Toit),
     Escalier(Escalier),
     /// Volée ou palier et son escalier (`m_stairsId`).
@@ -809,6 +831,18 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>) -> Ext
         Sorte::Toposolide => {
             let p = params(r, o);
             Extrait::Toposolide(Dalle { id: eid, classe: o.class_name().to_string(), type_id: id_of(o, "m_TypeId"), niveau: id_of(o, "m_assocLevelId"), decalage: reel_p(&p, TOPOSOLID_HEIGHTABOVELEVEL_PARAM) * FT, geometrie: Err(String::new()) })
+        }
+        Sorte::SurfaceTopo => {
+            // points saisis : sommets fixes du premier état de la triangulation
+            // (`m_drivers[0].m_pMementos[0]`) ; l'état suivant d'une surface hôte ajoute
+            // les intersections avec le contour de ses sous-régions
+            let points = (|| {
+                let d = r.deref(o.get("m_drivers")?.list().first()?)?;
+                let m = r.deref(d.obj.get("m_pMementos")?.list().first()?)?;
+                Some(m.obj.get("m_fixedVerts")?.list().len())
+            })()
+            .unwrap_or(0);
+            Extrait::SurfaceTopo(SurfaceTopo { id: eid, hote: id_of(o, "m_hostId"), points, geometrie: Err(String::new()) })
         }
         Sorte::Toit => {
             let p = params(r, o);
@@ -1085,6 +1119,7 @@ pub fn load_scene(path: &Path, titre: &str, format: &str, progress: &dyn Fn(Stri
     let mailles = m.murs.len() - murs_ko
         + m.dalles.iter().filter(|x| x.geometrie.is_ok()).count()
         + m.toposolides.iter().filter(|x| x.geometrie.is_ok()).count()
+        + m.surfaces_topo.iter().filter(|x| x.geometrie.is_ok()).count()
         + m.toits.iter().filter(|x| x.geometrie.is_ok()).count()
         + m.escaliers.iter().filter(|x| x.geometrie.is_ok()).count()
         + m.instances.iter().filter(|x| x.geometrie.is_ok()).count()
@@ -1101,7 +1136,7 @@ pub fn load_scene(path: &Path, titre: &str, format: &str, progress: &dyn Fn(Stri
     let mut s = scene(&m, titre, file_name, format);
     let pieces: Vec<&Piece> = m.pieces.iter().filter(|p| p.genre == "piece" && p.point.is_some()).collect();
     let toutes = m.murs.iter().map(|x| &x.geometrie).chain(m.dalles.iter().map(|x| &x.geometrie)).chain(m.toits.iter().map(|x| &x.geometrie));
-    let toutes = toutes.chain(m.toposolides.iter().map(|x| &x.geometrie));
+    let toutes = toutes.chain(m.toposolides.iter().map(|x| &x.geometrie)).chain(m.surfaces_topo.iter().map(|x| &x.geometrie));
     let toutes = toutes.chain(m.escaliers.iter().map(|x| &x.geometrie)).chain(m.instances.iter().map(|x| &x.geometrie)).chain(m.garde_corps.iter().map(|x| &x.geometrie));
     let toutes = toutes.chain(m.formes.iter().map(|x| &x.geometrie));
     let solides_ko: usize = toutes.filter_map(|g| g.as_ref().ok()).map(|g| g.echecs.len()).sum();
@@ -1109,6 +1144,7 @@ pub fn load_scene(path: &Path, titre: &str, format: &str, progress: &dyn Fn(Stri
         ("Murs Revit non maillés", murs_ko),
         ("Sols et plafonds Revit non maillés", ko(&mut m.dalles.iter().map(|x| &x.geometrie))),
         ("Toposolides Revit non maillés", ko(&mut m.toposolides.iter().map(|x| &x.geometrie))),
+        ("Surfaces topographiques Revit non maillées", ko(&mut m.surfaces_topo.iter().map(|x| &x.geometrie))),
         ("Toits Revit non maillés", ko(&mut m.toits.iter().map(|x| &x.geometrie))),
         ("Escaliers Revit non maillés", ko(&mut m.escaliers.iter().map(|x| &x.geometrie))),
         ("Garde-corps Revit non maillés", ko(&mut m.garde_corps.iter().map(|x| &x.geometrie))),
@@ -1162,6 +1198,12 @@ fn produits(m: &Maquette) -> Vec<Produit<'_>> {
             props.push(("Hauteur par rapport au niveau", mm(x.decalage)));
         }
         out.push(Produit { id: x.id, classe: "IFCGEOGRAPHICELEMENT", nom: format!("{nt} [{}]", x.id), type_id: x.type_id, nom_type: nt.clone(), niveau: x.niveau, props, geometrie: &x.geometrie });
+    }
+    for x in &m.surfaces_topo {
+        let (nom, mut props) = if x.hote == -1 { ("Surface topographique", vec![]) } else { ("Sous-région", vec![("Surface hôte", Value::Str(x.hote.to_string()))]) };
+        props.insert(0, ("Classe Revit", Value::Str("SiteSurface".into())));
+        props.push(("Points", Value::Str(x.points.to_string())));
+        out.push(Produit { id: x.id, classe: "IFCGEOGRAPHICELEMENT", nom: format!("{nom} [{}]", x.id), type_id: -1, nom_type: nom.into(), niveau: -1, props, geometrie: &x.geometrie });
     }
     for x in &m.dalles {
         let nt = nom_type(x.type_id);
@@ -1933,8 +1975,30 @@ mod tests {
         proche(t(11226899).decalage, -100.0, 1e-6, "décalage");
         assert_eq!(m.types[&10049174].nom, "Terre20");
     }
+
+    /// Essai E15 : surface topographique de 42 points et sous-région rectangulaire
+    /// créées dans Revit 2026 (script RiveTT `rvt-essai-e15-surface-topo`) ; points,
+    /// sommets, triangles, aire et boîte du maillage de `get_Geometry` relevés par
+    /// `rvt-reference-toposurfaces`.
+    #[test]
+    fn e15_surface_topo() {
+        let Some(p) = essai(r"Essais-format\2026", "E15_surface_topo.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        assert_eq!(m.surfaces_topo.len(), 2);
+        for (id, hote, points, sommets, triangles, aire, min, max) in [
+            (2797, -1, 42, 58, 84, 829.698725, [0.0, 0.0, -3.308721], [120.406824, 84.645669, 6.806726]),
+            (2840, 2797, 24, 24, 26, 120.73165, [26.246719, 19.685039, 1.491963], [65.616798, 52.493439, 5.053267]),
+        ] {
+            let s = m.surfaces_topo.iter().find(|s| s.id == id).unwrap();
+            assert_eq!((s.hote, s.points), (hote, points), "{id}");
+            let g = s.geometrie.as_ref().unwrap();
+            let c = g.controle();
+            assert_eq!((g.sommets.len(), c.triangles), (sommets, triangles), "{id}");
+            proche(c.aire_m2, aire, 1e-6, "aire");
+            for k in 0..3 {
+                proche(c.min[k], min[k] * FT, 0.01, "boîte min");
+                proche(c.max[k], max[k] * FT, 0.01, "boîte max");
+            }
+        }
+    }
 }
-
-
-
-

@@ -493,6 +493,13 @@ impl Parcours<'_, '_, '_> {
                 }
             }
             "GInstance" => return self.instance(rec, n, t, prof),
+            "GPolyMesh" => {
+                match polymaillage(rec, n) {
+                    Ok(f) => self.ajouter(std::iter::once(&f), t),
+                    Err(e) => self.echecs.push(e),
+                }
+                return;
+            }
             _ => {}
         }
         if n.get("m_pFaces").is_some() {
@@ -584,6 +591,42 @@ fn motif_face(rec: &Record, f: &Obj, s: &Obj) -> Option<MotifFace> {
 /// Faces (pieds) d'une `Geometry` si c'est un solide fermé de volume positif ; une
 /// feuille (plans de référence d'un mur) n'est gardée qu'avec `tout`. Les arêtes hors
 /// boucle de `m_pEdges` (murs joints) sont ignorées.
+/// Maillage à facettes (`GPolyMesh` : surface topographique) : `m_pFacetedTopology` est
+/// une `FacetedTopologyN` dont les bits de N donnent le format, d'après le schéma :
+/// 1 indices i32 (i16 sinon), 2 points f32 décalés de `m_offset`, 4 points f64 (f32
+/// sinon) ; 8 et suivants ajoutent visibilité des arêtes et coordonnées (u, v), non
+/// lues. Facettes triangulaires (`m_facetsArr`, 3 indices).
+fn polymaillage(rec: &Record, n: &Obj) -> Result<Face, String> {
+    let ft = rec.field_body(n, "m_pFacetedTopology").ok_or("GPolyMesh sans FacetedTopology")?;
+    let nom = ft.class_name();
+    let decalage = match ft.get("m_offset") {
+        Some(_) => vec3(ft, "m_offset")?,
+        None => DVec3::ZERO,
+    };
+    let points = ft.get("m_pointsArr").map(Val::list).ok_or_else(|| format!("{nom} : points absents (format non décodé)"))?;
+    let points = points
+        .iter()
+        .map(|p| match p.reals().as_deref() {
+            Some(&[x, y, z]) => Ok(DVec3::new(x, y, z) + decalage),
+            _ => err(format!("{nom}.m_pointsArr : 3 réels attendus")),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let triangles = ft
+        .get("m_facetsArr")
+        .map(Val::list)
+        .unwrap_or_default()
+        .iter()
+        .map(|f| {
+            let ix: Vec<usize> = f.list().iter().filter_map(Val::int).filter_map(|i| usize::try_from(i).ok()).filter(|&i| i < points.len()).collect();
+            match ix[..] {
+                [a, b, c] => Ok([points[a], points[b], points[c]]),
+                _ => err(format!("{nom}.m_facetsArr : facette invalide")),
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Face { materiau: eid(n, "m_materialID"), triangles, motif: None })
+}
+
 fn solide(rec: &Record, n: &Obj, tout: bool) -> Result<Option<Vec<Face>>, String> {
     let mut faces = Vec::new();
     let mut aretes = BTreeSet::new();
