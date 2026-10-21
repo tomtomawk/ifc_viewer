@@ -16,6 +16,14 @@ use std::path::PathBuf;
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
+    // Mode console : ifc_viewer --parametres fichier.rvt (valeurs brutes, unités internes)
+    if args.first().map(|s| s.as_str()) == Some("--parametres") {
+        let Some(path) = args.get(1) else {
+            eprintln!("Usage : ifc_viewer --parametres <fichier.rvt|.rfa|.rte>");
+            std::process::exit(2);
+        };
+        std::process::exit(rvt_parametres(&PathBuf::from(path)));
+    }
     // Mode console : ifc_viewer --stats fichier.ifc
     if args.first().map(|s| s.as_str()) == Some("--stats") {
         let Some(path) = args.get(1) else {
@@ -103,6 +111,43 @@ fn stats(path: PathBuf) -> i32 {
     }
 }
 
+/// Valeurs de paramètres décodées, une par ligne : élément, paramètre, stockage, valeur
+/// brute (unités internes de Revit), pour comparaison avec l'API.
+fn rvt_parametres(path: &std::path::Path) -> i32 {
+    use rvt::parametres::{Brut, Stockage, integres};
+    let m = match rvt::maquette::lire(path, &|_| {}) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Erreur : {e}");
+            return 1;
+        }
+    };
+    let mut ids: Vec<&i64> = m.parametres.keys().collect();
+    ids.sort();
+    for e in ids {
+        for (p, b) in &m.parametres[e] {
+            let st = m.definitions.get(p).map(|d| d.stockage).or_else(|| integres().get(p).map(|i| i.stockage)).unwrap_or(Stockage::Aucun);
+            let (s, v) = match b.selon(st) {
+                Brut::Reel(x) => ("Double", format!("{x:?}")),
+                Brut::Entier(i) => ("Integer", i.to_string()),
+                Brut::Id(i) => ("ElementId", i.to_string()),
+                Brut::Texte(t) => ("String", t.replace('\\', "\\\\").replace('\t', "\\t").replace('\n', "\\n").replace('\r', "\\r")),
+                Brut::Nomme { .. } => ("?", String::new()),
+            };
+            println!("{e}\t{p}\t{s}\t{v}");
+        }
+    }
+    // IfcGUID calculés (paramètres IFC_GUID et IFC_TYPE_GUID de l'API)
+    let mut ids: Vec<&i64> = m.episode_de.keys().collect();
+    ids.sort();
+    for e in ids {
+        if let Some(g) = m.guid_ifc(*e) {
+            println!("{e}\tifcguid\tString\t{g}");
+        }
+    }
+    0
+}
+
 fn rvt_stats(path: &std::path::Path) -> i32 {
     let info = match rvt::load(path) {
         Ok(i) => i,
@@ -160,6 +205,20 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
     for n in &m.niveaux {
         println!("  {:<34} {} mm", n.nom, step::format_real((n.altitude * 10.0).round() / 10.0));
     }
+    let mut genres = std::collections::BTreeMap::<&str, usize>::new();
+    for d in m.definitions.values() {
+        *genres.entry(d.genre.as_str()).or_default() += 1;
+    }
+    let partages = m.definitions.values().filter(|d| d.guid.is_some()).count();
+    let occurrence = m.definitions.values().filter(|d| d.occurrence == Some(true)).count();
+    let valeurs: usize = m.parametres.values().map(Vec::len).sum();
+    println!(
+        "Paramètres   : {} définitions ({}), dont {partages} avec GUID et {occurrence} de famille d'occurrence ; {valeurs} valeurs sur {} éléments",
+        m.definitions.len(),
+        genres.iter().map(|(g, n)| format!("{g} {n}")).collect::<Vec<_>>().join(", "),
+        m.parametres.len()
+    );
+    println!("Identifiants : {} épisodes, {} éléments avec UniqueId", m.episodes.len(), m.episode_de.len());
     let lus: Vec<_> = m.murs.iter().filter_map(|w| Some((w, w.geometrie.as_ref().ok()?.controle()))).collect();
     let fermes = lus.iter().filter(|(_, c)| c.non_appariees == 0).count();
     println!("Murs         : {} ({} maillés, dont {fermes} fermés)", m.murs.len(), lus.len());

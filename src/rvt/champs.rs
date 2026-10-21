@@ -21,8 +21,8 @@ pub enum Val<'s> {
     Int(i64),
     Real(f64),
     Str(String),
-    /// GUID (valeur non conservée).
-    Guid,
+    /// GUID, octets tels qu'enregistrés (GUID Windows).
+    Guid([u8; 16]),
     List(Vec<Val<'s>>),
     Obj(Obj<'s>),
     /// Pointeur possédé : indice du corps dans `Record::bodies`.
@@ -220,8 +220,7 @@ impl<'s> Lecteur<'s, '_> {
                 Val::Str(String::from_utf16_lossy(&units))
             }
             0x09 => {
-                take::<16>(self, "GUID")?;
-                Val::Guid
+                Val::Guid(take::<16>(self, "GUID")?)
             }
             0x0A => Val::Int(self.u16()? as i64),
             0x0D => self.value(t.elem.as_deref().ok_or("tableau sans type d'élément")?, depth)?,

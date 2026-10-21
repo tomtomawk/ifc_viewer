@@ -1,0 +1,127 @@
+# Groupes de paramètres de Revit 2026 (ParameterUtils.GetAllBuiltInGroups, LabelUtils.GetLabelForGroup),
+# interface française, relevés par RiveTT (script rvt-reference-groupes-uniqueid) : identifiant sans version, libellé.
+autodesk.parameter.group:constraints	Contraintes
+autodesk.parameter.group:construction	Construction
+autodesk.parameter.group:graphics	Graphismes
+autodesk.parameter.group:text	Texte
+autodesk.parameter.group:materials	Matériaux et finitions
+autodesk.parameter.group:dimensions	Cotes
+autodesk.parameter.group:identityData	Données d'identification
+autodesk.parameter.group:phasing	Phase de construction
+autodesk.parameter.group:ifc	Paramètres IFC
+autodesk.parameter.group:general	Général
+autodesk.parameter.group:data	Données
+autodesk.parameter.group:visibility	Visibilité
+autodesk.parameter.group:structural	Structure
+autodesk.parameter.group:structuralAnalysis	Analyse structurelle
+autodesk.parameter.group:analyticalModel	Modèle analytique
+autodesk.parameter.group:analyticalAlignment	Alignement analytique
+autodesk.parameter.group:energyAnalysis	Analyse d'énergie
+autodesk.parameter.group:greenBuilding	Propriétés Green Building
+autodesk.parameter.group:fireProtection	Protection contre les incendies
+autodesk.parameter.group:lifeSafety	Sécurité des personnes
+autodesk.parameter.group:title	Texte du titre
+autodesk.parameter.group:overallLegend	Légende globale
+autodesk.parameter.group:viewPositioning	Positionnement de la vue sur la feuille
+autodesk.parameter.group:visualization	Visualisation
+autodesk.parameter.group:adskModelProperties	Propriétés du modèle
+autodesk.parameter.group:analysisResults	Résultats de l'analyse
+autodesk.parameter.group:lightPhotometrics	Photométriques
+autodesk.parameter.group:electrical	Electrique
+autodesk.parameter.group:electricalEngineering	Electrotechnique
+autodesk.parameter.group:electricalLighting	Electricité - Eclairage
+autodesk.parameter.group:electricalLoads	Electricité - Charges
+autodesk.parameter.group:electricalCircuiting	Electricité - Circuit
+autodesk.parameter.group:electricalAnalysis	Analyse électrique
+autodesk.parameter.group:mechanical	Génie climatique
+autodesk.parameter.group:mechanicalAirflow	Génie climatique - Débit
+autodesk.parameter.group:mechanicalLoads	Génie climatique - Charges
+autodesk.parameter.group:plumbing	Plomberie
+autodesk.parameter.group:segmentsFittings	Segments et raccords
+autodesk.parameter.group:primaryEnd	Extrémité principale
+autodesk.parameter.group:secondaryEnd	Extrémité secondaire
+autodesk.parameter.group:forces	Forces
+autodesk.parameter.group:moments	Moments
+autodesk.parameter.group:releasesMemberForces	Relâchements / Forces des éléments
+autodesk.parameter.group:rebarArray	Jeu d'armatures
+autodesk.parameter.group:couplerArray	Jeu
+autodesk.parameter.group:rebarSystemLayers	Couches
+autodesk.parameter.group:slabShapeEdit	Modification de la forme de dalle
+autodesk.parameter.group:divisionGeometry	Géométrie de division
+autodesk.parameter.group:toposolidSubdivision	Sous-division
+autodesk.parameter.group:structuralSectionDimensions	Cotes de coupe structurelle
+autodesk.revit.group:geometryPositioning	Position géométrique
+autodesk.revit.group:wallCrossSectionDefinition	Définition de la coupe transversale
+autodesk.revit.group:reference	Référence
+autodesk.revit.group:underlay	Niveau en fond de plan
+autodesk.revit.group:display	Vue
+autodesk.revit.group:viewExtents	Etendues
+autodesk.revit.group:viewCamera	Caméra
+autodesk.revit.group:analyticalProperties	Propriétés analytiques
+autodesk.revit.group:energyAnalysisDetailedAndConceptualModels	Essentiel
+autodesk.revit.group:energyAnalysisDetailedModel	Modèle détaillé
+autodesk.revit.group:energyAnalysisConceptualModel	Modèle analytique d'énergie
+autodesk.revit.group:energyAnalysisAdvanced	Avancé
+autodesk.revit.group:energyAnalysisBuildingData	Données de construction
+autodesk.revit.group:energyAnalysisRoomSpaceData	Données de pièce/d'espace
+autodesk.revit.group:energyAnalysisBldgConsMtlThermalProps	Propriétés thermiques des matériaux
+autodesk.revit.group:conceptualEnergyData	Données sur l'énergie conceptuelle
+autodesk.revit.group:conceptualEnergyDataBuildingServices	Modèle énergétique - Services de construction
+autodesk.revit.group:structuralSectionGeometry	Géométrie de coupe structurelle
+autodesk.revit.group:stairsCalculatorRules	Règles de calcul
+autodesk.revit.group:stairsOpenEndConnection	Connexion d'arrivée
+autodesk.revit.group:stairsSupports	Supports
+autodesk.revit.group:stairTreads	Marches
+autodesk.revit.group:stairRisers	Contremarches
+autodesk.revit.group:stairStringers	Limons à la française
+autodesk.revit.group:stairsTreadsRisers	Marches/contremarches
+autodesk.revit.group:stairsWinders	Balancements
+autodesk.revit.group:pattern	Motif
+autodesk.revit.group:patternApplication	Application de motifs
+autodesk.revit.group:curtainGrid	Quadrillage
+autodesk.revit.group:curtainGridVert	Quadrillage vertical
+autodesk.revit.group:curtainGridHoriz	Quadrillage horizontal
+autodesk.revit.group:curtainGridn1	Quadrillage 1
+autodesk.revit.group:curtainGridn2	Quadrillage 2
+autodesk.revit.group:curtainGridU	Quadrillage U
+autodesk.revit.group:curtainGridV	Quadrillage V
+autodesk.revit.group:curtainMullionVert	Meneaux verticaux
+autodesk.revit.group:curtainMullionHoriz	Meneaux horizontaux
+autodesk.revit.group:curtainMullionn1	Meneaux de quadrillage 1
+autodesk.revit.group:curtainMullionn2	Meneaux de quadrillage 2
+autodesk.revit.group:nodes	Noeuds
+autodesk.revit.group:fitting	Raccords
+autodesk.revit.group:splitProfileDimensions	Cotes (unités linéaires ou % d'épaisseur)
+autodesk.revit.group:railingSystemFamilyTopRail	Traverse haute
+autodesk.revit.group:railingSystemFamilyHandrails	Main courante 1
+autodesk.revit.group:railingSystemSecondaryFamilyHandrails	Main courante 2
+autodesk.revit.group:railingSystemFamilySegmentPattern	Motif du segment (par défaut)
+autodesk.revit.group:railingSystemSegmentPatternRepeat	Répétition de motif
+autodesk.revit.group:railingSystemSegmentPatternRemainder	Reste de motif
+autodesk.revit.group:railingSystemSegmentPosts	Poteaux
+autodesk.revit.group:railingSystemSegmentUGrid	Quadrillage U
+autodesk.revit.group:railingSystemSegmentVGrid	Quadrillage V
+autodesk.revit.group:continuousrailBeginBottomExtension	Extension (début/bas)
+autodesk.revit.group:continuousrailEndTopExtension	Extension (fin/haut)
+autodesk.revit.group:termination	Terminaisons
+autodesk.revit.group:support	Supports
+autodesk.revit.group:translationIn	Déplacement
+autodesk.revit.group:rotationAbout	Rotation
+autodesk.revit.group:profile	Profil
+autodesk.revit.group:profilen1	Profil 1
+autodesk.revit.group:profilen2	Profil 2
+autodesk.revit.group:area	Surface
+autodesk.revit.group:length	Longueur
+autodesk.revit.group:flexible	Composant adaptatif
+autodesk.revit.group:insulation	Isolation
+autodesk.revit.group:lining	Revêtement
+autodesk.revit.group:systemtypeRisedrop	Montée/Descente
+autodesk.revit.group:fabricationProductData	Données de produit de fabrication
+autodesk.revit.group:geoLocation	Géolocalisation
+autodesk.revit.group:routeAnalysis	Analyse de l'itinéraire
+autodesk.revit.group:primaryUnits	Unités principales
+autodesk.revit.group:alternateUnits	Unités alternatives
+autodesk.revit.group:trussFamilyTopChord	Membrures supérieures
+autodesk.revit.group:trussFamilyVertWeb	Montants
+autodesk.revit.group:trussFamilyDiagWeb	Diagonales
+autodesk.revit.group:trussFamilyBottomChord	Membrures inférieures

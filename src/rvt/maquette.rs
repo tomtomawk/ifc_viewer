@@ -14,7 +14,8 @@
 
 use super::champs::{self, Obj, Record, Val};
 use super::geometrie::{self, FT, Maillage};
-use super::objets::{elem_table, inflate, records, sections, unpad};
+use super::objets::{elem_table, episodes, inflate, records, sections, unpad};
+use super::parametres::{self, Brut, Definition};
 use super::schema::Schema;
 use super::vues::{self, Contenu, Element2D, Motif, TypeRegion, Vue};
 use super::Cfb;
@@ -115,6 +116,9 @@ pub struct Famille {
     /// Famille hôte d'une famille imbriquée (`Element.m_famId`), −1 pour la famille d'un
     /// document `.rfa` ou une famille chargée dans un projet.
     pub parent: i64,
+    /// Paramètres d'occurrence de la famille (`Family.m_familyParams`, `m_instance` = 1),
+    /// intégrés compris : leur valeur est portée par chaque instance, pas par le type.
+    pub occurrence: std::collections::HashSet<i64>,
 }
 
 /// Forme d'un document de famille (`.rfa`) : extrusion, raccord, révolution, balayage…
@@ -298,6 +302,19 @@ pub struct Maquette {
     /// Couleur de projection de chaque catégorie ou sous-catégorie (`GStyleElem` de
     /// type 1 → `GStyle.m_color`).
     pub couleurs_categories: HashMap<i64, [u8; 3]>,
+    /// Définitions des paramètres utilisateur (`ParamElem`), par id.
+    pub definitions: HashMap<i64, Definition>,
+    /// Valeurs des paramètres de chaque élément lu (jeux, listes et champs appris).
+    pub parametres: HashMap<i64, Vec<(i64, Brut)>>,
+    /// Noms des phases (`ProjectPhase`).
+    pub phases: HashMap<i64, String>,
+    /// Famille d'un document `.rfa` (`Family` sans famille hôte), dont
+    /// `m_familyParams` porte les valeurs du type courant.
+    pub famille_document: Option<i64>,
+    /// GUID des épisodes (`Global/History`) et index de l'épisode de création de chaque
+    /// élément (`Global/ElemTable`, formats 2024 et suivants) : UniqueId et IfcGUID.
+    pub episodes: Vec<[u8; 16]>,
+    pub episode_de: HashMap<i64, u32>,
     /// Instances propres à une vue, ignorées.
     pub instances_de_vue: usize,
     /// Objets retenus mais illisibles (données d'add-ins…).
@@ -338,6 +355,10 @@ enum Sorte {
     TypeRegion,
     /// Style graphique d'une catégorie (`GStyleElem`).
     Style,
+    /// Définition de paramètre utilisateur (dérivées de `ParamElem`).
+    Parametre,
+    /// Phase (`ProjectPhase`).
+    Phase,
 }
 
 impl Sorte {
@@ -376,6 +397,8 @@ impl Sorte {
             "FilledRegion" => Sorte::Region,
             "FillPatternElem" => Sorte::Motif,
             "GStyleElem" => Sorte::Style,
+            "ProjectPhase" => Sorte::Phase,
+            _ if h("ParamElem") => Sorte::Parametre,
             "CurveElem" | "TextNote" | "LinearDimString" | "RadialDim" | "AngularDim" | "ArcLengthDim" | "Viewport" => Sorte::Annotation,
             _ if h("DBView") => Sorte::Vue,
             _ if h("GenSweep") || h("FamilyGeomCombination") => Sorte::Forme,
@@ -394,6 +417,9 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     let sch = Schema::parse(&inflate(&unpad(&raw)).map_err(|e| format!("Formats/Latest : {e}"))?)?;
     let ids8 = sch.ids8();
     let table = elem_table(&cfb.read("Global/ElemTable")?.ok_or("flux Global/ElemTable absent")?)?;
+    // épisodes de création : UniqueId et IfcGUID (règle vérifiée sur les formats 2024 et
+    // suivants, ElemTable de 40 octets)
+    let episodes = if ids8 { cfb.read("Global/History")?.and_then(|h| episodes(&h).ok()).unwrap_or_default() } else { Vec::new() };
     let sortes: HashMap<u16, Sorte> = sch.classes.iter().filter_map(|c| Some((c.id, Sorte::de(&sch, c.id, &c.name)?))).collect();
 
     let mut parts: Vec<(u64, String)> = cfb
@@ -417,7 +443,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         let sec = sections(&raw).map_err(|e| format!("{p} : {e}"))?;
         let vide = Vec::new();
         for (eid, body) in records(sec.get(&0x66).unwrap_or(&vide), true, ids8).map_err(|e| format!("{p}, section 0x66 : {e}"))? {
-            let Some(c) = champs::class_id(body).filter(|_| table.contains(&eid)) else { continue };
+            let Some(c) = champs::class_id(body).filter(|_| table.contains_key(&eid)) else { continue };
             if classes_types.contains(&c) {
                 types_famille.insert(eid);
             }
@@ -449,19 +475,24 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     };
     let mut illisibles = Vec::new();
     let mut niveaux = Vec::new();
+    let mut parametres: HashMap<i64, Vec<(i64, Brut)>> = HashMap::new();
     for eid in ids.iter().filter(|e| objets[e].0 == Sorte::Niveau) {
         match lire_objet(eid) {
-            Some(Ok((_, r))) => niveaux.extend(niveau(*eid, &r)),
+            Some(Ok((_, r))) => {
+                niveaux.extend(niveau(*eid, &r));
+                parametres.insert(*eid, parametres::valeurs(&r));
+            }
             Some(Err(e)) => illisibles.push(e),
             None => {}
         }
     }
     niveaux.sort_by(|a, b| a.altitude.total_cmp(&b.altitude).then(a.id.cmp(&b.id)));
     let altitude: HashMap<i64, f64> = niveaux.iter().map(|n| (n.id, n.altitude)).collect();
-    let extraits: Vec<Result<Extrait, (i64, String)>> = ids
+    let herite = |c: &str, base: &str| sch.by_name(c).is_some_and(|c| sch.inherits(c.id, base));
+    let extraits: Vec<Result<(i64, Extrait, Vec<(i64, Brut)>), (i64, String)>> = ids
         .par_iter()
         .filter(|e| objets[e].0 != Sorte::Niveau)
-        .filter_map(|eid| Some(lire_objet(eid)?.map(|(s, r)| extraire(*eid, s, &r, &altitude))))
+        .filter_map(|eid| Some(lire_objet(eid)?.map(|(s, r)| (*eid, extraire(*eid, s, &r, &altitude, &herite), parametres::valeurs(&r)))))
         .collect();
     drop(objets);
 
@@ -471,7 +502,14 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     let (mut formes, mut categories) = (Vec::new(), HashMap::new());
     let (mut vues, mut cadrages, mut elements_2d) = (Vec::new(), HashMap::new(), Vec::new());
     let (mut motifs, mut types_regions, mut couleurs_categories) = (HashMap::new(), HashMap::new(), HashMap::new());
+    let (mut definitions, mut phases) = (HashMap::new(), HashMap::new());
     for x in extraits {
+        let x = x.map(|(eid, x, vals)| {
+            if !vals.is_empty() {
+                parametres.insert(eid, vals);
+            }
+            x
+        });
         match x {
             Err(e) => illisibles.push(e),
             Ok(Extrait::Rien) => {}
@@ -496,8 +534,11 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
             Ok(Extrait::Motif(id, x)) => drop(motifs.insert(id, x)),
             Ok(Extrait::TypeRegion(id, x)) => drop(types_regions.insert(id, x)),
             Ok(Extrait::Style(cat, c)) => drop(couleurs_categories.insert(cat, c)),
+            Ok(Extrait::Parametre(id, d)) => drop(definitions.insert(id, d)),
+            Ok(Extrait::Phase(id, nom)) => drop(phases.insert(id, nom)),
         }
     }
+    let famille_document = if est_famille { familles.iter().filter(|(_, f): &(&i64, &Famille)| f.parent == -1).map(|(&id, _)| id).min() } else { None };
     // vues et éléments 2D du document : ceux des familles imbriquées rangées en ligne
     // dans un .rfa (symboles d'annotation) sont écartés
     let du_document = |f: i64| f == -1 || familles.get(&f).is_some_and(|x: &Famille| x.parent == -1);
@@ -567,6 +608,12 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         motifs,
         types_regions,
         couleurs_categories,
+        definitions,
+        parametres,
+        phases,
+        famille_document,
+        episodes,
+        episode_de: if ids8 { table } else { HashMap::new() },
         instances_de_vue,
         illisibles,
     };
@@ -738,6 +785,8 @@ enum Extrait {
     TypeRegion(i64, TypeRegion),
     /// Couleur de projection (catégorie, rouge vert bleu).
     Style(i64, [u8; 3]),
+    Parametre(i64, Definition),
+    Phase(i64, String),
 }
 
 fn niveau(id: i64, r: &Record) -> Option<Niveau> {
@@ -745,7 +794,7 @@ fn niveau(id: i64, r: &Record) -> Option<Niveau> {
     Some(Niveau { id, nom: r.root.get("m_text")?.str()?.to_string(), altitude: z * FT })
 }
 
-fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>) -> Extrait {
+fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite: &dyn Fn(&str, &str) -> bool) -> Extrait {
     let o = &r.root;
     let ou_rien = |x: Option<Extrait>| x.unwrap_or(Extrait::Rien);
     match s {
@@ -767,7 +816,14 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>) -> Ext
             let (largeur, hauteur) = (valeurs.get(&FAMILY_WIDTH_PARAM).copied(), valeurs.get(&FAMILY_HEIGHT_PARAM).copied());
             Some(Extrait::Type(eid, TypeElem { nom, classe: o.class_name().to_string(), epaisseur, famille: id_of(o, "m_familyId"), largeur, hauteur }))
         })()),
-        Sorte::Famille => ou_rien((|| Some(Extrait::Famille(eid, Famille { nom: o.get("m_name")?.str()?.to_string(), categorie: id_of(o, "m_categoryId"), parent: id_of(o, "m_famId") })))()),
+        Sorte::Famille => ou_rien((|| {
+            let occurrence = r.field_body(o, "m_familyParams").map(|fp| {
+                let liste = fp.get("m_params").map(Val::list).unwrap_or_default();
+                liste.iter().filter_map(Val::obj).filter(|x| x.get("m_instance").and_then(Val::int) == Some(1)).filter_map(|x| x.get("m_paramId").and_then(Val::element_id)).collect()
+            });
+            let f = Famille { nom: o.get("m_name")?.str()?.to_string(), categorie: id_of(o, "m_categoryId"), parent: id_of(o, "m_famId"), occurrence: occurrence.unwrap_or_default() };
+            Some(Extrait::Famille(eid, f))
+        })()),
         Sorte::Materiau => ou_rien((|| {
             let m = r.field_body(o, "m_pMaterial")?;
             // COLORREF : rouge dans l'octet de poids faible
@@ -820,6 +876,8 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>) -> Ext
             let c = r.field_body(o, "m_pGStyle")?.get("m_color")?.int()?;
             Some(Extrait::Style(id_of(o, "m_categoryId"), [c as u8, (c >> 8) as u8, (c >> 16) as u8]))
         })()),
+        Sorte::Parametre => ou_rien(parametres::definition(r, herite).map(|d| Extrait::Parametre(eid, d))),
+        Sorte::Phase => ou_rien(o.get("m_name").and_then(Val::str).map(|n| Extrait::Phase(eid, n.to_string()))),
     }
 }
 
@@ -964,6 +1022,54 @@ impl Maquette {
         predefinie.map(|(_, n)| n.to_string()).unwrap_or_else(|| format!("Catégorie {id}"))
     }
 
+    /// IfcGUID d'un élément du document (None hors ElemTable ou format antérieur à 2024).
+    pub fn guid_ifc(&self, id: i64) -> Option<String> {
+        Some(parametres::ifc_guid(self.episodes.get(*self.episode_de.get(&id)? as usize)?, id))
+    }
+
+    /// UniqueId de Revit d'un élément.
+    pub fn unique_id(&self, id: i64) -> Option<String> {
+        Some(parametres::unique_id(self.episodes.get(*self.episode_de.get(&id)? as usize)?, id))
+    }
+
+    /// Nom de l'élément désigné par la valeur ElementId d'un paramètre : type (« Famille :
+    /// type » pour FAMILY_AND_TYPE, famille seule pour FAMILY), niveau, matériau, phase,
+    /// vue, famille.
+    pub fn nom_element(&self, param: i64, id: i64) -> Option<String> {
+        const FAMILLE_ET_TYPE: [i64; 2] = [-1_002_052, -1_002_001];
+        const FAMILLE: [i64; 2] = [-1_002_051, -1_002_002];
+        if let Some(t) = self.types.get(&id) {
+            let fam = self.familles.get(&t.famille).map(|f| f.nom.as_str());
+            return Some(match fam {
+                Some(f) if FAMILLE.contains(&param) => f.to_string(),
+                Some(f) if FAMILLE_ET_TYPE.contains(&param) => format!("{f} : {}", t.nom),
+                _ => t.nom.clone(),
+            });
+        }
+        if let Some(n) = self.niveaux.iter().find(|n| n.id == id) {
+            return Some(n.nom.clone());
+        }
+        let nom = self.materiaux.get(&id).map(|x| x.nom.clone()).or_else(|| self.phases.get(&id).cloned());
+        nom.or_else(|| self.vues.iter().find(|v| v.id == id).map(|v| v.nom.clone())).or_else(|| self.familles.get(&id).map(|f| f.nom.clone()))
+    }
+
+    /// Paramètres affichables d'un élément, par groupe de Revit. Type de famille : sans
+    /// les paramètres d'occurrence de sa famille (Revit les montre sur les instances) ;
+    /// famille d'un document `.rfa` : « (occurrence) » après le nom de ces paramètres.
+    pub fn parametres_affiches(&self, id: i64) -> Vec<parametres::Affiche> {
+        let Some(v) = self.parametres.get(&id) else { return Vec::new() };
+        let occ = self.types.get(&id).and_then(|t| self.familles.get(&t.famille)).map(|f| &f.occurrence);
+        let v: Vec<(i64, Brut)> = v.iter().filter(|(p, _)| occ.is_none_or(|o| !o.contains(p))).cloned().collect();
+        let mut out = parametres::affiches(&v, &self.definitions, &|p, e| self.nom_element(p, e));
+        if let Some(f) = self.familles.get(&id).filter(|_| self.famille_document == Some(id)) {
+            let noms: std::collections::HashSet<String> = v.iter().filter(|(p, _)| f.occurrence.contains(p)).filter_map(|(p, _)| self.definitions.get(p).map(|d| d.nom.clone()).or_else(|| parametres::integres().get(p).map(|i| i.libelle.to_string()))).collect();
+            for a in out.iter_mut().filter(|a| noms.contains(&a.nom)) {
+                a.nom.push_str(" (occurrence)");
+            }
+        }
+        out
+    }
+
     /// « Famille : type » d'une instance.
     pub fn nom_type_instance(&self, inst: &Instance) -> String {
         let t = self.types.get(&inst.type_id);
@@ -974,7 +1080,8 @@ impl Maquette {
 
 // ------------------------------------------------------------------ Scène
 
-/// GlobalId synthétique de 22 caractères (les UniqueId de Revit ne sont pas décodés).
+/// GlobalId synthétique de 22 caractères, pour les entités qui ne sont pas des éléments
+/// Revit (jeux de propriétés, relations…) ou un élément sans IfcGUID connu.
 fn gid(prefix: &str, id: i64) -> Value {
     Value::Str(format!("{prefix}{:0>width$}", id, width = 22 - prefix.len()))
 }
@@ -1020,6 +1127,26 @@ impl Builder {
     fn pset(&mut self, prefix: &str, owner: i64, name: &str, props: Vec<(&str, Value)>) -> Id {
         let refs = props.into_iter().map(|(n, v)| Value::Ref(self.add("IFCPROPERTYSINGLEVALUE", vec![Value::Str(n.into()), Value::Null, v]))).collect();
         self.add("IFCPROPERTYSET", vec![gid(prefix, owner), Value::Null, Value::Str(name.into()), Value::Null, Value::List(refs)])
+    }
+
+    /// Un jeu de propriétés par groupe de paramètres de Revit (« Contraintes », « Cotes »…).
+    fn psets_parametres(&mut self, m: &Maquette, element: i64) -> Vec<Id> {
+        let mut out = Vec::new();
+        let aff = m.parametres_affiches(element);
+        let mut k = 0;
+        for groupe in aff.chunk_by(|a, b| a.groupe == b.groupe) {
+            let props: Vec<(&str, Value)> = groupe.iter().map(|a| (a.nom.as_str(), Value::Str(a.valeur.clone()))).collect();
+            out.push(self.pset(&format!("RVTG{k:02}"), element, groupe[0].groupe, props));
+            k += 1;
+        }
+        out
+    }
+
+    /// Rattache des jeux de propriétés à une entité.
+    fn definir(&mut self, prefix: &str, element: i64, entite: Id, psets: Vec<Id>) {
+        for (k, p) in psets.into_iter().enumerate() {
+            self.add("IFCRELDEFINESBYPROPERTIES", vec![gid(&format!("{prefix}{k:02}"), element), Value::Null, Value::Null, Value::Null, Value::List(vec![Value::Ref(entite)]), Value::Ref(p)]);
+        }
     }
 }
 
@@ -1213,11 +1340,20 @@ fn produits(m: &Maquette) -> Vec<Produit<'_>> {
             ("Point d'insertion", point_mm(x.point)),
         ];
         if let Some(t) = m.types.get(&x.type_id) {
-            // cotes du panneau (paramètres de type), pas l'encombrement de la famille
-            if let Some(l) = t.largeur.filter(|&l| l > 0.0) {
+            // cotes du panneau (paramètres de type, ou d'occurrence si la famille les
+            // déclare ainsi), pas l'encombrement de la famille
+            let occ = m.familles.get(&t.famille).map(|f| &f.occurrence);
+            let cote = |p: i64, du_type: Option<f64>| {
+                if !occ.is_some_and(|o| o.contains(&p)) {
+                    return du_type;
+                }
+                let b = m.parametres.get(&x.id)?.iter().find(|(q, _)| *q == p)?.1.selon(parametres::Stockage::Reel);
+                if let Brut::Reel(v) = b { Some(v * FT) } else { None }
+            };
+            if let Some(l) = cote(FAMILY_WIDTH_PARAM, t.largeur).filter(|&l| l > 0.0) {
                 props.push(("Largeur (panneau)", mm(l)));
             }
-            if let Some(h) = t.hauteur.filter(|&h| h > 0.0) {
+            if let Some(h) = cote(FAMILY_HEIGHT_PARAM, t.hauteur).filter(|&h| h > 0.0) {
                 props.push(("Hauteur (panneau)", mm(h)));
             }
         }
@@ -1260,11 +1396,21 @@ fn produits(m: &Maquette) -> Vec<Produit<'_>> {
 pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scene {
     let mut b = Builder { entities: IdMap::default() };
     let n = Value::Null;
+    // GlobalId d'un élément Revit : son IfcGUID, comme à l'export IFC de Revit
+    let guid = |prefix: &str, id: i64| m.guid_ifc(id).map(Value::Str).unwrap_or_else(|| gid(prefix, id));
     let projet = b.add("IFCPROJECT", vec![gid("RVTPROJET", 0), n.clone(), Value::Str(titre.into())]);
+    // document de famille : paramètres de la famille (valeurs du type courant)
+    if let Some(f) = m.famille_document {
+        let ps = b.psets_parametres(m, f);
+        b.definir("RVTDEFF", f, projet, ps);
+    }
     let mut etage: HashMap<i64, Id> = HashMap::new();
     for l in &m.niveaux {
-        let args = vec![gid("RVTNIV", l.id), n.clone(), Value::Str(l.nom.clone()), n.clone(), n.clone(), n.clone(), n.clone(), n.clone(), Value::Enum("ELEMENT".into()), Value::Real(l.altitude / 1000.0)];
-        etage.insert(l.id, b.add("IFCBUILDINGSTOREY", args));
+        let args = vec![guid("RVTNIV", l.id), n.clone(), Value::Str(l.nom.clone()), n.clone(), n.clone(), n.clone(), n.clone(), n.clone(), Value::Enum("ELEMENT".into()), Value::Real(l.altitude / 1000.0)];
+        let e = b.add("IFCBUILDINGSTOREY", args);
+        let ps = b.psets_parametres(m, l.id);
+        b.definir("RVTDEFN", l.id, e, ps);
+        etage.insert(l.id, e);
     }
     let storeys: Vec<Value> = m.niveaux.iter().map(|l| Value::Ref(etage[&l.id])).collect();
     b.add("IFCRELAGGREGATES", vec![gid("RVTAGG", 0), n.clone(), n.clone(), n.clone(), Value::Ref(projet), Value::List(storeys)]);
@@ -1276,8 +1422,11 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
     // traits des motifs de surface : plafond (2 sommets de 24 octets par trait)
     let (mut traits_motifs, mut motifs_omis, mut motifs_dessin) = (0usize, 0usize, 0usize);
     for p in produits(m) {
-        let id = b.add(p.classe, vec![gid("RVT", p.id), n.clone(), Value::Str(p.nom.clone()), n.clone(), Value::Str(p.nom_type.clone()), n.clone(), Value::Ref(shape), Value::Str(p.id.to_string())]);
+        let id = b.add(p.classe, vec![guid("RVT", p.id), n.clone(), Value::Str(p.nom.clone()), n.clone(), Value::Str(p.nom_type.clone()), n.clone(), Value::Ref(shape), Value::Str(p.id.to_string())]);
         let mut props = vec![("ElementId", Value::Str(p.id.to_string()))];
+        if let Some(u) = m.unique_id(p.id) {
+            props.push(("UniqueId", Value::Str(u)));
+        }
         props.extend(p.props);
         match p.geometrie {
             Ok(g) => {
@@ -1296,6 +1445,8 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
         }
         let pset = b.pset("RVTPSET", p.id, "Revit", props);
         b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF", p.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
+        let ps = b.psets_parametres(m, p.id);
+        b.definir("RVTDEFP", p.id, id, ps);
         if let Ok(g) = p.geometrie {
             let c = g.controle();
             let qv = b.add("IFCQUANTITYVOLUME", vec![Value::Str("Volume".into()), n.clone(), n.clone(), Value::Real(c.volume_m3)]);
@@ -1348,8 +1499,13 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
                     if let Some(e) = m.types.get(&p.type_id).and_then(|t| t.epaisseur) {
                         tp.push(("Épaisseur", mm(e)));
                     }
+                    if let Some(u) = m.unique_id(p.type_id) {
+                        tp.push(("UniqueId", Value::Str(u)));
+                    }
                     let pset = b.pset("RVTTPSET", p.type_id, "Revit", tp);
-                    let t = b.add(&format!("{}TYPE", p.classe), vec![gid("RVTTYPE", p.type_id), n.clone(), Value::Str(p.nom_type.clone()), n.clone(), n.clone(), Value::List(vec![Value::Ref(pset)])]);
+                    let mut psets = vec![Value::Ref(pset)];
+                    psets.extend(b.psets_parametres(m, p.type_id).into_iter().map(Value::Ref));
+                    let t = b.add(&format!("{}TYPE", p.classe), vec![guid("RVTTYPE", p.type_id), n.clone(), Value::Str(p.nom_type.clone()), n.clone(), n.clone(), Value::List(psets)]);
                     types.insert((p.type_id, classe_type), t);
                     t
                 }
@@ -1367,7 +1523,7 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
             }
             None => props.push(("Longueur", mm(g.debut.distance(g.fin)))),
         }
-        let id = b.add("IFCGRID", vec![gid("RVT", g.id), n.clone(), Value::Str(g.nom.clone()), n.clone(), n.clone(), n.clone(), Value::Ref(shape)]);
+        let id = b.add("IFCGRID", vec![guid("RVT", g.id), n.clone(), Value::Str(g.nom.clone()), n.clone(), n.clone(), n.clone(), Value::Ref(shape)]);
         let pset = b.pset("RVTPSET", g.id, "Revit", props);
         b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF", g.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
         contenus.entry(projet).or_default().push(Value::Ref(id));
@@ -1399,10 +1555,12 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
         let elems = par_vue.get(&v.id).map(Vec::as_slice).unwrap_or_default();
         props.push(("Éléments 2D", Value::Str(elems.len().to_string())));
         let nom = if v.nom.is_empty() { format!("{} [{}]", v.genre, v.id) } else { format!("{} : {}", v.genre, v.nom) };
-        let id_vue = b.add("IFCANNOTATION", vec![gid("RVTVUE", v.id), n.clone(), Value::Str(nom), n.clone(), Value::Str(v.genre.into()), n.clone(), Value::Ref(shape)]);
+        let id_vue = b.add("IFCANNOTATION", vec![guid("RVTVUE", v.id), n.clone(), Value::Str(nom), n.clone(), Value::Str(v.genre.into()), n.clone(), Value::Ref(shape)]);
         entite_vue.insert(v.id, id_vue);
         let pset = b.pset("RVTPSETV", v.id, "Revit", props);
         b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEFV", v.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id_vue)]), Value::Ref(pset)]);
+        let ps = b.psets_parametres(m, v.id);
+        b.definir("RVTDEFW", v.id, id_vue, ps);
         contenus.entry(etage.get(&v.niveau).copied().unwrap_or(projet)).or_default().push(Value::Ref(id_vue));
         let normale = if v.direction.length() > 0.5 { v.direction.normalize() } else { DVec3::Z };
         let mut enfants = Vec::new();
@@ -1434,9 +1592,11 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
                 Contenu::Texte { texte, .. } => format!("{genre} « {} » [{}]", texte.lines().next().unwrap_or_default(), e.id),
                 _ => format!("{genre} [{}]", e.id),
             };
-            let id = b.add("IFCANNOTATION", vec![gid("RVT2D", e.id), n.clone(), Value::Str(titre), n.clone(), Value::Str(genre.into()), n.clone(), Value::Ref(shape)]);
+            let id = b.add("IFCANNOTATION", vec![guid("RVT2D", e.id), n.clone(), Value::Str(titre), n.clone(), Value::Str(genre.into()), n.clone(), Value::Ref(shape)]);
             let pset = b.pset("RVTPSET2D", e.id, "Revit", props);
             b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF2D", e.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
+            let ps = b.psets_parametres(m, e.id);
+            b.definir("RVTDEF2P", e.id, id, ps);
             let tris = vues::trace(e, normale, v.echelle);
             let mut parts = Vec::new();
             if !tris.is_empty() {

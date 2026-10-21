@@ -16,6 +16,7 @@ mod champs;
 pub mod geometrie;
 pub mod maquette;
 mod objets;
+pub mod parametres;
 mod schema;
 pub mod vues;
 

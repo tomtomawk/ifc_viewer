@@ -10,7 +10,7 @@
 //! - 0x67 : un complément (géométrie `GElement`…), même cadrage que 0x66.
 
 use rayon::prelude::*;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 
 const DATA: usize = 64_896;
 const PAD: usize = 353;
@@ -116,18 +116,38 @@ pub fn records(data: &[u8], stamp: bool, ids8: bool) -> Result<Vec<(i64, &[u8])>
     Ok(out)
 }
 
-/// Ids de `Global/ElemTable` (les éléments du document) : u16, u32 nombre, puis des
-/// enregistrements de 40 octets (id i64, formats 2024 et suivants) ou 28 (id i32).
-pub fn elem_table(raw: &[u8]) -> Result<HashSet<i64>, String> {
+/// Éléments de `Global/ElemTable` (ceux du document) : u16, u32 nombre, puis des
+/// enregistrements de 40 octets (id i64, formats 2024 et suivants) ou 28 (id i32). Le
+/// u32 qui suit l'id est l'index de l'épisode de création dans `Global/History`
+/// (vérifié sur les enregistrements de 40 octets) : {id : index}.
+pub fn elem_table(raw: &[u8]) -> Result<HashMap<i64, u32>, String> {
     let t = inflate_global(raw)?;
     let n = u32_at(&t, 2).ok_or("ElemTable tronquée")? as usize;
     let size = if n > 0 { (t.len() - 6) / n } else { 40 };
     (0..n)
         .map(|k| {
             let o = 6 + size * k;
-            if size == 40 { i64_at(&t, o) } else { i32_at(&t, o).map(i64::from) }.ok_or_else(|| "ElemTable tronquée".to_string())
+            let (id, ids) = if size == 40 { (i64_at(&t, o), 8) } else { (i32_at(&t, o).map(i64::from), 4) };
+            id.zip(u32_at(&t, o + ids)).ok_or_else(|| "ElemTable tronquée".to_string())
         })
         .collect()
+}
+
+/// GUID des épisodes de `Global/History` (octets Windows), index 0 en premier : le flux
+/// se termine par u32 n, n × (GUID, u8), u32 0, la liste étant rangée du dernier
+/// épisode au premier.
+pub fn episodes(raw: &[u8]) -> Result<Vec<[u8; 16]>, String> {
+    let h = inflate_global(raw)?;
+    for n in 1..=h.len() / 17 {
+        let Some(debut) = h.len().checked_sub(4 + 17 * n + 4) else { break };
+        // le compte, puis le même octet après chaque GUID
+        if u32_at(&h, debut) == Some(n as u32) && (0..n).all(|k| h[debut + 20 + 17 * k] == h[debut + 20]) {
+            let mut l: Vec<[u8; 16]> = (0..n).map(|k| h[debut + 4 + 17 * k..debut + 20 + 17 * k].try_into().unwrap()).collect();
+            l.reverse();
+            return Ok(l);
+        }
+    }
+    Err("liste des épisodes introuvable dans Global/History".into())
 }
 
 #[cfg(test)]
