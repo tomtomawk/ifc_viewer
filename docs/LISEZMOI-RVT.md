@@ -15,7 +15,9 @@ par Autodesk. Les points non vérifiés sont signalés comme tels. Méthode d'es
 | Décompression | **résolue** (§ 4) : blocs de 353 octets intercalés tous les 64 896 octets ; 100 % des membres gzip décodés avec CRC exact (formats 2016, 2026, 2027) |
 | Code correcteur (blocs de 353 octets, fin des flux) | **décodé** (§ 4 bis) : CRC courts entrelacés, réencodage identique octet pour octet de tous les flux essayés (2026, 2027) |
 | Schéma de classes `Formats/Latest` | **lu en entier** : 4 690 classes et 12 558 champs (2026), 4 757 et 13 080 (2027) ; identifiants de classe établis |
-| Table des éléments `Global/ElemTable` | structure établie (en-tête, enregistrements de 40 octets) ; un champ non identifié |
+| Table des éléments `Global/ElemTable` | structure établie (en-tête, enregistrements de 40 octets) ; index de l'épisode de création (§ 6) |
+| **Identifiants** | UniqueId et IfcGUID reconstitués (épisodes de `Global/History`, § 6) : 1 275 IfcGUID sur 1 279 identiques à Revit ; les GlobalId du viewer sont ceux de l'export IFC de Revit |
+| **Paramètres** | définitions (famille, partagés avec GUID, projet, globaux), valeurs des instances, des types et du type courant d'une famille, paramètres intégrés portés par des champs (correspondances apprises) ; 12 609 valeurs sur 12 630 identiques à Revit (Kerreut), 3 738 sur 3 739 (Projet1) ; affichage par groupe comme la palette de Revit (§ 7, « Paramètres ») |
 | Partitions `Partitions/*` | **cadrage complet** : 3 sections, un enregistrement par élément ; inventaire identique à Revit (§ 7) |
 | Champs des objets | **lus en entier** par un lecteur générique piloté par le schéma : 100 % des enregistrements sur les fichiers 2016, 2022, 2025, 2026 et 2027 essayés, hors données d'add-ins (§ 7) |
 | Murs | type, niveaux, ligne (droite ou arc), hauteur et décalages extraits ; identiques à Revit sur 75 murs de deux projets et deux essais (§ 7) |
@@ -375,7 +377,8 @@ dans le projet 2027). Le flux se termine par 24 octets non étudiés.
 | Octets | Contenu |
 |---|---|
 | 0–7 | ElementId (i64) |
-| 8–19 | trois u32 : numéro de la sauvegarde où l'élément a été modifié en dernier (égaux dans tous les cas observés) |
+| 8–11 | u32 : index de l'épisode de création dans `Global/History` (UniqueId, ci-dessous) |
+| 12–19 | deux u32 : épisodes postérieurs (≥ le précédent ; dernière modification ?) |
 | 20–27 | ElementId répété |
 | 28–35 | −1 le plus souvent ; un autre id pour certains éléments (sens non établi) |
 | 36–39 | 0 |
@@ -383,6 +386,21 @@ dans le projet 2027). Le flux se termine par 24 octets non étudiés.
 Établi par différence : renommer le niveau 1 959 (essai E01) ne change que
 l'enregistrement 1 959, dont les trois u32 passent de 0 à 1 ; dans la série C7,
 les lignes créées avant la sauvegarde n portent n.
+
+**Épisodes et UniqueId** (21/10/2026). Un épisode est une session d'édition
+enregistrée. `Global/History` (8 octets de préfixe, gzip) se termine par u32 n, n ×
+(GUID de 16 octets, ordre Windows, suivi d'un octet 0x28), u32 0 ; la liste va du
+dernier épisode au premier (index 0 = le plus ancien). L'UniqueId d'un élément est
+`{GUID de son épisode de création}-{id sur 8 chiffres hexadécimaux}` ; l'identifiant
+d'export (`ExportUtils.GetExportId`) est ce GUID dont les 4 derniers octets sont
+combinés par OU exclusif avec l'id ; l'IfcGUID en est la compression IFC habituelle
+(128 bits en 22 caractères de l'alphabet `0-9A-Za-z_$`, 2 bits puis 21 × 6 bits).
+Validé contre les paramètres `IFC_GUID` et `IFC_TYPE_GUID` relevés par RiveTT :
+Projet1 337 sur 337, Kerreut 938 sur 942 (4 écarts sur le dernier caractère : IfcGUID
+enregistré différent du calcul, éléments copiés probablement) ; UniqueId de
+`FEN_2PF.rfa` identiques. Règle vérifiée sur les tables de 40 octets (formats 2024 et
+suivants) ; non appliquée aux formats antérieurs (enregistrements de 28 octets, non
+contrôlés). Outil `uniqueid.py`, portage `objets::episodes`, `parametres::ifc_guid`.
 
 ## 7. Données des éléments (`Partitions/*`)
 
@@ -977,6 +995,81 @@ ils forment un objet `IFCSURFACEFEATURE` « Motifs de surface » rattaché à l'
 scène. Kerreut : 21 éléments, 6 849 traits ; Saint-Malo : 82 éléments, 24 175 traits
 (scène construite en 0,5 s) ; `Projet1.rvt` : 3 éléments, 28 721 traits.
 
+### Paramètres
+
+Outils `parametres.py` (définitions, valeurs, comparaison à la référence) et
+`parametres_apprendre.py` (champs appris), portage `src/rvt/parametres.rs`. Référence
+Revit : scripts RiveTT `rvt-table-parametres-integres` (énumération
+`BuiltInParameter`, libellé, stockage), `rvt-reference-parametres-projet` (pour chaque
+élément de Kerreut et Projet1, ouverts en arrière-plan : id, nom, stockage, unité,
+groupe et valeur de chaque paramètre), `rvt-reference-parametres-famille`
+(`FamilyManager` de `FEN_2PF.rfa`), `rvt-reference-groupes-uniqueid` (libellés des
+groupes, UniqueId).
+
+**Définitions.** Un paramètre utilisateur est un élément dérivé de `ParamElem` :
+
+| Classe | Genre | Champs propres |
+|---|---|---|
+| `ParamElemFamily` | de famille (dans un `.rfa`, et pour chaque famille chargée d'un projet) | `m_instanceParam` (occurrence), famille `Element.m_famId` |
+| `ParamElemExternal` | partagé | `m_externalParamKey.m_guidValue.m_guid` (GUID, ordre Windows), `m_bindingIds` |
+| `ParamElemProject` | de projet | `m_bindingIds` → `ParamBinding` (`m_paramId`, `m_categoryId`, `m_elemOrSymbol`) |
+| `ParamElemGlobal` | global | valeur propre `m_value`, formule `m_oExpression` |
+| `ParamElemRefTableEntry` | table de clés | `ParamDefRefTableEntry.m_scheduleId` |
+
+Nom : `ParamElem.m_pParamDef` → `ParamDef.m_caption` ; groupe `m_groupTypeId`
+(ForgeTypeId, par exemple `autodesk.parameter.group:dimensions`) ; visibilité
+`m_userVisible`. La classe de la définition donne le stockage : `ParamDefValue` (et
+dérivées) réel avec l'unité `m_specTypeId`, `ParamDefInt` entier, `ParamDefYesNo`
+Oui/Non (entier), `ParamDefString`, `ParamDefURL` texte, `ParamDefMaterialBrowse`,
+`ParamDefFamType` ElementId. Contrôle : 489 définitions de Kerreut et 41 de Projet1
+vues par Revit, noms, stockages et unités identiques (à la version du spec près).
+
+Un paramètre intégré (id négatif, `BuiltInParameter`) n'a ni nom ni stockage dans le
+fichier : table `src/rvt/donnees/parametres_integres.tsv` (3 699 paramètres,
+libellé français, stockage ; unité et groupe pour les 1 238 observés sur des
+éléments), libellés des groupes `groupes_parametres.tsv`, libellés des valeurs
+énumérées observées `valeurs_enumerees.tsv` (286 couples, « Ligne de justification »
+2 = « Nu fini: Extérieur »…).
+
+**Valeurs.**
+
+| Source | Contenu |
+|---|---|
+| `Element.m_pParamValueSetDouble`, `…Int`, `…AString`, `…ElementId` | `m_paramSet` : `m_paramId`, `m_value` typé ; un entier est parfois rangé dans le jeu des réels (styles de texte) |
+| `FamilyInstance.m_pInstParams`, `FamilySymbol.m_pParams` | listes `NamedParam` : `m_paramId` et toutes les cases (`m_value` réel, `m_int`, `m_str`, `m_elemId`, formule `m_oExpression` dont la valeur calculée est dans la case), à lire selon le stockage du paramètre |
+| `Family.m_familyParams` | `NamedParam` du type courant d'un document de famille ; dans un projet, la liste des paramètres de la famille avec `m_instance` (1 : d'occurrence, intégrés compris) |
+| `PropertySetElement.m_oParamSet` | jeux imbriqués des actifs physiques et thermiques des matériaux |
+| champ de l'objet | beaucoup de paramètres intégrés : `Famille et type` d'une instance = `m_masterSymbolId`, `Décalage supérieur` = `m_refs[1]>.m_offset`, `Nom de la feuille` = `DBViewDrafting.m_viewName`… |
+
+Les champs ont été **appris** plutôt qu'écrits à la main : pour chaque couple
+(classe, paramètre intégré) absent des jeux, chemins de l'objet aplati dont la valeur
+égale celle de Revit sur tous les éléments de la classe, retenus s'ils ont vu au
+moins deux valeurs distinctes (ou une valeur autre que 0, 1, −1, '') ; le plus court
+d'abord. Validation croisée : appris sur Kerreut, justes à 99,35 % sur Projet1 ;
+appris sur Projet1, 98,9 % sur Kerreut ; appris sur les deux : 496 correspondances
+(`parametres_champs.tsv`), 19 284 valeurs couvertes, aucune fausse. Quand un jeu et
+un champ portent le même paramètre, Revit lit le champ (la valeur du jeu est
+ancienne) : le champ passe en premier.
+
+**Bilan** (lecteur Rust, `ifc_viewer --parametres` comparé à la référence) : Kerreut
+12 609 valeurs identiques sur 12 630 (plus 7 943 absentes à valeur par défaut : rien
+n'est enregistré), Projet1 3 738 sur 3 739. Écarts : « Construction analytique »
+(15, Revit affiche « <Aucune> » selon le mode thermique), « Gras » de styles de cote
+d'élévation (5), « Rugosité » (1), et la masse volumique des actifs de matériaux
+(non affichée). Non lus : les paramètres que Revit calcule (surfaces, volumes,
+longueurs ; en lecture seule dans l'API) et ceux des classes que le lecteur ne lit pas
+(génie climatique…).
+
+**Affichage.** Un jeu de propriétés par groupe de Revit, dans l'ordre de sa palette
+(Contraintes, Construction, Graphismes, Texte, Matériaux et finitions, Cotes…), sur
+l'instance et sur son type ; un type n'affiche pas les paramètres d'occurrence de sa
+famille (`Largeur` d'une porte coulissante de Kerreut : 1 300 mm sur l'occurrence
+comme dans Revit, pas les 1 900 mm restés dans le type) ; un document de famille
+porte ses paramètres sur le projet, « (occurrence) » après le nom des paramètres
+d'occurrence. Valeurs : longueurs en mm, surfaces en m², volumes en m³, angles en
+degrés, Oui/Non, énumérations par leur libellé, ElementId par le nom de l'élément
+(type, « Famille : type », niveau, matériau, phase, vue).
+
 ### Contenu repéré
 
 `Global/Latest` contient le nom des niveaux (`ZZ_NIV_A` y apparaît après
@@ -998,6 +1091,9 @@ Python 3 sans dépendance externe :
 | `objets.py` | inventaire des éléments par classe, lu dans les partitions (`--liste`, `--classe NOM`, `--tout`) |
 | `champs.py` | lecture des champs d'un élément (`fichier id`), couverture du lecteur (`--couverture`), extraction des murs (`--murs`) |
 | `elements.py` | niveaux, types de murs, dalles, instances, pièces, surfaces (`fichier niveaux pieces…`) ; objet aplati en `chemin = valeur` (`--plat id`) |
+| `parametres.py` | paramètres : définitions (`fichier definitions`), valeurs (`fichier valeurs [ids]`), comparaison à une référence RiveTT (`--comparer ref.json`) |
+| `parametres_apprendre.py` | correspondances paramètre intégré → champ apprises sur des références RiveTT, contrôle sur d'autres fichiers |
+| `uniqueid.py` | épisodes de `Global/History`, IfcGUID calculés comparés à une référence RiveTT |
 | `geometrie.py` | géométrie calculée d'un élément (`fichier id`) : solides B-rep, sommets, faces et triangles en mm, contrôle (boîte, volume, aire, fermeture, écart des arêtes), export OBJ (`--obj`), plans de référence (`--tout`) |
 | `familles.py` | géométrie d'une instance de famille (`fichier id…`) : volume, triangles, boîte en mm ; `--trace id` : solides retenus ou écartés (filtre, invisible, non décodé) et pourquoi |
 | `vues.py` | vues et éléments 2D (`fichier [--vues] [--elements] [--json f]`) |
@@ -1098,10 +1194,11 @@ feuilles numérotées de `Projet1.rvt` et leurs vues placées, nomenclatures. Do
 
 1. **Autres éléments** : faits et portés en Rust pour niveaux, types, familles,
    matériaux, sols, plafonds, toits, escaliers, garde-corps, grilles, instances et
-   pièces (§ 7, § 8). Restent la position des éléments 2D de vue, les surfaces
-   (validées seulement en nombre) et les paramètres en général (seuls quelques
-   BuiltInParameter précis sont lus ; les paramètres de type sont dans
-   `FamilySymbol.m_pParams`, les noms des paramètres de famille restent à trouver).
+   pièces (§ 7, § 8). Restent la position des éléments 2D de vue et les surfaces
+   (validées seulement en nombre). Paramètres faits le 21/10 (§ 7) : restent les
+   valeurs calculées par Revit (surfaces, volumes), la table des types d'une famille
+   (`Family.m_pFamilyTypes`) dans l'interface, les paramètres globaux et ceux des
+   informations du projet à afficher, et l'IfcGUID des formats antérieurs à 2024.
 2. **Géométrie** : surfaces `HermiteSurf`, `ConeSurf`, `OffsetSurf` et courbe
    `GEllipse` ; faces sans boucle (receveur de douche de Kerreut : maillage ouvert) ;
    22 garde-corps de Saint-Malo sans solide.

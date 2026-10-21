@@ -2281,4 +2281,51 @@ mod tests {
             }
         }
     }
+
+    /// Paramètres de `FEN_2PF.rfa` : valeurs du type courant (`Family.m_familyParams`)
+    /// contre FamilyManager dans Revit 2026, type courant « 120x204ht 16 » (script RiveTT
+    /// `rvt-reference-parametres-famille`).
+    #[test]
+    fn fenetre_rfa_parametres() {
+        let Some(p) = essai("", "FEN_2PF.rfa") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        assert_eq!(m.famille_document, Some(9_899_388));
+        let aff = m.parametres_affiches(9_899_388);
+        let val = |nom: &str| aff.iter().find(|a| a.nom == nom).map(|a| (a.groupe, a.valeur.as_str()));
+        assert_eq!(val("Distance résa"), Some(("Autre", "110 mm")), "formule if(…, 110 mm, 10 mm)");
+        assert_eq!(val("Nu pose"), Some(("Cotes", "160 mm")));
+        assert_eq!(val("Seuil PMR"), Some(("Cotes", "Oui")));
+        assert_eq!(val("Allège supérieure à 12cm (equerre)"), Some(("Autre", "Non")), "formule not(…)");
+        assert_eq!(val("Hauteur"), Some(("Cotes", "2040 mm")));
+        assert_eq!(val("Largeur"), Some(("Cotes", "1200 mm")));
+        assert_eq!(val("Description"), Some(("Données d'identification", "PF + FIXE")));
+        assert_eq!(val("Commentaires du type"), Some(("Données d'identification", "M02")));
+        let d = &m.definitions[&9_900_475];
+        assert_eq!((d.nom.as_str(), d.genre.as_str(), d.occurrence), ("Distance résa", "famille", Some(false)));
+        assert_eq!(m.unique_id(9_899_388).as_deref(), Some("79dc52d9-c475-4841-a47e-5c94d4e238e2-00970d7c"));
+    }
+
+    /// Paramètres et IfcGUID de `Kerreut 2025.rvt` contre l'API de Revit 2026 (script
+    /// RiveTT `rvt-reference-parametres-projet`) : porte coulissante 9911752, dont la
+    /// largeur est un paramètre d'occurrence de sa famille, son type 8677076 et un
+    /// paramètre partagé.
+    #[test]
+    fn kerreut_parametres() {
+        let Some(p) = corpus(r"PERROS-GUIREC - rue de Kerreut\01-TRAVAIL\Kerreut 2025.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        let val = |id: i64, nom: &str| m.parametres_affiches(id).into_iter().find(|a| a.nom == nom).map(|a| a.valeur);
+        assert_eq!(val(9_911_752, "Largeur").as_deref(), Some("1300 mm"));
+        assert_eq!(val(9_911_752, "Identifiant").as_deref(), Some("2275"));
+        assert_eq!(val(9_911_752, "Niveau").as_deref(), Some("RDC"));
+        assert_eq!(val(9_911_752, "Famille et type").as_deref(), Some("ARC_PTE_Placard coulissante_multi-panneaux : Largeur 1 m mini_largeur panneaux max 90 cm"));
+        // le type ne montre pas la largeur, paramètre d'occurrence de sa famille
+        assert_eq!(val(8_677_076, "Largeur"), None);
+        assert_eq!(val(8_677_076, "Hauteur").as_deref(), Some("2100 mm"));
+        assert_eq!(val(8_677_076, "Identifiant du type").as_deref(), Some("PL03"));
+        assert_eq!(val(8_677_076, "Opération").as_deref(), Some("SlidingToRight"));
+        assert_eq!(m.guid_ifc(9_911_752).as_deref(), Some("3Sv4yF$LD1uBYRSvD2Wzs7"));
+        assert_eq!(m.guid_ifc(8_677_076).as_deref(), Some("2VbQHXdHTBoAiSW3rsPCNH"));
+        let d = &m.definitions[&208_407];
+        assert_eq!((d.nom.as_str(), d.genre.as_str(), d.guid.as_deref()), ("Adresse du Client", "partagé", Some("f25fdde5-ae9e-422f-87c4-1d9e5fc71836")));
+    }
 }

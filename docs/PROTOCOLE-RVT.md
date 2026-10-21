@@ -318,6 +318,20 @@ arrière-plan, fermé sans enregistrer), comparée automatiquement au décodage
 (`geometrie.py`, puis le lecteur Rust). Travail fait sur la branche `topographie`
 (worktree séparé), en parallèle d'une autre session.
 
+### C16 — Paramètres et identifiants (faite le 21/10, nuit)
+
+Références RiveTT (Revit 2026, documents ouverts en arrière-plan et fermés sans
+enregistrer) : `rvt-table-parametres-integres` (3 740 valeurs de `BuiltInParameter`,
+libellé, stockage), `rvt-reference-parametres-projet` (Kerreut 2025 et Projet1 :
+46 298 valeurs de paramètres modifiables avec leur définition),
+`rvt-reference-parametres-famille` (`FamilyManager` de `FEN_2PF.rfa`, 35 paramètres,
+6 types), `rvt-reference-groupes-uniqueid` (libellés des groupes et des unités,
+UniqueId et IfcGUID). Décodage en Python (`parametres.py`), correspondances
+paramètre → champ apprises sur les références et validées en croisé
+(`parametres_apprendre.py`), règle de l'UniqueId (`uniqueid.py`), portage Rust
+comparé à la référence par `ifc_viewer --parametres` et un script de dépouillement.
+Contrôle visuel par captures du viewer piloté par son canal de commande.
+
 ### C9 — Variantes ciblées (Revit, prochaine session)
 
 Quand le lecteur bute sur un champ, produire deux fichiers qui ne diffèrent que

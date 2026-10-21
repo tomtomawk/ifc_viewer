@@ -1,0 +1,289 @@
+# Libellés des valeurs entières des paramètres intégrés (énumérations), tels que Revit 2026 fr les affiche
+# (Parameter.AsValueString, script RiveTT rvt-reference-parametres-projet sur Kerreut 2025.rvt et Projet1.rvt) :
+# id du paramètre, valeur, libellé. Seules les valeurs observées y sont.
+-1155313	0	Par vue
+-1155312	1	En dehors de la ligne de cote
+-1155311	1	En dehors de la ligne de cote
+-1155310	0	Standard
+-1155309	0	Afficher pour la barre
+-1155308	0	Isométrique
+-1155307	0	Angles intérieurs
+-1155297	1	Différents de 90 degrés
+-1155291	0	Afficher en tant que texte
+-1155290	1	Afficher en tant que cotes
+-1155281	0	Aucun
+-1155280	0	Aucun(e)
+-1155099	0	Par défaut
+-1154687	0	par personnes et par zone
+-1154613	1	Par discipline
+-1153002	0	Non calculé
+-1152378	0	Utiliser les éléments de construction
+-1152378	2	Util. volumes conceptuels et éléments de construction
+-1152375	1	Utiliser le diamètre
+-1152374	0	Chaîne unique
+-1152364	0	Haut
+-1152362	2	Origine
+-1152361	0	Uniforme
+-1152175	0	Devant seulement
+-1152161	0	Contremarche derrière la marche
+-1152161	2	Joindre toutes les contremarches et les marches
+-1151402	0	A crémaillère
+-1151402	1	Lissée
+-1151318	1	Volée: centre
+-1151232	0	Aucun
+-1151232	1	Limon à la française (fermé)
+-1151231	0	Aucun
+-1151231	1	Limon à la française (fermé)
+-1151224	1	Encoche
+-1150464	1	De base
+-1150464	2	Générique
+-1150464	3	Métal
+-1150464	4	Béton
+-1150464	5	Bois
+-1150464	6	Liquide
+-1150464	7	Gaz
+-1150464	8	Plastique
+-1150411	2	Croix
+-1150411	4	Barre oblique
+-1150410	11	Yin Yang
+-1150409	1	Contour
+-1150408	13	Courbure - ¾ de cercle
+-1150407	1	Contour
+-1150406	1	Contour
+-1150405	15	Té - Demi-cercle
+-1150355	1	Centre
+-1150352	1	Distance fixe
+-1150349	0	Aucun
+-1150347	0	Aucun
+-1150343	1	Col de cygne
+-1150343	2	Simple
+-1150337	0	Onglet
+-1150337	1	Congé
+-1150231	1	Milieu
+-1150231	2	Bas
+-1150230	0	Haut
+-1150230	1	Milieu
+-1150227	1	Début
+-1150220	2	Paramètre de courbe normalisée
+-1150140	0	<Aucun>
+-1140336	-1	Tous
+-1140335	-1	Tous
+-1140335	0	Aucun
+-1140335	1	Débit uniquement
+-1140328	0	Vide essentiellement les vannes
+-1140328	1	Vide essentiellement les citernes
+-1140322	0	Isotrope
+-1140322	1	Orthotrope
+-1140170	1	Deux colonnes, circuits au sein
+-1140061	0	Monophasé
+-1140022	0	Section du conducteur de phase
+-1114700	0	A partir du type d'espace
+-1114700	1	A partir de la zone
+-1114304	-1	<Bâtiment>
+-1114259	-1	Par type d'espace
+-1114258	0	Ratio de puissance
+-1114257	0	Ratio de puissance
+-1114252	0	Spécifié
+-1114224	-1	Par type d'espace
+-1114223	-1	Par type d'espace
+-1114206	0	Normal
+-1114206	14	Tableau de raccordement
+-1114173	-1	Par type d'espace
+-1114171	2	Chauffé et refroidi
+-1114134	1	Té
+-1114106	0	Milieu
+-1114105	0	Centre
+-1019100	1	Vertical
+-1019013	0	Par défaut
+-1019012	0	Par type
+-1018800	0	Poutres et contreventements
+-1018800	1	Haut du poteau
+-1018800	2	Bas du poteau
+-1013453	0	Poutre
+-1013331	0	Aucun
+-1013331	1	Distance fixe
+-1013331	2	Nombre Fixe
+-1013330	1	Distance fixe
+-1013330	2	Nombre Fixe
+-1013301	0	Aucun
+-1013301	1	Distance fixe
+-1013301	2	Nombre Fixe
+-1013300	0	Aucun
+-1013300	1	Distance fixe
+-1013300	2	Nombre Fixe
+-1013203	0	Origine de la vue
+-1012842	0	Pointeur
+-1012842	1	Corps
+-1012621	0	Point de base du projet
+-1011109	0	Aucun
+-1011109	3	90° en sens antihoraire
+-1011105	1	Distance fixe
+-1011105	4	Remplir l'espace vide
+-1011003	1	Afficher l'original
+-1011003	2	Afficher les deux
+-1011002	1	Faible
+-1011002	2	Moyen
+-1011002	3	Elevé
+-1009530	0	Bloqué
+-1009529	0	Bloqué
+-1009528	0	Bloqué
+-1009527	0	Bloqué
+-1009526	0	Bloqué
+-1009525	0	Bloqué
+-1008632	0	Ajuster
+-1008632	1	Soudure
+-1008631	0	Ajouter des segments verticaux/horizontaux
+-1008630	2	Prolonger la traverse jusqu'à
+-1008305	0	Epais
+-1008209	0	Bas
+-1008003	2	Haut
+-1007705	1	Arrière-plan
+-1007704	0	mètre
+-1007502	1	Par vue
+-1007395	0	Non défini
+-1007395	3	Bord et quadrillage vertical continu
+-1007387	0	Non défini
+-1007352	0	Meneau rectangulaire
+-1007352	1	Meneau circulaire
+-1007352	2	Meneau d'angle en L
+-1007352	3	Meneau d'angle en V
+-1007352	4	Meneau d'angle trapézoïdal
+-1007352	5	Meneau d'angle quadrilatéral
+-1007277	1	Correspondance au niveau
+-1007262	1	Marche dessous la contremarche
+-1007256	1	Lissé
+-1007243	1	Droit
+-1007109	0	Point de base du projet
+-1007006	0	Extrémité attachée
+-1007004	0	Horizontale
+-1007004	2	Modèle
+-1007003	0	Horizontale
+-1007003	2	Modèle
+-1006998	1	Avant la valeur
+-1006704	0	Continu
+-1006704	1	Aucun
+-1006704	2	Personnalisé
+-1006644	0	Contremarche
+-1006643	0	Tous
+-1006642	3	Quart gauche
+-1006641	2	Arrière
+-1006639	0	Horizontale
+-1006636	0	Horizontal
+-1006636	1	Vertical
+-1006624	0	Droite
+-1006620	0	Ligne unique
+-1006620	1	Ligne double
+-1006616	1	Zig-zag
+-1006615	0	Espacé
+-1006613	50	 1 : 50
+-1006613	100	 1 : 100
+-1006613	200	 1 : 200
+-1006613	5000	 1 : 5000
+-1006523	0	Dynamique
+-1006523	1	Toujours afficher
+-1006517	0	Coche et ligne
+-1006511	0	Aligné
+-1006511	1	Au-dessus
+-1006510	0	Loin de l'origine
+-1006510	1	Au-delà des lignes d'attache
+-1006508	0	Ligne
+-1006508	1	Arc
+-1006492	0	Haut
+-1006492	1	Bas
+-1006489	0	Préfixe
+-1006475	0	Préfixe
+-1006474	0	Préfixe
+-1006471	0	Au-dessus du repère
+-1006471	2	Aligné avec le repère
+-1006469	0	Elévation réelle (sélectionnée)
+-1006467	1	Continu
+-1006461	1	Point de topographie
+-1006458	0	Préfixe
+-1006457	2	Est / Ouest
+-1006456	0	Aucune
+-1006455	1	Nord / Sud
+-1006453	0	Horizontale
+-1006453	1	Verticale
+-1006448	0	Horizontale
+-1006448	1	Haut, ensuite Gauche
+-1006437	0	Point de base du projet
+-1006437	1	Point de topographie
+-1006437	2	Relatif
+-1006432	0	Espacement par rapport à l'élément
+-1006432	1	Fixé sur la ligne de cote
+-1006429	0	Opaque
+-1006429	1	Transparent
+-1006413	0	Diagonale
+-1006413	3	Point
+-1006413	7	Coche épaisse
+-1006413	8	Flèche
+-1006413	9	Triangle de référence
+-1006413	10	Case
+-1006413	11	Cible de l'élévation
+-1006408	1	Avant la valeur
+-1006314	0	Opaque
+-1006314	1	Transparent
+-1006309	512	Haut
+-1006309	1024	Milieu
+-1006308	64	Gauche
+-1006308	128	Centre
+-1005501	0	Non définie
+-1005501	8	Eléments à ailes larges en I
+-1005439	1	Type schématique
+-1005254	0	Aucun
+-1005251	0	Non
+-1005251	1	Oui
+-1005197	0	De la famille
+-1005197	1	A partir des paramètres du projet
+-1005196	3	Géométrie de la famille
+-1005183	1	Arrière-plan
+-1005177	0	Regarder vers le bas
+-1005172	2	Ligne cachée
+-1005168	0	Nord du projet
+-1005168	1	Nord géographique
+-1005163	1	Architecture
+-1005163	4095	Coordination
+-1005161	0	Normal(e)
+-1005161	1	Demi-teinte
+-1005158	0	Nettoyer toutes les jonctions de mur
+-1005151	10	 1 : 10
+-1005151	20	 1 : 20
+-1005151	50	 1 : 50
+-1005151	100	 1 : 100
+-1005151	200	 1 : 200
+-1005151	500	 1 : 500
+-1005151	1000	 1 : 1000
+-1005050	0	Orthographique
+-1005050	1	Perspective
+-1004514	0	Valeur
+-1002555	0	Intersection minimale
+-1002112	0	Ne pas retourner
+-1002112	3	Les deux
+-1002111	0	Aucun(e)
+-1001821	0	<Générique>
+-1001821	6	Garde-corps
+-1001821	7	Nez de marche d'escalier
+-1001821	9	Plancher collaborant
+-1001821	11	Marche d'escalier
+-1001710	33615	Coupe verticale
+-1001584	0	Arêtes cachées par d'autres membres
+-1001576	1	Gravité
+-1001575	1	A partir de la zone de délimitation
+-1001573	0	Normale
+-1001563	0	Soutènement
+-1001550	1	Acier
+-1001550	5	Béton précoulé
+-1001516	0	Encastré
+-1001515	0	Encastré
+-1001507	1	Ligne parallèle
+-1001507	2	Ligne avec angle
+-1001507	3	Contreventement entre poutres
+-1001390	0	Par hôte
+-1001390	1	Aucun
+-1001390	3	Extérieur
+-1001381	6	Autre
+-1001122	0	Axe du mur
+-1001122	2	Nu fini: Extérieur
+-1001006	0	Intérieur
+-1001006	1	Extérieur
+-1001006	2	Fondation

@@ -389,7 +389,24 @@ fn nombre(v: f64, decimales: i32) -> String {
 
 /// Texte d'une valeur ; None pour une valeur vide (chaîne vide, ElementId −1) ;
 /// `nom_element` nomme l'élément désigné par un ElementId.
-pub fn texte(b: &Brut, st: Stockage, spec: &str, enumeration: &str, nom_element: &dyn Fn(i64) -> Option<String>) -> Option<String> {
+/// Libellé affiché par Revit pour la valeur entière d'un paramètre intégré à valeurs
+/// énumérées (relevé dans l'interface ; seules les valeurs observées sont connues).
+pub fn libelle_valeur(param: i64, v: i64) -> Option<&'static str> {
+    static T: OnceLock<HashMap<(i64, i64), &'static str>> = OnceLock::new();
+    let t = T.get_or_init(|| {
+        include_str!("donnees/valeurs_enumerees.tsv")
+            .lines()
+            .filter(|l| !l.starts_with('#'))
+            .filter_map(|l| {
+                let mut c = l.splitn(3, '\t');
+                Some(((c.next()?.parse().ok()?, c.next()?.parse().ok()?), c.next()?))
+            })
+            .collect()
+    });
+    t.get(&(param, v)).copied()
+}
+
+pub fn texte(b: &Brut, param: i64, st: Stockage, spec: &str, enumeration: &str, nom_element: &dyn Fn(i64) -> Option<String>) -> Option<String> {
     Some(match b.selon(st) {
         Brut::Reel(v) => match unite(spec, enumeration) {
             "longueur" => format!("{} mm", nombre(v * super::geometrie::FT, 1)),
@@ -399,7 +416,7 @@ pub fn texte(b: &Brut, st: Stockage, spec: &str, enumeration: &str, nom_element:
             _ => nombre(v, 6),
         },
         Brut::Entier(i) if sans_version(spec).ends_with("spec.bool") => (if i != 0 { "Oui" } else { "Non" }).to_string(),
-        Brut::Entier(i) => i.to_string(),
+        Brut::Entier(i) => libelle_valeur(param, i).map(str::to_string).unwrap_or_else(|| i.to_string()),
         Brut::Texte(s) if s.is_empty() => return None,
         Brut::Texte(s) => s,
         Brut::Id(-1) => return None,
@@ -418,7 +435,7 @@ pub fn affiches(vals: &[(i64, Brut)], defs: &HashMap<i64, Definition>, nom_eleme
             (None, Some(i)) if *id < 0 && !i.libelle.is_empty() && i.libelle != "?" => (i.libelle.to_string(), i.stockage, i.spec, i.enumeration, i.groupe),
             _ => continue,
         };
-        if let Some(valeur) = texte(b, st, spec, enumeration, &|e| nom_element(*id, e)) {
+        if let Some(valeur) = texte(b, *id, st, spec, enumeration, &|e| nom_element(*id, e)) {
             out.push(Affiche { nom, groupe: libelle_groupe(groupe), valeur });
         }
     }
@@ -473,10 +490,12 @@ mod tests {
     #[test]
     fn mise_en_forme() {
         let aucun = |_: i64| None;
-        assert_eq!(texte(&Brut::Reel(3.937_007_874_015_747_3), Stockage::Reel, "autodesk.spec.aec:length-2.0.1", "", &aucun).as_deref(), Some("1200 mm"));
-        assert_eq!(texte(&Brut::Entier(1), Stockage::Entier, "autodesk.spec:spec.bool-1.0.0", "", &aucun).as_deref(), Some("Oui"));
+        assert_eq!(texte(&Brut::Reel(3.937_007_874_015_747_3), -1_001_301, Stockage::Reel, "autodesk.spec.aec:length-2.0.1", "", &aucun).as_deref(), Some("1200 mm"));
+        assert_eq!(texte(&Brut::Entier(1), 9_900_253, Stockage::Entier, "autodesk.spec:spec.bool-1.0.0", "", &aucun).as_deref(), Some("Oui"));
         let n = Brut::Nomme { reel: 0.360_892_388_451_443_56, entier: 0, texte: String::new(), id: -1 };
-        assert_eq!(texte(&n, Stockage::Reel, "autodesk.spec.aec:length-2.0.1", "", &aucun).as_deref(), Some("110 mm"));
-        assert_eq!(texte(&Brut::Id(-1), Stockage::Id, "", "", &aucun), None);
+        assert_eq!(texte(&n, 9_900_475, Stockage::Reel, "autodesk.spec.aec:length-2.0.1", "", &aucun).as_deref(), Some("110 mm"));
+        assert_eq!(texte(&Brut::Id(-1), -1_002_050, Stockage::Id, "", "", &aucun), None);
+        // énumération : « Définir les propriétés thermiques par » = Type schématique
+        assert_eq!(texte(&Brut::Entier(1), -1_005_439, Stockage::Entier, "", "", &aucun).as_deref(), Some("Type schématique"));
     }
 }

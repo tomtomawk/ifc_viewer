@@ -1003,8 +1003,8 @@ impl ViewerApp {
                     Ok(summary) => {
                         ui.label(format!(
                             "Vue 3D : {summary}, avec la géométrie calculée par Revit (murs, sols, toits, familles, \
-                             escaliers…), vues et éléments 2D. Les paramètres et le contenu des nomenclatures ne sont \
-                             pas encore lus : pour les données complètes, exporter en IFC depuis Revit."
+                             escaliers…), vues et éléments 2D, paramètres. Le contenu des nomenclatures et les valeurs \
+                             calculées (surfaces, volumes) ne sont pas encore lus."
                         ));
                     }
                     Err(e) => {
