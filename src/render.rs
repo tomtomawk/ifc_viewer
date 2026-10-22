@@ -303,12 +303,18 @@ impl Renderer {
                     plans[4 * k..4 * k + 4].copy_from_slice(&pl.to_array());
                 }
                 gl.uniform_4_f32_slice(self.u_plans.as_ref(), &plans);
+                // gl_ClipDistance n'existe pas en OpenGL ES : vue non découpée dans ce cas
+                let decoupe = !gl.version().is_embedded;
                 for k in 0..pp.plans.len().min(2) {
-                    gl.enable(glow::CLIP_DISTANCE0 + k as u32);
+                    if decoupe {
+                        gl.enable(glow::CLIP_DISTANCE0 + k as u32);
+                    }
                 }
                 self.dessiner(gl, ps.ebo, ps.n);
-                for k in 0..2 {
-                    gl.disable(glow::CLIP_DISTANCE0 + k);
+                if decoupe {
+                    for k in 0..2 {
+                        gl.disable(glow::CLIP_DISTANCE0 + k);
+                    }
                 }
             }
             if !p.passes.is_empty() {

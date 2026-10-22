@@ -33,9 +33,12 @@ selectionner <id> ; isoler <id> ; cadrer <id> ; proprietes [id] ; objet <x> <y>
 onglet projet|modele|classes."""
 
 
+NOM_EXE = "ifc_viewer.exe" if os.name == "nt" else "ifc_viewer"
+
+
 def executable():
     candidats = [os.environ.get("IFC_VIEWER_EXE", "")] + [
-        os.path.join(RACINE, "target", d, "ifc_viewer.exe") for d in ("release", os.path.join("alt", "release"))
+        os.path.join(RACINE, "target", d, NOM_EXE) for d in ("release", os.path.join("alt", "release"))
     ]
     existants = [c for c in candidats if c and os.path.isfile(c)]
     if not existants:
@@ -60,11 +63,13 @@ def envoyer(ligne, delai=600.0):
 
 def lancer():
     exe = executable()
-    drapeaux = 0
+    options = {}
     if os.name == "nt":
-        drapeaux = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-    subprocess.Popen([exe], cwd=RACINE, creationflags=drapeaux, stdin=subprocess.DEVNULL,
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+        options["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        options["start_new_session"] = True
+    subprocess.Popen([exe], cwd=RACINE, stdin=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True, **options)
     fin = time.time() + 30
     while time.time() < fin:
         try:

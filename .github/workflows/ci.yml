@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build:
+    name: ${{ matrix.nom }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { nom: windows-x64, os: windows-latest, artefact: ifc_viewer.exe }
+          - { nom: windows-arm64, os: windows-11-arm, artefact: ifc_viewer.exe }
+          - { nom: linux-x64, os: ubuntu-latest, artefact: ifc_viewer }
+          - { nom: linux-arm64, os: ubuntu-24.04-arm, artefact: ifc_viewer }
+          - { nom: macos-arm64, os: macos-14, artefact: ifc_viewer }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Dépendances système (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgl1-mesa-dev
+      - run: cargo test --release
+      - run: cargo build --release
+      - name: Statistiques sur l'échantillon IFC
+        run: cargo run --release -- --stats samples/test_ifc4.ifc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ifc_viewer-${{ matrix.nom }}
+          path: target/release/${{ matrix.artefact }}

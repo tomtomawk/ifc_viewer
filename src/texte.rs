@@ -1,7 +1,8 @@
 //! Textes tracés en triangles, pour qu'ils fassent partie de la scène (captures hors
 //! écran comprises) : contours des glyphes lus par skrifa, aplatis puis triangulés
-//! (earcut). Police du type de texte prise dans les polices de Windows quand elle y est
-//! (Arial, Trebuchet MS…), sinon Arial, sinon la police Ubuntu d'egui.
+//! (earcut). Police du type de texte prise dans les polices du système (Windows, macOS, Linux)
+//! quand elle y est (Arial, Trebuchet MS…, ou l'équivalent Liberation), sinon Arial,
+//! sinon la police Ubuntu d'egui.
 
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
@@ -39,19 +40,71 @@ fn charger(donnees: Vec<u8>) -> Option<Police> {
     Some(Police { donnees, unites, capitales, ascendante: m.ascent, descendante: m.descent, glyphes: Mutex::new(HashMap::new()) })
 }
 
-/// Fichiers (normal, gras) des polices courantes de Windows.
-const FICHIERS: &[(&str, &str, &str)] = &[
-    ("arial", "arial.ttf", "arialbd.ttf"),
-    ("arial narrow", "ARIALN.TTF", "ARIALNB.TTF"),
-    ("trebuchet ms", "trebuc.ttf", "trebucbd.ttf"),
-    ("calibri", "calibri.ttf", "calibrib.ttf"),
-    ("verdana", "verdana.ttf", "verdanab.ttf"),
-    ("tahoma", "tahoma.ttf", "tahomabd.ttf"),
-    ("times new roman", "times.ttf", "timesbd.ttf"),
-    ("segoe ui", "segoeui.ttf", "segoeuib.ttf"),
-    ("century gothic", "GOTHIC.TTF", "GOTHICB.TTF"),
-    ("courier new", "cour.ttf", "courbd.ttf"),
+/// Fichiers (normal, gras) des polices courantes : noms Windows, puis équivalents macOS
+/// et Linux (Liberation, métriquement compatibles avec Arial, Times et Courier).
+const FICHIERS: &[(&str, &[&str], &[&str])] = &[
+    ("arial", &["arial.ttf", "LiberationSans-Regular.ttf", "DejaVuSans.ttf"], &["arialbd.ttf", "Arial Bold.ttf", "LiberationSans-Bold.ttf", "DejaVuSans-Bold.ttf"]),
+    ("arial narrow", &["ARIALN.TTF", "Arial Narrow.ttf", "LiberationSansNarrow-Regular.ttf"], &["ARIALNB.TTF", "Arial Narrow Bold.ttf", "LiberationSansNarrow-Bold.ttf"]),
+    ("trebuchet ms", &["trebuc.ttf", "Trebuchet MS.ttf"], &["trebucbd.ttf", "Trebuchet MS Bold.ttf"]),
+    ("calibri", &["calibri.ttf", "Carlito-Regular.ttf"], &["calibrib.ttf", "Carlito-Bold.ttf"]),
+    ("verdana", &["verdana.ttf", "Verdana.ttf", "DejaVuSans.ttf"], &["verdanab.ttf", "Verdana Bold.ttf", "DejaVuSans-Bold.ttf"]),
+    ("tahoma", &["tahoma.ttf", "Tahoma.ttf"], &["tahomabd.ttf", "Tahoma Bold.ttf"]),
+    ("times new roman", &["times.ttf", "Times New Roman.ttf", "LiberationSerif-Regular.ttf"], &["timesbd.ttf", "Times New Roman Bold.ttf", "LiberationSerif-Bold.ttf"]),
+    ("segoe ui", &["segoeui.ttf", "DejaVuSans.ttf"], &["segoeuib.ttf", "DejaVuSans-Bold.ttf"]),
+    ("century gothic", &["GOTHIC.TTF", "Century Gothic.ttf"], &["GOTHICB.TTF", "Century Gothic Bold.ttf"]),
+    ("courier new", &["cour.ttf", "Courier New.ttf", "LiberationMono-Regular.ttf"], &["courbd.ttf", "Courier New Bold.ttf", "LiberationMono-Bold.ttf"]),
 ];
+
+/// Dossiers de polices du système.
+fn dossiers_polices() -> Vec<std::path::PathBuf> {
+    use std::path::PathBuf;
+    let mut d = Vec::new();
+    if cfg!(windows) {
+        let windir = std::env::var("WINDIR").unwrap_or_else(|_| r"C:\Windows".into());
+        d.push(PathBuf::from(windir).join("Fonts"));
+        if let Ok(l) = std::env::var("LOCALAPPDATA") {
+            d.push(PathBuf::from(l).join("Microsoft").join("Windows").join("Fonts"));
+        }
+    } else {
+        let home = std::env::var("HOME").map(PathBuf::from).ok();
+        if cfg!(target_os = "macos") {
+            d.extend(["/System/Library/Fonts", "/Library/Fonts"].map(PathBuf::from));
+            d.extend(home.iter().map(|h| h.join("Library/Fonts")));
+        } else {
+            d.extend(["/usr/share/fonts", "/usr/local/share/fonts"].map(PathBuf::from));
+            d.extend(home.iter().map(|h| h.join(".local/share/fonts")));
+            d.extend(home.iter().map(|h| h.join(".fonts")));
+        }
+    }
+    d
+}
+
+fn indexer(dossier: &std::path::Path, profondeur: u32, index: &mut HashMap<String, std::path::PathBuf>) {
+    let Ok(entrees) = std::fs::read_dir(dossier) else { return };
+    for e in entrees.flatten() {
+        let chemin = e.path();
+        if chemin.is_dir() {
+            if profondeur > 0 {
+                indexer(&chemin, profondeur - 1, index);
+            }
+        } else if let Some(n) = chemin.file_name().and_then(|n| n.to_str()) {
+            index.entry(n.to_lowercase()).or_insert(chemin);
+        }
+    }
+}
+
+/// Contenu du fichier de police `nom` (casse ignorée) dans les dossiers du système.
+fn lire_fichier_police(nom: &str) -> Option<Vec<u8>> {
+    static INDEX: OnceLock<HashMap<String, std::path::PathBuf>> = OnceLock::new();
+    let index = INDEX.get_or_init(|| {
+        let mut index = HashMap::new();
+        for d in dossiers_polices() {
+            indexer(&d, 4, &mut index);
+        }
+        index
+    });
+    std::fs::read(index.get(&nom.to_lowercase())?).ok()
+}
 
 /// Police `nom` normale ou grasse, lue une fois ; repli sur Arial puis sur Ubuntu.
 fn police(nom: &str, gras: bool) -> Arc<Police> {
@@ -61,10 +114,9 @@ fn police(nom: &str, gras: bool) -> Arc<Police> {
     if let Some(p) = cache.lock().unwrap().get(&cle) {
         return p.clone();
     }
-    let dossier = std::env::var("WINDIR").unwrap_or_else(|_| r"C:\Windows".into());
     let lire = |n: &str| {
         let (_, normal, gras_) = FICHIERS.iter().find(|f| f.0 == n)?;
-        std::fs::read(std::path::Path::new(&dossier).join("Fonts").join(if gras { gras_ } else { normal })).ok().and_then(charger)
+        (if gras { gras_ } else { normal }).iter().find_map(|f| lire_fichier_police(f).and_then(charger))
     };
     let p = lire(&cle.0)
         .or_else(|| lire("arial"))
@@ -232,6 +284,15 @@ pub fn couper(texte: &str, nom: &str, taille: f64, gras: bool, max: f64) -> Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Les polices système sont retrouvées par nom de fichier (Windows, macOS, Linux) ;
+    /// sans aucune police installée, le repli reste utilisable.
+    #[test]
+    fn polices_systeme() {
+        let trouvee = FICHIERS[0].1.iter().any(|f| lire_fichier_police(f).is_some());
+        eprintln!("Arial ou équivalent trouvé : {trouvee}");
+        assert!(!ligne("Test", "Arial", 2.5, true).triangles.is_empty());
+    }
 
     /// Un « H » de 2,5 mm de capitales : triangles dans [0, 2,5] en hauteur, aire > 0 ;
     /// un « o » a un trou (aire inférieure à celle de son disque).
