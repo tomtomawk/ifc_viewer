@@ -1,7 +1,7 @@
 # IFC Viewer (Rust)
 
 Visionneuse IFC native, écrite de zéro : parseur STEP, géométrie et rendu OpenGL. Aucune dépendance IFC externe.
-Ouvre aussi les fichiers Revit (`.rvt`) : murs, sols, toits, escaliers, garde-corps, portes, fenêtres, mobilier et autres familles, pièces et grilles lus directement dans le fichier, sans export IFC.
+Ouvre aussi les fichiers Revit (`.rvt`) : murs, sols, toits, escaliers, garde-corps, portes, fenêtres, mobilier et autres familles, pièces et grilles lus directement dans le fichier, sans export IFC ; feuilles affichées avec leur cartouche, leurs vues placées, leurs titres, textes et cotes.
 
 ## Utilisation
 
@@ -14,6 +14,8 @@ cargo run --release -- --parametres chemin\vers\projet.rvt   # valeurs de param�
 ```
 
 Ouverture aussi possible par Ctrl+O ou par glisser-déposer.
+
+Exécutable Windows prêt à l'emploi : `dist/ifc_viewer.exe` (compilé en release depuis cette version, sans installation).
 
 | Action | Commande |
 |---|---|
