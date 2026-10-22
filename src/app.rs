@@ -9,6 +9,7 @@ use crate::pilote::{self, Requete};
 use crate::render::{FrameParams, ParamsPasse, Renderer};
 use crate::rvt::{self, RvtInfo};
 use crate::scene::{self, Scene};
+use crate::trace2d;
 use crate::step::Id;
 use eframe::egui::{self, Align, Color32, PointerButton, RichText, Sense};
 use eframe::glow;
@@ -378,12 +379,55 @@ impl ViewerApp {
         }
         self.coupe_dirty = false;
         let (tris, traits) = match (&self.scene, self.plan_coupe()) {
-            (Some(s), Some(p)) => dessin::coupe(s, &self.visible, p, self.echelle, self.poche),
+            (Some(s), Some(p)) => {
+                let prims = dessin::coupe(s, &self.visible, p, self.echelle, self.poche);
+                dessin::sommets(s, &prims, p.truncate().as_dvec3().normalize(), self.echelle)
+            }
             _ => Default::default(),
         };
         if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
             r.upload_coupe(gl, &tris, &traits);
         }
+    }
+
+    /// Dessin vectoriel de la vue (orthographique) : coupe, arêtes vues sans les parties
+    /// cachées, éléments 2D de la vue Revit ouverte ; repère de la scène, axes de la caméra.
+    fn dessin_vue(&self) -> Result<trace2d::Dessin, String> {
+        let s = self.scene.as_ref().ok_or("aucun fichier ouvert")?;
+        if !self.camera.ortho {
+            return Err("vue orthographique requise (bouton Ortho)".into());
+        }
+        let vue = self.vue_active.and_then(|i| s.navigateur.as_ref()?.vues.get(i));
+        if vue.is_some_and(|v| v.genre == "Feuille") {
+            return Err("export d'une feuille non pris en charge".into());
+        }
+        let f = self.camera.forward().as_dvec3().normalize();
+        let droite = f.cross(self.camera.up().as_dvec3()).normalize();
+        let haut = droite.cross(f);
+        let mut primitives = Vec::new();
+        let coupe = self.plan_coupe();
+        if let Some(p) = coupe {
+            primitives.extend(dessin::coupe(s, &self.visible, p, self.echelle, self.poche));
+        }
+        primitives.extend(dessin::vu(s, &self.visible, droite, haut, -f, coupe, 4096));
+        // éléments 2D de la vue Revit ouverte, s'ils sont affichés (repère du fichier →
+        // repère de la scène)
+        if let Some(v) = vue {
+            for p in v.primitives.iter().filter(|p| p.element.and_then(|e| s.object_of.get(&e)).is_some_and(|&o| self.visible[o as usize])) {
+                primitives.push(p.translater(-s.origin));
+            }
+        }
+        Ok(trace2d::Dessin { droite, haut, echelle: self.echelle, primitives })
+    }
+
+    /// Export SVG du dessin de la vue ; nombre de primitives écrites.
+    fn exporter_svg(&self, chemin: &std::path::Path) -> Result<usize, String> {
+        let d = self.dessin_vue()?;
+        let s = self.scene.as_ref().ok_or("aucun fichier ouvert")?;
+        let vue = self.vue_active.and_then(|i| s.navigateur.as_ref()?.vues.get(i)).map(|v| format!(" — {} : {}", v.genre, v.nom)).unwrap_or_default();
+        let titre = format!("{}{vue} — 1:{}", s.file_name, d.echelle);
+        std::fs::write(chemin, d.svg(&titre)).map_err(|e| format!("écriture impossible : {e}"))?;
+        Ok(d.primitives.len())
     }
 
     /// Réglages du mode dessin : coupe, niveau, hauteur, poché, échelle.
@@ -406,6 +450,15 @@ impl ViewerApp {
             });
         }
         change |= ui.add(egui::DragValue::new(&mut self.echelle).speed(1.0).range(1.0..=10000.0).prefix("1:")).on_hover_text("Échelle : épaisseur des contours et pas des hachures").changed();
+        if ui.button("SVG…").on_hover_text("Exporter le dessin de la vue en SVG (vue orthographique)").clicked() {
+            let nom = self.scene.as_ref().map(|s| s.file_name.rsplit_once('.').map_or(s.file_name.clone(), |x| x.0.to_string())).unwrap_or_default();
+            if let Some(chemin) = rfd::FileDialog::new().add_filter("SVG", &["svg"]).set_file_name(format!("{nom}.svg")).save_file() {
+                match self.exporter_svg(&chemin) {
+                    Ok(n) => self.status = format!("{} : {n} primitives exportées", chemin.display()),
+                    Err(e) => self.error = Some(e),
+                }
+            }
+        }
         if change {
             self.visibility_dirty = true;
         }
@@ -1818,6 +1871,17 @@ impl ViewerApp {
                 }
                 self.visibility_dirty = true;
                 self.etat()
+            }
+            "exporter" => {
+                // exporter <chemin.svg> : dessin vectoriel de la vue
+                let chemin = argument.trim().trim_matches('"');
+                if !chemin.to_lowercase().ends_with(".svg") {
+                    return erreur("usage : exporter <chemin.svg>");
+                }
+                match self.exporter_svg(std::path::Path::new(chemin)) {
+                    Ok(n) => succes(&[("chemin", texte(chemin)), ("primitives", n.to_string())]),
+                    Err(e) => erreur(&e),
+                }
             }
             "niveaux" => {
                 let n = self.niveaux().into_iter().map(|(id, nom, z)| objet(&[("id", id.to_string()), ("nom", texte(&nom)), ("z", format!("{z:.3}"))]));

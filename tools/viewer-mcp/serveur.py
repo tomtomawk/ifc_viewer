@@ -33,7 +33,9 @@ selectionner <id> ; isoler <id> ; cadrer <id> ; proprietes [id] ; objet <x> <y>
 onglet projet|modele|classes ;
 dessin oui|non (rendu 2D des plans et élévations) ; coupe non | coupe <hauteur m> [niveau]
 (coupe horizontale au-dessus du niveau, mode dessin) ; niveaux ; poche hachure|plein|vide ;
-echelle <dénominateur> (épaisseur des contours coupés, pas des hachures)."""
+echelle <dénominateur> (épaisseur des contours coupés, pas des hachures) ;
+exporter <chemin.svg> (dessin vectoriel de la vue orthographique : coupe, arêtes vues
+sans parties cachées, éléments 2D de la vue Revit ouverte)."""
 
 
 NOM_EXE = "ifc_viewer.exe" if os.name == "nt" else "ifc_viewer"

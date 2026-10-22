@@ -12,6 +12,7 @@ mod rvt;
 mod scene;
 mod step;
 mod texte;
+mod trace2d;
 
 use std::path::PathBuf;
 

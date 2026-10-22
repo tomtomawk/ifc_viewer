@@ -39,7 +39,7 @@ impl Camera {
         self.target - self.forward() * self.dist
     }
 
-    fn up(&self) -> Vec3 {
+    pub fn up(&self) -> Vec3 {
         if self.pitch.abs() > 1.5 {
             // Vue de dessus/dessous : on utilise la direction horizontale comme haut.
             Vec3::new(self.yaw.cos(), self.yaw.sin(), 0.0) * -self.pitch.signum()

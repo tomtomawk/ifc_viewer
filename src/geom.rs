@@ -10,6 +10,7 @@ use std::sync::Mutex;
 
 pub type Rgba = [f32; 4];
 
+#[derive(Clone)]
 pub struct Part {
     pub color: Rgba,
     pub tris: Vec<Tri>,

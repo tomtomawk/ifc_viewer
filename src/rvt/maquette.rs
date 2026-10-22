@@ -24,6 +24,7 @@ use crate::geom::{Ligne, Part, ProductGeom, Rgba, class_color};
 use crate::model::IfcModel;
 use crate::scene::{self, NavFamille, NavVue, Navigateur, Scene};
 use crate::step::{Entity, Id, IdMap, StepFile, Value, format_real};
+use crate::trace2d::{self, Primitive, Role, Style};
 use glam::{DMat3, DVec3};
 use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -1429,32 +1430,65 @@ impl Builder {
 /// Tracé d'une région remplie : arrière-plan uni s'il y en a un, puis premier plan uni
 /// (face colorée) ou hachures (traits de 0,13 mm sur le papier, découpés sur la face) ;
 /// région sans type connu : face grise translucide.
-fn region(m: &Maquette, type_id: i64, g: &Maillage, v: &Vue) -> Vec<Part> {
+fn region(m: &Maquette, type_id: i64, g: &Maillage, v: &Vue, element: Option<Id>) -> Vec<Primitive> {
     let face: Vec<[DVec3; 3]> = g.faces.iter().flat_map(|f| f.triangles.iter().map(|t| t.map(|i| g.sommets[i]))).collect();
     let en_m = |tris: &[[DVec3; 3]]| tris.iter().map(|t| t.map(|p| p / 1000.0)).collect::<Vec<_>>();
-    let Some(t) = m.types_regions.get(&type_id) else { return vec![Part { color: [0.45, 0.45, 0.45, 0.6], tris: en_m(&face) }] };
-    let rgb = |c: [u8; 3], a: f32| [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0, a];
+    let plein = |couleur: [u8; 4]| Primitive { forme: trace2d::Forme::Triangles(en_m(&face)), style: Style { couleur, epaisseur: 0.0 }, role: Role::Annotation, element };
+    let Some(t) = m.types_regions.get(&type_id) else { return vec![plein([115, 115, 115, 153])] };
     let avant = m.couleurs_categories.get(&t.categorie).copied().unwrap_or([0, 0, 0]);
+    let avant = [avant[0], avant[1], avant[2], 255];
     let normale = v.droite.cross(v.haut).normalize_or_zero();
-    let mut parts = Vec::new();
+    let mut prims = Vec::new();
     match m.motifs.get(&t.arriere) {
-        Some(x) if x.grilles.is_empty() => parts.push(Part { color: rgb(t.couleur_arriere, 1.0), tris: en_m(&face) }),
-        _ => parts.push(Part { color: [0.85, 0.85, 0.85, 0.25], tris: en_m(&face) }),
+        Some(x) if x.grilles.is_empty() => prims.push(plein([t.couleur_arriere[0], t.couleur_arriere[1], t.couleur_arriere[2], 255])),
+        _ => prims.push(plein([217, 217, 217, 64])),
     }
     match m.motifs.get(&t.avant) {
-        Some(x) if x.grilles.is_empty() => parts.push(Part { color: rgb(avant, 1.0), tris: en_m(&face) }),
+        Some(x) if x.grilles.is_empty() => prims.push(plein(avant)),
         Some(x) => {
             // traits légèrement décollés de la face, vers l'observateur
             let ecart = normale * (0.05 * v.echelle);
-            let mut tris = Vec::new();
-            for [a, b] in vues::hachures(&face, x, v.echelle, v.droite, v.haut, 20_000) {
-                vues::ruban(&[a + ecart, b + ecart], normale, 0.13 * v.echelle, &mut tris);
-            }
-            if !tris.is_empty() {
-                parts.push(Part { color: rgb(avant, 1.0), tris });
+            let s: Vec<[DVec3; 2]> = vues::hachures(&face, x, v.echelle, v.droite, v.haut, 20_000).into_iter().map(|s| s.map(|p| (p + ecart) / 1000.0)).collect();
+            if !s.is_empty() {
+                prims.push(Primitive { forme: trace2d::Forme::Segments(s), style: Style { couleur: avant, epaisseur: 0.13 }, role: Role::Hachure, element });
             }
         }
         None => {}
+    }
+    prims
+}
+
+/// Couleur d'une partie (0..1) en octets.
+fn octets(c: Rgba) -> [u8; 4] {
+    c.map(|x| (x.clamp(0.0, 1.0) * 255.0).round() as u8)
+}
+
+/// Primitives déjà triangulées d'un élément (glyphes, traits des cotes et des cartouches).
+fn primitives_parts(parts: Vec<Part>, element: Option<Id>) -> Vec<Primitive> {
+    parts.into_iter().map(|p| Primitive { forme: trace2d::Forme::Triangles(p.tris), style: Style { couleur: octets(p.color), epaisseur: 0.0 }, role: Role::Annotation, element }).collect()
+}
+
+/// Parties à afficher (triangles par couleur) des primitives d'une vue de normale `normale`
+/// à l'échelle `echelle`.
+fn parts_primitives(prims: &[Primitive], normale: DVec3, echelle: f64) -> Vec<Part> {
+    let mut parts: Vec<Part> = Vec::new();
+    for p in prims {
+        let m = p.mailler(normale, echelle);
+        // traits fins : rubans de 0,1 mm (le tampon des traits d'un pixel n'est pas
+        // celui des objets 2D)
+        let mut tris = m.triangles;
+        if !m.traits.is_empty() {
+            let fin = Primitive { forme: trace2d::Forme::Segments(m.traits), style: Style { couleur: p.style.couleur, epaisseur: 0.1 }, ..p.clone() };
+            tris.extend(fin.mailler(normale, echelle).triangles);
+        }
+        if tris.is_empty() {
+            continue;
+        }
+        let color = p.style.couleur.map(|c| c as f32 / 255.0);
+        match parts.last_mut() {
+            Some(q) if q.color == color => q.tris.extend(tris),
+            _ => parts.push(Part { color, tris }),
+        }
     }
     parts
 }
@@ -1836,6 +1870,8 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
     }
     let nom_vue: HashMap<i64, &str> = m.vues.iter().map(|v| (v.id, v.nom.as_str())).collect();
     let mut entite_vue: HashMap<i64, Id> = HashMap::new();
+    // éléments 2D de chaque vue en primitives (export)
+    let mut primitives_vues: HashMap<i64, Vec<Primitive>> = HashMap::new();
     for v in m.vues.iter().filter(|v| !v.gabarit && v.genre != "Arborescence") {
         let mut props = vec![
             ("ElementId", Value::Str(v.id.to_string())),
@@ -1901,25 +1937,24 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
             b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF2D", e.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
             let ps = b.psets_parametres(m, e.id);
             b.definir("RVTDEF2P", e.id, id, ps);
-            let mut parts = Vec::new();
+            let mut prims = Vec::new();
             // note de texte : ses glyphes (le cadre seul si le texte est vide) ; cote :
             // ligne, lignes d'attache, marques et valeurs comme dans Revit
             if let Some((color, t)) = feuilles::note(m, e, v.echelle) {
-                parts.push(Part { color, tris: t.into_iter().map(|t| t.map(|p| p / 1000.0)).collect() });
+                prims.extend(primitives_parts(vec![Part { color, tris: t.into_iter().map(|t| t.map(|p| p / 1000.0)).collect() }], Some(id)));
             } else if let Some(p) = feuilles::cote(m, e, normale, v.droite, v.echelle) {
-                parts.extend(p);
+                prims.extend(primitives_parts(p, Some(id)));
             } else {
-                let tris = vues::trace(e, normale, v.echelle);
-                if !tris.is_empty() {
-                    parts.push(Part { color: couleur, tris });
-                }
+                prims.extend(vues::primitives(e, normale, v.echelle, octets(couleur), Some(id)));
             }
             if let (Contenu::Region { type_id }, Ok(g)) = (&e.contenu, &e.geometrie) {
-                parts.extend(region(m, *type_id, g, v));
+                prims.extend(region(m, *type_id, g, v, Some(id)));
             }
+            let parts = parts_primitives(&prims, normale, v.echelle);
             if !parts.is_empty() {
                 geoms.push(ProductGeom { id, parts, lignes: Vec::new() });
             }
+            primitives_vues.entry(v.id).or_default().extend(prims);
             enfants.push(Value::Ref(id));
         }
         // instances propres à la vue (cartouches, symboles, composants de détail) et titres
@@ -1932,6 +1967,7 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
             b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF2I", o.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
             let ps = b.psets_parametres(m, o.id);
             b.definir("RVTDEF2J", o.id, id, ps);
+            primitives_vues.entry(v.id).or_default().extend(primitives_parts(o.parts.clone(), Some(id)));
             geoms.push(ProductGeom { id, parts: o.parts, lignes: Vec::new() });
             enfants.push(Value::Ref(id));
         }
@@ -1943,7 +1979,10 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
         b.add("IFCRELCONTAINEDINSPATIALSTRUCTURE", vec![gid("RVTCONT", k as i64), n.clone(), n.clone(), n.clone(), Value::List(items), Value::Ref(s)]);
     }
     let entite_type: HashMap<i64, Id> = types.iter().map(|(&(t, _), &e)| (t, e)).collect();
-    let nav = navigateur(m, &entite_vue, &entite_type, &etage);
+    let mut nav = navigateur(m, &entite_vue, &entite_type, &etage);
+    for v in &mut nav.vues {
+        v.primitives = primitives_vues.remove(&v.revit_id).unwrap_or_default();
+    }
     let model = IfcModel::new(StepFile { schema: format!("REVIT {format}"), entities: b.entities });
     let mut s = scene::assemble(model, geoms, file_name);
     s.navigateur = Some(nav);
@@ -2015,6 +2054,7 @@ fn navigateur(m: &Maquette, entite_vue: &HashMap<i64, Id>, entite_type: &HashMap
             etage: etage.get(&v.niveau).copied(),
             placees: placees.remove(&v.id).unwrap_or_default(),
             fenetres: fenetres.remove(&v.id).unwrap_or_default(),
+            primitives: Vec::new(),
         })
         .collect();
     // familles chargées (catégorie, famille, types), puis familles système

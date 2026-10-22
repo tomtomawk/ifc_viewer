@@ -26,6 +26,7 @@ Exécutable Windows prêt à l'emploi : `dist/ifc_viewer.exe` (compilé en relea
 | Cadrer l'objet / tout | double-clic / F |
 | Masquer / isoler la sélection | H / I (Échap annule l'isolement) |
 | Rendu 2D (plans, élévations) | bouton « Dessin 2D » |
+| Export vectoriel du dessin | bouton « SVG… » (mode dessin, vue orthographique) |
 
 ## Fonctions
 
@@ -36,7 +37,7 @@ Exécutable Windows prêt à l'emploi : `dist/ifc_viewer.exe` (compilé en relea
 - Géométrie : IfcExtrudedAreaSolid, IfcRevolvedAreaSolid, IfcFacetedBrep, IfcAdvancedBrep (facettisé), IfcTriangulatedFaceSet, IfcPolygonalFaceSet, IfcShellBased/FaceBasedSurfaceModel, IfcMappedItem, IfcBooleanResult / IfcBooleanClippingResult (y compris IfcHalfSpaceSolid et IfcPolygonalBoundedHalfSpace), IfcCsgSolid, IfcBlock, IfcRightCircularCylinder, IfcSphere, IfcSweptDiskSolid.
 - Profils : rectangle (creux), cercle (creux), ellipse, I, L, U, T, C, Z, arbitraire avec ou sans vides, dérivé, composite. Courbes : polyligne, IfcIndexedPolyCurve (arcs), composite, cercle/ellipse rognés, B-spline (rationnelle).
 - Ouvertures (IfcRelVoidsElement) soustraites par CSG BSP : les portes et fenêtres sont visibles dans les murs.
-- Dessin 2D des plans et élévations, à la manière d'un logiciel de DAO ([CADCraft](https://github.com/storytold/cadcraft)) : fond blanc, faces blanches, arêtes vives et silhouettes des surfaces courbes en trait fin, parties cachées éliminées. Coupe horizontale à une hauteur au-dessus d'un niveau (1,20 m par défaut) : parties coupées en poché (hachuré, plein ou vide) et contour en trait fort (0,35 mm), parties au-dessus retirées. Épaisseur et pas des hachures en mm du papier à l'échelle choisie (celle de la vue Revit ouverte, sinon 1:100). Activé d'office à l'ouverture d'un plan d'étage (coupe sur son niveau), d'un plan de plafond, d'une coupe ou d'une élévation Revit.
+- Dessin 2D des plans et élévations, à la manière d'un logiciel de DAO ([CADCraft](https://github.com/storytold/cadcraft)) : fond blanc, faces blanches, arêtes vives et silhouettes des surfaces courbes en trait fin, parties cachées éliminées. Coupe horizontale à une hauteur au-dessus d'un niveau (1,20 m par défaut) : parties coupées en poché (hachuré, plein ou vide) et contour en trait fort (0,35 mm), parties au-dessus retirées. Épaisseur et pas des hachures en mm du papier à l'échelle choisie (celle de la vue Revit ouverte, sinon 1:100). Activé d'office à l'ouverture d'un plan d'étage (coupe sur son niveau), d'un plan de plafond, d'une coupe ou d'une élévation Revit. Export SVG (mm du papier, un groupe par rôle : poché, hachures, vu, coupe, annotations) : coupe, arêtes vues sans leurs parties cachées (tampon de profondeur calculé à l'export, 4 096 pixels sur le grand côté), éléments 2D de la vue Revit ouverte.
 - Grandes coordonnées (géoréférencement) : le rendu est recentré pour éviter les tremblements en f32.
 - Revit (`.rvt`, `.rte`, formats 2016 à 2027) : murs, sols, plafonds, toits, escaliers, garde-corps, pièces et instances de familles (portes, fenêtres, mobilier…) avec la géométrie calculée par Revit (jonctions et ouvertures comprises ; familles en vue 3D, détail fin), colorés par matériau, rangés par niveau, avec type, contraintes, hauteurs, décalages et volume ; portes et fenêtres avec catégorie, hôte, repère et cotes du panneau ; grilles dans l'arborescence ; métadonnées (version, informations projet, références externes, vignette) dans la « Fiche Revit ». Familles (`.rfa`) : formes (extrusions, raccordements, révolutions, balayages, vides). Vues, feuilles, nomenclatures et éléments 2D (lignes, textes, cotes, zones remplies avec leurs hachures), motifs de surface des matériaux sur les faces ; arborescence du projet façon Revit ; paramètres (intégrés, de famille, partagés, de projet) rangés par groupe comme la palette de Revit ; GlobalId = IfcGUID de Revit. Format : [docs/LISEZMOI-RVT.md](docs/LISEZMOI-RVT.md).
 
@@ -50,7 +51,8 @@ Exécutable Windows prêt à l'emploi : `dist/ifc_viewer.exe` (compilé en relea
 | `src/csg.rs` | Booléens sur maillages par arbre BSP (portage de csg.js) |
 | `src/scene.rs` | Chargement complet, tampons de sommets, picking CPU par rayon |
 | `src/render.rs` | Shaders et dessin OpenGL (glow) via un PaintCallback egui |
-| `src/dessin.rs` | Dessin 2D : arêtes vives et douces (silhouettes) des maillages, coupe par un plan (poché, hachures, contours en trait fort) |
+| `src/trace2d.rs` | Primitives 2D vectorielles (polylignes, segments, surfaces, triangles ; style en mm du papier, rôle, élément d'origine), maillage pour le GPU, export SVG |
+| `src/dessin.rs` | Dessin 2D : arêtes vives et douces (silhouettes) des maillages, coupe par un plan (poché, hachures, contours en trait fort), arêtes vues sans parties cachées pour l'export |
 | `src/camera.rs` | Caméra orbitale Z vers le haut, perspective / orthographique |
 | `src/app.rs` | Interface egui (panneaux, arborescence, propriétés, interaction 3D), commandes du pilote |
 | `src/pilote.rs` | Canal de commande local (TCP 127.0.0.1:47811) du serveur MCP |
@@ -80,7 +82,7 @@ aucun viewer n'écoute, le serveur lance `target/release/ifc_viewer.exe` (ou
 - Les surfaces NURBS des IfcAdvancedBrep sont approchées par leurs arêtes : les faces fortement courbes sont facettisées grossièrement.
 - La CSG est sautée pour les hôtes de plus de 6 000 triangles ou les ouvertures de plus de 3 000 triangles (performance) ; l'élément est alors affiché plein.
 - Revit : surfaces `HermiteSurf`, `ConeSurf`, `OffsetSurf` et courbes `GEllipse` non décodées ; un solide qui en porte est écarté (le reste de l'élément est affiché) et compté dans les entités ignorées. Contenu des nomenclatures et paramètres calculés par Revit (surfaces, volumes) non lus. GlobalId : IfcGUID de Revit pour les formats 2024 et suivants, synthétiques (`RVT` + ElementId) avant.
-- Dessin 2D : la coupe ne suit que des plans horizontaux (pas encore le plan des vues de coupe Revit) ; ni éléments au-dessus de la coupe en pointillés, ni épaisseurs de trait par catégorie, ni export vectoriel (SVG, PDF) ; traits fins d'un pixel. En OpenGL ES (Raspberry Pi), les parties au-dessus de la coupe ne sont pas retirées, seuls les objets entièrement au-dessus le sont.
+- Dessin 2D : la coupe ne suit que des plans horizontaux (pas encore le plan des vues de coupe Revit) ; ni éléments au-dessus de la coupe en pointillés, ni épaisseurs de trait par catégorie, ni export PDF ou DXF ; traits fins d'un pixel à l'écran ; export SVG des vues orthographiques seulement, pas des feuilles. Textes, cotes et cartouches Revit passent dans l'export en triangles (pas en texte SVG). Courbes en polylignes (pas d'arcs). En OpenGL ES (Raspberry Pi), les parties au-dessus de la coupe ne sont pas retirées, seuls les objets entièrement au-dessus le sont.
 - Non pris en charge : IfcSurfaceCurveSweptAreaSolid, IfcFixedReferenceSweptAreaSolid, IfcSectionedSolid, alignements IFC4X3, textures. Les entités ignorées sont listées dans la barre d'état et dans `--stats`.
 
 ## Tests

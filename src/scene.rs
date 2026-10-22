@@ -70,6 +70,9 @@ pub struct NavVue {
     pub placees: Vec<i64>,
     /// Fenêtres de vue d'une feuille, dans l'ordre de `placees`.
     pub fenetres: Vec<NavFenetre>,
+    /// Éléments 2D de la vue (traits, régions, textes, cotes, symboles) en primitives,
+    /// repère du fichier (m), pour l'export.
+    pub primitives: Vec<crate::trace2d::Primitive>,
 }
 
 /// Fenêtre de vue d'une feuille : la vue placée et le passage du modèle à la feuille.

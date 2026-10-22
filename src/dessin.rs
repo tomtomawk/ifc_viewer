@@ -6,6 +6,7 @@
 
 use crate::rvt::vues::{GrilleMotif, Motif, hachures_plan};
 use crate::scene::{Scene, Vertex};
+use crate::trace2d::{Forme, Primitive, Role, Style};
 use glam::{DVec3, Vec3, Vec4};
 use rayon::prelude::*;
 use std::collections::HashMap;
@@ -173,40 +174,38 @@ pub const PAS_HACHURE_MM: f64 = 1.5;
 pub const NOIR: [u8; 4] = [20, 20, 20, 255];
 
 /// Coupe des objets visibles par le plan `plan` (n, d ; repère de la scène, n·p + d ≥ 0
-/// gardé) : triangles (poché et contours en trait fort) et traits (hachures), à tracer
-/// sans plan de découpe. `echelle` : dénominateur de l'échelle du dessin.
-pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: Poche) -> (Vec<Vertex>, Vec<Vertex>) {
+/// gardé) : poché, hachures et contours en trait fort, en primitives 2D dans le plan
+/// (repère de la scène). `echelle` : dénominateur de l'échelle du dessin (pas des
+/// hachures).
+pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: Poche) -> Vec<Primitive> {
     let n = plan.truncate().as_dvec3();
     let d = plan.w as f64 / n.length().max(1e-12);
     let n = n.normalize_or_zero();
     if n == DVec3::ZERO {
-        return (Vec::new(), Vec::new());
+        return Vec::new();
     }
     // repère du plan : origine, deux axes ; x suit l'axe X du modèle quand c'est possible
     let o = -n * d;
     let ref_x = if n.x.abs() < 0.9 { DVec3::X } else { DVec3::Y };
     let e1 = (ref_x - n * ref_x.dot(n)).normalize();
     let e2 = e1.cross(n);
-    let f = echelle / 1000.0;
-    let (largeur, pas) = (TRAIT_FORT_MM * f, PAS_HACHURE_MM * f);
-    // poché, puis contour, légèrement du côté retiré (vers l'observateur d'un plan)
-    let (dp, dc) = (-n * (0.2 * largeur).min(0.002), -n * (0.4 * largeur).min(0.004));
     let motif = Motif {
         nom: "Poché".into(),
         modele: true,
-        grilles: vec![GrilleMotif { angle: std::f64::consts::FRAC_PI_4, origine: [0.0, 0.0], glissement: 0.0, decalage: pas, tirets: Vec::new() }],
+        grilles: vec![GrilleMotif { angle: std::f64::consts::FRAC_PI_4, origine: [0.0, 0.0], glissement: 0.0, decalage: PAS_HACHURE_MM * echelle / 1000.0, tirets: Vec::new() }],
     };
     let (fond, hachure) = match poche {
         Poche::Hachure => ([226, 226, 226, 255], Some([70, 70, 70, 255])),
         Poche::Plein => ([75, 75, 75, 255], None),
         Poche::Vide => ([255, 255, 255, 255], None),
     };
-    let parties: Vec<(Vec<Vertex>, Vec<Vertex>)> = (0..scene.objects.len())
+    (0..scene.objects.len())
         .into_par_iter()
-        .filter_map(|i| {
+        .flat_map_iter(|i| {
             let ob = &scene.objects[i];
+            let mut prims = Vec::new();
             if !visible[i] || &*ob.class == "IFCANNOTATION" {
-                return None;
+                return prims;
             }
             // boîte entièrement d'un côté du plan : pas de coupe
             let (mut smin, mut smax) = (f64::MAX, f64::MIN);
@@ -217,7 +216,7 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
                 smax = smax.max(s);
             }
             if smin > 0.0 || smax < 0.0 {
-                return None;
+                return prims;
             }
             let mut segs = Vec::new();
             for r in [ob.opaque, ob.transparent] {
@@ -229,66 +228,211 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
                 }
             }
             if segs.is_empty() {
-                return None;
+                return prims;
             }
             let (boucles, ouvertes) = chainer(&segs);
-            let obj = i as u32;
-            // drapeau « annotation » (normal.w) : jamais découpé par le plan
-            let sommet = |x: f64, y: f64, decal: DVec3, color: [u8; 4]| {
-                let p = o + e1 * x + e2 * y + decal;
-                Vertex { pos: p.as_vec3().to_array(), normal: [0, 0, 0, 127], color, obj }
-            };
-            let mut tris = Vec::new();
-            let mut traits = Vec::new();
-            let contours: Vec<Vec<[f32; 2]>> = boucles.iter().map(|b| b.iter().map(|p| [p[0] as f32, p[1] as f32]).collect()).collect();
-            let remplis = crate::texte::trianguler(contours);
-            for t in &remplis {
-                for p in t {
-                    tris.push(sommet(p[0] as f64, p[1] as f64, dp, fond));
-                }
+            let en_3d = |p: [f64; 2]| o + e1 * p[0] + e2 * p[1];
+            let primitive = |forme, couleur, epaisseur, role| Primitive { forme, style: Style { couleur, epaisseur }, role, element: Some(ob.id) };
+            if !boucles.is_empty() {
+                prims.push(primitive(Forme::Surface(boucles.iter().map(|b| b.iter().map(|p| en_3d(*p)).collect()).collect()), fond, 0.0, Role::Poche));
             }
             if let Some(c) = hachure {
-                let t2: Vec<[[f64; 2]; 3]> = remplis.iter().map(|t| t.map(|p| [p[0] as f64, p[1] as f64])).collect();
-                for s in hachures_plan(&t2, &motif, 1.0, 20_000) {
-                    traits.push(sommet(s[0][0], s[0][1], dp, c));
-                    traits.push(sommet(s[1][0], s[1][1], dp, c));
+                let contours: Vec<Vec<[f32; 2]>> = boucles.iter().map(|b| b.iter().map(|p| [p[0] as f32, p[1] as f32]).collect()).collect();
+                let t2: Vec<[[f64; 2]; 3]> = crate::texte::trianguler(contours).iter().map(|t| t.map(|p| [p[0] as f64, p[1] as f64])).collect();
+                let s: Vec<[DVec3; 2]> = hachures_plan(&t2, &motif, 1.0, 20_000).into_iter().map(|s| s.map(en_3d)).collect();
+                if !s.is_empty() {
+                    prims.push(primitive(Forme::Segments(s), c, 0.0, Role::Hachure));
                 }
             }
-            // contour en trait fort : un rectangle par segment, prolongé d'une demi
-            // largeur à chaque bout pour fermer les angles
-            let h = largeur / 2.0;
             for (pts, fermee) in boucles.iter().map(|b| (b, true)).chain(ouvertes.iter().map(|b| (b, false))) {
-                let k = if fermee { pts.len() } else { pts.len() - 1 };
-                for j in 0..k {
-                    let (a, b) = (pts[j], pts[(j + 1) % pts.len()]);
-                    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
-                    let l = (dx * dx + dy * dy).sqrt();
-                    if l < 1e-9 {
-                        continue;
-                    }
-                    let (tx, ty) = (dx / l * h, dy / l * h);
-                    let (nx, ny) = (-ty, tx);
-                    let c = [
-                        [a[0] - tx + nx, a[1] - ty + ny],
-                        [a[0] - tx - nx, a[1] - ty - ny],
-                        [b[0] + tx - nx, b[1] + ty - ny],
-                        [b[0] + tx + nx, b[1] + ty + ny],
-                    ];
-                    for q in [c[0], c[1], c[2], c[0], c[2], c[3]] {
-                        tris.push(sommet(q[0], q[1], dc, NOIR));
-                    }
-                }
+                prims.push(primitive(Forme::Polyligne { points: pts.iter().map(|p| en_3d(*p)).collect(), fermee }, NOIR, TRAIT_FORT_MM, Role::Coupe));
             }
-            Some((tris, traits))
+            prims
         })
-        .collect();
-    let mut tris = Vec::new();
-    let mut traits = Vec::new();
-    for (t, l) in parties {
-        tris.extend(t);
-        traits.extend(l);
+        .collect()
+}
+
+/// Sommets GPU des primitives d'une coupe de normale `normale` : triangles (poché,
+/// contours) et traits (hachures), décalés vers l'observateur (côté retiré du plan) pour
+/// passer devant les faces coupées ; marqués comme annotations, jamais découpés.
+pub fn sommets(scene: &Scene, prims: &[Primitive], normale: DVec3, echelle: f64) -> (Vec<Vertex>, Vec<Vertex>) {
+    let largeur = TRAIT_FORT_MM * echelle / 1000.0;
+    let (mut tris, mut traits) = (Vec::new(), Vec::new());
+    for p in prims {
+        let obj = p.element.and_then(|e| scene.object_of.get(&e).copied()).unwrap_or(u32::MAX);
+        let decal = -normale * if p.role == Role::Coupe { (0.4 * largeur).min(0.004) } else { (0.2 * largeur).min(0.002) };
+        let sommet = |q: DVec3| Vertex { pos: (q + decal).as_vec3().to_array(), normal: [0, 0, 0, 127], color: p.style.couleur, obj };
+        let m = p.mailler(normale, echelle);
+        tris.extend(m.triangles.iter().flatten().map(|q| sommet(*q)));
+        traits.extend(m.traits.iter().flatten().map(|q| sommet(*q)));
     }
     (tris, traits)
+}
+
+/// Arêtes vues sans leurs parties cachées, pour un export vectoriel : vue orthographique
+/// d'axes `droite` et `haut`, regardant vers −`vers_oeil` (vecteurs unitaires), parties
+/// retirées par la coupe (n·p + d < 0) exclues. Les parties cachées sont éliminées par un
+/// tampon de profondeur calculé ici (`resolution` pixels sur le grand côté) : chaque arête
+/// est échantillonnée tous les demi-pixels et gardée là où aucune face n'est devant elle.
+/// Arêtes vives et silhouettes des surfaces courbes, une primitive par objet.
+pub fn vu(scene: &Scene, visible: &[bool], droite: DVec3, haut: DVec3, vers_oeil: DVec3, coupe: Option<Vec4>, resolution: usize) -> Vec<Primitive> {
+    let plan = coupe.map(|c| (c.truncate().as_dvec3(), c.w as f64));
+    let proj = |p: DVec3| DVec3::new(p.dot(droite), p.dot(haut), p.dot(vers_oeil));
+    let objets: Vec<usize> = (0..scene.objects.len()).filter(|&i| visible[i] && &*scene.objects[i].class != "IFCANNOTATION").collect();
+    let pos = |v: &Vertex| Vec3::from(v.pos).as_dvec3();
+    // triangles projetés, découpés par la coupe
+    let mut tris: Vec<[DVec3; 3]> = Vec::new();
+    for &i in &objets {
+        let ob = &scene.objects[i];
+        for r in [ob.opaque, ob.transparent] {
+            for t in scene.vertices[r.start as usize..(r.start + r.count) as usize].chunks_exact(3) {
+                let p = [pos(&t[0]), pos(&t[1]), pos(&t[2])];
+                let poly = match plan {
+                    Some((n, d)) => decouper(&p, n, d),
+                    None => p.to_vec(),
+                };
+                for k in 1..poly.len().saturating_sub(1) {
+                    tris.push([proj(poly[0]), proj(poly[k]), proj(poly[k + 1])]);
+                }
+            }
+        }
+    }
+    // arêtes (vives, silhouettes) projetées, découpées par la coupe, par objet
+    let mut aretes: Vec<(usize, Vec<[DVec3; 2]>)> = Vec::new();
+    for &i in &objets {
+        let ob = &scene.objects[i];
+        let mut segs = Vec::new();
+        for v in scene.vertices[ob.aretes.start as usize..(ob.aretes.start + ob.aretes.count) as usize].chunks_exact(2) {
+            if v[0].normal[3] < 0 {
+                // arête douce : tracée sur la silhouette seulement (voir render.rs)
+                let n1 = DVec3::new(v[0].normal[0] as f64, v[0].normal[1] as f64, v[0].normal[2] as f64) / 127.0;
+                let n2 = DVec3::new(v[0].color[0] as f64, v[0].color[1] as f64, v[0].color[2] as f64) / 255.0 * 2.0 - DVec3::ONE;
+                if n1.dot(vers_oeil) * n2.dot(vers_oeil) > 0.0 {
+                    continue;
+                }
+            }
+            let (mut a, mut b) = (pos(&v[0]), pos(&v[1]));
+            if let Some((n, d)) = plan {
+                let (sa, sb) = (n.dot(a) + d, n.dot(b) + d);
+                if sa < 0.0 && sb < 0.0 {
+                    continue;
+                }
+                if sa < 0.0 {
+                    a = a + (b - a) * (sa / (sa - sb));
+                } else if sb < 0.0 {
+                    b = a + (b - a) * (sa / (sa - sb));
+                }
+            }
+            segs.push([a, b]);
+        }
+        if !segs.is_empty() {
+            aretes.push((i, segs));
+        }
+    }
+    if aretes.is_empty() {
+        return Vec::new();
+    }
+    // tampon de profondeur (plus grande profondeur vers l'œil = plus proche)
+    let (mut mn, mut mx) = (DVec3::splat(f64::MAX), DVec3::splat(f64::MIN));
+    for p in tris.iter().flatten().copied().chain(aretes.iter().flat_map(|a| a.1.iter().flatten().map(|p| proj(*p)))) {
+        mn = mn.min(p);
+        mx = mx.max(p);
+    }
+    let taille = (mx.x - mn.x).max(mx.y - mn.y).max(1e-6);
+    let px = taille / resolution.max(16) as f64;
+    let (nx, ny) = (((mx.x - mn.x) / px).ceil() as usize + 2, ((mx.y - mn.y) / px).ceil() as usize + 2);
+    let mut z = vec![f64::MIN; nx * ny];
+    // coordonnées continues : le pixel (i, j) couvre [i, i+1[ × [j, j+1[, centre en +0,5
+    let grille = |p: DVec3| (((p.x - mn.x) / px) + 0.5, ((p.y - mn.y) / px) + 0.5);
+    for t in &tris {
+        let [a, b, c] = t.map(|p| {
+            let (x, y) = grille(p);
+            DVec3::new(x, y, p.z)
+        });
+        let aire = (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y);
+        if aire.abs() < 1e-12 {
+            continue;
+        }
+        let (i0, i1) = (a.x.min(b.x).min(c.x).floor().max(0.0) as usize, (a.x.max(b.x).max(c.x).ceil() as usize).min(nx - 1));
+        let (j0, j1) = (a.y.min(b.y).min(c.y).floor().max(0.0) as usize, (a.y.max(b.y).max(c.y).ceil() as usize).min(ny - 1));
+        for j in j0..=j1 {
+            let y = j as f64 + 0.5;
+            for i in i0..=i1 {
+                let x = i as f64 + 0.5;
+                let w0 = ((b.x - x) * (c.y - y) - (c.x - x) * (b.y - y)) / aire;
+                let w1 = ((c.x - x) * (a.y - y) - (a.x - x) * (c.y - y)) / aire;
+                let w2 = 1.0 - w0 - w1;
+                if w0 < -1e-9 || w1 < -1e-9 || w2 < -1e-9 {
+                    continue;
+                }
+                let zz = w0 * a.z + w1 * b.z + w2 * c.z;
+                let k = j * nx + i;
+                if zz > z[k] {
+                    z[k] = zz;
+                }
+            }
+        }
+    }
+    // une arête est cachée là où les quatre pixels qui entourent l'échantillon ont une
+    // face nettement devant elle (tolérance : deux pixels et demi de profondeur)
+    let tolerance = 2.5 * px;
+    let visible_en = |p: DVec3| {
+        let (x, y) = grille(p);
+        let (i, j) = ((x - 0.5).floor().max(0.0) as usize, (y - 0.5).floor().max(0.0) as usize);
+        let mut devant = f64::MAX;
+        for (di, dj) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+            let (ii, jj) = ((i + di).min(nx - 1), (j + dj).min(ny - 1));
+            devant = devant.min(z[jj * nx + ii]);
+        }
+        p.z >= devant - tolerance
+    };
+    aretes
+        .into_iter()
+        .filter_map(|(i, segs)| {
+            let mut out = Vec::new();
+            for [a, b] in segs {
+                let (pa, pb) = (proj(a), proj(b));
+                let n = (((pb.x - pa.x).hypot(pb.y - pa.y) / px) * 2.0).ceil().max(1.0) as usize;
+                let mut debut: Option<usize> = None;
+                for k in 0..=n {
+                    let t = k as f64 / n as f64;
+                    let vu = visible_en(pa + (pb - pa) * t);
+                    match (vu, debut) {
+                        (true, None) => debut = Some(k),
+                        (false, Some(k0)) => {
+                            if k - 1 > k0 {
+                                out.push([a + (b - a) * (k0 as f64 / n as f64), a + (b - a) * ((k - 1) as f64 / n as f64)]);
+                            }
+                            debut = None;
+                        }
+                        _ => {}
+                    }
+                }
+                if let Some(k0) = debut
+                    && k0 < n
+                {
+                    out.push([a + (b - a) * (k0 as f64 / n as f64), b]);
+                }
+            }
+            (!out.is_empty()).then(|| Primitive { forme: Forme::Segments(out), style: Style { couleur: NOIR, epaisseur: 0.0 }, role: Role::Vu, element: Some(scene.objects[i].id) })
+        })
+        .collect()
+}
+
+/// Partie d'un triangle du côté gardé du plan (n·p + d ≥ 0) : polygone convexe.
+fn decouper(t: &[DVec3; 3], n: DVec3, d: f64) -> Vec<DVec3> {
+    let mut out = Vec::with_capacity(4);
+    for k in 0..3 {
+        let (a, b) = (t[k], t[(k + 1) % 3]);
+        let (sa, sb) = (n.dot(a) + d, n.dot(b) + d);
+        if sa >= 0.0 {
+            out.push(a);
+        }
+        if (sa >= 0.0) != (sb >= 0.0) {
+            out.push(a + (b - a) * (sa / (sa - sb)));
+        }
+    }
+    out
 }
 
 /// Segment d'intersection d'un triangle et du plan (n, d), s'il le traverse.
@@ -431,6 +575,15 @@ mod tests {
         assert!((longueur(&a.vives) - perimetre).abs() < 1e-6, "{} {}", longueur(&a.vives), perimetre);
         assert_eq!(a.douces.len(), k);
         assert!(a.douces.iter().all(|(s, n1, n2)| (s[0].distance(s[1]) - 1.0).abs() < 1e-9 && n1.dot(*n2) < 0.99));
+    }
+
+    /// Polygone découpé : un triangle à cheval garde un quadrilatère.
+    #[test]
+    fn decoupe_triangle() {
+        let t = [DVec3::ZERO, DVec3::new(2.0, 0.0, 0.0), DVec3::new(0.0, 0.0, 2.0)];
+        let q = decouper(&t, DVec3::NEG_Z, 1.0);
+        assert_eq!(q.len(), 4);
+        assert!(q.iter().all(|p| p.z <= 1.0 + 1e-12));
     }
 
     #[test]

@@ -8,6 +8,7 @@
 //! ses coordonnées sont celles du modèle (plans, coupes) ou, pour une vue de dessin et
 //! une feuille, celles de la vue (mm du papier pour une feuille).
 
+use crate::trace2d::{Forme, Primitive, Role, Style};
 use super::champs::{Obj, Record, Val};
 use super::geometrie::{FT, MotifFace};
 use super::maquette::Geometrie;
@@ -551,17 +552,24 @@ pub fn quad(p: [DVec3; 4], out: &mut Vec<[DVec3; 3]>) {
     out.push([a, c, d]);
 }
 
-/// Triangles d'un élément 2D (hors régions, maillées à part), pour une vue de normale
+/// Primitives d'un élément 2D (hors régions, tracées à part), pour une vue de normale
 /// `n` à l'échelle `echelle` : traits de 0,25 mm sur le papier, cadre du texte, ligne et
-/// repères de cote.
-pub fn trace(e: &Element2D, n: DVec3, echelle: f64) -> Vec<[DVec3; 3]> {
-    let l = 0.25 * echelle;
+/// repères de cote ; mètres.
+pub fn primitives(e: &Element2D, n: DVec3, echelle: f64, couleur: [u8; 4], element: Option<crate::step::Id>) -> Vec<Primitive> {
+    let trait_ = |points: Vec<DVec3>| Primitive {
+        forme: Forme::Polyligne { points: points.into_iter().map(|p| p / 1000.0).collect(), fermee: false },
+        style: Style { couleur, epaisseur: 0.25 },
+        role: Role::Annotation,
+        element,
+    };
     let mut out = Vec::new();
     match &e.contenu {
-        Contenu::Trait(p) => ruban(p, n, l, &mut out),
+        Contenu::Trait(p) => out.push(trait_(p.clone())),
         Contenu::Texte { point, base, haut, largeur, hauteur, .. } => {
             let (w, h) = (*base * largeur * echelle, *haut * hauteur * echelle);
-            quad([*point, *point + w, *point + w - h, *point - h], &mut out);
+            let mut t = Vec::new();
+            quad([*point, *point + w, *point + w - h, *point - h], &mut t);
+            out.push(Primitive { forme: Forme::Triangles(t), style: Style { couleur, epaisseur: 0.0 }, role: Role::Annotation, element });
         }
         Contenu::Cote { origine, direction, segments, points, .. } => {
             if let Some(d) = direction {
@@ -569,12 +577,12 @@ pub fn trace(e: &Element2D, n: DVec3, echelle: f64) -> Vec<[DVec3; 3]> {
                 let ts: Vec<f64> = points.iter().chain(segments.iter().map(|s| &s.1)).map(|p| (*p - *origine).dot(*d)).collect();
                 let (t0, t1) = ts.iter().fold((f64::MAX, f64::MIN), |(a, b), &t| (a.min(t), b.max(t)));
                 if t0 <= t1 {
-                    ruban(&[*origine + t0 * *d, *origine + t1 * *d], n, l, &mut out);
+                    out.push(trait_(vec![*origine + t0 * *d, *origine + t1 * *d]));
                     // repères obliques à 45° sur chaque point de référence
                     let oblique = (*d + n.cross(*d)).normalize() * (1.5 * echelle);
                     for p in points {
                         let q = *origine + (*p - *origine).dot(*d) * *d;
-                        ruban(&[q - oblique, q + oblique], n, l, &mut out);
+                        out.push(trait_(vec![q - oblique, q + oblique]));
                     }
                 }
             }
