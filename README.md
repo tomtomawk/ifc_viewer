@@ -10,6 +10,7 @@ cargo run --release -- chemin\vers\fichier.ifc
 cargo run --release -- --stats chemin\vers\fichier.ifc   # mode console : comptages, volumes, entités ignorées
 cargo run --release -- chemin\vers\projet.rvt
 cargo run --release -- --stats chemin\vers\projet.rvt    # métadonnées, niveaux, éléments par catégorie, volumes, causes d'échec
+cargo run --release -- --parametres chemin\vers\projet.rvt   # valeurs de paramètres décodées (élément, paramètre, stockage, valeur brute)
 ```
 
 Ouverture aussi possible par Ctrl+O ou par glisser-déposer.
@@ -33,7 +34,7 @@ Ouverture aussi possible par Ctrl+O ou par glisser-déposer.
 - Profils : rectangle (creux), cercle (creux), ellipse, I, L, U, T, C, Z, arbitraire avec ou sans vides, dérivé, composite. Courbes : polyligne, IfcIndexedPolyCurve (arcs), composite, cercle/ellipse rognés, B-spline (rationnelle).
 - Ouvertures (IfcRelVoidsElement) soustraites par CSG BSP : les portes et fenêtres sont visibles dans les murs.
 - Grandes coordonnées (géoréférencement) : le rendu est recentré pour éviter les tremblements en f32.
-- Revit (`.rvt`, `.rte`, formats 2016 à 2027) : murs, sols, plafonds, toits, escaliers, garde-corps, pièces et instances de familles (portes, fenêtres, mobilier…) avec la géométrie calculée par Revit (jonctions et ouvertures comprises ; familles en vue 3D, détail fin), colorés par matériau, rangés par niveau, avec type, contraintes, hauteurs, décalages et volume ; portes et fenêtres avec catégorie, hôte, repère et cotes du panneau ; grilles dans l'arborescence ; métadonnées (version, informations projet, références externes, vignette) dans la « Fiche Revit ». Familles (`.rfa`) : formes (extrusions, raccordements, révolutions, balayages, vides). Vues, feuilles, nomenclatures et éléments 2D (lignes, textes, cotes, zones remplies avec leurs hachures), motifs de surface des matériaux sur les faces ; arborescence du projet façon Revit. Format : [docs/LISEZMOI-RVT.md](docs/LISEZMOI-RVT.md).
+- Revit (`.rvt`, `.rte`, formats 2016 à 2027) : murs, sols, plafonds, toits, escaliers, garde-corps, pièces et instances de familles (portes, fenêtres, mobilier…) avec la géométrie calculée par Revit (jonctions et ouvertures comprises ; familles en vue 3D, détail fin), colorés par matériau, rangés par niveau, avec type, contraintes, hauteurs, décalages et volume ; portes et fenêtres avec catégorie, hôte, repère et cotes du panneau ; grilles dans l'arborescence ; métadonnées (version, informations projet, références externes, vignette) dans la « Fiche Revit ». Familles (`.rfa`) : formes (extrusions, raccordements, révolutions, balayages, vides). Vues, feuilles, nomenclatures et éléments 2D (lignes, textes, cotes, zones remplies avec leurs hachures), motifs de surface des matériaux sur les faces ; arborescence du projet façon Revit ; paramètres (intégrés, de famille, partagés, de projet) rangés par groupe comme la palette de Revit ; GlobalId = IfcGUID de Revit. Format : [docs/LISEZMOI-RVT.md](docs/LISEZMOI-RVT.md).
 
 ## Architecture
 
@@ -54,6 +55,7 @@ Ouverture aussi possible par Ctrl+O ou par glisser-déposer.
 | `src/rvt/champs.rs` | Revit : lecteur générique des objets, piloté par le schéma |
 | `src/rvt/geometrie.rs` | Revit : B-rep `GElement` → triangles (faces planes, cylindriques, réglées et de révolution, trous, faces courbes densifiées ; vides écartés) ; familles (`GInstance`) : filtres de vue, repère, géométrie des types partagée |
 | `src/rvt/vues.rs` | Revit : vues, éléments 2D, hachures et motifs de surface |
+| `src/rvt/parametres.rs` | Revit : définitions et valeurs des paramètres, mise en forme, UniqueId et IfcGUID ; tables relevées dans Revit dans `src/rvt/donnees/` |
 | `src/rvt/maquette.rs` | Revit : niveaux, types, familles, matériaux et éléments, traduits en modèle IFC synthétique pour l'affichage |
 | `tools/viewer-mcp/serveur.py` | Serveur MCP (stdio) qui pilote le viewer : ouverture, vues, caméra, propriétés, captures |
 
@@ -72,7 +74,7 @@ aucun viewer n'écoute, le serveur lance `target/release/ifc_viewer.exe` (ou
 
 - Les surfaces NURBS des IfcAdvancedBrep sont approchées par leurs arêtes : les faces fortement courbes sont facettisées grossièrement.
 - La CSG est sautée pour les hôtes de plus de 6 000 triangles ou les ouvertures de plus de 3 000 triangles (performance) ; l'élément est alors affiché plein.
-- Revit : surfaces `HermiteSurf`, `ConeSurf`, `OffsetSurf` et courbes `GEllipse` non décodées ; un solide qui en porte est écarté (le reste de l'élément est affiché) et compté dans les entités ignorées. Paramètres et contenu des nomenclatures non lus. GlobalId synthétiques (`RVT` + ElementId).
+- Revit : surfaces `HermiteSurf`, `ConeSurf`, `OffsetSurf` et courbes `GEllipse` non décodées ; un solide qui en porte est écarté (le reste de l'élément est affiché) et compté dans les entités ignorées. Contenu des nomenclatures et paramètres calculés par Revit (surfaces, volumes) non lus. GlobalId : IfcGUID de Revit pour les formats 2024 et suivants, synthétiques (`RVT` + ElementId) avant.
 - Non pris en charge : IfcSurfaceCurveSweptAreaSolid, IfcFixedReferenceSweptAreaSolid, IfcSectionedSolid, alignements IFC4X3, textures. Les entités ignorées sont listées dans la barre d'état et dans `--stats`.
 
 ## Tests

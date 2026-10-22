@@ -22,7 +22,7 @@ intervention : fichiers dans `C:\Users\theba\Desktop\Revit\Essais-format\2026\`.
 | C7 croissance de `ElemTable` (ajoutée) | faite | seuil net à 64 Ko compressés → règle des blocs intercalés |
 | C11 autres éléments et projets réels (ajoutée le 21/10) | faite | niveaux, types de murs, dalles, instances, pièces extraits (`elements.py`) et identiques à Revit sur `Projet1.rvt` (2026) et `Saint-cast-Le-Guildo.rvt` (2025) ; lecteur étendu aux formats 2022 et 2025 (ids 32 bits jusqu'en 2022) |
 | C8 lecteur d'objets | faite | lecteur générique : tous les enregistrements lus sur les fichiers 2016, 2026 et 2027 essayés, sauf 6 données d'add-ins sur 587 082 ; murs droits et courbes extraits, identiques à Revit |
-| C16 feuilles (22/10) | faite | fenêtres de vue placées par `m_offset` (origine de la vue), boîtes de l'API retrouvées depuis le cadrage ; cartouches et instances de vue placés par `m_Trf` (156 / 156) ; étiquettes remplies ; feuilles affichées par le viewer (LISEZMOI § 7, « Feuilles ») |
+| C17 feuilles (22/10) | faite | fenêtres de vue placées par `m_offset` (origine de la vue), boîtes de l'API retrouvées depuis le cadrage ; cartouches et instances de vue placés par `m_Trf` (156 / 156) ; étiquettes remplies ; feuilles affichées par le viewer (LISEZMOI § 7, « Feuilles ») |
 | C14 familles, vues et 2D, écriture (21/10, soir) | faite | famille chargée = document embarqué ; formes des `.rfa` affichées ; vues et éléments 2D lus ; code correcteur décodé ; fichiers écrits par nos outils ouverts par Revit (LISEZMOI § 4 bis, § 7, § 11) |
 
 Le blocage de décompression est levé : le flux est fait de tranches de 64 896
@@ -319,7 +319,21 @@ arrière-plan, fermé sans enregistrer), comparée automatiquement au décodage
 (`geometrie.py`, puis le lecteur Rust). Travail fait sur la branche `topographie`
 (worktree séparé), en parallèle d'une autre session.
 
-### C16 — Feuilles (faite le 22/10)
+### C16 — Paramètres et identifiants (faite le 21/10, nuit)
+
+Références RiveTT (Revit 2026, documents ouverts en arrière-plan et fermés sans
+enregistrer) : `rvt-table-parametres-integres` (3 740 valeurs de `BuiltInParameter`,
+libellé, stockage), `rvt-reference-parametres-projet` (Kerreut 2025 et Projet1 :
+46 298 valeurs de paramètres modifiables avec leur définition),
+`rvt-reference-parametres-famille` (`FamilyManager` de `FEN_2PF.rfa`, 35 paramètres,
+6 types), `rvt-reference-groupes-uniqueid` (libellés des groupes et des unités,
+UniqueId et IfcGUID). Décodage en Python (`parametres.py`), correspondances
+paramètre → champ apprises sur les références et validées en croisé
+(`parametres_apprendre.py`), règle de l'UniqueId (`uniqueid.py`), portage Rust
+comparé à la référence par `ifc_viewer --parametres` et un script de dépouillement.
+Contrôle visuel par captures du viewer piloté par son canal de commande.
+
+### C17 — Feuilles (faite le 22/10)
 
 Session Revit 2026 ouverte sur `FEN_2PF.rfa` ; documents ouverts en arrière-plan
 (`OpenDocumentFile`, `Close(false)`), jamais enregistrés.
@@ -376,7 +390,7 @@ pas seulement le schéma.
 | C12 | atteint : toits, escaliers, grilles et matériaux identiques à Revit ; volumes des sols, toits, escaliers et pièces identiques à 10⁻⁵ m³ |
 | C13 | atteint : 373 instances sur 448 de volume identique à Revit, 404 à moins de 1 % ; garde-corps 16 / 16 |
 | C15 | atteint : surface topographique et sous-région d'E15 identiques à Revit (points, sommets, triangles, aire, boîte) ; 40 toposolides de Saint-Malo lus et maillés, nombre de faces, type, niveau, décalage et boîte identiques pour les 40 ; volume et aire identiques à 10⁻⁵ près pour 37, à 4·10⁻⁴ au plus pour les 3 autres (faces cylindriques facettées : bordures courbes) ; total 45 414,805 m³ contre 45 414,807 m³ |
-| C16 | atteint : 46 fenêtres de vue, centre et boîte exacts quand le contour est le cadrage, écarts restants expliqués (annotations, niveaux, plans de référence, vues non cadrées) ; 156 instances de vue au repère identique ; feuilles affichées comme les exports de Revit (place des vues, cartouches, titres et étiquettes) |
+| C17 | atteint : 46 fenêtres de vue, centre et boîte exacts quand le contour est le cadrage, écarts restants expliqués (annotations, niveaux, plans de référence, vues non cadrées) ; 156 instances de vue au repère identique ; feuilles affichées comme les exports de Revit (place des vues, cartouches, titres et étiquettes) |
 | C14 | atteint : 11 formes de `FEN_2PF.rfa` sur 13 de volume identique à Revit, le coffre à −0,35 %, la combinaison évidée sans solide comme dans Revit ; motifs, types de régions et motifs des matériaux identiques à Revit ; vues et éléments 2D identiques sur E13, la famille et `Projet1.rvt` ; flux réencodés à l'identique ; quatre fichiers modifiés acceptés par Revit |
 
 Après chaque campagne : résultats reportés dans `LISEZMOI-RVT.md` (faits observés,
