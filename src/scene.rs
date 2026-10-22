@@ -3,7 +3,7 @@
 use crate::geom::{self, GeomStats, ProductGeom};
 use crate::model::IfcModel;
 use crate::step::{Id, IdMap, StepFile};
-use glam::{DMat4, DVec3, DVec4, Vec3};
+use glam::{DMat4, DVec3, DVec4, Vec3, Vec4};
 use rayon::prelude::*;
 use std::path::Path;
 use std::sync::Arc;
@@ -32,6 +32,8 @@ pub struct SceneObject {
     pub transparent: Range,
     /// Sommets des traits (paires, tracés en lignes).
     pub lines: Range,
+    /// Sommets des arêtes vives (paires), tracées en mode dessin.
+    pub aretes: Range,
     pub min: Vec3,
     pub max: Vec3,
 }
@@ -172,12 +174,28 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
     let mut opaque: Vec<Vertex> = Vec::new();
     let mut transp: Vec<Vertex> = Vec::new();
     let mut lignes: Vec<Vertex> = Vec::new();
+    let mut aretes: Vec<Vertex> = Vec::new();
     let mut objects = Vec::with_capacity(geoms.len());
     let mut triangles = 0;
+    let annotation = |g: &ProductGeom| model.get(g.id).is_some_and(|e| &*e.ty == "IFCANNOTATION");
+    // arêtes vives des objets du modèle (pas des annotations : textes, cotes)
+    let vives: Vec<crate::dessin::Aretes> = geoms
+        .par_iter()
+        .map(|g| {
+            if annotation(g) {
+                return Default::default();
+            }
+            let tris: Vec<[DVec3; 3]> = g.parts.iter().flat_map(|p| p.tris.iter().copied()).collect();
+            crate::dessin::aretes(&tris)
+        })
+        .collect();
 
-    for g in &geoms {
+    for (g, vives) in geoms.iter().zip(&vives) {
         let obj = objects.len() as u32;
-        let (o0, t0, l0) = (opaque.len() as u32, transp.len() as u32, lignes.len() as u32);
+        let (o0, t0, l0, a0) = (opaque.len() as u32, transp.len() as u32, lignes.len() as u32, aretes.len() as u32);
+        // drapeau des annotations (4ᵉ octet de la normale) : jamais découpées par la coupe
+        // du mode dessin, ni blanchies
+        let drapeau = if annotation(g) { 127 } else { 0 };
         let mut mn = Vec3::splat(f32::MAX);
         let mut mx = Vec3::splat(f32::MIN);
         for p in &g.parts {
@@ -190,7 +208,7 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
                     continue;
                 }
                 let n = n / len;
-                let normal = [(n.x * 127.0) as i8, (n.y * 127.0) as i8, (n.z * 127.0) as i8, 0];
+                let normal = [(n.x * 127.0) as i8, (n.y * 127.0) as i8, (n.z * 127.0) as i8, drapeau];
                 for v in t {
                     let p = (*v - origin).as_vec3();
                     mn = mn.min(p);
@@ -206,10 +224,25 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
                 let p = (*v - origin).as_vec3();
                 mn = mn.min(p);
                 mx = mx.max(p);
-                lignes.push(Vertex { pos: p.to_array(), normal: [0, 0, 0, 0], color, obj });
+                lignes.push(Vertex { pos: p.to_array(), normal: [0, 0, 0, drapeau], color, obj });
+            }
+        }
+        for v in vives.vives.iter().flatten() {
+            let p = (*v - origin).as_vec3();
+            aretes.push(Vertex { pos: p.to_array(), normal: [0, 0, 0, 0], color: crate::dessin::NOIR, obj });
+        }
+        // arêtes douces : normale de la 1ʳᵉ facette, celle de la 2ᵉ dans la couleur ;
+        // 4ᵉ octet de la normale à −127 (silhouette, voir render.rs)
+        for (s, n1, n2) in &vives.douces {
+            let normal = [(n1.x * 127.0) as i8, (n1.y * 127.0) as i8, (n1.z * 127.0) as i8, -127];
+            let color = [n2.x, n2.y, n2.z].map(|c| ((c * 0.5 + 0.5) * 255.0).round().clamp(0.0, 255.0) as u8);
+            for v in s {
+                let p = (*v - origin).as_vec3();
+                aretes.push(Vertex { pos: p.to_array(), normal, color: [color[0], color[1], color[2], 255], obj });
             }
         }
         if mn.x > mx.x {
+            aretes.truncate(a0 as usize);
             continue;
         }
         objects.push(SceneObject {
@@ -219,20 +252,24 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
             opaque: Range { start: o0, count: opaque.len() as u32 - o0 },
             transparent: Range { start: t0, count: transp.len() as u32 - t0 },
             lines: Range { start: l0, count: lignes.len() as u32 - l0 },
+            aretes: Range { start: a0, count: aretes.len() as u32 - a0 },
             min: mn,
             max: mx,
         });
     }
 
-    // Tampon unique : opaques, transparents, puis sommets des traits.
+    // Tampon unique : opaques, transparents, sommets des traits, puis des arêtes vives.
     let shift = opaque.len() as u32;
     let shift_l = shift + transp.len() as u32;
+    let shift_a = shift_l + lignes.len() as u32;
     for o in &mut objects {
         o.transparent.start += shift;
         o.lines.start += shift_l;
+        o.aretes.start += shift_a;
     }
     opaque.extend(transp);
     opaque.extend(lignes);
+    opaque.extend(aretes);
     let vertices = opaque;
 
     let mut min = Vec3::splat(f32::MAX);
@@ -265,8 +302,9 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
 }
 
 impl Scene {
-    /// Objet visible le plus proche le long du rayon.
-    pub fn pick(&self, origin: Vec3, dir: Vec3, visible: &[bool]) -> Option<(u32, f32)> {
+    /// Objet visible le plus proche le long du rayon ; avec une coupe (n, d), seuls les
+    /// points gardés (n·p + d ≥ 0) des objets du modèle comptent.
+    pub fn pick(&self, origin: Vec3, dir: Vec3, visible: &[bool], coupe: Option<Vec4>) -> Option<(u32, f32)> {
         let inv = dir.recip();
         let mut best: Option<(u32, f32)> = None;
         for (i, o) in self.objects.iter().enumerate() {
@@ -282,7 +320,8 @@ impl Scene {
                 for t in vs.chunks_exact(3) {
                     let (a, b, c) = (Vec3::from(t[0].pos), Vec3::from(t[1].pos), Vec3::from(t[2].pos));
                     if let Some(d) = ray_tri(origin, dir, a, b, c) {
-                        if best.is_none_or(|b| d < b.1) {
+                        let garde = t[0].normal[3] > 0 || coupe.is_none_or(|p| p.truncate().dot(origin + dir * d) + p.w >= 0.0);
+                        if garde && best.is_none_or(|b| d < b.1) {
                             best = Some((i as u32, d));
                         }
                     }

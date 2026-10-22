@@ -3,6 +3,7 @@
 mod app;
 mod camera;
 mod csg;
+mod dessin;
 mod geom;
 mod model;
 mod pilote;
@@ -37,22 +38,24 @@ fn main() {
     }
 
     let path = args.first().map(PathBuf::from);
-    let options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("IFC Viewer")
-            .with_inner_size([1500.0, 920.0])
-            .with_drag_and_drop(true),
-        depth_buffer: 24,
-        multisampling: 4,
-        renderer: eframe::Renderer::Glow,
-        ..Default::default()
-    };
-    if let Err(e) = eframe::run_native(
-        "IFC Viewer",
-        options,
-        Box::new(move |cc| Ok(Box::new(app::ViewerApp::new(cc, path)))),
-    ) {
-        eprintln!("Erreur : {e}");
+    // anticrénelage 4×, sinon sans : pilotes ou serveurs X sans configuration
+    // multiéchantillonnée (machines virtuelles, bureau à distance, Xvfb)
+    for multisampling in [4, 0] {
+        let options = eframe::NativeOptions {
+            viewport: eframe::egui::ViewportBuilder::default()
+                .with_title("IFC Viewer")
+                .with_inner_size([1500.0, 920.0])
+                .with_drag_and_drop(true),
+            depth_buffer: 24,
+            multisampling,
+            renderer: eframe::Renderer::Glow,
+            ..Default::default()
+        };
+        let path = path.clone();
+        match eframe::run_native("IFC Viewer", options, Box::new(move |cc| Ok(Box::new(app::ViewerApp::new(cc, path))))) {
+            Ok(()) => return,
+            Err(e) => eprintln!("Erreur (anticrénelage {multisampling}×) : {e}"),
+        }
     }
 }
 

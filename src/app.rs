@@ -3,6 +3,7 @@
 //! liens d'un fichier Revit ; arborescence spatiale et classes d'un IFC).
 
 use crate::camera::{Camera, MAX_PITCH};
+use crate::dessin::{self, Poche};
 use crate::model::pretty_type;
 use crate::pilote::{self, Requete};
 use crate::render::{FrameParams, ParamsPasse, Renderer};
@@ -120,6 +121,20 @@ pub struct ViewerApp {
     rect_vue: egui::Rect,
     /// Passes des fenêtres de vue de la feuille ouverte.
     passes_feuille: Vec<PasseFeuille>,
+    /// Mode dessin : plans et élévations comme dans un logiciel de DAO.
+    dessin: bool,
+    /// Coupe horizontale du mode dessin : active, niveau de référence (sinon bas du
+    /// modèle) et hauteur au-dessus de lui (m).
+    coupe: bool,
+    coupe_niveau: Option<Id>,
+    coupe_hauteur: f32,
+    poche: Poche,
+    /// Dénominateur de l'échelle du dessin (épaisseur des contours, pas des hachures).
+    echelle: f64,
+    /// Tracé de la coupe à recalculer.
+    coupe_dirty: bool,
+    /// Niveaux de la scène (voir `niveaux`), relevés à son installation.
+    liste_niveaux: Vec<(Id, String, f32)>,
 }
 
 impl ViewerApp {
@@ -166,6 +181,14 @@ impl ViewerApp {
             attente_ouverture: Vec::new(),
             rect_vue: egui::Rect::NOTHING,
             passes_feuille: Vec::new(),
+            dessin: false,
+            coupe: true,
+            coupe_niveau: None,
+            coupe_hauteur: 1.2,
+            poche: Poche::Hachure,
+            echelle: 100.0,
+            coupe_dirty: true,
+            liste_niveaux: Vec::new(),
         };
         if let Some(p) = path {
             app.open(p, &cc.egui_ctx);
@@ -292,6 +315,9 @@ impl ViewerApp {
         }
         self.visible = vec![true; scene.objects.len()];
         self.vue_active = None;
+        self.dessin = false;
+        self.coupe_niveau = None;
+        self.liste_niveaux = niveaux(&scene);
         self.left_tab = if scene.navigateur.is_some() { LeftTab::Projet } else { LeftTab::Tree };
         self.scene = Some(scene);
         self.visibility_dirty = true;
@@ -304,23 +330,84 @@ impl ViewerApp {
         }
         self.visibility_dirty = false;
         let Some(scene) = &self.scene else { return };
+        // coupe du mode dessin : objets du modèle entièrement au-dessus écartés
+        let dessus = self.plan_coupe().map(|p| p.w);
         let mut opaque = Vec::new();
         let mut transp = Vec::new();
         let mut lines = Vec::new();
+        let mut aretes = Vec::new();
         for (i, o) in scene.objects.iter().enumerate() {
             let vis = !self.hidden_classes.contains(&*o.class)
                 && !self.hidden_objects.contains(&(i as u32))
                 && o.storey.is_none_or(|s| !self.hidden_storeys.contains(&s))
-                && self.isolated.as_ref().is_none_or(|iso| iso.contains(&(i as u32)));
+                && self.isolated.as_ref().is_none_or(|iso| iso.contains(&(i as u32)))
+                && dessus.is_none_or(|z| o.min.z <= z || &*o.class == "IFCANNOTATION");
             self.visible[i] = vis;
             if vis {
                 opaque.extend(o.opaque.start..o.opaque.start + o.opaque.count);
                 transp.extend(o.transparent.start..o.transparent.start + o.transparent.count);
                 lines.extend(o.lines.start..o.lines.start + o.lines.count);
+                aretes.extend(o.aretes.start..o.aretes.start + o.aretes.count);
             }
         }
         if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
-            r.upload_indices(gl, &opaque, &transp, &lines);
+            r.upload_indices(gl, &opaque, &transp, &lines, &aretes);
+        }
+        self.coupe_dirty = true;
+    }
+
+    fn niveaux(&self) -> Vec<(Id, String, f32)> {
+        self.liste_niveaux.clone()
+    }
+
+    /// Plan de la coupe horizontale du mode dessin (n, d ; repère de la scène, partie
+    /// gardée sous la cote de coupe), None hors mode dessin ou sans coupe.
+    fn plan_coupe(&self) -> Option<Vec4> {
+        if !self.dessin || !self.coupe {
+            return None;
+        }
+        let s = self.scene.as_ref()?;
+        let base = self.coupe_niveau.and_then(|n| self.liste_niveaux.iter().find(|x| x.0 == n)).map_or(s.min.z, |x| x.2);
+        Some(Vec4::new(0.0, 0.0, -1.0, base + self.coupe_hauteur))
+    }
+
+    /// Recalcule le tracé de la coupe (poché, hachures, contours) s'il le faut.
+    fn update_coupe(&mut self) {
+        if !self.coupe_dirty {
+            return;
+        }
+        self.coupe_dirty = false;
+        let (tris, traits) = match (&self.scene, self.plan_coupe()) {
+            (Some(s), Some(p)) => dessin::coupe(s, &self.visible, p, self.echelle, self.poche),
+            _ => Default::default(),
+        };
+        if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
+            r.upload_coupe(gl, &tris, &traits);
+        }
+    }
+
+    /// Réglages du mode dessin : coupe, niveau, hauteur, poché, échelle.
+    fn reglages_dessin(&mut self, ui: &mut egui::Ui) {
+        let mut change = ui.checkbox(&mut self.coupe, "Coupe").on_hover_text("Coupe horizontale (plan) : parties coupées en poché et trait fort").changed();
+        if self.coupe {
+            let niveaux = self.niveaux();
+            let nom = |n: Option<Id>| n.and_then(|n| niveaux.iter().find(|x| x.0 == n)).map_or("Bas du modèle".to_string(), |x| x.1.clone());
+            egui::ComboBox::from_id_salt("coupe_niveau").selected_text(nom(self.coupe_niveau)).show_ui(ui, |ui| {
+                change |= ui.selectable_value(&mut self.coupe_niveau, None, "Bas du modèle").changed();
+                for (id, n, z) in &niveaux {
+                    change |= ui.selectable_value(&mut self.coupe_niveau, Some(*id), format!("{n} ({z:+.2})")).changed();
+                }
+            });
+            change |= ui.add(egui::DragValue::new(&mut self.coupe_hauteur).speed(0.01).range(-50.0..=200.0).suffix(" m")).on_hover_text("Hauteur de coupe au-dessus du niveau").changed();
+            egui::ComboBox::from_id_salt("poche").selected_text(self.poche.libelle()).show_ui(ui, |ui| {
+                for p in [Poche::Hachure, Poche::Plein, Poche::Vide] {
+                    change |= ui.selectable_value(&mut self.poche, p, p.libelle()).changed();
+                }
+            });
+        }
+        change |= ui.add(egui::DragValue::new(&mut self.echelle).speed(1.0).range(1.0..=10000.0).prefix("1:")).on_hover_text("Échelle : épaisseur des contours et pas des hachures").changed();
+        if change {
+            self.visibility_dirty = true;
         }
     }
 
@@ -426,6 +513,12 @@ impl ViewerApp {
                     self.camera.yaw = -2.3;
                 }
                 ui.toggle_value(&mut self.camera.ortho, "Ortho");
+                if ui.toggle_value(&mut self.dessin, "Dessin 2D").on_hover_text("Plans et élévations : faces blanches, arêtes vives, parties cachées éliminées, coupe").changed() {
+                    self.visibility_dirty = true;
+                }
+                if self.dessin {
+                    self.reglages_dessin(ui);
+                }
                 ui.separator();
                 for (label, classes) in [
                     ("Espaces", &["IFCSPACE"][..]),
@@ -683,6 +776,23 @@ impl ViewerApp {
         };
         let (d, haut, entite) = (v.direction.as_vec3(), v.haut.as_vec3(), v.entite);
         let genre_feuille = v.genre == "Feuille";
+        // mode dessin pour les plans, coupes et élévations ; coupe à hauteur sur le niveau
+        // d'un plan d'étage
+        let (genre, etage, echelle) = (v.genre.clone(), v.etage, v.echelle);
+        match genre.as_str() {
+            "Plan d'étage" | "Plan de plafond" | "Coupe" | "Élévation" => {
+                self.dessin = true;
+                self.coupe = genre == "Plan d'étage";
+                if self.coupe {
+                    self.coupe_niveau = etage;
+                }
+                if echelle > 0.0 {
+                    self.echelle = echelle;
+                }
+            }
+            "Vue 3D" | "Feuille" => self.dessin = false,
+            _ => {}
+        }
         self.vue_active = Some(i);
         self.preparer_feuille(Some(i));
         self.hidden_objects.clear();
@@ -1288,7 +1398,7 @@ impl ViewerApp {
                 let s = app.scene.as_ref()?;
                 let n = ndc(p);
                 let (o, d) = app.camera.ray(n.x, n.y, aspect);
-                s.pick(o, d, &app.visible).map(|(obj, t)| (obj, o + d * t))
+                s.pick(o, d, &app.visible, app.plan_coupe()).map(|(obj, t)| (obj, o + d * t))
             };
 
             // Orbite autour du point visé.
@@ -1372,6 +1482,7 @@ impl ViewerApp {
         }
 
         self.update_visibility();
+        self.update_coupe();
 
         let params = self.frame_params(aspect);
         let renderer = self.renderer.clone();
@@ -1465,7 +1576,9 @@ impl ViewerApp {
             view_dir: self.camera.forward(),
             ortho: self.camera.ortho,
             selected: self.selected_object().unwrap_or(u32::MAX),
-            background: [0.925, 0.933, 0.945],
+            background: if self.dessin { [1.0, 1.0, 1.0] } else { [0.925, 0.933, 0.945] },
+            dessin: self.dessin,
+            coupe: self.plan_coupe(),
         }
     }
 
@@ -1512,6 +1625,7 @@ impl ViewerApp {
         let (l, h) = taille.unwrap_or(((self.rect_vue.width() * ppp).round() as u32, (self.rect_vue.height() * ppp).round() as u32));
         let (l, h) = (l.clamp(16, 4096), h.clamp(16, 4096));
         self.update_visibility();
+        self.update_coupe();
         let params = self.frame_params(l as f32 / h as f32);
         let res = match (&self.gl, self.renderer.lock().unwrap().as_ref()) {
             (Some(gl), Some(r)) => r.capture(gl, &params, l as i32, h as i32),
@@ -1554,6 +1668,17 @@ impl ViewerApp {
                 ("distance", format!("{:.3}", c.dist)),
                 ("cible", format!("[{:.3},{:.3},{:.3}]", c.target.x, c.target.y, c.target.z)),
                 ("ortho", c.ortho.to_string()),
+            ]),
+        ));
+        p.push((
+            "dessin",
+            objet(&[
+                ("actif", self.dessin.to_string()),
+                ("coupe_z", self.plan_coupe().map_or("null".into(), |c| format!("{:.3}", c.w))),
+                ("niveau", self.coupe_niveau.map_or("null".into(), |n| self.decrire(n))),
+                ("hauteur", format!("{:.3}", self.coupe_hauteur)),
+                ("poche", texte(self.poche.nom())),
+                ("echelle", self.echelle.to_string()),
             ]),
         ));
         let mut masquees: Vec<&String> = self.hidden_classes.iter().collect();
@@ -1667,6 +1792,49 @@ impl ViewerApp {
                 }
                 self.etat()
             }
+            "dessin" => {
+                self.dessin = argument != "non";
+                self.visibility_dirty = true;
+                self.etat()
+            }
+            "coupe" => {
+                // coupe non | coupe <hauteur m> [niveau : id ou nom]
+                if argument == "non" {
+                    self.coupe = false;
+                } else {
+                    let (h, niveau) = argument.split_once(' ').unwrap_or((argument, ""));
+                    if !h.is_empty() {
+                        let Ok(h) = h.replace(',', ".").parse::<f32>() else { return erreur("usage : coupe non | coupe <hauteur m> [niveau]") };
+                        self.coupe_hauteur = h;
+                    }
+                    let niveau = niveau.trim().trim_start_matches('#').to_lowercase();
+                    if !niveau.is_empty() {
+                        let n = self.niveaux().into_iter().find(|x| x.0.to_string() == niveau || x.1.to_lowercase() == niveau || x.1.to_lowercase().contains(&niveau));
+                        let Some(n) = n else { return erreur(&format!("niveau introuvable : {niveau}")) };
+                        self.coupe_niveau = Some(n.0);
+                    }
+                    self.dessin = true;
+                    self.coupe = true;
+                }
+                self.visibility_dirty = true;
+                self.etat()
+            }
+            "niveaux" => {
+                let n = self.niveaux().into_iter().map(|(id, nom, z)| objet(&[("id", id.to_string()), ("nom", texte(&nom)), ("z", format!("{z:.3}"))]));
+                succes(&[("niveaux", liste(n))])
+            }
+            "poche" => {
+                let Some(p) = Poche::depuis(argument) else { return erreur("usage : poche hachure|plein|vide") };
+                self.poche = p;
+                self.visibility_dirty = true;
+                self.etat()
+            }
+            "echelle" => {
+                let Some(e) = argument.trim_start_matches("1:").parse::<f64>().ok().filter(|e| *e > 0.0) else { return erreur("usage : echelle <dénominateur> (100 pour 1:100)") };
+                self.echelle = e;
+                self.visibility_dirty = true;
+                self.etat()
+            }
             "zoom" => {
                 let Ok(f) = argument.parse::<f32>() else { return erreur("usage : zoom <facteur> (2 = deux fois plus près)") };
                 self.camera.zoom(1.0 / f.max(1e-3), None);
@@ -1754,7 +1922,7 @@ impl ViewerApp {
                 let (&[x, y], Some(s)) = (&v[..], &self.scene) else { return erreur("usage : objet <x 0..1> <y 0..1>") };
                 let aspect = self.rect_vue.width() / self.rect_vue.height().max(1.0);
                 let (o, d) = self.camera.ray(x * 2.0 - 1.0, 1.0 - y * 2.0, aspect);
-                match s.pick(o, d, &self.visible) {
+                match s.pick(o, d, &self.visible, self.plan_coupe()) {
                     Some((obj, t)) => {
                         let p = o + d * t;
                         succes(&[("entite", self.decrire(s.objects[obj as usize].id)), ("point", format!("[{:.3},{:.3},{:.3}]", p.x, p.y, p.z))])
@@ -1765,6 +1933,21 @@ impl ViewerApp {
             _ => erreur(&format!("commande inconnue : {commande}")),
         }
     }
+}
+
+/// Niveaux du modèle : entité, nom, altitude dans le repère de la scène (élévation de
+/// l'IfcBuildingStorey), du plus bas au plus haut.
+fn niveaux(s: &Scene) -> Vec<(Id, String, f32)> {
+    let mut out: Vec<(Id, String, f32)> = s
+        .model
+        .file
+        .entities
+        .iter()
+        .filter(|(_, e)| &*e.ty == "IFCBUILDINGSTOREY")
+        .filter_map(|(&id, e)| Some((id, s.model.name(id), (e.arg(9).as_f64()? * s.model.length_scale - s.origin.z) as f32)))
+        .collect();
+    out.sort_by(|a, b| a.2.total_cmp(&b.2).then(a.0.cmp(&b.0)));
+    out
 }
 
 /// Fichier Revit, reconnu à l'extension ou à la signature OLE.

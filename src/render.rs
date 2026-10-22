@@ -6,26 +6,45 @@ use glam::{Mat4, Vec3, Vec4};
 
 const VS: &str = r#"
 layout(location = 0) in vec3 a_pos;
-layout(location = 1) in vec3 a_normal;
+layout(location = 1) in vec4 a_normal;
 layout(location = 2) in vec4 a_color;
 layout(location = 3) in uint a_obj;
 uniform mat4 u_mvp;
 uniform uint u_sel;
 uniform vec4 u_plans[2];
+uniform vec4 u_coupe;
+uniform vec3 u_eye;
+uniform bool u_ortho;
+uniform vec3 u_view_dir;
 out vec3 v_pos;
 out vec3 v_n;
 out vec4 v_c;
 flat out uint v_selected;
+flat out uint v_annot;
 void main() {
     v_pos = a_pos;
-    v_n = a_normal;
+    v_n = a_normal.xyz;
+    // annotations (4ᵉ composante de la normale) : ni découpées ni blanchies en mode dessin
+    v_annot = a_normal.w > 0.5 ? 1u : 0u;
     v_c = a_color;
     v_selected = (a_obj == u_sel) ? 1u : 0u;
     gl_Position = u_mvp * vec4(a_pos, 1.0);
+    // arête douce (4ᵉ composante de la normale négative) : normales des deux facettes
+    // dans a_normal et a_color ; tracée en noir sur la silhouette seulement, sinon
+    // envoyée hors du volume de vue
+    if (a_normal.w < -0.5) {
+        vec3 vers_oeil = u_ortho ? -u_view_dir : u_eye - a_pos;
+        if (dot(a_normal.xyz, vers_oeil) * dot(a_color.rgb * 2.0 - 1.0, vers_oeil) > 0.0) {
+            gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        }
+        v_c = vec4(0.08, 0.08, 0.08, 1.0);
+    }
 #ifndef GL_ES
     // plans de découpe des passes (fenêtres de vue) : actifs seulement si demandés
     gl_ClipDistance[0] = dot(u_plans[0], vec4(a_pos, 1.0));
     gl_ClipDistance[1] = dot(u_plans[1], vec4(a_pos, 1.0));
+    // coupe du mode dessin (plan) : partie retirée, sauf annotations
+    gl_ClipDistance[2] = v_annot == 1u ? 1.0 : dot(u_coupe, vec4(a_pos, 1.0));
 #endif
 }
 "#;
@@ -35,15 +54,22 @@ in vec3 v_pos;
 in vec3 v_n;
 in vec4 v_c;
 flat in uint v_selected;
+flat in uint v_annot;
 uniform vec3 u_eye;
 uniform bool u_ortho;
 uniform vec3 u_view_dir;
 uniform bool u_flat;
+uniform bool u_dessin;
 out vec4 o_color;
 void main() {
     if (u_flat) {
         vec3 l = v_selected == 1u ? mix(v_c.rgb, vec3(1.0, 0.55, 0.1), 0.65) : v_c.rgb;
         o_color = vec4(l, 1.0);
+        return;
+    }
+    if (u_dessin && v_annot == 0u) {
+        // faces du dessin : blanches, elles masquent les arêtes cachées
+        o_color = vec4(v_selected == 1u ? vec3(1.0, 0.82, 0.62) : vec3(1.0), 1.0);
         return;
     }
     vec3 n = normalize(v_n);
@@ -85,9 +111,15 @@ pub struct Renderer {
     ebo_opaque: glow::Buffer,
     ebo_transp: glow::Buffer,
     ebo_lines: glow::Buffer,
+    ebo_aretes: glow::Buffer,
     n_opaque: i32,
     n_transp: i32,
     n_lines: i32,
+    n_aretes: i32,
+    /// Coupe du mode dessin : sommets propres (triangles puis traits).
+    vao_coupe: glow::VertexArray,
+    vbo_coupe: glow::Buffer,
+    n_coupe: [i32; 2],
     u_mvp: Option<glow::UniformLocation>,
     u_sel: Option<glow::UniformLocation>,
     u_eye: Option<glow::UniformLocation>,
@@ -95,6 +127,8 @@ pub struct Renderer {
     u_view_dir: Option<glow::UniformLocation>,
     u_flat: Option<glow::UniformLocation>,
     u_plans: Option<glow::UniformLocation>,
+    u_coupe: Option<glow::UniformLocation>,
+    u_dessin: Option<glow::UniformLocation>,
     passes: Vec<Passe>,
 }
 
@@ -105,6 +139,10 @@ pub struct FrameParams {
     pub ortho: bool,
     pub selected: u32,
     pub background: [f32; 3],
+    /// Mode dessin : faces blanches, arêtes vives, transparents opaques.
+    pub dessin: bool,
+    /// Plan de coupe du mode dessin (n, d ; n·p + d ≥ 0 gardé) et tracé de la coupe.
+    pub coupe: Option<Vec4>,
     /// Passes des fenêtres de vue (feuille ouverte), dans l'ordre des indices envoyés
     /// par `upload_passes`.
     pub passes: Vec<ParamsPasse>,
@@ -145,17 +183,21 @@ impl Renderer {
             let ebo_opaque = gl.create_buffer()?;
             let ebo_transp = gl.create_buffer()?;
             let ebo_lines = gl.create_buffer()?;
-            gl.bind_vertex_array(Some(vao));
-            gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo));
+            let ebo_aretes = gl.create_buffer()?;
+            let (vao_coupe, vbo_coupe) = (gl.create_vertex_array()?, gl.create_buffer()?);
             let stride = std::mem::size_of::<Vertex>() as i32;
-            gl.enable_vertex_attrib_array(0);
-            gl.vertex_attrib_pointer_f32(0, 3, glow::FLOAT, false, stride, 0);
-            gl.enable_vertex_attrib_array(1);
-            gl.vertex_attrib_pointer_f32(1, 3, glow::BYTE, true, stride, 12);
-            gl.enable_vertex_attrib_array(2);
-            gl.vertex_attrib_pointer_f32(2, 4, glow::UNSIGNED_BYTE, true, stride, 16);
-            gl.enable_vertex_attrib_array(3);
-            gl.vertex_attrib_pointer_i32(3, 1, glow::UNSIGNED_INT, stride, 20);
+            for (a, b) in [(vao, vbo), (vao_coupe, vbo_coupe)] {
+                gl.bind_vertex_array(Some(a));
+                gl.bind_buffer(glow::ARRAY_BUFFER, Some(b));
+                gl.enable_vertex_attrib_array(0);
+                gl.vertex_attrib_pointer_f32(0, 3, glow::FLOAT, false, stride, 0);
+                gl.enable_vertex_attrib_array(1);
+                gl.vertex_attrib_pointer_f32(1, 4, glow::BYTE, true, stride, 12);
+                gl.enable_vertex_attrib_array(2);
+                gl.vertex_attrib_pointer_f32(2, 4, glow::UNSIGNED_BYTE, true, stride, 16);
+                gl.enable_vertex_attrib_array(3);
+                gl.vertex_attrib_pointer_i32(3, 1, glow::UNSIGNED_INT, stride, 20);
+            }
             gl.bind_vertex_array(None);
             gl.bind_buffer(glow::ARRAY_BUFFER, None);
 
@@ -167,6 +209,8 @@ impl Renderer {
                 u_view_dir: gl.get_uniform_location(program, "u_view_dir"),
                 u_flat: gl.get_uniform_location(program, "u_flat"),
                 u_plans: gl.get_uniform_location(program, "u_plans[0]").or_else(|| gl.get_uniform_location(program, "u_plans")),
+                u_coupe: gl.get_uniform_location(program, "u_coupe"),
+                u_dessin: gl.get_uniform_location(program, "u_dessin"),
                 passes: Vec::new(),
                 program,
                 vao,
@@ -174,9 +218,14 @@ impl Renderer {
                 ebo_opaque,
                 ebo_transp,
                 ebo_lines,
+                ebo_aretes,
                 n_opaque: 0,
                 n_transp: 0,
                 n_lines: 0,
+                n_aretes: 0,
+                vao_coupe,
+                vbo_coupe,
+                n_coupe: [0, 0],
             })
         }
     }
@@ -190,10 +239,12 @@ impl Renderer {
         self.n_opaque = 0;
         self.n_transp = 0;
         self.n_lines = 0;
+        self.n_aretes = 0;
     }
 
-    /// Indices des triangles opaques, transparents et des traits (paires) à tracer.
-    pub fn upload_indices(&mut self, gl: &glow::Context, opaque: &[u32], transp: &[u32], lines: &[u32]) {
+    /// Indices des triangles opaques, transparents, des traits et des arêtes vives
+    /// (paires) à tracer.
+    pub fn upload_indices(&mut self, gl: &glow::Context, opaque: &[u32], transp: &[u32], lines: &[u32], aretes: &[u32]) {
         unsafe {
             gl.bind_vertex_array(Some(self.vao));
             gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_opaque));
@@ -202,12 +253,26 @@ impl Renderer {
             gl.buffer_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, as_bytes(transp), glow::DYNAMIC_DRAW);
             gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_lines));
             gl.buffer_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, as_bytes(lines), glow::DYNAMIC_DRAW);
+            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_aretes));
+            gl.buffer_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, as_bytes(aretes), glow::DYNAMIC_DRAW);
             gl.bind_vertex_array(None);
             gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
         }
         self.n_opaque = opaque.len() as i32;
         self.n_transp = transp.len() as i32;
         self.n_lines = lines.len() as i32;
+        self.n_aretes = aretes.len() as i32;
+    }
+
+    /// Tracé de la coupe du mode dessin : triangles (poché, contours) et traits (hachures).
+    pub fn upload_coupe(&mut self, gl: &glow::Context, tris: &[Vertex], traits: &[Vertex]) {
+        unsafe {
+            gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.vbo_coupe));
+            let tout: Vec<Vertex> = tris.iter().chain(traits).copied().collect();
+            gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, as_bytes(&tout), glow::DYNAMIC_DRAW);
+            gl.bind_buffer(glow::ARRAY_BUFFER, None);
+        }
+        self.n_coupe = [tris.len() as i32, traits.len() as i32];
     }
 
     /// Indices (triangles opaques, transparents, traits) de chaque passe ; une liste vide
@@ -258,6 +323,52 @@ impl Renderer {
         }
     }
 
+    /// Mode dessin : faces blanches (transparents compris) découpées par la coupe, traits
+    /// et arêtes vives par-dessus (parties cachées éliminées par la profondeur), puis le
+    /// tracé de la coupe (poché, hachures, contours), jamais découpé.
+    unsafe fn dessiner_plan(&self, gl: &glow::Context, p: &FrameParams) {
+        unsafe {
+            let decoupe = p.coupe.is_some() && !gl.version().is_embedded;
+            if let Some(c) = p.coupe.filter(|_| decoupe) {
+                gl.uniform_4_f32(self.u_coupe.as_ref(), c.x, c.y, c.z, c.w);
+            }
+            if decoupe {
+                gl.enable(glow::CLIP_DISTANCE0 + 2);
+            }
+            gl.disable(glow::BLEND);
+            // faces repoussées plus nettement qu'en 3D : les arêtes sont à leur profondeur
+            // exacte et les arrondis en f32 dépassent une unité du tampon de profondeur
+            gl.polygon_offset(1.0, 64.0);
+            gl.uniform_1_i32(self.u_dessin.as_ref(), 1);
+            for (ebo, n) in [(self.ebo_opaque, self.n_opaque), (self.ebo_transp, self.n_transp)] {
+                if n > 0 {
+                    gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ebo));
+                    gl.draw_elements(glow::TRIANGLES, n, glow::UNSIGNED_INT, 0);
+                }
+            }
+            gl.uniform_1_i32(self.u_dessin.as_ref(), 0);
+            gl.polygon_offset(1.0, 1.0);
+            gl.uniform_1_i32(self.u_flat.as_ref(), 1);
+            for (ebo, n) in [(self.ebo_lines, self.n_lines), (self.ebo_aretes, self.n_aretes)] {
+                if n > 0 {
+                    gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ebo));
+                    gl.draw_elements(glow::LINES, n, glow::UNSIGNED_INT, 0);
+                }
+            }
+            if decoupe {
+                gl.disable(glow::CLIP_DISTANCE0 + 2);
+                gl.uniform_4_f32(self.u_coupe.as_ref(), 0.0, 0.0, 0.0, 1.0);
+            }
+            if p.coupe.is_some() && self.n_coupe[0] + self.n_coupe[1] > 0 {
+                gl.bind_vertex_array(Some(self.vao_coupe));
+                gl.draw_arrays(glow::TRIANGLES, 0, self.n_coupe[0]);
+                gl.draw_arrays(glow::LINES, self.n_coupe[0], self.n_coupe[1]);
+                gl.bind_vertex_array(Some(self.vao));
+            }
+            gl.uniform_1_i32(self.u_flat.as_ref(), 0);
+        }
+    }
+
     pub fn paint(&self, gl: &glow::Context, p: &FrameParams, viewport: [i32; 4]) {
         unsafe {
             gl.enable(glow::SCISSOR_TEST);
@@ -275,6 +386,11 @@ impl Renderer {
             gl.uniform_3_f32(self.u_eye.as_ref(), p.eye.x, p.eye.y, p.eye.z);
             gl.uniform_1_i32(self.u_ortho.as_ref(), p.ortho as i32);
             gl.uniform_3_f32(self.u_view_dir.as_ref(), p.view_dir.x, p.view_dir.y, p.view_dir.z);
+            // plans de découpe neutres (distance positive ou nulle) hors de leur usage :
+            // certains pilotes (llvmpipe) appliquent les distances écrites par le shader
+            // même quand GL_CLIP_DISTANCEi n'est pas activé
+            gl.uniform_4_f32(self.u_coupe.as_ref(), 0.0, 0.0, 0.0, 1.0);
+            gl.uniform_4_f32_slice(self.u_plans.as_ref(), &[0.0; 8]);
             gl.bind_vertex_array(Some(self.vao));
 
             gl.enable(glow::POLYGON_OFFSET_FILL);
@@ -318,12 +434,17 @@ impl Renderer {
                 }
             }
             if !p.passes.is_empty() {
+                gl.uniform_4_f32_slice(self.u_plans.as_ref(), &[0.0; 8]);
                 gl.scissor(viewport[0], viewport[1], viewport[2], viewport[3]);
                 gl.clear(glow::DEPTH_BUFFER_BIT);
                 gl.uniform_matrix_4_f32_slice(self.u_mvp.as_ref(), false, &p.mvp.to_cols_array());
                 gl.uniform_3_f32(self.u_view_dir.as_ref(), p.view_dir.x, p.view_dir.y, p.view_dir.z);
             }
-            self.dessiner(gl, [self.ebo_opaque, self.ebo_transp, self.ebo_lines], [self.n_opaque, self.n_transp, self.n_lines]);
+            if p.dessin {
+                self.dessiner_plan(gl, p);
+            } else {
+                self.dessiner(gl, [self.ebo_opaque, self.ebo_transp, self.ebo_lines], [self.n_opaque, self.n_transp, self.n_lines]);
+            }
             gl.disable(glow::POLYGON_OFFSET_FILL);
             gl.bind_vertex_array(None);
             gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
@@ -390,6 +511,9 @@ impl Renderer {
             gl.delete_buffer(self.ebo_opaque);
             gl.delete_buffer(self.ebo_transp);
             gl.delete_buffer(self.ebo_lines);
+            gl.delete_buffer(self.ebo_aretes);
+            gl.delete_vertex_array(self.vao_coupe);
+            gl.delete_buffer(self.vbo_coupe);
             for ps in &self.passes {
                 for b in ps.ebo {
                     gl.delete_buffer(b);

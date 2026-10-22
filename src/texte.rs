@@ -185,7 +185,7 @@ fn dedans(p: [f32; 2], c: &[[f32; 2]]) -> bool {
 /// Triangles d'un glyphe : chaque contour est extérieur ou trou selon la parité du
 /// nombre de contours qui le contiennent ; un trou est rattaché au plus petit contour
 /// extérieur qui le contient.
-fn trianguler(mut contours: Vec<Vec<[f32; 2]>>) -> Vec<[[f32; 2]; 3]> {
+pub(crate) fn trianguler(mut contours: Vec<Vec<[f32; 2]>>) -> Vec<[[f32; 2]; 3]> {
     for c in &mut contours {
         if c.len() > 1 && c.first() == c.last() {
             c.pop();
