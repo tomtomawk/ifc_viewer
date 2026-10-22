@@ -10,6 +10,7 @@ mod render;
 mod rvt;
 mod scene;
 mod step;
+mod texte;
 
 use std::path::PathBuf;
 
@@ -309,7 +310,7 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
     for (c, n) in &cats {
         println!("  {c:<34} {n}");
     }
-    println!("Instances de vue (ignorées) : {}", m.instances_de_vue);
+    println!("Instances de vue (cartouches, symboles, composants de détail) : {}", m.instances_de_vue);
     bilan("Formes", &mut m.formes.iter().map(|x| &x.geometrie));
     for f in &m.formes {
         let g = f.geometrie.as_ref().map(|g| format!("{:.6} m3", g.controle().volume_m3)).unwrap_or_else(|e| e.clone());

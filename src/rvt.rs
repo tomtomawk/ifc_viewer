@@ -13,6 +13,7 @@
 //! scène du viewer (`maquette`).
 
 mod champs;
+pub mod feuilles;
 pub mod geometrie;
 pub mod maquette;
 mod objets;

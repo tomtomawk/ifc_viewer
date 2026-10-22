@@ -72,12 +72,36 @@ pub fn inflate_global(raw: &[u8]) -> Result<Vec<u8>, String> {
     inflate(b.get(8..).ok_or("flux Global tronqué")?)
 }
 
+/// Document d'une partition auquel appartient un membre : `None` pour le document
+/// principal, sinon le GUID du document embarqué (famille chargée).
+pub type Document = Option<[u8; 16]>;
+
 /// {h6 : données décompressées concaténées} d'un flux de partition. Les membres sont
 /// décompressés en parallèle ; un enregistrement peut déborder sur le membre suivant
-/// de la même section, d'où la concaténation dans l'ordre.
-pub fn sections(raw: &[u8]) -> Result<BTreeMap<u32, Vec<u8>>, String> {
+/// de la même section, d'où la concaténation dans l'ordre. Pour chaque section aussi,
+/// le début (position dans les données concaténées) de chacun de ses membres et le
+/// document auquel il appartient.
+/// `marqueurs` : ids de classe de `ContentMarker` et `ContentKey` (propres à chaque
+/// version du schéma). Un document commence par un `ContentMarker` collé à l'en-tête
+/// de son premier membre : u16 classe, u32 0 et u32 nombre d'éléments pour le document
+/// principal ; u16 classe, u32 FFFFFFFF, u16 `ContentKey`, u32 nombre d'éléments puis
+/// le GUID (corps du pointeur, écrit après les champs) pour un document embarqué.
+pub fn sections_documents(raw: &[u8], marqueurs: Option<(u16, u16)>) -> Result<(BTreeMap<u32, Vec<u8>>, BTreeMap<u32, Vec<(usize, Document)>>), String> {
     let b = unpad(raw);
     let heads = gzip_heads(&b);
+    // document de chaque membre : le dernier marqueur rencontré
+    let mut docs: Vec<Document> = Vec::with_capacity(heads.len());
+    let mut doc: Document = None;
+    for &h in &heads {
+        if let (Some((cm, ck)), Some(o)) = (marqueurs, h.checked_sub(54)) {
+            if u16_at(&b, o) == Some(cm) && u32_at(&b, o + 2) == Some(u32::MAX) && u16_at(&b, o + 6) == Some(ck) {
+                doc = b.get(h - 42..h - 26).and_then(|g| g.try_into().ok());
+            } else if u16_at(&b, h - 36) == Some(cm) && u32_at(&b, h - 34) == Some(0) {
+                doc = None;
+            }
+        }
+        docs.push(doc);
+    }
     let membres: Vec<Result<(u32, Vec<u8>), String>> = (0..heads.len())
         .into_par_iter()
         .map(|i| {
@@ -88,11 +112,23 @@ pub fn sections(raw: &[u8]) -> Result<BTreeMap<u32, Vec<u8>>, String> {
         })
         .collect();
     let mut out: BTreeMap<u32, Vec<u8>> = BTreeMap::new();
-    for m in membres {
+    let mut debuts: BTreeMap<u32, Vec<(usize, Document)>> = BTreeMap::new();
+    for (m, doc) in membres.into_iter().zip(docs) {
         let (h6, d) = m?;
-        out.entry(h6).or_default().extend(d);
+        let s = out.entry(h6).or_default();
+        debuts.entry(h6).or_default().push((s.len(), doc));
+        s.extend(d);
     }
-    Ok(out)
+    Ok((out, debuts))
+}
+
+/// Document d'un enregistrement commençant à la position `pos` des données d'une
+/// section, d'après les débuts de ses membres (voir [`sections_documents`]).
+pub fn document_de(debuts: &[(usize, Document)], pos: usize) -> Document {
+    match debuts.partition_point(|d| d.0 <= pos) {
+        0 => None,
+        k => debuts[k - 1].1,
+    }
 }
 
 /// Enregistrements `(id, octets)` d'une section. `stamp` : présence du u32 non

@@ -954,11 +954,13 @@ version = "0.1.0"
 dependencies = [
  "earcutr",
  "eframe",
+ "epaint_default_fonts",
  "glam",
  "miniz_oxide 0.8.9",
  "png",
  "rayon",
  "rfd",
+ "skrifa",
 ]
 
 [[package]]

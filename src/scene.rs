@@ -3,7 +3,7 @@
 use crate::geom::{self, GeomStats, ProductGeom};
 use crate::model::IfcModel;
 use crate::step::{Id, IdMap, StepFile};
-use glam::{DVec3, Vec3};
+use glam::{DMat4, DVec3, DVec4, Vec3};
 use rayon::prelude::*;
 use std::path::Path;
 use std::sync::Arc;
@@ -66,6 +66,28 @@ pub struct NavVue {
     pub etage: Option<Id>,
     /// Vues placées sur une feuille (ids Revit).
     pub placees: Vec<i64>,
+    /// Fenêtres de vue d'une feuille, dans l'ordre de `placees`.
+    pub fenetres: Vec<NavFenetre>,
+}
+
+/// Fenêtre de vue d'une feuille : la vue placée et le passage du modèle à la feuille.
+/// Coordonnées en mètres, repère du fichier (avant soustraction de `Scene::origin`).
+pub struct NavFenetre {
+    /// Vue placée (id Revit).
+    pub vue: i64,
+    /// Repère affine du modèle vers la feuille : x, y sur le papier, z = profondeur
+    /// réduite à l'échelle (vers l'observateur).
+    pub vers_feuille: DMat4,
+    /// Cadrage du modèle sur la feuille (xmin, ymin, xmax, ymax), None : vue non cadrée.
+    pub cadre: Option<[f64; 4]>,
+    /// Cadrage des annotations de la vue sur la feuille, None : non découpées.
+    pub cadre_annotations: Option<[f64; 4]>,
+    /// Plans de découpe en profondeur dans le modèle (n, d) : n·p + d ≥ 0 est gardé.
+    pub plans: Vec<DVec4>,
+    /// Direction de la vue (vers l'observateur), pour l'éclairage.
+    pub direction: DVec3,
+    /// Éléments masqués dans la vue placée (ids Revit).
+    pub masques: Vec<i64>,
 }
 
 /// Famille (chargeable ou système) et ses types (nom, entité du type s'il est utilisé).

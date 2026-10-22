@@ -38,22 +38,138 @@ pub struct Vue {
     pub type_vue: i64,
     /// Numéro d'une feuille (`m_sheetNumber`).
     pub numero: String,
+    /// Cadrage complet de la vue (bornes min et max, actives ou non).
+    pub cadre: Option<Cadre>,
+    /// Plage d'un plan : cotes absolues (mm) du plan de coupe (`m_cutPlaneElev`) et du
+    /// bas de la vue (`m_bottomClipElev`).
+    pub plage: Option<(f64, f64)>,
+    /// Révisions présentes sur une feuille (`m_explicitlyPresentRevisionIds`).
+    pub revisions: Vec<i64>,
+    /// Éléments masqués dans la vue (`m_oHiddenElementsViewSettings.m_hiddenElements`).
+    pub masques: Vec<i64>,
+    /// Catégories masquées dans la vue (`m_oaDrawFilters[0].m_categoryIds` ; contient
+    /// toutes celles que donne `View.GetCategoryHidden`, vérifié sur trois vues).
+    pub categories_masquees: Vec<i64>,
+    /// Titre sur la feuille (`m_viewDescription`), affiché par le titre de la fenêtre de
+    /// vue à la place du nom.
+    pub titre_feuille: String,
+}
+
+/// Cadrage d'une vue (`Viewer.m_boundedSpace`) : origine `m_orig`, axes `m_basis`,
+/// bornes de chaque axe (`m_boundOffset[i]` = [max, min], mm), actives si les deux
+/// drapeaux de `m_boundActive[i]` valent 1 ; cadrage d'annotation actif
+/// (`m_bAnnotationCropActive`) et ses décalages
+/// (`m_pAnnotationCropOffsets.m_leftRightTopBottomOffsets`, mm du papier : gauche,
+/// droite, haut, bas).
+#[derive(Clone, Copy, Debug)]
+pub struct Cadre {
+    pub origine: DVec3,
+    pub axes: [DVec3; 3],
+    pub min: [f64; 3],
+    pub max: [f64; 3],
+    pub actif: [bool; 3],
+    /// Limite de vue active (premier drapeau de `m_boundActive[2]` : borne max en
+    /// profondeur ; coupes et élévations, toujours découpées au plan de la vue).
+    pub loin: bool,
+    pub annotation_active: bool,
+    pub annotation: [f64; 4],
+}
+
+/// Type de fenêtre de vue (`m_attrId` d'un `Viewport`) : nom, titre affiché
+/// (`m_showLabel`), type de la famille de titre (`m_familyTagId`), ligne d'extension
+/// (`m_showExtensionLine`).
+pub struct TypeFenetre {
+    pub nom: String,
+    pub titre: bool,
+    pub famille_titre: i64,
+    pub ligne: bool,
+}
+
+/// Paramètre affiché par une étiquette (`m_paramDataFormattingArr`) : paramètre,
+/// préfixe, suffixe, texte d'exemple, saut de ligne avant.
+pub struct ParamEtiquette {
+    pub param: i64,
+    pub prefixe: String,
+    pub suffixe: String,
+    pub exemple: String,
+    pub a_la_ligne: bool,
+}
+
+/// Textes d'un segment de cote (`m_values[0].m_oTextFields`) : valeur remplacée
+/// (`m_valueOverride`), préfixe, suffixe.
+#[derive(Default, Clone)]
+pub struct TexteCote {
+    pub remplacement: String,
+    pub prefixe: String,
+    pub suffixe: String,
+}
+
+/// Alignement horizontal d'un texte : le point d'ancrage est à gauche, au milieu ou à
+/// droite du cadre.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Alignement {
+    Gauche,
+    Centre,
+    Droite,
+}
+
+/// Alignement vertical d'un texte : le point d'ancrage est en haut, au milieu ou en bas
+/// du bloc de lignes.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Vertical {
+    Haut,
+    Milieu,
+    Bas,
+}
+
+/// Alignements d'un texte d'après `TextElement.m_flags` (valeurs de `TextAlignFlags` de
+/// l'API : 0x40, 0x80, 0x100 à gauche, au centre, à droite ; 0x200, 0x400, 0x800 en
+/// haut, au milieu, en bas ; vérifié sur les étiquettes d'un cartouche de Kerreut contre
+/// l'export de la feuille par Revit), à défaut d'après le RTF.
+fn alignements(o: &Obj, rtf: Alignement) -> (Alignement, Vertical) {
+    let f = o.get("m_flags").and_then(Val::int).unwrap_or(0);
+    let h = if f & 0x80 != 0 {
+        Alignement::Centre
+    } else if f & 0x100 != 0 {
+        Alignement::Droite
+    } else if f & 0x40 != 0 {
+        Alignement::Gauche
+    } else {
+        rtf
+    };
+    let v = if f & 0x400 != 0 {
+        Vertical::Milieu
+    } else if f & 0x800 != 0 {
+        Vertical::Bas
+    } else {
+        Vertical::Haut
+    };
+    (h, v)
 }
 
 pub enum Contenu {
     /// Ligne ou arc de détail (`CurveElem`), polyligne en mm (arc facetté).
     Trait(Vec<DVec3>),
-    /// Note de texte : texte, point d'ancrage, direction du texte et vers le haut,
-    /// largeur et hauteur sur le papier (mm).
-    Texte { texte: String, point: DVec3, base: DVec3, haut: DVec3, largeur: f64, hauteur: f64 },
+    /// Note de texte : texte, point d'ancrage (`m_orig` : haut du cadre, à gauche, au
+    /// milieu ou à droite selon l'alignement), direction du texte et vers le haut,
+    /// largeur et hauteur du cadre sur le papier (mm), alignement, type (`m_attrId`).
+    Texte { texte: String, point: DVec3, base: DVec3, haut: DVec3, largeur: f64, hauteur: f64, alignement: Alignement, vertical: Vertical, gras: bool, type_id: i64 },
     /// Cote : ligne (origine, direction), valeur et milieu de chaque segment (mm), points
-    /// de référence.
-    Cote { origine: DVec3, direction: Option<DVec3>, segments: Vec<(f64, DVec3)>, points: Vec<DVec3> },
+    /// de référence (sur les éléments cotés), type (`m_styleSymbolId`), éléments cotés
+    /// (`m_witnessRefs[].m_pWitnessRef.m_geomRef.m_elemId`).
+    Cote { origine: DVec3, direction: Option<DVec3>, segments: Vec<(f64, DVec3)>, points: Vec<DVec3>, type_id: i64, references: Vec<i64>, textes: Vec<TexteCote> },
     /// Région remplie : face plane de son `GElement`, type (`m_attrId`, un
     /// `FilledRegionAttributes`).
     Region { type_id: i64 },
     /// Fenêtre de vue d'une feuille : vue placée, décalage sur la feuille (mm), échelle.
-    FenetreDeVue { vue: i64, decalage: DVec3, echelle: f64 },
+    /// Le décalage est la position sur la feuille de l'origine de la vue : un point p du
+    /// modèle se place en décalage + échelle · ((p − origine)·droite, (p − origine)·haut).
+    /// Titre : origine sur la feuille (`m_labelOrigin`) et longueur de sa ligne
+    /// (`m_labelLength`), mm ; type de fenêtre `m_attrId`.
+    FenetreDeVue { vue: i64, decalage: DVec3, echelle: f64, titre: DVec3, longueur_titre: f64, type_id: i64 },
+    /// Étiquette d'une famille (`TagNote` : cartouche, titre de vue) : paramètres
+    /// affichés, cadre comme un texte, type `m_attrId` (taille de la police).
+    Etiquette { params: Vec<ParamEtiquette>, point: DVec3, base: DVec3, haut: DVec3, largeur: f64, hauteur: f64, alignement: Alignement, vertical: Vertical, gras: bool, type_id: i64 },
 }
 
 pub struct Element2D {
@@ -64,7 +180,15 @@ pub struct Element2D {
     pub contenu: Contenu,
     /// Géométrie calculée (régions remplies).
     pub geometrie: Geometrie,
+    /// Paramètre de famille qui commande la visibilité de l'élément (`m_cellList` :
+    /// `m_paramDrivenData` de propriété `IS_VISIBLE_PARAM`), −1 sinon.
+    pub visible_si: i64,
+    /// Région de masquage (`FilledRegion.m_bMasking`) : blanche.
+    pub masque: bool,
 }
+
+/// Propriété « Visible » d'un élément (BuiltInParameter).
+const IS_VISIBLE_PARAM: i64 = -1_006_205;
 
 fn id_of(o: &Obj, name: &str) -> i64 {
     o.get(name).and_then(Val::element_id).unwrap_or(-1)
@@ -115,7 +239,77 @@ pub fn vue(id: i64, r: &Record) -> Option<Vue> {
         cadrage: None,
         type_vue: id_of(o, "m_dbViewTypeId"),
         numero: o.get("m_sheetNumber").and_then(Val::str).unwrap_or_default().to_string(),
+        cadre: None,
+        categories_masquees: o
+            .get("m_oaDrawFilters")
+            .map(Val::list)
+            .unwrap_or_default()
+            .first()
+            .and_then(|f| r.deref(f))
+            .and_then(|f| f.obj.get("m_categoryIds"))
+            .map(Val::list)
+            .unwrap_or_default()
+            .iter()
+            .filter_map(Val::element_id)
+            .collect(),
+        masques: r.field_body(o, "m_oHiddenElementsViewSettings").and_then(|h| h.get("m_hiddenElements")).map(Val::list).unwrap_or_default().iter().filter_map(Val::element_id).collect(),
+        titre_feuille: o.get("m_viewDescription").and_then(Val::str).unwrap_or_default().to_string(),
+        revisions: o.get("m_explicitlyPresentRevisionIds").map(Val::list).unwrap_or_default().iter().filter_map(Val::element_id).collect(),
+        plage: match (o.get("m_cutPlaneElev").and_then(Val::real), o.get("m_bottomClipElev").and_then(Val::real)) {
+            (Some(c), Some(b)) if o.class_name() == "DBViewPlan" => Some((c * FT, b * FT)),
+            _ => None,
+        },
     })
+}
+
+/// Cadrage complet d'un `Viewer` (voir [`Cadre`]) et sa vue.
+pub fn cadre(r: &Record) -> Option<(i64, Cadre)> {
+    let o = &r.root;
+    let b = o.get("m_boundedSpace")?.obj()?;
+    let axes: Vec<DVec3> = b.get("m_basis")?.list().iter().filter_map(|v| vec3(Some(v))).collect();
+    let bornes: Vec<Vec<f64>> = b.get("m_boundOffset")?.list().iter().filter_map(Val::reals).collect();
+    let actifs: Vec<Vec<f64>> = b.get("m_boundActive").map(Val::list).unwrap_or_default().iter().filter_map(Val::reals).collect();
+    let (&[x, y, z], [bx, by, bz]) = (axes.as_slice(), bornes.as_slice()) else { return None };
+    let borne = |v: &[f64], i: usize| v.get(i).copied().unwrap_or(0.0) * FT;
+    let actif = |i: usize| actifs.get(i).is_some_and(|a| a.len() == 2 && a.iter().all(|&x| x == 1.0));
+    let mut annotation = [0.0; 4];
+    if let Some(a) = r.field_body(o, "m_pAnnotationCropOffsets").and_then(|a| a.get("m_leftRightTopBottomOffsets")?.reals()) {
+        for (k, v) in a.iter().take(4).enumerate() {
+            annotation[k] = v * FT;
+        }
+    }
+    Some((
+        id_of(o, "m_dbViewId"),
+        Cadre {
+            origine: vec3(b.get("m_orig"))? * FT,
+            axes: [x, y, z],
+            min: [borne(bx, 1), borne(by, 1), borne(bz, 1)],
+            max: [borne(bx, 0), borne(by, 0), borne(bz, 0)],
+            actif: [actif(0), actif(1), actif(2)],
+            loin: actifs.get(2).and_then(|a| a.first()) == Some(&1.0),
+            annotation_active: o.get("m_bAnnotationCropActive").and_then(Val::int) == Some(1),
+            annotation,
+        },
+    ))
+}
+
+impl Cadre {
+    /// Contour (umin, vmin, umax, vmax) du cadrage sur le papier d'une vue (mm, relatif
+    /// à l'origine de la vue, axes droite et haut, échelle 1 / `echelle`) : projection
+    /// des huit coins.
+    pub fn contour(&self, v: &Vue) -> [f64; 4] {
+        let mut c = [f64::MAX, f64::MAX, f64::MIN, f64::MIN];
+        for &x in &[self.min[0], self.max[0]] {
+            for &y in &[self.min[1], self.max[1]] {
+                for &z in &[self.min[2], self.max[2]] {
+                    let p = self.origine + x * self.axes[0] + y * self.axes[1] + z * self.axes[2] - v.origine;
+                    let (u, w) = (p.dot(v.droite) / v.echelle, p.dot(v.haut) / v.echelle);
+                    c = [c[0].min(u), c[1].min(w), c[2].max(u), c[3].max(w)];
+                }
+            }
+        }
+        c
+    }
 }
 
 /// (vue, origine, axes, longueurs) du cadrage d'un `Viewer`.
@@ -210,6 +404,23 @@ pub fn texte_rtf(b: &[u8]) -> String {
     out.trim().to_string()
 }
 
+/// Alignement du premier paragraphe d'un RTF (`\qc` centré, `\qr` à droite) et gras
+/// (``, pas `0`).
+fn style_rtf(rtf: &Obj) -> (Alignement, bool) {
+    let b: Vec<u8> = rtf.get("m_arrRtfStream").map(Val::list).unwrap_or_default().iter().filter_map(|v| v.int().map(|c| c as u8)).collect();
+    let s = String::from_utf8_lossy(&b);
+    // mot de contrôle entier : suivi d'autre chose qu'une lettre ou un chiffre
+    let mot = |m: &str| s.match_indices(m).any(|(i, _)| !s[i + m.len()..].starts_with(|c: char| c.is_ascii_alphanumeric()));
+    let alignement = if mot(r"\qc") {
+        Alignement::Centre
+    } else if mot(r"\qr") {
+        Alignement::Droite
+    } else {
+        Alignement::Gauche
+    };
+    (alignement, mot(r""))
+}
+
 /// Élément 2D d'une vue, None pour une classe non retenue ou une ligne d'esquisse sans
 /// courbe.
 pub fn element(id: i64, r: &Record) -> Option<Element2D> {
@@ -230,7 +441,9 @@ pub fn element(id: i64, r: &Record) -> Option<Element2D> {
                 }
             }
             let reel = |n| o.get(n).and_then(Val::real).unwrap_or(0.0) * FT;
-            Contenu::Texte { texte, point: vec3(o.get("m_orig"))? * FT, base: vec3(o.get("m_baseVec"))?, haut: vec3(o.get("m_upVec"))?, largeur: reel("m_lineWidth"), hauteur: reel("m_height") }
+            let (rtf, gras) = r.field_body(o, "m_oSavedRtfData").map(style_rtf).unwrap_or((Alignement::Gauche, false));
+            let (alignement, vertical) = alignements(o, rtf);
+            Contenu::Texte { texte, point: vec3(o.get("m_orig"))? * FT, base: vec3(o.get("m_baseVec"))?, haut: vec3(o.get("m_upVec"))?, largeur: reel("m_lineWidth"), hauteur: reel("m_height"), alignement, vertical, gras, type_id: id_of(o, "m_attrId") }
         }
         "LinearDimString" | "RadialDim" | "AngularDim" | "ArcLengthDim" => {
             let ligne = r.field_body(o, "m_pDimLine");
@@ -248,13 +461,69 @@ pub fn element(id: i64, r: &Record) -> Option<Element2D> {
                 })
                 .collect::<Vec<_>>();
             let points = o.get("m_refPnts").map(Val::list).unwrap_or_default().iter().filter_map(|p| vec3(Some(p))).map(|p| p * FT).collect();
-            Contenu::Cote { origine: origine.or_else(|| segments.first().map(|s| s.1))?, direction, segments, points }
+            let references = o
+                .get("m_witnessRefs")
+                .map(Val::list)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|w| r.field_body(w.obj()?, "m_pWitnessRef")?.get("m_geomRef")?.obj().map(|g| id_of(g, "m_elemId")))
+                .collect();
+            let textes = o
+                .get("m_ArrSegInfo")
+                .map(Val::list)
+                .unwrap_or_default()
+                .iter()
+                .filter(|s| s.obj().and_then(|s| s.get("m_values")?.list().first()?.obj()?.get("m_value")?.real()).is_some())
+                .map(|s| {
+                    let t = s.obj().and_then(|s| r.field_body(s.get("m_values")?.list().first()?.obj()?, "m_oTextFields"));
+                    let champ = |k| t.and_then(|t| t.get(k)?.str()).unwrap_or_default().to_string();
+                    TexteCote { remplacement: champ("m_valueOverride"), prefixe: champ("m_prefix"), suffixe: champ("m_suffix") }
+                })
+                .collect();
+            Contenu::Cote { origine: origine.or_else(|| segments.first().map(|s| s.1))?, direction, segments, points, type_id: id_of(o, "m_styleSymbolId"), references, textes }
         }
         "FilledRegion" => Contenu::Region { type_id: id_of(o, "m_attrId") },
-        "Viewport" => Contenu::FenetreDeVue { vue: id_of(o, "m_dbViewId"), decalage: vec3(o.get("m_offset"))? * FT, echelle: o.get("m_scale").and_then(Val::real).unwrap_or(1.0) },
+        "Viewport" => Contenu::FenetreDeVue {
+            vue: id_of(o, "m_dbViewId"),
+            decalage: vec3(o.get("m_offset"))? * FT,
+            echelle: o.get("m_scale").and_then(Val::real).unwrap_or(1.0),
+            titre: vec3(o.get("m_labelOrigin")).unwrap_or_default() * FT,
+            longueur_titre: o.get("m_labelLength").and_then(Val::real).unwrap_or(0.0) * FT,
+            type_id: id_of(o, "m_attrId"),
+        },
+        "TagNote" => {
+            let params = o
+                .get("m_paramDataFormattingArr")
+                .map(Val::list)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|p| {
+                    let p = p.obj()?;
+                    let s = |k| p.get(k).and_then(Val::str).unwrap_or_default().to_string();
+                    Some(ParamEtiquette { param: id_of(p, "m_paramId"), prefixe: s("m_prefix"), suffixe: s("m_suffix"), exemple: s("m_sampleText"), a_la_ligne: p.get("m_bLeadingLineBreak").and_then(Val::int) == Some(1) })
+                })
+                .collect();
+            let reel = |n| o.get(n).and_then(Val::real).unwrap_or(0.0) * FT;
+            let (rtf, gras) = r.field_body(o, "m_oSavedRtfData").map(style_rtf).unwrap_or((Alignement::Gauche, false));
+            let (alignement, vertical) = alignements(o, rtf);
+            Contenu::Etiquette { params, point: vec3(o.get("m_orig"))? * FT, base: vec3(o.get("m_baseVec"))?, haut: vec3(o.get("m_upVec"))?, largeur: reel("m_lineWidth"), hauteur: reel("m_height"), alignement, vertical, gras, type_id: id_of(o, "m_attrId") }
+        }
         _ => return None,
     };
-    Some(Element2D { id, classe: o.class_name().to_string(), vue, famille: id_of(o, "m_famId"), contenu, geometrie: Err(String::new()) })
+    // visibilité commandée par un paramètre de la famille (étiquette d'un titre de vue…)
+    let mut visible_si = -1;
+    if let Some(cl) = r.field_body(o, "m_cellList") {
+        for c in cl.get("m_cells").map(Val::list).unwrap_or_default() {
+            let Some(c) = r.deref(c) else { continue };
+            for d in c.obj.get("m_paramDrivenData").map(Val::list).unwrap_or_default() {
+                let Some(d) = d.obj() else { continue };
+                if id_of(d, "m_elemPropId") == IS_VISIBLE_PARAM {
+                    visible_si = id_of(d, "m_famParamId");
+                }
+            }
+        }
+    }
+    Some(Element2D { id, classe: o.class_name().to_string(), vue, famille: id_of(o, "m_famId"), contenu, geometrie: Err(String::new()), visible_si, masque: o.get("m_bMasking").and_then(Val::int) == Some(1) })
 }
 
 // ------------------------------------------------------------------ Tracé
@@ -294,7 +563,7 @@ pub fn trace(e: &Element2D, n: DVec3, echelle: f64) -> Vec<[DVec3; 3]> {
             let (w, h) = (*base * largeur * echelle, *haut * hauteur * echelle);
             quad([*point, *point + w, *point + w - h, *point - h], &mut out);
         }
-        Contenu::Cote { origine, direction, segments, points } => {
+        Contenu::Cote { origine, direction, segments, points, .. } => {
             if let Some(d) = direction {
                 // étendue : projection des points de référence (ou des milieux) sur la ligne
                 let ts: Vec<f64> = points.iter().chain(segments.iter().map(|s| &s.1)).map(|p| (*p - *origine).dot(*d)).collect();
@@ -310,7 +579,7 @@ pub fn trace(e: &Element2D, n: DVec3, echelle: f64) -> Vec<[DVec3; 3]> {
                 }
             }
         }
-        Contenu::Region { .. } | Contenu::FenetreDeVue { .. } => {}
+        Contenu::Region { .. } | Contenu::FenetreDeVue { .. } | Contenu::Etiquette { .. } => {}
     }
     out
 }
@@ -365,6 +634,87 @@ pub fn motif(r: &Record) -> Option<Motif> {
         });
     }
     Some(Motif { nom: fp.get("m_name").and_then(Val::str).unwrap_or_default().to_string(), modele: fp.get("m_fpTarget").and_then(Val::int) == Some(1), grilles })
+}
+
+/// Type de cote (`DimensionStyle`), longueurs en mm du papier : format des valeurs
+/// (`m_oLinFormatOptions` : unité, précision ; celui du projet si `m_bUseDefault`), texte
+/// en gras et sous-catégorie (couleur) de `m_pLineAndTextAttr`, lignes d'attache de
+/// longueur fixe (`m_dimWitnCntrlExtBelow` = 1, `DIM_WITNS_LINE_CNTRL`) ou jusqu'à
+/// l'élément, paramètres `DIM_WITNS_LINE_EXTENSION_BELOW` (longueur fixe),
+/// `WITNS_LINE_EXTENSION` (au-delà de la ligne de cote), `WITNS_LINE_GAP_TO_ELT`,
+/// `DIM_LINE_EXTENSION`, `TEXT_DIST_TO_LINE`.
+pub struct TypeCote {
+    pub format: Option<(String, f64)>,
+    pub gras: bool,
+    pub categorie: i64,
+    pub attache_fixe: bool,
+    pub longueur_attache: f64,
+    pub extension_attache: f64,
+    pub ecart_element: f64,
+    pub extension_ligne: f64,
+    pub decalage_texte: f64,
+}
+
+/// Format (unité, précision) d'un `FormatOptions`, None s'il suit le projet.
+pub fn format(f: &Obj) -> Option<(String, f64)> {
+    if f.get("m_bUseDefault").and_then(Val::int) == Some(1) {
+        return None;
+    }
+    let u = f.get("m_unitTypeId")?.obj()?.get("m_typeId")?.str()?.to_string();
+    Some((u, f.get("m_accuracy").and_then(Val::real).unwrap_or(1.0)))
+}
+
+pub fn type_cote(r: &Record) -> Option<TypeCote> {
+    let o = &r.root;
+    let mut p: std::collections::HashMap<i64, f64> = Default::default();
+    for x in r.field_body(o, "m_pParamValueSetDouble").and_then(|s| s.get("m_paramSet")).map(Val::list).unwrap_or_default() {
+        if let Some(x) = x.obj() {
+            p.insert(id_of(x, "m_paramId"), x.get("m_value").and_then(Val::real).unwrap_or(0.0) * FT);
+        }
+    }
+    let attr = r.field_body(o, "m_pLineAndTextAttr");
+    Some(TypeCote {
+        format: r.field_body(o, "m_oLinFormatOptions").and_then(format),
+        gras: attr.and_then(|a| a.get("m_bBold")?.int()) == Some(1),
+        categorie: attr.map(|a| id_of(a, "m_categoryId")).unwrap_or(-1),
+        attache_fixe: o.get("m_dimWitnCntrlExtBelow").and_then(Val::int) == Some(1),
+        longueur_attache: p.get(&-1_006_433).copied().unwrap_or(0.0),
+        extension_attache: p.get(&-1_006_404).copied().unwrap_or(0.0),
+        ecart_element: p.get(&-1_006_405).copied().unwrap_or(0.0),
+        extension_ligne: p.get(&-1_006_431).copied().unwrap_or(0.0),
+        decalage_texte: p.get(&-1_006_401).copied().unwrap_or(0.0),
+    })
+}
+
+/// Format des longueurs du projet (`UnitsElem.m_units.m_formatOptionsMap`, entrée
+/// `autodesk.spec.aec:length`).
+pub fn format_projet(r: &Record) -> Option<(String, f64)> {
+    let u = r.root.get("m_units")?.obj()?;
+    for e in u.get("m_formatOptionsMap")?.list() {
+        let e = e.obj()?;
+        let spec = e.get("first").and_then(Val::obj).and_then(|f| f.get("m_typeId")?.str()).unwrap_or_default();
+        if spec.starts_with("autodesk.spec.aec:length-") {
+            return format(e.get("second")?.obj()?);
+        }
+    }
+    None
+}
+
+/// Texte d'une longueur (mm) selon un format (unité, précision) ; mètres au centimètre
+/// près à défaut.
+pub fn texte_longueur(v: f64, format: Option<&(String, f64)>) -> String {
+    let (unite, precision) = format.map(|(u, a)| (u.as_str(), *a)).unwrap_or(("meters", 0.01));
+    let unite = unite.rsplit(':').next().unwrap_or("").split('-').next().unwrap_or("");
+    let x = match unite {
+        "millimeters" => v,
+        "centimeters" => v / 10.0,
+        "decimeters" => v / 100.0,
+        _ => v / 1000.0,
+    };
+    let precision = if precision > 0.0 { precision } else { 1.0 };
+    let arrondi = (x / precision).round() * precision;
+    let decimales = (-precision.log10()).ceil().max(0.0) as usize;
+    format!("{arrondi:.decimales$}")
 }
 
 pub fn type_region(r: &Record) -> Option<TypeRegion> {

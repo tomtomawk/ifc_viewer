@@ -440,8 +440,9 @@ impl Trf {
     }
 }
 
-/// Faces et échecs de décodage d'un type de famille, dans son repère.
-type FacesType = Arc<(Vec<Face>, Vec<String>)>;
+/// Faces, échecs de décodage et traits (polylignes en pieds) d'un type de famille,
+/// dans son repère.
+type FacesType = Arc<(Vec<Face>, Vec<String>, Vec<Vec<DVec3>>)>;
 
 /// Faces des types (`GElement` de la section 0x67 d'un `Symbol` : type de famille,
 /// marches d'escalier…), calculées une fois dans le repère du type puis partagées par
@@ -450,11 +451,26 @@ pub struct Bibliotheque<'a, 's> {
     sch: &'s Schema,
     octets: &'a HashMap<i64, Vec<u8>>,
     cache: Mutex<HashMap<i64, FacesType>>,
+    /// Garder les faces ouvertes (types 2D : régions remplies d'un cartouche).
+    feuilles: bool,
 }
 
 impl<'a, 's> Bibliotheque<'a, 's> {
     pub fn new(sch: &'s Schema, octets: &'a HashMap<i64, Vec<u8>>) -> Self {
-        Bibliotheque { sch, octets, cache: Mutex::new(HashMap::new()) }
+        Bibliotheque { sch, octets, cache: Mutex::new(HashMap::new()), feuilles: false }
+    }
+
+    /// Bibliothèque des types 2D (cartouches, symboles, composants de détail) : faces
+    /// ouvertes gardées.
+    pub fn dessins(sch: &'s Schema, octets: &'a HashMap<i64, Vec<u8>>) -> Self {
+        Bibliotheque { sch, octets, cache: Mutex::new(HashMap::new()), feuilles: true }
+    }
+
+    /// Dessin du type `id` (repère du type, mm), None s'il n'a pas de géométrie.
+    pub fn dessin(&self, id: i64) -> Option<Dessin> {
+        let f = self.type_famille(id, 0)?;
+        let faces: Vec<(Option<[u8; 3]>, Vec<[DVec3; 3]>)> = f.0.iter().map(|x| (x.motif.map(|m| m.couleur), x.triangles.iter().map(|t| t.map(|p| p * FT)).collect())).collect();
+        Some(Dessin { traits: f.2.iter().map(|l| l.iter().map(|p| *p * FT).collect()).collect(), faces })
     }
 
     /// Faces (pieds, repère du type) et échecs de décodage du type `id`.
@@ -463,9 +479,9 @@ impl<'a, 's> Bibliotheque<'a, 's> {
             return Some(f.clone());
         }
         let rec = champs::read(self.sch, self.octets.get(&id)?).ok()?;
-        let mut p = Parcours { bib: self, tout: false, faces: Vec::new(), echecs: Vec::new() };
+        let mut p = Parcours { bib: self, tout: false, feuilles: self.feuilles, faces: Vec::new(), echecs: Vec::new(), traits: Vec::new() };
         p.noeud(&rec, gelement(&rec).ok()?, &Trf::ID, prof);
-        let f = Arc::new((p.faces, p.echecs));
+        let f = Arc::new((p.faces, p.echecs, p.traits));
         self.cache.lock().unwrap().insert(id, f.clone());
         Some(f)
     }
@@ -473,9 +489,36 @@ impl<'a, 's> Bibliotheque<'a, 's> {
 
 struct Parcours<'b, 'a, 's> {
     bib: &'b Bibliotheque<'a, 's>,
+    /// Tout garder : nœuds invisibles et faces ouvertes.
     tout: bool,
+    /// Garder les faces ouvertes.
+    feuilles: bool,
     faces: Vec<Face>,
     echecs: Vec<String>,
+    /// Courbes (`GLine`, `GArc`…) : polylignes en pieds.
+    traits: Vec<Vec<DVec3>>,
+}
+
+/// Dessin 2D d'un type (cartouche, symbole, composant de détail) : traits et faces
+/// (régions remplies, avec la couleur de leur remplissage s'il est connu), mm.
+pub struct Dessin {
+    pub traits: Vec<Vec<DVec3>>,
+    pub faces: Vec<(Option<[u8; 3]>, Vec<[DVec3; 3]>)>,
+}
+
+/// Points (pieds) d'une courbe d'un `GElement` : droite, arc facetté tous les 5° au plus,
+/// spline en 16 segments.
+fn polyligne(c: &Obj) -> Option<Vec<DVec3>> {
+    let n = match c.class_name() {
+        "GLine" => 1,
+        "GArc" => match c.get("m_endParams").and_then(Val::reals).as_deref() {
+            Some(&[t0, t1]) => (((t1 - t0).abs() / 5f64.to_radians()).ceil() as usize).max(2),
+            _ => return None,
+        },
+        "GHermiteSpline" => 16,
+        _ => return None,
+    };
+    (0..=n).map(|k| point_courbe(c, k as f64 / n as f64).ok()).collect()
 }
 
 impl Parcours<'_, '_, '_> {
@@ -502,8 +545,11 @@ impl Parcours<'_, '_, '_> {
             }
             _ => {}
         }
+        if let Some(l) = polyligne(n) {
+            self.traits.push(l.into_iter().map(|p| t.r * p + t.o).collect());
+        }
         if n.get("m_pFaces").is_some() {
-            match solide(rec, n, self.tout) {
+            match solide(rec, n, self.tout || self.feuilles) {
                 Ok(Some(fs)) => self.ajouter(fs.iter(), t),
                 Ok(None) => {}
                 Err(e) => self.echecs.push(e),
@@ -535,6 +581,7 @@ impl Parcours<'_, '_, '_> {
             Some(f) => {
                 self.ajouter(f.0.iter(), &t2);
                 self.echecs.extend(f.1.iter().cloned());
+                self.traits.extend(f.2.iter().map(|l| l.iter().map(|p| t2.r * *p + t2.o).collect()));
             }
             None => self.echecs.push(format!("géométrie du type {id} absente")),
         }
@@ -802,7 +849,7 @@ fn incercle(a: DVec2, b: DVec2, c: DVec2, d: DVec2) -> f64 {
 /// Maillage indexé (mm) des solides de l'élément, familles comprises ; les solides non
 /// décodés sont comptés dans `Maillage::echecs`. Erreur si aucun ne l'est.
 pub fn maillage(rec: &Record, tout: bool, bib: &Bibliotheque) -> Result<Maillage, String> {
-    let mut p = Parcours { bib, tout, faces: Vec::new(), echecs: Vec::new() };
+    let mut p = Parcours { bib, tout, feuilles: tout, faces: Vec::new(), echecs: Vec::new(), traits: Vec::new() };
     p.noeud(rec, gelement(rec)?, &Trf::ID, 0);
     if let (true, Some(e)) = (p.faces.is_empty(), p.echecs.first()) {
         return Err(e.clone());

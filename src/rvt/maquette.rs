@@ -14,16 +14,17 @@
 
 use super::champs::{self, Obj, Record, Val};
 use super::geometrie::{self, FT, Maillage};
-use super::objets::{elem_table, episodes, inflate, records, sections, unpad};
+use super::objets::{document_de, elem_table, episodes, inflate, records, sections_documents, unpad};
 use super::parametres::{self, Brut, Definition};
 use super::schema::Schema;
-use super::vues::{self, Contenu, Element2D, Motif, TypeRegion, Vue};
+use super::feuilles;
+use super::vues::{self, Cadre, Contenu, Element2D, Motif, TypeFenetre, TypeRegion, Vue};
 use super::Cfb;
 use crate::geom::{Ligne, Part, ProductGeom, Rgba, class_color};
 use crate::model::IfcModel;
 use crate::scene::{self, NavFamille, NavVue, Navigateur, Scene};
 use crate::step::{Entity, Id, IdMap, StepFile, Value, format_real};
-use glam::DVec3;
+use glam::{DMat3, DVec3};
 use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
@@ -108,6 +109,9 @@ pub struct TypeElem {
     /// fenêtre, les cotes du panneau, pas l'encombrement de la famille (huisserie).
     pub largeur: Option<f64>,
     pub hauteur: Option<f64>,
+    /// Sous-catégorie d'un type de texte ou d'étiquette (`m_lineAndTextAttr.m_categoryId`),
+    /// qui porte sa couleur ; −1 sinon.
+    pub categorie_texte: i64,
 }
 
 pub struct Famille {
@@ -120,6 +124,37 @@ pub struct Famille {
     /// Paramètres d'occurrence de la famille (`Family.m_familyParams`, `m_instance` = 1),
     /// intégrés compris : leur valeur est portée par chaque instance, pas par le type.
     pub occurrence: std::collections::HashSet<i64>,
+    /// Document embarqué d'une famille chargée (`m_oFamDoc.m_contentDocGUID`).
+    pub document: Option<[u8; 16]>,
+}
+
+/// Instance de famille propre à une vue (cartouche ou symbole d'une feuille, composant
+/// de détail, annotation) : type, vue, repère `m_pInstanceInfo.m_Trf` (comme
+/// `GetTransform` de l'API : origine en mm, axes en colonnes, échelle de la vue comprise
+/// pour une annotation).
+pub struct InstanceVue {
+    pub id: i64,
+    pub vue: i64,
+    pub type_id: i64,
+    pub origine: DVec3,
+    pub axes: DMat3,
+}
+
+/// Révision du projet (`ProjectRevision`).
+pub struct Revision {
+    pub description: String,
+    pub date: String,
+    pub numero: String,
+    pub sequence: i64,
+    pub remise_a: String,
+    pub remise_par: String,
+}
+
+/// Police d'un type de texte ou d'étiquette (`FontElem.m_pFont`, propriétaire
+/// `m_ownerId`) : nom et taille (mm, hauteur des capitales dans Revit).
+pub struct Police {
+    pub nom: String,
+    pub taille: f64,
 }
 
 /// Forme d'un document de famille (`.rfa`) : extrusion, raccord, révolution, balayage…
@@ -333,8 +368,33 @@ pub struct Maquette {
     /// élément (`Global/ElemTable`, formats 2024 et suivants) : UniqueId et IfcGUID.
     pub episodes: Vec<[u8; 16]>,
     pub episode_de: HashMap<i64, u32>,
-    /// Instances propres à une vue, ignorées.
+    /// Instances propres à une vue (cartouches, symboles, composants de détail).
     pub instances_de_vue: usize,
+    pub instances_vue: Vec<InstanceVue>,
+    /// Dessin 2D (traits, régions) des types placés dans une vue et des titres de vue.
+    pub dessins: HashMap<i64, geometrie::Dessin>,
+    /// Textes, étiquettes et régions remplies des documents de famille embarqués, par
+    /// document.
+    pub textes_familles: HashMap<[u8; 16], Vec<Element2D>>,
+    /// Polices des types de texte et d'étiquette, par type.
+    pub polices: HashMap<i64, Police>,
+    /// Noms des paramètres des documents de famille embarqués (`ParamElemFamily`), qui
+    /// commandent la visibilité de leurs textes.
+    pub params_embarques: HashMap<i64, String>,
+    /// Sous-catégorie (couleur) des types de texte et d'étiquette des documents de
+    /// famille embarqués.
+    pub categories_textes: HashMap<i64, i64>,
+    /// Types de fenêtres de vue (`ViewportAttributes`).
+    pub types_fenetres: HashMap<i64, TypeFenetre>,
+    pub revisions: HashMap<i64, Revision>,
+    /// Informations du projet (`ProjectInfo`) : leurs paramètres sont dans `parametres`.
+    pub info_projet: i64,
+    /// Types de cotes (`DimensionStyle`).
+    pub types_cotes: HashMap<i64, vues::TypeCote>,
+    /// Format des longueurs du projet (unité, précision), None : inconnu.
+    pub format_longueurs: Option<(String, f64)>,
+    /// Lignes d'esquisse (non tracées ; une cote qui s'y accroche est masquée).
+    pub lignes_esquisse: std::collections::HashSet<i64>,
     /// Objets retenus mais illisibles (données d'add-ins…).
     pub illisibles: Vec<(i64, String)>,
 }
@@ -381,6 +441,20 @@ enum Sorte {
     Parametre,
     /// Phase (`ProjectPhase`).
     Phase,
+    /// Police d'un type de texte (`FontElem`).
+    Police,
+    /// Type de fenêtre de vue (`ViewportAttributes`).
+    TypeFenetre,
+    /// Révision (`ProjectRevision`).
+    Revision,
+    /// Informations du projet (`ProjectInfo`).
+    InfoProjet,
+    /// Type de cote (`DimensionStyle`).
+    TypeCote,
+    /// Unités du projet (`UnitsElem`).
+    Unites,
+    /// Esquisse (dérivées de `Sketch`) : ses lignes ne sont pas tracées dans la vue.
+    Esquisse,
 }
 
 impl Sorte {
@@ -404,6 +478,13 @@ impl Sorte {
             "Grid" => Sorte::Grille,
             "RoomElem" => Sorte::Piece,
             "SiteSurface" => Sorte::SurfaceTopo,
+            "FontElem" => Sorte::Police,
+            "ViewportAttributes" => Sorte::TypeFenetre,
+            "ProjectRevision" => Sorte::Revision,
+            "ProjectInfo" => Sorte::InfoProjet,
+            "DimensionStyle" => Sorte::TypeCote,
+            "UnitsElem" => Sorte::Unites,
+
             // type de région remplie : un Symbol, lu à part (motifs et couleurs)
             "FilledRegionAttributes" => Sorte::TypeRegion,
             _ if h("Level") => Sorte::Niveau,
@@ -417,6 +498,8 @@ impl Sorte {
             _ if h("StairsRunAndLanding") => Sorte::Volee,
             _ if h("FamilyInstance") => Sorte::Instance,
             "CategoryElem" => Sorte::Categorie,
+            // esquisses (`VarSketch`…) : leurs lignes ne sont pas tracées
+            _ if h("Sketch") => Sorte::Esquisse,
             // marqueurs de vue (Section, Elevation, Viewer3d…) : cadrage de leur vue
             _ if h("Viewer") => Sorte::Viewer,
             "FilledRegion" => Sorte::Region,
@@ -424,7 +507,7 @@ impl Sorte {
             "GStyleElem" => Sorte::Style,
             "ProjectPhase" => Sorte::Phase,
             _ if h("ParamElem") => Sorte::Parametre,
-            "CurveElem" | "TextNote" | "LinearDimString" | "RadialDim" | "AngularDim" | "ArcLengthDim" | "Viewport" => Sorte::Annotation,
+            "CurveElem" | "TextNote" | "TagNote" | "LinearDimString" | "RadialDim" | "AngularDim" | "ArcLengthDim" | "Viewport" => Sorte::Annotation,
             _ if h("DBView") => Sorte::Vue,
             _ if h("GenSweep") || h("FamilyGeomCombination") => Sorte::Forme,
             _ => return None,
@@ -460,15 +543,34 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     let classes_types: std::collections::HashSet<u16> = sch.classes.iter().filter(|c| sch.inherits(c.id, "Symbol")).map(|c| c.id).collect();
     let mut types_famille: std::collections::HashSet<i64> = Default::default();
     let mut objets: HashMap<i64, (Sorte, Vec<u8>)> = HashMap::new();
+    // textes, étiquettes et polices des documents de famille embarqués (hors ElemTable)
+    let marqueurs = sch.by_name("ContentMarker").zip(sch.by_name("ContentKey")).map(|(a, b)| (a.id, b.id));
+    let classes_embarquees: std::collections::HashSet<u16> = ["TextNote", "TagNote", "FontElem", "ParamElemFamily", "FilledRegion", "FilledRegionAttributes", "FillPatternElem", "GStyleElem", "TextNoteAttributes", "TagNoteAttributes"].iter().filter_map(|n| sch.by_name(n)).map(|c| c.id).collect();
+    let mut embarques: HashMap<i64, ([u8; 16], Vec<u8>)> = HashMap::new();
+    let classe_region = sch.by_name("FilledRegion").map(|c| c.id);
+    let mut regions_embarquees: std::collections::HashSet<i64> = Default::default();
     let mut complements: HashMap<i64, Vec<u8>> = HashMap::new();
     let mut geometries_types: HashMap<i64, Vec<u8>> = HashMap::new();
     for (k, (_, p)) in parts.iter().enumerate() {
         progress(format!("Partition {} / {} ({p})…", k + 1, parts.len()));
         let raw = cfb.read(p)?.ok_or_else(|| format!("flux {p} illisible"))?;
-        let sec = sections(&raw).map_err(|e| format!("{p} : {e}"))?;
+        let (sec, debuts) = sections_documents(&raw, marqueurs).map_err(|e| format!("{p} : {e}"))?;
         let vide = Vec::new();
-        for (eid, body) in records(sec.get(&0x66).unwrap_or(&vide), true, ids8).map_err(|e| format!("{p}, section 0x66 : {e}"))? {
-            let Some(c) = champs::class_id(body).filter(|_| table.contains_key(&eid)) else { continue };
+        let donnees = sec.get(&0x66).unwrap_or(&vide);
+        let debuts = debuts.get(&0x66).map(Vec::as_slice).unwrap_or_default();
+        for (eid, body) in records(donnees, true, ids8).map_err(|e| format!("{p}, section 0x66 : {e}"))? {
+            if !table.contains_key(&eid) {
+                if let (Some(c), Some(doc)) = (champs::class_id(body), document_de(debuts, body.as_ptr() as usize - donnees.as_ptr() as usize)) {
+                    if classes_embarquees.contains(&c) {
+                        embarques.insert(eid, (doc, body.to_vec()));
+                        if Some(c) == classe_region {
+                            regions_embarquees.insert(eid);
+                        }
+                    }
+                }
+                continue;
+            }
+            let Some(c) = champs::class_id(body) else { continue };
             if classes_types.contains(&c) {
                 types_famille.insert(eid);
             }
@@ -481,6 +583,8 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
                 complements.insert(eid, body.to_vec());
             } else if types_famille.contains(&eid) {
                 geometries_types.insert(eid, body.to_vec());
+            } else if regions_embarquees.contains(&eid) {
+                complements.insert(eid, body.to_vec());
             }
         }
     }
@@ -529,6 +633,9 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     let (mut vues, mut cadrages, mut elements_2d) = (Vec::new(), HashMap::new(), Vec::new());
     let (mut motifs, mut types_regions, mut couleurs_categories) = (HashMap::new(), HashMap::new(), HashMap::new());
     let (mut definitions, mut phases) = (HashMap::new(), HashMap::new());
+    let (mut instances_vue, mut polices, mut types_fenetres, mut revisions, mut info_projet) = (Vec::new(), HashMap::new(), HashMap::new(), HashMap::new(), -1);
+    let (mut types_cotes, mut format_longueurs) = (HashMap::new(), None);
+    let mut lignes_esquisse: std::collections::HashSet<i64> = Default::default();
     for x in extraits {
         let x = x.map(|(eid, x, vals)| {
             if !vals.is_empty() {
@@ -552,18 +659,28 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
             Ok(Extrait::GardeCorps(g)) => garde_corps.push(g),
             Ok(Extrait::Grille(g)) => grilles.push(g),
             Ok(Extrait::Instance(i, h)) => instances.push((i, h)),
-            Ok(Extrait::InstanceDeVue) => instances_de_vue += 1,
+            Ok(Extrait::InstanceDeVue(i)) => {
+                instances_de_vue += 1;
+                instances_vue.push(i);
+            }
             Ok(Extrait::Piece(p)) => pieces.push(p),
             Ok(Extrait::Forme(f)) => formes.push(f),
             Ok(Extrait::Categorie(id, nom)) => drop(categories.insert(id, nom)),
             Ok(Extrait::Vue(v)) => vues.push(v),
-            Ok(Extrait::Cadrage(v, c)) => drop(cadrages.insert(v, c)),
+            Ok(Extrait::Cadrage(v, c, k)) => drop(cadrages.insert(v, (c, k))),
             Ok(Extrait::Element2D(e)) => elements_2d.push(e),
             Ok(Extrait::Motif(id, x)) => drop(motifs.insert(id, x)),
             Ok(Extrait::TypeRegion(id, x)) => drop(types_regions.insert(id, x)),
             Ok(Extrait::Style(cat, c)) => drop(couleurs_categories.insert(cat, c)),
             Ok(Extrait::Parametre(id, d)) => drop(definitions.insert(id, d)),
             Ok(Extrait::Phase(id, nom)) => drop(phases.insert(id, nom)),
+            Ok(Extrait::Police(t, x)) => drop(polices.insert(t, x)),
+            Ok(Extrait::TypeFenetre(id, x)) => drop(types_fenetres.insert(id, x)),
+            Ok(Extrait::Revision(id, x)) => drop(revisions.insert(id, x)),
+            Ok(Extrait::InfoProjet(id)) => info_projet = id,
+            Ok(Extrait::TypeCote(id, x)) => drop(types_cotes.insert(id, x)),
+            Ok(Extrait::Unites(f)) => format_longueurs = f,
+            Ok(Extrait::Esquisse(l)) => lignes_esquisse.extend(l),
         }
     }
     let famille_document = if est_famille { familles.iter().filter(|(_, f): &(&i64, &Famille)| f.parent == -1).map(|(&id, _)| id).min() } else { None };
@@ -572,11 +689,16 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     let du_document = |f: i64| f == -1 || familles.get(&f).is_some_and(|x: &Famille| x.parent == -1);
     vues.retain(|v: &Vue| du_document(v.famille));
     for v in &mut vues {
-        v.cadrage = cadrages.remove(&v.id);
+        if let Some((c, k)) = cadrages.remove(&v.id) {
+            v.cadrage = Some(c);
+            v.cadre = k;
+        }
     }
     vues.sort_by_key(|v| v.id);
     let ids_vues: std::collections::HashSet<i64> = vues.iter().map(|v| v.id).collect();
-    elements_2d.retain(|e: &Element2D| du_document(e.famille) && ids_vues.contains(&e.vue));
+    // les lignes d'une esquisse (contour d'une région remplie…) ne sont pas dans la vue
+    // (absentes du collecteur de la vue dans l'API)
+    elements_2d.retain(|e: &Element2D| du_document(e.famille) && ids_vues.contains(&e.vue) && !(e.classe == "CurveElem" && lignes_esquisse.contains(&e.id)));
     elements_2d.sort_by_key(|e| e.id);
     // formes affichées : hors combinaisons (le solide est celui de la combinaison) et
     // hors familles imbriquées (symboles d'annotation)
@@ -601,6 +723,48 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         })
         .collect();
 
+    // textes, étiquettes et polices des documents de famille embarqués
+    let mut textes_familles: HashMap<[u8; 16], Vec<Element2D>> = HashMap::new();
+    let mut params_embarques: HashMap<i64, String> = HashMap::new();
+    let mut categories_textes: HashMap<i64, i64> = HashMap::new();
+    let mut ids_embarques: Vec<&i64> = embarques.keys().collect();
+    ids_embarques.sort_unstable();
+    for eid in ids_embarques {
+        let (doc, body) = &embarques[eid];
+        let Ok(r) = champs::read(&sch, body) else { continue };
+        if r.root.class_name() == "FontElem" {
+            if let Extrait::Police(t, x) = extraire(*eid, Sorte::Police, &r, &altitude, &herite) {
+                polices.insert(t, x);
+            }
+        } else if r.root.class_name() == "ParamElemFamily" {
+            if let Some(d) = parametres::definition(&r, &herite) {
+                params_embarques.insert(*eid, d.nom);
+            }
+        } else if matches!(r.root.class_name(), "TextNoteAttributes" | "TagNoteAttributes") {
+            if let Some(a) = r.root.get("m_lineAndTextAttr").and_then(Val::obj) {
+                categories_textes.insert(*eid, id_of(a, "m_categoryId"));
+            }
+        } else if r.root.class_name() == "FilledRegionAttributes" {
+            types_regions.extend(vues::type_region(&r).map(|x| (*eid, x)));
+        } else if r.root.class_name() == "FillPatternElem" {
+            motifs.extend(vues::motif(&r).map(|x| (*eid, x)));
+        } else if r.root.class_name() == "GStyleElem" {
+            if let Extrait::Style(cat, c) = extraire(*eid, Sorte::Style, &r, &altitude, &herite) {
+                couleurs_categories.insert(cat, c);
+            }
+        } else if let Some(e) = vues::element(*eid, &r) {
+            textes_familles.entry(*doc).or_default().push(e);
+        }
+    }
+    drop(embarques);
+    // dessin 2D des types placés dans une vue et des familles de titre de vue
+    let mut types_2d: Vec<i64> = instances_vue.iter().map(|i: &InstanceVue| i.type_id).chain(types_fenetres.values().map(|t: &TypeFenetre| t.famille_titre)).collect();
+    types_2d.sort_unstable();
+    types_2d.dedup();
+    let bib_2d = geometrie::Bibliotheque::dessins(&sch, &geometries_types);
+    let dessins: HashMap<i64, geometrie::Dessin> = types_2d.par_iter().filter_map(|&t| Some((t, bib_2d.dessin(t)?))).collect();
+    drop(bib_2d);
+
     // Géométrie, en parallèle.
     let mut a_mailler: Vec<i64> = murs.iter().map(|m| m.id).chain(dalles.iter().map(|d| d.id)).chain(toits.iter().map(|t| t.id)).collect();
     a_mailler.extend(toposolides.iter().map(|t| t.id).chain(surfaces_topo.iter().map(|x| x.id)));
@@ -609,10 +773,13 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     a_mailler.extend(instances.iter().map(|i| i.id).chain(pieces.iter().map(|p| p.id)));
     a_mailler.extend(formes.iter().map(|f| f.id));
     a_mailler.extend(elements_2d.iter().filter(|e| matches!(e.contenu, Contenu::Region { .. })).map(|e| e.id));
+    let regions_familles: Vec<i64> = textes_familles.values().flatten().filter(|e| matches!(e.contenu, Contenu::Region { .. })).map(|e| e.id).collect();
+    a_mailler.extend(&regions_familles);
     progress(format!("Géométrie de {} éléments…", a_mailler.len()));
     progress(format!("Géométrie de {} types ({} Mo)…", geometries_types.len(), geometries_types.values().map(Vec::len).sum::<usize>() >> 20));
     let bib = geometrie::Bibliotheque::new(&sch, &geometries_types);
-    let regions: std::collections::HashSet<i64> = elements_2d.iter().filter(|e| matches!(e.contenu, Contenu::Region { .. })).map(|e| e.id).collect();
+    let mut regions: std::collections::HashSet<i64> = elements_2d.iter().filter(|e| matches!(e.contenu, Contenu::Region { .. })).map(|e| e.id).collect();
+    regions.extend(regions_familles);
     // une région remplie est une face ouverte (feuille), pas un solide
     let mut geoms: HashMap<i64, Geometrie> = a_mailler.par_iter().map(|&eid| (eid, maillage(&sch, &complements, &bib, eid, regions.contains(&eid)))).collect();
     let mut prendre = |eid: i64| geoms.remove(&eid).unwrap_or_else(|| Err("non maillé".into()));
@@ -646,6 +813,18 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         episodes,
         episode_de: if ids8 { table } else { HashMap::new() },
         instances_de_vue,
+        instances_vue,
+        dessins,
+        textes_familles,
+        polices,
+        params_embarques,
+        categories_textes,
+        types_fenetres,
+        revisions,
+        info_projet,
+        types_cotes,
+        format_longueurs,
+        lignes_esquisse,
         illisibles,
     };
     for x in &mut m.murs {
@@ -675,7 +854,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     for x in &mut m.formes {
         x.geometrie = prendre(x.id);
     }
-    for x in m.elements_2d.iter_mut().filter(|e| matches!(e.contenu, Contenu::Region { .. })) {
+    for x in m.elements_2d.iter_mut().chain(m.textes_familles.values_mut().flatten()).filter(|e| matches!(e.contenu, Contenu::Region { .. })) {
         x.geometrie = prendre(x.id);
     }
     for x in &mut m.escaliers {
@@ -812,13 +991,13 @@ enum Extrait {
     /// Instance et, si elle est hébergée, (`m_hostParam`, `m_elevation` en mm) pour
     /// placer son point sur la ligne de l'hôte.
     Instance(Instance, Option<(f64, f64)>),
-    InstanceDeVue,
+    InstanceDeVue(InstanceVue),
     Piece(Piece),
     Forme(Forme),
     Categorie(i64, String),
     Vue(Vue),
-    /// Cadrage (origine, axes, longueurs) de la vue d'un `Viewer`.
-    Cadrage(i64, (DVec3, [DVec3; 3], [f64; 3])),
+    /// Cadrage (origine, axes, longueurs ; cadrage complet) de la vue d'un `Viewer`.
+    Cadrage(i64, (DVec3, [DVec3; 3], [f64; 3]), Option<Cadre>),
     Element2D(Element2D),
     Motif(i64, Motif),
     TypeRegion(i64, TypeRegion),
@@ -826,6 +1005,15 @@ enum Extrait {
     Style(i64, [u8; 3]),
     Parametre(i64, Definition),
     Phase(i64, String),
+    /// Police et type de texte propriétaire.
+    Police(i64, Police),
+    TypeFenetre(i64, TypeFenetre),
+    Revision(i64, Revision),
+    InfoProjet(i64),
+    TypeCote(i64, vues::TypeCote),
+    Unites(Option<(String, f64)>),
+    /// Lignes d'une esquisse (`m_elemIdsPairSet.m_data[].m_elementId`).
+    Esquisse(Vec<i64>),
 }
 
 fn niveau(id: i64, r: &Record) -> Option<Niveau> {
@@ -853,14 +1041,19 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite
                 }
             }
             let (largeur, hauteur) = (valeurs.get(&FAMILY_WIDTH_PARAM).copied(), valeurs.get(&FAMILY_HEIGHT_PARAM).copied());
-            Some(Extrait::Type(eid, TypeElem { nom, classe: o.class_name().to_string(), epaisseur, famille: id_of(o, "m_familyId"), largeur, hauteur }))
+            let categorie_texte = o.get("m_lineAndTextAttr").and_then(Val::obj).map(|a| id_of(a, "m_categoryId")).unwrap_or(-1);
+            Some(Extrait::Type(eid, TypeElem { nom, classe: o.class_name().to_string(), epaisseur, famille: id_of(o, "m_familyId"), largeur, hauteur, categorie_texte }))
         })()),
         Sorte::Famille => ou_rien((|| {
             let occurrence = r.field_body(o, "m_familyParams").map(|fp| {
                 let liste = fp.get("m_params").map(Val::list).unwrap_or_default();
                 liste.iter().filter_map(Val::obj).filter(|x| x.get("m_instance").and_then(Val::int) == Some(1)).filter_map(|x| x.get("m_paramId").and_then(Val::element_id)).collect()
             });
-            let f = Famille { nom: o.get("m_name")?.str()?.to_string(), categorie: id_of(o, "m_categoryId"), parent: id_of(o, "m_famId"), occurrence: occurrence.unwrap_or_default() };
+            let document = r.field_body(o, "m_oFamDoc").and_then(|d| d.get("m_contentDocGUID")?.obj()?.get("m_guid")).and_then(|g| match g {
+                Val::Guid(g) => Some(*g),
+                _ => None,
+            });
+            let f = Famille { nom: o.get("m_name")?.str()?.to_string(), categorie: id_of(o, "m_categoryId"), parent: id_of(o, "m_famId"), occurrence: occurrence.unwrap_or_default(), document };
             Some(Extrait::Famille(eid, f))
         })()),
         Sorte::Materiau => ou_rien((|| {
@@ -910,7 +1103,14 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite
         Sorte::Volee => Extrait::Volee(eid, id_of(o, "m_stairsId")),
         Sorte::GardeCorps => Extrait::GardeCorps(GardeCorps { id: eid, type_id: id_of(o, "m_stairsRailingAttrId"), niveau: id_of(o, "m_assocLevelId"), geometrie: Err(String::new()) }),
         Sorte::Grille => ou_rien(grille(eid, r).map(Extrait::Grille)),
-        Sorte::Instance if id_of(o, "m_ownerDBViewId") != -1 => Extrait::InstanceDeVue,
+        Sorte::Instance if id_of(o, "m_ownerDBViewId") != -1 => ou_rien((|| {
+            let t = r.field_body(o, "m_pInstanceInfo")?.get("m_Trf")?.obj()?;
+            let l = t.get("m_3x3")?.list();
+            let ligne = |i: usize| l.get(i).and_then(vec3);
+            // la colonne j de m_3x3 est l'axe j (geometrie::Trf)
+            let axes = DMat3::from_cols(ligne(0)?, ligne(1)?, ligne(2)?).transpose();
+            Some(Extrait::InstanceDeVue(InstanceVue { id: eid, vue: id_of(o, "m_ownerDBViewId"), type_id: id_of(o, "m_masterSymbolId"), origine: t.get("m_or").and_then(vec3)? * FT, axes }))
+        })()),
         Sorte::Instance => {
             let (i, h) = instance(eid, r);
             Extrait::Instance(i, h)
@@ -919,7 +1119,7 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite
         Sorte::Forme => ou_rien(forme(eid, r).map(Extrait::Forme)),
         Sorte::Categorie => ou_rien((|| Some(Extrait::Categorie(eid, r.field_body(o, "m_pCategory")?.get("m_name")?.str()?.to_string())))()),
         Sorte::Vue => ou_rien(vues::vue(eid, r).map(Extrait::Vue)),
-        Sorte::Viewer => ou_rien(vues::cadrage(r).map(|(v, o, a, b)| Extrait::Cadrage(v, (o, a, b)))),
+        Sorte::Viewer => ou_rien(vues::cadrage(r).map(|(v, o, a, b)| Extrait::Cadrage(v, (o, a, b), vues::cadre(r).map(|c| c.1)))),
         Sorte::Annotation | Sorte::Region => ou_rien(vues::element(eid, r).map(Extrait::Element2D)),
         Sorte::Motif => ou_rien(vues::motif(r).map(|x| Extrait::Motif(eid, x))),
         Sorte::TypeRegion => ou_rien(vues::type_region(r).map(|x| Extrait::TypeRegion(eid, x))),
@@ -933,6 +1133,27 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite
         })()),
         Sorte::Parametre => ou_rien(parametres::definition(r, herite).map(|d| Extrait::Parametre(eid, d))),
         Sorte::Phase => ou_rien(o.get("m_name").and_then(Val::str).map(|n| Extrait::Phase(eid, n.to_string()))),
+        Sorte::Police => ou_rien((|| {
+            let f = r.field_body(o, "m_pFont")?;
+            Some(Extrait::Police(id_of(o, "m_ownerId"), Police { nom: f.get("m_name")?.str()?.to_string(), taille: f.get("m_size")?.real()? * FT }))
+        })()),
+        Sorte::TypeFenetre => ou_rien((|| {
+            let nom = r.field_body(o, "m_symbolInfo")?.get("m_name")?.str()?.to_string();
+            let oui = |k| o.get(k).and_then(Val::int) == Some(1);
+            Some(Extrait::TypeFenetre(eid, TypeFenetre { nom, titre: oui("m_showLabel"), famille_titre: id_of(o, "m_familyTagId"), ligne: oui("m_showExtensionLine") }))
+        })()),
+        Sorte::Revision => {
+            let t = |k| o.get(k).and_then(Val::str).unwrap_or_default().to_string();
+            let sequence = o.get("m_sequenceNumber").and_then(Val::int).unwrap_or(0);
+            Extrait::Revision(eid, Revision { description: t("m_description"), date: t("m_date"), numero: t("m_numberStr"), sequence, remise_a: t("m_issuedTo"), remise_par: t("m_issuedBy") })
+        }
+        Sorte::InfoProjet => Extrait::InfoProjet(eid),
+        Sorte::TypeCote => ou_rien(vues::type_cote(r).map(|t| Extrait::TypeCote(eid, t))),
+        Sorte::Unites => Extrait::Unites(vues::format_projet(r)),
+        Sorte::Esquisse => {
+            let d = r.field_body(o, "m_elemIdsPairSet").and_then(|p| p.get("m_data")).map(Val::list).unwrap_or_default();
+            Extrait::Esquisse(d.iter().filter_map(|x| x.obj().map(|x| id_of(x, "m_elementId"))).collect())
+        }
     }
 }
 
@@ -1605,8 +1826,12 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
     }
     // Vues : un nœud par vue (dans le niveau d'un plan, sinon dans le projet), ses
     // éléments 2D en enfants, tracés dans le plan de la vue (masqués par défaut).
+    // éléments 2D par vue, sauf ceux que Revit n'y montre pas (masqués, cotes dont un
+    // élément coté n'est pas visible dans la vue)
+    let boites = feuilles::boites(m);
+    let par_id: HashMap<i64, &Vue> = m.vues.iter().map(|v| (v.id, v)).collect();
     let mut par_vue: BTreeMap<i64, Vec<&Element2D>> = BTreeMap::new();
-    for e in &m.elements_2d {
+    for e in m.elements_2d.iter().filter(|e| par_id.get(&e.vue).is_some_and(|v| feuilles::visible_dans_vue(m, e, v, &boites))) {
         par_vue.entry(e.vue).or_default().push(e);
     }
     let nom_vue: HashMap<i64, &str> = m.vues.iter().map(|v| (v.id, v.nom.as_str())).collect();
@@ -1657,7 +1882,11 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
                     }
                     ("Région remplie", [0.45, 0.45, 0.45, 0.6], p)
                 }
-                Contenu::FenetreDeVue { vue, echelle, decalage } => {
+                Contenu::Etiquette { params, hauteur, .. } => {
+                    let exemple = params.iter().map(|p| format!("{}{}{}", p.prefixe, p.exemple, p.suffixe)).collect::<Vec<_>>().join(" ");
+                    ("Étiquette", [0.80, 0.35, 0.10, 0.45], vec![("Texte d'exemple", Value::Str(exemple)), ("Hauteur du cadre", mm(*hauteur))])
+                }
+                Contenu::FenetreDeVue { vue, echelle, decalage, .. } => {
                     let nv = nom_vue.get(vue).map(|s| s.to_string()).unwrap_or_else(|| vue.to_string());
                     ("Fenêtre de vue", [0.5, 0.5, 0.5, 1.0], vec![("Vue placée", Value::Str(nv)), ("Échelle", Value::Str(format!("1:{}", (1.0 / echelle).round()))), ("Décalage", point_mm(*decalage))])
                 }
@@ -1672,10 +1901,18 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
             b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF2D", e.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
             let ps = b.psets_parametres(m, e.id);
             b.definir("RVTDEF2P", e.id, id, ps);
-            let tris = vues::trace(e, normale, v.echelle);
             let mut parts = Vec::new();
-            if !tris.is_empty() {
-                parts.push(Part { color: couleur, tris });
+            // note de texte : ses glyphes (le cadre seul si le texte est vide) ; cote :
+            // ligne, lignes d'attache, marques et valeurs comme dans Revit
+            if let Some((color, t)) = feuilles::note(m, e, v.echelle) {
+                parts.push(Part { color, tris: t.into_iter().map(|t| t.map(|p| p / 1000.0)).collect() });
+            } else if let Some(p) = feuilles::cote(m, e, normale, v.droite, v.echelle) {
+                parts.extend(p);
+            } else {
+                let tris = vues::trace(e, normale, v.echelle);
+                if !tris.is_empty() {
+                    parts.push(Part { color: couleur, tris });
+                }
             }
             if let (Contenu::Region { type_id }, Ok(g)) = (&e.contenu, &e.geometrie) {
                 parts.extend(region(m, *type_id, g, v));
@@ -1683,6 +1920,19 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
             if !parts.is_empty() {
                 geoms.push(ProductGeom { id, parts, lignes: Vec::new() });
             }
+            enfants.push(Value::Ref(id));
+        }
+        // instances propres à la vue (cartouches, symboles, composants de détail) et titres
+        // des fenêtres de vue d'une feuille
+        for o in feuilles::objets_vue(m, v) {
+            let id = b.add("IFCANNOTATION", vec![guid("RVT2D", o.id), n.clone(), Value::Str(o.titre), n.clone(), Value::Str(o.genre.into()), n.clone(), Value::Ref(shape)]);
+            let classe = if o.genre == "Titre de vue" { "Viewport" } else { "FamilyInstance" };
+            let props = vec![("ElementId", Value::Str(o.id.to_string())), ("Classe Revit", Value::Str(classe.into())), ("Genre", Value::Str(o.genre.into())), ("Vue", Value::Str(v.nom.clone()))];
+            let pset = b.pset("RVTPSET2I", o.id, "Revit", props);
+            b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF2I", o.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
+            let ps = b.psets_parametres(m, o.id);
+            b.definir("RVTDEF2J", o.id, id, ps);
+            geoms.push(ProductGeom { id, parts: o.parts, lignes: Vec::new() });
             enfants.push(Value::Ref(id));
         }
         if !enfants.is_empty() {
@@ -1735,9 +1985,16 @@ fn famille_systeme(classe: &str) -> Option<(&'static str, &'static str)> {
 /// familles chargées par catégorie puis familles système, groupes.
 fn navigateur(m: &Maquette, entite_vue: &HashMap<i64, Id>, entite_type: &HashMap<i64, Id>, etage: &HashMap<i64, Id>) -> Navigateur {
     let mut placees: HashMap<i64, Vec<i64>> = HashMap::new();
+    let mut fenetres: HashMap<i64, Vec<scene::NavFenetre>> = HashMap::new();
+    let par_id: HashMap<i64, &Vue> = m.vues.iter().map(|v| (v.id, v)).collect();
     for e in &m.elements_2d {
-        if let Contenu::FenetreDeVue { vue, .. } = &e.contenu {
+        if let Contenu::FenetreDeVue { vue, decalage, echelle, .. } = &e.contenu {
             placees.entry(e.vue).or_default().push(*vue);
+            if let Some(v) = par_id.get(vue) {
+                let mut f = feuilles::fenetre(*decalage, *echelle, v);
+                f.masques.extend(feuilles::masques_par_categorie(m, v));
+                fenetres.entry(e.vue).or_default().push(f);
+            }
         }
     }
     let nom_type = |t: i64| m.types.get(&t).map(|x| x.nom.clone()).unwrap_or_default();
@@ -1757,6 +2014,7 @@ fn navigateur(m: &Maquette, entite_vue: &HashMap<i64, Id>, entite_type: &HashMap
             direction: v.direction,
             etage: etage.get(&v.niveau).copied(),
             placees: placees.remove(&v.id).unwrap_or_default(),
+            fenetres: fenetres.remove(&v.id).unwrap_or_default(),
         })
         .collect();
     // familles chargées (catégorie, famille, types), puis familles système
@@ -2072,11 +2330,16 @@ mod tests {
         let mut classes: Vec<&str> = m.elements_2d.iter().map(|e| e.classe.as_str()).collect();
         classes.sort_unstable();
         classes.dedup_by(|a, b| a == b);
-        assert_eq!(m.elements_2d.len(), 14, "{classes:?}");
-        // scène : un objet tracé par élément 2D (sauf la fenêtre de vue), dans le plan de la vue
+        // les 4 lignes de l'esquisse de la région ne sont pas dans la vue (collecteur de la
+        // vue dans l'API, script `rvt-elements-propres-e13`)
+        assert_eq!(m.elements_2d.len(), 10, "{classes:?}");
+        assert!([258467, 258468, 258469, 258470].iter().all(|id| !m.elements_2d.iter().any(|e| e.id == *id)));
+        // scène : un objet tracé par élément 2D visible (sauf la fenêtre de vue), dans le plan
+        // de la vue, plus le titre de la fenêtre de vue sur la feuille ; les deux cotes
+        // automatiques de l'esquisse, absentes de la vue, ne sont pas tracées
         let s = scene(&m, "E13", "E13_vues2d.rvt".into(), "2026");
         let annot: Vec<_> = s.objects.iter().filter(|o| &*o.class == "IFCANNOTATION").collect();
-        assert_eq!(annot.len(), 13, "objets 2D tracés");
+        assert_eq!(annot.len(), 8, "objets 2D tracés");
         assert!(annot.iter().all(|o| o.opaque.count + o.transparent.count > 0));
     }
 
@@ -2280,5 +2543,177 @@ mod tests {
                 proche(c.max[k], max[k] * FT, 0.01, "boîte max");
             }
         }
+    }
+
+    /// Feuilles de Kerreut : fenêtres de vue, cartouches et étiquettes, comparés à l'API
+    /// de Revit 2026 (scripts RiveTT `rvt-reference-feuilles`, `rvt-compare-feuilles`) :
+    /// `GetBoxCenter`, `GetBoxOutline`, `GetTransform` des cartouches.
+    #[test]
+    fn kerreut_feuilles() {
+        let Some(p) = corpus(r"PERROS-GUIREC - rue de Kerreut\01-TRAVAIL\Kerreut 2025.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        let vue = |id: i64| m.vues.iter().find(|v| v.id == id).unwrap();
+        let fen = |id: i64| match &m.elements_2d.iter().find(|e| e.id == id).unwrap().contenu {
+            Contenu::FenetreDeVue { vue: v, decalage, echelle, .. } => (*v, *decalage, *echelle),
+            _ => panic!("{id} n'est pas une fenêtre de vue"),
+        };
+        // centre et boîte (mm) : décalage + contour du cadrage, élargi de 0,01 pied
+        for (id, centre, boite) in [
+            (9985483, [-134.509, 231.005], [-266.514, 168.778, -2.504, 293.231]),
+            (10258761, [-310.344, 212.743], [-415.665, 138.341, -205.024, 287.146]),
+            (10226514, [-354.368, 194.746], [-414.919, 165.809, -293.816, 223.682]),
+        ] {
+            let (v, d, e) = fen(id);
+            let f = feuilles::fenetre(d, e, vue(v));
+            let c = f.cadre.unwrap().map(|x| x * 1000.0);
+            proche((c[0] + c[2]) / 2.0, centre[0], 0.002, "centre x");
+            proche((c[1] + c[3]) / 2.0, centre[1], 0.002, "centre y");
+            let marge = 0.01 * FT;
+            for (k, b) in boite.iter().enumerate() {
+                proche(c[k] + if k < 2 { -marge } else { marge }, *b, 0.002, "boîte");
+            }
+            // l'origine de la vue tombe sur le décalage
+            let o = f.vers_feuille.transform_point3(vue(v).origine / 1000.0) * 1000.0;
+            proche(o.x, d.x, 1e-6, "origine x");
+            proche(o.y, d.y, 1e-6, "origine y");
+        }
+        // cartouche réduit de PRO 05 : repère, traits du type, étiquettes remplies
+        let i = m.instances_vue.iter().find(|i| i.id == 10168802).unwrap();
+        assert_eq!((i.vue, i.type_id), (10168795, 9791176));
+        proche(i.origine.x, -1190.793, 0.001, "origine du cartouche");
+        assert_eq!(m.dessins[&9791176].traits.len(), 23);
+        assert_eq!(m.dessins[&8966185].traits.len(), 7);
+        let doc = m.familles[&m.types[&9791176].famille].document.unwrap();
+        assert_eq!(m.textes_familles[&doc].iter().filter(|e| matches!(e.contenu, Contenu::Etiquette { .. })).count(), 7);
+        assert_eq!(feuilles::police(&m, 9791121).0, "Arial");
+        proche(feuilles::police(&m, 9791121).1, 2.6, 1e-9, "taille de police");
+        let f = vue(10168795);
+        let val = |p: i64| feuilles::valeur_cartouche(&m, f, 10168802, p).unwrap_or_default();
+        assert_eq!(val(-1006319), "Nicolas et Isabelle MUSSET");
+        assert_eq!(val(-1007401), "PRO 05");
+        assert_eq!(val(-1007400), "Plan RDC");
+        assert_eq!(val(-1007402), "1 : 50");
+        assert_eq!(val(-1007414), "DOSSIER PRE-PRO");
+        assert_eq!(val(-1007415), "23/03/2024");
+        assert_eq!(val(-1006320), "PCMI");
+        // 66 instances sur les feuilles, toutes dessinées
+        let feuilles: std::collections::HashSet<i64> = m.vues.iter().filter(|v| v.genre == "Feuille").map(|v| v.id).collect();
+        let sur_feuilles: Vec<&InstanceVue> = m.instances_vue.iter().filter(|i| feuilles.contains(&i.vue)).collect();
+        assert_eq!(sur_feuilles.len(), 66);
+        assert!(sur_feuilles.iter().all(|i| m.dessins.contains_key(&i.type_id)));
+    }
+
+    /// Feuilles de `Projet1.rvt` (sans cartouche) et d'E13 : boîtes des fenêtres de vue
+    /// comparées à `GetBoxOutline` de Revit 2026 (`rvt-compare-feuilles`) ; titre de la
+    /// fenêtre de vue d'E13 (« Niveau 0 », « 1 : 100 », numéro de détail).
+    #[test]
+    fn projet1_e13_feuilles() {
+        let marge = 0.01 * FT;
+        if let Some(p) = essai("Archives", "Projet1.rvt") {
+            let m = lire(&p, &|_| {}).unwrap();
+            // plans cadrés : boîte exacte ; élévation : centre exact, boîte de Revit élargie
+            // de 25,598 mm à gauche et à droite par les niveaux qui sortent du cadrage
+            for (id, boite) in [(258041, [-118.048, -78.048, 118.048, 78.048]), (258042, [-118.048, -85.548, 118.048, 85.548]), (258010, [-273.118, -158.048, 273.118, 158.048])] {
+                let e = m.elements_2d.iter().find(|e| e.id == id).unwrap();
+                let Contenu::FenetreDeVue { vue, decalage, echelle, .. } = &e.contenu else { panic!() };
+                let v = m.vues.iter().find(|v| v.id == *vue).unwrap();
+                let c = feuilles::fenetre(*decalage, *echelle, v).cadre.unwrap().map(|x| x * 1000.0);
+                for (k, b) in boite.iter().enumerate() {
+                    proche(c[k] + if k < 2 { -marge } else { marge }, *b, 0.002, "boîte");
+                }
+            }
+        }
+        let Some(p) = essai(r"Essais-format\2026\C14", "E13_vues2d.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        let e = m.elements_2d.iter().find(|e| e.id == 258496).unwrap();
+        let Contenu::FenetreDeVue { vue, decalage, echelle, titre, longueur_titre, type_id } = &e.contenu else { panic!() };
+        let v = m.vues.iter().find(|v| v.id == *vue).unwrap();
+        // vue non cadrée : pas de découpe ; l'origine de la vue tombe sur le décalage
+        let f = feuilles::fenetre(*decalage, *echelle, v);
+        assert!(f.cadre.is_none());
+        proche(decalage.x, 370.0, 1e-9, "décalage");
+        // titre : m_labelOrigin = coin de la boîte + LabelOffset de l'API (370 ; 252,774)
+        proche(titre.x, 370.0, 1e-3, "titre x");
+        proche(titre.y, 252.774, 1e-3, "titre y");
+        proche(*longueur_titre, 60.0, 1e-6, "ligne de titre");
+        assert!(m.types_fenetres[type_id].titre);
+        assert_eq!(feuilles::valeur_titre(&m, e, v, -1_005_203).as_deref(), Some("Niveau 0"));
+        assert_eq!(feuilles::valeur_titre(&m, e, v, -1_005_204).as_deref(), Some("1 : 100"));
+        let feuille = m.vues.iter().find(|x| x.id == 258491).unwrap();
+        let titres: Vec<_> = feuilles::objets_vue(&m, feuille).into_iter().filter(|o| o.genre == "Titre de vue").collect();
+        assert_eq!(titres.len(), 1);
+        assert!(titres[0].parts.len() >= 3, "régions, traits et textes du titre");
+    }
+
+    /// Titres des fenêtres de vue de Kerreut (feuille PCMI3) : « Titre sur la feuille »
+    /// à la place du nom, numéro de détail masqué par le paramètre « Numero » du type,
+    /// comme dans l'export de la feuille par Revit.
+    #[test]
+    fn kerreut_titres_de_vue() {
+        let Some(p) = corpus(r"PERROS-GUIREC - rue de Kerreut\01-TRAVAIL\Kerreut 2025.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        let e = m.elements_2d.iter().find(|e| e.id == 9985364).unwrap();
+        let v = m.vues.iter().find(|v| v.id == 9985266).unwrap();
+        assert_eq!((v.nom.as_str(), v.titre_feuille.as_str()), ("PC A", "COUPE AA"));
+        assert_eq!(feuilles::valeur_titre(&m, e, v, -1_005_203).as_deref(), Some("COUPE AA"));
+        let t = &m.types_fenetres[&9347557];
+        assert!(t.titre && !t.ligne && t.famille_titre == 9347548);
+        // étiquettes du titre : nom et échelle visibles, numéro de détail masqué
+        let doc = m.familles[&m.types[&9347548].famille].document.unwrap();
+        let etiquettes: Vec<&Element2D> = m.textes_familles[&doc].iter().filter(|x| matches!(x.contenu, Contenu::Etiquette { .. })).collect();
+        assert_eq!(etiquettes.len(), 3);
+        let numero = etiquettes.iter().find(|x| x.id == 9347483).unwrap();
+        assert_eq!(m.params_embarques[&numero.visible_si], "Numero");
+        // cadrage d'annotation actif sur A 50e, inactif sur PC A (paramètre de l'API)
+        assert!(m.vues.iter().find(|v| v.id == 10168711).unwrap().cadre.unwrap().annotation_active);
+        assert!(!v.cadre.unwrap().annotation_active);
+    }
+
+    /// Cotes de Kerreut comme dans Revit 2026 : visibles seulement si chaque élément coté
+    /// est dans la vue (collecteur de la vue, script `rvt-visibilite-elements-vue`),
+    /// lignes d'esquisse écartées, catégories masquées (`GetCategoryHidden`, script
+    /// `rvt-categories-masquees`), valeurs au format du type (centimètres) ou remplacées.
+    #[test]
+    fn kerreut_cotes() {
+        let Some(p) = corpus(r"PERROS-GUIREC - rue de Kerreut\01-TRAVAIL\Kerreut 2025.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        let boites = feuilles::boites(&m);
+        let vue = |id: i64| m.vues.iter().find(|v| v.id == id).unwrap();
+        let el = |id: i64| m.elements_2d.iter().find(|e| e.id == id).unwrap();
+        let visible = |e: i64, v: i64| feuilles::visible_dans_vue(&m, el(e), vue(v), &boites);
+        // « RDC 50e » : 10168246 visible ; 10168254 cote un mur hors cadrage
+        assert!(visible(10168246, 10168217));
+        assert!(!visible(10168254, 10168217));
+        // « PC Est » : cotes accrochées à des lignes d'esquisse, absentes de la vue
+        assert!(m.lignes_esquisse.contains(&9985379));
+        assert!(!m.elements_2d.iter().any(|e| e.id == 9985379));
+        assert!(!visible(10085862, 9985368) && !visible(10104460, 9985368));
+        // catégories masquées : les 10 de l'API (niveaux compris) sont dans la liste lue
+        let api = [-2009645, -2008186, -2008185, -2003400, -2001115, -2001113, -2000535, -2000269, -2000240, -2000200];
+        assert!(api.iter().all(|c| vue(9985368).categories_masquees.contains(c)));
+        assert_eq!(vue(9985368).masques, vec![9722834, 9916200, 9988805]);
+        // type de cote « Cotes_2.25 mm_Noir_M 1 » : centimètres à l'unité, gras
+        let t = &m.types_cotes[&9706670];
+        assert_eq!(t.format.as_ref().map(|f| (f.0.as_str(), f.1)), Some(("autodesk.unit.unit:centimeters-1.0.1", 1.0)));
+        assert!(t.gras && !t.attache_fixe);
+        proche(t.decalage_texte, 1.5, 1e-9, "décalage du texte");
+        let Contenu::Cote { segments, textes, .. } = &el(10168246).contenu else { panic!() };
+        assert_eq!(vues::texte_longueur(segments[0].0, t.format.as_ref()), "321");
+        // valeurs remplacées de la coupe « PC A » : « GARAGE », « MAISON »
+        let Contenu::Cote { textes: tx, .. } = &el(10020238).contenu else { panic!() };
+        assert_eq!(tx.iter().map(|t| t.remplacement.as_str()).collect::<Vec<_>>(), ["GARAGE", "MAISON"]);
+        assert!(textes.iter().all(|t| t.remplacement.is_empty()));
+    }
+
+    /// Format des longueurs : unité et précision du type de cote ou du projet.
+    #[test]
+    fn format_longueurs() {
+        let cm = ("autodesk.unit.unit:centimeters-1.0.1".to_string(), 1.0);
+        assert_eq!(vues::texte_longueur(5650.0, Some(&cm)), "565");
+        let m = ("autodesk.unit.unit:meters-1.0.0".to_string(), 0.01);
+        assert_eq!(vues::texte_longueur(2456.7, Some(&m)), "2.46");
+        assert_eq!(vues::texte_longueur(2456.7, None), "2.46");
+        let mm = ("autodesk.unit.unit:millimeters-1.0.0".to_string(), 0.5);
+        assert_eq!(vues::texte_longueur(12.3, Some(&mm)), "12.5");
     }
 }

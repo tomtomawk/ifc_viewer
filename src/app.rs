@@ -5,13 +5,13 @@
 use crate::camera::{Camera, MAX_PITCH};
 use crate::model::pretty_type;
 use crate::pilote::{self, Requete};
-use crate::render::{FrameParams, Renderer};
+use crate::render::{FrameParams, ParamsPasse, Renderer};
 use crate::rvt::{self, RvtInfo};
 use crate::scene::{self, Scene};
 use crate::step::Id;
 use eframe::egui::{self, Align, Color32, PointerButton, RichText, Sense};
 use eframe::glow;
-use glam::{Vec2, Vec3};
+use glam::{DMat4, Mat4, Vec2, Vec3, Vec4};
 use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -66,6 +66,23 @@ fn rubrique(genre: &str) -> Option<(u8, &'static str)> {
     })
 }
 
+/// Genres (`ObjectType`) des éléments 2D découpés au cadrage d'une vue, comme dans Revit.
+const DETAIL: &[&str] = &["Trait", "Région remplie", "Composant de détail"];
+
+/// Fenêtre de vue de la feuille ouverte, rendue dans sa propre passe (repère de la
+/// scène) : passage du modèle à la feuille, rectangle de découpe sur la feuille (xmin,
+/// ymin, xmax, ymax, à la cote z), plans de découpe, direction de la vue.
+struct PasseFeuille {
+    vers_feuille: Mat4,
+    cadre: Option<[f32; 4]>,
+    /// Étendue sur la feuille des objets de la passe (cadrage de la caméra d'une vue non
+    /// cadrée).
+    etendue: [f32; 4],
+    z: f32,
+    plans: Vec<Vec4>,
+    direction: Vec3,
+}
+
 pub struct ViewerApp {
     gl: Option<Arc<glow::Context>>,
     renderer: Arc<Mutex<Option<Renderer>>>,
@@ -101,6 +118,8 @@ pub struct ViewerApp {
     attente_ouverture: Vec<Sender<String>>,
     /// Zone de la vue 3D dans la fenêtre (points), pour les captures.
     rect_vue: egui::Rect,
+    /// Passes des fenêtres de vue de la feuille ouverte.
+    passes_feuille: Vec<PasseFeuille>,
 }
 
 impl ViewerApp {
@@ -146,6 +165,7 @@ impl ViewerApp {
             requetes: Vec::new(),
             attente_ouverture: Vec::new(),
             rect_vue: egui::Rect::NOTHING,
+            passes_feuille: Vec::new(),
         };
         if let Some(p) = path {
             app.open(p, &cc.egui_ctx);
@@ -275,6 +295,7 @@ impl ViewerApp {
         self.left_tab = if scene.navigateur.is_some() { LeftTab::Projet } else { LeftTab::Tree };
         self.scene = Some(scene);
         self.visibility_dirty = true;
+        self.preparer_feuille(None);
     }
 
     fn update_visibility(&mut self) {
@@ -661,7 +682,9 @@ impl ViewerApp {
             _ => (annot.clone(), annot.clone()),
         };
         let (d, haut, entite) = (v.direction.as_vec3(), v.haut.as_vec3(), v.entite);
+        let genre_feuille = v.genre == "Feuille";
         self.vue_active = Some(i);
+        self.preparer_feuille(Some(i));
         self.hidden_objects.clear();
         self.hidden_storeys.clear();
         // visibilité propre à chaque vue : celle par défaut, puis les objets isolés
@@ -682,9 +705,104 @@ impl ViewerApp {
         if !cadre.is_empty() {
             self.frame_objects(&cadre);
         }
+        if genre_feuille {
+            self.cadrer_rectangle(&cadre);
+        }
         if let Some(e) = entite {
             self.select(Some(e), false);
         }
+    }
+
+    /// Vue orthographique de dessus ajustée au rectangle des objets et des fenêtres de
+    /// vue d'une feuille, selon les proportions de la vue.
+    fn cadrer_rectangle(&mut self, objs: &[u32]) {
+        let Some(s) = &self.scene else { return };
+        let (mut mn, mut mx) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+        for &o in objs {
+            mn = mn.min(s.objects[o as usize].min);
+            mx = mx.max(s.objects[o as usize].max);
+        }
+        // cadrages des vues placées ; à défaut (vues non cadrées), étendue de leurs objets
+        let cadres: Vec<([f32; 4], f32)> = self.passes_feuille.iter().filter_map(|p| Some((p.cadre?, p.z))).collect();
+        let rects = if cadres.is_empty() { self.passes_feuille.iter().map(|p| (p.etendue, p.z)).collect() } else { cadres };
+        for (c, z) in rects {
+            mn = mn.min(Vec3::new(c[0], c[1], z));
+            mx = mx.max(Vec3::new(c[2], c[3], z));
+        }
+        if mn.x > mx.x {
+            return;
+        }
+        let aspect = if self.rect_vue.height() > 0.0 { self.rect_vue.width() / self.rect_vue.height() } else { 1.0 };
+        let (l, h) = (mx.x - mn.x, mx.y - mn.y);
+        let demi = (h / 2.0).max(l / 2.0 / aspect) * 1.04;
+        self.camera.target = (mn + mx) / 2.0;
+        self.camera.dist = demi / (self.camera.fov_y / 2.0).tan();
+    }
+
+    /// Passes des fenêtres de vue de la feuille `i` (aucune pour une autre vue) : pour
+    /// chaque vue placée, ses objets du modèle (cadrés et découpés en profondeur) puis ses
+    /// annotations, tracés à leur place sur la feuille.
+    fn preparer_feuille(&mut self, i: Option<usize>) {
+        let mut passes = Vec::new();
+        let mut indices: Vec<[Vec<u32>; 3]> = Vec::new();
+        if let Some(s) = &self.scene {
+            let nav = s.navigateur.as_ref();
+            let feuille = i.and_then(|i| nav?.vues.get(i)).filter(|v| v.genre == "Feuille");
+            let o = s.origin;
+            let modele: Vec<u32> = (0..s.objects.len() as u32).filter(|&k| !HIDDEN_BY_DEFAULT.contains(&&*s.objects[k as usize].class)).collect();
+            for f in feuille.map(|v| v.fenetres.as_slice()).unwrap_or_default() {
+                let Some(pv) = nav.and_then(|n| n.vues.iter().find(|x| x.revit_id == f.vue)) else { continue };
+                // repère de la scène : q = p − origine, pour le modèle comme pour la feuille
+                let m = DMat4::from_translation(-o) * f.vers_feuille * DMat4::from_translation(o);
+                let rect = |c: [f64; 4]| [(c[0] - o.x) as f32, (c[1] - o.y) as f32, (c[2] - o.x) as f32, (c[3] - o.y) as f32];
+                let plans = f.plans.iter().map(|p| Vec4::new(p.x as f32, p.y as f32, p.z as f32, (p.w + p.truncate().dot(o)) as f32)).collect();
+                let dessin = matches!(pv.genre.as_str(), "Vue de dessin" | "Légende" | "Nomenclature");
+                // objets du modèle, sauf ceux masqués dans la vue placée (id Revit : 8ᵉ
+                // argument, l'étiquette, des produits de la scène)
+                let masque = |k: &u32| match s.model.get(s.objects[*k as usize].id).and_then(|e| e.args.get(7)) {
+                    Some(crate::step::Value::Str(t)) => t.parse::<i64>().is_ok_and(|id| f.masques.contains(&id)),
+                    _ => false,
+                };
+                let objets: Vec<u32> = if dessin { Vec::new() } else { modele.iter().filter(|k| !masque(k)).copied().collect() };
+                // éléments de détail (traits, régions, composants de détail) découpés au
+                // cadrage comme le modèle ; annotations (textes, cotes, symboles) non
+                // découpées, sauf cadrage d'annotation
+                let genre = |k: u32| match s.model.get(s.objects[k as usize].id).and_then(|e| e.args.get(4)) {
+                    Some(crate::step::Value::Str(g)) => g.clone(),
+                    _ => String::new(),
+                };
+                let (detail, annot): (Vec<u32>, Vec<u32>) = pv.entite.map(|e| self.objects_under(e)).unwrap_or_default().into_iter().partition(|&k| DETAIL.contains(&genre(k).as_str()));
+                let passes_vue = [(objets, f.cadre.map(rect), plans), (detail, f.cadre.map(rect), Vec::new()), (annot, f.cadre_annotations.map(rect), Vec::new())];
+                for (objs, cadre, plans) in passes_vue {
+                    if objs.is_empty() {
+                        continue;
+                    }
+                    let mut ix: [Vec<u32>; 3] = Default::default();
+                    for &k in &objs {
+                        let ob = &s.objects[k as usize];
+                        ix[0].extend(ob.opaque.start..ob.opaque.start + ob.opaque.count);
+                        ix[1].extend(ob.transparent.start..ob.transparent.start + ob.transparent.count);
+                        ix[2].extend(ob.lines.start..ob.lines.start + ob.lines.count);
+                    }
+                    indices.push(ix);
+                    let mf = m.as_mat4();
+                    let mut etendue = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
+                    for &k in &objs {
+                        let ob = &s.objects[k as usize];
+                        for c in 0..8 {
+                            let q = Vec3::new([ob.min.x, ob.max.x][c & 1], [ob.min.y, ob.max.y][(c >> 1) & 1], [ob.min.z, ob.max.z][c >> 2]);
+                            let q = mf.transform_point3(q);
+                            etendue = [etendue[0].min(q.x), etendue[1].min(q.y), etendue[2].max(q.x), etendue[3].max(q.y)];
+                        }
+                    }
+                    passes.push(PasseFeuille { vers_feuille: mf, cadre, etendue, z: -o.z as f32, plans, direction: f.direction.as_vec3() });
+                }
+            }
+        }
+        if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
+            r.upload_passes(gl, &indices);
+        }
+        self.passes_feuille = passes;
     }
 
     fn tree_roots(&self) -> Vec<Id> {
@@ -1326,8 +1444,23 @@ impl ViewerApp {
     }
 
     fn frame_params(&self, aspect: f32) -> FrameParams {
+        let vp = self.camera.view_proj(aspect);
+        let passes = self
+            .passes_feuille
+            .iter()
+            .map(|p| {
+                // rectangle de découpe : coins projetés, en coordonnées normalisées
+                let ciseaux = p.cadre.map(|c| {
+                    let coins = [[c[0], c[1]], [c[2], c[1]], [c[2], c[3]], [c[0], c[3]]].map(|[x, y]| vp.project_point3(Vec3::new(x, y, p.z)));
+                    let (mn, mx) = coins.iter().fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(a, b), q| (a.min(*q), b.max(*q)));
+                    [mn.x, mn.y, mx.x, mx.y]
+                });
+                ParamsPasse { mvp: vp * p.vers_feuille, view_dir: -p.direction, ciseaux, plans: p.plans.clone() }
+            })
+            .collect();
         FrameParams {
-            mvp: self.camera.view_proj(aspect),
+            passes,
+            mvp: vp,
             eye: self.camera.eye(),
             view_dir: self.camera.forward(),
             ortho: self.camera.ortho,

@@ -2,7 +2,7 @@
 
 use crate::scene::Vertex;
 use eframe::glow::{self, HasContext};
-use glam::{Mat4, Vec3};
+use glam::{Mat4, Vec3, Vec4};
 
 const VS: &str = r#"
 layout(location = 0) in vec3 a_pos;
@@ -11,6 +11,7 @@ layout(location = 2) in vec4 a_color;
 layout(location = 3) in uint a_obj;
 uniform mat4 u_mvp;
 uniform uint u_sel;
+uniform vec4 u_plans[2];
 out vec3 v_pos;
 out vec3 v_n;
 out vec4 v_c;
@@ -21,6 +22,11 @@ void main() {
     v_c = a_color;
     v_selected = (a_obj == u_sel) ? 1u : 0u;
     gl_Position = u_mvp * vec4(a_pos, 1.0);
+#ifndef GL_ES
+    // plans de découpe des passes (fenêtres de vue) : actifs seulement si demandés
+    gl_ClipDistance[0] = dot(u_plans[0], vec4(a_pos, 1.0));
+    gl_ClipDistance[1] = dot(u_plans[1], vec4(a_pos, 1.0));
+#endif
 }
 "#;
 
@@ -56,6 +62,22 @@ void main() {
 }
 "#;
 
+/// Indices d'une passe supplémentaire (fenêtre de vue d'une feuille).
+struct Passe {
+    ebo: [glow::Buffer; 3],
+    n: [i32; 3],
+}
+
+/// Paramètres d'une passe : matrice, direction de vue (éclairage), rectangle de
+/// découpe en coordonnées normalisées (xmin, ymin, xmax, ymax) et plans de découpe dans
+/// le repère de la scène (n·p + d ≥ 0 gardé, deux au plus).
+pub struct ParamsPasse {
+    pub mvp: Mat4,
+    pub view_dir: Vec3,
+    pub ciseaux: Option<[f32; 4]>,
+    pub plans: Vec<Vec4>,
+}
+
 pub struct Renderer {
     program: glow::Program,
     vao: glow::VertexArray,
@@ -72,6 +94,8 @@ pub struct Renderer {
     u_ortho: Option<glow::UniformLocation>,
     u_view_dir: Option<glow::UniformLocation>,
     u_flat: Option<glow::UniformLocation>,
+    u_plans: Option<glow::UniformLocation>,
+    passes: Vec<Passe>,
 }
 
 pub struct FrameParams {
@@ -81,6 +105,9 @@ pub struct FrameParams {
     pub ortho: bool,
     pub selected: u32,
     pub background: [f32; 3],
+    /// Passes des fenêtres de vue (feuille ouverte), dans l'ordre des indices envoyés
+    /// par `upload_passes`.
+    pub passes: Vec<ParamsPasse>,
 }
 
 fn as_bytes<T>(s: &[T]) -> &[u8] {
@@ -139,6 +166,8 @@ impl Renderer {
                 u_ortho: gl.get_uniform_location(program, "u_ortho"),
                 u_view_dir: gl.get_uniform_location(program, "u_view_dir"),
                 u_flat: gl.get_uniform_location(program, "u_flat"),
+                u_plans: gl.get_uniform_location(program, "u_plans[0]").or_else(|| gl.get_uniform_location(program, "u_plans")),
+                passes: Vec::new(),
                 program,
                 vao,
                 vbo,
@@ -181,6 +210,54 @@ impl Renderer {
         self.n_lines = lines.len() as i32;
     }
 
+    /// Indices (triangles opaques, transparents, traits) de chaque passe ; une liste vide
+    /// retire les passes.
+    pub fn upload_passes(&mut self, gl: &glow::Context, passes: &[[Vec<u32>; 3]]) {
+        unsafe {
+            while self.passes.len() < passes.len() {
+                let ebo = [gl.create_buffer().unwrap(), gl.create_buffer().unwrap(), gl.create_buffer().unwrap()];
+                self.passes.push(Passe { ebo, n: [0; 3] });
+            }
+            gl.bind_vertex_array(Some(self.vao));
+            for (k, ps) in self.passes.iter_mut().enumerate() {
+                for j in 0..3 {
+                    let idx: &[u32] = passes.get(k).map(|x| x[j].as_slice()).unwrap_or_default();
+                    gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ps.ebo[j]));
+                    gl.buffer_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, as_bytes(idx), glow::DYNAMIC_DRAW);
+                    ps.n[j] = idx.len() as i32;
+                }
+            }
+            gl.bind_vertex_array(None);
+            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
+        }
+    }
+
+    /// Triangles opaques, traits puis triangles transparents des tampons donnés.
+    unsafe fn dessiner(&self, gl: &glow::Context, ebo: [glow::Buffer; 3], n: [i32; 3]) {
+        unsafe {
+            gl.disable(glow::BLEND);
+            if n[0] > 0 {
+                gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ebo[0]));
+                gl.draw_elements(glow::TRIANGLES, n[0], glow::UNSIGNED_INT, 0);
+            }
+            if n[2] > 0 {
+                // traits sans ombrage ; les faces sont repoussées par le décalage de polygone
+                gl.uniform_1_i32(self.u_flat.as_ref(), 1);
+                gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ebo[2]));
+                gl.draw_elements(glow::LINES, n[2], glow::UNSIGNED_INT, 0);
+                gl.uniform_1_i32(self.u_flat.as_ref(), 0);
+            }
+            if n[1] > 0 {
+                gl.enable(glow::BLEND);
+                gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
+                gl.depth_mask(false);
+                gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ebo[1]));
+                gl.draw_elements(glow::TRIANGLES, n[1], glow::UNSIGNED_INT, 0);
+                gl.depth_mask(true);
+            }
+        }
+    }
+
     pub fn paint(&self, gl: &glow::Context, p: &FrameParams, viewport: [i32; 4]) {
         unsafe {
             gl.enable(glow::SCISSOR_TEST);
@@ -200,28 +277,47 @@ impl Renderer {
             gl.uniform_3_f32(self.u_view_dir.as_ref(), p.view_dir.x, p.view_dir.y, p.view_dir.z);
             gl.bind_vertex_array(Some(self.vao));
 
-            gl.disable(glow::BLEND);
             gl.enable(glow::POLYGON_OFFSET_FILL);
             gl.polygon_offset(1.0, 1.0);
-            if self.n_opaque > 0 {
-                gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_opaque));
-                gl.draw_elements(glow::TRIANGLES, self.n_opaque, glow::UNSIGNED_INT, 0);
+            // fenêtres de vue d'une feuille : chacune dans son rectangle, profondeur
+            // effacée, découpée par ses plans ; la feuille (cartouche, titres) par-dessus
+            for (pp, ps) in p.passes.iter().zip(&self.passes) {
+                let r = match pp.ciseaux {
+                    Some(c) => {
+                        let px = |x: f32| viewport[0] as f32 + (x.clamp(-1.0, 1.0) + 1.0) * 0.5 * viewport[2] as f32;
+                        let py = |y: f32| viewport[1] as f32 + (y.clamp(-1.0, 1.0) + 1.0) * 0.5 * viewport[3] as f32;
+                        let (x0, y0, x1, y1) = (px(c[0]).floor() as i32, py(c[1]).floor() as i32, px(c[2]).ceil() as i32, py(c[3]).ceil() as i32);
+                        if x1 <= x0 || y1 <= y0 {
+                            continue;
+                        }
+                        [x0, y0, x1 - x0, y1 - y0]
+                    }
+                    None => viewport,
+                };
+                gl.scissor(r[0], r[1], r[2], r[3]);
+                gl.clear(glow::DEPTH_BUFFER_BIT);
+                gl.uniform_matrix_4_f32_slice(self.u_mvp.as_ref(), false, &pp.mvp.to_cols_array());
+                gl.uniform_3_f32(self.u_view_dir.as_ref(), pp.view_dir.x, pp.view_dir.y, pp.view_dir.z);
+                let mut plans = [0f32; 8];
+                for (k, pl) in pp.plans.iter().take(2).enumerate() {
+                    plans[4 * k..4 * k + 4].copy_from_slice(&pl.to_array());
+                }
+                gl.uniform_4_f32_slice(self.u_plans.as_ref(), &plans);
+                for k in 0..pp.plans.len().min(2) {
+                    gl.enable(glow::CLIP_DISTANCE0 + k as u32);
+                }
+                self.dessiner(gl, ps.ebo, ps.n);
+                for k in 0..2 {
+                    gl.disable(glow::CLIP_DISTANCE0 + k);
+                }
             }
-            if self.n_lines > 0 {
-                // traits sans ombrage ; les faces sont repoussées par le décalage de polygone
-                gl.uniform_1_i32(self.u_flat.as_ref(), 1);
-                gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_lines));
-                gl.draw_elements(glow::LINES, self.n_lines, glow::UNSIGNED_INT, 0);
-                gl.uniform_1_i32(self.u_flat.as_ref(), 0);
+            if !p.passes.is_empty() {
+                gl.scissor(viewport[0], viewport[1], viewport[2], viewport[3]);
+                gl.clear(glow::DEPTH_BUFFER_BIT);
+                gl.uniform_matrix_4_f32_slice(self.u_mvp.as_ref(), false, &p.mvp.to_cols_array());
+                gl.uniform_3_f32(self.u_view_dir.as_ref(), p.view_dir.x, p.view_dir.y, p.view_dir.z);
             }
-            if self.n_transp > 0 {
-                gl.enable(glow::BLEND);
-                gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
-                gl.depth_mask(false);
-                gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_transp));
-                gl.draw_elements(glow::TRIANGLES, self.n_transp, glow::UNSIGNED_INT, 0);
-                gl.depth_mask(true);
-            }
+            self.dessiner(gl, [self.ebo_opaque, self.ebo_transp, self.ebo_lines], [self.n_opaque, self.n_transp, self.n_lines]);
             gl.disable(glow::POLYGON_OFFSET_FILL);
             gl.bind_vertex_array(None);
             gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
@@ -288,6 +384,11 @@ impl Renderer {
             gl.delete_buffer(self.ebo_opaque);
             gl.delete_buffer(self.ebo_transp);
             gl.delete_buffer(self.ebo_lines);
+            for ps in &self.passes {
+                for b in ps.ebo {
+                    gl.delete_buffer(b);
+                }
+            }
         }
     }
 }
