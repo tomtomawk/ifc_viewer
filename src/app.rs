@@ -590,7 +590,6 @@ impl ViewerApp {
                 }
             });
         }
-        change |= ui.add(egui::DragValue::new(&mut self.echelle).speed(1.0).range(1.0..=10000.0).prefix("1:")).on_hover_text("Échelle : épaisseur des contours et pas des hachures").changed();
         if ui.button("SVG…").on_hover_text("Exporter le dessin de la vue en SVG (vue orthographique)").clicked() {
             let nom = self.scene.as_ref().map(|s| s.file_name.rsplit_once('.').map_or(s.file_name.clone(), |x| x.0.to_string())).unwrap_or_default();
             if let Some(chemin) = rfd::FileDialog::new().add_filter("SVG", &["svg"]).set_file_name(format!("{nom}.svg")).save_file() {
@@ -731,35 +730,120 @@ impl ViewerApp {
         });
     }
 
-    /// Barre de la vue, sous la vue comme celle de Revit : échelle de la vue ouverte,
-    /// cadrage, orientations prédéfinies, projection.
+    /// Vue 3D : modèle libre (IFC, ou fichier Revit sans vue ouverte) ou vue 3D Revit ;
+    /// pas un plan, une coupe, une élévation ni une feuille.
+    fn vue_3d(&self) -> bool {
+        match self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)) {
+            Some(v) => v.genre == "Vue 3D",
+            None => true,
+        }
+    }
+
+    /// Barre de la vue, sous la vue comme celle de Revit : échelle (celle de la vue
+    /// ouverte, qui règle aussi le dessin 2D), cadrage, projection en vue 3D.
     fn barre_vue(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.add_enabled_ui(self.scene.is_some(), |ui| {
-                if let Some(v) = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)) {
-                    ui.label(RichText::new(format!("1 : {}", v.echelle)).strong()).on_hover_text("Échelle de la vue");
-                    ui.separator();
+                ui.label("Échelle");
+                let r = ui.add(egui::DragValue::new(&mut self.echelle).speed(1.0).range(1.0..=10000.0).prefix("1 : "));
+                if r.on_hover_text("Échelle de la vue : épaisseur des traits coupés et pas des hachures du dessin 2D, export SVG").changed() {
+                    self.visibility_dirty = true;
                 }
+                ui.separator();
                 if ui.button("Cadrer").on_hover_text("Tout le modèle visible dans la vue (F)").clicked() {
                     self.fit_all();
                 }
-                ui.separator();
-                if ui.button("Dessus").on_hover_text("Vue de dessus").clicked() {
-                    self.camera.pitch = MAX_PITCH;
-                    self.camera.yaw = -std::f32::consts::FRAC_PI_2;
+                if self.vue_3d() {
+                    ui.separator();
+                    ui.toggle_value(&mut self.camera.ortho, "Ortho").on_hover_text("Projection orthographique (sinon perspective)");
                 }
-                if ui.button("Face").on_hover_text("Vue de face (vers le nord)").clicked() {
-                    self.camera.pitch = 0.0;
-                    self.camera.yaw = -std::f32::consts::FRAC_PI_2;
-                }
-                if ui.button("Iso").on_hover_text("Vue axonométrique").clicked() {
-                    self.camera.pitch = 0.6;
-                    self.camera.yaw = -2.3;
-                }
-                ui.separator();
-                ui.toggle_value(&mut self.camera.ortho, "Ortho").on_hover_text("Projection orthographique (sinon perspective)");
             });
         });
+    }
+
+    /// Cube d'orientation (vue 3D), dans le coin haut droit de la vue : clic sur une face,
+    /// une arête ou un coin pour regarder le modèle depuis cette direction ; glisser pour
+    /// tourner autour.
+    fn cube_orientation(&mut self, ui: &mut egui::Ui, vue: egui::Rect) {
+        use egui::{Stroke, pos2};
+        let cote = 104.0;
+        let zone = egui::Rect::from_min_size(pos2(vue.right() - cote - 8.0, vue.top() + 8.0), egui::vec2(cote, cote));
+        let resp = ui.interact(zone, ui.make_persistent_id("cube_orientation"), Sense::click_and_drag());
+        if resp.dragged_by(PointerButton::Primary) {
+            let d = resp.drag_delta();
+            self.camera.orbit(d.x, d.y);
+        }
+        let rot = self.camera.view();
+        let centre = zone.center();
+        let k = cote * 0.27;
+        let ecran = |p: Vec3| {
+            let q = rot.transform_vector3(p);
+            pos2(centre.x + q.x * k, centre.y - q.y * k)
+        };
+        // faces : normale, axes (u, v) de leur grille 3 × 3, nom
+        let faces = [
+            (Vec3::Z, Vec3::X, Vec3::Y, "HAUT"),
+            (Vec3::NEG_Z, Vec3::X, Vec3::NEG_Y, "BAS"),
+            (Vec3::NEG_Y, Vec3::X, Vec3::Z, "AVANT"),
+            (Vec3::Y, Vec3::NEG_X, Vec3::Z, "ARRIÈRE"),
+            (Vec3::X, Vec3::Y, Vec3::Z, "DROITE"),
+            (Vec3::NEG_X, Vec3::NEG_Y, Vec3::Z, "GAUCHE"),
+        ];
+        let cellule = |n: Vec3, u: Vec3, v: Vec3, i: usize, j: usize| {
+            let (a0, a1) = ([-1.0, -0.6, 0.6][i], [-0.6, 0.6, 1.0][i]);
+            let (b0, b1) = ([-1.0, -0.6, 0.6][j], [-0.6, 0.6, 1.0][j]);
+            [n + u * a0 + v * b0, n + u * a1 + v * b0, n + u * a1 + v * b1, n + u * a0 + v * b1].map(ecran)
+        };
+        let dedans = |p: egui::Pos2, q: &[egui::Pos2; 4]| {
+            let signe = |a: egui::Pos2, b: egui::Pos2| (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+            let s: Vec<f32> = (0..4).map(|m| signe(q[m], q[(m + 1) % 4])).collect();
+            s.iter().all(|x| *x >= 0.0) || s.iter().all(|x| *x <= 0.0)
+        };
+        // faces tournées vers l'observateur, et cellule sous le pointeur
+        let visibles: Vec<_> = faces.iter().filter(|f| rot.transform_vector3(f.0).z > 1e-3).collect();
+        let mut survol: Option<Vec3> = None;
+        let mut survol_cellule = None;
+        if let Some(p) = resp.hover_pos() {
+            for f in &visibles {
+                for i in 0..3 {
+                    for j in 0..3 {
+                        if dedans(p, &cellule(f.0, f.1, f.2, i, j)) {
+                            survol = Some(f.0 + f.1 * (i as f32 - 1.0) + f.2 * (j as f32 - 1.0));
+                            survol_cellule = Some((f.0, i, j));
+                        }
+                    }
+                }
+            }
+        }
+        let painter = ui.painter_at(zone);
+        let encre = Color32::from_gray(70);
+        for f in &visibles {
+            let coins = [f.0 - f.1 - f.2, f.0 + f.1 - f.2, f.0 + f.1 + f.2, f.0 - f.1 + f.2].map(ecran);
+            let face = rot.transform_vector3(f.0).z;
+            let gris = (215.0 + 30.0 * face) as u8;
+            painter.add(egui::Shape::convex_polygon(coins.to_vec(), Color32::from_rgba_unmultiplied(gris, gris, gris, 235), Stroke::new(1.0, encre)));
+            if let Some((n, i, j)) = survol_cellule.filter(|c| c.0 == f.0) {
+                painter.add(egui::Shape::convex_polygon(cellule(n, f.1, f.2, i, j).to_vec(), Color32::from_rgba_unmultiplied(80, 150, 230, 170), Stroke::NONE));
+            }
+            // nom lisible seulement sur une face assez tournée vers l'observateur
+            if face > 0.5 {
+                painter.text(ecran(f.0), egui::Align2::CENTER_CENTER, f.3, egui::FontId::proportional(10.5), encre);
+            }
+        }
+        let survol_texte = survol.map(|d| {
+            let n = |x: f32, pos: &str, neg: &str| if x > 0.5 { pos.to_string() } else if x < -0.5 { neg.to_string() } else { String::new() };
+            [n(d.z, "haut", "bas"), n(-d.y, "avant", "arrière"), n(d.x, "droite", "gauche")].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(", ")
+        });
+        let clic = resp.clicked();
+        if let Some(t) = survol_texte {
+            resp.on_hover_text(format!("Vue depuis : {t}"));
+        }
+        if let (true, Some(d)) = (clic, survol) {
+            // regarder depuis d vers le centre ; dessus et dessous : nord en haut
+            let d = d.normalize();
+            self.camera.pitch = d.z.clamp(-1.0, 1.0).asin().clamp(-MAX_PITCH, MAX_PITCH);
+            self.camera.yaw = if d.truncate().length() < 1e-4 { -std::f32::consts::FRAC_PI_2 } else { d.y.atan2(d.x) };
+        }
     }
 
     fn status_bar(&mut self, ui: &mut egui::Ui) {
@@ -1063,12 +1147,13 @@ impl ViewerApp {
                 if self.coupe {
                     self.coupe_niveau = etage;
                 }
-                if echelle > 0.0 {
-                    self.echelle = echelle;
-                }
             }
             "Vue 3D" | "Feuille" => self.dessin = false,
             _ => {}
+        }
+        // échelle de la barre de vue : celle de la vue ouverte
+        if echelle > 0.0 {
+            self.echelle = echelle;
         }
         self.vue_active = Some(i);
         self.preparer_feuille(Some(i));
@@ -1773,6 +1858,9 @@ impl ViewerApp {
             })),
         };
         ui.painter().add(callback);
+        if self.scene.is_some() && self.vue_3d() {
+            self.cube_orientation(ui, rect);
+        }
 
         // onglet de la vue ouverte, comme dans Revit
         if let Some(v) = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)) {

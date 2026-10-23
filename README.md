@@ -26,6 +26,8 @@ Exécutable Windows prêt à l'emploi : `dist/ifc_viewer.exe` (compilé en relea
 | Sélection | clic |
 | Cadrer l'objet / tout | double-clic / F |
 | Masquer / isoler la sélection | H / I (Échap annule l'isolement) |
+| Orientation (vue 3D) | cube d'orientation, coin haut droit : clic sur une face, une arête ou un coin ; glisser pour tourner |
+| Échelle, cadrage, projection | barre sous la vue |
 | Rendu 2D (plans, élévations) | bouton « Dessin 2D » |
 | Export vectoriel du dessin | bouton « SVG… » (mode dessin, vue orthographique) |
 
