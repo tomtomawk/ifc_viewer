@@ -315,6 +315,32 @@ impl IfcModel {
         out
     }
 
+    /// Matériaux (`IfcMaterial`) d'une association : directe, couches, profils,
+    /// constituants, liste.
+    pub fn material_ids(&self, id: Id) -> Vec<Id> {
+        let mut out = Vec::new();
+        self.collect_material_ids(id, &mut out, 0);
+        out
+    }
+
+    fn collect_material_ids(&self, id: Id, out: &mut Vec<Id>, depth: u32) {
+        let Some(e) = self.get(id).filter(|_| depth <= 5) else { return };
+        let suivre: Vec<Id> = match &*e.ty {
+            "IFCMATERIAL" => {
+                out.push(id);
+                Vec::new()
+            }
+            "IFCMATERIALLAYERSETUSAGE" | "IFCMATERIALPROFILESETUSAGE" | "IFCMATERIALPROFILESETUSAGETAPERING" | "IFCMATERIALLAYER" => e.arg(0).as_ref().into_iter().collect(),
+            "IFCMATERIALLAYERSET" | "IFCMATERIALLIST" => e.arg(0).refs().collect(),
+            "IFCMATERIALCONSTITUENTSET" | "IFCMATERIALPROFILESET" => e.arg(2).refs().collect(),
+            "IFCMATERIALCONSTITUENT" | "IFCMATERIALPROFILE" => e.arg(2).as_ref().into_iter().collect(),
+            _ => Vec::new(),
+        };
+        for s in suivre {
+            self.collect_material_ids(s, out, depth + 1);
+        }
+    }
+
     /// Noms des matériaux associés (couches avec épaisseur).
     pub fn material_names(&self, id: Id) -> Vec<String> {
         let mut out = Vec::new();

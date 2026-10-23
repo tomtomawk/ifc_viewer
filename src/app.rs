@@ -35,14 +35,148 @@ const SPATIAL: &[&str] = &[
     "IFCSPATIALZONE", "IFCEXTERNALSPATIALELEMENT",
 ];
 
-/// Onglets de l'arborescence.
-#[derive(PartialEq, Clone, Copy)]
+/// Onglets de l'arborescence, choisis par la barre d'icônes : sections du navigateur de
+/// projet de Revit (toutes, ou une seule), matériaux, arborescence spatiale, classes.
+#[derive(PartialEq, Clone, Copy, Debug)]
 enum LeftTab {
-    /// Navigateur de projet de Revit.
-    Projet,
+    /// Navigateur de projet de Revit, toutes sections.
+    Tout,
+    Vues,
+    Feuilles,
+    Nomenclatures,
+    Familles,
+    Materiaux,
+    Groupes,
+    Liens,
     /// Arborescence spatiale.
     Tree,
     Classes,
+}
+
+impl LeftTab {
+    /// Onglets d'un fichier Revit (navigateur, puis modèle et classes) et d'un IFC.
+    const REVIT: [LeftTab; 10] = [LeftTab::Tout, LeftTab::Vues, LeftTab::Feuilles, LeftTab::Nomenclatures, LeftTab::Familles, LeftTab::Materiaux, LeftTab::Groupes, LeftTab::Liens, LeftTab::Tree, LeftTab::Classes];
+    const IFC: [LeftTab; 3] = [LeftTab::Tree, LeftTab::Classes, LeftTab::Materiaux];
+
+    fn libelle(self) -> &'static str {
+        match self {
+            LeftTab::Tout => "Tout",
+            LeftTab::Vues => "Vues",
+            LeftTab::Feuilles => "Feuilles",
+            LeftTab::Nomenclatures => "Nomenclatures",
+            LeftTab::Familles => "Familles",
+            LeftTab::Materiaux => "Matériaux",
+            LeftTab::Groupes => "Groupes",
+            LeftTab::Liens => "Liens Revit",
+            LeftTab::Tree => "Modèle (arborescence spatiale)",
+            LeftTab::Classes => "Classes",
+        }
+    }
+
+    /// Nom pour le pilote (commande `onglet`).
+    fn nom(self) -> &'static str {
+        match self {
+            LeftTab::Tout => "tout",
+            LeftTab::Vues => "vues",
+            LeftTab::Feuilles => "feuilles",
+            LeftTab::Nomenclatures => "nomenclatures",
+            LeftTab::Familles => "familles",
+            LeftTab::Materiaux => "materiaux",
+            LeftTab::Groupes => "groupes",
+            LeftTab::Liens => "liens",
+            LeftTab::Tree => "modele",
+            LeftTab::Classes => "classes",
+        }
+    }
+
+    /// Section du navigateur de projet de Revit.
+    fn du_navigateur(self) -> bool {
+        !matches!(self, LeftTab::Tree | LeftTab::Classes | LeftTab::Materiaux)
+    }
+}
+
+/// Icône d'un onglet, tracée en traits dans `r` (environ 16 px).
+fn icone(p: &egui::Painter, r: egui::Rect, onglet: LeftTab, c: Color32) {
+    use egui::{Stroke, pos2, vec2};
+    let t = Stroke::new(1.4, c);
+    let (x0, y0, w, h) = (r.left(), r.top(), r.width(), r.height());
+    let pt = |x: f32, y: f32| pos2(x0 + x * w, y0 + y * h);
+    let rect = |a: f32, b: f32, c2: f32, d: f32| egui::Rect::from_min_max(pt(a, b), pt(c2, d));
+    let seg = |a: (f32, f32), b: (f32, f32)| p.line_segment([pt(a.0, a.1), pt(b.0, b.1)], t);
+    let cadre = |r: egui::Rect, arrondi: f32| p.rect_stroke(r, arrondi, t, egui::StrokeKind::Inside);
+    match onglet {
+        LeftTab::Tout => {
+            for (a, b) in [(0.05, 0.05), (0.55, 0.05), (0.05, 0.55), (0.55, 0.55)] {
+                cadre(rect(a, b, a + 0.4, b + 0.4), 1.0);
+            }
+        }
+        LeftTab::Vues => {
+            // œil : deux arcs et la pupille
+            let arc = |signe: f32| -> Vec<egui::Pos2> {
+                (0..=12).map(|k| {
+                    let u = k as f32 / 12.0;
+                    pt(0.02 + 0.96 * u, 0.5 + signe * 0.32 * (std::f32::consts::PI * u).sin())
+                }).collect()
+            };
+            p.add(egui::Shape::line(arc(-1.0), t));
+            p.add(egui::Shape::line(arc(1.0), t));
+            p.circle_filled(pt(0.5, 0.5), w * 0.13, c);
+        }
+        LeftTab::Feuilles => {
+            // feuille au coin plié et son cartouche
+            p.add(egui::Shape::line(vec![pt(0.15, 0.02), pt(0.65, 0.02), pt(0.88, 0.25), pt(0.88, 0.98), pt(0.15, 0.98), pt(0.15, 0.02)], t));
+            seg((0.65, 0.02), (0.65, 0.25));
+            seg((0.65, 0.25), (0.88, 0.25));
+            cadre(rect(0.45, 0.72, 0.88, 0.98), 0.0);
+        }
+        LeftTab::Nomenclatures => {
+            cadre(rect(0.04, 0.08, 0.96, 0.92), 0.0);
+            p.rect_filled(rect(0.04, 0.08, 0.96, 0.3), 0.0, c);
+            for y in [0.52, 0.72] {
+                seg((0.04, y), (0.96, y));
+            }
+            seg((0.38, 0.3), (0.38, 0.92));
+        }
+        LeftTab::Familles => {
+            // cube en perspective
+            let (a, b, cc, d) = (pt(0.5, 0.04), pt(0.94, 0.27), pt(0.5, 0.5), pt(0.06, 0.27));
+            p.add(egui::Shape::closed_line(vec![a, b, cc, d], t));
+            p.add(egui::Shape::line(vec![d, pt(0.06, 0.73), pt(0.5, 0.96), pt(0.94, 0.73), b], t));
+            p.line_segment([cc, pt(0.5, 0.96)], t);
+        }
+        LeftTab::Materiaux => {
+            // échantillon : moitié pleine, moitié hachurée
+            cadre(rect(0.06, 0.06, 0.94, 0.94), 1.0);
+            p.add(egui::Shape::convex_polygon(vec![pt(0.06, 0.06), pt(0.94, 0.06), pt(0.06, 0.94)], c, Stroke::NONE));
+            for k in [0.55, 0.75] {
+                seg((k, 0.94), (0.94, k));
+            }
+        }
+        LeftTab::Groupes => {
+            cadre(rect(0.04, 0.04, 0.62, 0.62), 1.0);
+            cadre(rect(0.38, 0.38, 0.96, 0.96), 1.0);
+        }
+        LeftTab::Liens => {
+            // deux maillons de chaîne
+            cadre(egui::Rect::from_center_size(pt(0.32, 0.62), vec2(w * 0.56, h * 0.36)), h * 0.18);
+            cadre(egui::Rect::from_center_size(pt(0.68, 0.38), vec2(w * 0.56, h * 0.36)), h * 0.18);
+        }
+        LeftTab::Tree => {
+            // arborescence : tronc et trois branches
+            seg((0.2, 0.08), (0.2, 0.86));
+            for y in [0.24, 0.52, 0.86] {
+                seg((0.2, y), (0.5, y));
+                p.rect_filled(rect(0.56, y - 0.09, 0.95, y + 0.09), 1.0, c);
+            }
+        }
+        LeftTab::Classes => {
+            // liste à puces
+            for y in [0.2, 0.5, 0.8] {
+                p.circle_filled(pt(0.12, y), w * 0.08, c);
+                seg((0.3, y), (0.96, y));
+            }
+        }
+    }
 }
 
 /// Action demandée depuis le navigateur de projet, appliquée après son tracé.
@@ -136,6 +270,8 @@ pub struct ViewerApp {
     coupe_dirty: bool,
     /// Niveaux de la scène (voir `niveaux`), relevés à son installation.
     liste_niveaux: Vec<(Id, String, f32)>,
+    /// Matériaux de la scène et éléments qui les portent (onglet Matériaux).
+    liste_materiaux: Vec<scene::NavMateriau>,
 }
 
 impl ViewerApp {
@@ -190,6 +326,7 @@ impl ViewerApp {
             echelle: 100.0,
             coupe_dirty: true,
             liste_niveaux: Vec::new(),
+            liste_materiaux: Vec::new(),
         };
         if let Some(p) = path {
             app.open(p, &cc.egui_ctx);
@@ -319,7 +456,11 @@ impl ViewerApp {
         self.dessin = false;
         self.coupe_niveau = None;
         self.liste_niveaux = niveaux(&scene);
-        self.left_tab = if scene.navigateur.is_some() { LeftTab::Projet } else { LeftTab::Tree };
+        self.left_tab = if scene.navigateur.is_some() { LeftTab::Tout } else { LeftTab::Tree };
+        self.liste_materiaux = match &scene.navigateur {
+            Some(n) => n.materiaux.clone(),
+            None => materiaux_ifc(&scene),
+        };
         self.scene = Some(scene);
         self.visibility_dirty = true;
         self.preparer_feuille(None);
@@ -637,16 +778,30 @@ impl ViewerApp {
         let nom = self.scene.as_ref().map(|s| s.file_name.clone()).unwrap_or_default();
         ui.label(RichText::new(if nom.is_empty() { "Arborescence du projet".to_string() } else { format!("Arborescence du projet - {nom}") }).strong());
         let a_nav = self.scene.as_ref().is_some_and(|s| s.navigateur.is_some());
-        ui.horizontal(|ui| {
-            if a_nav {
-                ui.selectable_value(&mut self.left_tab, LeftTab::Projet, "Projet");
-            }
-            ui.selectable_value(&mut self.left_tab, LeftTab::Tree, if a_nav { "Modèle" } else { "Arborescence" });
-            ui.selectable_value(&mut self.left_tab, LeftTab::Classes, "Classes");
-        });
-        if !a_nav && self.left_tab == LeftTab::Projet {
-            self.left_tab = LeftTab::Tree;
+        let onglets: &[LeftTab] = if a_nav { &LeftTab::REVIT } else { &LeftTab::IFC };
+        if !onglets.contains(&self.left_tab) {
+            self.left_tab = onglets[0];
         }
+        // barre d'icônes : une section ou un mode de l'arborescence chacune
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            for &o in onglets {
+                if o == LeftTab::Tree && a_nav {
+                    ui.separator();
+                }
+                let (r, resp) = ui.allocate_exact_size(egui::vec2(25.0, 24.0), Sense::click());
+                let actif = self.left_tab == o;
+                let v = ui.visuals();
+                let fond = if actif { v.selection.bg_fill } else if resp.hovered() { v.widgets.hovered.bg_fill } else { Color32::TRANSPARENT };
+                let encre = if actif { v.selection.stroke.color } else { v.widgets.inactive.fg_stroke.color };
+                ui.painter().rect_filled(r, 3.0, fond);
+                icone(ui.painter(), r.shrink2(egui::vec2(4.5, 4.0)), o, encre);
+                if resp.on_hover_text(o.libelle()).clicked() {
+                    self.left_tab = o;
+                }
+            }
+        });
+        ui.label(RichText::new(self.left_tab.libelle()).small().weak());
         ui.add(egui::TextEdit::singleline(&mut self.filter).hint_text("Rechercher"));
         ui.separator();
         if self.scene.is_none() {
@@ -654,8 +809,12 @@ impl ViewerApp {
             return;
         }
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-            if self.left_tab == LeftTab::Projet {
-                self.navigateur_ui(ui);
+            if self.left_tab.du_navigateur() {
+                self.navigateur_ui(ui, self.left_tab);
+                return;
+            }
+            if self.left_tab == LeftTab::Materiaux {
+                self.materiaux_ui(ui);
                 return;
             }
             if !self.filter.trim().is_empty() {
@@ -663,23 +822,53 @@ impl ViewerApp {
                 return;
             }
             match self.left_tab {
-                LeftTab::Projet => {}
-                LeftTab::Tree => {
+                LeftTab::Classes => self.class_list(ui),
+                _ => {
                     let roots = self.tree_roots();
                     for r in roots {
                         self.tree_node(ui, r, 0);
                     }
                 }
-                LeftTab::Classes => self.class_list(ui),
             }
         });
         self.reveal = None;
     }
 
+    /// Matériaux : pastille de couleur, nom, nombre d'éléments ; clic : isoler et cadrer
+    /// les éléments qui portent le matériau.
+    fn materiaux_ui(&mut self, ui: &mut egui::Ui) {
+        let q = self.filter.trim().to_lowercase();
+        let mut isoler: Option<Vec<Id>> = None;
+        let mut n = 0;
+        for m in self.liste_materiaux.iter().filter(|m| q.is_empty() || m.nom.to_lowercase().contains(&q)) {
+            n += 1;
+            ui.horizontal(|ui| {
+                let (r, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), Sense::hover());
+                let [cr, cg, cb] = m.couleur;
+                ui.painter().rect_filled(r, 2.0, Color32::from_rgb(cr, cg, cb));
+                ui.painter().rect_stroke(r, 2.0, egui::Stroke::new(1.0, Color32::from_gray(120)), egui::StrokeKind::Inside);
+                let texte = format!("{} ({})", m.nom, m.elements.len());
+                let resp = ui.selectable_label(false, if m.elements.is_empty() { RichText::new(texte).weak() } else { RichText::new(texte) });
+                let resp = resp.on_hover_text(format!("Transparence {:.0} %\nClic : isoler les éléments qui le portent", m.transparence * 100.0));
+                if resp.clicked() && !m.elements.is_empty() {
+                    isoler = Some(m.elements.clone());
+                }
+            });
+        }
+        if n == 0 {
+            ui.label(RichText::new("Aucun matériau").weak());
+        }
+        if let (Some(ids), Some(s)) = (isoler, &self.scene) {
+            let objs: Vec<u32> = ids.iter().filter_map(|id| s.object_of.get(id).copied()).collect();
+            self.isolate(objs.clone());
+            self.frame_objects(&objs);
+        }
+    }
+
     /// Navigateur de projet de Revit : vues par genre et type, nomenclatures, feuilles et
     /// vues qu'elles portent, familles par catégorie, groupes, liens. Clic : propriétés ;
     /// double-clic : ouvrir la vue (ou isoler les instances d'un type).
-    fn navigateur_ui(&mut self, ui: &mut egui::Ui) {
+    fn navigateur_ui(&mut self, ui: &mut egui::Ui, section: LeftTab) {
         let Some(s) = self.scene.as_ref() else { return };
         let Some(nav) = s.navigateur.as_ref() else { return };
         let q = self.filter.trim().to_lowercase();
@@ -700,6 +889,14 @@ impl ViewerApp {
             }
         };
         let titre_vue = |v: &crate::scene::NavVue| if v.nom.is_empty() { format!("{} [{}]", v.genre, v.revit_id) } else { v.nom.clone() };
+        // section : repliable sous « Tout », seule et dépliée sous son onglet
+        let rubrique_nav = |ui: &mut egui::Ui, onglet: LeftTab, titre: String, ouverte: bool, contenu: &mut dyn FnMut(&mut egui::Ui)| {
+            if section == LeftTab::Tout {
+                egui::CollapsingHeader::new(RichText::new(titre).strong()).id_salt(("nav", onglet.nom())).default_open(ouverte).open(ouvert.then_some(true)).show(ui, |ui| contenu(ui));
+            } else if section == onglet {
+                contenu(ui);
+            }
+        };
         // Vues (tout) : rubriques dans l'ordre de Revit, puis type de vue
         let mut rubriques: BTreeMap<(u8, &str, String), Vec<usize>> = BTreeMap::new();
         for (i, v) in nav.vues.iter().enumerate() {
@@ -709,8 +906,9 @@ impl ViewerApp {
                 }
             }
         }
-        egui::CollapsingHeader::new(RichText::new("Vues (tout)").strong()).id_salt("nav-vues").default_open(true).open(ouvert.then_some(true)).show(ui, |ui| {
-            for ((_, nom, type_vue), mut vues) in rubriques {
+        rubrique_nav(ui, LeftTab::Vues, "Vues (tout)".into(), true, &mut |ui| {
+            for ((_, nom, type_vue), vues) in &rubriques {
+                let mut vues = vues.clone();
                 vues.sort_by_key(|&i| titre_vue(&nav.vues[i]).to_lowercase());
                 // « Élévations (Élévation 1) » : type entre parenthèses s'il diffère du genre
                 let genre = &nav.vues[vues[0]].genre;
@@ -724,16 +922,22 @@ impl ViewerApp {
         });
         let mut nomenclatures: Vec<usize> = (0..nav.vues.len()).filter(|&i| nav.vues[i].genre == "Nomenclature" && garde(&nav.vues[i].nom)).collect();
         nomenclatures.sort_by_key(|&i| nav.vues[i].nom.to_lowercase());
-        egui::CollapsingHeader::new(RichText::new(format!("Nomenclatures/Quantités (tout) ({})", nomenclatures.len())).strong()).id_salt("nav-nom").open(ouvert.then_some(true)).show(ui, |ui| {
-            for i in nomenclatures {
+        rubrique_nav(ui, LeftTab::Nomenclatures, format!("Nomenclatures/Quantités (tout) ({})", nomenclatures.len()), false, &mut |ui| {
+            if nomenclatures.is_empty() {
+                ui.label(RichText::new("Aucune nomenclature").weak());
+            }
+            for &i in &nomenclatures {
                 feuille(ui, nav.vues[i].nom.clone(), nav.vues[i].entite, Some(i), &mut action);
             }
         });
         let mut feuilles: Vec<usize> = (0..nav.vues.len()).filter(|&i| nav.vues[i].genre == "Feuille").collect();
         feuilles.sort_by_key(|&i| (nav.vues[i].numero.clone(), nav.vues[i].nom.clone()));
         let indice: std::collections::HashMap<i64, usize> = nav.vues.iter().enumerate().map(|(i, v)| (v.revit_id, i)).collect();
-        egui::CollapsingHeader::new(RichText::new(format!("Feuilles (tout) ({})", feuilles.len())).strong()).id_salt("nav-feuilles").open(ouvert.then_some(true)).show(ui, |ui| {
-            for i in feuilles {
+        rubrique_nav(ui, LeftTab::Feuilles, format!("Feuilles (tout) ({})", feuilles.len()), false, &mut |ui| {
+            if feuilles.is_empty() {
+                ui.label(RichText::new("Aucune feuille").weak());
+            }
+            for &i in &feuilles {
                 let f = &nav.vues[i];
                 let titre = if f.numero.is_empty() { titre_vue(f) } else { format!("{} - {}", f.numero, f.nom) };
                 let placees: Vec<usize> = f.placees.iter().filter_map(|v| indice.get(v).copied()).collect();
@@ -761,10 +965,10 @@ impl ViewerApp {
                 par_cat.entry(f.categorie.as_str()).or_default().push(f);
             }
         }
-        egui::CollapsingHeader::new(RichText::new("Familles").strong()).id_salt("nav-familles").open(ouvert.then_some(true)).show(ui, |ui| {
-            for (cat, fams) in par_cat {
+        rubrique_nav(ui, LeftTab::Familles, "Familles".into(), false, &mut |ui| {
+            for (&cat, fams) in &par_cat {
                 egui::CollapsingHeader::new(cat).id_salt(("nav-cat", cat)).open(ouvert.then_some(true)).show(ui, |ui| {
-                    for f in fams {
+                    for f in fams.iter() {
                         egui::CollapsingHeader::new(&f.nom).id_salt(("nav-fam", cat, &f.nom)).open(ouvert.then_some(true)).show(ui, |ui| {
                             for (t, e) in &f.types {
                                 let label = if e.is_some() { t.clone() } else { format!("{t} (non utilisé)") };
@@ -776,17 +980,26 @@ impl ViewerApp {
             }
         });
         let groupes: Vec<&String> = nav.groupes.iter().filter(|g| garde(g)).collect();
-        egui::CollapsingHeader::new(RichText::new(format!("Groupes ({})", groupes.len())).strong()).id_salt("nav-groupes").open(ouvert.then_some(true)).show(ui, |ui| {
-            for g in groupes {
+        rubrique_nav(ui, LeftTab::Groupes, format!("Groupes ({})", groupes.len()), false, &mut |ui| {
+            if groupes.is_empty() {
+                ui.label(RichText::new("Aucun groupe").weak());
+            }
+            for g in &groupes {
                 ui.label(g.as_str());
             }
         });
         let liens: Vec<String> = self.rvt.iter().flat_map(|r| r.external_refs.iter()).filter(|e| e.kind.contains("Revit")).map(|e| e.path.clone()).collect();
-        egui::CollapsingHeader::new(RichText::new(format!("Liens Revit ({})", liens.len())).strong()).id_salt("nav-liens").show(ui, |ui| {
-            for l in liens {
-                ui.label(l);
+        rubrique_nav(ui, LeftTab::Liens, format!("Liens Revit ({})", liens.len()), false, &mut |ui| {
+            for l in &liens {
+                ui.label(l.as_str());
+            }
+            if liens.is_empty() {
+                ui.label(RichText::new("Aucun lien").weak());
             }
         });
+        if section == LeftTab::Tout && !self.liste_materiaux.is_empty() {
+            egui::CollapsingHeader::new(RichText::new(format!("Matériaux ({})", self.liste_materiaux.len())).strong()).id_salt(("nav", "materiaux")).open(ouvert.then_some(true)).show(ui, |ui| self.materiaux_ui(ui));
+        }
         match action {
             Some(ActionNav::Selection(e)) => self.select(Some(e), false),
             Some(ActionNav::Activer(i)) => self.activer_vue(i),
@@ -1784,11 +1997,11 @@ impl ViewerApp {
                 self.etat()
             }
             "onglet" => {
-                self.left_tab = match argument {
-                    "projet" => LeftTab::Projet,
-                    "classes" => LeftTab::Classes,
-                    _ => LeftTab::Tree,
+                let a = if argument == "projet" { "tout" } else { argument };
+                let Some(&o) = LeftTab::REVIT.iter().find(|o| o.nom() == a) else {
+                    return erreur("usage : onglet tout|vues|feuilles|nomenclatures|familles|materiaux|groupes|liens|modele|classes");
                 };
+                self.left_tab = o;
                 self.etat()
             }
             "vues" => {
@@ -1997,6 +2210,35 @@ impl ViewerApp {
             _ => erreur(&format!("commande inconnue : {commande}")),
         }
     }
+}
+
+/// Matériaux d'un modèle IFC (`IfcMaterial`) et éléments qui les portent (association
+/// directe ou par le type, couches, profils, constituants).
+fn materiaux_ifc(s: &Scene) -> Vec<scene::NavMateriau> {
+    let m = &s.model;
+    let mut usages: BTreeMap<Id, Vec<Id>> = BTreeMap::new();
+    for o in &s.objects {
+        let assoc = m.material_of.get(&o.id).or_else(|| m.material_of.get(m.type_of.get(&o.id)?));
+        let mut ids = assoc.map(|a| m.material_ids(*a)).unwrap_or_default();
+        ids.sort_unstable();
+        ids.dedup();
+        for k in ids {
+            usages.entry(k).or_default().push(o.id);
+        }
+    }
+    let mut out: Vec<scene::NavMateriau> = m
+        .file
+        .entities
+        .iter()
+        .filter(|(_, e)| e.is("IFCMATERIAL"))
+        .map(|(&id, e)| {
+            let c = m.material_rgba(id).unwrap_or([0.7, 0.7, 0.7, 1.0]);
+            let octet = |x: f32| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
+            scene::NavMateriau { nom: e.arg(0).display(), couleur: [octet(c[0]), octet(c[1]), octet(c[2])], transparence: 1.0 - c[3] as f64, elements: usages.remove(&id).unwrap_or_default() }
+        })
+        .collect();
+    out.sort_by_key(|a| a.nom.to_lowercase());
+    out
 }
 
 /// Niveaux du modèle : entité, nom, altitude dans le repère de la scène (élévation de

@@ -32,6 +32,7 @@ Exécutable Windows prêt à l'emploi : `dist/ifc_viewer.exe` (compilé en relea
 ## Fonctions
 
 - IFC2X3, IFC4, IFC4X3 (fichiers `.ifc` texte ; pas `.ifczip` ni `.ifcXML`).
+- Arborescence en onglets, choisis par une barre d'icônes : pour un fichier Revit, tout le navigateur de projet ou une seule de ses sections (vues, feuilles, nomenclatures, familles, groupes, liens), matériaux (avec les éléments qui les portent : un clic les isole), modèle et classes ; pour un IFC, modèle, classes et matériaux (`IfcMaterial`).
 - Arborescence spatiale (projet > site > bâtiment > niveaux, éléments groupés par classe), visibilité par niveau et par classe, recherche par nom, classe ou GlobalId.
 - Propriétés : attributs, type, niveau, matériaux avec épaisseurs de couches, Psets et Qto (y compris ceux du type), unités converties en m / m² / m³.
 - Couleurs : IfcStyledItem, puis couleur du matériau, puis couleur par défaut de la classe. Transparence gérée.

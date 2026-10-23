@@ -30,7 +30,7 @@ camera <lacet°> <tangage°> [distance] ; zoom <facteur> ; afficher <CLASSES> ;
 masquer <CLASSES> ; tout_afficher ; classes ; elements [CLASSE|*] [texte] ;
 selectionner <id> ; isoler <id> ; cadrer <id> ; proprietes [id] ; objet <x> <y>
 (0..1 depuis le coin haut gauche de la vue) ; fiche oui|non (fiche Revit) ;
-onglet projet|modele|classes ;
+onglet tout|vues|feuilles|nomenclatures|familles|materiaux|groupes|liens|modele|classes ;
 dessin oui|non (rendu 2D des plans et élévations) ; coupe non | coupe <hauteur m> [niveau]
 (coupe horizontale au-dessus du niveau, mode dessin) ; niveaux ; poche hachure|plein|vide ;
 echelle <dénominateur> (épaisseur des contours coupés, pas des hachures) ;

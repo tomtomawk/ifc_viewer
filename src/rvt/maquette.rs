@@ -1749,6 +1749,8 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
     let mut types: HashMap<(i64, &str), Id> = HashMap::new();
     let mut contenus: BTreeMap<Id, Vec<Value>> = BTreeMap::new();
     let mut geoms = Vec::new();
+    // éléments qui portent chaque matériau (navigateur : onglet Matériaux)
+    let mut usages: HashMap<i64, Vec<Id>> = HashMap::new();
     // traits des motifs de surface : plafond (2 sommets de 24 octets par trait)
     let (mut traits_motifs, mut motifs_omis, mut motifs_dessin) = (0usize, 0usize, 0usize);
     for p in produits(m) {
@@ -1788,6 +1790,9 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
             let mut par_mat: BTreeMap<i64, Vec<[DVec3; 3]>> = BTreeMap::new();
             for f in &g.faces {
                 par_mat.entry(f.materiau).or_default().extend(f.triangles.iter().map(|t| t.map(|i| g.sommets[i] / 1000.0)));
+            }
+            for &k in par_mat.keys() {
+                usages.entry(k).or_default().push(id);
             }
             let parts = par_mat
                 .into_iter()
@@ -1980,6 +1985,12 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
     }
     let entite_type: HashMap<i64, Id> = types.iter().map(|(&(t, _), &e)| (t, e)).collect();
     let mut nav = navigateur(m, &entite_vue, &entite_type, &etage);
+    nav.materiaux = m
+        .materiaux
+        .iter()
+        .map(|(k, x)| scene::NavMateriau { nom: x.nom.clone(), couleur: x.couleur, transparence: x.transparence, elements: usages.remove(k).unwrap_or_default() })
+        .collect();
+    nav.materiaux.sort_by_key(|a| a.nom.to_lowercase());
     for v in &mut nav.vues {
         v.primitives = primitives_vues.remove(&v.revit_id).unwrap_or_default();
     }
@@ -2080,7 +2091,7 @@ fn navigateur(m: &Maquette, entite_vue: &HashMap<i64, Id>, entite_type: &HashMap
         .collect();
     let mut groupes: Vec<String> = m.types.values().filter(|t| t.classe == "ElementGroupType").map(|t| t.nom.clone()).collect();
     groupes.sort();
-    Navigateur { vues, familles, groupes }
+    Navigateur { vues, familles, groupes, materiaux: Vec::new() }
 }
 
 /// Nombre maximal de traits de motifs de surface dans une scène.

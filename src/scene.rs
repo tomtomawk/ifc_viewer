@@ -45,6 +45,17 @@ pub struct Navigateur {
     pub vues: Vec<NavVue>,
     pub familles: Vec<NavFamille>,
     pub groupes: Vec<String>,
+    pub materiaux: Vec<NavMateriau>,
+}
+
+/// Matériau et éléments qui le portent (entités de la scène).
+#[derive(Clone)]
+pub struct NavMateriau {
+    pub nom: String,
+    pub couleur: [u8; 3],
+    /// 0 opaque, 1 transparent.
+    pub transparence: f64,
+    pub elements: Vec<crate::step::Id>,
 }
 
 /// Vue, nomenclature ou feuille.
