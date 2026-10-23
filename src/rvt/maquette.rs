@@ -1978,6 +1978,7 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
             ("Genre", Value::Str(v.genre.into())),
             ("Échelle", Value::Str(format!("1:{}", v.echelle))),
             ("Orientation", Value::Str((if v.nord_geographique { "Nord géographique" } else { "Nord du projet" }).into())),
+            ("Plage de vue", Value::Str(texte_plage(m, v))),
             ("Origine", point_mm(v.origine)),
             ("Direction de vue", Value::Str(format!("{:.4} ; {:.4} ; {:.4}", v.direction.x, v.direction.y, v.direction.z))),
             ("Droite, haut", Value::Str(format!("{:.4} ; {:.4} ; {:.4} / {:.4} ; {:.4} ; {:.4}", v.droite.x, v.droite.y, v.droite.z, v.haut.x, v.haut.y, v.haut.z))),
@@ -2140,6 +2141,24 @@ fn famille_systeme(classe: &str) -> Option<(&'static str, &'static str)> {
 
 /// Arborescence du projet : vues (hors gabarits), feuilles et vues qu'elles portent,
 /// familles chargées par catégorie puis familles système, groupes.
+/// Plage de vue d'un plan en clair : « Haut : Niveau 1 + 2300 mm ; Plan de coupe : … ».
+fn texte_plage(m: &Maquette, v: &Vue) -> String {
+    let Some(p) = v.plage_vue else { return String::new() };
+    let niveau = |n: i64| match n {
+        -3 => "Niveau associé".to_string(),
+        -4 => "Niveau au-dessus".to_string(),
+        -2 => "Niveau en dessous".to_string(),
+        -1 => "Illimité".to_string(),
+        n => m.niveaux.iter().find(|x| x.id == n).map(|x| x.nom.clone()).unwrap_or_else(|| format!("#{n}")),
+    };
+    ["Haut", "Plan de coupe", "Bas", "Profondeur de vue"]
+        .iter()
+        .zip(p)
+        .map(|(nom, (n, d))| if n == -1 { format!("{nom} : Illimité") } else { format!("{nom} : {} {:+} mm", niveau(n), format_real((d * 10.0).round() / 10.0).parse::<f64>().unwrap_or(d)) })
+        .collect::<Vec<_>>()
+        .join(" ; ")
+}
+
 /// Valeur ElementId d'un paramètre d'un élément (jeux de paramètres).
 fn id_parametre(m: &Maquette, element: i64, param: i64) -> Option<i64> {
     m.parametres.get(&element)?.iter().find(|(p, _)| *p == param).and_then(|(_, b)| if let Brut::Id(i) = b.selon(parametres::Stockage::Id) { Some(i) } else { None })
@@ -2168,6 +2187,13 @@ fn navigateur(m: &Maquette, entite_vue: &HashMap<i64, Id>, entite_type: &HashMap
             revit_id: v.id,
             phase: id_parametre(m, v.id, -1_012_102).unwrap_or(0),
             filtre_phase: id_parametre(m, v.id, -1_012_103).unwrap_or(-1),
+            coupe: v.plage_vue.map(|p| {
+                // plan de coupe ramené au niveau de la vue
+                let alt = |n: i64| m.niveaux.iter().find(|x| x.id == n).map(|x| x.altitude);
+                let (n, d) = p[1];
+                let ecart = if n == -3 || n == v.niveau { 0.0 } else { alt(n).zip(alt(v.niveau)).map_or(0.0, |(a, b)| a - b) };
+                (ecart + d) / 1000.0
+            }),
             entite: entite_vue.get(&v.id).copied(),
             genre: v.genre.to_string(),
             type_vue: nom_type(v.type_vue),
@@ -2988,5 +3014,22 @@ mod tests {
         assert_eq!((ph(-1_012_100), ph(-1_012_101)), (Some(3), Some(354_698)));
         let etats: Vec<usize> = m.ordre_phases.iter().map(|&q| scene::etat_de_phase(&m.ordre_phases, 3, 354_698, q)).collect();
         assert_eq!(etats, [4, 3, 1]);
+    }
+
+    /// Plages de vue contre l'API de Revit 2026 (`rvt-reference-plages-vue`) : plan
+    /// SP/ST_RDC de Kerreut (niveau RDC) et gabarit au niveau associé (−3).
+    #[test]
+    fn plages_de_vue_kerreut() {
+        let Some(p) = essai("fichiers", "Kerreut 2025.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        let v = m.vues.iter().find(|v| v.id == 2_519_142).unwrap();
+        let attendu = [(608, 7.545_931_758_530_182), (608, 3.937_007_874_015_747_3), (608, 0.0), (608, 0.0)];
+        for (lu, (n, d)) in v.plage_vue.unwrap().iter().zip(attendu) {
+            assert_eq!(lu.0, n);
+            proche(lu.1, d * FT, 1e-6, "décalage");
+        }
+        assert_eq!(texte_plage(&m, v), "Haut : RDC +2300 mm ; Plan de coupe : RDC +1200 mm ; Bas : RDC +0 mm ; Profondeur de vue : RDC +0 mm");
+        let g = m.vues.iter().find(|v| v.id == 6_965_030).unwrap();
+        assert!(g.plage_vue.unwrap().iter().all(|x| x.0 == -3));
     }
 }

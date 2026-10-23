@@ -72,6 +72,8 @@ pub struct NavVue {
     /// Phase de la vue et filtre de phase (VIEW_PHASE, VIEW_PHASE_FILTER ; −1 : aucun).
     pub phase: i64,
     pub filtre_phase: i64,
+    /// Hauteur du plan de coupe d'un plan au-dessus de son niveau, m (plage de vue).
+    pub coupe: Option<f64>,
     /// Entité de la vue dans le modèle (propriétés ; ses éléments 2D en enfants).
     pub entite: Option<Id>,
     /// Genre (« Plan d'étage », « Élévation », « Feuille »…).

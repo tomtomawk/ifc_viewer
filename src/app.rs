@@ -1380,6 +1380,7 @@ impl ViewerApp {
         };
         let (d, haut, entite) = (v.direction.as_vec3(), v.haut.as_vec3(), v.entite);
         let genre_feuille = v.genre == "Feuille";
+        let coupe_vue = v.coupe;
         // mode dessin pour les plans, coupes et élévations ; coupe à hauteur sur le niveau
         // d'un plan d'étage
         let (genre, etage, echelle) = (v.genre.clone(), v.etage, v.echelle);
@@ -1389,6 +1390,10 @@ impl ViewerApp {
                 self.coupe = genre == "Plan d'étage";
                 if self.coupe {
                     self.coupe_niveau = etage;
+                    // hauteur du plan de coupe de la plage de vue
+                    if let Some(h) = coupe_vue {
+                        self.coupe_hauteur = h as f32;
+                    }
                 }
             }
             "Vue 3D" | "Feuille" => self.dessin = false,

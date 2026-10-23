@@ -32,6 +32,11 @@ pub struct Vue {
     /// Plan orienté au nord géographique (`m_bUseTrueNorth`, paramètre « Orientation ») :
     /// Revit a alors pivoté `m_horzDir` et `m_vertDir`.
     pub nord_geographique: bool,
+    /// Plage de vue d'un plan (`PlanViewRange`) : (niveau, décalage en mm) du haut, du
+    /// plan de coupe, du bas et de la profondeur de vue ; niveau −3 : celui de la vue.
+    /// Lue dans `m_pPlanViewRange2` (`m_viewDepthPlaneLevelIds`,
+    /// `m_viewDepthPlaneOffsets`, rangés coupe, haut, bas, profondeur).
+    pub plage_vue: Option<[(i64, f64); 4]>,
     /// Famille propriétaire (`Element.m_famId`), pour écarter les vues des familles
     /// imbriquées rangées en ligne dans un `.rfa`.
     pub famille: i64,
@@ -57,6 +62,15 @@ pub struct Vue {
     /// Titre sur la feuille (`m_viewDescription`), affiché par le titre de la fenêtre de
     /// vue à la place du nom.
     pub titre_feuille: String,
+}
+
+/// Plage de vue d'un plan : haut, coupe, bas, profondeur (voir [`Vue::plage_vue`]).
+fn plage_vue(r: &Record) -> Option<[(i64, f64); 4]> {
+    let p = r.field_body(&r.root, "m_pPlanViewRange2")?;
+    let niveaux: Vec<i64> = p.get("m_viewDepthPlaneLevelIds")?.list().iter().filter_map(Val::element_id).collect();
+    let decalages = p.get("m_viewDepthPlaneOffsets")?.reals()?;
+    let plan = |k: usize| Some((*niveaux.get(k)?, decalages.get(k)? * FT));
+    Some([plan(1)?, plan(0)?, plan(2)?, plan(3)?])
 }
 
 /// Cadrage d'une vue (`Viewer.m_boundedSpace`) : origine `m_orig`, axes `m_basis`,
@@ -240,6 +254,7 @@ pub fn vue(id: i64, r: &Record) -> Option<Vue> {
         direction: vec3(o.get("m_viewDir"))?,
         gabarit: o.get("m_isTemplate").and_then(Val::int) == Some(1),
         nord_geographique: o.get("m_bUseTrueNorth").and_then(Val::int) == Some(1),
+        plage_vue: plage_vue(r),
         famille: id_of(o, "m_famId"),
         cadrage: None,
         type_vue: id_of(o, "m_dbViewTypeId"),
