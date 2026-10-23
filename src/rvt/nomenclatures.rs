@@ -96,6 +96,10 @@ pub struct Definition {
     /// Nomenclature de clés (`m_bRefTable`).
     pub cle: bool,
     pub total_general: bool,
+    /// Titre du total général (`m_grandTotalTitle`) s'il est affiché, avec ou sans le
+    /// nombre d'éléments (`m_showGrandTotalTitle`, `m_showGrandTotalCount`).
+    pub titre_total: Option<String>,
+    pub nombre_total: bool,
     pub champs: Vec<Champ>,
     pub filtres: Vec<Filtre>,
     pub tris: Vec<Tri>,
@@ -161,6 +165,8 @@ pub fn definition(r: &Record) -> Option<Definition> {
         detail: int(s, "m_bInstanceSchedule") != 0,
         cle: int(s, "m_bRefTable") != 0,
         total_general: int(s, "m_showGrandTotal") != 0,
+        titre_total: (int(s, "m_showGrandTotalTitle") != 0).then(|| s.get("m_grandTotalTitle").and_then(Val::str).unwrap_or("Total général").to_string()),
+        nombre_total: int(s, "m_showGrandTotalCount") != 0,
         champs,
         filtres,
         tris,
@@ -192,7 +198,7 @@ fn texte(m: &Maquette, c: &Champ, b: &Brut, st: Stockage) -> String {
         (None, Some(i)) => (i.spec, i.enumeration),
         _ => ("", ""),
     };
-    parametres::texte(b, c.param, st, spec, enumeration, &|e| m.nom_element(c.param, e)).unwrap_or_default()
+    parametres::texte(b, c.param, st, spec, enumeration, &m.unites, &|e| m.nom_element(c.param, e)).unwrap_or_default()
 }
 
 fn nombre(b: &Brut) -> Option<f64> {
@@ -391,7 +397,16 @@ pub fn calculer(m: &Maquette, d: &Definition) -> Tableau {
                             return crate::step::format_real(s);
                         }
                     }
-                    if k == 0 { "Total général".into() } else { String::new() }
+                    if k > 0 {
+                        return String::new();
+                    }
+                    // « Total général: 112 » comme Revit
+                    match (&d.titre_total, d.nombre_total) {
+                        (Some(t), true) => format!("{t}: {}", els.len()),
+                        (Some(t), false) => t.clone(),
+                        (None, true) => els.len().to_string(),
+                        (None, false) => String::new(),
+                    }
                 })
                 .collect(),
         );

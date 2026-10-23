@@ -55,7 +55,7 @@ fn texte_param(m: &Maquette, element: i64, param: i64) -> Option<String> {
             _ => None,
         },
     };
-    parametres::texte(b, param, st, spec, en, &|e| m.nom_element(param, e))
+    parametres::texte(b, param, st, spec, en, &m.unites, &|e| m.nom_element(param, e))
 }
 
 /// Échelle comme Revit l'écrit sur une feuille (« 1 : 50 »).

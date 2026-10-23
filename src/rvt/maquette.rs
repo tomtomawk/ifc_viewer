@@ -362,6 +362,8 @@ pub struct Maquette {
     pub parametres: HashMap<i64, Vec<(i64, Brut)>>,
     /// Noms des phases (`ProjectPhase`).
     pub phases: HashMap<i64, String>,
+    /// Unités du projet (`UnitsElem`).
+    pub unites: parametres::Unites,
     /// Catégorie (BuiltInCategory) et type de chaque élément lu, pour les nomenclatures.
     pub categorie_de: HashMap<i64, i64>,
     pub type_de_element: HashMap<i64, i64>,
@@ -651,6 +653,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     let (mut definitions, mut phases) = (HashMap::new(), HashMap::new());
     let mut coord = Coordonnees::default();
     let (mut ordre_phases, mut filtres_phase) = (Vec::new(), HashMap::new());
+    let mut unites = parametres::Unites::default();
     let (mut instances_vue, mut polices, mut types_fenetres, mut revisions, mut info_projet) = (Vec::new(), HashMap::new(), HashMap::new(), HashMap::new(), -1);
     let (mut types_cotes, mut format_longueurs) = (HashMap::new(), None);
     let mut lignes_esquisse: std::collections::HashSet<i64> = Default::default();
@@ -706,7 +709,10 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
             Ok(Extrait::Revision(id, x)) => drop(revisions.insert(id, x)),
             Ok(Extrait::InfoProjet(id)) => info_projet = id,
             Ok(Extrait::TypeCote(id, x)) => drop(types_cotes.insert(id, x)),
-            Ok(Extrait::Unites(f)) => format_longueurs = f,
+            Ok(Extrait::Unites(f, u)) => {
+                format_longueurs = f;
+                unites = u;
+            }
             Ok(Extrait::Esquisse(l)) => lignes_esquisse.extend(l),
         }
     }
@@ -836,6 +842,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         definitions,
         parametres,
         phases,
+        unites,
         categorie_de: HashMap::new(),
         type_de_element: HashMap::new(),
         ordre_phases,
@@ -885,6 +892,15 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     }
     for x in &mut m.pieces {
         x.geometrie = prendre(x.id);
+        // surface et périmètre calculés par Revit (ROOM_AREA, ROOM_PERIMETER) : face
+        // inférieure du volume de la pièce
+        if let Ok(g) = &x.geometrie {
+            let (aire, perimetre) = pied_de_piece(g);
+            let v = m.parametres.entry(x.id).or_default();
+            v.retain(|(p, _)| *p != -1_006_902 && *p != -1_006_917);
+            v.push((-1_006_902, Brut::Reel(aire / (FT * FT))));
+            v.push((-1_006_917, Brut::Reel(perimetre / FT)));
+        }
     }
     for x in &mut m.formes {
         x.geometrie = prendre(x.id);
@@ -917,6 +933,28 @@ fn maillage(sch: &Schema, complements: &HashMap<i64, Vec<u8>>, bib: &geometrie::
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| champs::read(sch, b).and_then(|rec| geometrie::maillage(&rec, feuilles, bib))))
         .unwrap_or_else(|_| Err("erreur interne".into()))
         .and_then(|g| if g.faces.is_empty() { Err("aucun solide fermé dans le GElement".into()) } else { Ok(g) })
+}
+
+/// Surface (mm²) et périmètre (mm) d'une pièce : triangles horizontaux tournés vers le
+/// bas au plus bas du volume, et longueur de leurs arêtes non partagées.
+fn pied_de_piece(g: &Maillage) -> (f64, f64) {
+    let zmin = g.sommets.iter().map(|p| p.z).fold(f64::MAX, f64::min);
+    let mut aire = 0.0;
+    let mut aretes: HashMap<(usize, usize), usize> = HashMap::new();
+    for f in &g.faces {
+        for t in &f.triangles {
+            let [a, b, c] = t.map(|i| g.sommets[i]);
+            let n = (b - a).cross(c - a);
+            if n.z < 0.0 && n.z.abs() > 0.999 * n.length() && (a.z - zmin).abs() < 1.0 {
+                aire += n.length() / 2.0;
+                for (i, j) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
+                    *aretes.entry((i.min(j), i.max(j))).or_default() += 1;
+                }
+            }
+        }
+    }
+    let perimetre = aretes.iter().filter(|e| *e.1 == 1).map(|e| g.sommets[e.0.0].distance(g.sommets[e.0.1])).sum();
+    (aire, perimetre)
 }
 
 /// Élément placé : hors d'un groupe non placé.
@@ -1051,7 +1089,8 @@ enum Extrait {
     Revision(i64, Revision),
     InfoProjet(i64),
     TypeCote(i64, vues::TypeCote),
-    Unites(Option<(String, f64)>),
+    /// Format des longueurs (unité, précision) et unités du projet.
+    Unites(Option<(String, f64)>, parametres::Unites),
     /// Lignes d'une esquisse (`m_elemIdsPairSet.m_data[].m_elementId`).
     Esquisse(Vec<i64>),
 }
@@ -1198,7 +1237,7 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite
         }
         Sorte::InfoProjet => Extrait::InfoProjet(eid),
         Sorte::TypeCote => ou_rien(vues::type_cote(r).map(|t| Extrait::TypeCote(eid, t))),
-        Sorte::Unites => Extrait::Unites(vues::format_projet(r)),
+        Sorte::Unites => Extrait::Unites(vues::format_projet(r), parametres::Unites::lire(r).unwrap_or_default()),
         Sorte::Esquisse => {
             let d = r.field_body(o, "m_elemIdsPairSet").and_then(|p| p.get("m_data")).map(Val::list).unwrap_or_default();
             Extrait::Esquisse(d.iter().filter_map(|x| x.obj().map(|x| id_of(x, "m_elementId"))).collect())
@@ -1446,7 +1485,7 @@ impl Maquette {
         let Some(v) = self.parametres.get(&id) else { return Vec::new() };
         let occ = self.types.get(&id).and_then(|t| self.familles.get(&t.famille)).map(|f| &f.occurrence);
         let v: Vec<(i64, Brut)> = v.iter().filter(|(p, _)| occ.is_none_or(|o| !o.contains(p))).cloned().collect();
-        let mut out = parametres::affiches(&v, &self.definitions, &|p, e| self.nom_element(p, e));
+        let mut out = parametres::affiches(&v, &self.definitions, &self.unites, &|p, e| self.nom_element(p, e));
         if let Some(f) = self.familles.get(&id).filter(|_| self.famille_document == Some(id)) {
             let noms: std::collections::HashSet<String> = v.iter().filter(|(p, _)| f.occurrence.contains(p)).filter_map(|(p, _)| self.definitions.get(p).map(|d| d.nom.clone()).or_else(|| parametres::integres().get(p).map(|i| i.libelle.to_string()))).collect();
             for a in out.iter_mut().filter(|a| noms.contains(&a.nom)) {
@@ -2979,12 +3018,12 @@ mod tests {
         assert_eq!(m.famille_document, Some(9_899_388));
         let aff = m.parametres_affiches(9_899_388);
         let val = |nom: &str| aff.iter().find(|a| a.nom == nom).map(|a| (a.groupe, a.valeur.as_str()));
-        assert_eq!(val("Distance résa"), Some(("Autre", "110 mm")), "formule if(…, 110 mm, 10 mm)");
-        assert_eq!(val("Nu pose"), Some(("Cotes", "160 mm")));
+        assert_eq!(val("Distance résa"), Some(("Autre", "110")), "formule if(…, 110 mm, 10 mm), unités de la famille : mm sans symbole");
+        assert_eq!(val("Nu pose"), Some(("Cotes", "160")));
         assert_eq!(val("Seuil PMR"), Some(("Cotes", "Oui")));
         assert_eq!(val("Allège supérieure à 12cm (equerre)"), Some(("Autre", "Non")), "formule not(…)");
-        assert_eq!(val("Hauteur"), Some(("Cotes", "2040 mm")));
-        assert_eq!(val("Largeur"), Some(("Cotes", "1200 mm")));
+        assert_eq!(val("Hauteur"), Some(("Cotes", "2040")));
+        assert_eq!(val("Largeur"), Some(("Cotes", "1200")));
         assert_eq!(val("Description"), Some(("Données d'identification", "PF + FIXE")));
         assert_eq!(val("Commentaires du type"), Some(("Données d'identification", "M02")));
         let d = &m.definitions[&9_900_475];
@@ -3001,13 +3040,13 @@ mod tests {
         let Some(p) = essai("fichiers", "Kerreut 2025.rvt") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         let val = |id: i64, nom: &str| m.parametres_affiches(id).into_iter().find(|a| a.nom == nom).map(|a| a.valeur);
-        assert_eq!(val(9_911_752, "Largeur").as_deref(), Some("1300 mm"));
+        assert_eq!(val(9_911_752, "Largeur").as_deref(), Some("1.30"));
         assert_eq!(val(9_911_752, "Identifiant").as_deref(), Some("2275"));
         assert_eq!(val(9_911_752, "Niveau").as_deref(), Some("RDC"));
         assert_eq!(val(9_911_752, "Famille et type").as_deref(), Some("ARC_PTE_Placard coulissante_multi-panneaux: Largeur 1 m mini_largeur panneaux max 90 cm"));
         // le type ne montre pas la largeur, paramètre d'occurrence de sa famille
         assert_eq!(val(8_677_076, "Largeur"), None);
-        assert_eq!(val(8_677_076, "Hauteur").as_deref(), Some("2100 mm"));
+        assert_eq!(val(8_677_076, "Hauteur").as_deref(), Some("2.10"));
         assert_eq!(val(8_677_076, "Identifiant du type").as_deref(), Some("PL03"));
         assert_eq!(val(8_677_076, "Opération").as_deref(), Some("SlidingToRight"));
         assert_eq!(m.guid_ifc(9_911_752).as_deref(), Some("3Sv4yF$LD1uBYRSvD2Wzs7"));
@@ -3120,6 +3159,6 @@ mod tests {
         let t = super::super::nomenclatures::calculer(&m, &def(257_959));
         assert_eq!(t.titres, ["Identifiant", "Famille et type", "Niveau", "Largeur", "Hauteur"]);
         assert_eq!(t.lignes.len(), 43);
-        assert_eq!(t.lignes[1], ["P4", "Int. Simple: PP (0.83m x 2.04m)", "Niveau 0", "830 mm", "2040 mm"]);
+        assert_eq!(t.lignes[1], ["P4", "Int. Simple: PP (0.83m x 2.04m)", "Niveau 0", "0.83", "2.04"]);
     }
 }

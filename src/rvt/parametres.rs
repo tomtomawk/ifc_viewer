@@ -409,6 +409,111 @@ fn nombre(v: f64, decimales: i32) -> String {
     crate::step::format_real((v * p).round() / p)
 }
 
+/// Format d'affichage d'une unité (`FormatOptions` de l'API).
+#[derive(Clone, Debug)]
+pub struct Format {
+    /// Unité (`autodesk.unit.unit:meters`…, sans version).
+    pub unite: String,
+    /// Précision (0,01…).
+    pub precision: f64,
+    /// Symbole (`autodesk.unit.symbol:mSup2`…, vide : aucun).
+    pub symbole: String,
+    pub sans_zeros: bool,
+}
+
+/// Unités du projet (`UnitsElem.m_units` : `m_formatOptionsMap` spec → format,
+/// `m_decimalSymbol`). Vide : mise en forme du viewer (mm, m², m³, degrés).
+#[derive(Clone, Debug, Default)]
+pub struct Unites {
+    pub formats: HashMap<String, Format>,
+    pub virgule: bool,
+}
+
+impl Unites {
+    /// Lit `UnitsElem`.
+    pub fn lire(r: &Record) -> Option<Unites> {
+        let u = r.root.get("m_units")?.obj()?;
+        let mut formats = HashMap::new();
+        for p in u.get("m_formatOptionsMap").map(Val::list).unwrap_or_default() {
+            let Some(p) = p.obj() else { continue };
+            let forge = |o: Option<&Obj>, k: &str| o.and_then(|o| o.get(k)).and_then(Val::obj).and_then(|x| x.get("m_typeId")).and_then(Val::str).map(|s| sans_version(s).to_string()).unwrap_or_default();
+            let spec = p.get("first").and_then(Val::obj).and_then(|x| x.get("m_typeId")).and_then(Val::str).map(|s| sans_version(s).to_string()).unwrap_or_default();
+            let f = p.get("second").and_then(|v| r.deref(v).map(|b| &b.obj).or(v.obj()));
+            let Some(f) = f else { continue };
+            formats.insert(
+                spec,
+                Format {
+                    unite: forge(Some(f), "m_unitTypeId"),
+                    precision: f.get("m_accuracy").and_then(Val::real).unwrap_or(0.01),
+                    symbole: forge(Some(f), "m_symbolTypeId"),
+                    sans_zeros: f.get("m_bSuppressTrailingZeros").and_then(Val::int) == Some(1),
+                },
+            );
+        }
+        Some(Unites { formats, virgule: u.get("m_decimalSymbol").and_then(Val::int) == Some(1) })
+    }
+
+    /// Valeur interne (pieds, pieds², radians…) mise en forme selon le format du spec ;
+    /// None si le projet n'en a pas, ou l'unité n'est pas connue.
+    pub fn formater(&self, v: f64, spec: &str) -> Option<String> {
+        let f = self.formats.get(sans_version(spec))?;
+        formater(v, f, self.virgule)
+    }
+}
+
+/// Mise en forme d'une valeur interne selon un format : conversion d'unité, arrondi à la
+/// précision, symbole.
+pub fn formater(v: f64, f: &Format, virgule: bool) -> Option<String> {
+    const FT: f64 = 0.3048;
+    let u = f.unite.rsplit(':').next().unwrap_or("");
+    let x = match u {
+        "meters" | "metersCentimeters" => v * FT,
+        "centimeters" => v * FT * 100.0,
+        "millimeters" => v * FT * 1000.0,
+        "decimeters" => v * FT * 10.0,
+        "feet" => v,
+        "inches" => v * 12.0,
+        "squareMeters" => v * FT * FT,
+        "squareCentimeters" => v * FT * FT * 1e4,
+        "squareMillimeters" => v * FT * FT * 1e6,
+        "squareFeet" => v,
+        "cubicMeters" => v * FT * FT * FT,
+        "liters" => v * FT * FT * FT * 1000.0,
+        "cubicFeet" => v,
+        "degrees" | "slopeDegrees" => v.to_degrees(),
+        "radians" => v,
+        "general" | "fixed" | "currency" | "percentage" => v,
+        _ => return None,
+    };
+    let p = if f.precision > 0.0 { f.precision } else { 1.0 };
+    let decimales = (-p.log10()).round().max(0.0) as usize;
+    let arrondi = (x / p).round() * p;
+    let mut t = format!("{:.*}", decimales, arrondi);
+    if t == "-0" || t.starts_with("-0.") && t.trim_start_matches(['-', '0', '.']).is_empty() {
+        t = t.trim_start_matches('-').to_string();
+    }
+    if f.sans_zeros && t.contains('.') {
+        t = t.trim_end_matches('0').trim_end_matches('.').to_string();
+    }
+    if virgule {
+        t = t.replace('.', ",");
+    }
+    let symbole = match f.symbole.rsplit(':').next().unwrap_or("") {
+        "" => "",
+        "mSup2" => " m²",
+        "mSup3" => " m³",
+        "m" => " m",
+        "cm" => " cm",
+        "mm" => " mm",
+        "degree" | "slopeDegree" => "°",
+        "percent" => "%",
+        "liter" => " L",
+        "ftSup2" => " ft²",
+        s => return Some(format!("{t} {s}")),
+    };
+    Some(format!("{t}{symbole}"))
+}
+
 /// Texte d'une valeur ; None pour une valeur vide (chaîne vide, ElementId −1) ;
 /// `nom_element` nomme l'élément désigné par un ElementId.
 /// Libellé affiché par Revit pour la valeur entière d'un paramètre intégré à valeurs
@@ -428,8 +533,10 @@ pub fn libelle_valeur(param: i64, v: i64) -> Option<&'static str> {
     t.get(&(param, v)).copied()
 }
 
-pub fn texte(b: &Brut, param: i64, st: Stockage, spec: &str, enumeration: &str, nom_element: &dyn Fn(i64) -> Option<String>) -> Option<String> {
+pub fn texte(b: &Brut, param: i64, st: Stockage, spec: &str, enumeration: &str, unites: &Unites, nom_element: &dyn Fn(i64) -> Option<String>) -> Option<String> {
     Some(match b.selon(st) {
+        // unités du projet quand elles sont connues pour ce spec
+        Brut::Reel(v) if unites.formater(v, spec).is_some() => unites.formater(v, spec).unwrap_or_default(),
         Brut::Reel(v) => match unite(spec, enumeration) {
             "longueur" => format!("{} mm", nombre(v * super::geometrie::FT, 1)),
             "surface" => format!("{} m²", nombre(v * 0.092_903_04, 3)),
@@ -448,7 +555,7 @@ pub fn texte(b: &Brut, param: i64, st: Stockage, spec: &str, enumeration: &str, 
 }
 
 /// Paramètres affichables d'un élément, rangés par groupe dans l'ordre de Revit.
-pub fn affiches(vals: &[(i64, Brut)], defs: &HashMap<i64, Definition>, nom_element: &dyn Fn(i64, i64) -> Option<String>) -> Vec<Affiche> {
+pub fn affiches(vals: &[(i64, Brut)], defs: &HashMap<i64, Definition>, unites: &Unites, nom_element: &dyn Fn(i64, i64) -> Option<String>) -> Vec<Affiche> {
     let t = integres();
     let mut out = Vec::new();
     for (id, b) in vals {
@@ -457,7 +564,7 @@ pub fn affiches(vals: &[(i64, Brut)], defs: &HashMap<i64, Definition>, nom_eleme
             (None, Some(i)) if *id < 0 && !i.libelle.is_empty() && i.libelle != "?" => (i.libelle.to_string(), i.stockage, i.spec, i.enumeration, i.groupe),
             _ => continue,
         };
-        if let Some(valeur) = texte(b, *id, st, spec, enumeration, &|e| nom_element(*id, e)) {
+        if let Some(valeur) = texte(b, *id, st, spec, enumeration, unites, &|e| nom_element(*id, e)) {
             out.push(Affiche { nom, groupe: libelle_groupe(groupe), valeur });
         }
     }
@@ -512,12 +619,12 @@ mod tests {
     #[test]
     fn mise_en_forme() {
         let aucun = |_: i64| None;
-        assert_eq!(texte(&Brut::Reel(3.937_007_874_015_747_3), -1_001_301, Stockage::Reel, "autodesk.spec.aec:length-2.0.1", "", &aucun).as_deref(), Some("1200 mm"));
-        assert_eq!(texte(&Brut::Entier(1), 9_900_253, Stockage::Entier, "autodesk.spec:spec.bool-1.0.0", "", &aucun).as_deref(), Some("Oui"));
+        assert_eq!(texte(&Brut::Reel(3.937_007_874_015_747_3), -1_001_301, Stockage::Reel, "autodesk.spec.aec:length-2.0.1", "", &Unites::default(), &aucun).as_deref(), Some("1200 mm"));
+        assert_eq!(texte(&Brut::Entier(1), 9_900_253, Stockage::Entier, "autodesk.spec:spec.bool-1.0.0", "", &Unites::default(), &aucun).as_deref(), Some("Oui"));
         let n = Brut::Nomme { reel: 0.360_892_388_451_443_56, entier: 0, texte: String::new(), id: -1 };
-        assert_eq!(texte(&n, 9_900_475, Stockage::Reel, "autodesk.spec.aec:length-2.0.1", "", &aucun).as_deref(), Some("110 mm"));
-        assert_eq!(texte(&Brut::Id(-1), -1_002_050, Stockage::Id, "", "", &aucun), None);
+        assert_eq!(texte(&n, 9_900_475, Stockage::Reel, "autodesk.spec.aec:length-2.0.1", "", &Unites::default(), &aucun).as_deref(), Some("110 mm"));
+        assert_eq!(texte(&Brut::Id(-1), -1_002_050, Stockage::Id, "", "", &Unites::default(), &aucun), None);
         // énumération : « Définir les propriétés thermiques par » = Type schématique
-        assert_eq!(texte(&Brut::Entier(1), -1_005_439, Stockage::Entier, "", "", &aucun).as_deref(), Some("Type schématique"));
+        assert_eq!(texte(&Brut::Entier(1), -1_005_439, Stockage::Entier, "", "", &Unites::default(), &aucun).as_deref(), Some("Type schématique"));
     }
 }
