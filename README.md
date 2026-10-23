@@ -16,18 +16,25 @@ cargo run --release -- --modele chemin\vers\projet.rvt     # conversion vers le 
 
 Ouverture aussi possible par Ctrl+O ou par glisser-déposer.
 
-Exécutable Windows prêt à l'emploi : `dist/ifc_viewer.exe` (compilé en release depuis cette version, sans installation).
+Exécutables prêts à l'emploi, sans installation : page [Releases](https://github.com/tomtomawk/ifc_viewer/releases) (Windows x64 et ARM64, Linux x64 et ARM64, macOS ARM64). Une release est publiée par GitHub Actions (`.github/workflows/release.yml`) quand on pousse une étiquette `v*` :
+
+```
+git tag v0.2.0
+git push origin v0.2.0
+```
 
 | Action | Commande |
 |---|---|
-| Orbite (autour du point visé) | clic gauche + glisser |
-| Panoramique | clic droit / milieu, ou Maj + clic gauche |
+| Orbite (autour du point visé, vue 3D) | clic gauche + glisser |
+| Panoramique | clic droit / milieu, ou Maj + clic gauche ; clic gauche aussi dans une vue 2D (plan, coupe, élévation, feuille) |
 | Zoom vers le curseur | molette |
 | Sélection | clic |
 | Cadrer l'objet / tout | double-clic / F |
 | Masquer / isoler la sélection | H / I (Échap annule l'isolement) |
 | Orientation (vue 3D) | cube d'orientation, coin haut droit : clic sur une face, une arête ou un coin ; glisser pour tourner |
 | Échelle, cadrage, projection | barre sous la vue |
+| Visibilité par catégorie (modèle, annotation) | bouton « Visibilité » sous la vue, ou V |
+| Déplacer Propriétés / Arborescence | glisser le titre (relâcher contre un bord pour ancrer), ou menu « … » |
 | Rendu 2D (plans, élévations) | bouton « Dessin 2D » |
 | Export vectoriel du dessin | bouton « SVG… » (mode dessin, vue orthographique) |
 

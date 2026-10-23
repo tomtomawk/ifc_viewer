@@ -1,0 +1,64 @@
+name: Release
+
+# Pousser une étiquette v* compile le viewer pour les 5 cibles de la CI et publie une
+# release GitHub avec les exécutables :
+#   git tag v0.2.0
+#   git push origin v0.2.0
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.nom }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - { nom: windows-x64, os: windows-latest }
+          - { nom: windows-arm64, os: windows-11-arm }
+          - { nom: linux-x64, os: ubuntu-latest }
+          - { nom: linux-arm64, os: ubuntu-24.04-arm }
+          - { nom: macos-arm64, os: macos-14 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Dépendances système (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgl1-mesa-dev
+      - run: cargo build --release
+      # Windows : l'exe seul ; Linux et macOS : archive, qui garde le droit d'exécution
+      - name: Paquet
+        shell: bash
+        run: |
+          mkdir paquet
+          nom="ifc_viewer-${GITHUB_REF_NAME}-${{ matrix.nom }}"
+          if [ "$RUNNER_OS" = Windows ]; then
+            cp target/release/ifc_viewer.exe "paquet/$nom.exe"
+          else
+            tar -czf "paquet/$nom.tar.gz" -C target/release ifc_viewer
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paquet-${{ matrix.nom }}
+          path: paquet/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: paquet-*
+          path: paquets
+          merge-multiple: true
+      - name: Release GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" paquets/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes

@@ -2,7 +2,7 @@
 
 Il pilote le viewer par son canal local (127.0.0.1:47811, voir src/pilote.rs) : une
 ligne « commande argument » envoyée, une ligne JSON reçue. Si aucun viewer n'écoute, il
-en lance un (IFC_VIEWER_EXE, sinon le plus récent de target/release et dist).
+en lance un (IFC_VIEWER_EXE, sinon target/release).
 
 Outils : ouvrir un fichier, capturer la vue ou la fenêtre (image PNG rendue au client),
 lister et ouvrir les vues Revit, régler la caméra, lire les propriétés, désigner
@@ -46,16 +46,12 @@ NOM_EXE = "ifc_viewer.exe" if os.name == "nt" else "ifc_viewer"
 
 
 def executable():
-    candidats = [os.environ.get("IFC_VIEWER_EXE", "")] + [
-        os.path.join(RACINE, d, NOM_EXE) for d in (os.path.join("target", "release"), "dist")
-    ]
+    # variable explicite d'abord, sinon l'exe compilé
+    candidats = [os.environ.get("IFC_VIEWER_EXE", ""), os.path.join(RACINE, "target", "release", NOM_EXE)]
     existants = [c for c in candidats if c and os.path.isfile(c)]
     if not existants:
         raise RuntimeError("viewer introuvable : construire avec cargo build --release ou fixer IFC_VIEWER_EXE")
-    # variable explicite d'abord, sinon le plus récent
-    if os.environ.get("IFC_VIEWER_EXE") in existants:
-        return os.environ["IFC_VIEWER_EXE"]
-    return max(existants, key=os.path.getmtime)
+    return existants[0]
 
 
 def envoyer(ligne, delai=600.0):
