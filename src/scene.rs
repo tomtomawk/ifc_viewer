@@ -74,6 +74,8 @@ pub struct NavVue {
     pub filtre_phase: i64,
     /// Hauteur du plan de coupe d'un plan au-dessus de son niveau, m (plage de vue).
     pub coupe: Option<f64>,
+    /// Contenu d'une nomenclature : titres, lignes, colonnes non calculées, tri en clair.
+    pub tableau: Option<(Vec<String>, Vec<Vec<String>>, Vec<usize>, String)>,
     /// Entité de la vue dans le modèle (propriétés ; ses éléments 2D en enfants).
     pub entite: Option<Id>,
     /// Genre (« Plan d'étage », « Élévation », « Feuille »…).

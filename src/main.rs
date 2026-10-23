@@ -20,6 +20,14 @@ use std::path::PathBuf;
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
+    // Mode console : ifc_viewer --nomenclatures fichier.rvt (contenu calculé, JSON par ligne)
+    if args.first().map(|s| s.as_str()) == Some("--nomenclatures") {
+        let Some(path) = args.get(1) else {
+            eprintln!("Usage : ifc_viewer --nomenclatures <fichier.rvt>");
+            std::process::exit(2);
+        };
+        std::process::exit(rvt_nomenclatures(&PathBuf::from(path)));
+    }
     // Mode console : ifc_viewer --parametres fichier.rvt (valeurs brutes, unités internes)
     if args.first().map(|s| s.as_str()) == Some("--parametres") {
         let Some(path) = args.get(1) else {
@@ -207,6 +215,28 @@ fn rvt_parametres(path: &std::path::Path) -> i32 {
         if let Some(g) = m.guid_ifc(*e) {
             println!("{e}\tifcguid\tString\t{g}");
         }
+    }
+    0
+}
+
+/// Contenu calculé de chaque nomenclature : une ligne JSON {id, nom, titres, lignes,
+/// non_calculees}.
+fn rvt_nomenclatures(path: &std::path::Path) -> i32 {
+    let m = match rvt::maquette::lire(path, &|_| {}) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Erreur : {e}");
+            return 1;
+        }
+    };
+    let j = |s: &str| pilote::texte(s);
+    for v in &m.vues {
+        let Some(d) = &v.nomenclature else { continue };
+        let t = rvt::nomenclatures::calculer(&m, d);
+        let liste = |l: &[String]| format!("[{}]", l.iter().map(|x| j(x)).collect::<Vec<_>>().join(","));
+        let lignes = t.lignes.iter().map(|l| liste(l)).collect::<Vec<_>>().join(",");
+        let nc = t.non_calculees.iter().map(usize::to_string).collect::<Vec<_>>().join(",");
+        println!("{{\"id\":{},\"nom\":{},\"titres\":{},\"lignes\":[{lignes}],\"non_calculees\":[{nc}]}}", v.id, j(&v.nom), liste(&t.titres));
     }
     0
 }

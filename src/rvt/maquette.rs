@@ -362,6 +362,9 @@ pub struct Maquette {
     pub parametres: HashMap<i64, Vec<(i64, Brut)>>,
     /// Noms des phases (`ProjectPhase`).
     pub phases: HashMap<i64, String>,
+    /// Catégorie (BuiltInCategory) et type de chaque élément lu, pour les nomenclatures.
+    pub categorie_de: HashMap<i64, i64>,
+    pub type_de_element: HashMap<i64, i64>,
     /// Phases dans l'ordre (`AllProjectPhases.m_phaseIds`).
     pub ordre_phases: Vec<i64>,
     /// Filtres de phase (`PhaseFilterElem`) : nom et présentation par état
@@ -833,6 +836,8 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         definitions,
         parametres,
         phases,
+        categorie_de: HashMap::new(),
+        type_de_element: HashMap::new(),
         ordre_phases,
         filtres_phase,
         coordonnees: {
@@ -901,6 +906,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         }
         x.geometrie = tout.ok_or(erreur);
     }
+    m.indexer();
     Ok(m)
 }
 
@@ -1341,6 +1347,65 @@ impl Maquette {
         predefinie.map(|(_, n)| n.to_string()).unwrap_or_else(|| format!("Catégorie {id}"))
     }
 
+    /// Catégorie et type de chaque élément lu (murs, sols, plafonds, toits, escaliers,
+    /// garde-corps, instances, pièces, surfaces, niveaux, vues, feuilles, grilles).
+    fn indexer(&mut self) {
+        let (mut c, mut t) = (HashMap::new(), HashMap::new());
+        for x in &self.murs {
+            c.insert(x.id, -2_000_011);
+            t.insert(x.id, x.type_id);
+        }
+        for x in &self.dalles {
+            c.insert(x.id, if x.classe == "Ceiling" { -2_000_038 } else { -2_000_032 });
+            t.insert(x.id, x.type_id);
+        }
+        for x in &self.toits {
+            c.insert(x.id, -2_000_035);
+            t.insert(x.id, x.type_id);
+        }
+        for x in &self.escaliers {
+            c.insert(x.id, -2_000_120);
+            t.insert(x.id, x.type_id);
+        }
+        for x in &self.garde_corps {
+            c.insert(x.id, -2_000_126);
+            t.insert(x.id, x.type_id);
+        }
+        for x in &self.instances {
+            let f = self.types.get(&x.type_id).map(|ty| ty.famille).unwrap_or(-1);
+            c.insert(x.id, self.familles.get(&f).map(|f| f.categorie).unwrap_or(-1));
+            t.insert(x.id, x.type_id);
+        }
+        for x in &self.pieces {
+            match x.genre {
+                "piece" => drop(c.insert(x.id, -2_000_160)),
+                "surface" => drop(c.insert(x.id, -2_003_200)),
+                _ => {}
+            }
+        }
+        for x in &self.niveaux {
+            c.insert(x.id, -2_000_240);
+        }
+        for x in self.vues.iter().filter(|v| !v.gabarit) {
+            c.insert(x.id, if x.genre == "Feuille" { -2_003_100 } else { -2_000_279 });
+        }
+        for x in &self.grilles {
+            c.insert(x.id, -2_000_220);
+        }
+        self.categorie_de = c;
+        self.type_de_element = t;
+    }
+
+    /// Éléments lus d'une catégorie.
+    pub fn elements_de_categorie(&self, categorie: i64) -> Vec<i64> {
+        self.categorie_de.iter().filter(|&(_, &c)| c == categorie).map(|(&e, _)| e).collect()
+    }
+
+    /// Type d'un élément lu.
+    pub fn type_de(&self, element: i64) -> Option<i64> {
+        self.type_de_element.get(&element).copied()
+    }
+
     /// IfcGUID d'un élément du document (None hors ElemTable ou format antérieur à 2024).
     pub fn guid_ifc(&self, id: i64) -> Option<String> {
         Some(parametres::ifc_guid(self.episodes.get(*self.episode_de.get(&id)? as usize)?, id))
@@ -1358,17 +1423,19 @@ impl Maquette {
         const FAMILLE_ET_TYPE: [i64; 2] = [-1_002_052, -1_002_001];
         const FAMILLE: [i64; 2] = [-1_002_051, -1_002_002];
         if let Some(t) = self.types.get(&id) {
-            let fam = self.familles.get(&t.famille).map(|f| f.nom.as_str());
+            // famille chargée, sinon famille système (« Mur de base », « Mur-rideau »…)
+            let fam = self.familles.get(&t.famille).map(|f| f.nom.as_str()).or_else(|| famille_systeme(&t.classe).map(|x| x.1));
             return Some(match fam {
                 Some(f) if FAMILLE.contains(&param) => f.to_string(),
-                Some(f) if FAMILLE_ET_TYPE.contains(&param) => format!("{f} : {}", t.nom),
+                // écriture de Revit : « Famille: Type »
+                Some(f) if FAMILLE_ET_TYPE.contains(&param) => format!("{f}: {}", t.nom),
                 _ => t.nom.clone(),
             });
         }
         if let Some(n) = self.niveaux.iter().find(|n| n.id == id) {
             return Some(n.nom.clone());
         }
-        let nom = self.materiaux.get(&id).map(|x| x.nom.clone()).or_else(|| self.phases.get(&id).cloned());
+        let nom = self.materiaux.get(&id).map(|x| x.nom.clone()).or_else(|| self.phases.get(&id).cloned()).or_else(|| self.filtres_phase.get(&id).map(|f| f.0.clone()));
         nom.or_else(|| self.vues.iter().find(|v| v.id == id).map(|v| v.nom.clone())).or_else(|| self.familles.get(&id).map(|f| f.nom.clone()))
     }
 
@@ -2206,6 +2273,10 @@ fn navigateur(m: &Maquette, entite_vue: &HashMap<i64, Id>, entite_type: &HashMap
             placees: placees.remove(&v.id).unwrap_or_default(),
             fenetres: fenetres.remove(&v.id).unwrap_or_default(),
             primitives: Vec::new(),
+            tableau: v.nomenclature.as_ref().map(|d| {
+                let t = super::nomenclatures::calculer(m, d);
+                (t.titres, t.lignes, t.non_calculees, super::nomenclatures::texte_tris(d))
+            }),
         })
         .collect();
     // familles chargées (catégorie, famille, types), puis familles système
@@ -2933,7 +3004,7 @@ mod tests {
         assert_eq!(val(9_911_752, "Largeur").as_deref(), Some("1300 mm"));
         assert_eq!(val(9_911_752, "Identifiant").as_deref(), Some("2275"));
         assert_eq!(val(9_911_752, "Niveau").as_deref(), Some("RDC"));
-        assert_eq!(val(9_911_752, "Famille et type").as_deref(), Some("ARC_PTE_Placard coulissante_multi-panneaux : Largeur 1 m mini_largeur panneaux max 90 cm"));
+        assert_eq!(val(9_911_752, "Famille et type").as_deref(), Some("ARC_PTE_Placard coulissante_multi-panneaux: Largeur 1 m mini_largeur panneaux max 90 cm"));
         // le type ne montre pas la largeur, paramètre d'occurrence de sa famille
         assert_eq!(val(8_677_076, "Largeur"), None);
         assert_eq!(val(8_677_076, "Hauteur").as_deref(), Some("2100 mm"));
@@ -3031,5 +3102,24 @@ mod tests {
         assert_eq!(texte_plage(&m, v), "Haut : RDC +2300 mm ; Plan de coupe : RDC +1200 mm ; Bas : RDC +0 mm ; Profondeur de vue : RDC +0 mm");
         let g = m.vues.iter().find(|v| v.id == 6_965_030).unwrap();
         assert!(g.plage_vue.unwrap().iter().all(|x| x.0 == -3));
+    }
+
+    /// Nomenclatures de Projet1 contre le tableau affiché par Revit 2026
+    /// (`rvt-reference-nomenclatures`) : définition (catégorie, détail, champs, filtre,
+    /// tri) et contenu de la nomenclature détaillée des portes (43 lignes).
+    #[test]
+    fn nomenclatures_projet1() {
+        let Some(p) = essai("fichiers", "Projet1.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        let def = |id: i64| m.vues.iter().find(|v| v.id == id).and_then(|v| v.nomenclature.clone()).unwrap();
+        let portes = def(76_991);
+        assert_eq!((portes.categorie, portes.detail, portes.champs.len()), (-2_000_023, true, 8));
+        let f = &portes.filtres[0];
+        assert_eq!((f.champ, f.genre, &f.valeur), (7, 1, &parametres::Brut::Entier(0)));
+        assert!(portes.tris[0].entete && portes.tris[0].pied && portes.tris[0].ligne_vide);
+        let t = super::super::nomenclatures::calculer(&m, &def(257_959));
+        assert_eq!(t.titres, ["Identifiant", "Famille et type", "Niveau", "Largeur", "Hauteur"]);
+        assert_eq!(t.lignes.len(), 43);
+        assert_eq!(t.lignes[1], ["P4", "Int. Simple: PP (0.83m x 2.04m)", "Niveau 0", "830 mm", "2040 mm"]);
     }
 }

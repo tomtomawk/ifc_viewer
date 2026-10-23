@@ -59,6 +59,8 @@ pub struct Vue {
     /// Catégories masquées dans la vue (`m_oaDrawFilters[0].m_categoryIds` ; contient
     /// toutes celles que donne `View.GetCategoryHidden`, vérifié sur trois vues).
     pub categories_masquees: Vec<i64>,
+    /// Définition d'une nomenclature (`DBViewSchedule`).
+    pub nomenclature: Option<super::nomenclatures::Definition>,
     /// Titre sur la feuille (`m_viewDescription`), affiché par le titre de la fenêtre de
     /// vue à la place du nom.
     pub titre_feuille: String,
@@ -260,6 +262,7 @@ pub fn vue(id: i64, r: &Record) -> Option<Vue> {
         type_vue: id_of(o, "m_dbViewTypeId"),
         numero: o.get("m_sheetNumber").and_then(Val::str).unwrap_or_default().to_string(),
         cadre: None,
+        nomenclature: if o.class_name() == "DBViewSchedule" { super::nomenclatures::definition(r) } else { None },
         categories_masquees: o
             .get("m_oaDrawFilters")
             .map(Val::list)

@@ -308,6 +308,8 @@ pub struct ViewerApp {
     show_unsupported: bool,
     /// Vue Revit ouverte (indice dans `Navigateur::vues`).
     vue_active: Option<usize>,
+    /// Nomenclature affichée (indice dans `Navigateur::vues`).
+    nomenclature_ouverte: Option<usize>,
     /// Dernier point cliqué sur un objet, repère du fichier (m).
     point_clique: Option<glam::DVec3>,
     /// Commandes du serveur MCP (voir `pilote.rs`) et celles en attente de traitement.
@@ -391,6 +393,7 @@ impl ViewerApp {
             show_unsupported: false,
             vue_active: None,
             point_clique: None,
+            nomenclature_ouverte: None,
             pilote: pilote::demarrer(cc.egui_ctx.clone()),
             requetes: Vec::new(),
             attente_ouverture: Vec::new(),
@@ -1374,6 +1377,7 @@ impl ViewerApp {
                 if let Some(e) = v.entite {
                     self.select(Some(e), false);
                 }
+                self.nomenclature_ouverte = Some(i);
                 return;
             }
             _ => (annot.clone(), annot.clone()),
@@ -2002,6 +2006,39 @@ impl ViewerApp {
                 self.rvt_preview = None;
                 self.status = "Ouvrir un fichier IFC ou Revit (Ctrl+O), ou le glisser dans la fenêtre.".into();
             }
+        }
+    }
+
+    /// Tableau d'une nomenclature Revit, recomposé depuis les éléments lus ; les colonnes
+    /// que Revit calcule (formules, pièces d'une porte…) sont signalées.
+    fn fenetre_nomenclature(&mut self, ctx: &egui::Context) {
+        let Some(i) = self.nomenclature_ouverte else { return };
+        let Some(v) = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|n| n.vues.get(i)) else { return };
+        let Some((titres, lignes, nc, tris)) = &v.tableau else { return };
+        let mut ouvert = true;
+        egui::Window::new(format!("Nomenclature : {}", v.nom)).open(&mut ouvert).default_size([720.0, 420.0]).show(ctx, |ui| {
+            if !nc.is_empty() {
+                let noms: Vec<&str> = nc.iter().filter_map(|&k| titres.get(k).map(String::as_str)).collect();
+                ui.label(RichText::new(format!("Non calculées (calcul de Revit) : {}", noms.join(", "))).weak());
+            }
+            ui.label(RichText::new(format!("{} lignes{}", lignes.len(), if tris.is_empty() { String::new() } else { format!(" ; tri : {tris}") })).weak());
+            egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
+                egui::Grid::new("table_nomenclature").striped(true).show(ui, |ui| {
+                    for t in titres {
+                        ui.label(RichText::new(t).strong());
+                    }
+                    ui.end_row();
+                    for l in lignes {
+                        for c in l {
+                            ui.label(c);
+                        }
+                        ui.end_row();
+                    }
+                });
+            });
+        });
+        if !ouvert {
+            self.nomenclature_ouverte = None;
         }
     }
 
@@ -2866,6 +2903,7 @@ impl eframe::App for ViewerApp {
             self.fenetre_visibilite(&ctx);
         }
         self.unsupported_window(&ctx);
+        self.fenetre_nomenclature(&ctx);
     }
 
     /// Appelé même fenêtre réduite : relève les commandes du pilote et demande alors le

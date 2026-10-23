@@ -310,6 +310,22 @@ pub fn valeurs(r: &Record) -> Vec<(i64, Brut)> {
             out.push((id, b));
         }
     };
+    // niveau de l'élément (Element.m_assocLevelId) : paramètres « Niveau » des
+    // nomenclatures (SCHEDULE_LEVEL_PARAM, ROOM_LEVEL_ID)
+    if let Some(n) = o.get("m_assocLevelId").and_then(Val::element_id).filter(|&n| n != -1) {
+        for id in [-1_002_062, -1_006_916] {
+            ajouter(&mut out, id, Brut::Id(n));
+        }
+    }
+    // niveau : nom (DATUM_TEXT) et élévation (LEVEL_ELEV, Z de son plan)
+    if o.class_name() == "Level" {
+        if let Some(nom) = o.get("m_text").and_then(Val::str) {
+            ajouter(&mut out, -1_008_000, Brut::Texte(nom.to_string()));
+        }
+        if let Some(z) = r.field_body(o, "m_pSurface").and_then(|s| s.get("m_origin")).and_then(Val::reals).and_then(|v| v.get(2).copied()) {
+            ajouter(&mut out, -1_007_102, Brut::Reel(z));
+        }
+    }
     // phases de l'élément (champs de Element) : PHASE_CREATED, PHASE_DEMOLISHED
     for (k, id) in [("m_createdPhaseId", -1_012_100), ("m_demolishedPhaseId", -1_012_101)] {
         if let Some(p) = o.get(k).and_then(Val::element_id) {
