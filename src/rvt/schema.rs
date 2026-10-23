@@ -1,5 +1,4 @@
-//! Schéma de classes `Formats/Latest` (docs/LISEZMOI-RVT.md § 5 ; portage de
-//! `tools/rvt-research/schema.py` et de `objets.ClassTable`).
+//! Schéma de classes `Formats/Latest` (LISEZMOI-RVT.md du dossier Decodage RVT, § 5).
 //!
 //! ```text
 //! fichier    = u16 (0) , { classe , u16 }        jusqu'à un nom vide

@@ -1,5 +1,5 @@
-//! Flux compressés et cadrage des partitions (docs/LISEZMOI-RVT.md § 3, 4, 6 et 7 ;
-//! portage de `tools/rvt-research/extract.py` et `objets.py`).
+//! Flux compressés et cadrage des partitions (LISEZMOI-RVT.md du dossier Decodage RVT,
+//! § 3, 4, 6 et 7).
 //!
 //! Chaque flux compressé est une suite de tranches de 65 249 octets : 64 896 octets
 //! de données puis un bloc intercalé de 353 octets à retirer avant décompression.

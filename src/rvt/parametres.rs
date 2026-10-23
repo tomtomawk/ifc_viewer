@@ -1,5 +1,5 @@
-//! Paramètres Revit : définitions, valeurs et mise en forme (docs/LISEZMOI-RVT.md § 7
-//! « Paramètres » ; portage de `tools/rvt-research/parametres.py`).
+//! Paramètres Revit : définitions, valeurs et mise en forme (LISEZMOI-RVT.md du dossier Decodage RVT,
+//! § 7 « Paramètres »).
 //!
 //! Un paramètre utilisateur est un élément dérivé de `ParamElem` (de famille, partagé,
 //! de projet, global, de table de clés), nommé par `m_pParamDef` → `ParamDef.m_caption`,
@@ -115,7 +115,7 @@ struct Pas {
     pointeur: bool,
 }
 
-/// Chemin « m_refs[1]>.m_offset » (notation de `elements.plat` : « . » champ, « > »
+/// Chemin « m_refs[1]>.m_offset » (« . » champ, « > »
 /// corps d'un pointeur, [i] élément de liste).
 fn chemin(s: &'static str) -> Option<Vec<Pas>> {
     s.split('.')

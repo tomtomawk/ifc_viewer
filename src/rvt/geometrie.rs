@@ -1,6 +1,6 @@
 //! Géométrie calculée d'un élément : le `GElement` de la section 0x67
-//! (docs/LISEZMOI-RVT.md § 7 « Géométrie calculée » ; portage de
-//! `tools/rvt-research/geometrie.py`).
+//! (LISEZMOI-RVT.md du dossier Decodage RVT, § 7
+//! « Géométrie calculée »).
 //!
 //! Le `GElement` est un arbre de `GGroup` ; chaque `Geometry` (`GBRep`) est un B-rep.
 //! Une face porte une surface (`Plane`, `CylSurf`) et une chaîne de boucles
@@ -273,12 +273,12 @@ fn coupe(p: DVec2, q: DVec2, a: DVec2, b: DVec2) -> bool {
     d1 * d2 < 0.0 && d3 * d4 < 0.0
 }
 
-/// Premier indice du maximum (comme `max` de Python).
+/// Premier indice du maximum.
 fn argmax(n: usize, key: impl Fn(usize) -> f64) -> usize {
     (1..n).fold(0, |best, i| if key(i) > key(best) { i } else { best })
 }
 
-/// Premier indice du minimum (comme `min` de Python).
+/// Premier indice du minimum.
 fn argmin(items: &[usize], key: impl Fn(usize) -> f64) -> Option<usize> {
     items.iter().copied().fold(None, |best, i| match best {
         Some(b) if key(i) >= key(b) => Some(b),
@@ -393,7 +393,7 @@ const GRILLE_MAX: usize = 64;
 const TOLERANCE_SOMMET: f64 = 5e-4;
 
 /// Condition d'un `GFilter`, évaluée pour une vue 3D en détail fin (règles vérifiées
-/// contre l'API sur 448 instances, docs/LISEZMOI-RVT.md § 7) : `GConditionDir` et
+/// contre l'API sur 448 instances, LISEZMOI-RVT.md du dossier Decodage RVT § 7) : `GConditionDir` et
 /// `GConditionCut` sont vraies si niées (vue non parallèle à l'axe, élément non coupé),
 /// `GConditionInt` de paramètre 3 compare le niveau de détail (`m_comp` 0 : différent,
 /// 3 : égal) ; les autres sont tenues pour vraies.

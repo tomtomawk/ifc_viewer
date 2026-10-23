@@ -1,5 +1,5 @@
-//! Lecture générique des objets sérialisés, pilotée par le schéma (docs/LISEZMOI-RVT.md
-//! § 7 « Champs d'un objet » ; portage de `tools/rvt-research/champs.py`).
+//! Lecture générique des objets sérialisés, pilotée par le schéma (LISEZMOI-RVT.md du dossier Decodage RVT,
+//! § 7 « Champs d'un objet »).
 //!
 //! Champs dans l'ordre du schéma, classe de base d'abord, sans les champs non
 //! enregistrés (bit 0x02 de `ex`). Types simples en little-endian sans alignement ;

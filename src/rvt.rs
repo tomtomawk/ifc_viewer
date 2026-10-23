@@ -8,7 +8,7 @@
 //! - `RevitPreview4.0` : vignette PNG.
 //!
 //! Les éléments, dans `Partitions/*`, sont lus par les sous-modules (format décrit
-//! dans docs/LISEZMOI-RVT.md) : décompression et cadrage (`objets`), schéma de classes
+//! dans LISEZMOI-RVT.md du dossier Decodage RVT) : décompression et cadrage (`objets`), schéma de classes
 //! (`schema`), champs des objets (`champs`), géométrie calculée (`geometrie`), murs et
 //! scène du viewer (`maquette`).
 

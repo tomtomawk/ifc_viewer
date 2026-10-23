@@ -1,6 +1,5 @@
 //! Éléments lus directement dans les partitions d'un RVT, et leur traduction en scène du
-//! viewer (portage de `champs.murs`, `elements.*` et `geometrie.maillage` de
-//! `tools/rvt-research/`, plus toits, escaliers, grilles et matériaux).
+//! viewer : murs, sols, toits, escaliers, grilles, matériaux, familles, vues, paramètres…
 //!
 //! Les objets courants sont ceux des ids de `Global/ElemTable`, une partition plus
 //! récente remplaçant une plus ancienne. Comme les collecteurs de Revit, les éléments

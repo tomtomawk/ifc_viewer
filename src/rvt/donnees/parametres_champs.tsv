@@ -1,6 +1,6 @@
 # Paramètres intégrés portés par un champ de l'objet (et non par un jeu de paramètres) : classe, id, chemin du champ
-# (notation de elements.plat : « . » champ, « > » corps d'un pointeur, [i] élément de liste). Correspondances apprises sur
-# Kerreut 2025.rvt et Projet1.rvt par comparaison avec les valeurs de l'API (p6_apprendre.py, docs/LISEZMOI-RVT.md § 7) :
+# (notation : « . » champ, « > » corps d'un pointeur, [i] élément de liste). Correspondances apprises sur
+# Kerreut 2025.rvt et Projet1.rvt par comparaison avec les valeurs de l'API (LISEZMOI-RVT.md du dossier Decodage RVT § 7) :
 # chemin égal à la valeur de Revit sur tous les éléments de la classe, avec au moins deux valeurs distinctes.
 AbsDuctType	-1114114	m_dRoughness
 AbsFlexDuctType	-1114114	m_dRoughness

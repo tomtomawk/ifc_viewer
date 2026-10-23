@@ -1,6 +1,6 @@
 //! Coordonnées d'un projet Revit : emplacements de projet, point de base du projet,
-//! point topographique, lieu géographique (docs/LISEZMOI-RVT.md § 7 « Coordonnées » ;
-//! portage de `tools/rvt-research/coordonnees.py`).
+//! point topographique, lieu géographique (LISEZMOI-RVT.md du dossier Decodage RVT,
+//! § 7 « Coordonnées »).
 //!
 //! Un emplacement de projet (`ProjectLocation` de l'API) est un `GeoLocation` : nom
 //! `m_name`, transformation `m_pInstanceInfo.m_Trf` (lignes `m_3x3`, origine `m_or`),

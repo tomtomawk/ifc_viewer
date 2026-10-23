@@ -1,5 +1,5 @@
-//! Vues et éléments 2D propres à une vue (portage de `tools/rvt-research/vues.py` ;
-//! docs/LISEZMOI-RVT.md § 7 « Vues et éléments 2D »).
+//! Vues et éléments 2D propres à une vue (LISEZMOI-RVT.md du dossier Decodage RVT,
+//! § 7 « Vues et éléments 2D »).
 //!
 //! Une vue est un objet dérivé de `DBView` : nom `m_viewName`, échelle 1 / `m_scale`,
 //! origine `m_origin`, repère `m_horzDir` (droite), `m_vertDir` (haut), `m_viewDir`

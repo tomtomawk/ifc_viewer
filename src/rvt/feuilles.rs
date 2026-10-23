@@ -1,4 +1,4 @@
-//! Feuilles (docs/LISEZMOI-RVT.md § 7 « Feuilles ») : cartouches, symboles et autres
+//! Feuilles (LISEZMOI-RVT.md du dossier Decodage RVT § 7 « Feuilles ») : cartouches, symboles et autres
 //! instances propres à une vue, titres des fenêtres de vue, étiquettes remplies par les
 //! paramètres, et passage du modèle à la feuille pour chaque fenêtre de vue.
 //!
