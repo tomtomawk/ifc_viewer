@@ -17,6 +17,7 @@ par Autodesk. Les points non vérifiés sont signalés comme tels. Méthode d'es
 | Schéma de classes `Formats/Latest` | **lu en entier** : 4 690 classes et 12 558 champs (2026), 4 757 et 13 080 (2027) ; identifiants de classe établis |
 | Table des éléments `Global/ElemTable` | structure établie (en-tête, enregistrements de 40 octets) ; index de l'épisode de création (§ 6) |
 | **Identifiants** | UniqueId et IfcGUID reconstitués (épisodes de `Global/History`, § 6) : 1 275 IfcGUID sur 1 279 identiques à Revit ; les GlobalId du viewer sont ceux de l'export IFC de Revit |
+| **Coordonnées** | emplacements de projet, point de base du projet, point topographique, nord géographique, lieu (latitude, longitude, nom) : identiques à Revit sur six fichiers dont un essai placé à 351 km / 6 789 km avec rotation (§ 7, « Coordonnées ») ; coordonnées partagées du point cliqué dans le viewer |
 | **Paramètres** | définitions (famille, partagés avec GUID, projet, globaux), valeurs des instances, des types et du type courant d'une famille, paramètres intégrés portés par des champs (correspondances apprises) ; 12 609 valeurs sur 12 630 identiques à Revit (Kerreut), 3 738 sur 3 739 (Projet1) ; affichage par groupe comme la palette de Revit (§ 7, « Paramètres ») |
 | Partitions `Partitions/*` | **cadrage complet** : 3 sections, un enregistrement par élément ; inventaire identique à Revit (§ 7) |
 | Champs des objets | **lus en entier** par un lecteur générique piloté par le schéma : 100 % des enregistrements sur les fichiers 2016, 2022, 2025, 2026 et 2027 essayés, hors données d'add-ins (§ 7) |
@@ -1246,6 +1247,54 @@ d'occurrence. Valeurs : longueurs en mm, surfaces en m², volumes en m³, angles
 degrés, Oui/Non, énumérations par leur libellé, ElementId par le nom de l'élément
 (type, « Famille : type », niveau, matériau, phase, vue).
 
+### Coordonnées
+
+Outil `coordonnees.py`, portage `src/rvt/coordonnees.rs`. Référence Revit : script
+RiveTT `rvt-reference-coordonnees` (`InternalOrigin`, `BasePoint` et ses paramètres,
+`ProjectLocation.GetProjectPosition(XYZ.Zero)` et `GetTotalTransform`, `SiteLocation`),
+transcrite dans `Decodage RVT/references/coordonnees.json`. Essai **E16**
+(`essais/2026/E16_coordonnees.rvt`, script `rvt-essai-e16-coordonnees` depuis V0) :
+emplacement actif placé en E/O 351 234,567 m, N/S 6 789 012,345 m, élévation
+45,678 m, 23,456° ; second emplacement « ZZ_EMPLACEMENT_B » (100 m, 200 m, 3 m,
+−10°) ; point de base du projet déplacé de (5 ; 7 ; 1) m ; lieu Nantes nommé
+« ZZ_LIEU_NANTES ».
+
+| Objet (API) | Classe | Données |
+|---|---|---|
+| emplacement de projet (`ProjectLocation`) | `GeoLocation` (→ `Instance`) | nom `m_name` ; transformation `m_pInstanceInfo.m_Trf` (lignes `m_3x3`, origine `m_or`) ; lieu `m_pInstanceInfo.m_symbolId` |
+| lieu (`SiteLocation`) | `GeoSite` (→ `Symbol`) | `m_dLatitude`, `m_dLongitude` (radians), `m_dElevation`, `m_dTimeZone` (heures), `m_placeName`, `m_weatherStationName`, `m_sharedCoordGUID` |
+| emplacement actif | `ActiveGeoLocationTrackingElement` | `m_activeGeoLocationId` ; `m_projectGeoLocationId` : emplacement caché « Projet » dont l'origine est le point de base du projet |
+| point de base du projet, point topographique (`BasePoint`) | `BasePoint` (→ `CoordinateElemBase`) | `m_locationType` 1 : point topographique, 0 (absent) : point de base ; position dans le repère interne `m_oGPoint` → `GPoint.m_coord` ; `m_isClippedToShared` (vaut 1 pour les deux, sans rapport direct avec `BasePoint.Clipped`) |
+| origine interne (`InternalOrigin`) | `CoordinateSystemDisplayElem` | point à l'origine |
+
+**Transformation.** `GetTotalTransform` va des coordonnées partagées vers le repère
+interne : origine = `m_or` (position du point topographique), axes = **colonnes** de
+la matrice dont `m_3x3` donne les lignes. Un point p du repère interne a donc pour
+coordonnées partagées la transposée de cette base appliquée à p − `m_or` :
+composante j = Σₖ `m_3x3[k][j]` · (pₖ − `m_or`ₖ). `ProjectPosition` de l'origine interne :
+[E/O, N/S, Élévation] = ce calcul pour p = 0, `Angle` = −atan2(`m_3x3[1][0]`,
+`m_3x3[0][0]`) ; le paramètre « Angle par rapport au nord géographique » du point de
+base vaut 2π − `Angle` (336,54° pour 23,456°). Paramètres du point de base E/O
+(−1 150 192), N/S (−1 150 191), Élév. (−1 150 193) : ses coordonnées partagées.
+
+`Document.ProjectLocations` ne liste que les emplacements du lieu de l'emplacement
+actif (`ProjectLocation.Create` les rattache à un lieu) : ni l'emplacement caché
+« Projet », ni « DefaultLocation » de Kerreut, qui ont chacun leur `GeoSite`.
+
+**Bilan** (`coordonnees.py --comparer`, test Rust `coordonnees`) : E16, V0, E04,
+Projet1, Kerreut (rotation de 41,82°, élévation 68,90 m), Saint-Malo (1,81°, 7,75 m)
+identiques à Revit à 10⁻⁶ près (relatif) pour les emplacements listés, leurs
+origines, axes, positions et angles, les lieux, les deux points de base et l'origine
+interne. Aucun fichier du corpus n'a de système de coordonnées géographiques
+(`GeoCoordinateSystemId` vide) : son stockage reste à trouver.
+
+**Viewer.** Jeu de propriétés « Coordonnées » sur le projet (emplacement actif,
+coordonnées partagées du point de base, angle par rapport au nord géographique, point
+topographique, lieu, autres emplacements) ; pour un document placé, la barre d'état
+donne les coordonnées partagées (E/O, N/S, Élév.) du point cliqué, la commande `objet`
+du pilote aussi (`partage`). Contrôle sur E16 : trois points du mur, coordonnées du
+viewer identiques au calcul Python au millimètre.
+
 ### Contenu repéré
 
 `Global/Latest` contient le nom des niveaux (`ZZ_NIV_A` y apparaît après
@@ -1270,6 +1319,7 @@ Python 3 sans dépendance externe :
 | `parametres.py` | paramètres : définitions (`fichier definitions`), valeurs (`fichier valeurs [ids]`), comparaison à une référence RiveTT (`--comparer ref.json`) |
 | `parametres_apprendre.py` | correspondances paramètre intégré → champ apprises sur des références RiveTT, contrôle sur d'autres fichiers |
 | `uniqueid.py` | épisodes de `Global/History`, IfcGUID calculés comparés à une référence RiveTT |
+| `coordonnees.py` | emplacements, points de base, lieu ; comparaison à une référence RiveTT (`--comparer coordonnees.json`) |
 | `geometrie.py` | géométrie calculée d'un élément (`fichier id`) : solides B-rep, sommets, faces et triangles en mm, contrôle (boîte, volume, aire, fermeture, écart des arêtes), export OBJ (`--obj`), plans de référence (`--tout`) |
 | `familles.py` | géométrie d'une instance de famille (`fichier id…`) : volume, triangles, boîte en mm ; `--trace id` : solides retenus ou écartés (filtre, invisible, non décodé) et pourquoi |
 | `vues.py` | vues et éléments 2D (`fichier [--vues] [--elements] [--json f]`) |

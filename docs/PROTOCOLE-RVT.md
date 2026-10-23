@@ -366,6 +366,19 @@ Session Revit 2026 ouverte sur `FEN_2PF.rfa` ; documents ouverts en arrière-pla
    trois vues, comparé à `m_oaDrawFilters` ; exports des feuilles pour le tracé (lignes
    d'attache, marques, valeurs).
 
+### C18 — Coordonnées (faite le 23/10)
+
+Recherche des classes dans le schéma et le corpus (`GeoLocation`, `GeoSite`,
+`BasePoint`, `ActiveGeoLocationTrackingElement`, `CoordinateSystemDisplayElem`,
+`TrueNorth`), essai E16 créé dans Revit 2026 depuis V0 (script
+`rvt-essai-e16-coordonnees`, document ouvert en arrière-plan, enregistré sous un
+nouveau nom), référence `rvt-reference-coordonnees` sur E16, V0, E04, Projet1,
+Kerreut et Saint-Malo (documents ouverts en arrière-plan et fermés sans enregistrer).
+Comparaison automatique par `coordonnees.py --comparer`, test Rust, contrôle des
+coordonnées du point cliqué par le canal du viewer. Fichiers dans
+`C:\Users\theba\Projets code\Decodage RVT` (`essais/`, `references/`,
+`brouillons/coordonnees/`).
+
 ### C9 — Variantes ciblées (Revit, prochaine session)
 
 Quand le lecteur bute sur un champ, produire deux fichiers qui ne diffèrent que

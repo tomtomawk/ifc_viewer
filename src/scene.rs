@@ -113,6 +113,24 @@ pub struct NavFamille {
     pub types: Vec<(String, Option<Id>)>,
 }
 
+/// Coordonnées partagées d'un document Revit placé (emplacement actif) : point du
+/// repère du fichier (m) → coordonnées partagées (m), colonnes appliquées à p − origine.
+#[derive(Clone, Debug)]
+pub struct ReperePartage {
+    /// Nom de l'emplacement.
+    pub nom: String,
+    /// Point topographique dans le repère du fichier, m.
+    pub origine: DVec3,
+    pub colonnes: [DVec3; 3],
+}
+
+impl ReperePartage {
+    pub fn partage(&self, p: DVec3) -> DVec3 {
+        let d = p - self.origine;
+        DVec3::new(self.colonnes[0].dot(d), self.colonnes[1].dot(d), self.colonnes[2].dot(d))
+    }
+}
+
 pub struct Scene {
     pub model: IfcModel,
     pub vertices: Vec<Vertex>,
@@ -128,6 +146,8 @@ pub struct Scene {
     pub file_name: String,
     /// Arborescence du projet (fichiers Revit).
     pub navigateur: Option<Navigateur>,
+    /// Coordonnées partagées (fichier Revit placé).
+    pub partage: Option<ReperePartage>,
 }
 
 pub fn load(path: &Path, progress: &dyn Fn(String)) -> Result<Scene, String> {
@@ -312,6 +332,7 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
         load_ms: 0,
         file_name,
         navigateur: None,
+        partage: None,
     }
 }
 

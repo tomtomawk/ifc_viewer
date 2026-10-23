@@ -17,6 +17,7 @@ pub mod feuilles;
 pub mod geometrie;
 pub mod maquette;
 mod objets;
+pub mod coordonnees;
 pub mod parametres;
 mod schema;
 pub mod vues;

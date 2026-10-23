@@ -308,6 +308,8 @@ pub struct ViewerApp {
     show_unsupported: bool,
     /// Vue Revit ouverte (indice dans `Navigateur::vues`).
     vue_active: Option<usize>,
+    /// Dernier point cliqué sur un objet, repère du fichier (m).
+    point_clique: Option<glam::DVec3>,
     /// Commandes du serveur MCP (voir `pilote.rs`) et celles en attente de traitement.
     pilote: Option<Receiver<Requete>>,
     requetes: Vec<Requete>,
@@ -388,6 +390,7 @@ impl ViewerApp {
             filter: String::new(),
             show_unsupported: false,
             vue_active: None,
+            point_clique: None,
             pilote: pilote::demarrer(cc.egui_ctx.clone()),
             requetes: Vec::new(),
             attente_ouverture: Vec::new(),
@@ -1079,6 +1082,18 @@ impl ViewerApp {
                 ui.separator();
             }
             ui.label(&self.status);
+            if let (Some(p), Some(s)) = (self.point_clique, &self.scene) {
+                // coordonnées partagées (Revit placé) ou du fichier
+                ui.separator();
+                let texte = match &s.partage {
+                    Some(r) => {
+                        let q = r.partage(p);
+                        format!("E/O {:.3} · N/S {:.3} · Élév. {:.3} m ({})", q.x, q.y, q.z, r.nom)
+                    }
+                    None => format!("X {:.3} · Y {:.3} · Z {:.3} m", p.x, p.y, p.z),
+                };
+                ui.label(texte).on_hover_text("Point cliqué");
+            }
             if let Some(s) = &self.scene {
                 if !s.unsupported.is_empty() {
                     let n: usize = s.unsupported.iter().map(|u| u.1).sum();
@@ -2042,6 +2057,7 @@ impl ViewerApp {
             } else if resp.clicked() {
                 let hit = resp.interact_pointer_pos().and_then(|p| pick(self, p));
                 let id = hit.map(|(obj, _)| self.scene.as_ref().unwrap().objects[obj as usize].id);
+                self.point_clique = hit.map(|(_, p)| p.as_dvec3() + self.scene.as_ref().unwrap().origin);
                 self.select(id, true);
             }
 
@@ -2599,7 +2615,13 @@ impl ViewerApp {
                 match s.pick(o, d, &self.visible, self.plan_coupe()) {
                     Some((obj, t)) => {
                         let p = o + d * t;
-                        succes(&[("entite", self.decrire(s.objects[obj as usize].id)), ("point", format!("[{:.3},{:.3},{:.3}]", p.x, p.y, p.z))])
+                        let f = p.as_dvec3() + s.origin;
+                        let mut r = vec![("entite", self.decrire(s.objects[obj as usize].id)), ("point", format!("[{:.3},{:.3},{:.3}]", f.x, f.y, f.z))];
+                        if let Some(g) = &s.partage {
+                            let q = g.partage(f);
+                            r.push(("partage", format!("[{:.3},{:.3},{:.3}]", q.x, q.y, q.z)));
+                        }
+                        succes(&r)
                     }
                     None => succes(&[("entite", "null".into())]),
                 }

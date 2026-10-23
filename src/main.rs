@@ -282,6 +282,20 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
         m.parametres.len()
     );
     println!("Identifiants : {} épisodes, {} éléments avec UniqueId", m.episodes.len(), m.episode_de.len());
+    let c = &m.coordonnees;
+    if let Some(e) = c.actif() {
+        let b = c.partage(c.point_base.unwrap_or_default()).unwrap_or_default() / 1000.0;
+        let lieu = c.lieux.get(&e.lieu).map(|l| format!(", lieu « {} » {:.6}° {:.6}° (altitude {})", l.nom, l.latitude, l.longitude, l.altitude)).unwrap_or_default();
+        println!(
+            "Coordonnées : emplacement actif « {} » ({} emplacements), point de base E/O {:.3} N/S {:.3} Élév. {:.3} m, nord géographique {:.3}°{lieu}",
+            e.nom,
+            c.nommes().count(),
+            b.x,
+            b.y,
+            b.z,
+            e.angle().to_degrees()
+        );
+    }
     let lus: Vec<_> = m.murs.iter().filter_map(|w| Some((w, w.geometrie.as_ref().ok()?.controle()))).collect();
     let fermes = lus.iter().filter(|(_, c)| c.non_appariees == 0).count();
     println!("Murs         : {} ({} maillés, dont {fermes} fermés)", m.murs.len(), lus.len());

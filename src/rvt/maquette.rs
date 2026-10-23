@@ -13,6 +13,7 @@
 //! comme dans une vue 3D en détail fin ([`geometrie::Bibliotheque`]).
 
 use super::champs::{self, Obj, Record, Val};
+use super::coordonnees::{self, Coordonnees};
 use super::geometrie::{self, FT, Maillage};
 use super::objets::{document_de, elem_table, episodes, inflate, records, sections_documents, unpad};
 use super::parametres::{self, Brut, Definition};
@@ -362,6 +363,8 @@ pub struct Maquette {
     pub parametres: HashMap<i64, Vec<(i64, Brut)>>,
     /// Noms des phases (`ProjectPhase`).
     pub phases: HashMap<i64, String>,
+    /// Emplacements de projet, points de base et lieu géographique.
+    pub coordonnees: Coordonnees,
     /// Famille d'un document `.rfa` (`Family` sans famille hôte), dont
     /// `m_familyParams` porte les valeurs du type courant.
     pub famille_document: Option<i64>,
@@ -442,6 +445,9 @@ enum Sorte {
     Parametre,
     /// Phase (`ProjectPhase`).
     Phase,
+    /// Coordonnées : emplacement (`GeoLocation`), lieu (`GeoSite`), point de base
+    /// (`BasePoint`), emplacement actif (`ActiveGeoLocationTrackingElement`).
+    Coordonnee,
     /// Police d'un type de texte (`FontElem`).
     Police,
     /// Type de fenêtre de vue (`ViewportAttributes`).
@@ -474,6 +480,8 @@ impl Sorte {
         let h = |base| sch.inherits(id, base);
         Some(match name {
             "SWall" | "ArcWall" => Sorte::Mur,
+            // avant Symbol et Instance, dont GeoSite et GeoLocation dérivent
+            "GeoLocation" | "GeoSite" | "BasePoint" | "ActiveGeoLocationTrackingElement" => Sorte::Coordonnee,
             "MaterialElem" => Sorte::Materiau,
             "StairsElement" => Sorte::Escalier,
             "Grid" => Sorte::Grille,
@@ -634,6 +642,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     let (mut vues, mut cadrages, mut elements_2d) = (Vec::new(), HashMap::new(), Vec::new());
     let (mut motifs, mut types_regions, mut couleurs_categories) = (HashMap::new(), HashMap::new(), HashMap::new());
     let (mut definitions, mut phases) = (HashMap::new(), HashMap::new());
+    let mut coord = Coordonnees::default();
     let (mut instances_vue, mut polices, mut types_fenetres, mut revisions, mut info_projet) = (Vec::new(), HashMap::new(), HashMap::new(), HashMap::new(), -1);
     let (mut types_cotes, mut format_longueurs) = (HashMap::new(), None);
     let mut lignes_esquisse: std::collections::HashSet<i64> = Default::default();
@@ -675,6 +684,13 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
             Ok(Extrait::Style(cat, c)) => drop(couleurs_categories.insert(cat, c)),
             Ok(Extrait::Parametre(id, d)) => drop(definitions.insert(id, d)),
             Ok(Extrait::Phase(id, nom)) => drop(phases.insert(id, nom)),
+            Ok(Extrait::Coordonnee(x)) => match x {
+                coordonnees::Piece::Emplacement(e) => coord.emplacements.push(e),
+                coordonnees::Piece::Lieu(id, l) => drop(coord.lieux.insert(id, l)),
+                coordonnees::Piece::Point(true, p) => coord.point_topo = Some(p),
+                coordonnees::Piece::Point(false, p) => coord.point_base = Some(p),
+                coordonnees::Piece::Actif(a, p) => (coord.actif, coord.projet) = (a, p),
+            },
             Ok(Extrait::Police(t, x)) => drop(polices.insert(t, x)),
             Ok(Extrait::TypeFenetre(id, x)) => drop(types_fenetres.insert(id, x)),
             Ok(Extrait::Revision(id, x)) => drop(revisions.insert(id, x)),
@@ -810,6 +826,10 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         definitions,
         parametres,
         phases,
+        coordonnees: {
+            coord.emplacements.sort_by_key(|e| e.id);
+            coord
+        },
         famille_document,
         episodes,
         episode_de: if ids8 { table } else { HashMap::new() },
@@ -1006,6 +1026,7 @@ enum Extrait {
     Style(i64, [u8; 3]),
     Parametre(i64, Definition),
     Phase(i64, String),
+    Coordonnee(coordonnees::Piece),
     /// Police et type de texte propriétaire.
     Police(i64, Police),
     TypeFenetre(i64, TypeFenetre),
@@ -1134,6 +1155,7 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite
         })()),
         Sorte::Parametre => ou_rien(parametres::definition(r, herite).map(|d| Extrait::Parametre(eid, d))),
         Sorte::Phase => ou_rien(o.get("m_name").and_then(Val::str).map(|n| Extrait::Phase(eid, n.to_string()))),
+        Sorte::Coordonnee => ou_rien(coordonnees::lire(eid, r).map(Extrait::Coordonnee)),
         Sorte::Police => ou_rien((|| {
             let f = r.field_body(o, "m_pFont")?;
             Some(Extrait::Police(id_of(o, "m_ownerId"), Police { nom: f.get("m_name")?.str()?.to_string(), taille: f.get("m_size")?.real()? * FT }))
@@ -1493,6 +1515,47 @@ fn parts_primitives(prims: &[Primitive], normale: DVec3, echelle: f64) -> Vec<Pa
     parts
 }
 
+/// Propriétés « Coordonnées » du projet, comme la boîte « Emplacement » et les points de
+/// base de Revit : emplacement actif, position partagée du point de base du projet et
+/// angle par rapport au nord géographique, point topographique, lieu, autres
+/// emplacements.
+fn coordonnees_affichees(m: &Maquette) -> Vec<(String, String)> {
+    let c = &m.coordonnees;
+    let Some(e) = c.actif() else { return Vec::new() };
+    let metres = |v: f64| format!("{} m", format_real(v.round() / 1000.0));
+    let degres = |a: f64| format!("{}°", format_real((a.to_degrees() * 100.0).round() / 100.0));
+    let mut out = vec![("Emplacement actif".to_string(), e.nom.clone())];
+    let base = c.point_base.unwrap_or_default();
+    let s = e.vers_partage(base);
+    out.push(("Point de base du projet : E/O".into(), metres(s.x)));
+    out.push(("Point de base du projet : N/S".into(), metres(s.y)));
+    out.push(("Point de base du projet : Élév.".into(), metres(s.z)));
+    // paramètre « Angle par rapport au nord géographique » du point de base
+    out.push(("Angle par rapport au nord géographique".into(), degres((-e.angle()).rem_euclid(std::f64::consts::TAU))));
+    if base.length() > 1e-6 {
+        out.push(("Point de base du projet (repère interne)".into(), format!("{} ; {} ; {} mm", format_real(base.x.round()), format_real(base.y.round()), format_real(base.z.round()))));
+    }
+    if let Some(t) = c.point_topo {
+        out.push(("Point topographique (repère interne)".into(), format!("{} ; {} ; {} mm", format_real(t.x.round()), format_real(t.y.round()), format_real(t.z.round()))));
+    }
+    if let Some(l) = c.lieux.get(&e.lieu) {
+        if !l.nom.is_empty() {
+            out.push(("Lieu".into(), l.nom.clone()));
+        }
+        out.push(("Latitude".into(), format!("{:.6}°", l.latitude)));
+        out.push(("Longitude".into(), format!("{:.6}°", l.longitude)));
+        out.push(("Fuseau horaire".into(), format!("UTC{}{}", if l.fuseau < 0.0 { "−" } else { "+" }, format_real(l.fuseau.abs()))));
+        if !l.station.is_empty() {
+            out.push(("Station météo".into(), l.station.clone()));
+        }
+    }
+    for o in c.nommes().filter(|o| o.id != e.id) {
+        let p = o.vers_partage(DVec3::ZERO);
+        out.push((format!("Emplacement « {} »", o.nom), format!("E/O {}, N/S {}, Élév. {}, {}", metres(p.x), metres(p.y), metres(p.z), degres(o.angle()))));
+    }
+    out
+}
+
 /// Lit le fichier et construit la scène du viewer. Erreur si aucun élément n'a pu être
 /// maillé.
 pub fn load_scene(path: &Path, titre: &str, format: &str, progress: &dyn Fn(String)) -> Result<Scene, String> {
@@ -1729,6 +1792,11 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
     // GlobalId d'un élément Revit : son IfcGUID, comme à l'export IFC de Revit
     let guid = |prefix: &str, id: i64| m.guid_ifc(id).map(Value::Str).unwrap_or_else(|| gid(prefix, id));
     let projet = b.add("IFCPROJECT", vec![gid("RVTPROJET", 0), n.clone(), Value::Str(titre.into())]);
+    let coord = coordonnees_affichees(m);
+    if !coord.is_empty() {
+        let ps = b.pset("RVTCOORD", 0, "Coordonnées", coord.iter().map(|(k, v)| (k.as_str(), Value::Str(v.clone()))).collect());
+        b.definir("RVTDEFC", 0, projet, vec![ps]);
+    }
     // document de famille : paramètres de la famille (valeurs du type courant)
     if let Some(f) = m.famille_document {
         let ps = b.psets_parametres(m, f);
@@ -1997,6 +2065,11 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
     let model = IfcModel::new(StepFile { schema: format!("REVIT {format}"), entities: b.entities });
     let mut s = scene::assemble(model, geoms, file_name);
     s.navigateur = Some(nav);
+    // coordonnées partagées du point cliqué (document placé)
+    if let Some(e) = m.coordonnees.actif().filter(|_| m.coordonnees.place()) {
+        let col = |j: usize| DVec3::new(e.lignes[0][j], e.lignes[1][j], e.lignes[2][j]);
+        s.partage = Some(scene::ReperePartage { nom: e.nom.clone(), origine: e.origine / 1000.0, colonnes: [col(0), col(1), col(2)] });
+    }
     for (nom, k) in [
         ("Faces à motif de surface de dessin (taille d'écran dans Revit), non tracé en 3D", motifs_dessin),
         ("Faces à motif de surface non tracé (limite de traits atteinte)", motifs_omis),
@@ -2802,5 +2875,45 @@ mod tests {
         assert_eq!(m.guid_ifc(8_677_076).as_deref(), Some("2VbQHXdHTBoAiSW3rsPCNH"));
         let d = &m.definitions[&208_407];
         assert_eq!((d.nom.as_str(), d.genre.as_str(), d.guid.as_deref()), ("Adresse du Client", "partagé", Some("f25fdde5-ae9e-422f-87c4-1d9e5fc71836")));
+    }
+
+    /// Coordonnées contre l'API de Revit 2026 (script RiveTT `rvt-reference-coordonnees`,
+    /// `Decodage RVT/references/coordonnees.json`) : essai E16 (`rvt-essai-e16-coordonnees` :
+    /// emplacement actif placé, second emplacement, point de base déplacé, lieu), Kerreut
+    /// (rotation et altitude réelles) et Saint-Malo.
+    #[test]
+    fn coordonnees() {
+        let pied = |v: f64| v * FT;
+        for (fichier, nom, emplacements, position, angle, base, base_partage, lieu) in [
+            (
+                essai(r"essais\2026", "E16_coordonnees.rvt"),
+                "Site par défaut",
+                2,
+                [1_152_344.379_921_258_4, 22_273_662.549_212_597, 149.862_204_724_409_45],
+                0.409_384_429_347_789_9,
+                [16.404_199_475_065_617, 22.965_879_265_091_864, 3.280_839_895_013_123_5],
+                [1_152_350.287_129_944, 22_273_690.146_934_54, 153.143_044_619_422_57],
+                (47.2184, -1.5536, "ZZ_LIEU_NANTES"),
+            ),
+            (essai("fichiers", "Kerreut 2025.rvt"), "Interne", 1, [0.0, 0.0, 226.049_868_766_404_02], 0.729_962_381_603_939_6, [0.0; 3], [0.0, 0.0, 226.049_868_766_404_02], (48.113_518, -1.669_897, "48.1135177612305,-1.66989731788635")),
+            (essai("fichiers", "Saint-Malo_avenue aristide briand_46.rvt"), "Interne", 1, [0.0, 0.0, 25.426_509_186_351_172], -0.031_576_952_957_789_395, [0.0; 3], [0.0, 0.0, 25.426_509_186_351_172], (48.113_518, -1.669_897, "48.1135177612305,-1.66989731788635")),
+        ] {
+            let Some(p) = fichier else { continue };
+            let m = lire(&p, &|_| {}).unwrap();
+            let c = &m.coordonnees;
+            let e = c.actif().unwrap();
+            assert_eq!((e.nom.as_str(), c.nommes().count()), (nom, emplacements), "{}", p.display());
+            let o = c.partage(DVec3::ZERO).unwrap();
+            for k in 0..3 {
+                proche(o[k], pied(position[k]), 1e-3, "origine interne en coordonnées partagées");
+                proche(c.point_base.unwrap()[k], pied(base[k]), 1e-6, "point de base");
+                proche(c.partage(c.point_base.unwrap()).unwrap()[k], pied(base_partage[k]), 1e-3, "point de base partagé");
+            }
+            proche(e.angle(), angle, 1e-12, "angle par rapport au nord géographique");
+            let l = &c.lieux[&e.lieu];
+            proche(l.latitude, lieu.0, 1e-6, "latitude");
+            proche(l.longitude, lieu.1, 1e-6, "longitude");
+            assert_eq!(l.nom, lieu.2);
+        }
     }
 }
