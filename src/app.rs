@@ -691,22 +691,6 @@ impl ViewerApp {
             ui.separator();
             let has = self.scene.is_some();
             ui.add_enabled_ui(has, |ui| {
-                if ui.button("Cadrer").on_hover_text("F").clicked() {
-                    self.fit_all();
-                }
-                if ui.button("Dessus").clicked() {
-                    self.camera.pitch = MAX_PITCH;
-                    self.camera.yaw = -std::f32::consts::FRAC_PI_2;
-                }
-                if ui.button("Face").clicked() {
-                    self.camera.pitch = 0.0;
-                    self.camera.yaw = -std::f32::consts::FRAC_PI_2;
-                }
-                if ui.button("Iso").clicked() {
-                    self.camera.pitch = 0.6;
-                    self.camera.yaw = -2.3;
-                }
-                ui.toggle_value(&mut self.camera.ortho, "Ortho");
                 if ui.toggle_value(&mut self.dessin, "Dessin 2D").on_hover_text("Plans et élévations : faces blanches, arêtes vives, parties cachées éliminées, coupe").changed() {
                     self.visibility_dirty = true;
                 }
@@ -747,14 +731,41 @@ impl ViewerApp {
         });
     }
 
+    /// Barre de la vue, sous la vue comme celle de Revit : échelle de la vue ouverte,
+    /// cadrage, orientations prédéfinies, projection.
+    fn barre_vue(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.add_enabled_ui(self.scene.is_some(), |ui| {
+                if let Some(v) = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)) {
+                    ui.label(RichText::new(format!("1 : {}", v.echelle)).strong()).on_hover_text("Échelle de la vue");
+                    ui.separator();
+                }
+                if ui.button("Cadrer").on_hover_text("Tout le modèle visible dans la vue (F)").clicked() {
+                    self.fit_all();
+                }
+                ui.separator();
+                if ui.button("Dessus").on_hover_text("Vue de dessus").clicked() {
+                    self.camera.pitch = MAX_PITCH;
+                    self.camera.yaw = -std::f32::consts::FRAC_PI_2;
+                }
+                if ui.button("Face").on_hover_text("Vue de face (vers le nord)").clicked() {
+                    self.camera.pitch = 0.0;
+                    self.camera.yaw = -std::f32::consts::FRAC_PI_2;
+                }
+                if ui.button("Iso").on_hover_text("Vue axonométrique").clicked() {
+                    self.camera.pitch = 0.6;
+                    self.camera.yaw = -2.3;
+                }
+                ui.separator();
+                ui.toggle_value(&mut self.camera.ortho, "Ortho").on_hover_text("Projection orthographique (sinon perspective)");
+            });
+        });
+    }
+
     fn status_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             if let Some(e) = &self.error {
                 ui.colored_label(Color32::from_rgb(200, 40, 40), format!("Erreur : {e}"));
-                ui.separator();
-            }
-            if let Some(v) = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)) {
-                ui.label(RichText::new(format!("1 : {}", v.echelle)).strong());
                 ui.separator();
             }
             ui.label(&self.status);
@@ -2302,6 +2313,8 @@ impl eframe::App for ViewerApp {
             // disposition de Revit : propriétés à gauche, arborescence du projet à droite
             egui::Panel::left("proprietes").resizable(true).default_size(300.0).show(ui, |ui| self.right_panel(ui));
             egui::Panel::right("arborescence").resizable(true).default_size(320.0).show(ui, |ui| self.left_panel(ui));
+            // sous la vue seulement, entre les deux panneaux
+            egui::Panel::bottom("barre_vue").show(ui, |ui| self.barre_vue(ui));
             egui::CentralPanel::no_frame().show(ui, |ui| self.viewport(ui));
         }
         self.unsupported_window(&ctx);
