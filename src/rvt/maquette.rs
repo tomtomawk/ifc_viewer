@@ -127,6 +127,9 @@ pub struct Famille {
     pub occurrence: std::collections::HashSet<i64>,
     /// Document embarqué d'une famille chargée (`m_oFamDoc.m_contentDocGUID`).
     pub document: Option<[u8; 16]>,
+    /// Paramètres à formule (`NamedParam.m_oExpression`) : Revit enregistre leur valeur
+    /// calculée dans chaque type.
+    pub formules: Vec<(i64, super::formules::Expr)>,
 }
 
 /// Instance de famille propre à une vue (cartouche ou symbole d'une feuille, composant
@@ -1128,11 +1131,25 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite
                 let liste = fp.get("m_params").map(Val::list).unwrap_or_default();
                 liste.iter().filter_map(Val::obj).filter(|x| x.get("m_instance").and_then(Val::int) == Some(1)).filter_map(|x| x.get("m_paramId").and_then(Val::element_id)).collect()
             });
+            let formules = r
+                .field_body(o, "m_familyParams")
+                .map(|fp| {
+                    let liste = fp.get("m_params").map(Val::list).unwrap_or_default();
+                    liste
+                        .iter()
+                        .filter_map(Val::obj)
+                        .filter_map(|x| {
+                            let ex = x.get("m_oExpression")?;
+                            Some((x.get("m_paramId").and_then(Val::element_id)?, super::formules::lire(r, r.deref(ex).map(|b| &b.obj).or(ex.obj())?)?))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
             let document = r.field_body(o, "m_oFamDoc").and_then(|d| d.get("m_contentDocGUID")?.obj()?.get("m_guid")).and_then(|g| match g {
                 Val::Guid(g) => Some(*g),
                 _ => None,
             });
-            let f = Famille { nom: o.get("m_name")?.str()?.to_string(), categorie: id_of(o, "m_categoryId"), parent: id_of(o, "m_famId"), occurrence: occurrence.unwrap_or_default(), document };
+            let f = Famille { nom: o.get("m_name")?.str()?.to_string(), categorie: id_of(o, "m_categoryId"), parent: id_of(o, "m_famId"), occurrence: occurrence.unwrap_or_default(), document, formules };
             Some(Extrait::Famille(eid, f))
         })()),
         Sorte::Materiau => ou_rien((|| {
@@ -3160,5 +3177,58 @@ mod tests {
         assert_eq!(t.titres, ["Identifiant", "Famille et type", "Niveau", "Largeur", "Hauteur"]);
         assert_eq!(t.lignes.len(), 43);
         assert_eq!(t.lignes[1], ["P4", "Int. Simple: PP (0.83m x 2.04m)", "Niveau 0", "0.83", "2.04"]);
+    }
+
+    /// Champ pourcentage et champ calculé de Saint-Malo contre le tableau de Revit 2026
+    /// (`rvt-reference-nomenclatures`) : « Part de SP » = « % de SHAB » × 5 000 m², le
+    /// pourcentage étant la part de la surface de la pièce dans le total général.
+    #[test]
+    fn nomenclature_formule_saint_malo() {
+        let Some(p) = essai("fichiers", "Saint-Malo_avenue aristide briand_46.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        let d = m.vues.iter().find(|v| v.id == 9_190_140).and_then(|v| v.nomenclature.clone()).unwrap();
+        let t = super::super::nomenclatures::calculer(&m, &d);
+        let ligne = |n: &str| t.lignes.iter().find(|l| l[0] == n).cloned().unwrap();
+        assert_eq!(ligne("A110"), ["A110", "T1", "", "20.5 m²", "1%", "42.3 m²"]);
+        assert_eq!(ligne("A119"), ["A119", "T1", "", "33.4 m²", "1%", "68.9 m²"]);
+        assert_eq!(&ligne("Total général")[4], "100%");
+    }
+
+    /// Formules des familles évaluées avec les valeurs de chaque type, contre la valeur
+    /// calculée que Revit a enregistrée dans le type (une formule entière est arrondie).
+    #[test]
+    fn formules_familles() {
+        use super::super::formules::{de_brut, evaluer, Expr};
+        use super::super::parametres::Stockage;
+        for (fichier, minimum) in [("Kerreut 2025.rvt", 161), ("Saint-Malo_avenue aristide briand_46.rvt", 411)] {
+            let Some(p) = essai("fichiers", fichier) else { continue };
+            let m = lire(&p, &|_| {}).unwrap();
+            let st = |p: i64| m.definitions.get(&p).map(|d| d.stockage).or_else(|| parametres::integres().get(&p).map(|i| i.stockage)).unwrap_or(Stockage::Aucun);
+            let (mut justes, mut sans, mut faux) = (0, 0, Vec::new());
+            for (t, ty) in &m.types {
+                let (Some(f), Some(vals)) = (m.familles.get(&ty.famille), m.parametres.get(t)) else { continue };
+                let v = |p: i64| vals.iter().find(|(q, _)| *q == p).map(|(_, b)| de_brut(b, st(p)));
+                for (p, ex) in &f.formules {
+                    let Some(attendu) = v(*p).and_then(|x| x.nombre()) else { continue };
+                    let var = |e: &Expr| match e {
+                        Expr::Param(q) => v(*q),
+                        _ => None,
+                    };
+                    match evaluer(ex, &var).and_then(|x| x.nombre()) {
+                        Some(x) => {
+                            let x = if st(*p) == Stockage::Entier { x.round() } else { x };
+                            if (x - attendu).abs() <= 1e-6 * attendu.abs().max(1.0) {
+                                justes += 1
+                            } else {
+                                faux.push((*t, *p, x, attendu))
+                            }
+                        }
+                        None => sans += 1,
+                    }
+                }
+            }
+            eprintln!("{fichier} : {justes} justes, {sans} sans valeur");
+            assert!(faux.is_empty() && justes >= minimum, "{fichier} : {justes} justes, faux {faux:?}");
+        }
     }
 }

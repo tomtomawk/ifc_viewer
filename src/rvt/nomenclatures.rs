@@ -11,13 +11,16 @@
 //! croissant, `m_groupingFlags` : 2 en-tête, 4 pied, 16 ligne vide).
 //!
 //! Revit ne garde pas le contenu : il le recalcule à l'affichage. Le contenu est donc
-//! recomposé ici depuis les éléments lus et leurs paramètres ; les champs calculés
-//! (formules, pièce de départ et d'arrivée d'une porte, pourcentages…) ne le sont pas.
+//! recomposé ici depuis les éléments lus et leurs paramètres, formules des champs
+//! calculés comprises (`formules`) et pourcentages ; pièce de départ et d'arrivée
+//! d'une porte… ne le sont pas.
 
 use super::champs::{Obj, Record, Val};
+use super::formules::{self, Expr, Valeur};
 use super::maquette::Maquette;
-use super::parametres::{self, Brut, Stockage};
+use super::parametres::{self, Brut, Format, Stockage};
 use std::cmp::Ordering;
+use std::collections::HashMap;
 
 /// Genre d'un champ (`ScheduleFieldType` de l'API).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -54,7 +57,7 @@ impl GenreChamp {
 
     /// Champs dont la valeur est recomposée ici.
     pub fn calcule(self) -> bool {
-        matches!(self, GenreChamp::Occurrence | GenreChamp::Type | GenreChamp::Nombre)
+        matches!(self, GenreChamp::Occurrence | GenreChamp::Type | GenreChamp::Nombre | GenreChamp::Formule | GenreChamp::Pourcentage)
     }
 }
 
@@ -67,6 +70,16 @@ pub struct Champ {
     /// Totalisé dans les regroupements (`m_displayType` 1).
     pub total: bool,
     pub genre: GenreChamp,
+    /// Formule d'un champ calculé (`m_pExpression`).
+    pub formule: Option<Expr>,
+    /// Unité d'un champ calculé (`m_pParamDef` → `m_specTypeId`).
+    pub spec: String,
+    /// Format propre au champ (`m_pFormatOptions` quand `m_bUseDefault` vaut 0), sinon
+    /// celui du projet.
+    pub format: Option<Format>,
+    /// Champ pourcentage : champ dont il est la part (`m_percentageOfId`) et champ de
+    /// regroupement du total (`m_percentageById`, −1 : total général).
+    pub pourcentage: Option<(i64, i64)>,
 }
 
 #[derive(Clone, Debug)]
@@ -132,6 +145,13 @@ pub fn definition(r: &Record) -> Option<Definition> {
     let mut champs = Vec::new();
     for (k, f) in s.get("m_pFields").map(Val::list).unwrap_or_default().iter().enumerate() {
         let Some(f) = r.deref(f).map(|b| &b.obj) else { continue };
+        let pd = f.get("m_pParamDef").and_then(|v| corps(r, v));
+        let spec = match pd {
+            Some(d) if d.class_name() == "ParamDefYesNo" => "autodesk.spec:spec.bool-1.0.0".to_string(),
+            Some(d) => d.get("m_specTypeId").and_then(Val::obj).and_then(|x| x.get("m_typeId")).and_then(Val::str).unwrap_or_default().to_string(),
+            None => String::new(),
+        };
+        let format = f.get("m_pFormatOptions").and_then(|v| corps(r, v)).filter(|o| int(o, "m_bUseDefault") == 0).map(Format::de);
         champs.push(Champ {
             id: ids.get(k).copied().unwrap_or(k as i64),
             titre: f.get("m_columnHeading").and_then(Val::str).unwrap_or_default().to_string(),
@@ -139,6 +159,10 @@ pub fn definition(r: &Record) -> Option<Definition> {
             masque: int(f, "m_hidden") != 0,
             total: int(f, "m_displayType") == 1,
             genre: GenreChamp::de(int(f, "m_sourceType")),
+            formule: f.get("m_pExpression").and_then(|v| corps(r, v)).and_then(|x| formules::lire(r, x)),
+            spec,
+            format,
+            pourcentage: (int(f, "m_sourceType") == 6).then(|| (id_champ(f.get("m_percentageOfId")), id_champ(f.get("m_percentageById")))),
         });
     }
     let filtres = s
@@ -192,11 +216,72 @@ fn brut(m: &Maquette, element: i64, c: &Champ) -> Option<(Brut, Stockage)> {
     Some((v.selon(st), st))
 }
 
+/// Valeur d'un paramètre de l'élément, sinon de son type.
+fn parametre(m: &Maquette, element: i64, p: i64) -> Option<Valeur> {
+    let st = m.definitions.get(&p).map(|d| d.stockage).or_else(|| parametres::integres().get(&p).map(|i| i.stockage)).unwrap_or(Stockage::Aucun);
+    [Some(element), m.type_de(element)].into_iter().flatten().find_map(|e| m.parametres.get(&e)?.iter().find(|(q, _)| *q == p).map(|(_, b)| formules::de_brut(b, st)))
+}
+
+/// Totaux des champs pourcentage : champ → groupe (valeur du champ de regroupement,
+/// vide pour le total général) → somme du champ dont il est la part.
+type Totaux = HashMap<i64, HashMap<String, f64>>;
+
+/// Groupe d'un élément pour un total de pourcentage.
+fn groupe_pourcentage(m: &Maquette, element: i64, d: &Definition, par: i64) -> String {
+    match d.champs.iter().find(|c| c.id == par).and_then(|c| valeur(m, element, d, c, &Totaux::new(), 1)) {
+        Some(Valeur::Texte(s)) => s,
+        Some(Valeur::Nombre(x)) => x.to_string(),
+        None => String::new(),
+    }
+}
+
+/// Valeur d'un champ pour un élément ; un champ calculé évalue sa formule, dont les
+/// variables sont d'autres champs de la nomenclature ou des paramètres ; un pourcentage
+/// est la part de l'élément dans le total de son groupe.
+fn valeur(m: &Maquette, element: i64, d: &Definition, c: &Champ, totaux: &Totaux, profondeur: usize) -> Option<Valeur> {
+    if profondeur > 16 {
+        return None;
+    }
+    let champ = |id: i64| d.champs.iter().find(|c| c.id == id);
+    match c.genre {
+        GenreChamp::Formule => {
+            let var = |x: &Expr| match x {
+                Expr::Champ(k) => champ(*k).and_then(|c| valeur(m, element, d, c, totaux, profondeur + 1)),
+                Expr::Param(p) => parametre(m, element, *p),
+                _ => None,
+            };
+            formules::evaluer(c.formule.as_ref()?, &var)
+        }
+        GenreChamp::Pourcentage => {
+            let (de, par) = c.pourcentage?;
+            let x = valeur(m, element, d, champ(de)?, totaux, profondeur + 1)?.nombre()?;
+            let t = *totaux.get(&c.id)?.get(&groupe_pourcentage(m, element, d, par))?;
+            (t != 0.0).then(|| Valeur::Nombre(x / t))
+        }
+        GenreChamp::Nombre => Some(Valeur::Nombre(1.0)),
+        _ => brut(m, element, c).map(|(b, st)| formules::de_brut(&b, st)),
+    }
+}
+
+/// Texte du résultat d'une formule ou d'un pourcentage, dans l'unité du champ.
+fn texte_formule(m: &Maquette, c: &Champ, v: &Valeur) -> String {
+    match v {
+        Valeur::Texte(s) => s.clone(),
+        Valeur::Nombre(x) if c.spec.contains("spec.bool") => texte(m, c, &Brut::Entier(*x as i64), Stockage::Entier),
+        Valeur::Nombre(x) => texte(m, c, &Brut::Reel(*x), Stockage::Reel),
+    }
+}
+
 fn texte(m: &Maquette, c: &Champ, b: &Brut, st: Stockage) -> String {
+    if let (Some(f), Brut::Reel(x)) = (&c.format, b) {
+        if let Some(t) = parametres::formater(*x, f, m.unites.virgule) {
+            return t;
+        }
+    }
     let (spec, enumeration) = match (m.definitions.get(&c.param), parametres::integres().get(&c.param)) {
         (Some(d), _) => (d.spec.as_str(), ""),
         (None, Some(i)) => (i.spec, i.enumeration),
-        _ => ("", ""),
+        _ => (c.spec.as_str(), ""),
     };
     parametres::texte(b, c.param, st, spec, enumeration, &m.unites, &|e| m.nom_element(c.param, e)).unwrap_or_default()
 }
@@ -306,10 +391,27 @@ pub fn calculer(m: &Maquette, d: &Definition) -> Tableau {
         return Tableau { titres: visibles.iter().map(|c| c.titre.clone()).collect(), lignes: Vec::new(), non_calculees: (0..visibles.len()).collect() };
     }
     let mut els: Vec<i64> = m.elements_de_categorie(d.categorie).into_iter().filter(|&e| d.filtres.iter().all(|f| passe(m, e, d, f))).collect();
+    // totaux des pourcentages, sur les éléments retenus
+    let mut totaux = Totaux::new();
+    for c in d.champs.iter().filter(|c| c.genre == GenreChamp::Pourcentage) {
+        let Some((de, par)) = c.pourcentage else { continue };
+        let Some(cd) = d.champs.iter().find(|x| x.id == de) else { continue };
+        let mut t: HashMap<String, f64> = HashMap::new();
+        for &e in &els {
+            if let Some(x) = valeur(m, e, d, cd, &Totaux::new(), 1).and_then(|v| v.nombre()) {
+                *t.entry(groupe_pourcentage(m, e, d, par)).or_default() += x;
+            }
+        }
+        totaux.insert(c.id, t);
+    }
     // valeurs affichées (texte) et brutes de chaque élément
     let cellule = |e: i64, c: &Champ| -> (String, Option<f64>) {
         match c.genre {
             GenreChamp::Nombre => ("1".into(), Some(1.0)),
+            GenreChamp::Formule | GenreChamp::Pourcentage => match valeur(m, e, d, c, &totaux, 0) {
+                Some(v) => (texte_formule(m, c, &v), v.nombre().filter(|_| !c.spec.contains("spec.bool"))),
+                None => (String::new(), None),
+            },
             _ => match brut(m, e, c) {
                 Some((b, st)) => (texte(m, c, &b, st), nombre(&b).filter(|_| st == Stockage::Reel || st == Stockage::Entier)),
                 None => (String::new(), None),
@@ -362,6 +464,9 @@ pub fn calculer(m: &Maquette, d: &Definition) -> Tableau {
                         if c.total && vals.iter().all(|v| v.1.is_some()) {
                             let s: f64 = vals.iter().filter_map(|v| v.1).sum();
                             // somme mise en forme comme les valeurs de la colonne
+                            if matches!(c.genre, GenreChamp::Formule | GenreChamp::Pourcentage) {
+                                return texte_formule(m, c, &Valeur::Nombre(s));
+                            }
                             if let Some(e) = groupe.first() {
                                 if let Some((Brut::Reel(_), st)) = brut(m, *e, c) {
                                     return texte(m, c, &Brut::Reel(s), st);
@@ -391,6 +496,9 @@ pub fn calculer(m: &Maquette, d: &Definition) -> Tableau {
                         let vals: Vec<Option<f64>> = els.iter().map(|&e| cellule(e, c).1).collect();
                         if vals.iter().all(Option::is_some) {
                             let s: f64 = vals.iter().flatten().sum();
+                            if matches!(c.genre, GenreChamp::Formule | GenreChamp::Pourcentage) {
+                                return texte_formule(m, c, &Valeur::Nombre(s));
+                            }
                             if let Some((Brut::Reel(_), st)) = brut(m, els[0], c) {
                                 return texte(m, c, &Brut::Reel(s), st);
                             }

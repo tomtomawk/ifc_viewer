@@ -14,6 +14,7 @@
 
 mod champs;
 pub mod feuilles;
+pub mod formules;
 pub mod geometrie;
 pub mod maquette;
 mod objets;

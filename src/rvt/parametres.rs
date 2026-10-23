@@ -421,6 +421,19 @@ pub struct Format {
     pub sans_zeros: bool,
 }
 
+impl Format {
+    /// Lit un `FormatOptions`.
+    pub fn de(f: &Obj) -> Format {
+        let forge = |k: &str| f.get(k).and_then(Val::obj).and_then(|x| x.get("m_typeId")).and_then(Val::str).map(|s| sans_version(s).to_string()).unwrap_or_default();
+        Format {
+            unite: forge("m_unitTypeId"),
+            precision: f.get("m_accuracy").and_then(Val::real).unwrap_or(0.01),
+            symbole: forge("m_symbolTypeId"),
+            sans_zeros: f.get("m_bSuppressTrailingZeros").and_then(Val::int) == Some(1),
+        }
+    }
+}
+
 /// Unités du projet (`UnitsElem.m_units` : `m_formatOptionsMap` spec → format,
 /// `m_decimalSymbol`). Vide : mise en forme du viewer (mm, m², m³, degrés).
 #[derive(Clone, Debug, Default)]
@@ -436,19 +449,10 @@ impl Unites {
         let mut formats = HashMap::new();
         for p in u.get("m_formatOptionsMap").map(Val::list).unwrap_or_default() {
             let Some(p) = p.obj() else { continue };
-            let forge = |o: Option<&Obj>, k: &str| o.and_then(|o| o.get(k)).and_then(Val::obj).and_then(|x| x.get("m_typeId")).and_then(Val::str).map(|s| sans_version(s).to_string()).unwrap_or_default();
             let spec = p.get("first").and_then(Val::obj).and_then(|x| x.get("m_typeId")).and_then(Val::str).map(|s| sans_version(s).to_string()).unwrap_or_default();
             let f = p.get("second").and_then(|v| r.deref(v).map(|b| &b.obj).or(v.obj()));
             let Some(f) = f else { continue };
-            formats.insert(
-                spec,
-                Format {
-                    unite: forge(Some(f), "m_unitTypeId"),
-                    precision: f.get("m_accuracy").and_then(Val::real).unwrap_or(0.01),
-                    symbole: forge(Some(f), "m_symbolTypeId"),
-                    sans_zeros: f.get("m_bSuppressTrailingZeros").and_then(Val::int) == Some(1),
-                },
-            );
+            formats.insert(spec, Format::de(f));
         }
         Some(Unites { formats, virgule: u.get("m_decimalSymbol").and_then(Val::int) == Some(1) })
     }
@@ -482,7 +486,9 @@ pub fn formater(v: f64, f: &Format, virgule: bool) -> Option<String> {
         "cubicFeet" => v,
         "degrees" | "slopeDegrees" => v.to_degrees(),
         "radians" => v,
-        "general" | "fixed" | "currency" | "percentage" => v,
+        "general" | "fixed" | "currency" => v,
+        // valeur interne : fraction (2 sur 105 → 2 %)
+        "percentage" => v * 100.0,
         _ => return None,
     };
     let p = if f.precision > 0.0 { f.precision } else { 1.0 };
@@ -492,7 +498,8 @@ pub fn formater(v: f64, f: &Format, virgule: bool) -> Option<String> {
     if t == "-0" || t.starts_with("-0.") && t.trim_start_matches(['-', '0', '.']).is_empty() {
         t = t.trim_start_matches('-').to_string();
     }
-    if f.sans_zeros && t.contains('.') {
+    // format général : sans zéros inutiles
+    if (f.sans_zeros || u == "general") && t.contains('.') {
         t = t.trim_end_matches('0').trim_end_matches('.').to_string();
     }
     if virgule {

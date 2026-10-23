@@ -236,7 +236,9 @@ fn rvt_nomenclatures(path: &std::path::Path) -> i32 {
         let liste = |l: &[String]| format!("[{}]", l.iter().map(|x| j(x)).collect::<Vec<_>>().join(","));
         let lignes = t.lignes.iter().map(|l| liste(l)).collect::<Vec<_>>().join(",");
         let nc = t.non_calculees.iter().map(usize::to_string).collect::<Vec<_>>().join(",");
-        println!("{{\"id\":{},\"nom\":{},\"titres\":{},\"lignes\":[{lignes}],\"non_calculees\":[{nc}]}}", v.id, j(&v.nom), liste(&t.titres));
+        // colonnes visibles calculées par une formule
+        let formules = d.champs.iter().filter(|c| !c.masque).enumerate().filter(|(_, c)| c.genre == rvt::nomenclatures::GenreChamp::Formule).map(|(k, _)| k.to_string()).collect::<Vec<_>>().join(",");
+        println!("{{\"id\":{},\"nom\":{},\"titres\":{},\"lignes\":[{lignes}],\"non_calculees\":[{nc}],\"formules\":[{formules}]}}", v.id, j(&v.nom), liste(&t.titres));
     }
     0
 }
@@ -312,6 +314,9 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
         m.parametres.len()
     );
     println!("Identifiants : {} épisodes, {} éléments avec UniqueId", m.episodes.len(), m.episode_de.len());
+    let formules: usize = m.familles.values().map(|f| f.formules.len()).sum();
+    let champs_calcules = m.vues.iter().filter_map(|v| v.nomenclature.as_ref()).flat_map(|d| &d.champs).filter(|c| c.formule.is_some()).count();
+    println!("Formules : {formules} dans les familles, {champs_calcules} champs calculés de nomenclatures");
     let c = &m.coordonnees;
     if let Some(e) = c.actif() {
         let b = c.partage(c.point_base.unwrap_or_default()).unwrap_or_default() / 1000.0;
