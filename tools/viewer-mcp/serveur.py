@@ -26,7 +26,9 @@ COMMANDES = """Commandes du viewer (outil viewer_commande) :
 etat ; ouvrir <chemin> ; capture vue|fenetre [LxH] <chemin.png> ; taille <largeur> <hauteur> ;
 reduire ; restaurer ; quitter ;
 vues ; vue <indice|nom> ; camera dessus|face|iso|cadrer|ortho|perspective ;
-camera <lacet°> <tangage°> [distance] ; zoom <facteur> ; afficher <CLASSES> ;
+camera <lacet°> <tangage°> [distance] (vue 3D seulement) ; zoom <facteur> ;
+glisser <dx> <dy> [gauche|droit|milieu] [maj] (comme à la souris : orbite au bouton
+gauche en vue 3D, panoramique sinon) ; afficher <CLASSES> ;
 masquer <CLASSES> ; tout_afficher ; classes ; elements [CLASSE|*] [texte] ;
 selectionner <id> ; isoler <id> ; cadrer <id> ; proprietes [id] ; objet <x> <y>
 (0..1 depuis le coin haut gauche de la vue) ; fiche oui|non (fiche Revit) ;

@@ -739,6 +739,17 @@ impl ViewerApp {
         }
     }
 
+    /// Glisser dans la vue : orbite au bouton gauche en vue 3D ; panoramique au bouton
+    /// droit ou du milieu, à Maj + gauche, et au bouton gauche dans une vue 2D (plan,
+    /// coupe, élévation, feuille), dont l'orientation est celle de la vue Revit.
+    fn glisser(&mut self, bouton: PointerButton, d: egui::Vec2, shift: bool, hauteur: f32) {
+        if bouton == PointerButton::Primary && !shift && self.vue_3d() {
+            self.camera.orbit(d.x, d.y);
+        } else {
+            self.camera.pan(d.x, d.y, hauteur);
+        }
+    }
+
     /// Barre de la vue, sous la vue comme celle de Revit : échelle (celle de la vue
     /// ouverte, qui règle aussi le dessin 2D), cadrage, projection en vue 3D.
     fn barre_vue(&mut self, ui: &mut egui::Ui) {
@@ -863,7 +874,8 @@ impl ViewerApp {
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                ui.label(RichText::new("Gauche : orbite · Droit/milieu : pan · Molette : zoom · Double-clic : cadrer").weak());
+                let aide = if self.vue_3d() { "Gauche : orbite · Droit/milieu : pan" } else { "Gauche/droit/milieu : pan" };
+                ui.label(RichText::new(format!("{aide} · Molette : zoom · Double-clic : cadrer")).weak());
             });
         });
     }
@@ -1763,21 +1775,17 @@ impl ViewerApp {
                 s.pick(o, d, &app.visible, app.plan_coupe()).map(|(obj, t)| (obj, o + d * t))
             };
 
-            // Orbite autour du point visé.
-            if resp.drag_started_by(PointerButton::Primary) && !ui.input(|i| i.modifiers.shift) {
+            // Orbite autour du point visé (vue 3D seulement).
+            if resp.drag_started_by(PointerButton::Primary) && !ui.input(|i| i.modifiers.shift) && self.vue_3d() {
                 if let Some((_, p)) = resp.interact_pointer_pos().and_then(|pp| pick(self, pp)) {
                     self.camera.set_pivot(p);
                 }
             }
-            let d = resp.drag_delta();
             let shift = ui.input(|i| i.modifiers.shift);
-            if resp.dragged_by(PointerButton::Primary) && !shift {
-                self.camera.orbit(d.x, d.y);
-            } else if resp.dragged_by(PointerButton::Secondary)
-                || resp.dragged_by(PointerButton::Middle)
-                || (resp.dragged_by(PointerButton::Primary) && shift)
-            {
-                self.camera.pan(d.x, d.y, rect.height());
+            for b in [PointerButton::Primary, PointerButton::Secondary, PointerButton::Middle] {
+                if resp.dragged_by(b) {
+                    self.glisser(b, resp.drag_delta(), shift, rect.height());
+                }
             }
 
             if let Some(hp) = resp.hover_pos() {
@@ -2126,6 +2134,10 @@ impl ViewerApp {
                 self.etat()
             }
             "camera" => {
+                // vue 2D : orientation et projection fixées par la vue Revit
+                if !self.vue_3d() && !matches!(argument, "cadrer" | "ortho") {
+                    return erreur("vue 2D : orientation fixe (cadrer seulement ; tout_afficher revient au modèle 3D)");
+                }
                 let c = &mut self.camera;
                 match argument {
                     "dessus" => {
@@ -2209,6 +2221,20 @@ impl ViewerApp {
                 let Some(e) = argument.trim_start_matches("1:").parse::<f64>().ok().filter(|e| *e > 0.0) else { return erreur("usage : echelle <dénominateur> (100 pour 1:100)") };
                 self.echelle = e;
                 self.visibility_dirty = true;
+                self.etat()
+            }
+            "glisser" => {
+                // glisser <dx> <dy> [gauche|droit|milieu] [maj] : comme à la souris (pixels)
+                let mots: Vec<&str> = argument.split_whitespace().collect();
+                let (Some(Ok(dx)), Some(Ok(dy))) = (mots.first().map(|x| x.parse::<f32>()), mots.get(1).map(|x| x.parse::<f32>())) else {
+                    return erreur("usage : glisser <dx> <dy> [gauche|droit|milieu] [maj]");
+                };
+                let bouton = match mots.get(2).copied() {
+                    Some("droit") => PointerButton::Secondary,
+                    Some("milieu") => PointerButton::Middle,
+                    _ => PointerButton::Primary,
+                };
+                self.glisser(bouton, egui::vec2(dx, dy), mots.contains(&"maj"), self.rect_vue.height());
                 self.etat()
             }
             "zoom" => {
