@@ -6,6 +6,7 @@ mod csg;
 mod dessin;
 mod geom;
 mod model;
+mod modele;
 mod pilote;
 mod render;
 mod rvt;
@@ -26,6 +27,16 @@ fn main() {
             std::process::exit(2);
         };
         std::process::exit(rvt_parametres(&PathBuf::from(path)));
+    }
+    // Mode console : ifc_viewer --modele fichier.rvt|.ifc [sortie.json]
+    if args.first().map(|s| s.as_str()) == Some("--modele") {
+        let Some(path) = args.get(1) else {
+            eprintln!("Usage : ifc_viewer --modele <fichier.rvt|.rfa|.ifc> [sortie.json]");
+            std::process::exit(2);
+        };
+        let entree = PathBuf::from(path);
+        let sortie = args.get(2).map(PathBuf::from).unwrap_or_else(|| PathBuf::from(format!("{path}.modele.json")));
+        std::process::exit(modele(entree, sortie));
     }
     // Mode console : ifc_viewer --stats fichier.ifc
     if args.first().map(|s| s.as_str()) == Some("--stats") {
@@ -58,6 +69,53 @@ fn main() {
             Err(e) => eprintln!("Erreur (anticrénelage {multisampling}×) : {e}"),
         }
     }
+}
+
+/// Conversion vers le modèle v0 : projet JSON, et rapport (Markdown) à côté et sur la
+/// sortie standard.
+fn modele(entree: PathBuf, sortie: PathBuf) -> i32 {
+    let t0 = std::time::Instant::now();
+    let e = entree.clone();
+    let handle = std::thread::Builder::new()
+        .stack_size(64 << 20)
+        .spawn(move || {
+            let progress = |s: String| eprintln!("{s}");
+            if rvt::is_revit_path(&e) { modele::depuis_rvt::convertir(&e, &progress) } else { modele::depuis_ifc::convertir(&e, &progress) }
+        })
+        .unwrap();
+    let (projet, mesures) = match handle.join() {
+        Ok(Ok(x)) => x,
+        Ok(Err(e)) => {
+            eprintln!("Erreur : {e}");
+            return 1;
+        }
+        Err(_) => {
+            eprintln!("Erreur : la conversion a échoué (panique)");
+            return 1;
+        }
+    };
+    let rapport = modele::rapport::markdown(&projet, &mesures, t0.elapsed().as_secs_f64());
+    let json = match projet.json() {
+        Ok(j) => j,
+        Err(e) => {
+            eprintln!("Erreur : {e}");
+            return 1;
+        }
+    };
+    // aller-retour : le fichier écrit se relit à l'identique
+    match modele::Projet::lire_json(&json) {
+        Ok(p) if p.murs.len() == projet.murs.len() && p.importes.len() == projet.importes.len() => {}
+        Ok(_) => eprintln!("Attention : le projet relu diffère du projet écrit"),
+        Err(e) => eprintln!("Attention : projet écrit illisible ({e})"),
+    }
+    let chemin_rapport = sortie.with_extension("rapport.md");
+    if let Err(e) = std::fs::write(&sortie, json).and_then(|_| std::fs::write(&chemin_rapport, &rapport)) {
+        eprintln!("Écriture impossible : {e}");
+        return 1;
+    }
+    println!("{rapport}");
+    eprintln!("Projet : {}\nRapport : {}", sortie.display(), chemin_rapport.display());
+    0
 }
 
 fn stats(path: PathBuf) -> i32 {

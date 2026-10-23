@@ -460,7 +460,7 @@ fn section(p: [DVec3; 3], n: DVec3, d: f64) -> Option<[DVec3; 2]> {
 type Polyligne = Vec<[f64; 2]>;
 
 /// Segments (coordonnées du plan) chaînés en boucles fermées et en lignes ouvertes.
-fn chainer(segs: &[[[f64; 2]; 2]]) -> (Vec<Polyligne>, Vec<Polyligne>) {
+pub(crate) fn chainer(segs: &[[[f64; 2]; 2]]) -> (Vec<Polyligne>, Vec<Polyligne>) {
     let cle = |p: [f64; 2]| ((p[0] / PAS).round() as i64, (p[1] / PAS).round() as i64);
     let mut voisins: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
     for (i, s) in segs.iter().enumerate() {

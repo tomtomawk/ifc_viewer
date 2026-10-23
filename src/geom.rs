@@ -121,6 +121,22 @@ pub fn product_geometry(m: &IfcModel, stats: &GeomStats, id: Id) -> Option<Produ
     Some(ProductGeom { id, parts, lignes: Vec::new() })
 }
 
+/// Points (m, repère du projet) de la représentation « Axis » d'un produit : l'axe d'un
+/// mur (arcs facettés).
+pub fn axe(m: &IfcModel, id: Id) -> Option<Vec<DVec3>> {
+    let stats = GeomStats::default();
+    let g = Geom { m, stats: &stats, eps: 1e-6 / m.length_scale };
+    let e = m.get(id)?;
+    let pds = g.get(e.arg(6).as_ref()?)?;
+    let rep = pds.arg(2).refs().filter_map(|r| g.get(r)).find(|r| r.arg(1).as_str() == Some("Axis"))?;
+    let pts = g.curve(rep.arg(3).refs().next()?, 0);
+    if pts.len() < 2 {
+        return None;
+    }
+    let monde = DMat4::from_scale(DVec3::splat(m.length_scale)) * g.placement(e.arg(5).as_ref(), 0);
+    Some(pts.into_iter().map(|p| monde.transform_point3(p)).collect())
+}
+
 fn bbox(tris: &[Tri]) -> (DVec3, DVec3) {
     let mut mn = DVec3::splat(f64::MAX);
     let mut mx = DVec3::splat(f64::MIN);

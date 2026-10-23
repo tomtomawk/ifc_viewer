@@ -11,6 +11,7 @@ cargo run --release -- --stats chemin\vers\fichier.ifc   # mode console : compta
 cargo run --release -- chemin\vers\projet.rvt
 cargo run --release -- --stats chemin\vers\projet.rvt    # métadonnées, niveaux, éléments par catégorie, volumes, causes d'échec
 cargo run --release -- --parametres chemin\vers\projet.rvt   # valeurs de paramètres décodées (élément, paramètre, stockage, valeur brute)
+cargo run --release -- --modele chemin\vers\projet.rvt     # conversion vers le modèle natif v0 (JSON) et rapport de conversion
 ```
 
 Ouverture aussi possible par Ctrl+O ou par glisser-déposer.
@@ -64,6 +65,7 @@ Exécutable Windows prêt à l'emploi : `dist/ifc_viewer.exe` (compilé en relea
 | `src/rvt/vues.rs` | Revit : vues, éléments 2D, hachures et motifs de surface |
 | `src/rvt/parametres.rs` | Revit : définitions et valeurs des paramètres, mise en forme, UniqueId et IfcGUID ; tables relevées dans Revit dans `src/rvt/donnees/` |
 | `src/rvt/maquette.rs` | Revit : niveaux, types, familles, matériaux et éléments, traduits en modèle IFC synthétique pour l'affichage |
+| `src/modele/` | Modèle natif v0 (format d'édition) et conversions depuis Revit et IFC, rapport de conversion : [docs/MODELE.md](docs/MODELE.md) |
 | `tools/viewer-mcp/serveur.py` | Serveur MCP (stdio) qui pilote le viewer : ouverture, vues, caméra, propriétés, captures |
 
 ## Pilotage par MCP
@@ -91,6 +93,8 @@ aucun viewer n'écoute, le serveur lance `target/release/ifc_viewer.exe` (ou
 cargo test
 cargo run --release -- --stats samples/test_ifc4.ifc
 ```
+
+`samples/test_ifc4_murs.ifc` couvre la conversion vers le modèle natif : mur à axe et jeu de couches avec une porte, mur courbe, dalle à couches (volumes attendus en commentaire).
 
 `samples/test_ifc4.ifc` couvre mur percé, dalle à profil avec arc indexé, item mappé coloré, faces triangulées et découpe par demi-espace ; les volumes attendus sont en commentaire dans le fichier.
 
