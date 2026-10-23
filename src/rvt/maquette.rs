@@ -2102,28 +2102,17 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    /// Fichier d'essai hors dépôt (docs/PROTOCOLE-RVT.md) ; dossier remplaçable par la
-    /// variable d'environnement RVT_ESSAIS. Absent : le test est sauté.
+    /// Fichier d'essai hors dépôt, dans le dossier du décodage (`essais\` : essais créés
+    /// par les campagnes ; `fichiers\` : projets et familles de référence ; voir son
+    /// SOURCES.md) ; dossier remplaçable par la variable d'environnement RVT_ESSAIS.
+    /// Absent : le test est sauté.
     fn essai(dossier: &str, nom: &str) -> Option<PathBuf> {
-        let base = std::env::var("RVT_ESSAIS").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from(r"C:\Users\theba\Desktop\Revit"));
+        let base = std::env::var("RVT_ESSAIS").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from(r"C:\Users\theba\Projets code\Decodage RVT"));
         let p = base.join(dossier).join(nom);
         if p.exists() {
             Some(p)
         } else {
             eprintln!("fichier d'essai absent, test sauté : {}", p.display());
-            None
-        }
-    }
-
-    /// Projet du corpus de l'agence (hors dépôt) ; dossier remplaçable par la variable
-    /// d'environnement RVT_CORPUS. Absent : le test est sauté.
-    fn corpus(chemin: &str) -> Option<PathBuf> {
-        let base = std::env::var("RVT_CORPUS").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from(r"C:\Users\theba\Documents\Thomas\ARCHI PERSO"));
-        let p = base.join(chemin);
-        if p.exists() {
-            Some(p)
-        } else {
-            eprintln!("fichier du corpus absent, test sauté : {}", p.display());
             None
         }
     }
@@ -2135,7 +2124,7 @@ mod tests {
     /// Essai E04 : mur de 12 345,6 × 200 × 2 718,2 mm, valeurs validées contre Revit 2026.
     #[test]
     fn e04_volume_et_boite() {
-        let Some(p) = essai(r"Essais-format\2026", "E04_mur.rvt") else { return };
+        let Some(p) = essai(r"essais\2026", "E04_mur.rvt") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         assert_eq!(m.murs.len(), 1);
         let mur = &m.murs[0];
@@ -2160,7 +2149,7 @@ mod tests {
     /// Revit 2026 (script RiveTT rvt-reference-elements, 21/10/2026).
     #[test]
     fn projet1() {
-        let Some(p) = essai("Archives", "Projet1.rvt") else { return };
+        let Some(p) = essai("fichiers", "Projet1.rvt") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         assert_eq!(m.murs.len(), 59);
         assert_eq!(m.niveaux.len(), 3);
@@ -2247,7 +2236,7 @@ mod tests {
     /// comparés à l'API de Revit 2026 (fichier mis à niveau à l'ouverture).
     #[test]
     fn kerreut_2025_toits() {
-        let Some(p) = corpus(r"PERROS-GUIREC - rue de Kerreut\01-TRAVAIL\Kerreut 2025.rvt") else { return };
+        let Some(p) = essai("fichiers", "Kerreut 2025.rvt") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         let att = [
             (9793689, 512913, 0.0, 7.483604),
@@ -2294,7 +2283,7 @@ mod tests {
     /// arc de rayon 4 000 mm).
     #[test]
     fn e12_grilles() {
-        let Some(p) = essai(r"Essais-format\2026", "E12_grilles.rvt") else { return };
+        let Some(p) = essai(r"essais\2026", "E12_grilles.rvt") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         assert_eq!(m.grilles.len(), 3);
         let g = |nom: &str| m.grilles.iter().find(|g| g.nom == nom).unwrap();
@@ -2314,7 +2303,7 @@ mod tests {
     /// `get_Geometry` relevés par le script RiveTT `rvt-reference-formes-famille`.
     #[test]
     fn fenetre_rfa_formes() {
-        let Some(p) = essai("", "FEN_2PF.rfa") else { return };
+        let Some(p) = essai("fichiers", "FEN_2PF.rfa") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         let ids: BTreeSet<i64> = m.formes.iter().map(|f| f.id).collect();
         let attendus = [9900043, 9900072, 9900099, 9900103, 9900142, 9900181, 9900224, 9900236, 9900237, 9900258, 9900428, 9900429, 9900436];
@@ -2338,7 +2327,7 @@ mod tests {
     /// `rvt-essai-e13-vues2d`), valeurs relevées par `rvt-reference-vues-2d`.
     #[test]
     fn e13_vues_2d() {
-        let Some(p) = essai(r"Essais-format\2026\C14", "E13_vues2d.rvt") else { return };
+        let Some(p) = essai(r"essais\2026\C14", "E13_vues2d.rvt") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         assert_eq!(m.vues.len(), 19);
         let vue = |id: i64| m.vues.iter().find(|v| v.id == id).unwrap();
@@ -2398,7 +2387,7 @@ mod tests {
     /// Revit (ceux des familles imbriquées écartés), textes lus dans leur RTF.
     #[test]
     fn fenetre_rfa_vues() {
-        let Some(p) = essai("", "FEN_2PF.rfa") else { return };
+        let Some(p) = essai("fichiers", "FEN_2PF.rfa") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         assert_eq!(m.vues.len(), 8);
         let cotes: HashMap<i64, Vec<f64>> = m
@@ -2423,7 +2412,7 @@ mod tests {
     /// (`rvt-reference-motifs-materiaux`).
     #[test]
     fn kerreut_hachures() {
-        let Some(p) = corpus(r"PERROS-GUIREC - rue de Kerreut\01-TRAVAIL\Kerreut 2025.rvt") else { return };
+        let Some(p) = essai("fichiers", "Kerreut 2025.rvt") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         assert_eq!(m.motifs.len(), 219);
         let (mut unies, mut hachurees, mut sans_type, mut traits) = (0, 0, 0, 0);
@@ -2460,7 +2449,7 @@ mod tests {
     /// la grille à 0° sont horizontaux et espacés de 200 mm.
     #[test]
     fn kerreut_motifs_surface() {
-        let Some(p) = corpus(r"PERROS-GUIREC - rue de Kerreut\01-TRAVAIL\Kerreut 2025.rvt") else { return };
+        let Some(p) = essai("fichiers", "Kerreut 2025.rvt") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         let blocs = &m.motifs[&819];
         assert!(blocs.modele && blocs.grilles.len() == 2);
@@ -2499,7 +2488,7 @@ mod tests {
     /// leurs vues placées, nomenclatures).
     #[test]
     fn navigateur_projet() {
-        if let Some(p) = essai("", "FEN_2PF.rfa") {
+        if let Some(p) = essai("fichiers", "FEN_2PF.rfa") {
             let m = lire(&p, &|_| {}).unwrap();
             let nav = scene(&m, "FEN_2PF", "FEN_2PF.rfa".into(), "2026").navigateur.unwrap();
             let mut vues: Vec<(String, String, String)> = nav.vues.iter().map(|v| (v.genre.clone(), v.type_vue.clone(), v.nom.clone())).collect();
@@ -2517,7 +2506,7 @@ mod tests {
             assert!(nav.vues.iter().all(|v| v.entite.is_some()));
             assert!(nav.familles.iter().any(|f| f.categorie == "Murs" && f.nom == "Mur de base"));
         }
-        let Some(p) = essai("Archives", "Projet1.rvt") else { return };
+        let Some(p) = essai("fichiers", "Projet1.rvt") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         let nav = scene(&m, "Projet1", "Projet1.rvt".into(), "2026").navigateur.unwrap();
         let f = nav.vues.iter().find(|v| v.numero == "A101").unwrap();
@@ -2534,7 +2523,7 @@ mod tests {
     /// mur ; volume de chaque instance 0,110441 m³ dans Revit (coffre : −0,35 %).
     #[test]
     fn c14_fenetres_placees() {
-        let Some(p) = essai(r"Essais-format\2026\C14", "F04_deux.rvt") else { return };
+        let Some(p) = essai(r"essais\2026\C14", "F04_deux.rvt") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         assert!(m.formes.is_empty(), "les formes des familles chargées ne sont pas des éléments du projet");
         assert_eq!(m.instances.len(), 2);
@@ -2552,7 +2541,7 @@ mod tests {
     /// `get_Geometry` relevés par le script RiveTT `rvt-reference-toposolides`.
     #[test]
     fn saint_malo_toposolides() {
-        let Some(p) = essai("", "Saint-Malo_avenue aristide briand_46.rvt") else { return };
+        let Some(p) = essai("fichiers", "Saint-Malo_avenue aristide briand_46.rvt") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         assert_eq!(m.toposolides.len(), 40);
         assert!(m.toposolides.iter().all(|t| t.geometrie.is_ok()));
@@ -2576,7 +2565,7 @@ mod tests {
     /// `rvt-reference-toposurfaces`.
     #[test]
     fn e15_surface_topo() {
-        let Some(p) = essai(r"Essais-format\2026", "E15_surface_topo.rvt") else { return };
+        let Some(p) = essai(r"essais\2026", "E15_surface_topo.rvt") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         assert_eq!(m.surfaces_topo.len(), 2);
         for (id, hote, points, sommets, triangles, aire, min, max) in [
@@ -2601,7 +2590,7 @@ mod tests {
     /// `GetBoxCenter`, `GetBoxOutline`, `GetTransform` des cartouches.
     #[test]
     fn kerreut_feuilles() {
-        let Some(p) = corpus(r"PERROS-GUIREC - rue de Kerreut\01-TRAVAIL\Kerreut 2025.rvt") else { return };
+        let Some(p) = essai("fichiers", "Kerreut 2025.rvt") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         let vue = |id: i64| m.vues.iter().find(|v| v.id == id).unwrap();
         let fen = |id: i64| match &m.elements_2d.iter().find(|e| e.id == id).unwrap().contenu {
@@ -2660,7 +2649,7 @@ mod tests {
     #[test]
     fn projet1_e13_feuilles() {
         let marge = 0.01 * FT;
-        if let Some(p) = essai("Archives", "Projet1.rvt") {
+        if let Some(p) = essai("fichiers", "Projet1.rvt") {
             let m = lire(&p, &|_| {}).unwrap();
             // plans cadrés : boîte exacte ; élévation : centre exact, boîte de Revit élargie
             // de 25,598 mm à gauche et à droite par les niveaux qui sortent du cadrage
@@ -2674,7 +2663,7 @@ mod tests {
                 }
             }
         }
-        let Some(p) = essai(r"Essais-format\2026\C14", "E13_vues2d.rvt") else { return };
+        let Some(p) = essai(r"essais\2026\C14", "E13_vues2d.rvt") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         let e = m.elements_2d.iter().find(|e| e.id == 258496).unwrap();
         let Contenu::FenetreDeVue { vue, decalage, echelle, titre, longueur_titre, type_id } = &e.contenu else { panic!() };
@@ -2701,7 +2690,7 @@ mod tests {
     /// comme dans l'export de la feuille par Revit.
     #[test]
     fn kerreut_titres_de_vue() {
-        let Some(p) = corpus(r"PERROS-GUIREC - rue de Kerreut\01-TRAVAIL\Kerreut 2025.rvt") else { return };
+        let Some(p) = essai("fichiers", "Kerreut 2025.rvt") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         let e = m.elements_2d.iter().find(|e| e.id == 9985364).unwrap();
         let v = m.vues.iter().find(|v| v.id == 9985266).unwrap();
@@ -2726,7 +2715,7 @@ mod tests {
     /// `rvt-categories-masquees`), valeurs au format du type (centimètres) ou remplacées.
     #[test]
     fn kerreut_cotes() {
-        let Some(p) = corpus(r"PERROS-GUIREC - rue de Kerreut\01-TRAVAIL\Kerreut 2025.rvt") else { return };
+        let Some(p) = essai("fichiers", "Kerreut 2025.rvt") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         let boites = feuilles::boites(&m);
         let vue = |id: i64| m.vues.iter().find(|v| v.id == id).unwrap();
@@ -2773,7 +2762,7 @@ mod tests {
     /// `rvt-reference-parametres-famille`).
     #[test]
     fn fenetre_rfa_parametres() {
-        let Some(p) = essai("", "FEN_2PF.rfa") else { return };
+        let Some(p) = essai("fichiers", "FEN_2PF.rfa") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         assert_eq!(m.famille_document, Some(9_899_388));
         let aff = m.parametres_affiches(9_899_388);
@@ -2797,7 +2786,7 @@ mod tests {
     /// paramètre partagé.
     #[test]
     fn kerreut_parametres() {
-        let Some(p) = corpus(r"PERROS-GUIREC - rue de Kerreut\01-TRAVAIL\Kerreut 2025.rvt") else { return };
+        let Some(p) = essai("fichiers", "Kerreut 2025.rvt") else { return };
         let m = lire(&p, &|_| {}).unwrap();
         let val = |id: i64, nom: &str| m.parametres_affiches(id).into_iter().find(|a| a.nom == nom).map(|a| a.valeur);
         assert_eq!(val(9_911_752, "Largeur").as_deref(), Some("1300 mm"));

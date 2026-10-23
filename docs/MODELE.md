@@ -84,8 +84,8 @@ reconnus, l'écart de volume entre paramètres et géométrie lue (répartition 
 éléments non convertis.
 
 Tests sur des fichiers hors dépôt (sautés s'ils sont absents) : `cargo test --release
-depuis_rvt -- --nocapture` convertit `Projet1.rvt` (`RVT_ESSAIS`) et `Kerreut 2025.rvt`
-(`RVT_CORPUS`), écrit leurs rapports dans `exports/` ; `RVT_FAMILLES=<dossier>` convertit
+depuis_rvt -- --nocapture` convertit `Projet1.rvt` et `Kerreut 2025.rvt` (copies dans
+`fichiers` du dossier `RVT_ESSAIS`, par défaut `C:\Users\theba\Projets code\Decodage RVT`), écrit leurs rapports dans `exports/` ; `RVT_FAMILLES=<dossier>` convertit
 chaque `.rfa` du dossier.
 
 ## Hors v0 (prochaines itérations)

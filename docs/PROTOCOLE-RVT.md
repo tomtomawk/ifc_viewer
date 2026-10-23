@@ -8,7 +8,8 @@ comparer les octets. Revit est piloté par RiveTT ; la comparaison se fait avec
 ## 0. Avancement (20 octobre 2026, soir)
 
 Session unique dans Revit 2026.5 (build 20260731), pilotée par RiveTT sans
-intervention : fichiers dans `C:\Users\theba\Desktop\Revit\Essais-format\2026\`.
+intervention : fichiers dans `C:\Users\theba\Desktop\Revit\Essais-format\2026\`
+(déplacés le 23/10/2026 dans `C:\Users\theba\Projets code\Decodage RVT\essais\2026\`).
 
 | Campagne | État | Résultat principal |
 |---|---|---|
@@ -58,7 +59,8 @@ Faits sur des fichiers déjà présents sur le poste. Ils orientent le protocole
    ou modifiés, le nombre d'éléments, la version et le build. C'est la vérité
    terrain pour `ElemTable` et les partitions.
 5. **Copies uniquement.** Aucun fichier de projet réel n'est modifié. Dossier de
-   travail : `C:\Users\theba\Desktop\Revit\Essais-format\<campagne>\`.
+   travail : `C:\Users\theba\Projets code\Decodage RVT\essais\<campagne>\` (avant le 23/10/2026 :
+   `C:\Users\theba\Desktop\Revit\Essais-format\`).
 6. **Fiche par essai** (une ligne dans `journal.csv` de la campagne) : id, version et
    build Revit, opération, script RiveTT, ElementId, fichier, taille, SHA-256,
    nombre de membres OK/KO, flux modifiés, sentinelles trouvées (flux, membre, offset,
@@ -274,7 +276,7 @@ murs contraints, groupes non placés, pièces non placées et surfaces portées 
 ### C14 — Familles, vues et 2D, écriture (faite le 21/10, soir)
 
 Session Revit 2026 ouverte par l'utilisateur sur `FEN_2PF.rfa`, écriture autorisée ;
-fichiers dans `Essais-format\2026\C14\`.
+fichiers dans `essais\2026\C14\`.
 
 1. **Famille seule** : inventaire de `FEN_2PF.rfa` (19 extrusions, 7 combinaisons,
    un mur hôte) ; référence Revit `rvt-reference-formes-famille` (forme par forme :

@@ -40,6 +40,14 @@ remplacements graphiques. Les 64 octets qui suivent chaque document d'une partit
 
 ## Fichiers étudiés
 
+Les essais et les copies des fichiers lus par les tests sont rangés dans le dossier du
+décodage `C:\Users\theba\Projets code\Decodage RVT` (`essais/` : essais créés par les campagnes,
+déplacés du Bureau le 23/10/2026 ; `fichiers/` : copies des projets et familles de
+référence ; `references/` : sorties de l'API de Revit ; `scripts-rivett/` : scripts
+RiveTT ; `brouillons/` : dossiers de travail des sessions). Son `SOURCES.md` donne la
+provenance de chaque fichier ; les autres fichiers ci-dessous sont restés à leur place
+(Bureau `Revit/`, corpus `Documents\Thomas\ARCHI PERSO`).
+
 Tous ouvrent normalement dans Revit (vérifié pour `Essai projet 2027 astra.rvt`,
 ouvert dans Revit 2027 via RiveTT).
 
@@ -57,9 +65,9 @@ ouvert dans Revit 2027 via RiveTT).
 | `Kerreut 2025.rvt`, `Langan.rvt`, `BIBLIO.rvt`, `Guidel.rvt` | projets d'agence (`Documents\Thomas\ARCHI PERSO`) | 2025 | — |
 | `Kerreutv9.rvt`, `Colombes.rvt` | projets d'agence | 2022 | 138,2 Mo (Kerreutv9) |
 | `Phase2_Lecture.rvt` | projet de Saint-Malo enregistré en 2027 (`Recettes\`) | 2027 | — |
-| `Essais-format/2026/*.rvt` | essais produits par RiveTT (protocole), dont E12 (grilles), E15 (surface topographique) | 2026 | 0,5 à 1,6 Mo |
+| `essais/2026/*.rvt` | essais produits par RiveTT (protocole), dont E12 (grilles), E15 (surface topographique) | 2026 | 0,5 à 1,6 Mo |
 | `FEN_2PF.rfa`, `Projet vide.rvt` | famille de fenêtre de l'agence (6 types) et projet issu du gabarit, fournis le 21/10 | 2026 | 0,7 et 1,6 Mo |
-| `Essais-format/2026/C14/*` | campagne C14 : F00 à F04 (projet vide, famille chargée, mur, fenêtre placée une puis deux fois), E13 (vues et 2D), W0 à W6 (écriture) | 2026 | 0,7 à 2,1 Mo |
+| `essais/2026/C14/*` | campagne C14 : F00 à F04 (projet vide, famille chargée, mur, fenêtre placée une puis deux fois), E13 (vues et 2D), W0 à W6 (écriture) | 2026 | 0,7 à 2,1 Mo |
 | `Saint-cast-Le-Guildo.rvt` (`ARCHI PERSO\SAINT-CAST-LE-GUILDO - Rue des roseraies`) | projet d'agence, 15 fenêtres de vue, 67 instances de vue (campagne C17) | 2025 | 52,0 Mo |
 
 ## 1. Conteneur OLE
@@ -1090,7 +1098,7 @@ rencontrées. Facettes triangulaires (`m_facetsArr`, 3 indices) ; une surface et
 sous-région ne se recouvrent pas : le maillage de la surface est évidé au contour de
 la sous-région.
 
-Validation sur l'essai **E15** (`Essais-format/2026/E15_surface_topo.rvt`, créé depuis
+Validation sur l'essai **E15** (`essais/2026/E15_surface_topo.rvt`, créé depuis
 V0 par le script RiveTT `rvt-essai-e15-surface-topo` : surface de 42 points en
 relief, matériau 90, sous-région rectangulaire de 12 × 10 m), comparé au script
 `rvt-reference-toposurfaces` (`GetPoints`, maillage de `get_Geometry`, boîte,
@@ -1373,8 +1381,8 @@ textes), C14 F04 (fenêtres placées), E13 (vues et 2D, objets de la scène), Ke
 hachures sur un carré et texte RTF (sans fichier), sautés si les fichiers sont absents.
 `--stats` donne aussi le bilan de la scène (objets, triangles, traits des motifs).
 Test de l'arborescence du projet : vues de `FEN_2PF.rfa` (genre, type, nom),
-feuilles numérotées de `Projet1.rvt` et leurs vues placées, nomenclatures. Dossiers : `RVT_ESSAIS` (défaut `C:\Users\theba\Desktop\Revit`) et
-`RVT_CORPUS` (défaut `C:\Users\theba\Documents\Thomas\ARCHI PERSO`).
+feuilles numérotées de `Projet1.rvt` et leurs vues placées, nomenclatures. Dossier : `RVT_ESSAIS` (défaut `C:\Users\theba\Projets code\Decodage RVT`, sous-dossiers
+`essais` et `fichiers`).
 
 ## 9. Pistes pour la suite
 

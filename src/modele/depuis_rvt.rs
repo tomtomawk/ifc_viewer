@@ -235,8 +235,9 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    /// Fichier des essais Revit (`RVT_ESSAIS`) ou du corpus (`RVT_CORPUS`), comme les
-    /// tests de `rvt::maquette` ; absent : test sauté.
+    /// Fichier du dossier du décodage (`RVT_ESSAIS`, par défaut
+    /// `C:\Users\theba\Projets code\Decodage RVT`), comme les tests de `rvt::maquette` ;
+    /// absent : test sauté.
     fn fichier(variable: &str, defaut: &str, chemin: &str) -> Option<PathBuf> {
         let p = std::env::var(variable).map(PathBuf::from).unwrap_or_else(|_| PathBuf::from(defaut)).join(chemin);
         if p.exists() {
@@ -264,7 +265,7 @@ mod tests {
     /// Projet1.rvt (59 murs) : la plupart des murs deviennent paramétriques.
     #[test]
     fn projet1() {
-        let Some(p) = fichier("RVT_ESSAIS", r"C:\Users\theba\Desktop\Revit", r"Archives\Projet1.rvt") else { return };
+        let Some(p) = fichier("RVT_ESSAIS", r"C:\Users\theba\Projets code\Decodage RVT", r"fichiers\Projet1.rvt") else { return };
         let projet = convertir_et_rapporter(&p);
         assert!(!projet.niveaux.is_empty());
         assert!(projet.murs.len() * 2 >= 59, "{} murs paramétriques sur 59", projet.murs.len());
@@ -273,7 +274,7 @@ mod tests {
     /// Kerreut 2025.rvt (corpus de l'agence) : rapport seul.
     #[test]
     fn kerreut() {
-        let Some(p) = fichier("RVT_CORPUS", r"C:\Users\theba\Documents\Thomas\ARCHI PERSO", r"PERROS-GUIREC - rue de Kerreut\01-TRAVAIL\Kerreut 2025.rvt") else { return };
+        let Some(p) = fichier("RVT_ESSAIS", r"C:\Users\theba\Projets code\Decodage RVT", r"fichiers\Kerreut 2025.rvt") else { return };
         let projet = convertir_et_rapporter(&p);
         assert!(!projet.murs.is_empty());
     }
