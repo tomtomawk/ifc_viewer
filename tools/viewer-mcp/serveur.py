@@ -2,7 +2,7 @@
 
 Il pilote le viewer par son canal local (127.0.0.1:47811, voir src/pilote.rs) : une
 ligne « commande argument » envoyée, une ligne JSON reçue. Si aucun viewer n'écoute, il
-en lance un (IFC_VIEWER_EXE, sinon target/release puis target/alt/release).
+en lance un (IFC_VIEWER_EXE, sinon le plus récent de target/release et dist).
 
 Outils : ouvrir un fichier, capturer la vue ou la fenêtre (image PNG rendue au client),
 lister et ouvrir les vues Revit, régler la caméra, lire les propriétés, désigner
@@ -29,7 +29,9 @@ vues ; vue <indice|nom> ; camera dessus|face|iso|cadrer|ortho|perspective ;
 camera <lacet°> <tangage°> [distance] (vue 3D seulement) ; zoom <facteur> ;
 glisser <dx> <dy> [gauche|droit|milieu] [maj] (comme à la souris : orbite au bouton
 gauche en vue 3D, panoramique sinon) ; afficher <CLASSES> ;
-masquer <CLASSES> ; tout_afficher ; classes ; elements [CLASSE|*] [texte] ;
+masquer <CLASSES> ; tout_afficher ; classes ; categories (catégories de modèle et
+d'annotation) ; visibilite oui|non (boîte de visibilité) ; visibilite <catégorie> oui|non ;
+panneau proprietes|arborescence gauche|droite|flottant ; elements [CLASSE|*] [texte] ;
 selectionner <id> ; isoler <id> ; cadrer <id> ; proprietes [id] ; objet <x> <y>
 (0..1 depuis le coin haut gauche de la vue) ; fiche oui|non (fiche Revit) ;
 onglet tout|vues|feuilles|nomenclatures|familles|materiaux|groupes|liens|modele|classes ;
@@ -45,7 +47,7 @@ NOM_EXE = "ifc_viewer.exe" if os.name == "nt" else "ifc_viewer"
 
 def executable():
     candidats = [os.environ.get("IFC_VIEWER_EXE", "")] + [
-        os.path.join(RACINE, "target", d, NOM_EXE) for d in ("release", os.path.join("alt", "release"))
+        os.path.join(RACINE, d, NOM_EXE) for d in (os.path.join("target", "release"), "dist")
     ]
     existants = [c for c in candidats if c and os.path.isfile(c)]
     if not existants:

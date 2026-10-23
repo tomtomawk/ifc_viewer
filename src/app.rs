@@ -1,6 +1,8 @@
 //! Interface egui, disposée comme Revit : propriétés à gauche, vue au centre,
 //! arborescence du projet à droite (vues, nomenclatures, feuilles, familles, groupes et
-//! liens d'un fichier Revit ; arborescence spatiale et classes d'un IFC).
+//! liens d'un fichier Revit ; arborescence spatiale et classes d'un IFC). Les deux
+//! panneaux s'ancrent d'un côté ou flottent ; sous la vue, la boîte de visibilité par
+//! catégorie de modèle et d'annotation.
 
 use crate::camera::{Camera, MAX_PITCH};
 use crate::dessin::{self, Poche};
@@ -205,6 +207,65 @@ fn rubrique(genre: &str) -> Option<(u8, &'static str)> {
 /// Genres (`ObjectType`) des éléments 2D découpés au cadrage d'une vue, comme dans Revit.
 const DETAIL: &[&str] = &["Trait", "Région remplie", "Composant de détail"];
 
+/// Panneaux déplaçables, comme les palettes de Revit.
+#[derive(PartialEq, Clone, Copy, Debug)]
+enum Panneau {
+    Proprietes,
+    Arborescence,
+}
+
+impl Panneau {
+    const TOUS: [Panneau; 2] = [Panneau::Proprietes, Panneau::Arborescence];
+
+    /// Nom pour le pilote (commande `panneau`).
+    fn nom(self) -> &'static str {
+        match self {
+            Panneau::Proprietes => "proprietes",
+            Panneau::Arborescence => "arborescence",
+        }
+    }
+}
+
+/// Place d'un panneau : ancré d'un côté de la vue, ou flottant au-dessus.
+#[derive(PartialEq, Clone, Copy, Debug)]
+enum Ancrage {
+    Gauche,
+    Droite,
+    Flottant,
+}
+
+impl Ancrage {
+    const TOUS: [Ancrage; 3] = [Ancrage::Gauche, Ancrage::Droite, Ancrage::Flottant];
+
+    fn libelle(self) -> &'static str {
+        match self {
+            Ancrage::Gauche => "Ancrer à gauche",
+            Ancrage::Droite => "Ancrer à droite",
+            Ancrage::Flottant => "Flottant",
+        }
+    }
+
+    /// Nom pour le pilote (commande `panneau`).
+    fn nom(self) -> &'static str {
+        match self {
+            Ancrage::Gauche => "gauche",
+            Ancrage::Droite => "droite",
+            Ancrage::Flottant => "flottant",
+        }
+    }
+}
+
+/// Catégorie de la boîte de visibilité, comme dans Revit : catégorie de modèle (éléments
+/// à géométrie : murs, fenêtres…) ou d'annotation (éléments 2D : cotes, textes, traits…).
+struct Categorie {
+    annotation: bool,
+    nom: String,
+    /// Clés de masquage de ses objets (dans `hidden_classes`) : leur classe IFC, ou
+    /// « classe:nom » quand la classe regroupe plusieurs catégories (genres des
+    /// annotations, catégories Revit des proxys).
+    cles: Vec<Arc<str>>,
+}
+
 /// Fenêtre de vue de la feuille ouverte, rendue dans sa propre passe (repère de la
 /// scène) : passage du modèle à la feuille, rectangle de découpe sur la feuille (xmin,
 /// ymin, xmax, ymax, à la cote z), plans de découpe, direction de la vue.
@@ -254,8 +315,10 @@ pub struct ViewerApp {
     attente_ouverture: Vec<Sender<String>>,
     /// Zone de la vue 3D dans la fenêtre (points), pour les captures.
     rect_vue: egui::Rect,
-    /// Passes des fenêtres de vue de la feuille ouverte.
+    /// Passes des fenêtres de vue de la feuille ouverte, et leurs objets (catégories
+    /// masquées comprises).
     passes_feuille: Vec<PasseFeuille>,
+    objets_feuille: Vec<u32>,
     /// Mode dessin : plans et élévations comme dans un logiciel de DAO.
     dessin: bool,
     /// Coupe horizontale du mode dessin : active, niveau de référence (sinon bas du
@@ -272,6 +335,18 @@ pub struct ViewerApp {
     liste_niveaux: Vec<(Id, String, f32)>,
     /// Matériaux de la scène et éléments qui les portent (onglet Matériaux).
     liste_materiaux: Vec<scene::NavMateriau>,
+    /// Catégories de visibilité de la scène, et pour chaque objet sa catégorie et sa clé
+    /// de masquage (voir [`Categorie`]).
+    categories: Vec<Categorie>,
+    categorie_objet: Vec<usize>,
+    cle_objet: Vec<Arc<str>>,
+    /// Boîte de visibilité ouverte.
+    voir_visibilite: bool,
+    /// Place des panneaux (indice : `Panneau`), coin haut gauche des panneaux flottants
+    /// et position imposée à la prochaine image (panneau qu'on glisse par son titre).
+    ancrages: [Ancrage; 2],
+    pos_flottants: [egui::Pos2; 2],
+    pos_imposee: [Option<egui::Pos2>; 2],
 }
 
 impl ViewerApp {
@@ -318,6 +393,7 @@ impl ViewerApp {
             attente_ouverture: Vec::new(),
             rect_vue: egui::Rect::NOTHING,
             passes_feuille: Vec::new(),
+            objets_feuille: Vec::new(),
             dessin: false,
             coupe: true,
             coupe_niveau: None,
@@ -327,6 +403,13 @@ impl ViewerApp {
             coupe_dirty: true,
             liste_niveaux: Vec::new(),
             liste_materiaux: Vec::new(),
+            categories: Vec::new(),
+            categorie_objet: Vec::new(),
+            cle_objet: Vec::new(),
+            voir_visibilite: false,
+            ancrages: [Ancrage::Gauche, Ancrage::Droite],
+            pos_flottants: [egui::pos2(60.0, 80.0), egui::pos2(400.0, 80.0)],
+            pos_imposee: [None, None],
         };
         if let Some(p) = path {
             app.open(p, &cc.egui_ctx);
@@ -461,6 +544,7 @@ impl ViewerApp {
             Some(n) => n.materiaux.clone(),
             None => materiaux_ifc(&scene),
         };
+        (self.categories, self.categorie_objet, self.cle_objet) = categories(&scene);
         self.scene = Some(scene);
         self.visibility_dirty = true;
         self.preparer_feuille(None);
@@ -480,6 +564,7 @@ impl ViewerApp {
         let mut aretes = Vec::new();
         for (i, o) in scene.objects.iter().enumerate() {
             let vis = !self.hidden_classes.contains(&*o.class)
+                && !self.hidden_classes.contains(&*self.cle_objet[i])
                 && !self.hidden_objects.contains(&(i as u32))
                 && o.storey.is_none_or(|s| !self.hidden_storeys.contains(&s))
                 && self.isolated.as_ref().is_none_or(|iso| iso.contains(&(i as u32)))
@@ -696,32 +781,6 @@ impl ViewerApp {
                 if self.dessin {
                     self.reglages_dessin(ui);
                 }
-                ui.separator();
-                for (label, classes) in [
-                    ("Espaces", &["IFCSPACE"][..]),
-                    ("Ouvertures", &["IFCOPENINGELEMENT", "IFCOPENINGSTANDARDCASE"][..]),
-                    ("Annotations", &["IFCANNOTATION"][..]),
-                    ("Motifs", &["IFCSURFACEFEATURE"][..]),
-                ] {
-                    let mut shown = !self.hidden_classes.contains(classes[0]);
-                    if ui.checkbox(&mut shown, label).changed() {
-                        for c in classes {
-                            if shown {
-                                self.hidden_classes.remove(*c);
-                            } else {
-                                self.hidden_classes.insert(c.to_string());
-                            }
-                        }
-                        self.visibility_dirty = true;
-                    }
-                }
-                ui.separator();
-                if ui.button("Tout afficher").clicked() {
-                    self.hidden_objects.clear();
-                    self.hidden_storeys.clear();
-                    self.isolated = None;
-                    self.visibility_dirty = true;
-                }
             });
             if self.loading.is_some() {
                 ui.separator();
@@ -764,12 +823,168 @@ impl ViewerApp {
                 if ui.button("Cadrer").on_hover_text("Tout le modèle visible dans la vue (F)").clicked() {
                     self.fit_all();
                 }
+                ui.separator();
+                ui.toggle_value(&mut self.voir_visibilite, "Visibilité").on_hover_text("Catégories de modèle et d'annotation affichées dans la vue (V)");
+                if ui.button("Tout afficher").on_hover_text("Montrer les éléments masqués et isolés").clicked() {
+                    self.hidden_objects.clear();
+                    self.hidden_storeys.clear();
+                    self.isolated = None;
+                    self.visibility_dirty = true;
+                }
                 if self.vue_3d() {
                     ui.separator();
                     ui.toggle_value(&mut self.camera.ortho, "Ortho").on_hover_text("Projection orthographique (sinon perspective)");
                 }
             });
         });
+    }
+
+    /// Catégorie montrée : une de ses clés au moins n'est pas masquée, ni sa classe.
+    fn categorie_visible(&self, c: &Categorie) -> bool {
+        c.cles.iter().any(|cle| !self.hidden_classes.contains(&**cle) && !self.hidden_classes.contains(classe_cle(cle)))
+    }
+
+    /// Affiche ou masque la catégorie `k` de la boîte de visibilité.
+    fn montrer_categorie(&mut self, k: usize, montrer: bool) {
+        for cle in self.categories[k].cles.clone() {
+            let classe = classe_cle(&cle);
+            if !montrer {
+                self.hidden_classes.insert(cle.to_string());
+                continue;
+            }
+            // classe masquée en bloc (annotations à l'ouverture) : on la montre en
+            // masquant ses autres catégories
+            if &*cle != classe && self.hidden_classes.remove(classe) {
+                for c in self.categories.iter().flat_map(|c| &c.cles).filter(|c| **c != cle && classe_cle(c) == classe) {
+                    self.hidden_classes.insert(c.to_string());
+                }
+            }
+            self.hidden_classes.remove(&*cle);
+        }
+        self.visibility_dirty = true;
+        self.preparer_feuille(self.vue_active);
+    }
+
+    /// Boîte de visibilité, au bas de la vue : catégories de modèle et d'annotation des
+    /// éléments de la vue ouverte (de toute la scène hors vue Revit), à cocher une à une
+    /// ou par groupe.
+    fn fenetre_visibilite(&mut self, ctx: &egui::Context) {
+        if !self.voir_visibilite || self.scene.is_none() {
+            return;
+        }
+        let mut nombres = vec![0usize; self.categories.len()];
+        for (i, &k) in self.categorie_objet.iter().enumerate() {
+            if self.isolated.as_ref().is_none_or(|iso| iso.contains(&(i as u32))) {
+                nombres[k] += 1;
+            }
+        }
+        // objets des vues placées d'une feuille
+        for &i in &self.objets_feuille {
+            nombres[self.categorie_objet[i as usize]] += 1;
+        }
+        let mut ouverte = true;
+        let mut bascules = Vec::new();
+        egui::Window::new("Visibilité")
+            .open(&mut ouverte)
+            .collapsible(false)
+            .resizable(true)
+            .default_size([480.0, 300.0])
+            .pivot(egui::Align2::LEFT_BOTTOM)
+            .default_pos(self.rect_vue.left_bottom() + egui::vec2(10.0, -10.0))
+            .constrain_to(self.rect_vue)
+            .show(ctx, |ui| {
+                ui.columns(2, |colonnes| {
+                    for (ui, annotation) in colonnes.iter_mut().zip([false, true]) {
+                        let titre = if annotation { "Catégories d'annotation (2D)" } else { "Catégories de modèle" };
+                        let ks: Vec<usize> = (0..self.categories.len()).filter(|&k| self.categories[k].annotation == annotation && nombres[k] > 0).collect();
+                        let vues = ks.iter().filter(|&&k| self.categorie_visible(&self.categories[k])).count();
+                        let mut toutes = !ks.is_empty() && vues == ks.len();
+                        let groupe = egui::Checkbox::new(&mut toutes, RichText::new(titre).strong()).indeterminate(vues > 0 && vues < ks.len());
+                        if ui.add_enabled(!ks.is_empty(), groupe).changed() {
+                            bascules.extend(ks.iter().map(|&k| (k, toutes)));
+                        }
+                        ui.separator();
+                        egui::ScrollArea::vertical().id_salt(("visibilite", annotation)).auto_shrink([false, false]).show(ui, |ui| {
+                            if ks.is_empty() {
+                                ui.label(RichText::new("Aucune dans la vue").weak());
+                            }
+                            for &k in &ks {
+                                let mut vue = self.categorie_visible(&self.categories[k]);
+                                if ui.checkbox(&mut vue, format!("{} ({})", self.categories[k].nom, nombres[k])).changed() {
+                                    bascules.push((k, vue));
+                                }
+                            }
+                        });
+                    }
+                });
+            });
+        self.voir_visibilite = ouverte;
+        for (k, montrer) in bascules {
+            self.montrer_categorie(k, montrer);
+        }
+    }
+
+    /// Contenu d'un panneau déplaçable.
+    fn panneau(&mut self, ui: &mut egui::Ui, p: Panneau) {
+        match p {
+            Panneau::Proprietes => self.right_panel(ui),
+            Panneau::Arborescence => self.left_panel(ui),
+        }
+    }
+
+    /// Titre d'un panneau, par lequel on le déplace : glissé hors de son ancrage il
+    /// devient flottant ; relâché contre le bord gauche ou droit de la fenêtre, il s'y
+    /// ancre. Menu d'ancrage à droite du titre.
+    fn entete_panneau(&mut self, ui: &mut egui::Ui, p: Panneau, titre: &str) {
+        let i = p as usize;
+        let mut ancrage = None;
+        // de droite à gauche : menu, puis le titre sur la largeur restante (sans élargir
+        // le panneau)
+        ui.horizontal(|ui| ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+            ui.menu_button("…", |ui| {
+                for a in Ancrage::TOUS {
+                    if ui.selectable_label(self.ancrages[i] == a, a.libelle()).clicked() {
+                        ancrage = Some(a);
+                        ui.close();
+                    }
+                }
+            });
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 20.0), Sense::hover());
+            let resp = ui.interact(rect, egui::Id::unique(("entete_panneau", p.nom())), Sense::click_and_drag());
+            let encre = ui.visuals().strong_text_color();
+            ui.painter_at(rect).text(rect.left_center(), egui::Align2::LEFT_CENTER, titre, egui::FontId::proportional(15.0), encre);
+            if resp.drag_started() && self.ancrages[i] != Ancrage::Flottant {
+                ancrage = Some(Ancrage::Flottant);
+                self.pos_imposee[i] = resp.interact_pointer_pos().map(|q| q - egui::vec2(60.0, 10.0));
+            } else if resp.dragged() && self.ancrages[i] == Ancrage::Flottant {
+                self.pos_imposee[i] = Some(self.pos_flottants[i] + resp.drag_delta());
+            }
+            if resp.drag_stopped() && self.ancrages[i] == Ancrage::Flottant {
+                let ecran = ui.ctx().content_rect();
+                match ui.ctx().pointer_latest_pos() {
+                    Some(q) if q.x < ecran.left() + 40.0 => ancrage = Some(Ancrage::Gauche),
+                    Some(q) if q.x > ecran.right() - 40.0 => ancrage = Some(Ancrage::Droite),
+                    _ => {}
+                }
+            }
+            let survol = if resp.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab };
+            resp.on_hover_cursor(survol).on_hover_text("Glisser pour déplacer ; relâcher contre un bord de la fenêtre pour ancrer");
+        }));
+        if let Some(a) = ancrage {
+            self.ancrer(p, a);
+        }
+    }
+
+    /// Ancre un panneau, ou le rend flottant au-dessus de la vue (à sa dernière place
+    /// flottante, ramenée dans la vue).
+    fn ancrer(&mut self, p: Panneau, a: Ancrage) {
+        let i = p as usize;
+        if a == Ancrage::Flottant && self.ancrages[i] != a && self.pos_imposee[i].is_none() && self.rect_vue.is_positive() {
+            let v = self.rect_vue;
+            let q = self.pos_flottants[i];
+            self.pos_imposee[i] = Some(egui::pos2(q.x.clamp(v.left(), (v.right() - 200.0).max(v.left())), q.y.clamp(v.top(), (v.bottom() - 200.0).max(v.top()))));
+        }
+        self.ancrages[i] = a;
     }
 
     /// Cube d'orientation (vue 3D), dans le coin haut droit de la vue : clic sur une face,
@@ -883,7 +1098,8 @@ impl ViewerApp {
     /// Arborescence du projet (panneau de droite, comme dans Revit).
     fn left_panel(&mut self, ui: &mut egui::Ui) {
         let nom = self.scene.as_ref().map(|s| s.file_name.clone()).unwrap_or_default();
-        ui.label(RichText::new(if nom.is_empty() { "Arborescence du projet".to_string() } else { format!("Arborescence du projet - {nom}") }).strong());
+        let titre = if nom.is_empty() { "Arborescence du projet".to_string() } else { format!("Arborescence du projet - {nom}") };
+        self.entete_panneau(ui, Panneau::Arborescence, &titre);
         let a_nav = self.scene.as_ref().is_some_and(|s| s.navigateur.is_some());
         let onglets: &[LeftTab] = if a_nav { &LeftTab::REVIT } else { &LeftTab::IFC };
         if !onglets.contains(&self.left_tab) {
@@ -1168,7 +1384,6 @@ impl ViewerApp {
             self.echelle = echelle;
         }
         self.vue_active = Some(i);
-        self.preparer_feuille(Some(i));
         self.hidden_objects.clear();
         self.hidden_storeys.clear();
         // visibilité propre à chaque vue : celle par défaut, puis les objets isolés
@@ -1179,6 +1394,11 @@ impl ViewerApp {
         } else {
             self.isolate(objs);
         }
+        // vues placées d'une feuille, selon la visibilité de la vue (annotations montrées)
+        if genre_feuille && self.isolated.is_some() {
+            self.hidden_classes.remove("IFCANNOTATION");
+        }
+        self.preparer_feuille(Some(i));
         // caméra : regarde vers −direction ; vue de dessus orientée par le haut de la vue
         self.camera.ortho = true;
         if d.length() > 0.5 {
@@ -1229,10 +1449,13 @@ impl ViewerApp {
     fn preparer_feuille(&mut self, i: Option<usize>) {
         let mut passes = Vec::new();
         let mut indices: Vec<[Vec<u32>; 3]> = Vec::new();
+        let mut objets_feuille = Vec::new();
         if let Some(s) = &self.scene {
             let nav = s.navigateur.as_ref();
             let feuille = i.and_then(|i| nav?.vues.get(i)).filter(|v| v.genre == "Feuille");
             let o = s.origin;
+            // catégorie montrée (boîte de visibilité)
+            let montre = |k: &u32| !self.hidden_classes.contains(&*s.objects[*k as usize].class) && !self.hidden_classes.contains(&*self.cle_objet[*k as usize]);
             let modele: Vec<u32> = (0..s.objects.len() as u32).filter(|&k| !HIDDEN_BY_DEFAULT.contains(&&*s.objects[k as usize].class)).collect();
             for f in feuille.map(|v| v.fenetres.as_slice()).unwrap_or_default() {
                 let Some(pv) = nav.and_then(|n| n.vues.iter().find(|x| x.revit_id == f.vue)) else { continue };
@@ -1257,7 +1480,9 @@ impl ViewerApp {
                 };
                 let (detail, annot): (Vec<u32>, Vec<u32>) = pv.entite.map(|e| self.objects_under(e)).unwrap_or_default().into_iter().partition(|&k| DETAIL.contains(&genre(k).as_str()));
                 let passes_vue = [(objets, f.cadre.map(rect), plans), (detail, f.cadre.map(rect), Vec::new()), (annot, f.cadre_annotations.map(rect), Vec::new())];
-                for (objs, cadre, plans) in passes_vue {
+                for (mut objs, cadre, plans) in passes_vue {
+                    objets_feuille.extend_from_slice(&objs);
+                    objs.retain(montre);
                     if objs.is_empty() {
                         continue;
                     }
@@ -1287,6 +1512,10 @@ impl ViewerApp {
             r.upload_passes(gl, &indices);
         }
         self.passes_feuille = passes;
+        // un objet de plusieurs vues placées compte une fois
+        objets_feuille.sort_unstable();
+        objets_feuille.dedup();
+        self.objets_feuille = objets_feuille;
     }
 
     fn tree_roots(&self) -> Vec<Id> {
@@ -1481,7 +1710,7 @@ impl ViewerApp {
 
     /// Propriétés de l'élément sélectionné (panneau de gauche, comme dans Revit).
     fn right_panel(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Propriétés");
+        self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
         if let (Some(s), Some(id)) = (&self.scene, self.selected) {
             // en-tête façon Revit : classe et type de l'élément
             let ty = s.model.type_of.get(&id).map(|t| s.model.name(*t)).filter(|t| !t.is_empty());
@@ -1559,6 +1788,7 @@ impl ViewerApp {
         if let Some(s) = &self.scene {
             for &o in &objs {
                 self.hidden_classes.remove(&*s.objects[o as usize].class);
+                self.hidden_classes.remove(&*self.cle_objet[o as usize]);
             }
         }
         self.isolated = Some(objs.into_iter().collect());
@@ -1816,14 +2046,18 @@ impl ViewerApp {
             }
 
             if resp.hovered() || resp.has_focus() {
-                let (f, esc, h, i) = ui.input(|i| {
+                let (f, esc, h, i, v) = ui.input(|i| {
                     (
                         i.key_pressed(egui::Key::F),
                         i.key_pressed(egui::Key::Escape),
                         i.key_pressed(egui::Key::H),
                         i.key_pressed(egui::Key::I),
+                        i.key_pressed(egui::Key::V),
                     )
                 });
+                if v {
+                    self.voir_visibilite = !self.voir_visibilite;
+                }
                 if f {
                     match self.selected.map(|s| self.objects_under(s)) {
                         Some(o) if !o.is_empty() => self.frame_objects(&o),
@@ -2062,6 +2296,8 @@ impl ViewerApp {
             p.push(("selection", self.decrire(id)));
         }
         p.push(("vue_px", format!("[{:.0},{:.0}]", self.rect_vue.width(), self.rect_vue.height())));
+        p.push(("panneaux", objet(&Panneau::TOUS.map(|q| (q.nom(), texte(self.ancrages[q as usize].nom()))))));
+        p.push(("visibilite_ouverte", self.voir_visibilite.to_string()));
         pilote::succes(&p)
     }
 
@@ -2223,6 +2459,42 @@ impl ViewerApp {
                 self.visibility_dirty = true;
                 self.etat()
             }
+            "panneau" => {
+                // panneau proprietes|arborescence gauche|droite|flottant
+                let (p, a) = argument.split_once(' ').unwrap_or((argument, ""));
+                let p = Panneau::TOUS.into_iter().find(|x| x.nom() == p);
+                let a = Ancrage::TOUS.into_iter().find(|x| x.nom() == a.trim());
+                let (Some(p), Some(a)) = (p, a) else { return erreur("usage : panneau proprietes|arborescence gauche|droite|flottant") };
+                self.ancrer(p, a);
+                self.etat()
+            }
+            "visibilite" => {
+                // visibilite oui|non : boîte ; visibilite <catégorie> oui|non
+                let (nom, oui) = match argument.rsplit_once(' ') {
+                    Some((n, o)) if o == "oui" || o == "non" => (n.trim(), o == "oui"),
+                    _ => ("", argument != "non"),
+                };
+                if nom.is_empty() {
+                    self.voir_visibilite = oui;
+                    return self.etat();
+                }
+                let n = nom.to_lowercase();
+                let k = self.categories.iter().position(|c| c.nom.to_lowercase() == n).or_else(|| self.categories.iter().position(|c| c.nom.to_lowercase().contains(&n)));
+                let Some(k) = k else { return erreur(&format!("catégorie introuvable : {nom}")) };
+                self.montrer_categorie(k, oui);
+                self.update_visibility();
+                self.etat()
+            }
+            "categories" => {
+                let mut nombres = vec![0usize; self.categories.len()];
+                for &k in &self.categorie_objet {
+                    nombres[k] += 1;
+                }
+                let c = self.categories.iter().zip(nombres).map(|(c, n)| {
+                    objet(&[("nom", texte(&c.nom)), ("genre", texte(if c.annotation { "annotation" } else { "modele" })), ("objets", n.to_string()), ("visible", self.categorie_visible(c).to_string())])
+                });
+                succes(&[("categories", liste(c))])
+            }
             "glisser" => {
                 // glisser <dx> <dy> [gauche|droit|milieu] [maj] : comme à la souris (pixels)
                 let mots: Vec<&str> = argument.split_whitespace().collect();
@@ -2382,6 +2654,100 @@ fn niveaux(s: &Scene) -> Vec<(Id, String, f32)> {
 }
 
 /// Fichier Revit, reconnu à l'extension ou à la signature OLE.
+/// Classe IFC d'une clé de masquage (« classe » ou « classe:nom »).
+fn classe_cle(cle: &str) -> &str {
+    cle.split_once(':').map_or(cle, |c| c.0)
+}
+
+/// Catégories de visibilité de la scène, puis catégorie et clé de masquage de chaque
+/// objet (voir [`Categorie`]) : genre (`ObjectType`) des annotations ; catégorie Revit
+/// (propriété « Catégorie ») des proxys d'un fichier Revit ; nom de la classe IFC
+/// sinon. Les quadrillages sont des annotations, comme dans Revit.
+fn categories(s: &Scene) -> (Vec<Categorie>, Vec<usize>, Vec<Arc<str>>) {
+    let revit = s.navigateur.is_some();
+    let noms: Vec<(bool, String)> = s
+        .objects
+        .iter()
+        .map(|o| match &*o.class {
+            "IFCANNOTATION" => (true, nom_genre(s.model.get(o.id).and_then(|e| e.arg(4).as_str()).unwrap_or(""))),
+            "IFCBUILDINGELEMENTPROXY" if revit => {
+                let cat = s.model.property_groups(o.id).into_iter().filter(|g| g.name == "Revit").flat_map(|g| g.props).find(|p| p.0 == "Catégorie");
+                (false, cat.map_or_else(|| nom_classe(&o.class), |p| p.1))
+            }
+            c => (c == "IFCGRID", nom_classe(c)),
+        })
+        .collect();
+    // classes à plusieurs catégories : une clé « classe:nom » par catégorie
+    let mut par_classe: BTreeMap<&str, HashSet<&str>> = BTreeMap::new();
+    for (o, (_, n)) in s.objects.iter().zip(&noms) {
+        par_classe.entry(&o.class).or_default().insert(n);
+    }
+    let cles: Vec<Arc<str>> = s.objects.iter().zip(&noms).map(|(o, (_, n))| if par_classe[&*o.class].len() > 1 { format!("{}:{n}", o.class).into() } else { o.class.clone() }).collect();
+    let mut groupes: BTreeMap<(bool, &str), Vec<Arc<str>>> = BTreeMap::new();
+    for ((a, n), cle) in noms.iter().zip(&cles) {
+        let g = groupes.entry((*a, n)).or_default();
+        if !g.contains(cle) {
+            g.push(cle.clone());
+        }
+    }
+    let index: BTreeMap<(bool, &str), usize> = groupes.keys().enumerate().map(|(k, g)| (*g, k)).collect();
+    let categorie_objet = noms.iter().map(|(a, n)| index[&(*a, n.as_str())]).collect();
+    let categories = groupes.into_iter().map(|((annotation, nom), cles)| Categorie { annotation, nom: nom.to_string(), cles }).collect();
+    (categories, categorie_objet, cles)
+}
+
+/// Nom de catégorie (au pluriel, comme dans Revit) d'une classe IFC d'élément de modèle.
+fn nom_classe(classe: &str) -> String {
+    let nom = match classe {
+        "IFCWALL" | "IFCWALLSTANDARDCASE" | "IFCWALLELEMENTEDCASE" => "Murs",
+        "IFCWINDOW" | "IFCWINDOWSTANDARDCASE" => "Fenêtres",
+        "IFCDOOR" | "IFCDOORSTANDARDCASE" => "Portes",
+        "IFCSLAB" | "IFCSLABSTANDARDCASE" | "IFCSLABELEMENTEDCASE" => "Sols",
+        "IFCCOVERING" => "Plafonds et revêtements",
+        "IFCROOF" => "Toits",
+        "IFCSTAIR" | "IFCSTAIRFLIGHT" => "Escaliers",
+        "IFCRAMP" | "IFCRAMPFLIGHT" => "Rampes",
+        "IFCRAILING" => "Garde-corps",
+        "IFCCOLUMN" | "IFCCOLUMNSTANDARDCASE" => "Poteaux",
+        "IFCBEAM" | "IFCBEAMSTANDARDCASE" => "Ossature",
+        "IFCMEMBER" | "IFCMEMBERSTANDARDCASE" => "Meneaux et membrures",
+        "IFCPLATE" | "IFCPLATESTANDARDCASE" => "Panneaux de murs-rideaux",
+        "IFCCURTAINWALL" => "Murs-rideaux",
+        "IFCFOOTING" => "Fondations",
+        "IFCFURNITURE" | "IFCFURNISHINGELEMENT" => "Mobilier",
+        "IFCSANITARYTERMINAL" => "Appareils sanitaires",
+        "IFCBUILDINGELEMENTPROXY" => "Modèles génériques",
+        "IFCSPACE" => "Pièces",
+        "IFCGEOGRAPHICELEMENT" => "Topographie",
+        "IFCSITE" => "Site",
+        "IFCOPENINGELEMENT" | "IFCOPENINGSTANDARDCASE" => "Ouvertures",
+        "IFCSURFACEFEATURE" => "Motifs de surface",
+        "IFCVIRTUALELEMENT" => "Éléments virtuels",
+        "IFCGRID" => "Quadrillages",
+        _ => return pretty_type(classe).trim_start_matches("Ifc").to_string(),
+    };
+    nom.to_string()
+}
+
+/// Nom de catégorie d'un genre d'annotation (éléments 2D d'une vue Revit).
+fn nom_genre(genre: &str) -> String {
+    match genre {
+        "" => "Annotations",
+        "Trait" => "Lignes",
+        "Texte" => "Textes",
+        "Cote" => "Cotes",
+        "Région remplie" => "Régions remplies",
+        "Étiquette" => "Étiquettes",
+        "Fenêtre de vue" => "Fenêtres de vue",
+        "Titre de vue" => "Titres de vue",
+        "Symbole" => "Symboles",
+        "Cartouche" => "Cartouches",
+        "Composant de détail" => "Composants de détail",
+        g => g,
+    }
+    .to_string()
+}
+
 fn is_revit_file(path: &std::path::Path) -> bool {
     if rvt::is_revit_path(path) {
         return true;
@@ -2424,12 +2790,37 @@ impl eframe::App for ViewerApp {
         if self.rvt.is_some() && self.rvt_sheet {
             egui::CentralPanel::default().show(ui, |ui| self.revit_view(ui));
         } else {
-            // disposition de Revit : propriétés à gauche, arborescence du projet à droite
-            egui::Panel::left("proprietes").resizable(true).default_size(300.0).show(ui, |ui| self.right_panel(ui));
-            egui::Panel::right("arborescence").resizable(true).default_size(320.0).show(ui, |ui| self.left_panel(ui));
-            // sous la vue seulement, entre les deux panneaux
+            // disposition de Revit par défaut : propriétés à gauche, arborescence du projet
+            // à droite ; chacun s'ancre d'un côté ou flotte (ancrages relevés en début
+            // d'image, changés pour la suivante)
+            let ancrages = self.ancrages;
+            for p in Panneau::TOUS {
+                let id = egui::IdSalt::new((p.nom(), ancrages[p as usize].nom()));
+                let panneau = match ancrages[p as usize] {
+                    Ancrage::Gauche => egui::Panel::left(id),
+                    Ancrage::Droite => egui::Panel::right(id),
+                    Ancrage::Flottant => continue,
+                };
+                panneau.resizable(true).default_size(if p == Panneau::Proprietes { 300.0 } else { 320.0 }).show(ui, |ui| self.panneau(ui, p));
+            }
+            // sous la vue seulement, entre les panneaux ancrés
             egui::Panel::bottom("barre_vue").show(ui, |ui| self.barre_vue(ui));
             egui::CentralPanel::no_frame().show(ui, |ui| self.viewport(ui));
+            for p in Panneau::TOUS.into_iter().filter(|p| ancrages[*p as usize] == Ancrage::Flottant) {
+                let i = p as usize;
+                let mut fenetre = egui::Window::new(p.nom()).id(egui::Id::unique(("flottant", p.nom()))).title_bar(false).resizable(true).default_size([320.0, 520.0]).min_width(220.0);
+                if let Some(q) = self.pos_imposee[i].take() {
+                    fenetre = fenetre.current_pos(q);
+                }
+                let r = fenetre.show(&ctx, |ui| self.panneau(ui, p));
+                // position imposée pendant ce tracé (titre glissé) : place de la suivante
+                self.pos_flottants[i] = match (self.pos_imposee[i], r) {
+                    (Some(q), _) => q,
+                    (None, Some(r)) => r.response.rect.min,
+                    (None, None) => self.pos_flottants[i],
+                };
+            }
+            self.fenetre_visibilite(&ctx);
         }
         self.unsupported_window(&ctx);
     }
