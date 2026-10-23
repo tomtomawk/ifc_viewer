@@ -310,6 +310,12 @@ pub fn valeurs(r: &Record) -> Vec<(i64, Brut)> {
             out.push((id, b));
         }
     };
+    // phases de l'élément (champs de Element) : PHASE_CREATED, PHASE_DEMOLISHED
+    for (k, id) in [("m_createdPhaseId", -1_012_100), ("m_demolishedPhaseId", -1_012_101)] {
+        if let Some(p) = o.get(k).and_then(Val::element_id) {
+            ajouter(&mut out, id, Brut::Id(p));
+        }
+    }
     // champ appris d'abord : Revit lit le champ quand un jeu garde aussi une valeur
     // (ancienne) pour le même paramètre
     if let Some(liste) = champs_appris().get(o.class_name()) {

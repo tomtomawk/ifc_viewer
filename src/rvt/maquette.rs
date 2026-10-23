@@ -362,6 +362,11 @@ pub struct Maquette {
     pub parametres: HashMap<i64, Vec<(i64, Brut)>>,
     /// Noms des phases (`ProjectPhase`).
     pub phases: HashMap<i64, String>,
+    /// Phases dans l'ordre (`AllProjectPhases.m_phaseIds`).
+    pub ordre_phases: Vec<i64>,
+    /// Filtres de phase (`PhaseFilterElem`) : nom et présentation par état
+    /// (`m_phaseStatusPresentation`, indice = `ElementOnPhaseStatus`).
+    pub filtres_phase: HashMap<i64, (String, [u8; 7])>,
     /// Emplacements de projet, points de base et lieu géographique.
     pub coordonnees: Coordonnees,
     /// Famille d'un document `.rfa` (`Family` sans famille hôte), dont
@@ -513,7 +518,7 @@ impl Sorte {
             "FilledRegion" => Sorte::Region,
             "FillPatternElem" => Sorte::Motif,
             "GStyleElem" => Sorte::Style,
-            "ProjectPhase" => Sorte::Phase,
+            "ProjectPhase" | "AllProjectPhases" | "PhaseFilterElem" => Sorte::Phase,
             _ if h("ParamElem") => Sorte::Parametre,
             "CurveElem" | "TextNote" | "TagNote" | "LinearDimString" | "RadialDim" | "AngularDim" | "ArcLengthDim" | "Viewport" => Sorte::Annotation,
             _ if h("DBView") => Sorte::Vue,
@@ -642,6 +647,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     let (mut motifs, mut types_regions, mut couleurs_categories) = (HashMap::new(), HashMap::new(), HashMap::new());
     let (mut definitions, mut phases) = (HashMap::new(), HashMap::new());
     let mut coord = Coordonnees::default();
+    let (mut ordre_phases, mut filtres_phase) = (Vec::new(), HashMap::new());
     let (mut instances_vue, mut polices, mut types_fenetres, mut revisions, mut info_projet) = (Vec::new(), HashMap::new(), HashMap::new(), HashMap::new(), -1);
     let (mut types_cotes, mut format_longueurs) = (HashMap::new(), None);
     let mut lignes_esquisse: std::collections::HashSet<i64> = Default::default();
@@ -683,6 +689,8 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
             Ok(Extrait::Style(cat, c)) => drop(couleurs_categories.insert(cat, c)),
             Ok(Extrait::Parametre(id, d)) => drop(definitions.insert(id, d)),
             Ok(Extrait::Phase(id, nom)) => drop(phases.insert(id, nom)),
+            Ok(Extrait::OrdrePhases(l)) => ordre_phases = l,
+            Ok(Extrait::FiltrePhase(id, nom, p)) => drop(filtres_phase.insert(id, (nom, p))),
             Ok(Extrait::Coordonnee(x)) => match x {
                 coordonnees::Piece::Emplacement(e) => coord.emplacements.push(e),
                 coordonnees::Piece::Lieu(id, l) => drop(coord.lieux.insert(id, l)),
@@ -825,6 +833,8 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         definitions,
         parametres,
         phases,
+        ordre_phases,
+        filtres_phase,
         coordonnees: {
             coord.emplacements.sort_by_key(|e| e.id);
             coord
@@ -1025,6 +1035,9 @@ enum Extrait {
     Style(i64, [u8; 3]),
     Parametre(i64, Definition),
     Phase(i64, String),
+    OrdrePhases(Vec<i64>),
+    /// Filtre de phase : nom, présentation par état.
+    FiltrePhase(i64, String, [u8; 7]),
     Coordonnee(coordonnees::Piece),
     /// Police et type de texte propriétaire.
     Police(i64, Police),
@@ -1153,6 +1166,14 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite
             Some(Extrait::Style(id_of(o, "m_categoryId"), [c as u8, (c >> 8) as u8, (c >> 16) as u8]))
         })()),
         Sorte::Parametre => ou_rien(parametres::definition(r, herite).map(|d| Extrait::Parametre(eid, d))),
+        Sorte::Phase if o.class_name() == "AllProjectPhases" => Extrait::OrdrePhases(o.get("m_phaseIds").map(Val::list).unwrap_or_default().iter().filter_map(Val::element_id).collect()),
+        Sorte::Phase if o.class_name() == "PhaseFilterElem" => {
+            let mut pres = [0u8; 7];
+            for (k, v) in o.get("m_phaseStatusPresentation").map(Val::list).unwrap_or_default().iter().take(7).enumerate() {
+                pres[k] = v.int().unwrap_or(0) as u8;
+            }
+            Extrait::FiltrePhase(eid, o.get("m_name").and_then(Val::str).unwrap_or_default().to_string(), pres)
+        }
         Sorte::Phase => ou_rien(o.get("m_name").and_then(Val::str).map(|n| Extrait::Phase(eid, n.to_string()))),
         Sorte::Coordonnee => ou_rien(coordonnees::lire(eid, r).map(Extrait::Coordonnee)),
         Sorte::Police => ou_rien((|| {
@@ -1791,6 +1812,7 @@ fn produits(m: &Maquette) -> Vec<Produit<'_>> {
 /// matériau.
 pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scene {
     let mut b = Builder { entities: IdMap::default() };
+    let mut element_de: HashMap<Id, i64> = HashMap::new();
     let n = Value::Null;
     // GlobalId d'un élément Revit : son IfcGUID, comme à l'export IFC de Revit
     let guid = |prefix: &str, id: i64| m.guid_ifc(id).map(Value::Str).unwrap_or_else(|| gid(prefix, id));
@@ -1826,6 +1848,7 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
     let (mut traits_motifs, mut motifs_omis, mut motifs_dessin) = (0usize, 0usize, 0usize);
     for p in produits(m) {
         let id = b.add(p.classe, vec![guid("RVT", p.id), n.clone(), Value::Str(p.nom.clone()), n.clone(), Value::Str(p.nom_type.clone()), n.clone(), Value::Ref(shape), Value::Str(p.id.to_string())]);
+        element_de.insert(id, p.id);
         let mut props = vec![("ElementId", Value::Str(p.id.to_string()))];
         if let Some(u) = m.unique_id(p.id) {
             props.push(("UniqueId", Value::Str(u)));
@@ -2068,6 +2091,13 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
     }
     let model = IfcModel::new(StepFile { schema: format!("REVIT {format}"), entities: b.entities });
     let mut s = scene::assemble(model, geoms, file_name);
+    let mut nav = nav;
+    for (&ent, &el) in &element_de {
+        let ph = |k| id_parametre(m, el, k);
+        if let Some(c) = ph(-1_012_100) {
+            nav.phases_objets.insert(ent, (c, ph(-1_012_101).unwrap_or(-1)));
+        }
+    }
     s.navigateur = Some(nav);
     // coordonnées partagées du point cliqué (document placé)
     if let Some(e) = m.coordonnees.actif().filter(|_| m.coordonnees.place()) {
@@ -2110,6 +2140,11 @@ fn famille_systeme(classe: &str) -> Option<(&'static str, &'static str)> {
 
 /// Arborescence du projet : vues (hors gabarits), feuilles et vues qu'elles portent,
 /// familles chargées par catégorie puis familles système, groupes.
+/// Valeur ElementId d'un paramètre d'un élément (jeux de paramètres).
+fn id_parametre(m: &Maquette, element: i64, param: i64) -> Option<i64> {
+    m.parametres.get(&element)?.iter().find(|(p, _)| *p == param).and_then(|(_, b)| if let Brut::Id(i) = b.selon(parametres::Stockage::Id) { Some(i) } else { None })
+}
+
 fn navigateur(m: &Maquette, entite_vue: &HashMap<i64, Id>, entite_type: &HashMap<i64, Id>, etage: &HashMap<i64, Id>) -> Navigateur {
     let mut placees: HashMap<i64, Vec<i64>> = HashMap::new();
     let mut fenetres: HashMap<i64, Vec<scene::NavFenetre>> = HashMap::new();
@@ -2131,6 +2166,8 @@ fn navigateur(m: &Maquette, entite_vue: &HashMap<i64, Id>, entite_type: &HashMap
         .filter(|v| !v.gabarit && v.genre != "Arborescence")
         .map(|v| NavVue {
             revit_id: v.id,
+            phase: id_parametre(m, v.id, -1_012_102).unwrap_or(0),
+            filtre_phase: id_parametre(m, v.id, -1_012_103).unwrap_or(-1),
             entite: entite_vue.get(&v.id).copied(),
             genre: v.genre.to_string(),
             type_vue: nom_type(v.type_vue),
@@ -2168,7 +2205,8 @@ fn navigateur(m: &Maquette, entite_vue: &HashMap<i64, Id>, entite_type: &HashMap
         .collect();
     let mut groupes: Vec<String> = m.types.values().filter(|t| t.classe == "ElementGroupType").map(|t| t.nom.clone()).collect();
     groupes.sort();
-    Navigateur { vues, familles, groupes, materiaux: Vec::new() }
+    let filtres_phase = m.filtres_phase.iter().map(|(&id, (_, p))| (id, *p)).collect();
+    Navigateur { vues, familles, groupes, materiaux: Vec::new(), phases: m.ordre_phases.clone(), filtres_phase, phases_objets: Default::default() }
 }
 
 /// Nombre maximal de traits de motifs de surface dans une scène.
@@ -2935,5 +2973,20 @@ mod tests {
         assert_eq!(l.nom, "48.1083397799843,-1.6887299952413");
         let nord = |id: i64| m.vues.iter().find(|v| v.id == id).unwrap().nord_geographique;
         assert!(nord(1979) && !nord(1960) && !nord(1970));
+    }
+
+    /// Phases de Saint-Malo contre l'API de Revit 2026 (`rvt-reference-phases`) : ordre,
+    /// filtre « Conservé + Projet », élément créé en Existant et démoli en Démolition.
+    #[test]
+    fn phases_saint_malo() {
+        let Some(p) = essai("fichiers", "Saint-Malo_avenue aristide briand_46.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        assert_eq!(m.ordre_phases, [3, 354_698, 0]);
+        assert_eq!(m.phases[&0], "Projet");
+        assert_eq!(m.filtres_phase[&751], ("Conservé + Projet".to_string(), [0, 0, 1, 0, 1, 0, 0]));
+        let ph = |k| id_parametre(&m, 10_126_105, k);
+        assert_eq!((ph(-1_012_100), ph(-1_012_101)), (Some(3), Some(354_698)));
+        let etats: Vec<usize> = m.ordre_phases.iter().map(|&q| scene::etat_de_phase(&m.ordre_phases, 3, 354_698, q)).collect();
+        assert_eq!(etats, [4, 3, 1]);
     }
 }

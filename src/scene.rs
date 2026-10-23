@@ -42,6 +42,14 @@ pub struct SceneObject {
 /// vues, nomenclatures, feuilles, familles et groupes.
 #[derive(Default)]
 pub struct Navigateur {
+    /// Phases dans l'ordre (ids Revit).
+    pub phases: Vec<i64>,
+    /// Filtres de phase : présentation par état de phase (`ElementOnPhaseStatus` :
+    /// aucun, passé, existant, démoli, nouveau, temporaire, futur), 0 masqué, 1 par
+    /// catégorie, 2 remplacé.
+    pub filtres_phase: std::collections::HashMap<i64, [u8; 7]>,
+    /// Phases de création et de démolition des objets de la scène.
+    pub phases_objets: std::collections::HashMap<Id, (i64, i64)>,
     pub vues: Vec<NavVue>,
     pub familles: Vec<NavFamille>,
     pub groupes: Vec<String>,
@@ -61,6 +69,9 @@ pub struct NavMateriau {
 /// Vue, nomenclature ou feuille.
 pub struct NavVue {
     pub revit_id: i64,
+    /// Phase de la vue et filtre de phase (VIEW_PHASE, VIEW_PHASE_FILTER ; −1 : aucun).
+    pub phase: i64,
+    pub filtre_phase: i64,
     /// Entité de la vue dans le modèle (propriétés ; ses éléments 2D en enfants).
     pub entite: Option<Id>,
     /// Genre (« Plan d'étage », « Élévation », « Feuille »…).
@@ -396,4 +407,24 @@ fn ray_tri(o: Vec3, d: Vec3, a: Vec3, b: Vec3, c: Vec3) -> Option<f32> {
     }
     let t = e2.dot(q) * inv;
     (t > 0.0).then_some(t)
+}
+
+/// État d'un élément dans une phase (`Element.GetPhaseStatus`) : 0 aucun, 1 passé,
+/// 2 existant, 3 démoli, 4 nouveau, 5 temporaire, 6 futur, d'après l'ordre des phases.
+pub fn etat_de_phase(ordre: &[i64], cree: i64, demoli: i64, phase: i64) -> usize {
+    let rang = |p: i64| ordre.iter().position(|&x| x == p);
+    let (Some(c), Some(p)) = (rang(cree), rang(phase)) else { return 0 };
+    let d = rang(demoli);
+    if c > p {
+        6
+    } else if c == p {
+        if d == Some(p) { 5 } else { 4 }
+    } else {
+        match d {
+            None => 2,
+            Some(d) if d > p => 2,
+            Some(d) if d == p => 3,
+            _ => 1,
+        }
+    }
 }

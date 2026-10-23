@@ -1409,6 +1409,9 @@ impl ViewerApp {
         } else {
             self.isolate(objs);
         }
+        // filtre de phase de la vue : objets dont l'état dans la phase de la vue est masqué
+        let masques = self.masques_de_phase(i);
+        self.hidden_objects.extend(masques);
         // vues placées d'une feuille, selon la visibilité de la vue (annotations montrées)
         if genre_feuille && self.isolated.is_some() {
             self.hidden_classes.remove("IFCANNOTATION");
@@ -1430,6 +1433,19 @@ impl ViewerApp {
         if let Some(e) = entite {
             self.select(Some(e), false);
         }
+    }
+
+    /// Objets qu'une vue Revit ne montre pas selon sa phase et son filtre de phase (état
+    /// de l'objet dans la phase, présentation « masqué » du filtre).
+    fn masques_de_phase(&self, i: usize) -> Vec<u32> {
+        let Some(s) = &self.scene else { return Vec::new() };
+        let Some(nav) = &s.navigateur else { return Vec::new() };
+        let (Some(v), Some(filtre)) = (nav.vues.get(i), nav.vues.get(i).and_then(|v| nav.filtres_phase.get(&v.filtre_phase))) else { return Vec::new() };
+        (0..s.objects.len() as u32)
+            .filter(|&o| {
+                nav.phases_objets.get(&s.objects[o as usize].id).is_some_and(|&(c, d)| filtre[scene::etat_de_phase(&nav.phases, c, d, v.phase)] == 0)
+            })
+            .collect()
     }
 
     /// Vue orthographique de dessus ajustée au rectangle des objets et des fenêtres de
