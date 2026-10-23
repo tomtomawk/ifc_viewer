@@ -1543,6 +1543,10 @@ fn coordonnees_affichees(m: &Maquette) -> Vec<(String, String)> {
         }
         out.push(("Latitude".into(), format!("{:.6}°", l.latitude)));
         out.push(("Longitude".into(), format!("{:.6}°", l.longitude)));
+        if !l.systeme.is_empty() {
+            let code = l.epsg.map(|c| format!(" (EPSG {c})")).unwrap_or_default();
+            out.push(("Système de coordonnées".into(), format!("{}{code}", l.systeme)));
+        }
         out.push(("Fuseau horaire".into(), format!("UTC{}{}", if l.fuseau < 0.0 { "−" } else { "+" }, format_real(l.fuseau.abs()))));
         if !l.station.is_empty() {
             out.push(("Station météo".into(), l.station.clone()));
@@ -1950,6 +1954,7 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
             ("Classe Revit", Value::Str(v.classe.clone())),
             ("Genre", Value::Str(v.genre.into())),
             ("Échelle", Value::Str(format!("1:{}", v.echelle))),
+            ("Orientation", Value::Str((if v.nord_geographique { "Nord géographique" } else { "Nord du projet" }).into())),
             ("Origine", point_mm(v.origine)),
             ("Direction de vue", Value::Str(format!("{:.4} ; {:.4} ; {:.4}", v.direction.x, v.direction.y, v.direction.z))),
             ("Droite, haut", Value::Str(format!("{:.4} ; {:.4} ; {:.4} / {:.4} ; {:.4} ; {:.4}", v.droite.x, v.droite.y, v.droite.z, v.haut.x, v.haut.y, v.haut.z))),
@@ -2914,5 +2919,21 @@ mod tests {
             proche(l.longitude, lieu.1, 1e-6, "longitude");
             assert_eq!(l.nom, lieu.2);
         }
+    }
+
+    /// Essai E17 (`rvt-essai-e17-scg-nord`, depuis E16) : système EPSG:2154 et un plan
+    /// orienté au nord géographique ; valeurs de Revit 2026 (`rvt-reference-scg-nord`).
+    #[test]
+    fn e17_systeme_et_nord() {
+        let Some(p) = essai(r"essais\2026", "E17_scg_nord.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        let c = &m.coordonnees;
+        let l = &c.lieux[&c.actif().unwrap().lieu];
+        assert_eq!((l.systeme.as_str(), l.epsg), ("Lambert93", Some(2154)));
+        proche(l.latitude, 0.839_648_926_828_889_7_f64.to_degrees(), 1e-9, "latitude");
+        proche(l.longitude, (-0.029_473_898_594_148_437_f64).to_degrees(), 1e-9, "longitude");
+        assert_eq!(l.nom, "48.1083397799843,-1.6887299952413");
+        let nord = |id: i64| m.vues.iter().find(|v| v.id == id).unwrap().nord_geographique;
+        assert!(nord(1979) && !nord(1960) && !nord(1970));
     }
 }

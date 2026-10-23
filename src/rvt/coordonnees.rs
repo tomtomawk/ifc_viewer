@@ -59,6 +59,20 @@ pub struct Lieu {
     pub fuseau: f64,
     pub nom: String,
     pub station: String,
+    /// Système de coordonnées géographiques (`GeoCoordinateSystemId`, attribut `id` du
+    /// premier système de la définition XML `m_geoCoordinateSystem`), vide sans système.
+    pub systeme: String,
+    /// Code EPSG du système (premier `id` numérique de la définition).
+    pub epsg: Option<u32>,
+}
+
+/// (identifiant, code EPSG) d'une définition MapGuide de système de coordonnées : le
+/// premier `id="…"` est celui du système, le premier `id` numérique son code EPSG
+/// (« Lambert93 », 2154).
+pub fn systeme(xml: &str) -> (String, Option<u32>) {
+    let ids: Vec<&str> = xml.split("id=\"").skip(1).filter_map(|r| r.split('"').next()).collect();
+    let nom = ids.first().map(|s| s.to_string()).unwrap_or_default();
+    (nom, ids.iter().find_map(|s| s.parse().ok()))
 }
 
 /// Coordonnées du document.
@@ -142,6 +156,8 @@ pub fn lire(id: i64, r: &Record) -> Option<Piece> {
                 fuseau: reel("m_dTimeZone"),
                 nom: texte("m_placeName"),
                 station: texte("m_weatherStationName"),
+                systeme: systeme(&texte("m_geoCoordinateSystem")).0,
+                epsg: systeme(&texte("m_geoCoordinateSystem")).1,
             },
         ),
         "BasePoint" => {

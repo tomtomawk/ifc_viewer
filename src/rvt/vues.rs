@@ -29,6 +29,9 @@ pub struct Vue {
     pub haut: DVec3,
     pub direction: DVec3,
     pub gabarit: bool,
+    /// Plan orienté au nord géographique (`m_bUseTrueNorth`, paramètre « Orientation ») :
+    /// Revit a alors pivoté `m_horzDir` et `m_vertDir`.
+    pub nord_geographique: bool,
     /// Famille propriétaire (`Element.m_famId`), pour écarter les vues des familles
     /// imbriquées rangées en ligne dans un `.rfa`.
     pub famille: i64,
@@ -236,6 +239,7 @@ pub fn vue(id: i64, r: &Record) -> Option<Vue> {
         haut: vec3(o.get("m_vertDir"))?,
         direction: vec3(o.get("m_viewDir"))?,
         gabarit: o.get("m_isTemplate").and_then(Val::int) == Some(1),
+        nord_geographique: o.get("m_bUseTrueNorth").and_then(Val::int) == Some(1),
         famille: id_of(o, "m_famId"),
         cadrage: None,
         type_vue: id_of(o, "m_dbViewTypeId"),
