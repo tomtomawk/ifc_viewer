@@ -249,6 +249,16 @@ impl<'s> Lecteur<'s, '_> {
 /// Lit un enregistrement entier : id de classe, champs de la racine, puis corps des
 /// pointeurs. Erreur si la lecture ne s'arrête pas exactement à la fin des données.
 pub fn read<'s>(sch: &'s Schema, b: &[u8]) -> Result<Record<'s>, String> {
+    let (rec, fin) = read_prefix(sch, b)?;
+    if fin != b.len() {
+        return Err(format!("lecture arrêtée à {fin} sur {} octets", b.len()));
+    }
+    Ok(rec)
+}
+
+/// Lit un objet au début des données (flux globaux : objets mis bout à bout) ; renvoie
+/// aussi le nombre d'octets lus.
+pub fn read_prefix<'s>(sch: &'s Schema, b: &[u8]) -> Result<(Record<'s>, usize), String> {
     let mut r = Lecteur { sch, b, o: 0, pending: Vec::new() };
     let cid = r.u16()?;
     let root = r.obj(cid, 0)?;
@@ -259,11 +269,8 @@ pub fn read<'s>(sch: &'s Schema, b: &[u8]) -> Result<Record<'s>, String> {
         bodies.push(Body { num, obj: r.obj(cid, 0)? });
         i += 1;
     }
-    if r.o != b.len() {
-        return Err(format!("lecture arrêtée à {} sur {} octets", r.o, b.len()));
-    }
     let by_num = bodies.iter().enumerate().map(|(i, b)| (b.num, i)).collect();
-    Ok(Record { root, bodies, by_num })
+    Ok((Record { root, bodies, by_num }, r.o))
 }
 
 /// Id de classe d'un enregistrement (ses deux premiers octets).

@@ -340,6 +340,18 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
         m.parametres.len()
     );
     println!("Identifiants : {} épisodes, {} éléments avec UniqueId", m.episodes.len(), m.episode_de.len());
+    if let Ok(i) = rvt::maquette::infos_document(path) {
+        println!(
+            "Document : logiciel {}, {} versions de Revit ({}), sous-projets {:?}, {} enregistrements (dernier par {}), {} documents de famille embarqués",
+            i.logiciel,
+            i.versions.len(),
+            i.versions.last().map(String::as_str).unwrap_or(""),
+            i.sous_projets,
+            i.enregistrements.len(),
+            i.enregistrements.last().map(|e| e.0.as_str()).unwrap_or(""),
+            i.documents.len()
+        );
+    }
     let formules: usize = m.familles.values().map(|f| f.formules.len()).sum();
     let champs_calcules = m.vues.iter().filter_map(|v| v.nomenclature.as_ref()).flat_map(|d| &d.champs).filter(|c| c.formule.is_some()).count();
     println!("Formules : {formules} dans les familles, {champs_calcules} champs calculés de nomenclatures");

@@ -570,18 +570,121 @@ pub struct Decodage {
     pub octets_geometries: (u64, u64),
 }
 
+/// Flux globaux, chacun un objet sérialisé (préfixe de 8 octets, 24 pour `Contents`,
+/// puis gzip ; objet suivi d'un u32 0) : `Global/Latest` (`ADocument` : table des
+/// documents embarqués, applications, versions de Revit qui l'ont enregistré…),
+/// `Global/PartitionTable` (sous-projets), `Global/DocumentIncrementTable` (historique
+/// des enregistrements : utilisateur, épisodes, nombre d'éléments), `Contents`
+/// (`DocumentStorageIndexImpl` : version du logiciel, révisions des flux, emplacement
+/// central). `Global/ContentDocuments` : pour chaque document de famille embarqué,
+/// `ContentMarker`, u32 n, son `ADocument` de n octets, u32 n ; puis un marqueur vide
+/// et u32 0.
+pub const FLUX_GLOBAUX: &[&str] = &["/Global/Latest", "/Global/PartitionTable", "/Global/DocumentIncrementTable", "/Contents", "/Global/ContentDocuments"];
+
+/// Objets d'un flux global (racines lues en entier).
+pub fn flux_global<'s>(sch: &'s Schema, nom: &str, raw: &[u8]) -> Result<Vec<Record<'s>>, String> {
+    let b = unpad(raw);
+    let h = b.windows(3).position(|w| w == [0x1f, 0x8b, 0x08]).ok_or("pas de gzip")?;
+    let d = inflate(&b[h..])?;
+    let u32_a = |o: usize| d.get(o..o + 4).map(|x| u32::from_le_bytes([x[0], x[1], x[2], x[3]]) as usize);
+    if nom != "/Global/ContentDocuments" {
+        if d.len() < 4 || u32_a(d.len() - 4) != Some(0) {
+            return Err("u32 0 final absent".into());
+        }
+        return Ok(vec![champs::read(sch, &d[..d.len() - 4])?]);
+    }
+    let mut out = Vec::new();
+    let mut o = 0;
+    loop {
+        let (marqueur, fin) = champs::read_prefix(sch, &d[o..])?;
+        if marqueur.root.class_name() != "ContentMarker" {
+            return Err(format!("{} au lieu de ContentMarker à {o}", marqueur.root.class_name()));
+        }
+        let o2 = o + fin;
+        if o2 + 4 == d.len() && u32_a(o2) == Some(0) {
+            return Ok(out);
+        }
+        let n = u32_a(o2).ok_or("longueur absente")?;
+        let doc = champs::read(sch, d.get(o2 + 4..o2 + 4 + n).ok_or("document tronqué")?)?;
+        if u32_a(o2 + 4 + n) != Some(n) {
+            return Err(format!("longueur non répétée à {}", o2 + 4 + n));
+        }
+        out.push(doc);
+        o = o2 + 8 + n;
+    }
+}
+
+/// Informations du document tirées des flux globaux.
+#[derive(Debug, Default)]
+pub struct InfosDocument {
+    /// Version du logiciel du dernier enregistrement (`Contents.m_softwareVersion`).
+    pub logiciel: String,
+    /// Versions de Revit qui ont enregistré le fichier (`ADocument.m_storedByRevitBuild`).
+    pub versions: Vec<String>,
+    /// Sous-projets (`PartitionTable.m_set[].m_name`).
+    pub sous_projets: Vec<String>,
+    /// Enregistrements : utilisateur, nombre d'éléments (`DocumentIncrementTable.m_increments`).
+    pub enregistrements: Vec<(String, i64)>,
+    /// Documents de famille embarqués : famille propriétaire (`ADocument.m_ownerFamilyId`)
+    /// et nombre d'éléments de leur table.
+    pub documents: Vec<(i64, usize)>,
+}
+
+pub fn infos_document(path: &Path) -> Result<InfosDocument, String> {
+    let mut cfb = Cfb::open(path)?;
+    let raw = cfb.read("Formats/Latest")?.ok_or("flux Formats/Latest absent")?;
+    let sch = Schema::parse(&inflate(&unpad(&raw)).map_err(|e| format!("Formats/Latest : {e}"))?)?;
+    let mut infos = InfosDocument::default();
+    let lire = |cfb: &mut Cfb, f: &str| -> Result<Vec<Record<'_>>, String> {
+        match cfb.read(&f[1..])? {
+            Some(raw) => flux_global(&sch, f, &raw),
+            None => Ok(Vec::new()),
+        }
+    };
+    let texte = |o: &Obj, k: &str| o.get(k).and_then(Val::str).unwrap_or_default().to_string();
+    for r in lire(&mut cfb, "/Contents")? {
+        infos.logiciel = texte(&r.root, "m_softwareVersion");
+    }
+    for r in lire(&mut cfb, "/Global/Latest")? {
+        infos.versions = r.root.get("m_storedByRevitBuild").map(Val::list).unwrap_or_default().iter().filter_map(|v| Some(texte(v.obj()?, "m_str"))).collect();
+    }
+    for r in lire(&mut cfb, "/Global/PartitionTable")? {
+        let set = r.root.get("m_set").map(Val::list).unwrap_or_default();
+        infos.sous_projets = set.iter().filter_map(|v| r.deref(v).map(|b| &b.obj).or(v.obj())).map(|o| texte(o, "m_name")).collect();
+    }
+    for r in lire(&mut cfb, "/Global/DocumentIncrementTable")? {
+        let l = r.root.get("m_increments").map(Val::list).unwrap_or_default();
+        infos.enregistrements = l.iter().filter_map(|v| r.deref(v).map(|b| &b.obj).or(v.obj())).map(|o| (texte(o, "m_userName"), o.get("m_totalElements").and_then(Val::int).unwrap_or(0))).collect();
+    }
+    for r in lire(&mut cfb, "/Global/ContentDocuments")? {
+        let n = r.field_body(&r.root, "m_elemTable").or(r.root.get("m_elemTable").and_then(Val::obj)).and_then(|t| t.get("m_elemArr")).map(|a| a.list().len()).unwrap_or(0);
+        infos.documents.push((r.root.get("m_ownerFamilyId").and_then(Val::element_id).unwrap_or(-1), n));
+    }
+    Ok(infos)
+}
+
 pub fn decodage(path: &Path) -> Result<Decodage, String> {
     let mut cfb = Cfb::open(path)?;
     const LUS: &[&str] = &["/Formats/Latest", "/Global/ElemTable", "/Global/History", "/BasicFileInfo", "/ProjectInformation", "/PartAtom", "/TransmissionData", "/RevitPreview4.0"];
     let entrees = cfb.entries();
     let total: u64 = entrees.iter().filter(|e| !e.1).map(|e| e.2).sum();
-    let lus: u64 = entrees.iter().filter(|e| !e.1 && (LUS.contains(&e.0.as_str()) || e.0.starts_with("/Partitions/"))).map(|e| e.2).sum();
     let raw = cfb.read("Formats/Latest")?.ok_or("flux Formats/Latest absent")?;
     let sch = Schema::parse(&inflate(&unpad(&raw)).map_err(|e| format!("Formats/Latest : {e}"))?)?;
+    // flux globaux comptés lus s'ils se lisent en entier
+    let mut globaux_lus = Vec::new();
+    for f in FLUX_GLOBAUX {
+        if let Some(raw) = cfb.read(&f[1..])? {
+            if flux_global(&sch, f, &raw).is_ok() {
+                globaux_lus.push(*f);
+            }
+        }
+    }
+    let lu = |p: &str| LUS.contains(&p) || globaux_lus.contains(&p) || p.starts_with("/Partitions/");
+    let lus: u64 = entrees.iter().filter(|e| !e.1 && lu(&e.0)).map(|e| e.2).sum();
     let ids8 = sch.ids8();
     let sortes: HashMap<u16, Sorte> = sch.classes.iter().filter_map(|c| Some((c.id, Sorte::de(&sch, c.id, &c.name)?))).collect();
     let marqueurs = sch.by_name("ContentMarker").zip(sch.by_name("ContentKey")).map(|(a, b)| (a.id, b.id));
-    let non_lus = entrees.iter().filter(|e| !e.1 && !LUS.contains(&e.0.as_str()) && !e.0.starts_with("/Partitions/")).map(|e| (e.0.clone(), e.2)).collect();
+    let non_lus = entrees.iter().filter(|e| !e.1 && !lu(&e.0)).map(|e| (e.0.clone(), e.2)).collect();
     let mut d = Decodage { flux: (lus, total), non_lus, elements: (0, 0, 0), octets_elements: (0, 0, 0), geometries: (0, 0), octets_geometries: (0, 0) };
     let parts: Vec<String> = entrees.iter().filter(|e| !e.1 && e.0.starts_with("/Partitions/")).map(|e| e.0.clone()).collect();
     for p in parts {
@@ -3393,6 +3496,27 @@ mod tests {
         assert_eq!(t.titres, ["Identifiant", "Famille et type", "Niveau", "Largeur", "Hauteur"]);
         assert_eq!(t.lignes.len(), 43);
         assert_eq!(t.lignes[1], ["P4", "Int. Simple: PP (0.83m x 2.04m)", "Niveau 0", "0.83", "2.04"]);
+    }
+
+    /// Flux globaux lus en entier (`Global/Latest`, `PartitionTable`,
+    /// `DocumentIncrementTable`, `Contents`, `ContentDocuments`) et leurs informations,
+    /// contre la lecture Python (`Decodage RVT/brouillons/flux/verifier_infos.py`).
+    #[test]
+    fn flux_globaux() {
+        for (fichier, documents) in [("Projet1.rvt", 101), ("Kerreut 2025.rvt", 262), ("FEN_2PF.rfa", 1)] {
+            let Some(p) = essai("fichiers", fichier) else { continue };
+            let d = decodage(&p).unwrap();
+            assert!(d.non_lus.is_empty() && d.flux.0 == d.flux.1, "{fichier} : {:?}", d.non_lus);
+            let i = infos_document(&p).unwrap();
+            assert_eq!(i.documents.len(), documents, "{fichier}");
+            if fichier == "Projet1.rvt" {
+                assert_eq!(i.logiciel, "20260731_1210(x64)");
+                assert_eq!(i.sous_projets, ["Workset1"]);
+                assert_eq!(i.enregistrements.len(), 8);
+                assert_eq!(i.enregistrements[0], ("thebault3LE8A".to_string(), 37_174));
+                assert_eq!(i.versions.last().map(String::as_str), Some("Revit 2026 2026 (2026.000) : 20260731_1210(x64)"));
+            }
+        }
     }
 
     /// Surface et périmètre des zones de surface contre `Area.Area` et `Area.Perimeter`
