@@ -88,6 +88,8 @@ pub struct NavVue {
     pub nom: String,
     /// Dénominateur de l'échelle.
     pub echelle: f64,
+    /// Niveau de détail (VIEW_DETAIL_LEVEL : 1 faible, 2 moyen, 3 élevé ; 0 : non lu).
+    pub detail: i64,
     /// Numéro d'une feuille.
     pub numero: String,
     /// Orientation de la vue : haut et direction vers l'observateur.

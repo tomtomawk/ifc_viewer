@@ -3070,6 +3070,11 @@ fn id_parametre(m: &Maquette, element: i64, param: i64) -> Option<i64> {
     m.parametres.get(&element)?.iter().find(|(p, _)| *p == param).and_then(|(_, b)| if let Brut::Id(i) = b.selon(parametres::Stockage::Id) { Some(i) } else { None })
 }
 
+/// Valeur entière d'un paramètre d'un élément (jeux de paramètres).
+fn entier_parametre(m: &Maquette, element: i64, param: i64) -> Option<i64> {
+    m.parametres.get(&element)?.iter().find(|(p, _)| *p == param).and_then(|(_, b)| if let Brut::Entier(i) = b.selon(parametres::Stockage::Entier) { Some(i) } else { None })
+}
+
 fn navigateur(m: &Maquette, entite_vue: &HashMap<i64, Id>, entite_type: &HashMap<i64, Id>, etage: &HashMap<i64, Id>) -> Navigateur {
     let mut placees: HashMap<i64, Vec<i64>> = HashMap::new();
     let mut fenetres: HashMap<i64, Vec<scene::NavFenetre>> = HashMap::new();
@@ -3105,6 +3110,7 @@ fn navigateur(m: &Maquette, entite_vue: &HashMap<i64, Id>, entite_type: &HashMap
             type_vue: nom_type(v.type_vue),
             nom: v.nom.clone(),
             echelle: v.echelle,
+            detail: entier_parametre(m, v.id, -1_011_002).unwrap_or(0),
             numero: v.numero.clone(),
             haut: v.haut,
             direction: v.direction,

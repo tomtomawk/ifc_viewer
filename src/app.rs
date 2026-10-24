@@ -280,6 +280,36 @@ struct PasseFeuille {
     direction: Vec3,
 }
 
+/// Niveau de détail d'une vue, comme dans Revit.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum NiveauDetail {
+    Faible,
+    Moyen,
+    Eleve,
+}
+
+impl NiveauDetail {
+    const TOUS: [NiveauDetail; 3] = [NiveauDetail::Faible, NiveauDetail::Moyen, NiveauDetail::Eleve];
+
+    fn libelle(self) -> &'static str {
+        match self {
+            NiveauDetail::Faible => "Faible",
+            NiveauDetail::Moyen => "Moyen",
+            NiveauDetail::Eleve => "Élevé",
+        }
+    }
+
+    /// Valeur du paramètre VIEW_DETAIL_LEVEL (`ViewDetailLevel` de l'API : 1, 2, 3).
+    fn depuis_revit(v: i64) -> Option<Self> {
+        match v {
+            1 => Some(NiveauDetail::Faible),
+            2 => Some(NiveauDetail::Moyen),
+            3 => Some(NiveauDetail::Eleve),
+            _ => None,
+        }
+    }
+}
+
 /// Navigation en vol façon Unity : clic droit maintenu pour regarder autour de soi,
 /// clavier pour se déplacer. Les touches sont lues par leur position physique (W A S D Q E
 /// d'un clavier QWERTY, Z Q S D A E d'un AZERTY).
@@ -361,6 +391,8 @@ pub struct ViewerApp {
     poche: Poche,
     /// Dénominateur de l'échelle du dessin (épaisseur des contours, pas des hachures).
     echelle: f64,
+    /// Niveau de détail de la vue (barre de la vue), lu dans la vue Revit ouverte.
+    detail: NiveauDetail,
     /// Tracé de la coupe à recalculer.
     coupe_dirty: bool,
     /// Niveaux de la scène (voir `niveaux`), relevés à son installation.
@@ -435,6 +467,7 @@ impl ViewerApp {
             coupe_hauteur: 1.2,
             poche: Poche::Hachure,
             echelle: 100.0,
+            detail: NiveauDetail::Moyen,
             coupe_dirty: true,
             liste_niveaux: Vec::new(),
             liste_materiaux: Vec::new(),
@@ -912,14 +945,15 @@ impl ViewerApp {
     fn barre_vue(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             ui.add_enabled_ui(self.scene.is_some(), |ui| {
-                self.choix_style(ui);
-                self.bouton_svg(ui);
-                ui.separator();
                 ui.label("Échelle");
                 let r = ui.add(egui::DragValue::new(&mut self.echelle).speed(1.0).range(1.0..=10000.0).prefix("1 : "));
                 if r.on_hover_text("Échelle de la vue : épaisseur des traits coupés et pas des hachures du dessin 2D, export SVG").changed() {
                     self.visibility_dirty = true;
                 }
+                ui.separator();
+                self.choix_detail(ui);
+                ui.separator();
+                self.choix_style(ui);
                 ui.separator();
                 if ui.button("Cadrer").on_hover_text("Tout le modèle visible dans la vue (F)").clicked() {
                     self.fit_all();
@@ -932,12 +966,40 @@ impl ViewerApp {
                     self.isolated = None;
                     self.visibility_dirty = true;
                 }
+                ui.separator();
                 if self.vue_3d() {
-                    ui.separator();
                     ui.toggle_value(&mut self.camera.ortho, "Ortho").on_hover_text("Projection orthographique (sinon perspective)");
                 }
+                self.bouton_svg(ui);
             });
         });
+    }
+
+    /// Niveau de détail de la vue (Faible, Moyen, Élevé), celui de la vue Revit ouverte.
+    /// La visibilité des géométries des familles selon le niveau de détail n'est pas
+    /// encore lue : le choix n'a pas d'effet sur l'affichage.
+    fn choix_detail(&mut self, ui: &mut egui::Ui) {
+        let (r, _) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), Sense::hover());
+        icone_detail(ui.painter(), r.shrink(3.0), self.detail);
+        ui.menu_button(self.detail.libelle(), |ui| {
+            for d in NiveauDetail::TOUS {
+                let (r, resp) = ui.allocate_exact_size(egui::vec2(120.0, 24.0), Sense::click());
+                let v = ui.visuals();
+                if d == self.detail {
+                    ui.painter().rect_filled(r, 3.0, v.selection.bg_fill);
+                } else if resp.hovered() {
+                    ui.painter().rect_filled(r, 3.0, v.widgets.hovered.bg_fill);
+                }
+                icone_detail(ui.painter(), egui::Rect::from_min_size(r.min + egui::vec2(5.0, 4.0), egui::vec2(16.0, 16.0)), d);
+                ui.painter().text(r.min + egui::vec2(30.0, 12.0), egui::Align2::LEFT_CENTER, d.libelle(), egui::TextStyle::Button.resolve(ui.style()), v.text_color());
+                if resp.clicked() {
+                    self.detail = d;
+                    ui.close();
+                }
+            }
+        })
+        .response
+        .on_hover_text("Niveau de détail de la vue (lu dans la vue Revit). Sans effet sur l'affichage pour l'instant : la visibilité des géométries de familles par niveau de détail n'est pas encore lue");
     }
 
     /// Catégorie montrée : une de ses clés au moins n'est pas masquée, ni sa classe.
@@ -1323,7 +1385,7 @@ impl ViewerApp {
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                let aide = if self.vue_3d() { "Gauche : orbite · Droit maintenu : vol (ZQSD/WASD, A/E) · Milieu, Maj+gauche : pan" } else { "Gauche/droit/milieu : pan" };
+                let aide = if self.vue_3d() { "Gauche : orbite · Droit : vol · Milieu : pan" } else { "Gauche/droit/milieu : pan" };
                 ui.label(RichText::new(format!("{aide} · Molette : zoom · Double-clic : cadrer")).weak());
             });
         });
@@ -1604,6 +1666,9 @@ impl ViewerApp {
         // mode dessin pour les plans, coupes et élévations ; coupe à hauteur sur le niveau
         // d'un plan d'étage
         let (genre, etage, echelle) = (v.genre.clone(), v.etage, v.echelle);
+        if let Some(d) = NiveauDetail::depuis_revit(v.detail) {
+            self.detail = d;
+        }
         match genre.as_str() {
             "Plan d'étage" | "Plan de plafond" | "Coupe" | "Élévation" => {
                 self.style = StyleVisuel::LignesCachees;
@@ -2584,7 +2649,7 @@ impl ViewerApp {
             p.push(("vues_revit", s.navigateur.as_ref().map_or(0, |n| n.vues.len()).to_string()));
         }
         if let Some(v) = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)) {
-            p.push(("vue", objet(&[("indice", self.vue_active.unwrap_or(0).to_string()), ("genre", texte(&v.genre)), ("nom", texte(&v.nom)), ("echelle", v.echelle.to_string())])));
+            p.push(("vue", objet(&[("indice", self.vue_active.unwrap_or(0).to_string()), ("genre", texte(&v.genre)), ("nom", texte(&v.nom)), ("echelle", v.echelle.to_string()), ("niveau_detail", texte(self.detail.libelle()))])));
         }
         let c = &self.camera;
         p.push((
@@ -2945,6 +3010,21 @@ impl ViewerApp {
 }
 
 /// Icône d'un style visuel : petit cube en perspective, tracé dans `r`.
+/// Icône du niveau de détail : un, deux ou trois traits, comme dans Revit.
+fn icone_detail(p: &egui::Painter, r: egui::Rect, d: NiveauDetail) {
+    let n = match d {
+        NiveauDetail::Faible => 1,
+        NiveauDetail::Moyen => 2,
+        NiveauDetail::Eleve => 3,
+    };
+    let t = egui::Stroke::new(1.4, Color32::from_gray(50));
+    p.rect_stroke(r, 1.0, egui::Stroke::new(1.0, Color32::from_gray(120)), egui::StrokeKind::Inside);
+    for k in 0..n {
+        let y = r.top() + r.height() * (k as f32 + 1.0) / (n as f32 + 1.0);
+        p.line_segment([egui::pos2(r.left() + 3.0, y), egui::pos2(r.right() - 3.0, y)], t);
+    }
+}
+
 fn icone_style(p: &egui::Painter, r: egui::Rect, style: StyleVisuel) {
     use egui::{Stroke, pos2};
     let c = r.center();
