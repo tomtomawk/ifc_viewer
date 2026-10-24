@@ -272,6 +272,12 @@ fn rvt_images(path: &std::path::Path, dossier: &std::path::Path) -> i32 {
             ecrire(format!("apparence {id} {}", a.nom), r);
         }
     }
+    // aperçus des types (composants de légende d'aperçu)
+    for l in &m.legendes {
+        if let Some(r) = &l.image {
+            ecrire(format!("apercu {} {}", l.type_id, m.nom_element(-1_002_052, l.type_id).unwrap_or_default()), r);
+        }
+    }
     println!("{n} fichiers écrits");
     0
 }
@@ -280,11 +286,11 @@ fn rvt_decodage(path: &std::path::Path) -> i32 {
     match rvt::maquette::decodage(path) {
         Ok(d) => {
             println!(
-                "{{\"non_interpretees\":[{}],\"flux\":[{},{}],\"non_lus\":[{}],\"elements\":[{},{},{}],\"octets_elements\":[{},{},{}],\"geometries\":[{},{}],\"octets_geometries\":[{},{}]}}",
+                "{{\"non_interpretees\":[{}],\"flux\":[{},{}],\"non_lus\":[{}],\"elements\":[{},{},{}],\"octets_elements\":[{},{},{}],\"octets_nommes\":{},\"geometries\":[{},{}],\"octets_geometries\":[{},{}]}}",
                 d.non_interpretees.iter().map(|(c, n, o)| format!("[{},{n},{o}]", pilote::texte(c))).collect::<Vec<_>>().join(","),
                 d.flux.0,
                 d.flux.1,
-                d.non_lus.iter().map(|(p, n)| format!("[{},{n}]", pilote::texte(p))).collect::<Vec<_>>().join(","), d.elements.0, d.elements.1, d.elements.2, d.octets_elements.0, d.octets_elements.1, d.octets_elements.2, d.geometries.0, d.geometries.1, d.octets_geometries.0, d.octets_geometries.1
+                d.non_lus.iter().map(|(p, n)| format!("[{},{n}]", pilote::texte(p))).collect::<Vec<_>>().join(","), d.elements.0, d.elements.1, d.elements.2, d.octets_elements.0, d.octets_elements.1, d.octets_elements.2, d.octets_nommes, d.geometries.0, d.geometries.1, d.octets_geometries.0, d.octets_geometries.1
             );
             0
         }
@@ -412,6 +418,18 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
         m.types_imports.len(),
         m.liens.len(),
         m.types_liens.iter().map(|t| t.chemin.as_str()).collect::<Vec<_>>().join(", ")
+    );
+    println!(
+        "Annexes : {} groupes ({} membres lus), {} jeux de variantes, {} options, {} éléments en variante, {} composants de légende, {} contraintes d'alignement, {} motifs de ligne, {} objets nommés",
+        m.groupes.len(),
+        m.groupe_de.len(),
+        m.variantes.values().filter(|v| v.jeu).count(),
+        m.variantes.values().filter(|v| !v.jeu).count(),
+        m.variante_de.len(),
+        m.legendes.iter().filter(|l| !l.apercu_type).count(),
+        m.contraintes.len(),
+        m.motifs_ligne.len(),
+        m.objets_nommes.len()
     );
     let formules: usize = m.familles.values().map(|f| f.formules.len()).sum();
     let champs_calcules = m.vues.iter().filter_map(|v| v.nomenclature.as_ref()).flat_map(|d| &d.champs).filter(|c| c.formule.is_some()).count();

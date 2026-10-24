@@ -115,6 +115,8 @@ pub struct TypeElem {
     /// Sous-catégorie d'un type de texte ou d'étiquette (`m_lineAndTextAttr.m_categoryId`),
     /// qui porte sa couleur ; −1 sinon.
     pub categorie_texte: i64,
+    /// Type de groupe : origine d'insertion (`ElementGroupType.m_insertionOrigin`, mm).
+    pub origine_insertion: Option<DVec3>,
 }
 
 pub struct Famille {
@@ -376,6 +378,19 @@ pub struct Maquette {
     pub imports: Vec<super::medias::InstanceLien>,
     pub types_liens: Vec<super::medias::TypeLien>,
     pub liens: Vec<super::medias::InstanceLien>,
+    /// Objets annexes (`annexes`).
+    pub groupes: Vec<super::annexes::Groupe>,
+    /// Groupe de chaque élément membre lu.
+    pub groupe_de: HashMap<i64, i64>,
+    /// Options et jeux de variantes, par id ; option de chaque élément lu qui en a une.
+    pub variantes: HashMap<i64, super::annexes::Variante>,
+    pub variante_de: HashMap<i64, i64>,
+    pub legendes: Vec<super::annexes::ComposantLegende>,
+    pub contraintes: Vec<super::annexes::Contrainte>,
+    pub motifs_ligne: HashMap<i64, super::annexes::MotifLigne>,
+    pub epaisseurs: Vec<super::annexes::TableEpaisseurs>,
+    pub tables_cles: Vec<super::annexes::TableCles>,
+    pub objets_nommes: Vec<super::annexes::ObjetNomme>,
     /// Formes et combinaisons d'un document de famille.
     pub formes: Vec<Forme>,
     /// Noms des sous-catégories définies dans le document (`CategoryElem`), lus pour
@@ -512,6 +527,10 @@ enum Sorte {
     Apparence,
     /// Images, imports CAO, liens Revit (`medias`).
     Media,
+    /// Objets annexes (`annexes` : groupes, légendes, contraintes, motifs de ligne…).
+    Annexe,
+    /// Profilé de mur (`WallSweep`) : géométrie propre, lu comme une forme.
+    Profile,
     /// Topologie de plan d'un niveau (`LevelRoomPlan`).
     Topologie,
     /// Esquisse (dérivées de `Sketch`) : ses lignes ne sont pas tracées dans la vue.
@@ -521,7 +540,7 @@ enum Sorte {
 impl Sorte {
     /// Éléments dont on lit le complément 0x67 (géométrie).
     fn a_geometrie(self) -> bool {
-        matches!(self, Sorte::Mur | Sorte::Dalle | Sorte::Toposolide | Sorte::SurfaceTopo | Sorte::Toit | Sorte::Volee | Sorte::GardeCorps | Sorte::Instance | Sorte::Piece | Sorte::Forme | Sorte::Region)
+        matches!(self, Sorte::Mur | Sorte::Dalle | Sorte::Toposolide | Sorte::SurfaceTopo | Sorte::Toit | Sorte::Volee | Sorte::GardeCorps | Sorte::Instance | Sorte::Piece | Sorte::Forme | Sorte::Region | Sorte::Profile)
     }
 
     /// Sortes lues seulement dans un document de famille : dans un projet, les formes
@@ -552,6 +571,10 @@ impl Sorte {
             "SketchPlane" => Sorte::PlanConstruction,
             "AppearanceAssetElem" => Sorte::Apparence,
             "ImageHolder" | "ImageSymbol" | "ImageInstance" | "MasterImportSymbol" | "ImportInstance" | "RvtLinkSymbol" | "RvtLinkInstance" => Sorte::Media,
+            "WallSweep" => Sorte::Profile,
+            // profil de plan de référence (plan d'esquisse d'un profil) : lu comme un plan
+            "ProfileRefPlane" => Sorte::PlanReference,
+            c if super::annexes::CLASSES.contains(&c) => Sorte::Annexe,
 
             // type de région remplie : un Symbol, lu à part (motifs et couleurs)
             "FilledRegionAttributes" => Sorte::TypeRegion,
@@ -593,6 +616,8 @@ pub struct Decodage {
     pub non_lus: Vec<(String, u64)>,
     pub elements: (usize, usize, usize),
     pub octets_elements: (u64, u64, u64),
+    /// Octets des classes interprétées par leur seul nom (`annexes::NOMMEES_SEULEMENT`).
+    pub octets_nommes: u64,
     pub geometries: (usize, usize),
     pub octets_geometries: (u64, u64),
     /// Classes lues mais non interprétées : nom, nombre, octets (les plus lourdes d'abord).
@@ -714,7 +739,8 @@ pub fn decodage(path: &Path) -> Result<Decodage, String> {
     let sortes: HashMap<u16, Sorte> = sch.classes.iter().filter_map(|c| Some((c.id, Sorte::de(&sch, c.id, &c.name)?))).collect();
     let marqueurs = sch.by_name("ContentMarker").zip(sch.by_name("ContentKey")).map(|(a, b)| (a.id, b.id));
     let non_lus = entrees.iter().filter(|e| !e.1 && !lu(&e.0)).map(|e| (e.0.clone(), e.2)).collect();
-    let mut d = Decodage { flux: (lus, total), non_lus, elements: (0, 0, 0), octets_elements: (0, 0, 0), geometries: (0, 0), octets_geometries: (0, 0), non_interpretees: Vec::new() };
+    let mut d = Decodage { flux: (lus, total), non_lus, elements: (0, 0, 0), octets_elements: (0, 0, 0), geometries: (0, 0), octets_geometries: (0, 0), non_interpretees: Vec::new(), octets_nommes: 0 };
+    let nommees: std::collections::HashSet<u16> = super::annexes::NOMMEES_SEULEMENT.iter().filter_map(|n| sch.by_name(n)).map(|c| c.id).collect();
     let mut autres: HashMap<u16, (usize, u64)> = HashMap::new();
     let parts: Vec<String> = entrees.iter().filter(|e| !e.1 && e.0.starts_with("/Partitions/")).map(|e| e.0.clone()).collect();
     for p in parts {
@@ -732,6 +758,9 @@ pub fn decodage(path: &Path) -> Result<Decodage, String> {
                     Some(c) if sortes.contains_key(&c) => {
                         d.elements.2 += 1;
                         d.octets_elements.2 += n;
+                        if nommees.contains(&c) {
+                            d.octets_nommes += n;
+                        }
                     }
                     Some(c) => {
                         let e = autres.entry(c).or_default();
@@ -861,10 +890,10 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     niveaux.sort_by(|a, b| a.altitude.total_cmp(&b.altitude).then(a.id.cmp(&b.id)));
     let altitude: HashMap<i64, f64> = niveaux.iter().map(|n| (n.id, n.altitude)).collect();
     let herite = |c: &str, base: &str| sch.by_name(c).is_some_and(|c| sch.inherits(c.id, base));
-    let extraits: Vec<Result<(i64, Extrait, Vec<(i64, Brut)>), (i64, String)>> = ids
+    let extraits: Vec<Result<(i64, Extrait, Vec<(i64, Brut)>, (Option<i64>, Option<i64>)), (i64, String)>> = ids
         .par_iter()
         .filter(|e| objets[e].0 != Sorte::Niveau)
-        .filter_map(|eid| Some(lire_objet(eid)?.map(|(s, r)| (*eid, extraire(*eid, s, &r, &altitude, &herite), parametres::valeurs(&r)))))
+        .filter_map(|eid| Some(lire_objet(eid)?.map(|(s, r)| (*eid, extraire(*eid, s, &r, &altitude, &herite), parametres::valeurs(&r), (super::annexes::groupe_de(&r), super::annexes::variante_de(&r))))))
         .collect();
     drop(objets);
 
@@ -884,13 +913,24 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     let (mut plans_reference, mut plans_construction, mut apparences) = (Vec::new(), Vec::new(), HashMap::new());
     let (mut rasters, mut types_images, mut images) = (HashMap::new(), Vec::new(), Vec::new());
     let (mut types_imports, mut imports, mut types_liens, mut liens) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let (mut groupes, mut legendes, mut contraintes, mut motifs_ligne) = (Vec::new(), Vec::new(), Vec::new(), HashMap::new());
+    let (mut epaisseurs, mut tables_cles, mut objets_nommes) = (Vec::new(), Vec::new(), Vec::new());
+    let mut variantes: HashMap<i64, super::annexes::Variante> = HashMap::new();
     let (mut instances_vue, mut polices, mut types_fenetres, mut revisions, mut info_projet) = (Vec::new(), HashMap::new(), HashMap::new(), HashMap::new(), -1);
     let (mut types_cotes, mut format_longueurs) = (HashMap::new(), None);
     let mut lignes_esquisse: std::collections::HashSet<i64> = Default::default();
+    let mut groupe_de: HashMap<i64, i64> = HashMap::new();
+    let mut variante_de: HashMap<i64, i64> = HashMap::new();
     for x in extraits {
-        let x = x.map(|(eid, x, vals)| {
+        let x = x.map(|(eid, x, vals, (groupe, variante))| {
             if !vals.is_empty() {
                 parametres.insert(eid, vals);
+            }
+            if let Some(g) = groupe {
+                groupe_de.insert(eid, g);
+            }
+            if let Some(o) = variante {
+                variante_de.insert(eid, o);
             }
             x
         });
@@ -919,11 +959,24 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
             Ok(Extrait::PlanReference(p)) => plans_reference.push(p),
             Ok(Extrait::PlanConstruction(p)) => plans_construction.push(p),
             Ok(Extrait::Apparence(id, a)) => drop(apparences.insert(id, a)),
+            Ok(Extrait::Annexe(x)) => {
+                use super::annexes::Annexe;
+                match x {
+                    Annexe::Variante(v) => drop(variantes.insert(v.id, v)),
+                    Annexe::Groupe(g) => groupes.push(g),
+                    Annexe::Legende(l) => legendes.push(l),
+                    Annexe::Contrainte(c) => contraintes.push(c),
+                    Annexe::Motif(mo) => drop(motifs_ligne.insert(mo.id, mo)),
+                    Annexe::Epaisseurs(e) => epaisseurs.push(e),
+                    Annexe::Cles(c) => tables_cles.push(c),
+                    Annexe::Nomme(n) => objets_nommes.push(n),
+                }
+            }
             Ok(Extrait::Media(x)) => {
                 use super::medias::Media;
                 // les types gardent aussi leur nom parmi les types (nom des éléments)
                 let mut type_nomme = |id: i64, nom: &str, classe: &str| {
-                    types.insert(id, TypeElem { nom: nom.to_string(), classe: classe.into(), epaisseur: None, famille: -1, largeur: None, hauteur: None, categorie_texte: -1 });
+                    types.insert(id, TypeElem { nom: nom.to_string(), classe: classe.into(), epaisseur: None, famille: -1, largeur: None, hauteur: None, categorie_texte: -1, origine_insertion: None });
                 };
                 match x {
                     Media::Raster(id, r) => drop(rasters.insert(id, r)),
@@ -1115,6 +1168,16 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         imports,
         types_liens,
         liens,
+        groupes,
+        groupe_de,
+        variantes,
+        variante_de,
+        legendes,
+        contraintes,
+        motifs_ligne,
+        epaisseurs,
+        tables_cles,
+        objets_nommes,
         type_de_element: HashMap::new(),
         ordre_phases,
         filtres_phase,
@@ -1448,6 +1511,7 @@ enum Extrait {
     PlanConstruction(super::plans::PlanConstruction),
     Apparence(i64, super::plans::Apparence),
     Media(super::medias::Media),
+    Annexe(super::annexes::Annexe),
     /// Ligne de zone : schéma, niveau, extrémités (x, y en mm).
     LigneZone(i64, i64, DVec2, DVec2),
     Forme(Forme),
@@ -1504,7 +1568,9 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite
             }
             let (largeur, hauteur) = (valeurs.get(&FAMILY_WIDTH_PARAM).copied(), valeurs.get(&FAMILY_HEIGHT_PARAM).copied());
             let categorie_texte = o.get("m_lineAndTextAttr").and_then(Val::obj).map(|a| id_of(a, "m_categoryId")).unwrap_or(-1);
-            Some(Extrait::Type(eid, TypeElem { nom, classe: o.class_name().to_string(), epaisseur, famille: id_of(o, "m_familyId"), largeur, hauteur, categorie_texte }))
+            // type de groupe : `m_insertionOrigin` est un repère (`Trf`), son origine `m_or`
+            let origine_insertion = r.field_body(o, "m_insertionOrigin").or(o.get("m_insertionOrigin").and_then(Val::obj)).and_then(|t| t.get("m_or")).and_then(vec3).map(|p| p * FT);
+            Some(Extrait::Type(eid, TypeElem { nom, classe: o.class_name().to_string(), epaisseur, famille: id_of(o, "m_familyId"), largeur, hauteur, categorie_texte, origine_insertion }))
         })()),
         Sorte::Famille => ou_rien((|| {
             let occurrence = r.field_body(o, "m_familyParams").map(|fp| {
@@ -1648,6 +1714,20 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite
         Sorte::PlanConstruction => ou_rien(super::plans::plan_construction(eid, r).map(Extrait::PlanConstruction)),
         Sorte::Apparence => ou_rien(super::plans::apparence(r).map(|a| Extrait::Apparence(eid, a))),
         Sorte::Media => ou_rien(super::medias::lire(eid, r).map(Extrait::Media)),
+        Sorte::Annexe => ou_rien(super::annexes::lire(eid, r).map(Extrait::Annexe)),
+        Sorte::Profile => {
+            let info = r.field_body(o, "m_wallSweepInfo").or(o.get("m_wallSweepInfo").and_then(Val::obj));
+            Extrait::Forme(Forme {
+                id: eid,
+                classe: o.class_name().to_string(),
+                sous_categorie: -1,
+                materiau: info.map(|i| id_of(i, "m_matId")).unwrap_or(-1),
+                famille: -1,
+                niveau: id_of(o, "m_assocLevelId"),
+                membres: Vec::new(),
+                geometrie: Err(String::new()),
+            })
+        }
         Sorte::Unites => Extrait::Unites(vues::format_projet(r), parametres::Unites::lire(r).unwrap_or_default()),
         Sorte::Esquisse => {
             let d = r.field_body(o, "m_elemIdsPairSet").and_then(|p| p.get("m_data")).map(Val::list).unwrap_or_default();
@@ -1888,6 +1968,25 @@ impl Maquette {
             .or_else(|| self.type_de(p.support).and_then(|t| self.types.get(&t)).map(|t| t.nom.clone()))
             .or_else(|| self.nom_element(-1, p.support))
             .unwrap_or_else(|| "<non associé>".into())
+    }
+
+    /// Variante d'un élément : (jeu, option, principale), None dans le modèle principal.
+    pub fn variante(&self, element: i64) -> Option<(&str, &str, bool)> {
+        let o = self.variantes.get(self.variante_de.get(&element)?)?;
+        let jeu = self.variantes.get(&o.lien);
+        Some((jeu.map(|j| j.nom.as_str()).unwrap_or(""), o.nom.as_str(), jeu.is_some_and(|j| j.lien == o.id)))
+    }
+
+    /// Point d'un groupe (LocationPoint de l'API, mm) : origine de son repère plus
+    /// l'origine d'insertion de son type, tournée par le repère ; groupe de modèle
+    /// (rattaché à un niveau) : cote = altitude du niveau + décalage (`m_offsetFromLevel`).
+    pub fn point_groupe(&self, g: &super::annexes::Groupe) -> DVec3 {
+        let io = self.types.get(&g.type_id).and_then(|t| t.origine_insertion).unwrap_or(DVec3::ZERO);
+        let p = g.origine + g.axes * io;
+        match self.niveaux.iter().find(|l| l.id == g.niveau) {
+            Some(l) => DVec3::new(p.x, p.y, l.altitude + g.decalage),
+            None => p,
+        }
     }
 
     /// Type d'un élément lu.
@@ -2428,6 +2527,15 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
         if let Some(u) = m.unique_id(p.id) {
             props.push(("UniqueId", Value::Str(u)));
         }
+        // variante : jeu, option, principale ou secondaire
+        if let Some((jeu, option, principale)) = m.variante(p.id) {
+            props.push(("Variante", Value::Str(format!("{jeu} : {option} ({})", if principale { "principale" } else { "secondaire" }))));
+        }
+        // membre d'un groupe : nom du type de groupe et ElementId du groupe
+        if let Some(g) = m.groupe_de.get(&p.id) {
+            let nom = m.groupes.iter().find(|x| x.id == *g).and_then(|x| m.types.get(&x.type_id)).map(|t| t.nom.clone()).unwrap_or_default();
+            props.push(("Groupe", Value::Str(format!("{nom} ({g})"))));
+        }
         props.extend(p.props);
         match p.geometrie {
             Ok(g) => {
@@ -2620,6 +2728,82 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
         b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF", i.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
         contenus.entry(projet).or_default().push(Value::Ref(id));
     }
+    // objets annexes : groupes, composants de légende, motifs de ligne, épaisseurs,
+    // tables de clés, objets nommés, contraintes d'alignement (résumé)
+    let mut annexe = |b: &mut Builder, eid: i64, genre: &str, nom: String, props: Vec<(&str, Value)>| {
+        let id = b.add("IFCANNOTATION", vec![guid("RVT", eid), n.clone(), Value::Str(nom), n.clone(), Value::Str(genre.into()), Value::Ref(shape), n.clone()]);
+        let pset = b.pset("RVTPSET", eid, "Revit", props);
+        b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF", eid), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
+        contenus.entry(projet).or_default().push(Value::Ref(id));
+    };
+    let ids_texte = |l: &[i64]| {
+        let mut t = l.iter().take(40).map(i64::to_string).collect::<Vec<_>>().join(", ");
+        if l.len() > 40 {
+            t += &format!(" … ({} en tout)", l.len());
+        }
+        t
+    };
+    for g in &m.groupes {
+        let nom = m.types.get(&g.type_id).map(|t| t.nom.clone()).unwrap_or_default();
+        let niveau = m.niveaux.iter().find(|l| l.id == g.niveau).map(|l| l.nom.clone()).unwrap_or_default();
+        let props = vec![
+            ("ElementId", Value::Str(g.id.to_string())),
+            ("Point", point_mm(m.point_groupe(g))),
+            ("Niveau", Value::Str(niveau)),
+            ("Décalage", mm(g.decalage)),
+            ("Vue", Value::Str(nom_vue_de(g.vue))),
+            ("Membres", Value::Str(g.membres.len().to_string())),
+            ("Membres (ElementId)", Value::Str(ids_texte(&g.membres))),
+        ];
+        annexe(&mut b, g.id, "Groupe", nom, props);
+    }
+    for l in m.legendes.iter().filter(|l| !l.apercu_type) {
+        let props = vec![
+            ("ElementId", Value::Str(l.id.to_string())),
+            ("Vue", Value::Str(nom_vue_de(l.vue))),
+            ("Vue du composant", Value::Str(l.vue_composant.to_string())),
+            ("Longueur", mm(l.longueur)),
+            ("Niveau de détail", Value::Str(l.detail.to_string())),
+        ];
+        annexe(&mut b, l.id, "Composant de légende", m.nom_element(-1_002_052, l.type_id).unwrap_or_default(), props);
+    }
+    let genre_segment = |g: i64| match g {
+        0 => "trait",
+        1 => "espace",
+        2 => "point",
+        _ => "?",
+    };
+    for x in m.motifs_ligne.values() {
+        let segs = x.segments.iter().map(|(g, l)| format!("{} {} mm", genre_segment(*g), format_real((l * 1000.0).round() / 1000.0))).collect::<Vec<_>>().join(", ");
+        annexe(&mut b, x.id, "Motif de ligne", x.nom.clone(), vec![("ElementId", Value::Str(x.id.to_string())), ("Segments", Value::Str(segs))]);
+    }
+    for x in &m.epaisseurs {
+        let liste = |v: &[f64]| v.iter().map(|e| format_real((e * 1000.0).round() / 1000.0)).collect::<Vec<_>>().join(" ; ");
+        let mut props = vec![("ElementId", Value::Str(x.id.to_string())), ("Perspective (mm)", Value::Str(liste(&x.perspective))), ("Annotation (mm)", Value::Str(liste(&x.annotation)))];
+        let echelles: Vec<String> = x.modele.iter().map(|(e, v)| format!("1:{e} : {}", liste(v))).collect();
+        props.push(("Modèle (mm, par échelle)", Value::Str(echelles.join(" | "))));
+        annexe(&mut b, x.id, "Épaisseurs de ligne", String::new(), props);
+    }
+    for x in &m.tables_cles {
+        let apercu = x.entrees.iter().take(20).map(|(k, _, t)| format!("{k} {t}")).collect::<Vec<_>>().join(" ; ");
+        annexe(&mut b, x.id, x.genre, x.nom.clone(), vec![("ElementId", Value::Str(x.id.to_string())), ("Entrées", Value::Str(x.entrees.len().to_string())), ("Premières entrées", Value::Str(apercu))]);
+    }
+    for x in &m.objets_nommes {
+        let mut props = vec![("ElementId", Value::Str(x.id.to_string()))];
+        props.extend(x.props.iter().map(|(k, v)| (*k, Value::Str(v.clone()))));
+        annexe(&mut b, x.id, x.genre, x.nom.clone(), props);
+    }
+    if !m.contraintes.is_empty() {
+        let liees: std::collections::HashSet<i64> = m.contraintes.iter().flat_map(|c| c.references.iter().copied()).filter(|&e| e != -1).collect();
+        let vues: std::collections::HashSet<i64> = m.contraintes.iter().map(|c| c.vue).collect();
+        annexe(
+            &mut b,
+            -1,
+            "Contraintes d'alignement",
+            format!("{} contraintes", m.contraintes.len()),
+            vec![("Éléments contraints", Value::Str(liees.len().to_string())), ("Vues", Value::Str(vues.len().to_string())), ("Premières (ElementId)", Value::Str(ids_texte(&m.contraintes.iter().map(|c| c.id).collect::<Vec<_>>())))],
+        );
+    }
     // Vues : un nœud par vue (dans le niveau d'un plan, sinon dans le projet), ses
     // éléments 2D en enfants, tracés dans le plan de la vue (masqués par défaut).
     // éléments 2D par vue, sauf ceux que Revit n'y montre pas (masqués, cotes dont un
@@ -2761,6 +2945,9 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
         if let Some(c) = ph(-1_012_100) {
             nav.phases_objets.insert(ent, (c, ph(-1_012_101).unwrap_or(-1)));
         }
+        if m.variante(el).is_some_and(|v| !v.2) {
+            nav.variantes_secondaires.insert(ent);
+        }
     }
     s.navigateur = Some(nav);
     // coordonnées partagées du point cliqué (document placé)
@@ -2899,7 +3086,7 @@ fn navigateur(m: &Maquette, entite_vue: &HashMap<i64, Id>, entite_type: &HashMap
     let mut groupes: Vec<String> = m.types.values().filter(|t| t.classe == "ElementGroupType").map(|t| t.nom.clone()).collect();
     groupes.sort();
     let filtres_phase = m.filtres_phase.iter().map(|(&id, (_, p))| (id, *p)).collect();
-    Navigateur { vues, familles, groupes, materiaux: Vec::new(), phases: m.ordre_phases.clone(), filtres_phase, phases_objets: Default::default() }
+    Navigateur { vues, familles, groupes, materiaux: Vec::new(), phases: m.ordre_phases.clone(), filtres_phase, phases_objets: Default::default(), variantes_secondaires: Default::default() }
 }
 
 /// Nombre maximal de traits de motifs de surface dans une scène.
@@ -3717,6 +3904,84 @@ mod tests {
         assert_eq!(t.titres, ["Identifiant", "Famille et type", "Niveau", "Largeur", "Hauteur"]);
         assert_eq!(t.lignes.len(), 43);
         assert_eq!(t.lignes[1], ["P4", "Int. Simple: PP (0.83m x 2.04m)", "Niveau 0", "0.83", "2.04"]);
+    }
+
+    /// Groupes, composants de légende, table des notes, cas et natures de charge,
+    /// gabarits de tableaux électriques, motifs de ligne contre Revit 2026
+    /// (`rvt-reference-classes-restantes`, `references/classes_restantes.json`).
+    #[test]
+    fn objets_annexes() {
+        let base = std::env::var("RVT_ESSAIS").unwrap_or_else(|_| r"C:\Users\theba\Projets code\Decodage RVT".into());
+        let Ok(t) = std::fs::read_to_string(format!(r"{base}\references\classes_restantes.json")) else { return };
+        let r: serde_json::Value = serde_json::from_str(&t).unwrap();
+        for fichier in ["Projet vide.rvt", "Kerreut 2025.rvt", "Saint-Malo_avenue aristide briand_46.rvt"] {
+            let Some(p) = essai("fichiers", fichier) else { continue };
+            let m = lire(&p, &|_| {}).unwrap();
+            let f = &r[fichier];
+            let ids = |x: &serde_json::Value| -> BTreeSet<i64> { x.as_array().unwrap().iter().map(|v| v.as_i64().unwrap()).collect() };
+            // groupes : type, membres (liste du groupe et renvoi de chaque membre), point
+            assert_eq!(m.groupes.len(), f["groupes"].as_array().unwrap().len(), "{fichier} : groupes");
+            for x in f["groupes"].as_array().unwrap() {
+                let id = x["id"].as_i64().unwrap();
+                let g = m.groupes.iter().find(|g| g.id == id).unwrap();
+                assert_eq!(g.type_id, x["type"].as_i64().unwrap(), "{fichier} groupe {id}");
+                assert_eq!(m.types.get(&g.type_id).map(|t| t.nom.as_str()), x["nomType"].as_str(), "{fichier} groupe {id}");
+                let attendus = ids(&x["membres"]);
+                assert_eq!(g.membres.iter().copied().collect::<BTreeSet<i64>>(), attendus, "{fichier} groupe {id} : membres");
+                let p = DVec3::new(x["point"][0].as_f64().unwrap(), x["point"][1].as_f64().unwrap(), x["point"][2].as_f64().unwrap()) * FT;
+                let lu = m.point_groupe(g);
+                assert!(lu.distance(p) < 1e-3, "{fichier} groupe {id} : point {lu:?} contre {p:?}");
+            }
+            // composants de légende placés
+            let legendes: Vec<_> = m.legendes.iter().filter(|l| !l.apercu_type).collect();
+            assert_eq!(legendes.len(), f["legendes"].as_array().unwrap().len(), "{fichier} : légendes");
+            for x in f["legendes"].as_array().unwrap() {
+                let l = legendes.iter().find(|l| l.id == x["id"].as_i64().unwrap()).unwrap();
+                assert_eq!((l.vue, l.type_id, l.vue_composant), (x["vue"].as_i64().unwrap(), x["composant"].as_i64().unwrap(), x["vueComposant"].as_i64().unwrap()));
+                proche(l.longueur, x["longueur"].as_f64().unwrap() * FT, 1e-6, "longueur");
+            }
+            // table des notes d'identification
+            let notes = m.tables_cles.iter().find(|t| t.genre.starts_with("Table des notes")).unwrap();
+            assert_eq!(notes.entrees.len(), f["notes"].as_array().unwrap().len(), "{fichier} : notes");
+            for x in f["notes"].as_array().unwrap().iter().step_by(37) {
+                let e = notes.entrees.iter().find(|e| e.0 == x["cle"].as_str().unwrap()).unwrap();
+                assert_eq!((e.1.as_str(), e.2.as_str()), (x["parent"].as_str().unwrap(), x["texte"].as_str().unwrap_or("")));
+            }
+            // cas et natures de charge, gabarits de tableaux électriques
+            let nommes = |genre: &str| m.objets_nommes.iter().filter(|o| o.genre == genre).map(|o| (o.id, o.nom.clone())).collect::<BTreeSet<_>>();
+            let attendus = |k: &str| f[k].as_array().unwrap().iter().map(|x| (x["id"].as_i64().unwrap(), x["nom"].as_str().unwrap().to_string())).collect::<BTreeSet<_>>();
+            assert_eq!(nommes("Cas de charge"), attendus("cas"), "{fichier} : cas de charge");
+            assert_eq!(nommes("Nature de charge"), attendus("natures"), "{fichier} : natures");
+            assert_eq!(nommes("Gabarit de tableau électrique"), attendus("tableaux"), "{fichier} : tableaux");
+            for x in f["cas"].as_array().unwrap() {
+                let o = m.objets_nommes.iter().find(|o| o.id == x["id"].as_i64().unwrap()).unwrap();
+                assert_eq!(o.props[0].1, x["numero"].as_i64().unwrap().to_string());
+                assert_eq!(o.props[1].1, x["nature"].as_i64().unwrap().to_string());
+            }
+            // profilés de mur : maillés comme des formes
+            let profiles: Vec<_> = m.formes.iter().filter(|x| x.classe == "WallSweep").collect();
+            let mailles = profiles.iter().filter(|x| x.geometrie.is_ok()).count();
+            eprintln!("{fichier} : profilés de mur {mailles} maillés sur {}", profiles.len());
+            assert_eq!(mailles, profiles.len(), "{fichier} : profilés de mur");
+            // motifs de ligne : nom et segments
+            assert_eq!(m.motifs_ligne.len(), f["motifs"].as_array().unwrap().len(), "{fichier} : motifs de ligne");
+            for x in f["motifs"].as_array().unwrap() {
+                let mo = &m.motifs_ligne[&x["id"].as_i64().unwrap()];
+                assert_eq!(mo.nom, x["nom"].as_str().unwrap());
+                let segs = x["segments"].as_array().unwrap();
+                assert_eq!(mo.segments.len(), segs.len(), "{}", mo.nom);
+                for ((g, l), s) in mo.segments.iter().zip(segs) {
+                    let genre = match s[0].as_str().unwrap() {
+                        "Dash" => 0,
+                        "Space" => 1,
+                        "Dot" => 2,
+                        _ => -1,
+                    };
+                    assert_eq!(*g, genre, "{} : genre", mo.nom);
+                    proche(*l, s[1].as_f64().unwrap() * FT, 1e-6, "segment");
+                }
+            }
+        }
     }
 
     /// Images, imports CAO et liens Revit contre Revit 2026 (`rvt-reference-images-liens`,

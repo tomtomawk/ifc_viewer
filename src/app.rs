@@ -552,6 +552,8 @@ impl ViewerApp {
         };
         (self.categories, self.categorie_objet, self.cle_objet) = categories(&scene);
         self.scene = Some(scene);
+        let secondaires = self.masques_variantes();
+        self.hidden_objects.extend(secondaires);
         self.visibility_dirty = true;
         self.preparer_feuille(None);
     }
@@ -1421,6 +1423,8 @@ impl ViewerApp {
         // filtre de phase de la vue : objets dont l'état dans la phase de la vue est masqué
         let masques = self.masques_de_phase(i);
         self.hidden_objects.extend(masques);
+        let secondaires = self.masques_variantes();
+        self.hidden_objects.extend(secondaires);
         // vues placées d'une feuille, selon la visibilité de la vue (annotations montrées)
         if genre_feuille && self.isolated.is_some() {
             self.hidden_classes.remove("IFCANNOTATION");
@@ -1442,6 +1446,16 @@ impl ViewerApp {
         if let Some(e) = entite {
             self.select(Some(e), false);
         }
+    }
+
+    /// Objets des options de variante secondaires (masqués par défaut, comme dans Revit).
+    fn masques_variantes(&self) -> Vec<u32> {
+        let Some(s) = &self.scene else { return Vec::new() };
+        let Some(nav) = &s.navigateur else { return Vec::new() };
+        if nav.variantes_secondaires.is_empty() {
+            return Vec::new();
+        }
+        (0..s.objects.len() as u32).filter(|&o| nav.variantes_secondaires.contains(&s.objects[o as usize].id)).collect()
     }
 
     /// Objets qu'une vue Revit ne montre pas selon sa phase et son filtre de phase (état

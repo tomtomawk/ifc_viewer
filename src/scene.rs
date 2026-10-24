@@ -50,6 +50,9 @@ pub struct Navigateur {
     pub filtres_phase: std::collections::HashMap<i64, [u8; 7]>,
     /// Phases de création et de démolition des objets de la scène.
     pub phases_objets: std::collections::HashMap<Id, (i64, i64)>,
+    /// Objets d'une option de variante secondaire : masqués comme dans Revit, qui ne
+    /// montre que les options principales hors vues réglées autrement.
+    pub variantes_secondaires: std::collections::HashSet<Id>,
     pub vues: Vec<NavVue>,
     pub familles: Vec<NavFamille>,
     pub groupes: Vec<String>,
