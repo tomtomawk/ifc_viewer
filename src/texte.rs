@@ -36,7 +36,14 @@ fn charger(donnees: Vec<u8>) -> Option<Police> {
     let f = FontRef::new(&donnees).ok()?;
     let m = f.metrics(Size::unscaled(), LocationRef::default());
     let unites = m.units_per_em as f32;
-    let capitales = m.cap_height.unwrap_or(0.7 * unites);
+    // hauteur des capitales déclarée (OS/2 version 2 et suivantes), sinon mesurée sur le
+    // « H » (DejaVu Sans, par exemple, ne la déclare pas), sinon 0,7 cadratin
+    let mesuree = || {
+        let h = f.charmap().map('H')?;
+        let b = f.glyph_metrics(Size::unscaled(), LocationRef::default()).bounds(h)?;
+        (b.y_max > 0.0).then_some(b.y_max)
+    };
+    let capitales = m.cap_height.filter(|c| *c > 0.0).or_else(mesuree).unwrap_or(0.7 * unites);
     Some(Police { donnees, unites, capitales, ascendante: m.ascent, descendante: m.descent, glyphes: Mutex::new(HashMap::new()) })
 }
 
@@ -292,6 +299,19 @@ mod tests {
         let trouvee = FICHIERS[0].1.iter().any(|f| lire_fichier_police(f).is_some());
         eprintln!("Arial ou équivalent trouvé : {trouvee}");
         assert!(!ligne("Test", "Arial", 2.5, true).triangles.is_empty());
+    }
+
+    /// Police sans hauteur de capitales déclarée (DejaVu Sans, seule police trouvée sur le
+    /// runner linux-arm64 de la CI) : hauteur mesurée sur le « H ».
+    #[test]
+    fn capitales_mesurees() {
+        let Ok(d) = std::fs::read("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") else {
+            eprintln!("DejaVu Sans absente, test sauté");
+            return;
+        };
+        let p = charger(d).unwrap();
+        // DejaVu Sans : 2048 unités par cadratin, « H » de 1493 unités
+        assert!((p.capitales / p.unites - 1493.0 / 2048.0).abs() < 0.01, "{} / {}", p.capitales, p.unites);
     }
 
     /// Un « H » de 2,5 mm de capitales : triangles dans [0, 2,5] en hauteur, aire > 0 ;
