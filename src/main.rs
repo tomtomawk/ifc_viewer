@@ -20,6 +20,14 @@ use std::path::PathBuf;
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
+    // Mode console : ifc_viewer --decodage fichier.rvt|.rfa|.rte (part décodée, JSON)
+    if args.first().map(|s| s.as_str()) == Some("--decodage") {
+        let Some(path) = args.get(1) else {
+            eprintln!("Usage : ifc_viewer --decodage <fichier.rvt|.rfa|.rte>");
+            std::process::exit(2);
+        };
+        std::process::exit(rvt_decodage(&PathBuf::from(path)));
+    }
     // Mode console : ifc_viewer --nomenclatures fichier.rvt (contenu calculé, JSON par ligne)
     if args.first().map(|s| s.as_str()) == Some("--nomenclatures") {
         let Some(path) = args.get(1) else {
@@ -221,6 +229,24 @@ fn rvt_parametres(path: &std::path::Path) -> i32 {
 
 /// Contenu calculé de chaque nomenclature : une ligne JSON {id, nom, titres, lignes,
 /// non_calculees}.
+fn rvt_decodage(path: &std::path::Path) -> i32 {
+    match rvt::maquette::decodage(path) {
+        Ok(d) => {
+            println!(
+                "{{\"flux\":[{},{}],\"non_lus\":[{}],\"elements\":[{},{},{}],\"octets_elements\":[{},{},{}],\"geometries\":[{},{}],\"octets_geometries\":[{},{}]}}",
+                d.flux.0,
+                d.flux.1,
+                d.non_lus.iter().map(|(p, n)| format!("[{},{n}]", pilote::texte(p))).collect::<Vec<_>>().join(","), d.elements.0, d.elements.1, d.elements.2, d.octets_elements.0, d.octets_elements.1, d.octets_elements.2, d.geometries.0, d.geometries.1, d.octets_geometries.0, d.octets_geometries.1
+            );
+            0
+        }
+        Err(e) => {
+            eprintln!("Erreur : {e}");
+            1
+        }
+    }
+}
+
 fn rvt_nomenclatures(path: &std::path::Path) -> i32 {
     let m = match rvt::maquette::lire(path, &|_| {}) {
         Ok(m) => m,

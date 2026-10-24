@@ -556,6 +556,64 @@ impl Sorte {
     }
 }
 
+/// Mesure du décodage d'un fichier (`ifc_viewer --decodage`) : part des flux OLE lus par
+/// le lecteur (octets), des enregistrements d'éléments (section 0x66) lus en entier par
+/// le schéma, de ceux dont la classe est exploitée (`Sorte`), et des compléments de
+/// géométrie (section 0x67) lus en entier ; en nombre et en octets.
+pub struct Decodage {
+    pub flux: (u64, u64),
+    /// Flux non lus : chemin, taille.
+    pub non_lus: Vec<(String, u64)>,
+    pub elements: (usize, usize, usize),
+    pub octets_elements: (u64, u64, u64),
+    pub geometries: (usize, usize),
+    pub octets_geometries: (u64, u64),
+}
+
+pub fn decodage(path: &Path) -> Result<Decodage, String> {
+    let mut cfb = Cfb::open(path)?;
+    const LUS: &[&str] = &["/Formats/Latest", "/Global/ElemTable", "/Global/History", "/BasicFileInfo", "/ProjectInformation", "/PartAtom", "/TransmissionData", "/RevitPreview4.0"];
+    let entrees = cfb.entries();
+    let total: u64 = entrees.iter().filter(|e| !e.1).map(|e| e.2).sum();
+    let lus: u64 = entrees.iter().filter(|e| !e.1 && (LUS.contains(&e.0.as_str()) || e.0.starts_with("/Partitions/"))).map(|e| e.2).sum();
+    let raw = cfb.read("Formats/Latest")?.ok_or("flux Formats/Latest absent")?;
+    let sch = Schema::parse(&inflate(&unpad(&raw)).map_err(|e| format!("Formats/Latest : {e}"))?)?;
+    let ids8 = sch.ids8();
+    let sortes: HashMap<u16, Sorte> = sch.classes.iter().filter_map(|c| Some((c.id, Sorte::de(&sch, c.id, &c.name)?))).collect();
+    let marqueurs = sch.by_name("ContentMarker").zip(sch.by_name("ContentKey")).map(|(a, b)| (a.id, b.id));
+    let non_lus = entrees.iter().filter(|e| !e.1 && !LUS.contains(&e.0.as_str()) && !e.0.starts_with("/Partitions/")).map(|e| (e.0.clone(), e.2)).collect();
+    let mut d = Decodage { flux: (lus, total), non_lus, elements: (0, 0, 0), octets_elements: (0, 0, 0), geometries: (0, 0), octets_geometries: (0, 0) };
+    let parts: Vec<String> = entrees.iter().filter(|e| !e.1 && e.0.starts_with("/Partitions/")).map(|e| e.0.clone()).collect();
+    for p in parts {
+        let raw = cfb.read(&p)?.ok_or_else(|| format!("flux {p} illisible"))?;
+        let (sec, _) = sections_documents(&raw, marqueurs).map_err(|e| format!("{p} : {e}"))?;
+        let vide = Vec::new();
+        for (_, body) in records(sec.get(&0x66).unwrap_or(&vide), true, ids8).map_err(|e| format!("{p} : {e}"))? {
+            let n = body.len() as u64;
+            d.elements.0 += 1;
+            d.octets_elements.0 += n;
+            if champs::read(&sch, body).is_ok() {
+                d.elements.1 += 1;
+                d.octets_elements.1 += n;
+                if champs::class_id(body).is_some_and(|c| sortes.contains_key(&c)) {
+                    d.elements.2 += 1;
+                    d.octets_elements.2 += n;
+                }
+            }
+        }
+        for (_, body) in records(sec.get(&0x67).unwrap_or(&vide), true, ids8).map_err(|e| format!("{p} : {e}"))? {
+            let n = body.len() as u64;
+            d.geometries.0 += 1;
+            d.octets_geometries.0 += n;
+            if champs::read(&sch, body).is_ok() {
+                d.geometries.1 += 1;
+                d.octets_geometries.1 += n;
+            }
+        }
+    }
+    Ok(d)
+}
+
 /// Lit le schéma, la table des éléments et les partitions, puis les éléments et leur
 /// géométrie.
 pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> {
