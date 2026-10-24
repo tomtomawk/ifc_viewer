@@ -17,6 +17,7 @@ pub mod feuilles;
 pub mod formules;
 pub mod geometrie;
 pub mod maquette;
+pub mod medias;
 mod objets;
 pub mod coordonnees;
 pub mod nomenclatures;

@@ -367,6 +367,15 @@ pub struct Maquette {
     pub plans_construction: Vec<super::plans::PlanConstruction>,
     /// Apparences de rendu, par id.
     pub apparences: HashMap<i64, super::plans::Apparence>,
+    /// Images : fichiers (par id de `ImageHolder`), types, occurrences (`medias`).
+    pub rasters: HashMap<i64, super::medias::Raster>,
+    pub types_images: Vec<super::medias::TypeImage>,
+    pub images: Vec<super::medias::InstanceImage>,
+    /// Imports CAO et liens Revit : types et occurrences.
+    pub types_imports: Vec<super::medias::TypeImport>,
+    pub imports: Vec<super::medias::InstanceLien>,
+    pub types_liens: Vec<super::medias::TypeLien>,
+    pub liens: Vec<super::medias::InstanceLien>,
     /// Formes et combinaisons d'un document de famille.
     pub formes: Vec<Forme>,
     /// Noms des sous-catégories définies dans le document (`CategoryElem`), lus pour
@@ -501,6 +510,8 @@ enum Sorte {
     PlanReference,
     PlanConstruction,
     Apparence,
+    /// Images, imports CAO, liens Revit (`medias`).
+    Media,
     /// Topologie de plan d'un niveau (`LevelRoomPlan`).
     Topologie,
     /// Esquisse (dérivées de `Sketch`) : ses lignes ne sont pas tracées dans la vue.
@@ -540,6 +551,7 @@ impl Sorte {
             "RefPlane" => Sorte::PlanReference,
             "SketchPlane" => Sorte::PlanConstruction,
             "AppearanceAssetElem" => Sorte::Apparence,
+            "ImageHolder" | "ImageSymbol" | "ImageInstance" | "MasterImportSymbol" | "ImportInstance" | "RvtLinkSymbol" | "RvtLinkInstance" => Sorte::Media,
 
             // type de région remplie : un Symbol, lu à part (motifs et couleurs)
             "FilledRegionAttributes" => Sorte::TypeRegion,
@@ -870,6 +882,8 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     let mut lignes_zones: HashMap<(i64, i64), Vec<(DVec2, DVec2)>> = HashMap::new();
     let mut topologies: Vec<super::zones::Topologie> = Vec::new();
     let (mut plans_reference, mut plans_construction, mut apparences) = (Vec::new(), Vec::new(), HashMap::new());
+    let (mut rasters, mut types_images, mut images) = (HashMap::new(), Vec::new(), Vec::new());
+    let (mut types_imports, mut imports, mut types_liens, mut liens) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     let (mut instances_vue, mut polices, mut types_fenetres, mut revisions, mut info_projet) = (Vec::new(), HashMap::new(), HashMap::new(), HashMap::new(), -1);
     let (mut types_cotes, mut format_longueurs) = (HashMap::new(), None);
     let mut lignes_esquisse: std::collections::HashSet<i64> = Default::default();
@@ -905,6 +919,31 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
             Ok(Extrait::PlanReference(p)) => plans_reference.push(p),
             Ok(Extrait::PlanConstruction(p)) => plans_construction.push(p),
             Ok(Extrait::Apparence(id, a)) => drop(apparences.insert(id, a)),
+            Ok(Extrait::Media(x)) => {
+                use super::medias::Media;
+                // les types gardent aussi leur nom parmi les types (nom des éléments)
+                let mut type_nomme = |id: i64, nom: &str, classe: &str| {
+                    types.insert(id, TypeElem { nom: nom.to_string(), classe: classe.into(), epaisseur: None, famille: -1, largeur: None, hauteur: None, categorie_texte: -1 });
+                };
+                match x {
+                    Media::Raster(id, r) => drop(rasters.insert(id, r)),
+                    Media::TypeImage(t) => {
+                        type_nomme(t.id, &t.nom, "ImageSymbol");
+                        types_images.push(t)
+                    }
+                    Media::InstanceImage(i) => images.push(i),
+                    Media::TypeImport(t) => {
+                        type_nomme(t.id, &t.nom, "MasterImportSymbol");
+                        types_imports.push(t)
+                    }
+                    Media::InstanceImport(i) => imports.push(i),
+                    Media::TypeLien(t) => {
+                        type_nomme(t.id, &t.nom, "RvtLinkSymbol");
+                        types_liens.push(t)
+                    }
+                    Media::InstanceLien(i) => liens.push(i),
+                }
+            }
             Ok(Extrait::LigneZone(sc, niv, a, b)) => lignes_zones.entry((sc, niv)).or_insert_with(Vec::new).push((a, b)),
             Ok(Extrait::Forme(f)) => formes.push(f),
             Ok(Extrait::Categorie(id, nom)) => drop(categories.insert(id, nom)),
@@ -1069,6 +1108,13 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         plans_reference,
         plans_construction,
         apparences,
+        rasters,
+        types_images,
+        images,
+        types_imports,
+        imports,
+        types_liens,
+        liens,
         type_de_element: HashMap::new(),
         ordre_phases,
         filtres_phase,
@@ -1401,6 +1447,7 @@ enum Extrait {
     PlanReference(super::plans::PlanReference),
     PlanConstruction(super::plans::PlanConstruction),
     Apparence(i64, super::plans::Apparence),
+    Media(super::medias::Media),
     /// Ligne de zone : schéma, niveau, extrémités (x, y en mm).
     LigneZone(i64, i64, DVec2, DVec2),
     Forme(Forme),
@@ -1600,6 +1647,7 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite
         Sorte::PlanReference => ou_rien(super::plans::plan_reference(eid, r).map(Extrait::PlanReference)),
         Sorte::PlanConstruction => ou_rien(super::plans::plan_construction(eid, r).map(Extrait::PlanConstruction)),
         Sorte::Apparence => ou_rien(super::plans::apparence(r).map(|a| Extrait::Apparence(eid, a))),
+        Sorte::Media => ou_rien(super::medias::lire(eid, r).map(Extrait::Media)),
         Sorte::Unites => Extrait::Unites(vues::format_projet(r), parametres::Unites::lire(r).unwrap_or_default()),
         Sorte::Esquisse => {
             let d = r.field_body(o, "m_elemIdsPairSet").and_then(|p| p.get("m_data")).map(Val::list).unwrap_or_default();
@@ -2524,6 +2572,52 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
         let id = b.add("IFCANNOTATION", vec![guid("RVT", p.id), n.clone(), Value::Str(m.nom_plan_construction(p)), n.clone(), Value::Str("Plan de construction".into()), Value::Ref(shape), n.clone()]);
         let pset = b.pset("RVTPSET", p.id, "Revit", props);
         b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF", p.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
+        contenus.entry(projet).or_default().push(Value::Ref(id));
+    }
+    // images placées, imports CAO, liens Revit
+    let nom_vue_de = |v: i64| if v == -1 { "Modèle".to_string() } else { m.vues.iter().find(|x| x.id == v).map(|x| x.nom.clone()).unwrap_or_else(|| v.to_string()) };
+    for i in &m.images {
+        let t = m.types_images.iter().find(|t| t.id == i.type_id);
+        let mut props = vec![("ElementId", Value::Str(i.id.to_string())), ("Vue", Value::Str(nom_vue_de(i.vue))), ("Centre", point_mm(i.centre))];
+        if let Some(t) = t {
+            props.push(("Largeur", mm(t.largeur * i.echelle.0)));
+            props.push(("Hauteur", mm(t.hauteur * i.echelle.1)));
+            props.push(("Pixels", Value::Str(format!("{} × {}", t.largeur_px, t.hauteur_px))));
+            props.push(("Résolution", Value::Str(format!("{} ppp", format_real(t.dpi)))));
+            if let Some(c) = &t.chemin {
+                props.push(("Fichier d'origine", Value::Str(c.clone())));
+            }
+            if let Some(r) = m.rasters.get(&t.donnees) {
+                props.push(("Format", Value::Str(format!("{} ({} octets)", r.format, r.donnees.len()))));
+            }
+        }
+        let nom = t.map(|t| t.nom.clone()).unwrap_or_default();
+        let id = b.add("IFCANNOTATION", vec![guid("RVT", i.id), n.clone(), Value::Str(nom), n.clone(), Value::Str("Image".into()), Value::Ref(shape), n.clone()]);
+        let pset = b.pset("RVTPSET", i.id, "Revit", props);
+        b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF", i.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
+        contenus.entry(projet).or_default().push(Value::Ref(id));
+    }
+    for (genre, i) in m.imports.iter().map(|i| ("Import CAO", i)).chain(m.liens.iter().map(|i| ("Lien Revit", i))) {
+        let mut props = vec![("ElementId", Value::Str(i.id.to_string())), ("Vue", Value::Str(nom_vue_de(i.vue))), ("Origine", point_mm(i.origine)), ("Axe X", vecteur(i.axes.x_axis))];
+        let nom = if let Some(t) = m.types_imports.iter().find(|t| t.id == i.type_id) {
+            props.push(("Taille du fichier", Value::Str(format!("{} octets", t.taille))));
+            props.push(("Catégorie", Value::Str(m.nom_categorie(t.categorie))));
+            props.push(("Lien", Value::Str((if t.lie { "Lié" } else { "Importé" }).into())));
+            if !t.chemin.is_empty() {
+                props.push(("Chemin", Value::Str(t.chemin.clone())));
+            }
+            props.push(("Unité", Value::Str(t.unite.rsplit(':').next().unwrap_or("").split('-').next().unwrap_or("").into())));
+            t.nom.clone()
+        } else if let Some(t) = m.types_liens.iter().find(|t| t.id == i.type_id) {
+            props.push(("Chemin", Value::Str(t.chemin.clone())));
+            props.push(("Chemin relatif", Value::Str((if t.relatif { "Oui" } else { "Non" }).into())));
+            if i.nom.is_empty() { t.nom.clone() } else { format!("{} : {}", t.nom, i.nom) }
+        } else {
+            i.nom.clone()
+        };
+        let id = b.add("IFCANNOTATION", vec![guid("RVT", i.id), n.clone(), Value::Str(nom), n.clone(), Value::Str(genre.into()), Value::Ref(shape), n.clone()]);
+        let pset = b.pset("RVTPSET", i.id, "Revit", props);
+        b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF", i.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
         contenus.entry(projet).or_default().push(Value::Ref(id));
     }
     // Vues : un nœud par vue (dans le niveau d'un plan, sinon dans le projet), ses
@@ -3623,6 +3717,75 @@ mod tests {
         assert_eq!(t.titres, ["Identifiant", "Famille et type", "Niveau", "Largeur", "Hauteur"]);
         assert_eq!(t.lignes.len(), 43);
         assert_eq!(t.lignes[1], ["P4", "Int. Simple: PP (0.83m x 2.04m)", "Niveau 0", "0.83", "2.04"]);
+    }
+
+    /// Images, imports CAO et liens Revit contre Revit 2026 (`rvt-reference-images-liens`,
+    /// `references/images_liens.json`) ; les données de chaque image sont un fichier
+    /// JPEG ou PNG dont l'en-tête donne la taille en pixels de Revit.
+    #[test]
+    fn images_et_liens() {
+        let base = std::env::var("RVT_ESSAIS").unwrap_or_else(|_| r"C:\Users\theba\Projets code\Decodage RVT".into());
+        let Ok(t) = std::fs::read_to_string(format!(r"{base}\references\images_liens.json")) else { return };
+        let r: serde_json::Value = serde_json::from_str(&t).unwrap();
+        let v3 = |x: &serde_json::Value| DVec3::new(x[0].as_f64().unwrap(), x[1].as_f64().unwrap(), x[2].as_f64().unwrap());
+        // taille en pixels d'après l'en-tête du fichier image
+        let pixels = |d: &[u8]| -> Option<(u32, u32)> {
+            if d.starts_with(b"\x89PNG") {
+                return Some((u32::from_be_bytes(d[16..20].try_into().ok()?), u32::from_be_bytes(d[20..24].try_into().ok()?)));
+            }
+            let mut i = 2;
+            while i + 9 < d.len() {
+                let (m, l) = (d[i + 1], u16::from_be_bytes([d[i + 2], d[i + 3]]) as usize);
+                if (0xC0..=0xCF).contains(&m) && m != 0xC4 && m != 0xC8 && m != 0xCC {
+                    return Some((u16::from_be_bytes([d[i + 7], d[i + 8]]) as u32, u16::from_be_bytes([d[i + 5], d[i + 6]]) as u32));
+                }
+                i += 2 + l;
+            }
+            None
+        };
+        for fichier in ["Kerreut 2025.rvt", "Saint-Malo_avenue aristide briand_46.rvt"] {
+            let Some(p) = essai("fichiers", fichier) else { continue };
+            let m = lire(&p, &|_| {}).unwrap();
+            let f = &r[fichier];
+            let projet: Vec<&super::super::medias::TypeImage> = m.types_images.iter().filter(|t| t.famille == -1).collect();
+            let attendus = f["types_compte"].as_u64().unwrap_or(f["types"].as_array().unwrap().len() as u64) as usize;
+            assert_eq!(projet.len(), attendus, "{fichier} : types d'image du projet");
+            for x in f["types"].as_array().unwrap() {
+                let id = x[0].as_i64().unwrap();
+                let t = projet.iter().find(|t| t.id == id).unwrap_or_else(|| panic!("type {id}"));
+                assert_eq!((t.nom.as_str(), t.largeur_px, t.hauteur_px, t.chemin.as_deref()), (x[1].as_str().unwrap(), x[2].as_i64().unwrap(), x[3].as_i64().unwrap(), x[4].as_str()), "{fichier} {id}");
+                let d = &m.rasters[&t.donnees];
+                assert_eq!(pixels(&d.donnees), Some((t.largeur_px as u32, t.hauteur_px as u32)), "{fichier} {id} : en-tête {}", d.format);
+            }
+            assert_eq!(m.images.len(), f["images"].as_array().unwrap().len(), "{fichier} : images placées");
+            for x in f["images"].as_array().unwrap() {
+                let id = x[0].as_i64().unwrap();
+                let i = m.images.iter().find(|i| i.id == id).unwrap();
+                let t = m.types_images.iter().find(|t| t.id == i.type_id).unwrap();
+                assert_eq!((i.type_id, i.vue), (x[1].as_i64().unwrap(), x[2].as_i64().unwrap()));
+                proche(t.largeur * i.echelle.0, x[3].as_f64().unwrap() * FT, 1e-3, "largeur");
+                proche(t.hauteur * i.echelle.1, x[4].as_f64().unwrap() * FT, 1e-3, "hauteur");
+                assert!(i.centre.distance(v3(&x[5]) * FT) < 1e-3, "{fichier} {id} : centre {:?}", i.centre / FT);
+            }
+            assert_eq!(m.imports.len(), f["imports"].as_array().unwrap().len(), "{fichier} : imports");
+            for x in f["imports"].as_array().unwrap() {
+                let id = x[0].as_i64().unwrap();
+                let i = m.imports.iter().find(|i| i.id == id).unwrap();
+                let t = m.types_imports.iter().find(|t| t.id == i.type_id).unwrap();
+                assert_eq!((i.type_id, t.nom.as_str(), t.lie, i.vue), (x[1].as_i64().unwrap(), x[2].as_str().unwrap(), x[3].as_bool().unwrap(), x[4].as_i64().unwrap()), "{fichier} {id}");
+                assert!(i.origine.distance(v3(&x[5]) * FT) < 1e-3 && i.axes.x_axis.distance(v3(&x[6])) < 1e-6, "{fichier} {id} : repère");
+                if let Some(c) = x[7].as_str() {
+                    assert_eq!(t.chemin, c);
+                }
+            }
+            for x in f["liens"].as_array().unwrap() {
+                let i = m.liens.iter().find(|i| i.id == x[0].as_i64().unwrap()).unwrap();
+                let t = m.types_liens.iter().find(|t| t.id == i.type_id).unwrap();
+                assert_eq!((i.type_id, t.nom.as_str(), t.chemin.as_str(), t.relatif), (x[2].as_i64().unwrap(), x[3].as_str().unwrap(), x[4].as_str().unwrap(), x[5].as_str() == Some("Relative")));
+                assert!(x[1].as_str().unwrap().starts_with(&format!("{} : {} : ", t.nom, i.nom)), "nom du lien");
+                assert!(i.origine.distance(v3(&x[6]) * FT) < 1e-3 && i.axes.x_axis.distance(v3(&x[7])) < 1e-6);
+            }
+        }
     }
 
     /// Plans de référence, plans de construction, apparences de rendu et apparence des

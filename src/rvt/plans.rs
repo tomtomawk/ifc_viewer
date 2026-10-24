@@ -57,6 +57,8 @@ pub struct Apparence {
     pub diffuse: Option<[f64; 4]>,
     /// Texture de la couleur diffuse (chemins séparés par « | »).
     pub texture: Option<String>,
+    /// Vignette de rendu (`m_pThumbnail`, PNG).
+    pub vignette: Option<super::medias::Raster>,
 }
 
 fn corps<'r, 's>(r: &'r Record<'s>, v: &'r Val<'s>) -> Option<&'r Obj<'s>> {
@@ -131,5 +133,6 @@ pub fn apparence(r: &Record) -> Option<Apparence> {
         nom: a.get("m_Name").and_then(Val::str).unwrap_or_default().to_string(),
         diffuse: diffuse.and_then(|d| d.get("m_value")).and_then(Val::reals).and_then(|v| v.try_into().ok()),
         texture,
+        vignette: r.field_body(&r.root, "m_pThumbnail").and_then(super::medias::raster),
     })
 }

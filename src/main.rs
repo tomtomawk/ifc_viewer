@@ -20,6 +20,14 @@ use std::path::PathBuf;
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
+    // Mode console : ifc_viewer --images fichier.rvt dossier (images et vignettes enregistrées)
+    if args.first().map(|s| s.as_str()) == Some("--images") {
+        let (Some(path), Some(dossier)) = (args.get(1), args.get(2)) else {
+            eprintln!("Usage : ifc_viewer --images <fichier.rvt|.rfa|.rte> <dossier>");
+            std::process::exit(2);
+        };
+        std::process::exit(rvt_images(&PathBuf::from(path), &PathBuf::from(dossier)));
+    }
     // Mode console : ifc_viewer --decodage fichier.rvt|.rfa|.rte (part décodée, JSON)
     if args.first().map(|s| s.as_str()) == Some("--decodage") {
         let Some(path) = args.get(1) else {
@@ -229,12 +237,51 @@ fn rvt_parametres(path: &std::path::Path) -> i32 {
 
 /// Contenu calculé de chaque nomenclature : une ligne JSON {id, nom, titres, lignes,
 /// non_calculees}.
+/// Écrit les images (types d'image) et les vignettes des apparences d'un fichier Revit.
+fn rvt_images(path: &std::path::Path, dossier: &std::path::Path) -> i32 {
+    let m = match rvt::maquette::lire(path, &|_| {}) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Erreur : {e}");
+            return 1;
+        }
+    };
+    if let Err(e) = std::fs::create_dir_all(dossier) {
+        eprintln!("Erreur : {e}");
+        return 1;
+    }
+    let propre = |s: &str| s.chars().map(|c| if r#"\/:*?"<>|"#.contains(c) { '_' } else { c }).collect::<String>();
+    let mut n = 0;
+    let mut ecrire = |nom: String, r: &rvt::medias::Raster| {
+        let f = dossier.join(format!("{}.{}", propre(&nom), r.format));
+        match std::fs::write(&f, &r.donnees) {
+            Ok(()) => {
+                println!("{} ({} × {} px, {} octets)", f.display(), r.largeur_px, r.hauteur_px, r.donnees.len());
+                n += 1;
+            }
+            Err(e) => eprintln!("{} : {e}", f.display()),
+        }
+    };
+    for t in &m.types_images {
+        if let Some(r) = m.rasters.get(&t.donnees) {
+            ecrire(format!("image {} {}", t.id, t.nom), r);
+        }
+    }
+    for (id, a) in &m.apparences {
+        if let Some(r) = &a.vignette {
+            ecrire(format!("apparence {id} {}", a.nom), r);
+        }
+    }
+    println!("{n} fichiers écrits");
+    0
+}
+
 fn rvt_decodage(path: &std::path::Path) -> i32 {
     match rvt::maquette::decodage(path) {
         Ok(d) => {
             println!(
                 "{{\"non_interpretees\":[{}],\"flux\":[{},{}],\"non_lus\":[{}],\"elements\":[{},{},{}],\"octets_elements\":[{},{},{}],\"geometries\":[{},{}],\"octets_geometries\":[{},{}]}}",
-                d.non_interpretees.iter().take(60).map(|(c, n, o)| format!("[{},{n},{o}]", pilote::texte(c))).collect::<Vec<_>>().join(","),
+                d.non_interpretees.iter().map(|(c, n, o)| format!("[{},{n},{o}]", pilote::texte(c))).collect::<Vec<_>>().join(","),
                 d.flux.0,
                 d.flux.1,
                 d.non_lus.iter().map(|(p, n)| format!("[{},{n}]", pilote::texte(p))).collect::<Vec<_>>().join(","), d.elements.0, d.elements.1, d.elements.2, d.octets_elements.0, d.octets_elements.1, d.octets_elements.2, d.geometries.0, d.geometries.1, d.octets_geometries.0, d.octets_geometries.1
@@ -353,6 +400,19 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
             i.documents.len()
         );
     }
+    println!(
+        "Images et liens : {} types d'image du projet et {} des familles ({} fichiers, {} octets), {} images placées, {} vignettes d'apparence, {} imports CAO ({} types), {} liens Revit ({})",
+        m.types_images.iter().filter(|t| t.famille == -1).count(),
+        m.types_images.iter().filter(|t| t.famille != -1).count(),
+        m.rasters.len(),
+        m.rasters.values().map(|r| r.donnees.len()).sum::<usize>(),
+        m.images.len(),
+        m.apparences.values().filter(|a| a.vignette.is_some()).count(),
+        m.imports.len(),
+        m.types_imports.len(),
+        m.liens.len(),
+        m.types_liens.iter().map(|t| t.chemin.as_str()).collect::<Vec<_>>().join(", ")
+    );
     let formules: usize = m.familles.values().map(|f| f.formules.len()).sum();
     let champs_calcules = m.vues.iter().filter_map(|v| v.nomenclature.as_ref()).flat_map(|d| &d.champs).filter(|c| c.formule.is_some()).count();
     println!("Formules : {formules} dans les familles, {champs_calcules} champs calculés de nomenclatures");
