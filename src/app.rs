@@ -1059,9 +1059,11 @@ impl ViewerApp {
             if let Some((n, i, j)) = survol_cellule.filter(|c| c.0 == f.0) {
                 painter.add(egui::Shape::convex_polygon(cellule(n, f.1, f.2, i, j).to_vec(), Color32::from_rgba_unmultiplied(80, 150, 230, 170), Stroke::NONE));
             }
-            // nom lisible seulement sur une face assez tournée vers l'observateur
-            if face > 0.5 {
-                painter.text(ecran(f.0), egui::Align2::CENTER_CENTER, f.3, egui::FontId::proportional(10.5), encre);
+            // nom imprimé sur la face : glyphes de la police (texte::ligne) posés dans le
+            // plan de la face (u vers la droite, v vers le haut vu de l'extérieur), puis
+            // projetés avec le cube ; caché sur une face presque de profil
+            if face > 0.15 {
+                painter.add(texte_sur_face(f.3, f.0, f.1, f.2, &ecran, encre));
             }
         }
         let survol_texte = survol.map(|d| {
@@ -2701,6 +2703,27 @@ impl ViewerApp {
             _ => erreur(&format!("commande inconnue : {commande}")),
         }
     }
+}
+
+/// Texte gravé au milieu d'une face du cube d'orientation (normale `n`, axes `u`, `v`
+/// dans le plan, côté du cube = 2) : capitales de 0,34, largeur au plus 1,7, centré ;
+/// maillage egui des glyphes projetés par `ecran`.
+fn texte_sur_face(texte: &str, n: Vec3, u: Vec3, v: Vec3, ecran: &dyn Fn(Vec3) -> egui::Pos2, couleur: Color32) -> egui::Shape {
+    const POLICE: &str = "Arial";
+    let largeur = crate::texte::largeur(texte, POLICE, 1.0, true).max(1e-6);
+    let taille = (0.34f64).min(1.7 / largeur);
+    let l = crate::texte::ligne(texte, POLICE, taille, true);
+    let (dx, dy) = (-l.largeur / 2.0, -taille / 2.0);
+    let mut m = egui::Mesh::default();
+    for t in &l.triangles {
+        let base = m.vertices.len() as u32;
+        for p in t {
+            let q = n + u * (p[0] + dx) as f32 + v * (p[1] + dy) as f32;
+            m.colored_vertex(ecran(q), couleur);
+        }
+        m.add_triangle(base, base + 1, base + 2);
+    }
+    egui::Shape::mesh(m)
 }
 
 /// Matériaux d'un modèle IFC (`IfcMaterial`) et éléments qui les portent (association
