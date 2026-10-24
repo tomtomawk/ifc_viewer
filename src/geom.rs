@@ -26,6 +26,9 @@ pub struct ProductGeom {
     pub id: Id,
     pub parts: Vec<Part>,
     pub lignes: Vec<Ligne>,
+    /// Couleur de rendu (apparence du matériau) de chaque partie, parallèle à `parts` ;
+    /// vide ou None : sa couleur d'affichage.
+    pub rendu: Vec<Option<Rgba>>,
 }
 
 /// Compteurs d'entités géométriques non prises en charge.
@@ -118,7 +121,7 @@ pub fn product_geometry(m: &IfcModel, stats: &GeomStats, id: Id) -> Option<Produ
         }
     }
     parts.retain(|p| !p.tris.is_empty());
-    Some(ProductGeom { id, parts, lignes: Vec::new() })
+    Some(ProductGeom { id, parts, lignes: Vec::new(), rendu: Vec::new() })
 }
 
 /// Points (m, repère du projet) de la représentation « Axis » d'un produit : l'axe d'un

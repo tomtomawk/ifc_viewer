@@ -152,6 +152,9 @@ impl ReperePartage {
 pub struct Scene {
     pub model: IfcModel,
     pub vertices: Vec<Vertex>,
+    /// Couleur de rendu (apparence du matériau) de chaque sommet, alpha 0 : aucune
+    /// (style Rendu).
+    pub couleurs_rendu: Vec<[u8; 4]>,
     pub objects: Vec<SceneObject>,
     pub object_of: IdMap<u32>,
     /// Origine (mètres, repère du fichier) soustraite aux coordonnées f32.
@@ -227,6 +230,8 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
     let mut transp: Vec<Vertex> = Vec::new();
     let mut lignes: Vec<Vertex> = Vec::new();
     let mut aretes: Vec<Vertex> = Vec::new();
+    // couleurs de rendu des sommets opaques et transparents (alpha 0 : aucune)
+    let (mut rendu_o, mut rendu_t): (Vec<[u8; 4]>, Vec<[u8; 4]>) = (Vec::new(), Vec::new());
     let mut objects = Vec::with_capacity(geoms.len());
     let mut triangles = 0;
     let annotation = |g: &ProductGeom| model.get(g.id).is_some_and(|e| &*e.ty == "IFCANNOTATION");
@@ -250,9 +255,10 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
         let drapeau = if annotation(g) { 127 } else { 0 };
         let mut mn = Vec3::splat(f32::MAX);
         let mut mx = Vec3::splat(f32::MIN);
-        for p in &g.parts {
+        for (k, p) in g.parts.iter().enumerate() {
             let color = p.color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8);
-            let dst = if p.color[3] < 0.99 { &mut transp } else { &mut opaque };
+            let rendu = g.rendu.get(k).copied().flatten().map_or([0; 4], |c| [c[0], c[1], c[2], 1.0].map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8));
+            let (dst, dst_r) = if p.color[3] < 0.99 { (&mut transp, &mut rendu_t) } else { (&mut opaque, &mut rendu_o) };
             for t in &p.tris {
                 let n = (t[1] - t[0]).cross(t[2] - t[0]);
                 let len = n.length();
@@ -266,6 +272,7 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
                     mn = mn.min(p);
                     mx = mx.max(p);
                     dst.push(Vertex { pos: p.to_array(), normal, color, obj });
+                    dst_r.push(rendu);
                 }
                 triangles += 1;
             }
@@ -319,10 +326,13 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
         o.lines.start += shift_l;
         o.aretes.start += shift_a;
     }
+    rendu_o.extend(rendu_t);
+    rendu_o.resize(rendu_o.len() + lignes.len() + aretes.len(), [0; 4]);
     opaque.extend(transp);
     opaque.extend(lignes);
     opaque.extend(aretes);
     let vertices = opaque;
+    let couleurs_rendu = rendu_o;
 
     let mut min = Vec3::splat(f32::MAX);
     let mut max = Vec3::splat(f32::MIN);
@@ -340,6 +350,7 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
     Scene {
         model,
         vertices,
+        couleurs_rendu,
         objects,
         object_of,
         origin,

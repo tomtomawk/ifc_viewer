@@ -9,6 +9,7 @@ layout(location = 0) in vec3 a_pos;
 layout(location = 1) in vec4 a_normal;
 layout(location = 2) in vec4 a_color;
 layout(location = 3) in uint a_obj;
+layout(location = 4) in vec4 a_rendu;
 uniform mat4 u_mvp;
 uniform uint u_sel;
 uniform vec4 u_plans[2];
@@ -19,10 +20,12 @@ uniform vec3 u_view_dir;
 out vec3 v_pos;
 out vec3 v_n;
 out vec4 v_c;
+out vec4 v_rendu;
 flat out uint v_selected;
 flat out uint v_annot;
 void main() {
     v_pos = a_pos;
+    v_rendu = a_rendu;
     v_n = a_normal.xyz;
     // annotations (4ᵉ composante de la normale) : ni découpées ni blanchies en mode dessin
     v_annot = a_normal.w > 0.5 ? 1u : 0u;
@@ -53,6 +56,7 @@ const FS: &str = r#"
 in vec3 v_pos;
 in vec3 v_n;
 in vec4 v_c;
+in vec4 v_rendu;
 flat in uint v_selected;
 flat in uint v_annot;
 uniform vec3 u_eye;
@@ -62,7 +66,31 @@ uniform bool u_flat;
 uniform bool u_dessin;
 uniform bool u_filaire;
 uniform bool u_sans_eclairage;
+// style Rendu : couleurs des matériaux, soleil et ombres portées (carte d'ombres)
+uniform bool u_rendu;
+uniform vec3 u_soleil;
+uniform mat4 u_lumiere;
+uniform highp sampler2D u_ombres;
+uniform float u_decalage_ombre;
 out vec4 o_color;
+
+// part du soleil reçue en p (0 : à l'ombre), moyenne de 3 × 3 échantillons
+float ensoleillement(vec3 p, vec3 n) {
+    vec4 l = u_lumiere * vec4(p + n * u_decalage_ombre, 1.0);
+    vec3 q = l.xyz / l.w * 0.5 + 0.5;
+    if (q.x < 0.0 || q.x > 1.0 || q.y < 0.0 || q.y > 1.0 || q.z > 1.0) {
+        return 1.0;
+    }
+    vec2 pas = 1.0 / vec2(textureSize(u_ombres, 0));
+    float s = 0.0;
+    for (int i = -1; i <= 1; i++) {
+        for (int j = -1; j <= 1; j++) {
+            s += (q.z - 0.0008 <= texture(u_ombres, q.xy + vec2(i, j) * pas).r) ? 1.0 : 0.0;
+        }
+    }
+    return s / 9.0;
+}
+
 void main() {
     // filaire : faces du modèle invisibles (annotations gardées : textes, régions)
     if (u_filaire && v_annot == 0u) {
@@ -84,7 +112,16 @@ void main() {
     vec3 sun = normalize(vec3(0.35, 0.25, 0.9));
     vec3 fill = normalize(vec3(-0.5, -0.7, 0.2));
     float d = u_sans_eclairage ? 1.0 : 0.50 + 0.38 * max(dot(n, sun), 0.0) + 0.12 * max(dot(n, fill), 0.0) + 0.12 * max(dot(n, vd), 0.0);
-    vec3 c = v_c.rgb * d;
+    vec3 base = v_c.rgb;
+    if (u_rendu) {
+        if (v_rendu.a > 0.5) {
+            base = v_rendu.rgb;
+        }
+        // ciel (hémisphère), soleil ombré, un peu de lumière vers l'œil
+        float soleil = max(dot(n, u_soleil), 0.0) * ensoleillement(v_pos, n);
+        d = 0.30 + 0.28 * (0.5 + 0.5 * n.z) + 0.62 * soleil + 0.05 * max(dot(n, vd), 0.0);
+    }
+    vec3 c = base * d;
     float a = v_c.a;
     if (v_selected == 1u) {
         c = mix(c, vec3(1.0, 0.55, 0.1), 0.65);
@@ -93,6 +130,25 @@ void main() {
     o_color = vec4(c, a);
 }
 "#;
+
+/// Passe d'ombre : profondeur vue du soleil.
+const VS_OMBRE: &str = r#"
+layout(location = 0) in vec3 a_pos;
+uniform mat4 u_mvp;
+void main() {
+    gl_Position = u_mvp * vec4(a_pos, 1.0);
+}
+"#;
+
+const FS_OMBRE: &str = r#"
+out vec4 o_color;
+void main() {
+    o_color = vec4(1.0);
+}
+"#;
+
+/// Côté de la carte d'ombres (pixels).
+const TAILLE_OMBRES: i32 = 2048;
 
 /// Indices d'une passe supplémentaire (fenêtre de vue d'une feuille).
 struct Passe {
@@ -137,6 +193,18 @@ pub struct Renderer {
     u_dessin: Option<glow::UniformLocation>,
     u_filaire: Option<glow::UniformLocation>,
     u_sans_eclairage: Option<glow::UniformLocation>,
+    u_rendu: Option<glow::UniformLocation>,
+    u_soleil: Option<glow::UniformLocation>,
+    u_lumiere: Option<glow::UniformLocation>,
+    u_ombres: Option<glow::UniformLocation>,
+    u_decalage_ombre: Option<glow::UniformLocation>,
+    /// Couleurs de rendu des sommets (attribut 4), tampon à part.
+    vbo_rendu: glow::Buffer,
+    /// Carte d'ombres du style Rendu : programme, tampon de trame, texture de profondeur.
+    programme_ombre: glow::Program,
+    u_mvp_ombre: Option<glow::UniformLocation>,
+    fbo_ombres: glow::Framebuffer,
+    texture_ombres: glow::Texture,
     passes: Vec<Passe>,
 }
 
@@ -153,10 +221,12 @@ pub enum StyleVisuel {
     CouleursHomogenes,
     /// Faces éclairées, sans arêtes.
     Realiste,
+    /// Couleurs de rendu des matériaux, soleil et ombres portées.
+    Rendu,
 }
 
 impl StyleVisuel {
-    pub const TOUS: [StyleVisuel; 5] = [StyleVisuel::Filaire, StyleVisuel::LignesCachees, StyleVisuel::Ombre, StyleVisuel::CouleursHomogenes, StyleVisuel::Realiste];
+    pub const TOUS: [StyleVisuel; 6] = [StyleVisuel::Filaire, StyleVisuel::LignesCachees, StyleVisuel::Ombre, StyleVisuel::CouleursHomogenes, StyleVisuel::Realiste, StyleVisuel::Rendu];
 
     pub fn libelle(self) -> &'static str {
         match self {
@@ -165,6 +235,7 @@ impl StyleVisuel {
             StyleVisuel::Ombre => "Ombré",
             StyleVisuel::CouleursHomogenes => "Couleurs homogènes",
             StyleVisuel::Realiste => "Réaliste",
+            StyleVisuel::Rendu => "Rendu",
         }
     }
 
@@ -176,6 +247,7 @@ impl StyleVisuel {
             StyleVisuel::Ombre => "ombre",
             StyleVisuel::CouleursHomogenes => "couleurs",
             StyleVisuel::Realiste => "realiste",
+            StyleVisuel::Rendu => "rendu",
         }
     }
 
@@ -197,9 +269,41 @@ pub struct FrameParams {
     pub style: StyleVisuel,
     /// Plan de coupe du mode dessin (n, d ; n·p + d ≥ 0 gardé) et tracé de la coupe.
     pub coupe: Option<Vec4>,
+    /// Style Rendu : direction du soleil (vers lui), matrice de la vue du soleil
+    /// (orthographique, scène entière) et décalage des points le long de la normale
+    /// contre l'acné d'ombre (unités de la scène).
+    pub soleil: Option<(Vec3, Mat4, f32)>,
     /// Passes des fenêtres de vue (feuille ouverte), dans l'ordre des indices envoyés
     /// par `upload_passes`.
     pub passes: Vec<ParamsPasse>,
+}
+
+/// Programme GLSL (en-tête de version selon OpenGL ou OpenGL ES).
+unsafe fn compiler(gl: &glow::Context, vs: &str, fs: &str) -> Result<glow::Program, String> {
+    unsafe {
+        let version = if gl.version().is_embedded { "#version 300 es\nprecision highp float;\nprecision highp int;\n" } else { "#version 330 core\n" };
+        let program = gl.create_program()?;
+        let mut shaders = Vec::new();
+        for (ty, src) in [(glow::VERTEX_SHADER, vs), (glow::FRAGMENT_SHADER, fs)] {
+            let sh = gl.create_shader(ty)?;
+            gl.shader_source(sh, &format!("{version}{src}"));
+            gl.compile_shader(sh);
+            if !gl.get_shader_compile_status(sh) {
+                return Err(format!("Shader : {}", gl.get_shader_info_log(sh)));
+            }
+            gl.attach_shader(program, sh);
+            shaders.push(sh);
+        }
+        gl.link_program(program);
+        if !gl.get_program_link_status(program) {
+            return Err(format!("Programme : {}", gl.get_program_info_log(program)));
+        }
+        for sh in shaders {
+            gl.detach_shader(program, sh);
+            gl.delete_shader(sh);
+        }
+        Ok(program)
+    }
 }
 
 fn as_bytes<T>(s: &[T]) -> &[u8] {
@@ -210,27 +314,22 @@ fn as_bytes<T>(s: &[T]) -> &[u8] {
 impl Renderer {
     pub fn new(gl: &glow::Context) -> Result<Self, String> {
         unsafe {
-            let version = if gl.version().is_embedded { "#version 300 es\nprecision highp float;\nprecision highp int;\n" } else { "#version 330 core\n" };
-            let program = gl.create_program()?;
-            let mut shaders = Vec::new();
-            for (ty, src) in [(glow::VERTEX_SHADER, VS), (glow::FRAGMENT_SHADER, FS)] {
-                let sh = gl.create_shader(ty)?;
-                gl.shader_source(sh, &format!("{version}{src}"));
-                gl.compile_shader(sh);
-                if !gl.get_shader_compile_status(sh) {
-                    return Err(format!("Shader : {}", gl.get_shader_info_log(sh)));
-                }
-                gl.attach_shader(program, sh);
-                shaders.push(sh);
+            let program = compiler(gl, VS, FS)?;
+            let programme_ombre = compiler(gl, VS_OMBRE, FS_OMBRE)?;
+            // carte d'ombres : texture de profondeur seule
+            let texture_ombres = gl.create_texture()?;
+            gl.bind_texture(glow::TEXTURE_2D, Some(texture_ombres));
+            gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::DEPTH_COMPONENT24 as i32, TAILLE_OMBRES, TAILLE_OMBRES, 0, glow::DEPTH_COMPONENT, glow::UNSIGNED_INT, glow::PixelUnpackData::Slice(None));
+            for (k, v) in [(glow::TEXTURE_MIN_FILTER, glow::NEAREST), (glow::TEXTURE_MAG_FILTER, glow::NEAREST), (glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE), (glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE)] {
+                gl.tex_parameter_i32(glow::TEXTURE_2D, k, v as i32);
             }
-            gl.link_program(program);
-            if !gl.get_program_link_status(program) {
-                return Err(format!("Programme : {}", gl.get_program_info_log(program)));
-            }
-            for sh in shaders {
-                gl.detach_shader(program, sh);
-                gl.delete_shader(sh);
-            }
+            gl.bind_texture(glow::TEXTURE_2D, None);
+            let fbo_ombres = gl.create_framebuffer()?;
+            gl.bind_framebuffer(glow::FRAMEBUFFER, Some(fbo_ombres));
+            gl.framebuffer_texture_2d(glow::FRAMEBUFFER, glow::DEPTH_ATTACHMENT, glow::TEXTURE_2D, Some(texture_ombres), 0);
+            gl.draw_buffers(&[glow::NONE]);
+            gl.read_buffer(glow::NONE);
+            gl.bind_framebuffer(glow::FRAMEBUFFER, None);
 
             let vao = gl.create_vertex_array()?;
             let vbo = gl.create_buffer()?;
@@ -252,6 +351,14 @@ impl Renderer {
                 gl.enable_vertex_attrib_array(3);
                 gl.vertex_attrib_pointer_i32(3, 1, glow::UNSIGNED_INT, stride, 20);
             }
+            // couleurs de rendu : attribut 4 du modèle, tampon à part (la coupe n'en a pas :
+            // valeur par défaut, alpha nul)
+            let vbo_rendu = gl.create_buffer()?;
+            gl.bind_vertex_array(Some(vao));
+            gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo_rendu));
+            gl.enable_vertex_attrib_array(4);
+            gl.vertex_attrib_pointer_f32(4, 4, glow::UNSIGNED_BYTE, true, 4, 0);
+            gl.vertex_attrib_4_f32(4, 0.0, 0.0, 0.0, 0.0);
             gl.bind_vertex_array(None);
             gl.bind_buffer(glow::ARRAY_BUFFER, None);
 
@@ -267,6 +374,16 @@ impl Renderer {
                 u_dessin: gl.get_uniform_location(program, "u_dessin"),
                 u_filaire: gl.get_uniform_location(program, "u_filaire"),
                 u_sans_eclairage: gl.get_uniform_location(program, "u_sans_eclairage"),
+                u_rendu: gl.get_uniform_location(program, "u_rendu"),
+                u_soleil: gl.get_uniform_location(program, "u_soleil"),
+                u_lumiere: gl.get_uniform_location(program, "u_lumiere"),
+                u_ombres: gl.get_uniform_location(program, "u_ombres"),
+                u_decalage_ombre: gl.get_uniform_location(program, "u_decalage_ombre"),
+                vbo_rendu,
+                u_mvp_ombre: gl.get_uniform_location(programme_ombre, "u_mvp"),
+                programme_ombre,
+                fbo_ombres,
+                texture_ombres,
                 passes: Vec::new(),
                 program,
                 vao,
@@ -286,8 +403,11 @@ impl Renderer {
         }
     }
 
-    pub fn upload_vertices(&mut self, gl: &glow::Context, v: &[Vertex]) {
+    /// Sommets et leurs couleurs de rendu (même nombre, alpha 0 : aucune).
+    pub fn upload_vertices(&mut self, gl: &glow::Context, v: &[Vertex], rendu: &[[u8; 4]]) {
         unsafe {
+            gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.vbo_rendu));
+            gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, as_bytes(rendu), glow::STATIC_DRAW);
             gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.vbo));
             gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, as_bytes(v), glow::STATIC_DRAW);
             gl.bind_buffer(glow::ARRAY_BUFFER, None);
@@ -441,8 +561,45 @@ impl Renderer {
         }
     }
 
+    /// Profondeur de la scène vue du soleil dans la carte d'ombres (triangles opaques),
+    /// puis retour au tampon de trame et à la zone d'affichage en cours.
+    unsafe fn passe_ombres(&self, gl: &glow::Context, lumiere: Mat4) {
+        unsafe {
+            let tampon = gl.get_parameter_framebuffer(glow::DRAW_FRAMEBUFFER_BINDING);
+            let mut zone = [0i32; 4];
+            gl.get_parameter_i32_slice(glow::VIEWPORT, &mut zone);
+            let ciseaux = gl.is_enabled(glow::SCISSOR_TEST);
+            gl.bind_framebuffer(glow::FRAMEBUFFER, Some(self.fbo_ombres));
+            gl.viewport(0, 0, TAILLE_OMBRES, TAILLE_OMBRES);
+            gl.disable(glow::SCISSOR_TEST);
+            gl.enable(glow::DEPTH_TEST);
+            gl.depth_func(glow::LEQUAL);
+            gl.depth_mask(true);
+            gl.clear(glow::DEPTH_BUFFER_BIT);
+            gl.enable(glow::POLYGON_OFFSET_FILL);
+            gl.polygon_offset(2.0, 4.0);
+            gl.use_program(Some(self.programme_ombre));
+            gl.uniform_matrix_4_f32_slice(self.u_mvp_ombre.as_ref(), false, &lumiere.to_cols_array());
+            gl.bind_vertex_array(Some(self.vao));
+            if self.n_opaque > 0 {
+                gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_opaque));
+                gl.draw_elements(glow::TRIANGLES, self.n_opaque, glow::UNSIGNED_INT, 0);
+            }
+            gl.bind_vertex_array(None);
+            gl.disable(glow::POLYGON_OFFSET_FILL);
+            gl.bind_framebuffer(glow::FRAMEBUFFER, tampon);
+            gl.viewport(zone[0], zone[1], zone[2], zone[3]);
+            if ciseaux {
+                gl.enable(glow::SCISSOR_TEST);
+            }
+        }
+    }
+
     pub fn paint(&self, gl: &glow::Context, p: &FrameParams, viewport: [i32; 4]) {
         unsafe {
+            if let (StyleVisuel::Rendu, Some((_, lumiere, _))) = (p.style, p.soleil) {
+                self.passe_ombres(gl, lumiere);
+            }
             gl.enable(glow::SCISSOR_TEST);
             gl.scissor(viewport[0], viewport[1], viewport[2], viewport[3]);
             gl.clear_color(p.background[0], p.background[1], p.background[2], 1.0);
@@ -515,6 +672,22 @@ impl Renderer {
             match p.style {
                 StyleVisuel::LignesCachees => self.dessiner_plan(gl, p, true),
                 StyleVisuel::Filaire => self.dessiner_plan(gl, p, false),
+                StyleVisuel::Rendu => {
+                    if let Some((soleil, lumiere, decalage)) = p.soleil {
+                        gl.uniform_1_i32(self.u_rendu.as_ref(), 1);
+                        gl.uniform_3_f32(self.u_soleil.as_ref(), soleil.x, soleil.y, soleil.z);
+                        gl.uniform_matrix_4_f32_slice(self.u_lumiere.as_ref(), false, &lumiere.to_cols_array());
+                        gl.uniform_1_f32(self.u_decalage_ombre.as_ref(), decalage);
+                        // carte d'ombres sur l'unité 1 (egui se sert de la 0)
+                        gl.active_texture(glow::TEXTURE1);
+                        gl.bind_texture(glow::TEXTURE_2D, Some(self.texture_ombres));
+                        gl.uniform_1_i32(self.u_ombres.as_ref(), 1);
+                    }
+                    self.dessiner(gl, [self.ebo_opaque, self.ebo_transp, self.ebo_lines], [self.n_opaque, self.n_transp, self.n_lines], false);
+                    gl.uniform_1_i32(self.u_rendu.as_ref(), 0);
+                    gl.bind_texture(glow::TEXTURE_2D, None);
+                    gl.active_texture(glow::TEXTURE0);
+                }
                 style => {
                     let homogene = style == StyleVisuel::CouleursHomogenes;
                     gl.uniform_1_i32(self.u_sans_eclairage.as_ref(), homogene as i32);
@@ -589,6 +762,10 @@ impl Renderer {
             gl.delete_buffer(self.ebo_transp);
             gl.delete_buffer(self.ebo_lines);
             gl.delete_buffer(self.ebo_aretes);
+            gl.delete_buffer(self.vbo_rendu);
+            gl.delete_program(self.programme_ombre);
+            gl.delete_framebuffer(self.fbo_ombres);
+            gl.delete_texture(self.texture_ombres);
             gl.delete_vertex_array(self.vao_coupe);
             gl.delete_buffer(self.vbo_coupe);
             for ps in &self.passes {

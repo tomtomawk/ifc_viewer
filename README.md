@@ -35,7 +35,8 @@ git push origin v0.2.0
 | Échelle, cadrage, projection | barre sous la vue |
 | Visibilité par catégorie (modèle, annotation) | bouton « Visibilité » sous la vue, ou V |
 | Déplacer Propriétés / Arborescence | glisser le titre (relâcher contre un bord pour ancrer), ou menu « … » |
-| Style visuel | barre sous la vue : Filaire, Lignes cachées (dessin des plans et élévations, coupe), Ombré, Couleurs homogènes, Réaliste |
+| Style visuel | barre sous la vue : Filaire, Lignes cachées (dessin des plans et élévations), Ombré, Couleurs homogènes, Réaliste, Rendu (couleurs de rendu des matériaux Revit, soleil et ombres portées) |
+| Plan de coupe | propriétés, « Plage de vue » (style Lignes cachées) : coupe, niveau, décalage, poché |
 | Export vectoriel du dessin | bouton « SVG… » (mode dessin, vue orthographique) |
 
 ## Fonctions
