@@ -81,6 +81,29 @@ impl Camera {
         self.pitch = (self.pitch + dy * 0.008).clamp(-MAX_PITCH, MAX_PITCH);
     }
 
+    /// Tourne la tête sans bouger l'œil (navigation en vol, clic droit) : glisser à
+    /// droite regarde à droite, vers le bas regarde vers le bas.
+    pub fn regarder(&mut self, dx: f32, dy: f32) {
+        let eye = self.eye();
+        self.orbit(dx * 0.5, dy * 0.5);
+        self.target = eye + self.forward() * self.dist;
+    }
+
+    /// Déplace l'œil et la cible ensemble (navigation en vol).
+    pub fn deplacer(&mut self, d: Vec3) {
+        self.target += d;
+    }
+
+    /// Ramène la cible devant l'œil à `dist` au plus, sans bouger l'œil : en vol, le plan
+    /// proche (proportionnel à la distance) reste petit à l'intérieur des bâtiments.
+    pub fn rapprocher_cible(&mut self, dist: f32) {
+        if self.dist > dist {
+            let eye = self.eye();
+            self.dist = dist;
+            self.target = eye + self.forward() * dist;
+        }
+    }
+
     pub fn pan(&mut self, dx: f32, dy: f32, viewport_h: f32) {
         let f = self.forward();
         let right = f.cross(self.up()).normalize_or(Vec3::X);

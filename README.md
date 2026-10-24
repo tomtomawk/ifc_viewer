@@ -26,7 +26,8 @@ git push origin v0.2.0
 | Action | Commande |
 |---|---|
 | Orbite (autour du point visé, vue 3D) | clic gauche + glisser |
-| Panoramique | clic droit / milieu, ou Maj + clic gauche ; clic gauche aussi dans une vue 2D (plan, coupe, élévation, feuille) |
+| Navigation en vol (vue 3D, comme la vue Scène d'Unity) | clic droit maintenu : la souris oriente le regard ; Z/S avancer/reculer, Q/D gauche/droite, A/E descendre/monter (W/S, A/D, Q/E en QWERTY : touches lues par position) ; Maj : vitesse ×3 ; molette : vitesse |
+| Panoramique | clic milieu ou Maj + clic gauche ; clic gauche et droit aussi dans une vue 2D (plan, coupe, élévation, feuille) |
 | Zoom vers le curseur | molette |
 | Sélection | clic |
 | Cadrer l'objet / tout | double-clic / F |

@@ -28,7 +28,7 @@ reduire ; restaurer ; quitter ;
 vues ; vue <indice|nom> ; camera dessus|face|iso|cadrer|ortho|perspective ;
 camera <lacet°> <tangage°> [distance] (vue 3D seulement) ; zoom <facteur> ;
 glisser <dx> <dy> [gauche|droit|milieu] [maj] (comme à la souris : orbite au bouton
-gauche en vue 3D, panoramique sinon) ; afficher <CLASSES> ;
+gauche et regard sur place au bouton droit en vue 3D, panoramique sinon) ; afficher <CLASSES> ;
 masquer <CLASSES> ; tout_afficher ; classes ; categories (catégories de modèle et
 d'annotation) ; visibilite oui|non (boîte de visibilité) ; visibilite <catégorie> oui|non ;
 panneau proprietes|arborescence gauche|droite|flottant ; elements [CLASSE|*] [texte] ;

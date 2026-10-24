@@ -280,6 +280,31 @@ struct PasseFeuille {
     direction: Vec3,
 }
 
+/// Navigation en vol façon Unity : clic droit maintenu pour regarder autour de soi,
+/// clavier pour se déplacer. Les touches sont lues par leur position physique (W A S D Q E
+/// d'un clavier QWERTY, Z Q S D A E d'un AZERTY).
+struct Vol {
+    actif: bool,
+    touches: HashSet<egui::Key>,
+    /// Multiplicateur de vitesse, réglé à la molette pendant le vol.
+    vitesse: f32,
+}
+
+impl Default for Vol {
+    fn default() -> Self {
+        Vol { actif: false, touches: HashSet::new(), vitesse: 1.0 }
+    }
+}
+
+impl Vol {
+    /// Direction demandée (avant, droite, haut) d'après les touches enfoncées.
+    fn direction(&self) -> Vec3 {
+        use egui::Key::*;
+        let axe = |plus, moins| self.touches.contains(&plus) as i32 as f32 - self.touches.contains(&moins) as i32 as f32;
+        Vec3::new(axe(W, S), axe(D, A), axe(E, Q))
+    }
+}
+
 pub struct ViewerApp {
     gl: Option<Arc<glow::Context>>,
     renderer: Arc<Mutex<Option<Renderer>>>,
@@ -312,6 +337,8 @@ pub struct ViewerApp {
     nomenclature_ouverte: Option<usize>,
     /// Dernier point cliqué sur un objet, repère du fichier (m).
     point_clique: Option<glam::DVec3>,
+    /// Navigation en vol façon Unity (vue 3D, clic droit maintenu).
+    vol: Vol,
     /// Commandes du serveur MCP (voir `pilote.rs`) et celles en attente de traitement.
     pilote: Option<Receiver<Requete>>,
     requetes: Vec<Requete>,
@@ -394,6 +421,7 @@ impl ViewerApp {
             show_unsupported: false,
             vue_active: None,
             point_clique: None,
+            vol: Vol::default(),
             nomenclature_ouverte: None,
             pilote: pilote::demarrer(cc.egui_ctx.clone()),
             requetes: Vec::new(),
@@ -819,14 +847,63 @@ impl ViewerApp {
         }
     }
 
-    /// Glisser dans la vue : orbite au bouton gauche en vue 3D ; panoramique au bouton
-    /// droit ou du milieu, à Maj + gauche, et au bouton gauche dans une vue 2D (plan,
-    /// coupe, élévation, feuille), dont l'orientation est celle de la vue Revit.
+    /// Glisser dans la vue : orbite au bouton gauche et regard sur place au bouton droit
+    /// (vol) en vue 3D ; panoramique au bouton du milieu, à Maj + gauche, et aux boutons
+    /// gauche et droit dans une vue 2D (plan, coupe, élévation, feuille), dont
+    /// l'orientation est celle de la vue Revit.
     fn glisser(&mut self, bouton: PointerButton, d: egui::Vec2, shift: bool, hauteur: f32) {
         if bouton == PointerButton::Primary && !shift && self.vue_3d() {
             self.camera.orbit(d.x, d.y);
+        } else if bouton == PointerButton::Secondary && self.vue_3d() {
+            self.camera.ortho = false;
+            self.camera.regarder(d.x, d.y);
         } else {
             self.camera.pan(d.x, d.y, hauteur);
+        }
+    }
+
+    /// Navigation en vol (vue 3D) : tant que le bouton droit est enfoncé sur la vue, la
+    /// souris oriente le regard, W/S (Z/S en AZERTY) avancent et reculent, A/D (Q/D) vont à
+    /// gauche et à droite, Q/E (A/E) descendent et montent ; Maj triple la vitesse, la
+    /// molette la règle. Comme dans la vue Scène d'Unity.
+    fn voler(&mut self, ui: &egui::Ui, resp: &egui::Response) {
+        let enfonce = self.vue_3d() && resp.is_pointer_button_down_on() && ui.input(|i| i.pointer.button_down(PointerButton::Secondary));
+        if !enfonce {
+            self.vol.actif = false;
+            self.vol.touches.clear();
+            return;
+        }
+        if !self.vol.actif {
+            self.vol.actif = true;
+            self.camera.ortho = false;
+            self.camera.rapprocher_cible((self.camera.scene_radius * 0.25).max(1.0));
+        }
+        let (delta, molette, maj, dt) = ui.input(|i| {
+            for e in &i.events {
+                if let egui::Event::Key { key, physical_key, pressed, .. } = e {
+                    let k = physical_key.unwrap_or(*key);
+                    if *pressed {
+                        self.vol.touches.insert(k);
+                    } else {
+                        self.vol.touches.remove(&k);
+                    }
+                }
+            }
+            (i.pointer.delta(), i.smooth_scroll_delta.y, i.modifiers.shift, i.stable_dt.min(0.1))
+        });
+        if delta != egui::Vec2::ZERO {
+            self.camera.regarder(delta.x, delta.y);
+        }
+        if molette != 0.0 {
+            self.vol.vitesse = (self.vol.vitesse * (molette * 0.004).exp()).clamp(0.02, 50.0);
+        }
+        let dir = self.vol.direction();
+        if dir != Vec3::ZERO {
+            let f = self.camera.forward();
+            let droite = f.cross(Vec3::Z).normalize_or(Vec3::X);
+            let v = (self.camera.scene_radius * 0.3).max(1.0) * self.vol.vitesse * if maj { 3.0 } else { 1.0 };
+            self.camera.deplacer((f * dir.x + droite * dir.y + Vec3::Z * dir.z) * v * dt);
+            ui.ctx().request_repaint();
         }
     }
 
@@ -1246,7 +1323,7 @@ impl ViewerApp {
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                let aide = if self.vue_3d() { "Gauche : orbite · Droit/milieu : pan" } else { "Gauche/droit/milieu : pan" };
+                let aide = if self.vue_3d() { "Gauche : orbite · Droit maintenu : vol (ZQSD/WASD, A/E) · Milieu, Maj+gauche : pan" } else { "Gauche/droit/milieu : pan" };
                 ui.label(RichText::new(format!("{aide} · Molette : zoom · Double-clic : cadrer")).weak());
             });
         });
@@ -2241,13 +2318,16 @@ impl ViewerApp {
                 }
             }
             let shift = ui.input(|i| i.modifiers.shift);
+            self.voler(ui, &resp);
             for b in [PointerButton::Primary, PointerButton::Secondary, PointerButton::Middle] {
-                if resp.dragged_by(b) {
+                if resp.dragged_by(b) && !(self.vol.actif && b == PointerButton::Secondary) {
                     self.glisser(b, resp.drag_delta(), shift, rect.height());
                 }
             }
 
-            if let Some(hp) = resp.hover_pos() {
+            if self.vol.actif {
+                // molette : vitesse du vol, pas de zoom
+            } else if let Some(hp) = resp.hover_pos() {
                 let scroll = ui.input(|i| i.smooth_scroll_delta.y);
                 if scroll != 0.0 {
                     let factor = (-scroll * 0.0018).exp();
@@ -2275,7 +2355,7 @@ impl ViewerApp {
                 self.select(id, true);
             }
 
-            if resp.hovered() || resp.has_focus() {
+            if (resp.hovered() || resp.has_focus()) && !self.vol.actif {
                 let (f, esc, h, i, v) = ui.input(|i| {
                     (
                         i.key_pressed(egui::Key::F),
@@ -2330,6 +2410,15 @@ impl ViewerApp {
             })),
         };
         ui.painter().add(callback);
+        if self.vol.actif {
+            ui.painter().text(
+                rect.left_bottom() + egui::vec2(10.0, -10.0),
+                egui::Align2::LEFT_BOTTOM,
+                format!("Vol · vitesse ×{:.2} (molette) · ZQSD/WASD, A/E : descendre/monter, Maj ×3", self.vol.vitesse),
+                egui::FontId::proportional(12.0),
+                ui.visuals().strong_text_color(),
+            );
+        }
         if self.scene.is_some() && self.vue_3d() {
             self.cube_orientation(ui, rect);
         }
