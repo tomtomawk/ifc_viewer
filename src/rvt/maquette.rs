@@ -3179,6 +3179,38 @@ mod tests {
         assert_eq!(t.lignes[1], ["P4", "Int. Simple: PP (0.83m x 2.04m)", "Niveau 0", "0.83", "2.04"]);
     }
 
+    /// Essai E18 (`rvt-essai-e18-formules`) : une formule par fonction, évaluée avec les
+    /// valeurs du type courant, contre la valeur que donne FamilyManager dans Revit 2026
+    /// (`Decodage RVT/references/formules_e18.json`).
+    #[test]
+    fn formules_e18() {
+        use super::super::formules::{de_brut, evaluer, Expr, Valeur};
+        use super::super::parametres::Stockage;
+        let Some(p) = essai(r"essais\2026", "E18_formules.rfa") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        let (fid, f) = m.familles.iter().find(|(_, f)| !f.formules.is_empty()).unwrap();
+        let vals = &m.parametres[fid];
+        let st = |p: i64| m.definitions.get(&p).map(|d| d.stockage).unwrap_or(Stockage::Aucun);
+        let v = |p: i64| vals.iter().find(|(q, _)| *q == p).map(|(_, b)| de_brut(b, st(p)));
+        let var = |e: &Expr| match e {
+            Expr::Param(q) => v(*q),
+            _ => None,
+        };
+        let calcul = |id: i64| f.formules.iter().find(|(p, _)| *p == id).and_then(|(_, ex)| evaluer(ex, &var));
+        let revit = [
+            (2942, 0.5), (2943, 0.866_025_403_784_438_7), (2944, 0.577_350_269_189_625_7), (2945, 0.523_598_775_598_298_9), (2946, 1.047_197_551_196_597_9),
+            (2947, 0.785_398_163_397_448_3), (2948, 9.974_182_454_814_718), (2949, 0.361_727_836_017_592_84), (2951, 1.516_575_088_810_31), (2952, 2.7),
+            (2953, std::f64::consts::PI), (2954, 2.0), (2955, 3.0), (2956, 2.0), (2957, -3.0), (2958, -2.0), (2959, -3.0), (2960, 3.0), (2961, 5.29),
+            (2962, -2.3), (2964, -0.4), (2965, 1.15), (2966, 1.0), (2967, 0.0), (2968, 1.0), (2969, 0.0), (2970, 1.0), (2971, 1.0), (2976, 20.0),
+        ];
+        for (id, attendu) in revit {
+            let x = calcul(id).and_then(|x| x.nombre()).unwrap_or(f64::NAN);
+            proche(x, attendu, 1e-9, &format!("formule {id}"));
+        }
+        assert_eq!(calcul(2975), Some(Valeur::Texte("grand".into())));
+        assert_eq!(f.formules.len(), 30);
+    }
+
     /// Champ pourcentage et champ calculé de Saint-Malo contre le tableau de Revit 2026
     /// (`rvt-reference-nomenclatures`) : « Part de SP » = « % de SHAB » × 5 000 m², le
     /// pourcentage étant la part de la surface de la pièce dans le total général.

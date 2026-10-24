@@ -10,11 +10,13 @@
 //! internes, `m_specTypeId`), `StringConstantExpression`, `ParameterExpression`
 //! (`m_paramId`), `ScheduleFieldExpression` (`m_fieldId`).
 //!
-//! Codes établis en évaluant les formules des familles contre les valeurs que Revit
-//! enregistre dans les types (572 formules de Kerreut et Saint-Malo) : opérateurs 1 +,
-//! 2 −, 3 ×, 4 ÷, 6 =, 7 >, 8 < ; fonctions 2 cos, 10 if, 12 and, 13 not, 18 round,
-//! 19 roundup. Seuls les codes vérifiés sont évalués : une formule qui en emploie un
-//! autre n'a pas de valeur.
+//! Codes établis par l'essai E18 (une formule par fonction, valeurs de FamilyManager)
+//! et contrôlés sur les valeurs que Revit enregistre dans les types (572 formules de
+//! Kerreut et Saint-Malo) : opérateurs 1 +, 2 −, 3 ×, 4 ÷, 5 ^, 6 =, 7 >, 8 < ;
+//! opérateur unaire 1 − ; fonctions 1 sin, 2 cos, 3 tan, 4 asin, 5 acos, 6 atan, 7 exp,
+//! 8 log (décimal), 9 sqrt, 10 if, 11 or, 12 and, 13 not, 14 abs, 16 pi, 18 round,
+//! 19 roundup, 20 rounddown. Un autre code n'est pas évalué : la formule n'a pas de
+//! valeur.
 
 use super::champs::{Obj, Record, Val};
 use super::parametres::{Brut, Stockage};
@@ -103,6 +105,7 @@ pub fn evaluer(e: &Expr, variable: &dyn Fn(&Expr) -> Option<Valeur>) -> Option<V
                 2 => Valeur::Nombre(a - b),
                 3 => Valeur::Nombre(a * b),
                 4 if b != 0.0 => Valeur::Nombre(a / b),
+                5 => Valeur::Nombre(a.powf(b)),
                 6 => oui((a - b).abs() <= 1e-9 * a.abs().max(b.abs()).max(1.0)),
                 7 => oui(a > b),
                 8 => oui(a < b),
@@ -110,17 +113,35 @@ pub fn evaluer(e: &Expr, variable: &dyn Fn(&Expr) -> Option<Valeur>) -> Option<V
             }
         }
         Expr::Fonction(f, args) => match (f, args.as_slice()) {
+            // angles en radians (unités internes)
+            (1, [a]) => Valeur::Nombre(n(a)?.sin()),
             (2, [a]) => Valeur::Nombre(n(a)?.cos()),
+            (3, [a]) => Valeur::Nombre(n(a)?.tan()),
+            (4, [a]) => Valeur::Nombre(n(a)?.asin()),
+            (5, [a]) => Valeur::Nombre(n(a)?.acos()),
+            (6, [a]) => Valeur::Nombre(n(a)?.atan()),
+            (7, [a]) => Valeur::Nombre(n(a)?.exp()),
+            (8, [a]) => Valeur::Nombre(n(a)?.log10()),
+            (9, [a]) => Valeur::Nombre(n(a)?.sqrt()),
             // if : seule la branche retenue est évaluée
             (10, [c, a, b]) => evaluer(if n(c)? != 0.0 { a } else { b }, variable)?,
+            (11, l) => oui(l.iter().map(|x| n(x).map(|v| v != 0.0)).collect::<Option<Vec<_>>>()?.into_iter().any(|v| v)),
             (12, l) => oui(l.iter().map(|x| n(x).map(|v| v != 0.0)).collect::<Option<Vec<_>>>()?.into_iter().all(|v| v)),
             (13, [a]) => oui(n(a)? == 0.0),
-            // round (14,67 → 15), roundup (2,11 → 3) ; tolérance pour un quotient
-            // tombant juste (10,000…01 → 10)
-            (18, [a]) => Valeur::Nombre((n(a)? + 1e-9).round()),
+            (14, [a]) => Valeur::Nombre(n(a)?.abs()),
+            (16, []) => Valeur::Nombre(std::f64::consts::PI),
+            // round : demi loin de zéro (2,5 → 3 ; −2,7 → −3) ; roundup (−2,7 → −2),
+            // rounddown (−2,7 → −3) ; tolérance pour un quotient tombant juste
+            // (10,000…01 → 10)
+            (18, [a]) => {
+                let x = n(a)?;
+                Valeur::Nombre((x + 1e-9 * x.signum()).round())
+            }
             (19, [a]) => Valeur::Nombre((n(a)? - 1e-9).ceil()),
+            (20, [a]) => Valeur::Nombre((n(a)? + 1e-9).floor()),
             _ => return None,
         },
+        Expr::Unaire(1, a) => Valeur::Nombre(-n(a)?),
         Expr::Unaire(..) | Expr::Autre(_) => return None,
     })
 }
