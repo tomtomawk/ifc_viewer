@@ -31,7 +31,7 @@ git push origin v0.2.0
 | Sélection | clic |
 | Cadrer l'objet / tout | double-clic / F |
 | Masquer / isoler la sélection | H / I (Échap annule l'isolement) |
-| Orientation (vue 3D) | cube d'orientation, coin haut droit : clic sur une face, une arête ou un coin ; glisser pour tourner |
+| Orientation (vue 3D) | cube d'orientation, coin haut droit : clic sur une face, une arête ou un coin ; glisser pour tourner. Boussole autour : clic sur N, E, S, O ; glisser l'anneau pour tourner autour de la verticale |
 | Échelle, cadrage, projection | barre sous la vue |
 | Visibilité par catégorie (modèle, annotation) | bouton « Visibilité » sous la vue, ou V |
 | Déplacer Propriétés / Arborescence | glisser le titre (relâcher contre un bord pour ancrer), ou menu « … » |

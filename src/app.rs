@@ -997,19 +997,17 @@ impl ViewerApp {
 
     /// Cube d'orientation (vue 3D), dans le coin haut droit de la vue : clic sur une face,
     /// une arête ou un coin pour regarder le modèle depuis cette direction ; glisser pour
-    /// tourner autour.
+    /// tourner autour. Boussole en anneau à sa base : clic sur N, E, S ou O pour regarder
+    /// depuis ce point cardinal (inclinaison gardée) ; glisser l'anneau pour tourner autour
+    /// de la verticale.
     fn cube_orientation(&mut self, ui: &mut egui::Ui, vue: egui::Rect) {
         use egui::{Stroke, pos2};
-        let cote = 104.0;
+        let cote = 132.0;
         let zone = egui::Rect::from_min_size(pos2(vue.right() - cote - 8.0, vue.top() + 8.0), egui::vec2(cote, cote));
         let resp = ui.interact(zone, ui.make_persistent_id("cube_orientation"), Sense::click_and_drag());
-        if resp.dragged_by(PointerButton::Primary) {
-            let d = resp.drag_delta();
-            self.camera.orbit(d.x, d.y);
-        }
         let rot = self.camera.view();
         let centre = zone.center();
-        let k = cote * 0.27;
+        let k = cote * 0.2;
         let ecran = |p: Vec3| {
             let q = rot.transform_vector3(p);
             pos2(centre.x + q.x * k, centre.y - q.y * k)
@@ -1033,52 +1031,131 @@ impl ViewerApp {
             let s: Vec<f32> = (0..4).map(|m| signe(q[m], q[(m + 1) % 4])).collect();
             s.iter().all(|x| *x >= 0.0) || s.iter().all(|x| *x <= 0.0)
         };
-        // faces tournées vers l'observateur, et cellule sous le pointeur
+        // boussole : anneau dans le plan de la base du cube, quadrilatères (repère du
+        // modèle) ; points cardinaux (nom, direction depuis le centre, libellé)
+        const R0: f32 = 1.55;
+        const R1: f32 = 1.95;
+        const Z: f32 = -1.0;
+        let n_seg = 64;
+        let au = |a: f32, r: f32| Vec3::new(a.cos() * r, a.sin() * r, Z);
+        let segments: Vec<[Vec3; 4]> = (0..n_seg)
+            .map(|i| {
+                let (a, b) = (i as f32 / n_seg as f32 * std::f32::consts::TAU, (i + 1) as f32 / n_seg as f32 * std::f32::consts::TAU);
+                [au(a, R0), au(a, R1), au(b, R1), au(b, R0)]
+            })
+            .collect();
+        let cardinaux = [("N", Vec3::Y, "le nord"), ("E", Vec3::X, "l'est"), ("S", Vec3::NEG_Y, "le sud"), ("O", Vec3::NEG_X, "l'ouest")];
+        // lettre : centrée sur l'anneau, le haut vers l'extérieur
+        let lettre = |d: Vec3| {
+            let c = d * ((R0 + R1) / 2.0) + Vec3::Z * Z;
+            (c, d.cross(Vec3::Z), d)
+        };
+        let lettre_quad = |d: Vec3| {
+            let (c, u, v) = lettre(d);
+            let h = 0.22;
+            [c - u * h - v * h, c + u * h - v * h, c + u * h + v * h, c - u * h + v * h].map(ecran)
+        };
+
+        // ce que désigne un point : cellule du cube, sinon lettre, sinon anneau
         let visibles: Vec<_> = faces.iter().filter(|f| rot.transform_vector3(f.0).z > 1e-3).collect();
-        let mut survol: Option<Vec3> = None;
-        let mut survol_cellule = None;
-        if let Some(p) = resp.hover_pos() {
+        enum Cible {
+            Cellule(Vec3, Vec3, usize, usize),
+            Lettre(usize),
+            Anneau,
+        }
+        let cible = |p: egui::Pos2| -> Option<Cible> {
+            let mut c = None;
             for f in &visibles {
                 for i in 0..3 {
                     for j in 0..3 {
                         if dedans(p, &cellule(f.0, f.1, f.2, i, j)) {
-                            survol = Some(f.0 + f.1 * (i as f32 - 1.0) + f.2 * (j as f32 - 1.0));
-                            survol_cellule = Some((f.0, i, j));
+                            c = Some(Cible::Cellule(f.0 + f.1 * (i as f32 - 1.0) + f.2 * (j as f32 - 1.0), f.0, i, j));
                         }
                     }
                 }
             }
+            c.or_else(|| cardinaux.iter().position(|x| dedans(p, &lettre_quad(x.1))).map(Cible::Lettre))
+                .or_else(|| segments.iter().any(|q| dedans(p, &q.map(ecran))).then_some(Cible::Anneau))
+        };
+        let survol = resp.hover_pos().and_then(cible);
+        // glisser : depuis l'anneau, autour de la verticale seulement
+        if resp.dragged_by(PointerButton::Primary) {
+            let d = resp.drag_delta();
+            let depuis_anneau = ui.input(|i| i.pointer.press_origin()).and_then(cible).is_some_and(|c| matches!(c, Cible::Anneau | Cible::Lettre(_)));
+            self.camera.orbit(d.x, if depuis_anneau { 0.0 } else { d.y });
         }
+
         let painter = ui.painter_at(zone);
         let encre = Color32::from_gray(70);
+        let bleu = Color32::from_rgb(40, 110, 210);
+        let anneau_survole = matches!(survol, Some(Cible::Anneau));
+        let profondeur = |q: &[Vec3; 4]| rot.transform_vector3((q[0] + q[2]) / 2.0).z;
+        let tracer_anneau = |devant: bool| {
+            let fond = if anneau_survole { Color32::from_rgba_unmultiplied(170, 200, 240, 220) } else { Color32::from_rgba_unmultiplied(225, 225, 225, 210) };
+            for q in segments.iter().filter(|q| (profondeur(q) > 0.0) == devant) {
+                painter.add(egui::Shape::convex_polygon(q.map(ecran).to_vec(), fond, Stroke::NONE));
+                // bords intérieur et extérieur
+                painter.line_segment([ecran(q[0]), ecran(q[3])], Stroke::new(1.0, encre));
+                painter.line_segment([ecran(q[1]), ecran(q[2])], Stroke::new(1.0, encre));
+            }
+            // lettres imprimées sur le dessus de l'anneau : illisibles (en miroir) vues
+            // d'en dessous, écrasées vues par la tranche
+            let dessus_visible = rot.transform_vector3(Vec3::Z).z > 0.08;
+            for (i, (nom, d, _)) in cardinaux.iter().enumerate() {
+                let (c, u, v) = lettre(*d);
+                if !dessus_visible || (rot.transform_vector3(c).z > 0.0) != devant {
+                    continue;
+                }
+                let couleur = if matches!(survol, Some(Cible::Lettre(j)) if j == i) { bleu } else if *nom == "N" { Color32::from_rgb(200, 40, 40) } else { encre };
+                painter.add(texte_sur_face(nom, c, u, v, &ecran, couleur, 0.32));
+            }
+        };
+        // anneau derrière le cube, cube, anneau devant
+        tracer_anneau(false);
         for f in &visibles {
             let coins = [f.0 - f.1 - f.2, f.0 + f.1 - f.2, f.0 + f.1 + f.2, f.0 - f.1 + f.2].map(ecran);
             let face = rot.transform_vector3(f.0).z;
             let gris = (215.0 + 30.0 * face) as u8;
             painter.add(egui::Shape::convex_polygon(coins.to_vec(), Color32::from_rgba_unmultiplied(gris, gris, gris, 235), Stroke::new(1.0, encre)));
-            if let Some((n, i, j)) = survol_cellule.filter(|c| c.0 == f.0) {
-                painter.add(egui::Shape::convex_polygon(cellule(n, f.1, f.2, i, j).to_vec(), Color32::from_rgba_unmultiplied(80, 150, 230, 170), Stroke::NONE));
+            if let Some(Cible::Cellule(_, n, i, j)) = survol.as_ref().filter(|c| matches!(c, Cible::Cellule(_, n, _, _) if *n == f.0)) {
+                painter.add(egui::Shape::convex_polygon(cellule(*n, f.1, f.2, *i, *j).to_vec(), Color32::from_rgba_unmultiplied(80, 150, 230, 170), Stroke::NONE));
             }
             // nom imprimé sur la face : glyphes de la police (texte::ligne) posés dans le
             // plan de la face (u vers la droite, v vers le haut vu de l'extérieur), puis
             // projetés avec le cube ; caché sur une face presque de profil
             if face > 0.15 {
-                painter.add(texte_sur_face(f.3, f.0, f.1, f.2, &ecran, encre));
+                painter.add(texte_sur_face(f.3, f.0, f.1, f.2, &ecran, encre, 0.34));
             }
         }
-        let survol_texte = survol.map(|d| {
-            let n = |x: f32, pos: &str, neg: &str| if x > 0.5 { pos.to_string() } else if x < -0.5 { neg.to_string() } else { String::new() };
-            [n(d.z, "haut", "bas"), n(-d.y, "avant", "arrière"), n(d.x, "droite", "gauche")].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(", ")
-        });
+        tracer_anneau(true);
+
+        let info = match &survol {
+            Some(Cible::Cellule(d, ..)) => {
+                let n = |x: f32, pos: &str, neg: &str| if x > 0.5 { pos.to_string() } else if x < -0.5 { neg.to_string() } else { String::new() };
+                let t = [n(d.z, "haut", "bas"), n(-d.y, "avant", "arrière"), n(d.x, "droite", "gauche")].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(", ");
+                Some(format!("Vue depuis : {t}"))
+            }
+            Some(Cible::Lettre(i)) => Some(format!("Vue depuis {}", cardinaux[*i].2)),
+            Some(Cible::Anneau) => Some("Glisser pour tourner autour de la verticale".to_string()),
+            None => None,
+        };
         let clic = resp.clicked();
-        if let Some(t) = survol_texte {
-            resp.on_hover_text(format!("Vue depuis : {t}"));
+        if let Some(t) = info {
+            resp.on_hover_text(t);
         }
-        if let (true, Some(d)) = (clic, survol) {
-            // regarder depuis d vers le centre ; dessus et dessous : nord en haut
-            let d = d.normalize();
-            self.camera.pitch = d.z.clamp(-1.0, 1.0).asin().clamp(-MAX_PITCH, MAX_PITCH);
-            self.camera.yaw = if d.truncate().length() < 1e-4 { -std::f32::consts::FRAC_PI_2 } else { d.y.atan2(d.x) };
+        if !clic {
+            return;
+        }
+        match survol {
+            Some(Cible::Cellule(d, ..)) => {
+                // regarder depuis d vers le centre ; dessus et dessous : nord en haut
+                let d = d.normalize();
+                self.camera.pitch = d.z.clamp(-1.0, 1.0).asin().clamp(-MAX_PITCH, MAX_PITCH);
+                self.camera.yaw = if d.truncate().length() < 1e-4 { -std::f32::consts::FRAC_PI_2 } else { d.y.atan2(d.x) };
+            }
+            // depuis un point cardinal, inclinaison gardée
+            Some(Cible::Lettre(i)) => self.camera.yaw = cardinaux[i].1.y.atan2(cardinaux[i].1.x),
+            _ => {}
         }
     }
 
@@ -2706,12 +2783,12 @@ impl ViewerApp {
 }
 
 /// Texte gravé au milieu d'une face du cube d'orientation (normale `n`, axes `u`, `v`
-/// dans le plan, côté du cube = 2) : capitales de 0,34, largeur au plus 1,7, centré ;
+/// dans le plan, côté du cube = 2) : capitales de `capitales`, largeur au plus 1,7, centré ;
 /// maillage egui des glyphes projetés par `ecran`.
-fn texte_sur_face(texte: &str, n: Vec3, u: Vec3, v: Vec3, ecran: &dyn Fn(Vec3) -> egui::Pos2, couleur: Color32) -> egui::Shape {
+fn texte_sur_face(texte: &str, n: Vec3, u: Vec3, v: Vec3, ecran: &dyn Fn(Vec3) -> egui::Pos2, couleur: Color32, capitales: f64) -> egui::Shape {
     const POLICE: &str = "Arial";
     let largeur = crate::texte::largeur(texte, POLICE, 1.0, true).max(1e-6);
-    let taille = (0.34f64).min(1.7 / largeur);
+    let taille = capitales.min(1.7 / largeur);
     let l = crate::texte::ligne(texte, POLICE, taille, true);
     let (dx, dy) = (-l.largeur / 2.0, -taille / 2.0);
     let mut m = egui::Mesh::default();
