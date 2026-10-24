@@ -217,6 +217,18 @@ impl Brut {
     }
 }
 
+/// Valeur rangée dans un `ParamStorage` (filtres de nomenclature, paramètres globaux) :
+/// `m_storageType` 1 entier `m_int`, 2 réel `m_dbl`, 3 texte `m_str.m_str`, 4 ElementId
+/// `m_elemId`.
+pub fn valeur_stockee(o: &Obj) -> Brut {
+    match o.get("m_storageType").and_then(Val::int) {
+        Some(2) => Brut::Reel(o.get("m_dbl").and_then(Val::real).unwrap_or(0.0)),
+        Some(3) => Brut::Texte(o.get("m_str").and_then(Val::obj).and_then(|s| s.get("m_str")).and_then(Val::str).unwrap_or_default().to_string()),
+        Some(4) => Brut::Id(o.get("m_elemId").and_then(Val::element_id).unwrap_or(-1)),
+        _ => Brut::Entier(o.get("m_int").and_then(Val::int).unwrap_or(0)),
+    }
+}
+
 /// Définition d'un paramètre utilisateur.
 #[derive(Clone, Debug)]
 pub struct Definition {
@@ -232,6 +244,10 @@ pub struct Definition {
     pub occurrence: Option<bool>,
     /// Paramètre partagé : GUID.
     pub guid: Option<String>,
+    /// Paramètre global : valeur (`ParamElemGlobal.m_value`, `ParamStorage`) et formule
+    /// (`m_oExpression`).
+    pub valeur_globale: Option<Brut>,
+    pub formule: Option<super::formules::Expr>,
 }
 
 /// Classe de définition → stockage (les classes dérivées en héritent).
@@ -296,6 +312,8 @@ pub fn definition(r: &Record, herite: &dyn Fn(&str, &str) -> bool) -> Option<Def
             Some(Val::Guid(b)) => Some(uuid_texte(&le_vers_be(b))),
             _ => None,
         },
+        valeur_globale: o.get("m_value").and_then(|v| r.deref(v).map(|b| &b.obj).or(v.obj())).map(valeur_stockee),
+        formule: o.get("m_oExpression").and_then(|v| r.deref(v).map(|b| &b.obj).or(v.obj())).and_then(|x| super::formules::lire(r, x)),
     })
 }
 

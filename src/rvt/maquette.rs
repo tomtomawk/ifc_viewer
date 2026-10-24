@@ -385,6 +385,8 @@ pub struct Maquette {
     /// Options et jeux de variantes, par id ; option de chaque élément lu qui en a une.
     pub variantes: HashMap<i64, super::annexes::Variante>,
     pub variante_de: HashMap<i64, i64>,
+    /// Liaisons des paramètres de projet et partagés : catégories, occurrence (sinon type).
+    pub liaisons: HashMap<i64, (Vec<i64>, bool)>,
     pub legendes: Vec<super::annexes::ComposantLegende>,
     pub contraintes: Vec<super::annexes::Contrainte>,
     pub motifs_ligne: HashMap<i64, super::annexes::MotifLigne>,
@@ -916,6 +918,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     let (mut groupes, mut legendes, mut contraintes, mut motifs_ligne) = (Vec::new(), Vec::new(), Vec::new(), HashMap::new());
     let (mut epaisseurs, mut tables_cles, mut objets_nommes) = (Vec::new(), Vec::new(), Vec::new());
     let mut variantes: HashMap<i64, super::annexes::Variante> = HashMap::new();
+    let mut liaisons: HashMap<i64, (Vec<i64>, bool)> = HashMap::new();
     let (mut instances_vue, mut polices, mut types_fenetres, mut revisions, mut info_projet) = (Vec::new(), HashMap::new(), HashMap::new(), HashMap::new(), -1);
     let (mut types_cotes, mut format_longueurs) = (HashMap::new(), None);
     let mut lignes_esquisse: std::collections::HashSet<i64> = Default::default();
@@ -963,6 +966,10 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
                 use super::annexes::Annexe;
                 match x {
                     Annexe::Variante(v) => drop(variantes.insert(v.id, v)),
+                    Annexe::Liaison(l) => {
+                        let e = liaisons.entry(l.param).or_insert((Vec::new(), l.occurrence));
+                        e.0.push(l.categorie);
+                    }
                     Annexe::Groupe(g) => groupes.push(g),
                     Annexe::Legende(l) => legendes.push(l),
                     Annexe::Contrainte(c) => contraintes.push(c),
@@ -1172,6 +1179,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         groupe_de,
         variantes,
         variante_de,
+        liaisons,
         legendes,
         contraintes,
         motifs_ligne,
@@ -2213,6 +2221,35 @@ fn parts_primitives(prims: &[Primitive], normale: DVec3, echelle: f64) -> Vec<Pa
 /// base de Revit : emplacement actif, position partagée du point de base du projet et
 /// angle par rapport au nord géographique, point topographique, lieu, autres
 /// emplacements.
+fn parametres_du_projet(m: &Maquette) -> (Vec<(String, String)>, Vec<(String, String)>) {
+    let mut globaux: Vec<(String, String)> = m
+        .definitions
+        .iter()
+        .filter(|(_, d)| d.genre == "global")
+        .map(|(&id, d)| {
+            let mut v = d.valeur_globale.as_ref().and_then(|b| parametres::texte(b, id, d.stockage, &d.spec, "", &m.unites, &|e| m.nom_element(id, e))).unwrap_or_default();
+            if d.formule.is_some() {
+                v += " (formule)";
+            }
+            (d.nom.clone(), v)
+        })
+        .collect();
+    globaux.sort();
+    let mut liaisons: Vec<(String, String)> = m
+        .liaisons
+        .iter()
+        .filter_map(|(id, (cats, occ))| {
+            let d = m.definitions.get(id)?;
+            let mut noms: Vec<String> = cats.iter().map(|c| m.nom_categorie(*c)).collect();
+            noms.sort();
+            let genre = if d.guid.is_some() { "partagé" } else { "projet" };
+            Some((d.nom.clone(), format!("{genre}, {} ; {} catégories : {}", if *occ { "occurrence" } else { "type" }, cats.len(), noms.join(", "))))
+        })
+        .collect();
+    liaisons.sort();
+    (globaux, liaisons)
+}
+
 fn coordonnees_affichees(m: &Maquette) -> Vec<(String, String)> {
     let c = &m.coordonnees;
     let Some(e) = c.actif() else { return Vec::new() };
@@ -2495,6 +2532,16 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
     if !coord.is_empty() {
         let ps = b.pset("RVTCOORD", 0, "Coordonnées", coord.iter().map(|(k, v)| (k.as_str(), Value::Str(v.clone()))).collect());
         b.definir("RVTDEFC", 0, projet, vec![ps]);
+    }
+    // paramètres globaux (valeur, formule) et paramètres de projet et partagés (liaisons)
+    let (globaux, liaisons) = parametres_du_projet(m);
+    if !globaux.is_empty() {
+        let ps = b.pset("RVTGLOB", 0, "Paramètres globaux", globaux.iter().map(|(k, v)| (k.as_str(), Value::Str(v.clone()))).collect());
+        b.definir("RVTDEFG", 0, projet, vec![ps]);
+    }
+    if !liaisons.is_empty() {
+        let ps = b.pset("RVTLIAI", 0, "Paramètres de projet et partagés", liaisons.iter().map(|(k, v)| (k.as_str(), Value::Str(v.clone()))).collect());
+        b.definir("RVTDEFL", 0, projet, vec![ps]);
     }
     // document de famille : paramètres de la famille (valeurs du type courant)
     if let Some(f) = m.famille_document {
@@ -3906,10 +3953,53 @@ mod tests {
         assert_eq!(t.lignes[1], ["P4", "Int. Simple: PP (0.83m x 2.04m)", "Niveau 0", "0.83", "2.04"]);
     }
 
+    /// Liaisons des paramètres de projet et partagés (catégories, occurrence ou type,
+    /// GUID) et valeurs des paramètres globaux contre l'API de Revit 2026
+    /// (`rvt-reference-liaisons-parametres`, `references/liaisons_parametres.json`).
+    #[test]
+    fn liaisons_et_globaux() {
+        let base = std::env::var("RVT_ESSAIS").unwrap_or_else(|_| r"C:\Users\theba\Projets code\Decodage RVT".into());
+        let Ok(t) = std::fs::read_to_string(format!(r"{base}\references\liaisons_parametres.json")) else { return };
+        let r: serde_json::Value = serde_json::from_str(&t).unwrap();
+        for fichier in ["Kerreut 2025.rvt", "Saint-Malo_avenue aristide briand_46.rvt"] {
+            let Some(p) = essai("fichiers", fichier) else { continue };
+            let m = lire(&p, &|_| {}).unwrap();
+            let f = &r[fichier];
+            assert_eq!(m.liaisons.len(), f["liaisons"].as_array().unwrap().len(), "{fichier} : liaisons");
+            for x in f["liaisons"].as_array().unwrap() {
+                let id = x["id"].as_i64().unwrap();
+                let (cats, occ) = &m.liaisons[&id];
+                let attendues: BTreeSet<i64> = x["categories"].as_array().unwrap().iter().map(|c| c.as_i64().unwrap()).collect();
+                assert_eq!(cats.iter().copied().collect::<BTreeSet<i64>>(), attendues, "{fichier} : catégories de {id}");
+                assert_eq!(*occ, x["genre"].as_str() == Some("occurrence"), "{fichier} : genre de {id}");
+                let d = &m.definitions[&id];
+                assert_eq!(d.nom, x["nom"].as_str().unwrap());
+                assert_eq!(d.guid.as_deref(), x["guid"].as_str(), "{fichier} : GUID de {id}");
+            }
+            let globaux = f["globaux"].as_array().unwrap();
+            assert_eq!(m.definitions.values().filter(|d| d.genre == "global").count(), globaux.len(), "{fichier} : globaux");
+            for x in globaux {
+                let d = &m.definitions[&x["id"].as_i64().unwrap()];
+                assert_eq!(d.nom, x["nom"].as_str().unwrap());
+                let lu = match d.valeur_globale.as_ref() {
+                    Some(parametres::Brut::Texte(s)) => s.clone(),
+                    Some(parametres::Brut::Entier(i)) | Some(parametres::Brut::Id(i)) => i.to_string(),
+                    Some(parametres::Brut::Reel(v)) => format!("{v}"),
+                    _ => String::new(),
+                };
+                let attendu = x["valeur"].as_str().unwrap_or("");
+                let egal = lu == attendu || attendu.parse::<f64>().ok().zip(lu.parse::<f64>().ok()).is_some_and(|(a, b)| (a - b).abs() < 1e-9 * a.abs().max(1.0));
+                assert!(egal, "{fichier} : global {} lu « {lu} », Revit « {attendu} »", d.nom);
+            }
+        }
+    }
+
     /// Variantes de `Projet variante.rvt` (fait à la main dans Revit 2026 par Thomas, le
-    /// 24/10/2026) contre l'API (`rvt-reference-variantes`) : un jeu « Variante 1 », deux
+    /// 24/10/2026) contre l'API (`rvt-reference-variantes`) : jeu « Variante 1 », deux
     /// options (principale « Variante 1 », que Revit nomme « Variante 1  <principal> »,
-    /// et « Variante 2 »), deux murs dans la principale, trois dans la secondaire.
+    /// et « Variante 2 »), deux murs dans la principale, trois dans la secondaire ; jeu
+    /// « test d'une forme ronde » (« Rond de 50 » principale, « Rond de 100 »), deux murs
+    /// dans chacune.
     #[test]
     fn variantes_essai() {
         let Some(p) = essai("fichiers", "Projet variante.rvt") else { return };
@@ -3918,11 +4008,26 @@ mod tests {
         assert_eq!((jeu.nom.as_str(), jeu.jeu, jeu.lien), ("Variante 1", true, 257_067));
         assert_eq!((m.variantes[&257_067].nom.as_str(), m.variantes[&257_067].lien), ("Variante 1", 257_066));
         assert_eq!((m.variantes[&257_070].nom.as_str(), m.variantes[&257_070].lien), ("Variante 2", 257_066));
-        for (mur, option, principale) in [(257_248, 257_067, true), (257_371, 257_067, true), (257_450, 257_070, false), (257_508, 257_070, false), (257_616, 257_070, false)] {
+        // second jeu, ajouté à 18 h 13 : « test d'une forme ronde »
+        let jeu2 = &m.variantes[&257_717];
+        assert_eq!((jeu2.nom.as_str(), jeu2.jeu, jeu2.lien), ("test d'une forme ronde", true, 257_718));
+        assert_eq!((m.variantes[&257_718].nom.as_str(), m.variantes[&257_718].lien), ("Rond de 50", 257_717));
+        assert_eq!((m.variantes[&257_721].nom.as_str(), m.variantes[&257_721].lien), ("Rond de 100", 257_717));
+        for (mur, option, principale) in [
+            (257_248, 257_067, true),
+            (257_371, 257_067, true),
+            (257_450, 257_070, false),
+            (257_508, 257_070, false),
+            (257_616, 257_070, false),
+            (258_274, 257_718, true),
+            (258_275, 257_718, true),
+            (258_446, 257_721, false),
+            (258_447, 257_721, false),
+        ] {
             assert_eq!(m.variante_de.get(&mur), Some(&option), "mur {mur}");
             assert_eq!(m.variante(mur).map(|v| v.2), Some(principale), "mur {mur}");
         }
-        assert_eq!(m.variante_de.len(), 5);
+        assert_eq!(m.variante_de.len(), 9);
         assert!(m.groupe_de.is_empty() && m.groupes.is_empty());
         assert_eq!(m.ordre_phases, [3, 0]);
     }

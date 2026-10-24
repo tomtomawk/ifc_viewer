@@ -96,7 +96,16 @@ pub struct Variante {
     pub jeu: bool,
 }
 
+/// Liaison d'un paramètre de projet ou partagé à une catégorie (`ParamBinding` :
+/// `m_paramId`, `m_categoryId`, `m_elemOrSymbol` : 1 occurrence, 0 type).
+pub struct Liaison {
+    pub param: i64,
+    pub categorie: i64,
+    pub occurrence: bool,
+}
+
 pub enum Annexe {
+    Liaison(Liaison),
     Variante(Variante),
     Groupe(Groupe),
     Legende(ComposantLegende),
@@ -109,6 +118,7 @@ pub enum Annexe {
 
 /// Classes lues par `lire`.
 pub const CLASSES: &[&str] = &[
+    "ParamBinding",
     "DesignOption",
     "DesignOptionSet",
     "ElementGroup",
@@ -223,6 +233,7 @@ pub fn lire(eid: i64, r: &Record) -> Option<Annexe> {
     let vue = id(o, "m_ownerDBViewId");
     let nomme = |genre: &'static str, nom: String, props: Vec<(&'static str, String)>| Some(Annexe::Nomme(ObjetNomme { id: eid, genre, nom, props }));
     match o.class_name() {
+        "ParamBinding" => Some(Annexe::Liaison(Liaison { param: id(o, "m_paramId"), categorie: id(o, "m_categoryId"), occurrence: entier(o, "m_elemOrSymbol") == 1 })),
         "DesignOption" => Some(Annexe::Variante(Variante { id: eid, nom: texte(o, "m_strName"), lien: id(o, "m_DesignOptionSetId"), jeu: false })),
         "DesignOptionSet" => Some(Annexe::Variante(Variante { id: eid, nom: texte(o, "m_strName"), lien: id(o, "m_mainDesignOption"), jeu: true })),
         "ElementGroup" => {

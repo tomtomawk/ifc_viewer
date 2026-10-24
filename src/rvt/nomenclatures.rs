@@ -129,13 +129,7 @@ fn id_champ(v: Option<&Val>) -> i64 {
 }
 
 fn valeur_filtre(o: Option<&Obj>) -> Brut {
-    let Some(o) = o else { return Brut::Entier(0) };
-    match o.get("m_storageType").and_then(Val::int) {
-        Some(2) => Brut::Reel(o.get("m_dbl").and_then(Val::real).unwrap_or(0.0)),
-        Some(3) => Brut::Texte(o.get("m_str").and_then(Val::obj).and_then(|s| s.get("m_str")).and_then(Val::str).unwrap_or_default().to_string()),
-        Some(4) => Brut::Id(o.get("m_elemId").and_then(Val::element_id).unwrap_or(-1)),
-        _ => Brut::Entier(o.get("m_int").and_then(Val::int).unwrap_or(0)),
-    }
+    o.map(parametres::valeur_stockee).unwrap_or(Brut::Entier(0))
 }
 
 /// Objet désigné par un pointeur possédé, ou incorporé.
