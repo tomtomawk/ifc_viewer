@@ -188,6 +188,8 @@ pub struct Materiau {
     pub nom: String,
     /// Couleur d'ombrage (rouge, vert, bleu).
     pub couleur: [u8; 3],
+    /// Apparence de rendu (`m_appearanceAssetId`, `AppearanceAssetElem`), −1 : aucune.
+    pub apparence: i64,
     /// 0 opaque, 1 transparent (Revit affiche ×100).
     pub transparence: f64,
     /// Motifs de coupe et de surface, premier plan puis arrière-plan (ids de
@@ -360,6 +362,11 @@ pub struct Maquette {
     pub pieces: Vec<Piece>,
     /// Emprises des pièces de la dernière phase, pour situer un point.
     pub emprises: Vec<Emprise>,
+    /// Plans de référence et plans de construction (`plans`).
+    pub plans_reference: Vec<super::plans::PlanReference>,
+    pub plans_construction: Vec<super::plans::PlanConstruction>,
+    /// Apparences de rendu, par id.
+    pub apparences: HashMap<i64, super::plans::Apparence>,
     /// Formes et combinaisons d'un document de famille.
     pub formes: Vec<Forme>,
     /// Noms des sous-catégories définies dans le document (`CategoryElem`), lus pour
@@ -489,6 +496,11 @@ enum Sorte {
     TypeCote,
     /// Unités du projet (`UnitsElem`).
     Unites,
+    /// Plan de référence (`RefPlane`), plan de construction (`SketchPlane`), apparence
+    /// de rendu (`AppearanceAssetElem`).
+    PlanReference,
+    PlanConstruction,
+    Apparence,
     /// Topologie de plan d'un niveau (`LevelRoomPlan`).
     Topologie,
     /// Esquisse (dérivées de `Sketch`) : ses lignes ne sont pas tracées dans la vue.
@@ -525,6 +537,9 @@ impl Sorte {
             "DimensionStyle" => Sorte::TypeCote,
             "UnitsElem" => Sorte::Unites,
             "LevelRoomPlan" => Sorte::Topologie,
+            "RefPlane" => Sorte::PlanReference,
+            "SketchPlane" => Sorte::PlanConstruction,
+            "AppearanceAssetElem" => Sorte::Apparence,
 
             // type de région remplie : un Symbol, lu à part (motifs et couleurs)
             "FilledRegionAttributes" => Sorte::TypeRegion,
@@ -568,6 +583,8 @@ pub struct Decodage {
     pub octets_elements: (u64, u64, u64),
     pub geometries: (usize, usize),
     pub octets_geometries: (u64, u64),
+    /// Classes lues mais non interprétées : nom, nombre, octets (les plus lourdes d'abord).
+    pub non_interpretees: Vec<(String, usize, u64)>,
 }
 
 /// Flux globaux, chacun un objet sérialisé (préfixe de 8 octets, 24 pour `Contents`,
@@ -685,7 +702,8 @@ pub fn decodage(path: &Path) -> Result<Decodage, String> {
     let sortes: HashMap<u16, Sorte> = sch.classes.iter().filter_map(|c| Some((c.id, Sorte::de(&sch, c.id, &c.name)?))).collect();
     let marqueurs = sch.by_name("ContentMarker").zip(sch.by_name("ContentKey")).map(|(a, b)| (a.id, b.id));
     let non_lus = entrees.iter().filter(|e| !e.1 && !lu(&e.0)).map(|e| (e.0.clone(), e.2)).collect();
-    let mut d = Decodage { flux: (lus, total), non_lus, elements: (0, 0, 0), octets_elements: (0, 0, 0), geometries: (0, 0), octets_geometries: (0, 0) };
+    let mut d = Decodage { flux: (lus, total), non_lus, elements: (0, 0, 0), octets_elements: (0, 0, 0), geometries: (0, 0), octets_geometries: (0, 0), non_interpretees: Vec::new() };
+    let mut autres: HashMap<u16, (usize, u64)> = HashMap::new();
     let parts: Vec<String> = entrees.iter().filter(|e| !e.1 && e.0.starts_with("/Partitions/")).map(|e| e.0.clone()).collect();
     for p in parts {
         let raw = cfb.read(&p)?.ok_or_else(|| format!("flux {p} illisible"))?;
@@ -698,9 +716,17 @@ pub fn decodage(path: &Path) -> Result<Decodage, String> {
             if champs::read(&sch, body).is_ok() {
                 d.elements.1 += 1;
                 d.octets_elements.1 += n;
-                if champs::class_id(body).is_some_and(|c| sortes.contains_key(&c)) {
-                    d.elements.2 += 1;
-                    d.octets_elements.2 += n;
+                match champs::class_id(body) {
+                    Some(c) if sortes.contains_key(&c) => {
+                        d.elements.2 += 1;
+                        d.octets_elements.2 += n;
+                    }
+                    Some(c) => {
+                        let e = autres.entry(c).or_default();
+                        e.0 += 1;
+                        e.1 += n;
+                    }
+                    None => {}
                 }
             }
         }
@@ -714,6 +740,9 @@ pub fn decodage(path: &Path) -> Result<Decodage, String> {
             }
         }
     }
+    let mut l: Vec<(String, usize, u64)> = autres.into_iter().map(|(c, (n, o))| (sch.classes.iter().find(|k| k.id == c).map(|k| k.name.clone()).unwrap_or_default(), n, o)).collect();
+    l.sort_by(|a, b| b.2.cmp(&a.2));
+    d.non_interpretees = l;
     Ok(d)
 }
 
@@ -840,6 +869,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     let mut unites = parametres::Unites::default();
     let mut lignes_zones: HashMap<(i64, i64), Vec<(DVec2, DVec2)>> = HashMap::new();
     let mut topologies: Vec<super::zones::Topologie> = Vec::new();
+    let (mut plans_reference, mut plans_construction, mut apparences) = (Vec::new(), Vec::new(), HashMap::new());
     let (mut instances_vue, mut polices, mut types_fenetres, mut revisions, mut info_projet) = (Vec::new(), HashMap::new(), HashMap::new(), HashMap::new(), -1);
     let (mut types_cotes, mut format_longueurs) = (HashMap::new(), None);
     let mut lignes_esquisse: std::collections::HashSet<i64> = Default::default();
@@ -872,6 +902,9 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
             }
             Ok(Extrait::Piece(p)) => pieces.push(p),
             Ok(Extrait::Topologie(t)) => topologies.push(t),
+            Ok(Extrait::PlanReference(p)) => plans_reference.push(p),
+            Ok(Extrait::PlanConstruction(p)) => plans_construction.push(p),
+            Ok(Extrait::Apparence(id, a)) => drop(apparences.insert(id, a)),
             Ok(Extrait::LigneZone(sc, niv, a, b)) => lignes_zones.entry((sc, niv)).or_insert_with(Vec::new).push((a, b)),
             Ok(Extrait::Forme(f)) => formes.push(f),
             Ok(Extrait::Categorie(id, nom)) => drop(categories.insert(id, nom)),
@@ -1033,6 +1066,9 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         unites,
         categorie_de: HashMap::new(),
         emprises: Vec::new(),
+        plans_reference,
+        plans_construction,
+        apparences,
         type_de_element: HashMap::new(),
         ordre_phases,
         filtres_phase,
@@ -1201,6 +1237,21 @@ fn pied_de_piece(g: &Maillage) -> (f64, f64) {
     (aire, perimetre)
 }
 
+/// Texte de « Est une référence » d'un plan de référence (codes relevés dans Revit 2026,
+/// `rvt-reference-plans-apparences`) ; code brut pour un code non relevé.
+fn texte_reference(code: i64) -> String {
+    match code {
+        0 => "Gauche".into(),
+        1 => "Centre (gauche/droite)".into(),
+        2 => "Droite".into(),
+        6 => "Bas".into(),
+        8 => "Haut".into(),
+        12 => "Pas référence".into(),
+        14 => "Référence moins importante".into(),
+        c => format!("code {c}"),
+    }
+}
+
 /// Emprise d'une pièce : triangles de son pied (x, y en mm) et étendue en hauteur.
 pub struct Emprise {
     pub piece: i64,
@@ -1347,6 +1398,9 @@ enum Extrait {
     InstanceDeVue(InstanceVue),
     Piece(Piece),
     Topologie(super::zones::Topologie),
+    PlanReference(super::plans::PlanReference),
+    PlanConstruction(super::plans::PlanConstruction),
+    Apparence(i64, super::plans::Apparence),
     /// Ligne de zone : schéma, niveau, extrémités (x, y en mm).
     LigneZone(i64, i64, DVec2, DVec2),
     Forme(Forme),
@@ -1446,7 +1500,7 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite
                 motif("m_surfacePatternId", "m_surfacePatternColor"),
                 motif("m_surfaceBackgroundPatternId", "m_surfaceBackgroundPatternColor"),
             ];
-            Some(Extrait::Materiau(eid, Materiau { nom: m.get("m_name")?.str()?.to_string(), couleur, transparence: m.get("m_transparency").and_then(Val::real).unwrap_or(0.0), motifs }))
+            Some(Extrait::Materiau(eid, Materiau { nom: m.get("m_name")?.str()?.to_string(), couleur, apparence: id_of(m, "m_appearanceAssetId"), transparence: m.get("m_transparency").and_then(Val::real).unwrap_or(0.0), motifs }))
         })()),
         Sorte::Mur => Extrait::Mur(mur(eid, r, altitude)),
         Sorte::Dalle => {
@@ -1543,6 +1597,9 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite
         Sorte::InfoProjet => Extrait::InfoProjet(eid),
         Sorte::TypeCote => ou_rien(vues::type_cote(r).map(|t| Extrait::TypeCote(eid, t))),
         Sorte::Topologie => ou_rien(super::zones::Topologie::lire(r).map(Extrait::Topologie)),
+        Sorte::PlanReference => ou_rien(super::plans::plan_reference(eid, r).map(Extrait::PlanReference)),
+        Sorte::PlanConstruction => ou_rien(super::plans::plan_construction(eid, r).map(Extrait::PlanConstruction)),
+        Sorte::Apparence => ou_rien(super::plans::apparence(r).map(|a| Extrait::Apparence(eid, a))),
         Sorte::Unites => Extrait::Unites(vues::format_projet(r), parametres::Unites::lire(r).unwrap_or_default()),
         Sorte::Esquisse => {
             let d = r.field_body(o, "m_elemIdsPairSet").and_then(|p| p.get("m_data")).map(Val::list).unwrap_or_default();
@@ -1755,6 +1812,34 @@ impl Maquette {
     /// Éléments lus d'une catégorie.
     pub fn elements_de_categorie(&self, categorie: i64) -> Vec<i64> {
         self.categorie_de.iter().filter(|&(_, &c)| c == categorie).map(|(&e, _)| e).collect()
+    }
+
+    /// Nom d'un plan de construction (`SketchPlane.Name` de l'API) : celui de son plan
+    /// support (niveau, plan de référence, grille), « <non associé> » sans support.
+    pub fn nom_plan_construction(&self, p: &super::plans::PlanConstruction) -> String {
+        if p.support == -1 {
+            return "<non associé>".into();
+        }
+        // formes d'une famille : nom de leur genre dans Revit
+        let forme = |id: i64| {
+            self.formes.iter().find(|f| f.id == id).and_then(|f| match f.classe.as_str() {
+                "ExtrusionElem" => Some("Extrusion"),
+                "FamilyGeomCombination" => Some("Géométrie solide attachée"),
+                _ => None,
+            })
+        };
+        self.niveaux
+            .iter()
+            .find(|n| n.id == p.support)
+            .map(|n| n.nom.clone())
+            .or_else(|| self.plans_reference.iter().find(|r| r.id == p.support).map(|r| r.nom.clone()))
+            .or_else(|| self.grilles.iter().find(|g| g.id == p.support).map(|g| g.nom.clone()))
+            .or_else(|| self.vues.iter().find(|v| v.id == p.support).map(|v| v.nom.clone()))
+            .or_else(|| forme(p.support).map(str::to_string))
+            // face d'un mur, d'un sol, d'une instance : nom de son type
+            .or_else(|| self.type_de(p.support).and_then(|t| self.types.get(&t)).map(|t| t.nom.clone()))
+            .or_else(|| self.nom_element(-1, p.support))
+            .unwrap_or_else(|| "<non associé>".into())
     }
 
     /// Type d'un élément lu.
@@ -2302,6 +2387,24 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
                 mats.sort_unstable_by(|a, b| a.nom.cmp(&b.nom));
                 mats.dedup_by(|a, b| a.nom == b.nom);
                 props.push(("Matériaux des faces", Value::Str(mats.iter().map(|x| x.nom.as_str()).collect::<Vec<_>>().join(", "))));
+                // apparences de rendu des matériaux : nom, couleur diffuse, texture
+                let apparences: Vec<String> = mats
+                    .iter()
+                    .filter_map(|x| {
+                        let a = m.apparences.get(&x.apparence)?;
+                        let mut t = format!("{} : {}", x.nom, a.nom);
+                        if let Some(c) = a.diffuse {
+                            t += &format!(" (couleur {} {} {})", (c[0] * 255.0).round(), (c[1] * 255.0).round(), (c[2] * 255.0).round());
+                        }
+                        if let Some(tx) = &a.texture {
+                            t += &format!(" (texture {})", tx.split('|').next().unwrap_or(tx).rsplit(['/', '\\']).next().unwrap_or(tx));
+                        }
+                        Some(t)
+                    })
+                    .collect();
+                if !apparences.is_empty() {
+                    props.push(("Apparences de rendu", Value::Str(apparences.join(" ; "))));
+                }
                 // motifs de coupe et de surface (premier plan) de chaque matériau
                 let nom_motif = |id: i64| m.motifs.get(&id).map(|x| x.nom.as_str()).unwrap_or("aucun");
                 let motifs: Vec<String> = mats.iter().filter(|x| x.motifs[0].0 != -1 || x.motifs[2].0 != -1).map(|x| format!("{} : coupe {}, surface {}", x.nom, nom_motif(x.motifs[0].0), nom_motif(x.motifs[2].0))).collect();
@@ -2397,6 +2500,30 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
         let id = b.add("IFCGRID", vec![guid("RVT", g.id), n.clone(), Value::Str(g.nom.clone()), n.clone(), n.clone(), n.clone(), Value::Ref(shape)]);
         let pset = b.pset("RVTPSET", g.id, "Revit", props);
         b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF", g.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
+        contenus.entry(projet).or_default().push(Value::Ref(id));
+    }
+    // plans de référence et plans de construction du modèle
+    let vecteur = |v: DVec3| Value::Str(format!("{:.4} ; {:.4} ; {:.4}", v.x, v.y, v.z));
+    for p in m.plans_reference.iter().filter(|p| p.vue == -1) {
+        let props = vec![
+            ("ElementId", Value::Str(p.id.to_string())),
+            ("Extrémité à bulle", point_mm(p.bulle)),
+            ("Extrémité libre", point_mm(p.libre)),
+            ("Direction", vecteur(p.direction)),
+            ("Normale", vecteur(p.normale)),
+            ("Est une référence", Value::Str(texte_reference(p.reference).into())),
+            ("Définit l'origine", Value::Str((if p.definit_origine { "Oui" } else { "Non" }).into())),
+        ];
+        let id = b.add("IFCANNOTATION", vec![guid("RVT", p.id), n.clone(), Value::Str(p.nom.clone()), n.clone(), Value::Str("Plan de référence".into()), Value::Ref(shape), n.clone()]);
+        let pset = b.pset("RVTPSET", p.id, "Revit", props);
+        b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF", p.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
+        contenus.entry(projet).or_default().push(Value::Ref(id));
+    }
+    for p in &m.plans_construction {
+        let props = vec![("ElementId", Value::Str(p.id.to_string())), ("Origine", point_mm(p.origine)), ("Normale", vecteur(p.axes.z_axis)), ("Axe X", vecteur(p.axes.x_axis))];
+        let id = b.add("IFCANNOTATION", vec![guid("RVT", p.id), n.clone(), Value::Str(m.nom_plan_construction(p)), n.clone(), Value::Str("Plan de construction".into()), Value::Ref(shape), n.clone()]);
+        let pset = b.pset("RVTPSET", p.id, "Revit", props);
+        b.add("IFCRELDEFINESBYPROPERTIES", vec![gid("RVTDEF", p.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(pset)]);
         contenus.entry(projet).or_default().push(Value::Ref(id));
     }
     // Vues : un nœud par vue (dans le niveau d'un plan, sinon dans le projet), ses
@@ -3496,6 +3623,80 @@ mod tests {
         assert_eq!(t.titres, ["Identifiant", "Famille et type", "Niveau", "Largeur", "Hauteur"]);
         assert_eq!(t.lignes.len(), 43);
         assert_eq!(t.lignes[1], ["P4", "Int. Simple: PP (0.83m x 2.04m)", "Niveau 0", "0.83", "2.04"]);
+    }
+
+    /// Plans de référence, plans de construction, apparences de rendu et apparence des
+    /// matériaux contre Revit 2026 (`rvt-reference-plans-apparences`,
+    /// `references/plans_apparences.json`).
+    #[test]
+    fn plans_et_apparences() {
+        let base = std::env::var("RVT_ESSAIS").unwrap_or_else(|_| r"C:\Users\theba\Projets code\Decodage RVT".into());
+        let Ok(t) = std::fs::read_to_string(format!(r"{base}\references\plans_apparences.json")) else { return };
+        let r: serde_json::Value = serde_json::from_str(&t).unwrap();
+        let v3 = |x: &serde_json::Value| DVec3::new(x[0].as_f64().unwrap(), x[1].as_f64().unwrap(), x[2].as_f64().unwrap());
+        for fichier in ["FEN_2PF.rfa", "Projet1.rvt", "Kerreut 2025.rvt"] {
+            let Some(p) = essai("fichiers", fichier) else { continue };
+            let m = lire(&p, &|_| {}).unwrap();
+            let f = &r[fichier];
+            let (mut n, mut faux) = (0, Vec::new());
+            for x in f["plans"].as_array().unwrap() {
+                n += 1;
+                let id = x["id"].as_i64().unwrap();
+                let ok = m.plans_reference.iter().find(|p| p.id == id).is_some_and(|p| {
+                    p.nom == x["nom"].as_str().unwrap()
+                        && p.bulle.distance(v3(&x["bulle"]) * FT) < 1e-3
+                        && p.libre.distance(v3(&x["libre"]) * FT) < 1e-3
+                        && p.normale.distance(v3(&x["normale"])) < 1e-6
+                        && p.reference == x["reference"].as_i64().unwrap()
+                        && p.definit_origine == (x["origine"].as_i64() == Some(1))
+                });
+                if !ok {
+                    faux.push(id);
+                }
+            }
+            for x in f["esquisses"].as_array().unwrap().iter().filter(|x| !x["origine"].is_null()) {
+                n += 1;
+                let id = x["id"].as_i64().unwrap();
+                let lu = m.plans_construction.iter().find(|p| p.id == id);
+                let ok = lu.is_some_and(|p| {
+                    m.nom_plan_construction(p) == x["nom"].as_str().unwrap() && p.origine.distance(v3(&x["origine"]) * FT) < 1e-3 && p.axes.z_axis.distance(v3(&x["normale"])) < 1e-6
+                });
+                if !ok {
+                    faux.push(id);
+                    if let Some(p) = lu {
+                        eprintln!("   esquisse {id} : lu « {} » support {} {:?} {:?} ; Revit « {} » {} {}", m.nom_plan_construction(p), p.support, p.origine / FT, p.axes.z_axis, x["nom"], x["origine"], x["normale"]);
+                    } else {
+                        eprintln!("   esquisse {id} absente");
+                    }
+                }
+            }
+            for x in f["apparences"].as_array().unwrap() {
+                n += 1;
+                let id = x["id"].as_i64().unwrap();
+                let diffuse: Option<Vec<f64>> = x["diffuse"].as_array().map(|a| a.iter().map(|c| c.as_f64().unwrap()).collect());
+                let ok = m.apparences.get(&id).is_some_and(|a| {
+                    a.nom == x["nom"].as_str().unwrap()
+                        && match (&a.diffuse, &diffuse) {
+                            (Some(c), Some(d)) => c.iter().zip(d).all(|(u, v)| (u - v).abs() < 1e-6),
+                            (None, None) => true,
+                            _ => false,
+                        }
+                        && a.texture.as_deref() == x["texture"].as_str()
+                });
+                if !ok {
+                    faux.push(id);
+                }
+            }
+            for x in f["materiaux"].as_array().unwrap() {
+                n += 1;
+                let id = x["id"].as_i64().unwrap();
+                if m.materiaux.get(&id).map(|k| k.apparence) != x["apparence"].as_i64() {
+                    faux.push(id);
+                }
+            }
+            eprintln!("{fichier} : {} justes sur {n}, faux {:?}", n - faux.len(), &faux[..faux.len().min(12)]);
+            assert!(faux.is_empty(), "{fichier} : {} faux", faux.len());
+        }
     }
 
     /// Flux globaux lus en entier (`Global/Latest`, `PartitionTable`,

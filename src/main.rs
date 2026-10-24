@@ -233,7 +233,8 @@ fn rvt_decodage(path: &std::path::Path) -> i32 {
     match rvt::maquette::decodage(path) {
         Ok(d) => {
             println!(
-                "{{\"flux\":[{},{}],\"non_lus\":[{}],\"elements\":[{},{},{}],\"octets_elements\":[{},{},{}],\"geometries\":[{},{}],\"octets_geometries\":[{},{}]}}",
+                "{{\"non_interpretees\":[{}],\"flux\":[{},{}],\"non_lus\":[{}],\"elements\":[{},{},{}],\"octets_elements\":[{},{},{}],\"geometries\":[{},{}],\"octets_geometries\":[{},{}]}}",
+                d.non_interpretees.iter().take(60).map(|(c, n, o)| format!("[{},{n},{o}]", pilote::texte(c))).collect::<Vec<_>>().join(","),
                 d.flux.0,
                 d.flux.1,
                 d.non_lus.iter().map(|(p, n)| format!("[{},{n}]", pilote::texte(p))).collect::<Vec<_>>().join(","), d.elements.0, d.elements.1, d.elements.2, d.octets_elements.0, d.octets_elements.1, d.octets_elements.2, d.geometries.0, d.geometries.1, d.octets_geometries.0, d.octets_geometries.1

@@ -21,6 +21,7 @@ mod objets;
 pub mod coordonnees;
 pub mod nomenclatures;
 pub mod parametres;
+pub mod plans;
 mod schema;
 pub mod vues;
 pub mod zones;
