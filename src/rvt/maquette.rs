@@ -327,6 +327,10 @@ pub struct Piece {
     pub service: String,
     /// Phase de la pièce (`m_phaseId` ; `m_createdPhaseId` vaut −1).
     pub phase: i64,
+    /// Schéma d'une zone de surface (`m_areaSchemeId`), −1 pour une pièce.
+    pub schema: i64,
+    /// Circuit de la pièce dans la topologie de son niveau (`m_cachedCircuitId`).
+    pub circuit: i64,
     pub niveau: i64,
     /// Point de placement en mm (x, y de `m_point`, z à l'altitude du niveau), None si
     /// la pièce n'est pas placée.
@@ -485,6 +489,8 @@ enum Sorte {
     TypeCote,
     /// Unités du projet (`UnitsElem`).
     Unites,
+    /// Topologie de plan d'un niveau (`LevelRoomPlan`).
+    Topologie,
     /// Esquisse (dérivées de `Sketch`) : ses lignes ne sont pas tracées dans la vue.
     Esquisse,
 }
@@ -518,6 +524,7 @@ impl Sorte {
             "ProjectInfo" => Sorte::InfoProjet,
             "DimensionStyle" => Sorte::TypeCote,
             "UnitsElem" => Sorte::Unites,
+            "LevelRoomPlan" => Sorte::Topologie,
 
             // type de région remplie : un Symbol, lu à part (motifs et couleurs)
             "FilledRegionAttributes" => Sorte::TypeRegion,
@@ -670,6 +677,8 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     let mut coord = Coordonnees::default();
     let (mut ordre_phases, mut filtres_phase) = (Vec::new(), HashMap::new());
     let mut unites = parametres::Unites::default();
+    let mut lignes_zones: HashMap<(i64, i64), Vec<(DVec2, DVec2)>> = HashMap::new();
+    let mut topologies: Vec<super::zones::Topologie> = Vec::new();
     let (mut instances_vue, mut polices, mut types_fenetres, mut revisions, mut info_projet) = (Vec::new(), HashMap::new(), HashMap::new(), HashMap::new(), -1);
     let (mut types_cotes, mut format_longueurs) = (HashMap::new(), None);
     let mut lignes_esquisse: std::collections::HashSet<i64> = Default::default();
@@ -701,6 +710,8 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
                 instances_vue.push(i);
             }
             Ok(Extrait::Piece(p)) => pieces.push(p),
+            Ok(Extrait::Topologie(t)) => topologies.push(t),
+            Ok(Extrait::LigneZone(sc, niv, a, b)) => lignes_zones.entry((sc, niv)).or_insert_with(Vec::new).push((a, b)),
             Ok(Extrait::Forme(f)) => formes.push(f),
             Ok(Extrait::Categorie(id, nom)) => drop(categories.insert(id, nom)),
             Ok(Extrait::Vue(v)) => vues.push(v),
@@ -916,6 +927,37 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
             let v = m.parametres.entry(x.id).or_default();
             v.retain(|(p, _)| *p != -1_006_902 && *p != -1_006_917);
             v.push((-1_006_902, Brut::Reel(aire / (FT * FT))));
+            v.push((-1_006_917, Brut::Reel(perimetre / FT)));
+        }
+    }
+    // surface et périmètre des zones de surface (ROOM_AREA, ROOM_PERIMETER) : face des
+    // lignes de zone de leur schéma et de leur niveau qui contient leur point
+    // (circuit de la topologie du niveau, sinon arrangement des lignes) ; pièce : surface
+    // de son circuit, périmètre de son maillage (celui du circuit en diffère)
+    let topologie_de: HashMap<i64, &super::zones::Topologie> = topologies.iter().flat_map(|t| t.pieces.iter().map(move |&p| (p, t))).collect();
+    for x in m.pieces.iter().filter(|x| x.genre != "zone") {
+        let mesure = topologie_de.get(&x.id).and_then(|t| t.mesure(x.circuit)).map(|(a, p)| (a, p * FT));
+        let mesure = match (mesure, x.genre) {
+            (Some(m), _) => Some(m),
+            (None, "surface") => (|| {
+                let (a, p) = super::zones::surface(lignes_zones.get(&(x.schema, x.niveau))?, x.point?.truncate())?;
+                Some((a / (FT * FT), p))
+            })(),
+            _ => None,
+        };
+        // pièce ou zone non placée : surface nulle, niveau « Non placée » (ROOM_LEVEL_ID)
+        if x.point.is_none() {
+            let v = m.parametres.entry(x.id).or_default();
+            v.retain(|(p, _)| *p != -1_006_902 && *p != -1_006_916);
+            v.push((-1_006_902, Brut::Reel(0.0)));
+            v.push((-1_006_916, Brut::Texte("Non placée".into())));
+            continue;
+        }
+        let Some((aire, perimetre)) = mesure else { continue };
+        let v = m.parametres.entry(x.id).or_default();
+        v.retain(|(p, _)| *p != -1_006_902 && (x.genre == "piece" || *p != -1_006_917));
+        v.push((-1_006_902, Brut::Reel(aire)));
+        if x.genre == "surface" {
             v.push((-1_006_917, Brut::Reel(perimetre / FT)));
         }
     }
@@ -1143,6 +1185,9 @@ enum Extrait {
     Instance(Instance, Option<(f64, f64)>),
     InstanceDeVue(InstanceVue),
     Piece(Piece),
+    Topologie(super::zones::Topologie),
+    /// Ligne de zone : schéma, niveau, extrémités (x, y en mm).
+    LigneZone(i64, i64, DVec2, DVec2),
     Forme(Forme),
     Categorie(i64, String),
     Vue(Vue),
@@ -1289,6 +1334,15 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite
         Sorte::Categorie => ou_rien((|| Some(Extrait::Categorie(eid, r.field_body(o, "m_pCategory")?.get("m_name")?.str()?.to_string())))()),
         Sorte::Vue => ou_rien(vues::vue(eid, r).map(Extrait::Vue)),
         Sorte::Viewer => ou_rien(vues::cadrage(r).map(|(v, o, a, b)| Extrait::Cadrage(v, (o, a, b), vues::cadre(r).map(|c| c.1)))),
+        // ligne de zone (limite des zones de surface) : droite `m_pCurveDriver.m_pCrv`
+        // (`m_origin`, `m_dirVec`, `m_endParams`, pieds)
+        Sorte::Annotation if o.class_name() == "CurveElem" && o.get("m_isAreaMeasurementScheme").and_then(Val::int) == Some(1) => ou_rien((|| {
+            let c = r.field_body(r.field_body(o, "m_pCurveDriver")?, "m_pCrv")?;
+            let (org, dir) = (c.get("m_origin").and_then(vec3)?, c.get("m_dirVec").and_then(vec3)?);
+            let t = c.get("m_endParams").and_then(Val::reals)?;
+            let pt = |u: f64| ((org + dir * u) * FT).truncate();
+            Some(Extrait::LigneZone(id_of(o, "m_areaSchemeId"), id_of(o, "m_assocLevelId"), pt(*t.first()?), pt(*t.get(1)?)))
+        })()),
         Sorte::Annotation | Sorte::Region => ou_rien(vues::element(eid, r).map(Extrait::Element2D)),
         Sorte::Motif => ou_rien(vues::motif(r).map(|x| Extrait::Motif(eid, x))),
         Sorte::TypeRegion => ou_rien(vues::type_region(r).map(|x| Extrait::TypeRegion(eid, x))),
@@ -1327,6 +1381,7 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite
         }
         Sorte::InfoProjet => Extrait::InfoProjet(eid),
         Sorte::TypeCote => ou_rien(vues::type_cote(r).map(|t| Extrait::TypeCote(eid, t))),
+        Sorte::Topologie => ou_rien(super::zones::Topologie::lire(r).map(Extrait::Topologie)),
         Sorte::Unites => Extrait::Unites(vues::format_projet(r), parametres::Unites::lire(r).unwrap_or_default()),
         Sorte::Esquisse => {
             let d = r.field_body(o, "m_elemIdsPairSet").and_then(|p| p.get("m_data")).map(Val::list).unwrap_or_default();
@@ -1454,6 +1509,8 @@ fn piece(id: i64, r: &Record, altitude: &HashMap<i64, f64>) -> Piece {
         numero: texte_p(&p, ROOM_NUMBER),
         service: texte_p(&p, ROOM_DEPARTMENT),
         phase: id_of(o, "m_phaseId"),
+        schema: id_of(o, "m_areaSchemeId"),
+        circuit: o.get("m_cachedCircuitId").and_then(Val::obj).and_then(|c| c.get("m_id")).and_then(Val::int).unwrap_or(-1),
         niveau,
         point: point.filter(|_| place),
         geometrie: Err(String::new()),
@@ -3278,6 +3335,42 @@ mod tests {
         assert_eq!(t.titres, ["Identifiant", "Famille et type", "Niveau", "Largeur", "Hauteur"]);
         assert_eq!(t.lignes.len(), 43);
         assert_eq!(t.lignes[1], ["P4", "Int. Simple: PP (0.83m x 2.04m)", "Niveau 0", "0.83", "2.04"]);
+    }
+
+    /// Surface et périmètre des zones de surface contre `Area.Area` et `Area.Perimeter`
+    /// de Revit 2026 (`rvt-reference-zones-surface`, `references/zones_surface.json`).
+    #[test]
+    fn zones_surface() {
+        let base = std::env::var("RVT_ESSAIS").unwrap_or_else(|_| r"C:\Users\theba\Projets code\Decodage RVT".into());
+        let Ok(t) = std::fs::read_to_string(format!(r"{base}\references\zones_surface.json")) else { return };
+        let r: serde_json::Value = serde_json::from_str(&t).unwrap();
+        // pièces (et zones) : surface du circuit contre `Room.Area`
+        // (`rvt-reference-pieces-unites`)
+        let pu: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(format!(r"{base}\references\pieces_unites.json")).unwrap()).unwrap();
+        for (dossier, fichier, minimum) in [("fichiers", "Projet1.rvt", 39), ("fichiers", "Kerreut 2025.rvt", 35), ("fichiers", "Saint-Malo_avenue aristide briand_46.rvt", 164), (r"essais\2026", "E10_piece.rvt", 1)] {
+            let Some(p) = essai(dossier, fichier) else { continue };
+            let m = lire(&p, &|_| {}).unwrap();
+            let val = |id: i64| m.parametres.get(&id).and_then(|v| v.iter().find(|(q, _)| *q == -1_006_902)).and_then(|(_, b)| if let parametres::Brut::Reel(x) = b { Some(*x) } else { None });
+            let l: Vec<&serde_json::Value> = pu[fichier]["pieces"].as_array().unwrap().iter().filter(|x| x["surface"].as_f64().unwrap_or(0.0) > 0.0).collect();
+            let justes = l.iter().filter(|x| val(x["id"].as_i64().unwrap()).is_some_and(|a| (a - x["surface"].as_f64().unwrap()).abs() < 1e-9 * a.max(1.0))).count();
+            eprintln!("{fichier} : surfaces des pièces {justes} sur {}", l.len());
+            assert!(justes >= minimum, "{fichier} : {justes} sur {}", l.len());
+        }
+        for (fichier, surfaces, perimetres) in [("Kerreut 2025.rvt", 16, 15), ("Saint-Malo_avenue aristide briand_46.rvt", 27, 20)] {
+            let Some(p) = essai("fichiers", fichier) else { continue };
+            let m = lire(&p, &|_| {}).unwrap();
+            let val = |id: i64, p: i64| m.parametres.get(&id).and_then(|v| v.iter().find(|(q, _)| *q == p)).and_then(|(_, b)| if let parametres::Brut::Reel(x) = b { Some(*x) } else { None });
+            let (mut s_justes, mut p_justes, mut n) = (0, 0, 0);
+            for z in r[fichier]["zones"].as_array().unwrap().iter().filter(|z| z["place"].as_bool() == Some(true)) {
+                n += 1;
+                let id = z["id"].as_i64().unwrap();
+                let (s, pe) = (z["surface"].as_f64().unwrap(), z["perimetre"].as_f64().unwrap());
+                s_justes += val(id, -1_006_902).is_some_and(|a| (a - s).abs() < 1e-9 * s.max(1.0)) as usize;
+                p_justes += val(id, -1_006_917).is_some_and(|b| (b - pe).abs() < 1e-6 * pe.max(1.0)) as usize;
+            }
+            eprintln!("{fichier} : surfaces {s_justes} sur {n}, périmètres {p_justes} sur {n}");
+            assert!(s_justes >= surfaces && p_justes >= perimetres, "{fichier} : surfaces {s_justes}, périmètres {p_justes} sur {n}");
+        }
     }
 
     /// Élévation des niveaux selon la base de leur type, contre Revit 2026

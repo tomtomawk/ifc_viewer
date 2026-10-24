@@ -112,6 +112,8 @@ pub struct Definition {
     pub detail: bool,
     /// Nomenclature de clés (`m_bRefTable`).
     pub cle: bool,
+    /// Schéma de surface d'une nomenclature de zones (`m_areaSchemeId`, −1 : aucun).
+    pub schema: i64,
     pub total_general: bool,
     /// Titre du total général (`m_grandTotalTitle`) s'il est affiché, avec ou sans le
     /// nombre d'éléments (`m_showGrandTotalTitle`, `m_showGrandTotalCount`).
@@ -192,6 +194,7 @@ pub fn definition(r: &Record) -> Option<Definition> {
         categorie: s.get("m_categoryId").and_then(Val::element_id).unwrap_or(-1),
         detail: int(s, "m_bInstanceSchedule") != 0,
         cle: int(s, "m_bRefTable") != 0,
+        schema: s.get("m_areaSchemeId").and_then(Val::element_id).unwrap_or(-1),
         total_general: int(s, "m_showGrandTotal") != 0,
         titre_total: (int(s, "m_showGrandTotalTitle") != 0).then(|| s.get("m_grandTotalTitle").and_then(Val::str).unwrap_or("Total général").to_string()),
         nombre_total: int(s, "m_showGrandTotalCount") != 0,
@@ -448,7 +451,9 @@ pub fn calculer(m: &Maquette, d: &Definition) -> Tableau {
     if d.cle {
         return Tableau { titres: visibles.iter().map(|c| c.titre.clone()).collect(), lignes: Vec::new(), non_calculees: (0..visibles.len()).collect() };
     }
-    let mut els: Vec<i64> = m.elements_de_categorie(d.categorie).into_iter().filter(|&e| d.filtres.iter().all(|f| passe(m, e, d, f))).collect();
+    // zones : celles du schéma de la nomenclature
+    let schema_ok = |e: i64| d.schema == -1 || m.pieces.iter().find(|p| p.id == e).is_none_or(|p| p.schema == d.schema);
+    let mut els: Vec<i64> = m.elements_de_categorie(d.categorie).into_iter().filter(|&e| schema_ok(e) && d.filtres.iter().all(|f| passe(m, e, d, f))).collect();
     // totaux des pourcentages, sur les éléments retenus
     let mut totaux = Totaux::new();
     for c in d.champs.iter().filter(|c| c.genre == GenreChamp::Pourcentage) {
@@ -504,13 +509,14 @@ pub fn calculer(m: &Maquette, d: &Definition) -> Tableau {
     });
     let titres = visibles.iter().map(|c| c.titre.clone()).collect();
     let non_calculees = visibles.iter().enumerate().filter(|(_, c)| !c.genre.calcule()).map(|(k, _)| k).collect();
-    // somme d'une colonne totalisée sur des éléments, mise en forme comme ses valeurs
+    // somme d'une colonne totalisée sur des éléments (ceux qui ont une valeur), mise en
+    // forme comme ses valeurs
     let somme = |groupe: &[i64], c: &Champ| -> Option<String> {
-        let vals: Vec<Option<f64>> = groupe.iter().map(|&e| cellule(e, c).1).collect();
-        if !c.total || !vals.iter().all(Option::is_some) {
+        let vals: Vec<f64> = groupe.iter().filter_map(|&e| cellule(e, c).1).collect();
+        if !c.total || vals.is_empty() {
             return None;
         }
-        let s: f64 = vals.iter().flatten().sum();
+        let s: f64 = vals.iter().sum();
         if matches!(c.genre, GenreChamp::Formule | GenreChamp::Pourcentage) {
             return Some(texte_formule(m, c, &Valeur::Nombre(s)));
         }

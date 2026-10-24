@@ -23,6 +23,7 @@ pub mod nomenclatures;
 pub mod parametres;
 mod schema;
 pub mod vues;
+pub mod zones;
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
