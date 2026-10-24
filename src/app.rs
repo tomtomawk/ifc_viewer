@@ -280,6 +280,13 @@ struct PasseFeuille {
     direction: Vec3,
 }
 
+/// Onglet du ruban en haut de la fenêtre.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum OngletRuban {
+    Fichier,
+    Exporter,
+}
+
 /// Niveau de détail d'une vue, comme dans Revit.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum NiveauDetail {
@@ -393,6 +400,7 @@ pub struct ViewerApp {
     echelle: f64,
     /// Niveau de détail de la vue (barre de la vue), lu dans la vue Revit ouverte.
     detail: NiveauDetail,
+    onglet_ruban: OngletRuban,
     /// Tracé de la coupe à recalculer.
     coupe_dirty: bool,
     /// Niveaux de la scène (voir `niveaux`), relevés à son installation.
@@ -468,6 +476,7 @@ impl ViewerApp {
             poche: Poche::Hachure,
             echelle: 100.0,
             detail: NiveauDetail::Moyen,
+            onglet_ruban: OngletRuban::Fichier,
             coupe_dirty: true,
             liste_niveaux: Vec::new(),
             liste_materiaux: Vec::new(),
@@ -770,7 +779,7 @@ impl ViewerApp {
 
     /// Export SVG du dessin de la vue, après choix du fichier.
     fn bouton_svg(&mut self, ui: &mut egui::Ui) {
-        if ui.button("SVG…").on_hover_text("Exporter le dessin de la vue en SVG (vue orthographique)").clicked() {
+        if ui.button("Dessin SVG…").on_hover_text("Exporter le dessin de la vue en SVG (vue orthographique)").clicked() {
             let nom = self.scene.as_ref().map(|s| s.file_name.rsplit_once('.').map_or(s.file_name.clone(), |x| x.0.to_string())).unwrap_or_default();
             if let Some(chemin) = rfd::FileDialog::new().add_filter("SVG", &["svg"]).set_file_name(format!("{nom}.svg")).save_file() {
                 match self.exporter_svg(&chemin) {
@@ -855,18 +864,30 @@ impl ViewerApp {
 
     // ------------------------------------------------------------------ UI
 
+    /// Ruban en haut : onglets (Fichier, Exporter), puis les commandes de l'onglet ouvert.
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         ui.horizontal(|ui| {
-            if ui.button("Ouvrir…").on_hover_text("Ctrl+O").clicked() {
-                self.open_dialog(&ctx);
-            }
-            if self.rvt.is_some() && self.rvt_geom.is_ok() {
-                ui.toggle_value(&mut self.rvt_sheet, "Fiche Revit").on_hover_text("Métadonnées du fichier Revit");
+            for (o, nom) in [(OngletRuban::Fichier, "Fichier"), (OngletRuban::Exporter, "Exporter")] {
+                ui.selectable_value(&mut self.onglet_ruban, o, RichText::new(nom).strong());
             }
             if self.loading.is_some() {
                 ui.separator();
                 ui.spinner();
+            }
+        });
+        ui.separator();
+        ui.horizontal(|ui| match self.onglet_ruban {
+            OngletRuban::Fichier => {
+                if ui.button("Ouvrir…").on_hover_text("Ctrl+O").clicked() {
+                    self.open_dialog(&ctx);
+                }
+                if self.rvt.is_some() && self.rvt_geom.is_ok() {
+                    ui.toggle_value(&mut self.rvt_sheet, "Fiche Revit").on_hover_text("Métadonnées du fichier Revit");
+                }
+            }
+            OngletRuban::Exporter => {
+                ui.add_enabled_ui(self.scene.is_some(), |ui| self.bouton_svg(ui));
             }
         });
     }
@@ -945,7 +966,6 @@ impl ViewerApp {
     fn barre_vue(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             ui.add_enabled_ui(self.scene.is_some(), |ui| {
-                ui.label("Échelle");
                 let r = ui.add(egui::DragValue::new(&mut self.echelle).speed(1.0).range(1.0..=10000.0).prefix("1 : "));
                 if r.on_hover_text("Échelle de la vue : épaisseur des traits coupés et pas des hachures du dessin 2D, export SVG").changed() {
                     self.visibility_dirty = true;
@@ -970,7 +990,6 @@ impl ViewerApp {
                 if self.vue_3d() {
                     ui.toggle_value(&mut self.camera.ortho, "Ortho").on_hover_text("Projection orthographique (sinon perspective)");
                 }
-                self.bouton_svg(ui);
             });
         });
     }

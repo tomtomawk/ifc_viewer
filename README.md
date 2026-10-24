@@ -33,12 +33,12 @@ git push origin v0.2.0
 | Cadrer l'objet / tout | double-clic / F |
 | Masquer / isoler la sélection | H / I (Échap annule l'isolement) |
 | Orientation (vue 3D) | cube d'orientation, coin haut droit : clic sur une face, une arête ou un coin ; glisser pour tourner. Boussole autour : clic sur N, E, S, O ; glisser l'anneau pour tourner autour de la verticale |
-| Barre sous la vue | dans l'ordre : échelle, niveau de détail (lu dans la vue Revit ; sans effet sur l'affichage pour l'instant), style visuel, cadrer, visibilité / tout afficher ; puis Ortho (vue 3D) et export SVG |
+| Barre sous la vue | dans l'ordre : échelle (1 : n), niveau de détail (lu dans la vue Revit ; sans effet sur l'affichage pour l'instant), style visuel, cadrer, visibilité / tout afficher ; puis Ortho (vue 3D : projection orthographique ou perspective) |
 | Visibilité par catégorie (modèle, annotation) | bouton « Visibilité » sous la vue, ou V |
 | Déplacer Propriétés / Arborescence | glisser le titre (relâcher contre un bord pour ancrer), ou menu « … » |
 | Style visuel | barre sous la vue : Filaire, Lignes cachées (dessin des plans et élévations), Ombré, Couleurs homogènes, Réaliste, Rendu (couleurs de rendu des matériaux Revit, soleil et ombres portées) |
 | Plan de coupe | propriétés, « Plage de vue » (style Lignes cachées) : coupe, niveau, décalage, poché |
-| Export vectoriel du dessin | bouton « SVG… » (mode dessin, vue orthographique) |
+| Export vectoriel du dessin | ruban, onglet « Exporter » : « Dessin SVG… » (mode dessin, vue orthographique) |
 
 ## Fonctions
 
