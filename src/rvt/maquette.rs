@@ -25,7 +25,7 @@ use crate::model::IfcModel;
 use crate::scene::{self, NavFamille, NavVue, Navigateur, Scene};
 use crate::step::{Entity, Id, IdMap, StepFile, Value, format_real};
 use crate::trace2d::{self, Primitive, Role, Style};
-use glam::{DMat3, DVec3};
+use glam::{DMat3, DVec2, DVec3};
 use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
@@ -92,6 +92,8 @@ pub struct Niveau {
     pub nom: String,
     /// Altitude en mm.
     pub altitude: f64,
+    /// Type de niveau (`m_attrId`, `LevelAttributes`).
+    pub type_id: i64,
 }
 
 /// Type d'élément (tout `Symbol` : types de murs, de sols, de toits, d'escaliers,
@@ -295,6 +297,13 @@ pub struct Instance {
     pub point: DVec3,
     /// Repère (paramètre ALL_MODEL_MARK, ou numéro de porte).
     pub repere: String,
+    /// Axes X et Y du repère de l'instance (`m_pInstanceInfo.m_Trf`, en colonnes,
+    /// identiques à `GetTransform`).
+    pub axes: Option<DMat3>,
+    /// Pièces de départ et d'arrivée inversées (`m_flippedFromToRoom`).
+    pub pieces_inversees: bool,
+    /// Main retournée (`m_flippedX`, HandFlipped de l'API).
+    pub main_retournee: bool,
     pub geometrie: Geometrie,
 }
 
@@ -316,6 +325,8 @@ pub struct Piece {
     pub nom: String,
     pub numero: String,
     pub service: String,
+    /// Phase de la pièce (`m_phaseId` ; `m_createdPhaseId` vaut −1).
+    pub phase: i64,
     pub niveau: i64,
     /// Point de placement en mm (x, y de `m_point`, z à l'altitude du niveau), None si
     /// la pièce n'est pas placée.
@@ -343,6 +354,8 @@ pub struct Maquette {
     pub grilles: Vec<Grille>,
     pub instances: Vec<Instance>,
     pub pieces: Vec<Piece>,
+    /// Emprises des pièces de la dernière phase, pour situer un point.
+    pub emprises: Vec<Emprise>,
     /// Formes et combinaisons d'un document de famille.
     pub formes: Vec<Forme>,
     /// Noms des sous-catégories définies dans le document (`CategoryElem`), lus pour
@@ -847,6 +860,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         phases,
         unites,
         categorie_de: HashMap::new(),
+        emprises: Vec::new(),
         type_de_element: HashMap::new(),
         ordre_phases,
         filtres_phase,
@@ -905,6 +919,30 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
             v.push((-1_006_917, Brut::Reel(perimetre / FT)));
         }
     }
+    // élévation des niveaux (LEVEL_ELEV) depuis la base de leur type
+    // (`LevelAttributes.m_baseElevation`, LEVEL_RELATIVE_BASE_TYPE) : 0 point de base du
+    // projet, 1 point topographique (cote partagée)
+    for n in &m.niveaux {
+        let base = m.parametres.get(&n.type_id).and_then(|v| v.iter().find(|(p, _)| *p == -1_007_109)).map(|(_, b)| b.clone());
+        let p = DVec3::new(0.0, 0.0, n.altitude);
+        let elevation = match base {
+            Some(Brut::Entier(1)) => m.coordonnees.partage(p).map(|q| q.z),
+            _ => Some(n.altitude - m.coordonnees.point_base.map(|b| b.z).unwrap_or(0.0)),
+        };
+        if let (Some(e), Some(v)) = (elevation, m.parametres.get_mut(&n.id)) {
+            v.retain(|(p, _)| *p != -1_007_102);
+            v.push((-1_007_102, Brut::Reel(e / FT)));
+        }
+    }
+    // emprises des pièces de la dernière phase (pièces de départ et d'arrivée)
+    let derniere = m.ordre_phases.last().copied();
+    let emprises = m
+        .pieces
+        .iter()
+        .filter(|x| x.genre == "piece" && (derniere.is_none() || Some(x.phase) == derniere))
+        .filter_map(|x| Some(emprise(x.id, x.geometrie.as_ref().ok()?)))
+        .collect();
+    m.emprises = emprises;
     for x in &mut m.formes {
         x.geometrie = prendre(x.id);
     }
@@ -958,6 +996,41 @@ fn pied_de_piece(g: &Maillage) -> (f64, f64) {
     }
     let perimetre = aretes.iter().filter(|e| *e.1 == 1).map(|e| g.sommets[e.0.0].distance(g.sommets[e.0.1])).sum();
     (aire, perimetre)
+}
+
+/// Emprise d'une pièce : triangles de son pied (x, y en mm) et étendue en hauteur.
+pub struct Emprise {
+    pub piece: i64,
+    pub triangles: Vec<[DVec2; 3]>,
+    pub zmin: f64,
+    pub zmax: f64,
+}
+
+impl Emprise {
+    pub fn contient(&self, p: DVec3) -> bool {
+        let dans = |t: &[DVec2; 3]| {
+            let s = |a: DVec2, b: DVec2| (b - a).perp_dot(p.truncate() - a);
+            let (u, v, w) = (s(t[0], t[1]), s(t[1], t[2]), s(t[2], t[0]));
+            (u >= 0.0 && v >= 0.0 && w >= 0.0) || (u <= 0.0 && v <= 0.0 && w <= 0.0)
+        };
+        p.z >= self.zmin - 1.0 && p.z <= self.zmax + 1.0 && self.triangles.iter().any(dans)
+    }
+}
+
+fn emprise(piece: i64, g: &Maillage) -> Emprise {
+    let zmin = g.sommets.iter().map(|p| p.z).fold(f64::MAX, f64::min);
+    let zmax = g.sommets.iter().map(|p| p.z).fold(f64::MIN, f64::max);
+    let mut triangles = Vec::new();
+    for f in &g.faces {
+        for t in &f.triangles {
+            let [a, b, c] = t.map(|i| g.sommets[i]);
+            let n = (b - a).cross(c - a);
+            if n.z < 0.0 && n.z.abs() > 0.999 * n.length() && (a.z - zmin).abs() < 1.0 {
+                triangles.push([a.truncate(), b.truncate(), c.truncate()]);
+            }
+        }
+    }
+    Emprise { piece, triangles, zmin, zmax }
 }
 
 /// Élément placé : hors d'un groupe non placé.
@@ -1100,7 +1173,7 @@ enum Extrait {
 
 fn niveau(id: i64, r: &Record) -> Option<Niveau> {
     let z = r.field_body(&r.root, "m_pSurface")?.get("m_origin")?.reals()?.get(2).copied()?;
-    Some(Niveau { id, nom: r.root.get("m_text")?.str()?.to_string(), altitude: z * FT })
+    Some(Niveau { id, nom: r.root.get("m_text")?.str()?.to_string(), altitude: z * FT, type_id: id_of(&r.root, "m_attrId") })
 }
 
 fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite: &dyn Fn(&str, &str) -> bool) -> Extrait {
@@ -1345,6 +1418,13 @@ fn instance(id: i64, r: &Record) -> (Instance, Option<(f64, f64)>) {
         niveau: id_of(o, "m_assocLevelId"),
         point: o.get("m_instOrigin").and_then(vec3).unwrap_or_default() * FT,
         repere,
+        axes: (|| {
+            let l = r.field_body(o, "m_pInstanceInfo")?.get("m_Trf")?.obj()?.get("m_3x3")?.list();
+            let ligne = |i: usize| l.get(i).and_then(vec3);
+            Some(DMat3::from_cols(ligne(0)?, ligne(1)?, ligne(2)?).transpose())
+        })(),
+        pieces_inversees: o.get("m_flippedFromToRoom").and_then(Val::int).unwrap_or(0) != 0,
+        main_retournee: o.get("m_flippedX").and_then(Val::int).unwrap_or(0) != 0,
         geometrie: Err(String::new()),
     };
     (i, reel(o, "m_hostParam").map(|h| (h, reel(o, "m_elevation").unwrap_or(0.0) * FT)))
@@ -1373,6 +1453,7 @@ fn piece(id: i64, r: &Record, altitude: &HashMap<i64, f64>) -> Piece {
         nom: texte_p(&p, ROOM_NAME),
         numero: texte_p(&p, ROOM_NUMBER),
         service: texte_p(&p, ROOM_DEPARTMENT),
+        phase: id_of(o, "m_phaseId"),
         niveau,
         point: point.filter(|_| place),
         geometrie: Err(String::new()),
@@ -1441,6 +1522,7 @@ impl Maquette {
         }
         for x in &self.niveaux {
             c.insert(x.id, -2_000_240);
+            t.insert(x.id, x.type_id);
         }
         for x in self.vues.iter().filter(|v| !v.gabarit) {
             c.insert(x.id, if x.genre == "Feuille" { -2_003_100 } else { -2_000_279 });
@@ -1460,6 +1542,25 @@ impl Maquette {
     /// Type d'un élément lu.
     pub fn type_de(&self, element: i64) -> Option<i64> {
         self.type_de_element.get(&element).copied()
+    }
+
+    /// Pièces de départ et d'arrivée d'une porte ou fenêtre (FromRoom, ToRoom de l'API,
+    /// dernière phase ; −1 : aucune). Revit ne les enregistre pas : pièces contenant les
+    /// points situés de part et d'autre du mur hôte, à 100 mm de ses faces et 300 mm
+    /// au-dessus du point d'insertion, le long de l'axe Y du repère ; l'arrivée est du
+    /// côté +Y, sauf si la main est retournée (`m_flippedX`) ou exclusif les pièces sont
+    /// inversées (`m_flippedFromToRoom`). Sans mur hôte, aucune pièce.
+    pub fn pieces_de_porte(&self, element: i64) -> (i64, i64) {
+        let Some(i) = self.instances.iter().find(|i| i.id == element) else { return (-1, -1) };
+        let Some(mur) = self.murs.iter().find(|w| w.id == i.hote) else { return (-1, -1) };
+        let Some(axes) = i.axes else { return (-1, -1) };
+        let ep = self.types.get(&mur.type_id).and_then(|t| t.epaisseur).unwrap_or(0.0);
+        let cote = |s: f64| {
+            let p = i.point + axes.y_axis * s * (ep / 2.0 + 100.0) + DVec3::Z * 300.0;
+            self.emprises.iter().find(|e| e.contient(p)).map(|e| e.piece).unwrap_or(-1)
+        };
+        let (plus, moins) = (cote(1.0), cote(-1.0));
+        if i.main_retournee != i.pieces_inversees { (plus, moins) } else { (moins, plus) }
     }
 
     /// IfcGUID d'un élément du document (None hors ElemTable ou format antérieur à 2024).
@@ -3177,6 +3278,39 @@ mod tests {
         assert_eq!(t.titres, ["Identifiant", "Famille et type", "Niveau", "Largeur", "Hauteur"]);
         assert_eq!(t.lignes.len(), 43);
         assert_eq!(t.lignes[1], ["P4", "Int. Simple: PP (0.83m x 2.04m)", "Niveau 0", "0.83", "2.04"]);
+    }
+
+    /// Élévation des niveaux selon la base de leur type, contre Revit 2026
+    /// (`rvt-essai-e19-base-niveaux`, depuis E16 : point de base relevé de 1 m, niveau
+    /// d'un type mesuré depuis le point topographique).
+    #[test]
+    fn elevations_niveaux_e19() {
+        let Some(p) = essai(r"essais\2026", "E19_base_niveaux.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        let elev = |id: i64| match m.parametres[&id].iter().find(|(p, _)| *p == -1_007_102).map(|(_, b)| b.clone()) {
+            Some(parametres::Brut::Reel(x)) => x,
+            b => panic!("{b:?}"),
+        };
+        proche(elev(1959), -3.280_839_895_013_123_5, 1e-9, "base : point de base du projet");
+        proche(elev(2805), 159.704_724_409_448_83, 1e-6, "base : point topographique");
+    }
+
+    /// Pièces de départ et d'arrivée des portes et fenêtres contre `FromRoom`/`ToRoom`
+    /// de Revit 2026 dans la dernière phase (`rvt-reference-pieces-portes`,
+    /// `Decodage RVT/references/pieces_portes.json`).
+    #[test]
+    fn pieces_portes() {
+        let base = std::env::var("RVT_ESSAIS").unwrap_or_else(|_| r"C:\Users\theba\Projets code\Decodage RVT".into());
+        let Ok(t) = std::fs::read_to_string(format!(r"{base}\references\pieces_portes.json")) else { return };
+        let r: serde_json::Value = serde_json::from_str(&t).unwrap();
+        for (fichier, minimum) in [("Projet1.rvt", 67), ("Kerreut 2025.rvt", 37), ("Saint-Malo_avenue aristide briand_46.rvt", 515)] {
+            let Some(p) = essai("fichiers", fichier) else { continue };
+            let m = lire(&p, &|_| {}).unwrap();
+            let l = r[fichier]["instances"].as_array().unwrap();
+            let justes = l.iter().filter(|x| m.pieces_de_porte(x["id"].as_i64().unwrap()) == (x["de"].as_i64().unwrap(), x["a"].as_i64().unwrap())).count();
+            eprintln!("{fichier} : {justes} sur {}", l.len());
+            assert!(justes >= minimum, "{fichier} : {justes} sur {}", l.len());
+        }
     }
 
     /// Essai E18 (`rvt-essai-e18-formules`) : une formule par fonction, évaluée avec les

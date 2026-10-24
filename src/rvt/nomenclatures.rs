@@ -12,8 +12,8 @@
 //!
 //! Revit ne garde pas le contenu : il le recalcule à l'affichage. Le contenu est donc
 //! recomposé ici depuis les éléments lus et leurs paramètres, formules des champs
-//! calculés comprises (`formules`) et pourcentages ; pièce de départ et d'arrivée
-//! d'une porte… ne le sont pas.
+//! calculés comprises (`formules`), pourcentages, pièces de départ et d'arrivée des
+//! portes et fenêtres (`Maquette::pieces_de_porte`).
 
 use super::champs::{Obj, Record, Val};
 use super::formules::{self, Expr, Valeur};
@@ -57,7 +57,7 @@ impl GenreChamp {
 
     /// Champs dont la valeur est recomposée ici.
     pub fn calcule(self) -> bool {
-        matches!(self, GenreChamp::Occurrence | GenreChamp::Type | GenreChamp::Nombre | GenreChamp::Formule | GenreChamp::Pourcentage)
+        matches!(self, GenreChamp::Occurrence | GenreChamp::Type | GenreChamp::Nombre | GenreChamp::Formule | GenreChamp::Pourcentage | GenreChamp::PieceDepart | GenreChamp::PieceArrivee | GenreChamp::Vue | GenreChamp::InfoProjet)
     }
 }
 
@@ -100,6 +100,10 @@ pub struct Tri {
     pub entete: bool,
     pub pied: bool,
     pub ligne_vide: bool,
+    /// Pied de groupe : titre (valeur du groupe, drapeau 32) et nombre d'éléments
+    /// (drapeau 64), écrits « RDC: 3 » dans la première colonne.
+    pub titre_pied: bool,
+    pub nombre_pied: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -181,7 +185,7 @@ pub fn definition(r: &Record) -> Option<Definition> {
         .filter_map(|v| corps(r, v))
         .map(|t| {
             let d = int(t, "m_groupingFlags");
-            Tri { champ: id_champ(t.get("m_fieldId")), decroissant: int(t, "m_sortOrder") != 0, entete: d & 2 != 0, pied: d & 4 != 0, ligne_vide: d & 16 != 0 }
+            Tri { champ: id_champ(t.get("m_fieldId")), decroissant: int(t, "m_sortOrder") != 0, entete: d & 2 != 0, pied: d & 4 != 0, ligne_vide: d & 16 != 0, titre_pied: d & 32 != 0, nombre_pied: d & 64 != 0 }
         })
         .collect();
     Some(Definition {
@@ -209,6 +213,9 @@ pub struct Tableau {
 fn brut(m: &Maquette, element: i64, c: &Champ) -> Option<(Brut, Stockage)> {
     let cible = match c.genre {
         GenreChamp::Type => m.type_de(element)?,
+        GenreChamp::PieceDepart => Some(m.pieces_de_porte(element).0).filter(|&p| p != -1)?,
+        GenreChamp::PieceArrivee => Some(m.pieces_de_porte(element).1).filter(|&p| p != -1)?,
+        GenreChamp::InfoProjet => m.info_projet,
         _ => element,
     };
     let v = m.parametres.get(&cible)?.iter().find(|(p, _)| *p == c.param)?.1.clone();
@@ -380,10 +387,61 @@ fn naturel(a: &str, b: &str) -> Ordering {
     }
 }
 
-/// Contenu d'une nomenclature : éléments de sa catégorie filtrés, triés, puis une ligne
-/// par élément (détail) ou par groupe des champs de tri ; en regroupement, une colonne
-/// totalisée est sommée, une autre garde sa valeur si elle est commune, « <multiples> »
-/// sinon (comme Revit).
+/// Lignes d'un niveau de regroupement : groupes consécutifs de même valeur du champ de
+/// tri, chacun avec son en-tête (valeur dans la première colonne), ses lignes, son pied
+/// (totaux ; titre et nombre selon les drapeaux) ; une ligne vide sépare deux groupes
+/// voisins, pas après le dernier (comme Revit).
+#[allow(clippy::too_many_arguments)]
+fn composer(
+    niveau: usize,
+    els: &[i64],
+    d: &Definition,
+    largeur: usize,
+    cle: &dyn Fn(i64, &Tri) -> String,
+    feuille: &dyn Fn(&[i64]) -> Vec<Vec<String>>,
+    total: &dyn Fn(&[i64], Option<String>) -> Vec<String>,
+    lignes: &mut Vec<Vec<String>>,
+) {
+    let Some(t) = d.tris.get(niveau) else {
+        lignes.extend(feuille(els));
+        return;
+    };
+    let mut k = 0;
+    while k < els.len() {
+        let valeur = cle(els[k], t);
+        let mut fin = k + 1;
+        while fin < els.len() && cle(els[fin], t) == valeur {
+            fin += 1;
+        }
+        let groupe = &els[k..fin];
+        if k > 0 && t.ligne_vide {
+            lignes.push(vec![String::new(); largeur]);
+        }
+        if t.entete {
+            let mut l = vec![String::new(); largeur];
+            if let Some(x) = l.first_mut() {
+                *x = valeur.clone();
+            }
+            lignes.push(l);
+        }
+        composer(niveau + 1, groupe, d, largeur, cle, feuille, total, lignes);
+        if t.pied {
+            let tete = match (t.titre_pied, t.nombre_pied) {
+                (true, true) => Some(format!("{valeur}: {}", groupe.len())),
+                (true, false) => Some(valeur),
+                (false, true) => Some(groupe.len().to_string()),
+                (false, false) => None,
+            };
+            lignes.push(total(groupe, tete));
+        }
+        k = fin;
+    }
+}
+
+/// Contenu d'une nomenclature : éléments de sa catégorie filtrés, triés, puis regroupés
+/// par les champs de tri (`composer`) : une ligne par élément (détail) ou par groupe des
+/// champs de tri ; en regroupement, une colonne totalisée est sommée, une autre garde sa
+/// valeur si elle est commune, « <multiples> » sinon (comme Revit).
 pub fn calculer(m: &Maquette, d: &Definition) -> Tableau {
     let visibles: Vec<&Champ> = d.champs.iter().filter(|c| !c.masque).collect();
     // nomenclature de clés : ses lignes sont des clés, non lues
@@ -419,8 +477,17 @@ pub fn calculer(m: &Maquette, d: &Definition) -> Tableau {
         }
     };
     let cle = |e: i64, t: &Tri| d.champs.iter().find(|c| c.id == t.champ).map(|c| cellule(e, c).0).unwrap_or_default();
-    // tri sur la valeur (nombre) quand il y en a une, sinon sur le texte
-    let cle_tri = |e: i64, t: &Tri| d.champs.iter().find(|c| c.id == t.champ).map(|c| cellule(e, c)).unwrap_or_default();
+    // tri sur la valeur (nombre) quand il y en a une, sinon sur le texte ; un niveau se
+    // range par altitude (RDC, R+1, R+2), comme dans Revit
+    let cle_tri = |e: i64, t: &Tri| {
+        let Some(c) = d.champs.iter().find(|c| c.id == t.champ) else { return Default::default() };
+        let (texte, n) = cellule(e, c);
+        let altitude = match brut(m, e, c) {
+            Some((Brut::Id(i), _)) => m.niveaux.iter().find(|n| n.id == i).map(|n| n.altitude),
+            _ => None,
+        };
+        (texte, altitude.or(n))
+    };
     els.sort_by(|&a, &b| {
         for t in &d.tris {
             let (x, y) = (cle_tri(a, t), cle_tri(b, t));
@@ -437,87 +504,68 @@ pub fn calculer(m: &Maquette, d: &Definition) -> Tableau {
     });
     let titres = visibles.iter().map(|c| c.titre.clone()).collect();
     let non_calculees = visibles.iter().enumerate().filter(|(_, c)| !c.genre.calcule()).map(|(k, _)| k).collect();
+    // somme d'une colonne totalisée sur des éléments, mise en forme comme ses valeurs
+    let somme = |groupe: &[i64], c: &Champ| -> Option<String> {
+        let vals: Vec<Option<f64>> = groupe.iter().map(|&e| cellule(e, c).1).collect();
+        if !c.total || !vals.iter().all(Option::is_some) {
+            return None;
+        }
+        let s: f64 = vals.iter().flatten().sum();
+        if matches!(c.genre, GenreChamp::Formule | GenreChamp::Pourcentage) {
+            return Some(texte_formule(m, c, &Valeur::Nombre(s)));
+        }
+        if let Some((Brut::Reel(_), st)) = groupe.first().and_then(|&e| brut(m, e, c)) {
+            return Some(texte(m, c, &Brut::Reel(s), st));
+        }
+        Some(crate::step::format_real(s))
+    };
+    // lignes du bas d'un regroupement : une par élément (détail), sinon une pour le
+    // groupe (colonne totalisée sommée, valeur commune ou « <multiples> »)
+    let feuille = |groupe: &[i64]| -> Vec<Vec<String>> {
+        if d.detail {
+            return groupe.iter().map(|&e| visibles.iter().map(|c| cellule(e, c).0).collect()).collect();
+        }
+        vec![visibles
+            .iter()
+            .map(|c| {
+                if c.genre == GenreChamp::Nombre {
+                    return groupe.len().to_string();
+                }
+                if let Some(s) = somme(groupe, c) {
+                    return s;
+                }
+                let vals: Vec<String> = groupe.iter().map(|&e| cellule(e, c).0).collect();
+                if vals.iter().all(|v| v == &vals[0]) { vals[0].clone() } else { "<multiples>".into() }
+            })
+            .collect()]
+    };
+    // ligne de total (pied de groupe, total général) : titre ou nombre dans la première
+    // colonne, nombre d'éléments dans un champ Nombre, sommes des colonnes totalisées
+    let total = |groupe: &[i64], tete: Option<String>| -> Vec<String> {
+        visibles
+            .iter()
+            .enumerate()
+            .map(|(k, c)| match (&tete, c.genre) {
+                (Some(t), _) if k == 0 => t.clone(),
+                (_, GenreChamp::Nombre) => groupe.len().to_string(),
+                _ => somme(groupe, c).unwrap_or_default(),
+            })
+            .collect()
+    };
     let mut lignes = Vec::new();
-    if d.detail {
-        for &e in &els {
-            lignes.push(visibles.iter().map(|c| cellule(e, c).0).collect());
-        }
-    } else if !d.tris.is_empty() {
-        // groupes consécutifs de mêmes clés de tri (sans champ de tri : aucune ligne,
-        // seulement le total général)
-        let mut k = 0;
-        while k < els.len() {
-            let cles: Vec<String> = d.tris.iter().map(|t| cle(els[k], t)).collect();
-            let mut fin = k + 1;
-            while fin < els.len() && d.tris.iter().map(|t| cle(els[fin], t)).collect::<Vec<_>>() == cles {
-                fin += 1;
-            }
-            let groupe = &els[k..fin];
-            lignes.push(
-                visibles
-                    .iter()
-                    .map(|c| {
-                        let vals: Vec<(String, Option<f64>)> = groupe.iter().map(|&e| cellule(e, c)).collect();
-                        if c.genre == GenreChamp::Nombre {
-                            return groupe.len().to_string();
-                        }
-                        if c.total && vals.iter().all(|v| v.1.is_some()) {
-                            let s: f64 = vals.iter().filter_map(|v| v.1).sum();
-                            // somme mise en forme comme les valeurs de la colonne
-                            if matches!(c.genre, GenreChamp::Formule | GenreChamp::Pourcentage) {
-                                return texte_formule(m, c, &Valeur::Nombre(s));
-                            }
-                            if let Some(e) = groupe.first() {
-                                if let Some((Brut::Reel(_), st)) = brut(m, *e, c) {
-                                    return texte(m, c, &Brut::Reel(s), st);
-                                }
-                            }
-                            return crate::step::format_real(s);
-                        }
-                        let premier = &vals[0].0;
-                        if vals.iter().all(|v| &v.0 == premier) { premier.clone() } else { "<multiples>".into() }
-                    })
-                    .collect(),
-            );
-            k = fin;
-        }
+    // sans détail ni champ de tri : une seule ligne pour tous les éléments
+    if !els.is_empty() {
+        composer(0, &els, d, visibles.len(), &cle, &feuille, &total, &mut lignes);
     }
-    // total général : nombre d'éléments et sommes des colonnes totalisées
+    // total général : « Total général: 112 » comme Revit
     if d.total_general && !els.is_empty() {
-        lignes.push(
-            visibles
-                .iter()
-                .enumerate()
-                .map(|(k, c)| {
-                    if c.genre == GenreChamp::Nombre {
-                        return els.len().to_string();
-                    }
-                    if c.total {
-                        let vals: Vec<Option<f64>> = els.iter().map(|&e| cellule(e, c).1).collect();
-                        if vals.iter().all(Option::is_some) {
-                            let s: f64 = vals.iter().flatten().sum();
-                            if matches!(c.genre, GenreChamp::Formule | GenreChamp::Pourcentage) {
-                                return texte_formule(m, c, &Valeur::Nombre(s));
-                            }
-                            if let Some((Brut::Reel(_), st)) = brut(m, els[0], c) {
-                                return texte(m, c, &Brut::Reel(s), st);
-                            }
-                            return crate::step::format_real(s);
-                        }
-                    }
-                    if k > 0 {
-                        return String::new();
-                    }
-                    // « Total général: 112 » comme Revit
-                    match (&d.titre_total, d.nombre_total) {
-                        (Some(t), true) => format!("{t}: {}", els.len()),
-                        (Some(t), false) => t.clone(),
-                        (None, true) => els.len().to_string(),
-                        (None, false) => String::new(),
-                    }
-                })
-                .collect(),
-        );
+        let tete = match (&d.titre_total, d.nombre_total) {
+            (Some(t), true) => Some(format!("{t}: {}", els.len())),
+            (Some(t), false) => Some(t.clone()),
+            (None, true) => Some(els.len().to_string()),
+            (None, false) => None,
+        };
+        lignes.push(total(&els, tete));
     }
     Tableau { titres, lignes, non_calculees }
 }

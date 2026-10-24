@@ -326,6 +326,12 @@ pub fn valeurs(r: &Record) -> Vec<(i64, Brut)> {
             ajouter(&mut out, -1_007_102, Brut::Reel(z));
         }
     }
+    // type de niveau : base de l'élévation (LEVEL_RELATIVE_BASE_TYPE)
+    if o.class_name() == "LevelAttributes" {
+        if let Some(b) = o.get("m_baseElevation").and_then(Val::int) {
+            ajouter(&mut out, -1_007_109, Brut::Entier(b));
+        }
+    }
     // phases de l'élément (champs de Element) : PHASE_CREATED, PHASE_DEMOLISHED
     for (k, id) in [("m_createdPhaseId", -1_012_100), ("m_demolishedPhaseId", -1_012_101)] {
         if let Some(p) = o.get(k).and_then(Val::element_id) {
