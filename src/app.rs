@@ -8,7 +8,7 @@ use crate::camera::{Camera, MAX_PITCH};
 use crate::dessin::{self, Poche};
 use crate::model::pretty_type;
 use crate::pilote::{self, Requete};
-use crate::render::{FrameParams, ParamsPasse, Renderer};
+use crate::render::{FrameParams, ParamsPasse, Renderer, StyleVisuel};
 use crate::rvt::{self, RvtInfo};
 use crate::scene::{self, Scene};
 use crate::trace2d;
@@ -324,7 +324,8 @@ pub struct ViewerApp {
     passes_feuille: Vec<PasseFeuille>,
     objets_feuille: Vec<u32>,
     /// Mode dessin : plans et élévations comme dans un logiciel de DAO.
-    dessin: bool,
+    /// Style visuel de la vue (Lignes cachées : dessin des plans et élévations).
+    style: StyleVisuel,
     /// Coupe horizontale du mode dessin : active, niveau de référence (sinon bas du
     /// modèle) et hauteur au-dessus de lui (m).
     coupe: bool,
@@ -400,8 +401,8 @@ impl ViewerApp {
             rect_vue: egui::Rect::NOTHING,
             passes_feuille: Vec::new(),
             objets_feuille: Vec::new(),
-            dessin: false,
-            coupe: true,
+            style: StyleVisuel::Realiste,
+            coupe: false,
             coupe_niveau: None,
             coupe_hauteur: 1.2,
             poche: Poche::Hachure,
@@ -542,7 +543,7 @@ impl ViewerApp {
         }
         self.visible = vec![true; scene.objects.len()];
         self.vue_active = None;
-        self.dessin = false;
+        self.style = StyleVisuel::Realiste;
         self.coupe_niveau = None;
         self.liste_niveaux = niveaux(&scene);
         self.left_tab = if scene.navigateur.is_some() { LeftTab::Tout } else { LeftTab::Tree };
@@ -598,7 +599,7 @@ impl ViewerApp {
     /// Plan de la coupe horizontale du mode dessin (n, d ; repère de la scène, partie
     /// gardée sous la cote de coupe), None hors mode dessin ou sans coupe.
     fn plan_coupe(&self) -> Option<Vec4> {
-        if !self.dessin || !self.coupe {
+        if self.style != StyleVisuel::LignesCachees || !self.coupe {
             return None;
         }
         let s = self.scene.as_ref()?;
@@ -664,25 +665,46 @@ impl ViewerApp {
         Ok(d.primitives.len())
     }
 
-    /// Réglages du mode dessin : coupe, niveau, hauteur, poché, échelle.
+    /// Réglages de la coupe du style Lignes cachées, dans un menu : coupe, niveau,
+    /// hauteur, poché.
     fn reglages_dessin(&mut self, ui: &mut egui::Ui) {
-        let mut change = ui.checkbox(&mut self.coupe, "Coupe").on_hover_text("Coupe horizontale (plan) : parties coupées en poché et trait fort").changed();
-        if self.coupe {
-            let niveaux = self.niveaux();
-            let nom = |n: Option<Id>| n.and_then(|n| niveaux.iter().find(|x| x.0 == n)).map_or("Bas du modèle".to_string(), |x| x.1.clone());
-            egui::ComboBox::from_id_salt("coupe_niveau").selected_text(nom(self.coupe_niveau)).show_ui(ui, |ui| {
+        let niveaux = self.niveaux();
+        let nom_niveau = |n: Option<Id>| n.and_then(|n| niveaux.iter().find(|x| x.0 == n)).map_or("Bas du modèle".to_string(), |x| x.1.clone());
+        let (court, complet) = if self.coupe {
+            (format!("Coupe {:+.2} m", self.coupe_hauteur), format!("Coupe à {:+.2} m au-dessus de {}", self.coupe_hauteur, nom_niveau(self.coupe_niveau)))
+        } else {
+            ("Sans coupe".to_string(), "Pas de coupe horizontale".to_string())
+        };
+        let mut change = false;
+        let menu = ui.menu_button(court, |ui| {
+            change |= ui.checkbox(&mut self.coupe, "Coupe horizontale").on_hover_text("Parties coupées en poché et trait fort, parties au-dessus retirées").changed();
+            ui.add_enabled_ui(self.coupe, |ui| {
+                ui.separator();
+                ui.label(RichText::new("Niveau").strong());
                 change |= ui.selectable_value(&mut self.coupe_niveau, None, "Bas du modèle").changed();
                 for (id, n, z) in &niveaux {
                     change |= ui.selectable_value(&mut self.coupe_niveau, Some(*id), format!("{n} ({z:+.2})")).changed();
                 }
-            });
-            change |= ui.add(egui::DragValue::new(&mut self.coupe_hauteur).speed(0.01).range(-50.0..=200.0).suffix(" m")).on_hover_text("Hauteur de coupe au-dessus du niveau").changed();
-            egui::ComboBox::from_id_salt("poche").selected_text(self.poche.libelle()).show_ui(ui, |ui| {
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label("Hauteur au-dessus du niveau");
+                    change |= ui.add(egui::DragValue::new(&mut self.coupe_hauteur).speed(0.01).range(-50.0..=200.0).suffix(" m")).changed();
+                });
+                ui.separator();
+                ui.label(RichText::new("Poché").strong());
                 for p in [Poche::Hachure, Poche::Plein, Poche::Vide] {
                     change |= ui.selectable_value(&mut self.poche, p, p.libelle()).changed();
                 }
             });
+        });
+        menu.response.on_hover_text(complet);
+        if change {
+            self.visibility_dirty = true;
         }
+    }
+
+    /// Export SVG du dessin de la vue, après choix du fichier.
+    fn bouton_svg(&mut self, ui: &mut egui::Ui) {
         if ui.button("SVG…").on_hover_text("Exporter le dessin de la vue en SVG (vue orthographique)").clicked() {
             let nom = self.scene.as_ref().map(|s| s.file_name.rsplit_once('.').map_or(s.file_name.clone(), |x| x.0.to_string())).unwrap_or_default();
             if let Some(chemin) = rfd::FileDialog::new().add_filter("SVG", &["svg"]).set_file_name(format!("{nom}.svg")).save_file() {
@@ -691,9 +713,6 @@ impl ViewerApp {
                     Err(e) => self.error = Some(e),
                 }
             }
-        }
-        if change {
-            self.visibility_dirty = true;
         }
     }
 
@@ -780,16 +799,6 @@ impl ViewerApp {
             if self.rvt.is_some() && self.rvt_geom.is_ok() {
                 ui.toggle_value(&mut self.rvt_sheet, "Fiche Revit").on_hover_text("Métadonnées du fichier Revit");
             }
-            ui.separator();
-            let has = self.scene.is_some();
-            ui.add_enabled_ui(has, |ui| {
-                if ui.toggle_value(&mut self.dessin, "Dessin 2D").on_hover_text("Plans et élévations : faces blanches, arêtes vives, parties cachées éliminées, coupe").changed() {
-                    self.visibility_dirty = true;
-                }
-                if self.dessin {
-                    self.reglages_dessin(ui);
-                }
-            });
             if self.loading.is_some() {
                 ui.separator();
                 ui.spinner();
@@ -820,8 +829,14 @@ impl ViewerApp {
     /// Barre de la vue, sous la vue comme celle de Revit : échelle (celle de la vue
     /// ouverte, qui règle aussi le dessin 2D), cadrage, projection en vue 3D.
     fn barre_vue(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.add_enabled_ui(self.scene.is_some(), |ui| {
+                self.choix_style(ui);
+                if self.style == StyleVisuel::LignesCachees {
+                    self.reglages_dessin(ui);
+                }
+                self.bouton_svg(ui);
+                ui.separator();
                 ui.label("Échelle");
                 let r = ui.add(egui::DragValue::new(&mut self.echelle).speed(1.0).range(1.0..=10000.0).prefix("1 : "));
                 if r.on_hover_text("Échelle de la vue : épaisseur des traits coupés et pas des hachures du dessin 2D, export SVG").changed() {
@@ -993,6 +1008,36 @@ impl ViewerApp {
             self.pos_imposee[i] = Some(egui::pos2(q.x.clamp(v.left(), (v.right() - 200.0).max(v.left())), q.y.clamp(v.top(), (v.bottom() - 200.0).max(v.top()))));
         }
         self.ancrages[i] = a;
+    }
+
+    /// Style visuel : bouton à l'icône du style en cours, menu des styles.
+    fn choix_style(&mut self, ui: &mut egui::Ui) {
+        let (r, _) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), Sense::hover());
+        icone_style(ui.painter(), r.shrink(2.0), self.style);
+        let mut choisi = None;
+        ui.menu_button(self.style.libelle(), |ui| {
+            for st in StyleVisuel::TOUS {
+                let (r, resp) = ui.allocate_exact_size(egui::vec2(190.0, 24.0), Sense::click());
+                let v = ui.visuals();
+                if st == self.style {
+                    ui.painter().rect_filled(r, 3.0, v.selection.bg_fill);
+                } else if resp.hovered() {
+                    ui.painter().rect_filled(r, 3.0, v.widgets.hovered.bg_fill);
+                }
+                icone_style(ui.painter(), egui::Rect::from_min_size(r.min + egui::vec2(4.0, 3.0), egui::vec2(18.0, 18.0)), st);
+                ui.painter().text(r.min + egui::vec2(30.0, 12.0), egui::Align2::LEFT_CENTER, st.libelle(), egui::TextStyle::Button.resolve(ui.style()), v.text_color());
+                if resp.clicked() {
+                    choisi = Some(st);
+                    ui.close();
+                }
+            }
+        })
+        .response
+        .on_hover_text("Style visuel");
+        if let Some(st) = choisi {
+            self.style = st;
+            self.visibility_dirty = true;
+        }
     }
 
     /// Cube d'orientation (vue 3D), dans le coin haut droit de la vue : clic sur une face,
@@ -1471,7 +1516,7 @@ impl ViewerApp {
         let (genre, etage, echelle) = (v.genre.clone(), v.etage, v.echelle);
         match genre.as_str() {
             "Plan d'étage" | "Plan de plafond" | "Coupe" | "Élévation" => {
-                self.dessin = true;
+                self.style = StyleVisuel::LignesCachees;
                 self.coupe = genre == "Plan d'étage";
                 if self.coupe {
                     self.coupe_niveau = etage;
@@ -1481,7 +1526,8 @@ impl ViewerApp {
                     }
                 }
             }
-            "Vue 3D" | "Feuille" => self.dessin = false,
+            // vue 3D : le style 3D en cours, réaliste en sortant d'un dessin
+            "Vue 3D" | "Feuille" if self.style == StyleVisuel::LignesCachees => self.style = StyleVisuel::Realiste,
             _ => {}
         }
         // échelle de la barre de vue : celle de la vue ouverte
@@ -2350,8 +2396,8 @@ impl ViewerApp {
             view_dir: self.camera.forward(),
             ortho: self.camera.ortho,
             selected: self.selected_object().unwrap_or(u32::MAX),
-            background: if self.dessin { [1.0, 1.0, 1.0] } else { [0.925, 0.933, 0.945] },
-            dessin: self.dessin,
+            background: if self.style.papier() { [1.0, 1.0, 1.0] } else { [0.925, 0.933, 0.945] },
+            style: self.style,
             coupe: self.plan_coupe(),
         }
     }
@@ -2447,7 +2493,8 @@ impl ViewerApp {
         p.push((
             "dessin",
             objet(&[
-                ("actif", self.dessin.to_string()),
+                ("actif", (self.style == StyleVisuel::LignesCachees).to_string()),
+                ("style", texte(self.style.nom())),
                 ("coupe_z", self.plan_coupe().map_or("null".into(), |c| format!("{:.3}", c.w))),
                 ("niveau", self.coupe_niveau.map_or("null".into(), |n| self.decrire(n))),
                 ("hauteur", format!("{:.3}", self.coupe_hauteur)),
@@ -2573,7 +2620,15 @@ impl ViewerApp {
                 self.etat()
             }
             "dessin" => {
-                self.dessin = argument != "non";
+                self.style = if argument == "non" { StyleVisuel::Realiste } else { StyleVisuel::LignesCachees };
+                self.visibility_dirty = true;
+                self.etat()
+            }
+            "style" => {
+                let Some(&st) = StyleVisuel::TOUS.iter().find(|x| x.nom() == argument) else {
+                    return erreur("usage : style filaire|lignes_cachees|ombre|couleurs|realiste");
+                };
+                self.style = st;
                 self.visibility_dirty = true;
                 self.etat()
             }
@@ -2593,7 +2648,7 @@ impl ViewerApp {
                         let Some(n) = n else { return erreur(&format!("niveau introuvable : {niveau}")) };
                         self.coupe_niveau = Some(n.0);
                     }
-                    self.dessin = true;
+                    self.style = StyleVisuel::LignesCachees;
                     self.coupe = true;
                 }
                 self.visibility_dirty = true;
@@ -2779,6 +2834,45 @@ impl ViewerApp {
             }
             _ => erreur(&format!("commande inconnue : {commande}")),
         }
+    }
+}
+
+/// Icône d'un style visuel : petit cube en perspective, tracé dans `r`.
+fn icone_style(p: &egui::Painter, r: egui::Rect, style: StyleVisuel) {
+    use egui::{Stroke, pos2};
+    let c = r.center();
+    let k = r.width() / 4.2;
+    // perspective fixe : vu depuis l'avant gauche, en plongée
+    let pt = |x: f32, y: f32, z: f32| pos2(c.x + (x - y) * 0.87 * k, c.y - (z * 1.0 + (x + y) * 0.45) * k);
+    let encre = Color32::from_gray(50);
+    let t = Stroke::new(1.1, encre);
+    let faces = [
+        ([pt(-1., -1., 1.), pt(1., -1., 1.), pt(1., 1., 1.), pt(-1., 1., 1.)], 0),
+        ([pt(-1., -1., -1.), pt(1., -1., -1.), pt(1., -1., 1.), pt(-1., -1., 1.)], 1),
+        ([pt(-1., -1., -1.), pt(-1., 1., -1.), pt(-1., 1., 1.), pt(-1., -1., 1.)], 2),
+    ];
+    let remplissage = |i: usize| -> Option<Color32> {
+        match style {
+            StyleVisuel::Filaire => None,
+            StyleVisuel::LignesCachees => Some(Color32::WHITE),
+            StyleVisuel::Ombre => Some(Color32::from_gray([235, 185, 150][i])),
+            StyleVisuel::CouleursHomogenes => Some(Color32::from_rgb(150, 180, 210)),
+            StyleVisuel::Realiste => Some([Color32::from_rgb(232, 196, 150), Color32::from_rgb(200, 150, 100), Color32::from_rgb(165, 118, 75)][i]),
+        }
+    };
+    if style == StyleVisuel::Filaire {
+        // arêtes cachées aussi
+        let a = pt(1., 1., -1.);
+        for b in [pt(1., -1., -1.), pt(-1., 1., -1.), pt(1., 1., 1.)] {
+            p.line_segment([a, b], Stroke::new(1.0, Color32::from_gray(140)));
+        }
+    }
+    for (coins, i) in faces {
+        let trait_ = if style == StyleVisuel::Realiste { Stroke::NONE } else { t };
+        match remplissage(i) {
+            Some(f) => p.add(egui::Shape::convex_polygon(coins.to_vec(), f, trait_)),
+            None => p.add(egui::Shape::closed_line(coins.to_vec(), t)),
+        };
     }
 }
 

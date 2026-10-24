@@ -35,7 +35,7 @@ panneau proprietes|arborescence gauche|droite|flottant ; elements [CLASSE|*] [te
 selectionner <id> ; isoler <id> ; cadrer <id> ; proprietes [id] ; objet <x> <y>
 (0..1 depuis le coin haut gauche de la vue) ; fiche oui|non (fiche Revit) ;
 onglet tout|vues|feuilles|nomenclatures|familles|materiaux|groupes|liens|modele|classes ;
-dessin oui|non (rendu 2D des plans et élévations) ; coupe non | coupe <hauteur m> [niveau]
+style filaire|lignes_cachees|ombre|couleurs|realiste (style visuel) ; dessin oui|non (lignes cachées ou réaliste) ; coupe non | coupe <hauteur m> [niveau]
 (coupe horizontale au-dessus du niveau, mode dessin) ; niveaux ; poche hachure|plein|vide ;
 echelle <dénominateur> (épaisseur des contours coupés, pas des hachures) ;
 exporter <chemin.svg> (dessin vectoriel de la vue orthographique : coupe, arêtes vues
