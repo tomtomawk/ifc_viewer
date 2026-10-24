@@ -187,12 +187,12 @@ fn cellules<'r, 's>(r: &'r Record<'s>, o: &'r Obj<'s>) -> Vec<&'r Obj<'s>> {
     o.get("m_cellList").and_then(|v| corps(r, v)).and_then(|c| c.get("m_cells")).map(Val::list).unwrap_or_default().iter().filter_map(|v| corps(r, v)).collect()
 }
 
-/// Groupe d'un élément membre (cellule `m_groupId` de `m_cellList`), None hors groupe.
+/// Groupe d'un élément membre (cellule `ElementGroupMembership` de `m_cellList`, champ
+/// `m_groupId`), None hors groupe. D'autres cellules portent aussi un `m_groupId`
+/// (`SketchMembership` : esquisse, `SecretStyleMembership` : style, `StairsElementMembership`,
+/// `Path3dMembership`) : elles ne disent pas l'appartenance à un groupe.
 pub fn groupe_de(r: &Record) -> Option<i64> {
-    if r.root.class_name() == "ElementGroup" {
-        return None;
-    }
-    cellules(r, &r.root).iter().find_map(|c| c.get("m_groupId").and_then(Val::element_id)).filter(|&g| g != -1)
+    cellules(r, &r.root).iter().filter(|c| c.class_name() == "ElementGroupMembership").find_map(|c| c.get("m_groupId").and_then(Val::element_id)).filter(|&g| g != -1)
 }
 
 /// Variante d'un élément (`Element.m_designOptionId`), None dans le modèle principal

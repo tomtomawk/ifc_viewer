@@ -3906,6 +3906,27 @@ mod tests {
         assert_eq!(t.lignes[1], ["P4", "Int. Simple: PP (0.83m x 2.04m)", "Niveau 0", "0.83", "2.04"]);
     }
 
+    /// Variantes de `Projet variante.rvt` (fait à la main dans Revit 2026 par Thomas, le
+    /// 24/10/2026) contre l'API (`rvt-reference-variantes`) : un jeu « Variante 1 », deux
+    /// options (principale « Variante 1 », que Revit nomme « Variante 1  <principal> »,
+    /// et « Variante 2 »), deux murs dans la principale, trois dans la secondaire.
+    #[test]
+    fn variantes_essai() {
+        let Some(p) = essai("fichiers", "Projet variante.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        let jeu = &m.variantes[&257_066];
+        assert_eq!((jeu.nom.as_str(), jeu.jeu, jeu.lien), ("Variante 1", true, 257_067));
+        assert_eq!((m.variantes[&257_067].nom.as_str(), m.variantes[&257_067].lien), ("Variante 1", 257_066));
+        assert_eq!((m.variantes[&257_070].nom.as_str(), m.variantes[&257_070].lien), ("Variante 2", 257_066));
+        for (mur, option, principale) in [(257_248, 257_067, true), (257_371, 257_067, true), (257_450, 257_070, false), (257_508, 257_070, false), (257_616, 257_070, false)] {
+            assert_eq!(m.variante_de.get(&mur), Some(&option), "mur {mur}");
+            assert_eq!(m.variante(mur).map(|v| v.2), Some(principale), "mur {mur}");
+        }
+        assert_eq!(m.variante_de.len(), 5);
+        assert!(m.groupe_de.is_empty() && m.groupes.is_empty());
+        assert_eq!(m.ordre_phases, [3, 0]);
+    }
+
     /// Groupes, composants de légende, table des notes, cas et natures de charge,
     /// gabarits de tableaux électriques, motifs de ligne contre Revit 2026
     /// (`rvt-reference-classes-restantes`, `references/classes_restantes.json`).
@@ -3928,6 +3949,12 @@ mod tests {
                 assert_eq!(m.types.get(&g.type_id).map(|t| t.nom.as_str()), x["nomType"].as_str(), "{fichier} groupe {id}");
                 let attendus = ids(&x["membres"]);
                 assert_eq!(g.membres.iter().copied().collect::<BTreeSet<i64>>(), attendus, "{fichier} groupe {id} : membres");
+                // renvoi de chaque membre lu vers son groupe
+                for e in &attendus {
+                    if let Some(gr) = m.groupe_de.get(e) {
+                        assert_eq!(*gr, id, "{fichier} : groupe du membre {e}");
+                    }
+                }
                 let p = DVec3::new(x["point"][0].as_f64().unwrap(), x["point"][1].as_f64().unwrap(), x["point"][2].as_f64().unwrap()) * FT;
                 let lu = m.point_groupe(g);
                 assert!(lu.distance(p) < 1e-3, "{fichier} groupe {id} : point {lu:?} contre {p:?}");
