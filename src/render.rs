@@ -72,6 +72,10 @@ uniform vec3 u_soleil;
 uniform mat4 u_lumiere;
 uniform highp sampler2D u_ombres;
 uniform float u_decalage_ombre;
+// zone de coupe 3D (boîte alignée sur les axes) : modèle retiré hors de la boîte
+uniform bool u_boite;
+uniform vec3 u_boite_min;
+uniform vec3 u_boite_max;
 out vec4 o_color;
 
 // part du soleil reçue en p (0 : à l'ombre), moyenne de 3 × 3 échantillons
@@ -92,6 +96,9 @@ float ensoleillement(vec3 p, vec3 n) {
 }
 
 void main() {
+    if (u_boite && v_annot == 0u && (any(lessThan(v_pos, u_boite_min)) || any(greaterThan(v_pos, u_boite_max)))) {
+        discard;
+    }
     // filaire : faces du modèle invisibles (annotations gardées : textes, régions)
     if (u_filaire && v_annot == 0u) {
         discard;
@@ -198,6 +205,9 @@ pub struct Renderer {
     u_lumiere: Option<glow::UniformLocation>,
     u_ombres: Option<glow::UniformLocation>,
     u_decalage_ombre: Option<glow::UniformLocation>,
+    u_boite: Option<glow::UniformLocation>,
+    u_boite_min: Option<glow::UniformLocation>,
+    u_boite_max: Option<glow::UniformLocation>,
     /// Couleurs de rendu des sommets (attribut 4), tampon à part.
     vbo_rendu: glow::Buffer,
     /// Carte d'ombres du style Rendu : programme, tampon de trame, texture de profondeur.
@@ -273,6 +283,8 @@ pub struct FrameParams {
     /// (orthographique, scène entière) et décalage des points le long de la normale
     /// contre l'acné d'ombre (unités de la scène).
     pub soleil: Option<(Vec3, Mat4, f32)>,
+    /// Zone de coupe 3D (min, max), repère de la scène : vue principale seulement.
+    pub boite: Option<(Vec3, Vec3)>,
     /// Passes des fenêtres de vue (feuille ouverte), dans l'ordre des indices envoyés
     /// par `upload_passes`.
     pub passes: Vec<ParamsPasse>,
@@ -378,6 +390,9 @@ impl Renderer {
                 u_soleil: gl.get_uniform_location(program, "u_soleil"),
                 u_lumiere: gl.get_uniform_location(program, "u_lumiere"),
                 u_ombres: gl.get_uniform_location(program, "u_ombres"),
+                u_boite: gl.get_uniform_location(program, "u_boite"),
+                u_boite_min: gl.get_uniform_location(program, "u_boite_min"),
+                u_boite_max: gl.get_uniform_location(program, "u_boite_max"),
                 u_decalage_ombre: gl.get_uniform_location(program, "u_decalage_ombre"),
                 vbo_rendu,
                 u_mvp_ombre: gl.get_uniform_location(programme_ombre, "u_mvp"),
@@ -669,6 +684,11 @@ impl Renderer {
                 gl.uniform_matrix_4_f32_slice(self.u_mvp.as_ref(), false, &p.mvp.to_cols_array());
                 gl.uniform_3_f32(self.u_view_dir.as_ref(), p.view_dir.x, p.view_dir.y, p.view_dir.z);
             }
+            if let Some((a, b)) = p.boite {
+                gl.uniform_1_i32(self.u_boite.as_ref(), 1);
+                gl.uniform_3_f32(self.u_boite_min.as_ref(), a.x, a.y, a.z);
+                gl.uniform_3_f32(self.u_boite_max.as_ref(), b.x, b.y, b.z);
+            }
             match p.style {
                 StyleVisuel::LignesCachees => self.dessiner_plan(gl, p, true),
                 StyleVisuel::Filaire => self.dessiner_plan(gl, p, false),
@@ -695,6 +715,7 @@ impl Renderer {
                     gl.uniform_1_i32(self.u_sans_eclairage.as_ref(), 0);
                 }
             }
+            gl.uniform_1_i32(self.u_boite.as_ref(), 0);
             gl.disable(glow::POLYGON_OFFSET_FILL);
             gl.bind_vertex_array(None);
             gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);

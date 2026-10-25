@@ -401,6 +401,10 @@ pub struct ViewerApp {
     /// Niveau de détail de la vue (barre de la vue), lu dans la vue Revit ouverte.
     detail: NiveauDetail,
     onglet_ruban: OngletRuban,
+    /// Zone de coupe 3D (min, max), repère de la scène ; appliquée aux vues 3D quand
+    /// elle est active, modifiable par ses poignées dans toutes les vues.
+    boite: Option<(Vec3, Vec3)>,
+    boite_active: bool,
     /// Tracé de la coupe à recalculer.
     coupe_dirty: bool,
     /// Niveaux de la scène (voir `niveaux`), relevés à son installation.
@@ -477,6 +481,8 @@ impl ViewerApp {
             echelle: 100.0,
             detail: NiveauDetail::Moyen,
             onglet_ruban: OngletRuban::Fichier,
+            boite: None,
+            boite_active: false,
             coupe_dirty: true,
             liste_niveaux: Vec::new(),
             liste_materiaux: Vec::new(),
@@ -622,6 +628,8 @@ impl ViewerApp {
             None => materiaux_ifc(&scene),
         };
         (self.categories, self.categorie_objet, self.cle_objet) = categories(&scene);
+        self.boite = None;
+        self.boite_active = false;
         self.scene = Some(scene);
         let secondaires = self.masques_variantes();
         self.hidden_objects.extend(secondaires);
@@ -733,6 +741,126 @@ impl ViewerApp {
         let titre = format!("{}{vue} — 1:{}", s.file_name, d.echelle);
         std::fs::write(chemin, d.svg(&titre)).map_err(|e| format!("écriture impossible : {e}"))?;
         Ok(d.primitives.len())
+    }
+
+    /// Zone de coupe appliquée au rendu et à la sélection : active, vue 3D.
+    fn boite_appliquee(&self) -> Option<(Vec3, Vec3)> {
+        if self.boite_active && self.vue_3d() { self.boite } else { None }
+    }
+
+    /// Active la zone de coupe ; la première fois, elle entoure tout le modèle.
+    fn activer_boite(&mut self, active: bool) {
+        self.boite_active = active;
+        if active
+            && self.boite.is_none()
+            && let Some(s) = &self.scene
+        {
+            let marge = ((s.max - s.min).length() * 0.02).max(0.1);
+            self.boite = Some((s.min - Vec3::splat(marge), s.max + Vec3::splat(marge)));
+        }
+    }
+
+    /// Zone de coupe dans les propriétés : bornes en coordonnées du fichier (m).
+    fn proprietes_boite(&mut self, ui: &mut egui::Ui) {
+        let (Some((mut a, mut b)), Some(s)) = (self.boite, &self.scene) else { return };
+        // coordonnées du fichier en f64 : origine éventuellement lointaine (géoréférencement)
+        let o = s.origin;
+        egui::CollapsingHeader::new(RichText::new("Zone de coupe").strong()).id_salt("zone_de_coupe").default_open(true).show(ui, |ui| {
+            egui::Grid::new("grille_zone_de_coupe").num_columns(3).spacing([10.0, 4.0]).show(ui, |ui| {
+                ui.label("");
+                ui.label("Min");
+                ui.label("Max");
+                ui.end_row();
+                for (k, nom) in ["X", "Y", "Z"].iter().enumerate() {
+                    ui.label(*nom);
+                    let (mut lo, mut hi) = (a[k] as f64 + o[k], b[k] as f64 + o[k]);
+                    ui.add(egui::DragValue::new(&mut lo).speed(0.05).max_decimals(3).suffix(" m"));
+                    ui.add(egui::DragValue::new(&mut hi).speed(0.05).max_decimals(3).suffix(" m"));
+                    a[k] = (lo - o[k]) as f32;
+                    b[k] = (hi - o[k]) as f32;
+                    ui.end_row();
+                }
+            });
+            if ui.button("Ajuster au modèle").clicked() {
+                self.boite = None;
+                self.activer_boite(true);
+                (a, b) = self.boite.unwrap_or((a, b));
+            }
+        });
+        self.regler_boite(a, b);
+    }
+
+    /// Nouvelles bornes de la zone de coupe, épaisseur minimale gardée.
+    fn regler_boite(&mut self, a: Vec3, b: Vec3) {
+        let ep = 0.05;
+        let b = b.max(a + Vec3::splat(ep));
+        self.boite = Some((a, b));
+    }
+
+    /// Contour de la zone de coupe sur la vue et ses poignées : une au centre de chaque
+    /// face vue par la tranche ou de biais (en plan : les quatre côtés ; en élévation :
+    /// dessus, dessous et côtés). Glisser une poignée déplace sa face le long de sa
+    /// normale.
+    fn poignees_boite(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
+        let Some((a, b)) = self.boite else { return };
+        if !self.boite_active || self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).is_some_and(|v| v.genre == "Feuille") {
+            return;
+        }
+        let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
+        let ecran = |p: Vec3| -> Option<egui::Pos2> {
+            let c = vp * p.extend(1.0);
+            (c.w > 1e-4).then(|| egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height()))
+        };
+        let coin = |i: usize| Vec3::new(if i & 1 == 0 { a.x } else { b.x }, if i & 2 == 0 { a.y } else { b.y }, if i & 4 == 0 { a.z } else { b.z });
+        let couleur = Color32::from_rgb(230, 120, 20);
+        let painter = ui.painter_at(rect);
+        for i in 0..8 {
+            for bit in [1, 2, 4] {
+                if i & bit == 0
+                    && let (Some(p), Some(q)) = (ecran(coin(i)), ecran(coin(i | bit)))
+                {
+                    painter.line_segment([p, q], egui::Stroke::new(1.5, couleur));
+                }
+            }
+        }
+        let f = self.camera.forward();
+        let centre = (a + b) * 0.5;
+        let (mut na, mut nb) = (a, b);
+        for k in 0..3 {
+            for haut in [false, true] {
+                let mut n = Vec3::ZERO;
+                n[k] = if haut { 1.0 } else { -1.0 };
+                if n.dot(f).abs() > 0.9 {
+                    continue; // face vue de face : pas de sens à la glisser à l'écran
+                }
+                let mut c = centre;
+                c[k] = if haut { b[k] } else { a[k] };
+                let (Some(p), Some(q)) = (ecran(c), ecran(c + n)) else { continue };
+                if !rect.contains(p) {
+                    continue;
+                }
+                let r = egui::Rect::from_center_size(p, egui::vec2(14.0, 14.0));
+                let resp = ui.interact(r, ui.make_persistent_id(("poignee_boite", k, haut)), Sense::drag());
+                let actif = resp.hovered() || resp.dragged();
+                painter.circle(p, if actif { 7.0 } else { 5.5 }, if actif { couleur } else { Color32::WHITE }, egui::Stroke::new(1.5, couleur));
+                if resp.dragged() {
+                    // pixels par mètre le long de la normale, à l'écran
+                    let s = q - p;
+                    let d = resp.drag_delta().dot(s) / s.length_sq().max(1e-6);
+                    if haut {
+                        nb[k] += d;
+                    } else {
+                        na[k] += d;
+                    }
+                }
+                if actif {
+                    resp.on_hover_cursor(egui::CursorIcon::Grab);
+                }
+            }
+        }
+        if (na, nb) != (a, b) {
+            self.regler_boite(na.min(nb - Vec3::splat(0.05)), nb);
+        }
     }
 
     /// Plage de vue du dessin (style Lignes cachées), en tête des propriétés comme dans
@@ -987,6 +1115,10 @@ impl ViewerApp {
                     self.visibility_dirty = true;
                 }
                 ui.separator();
+                let mut zone = self.boite_active;
+                if ui.toggle_value(&mut zone, "Zone de coupe").on_hover_text("Boîte qui découpe le modèle dans les vues 3D ; ses faces se règlent aux poignées, en 3D, en plan ou en élévation, ou dans les propriétés").changed() {
+                    self.activer_boite(zone);
+                }
                 if self.vue_3d() {
                     ui.toggle_value(&mut self.camera.ortho, "Ortho").on_hover_text("Projection orthographique (sinon perspective)");
                 }
@@ -2078,6 +2210,10 @@ impl ViewerApp {
             self.plage_de_vue(ui);
             ui.separator();
         }
+        if self.boite_active {
+            self.proprietes_boite(ui);
+            ui.separator();
+        }
         let (Some(s), Some(id)) = (&self.scene, self.selected) else {
             ui.label(RichText::new("Sélectionner un élément dans la vue ou l'arborescence.").weak());
             return;
@@ -2392,7 +2528,7 @@ impl ViewerApp {
                 let s = app.scene.as_ref()?;
                 let n = ndc(p);
                 let (o, d) = app.camera.ray(n.x, n.y, aspect);
-                s.pick(o, d, &app.visible, app.plan_coupe()).map(|(obj, t)| (obj, o + d * t))
+                s.pick(o, d, &app.visible, app.plan_coupe(), app.boite_appliquee()).map(|(obj, t)| (obj, o + d * t))
             };
 
             // Orbite autour du point visé (vue 3D seulement).
@@ -2494,6 +2630,9 @@ impl ViewerApp {
             })),
         };
         ui.painter().add(callback);
+        if self.scene.is_some() {
+            self.poignees_boite(ui, rect);
+        }
         if self.vol.actif {
             ui.painter().text(
                 rect.left_bottom() + egui::vec2(10.0, -10.0),
@@ -2590,6 +2729,7 @@ impl ViewerApp {
             style: self.style,
             soleil: (self.style == StyleVisuel::Rendu).then(|| self.soleil()).flatten(),
             coupe: self.plan_coupe(),
+            boite: self.boite_appliquee(),
         }
     }
 
@@ -2669,6 +2809,10 @@ impl ViewerApp {
         }
         if let Some(v) = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)) {
             p.push(("vue", objet(&[("indice", self.vue_active.unwrap_or(0).to_string()), ("genre", texte(&v.genre)), ("nom", texte(&v.nom)), ("echelle", v.echelle.to_string()), ("niveau_detail", texte(self.detail.libelle()))])));
+        }
+        if let (Some((a, b)), Some(s)) = (self.boite, &self.scene) {
+            let (a, b) = (a.as_dvec3() + s.origin, b.as_dvec3() + s.origin);
+            p.push(("zone_de_coupe", objet(&[("active", self.boite_active.to_string()), ("min", format!("[{:.3},{:.3},{:.3}]", a.x, a.y, a.z)), ("max", format!("[{:.3},{:.3},{:.3}]", b.x, b.y, b.z))])));
         }
         let c = &self.camera;
         p.push((
@@ -2772,6 +2916,25 @@ impl ViewerApp {
                 let Some(i) = i else { return erreur(&format!("vue introuvable : {argument}")) };
                 self.rvt_sheet = false;
                 self.activer_vue(i);
+                self.etat()
+            }
+            "zone" => {
+                // zone on|off|ajuster, ou zone <xmin> <ymin> <zmin> <xmax> <ymax> <zmax> (m, repère du fichier)
+                let v: Vec<f64> = argument.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+                match (argument.trim(), &v[..]) {
+                    ("on", _) => self.activer_boite(true),
+                    ("off", _) => self.boite_active = false,
+                    ("ajuster", _) => {
+                        self.boite = None;
+                        self.activer_boite(true);
+                    }
+                    (_, &[x0, y0, z0, x1, y1, z1]) => {
+                        let o = self.scene.as_ref().map_or(glam::DVec3::ZERO, |s| s.origin);
+                        self.boite_active = true;
+                        self.regler_boite((glam::DVec3::new(x0, y0, z0) - o).as_vec3(), (glam::DVec3::new(x1, y1, z1) - o).as_vec3());
+                    }
+                    _ => return erreur("usage : zone on|off|ajuster, ou zone <xmin> <ymin> <zmin> <xmax> <ymax> <zmax>"),
+                }
                 self.etat()
             }
             "camera" => {
@@ -3009,7 +3172,7 @@ impl ViewerApp {
                 let (&[x, y], Some(s)) = (&v[..], &self.scene) else { return erreur("usage : objet <x 0..1> <y 0..1>") };
                 let aspect = self.rect_vue.width() / self.rect_vue.height().max(1.0);
                 let (o, d) = self.camera.ray(x * 2.0 - 1.0, 1.0 - y * 2.0, aspect);
-                match s.pick(o, d, &self.visible, self.plan_coupe()) {
+                match s.pick(o, d, &self.visible, self.plan_coupe(), self.boite_appliquee()) {
                     Some((obj, t)) => {
                         let p = o + d * t;
                         let f = p.as_dvec3() + s.origin;

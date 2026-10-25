@@ -27,6 +27,7 @@ etat ; ouvrir <chemin> ; capture vue|fenetre [LxH] <chemin.png> ; taille <largeu
 reduire ; restaurer ; quitter ;
 vues ; vue <indice|nom> ; camera dessus|face|iso|cadrer|ortho|perspective ;
 camera <lacet°> <tangage°> [distance] (vue 3D seulement) ; zoom <facteur> ;
+zone on|off|ajuster ou zone <xmin> <ymin> <zmin> <xmax> <ymax> <zmax> (zone de coupe 3D, m) ;
 glisser <dx> <dy> [gauche|droit|milieu] [maj] (comme à la souris : orbite au bouton
 gauche et regard sur place au bouton droit en vue 3D, panoramique sinon) ; afficher <CLASSES> ;
 masquer <CLASSES> ; tout_afficher ; classes ; categories (catégories de modèle et

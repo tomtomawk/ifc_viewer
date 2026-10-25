@@ -37,6 +37,7 @@ git push origin v0.2.0
 | Visibilité par catégorie (modèle, annotation) | bouton « Visibilité » sous la vue, ou V |
 | Déplacer Propriétés / Arborescence | glisser le titre (relâcher contre un bord pour ancrer), ou menu « … » |
 | Style visuel | barre sous la vue : Filaire, Lignes cachées (dessin des plans et élévations), Ombré, Couleurs homogènes, Réaliste, Rendu (couleurs de rendu des matériaux Revit, soleil et ombres portées) |
+| Zone de coupe 3D | bouton « Zone de coupe » sous la vue : boîte qui découpe le modèle dans les vues 3D ; poignées au milieu des faces pour la régler en 3D, en plan (côtés) ou en élévation (dessus, dessous) ; bornes dans les propriétés |
 | Plan de coupe | propriétés, « Plage de vue » (style Lignes cachées) : coupe, niveau, décalage, poché |
 | Export vectoriel du dessin | ruban, onglet « Exporter » : « Dessin SVG… » (mode dessin, vue orthographique) |
 

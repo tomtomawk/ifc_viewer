@@ -370,7 +370,7 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
 impl Scene {
     /// Objet visible le plus proche le long du rayon ; avec une coupe (n, d), seuls les
     /// points gardés (n·p + d ≥ 0) des objets du modèle comptent.
-    pub fn pick(&self, origin: Vec3, dir: Vec3, visible: &[bool], coupe: Option<Vec4>) -> Option<(u32, f32)> {
+    pub fn pick(&self, origin: Vec3, dir: Vec3, visible: &[bool], coupe: Option<Vec4>, boite: Option<(Vec3, Vec3)>) -> Option<(u32, f32)> {
         let inv = dir.recip();
         let mut best: Option<(u32, f32)> = None;
         for (i, o) in self.objects.iter().enumerate() {
@@ -386,7 +386,8 @@ impl Scene {
                 for t in vs.chunks_exact(3) {
                     let (a, b, c) = (Vec3::from(t[0].pos), Vec3::from(t[1].pos), Vec3::from(t[2].pos));
                     if let Some(d) = ray_tri(origin, dir, a, b, c) {
-                        let garde = t[0].normal[3] > 0 || coupe.is_none_or(|p| p.truncate().dot(origin + dir * d) + p.w >= 0.0);
+                        let q = origin + dir * d;
+                        let garde = t[0].normal[3] > 0 || (coupe.is_none_or(|p| p.truncate().dot(q) + p.w >= 0.0) && boite.is_none_or(|(a, b)| q.cmpge(a).all() && q.cmple(b).all()));
                         if garde && best.is_none_or(|b| d < b.1) {
                             best = Some((i as u32, d));
                         }
