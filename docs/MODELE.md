@@ -22,8 +22,9 @@ autres documents. Il utilise `Projet::nouveau` : en-tête v0, collections vides,
 aucun niveau, type ou élément ajouté implicitement. **Sortie → Enregistrer**
 (Ctrl+S) enregistre ce document. **Modéliser → Mur** crée des murs droits par deux
 clics, avec un aperçu et une palette Propriétés dédiée. La phase, le sous-projet et la variante
-se choisissent sur une ligne commune sous le ruban, dans les onglets Modéliser,
-Modifier et Annoter, indépendamment de l’outil actif. Le menu « + » en fin de ligne
+se choisissent sur une ligne commune en tête du panneau Propriétés,
+indépendamment de l’outil actif. Les trois listes et le bouton « + » restent
+dans la largeur du panneau ; les noms longs sont abrégés et lisibles au survol. Le menu « + » en fin de ligne
 ajoute une phase, un sous-projet ou une variante (nom et jeu), sélectionne la
 nouvelle valeur et la conserve dans le document. Les noms vides et doublons sont
 refusés. Ces choix s’appliquent aux prochaines créations. Dans la palette

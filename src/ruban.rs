@@ -578,12 +578,13 @@ impl RubanEdition {
         {
             self.variante_creation = None;
         }
-        let largeur = ((ui.available_width() - 240.0) / 3.0).clamp(70.0, 150.0);
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 6.0;
-            ui.label("Phase");
-            ui.scope(|ui| {
-                ui.set_max_width(largeur);
+        let largeur = ((ui.available_width() - 36.0) / 3.0).max(30.0);
+        ui.horizontal_top(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+            ui.vertical(|ui| {
+                ui.set_width(largeur);
+                ui.spacing_mut().item_spacing.y = 2.0;
+                ui.add(egui::Label::new(RichText::new("Phase").small()).truncate());
                 egui::ComboBox::from_id_salt("phase_creation")
                     .width(largeur)
                     .truncate()
@@ -599,9 +600,10 @@ impl RubanEdition {
                         self.phase_creation.as_deref().unwrap_or("Projet")
                     ));
             });
-            ui.label("Sous-projet");
-            ui.scope(|ui| {
-                ui.set_max_width(largeur);
+            ui.vertical(|ui| {
+                ui.set_width(largeur);
+                ui.spacing_mut().item_spacing.y = 2.0;
+                ui.add(egui::Label::new(RichText::new("Sous-projet").small()).truncate());
                 egui::ComboBox::from_id_salt("sous_projet_creation")
                     .width(largeur)
                     .truncate()
@@ -627,14 +629,15 @@ impl RubanEdition {
                             .unwrap_or("Sous-projet 1")
                     ));
             });
-            ui.label("Variante");
             let nom = self
                 .variante_creation
                 .as_ref()
                 .and_then(|id| projet.variantes.iter().find(|v| &v.id == id))
                 .map_or_else(|| "Modèle principal".into(), |v| v.libelle());
-            ui.scope(|ui| {
-                ui.set_max_width(largeur);
+            ui.vertical(|ui| {
+                ui.set_width(largeur);
+                ui.spacing_mut().item_spacing.y = 2.0;
+                ui.add(egui::Label::new(RichText::new("Variante").small()).truncate());
                 egui::ComboBox::from_id_salt("variante_creation")
                     .width(largeur)
                     .truncate()
@@ -652,26 +655,29 @@ impl RubanEdition {
                     .response
                     .on_hover_text(format!("Variante des prochaines créations : {nom}"));
             });
-            ui.menu_button("+", |ui| {
-                for liste in [
-                    ListeCreation::Phase,
-                    ListeCreation::SousProjet,
-                    ListeCreation::Variante,
-                ] {
-                    if ui
-                        .button(format!("Ajouter : {}…", liste.libelle()))
-                        .clicked()
-                    {
-                        self.ajout_creation = Some(liste);
-                        self.nom_creation.clear();
-                        self.jeu_creation.clear();
-                        self.erreur_creation = None;
-                        ui.close();
+            ui.vertical(|ui| {
+                ui.add_space(12.0);
+                ui.menu_button("+", |ui| {
+                    for liste in [
+                        ListeCreation::Phase,
+                        ListeCreation::SousProjet,
+                        ListeCreation::Variante,
+                    ] {
+                        if ui
+                            .button(format!("Ajouter : {}…", liste.libelle()))
+                            .clicked()
+                        {
+                            self.ajout_creation = Some(liste);
+                            self.nom_creation.clear();
+                            self.jeu_creation.clear();
+                            self.erreur_creation = None;
+                            ui.close();
+                        }
                     }
-                }
-            })
-            .response
-            .on_hover_text("Ajouter une phase, un sous-projet ou une variante");
+                })
+                .response
+                .on_hover_text("Ajouter une phase, un sous-projet ou une variante");
+            });
         });
         let mut modifie = false;
         if let Some(liste) = self.ajout_creation {
@@ -1525,7 +1531,7 @@ mod tests {
             Some(Outil::Texte),
         ] {
             ruban.selection = outil;
-            for largeur in [800.0, 1500.0] {
+            for largeur in [220.0, 260.0, 300.0, 420.0] {
                 let mut sortie = None;
                 for _ in 0..3 {
                     let mut frame = ctx.run_ui(
@@ -1557,6 +1563,12 @@ mod tests {
                         _ => None,
                     })
                     .collect();
+                for (texte, rect) in &textes {
+                    assert!(
+                        rect.right() <= largeur + 0.5,
+                        "Débordement à {largeur} px : {texte} {rect:?}"
+                    );
+                }
                 let mut ligne: Option<f32> = None;
                 for attendu in ["Phase", "Sous-projet", "Variante", "+"] {
                     let (_, r) = textes
@@ -1564,10 +1576,12 @@ mod tests {
                         .find(|(t, _)| t == attendu)
                         .unwrap_or_else(|| panic!("Absent : {attendu}, textes : {textes:?}"));
                     assert!(r.right() <= largeur, "{attendu} déborde à {largeur} px");
-                    if let Some(y) = ligne {
-                        assert!((r.center().y - y).abs() < 2.0);
-                    } else {
-                        ligne = Some(r.center().y);
+                    if attendu != "+" {
+                        if let Some(y) = ligne {
+                            assert!((r.center().y - y).abs() < 2.0);
+                        } else {
+                            ligne = Some(r.center().y);
+                        }
                     }
                 }
                 assert_eq!(ruban.parametres_mur().phase, projet.phases.last().cloned());

@@ -1610,10 +1610,6 @@ impl ViewerApp {
         };
         if let Some(menu) = edition {
             self.ruban_edition.afficher(ui, menu, self.natif.as_ref().map(|n| &n.0));
-            if let Some((projet, _)) = &mut self.natif {
-                ui.separator();
-                if self.ruban_edition.contexte_creation(ui, projet) { self.natif_modifie = true; }
-            }
             return;
         }
         ui.horizontal(|ui| match self.onglet_ruban {
@@ -3125,6 +3121,10 @@ impl ViewerApp {
     /// Propriétés de l'élément sélectionné (panneau de gauche, comme dans Revit).
     fn right_panel(&mut self, ui: &mut egui::Ui) {
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
+        if let Some((projet, _)) = &mut self.natif {
+            if self.ruban_edition.contexte_creation(ui, projet) { self.natif_modifie = true; }
+            ui.separator();
+        }
         if self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.proprietes_mur(ui, self.natif.as_ref().map(|(p, _)| p)) {
             return;
         }
