@@ -100,15 +100,43 @@ fn main() {
 }
 
 /// Cadre de fenêtre du système (barre de titre, bords) plutôt que la barre dessinée par
-/// l'application. Par défaut sous Windows : une fenêtre sans décoration y garde une
-/// bande en haut de la zone cliente (Windows 10), qui décale l'affichage par rapport aux
-/// clics. `IFC_VIEWER_CADRE=natif` ou `perso` force l'un ou l'autre.
+/// l'application. Par défaut sous Windows 10 seulement : une fenêtre sans décoration y
+/// garde une bande en haut de la zone cliente, qui décale l'affichage par rapport aux
+/// clics (Windows 11 n'a pas ce défaut). `IFC_VIEWER_CADRE=natif` ou `perso` force l'un
+/// ou l'autre.
 pub fn cadre_natif() -> bool {
     match std::env::var("IFC_VIEWER_CADRE").as_deref() {
         Ok("natif") => true,
         Ok("perso") => false,
-        _ => cfg!(windows),
+        _ => windows_10(),
     }
+}
+
+/// Windows antérieur à Windows 11 (build < 22000), lu dans le registre ; faux ailleurs
+/// ou si le build est illisible.
+#[cfg(windows)]
+fn windows_10() -> bool {
+    use windows_sys::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ, RegGetValueW};
+    static BUILD: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
+    let build = *BUILD.get_or_init(|| {
+        let large = |s: &str| s.encode_utf16().chain([0]).collect::<Vec<u16>>();
+        let (cle, valeur) = (large("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"), large("CurrentBuildNumber"));
+        let mut tampon = [0u16; 32];
+        let mut taille = std::mem::size_of_val(&tampon) as u32;
+        // SAFETY : chaînes terminées par zéro, tampon et taille cohérents
+        let r = unsafe { RegGetValueW(HKEY_LOCAL_MACHINE, cle.as_ptr(), valeur.as_ptr(), RRF_RT_REG_SZ, std::ptr::null_mut(), tampon.as_mut_ptr().cast(), &mut taille) };
+        if r != 0 {
+            return None;
+        }
+        let n = tampon.iter().position(|&c| c == 0).unwrap_or(tampon.len());
+        String::from_utf16_lossy(&tampon[..n]).trim().parse().ok()
+    });
+    build.is_some_and(|b| b < 22000)
+}
+
+#[cfg(not(windows))]
+fn windows_10() -> bool {
+    false
 }
 
 /// Conversion vers le modèle v0 : projet JSON, et rapport (Markdown) à côté et sur la

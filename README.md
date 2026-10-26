@@ -78,8 +78,9 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
-Fenêtre : sous Windows, cadre du système (barre de titre et bords natifs) ; ailleurs,
-barre dessinée par l'application. `IFC_VIEWER_CADRE=natif` ou `IFC_VIEWER_CADRE=perso`
+Fenêtre : barre dessinée par l'application ; sous Windows 10 (build antérieur à 22000),
+cadre du système (barre de titre et bords natifs), la fenêtre sans décoration y décalant
+l'affichage par rapport aux clics. `IFC_VIEWER_CADRE=natif` ou `IFC_VIEWER_CADRE=perso`
 force l'un ou l'autre.
 
 | Action | Commande |
