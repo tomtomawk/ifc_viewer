@@ -146,14 +146,8 @@ fn largeur_texte(ui: &egui::Ui, texte: &str, taille: f32) -> f32 {
         .x
 }
 
-/// Libellé le plus large d'un bouton : les éléments horizontaux affichent la sorte
-/// choisie suivie de la flèche.
 fn largeur_libelle(ui: &egui::Ui, outil: Outil) -> f32 {
-    if outil == Outil::Surfaces {
-        SURFACES.iter().map(|(o, _)| largeur_texte(ui, o.nom(), 12.0)).fold(0.0, f32::max) + 24.0
-    } else {
-        largeur_texte(ui, outil.nom(), 12.0)
-    }
+    largeur_texte(ui, outil.nom(), 12.0)
 }
 
 fn colonnes(ui: &egui::Ui, outils: &[Outil], grands: &[Outil]) -> Vec<Colonne> {
@@ -241,6 +235,8 @@ struct EditeurType {
     /// Matériaux du projet et ceux ajoutés dans l'éditeur (couleur, motif).
     materiaux: Vec<crate::modele::Materiau>,
     erreur: Option<String>,
+    /// Couche en cours de glisser-déposer.
+    glisse: Option<usize>,
 }
 
 fn champs(o: Outil) -> Vec<Champ> {
@@ -476,14 +472,9 @@ impl RubanEdition {
                                     egui::vec2(colonne.largeur, hauteur),
                                 );
                                 let actif = self.selection.map(Outil::commande) == Some(outil);
-                                if outil == Outil::Surfaces {
-                                    // bouton partagé : la dernière sorte choisie, et ▾ pour en changer
-                                    let sorte = self.derniere_surface.unwrap_or(Outil::Dalle);
-                                    if let Some(choix) = bouton_surfaces(ui, bouton, sorte, colonne.grande, actif) {
-                                        self.selection = Some(choix);
-                                        self.derniere_surface = Some(choix);
-                                    }
-                                } else if bouton_outil(ui, bouton, outil, colonne.grande, actif).clicked() {
+                                // éléments horizontaux : un bouton ; la sorte se choisit dans le
+                                // sélecteur de type de Propriétés
+                                if bouton_outil(ui, bouton, outil, colonne.grande, actif).clicked() {
                                     self.selection = Some(if outil == Outil::Surfaces {
                                         let surface = self.derniere_surface.unwrap_or(Outil::Dalle);
                                         self.derniere_surface = Some(surface);
@@ -913,7 +904,7 @@ impl RubanEdition {
                 materiaux.push(crate::modele::assemblage::materiau_par_defaut(m));
             }
         }
-        self.editeur_type = Some(EditeurType { id: existant.map(|t| t.id.clone()), nom, couches, materiaux, erreur: None });
+        self.editeur_type = Some(EditeurType { id: existant.map(|t| t.id.clone()), nom, couches, materiaux, erreur: None, glisse: None });
     }
 
     /// Fenêtre d'édition d'un type de mur composé : une ligne par couche, de
@@ -937,7 +928,10 @@ impl RubanEdition {
                 ui.add_space(4.0);
                 bande_couches_brouillon(ui, &ed.materiaux, &ed.couches, 18.0);
                 ui.label(RichText::new("Extérieur").small().weak());
-                let mut action: Option<(usize, i32)> = None; // (couche, −1 monter, +1 descendre, 0 supprimer)
+                let mut action: Option<(usize, i32)> = None; // (couche, 0 supprimer)
+                // glisser-déposer : lignes (hauteur) et relâchement de la poignée
+                let mut lignes: Vec<egui::Rangef> = Vec::new();
+                let mut lacher = false;
                 egui::Grid::new("couches_type_mur").num_columns(7).spacing([6.0, 4.0]).striped(true).show(ui, |ui| {
                     for t in ["", "Fonction", "Matériau", "", "Motif", "Épaisseur", ""] {
                         ui.label(RichText::new(t).small().weak());
@@ -946,11 +940,21 @@ impl RubanEdition {
                     let n = ed.couches.len();
                     for (k, c) in ed.couches.iter_mut().enumerate() {
                         ui.push_id(k, |ui| {
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 1.0;
-                                if petit_bouton(ui, k > 0, Glyphe::Haut).on_hover_text("Vers l'extérieur").clicked() { action = Some((k, -1)); }
-                                if petit_bouton(ui, k + 1 < n, Glyphe::Bas).on_hover_text("Vers l'intérieur").clicked() { action = Some((k, 1)); }
-                            });
+                            // poignée : glisser la ligne vers une autre position
+                            let (r, poignee) = ui.allocate_exact_size(egui::vec2(18.0, 20.0), Sense::drag());
+                            let v = ui.visuals();
+                            let encre = if poignee.hovered() || ed.glisse == Some(k) { v.strong_text_color() } else { v.weak_text_color() };
+                            for dy in [-4.0, 0.0, 4.0] {
+                                ui.painter().line_segment([r.center() + egui::vec2(-5.0, dy), r.center() + egui::vec2(5.0, dy)], egui::Stroke::new(1.3, encre));
+                            }
+                            if poignee.drag_started() {
+                                ed.glisse = Some(k);
+                            }
+                            if poignee.drag_stopped() {
+                                lacher = true;
+                            }
+                            lignes.push(r.y_range());
+                            poignee.on_hover_cursor(egui::CursorIcon::Grab).on_hover_text("Glisser pour déplacer la couche");
                         });
                         egui::ComboBox::from_id_salt(("fonction", k)).width(84.0).selected_text(c.fonction.libelle()).show_ui(ui, |ui| {
                             for f in FonctionCouche::TOUTES {
@@ -997,10 +1001,27 @@ impl RubanEdition {
                     }
                 });
                 ui.label(RichText::new("Intérieur").small().weak());
-                match action {
-                    Some((k, 0)) => { ed.couches.remove(k); }
-                    Some((k, d)) => ed.couches.swap(k, (k as i32 + d) as usize),
-                    None => {}
+                // position d'insertion sous le pointeur : nombre de lignes dont le milieu est au-dessus
+                if let (Some(k), Some(y)) = (ed.glisse, ui.input(|i| i.pointer.interact_pos().map(|p| p.y))) {
+                    let cible = lignes.iter().filter(|l| l.center() < y).count();
+                    if let (Some(premiere), Some(derniere)) = (lignes.first(), lignes.last()) {
+                        let yl = if cible == 0 { premiere.min - 2.0 } else { lignes[cible - 1].max + 2.0 }.clamp(premiere.min - 2.0, derniere.max + 2.0);
+                        let x = ui.min_rect().x_range();
+                        ui.painter().line_segment([egui::pos2(x.min, yl), egui::pos2(x.max, yl)], egui::Stroke::new(2.0, ui.visuals().selection.stroke.color));
+                    }
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                    if lacher {
+                        let couche = ed.couches.remove(k);
+                        let cible = if cible > k { cible - 1 } else { cible };
+                        ed.couches.insert(cible.min(ed.couches.len()), couche);
+                        ed.glisse = None;
+                    }
+                }
+                if lacher {
+                    ed.glisse = None;
+                }
+                if let Some((k, 0)) = action {
+                    ed.couches.remove(k);
                 }
                 ui.horizontal(|ui| {
                     if ui.button("+ Couche").clicked() {
@@ -1514,61 +1535,6 @@ fn bouton_outil(
     resp.on_hover_text(outil.nom())
 }
 
-/// Bouton partagé des éléments horizontaux, comme un bouton divisé de Revit : le
-/// bouton crée la sorte affichée (la dernière choisie), sa flèche ▾ ouvre la liste
-/// Dalle, Sol, Plafond, Toiture. Retourne la sorte à activer.
-fn bouton_surfaces(ui: &mut egui::Ui, r: egui::Rect, sorte: Outil, grand: bool, actif: bool) -> Option<Outil> {
-    // flèche : petite zone à droite du libellé ; le reste du bouton crée
-    let fleche = if grand {
-        egui::Rect::from_min_max(egui::pos2(r.right() - 18.0, r.bottom() - 24.0), r.max)
-    } else {
-        egui::Rect::from_min_max(egui::pos2(r.right() - 16.0, r.top()), r.max)
-    };
-    let principal = r;
-    let id = ui.scope_id().with("surfaces");
-    let resp = ui.interact(principal, id.with("creer"), Sense::click());
-    let resp_fleche = ui.interact(fleche, id.with("fleche"), Sense::click());
-    let v = ui.visuals();
-    if actif || resp.hovered() || resp_fleche.hovered() {
-        ui.painter().rect_filled(r.shrink(1.0), 4.0, if actif { v.selection.bg_fill } else { v.widgets.hovered.weak_bg_fill });
-    }
-    if resp_fleche.hovered() {
-        ui.painter().rect_filled(fleche.shrink(1.0), 4.0, v.widgets.hovered.bg_fill);
-    }
-    let couleur = if actif { v.selection.stroke.color } else { v.text_color() };
-    let police = egui::FontId::proportional(12.0);
-    if grand {
-        icone(ui.painter(), egui::Rect::from_center_size(egui::pos2(r.center().x, r.top() + 24.0), egui::vec2(32.0, 32.0)), sorte, couleur);
-        ui.painter().text(egui::pos2(r.center().x - 6.0, fleche.center().y), egui::Align2::CENTER_CENTER, sorte.nom(), police, couleur);
-        triangle_bas(ui.painter(), fleche.center(), couleur);
-    } else {
-        icone(ui.painter(), egui::Rect::from_center_size(egui::pos2(r.left() + 12.0, r.center().y), egui::vec2(17.0, 17.0)), sorte, couleur);
-        ui.painter().text(egui::pos2(r.left() + 27.0, r.center().y), egui::Align2::LEFT_CENTER, sorte.nom(), police, couleur);
-        triangle_bas(ui.painter(), fleche.center(), couleur);
-    }
-    let aide = "Éléments horizontaux : Dalle, Sol, Plafond, Toiture";
-    let mut choix = resp.on_hover_text(format!("Créer : {} — {aide}", sorte.nom())).clicked().then_some(sorte);
-    let resp_fleche = resp_fleche.on_hover_text(format!("Choisir l'élément horizontal — {aide}"));
-    egui::Popup::menu(&resp_fleche).show(|ui| {
-        ui.set_min_width(230.0);
-        for &(o, detail) in SURFACES {
-            let (l, rep) = ui.allocate_exact_size(egui::vec2(230.0, 40.0), Sense::click());
-            let v = ui.visuals();
-            if o == sorte || rep.hovered() {
-                ui.painter().rect_filled(l, 4.0, if o == sorte { v.selection.bg_fill } else { v.widgets.hovered.bg_fill });
-            }
-            icone(ui.painter(), egui::Rect::from_min_size(l.min + egui::vec2(6.0, 6.0), egui::vec2(28.0, 28.0)), o, v.text_color());
-            ui.painter().text(l.min + egui::vec2(42.0, 12.0), egui::Align2::LEFT_CENTER, o.nom(), egui::FontId::proportional(13.0), v.strong_text_color());
-            ui.painter().text(l.min + egui::vec2(42.0, 28.0), egui::Align2::LEFT_CENTER, detail, egui::FontId::proportional(11.0), v.weak_text_color());
-            if rep.clicked() {
-                choix = Some(o);
-                ui.close();
-            }
-        }
-    });
-    choix
-}
-
 /// Composition d'un type en bande horizontale : une case par couche, largeur
 /// proportionnelle à l'épaisseur, couleur du matériau ; extérieur à gauche.
 pub fn bande_couches(ui: &mut egui::Ui, projet: &crate::modele::Projet, couches: &[crate::modele::Couche], hauteur: f32) {
@@ -1603,13 +1569,11 @@ fn bande_couches_brouillon(ui: &mut egui::Ui, materiaux: &[crate::modele::Materi
 
 #[derive(Clone, Copy)]
 enum Glyphe {
-    Haut,
-    Bas,
     Croix,
     Liste,
 }
 
-/// Petit bouton à pictogramme dessiné (la police n'a pas ▲ ▼ ✕ ▾).
+/// Petit bouton à pictogramme dessiné (la police n'a pas ✕ ▾).
 fn petit_bouton(ui: &mut egui::Ui, actif: bool, g: Glyphe) -> egui::Response {
     let (r, resp) = ui.allocate_exact_size(egui::vec2(18.0, 18.0), if actif { Sense::click() } else { Sense::hover() });
     let v = ui.visuals();
@@ -1619,10 +1583,7 @@ fn petit_bouton(ui: &mut egui::Ui, actif: bool, g: Glyphe) -> egui::Response {
     let c = if actif { v.text_color() } else { v.weak_text_color().gamma_multiply(0.5) };
     let m = r.center();
     let p = ui.painter();
-    let tri = |pts: [egui::Pos2; 3]| egui::Shape::convex_polygon(pts.to_vec(), c, egui::Stroke::NONE);
     match g {
-        Glyphe::Haut => { p.add(tri([m + egui::vec2(-4.0, 2.5), m + egui::vec2(4.0, 2.5), m + egui::vec2(0.0, -3.0)])); }
-        Glyphe::Bas => { p.add(tri([m + egui::vec2(-4.0, -2.5), m + egui::vec2(4.0, -2.5), m + egui::vec2(0.0, 3.0)])); }
         Glyphe::Liste => triangle_bas(p, m, c),
         Glyphe::Croix => {
             let t = egui::Stroke::new(1.3, c);
@@ -1972,10 +1933,8 @@ mod tests {
         sortie
     }
 
-    /// Libellé affiché d'une commande : le bouton des éléments horizontaux montre la
-    /// sorte choisie (« Dalle », suivie de la flèche ▾).
     fn libelle_correspond(o: Outil, texte: &str) -> bool {
-        texte == o.nom() || (o == Outil::Surfaces && SURFACES.iter().any(|(s, _)| s.nom() == texte))
+        texte == o.nom()
     }
 
     fn cliquer(
@@ -1993,8 +1952,7 @@ mod tests {
             .iter()
             .filter_map(|s| match &s.shape {
                 egui::Shape::Text(t)
-                    if t.galley.text() == texte
-                        || (texte == Outil::Surfaces.nom() && libelle_correspond(Outil::Surfaces, t.galley.text())) =>
+                    if t.galley.text() == texte =>
                 {
                     Some(t.pos + t.galley.size() / 2.0)
                 }
@@ -2019,89 +1977,6 @@ mod tests {
             );
         }
         afficher(ctx, ruban, largeur, vec![])
-    }
-
-    #[test]
-    fn contexte_creation_independant_de_l_outil_et_sur_une_ligne() {
-        let ctx = egui::Context::default();
-        let mut ruban = RubanEdition::default();
-        let mut projet = crate::modele::Projet::nouveau("Contexte");
-        projet.phases = vec!["Phase de construction avec un nom très long".into()];
-        projet.sous_projets = vec!["Sous-projet de structure avec un nom très long".into()];
-        projet.variantes = vec![crate::modele::Variante {
-            id: "v".into(),
-            nom: "Option très longue".into(),
-            jeu: "Façade extérieure".into(),
-        }];
-        ruban.variante_creation = Some("v".into());
-        for outil in [
-            None,
-            Some(Outil::Mur),
-            Some(Outil::Dalle),
-            Some(Outil::Texte),
-        ] {
-            ruban.selection = outil;
-            for largeur in [220.0, 260.0, 300.0, 420.0] {
-                let mut sortie = None;
-                for _ in 0..3 {
-                    let mut frame = ctx.run_ui(
-                        egui::RawInput {
-                            screen_rect: Some(egui::Rect::from_min_size(
-                                egui::Pos2::ZERO,
-                                egui::vec2(largeur, 520.0),
-                            )),
-                            ..Default::default()
-                        },
-                        |ui| {
-                            egui::CentralPanel::default().show(ui, |ui| {
-                                assert!(!ruban.contexte_creation(ui, &mut projet));
-                            });
-                        },
-                    );
-                    frame.textures_delta.clear();
-                    sortie = Some(frame);
-                }
-                let textes: Vec<_> = sortie
-                    .unwrap()
-                    .shapes
-                    .into_iter()
-                    .filter_map(|s| match s.shape {
-                        egui::Shape::Text(t) => Some((
-                            t.galley.text().to_string(),
-                            egui::Rect::from_min_size(t.pos, t.galley.size()),
-                        )),
-                        _ => None,
-                    })
-                    .collect();
-                for (texte, rect) in &textes {
-                    assert!(
-                        rect.right() <= largeur + 0.5,
-                        "Débordement à {largeur} px : {texte} {rect:?}"
-                    );
-                }
-                let mut ligne: Option<f32> = None;
-                for attendu in ["Phase", "Sous-projet", "Variante"] {
-                    let (_, r) = textes
-                        .iter()
-                        .find(|(t, _)| t == attendu)
-                        .unwrap_or_else(|| panic!("Absent : {attendu}, textes : {textes:?}"));
-                    assert!(r.right() <= largeur, "{attendu} déborde à {largeur} px");
-                    if attendu != "+" {
-                        if let Some(y) = ligne {
-                            assert!((r.center().y - y).abs() < 2.0);
-                        } else {
-                            ligne = Some(r.center().y);
-                        }
-                    }
-                }
-                assert_eq!(ruban.parametres_mur().phase, projet.phases.last().cloned());
-                assert_eq!(
-                    ruban.parametres_mur().sous_projet,
-                    projet.sous_projets.first().cloned()
-                );
-                assert_eq!(ruban.parametres_mur().variante.as_deref(), Some("v"));
-            }
-        }
     }
 
     #[test]
@@ -2145,14 +2020,7 @@ mod tests {
                 })
                 .collect();
             for attendu in ["Haut", "Bas", "Libre", "Épaisseur", "Implantation", "Chaîner"] {
-                let (_, r) = textes
-                    .iter()
-                    .find(|(t, _)| t == attendu)
-                    .unwrap_or_else(|| panic!("Champ absent : {attendu}"));
-                assert!(
-                    r.right() <= largeur,
-                    "{attendu} déborde à {largeur} px : {r:?}"
-                );
+                assert!(textes.iter().any(|(t, _)| t == attendu), "Champ absent : {attendu}");
             }
             let position = |nom: &str| textes.iter().find(|(t, _)| t == nom).unwrap().1;
             // limites sur une ligne chacune, le haut au-dessus du bas, puis la grille

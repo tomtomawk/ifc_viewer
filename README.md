@@ -31,7 +31,7 @@ Le ruban regroupe les commandes dans Début, Modéliser, Modifier, Annoter et So
 Les commandes fréquentes (Mur, Éléments horizontaux, Ouverture, Déplacer, Copier, Aligner, Cote et
 Texte) disposent de grands boutons lorsque la largeur le permet ; les autres
 restent empilées avec de petites icônes. Les grands boutons se replient selon leur
-priorité quand la fenêtre rétrécit. Le bouton des éléments horizontaux est un bouton divisé : il affiche et crée la dernière sorte choisie (Dalle par défaut) ; sa flèche ouvre la liste Dalle, Sol, Plafond, Toiture. Son sélecteur se trouve dans un encart en tête de
+priorité quand la fenêtre rétrécit. Le bouton Éléments horizontaux superpose sol, plafond et toiture dans une seule icône ; la sorte (Dalle, Sol, Plafond, Toiture) se choisit dans le sélecteur de type en tête de Propriétés. Son sélecteur se trouve dans un encart en tête de
 Propriétés, avec une vignette et une liste déroulante distinguant Dalle (structure),
 Sol (revêtement), Plafond et Toiture. Les paramètres sont juste en dessous et
 restent mémorisés séparément pour chaque catégorie. Les vignettes distinguent la
@@ -54,7 +54,8 @@ l'arrête. Échap efface la saisie, puis annule le segment en cours, puis quitte
 l'outil ; le clic droit arrête le segment. Le niveau 0 est créé au premier
 mur si le projet est vide. Les autres commandes restent à raccorder.
 **Murs composés** : choisir un type dans Propriétés (ou en créer un avec « + » :
-couches, fonction, matériau, couleur, motif de coupe, épaisseur). Chaque couche est
+couches, fonction, matériau, couleur, motif de coupe, épaisseur ; glisser la poignée ≡ d'une
+couche pour la déplacer). Chaque couche est
 tracée comme un mur indépendant, regroupé en assemblage : un clic sélectionne
 l'assemblage, un second clic (ou Tab) la couche, dont la hauteur, les niveaux, la
 phase et le sous-projet se règlent seuls ; « Dissocier » la sort de l'assemblage.
