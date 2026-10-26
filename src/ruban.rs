@@ -531,6 +531,24 @@ impl RubanEdition {
             });
     }
 
+    fn proposer_ajout_creation(
+        &mut self,
+        ui: &mut egui::Ui,
+        liste: crate::modele::edition::ListeCreation,
+    ) {
+        ui.separator();
+        if ui
+            .button(format!("+ Ajouter : {}…", liste.libelle()))
+            .clicked()
+        {
+            self.ajout_creation = Some(liste);
+            self.nom_creation.clear();
+            self.jeu_creation.clear();
+            self.erreur_creation = None;
+            ui.close();
+        }
+    }
+
     pub fn reinitialiser_contexte_creation(&mut self) {
         self.phase_creation = None;
         self.sous_projet_creation = None;
@@ -578,7 +596,7 @@ impl RubanEdition {
         {
             self.variante_creation = None;
         }
-        let largeur = ((ui.available_width() - 36.0) / 3.0).max(30.0);
+        let largeur = ((ui.available_width() - 8.0) / 3.0).max(30.0);
         ui.horizontal_top(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
             ui.vertical(|ui| {
@@ -593,6 +611,7 @@ impl RubanEdition {
                         for nom in &phases {
                             ui.selectable_value(&mut self.phase_creation, Some(nom.clone()), nom);
                         }
+                        self.proposer_ajout_creation(ui, ListeCreation::Phase);
                     })
                     .response
                     .on_hover_text(format!(
@@ -620,6 +639,7 @@ impl RubanEdition {
                                 nom,
                             );
                         }
+                        self.proposer_ajout_creation(ui, ListeCreation::SousProjet);
                     })
                     .response
                     .on_hover_text(format!(
@@ -651,32 +671,10 @@ impl RubanEdition {
                                 v.libelle(),
                             );
                         }
+                        self.proposer_ajout_creation(ui, ListeCreation::Variante);
                     })
                     .response
                     .on_hover_text(format!("Variante des prochaines créations : {nom}"));
-            });
-            ui.vertical(|ui| {
-                ui.add_space(12.0);
-                ui.menu_button("+", |ui| {
-                    for liste in [
-                        ListeCreation::Phase,
-                        ListeCreation::SousProjet,
-                        ListeCreation::Variante,
-                    ] {
-                        if ui
-                            .button(format!("Ajouter : {}…", liste.libelle()))
-                            .clicked()
-                        {
-                            self.ajout_creation = Some(liste);
-                            self.nom_creation.clear();
-                            self.jeu_creation.clear();
-                            self.erreur_creation = None;
-                            ui.close();
-                        }
-                    }
-                })
-                .response
-                .on_hover_text("Ajouter une phase, un sous-projet ou une variante");
             });
         });
         let mut modifie = false;
@@ -1570,7 +1568,7 @@ mod tests {
                     );
                 }
                 let mut ligne: Option<f32> = None;
-                for attendu in ["Phase", "Sous-projet", "Variante", "+"] {
+                for attendu in ["Phase", "Sous-projet", "Variante"] {
                     let (_, r) = textes
                         .iter()
                         .find(|(t, _)| t == attendu)
