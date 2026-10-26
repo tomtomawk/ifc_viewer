@@ -2508,6 +2508,25 @@ impl ViewerApp {
         self.preparer_feuille(vue);
     }
 
+    /// Ferme les autres vues sans fermer les documents ni perdre leurs modifications.
+    fn garder_derniere_vue_par_document(&mut self) {
+        for d in self.documents.values_mut() {
+            if let Some(&derniere) = d.vues.last() {
+                d.vues.retain(|&vue| vue == derniere);
+                d.etats.retain(|&vue, _| vue == derniere);
+                d.active = derniere;
+            }
+        }
+        if self.vues_ouvertes.len() > 1 {
+            if let Some(&derniere) = self.vues_ouvertes.last() {
+                self.memoriser_vue();
+                self.restaurer_vue(derniere);
+                self.vues_ouvertes.retain(|&vue| vue == derniere);
+                self.etats_vues.retain(|&vue, _| vue == derniere);
+            }
+        }
+    }
+
     fn onglets_vues(&mut self, ui: &mut egui::Ui) {
         let mut onglets = Vec::new();
         let mut titres = BTreeMap::new();
@@ -2534,7 +2553,16 @@ impl ViewerApp {
         let (barre, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 26.0), Sense::hover());
         let marge = 4.0;
         let fleche = 24.0;
-        let disponible = (barre.width() - 2.0 * (marge + fleche + 6.0)).max(1.0);
+        let bouton_fermeture = 28.0;
+        let disponible = (barre.width() - 2.0 * (marge + fleche + 6.0) - bouton_fermeture).max(1.0);
+        let rect_fermeture = egui::Rect::from_min_size(
+            egui::pos2(barre.right() - marge - fleche - bouton_fermeture, barre.top() + 2.0),
+            egui::vec2(24.0, 22.0),
+        );
+        let plusieurs_vues = self.vues_ouvertes.len() > 1 || self.documents.values().any(|d| d.vues.len() > 1);
+        let reduire = ui.put(rect_fermeture, egui::Button::new("×").sense(
+            if plusieurs_vues { Sense::click() } else { Sense::hover() },
+        )).on_hover_text("Fermer les autres onglets : garder la dernière vue ouverte de chaque document").clicked();
         let nombre = ((disponible / 180.0).floor() as usize).max(1).min(onglets.len().max(1));
         let actif = onglets.iter().position(|o| o.0 == self.document_actif && o.1 == self.vue_active).unwrap_or(0);
         let debut = actif.saturating_sub(nombre / 2).min(onglets.len().saturating_sub(nombre));
@@ -2587,6 +2615,9 @@ impl ViewerApp {
                             let x = rect.right() + 3.0;
                             ui.painter().line_segment([egui::pos2(x, rect.top() + 4.0), egui::pos2(x, rect.bottom() - 4.0)], egui::Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color));
                         }
+        }
+        if reduire {
+            self.garder_derniere_vue_par_document();
         }
         if let Some((id, vue)) = activer {
             self.changer_document(id);
