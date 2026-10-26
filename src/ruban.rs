@@ -685,24 +685,33 @@ impl RubanEdition {
             egui::Window::new(format!("Ajouter : {}", liste.libelle()))
                 .id(egui::Id::unique("ajout_contexte_creation"))
                 .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-                .default_width(300.0)
+                .default_width(280.0)
                 .open(&mut ouvert)
                 .collapsible(false)
                 .resizable(false)
                 .show(ui.ctx(), |ui| {
-                    ui.label("Nom");
-                    ui.text_edit_singleline(&mut self.nom_creation);
-                    if liste == ListeCreation::Variante {
-                        ui.label("Jeu de variantes");
-                        ui.text_edit_singleline(&mut self.jeu_creation);
-                    }
+                    egui::Grid::new("grille_ajout_creation").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+                        ui.label("Nom");
+                        ui.add(egui::TextEdit::singleline(&mut self.nom_creation).desired_width(180.0).hint_text(liste.libelle()));
+                        ui.end_row();
+                        if liste == ListeCreation::Variante {
+                            ui.label("Jeu");
+                            ui.add(egui::TextEdit::singleline(&mut self.jeu_creation).desired_width(180.0).hint_text("Jeu de variantes"));
+                            ui.end_row();
+                        }
+                    });
                     if let Some(erreur) = &self.erreur_creation {
                         ui.colored_label(ui.visuals().error_fg_color, erreur);
                     }
-                    ui.horizontal(|ui| {
-                        valider = ui.button("Ajouter").clicked();
+                    ui.add_space(4.0);
+                    ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 24.0), egui::Layout::right_to_left(Align::Center), |ui| {
                         annuler = ui.button("Annuler").clicked();
+                        valider = ui.add_enabled(!self.nom_creation.trim().is_empty(), egui::Button::new(RichText::new("Ajouter").strong())).clicked();
                     });
+                    // touches consommées : Échap ne doit pas aussi quitter l'outil en cours
+                    let (entree, echap) = ui.input_mut(|i| (i.consume_key(egui::Modifiers::NONE, egui::Key::Enter), i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)));
+                    valider |= entree && !self.nom_creation.trim().is_empty();
+                    annuler |= echap;
                 });
             if valider {
                 match projet.ajouter_choix_creation(liste, &self.nom_creation, &self.jeu_creation) {
@@ -725,7 +734,8 @@ impl RubanEdition {
         modifie
     }
 
-    /// Coupe schématique du mur et contraintes directement associées à ses extrémités.
+    /// Palette de création du mur : croquis des deux limites (haut, bas) avec leur
+    /// réglage sur la même ligne, puis les propriétés du type en grille.
     pub fn proprietes_mur(
         &mut self,
         ui: &mut egui::Ui,
@@ -751,163 +761,181 @@ impl RubanEdition {
         egui::ScrollArea::vertical()
             .id_salt("creation_mur")
             .show(ui, |ui| {
+                ui.add_space(2.0);
                 egui::Frame::new()
                     .fill(ui.visuals().faint_bg_color)
-                    .corner_radius(8.0)
-                    .inner_margin(10.0)
+                    .corner_radius(6.0)
+                    .inner_margin(egui::Margin::symmetric(8, 6))
                     .show(ui, |ui| {
+                        ui.set_min_width(ui.available_width());
                         self.croquis_mur_creation(ui, projet);
                     });
                 if let Err(e) = self.parametres_mur().bornes(projet) {
                     ui.colored_label(ui.visuals().error_fg_color, e);
                 }
-                ui.label("Épaisseur");
-                self.nombre_mur(ui, 2, 300.0);
-                ui.label("Implantation");
-                let v = self
-                    .valeurs
-                    .entry((Outil::Mur, 0))
-                    .or_insert_with(|| Valeur::Texte("Axe".into()));
-                if let Valeur::Texte(v) = v {
-                    egui::ComboBox::from_id_salt("implantation_proprietes_mur")
-                        .width(ui.available_width())
-                        .selected_text(v.as_str())
-                        .show_ui(ui, |ui| {
-                            for nom in ["Axe", "Face extérieure", "Face intérieure"] {
-                                ui.selectable_value(v, nom.into(), nom);
-                            }
-                        });
-                }
-                ui.checkbox(&mut self.chainer_murs, "Chaîner les murs");
+                ui.add_space(4.0);
+                egui::Grid::new("grille_creation_mur")
+                    .num_columns(2)
+                    .striped(true)
+                    .spacing([10.0, 4.0])
+                    .min_col_width(80.0)
+                    .show(ui, |ui| {
+                        ui.label("Épaisseur");
+                        self.nombre_mur(ui, 2, 300.0);
+                        ui.end_row();
+                        ui.label("Implantation");
+                        let v = self
+                            .valeurs
+                            .entry((Outil::Mur, 0))
+                            .or_insert_with(|| Valeur::Texte("Axe".into()));
+                        if let Valeur::Texte(v) = v {
+                            egui::ComboBox::from_id_salt("implantation_proprietes_mur")
+                                .width(130.0)
+                                .selected_text(v.as_str())
+                                .show_ui(ui, |ui| {
+                                    for nom in ["Axe", "Face extérieure", "Face intérieure"] {
+                                        ui.selectable_value(v, nom.into(), nom);
+                                    }
+                                });
+                        }
+                        ui.end_row();
+                        ui.label("Chaîner");
+                        ui.checkbox(&mut self.chainer_murs, "")
+                            .on_hover_text("Le mur suivant part de la fin du précédent");
+                        ui.end_row();
+                    });
             });
         true
     }
 
-    /// Croquis de saisie : volume à gauche, rappels vers les deux réglages à droite.
+    /// Croquis de saisie : mur en perspective à gauche, ses deux limites à droite, sur
+    /// une ligne chacune (niveau, puis décalage, ou hauteur si le haut est libre),
+    /// rappelées par un pointillé depuis l'arête correspondante du mur.
     fn croquis_mur_creation(&mut self, ui: &mut egui::Ui, projet: &crate::modele::Projet) {
         use egui::{Align2, FontId, Stroke, pos2, vec2};
-        let largeur = ui.available_width();
-        let libre = self.niveau_haut_mur.is_none();
-        let bas_champs = if libre { 120.0 } else { 86.0 };
-        let (r, _) = ui.allocate_exact_size(vec2(largeur, bas_champs + 82.0), Sense::hover());
         let bleu = Color32::from_rgb(18, 158, 205);
-        let droite = r.left() + largeur * 0.43;
-        let champs_x = droite + 18.0;
-        let mut centres = [r.top(); 2];
-        for (haut, y) in [(true, 6.0), (false, bas_champs)] {
-            let rect = egui::Rect::from_min_max(
-                pos2(champs_x, r.top() + y),
-                pos2(r.right(), r.top() + y + 108.0),
-            );
-            ui.scope_builder(
-                egui::UiBuilder::new()
-                    .id_salt(("croquis_limite", haut))
-                    .max_rect(rect)
-                    .layout(egui::Layout::top_down(Align::Min)),
-                |ui| {
-                    ui.set_width(rect.width());
-                    ui.spacing_mut().item_spacing.y = 2.0;
-                    ui.label(
-                        RichText::new(if haut { "Limite haute" } else { "Limite basse" })
-                            .small()
-                            .color(bleu),
-                    );
-                    let niveau = if haut {
-                        &mut self.niveau_haut_mur
-                    } else {
-                        &mut self.niveau_mur
-                    };
-                    let nom = niveau
-                        .as_ref()
-                        .and_then(|id| projet.niveau(id))
-                        .or_else(|| if haut { None } else { projet.niveaux.first() })
-                        .map_or(if haut { "Hauteur libre" } else { "Niveau 0" }, |n| {
-                            n.nom.as_str()
-                        });
-                    let selection = egui::ComboBox::from_id_salt(("limite_creation_mur", haut))
-                        .width(rect.width())
-                        .truncate()
-                        .selected_text(nom)
-                        .show_ui(ui, |ui| {
-                            if haut || projet.niveaux.is_empty() {
-                                ui.selectable_value(
-                                    niveau,
-                                    None,
-                                    if haut { "Hauteur libre" } else { "Niveau 0" },
-                                );
-                            }
-                            for n in &projet.niveaux {
-                                ui.selectable_value(niveau, Some(n.id.clone()), &n.nom);
-                            }
-                        });
-                    centres[if haut { 0 } else { 1 }] = selection.response.rect.center().y;
-                    ui.label(
-                        RichText::new(if haut {
-                            "Décalage haut"
-                        } else {
-                            "Décalage bas"
-                        })
-                        .small()
-                        .weak(),
-                    );
-                    if haut {
-                        ui.add(
-                            egui::DragValue::new(&mut self.decalage_haut_mur)
-                                .speed(10.0)
-                                .suffix(" mm"),
+        let largeur_croquis = 64.0;
+        let origine = ui.cursor().min;
+        let mut centres = [0.0f32; 2];
+        let mut gauche_champs = 0.0f32;
+        ui.horizontal_top(|ui| {
+            ui.add_space(largeur_croquis);
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 16.0;
+                for haut in [true, false] {
+                    let ligne = ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        ui.add_sized(
+                            [30.0, 20.0],
+                            egui::Label::new(RichText::new(if haut { "Haut" } else { "Bas" }).color(bleu)),
                         );
-                    } else {
-                        self.nombre_mur(ui, 3, 0.0);
-                    }
-                    if haut && self.niveau_haut_mur.is_none() {
-                        ui.label(RichText::new("Hauteur libre").small().weak());
-                        self.nombre_mur(ui, 1, 2800.0);
-                    }
-                },
-            );
-        }
-        let p = ui.painter_at(r);
-        let bord = Stroke::new(1.7, bleu);
-        let profondeur = vec2(12.0, -8.0);
-        let largeur_mur = largeur * 0.31;
-        // Les sommets arrière sont calés sur le centre réel de chaque sélecteur.
-        let haut = pos2(droite - 14.0, centres[0] + 8.0);
-        let bas = pos2(droite - 14.0, centres[1] + 8.0);
-        let a = haut - vec2(largeur_mur, 18.0);
-        let b = bas - vec2(largeur_mur, 18.0);
+                        let niveau = if haut {
+                            &mut self.niveau_haut_mur
+                        } else {
+                            &mut self.niveau_mur
+                        };
+                        let nom = niveau
+                            .as_ref()
+                            .and_then(|id| projet.niveau(id))
+                            .or_else(|| if haut { None } else { projet.niveaux.first() })
+                            .map_or(if haut { "Libre" } else { "Niveau 0" }, |n| n.nom.as_str());
+                        let champ = 72.0;
+                        egui::ComboBox::from_id_salt(("limite_creation_mur", haut))
+                            .width((ui.available_width() - champ - 4.0).max(60.0))
+                            .truncate()
+                            .selected_text(nom)
+                            .show_ui(ui, |ui| {
+                                if haut || projet.niveaux.is_empty() {
+                                    ui.selectable_value(
+                                        niveau,
+                                        None,
+                                        if haut { "Libre (hauteur)" } else { "Niveau 0" },
+                                    );
+                                }
+                                for n in &projet.niveaux {
+                                    ui.selectable_value(niveau, Some(n.id.clone()), &n.nom);
+                                }
+                            })
+                            .response
+                            .on_hover_text(if haut {
+                                "Limite haute : un niveau, ou libre (hauteur saisie)"
+                            } else {
+                                "Limite basse : niveau de base du mur"
+                            });
+                        if haut && self.niveau_haut_mur.is_none() {
+                            // haut libre : la valeur est la hauteur, sans décalage
+                            self.decalage_haut_mur = 0.0;
+                            let v = self
+                                .valeurs
+                                .entry((Outil::Mur, 1))
+                                .or_insert(Valeur::Nombre(2800.0));
+                            if let Valeur::Nombre(v) = v {
+                                ui.add_sized(
+                                    [champ, 20.0],
+                                    egui::DragValue::new(v).speed(10.0).range(1.0..=f64::MAX).suffix(" mm"),
+                                )
+                                .on_hover_text("Hauteur du mur");
+                            }
+                        } else {
+                            let v = if haut {
+                                &mut self.decalage_haut_mur
+                            } else {
+                                match self.valeurs.entry((Outil::Mur, 3)).or_insert(Valeur::Nombre(0.0)) {
+                                    Valeur::Nombre(v) => v,
+                                    Valeur::Texte(_) => unreachable!(),
+                                }
+                            };
+                            ui.add_sized(
+                                [champ, 20.0],
+                                egui::DragValue::new(v)
+                                    .speed(10.0)
+                                    .custom_formatter(|x, _| format!("{x:+.0} mm"))
+                                    .custom_parser(|t| t.trim().trim_end_matches("mm").trim().trim_start_matches('+').parse().ok()),
+                            )
+                            .on_hover_text("Décalage par rapport au niveau");
+                        }
+                    });
+                    gauche_champs = ligne.response.rect.left();
+                    centres[if haut { 0 } else { 1 }] = ligne.response.rect.center().y;
+                }
+            });
+        });
+        let p = ui.painter();
+        let bord = Stroke::new(1.5, bleu);
+        let profondeur = vec2(10.0, -7.0);
+        // mur vu de face (largeur), son chant à droite et son dessus
+        let x1 = origine.x + largeur_croquis - 22.0;
+        let x0 = origine.x + 10.0;
+        let (yh, yb) = (centres[0] + 4.0, centres[1] + 4.0);
+        let (a, h, b, bb) = (pos2(x0, yh), pos2(x1, yh), pos2(x1, yb), pos2(x0, yb));
+        p.add(egui::Shape::convex_polygon(vec![a, h, b, bb], Color32::from_rgb(244, 250, 252), bord));
         p.add(egui::Shape::convex_polygon(
-            vec![a, haut, bas, b],
-            Color32::from_rgb(244, 250, 252),
-            bord,
-        ));
-        p.add(egui::Shape::convex_polygon(
-            vec![haut, haut + profondeur, bas + profondeur, bas],
+            vec![h, h + profondeur, b + profondeur, b],
             Color32::from_rgb(214, 239, 247),
             bord,
         ));
         p.add(egui::Shape::convex_polygon(
-            vec![a, a + profondeur, haut + profondeur, haut],
+            vec![a, a + profondeur, h + profondeur, h],
             Color32::from_rgb(233, 247, 252),
             bord,
         ));
-        // Rappels horizontaux : même ligne que le niveau, sans estimation de hauteur de texte.
-        for depuis in [haut + profondeur, bas + profondeur] {
-            let fin = champs_x - 4.0;
-            let mut x = depuis.x + 4.0;
+        // rappels : de l'arête du mur à la ligne de sa limite
+        for (depuis, y) in [(h + profondeur, centres[0]), (b + profondeur, centres[1])] {
+            let fin = gauche_champs - 3.0;
+            let mut x = depuis.x + 3.0;
             while x < fin {
-                p.line_segment(
-                    [pos2(x, depuis.y), pos2((x + 3.0).min(fin), depuis.y)],
-                    Stroke::new(1.2, bleu),
-                );
+                p.line_segment([pos2(x, y), pos2((x + 3.0).min(fin), y)], Stroke::new(1.0, bleu));
                 x += 6.0;
             }
+            p.line_segment([depuis, pos2(depuis.x + 2.0, y)], Stroke::new(1.0, bleu));
             p.circle_filled(depuis, 2.0, bleu);
         }
+        // hauteur résultante, le long du mur
         if let Ok((bas_z, haut_z)) = self.parametres_mur().bornes(projet) {
             p.text(
-                pos2(r.left() + largeur * 0.22, bas.y + 23.0),
+                pos2((x0 + x1) * 0.5, (yh + yb) * 0.5),
                 Align2::CENTER_CENTER,
-                format!("{:.0} mm", haut_z - bas_z),
+                format!("{:.0}", haut_z - bas_z),
                 FontId::proportional(11.0),
                 ui.visuals().weak_text_color(),
             );
@@ -920,7 +948,7 @@ impl RubanEdition {
             .entry((Outil::Mur, cle))
             .or_insert(Valeur::Nombre(defaut));
         if let Valeur::Nombre(v) = v {
-            ui.add(egui::DragValue::new(v).speed(10.0).suffix(" mm"));
+            ui.add_sized([130.0, 20.0], egui::DragValue::new(v).speed(10.0).range(1.0..=f64::MAX).suffix(" mm"));
         }
     }
 
@@ -1041,6 +1069,8 @@ impl RubanEdition {
             .into_iter()
             .enumerate()
             .filter(|(k, _)| outil != Outil::Ouverture || *k != 3 || fenetre)
+            // mur : décalage bas dans Propriétés ; hauteur seulement si le haut est libre
+            .filter(|(k, _)| outil != Outil::Mur || (*k != 3 && (*k != 1 || self.niveau_haut_mur.is_none())))
             .collect();
         for ligne in champs.chunks(2) {
             ui.horizontal(|ui| {
@@ -1071,7 +1101,8 @@ impl RubanEdition {
                                     .entry((outil, *k))
                                     .or_insert(Valeur::Nombre(*defaut));
                                 if let Valeur::Nombre(v) = v {
-                                    ui.add(egui::DragValue::new(v).speed(0.1).suffix(*suffixe));
+                                    let pas = if *suffixe == " mm" { 10.0 } else { 0.1 };
+                                    ui.add(egui::DragValue::new(v).speed(pas).max_decimals(if *suffixe == " mm" { 0 } else { 2 }).suffix(*suffixe));
                                 }
                             }
                             Champ::Saisie(nom, defaut) => {
@@ -1680,13 +1711,7 @@ mod tests {
                     _ => None,
                 })
                 .collect();
-            for attendu in [
-                "Limite haute",
-                "Limite basse",
-                "Décalage haut",
-                "Décalage bas",
-                "Hauteur libre",
-            ] {
+            for attendu in ["Haut", "Bas", "Libre", "Épaisseur", "Implantation", "Chaîner"] {
                 let (_, r) = textes
                     .iter()
                     .find(|(t, _)| t == attendu)
@@ -1697,9 +1722,10 @@ mod tests {
                 );
             }
             let position = |nom: &str| textes.iter().find(|(t, _)| t == nom).unwrap().1;
-            assert!(position("Décalage haut").top() > position("Limite haute").bottom());
-            assert!(position("Limite basse").top() > position("Décalage haut").bottom());
-            assert!(position("Décalage bas").top() > position("Limite basse").bottom());
+            // limites sur une ligne chacune, le haut au-dessus du bas, puis la grille
+            assert!((position("Haut").center().y - position("Libre").center().y).abs() < 3.0);
+            assert!(position("Bas").top() > position("Haut").bottom());
+            assert!(position("Épaisseur").top() > position("Bas").bottom());
         }
     }
 
