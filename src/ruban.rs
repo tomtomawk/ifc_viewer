@@ -100,6 +100,60 @@ const SURFACES: &[(Outil, &str)] = &[
     (Outil::Toiture, "Couverture et toiture"),
 ];
 
+/// Types prédéfinis d'éléments horizontaux, couches du haut vers le bas.
+fn types_surface(o: Outil) -> Vec<(&'static str, Vec<crate::modele::Couche>)> {
+    use crate::modele::{Couche, FonctionCouche::*};
+    let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f };
+    match o {
+        Outil::Dalle => vec![
+            ("Dalle BA 200", vec![c("Béton armé", 200.0, Structure)]),
+            ("Dalle BA 230 + chape isolée", vec![c("Chape ciment", 50.0, Finition), c("Isolant PSE", 30.0, Isolation), c("Béton armé", 230.0, Structure)]),
+            ("Dalle sur vide sanitaire", vec![c("Chape ciment", 60.0, Finition), c("Isolant polyuréthane", 80.0, Isolation), c("Béton armé", 200.0, Structure)]),
+            ("Plancher bois CLT", vec![c("Parquet chêne", 20.0, Finition), c("Isolant fibre de bois", 40.0, Isolation), c("Bois CLT", 140.0, Structure)]),
+        ],
+        Outil::Sol => vec![
+            ("Carrelage collé", vec![c("Carrelage grès cérame", 10.0, Finition), c("Mortier colle", 5.0, Autre)]),
+            ("Parquet flottant", vec![c("Parquet chêne", 14.0, Finition), c("Sous-couche acoustique", 3.0, Isolation)]),
+            ("Sol souple PVC", vec![c("Revêtement PVC", 3.0, Finition), c("Ragréage", 5.0, Autre)]),
+            ("Résine sur chape", vec![c("Résine époxy", 3.0, Finition), c("Chape ciment", 50.0, Autre)]),
+        ],
+        Outil::Plafond => vec![
+            ("Plafond BA13 sur ossature", vec![c("Lame d'air", 50.0, Autre), c("Plaque de plâtre", 13.0, Finition)]),
+            ("Plafond BA13 isolé", vec![c("Laine minérale", 100.0, Isolation), c("Plaque de plâtre", 13.0, Finition)]),
+            ("Dalles acoustiques 600×600", vec![c("Lame d'air", 200.0, Autre), c("Dalle minérale acoustique", 15.0, Finition)]),
+        ],
+        Outil::Toiture => vec![
+            ("Toiture tuiles isolée", vec![c("Tuile terre cuite", 30.0, Finition), c("Liteaux bois", 27.0, Autre), c("Écran sous-toiture", 1.0, Autre), c("Laine minérale entre chevrons", 200.0, Isolation), c("Plaque de plâtre", 13.0, Finition)]),
+            ("Toiture terrasse inaccessible", vec![c("Gravillons", 50.0, Finition), c("Étanchéité bitumineuse", 10.0, Autre), c("Isolant polyuréthane", 120.0, Isolation), c("Béton armé", 200.0, Structure)]),
+            ("Toiture bac acier", vec![c("Bac acier", 40.0, Structure), c("Laine minérale", 160.0, Isolation)]),
+            ("Toiture végétalisée", vec![c("Substrat végétal", 80.0, Finition), c("Étanchéité bitumineuse", 10.0, Autre), c("Isolant polyuréthane", 140.0, Isolation), c("Béton armé", 200.0, Structure)]),
+        ],
+        _ => Vec::new(),
+    }
+}
+
+/// Composition d'un élément horizontal en coupe : couches empilées du haut vers le bas,
+/// hauteur proportionnelle à l'épaisseur (2 px au moins), couleur du matériau.
+fn pile_couches(ui: &mut egui::Ui, r: egui::Rect, couches: &[crate::modele::Couche]) {
+    let total: f64 = couches.iter().map(|c| c.epaisseur).sum();
+    if total <= 0.0 {
+        return;
+    }
+    let p = ui.painter();
+    let n = couches.len() as f32;
+    let reste = (r.height() - 2.0 * n).max(0.0);
+    let mut y = r.top();
+    for c in couches {
+        let h = 2.0 + reste * (c.epaisseur / total) as f32;
+        let m = crate::modele::assemblage::materiau_par_defaut(c.materiau.as_deref().unwrap_or(""));
+        let [cr, cg, cb] = m.couleur;
+        let bande = egui::Rect::from_min_size(egui::pos2(r.left(), y), egui::vec2(r.width(), h));
+        p.rect_filled(bande, 0.0, Color32::from_rgb(cr, cg, cb));
+        p.rect_stroke(bande, 0.0, egui::Stroke::new(0.5, Color32::from_gray(90)), egui::StrokeKind::Inside);
+        y += h;
+    }
+}
+
 fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
     use Outil::*;
     match menu {
@@ -221,6 +275,8 @@ pub struct RubanEdition {
     erreur_creation: Option<String>,
     /// Type des prochains murs ; None : générique, épaisseur saisie.
     pub type_mur: Option<String>,
+    /// Type prédéfini choisi pour chaque sorte d'élément horizontal (indice).
+    type_surface: BTreeMap<Outil, usize>,
     /// Type composé en cours d'édition (fenêtre « Type de mur »).
     editeur_type: Option<EditeurType>,
 }
@@ -1286,50 +1342,63 @@ impl RubanEdition {
                     );
                     ui.vertical(|ui| {
                         ui.label(RichText::new("Éléments horizontaux").small().weak());
+                        let types = types_surface(surface);
+                        let k = self.type_surface.get(&surface).copied().unwrap_or(0).min(types.len().saturating_sub(1));
+                        let nom_type = types.get(k).map_or("", |t| t.0);
+                        let mut choix_type: Option<(Outil, usize)> = None;
                         egui::ComboBox::from_id_salt("surface_proprietes")
                             .width(ui.available_width())
-                            .height(240.0)
-                            .selected_text(RichText::new(surface.nom()).strong())
+                            .height(400.0)
+                            // les onglets de sorte gardent la liste ouverte ; un type la ferme
+                            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                            .truncate()
+                            .selected_text(RichText::new(format!("{} · {nom_type}", surface.nom())).strong())
                             .show_ui(ui, |ui| {
-                                ui.set_min_width(280.0);
-                                for &(choix, aide) in SURFACES {
-                                    let (r, reponse) = ui.allocate_exact_size(
-                                        egui::vec2(ui.available_width(), 50.0),
-                                        Sense::click(),
-                                    );
-                                    if surface == choix || reponse.hovered() {
-                                        ui.painter().rect_filled(
-                                            r,
-                                            4.0,
-                                            if surface == choix {
-                                                ui.visuals().selection.bg_fill
-                                            } else {
-                                                ui.visuals().widgets.hovered.bg_fill
-                                            },
-                                        );
+                                ui.set_min_width(300.0);
+                                // hauteur fixe (sorte la plus fournie) : la liste ne saute pas d'un onglet à l'autre
+                                let rangs = SURFACES.iter().map(|(o, _)| types_surface(*o).len()).max().unwrap_or(0);
+                                ui.set_min_height(86.0 + rangs as f32 * 27.0);
+                                // onglets des sortes : choisir une sorte garde la liste ouverte
+                                ui.horizontal(|ui| {
+                                    ui.spacing_mut().item_spacing.x = 2.0;
+                                    for &(choix, _) in SURFACES {
+                                        let (r, reponse) = ui.allocate_exact_size(egui::vec2(74.0, 50.0), Sense::click());
+                                        let actif = surface == choix;
+                                        if actif || reponse.hovered() {
+                                            ui.painter().rect_filled(r, 4.0, if actif { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
+                                        }
+                                        icone(ui.painter(), egui::Rect::from_center_size(r.center_top() + egui::vec2(0.0, 17.0), egui::vec2(26.0, 26.0)), choix, ui.visuals().text_color());
+                                        ui.painter().text(r.center_bottom() - egui::vec2(0.0, 9.0), egui::Align2::CENTER_CENTER, choix.nom(), egui::FontId::proportional(12.0), ui.visuals().text_color());
+                                        if reponse.clicked() && !actif {
+                                            choix_type = Some((choix, self.type_surface.get(&choix).copied().unwrap_or(0)));
+                                            // liste redimensionnée à l'image suivante
+                                            ui.ctx().request_repaint();
+                                        }
                                     }
-                                    icone(
-                                        ui.painter(),
-                                        egui::Rect::from_min_size(
-                                            r.min + egui::vec2(6.0, 8.0),
-                                            egui::vec2(34.0, 34.0),
-                                        ),
-                                        choix,
-                                        ui.visuals().text_color(),
-                                    );
-                                    ui.painter().text(
-                                        r.min + egui::vec2(48.0, 25.0),
-                                        egui::Align2::LEFT_CENTER,
-                                        format!("{}\n{aide}", choix.nom()),
-                                        egui::FontId::proportional(12.0),
-                                        ui.visuals().text_color(),
-                                    );
+                                });
+                                let aide = SURFACES.iter().find(|(o, _)| *o == surface).map_or("", |(_, a)| *a);
+                                ui.label(RichText::new(aide).small().weak());
+                                ui.separator();
+                                // types de la sorte : composition, nom, épaisseur
+                                for (i, (nom, couches)) in types.iter().enumerate() {
+                                    let (r, reponse) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 24.0), Sense::click());
+                                    if i == k || reponse.hovered() {
+                                        ui.painter().rect_filled(r, 3.0, if i == k { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
+                                    }
+                                    let e: f64 = couches.iter().map(|c| c.epaisseur).sum();
+                                    pile_couches(ui, egui::Rect::from_min_size(r.min + egui::vec2(8.0, 4.0), egui::vec2(26.0, 16.0)), couches);
+                                    ui.painter().text(r.min + egui::vec2(42.0, 12.0), egui::Align2::LEFT_CENTER, *nom, egui::FontId::proportional(12.0), ui.visuals().text_color());
+                                    ui.painter().text(r.right_center() - egui::vec2(8.0, 0.0), egui::Align2::RIGHT_CENTER, format!("{} mm", crate::step::format_real(e)), egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
                                     if reponse.clicked() {
-                                        surface = choix;
+                                        choix_type = Some((surface, i));
                                         ui.close();
                                     }
                                 }
                             });
+                        if let Some((sorte, i)) = choix_type {
+                            surface = sorte;
+                            self.type_surface.insert(sorte, i);
+                        }
                         let aide = SURFACES
                             .iter()
                             .find(|(o, _)| *o == surface)
@@ -1337,6 +1406,19 @@ impl RubanEdition {
                         ui.add(egui::Label::new(RichText::new(aide).small().weak()).wrap());
                     });
                 });
+                // composition du type choisi, du haut vers le bas
+                let types = types_surface(surface);
+                if let Some((_, couches)) = types.get(self.type_surface.get(&surface).copied().unwrap_or(0)) {
+                    ui.add_space(4.0);
+                    for c in couches {
+                        ui.horizontal(|ui| {
+                            let (r, _) = ui.allocate_exact_size(egui::vec2(16.0, 12.0), Sense::hover());
+                            pile_couches(ui, r, std::slice::from_ref(c));
+                            ui.label(RichText::new(format!("{} · {} mm", c.materiau.as_deref().unwrap_or("Couche"), crate::step::format_real(c.epaisseur))).small());
+                            ui.label(RichText::new(c.fonction.libelle()).small().weak());
+                        });
+                    }
+                }
             });
         self.selection = Some(surface);
         self.derniere_surface = Some(surface);
@@ -1347,9 +1429,18 @@ impl RubanEdition {
             .num_columns(2)
             .striped(true)
             .show(ui, |ui| {
+                let epaisseur_type: Option<f64> = types_surface(surface)
+                    .get(self.type_surface.get(&surface).copied().unwrap_or(0))
+                    .map(|(_, cs)| cs.iter().map(|c| c.epaisseur).sum());
                 for (indice, champ) in champs(surface).into_iter().enumerate() {
                     if let Champ::Nombre(nom, defaut, suffixe) = champ {
                         ui.label(nom);
+                        // épaisseur : celle du type choisi
+                        if let (Some(e), "Épaisseur") = (epaisseur_type, nom) {
+                            ui.label(format!("{} mm", crate::step::format_real(e))).on_hover_text("Épaisseur du type (somme des couches)");
+                            ui.end_row();
+                            continue;
+                        }
                         let valeur = self
                             .valeurs
                             .entry((surface, indice))
@@ -1960,6 +2051,7 @@ mod tests {
             })
             .last()
             .unwrap_or_else(|| panic!("commande absente : {texte}"));
+
         for pressed in [true, false] {
             afficher(
                 ctx,
@@ -2041,7 +2133,7 @@ mod tests {
                 .shapes
                 .iter()
                 .filter_map(|s| match &s.shape {
-                    egui::Shape::Text(t) if t.galley.text() == "Dalle" => Some(t.pos),
+                    egui::Shape::Text(t) if t.galley.text() == "Dalle · Dalle BA 200" => Some(t.pos),
                     _ => None,
                 })
                 .last()
@@ -2050,51 +2142,48 @@ mod tests {
                 encart.x < 284.0 && encart.y > HAUTEUR_GROUPE,
                 "le sélecteur doit se trouver dans la palette sous le ruban"
             );
-            cliquer(&ctx, &mut ruban, largeur, "Dalle");
+            // la liste reste ouverte d'un onglet de sorte à l'autre
+            cliquer(&ctx, &mut ruban, largeur, "Dalle · Dalle BA 200");
             cliquer(
                 &ctx,
                 &mut ruban,
                 largeur,
-                "Sol\nRevêtement et finition de sol",
+                "Sol",
             );
             assert_eq!(ruban.selection, Some(Outil::Sol));
             assert!(matches!(
-                ruban.valeurs.get(&(Outil::Sol, 0)),
-                Some(Valeur::Nombre(15.0))
+                ruban.valeurs.get(&(Outil::Sol, 1)),
+                Some(Valeur::Nombre(0.0))
             ));
-            ruban.valeurs.insert((Outil::Sol, 0), Valeur::Nombre(21.0));
-            cliquer(&ctx, &mut ruban, largeur, "Sol");
+            ruban.valeurs.insert((Outil::Sol, 1), Valeur::Nombre(21.0));
             cliquer(
                 &ctx,
                 &mut ruban,
                 largeur,
-                "Plafond\nPlafond ou faux plafond",
+                "Plafond",
             );
             assert_eq!(ruban.selection, Some(Outil::Plafond));
-            cliquer(&ctx, &mut ruban, largeur, "Plafond");
             cliquer(
                 &ctx,
                 &mut ruban,
                 largeur,
-                "Dalle\nDalle structurelle porteuse",
+                "Dalle",
             );
             assert!(matches!(
-                ruban.valeurs.get(&(Outil::Dalle, 0)),
-                Some(Valeur::Nombre(200.0))
+                ruban.valeurs.get(&(Outil::Dalle, 1)),
+                Some(Valeur::Nombre(0.0))
             ));
-            cliquer(&ctx, &mut ruban, largeur, "Dalle");
             cliquer(
                 &ctx,
                 &mut ruban,
                 largeur,
-                "Sol\nRevêtement et finition de sol",
+                "Sol",
             );
             assert!(matches!(
-                ruban.valeurs.get(&(Outil::Sol, 0)),
+                ruban.valeurs.get(&(Outil::Sol, 1)),
                 Some(Valeur::Nombre(21.0))
             ));
-            cliquer(&ctx, &mut ruban, largeur, "Sol");
-            let sortie = cliquer(&ctx, &mut ruban, largeur, "Toiture\nCouverture et toiture");
+            let sortie = cliquer(&ctx, &mut ruban, largeur, "Toiture");
             assert_eq!(ruban.selection, Some(Outil::Toiture));
             assert!(
                 sortie.shapes.iter().any(

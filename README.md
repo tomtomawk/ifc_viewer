@@ -31,7 +31,7 @@ Le ruban regroupe les commandes dans Début, Modéliser, Modifier, Annoter et So
 Les commandes fréquentes (Mur, Éléments horizontaux, Ouverture, Déplacer, Copier, Aligner, Cote et
 Texte) disposent de grands boutons lorsque la largeur le permet ; les autres
 restent empilées avec de petites icônes. Les grands boutons se replient selon leur
-priorité quand la fenêtre rétrécit. Le bouton Éléments horizontaux superpose sol, plafond et toiture dans une seule icône ; la sorte (Dalle, Sol, Plafond, Toiture) se choisit dans le sélecteur de type en tête de Propriétés. Son sélecteur se trouve dans un encart en tête de
+priorité quand la fenêtre rétrécit. Le bouton Éléments horizontaux superpose sol, plafond et toiture dans une seule icône ; la sorte (Dalle, Sol, Plafond, Toiture) et son type se choisissent dans le sélecteur de type en tête de Propriétés : un onglet par sorte, puis des types prédéfinis (dalles BA ou bois, sols carrelage, parquet, PVC, résine, plafonds plaque de plâtre ou dalles acoustiques, toitures tuiles, terrasse, bac acier, végétalisée) avec leur composition ; l'épaisseur est celle du type. La création des éléments horizontaux n'est pas encore raccordée. Son sélecteur se trouve dans un encart en tête de
 Propriétés, avec une vignette et une liste déroulante distinguant Dalle (structure),
 Sol (revêtement), Plafond et Toiture. Les paramètres sont juste en dessous et
 restent mémorisés séparément pour chaque catégorie. Les vignettes distinguent la

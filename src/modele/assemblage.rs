@@ -11,9 +11,21 @@ pub fn materiau_par_defaut(nom: &str) -> Materiau {
         ([236, 214, 120], MotifCoupe::Croisees)
     } else if ["plâtre", "platre", "placo", "enduit", "peinture", "finition"].iter().any(|k| n.contains(k)) {
         ([238, 236, 230], MotifCoupe::Vide)
-    } else if ["brique", "terre cuite"].iter().any(|k| n.contains(k)) {
+    } else if ["étanch", "etanch", "bitum", "écran", "ecran", "membrane"].iter().any(|k| n.contains(k)) {
+        ([70, 70, 74], MotifCoupe::Uni)
+    } else if ["acier", "métal", "metal", "zinc", "alu"].iter().any(|k| n.contains(k)) {
+        ([150, 165, 180], MotifCoupe::Uni)
+    } else if ["carrelage", "grès", "gres", "faïence"].iter().any(|k| n.contains(k)) {
+        ([200, 210, 220], MotifCoupe::Diagonales)
+    } else if ["gravillon", "substrat", "terre végétale", "végétal"].iter().any(|k| n.contains(k)) {
+        ([170, 160, 120], MotifCoupe::Diagonales)
+    } else if ["pvc", "résine", "resine", "colle", "ragréage", "ragreage"].iter().any(|k| n.contains(k)) {
+        ([215, 205, 225], MotifCoupe::Vide)
+    } else if ["chape", "mortier"].iter().any(|k| n.contains(k)) {
+        ([196, 192, 182], MotifCoupe::Diagonales)
+    } else if ["brique", "terre cuite", "tuile"].iter().any(|k| n.contains(k)) {
         ([196, 120, 92], MotifCoupe::Diagonales)
-    } else if ["bois", "ossature", "osb", "clt"].iter().any(|k| n.contains(k)) {
+    } else if ["bois", "ossature", "osb", "clt", "parquet", "chêne", "liteau"].iter().any(|k| n.contains(k)) {
         ([196, 160, 110], MotifCoupe::Diagonales)
     } else if ["béton", "beton", "parpaing", "bloc", "agglo", "maçon", "macon"].iter().any(|k| n.contains(k)) {
         ([176, 176, 170], MotifCoupe::Diagonales)
