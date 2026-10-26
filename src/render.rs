@@ -12,6 +12,7 @@ layout(location = 3) in uint a_obj;
 layout(location = 4) in vec4 a_rendu;
 uniform mat4 u_mvp;
 uniform uint u_sel;
+uniform uint u_sel_fin;
 uniform vec4 u_plans[2];
 uniform vec4 u_coupe;
 uniform vec3 u_eye;
@@ -30,7 +31,8 @@ void main() {
     // annotations (4ᵉ composante de la normale) : ni découpées ni blanchies en mode dessin
     v_annot = a_normal.w > 0.5 ? 1u : 0u;
     v_c = a_color;
-    v_selected = (a_obj == u_sel) ? 1u : 0u;
+    // sélection : plage d'objets consécutifs (un assemblage et ses couches)
+    v_selected = (a_obj >= u_sel && a_obj <= u_sel_fin) ? 1u : 0u;
     gl_Position = u_mvp * vec4(a_pos, 1.0);
     // arête douce (4ᵉ composante de la normale négative) : normales des deux facettes
     // dans a_normal et a_color ; tracée en noir sur la silhouette seulement, sinon
@@ -191,6 +193,7 @@ pub struct Renderer {
     n_coupe: [i32; 2],
     u_mvp: Option<glow::UniformLocation>,
     u_sel: Option<glow::UniformLocation>,
+    u_sel_fin: Option<glow::UniformLocation>,
     u_eye: Option<glow::UniformLocation>,
     u_ortho: Option<glow::UniformLocation>,
     u_view_dir: Option<glow::UniformLocation>,
@@ -272,7 +275,8 @@ pub struct FrameParams {
     pub eye: Vec3,
     pub view_dir: Vec3,
     pub ortho: bool,
-    pub selected: u32,
+    /// Objets sélectionnés, plage inclusive (u32::MAX : aucun).
+    pub selected: (u32, u32),
     pub background: [f32; 3],
     /// Style visuel de la vue principale (les fenêtres de vue d'une feuille restent
     /// ombrées).
@@ -377,6 +381,7 @@ impl Renderer {
             Ok(Renderer {
                 u_mvp: gl.get_uniform_location(program, "u_mvp"),
                 u_sel: gl.get_uniform_location(program, "u_sel"),
+                u_sel_fin: gl.get_uniform_location(program, "u_sel_fin"),
                 u_eye: gl.get_uniform_location(program, "u_eye"),
                 u_ortho: gl.get_uniform_location(program, "u_ortho"),
                 u_view_dir: gl.get_uniform_location(program, "u_view_dir"),
@@ -620,7 +625,8 @@ impl Renderer {
             gl.disable(glow::CULL_FACE);
             gl.use_program(Some(self.program));
             gl.uniform_matrix_4_f32_slice(self.u_mvp.as_ref(), false, &p.mvp.to_cols_array());
-            gl.uniform_1_u32(self.u_sel.as_ref(), p.selected);
+            gl.uniform_1_u32(self.u_sel.as_ref(), p.selected.0);
+            gl.uniform_1_u32(self.u_sel_fin.as_ref(), p.selected.1);
             gl.uniform_3_f32(self.u_eye.as_ref(), p.eye.x, p.eye.y, p.eye.z);
             gl.uniform_1_i32(self.u_ortho.as_ref(), p.ortho as i32);
             gl.uniform_3_f32(self.u_view_dir.as_ref(), p.view_dir.x, p.view_dir.y, p.view_dir.z);

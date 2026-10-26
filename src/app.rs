@@ -1074,6 +1074,221 @@ impl ViewerApp {
         }
     }
 
+    /// Propriétés éditables d'un mur natif (mur seul ou couche d'assemblage) ou d'un
+    /// assemblage. Retourne le projet modifié s'il a changé.
+    fn proprietes_natif(&mut self, ui: &mut egui::Ui, id: Id) -> Option<crate::modele::Projet> {
+        use crate::modele::Haut;
+        let (projet, _) = self.natif.as_ref()?;
+        let mut nouveau: Option<crate::modele::Projet> = None;
+        let mut selection: Option<Id> = None;
+        if let Some(a) = projet.assemblages.iter().find(|a| scene::id_natif("assemblage", &a.id) == id) {
+            ui.label(RichText::new(format!("Mur composé · {}", a.nom)).strong());
+            if let Some(t) = projet.type_mur(&a.type_mur) {
+                ui.label(RichText::new(&t.nom).weak());
+            }
+            let couches = projet.couches_assemblage(&a.id);
+            let compo: Vec<crate::modele::Couche> = couches.iter().filter_map(|m| projet.type_mur(&m.type_mur).and_then(|t| t.couches.first().cloned())).collect();
+            crate::ruban::bande_couches(ui, projet, &compo, 14.0);
+            ui.label(RichText::new("Couches, de l'extérieur vers l'intérieur (clic : sélectionner ; Tab parcourt)").small().weak());
+            egui::Grid::new("couches_assemblage").num_columns(4).striped(true).spacing([8.0, 3.0]).show(ui, |ui| {
+                for m in &couches {
+                    let c = projet.type_mur(&m.type_mur).and_then(|t| t.couches.first());
+                    let nom = c.and_then(|c| c.materiau.clone()).unwrap_or_else(|| m.nom.clone());
+                    if ui.link(nom).clicked() {
+                        selection = Some(scene::id_natif("mur", &m.id));
+                    }
+                    ui.label(format!("{} mm", c.map_or(0.0, |c| c.epaisseur)));
+                    ui.label(projet.bas_haut(m).map_or(String::new(), |(b, h)| format!("h {:.0}", h - b)));
+                    ui.label(RichText::new(m.phase.as_deref().unwrap_or("")).weak());
+                    ui.end_row();
+                }
+            });
+            ui.separator();
+        } else if let Some(mur) = projet.murs.iter().find(|m| scene::id_natif("mur", &m.id) == id) {
+            let mut m = mur.clone();
+            let epaisseur = projet.type_mur(&m.type_mur).map_or(0.0, |t| t.epaisseur());
+            let materiau = projet.type_mur(&m.type_mur).and_then(|t| (t.couches.len() == 1).then(|| t.couches[0].materiau.clone()).flatten());
+            let assemblage = m.assemblage.as_ref().and_then(|a| projet.assemblage(a));
+            ui.label(RichText::new(match (assemblage, &materiau) {
+                (Some(a), Some(x)) => format!("Couche · {x} · de {}", a.nom),
+                (Some(a), None) => format!("Couche de {}", a.nom),
+                (None, _) => m.nom.clone(),
+            }).strong());
+            let liste = |ui: &mut egui::Ui, sel: &mut Option<String>, choix: &[String], sale: &str, vide: &str| {
+                let mut change = false;
+                egui::ComboBox::from_id_salt(sale).width(150.0).selected_text(sel.as_deref().unwrap_or(vide)).show_ui(ui, |ui| {
+                    for c in choix {
+                        change |= ui.selectable_value(sel, Some(c.clone()), c).changed();
+                    }
+                });
+                change
+            };
+            let mut change = false;
+            egui::Grid::new("mur_natif_proprietes").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
+                let niveaux: Vec<(String, String)> = projet.niveaux.iter().map(|n| (n.id.clone(), n.nom.clone())).collect();
+                let nom_niveau = |id: &str| niveaux.iter().find(|n| n.0 == id).map_or(id.to_string(), |n| n.1.clone());
+                ui.label("Niveau de base");
+                egui::ComboBox::from_id_salt("mur_niveau").width(150.0).selected_text(nom_niveau(&m.niveau)).show_ui(ui, |ui| {
+                    for (nid, nom) in &niveaux {
+                        change |= ui.selectable_value(&mut m.niveau, nid.clone(), nom).changed();
+                    }
+                });
+                ui.end_row();
+                ui.label("Décalage bas");
+                change |= ui.add(egui::DragValue::new(&mut m.decalage_bas).speed(10.0).suffix(" mm")).changed();
+                ui.end_row();
+                ui.label("Contrainte haute");
+                let libre = matches!(m.haut, Haut::Libre { .. });
+                let texte = match &m.haut { Haut::Libre { .. } => "Libre (hauteur)".to_string(), Haut::Niveau { niveau, .. } => nom_niveau(niveau) };
+                let (bas, haut) = projet.bas_haut(&m).unwrap_or((0.0, 2800.0));
+                egui::ComboBox::from_id_salt("mur_haut").width(150.0).selected_text(texte).show_ui(ui, |ui| {
+                    if ui.selectable_label(libre, "Libre (hauteur)").clicked() && !libre {
+                        m.haut = Haut::Libre { hauteur: haut - bas };
+                        change = true;
+                    }
+                    for (nid, nom) in &niveaux {
+                        let actif = matches!(&m.haut, Haut::Niveau { niveau, .. } if niveau == nid);
+                        if ui.selectable_label(actif, nom).clicked() && !actif {
+                            m.haut = Haut::Niveau { niveau: nid.clone(), decalage: 0.0 };
+                            change = true;
+                        }
+                    }
+                });
+                ui.end_row();
+                match &mut m.haut {
+                    Haut::Libre { hauteur } => {
+                        ui.label("Hauteur");
+                        change |= ui.add(egui::DragValue::new(hauteur).speed(10.0).range(1.0..=f64::MAX).suffix(" mm")).changed();
+                    }
+                    Haut::Niveau { decalage, .. } => {
+                        ui.label("Décalage haut");
+                        change |= ui.add(egui::DragValue::new(decalage).speed(10.0).suffix(" mm")).changed();
+                    }
+                }
+                ui.end_row();
+                ui.label("Phase");
+                change |= liste(ui, &mut m.phase, &projet.phases, "mur_phase", "Non renseignée");
+                ui.end_row();
+                ui.label("Sous-projet");
+                change |= liste(ui, &mut m.sous_projet, &projet.sous_projets, "mur_sous_projet", "Non renseigné");
+                ui.end_row();
+                ui.label("Variante");
+                ui.label(m.variante.as_ref().and_then(|id| projet.variantes.iter().find(|v| &v.id == id)).map_or_else(|| "Modèle principal".into(), |v| v.libelle()));
+                ui.end_row();
+                for (nom, valeur) in [
+                    ("Longueur", format!("{:.0} mm", m.axe.longueur())),
+                    ("Hauteur résultante", format!("{:.0} mm", haut - bas)),
+                    ("Épaisseur", format!("{epaisseur:.0} mm")),
+                    ("Volume", format!("{:.3} m³", projet.volume_mur(&m).unwrap_or(0.0) / 1e9)),
+                ] {
+                    ui.label(nom);
+                    ui.label(valeur);
+                    ui.end_row();
+                }
+            });
+            if change {
+                let mut p = projet.clone();
+                if let Some(x) = p.murs.iter_mut().find(|x| x.id == m.id) {
+                    *x = m.clone();
+                }
+                match p.bas_haut(&m) {
+                    Some((b, h)) if h > b => nouveau = Some(p),
+                    _ => self.error = Some("La limite haute du mur doit être au-dessus de sa limite basse.".into()),
+                }
+            }
+            // assemblage : sortir la couche, ou rattacher un mur indépendant
+            ui.horizontal_wrapped(|ui| match &m.assemblage {
+                Some(a) => {
+                    if ui.button("Dissocier").on_hover_text("La couche devient un mur indépendant (elle garde sa place et ses réglages)").clicked() {
+                        let mut p = projet.clone();
+                        if p.dissocier(&m.id).is_ok() {
+                            nouveau = Some(p);
+                        }
+                    }
+                    if ui.button("Assemblage").on_hover_text("Sélectionner l'assemblage entier").clicked() {
+                        selection = Some(scene::id_natif("assemblage", a));
+                    }
+                }
+                None if !projet.assemblages.is_empty() => {
+                    let mut choix: Option<String> = None;
+                    egui::ComboBox::from_id_salt("associer_mur").width(170.0).selected_text("Associer à un assemblage…").show_ui(ui, |ui| {
+                        for a in projet.assemblages.iter().filter(|a| projet.couches_assemblage(&a.id).first().is_some_and(|c| c.niveau == m.niveau)) {
+                            if ui.selectable_label(false, &a.nom).clicked() {
+                                choix = Some(a.id.clone());
+                            }
+                        }
+                    });
+                    if let Some(a) = choix {
+                        let mut p = projet.clone();
+                        match p.associer(&m.id, &a) {
+                            Ok(()) => nouveau = Some(p),
+                            Err(e) => self.error = Some(e),
+                        }
+                    }
+                }
+                None => {}
+            });
+            ui.separator();
+        } else {
+            return None;
+        }
+        if let Some(sel) = selection {
+            self.select(Some(sel), true);
+        }
+        nouveau
+    }
+
+    /// Élément sélectionné par un clic sur l'objet `id` : une couche d'assemblage
+    /// sélectionne son assemblage, sauf si l'assemblage (ou l'une de ses couches) l'est
+    /// déjà : le clic suivant entre dans l'assemblage et prend la couche.
+    fn cible_clic(&self, id: Id) -> Id {
+        let Some(s) = &self.scene else { return id };
+        let Some(&parent) = s.model.parent.get(&id) else { return id };
+        if s.model.ty(parent) != "IFCELEMENTASSEMBLY" {
+            return id;
+        }
+        let dedans = self.selected.is_some_and(|sel| sel == parent || s.model.parent.get(&sel) == Some(&parent));
+        if dedans { id } else { parent }
+    }
+
+    /// Tab : de l'assemblage sélectionné à sa première couche, puis couche suivante,
+    /// puis retour à l'assemblage.
+    fn tab_selection(&mut self) {
+        let Some(s) = &self.scene else { return };
+        let Some(sel) = self.selected else { return };
+        let (assemblage, courant) = if s.model.ty(sel) == "IFCELEMENTASSEMBLY" {
+            (sel, None)
+        } else {
+            match s.model.parent.get(&sel) {
+                Some(&p) if s.model.ty(p) == "IFCELEMENTASSEMBLY" => (p, Some(sel)),
+                _ => return,
+            }
+        };
+        let couches = s.model.children.get(&assemblage).cloned().unwrap_or_default();
+        let suivant = match courant {
+            None => couches.first().copied(),
+            Some(c) => couches.iter().position(|&x| x == c).and_then(|k| couches.get(k + 1).copied()),
+        };
+        self.select(Some(suivant.unwrap_or(assemblage)), true);
+    }
+
+    /// Objets à surligner : celui de la sélection, ou ceux d'un nœud dont les objets
+    /// sont consécutifs (assemblage de murs).
+    fn plage_selection(&self) -> (u32, u32) {
+        if let Some(o) = self.selected_object() {
+            return (o, o);
+        }
+        let Some(id) = self.selected else { return (u32::MAX, u32::MAX) };
+        if self.scene.as_ref().is_none_or(|s| s.model.ty(id) != "IFCELEMENTASSEMBLY") {
+            return (u32::MAX, u32::MAX);
+        }
+        let objs = self.objects_under(id);
+        match (objs.iter().min(), objs.iter().max()) {
+            (Some(&a), Some(&b)) if (b - a) as usize + 1 == objs.len() && objs.len() <= 64 => (a, b),
+            _ => (u32::MAX, u32::MAX),
+        }
+    }
+
     fn selected_object(&self) -> Option<u32> {
         let s = self.scene.as_ref()?;
         s.object_of.get(&self.selected?).copied()
@@ -3351,24 +3566,18 @@ impl ViewerApp {
             self.proprietes_boite(ui);
             ui.separator();
         }
-        let (Some(s), Some(id)) = (&self.scene, self.selected) else {
+        let (Some(_), Some(id)) = (&self.scene, self.selected) else {
             ui.label(RichText::new("Sélectionner un élément dans la vue ou l'arborescence.").weak());
             return;
         };
-        let model = &s.model;
-        if let Some((projet, _)) = &self.natif {
-            if let Some(mur) = projet.murs.iter().find(|m| scene::id_natif("mur", &m.id) == id) {
-                let niveau = projet.niveau(&mur.niveau).map_or("", |n| n.nom.as_str());
-                let epaisseur = projet.type_mur(&mur.type_mur).map_or(0.0, |t| t.epaisseur());
-                let hauteur = projet.bas_haut(mur).map_or(0.0, |(a,b)| b-a);
-                egui::Grid::new("mur_natif_proprietes").num_columns(2).show(ui, |ui| {
-                    for (nom, valeur) in [("Variante", mur.variante.as_ref().and_then(|id| projet.variantes.iter().find(|v| &v.id == id)).map_or_else(|| "Modèle principal".into(), |v| v.libelle())), ("Phase", mur.phase.clone().unwrap_or_else(|| "Non renseignée".into())), ("Sous-projet", mur.sous_projet.clone().unwrap_or_else(|| "Non renseigné".into())), ("Niveau", niveau.to_string()), ("Longueur", format!("{:.0} mm",mur.axe.longueur())), ("Hauteur",format!("{hauteur:.0} mm")), ("Épaisseur",format!("{epaisseur:.0} mm")), ("Volume",format!("{:.3} m³",projet.volume_mur(mur).unwrap_or(0.0)/1e9))] {
-                        ui.label(nom); ui.label(valeur); ui.end_row();
-                    }
-                });
-                ui.separator();
+        if self.natif.is_some() {
+            if let Some(projet) = self.proprietes_natif(ui, id) {
+                if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
+                return;
             }
         }
+        let Some(s) = &self.scene else { return };
+        let model = &s.model;
         let has_obj = s.object_of.contains_key(&id);
         let under = self.objects_under(id);
         let mut action = None;
@@ -3762,7 +3971,7 @@ impl ViewerApp {
                 }
             } else if resp.clicked() {
                 let hit = resp.interact_pointer_pos().and_then(|p| pick(self, p));
-                let id = hit.map(|(obj, _)| self.scene.as_ref().unwrap().objects[obj as usize].id);
+                let id = hit.map(|(obj, _)| self.cible_clic(self.scene.as_ref().unwrap().objects[obj as usize].id));
                 self.point_clique = hit.map(|(_, p)| p.as_dvec3() + self.scene.as_ref().unwrap().origin);
                 self.select(id, true);
             }
@@ -3921,7 +4130,7 @@ impl ViewerApp {
             eye: self.camera.eye(),
             view_dir: self.camera.forward(),
             ortho: self.camera.ortho,
-            selected: self.selected_object().unwrap_or(u32::MAX),
+            selected: self.plage_selection(),
             background: if self.style.papier() { [1.0, 1.0, 1.0] } else { [0.925, 0.933, 0.945] },
             style: self.style,
             soleil: (self.style == StyleVisuel::Rendu).then(|| self.soleil()).flatten(),
@@ -4707,6 +4916,9 @@ impl eframe::App for ViewerApp {
         } else if ctx.input(|i| i.viewport().close_requested()) && (self.natif_modifie || self.documents.values().any(|d| d.modifie)) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.confirmer_fermeture = Some((true, self.document_actif));
+        }
+        if self.selected.is_some() && !ctx.egui_wants_keyboard_input() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab)) {
+            self.tab_selection();
         }
         if self.alignement_plan && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             self.alignement_plan = false;
