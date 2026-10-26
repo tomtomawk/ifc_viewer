@@ -65,6 +65,12 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
 
     c.projet.phases = m.ordre_phases.iter().filter_map(|id| m.phases.get(id).cloned()).collect();
 
+    c.projet.variantes = m.variantes.values().filter(|v| !v.jeu).map(|v| super::Variante {
+        id: ident("variante", v.id), nom: v.nom.clone(),
+        jeu: m.variantes.get(&v.lien).map_or_else(String::new, |j| j.nom.clone()),
+    }).collect();
+    c.projet.variantes.sort_by(|a,b| a.jeu.cmp(&b.jeu).then(a.nom.cmp(&b.nom)).then(a.id.cmp(&b.id)));
+
     // niveaux
     let mut niveaux: HashMap<i64, (String, f64)> = HashMap::new();
     for n in &m.niveaux {
@@ -132,7 +138,7 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
         let id = ident("mur", w.id);
         c.lire(&id, &tris, "Murs");
         murs.insert(w.id, c.projet.murs.len());
-        c.projet.murs.push(Mur { phase: None, sous_projet: None, id, nom, type_mur, niveau: base, decalage_bas: w.decalage_bas, haut, axe, origine: origine(w.id, &w.classe) });
+        c.projet.murs.push(Mur { variante: m.variante_de.get(&w.id).filter(|id| m.variantes.get(id).is_some_and(|v| !v.jeu)).map(|&id| ident("variante", id)), phase: None, sous_projet: None, id, nom, type_mur, niveau: base, decalage_bas: w.decalage_bas, haut, axe, origine: origine(w.id, &w.classe) });
     }
 
     // portes et fenêtres hébergées par un mur converti ; autres familles importées

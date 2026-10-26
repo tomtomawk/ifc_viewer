@@ -21,7 +21,7 @@ nommé d'après le fichier choisi et l'ouvre dans une vue 3D vide, en conservant
 autres documents. Il utilise `Projet::nouveau` : en-tête v0, collections vides,
 aucun niveau, type ou élément ajouté implicitement. **Sortie → Enregistrer**
 (Ctrl+S) enregistre ce document. **Modéliser → Mur** crée des murs droits par deux
-clics, avec un aperçu et une palette Propriétés dédiée. La phase et le sous-projet
+clics, avec un aperçu et une palette Propriétés dédiée. La phase, le sous-projet et la variante
 se choisissent en tête de palette ; le schéma du mur accompagne les limites haute
 et basse et leurs décalages en millimètres. La limite haute est un niveau ou une
 hauteur libre (le décalage haut s'ajoute alors à cette hauteur). La hauteur
@@ -65,10 +65,11 @@ garde le RVT et ses vues ouverts, sans basculer vers le rendu natif limité.
 |---|---|---|
 | `sources[]` | `id` (« s1 »), `fichier`, `format` (RVT, IFC), `octets`, `modifie` (s depuis 1970) | Fichiers d'origine |
 | `phases[]`, `sous_projets[]` | Noms | Choix de création ; listes vides si absentes des anciens fichiers. À défaut : Projet et Sous-projet 1 au premier mur. Les listes Revit sont reprises lors de la conversion. |
+| `variantes[]` | `id`, `nom`, `jeu` | Options Revit reprises à la conversion, distinguées par jeu ; une variante absente sur un mur désigne le modèle principal. |
 | `niveaux[]` | `id`, `nom`, `altitude`, `origine` | Triés par altitude |
 | `types_murs[]`, `types_dalles[]` | `id`, `nom`, `couches[]` (`materiau`, `epaisseur`), `couches_detaillees` | Murs : couches de l'extérieur vers l'intérieur ; dalles : du haut vers le bas. `couches_detaillees` = false : une couche de l'épaisseur totale (détail non lu) |
 | `types_ouvertures[]` | `id`, `nom`, `genre`, `largeur`, `hauteur` | Revit seulement en v0 (cotes du type) |
-| `murs[]` | `id`, `nom`, `type_mur`, `niveau`, `decalage_bas`, `haut`, `axe`, `origine`, `phase`, `sous_projet` | `phase` et `sous_projet` sont facultatifs (absents des anciens fichiers). `haut` : `{contrainte: libre, hauteur}` ou `{contrainte: niveau, niveau, decalage}` |
+| `murs[]` | `id`, `nom`, `type_mur`, `niveau`, `decalage_bas`, `haut`, `axe`, `origine`, `phase`, `sous_projet`, `variante` | `phase`, `sous_projet` et `variante` sont facultatifs (absents des anciens fichiers). `haut` : `{contrainte: libre, hauteur}` ou `{contrainte: niveau, niveau, decalage}` |
 | `axe` | `{forme: droit, debut, fin}` ou `{forme: arc, debut, fin, centre, direct}` | Ligne médiane de l'épaisseur, en plan (x, y) |
 | `ouvertures[]` | `id`, `nom`, `genre` (porte, fenetre, baie), `mur`, `type_ouverture`, `abscisse`, `largeur`, `hauteur`, `allege`, `representation`, `origine` | Baie rectangulaire à travers le mur ; `abscisse` = milieu de la baie le long de l'axe ; `allege` au-dessus du niveau du mur ; `representation` = menuiserie lue (maillage) |
 | `dalles[]` | `id`, `nom`, `type_dalle`, `niveau`, `decalage`, `contours`, `origine` | `decalage` = dessus au-dessus du niveau ; `contours` en plan, pair-impair (trous) |

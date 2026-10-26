@@ -32,6 +32,8 @@ pub struct Projet {
     pub phases: Vec<String>,
     #[serde(default)]
     pub sous_projets: Vec<String>,
+    #[serde(default)]
+    pub variantes: Vec<Variante>,
     pub niveaux: Vec<Niveau>,
     pub types_murs: Vec<TypeCompose>,
     pub types_dalles: Vec<TypeCompose>,
@@ -43,6 +45,20 @@ pub struct Projet {
     /// Éléments de la source qui n'ont rien donné (sans géométrie, hors du périmètre v0),
     /// comptés par catégorie.
     pub ignores: BTreeMap<String, usize>,
+}
+
+/// Option de conception ; les identifiants distinguent les options homonymes.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Variante {
+    pub id: String,
+    pub nom: String,
+    pub jeu: String,
+}
+
+impl Variante {
+    pub fn libelle(&self) -> String {
+        if self.jeu.is_empty() { self.nom.clone() } else { format!("{} — {}", self.jeu, self.nom) }
+    }
 }
 
 /// Fichier d'où vient une partie du projet.
@@ -169,6 +185,9 @@ pub enum Haut {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Mur {
+    /// None : modèle principal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variante: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -564,7 +583,7 @@ mod tests {
         let mut p = Projet::nouveau("essai");
         p.niveaux.push(Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
         p.types_murs.push(TypeCompose { id: "t".into(), nom: "200".into(), couches: vec![Couche { materiau: None, epaisseur: 200.0 }], couches_detaillees: false, origine: None });
-        p.murs.push(Mur { phase: None, sous_projet: None, id: "m".into(), nom: "Mur".into(), type_mur: "t".into(), niveau: "n".into(), decalage_bas: 0.0, haut: Haut::Libre { hauteur: 3000.0 }, axe: Axe::Droit { debut: [0.0, 0.0], fin: [5000.0, 0.0] }, origine: None });
+        p.murs.push(Mur { variante: None, phase: None, sous_projet: None, id: "m".into(), nom: "Mur".into(), type_mur: "t".into(), niveau: "n".into(), decalage_bas: 0.0, haut: Haut::Libre { hauteur: 3000.0 }, axe: Axe::Droit { debut: [0.0, 0.0], fin: [5000.0, 0.0] }, origine: None });
         p.ouvertures.push(Ouverture { id: "o".into(), nom: String::new(), genre: GenreOuverture::Baie, mur: "m".into(), type_ouverture: None, abscisse: 1500.0, largeur: 1000.0, hauteur: 1200.0, allege: 900.0, representation: None, origine: None });
         assert!((p.volume_mur(&p.murs[0]).unwrap() - 2.76e9).abs() < 1.0);
         let q = Projet::lire_json(&p.json().unwrap()).unwrap();

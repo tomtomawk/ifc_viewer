@@ -1404,6 +1404,7 @@ impl ViewerApp {
         self.ruban_edition.niveau_haut_mur = None;
         self.ruban_edition.phase_mur = None;
         self.ruban_edition.sous_projet_mur = None;
+        self.ruban_edition.variante_mur = None;
         self.document_actif = self.prochain_document;
         self.prochain_document += 1;
     }
@@ -1422,6 +1423,7 @@ impl ViewerApp {
         self.ruban_edition.niveau_haut_mur = None;
         self.ruban_edition.phase_mur = None;
         self.ruban_edition.sous_projet_mur = None;
+        self.ruban_edition.variante_mur = None;
         self.scene = d.scene;
         self.rvt = d.rvt;
         self.rvt_source = d.rvt_source;
@@ -3145,7 +3147,7 @@ impl ViewerApp {
                 let epaisseur = projet.type_mur(&mur.type_mur).map_or(0.0, |t| t.epaisseur());
                 let hauteur = projet.bas_haut(mur).map_or(0.0, |(a,b)| b-a);
                 egui::Grid::new("mur_natif_proprietes").num_columns(2).show(ui, |ui| {
-                    for (nom, valeur) in [("Phase", mur.phase.clone().unwrap_or_else(|| "Non renseignée".into())), ("Sous-projet", mur.sous_projet.clone().unwrap_or_else(|| "Non renseigné".into())), ("Niveau", niveau.to_string()), ("Longueur", format!("{:.0} mm",mur.axe.longueur())), ("Hauteur",format!("{hauteur:.0} mm")), ("Épaisseur",format!("{epaisseur:.0} mm")), ("Volume",format!("{:.3} m³",projet.volume_mur(mur).unwrap_or(0.0)/1e9))] {
+                    for (nom, valeur) in [("Variante", mur.variante.as_ref().and_then(|id| projet.variantes.iter().find(|v| &v.id == id)).map_or_else(|| "Modèle principal".into(), |v| v.libelle())), ("Phase", mur.phase.clone().unwrap_or_else(|| "Non renseignée".into())), ("Sous-projet", mur.sous_projet.clone().unwrap_or_else(|| "Non renseigné".into())), ("Niveau", niveau.to_string()), ("Longueur", format!("{:.0} mm",mur.axe.longueur())), ("Hauteur",format!("{hauteur:.0} mm")), ("Épaisseur",format!("{epaisseur:.0} mm")), ("Volume",format!("{:.3} m³",projet.volume_mur(mur).unwrap_or(0.0)/1e9))] {
                         ui.label(nom); ui.label(valeur); ui.end_row();
                     }
                 });

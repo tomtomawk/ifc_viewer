@@ -15,11 +15,12 @@ pub struct ParametresMur {
     pub decalage_haut: f64,
     pub phase: Option<String>,
     pub sous_projet: Option<String>,
+    pub variante: Option<String>,
 }
 
 impl Default for ParametresMur {
     fn default() -> Self {
-        Self { hauteur: 2800.0, epaisseur: 300.0, implantation: Implantation::Axe, niveau: None, decalage: 0.0, niveau_haut: None, decalage_haut: 0.0, phase: None, sous_projet: None }
+        Self { hauteur: 2800.0, epaisseur: 300.0, implantation: Implantation::Axe, niveau: None, decalage: 0.0, niveau_haut: None, decalage_haut: 0.0, phase: None, sous_projet: None, variante: None }
     }
 }
 
@@ -63,6 +64,9 @@ impl Projet {
                 }
             }
         }
+        if p.variante.as_ref().is_some_and(|id| !self.variantes.iter().any(|v| &v.id == id)) {
+            return Err("Variante introuvable.".into());
+        }
         let existant = self.types_murs.iter().find(|t| (t.epaisseur() - p.epaisseur).abs() < 1e-6 && t.couches.len() == 1).map(|t| t.id.clone());
         let type_mur = existant.clone().unwrap_or_else(|| {
             let mut k = self.types_murs.len() + 1;
@@ -85,7 +89,7 @@ impl Projet {
             Some(niveau) => Haut::Niveau { niveau: niveau.clone(), decalage: p.decalage_haut },
             None => Haut::Libre { hauteur: haut - bas },
         };
-        self.murs.push(Mur { phase: p.phase.clone().or_else(|| self.phases.last().cloned()), sous_projet: p.sous_projet.clone().or_else(|| self.sous_projets.first().cloned()), id: id.clone(), nom: format!("Mur {k}"), type_mur, niveau, decalage_bas: p.decalage,
+        self.murs.push(Mur { variante: p.variante.clone(), phase: p.phase.clone().or_else(|| self.phases.last().cloned()), sous_projet: p.sous_projet.clone().or_else(|| self.sous_projets.first().cloned()), id: id.clone(), nom: format!("Mur {k}"), type_mur, niveau, decalage_bas: p.decalage,
             haut: contrainte, axe: Axe::Droit { debut: deplacer(debut), fin: deplacer(fin) }, origine: None });
         self.arrondir();
         Ok(id)
@@ -136,13 +140,36 @@ mod tests {
         p.ajouter_mur([0.,0.], [1000.,0.], &ParametresMur::default()).unwrap();
         let mut json: serde_json::Value = serde_json::from_str(&p.json().unwrap()).unwrap();
         let objet = json.as_object_mut().unwrap();
-        objet.remove("phases"); objet.remove("sous_projets");
+        objet.remove("phases"); objet.remove("sous_projets"); objet.remove("variantes");
         let mur = objet["murs"][0].as_object_mut().unwrap();
-        mur.remove("phase"); mur.remove("sous_projet");
+        mur.remove("phase"); mur.remove("sous_projet"); mur.remove("variante");
         let relu = Projet::lire_json(&json.to_string()).unwrap();
         assert!(relu.phases.is_empty());
+        assert!(relu.variantes.is_empty());
+        assert!(relu.murs[0].variante.is_none());
         assert!(relu.murs[0].phase.is_none());
         assert_eq!(relu.bas_haut(&relu.murs[0]), Some((0.,2800.)));
+    }
+
+    #[test]
+    fn variante_mur_persiste_et_validee_sans_mutation() {
+        let mut projet = Projet::nouveau("Variantes");
+        projet.variantes = vec![
+            Variante { id: "a".into(), nom: "Option 1".into(), jeu: "Façade".into() },
+            Variante { id: "b".into(), nom: "Option 1".into(), jeu: "Structure".into() },
+        ];
+        let mut options = ParametresMur { variante: Some("b".into()), ..Default::default() };
+        projet.ajouter_mur([0.,0.], [1000.,0.], &options).unwrap();
+        options.variante = None;
+        projet.ajouter_mur([0.,1000.], [1000.,1000.], &options).unwrap();
+        let relu = Projet::lire_json(&projet.json().unwrap()).unwrap();
+        assert_eq!(relu.murs[0].variante.as_deref(), Some("b"));
+        assert_eq!(relu.murs[1].variante, None);
+        assert_eq!(relu.variantes[1].libelle(), "Structure — Option 1");
+        let avant = projet.json().unwrap();
+        options.variante = Some("absente".into());
+        assert!(projet.ajouter_mur([0.,0.], [1000.,0.], &options).is_err());
+        assert_eq!(projet.json().unwrap(), avant);
     }
 
     #[test]

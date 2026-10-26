@@ -209,6 +209,7 @@ pub struct RubanEdition {
     pub decalage_haut_mur: f64,
     pub phase_mur: Option<String>,
     pub sous_projet_mur: Option<String>,
+    pub variante_mur: Option<String>,
     pub chainer_murs: bool,
 }
 
@@ -352,6 +353,7 @@ impl RubanEdition {
             decalage_haut: self.decalage_haut_mur,
             phase: self.phase_mur.clone(),
             sous_projet: self.sous_projet_mur.clone(),
+            variante: self.variante_mur.clone(),
         }
     }
 
@@ -548,6 +550,13 @@ impl RubanEdition {
                 *niveau = None;
             }
         }
+        if self
+            .variante_mur
+            .as_ref()
+            .is_some_and(|id| !projet.variantes.iter().any(|v| &v.id == id))
+        {
+            self.variante_mur = None;
+        }
         let phases = if projet.phases.is_empty() {
             vec!["Projet".to_string()]
         } else {
@@ -587,6 +596,26 @@ impl RubanEdition {
                     .show_ui(ui, |ui| {
                         for nom in &sous_projets {
                             ui.selectable_value(&mut self.sous_projet_mur, Some(nom.clone()), nom);
+                        }
+                    });
+                ui.label("Variante");
+                let variante = self
+                    .variante_mur
+                    .as_ref()
+                    .and_then(|id| projet.variantes.iter().find(|v| &v.id == id));
+                egui::ComboBox::from_id_salt("variante_creation_mur")
+                    .width(ui.available_width())
+                    .selected_text(
+                        variante.map_or_else(|| "Modèle principal".into(), |v| v.libelle()),
+                    )
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.variante_mur, None, "Modèle principal");
+                        for v in &projet.variantes {
+                            ui.selectable_value(
+                                &mut self.variante_mur,
+                                Some(v.id.clone()),
+                                v.libelle(),
+                            );
                         }
                     });
                 ui.separator();
@@ -1391,6 +1420,8 @@ mod tests {
             for attendu in [
                 "Phase",
                 "Sous-projet",
+                "Variante",
+                "Modèle principal",
                 "Construction",
                 "Enveloppe",
                 "Limite haute",
