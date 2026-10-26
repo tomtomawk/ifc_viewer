@@ -756,17 +756,7 @@ impl RubanEdition {
                     .corner_radius(8.0)
                     .inner_margin(10.0)
                     .show(ui, |ui| {
-                        self.ligne_limite_mur(ui, projet, true);
-                        if self.niveau_haut_mur.is_none() {
-                            ui.horizontal(|ui| {
-                                ui.label(RichText::new("Hauteur libre").small().weak());
-                                self.nombre_mur(ui, 1, 2800.0);
-                            });
-                        }
-                        ui.add_space(4.0);
-                        self.dessin_mur_creation(ui, projet);
-                        ui.add_space(4.0);
-                        self.ligne_limite_mur(ui, projet, false);
+                        self.croquis_mur_creation(ui, projet);
                     });
                 if let Err(e) = self.parametres_mur().bornes(projet) {
                     ui.colored_label(ui.visuals().error_fg_color, e);
@@ -793,224 +783,143 @@ impl RubanEdition {
         true
     }
 
-    fn ligne_limite_mur(&mut self, ui: &mut egui::Ui, projet: &crate::modele::Projet, haut: bool) {
-        let couleur = if haut {
-            Color32::from_rgb(35, 115, 165)
-        } else {
-            Color32::from_rgb(155, 100, 40)
-        };
-        let largeur = ui.available_width();
-        let gauche = (largeur * 0.58).floor();
-        ui.horizontal_top(|ui| {
-            ui.spacing_mut().item_spacing.x = 8.0;
-            ui.vertical(|ui| {
-                ui.set_width(gauche);
-                ui.label(
-                    RichText::new(if haut { "Limite haute" } else { "Limite basse" })
-                        .small()
-                        .strong()
-                        .color(couleur),
-                );
-                let niveau = if haut {
-                    &mut self.niveau_haut_mur
-                } else {
-                    &mut self.niveau_mur
-                };
-                let nom = niveau
-                    .as_ref()
-                    .and_then(|id| projet.niveau(id))
-                    .or_else(|| if haut { None } else { projet.niveaux.first() })
-                    .map_or(if haut { "Hauteur libre" } else { "Niveau 0" }, |n| {
-                        n.nom.as_str()
-                    });
-                egui::ComboBox::from_id_salt(("limite_creation_mur", haut))
-                    .width(gauche)
-                    .truncate()
-                    .selected_text(nom)
-                    .show_ui(ui, |ui| {
-                        if haut || projet.niveaux.is_empty() {
-                            ui.selectable_value(
-                                niveau,
-                                None,
-                                if haut { "Hauteur libre" } else { "Niveau 0" },
-                            );
-                        }
-                        for n in &projet.niveaux {
-                            ui.selectable_value(niveau, Some(n.id.clone()), &n.nom);
-                        }
-                    });
-            });
-            ui.vertical(|ui| {
-                ui.set_width((largeur - gauche - 8.0).max(40.0));
-                ui.label(
-                    RichText::new(if haut {
-                        "Décalage haut"
-                    } else {
-                        "Décalage bas"
-                    })
-                    .small()
-                    .color(couleur),
-                );
-                if haut {
-                    ui.add(
-                        egui::DragValue::new(&mut self.decalage_haut_mur)
-                            .speed(10.0)
-                            .suffix(" mm"),
-                    );
-                } else {
-                    self.nombre_mur(ui, 3, 0.0);
-                }
-            });
-        });
-    }
-
-    /// Vue axonométrique : les arêtes colorées correspondent aux deux lignes de saisie.
-    fn dessin_mur_creation(&self, ui: &mut egui::Ui, projet: &crate::modele::Projet) {
+    /// Croquis de saisie : volume à gauche, rappels vers les deux réglages à droite.
+    fn croquis_mur_creation(&mut self, ui: &mut egui::Ui, projet: &crate::modele::Projet) {
         use egui::{Align2, FontId, Stroke, pos2, vec2};
-        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 190.0), Sense::hover());
+        let largeur = ui.available_width();
+        let (r, _) = ui.allocate_exact_size(vec2(largeur, 318.0), Sense::hover());
         let p = ui.painter_at(r);
-        let options = self.parametres_mur();
-        let base = options
-            .niveau
-            .as_ref()
-            .and_then(|id| projet.niveau(id))
-            .or_else(|| projet.niveaux.first())
-            .map_or(0.0, |n| n.altitude);
-        let (bas, haut) = options.bornes(projet).unwrap_or((base, base + 2800.0));
-        let ref_haut = options
-            .niveau_haut
-            .as_ref()
-            .and_then(|id| projet.niveau(id))
-            .map_or(haut - options.decalage_haut, |n| n.altitude);
-        let ref_haut = if ref_haut.is_finite() { ref_haut } else { haut };
-        let minimum = base.min(bas).min(ref_haut).min(haut);
-        let maximum = base.max(bas).max(ref_haut).max(haut);
-        let y =
-            |z: f64| r.top() + 30.0 + (125.0 * (maximum - z) / (maximum - minimum).max(1.0)) as f32;
-        let x0 = r.left() + r.width() * 0.22;
-        let x1 = r.left() + r.width() * 0.68;
-        let profondeur = vec2(r.width() * 0.13, -14.0);
-        let a = pos2(x0, y(bas));
-        let b = pos2(x1, y(bas));
-        let c = pos2(x1, y(haut));
-        let d = pos2(x0, y(haut));
-        let bleu = Color32::from_rgb(35, 115, 165);
-        let ocre = Color32::from_rgb(170, 115, 55);
-        let contour = Stroke::new(1.0, Color32::from_rgb(125, 145, 155));
-        // Ombre au sol, trois faces distinctes : volume et épaisseur lisibles.
+        let bleu = Color32::from_rgb(18, 158, 205);
+        let bord = Stroke::new(1.7, bleu);
+        let droite = r.left() + largeur * 0.43;
+        let profondeur = vec2(13.0, -12.0);
+        let largeur_mur = largeur * 0.31;
+        let haut = pos2(droite - 14.0, r.top() + 72.0);
+        let bas = pos2(droite - 14.0, r.top() + 218.0);
+        let a = haut - vec2(largeur_mur, 42.0);
+        let b = bas - vec2(largeur_mur, 42.0);
         p.add(egui::Shape::convex_polygon(
-            vec![
-                a + vec2(-8.0, 6.0),
-                b + vec2(10.0, 6.0),
-                b + profondeur + vec2(14.0, 6.0),
-                a + profondeur,
-            ],
-            Color32::from_rgba_unmultiplied(70, 90, 110, 22),
-            Stroke::NONE,
+            vec![a, haut, bas, b],
+            Color32::from_rgb(244, 250, 252),
+            bord,
         ));
         p.add(egui::Shape::convex_polygon(
-            vec![a, b, c, d],
-            Color32::from_rgb(213, 228, 236),
-            contour,
+            vec![haut, haut + profondeur, bas + profondeur, bas],
+            Color32::from_rgb(214, 239, 247),
+            bord,
         ));
         p.add(egui::Shape::convex_polygon(
-            vec![b, b + profondeur, c + profondeur, c],
-            Color32::from_rgb(163, 188, 201),
-            contour,
+            vec![a, a + profondeur, haut + profondeur, haut],
+            Color32::from_rgb(233, 247, 252),
+            bord,
         ));
-        p.add(egui::Shape::convex_polygon(
-            vec![d, c, c + profondeur, d + profondeur],
-            Color32::from_rgb(237, 245, 249),
-            contour,
-        ));
-        // Niveaux en pointillés, prolongés des deux côtés du volume.
-        for (z, couleur) in [(ref_haut, bleu), (base, ocre)] {
-            let yy = y(z);
-            let mut x = r.left() + 8.0;
-            while x < r.right() - 8.0 {
-                p.line_segment(
-                    [pos2(x, yy), pos2((x + 4.0).min(r.right() - 8.0), yy)],
-                    Stroke::new(0.8, couleur.gamma_multiply(0.55)),
-                );
-                x += 8.0;
-            }
-        }
-        for (points, couleur) in [
-            ([d, c, c + profondeur, d + profondeur], bleu),
-            ([a, b, b + profondeur, a + profondeur], ocre),
+        let champs_x = droite + 22.0;
+        // Traits de rappel, comme dans le croquis : haut et bas restent identifiables.
+        for (depuis, y) in [
+            (haut + profondeur, r.top() + 94.0),
+            (bas + profondeur, r.top() + 234.0),
         ] {
-            p.add(egui::Shape::closed_line(
-                points.to_vec(),
-                Stroke::new(2.0, couleur),
-            ));
+            let fin = pos2(champs_x - 5.0, y);
+            let d = fin - depuis;
+            let longueur = d.length();
+            let mut t = 5.0;
+            while t < longueur {
+                p.line_segment(
+                    [
+                        depuis + d * (t / longueur),
+                        depuis + d * ((t + 5.0).min(longueur) / longueur),
+                    ],
+                    bord,
+                );
+                t += 10.0;
+            }
+            p.circle_filled(depuis, 2.5, bleu);
         }
-        // Cotation verticale et hauteur utile, au milieu de la face.
-        let cote_x = x1 + profondeur.x + 12.0;
-        p.line_segment(
-            [pos2(cote_x, y(haut) - 7.0), pos2(cote_x, y(bas))],
-            Stroke::new(1.0, contour.color),
-        );
-        for yy in [y(haut) - 7.0, y(bas)] {
-            p.line_segment(
-                [pos2(cote_x - 3.0, yy + 3.0), pos2(cote_x + 3.0, yy - 3.0)],
-                contour,
+        let hauteur = self
+            .parametres_mur()
+            .bornes(projet)
+            .ok()
+            .map(|(bas, haut)| haut - bas);
+        if let Some(hauteur) = hauteur {
+            p.text(
+                pos2(r.left() + largeur * 0.22, r.top() + 269.0),
+                Align2::CENTER_CENTER,
+                format!("{hauteur:.0} mm"),
+                FontId::proportional(12.0),
+                ui.visuals().weak_text_color(),
             );
         }
-        let centre = pos2((x0 + x1) * 0.5, (y(bas) + y(haut)) * 0.5);
-        p.text(
-            centre - vec2(0.0, 8.0),
-            Align2::CENTER_CENTER,
-            format!("{:.0} mm", haut - bas),
-            FontId::proportional(16.0),
-            Color32::from_rgb(55, 80, 95),
-        );
-        p.text(
-            centre + vec2(0.0, 10.0),
-            Align2::CENTER_CENTER,
-            "hauteur du mur",
-            FontId::proportional(10.0),
-            Color32::from_rgb(85, 110, 125),
-        );
-        // Décalages signés, à côté du niveau de référence correspondant.
-        for (reference, limite, valeur, couleur) in [
-            (ref_haut, haut, options.decalage_haut, bleu),
-            (base, bas, options.decalage, ocre),
-        ] {
-            if valeur.is_finite() && valeur.abs() > 0.01 {
-                let x = r.left() + 14.0;
-                p.line_segment(
-                    [pos2(x, y(reference)), pos2(x, y(limite))],
-                    Stroke::new(1.5, couleur),
-                );
-                for yy in [y(reference), y(limite)] {
-                    p.line_segment(
-                        [pos2(x - 3.0, yy), pos2(x + 3.0, yy)],
-                        Stroke::new(1.5, couleur),
+        for (haut, y) in [(true, 74.0), (false, 214.0)] {
+            let rect = egui::Rect::from_min_max(
+                pos2(champs_x, r.top() + y),
+                pos2(r.right(), r.top() + y + 102.0),
+            );
+            ui.scope_builder(
+                egui::UiBuilder::new()
+                    .id_salt(("croquis_limite", haut))
+                    .max_rect(rect)
+                    .layout(egui::Layout::top_down(Align::Min)),
+                |ui| {
+                    ui.set_width(rect.width());
+                    ui.spacing_mut().item_spacing.y = 3.0;
+                    ui.label(
+                        RichText::new(if haut { "Limite haute" } else { "Limite basse" })
+                            .small()
+                            .color(bleu),
                     );
-                }
-                p.text(
-                    pos2(
-                        r.left() + 5.0,
-                        if valeur > 0.0 {
-                            y(limite) - 9.0
+                    let niveau = if haut {
+                        &mut self.niveau_haut_mur
+                    } else {
+                        &mut self.niveau_mur
+                    };
+                    let nom = niveau
+                        .as_ref()
+                        .and_then(|id| projet.niveau(id))
+                        .or_else(|| if haut { None } else { projet.niveaux.first() })
+                        .map_or(if haut { "Hauteur libre" } else { "Niveau 0" }, |n| {
+                            n.nom.as_str()
+                        });
+                    egui::ComboBox::from_id_salt(("limite_creation_mur", haut))
+                        .width(rect.width())
+                        .truncate()
+                        .selected_text(nom)
+                        .show_ui(ui, |ui| {
+                            if haut || projet.niveaux.is_empty() {
+                                ui.selectable_value(
+                                    niveau,
+                                    None,
+                                    if haut { "Hauteur libre" } else { "Niveau 0" },
+                                );
+                            }
+                            for n in &projet.niveaux {
+                                ui.selectable_value(niveau, Some(n.id.clone()), &n.nom);
+                            }
+                        });
+                    ui.label(
+                        RichText::new(if haut {
+                            "Décalage haut"
                         } else {
-                            y(limite) + 9.0
-                        },
-                    ),
-                    Align2::LEFT_CENTER,
-                    format!("{valeur:+.0}"),
-                    FontId::proportional(10.0),
-                    couleur,
-                );
-            }
+                            "Décalage bas"
+                        })
+                        .small()
+                        .weak(),
+                    );
+                    if haut {
+                        ui.add(
+                            egui::DragValue::new(&mut self.decalage_haut_mur)
+                                .speed(10.0)
+                                .suffix(" mm"),
+                        );
+                    } else {
+                        self.nombre_mur(ui, 3, 0.0);
+                    }
+                    if haut && self.niveau_haut_mur.is_none() {
+                        ui.label(RichText::new("Hauteur libre").small().weak());
+                        self.nombre_mur(ui, 1, 2800.0);
+                    }
+                },
+            );
         }
-        p.text(
-            pos2(r.center().x, r.bottom() - 7.0),
-            Align2::CENTER_CENTER,
-            "Pointillés : niveaux de référence",
-            FontId::proportional(10.0),
-            ui.visuals().weak_text_color(),
-        );
     }
 
     fn nombre_mur(&mut self, ui: &mut egui::Ui, cle: usize, defaut: f64) {
@@ -1739,17 +1648,10 @@ mod tests {
                     "{attendu} déborde à {largeur} px : {r:?}"
                 );
             }
-            for (limite, decalage) in [
-                ("Limite haute", "Décalage haut"),
-                ("Limite basse", "Décalage bas"),
-            ] {
-                let limite = &textes.iter().find(|(t, _)| t == limite).unwrap().1;
-                let decalage = &textes.iter().find(|(t, _)| t == decalage).unwrap().1;
-                assert!(
-                    (limite.center().y - decalage.center().y).abs() < 1.0,
-                    "Limite et décalage doivent rester sur la même ligne"
-                );
-            }
+            let position = |nom: &str| textes.iter().find(|(t, _)| t == nom).unwrap().1;
+            assert!(position("Décalage haut").top() > position("Limite haute").bottom());
+            assert!(position("Limite basse").top() > position("Décalage haut").bottom());
+            assert!(position("Décalage bas").top() > position("Limite basse").bottom());
         }
     }
 

@@ -28,11 +28,10 @@ dans la largeur du panneau ; les noms longs sont abrégés et lisibles au survol
 phase, sous-projet ou variante (nom et jeu). Cet ajout sélectionne la
 nouvelle valeur et la conserve dans le document. Les noms vides et doublons sont
 refusés. Ces choix s’appliquent aux prochaines créations. Dans la palette
-Propriétés, une illustration du mur en perspective relie les deux lignes de réglage :
-limite haute et décalage haut, puis limite basse et décalage bas. Les arêtes
-bleues et ocre correspondent aux lignes de saisie ; les pointillés représentent
-les niveaux de référence et les cotes signées montrent les décalages. La hauteur
-utile est affichée sur le mur. Tous les champs restent dans la largeur du panneau. La limite haute est un niveau ou une
+Propriétés, un croquis du mur en perspective est placé à gauche. Deux traits de rappel
+relient ses extrémités aux réglages à droite : niveau haut et décalage en haut,
+niveau bas et décalage en dessous. La hauteur utile figure sous le dessin.
+Les contrôles restent dans la largeur du panneau. La limite haute est un niveau ou une
 hauteur libre (le décalage haut s'ajoute alors à cette hauteur). La hauteur
 résultante doit être positive. L'aperçu utilise les mêmes contraintes que le mur
 créé. L'épaisseur, l'implantation et le chaînage restent réglables. Un niveau 0 est créé si nécessaire et les types à une couche de
