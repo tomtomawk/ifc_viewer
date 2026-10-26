@@ -911,34 +911,35 @@ impl RubanEdition {
             });
         });
         let p = ui.painter();
-        let bord = Stroke::new(1.5, bleu);
-        let profondeur = vec2(10.0, -7.0);
+        let bord = Stroke::new(1.0, bleu);
+        let profondeur = vec2(7.0, -4.5);
         // mur vu de face (largeur), son chant à droite et son dessus
-        let x1 = origine.x + largeur_croquis - 22.0;
-        let x0 = origine.x + 10.0;
-        let (yh, yb) = (centres[0] + 4.0, centres[1] + 4.0);
+        let x1 = origine.x + largeur_croquis - 20.0;
+        let x0 = origine.x + 12.0;
+        let (yh, yb) = (centres[0] + 3.0, centres[1] + 3.0);
         let (a, h, b, bb) = (pos2(x0, yh), pos2(x1, yh), pos2(x1, yb), pos2(x0, yb));
-        p.add(egui::Shape::convex_polygon(vec![a, h, b, bb], Color32::from_rgb(244, 250, 252), bord));
+        p.add(egui::Shape::convex_polygon(vec![a, h, b, bb], Color32::from_rgb(246, 251, 253), bord));
         p.add(egui::Shape::convex_polygon(
             vec![h, h + profondeur, b + profondeur, b],
-            Color32::from_rgb(214, 239, 247),
+            Color32::from_rgb(222, 242, 249),
             bord,
         ));
         p.add(egui::Shape::convex_polygon(
             vec![a, a + profondeur, h + profondeur, h],
-            Color32::from_rgb(233, 247, 252),
+            Color32::from_rgb(236, 248, 252),
             bord,
         ));
         // rappels : de l'arête du mur à la ligne de sa limite
+        let rappel = Stroke::new(0.8, bleu.gamma_multiply(0.8));
         for (depuis, y) in [(h + profondeur, centres[0]), (b + profondeur, centres[1])] {
             let fin = gauche_champs - 3.0;
             let mut x = depuis.x + 3.0;
             while x < fin {
-                p.line_segment([pos2(x, y), pos2((x + 3.0).min(fin), y)], Stroke::new(1.0, bleu));
-                x += 6.0;
+                p.line_segment([pos2(x, y), pos2((x + 2.5).min(fin), y)], rappel);
+                x += 5.0;
             }
-            p.line_segment([depuis, pos2(depuis.x + 2.0, y)], Stroke::new(1.0, bleu));
-            p.circle_filled(depuis, 2.0, bleu);
+            p.line_segment([depuis, pos2(depuis.x + 2.0, y)], rappel);
+            p.circle_filled(depuis, 1.5, bleu);
         }
         // hauteur résultante, le long du mur
         if let Ok((bas_z, haut_z)) = self.parametres_mur().bornes(projet) {
@@ -1339,25 +1340,25 @@ fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             }
         }
         Mur => {
-            // Face lisse ; les trois couches se lisent uniquement sur la coupe
-            // et sur le dessus, sans joints ni dessin de maçonnerie.
-            face(
-                &[(0.08, 0.28), (0.62, 0.48), (0.62, 0.94), (0.08, 0.74)],
-                0.04,
-            );
-            face(
-                &[(0.08, 0.28), (0.38, 0.10), (0.92, 0.30), (0.62, 0.48)],
-                0.08,
-            );
-            face(
-                &[(0.62, 0.48), (0.92, 0.30), (0.92, 0.76), (0.62, 0.94)],
-                0.16,
-            );
-            for couche in [0.28, 0.72] {
-                let dx = couche * 0.30;
-                let dy = couche * -0.18;
-                seg((0.08 + dx, 0.28 + dy), (0.62 + dx, 0.48 + dy));
-                seg((0.62 + dx, 0.48 + dy), (0.62 + dx, 0.94 + dy));
+            // Mur mince en perspective, trait fin ; les couches ne se lisent que sur
+            // le chant et le dessus, en trait plus léger.
+            let fin = egui::Stroke::new(t.width * 0.6, c);
+            let leger = egui::Stroke::new(t.width * 0.45, c.gamma_multiply(0.7));
+            let (e, f) = (0.16, -0.10); // épaisseur du mur (profondeur)
+            let face = |points: &[(f32, f32)], opacite: f32| {
+                p.add(egui::Shape::convex_polygon(
+                    points.iter().map(|&(x, y)| pt(x, y)).collect(),
+                    c.gamma_multiply(opacite),
+                    fin,
+                ));
+            };
+            face(&[(0.10, 0.20), (0.72, 0.40), (0.72, 0.98), (0.10, 0.78)], 0.05);
+            face(&[(0.10, 0.20), (0.10 + e, 0.20 + f), (0.72 + e, 0.40 + f), (0.72, 0.40)], 0.10);
+            face(&[(0.72, 0.40), (0.72 + e, 0.40 + f), (0.72 + e, 0.98 + f), (0.72, 0.98)], 0.18);
+            for couche in [1.0 / 3.0, 2.0 / 3.0] {
+                let (dx, dy) = (couche * e, couche * f);
+                p.line_segment([pt(0.10 + dx, 0.20 + dy), pt(0.72 + dx, 0.40 + dy)], leger);
+                p.line_segment([pt(0.72 + dx, 0.40 + dy), pt(0.72 + dx, 0.98 + dy)], leger);
             }
         }
         Surfaces => {
