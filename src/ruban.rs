@@ -146,6 +146,16 @@ fn largeur_texte(ui: &egui::Ui, texte: &str, taille: f32) -> f32 {
         .x
 }
 
+/// Libellé le plus large d'un bouton : les éléments horizontaux affichent la sorte
+/// choisie suivie de la flèche.
+fn largeur_libelle(ui: &egui::Ui, outil: Outil) -> f32 {
+    if outil == Outil::Surfaces {
+        SURFACES.iter().map(|(o, _)| largeur_texte(ui, o.nom(), 12.0)).fold(0.0, f32::max) + 24.0
+    } else {
+        largeur_texte(ui, outil.nom(), 12.0)
+    }
+}
+
 fn colonnes(ui: &egui::Ui, outils: &[Outil], grands: &[Outil]) -> Vec<Colonne> {
     let mut resultat: Vec<Colonne> = Vec::new();
     for &outil in outils {
@@ -153,10 +163,10 @@ fn colonnes(ui: &egui::Ui, outils: &[Outil], grands: &[Outil]) -> Vec<Colonne> {
             resultat.push(Colonne {
                 outils: vec![outil],
                 grande: true,
-                largeur: (largeur_texte(ui, outil.nom(), 12.0) + 20.0).max(62.0),
+                largeur: (largeur_libelle(ui, outil) + 20.0).max(62.0),
             });
         } else {
-            let largeur = largeur_texte(ui, outil.nom(), 12.0) + 34.0;
+            let largeur = largeur_libelle(ui, outil) + 34.0;
             if let Some(colonne) = resultat
                 .last_mut()
                 .filter(|c| !c.grande && c.outils.len() < 3)
@@ -447,15 +457,15 @@ impl RubanEdition {
                                     egui::pos2(x, rect.top() + ligne as f32 * hauteur),
                                     egui::vec2(colonne.largeur, hauteur),
                                 );
-                                if bouton_outil(
-                                    ui,
-                                    bouton,
-                                    outil,
-                                    colonne.grande,
-                                    self.selection.map(Outil::commande) == Some(outil),
-                                )
-                                .clicked()
-                                {
+                                let actif = self.selection.map(Outil::commande) == Some(outil);
+                                if outil == Outil::Surfaces {
+                                    // bouton partagé : la dernière sorte choisie, et ▾ pour en changer
+                                    let sorte = self.derniere_surface.unwrap_or(Outil::Dalle);
+                                    if let Some(choix) = bouton_surfaces(ui, bouton, sorte, colonne.grande, actif) {
+                                        self.selection = Some(choix);
+                                        self.derniere_surface = Some(choix);
+                                    }
+                                } else if bouton_outil(ui, bouton, outil, colonne.grande, actif).clicked() {
                                     self.selection = Some(if outil == Outil::Surfaces {
                                         let surface = self.derniere_surface.unwrap_or(Outil::Dalle);
                                         self.derniere_surface = Some(surface);
@@ -1048,7 +1058,10 @@ impl RubanEdition {
                         if let Valeur::Nombre(valeur) = valeur {
                             ui.add_sized(
                                 [90.0, 22.0],
-                                egui::DragValue::new(valeur).speed(0.1).suffix(suffixe),
+                                egui::DragValue::new(valeur)
+                                    .speed(if suffixe == " mm" { 10.0 } else { 0.1 })
+                                    .max_decimals(if suffixe == " mm" { 0 } else { 2 })
+                                    .suffix(suffixe),
                             );
                         }
                         ui.end_row();
@@ -1220,6 +1233,71 @@ fn bouton_outil(
         egui::WidgetInfo::selected(egui::Role::Button, ui.is_enabled(), actif, outil.nom())
     });
     resp.on_hover_text(outil.nom())
+}
+
+/// Bouton partagé des éléments horizontaux, comme un bouton divisé de Revit : le
+/// bouton crée la sorte affichée (la dernière choisie), sa flèche ▾ ouvre la liste
+/// Dalle, Sol, Plafond, Toiture. Retourne la sorte à activer.
+fn bouton_surfaces(ui: &mut egui::Ui, r: egui::Rect, sorte: Outil, grand: bool, actif: bool) -> Option<Outil> {
+    // flèche : petite zone à droite du libellé ; le reste du bouton crée
+    let fleche = if grand {
+        egui::Rect::from_min_max(egui::pos2(r.right() - 18.0, r.bottom() - 24.0), r.max)
+    } else {
+        egui::Rect::from_min_max(egui::pos2(r.right() - 16.0, r.top()), r.max)
+    };
+    let principal = r;
+    let id = ui.scope_id().with("surfaces");
+    let resp = ui.interact(principal, id.with("creer"), Sense::click());
+    let resp_fleche = ui.interact(fleche, id.with("fleche"), Sense::click());
+    let v = ui.visuals();
+    if actif || resp.hovered() || resp_fleche.hovered() {
+        ui.painter().rect_filled(r.shrink(1.0), 4.0, if actif { v.selection.bg_fill } else { v.widgets.hovered.weak_bg_fill });
+    }
+    if resp_fleche.hovered() {
+        ui.painter().rect_filled(fleche.shrink(1.0), 4.0, v.widgets.hovered.bg_fill);
+    }
+    let couleur = if actif { v.selection.stroke.color } else { v.text_color() };
+    let police = egui::FontId::proportional(12.0);
+    if grand {
+        icone(ui.painter(), egui::Rect::from_center_size(egui::pos2(r.center().x, r.top() + 24.0), egui::vec2(32.0, 32.0)), sorte, couleur);
+        ui.painter().text(egui::pos2(r.center().x - 6.0, fleche.center().y), egui::Align2::CENTER_CENTER, sorte.nom(), police, couleur);
+        triangle_bas(ui.painter(), fleche.center(), couleur);
+    } else {
+        icone(ui.painter(), egui::Rect::from_center_size(egui::pos2(r.left() + 12.0, r.center().y), egui::vec2(17.0, 17.0)), sorte, couleur);
+        ui.painter().text(egui::pos2(r.left() + 27.0, r.center().y), egui::Align2::LEFT_CENTER, sorte.nom(), police, couleur);
+        triangle_bas(ui.painter(), fleche.center(), couleur);
+    }
+    let aide = "Éléments horizontaux : Dalle, Sol, Plafond, Toiture";
+    let mut choix = resp.on_hover_text(format!("Créer : {} — {aide}", sorte.nom())).clicked().then_some(sorte);
+    let resp_fleche = resp_fleche.on_hover_text(format!("Choisir l'élément horizontal — {aide}"));
+    egui::Popup::menu(&resp_fleche).show(|ui| {
+        ui.set_min_width(230.0);
+        for &(o, detail) in SURFACES {
+            let (l, rep) = ui.allocate_exact_size(egui::vec2(230.0, 40.0), Sense::click());
+            let v = ui.visuals();
+            if o == sorte || rep.hovered() {
+                ui.painter().rect_filled(l, 4.0, if o == sorte { v.selection.bg_fill } else { v.widgets.hovered.bg_fill });
+            }
+            icone(ui.painter(), egui::Rect::from_min_size(l.min + egui::vec2(6.0, 6.0), egui::vec2(28.0, 28.0)), o, v.text_color());
+            ui.painter().text(l.min + egui::vec2(42.0, 12.0), egui::Align2::LEFT_CENTER, o.nom(), egui::FontId::proportional(13.0), v.strong_text_color());
+            ui.painter().text(l.min + egui::vec2(42.0, 28.0), egui::Align2::LEFT_CENTER, detail, egui::FontId::proportional(11.0), v.weak_text_color());
+            if rep.clicked() {
+                choix = Some(o);
+                ui.close();
+            }
+        }
+    });
+    choix
+}
+
+/// Flèche de liste déroulante (la police n'a pas toujours ▾).
+fn triangle_bas(p: &egui::Painter, c: egui::Pos2, couleur: Color32) {
+    let (l, h) = (4.0, 3.0);
+    p.add(egui::Shape::convex_polygon(
+        vec![egui::pos2(c.x - l, c.y - h * 0.5), egui::pos2(c.x + l, c.y - h * 0.5), egui::pos2(c.x, c.y + h)],
+        couleur,
+        egui::Stroke::NONE,
+    ));
 }
 
 fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
@@ -1551,6 +1629,12 @@ mod tests {
         sortie
     }
 
+    /// Libellé affiché d'une commande : le bouton des éléments horizontaux montre la
+    /// sorte choisie (« Dalle », suivie de la flèche ▾).
+    fn libelle_correspond(o: Outil, texte: &str) -> bool {
+        texte == o.nom() || (o == Outil::Surfaces && SURFACES.iter().any(|(s, _)| s.nom() == texte))
+    }
+
     fn cliquer(
         ctx: &egui::Context,
         ruban: &mut RubanEdition,
@@ -1559,15 +1643,21 @@ mod tests {
     ) -> egui::FullOutput {
         afficher(ctx, ruban, largeur, vec![]);
         let sortie = afficher(ctx, ruban, largeur, vec![]);
+        // dernière occurrence : Propriétés est dessinée après le ruban, qui peut
+        // afficher le même libellé (sorte d'élément horizontal)
         let position = sortie
             .shapes
             .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.text() == texte => {
+            .filter_map(|s| match &s.shape {
+                egui::Shape::Text(t)
+                    if t.galley.text() == texte
+                        || (texte == Outil::Surfaces.nom() && libelle_correspond(Outil::Surfaces, t.galley.text())) =>
+                {
                     Some(t.pos + t.galley.size() / 2.0)
                 }
                 _ => None,
             })
+            .last()
             .unwrap_or_else(|| panic!("commande absente : {texte}"));
         for pressed in [true, false] {
             afficher(
@@ -1739,10 +1829,11 @@ mod tests {
             let encart = sortie
                 .shapes
                 .iter()
-                .find_map(|s| match &s.shape {
+                .filter_map(|s| match &s.shape {
                     egui::Shape::Text(t) if t.galley.text() == "Dalle" => Some(t.pos),
                     _ => None,
                 })
+                .last()
                 .expect("sélecteur Dalle dans Propriétés");
             assert!(
                 encart.x < 284.0 && encart.y > HAUTEUR_GROUPE,
@@ -1938,7 +2029,7 @@ mod tests {
                     for outil in &outils {
                         let (_, rect) = textes
                             .iter()
-                            .find(|(texte, _)| texte == outil.nom())
+                            .find(|(texte, _)| libelle_correspond(*outil, texte))
                             .unwrap_or_else(|| panic!("commande absente : {outil:?}"));
                         assert!(
                             rect.left() >= 0.0 && rect.right() <= largeur,
@@ -1947,7 +2038,7 @@ mod tests {
                     }
                     let commandes: Vec<_> = textes
                         .iter()
-                        .filter(|(texte, _)| outils.iter().any(|o| o.nom() == texte))
+                        .filter(|(texte, _)| outils.iter().any(|o| libelle_correspond(*o, texte)))
                         .collect();
                     for (indice, (nom, rect)) in commandes.iter().enumerate() {
                         for (autre, voisin) in commandes.iter().skip(indice + 1) {

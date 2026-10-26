@@ -31,8 +31,7 @@ Le ruban regroupe les commandes dans Début, Modéliser, Modifier, Annoter et So
 Les commandes fréquentes (Mur, Éléments horizontaux, Ouverture, Déplacer, Copier, Aligner, Cote et
 Texte) disposent de grands boutons lorsque la largeur le permet ; les autres
 restent empilées avec de petites icônes. Les grands boutons se replient selon leur
-priorité quand la fenêtre rétrécit. Le bouton Éléments horizontaux superpose sol, plafond et
-toiture dans une seule icône. Les niveaux sont espacés pour rendre la superposition lisible. Son sélecteur se trouve dans un encart en tête de
+priorité quand la fenêtre rétrécit. Le bouton des éléments horizontaux est un bouton divisé : il affiche et crée la dernière sorte choisie (Dalle par défaut) ; sa flèche ouvre la liste Dalle, Sol, Plafond, Toiture. Son sélecteur se trouve dans un encart en tête de
 Propriétés, avec une vignette et une liste déroulante distinguant Dalle (structure),
 Sol (revêtement), Plafond et Toiture. Les paramètres sont juste en dessous et
 restent mémorisés séparément pour chaque catégorie. Les vignettes distinguent la
