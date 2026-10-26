@@ -48,6 +48,9 @@ pub fn convertir(chemin: &Path, progress: &dyn Fn(String)) -> Result<(Projet, Ve
     let nom = chemin.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let mut c = Conversion { projet: Projet::nouveau(&nom), ..Default::default() };
     c.projet.sources.push(source("s1", chemin, "RVT"));
+    if let Ok(infos) = maquette::infos_document(chemin) {
+        c.projet.sous_projets = infos.sous_projets;
+    }
     convertir_maquette(&m, &mut c);
     c.valider();
     Ok((c.projet, c.mesures))
@@ -59,6 +62,8 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
     let fichier = c.projet.sources[0].fichier.clone();
     let cle = |id: i64| m.unique_id(id).unwrap_or_else(|| format!("{fichier}:{id}"));
     let ident = |genre: &str, id: i64| identifiant(genre, &cle(id));
+
+    c.projet.phases = m.ordre_phases.iter().filter_map(|id| m.phases.get(id).cloned()).collect();
 
     // niveaux
     let mut niveaux: HashMap<i64, (String, f64)> = HashMap::new();
@@ -127,7 +132,7 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
         let id = ident("mur", w.id);
         c.lire(&id, &tris, "Murs");
         murs.insert(w.id, c.projet.murs.len());
-        c.projet.murs.push(Mur { id, nom, type_mur, niveau: base, decalage_bas: w.decalage_bas, haut, axe, origine: origine(w.id, &w.classe) });
+        c.projet.murs.push(Mur { phase: None, sous_projet: None, id, nom, type_mur, niveau: base, decalage_bas: w.decalage_bas, haut, axe, origine: origine(w.id, &w.classe) });
     }
 
     // portes et fenêtres hébergées par un mur converti ; autres familles importées

@@ -28,6 +28,10 @@ pub struct Projet {
     pub version: u32,
     pub nom: String,
     pub sources: Vec<Source>,
+    #[serde(default)]
+    pub phases: Vec<String>,
+    #[serde(default)]
+    pub sous_projets: Vec<String>,
     pub niveaux: Vec<Niveau>,
     pub types_murs: Vec<TypeCompose>,
     pub types_dalles: Vec<TypeCompose>,
@@ -165,6 +169,10 @@ pub enum Haut {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Mur {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sous_projet: Option<String>,
     pub id: String,
     pub nom: String,
     pub type_mur: String,
@@ -556,7 +564,7 @@ mod tests {
         let mut p = Projet::nouveau("essai");
         p.niveaux.push(Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
         p.types_murs.push(TypeCompose { id: "t".into(), nom: "200".into(), couches: vec![Couche { materiau: None, epaisseur: 200.0 }], couches_detaillees: false, origine: None });
-        p.murs.push(Mur { id: "m".into(), nom: "Mur".into(), type_mur: "t".into(), niveau: "n".into(), decalage_bas: 0.0, haut: Haut::Libre { hauteur: 3000.0 }, axe: Axe::Droit { debut: [0.0, 0.0], fin: [5000.0, 0.0] }, origine: None });
+        p.murs.push(Mur { phase: None, sous_projet: None, id: "m".into(), nom: "Mur".into(), type_mur: "t".into(), niveau: "n".into(), decalage_bas: 0.0, haut: Haut::Libre { hauteur: 3000.0 }, axe: Axe::Droit { debut: [0.0, 0.0], fin: [5000.0, 0.0] }, origine: None });
         p.ouvertures.push(Ouverture { id: "o".into(), nom: String::new(), genre: GenreOuverture::Baie, mur: "m".into(), type_ouverture: None, abscisse: 1500.0, largeur: 1000.0, hauteur: 1200.0, allege: 900.0, representation: None, origine: None });
         assert!((p.volume_mur(&p.murs[0]).unwrap() - 2.76e9).abs() < 1.0);
         let q = Projet::lire_json(&p.json().unwrap()).unwrap();

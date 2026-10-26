@@ -205,6 +205,10 @@ pub struct RubanEdition {
     derniere_surface: Option<Outil>,
     valeurs: BTreeMap<(Outil, usize), Valeur>,
     pub niveau_mur: Option<String>,
+    pub niveau_haut_mur: Option<String>,
+    pub decalage_haut_mur: f64,
+    pub phase_mur: Option<String>,
+    pub sous_projet_mur: Option<String>,
     pub chainer_murs: bool,
 }
 
@@ -344,6 +348,10 @@ impl RubanEdition {
             implantation,
             niveau: self.niveau_mur.clone(),
             decalage: nombre(3, 0.0),
+            niveau_haut: self.niveau_haut_mur.clone(),
+            decalage_haut: self.decalage_haut_mur,
+            phase: self.phase_mur.clone(),
+            sous_projet: self.sous_projet_mur.clone(),
         }
     }
 
@@ -515,6 +523,252 @@ impl RubanEdition {
                     }
                 });
             });
+    }
+
+    /// Coupe schématique du mur et contraintes directement associées à ses extrémités.
+    pub fn proprietes_mur(
+        &mut self,
+        ui: &mut egui::Ui,
+        projet: Option<&crate::modele::Projet>,
+    ) -> bool {
+        if !self.mur_actif() {
+            return false;
+        }
+        ui.label(RichText::new("Créer un mur").strong());
+        let Some(projet) = projet else {
+            ui.label("Créez ou ouvrez un projet natif pour dessiner un mur.");
+            return true;
+        };
+        // Un changement de document ne doit jamais réutiliser une référence étrangère.
+        for niveau in [&mut self.niveau_mur, &mut self.niveau_haut_mur] {
+            if niveau
+                .as_ref()
+                .is_some_and(|id| projet.niveau(id).is_none())
+            {
+                *niveau = None;
+            }
+        }
+        let phases = if projet.phases.is_empty() {
+            vec!["Projet".to_string()]
+        } else {
+            projet.phases.clone()
+        };
+        let sous_projets = if projet.sous_projets.is_empty() {
+            vec!["Sous-projet 1".to_string()]
+        } else {
+            projet.sous_projets.clone()
+        };
+        if self.phase_mur.as_ref().is_none_or(|v| !phases.contains(v)) {
+            self.phase_mur = phases.last().cloned();
+        }
+        if self
+            .sous_projet_mur
+            .as_ref()
+            .is_none_or(|v| !sous_projets.contains(v))
+        {
+            self.sous_projet_mur = sous_projets.first().cloned();
+        }
+        egui::ScrollArea::vertical()
+            .id_salt("creation_mur")
+            .show(ui, |ui| {
+                ui.label("Phase");
+                egui::ComboBox::from_id_salt("phase_creation_mur")
+                    .width(ui.available_width())
+                    .selected_text(self.phase_mur.as_deref().unwrap_or("Projet"))
+                    .show_ui(ui, |ui| {
+                        for nom in &phases {
+                            ui.selectable_value(&mut self.phase_mur, Some(nom.clone()), nom);
+                        }
+                    });
+                ui.label("Sous-projet");
+                egui::ComboBox::from_id_salt("sous_projet_creation_mur")
+                    .width(ui.available_width())
+                    .selected_text(self.sous_projet_mur.as_deref().unwrap_or("Sous-projet 1"))
+                    .show_ui(ui, |ui| {
+                        for nom in &sous_projets {
+                            ui.selectable_value(&mut self.sous_projet_mur, Some(nom.clone()), nom);
+                        }
+                    });
+                ui.separator();
+                ui.label(RichText::new("Contraintes du mur").strong());
+                ui.label(
+                    RichText::new("Choisissez les niveaux et ajustez les décalages (mm).")
+                        .small()
+                        .weak(),
+                );
+                egui::Frame::group(ui.style()).show(ui, |ui| {
+                    ui.horizontal_top(|ui| {
+                        let (r, _) =
+                            ui.allocate_exact_size(egui::vec2(52.0, 248.0), Sense::hover());
+                        let p = ui.painter();
+                        let encre = ui.visuals().text_color();
+                        let bleu = ui.visuals().selection.stroke.color;
+                        let options = self.parametres_mur();
+                        let base = options
+                            .niveau
+                            .as_ref()
+                            .and_then(|id| projet.niveau(id))
+                            .or_else(|| projet.niveaux.first())
+                            .map_or(0.0, |n| n.altitude);
+                        let (bas, haut) = options.bornes(projet).unwrap_or((base, base + 2800.0));
+                        let reference_haute = options
+                            .niveau_haut
+                            .as_ref()
+                            .and_then(|id| projet.niveau(id))
+                            .map_or(bas + options.hauteur, |n| n.altitude);
+                        let minimum = base.min(bas).min(haut).min(reference_haute);
+                        let maximum = base.max(bas).max(haut).max(reference_haute);
+                        let y = |z: f64| {
+                            (18.0 + 208.0 * (maximum - z) / (maximum - minimum).max(1.0)) as f32
+                        };
+                        let mur = egui::Rect::from_min_max(
+                            r.min + egui::vec2(16.0, y(haut)),
+                            r.min + egui::vec2(37.0, y(bas)),
+                        );
+                        p.rect_filled(mur, 1.0, ui.visuals().selection.bg_fill);
+                        p.rect_stroke(
+                            mur,
+                            1.0,
+                            egui::Stroke::new(1.5, encre),
+                            egui::StrokeKind::Inside,
+                        );
+                        // Les repères pointillés sont les niveaux ; les traits pleins, les faces du mur.
+                        for y in [y(reference_haute), y(base)] {
+                            for x in (0..52).step_by(8) {
+                                p.line_segment(
+                                    [
+                                        r.min + egui::vec2(x as f32, y),
+                                        r.min + egui::vec2((x + 4) as f32, y),
+                                    ],
+                                    egui::Stroke::new(1.0, bleu),
+                                );
+                            }
+                        }
+                        for (a, b) in [(y(reference_haute), y(haut)), (y(bas), y(base))] {
+                            let x = r.left() + 7.0;
+                            p.line_segment(
+                                [egui::pos2(x, r.top() + a), egui::pos2(x, r.top() + b)],
+                                egui::Stroke::new(1.0, bleu),
+                            );
+                            for y in [a, b] {
+                                p.line_segment(
+                                    [
+                                        egui::pos2(x - 3.0, r.top() + y),
+                                        egui::pos2(x + 3.0, r.top() + y),
+                                    ],
+                                    egui::Stroke::new(1.0, bleu),
+                                );
+                            }
+                        }
+                        p.text(
+                            mur.center(),
+                            egui::Align2::CENTER_CENTER,
+                            "Mur",
+                            egui::FontId::proportional(10.0),
+                            encre,
+                        );
+                        ui.vertical(|ui| {
+                            ui.set_width(ui.available_width().max(100.0));
+                            ui.label("Limite haute");
+                            egui::ComboBox::from_id_salt("limite_haute_mur")
+                                .width(ui.available_width())
+                                .selected_text(
+                                    self.niveau_haut_mur
+                                        .as_ref()
+                                        .and_then(|id| projet.niveau(id))
+                                        .map_or("Sans contrainte", |n| n.nom.as_str()),
+                                )
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(
+                                        &mut self.niveau_haut_mur,
+                                        None,
+                                        "Sans contrainte",
+                                    );
+                                    for n in &projet.niveaux {
+                                        ui.selectable_value(
+                                            &mut self.niveau_haut_mur,
+                                            Some(n.id.clone()),
+                                            &n.nom,
+                                        );
+                                    }
+                                });
+                            ui.label("Décalage haut");
+                            ui.add(
+                                egui::DragValue::new(&mut self.decalage_haut_mur)
+                                    .speed(10.0)
+                                    .suffix(" mm"),
+                            );
+                            if self.niveau_haut_mur.is_none() {
+                                ui.label("Hauteur libre");
+                                self.nombre_mur(ui, 1, 2800.0);
+                            } else {
+                                ui.add_space(40.0);
+                            }
+                            ui.label("Décalage bas");
+                            self.nombre_mur(ui, 3, 0.0);
+                            ui.label("Limite basse");
+                            egui::ComboBox::from_id_salt("limite_basse_mur")
+                                .width(ui.available_width())
+                                .selected_text(
+                                    self.niveau_mur
+                                        .as_ref()
+                                        .and_then(|id| projet.niveau(id))
+                                        .or_else(|| projet.niveaux.first())
+                                        .map_or("Niveau 0", |n| n.nom.as_str()),
+                                )
+                                .show_ui(ui, |ui| {
+                                    if projet.niveaux.is_empty() {
+                                        ui.selectable_value(&mut self.niveau_mur, None, "Niveau 0");
+                                    }
+                                    for n in &projet.niveaux {
+                                        ui.selectable_value(
+                                            &mut self.niveau_mur,
+                                            Some(n.id.clone()),
+                                            &n.nom,
+                                        );
+                                    }
+                                });
+                        });
+                    });
+                });
+                match self.parametres_mur().bornes(projet) {
+                    Ok((bas, haut)) => {
+                        ui.label(format!("Hauteur résultante : {:.0} mm", haut - bas));
+                    }
+                    Err(e) => {
+                        ui.colored_label(ui.visuals().error_fg_color, e);
+                    }
+                }
+                ui.label("Épaisseur");
+                self.nombre_mur(ui, 2, 300.0);
+                ui.label("Implantation");
+                let v = self
+                    .valeurs
+                    .entry((Outil::Mur, 0))
+                    .or_insert_with(|| Valeur::Texte("Axe".into()));
+                if let Valeur::Texte(v) = v {
+                    egui::ComboBox::from_id_salt("implantation_proprietes_mur")
+                        .width(ui.available_width())
+                        .selected_text(v.as_str())
+                        .show_ui(ui, |ui| {
+                            for nom in ["Axe", "Face extérieure", "Face intérieure"] {
+                                ui.selectable_value(v, nom.into(), nom);
+                            }
+                        });
+                }
+                ui.checkbox(&mut self.chainer_murs, "Chaîner les murs");
+            });
+        true
+    }
+
+    fn nombre_mur(&mut self, ui: &mut egui::Ui, cle: usize, defaut: f64) {
+        let v = self
+            .valeurs
+            .entry((Outil::Mur, cle))
+            .or_insert(Valeur::Nombre(defaut));
+        if let Valeur::Nombre(v) = v {
+            ui.add(egui::DragValue::new(v).speed(10.0).suffix(" mm"));
+        }
     }
 
     /// Sélecteur de création placé en tête de la palette Propriétés, comme un
@@ -1092,6 +1346,77 @@ mod tests {
             );
         }
         afficher(ctx, ruban, largeur, vec![])
+    }
+
+    #[test]
+    fn palette_mur_affiche_contraintes_et_choix_du_document() {
+        let ctx = egui::Context::default();
+        let mut ruban = RubanEdition::default();
+        ruban.activer_mur();
+        let mut projet = crate::modele::Projet::nouveau("Mur");
+        projet.phases = vec!["Existant".into(), "Construction".into()];
+        projet.sous_projets = vec!["Enveloppe".into(), "Structure".into()];
+        for largeur in [260.0, 300.0, 420.0] {
+            let mut sortie = None;
+            for _ in 0..3 {
+                let mut frame = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(largeur, 900.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| {
+                        egui::CentralPanel::default().show(ui, |ui| {
+                            assert!(ruban.proprietes_mur(ui, Some(&projet)));
+                        });
+                    },
+                );
+                frame.textures_delta.clear();
+                sortie = Some(frame);
+            }
+            let textes: Vec<_> = sortie
+                .unwrap()
+                .shapes
+                .into_iter()
+                .filter_map(|s| match s.shape {
+                    egui::Shape::Text(t) => Some((
+                        t.galley.text().to_string(),
+                        egui::Rect::from_min_size(t.pos, t.galley.size()),
+                    )),
+                    _ => None,
+                })
+                .collect();
+            for attendu in [
+                "Phase",
+                "Sous-projet",
+                "Construction",
+                "Enveloppe",
+                "Limite haute",
+                "Limite basse",
+                "Décalage haut",
+                "Décalage bas",
+                "Hauteur libre",
+            ] {
+                let (_, r) = textes
+                    .iter()
+                    .find(|(t, _)| t == attendu)
+                    .unwrap_or_else(|| panic!("Champ absent : {attendu}"));
+                assert!(
+                    r.right() <= largeur,
+                    "{attendu} déborde à {largeur} px : {r:?}"
+                );
+            }
+            assert_eq!(
+                ruban.parametres_mur().phase.as_deref(),
+                Some("Construction")
+            );
+            assert_eq!(
+                ruban.parametres_mur().sous_projet.as_deref(),
+                Some("Enveloppe")
+            );
+        }
     }
 
     #[test]

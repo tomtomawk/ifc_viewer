@@ -174,7 +174,7 @@ pub fn convertir_modele(m: &IfcModel, geometries: &HashMap<Id, Vec<[DVec3; 3]>>,
             .clone();
         let mid = ident("mur", id);
         c.lire(&mid, t, "Murs");
-        let mur = Mur { id: mid.clone(), nom, type_mur, niveau: niv, decalage_bas: z[0] - alt, haut: Haut::Libre { hauteur: z[1] - z[0] }, axe, origine: origine(id) };
+        let mur = Mur { phase: None, sous_projet: None, id: mid.clone(), nom, type_mur, niveau: niv, decalage_bas: z[0] - alt, haut: Haut::Libre { hauteur: z[1] - z[0] }, axe, origine: origine(id) };
         // ouvertures
         for &o in m.openings.get(&id).map(Vec::as_slice).unwrap_or_default() {
             consommes.insert(o);

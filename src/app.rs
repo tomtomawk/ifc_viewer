@@ -1324,7 +1324,7 @@ impl ViewerApp {
         let Some((projet, _)) = &self.natif else { return };
         let Some(scene) = &self.scene else { return };
         let options = self.ruban_edition.parametres_mur();
-        let altitude = options.niveau.as_ref().and_then(|id| projet.niveau(id)).or_else(|| projet.niveaux.first()).map_or(0.0, |n| n.altitude) + options.decalage;
+        let Ok((altitude, sommet)) = options.bornes(projet) else { return };
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
         let ecran = |p: [f64; 2], z: f64| {
             let p = (glam::DVec3::new(p[0], p[1], z) * 0.001 - scene.origin).as_vec3();
@@ -1337,16 +1337,16 @@ impl ViewerApp {
             if let Some(q) = ecran(b, altitude) { painter.circle_stroke(q, 4.0, egui::Stroke::new(1.5, couleur)); }
             if let Some(a) = self.mur_depart {
                 let longueur = (b[0] - a[0]).hypot(b[1] - a[1]);
-                if longueur >= 1.0 && options.hauteur > 0.0 && options.epaisseur > 0.0 {
+                if longueur >= 1.0 && sommet > altitude && options.epaisseur > 0.0 {
                     use crate::modele::edition::Implantation;
                     let signe = match options.implantation { Implantation::Axe => 0.0, Implantation::Exterieure => -0.5, Implantation::Interieure => 0.5 };
                     let n = [-(b[1]-a[1])/longueur, (b[0]-a[0])/longueur];
                     let c = |p: [f64; 2], k: f64| [p[0]+n[0]*options.epaisseur*(signe+k), p[1]+n[1]*options.epaisseur*(signe+k)];
                     let contour = [c(a,-0.5),c(b,-0.5),c(b,0.5),c(a,0.5)];
-                    for z in [altitude, altitude + options.hauteur] {
+                    for z in [altitude, sommet] {
                         for k in 0..4 { if let (Some(a),Some(b)) = (ecran(contour[k],z),ecran(contour[(k+1)%4],z)) { painter.line_segment([a,b],egui::Stroke::new(1.5,couleur)); } }
                     }
-                    for q in contour { if let (Some(a),Some(b)) = (ecran(q,altitude),ecran(q,altitude+options.hauteur)) { painter.line_segment([a,b],egui::Stroke::new(1.0,couleur)); } }
+                    for q in contour { if let (Some(a),Some(b)) = (ecran(q,altitude),ecran(q,sommet)) { painter.line_segment([a,b],egui::Stroke::new(1.0,couleur)); } }
                     if let Some(q) = ecran(b, altitude) {
                         painter.text(q+egui::vec2(12.0,-12.0),egui::Align2::LEFT_BOTTOM,format!("{longueur:.0} mm"),egui::FontId::proportional(13.0),couleur);
                     }
@@ -1401,6 +1401,9 @@ impl ViewerApp {
         self.natif_modifie = false;
         self.mur_depart = None;
         self.ruban_edition.niveau_mur = None;
+        self.ruban_edition.niveau_haut_mur = None;
+        self.ruban_edition.phase_mur = None;
+        self.ruban_edition.sous_projet_mur = None;
         self.document_actif = self.prochain_document;
         self.prochain_document += 1;
     }
@@ -1416,6 +1419,9 @@ impl ViewerApp {
         self.natif_modifie = d.modifie;
         self.mur_depart = None;
         self.ruban_edition.niveau_mur = None;
+        self.ruban_edition.niveau_haut_mur = None;
+        self.ruban_edition.phase_mur = None;
+        self.ruban_edition.sous_projet_mur = None;
         self.scene = d.scene;
         self.rvt = d.rvt;
         self.rvt_source = d.rvt_source;
@@ -3104,6 +3110,9 @@ impl ViewerApp {
     /// Propriétés de l'élément sélectionné (panneau de gauche, comme dans Revit).
     fn right_panel(&mut self, ui: &mut egui::Ui) {
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
+        if self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.proprietes_mur(ui, self.natif.as_ref().map(|(p, _)| p)) {
+            return;
+        }
         if self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.proprietes_surfaces(ui) {
             return;
         }
@@ -3136,7 +3145,7 @@ impl ViewerApp {
                 let epaisseur = projet.type_mur(&mur.type_mur).map_or(0.0, |t| t.epaisseur());
                 let hauteur = projet.bas_haut(mur).map_or(0.0, |(a,b)| b-a);
                 egui::Grid::new("mur_natif_proprietes").num_columns(2).show(ui, |ui| {
-                    for (nom, valeur) in [("Niveau", niveau.to_string()), ("Longueur", format!("{:.0} mm",mur.axe.longueur())), ("Hauteur",format!("{hauteur:.0} mm")), ("Épaisseur",format!("{epaisseur:.0} mm")), ("Volume",format!("{:.3} m³",projet.volume_mur(mur).unwrap_or(0.0)/1e9))] {
+                    for (nom, valeur) in [("Phase", mur.phase.clone().unwrap_or_else(|| "Non renseignée".into())), ("Sous-projet", mur.sous_projet.clone().unwrap_or_else(|| "Non renseigné".into())), ("Niveau", niveau.to_string()), ("Longueur", format!("{:.0} mm",mur.axe.longueur())), ("Hauteur",format!("{hauteur:.0} mm")), ("Épaisseur",format!("{epaisseur:.0} mm")), ("Volume",format!("{:.3} m³",projet.volume_mur(mur).unwrap_or(0.0)/1e9))] {
                         ui.label(nom); ui.label(valeur); ui.end_row();
                     }
                 });
