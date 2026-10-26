@@ -43,7 +43,40 @@ impl ParametresMur {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ListeCreation { Phase, SousProjet, Variante }
+
+impl ListeCreation {
+    pub fn libelle(self) -> &'static str {
+        match self { Self::Phase => "Phase", Self::SousProjet => "Sous-projet", Self::Variante => "Variante" }
+    }
+}
+
 impl Projet {
+    /// Ajout atomique aux listes communes à tous les outils de création.
+    pub fn ajouter_choix_creation(&mut self, liste: ListeCreation, nom: &str, jeu: &str) -> Result<String, String> {
+        let nom = nom.trim();
+        let jeu = jeu.trim();
+        if nom.is_empty() { return Err("Saisissez un nom.".into()); }
+        if liste == ListeCreation::Variante {
+            if jeu.is_empty() { return Err("Saisissez le jeu de variantes.".into()); }
+            if self.variantes.iter().any(|v| v.jeu.eq_ignore_ascii_case(jeu) && v.nom.eq_ignore_ascii_case(nom)) {
+                return Err("Cette variante existe déjà dans ce jeu.".into());
+            }
+            let id = identifiant("variante", &format!("{}:{jeu}:{nom}", jeu.len()));
+            if self.variantes.iter().any(|v| v.id == id) { return Err("Identifiant de variante déjà utilisé.".into()); }
+            self.variantes.push(Variante { id: id.clone(), nom: nom.into(), jeu: jeu.into() });
+            return Ok(id);
+        }
+        let (choix, defaut) = match liste { ListeCreation::Phase => (&mut self.phases, "Projet"), _ => (&mut self.sous_projets, "Sous-projet 1") };
+        if choix.iter().any(|v| v.eq_ignore_ascii_case(nom)) || (choix.is_empty() && defaut.eq_ignore_ascii_case(nom)) {
+            return Err("Ce nom existe déjà.".into());
+        }
+        if choix.is_empty() { choix.push(defaut.into()); }
+        choix.push(nom.into());
+        Ok(nom.into())
+    }
+
     /// Valide entièrement la commande avant d'ajouter le niveau, le type et le mur.
     pub fn ajouter_mur(&mut self, debut: [f64; 2], fin: [f64; 2], p: &ParametresMur) -> Result<String, String> {
         if !debut.iter().chain(&fin).all(|x| x.is_finite()) || ![p.hauteur, p.epaisseur, p.decalage].iter().all(|x| x.is_finite()) {
@@ -149,6 +182,27 @@ mod tests {
         assert!(relu.murs[0].variante.is_none());
         assert!(relu.murs[0].phase.is_none());
         assert_eq!(relu.bas_haut(&relu.murs[0]), Some((0.,2800.)));
+    }
+
+    #[test]
+    fn listes_creation_ajout_validation_et_persistance() {
+        let mut projet = Projet::nouveau("Listes");
+        assert_eq!(projet.ajouter_choix_creation(ListeCreation::Phase, "  Livraison  ", "").unwrap(), "Livraison");
+        assert_eq!(projet.phases, ["Projet", "Livraison"]);
+        projet.ajouter_choix_creation(ListeCreation::SousProjet, "Structure", "").unwrap();
+        assert_eq!(projet.sous_projets, ["Sous-projet 1", "Structure"]);
+        let a = projet.ajouter_choix_creation(ListeCreation::Variante, "Option A", "Façade").unwrap();
+        let b = projet.ajouter_choix_creation(ListeCreation::Variante, "Option A", "Structure").unwrap();
+        assert_ne!(a,b);
+        let avant = projet.json().unwrap();
+        for (liste, nom, jeu) in [(ListeCreation::Phase,"livraison",""), (ListeCreation::SousProjet," ",""), (ListeCreation::Variante,"option a","façade"), (ListeCreation::Variante,"Option B","")] {
+            assert!(projet.ajouter_choix_creation(liste, nom, jeu).is_err());
+            assert_eq!(projet.json().unwrap(), avant);
+        }
+        let relu = Projet::lire_json(&avant).unwrap();
+        assert_eq!(relu.variantes.len(),2);
+        assert_eq!(relu.phases, projet.phases);
+        assert_eq!(relu.sous_projets, projet.sous_projets);
     }
 
     #[test]

@@ -22,7 +22,12 @@ autres documents. Il utilise `Projet::nouveau` : en-tête v0, collections vides,
 aucun niveau, type ou élément ajouté implicitement. **Sortie → Enregistrer**
 (Ctrl+S) enregistre ce document. **Modéliser → Mur** crée des murs droits par deux
 clics, avec un aperçu et une palette Propriétés dédiée. La phase, le sous-projet et la variante
-se choisissent en tête de palette ; le schéma du mur accompagne les limites haute
+se choisissent sur une ligne commune sous le ruban, dans les onglets Modéliser,
+Modifier et Annoter, indépendamment de l’outil actif. Le menu « + » en fin de ligne
+ajoute une phase, un sous-projet ou une variante (nom et jeu), sélectionne la
+nouvelle valeur et la conserve dans le document. Les noms vides et doublons sont
+refusés. Ces choix s’appliquent aux prochaines créations. Dans la palette
+Propriétés, le schéma du mur accompagne les limites haute
 et basse et leurs décalages en millimètres. La limite haute est un niveau ou une
 hauteur libre (le décalage haut s'ajoute alors à cette hauteur). La hauteur
 résultante doit être positive. L'aperçu utilise les mêmes contraintes que le mur

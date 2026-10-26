@@ -207,10 +207,14 @@ pub struct RubanEdition {
     pub niveau_mur: Option<String>,
     pub niveau_haut_mur: Option<String>,
     pub decalage_haut_mur: f64,
-    pub phase_mur: Option<String>,
-    pub sous_projet_mur: Option<String>,
-    pub variante_mur: Option<String>,
+    pub phase_creation: Option<String>,
+    pub sous_projet_creation: Option<String>,
+    pub variante_creation: Option<String>,
     pub chainer_murs: bool,
+    ajout_creation: Option<crate::modele::edition::ListeCreation>,
+    nom_creation: String,
+    jeu_creation: String,
+    erreur_creation: Option<String>,
 }
 
 fn champs(o: Outil) -> Vec<Champ> {
@@ -351,9 +355,9 @@ impl RubanEdition {
             decalage: nombre(3, 0.0),
             niveau_haut: self.niveau_haut_mur.clone(),
             decalage_haut: self.decalage_haut_mur,
-            phase: self.phase_mur.clone(),
-            sous_projet: self.sous_projet_mur.clone(),
-            variante: self.variante_mur.clone(),
+            phase: self.phase_creation.clone(),
+            sous_projet: self.sous_projet_creation.clone(),
+            variante: self.variante_creation.clone(),
         }
     }
 
@@ -527,6 +531,196 @@ impl RubanEdition {
             });
     }
 
+    pub fn reinitialiser_contexte_creation(&mut self) {
+        self.phase_creation = None;
+        self.sous_projet_creation = None;
+        self.variante_creation = None;
+        self.ajout_creation = None;
+        self.erreur_creation = None;
+    }
+
+    /// Contexte commun aux créations, affiché indépendamment de l'outil actif.
+    /// Seuls les ajouts modifient le document ; choisir une valeur règle les prochaines créations.
+    pub fn contexte_creation(
+        &mut self,
+        ui: &mut egui::Ui,
+        projet: &mut crate::modele::Projet,
+    ) -> bool {
+        use crate::modele::edition::ListeCreation;
+        let phases = if projet.phases.is_empty() {
+            vec!["Projet".into()]
+        } else {
+            projet.phases.clone()
+        };
+        let sous_projets = if projet.sous_projets.is_empty() {
+            vec!["Sous-projet 1".into()]
+        } else {
+            projet.sous_projets.clone()
+        };
+        if self
+            .phase_creation
+            .as_ref()
+            .is_none_or(|v| !phases.contains(v))
+        {
+            self.phase_creation = phases.last().cloned();
+        }
+        if self
+            .sous_projet_creation
+            .as_ref()
+            .is_none_or(|v| !sous_projets.contains(v))
+        {
+            self.sous_projet_creation = sous_projets.first().cloned();
+        }
+        if self
+            .variante_creation
+            .as_ref()
+            .is_some_and(|id| !projet.variantes.iter().any(|v| &v.id == id))
+        {
+            self.variante_creation = None;
+        }
+        let largeur = ((ui.available_width() - 240.0) / 3.0).clamp(70.0, 150.0);
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            ui.label("Phase");
+            ui.scope(|ui| {
+                ui.set_max_width(largeur);
+                egui::ComboBox::from_id_salt("phase_creation")
+                    .width(largeur)
+                    .truncate()
+                    .selected_text(self.phase_creation.as_deref().unwrap_or("Projet"))
+                    .show_ui(ui, |ui| {
+                        for nom in &phases {
+                            ui.selectable_value(&mut self.phase_creation, Some(nom.clone()), nom);
+                        }
+                    })
+                    .response
+                    .on_hover_text(format!(
+                        "Phase des prochaines créations : {}",
+                        self.phase_creation.as_deref().unwrap_or("Projet")
+                    ));
+            });
+            ui.label("Sous-projet");
+            ui.scope(|ui| {
+                ui.set_max_width(largeur);
+                egui::ComboBox::from_id_salt("sous_projet_creation")
+                    .width(largeur)
+                    .truncate()
+                    .selected_text(
+                        self.sous_projet_creation
+                            .as_deref()
+                            .unwrap_or("Sous-projet 1"),
+                    )
+                    .show_ui(ui, |ui| {
+                        for nom in &sous_projets {
+                            ui.selectable_value(
+                                &mut self.sous_projet_creation,
+                                Some(nom.clone()),
+                                nom,
+                            );
+                        }
+                    })
+                    .response
+                    .on_hover_text(format!(
+                        "Sous-projet des prochaines créations : {}",
+                        self.sous_projet_creation
+                            .as_deref()
+                            .unwrap_or("Sous-projet 1")
+                    ));
+            });
+            ui.label("Variante");
+            let nom = self
+                .variante_creation
+                .as_ref()
+                .and_then(|id| projet.variantes.iter().find(|v| &v.id == id))
+                .map_or_else(|| "Modèle principal".into(), |v| v.libelle());
+            ui.scope(|ui| {
+                ui.set_max_width(largeur);
+                egui::ComboBox::from_id_salt("variante_creation")
+                    .width(largeur)
+                    .truncate()
+                    .selected_text(&nom)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.variante_creation, None, "Modèle principal");
+                        for v in &projet.variantes {
+                            ui.selectable_value(
+                                &mut self.variante_creation,
+                                Some(v.id.clone()),
+                                v.libelle(),
+                            );
+                        }
+                    })
+                    .response
+                    .on_hover_text(format!("Variante des prochaines créations : {nom}"));
+            });
+            ui.menu_button("+", |ui| {
+                for liste in [
+                    ListeCreation::Phase,
+                    ListeCreation::SousProjet,
+                    ListeCreation::Variante,
+                ] {
+                    if ui
+                        .button(format!("Ajouter : {}…", liste.libelle()))
+                        .clicked()
+                    {
+                        self.ajout_creation = Some(liste);
+                        self.nom_creation.clear();
+                        self.jeu_creation.clear();
+                        self.erreur_creation = None;
+                        ui.close();
+                    }
+                }
+            })
+            .response
+            .on_hover_text("Ajouter une phase, un sous-projet ou une variante");
+        });
+        let mut modifie = false;
+        if let Some(liste) = self.ajout_creation {
+            let mut ouvert = true;
+            let mut valider = false;
+            let mut annuler = false;
+            egui::Window::new(format!("Ajouter : {}", liste.libelle()))
+                .id(egui::Id::unique("ajout_contexte_creation"))
+                .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+                .default_width(300.0)
+                .open(&mut ouvert)
+                .collapsible(false)
+                .resizable(false)
+                .show(ui.ctx(), |ui| {
+                    ui.label("Nom");
+                    ui.text_edit_singleline(&mut self.nom_creation);
+                    if liste == ListeCreation::Variante {
+                        ui.label("Jeu de variantes");
+                        ui.text_edit_singleline(&mut self.jeu_creation);
+                    }
+                    if let Some(erreur) = &self.erreur_creation {
+                        ui.colored_label(ui.visuals().error_fg_color, erreur);
+                    }
+                    ui.horizontal(|ui| {
+                        valider = ui.button("Ajouter").clicked();
+                        annuler = ui.button("Annuler").clicked();
+                    });
+                });
+            if valider {
+                match projet.ajouter_choix_creation(liste, &self.nom_creation, &self.jeu_creation) {
+                    Ok(valeur) => {
+                        match liste {
+                            ListeCreation::Phase => self.phase_creation = Some(valeur),
+                            ListeCreation::SousProjet => self.sous_projet_creation = Some(valeur),
+                            ListeCreation::Variante => self.variante_creation = Some(valeur),
+                        }
+                        modifie = true;
+                        self.ajout_creation = None;
+                    }
+                    Err(e) => self.erreur_creation = Some(e),
+                }
+            }
+            if !ouvert || annuler {
+                self.ajout_creation = None;
+            }
+        }
+        modifie
+    }
+
     /// Coupe schématique du mur et contraintes directement associées à ses extrémités.
     pub fn proprietes_mur(
         &mut self,
@@ -550,75 +744,9 @@ impl RubanEdition {
                 *niveau = None;
             }
         }
-        if self
-            .variante_mur
-            .as_ref()
-            .is_some_and(|id| !projet.variantes.iter().any(|v| &v.id == id))
-        {
-            self.variante_mur = None;
-        }
-        let phases = if projet.phases.is_empty() {
-            vec!["Projet".to_string()]
-        } else {
-            projet.phases.clone()
-        };
-        let sous_projets = if projet.sous_projets.is_empty() {
-            vec!["Sous-projet 1".to_string()]
-        } else {
-            projet.sous_projets.clone()
-        };
-        if self.phase_mur.as_ref().is_none_or(|v| !phases.contains(v)) {
-            self.phase_mur = phases.last().cloned();
-        }
-        if self
-            .sous_projet_mur
-            .as_ref()
-            .is_none_or(|v| !sous_projets.contains(v))
-        {
-            self.sous_projet_mur = sous_projets.first().cloned();
-        }
         egui::ScrollArea::vertical()
             .id_salt("creation_mur")
             .show(ui, |ui| {
-                ui.label("Phase");
-                egui::ComboBox::from_id_salt("phase_creation_mur")
-                    .width(ui.available_width())
-                    .selected_text(self.phase_mur.as_deref().unwrap_or("Projet"))
-                    .show_ui(ui, |ui| {
-                        for nom in &phases {
-                            ui.selectable_value(&mut self.phase_mur, Some(nom.clone()), nom);
-                        }
-                    });
-                ui.label("Sous-projet");
-                egui::ComboBox::from_id_salt("sous_projet_creation_mur")
-                    .width(ui.available_width())
-                    .selected_text(self.sous_projet_mur.as_deref().unwrap_or("Sous-projet 1"))
-                    .show_ui(ui, |ui| {
-                        for nom in &sous_projets {
-                            ui.selectable_value(&mut self.sous_projet_mur, Some(nom.clone()), nom);
-                        }
-                    });
-                ui.label("Variante");
-                let variante = self
-                    .variante_mur
-                    .as_ref()
-                    .and_then(|id| projet.variantes.iter().find(|v| &v.id == id));
-                egui::ComboBox::from_id_salt("variante_creation_mur")
-                    .width(ui.available_width())
-                    .selected_text(
-                        variante.map_or_else(|| "Modèle principal".into(), |v| v.libelle()),
-                    )
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.variante_mur, None, "Modèle principal");
-                        for v in &projet.variantes {
-                            ui.selectable_value(
-                                &mut self.variante_mur,
-                                Some(v.id.clone()),
-                                v.libelle(),
-                            );
-                        }
-                    });
-                ui.separator();
                 ui.label(RichText::new("Contraintes du mur").strong());
                 ui.label(
                     RichText::new("Choisissez les niveaux et ajustez les décalages (mm).")
@@ -1378,6 +1506,81 @@ mod tests {
     }
 
     #[test]
+    fn contexte_creation_independant_de_l_outil_et_sur_une_ligne() {
+        let ctx = egui::Context::default();
+        let mut ruban = RubanEdition::default();
+        let mut projet = crate::modele::Projet::nouveau("Contexte");
+        projet.phases = vec!["Phase de construction avec un nom très long".into()];
+        projet.sous_projets = vec!["Sous-projet de structure avec un nom très long".into()];
+        projet.variantes = vec![crate::modele::Variante {
+            id: "v".into(),
+            nom: "Option très longue".into(),
+            jeu: "Façade extérieure".into(),
+        }];
+        ruban.variante_creation = Some("v".into());
+        for outil in [
+            None,
+            Some(Outil::Mur),
+            Some(Outil::Dalle),
+            Some(Outil::Texte),
+        ] {
+            ruban.selection = outil;
+            for largeur in [800.0, 1500.0] {
+                let mut sortie = None;
+                for _ in 0..3 {
+                    let mut frame = ctx.run_ui(
+                        egui::RawInput {
+                            screen_rect: Some(egui::Rect::from_min_size(
+                                egui::Pos2::ZERO,
+                                egui::vec2(largeur, 520.0),
+                            )),
+                            ..Default::default()
+                        },
+                        |ui| {
+                            egui::CentralPanel::default().show(ui, |ui| {
+                                assert!(!ruban.contexte_creation(ui, &mut projet));
+                            });
+                        },
+                    );
+                    frame.textures_delta.clear();
+                    sortie = Some(frame);
+                }
+                let textes: Vec<_> = sortie
+                    .unwrap()
+                    .shapes
+                    .into_iter()
+                    .filter_map(|s| match s.shape {
+                        egui::Shape::Text(t) => Some((
+                            t.galley.text().to_string(),
+                            egui::Rect::from_min_size(t.pos, t.galley.size()),
+                        )),
+                        _ => None,
+                    })
+                    .collect();
+                let mut ligne: Option<f32> = None;
+                for attendu in ["Phase", "Sous-projet", "Variante", "+"] {
+                    let (_, r) = textes
+                        .iter()
+                        .find(|(t, _)| t == attendu)
+                        .unwrap_or_else(|| panic!("Absent : {attendu}, textes : {textes:?}"));
+                    assert!(r.right() <= largeur, "{attendu} déborde à {largeur} px");
+                    if let Some(y) = ligne {
+                        assert!((r.center().y - y).abs() < 2.0);
+                    } else {
+                        ligne = Some(r.center().y);
+                    }
+                }
+                assert_eq!(ruban.parametres_mur().phase, projet.phases.last().cloned());
+                assert_eq!(
+                    ruban.parametres_mur().sous_projet,
+                    projet.sous_projets.first().cloned()
+                );
+                assert_eq!(ruban.parametres_mur().variante.as_deref(), Some("v"));
+            }
+        }
+    }
+
+    #[test]
     fn palette_mur_affiche_contraintes_et_choix_du_document() {
         let ctx = egui::Context::default();
         let mut ruban = RubanEdition::default();
@@ -1418,12 +1621,6 @@ mod tests {
                 })
                 .collect();
             for attendu in [
-                "Phase",
-                "Sous-projet",
-                "Variante",
-                "Modèle principal",
-                "Construction",
-                "Enveloppe",
                 "Limite haute",
                 "Limite basse",
                 "Décalage haut",
@@ -1439,14 +1636,6 @@ mod tests {
                     "{attendu} déborde à {largeur} px : {r:?}"
                 );
             }
-            assert_eq!(
-                ruban.parametres_mur().phase.as_deref(),
-                Some("Construction")
-            );
-            assert_eq!(
-                ruban.parametres_mur().sous_projet.as_deref(),
-                Some("Enveloppe")
-            );
         }
     }
 

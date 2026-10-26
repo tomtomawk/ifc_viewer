@@ -1402,9 +1402,7 @@ impl ViewerApp {
         self.mur_depart = None;
         self.ruban_edition.niveau_mur = None;
         self.ruban_edition.niveau_haut_mur = None;
-        self.ruban_edition.phase_mur = None;
-        self.ruban_edition.sous_projet_mur = None;
-        self.ruban_edition.variante_mur = None;
+        self.ruban_edition.reinitialiser_contexte_creation();
         self.document_actif = self.prochain_document;
         self.prochain_document += 1;
     }
@@ -1421,9 +1419,7 @@ impl ViewerApp {
         self.mur_depart = None;
         self.ruban_edition.niveau_mur = None;
         self.ruban_edition.niveau_haut_mur = None;
-        self.ruban_edition.phase_mur = None;
-        self.ruban_edition.sous_projet_mur = None;
-        self.ruban_edition.variante_mur = None;
+        self.ruban_edition.reinitialiser_contexte_creation();
         self.scene = d.scene;
         self.rvt = d.rvt;
         self.rvt_source = d.rvt_source;
@@ -1614,6 +1610,10 @@ impl ViewerApp {
         };
         if let Some(menu) = edition {
             self.ruban_edition.afficher(ui, menu, self.natif.as_ref().map(|n| &n.0));
+            if let Some((projet, _)) = &mut self.natif {
+                ui.separator();
+                if self.ruban_edition.contexte_creation(ui, projet) { self.natif_modifie = true; }
+            }
             return;
         }
         ui.horizontal(|ui| match self.onglet_ruban {
