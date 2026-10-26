@@ -69,6 +69,64 @@ impl ParametresMur {
     }
 }
 
+/// Paramètres de création d'une dalle (ou d'un sol) : type composé (couches du haut
+/// vers le bas), niveau et altitude du dessus par rapport à lui.
+#[derive(Clone)]
+pub struct ParametresDalle {
+    pub type_dalle: TypeCompose,
+    pub niveau: Option<String>,
+    pub decalage: f64,
+    pub phase: Option<String>,
+    pub sous_projet: Option<String>,
+    pub variante: Option<String>,
+}
+
+/// Contour fermé simple : au moins trois sommets distincts, sans arête qui en croise
+/// une autre (sommets en double et point de fermeture retirés), orienté dans le sens
+/// trigonométrique.
+pub fn contour_valide(points: &[[f64; 2]]) -> Result<Vec<[f64; 2]>, String> {
+    let mut c: Vec<[f64; 2]> = Vec::new();
+    for &p in points {
+        if !p.iter().all(|x| x.is_finite()) {
+            return Err("Les coordonnées du contour doivent être finies.".into());
+        }
+        if c.last().is_none_or(|q: &[f64; 2]| (q[0] - p[0]).hypot(q[1] - p[1]) > 0.5) {
+            c.push(p);
+        }
+    }
+    while c.len() > 1 && (c[0][0] - c[c.len() - 1][0]).hypot(c[0][1] - c[c.len() - 1][1]) <= 0.5 {
+        c.pop();
+    }
+    if c.len() < 3 {
+        return Err("Le contour doit avoir au moins trois sommets.".into());
+    }
+    let aire = geometrie::aire_pair_impair(std::slice::from_ref(&c));
+    if aire < 10_000.0 {
+        return Err("Le contour est trop petit (moins de 0,01 m²).".into());
+    }
+    let n = c.len();
+    let croise = |a: [f64; 2], b: [f64; 2], p: [f64; 2], q: [f64; 2]| {
+        let o = |a: [f64; 2], b: [f64; 2], c: [f64; 2]| (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+        let (d1, d2, d3, d4) = (o(p, q, a), o(p, q, b), o(a, b, p), o(a, b, q));
+        d1 * d2 < 0.0 && d3 * d4 < 0.0
+    };
+    for i in 0..n {
+        for j in i + 2..n {
+            if i == 0 && j == n - 1 {
+                continue;
+            }
+            if croise(c[i], c[(i + 1) % n], c[j], c[(j + 1) % n]) {
+                return Err("Le contour se recoupe.".into());
+            }
+        }
+    }
+    let signe: f64 = (0..n).map(|i| c[i][0] * c[(i + 1) % n][1] - c[(i + 1) % n][0] * c[i][1]).sum();
+    if signe < 0.0 {
+        c.reverse();
+    }
+    Ok(c)
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ListeCreation { Phase, SousProjet, Variante }
 
@@ -79,6 +137,66 @@ impl ListeCreation {
 }
 
 impl Projet {
+    /// Ajoute une dalle de contour `points` ; son type (couches du haut vers le bas) est
+    /// repris s'il existe déjà (même nom et mêmes couches), sinon ajouté. Rien ne change
+    /// en cas d'erreur.
+    pub fn ajouter_dalle(&mut self, points: &[[f64; 2]], p: &ParametresDalle) -> Result<String, String> {
+        let contour = contour_valide(points)?;
+        if !p.decalage.is_finite() {
+            return Err("Le décalage doit être fini.".into());
+        }
+        let t = &p.type_dalle;
+        if t.couches.is_empty() || t.couches.iter().any(|c| !(c.epaisseur > 0.0 && c.epaisseur.is_finite())) {
+            return Err("Le type de dalle doit avoir des couches d’épaisseur positive.".into());
+        }
+        let niveau = match &p.niveau {
+            Some(id) => self.niveau(id).ok_or("Niveau introuvable.")?.id.clone(),
+            None => self.niveaux.first().map(|n| n.id.clone()).unwrap_or_else(|| identifiant("niveau", "niveau-0")),
+        };
+        if p.variante.as_ref().is_some_and(|id| !self.variantes.iter().any(|v| &v.id == id)) {
+            return Err("Variante introuvable.".into());
+        }
+        if self.niveaux.is_empty() {
+            self.niveaux.push(Niveau { id: niveau.clone(), nom: "Niveau 0".into(), altitude: 0.0, origine: None });
+        }
+        let type_dalle = match self.types_dalles.iter().find(|x| x.nom == t.nom && x.couches == t.couches) {
+            Some(x) => x.id.clone(),
+            None => {
+                let mut k = self.types_dalles.len() + 1;
+                let id = loop {
+                    let id = identifiant("type-dalle", &format!("{}:{k}", t.nom));
+                    if self.types_dalles.iter().all(|x| x.id != id) { break id; }
+                    k += 1;
+                };
+                self.types_dalles.push(TypeCompose { id: id.clone(), nom: t.nom.clone(), couches: t.couches.clone(), couches_detaillees: true, origine: None });
+                id
+            }
+        };
+        let mut k = self.dalles.len() + 1;
+        let id = loop {
+            let id = identifiant("dalle", &format!("natif-{k}"));
+            if self.dalles.iter().all(|d| d.id != id) { break id; }
+            k += 1;
+        };
+        if self.phases.is_empty() { self.phases.push(p.phase.clone().unwrap_or_else(|| "Projet".into())); }
+        if self.sous_projets.is_empty() { self.sous_projets.push(p.sous_projet.clone().unwrap_or_else(|| "Sous-projet 1".into())); }
+        self.dalles.push(Dalle {
+            variante: p.variante.clone(),
+            phase: p.phase.clone().or_else(|| self.phases.last().cloned()),
+            sous_projet: p.sous_projet.clone().or_else(|| self.sous_projets.first().cloned()),
+            id: id.clone(),
+            nom: format!("{} {k}", t.nom),
+            type_dalle,
+            niveau,
+            decalage: p.decalage,
+            contours: vec![contour],
+            origine: None,
+        });
+        self.completer_materiaux();
+        self.arrondir();
+        Ok(id)
+    }
+
     /// Ajout atomique aux listes communes à tous les outils de création.
     pub fn ajouter_choix_creation(&mut self, liste: ListeCreation, nom: &str, jeu: &str) -> Result<String, String> {
         let nom = nom.trim();
@@ -267,6 +385,36 @@ mod tests {
         options.variante = Some("absente".into());
         assert!(projet.ajouter_mur([0.,0.], [1000.,0.], &options).is_err());
         assert_eq!(projet.json().unwrap(), avant);
+    }
+
+    #[test]
+    fn dalle_creation_contour_et_relecture() {
+        let mut p = Projet::nouveau("Dalle");
+        let c = |m: &str, e: f64| Couche { materiau: Some(m.into()), epaisseur: e, ..Default::default() };
+        let t = TypeCompose { id: String::new(), nom: "Dalle BA 230 + chape".into(), couches: vec![c("Chape ciment", 50.0), c("Béton armé", 230.0)], couches_detaillees: true, origine: None };
+        let o = ParametresDalle { type_dalle: t, niveau: None, decalage: 0.0, phase: None, sous_projet: None, variante: None };
+        // contour en sens horaire, point de fermeture répété : réorienté et nettoyé
+        let id = p.ajouter_dalle(&[[0.0, 0.0], [0.0, 4000.0], [5000.0, 4000.0], [5000.0, 0.0], [0.0, 0.0]], &o).unwrap();
+        let d = p.dalles.iter().find(|d| d.id == id).unwrap();
+        assert_eq!(d.contours[0].len(), 4);
+        assert!((p.volume_dalle(d).unwrap() - 5000.0 * 4000.0 * 280.0).abs() < 1.0);
+        // même type : pas de doublon ; contours invalides refusés sans rien changer
+        p.ajouter_dalle(&[[6000.0, 0.0], [8000.0, 0.0], [8000.0, 2000.0]], &o).unwrap();
+        assert_eq!(p.types_dalles.len(), 1);
+        let avant = p.json().unwrap();
+        for mauvais in [vec![[0.0, 0.0], [1000.0, 0.0]], vec![[0.0, 0.0], [1000.0, 1000.0], [1000.0, 0.0], [0.0, 1000.0]], vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]]] {
+            assert!(p.ajouter_dalle(&mauvais, &o).is_err());
+            assert_eq!(p.json().unwrap(), avant);
+        }
+        let relu = Projet::lire_json(&avant).unwrap();
+        assert_eq!(relu.dalles.len(), 2);
+        let s = crate::scene::depuis_natif(&relu, std::path::Path::new("dalle.modele.json")).unwrap();
+        assert_eq!(s.objects.len(), 2);
+        let volume: f64 = s.objects.iter().map(|o| s.vertices[o.opaque.start as usize..(o.opaque.start + o.opaque.count) as usize].chunks_exact(3).map(|t| {
+            let p = [0, 1, 2].map(|k| glam::Vec3::from(t[k].pos).as_dvec3());
+            p[0].dot(p[1].cross(p[2])) / 6.0
+        }).sum::<f64>()).sum();
+        assert!((volume - (20.0 + 2.0) * 0.28).abs() < 1e-4, "Volume du maillage : {volume}");
     }
 
     #[test]

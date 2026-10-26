@@ -293,6 +293,8 @@ enum AccrocheMur {
     Orthogonal,
     /// Angle rond depuis le départ (degrés).
     Angle(f64),
+    /// Angle d'un mur (contour raccordé).
+    Coin,
 }
 
 /// Onglet du ruban en haut de la fenêtre.
@@ -416,6 +418,8 @@ pub struct ViewerApp {
     alignement_plan: bool,
     /// Premier point d'une chaîne de murs (la refermer l'arrête).
     mur_chaine: Option<[f64; 2]>,
+    /// Sommets de la dalle en cours de tracé (mm).
+    dalle_points: Vec<[f64; 2]>,
     /// Longueur du mur en cours tapée au clavier (mm).
     mur_saisie: String,
     confirmer_fermeture: Option<(bool, usize)>, // application entière, ou identifiant du document
@@ -534,6 +538,7 @@ impl ViewerApp {
             natif_modifie: false,
             mur_depart: None,
             mur_saisie: String::new(),
+            dalle_points: Vec::new(),
             mur_chaine: None,
             alignement_plan: false,
             confirmer_fermeture: None,
@@ -1230,7 +1235,61 @@ impl ViewerApp {
             });
             ui.separator();
         } else {
-            return None;
+            let dalle = projet.dalles.iter().find(|d| scene::id_natif("dalle", &d.id) == id)?;
+            let mut d = dalle.clone();
+            let t = projet.type_dalle(&d.type_dalle);
+            ui.label(RichText::new(format!("Dalle · {}", t.map_or("", |t| t.nom.as_str()))).strong());
+            if let Some(t) = t {
+                for c in &t.couches {
+                    ui.horizontal(|ui| {
+                        let [r, g, b] = c.materiau.as_ref().and_then(|n| projet.materiau(n)).map_or([200, 200, 196], |m| m.couleur);
+                        let (q, _) = ui.allocate_exact_size(egui::vec2(16.0, 12.0), Sense::hover());
+                        ui.painter().rect_filled(q, 0.0, Color32::from_rgb(r, g, b));
+                        ui.label(RichText::new(format!("{} · {} mm", c.materiau.as_deref().unwrap_or("Couche"), crate::step::format_real(c.epaisseur))).small());
+                    });
+                }
+            }
+            let mut change = false;
+            egui::Grid::new("dalle_natif_proprietes").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
+                ui.label("Niveau");
+                let nom = projet.niveau(&d.niveau).map_or(d.niveau.clone(), |n| n.nom.clone());
+                egui::ComboBox::from_id_salt("dalle_niveau").width(150.0).selected_text(nom).show_ui(ui, |ui| {
+                    for n in &projet.niveaux {
+                        change |= ui.selectable_value(&mut d.niveau, n.id.clone(), &n.nom).changed();
+                    }
+                });
+                ui.end_row();
+                ui.label("Décalage (dessus)");
+                change |= ui.add(egui::DragValue::new(&mut d.decalage).speed(10.0).suffix(" mm")).changed();
+                ui.end_row();
+                for (nom, valeur, choix, sale) in [("Phase", &mut d.phase, &projet.phases, "dalle_phase"), ("Sous-projet", &mut d.sous_projet, &projet.sous_projets, "dalle_sous_projet")] {
+                    ui.label(nom);
+                    egui::ComboBox::from_id_salt(sale).width(150.0).selected_text(valeur.as_deref().unwrap_or("Non renseigné")).show_ui(ui, |ui| {
+                        for c in choix {
+                            change |= ui.selectable_value(valeur, Some(c.clone()), c).changed();
+                        }
+                    });
+                    ui.end_row();
+                }
+                let aire = crate::modele::geometrie::aire_pair_impair(&d.contours);
+                for (nom, valeur) in [
+                    ("Aire", format!("{:.2} m²", aire / 1e6)),
+                    ("Épaisseur", format!("{} mm", crate::step::format_real(t.map_or(0.0, |t| t.epaisseur())))),
+                    ("Volume", format!("{:.3} m³", projet.volume_dalle(&d).unwrap_or(0.0) / 1e9)),
+                ] {
+                    ui.label(nom);
+                    ui.label(valeur);
+                    ui.end_row();
+                }
+            });
+            if change {
+                let mut p = projet.clone();
+                if let Some(x) = p.dalles.iter_mut().find(|x| x.id == d.id) {
+                    *x = d;
+                }
+                nouveau = Some(p);
+            }
+            ui.separator();
         }
         if let Some(sel) = selection {
             self.select(Some(sel), true);
@@ -1499,6 +1558,96 @@ impl ViewerApp {
         Ok(id)
     }
 
+    /// Crée une dalle de contour `pts` (mm) dans le projet natif et la sélectionne.
+    fn creer_dalle(&mut self, pts: &[[f64; 2]], parametres: &crate::modele::edition::ParametresDalle) {
+        let Some((projet, _)) = &self.natif else { return };
+        let mut projet = projet.clone();
+        match projet.ajouter_dalle(pts, parametres).and_then(|id| self.appliquer_projet(projet).map(|_| id)) {
+            Ok(id) => {
+                self.selected = Some(scene::id_natif("dalle", &id));
+                self.reveal = self.selected;
+                self.status = "Dalle créée — Ctrl+S pour enregistrer.".into();
+            }
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    /// Rectangle de coins opposés `a` et `b`, côtés dans les axes du plan (repère tourné).
+    fn rectangle_plan(&self, a: [f64; 2], b: [f64; 2]) -> Vec<[f64; 2]> {
+        let t = self.angle_axes_plan();
+        let (u, v) = ([t.cos(), t.sin()], [-t.sin(), t.cos()]);
+        let d = [b[0] - a[0], b[1] - a[1]];
+        let (du, dv) = (d[0] * u[0] + d[1] * u[1], d[0] * v[0] + d[1] * v[1]);
+        vec![a, [a[0] + u[0] * du, a[1] + u[1] * du], [a[0] + u[0] * du + v[0] * dv, a[1] + u[1] * du + v[1] * dv], [a[0] + v[0] * dv, a[1] + v[1] * dv]]
+    }
+
+    /// Aperçu de la dalle en cours : contour (avec le curseur), surface et aire, repère
+    /// d'accrochage, premier sommet signalé quand le contour peut s'y refermer.
+    fn apercu_dalle(&self, ui: &egui::Ui, rect: egui::Rect, survol: Option<([f64; 2], AccrocheMur)>, altitude: f64) {
+        let Some(scene) = &self.scene else { return };
+        let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
+        let ecran = |p: [f64; 2]| {
+            let p = (glam::DVec3::new(p[0], p[1], altitude) * 0.001 - scene.origin).as_vec3();
+            let c = vp * p.extend(1.0);
+            (c.w > 0.0).then(|| egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height()))
+        };
+        let painter = ui.painter().with_clip_rect(rect);
+        let couleur = Color32::from_rgb(55, 130, 200);
+        let accent = Color32::from_rgb(230, 120, 20);
+        let mut pts = self.dalle_points.clone();
+        if let Some((p, _)) = survol {
+            if self.ruban_edition.dalle_rectangle {
+                if let Some(&a) = pts.first() {
+                    pts = self.rectangle_plan(a, p);
+                }
+            } else if pts.first() != Some(&p) || pts.len() < 3 {
+                pts.push(p);
+            }
+        }
+        let ecr: Vec<egui::Pos2> = pts.iter().filter_map(|&p| ecran(p)).collect();
+        if ecr.len() >= 3 {
+            let aire = crate::modele::geometrie::aire_pair_impair(std::slice::from_ref(&pts));
+            let maillage = crate::texte::trianguler(vec![ecr.iter().map(|p| [p.x, p.y]).collect()]);
+            let mut m = egui::Mesh::default();
+            for t in maillage {
+                for p in t {
+                    m.colored_vertex(egui::pos2(p[0], p[1]), couleur.gamma_multiply(0.18));
+                }
+            }
+            m.indices = (0..m.vertices.len() as u32).collect();
+            painter.add(egui::Shape::mesh(m));
+            let c = ecr.iter().fold(egui::Vec2::ZERO, |s, p| s + p.to_vec2()) / ecr.len() as f32;
+            let galee = painter.layout_no_wrap(format!("{:.2} m²", aire / 1e6), egui::FontId::proportional(13.0), Color32::from_gray(30));
+            let cadre = egui::Rect::from_center_size(c.to_pos2(), galee.size() + egui::vec2(12.0, 6.0));
+            painter.rect(cadre, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 235), egui::Stroke::new(1.0, couleur), egui::StrokeKind::Inside);
+            painter.galley(cadre.min + egui::vec2(6.0, 3.0), galee, Color32::from_gray(30));
+        }
+        if ecr.len() >= 2 {
+            let mut ligne = ecr.clone();
+            if self.ruban_edition.dalle_rectangle || ecr.len() >= 3 {
+                ligne.push(ecr[0]);
+            }
+            painter.add(egui::Shape::line(ligne, egui::Stroke::new(1.5, couleur)));
+        }
+        for (k, q) in self.dalle_points.iter().filter_map(|&p| ecran(p)).enumerate() {
+            let fermer = k == 0 && self.dalle_points.len() >= 3 && survol.is_some_and(|(p, _)| p == self.dalle_points[0]);
+            painter.circle(q, if fermer { 6.0 } else { 3.0 }, if fermer { accent } else { Color32::WHITE }, egui::Stroke::new(1.5, if fermer { accent } else { couleur }));
+        }
+        if let Some((p, acc)) = survol
+            && let Some(q) = ecran(p)
+        {
+            marqueur(&painter, q, acc, couleur, accent);
+        }
+        let texte = match (self.ruban_edition.dalle_rectangle, self.dalle_points.len()) {
+            (true, 0) => "Dalle : cliquer un premier coin · molette : zoom · milieu : panoramique",
+            (true, _) => "Dalle : cliquer le coin opposé · Échap : annuler",
+            (false, 0) => "Dalle : cliquer le premier sommet du contour",
+            (false, 1 | 2) => "Dalle : sommet suivant · Maj : orthogonal · Retour arrière : enlever le dernier",
+            _ => "Dalle : sommet suivant, recliquer le premier ou Entrée pour fermer · Échap : annuler",
+        };
+        painter.text(rect.left_top() + egui::vec2(12.0, 12.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
+    }
+
     /// Remplace le projet natif ouvert par `projet` (modifié) et reconstruit la scène,
     /// cadrage, niveaux, catégories et visibilité compris. Rien ne change en cas d'erreur.
     fn appliquer_projet(&mut self, projet: crate::modele::Projet) -> Result<(), String> {
@@ -1575,9 +1724,18 @@ impl ViewerApp {
     /// à 3° près) depuis le départ ; sinon grille de 10 mm.
     fn point_tracage_mur(&self, q: egui::Pos2, rect: egui::Rect, orthogonal: bool) -> Option<([f64; 2], AccrocheMur)> {
         let (projet, _) = self.natif.as_ref()?;
-        let scene = self.scene.as_ref()?;
         let options = self.ruban_edition.parametres_mur();
         let altitude = options.niveau.as_ref().and_then(|id| projet.niveau(id)).or_else(|| projet.niveaux.first()).map_or(0.0, |n| n.altitude) + options.decalage;
+        self.point_tracage(q, rect, orthogonal, self.mur_depart, altitude)
+    }
+
+    /// Point de tracé sous le curseur sur le plan horizontal `altitude` (mm), et son
+    /// accrochage : extrémité ou milieu d'un mur de ce niveau, angle d'un mur (contour
+    /// raccordé), sommet d'une dalle ou du contour en cours, à dix pixels près ; puis
+    /// depuis `depart` : Maj (axes du plan) ou angle rond ; sinon grille de 10 mm.
+    fn point_tracage(&self, q: egui::Pos2, rect: egui::Rect, orthogonal: bool, depart: Option<[f64; 2]>, altitude: f64) -> Option<([f64; 2], AccrocheMur)> {
+        let (projet, _) = self.natif.as_ref()?;
+        let scene = self.scene.as_ref()?;
         let x = (q.x - rect.left()) / rect.width() * 2.0 - 1.0;
         let y = 1.0 - (q.y - rect.top()) / rect.height() * 2.0;
         let (o, d) = self.camera.ray(x, y, rect.width() / rect.height().max(1.0));
@@ -1589,23 +1747,41 @@ impl ViewerApp {
         let mut accroche = AccrocheMur::Grille;
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
         let mut distance = 10.0;
+        let mut candidats: Vec<([f64; 2], AccrocheMur)> = Vec::new();
+        let jonctions = crate::modele::jonctions::coupes(projet);
         for m in &projet.murs {
-            if projet.bas_haut(m).is_none_or(|(z, _)| (z - altitude).abs() > 0.1) { continue; }
+            // murs qui traversent ce plan (base au niveau, ou plus bas et plus haut)
+            if projet.bas_haut(m).is_none_or(|(b, h)| altitude < b - 0.1 || altitude > h + 0.1) { continue; }
             let (crate::modele::Axe::Droit { debut, fin } | crate::modele::Axe::Arc { debut, fin, .. }) = m.axe;
-            let milieu = [(debut[0] + fin[0]) * 0.5, (debut[1] + fin[1]) * 0.5];
-            for (v, genre) in [(debut, AccrocheMur::Extremite), (fin, AccrocheMur::Extremite), (milieu, AccrocheMur::Milieu)] {
-                let p = (glam::DVec3::new(v[0], v[1], altitude) * 0.001 - scene.origin).as_vec3();
-                let clip = vp * p.extend(1.0);
-                if clip.w <= 0.0 { continue; }
-                let n = clip.truncate() / clip.w;
-                let ecran = egui::pos2(rect.left() + (n.x + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - n.y) * 0.5 * rect.height());
-                // à distance égale, l'extrémité l'emporte sur le milieu
-                let d = q.distance(ecran) + if genre == AccrocheMur::Milieu { 0.5 } else { 0.0 };
-                if d < distance { point = v; distance = d; accroche = genre; }
+            if projet.bas_haut(m).is_some_and(|(b, _)| (b - altitude).abs() <= 0.1) {
+                candidats.push((debut, AccrocheMur::Extremite));
+                candidats.push((fin, AccrocheMur::Extremite));
+                candidats.push(([(debut[0] + fin[0]) * 0.5, (debut[1] + fin[1]) * 0.5], AccrocheMur::Milieu));
+            }
+            if let Some(c) = crate::modele::jonctions::contour(projet, m, &jonctions) {
+                candidats.extend(c.into_iter().map(|p| (p, AccrocheMur::Angle(f64::NAN))));
+            }
+        }
+        for d in &projet.dalles {
+            candidats.extend(d.contours.iter().flatten().map(|&p| (p, AccrocheMur::Extremite)));
+        }
+        candidats.extend(self.dalle_points.iter().map(|&p| (p, AccrocheMur::Extremite)));
+        for (v, genre) in candidats {
+            let p = (glam::DVec3::new(v[0], v[1], altitude) * 0.001 - scene.origin).as_vec3();
+            let clip = vp * p.extend(1.0);
+            if clip.w <= 0.0 { continue; }
+            let n = clip.truncate() / clip.w;
+            let ecran = egui::pos2(rect.left() + (n.x + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - n.y) * 0.5 * rect.height());
+            // à distance égale, l'extrémité l'emporte sur le milieu et l'angle
+            let d = q.distance(ecran) + if genre == AccrocheMur::Extremite { 0.0 } else { 0.5 };
+            if d < distance {
+                point = v;
+                distance = d;
+                accroche = if matches!(genre, AccrocheMur::Angle(_)) { AccrocheMur::Coin } else { genre };
             }
         }
         if accroche != AccrocheMur::Grille { return Some((point, accroche)); }
-        let Some(a) = self.mur_depart else { return Some((point, accroche)) };
+        let Some(a) = depart else { return Some((point, accroche)) };
         let (dx, dy) = (point[0] - a[0], point[1] - a[1]);
         let longueur = dx.hypot(dy);
         // axes du plan tourné (repère du plan) : Maj et angles ronds suivent l'écran
@@ -1656,14 +1832,7 @@ impl ViewerApp {
         };
         if let Some((b, acc)) = fin {
             if let Some(q) = ecran(b, altitude) {
-                match acc {
-                    AccrocheMur::Extremite => { painter.rect_stroke(egui::Rect::from_center_size(q, egui::vec2(11.0, 11.0)), 0.0, egui::Stroke::new(2.0, accent), egui::StrokeKind::Middle); }
-                    AccrocheMur::Milieu => {
-                        let h = 7.0;
-                        painter.add(egui::Shape::closed_line(vec![q + egui::vec2(0.0, -h), q + egui::vec2(h, h * 0.8), q + egui::vec2(-h, h * 0.8)], egui::Stroke::new(2.0, accent)));
-                    }
-                    _ => { painter.circle_stroke(q, 4.0, egui::Stroke::new(1.5, couleur)); }
-                }
+                marqueur(&painter, q, acc, couleur, accent);
             }
             if let Some(a) = self.mur_depart {
                 // ligne guide prolongée de l'angle accroché
@@ -3545,7 +3714,7 @@ impl ViewerApp {
         if self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.proprietes_mur(ui, self.natif.as_ref().map(|(p, _)| p)) {
             return;
         }
-        if self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.proprietes_surfaces(ui) {
+        if self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.proprietes_surfaces(ui, self.natif.as_ref().map(|(p, _)| p)) {
             return;
         }
         if let (Some(s), Some(id)) = (&self.scene, self.selected) {
@@ -3874,7 +4043,16 @@ impl ViewerApp {
         let aspect = rect.width() / rect.height().max(1.0);
         let mode_mur = self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.mur_actif() && self.natif.is_some() && self.loading.is_none();
         if !mode_mur { self.mur_depart = None; }
-        if mode_mur && resp.hovered() { ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair); }
+        // dalle (ou sol) : contour cliqué sur le plan de son dessus
+        let dalle = if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() { self.ruban_edition.dalle_active() } else { None };
+        let altitude_dalle = dalle.as_ref().and_then(|d| {
+            let (projet, _) = self.natif.as_ref()?;
+            let n = d.niveau.as_ref().and_then(|id| projet.niveau(id)).or_else(|| projet.niveaux.first());
+            Some(n.map_or(0.0, |n| n.altitude) + d.decalage)
+        });
+        if dalle.is_none() { self.dalle_points.clear(); }
+        let mode_trace = mode_mur || dalle.is_some();
+        if mode_trace && resp.hovered() { ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair); }
         let ndc = |p: egui::Pos2| {
             Vec2::new((p.x - rect.left()) / rect.width() * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height() * 2.0)
         };
@@ -3894,15 +4072,15 @@ impl ViewerApp {
             };
 
             // Orbite autour du point visé (vue 3D seulement).
-            if !mode_mur && resp.drag_started_by(PointerButton::Primary) && !ui.input(|i| i.modifiers.shift) && self.vue_3d() {
+            if !mode_trace && resp.drag_started_by(PointerButton::Primary) && !ui.input(|i| i.modifiers.shift) && self.vue_3d() {
                 if let Some((_, p)) = resp.interact_pointer_pos().and_then(|pp| pick(self, pp)) {
                     self.camera.set_pivot(p);
                 }
             }
             let shift = ui.input(|i| i.modifiers.shift);
-            if !mode_mur { self.voler(ui, &resp); } else { self.vol.actif = false; }
+            if !mode_trace { self.voler(ui, &resp); } else { self.vol.actif = false; }
             for b in [PointerButton::Primary, PointerButton::Secondary, PointerButton::Middle] {
-                if mode_mur && b != PointerButton::Middle { continue; }
+                if mode_trace && b != PointerButton::Middle { continue; }
                 if resp.dragged_by(b) && !(self.vol.actif && b == PointerButton::Secondary) {
                     self.glisser(b, resp.drag_delta(), shift, rect.height());
                 }
@@ -3938,6 +4116,35 @@ impl ViewerApp {
                             self.alignement_plan = false;
                         }
                         None => self.status = "Aligner : cliquer un élément du plan (Échap : annuler)".into(),
+                    }
+                }
+            } else if let (Some(parametres), Some(alt)) = (&dalle, altitude_dalle) {
+                if resp.clicked_by(PointerButton::Secondary) { self.dalle_points.clear(); }
+                let (entree, retour) = ui.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Backspace)));
+                if retour { self.dalle_points.pop(); }
+                if entree && self.dalle_points.len() >= 3 {
+                    let pts = std::mem::take(&mut self.dalle_points);
+                    self.creer_dalle(&pts, parametres);
+                }
+                if resp.clicked() {
+                    let depart = self.dalle_points.last().copied();
+                    if let Some((p, _)) = resp.interact_pointer_pos().and_then(|q| self.point_tracage(q, rect, shift, depart, alt)) {
+                        if self.ruban_edition.dalle_rectangle {
+                            match self.dalle_points.first().copied() {
+                                Some(a) => {
+                                    let pts = self.rectangle_plan(a, p);
+                                    self.dalle_points.clear();
+                                    self.creer_dalle(&pts, parametres);
+                                }
+                                None => self.dalle_points.push(p),
+                            }
+                        } else if self.dalle_points.len() >= 3 && self.dalle_points[0] == p {
+                            // retour au premier sommet : contour fermé
+                            let pts = std::mem::take(&mut self.dalle_points);
+                            self.creer_dalle(&pts, parametres);
+                        } else {
+                            self.dalle_points.push(p);
+                        }
                     }
                 }
             } else if mode_mur {
@@ -4031,6 +4238,10 @@ impl ViewerApp {
             })),
         };
         ui.painter().add(callback);
+        if let (Some(_), Some(alt)) = (&dalle, altitude_dalle) {
+            let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.dalle_points.last().copied(), alt));
+            self.apercu_dalle(ui, rect, point, alt);
+        }
         if mode_mur {
             let point = resp.hover_pos().and_then(|q| self.point_tracage_mur(q, rect, ui.input(|i| i.modifiers.shift)));
             self.apercu_mur(ui, rect, point);
@@ -4281,10 +4492,21 @@ impl ViewerApp {
             "outil" => {
                 match argument {
                     "mur" => { self.onglet_ruban = OngletRuban::Modeliser; self.ruban_edition.activer_mur(); }
+                    "dalle" | "sol" => { self.onglet_ruban = OngletRuban::Modeliser; self.ruban_edition.activer_surface(argument == "sol"); }
                     "aucun" => { self.ruban_edition.annuler(); self.mur_depart = None; }
-                    _ => return erreur("usage : outil mur|aucun"),
+                    _ => return erreur("usage : outil mur|dalle|sol|aucun"),
                 }
                 self.etat()
+            }
+            "dalle" => {
+                // dalle <x y> <x y> <x y> … (mm) : type, niveau et décalage de l'outil Dalle / Sol
+                let Ok(v) = argument.split_whitespace().map(str::parse::<f64>).collect::<Result<Vec<_>, _>>() else { return erreur("coordonnées de la dalle invalides") };
+                if v.len() < 6 || v.len() % 2 != 0 { return erreur("usage : dalle <x0 y0> <x1 y1> <x2 y2> … (mm)") }
+                let pts: Vec<[f64; 2]> = v.chunks(2).map(|c| [c[0], c[1]]).collect();
+                self.onglet_ruban = OngletRuban::Modeliser;
+                let Some(parametres) = self.ruban_edition.dalle_active().or_else(|| { self.ruban_edition.activer_dalle(); self.ruban_edition.dalle_active() }) else { return erreur("outil Dalle indisponible") };
+                self.creer_dalle(&pts, &parametres);
+                match &self.error { Some(e) => erreur(e), None => self.etat() }
             }
             "type_mur" => {
                 // type_mur <nom>|<matériau>:<épaisseur mm>[:structure|isolation|finition]|… (extérieur → intérieur)
@@ -4666,6 +4888,28 @@ impl ViewerApp {
 }
 
 /// Icône d'un style visuel : petit cube en perspective, tracé dans `r`.
+/// Repère d'accrochage du tracé : carré (extrémité), triangle (milieu), losange
+/// (angle d'un mur), cercle sinon.
+fn marqueur(painter: &egui::Painter, q: egui::Pos2, acc: AccrocheMur, couleur: Color32, accent: Color32) {
+    let t = egui::Stroke::new(2.0, accent);
+    match acc {
+        AccrocheMur::Extremite => {
+            painter.rect_stroke(egui::Rect::from_center_size(q, egui::vec2(11.0, 11.0)), 0.0, t, egui::StrokeKind::Middle);
+        }
+        AccrocheMur::Milieu => {
+            let h = 7.0;
+            painter.add(egui::Shape::closed_line(vec![q + egui::vec2(0.0, -h), q + egui::vec2(h, h * 0.8), q + egui::vec2(-h, h * 0.8)], t));
+        }
+        AccrocheMur::Coin => {
+            let h = 7.0;
+            painter.add(egui::Shape::closed_line(vec![q + egui::vec2(0.0, -h), q + egui::vec2(h, 0.0), q + egui::vec2(0.0, h), q + egui::vec2(-h, 0.0)], t));
+        }
+        _ => {
+            painter.circle_stroke(q, 4.0, egui::Stroke::new(1.5, couleur));
+        }
+    }
+}
+
 /// Icône du niveau de détail : un, deux ou trois traits, comme dans Revit.
 fn icone_detail(p: &egui::Painter, r: egui::Rect, d: NiveauDetail) {
     let n = match d {
@@ -4931,8 +5175,10 @@ impl eframe::App for ViewerApp {
             self.alignement_plan = false;
         }
         if self.ruban_edition.a_un_outil() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
-            // Échap : la saisie, puis le mur en cours, puis l'outil
-            if !self.mur_saisie.is_empty() {
+            // Échap : la saisie, puis le mur ou la dalle en cours, puis l'outil
+            if !self.dalle_points.is_empty() {
+                self.dalle_points.clear();
+            } else if !self.mur_saisie.is_empty() {
                 self.mur_saisie.clear();
             } else if self.mur_depart.take().is_none() {
                 self.ruban_edition.annuler();

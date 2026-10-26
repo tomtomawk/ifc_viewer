@@ -82,7 +82,7 @@ garde le RVT et ses vues ouverts, sans basculer vers le rendu natif limité.
 | `murs[]` | `id`, `nom`, `type_mur`, `niveau`, `decalage_bas`, `haut`, `axe`, `origine`, `phase`, `sous_projet`, `variante` | `phase`, `sous_projet` et `variante` sont facultatifs (absents des anciens fichiers). `haut` : `{contrainte: libre, hauteur}` ou `{contrainte: niveau, niveau, decalage}` |
 | `axe` | `{forme: droit, debut, fin}` ou `{forme: arc, debut, fin, centre, direct}` | Ligne médiane de l'épaisseur, en plan (x, y) |
 | `ouvertures[]` | `id`, `nom`, `genre` (porte, fenetre, baie), `mur`, `type_ouverture`, `abscisse`, `largeur`, `hauteur`, `allege`, `representation`, `origine` | Baie rectangulaire à travers le mur ; `abscisse` = milieu de la baie le long de l'axe ; `allege` au-dessus du niveau du mur ; `representation` = menuiserie lue (maillage) |
-| `dalles[]` | `id`, `nom`, `type_dalle`, `niveau`, `decalage`, `contours`, `origine` | `decalage` = dessus au-dessus du niveau ; `contours` en plan, pair-impair (trous) |
+| `dalles[]` | `id`, `nom`, `type_dalle`, `niveau`, `decalage`, `contours`, `phase`, `sous_projet`, `variante`, `origine` | `decalage` = dessus au-dessus du niveau ; `contours` en plan, pair-impair (trous) |
 | `importes[]` | `id`, `nom`, `categorie`, `niveau`, `maillage`, `raison`, `origine` | `maillage` : `sommets` [x, y, z], `triangles` [i, j, k] |
 | `ignores` | catégorie → nombre | Éléments sans géométrie ou hors périmètre (pièces, quadrillages, espaces, ouvertures IFC vides, éléments 2D) |
 
@@ -108,6 +108,17 @@ doublage d'une autre phase…). Conventions :
 - **Type** : le type composé reste celui de l'assemblage ; le modifier n'affecte que les
   prochains tracés (les murs déjà tracés gardent leurs couches).
 - **Volume** : celui de chaque couche, baies de son assemblage déduites.
+
+## Dalles natives
+
+Outil Dalle (ou Sol) : type choisi dans le sélecteur de type (couches du haut vers le
+bas, enregistré dans `types_dalles` à la première dalle de ce type), niveau et décalage
+du dessus dans Propriétés. Contour par sommets (recliquer le premier ou Entrée pour
+fermer, Retour arrière enlève le dernier) ou rectangle par deux coins dans les axes du
+plan ; accrochage aux extrémités, milieux et angles des murs (contours raccordés) et
+aux sommets des dalles. Contour validé : au moins trois sommets, 0,01 m² au moins,
+pas d'arête qui en croise une autre, orienté dans le sens trigonométrique. Affichage :
+une partie par couche (couleur du matériau), poché par couche en coupe.
 
 ## Jonctions
 

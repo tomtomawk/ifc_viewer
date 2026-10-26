@@ -234,7 +234,7 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
             .clone();
         let id = ident("dalle", d.id);
         c.lire(&id, &tris, categorie);
-        c.projet.dalles.push(Dalle { id, nom, type_dalle, niveau: base.0.clone(), decalage: p.haut - base.1, contours: p.contours, origine: origine(d.id, &d.classe) });
+        c.projet.dalles.push(Dalle { variante: None, phase: None, sous_projet: None, id, nom, type_dalle, niveau: base.0.clone(), decalage: p.haut - base.1, contours: p.contours, origine: origine(d.id, &d.classe) });
     }
 
     // le reste : éléments importés

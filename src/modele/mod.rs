@@ -338,6 +338,13 @@ pub struct Ouverture {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Dalle {
+    /// None : modèle principal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variante: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sous_projet: Option<String>,
     pub id: String,
     pub nom: String,
     pub type_dalle: String,

@@ -275,6 +275,10 @@ pub struct RubanEdition {
     erreur_creation: Option<String>,
     /// Type des prochains murs ; None : générique, épaisseur saisie.
     pub type_mur: Option<String>,
+    /// Niveau des prochaines dalles (None : le premier).
+    pub niveau_dalle: Option<String>,
+    /// Tracé des dalles par deux coins (sinon polygone).
+    pub dalle_rectangle: bool,
     /// Type prédéfini choisi pour chaque sorte d'élément horizontal (indice).
     type_surface: BTreeMap<Outil, usize>,
     /// Type composé en cours d'édition (fenêtre « Type de mur »).
@@ -402,12 +406,42 @@ fn champs(o: Outil) -> Vec<Champ> {
 }
 
 impl RubanEdition {
+    /// Paramètres de la dalle (ou du sol) à tracer, si cet outil est actif.
+    pub fn dalle_active(&self) -> Option<crate::modele::edition::ParametresDalle> {
+        let sorte = self.selection.filter(|o| matches!(o, Outil::Dalle | Outil::Sol))?;
+        let types = types_surface(sorte);
+        let (nom, couches) = types.get(self.type_surface.get(&sorte).copied().unwrap_or(0))?.clone();
+        let decalage = match self.valeurs.get(&(sorte, 1)) {
+            Some(Valeur::Nombre(v)) => *v,
+            _ => 0.0,
+        };
+        Some(crate::modele::edition::ParametresDalle {
+            type_dalle: crate::modele::TypeCompose { id: String::new(), nom: nom.into(), couches, couches_detaillees: true, origine: None },
+            niveau: self.niveau_dalle.clone(),
+            decalage,
+            phase: self.phase_creation.clone(),
+            sous_projet: self.sous_projet_creation.clone(),
+            variante: self.variante_creation.clone(),
+        })
+    }
+
     pub fn mur_actif(&self) -> bool {
         self.selection == Some(Outil::Mur)
     }
     pub fn a_un_outil(&self) -> bool {
         self.selection.is_some()
     }
+    /// Outil Dalle (ou Sol), type courant de la sorte.
+    pub fn activer_surface(&mut self, sol: bool) {
+        let o = if sol { Outil::Sol } else { Outil::Dalle };
+        self.selection = Some(o);
+        self.derniere_surface = Some(o);
+    }
+
+    pub fn activer_dalle(&mut self) {
+        self.activer_surface(false);
+    }
+
     pub fn activer_mur(&mut self) {
         self.selection = Some(Outil::Mur);
     }
@@ -1320,7 +1354,7 @@ impl RubanEdition {
     /// Sélecteur de création placé en tête de la palette Propriétés, comme un
     /// sélecteur de type : vignette, choix explicite, puis paramètres de l'outil.
     /// Retourne false pour laisser la palette afficher la sélection du modèle.
-    pub fn proprietes_surfaces(&mut self, ui: &mut egui::Ui) -> bool {
+    pub fn proprietes_surfaces(&mut self, ui: &mut egui::Ui, projet: Option<&crate::modele::Projet>) -> bool {
         let Some(mut surface) = self.selection.filter(|o| o.commande() == Outil::Surfaces) else {
             return false;
         };
@@ -1425,6 +1459,37 @@ impl RubanEdition {
         ui.add_space(8.0);
         ui.label(RichText::new("Paramètres").strong());
         ui.separator();
+        // dalle et sol : tracé dans la vue (projet natif), niveau et mode de tracé
+        if matches!(surface, Outil::Dalle | Outil::Sol) {
+            match projet {
+                Some(projet) => {
+                    if self.niveau_dalle.as_ref().is_some_and(|id| projet.niveau(id).is_none()) {
+                        self.niveau_dalle = None;
+                    }
+                    egui::Grid::new("dalle_trace").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                        ui.label("Niveau");
+                        let nom = self.niveau_dalle.as_ref().and_then(|id| projet.niveau(id)).or(projet.niveaux.first()).map_or("Niveau 0", |n| n.nom.as_str());
+                        egui::ComboBox::from_id_salt("niveau_dalle").width(130.0).selected_text(nom).show_ui(ui, |ui| {
+                            for n in &projet.niveaux {
+                                ui.selectable_value(&mut self.niveau_dalle, Some(n.id.clone()), &n.nom);
+                            }
+                        });
+                        ui.end_row();
+                        ui.label("Tracé");
+                        ui.horizontal(|ui| {
+                            ui.selectable_value(&mut self.dalle_rectangle, false, "Polygone").on_hover_text("Cliquer les sommets ; recliquer le premier ou Entrée pour fermer");
+                            ui.selectable_value(&mut self.dalle_rectangle, true, "Rectangle").on_hover_text("Deux coins opposés, dans les axes du plan");
+                        });
+                        ui.end_row();
+                    });
+                }
+                None => {
+                    ui.label(RichText::new("Créez ou ouvrez un projet natif pour dessiner une dalle.").weak());
+                }
+            }
+        } else {
+            ui.label(RichText::new("Création pas encore raccordée : choix du type seulement.").small().weak());
+        }
         egui::Grid::new(("proprietes_surface", surface))
             .num_columns(2)
             .striped(true)
@@ -2015,7 +2080,7 @@ mod tests {
                     .exact_size(284.0)
                     .show(ui, |ui| {
                         ui.label("Propriétés");
-                        ruban.proprietes_surfaces(ui);
+                        ruban.proprietes_surfaces(ui, None);
                     });
                 egui::CentralPanel::default().show(ui, |_| {});
             },
