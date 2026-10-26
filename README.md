@@ -45,10 +45,13 @@ Les onglets d'édition présentent leurs groupes d'outils et les options de l'ou
 sélectionné directement à droite de son icône (Ouverture : Porte/Fenêtre ; Cote : Alignée/Orthogonale ; Texte :
 avec/sans flèche). **Mur** est opérationnel dans les projets natifs : régler
 hauteur, épaisseur, implantation et niveau de base, puis cliquer le départ et
-l'extrémité. L'aperçu suit le curseur, les extrémités existantes s'accrochent et
-Maj contraint le tracé horizontalement ou verticalement. L'option Chaîner permet
-de continuer depuis le dernier point. Échap annule le segment en cours, puis
-quitte l'outil ; le clic droit annule le segment. Le niveau 0 est créé au premier
+l'extrémité, ou taper la longueur au clavier puis Entrée (direction du curseur).
+L'aperçu montre le mur, sa longueur et son angle. Accrochages : extrémités (carré)
+et milieux (triangle) des murs du niveau, angles multiples de 15° à 3° près (ligne
+guide) ; Maj contraint le tracé horizontalement ou verticalement. L'option Chaîner
+permet de continuer depuis le dernier point ; revenir au premier point de la chaîne
+l'arrête. Échap efface la saisie, puis annule le segment en cours, puis quitte
+l'outil ; le clic droit arrête le segment. Le niveau 0 est créé au premier
 mur si le projet est vide. Les autres commandes restent à raccorder.
 Un astérisque signale les modifications et la fermeture propose de les enregistrer. Une seconde
 barre, au-dessus de la zone de dessin, affiche les vues ouvertes : vue générale du
