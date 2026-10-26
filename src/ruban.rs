@@ -47,7 +47,7 @@ impl Outil {
             Self::Niveau => "Niveau",
             Self::Quadrillage => "Quadrillage",
             Self::Mur => "Mur",
-            Self::Surfaces => "Surfaces",
+            Self::Surfaces => "Éléments horizontaux",
             Self::Dalle => "Dalle",
             Self::Sol => "Sol",
             Self::Toiture => "Toiture",
@@ -948,24 +948,46 @@ impl RubanEdition {
                         ui.visuals().text_color(),
                     );
                     ui.vertical(|ui| {
-                        ui.label(RichText::new("Surfaces").small().weak());
+                        ui.label(RichText::new("Éléments horizontaux").small().weak());
                         egui::ComboBox::from_id_salt("surface_proprietes")
                             .width(ui.available_width())
                             .height(240.0)
                             .selected_text(RichText::new(surface.nom()).strong())
                             .show_ui(ui, |ui| {
-                                ui.set_min_width(220.0);
+                                ui.set_min_width(280.0);
                                 for &(choix, aide) in SURFACES {
-                                    if ui
-                                        .add_sized(
-                                            [ui.available_width(), 42.0],
-                                            egui::Button::selectable(
-                                                surface == choix,
-                                                format!("{}\n{aide}", choix.nom()),
-                                            ),
-                                        )
-                                        .clicked()
-                                    {
+                                    let (r, reponse) = ui.allocate_exact_size(
+                                        egui::vec2(ui.available_width(), 50.0),
+                                        Sense::click(),
+                                    );
+                                    if surface == choix || reponse.hovered() {
+                                        ui.painter().rect_filled(
+                                            r,
+                                            4.0,
+                                            if surface == choix {
+                                                ui.visuals().selection.bg_fill
+                                            } else {
+                                                ui.visuals().widgets.hovered.bg_fill
+                                            },
+                                        );
+                                    }
+                                    icone(
+                                        ui.painter(),
+                                        egui::Rect::from_min_size(
+                                            r.min + egui::vec2(6.0, 8.0),
+                                            egui::vec2(34.0, 34.0),
+                                        ),
+                                        choix,
+                                        ui.visuals().text_color(),
+                                    );
+                                    ui.painter().text(
+                                        r.min + egui::vec2(48.0, 25.0),
+                                        egui::Align2::LEFT_CENTER,
+                                        format!("{}\n{aide}", choix.nom()),
+                                        egui::FontId::proportional(12.0),
+                                        ui.visuals().text_color(),
+                                    );
+                                    if reponse.clicked() {
                                         surface = choix;
                                         ui.close();
                                     }
@@ -1230,62 +1252,96 @@ fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             }
         }
         Surfaces => {
-            // Sol et plafond superposés, sous une couverture à deux pans.
-            for (y, opacite) in [(0.65, 0.12), (0.42, 0.06)] {
-                face(
-                    &[
-                        (0.07, y),
-                        (0.57, y - 0.19),
-                        (0.94, y + 0.02),
-                        (0.44, y + 0.23),
-                    ],
-                    opacite,
-                );
-            }
+            // Trois silhouettes espacées : couverture, plafond suspendu et plancher.
             face(
-                &[(0.07, 0.26), (0.33, 0.06), (0.82, 0.21), (0.57, 0.42)],
-                0.05,
+                &[(0.08, 0.22), (0.36, 0.05), (0.86, 0.16), (0.58, 0.32)],
+                0.06,
             );
+            seg((0.36, 0.05), (0.60, 0.16));
             face(
-                &[(0.33, 0.06), (0.57, 0.42), (0.94, 0.28), (0.82, 0.21)],
-                0.11,
+                &[(0.08, 0.49), (0.49, 0.39), (0.92, 0.50), (0.51, 0.61)],
+                0.04,
             );
-        }
-        Dalle | Sol => {
-            p.add(egui::Shape::closed_line(
-                vec![pt(0.05, 0.4), pt(0.6, 0.18), pt(0.95, 0.48), pt(0.4, 0.75)],
-                t,
-            ));
-            seg((0.05, 0.4), (0.05, 0.6));
-            seg((0.05, 0.6), (0.4, 0.9));
-            seg((0.4, 0.9), (0.95, 0.65));
-            seg((0.95, 0.65), (0.95, 0.48));
-        }
-        Toiture => {
+            seg((0.20, 0.46), (0.20, 0.36));
+            seg((0.79, 0.47), (0.79, 0.37));
             face(
-                &[(0.05, 0.64), (0.32, 0.24), (0.72, 0.10), (0.46, 0.50)],
+                &[(0.08, 0.78), (0.49, 0.68), (0.92, 0.79), (0.51, 0.90)],
                 0.10,
             );
+            seg((0.08, 0.78), (0.08, 0.86));
+            seg((0.08, 0.86), (0.51, 0.98));
+            seg((0.51, 0.98), (0.92, 0.87));
+            seg((0.92, 0.87), (0.92, 0.79));
+            seg((0.51, 0.90), (0.51, 0.98));
+        }
+        Dalle => {
+            // Béton porteur : tranche épaisse, avec hachures dans l'épaisseur.
             face(
-                &[(0.32, 0.24), (0.64, 0.67), (0.96, 0.52), (0.72, 0.10)],
+                &[(0.06, 0.35), (0.55, 0.15), (0.94, 0.40), (0.45, 0.61)],
+                0.04,
+            );
+            face(
+                &[(0.06, 0.35), (0.45, 0.61), (0.45, 0.88), (0.06, 0.62)],
+                0.13,
+            );
+            face(
+                &[(0.45, 0.61), (0.94, 0.40), (0.94, 0.67), (0.45, 0.88)],
+                0.20,
+            );
+            for k in [0.0, 0.18, 0.36] {
+                seg((0.50 + k, 0.69 - k * 0.42), (0.56 + k, 0.80 - k * 0.42));
+            }
+        }
+        Sol => {
+            // Finition mince : carrelage sur le dessus, très faible épaisseur.
+            face(
+                &[(0.06, 0.44), (0.55, 0.20), (0.94, 0.46), (0.45, 0.70)],
                 0.05,
             );
-            seg((0.05, 0.72), (0.64, 0.81));
-            seg((0.64, 0.81), (0.96, 0.65));
-            seg((0.64, 0.67), (0.64, 0.81));
+            for k in [0.33, 0.66] {
+                seg(
+                    (0.06 + 0.49 * k, 0.44 - 0.24 * k),
+                    (0.45 + 0.49 * k, 0.70 - 0.24 * k),
+                );
+                seg(
+                    (0.06 + 0.39 * k, 0.44 + 0.26 * k),
+                    (0.55 + 0.39 * k, 0.20 + 0.26 * k),
+                );
+            }
+            seg((0.06, 0.50), (0.45, 0.76));
+            seg((0.45, 0.76), (0.94, 0.52));
+            seg((0.06, 0.44), (0.06, 0.50));
+            seg((0.94, 0.46), (0.94, 0.52));
+        }
+        Toiture => {
+            // Deux pans bien distincts autour d'un faîtage, avec débords.
+            face(
+                &[(0.04, 0.62), (0.32, 0.20), (0.75, 0.08), (0.47, 0.50)],
+                0.16,
+            );
+            face(
+                &[(0.32, 0.20), (0.68, 0.68), (0.97, 0.54), (0.75, 0.08)],
+                0.04,
+            );
+            seg((0.32, 0.20), (0.75, 0.08));
+            seg((0.04, 0.69), (0.68, 0.80));
+            seg((0.68, 0.80), (0.97, 0.65));
+            seg((0.68, 0.68), (0.68, 0.80));
+            seg((0.19, 0.59), (0.47, 0.17));
         }
         Plafond => {
-            face(
-                &[(0.08, 0.42), (0.62, 0.18), (0.93, 0.43), (0.39, 0.68)],
-                0.08,
-            );
-            seg((0.08, 0.52), (0.39, 0.78));
-            seg((0.39, 0.78), (0.93, 0.53));
-            for (x, y) in [(0.24, 0.34), (0.62, 0.18), (0.77, 0.49)] {
-                seg((x, y), (x, y - 0.15));
+            // Panneau haut, suspendu à trois tiges ; lecture par le dessous.
+            for (x, y) in [(0.13, 0.50), (0.55, 0.30), (0.89, 0.53)] {
+                seg((x, y), (x, y - 0.24));
+                seg((x - 0.05, y - 0.24), (x + 0.05, y - 0.24));
             }
-            seg((0.26, 0.57), (0.78, 0.31));
-            seg((0.34, 0.30), (0.65, 0.56));
+            face(
+                &[(0.06, 0.55), (0.55, 0.34), (0.94, 0.59), (0.45, 0.81)],
+                0.13,
+            );
+            seg((0.06, 0.61), (0.45, 0.87));
+            seg((0.45, 0.87), (0.94, 0.65));
+            seg((0.25, 0.68), (0.74, 0.47));
         }
         Poteau => {
             face(
@@ -1652,7 +1708,7 @@ mod tests {
         for largeur in [800.0, 1500.0] {
             let ctx = egui::Context::default();
             let mut ruban = RubanEdition::default();
-            let sortie = cliquer(&ctx, &mut ruban, largeur, "Surfaces");
+            let sortie = cliquer(&ctx, &mut ruban, largeur, "Éléments horizontaux");
             assert_eq!(ruban.selection, Some(Outil::Dalle));
             let encart = sortie
                 .shapes
@@ -1722,7 +1778,7 @@ mod tests {
                 ruban.mur_actif(),
                 "le sélecteur ne doit pas réactiver les surfaces après le clic Mur"
             );
-            cliquer(&ctx, &mut ruban, largeur, "Surfaces");
+            cliquer(&ctx, &mut ruban, largeur, "Éléments horizontaux");
             assert_eq!(
                 ruban.selection,
                 Some(Outil::Toiture),

@@ -28,18 +28,19 @@ ce document. La conversion v0 s'exécute en arrière-plan, écrit aussi le rappo
 disque doit être rouvert avant conversion. Le fichier RVT source reste intact.
 
 Le ruban regroupe les commandes dans Début, Modéliser, Modifier, Annoter et Sortie.
-Les commandes fréquentes (Mur, Surfaces, Ouverture, Déplacer, Copier, Aligner, Cote et
+Les commandes fréquentes (Mur, Éléments horizontaux, Ouverture, Déplacer, Copier, Aligner, Cote et
 Texte) disposent de grands boutons lorsque la largeur le permet ; les autres
 restent empilées avec de petites icônes. Les grands boutons se replient selon leur
-priorité quand la fenêtre rétrécit. Le bouton Surfaces superpose sol, plafond et
-toiture dans une seule icône. Son sélecteur se trouve dans un encart en tête de
+priorité quand la fenêtre rétrécit. Le bouton Éléments horizontaux superpose sol, plafond et
+toiture dans une seule icône. Les niveaux sont espacés pour rendre la superposition lisible. Son sélecteur se trouve dans un encart en tête de
 Propriétés, avec une vignette et une liste déroulante distinguant Dalle (structure),
 Sol (revêtement), Plafond et Toiture. Les paramètres sont juste en dessous et
-restent mémorisés séparément pour chaque catégorie.
+restent mémorisés séparément pour chaque catégorie. Les vignettes distinguent la
+dalle épaisse, le sol carrelé mince, le plafond suspendu et la toiture à deux pans.
 L'icône Mur présente une coupe en trois couches avec une face lisse.
 Modéliser comprend aussi Poteau, Escalier et Garde-corps.
 Sur une fenêtre étroite, le bouton « ... » à droite
-de la colonne de l'outil actif donne accès à ses réglages ; Surfaces conserve son
+de la colonne de l'outil actif donne accès à ses réglages ; Éléments horizontaux conserve son
 sélecteur et ses paramètres dans Propriétés à toutes les largeurs.
 Les onglets d'édition présentent leurs groupes d'outils et les options de l'outil
 sélectionné directement à droite de son icône (Ouverture : Porte/Fenêtre ; Cote : Alignée/Orthogonale ; Texte :
