@@ -412,6 +412,8 @@ pub struct ViewerApp {
     natif: Option<(crate::modele::Projet, PathBuf)>,
     natif_modifie: bool,
     mur_depart: Option<[f64; 2]>,
+    /// Repère du plan : le prochain clic choisit l'élément à mettre à l'horizontale.
+    alignement_plan: bool,
     /// Premier point d'une chaîne de murs (la refermer l'arrête).
     mur_chaine: Option<[f64; 2]>,
     /// Longueur du mur en cours tapée au clavier (mm).
@@ -533,6 +535,7 @@ impl ViewerApp {
             mur_depart: None,
             mur_saisie: String::new(),
             mur_chaine: None,
+            alignement_plan: false,
             confirmer_fermeture: None,
             documents: BTreeMap::new(),
             document_actif: 0,
@@ -1302,6 +1305,42 @@ impl ViewerApp {
         Ok(id)
     }
 
+    /// Angle (rad) de l'horizontale de l'écran dans le repère du modèle en vue en plan
+    /// (repère du plan tourné) ; 0 ailleurs (axes du modèle).
+    fn angle_axes_plan(&self) -> f64 {
+        if self.vue_en_plan() { crate::orientation_plan::angle(&self.camera) as f64 } else { 0.0 }
+    }
+
+    /// Direction principale d'un objet en plan (axe d'inertie de ses sommets en x, y) :
+    /// la longueur d'un mur, le grand côté d'une dalle.
+    fn direction_principale(&self, obj: u32) -> Option<glam::Vec2> {
+        let s = self.scene.as_ref()?;
+        let o = s.objects.get(obj as usize)?;
+        let pts: Vec<glam::Vec2> = [o.opaque, o.transparent]
+            .iter()
+            .flat_map(|r| &s.vertices[r.start as usize..(r.start + r.count) as usize])
+            .map(|v| glam::Vec2::new(v.pos[0], v.pos[1]))
+            .collect();
+        if pts.len() < 3 {
+            return None;
+        }
+        let m = pts.iter().copied().sum::<glam::Vec2>() / pts.len() as f32;
+        let (mut xx, mut xy, mut yy) = (0.0f32, 0.0f32, 0.0f32);
+        for p in &pts {
+            let d = *p - m;
+            xx += d.x * d.x;
+            xy += d.x * d.y;
+            yy += d.y * d.y;
+        }
+        // objet sans direction dominante (carré, cercle) : pas d'alignement
+        let ecart = ((xx - yy).powi(2) + 4.0 * xy * xy).sqrt();
+        if ecart < 0.05 * (xx + yy) {
+            return None;
+        }
+        let a = 0.5 * (2.0 * xy).atan2(xx - yy);
+        Some(glam::Vec2::new(a.cos(), a.sin()))
+    }
+
     /// Point de tracé du mur sous le curseur, sur le plan de son niveau de base (mm),
     /// et l'accrochage retenu. Priorité : extrémité ou milieu d'un mur du niveau (dix
     /// pixels près), puis Maj (horizontal / vertical), puis angle rond (multiple de 15°
@@ -1341,16 +1380,21 @@ impl ViewerApp {
         let Some(a) = self.mur_depart else { return Some((point, accroche)) };
         let (dx, dy) = (point[0] - a[0], point[1] - a[1]);
         let longueur = dx.hypot(dy);
+        // axes du plan tourné (repère du plan) : Maj et angles ronds suivent l'écran
+        let theta = self.angle_axes_plan();
+        let (u, v) = ([theta.cos(), theta.sin()], [-theta.sin(), theta.cos()]);
         if orthogonal {
-            if dx.abs() >= dy.abs() { point[1] = a[1]; } else { point[0] = a[0]; }
-            return Some((point, AccrocheMur::Orthogonal));
+            let (du, dv) = (dx * u[0] + dy * u[1], dx * v[0] + dy * v[1]);
+            let (axe, l) = if du.abs() >= dv.abs() { (u, du) } else { (v, dv) };
+            let l = (l / 10.0).round() * 10.0;
+            return Some(([a[0] + axe[0] * l, a[1] + axe[1] * l], AccrocheMur::Orthogonal));
         }
         if longueur > 1.0 {
-            let angle = dy.atan2(dx).to_degrees();
+            let angle = (dy.atan2(dx) - theta).to_degrees();
             let rond = (angle / 15.0).round() * 15.0;
             if (angle - rond).abs() < 3.0 {
                 let l = (longueur / 10.0).round() * 10.0;
-                let r = rond.to_radians();
+                let r = rond.to_radians() + theta;
                 return Some(([a[0] + l * r.cos(), a[1] + l * r.sin()], AccrocheMur::Angle(rond)));
             }
         }
@@ -1420,7 +1464,9 @@ impl ViewerApp {
                     for q in contour { if let (Some(a),Some(b)) = (ecran(q,altitude),ecran(q,sommet)) { painter.line_segment([a,b],egui::Stroke::new(1.0,couleur)); } }
                     // étiquette au milieu du mur : longueur et angle, ou la saisie
                     if let (Some(p), Some(q)) = (ecran(a, altitude), ecran(b, altitude)) {
-                        let angle = (b[1] - a[1]).atan2(b[0] - a[0]).to_degrees();
+                        // angle par rapport à l'horizontale de l'écran en plan
+                        let angle = ((b[1] - a[1]).atan2(b[0] - a[0]) - self.angle_axes_plan()).to_degrees();
+                        let angle = (angle + 180.0).rem_euclid(360.0) - 180.0;
                         let texte = if self.mur_saisie.is_empty() {
                             format!("{longueur:.0} mm  ·  {angle:.0}°")
                         } else {
@@ -3641,7 +3687,21 @@ impl ViewerApp {
                 }
             }
 
-            if mode_mur {
+            if self.alignement_plan {
+                // Aligner (repère du plan) : l'élément cliqué devient horizontal
+                if resp.clicked() {
+                    let hit = resp.interact_pointer_pos().and_then(|p| pick(self, p));
+                    let d = hit.and_then(|(obj, _)| self.direction_principale(obj));
+                    match d.and_then(|d| crate::orientation_plan::angle_pour_horizontale(&self.camera, d)) {
+                        Some(a) => {
+                            crate::orientation_plan::orienter(&mut self.camera, a);
+                            self.memoriser_vue();
+                            self.alignement_plan = false;
+                        }
+                        None => self.status = "Aligner : cliquer un élément du plan (Échap : annuler)".into(),
+                    }
+                }
+            } else if mode_mur {
                 if resp.clicked_by(PointerButton::Secondary) { self.mur_depart = None; self.mur_chaine = None; }
                 let survol = resp.hover_pos();
                 self.saisie_longueur_mur(ui, rect, survol, shift);
@@ -3750,7 +3810,11 @@ impl ViewerApp {
         }
         if repere_plan {
             let origine = self.orientation_initiale_plan();
-            if crate::orientation_plan::afficher(ui, rect, &mut self.camera, origine) {
+            let r = crate::orientation_plan::afficher(ui, rect, &mut self.camera, origine, self.alignement_plan);
+            if r.aligner {
+                self.alignement_plan = !self.alignement_plan;
+            }
+            if r.change {
                 self.memoriser_vue();
             }
         } else if self.scene.is_some() && self.vue_3d() {
@@ -4585,6 +4649,9 @@ impl eframe::App for ViewerApp {
         } else if ctx.input(|i| i.viewport().close_requested()) && (self.natif_modifie || self.documents.values().any(|d| d.modifie)) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.confirmer_fermeture = Some((true, self.document_actif));
+        }
+        if self.alignement_plan && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+            self.alignement_plan = false;
         }
         if self.ruban_edition.a_un_outil() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             // Échap : la saisie, puis le mur en cours, puis l'outil
