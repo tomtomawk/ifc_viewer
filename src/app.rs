@@ -2107,11 +2107,13 @@ impl ViewerApp {
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         let maximise = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
+        // cadre du système : ni boutons de fenêtre ni zones de déplacement dessinés ici
+        let natif = crate::cadre_natif();
         let (barre, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 32.0), Sense::hover());
         let titre = egui::Rect::from_min_size(barre.min, egui::vec2(88.0, barre.height()));
         ui.put(titre, egui::Label::new(RichText::new("IFC Viewer").strong()));
         let mut zones_deplacement = vec![titre];
-        let menus = egui::Rect::from_min_max(egui::pos2(titre.right() + 8.0, barre.top()), egui::pos2(barre.right() - 144.0, barre.bottom()));
+        let menus = egui::Rect::from_min_max(egui::pos2(titre.right() + 8.0, barre.top()), egui::pos2(barre.right() - if natif { 4.0 } else { 144.0 }, barre.bottom()));
         ui.scope_builder(egui::UiBuilder::new().id_salt("menu_fenetre").max_rect(menus).layout(egui::Layout::left_to_right(Align::Center)), |ui| {
             for (o, nom) in [
                 (OngletRuban::Debut, "Début"),
@@ -2131,6 +2133,9 @@ impl ViewerApp {
             let (libre, _) = ui.allocate_exact_size(egui::vec2(ui.available_width().max(0.0), 32.0), Sense::hover());
             zones_deplacement.push(libre);
         });
+        if natif {
+            zones_deplacement.clear();
+        }
         for (k, rect) in zones_deplacement.into_iter().enumerate() {
             let reponse = ui.interact(rect, ui.scope_id().with(("deplacer_fenetre", k)), Sense::click_and_drag());
             if reponse.double_clicked() {
@@ -2139,7 +2144,7 @@ impl ViewerApp {
                 ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
             }
         }
-        for (k, aide) in ["Réduire", if maximise { "Restaurer" } else { "Agrandir" }, "Fermer l’application"].into_iter().enumerate() {
+        for (k, aide) in ["Réduire", if maximise { "Restaurer" } else { "Agrandir" }, "Fermer l’application"].into_iter().enumerate().filter(|_| !natif) {
             let rect = egui::Rect::from_min_size(egui::pos2(barre.right() - 138.0 + k as f32 * 46.0, barre.top()), egui::vec2(46.0, 30.0));
             let reponse = ui.interact(rect, ui.scope_id().with(("bouton_fenetre", k)), Sense::click()).on_hover_text(aide);
             let survole = reponse.hovered() || reponse.is_pointer_button_down_on();
@@ -2224,6 +2229,9 @@ impl ViewerApp {
     /// Redimensionnement natif sur les bords de la fenêtre sans décoration.
     fn bords_fenetre(&self, ctx: &egui::Context) {
         use egui::ResizeDirection::*;
+        if crate::cadre_natif() {
+            return;
+        }
         let (rect, position, maximise, presse) = ctx.input(|i| (i.viewport_rect(), i.pointer.hover_pos(), i.viewport().maximized.unwrap_or(false), i.pointer.primary_pressed()));
         let Some(p) = position.filter(|p| rect.contains(*p) && !maximise) else { return };
         let gauche = p.x < rect.left() + 5.0;

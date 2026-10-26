@@ -82,7 +82,7 @@ fn main() {
         let options = eframe::NativeOptions {
             viewport: eframe::egui::ViewportBuilder::default()
                 .with_title("IFC Viewer")
-                .with_decorations(false)
+                .with_decorations(cadre_natif())
                 .with_min_inner_size([800.0, 520.0])
                 .with_inner_size([1500.0, 920.0])
                 .with_drag_and_drop(true),
@@ -96,6 +96,18 @@ fn main() {
             Ok(()) => return,
             Err(e) => eprintln!("Erreur (anticrénelage {multisampling}×) : {e}"),
         }
+    }
+}
+
+/// Cadre de fenêtre du système (barre de titre, bords) plutôt que la barre dessinée par
+/// l'application. Par défaut sous Windows : une fenêtre sans décoration y garde une
+/// bande en haut de la zone cliente (Windows 10), qui décale l'affichage par rapport aux
+/// clics. `IFC_VIEWER_CADRE=natif` ou `perso` force l'un ou l'autre.
+pub fn cadre_natif() -> bool {
+    match std::env::var("IFC_VIEWER_CADRE").as_deref() {
+        Ok("natif") => true,
+        Ok("perso") => false,
+        _ => cfg!(windows),
     }
 }
 

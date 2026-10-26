@@ -78,6 +78,10 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
+Fenêtre : sous Windows, cadre du système (barre de titre et bords natifs) ; ailleurs,
+barre dessinée par l'application. `IFC_VIEWER_CADRE=natif` ou `IFC_VIEWER_CADRE=perso`
+force l'un ou l'autre.
+
 | Action | Commande |
 |---|---|
 | Orbite (autour du point visé, vue 3D) | clic gauche + glisser |
