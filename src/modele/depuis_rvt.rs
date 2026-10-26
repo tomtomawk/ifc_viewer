@@ -83,6 +83,9 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
     let niveau = |id: i64| niveaux.get(&id).map(|n| n.0.clone());
     let nom_type = |t: i64| m.types.get(&t).map(|x| x.nom.clone()).unwrap_or_else(|| format!("Type {t}"));
 
+    for x in m.materiaux.values() {
+        c.couleurs.insert(x.nom.clone(), x.couleur);
+    }
     // murs
     let mut types_murs: HashMap<i64, String> = HashMap::new();
     let mut murs: HashMap<i64, usize> = HashMap::new();
@@ -138,6 +141,11 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
         };
         let id = ident("mur", w.id);
         c.lire(&id, &tris, "Murs");
+        // côté extérieur vérifié par les matériaux des faces : couches en assemblage
+        if let (Some(ext), Axe::Droit { debut, fin }) = (maquette::direction_exterieure(m, w), &axe) {
+            let gauche = DVec2::new(-(fin[1] - debut[1]), fin[0] - debut[0]);
+            c.sens_couches.insert(id.clone(), ext.dot(gauche) < 0.0);
+        }
         murs.insert(w.id, c.projet.murs.len());
         c.projet.murs.push(Mur { variante: m.variante_de.get(&w.id).filter(|id| m.variantes.get(id).is_some_and(|v| !v.jeu)).map(|&id| ident("variante", id)), phase: None, sous_projet: None, id, nom, type_mur, assemblage: None, niveau: base, decalage_bas: w.decalage_bas, haut, axe, origine: origine(w.id, &w.classe) });
     }

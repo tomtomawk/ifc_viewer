@@ -68,6 +68,25 @@ fn couches(m: &IfcModel, id: Id) -> Option<(Id, String, Vec<Couche>)> {
         jeu = e.arg(0).as_ref()?;
         e = m.get(jeu)?;
     }
+    couches_du_jeu(m, jeu, e)
+}
+
+/// Sens d'empilement des couches d'un mur (`IfcMaterialLayerSetUsage` sur l'axe 2) :
+/// vrai si POSITIVE (première couche contre la ligne de référence, les suivantes vers
+/// +Y local, à gauche de l'axe).
+fn sens_positif(m: &IfcModel, id: Id) -> Option<bool> {
+    let u = m.get(*m.material_of.get(&id)?)?;
+    if !u.is("IFCMATERIALLAYERSETUSAGE") || u.arg(1).as_enum() != Some("AXIS2") {
+        return None;
+    }
+    match u.arg(2).as_enum()? {
+        "POSITIVE" => Some(true),
+        "NEGATIVE" => Some(false),
+        _ => None,
+    }
+}
+
+fn couches_du_jeu(m: &IfcModel, jeu: Id, e: &crate::step::Entity) -> Option<(Id, String, Vec<Couche>)> {
     if !e.is("IFCMATERIALLAYERSET") {
         return None;
     }
@@ -164,6 +183,7 @@ pub fn convertir_modele(m: &IfcModel, geometries: &HashMap<Id, Vec<[DVec3; 3]>>,
             }
             None => (format!("e:{epaisseur_lue:.1}"), format!("Mur {epaisseur_lue:.0} mm"), vec![Couche { materiau: None, epaisseur: epaisseur_lue, ..Default::default() }], false),
         };
+        let detaillees_mur = detaillees && couches.len() > 1;
         let type_mur = types_murs
             .entry(cle_type.clone())
             .or_insert_with(|| {
@@ -174,6 +194,15 @@ pub fn convertir_modele(m: &IfcModel, geometries: &HashMap<Id, Vec<[DVec3; 3]>>,
             .clone();
         let mid = ident("mur", id);
         c.lire(&mid, t, "Murs");
+        // couches ordonnées par rapport à l'axe lu (représentation Axis droite) : en
+        // POSITIVE, la première couche est à droite ; l'axe est retourné pour l'avoir à gauche
+        if pts.len() == 2
+            && arc.is_none()
+            && detaillees_mur
+            && let Some(positif) = sens_positif(m, id)
+        {
+            c.sens_couches.insert(mid.clone(), positif);
+        }
         let mur = Mur { variante: None, phase: None, sous_projet: None, id: mid.clone(), nom, type_mur, assemblage: None, niveau: niv, decalage_bas: z[0] - alt, haut: Haut::Libre { hauteur: z[1] - z[0] }, axe, origine: origine(id) };
         // ouvertures
         for &o in m.openings.get(&id).map(Vec::as_slice).unwrap_or_default() {
@@ -271,19 +300,28 @@ mod tests {
     fn echantillon_murs() {
         let (p, mesures) = convertir(Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();
         assert_eq!(p.niveaux.len(), 2);
-        assert_eq!(p.murs.len(), 2, "{:?}", p.importes.iter().map(|i| &i.raison).collect::<Vec<_>>());
-        let droit = p.murs.iter().find(|m| m.nom == "Mur droit").unwrap();
-        let Axe::Droit { debut, fin } = droit.axe else { panic!() };
-        assert!(debut[0].abs() < 1e-6 && debut[1].abs() < 1e-6 && (fin[0] - 6000.0).abs() < 1e-6 && fin[1].abs() < 1e-6, "{:?}", droit.axe);
-        let t = p.type_mur(&droit.type_mur).unwrap();
+        // mur droit à couches POSITIVE : assemblage de deux murs (béton, isolant) ; mur courbe seul
+        assert_eq!(p.murs.len(), 3, "{:?}", p.importes.iter().map(|i| &i.raison).collect::<Vec<_>>());
+        assert_eq!(p.assemblages.len(), 1);
+        let a = &p.assemblages[0];
+        assert_eq!(a.nom, "Mur droit");
+        let t = p.type_mur(&a.type_mur).unwrap();
         assert!(t.couches_detaillees && t.couches.len() == 2 && (t.epaisseur() - 250.0).abs() < 1e-9);
         assert_eq!(t.couches[0].materiau.as_deref(), Some("Béton"));
-        assert_eq!(droit.haut, Haut::Libre { hauteur: 2700.0 });
+        let couches = p.couches_assemblage(&a.id);
+        // axe retourné (extérieur à gauche) : béton de y −125 à 75, isolant de 75 à 125
+        let milieu_y = |m: &Mur| match m.axe { Axe::Droit { debut, fin } => { assert!((debut[0] - 6000.0).abs() < 1e-6 && fin[0].abs() < 1e-6, "{:?}", m.axe); debut[1] } _ => panic!() };
+        assert!((milieu_y(couches[0]) + 25.0).abs() < 1e-6 && (milieu_y(couches[1]) - 100.0).abs() < 1e-6);
+        assert!(couches.iter().all(|m| m.haut == Haut::Libre { hauteur: 2700.0 }));
         let porte = &p.ouvertures[0];
+        assert_eq!(porte.mur, a.id, "la porte traverse l'assemblage");
         assert_eq!(porte.genre, GenreOuverture::Porte);
-        assert!((porte.abscisse - 1450.0).abs() < 1e-6 && (porte.largeur - 900.0).abs() < 1e-6 && (porte.hauteur - 2100.0).abs() < 1e-6 && porte.allege.abs() < 1e-6);
+        assert!((porte.abscisse - 4550.0).abs() < 1e-6 && (porte.largeur - 900.0).abs() < 1e-6 && (porte.hauteur - 2100.0).abs() < 1e-6 && porte.allege.abs() < 1e-6, "{}", porte.abscisse);
         assert!(porte.representation.is_some());
-        assert!((p.volume_mur(droit).unwrap() - 3.5775e9).abs() < 1e3);
+        // volume des couches = celui du mur validé avant éclatement (porte déduite)
+        let volume: f64 = couches.iter().map(|m| p.volume_mur(m).unwrap()).sum();
+        assert!((volume - 3.5775e9).abs() < 1e3, "{volume}");
+        assert!(mesures.iter().any(|x| x.nom == "Mur droit" && x.retenu && (x.parametres - 3.5775e9).abs() < 1e3));
         let courbe = p.murs.iter().find(|m| m.nom == "Mur courbe").unwrap();
         let Axe::Arc { centre, .. } = courbe.axe else { panic!("{:?}", courbe.axe) };
         assert!((centre[0] - 8000.0).abs() < 0.05 && centre[1].abs() < 0.05, "{centre:?}");

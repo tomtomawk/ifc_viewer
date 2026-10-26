@@ -435,7 +435,8 @@ impl Projet {
         let vides: f64 = self
             .ouvertures
             .iter()
-            .filter(|o| o.mur == m.id)
+            // baies du mur, ou de son assemblage (elles traversent toutes les couches)
+            .filter(|o| o.mur == m.id || m.assemblage.as_ref() == Some(&o.mur))
             .map(|o| {
                 let (z0, z1) = ((base + o.allege).max(bas), (base + o.allege + o.hauteur).min(haut));
                 o.largeur * (z1 - z0).max(0.0)
@@ -543,6 +544,11 @@ pub struct Conversion {
     pub projet: Projet,
     pub lu: std::collections::HashMap<String, (f64, Maillage, String)>,
     pub mesures: Vec<Mesure>,
+    /// Murs à plusieurs couches dont le côté extérieur est vérifié : vrai si l'axe doit
+    /// être retourné pour avoir l'extérieur à sa gauche (première couche).
+    pub sens_couches: std::collections::HashMap<String, bool>,
+    /// Couleurs des matériaux lues dans la source (nom → sRGB).
+    pub couleurs: std::collections::HashMap<String, [u8; 3]>,
 }
 
 impl Conversion {
@@ -620,7 +626,35 @@ impl Conversion {
         p.types_dalles.retain(|t| dalles.contains(t.id.as_str()));
         let ouv: std::collections::HashSet<&str> = p.ouvertures.iter().filter_map(|o| o.type_ouverture.as_deref()).collect();
         p.types_ouvertures.retain(|t| ouv.contains(t.id.as_str()));
-        p.arrondir();
+        self.assembler();
+        self.projet.arrondir();
+    }
+
+    /// Murs retenus à plusieurs couches dont le côté extérieur est vérifié : un mur par
+    /// couche, en assemblage (même identifiant que le mur ; ses ouvertures traversent
+    /// toutes les couches). Les autres gardent leur type composé.
+    fn assembler(&mut self) {
+        let p = &mut self.projet;
+        let mut ids: Vec<(String, bool)> = self.sens_couches.iter().map(|(k, v)| (k.clone(), *v)).collect();
+        ids.sort();
+        for (id, inverser) in ids {
+            let Some(m) = p.murs.iter_mut().find(|m| m.id == id) else { continue };
+            let Axe::Droit { debut, fin } = m.axe else { continue };
+            if inverser {
+                // extérieur à gauche : axe retourné, abscisses des baies reprises depuis l'autre bout
+                m.axe = Axe::Droit { debut: fin, fin: debut };
+                let l = m.axe.longueur();
+                for o in p.ouvertures.iter_mut().filter(|o| o.mur == id) {
+                    o.abscisse = l - o.abscisse;
+                }
+            }
+            let _ = p.eclater_mur(&id);
+        }
+        for m in &mut p.materiaux {
+            if let Some(c) = self.couleurs.get(&m.nom) {
+                m.couleur = *c;
+            }
+        }
     }
 }
 

@@ -17,7 +17,11 @@ pub fn markdown(p: &Projet, mesures: &[Mesure], duree_s: f64) -> String {
     // par catégorie : paramétriques et importés
     let mut cat: BTreeMap<String, (usize, usize)> = BTreeMap::new();
     cat.entry("Niveaux".into()).or_default().0 += p.niveaux.len();
-    cat.entry("Murs".into()).or_default().0 += p.murs.len();
+    // un assemblage compte pour un mur ; ses couches sont détaillées dans le résumé
+    let murs = p.murs.iter().filter(|m| m.assemblage.is_none()).count() + p.assemblages.len();
+    let couches = p.murs.len() - p.murs.iter().filter(|m| m.assemblage.is_none()).count();
+    let non_eclates = p.murs.iter().filter(|m| m.assemblage.is_none() && p.type_mur(&m.type_mur).is_some_and(|t| t.couches.len() > 1)).count();
+    cat.entry("Murs".into()).or_default().0 += murs;
     cat.entry("Dalles".into()).or_default().0 += p.dalles.len();
     for o in &p.ouvertures {
         let c = match o.genre {
@@ -30,12 +34,14 @@ pub fn markdown(p: &Projet, mesures: &[Mesure], duree_s: f64) -> String {
     for i in &p.importes {
         cat.entry(i.categorie.clone()).or_default().1 += 1;
     }
-    let parametriques = p.murs.len() + p.dalles.len() + p.ouvertures.len();
+    let parametriques = murs + p.dalles.len() + p.ouvertures.len();
     let total = parametriques + p.importes.len();
     let taux = |a: usize, b: usize| if a + b == 0 { "—".to_string() } else { format!("{:.0} %", 100.0 * a as f64 / (a + b) as f64) };
     s.push_str("## Résumé\n\n| | Nombre |\n|---|---|\n");
     let _ = writeln!(s, "| Niveaux | {} |", p.niveaux.len());
-    let _ = writeln!(s, "| Murs paramétriques | {} |", p.murs.len());
+    let _ = writeln!(s, "| Murs paramétriques | {murs} |");
+    let _ = writeln!(s, "| dont murs composés (assemblages : un mur par couche) | {} ({couches} couches) |", p.assemblages.len());
+    let _ = writeln!(s, "| Murs à couches gardés d'un bloc (côté extérieur non vérifiable) | {non_eclates} |");
     let _ = writeln!(s, "| Ouvertures (portes, fenêtres, baies) | {} |", p.ouvertures.len());
     let _ = writeln!(s, "| Dalles paramétriques | {} |", p.dalles.len());
     let _ = writeln!(s, "| Éléments importés (géométrie figée) | {} |", p.importes.len());

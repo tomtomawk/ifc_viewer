@@ -53,6 +53,11 @@ permet de continuer depuis le dernier point ; revenir au premier point de la cha
 l'arrête. Échap efface la saisie, puis annule le segment en cours, puis quitte
 l'outil ; le clic droit arrête le segment. Le niveau 0 est créé au premier
 mur si le projet est vide. Les autres commandes restent à raccorder.
+**Murs composés** : choisir un type dans Propriétés (ou en créer un avec « + » :
+couches, fonction, matériau, couleur, motif de coupe, épaisseur). Chaque couche est
+tracée comme un mur indépendant, regroupé en assemblage : un clic sélectionne
+l'assemblage, un second clic (ou Tab) la couche, dont la hauteur, les niveaux, la
+phase et le sous-projet se règlent seuls ; « Dissocier » la sort de l'assemblage.
 Un astérisque signale les modifications et la fermeture propose de les enregistrer. Une seconde
 barre, au-dessus de la zone de dessin, affiche les vues ouvertes : vue générale du
 modèle, plans, coupes, vues 3D, feuilles et nomenclatures. Cliquer sur un onglet

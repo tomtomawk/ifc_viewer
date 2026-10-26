@@ -75,7 +75,9 @@ garde le RVT et ses vues ouverts, sans basculer vers le rendu natif limité.
 | `phases[]`, `sous_projets[]` | Noms | Choix de création ; listes vides si absentes des anciens fichiers. À défaut : Projet et Sous-projet 1 au premier mur. Les listes Revit sont reprises lors de la conversion. |
 | `variantes[]` | `id`, `nom`, `jeu` | Options Revit reprises à la conversion, distinguées par jeu ; une variante absente sur un mur désigne le modèle principal. |
 | `niveaux[]` | `id`, `nom`, `altitude`, `origine` | Triés par altitude |
-| `types_murs[]`, `types_dalles[]` | `id`, `nom`, `couches[]` (`materiau`, `epaisseur`), `couches_detaillees` | Murs : couches de l'extérieur vers l'intérieur ; dalles : du haut vers le bas. `couches_detaillees` = false : une couche de l'épaisseur totale (détail non lu) |
+| `types_murs[]`, `types_dalles[]` | `id`, `nom`, `couches[]` (`materiau`, `epaisseur`, `fonction` : structure, isolation, finition, autre), `couches_detaillees` | Murs : couches de l'extérieur vers l'intérieur ; dalles : du haut vers le bas. `couches_detaillees` = false : une couche de l'épaisseur totale (détail non lu) |
+| `materiaux[]` | `nom`, `couleur` [r, g, b], `motif` (diagonales, croisees, uni, vide) | Matériaux nommés par les couches : couleur 3D et poché de coupe |
+| `assemblages[]` | `id`, `nom`, `type_mur`, `couches[]` (ids de murs), `origine` | Mur composé : **chaque couche est un mur** à part entière (type monocouche, niveaux, hauteur, phase, sous-projet propres), listées de l'extérieur vers l'intérieur. Une ouverture dont `mur` vaut l'id de l'assemblage traverse toutes ses couches |
 | `types_ouvertures[]` | `id`, `nom`, `genre`, `largeur`, `hauteur` | Revit seulement en v0 (cotes du type) |
 | `murs[]` | `id`, `nom`, `type_mur`, `niveau`, `decalage_bas`, `haut`, `axe`, `origine`, `phase`, `sous_projet`, `variante` | `phase`, `sous_projet` et `variante` sont facultatifs (absents des anciens fichiers). `haut` : `{contrainte: libre, hauteur}` ou `{contrainte: niveau, niveau, decalage}` |
 | `axe` | `{forme: droit, debut, fin}` ou `{forme: arc, debut, fin, centre, direct}` | Ligne médiane de l'épaisseur, en plan (x, y) |
@@ -86,6 +88,26 @@ garde le RVT et ses vues ouverts, sans basculer vers le rendu natif limité.
 
 Volumes déduits des paramètres (validation) : mur = longueur d'axe × épaisseur du type ×
 hauteur − baies (bornées à la hauteur du mur) ; dalle = aire des contours × épaisseur du type.
+
+## Murs composés (assemblages)
+
+Contrairement à Revit, une couche n'est pas une tranche d'un mur unique : c'est un mur.
+Un assemblage regroupe ces murs pour les tracer, les sélectionner et les percer
+ensemble ; chacun garde ses propres contraintes (isolant monté jusqu'à l'acrotère,
+doublage d'une autre phase…). Conventions :
+
+- **Côté extérieur** : à gauche de l'axe parcouru du début vers la fin (normale
+  (−dy, dx)), comme un mur Revit tracé dans le sens horaire.
+- **Tracé** (outil Mur avec un type à plusieurs couches) : un mur par couche, axes
+  décalés depuis la ligne tracée selon l'implantation (axe, face extérieure, face
+  intérieure, axe de la première couche de structure). L'assemblage prend l'identifiant
+  que le mur aurait eu.
+- **Dissocier** : la couche quitte l'assemblage et reste un mur indépendant, en place.
+  **Associer** : un mur droit du même niveau rejoint un assemblage, rangé selon sa
+  position le long de la normale.
+- **Type** : le type composé reste celui de l'assemblage ; le modifier n'affecte que les
+  prochains tracés (les murs déjà tracés gardent leurs couches).
+- **Volume** : celui de chaque couche, baies de son assemblage déduites.
 
 ## Conversion depuis Revit
 
@@ -108,7 +130,7 @@ vide de la famille, pas par une instance : son écart de volume le laisse import
 | Élément | Paramètres | Limites |
 |---|---|---|
 | `IfcBuildingStorey` | nom, élévation | |
-| `IfcWall`, `IfcWallStandardCase`, `IfcWallElementedCase` | axe (représentation `Axis` : droite ou arc ; sinon plus longue arête horizontale), ligne médiane, base et hauteur lues dans la géométrie, couches de `IfcMaterialLayerSet(Usage)` du mur ou de son type | Axe en polyligne : importé. Ordre des couches = ordre du fichier |
+| `IfcWall`, `IfcWallStandardCase`, `IfcWallElementedCase` | axe (représentation `Axis` : droite ou arc ; sinon plus longue arête horizontale), ligne médiane, base et hauteur lues dans la géométrie, couches de `IfcMaterialLayerSet(Usage)` du mur ou de son type | Axe en polyligne : importé. Ordre des couches = ordre du fichier. Axe `Axis` droit et `IfcMaterialLayerSetUsage` (AXIS2, POSITIVE ou NEGATIVE) : assemblage, un mur par couche (axe retourné en POSITIVE pour avoir la première couche à gauche) |
 | `IfcOpeningElement` (via `IfcRelVoidsElement`) | encombrement borné au mur ; genre selon `IfcRelFillsElement` (`IfcDoor`, `IfcWindow`) | Ouvertures non rectangulaires : approchées par leur encombrement |
 | `IfcSlab` prismatique | contour du dessus, couches | Dalles en pente : importées |
 | Autres produits avec géométrie | — | Importés, catégorie = classe IFC |
@@ -129,7 +151,10 @@ chaque `.rfa` du dossier.
 
 - Revit : contours d'esquisse des sols, extrémités du
   tracé des murs, ligne d'implantation, cotes de réservation des familles.
-- Jonctions de murs, murs attachés aux toits, profils de murs non rectangulaires.
+- Jonctions de murs (les couches des assemblages se chevauchent aux angles), murs
+  attachés aux toits, profils de murs non rectangulaires.
+- Assemblages courbes à la conversion (arc Revit ou IFC), fonction des couches Revit
+  (structure, isolation…), mise à jour des assemblages existants depuis leur type.
 - Toits, escaliers, poteaux, poutres paramétriques ; familles paramétriques (portes,
   fenêtres) à la place des maillages de menuiserie.
 - Affichage des autres éléments natifs (hors niveaux et murs droits), export IFC.

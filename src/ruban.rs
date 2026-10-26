@@ -907,10 +907,10 @@ impl RubanEdition {
         };
         let mut materiaux = projet.materiaux.clone();
         for c in &couches {
-            if let Some(m) = &c.materiau {
-                if !materiaux.iter().any(|x| &x.nom == m) {
-                    materiaux.push(crate::modele::assemblage::materiau_par_defaut(m));
-                }
+            if let Some(m) = &c.materiau
+                && !materiaux.iter().any(|x| &x.nom == m)
+            {
+                materiaux.push(crate::modele::assemblage::materiau_par_defaut(m));
             }
         }
         self.editeur_type = Some(EditeurType { id: existant.map(|t| t.id.clone()), nom, couches, materiaux, erreur: None });

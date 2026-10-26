@@ -2545,7 +2545,11 @@ fn produits(m: &Maquette) -> Vec<Produit<'_>> {
 /// Scène du viewer : un modèle IFC synthétique (projet, niveaux, éléments, types,
 /// propriétés) pour l'arborescence et les propriétés, et les maillages colorés par
 /// matériau.
-fn bandes_couches_mur(m: &Maquette, mur: &Mur, origine: DVec3) -> Option<Vec<scene::CoucheCoupe>> {
+/// Côté des couches d'un mur droit à plusieurs couches, vérifié par les matériaux
+/// réellement présents sur ses deux grandes faces : normale gauche du tracé, signe
+/// (+1 : couche extérieure du côté du minimum le long de la normale), étendue (mm) le
+/// long de la normale, couches.
+fn cote_couches<'a>(m: &'a Maquette, mur: &Mur) -> Option<(DVec3, f64, f64, f64, &'a [CoucheType])> {
     let t = m.types.get(&mur.type_id)?;
     if t.couches_variables { return None; }
     let couches = t.couches.as_ref().filter(|c| c.len() > 1)?;
@@ -2577,6 +2581,19 @@ fn bandes_couches_mur(m: &Maquette, mur: &Mur, origine: DVec3) -> Option<Vec<sce
     let interieur = cote(couches.last()?.materiau).map(|s| -s);
     if exterieur.zip(interieur).is_some_and(|(a,b)| a != b) { return None; }
     let signe = exterieur.or(interieur)?;
+    Some((normale, signe, min, max, couches))
+}
+
+/// Direction (plan, unitaire) vers l'extérieur d'un mur droit à plusieurs couches,
+/// si les matériaux de ses faces permettent de la vérifier.
+pub fn direction_exterieure(m: &Maquette, mur: &Mur) -> Option<glam::DVec2> {
+    let (normale, signe, ..) = cote_couches(m, mur)?;
+    // signe +1 : extérieur du côté du minimum le long de la normale
+    Some((-normale * signe).truncate())
+}
+
+fn bandes_couches_mur(m: &Maquette, mur: &Mur, origine: DVec3) -> Option<Vec<scene::CoucheCoupe>> {
+    let (normale, signe, min, max, couches) = cote_couches(m, mur)?;
     let normale = normale * signe;
     let mut position = (if signe > 0.0 { min } else { -max }) / 1000.0 - normale.dot(origine);
     let mut bandes = Vec::new();
