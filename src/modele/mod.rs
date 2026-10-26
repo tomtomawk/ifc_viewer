@@ -7,6 +7,7 @@
 //! Unités : millimètres ; coordonnées du fichier source (Revit : origine interne ; IFC :
 //! repère du projet).
 
+pub mod assemblage;
 pub mod depuis_ifc;
 pub mod depuis_rvt;
 pub mod geometrie;
@@ -39,6 +40,12 @@ pub struct Projet {
     pub types_dalles: Vec<TypeCompose>,
     pub types_ouvertures: Vec<TypeOuverture>,
     pub murs: Vec<Mur>,
+    /// Murs composés : chaque couche y est un mur à part entière (voir [`Assemblage`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub assemblages: Vec<Assemblage>,
+    /// Matériaux nommés par les couches : couleur et motif de coupe.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub materiaux: Vec<Materiau>,
     pub ouvertures: Vec<Ouverture>,
     pub dalles: Vec<Dalle>,
     pub importes: Vec<ElementImporte>,
@@ -98,11 +105,94 @@ pub struct Niveau {
 
 /// Couche d'un type composé, de l'extérieur vers l'intérieur (murs) ou du haut vers le
 /// bas (dalles).
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 pub struct Couche {
     pub materiau: Option<String>,
     /// Épaisseur, mm.
     pub epaisseur: f64,
+    #[serde(default, skip_serializing_if = "FonctionCouche::est_autre")]
+    pub fonction: FonctionCouche,
+}
+
+/// Rôle d'une couche ; la structure sert de référence d'implantation (axe du porteur).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FonctionCouche {
+    Structure,
+    Isolation,
+    Finition,
+    #[default]
+    Autre,
+}
+
+impl FonctionCouche {
+    pub const TOUTES: [FonctionCouche; 4] = [Self::Structure, Self::Isolation, Self::Finition, Self::Autre];
+
+    fn est_autre(&self) -> bool {
+        *self == Self::Autre
+    }
+
+    pub fn libelle(self) -> &'static str {
+        match self {
+            Self::Structure => "Structure",
+            Self::Isolation => "Isolation",
+            Self::Finition => "Finition",
+            Self::Autre => "Autre",
+        }
+    }
+}
+
+/// Motif de coupe d'un matériau (poché des plans et des coupes).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MotifCoupe {
+    /// Hachures à 45°.
+    #[default]
+    Diagonales,
+    /// Hachures croisées (isolants).
+    Croisees,
+    /// Aplat de la couleur du matériau.
+    Uni,
+    /// Contour seul.
+    Vide,
+}
+
+impl MotifCoupe {
+    pub const TOUS: [MotifCoupe; 4] = [Self::Diagonales, Self::Croisees, Self::Uni, Self::Vide];
+
+    pub fn libelle(self) -> &'static str {
+        match self {
+            Self::Diagonales => "Diagonales",
+            Self::Croisees => "Croisées",
+            Self::Uni => "Uni",
+            Self::Vide => "Vide",
+        }
+    }
+}
+
+/// Matériau nommé par les couches (`Couche::materiau`).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct Materiau {
+    pub nom: String,
+    /// Couleur d'affichage (sRGB).
+    pub couleur: [u8; 3],
+    #[serde(default)]
+    pub motif: MotifCoupe,
+}
+
+/// Mur composé dont chaque couche est un mur indépendant (son type monocouche, ses
+/// contraintes de hauteur, sa phase, son sous-projet), regroupé pour être sélectionné,
+/// tracé et hébergé ensemble. Une ouverture dont `mur` vaut l'identifiant de
+/// l'assemblage traverse toutes ses couches.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Assemblage {
+    pub id: String,
+    pub nom: String,
+    /// Type composé d'origine (couches de l'extérieur vers l'intérieur).
+    pub type_mur: String,
+    /// Murs des couches, de l'extérieur vers l'intérieur.
+    pub couches: Vec<String>,
+    pub origine: Option<Origine>,
 }
 
 /// Type de mur ou de dalle : ses couches.
@@ -195,6 +285,9 @@ pub struct Mur {
     pub id: String,
     pub nom: String,
     pub type_mur: String,
+    /// Assemblage dont ce mur est une couche ; None : mur indépendant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assemblage: Option<String>,
     /// Niveau de base et décalage de la base (mm).
     pub niveau: String,
     pub decalage_bas: f64,
@@ -307,6 +400,14 @@ impl Projet {
 
     pub fn type_mur(&self, id: &str) -> Option<&TypeCompose> {
         self.types_murs.iter().find(|t| t.id == id)
+    }
+
+    pub fn assemblage(&self, id: &str) -> Option<&Assemblage> {
+        self.assemblages.iter().find(|a| a.id == id)
+    }
+
+    pub fn materiau(&self, nom: &str) -> Option<&Materiau> {
+        self.materiaux.iter().find(|m| m.nom == nom)
     }
 
     pub fn type_dalle(&self, id: &str) -> Option<&TypeCompose> {
@@ -582,8 +683,8 @@ mod tests {
     fn volume_et_json() {
         let mut p = Projet::nouveau("essai");
         p.niveaux.push(Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
-        p.types_murs.push(TypeCompose { id: "t".into(), nom: "200".into(), couches: vec![Couche { materiau: None, epaisseur: 200.0 }], couches_detaillees: false, origine: None });
-        p.murs.push(Mur { variante: None, phase: None, sous_projet: None, id: "m".into(), nom: "Mur".into(), type_mur: "t".into(), niveau: "n".into(), decalage_bas: 0.0, haut: Haut::Libre { hauteur: 3000.0 }, axe: Axe::Droit { debut: [0.0, 0.0], fin: [5000.0, 0.0] }, origine: None });
+        p.types_murs.push(TypeCompose { id: "t".into(), nom: "200".into(), couches: vec![Couche { materiau: None, epaisseur: 200.0, ..Default::default() }], couches_detaillees: false, origine: None });
+        p.murs.push(Mur { variante: None, phase: None, sous_projet: None, id: "m".into(), nom: "Mur".into(), type_mur: "t".into(), assemblage: None, niveau: "n".into(), decalage_bas: 0.0, haut: Haut::Libre { hauteur: 3000.0 }, axe: Axe::Droit { debut: [0.0, 0.0], fin: [5000.0, 0.0] }, origine: None });
         p.ouvertures.push(Ouverture { id: "o".into(), nom: String::new(), genre: GenreOuverture::Baie, mur: "m".into(), type_ouverture: None, abscisse: 1500.0, largeur: 1000.0, hauteur: 1200.0, allege: 900.0, representation: None, origine: None });
         assert!((p.volume_mur(&p.murs[0]).unwrap() - 2.76e9).abs() < 1.0);
         let q = Projet::lire_json(&p.json().unwrap()).unwrap();

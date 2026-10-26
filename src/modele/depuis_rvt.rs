@@ -37,10 +37,11 @@ fn couches_type(m: &Maquette, type_id: i64, epaisseur: f64) -> (Vec<Couche>, boo
             return (couches.iter().map(|c| Couche {
                 epaisseur: c.epaisseur,
                 materiau: (c.materiau != -1).then(|| m.materiaux.get(&c.materiau).map(|m| m.nom.clone()).unwrap_or_else(|| format!("Matériau {}", c.materiau))),
+                ..Default::default()
             }).collect(), true);
         }
     }
-    (vec![Couche { materiau: None, epaisseur }], false)
+    (vec![Couche { materiau: None, epaisseur, ..Default::default() }], false)
 }
 
 pub fn convertir(chemin: &Path, progress: &dyn Fn(String)) -> Result<(Projet, Vec<super::Mesure>), String> {
@@ -138,7 +139,7 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
         let id = ident("mur", w.id);
         c.lire(&id, &tris, "Murs");
         murs.insert(w.id, c.projet.murs.len());
-        c.projet.murs.push(Mur { variante: m.variante_de.get(&w.id).filter(|id| m.variantes.get(id).is_some_and(|v| !v.jeu)).map(|&id| ident("variante", id)), phase: None, sous_projet: None, id, nom, type_mur, niveau: base, decalage_bas: w.decalage_bas, haut, axe, origine: origine(w.id, &w.classe) });
+        c.projet.murs.push(Mur { variante: m.variante_de.get(&w.id).filter(|id| m.variantes.get(id).is_some_and(|v| !v.jeu)).map(|&id| ident("variante", id)), phase: None, sous_projet: None, id, nom, type_mur, assemblage: None, niveau: base, decalage_bas: w.decalage_bas, haut, axe, origine: origine(w.id, &w.classe) });
     }
 
     // portes et fenêtres hébergées par un mur converti ; autres familles importées

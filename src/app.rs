@@ -1272,10 +1272,22 @@ impl ViewerApp {
     }
 
     fn ajouter_mur_natif(&mut self, debut: [f64; 2], fin: [f64; 2], options: &crate::modele::edition::ParametresMur) -> Result<String, String> {
-        let (projet, chemin) = self.natif.as_ref().ok_or("Créez ou ouvrez un projet natif pour dessiner un mur.")?;
+        let (projet, _) = self.natif.as_ref().ok_or("Créez ou ouvrez un projet natif pour dessiner un mur.")?;
         let mut projet = projet.clone();
-        let chemin = chemin.clone();
         let id = projet.ajouter_mur(debut, fin, options)?;
+        self.appliquer_projet(projet)?;
+        // assemblage (type composé) ou mur seul
+        let genre = if self.natif.as_ref().is_some_and(|(p, _)| p.assemblage(&id).is_some()) { "assemblage" } else { "mur" };
+        self.selected = Some(scene::id_natif(genre, &id));
+        self.reveal = self.selected;
+        self.status = "Mur créé — Ctrl+S pour enregistrer.".into();
+        Ok(id)
+    }
+
+    /// Remplace le projet natif ouvert par `projet` (modifié) et reconstruit la scène,
+    /// cadrage, niveaux, catégories et visibilité compris. Rien ne change en cas d'erreur.
+    fn appliquer_projet(&mut self, projet: crate::modele::Projet) -> Result<(), String> {
+        let chemin = self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.1.clone();
         let scene = scene::depuis_natif(&projet, &chemin)?;
         let delta = self.scene.as_ref().map_or(glam::DVec3::ZERO, |s| s.origin) - scene.origin;
         self.camera.target += delta.as_vec3();
@@ -1293,17 +1305,18 @@ impl ViewerApp {
         self.liste_materiaux = materiaux_ifc(&scene);
         (self.categories, self.categorie_objet, self.cle_objet) = categories(&scene);
         self.visible = vec![true; scene.objects.len()];
+        if self.selected.is_some_and(|id| !scene.model.file.entities.contains_key(&id)) {
+            self.selected = None;
+        }
         self.scene = Some(scene);
         self.natif = Some((projet, chemin));
         self.natif_modifie = true;
         self.visibility_dirty = true;
         self.coupe_dirty = true;
-        self.selected = Some(scene::id_natif("mur", &id));
-        self.reveal = self.selected;
         self.error = None;
-        self.status = "Mur créé — Ctrl+S pour enregistrer.".into();
-        Ok(id)
+        Ok(())
     }
+
 
     /// Angle (rad) de l'horizontale de l'écran dans le repère du modèle en vue en plan
     /// (repère du plan tourné) ; 0 ailleurs (axes du modèle).
@@ -1449,14 +1462,26 @@ impl ViewerApp {
                     }
                 }
                 let longueur = (b[0] - a[0]).hypot(b[1] - a[1]);
-                if longueur >= 1.0 && sommet > altitude && options.epaisseur > 0.0 {
-                    use crate::modele::edition::Implantation;
-                    let signe = match options.implantation { Implantation::Axe => 0.0, Implantation::Exterieure => -0.5, Implantation::Interieure => 0.5 };
+                let gabarit = options.gabarit(projet);
+                let e = gabarit.epaisseur();
+                if longueur >= 1.0 && sommet > altitude && e > 0.0 {
+                    // milieu de l'épaisseur décalé de la ligne tracée vers l'intérieur
+                    let centre = -gabarit.decalage_reference(options.implantation.reference());
                     let n = [-(b[1]-a[1])/longueur, (b[0]-a[0])/longueur];
-                    let c = |p: [f64; 2], k: f64| [p[0]+n[0]*options.epaisseur*(signe+k), p[1]+n[1]*options.epaisseur*(signe+k)];
+                    let c = |p: [f64; 2], k: f64| [p[0]+n[0]*(centre+e*k), p[1]+n[1]*(centre+e*k)];
                     let contour = [c(a,-0.5),c(b,-0.5),c(b,0.5),c(a,0.5)];
                     if let Some(sol) = contour.iter().map(|&q| ecran(q, altitude)).collect::<Option<Vec<_>>>() {
                         painter.add(egui::Shape::convex_polygon(sol, couleur.gamma_multiply(0.18), egui::Stroke::NONE));
+                    }
+                    // séparations des couches, au sol et en tête
+                    let mut k = 0.5;
+                    for couche in gabarit.couches.iter().take(gabarit.couches.len().saturating_sub(1)) {
+                        k -= couche.epaisseur / e;
+                        for z in [altitude, sommet] {
+                            if let (Some(p), Some(q)) = (ecran(c(a, k), z), ecran(c(b, k), z)) {
+                                painter.line_segment([p, q], egui::Stroke::new(0.8, couleur.gamma_multiply(0.8)));
+                            }
+                        }
                     }
                     for z in [altitude, sommet] {
                         for k in 0..4 { if let (Some(a),Some(b)) = (ecran(contour[k],z),ecran(contour[(k+1)%4],z)) { painter.line_segment([a,b],egui::Stroke::new(1.5,couleur)); } }
@@ -3296,6 +3321,11 @@ impl ViewerApp {
         if let Some((projet, _)) = &mut self.natif {
             if self.ruban_edition.contexte_creation(ui, projet) { self.natif_modifie = true; }
             ui.separator();
+            // éditeur de type de mur : un type déjà porté par des murs les met à jour
+            let mut copie = if self.ruban_edition.editeur_type_ouvert() { projet.clone() } else { crate::modele::Projet::default() };
+            if self.ruban_edition.editeur_type_ouvert() && self.ruban_edition.editeur_type_mur(ui.ctx(), &mut copie) {
+                if let Err(e) = self.appliquer_projet(copie) { self.error = Some(e); }
+            }
         }
         if self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.proprietes_mur(ui, self.natif.as_ref().map(|(p, _)| p)) {
             return;
@@ -4046,6 +4076,34 @@ impl ViewerApp {
                     _ => return erreur("usage : outil mur|aucun"),
                 }
                 self.etat()
+            }
+            "type_mur" => {
+                // type_mur <nom>|<matériau>:<épaisseur mm>[:structure|isolation|finition]|… (extérieur → intérieur)
+                use crate::modele::{Couche, FonctionCouche};
+                let mut parties = argument.split('|');
+                let nom = parties.next().unwrap_or("").trim().to_string();
+                let couches: Option<Vec<Couche>> = parties.map(|c| {
+                    let mut x = c.split(':');
+                    let materiau = x.next()?.trim().to_string();
+                    let epaisseur = x.next()?.trim().parse().ok()?;
+                    let fonction = match x.next().map(str::trim) {
+                        Some("structure") => FonctionCouche::Structure,
+                        Some("isolation") => FonctionCouche::Isolation,
+                        Some("finition") => FonctionCouche::Finition,
+                        _ => FonctionCouche::Autre,
+                    };
+                    Some(Couche { materiau: Some(materiau), epaisseur, fonction })
+                }).collect();
+                let (Some(couches), false) = (couches, nom.is_empty()) else { return erreur("usage : type_mur <nom>|<matériau>:<épaisseur>[:fonction]|…") };
+                let Some((projet, _)) = &self.natif else { return erreur("pas de projet natif ouvert") };
+                let mut projet = projet.clone();
+                match self.ruban_edition.definir_type_mur(&mut projet, &nom, couches) {
+                    Ok(id) => match self.appliquer_projet(projet) {
+                        Ok(()) => succes(&[("type", texte(&id))]),
+                        Err(e) => erreur(&e),
+                    },
+                    Err(e) => erreur(&e),
+                }
             }
             "mur" => {
                 let Ok(v) = argument.split_whitespace().map(str::parse::<f64>).collect::<Result<Vec<_>, _>>() else { return erreur("coordonnées du mur invalides") };

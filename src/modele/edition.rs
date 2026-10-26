@@ -2,7 +2,19 @@
 use super::*;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Implantation { Axe, Exterieure, Interieure }
+pub enum Implantation { Axe, Exterieure, Interieure, AxePorteur }
+
+impl Implantation {
+    pub fn reference(self) -> super::assemblage::Reference {
+        use super::assemblage::Reference;
+        match self {
+            Self::Axe => Reference::Axe,
+            Self::Exterieure => Reference::FaceExterieure,
+            Self::Interieure => Reference::FaceInterieure,
+            Self::AxePorteur => Reference::AxePorteur,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct ParametresMur {
@@ -16,15 +28,29 @@ pub struct ParametresMur {
     pub phase: Option<String>,
     pub sous_projet: Option<String>,
     pub variante: Option<String>,
+    /// Type de mur existant ; None : type monocouche de l'épaisseur `epaisseur`. Un type
+    /// à plusieurs couches crée un assemblage (un mur par couche).
+    pub type_mur: Option<String>,
 }
 
 impl Default for ParametresMur {
     fn default() -> Self {
-        Self { hauteur: 2800.0, epaisseur: 300.0, implantation: Implantation::Axe, niveau: None, decalage: 0.0, niveau_haut: None, decalage_haut: 0.0, phase: None, sous_projet: None, variante: None }
+        Self { hauteur: 2800.0, epaisseur: 300.0, implantation: Implantation::Axe, niveau: None, decalage: 0.0, niveau_haut: None, decalage_haut: 0.0, phase: None, sous_projet: None, variante: None, type_mur: None }
     }
 }
 
 impl ParametresMur {
+    /// Type tracé : celui choisi, sinon une couche de l'épaisseur saisie.
+    pub fn gabarit(&self, projet: &Projet) -> TypeCompose {
+        self.type_mur.as_ref().and_then(|id| projet.type_mur(id)).cloned().unwrap_or_else(|| TypeCompose {
+            id: String::new(),
+            nom: String::new(),
+            couches: vec![Couche { materiau: None, epaisseur: self.epaisseur, ..Default::default() }],
+            couches_detaillees: true,
+            origine: None,
+        })
+    }
+
     /// Altitudes résolues pour la validation, le schéma et l'aperçu 3D (mm).
     pub fn bornes(&self, projet: &Projet) -> Result<(f64, f64), String> {
         let base = match &self.niveau {
@@ -100,30 +126,47 @@ impl Projet {
         if p.variante.as_ref().is_some_and(|id| !self.variantes.iter().any(|v| &v.id == id)) {
             return Err("Variante introuvable.".into());
         }
-        let existant = self.types_murs.iter().find(|t| (t.epaisseur() - p.epaisseur).abs() < 1e-6 && t.couches.len() == 1).map(|t| t.id.clone());
+        let compose = match &p.type_mur {
+            Some(id) => Some(self.type_mur(id).ok_or("Type de mur introuvable.")?.clone()),
+            None => None,
+        };
+        if compose.as_ref().is_some_and(|t| t.couches.is_empty() || t.couches.iter().any(|c| !(c.epaisseur > 0.0 && c.epaisseur.is_finite()))) {
+            return Err("Le type de mur doit avoir des couches d’épaisseur positive.".into());
+        }
+        let existant = match &compose {
+            Some(t) => Some(t.id.clone()),
+            None => self.types_murs.iter().find(|t| (t.epaisseur() - p.epaisseur).abs() < 1e-6 && t.couches.len() == 1).map(|t| t.id.clone()),
+        };
         let type_mur = existant.clone().unwrap_or_else(|| {
             let mut k = self.types_murs.len() + 1;
             loop { let id = identifiant("type-mur", &format!("natif-{k}")); if self.types_murs.iter().all(|t| t.id != id) { break id; } k += 1; }
         });
-        let mut k = self.murs.len() + 1;
-        let id = loop { let id = identifiant("mur", &format!("natif-{k}")); if self.murs.iter().all(|m| m.id != id) { break id; } k += 1; };
-        let signe = match p.implantation { Implantation::Axe => 0.0, Implantation::Exterieure => -0.5, Implantation::Interieure => 0.5 };
+        let mut k = self.murs.len() + self.assemblages.len() + 1;
+        let id = loop { let id = identifiant("mur", &format!("natif-{k}")); if self.murs.iter().all(|m| m.id != id) && self.assemblages.iter().all(|a| a.id != id) { break id; } k += 1; };
+        // ligne tracée → milieu de l'épaisseur totale : décalage de la référence vers l'intérieur
+        let gabarit = p.gabarit(self);
+        let decalage = gabarit.decalage_reference(p.implantation.reference());
         let n = [-(fin[1] - debut[1]) / longueur, (fin[0] - debut[0]) / longueur];
-        let deplacer = |q: [f64; 2]| [q[0] + n[0] * p.epaisseur * signe, q[1] + n[1] * p.epaisseur * signe];
+        let deplacer = |q: [f64; 2]| [q[0] - n[0] * decalage, q[1] - n[1] * decalage];
         if self.niveaux.is_empty() {
             self.niveaux.push(Niveau { id: niveau.clone(), nom: "Niveau 0".into(), altitude: 0.0, origine: None });
         }
         if existant.is_none() {
-            self.types_murs.push(TypeCompose { id: type_mur.clone(), nom: format!("Mur · {} mm", p.epaisseur), couches: vec![Couche { materiau: None, epaisseur: p.epaisseur }], couches_detaillees: true, origine: None });
+            self.types_murs.push(TypeCompose { id: type_mur.clone(), nom: format!("Mur · {} mm", p.epaisseur), couches: vec![Couche { materiau: None, epaisseur: p.epaisseur, ..Default::default() }], couches_detaillees: true, origine: None });
         }
+        let compose = compose.is_some_and(|t| t.couches.len() > 1);
         if self.phases.is_empty() { self.phases.push(p.phase.clone().unwrap_or_else(|| "Projet".into())); }
         if self.sous_projets.is_empty() { self.sous_projets.push(p.sous_projet.clone().unwrap_or_else(|| "Sous-projet 1".into())); }
         let contrainte = match &p.niveau_haut {
             Some(niveau) => Haut::Niveau { niveau: niveau.clone(), decalage: p.decalage_haut },
             None => Haut::Libre { hauteur: haut - bas },
         };
-        self.murs.push(Mur { variante: p.variante.clone(), phase: p.phase.clone().or_else(|| self.phases.last().cloned()), sous_projet: p.sous_projet.clone().or_else(|| self.sous_projets.first().cloned()), id: id.clone(), nom: format!("Mur {k}"), type_mur, niveau, decalage_bas: p.decalage,
+        self.murs.push(Mur { variante: p.variante.clone(), phase: p.phase.clone().or_else(|| self.phases.last().cloned()), sous_projet: p.sous_projet.clone().or_else(|| self.sous_projets.first().cloned()), id: id.clone(), nom: format!("Mur {k}"), type_mur, assemblage: None, niveau, decalage_bas: p.decalage,
             haut: contrainte, axe: Axe::Droit { debut: deplacer(debut), fin: deplacer(fin) }, origine: None });
+        // type à plusieurs couches : un mur par couche, regroupés (même identifiant)
+        if compose {
+            self.eclater_mur(&id)?;
+        }
         self.arrondir();
         Ok(id)
     }

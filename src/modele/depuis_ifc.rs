@@ -75,7 +75,7 @@ fn couches(m: &IfcModel, id: Id) -> Option<(Id, String, Vec<Couche>)> {
         .arg(0)
         .refs()
         .filter_map(|l| m.get(l))
-        .map(|l| Couche { materiau: l.arg(0).as_ref().and_then(|x| m.get(x)).and_then(|x| x.arg(0).as_str()).map(str::to_string), epaisseur: l.arg(1).as_f64().unwrap_or(0.0) * m.length_scale * 1000.0 })
+        .map(|l| Couche { materiau: l.arg(0).as_ref().and_then(|x| m.get(x)).and_then(|x| x.arg(0).as_str()).map(str::to_string), epaisseur: l.arg(1).as_f64().unwrap_or(0.0) * m.length_scale * 1000.0, ..Default::default() })
         .collect();
     let total: f64 = couches.iter().map(|c| c.epaisseur).sum();
     (total > 0.0).then(|| (jeu, e.arg(1).as_str().map(str::to_string).unwrap_or_default(), couches))
@@ -162,7 +162,7 @@ pub fn convertir_modele(m: &IfcModel, geometries: &HashMap<Id, Vec<[DVec3; 3]>>,
                 let total: f64 = cs.iter().map(|x| x.epaisseur).sum();
                 (format!("jeu:{}", cle(jeu)), if n.is_empty() { format!("Mur {total:.0} mm") } else { n }, cs, true)
             }
-            None => (format!("e:{epaisseur_lue:.1}"), format!("Mur {epaisseur_lue:.0} mm"), vec![Couche { materiau: None, epaisseur: epaisseur_lue }], false),
+            None => (format!("e:{epaisseur_lue:.1}"), format!("Mur {epaisseur_lue:.0} mm"), vec![Couche { materiau: None, epaisseur: epaisseur_lue, ..Default::default() }], false),
         };
         let type_mur = types_murs
             .entry(cle_type.clone())
@@ -174,7 +174,7 @@ pub fn convertir_modele(m: &IfcModel, geometries: &HashMap<Id, Vec<[DVec3; 3]>>,
             .clone();
         let mid = ident("mur", id);
         c.lire(&mid, t, "Murs");
-        let mur = Mur { variante: None, phase: None, sous_projet: None, id: mid.clone(), nom, type_mur, niveau: niv, decalage_bas: z[0] - alt, haut: Haut::Libre { hauteur: z[1] - z[0] }, axe, origine: origine(id) };
+        let mur = Mur { variante: None, phase: None, sous_projet: None, id: mid.clone(), nom, type_mur, assemblage: None, niveau: niv, decalage_bas: z[0] - alt, haut: Haut::Libre { hauteur: z[1] - z[0] }, axe, origine: origine(id) };
         // ouvertures
         for &o in m.openings.get(&id).map(Vec::as_slice).unwrap_or_default() {
             consommes.insert(o);
@@ -232,7 +232,7 @@ pub fn convertir_modele(m: &IfcModel, geometries: &HashMap<Id, Vec<[DVec3; 3]>>,
         let lue = p.haut - p.bas;
         let (cle_type, nom_type, couches, detaillees) = match couches(m, id) {
             Some((jeu, n, cs)) => (format!("jeu:{}", cle(jeu)), if n.is_empty() { format!("Dalle {lue:.0} mm") } else { n }, cs, true),
-            None => (format!("e:{lue:.1}"), format!("Dalle {lue:.0} mm"), vec![Couche { materiau: None, epaisseur: lue }], false),
+            None => (format!("e:{lue:.1}"), format!("Dalle {lue:.0} mm"), vec![Couche { materiau: None, epaisseur: lue, ..Default::default() }], false),
         };
         let type_dalle = types_dalles
             .entry(cle_type.clone())
