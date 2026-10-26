@@ -787,72 +787,17 @@ impl RubanEdition {
     fn croquis_mur_creation(&mut self, ui: &mut egui::Ui, projet: &crate::modele::Projet) {
         use egui::{Align2, FontId, Stroke, pos2, vec2};
         let largeur = ui.available_width();
-        let (r, _) = ui.allocate_exact_size(vec2(largeur, 318.0), Sense::hover());
-        let p = ui.painter_at(r);
+        let libre = self.niveau_haut_mur.is_none();
+        let bas_champs = if libre { 120.0 } else { 86.0 };
+        let (r, _) = ui.allocate_exact_size(vec2(largeur, bas_champs + 82.0), Sense::hover());
         let bleu = Color32::from_rgb(18, 158, 205);
-        let bord = Stroke::new(1.7, bleu);
         let droite = r.left() + largeur * 0.43;
-        let profondeur = vec2(13.0, -12.0);
-        let largeur_mur = largeur * 0.31;
-        let haut = pos2(droite - 14.0, r.top() + 72.0);
-        let bas = pos2(droite - 14.0, r.top() + 218.0);
-        let a = haut - vec2(largeur_mur, 42.0);
-        let b = bas - vec2(largeur_mur, 42.0);
-        p.add(egui::Shape::convex_polygon(
-            vec![a, haut, bas, b],
-            Color32::from_rgb(244, 250, 252),
-            bord,
-        ));
-        p.add(egui::Shape::convex_polygon(
-            vec![haut, haut + profondeur, bas + profondeur, bas],
-            Color32::from_rgb(214, 239, 247),
-            bord,
-        ));
-        p.add(egui::Shape::convex_polygon(
-            vec![a, a + profondeur, haut + profondeur, haut],
-            Color32::from_rgb(233, 247, 252),
-            bord,
-        ));
-        let champs_x = droite + 22.0;
-        // Traits de rappel, comme dans le croquis : haut et bas restent identifiables.
-        for (depuis, y) in [
-            (haut + profondeur, r.top() + 94.0),
-            (bas + profondeur, r.top() + 234.0),
-        ] {
-            let fin = pos2(champs_x - 5.0, y);
-            let d = fin - depuis;
-            let longueur = d.length();
-            let mut t = 5.0;
-            while t < longueur {
-                p.line_segment(
-                    [
-                        depuis + d * (t / longueur),
-                        depuis + d * ((t + 5.0).min(longueur) / longueur),
-                    ],
-                    bord,
-                );
-                t += 10.0;
-            }
-            p.circle_filled(depuis, 2.5, bleu);
-        }
-        let hauteur = self
-            .parametres_mur()
-            .bornes(projet)
-            .ok()
-            .map(|(bas, haut)| haut - bas);
-        if let Some(hauteur) = hauteur {
-            p.text(
-                pos2(r.left() + largeur * 0.22, r.top() + 269.0),
-                Align2::CENTER_CENTER,
-                format!("{hauteur:.0} mm"),
-                FontId::proportional(12.0),
-                ui.visuals().weak_text_color(),
-            );
-        }
-        for (haut, y) in [(true, 74.0), (false, 214.0)] {
+        let champs_x = droite + 18.0;
+        let mut centres = [r.top(); 2];
+        for (haut, y) in [(true, 6.0), (false, bas_champs)] {
             let rect = egui::Rect::from_min_max(
                 pos2(champs_x, r.top() + y),
-                pos2(r.right(), r.top() + y + 102.0),
+                pos2(r.right(), r.top() + y + 108.0),
             );
             ui.scope_builder(
                 egui::UiBuilder::new()
@@ -861,7 +806,7 @@ impl RubanEdition {
                     .layout(egui::Layout::top_down(Align::Min)),
                 |ui| {
                     ui.set_width(rect.width());
-                    ui.spacing_mut().item_spacing.y = 3.0;
+                    ui.spacing_mut().item_spacing.y = 2.0;
                     ui.label(
                         RichText::new(if haut { "Limite haute" } else { "Limite basse" })
                             .small()
@@ -879,7 +824,7 @@ impl RubanEdition {
                         .map_or(if haut { "Hauteur libre" } else { "Niveau 0" }, |n| {
                             n.nom.as_str()
                         });
-                    egui::ComboBox::from_id_salt(("limite_creation_mur", haut))
+                    let selection = egui::ComboBox::from_id_salt(("limite_creation_mur", haut))
                         .width(rect.width())
                         .truncate()
                         .selected_text(nom)
@@ -895,6 +840,7 @@ impl RubanEdition {
                                 ui.selectable_value(niveau, Some(n.id.clone()), &n.nom);
                             }
                         });
+                    centres[if haut { 0 } else { 1 }] = selection.response.rect.center().y;
                     ui.label(
                         RichText::new(if haut {
                             "Décalage haut"
@@ -918,6 +864,52 @@ impl RubanEdition {
                         self.nombre_mur(ui, 1, 2800.0);
                     }
                 },
+            );
+        }
+        let p = ui.painter_at(r);
+        let bord = Stroke::new(1.7, bleu);
+        let profondeur = vec2(12.0, -8.0);
+        let largeur_mur = largeur * 0.31;
+        // Les sommets arrière sont calés sur le centre réel de chaque sélecteur.
+        let haut = pos2(droite - 14.0, centres[0] + 8.0);
+        let bas = pos2(droite - 14.0, centres[1] + 8.0);
+        let a = haut - vec2(largeur_mur, 18.0);
+        let b = bas - vec2(largeur_mur, 18.0);
+        p.add(egui::Shape::convex_polygon(
+            vec![a, haut, bas, b],
+            Color32::from_rgb(244, 250, 252),
+            bord,
+        ));
+        p.add(egui::Shape::convex_polygon(
+            vec![haut, haut + profondeur, bas + profondeur, bas],
+            Color32::from_rgb(214, 239, 247),
+            bord,
+        ));
+        p.add(egui::Shape::convex_polygon(
+            vec![a, a + profondeur, haut + profondeur, haut],
+            Color32::from_rgb(233, 247, 252),
+            bord,
+        ));
+        // Rappels horizontaux : même ligne que le niveau, sans estimation de hauteur de texte.
+        for depuis in [haut + profondeur, bas + profondeur] {
+            let fin = champs_x - 4.0;
+            let mut x = depuis.x + 4.0;
+            while x < fin {
+                p.line_segment(
+                    [pos2(x, depuis.y), pos2((x + 3.0).min(fin), depuis.y)],
+                    Stroke::new(1.2, bleu),
+                );
+                x += 6.0;
+            }
+            p.circle_filled(depuis, 2.0, bleu);
+        }
+        if let Ok((bas_z, haut_z)) = self.parametres_mur().bornes(projet) {
+            p.text(
+                pos2(r.left() + largeur * 0.22, bas.y + 23.0),
+                Align2::CENTER_CENTER,
+                format!("{:.0} mm", haut_z - bas_z),
+                FontId::proportional(11.0),
+                ui.visuals().weak_text_color(),
             );
         }
     }
