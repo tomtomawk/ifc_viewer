@@ -199,7 +199,7 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
         Poche::Plein => ([75, 75, 75, 255], None),
         Poche::Vide => ([255, 255, 255, 255], None),
     };
-    (0..scene.objects.len())
+    let prims: Vec<Primitive> = (0..scene.objects.len())
         .into_par_iter()
         .flat_map_iter(|i| {
             let ob = &scene.objects[i];
@@ -283,7 +283,58 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
             }
             prims
         })
-        .collect()
+        .collect();
+    fusionner_materiaux(scene, prims)
+}
+
+/// Segment repéré au dixième de millimètre, extrémités dans l'ordre.
+type CleSegment = ([i64; 3], [i64; 3]);
+
+/// Nettoyage des jonctions comme Revit : un trait de coupe commun à deux éléments du
+/// même matériau (deux couches identiques raccordées en onglet) est retiré, les deux
+/// régions se lisent d'un seul tenant.
+fn fusionner_materiaux(scene: &Scene, mut prims: Vec<Primitive>) -> Vec<Primitive> {
+    use std::collections::HashMap;
+    // matériau d'un élément : sa bande de coupe unique (couches des murs natifs)
+    let materiau = |id: Option<crate::step::Id>| -> Option<([u8; 4], String)> {
+        let c = scene.couches_coupe.get(&id?)?;
+        let [b] = c.as_slice() else { return None };
+        Some((b.couleur, b.motif.as_ref().map_or_else(String::new, |m| m.nom.clone())))
+    };
+    let cle = |s: &[DVec3; 2]| -> CleSegment {
+        let q = |p: DVec3| [(p.x * 1e4).round() as i64, (p.y * 1e4).round() as i64, (p.z * 1e4).round() as i64];
+        let (a, b) = (q(s[0]), q(s[1]));
+        if a <= b { (a, b) } else { (b, a) }
+    };
+    let mut vus: HashMap<CleSegment, Vec<(usize, Option<crate::step::Id>)>> = HashMap::new();
+    for (k, p) in prims.iter().enumerate() {
+        if let (Role::Coupe, Forme::Segments(segs)) = (p.role, &p.forme) {
+            if materiau(p.element).is_none() {
+                continue;
+            }
+            for s in segs {
+                vus.entry(cle(s)).or_default().push((k, p.element));
+            }
+        }
+    }
+    let mut retirer: std::collections::HashSet<(usize, CleSegment)> = std::collections::HashSet::new();
+    for (c, qui) in &vus {
+        if let [(ka, ea), (kb, eb)] = qui.as_slice() {
+            if ea != eb && materiau(*ea) == materiau(*eb) {
+                retirer.insert((*ka, *c));
+                retirer.insert((*kb, *c));
+            }
+        }
+    }
+    if retirer.is_empty() {
+        return prims;
+    }
+    for (k, p) in prims.iter_mut().enumerate() {
+        if let Forme::Segments(segs) = &mut p.forme {
+            segs.retain(|s| !retirer.contains(&(k, cle(s))));
+        }
+    }
+    prims
 }
 
 /// Sommets GPU des primitives d'une coupe de normale `normale` : triangles (poché,

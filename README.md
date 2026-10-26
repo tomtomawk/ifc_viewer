@@ -58,6 +58,8 @@ couches, fonction, matériau, couleur, motif de coupe, épaisseur). Chaque couch
 tracée comme un mur indépendant, regroupé en assemblage : un clic sélectionne
 l'assemblage, un second clic (ou Tab) la couche, dont la hauteur, les niveaux, la
 phase et le sous-projet se règlent seuls ; « Dissocier » la sort de l'assemblage.
+Les murs droits se raccordent automatiquement : angles en onglet (couche à couche pour
+deux assemblages de même composition), arrivées en T arrêtées sur la face du mur.
 Un astérisque signale les modifications et la fermeture propose de les enregistrer. Une seconde
 barre, au-dessus de la zone de dessin, affiche les vues ouvertes : vue générale du
 modèle, plans, coupes, vues 3D, feuilles et nomenclatures. Cliquer sur un onglet

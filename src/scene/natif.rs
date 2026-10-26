@@ -47,6 +47,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     }
     let mut couches_coupe = Vec::new();
     let mut geoms = Vec::new();
+    let jonctions = crate::modele::jonctions::coupes(projet);
     // couches d'un même assemblage consécutives (sélection d'un seul tenant)
     let mut ordre: Vec<&crate::modele::Mur> = projet.murs.iter().filter(|m| m.assemblage.is_none()).collect();
     for a in &projet.assemblages {
@@ -64,10 +65,10 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         }
         let d = glam::DVec2::from_array(fin) - glam::DVec2::from_array(debut);
         if d.length() < 1.0 { return Err(format!("{} : longueur inférieure à 1 mm.", m.nom)); }
-        let n = glam::DVec2::new(-d.y, d.x).normalize() * epaisseur * 0.5;
-        let a = glam::DVec2::from_array(debut);
-        let b = glam::DVec2::from_array(fin);
-        let contour = [a - n, b - n, b + n, a + n];
+        // contour en plan, extrémités raccordées aux murs voisins (angles, T)
+        let contour = crate::modele::jonctions::contour(projet, m, &jonctions)
+            .ok_or_else(|| format!("{} : contour non valide.", m.nom))?
+            .map(|p| glam::DVec2::from_array(p));
         let points: Vec<DVec3> = [bas, haut].into_iter().flat_map(|z| contour.map(|p| DVec3::new(p.x, p.y, z) * 0.001)).collect();
         let faces = [[3,2,1,0],[4,5,6,7],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7]];
         let tris = faces.into_iter().flat_map(|[a,b,c,d]| [[points[a],points[b],points[c]], [points[a],points[c],points[d]]]).collect();

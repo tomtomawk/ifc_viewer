@@ -109,6 +109,22 @@ doublage d'une autre phase…). Conventions :
   prochains tracés (les murs déjà tracés gardent leurs couches).
 - **Volume** : celui de chaque couche, baies de son assemblage déduites.
 
+## Jonctions
+
+Calculées à l'affichage à partir des axes (rien n'est enregistré ; `modele/jonctions.rs`),
+pour les murs droits superposés en hauteur, un assemblage comptant pour un seul mur :
+
+- **Angle (L)** : deux extrémités proches de l'intersection des axes (à l'épaisseur des
+  deux murs près) sont coupées en onglet, par la droite qui joint les intersections des
+  faces intérieures et des faces extérieures. Toutes les couches d'un assemblage
+  prennent la même coupe : deux assemblages de même composition, tracés dans le même
+  sens, se raccordent couche à couche.
+- **Arrivée (T)** : une extrémité proche d'un mur, loin de ses bouts, s'arrête sur sa
+  face (toutes les couches de l'arrivant).
+- Plus de deux murs au même angle : extrémités laissées droites.
+- En coupe, le trait commun à deux couches du même matériau est retiré (régions
+  fondues, comme le nettoyage des jonctions de Revit).
+
 ## Conversion depuis Revit
 
 Uniquement à partir des données déjà décodées par `rvt::maquette` (aucune lecture nouvelle du
@@ -151,8 +167,9 @@ chaque `.rfa` du dossier.
 
 - Revit : contours d'esquisse des sols, extrémités du
   tracé des murs, ligne d'implantation, cotes de réservation des familles.
-- Jonctions de murs (les couches des assemblages se chevauchent aux angles), murs
-  attachés aux toits, profils de murs non rectangulaires.
+- Jonctions : murs courbes, croisements (X) et angles à plus de deux murs, choix
+  onglet / aboutement et priorité des couches comme dans Revit ; murs attachés aux
+  toits, profils de murs non rectangulaires.
 - Assemblages courbes à la conversion (arc Revit ou IFC), fonction des couches Revit
   (structure, isolation…), mise à jour des assemblages existants depuis leur type.
 - Toits, escaliers, poteaux, poutres paramétriques ; familles paramétriques (portes,
