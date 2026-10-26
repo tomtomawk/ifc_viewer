@@ -4919,6 +4919,13 @@ impl eframe::App for ViewerApp {
         }
         if self.selected.is_some() && !ctx.egui_wants_keyboard_input() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab)) {
             self.tab_selection();
+            // Tab sert ici à la sélection, pas au passage du focus entre les champs
+            ctx.memory_mut(|m| {
+                m.move_focus(egui::FocusDirection::None);
+                if let Some(id) = m.focused() {
+                    m.surrender_focus(id);
+                }
+            });
         }
         if self.alignement_plan && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             self.alignement_plan = false;
