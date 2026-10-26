@@ -105,6 +105,10 @@ pub struct TypeElem {
     /// Somme des couches de la structure composée, en mm (types de murs, sols et toits ;
     /// absente pour les murs-rideaux et les murs empilés).
     pub epaisseur: Option<f64>,
+    /// Couches dans l'ordre de la structure composée Revit (extérieur → intérieur
+    /// pour les murs, dessus → dessous pour les sols). None : lecture incomplète.
+    pub couches: Option<Vec<CoucheType>>,
+    pub couches_variables: bool,
     /// Famille d'un type de famille (`FamilySymbol.m_familyId`), −1 sinon.
     pub famille: i64,
     /// Largeur et hauteur en mm (paramètres de type `FAMILY_WIDTH_PARAM` et
@@ -117,6 +121,24 @@ pub struct TypeElem {
     pub categorie_texte: i64,
     /// Type de groupe : origine d'insertion (`ElementGroupType.m_insertionOrigin`, mm).
     pub origine_insertion: Option<DVec3>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CoucheType {
+    pub epaisseur: f64,
+    /// ElementId du matériau, −1 : par catégorie.
+    pub materiau: i64,
+}
+
+fn couches_structure(cs: &Obj<'_>) -> Option<Vec<CoucheType>> {
+    let Val::List(liste) = cs.get("m_layers")? else { return None };
+    if liste.is_empty() { return None; }
+    liste.iter().map(|v| {
+        let c = v.obj()?;
+        let epaisseur = c.get("m_layerWidth")?.real()? * FT;
+        if !epaisseur.is_finite() || epaisseur < 0.0 { return None; }
+        Some(CoucheType { epaisseur, materiau: c.get("m_materialId")?.element_id()? })
+    }).collect()
 }
 
 pub struct Famille {
@@ -983,7 +1005,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
                 use super::medias::Media;
                 // les types gardent aussi leur nom parmi les types (nom des éléments)
                 let mut type_nomme = |id: i64, nom: &str, classe: &str| {
-                    types.insert(id, TypeElem { nom: nom.to_string(), classe: classe.into(), epaisseur: None, famille: -1, largeur: None, hauteur: None, categorie_texte: -1, origine_insertion: None });
+                    types.insert(id, TypeElem { nom: nom.to_string(), classe: classe.into(), epaisseur: None, couches: None, couches_variables: false, famille: -1, largeur: None, hauteur: None, categorie_texte: -1, origine_insertion: None });
                 };
                 match x {
                     Media::Raster(id, r) => drop(rasters.insert(id, r)),
@@ -1566,6 +1588,8 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite
                 let couches = cs.get("m_layers").map(Val::list).unwrap_or_default();
                 couches.iter().filter_map(|c| c.obj()?.get("m_layerWidth")?.real()).sum::<f64>() * FT
             });
+            let couches = r.field_body(o, "m_pCompoundStructure").and_then(couches_structure);
+            let couches_variables = r.field_body(o, "m_pCompoundStructure").and_then(|cs| cs.get("m_variableLayerIdx")).and_then(Val::int).is_some_and(|i| i >= 0);
             let mut valeurs = HashMap::new();
             if let Some(pp) = r.field_body(o, "m_pParams") {
                 for x in pp.get("m_params").map(Val::list).unwrap_or_default() {
@@ -1578,7 +1602,7 @@ fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f64>, herite
             let categorie_texte = o.get("m_lineAndTextAttr").and_then(Val::obj).map(|a| id_of(a, "m_categoryId")).unwrap_or(-1);
             // type de groupe : `m_insertionOrigin` est un repère (`Trf`), son origine `m_or`
             let origine_insertion = r.field_body(o, "m_insertionOrigin").or(o.get("m_insertionOrigin").and_then(Val::obj)).and_then(|t| t.get("m_or")).and_then(vec3).map(|p| p * FT);
-            Some(Extrait::Type(eid, TypeElem { nom, classe: o.class_name().to_string(), epaisseur, famille: id_of(o, "m_familyId"), largeur, hauteur, categorie_texte, origine_insertion }))
+            Some(Extrait::Type(eid, TypeElem { nom, classe: o.class_name().to_string(), epaisseur, couches, couches_variables, famille: id_of(o, "m_familyId"), largeur, hauteur, categorie_texte, origine_insertion }))
         })()),
         Sorte::Famille => ou_rien((|| {
             let occurrence = r.field_body(o, "m_familyParams").map(|fp| {
@@ -2521,6 +2545,55 @@ fn produits(m: &Maquette) -> Vec<Produit<'_>> {
 /// Scène du viewer : un modèle IFC synthétique (projet, niveaux, éléments, types,
 /// propriétés) pour l'arborescence et les propriétés, et les maillages colorés par
 /// matériau.
+fn bandes_couches_mur(m: &Maquette, mur: &Mur, origine: DVec3) -> Option<Vec<scene::CoucheCoupe>> {
+    let t = m.types.get(&mur.type_id)?;
+    if t.couches_variables { return None; }
+    let couches = t.couches.as_ref().filter(|c| c.len() > 1)?;
+    let Trace::Ligne { direction, .. } = mur.trace? else { return None };
+    let normale = DVec3::new(-direction.y, direction.x, 0.0).normalize_or_zero();
+    if normale == DVec3::ZERO { return None; }
+    let g = mur.geometrie.as_ref().ok()?;
+    let (min, max) = g.sommets.iter().map(|p| p.dot(normale)).fold((f64::INFINITY, f64::NEG_INFINITY), |(a,b), x| (a.min(x),b.max(x)));
+    let total: f64 = couches.iter().map(|c| c.epaisseur).sum();
+    if total <= 0.0 || (max-min-total).abs() > 0.5 { return None; }
+    // La courbe porteuse seule ne dit pas si le mur est retourné. Valider le côté
+    // extérieur avec les matériaux réellement présents sur ses deux grandes faces.
+    let cote = |materiau: i64| -> Option<f64> {
+        if materiau == -1 { return None; }
+        let mut cotes = [false; 2];
+        for f in g.faces.iter().filter(|f| f.materiau == materiau) {
+            for tri in &f.triangles {
+                let p = tri.map(|i| g.sommets[i]);
+                let n = (p[1]-p[0]).cross(p[2]-p[0]).normalize_or_zero();
+                if n.dot(normale).abs() < 0.95 { continue; }
+                for (k, z) in [min,max].iter().enumerate() {
+                    if p.iter().all(|p| (p.dot(normale)-z).abs() < 0.1) { cotes[k] = true; }
+                }
+            }
+        }
+        match cotes { [true,false] => Some(1.0), [false,true] => Some(-1.0), _ => None }
+    };
+    let exterieur = cote(couches.first()?.materiau);
+    let interieur = cote(couches.last()?.materiau).map(|s| -s);
+    if exterieur.zip(interieur).is_some_and(|(a,b)| a != b) { return None; }
+    let signe = exterieur.or(interieur)?;
+    let normale = normale * signe;
+    let mut position = (if signe > 0.0 { min } else { -max }) / 1000.0 - normale.dot(origine);
+    let mut bandes = Vec::new();
+    for c in couches {
+        let fin = position + c.epaisseur / 1000.0;
+        if c.epaisseur > 0.0 {
+            let mat = m.materiaux.get(&c.materiau);
+            let couleur = mat.map_or([195,195,190], |m| m.couleur);
+            let motif = mat.and_then(|m| m.motifs.first()).and_then(|(id,_)| m.motifs.get(id)).cloned().map(Arc::new);
+            let encre = mat.map_or([70,70,70], |m| m.motifs[0].1);
+            bandes.push(scene::CoucheCoupe { plans: [normale.as_vec3().extend(-position as f32), (-normale).as_vec3().extend(fin as f32)], couleur: [couleur[0],couleur[1],couleur[2],255], motif, couleur_motif: [encre[0],encre[1],encre[2],255], hachure_defaut: mat.is_none() });
+        }
+        position = fin;
+    }
+    Some(bandes)
+}
+
 pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scene {
     let mut b = Builder { entities: IdMap::default() };
     let mut element_de: HashMap<Id, i64> = HashMap::new();
@@ -2561,6 +2634,8 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
     let shape = b.add("IFCPRODUCTDEFINITIONSHAPE", vec![n.clone(), n.clone(), Value::List(vec![])]);
 
     let mut types: HashMap<(i64, &str), Id> = HashMap::new();
+    let mut compositions: HashMap<Id, Id> = HashMap::new();
+    let mut materiaux_composition: HashMap<i64, Id> = HashMap::new();
     let mut contenus: BTreeMap<Id, Vec<Value>> = BTreeMap::new();
     let mut geoms = Vec::new();
     // éléments qui portent chaque matériau (navigateur : onglet Matériaux)
@@ -2691,12 +2766,37 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
                     let pset = b.pset("RVTTPSET", p.type_id, "Revit", tp);
                     let mut psets = vec![Value::Ref(pset)];
                     psets.extend(b.psets_parametres(m, p.type_id).into_iter().map(Value::Ref));
+                    let couches = m.types.get(&p.type_id).and_then(|t| t.couches.as_ref());
+                    if let Some(couches) = couches {
+                        let props: Vec<(String, Value)> = couches.iter().enumerate().map(|(k, c)| {
+                            let materiau = if c.materiau == -1 { "Par catégorie".into() } else { m.materiaux.get(&c.materiau).map(|m| m.nom.clone()).unwrap_or_else(|| format!("Matériau {}", c.materiau)) };
+                            (format!("Couche {}", k+1), Value::Str(format!("{} mm — {materiau}", crate::step::format_real(c.epaisseur))))
+                        }).collect();
+                        let ps = b.pset("RVTCOUCHES", p.type_id, "Composition", props.iter().map(|(k,v)| (k.as_str(),v.clone())).collect());
+                        psets.push(Value::Ref(ps));
+                    }
                     let t = b.add(&format!("{}TYPE", p.classe), vec![guid("RVTTYPE", p.type_id), n.clone(), Value::Str(p.nom_type.clone()), n.clone(), n.clone(), Value::List(psets)]);
+                    if let Some(couches) = couches {
+                        let refs = couches.iter().map(|c| {
+                            let mat = if c.materiau == -1 { Value::Null } else {
+                                Value::Ref(*materiaux_composition.entry(c.materiau).or_insert_with(|| {
+                                    let nom = m.materiaux.get(&c.materiau).map(|m| m.nom.clone()).unwrap_or_else(|| format!("Matériau {}", c.materiau));
+                                    b.add("IFCMATERIAL", vec![Value::Str(nom)])
+                                }))
+                            };
+                            Value::Ref(b.add("IFCMATERIALLAYER", vec![mat, Value::Real(c.epaisseur / 1000.0), Value::Null]))
+                        }).collect();
+                        let jeu = b.add("IFCMATERIALLAYERSET", vec![Value::List(refs), Value::Str(p.nom_type.clone())]);
+                        compositions.insert(t, jeu);
+                    }
                     types.insert((p.type_id, classe_type), t);
                     t
                 }
             };
             b.add("IFCRELDEFINESBYTYPE", vec![gid("RVTRELT", p.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(t)]);
+            if let Some(&jeu) = compositions.get(&t) {
+                b.add("IFCRELASSOCIATESMATERIAL", vec![gid("RVTCMAT", p.id), n.clone(), n.clone(), n.clone(), Value::List(vec![Value::Ref(id)]), Value::Ref(jeu)]);
+            }
         }
         contenus.entry(etage.get(&p.niveau).copied().unwrap_or(projet)).or_default().push(Value::Ref(id));
     }
@@ -2995,6 +3095,11 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
     }
     let model = IfcModel::new(StepFile { schema: format!("REVIT {format}"), entities: b.entities });
     let mut s = scene::assemble(model, geoms, file_name);
+    for (&ent, &el) in &element_de {
+        if let Some(mur) = m.murs.iter().find(|w| w.id == el) {
+            if let Some(bandes) = bandes_couches_mur(m, mur, s.origin) { s.couches_coupe.insert(ent, bandes); }
+        }
+    }
     let mut nav = nav;
     for (&ent, &el) in &element_de {
         let ph = |k| id_parametre(m, el, k);
@@ -3158,6 +3263,44 @@ const MAX_TRAITS_MOTIFS: usize = 1_500_000;
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn couches_projet1_lecture_et_conversion() {
+        let Some(p) = essai("fichiers", "Projet1.rvt") else { return };
+        let m = lire(&p, &|_| {}).unwrap();
+        let mut multicouches: Vec<_> = m.types.iter().filter(|(_, t)| t.couches.as_ref().is_some_and(|c| c.len() > 1)).collect();
+        multicouches.sort_by_key(|(id, _)| **id);
+        assert!(!multicouches.is_empty(), "aucun type multicouche lu");
+        let reference = m.types[&29321].couches.as_ref().unwrap();
+        assert_eq!(reference.iter().map(|c| c.materiau).collect::<Vec<_>>(),vec![874,872,873]);
+        for (c, epaisseur) in reference.iter().zip([20.,200.,100.]) { assert!((c.epaisseur-epaisseur).abs() < 1e-8); }
+        for (_, t) in &multicouches {
+            let total: f64 = t.couches.as_ref().unwrap().iter().map(|c| c.epaisseur).sum();
+            assert!((total-t.epaisseur.unwrap()).abs() < 1e-6);
+        }
+        let mut c = crate::modele::Conversion::default();
+        c.projet = crate::modele::Projet::nouveau("Test couches");
+        c.projet.sources.push(crate::modele::source("s1", &p, "RVT"));
+        crate::modele::depuis_rvt::convertir_maquette(&m, &mut c);
+        let detaillees: Vec<_> = c.projet.types_murs.iter().filter(|t| t.couches_detaillees && t.couches.len() > 1).collect();
+        assert!(!detaillees.is_empty(), "couches perdues pendant la conversion");
+        let relu = crate::modele::Projet::lire_json(&c.projet.json().unwrap()).unwrap();
+        for t in detaillees {
+            let q = relu.type_mur(&t.id).unwrap();
+            assert_eq!(q.couches.len(),t.couches.len());
+            for (a,b) in q.couches.iter().zip(&t.couches) { assert_eq!(a.materiau,b.materiau); assert_eq!(a.epaisseur,b.epaisseur); }
+        }
+        let s = scene(&m, "Test couches", "Projet1.rvt".into(), "2026");
+        eprintln!("Murs avec position des couches vérifiée : {}", s.couches_coupe.len());
+        assert!(!s.couches_coupe.is_empty(), "aucun mur avec orientation de couches vérifiable");
+        let mur = m.murs.iter().find(|w| w.type_id == 29321).unwrap();
+        let (&id, _) = s.model.file.entities.iter().find(|(_,e)| e.is("IFCWALL") && e.arg(7).as_str() == Some(&mur.id.to_string())).unwrap();
+        let groupe = s.model.property_groups(id).into_iter().find(|g| g.name.starts_with("Composition")).unwrap();
+        assert_eq!(groupe.props.len(),3);
+        let noms = s.model.material_names(s.model.material_of[&id]);
+        assert_eq!(noms.len(),3);
+        assert!(noms[0].contains(&m.materiaux[&874].nom));
+    }
 
     /// Fichier d'essai hors dépôt, dans le dossier du décodage (`essais\` : essais créés
     /// par les campagnes ; `fichiers\` : projets et familles de référence ; voir son

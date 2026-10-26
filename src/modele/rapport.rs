@@ -110,7 +110,7 @@ pub fn markdown(p: &Projet, mesures: &[Mesure], duree_s: f64) -> String {
     s.push_str("\n## Hypothèses de la v0\n\n");
     if src.is_some_and(|x| x.format == "RVT") {
         s.push_str(
-            "- Murs : le tracé lu donne la droite ou le cercle porteur ; extrémités et ligne médiane viennent de la géométrie du mur projetée sur ce tracé. Aux angles, la géométrie lue inclut la jonction : l'axe s'étend jusqu'au bout de la jonction. Épaisseur = celle du type, en une couche (couches non lues).\n\
+            "- Murs : le tracé lu donne la droite ou le cercle porteur ; extrémités et ligne médiane viennent de la géométrie du mur projetée sur ce tracé. Aux angles, la géométrie lue inclut la jonction : l'axe s'étend jusqu'au bout de la jonction. Couches de la structure composée conservées dans l’ordre du type avec leurs matériaux et épaisseurs ; une couche globale non détaillée uniquement si la composition est indisponible.\n\
 - Ouvertures : baie rectangulaire à travers tout le mur, aux cotes du type (largeur, hauteur de la famille), centrée sur le point d'insertion ; ces cotes peuvent différer de la réservation réellement découpée dans le mur.\n",
         );
     } else {

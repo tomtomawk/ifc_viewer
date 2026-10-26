@@ -16,6 +16,29 @@ ifc_viewer --modele <fichier.rvt|.rfa|.ifc> [sortie.json]
 
 ## Principes
 
+Dans l'interface, **Début → Nouveau…** (Ctrl+N) crée un fichier `.modele.json`
+nommé d'après le fichier choisi et l'ouvre dans une vue 3D vide, en conservant les
+autres documents. Il utilise `Projet::nouveau` : en-tête v0, collections vides,
+aucun niveau, type ou élément ajouté implicitement. **Sortie → Enregistrer**
+(Ctrl+S) enregistre ce document. **Modéliser → Mur** crée des murs droits par deux
+clics, avec un aperçu, les dimensions, le niveau de base, le décalage et la ligne
+d'implantation. Un niveau 0 est créé si nécessaire et les types à une couche de
+même épaisseur sont réutilisés. Le schéma v0 n'est pas modifié : l'axe enregistré
+reste la ligne médiane de l'épaisseur ; les variantes d'implantation décalent cet axe.
+Les niveaux et murs droits natifs sont affichés par la chaîne de rendu commune,
+avec sélection et propriétés, et peuvent être rouverts après enregistrement.
+L'affichage natif des autres éléments et des murs courbes reste à implémenter :
+les fichiers qui en contiennent sont refusés explicitement, sans être modifiés.
+
+Un RVT déjà ouvert peut aussi être enregistré en v0 avec **Sortie → Enregistrer**
+ou Ctrl+S. Une destination est demandée la première fois et mémorisée par document.
+La conversion complète est effectuée en arrière-plan depuis le fichier source,
+dont la taille et la date sont vérifiées par rapport à son ouverture. Elle utilise
+les mêmes règles de reconnaissance et de conservation en éléments importés que
+la conversion en ligne de commande. Le JSON est validé avant remplacement du fichier
+de destination ; un rapport `.modele.rapport.md` est écrit à côté. L'application
+garde le RVT et ses vues ouverts, sans basculer vers le rendu natif limité.
+
 1. **Deux niveaux** : paramétrique (niveaux, murs, ouvertures, dalles) ou importé (maillage +
    catégorie + raison). Un élément paramétrique n'est retenu que si ses paramètres reproduisent
    sa géométrie lue à 5 % près en volume (`ECART_MAX`) ; sinon il redevient un élément importé,
@@ -58,7 +81,7 @@ format en v0).
 | Élément | Paramètres | Limites |
 |---|---|---|
 | Niveaux | nom, altitude | |
-| Murs `SWall`, `ArcWall` | type (épaisseur), niveau de base, décalage, niveau haut et décalage (ou hauteur libre), axe | Le tracé lu donne la droite ou le cercle porteur, pas les extrémités : extrémités et ligne médiane viennent de la géométrie projetée sur ce tracé (indépendant de la ligne d'implantation). Aux angles, la géométrie inclut la jonction. Couches du type non lues |
+| Murs `SWall`, `ArcWall` | type (épaisseur), niveau de base, décalage, niveau haut et décalage (ou hauteur libre), axe | Le tracé lu donne la droite ou le cercle porteur, pas les extrémités : extrémités et ligne médiane viennent de la géométrie projetée sur ce tracé (indépendant de la ligne d'implantation). Aux angles, la géométrie inclut la jonction. Couches du type lues (épaisseur et matériau, ordre extérieur → intérieur) |
 | Portes, fenêtres hébergées par un mur converti | largeur et hauteur du type, abscisse et allège du point d'insertion | Cotes du type ≠ réservation découpée dans le mur ; sans cotes de type : encombrement de la famille |
 | Sols, plafonds prismatiques | contour du dessus, épaisseur du type, décalage | Sols en pente : importés |
 | Murs-rideaux, toits, escaliers, garde-corps, terrain, autres familles, formes d'un `.rfa` | — | Importés |
@@ -90,10 +113,10 @@ chaque `.rfa` du dossier.
 
 ## Hors v0 (prochaines itérations)
 
-- Revit : couches des types de murs et de sols, contours d'esquisse des sols, extrémités du
+- Revit : contours d'esquisse des sols, extrémités du
   tracé des murs, ligne d'implantation, cotes de réservation des familles.
 - Jonctions de murs, murs attachés aux toits, profils de murs non rectangulaires.
 - Toits, escaliers, poteaux, poutres paramétriques ; familles paramétriques (portes,
   fenêtres) à la place des maillages de menuiserie.
-- Affichage du modèle natif par le viewer (une seule chaîne d'affichage), export IFC.
+- Affichage des autres éléments natifs (hors niveaux et murs droits), export IFC.
 - Maillages des éléments importés dans un fichier binaire à côté du JSON (taille).

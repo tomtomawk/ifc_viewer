@@ -9,6 +9,7 @@ mod model;
 mod modele;
 mod pilote;
 mod render;
+mod ruban;
 mod rvt;
 mod scene;
 mod step;
@@ -80,6 +81,8 @@ fn main() {
         let options = eframe::NativeOptions {
             viewport: eframe::egui::ViewportBuilder::default()
                 .with_title("IFC Viewer")
+                .with_decorations(false)
+                .with_min_inner_size([800.0, 520.0])
                 .with_inner_size([1500.0, 920.0])
                 .with_drag_and_drop(true),
             depth_buffer: 24,

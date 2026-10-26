@@ -8,6 +8,8 @@ use rayon::prelude::*;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
+mod natif;
+pub use natif::{depuis_natif, id_natif};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -171,6 +173,22 @@ pub struct Scene {
     pub navigateur: Option<Navigateur>,
     /// Coordonnées partagées (fichier Revit placé).
     pub partage: Option<ReperePartage>,
+    /// Bandes de composition dont la position dans un mur droit est vérifiée.
+    pub couches_coupe: IdMap<Vec<CoucheCoupe>>,
+}
+
+pub struct CoucheCoupe {
+    pub plans: [Vec4; 2],
+    pub couleur: [u8; 4],
+    pub motif: Option<Arc<crate::rvt::vues::Motif>>,
+    pub couleur_motif: [u8; 4],
+    pub hachure_defaut: bool,
+}
+
+/// Vue de départ d'un projet natif vide, sans inventer de géométrie ni de source IFC.
+#[cfg(test)]
+pub fn projet_vide(projet: &crate::modele::Projet, path: &Path) -> Result<Scene, String> {
+    depuis_natif(projet, path)
 }
 
 pub fn load(path: &Path, progress: &dyn Fn(String)) -> Result<Scene, String> {
@@ -364,6 +382,7 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
         file_name,
         navigateur: None,
         partage: None,
+        couches_coupe: IdMap::default(),
     }
 }
 

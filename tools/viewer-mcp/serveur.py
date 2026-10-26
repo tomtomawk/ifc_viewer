@@ -24,6 +24,8 @@ CAPTURES = os.path.join(tempfile.gettempdir(), "ifc-viewer-mcp")
 
 COMMANDES = """Commandes du viewer (outil viewer_commande) :
 etat ; ouvrir <chemin> ; capture vue|fenetre [LxH] <chemin.png> ; taille <largeur> <hauteur> ;
+outil mur|aucun ; mur <x0 mm> <y0 mm> <x1 mm> <y1 mm> [hauteur mm epaisseur mm] ;
+enregistrer [chemin.modele.json] (RVT : conversion en arrière-plan ; etat.enregistrement indique si elle est en cours) ;
 reduire ; restaurer ; quitter ;
 vues ; vue <indice|nom> ; camera dessus|face|iso|cadrer|ortho|perspective ;
 camera <lacet°> <tangage°> [distance] (vue 3D seulement) ; zoom <facteur> ;

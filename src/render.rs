@@ -566,12 +566,6 @@ impl Renderer {
                 gl.disable(glow::CLIP_DISTANCE0 + 2);
                 gl.uniform_4_f32(self.u_coupe.as_ref(), 0.0, 0.0, 0.0, 1.0);
             }
-            if p.coupe.is_some() && self.n_coupe[0] + self.n_coupe[1] > 0 {
-                gl.bind_vertex_array(Some(self.vao_coupe));
-                gl.draw_arrays(glow::TRIANGLES, 0, self.n_coupe[0]);
-                gl.draw_arrays(glow::LINES, self.n_coupe[0], self.n_coupe[1]);
-                gl.bind_vertex_array(Some(self.vao));
-            }
             gl.uniform_1_i32(self.u_flat.as_ref(), 0);
         }
     }
@@ -714,6 +708,15 @@ impl Renderer {
                     self.dessiner(gl, [self.ebo_opaque, self.ebo_transp, self.ebo_lines], [self.n_opaque, self.n_transp, self.n_lines], style != StyleVisuel::Realiste);
                     gl.uniform_1_i32(self.u_sans_eclairage.as_ref(), 0);
                 }
+            }
+            if (p.coupe.is_some() || p.boite.is_some()) && p.style != StyleVisuel::Filaire && self.n_coupe[0] + self.n_coupe[1] > 0 {
+                gl.disable(glow::BLEND);
+                gl.depth_mask(true);
+                gl.uniform_1_i32(self.u_flat.as_ref(), 1);
+                gl.bind_vertex_array(Some(self.vao_coupe));
+                gl.draw_arrays(glow::TRIANGLES, 0, self.n_coupe[0]);
+                gl.draw_arrays(glow::LINES, self.n_coupe[0], self.n_coupe[1]);
+                gl.uniform_1_i32(self.u_flat.as_ref(), 0);
             }
             gl.uniform_1_i32(self.u_boite.as_ref(), 0);
             gl.disable(glow::POLYGON_OFFSET_FILL);

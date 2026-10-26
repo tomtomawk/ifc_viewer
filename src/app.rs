@@ -22,10 +22,22 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 
 enum LoadMsg {
+    Natif(Result<(Box<Scene>, crate::modele::Projet, PathBuf), String>),
     Progress(String),
     Done(Result<Box<Scene>, String>),
     /// Métadonnées, puis scène des murs (ou raison de son absence).
-    Revit(Result<(Box<RvtInfo>, Result<Box<Scene>, String>), String>),
+    Revit(Result<(Box<RvtInfo>, Result<Box<Scene>, String>, crate::modele::enregistrement::SourceRvt), String>),
+}
+
+enum SaveMsg {
+    Progress(String),
+    Done(Result<crate::modele::enregistrement::Bilan, String>),
+}
+
+struct Sauvegarde {
+    document: usize,
+    progression: String,
+    messages: Receiver<SaveMsg>,
 }
 
 /// Classes masquées à l'ouverture.
@@ -237,14 +249,6 @@ enum Ancrage {
 impl Ancrage {
     const TOUS: [Ancrage; 3] = [Ancrage::Gauche, Ancrage::Droite, Ancrage::Flottant];
 
-    fn libelle(self) -> &'static str {
-        match self {
-            Ancrage::Gauche => "Ancrer à gauche",
-            Ancrage::Droite => "Ancrer à droite",
-            Ancrage::Flottant => "Flottant",
-        }
-    }
-
     /// Nom pour le pilote (commande `panneau`).
     fn nom(self) -> &'static str {
         match self {
@@ -283,8 +287,59 @@ struct PasseFeuille {
 /// Onglet du ruban en haut de la fenêtre.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum OngletRuban {
-    Fichier,
-    Exporter,
+    Debut,
+    Modeliser,
+    Modifier,
+    Annoter,
+    Sortie,
+}
+
+/// Teinte stable pendant toute la durée d'ouverture du fichier.
+fn couleur_document(id: usize) -> Color32 {
+    const TEINTES: [[u8; 3]; 8] = [
+        [83, 122, 158], [93, 137, 112], [146, 111, 151], [165, 124, 78],
+        [77, 139, 145], [162, 105, 111], [119, 124, 168], [132, 137, 83],
+    ];
+    let [r, g, b] = TEINTES[id.wrapping_sub(1) % TEINTES.len()];
+    Color32::from_rgb(r, g, b)
+}
+
+/// Réglages conservés quand on quitte un onglet de vue.
+#[derive(Clone)]
+struct EtatVue {
+    camera: Camera,
+    hidden_classes: HashSet<String>,
+    hidden_objects: HashSet<u32>,
+    hidden_storeys: HashSet<Id>,
+    isolated: Option<HashSet<u32>>,
+    style: StyleVisuel,
+    coupe: bool,
+    coupe_niveau: Option<Id>,
+    coupe_hauteur: f32,
+    poche: Poche,
+    echelle: f64,
+    detail: NiveauDetail,
+    boite: Option<(Vec3, Vec3)>,
+    boite_active: bool,
+}
+
+/// Fichier conservé en mémoire quand un autre document devient actif.
+struct DocumentOuvert {
+    natif: Option<(crate::modele::Projet, PathBuf)>,
+    modifie: bool,
+    scene: Option<Scene>,
+    rvt: Option<RvtInfo>,
+    rvt_source: Option<crate::modele::enregistrement::SourceRvt>,
+    rvt_sortie: Option<PathBuf>,
+    rvt_geom: Result<String, String>,
+    rvt_sheet: bool,
+    vues: Vec<Option<usize>>,
+    etats: BTreeMap<Option<usize>, EtatVue>,
+    active: Option<usize>,
+    selected: Option<Id>,
+    filtre: String,
+    onglet: LeftTab,
+    status: String,
 }
 
 /// Niveau de détail d'une vue, comme dans Revit.
@@ -343,11 +398,21 @@ impl Vol {
 }
 
 pub struct ViewerApp {
+    natif: Option<(crate::modele::Projet, PathBuf)>,
+    natif_modifie: bool,
+    mur_depart: Option<[f64; 2]>,
+    confirmer_fermeture: Option<(bool, usize)>, // application entière, ou identifiant du document
+    documents: BTreeMap<usize, DocumentOuvert>,
+    document_actif: usize,
+    prochain_document: usize,
     gl: Option<Arc<glow::Context>>,
     renderer: Arc<Mutex<Option<Renderer>>>,
     scene: Option<Scene>,
     /// Métadonnées du fichier Revit ouvert.
     rvt: Option<RvtInfo>,
+    rvt_source: Option<crate::modele::enregistrement::SourceRvt>,
+    rvt_sortie: Option<PathBuf>,
+    sauvegarde: Option<Sauvegarde>,
     /// Fiche Revit affichée à la place de la vue 3D.
     rvt_sheet: bool,
     /// Lecture des murs du fichier Revit : résumé si la scène en vient, sinon raison de l'échec.
@@ -370,6 +435,9 @@ pub struct ViewerApp {
     show_unsupported: bool,
     /// Vue Revit ouverte (indice dans `Navigateur::vues`).
     vue_active: Option<usize>,
+    /// None désigne la vue générale du modèle ; Some, une vue du navigateur.
+    vues_ouvertes: Vec<Option<usize>>,
+    etats_vues: BTreeMap<Option<usize>, EtatVue>,
     /// Nomenclature affichée (indice dans `Navigateur::vues`).
     nomenclature_ouverte: Option<usize>,
     /// Dernier point cliqué sur un objet, repère du fichier (m).
@@ -401,6 +469,7 @@ pub struct ViewerApp {
     /// Niveau de détail de la vue (barre de la vue), lu dans la vue Revit ouverte.
     detail: NiveauDetail,
     onglet_ruban: OngletRuban,
+    ruban_edition: crate::ruban::RubanEdition,
     /// Zone de coupe 3D (min, max), repère de la scène ; appliquée aux vues 3D quand
     /// elle est active, modifiable par ses poignées dans toutes les vues.
     boite: Option<(Vec3, Vec3)>,
@@ -423,6 +492,9 @@ pub struct ViewerApp {
     ancrages: [Ancrage; 2],
     pos_flottants: [egui::Pos2; 2],
     pos_imposee: [Option<egui::Pos2>; 2],
+    deplacement_panneau: Option<(Panneau, egui::Vec2)>,
+    zone_panneaux: egui::Rect,
+    largeurs_panneaux: [f32; 2],
 }
 
 impl ViewerApp {
@@ -441,10 +513,20 @@ impl ViewerApp {
         };
         cc.egui_ctx.set_visuals(egui::Visuals::light());
         let mut app = ViewerApp {
+            natif: None,
+            natif_modifie: false,
+            mur_depart: None,
+            confirmer_fermeture: None,
+            documents: BTreeMap::new(),
+            document_actif: 0,
+            prochain_document: 1,
             gl: cc.gl.clone(),
             renderer: Arc::new(Mutex::new(renderer)),
             scene: None,
             rvt: None,
+            rvt_source: None,
+            rvt_sortie: None,
+            sauvegarde: None,
             rvt_sheet: false,
             rvt_geom: Err(String::new()),
             rvt_preview: None,
@@ -464,6 +546,8 @@ impl ViewerApp {
             filter: String::new(),
             show_unsupported: false,
             vue_active: None,
+            vues_ouvertes: Vec::new(),
+            etats_vues: BTreeMap::new(),
             point_clique: None,
             vol: Vol::default(),
             nomenclature_ouverte: None,
@@ -480,7 +564,8 @@ impl ViewerApp {
             poche: Poche::Hachure,
             echelle: 100.0,
             detail: NiveauDetail::Moyen,
-            onglet_ruban: OngletRuban::Fichier,
+            onglet_ruban: OngletRuban::Debut,
+            ruban_edition: Default::default(),
             boite: None,
             boite_active: false,
             coupe_dirty: true,
@@ -493,6 +578,9 @@ impl ViewerApp {
             ancrages: [Ancrage::Gauche, Ancrage::Droite],
             pos_flottants: [egui::pos2(60.0, 80.0), egui::pos2(400.0, 80.0)],
             pos_imposee: [None, None],
+            deplacement_panneau: None,
+            zone_panneaux: egui::Rect::NOTHING,
+            largeurs_panneaux: [300.0, 320.0],
         };
         if let Some(p) = path {
             app.open(p, &cc.egui_ctx);
@@ -513,14 +601,19 @@ impl ViewerApp {
                     let _ = tx.send(LoadMsg::Progress(s));
                     ctx.request_repaint();
                 };
-                if is_revit_file(&path) {
+                if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")) {
+                    let res = std::fs::read_to_string(&path).map_err(|e| format!("Lecture impossible : {e}"))
+                        .and_then(|json| crate::modele::Projet::lire_json(&json))
+                        .and_then(|projet| scene::depuis_natif(&projet, &path).map(|scene| (Box::new(scene), projet, path)));
+                    let _ = tx.send(LoadMsg::Natif(res));
+                } else if is_revit_file(&path) {
                     progress(format!("Lecture des métadonnées Revit de {}…", path.display()));
-                    let res = rvt::load(&path).map(|info| {
+                    let res = crate::modele::enregistrement::SourceRvt::ouvrir(&path).and_then(|source| rvt::load(&path).map(|info| {
                         let titre = info.title.clone().unwrap_or_else(|| info.file_name.clone());
                         let format = info.format().unwrap_or("?").to_string();
                         let scene = rvt::maquette::load_scene(&path, &titre, &format, &progress).map(Box::new);
-                        (Box::new(info), scene)
-                    });
+                        (Box::new(info), scene, source)
+                    }));
                     let _ = tx.send(LoadMsg::Revit(res));
                 } else {
                     let res = scene::load(&path, &progress).map(Box::new);
@@ -535,13 +628,20 @@ impl ViewerApp {
         let Some(rx) = &self.loading else { return };
         while let Ok(msg) = rx.try_recv() {
             match msg {
+                LoadMsg::Natif(Ok((scene, projet, chemin))) => {
+                    self.loading = None;
+                    self.install_scene(*scene);
+                    self.status = format!("{} — projet natif v0", projet.nom);
+                    self.natif = Some((projet, chemin));
+                    return;
+                }
                 LoadMsg::Progress(s) => self.status = s,
                 LoadMsg::Done(Ok(scene)) => {
                     self.loading = None;
                     self.install_scene(*scene);
                     return;
                 }
-                LoadMsg::Revit(Ok((info, scene))) => {
+                LoadMsg::Revit(Ok((info, scene, source))) => {
                     self.loading = None;
                     let head = format!("{} — {} Revit {}", info.file_name, info.kind, info.format().unwrap_or("?"));
                     match scene {
@@ -558,6 +658,11 @@ impl ViewerApp {
                             self.rvt_sheet = false;
                         }
                         Err(e) => {
+                            self.nouveau_document();
+                            self.vues_ouvertes.clear();
+                            self.etats_vues.clear();
+                            self.vue_active = None;
+                            self.nomenclature_ouverte = None;
                             self.status = format!("{head} — métadonnées seules ({e})");
                             self.rvt_geom = Err(e);
                             self.rvt_sheet = true;
@@ -565,9 +670,11 @@ impl ViewerApp {
                     }
                     self.rvt_preview = None;
                     self.rvt = Some(*info);
+                    self.rvt_source = Some(source);
+                    self.rvt_sortie = None;
                     return;
                 }
-                LoadMsg::Revit(Err(e)) | LoadMsg::Done(Err(e)) => {
+                LoadMsg::Natif(Err(e)) | LoadMsg::Revit(Err(e)) | LoadMsg::Done(Err(e)) => {
                     self.loading = None;
                     self.status = "Échec du chargement.".into();
                     self.error = Some(e);
@@ -578,6 +685,7 @@ impl ViewerApp {
     }
 
     fn install_scene(&mut self, scene: Scene) {
+        self.nouveau_document();
         if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
             r.upload_vertices(gl, &scene.vertices, &scene.couleurs_rendu);
         }
@@ -597,6 +705,13 @@ impl ViewerApp {
         self.camera.scene_radius = (scene.max - scene.min).length() * 0.5;
         self.camera.fit(scene.min, scene.max);
         self.selected = None;
+        self.reveal = None;
+        self.nomenclature_ouverte = None;
+        self.point_clique = None;
+        self.filter.clear();
+        self.coupe = false;
+        self.coupe_dirty = true;
+        self.vol = Vol::default();
         self.hidden_objects.clear();
         self.hidden_storeys.clear();
         self.isolated = None;
@@ -620,6 +735,8 @@ impl ViewerApp {
         self.visible = vec![true; scene.objects.len()];
         self.vue_active = None;
         self.style = StyleVisuel::Realiste;
+        self.vues_ouvertes = vec![None];
+        self.etats_vues.clear();
         self.coupe_niveau = None;
         self.liste_niveaux = niveaux(&scene);
         self.left_tab = if scene.navigateur.is_some() { LeftTab::Tout } else { LeftTab::Tree };
@@ -691,13 +808,19 @@ impl ViewerApp {
             return;
         }
         self.coupe_dirty = false;
-        let (tris, traits) = match (&self.scene, self.plan_coupe()) {
+        let (mut tris, mut traits) = match (&self.scene, self.plan_coupe()) {
             (Some(s), Some(p)) => {
                 let prims = dessin::coupe(s, &self.visible, p, self.echelle, self.poche);
                 dessin::sommets(s, &prims, p.truncate().as_dvec3().normalize(), self.echelle)
             }
             _ => Default::default(),
         };
+        if let (Some(s), Some((a, b))) = (&self.scene, self.boite_appliquee()) {
+            let poche = (self.style == StyleVisuel::LignesCachees).then_some(self.poche);
+            let (t, l) = dessin::sommets_boite(s, &self.visible, a, b, self.echelle, poche, self.style == StyleVisuel::Rendu);
+            tris.extend(t);
+            traits.extend(l);
+        }
         if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
             r.upload_coupe(gl, &tris, &traits);
         }
@@ -751,6 +874,7 @@ impl ViewerApp {
     /// Active la zone de coupe ; la première fois, elle entoure tout le modèle.
     fn activer_boite(&mut self, active: bool) {
         self.boite_active = active;
+        self.coupe_dirty = true;
         if active
             && self.boite.is_none()
             && let Some(s) = &self.scene
@@ -795,6 +919,7 @@ impl ViewerApp {
         let ep = 0.05;
         let b = b.max(a + Vec3::splat(ep));
         self.boite = Some((a, b));
+        self.coupe_dirty = true;
     }
 
     /// Contour de la zone de coupe sur la vue et ses poignées : une au centre de chaque
@@ -979,9 +1104,263 @@ impl ViewerApp {
         }
     }
 
+    fn creer_projet(&mut self) {
+        let Some(mut chemin) = rfd::FileDialog::new().set_title("Nouveau projet natif v0")
+            .add_filter("Modèle natif v0", &["json"]).set_file_name("Nouveau projet.modele.json").save_file() else { return };
+        if chemin.extension().is_none() {
+            chemin.set_extension("modele.json");
+        }
+        let nom = chemin.file_stem().map(|n| n.to_string_lossy().trim_end_matches(".modele").to_string()).unwrap_or_else(|| "Nouveau projet".into());
+        let projet = crate::modele::Projet::nouveau(&nom);
+        let resultat = scene::depuis_natif(&projet, &chemin).and_then(|scene| {
+            let json = projet.json()?;
+            std::fs::write(&chemin, json).map_err(|e| format!("Création impossible : {e}"))?;
+            Ok(scene)
+        });
+        match resultat {
+            Ok(scene) => {
+                self.install_scene(scene);
+                self.status = format!("{} — nouveau projet natif v0", projet.nom);
+                self.natif = Some((projet, chemin));
+                self.error = None;
+            }
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    fn enregistrer_projet(&mut self, ctx: &egui::Context) {
+        if self.loading.is_some() || self.sauvegarde.is_some() { return; }
+        if self.natif.is_none() {
+            self.enregistrer_rvt_dialogue(ctx);
+            return;
+        }
+        let Some((projet, chemin)) = &self.natif else { return };
+        match projet.json().and_then(|json| std::fs::write(chemin, json).map_err(|e| format!("Enregistrement impossible : {e}"))) {
+            Ok(()) => {
+                self.natif_modifie = false;
+                self.status = format!("{} — enregistré", chemin.display());
+                self.error = None;
+            }
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    fn confirmation_modifications(&mut self, ctx: &egui::Context) {
+        let Some((application, document)) = self.confirmer_fermeture else { return };
+        let mut action = None;
+        egui::Modal::new(egui::Id::unique("modifications_non_enregistrees")).show(ctx, |ui| {
+            ui.set_max_width(440.0);
+            ui.heading("Enregistrer les modifications ?");
+            ui.label(if application { "Des projets contiennent des modifications non enregistrées." } else { "Ce projet contient des modifications non enregistrées." });
+            if let Some(e) = &self.error { ui.colored_label(Color32::from_rgb(180,45,40), e); }
+            ui.horizontal(|ui| {
+                if ui.button("Enregistrer").clicked() { action = Some(0); }
+                if ui.button("Fermer sans enregistrer").clicked() { action = Some(1); }
+                if ui.button("Annuler").clicked() { action = Some(2); }
+            });
+        });
+        let Some(action) = action else { return };
+        if action == 2 { self.confirmer_fermeture = None; return; }
+        if !application { self.changer_document(document); }
+        if action == 0 {
+            if self.natif_modifie {
+                self.enregistrer_projet(&ctx);
+                if self.natif_modifie { return; }
+            }
+            if application {
+                for d in self.documents.values_mut().filter(|d| d.modifie) {
+                    if let Some((p, chemin)) = &d.natif {
+                        if let Err(e) = p.json().and_then(|json| std::fs::write(chemin, json).map_err(|e| e.to_string())) {
+                            self.error = Some(format!("Enregistrement impossible de {} : {e}", chemin.display()));
+                            return;
+                        }
+                    }
+                    d.modifie = false;
+                }
+            }
+        }
+        self.confirmer_fermeture = None;
+        if application {
+            self.natif_modifie = false;
+            for d in self.documents.values_mut() { d.modifie = false; }
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        } else { self.fermer_document(); }
+    }
+
+    fn enregistrer_rvt_dialogue(&mut self, ctx: &egui::Context) {
+        let Some(source) = &self.rvt_source else { return };
+        let sortie = match &self.rvt_sortie {
+            Some(p) => p.clone(),
+            None => {
+                let nom = source.chemin.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "Projet".into());
+                let dialogue = rfd::FileDialog::new().set_title("Enregistrer le projet Revit en modèle natif v0")
+                    .add_filter("Modèle natif v0", &["json"]).set_file_name(format!("{nom}.modele.json"));
+                let Some(mut p) = dialogue.save_file() else { return };
+                if p.extension().is_none() { p.set_extension("modele.json"); }
+                p
+            }
+        };
+        if let Err(e) = self.demarrer_enregistrement_rvt(ctx,sortie) { self.error = Some(e); }
+    }
+
+    fn demarrer_enregistrement_rvt(&mut self, ctx: &egui::Context, sortie: PathBuf) -> Result<(), String> {
+        if self.sauvegarde.is_some() { return Err("Un enregistrement est déjà en cours.".into()); }
+        if self.loading.is_some() { return Err("Attendre la fin du chargement avant d’enregistrer.".into()); }
+        let source = self.rvt_source.clone().ok_or("Aucun fichier Revit ouvert.")?;
+        let (tx, rx) = channel();
+        let contexte = ctx.clone();
+        std::thread::Builder::new().name("enregistrer-v0".into()).stack_size(64 << 20).spawn(move || {
+            let progress = |p| { let _ = tx.send(SaveMsg::Progress(p)); contexte.request_repaint(); };
+            let resultat = crate::modele::enregistrement::enregistrer_rvt(&source,&sortie,&progress);
+            let _ = tx.send(SaveMsg::Done(resultat));
+            contexte.request_repaint();
+        }).map_err(|e| format!("Démarrage de l’enregistrement impossible : {e}"))?;
+        self.sauvegarde = Some(Sauvegarde { document: self.document_actif, progression: "Préparation de l’enregistrement v0…".into(), messages: rx });
+        self.error = None;
+        Ok(())
+    }
+
+    fn poll_sauvegarde(&mut self) {
+        loop {
+            let Some(tache) = &mut self.sauvegarde else { return };
+            let message = match tache.messages.try_recv() {
+                Ok(m) => m,
+                Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => SaveMsg::Done(Err("L’enregistrement a été interrompu.".into())),
+            };
+            match message {
+                SaveMsg::Progress(p) => tache.progression = p,
+                SaveMsg::Done(resultat) => {
+                    let document = self.sauvegarde.take().unwrap().document;
+                    match resultat {
+                        Ok(bilan) => {
+                            let statut = format!("{} — enregistré en v0 : {} murs paramétriques, {} éléments importés",bilan.chemin.display(),bilan.murs,bilan.importes);
+                            if document == self.document_actif {
+                                self.rvt_sortie = Some(bilan.chemin.clone());
+                                self.status = statut;
+                            } else if let Some(d) = self.documents.get_mut(&document) {
+                                d.rvt_sortie = Some(bilan.chemin.clone()); d.status = statut;
+                            } else { self.status = statut; }
+                            if let Err(e) = bilan.rapport { self.error = Some(format!("Le projet v0 est enregistré, mais son rapport n’a pas pu être écrit : {e}")); }
+                        }
+                        Err(e) => self.error = Some(e),
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    fn ajouter_mur_natif(&mut self, debut: [f64; 2], fin: [f64; 2], options: &crate::modele::edition::ParametresMur) -> Result<String, String> {
+        let (projet, chemin) = self.natif.as_ref().ok_or("Créez ou ouvrez un projet natif pour dessiner un mur.")?;
+        let mut projet = projet.clone();
+        let chemin = chemin.clone();
+        let id = projet.ajouter_mur(debut, fin, options)?;
+        let scene = scene::depuis_natif(&projet, &chemin)?;
+        let delta = self.scene.as_ref().map_or(glam::DVec3::ZERO, |s| s.origin) - scene.origin;
+        self.camera.target += delta.as_vec3();
+        self.camera.scene_radius = ((scene.max - scene.min).length() * 0.5).max(1.0);
+        if let Some((a, b)) = &mut self.boite { *a += delta.as_vec3(); *b += delta.as_vec3(); }
+        for etat in self.etats_vues.values_mut() {
+            etat.camera.target += delta.as_vec3();
+            etat.camera.scene_radius = self.camera.scene_radius;
+            if let Some((a, b)) = &mut etat.boite { *a += delta.as_vec3(); *b += delta.as_vec3(); }
+        }
+        if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
+            r.upload_vertices(gl, &scene.vertices, &scene.couleurs_rendu);
+        }
+        self.liste_niveaux = niveaux(&scene);
+        self.liste_materiaux = materiaux_ifc(&scene);
+        (self.categories, self.categorie_objet, self.cle_objet) = categories(&scene);
+        self.visible = vec![true; scene.objects.len()];
+        self.scene = Some(scene);
+        self.natif = Some((projet, chemin));
+        self.natif_modifie = true;
+        self.visibility_dirty = true;
+        self.coupe_dirty = true;
+        self.selected = Some(scene::id_natif("mur", &id));
+        self.reveal = self.selected;
+        self.error = None;
+        self.status = "Mur créé — Ctrl+S pour enregistrer.".into();
+        Ok(id)
+    }
+
+    fn point_tracage_mur(&self, q: egui::Pos2, rect: egui::Rect, orthogonal: bool) -> Option<[f64; 2]> {
+        let (projet, _) = self.natif.as_ref()?;
+        let scene = self.scene.as_ref()?;
+        let options = self.ruban_edition.parametres_mur();
+        let altitude = options.niveau.as_ref().and_then(|id| projet.niveau(id)).or_else(|| projet.niveaux.first()).map_or(0.0, |n| n.altitude) + options.decalage;
+        let x = (q.x - rect.left()) / rect.width() * 2.0 - 1.0;
+        let y = 1.0 - (q.y - rect.top()) / rect.height() * 2.0;
+        let (o, d) = self.camera.ray(x, y, rect.width() / rect.height().max(1.0));
+        if d.z.abs() < 1e-6 { return None; }
+        let t = (altitude * 0.001 - scene.origin.z - o.z as f64) / d.z as f64;
+        if !t.is_finite() || t <= 0.0 { return None; }
+        let p = (o.as_dvec3() + d.as_dvec3() * t + scene.origin) * 1000.0;
+        let mut point = [(p.x / 10.0).round() * 10.0, (p.y / 10.0).round() * 10.0];
+        // Accrochage aux extrémités des murs du niveau courant, à dix pixels près.
+        let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
+        let mut distance = 10.0;
+        for m in &projet.murs {
+            if projet.bas_haut(m).is_none_or(|(z, _)| (z - altitude).abs() > 0.1) { continue; }
+            let (crate::modele::Axe::Droit { debut, fin } | crate::modele::Axe::Arc { debut, fin, .. }) = m.axe;
+            for v in [debut, fin] {
+                let p = (glam::DVec3::new(v[0], v[1], altitude) * 0.001 - scene.origin).as_vec3();
+                let clip = vp * p.extend(1.0);
+                if clip.w <= 0.0 { continue; }
+                let n = clip.truncate() / clip.w;
+                let ecran = egui::pos2(rect.left() + (n.x + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - n.y) * 0.5 * rect.height());
+                let d = q.distance(ecran);
+                if d < distance { point = v; distance = d; }
+            }
+        }
+        if orthogonal && let Some(a) = self.mur_depart {
+            if (point[0] - a[0]).abs() >= (point[1] - a[1]).abs() { point[1] = a[1]; } else { point[0] = a[0]; }
+        }
+        Some(point)
+    }
+
+    fn apercu_mur(&self, ui: &egui::Ui, rect: egui::Rect, fin: Option<[f64; 2]>) {
+        let Some((projet, _)) = &self.natif else { return };
+        let Some(scene) = &self.scene else { return };
+        let options = self.ruban_edition.parametres_mur();
+        let altitude = options.niveau.as_ref().and_then(|id| projet.niveau(id)).or_else(|| projet.niveaux.first()).map_or(0.0, |n| n.altitude) + options.decalage;
+        let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
+        let ecran = |p: [f64; 2], z: f64| {
+            let p = (glam::DVec3::new(p[0], p[1], z) * 0.001 - scene.origin).as_vec3();
+            let c = vp * p.extend(1.0);
+            (c.w > 0.0).then(|| egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height()))
+        };
+        let painter = ui.painter().with_clip_rect(rect);
+        let couleur = Color32::from_rgb(55, 130, 200);
+        if let Some(b) = fin {
+            if let Some(q) = ecran(b, altitude) { painter.circle_stroke(q, 4.0, egui::Stroke::new(1.5, couleur)); }
+            if let Some(a) = self.mur_depart {
+                let longueur = (b[0] - a[0]).hypot(b[1] - a[1]);
+                if longueur >= 1.0 && options.hauteur > 0.0 && options.epaisseur > 0.0 {
+                    use crate::modele::edition::Implantation;
+                    let signe = match options.implantation { Implantation::Axe => 0.0, Implantation::Exterieure => -0.5, Implantation::Interieure => 0.5 };
+                    let n = [-(b[1]-a[1])/longueur, (b[0]-a[0])/longueur];
+                    let c = |p: [f64; 2], k: f64| [p[0]+n[0]*options.epaisseur*(signe+k), p[1]+n[1]*options.epaisseur*(signe+k)];
+                    let contour = [c(a,-0.5),c(b,-0.5),c(b,0.5),c(a,0.5)];
+                    for z in [altitude, altitude + options.hauteur] {
+                        for k in 0..4 { if let (Some(a),Some(b)) = (ecran(contour[k],z),ecran(contour[(k+1)%4],z)) { painter.line_segment([a,b],egui::Stroke::new(1.5,couleur)); } }
+                    }
+                    for q in contour { if let (Some(a),Some(b)) = (ecran(q,altitude),ecran(q,altitude+options.hauteur)) { painter.line_segment([a,b],egui::Stroke::new(1.0,couleur)); } }
+                    if let Some(q) = ecran(b, altitude) {
+                        painter.text(q+egui::vec2(12.0,-12.0),egui::Align2::LEFT_BOTTOM,format!("{longueur:.0} mm"),egui::FontId::proportional(13.0),couleur);
+                    }
+                }
+            }
+        }
+        let texte = if self.mur_depart.is_some() { "Mur : choisir l’extrémité · Maj : orthogonal · Échap : annuler" } else { "Mur : choisir le départ · molette : zoom · milieu : panoramique" };
+        painter.text(rect.left_top()+egui::vec2(12.0,12.0),egui::Align2::LEFT_TOP,texte,egui::FontId::proportional(13.0),couleur);
+    }
+
     fn open_dialog(&mut self, ctx: &egui::Context) {
         if let Some(p) = rfd::FileDialog::new()
-            .add_filter("IFC et Revit", &["ifc", "IFC", "rvt", "rfa", "rte", "rft"])
+            .add_filter("Modèle natif, IFC et Revit", &["json", "ifc", "IFC", "rvt", "rfa", "rte", "rft"])
+            .add_filter("Modèle natif v0", &["json"])
             .add_filter("IFC", &["ifc", "IFC"])
             .add_filter("Revit (murs et métadonnées)", &["rvt", "rfa", "rte", "rft"])
             .pick_file()
@@ -992,32 +1371,300 @@ impl ViewerApp {
 
     // ------------------------------------------------------------------ UI
 
-    /// Ruban en haut : onglets (Fichier, Exporter), puis les commandes de l'onglet ouvert.
+    fn stocker_document(&mut self) {
+        if self.scene.is_none() && self.rvt.is_none() {
+            return;
+        }
+        self.memoriser_vue();
+        let status = self.scene.as_ref().map(|s| format!("{} — {} objets 3D, {} triangles", s.file_name, s.objects.len(), s.triangles)).unwrap_or_else(|| self.status.clone());
+        self.documents.insert(self.document_actif, DocumentOuvert {
+            natif: self.natif.take(),
+            modifie: self.natif_modifie,
+            scene: self.scene.take(),
+            rvt: self.rvt.take(),
+            rvt_source: self.rvt_source.take(),
+            rvt_sortie: self.rvt_sortie.take(),
+            rvt_geom: std::mem::replace(&mut self.rvt_geom, Err(String::new())),
+            rvt_sheet: self.rvt_sheet,
+            vues: std::mem::take(&mut self.vues_ouvertes),
+            etats: std::mem::take(&mut self.etats_vues),
+            active: self.vue_active,
+            selected: self.selected,
+            filtre: std::mem::take(&mut self.filter),
+            onglet: self.left_tab,
+            status,
+        });
+    }
+
+    fn nouveau_document(&mut self) {
+        self.stocker_document();
+        self.natif_modifie = false;
+        self.mur_depart = None;
+        self.ruban_edition.niveau_mur = None;
+        self.document_actif = self.prochain_document;
+        self.prochain_document += 1;
+    }
+
+    fn changer_document(&mut self, id: usize) {
+        if id == self.document_actif {
+            return;
+        }
+        let Some(d) = self.documents.remove(&id) else { return };
+        self.stocker_document();
+        self.document_actif = id;
+        self.natif = d.natif;
+        self.natif_modifie = d.modifie;
+        self.mur_depart = None;
+        self.ruban_edition.niveau_mur = None;
+        self.scene = d.scene;
+        self.rvt = d.rvt;
+        self.rvt_source = d.rvt_source;
+        self.rvt_sortie = d.rvt_sortie;
+        self.rvt_geom = d.rvt_geom;
+        self.rvt_sheet = d.rvt_sheet;
+        self.rvt_preview = None;
+        self.vues_ouvertes = d.vues;
+        self.etats_vues = d.etats;
+        self.vue_active = d.active;
+        self.selected = d.selected;
+        self.reveal = None;
+        self.filter = d.filtre;
+        self.left_tab = d.onglet;
+        self.status = d.status;
+        self.nomenclature_ouverte = None;
+        self.point_clique = None;
+        self.passes_feuille.clear();
+        self.objets_feuille.clear();
+        self.voir_visibilite = false;
+        self.show_unsupported = false;
+        self.error = None;
+        self.liste_niveaux.clear();
+        self.liste_materiaux.clear();
+        self.categories.clear();
+        self.categorie_objet.clear();
+        self.cle_objet.clear();
+        self.visible.clear();
+        if let Some(s) = &self.scene {
+            self.liste_niveaux = niveaux(s);
+            self.liste_materiaux = s.navigateur.as_ref().map_or_else(|| materiaux_ifc(s), |n| n.materiaux.clone());
+            (self.categories, self.categorie_objet, self.cle_objet) = categories(s);
+            self.visible = vec![true; s.objects.len()];
+            if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
+                r.upload_vertices(gl, &s.vertices, &s.couleurs_rendu);
+            }
+        }
+        self.restaurer_vue(self.vue_active);
+        self.visibility_dirty = self.scene.is_some();
+        self.coupe_dirty = true;
+    }
+
+    fn fermer(&mut self) {
+        if self.natif_modifie {
+            self.confirmer_fermeture = Some((false, self.document_actif));
+            return;
+        }
+        self.fermer_document();
+    }
+
+    fn fermer_document(&mut self) {
+        self.natif_modifie = false;
+        self.mur_depart = None;
+        self.natif = None;
+        self.vues_ouvertes.clear();
+        self.etats_vues.clear();
+        self.loading = None;
+        self.scene = None;
+        self.rvt = None;
+        self.rvt_source = None;
+        self.rvt_sortie = None;
+        self.rvt_sheet = false;
+        self.rvt_geom = Err(String::new());
+        self.rvt_preview = None;
+        self.selected = None;
+        self.reveal = None;
+        self.vue_active = None;
+        self.point_clique = None;
+        self.nomenclature_ouverte = None;
+        self.passes_feuille.clear();
+        self.objets_feuille.clear();
+        self.hidden_classes.clear();
+        self.hidden_objects.clear();
+        self.hidden_storeys.clear();
+        self.isolated = None;
+        self.visible.clear();
+        self.liste_niveaux.clear();
+        self.liste_materiaux.clear();
+        self.categories.clear();
+        self.categorie_objet.clear();
+        self.cle_objet.clear();
+        self.filter.clear();
+        self.voir_visibilite = false;
+        self.show_unsupported = false;
+        self.boite = None;
+        self.boite_active = false;
+        self.coupe = false;
+        self.coupe_niveau = None;
+        self.coupe_dirty = true;
+        self.visibility_dirty = false;
+        self.camera = Camera::default();
+        self.vol = Vol::default();
+        self.error = None;
+        self.status = "Ouvrir un fichier IFC ou Revit (Ctrl+O), ou le glisser dans la fenêtre.".into();
+        for tx in self.attente_ouverture.drain(..) {
+            let _ = tx.send("Erreur : ouverture annulée par la fermeture du fichier.".into());
+        }
+        if let Some(&id) = self.documents.keys().next_back() {
+            self.changer_document(id);
+        }
+    }
+
+    /// Ruban en haut : onglets, puis les commandes de l'onglet ouvert.
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
-        ui.horizontal(|ui| {
-            for (o, nom) in [(OngletRuban::Fichier, "Fichier"), (OngletRuban::Exporter, "Exporter")] {
+        let maximise = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
+        let (barre, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 32.0), Sense::hover());
+        let titre = egui::Rect::from_min_size(barre.min, egui::vec2(88.0, barre.height()));
+        ui.put(titre, egui::Label::new(RichText::new("IFC Viewer").strong()));
+        let mut zones_deplacement = vec![titre];
+        let menus = egui::Rect::from_min_max(egui::pos2(titre.right() + 8.0, barre.top()), egui::pos2(barre.right() - 144.0, barre.bottom()));
+        ui.scope_builder(egui::UiBuilder::new().id_salt("menu_fenetre").max_rect(menus).layout(egui::Layout::left_to_right(Align::Center)), |ui| {
+            for (o, nom) in [
+                (OngletRuban::Debut, "Début"),
+                (OngletRuban::Modeliser, "Modéliser"),
+                (OngletRuban::Modifier, "Modifier"),
+                (OngletRuban::Annoter, "Annoter"),
+                (OngletRuban::Sortie, "Sortie"),
+            ] {
                 ui.selectable_value(&mut self.onglet_ruban, o, RichText::new(nom).strong());
             }
-            if self.loading.is_some() {
-                ui.separator();
+            if self.loading.is_some() || self.sauvegarde.is_some() {
                 ui.spinner();
+                let texte = self.sauvegarde.as_ref().map_or(&self.status, |s| &s.progression);
+                let reponse = ui.add_sized([ui.available_width().max(0.0), 24.0], egui::Label::new(texte).truncate()).on_hover_text(texte);
+                zones_deplacement.push(reponse.rect);
             }
+            let (libre, _) = ui.allocate_exact_size(egui::vec2(ui.available_width().max(0.0), 32.0), Sense::hover());
+            zones_deplacement.push(libre);
         });
+        for (k, rect) in zones_deplacement.into_iter().enumerate() {
+            let reponse = ui.interact(rect, ui.scope_id().with(("deplacer_fenetre", k)), Sense::click_and_drag());
+            if reponse.double_clicked() {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!maximise));
+            } else if reponse.drag_started_by(PointerButton::Primary) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+            }
+        }
+        for (k, aide) in ["Réduire", if maximise { "Restaurer" } else { "Agrandir" }, "Fermer l’application"].into_iter().enumerate() {
+            let rect = egui::Rect::from_min_size(egui::pos2(barre.right() - 138.0 + k as f32 * 46.0, barre.top()), egui::vec2(46.0, 30.0));
+            let reponse = ui.interact(rect, ui.scope_id().with(("bouton_fenetre", k)), Sense::click()).on_hover_text(aide);
+            let survole = reponse.hovered() || reponse.is_pointer_button_down_on();
+            let couleur = if survole && k == 2 { Color32::WHITE } else { ui.visuals().text_color() };
+            if survole {
+                ui.painter().rect_filled(rect, 0.0, if k == 2 { Color32::from_rgb(196, 43, 28) } else { Color32::from_gray(225) });
+            }
+            let centre = rect.center();
+            let icone = egui::Rect::from_center_size(centre, egui::vec2(10.0, 10.0));
+            let trait_fin = egui::Stroke::new(1.0, couleur);
+            match k {
+                0 => { ui.painter().line_segment([icone.left_center(), icone.right_center()], trait_fin); }
+                1 if maximise => {
+                    let arriere = egui::Rect::from_min_size(icone.min + egui::vec2(3.0, 0.0), egui::vec2(7.0, 7.0));
+                    ui.painter().line_segment([arriere.left_top(), arriere.right_top()], trait_fin);
+                    ui.painter().line_segment([arriere.right_top(), arriere.right_bottom()], trait_fin);
+                    let avant = egui::Rect::from_min_size(icone.min + egui::vec2(0.0, 3.0), egui::vec2(7.0, 7.0));
+                    ui.painter().rect_stroke(avant, 0.0, trait_fin, egui::StrokeKind::Inside);
+                }
+                1 => { ui.painter().rect_stroke(icone, 0.0, trait_fin, egui::StrokeKind::Inside); }
+                _ => {
+                    ui.painter().line_segment([icone.left_top(), icone.right_bottom()], trait_fin);
+                    ui.painter().line_segment([icone.right_top(), icone.left_bottom()], trait_fin);
+                }
+            }
+            if reponse.clicked() {
+                if k == 2 && self.sauvegarde.is_some() {
+                    self.error = Some("Un enregistrement est en cours ; attendez sa fin avant de quitter.".into());
+                    continue;
+                }
+                if k == 2 && (self.natif_modifie || self.documents.values().any(|d| d.modifie)) {
+                    self.confirmer_fermeture = Some((true, self.document_actif));
+                    continue;
+                }
+                ctx.send_viewport_cmd(match k {
+                    0 => egui::ViewportCommand::Minimized(true),
+                    1 => egui::ViewportCommand::Maximized(!maximise),
+                    _ => egui::ViewportCommand::Close,
+                });
+            }
+        }
         ui.separator();
+        ui.set_min_height(28.0);
+        let edition = match self.onglet_ruban {
+            OngletRuban::Modeliser => Some(crate::ruban::Menu::Modeliser),
+            OngletRuban::Modifier => Some(crate::ruban::Menu::Modifier),
+            OngletRuban::Annoter => Some(crate::ruban::Menu::Annoter),
+            _ => None,
+        };
+        if let Some(menu) = edition {
+            self.ruban_edition.afficher(ui, menu, self.natif.as_ref().map(|n| &n.0));
+            return;
+        }
         ui.horizontal(|ui| match self.onglet_ruban {
-            OngletRuban::Fichier => {
+            OngletRuban::Debut => {
+                if ui.add_enabled(self.loading.is_none(), egui::Button::new("Nouveau…")).on_hover_text("Créer un projet natif v0 (Ctrl+N)").clicked() {
+                    self.creer_projet();
+                }
                 if ui.button("Ouvrir…").on_hover_text("Ctrl+O").clicked() {
                     self.open_dialog(&ctx);
                 }
+                if ui.add_enabled(self.scene.is_some() || self.rvt.is_some() || self.loading.is_some(), egui::Button::new("Fermer")).clicked() {
+                    self.fermer();
+                }
+                ui.add_enabled(false, egui::Button::new("Importer…")).on_disabled_hover_text("Import dans le modèle à venir");
                 if self.rvt.is_some() && self.rvt_geom.is_ok() {
                     ui.toggle_value(&mut self.rvt_sheet, "Fiche Revit").on_hover_text("Métadonnées du fichier Revit");
                 }
             }
-            OngletRuban::Exporter => {
+            OngletRuban::Modeliser | OngletRuban::Modifier | OngletRuban::Annoter => {}
+            OngletRuban::Sortie => {
+                let disponible = (self.natif.is_some() || self.rvt_source.is_some()) && self.loading.is_none() && self.sauvegarde.is_none();
+                if ui.add_enabled(disponible, egui::Button::new("Enregistrer")).on_hover_text("Enregistrer en modèle natif v0 (Ctrl+S)").clicked() {
+                    self.enregistrer_projet(&ctx);
+                }
                 ui.add_enabled_ui(self.scene.is_some(), |ui| self.bouton_svg(ui));
+                ui.add_enabled(false, egui::Button::new("Imprimer…")).on_disabled_hover_text("Impression à venir");
             }
         });
+    }
+
+    /// Redimensionnement natif sur les bords de la fenêtre sans décoration.
+    fn bords_fenetre(&self, ctx: &egui::Context) {
+        use egui::ResizeDirection::*;
+        let (rect, position, maximise, presse) = ctx.input(|i| (i.viewport_rect(), i.pointer.hover_pos(), i.viewport().maximized.unwrap_or(false), i.pointer.primary_pressed()));
+        let Some(p) = position.filter(|p| rect.contains(*p) && !maximise) else { return };
+        let gauche = p.x < rect.left() + 5.0;
+        let droite = p.x > rect.right() - 5.0;
+        let haut = p.y < rect.top() + 5.0;
+        let bas = p.y > rect.bottom() - 5.0;
+        let direction = match (gauche, droite, haut, bas) {
+            (true, _, true, _) => NorthWest,
+            (_, true, true, _) => NorthEast,
+            (true, _, _, true) => SouthWest,
+            (_, true, _, true) => SouthEast,
+            (true, _, _, _) => West,
+            (_, true, _, _) => East,
+            (_, _, true, _) => North,
+            (_, _, _, true) => South,
+            _ => return,
+        };
+        ctx.set_cursor_icon(match direction {
+            NorthWest | SouthEast => egui::CursorIcon::ResizeNwSe,
+            NorthEast | SouthWest => egui::CursorIcon::ResizeNeSw,
+            North | South => egui::CursorIcon::ResizeVertical,
+            _ => egui::CursorIcon::ResizeHorizontal,
+        });
+        if presse {
+            ctx.send_viewport_cmd(egui::ViewportCommand::BeginResize(direction));
+        }
     }
 
     /// Vue 3D : modèle libre (IFC, ou fichier Revit sans vue ouverte) ou vue 3D Revit ;
@@ -1246,47 +1893,71 @@ impl ViewerApp {
         }
     }
 
-    /// Titre d'un panneau, par lequel on le déplace : glissé hors de son ancrage il
-    /// devient flottant ; relâché contre le bord gauche ou droit de la fenêtre, il s'y
-    /// ancre. Menu d'ancrage à droite du titre.
+    /// Le titre entier sert de poignée, sans menu d'ancrage.
     fn entete_panneau(&mut self, ui: &mut egui::Ui, p: Panneau, titre: &str) {
         let i = p as usize;
-        let mut ancrage = None;
-        // de droite à gauche : menu, puis le titre sur la largeur restante (sans élargir
-        // le panneau)
-        ui.horizontal(|ui| ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-            ui.menu_button("…", |ui| {
-                for a in Ancrage::TOUS {
-                    if ui.selectable_label(self.ancrages[i] == a, a.libelle()).clicked() {
-                        ancrage = Some(a);
-                        ui.close();
-                    }
-                }
-            });
+        ui.horizontal(|ui| {
             let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 20.0), Sense::hover());
             let resp = ui.interact(rect, egui::Id::unique(("entete_panneau", p.nom())), Sense::click_and_drag());
             let encre = ui.visuals().strong_text_color();
             ui.painter_at(rect).text(rect.left_center(), egui::Align2::LEFT_CENTER, titre, egui::FontId::proportional(15.0), encre);
-            if resp.drag_started() && self.ancrages[i] != Ancrage::Flottant {
-                ancrage = Some(Ancrage::Flottant);
-                self.pos_imposee[i] = resp.interact_pointer_pos().map(|q| q - egui::vec2(60.0, 10.0));
-            } else if resp.dragged() && self.ancrages[i] == Ancrage::Flottant {
-                self.pos_imposee[i] = Some(self.pos_flottants[i] + resp.drag_delta());
-            }
-            if resp.drag_stopped() && self.ancrages[i] == Ancrage::Flottant {
-                let ecran = ui.ctx().content_rect();
-                match ui.ctx().pointer_latest_pos() {
-                    Some(q) if q.x < ecran.left() + 40.0 => ancrage = Some(Ancrage::Gauche),
-                    Some(q) if q.x > ecran.right() - 40.0 => ancrage = Some(Ancrage::Droite),
-                    _ => {}
+            if resp.drag_started_by(PointerButton::Primary) {
+                if let Some(q) = resp.interact_pointer_pos() {
+                    let decalage = if self.ancrages[i] == Ancrage::Flottant {
+                        q - self.pos_flottants[i]
+                    } else {
+                        egui::vec2((q.x - rect.left()).clamp(20.0, 140.0), 16.0)
+                    };
+                    self.pos_imposee[i] = Some(q - decalage);
+                    self.deplacement_panneau = Some((p, decalage));
+                    self.ancrer(p, Ancrage::Flottant);
                 }
             }
             let survol = if resp.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab };
             resp.on_hover_cursor(survol).on_hover_text("Glisser pour déplacer ; relâcher contre un bord de la fenêtre pour ancrer");
-        }));
-        if let Some(a) = ancrage {
-            self.ancrer(p, a);
+        });
+    }
+
+    fn cible_ancrage(&self, q: egui::Pos2) -> Option<Ancrage> {
+        let r = self.zone_panneaux;
+        if !r.is_positive() || q.y < r.top() || q.y > r.bottom() {
+            return None;
         }
+        if q.x <= r.left() + 64.0 { Some(Ancrage::Gauche) }
+        else if q.x >= r.right() - 64.0 { Some(Ancrage::Droite) }
+        else { None }
+    }
+
+    /// Le suivi reste actif pendant le passage d'un panneau ancré à une fenêtre flottante.
+    fn deplacer_panneau(&mut self, ctx: &egui::Context) {
+        let Some((p, decalage)) = self.deplacement_panneau else { return };
+        let (position, enfonce) = ctx.input(|i| (i.pointer.latest_pos(), i.pointer.primary_down()));
+        if let Some(q) = position {
+            let r = self.zone_panneaux;
+            let v = q - decalage;
+            self.pos_imposee[p as usize] = Some(egui::pos2(v.x.clamp(r.left(), (r.right() - 80.0).max(r.left())), v.y.clamp(r.top(), (r.bottom() - 30.0).max(r.top()))));
+            if !enfonce {
+                if let Some(a) = self.cible_ancrage(q) {
+                    self.ancrer(p, a);
+                }
+            }
+        }
+        if !enfonce {
+            self.deplacement_panneau = None;
+        }
+        ctx.request_repaint();
+    }
+
+    fn apercu_ancrage(&self, ctx: &egui::Context) {
+        let Some((p, _)) = self.deplacement_panneau else { return };
+        let Some(cible) = ctx.pointer_latest_pos().and_then(|q| self.cible_ancrage(q)) else { return };
+        let zone = self.zone_panneaux;
+        let largeur = self.largeurs_panneaux[p as usize].min(zone.width() * 0.45);
+        let x = if cible == Ancrage::Gauche { zone.left() } else { zone.right() - largeur };
+        let rect = egui::Rect::from_min_size(egui::pos2(x, zone.top()), egui::vec2(largeur, zone.height()));
+        let peintre = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("apercu_ancrage")));
+        peintre.rect_filled(rect, 4.0, Color32::from_rgba_unmultiplied(90, 140, 195, 45));
+        peintre.rect_stroke(rect, 4.0, egui::Stroke::new(1.5, Color32::from_rgb(90, 140, 195)), egui::StrokeKind::Inside);
     }
 
     /// Ancre un panneau, ou le rend flottant au-dessus de la vue (à sa dernière place
@@ -1299,6 +1970,9 @@ impl ViewerApp {
             self.pos_imposee[i] = Some(egui::pos2(q.x.clamp(v.left(), (v.right() - 200.0).max(v.left())), q.y.clamp(v.top(), (v.bottom() - 200.0).max(v.top()))));
         }
         self.ancrages[i] = a;
+        if a != Ancrage::Flottant {
+            self.pos_imposee[i] = None;
+        }
     }
 
     /// Soleil du style Rendu : direction (depuis le sud-ouest, 45° de hauteur environ),
@@ -1513,7 +2187,9 @@ impl ViewerApp {
                 ui.colored_label(Color32::from_rgb(200, 40, 40), format!("Erreur : {e}"));
                 ui.separator();
             }
-            ui.label(&self.status);
+            if self.loading.is_none() {
+                ui.label(&self.status);
+            }
             if let (Some(p), Some(s)) = (self.point_clique, &self.scene) {
                 // coordonnées partagées (Revit placé) ou du fichier
                 ui.separator();
@@ -1785,11 +2461,209 @@ impl ViewerApp {
         }
     }
 
+    fn memoriser_vue(&mut self) {
+        if !self.vues_ouvertes.contains(&self.vue_active) {
+            return;
+        }
+        self.etats_vues.insert(self.vue_active, EtatVue {
+            camera: self.camera.clone(),
+            hidden_classes: self.hidden_classes.clone(),
+            hidden_objects: self.hidden_objects.clone(),
+            hidden_storeys: self.hidden_storeys.clone(),
+            isolated: self.isolated.clone(),
+            style: self.style,
+            coupe: self.coupe,
+            coupe_niveau: self.coupe_niveau,
+            coupe_hauteur: self.coupe_hauteur,
+            poche: self.poche,
+            echelle: self.echelle,
+            detail: self.detail,
+            boite: self.boite,
+            boite_active: self.boite_active,
+        });
+    }
+
+    fn restaurer_vue(&mut self, vue: Option<usize>) {
+        let Some(e) = self.etats_vues.get(&vue).cloned() else { return };
+        self.vue_active = vue;
+        self.nomenclature_ouverte = vue.filter(|&i| self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|n| n.vues.get(i)).is_some_and(|v| v.genre == "Nomenclature"));
+        self.camera = e.camera;
+        self.hidden_classes = e.hidden_classes;
+        self.hidden_objects = e.hidden_objects;
+        self.hidden_storeys = e.hidden_storeys;
+        self.isolated = e.isolated;
+        self.style = e.style;
+        self.coupe = e.coupe;
+        self.coupe_niveau = e.coupe_niveau;
+        self.coupe_hauteur = e.coupe_hauteur;
+        self.poche = e.poche;
+        self.echelle = e.echelle;
+        self.detail = e.detail;
+        self.boite = e.boite;
+        self.boite_active = e.boite_active;
+        self.vol = Vol::default();
+        self.point_clique = None;
+        self.visibility_dirty = true;
+        self.coupe_dirty = true;
+        self.preparer_feuille(vue);
+    }
+
+    fn onglets_vues(&mut self, ui: &mut egui::Ui) {
+        let mut onglets = Vec::new();
+        let mut titres = BTreeMap::new();
+        let mut ajouter = |id: usize, scene: Option<&Scene>, rvt: Option<&RvtInfo>, vues: &[Option<usize>], modifie: bool| {
+            let fichier = scene.map(|s| s.file_name.as_str()).or_else(|| rvt.map(|r| r.file_name.as_str())).unwrap_or("Modèle");
+            titres.insert(id, fichier.to_string());
+            for &vue in vues {
+                let nom = vue.and_then(|i| scene?.navigateur.as_ref()?.vues.get(i)).map_or("Vue 3D", |v| v.nom.as_str());
+                onglets.push((id, vue, format!("{nom}{}", if modifie { " *" } else { "" }), format!("{fichier} — {nom}")));
+            }
+            if vues.is_empty() {
+                let nom = if scene.is_some() { "Aucune vue" } else { "Fiche Revit" };
+                onglets.push((id, None, nom.to_string(), fichier.to_string()));
+            }
+        };
+        for (&id, d) in &self.documents {
+            ajouter(id, d.scene.as_ref(), d.rvt.as_ref(), &d.vues, d.modifie);
+        }
+        ajouter(self.document_actif, self.scene.as_ref(), self.rvt.as_ref(), &self.vues_ouvertes, self.natif_modifie);
+        onglets.sort_by_key(|o| o.0);
+        let mut activer = None;
+        let mut fermer = None;
+        // Les sélecteurs disposent de leurs propres emplacements, indépendants des onglets.
+        let (barre, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 26.0), Sense::hover());
+        let marge = 4.0;
+        let fleche = 24.0;
+        let disponible = (barre.width() - 2.0 * (marge + fleche + 6.0)).max(1.0);
+        let nombre = ((disponible / 180.0).floor() as usize).max(1).min(onglets.len().max(1));
+        let actif = onglets.iter().position(|o| o.0 == self.document_actif && o.1 == self.vue_active).unwrap_or(0);
+        let debut = actif.saturating_sub(nombre / 2).min(onglets.len().saturating_sub(nombre));
+        let largeur = (disponible / nombre as f32).min(220.0);
+        for (droite, symbole) in [(false, "◀"), (true, "▶")] {
+            let x = if droite { barre.right() - marge - fleche } else { barre.left() + marge };
+            let rect = egui::Rect::from_min_size(egui::pos2(x, barre.top() + 2.0), egui::vec2(fleche, 22.0));
+            ui.scope_builder(egui::UiBuilder::new().id_salt(("selecteur_vues", droite)).max_rect(rect), |ui| {
+                ui.menu_button(symbole, |ui| {
+                let mut precedent = None;
+                for (id, vue, nom, infobulle) in &onglets {
+                    if precedent != Some(*id) {
+                        if precedent.is_some() {
+                            ui.separator();
+                        }
+                        ui.label(RichText::new(&titres[id]).strong().color(couleur_document(*id)));
+                        precedent = Some(*id);
+                    }
+                    if ui.selectable_label(*id == self.document_actif && *vue == self.vue_active, RichText::new(format!("●  {nom}")).color(couleur_document(*id))).on_hover_text(infobulle).clicked() {
+                        activer = Some((*id, *vue));
+                        ui.close();
+                    }
+                }
+                }).response.on_hover_text("Liste des onglets ouverts");
+            });
+        }
+        for (k, (id, vue, nom, infobulle)) in onglets.iter().skip(debut).take(nombre).enumerate() {
+                        let x = barre.left() + marge + fleche + 6.0 + k as f32 * largeur;
+                        let rect = egui::Rect::from_min_size(egui::pos2(x, barre.top() + 2.0), egui::vec2((largeur - 6.0).max(1.0), 22.0));
+                        let couleur = couleur_document(*id);
+                        let actif = *id == self.document_actif && self.vue_active == *vue;
+                        let diluer = |c: u8| ((c as u16 + 255 * if actif { 3 } else { 5 }) / if actif { 4 } else { 6 }) as u8;
+                        let fond = Color32::from_rgb(diluer(couleur.r()), diluer(couleur.g()), diluer(couleur.b()));
+                        let survole = ui.rect_contains_pointer(rect);
+                        ui.painter().rect_filled(rect, 4.0, fond);
+                        ui.painter().rect_stroke(rect, 4.0, egui::Stroke::new(if actif { 1.5 } else { 0.5 }, couleur), egui::StrokeKind::Inside);
+                        let rect_croix = egui::Rect::from_min_max(egui::pos2((rect.right() - 21.0).max(rect.left()), rect.top() + 2.0), egui::pos2(rect.right() - 2.0, rect.bottom() - 2.0));
+                        let rect_corps = egui::Rect::from_min_max(rect.min, egui::pos2(rect_croix.left(), rect.bottom()));
+                        let reponse = ui.interact(rect_corps, ui.scope_id().with(("onglet_vue", id, vue)), Sense::click()).on_hover_text(infobulle);
+                        let texte_rect = rect_corps.shrink2(egui::vec2(7.0, 2.0));
+                        ui.put(texte_rect, egui::Label::new(RichText::new(nom).color(ui.visuals().text_color())).truncate());
+                        if reponse.clicked() {
+                            activer = Some((*id, *vue));
+                        }
+                        let fermer_clic = survole && ui.put(rect_croix, egui::Button::new("×").small().frame(false)).on_hover_text("Fermer la vue").clicked();
+                        if reponse.clicked_by(PointerButton::Middle) || fermer_clic {
+                            fermer = Some((*id, *vue));
+                        }
+                        if k + 1 < nombre && onglets.get(debut + k + 1).is_some_and(|suivant| suivant.0 != *id) {
+                            let x = rect.right() + 3.0;
+                            ui.painter().line_segment([egui::pos2(x, rect.top() + 4.0), egui::pos2(x, rect.bottom() - 4.0)], egui::Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color));
+                        }
+        }
+        if let Some((id, vue)) = activer {
+            self.changer_document(id);
+            if let Some(i) = vue {
+                self.activer_vue(i);
+            } else {
+                self.memoriser_vue();
+                self.restaurer_vue(None);
+            }
+        }
+        if let Some((id, cible)) = fermer {
+            let precedent = self.document_actif;
+            self.changer_document(id);
+            if let Some(k) = self.vues_ouvertes.iter().position(|&v| v == cible) {
+                let vue = self.vues_ouvertes.remove(k);
+                self.etats_vues.remove(&vue);
+                if self.vue_active == vue {
+                    self.nomenclature_ouverte = None;
+                    if let Some(&suivante) = self.vues_ouvertes.get(k.min(self.vues_ouvertes.len().saturating_sub(1))) {
+                        self.restaurer_vue(suivante);
+                    }
+                }
+            } else {
+                self.fermer();
+            }
+            if precedent != id {
+                self.changer_document(precedent);
+            }
+        }
+        if self.scene.is_some() && self.vues_ouvertes.is_empty() && ui.button("Ouvrir la vue 3D du modèle").clicked() {
+            self.vues_ouvertes.push(None);
+            self.vue_active = None;
+            self.nomenclature_ouverte = None;
+            self.hidden_objects.clear();
+            self.hidden_storeys.clear();
+            self.hidden_classes = HIDDEN_BY_DEFAULT.iter().map(|s| s.to_string()).collect();
+            self.isolated = None;
+            self.style = StyleVisuel::Realiste;
+            self.coupe = false;
+            self.boite = None;
+            self.boite_active = false;
+            self.camera = Camera::default();
+            if let Some(s) = &self.scene {
+                self.camera.scene_radius = (s.max - s.min).length() * 0.5;
+            }
+            self.visibility_dirty = true;
+            self.coupe_dirty = true;
+            self.preparer_feuille(None);
+            self.update_visibility();
+            self.fit_all();
+        }
+    }
+
     /// Ouvre une vue Revit comme dans Revit : caméra orthographique orientée selon la
     /// vue ; plan : son niveau seul ; coupe, élévation : tout le modèle ; vue de dessin,
     /// feuille, légende : ses éléments 2D ; vue 3D : modèle entier. Les éléments 2D de la
     /// vue sont affichés.
     fn activer_vue(&mut self, i: usize) {
+        if self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|n| n.vues.get(i)).is_none() {
+            return;
+        }
+        if self.vue_active == Some(i) && self.vues_ouvertes.contains(&Some(i)) {
+            return;
+        }
+        self.memoriser_vue();
+        if self.etats_vues.contains_key(&Some(i)) {
+            self.restaurer_vue(Some(i));
+            return;
+        }
+        self.vues_ouvertes.push(Some(i));
+        self.nomenclature_ouverte = None;
+        self.boite = None;
+        self.boite_active = false;
+        self.coupe = false;
+        self.coupe_niveau = None;
+        self.vol = Vol::default();
+        self.point_clique = None;
         let Some(s) = &self.scene else { return };
         let Some(v) = s.navigateur.as_ref().and_then(|n| n.vues.get(i)) else { return };
         let annot = v.entite.map(|e| self.objects_under(e)).unwrap_or_default();
@@ -1807,6 +2681,8 @@ impl ViewerApp {
                     self.select(Some(e), false);
                 }
                 self.nomenclature_ouverte = Some(i);
+                self.vue_active = Some(i);
+                self.memoriser_vue();
                 return;
             }
             _ => (annot.clone(), annot.clone()),
@@ -1877,6 +2753,7 @@ impl ViewerApp {
         if let Some(e) = entite {
             self.select(Some(e), false);
         }
+        self.memoriser_vue();
     }
 
     /// Objets des options de variante secondaires (masqués par défaut, comme dans Revit).
@@ -2196,6 +3073,9 @@ impl ViewerApp {
     /// Propriétés de l'élément sélectionné (panneau de gauche, comme dans Revit).
     fn right_panel(&mut self, ui: &mut egui::Ui) {
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
+        if self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.proprietes_surfaces(ui) {
+            return;
+        }
         if let (Some(s), Some(id)) = (&self.scene, self.selected) {
             // en-tête façon Revit : classe et type de l'élément
             let ty = s.model.type_of.get(&id).map(|t| s.model.name(*t)).filter(|t| !t.is_empty());
@@ -2219,6 +3099,19 @@ impl ViewerApp {
             return;
         };
         let model = &s.model;
+        if let Some((projet, _)) = &self.natif {
+            if let Some(mur) = projet.murs.iter().find(|m| scene::id_natif("mur", &m.id) == id) {
+                let niveau = projet.niveau(&mur.niveau).map_or("", |n| n.nom.as_str());
+                let epaisseur = projet.type_mur(&mur.type_mur).map_or(0.0, |t| t.epaisseur());
+                let hauteur = projet.bas_haut(mur).map_or(0.0, |(a,b)| b-a);
+                egui::Grid::new("mur_natif_proprietes").num_columns(2).show(ui, |ui| {
+                    for (nom, valeur) in [("Niveau", niveau.to_string()), ("Longueur", format!("{:.0} mm",mur.axe.longueur())), ("Hauteur",format!("{hauteur:.0} mm")), ("Épaisseur",format!("{epaisseur:.0} mm")), ("Volume",format!("{:.3} m³",projet.volume_mur(mur).unwrap_or(0.0)/1e9))] {
+                        ui.label(nom); ui.label(valeur); ui.end_row();
+                    }
+                });
+                ui.separator();
+            }
+        }
         let has_obj = s.object_of.contains_key(&id);
         let under = self.objects_under(id);
         let mut action = None;
@@ -2454,22 +3347,19 @@ impl ViewerApp {
                 // Retour à la vue 3D des murs.
                 self.rvt_sheet = false;
             } else {
-                self.rvt = None;
-                self.rvt_sheet = false;
-                self.rvt_preview = None;
-                self.status = "Ouvrir un fichier IFC ou Revit (Ctrl+O), ou le glisser dans la fenêtre.".into();
+                self.fermer();
             }
         }
     }
 
     /// Tableau d'une nomenclature Revit, recomposé depuis les éléments lus ; les colonnes
     /// que Revit calcule (formules, pièces d'une porte…) sont signalées.
-    fn fenetre_nomenclature(&mut self, ctx: &egui::Context) {
+    fn vue_nomenclature(&mut self, ui: &mut egui::Ui) {
         let Some(i) = self.nomenclature_ouverte else { return };
         let Some(v) = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|n| n.vues.get(i)) else { return };
         let Some((titres, lignes, nc, tris)) = &v.tableau else { return };
-        let mut ouvert = true;
-        egui::Window::new(format!("Nomenclature : {}", v.nom)).open(&mut ouvert).default_size([720.0, 420.0]).show(ctx, |ui| {
+        ui.vertical(|ui| {
+            ui.heading(&v.nom);
             if !nc.is_empty() {
                 let noms: Vec<&str> = nc.iter().filter_map(|&k| titres.get(k).map(String::as_str)).collect();
                 ui.label(RichText::new(format!("Non calculées (calcul de Revit) : {}", noms.join(", "))).weak());
@@ -2490,9 +3380,6 @@ impl ViewerApp {
                 });
             });
         });
-        if !ouvert {
-            self.nomenclature_ouverte = None;
-        }
     }
 
     fn unsupported_window(&mut self, ctx: &egui::Context) {
@@ -2519,6 +3406,9 @@ impl ViewerApp {
         }
         let resp = ui.allocate_rect(rect, Sense::click_and_drag());
         let aspect = rect.width() / rect.height().max(1.0);
+        let mode_mur = self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.mur_actif() && self.natif.is_some() && self.loading.is_none();
+        if !mode_mur { self.mur_depart = None; }
+        if mode_mur && resp.hovered() { ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair); }
         let ndc = |p: egui::Pos2| {
             Vec2::new((p.x - rect.left()) / rect.width() * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height() * 2.0)
         };
@@ -2532,14 +3422,15 @@ impl ViewerApp {
             };
 
             // Orbite autour du point visé (vue 3D seulement).
-            if resp.drag_started_by(PointerButton::Primary) && !ui.input(|i| i.modifiers.shift) && self.vue_3d() {
+            if !mode_mur && resp.drag_started_by(PointerButton::Primary) && !ui.input(|i| i.modifiers.shift) && self.vue_3d() {
                 if let Some((_, p)) = resp.interact_pointer_pos().and_then(|pp| pick(self, pp)) {
                     self.camera.set_pivot(p);
                 }
             }
             let shift = ui.input(|i| i.modifiers.shift);
-            self.voler(ui, &resp);
+            if !mode_mur { self.voler(ui, &resp); } else { self.vol.actif = false; }
             for b in [PointerButton::Primary, PointerButton::Secondary, PointerButton::Middle] {
+                if mode_mur && b != PointerButton::Middle { continue; }
                 if resp.dragged_by(b) && !(self.vol.actif && b == PointerButton::Secondary) {
                     self.glisser(b, resp.drag_delta(), shift, rect.height());
                 }
@@ -2563,7 +3454,20 @@ impl ViewerApp {
                 }
             }
 
-            if resp.double_clicked() {
+            if mode_mur {
+                if resp.clicked_by(PointerButton::Secondary) { self.mur_depart = None; }
+                if resp.clicked() {
+                    if let Some(point) = resp.interact_pointer_pos().and_then(|q| self.point_tracage_mur(q, rect, shift)) {
+                        if let Some(debut) = self.mur_depart {
+                            let options = self.ruban_edition.parametres_mur();
+                            match self.ajouter_mur_natif(debut, point, &options) {
+                                Ok(_) => self.mur_depart = self.ruban_edition.chainer_murs.then_some(point),
+                                Err(e) => self.error = Some(e),
+                            }
+                        } else { self.mur_depart = Some(point); }
+                    } else { self.error = Some("Le plan de tracé est parallèle à la vue. Utilisez la vue de dessus ou une vue 3D inclinée.".into()); }
+                }
+            } else if resp.double_clicked() {
                 match resp.interact_pointer_pos().and_then(|p| pick(self, p)) {
                     Some((obj, _)) => self.frame_objects(&[obj]),
                     None => self.fit_all(),
@@ -2630,6 +3534,10 @@ impl ViewerApp {
             })),
         };
         ui.painter().add(callback);
+        if mode_mur {
+            let point = resp.hover_pos().and_then(|q| self.point_tracage_mur(q, rect, ui.input(|i| i.modifiers.shift)));
+            self.apercu_mur(ui, rect, point);
+        }
         if self.scene.is_some() {
             self.poignees_boite(ui, rect);
         }
@@ -2656,14 +3564,6 @@ impl ViewerApp {
         if self.scene.is_none() {
             let msg = if self.loading.is_some() { self.status.clone() } else { "Glisser un fichier .ifc ou .rvt ici\nou Ctrl+O".to_string() };
             ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, msg, egui::FontId::proportional(20.0), Color32::from_gray(110));
-        } else if self.loading.is_some() {
-            ui.painter().text(
-                rect.left_top() + egui::vec2(12.0, 12.0),
-                egui::Align2::LEFT_TOP,
-                &self.status,
-                egui::FontId::proportional(15.0),
-                Color32::from_gray(60),
-            );
         }
     }
 }
@@ -2795,6 +3695,8 @@ impl ViewerApp {
             ("fichier", self.scene.as_ref().map(|s| texte(&s.file_name)).unwrap_or_else(|| "null".into())),
             ("statut", texte(&self.status)),
             ("chargement", self.loading.is_some().to_string()),
+            ("enregistrement", self.sauvegarde.is_some().to_string()),
+            ("sortie_v0", self.natif.as_ref().map(|n| &n.1).or(self.rvt_sortie.as_ref()).map_or("null".into(), |p| texte(&p.to_string_lossy()))),
             ("fiche_revit", (self.rvt.is_some() && self.rvt_sheet).to_string()),
         ];
         if let Some(e) = &self.error {
@@ -2870,6 +3772,38 @@ impl ViewerApp {
         use pilote::{erreur, liste, objet, succes, texte};
         match commande {
             "etat" => self.etat(),
+            "outil" => {
+                match argument {
+                    "mur" => { self.onglet_ruban = OngletRuban::Modeliser; self.ruban_edition.activer_mur(); }
+                    "aucun" => { self.ruban_edition.annuler(); self.mur_depart = None; }
+                    _ => return erreur("usage : outil mur|aucun"),
+                }
+                self.etat()
+            }
+            "mur" => {
+                let Ok(v) = argument.split_whitespace().map(str::parse::<f64>).collect::<Result<Vec<_>, _>>() else { return erreur("coordonnées du mur invalides") };
+                if v.len() != 4 && v.len() != 6 { return erreur("usage : mur <x0 mm> <y0 mm> <x1 mm> <y1 mm> [hauteur mm epaisseur mm]") }
+                let mut options = self.ruban_edition.parametres_mur();
+                if v.len() == 6 { options.hauteur = v[4]; options.epaisseur = v[5]; }
+                match self.ajouter_mur_natif([v[0],v[1]],[v[2],v[3]],&options) {
+                    Ok(id) => succes(&[("mur",texte(&id))]),
+                    Err(e) => erreur(&e),
+                }
+            }
+            "enregistrer" => {
+                if self.natif.is_none() && self.rvt_source.is_some() {
+                    let sortie = if argument.trim().is_empty() {
+                        let Some(p) = self.rvt_sortie.clone() else { return erreur("usage : enregistrer <chemin.modele.json> pour le premier enregistrement d’un RVT") };
+                        p
+                    } else { PathBuf::from(argument.trim().trim_matches('"')) };
+                    return match self.demarrer_enregistrement_rvt(ctx,sortie) {
+                        Ok(()) => self.etat(), Err(e) => erreur(&e),
+                    };
+                }
+                if self.natif.is_none() { return erreur("aucun projet natif ou Revit ouvert") }
+                self.enregistrer_projet(&ctx);
+                if let Some(e) = &self.error { erreur(e) } else { self.etat() }
+            }
             "taille" => {
                 let v: Vec<f32> = argument.split_whitespace().filter_map(|x| x.parse().ok()).collect();
                 let [l, h] = v[..] else { return erreur("usage : taille <largeur> <hauteur>") };
@@ -2923,7 +3857,7 @@ impl ViewerApp {
                 let v: Vec<f64> = argument.split_whitespace().filter_map(|x| x.parse().ok()).collect();
                 match (argument.trim(), &v[..]) {
                     ("on", _) => self.activer_boite(true),
-                    ("off", _) => self.boite_active = false,
+                    ("off", _) => self.activer_boite(false),
                     ("ajuster", _) => {
                         self.boite = None;
                         self.activer_boite(true);
@@ -3103,10 +4037,16 @@ impl ViewerApp {
                 self.etat()
             }
             "tout_afficher" => {
+                self.memoriser_vue();
                 self.hidden_objects.clear();
                 self.hidden_storeys.clear();
                 self.isolated = None;
                 self.vue_active = None;
+                self.nomenclature_ouverte = None;
+                if !self.vues_ouvertes.contains(&None) {
+                    self.vues_ouvertes.push(None);
+                }
+                self.memoriser_vue();
                 self.visibility_dirty = true;
                 self.etat()
             }
@@ -3435,6 +4375,17 @@ fn load_state_fr(s: &str) -> &str {
 impl eframe::App for ViewerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        self.poll_sauvegarde();
+        if ctx.input(|i| i.viewport().close_requested()) && self.sauvegarde.is_some() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.error = Some("Un enregistrement est en cours ; attendez sa fin avant de quitter.".into());
+        } else if ctx.input(|i| i.viewport().close_requested()) && (self.natif_modifie || self.documents.values().any(|d| d.modifie)) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.confirmer_fermeture = Some((true, self.document_actif));
+        }
+        if self.ruban_edition.a_un_outil() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+            if self.mur_depart.take().is_none() { self.ruban_edition.annuler(); }
+        }
         self.poll_loading();
         self.piloter(&ctx);
 
@@ -3445,10 +4396,19 @@ impl eframe::App for ViewerApp {
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::O)) {
             self.open_dialog(&ctx);
         }
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::N)) && self.loading.is_none() {
+            self.creer_projet();
+        }
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
+            self.enregistrer_projet(&ctx);
+        }
 
         egui::Panel::top("top").show(ui, |ui| self.top_bar(ui));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
+        self.zone_panneaux = ui.available_rect_before_wrap();
+        self.deplacer_panneau(&ctx);
         if self.rvt.is_some() && self.rvt_sheet {
+            egui::Panel::top("onglets_vues").show(ui, |ui| self.onglets_vues(ui));
             egui::CentralPanel::default().show(ui, |ui| self.revit_view(ui));
         } else {
             // disposition de Revit par défaut : propriétés à gauche, arborescence du projet
@@ -3462,14 +4422,26 @@ impl eframe::App for ViewerApp {
                     Ancrage::Droite => egui::Panel::right(id),
                     Ancrage::Flottant => continue,
                 };
-                panneau.resizable(true).default_size(if p == Panneau::Proprietes { 300.0 } else { 320.0 }).show(ui, |ui| self.panneau(ui, p));
+                let reponse = panneau.resizable(true).default_size(self.largeurs_panneaux[p as usize]).show(ui, |ui| self.panneau(ui, p));
+                self.largeurs_panneaux[p as usize] = reponse.response.rect.width();
             }
             // sous la vue seulement, entre les panneaux ancrés
+            if self.scene.is_some() {
+                egui::Panel::top("onglets_vues").show(ui, |ui| self.onglets_vues(ui));
+            }
             egui::Panel::bottom("barre_vue").show(ui, |ui| self.barre_vue(ui));
-            egui::CentralPanel::no_frame().show(ui, |ui| self.viewport(ui));
+            egui::CentralPanel::no_frame().show(ui, |ui| {
+                if self.scene.is_some() && self.vues_ouvertes.is_empty() {
+                    ui.centered_and_justified(|ui| ui.label("Ouvrir une vue depuis l’arborescence du projet."));
+                } else if self.nomenclature_ouverte.is_some() {
+                    self.vue_nomenclature(ui);
+                } else {
+                    self.viewport(ui);
+                }
+            });
             for p in Panneau::TOUS.into_iter().filter(|p| ancrages[*p as usize] == Ancrage::Flottant) {
                 let i = p as usize;
-                let mut fenetre = egui::Window::new(p.nom()).id(egui::Id::unique(("flottant", p.nom()))).title_bar(false).resizable(true).default_size([320.0, 520.0]).min_width(220.0);
+                let mut fenetre = egui::Window::new(p.nom()).id(egui::Id::unique(("flottant", p.nom()))).title_bar(false).movable(false).resizable(true).default_size([self.largeurs_panneaux[i], 520.0]).min_width(220.0);
                 if let Some(q) = self.pos_imposee[i].take() {
                     fenetre = fenetre.current_pos(q);
                 }
@@ -3484,12 +4456,15 @@ impl eframe::App for ViewerApp {
             self.fenetre_visibilite(&ctx);
         }
         self.unsupported_window(&ctx);
-        self.fenetre_nomenclature(&ctx);
+        self.confirmation_modifications(&ctx);
+        self.apercu_ancrage(&ctx);
+        self.bords_fenetre(&ctx);
     }
 
     /// Appelé même fenêtre réduite : relève les commandes du pilote et demande alors le
     /// tracé complet, que `ui` les traite et qu'une capture ait des pixels.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.poll_sauvegarde();
         if let Some(rx) = &self.pilote {
             self.requetes.extend(rx.try_iter());
         }

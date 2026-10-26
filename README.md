@@ -16,6 +16,50 @@ cargo run --release -- --modele chemin\vers\projet.rvt     # conversion vers le 
 
 Ouverture aussi possible par Ctrl+O ou par glisser-déposer.
 
+**Début → Nouveau…** (Ctrl+N) crée et ouvre un projet natif v0 vide
+(`.modele.json`), selon [le schéma du modèle](docs/MODELE.md).
+**Sortie → Enregistrer** (Ctrl+S) l'enregistre. Les niveaux et murs droits natifs
+sont affichés et peuvent être enregistrés puis rouverts.
+
+Avec un fichier Revit ouvert, **Sortie → Enregistrer** (Ctrl+S) propose un fichier
+`.modele.json` au premier enregistrement, puis réutilise cette destination pour
+ce document. La conversion v0 s'exécute en arrière-plan, écrit aussi le rapport
+`.modele.rapport.md` et conserve le RVT et ses vues ouverts. Un RVT modifié sur
+disque doit être rouvert avant conversion. Le fichier RVT source reste intact.
+
+Le ruban regroupe les commandes dans Début, Modéliser, Modifier, Annoter et Sortie.
+Les commandes fréquentes (Mur, Surfaces, Ouverture, Déplacer, Copier, Aligner, Cote et
+Texte) disposent de grands boutons lorsque la largeur le permet ; les autres
+restent empilées avec de petites icônes. Les grands boutons se replient selon leur
+priorité quand la fenêtre rétrécit. Le bouton Surfaces superpose sol, plafond et
+toiture dans une seule icône. Son sélecteur se trouve dans un encart en tête de
+Propriétés, avec une vignette et une liste déroulante distinguant Dalle (structure),
+Sol (revêtement), Plafond et Toiture. Les paramètres sont juste en dessous et
+restent mémorisés séparément pour chaque catégorie.
+L'icône Mur présente une coupe en trois couches avec une face lisse.
+Modéliser comprend aussi Poteau, Escalier et Garde-corps.
+Sur une fenêtre étroite, le bouton « ... » à droite
+de la colonne de l'outil actif donne accès à ses réglages ; Surfaces conserve son
+sélecteur et ses paramètres dans Propriétés à toutes les largeurs.
+Les onglets d'édition présentent leurs groupes d'outils et les options de l'outil
+sélectionné directement à droite de son icône (Ouverture : Porte/Fenêtre ; Cote : Alignée/Orthogonale ; Texte :
+avec/sans flèche). **Mur** est opérationnel dans les projets natifs : régler
+hauteur, épaisseur, implantation et niveau de base, puis cliquer le départ et
+l'extrémité. L'aperçu suit le curseur, les extrémités existantes s'accrochent et
+Maj contraint le tracé horizontalement ou verticalement. L'option Chaîner permet
+de continuer depuis le dernier point. Échap annule le segment en cours, puis
+quitte l'outil ; le clic droit annule le segment. Le niveau 0 est créé au premier
+mur si le projet est vide. Les autres commandes restent à raccorder.
+Un astérisque signale les modifications et la fermeture propose de les enregistrer. Une seconde
+barre, au-dessus de la zone de dessin, affiche les vues ouvertes : vue générale du
+modèle, plans, coupes, vues 3D, feuilles et nomenclatures. Cliquer sur un onglet
+retrouve son cadrage et ses réglages d'affichage ; la croix au survol ou le clic du milieu
+ferme la vue. Une vue fermée peut être rouverte depuis l'arborescence du projet.
+L'ouverture d'un autre fichier conserve les documents précédents et leurs onglets.
+Les onglets affichent uniquement le nom de la vue ; le nom du fichier reste dans
+l'infobulle et chaque fichier garde sa couleur discrète. Les deux petites flèches
+affichent la liste des onglets ouverts ; la barre d'onglets ne défile pas.
+
 Exécutables prêts à l'emploi, sans installation : page [Releases](https://github.com/tomtomawk/ifc_viewer/releases) (Windows x64 et ARM64, Linux x64 et ARM64, macOS ARM64). Une release est publiée par GitHub Actions (`.github/workflows/release.yml`) quand on pousse une étiquette `v*` :
 
 ```
@@ -35,13 +79,17 @@ git push origin v0.2.0
 | Orientation (vue 3D) | cube d'orientation, coin haut droit : clic sur une face, une arête ou un coin ; glisser pour tourner. Boussole autour : clic sur N, E, S, O ; glisser l'anneau pour tourner autour de la verticale |
 | Barre sous la vue | dans l'ordre : échelle (1 : n), niveau de détail (lu dans la vue Revit ; sans effet sur l'affichage pour l'instant), style visuel, cadrer, visibilité / tout afficher ; puis Ortho (vue 3D : projection orthographique ou perspective) |
 | Visibilité par catégorie (modèle, annotation) | bouton « Visibilité » sous la vue, ou V |
-| Déplacer Propriétés / Arborescence | glisser le titre (relâcher contre un bord pour ancrer), ou menu « … » |
+| Déplacer Propriétés / Arborescence | glisser le titre ; une zone magnétique prévisualise l'ancrage au bord gauche ou droit, relâcher pour ancrer |
 | Style visuel | barre sous la vue : Filaire, Lignes cachées (dessin des plans et élévations), Ombré, Couleurs homogènes, Réaliste, Rendu (couleurs de rendu des matériaux Revit, soleil et ombres portées) |
 | Zone de coupe 3D | bouton « Zone de coupe » sous la vue : boîte qui découpe le modèle dans les vues 3D ; poignées au milieu des faces pour la régler en 3D, en plan (côtés) ou en élévation (dessus, dessous) ; bornes dans les propriétés |
 | Plan de coupe | propriétés, « Plage de vue » (style Lignes cachées) : coupe, niveau, décalage, poché |
 | Export vectoriel du dessin | ruban, onglet « Exporter » : « Dessin SVG… » (mode dessin, vue orthographique) |
 
 ## Fonctions
+
+- Compositions Revit : couches des types de murs et de sols, avec épaisseur, matériau et ordre, affichées dans les propriétés et conservées dans le v0. Sur les murs droits dont le côté extérieur peut être vérifié par les matériaux des faces, les coupes et la section box distinguent les couches, leurs couleurs et les motifs de coupe des matériaux. Les compositions variables et les orientations ambiguës gardent un rendu global.
+
+- Zone de coupe 3D (section box) : les six faces coupées sont refermées avec la couleur de l'élément ; en style Lignes cachées, elles utilisent le poché et les hachures du dessin. Les cavités restent vides et le remplissage respecte les bornes de la boîte.
 
 - IFC2X3, IFC4, IFC4X3 (fichiers `.ifc` texte ; pas `.ifczip` ni `.ifcXML`).
 - Arborescence en onglets, choisis par une barre d'icônes : pour un fichier Revit, tout le navigateur de projet ou une seule de ses sections (vues, feuilles, nomenclatures, familles, groupes, liens), matériaux (avec les éléments qui les portent : un clic les isole), modèle et classes ; pour un IFC, modèle, classes et matériaux (`IfcMaterial`).

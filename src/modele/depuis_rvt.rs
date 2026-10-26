@@ -6,7 +6,7 @@
 //!   décalages. Le tracé lu (`m_pCurveDriver`) donne la droite ou le cercle porteur, pas
 //!   les extrémités : elles et la ligne médiane viennent de la géométrie du mur, projetée
 //!   sur ce tracé (ce qui rend le résultat indépendant de la ligne d'implantation choisie
-//!   dans Revit). Les couches du type ne sont pas lues : une couche de l'épaisseur totale.
+//!   dans Revit). Les couches du type conservent leurs épaisseurs, matériaux et ordre.
 //! - Portes et fenêtres hébergées par un mur converti : baie aux cotes du type (largeur,
 //!   hauteur), centrée sur le point d'insertion ; allège = altitude du point d'insertion
 //!   au-dessus du niveau du mur ; sans cotes de type, cotes de l'encombrement de la
@@ -28,6 +28,19 @@ fn triangles(g: &Geometrie) -> Vec<[DVec3; 3]> {
         Ok(m) => m.faces.iter().flat_map(|f| f.triangles.iter().map(|t| t.map(|i| m.sommets[i]))).collect(),
         Err(_) => Vec::new(),
     }
+}
+
+fn couches_type(m: &Maquette, type_id: i64, epaisseur: f64) -> (Vec<Couche>, bool) {
+    if let Some(couches) = m.types.get(&type_id).and_then(|t| t.couches.as_ref()) {
+        let total: f64 = couches.iter().map(|c| c.epaisseur).sum();
+        if total > 0.0 && (total - epaisseur).abs() <= 0.1 {
+            return (couches.iter().map(|c| Couche {
+                epaisseur: c.epaisseur,
+                materiau: (c.materiau != -1).then(|| m.materiaux.get(&c.materiau).map(|m| m.nom.clone()).unwrap_or_else(|| format!("Matériau {}", c.materiau))),
+            }).collect(), true);
+        }
+    }
+    (vec![Couche { materiau: None, epaisseur }], false)
 }
 
 pub fn convertir(chemin: &Path, progress: &dyn Fn(String)) -> Result<(Projet, Vec<super::Mesure>), String> {
@@ -102,7 +115,8 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
             .entry(w.type_id)
             .or_insert_with(|| {
                 let id = ident("type_mur", w.type_id);
-                c.projet.types_murs.push(TypeCompose { id: id.clone(), nom: nom_type(w.type_id), couches: vec![Couche { materiau: None, epaisseur: e }], couches_detaillees: false, origine: origine(w.type_id, "WallType") });
+                let (couches, couches_detaillees) = couches_type(m, w.type_id, e);
+                c.projet.types_murs.push(TypeCompose { id: id.clone(), nom: nom_type(w.type_id), couches, couches_detaillees, origine: origine(w.type_id, "WallType") });
                 id
             })
             .clone();
@@ -193,7 +207,8 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
             .entry(d.type_id)
             .or_insert_with(|| {
                 let id = ident("type_dalle", d.type_id);
-                c.projet.types_dalles.push(TypeCompose { id: id.clone(), nom: nom_type(d.type_id), couches: vec![Couche { materiau: None, epaisseur: e }], couches_detaillees: false, origine: origine(d.type_id, "FloorType") });
+                let (couches, couches_detaillees) = couches_type(m, d.type_id, e);
+                c.projet.types_dalles.push(TypeCompose { id: id.clone(), nom: nom_type(d.type_id), couches, couches_detaillees, origine: origine(d.type_id, "FloorType") });
                 id
             })
             .clone();

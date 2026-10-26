@@ -10,6 +10,8 @@
 pub mod depuis_ifc;
 pub mod depuis_rvt;
 pub mod geometrie;
+pub mod edition;
+pub mod enregistrement;
 pub mod rapport;
 
 use serde::{Deserialize, Serialize};

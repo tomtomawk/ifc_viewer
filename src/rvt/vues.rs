@@ -620,6 +620,7 @@ pub fn primitives(e: &Element2D, n: DVec3, echelle: f64, couleur: [u8; 4], eleme
 /// (radians), origine, décalage entre deux lignes (`m_deltas[1]`), glissement le long
 /// des lignes d'une ligne à la suivante (`m_deltas[0]`), tirets (longueurs alternées
 /// trait / blanc, `m_segs` ; vide : trait continu).
+#[derive(Clone)]
 pub struct GrilleMotif {
     pub angle: f64,
     pub origine: [f64; 2],
@@ -629,6 +630,7 @@ pub struct GrilleMotif {
 }
 
 /// Motif de remplissage (`FillPatternElem` → `FillPattern`) ; sans grille : uni.
+#[derive(Clone)]
 pub struct Motif {
     pub nom: String,
     /// Motif de modèle (`m_fpTarget` = 1, mesures en mm du modèle), sinon de dessin (mm

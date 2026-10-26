@@ -5,6 +5,7 @@ use glam::{Mat4, Vec3, Vec4};
 /// Inclinaison maximale (juste sous la verticale, pour garder look_at défini).
 pub const MAX_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 1e-4;
 
+#[derive(Clone)]
 pub struct Camera {
     pub target: Vec3,
     pub dist: f32,
