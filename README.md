@@ -77,6 +77,7 @@ git push origin v0.2.0
 | Cadrer l'objet / tout | double-clic / F |
 | Masquer / isoler la sélection | H / I (Échap annule l'isolement) |
 | Orientation (vue 3D) | cube d'orientation, coin haut droit : clic sur une face, une arête ou un coin ; glisser pour tourner. Boussole autour : clic sur N, E, S, O ; glisser l'anneau pour tourner autour de la verticale |
+| Orientation (vue en plan) | repère plat en haut à droite : glisser pour tourner librement, N/E/S/O pour placer une direction en haut, boutons −90°/+90° pour tourner par quarts de tour, angle saisi en degrés ; « PLAN » retrouve l’orientation initiale de la vue. Zoom et cadrage conservés. Disponible aussi en vue orthographique de dessus/dessous du modèle. |
 | Barre sous la vue | dans l'ordre : échelle (1 : n), niveau de détail (lu dans la vue Revit ; sans effet sur l'affichage pour l'instant), style visuel, cadrer, visibilité / tout afficher ; puis Ortho (vue 3D : projection orthographique ou perspective) |
 | Visibilité par catégorie (modèle, annotation) | bouton « Visibilité » sous la vue, ou V |
 | Déplacer Propriétés / Arborescence | glisser le titre ; une zone magnétique prévisualise l'ancrage au bord gauche ou droit, relâcher pour ancrer |

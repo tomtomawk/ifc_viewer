@@ -1684,6 +1684,19 @@ impl ViewerApp {
         }
     }
 
+    /// Plans Revit et vues orthographiques du modèle regardées verticalement.
+    fn vue_en_plan(&self) -> bool {
+        if let Some(v) = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)) {
+            return matches!(v.genre.as_str(), "Plan d'étage" | "Plan de plafond" | "Plan de structure" | "Plan de site");
+        }
+        self.camera.ortho && self.camera.pitch.abs() > 1.56
+    }
+
+    fn orientation_initiale_plan(&self) -> f32 {
+        self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i))
+            .map_or(-std::f32::consts::FRAC_PI_2, |v| (-v.haut.y as f32).atan2(-v.haut.x as f32))
+    }
+
     /// Glisser dans la vue : orbite au bouton gauche et regard sur place au bouton droit
     /// (vol) en vue 3D ; panoramique au bouton du milieu, à Maj + gauche, et aux boutons
     /// gauche et droit dans une vue 2D (plan, coupe, élévation, feuille), dont
@@ -3455,7 +3468,13 @@ impl ViewerApp {
             Vec2::new((p.x - rect.left()) / rect.width() * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height() * 2.0)
         };
 
-        if self.scene.is_some() {
+        let repere_plan = self.scene.is_some() && self.vue_en_plan();
+        let sur_repere_plan = repere_plan && ui.input(|i| {
+            let zone = crate::orientation_plan::zone(rect);
+            i.pointer.hover_pos().is_some_and(|p| zone.contains(p))
+                || (i.pointer.any_down() && i.pointer.press_origin().is_some_and(|p| zone.contains(p)))
+        });
+        if self.scene.is_some() && !sur_repere_plan {
             let pick = |app: &Self, p: egui::Pos2| -> Option<(u32, Vec3)> {
                 let s = app.scene.as_ref()?;
                 let n = ndc(p);
@@ -3592,7 +3611,12 @@ impl ViewerApp {
                 ui.visuals().strong_text_color(),
             );
         }
-        if self.scene.is_some() && self.vue_3d() {
+        if repere_plan {
+            let origine = self.orientation_initiale_plan();
+            if crate::orientation_plan::afficher(ui, rect, &mut self.camera, origine) {
+                self.memoriser_vue();
+            }
+        } else if self.scene.is_some() && self.vue_3d() {
             self.cube_orientation(ui, rect);
         }
 
