@@ -99,7 +99,7 @@ force l'un ou l'autre.
 | Barre sous la vue | dans l'ordre : échelle (1 : n), niveau de détail (lu dans la vue Revit ; sans effet sur l'affichage pour l'instant), style visuel, cadrer, visibilité / tout afficher ; puis Ortho (vue 3D : projection orthographique ou perspective) |
 | Visibilité par catégorie (modèle, annotation) | bouton « Visibilité » sous la vue, ou V |
 | Déplacer Propriétés / Arborescence | glisser le titre ; une zone magnétique prévisualise l'ancrage au bord gauche ou droit, relâcher pour ancrer |
-| Style visuel | barre sous la vue : Filaire, Lignes cachées (dessin des plans et élévations), Ombré, Couleurs homogènes, Réaliste, Rendu (couleurs de rendu des matériaux Revit, soleil et ombres portées) |
+| Style visuel | barre sous la vue : Filaire, Lignes cachées (dessin des plans et élévations), Ombré, Couleurs homogènes, Réaliste, Rendu (couleurs de rendu des matériaux Revit, soleil, ombres portées calées sur la vue et occultation ambiante) ; traits, cotes et textes jamais plus fins qu'un pixel (stables au zoom) |
 | Zone de coupe 3D | bouton « Zone de coupe » sous la vue : boîte qui découpe le modèle dans les vues 3D ; poignées au milieu des faces pour la régler en 3D, en plan (côtés) ou en élévation (dessus, dessous) ; bornes dans les propriétés |
 | Plan de coupe | propriétés, « Plage de vue » (style Lignes cachées) : coupe, niveau, décalage, poché |
 | Export vectoriel du dessin | ruban, onglet « Exporter » : « Dessin SVG… » (mode dessin, vue orthographique) |

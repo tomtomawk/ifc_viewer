@@ -4880,6 +4880,8 @@ impl ViewerApp {
             background: if self.style.papier() { [1.0, 1.0, 1.0] } else { [0.925, 0.933, 0.945] },
             style: self.style,
             soleil: (self.style == StyleVisuel::Rendu).then(|| self.soleil(aspect)).flatten(),
+            // occultation : rayon de l'ordre du mètre, réduit de près, élargi de loin
+            ao: (self.style == StyleVisuel::Rendu).then(|| (self.camera.proj(aspect), (self.camera.dist * 0.04).clamp(0.15, 1.5))),
             coupe: self.plan_coupe(),
             boite: self.boite_appliquee(),
             cadrage: self.cadrage_vue(),
