@@ -27,11 +27,12 @@ ce document. La conversion v0 s'exécute en arrière-plan, écrit aussi le rappo
 `.modele.rapport.md` et conserve le RVT et ses vues ouverts. Un RVT modifié sur
 disque doit être rouvert avant conversion. Le fichier RVT source reste intact.
 
-Le ruban regroupe les commandes dans Début, Modéliser, Modifier, Annoter et Sortie.
+Le ruban regroupe les commandes dans Début, Modéliser, Modifier, Documenter et Sortie.
 Les commandes fréquentes (Mur, Éléments horizontaux, Ouverture, Déplacer, Copier, Aligner, Cote et
 Texte) disposent de grands boutons lorsque la largeur le permet ; les autres
 restent empilées avec de petites icônes. Les grands boutons se replient selon leur
-priorité quand la fenêtre rétrécit. Le bouton Éléments horizontaux superpose sol, plafond et toiture dans une seule icône ; la sorte (Dalle, Sol, Plafond, Toiture) et son type se choisissent dans le sélecteur de type en tête de Propriétés : un onglet par sorte, puis des types prédéfinis (dalles BA ou bois, sols carrelage, parquet, PVC, résine, plafonds plaque de plâtre ou dalles acoustiques, toitures tuiles, terrasse, bac acier, végétalisée) avec leur composition ; l'épaisseur est celle du type. **Dalle** et **Sol** sont opérationnels dans les projets natifs : contour par sommets (recliquer le premier ou Entrée pour fermer) ou rectangle, accroché aux angles des murs ; une couleur par couche. Plafond et Toiture restent à raccorder. Son sélecteur se trouve dans un encart en tête de
+priorité quand la fenêtre rétrécit. Le bouton Éléments horizontaux superpose sol, plafond et toiture dans une seule icône ; la sorte (Dalle, Sol, Plafond, Toiture) et son type se choisissent dans le sélecteur de type en tête de Propriétés : un onglet par sorte, puis des types prédéfinis (dalles BA ou bois, sols carrelage, parquet, PVC, résine, plafonds plaque de plâtre ou dalles acoustiques, toitures tuiles, terrasse, bac acier, végétalisée) avec leur composition ; l'épaisseur est celle du type. **Dalle** et **Sol** sont opérationnels dans les projets natifs : contour par sommets (recliquer le premier ou Entrée pour fermer) ou rectangle, accroché aux angles des murs ; une couleur par couche. Plafond et Toiture restent à raccorder.
+Les projets natifs ont une arborescence (vue 3D, plans d'étage, coupes, types, matériaux) ; l'onglet **Documenter** crée les vues en plan (une par niveau) et les coupes (deux clics dans un plan), enregistrées dans le projet. Son sélecteur se trouve dans un encart en tête de
 Propriétés, avec une vignette et une liste déroulante distinguant Dalle (structure),
 Sol (revêtement), Plafond et Toiture. Les paramètres sont juste en dessous et
 restent mémorisés séparément pour chaque catégorie. Les vignettes distinguent la

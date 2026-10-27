@@ -146,7 +146,97 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         scene.couches_coupe.insert(id, bandes);
     }
     if scene.objects.is_empty() { scene.min = Vec3::splat(-5.0); scene.max = Vec3::splat(5.0); }
+    scene.navigateur = Some(navigateur(projet));
     Ok(scene)
+}
+
+/// Identifiant numérique stable d'une vue native dans l'arborescence (« 3d » : la vue 3D).
+pub fn numero_vue(id: &str) -> i64 {
+    (id_natif("vue", id) >> 1) as i64
+}
+
+/// Arborescence du projet natif : vue 3D, vues enregistrées (plans d'étage, coupes),
+/// types de murs et de dalles, matériaux et éléments qui les portent.
+fn navigateur(projet: &Projet) -> Navigateur {
+    use crate::modele::GenreVue;
+    let num = numero_vue;
+    let vue = |revit_id: i64, genre: &str, nom: &str, echelle: f64| NavVue {
+        revit_id,
+        phase: 0,
+        filtre_phase: -1,
+        coupe: None,
+        plan_coupe: None,
+        tableau: None,
+        entite: None,
+        genre: genre.into(),
+        type_vue: String::new(),
+        nom: nom.into(),
+        echelle,
+        detail: 2,
+        numero: String::new(),
+        haut: DVec3::Z,
+        direction: DVec3::new(-1.0, -1.0, 1.0).normalize(),
+        etage: None,
+        placees: Vec::new(),
+        fenetres: Vec::new(),
+        primitives: Vec::new(),
+    };
+    let mut vues = vec![vue(num("3d"), "Vue 3D", "{3D}", 100.0)];
+    for v in &projet.vues {
+        let mut n = vue(num(&v.id), "", &v.nom, v.echelle);
+        match &v.genre {
+            GenreVue::Plan { niveau, coupe } => {
+                n.genre = "Plan d'étage".into();
+                n.etage = Some(id_natif("niveau", niveau));
+                n.coupe = Some(coupe / 1000.0);
+                n.direction = DVec3::Z;
+                n.haut = DVec3::Y;
+            }
+            GenreVue::Coupe { debut, fin, .. } => {
+                n.genre = "Coupe".into();
+                let d = glam::DVec2::from_array(*fin) - glam::DVec2::from_array(*debut);
+                let gauche = d.perp().normalize_or_zero();
+                // l'observateur est à droite de la ligne et regarde vers sa gauche
+                n.direction = -gauche.extend(0.0);
+                n.haut = DVec3::Z;
+                let a = glam::DVec2::from_array(*debut) / 1000.0;
+                n.plan_coupe = Some(gauche.extend(0.0).extend(-gauche.dot(a)));
+            }
+        }
+        vues.push(n);
+    }
+    let types = |categorie: &str, nom: &str, ts: &[crate::modele::TypeCompose], genre: &str| NavFamille {
+        categorie: categorie.into(),
+        nom: nom.into(),
+        types: ts.iter().map(|t| (t.nom.clone(), Some(id_natif(genre, &t.id)))).collect(),
+    };
+    let mut familles = Vec::new();
+    if !projet.types_murs.is_empty() {
+        familles.push(types("Murs", "Mur de base", &projet.types_murs, "type-mur"));
+    }
+    if !projet.types_dalles.is_empty() {
+        familles.push(types("Sols", "Sol", &projet.types_dalles, "type-dalle"));
+    }
+    let materiaux = projet
+        .materiaux
+        .iter()
+        .map(|m| {
+            let porte = |t: Option<&crate::modele::TypeCompose>| t.is_some_and(|t| t.couches.iter().any(|c| c.materiau.as_deref() == Some(m.nom.as_str())));
+            let mut elements: Vec<Id> = projet.murs.iter().filter(|x| porte(projet.type_mur(&x.type_mur))).map(|x| id_natif("mur", &x.id)).collect();
+            elements.extend(projet.dalles.iter().filter(|x| porte(projet.type_dalle(&x.type_dalle))).map(|x| id_natif("dalle", &x.id)));
+            NavMateriau { nom: m.nom.clone(), couleur: m.couleur, transparence: 0.0, elements }
+        })
+        .collect();
+    Navigateur {
+        phases: Vec::new(),
+        filtres_phase: Default::default(),
+        phases_objets: Default::default(),
+        variantes_secondaires: Default::default(),
+        vues,
+        familles,
+        groupes: Vec::new(),
+        materiaux,
+    }
 }
 
 /// Prisme vertical (m) d'un contour pair-impair (mm) entre `bas` et `haut` (mm) :

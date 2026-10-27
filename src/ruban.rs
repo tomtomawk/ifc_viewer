@@ -39,6 +39,8 @@ enum Outil {
     Zone,
     Symbole,
     Legende,
+    VuePlan,
+    VueCoupe,
 }
 
 impl Outil {
@@ -71,6 +73,8 @@ impl Outil {
             Self::Zone => "Zone remplie",
             Self::Symbole => "Symbole",
             Self::Legende => "Légende",
+            Self::VuePlan => "Vue en plan",
+            Self::VueCoupe => "Coupe",
         }
     }
 
@@ -79,7 +83,8 @@ impl Outil {
     fn priorite(self) -> u8 {
         match self {
             Self::Mur | Self::Deplacer | Self::Cote => 3,
-            Self::Ouverture | Self::Copier | Self::Texte => 2,
+            Self::Ouverture | Self::Copier | Self::Texte | Self::VueCoupe => 2,
+            Self::VuePlan => 1,
             Self::Surfaces | Self::Aligner => 1,
             _ => 0,
         }
@@ -168,8 +173,9 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
             ("Ajuster", &[Aligner, Ajuster]),
         ],
         Menu::Annoter => &[
+            ("Vues", &[VuePlan, VueCoupe]),
             ("Coter", &[Cote, Altimetrie]),
-            ("Documenter", &[Texte, Etiquette]),
+            ("Texte", &[Texte, Etiquette]),
             ("Détail", &[Ligne, Arc, Zone]),
             ("Bibliothèque", &[Symbole, Legende]),
         ],
@@ -402,10 +408,73 @@ fn champs(o: Outil) -> Vec<Champ> {
             "Contenu",
             &["Matériaux", "Types de murs", "Symboles"],
         )],
+        VuePlan => vec![Nombre("Hauteur de coupe", 1200.0, " mm")],
+        VueCoupe => vec![Nombre("Profondeur", 8000.0, " mm")],
     }
 }
 
 impl RubanEdition {
+    /// Outil Coupe actif : profondeur des coupes (mm).
+    pub fn coupe_active(&self) -> Option<f64> {
+        (self.selection == Some(Outil::VueCoupe)).then(|| match self.valeurs.get(&(Outil::VueCoupe, 0)) {
+            Some(Valeur::Nombre(v)) => *v,
+            _ => 8000.0,
+        })
+    }
+
+    pub fn activer_coupe(&mut self) {
+        self.selection = Some(Outil::VueCoupe);
+    }
+
+    /// Palette de l'outil Vue en plan : un bouton par niveau (plans existants
+    /// indiqués). Retourne le niveau et la hauteur de coupe (mm) du plan à créer.
+    pub fn proprietes_vues(&mut self, ui: &mut egui::Ui, projet: Option<&crate::modele::Projet>) -> Option<Option<(String, f64)>> {
+        match self.selection {
+            Some(Outil::VuePlan) => {}
+            Some(Outil::VueCoupe) => {
+                ui.label(RichText::new("Créer une coupe").strong());
+                ui.label("Dans une vue en plan, cliquer le début puis la fin de la ligne de coupe. La coupe regarde vers la gauche de la ligne (vers le haut pour une ligne tracée de gauche à droite).");
+                ui.horizontal(|ui| {
+                    ui.label("Profondeur");
+                    let v = self.valeurs.entry((Outil::VueCoupe, 0)).or_insert(Valeur::Nombre(8000.0));
+                    if let Valeur::Nombre(v) = v {
+                        ui.add(egui::DragValue::new(v).speed(50.0).range(100.0..=100_000.0).suffix(" mm"));
+                    }
+                });
+                return Some(None);
+            }
+            _ => return None,
+        }
+        ui.label(RichText::new("Créer une vue en plan").strong());
+        let Some(projet) = projet else {
+            ui.label(RichText::new("Créez ou ouvrez un projet natif.").weak());
+            return Some(None);
+        };
+        let v = self.valeurs.entry((Outil::VuePlan, 0)).or_insert(Valeur::Nombre(1200.0));
+        let Valeur::Nombre(hauteur) = v else { return Some(None) };
+        ui.horizontal(|ui| {
+            ui.label("Hauteur du plan de coupe");
+            ui.add(egui::DragValue::new(hauteur).speed(10.0).suffix(" mm"));
+        });
+        let hauteur = *hauteur;
+        let mut choix = None;
+        egui::Grid::new("niveaux_vues_plan").num_columns(3).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
+            for n in &projet.niveaux {
+                let plans = projet.vues.iter().filter(|v| matches!(&v.genre, crate::modele::GenreVue::Plan { niveau, .. } if niveau == &n.id)).count();
+                ui.label(&n.nom);
+                ui.label(RichText::new(match plans { 0 => "aucun plan".to_string(), 1 => "1 plan".to_string(), k => format!("{k} plans") }).small().weak());
+                if ui.button("Créer").on_hover_text("Créer le plan d'étage de ce niveau et l'ouvrir").clicked() {
+                    choix = Some((n.id.clone(), hauteur));
+                }
+                ui.end_row();
+            }
+        });
+        if projet.niveaux.is_empty() {
+            ui.label(RichText::new("Le projet n'a pas encore de niveau (le premier mur en crée un).").weak());
+        }
+        Some(choix)
+    }
+
     /// Paramètres de la dalle (ou du sol) à tracer, si cet outil est actif.
     pub fn dalle_active(&self) -> Option<crate::modele::edition::ParametresDalle> {
         let sorte = self.selection.filter(|o| matches!(o, Outil::Dalle | Outil::Sol))?;
@@ -2049,6 +2118,21 @@ fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             for y in [0.2, 0.5, 0.8] {
                 cadre(0.08, y - 0.07, 0.17, 0.14);
                 seg((0.4, y), (0.92, y));
+            }
+        }
+        VuePlan => {
+            // plan : contour de pièces vu de dessus
+            cadre(0.1, 0.15, 0.8, 0.7);
+            seg((0.5, 0.15), (0.5, 0.55));
+            seg((0.1, 0.55), (0.35, 0.55));
+            seg((0.65, 0.55), (0.9, 0.55));
+        }
+        VueCoupe => {
+            // repère de coupe : trait, têtes rondes et flèches de visée
+            seg((0.12, 0.5), (0.88, 0.5));
+            for x in [0.12, 0.88] {
+                p.circle_stroke(pt(x, 0.5), r.width() * 0.1, t);
+                p.add(egui::Shape::convex_polygon(vec![pt(x - 0.1, 0.38), pt(x + 0.1, 0.38), pt(x, 0.2)], c, egui::Stroke::NONE));
             }
         }
     }

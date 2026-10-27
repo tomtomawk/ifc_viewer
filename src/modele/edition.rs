@@ -137,6 +137,46 @@ impl ListeCreation {
 }
 
 impl Projet {
+    /// Identifiant libre pour une nouvelle vue et son nom (« Coupe 3 »).
+    fn nouvelle_vue(&self, prefixe: &str) -> (String, usize) {
+        let mut k = 1;
+        loop {
+            let id = identifiant("vue", &format!("{prefixe}-{k}"));
+            if self.vues.iter().all(|v| v.id != id) {
+                return (id, k);
+            }
+            k += 1;
+        }
+    }
+
+    /// Ajoute un plan d'étage du niveau `niveau` (nom du niveau, suffixé s'il en existe
+    /// déjà un), coupe à `coupe` mm au-dessus du niveau.
+    pub fn ajouter_vue_plan(&mut self, niveau: &str, coupe: f64) -> Result<String, String> {
+        let n = self.niveau(niveau).ok_or("Niveau introuvable.")?.clone();
+        if !coupe.is_finite() {
+            return Err("La hauteur du plan de coupe doit être finie.".into());
+        }
+        let (id, _) = self.nouvelle_vue("plan");
+        let deja = self.vues.iter().filter(|v| matches!(&v.genre, GenreVue::Plan { niveau: x, .. } if x == niveau)).count();
+        let nom = if deja == 0 { n.nom.clone() } else { format!("{} ({})", n.nom, deja + 1) };
+        self.vues.push(Vue { id: id.clone(), nom, echelle: 100.0, genre: GenreVue::Plan { niveau: n.id, coupe } });
+        Ok(id)
+    }
+
+    /// Ajoute une coupe le long de `debut` → `fin` (mm), regardant vers la gauche.
+    pub fn ajouter_vue_coupe(&mut self, debut: [f64; 2], fin: [f64; 2], profondeur: f64) -> Result<String, String> {
+        if !debut.iter().chain(&fin).chain([&profondeur]).all(|x| x.is_finite()) || (fin[0] - debut[0]).hypot(fin[1] - debut[1]) < 100.0 {
+            return Err("La ligne de coupe doit mesurer au moins 100 mm.".into());
+        }
+        if profondeur <= 0.0 {
+            return Err("La profondeur de la coupe doit être positive.".into());
+        }
+        let (id, k) = self.nouvelle_vue("coupe");
+        self.vues.push(Vue { id: id.clone(), nom: format!("Coupe {k}"), echelle: 50.0, genre: GenreVue::Coupe { debut, fin, profondeur } });
+        self.arrondir();
+        Ok(id)
+    }
+
     /// Ajoute une dalle de contour `points` ; son type (couches du haut vers le bas) est
     /// repris s'il existe déjà (même nom et mêmes couches), sinon ajouté. Rien ne change
     /// en cas d'erreur.
@@ -415,6 +455,30 @@ mod tests {
             p[0].dot(p[1].cross(p[2])) / 6.0
         }).sum::<f64>()).sum();
         assert!((volume - (20.0 + 2.0) * 0.28).abs() < 1e-4, "Volume du maillage : {volume}");
+    }
+
+    #[test]
+    fn vues_plan_et_coupe() {
+        let mut p = Projet::nouveau("Vues");
+        p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &ParametresMur::default()).unwrap();
+        let n = p.niveaux[0].id.clone();
+        p.ajouter_vue_plan(&n, 1200.0).unwrap();
+        p.ajouter_vue_plan(&n, 1500.0).unwrap();
+        p.ajouter_vue_coupe([0.0, -2000.0], [5000.0, -2000.0], 8000.0).unwrap();
+        assert!(p.ajouter_vue_plan("absent", 1200.0).is_err());
+        assert!(p.ajouter_vue_coupe([0.0, 0.0], [10.0, 0.0], 8000.0).is_err());
+        let noms: Vec<&str> = p.vues.iter().map(|v| v.nom.as_str()).collect();
+        assert_eq!(noms, ["Niveau 0", "Niveau 0 (2)", "Coupe 1"]);
+        let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
+        assert_eq!(relu.vues, p.vues);
+        let s = crate::scene::depuis_natif(&relu, std::path::Path::new("vues.modele.json")).unwrap();
+        let nav = s.navigateur.as_ref().unwrap();
+        let genres: Vec<&str> = nav.vues.iter().map(|v| v.genre.as_str()).collect();
+        assert_eq!(genres, ["Vue 3D", "Plan d'étage", "Plan d'étage", "Coupe"]);
+        // coupe : on regarde vers la gauche de la ligne (+y), l'observateur est côté −y
+        let c = &nav.vues[3];
+        assert!((c.direction - glam::DVec3::NEG_Y).length() < 1e-9, "{:?}", c.direction);
+        assert!(c.plan_coupe.is_some());
     }
 
     #[test]

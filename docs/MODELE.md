@@ -83,6 +83,7 @@ garde le RVT et ses vues ouverts, sans basculer vers le rendu natif limité.
 | `axe` | `{forme: droit, debut, fin}` ou `{forme: arc, debut, fin, centre, direct}` | Ligne médiane de l'épaisseur, en plan (x, y) |
 | `ouvertures[]` | `id`, `nom`, `genre` (porte, fenetre, baie), `mur`, `type_ouverture`, `abscisse`, `largeur`, `hauteur`, `allege`, `representation`, `origine` | Baie rectangulaire à travers le mur ; `abscisse` = milieu de la baie le long de l'axe ; `allege` au-dessus du niveau du mur ; `representation` = menuiserie lue (maillage) |
 | `dalles[]` | `id`, `nom`, `type_dalle`, `niveau`, `decalage`, `contours`, `phase`, `sous_projet`, `variante`, `origine` | `decalage` = dessus au-dessus du niveau ; `contours` en plan, pair-impair (trous) |
+| `vues[]` | `id`, `nom`, `echelle`, `genre` : `plan` (`niveau`, `coupe` mm au-dessus du niveau) ou `coupe` (`debut`, `fin`, `profondeur` mm) | Arborescence du projet ; une coupe regarde vers la gauche de sa ligne |
 | `importes[]` | `id`, `nom`, `categorie`, `niveau`, `maillage`, `raison`, `origine` | `maillage` : `sommets` [x, y, z], `triangles` [i, j, k] |
 | `ignores` | catégorie → nombre | Éléments sans géométrie ou hors périmètre (pièces, quadrillages, espaces, ouvertures IFC vides, éléments 2D) |
 
@@ -119,6 +120,17 @@ plan ; accrochage aux extrémités, milieux et angles des murs (contours raccord
 aux sommets des dalles. Contour validé : au moins trois sommets, 0,01 m² au moins,
 pas d'arête qui en croise une autre, orienté dans le sens trigonométrique. Affichage :
 une partie par couche (couleur du matériau), poché par couche en coupe.
+
+## Vues et arborescence
+
+Un projet natif a une arborescence comme un fichier Revit : vue 3D, plans d'étage,
+coupes (enregistrés dans `vues`), types de murs et de sols, matériaux. Onglet
+Documenter : **Vue en plan** (un bouton Créer par niveau, hauteur du plan de coupe ;
+la vue s'ouvre) et **Coupe** (deux clics dans un plan ; la coupe regarde vers la
+gauche de la ligne, profondeur dessinée en tireté). Une coupe ouverte coupe le modèle
+par le plan vertical de sa ligne (poché par couche) ; ses repères sont dessinés dans
+les vues en plan. La profondeur n'est pas encore appliquée (le modèle au-delà reste
+visible).
 
 ## Jonctions
 

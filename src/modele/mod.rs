@@ -49,6 +49,9 @@ pub struct Projet {
     pub materiaux: Vec<Materiau>,
     pub ouvertures: Vec<Ouverture>,
     pub dalles: Vec<Dalle>,
+    /// Vues du projet (arborescence) : plans d'étage et coupes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub vues: Vec<Vue>,
     pub importes: Vec<ElementImporte>,
     /// Éléments de la source qui n'ont rien donné (sans géométrie, hors du périmètre v0),
     /// comptés par catégorie.
@@ -354,6 +357,28 @@ pub struct Dalle {
     /// Contours dans le plan (mm) : extérieurs et trous, règle pair-impair.
     pub contours: Vec<Vec<[f64; 2]>>,
     pub origine: Option<Origine>,
+}
+
+/// Vue du projet, comme dans l'arborescence de Revit.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct Vue {
+    pub id: String,
+    pub nom: String,
+    /// Dénominateur de l'échelle (100 : 1:100).
+    pub echelle: f64,
+    #[serde(flatten)]
+    pub genre: GenreVue,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(tag = "genre", rename_all = "snake_case")]
+pub enum GenreVue {
+    /// Plan d'étage : coupe horizontale à `coupe` mm au-dessus du niveau.
+    Plan { niveau: String, coupe: f64 },
+    /// Coupe verticale le long de la ligne `debut` → `fin` (mm, plan) ; on regarde vers
+    /// la gauche de la ligne (comme une coupe Revit tracée de gauche à droite regarde
+    /// vers le haut), sur `profondeur` mm.
+    Coupe { debut: [f64; 2], fin: [f64; 2], profondeur: f64 },
 }
 
 /// Élément non reconnu : géométrie figée, déplaçable mais pas modifiable dans sa forme.

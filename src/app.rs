@@ -418,6 +418,8 @@ pub struct ViewerApp {
     alignement_plan: bool,
     /// Premier point d'une chaîne de murs (la refermer l'arrête).
     mur_chaine: Option<[f64; 2]>,
+    /// Début de la ligne de coupe en cours de tracé (mm).
+    coupe_depart: Option<[f64; 2]>,
     /// Sommets de la dalle en cours de tracé (mm).
     dalle_points: Vec<[f64; 2]>,
     /// Longueur du mur en cours tapée au clavier (mm).
@@ -539,6 +541,7 @@ impl ViewerApp {
             mur_depart: None,
             mur_saisie: String::new(),
             dalle_points: Vec::new(),
+            coupe_depart: None,
             mur_chaine: None,
             alignement_plan: false,
             confirmer_fermeture: None,
@@ -823,6 +826,11 @@ impl ViewerApp {
             return None;
         }
         let s = self.scene.as_ref()?;
+        // coupe native : plan vertical de la vue ouverte, ramené au repère de la scène
+        if let Some(p) = self.vue_active.and_then(|i| s.navigateur.as_ref()?.vues.get(i)?.plan_coupe) {
+            let n = p.truncate();
+            return Some(Vec4::new(n.x as f32, n.y as f32, n.z as f32, (p.w + n.dot(s.origin)) as f32));
+        }
         let base = self.coupe_niveau.and_then(|n| self.liste_niveaux.iter().find(|x| x.0 == n)).map_or(s.min.z, |x| x.2);
         Some(Vec4::new(0.0, 0.0, -1.0, base + self.coupe_hauteur))
     }
@@ -1019,11 +1027,14 @@ impl ViewerApp {
         let niveaux = self.niveaux();
         let nom = |n: Option<Id>| n.and_then(|n| niveaux.iter().find(|x| x.0 == n)).map_or("Bas du modèle".to_string(), |x| x.1.clone());
         let mut change = false;
+        // coupe native : plan vertical de la vue, pas de niveau ni de hauteur
+        let verticale = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)?.plan_coupe).is_some();
         egui::CollapsingHeader::new(RichText::new("Plage de vue").strong()).id_salt("plage_de_vue").default_open(true).show(ui, |ui| {
             egui::Grid::new("grille_plage_de_vue").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
                 ui.label("Plan de coupe");
-                change |= ui.checkbox(&mut self.coupe, "").on_hover_text("Parties coupées en poché et trait fort, parties au-dessus retirées").changed();
+                change |= ui.checkbox(&mut self.coupe, if verticale { "ligne de coupe" } else { "" }).on_hover_text("Parties coupées en poché et trait fort, parties au-dessus retirées").changed();
                 ui.end_row();
+                if !verticale {
                 ui.add_enabled_ui(self.coupe, |ui| ui.label("Niveau"));
                 ui.add_enabled_ui(self.coupe, |ui| {
                     egui::ComboBox::from_id_salt("coupe_niveau").selected_text(nom(self.coupe_niveau)).show_ui(ui, |ui| {
@@ -1039,6 +1050,7 @@ impl ViewerApp {
                     change |= ui.add(egui::DragValue::new(&mut self.coupe_hauteur).speed(0.01).range(-50.0..=200.0).suffix(" m")).on_hover_text("Hauteur du plan de coupe au-dessus du niveau").changed();
                 });
                 ui.end_row();
+                }
                 ui.add_enabled_ui(self.coupe, |ui| ui.label("Poché"));
                 ui.add_enabled_ui(self.coupe, |ui| {
                     egui::ComboBox::from_id_salt("poche").selected_text(self.poche.libelle()).show_ui(ui, |ui| {
@@ -1558,6 +1570,31 @@ impl ViewerApp {
         Ok(id)
     }
 
+    /// Ajoute une vue au projet natif (`ajout` rend son identifiant) et l'ouvre si
+    /// `ouvrir` ; elle apparaît dans l'arborescence.
+    fn creer_vue(&mut self, ajout: impl FnOnce(&mut crate::modele::Projet) -> Result<String, String>, ouvrir: bool) {
+        let Some((projet, _)) = &self.natif else { return };
+        let mut projet = projet.clone();
+        let id = match ajout(&mut projet) {
+            Ok(id) => id,
+            Err(e) => {
+                self.error = Some(e);
+                return;
+            }
+        };
+        let nom = projet.vues.iter().find(|v| v.id == id).map(|v| v.nom.clone()).unwrap_or_default();
+        if let Err(e) = self.appliquer_projet(projet) {
+            self.error = Some(e);
+            return;
+        }
+        self.status = format!("Vue « {nom} » créée — Ctrl+S pour enregistrer.");
+        let numero = scene::numero_vue(&id);
+        let indice = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()?.vues.iter().position(|v| v.revit_id == numero));
+        if ouvrir && let Some(i) = indice {
+            self.activer_vue(i);
+        }
+    }
+
     /// Crée une dalle de contour `pts` (mm) dans le projet natif et la sélectionne.
     fn creer_dalle(&mut self, pts: &[[f64; 2]], parametres: &crate::modele::edition::ParametresDalle) {
         let Some((projet, _)) = &self.natif else { return };
@@ -1570,6 +1607,79 @@ impl ViewerApp {
             }
             Err(e) => self.error = Some(e),
         }
+    }
+
+    /// Altitude (mm) du plan de tracé d'une vue native : niveau du plan ouvert, sinon le
+    /// premier niveau.
+    fn altitude_vue_native(&self) -> f64 {
+        let Some((projet, _)) = &self.natif else { return 0.0 };
+        let etage = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)?.etage);
+        etage
+            .and_then(|e| projet.niveaux.iter().find(|n| scene::id_natif("niveau", &n.id) == e))
+            .or(projet.niveaux.first())
+            .map_or(0.0, |n| n.altitude)
+    }
+
+    /// Projection écran d'un point du plan (mm) à l'altitude `z` (mm).
+    fn ecran_plan(&self, rect: egui::Rect, p: [f64; 2], z: f64) -> Option<egui::Pos2> {
+        let s = self.scene.as_ref()?;
+        let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
+        let q = (glam::DVec3::new(p[0], p[1], z) * 0.001 - s.origin).as_vec3();
+        let c = vp * q.extend(1.0);
+        (c.w > 0.0).then(|| egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height()))
+    }
+
+    /// Repère de coupe en plan, comme dans Revit : trait mixte, têtes rondes, flèches de
+    /// visée vers la gauche de la ligne, nom ; profondeur en tireté léger.
+    fn dessiner_repere_coupe(&self, painter: &egui::Painter, rect: egui::Rect, a: [f64; 2], b: [f64; 2], z: f64, profondeur: f64, nom: &str, couleur: Color32) {
+        let (Some(pa), Some(pb)) = (self.ecran_plan(rect, a, z), self.ecran_plan(rect, b, z)) else { return };
+        let l = (b[0] - a[0]).hypot(b[1] - a[1]).max(1e-9);
+        let g = [-(b[1] - a[1]) / l, (b[0] - a[0]) / l];
+        let loin = |p: [f64; 2]| [p[0] + g[0] * profondeur, p[1] + g[1] * profondeur];
+        if let (Some(pc), Some(pd)) = (self.ecran_plan(rect, loin(b), z), self.ecran_plan(rect, loin(a), z)) {
+            painter.add(egui::Shape::dashed_line(&[pb, pc, pd, pa], egui::Stroke::new(0.8, couleur.gamma_multiply(0.5)), 5.0, 4.0));
+        }
+        painter.add(egui::Shape::dashed_line(&[pa, pb], egui::Stroke::new(1.6, couleur), 14.0, 4.0));
+        // flèches de visée : du bout vers la gauche de la ligne
+        let fleche = self.ecran_plan(rect, [a[0] + g[0] * 600.0, a[1] + g[1] * 600.0], z).map(|q| (q - pa).normalized());
+        for p in [pa, pb] {
+            painter.circle(p, 6.0, Color32::WHITE, egui::Stroke::new(1.5, couleur));
+            if let Some(v) = fleche {
+                let n = egui::vec2(-v.y, v.x);
+                painter.add(egui::Shape::convex_polygon(vec![p + v * 16.0, p + v * 6.0 + n * 6.0, p + v * 6.0 - n * 6.0], couleur, egui::Stroke::NONE));
+            }
+        }
+        painter.text(pa + egui::vec2(-10.0, -10.0), egui::Align2::RIGHT_BOTTOM, nom, egui::FontId::proportional(12.0), couleur);
+    }
+
+    /// Repères des coupes natives dans une vue en plan.
+    fn reperes_coupes(&self, ui: &egui::Ui, rect: egui::Rect, z: f64) {
+        let Some((projet, _)) = &self.natif else { return };
+        let painter = ui.painter().with_clip_rect(rect);
+        for v in &projet.vues {
+            if let crate::modele::GenreVue::Coupe { debut, fin, profondeur } = &v.genre {
+                self.dessiner_repere_coupe(&painter, rect, *debut, *fin, z, *profondeur, &v.nom, Color32::from_rgb(40, 90, 170));
+            }
+        }
+    }
+
+    /// Aperçu de la coupe en cours de tracé.
+    fn apercu_coupe(&self, ui: &egui::Ui, rect: egui::Rect, survol: Option<([f64; 2], AccrocheMur)>, z: f64, profondeur: f64) {
+        let painter = ui.painter().with_clip_rect(rect);
+        let couleur = Color32::from_rgb(55, 130, 200);
+        let accent = Color32::from_rgb(230, 120, 20);
+        if let (Some(a), Some((b, _))) = (self.coupe_depart, survol)
+            && (b[0] - a[0]).hypot(b[1] - a[1]) > 1.0
+        {
+            self.dessiner_repere_coupe(&painter, rect, a, b, z, profondeur, "", couleur);
+        }
+        if let Some((p, acc)) = survol
+            && let Some(q) = self.ecran_plan(rect, p, z)
+        {
+            marqueur(&painter, q, acc, couleur, accent);
+        }
+        let texte = if self.coupe_depart.is_some() { "Coupe : cliquer la fin de la ligne · elle regarde vers sa gauche · Échap : annuler" } else { "Coupe : cliquer le début de la ligne de coupe" };
+        painter.text(rect.left_top() + egui::vec2(12.0, 34.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
     }
 
     /// Rectangle de coins opposés `a` et `b`, côtés dans les axes du plan (repère tourné).
@@ -1645,7 +1755,7 @@ impl ViewerApp {
             (false, 1 | 2) => "Dalle : sommet suivant · Maj : orthogonal · Retour arrière : enlever le dernier",
             _ => "Dalle : sommet suivant, recliquer le premier ou Entrée pour fermer · Échap : annuler",
         };
-        painter.text(rect.left_top() + egui::vec2(12.0, 12.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
+        painter.text(rect.left_top() + egui::vec2(12.0, 34.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
     }
 
     /// Remplace le projet natif ouvert par `projet` (modifié) et reconstruit la scène,
@@ -1897,7 +2007,7 @@ impl ViewerApp {
         } else {
             "Mur : cliquer le départ · molette : zoom · milieu : panoramique"
         };
-        painter.text(rect.left_top()+egui::vec2(12.0,12.0),egui::Align2::LEFT_TOP,texte,egui::FontId::proportional(13.0),couleur);
+        painter.text(rect.left_top()+egui::vec2(12.0,34.0),egui::Align2::LEFT_TOP,texte,egui::FontId::proportional(13.0),couleur);
     }
 
     /// Saisie de la longueur du mur au clavier (chiffres, virgule ou point, retour
@@ -2119,7 +2229,7 @@ impl ViewerApp {
                 (OngletRuban::Debut, "Début"),
                 (OngletRuban::Modeliser, "Modéliser"),
                 (OngletRuban::Modifier, "Modifier"),
-                (OngletRuban::Annoter, "Annoter"),
+                (OngletRuban::Annoter, "Documenter"),
                 (OngletRuban::Sortie, "Sortie"),
             ] {
                 ui.selectable_value(&mut self.onglet_ruban, o, RichText::new(nom).strong());
@@ -3327,6 +3437,7 @@ impl ViewerApp {
         let (d, haut, entite) = (v.direction.as_vec3(), v.haut.as_vec3(), v.entite);
         let genre_feuille = v.genre == "Feuille";
         let coupe_vue = v.coupe;
+        let coupe_verticale = v.plan_coupe.is_some();
         // mode dessin pour les plans, coupes et élévations ; coupe à hauteur sur le niveau
         // d'un plan d'étage
         let (genre, etage, echelle) = (v.genre.clone(), v.etage, v.echelle);
@@ -3336,8 +3447,8 @@ impl ViewerApp {
         match genre.as_str() {
             "Plan d'étage" | "Plan de plafond" | "Coupe" | "Élévation" => {
                 self.style = StyleVisuel::LignesCachees;
-                self.coupe = genre == "Plan d'étage";
-                if self.coupe {
+                self.coupe = genre == "Plan d'étage" || coupe_verticale;
+                if self.coupe && !coupe_verticale {
                     self.coupe_niveau = etage;
                     // hauteur du plan de coupe de la plage de vue
                     if let Some(h) = coupe_vue {
@@ -3725,6 +3836,14 @@ impl ViewerApp {
         if self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.proprietes_surfaces(ui, self.natif.as_ref().map(|(p, _)| p)) {
             return;
         }
+        if self.onglet_ruban == OngletRuban::Annoter
+            && let Some(choix) = self.ruban_edition.proprietes_vues(ui, self.natif.as_ref().map(|(p, _)| p))
+        {
+            if let Some((niveau, hauteur)) = choix {
+                self.creer_vue(|p| p.ajouter_vue_plan(&niveau, hauteur), true);
+            }
+            return;
+        }
         if let (Some(s), Some(id)) = (&self.scene, self.selected) {
             // en-tête façon Revit : classe et type de l'élément
             let ty = s.model.type_of.get(&id).map(|t| s.model.name(*t)).filter(|t| !t.is_empty());
@@ -4059,7 +4178,11 @@ impl ViewerApp {
             Some(n.map_or(0.0, |n| n.altitude) + d.decalage)
         });
         if dalle.is_none() { self.dalle_points.clear(); }
-        let mode_trace = mode_mur || dalle.is_some();
+        // coupe : ligne à deux clics, sur le plan du niveau de la vue ouverte
+        let profondeur_coupe = if self.onglet_ruban == OngletRuban::Annoter && self.natif.is_some() && self.loading.is_none() { self.ruban_edition.coupe_active() } else { None };
+        if profondeur_coupe.is_none() { self.coupe_depart = None; }
+        let altitude_coupe = self.altitude_vue_native();
+        let mode_trace = mode_mur || dalle.is_some() || profondeur_coupe.is_some();
         if mode_trace && resp.hovered() { ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair); }
         let ndc = |p: egui::Pos2| {
             Vec2::new((p.x - rect.left()) / rect.width() * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height() * 2.0)
@@ -4124,6 +4247,16 @@ impl ViewerApp {
                             self.alignement_plan = false;
                         }
                         None => self.status = "Aligner : cliquer un élément du plan (Échap : annuler)".into(),
+                    }
+                }
+            } else if let Some(profondeur) = profondeur_coupe {
+                if resp.clicked_by(PointerButton::Secondary) { self.coupe_depart = None; }
+                if resp.clicked()
+                    && let Some((p, _)) = resp.interact_pointer_pos().and_then(|q| self.point_tracage(q, rect, shift, self.coupe_depart, altitude_coupe))
+                {
+                    match self.coupe_depart.take() {
+                        Some(a) => self.creer_vue(|projet| projet.ajouter_vue_coupe(a, p, profondeur), false),
+                        None => self.coupe_depart = Some(p),
                     }
                 }
             } else if let (Some(parametres), Some(alt)) = (&dalle, altitude_dalle) {
@@ -4246,6 +4379,13 @@ impl ViewerApp {
             })),
         };
         ui.painter().add(callback);
+        if self.natif.is_some() && self.vue_en_plan() {
+            self.reperes_coupes(ui, rect, altitude_coupe);
+        }
+        if let Some(profondeur) = profondeur_coupe {
+            let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.coupe_depart, altitude_coupe));
+            self.apercu_coupe(ui, rect, point, altitude_coupe, profondeur);
+        }
         if let (Some(_), Some(alt)) = (&dalle, altitude_dalle) {
             let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.dalle_points.last().copied(), alt));
             self.apercu_dalle(ui, rect, point, alt);
@@ -4500,11 +4640,27 @@ impl ViewerApp {
             "outil" => {
                 match argument {
                     "mur" => { self.onglet_ruban = OngletRuban::Modeliser; self.ruban_edition.activer_mur(); }
+                    "coupe" => { self.onglet_ruban = OngletRuban::Annoter; self.ruban_edition.activer_coupe(); }
                     "dalle" | "sol" => { self.onglet_ruban = OngletRuban::Modeliser; self.ruban_edition.activer_surface(argument == "sol"); }
                     "aucun" => { self.ruban_edition.annuler(); self.mur_depart = None; }
-                    _ => return erreur("usage : outil mur|dalle|sol|aucun"),
+                    _ => return erreur("usage : outil mur|dalle|sol|coupe|aucun"),
                 }
                 self.etat()
+            }
+            "vue_plan" => {
+                // vue_plan <nom ou id du niveau> [hauteur de coupe mm]
+                let (nom, h) = argument.rsplit_once(' ').and_then(|(n, h)| Some((n, h.parse::<f64>().ok()?))).unwrap_or((argument, 1200.0));
+                let Some(niveau) = self.natif.as_ref().and_then(|(p, _)| p.niveaux.iter().find(|n| n.nom == nom.trim() || n.id == nom.trim())).map(|n| n.id.clone()) else { return erreur("niveau introuvable") };
+                self.creer_vue(|p| p.ajouter_vue_plan(&niveau, h), true);
+                match &self.error { Some(e) => erreur(e), None => self.etat() }
+            }
+            "coupe_vue" => {
+                // coupe_vue <x0 y0 x1 y1> [profondeur] (mm)
+                let Ok(v) = argument.split_whitespace().map(str::parse::<f64>).collect::<Result<Vec<_>, _>>() else { return erreur("usage : coupe_vue x0 y0 x1 y1 [profondeur]") };
+                if v.len() != 4 && v.len() != 5 { return erreur("usage : coupe_vue x0 y0 x1 y1 [profondeur]") }
+                let p = v.get(4).copied().unwrap_or(8000.0);
+                self.creer_vue(|projet| projet.ajouter_vue_coupe([v[0], v[1]], [v[2], v[3]], p), false);
+                match &self.error { Some(e) => erreur(e), None => self.etat() }
             }
             "dalle" => {
                 // dalle <x y> <x y> <x y> … (mm) : type, niveau et décalage de l'outil Dalle / Sol
@@ -5184,7 +5340,9 @@ impl eframe::App for ViewerApp {
         }
         if self.ruban_edition.a_un_outil() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             // Échap : la saisie, puis le mur ou la dalle en cours, puis l'outil
-            if !self.dalle_points.is_empty() {
+            if self.coupe_depart.is_some() {
+                self.coupe_depart = None;
+            } else if !self.dalle_points.is_empty() {
                 self.dalle_points.clear();
             } else if !self.mur_saisie.is_empty() {
                 self.mur_saisie.clear();

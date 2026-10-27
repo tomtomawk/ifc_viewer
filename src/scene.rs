@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 mod natif;
-pub use natif::{depuis_natif, id_natif};
+pub use natif::{depuis_natif, id_natif, numero_vue};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -79,6 +79,9 @@ pub struct NavVue {
     pub filtre_phase: i64,
     /// Hauteur du plan de coupe d'un plan au-dessus de son niveau, m (plage de vue).
     pub coupe: Option<f64>,
+    /// Plan de coupe vertical d'une coupe native (n, d ; n·p + d ≥ 0 gardé, m, repère
+    /// du fichier).
+    pub plan_coupe: Option<DVec4>,
     /// Contenu d'une nomenclature : titres, lignes, colonnes non calculées, tri en clair.
     pub tableau: Option<(Vec<String>, Vec<Vec<String>>, Vec<usize>, String)>,
     /// Entité de la vue dans le modèle (propriétés ; ses éléments 2D en enfants).
