@@ -456,6 +456,9 @@ pub struct ViewerApp {
     visible: Vec<bool>,
     visibility_dirty: bool,
     left_tab: LeftTab,
+    /// Ombres portées et ombre ambiante : réglages à part du style (hors Lignes cachées).
+    ombres_portees: bool,
+    ombre_ambiante: bool,
     /// Pente donnée à une arête cochée (degrés), la dernière saisie.
     pente_defaut: f64,
     /// Options de l'application (menu Début > Options).
@@ -579,6 +582,8 @@ impl ViewerApp {
             visibility_dirty: false,
             left_tab: LeftTab::Tree,
             pente_defaut: 35.0,
+            ombres_portees: false,
+            ombre_ambiante: false,
             options: {
                 let o = crate::options::Options::charger();
                 // gabarit choisi : lu au démarrage, défaut s'il est illisible
@@ -876,7 +881,7 @@ impl ViewerApp {
         };
         if let (Some(s), Some((a, b))) = (&self.scene, self.boite_appliquee()) {
             let poche = (self.style == StyleVisuel::LignesCachees).then_some(self.poche);
-            let (t, l) = dessin::sommets_boite(s, &self.visible, a, b, self.echelle, poche, self.style == StyleVisuel::Rendu);
+            let (t, l) = dessin::sommets_boite(s, &self.visible, a, b, self.echelle, poche, self.style == StyleVisuel::Realiste);
             tris.extend(t);
             traits.extend(l);
         }
@@ -3005,13 +3010,13 @@ impl ViewerApp {
     /// Soleil du style Rendu : direction (depuis le sud-ouest, 45° de hauteur environ),
     /// vue orthographique du soleil englobant la scène, décalage contre l'acné d'ombre
     /// (un texel et demi de la carte d'ombres).
-    /// Soleil du style Rendu : direction, matrice de la carte d'ombres et décalage contre
+    /// Ombres portées : direction du soleil, matrice de la carte d'ombres et décalage contre
     /// l'acné. La carte couvre la partie de la scène vue par la caméra (et non la scène
     /// entière) : plus on zoome, plus elle est fine ; ses bornes suivent la grille de ses
     /// pixels pour que les ombres ne frémissent pas quand la caméra bouge.
     fn soleil(&self, aspect: f32) -> Option<(Vec3, Mat4, f32)> {
         let s = self.scene.as_ref()?;
-        let dir = Vec3::new(-0.45, -0.6, 0.66).normalize();
+        let dir = crate::render::SOLEIL;
         let (c, r) = ((s.min + s.max) * 0.5, ((s.max - s.min).length() * 0.5).max(0.1) * 1.02);
         let vue = glam::camera::rh::view::look_at_mat4(c + dir * r * 2.0, c, Vec3::Z);
         let coins_scene: Vec<Vec3> = (0..8).map(|k| Vec3::new(if k & 1 == 0 { s.min.x } else { s.max.x }, if k & 2 == 0 { s.min.y } else { s.max.y }, if k & 4 == 0 { s.min.z } else { s.max.z })).collect();
@@ -3075,9 +3080,15 @@ impl ViewerApp {
                     ui.close();
                 }
             }
+            ui.separator();
+            let actif = self.style != StyleVisuel::LignesCachees;
+            ui.add_enabled(actif, egui::Checkbox::new(&mut self.ombres_portees, "Ombres portées"))
+                .on_hover_text("Ombres du soleil, dans tous les styles sauf Lignes cachées");
+            ui.add_enabled(actif, egui::Checkbox::new(&mut self.ombre_ambiante, "Ombre ambiante"))
+                .on_hover_text("Assombrit les angles rentrants, pieds de murs et dessous des débords");
         })
         .response
-        .on_hover_text("Style visuel");
+        .on_hover_text("Style visuel et ombres");
         if let Some(st) = choisi {
             self.style = st;
             self.visibility_dirty = true;
@@ -4879,9 +4890,9 @@ impl ViewerApp {
             selected: self.plage_selection(),
             background: if self.style.papier() { [1.0, 1.0, 1.0] } else { [0.925, 0.933, 0.945] },
             style: self.style,
-            soleil: (self.style == StyleVisuel::Rendu).then(|| self.soleil(aspect)).flatten(),
+            soleil: (self.ombres_portees && self.style != StyleVisuel::LignesCachees).then(|| self.soleil(aspect)).flatten(),
             // occultation : rayon de l'ordre du mètre, réduit de près, élargi de loin
-            ao: (self.style == StyleVisuel::Rendu).then(|| (self.camera.proj(aspect), (self.camera.dist * 0.04).clamp(0.15, 1.5))),
+            ao: (self.ombre_ambiante && self.style != StyleVisuel::LignesCachees).then(|| (self.camera.proj(aspect), (self.camera.dist * 0.04).clamp(0.15, 1.5))),
             coupe: self.plan_coupe(),
             boite: self.boite_appliquee(),
             cadrage: self.cadrage_vue(),
@@ -5259,9 +5270,28 @@ impl ViewerApp {
                 self.visibility_dirty = true;
                 self.etat()
             }
+            "ombres" => {
+                // ombres portees|ambiante oui|non
+                let (quoi, valeur) = argument.split_once(' ').unwrap_or((argument, "oui"));
+                let oui = valeur.trim() != "non";
+                match quoi {
+                    "portees" | "portées" => self.ombres_portees = oui,
+                    "ambiante" => self.ombre_ambiante = oui,
+                    _ => return erreur("usage : ombres portees|ambiante oui|non"),
+                }
+                self.etat()
+            }
+            "style" if argument == "rendu" => {
+                // ancien style Rendu : réaliste, ombres portées et ambiante
+                self.style = StyleVisuel::Realiste;
+                self.ombres_portees = true;
+                self.ombre_ambiante = true;
+                self.visibility_dirty = true;
+                self.etat()
+            }
             "style" => {
                 let Some(&st) = StyleVisuel::TOUS.iter().find(|x| x.nom() == argument) else {
-                    return erreur("usage : style lignes_cachees|ombre|couleurs|realiste|rendu");
+                    return erreur("usage : style lignes_cachees|ombre|couleurs|realiste");
                 };
                 self.style = st;
                 self.visibility_dirty = true;
@@ -5534,15 +5564,11 @@ fn icone_style(p: &egui::Painter, r: egui::Rect, style: StyleVisuel) {
             StyleVisuel::LignesCachees => Some(Color32::WHITE),
             StyleVisuel::Ombre => Some(Color32::from_gray([235, 185, 150][i])),
             StyleVisuel::CouleursHomogenes => Some(Color32::from_rgb(150, 180, 210)),
-            StyleVisuel::Realiste | StyleVisuel::Rendu => Some([Color32::from_rgb(232, 196, 150), Color32::from_rgb(200, 150, 100), Color32::from_rgb(165, 118, 75)][i]),
+            StyleVisuel::Realiste => Some([Color32::from_rgb(232, 196, 150), Color32::from_rgb(200, 150, 100), Color32::from_rgb(165, 118, 75)][i]),
         }
     };
-    if style == StyleVisuel::Rendu {
-        // ombre portée au sol
-        p.add(egui::Shape::convex_polygon(vec![pt(1., -1., -1.), pt(2.4, -0.2, -1.), pt(2.4, 1.8, -1.), pt(1., 1., -1.)], Color32::from_gray(150), Stroke::NONE));
-    }
     for (coins, i) in faces {
-        let trait_ = if matches!(style, StyleVisuel::Realiste | StyleVisuel::Rendu) { Stroke::NONE } else { t };
+        let trait_ = if style == StyleVisuel::Realiste { Stroke::NONE } else { t };
         match remplissage(i) {
             Some(f) => p.add(egui::Shape::convex_polygon(coins.to_vec(), f, trait_)),
             None => p.add(egui::Shape::closed_line(coins.to_vec(), t)),

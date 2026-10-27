@@ -73,13 +73,15 @@ uniform vec3 u_view_dir;
 uniform bool u_flat;
 uniform bool u_dessin;
 uniform bool u_sans_eclairage;
-// style Rendu : couleurs des matériaux, soleil et ombres portées (carte d'ombres)
-uniform bool u_rendu;
+// style Réaliste : couleurs de rendu des matériaux, ciel et soleil
+uniform bool u_materiaux;
+// direction du soleil (vers lui) ; ombres portées (carte d'ombres), réglage à part
 uniform vec3 u_soleil;
+uniform bool u_portees;
 uniform mat4 u_lumiere;
 uniform highp sampler2DShadow u_ombres;
 uniform float u_decalage_ombre;
-// occultation ambiante (style Rendu) : texture lissée et zone d'affichage (pixels)
+// ombre ambiante (réglage à part) : occultation lissée et zone d'affichage (pixels)
 uniform bool u_ao;
 uniform highp sampler2D u_ao_tex;
 uniform vec4 u_vp;
@@ -148,20 +150,27 @@ void main() {
     vec3 n = normalize(v_n);
     vec3 vd = u_ortho ? -u_view_dir : normalize(u_eye - v_pos);
     if (dot(n, vd) < 0.0) n = -n;
-    vec3 sun = normalize(vec3(0.35, 0.25, 0.9));
     vec3 fill = normalize(vec3(-0.5, -0.7, 0.2));
-    float d = u_sans_eclairage ? 1.0 : 0.50 + 0.38 * max(dot(n, sun), 0.0) + 0.12 * max(dot(n, fill), 0.0) + 0.12 * max(dot(n, vd), 0.0);
+    // ombres, réglages indépendants du style : part du soleil reçue, lumière ambiante reçue
+    float ndl = max(dot(n, u_soleil), 0.0);
+    float ombre = (u_portees && ndl > 0.0) ? ensoleillement(v_pos, n, ndl) : 1.0;
+    float ao = (u_ao && v_annot == 0u) ? occultation() : 1.0;
     vec3 base = v_c.rgb;
-    if (u_rendu) {
+    float d;
+    if (u_materiaux) {
         if (v_rendu.a > 0.5) {
             base = v_rendu.rgb;
         }
-        // ciel (hémisphère), soleil ombré, un peu de lumière vers l'œil
-        float ndl = max(dot(n, u_soleil), 0.0);
-        float soleil = ndl > 0.0 ? ndl * ensoleillement(v_pos, n, ndl) : 0.0;
-        float ao = (u_ao && v_annot == 0u) ? occultation() : 1.0;
-        // l'occultation éteint surtout la lumière du ciel, un peu le soleil
-        d = (0.30 + 0.28 * (0.5 + 0.5 * n.z)) * ao + 0.62 * soleil * mix(1.0, ao, 0.35) + 0.05 * max(dot(n, vd), 0.0);
+        // ciel (hémisphère), soleil, un peu de lumière vers l'œil ; l'occultation éteint
+        // surtout le ciel, un peu le soleil
+        d = (0.30 + 0.28 * (0.5 + 0.5 * n.z)) * ao + 0.62 * ndl * ombre * mix(1.0, ao, 0.35) + 0.05 * max(dot(n, vd), 0.0);
+    } else if (u_sans_eclairage) {
+        // aplats : les ombres assombrissent sans éclairer
+        d = (1.0 - 0.35 * (ndl > 0.0 ? 1.0 - ombre : 0.0)) * mix(0.55, 1.0, ao);
+    } else {
+        // éclairage graphique ; soleil des ombres quand elles sont portées
+        vec3 sun = u_portees ? u_soleil : normalize(vec3(0.35, 0.25, 0.9));
+        d = 0.50 * ao + 0.38 * max(dot(n, sun), 0.0) * ombre + 0.12 * max(dot(n, fill), 0.0) * ao + 0.12 * max(dot(n, vd), 0.0);
     }
     vec3 c = base * d;
     float a = v_c.a;
@@ -291,6 +300,10 @@ struct CiblesAo {
     textures: [glow::Texture; 3],
 }
 
+/// Direction du soleil (vers lui), repère de la scène : éclairage du style Réaliste et
+/// des ombres portées.
+pub const SOLEIL: Vec3 = Vec3::new(-0.4504, -0.6006, 0.6606);
+
 /// Côté de la carte d'ombres (pixels).
 pub const TAILLE_OMBRES: i32 = 2048;
 
@@ -337,7 +350,8 @@ pub struct Renderer {
     u_coupe: Option<glow::UniformLocation>,
     u_dessin: Option<glow::UniformLocation>,
     u_sans_eclairage: Option<glow::UniformLocation>,
-    u_rendu: Option<glow::UniformLocation>,
+    u_materiaux: Option<glow::UniformLocation>,
+    u_portees: Option<glow::UniformLocation>,
     u_soleil: Option<glow::UniformLocation>,
     u_lumiere: Option<glow::UniformLocation>,
     u_ombres: Option<glow::UniformLocation>,
@@ -375,14 +389,12 @@ pub enum StyleVisuel {
     Ombre,
     /// Couleurs des matériaux sans éclairage, et arêtes.
     CouleursHomogenes,
-    /// Faces éclairées, sans arêtes.
+    /// Couleurs de rendu des matériaux, ciel et soleil, sans arêtes.
     Realiste,
-    /// Couleurs de rendu des matériaux, soleil et ombres portées.
-    Rendu,
 }
 
 impl StyleVisuel {
-    pub const TOUS: [StyleVisuel; 5] = [StyleVisuel::LignesCachees, StyleVisuel::Ombre, StyleVisuel::CouleursHomogenes, StyleVisuel::Realiste, StyleVisuel::Rendu];
+    pub const TOUS: [StyleVisuel; 4] = [StyleVisuel::LignesCachees, StyleVisuel::Ombre, StyleVisuel::CouleursHomogenes, StyleVisuel::Realiste];
 
     pub fn libelle(self) -> &'static str {
         match self {
@@ -390,7 +402,6 @@ impl StyleVisuel {
             StyleVisuel::Ombre => "Ombré",
             StyleVisuel::CouleursHomogenes => "Couleurs homogènes",
             StyleVisuel::Realiste => "Réaliste",
-            StyleVisuel::Rendu => "Rendu",
         }
     }
 
@@ -401,7 +412,6 @@ impl StyleVisuel {
             StyleVisuel::Ombre => "ombre",
             StyleVisuel::CouleursHomogenes => "couleurs",
             StyleVisuel::Realiste => "realiste",
-            StyleVisuel::Rendu => "rendu",
         }
     }
 
@@ -424,11 +434,11 @@ pub struct FrameParams {
     pub style: StyleVisuel,
     /// Plan de coupe du mode dessin (n, d ; n·p + d ≥ 0 gardé) et tracé de la coupe.
     pub coupe: Option<Vec4>,
-    /// Style Rendu : direction du soleil (vers lui), matrice de la vue du soleil
-    /// (orthographique, scène entière) et décalage des points le long de la normale
-    /// contre l'acné d'ombre (unités de la scène).
+    /// Ombres portées (hors Lignes cachées) : direction du soleil (vers lui), matrice
+    /// de la carte d'ombres et décalage des points le long de la normale contre l'acné
+    /// d'ombre (unités de la scène).
     pub soleil: Option<(Vec3, Mat4, f32)>,
-    /// Occultation ambiante du style Rendu : matrice de projection de la caméra, rayon
+    /// Ombre ambiante (hors Lignes cachées) : matrice de projection de la caméra, rayon
     /// (unités de la scène).
     pub ao: Option<(Mat4, f32)>,
     /// Zone de coupe 3D (min, max), repère de la scène : vue principale seulement.
@@ -544,7 +554,8 @@ impl Renderer {
                 u_coupe: gl.get_uniform_location(program, "u_coupe"),
                 u_dessin: gl.get_uniform_location(program, "u_dessin"),
                 u_sans_eclairage: gl.get_uniform_location(program, "u_sans_eclairage"),
-                u_rendu: gl.get_uniform_location(program, "u_rendu"),
+                u_materiaux: gl.get_uniform_location(program, "u_materiaux"),
+                u_portees: gl.get_uniform_location(program, "u_portees"),
                 u_soleil: gl.get_uniform_location(program, "u_soleil"),
                 u_lumiere: gl.get_uniform_location(program, "u_lumiere"),
                 u_ombres: gl.get_uniform_location(program, "u_ombres"),
@@ -886,12 +897,12 @@ impl Renderer {
 
     pub fn paint(&self, gl: &glow::Context, p: &FrameParams, viewport: [i32; 4]) {
         unsafe {
-            if let (StyleVisuel::Rendu, Some((_, lumiere, _))) = (p.style, p.soleil) {
+            if let (true, Some((_, lumiere, _))) = (p.style != StyleVisuel::LignesCachees, p.soleil) {
                 self.passe_ombres(gl, lumiere);
             }
             // occultation ambiante : vue entière seulement (ni zone de coupe, ni cadrage, ni feuille)
             let ao = match p.ao {
-                Some((proj, rayon)) if p.style == StyleVisuel::Rendu && p.boite.is_none() && p.cadrage.is_empty() && p.passes.is_empty() => {
+                Some((proj, rayon)) if p.style != StyleVisuel::LignesCachees && p.boite.is_none() && p.cadrage.is_empty() && p.passes.is_empty() => {
                     self.passe_ao(gl, p.mvp, proj, rayon, viewport[2], viewport[3])
                 }
                 _ => None,
@@ -981,9 +992,10 @@ impl Renderer {
             }
             match p.style {
                 StyleVisuel::LignesCachees => self.dessiner_plan(gl, p),
-                StyleVisuel::Rendu => {
+                style => {
+                    gl.uniform_3_f32(self.u_soleil.as_ref(), SOLEIL.x, SOLEIL.y, SOLEIL.z);
                     if let Some((soleil, lumiere, decalage)) = p.soleil {
-                        gl.uniform_1_i32(self.u_rendu.as_ref(), 1);
+                        gl.uniform_1_i32(self.u_portees.as_ref(), 1);
                         gl.uniform_3_f32(self.u_soleil.as_ref(), soleil.x, soleil.y, soleil.z);
                         gl.uniform_matrix_4_f32_slice(self.u_lumiere.as_ref(), false, &lumiere.to_cols_array());
                         gl.uniform_1_f32(self.u_decalage_ombre.as_ref(), decalage);
@@ -1000,20 +1012,19 @@ impl Renderer {
                         gl.bind_texture(glow::TEXTURE_2D, Some(t));
                         gl.uniform_1_i32(self.u_ao_tex.as_ref(), 2);
                     }
-                    self.dessiner(gl, [self.ebo_opaque, self.ebo_transp, self.ebo_lines], [self.n_opaque, self.n_transp, self.n_lines], false);
-                    gl.uniform_1_i32(self.u_rendu.as_ref(), 0);
+                    gl.active_texture(glow::TEXTURE0);
+                    gl.uniform_1_i32(self.u_materiaux.as_ref(), (style == StyleVisuel::Realiste) as i32);
+                    gl.uniform_1_i32(self.u_sans_eclairage.as_ref(), (style == StyleVisuel::CouleursHomogenes) as i32);
+                    self.dessiner(gl, [self.ebo_opaque, self.ebo_transp, self.ebo_lines], [self.n_opaque, self.n_transp, self.n_lines], style != StyleVisuel::Realiste);
+                    gl.uniform_1_i32(self.u_sans_eclairage.as_ref(), 0);
+                    gl.uniform_1_i32(self.u_materiaux.as_ref(), 0);
+                    gl.uniform_1_i32(self.u_portees.as_ref(), 0);
                     gl.uniform_1_i32(self.u_ao.as_ref(), 0);
                     gl.active_texture(glow::TEXTURE2);
                     gl.bind_texture(glow::TEXTURE_2D, None);
                     gl.active_texture(glow::TEXTURE1);
                     gl.bind_texture(glow::TEXTURE_2D, None);
                     gl.active_texture(glow::TEXTURE0);
-                }
-                style => {
-                    let homogene = style == StyleVisuel::CouleursHomogenes;
-                    gl.uniform_1_i32(self.u_sans_eclairage.as_ref(), homogene as i32);
-                    self.dessiner(gl, [self.ebo_opaque, self.ebo_transp, self.ebo_lines], [self.n_opaque, self.n_transp, self.n_lines], style != StyleVisuel::Realiste);
-                    gl.uniform_1_i32(self.u_sans_eclairage.as_ref(), 0);
                 }
             }
             if (p.coupe.is_some() || p.boite.is_some()) && self.n_coupe[0] + self.n_coupe[1] > 0 {
