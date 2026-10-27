@@ -78,7 +78,7 @@ uniform bool u_sans_eclairage;
 uniform bool u_rendu;
 uniform vec3 u_soleil;
 uniform mat4 u_lumiere;
-uniform highp sampler2D u_ombres;
+uniform highp sampler2DShadow u_ombres;
 uniform float u_decalage_ombre;
 // zone de coupe 3D (boîte alignée sur les axes) : modèle retiré hors de la boîte
 uniform bool u_boite;
@@ -89,21 +89,29 @@ uniform vec4 u_cadrage[4];
 uniform int u_n_cadrage;
 out vec4 o_color;
 
-// part du soleil reçue en p (0 : à l'ombre), moyenne de 3 × 3 échantillons
-float ensoleillement(vec3 p, vec3 n) {
-    vec4 l = u_lumiere * vec4(p + n * u_decalage_ombre, 1.0);
+// part du soleil reçue en p (0 : à l'ombre) : 12 échantillons d'un disque de Poisson
+// tourné à chaque pixel, chacun filtré par le matériel (comparaison bilinéaire)
+const vec2 POISSON[12] = vec2[](
+    vec2(-0.326, -0.406), vec2(-0.840, -0.074), vec2(-0.696, 0.457), vec2(-0.203, 0.621),
+    vec2(0.962, -0.195), vec2(0.473, -0.480), vec2(0.519, 0.767), vec2(0.185, -0.893),
+    vec2(0.507, 0.064), vec2(0.896, 0.412), vec2(-0.322, -0.933), vec2(-0.792, -0.598));
+float ensoleillement(vec3 p, vec3 n, float ndl) {
+    // décalage le long de la normale, plus fort en lumière rasante (acné d'ombre)
+    vec4 l = u_lumiere * vec4(p + n * u_decalage_ombre * (1.0 + 2.0 * (1.0 - ndl)), 1.0);
     vec3 q = l.xyz / l.w * 0.5 + 0.5;
     if (q.x < 0.0 || q.x > 1.0 || q.y < 0.0 || q.y > 1.0 || q.z > 1.0) {
         return 1.0;
     }
-    vec2 pas = 1.0 / vec2(textureSize(u_ombres, 0));
+    vec2 pas = 1.6 / vec2(textureSize(u_ombres, 0));
+    float a = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+    mat2 r = mat2(cos(a), sin(a), -sin(a), cos(a));
     float s = 0.0;
-    for (int i = -1; i <= 1; i++) {
-        for (int j = -1; j <= 1; j++) {
-            s += (q.z - 0.0008 <= texture(u_ombres, q.xy + vec2(i, j) * pas).r) ? 1.0 : 0.0;
-        }
+    for (int i = 0; i < 12; i++) {
+        s += texture(u_ombres, vec3(q.xy + r * POISSON[i] * pas, q.z - 0.0002));
     }
-    return s / 9.0;
+    // fondu vers le bord de la carte (portée des ombres) : pas de limite franche
+    float bord = max(abs(q.x - 0.5), abs(q.y - 0.5)) * 2.0;
+    return mix(s / 12.0, 1.0, smoothstep(0.85, 1.0, bord));
 }
 
 void main() {
@@ -143,7 +151,8 @@ void main() {
             base = v_rendu.rgb;
         }
         // ciel (hémisphère), soleil ombré, un peu de lumière vers l'œil
-        float soleil = max(dot(n, u_soleil), 0.0) * ensoleillement(v_pos, n);
+        float ndl = max(dot(n, u_soleil), 0.0);
+        float soleil = ndl > 0.0 ? ndl * ensoleillement(v_pos, n, ndl) : 0.0;
         d = 0.30 + 0.28 * (0.5 + 0.5 * n.z) + 0.62 * soleil + 0.05 * max(dot(n, vd), 0.0);
     }
     vec3 c = base * d;
@@ -173,7 +182,7 @@ void main() {
 "#;
 
 /// Côté de la carte d'ombres (pixels).
-const TAILLE_OMBRES: i32 = 2048;
+pub const TAILLE_OMBRES: i32 = 2048;
 
 /// Indices d'une passe supplémentaire (fenêtre de vue d'une feuille).
 struct Passe {
@@ -356,7 +365,15 @@ impl Renderer {
             let texture_ombres = gl.create_texture()?;
             gl.bind_texture(glow::TEXTURE_2D, Some(texture_ombres));
             gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::DEPTH_COMPONENT24 as i32, TAILLE_OMBRES, TAILLE_OMBRES, 0, glow::DEPTH_COMPONENT, glow::UNSIGNED_INT, glow::PixelUnpackData::Slice(None));
-            for (k, v) in [(glow::TEXTURE_MIN_FILTER, glow::NEAREST), (glow::TEXTURE_MAG_FILTER, glow::NEAREST), (glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE), (glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE)] {
+            // comparaison de profondeur par le matériel, filtrée (bords adoucis)
+            for (k, v) in [
+                (glow::TEXTURE_MIN_FILTER, glow::LINEAR),
+                (glow::TEXTURE_MAG_FILTER, glow::LINEAR),
+                (glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE),
+                (glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE),
+                (glow::TEXTURE_COMPARE_MODE, glow::COMPARE_REF_TO_TEXTURE),
+                (glow::TEXTURE_COMPARE_FUNC, glow::LEQUAL),
+            ] {
                 gl.tex_parameter_i32(glow::TEXTURE_2D, k, v as i32);
             }
             gl.bind_texture(glow::TEXTURE_2D, None);
