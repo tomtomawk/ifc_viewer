@@ -52,6 +52,10 @@ pub struct FamilleMateriau {
     #[serde(default)]
     pub coupe_fond: Option<[u8; 3]>,
     #[serde(default)]
+    pub coupe_fond_motif: Option<MotifCoupe>,
+    #[serde(default)]
+    pub surface_fond_motif: Option<MotifCoupe>,
+    #[serde(default)]
     pub surface_motif: Option<MotifCoupe>,
     #[serde(default)]
     pub surface_couleur: Option<[u8; 3]>,
@@ -129,6 +133,8 @@ impl Gabarit {
                 motif: f.motif,
                 coupe_couleur: f.coupe_couleur,
                 coupe_fond: f.coupe_fond,
+                coupe_fond_motif: f.coupe_fond_motif,
+                surface_fond_motif: f.surface_fond_motif,
                 surface_motif: f.surface_motif,
                 surface_couleur: f.surface_couleur,
             },

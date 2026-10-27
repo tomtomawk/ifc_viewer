@@ -175,29 +175,34 @@ impl MotifCoupe {
     }
 }
 
-/// Matériau nommé par les couches (`Couche::materiau`), comme dans Revit : couleur de
-/// surface (fond, ombrage) et motif de surface (premier plan) ; en coupe, motif (premier
-/// plan) et couleur de fond.
+/// Matériau nommé par les couches (`Couche::materiau`), comme les graphismes d'un
+/// matériau Revit (sans ombrage à part) : motifs de surface et de coupe, chacun en
+/// premier plan et en arrière-plan (motif et couleur). L'arrière-plan de surface, uni par
+/// défaut, donne la couleur des faces.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct Materiau {
     pub nom: String,
-    /// Couleur de surface : fond des faces vues (sRGB).
+    /// Surface, arrière-plan : couleur (sRGB) ; aussi la couleur du style Réaliste.
     pub couleur: [u8; 3],
-    /// Motif de coupe (premier plan).
-    #[serde(default)]
-    pub motif: MotifCoupe,
-    /// Couleur du motif de coupe (None : encre par défaut du motif).
+    /// Surface, arrière-plan : motif (None : uni).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub coupe_couleur: Option<[u8; 3]>,
-    /// Fond des parties coupées (None : blanc).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub coupe_fond: Option<[u8; 3]>,
-    /// Motif de surface (premier plan) des faces vues (None : aucun).
+    pub surface_fond_motif: Option<MotifCoupe>,
+    /// Surface, premier plan : motif (None : aucun) et couleur (None : gris foncé).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub surface_motif: Option<MotifCoupe>,
-    /// Couleur du motif de surface (None : gris foncé).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub surface_couleur: Option<[u8; 3]>,
+    /// Coupe, premier plan : motif et couleur (None : encre par défaut du motif).
+    #[serde(default)]
+    pub motif: MotifCoupe,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coupe_couleur: Option<[u8; 3]>,
+    /// Coupe, arrière-plan : couleur et motif (couleur seule : uni ; ni l'un ni l'autre :
+    /// aucun, fond blanc).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coupe_fond: Option<[u8; 3]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coupe_fond_motif: Option<MotifCoupe>,
 }
 
 impl Materiau {
@@ -210,9 +215,15 @@ impl Materiau {
         })
     }
 
-    /// Fond des parties coupées.
-    pub fn fond_coupe(&self) -> [u8; 3] {
-        self.coupe_fond.unwrap_or([255, 255, 255])
+    /// Arrière-plan de coupe : motif (None : aucun) et couleur.
+    pub fn fond_coupe(&self) -> (Option<MotifCoupe>, [u8; 3]) {
+        let motif = self.coupe_fond_motif.or(self.coupe_fond.map(|_| MotifCoupe::Uni)).filter(|m| *m != MotifCoupe::Vide);
+        (motif, self.coupe_fond.unwrap_or([150, 150, 150]))
+    }
+
+    /// Arrière-plan de surface : motif (uni par défaut).
+    pub fn fond_surface(&self) -> MotifCoupe {
+        self.surface_fond_motif.unwrap_or(MotifCoupe::Uni)
     }
 
     /// Encre du motif de surface.
@@ -874,6 +885,20 @@ pub fn source(id: &str, chemin: &std::path::Path, format: &str) -> Source {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn graphismes_materiau_comme_revit() {
+        // ancien fond de coupe (couleur seule) : arrière-plan uni
+        let m: Materiau = serde_json::from_str(r#"{"nom":"B","couleur":[1,2,3],"motif":"diagonales","coupe_fond":[9,9,9]}"#).unwrap();
+        assert_eq!(m.fond_coupe(), (Some(MotifCoupe::Uni), [9, 9, 9]));
+        assert_eq!(m.fond_surface(), MotifCoupe::Uni);
+        // sans fond : aucun arrière-plan de coupe
+        let m: Materiau = serde_json::from_str(r#"{"nom":"B","couleur":[1,2,3]}"#).unwrap();
+        assert_eq!(m.fond_coupe().0, None);
+        let m = Materiau { coupe_fond_motif: Some(MotifCoupe::Croisees), coupe_fond: Some([5, 5, 5]), ..m };
+        let relu: Materiau = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
+        assert_eq!(relu.fond_coupe(), (Some(MotifCoupe::Croisees), [5, 5, 5]));
+    }
 
     #[test]
     fn axes() {

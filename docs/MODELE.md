@@ -76,7 +76,7 @@ garde le RVT et ses vues ouverts, sans basculer vers le rendu natif limité.
 | `variantes[]` | `id`, `nom`, `jeu` | Options Revit reprises à la conversion, distinguées par jeu ; une variante absente sur un mur désigne le modèle principal. |
 | `niveaux[]` | `id`, `nom`, `altitude`, `origine` | Triés par altitude |
 | `types_murs[]`, `types_dalles[]` | `id`, `nom`, `couches[]` (`materiau`, `epaisseur`, `fonction` : structure, isolation, finition, autre), `couches_detaillees` | Murs : couches de l'extérieur vers l'intérieur ; dalles : du haut vers le bas. `couches_detaillees` = false : une couche de l'épaisseur totale (détail non lu) |
-| `materiaux[]` | `nom`, `couleur` [r, g, b], `motif` (diagonales, croisees, uni, vide), `coupe_couleur`, `coupe_fond`, `surface_motif`, `surface_couleur` | Matériaux nommés par les couches, comme dans Revit. Surface : `couleur` (fond, ombrage, poché du style Réaliste) et `surface_motif` / `surface_couleur` (premier plan, traits sur les faces vues en style Graphique). Coupe : `motif` / `coupe_couleur` (premier plan) et `coupe_fond` (fond, blanc par défaut). Champs facultatifs omis : valeurs par défaut |
+| `materiaux[]` | `nom`, `couleur` [r, g, b], `surface_fond_motif`, `surface_motif`, `surface_couleur`, `motif`, `coupe_couleur`, `coupe_fond`, `coupe_fond_motif` | Graphismes comme dans Revit, sans ombrage à part. Motifs de surface : premier plan (`surface_motif`, `surface_couleur`) et arrière-plan (`surface_fond_motif`, uni par défaut, de couleur `couleur` : couleur des faces, aussi celle du style Réaliste ; `vide` : aucun, faces blanches). Motifs de coupe : premier plan (`motif`, `coupe_couleur`) et arrière-plan (`coupe_fond_motif`, `coupe_fond` ; couleur seule : uni ; ni l'un ni l'autre : aucun, blanc). Motifs : `diagonales`, `croisees`, `uni`, `vide`. Champs facultatifs omis : valeurs par défaut |
 | `assemblages[]` | `id`, `nom`, `type_mur`, `couches[]` (ids de murs), `origine` | Mur composé : **chaque couche est un mur** à part entière (type monocouche, niveaux, hauteur, phase, sous-projet propres), listées de l'extérieur vers l'intérieur. Une ouverture dont `mur` vaut l'id de l'assemblage traverse toutes ses couches |
 | `types_ouvertures[]` | `id`, `nom`, `genre`, `largeur`, `hauteur` | Revit seulement en v0 (cotes du type) |
 | `murs[]` | `id`, `nom`, `type_mur`, `niveau`, `decalage_bas`, `haut`, `axe`, `origine`, `phase`, `sous_projet`, `variante` | `phase`, `sous_projet` et `variante` sont facultatifs (absents des anciens fichiers). `haut` : `{contrainte: libre, hauteur}` ou `{contrainte: niveau, niveau, decalage}` |
@@ -164,7 +164,8 @@ revenir au défaut, ou enregistrer une copie pour en faire un gabarit d'agence.
 Motifs : `diagonales`, `croisees`, `uni`, `vide`. Il faut au moins un type de coupe et un
 type d'élévation. `niveaux` (`nom`, `altitude` en mm) : niveaux d'un nouveau projet (RDC
 à 0 dans le gabarit par défaut). Les familles de `materiaux` acceptent aussi
-`coupe_couleur`, `coupe_fond`, `surface_motif`, `surface_couleur`. Un nouveau projet reprend les types de murs du gabarit ; dans un projet
+`surface_fond_motif`, `surface_motif`, `surface_couleur`, `coupe_couleur`, `coupe_fond`,
+`coupe_fond_motif`. Un nouveau projet reprend les types de murs du gabarit ; dans un projet
 existant, ceux qui manquent sont proposés en bas du sélecteur de type de mur et copiés
 dans le projet au choix.
 

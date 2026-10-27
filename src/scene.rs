@@ -190,8 +190,10 @@ pub struct CoucheCoupe {
     pub plans: Vec<Vec4>,
     /// Couleur du matériau (poché du style Réaliste).
     pub couleur: [u8; 4],
-    /// Fond du poché hachuré (style Graphique).
+    /// Arrière-plan du poché (style Graphique) : couleur et motif (None : aucun, blanc ;
+    /// grilles vides : uni).
     pub fond: [u8; 4],
+    pub motif_fond: Option<Arc<crate::rvt::vues::Motif>>,
     pub motif: Option<Arc<crate::rvt::vues::Motif>>,
     pub couleur_motif: [u8; 4],
     pub hachure_defaut: bool,

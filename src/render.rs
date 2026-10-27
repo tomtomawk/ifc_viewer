@@ -161,7 +161,14 @@ void main() {
     vec2 uvm = an.z > 0.7 ? v_pos.xy : vec2(dot(v_pos, normalize(vec3(-n.y, n.x, 0.0) + vec3(1e-6, 0.0, 0.0))), v_pos.z);
     vec2 fm = vec2(uvm.x + uvm.y, uvm.x - uvm.y) * (0.70710678 / max(u_pas_motif, 1e-6));
     vec2 lm = abs(fract(fm + 0.5) - 0.5) / max(fwidth(fm), vec2(1e-6));
-    float trait_motif = int(v_motif.x * 255.0 + 0.5) == 2 ? 1.0 - min(min(lm.x, lm.y), 1.0) : 1.0 - min(lm.x, 1.0);
+    // premier plan (4 bits bas) et arrière-plan (4 bits hauts) : 1 diagonales, 2 croisées
+    int code_motif = int(v_motif.x * 255.0 + 0.5);
+    int premier = code_motif & 15;
+    int arriere = code_motif >> 4;
+    float diag = 1.0 - min(lm.x, 1.0);
+    float croix = 1.0 - min(min(lm.x, lm.y), 1.0);
+    float trait_premier = premier == 2 ? croix : diag;
+    float trait_arriere = arriere == 2 ? croix : diag;
     vec3 vd = u_ortho ? -u_view_dir : normalize(u_eye - v_pos);
     if (dot(n, vd) < 0.0) n = -n;
     vec3 fill = normalize(vec3(-0.5, -0.7, 0.2));
@@ -169,9 +176,10 @@ void main() {
     float ndl = max(dot(n, u_soleil), 0.0);
     float ombre = (u_portees && ndl > 0.0) ? ensoleillement(v_pos, n, ndl) : 1.0;
     float ao = (u_ao && v_annot == 0u) ? occultation() : 1.0;
-    vec3 base = blanc ? vec3(1.0) : v_c.rgb;
-    int motif = int(v_motif.x * 255.0 + 0.5);
-    if (!u_materiaux && v_annot == 0u && motif == 3) {
+    bool motifs = !u_materiaux && v_annot == 0u;
+    // arrière-plan de surface : uni (couleur des faces), sinon faces blanches
+    vec3 base = (blanc || (motifs && arriere != 0)) ? vec3(1.0) : v_c.rgb;
+    if (motifs && premier == 3) {
         base = v_motif.yzw;
     }
     float d;
@@ -191,8 +199,11 @@ void main() {
         d = 0.50 * ao + 0.38 * max(dot(n, sun), 0.0) * ombre + 0.12 * max(dot(n, fill), 0.0) * ao + 0.12 * max(dot(n, vd), 0.0);
     }
     vec3 c = base * d;
-    if (!u_materiaux && v_annot == 0u && (motif == 1 || motif == 2)) {
-        c = mix(c, v_motif.yzw, trait_motif);
+    if (motifs && (arriere == 1 || arriere == 2)) {
+        c = mix(c, v_c.rgb, trait_arriere);
+    }
+    if (motifs && (premier == 1 || premier == 2)) {
+        c = mix(c, v_motif.yzw, trait_premier);
     }
     float a = v_c.a;
     if (v_selected == 1u) {

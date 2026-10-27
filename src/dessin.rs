@@ -283,13 +283,20 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
                         }
                         if tris.is_empty() { continue; }
                         let uni = poche == Poche::Hachure && couche.motif.as_ref().is_some_and(|m| m.grilles.is_empty());
+                        // arrière-plan : uni (sa couleur), motif (sur blanc) ou aucun (blanc)
+                        let fond_uni = couche.motif_fond.as_ref().is_some_and(|m| m.grilles.is_empty());
                         let couleur = match poche {
                             Poche::Materiau => couche.couleur,
                             _ if uni => couche.couleur_motif,
-                            Poche::Hachure if !couche.hachure_defaut => couche.fond,
+                            Poche::Hachure if !couche.hachure_defaut => if fond_uni { couche.fond } else { [255,255,255,255] },
                             _ => fond,
                         };
                         detail.push(primitive(Forme::Triangles(tris.clone()),couleur,0.0,Role::Poche));
+                        if let (Poche::Hachure, Some(m)) = (poche, couche.motif_fond.as_ref().filter(|m| !m.grilles.is_empty())) {
+                            let t2: Vec<_> = tris.iter().map(|t| t.map(|p| [(p-o).dot(e1),(p-o).dot(e2)])).collect();
+                            let h = hachures_plan(&t2,m,echelle / 1000.0,20_000).into_iter().map(|s| s.map(en_3d)).collect();
+                            detail.push(primitive(Forme::Segments(h),couche.fond,0.0,Role::Hachure));
+                        }
                         if poche == Poche::Hachure && !uni {
                             let (motif, facteur) = match &couche.motif {
                                 Some(m) => (m.as_ref(), if m.modele { 0.001 } else { echelle / 1000.0 }),
@@ -790,7 +797,7 @@ mod tests {
         tris.extend(cube().into_iter().map(|t| t.map(|p| p * 0.5 + DVec3::splat(0.25))));
         let mut s = scene_section(tris);
         let bande = |a: f32, b: f32, couleur| crate::scene::CoucheCoupe {
-            plans: vec![Vec3::X.extend(-a),Vec3::NEG_X.extend(b)], couleur, fond: [255,255,255,255], motif: None, couleur_motif: [70,70,70,255], hachure_defaut: true,
+            plans: vec![Vec3::X.extend(-a),Vec3::NEG_X.extend(b)], couleur, fond: [255,255,255,255], motif_fond: None, motif: None, couleur_motif: [70,70,70,255], hachure_defaut: true,
         };
         s.couches_coupe.insert(1,vec![bande(0.0,0.2,[190,120,120,255]),bande(0.2,1.0,[120,190,120,255])]);
         let p = coupe(&s,&[true],Vec3::NEG_Z.extend(0.5),100.0,Poche::Hachure);

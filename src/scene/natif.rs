@@ -169,17 +169,28 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     Ok(scene)
 }
 
-/// Motif de surface d'un matériau pour le rendu : [motif, r, g, b].
+/// Motifs de surface d'un matériau pour le rendu : [premier plan | arrière-plan << 4,
+/// couleur du premier plan]. Premier plan : 0 aucun, 1 diagonales, 2 croisées, 3 uni ;
+/// arrière-plan : 0 uni (couleur des faces), 1 diagonales, 2 croisées, 4 aucun.
 fn motif_surface(m: &crate::modele::Materiau) -> Option<[u8; 4]> {
     use crate::modele::MotifCoupe;
-    let code = match m.surface_motif? {
+    let premier = match m.surface_motif {
+        Some(MotifCoupe::Diagonales) => 1,
+        Some(MotifCoupe::Croisees) => 2,
+        Some(MotifCoupe::Uni) => 3,
+        _ => 0,
+    };
+    let arriere = match m.fond_surface() {
+        MotifCoupe::Uni => 0,
         MotifCoupe::Diagonales => 1,
         MotifCoupe::Croisees => 2,
-        MotifCoupe::Uni => 3,
-        MotifCoupe::Vide => return None,
+        MotifCoupe::Vide => 4,
     };
+    if premier == 0 && arriere == 0 {
+        return None;
+    }
     let [r, g, b] = m.encre_surface();
-    Some([code, r, g, b])
+    Some([premier | (arriere << 4), r, g, b])
 }
 
 /// Arêtes des éléments calculées par matériau : là où deux éléments d'un même matériau se
@@ -317,20 +328,22 @@ fn coupe_materiau(m: &crate::modele::Materiau, plans: Vec<Vec4>) -> Vec<CoucheCo
     use crate::rvt::vues::{GrilleMotif, Motif};
     let grille = |angle: f64, pas: f64| GrilleMotif { angle, origine: [0.0, 0.0], glissement: 0.0, decalage: pas, tirets: Vec::new() };
     let [r, g, b] = m.couleur;
-    let motif = match m.motif {
+    let grilles = |x: MotifCoupe| match x {
         MotifCoupe::Diagonales => Some(vec![grille(std::f64::consts::FRAC_PI_4, 2.0)]),
         MotifCoupe::Croisees => Some(vec![grille(std::f64::consts::FRAC_PI_4, 1.5), grille(-std::f64::consts::FRAC_PI_4, 1.5)]),
         // sans grille : aplat de la couleur du motif
         MotifCoupe::Uni => Some(Vec::new()),
         MotifCoupe::Vide => None,
     };
+    let motif = grilles(m.motif);
     let [er, eg, eb] = m.encre_coupe();
-    let [fr, fg, fb] = m.fond_coupe();
+    let (motif_fond, [fr, fg, fb]) = m.fond_coupe();
     let encre = [er, eg, eb, 255];
     vec![CoucheCoupe {
         plans,
         couleur: [r, g, b, 255],
         fond: [fr, fg, fb, 255],
+        motif_fond: motif_fond.and_then(grilles).map(|grilles| std::sync::Arc::new(Motif { nom: format!("{} (arrière-plan)", m.nom), modele: false, grilles })),
         motif: motif.map(|grilles| std::sync::Arc::new(Motif { nom: m.nom.clone(), modele: false, grilles })),
         couleur_motif: encre,
         hachure_defaut: false,

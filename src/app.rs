@@ -4276,10 +4276,8 @@ impl ViewerApp {
         }
     }
 
-    /// Propriétés de l'élément sélectionné (panneau de gauche, comme dans Revit).
-    /// Graphismes d'un matériau du projet natif, comme dans Revit : ombrage (couleur de
-    /// surface), motif de surface (premier plan, couleur), motif de coupe (premier plan,
-    /// couleur) et fond de coupe.
+    /// Graphismes d'un matériau du projet natif, comme dans Revit (sans ombrage) : motifs
+    /// de surface et de coupe, chacun en premier plan et en arrière-plan (motif, couleur).
     fn fenetre_materiau(&mut self, ctx: &egui::Context) {
         use crate::modele::MotifCoupe;
         let Some(nom) = self.materiau_edite.clone() else { return };
@@ -4288,52 +4286,60 @@ impl ViewerApp {
         let avant = m.clone();
         let mut ouvert = true;
         egui::Window::new(format!("Matériau · {nom}")).id(egui::Id::unique("fenetre_materiau")).open(&mut ouvert).resizable(false).collapsible(false).show(ctx, |ui| {
-            let couleur = |ui: &mut egui::Ui, c: &mut Option<[u8; 3]>, defaut: [u8; 3], aucun: &str| {
-                let mut actif = c.is_some();
-                ui.horizontal(|ui| {
-                    let mut v = c.unwrap_or(defaut);
-                    if ui.color_edit_button_srgb(&mut v).changed() {
-                        actif = true;
-                    }
-                    ui.checkbox(&mut actif, "").on_hover_text(aucun);
-                    *c = actif.then_some(v);
-                });
-            };
-            let motif = |ui: &mut egui::Ui, id: &str, x: &mut Option<MotifCoupe>| {
-                egui::ComboBox::from_id_salt(id).width(110.0).selected_text(x.map_or("Aucun", |m| m.libelle())).show_ui(ui, |ui| {
-                    ui.selectable_value(x, None, "Aucun");
-                    for t in MotifCoupe::TOUS {
+            let motif = |ui: &mut egui::Ui, id: &str, x: &mut Option<MotifCoupe>, aucun: &str| {
+                egui::ComboBox::from_id_salt(id).width(110.0).selected_text(x.map_or(aucun, |m| m.libelle())).show_ui(ui, |ui| {
+                    ui.selectable_value(x, None, aucun);
+                    for t in MotifCoupe::TOUS.into_iter().filter(|t| *t != MotifCoupe::Vide) {
                         ui.selectable_value(x, Some(t), t.libelle());
                     }
                 });
             };
+            let couleur = |ui: &mut egui::Ui, c: &mut Option<[u8; 3]>, defaut: [u8; 3]| {
+                let mut v = c.unwrap_or(defaut);
+                if ui.color_edit_button_srgb(&mut v).changed() {
+                    *c = Some(v);
+                }
+            };
             egui::Grid::new("graphismes_materiau").num_columns(3).spacing([10.0, 6.0]).show(ui, |ui| {
-                ui.label(RichText::new("Surface").strong());
-                ui.end_row();
-                ui.label("Fond (ombrage)");
-                ui.color_edit_button_srgb(&mut m.couleur);
+                ui.label(RichText::new("Motifs de surface").strong());
                 ui.end_row();
                 ui.label("Premier plan");
-                motif(ui, "motif_surface", &mut m.surface_motif);
+                motif(ui, "surface_premier", &mut m.surface_motif, "Aucun");
                 let d = m.encre_surface();
-                couleur(ui, &mut m.surface_couleur, d, "Couleur propre (sinon gris foncé)");
+                couleur(ui, &mut m.surface_couleur, d);
                 ui.end_row();
-                ui.label(RichText::new("Coupe").strong());
+                ui.label("Arrière-plan");
+                let mut fond = Some(m.fond_surface()).filter(|x| *x != MotifCoupe::Vide);
+                motif(ui, "surface_arriere", &mut fond, "Aucun");
+                m.surface_fond_motif = match fond {
+                    Some(MotifCoupe::Uni) => None,
+                    None => Some(MotifCoupe::Vide),
+                    x => x,
+                };
+                ui.color_edit_button_srgb(&mut m.couleur).on_hover_text("Couleur des faces (arrière-plan uni) ; aussi celle du style Réaliste");
                 ui.end_row();
-                ui.label("Fond");
-                ui.label("");
-                let d = m.fond_coupe();
-                couleur(ui, &mut m.coupe_fond, d, "Fond coloré (sinon blanc)");
+                ui.label(RichText::new("Motifs de coupe").strong());
                 ui.end_row();
                 ui.label("Premier plan");
-                let mut mc = Some(m.motif);
-                motif(ui, "motif_coupe", &mut mc);
+                let mut mc = Some(m.motif).filter(|x| *x != MotifCoupe::Vide);
+                motif(ui, "coupe_premier", &mut mc, "Aucun");
                 m.motif = mc.unwrap_or(MotifCoupe::Vide);
                 let d = m.encre_coupe();
-                couleur(ui, &mut m.coupe_couleur, d, "Couleur propre (sinon encre du motif)");
+                couleur(ui, &mut m.coupe_couleur, d);
+                ui.end_row();
+                ui.label("Arrière-plan");
+                let (mut fond, teinte) = m.fond_coupe();
+                motif(ui, "coupe_arriere", &mut fond, "Aucun");
+                let mut c = Some(teinte);
+                couleur(ui, &mut c, teinte);
+                (m.coupe_fond_motif, m.coupe_fond) = match fond {
+                    None => (None, None),
+                    Some(MotifCoupe::Uni) => (None, c),
+                    x => (x, c),
+                };
                 ui.end_row();
             });
-            ui.label(RichText::new("Le fond de surface sert aussi au poché du style Réaliste.").small().weak());
+            ui.label(RichText::new("Arrière-plan aucun : blanc.").small().weak());
         });
         if !ouvert {
             self.materiau_edite = None;
@@ -4349,6 +4355,7 @@ impl ViewerApp {
         }
     }
 
+    /// Propriétés de l'élément sélectionné (panneau de gauche, comme dans Revit).
     fn right_panel(&mut self, ui: &mut egui::Ui) {
         self.fenetre_materiau(ui.ctx());
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
