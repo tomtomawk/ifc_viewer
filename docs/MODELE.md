@@ -83,7 +83,7 @@ garde le RVT et ses vues ouverts, sans basculer vers le rendu natif limité.
 | `axe` | `{forme: droit, debut, fin}` ou `{forme: arc, debut, fin, centre, direct}` | Ligne médiane de l'épaisseur, en plan (x, y) |
 | `ouvertures[]` | `id`, `nom`, `genre` (porte, fenetre, baie), `mur`, `type_ouverture`, `abscisse`, `largeur`, `hauteur`, `allege`, `representation`, `origine` | Baie rectangulaire à travers le mur ; `abscisse` = milieu de la baie le long de l'axe ; `allege` au-dessus du niveau du mur ; `representation` = menuiserie lue (maillage) |
 | `dalles[]` | `id`, `nom`, `type_dalle`, `niveau`, `decalage`, `contours`, `phase`, `sous_projet`, `variante`, `origine` | `decalage` = dessus au-dessus du niveau ; `contours` en plan, pair-impair (trous) |
-| `vues[]` | `id`, `nom`, `echelle`, `genre` : `plan` (`niveau`, `coupe` mm au-dessus du niveau) ou `coupe` (`debut`, `fin`, `profondeur` mm) | Arborescence du projet ; une coupe regarde vers la gauche de sa ligne |
+| `vues[]` | `id`, `nom`, `type_vue`, `echelle`, `genre` : `plan` (`niveau`, `coupe` mm au-dessus du niveau) ou `coupe` (`debut`, `fin`, `profondeur` mm, `elevation`) | Arborescence du projet ; une coupe ou une élévation regarde vers la gauche de sa ligne |
 | `importes[]` | `id`, `nom`, `categorie`, `niveau`, `maillage`, `raison`, `origine` | `maillage` : `sommets` [x, y, z], `triangles` [i, j, k] |
 | `ignores` | catégorie → nombre | Éléments sans géométrie ou hors périmètre (pièces, quadrillages, espaces, ouvertures IFC vides, éléments 2D) |
 
@@ -126,11 +126,15 @@ une partie par couche (couleur du matériau), poché par couche en coupe.
 Un projet natif a une arborescence comme un fichier Revit : vue 3D, plans d'étage,
 coupes (enregistrés dans `vues`), types de murs et de sols, matériaux. Onglet
 Documenter : **Vue en plan** (un bouton Créer par niveau, hauteur du plan de coupe ;
-la vue s'ouvre) et **Coupe** (deux clics dans un plan ; la coupe regarde vers la
-gauche de la ligne, profondeur dessinée en tireté). Une coupe ouverte coupe le modèle
-par le plan vertical de sa ligne (poché par couche) ; ses repères sont dessinés dans
-les vues en plan. La profondeur n'est pas encore appliquée (le modèle au-delà reste
-visible).
+la vue s'ouvre) et **Coupe / élévation** : un seul outil, le sélecteur de type propose
+les coupes (de bâtiment, de mur, de détail) et les élévations (extérieure, intérieure),
+chacune avec son échelle et sa profondeur. Deux clics dans un plan ; la vue regarde
+vers la gauche de la ligne. Une coupe tranche le modèle par le plan vertical de sa
+ligne (poché par couche) ; une élévation montre le modèle depuis sa ligne, sans
+poché. Le modèle est limité à la profondeur et à la longueur de la ligne. Repères
+dans les plans (coupe : trait mixte et têtes ; élévation : cercle et flèche).
+Propriétés d'une vue ouverte : nom, échelle, hauteur de coupe (plan) ou profondeur,
+Retourner, Supprimer la vue.
 
 ## Jonctions
 

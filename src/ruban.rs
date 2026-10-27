@@ -74,7 +74,7 @@ impl Outil {
             Self::Symbole => "Symbole",
             Self::Legende => "Légende",
             Self::VuePlan => "Vue en plan",
-            Self::VueCoupe => "Coupe",
+            Self::VueCoupe => "Coupe / élévation",
         }
     }
 
@@ -104,6 +104,46 @@ const SURFACES: &[(Outil, &str)] = &[
     (Outil::Plafond, "Plafond ou faux plafond"),
     (Outil::Toiture, "Couverture et toiture"),
 ];
+
+/// Paramètres d'une coupe ou d'une élévation à tracer.
+pub struct ParametresCoupe {
+    pub elevation: bool,
+    pub type_vue: String,
+    pub echelle: f64,
+    pub profondeur: f64,
+}
+
+/// Type de coupe ou d'élévation : échelle et profondeur par défaut.
+struct TypeCoupe {
+    elevation: bool,
+    nom: &'static str,
+    aide: &'static str,
+    echelle: f64,
+    profondeur: f64,
+}
+
+const TYPES_COUPE: &[TypeCoupe] = &[
+    TypeCoupe { elevation: false, nom: "Coupe de bâtiment", aide: "Coupe générale du bâtiment", echelle: 100.0, profondeur: 15_000.0 },
+    TypeCoupe { elevation: false, nom: "Coupe de mur", aide: "Paroi et ses abords, faible profondeur", echelle: 20.0, profondeur: 1_500.0 },
+    TypeCoupe { elevation: false, nom: "Coupe de détail", aide: "Détail constructif", echelle: 10.0, profondeur: 600.0 },
+    TypeCoupe { elevation: true, nom: "Élévation extérieure", aide: "Façade vue depuis l'extérieur", echelle: 100.0, profondeur: 30_000.0 },
+    TypeCoupe { elevation: true, nom: "Élévation intérieure", aide: "Paroi d'une pièce vue de l'intérieur", echelle: 50.0, profondeur: 6_000.0 },
+];
+
+/// Pictogramme d'une coupe (trait, têtes et flèches) ou d'une élévation (cercle et
+/// flèche de visée).
+fn icone_vue(p: &egui::Painter, r: egui::Rect, elevation: bool, c: Color32) {
+    if !elevation {
+        icone(p, r, Outil::VueCoupe, c);
+        return;
+    }
+    let t = egui::Stroke::new(1.3, c);
+    let m = r.center() + egui::vec2(0.0, r.height() * 0.08);
+    let rayon = r.width() * 0.22;
+    p.circle_stroke(m, rayon, t);
+    p.add(egui::Shape::convex_polygon(vec![m + egui::vec2(-rayon, -rayon * 0.2), m + egui::vec2(rayon, -rayon * 0.2), m + egui::vec2(0.0, -rayon * 2.1)], c, egui::Stroke::NONE));
+    p.line_segment([r.left_bottom() + egui::vec2(r.width() * 0.05, -r.height() * 0.12), r.right_bottom() + egui::vec2(-r.width() * 0.05, -r.height() * 0.12)], egui::Stroke::new(1.0, c));
+}
 
 /// Types prédéfinis d'éléments horizontaux, couches du haut vers le bas.
 fn types_surface(o: Outil) -> Vec<(&'static str, Vec<crate::modele::Couche>)> {
@@ -281,6 +321,8 @@ pub struct RubanEdition {
     erreur_creation: Option<String>,
     /// Type des prochains murs ; None : générique, épaisseur saisie.
     pub type_mur: Option<String>,
+    /// Type de coupe ou d'élévation choisi (indice dans `TYPES_COUPE`).
+    type_coupe: usize,
     /// Niveau des prochaines dalles (None : le premier).
     pub niveau_dalle: Option<String>,
     /// Tracé des dalles par deux coins (sinon polygone).
@@ -409,21 +451,105 @@ fn champs(o: Outil) -> Vec<Champ> {
             &["Matériaux", "Types de murs", "Symboles"],
         )],
         VuePlan => vec![Nombre("Hauteur de coupe", 1200.0, " mm")],
-        VueCoupe => vec![Nombre("Profondeur", 8000.0, " mm")],
+        VueCoupe => vec![Nombre("Profondeur", 15_000.0, " mm")],
     }
 }
 
 impl RubanEdition {
-    /// Outil Coupe actif : profondeur des coupes (mm).
-    pub fn coupe_active(&self) -> Option<f64> {
-        (self.selection == Some(Outil::VueCoupe)).then(|| match self.valeurs.get(&(Outil::VueCoupe, 0)) {
+    /// Outil Coupe actif : sorte (coupe ou élévation), type, échelle et profondeur.
+    pub fn coupe_active(&self) -> Option<ParametresCoupe> {
+        if self.selection != Some(Outil::VueCoupe) {
+            return None;
+        }
+        let k = self.type_coupe.min(TYPES_COUPE.len() - 1);
+        let t = &TYPES_COUPE[k];
+        let profondeur = match self.valeurs.get(&(Outil::VueCoupe, 0)) {
             Some(Valeur::Nombre(v)) => *v,
-            _ => 8000.0,
-        })
+            _ => t.profondeur,
+        };
+        Some(ParametresCoupe { elevation: t.elevation, type_vue: t.nom.into(), echelle: t.echelle, profondeur })
     }
 
     pub fn activer_coupe(&mut self) {
         self.selection = Some(Outil::VueCoupe);
+    }
+
+    /// Sélecteur de type de l'outil Coupe, comme celui des éléments horizontaux : un
+    /// onglet Coupe, un onglet Élévation, leurs types (échelle, profondeur par défaut).
+    fn selecteur_coupe(&mut self, ui: &mut egui::Ui) {
+        let k = self.type_coupe.min(TYPES_COUPE.len() - 1);
+        let courant = &TYPES_COUPE[k];
+        let sorte = |e: bool| if e { "Élévation" } else { "Coupe" };
+        let mut choix: Option<usize> = None;
+        egui::Frame::group(ui.style()).inner_margin(8.0).show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.horizontal_top(|ui| {
+                let (vignette, _) = ui.allocate_exact_size(egui::vec2(52.0, 52.0), Sense::hover());
+                ui.painter().rect_filled(vignette, 3.0, ui.visuals().faint_bg_color);
+                icone_vue(ui.painter(), egui::Rect::from_center_size(vignette.center(), egui::vec2(34.0, 34.0)), courant.elevation, ui.visuals().text_color());
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("Coupe ou élévation").small().weak());
+                    egui::ComboBox::from_id_salt("type_coupe")
+                        .width(ui.available_width())
+                        .height(400.0)
+                        .truncate()
+                        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                        .selected_text(RichText::new(format!("{} · {}", sorte(courant.elevation), courant.nom)).strong())
+                        .show_ui(ui, |ui| {
+                            ui.set_min_width(280.0);
+                            ui.horizontal(|ui| {
+                                for e in [false, true] {
+                                    let (r, rep) = ui.allocate_exact_size(egui::vec2(120.0, 46.0), Sense::click());
+                                    let actif = courant.elevation == e;
+                                    if actif || rep.hovered() {
+                                        ui.painter().rect_filled(r, 4.0, if actif { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
+                                    }
+                                    icone_vue(ui.painter(), egui::Rect::from_center_size(r.center_top() + egui::vec2(0.0, 15.0), egui::vec2(24.0, 24.0)), e, ui.visuals().text_color());
+                                    ui.painter().text(r.center_bottom() - egui::vec2(0.0, 9.0), egui::Align2::CENTER_CENTER, sorte(e), egui::FontId::proportional(12.0), ui.visuals().text_color());
+                                    if rep.clicked() && !actif {
+                                        choix = TYPES_COUPE.iter().position(|t| t.elevation == e);
+                                        ui.ctx().request_repaint();
+                                    }
+                                }
+                            });
+                            ui.separator();
+                            for (i, t) in TYPES_COUPE.iter().enumerate().filter(|(_, t)| t.elevation == courant.elevation) {
+                                let (r, rep) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 36.0), Sense::click());
+                                if i == k || rep.hovered() {
+                                    ui.painter().rect_filled(r, 3.0, if i == k { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
+                                }
+                                ui.painter().text(r.min + egui::vec2(8.0, 11.0), egui::Align2::LEFT_CENTER, t.nom, egui::FontId::proportional(12.0), ui.visuals().text_color());
+                                ui.painter().text(r.min + egui::vec2(8.0, 26.0), egui::Align2::LEFT_CENTER, t.aide, egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
+                                ui.painter().text(r.right_center() - egui::vec2(8.0, 0.0), egui::Align2::RIGHT_CENTER, format!("1:{} · {} m", t.echelle, crate::step::format_real(t.profondeur / 1000.0)), egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
+                                if rep.clicked() {
+                                    choix = Some(i);
+                                    ui.close();
+                                }
+                            }
+                        });
+                    ui.label(RichText::new(courant.aide).small().weak());
+                });
+            });
+        });
+        if let Some(i) = choix {
+            self.type_coupe = i;
+            // profondeur par défaut du type choisi
+            self.valeurs.insert((Outil::VueCoupe, 0), Valeur::Nombre(TYPES_COUPE[i].profondeur));
+        }
+        ui.add_space(6.0);
+        egui::Grid::new("parametres_coupe").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
+            ui.label("Profondeur");
+            let v = self.valeurs.entry((Outil::VueCoupe, 0)).or_insert(Valeur::Nombre(TYPES_COUPE[self.type_coupe.min(TYPES_COUPE.len() - 1)].profondeur));
+            if let Valeur::Nombre(v) = v {
+                ui.add(egui::DragValue::new(v).speed(50.0).range(100.0..=200_000.0).suffix(" mm"));
+            }
+            ui.end_row();
+            ui.label("Échelle");
+            ui.label(format!("1:{}", TYPES_COUPE[self.type_coupe.min(TYPES_COUPE.len() - 1)].echelle));
+            ui.end_row();
+        });
+        ui.add_space(4.0);
+        ui.label(RichText::new("Dans une vue en plan, cliquer le début puis la fin de la ligne : la vue regarde vers sa gauche (vers le haut pour une ligne tracée de gauche à droite), sur la longueur de la ligne et la profondeur.").small().weak());
     }
 
     /// Palette de l'outil Vue en plan : un bouton par niveau (plans existants
@@ -432,15 +558,7 @@ impl RubanEdition {
         match self.selection {
             Some(Outil::VuePlan) => {}
             Some(Outil::VueCoupe) => {
-                ui.label(RichText::new("Créer une coupe").strong());
-                ui.label("Dans une vue en plan, cliquer le début puis la fin de la ligne de coupe. La coupe regarde vers la gauche de la ligne (vers le haut pour une ligne tracée de gauche à droite).");
-                ui.horizontal(|ui| {
-                    ui.label("Profondeur");
-                    let v = self.valeurs.entry((Outil::VueCoupe, 0)).or_insert(Valeur::Nombre(8000.0));
-                    if let Valeur::Nombre(v) = v {
-                        ui.add(egui::DragValue::new(v).speed(50.0).range(100.0..=100_000.0).suffix(" mm"));
-                    }
-                });
+                self.selecteur_coupe(ui);
                 return Some(None);
             }
             _ => return None,

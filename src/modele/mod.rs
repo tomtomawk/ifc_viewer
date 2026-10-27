@@ -364,6 +364,9 @@ pub struct Dalle {
 pub struct Vue {
     pub id: String,
     pub nom: String,
+    /// Type de vue (« Coupe de bâtiment », « Élévation extérieure »…), vide : aucun.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub type_vue: String,
     /// Dénominateur de l'échelle (100 : 1:100).
     pub echelle: f64,
     #[serde(flatten)]
@@ -377,8 +380,15 @@ pub enum GenreVue {
     Plan { niveau: String, coupe: f64 },
     /// Coupe verticale le long de la ligne `debut` → `fin` (mm, plan) ; on regarde vers
     /// la gauche de la ligne (comme une coupe Revit tracée de gauche à droite regarde
-    /// vers le haut), sur `profondeur` mm.
-    Coupe { debut: [f64; 2], fin: [f64; 2], profondeur: f64 },
+    /// vers le haut), sur `profondeur` mm, entre les deux bouts de la ligne. Une
+    /// élévation est la même vue sans poché : rien n'est coupé, on voit depuis la ligne.
+    Coupe {
+        debut: [f64; 2],
+        fin: [f64; 2],
+        profondeur: f64,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        elevation: bool,
+    },
 }
 
 /// Élément non reconnu : géométrie figée, déplaçable mais pas modifiable dans sa forme.

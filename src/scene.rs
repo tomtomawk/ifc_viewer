@@ -82,6 +82,9 @@ pub struct NavVue {
     /// Plan de coupe vertical d'une coupe native (n, d ; n·p + d ≥ 0 gardé, m, repère
     /// du fichier).
     pub plan_coupe: Option<DVec4>,
+    /// Cadrage d'une coupe native : profondeur et côtés (plans gardés, m, repère du
+    /// fichier).
+    pub cadrage: Vec<DVec4>,
     /// Contenu d'une nomenclature : titres, lignes, colonnes non calculées, tri en clair.
     pub tableau: Option<(Vec<String>, Vec<Vec<String>>, Vec<usize>, String)>,
     /// Entité de la vue dans le modèle (propriétés ; ses éléments 2D en enfants).

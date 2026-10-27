@@ -166,6 +166,7 @@ fn navigateur(projet: &Projet) -> Navigateur {
         filtre_phase: -1,
         coupe: None,
         plan_coupe: None,
+        cadrage: Vec::new(),
         tableau: None,
         entite: None,
         genre: genre.into(),
@@ -184,6 +185,7 @@ fn navigateur(projet: &Projet) -> Navigateur {
     let mut vues = vec![vue(num("3d"), "Vue 3D", "{3D}", 100.0)];
     for v in &projet.vues {
         let mut n = vue(num(&v.id), "", &v.nom, v.echelle);
+        n.type_vue = v.type_vue.clone();
         match &v.genre {
             GenreVue::Plan { niveau, coupe } => {
                 n.genre = "Plan d'étage".into();
@@ -192,15 +194,18 @@ fn navigateur(projet: &Projet) -> Navigateur {
                 n.direction = DVec3::Z;
                 n.haut = DVec3::Y;
             }
-            GenreVue::Coupe { debut, fin, .. } => {
-                n.genre = "Coupe".into();
-                let d = glam::DVec2::from_array(*fin) - glam::DVec2::from_array(*debut);
-                let gauche = d.perp().normalize_or_zero();
+            GenreVue::Coupe { debut, fin, profondeur, elevation } => {
+                n.genre = if *elevation { "Élévation" } else { "Coupe" }.into();
+                let (a, b) = (glam::DVec2::from_array(*debut) / 1000.0, glam::DVec2::from_array(*fin) / 1000.0);
+                let u = (b - a).normalize_or_zero();
+                let gauche = u.perp();
                 // l'observateur est à droite de la ligne et regarde vers sa gauche
                 n.direction = -gauche.extend(0.0);
                 n.haut = DVec3::Z;
-                let a = glam::DVec2::from_array(*debut) / 1000.0;
                 n.plan_coupe = Some(gauche.extend(0.0).extend(-gauche.dot(a)));
+                // profondeur, puis les deux bouts de la ligne
+                let plan = |n: glam::DVec2, p: glam::DVec2| n.extend(0.0).extend(-n.dot(p));
+                n.cadrage = vec![plan(-gauche, a + gauche * (profondeur / 1000.0)), plan(u, a), plan(-u, b)];
             }
         }
         vues.push(n);

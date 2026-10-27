@@ -159,22 +159,62 @@ impl Projet {
         let (id, _) = self.nouvelle_vue("plan");
         let deja = self.vues.iter().filter(|v| matches!(&v.genre, GenreVue::Plan { niveau: x, .. } if x == niveau)).count();
         let nom = if deja == 0 { n.nom.clone() } else { format!("{} ({})", n.nom, deja + 1) };
-        self.vues.push(Vue { id: id.clone(), nom, echelle: 100.0, genre: GenreVue::Plan { niveau: n.id, coupe } });
+        self.vues.push(Vue { id: id.clone(), nom, type_vue: String::new(), echelle: 100.0, genre: GenreVue::Plan { niveau: n.id, coupe } });
         Ok(id)
     }
 
-    /// Ajoute une coupe le long de `debut` → `fin` (mm), regardant vers la gauche.
-    pub fn ajouter_vue_coupe(&mut self, debut: [f64; 2], fin: [f64; 2], profondeur: f64) -> Result<String, String> {
+    /// Ajoute une coupe (ou une élévation) le long de `debut` → `fin` (mm), regardant
+    /// vers la gauche, de type `type_vue` à l'échelle 1:`echelle`.
+    pub fn ajouter_vue_coupe(&mut self, debut: [f64; 2], fin: [f64; 2], profondeur: f64, elevation: bool, type_vue: &str, echelle: f64) -> Result<String, String> {
         if !debut.iter().chain(&fin).chain([&profondeur]).all(|x| x.is_finite()) || (fin[0] - debut[0]).hypot(fin[1] - debut[1]) < 100.0 {
             return Err("La ligne de coupe doit mesurer au moins 100 mm.".into());
         }
         if profondeur <= 0.0 {
             return Err("La profondeur de la coupe doit être positive.".into());
         }
-        let (id, k) = self.nouvelle_vue("coupe");
-        self.vues.push(Vue { id: id.clone(), nom: format!("Coupe {k}"), echelle: 50.0, genre: GenreVue::Coupe { debut, fin, profondeur } });
+        if !(echelle >= 1.0 && echelle.is_finite()) {
+            return Err("L’échelle doit être au moins 1:1.".into());
+        }
+        let (prefixe, nom) = if elevation { ("elevation", "Élévation") } else { ("coupe", "Coupe") };
+        let (id, _) = self.nouvelle_vue(prefixe);
+        // numéro : premier libre parmi les vues du même nom
+        let mut k = 1;
+        while self.vues.iter().any(|v| v.nom == format!("{nom} {k}")) {
+            k += 1;
+        }
+        self.vues.push(Vue { id: id.clone(), nom: format!("{nom} {k}"), type_vue: type_vue.into(), echelle, genre: GenreVue::Coupe { debut, fin, profondeur, elevation } });
         self.arrondir();
         Ok(id)
+    }
+
+    /// Renomme une vue ; le nom doit être unique et non vide.
+    pub fn renommer_vue(&mut self, id: &str, nom: &str) -> Result<(), String> {
+        let nom = nom.trim();
+        if nom.is_empty() {
+            return Err("Le nom de la vue ne peut pas être vide.".into());
+        }
+        if self.vues.iter().any(|v| v.nom == nom && v.id != id) {
+            return Err(format!("Une vue s’appelle déjà « {nom} »."));
+        }
+        self.vues.iter_mut().find(|v| v.id == id).ok_or("Vue introuvable.")?.nom = nom.into();
+        Ok(())
+    }
+
+    /// Retourne une coupe ou une élévation : elle regarde de l'autre côté de sa ligne.
+    pub fn retourner_vue(&mut self, id: &str) -> Result<(), String> {
+        match &mut self.vues.iter_mut().find(|v| v.id == id).ok_or("Vue introuvable.")?.genre {
+            GenreVue::Coupe { debut, fin, .. } => {
+                std::mem::swap(debut, fin);
+                Ok(())
+            }
+            GenreVue::Plan { .. } => Err("Un plan ne se retourne pas.".into()),
+        }
+    }
+
+    pub fn supprimer_vue(&mut self, id: &str) -> Result<(), String> {
+        let avant = self.vues.len();
+        self.vues.retain(|v| v.id != id);
+        if self.vues.len() == avant { Err("Vue introuvable.".into()) } else { Ok(()) }
     }
 
     /// Ajoute une dalle de contour `points` ; son type (couches du haut vers le bas) est
@@ -464,17 +504,32 @@ mod tests {
         let n = p.niveaux[0].id.clone();
         p.ajouter_vue_plan(&n, 1200.0).unwrap();
         p.ajouter_vue_plan(&n, 1500.0).unwrap();
-        p.ajouter_vue_coupe([0.0, -2000.0], [5000.0, -2000.0], 8000.0).unwrap();
+        p.ajouter_vue_coupe([0.0, -2000.0], [5000.0, -2000.0], 8000.0, false, "Coupe de bâtiment", 100.0).unwrap();
+        let e = p.ajouter_vue_coupe([5000.0, 6000.0], [0.0, 6000.0], 20000.0, true, "Élévation extérieure", 100.0).unwrap();
         assert!(p.ajouter_vue_plan("absent", 1200.0).is_err());
-        assert!(p.ajouter_vue_coupe([0.0, 0.0], [10.0, 0.0], 8000.0).is_err());
+        assert!(p.ajouter_vue_coupe([0.0, 0.0], [10.0, 0.0], 8000.0, false, "", 100.0).is_err());
         let noms: Vec<&str> = p.vues.iter().map(|v| v.nom.as_str()).collect();
-        assert_eq!(noms, ["Niveau 0", "Niveau 0 (2)", "Coupe 1"]);
+        assert_eq!(noms, ["Niveau 0", "Niveau 0 (2)", "Coupe 1", "Élévation 1"]);
+        assert!(p.renommer_vue(&e, "Coupe 1").is_err());
+        p.renommer_vue(&e, "Façade sud").unwrap();
+        p.retourner_vue(&e).unwrap();
+        assert!(matches!(p.vues[3].genre, GenreVue::Coupe { debut, .. } if debut == [0.0, 6000.0]));
+        p.retourner_vue(&e).unwrap();
         let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
         assert_eq!(relu.vues, p.vues);
         let s = crate::scene::depuis_natif(&relu, std::path::Path::new("vues.modele.json")).unwrap();
         let nav = s.navigateur.as_ref().unwrap();
         let genres: Vec<&str> = nav.vues.iter().map(|v| v.genre.as_str()).collect();
-        assert_eq!(genres, ["Vue 3D", "Plan d'étage", "Plan d'étage", "Coupe"]);
+        assert_eq!(genres, ["Vue 3D", "Plan d'étage", "Plan d'étage", "Coupe", "Élévation"]);
+        // élévation tracée de droite à gauche au nord : elle regarde vers le sud (−y)
+        assert!((nav.vues[4].direction - glam::DVec3::Y).length() < 1e-9, "{:?}", nav.vues[4].direction);
+        // cadrage : profondeur et deux côtés
+        assert_eq!(nav.vues[3].cadrage.len(), 3);
+        let (p0, p1) = (glam::DVec3::new(2.5, 0.0, 0.0), glam::DVec3::new(2.5, 7.0, 0.0));
+        let garde = |q: glam::DVec3| nav.vues[3].cadrage.iter().all(|pl| pl.truncate().dot(q) + pl.w >= 0.0);
+        assert!(garde(p0) && !garde(p1), "au-delà de la profondeur de 8 m");
+        p.supprimer_vue(&e).unwrap();
+        assert_eq!(p.vues.len(), 3);
         // coupe : on regarde vers la gauche de la ligne (+y), l'observateur est côté −y
         let c = &nav.vues[3];
         assert!((c.direction - glam::DVec3::NEG_Y).length() < 1e-9, "{:?}", c.direction);

@@ -78,6 +78,9 @@ uniform float u_decalage_ombre;
 uniform bool u_boite;
 uniform vec3 u_boite_min;
 uniform vec3 u_boite_max;
+// cadrage d'une coupe ou d'une élévation : plans n·p + d ≥ 0 gardés (u_n_cadrage)
+uniform vec4 u_cadrage[4];
+uniform int u_n_cadrage;
 out vec4 o_color;
 
 // part du soleil reçue en p (0 : à l'ombre), moyenne de 3 × 3 échantillons
@@ -100,6 +103,13 @@ float ensoleillement(vec3 p, vec3 n) {
 void main() {
     if (u_boite && v_annot == 0u && (any(lessThan(v_pos, u_boite_min)) || any(greaterThan(v_pos, u_boite_max)))) {
         discard;
+    }
+    if (v_annot == 0u) {
+        for (int i = 0; i < 4; i++) {
+            if (i < u_n_cadrage && dot(u_cadrage[i], vec4(v_pos, 1.0)) < 0.0) {
+                discard;
+            }
+        }
     }
     // filaire : faces du modèle invisibles (annotations gardées : textes, régions)
     if (u_filaire && v_annot == 0u) {
@@ -209,6 +219,8 @@ pub struct Renderer {
     u_ombres: Option<glow::UniformLocation>,
     u_decalage_ombre: Option<glow::UniformLocation>,
     u_boite: Option<glow::UniformLocation>,
+    u_cadrage: Option<glow::UniformLocation>,
+    u_n_cadrage: Option<glow::UniformLocation>,
     u_boite_min: Option<glow::UniformLocation>,
     u_boite_max: Option<glow::UniformLocation>,
     /// Couleurs de rendu des sommets (attribut 4), tampon à part.
@@ -289,6 +301,8 @@ pub struct FrameParams {
     pub soleil: Option<(Vec3, Mat4, f32)>,
     /// Zone de coupe 3D (min, max), repère de la scène : vue principale seulement.
     pub boite: Option<(Vec3, Vec3)>,
+    /// Cadrage de la vue principale (coupe, élévation) : plans gardés, 4 au plus.
+    pub cadrage: Vec<Vec4>,
     /// Passes des fenêtres de vue (feuille ouverte), dans l'ordre des indices envoyés
     /// par `upload_passes`.
     pub passes: Vec<ParamsPasse>,
@@ -396,6 +410,8 @@ impl Renderer {
                 u_lumiere: gl.get_uniform_location(program, "u_lumiere"),
                 u_ombres: gl.get_uniform_location(program, "u_ombres"),
                 u_boite: gl.get_uniform_location(program, "u_boite"),
+                u_cadrage: gl.get_uniform_location(program, "u_cadrage[0]").or_else(|| gl.get_uniform_location(program, "u_cadrage")),
+                u_n_cadrage: gl.get_uniform_location(program, "u_n_cadrage"),
                 u_boite_min: gl.get_uniform_location(program, "u_boite_min"),
                 u_boite_max: gl.get_uniform_location(program, "u_boite_max"),
                 u_decalage_ombre: gl.get_uniform_location(program, "u_decalage_ombre"),
@@ -684,6 +700,14 @@ impl Renderer {
                 gl.uniform_matrix_4_f32_slice(self.u_mvp.as_ref(), false, &p.mvp.to_cols_array());
                 gl.uniform_3_f32(self.u_view_dir.as_ref(), p.view_dir.x, p.view_dir.y, p.view_dir.z);
             }
+            if !p.cadrage.is_empty() {
+                let mut plans = [0f32; 16];
+                for (k, pl) in p.cadrage.iter().take(4).enumerate() {
+                    plans[4 * k..4 * k + 4].copy_from_slice(&pl.to_array());
+                }
+                gl.uniform_4_f32_slice(self.u_cadrage.as_ref(), &plans);
+                gl.uniform_1_i32(self.u_n_cadrage.as_ref(), p.cadrage.len().min(4) as i32);
+            }
             if let Some((a, b)) = p.boite {
                 gl.uniform_1_i32(self.u_boite.as_ref(), 1);
                 gl.uniform_3_f32(self.u_boite_min.as_ref(), a.x, a.y, a.z);
@@ -725,6 +749,7 @@ impl Renderer {
                 gl.uniform_1_i32(self.u_flat.as_ref(), 0);
             }
             gl.uniform_1_i32(self.u_boite.as_ref(), 0);
+            gl.uniform_1_i32(self.u_n_cadrage.as_ref(), 0);
             gl.disable(glow::POLYGON_OFFSET_FILL);
             gl.bind_vertex_array(None);
             gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
