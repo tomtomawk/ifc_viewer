@@ -350,6 +350,11 @@ pub fn sommets(scene: &Scene, prims: &[Primitive], normale: DVec3, echelle: f64)
         let m = p.mailler(normale, echelle);
         tris.extend(m.triangles.iter().flatten().map(|q| sommet(*q)));
         traits.extend(m.traits.iter().flatten().map(|q| sommet(*q)));
+        // liseré d'un pixel des traits épais (contours, annotations) : jamais plus fins
+        // qu'un pixel, donc stables au zoom
+        if p.role != Role::Poche && !m.triangles.is_empty() {
+            traits.extend(aretes(&m.triangles).vives.iter().flatten().map(|q| sommet(*q)));
+        }
     }
     (tris, traits)
 }

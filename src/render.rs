@@ -34,6 +34,12 @@ void main() {
     // sélection : plage d'objets consécutifs (un assemblage et ses couches)
     v_selected = (a_obj >= u_sel && a_obj <= u_sel_fin) ? 1u : 0u;
     gl_Position = u_mvp * vec4(a_pos, 1.0);
+    // annotations (cotes, textes, tracé de la coupe) un peu avancées en profondeur, en
+    // proportion de la précision du tampon : elles ne se battent plus avec les faces
+    // coplanaires quand on s'éloigne
+    if (v_annot == 1u) {
+        gl_Position.z -= 4e-5 * gl_Position.w;
+    }
     // arête douce (4ᵉ composante de la normale négative) : normales des deux facettes
     // dans a_normal et a_color ; tracée en noir sur la silhouette seulement, sinon
     // envoyée hors du volume de vue

@@ -274,7 +274,14 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
         })
         .collect();
 
-    for (g, vives) in geoms.iter().zip(&vives) {
+    // liserés d'un pixel des annotations (cotes, textes, traits) : un ruban plus fin qu'un
+    // pixel ne disparaît plus d'une image à l'autre au zoom
+    let liseres: Vec<Vec<Vec<[DVec3; 2]>>> = geoms
+        .par_iter()
+        .map(|g| if annotation(g) { g.parts.iter().map(|p| crate::dessin::aretes(&p.tris).vives).collect() } else { Vec::new() })
+        .collect();
+
+    for ((g, vives), liseres) in geoms.iter().zip(&vives).zip(&liseres) {
         let obj = objects.len() as u32;
         let (o0, t0, l0, a0) = (opaque.len() as u32, transp.len() as u32, lignes.len() as u32, aretes.len() as u32);
         // drapeau des annotations (4ᵉ octet de la normale) : jamais découpées par la coupe
@@ -302,6 +309,12 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
                     dst_r.push(rendu);
                 }
                 triangles += 1;
+            }
+        }
+        for (p, segs) in g.parts.iter().zip(liseres) {
+            let color = p.color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8);
+            for v in segs.iter().flatten() {
+                lignes.push(Vertex { pos: (*v - origin).as_vec3().to_array(), normal: [0, 0, 0, drapeau], color, obj });
             }
         }
         for l in &g.lignes {
