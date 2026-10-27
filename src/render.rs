@@ -72,7 +72,6 @@ uniform bool u_ortho;
 uniform vec3 u_view_dir;
 uniform bool u_flat;
 uniform bool u_dessin;
-uniform bool u_filaire;
 uniform bool u_sans_eclairage;
 // style Rendu : couleurs des matériaux, soleil et ombres portées (carte d'ombres)
 uniform bool u_rendu;
@@ -135,10 +134,6 @@ void main() {
                 discard;
             }
         }
-    }
-    // filaire : faces du modèle invisibles (annotations gardées : textes, régions)
-    if (u_filaire && v_annot == 0u) {
-        discard;
     }
     if (u_flat) {
         vec3 l = v_selected == 1u ? mix(v_c.rgb, vec3(1.0, 0.55, 0.1), 0.65) : v_c.rgb;
@@ -341,7 +336,6 @@ pub struct Renderer {
     u_plans: Option<glow::UniformLocation>,
     u_coupe: Option<glow::UniformLocation>,
     u_dessin: Option<glow::UniformLocation>,
-    u_filaire: Option<glow::UniformLocation>,
     u_sans_eclairage: Option<glow::UniformLocation>,
     u_rendu: Option<glow::UniformLocation>,
     u_soleil: Option<glow::UniformLocation>,
@@ -375,8 +369,6 @@ pub struct Renderer {
 /// Style visuel d'une vue, comme dans Revit.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum StyleVisuel {
-    /// Arêtes seules, parties cachées comprises.
-    Filaire,
     /// Dessin : faces blanches, arêtes vues, coupe (plans, élévations).
     LignesCachees,
     /// Faces éclairées et arêtes.
@@ -390,11 +382,10 @@ pub enum StyleVisuel {
 }
 
 impl StyleVisuel {
-    pub const TOUS: [StyleVisuel; 6] = [StyleVisuel::Filaire, StyleVisuel::LignesCachees, StyleVisuel::Ombre, StyleVisuel::CouleursHomogenes, StyleVisuel::Realiste, StyleVisuel::Rendu];
+    pub const TOUS: [StyleVisuel; 5] = [StyleVisuel::LignesCachees, StyleVisuel::Ombre, StyleVisuel::CouleursHomogenes, StyleVisuel::Realiste, StyleVisuel::Rendu];
 
     pub fn libelle(self) -> &'static str {
         match self {
-            StyleVisuel::Filaire => "Filaire",
             StyleVisuel::LignesCachees => "Lignes cachées",
             StyleVisuel::Ombre => "Ombré",
             StyleVisuel::CouleursHomogenes => "Couleurs homogènes",
@@ -406,7 +397,6 @@ impl StyleVisuel {
     /// Nom pour le pilote (commande `style`).
     pub fn nom(self) -> &'static str {
         match self {
-            StyleVisuel::Filaire => "filaire",
             StyleVisuel::LignesCachees => "lignes_cachees",
             StyleVisuel::Ombre => "ombre",
             StyleVisuel::CouleursHomogenes => "couleurs",
@@ -417,7 +407,7 @@ impl StyleVisuel {
 
     /// Style « papier » : fond blanc, traits noirs.
     pub fn papier(self) -> bool {
-        matches!(self, StyleVisuel::Filaire | StyleVisuel::LignesCachees)
+        self == StyleVisuel::LignesCachees
     }
 }
 
@@ -553,7 +543,6 @@ impl Renderer {
                 u_plans: gl.get_uniform_location(program, "u_plans[0]").or_else(|| gl.get_uniform_location(program, "u_plans")),
                 u_coupe: gl.get_uniform_location(program, "u_coupe"),
                 u_dessin: gl.get_uniform_location(program, "u_dessin"),
-                u_filaire: gl.get_uniform_location(program, "u_filaire"),
                 u_sans_eclairage: gl.get_uniform_location(program, "u_sans_eclairage"),
                 u_rendu: gl.get_uniform_location(program, "u_rendu"),
                 u_soleil: gl.get_uniform_location(program, "u_soleil"),
@@ -708,9 +697,8 @@ impl Renderer {
 
     /// Mode dessin : faces blanches (transparents compris) découpées par la coupe, traits
     /// et arêtes vives par-dessus (parties cachées éliminées par la profondeur), puis le
-    /// tracé de la coupe (poché, hachures, contours), jamais découpé. Sans `faces`
-    /// (filaire) : faces du modèle omises, toutes les arêtes visibles.
-    unsafe fn dessiner_plan(&self, gl: &glow::Context, p: &FrameParams, faces: bool) {
+    /// tracé de la coupe (poché, hachures, contours), jamais découpé.
+    unsafe fn dessiner_plan(&self, gl: &glow::Context, p: &FrameParams) {
         unsafe {
             let decoupe = p.coupe.is_some() && !gl.version().is_embedded;
             if let Some(c) = p.coupe.filter(|_| decoupe) {
@@ -723,15 +711,14 @@ impl Renderer {
             // faces repoussées plus nettement qu'en 3D : les arêtes sont à leur profondeur
             // exacte et les arrondis en f32 dépassent une unité du tampon de profondeur
             gl.polygon_offset(1.0, 64.0);
-            let mode = if faces { self.u_dessin.as_ref() } else { self.u_filaire.as_ref() };
-            gl.uniform_1_i32(mode, 1);
+            gl.uniform_1_i32(self.u_dessin.as_ref(), 1);
             for (ebo, n) in [(self.ebo_opaque, self.n_opaque), (self.ebo_transp, self.n_transp)] {
                 if n > 0 {
                     gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ebo));
                     gl.draw_elements(glow::TRIANGLES, n, glow::UNSIGNED_INT, 0);
                 }
             }
-            gl.uniform_1_i32(mode, 0);
+            gl.uniform_1_i32(self.u_dessin.as_ref(), 0);
             gl.polygon_offset(1.0, 1.0);
             gl.uniform_1_i32(self.u_flat.as_ref(), 1);
             for (ebo, n) in [(self.ebo_lines, self.n_lines), (self.ebo_aretes, self.n_aretes)] {
@@ -993,8 +980,7 @@ impl Renderer {
                 gl.uniform_3_f32(self.u_boite_max.as_ref(), b.x, b.y, b.z);
             }
             match p.style {
-                StyleVisuel::LignesCachees => self.dessiner_plan(gl, p, true),
-                StyleVisuel::Filaire => self.dessiner_plan(gl, p, false),
+                StyleVisuel::LignesCachees => self.dessiner_plan(gl, p),
                 StyleVisuel::Rendu => {
                     if let Some((soleil, lumiere, decalage)) = p.soleil {
                         gl.uniform_1_i32(self.u_rendu.as_ref(), 1);
@@ -1030,7 +1016,7 @@ impl Renderer {
                     gl.uniform_1_i32(self.u_sans_eclairage.as_ref(), 0);
                 }
             }
-            if (p.coupe.is_some() || p.boite.is_some()) && p.style != StyleVisuel::Filaire && self.n_coupe[0] + self.n_coupe[1] > 0 {
+            if (p.coupe.is_some() || p.boite.is_some()) && self.n_coupe[0] + self.n_coupe[1] > 0 {
                 gl.disable(glow::BLEND);
                 gl.depth_mask(true);
                 gl.uniform_1_i32(self.u_flat.as_ref(), 1);

@@ -5261,7 +5261,7 @@ impl ViewerApp {
             }
             "style" => {
                 let Some(&st) = StyleVisuel::TOUS.iter().find(|x| x.nom() == argument) else {
-                    return erreur("usage : style filaire|lignes_cachees|ombre|couleurs|realiste|rendu");
+                    return erreur("usage : style lignes_cachees|ombre|couleurs|realiste|rendu");
                 };
                 self.style = st;
                 self.visibility_dirty = true;
@@ -5531,7 +5531,6 @@ fn icone_style(p: &egui::Painter, r: egui::Rect, style: StyleVisuel) {
     ];
     let remplissage = |i: usize| -> Option<Color32> {
         match style {
-            StyleVisuel::Filaire => None,
             StyleVisuel::LignesCachees => Some(Color32::WHITE),
             StyleVisuel::Ombre => Some(Color32::from_gray([235, 185, 150][i])),
             StyleVisuel::CouleursHomogenes => Some(Color32::from_rgb(150, 180, 210)),
@@ -5541,13 +5540,6 @@ fn icone_style(p: &egui::Painter, r: egui::Rect, style: StyleVisuel) {
     if style == StyleVisuel::Rendu {
         // ombre portée au sol
         p.add(egui::Shape::convex_polygon(vec![pt(1., -1., -1.), pt(2.4, -0.2, -1.), pt(2.4, 1.8, -1.), pt(1., 1., -1.)], Color32::from_gray(150), Stroke::NONE));
-    }
-    if style == StyleVisuel::Filaire {
-        // arêtes cachées aussi
-        let a = pt(1., 1., -1.);
-        for b in [pt(1., -1., -1.), pt(-1., 1., -1.), pt(1., 1., 1.)] {
-            p.line_segment([a, b], Stroke::new(1.0, Color32::from_gray(140)));
-        }
     }
     for (coins, i) in faces {
         let trait_ = if matches!(style, StyleVisuel::Realiste | StyleVisuel::Rendu) { Stroke::NONE } else { t };
