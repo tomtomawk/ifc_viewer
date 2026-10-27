@@ -8,6 +8,7 @@ mod dessin;
 mod geom;
 mod model;
 mod modele;
+mod options;
 mod pilote;
 mod render;
 mod ruban;

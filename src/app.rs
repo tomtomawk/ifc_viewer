@@ -456,6 +456,8 @@ pub struct ViewerApp {
     visible: Vec<bool>,
     visibility_dirty: bool,
     left_tab: LeftTab,
+    /// Options de l'application (menu Début > Options).
+    options: crate::options::Options,
     filter: String,
     show_unsupported: bool,
     /// Vue Revit ouverte (indice dans `Navigateur::vues`).
@@ -574,6 +576,7 @@ impl ViewerApp {
             visible: Vec::new(),
             visibility_dirty: false,
             left_tab: LeftTab::Tree,
+            options: crate::options::Options::charger(),
             filter: String::new(),
             show_unsupported: false,
             vue_active: None,
@@ -2452,6 +2455,14 @@ impl ViewerApp {
                 if self.rvt.is_some() && self.rvt_geom.is_ok() {
                     ui.toggle_value(&mut self.rvt_sheet, "Fiche Revit").on_hover_text("Métadonnées du fichier Revit");
                 }
+                ui.menu_button("Options", |ui| {
+                    if ui.checkbox(&mut self.options.navigation_ifc, "Navigation IFC")
+                        .on_hover_text("Arborescence spatiale, classes et attributs IFC (GlobalId, Id STEP) pour les modèles Revit et natifs")
+                        .changed()
+                    {
+                        self.options.enregistrer();
+                    }
+                });
             }
             OngletRuban::Modeliser | OngletRuban::Modifier | OngletRuban::Annoter => {}
             OngletRuban::Sortie => {
@@ -3069,7 +3080,11 @@ impl ViewerApp {
         let titre = if nom.is_empty() { "Arborescence du projet".to_string() } else { format!("Arborescence du projet - {nom}") };
         self.entete_panneau(ui, Panneau::Arborescence, &titre);
         let a_nav = self.scene.as_ref().is_some_and(|s| s.navigateur.is_some());
-        let onglets: &[LeftTab] = if a_nav { &LeftTab::REVIT } else { &LeftTab::IFC };
+        let onglets: &[LeftTab] = match (a_nav, self.options.navigation_ifc) {
+            (false, _) => &LeftTab::IFC,
+            (true, true) => &LeftTab::REVIT,
+            (true, false) => &LeftTab::REVIT[..LeftTab::REVIT.len() - 2],
+        };
         if !onglets.contains(&self.left_tab) {
             self.left_tab = onglets[0];
         }
@@ -3973,14 +3988,20 @@ impl ViewerApp {
             }
             return;
         }
+        // sans navigation IFC, un modèle Revit ou natif n'expose pas ses données IFC
+        let ifc = self.options.navigation_ifc || self.scene.as_ref().is_some_and(|s| s.navigateur.is_none());
         if let (Some(s), Some(id)) = (&self.scene, self.selected) {
-            // en-tête façon Revit : classe et type de l'élément
+            // en-tête façon Revit : classe (IFC) et type de l'élément
             let ty = s.model.type_of.get(&id).map(|t| s.model.name(*t)).filter(|t| !t.is_empty());
             let classe = pretty_type(s.model.ty(id)).trim_start_matches("Ifc").to_string();
-            ui.label(RichText::new(match ty {
-                Some(t) => format!("{classe} : {t}"),
-                None => classe,
-            }).color(Color32::from_gray(70)));
+            let entete = match (ifc, ty) {
+                (true, Some(t)) => Some(format!("{classe} : {t}")),
+                (true, None) => Some(classe),
+                (false, t) => t,
+            };
+            if let Some(e) = entete {
+                ui.label(RichText::new(e).color(Color32::from_gray(70)));
+            }
         }
         ui.separator();
         if self.natif.is_some() {
@@ -4019,7 +4040,7 @@ impl ViewerApp {
             if ui.add_enabled(!under.is_empty(), egui::Button::new("Masquer")).on_hover_text("H").clicked() {
                 action = Some("hide");
             }
-            if ui.button("Copier GlobalId").clicked() {
+            if ifc && ui.button("Copier GlobalId").clicked() {
                 ui.ctx().copy_text(model.global_id(id));
             }
         });
@@ -4027,7 +4048,10 @@ impl ViewerApp {
             ui.label(RichText::new("Pas de géométrie affichable.").weak());
         }
         ui.add_space(4.0);
-        let attrs = model.attributes(id);
+        let mut attrs = model.attributes(id);
+        if !ifc {
+            attrs.retain(|(k, _)| !matches!(k.as_str(), "Classe" | "Id STEP" | "GlobalId"));
+        }
         let groups = model.property_groups(id);
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             egui::Grid::new("attrs").num_columns(2).striped(true).show(ui, |ui| {

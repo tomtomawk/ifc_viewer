@@ -28,6 +28,7 @@ ce document. La conversion v0 s'exécute en arrière-plan, écrit aussi le rappo
 disque doit être rouvert avant conversion. Le fichier RVT source reste intact.
 
 Le ruban regroupe les commandes dans Début, Modéliser, Modifier, Documenter et Sortie.
+**Début → Options → Navigation IFC** (désactivée par défaut) affiche, pour les modèles Revit et natifs, l'arborescence spatiale IFC, la liste des classes et les attributs IFC des propriétés (classe, Id STEP, GlobalId, bouton Copier GlobalId). Les fichiers IFC gardent toujours cette navigation, qui est leur seule arborescence. L'option est enregistrée dans `%APPDATA%\ifc_viewer\options.json` (Windows) ou `~/.config/ifc_viewer/options.json`.
 Les commandes fréquentes (Mur, Éléments horizontaux, Ouverture, Déplacer, Copier, Aligner, Cote et
 Texte) disposent de grands boutons lorsque la largeur le permet ; les autres
 restent empilées avec de petites icônes. Les grands boutons se replient selon leur
