@@ -184,7 +184,8 @@ pub struct Scene {
 }
 
 pub struct CoucheCoupe {
-    pub plans: [Vec4; 2],
+    /// Région de la couche : demi-espaces `n · x + w >= 0`.
+    pub plans: Vec<Vec4>,
     pub couleur: [u8; 4],
     pub motif: Option<Arc<crate::rvt::vues::Motif>>,
     pub couleur_motif: [u8; 4],

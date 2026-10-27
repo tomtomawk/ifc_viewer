@@ -82,13 +82,13 @@ garde le RVT et ses vues ouverts, sans basculer vers le rendu natif limité.
 | `murs[]` | `id`, `nom`, `type_mur`, `niveau`, `decalage_bas`, `haut`, `axe`, `origine`, `phase`, `sous_projet`, `variante` | `phase`, `sous_projet` et `variante` sont facultatifs (absents des anciens fichiers). `haut` : `{contrainte: libre, hauteur}` ou `{contrainte: niveau, niveau, decalage}` |
 | `axe` | `{forme: droit, debut, fin}` ou `{forme: arc, debut, fin, centre, direct}` | Ligne médiane de l'épaisseur, en plan (x, y) |
 | `ouvertures[]` | `id`, `nom`, `genre` (porte, fenetre, baie), `mur`, `type_ouverture`, `abscisse`, `largeur`, `hauteur`, `allege`, `representation`, `origine` | Baie rectangulaire à travers le mur ; `abscisse` = milieu de la baie le long de l'axe ; `allege` au-dessus du niveau du mur ; `representation` = menuiserie lue (maillage) |
-| `dalles[]` | `id`, `nom`, `type_dalle`, `niveau`, `decalage`, `contours`, `phase`, `sous_projet`, `variante`, `origine` | `decalage` = dessus au-dessus du niveau ; `contours` en plan, pair-impair (trous) |
+| `dalles[]` | `id`, `nom`, `sorte`, `type_dalle`, `niveau`, `decalage`, `contours`, `pentes`, `phase`, `sous_projet`, `variante`, `origine` | `sorte` : `dalle` (défaut, omis), `sol`, `plafond`, `toiture`. `decalage` = dessus (dalle, sol) ou sous-face (plafond, toiture ; à l'égout si en pente) au-dessus du niveau ; `contours` en plan, pair-impair (trous) ; `pentes[c][k]` = pente en degrés de l'arête du sommet k au suivant du contour c, `null` sans pente (omis : élément plan) |
 | `vues[]` | `id`, `nom`, `type_vue`, `echelle`, `genre` : `plan` (`niveau`, `coupe` mm au-dessus du niveau) ou `coupe` (`debut`, `fin`, `profondeur` mm, `elevation`) | Arborescence du projet ; une coupe ou une élévation regarde vers la gauche de sa ligne |
 | `importes[]` | `id`, `nom`, `categorie`, `niveau`, `maillage`, `raison`, `origine` | `maillage` : `sommets` [x, y, z], `triangles` [i, j, k] |
 | `ignores` | catégorie → nombre | Éléments sans géométrie ou hors périmètre (pièces, quadrillages, espaces, ouvertures IFC vides, éléments 2D) |
 
 Volumes déduits des paramètres (validation) : mur = longueur d'axe × épaisseur du type ×
-hauteur − baies (bornées à la hauteur du mur) ; dalle = aire des contours × épaisseur du type.
+hauteur − baies (bornées à la hauteur du mur) ; dalle = aire des contours × épaisseur du type (en pente : épaisseur normale aux versants, intégrée sur chaque versant).
 
 ## Murs composés (assemblages)
 
@@ -110,16 +110,61 @@ doublage d'une autre phase…). Conventions :
   prochains tracés (les murs déjà tracés gardent leurs couches).
 - **Volume** : celui de chaque couche, baies de son assemblage déduites.
 
-## Dalles natives
+## Éléments horizontaux natifs (dalle, sol, plafond, toiture)
 
-Outil Dalle (ou Sol) : type choisi dans le sélecteur de type (couches du haut vers le
-bas, enregistré dans `types_dalles` à la première dalle de ce type), niveau et décalage
-du dessus dans Propriétés. Contour par sommets (recliquer le premier ou Entrée pour
-fermer, Retour arrière enlève le dernier) ou rectangle par deux coins dans les axes du
-plan ; accrochage aux extrémités, milieux et angles des murs (contours raccordés) et
-aux sommets des dalles. Contour validé : au moins trois sommets, 0,01 m² au moins,
-pas d'arête qui en croise une autre, orienté dans le sens trigonométrique. Affichage :
-une partie par couche (couleur du matériau), poché par couche en coupe.
+Un seul élément, quatre sortes qui ne diffèrent que par leur nom, leurs types et leur
+référence d'altitude : dessus pour la dalle et le sol, sous-face pour le plafond
+(hauteur sous plafond) et la toiture. Type choisi dans le sélecteur de type (onglet par
+sorte, types du gabarit, couches du haut vers le bas, enregistré dans `types_dalles` au
+premier élément de ce type), niveau et décalage dans Propriétés. Contour par sommets
+(recliquer le premier ou Entrée pour fermer, Retour arrière enlève le dernier) ou
+rectangle par deux coins dans les axes du plan ; accrochage aux extrémités, milieux et
+angles des murs (contours raccordés) et aux sommets des dalles. Contour validé : au
+moins trois sommets, 0,01 m² au moins, pas d'arête qui en croise une autre, orienté
+dans le sens trigonométrique. Affichage : une partie par couche (couleur du matériau),
+poché par couche en coupe. Classes IFC de la scène : `IfcSlab` (dalle), `IfcCovering`
+(sol, plafond), `IfcRoof` (toiture) ; familles de l'arborescence : Sols, Plafonds, Toits.
+
+### Pente par arête
+
+Comme une toiture par tracé de Revit : une arête qui « définit la pente » porte un
+versant qui monte de son arête vers l'intérieur du contour, avec sa pente en degrés ;
+la surface est le plus bas des versants (croupes, noues, faîtages à leurs
+intersections). Une arête sans pente ne porte rien : deux versants opposés et deux
+pignons font une toiture à deux pans ; aucune arête en pente, un élément plan.
+
+- Création : outil Toiture, case « Toutes les arêtes la définissent » et pente (défaut
+  35°) ; décochée, toiture plate.
+- Modification (toiture, plafond rampant) : liste des arêtes dans Propriétés (case et
+  pente), ou clic sur les repères des arêtes dans la vue quand l'élément est
+  sélectionné (triangle plein et pente : arête en pente ; rond : sans pente).
+- Couches : épaisseur normale aux versants (verticale : épaisseur / cos pente), empilées
+  depuis la sous-face. Coupe d'égout verticale. Une couche de coupe par versant.
+- Limite v0 : le plus bas des plans est exact pour un contour convexe ; sur un contour
+  concave (L, T), un versant prolongé peut couper l'aile voisine.
+
+## Gabarit
+
+Matériaux (couleur et motif de coupe par mot du nom), types de murs, types d'éléments
+horizontaux et types de coupes / élévations viennent d'un gabarit JSON, pas du code.
+Le gabarit par défaut est `gabarits/defaut.gabarit.json` (embarqué dans l'exécutable).
+Début > Options : choisir un autre fichier (`.gabarit.json`, mémorisé dans les options),
+revenir au défaut, ou enregistrer une copie pour en faire un gabarit d'agence.
+
+```json
+{
+ "format": "ifc_viewer.gabarit", "version": 1, "nom": "Agence",
+ "materiaux": [{"mots": ["béton"], "couleur": [176, 176, 170], "motif": "diagonales"}],
+ "types_murs": [{"nom": "Voile BA 200", "couches": [{"materiau": "Béton armé", "epaisseur": 200.0, "fonction": "structure"}]}],
+ "types_surfaces": [{"sorte": "toiture", "nom": "Bac acier", "couches": [{"materiau": "Bac acier", "epaisseur": 40.0}]}],
+ "types_vues": [{"elevation": false, "nom": "Coupe de bâtiment", "aide": "", "echelle": 100.0, "profondeur": 15000.0}]
+}
+```
+
+Motifs : `diagonales`, `croisees`, `uni`, `vide`. Il faut au moins un type de coupe et un
+type d'élévation. Un nouveau projet reprend les types de murs du gabarit ; dans un projet
+existant, ceux qui manquent sont proposés en bas du sélecteur de type de mur et copiés
+dans le projet au choix.
 
 ## Vues et arborescence
 

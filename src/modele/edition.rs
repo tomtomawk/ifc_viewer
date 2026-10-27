@@ -69,11 +69,14 @@ impl ParametresMur {
     }
 }
 
-/// Paramètres de création d'une dalle (ou d'un sol) : type composé (couches du haut
-/// vers le bas), niveau et altitude du dessus par rapport à lui.
+/// Paramètres de création d'un élément horizontal : sorte, type composé (couches du
+/// haut vers le bas), niveau et altitude de la référence (dessus, ou sous-face d'un
+/// plafond et d'une toiture) par rapport à lui ; pente donnée à toutes les arêtes.
 #[derive(Clone)]
 pub struct ParametresDalle {
+    pub sorte: SorteDalle,
     pub type_dalle: TypeCompose,
+    pub pente: Option<f64>,
     pub niveau: Option<String>,
     pub decalage: f64,
     pub phase: Option<String>,
@@ -225,6 +228,9 @@ impl Projet {
         if !p.decalage.is_finite() {
             return Err("Le décalage doit être fini.".into());
         }
+        if p.pente.is_some_and(|a| !(a > 0.0 && a < 89.0)) {
+            return Err("La pente doit être comprise entre 0 et 89°.".into());
+        }
         let t = &p.type_dalle;
         if t.couches.is_empty() || t.couches.iter().any(|c| !(c.epaisseur > 0.0 && c.epaisseur.is_finite())) {
             return Err("Le type de dalle doit avoir des couches d’épaisseur positive.".into());
@@ -268,7 +274,9 @@ impl Projet {
             nom: format!("{} {k}", t.nom),
             type_dalle,
             niveau,
+            sorte: p.sorte,
             decalage: p.decalage,
+            pentes: p.pente.map(|a| vec![vec![Some(a); contour.len()]]).unwrap_or_default(),
             contours: vec![contour],
             origine: None,
         });
@@ -472,7 +480,7 @@ mod tests {
         let mut p = Projet::nouveau("Dalle");
         let c = |m: &str, e: f64| Couche { materiau: Some(m.into()), epaisseur: e, ..Default::default() };
         let t = TypeCompose { id: String::new(), nom: "Dalle BA 230 + chape".into(), couches: vec![c("Chape ciment", 50.0), c("Béton armé", 230.0)], couches_detaillees: true, origine: None };
-        let o = ParametresDalle { type_dalle: t, niveau: None, decalage: 0.0, phase: None, sous_projet: None, variante: None };
+        let o = ParametresDalle { sorte: SorteDalle::Dalle, type_dalle: t, pente: None, niveau: None, decalage: 0.0, phase: None, sous_projet: None, variante: None };
         // contour en sens horaire, point de fermeture répété : réorienté et nettoyé
         let id = p.ajouter_dalle(&[[0.0, 0.0], [0.0, 4000.0], [5000.0, 4000.0], [5000.0, 0.0], [0.0, 0.0]], &o).unwrap();
         let d = p.dalles.iter().find(|d| d.id == id).unwrap();
@@ -495,6 +503,41 @@ mod tests {
             p[0].dot(p[1].cross(p[2])) / 6.0
         }).sum::<f64>()).sum();
         assert!((volume - (20.0 + 2.0) * 0.28).abs() < 1e-4, "Volume du maillage : {volume}");
+    }
+
+    #[test]
+    fn plafond_et_toiture_en_pente() {
+        let g = crate::gabarit::Gabarit::defaut();
+        let mut p = Projet::depuis_gabarit("Toit", &g);
+        assert_eq!(p.types_murs.len(), g.types_murs.len());
+        let type_de = |sorte| {
+            let t = g.surfaces(sorte)[0];
+            TypeCompose { id: String::new(), nom: t.nom.clone(), couches: t.couches.clone(), couches_detaillees: true, origine: None }
+        };
+        let rect = [[0.0, 0.0], [10_000.0, 0.0], [10_000.0, 6_000.0], [0.0, 6_000.0]];
+        let plafond = ParametresDalle { sorte: SorteDalle::Plafond, type_dalle: type_de(SorteDalle::Plafond), pente: None, niveau: None, decalage: 2500.0, phase: None, sous_projet: None, variante: None };
+        let toit = ParametresDalle { sorte: SorteDalle::Toiture, type_dalle: type_de(SorteDalle::Toiture), pente: Some(35.0), decalage: 2800.0, ..plafond.clone() };
+        p.ajouter_dalle(&rect, &plafond).unwrap();
+        let id = p.ajouter_dalle(&rect, &toit).unwrap();
+        assert!(p.ajouter_dalle(&rect, &ParametresDalle { pente: Some(90.0), ..toit.clone() }).is_err());
+        let d = p.dalles.iter().find(|d| d.id == id).unwrap().clone();
+        assert_eq!(d.sorte, SorteDalle::Toiture);
+        assert_eq!((0..4).filter_map(|k| d.pente(0, k)).count(), 4);
+        // épaisseur normale aux versants : volume = aire × e / cos 35°
+        let e = p.type_dalle(&d.type_dalle).unwrap().epaisseur();
+        let v = p.volume_dalle(&d).unwrap();
+        assert!((v - 60e6 * e / 35f64.to_radians().cos()).abs() / v < 1e-9, "{v}");
+        let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
+        let s = crate::scene::depuis_natif(&relu, std::path::Path::new("toit.modele.json")).unwrap();
+        assert_eq!(s.objects.len(), 2);
+        let nav = s.navigateur.unwrap();
+        assert!(nav.familles.iter().any(|f| f.categorie == "Plafonds") && nav.familles.iter().any(|f| f.categorie == "Toits"));
+        // toiture en dessous du faîtage, sous-face à l'égout (2,80 m), plafond sous-face à 2,50 m
+        let o = &s.objects[1];
+        assert!((o.min.z as f64 + s.origin.z - 2.8).abs() < 1e-3, "{}", o.min.z as f64 + s.origin.z);
+        let faitage = 2.8 + 3.0 * 35f64.to_radians().tan() + e / 1000.0 / 35f64.to_radians().cos();
+        assert!((o.max.z as f64 + s.origin.z - faitage).abs() < 1e-3);
+        assert!((s.objects[0].min.z as f64 + s.origin.z - 2.5).abs() < 1e-3);
     }
 
     #[test]

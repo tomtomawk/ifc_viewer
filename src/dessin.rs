@@ -242,7 +242,7 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
                         let mut tris = Vec::new();
                         for t in &triangles {
                             let mut polygone = t.to_vec();
-                            for plan in couche.plans { polygone = decouper(&polygone, plan.truncate().as_dvec3(), plan.w as f64); }
+                            for plan in &couche.plans { polygone = decouper(&polygone, plan.truncate().as_dvec3(), plan.w as f64); }
                             for k in 1..polygone.len().saturating_sub(1) {
                                 let t = [polygone[0],polygone[k],polygone[k+1]];
                                 if (t[1]-t[0]).cross(t[2]-t[0]).length_squared() > 1e-24 { tris.push(t); }
@@ -721,7 +721,7 @@ mod tests {
         tris.extend(cube().into_iter().map(|t| t.map(|p| p * 0.5 + DVec3::splat(0.25))));
         let mut s = scene_section(tris);
         let bande = |a: f32, b: f32, couleur| crate::scene::CoucheCoupe {
-            plans: [Vec3::X.extend(-a),Vec3::NEG_X.extend(b)], couleur, motif: None, couleur_motif: [70,70,70,255], hachure_defaut: true,
+            plans: vec![Vec3::X.extend(-a),Vec3::NEG_X.extend(b)], couleur, motif: None, couleur_motif: [70,70,70,255], hachure_defaut: true,
         };
         s.couches_coupe.insert(1,vec![bande(0.0,0.2,[190,120,120,255]),bande(0.2,1.0,[120,190,120,255])]);
         let p = coupe(&s,&[true],Vec3::NEG_Z.extend(0.5),100.0,Poche::Hachure);

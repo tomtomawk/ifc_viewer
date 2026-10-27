@@ -16,7 +16,7 @@
 //!   document de famille, murs-rideaux, sols en pente) : éléments importés.
 
 use super::geometrie::{etendue, etendue_arc, prisme_vertical};
-use super::{Axe, Conversion, Couche, Dalle, GenreOuverture, Haut, Mur, Niveau, Origine, Ouverture, Projet, TypeCompose, TypeOuverture, identifiant, source};
+use super::{Axe, Conversion, Couche, Dalle, GenreOuverture, Haut, Mur, Niveau, Origine, Ouverture, Projet, SorteDalle, TypeCompose, TypeOuverture, identifiant, source};
 use crate::rvt::maquette::{self, Geometrie, Maquette, Trace};
 use glam::{DVec2, DVec3};
 use std::collections::HashMap;
@@ -214,7 +214,8 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
     let mut types_dalles: HashMap<i64, String> = HashMap::new();
     for d in &m.dalles {
         let tris = triangles(&d.geometrie);
-        let categorie = if d.classe == "Ceiling" { "Plafonds" } else { "Sols" };
+        let sorte = if d.classe == "Ceiling" { SorteDalle::Plafond } else { SorteDalle::Dalle };
+        let categorie = sorte.categorie();
         let nom = format!("{} [{}]", nom_type(d.type_id), d.id);
         let prisme = prisme_vertical(&tris);
         let (Some(p), Some(base)) = (prisme, niveaux.get(&d.niveau)) else {
@@ -234,7 +235,7 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
             .clone();
         let id = ident("dalle", d.id);
         c.lire(&id, &tris, categorie);
-        c.projet.dalles.push(Dalle { variante: None, phase: None, sous_projet: None, id, nom, type_dalle, niveau: base.0.clone(), decalage: p.haut - base.1, contours: p.contours, origine: origine(d.id, &d.classe) });
+        c.projet.dalles.push(Dalle { variante: None, phase: None, sous_projet: None, id, nom, type_dalle, niveau: base.0.clone(), sorte, decalage: if sorte.sous_face() { p.bas - base.1 } else { p.haut - base.1 }, contours: p.contours, pentes: Vec::new(), origine: origine(d.id, &d.classe) });
     }
 
     // le reste : éléments importés

@@ -8,6 +8,9 @@ use std::path::PathBuf;
 pub struct Options {
     /// Arborescence spatiale, classes et attributs IFC pour les modèles Revit et natifs.
     pub navigation_ifc: bool,
+    /// Gabarit choisi (None : gabarit par défaut embarqué).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gabarit: Option<PathBuf>,
 }
 
 /// `%APPDATA%\ifc_viewer\options.json`, `$XDG_CONFIG_HOME/ifc_viewer/options.json` ou `~/.config/ifc_viewer/options.json`.

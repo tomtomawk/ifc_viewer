@@ -12,6 +12,7 @@ pub mod depuis_ifc;
 pub mod depuis_rvt;
 pub mod geometrie;
 pub mod jonctions;
+pub mod pente;
 pub mod edition;
 pub mod enregistrement;
 pub mod rapport;
@@ -352,11 +353,97 @@ pub struct Dalle {
     pub nom: String,
     pub type_dalle: String,
     pub niveau: String,
-    /// Altitude du dessus par rapport au niveau (mm).
+    /// Dalle, sol, plafond ou toiture (même élément, nom et référence d'altitude
+    /// différents).
+    #[serde(default, skip_serializing_if = "SorteDalle::est_dalle")]
+    pub sorte: SorteDalle,
+    /// Altitude par rapport au niveau (mm) : du dessus (dalle, sol) ou de la sous-face
+    /// (plafond, toiture ; à l'égout pour une toiture en pente).
     pub decalage: f64,
     /// Contours dans le plan (mm) : extérieurs et trous, règle pair-impair.
     pub contours: Vec<Vec<[f64; 2]>>,
+    /// Pente (degrés) des arêtes qui la définissent, en regard des sommets de `contours` :
+    /// `pentes[c][k]` pour l'arête du sommet k au suivant. Vide : élément plan.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pentes: Vec<Vec<Option<f64>>>,
     pub origine: Option<Origine>,
+}
+
+/// Sorte d'élément horizontal.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum SorteDalle {
+    #[default]
+    Dalle,
+    Sol,
+    Plafond,
+    Toiture,
+}
+
+impl SorteDalle {
+    pub const TOUTES: [SorteDalle; 4] = [Self::Dalle, Self::Sol, Self::Plafond, Self::Toiture];
+
+    pub fn est_dalle(&self) -> bool {
+        *self == Self::Dalle
+    }
+
+    pub fn nom(self) -> &'static str {
+        match self {
+            Self::Dalle => "Dalle",
+            Self::Sol => "Sol",
+            Self::Plafond => "Plafond",
+            Self::Toiture => "Toiture",
+        }
+    }
+
+    /// Catégorie de l'arborescence (familles), comme dans Revit.
+    pub fn categorie(self) -> &'static str {
+        match self {
+            Self::Dalle | Self::Sol => "Sols",
+            Self::Plafond => "Plafonds",
+            Self::Toiture => "Toits",
+        }
+    }
+
+    /// Le décalage repère la sous-face (plafond, toiture) et non le dessus.
+    pub fn sous_face(self) -> bool {
+        matches!(self, Self::Plafond | Self::Toiture)
+    }
+
+    /// Les arêtes peuvent définir une pente (toiture, plafond rampant).
+    pub fn pente_possible(self) -> bool {
+        matches!(self, Self::Plafond | Self::Toiture)
+    }
+}
+
+impl Dalle {
+    /// Décalages (bas, haut) de l'épaisseur `e` par rapport à la surface de référence :
+    /// sous-face (plafond, toiture) ou dessus (dalle, sol).
+    pub fn decalages_couches(&self, e: f64) -> (f64, f64) {
+        if self.sorte.sous_face() { (0.0, e) } else { (-e, 0.0) }
+    }
+
+    /// Pente de l'arête `k` du contour `c` (degrés), si elle en définit une.
+    pub fn pente(&self, c: usize, k: usize) -> Option<f64> {
+        self.pentes.get(c).and_then(|p| p.get(k)).copied().flatten()
+    }
+
+    /// Fixe la pente d'une arête (None : arête sans pente) ; vide `pentes` si plus
+    /// aucune arête n'en porte.
+    pub fn definir_pente(&mut self, c: usize, k: usize, pente: Option<f64>) {
+        if self.pentes.len() < self.contours.len() {
+            self.pentes.resize(self.contours.len(), Vec::new());
+        }
+        let n = self.contours.get(c).map_or(0, |x| x.len());
+        if k >= n {
+            return;
+        }
+        self.pentes[c].resize(n, None);
+        self.pentes[c][k] = pente;
+        if self.pentes.iter().flatten().all(|p| p.is_none()) {
+            self.pentes.clear();
+        }
+    }
 }
 
 /// Vue du projet, comme dans l'arborescence de Revit.
@@ -437,6 +524,16 @@ impl Projet {
         Projet { format: FORMAT.into(), version: VERSION, nom: nom.into(), ..Default::default() }
     }
 
+    /// Projet vide portant les types de murs du gabarit et leurs matériaux.
+    pub fn depuis_gabarit(nom: &str, g: &crate::gabarit::Gabarit) -> Projet {
+        let mut p = Projet::nouveau(nom);
+        for t in &g.types_murs {
+            p.types_murs.push(TypeCompose { id: identifiant("type-mur", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), couches: t.couches.clone(), couches_detaillees: true, origine: None });
+        }
+        p.completer_materiaux();
+        p
+    }
+
     pub fn niveau(&self, id: &str) -> Option<&Niveau> {
         self.niveaux.iter().find(|n| n.id == id)
     }
@@ -489,9 +586,14 @@ impl Projet {
     }
 
     /// Volume d'une dalle déduit de ses paramètres (mm³) : aire des contours × épaisseur
-    /// du type.
+    /// du type, épaisseur normale aux versants si des arêtes définissent une pente.
     pub fn volume_dalle(&self, d: &Dalle) -> Option<f64> {
-        Some(geometrie::aire_pair_impair(&d.contours) * self.type_dalle(&d.type_dalle)?.epaisseur())
+        let e = self.type_dalle(&d.type_dalle)?.epaisseur();
+        if d.pentes.is_empty() {
+            return Some(geometrie::aire_pair_impair(&d.contours) * e);
+        }
+        let (e0, e1) = d.decalages_couches(e);
+        Some(pente::volume(&d.contours, &pente::plans(d), e0, e1))
     }
 
     /// Longueurs arrondies au micromètre (bruit des calculs en virgule flottante).
@@ -536,6 +638,7 @@ impl Projet {
         for d in &mut self.dalles {
             r(&mut d.decalage);
             d.contours.iter_mut().flatten().for_each(r2);
+            d.pentes.iter_mut().flatten().flatten().for_each(r);
         }
         self.importes.iter_mut().for_each(|i| maillage(&mut i.maillage));
     }

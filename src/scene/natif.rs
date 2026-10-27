@@ -1,7 +1,7 @@
 //! Adaptation du modèle natif vers la chaîne de rendu commune.
 use super::*;
 use crate::geom::{Part, ProductGeom};
-use crate::modele::{Axe, Projet};
+use crate::modele::{Axe, Projet, SorteDalle};
 use crate::step::{Entity, Value};
 
 pub fn id_natif(genre: &str, id: &str) -> u64 {
@@ -30,7 +30,14 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     for a in &projet.assemblages { entite(id_natif("assemblage", &a.id), "IFCELEMENTASSEMBLY", &a.id, &a.nom, 9)?; }
     for m in &projet.murs { entite(id_natif("mur", &m.id), "IFCWALL", &m.id, &m.nom, 9)?; }
     for t in &projet.types_dalles { entite(id_natif("type-dalle", &t.id), "IFCSLABTYPE", &t.id, &t.nom, 10)?; }
-    for d in &projet.dalles { entite(id_natif("dalle", &d.id), "IFCSLAB", &d.id, &d.nom, 9)?; }
+    for d in &projet.dalles {
+        let classe = match d.sorte {
+            SorteDalle::Dalle => "IFCSLAB",
+            SorteDalle::Sol | SorteDalle::Plafond => "IFCCOVERING",
+            SorteDalle::Toiture => "IFCROOF",
+        };
+        entite(id_natif("dalle", &d.id), classe, &d.id, &d.nom, 9)?;
+    }
     for n in &projet.niveaux { file.entities.get_mut(&id_natif("niveau", &n.id)).unwrap().args[9] = Value::Real(n.altitude); }
     let mut model = IfcModel::new(file);
     model.length_scale = 0.001;
@@ -93,7 +100,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         });
         if let Some(x) = &materiau {
             let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
-            couches_coupe.push((id, coupe_materiau(x, [neutre, neutre])));
+            couches_coupe.push((id, coupe_materiau(x, vec![neutre, neutre])));
         }
         geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.is_some().then_some(couleur)] });
     }
@@ -107,12 +114,16 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         model.parent.insert(id, niveau);
         model.children.entry(niveau).or_default().push(id);
         model.type_of.insert(id, id_natif("type-dalle", &d.type_dalle));
-        let mut z = alt + d.decalage;
+        // couches du haut vers le bas, décalées de la surface de référence (sous-face ou
+        // dessus, en pente si des arêtes en définissent une)
+        let plans = crate::modele::pente::plans(d);
+        let z0 = alt + d.decalage;
+        let (_, mut e) = d.decalages_couches(t.epaisseur());
         let (mut parts, mut rendu, mut bandes) = (Vec::new(), Vec::new(), Vec::new());
         for c in &t.couches {
-            let (haut, bas) = (z, z - c.epaisseur);
-            z = bas;
-            let tris = prisme(&d.contours, bas, haut);
+            let (haut, bas) = (e, e - c.epaisseur);
+            e = bas;
+            let tris = crate::modele::pente::couche(&d.contours, &plans, z0, bas, haut);
             if tris.is_empty() { continue; }
             let m = c.materiau.as_ref().map(|n| projet.materiau(n).cloned().unwrap_or_else(|| crate::modele::assemblage::materiau_par_defaut(n)));
             let couleur = m.as_ref().map_or([0.70, 0.70, 0.68, 1.0], |x| {
@@ -120,9 +131,10 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
                 [r, g, b, 1.0]
             });
             if let Some(m) = &m {
-                // bande de coupe entre le dessous et le dessus de la couche (m, repère du fichier)
-                let plans = [Vec4::new(0.0, 0.0, -1.0, (haut * 0.001) as f32), Vec4::new(0.0, 0.0, 1.0, -(bas * 0.001) as f32)];
-                bandes.extend(coupe_materiau(m, plans));
+                // bandes de coupe entre le dessous et le dessus de la couche (m, repère du fichier)
+                for jeu in crate::modele::pente::bandes(&plans, z0, bas, haut) {
+                    bandes.extend(coupe_materiau(m, jeu));
+                }
             }
             rendu.push(m.is_some().then_some(couleur));
             parts.push(Part { color: couleur, tris });
@@ -219,8 +231,17 @@ fn navigateur(projet: &Projet) -> Navigateur {
     if !projet.types_murs.is_empty() {
         familles.push(types("Murs", "Mur de base", &projet.types_murs, "type-mur"));
     }
-    if !projet.types_dalles.is_empty() {
-        familles.push(types("Sols", "Sol", &projet.types_dalles, "type-dalle"));
+    // types d'éléments horizontaux rangés par catégorie de leurs éléments (sols par défaut)
+    for (categorie, famille) in [("Sols", "Sol"), ("Plafonds", "Plafond composé"), ("Toits", "Toit de base")] {
+        let ts: Vec<crate::modele::TypeCompose> = projet
+            .types_dalles
+            .iter()
+            .filter(|t| projet.dalles.iter().find(|d| d.type_dalle == t.id).map_or("Sols", |d| d.sorte.categorie()) == categorie)
+            .cloned()
+            .collect();
+        if !ts.is_empty() {
+            familles.push(types(categorie, famille, &ts, "type-dalle"));
+        }
     }
     let materiaux = projet
         .materiaux
@@ -244,42 +265,9 @@ fn navigateur(projet: &Projet) -> Navigateur {
     }
 }
 
-/// Prisme vertical (m) d'un contour pair-impair (mm) entre `bas` et `haut` (mm) :
-/// dessus et dessous triangulés, une face par arête.
-fn prisme(contours: &[Vec<[f64; 2]>], bas: f64, haut: f64) -> Vec<[DVec3; 3]> {
-    let Some(&o) = contours.first().and_then(|c| c.first()) else { return Vec::new() };
-    // triangulation en coordonnées locales (f32) : précision gardée loin de l'origine
-    let locaux: Vec<Vec<[f32; 2]>> = contours.iter().map(|c| c.iter().map(|p| [(p[0] - o[0]) as f32, (p[1] - o[1]) as f32]).collect()).collect();
-    let p3 = |p: [f32; 2], z: f64| DVec3::new(p[0] as f64 + o[0], p[1] as f64 + o[1], z) * 0.001;
-    let mut tris = Vec::new();
-    for t in crate::texte::trianguler(locaux.clone()) {
-        // orientation : normales vers le haut au-dessus, vers le bas au-dessous
-        let a = (t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[1][1] - t[0][1]) * (t[2][0] - t[0][0]);
-        let t = if a < 0.0 { [t[0], t[2], t[1]] } else { t };
-        tris.push([p3(t[0], haut), p3(t[1], haut), p3(t[2], haut)]);
-        tris.push([p3(t[0], bas), p3(t[2], bas), p3(t[1], bas)]);
-    }
-    if tris.is_empty() {
-        return tris;
-    }
-    for c in contours {
-        let sens: f64 = (0..c.len()).map(|i| c[i][0] * c[(i + 1) % c.len()][1] - c[(i + 1) % c.len()][0] * c[i][1]).sum();
-        for i in 0..c.len() {
-            let (mut a, mut b) = (c[i], c[(i + 1) % c.len()]);
-            if sens < 0.0 {
-                std::mem::swap(&mut a, &mut b);
-            }
-            let q = |p: [f64; 2], z: f64| DVec3::new(p[0], p[1], z) * 0.001;
-            tris.push([q(a, bas), q(b, bas), q(b, haut)]);
-            tris.push([q(a, bas), q(b, haut), q(a, haut)]);
-        }
-    }
-    tris
-}
-
 /// Poché de coupe d'un matériau entre deux plans (neutres : tout l'élément), motif
 /// selon le matériau (hachures en mm du papier).
-fn coupe_materiau(m: &crate::modele::Materiau, plans: [Vec4; 2]) -> Vec<CoucheCoupe> {
+fn coupe_materiau(m: &crate::modele::Materiau, plans: Vec<Vec4>) -> Vec<CoucheCoupe> {
     use crate::modele::MotifCoupe;
     use crate::rvt::vues::{GrilleMotif, Motif};
     let grille = |angle: f64, pas: f64| GrilleMotif { angle, origine: [0.0, 0.0], glissement: 0.0, decalage: pas, tirets: Vec::new() };

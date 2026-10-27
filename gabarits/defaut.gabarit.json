@@ -1,0 +1,49 @@
+{
+ "format": "ifc_viewer.gabarit",
+ "version": 1,
+ "nom": "Gabarit par défaut",
+ "materiaux": [
+  {"mots": ["isol", "laine", "polystyr", "pse", "pui", "fibre"], "couleur": [236, 214, 120], "motif": "croisees"},
+  {"mots": ["plâtre", "platre", "placo", "enduit", "peinture", "finition"], "couleur": [238, 236, 230], "motif": "vide"},
+  {"mots": ["étanch", "etanch", "bitum", "écran", "ecran", "membrane"], "couleur": [70, 70, 74], "motif": "uni"},
+  {"mots": ["acier", "métal", "metal", "zinc", "alu"], "couleur": [150, 165, 180], "motif": "uni"},
+  {"mots": ["carrelage", "grès", "gres", "faïence"], "couleur": [200, 210, 220], "motif": "diagonales"},
+  {"mots": ["gravillon", "substrat", "terre végétale", "végétal"], "couleur": [170, 160, 120], "motif": "diagonales"},
+  {"mots": ["pvc", "résine", "resine", "colle", "ragréage", "ragreage"], "couleur": [215, 205, 225], "motif": "vide"},
+  {"mots": ["chape", "mortier"], "couleur": [196, 192, 182], "motif": "diagonales"},
+  {"mots": ["brique", "terre cuite", "tuile"], "couleur": [196, 120, 92], "motif": "diagonales"},
+  {"mots": ["bois", "ossature", "osb", "clt", "parquet", "chêne", "liteau"], "couleur": [196, 160, 110], "motif": "diagonales"},
+  {"mots": ["béton", "beton", "parpaing", "bloc", "agglo", "maçon", "macon"], "couleur": [176, 176, 170], "motif": "diagonales"},
+  {"mots": ["air", "lame"], "couleur": [250, 250, 250], "motif": "vide"}
+ ],
+ "types_murs": [
+  {"nom": "Voile BA 200", "couches": [{"materiau": "Béton armé", "epaisseur": 200.0, "fonction": "structure"}]},
+  {"nom": "Mur BA 200 + doublage isolé", "couches": [{"materiau": "Enduit", "epaisseur": 15.0, "fonction": "finition"}, {"materiau": "Béton armé", "epaisseur": 200.0, "fonction": "structure"}, {"materiau": "Laine minérale", "epaisseur": 120.0, "fonction": "isolation"}, {"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}]},
+  {"nom": "Mur ossature bois 145", "couches": [{"materiau": "Bardage bois", "epaisseur": 22.0, "fonction": "finition"}, {"materiau": "Lame d'air", "epaisseur": 25.0}, {"materiau": "Panneau fibre de bois", "epaisseur": 35.0, "fonction": "isolation"}, {"materiau": "Ossature bois + laine", "epaisseur": 145.0, "fonction": "structure"}, {"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}]},
+  {"nom": "Cloison 72/48", "couches": [{"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}, {"materiau": "Laine minérale", "epaisseur": 45.0, "fonction": "isolation"}, {"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}]}
+ ],
+ "types_surfaces": [
+  {"sorte": "dalle", "nom": "Dalle BA 200", "couches": [{"materiau": "Béton armé", "epaisseur": 200.0, "fonction": "structure"}]},
+  {"sorte": "dalle", "nom": "Dalle BA 230 + chape isolée", "couches": [{"materiau": "Chape ciment", "epaisseur": 50.0, "fonction": "finition"}, {"materiau": "Isolant PSE", "epaisseur": 30.0, "fonction": "isolation"}, {"materiau": "Béton armé", "epaisseur": 230.0, "fonction": "structure"}]},
+  {"sorte": "dalle", "nom": "Dalle sur vide sanitaire", "couches": [{"materiau": "Chape ciment", "epaisseur": 60.0, "fonction": "finition"}, {"materiau": "Isolant polyuréthane", "epaisseur": 80.0, "fonction": "isolation"}, {"materiau": "Béton armé", "epaisseur": 200.0, "fonction": "structure"}]},
+  {"sorte": "dalle", "nom": "Plancher bois CLT", "couches": [{"materiau": "Parquet chêne", "epaisseur": 20.0, "fonction": "finition"}, {"materiau": "Isolant fibre de bois", "epaisseur": 40.0, "fonction": "isolation"}, {"materiau": "Bois CLT", "epaisseur": 140.0, "fonction": "structure"}]},
+  {"sorte": "sol", "nom": "Carrelage collé", "couches": [{"materiau": "Carrelage grès cérame", "epaisseur": 10.0, "fonction": "finition"}, {"materiau": "Mortier colle", "epaisseur": 5.0}]},
+  {"sorte": "sol", "nom": "Parquet flottant", "couches": [{"materiau": "Parquet chêne", "epaisseur": 14.0, "fonction": "finition"}, {"materiau": "Sous-couche acoustique", "epaisseur": 3.0, "fonction": "isolation"}]},
+  {"sorte": "sol", "nom": "Sol souple PVC", "couches": [{"materiau": "Revêtement PVC", "epaisseur": 3.0, "fonction": "finition"}, {"materiau": "Ragréage", "epaisseur": 5.0}]},
+  {"sorte": "sol", "nom": "Résine sur chape", "couches": [{"materiau": "Résine époxy", "epaisseur": 3.0, "fonction": "finition"}, {"materiau": "Chape ciment", "epaisseur": 50.0}]},
+  {"sorte": "plafond", "nom": "Plafond BA13 sur ossature", "couches": [{"materiau": "Lame d'air", "epaisseur": 50.0}, {"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}]},
+  {"sorte": "plafond", "nom": "Plafond BA13 isolé", "couches": [{"materiau": "Laine minérale", "epaisseur": 100.0, "fonction": "isolation"}, {"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}]},
+  {"sorte": "plafond", "nom": "Dalles acoustiques 600×600", "couches": [{"materiau": "Lame d'air", "epaisseur": 200.0}, {"materiau": "Dalle minérale acoustique", "epaisseur": 15.0, "fonction": "finition"}]},
+  {"sorte": "toiture", "nom": "Toiture tuiles isolée", "couches": [{"materiau": "Tuile terre cuite", "epaisseur": 30.0, "fonction": "finition"}, {"materiau": "Liteaux bois", "epaisseur": 27.0}, {"materiau": "Écran sous-toiture", "epaisseur": 1.0}, {"materiau": "Laine minérale entre chevrons", "epaisseur": 200.0, "fonction": "isolation"}, {"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}]},
+  {"sorte": "toiture", "nom": "Toiture terrasse inaccessible", "couches": [{"materiau": "Gravillons", "epaisseur": 50.0, "fonction": "finition"}, {"materiau": "Étanchéité bitumineuse", "epaisseur": 10.0}, {"materiau": "Isolant polyuréthane", "epaisseur": 120.0, "fonction": "isolation"}, {"materiau": "Béton armé", "epaisseur": 200.0, "fonction": "structure"}]},
+  {"sorte": "toiture", "nom": "Toiture bac acier", "couches": [{"materiau": "Bac acier", "epaisseur": 40.0, "fonction": "structure"}, {"materiau": "Laine minérale", "epaisseur": 160.0, "fonction": "isolation"}]},
+  {"sorte": "toiture", "nom": "Toiture végétalisée", "couches": [{"materiau": "Substrat végétal", "epaisseur": 80.0, "fonction": "finition"}, {"materiau": "Étanchéité bitumineuse", "epaisseur": 10.0}, {"materiau": "Isolant polyuréthane", "epaisseur": 140.0, "fonction": "isolation"}, {"materiau": "Béton armé", "epaisseur": 200.0, "fonction": "structure"}]}
+ ],
+ "types_vues": [
+  {"elevation": false, "nom": "Coupe de bâtiment", "aide": "Coupe générale du bâtiment", "echelle": 100.0, "profondeur": 15000.0},
+  {"elevation": false, "nom": "Coupe de mur", "aide": "Paroi et ses abords, faible profondeur", "echelle": 20.0, "profondeur": 1500.0},
+  {"elevation": false, "nom": "Coupe de détail", "aide": "Détail constructif", "echelle": 10.0, "profondeur": 600.0},
+  {"elevation": true, "nom": "Élévation extérieure", "aide": "Façade vue depuis l'extérieur", "echelle": 100.0, "profondeur": 30000.0},
+  {"elevation": true, "nom": "Élévation intérieure", "aide": "Paroi d'une pièce vue de l'intérieur", "echelle": 50.0, "profondeur": 6000.0}
+ ]
+}

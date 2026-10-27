@@ -456,6 +456,8 @@ pub struct ViewerApp {
     visible: Vec<bool>,
     visibility_dirty: bool,
     left_tab: LeftTab,
+    /// Pente donnée à une arête cochée (degrés), la dernière saisie.
+    pente_defaut: f64,
     /// Options de l'application (menu Début > Options).
     options: crate::options::Options,
     filter: String,
@@ -576,7 +578,18 @@ impl ViewerApp {
             visible: Vec::new(),
             visibility_dirty: false,
             left_tab: LeftTab::Tree,
-            options: crate::options::Options::charger(),
+            pente_defaut: 35.0,
+            options: {
+                let o = crate::options::Options::charger();
+                // gabarit choisi : lu au démarrage, défaut s'il est illisible
+                if let Some(c) = &o.gabarit {
+                    match crate::gabarit::Gabarit::charger(c) {
+                        Ok(g) => crate::gabarit::definir(g),
+                        Err(e) => eprintln!("{e} : gabarit par défaut utilisé"),
+                    }
+                }
+                o
+            },
             filter: String::new(),
             show_unsupported: false,
             vue_active: None,
@@ -794,8 +807,13 @@ impl ViewerApp {
         }
         self.visibility_dirty = false;
         let Some(scene) = &self.scene else { return };
-        // coupe du mode dessin : objets du modèle entièrement au-dessus écartés
-        let dessus = self.plan_coupe().map(|p| p.w);
+        // coupe du mode dessin : objets du modèle entièrement du côté retiré écartés (au-dessus
+        // d'un plan, devant la ligne d'une coupe)
+        let plan = self.plan_coupe();
+        let garde = |o: &scene::SceneObject| plan.is_none_or(|p| {
+            let n = p.truncate();
+            n.x * if n.x > 0.0 { o.max.x } else { o.min.x } + n.y * if n.y > 0.0 { o.max.y } else { o.min.y } + n.z * if n.z > 0.0 { o.max.z } else { o.min.z } + p.w >= 0.0
+        });
         let mut opaque = Vec::new();
         let mut transp = Vec::new();
         let mut lines = Vec::new();
@@ -806,7 +824,7 @@ impl ViewerApp {
                 && !self.hidden_objects.contains(&(i as u32))
                 && o.storey.is_none_or(|s| !self.hidden_storeys.contains(&s))
                 && self.isolated.as_ref().is_none_or(|iso| iso.contains(&(i as u32)))
-                && dessus.is_none_or(|z| o.min.z <= z || &*o.class == "IFCANNOTATION");
+                && (garde(o) || &*o.class == "IFCANNOTATION");
             self.visible[i] = vis;
             if vis {
                 opaque.extend(o.opaque.start..o.opaque.start + o.opaque.count);
@@ -1211,6 +1229,7 @@ impl ViewerApp {
     /// assemblage. Retourne le projet modifié s'il a changé.
     fn proprietes_natif(&mut self, ui: &mut egui::Ui, id: Id) -> Option<crate::modele::Projet> {
         use crate::modele::Haut;
+        let mut pente_defaut = self.pente_defaut;
         let (projet, _) = self.natif.as_ref()?;
         let mut nouveau: Option<crate::modele::Projet> = None;
         let mut selection: Option<Id> = None;
@@ -1366,7 +1385,7 @@ impl ViewerApp {
             let dalle = projet.dalles.iter().find(|d| scene::id_natif("dalle", &d.id) == id)?;
             let mut d = dalle.clone();
             let t = projet.type_dalle(&d.type_dalle);
-            ui.label(RichText::new(format!("Dalle · {}", t.map_or("", |t| t.nom.as_str()))).strong());
+            ui.label(RichText::new(format!("{} · {}", d.sorte.nom(), t.map_or("", |t| t.nom.as_str()))).strong());
             if let Some(t) = t {
                 for c in &t.couches {
                     ui.horizontal(|ui| {
@@ -1387,7 +1406,20 @@ impl ViewerApp {
                     }
                 });
                 ui.end_row();
-                ui.label("Décalage (dessus)");
+                ui.label("Sorte");
+                egui::ComboBox::from_id_salt("dalle_sorte").width(150.0).selected_text(d.sorte.nom()).show_ui(ui, |ui| {
+                    for s in crate::modele::SorteDalle::TOUTES {
+                        change |= ui.selectable_value(&mut d.sorte, s, s.nom()).changed();
+                    }
+                })
+                .response
+                .on_hover_text("Même élément, nom et référence d'altitude différents (dessus ou sous-face)");
+                ui.end_row();
+                ui.label(match d.sorte {
+                    crate::modele::SorteDalle::Plafond => "Hauteur sous plafond",
+                    crate::modele::SorteDalle::Toiture => "Décalage (sous-face)",
+                    _ => "Décalage (dessus)",
+                });
                 change |= ui.add(egui::DragValue::new(&mut d.decalage).speed(10.0).suffix(" mm")).changed();
                 ui.end_row();
                 for (nom, valeur, choix, sale) in [("Phase", &mut d.phase, &projet.phases, "dalle_phase"), ("Sous-projet", &mut d.sous_projet, &projet.sous_projets, "dalle_sous_projet")] {
@@ -1410,6 +1442,40 @@ impl ViewerApp {
                     ui.end_row();
                 }
             });
+            if d.sorte.pente_possible() {
+                ui.add_space(4.0);
+                ui.label(RichText::new("Arêtes").strong())
+                    .on_hover_text("Une arête cochée définit une pente : le versant monte depuis elle vers l'intérieur. Aussi en cliquant ses repères dans la vue.");
+                egui::Grid::new("dalle_aretes").num_columns(3).striped(true).spacing([8.0, 3.0]).show(ui, |ui| {
+                    for c in 0..d.contours.len() {
+                        let n = d.contours[c].len();
+                        for k in 0..n {
+                            let (a, b) = (d.contours[c][k], d.contours[c][(k + 1) % n]);
+                            let nom = if d.contours.len() > 1 { format!("{}.{}", c + 1, k + 1) } else { format!("{}", k + 1) };
+                            ui.label(format!("Arête {nom} · {:.2} m", (b[0] - a[0]).hypot(b[1] - a[1]) / 1000.0));
+                            let mut pente = d.pente(c, k);
+                            let mut oui = pente.is_some();
+                            if ui.checkbox(&mut oui, "Pente").changed() {
+                                pente = oui.then_some(pente_defaut);
+                            }
+                            match &mut pente {
+                                Some(a) => {
+                                    ui.add(egui::DragValue::new(a).speed(0.5).range(0.5..=85.0).max_decimals(1).suffix(" °"));
+                                }
+                                None => {
+                                    ui.label("");
+                                }
+                            }
+                            ui.end_row();
+                            if pente != d.pente(c, k) {
+                                if let Some(a) = pente { pente_defaut = a; }
+                                d.definir_pente(c, k, pente);
+                                change = true;
+                            }
+                        }
+                    }
+                });
+            }
             if change {
                 let mut p = projet.clone();
                 if let Some(x) = p.dalles.iter_mut().find(|x| x.id == d.id) {
@@ -1419,6 +1485,7 @@ impl ViewerApp {
             }
             ui.separator();
         }
+        self.pente_defaut = pente_defaut;
         if let Some(sel) = selection {
             self.select(Some(sel), true);
         }
@@ -1533,7 +1600,7 @@ impl ViewerApp {
             chemin.set_extension("modele.json");
         }
         let nom = chemin.file_stem().map(|n| n.to_string_lossy().trim_end_matches(".modele").to_string()).unwrap_or_else(|| "Nouveau projet".into());
-        let projet = crate::modele::Projet::nouveau(&nom);
+        let projet = crate::modele::Projet::depuis_gabarit(&nom, &crate::gabarit::actif());
         let resultat = scene::depuis_natif(&projet, &chemin).and_then(|scene| {
             let json = projet.json()?;
             std::fs::write(&chemin, json).map_err(|e| format!("Création impossible : {e}"))?;
@@ -1743,6 +1810,73 @@ impl ViewerApp {
         let q = (glam::DVec3::new(p[0], p[1], z) * 0.001 - s.origin).as_vec3();
         let c = vp * q.extend(1.0);
         (c.w > 0.0).then(|| egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height()))
+    }
+
+    /// Arêtes de l'élément horizontal sélectionné qui peut porter une pente (plafond,
+    /// toiture) : contour, rang, milieu et direction vers l'intérieur à l'écran, pente.
+    fn aretes_pente(&self, rect: egui::Rect) -> Vec<(usize, usize, egui::Pos2, egui::Vec2, Option<f64>)> {
+        use crate::modele::pente;
+        let (Some((projet, _)), Some(sel)) = (&self.natif, self.selected) else { return Vec::new() };
+        let Some(d) = projet.dalles.iter().find(|d| scene::id_natif("dalle", &d.id) == sel && d.sorte.pente_possible()) else { return Vec::new() };
+        let z0 = projet.niveau(&d.niveau).map_or(0.0, |n| n.altitude) + d.decalage;
+        let plans = pente::plans(d);
+        let mut v = Vec::new();
+        for (c, contour) in d.contours.iter().enumerate() {
+            let n = contour.len();
+            for k in 0..n {
+                let (a, b) = (glam::DVec2::from_array(contour[k]), glam::DVec2::from_array(contour[(k + 1) % n]));
+                let m = (a + b) * 0.5;
+                let z = z0 + pente::hauteur(&plans, 0.0, m);
+                let (Some(i), Some(q)) = (pente::vers_interieur(&d.contours, c, k), self.ecran_plan(rect, m.to_array(), z)) else { continue };
+                let Some(qi) = self.ecran_plan(rect, (m + i * 300.0).to_array(), z) else { continue };
+                let dir = (qi - q).normalized();
+                v.push((c, k, q, if dir.is_finite() { dir } else { egui::Vec2::ZERO }, d.pente(c, k)));
+            }
+        }
+        v
+    }
+
+    /// Repères des arêtes : triangle plein et pente pour une arête qui la définit, rond
+    /// creux sinon ; un clic bascule.
+    fn dessiner_aretes_pente(&self, ui: &egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>) {
+        let aretes = self.aretes_pente(rect);
+        if aretes.is_empty() { return; }
+        let painter = ui.painter().with_clip_rect(rect);
+        let accent = Color32::from_rgb(230, 120, 20);
+        let gris = Color32::from_gray(90);
+        for (_, _, q, dir, pente) in aretes {
+            let survole = survol.is_some_and(|s| s.distance(q) <= 9.0);
+            match pente {
+                Some(a) => {
+                    // triangle pointé vers le haut du versant
+                    let (n, t) = (dir, egui::vec2(-dir.y, dir.x));
+                    let pts = vec![q + n * 9.0, q - n * 4.0 + t * 6.0, q - n * 4.0 - t * 6.0];
+                    painter.add(egui::Shape::convex_polygon(pts, accent, egui::Stroke::new(if survole { 2.0 } else { 1.0 }, Color32::WHITE)));
+                    let texte = format!("{}°", crate::step::format_real((a * 10.0).round() / 10.0));
+                    let g = painter.layout_no_wrap(texte, egui::FontId::proportional(12.0), Color32::from_gray(30));
+                    let cadre = egui::Rect::from_center_size(q - n * 18.0, g.size() + egui::vec2(8.0, 4.0));
+                    painter.rect(cadre, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 230), egui::Stroke::new(1.0, accent), egui::StrokeKind::Inside);
+                    painter.galley(cadre.min + egui::vec2(4.0, 2.0), g, Color32::from_gray(30));
+                }
+                None => {
+                    painter.circle(q, 5.0, Color32::from_rgba_unmultiplied(255, 255, 255, 220), egui::Stroke::new(if survole { 2.0 } else { 1.2 }, gris));
+                }
+            }
+            if survole {
+                let aide = if pente.is_some() { "Clic : arête sans pente" } else { "Clic : l'arête définit la pente" };
+                painter.text(q + egui::vec2(12.0, -12.0), egui::Align2::LEFT_BOTTOM, aide, egui::FontId::proportional(12.0), Color32::from_gray(30));
+            }
+        }
+    }
+
+    /// Ajoute (pente par défaut) ou retire la pente de l'arête de l'élément sélectionné.
+    fn basculer_pente(&mut self, c: usize, k: usize) {
+        let (Some((projet, _)), Some(sel)) = (&self.natif, self.selected) else { return };
+        let mut p = projet.clone();
+        let Some(d) = p.dalles.iter_mut().find(|d| scene::id_natif("dalle", &d.id) == sel) else { return };
+        let pente = if d.pente(c, k).is_some() { None } else { Some(self.pente_defaut) };
+        d.definir_pente(c, k, pente);
+        if let Err(e) = self.appliquer_projet(p) { self.error = Some(e); }
     }
 
     /// Repère en plan, comme dans Revit. Coupe : trait mixte, têtes rondes, flèches de
@@ -2461,6 +2595,43 @@ impl ViewerApp {
                         .changed()
                     {
                         self.options.enregistrer();
+                    }
+                    ui.separator();
+                    let g = crate::gabarit::actif();
+                    ui.label(RichText::new(format!("Gabarit : {}", g.nom)).strong())
+                        .on_hover_text(self.options.gabarit.as_ref().map_or("Gabarit embarqué".into(), |c| c.display().to_string()));
+                    ui.label(RichText::new(format!("{} types de murs · {} éléments horizontaux · {} vues", g.types_murs.len(), g.types_surfaces.len(), g.types_vues.len())).small().weak());
+                    if ui.button("Choisir un gabarit…").on_hover_text("Fichier .gabarit.json : matériaux, types de murs, d'éléments horizontaux et de vues").clicked() {
+                        ui.close();
+                        if let Some(c) = rfd::FileDialog::new().set_title("Gabarit").add_filter("Gabarit", &["json"]).pick_file() {
+                            match crate::gabarit::Gabarit::charger(&c) {
+                                Ok(g) => {
+                                    self.status = format!("Gabarit « {} » chargé", g.nom);
+                                    crate::gabarit::definir(g);
+                                    self.options.gabarit = Some(c);
+                                    self.options.enregistrer();
+                                }
+                                Err(e) => self.error = Some(e),
+                            }
+                        }
+                    }
+                    if ui.add_enabled(self.options.gabarit.is_some(), egui::Button::new("Gabarit par défaut")).clicked() {
+                        ui.close();
+                        crate::gabarit::definir(crate::gabarit::Gabarit::defaut());
+                        self.options.gabarit = None;
+                        self.options.enregistrer();
+                    }
+                    if ui.button("Enregistrer une copie du gabarit…").on_hover_text("Point de départ d'un gabarit d'agence, à modifier dans un éditeur de texte").clicked() {
+                        ui.close();
+                        if let Some(c) = rfd::FileDialog::new().set_title("Copie du gabarit").add_filter("Gabarit", &["json"]).set_file_name("agence.gabarit.json").save_file() {
+                            let texte = match &self.options.gabarit {
+                                Some(src) => std::fs::read_to_string(src).map_err(|e| e.to_string()),
+                                None => Ok(crate::gabarit::texte_defaut().to_string()),
+                            };
+                            if let Err(e) = texte.and_then(|t| std::fs::write(&c, t).map_err(|e| e.to_string())) {
+                                self.error = Some(format!("Copie du gabarit impossible : {e}"));
+                            }
+                        }
                     }
                 });
             }
@@ -3972,6 +4143,12 @@ impl ViewerApp {
             let mut copie = if self.ruban_edition.editeur_type_ouvert() { projet.clone() } else { crate::modele::Projet::default() };
             if self.ruban_edition.editeur_type_ouvert() && self.ruban_edition.editeur_type_mur(ui.ctx(), &mut copie) {
                 if let Err(e) = self.appliquer_projet(copie) { self.error = Some(e); }
+            } else if let Some(t) = self.ruban_edition.prendre_type_gabarit()
+                && let Some((projet, _)) = &self.natif
+            {
+                let mut copie = projet.clone();
+                let r = self.ruban_edition.definir_type_mur(&mut copie, &t.nom, t.couches).and_then(|_| self.appliquer_projet(copie));
+                if let Err(e) = r { self.error = Some(e); }
             }
         }
         if self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.proprietes_mur(ui, self.natif.as_ref().map(|(p, _)| p)) {
@@ -4479,6 +4656,11 @@ impl ViewerApp {
                     Some((obj, _)) => self.frame_objects(&[obj]),
                     None => self.fit_all(),
                 }
+            } else if let Some((c, k)) = resp.clicked().then(|| resp.interact_pointer_pos()).flatten().and_then(|q| {
+                self.aretes_pente(rect).into_iter().find(|a| a.2.distance(q) <= 9.0).map(|a| (a.0, a.1))
+            }) {
+                // repère d'arête de l'élément sélectionné : la pente est ajoutée ou retirée
+                self.basculer_pente(c, k);
             } else if resp.clicked() {
                 let hit = resp.interact_pointer_pos().and_then(|p| pick(self, p));
                 let id = hit.map(|(obj, _)| self.cible_clic(self.scene.as_ref().unwrap().objects[obj as usize].id));
@@ -4555,6 +4737,9 @@ impl ViewerApp {
         if mode_mur {
             let point = resp.hover_pos().and_then(|q| self.point_tracage_mur(q, rect, ui.input(|i| i.modifiers.shift)));
             self.apercu_mur(ui, rect, point);
+        }
+        if dalle.is_none() && !mode_mur && outil_coupe.is_none() {
+            self.dessiner_aretes_pente(ui, rect, resp.hover_pos());
         }
         if self.scene.is_some() {
             self.poignees_boite(ui, rect);
@@ -4804,7 +4989,12 @@ impl ViewerApp {
                 match argument {
                     "mur" => { self.onglet_ruban = OngletRuban::Modeliser; self.ruban_edition.activer_mur(); }
                     "coupe" => { self.onglet_ruban = OngletRuban::Annoter; self.ruban_edition.activer_coupe(); }
-                    "dalle" | "sol" => { self.onglet_ruban = OngletRuban::Modeliser; self.ruban_edition.activer_surface(argument == "sol"); }
+                    "dalle" | "sol" | "plafond" | "toiture" => {
+                        use crate::modele::SorteDalle;
+                        let sorte = match argument { "sol" => SorteDalle::Sol, "plafond" => SorteDalle::Plafond, "toiture" => SorteDalle::Toiture, _ => SorteDalle::Dalle };
+                        self.onglet_ruban = OngletRuban::Modeliser;
+                        self.ruban_edition.activer_surface(sorte);
+                    }
                     "aucun" => { self.ruban_edition.annuler(); self.mur_depart = None; }
                     _ => return erreur("usage : outil mur|dalle|sol|coupe|aucun"),
                 }
@@ -4836,6 +5026,36 @@ impl ViewerApp {
                 let Some(parametres) = self.ruban_edition.dalle_active().or_else(|| { self.ruban_edition.activer_dalle(); self.ruban_edition.dalle_active() }) else { return erreur("outil Dalle indisponible") };
                 self.creer_dalle(&pts, &parametres);
                 match &self.error { Some(e) => erreur(e), None => self.etat() }
+            }
+            "surface" => {
+                // surface type <nom> | surface pente oui|non | surface <paramètre> <valeur> (outil actif)
+                let (cle, reste) = argument.split_once(' ').map_or((argument, ""), |(a, b)| (a, b.trim()));
+                let r = match cle {
+                    "type" => self.ruban_edition.choisir_type_surface(reste),
+                    "pente" => { self.ruban_edition.definir_pente_toiture(reste != "non"); Ok(()) }
+                    _ => match reste.parse::<f64>() {
+                        Ok(v) => self.ruban_edition.regler_surface(cle, v),
+                        Err(_) => Err("usage : surface type <nom> | surface pente oui|non | surface <paramètre> <valeur>".into()),
+                    },
+                };
+                match r { Ok(()) => self.etat(), Err(e) => erreur(&e) }
+            }
+            "pente" => {
+                // pente <id|dernier> <arête 1…n|toutes> <degrés|aucune>
+                let v: Vec<&str> = argument.split_whitespace().collect();
+                let [cible, arete, valeur] = v[..] else { return erreur("usage : pente <id|dernier> <arête|toutes> <degrés|aucune>") };
+                let Some((projet, _)) = &self.natif else { return erreur("pas de projet natif ouvert") };
+                let mut projet = projet.clone();
+                let Some(d) = (if cible == "dernier" { projet.dalles.last_mut() } else { projet.dalles.iter_mut().find(|d| d.id == cible) }) else { return erreur("élément horizontal introuvable") };
+                let pente = if valeur == "aucune" { None } else {
+                    match valeur.parse::<f64>() { Ok(a) if a > 0.0 && a < 89.0 => Some(a), _ => return erreur("pente : degrés entre 0 et 89, ou « aucune »") }
+                };
+                let n = d.contours.first().map_or(0, |c| c.len());
+                let aretes: Vec<usize> = if arete == "toutes" { (0..n).collect() } else {
+                    match arete.parse::<usize>() { Ok(k) if k >= 1 && k <= n => vec![k - 1], _ => return erreur("numéro d'arête invalide") }
+                };
+                for k in aretes { d.definir_pente(0, k, pente); }
+                match self.appliquer_projet(projet) { Ok(()) => self.etat(), Err(e) => erreur(&e) }
             }
             "type_mur" => {
                 // type_mur <nom>|<matériau>:<épaisseur mm>[:structure|isolation|finition]|… (extérieur → intérieur)

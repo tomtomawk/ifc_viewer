@@ -4,40 +4,9 @@
 //! sens horaire.
 use super::*;
 
-/// Matériaux reconnus par leur nom : couleur et motif de coupe par défaut.
+/// Matériaux reconnus par leur nom (familles du gabarit) : couleur et motif de coupe.
 pub fn materiau_par_defaut(nom: &str) -> Materiau {
-    let n = nom.to_lowercase();
-    let (couleur, motif) = if ["isol", "laine", "polystyr", "pse", "pui", "fibre"].iter().any(|k| n.contains(k)) {
-        ([236, 214, 120], MotifCoupe::Croisees)
-    } else if ["plâtre", "platre", "placo", "enduit", "peinture", "finition"].iter().any(|k| n.contains(k)) {
-        ([238, 236, 230], MotifCoupe::Vide)
-    } else if ["étanch", "etanch", "bitum", "écran", "ecran", "membrane"].iter().any(|k| n.contains(k)) {
-        ([70, 70, 74], MotifCoupe::Uni)
-    } else if ["acier", "métal", "metal", "zinc", "alu"].iter().any(|k| n.contains(k)) {
-        ([150, 165, 180], MotifCoupe::Uni)
-    } else if ["carrelage", "grès", "gres", "faïence"].iter().any(|k| n.contains(k)) {
-        ([200, 210, 220], MotifCoupe::Diagonales)
-    } else if ["gravillon", "substrat", "terre végétale", "végétal"].iter().any(|k| n.contains(k)) {
-        ([170, 160, 120], MotifCoupe::Diagonales)
-    } else if ["pvc", "résine", "resine", "colle", "ragréage", "ragreage"].iter().any(|k| n.contains(k)) {
-        ([215, 205, 225], MotifCoupe::Vide)
-    } else if ["chape", "mortier"].iter().any(|k| n.contains(k)) {
-        ([196, 192, 182], MotifCoupe::Diagonales)
-    } else if ["brique", "terre cuite", "tuile"].iter().any(|k| n.contains(k)) {
-        ([196, 120, 92], MotifCoupe::Diagonales)
-    } else if ["bois", "ossature", "osb", "clt", "parquet", "chêne", "liteau"].iter().any(|k| n.contains(k)) {
-        ([196, 160, 110], MotifCoupe::Diagonales)
-    } else if ["béton", "beton", "parpaing", "bloc", "agglo", "maçon", "macon"].iter().any(|k| n.contains(k)) {
-        ([176, 176, 170], MotifCoupe::Diagonales)
-    } else if ["air", "lame"].iter().any(|k| n.contains(k)) {
-        ([250, 250, 250], MotifCoupe::Vide)
-    } else {
-        // couleur stable tirée du nom, assez claire pour les hachures
-        let h = identifiant("materiau", nom);
-        let v = u32::from_str_radix(&h[..6], 16).unwrap_or(0);
-        ([150 + (v & 0x5f) as u8, 150 + ((v >> 8) & 0x5f) as u8, 150 + ((v >> 16) & 0x5f) as u8], MotifCoupe::Diagonales)
-    };
-    Materiau { nom: nom.into(), couleur, motif }
+    crate::gabarit::actif().materiau(nom)
 }
 
 /// Implantation d'un mur composé : ligne tracée par rapport à ses couches.

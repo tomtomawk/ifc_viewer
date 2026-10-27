@@ -113,22 +113,10 @@ pub struct ParametresCoupe {
     pub profondeur: f64,
 }
 
-/// Type de coupe ou d'élévation : échelle et profondeur par défaut.
-struct TypeCoupe {
-    elevation: bool,
-    nom: &'static str,
-    aide: &'static str,
-    echelle: f64,
-    profondeur: f64,
+/// Types de coupe et d'élévation du gabarit (échelle, profondeur par défaut).
+fn types_coupe() -> Vec<crate::gabarit::TypeVue> {
+    crate::gabarit::actif().types_vues.clone()
 }
-
-const TYPES_COUPE: &[TypeCoupe] = &[
-    TypeCoupe { elevation: false, nom: "Coupe de bâtiment", aide: "Coupe générale du bâtiment", echelle: 100.0, profondeur: 15_000.0 },
-    TypeCoupe { elevation: false, nom: "Coupe de mur", aide: "Paroi et ses abords, faible profondeur", echelle: 20.0, profondeur: 1_500.0 },
-    TypeCoupe { elevation: false, nom: "Coupe de détail", aide: "Détail constructif", echelle: 10.0, profondeur: 600.0 },
-    TypeCoupe { elevation: true, nom: "Élévation extérieure", aide: "Façade vue depuis l'extérieur", echelle: 100.0, profondeur: 30_000.0 },
-    TypeCoupe { elevation: true, nom: "Élévation intérieure", aide: "Paroi d'une pièce vue de l'intérieur", echelle: 50.0, profondeur: 6_000.0 },
-];
 
 /// Pictogramme d'une coupe (trait, têtes et flèches) ou d'une élévation (cercle et
 /// flèche de visée).
@@ -145,36 +133,22 @@ fn icone_vue(p: &egui::Painter, r: egui::Rect, elevation: bool, c: Color32) {
     p.line_segment([r.left_bottom() + egui::vec2(r.width() * 0.05, -r.height() * 0.12), r.right_bottom() + egui::vec2(-r.width() * 0.05, -r.height() * 0.12)], egui::Stroke::new(1.0, c));
 }
 
-/// Types prédéfinis d'éléments horizontaux, couches du haut vers le bas.
-fn types_surface(o: Outil) -> Vec<(&'static str, Vec<crate::modele::Couche>)> {
-    use crate::modele::{Couche, FonctionCouche::*};
-    let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f };
+/// Sorte d'élément horizontal d'un outil.
+fn sorte_surface(o: Outil) -> Option<crate::modele::SorteDalle> {
+    use crate::modele::SorteDalle;
     match o {
-        Outil::Dalle => vec![
-            ("Dalle BA 200", vec![c("Béton armé", 200.0, Structure)]),
-            ("Dalle BA 230 + chape isolée", vec![c("Chape ciment", 50.0, Finition), c("Isolant PSE", 30.0, Isolation), c("Béton armé", 230.0, Structure)]),
-            ("Dalle sur vide sanitaire", vec![c("Chape ciment", 60.0, Finition), c("Isolant polyuréthane", 80.0, Isolation), c("Béton armé", 200.0, Structure)]),
-            ("Plancher bois CLT", vec![c("Parquet chêne", 20.0, Finition), c("Isolant fibre de bois", 40.0, Isolation), c("Bois CLT", 140.0, Structure)]),
-        ],
-        Outil::Sol => vec![
-            ("Carrelage collé", vec![c("Carrelage grès cérame", 10.0, Finition), c("Mortier colle", 5.0, Autre)]),
-            ("Parquet flottant", vec![c("Parquet chêne", 14.0, Finition), c("Sous-couche acoustique", 3.0, Isolation)]),
-            ("Sol souple PVC", vec![c("Revêtement PVC", 3.0, Finition), c("Ragréage", 5.0, Autre)]),
-            ("Résine sur chape", vec![c("Résine époxy", 3.0, Finition), c("Chape ciment", 50.0, Autre)]),
-        ],
-        Outil::Plafond => vec![
-            ("Plafond BA13 sur ossature", vec![c("Lame d'air", 50.0, Autre), c("Plaque de plâtre", 13.0, Finition)]),
-            ("Plafond BA13 isolé", vec![c("Laine minérale", 100.0, Isolation), c("Plaque de plâtre", 13.0, Finition)]),
-            ("Dalles acoustiques 600×600", vec![c("Lame d'air", 200.0, Autre), c("Dalle minérale acoustique", 15.0, Finition)]),
-        ],
-        Outil::Toiture => vec![
-            ("Toiture tuiles isolée", vec![c("Tuile terre cuite", 30.0, Finition), c("Liteaux bois", 27.0, Autre), c("Écran sous-toiture", 1.0, Autre), c("Laine minérale entre chevrons", 200.0, Isolation), c("Plaque de plâtre", 13.0, Finition)]),
-            ("Toiture terrasse inaccessible", vec![c("Gravillons", 50.0, Finition), c("Étanchéité bitumineuse", 10.0, Autre), c("Isolant polyuréthane", 120.0, Isolation), c("Béton armé", 200.0, Structure)]),
-            ("Toiture bac acier", vec![c("Bac acier", 40.0, Structure), c("Laine minérale", 160.0, Isolation)]),
-            ("Toiture végétalisée", vec![c("Substrat végétal", 80.0, Finition), c("Étanchéité bitumineuse", 10.0, Autre), c("Isolant polyuréthane", 140.0, Isolation), c("Béton armé", 200.0, Structure)]),
-        ],
-        _ => Vec::new(),
+        Outil::Dalle => Some(SorteDalle::Dalle),
+        Outil::Sol => Some(SorteDalle::Sol),
+        Outil::Plafond => Some(SorteDalle::Plafond),
+        Outil::Toiture => Some(SorteDalle::Toiture),
+        _ => None,
     }
+}
+
+/// Types d'éléments horizontaux du gabarit, couches du haut vers le bas.
+fn types_surface(o: Outil) -> Vec<(String, Vec<crate::modele::Couche>)> {
+    let Some(sorte) = sorte_surface(o) else { return Vec::new() };
+    crate::gabarit::actif().surfaces(sorte).into_iter().map(|t| (t.nom.clone(), t.couches.clone())).collect()
 }
 
 /// Composition d'un élément horizontal en coupe : couches empilées du haut vers le bas,
@@ -321,10 +295,14 @@ pub struct RubanEdition {
     erreur_creation: Option<String>,
     /// Type des prochains murs ; None : générique, épaisseur saisie.
     pub type_mur: Option<String>,
-    /// Type de coupe ou d'élévation choisi (indice dans `TYPES_COUPE`).
+    /// Type de coupe ou d'élévation choisi (indice dans les types de vues du gabarit).
     type_coupe: usize,
     /// Niveau des prochaines dalles (None : le premier).
     pub niveau_dalle: Option<String>,
+    /// Type de mur du gabarit choisi, à copier dans le projet.
+    type_mur_gabarit: Option<crate::gabarit::TypeGabarit>,
+    /// Toiture : arêtes tracées sans pente (toiture plate).
+    toiture_plate: bool,
     /// Tracé des dalles par deux coins (sinon polygone).
     pub dalle_rectangle: bool,
     /// Type prédéfini choisi pour chaque sorte d'élément horizontal (indice).
@@ -345,6 +323,12 @@ struct EditeurType {
     erreur: Option<String>,
     /// Couche en cours de glisser-déposer.
     glisse: Option<usize>,
+}
+
+fn nom_champ(c: &Champ) -> &'static str {
+    match c {
+        Champ::Nombre(n, _, _) | Champ::Saisie(n, _) | Champ::Choix(n, _) => n,
+    }
 }
 
 fn champs(o: Outil) -> Vec<Champ> {
@@ -372,12 +356,13 @@ fn champs(o: Outil) -> Vec<Champ> {
             Nombre("Décalage", 0.0, " mm"),
         ],
         Toiture => vec![
-            Nombre("Décalage", 2800.0, " mm"),
+            Nombre("Épaisseur", 300.0, " mm"),
+            Nombre("Décalage sous-face", 2800.0, " mm"),
             Nombre("Pente", 35.0, " °"),
         ],
         Plafond => vec![
-            Nombre("Hauteur", 2500.0, " mm"),
             Nombre("Épaisseur", 25.0, " mm"),
+            Nombre("Hauteur sous plafond", 2500.0, " mm"),
         ],
         Poteau => vec![
             Choix("Section", &["Rectangulaire", "Circulaire"]),
@@ -461,13 +446,13 @@ impl RubanEdition {
         if self.selection != Some(Outil::VueCoupe) {
             return None;
         }
-        let k = self.type_coupe.min(TYPES_COUPE.len() - 1);
-        let t = &TYPES_COUPE[k];
+        let types = types_coupe();
+        let t = &types[self.type_coupe.min(types.len() - 1)];
         let profondeur = match self.valeurs.get(&(Outil::VueCoupe, 0)) {
             Some(Valeur::Nombre(v)) => *v,
             _ => t.profondeur,
         };
-        Some(ParametresCoupe { elevation: t.elevation, type_vue: t.nom.into(), echelle: t.echelle, profondeur })
+        Some(ParametresCoupe { elevation: t.elevation, type_vue: t.nom.clone(), echelle: t.echelle, profondeur })
     }
 
     pub fn activer_coupe(&mut self) {
@@ -477,8 +462,9 @@ impl RubanEdition {
     /// Sélecteur de type de l'outil Coupe, comme celui des éléments horizontaux : un
     /// onglet Coupe, un onglet Élévation, leurs types (échelle, profondeur par défaut).
     fn selecteur_coupe(&mut self, ui: &mut egui::Ui) {
-        let k = self.type_coupe.min(TYPES_COUPE.len() - 1);
-        let courant = &TYPES_COUPE[k];
+        let types = types_coupe();
+        let k = self.type_coupe.min(types.len() - 1);
+        let courant = &types[k];
         let sorte = |e: bool| if e { "Élévation" } else { "Coupe" };
         let mut choix: Option<usize> = None;
         egui::Frame::group(ui.style()).inner_margin(8.0).show(ui, |ui| {
@@ -507,19 +493,19 @@ impl RubanEdition {
                                     icone_vue(ui.painter(), egui::Rect::from_center_size(r.center_top() + egui::vec2(0.0, 15.0), egui::vec2(24.0, 24.0)), e, ui.visuals().text_color());
                                     ui.painter().text(r.center_bottom() - egui::vec2(0.0, 9.0), egui::Align2::CENTER_CENTER, sorte(e), egui::FontId::proportional(12.0), ui.visuals().text_color());
                                     if rep.clicked() && !actif {
-                                        choix = TYPES_COUPE.iter().position(|t| t.elevation == e);
+                                        choix = types.iter().position(|t| t.elevation == e);
                                         ui.ctx().request_repaint();
                                     }
                                 }
                             });
                             ui.separator();
-                            for (i, t) in TYPES_COUPE.iter().enumerate().filter(|(_, t)| t.elevation == courant.elevation) {
+                            for (i, t) in types.iter().enumerate().filter(|(_, t)| t.elevation == courant.elevation) {
                                 let (r, rep) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 36.0), Sense::click());
                                 if i == k || rep.hovered() {
                                     ui.painter().rect_filled(r, 3.0, if i == k { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
                                 }
-                                ui.painter().text(r.min + egui::vec2(8.0, 11.0), egui::Align2::LEFT_CENTER, t.nom, egui::FontId::proportional(12.0), ui.visuals().text_color());
-                                ui.painter().text(r.min + egui::vec2(8.0, 26.0), egui::Align2::LEFT_CENTER, t.aide, egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
+                                ui.painter().text(r.min + egui::vec2(8.0, 11.0), egui::Align2::LEFT_CENTER, &t.nom, egui::FontId::proportional(12.0), ui.visuals().text_color());
+                                ui.painter().text(r.min + egui::vec2(8.0, 26.0), egui::Align2::LEFT_CENTER, &t.aide, egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
                                 ui.painter().text(r.right_center() - egui::vec2(8.0, 0.0), egui::Align2::RIGHT_CENTER, format!("1:{} · {} m", t.echelle, crate::step::format_real(t.profondeur / 1000.0)), egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
                                 if rep.clicked() {
                                     choix = Some(i);
@@ -527,25 +513,25 @@ impl RubanEdition {
                                 }
                             }
                         });
-                    ui.label(RichText::new(courant.aide).small().weak());
+                    ui.label(RichText::new(&courant.aide).small().weak());
                 });
             });
         });
         if let Some(i) = choix {
             self.type_coupe = i;
             // profondeur par défaut du type choisi
-            self.valeurs.insert((Outil::VueCoupe, 0), Valeur::Nombre(TYPES_COUPE[i].profondeur));
+            self.valeurs.insert((Outil::VueCoupe, 0), Valeur::Nombre(types[i].profondeur));
         }
         ui.add_space(6.0);
         egui::Grid::new("parametres_coupe").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
             ui.label("Profondeur");
-            let v = self.valeurs.entry((Outil::VueCoupe, 0)).or_insert(Valeur::Nombre(TYPES_COUPE[self.type_coupe.min(TYPES_COUPE.len() - 1)].profondeur));
+            let v = self.valeurs.entry((Outil::VueCoupe, 0)).or_insert(Valeur::Nombre(types[k].profondeur));
             if let Valeur::Nombre(v) = v {
                 ui.add(egui::DragValue::new(v).speed(50.0).range(100.0..=200_000.0).suffix(" mm"));
             }
             ui.end_row();
             ui.label("Échelle");
-            ui.label(format!("1:{}", TYPES_COUPE[self.type_coupe.min(TYPES_COUPE.len() - 1)].echelle));
+            ui.label(format!("1:{}", types[k].echelle));
             ui.end_row();
         });
         ui.add_space(4.0);
@@ -593,19 +579,25 @@ impl RubanEdition {
         Some(choix)
     }
 
-    /// Paramètres de la dalle (ou du sol) à tracer, si cet outil est actif.
+    /// Paramètres de l'élément horizontal à tracer (dalle, sol, plafond, toiture), si
+    /// cet outil est actif.
     pub fn dalle_active(&self) -> Option<crate::modele::edition::ParametresDalle> {
-        let sorte = self.selection.filter(|o| matches!(o, Outil::Dalle | Outil::Sol))?;
-        let types = types_surface(sorte);
-        let (nom, couches) = types.get(self.type_surface.get(&sorte).copied().unwrap_or(0))?.clone();
-        let decalage = match self.valeurs.get(&(sorte, 1)) {
-            Some(Valeur::Nombre(v)) => *v,
+        let outil = self.selection?;
+        let sorte = sorte_surface(outil)?;
+        let types = types_surface(outil);
+        let (nom, couches) = types.get(self.type_surface.get(&outil).copied().unwrap_or(0))?.clone();
+        let nombre = |k| match (self.valeurs.get(&(outil, k)), champs(outil).get(k)) {
+            (Some(Valeur::Nombre(v)), _) => *v,
+            (_, Some(Champ::Nombre(_, d, _))) => *d,
             _ => 0.0,
         };
+        let pente = (outil == Outil::Toiture && !self.toiture_plate).then(|| nombre(2));
         Some(crate::modele::edition::ParametresDalle {
-            type_dalle: crate::modele::TypeCompose { id: String::new(), nom: nom.into(), couches, couches_detaillees: true, origine: None },
+            sorte,
+            type_dalle: crate::modele::TypeCompose { id: String::new(), nom, couches, couches_detaillees: true, origine: None },
+            pente,
             niveau: self.niveau_dalle.clone(),
-            decalage,
+            decalage: nombre(1),
             phase: self.phase_creation.clone(),
             sous_projet: self.sous_projet_creation.clone(),
             variante: self.variante_creation.clone(),
@@ -618,15 +610,42 @@ impl RubanEdition {
     pub fn a_un_outil(&self) -> bool {
         self.selection.is_some()
     }
-    /// Outil Dalle (ou Sol), type courant de la sorte.
-    pub fn activer_surface(&mut self, sol: bool) {
-        let o = if sol { Outil::Sol } else { Outil::Dalle };
+    /// Outil d'élément horizontal de la sorte, type courant de la sorte.
+    pub fn activer_surface(&mut self, sorte: crate::modele::SorteDalle) {
+        use crate::modele::SorteDalle;
+        let o = match sorte {
+            SorteDalle::Dalle => Outil::Dalle,
+            SorteDalle::Sol => Outil::Sol,
+            SorteDalle::Plafond => Outil::Plafond,
+            SorteDalle::Toiture => Outil::Toiture,
+        };
         self.selection = Some(o);
         self.derniere_surface = Some(o);
     }
 
     pub fn activer_dalle(&mut self) {
-        self.activer_surface(false);
+        self.activer_surface(crate::modele::SorteDalle::Dalle);
+    }
+
+    /// Choisit le type de la sorte active par son nom (gabarit).
+    pub fn choisir_type_surface(&mut self, nom: &str) -> Result<(), String> {
+        let o = self.selection.filter(|o| sorte_surface(*o).is_some()).ok_or("Aucun outil d'élément horizontal actif.")?;
+        let i = types_surface(o).iter().position(|(n, _)| n == nom).ok_or_else(|| format!("Type « {nom} » absent du gabarit."))?;
+        self.type_surface.insert(o, i);
+        Ok(())
+    }
+
+    /// Règle un paramètre numérique de l'outil d'élément horizontal actif (par son nom).
+    pub fn regler_surface(&mut self, champ: &str, valeur: f64) -> Result<(), String> {
+        let o = self.selection.filter(|o| sorte_surface(*o).is_some()).ok_or("Aucun outil d'élément horizontal actif.")?;
+        let k = champs(o).iter().position(|c| matches!(c, Champ::Nombre(n, _, _) if n.to_lowercase().starts_with(&champ.to_lowercase()))).ok_or_else(|| format!("Paramètre « {champ} » inconnu."))?;
+        self.valeurs.insert((o, k), Valeur::Nombre(valeur));
+        Ok(())
+    }
+
+    /// Toiture : toutes les arêtes tracées définissent la pente.
+    pub fn definir_pente_toiture(&mut self, oui: bool) {
+        self.toiture_plate = !oui;
     }
 
     pub fn activer_mur(&mut self) {
@@ -1142,6 +1161,19 @@ impl RubanEdition {
                         let texte = if t.couches.len() > 1 { format!("{} — {} couches, {} mm", t.nom, t.couches.len(), crate::step::format_real(t.epaisseur())) } else { t.nom.clone() };
                         ui.selectable_value(&mut self.type_mur, Some(t.id.clone()), texte);
                     }
+                    // types du gabarit absents du projet : copiés dans le projet au choix
+                    let gabarit = crate::gabarit::actif();
+                    let absents: Vec<_> = gabarit.types_murs.iter().filter(|t| !projet.types_murs.iter().any(|p| p.nom == t.nom)).collect();
+                    if !absents.is_empty() {
+                        ui.separator();
+                        ui.label(RichText::new(format!("Gabarit · {}", gabarit.nom)).small().weak());
+                        for t in absents {
+                            let e: f64 = t.couches.iter().map(|c| c.epaisseur).sum();
+                            if ui.selectable_label(false, format!("{} — {} mm", t.nom, crate::step::format_real(e))).clicked() {
+                                self.type_mur_gabarit = Some(t.clone());
+                            }
+                        }
+                    }
                 })
                 .response
                 .on_hover_text("Type des prochains murs. Un type à plusieurs couches crée un mur par couche, regroupés en assemblage.");
@@ -1152,6 +1184,11 @@ impl RubanEdition {
                 bande_couches(ui, projet, &t.couches, 12.0);
             });
         }
+    }
+
+    /// Type de mur du gabarit choisi dans le sélecteur, à ajouter au projet.
+    pub fn prendre_type_gabarit(&mut self) -> Option<crate::gabarit::TypeGabarit> {
+        self.type_mur_gabarit.take()
     }
 
     pub fn editeur_type_ouvert(&self) -> bool {
@@ -1565,7 +1602,7 @@ impl RubanEdition {
                         ui.label(RichText::new("Éléments horizontaux").small().weak());
                         let types = types_surface(surface);
                         let k = self.type_surface.get(&surface).copied().unwrap_or(0).min(types.len().saturating_sub(1));
-                        let nom_type = types.get(k).map_or("", |t| t.0);
+                        let nom_type = types.get(k).map_or("", |t| t.0.as_str());
                         let mut choix_type: Option<(Outil, usize)> = None;
                         egui::ComboBox::from_id_salt("surface_proprietes")
                             .width(ui.available_width())
@@ -1608,7 +1645,7 @@ impl RubanEdition {
                                     }
                                     let e: f64 = couches.iter().map(|c| c.epaisseur).sum();
                                     pile_couches(ui, egui::Rect::from_min_size(r.min + egui::vec2(8.0, 4.0), egui::vec2(26.0, 16.0)), couches);
-                                    ui.painter().text(r.min + egui::vec2(42.0, 12.0), egui::Align2::LEFT_CENTER, *nom, egui::FontId::proportional(12.0), ui.visuals().text_color());
+                                    ui.painter().text(r.min + egui::vec2(42.0, 12.0), egui::Align2::LEFT_CENTER, nom, egui::FontId::proportional(12.0), ui.visuals().text_color());
                                     ui.painter().text(r.right_center() - egui::vec2(8.0, 0.0), egui::Align2::RIGHT_CENTER, format!("{} mm", crate::step::format_real(e)), egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
                                     if reponse.clicked() {
                                         choix_type = Some((surface, i));
@@ -1646,8 +1683,8 @@ impl RubanEdition {
         ui.add_space(8.0);
         ui.label(RichText::new("Paramètres").strong());
         ui.separator();
-        // dalle et sol : tracé dans la vue (projet natif), niveau et mode de tracé
-        if matches!(surface, Outil::Dalle | Outil::Sol) {
+        // tracé dans la vue (projet natif), niveau et mode de tracé
+        {
             match projet {
                 Some(projet) => {
                     if self.niveau_dalle.as_ref().is_some_and(|id| projet.niveau(id).is_none()) {
@@ -1668,14 +1705,20 @@ impl RubanEdition {
                             ui.selectable_value(&mut self.dalle_rectangle, true, "Rectangle").on_hover_text("Deux coins opposés, dans les axes du plan");
                         });
                         ui.end_row();
+                        if surface == Outil::Toiture {
+                            ui.label("Pente");
+                            let mut pente = !self.toiture_plate;
+                            ui.checkbox(&mut pente, "Toutes les arêtes la définissent")
+                                .on_hover_text("Arêtes tracées en pente (croupes). Décocher pour une toiture plate ; chaque arête se règle ensuite dans les propriétés de la toiture.");
+                            self.toiture_plate = !pente;
+                            ui.end_row();
+                        }
                     });
                 }
                 None => {
-                    ui.label(RichText::new("Créez ou ouvrez un projet natif pour dessiner une dalle.").weak());
+                    ui.label(RichText::new(format!("Créez ou ouvrez un projet natif pour dessiner : {}.", surface.nom().to_lowercase())).weak());
                 }
             }
-        } else {
-            ui.label(RichText::new("Création pas encore raccordée : choix du type seulement.").small().weak());
         }
         egui::Grid::new(("proprietes_surface", surface))
             .num_columns(2)
@@ -1685,6 +1728,9 @@ impl RubanEdition {
                     .get(self.type_surface.get(&surface).copied().unwrap_or(0))
                     .map(|(_, cs)| cs.iter().map(|c| c.epaisseur).sum());
                 for (indice, champ) in champs(surface).into_iter().enumerate() {
+                    if surface == Outil::Toiture && nom_champ(&champ) == "Pente" && self.toiture_plate {
+                        continue;
+                    }
                     if let Champ::Nombre(nom, defaut, suffixe) = champ {
                         ui.label(nom);
                         // épaisseur : celle du type choisi
