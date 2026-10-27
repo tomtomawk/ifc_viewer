@@ -165,8 +165,11 @@ pub struct Scene {
     /// Couleur de rendu (apparence du matériau) de chaque sommet, alpha 0 : aucune
     /// (style Rendu).
     pub couleurs_rendu: Vec<[u8; 4]>,
-    /// Motif de surface de chaque sommet : [motif (0 : aucun), r, g, b].
+    /// Motif de surface de chaque sommet : [premier plan | arrière-plan << 4, r, g, b].
     pub motifs_surface: Vec<[u8; 4]>,
+    /// Motifs de surface de la scène, indexés par les codes des sommets (moins un) :
+    /// deux familles de traits (angle en radians, pas en mm du papier).
+    pub table_motifs: Vec<[f32; 4]>,
     pub objects: Vec<SceneObject>,
     pub object_of: IdMap<u32>,
     /// Origine (mètres, repère du fichier) soustraite aux coordonnées f32.
@@ -194,6 +197,8 @@ pub struct CoucheCoupe {
     /// grilles vides : uni).
     pub fond: [u8; 4],
     pub motif_fond: Option<Arc<crate::rvt::vues::Motif>>,
+    /// Ligne d'isolant en boucles au milieu de la couche (premier plan).
+    pub isolation: bool,
     pub motif: Option<Arc<crate::rvt::vues::Motif>>,
     pub couleur_motif: [u8; 4],
     pub hachure_defaut: bool,
@@ -419,6 +424,7 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
         vertices,
         couleurs_rendu,
         motifs_surface,
+        table_motifs: Vec::new(),
         objects,
         object_of,
         origin,

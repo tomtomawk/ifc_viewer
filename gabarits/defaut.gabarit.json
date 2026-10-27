@@ -5,8 +5,16 @@
  "niveaux": [
   {"nom": "RDC", "altitude": 0.0}
  ],
+ "motifs": [
+  {"nom": "Diagonales serrées", "lignes": [{"angle": 45.0, "pas": 1.0}]},
+  {"nom": "Horizontales", "lignes": [{"angle": 0.0, "pas": 2.0}]},
+  {"nom": "Béton", "lignes": [{"angle": 45.0, "pas": 3.0, "tirets": [2.0, -1.0, 0.3, -1.0]}, {"angle": -45.0, "pas": 4.5, "tirets": [0.3, -3.0]}]},
+  {"nom": "Brique", "lignes": [{"angle": 45.0, "pas": 1.2}, {"angle": 45.0, "pas": 1.2, "origine": [0.0, 0.3]}]},
+  {"nom": "Bois (fil)", "lignes": [{"angle": 0.0, "pas": 1.0, "tirets": [6.0, -1.5]}]},
+  {"nom": "Terre", "lignes": [{"angle": 0.0, "pas": 2.5, "tirets": [1.5, -1.5]}, {"angle": 90.0, "pas": 2.5, "tirets": [1.5, -1.5], "origine": [0.75, 0.0]}]}
+ ],
  "materiaux": [
-  {"mots": ["isol", "laine", "polystyr", "pse", "pui", "fibre"], "couleur": [236, 214, 120], "motif": "croisees"},
+  {"mots": ["isol", "laine", "polystyr", "pse", "pui", "fibre"], "couleur": [236, 214, 120], "motif": "isolation"},
   {"mots": ["plâtre", "platre", "placo", "enduit", "peinture", "finition"], "couleur": [238, 236, 230], "motif": "vide"},
   {"mots": ["étanch", "etanch", "bitum", "écran", "ecran", "membrane"], "couleur": [70, 70, 74], "motif": "uni"},
   {"mots": ["acier", "métal", "metal", "zinc", "alu"], "couleur": [150, 165, 180], "motif": "uni"},
@@ -16,7 +24,8 @@
   {"mots": ["chape", "mortier"], "couleur": [196, 192, 182], "motif": "diagonales"},
   {"mots": ["brique", "terre cuite", "tuile"], "couleur": [196, 120, 92], "motif": "diagonales"},
   {"mots": ["bois", "ossature", "osb", "clt", "parquet", "chêne", "liteau"], "couleur": [196, 160, 110], "motif": "diagonales"},
-  {"mots": ["béton", "beton", "parpaing", "bloc", "agglo", "maçon", "macon"], "couleur": [176, 176, 170], "motif": "diagonales"},
+  {"mots": ["béton", "beton"], "couleur": [176, 176, 170], "motif": {"perso": "Béton"}},
+  {"mots": ["parpaing", "bloc", "agglo", "maçon", "macon"], "couleur": [176, 176, 170], "motif": "diagonales"},
   {"mots": ["air", "lame"], "couleur": [250, 250, 250], "motif": "vide"}
  ],
  "types_murs": [

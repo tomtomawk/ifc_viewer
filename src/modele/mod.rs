@@ -48,6 +48,9 @@ pub struct Projet {
     /// Matériaux nommés par les couches : couleur et motif de coupe.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub materiaux: Vec<Materiau>,
+    /// Motifs de hachures du projet (en plus de ceux du gabarit et de base).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub motifs: Vec<DefinitionMotif>,
     pub ouvertures: Vec<Ouverture>,
     pub dalles: Vec<Dalle>,
     /// Vues du projet (arborescence) : plans d'étage et coupes.
@@ -147,31 +150,98 @@ impl FonctionCouche {
     }
 }
 
-/// Motif de coupe d'un matériau (poché des plans et des coupes).
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
+/// Motif d'un matériau, en coupe (poché) ou en surface : hachures nommées (définies dans
+/// le projet ou le gabarit, éditables), aplat, ligne d'isolant ou rien.
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum MotifCoupe {
-    /// Hachures à 45°.
+    /// Hachures « Diagonales ».
     #[default]
     Diagonales,
-    /// Hachures croisées (isolants).
+    /// Hachures « Croisées ».
     Croisees,
-    /// Aplat de la couleur du matériau.
+    /// Aplat de la couleur.
     Uni,
-    /// Contour seul.
+    /// Rien (premier plan seulement).
     Vide,
+    /// Ligne d'isolant en boucles au milieu de la couche (coupe, premier plan).
+    Isolation,
+    /// Hachures nommées (`Projet::motifs`, gabarit).
+    Perso(String),
 }
 
 impl MotifCoupe {
-    pub const TOUS: [MotifCoupe; 4] = [Self::Diagonales, Self::Croisees, Self::Uni, Self::Vide];
+    pub const TOUS: [MotifCoupe; 5] = [Self::Diagonales, Self::Croisees, Self::Uni, Self::Vide, Self::Isolation];
 
-    pub fn libelle(self) -> &'static str {
+    pub fn libelle(&self) -> &str {
         match self {
             Self::Diagonales => "Diagonales",
             Self::Croisees => "Croisées",
             Self::Uni => "Uni",
-            Self::Vide => "Vide",
+            Self::Vide => "Aucun",
+            Self::Isolation => "Isolation",
+            Self::Perso(n) => n,
         }
+    }
+
+    /// Nom de la définition de hachures, pour un motif de hachures.
+    pub fn nom_hachures(&self) -> Option<&str> {
+        match self {
+            Self::Diagonales => Some("Diagonales"),
+            Self::Croisees => Some("Croisées"),
+            Self::Perso(n) => Some(n),
+            _ => None,
+        }
+    }
+
+    /// Motif de hachures d'après son nom (les deux de base gardent leur variante).
+    pub fn hachures(nom: &str) -> MotifCoupe {
+        match nom {
+            "Diagonales" => Self::Diagonales,
+            "Croisées" => Self::Croisees,
+            n => Self::Perso(n.to_string()),
+        }
+    }
+}
+
+/// Famille de traits parallèles d'un motif de hachures, comme dans Revit : angle (degrés),
+/// pas entre traits, glissement d'un trait au suivant, origine et tirets (longueurs
+/// positives : traits, négatives : blancs ; vide : trait continu), en mm du papier.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct LigneMotif {
+    pub angle: f64,
+    pub pas: f64,
+    #[serde(default, skip_serializing_if = "est_nul")]
+    pub glissement: f64,
+    #[serde(default, skip_serializing_if = "origine_nulle")]
+    pub origine: [f64; 2],
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tirets: Vec<f64>,
+}
+
+fn est_nul(x: &f64) -> bool {
+    *x == 0.0
+}
+
+fn origine_nulle(o: &[f64; 2]) -> bool {
+    o[0] == 0.0 && o[1] == 0.0
+}
+
+/// Motif de hachures nommé : familles de traits.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct DefinitionMotif {
+    pub nom: String,
+    pub lignes: Vec<LigneMotif>,
+}
+
+impl DefinitionMotif {
+    /// Motifs de base, toujours disponibles.
+    pub fn base() -> Vec<DefinitionMotif> {
+        let l = |angle: f64, pas: f64| LigneMotif { angle, pas, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() };
+        vec![
+            DefinitionMotif { nom: "Diagonales".into(), lignes: vec![l(45.0, 2.0)] },
+            DefinitionMotif { nom: "Croisées".into(), lignes: vec![l(45.0, 1.5), l(-45.0, 1.5)] },
+        ]
     }
 }
 
@@ -184,7 +254,7 @@ pub struct Materiau {
     pub nom: String,
     /// Surface, arrière-plan : couleur (sRGB) ; aussi la couleur du style Réaliste.
     pub couleur: [u8; 3],
-    /// Surface, arrière-plan : motif (None : uni).
+    /// Surface, arrière-plan : motif (None : uni ; uni ou hachures).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub surface_fond_motif: Option<MotifCoupe>,
     /// Surface, premier plan : motif (None : aucun) et couleur (None : gris foncé).
@@ -197,33 +267,38 @@ pub struct Materiau {
     pub motif: MotifCoupe,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coupe_couleur: Option<[u8; 3]>,
-    /// Coupe, arrière-plan : couleur et motif (couleur seule : uni ; ni l'un ni l'autre :
-    /// aucun, fond blanc).
+    /// Coupe, arrière-plan : couleur (None : blanc) et motif (None : uni ; uni ou
+    /// hachures).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coupe_fond: Option<[u8; 3]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coupe_fond_motif: Option<MotifCoupe>,
 }
 
+/// Un arrière-plan est uni ou hachuré (ni vide ni isolant).
+fn arriere_plan_valide(m: &MotifCoupe) -> bool {
+    !matches!(m, MotifCoupe::Vide | MotifCoupe::Isolation)
+}
+
 impl Materiau {
     /// Encre du motif de coupe.
     pub fn encre_coupe(&self) -> [u8; 3] {
-        self.coupe_couleur.unwrap_or(match self.motif {
+        self.coupe_couleur.unwrap_or(match &self.motif {
             MotifCoupe::Croisees => [110, 95, 40],
             MotifCoupe::Uni => self.couleur,
             _ => [70, 70, 70],
         })
     }
 
-    /// Arrière-plan de coupe : motif (None : aucun) et couleur.
-    pub fn fond_coupe(&self) -> (Option<MotifCoupe>, [u8; 3]) {
-        let motif = self.coupe_fond_motif.or(self.coupe_fond.map(|_| MotifCoupe::Uni)).filter(|m| *m != MotifCoupe::Vide);
-        (motif, self.coupe_fond.unwrap_or([150, 150, 150]))
+    /// Arrière-plan de coupe : motif (uni ou hachures) et couleur (blanc par défaut).
+    pub fn fond_coupe(&self) -> (MotifCoupe, [u8; 3]) {
+        let motif = self.coupe_fond_motif.clone().filter(|m| arriere_plan_valide(m)).unwrap_or(MotifCoupe::Uni);
+        (motif, self.coupe_fond.unwrap_or([255, 255, 255]))
     }
 
-    /// Arrière-plan de surface : motif (uni par défaut).
+    /// Arrière-plan de surface : motif (uni par défaut, ou hachures).
     pub fn fond_surface(&self) -> MotifCoupe {
-        self.surface_fond_motif.unwrap_or(MotifCoupe::Uni)
+        self.surface_fond_motif.clone().filter(|m| arriere_plan_valide(m)).unwrap_or(MotifCoupe::Uni)
     }
 
     /// Encre du motif de surface.
@@ -600,6 +675,29 @@ impl Projet {
         self.materiaux.iter().find(|m| m.nom == nom)
     }
 
+    /// Définition d'un motif de hachures : celle du projet, sinon du gabarit, sinon de base.
+    pub fn definition_motif(&self, m: &MotifCoupe) -> Option<DefinitionMotif> {
+        let nom = m.nom_hachures()?;
+        self.motifs
+            .iter()
+            .find(|d| d.nom == nom)
+            .cloned()
+            .or_else(|| crate::gabarit::actif().motifs.iter().find(|d| d.nom == nom).cloned())
+            .or_else(|| DefinitionMotif::base().into_iter().find(|d| d.nom == nom))
+    }
+
+    /// Noms des motifs de hachures disponibles : projet, gabarit, base, sans doublon.
+    pub fn noms_motifs(&self) -> Vec<String> {
+        let mut noms: Vec<String> = Vec::new();
+        let g = crate::gabarit::actif();
+        for d in DefinitionMotif::base().iter().chain(g.motifs.iter()).chain(self.motifs.iter()) {
+            if !noms.contains(&d.nom) {
+                noms.push(d.nom.clone());
+            }
+        }
+        noms
+    }
+
     pub fn type_dalle(&self, id: &str) -> Option<&TypeCompose> {
         self.types_dalles.iter().find(|t| t.id == id)
     }
@@ -890,14 +988,16 @@ mod tests {
     fn graphismes_materiau_comme_revit() {
         // ancien fond de coupe (couleur seule) : arrière-plan uni
         let m: Materiau = serde_json::from_str(r#"{"nom":"B","couleur":[1,2,3],"motif":"diagonales","coupe_fond":[9,9,9]}"#).unwrap();
-        assert_eq!(m.fond_coupe(), (Some(MotifCoupe::Uni), [9, 9, 9]));
+        assert_eq!(m.fond_coupe(), (MotifCoupe::Uni, [9, 9, 9]));
         assert_eq!(m.fond_surface(), MotifCoupe::Uni);
-        // sans fond : aucun arrière-plan de coupe
+        // sans fond : arrière-plan uni blanc
         let m: Materiau = serde_json::from_str(r#"{"nom":"B","couleur":[1,2,3]}"#).unwrap();
-        assert_eq!(m.fond_coupe().0, None);
-        let m = Materiau { coupe_fond_motif: Some(MotifCoupe::Croisees), coupe_fond: Some([5, 5, 5]), ..m };
-        let relu: Materiau = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
-        assert_eq!(relu.fond_coupe(), (Some(MotifCoupe::Croisees), [5, 5, 5]));
+        assert_eq!(m.fond_coupe(), (MotifCoupe::Uni, [255, 255, 255]));
+        let m = Materiau { coupe_fond_motif: Some(MotifCoupe::Perso("Brique".into())), coupe_fond: Some([5, 5, 5]), motif: MotifCoupe::Isolation, ..m };
+        let texte = serde_json::to_string(&m).unwrap();
+        assert!(texte.contains(r#""perso":"Brique""#) && texte.contains(r#""motif":"isolation""#), "{texte}");
+        let relu: Materiau = serde_json::from_str(&texte).unwrap();
+        assert_eq!(relu.fond_coupe(), (MotifCoupe::Perso("Brique".into()), [5, 5, 5]));
     }
 
     #[test]

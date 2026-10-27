@@ -3,7 +3,7 @@
 //! (`gabarits/defaut.gabarit.json`) ; un autre fichier peut être choisi dans
 //! Début > Options.
 
-use crate::modele::{Couche, Materiau, MotifCoupe, SorteDalle};
+use crate::modele::{Couche, DefinitionMotif, Materiau, MotifCoupe, SorteDalle};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
@@ -19,6 +19,9 @@ pub struct Gabarit {
     /// Niveaux d'un nouveau projet.
     #[serde(default)]
     pub niveaux: Vec<NiveauGabarit>,
+    /// Motifs de hachures proposés (en plus des motifs de base).
+    #[serde(default)]
+    pub motifs: Vec<DefinitionMotif>,
     /// Matériaux reconnus par un mot de leur nom (premier qui correspond).
     #[serde(default)]
     pub materiaux: Vec<FamilleMateriau>,
@@ -130,12 +133,12 @@ impl Gabarit {
             Some(f) => Materiau {
                 nom: nom.into(),
                 couleur: f.couleur,
-                motif: f.motif,
+                motif: f.motif.clone(),
                 coupe_couleur: f.coupe_couleur,
                 coupe_fond: f.coupe_fond,
-                coupe_fond_motif: f.coupe_fond_motif,
-                surface_fond_motif: f.surface_fond_motif,
-                surface_motif: f.surface_motif,
+                coupe_fond_motif: f.coupe_fond_motif.clone(),
+                surface_fond_motif: f.surface_fond_motif.clone(),
+                surface_motif: f.surface_motif.clone(),
                 surface_couleur: f.surface_couleur,
             },
             None => {
@@ -186,7 +189,8 @@ mod tests {
         }
         assert!(!g.types_murs.is_empty());
         assert!(!g.niveaux.is_empty());
-        assert_eq!(g.materiau("Laine minérale").motif, MotifCoupe::Croisees);
+        assert_eq!(g.materiau("Laine minérale").motif, MotifCoupe::Isolation);
+        assert!(g.motifs.iter().any(|m| m.nom == "Béton"));
         assert_eq!(g.materiau("Béton armé").couleur, [176, 176, 170]);
     }
 

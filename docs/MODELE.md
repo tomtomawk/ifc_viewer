@@ -76,7 +76,8 @@ garde le RVT et ses vues ouverts, sans basculer vers le rendu natif limité.
 | `variantes[]` | `id`, `nom`, `jeu` | Options Revit reprises à la conversion, distinguées par jeu ; une variante absente sur un mur désigne le modèle principal. |
 | `niveaux[]` | `id`, `nom`, `altitude`, `origine` | Triés par altitude |
 | `types_murs[]`, `types_dalles[]` | `id`, `nom`, `couches[]` (`materiau`, `epaisseur`, `fonction` : structure, isolation, finition, autre), `couches_detaillees` | Murs : couches de l'extérieur vers l'intérieur ; dalles : du haut vers le bas. `couches_detaillees` = false : une couche de l'épaisseur totale (détail non lu) |
-| `materiaux[]` | `nom`, `couleur` [r, g, b], `surface_fond_motif`, `surface_motif`, `surface_couleur`, `motif`, `coupe_couleur`, `coupe_fond`, `coupe_fond_motif` | Graphismes comme dans Revit, sans ombrage à part. Motifs de surface : premier plan (`surface_motif`, `surface_couleur`) et arrière-plan (`surface_fond_motif`, uni par défaut, de couleur `couleur` : couleur des faces, aussi celle du style Réaliste ; `vide` : aucun, faces blanches). Motifs de coupe : premier plan (`motif`, `coupe_couleur`) et arrière-plan (`coupe_fond_motif`, `coupe_fond` ; couleur seule : uni ; ni l'un ni l'autre : aucun, blanc). Motifs : `diagonales`, `croisees`, `uni`, `vide`. Champs facultatifs omis : valeurs par défaut |
+| `materiaux[]` | `nom`, `couleur` [r, g, b], `surface_fond_motif`, `surface_motif`, `surface_couleur`, `motif`, `coupe_couleur`, `coupe_fond`, `coupe_fond_motif` | Graphismes comme dans Revit, sans ombrage à part. Motifs de surface : premier plan (`surface_motif`, `surface_couleur`) et arrière-plan (`surface_fond_motif`, uni par défaut, de couleur `couleur` : couleur des faces, aussi celle du style Réaliste). Motifs de coupe : premier plan (`motif`, `coupe_couleur`) et arrière-plan (`coupe_fond_motif`, uni par défaut, `coupe_fond`, blanc par défaut). Motif : `diagonales`, `croisees`, `uni`, `vide` (premier plan : aucun), `isolation` (coupe : ligne d'isolant en boucles au milieu de la couche) ou `{"perso": "<nom>"}` (motif de hachures nommé). L'arrière-plan est uni ou hachuré. Champs facultatifs omis : valeurs par défaut |
+| `motifs[]` | `nom`, `lignes[]` (`angle` °, `pas`, `glissement`, `origine` [x, y], `tirets` : trait, blanc, trait… ; mm du papier) | Motifs de hachures du projet, comme les motifs de remplissage de Revit ; un motif du gabarit ou de base modifié y est copié. Motifs de base : Diagonales, Croisées |
 | `assemblages[]` | `id`, `nom`, `type_mur`, `couches[]` (ids de murs), `origine` | Mur composé : **chaque couche est un mur** à part entière (type monocouche, niveaux, hauteur, phase, sous-projet propres), listées de l'extérieur vers l'intérieur. Une ouverture dont `mur` vaut l'id de l'assemblage traverse toutes ses couches |
 | `types_ouvertures[]` | `id`, `nom`, `genre`, `largeur`, `hauteur` | Revit seulement en v0 (cotes du type) |
 | `murs[]` | `id`, `nom`, `type_mur`, `niveau`, `decalage_bas`, `haut`, `axe`, `origine`, `phase`, `sous_projet`, `variante` | `phase`, `sous_projet` et `variante` sont facultatifs (absents des anciens fichiers). `haut` : `{contrainte: libre, hauteur}` ou `{contrainte: niveau, niveau, decalage}` |
@@ -165,7 +166,14 @@ Motifs : `diagonales`, `croisees`, `uni`, `vide`. Il faut au moins un type de co
 type d'élévation. `niveaux` (`nom`, `altitude` en mm) : niveaux d'un nouveau projet (RDC
 à 0 dans le gabarit par défaut). Les familles de `materiaux` acceptent aussi
 `surface_fond_motif`, `surface_motif`, `surface_couleur`, `coupe_couleur`, `coupe_fond`,
-`coupe_fond_motif`. Un nouveau projet reprend les types de murs du gabarit ; dans un projet
+`coupe_fond_motif`. `motifs` : motifs de hachures proposés (Diagonales serrées,
+Horizontales, Béton, Brique, Bois (fil), Terre dans le gabarit par défaut).
+
+Éditeur de hachures (Graphismes d'un matériau > Motifs de hachures…) : liste des motifs
+avec aperçu, Nouveau, Dupliquer, Supprimer (motif du projet non utilisé) ou Rétablir (motif
+du gabarit modifié) ; nom (renommer met à jour les matériaux), familles de traits (angle,
+pas, glissement, origine, tirets) et aperçu de 3 × 3 cm du papier. En 3D, les motifs de
+surface sont tracés en traits continus (deux familles au plus). Un nouveau projet reprend les types de murs du gabarit ; dans un projet
 existant, ceux qui manquent sont proposés en bas du sélecteur de type de mur et copiés
 dans le projet au choix.
 
@@ -173,6 +181,11 @@ dans le projet au choix.
 
 - Angle (L) en onglet, arrivée (T) arrêtée sur la face du mur traversé, deux murs alignés
   bout à bout continus : un troisième mur au même nœud s'arrête sur leur face.
+- Jonction des noyaux (comme Revit) : à une arrivée en T, les couches porteuses
+  (fonction structure) du mur arrivant vont jusqu'à la face du noyau du mur rejoint ; ses
+  couches de finition s'arrêtent sur sa face, et celles du mur rejoint sont interrompues
+  au passage. En coupe, le trait commun à deux éléments du même matériau disparaît, même
+  partiel (trait court posé sur un trait long).
 - Arêtes : celles des éléments d'un même matériau sont calculées ensemble ; là où deux
   éléments se touchent (faces collées), les faces qui se prolongent ne portent pas
   d'arête. Les angles réels restent, et deux matériaux différents gardent leur limite.

@@ -71,8 +71,27 @@ in vec4 v_rendu;
 flat in vec4 v_motif;
 flat in uint v_selected;
 flat in uint v_annot;
-// motifs de surface des matériaux : pas des traits (unités de la scène)
-uniform float u_pas_motif;
+// motifs de surface des matériaux : unités de la scène par mm du papier, table des
+// motifs (deux familles de traits : angle en radians, pas en mm ; pas nul : aucune)
+uniform float u_mm;
+uniform vec4 u_table_motifs[14];
+
+// part d'un trait d'une famille (angle, pas) au point uv du plan de la face (anticrénelé
+// avec les dérivées dx, dy calculées hors des branches)
+float famille(vec2 uv, vec2 dx, vec2 dy, float angle, float pas_mm) {
+    if (pas_mm <= 0.0) return 0.0;
+    float pas = pas_mm * u_mm;
+    vec2 nrm = vec2(-sin(angle), cos(angle));
+    float f = dot(uv, nrm) / pas;
+    float w = (abs(dot(dx, nrm)) + abs(dot(dy, nrm))) / pas;
+    return 1.0 - min(abs(fract(f + 0.5) - 0.5) / max(w, 1e-6), 1.0);
+}
+
+float traits_motif(int code, vec2 uv, vec2 dx, vec2 dy) {
+    if (code < 1 || code > 14) return 0.0;
+    vec4 t = u_table_motifs[code - 1];
+    return max(famille(uv, dx, dy, t.x, t.y), famille(uv, dx, dy, t.z, t.w));
+}
 uniform vec3 u_eye;
 uniform bool u_ortho;
 uniform vec3 u_view_dir;
@@ -159,16 +178,15 @@ void main() {
     // pixel (dérivées calculées hors des branches)
     vec3 an = abs(n);
     vec2 uvm = an.z > 0.7 ? v_pos.xy : vec2(dot(v_pos, normalize(vec3(-n.y, n.x, 0.0) + vec3(1e-6, 0.0, 0.0))), v_pos.z);
-    vec2 fm = vec2(uvm.x + uvm.y, uvm.x - uvm.y) * (0.70710678 / max(u_pas_motif, 1e-6));
-    vec2 lm = abs(fract(fm + 0.5) - 0.5) / max(fwidth(fm), vec2(1e-6));
-    // premier plan (4 bits bas) et arrière-plan (4 bits hauts) : 1 diagonales, 2 croisées
+    vec2 dxm = dFdx(uvm);
+    vec2 dym = dFdy(uvm);
+    // premier plan (4 bits bas : 0 aucun, 15 uni, sinon motif de la table) et arrière-plan
+    // (4 bits hauts : 0 uni, sinon motif de la table)
     int code_motif = int(v_motif.x * 255.0 + 0.5);
     int premier = code_motif & 15;
     int arriere = code_motif >> 4;
-    float diag = 1.0 - min(lm.x, 1.0);
-    float croix = 1.0 - min(min(lm.x, lm.y), 1.0);
-    float trait_premier = premier == 2 ? croix : diag;
-    float trait_arriere = arriere == 2 ? croix : diag;
+    float trait_premier = traits_motif(premier, uvm, dxm, dym);
+    float trait_arriere = traits_motif(arriere, uvm, dxm, dym);
     vec3 vd = u_ortho ? -u_view_dir : normalize(u_eye - v_pos);
     if (dot(n, vd) < 0.0) n = -n;
     vec3 fill = normalize(vec3(-0.5, -0.7, 0.2));
@@ -179,7 +197,7 @@ void main() {
     bool motifs = !u_materiaux && v_annot == 0u;
     // arrière-plan de surface : uni (couleur des faces), sinon faces blanches
     vec3 base = (blanc || (motifs && arriere != 0)) ? vec3(1.0) : v_c.rgb;
-    if (motifs && premier == 3) {
+    if (motifs && premier == 15) {
         base = v_motif.yzw;
     }
     float d;
@@ -199,10 +217,10 @@ void main() {
         d = 0.50 * ao + 0.38 * max(dot(n, sun), 0.0) * ombre + 0.12 * max(dot(n, fill), 0.0) * ao + 0.12 * max(dot(n, vd), 0.0);
     }
     vec3 c = base * d;
-    if (motifs && (arriere == 1 || arriere == 2)) {
+    if (motifs && arriere != 0) {
         c = mix(c, v_c.rgb, trait_arriere);
     }
-    if (motifs && (premier == 1 || premier == 2)) {
+    if (motifs && premier != 0 && premier != 15) {
         c = mix(c, v_motif.yzw, trait_premier);
     }
     float a = v_c.a;
@@ -406,7 +424,8 @@ pub struct Renderer {
     vbo_rendu: glow::Buffer,
     /// Motifs de surface des sommets (attribut 5), tampon à part.
     vbo_motifs: glow::Buffer,
-    u_pas_motif: Option<glow::UniformLocation>,
+    u_mm: Option<glow::UniformLocation>,
+    u_table_motifs: Option<glow::UniformLocation>,
     /// Carte d'ombres du style Rendu : programme, tampon de trame, texture de profondeur.
     programme_ombre: glow::Program,
     u_mvp_ombre: Option<glow::UniformLocation>,
@@ -465,8 +484,10 @@ pub struct FrameParams {
     /// Graphique : faces blanches (dessin au trait) et éclairage des faces.
     pub faces_blanches: bool,
     pub eclairage: bool,
-    /// Pas des motifs de surface (unités de la scène) : 2 mm du papier à l'échelle.
-    pub pas_motif: f32,
+    /// Unités de la scène par mm du papier (motifs de surface) et table des motifs de la
+    /// scène (angle, pas, angle, pas).
+    pub mm: f32,
+    pub table_motifs: Vec<[f32; 4]>,
     /// Plan de coupe du mode dessin (n, d ; n·p + d ≥ 0 gardé) et tracé de la coupe.
     pub coupe: Option<Vec4>,
     /// Ombres portées : direction du soleil (vers lui), matrice
@@ -617,7 +638,8 @@ impl Renderer {
                 cibles_ao: std::cell::RefCell::new(None),
                 vbo_rendu,
                 vbo_motifs,
-                u_pas_motif: gl.get_uniform_location(program, "u_pas_motif"),
+                u_mm: gl.get_uniform_location(program, "u_mm"),
+                u_table_motifs: gl.get_uniform_location(program, "u_table_motifs[0]").or_else(|| gl.get_uniform_location(program, "u_table_motifs")),
                 u_mvp_ombre: gl.get_uniform_location(programme_ombre, "u_mvp"),
                 programme_ombre,
                 fbo_ombres,
@@ -930,7 +952,12 @@ impl Renderer {
             gl.uniform_3_f32(self.u_eye.as_ref(), p.eye.x, p.eye.y, p.eye.z);
             gl.uniform_1_i32(self.u_ortho.as_ref(), p.ortho as i32);
             gl.uniform_3_f32(self.u_view_dir.as_ref(), p.view_dir.x, p.view_dir.y, p.view_dir.z);
-            gl.uniform_1_f32(self.u_pas_motif.as_ref(), p.pas_motif);
+            gl.uniform_1_f32(self.u_mm.as_ref(), p.mm);
+            let mut table = [0f32; 56];
+            for (k, t) in p.table_motifs.iter().take(14).enumerate() {
+                table[4 * k..4 * k + 4].copy_from_slice(t);
+            }
+            gl.uniform_4_f32_slice(self.u_table_motifs.as_ref(), &table);
             // plans de découpe neutres (distance positive ou nulle) hors de leur usage :
             // certains pilotes (llvmpipe) appliquent les distances écrites par le shader
             // même quand GL_CLIP_DISTANCEi n'est pas activé

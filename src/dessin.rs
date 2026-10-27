@@ -297,7 +297,12 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
                             let h = hachures_plan(&t2,m,echelle / 1000.0,20_000).into_iter().map(|s| s.map(en_3d)).collect();
                             detail.push(primitive(Forme::Segments(h),couche.fond,0.0,Role::Hachure));
                         }
-                        if poche == Poche::Hachure && !uni {
+                        if poche == Poche::Hachure && couche.isolation {
+                            let t2: Vec<_> = tris.iter().map(|t| t.map(|p| [(p-o).dot(e1),(p-o).dot(e2)])).collect();
+                            let h = ligne_isolation(&t2).into_iter().map(|s| s.map(en_3d)).collect();
+                            detail.push(primitive(Forme::Segments(h),couche.couleur_motif,0.0,Role::Hachure));
+                        }
+                        if poche == Poche::Hachure && !uni && !couche.isolation {
                             let (motif, facteur) = match &couche.motif {
                                 Some(m) => (m.as_ref(), if m.modele { 0.001 } else { echelle / 1000.0 }),
                                 None if couche.hachure_defaut => (&motif, 1.0),
@@ -341,8 +346,62 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
     fusionner_materiaux(scene, prims)
 }
 
-/// Segment repéré au dixième de millimètre, extrémités dans l'ordre.
-type CleSegment = ([i64; 3], [i64; 3]);
+/// Ligne d'isolant en boucles (laine, comme le composant « isolant » de Revit) au milieu
+/// d'une région de coupe (triangles 2D) : axe le long de sa plus grande dimension,
+/// boucles de la hauteur de son épaisseur, segments gardés dans la région.
+pub fn ligne_isolation(tris: &[[[f64; 2]; 3]]) -> Vec<[[f64; 2]; 2]> {
+    use glam::DVec2;
+    let pts: Vec<DVec2> = tris.iter().flatten().map(|p| DVec2::from_array(*p)).collect();
+    if pts.len() < 3 {
+        return Vec::new();
+    }
+    let c = pts.iter().copied().sum::<DVec2>() / pts.len() as f64;
+    // direction principale (covariance des sommets)
+    let (mut xx, mut xy, mut yy) = (0.0, 0.0, 0.0);
+    for p in &pts {
+        let d = *p - c;
+        xx += d.x * d.x;
+        xy += d.x * d.y;
+        yy += d.y * d.y;
+    }
+    let a = 0.5 * (2.0 * xy).atan2(xx - yy);
+    let u = DVec2::new(a.cos(), a.sin());
+    let v = u.perp();
+    let (mut u0, mut u1, mut v0, mut v1) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
+    for p in &pts {
+        let d = *p - c;
+        u0 = u0.min(d.dot(u));
+        u1 = u1.max(d.dot(u));
+        v0 = v0.min(d.dot(v));
+        v1 = v1.max(d.dot(v));
+    }
+    let e = v1 - v0;
+    if !(e > 1e-6) || u1 - u0 < e {
+        return Vec::new();
+    }
+    let milieu = c + v * ((v0 + v1) / 2.0);
+    // cycloïde allongée : boucles de hauteur 0,9 × épaisseur, une boucle par 0,6 × épaisseur
+    let (d, r) = (0.45 * e, 0.6 * e / std::f64::consts::TAU);
+    let dedans = |p: DVec2| tris.iter().any(|t| {
+        let [a, b, c] = t.map(DVec2::from_array);
+        let s = |x: DVec2, y: DVec2| (y - x).perp_dot(p - x);
+        let (s1, s2, s3) = (s(a, b), s(b, c), s(c, a));
+        (s1 >= -1e-12 && s2 >= -1e-12 && s3 >= -1e-12) || (s1 <= 1e-12 && s2 <= 1e-12 && s3 <= 1e-12)
+    });
+    let point = |th: f64| milieu + u * (u0 + d + r * th - d * th.sin()) + v * (-d * th.cos());
+    let fin = ((u1 - u0 - 2.0 * d) / r).max(0.0);
+    let pas = 0.2;
+    let mut out = Vec::new();
+    let mut th = 0.0;
+    while th < fin {
+        let (p, q) = (point(th), point((th + pas).min(fin)));
+        if dedans((p + q) * 0.5) {
+            out.push([p.to_array(), q.to_array()]);
+        }
+        th += pas;
+    }
+    out
+}
 
 /// Nettoyage des jonctions comme Revit : un trait de coupe commun à deux éléments du
 /// même matériau (deux couches identiques raccordées en onglet) est retiré, les deux
@@ -355,37 +414,76 @@ fn fusionner_materiaux(scene: &Scene, mut prims: Vec<Primitive>) -> Vec<Primitiv
         let [b] = c.as_slice() else { return None };
         Some((b.couleur, b.motif.as_ref().map_or_else(String::new, |m| m.nom.clone())))
     };
-    let cle = |s: &[DVec3; 2]| -> CleSegment {
-        let q = |p: DVec3| [(p.x * 1e4).round() as i64, (p.y * 1e4).round() as i64, (p.z * 1e4).round() as i64];
-        let (a, b) = (q(s[0]), q(s[1]));
-        if a <= b { (a, b) } else { (b, a) }
-    };
-    let mut vus: HashMap<CleSegment, Vec<(usize, Option<crate::step::Id>)>> = HashMap::new();
+    // traits de coupe rangés par droite porteuse : (primitive, rang, t0, t1, élément)
+    type Trait = (usize, usize, f64, f64, Option<crate::step::Id>);
+    let q = |x: f64| (x * 1e4).round() as i64;
+    let mut droites: HashMap<([i64; 3], [i64; 3]), (DVec3, Vec<Trait>)> = HashMap::new();
     for (k, p) in prims.iter().enumerate() {
         if let (Role::Coupe, Forme::Segments(segs)) = (p.role, &p.forme) {
             if materiau(p.element).is_none() {
                 continue;
             }
-            for s in segs {
-                vus.entry(cle(s)).or_default().push((k, p.element));
+            for (i, s) in segs.iter().enumerate() {
+                let d = s[1] - s[0];
+                if d.length() < 1e-9 {
+                    continue;
+                }
+                let mut u = d.normalize();
+                let m = if u.x.abs() >= u.y.abs() && u.x.abs() >= u.z.abs() { u.x } else if u.y.abs() >= u.z.abs() { u.y } else { u.z };
+                if m < 0.0 {
+                    u = -u;
+                }
+                let p0 = s[0] - u * s[0].dot(u);
+                let cle = ([q(u.x), q(u.y), q(u.z)], [q(p0.x), q(p0.y), q(p0.z)]);
+                let (ta, tb) = (s[0].dot(u), s[1].dot(u));
+                droites.entry(cle).or_insert((u, Vec::new())).1.push((k, i, ta.min(tb), ta.max(tb), p.element));
             }
         }
     }
-    let mut retirer: std::collections::HashSet<(usize, CleSegment)> = std::collections::HashSet::new();
-    for (c, qui) in &vus {
-        if let [(ka, ea), (kb, eb)] = qui.as_slice() {
-            if ea != eb && materiau(*ea) == materiau(*eb) {
-                retirer.insert((*ka, *c));
-                retirer.insert((*kb, *c));
+    // partie de chaque trait recouverte par un trait d'un autre élément du même matériau :
+    // retirée des deux (un trait court posé sur un trait long compris)
+    let mut remplacer: HashMap<(usize, usize), Vec<[DVec3; 2]>> = HashMap::new();
+    for (u, traits) in droites.values() {
+        for &(k, i, t0, t1, e) in traits {
+            let mut couverts: Vec<(f64, f64)> = traits
+                .iter()
+                .filter(|o| o.4 != e && materiau(o.4) == materiau(e) && o.3 > t0 + 1e-6 && o.2 < t1 - 1e-6)
+                .map(|o| (o.2.max(t0), o.3.min(t1)))
+                .collect();
+            if couverts.is_empty() {
+                continue;
             }
+            couverts.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let Forme::Segments(segs) = &prims[k].forme else { continue };
+            let s = segs[i];
+            // point de la droite à l'abscisse t
+            let base = s[0] - *u * s[0].dot(*u);
+            let mut restes = Vec::new();
+            let mut debut = t0;
+            for (a, b) in couverts {
+                if a > debut + 1e-6 {
+                    restes.push([base + *u * debut, base + *u * a]);
+                }
+                debut = debut.max(b);
+            }
+            if t1 > debut + 1e-6 {
+                restes.push([base + *u * debut, base + *u * t1]);
+            }
+            remplacer.insert((k, i), restes);
         }
     }
-    if retirer.is_empty() {
+    if remplacer.is_empty() {
         return prims;
     }
     for (k, p) in prims.iter_mut().enumerate() {
         if let Forme::Segments(segs) = &mut p.forme {
-            segs.retain(|s| !retirer.contains(&(k, cle(s))));
+            let anciens = std::mem::take(segs);
+            for (i, s) in anciens.into_iter().enumerate() {
+                match remplacer.remove(&(k, i)) {
+                    Some(r) => segs.extend(r),
+                    None => segs.push(s),
+                }
+            }
         }
     }
     prims
@@ -797,7 +895,7 @@ mod tests {
         tris.extend(cube().into_iter().map(|t| t.map(|p| p * 0.5 + DVec3::splat(0.25))));
         let mut s = scene_section(tris);
         let bande = |a: f32, b: f32, couleur| crate::scene::CoucheCoupe {
-            plans: vec![Vec3::X.extend(-a),Vec3::NEG_X.extend(b)], couleur, fond: [255,255,255,255], motif_fond: None, motif: None, couleur_motif: [70,70,70,255], hachure_defaut: true,
+            plans: vec![Vec3::X.extend(-a),Vec3::NEG_X.extend(b)], couleur, fond: [255,255,255,255], motif_fond: None, motif: None, couleur_motif: [70,70,70,255], hachure_defaut: true, isolation: false,
         };
         s.couches_coupe.insert(1,vec![bande(0.0,0.2,[190,120,120,255]),bande(0.2,1.0,[120,190,120,255])]);
         let p = coupe(&s,&[true],Vec3::NEG_Z.extend(0.5),100.0,Poche::Hachure);

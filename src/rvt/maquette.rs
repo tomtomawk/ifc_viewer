@@ -2604,7 +2604,7 @@ fn bandes_couches_mur(m: &Maquette, mur: &Mur, origine: DVec3) -> Option<Vec<sce
             let couleur = mat.map_or([195,195,190], |m| m.couleur);
             let motif = mat.and_then(|m| m.motifs.first()).and_then(|(id,_)| m.motifs.get(id)).cloned().map(Arc::new);
             let encre = mat.map_or([70,70,70], |m| m.motifs[0].1);
-            bandes.push(scene::CoucheCoupe { plans: vec![normale.as_vec3().extend(-position as f32), (-normale).as_vec3().extend(fin as f32)], couleur: [couleur[0],couleur[1],couleur[2],255], fond: [255,255,255,255], motif_fond: None, motif, couleur_motif: [encre[0],encre[1],encre[2],255], hachure_defaut: mat.is_none() });
+            bandes.push(scene::CoucheCoupe { plans: vec![normale.as_vec3().extend(-position as f32), (-normale).as_vec3().extend(fin as f32)], couleur: [couleur[0],couleur[1],couleur[2],255], fond: [255,255,255,255], motif_fond: None, motif, couleur_motif: [encre[0],encre[1],encre[2],255], hachure_defaut: mat.is_none(), isolation: false });
         }
         position = fin;
     }

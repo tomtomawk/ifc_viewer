@@ -58,7 +58,8 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     let mut geoms = Vec::new();
     // matériau de chaque partie des éléments (jonctions sans arête entre mêmes matériaux)
     let mut materiaux_parts: Vec<Vec<Option<String>>> = Vec::new();
-    let jonctions = crate::modele::jonctions::coupes(projet);
+    let mut table_motifs: Vec<(String, [f32; 4])> = Vec::new();
+    let (jonctions, interruptions) = crate::modele::jonctions::jonctions(projet);
     // couches d'un même assemblage consécutives (sélection d'un seul tenant)
     let mut ordre: Vec<&crate::modele::Mur> = projet.murs.iter().filter(|m| m.assemblage.is_none()).collect();
     for a in &projet.assemblages {
@@ -80,9 +81,15 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         let contour = crate::modele::jonctions::contour(projet, m, &jonctions)
             .ok_or_else(|| format!("{} : contour non valide.", m.nom))?
             .map(glam::DVec2::from_array);
-        let points: Vec<DVec3> = [bas, haut].into_iter().flat_map(|z| contour.map(|p| DVec3::new(p.x, p.y, z) * 0.001)).collect();
-        let faces = [[3,2,1,0],[4,5,6,7],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7]];
-        let tris = faces.into_iter().flat_map(|[a,b,c,d]| [[points[a],points[b],points[c]], [points[a],points[c],points[d]]]).collect();
+        // couches de finition traversées par le noyau d'un mur arrivant : interrompues
+        let morceaux = match interruptions.get(&m.id) {
+            Some(trous) => morceaux_mur(&contour, glam::DVec2::from_array(debut), d.normalize(), trous),
+            None => vec![contour.to_vec()],
+        };
+        let mut tris = Vec::new();
+        for poly in morceaux {
+            prisme_convexe(&poly, bas, haut, &mut tris);
+        }
         let id = id_natif("mur", &m.id);
         let parent = match m.assemblage.as_ref().filter(|a| projet.assemblage(a).is_some()) {
             Some(a) => id_natif("assemblage", a),
@@ -102,10 +109,10 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         });
         if let Some(x) = &materiau {
             let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
-            couches_coupe.push((id, coupe_materiau(x, vec![neutre, neutre])));
+            couches_coupe.push((id, coupe_materiau(projet, x, vec![neutre, neutre])));
         }
         materiaux_parts.push(vec![materiau.as_ref().map(|m| m.nom.clone())]);
-        geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.is_some().then_some(couleur)], motifs: vec![materiau.as_ref().and_then(motif_surface)] });
+        geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.is_some().then_some(couleur)], motifs: vec![materiau.as_ref().and_then(|m| motif_surface(projet, m, &mut table_motifs))] });
     }
     // dalles : un prisme par couche, du dessus (niveau + décalage) vers le bas
     let mut bandes_dalles: Vec<(u64, Vec<CoucheCoupe>)> = Vec::new();
@@ -136,12 +143,12 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
             if let Some(m) = &m {
                 // bandes de coupe entre le dessous et le dessus de la couche (m, repère du fichier)
                 for jeu in crate::modele::pente::bandes(&plans, z0, bas, haut) {
-                    bandes.extend(coupe_materiau(m, jeu));
+                    bandes.extend(coupe_materiau(projet, m, jeu));
                 }
             }
             rendu.push(m.is_some().then_some(couleur));
             noms.push(m.as_ref().map(|m| m.nom.clone()));
-            motifs.push(m.as_ref().and_then(motif_surface));
+            motifs.push(m.as_ref().and_then(|m| motif_surface(projet, m, &mut table_motifs)));
             parts.push(Part { color: couleur, tris });
         }
         if parts.is_empty() {
@@ -154,6 +161,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     let aretes = aretes_jointes(&geoms, &materiaux_parts);
     let mut scene = crate::scene::assemble_avec(model, geoms, path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| projet.nom.clone()), aretes);
     scene.couches_coupe.extend(couches_coupe);
+    scene.table_motifs = table_motifs.into_iter().map(|t| t.1).collect();
     // plans des bandes ramenés au repère de la scène (origine retirée)
     let o = scene.origin;
     for (id, mut bandes) in bandes_dalles {
@@ -170,21 +178,31 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
 }
 
 /// Motifs de surface d'un matériau pour le rendu : [premier plan | arrière-plan << 4,
-/// couleur du premier plan]. Premier plan : 0 aucun, 1 diagonales, 2 croisées, 3 uni ;
-/// arrière-plan : 0 uni (couleur des faces), 1 diagonales, 2 croisées, 4 aucun.
-fn motif_surface(m: &crate::modele::Materiau) -> Option<[u8; 4]> {
+/// couleur du premier plan]. Premier plan : 0 aucun, 15 uni, sinon rang + 1 dans la
+/// table ; arrière-plan : 0 uni (couleur des faces), sinon rang + 1 dans la table.
+fn motif_surface(projet: &Projet, m: &crate::modele::Materiau, table: &mut Vec<(String, [f32; 4])>) -> Option<[u8; 4]> {
     use crate::modele::MotifCoupe;
-    let premier = match m.surface_motif {
-        Some(MotifCoupe::Diagonales) => 1,
-        Some(MotifCoupe::Croisees) => 2,
-        Some(MotifCoupe::Uni) => 3,
-        _ => 0,
+    let mut rang = |x: &MotifCoupe| -> u8 {
+        let Some(d) = projet.definition_motif(x) else { return 0 };
+        if let Some(k) = table.iter().position(|t| t.0 == d.nom) {
+            return k as u8 + 1;
+        }
+        if table.len() >= 14 {
+            return 1;
+        }
+        let f = |k: usize| d.lignes.get(k).map_or([0.0, 0.0], |l| [l.angle.to_radians() as f32, l.pas as f32]);
+        let ([a, b], [c, e]) = (f(0), f(1));
+        table.push((d.nom.clone(), [a, b, c, e]));
+        table.len() as u8
+    };
+    let premier = match &m.surface_motif {
+        None | Some(MotifCoupe::Vide) | Some(MotifCoupe::Isolation) => 0,
+        Some(MotifCoupe::Uni) => 15,
+        Some(x) => rang(x),
     };
     let arriere = match m.fond_surface() {
         MotifCoupe::Uni => 0,
-        MotifCoupe::Diagonales => 1,
-        MotifCoupe::Croisees => 2,
-        MotifCoupe::Vide => 4,
+        x => rang(&x),
     };
     if premier == 0 && arriere == 0 {
         return None;
@@ -216,6 +234,58 @@ fn aretes_jointes(geoms: &[ProductGeom], materiaux: &[Vec<Option<String>>]) -> s
         }
     }
     par_objet
+}
+
+/// Morceaux du contour (convexe) d'un mur hors des intervalles `trous` (mm le long de
+/// l'axe `d` depuis `debut`).
+fn morceaux_mur(contour: &[glam::DVec2; 4], debut: glam::DVec2, d: glam::DVec2, trous: &[(f64, f64)]) -> Vec<Vec<glam::DVec2>> {
+    let mut trous = trous.to_vec();
+    trous.sort_by(|a, b| a.0.total_cmp(&b.0));
+    // garde la partie du polygone où signe · (t − t0) ≥ 0
+    let couper = |poly: &[glam::DVec2], t0: f64, signe: f64| -> Vec<glam::DVec2> {
+        let f = |p: glam::DVec2| signe * ((p - debut).dot(d) - t0);
+        let mut out = Vec::new();
+        for i in 0..poly.len() {
+            let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+            let (fa, fb) = (f(a), f(b));
+            if fa >= 0.0 { out.push(a); }
+            if (fa >= 0.0) != (fb >= 0.0) { out.push(a + (b - a) * (fa / (fa - fb))); }
+        }
+        out
+    };
+    let mut bornes = Vec::new();
+    let mut lo = f64::NEG_INFINITY;
+    for (a, b) in trous {
+        bornes.push((lo, a));
+        lo = lo.max(b);
+    }
+    bornes.push((lo, f64::INFINITY));
+    bornes
+        .into_iter()
+        .filter(|(a, b)| b > a)
+        .filter_map(|(a, b)| {
+            let mut p = contour.to_vec();
+            if a.is_finite() { p = couper(&p, a, 1.0); }
+            if b.is_finite() { p = couper(&p, b, -1.0); }
+            (p.len() >= 3).then_some(p)
+        })
+        .collect()
+}
+
+/// Prisme vertical (m) d'un polygone convexe du plan (mm, sens trigonométrique) entre
+/// les altitudes `bas` et `haut` (mm) ; normales vers l'extérieur.
+fn prisme_convexe(poly: &[glam::DVec2], bas: f64, haut: f64, tris: &mut Vec<[DVec3; 3]>) {
+    let p = |q: glam::DVec2, z: f64| DVec3::new(q.x, q.y, z) * 0.001;
+    let n = poly.len();
+    for k in 1..n - 1 {
+        tris.push([p(poly[0], haut), p(poly[k], haut), p(poly[k + 1], haut)]);
+        tris.push([p(poly[0], bas), p(poly[k + 1], bas), p(poly[k], bas)]);
+    }
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[(i + 1) % n]);
+        tris.push([p(a, bas), p(b, bas), p(b, haut)]);
+        tris.push([p(a, bas), p(b, haut), p(a, haut)]);
+    }
 }
 
 /// Identifiant numérique stable d'une vue native dans l'arborescence (« 3d » : la vue 3D).
@@ -321,31 +391,34 @@ fn navigateur(projet: &Projet) -> Navigateur {
     }
 }
 
-/// Poché de coupe d'un matériau entre deux plans (neutres : tout l'élément), motif
-/// selon le matériau (hachures en mm du papier).
-fn coupe_materiau(m: &crate::modele::Materiau, plans: Vec<Vec4>) -> Vec<CoucheCoupe> {
+/// Poché de coupe d'un matériau entre deux plans (neutres : tout l'élément) : premier
+/// plan (hachures du projet, aplat ou ligne d'isolant) et arrière-plan (aplat ou
+/// hachures), en mm du papier.
+fn coupe_materiau(projet: &Projet, m: &crate::modele::Materiau, plans: Vec<Vec4>) -> Vec<CoucheCoupe> {
     use crate::modele::MotifCoupe;
     use crate::rvt::vues::{GrilleMotif, Motif};
-    let grille = |angle: f64, pas: f64| GrilleMotif { angle, origine: [0.0, 0.0], glissement: 0.0, decalage: pas, tirets: Vec::new() };
     let [r, g, b] = m.couleur;
-    let grilles = |x: MotifCoupe| match x {
-        MotifCoupe::Diagonales => Some(vec![grille(std::f64::consts::FRAC_PI_4, 2.0)]),
-        MotifCoupe::Croisees => Some(vec![grille(std::f64::consts::FRAC_PI_4, 1.5), grille(-std::f64::consts::FRAC_PI_4, 1.5)]),
-        // sans grille : aplat de la couleur du motif
-        MotifCoupe::Uni => Some(Vec::new()),
-        MotifCoupe::Vide => None,
+    // hachures d'une définition ; aplat : sans grille ; rien : None
+    let grilles = |x: &MotifCoupe| -> Option<Vec<GrilleMotif>> {
+        match x {
+            MotifCoupe::Uni => Some(Vec::new()),
+            MotifCoupe::Vide | MotifCoupe::Isolation => None,
+            x => projet.definition_motif(x).map(|d| {
+                d.lignes.iter().map(|l| GrilleMotif { angle: l.angle.to_radians(), origine: l.origine, glissement: l.glissement, decalage: l.pas, tirets: l.tirets.iter().map(|t| t.abs()).collect() }).collect()
+            }),
+        }
     };
-    let motif = grilles(m.motif);
+    let motif = grilles(&m.motif);
     let [er, eg, eb] = m.encre_coupe();
     let (motif_fond, [fr, fg, fb]) = m.fond_coupe();
-    let encre = [er, eg, eb, 255];
     vec![CoucheCoupe {
         plans,
         couleur: [r, g, b, 255],
         fond: [fr, fg, fb, 255],
-        motif_fond: motif_fond.and_then(grilles).map(|grilles| std::sync::Arc::new(Motif { nom: format!("{} (arrière-plan)", m.nom), modele: false, grilles })),
+        motif_fond: grilles(&motif_fond).map(|grilles| std::sync::Arc::new(Motif { nom: format!("{} (arrière-plan)", m.nom), modele: false, grilles })),
         motif: motif.map(|grilles| std::sync::Arc::new(Motif { nom: m.nom.clone(), modele: false, grilles })),
-        couleur_motif: encre,
+        couleur_motif: [er, eg, eb, 255],
         hachure_defaut: false,
+        isolation: m.motif == MotifCoupe::Isolation,
     }]
 }

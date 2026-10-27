@@ -1300,7 +1300,8 @@ impl RubanEdition {
                                 ui.color_edit_button_srgb(&mut m.couleur).on_hover_text("Couleur du matériau (tous ses usages)");
                                 egui::ComboBox::from_id_salt(("motif", k)).width(80.0).selected_text(m.motif.libelle()).show_ui(ui, |ui| {
                                     for x in MotifCoupe::TOUS {
-                                        ui.selectable_value(&mut m.motif, x, x.libelle());
+                                        let l = x.libelle().to_string();
+                                        ui.selectable_value(&mut m.motif, x, l);
                                     }
                                 });
                             }

@@ -244,7 +244,7 @@ mod tests {
         let v: f64 = p.murs.iter().map(|m| p.volume_mur(m).unwrap()).sum();
         assert!((v - 5000.0 * 2800.0 * 320.0).abs() < 1.0);
         assert_eq!(p.materiaux.len(), 3);
-        assert_eq!(p.materiau("Laine de verre").unwrap().motif, MotifCoupe::Croisees);
+        assert_eq!(p.materiau("Laine de verre").unwrap().motif, MotifCoupe::Isolation);
         // la couche d'isolant devient indépendante, puis revient à sa place
         let isolant = p.couches_assemblage(&id)[2].id.clone();
         p.dissocier(&isolant).unwrap();
