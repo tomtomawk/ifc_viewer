@@ -2,6 +2,9 @@
  "format": "ifc_viewer.gabarit",
  "version": 1,
  "nom": "Gabarit par défaut",
+ "niveaux": [
+  {"nom": "RDC", "altitude": 0.0}
+ ],
  "materiaux": [
   {"mots": ["isol", "laine", "polystyr", "pse", "pui", "fibre"], "couleur": [236, 214, 120], "motif": "croisees"},
   {"mots": ["plâtre", "platre", "placo", "enduit", "peinture", "finition"], "couleur": [238, 236, 230], "motif": "vide"},

@@ -16,6 +16,9 @@ pub struct Gabarit {
     pub format: String,
     pub version: u32,
     pub nom: String,
+    /// Niveaux d'un nouveau projet.
+    #[serde(default)]
+    pub niveaux: Vec<NiveauGabarit>,
     /// Matériaux reconnus par un mot de leur nom (premier qui correspond).
     #[serde(default)]
     pub materiaux: Vec<FamilleMateriau>,
@@ -28,13 +31,30 @@ pub struct Gabarit {
     pub types_vues: Vec<TypeVue>,
 }
 
-/// Couleur et motif de coupe des matériaux dont le nom contient un des mots.
+/// Niveau d'un nouveau projet : nom et altitude (mm).
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct NiveauGabarit {
+    pub nom: String,
+    pub altitude: f64,
+}
+
+/// Couleurs et motifs (surface, coupe) des matériaux dont le nom contient un des mots.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FamilleMateriau {
     pub mots: Vec<String>,
+    /// Couleur de surface (fond).
     pub couleur: [u8; 3],
+    /// Motif de coupe (premier plan).
     #[serde(default)]
     pub motif: MotifCoupe,
+    #[serde(default)]
+    pub coupe_couleur: Option<[u8; 3]>,
+    #[serde(default)]
+    pub coupe_fond: Option<[u8; 3]>,
+    #[serde(default)]
+    pub surface_motif: Option<MotifCoupe>,
+    #[serde(default)]
+    pub surface_couleur: Option<[u8; 3]>,
 }
 
 /// Type composé : couches (murs : de l'extérieur vers l'intérieur).
@@ -103,13 +123,21 @@ impl Gabarit {
     pub fn materiau(&self, nom: &str) -> Materiau {
         let n = nom.to_lowercase();
         match self.materiaux.iter().find(|f| f.mots.iter().any(|m| n.contains(&m.to_lowercase()))) {
-            Some(f) => Materiau { nom: nom.into(), couleur: f.couleur, motif: f.motif },
+            Some(f) => Materiau {
+                nom: nom.into(),
+                couleur: f.couleur,
+                motif: f.motif,
+                coupe_couleur: f.coupe_couleur,
+                coupe_fond: f.coupe_fond,
+                surface_motif: f.surface_motif,
+                surface_couleur: f.surface_couleur,
+            },
             None => {
                 // couleur assez claire pour les hachures
                 let h = crate::modele::identifiant("materiau", nom);
                 let v = u32::from_str_radix(&h[..6], 16).unwrap_or(0);
                 let couleur = [150 + (v & 0x5f) as u8, 150 + ((v >> 8) & 0x5f) as u8, 150 + ((v >> 16) & 0x5f) as u8];
-                Materiau { nom: nom.into(), couleur, motif: MotifCoupe::Diagonales }
+                Materiau { nom: nom.into(), couleur, motif: MotifCoupe::Diagonales, ..Default::default() }
             }
         }
     }
@@ -151,6 +179,7 @@ mod tests {
             assert!(!g.surfaces(s).is_empty(), "{s:?}");
         }
         assert!(!g.types_murs.is_empty());
+        assert!(!g.niveaux.is_empty());
         assert_eq!(g.materiau("Laine minérale").motif, MotifCoupe::Croisees);
         assert_eq!(g.materiau("Béton armé").couleur, [176, 176, 170]);
     }

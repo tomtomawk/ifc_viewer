@@ -41,12 +41,27 @@ pub struct Aretes {
 /// marque le bord d'une face, donc une arête vive ou un bord libre. Une face continue dont
 /// les deux facettes ne sont pas coplanaires donne une arête douce.
 pub fn aretes(tris: &[[DVec3; 3]]) -> Aretes {
+    let (vives, douces) = aretes_proprietaires(tris.iter().map(|t| (*t, 0)), false);
+    Aretes { vives: vives.into_iter().map(|(s, _)| s).collect(), douces: douces.into_iter().map(|(d, _)| d).collect() }
+}
+
+/// Arêtes d'éléments d'un même matériau pris ensemble, chacune rendue à l'élément
+/// (indice de `tris`) qui la porte : deux faces collées l'une contre l'autre (normales
+/// opposées, parcours opposés : contact entre deux murs) s'annulent, et les faces
+/// coplanaires de part et d'autre d'une jonction se raccordent sans arête. Les angles
+/// réels (faces non coplanaires) restent.
+pub fn aretes_jointes(tris: &[([DVec3; 3], usize)]) -> (Vec<([DVec3; 2], usize)>, Vec<(([DVec3; 2], DVec3, DVec3), usize)>) {
+    aretes_proprietaires(tris.iter().copied(), true)
+}
+
+#[allow(clippy::type_complexity)]
+fn aretes_proprietaires(tris: impl Iterator<Item = ([DVec3; 3], usize)>, annuler_opposees: bool) -> (Vec<([DVec3; 2], usize)>, Vec<(([DVec3; 2], DVec3, DVec3), usize)>) {
     type Cle = ([i64; 3], [i64; 3]);
-    /// Direction, point et arêtes (t0, t1, normale, sens) d'une droite.
-    type Droite = (DVec3, DVec3, Vec<(f64, f64, DVec3, i32)>);
+    /// Direction, point et arêtes (t0, t1, normale, sens, élément) d'une droite.
+    type Droite = (DVec3, DVec3, Vec<(f64, f64, DVec3, i32, usize)>);
     let q = |x: f64, pas: f64| (x / pas).round() as i64;
     let mut droites: HashMap<Cle, Droite> = HashMap::new();
-    for t in tris {
+    for (t, proprietaire) in tris {
         let n = (t[1] - t[0]).cross(t[2] - t[0]);
         if n.length_squared() < 1e-20 {
             continue;
@@ -71,7 +86,7 @@ pub fn aretes(tris: &[[DVec3; 3]]) -> Aretes {
             let cle = ([q(u.x, PAS_DIR), q(u.y, PAS_DIR), q(u.z, PAS_DIR)], [q(p0.x, PAS), q(p0.y, PAS), q(p0.z, PAS)]);
             let e = droites.entry(cle).or_insert((u, p0, Vec::new()));
             let (ta, tb) = (a.dot(e.0), b.dot(e.0));
-            e.2.push((ta.min(tb), ta.max(tb), n, sens));
+            e.2.push((ta.min(tb), ta.max(tb), n, sens, proprietaire));
         }
     }
     let mut out = Vec::new();
@@ -81,13 +96,13 @@ pub fn aretes(tris: &[[DVec3; 3]]) -> Aretes {
         let mut bornes: Vec<f64> = segs.iter().flat_map(|s| [s.0, s.1]).collect();
         bornes.sort_by(f64::total_cmp);
         bornes.dedup_by(|a, b| (*a - *b).abs() < PAS);
-        let mut courant: Option<(f64, f64)> = None;
+        let mut courant: Option<(f64, f64, usize)> = None;
         for w in bornes.windows(2) {
             let (a, b) = (w[0], w[1]);
             let actifs = segs.iter().filter(|s| s.0 <= a + PAS && s.1 >= b - PAS);
             // groupes d'orientation : (normale de référence, somme des sens, normale la
-            // plus écartée de la référence)
-            let mut groupes: Vec<(DVec3, i32, DVec3)> = Vec::new();
+            // plus écartée de la référence, élément)
+            let mut groupes: Vec<(DVec3, i32, DVec3, usize)> = Vec::new();
             for s in actifs {
                 match groupes.iter_mut().find(|g| g.0.dot(s.2) > COS_VIF) {
                     Some(g) => {
@@ -96,10 +111,24 @@ pub fn aretes(tris: &[[DVec3; 3]]) -> Aretes {
                             g.2 = s.2;
                         }
                     }
-                    None => groupes.push((s.2, s.3, s.2)),
+                    None => groupes.push((s.2, s.3, s.2, s.4)),
                 }
             }
-            let vive = groupes.iter().any(|g| g.1 != 0);
+            if annuler_opposees {
+                // faces collées : normales opposées, sommes opposées
+                let mut k = 0;
+                while k < groupes.len() {
+                    match (k + 1..groupes.len()).find(|&l| groupes[k].0.dot(groupes[l].0) < -COS_VIF && groupes[k].1 + groupes[l].1 == 0 && groupes[k].1 != 0) {
+                        Some(l) => {
+                            groupes.remove(l);
+                            groupes.remove(k);
+                        }
+                        None => k += 1,
+                    }
+                }
+            }
+            let porteur = groupes.iter().find(|g| g.1 != 0).map(|g| g.3);
+            let vive = porteur.is_some();
             // une seule face, courbe à cet endroit (plus d'un quart de degré entre les
             // facettes ; en deçà, coplanaires aux arrondis près)
             if let [g] = groupes[..]
@@ -107,29 +136,29 @@ pub fn aretes(tris: &[[DVec3; 3]]) -> Aretes {
                 && g.0.dot(g.2) < 0.99999
                 && b - a > PAS
             {
-                douces.push(([p0 + u * a, p0 + u * b], g.0, g.2));
+                douces.push((([p0 + u * a, p0 + u * b], g.0, g.2), g.3));
             }
-            match (&mut courant, vive) {
-                (Some(c), true) if (c.1 - a).abs() < PAS => c.1 = b,
-                (_, true) => {
+            match (&mut courant, porteur) {
+                (Some(c), Some(e)) if (c.1 - a).abs() < PAS && c.2 == e => c.1 = b,
+                (_, Some(e)) => {
                     if let Some(c) = courant.take() {
-                        out.push([p0 + u * c.0, p0 + u * c.1]);
+                        out.push(([p0 + u * c.0, p0 + u * c.1], c.2));
                     }
-                    courant = Some((a, b));
+                    courant = Some((a, b, e));
                 }
-                (_, false) => {
+                (_, None) => {
                     if let Some(c) = courant.take() {
-                        out.push([p0 + u * c.0, p0 + u * c.1]);
+                        out.push(([p0 + u * c.0, p0 + u * c.1], c.2));
                     }
                 }
             }
         }
         if let Some(c) = courant {
-            out.push([p0 + u * c.0, p0 + u * c.1]);
+            out.push(([p0 + u * c.0, p0 + u * c.1], c.2));
         }
     }
-    out.retain(|s| s[0].distance_squared(s[1]) > PAS * PAS);
-    Aretes { vives: out, douces }
+    out.retain(|s| s.0[0].distance_squared(s.0[1]) > PAS * PAS);
+    (out, douces)
 }
 
 /// Remplissage des parties coupées.
@@ -141,6 +170,8 @@ pub enum Poche {
     Plein,
     /// Blanc : contour seul.
     Vide,
+    /// Couleur du matériau (style Réaliste).
+    Materiau,
 }
 
 impl Poche {
@@ -149,6 +180,7 @@ impl Poche {
             Poche::Hachure => "hachure",
             Poche::Plein => "plein",
             Poche::Vide => "vide",
+            Poche::Materiau => "materiau",
         }
     }
 
@@ -157,6 +189,7 @@ impl Poche {
             Poche::Hachure => "Hachuré",
             Poche::Plein => "Plein",
             Poche::Vide => "Vide",
+            Poche::Materiau => "Matériau",
         }
     }
 
@@ -197,7 +230,7 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
     let (fond, hachure) = match poche {
         Poche::Hachure => ([226, 226, 226, 255], Some([70, 70, 70, 255])),
         Poche::Plein => ([75, 75, 75, 255], None),
-        Poche::Vide => ([255, 255, 255, 255], None),
+        Poche::Vide | Poche::Materiau => ([255, 255, 255, 255], None),
     };
     let prims: Vec<Primitive> = (0..scene.objects.len())
         .into_par_iter()
@@ -250,7 +283,12 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
                         }
                         if tris.is_empty() { continue; }
                         let uni = poche == Poche::Hachure && couche.motif.as_ref().is_some_and(|m| m.grilles.is_empty());
-                        let couleur = if uni { couche.couleur_motif } else if poche == Poche::Hachure && !couche.hachure_defaut { [255,255,255,255] } else { fond };
+                        let couleur = match poche {
+                            Poche::Materiau => couche.couleur,
+                            _ if uni => couche.couleur_motif,
+                            Poche::Hachure if !couche.hachure_defaut => couche.fond,
+                            _ => fond,
+                        };
                         detail.push(primitive(Forme::Triangles(tris.clone()),couleur,0.0,Role::Poche));
                         if poche == Poche::Hachure && !uni {
                             let (motif, facteur) = match &couche.motif {
@@ -268,6 +306,15 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
                 }
             }
             if !boucles.is_empty() {
+                // style Réaliste : couleur de l'élément (rendu, sinon affichage)
+                let fond = match poche {
+                    Poche::Materiau => {
+                        let r = if ob.opaque.count > 0 { ob.opaque } else { ob.transparent };
+                        let k = r.start as usize;
+                        scene.couleurs_rendu.get(k).filter(|c| c[3] > 0).copied().or_else(|| scene.vertices.get(k).filter(|_| r.count > 0).map(|v| v.color)).map_or(fond, |c| [c[0], c[1], c[2], 255])
+                    }
+                    _ => fond,
+                };
                 prims.push(primitive(Forme::Surface(boucles.iter().map(|b| b.iter().map(|p| en_3d(*p)).collect()).collect()), fond, 0.0, Role::Poche));
             }
             if let Some(c) = hachure {
@@ -666,6 +713,23 @@ pub(crate) fn chainer(segs: &[[[f64; 2]; 2]]) -> (Vec<Polyligne>, Vec<Polyligne>
 mod tests {
     use super::*;
 
+    /// Deux pavés du même matériau bout à bout : la jonction ne trace aucune arête ; en
+    /// équerre, l'angle extérieur reste.
+    #[test]
+    fn jonction_sans_arete_meme_materiau() {
+        let pave = |a: DVec3, b: DVec3| crate::modele::geometrie::tests::boite(a, b);
+        let mut tris: Vec<([DVec3; 3], usize)> = pave(DVec3::ZERO, DVec3::new(1.0, 0.2, 1.0)).into_iter().map(|t| (t, 0)).collect();
+        tris.extend(pave(DVec3::new(1.0, 0.0, 0.0), DVec3::new(2.0, 0.2, 1.0)).into_iter().map(|t| (t, 1)));
+        let (vives, _) = aretes_jointes(&tris);
+        // aucune arête dans le plan x = 1
+        assert!(vives.iter().all(|(s, _)| !(s[0].x - 1.0).abs().lt(&1e-9) || !(s[1].x - 1.0).abs().lt(&1e-9)), "{vives:?}");
+        // 12 arêtes d'un pavé 2 × 0,2 × 1 (les 4 longues coupées en deux, une par pavé)
+        assert_eq!(vives.len(), 16);
+        // sans jonction (calcul ordinaire) : le contour du plan x = 1 reste
+        let seuls = aretes(&tris.iter().map(|t| t.0).collect::<Vec<_>>());
+        assert!(seuls.vives.iter().any(|s| (s[0].x - 1.0).abs() < 1e-9 && (s[1].x - 1.0).abs() < 1e-9));
+    }
+
     /// Cube unité en 12 triangles : 12 arêtes, aucune diagonale.
     fn cube() -> Vec<[DVec3; 3]> {
         let v = |x: f64, y: f64, z: f64| DVec3::new(x, y, z);
@@ -726,7 +790,7 @@ mod tests {
         tris.extend(cube().into_iter().map(|t| t.map(|p| p * 0.5 + DVec3::splat(0.25))));
         let mut s = scene_section(tris);
         let bande = |a: f32, b: f32, couleur| crate::scene::CoucheCoupe {
-            plans: vec![Vec3::X.extend(-a),Vec3::NEG_X.extend(b)], couleur, motif: None, couleur_motif: [70,70,70,255], hachure_defaut: true,
+            plans: vec![Vec3::X.extend(-a),Vec3::NEG_X.extend(b)], couleur, fond: [255,255,255,255], motif: None, couleur_motif: [70,70,70,255], hachure_defaut: true,
         };
         s.couches_coupe.insert(1,vec![bande(0.0,0.2,[190,120,120,255]),bande(0.2,1.0,[120,190,120,255])]);
         let p = coupe(&s,&[true],Vec3::NEG_Z.extend(0.5),100.0,Poche::Hachure);

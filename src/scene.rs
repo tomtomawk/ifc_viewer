@@ -165,6 +165,8 @@ pub struct Scene {
     /// Couleur de rendu (apparence du matériau) de chaque sommet, alpha 0 : aucune
     /// (style Rendu).
     pub couleurs_rendu: Vec<[u8; 4]>,
+    /// Motif de surface de chaque sommet : [motif (0 : aucun), r, g, b].
+    pub motifs_surface: Vec<[u8; 4]>,
     pub objects: Vec<SceneObject>,
     pub object_of: IdMap<u32>,
     /// Origine (mètres, repère du fichier) soustraite aux coordonnées f32.
@@ -186,7 +188,10 @@ pub struct Scene {
 pub struct CoucheCoupe {
     /// Région de la couche : demi-espaces `n · x + w >= 0`.
     pub plans: Vec<Vec4>,
+    /// Couleur du matériau (poché du style Réaliste).
     pub couleur: [u8; 4],
+    /// Fond du poché hachuré (style Graphique).
+    pub fond: [u8; 4],
     pub motif: Option<Arc<crate::rvt::vues::Motif>>,
     pub couleur_motif: [u8; 4],
     pub hachure_defaut: bool,
@@ -242,6 +247,12 @@ pub fn load(path: &Path, progress: &dyn Fn(String)) -> Result<Scene, String> {
 }
 
 pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> Scene {
+    assemble_avec(model, geoms, file_name, std::collections::HashMap::new())
+}
+
+/// Comme [`assemble`], les arêtes de certains objets étant données (jonctions entre
+/// éléments d'un même matériau, calculées ensemble).
+pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String, mut imposees: std::collections::HashMap<Id, crate::dessin::Aretes>) -> Scene {
     let mut gmin = DVec3::splat(f64::MAX);
     let mut gmax = DVec3::splat(f64::MIN);
     for g in &geoms {
@@ -259,13 +270,22 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
     let mut aretes: Vec<Vertex> = Vec::new();
     // couleurs de rendu des sommets opaques et transparents (alpha 0 : aucune)
     let (mut rendu_o, mut rendu_t): (Vec<[u8; 4]>, Vec<[u8; 4]>) = (Vec::new(), Vec::new());
+    // motifs de surface des sommets opaques et transparents (motif 0 : aucun)
+    let (mut motifs_o, mut motifs_t): (Vec<[u8; 4]>, Vec<[u8; 4]>) = (Vec::new(), Vec::new());
     let mut objects = Vec::with_capacity(geoms.len());
     let mut triangles = 0;
     let annotation = |g: &ProductGeom| model.get(g.id).is_some_and(|e| &*e.ty == "IFCANNOTATION");
     // arêtes vives des objets du modèle (pas des annotations : textes, cotes)
     let vives: Vec<crate::dessin::Aretes> = geoms
-        .par_iter()
-        .map(|g| {
+        .iter()
+        .map(|g| imposees.remove(&g.id))
+        .collect::<Vec<_>>()
+        .into_par_iter()
+        .zip(geoms.par_iter())
+        .map(|(imposee, g)| {
+            if let Some(a) = imposee {
+                return a;
+            }
             if annotation(g) {
                 return Default::default();
             }
@@ -292,7 +312,8 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
         for (k, p) in g.parts.iter().enumerate() {
             let color = p.color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8);
             let rendu = g.rendu.get(k).copied().flatten().map_or([0; 4], |c| [c[0], c[1], c[2], 1.0].map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8));
-            let (dst, dst_r) = if p.color[3] < 0.99 { (&mut transp, &mut rendu_t) } else { (&mut opaque, &mut rendu_o) };
+            let motif = g.motifs.get(k).copied().flatten().unwrap_or([0; 4]);
+            let (dst, dst_r, dst_m) = if p.color[3] < 0.99 { (&mut transp, &mut rendu_t, &mut motifs_t) } else { (&mut opaque, &mut rendu_o, &mut motifs_o) };
             for t in &p.tris {
                 let n = (t[1] - t[0]).cross(t[2] - t[0]);
                 let len = n.length();
@@ -307,6 +328,7 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
                     mx = mx.max(p);
                     dst.push(Vertex { pos: p.to_array(), normal, color, obj });
                     dst_r.push(rendu);
+                    dst_m.push(motif);
                 }
                 triangles += 1;
             }
@@ -368,11 +390,14 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
     }
     rendu_o.extend(rendu_t);
     rendu_o.resize(rendu_o.len() + lignes.len() + aretes.len(), [0; 4]);
+    motifs_o.extend(motifs_t);
+    motifs_o.resize(rendu_o.len(), [0; 4]);
     opaque.extend(transp);
     opaque.extend(lignes);
     opaque.extend(aretes);
     let vertices = opaque;
     let couleurs_rendu = rendu_o;
+    let motifs_surface = motifs_o;
 
     let mut min = Vec3::splat(f32::MAX);
     let mut max = Vec3::splat(f32::MIN);
@@ -391,6 +416,7 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
         model,
         vertices,
         couleurs_rendu,
+        motifs_surface,
         objects,
         object_of,
         origin,

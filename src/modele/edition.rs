@@ -220,6 +220,53 @@ impl Projet {
         if self.vues.len() == avant { Err("Vue introuvable.".into()) } else { Ok(()) }
     }
 
+    /// Axe d'un mur ou d'un assemblage (moyenne des axes de ses couches) : début, fin
+    /// (mm) et altitude de la base.
+    pub fn axe_element(&self, id: &str) -> Option<([f64; 2], [f64; 2], f64)> {
+        let murs: Vec<&Mur> = match self.assemblage(id) {
+            Some(_) => self.couches_assemblage(id),
+            None => self.murs.iter().filter(|m| m.id == id).collect(),
+        };
+        let (mut a, mut b) = (glam::DVec2::ZERO, glam::DVec2::ZERO);
+        for m in &murs {
+            let Axe::Droit { debut, fin } = m.axe else { return None };
+            a += glam::DVec2::from_array(debut);
+            b += glam::DVec2::from_array(fin);
+        }
+        let n = murs.len() as f64;
+        let premier = murs.first()?;
+        let z = self.niveau(&premier.niveau)?.altitude + premier.decalage_bas;
+        Some(((a / n).to_array(), (b / n).to_array(), z))
+    }
+
+    /// Déplace une extrémité (`fin` : la fin, sinon le début) de l'axe d'un mur ou d'un
+    /// assemblage ; les couches d'un assemblage gardent leur écart à l'axe.
+    pub fn deplacer_extremite(&mut self, id: &str, fin: bool, p: [f64; 2]) -> Result<(), String> {
+        use glam::DVec2;
+        let (a, b, _) = self.axe_element(id).ok_or("Mur introuvable ou courbe.")?;
+        let (a, b) = (DVec2::from_array(a), DVec2::from_array(b));
+        let (na, nb) = if fin { (a, DVec2::from_array(p)) } else { (DVec2::from_array(p), b) };
+        if !p.iter().all(|x| x.is_finite()) || (nb - na).length() < 1.0 {
+            return Err("Le mur doit mesurer au moins 1 mm.".into());
+        }
+        let normale = |a: DVec2, b: DVec2| (b - a).normalize().perp();
+        let (n0, n1) = (normale(a, b), normale(na, nb));
+        let couches: Vec<String> = match self.assemblage(id) {
+            Some(x) => x.couches.clone(),
+            None => vec![id.to_string()],
+        };
+        for c in couches {
+            let Some(m) = self.murs.iter_mut().find(|m| m.id == c) else { continue };
+            let Axe::Droit { debut, fin } = m.axe else { continue };
+            // écart de la couche à l'axe, gardé
+            let ecart = (DVec2::from_array(debut) - a).dot(n0);
+            let _ = fin;
+            m.axe = Axe::Droit { debut: (na + n1 * ecart).to_array(), fin: (nb + n1 * ecart).to_array() };
+        }
+        self.arrondir();
+        Ok(())
+    }
+
     /// Ajoute une dalle de contour `points` ; son type (couches du haut vers le bas) est
     /// repris s'il existe déjà (même nom et mêmes couches), sinon ajouté. Rien ne change
     /// en cas d'erreur.
@@ -510,6 +557,7 @@ mod tests {
         let g = crate::gabarit::Gabarit::defaut();
         let mut p = Projet::depuis_gabarit("Toit", &g);
         assert_eq!(p.types_murs.len(), g.types_murs.len());
+        assert_eq!(p.niveaux.len(), 1);
         let type_de = |sorte| {
             let t = g.surfaces(sorte)[0];
             TypeCompose { id: String::new(), nom: t.nom.clone(), couches: t.couches.clone(), couches_detaillees: true, origine: None }

@@ -76,7 +76,7 @@ garde le RVT et ses vues ouverts, sans basculer vers le rendu natif limité.
 | `variantes[]` | `id`, `nom`, `jeu` | Options Revit reprises à la conversion, distinguées par jeu ; une variante absente sur un mur désigne le modèle principal. |
 | `niveaux[]` | `id`, `nom`, `altitude`, `origine` | Triés par altitude |
 | `types_murs[]`, `types_dalles[]` | `id`, `nom`, `couches[]` (`materiau`, `epaisseur`, `fonction` : structure, isolation, finition, autre), `couches_detaillees` | Murs : couches de l'extérieur vers l'intérieur ; dalles : du haut vers le bas. `couches_detaillees` = false : une couche de l'épaisseur totale (détail non lu) |
-| `materiaux[]` | `nom`, `couleur` [r, g, b], `motif` (diagonales, croisees, uni, vide) | Matériaux nommés par les couches : couleur 3D et poché de coupe |
+| `materiaux[]` | `nom`, `couleur` [r, g, b], `motif` (diagonales, croisees, uni, vide), `coupe_couleur`, `coupe_fond`, `surface_motif`, `surface_couleur` | Matériaux nommés par les couches, comme dans Revit. Surface : `couleur` (fond, ombrage, poché du style Réaliste) et `surface_motif` / `surface_couleur` (premier plan, traits sur les faces vues en style Graphique). Coupe : `motif` / `coupe_couleur` (premier plan) et `coupe_fond` (fond, blanc par défaut). Champs facultatifs omis : valeurs par défaut |
 | `assemblages[]` | `id`, `nom`, `type_mur`, `couches[]` (ids de murs), `origine` | Mur composé : **chaque couche est un mur** à part entière (type monocouche, niveaux, hauteur, phase, sous-projet propres), listées de l'extérieur vers l'intérieur. Une ouverture dont `mur` vaut l'id de l'assemblage traverse toutes ses couches |
 | `types_ouvertures[]` | `id`, `nom`, `genre`, `largeur`, `hauteur` | Revit seulement en v0 (cotes du type) |
 | `murs[]` | `id`, `nom`, `type_mur`, `niveau`, `decalage_bas`, `haut`, `axe`, `origine`, `phase`, `sous_projet`, `variante` | `phase`, `sous_projet` et `variante` sont facultatifs (absents des anciens fichiers). `haut` : `{contrainte: libre, hauteur}` ou `{contrainte: niveau, niveau, decalage}` |
@@ -162,9 +162,22 @@ revenir au défaut, ou enregistrer une copie pour en faire un gabarit d'agence.
 ```
 
 Motifs : `diagonales`, `croisees`, `uni`, `vide`. Il faut au moins un type de coupe et un
-type d'élévation. Un nouveau projet reprend les types de murs du gabarit ; dans un projet
+type d'élévation. `niveaux` (`nom`, `altitude` en mm) : niveaux d'un nouveau projet (RDC
+à 0 dans le gabarit par défaut). Les familles de `materiaux` acceptent aussi
+`coupe_couleur`, `coupe_fond`, `surface_motif`, `surface_couleur`. Un nouveau projet reprend les types de murs du gabarit ; dans un projet
 existant, ceux qui manquent sont proposés en bas du sélecteur de type de mur et copiés
 dans le projet au choix.
+
+## Jonctions et édition des murs
+
+- Angle (L) en onglet, arrivée (T) arrêtée sur la face du mur traversé, deux murs alignés
+  bout à bout continus : un troisième mur au même nœud s'arrête sur leur face.
+- Arêtes : celles des éléments d'un même matériau sont calculées ensemble ; là où deux
+  éléments se touchent (faces collées), les faces qui se prolongent ne portent pas
+  d'arête. Les angles réels restent, et deux matériaux différents gardent leur limite.
+- Mur ou assemblage sélectionné : axe en tireté et poignées à ses extrémités ; glisser
+  une poignée (accrochages du tracé, Maj : orthogonal) déplace l'extrémité ; les couches
+  d'un assemblage gardent leur écart à l'axe.
 
 ## Vues et arborescence
 

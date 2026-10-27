@@ -56,6 +56,8 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     }
     let mut couches_coupe = Vec::new();
     let mut geoms = Vec::new();
+    // matériau de chaque partie des éléments (jonctions sans arête entre mêmes matériaux)
+    let mut materiaux_parts: Vec<Vec<Option<String>>> = Vec::new();
     let jonctions = crate::modele::jonctions::coupes(projet);
     // couches d'un même assemblage consécutives (sélection d'un seul tenant)
     let mut ordre: Vec<&crate::modele::Mur> = projet.murs.iter().filter(|m| m.assemblage.is_none()).collect();
@@ -102,7 +104,8 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
             let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
             couches_coupe.push((id, coupe_materiau(x, vec![neutre, neutre])));
         }
-        geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.is_some().then_some(couleur)] });
+        materiaux_parts.push(vec![materiau.as_ref().map(|m| m.nom.clone())]);
+        geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.is_some().then_some(couleur)], motifs: vec![materiau.as_ref().and_then(motif_surface)] });
     }
     // dalles : un prisme par couche, du dessus (niveau + décalage) vers le bas
     let mut bandes_dalles: Vec<(u64, Vec<CoucheCoupe>)> = Vec::new();
@@ -119,7 +122,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         let plans = crate::modele::pente::plans(d);
         let z0 = alt + d.decalage;
         let (_, mut e) = d.decalages_couches(t.epaisseur());
-        let (mut parts, mut rendu, mut bandes) = (Vec::new(), Vec::new(), Vec::new());
+        let (mut parts, mut rendu, mut bandes, mut noms, mut motifs) = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
         for c in &t.couches {
             let (haut, bas) = (e, e - c.epaisseur);
             e = bas;
@@ -137,15 +140,19 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
                 }
             }
             rendu.push(m.is_some().then_some(couleur));
+            noms.push(m.as_ref().map(|m| m.nom.clone()));
+            motifs.push(m.as_ref().and_then(motif_surface));
             parts.push(Part { color: couleur, tris });
         }
         if parts.is_empty() {
             return Err(format!("{} : contour non valide.", d.nom));
         }
         if !bandes.is_empty() { bandes_dalles.push((id, bandes)); }
-        geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu });
+        materiaux_parts.push(noms);
+        geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu, motifs });
     }
-    let mut scene = assemble(model, geoms, path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| projet.nom.clone()));
+    let aretes = aretes_jointes(&geoms, &materiaux_parts);
+    let mut scene = crate::scene::assemble_avec(model, geoms, path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| projet.nom.clone()), aretes);
     scene.couches_coupe.extend(couches_coupe);
     // plans des bandes ramenés au repère de la scène (origine retirée)
     let o = scene.origin;
@@ -160,6 +167,44 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     if scene.objects.is_empty() { scene.min = Vec3::splat(-5.0); scene.max = Vec3::splat(5.0); }
     scene.navigateur = Some(navigateur(projet));
     Ok(scene)
+}
+
+/// Motif de surface d'un matériau pour le rendu : [motif, r, g, b].
+fn motif_surface(m: &crate::modele::Materiau) -> Option<[u8; 4]> {
+    use crate::modele::MotifCoupe;
+    let code = match m.surface_motif? {
+        MotifCoupe::Diagonales => 1,
+        MotifCoupe::Croisees => 2,
+        MotifCoupe::Uni => 3,
+        MotifCoupe::Vide => return None,
+    };
+    let [r, g, b] = m.encre_surface();
+    Some([code, r, g, b])
+}
+
+/// Arêtes des éléments calculées par matériau : là où deux éléments d'un même matériau se
+/// joignent (murs raccordés, dalle sous un mur), pas d'arête sur les faces qui se
+/// prolongent ; les parties sans matériau restent à part.
+fn aretes_jointes(geoms: &[ProductGeom], materiaux: &[Vec<Option<String>>]) -> std::collections::HashMap<Id, crate::dessin::Aretes> {
+    use std::collections::HashMap;
+    let mut groupes: HashMap<String, Vec<([DVec3; 3], usize)>> = HashMap::new();
+    for (k, (g, noms)) in geoms.iter().zip(materiaux).enumerate() {
+        for (i, p) in g.parts.iter().enumerate() {
+            let cle = noms.get(i).cloned().flatten().map_or_else(|| format!("\u{0}{k}:{i}"), |n| n);
+            groupes.entry(cle).or_default().extend(p.tris.iter().map(|t| (*t, k)));
+        }
+    }
+    let mut par_objet: HashMap<Id, crate::dessin::Aretes> = geoms.iter().map(|g| (g.id, crate::dessin::Aretes::default())).collect();
+    let resultats: Vec<_> = groupes.into_par_iter().map(|(_, tris)| crate::dessin::aretes_jointes(&tris)).collect();
+    for (vives, douces) in resultats {
+        for (s, k) in vives {
+            if let Some(a) = par_objet.get_mut(&geoms[k].id) { a.vives.push(s); }
+        }
+        for (d, k) in douces {
+            if let Some(a) = par_objet.get_mut(&geoms[k].id) { a.douces.push(d); }
+        }
+    }
+    par_objet
 }
 
 /// Identifiant numérique stable d'une vue native dans l'arborescence (« 3d » : la vue 3D).
@@ -272,16 +317,20 @@ fn coupe_materiau(m: &crate::modele::Materiau, plans: Vec<Vec4>) -> Vec<CoucheCo
     use crate::rvt::vues::{GrilleMotif, Motif};
     let grille = |angle: f64, pas: f64| GrilleMotif { angle, origine: [0.0, 0.0], glissement: 0.0, decalage: pas, tirets: Vec::new() };
     let [r, g, b] = m.couleur;
-    let (motif, encre) = match m.motif {
-        MotifCoupe::Diagonales => (Some(vec![grille(std::f64::consts::FRAC_PI_4, 2.0)]), [70, 70, 70, 255]),
-        MotifCoupe::Croisees => (Some(vec![grille(std::f64::consts::FRAC_PI_4, 1.5), grille(-std::f64::consts::FRAC_PI_4, 1.5)]), [110, 95, 40, 255]),
+    let motif = match m.motif {
+        MotifCoupe::Diagonales => Some(vec![grille(std::f64::consts::FRAC_PI_4, 2.0)]),
+        MotifCoupe::Croisees => Some(vec![grille(std::f64::consts::FRAC_PI_4, 1.5), grille(-std::f64::consts::FRAC_PI_4, 1.5)]),
         // sans grille : aplat de la couleur du motif
-        MotifCoupe::Uni => (Some(Vec::new()), [r, g, b, 255]),
-        MotifCoupe::Vide => (None, [70, 70, 70, 255]),
+        MotifCoupe::Uni => Some(Vec::new()),
+        MotifCoupe::Vide => None,
     };
+    let [er, eg, eb] = m.encre_coupe();
+    let [fr, fg, fb] = m.fond_coupe();
+    let encre = [er, eg, eb, 255];
     vec![CoucheCoupe {
         plans,
         couleur: [r, g, b, 255],
+        fond: [fr, fg, fb, 255],
         motif: motif.map(|grilles| std::sync::Arc::new(Motif { nom: m.nom.clone(), modele: false, grilles })),
         couleur_motif: encre,
         hachure_defaut: false,

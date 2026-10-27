@@ -206,6 +206,25 @@ mod tests {
     }
 
     #[test]
+    fn extremite_d_assemblage_deplacee() {
+        let mut p = Projet::nouveau("A");
+        p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &ParametresMur::default()).unwrap();
+        p.types_murs.push(type_trois_couches());
+        let id = p.murs[0].id.clone();
+        p.murs[0].type_mur = "t".into();
+        p.eclater_mur(&id).unwrap();
+        let (a, b, _) = p.axe_element(&id).unwrap();
+        // axe moyen des couches : y = (150 + 40 − 110) / 3
+        assert!((a[1] - 80.0 / 3.0).abs() < 1e-6 && (b[0] - 5000.0).abs() < 1e-6);
+        // fin tournée de 90° : les couches gardent leur écart à l'axe
+        p.deplacer_extremite(&id, true, [a[0], a[1] + 4000.0]).unwrap();
+        let x: Vec<f64> = p.couches_assemblage(&id).iter().map(|m| match m.axe { Axe::Droit { fin, .. } => fin[0], _ => f64::NAN }).collect();
+        let ecarts: Vec<f64> = x.iter().map(|x| (x - a[0]).round()).collect();
+        assert_eq!(ecarts, [-(150.0 - 80.0 / 3.0f64).round(), -(40.0 - 80.0 / 3.0f64).round(), (110.0 + 80.0 / 3.0f64).round()]);
+        assert!(p.deplacer_extremite(&id, true, a).is_err());
+    }
+
+    #[test]
     fn eclater_dissocier_associer() {
         let mut p = Projet::nouveau("A");
         p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &ParametresMur::default()).unwrap();

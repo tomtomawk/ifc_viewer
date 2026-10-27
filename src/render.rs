@@ -10,6 +10,7 @@ layout(location = 1) in vec4 a_normal;
 layout(location = 2) in vec4 a_color;
 layout(location = 3) in uint a_obj;
 layout(location = 4) in vec4 a_rendu;
+layout(location = 5) in vec4 a_motif;
 uniform mat4 u_mvp;
 uniform uint u_sel;
 uniform uint u_sel_fin;
@@ -22,11 +23,13 @@ out vec3 v_pos;
 out vec3 v_n;
 out vec4 v_c;
 out vec4 v_rendu;
+flat out vec4 v_motif;
 flat out uint v_selected;
 flat out uint v_annot;
 void main() {
     v_pos = a_pos;
     v_rendu = a_rendu;
+    v_motif = a_motif;
     v_n = a_normal.xyz;
     // annotations (4ᵉ composante de la normale) : ni découpées ni blanchies en mode dessin
     v_annot = a_normal.w > 0.5 ? 1u : 0u;
@@ -65,8 +68,11 @@ in vec3 v_pos;
 in vec3 v_n;
 in vec4 v_c;
 in vec4 v_rendu;
+flat in vec4 v_motif;
 flat in uint v_selected;
 flat in uint v_annot;
+// motifs de surface des matériaux : pas des traits (unités de la scène)
+uniform float u_pas_motif;
 uniform vec3 u_eye;
 uniform bool u_ortho;
 uniform vec3 u_view_dir;
@@ -142,12 +148,20 @@ void main() {
         o_color = vec4(l, 1.0);
         return;
     }
-    if (u_dessin && v_annot == 0u) {
-        // faces du dessin : blanches, elles masquent les arêtes cachées
+    // faces du dessin : blanches, elles masquent les arêtes cachées
+    bool blanc = u_dessin && v_annot == 0u;
+    if (blanc && !u_portees && !u_ao) {
         o_color = vec4(v_selected == 1u ? vec3(1.0, 0.82, 0.62) : vec3(1.0), 1.0);
         return;
     }
     vec3 n = normalize(v_n);
+    // motif de surface (premier plan) : traits dans le plan de la face, épaisseur d'un
+    // pixel (dérivées calculées hors des branches)
+    vec3 an = abs(n);
+    vec2 uvm = an.z > 0.7 ? v_pos.xy : vec2(dot(v_pos, normalize(vec3(-n.y, n.x, 0.0) + vec3(1e-6, 0.0, 0.0))), v_pos.z);
+    vec2 fm = vec2(uvm.x + uvm.y, uvm.x - uvm.y) * (0.70710678 / max(u_pas_motif, 1e-6));
+    vec2 lm = abs(fract(fm + 0.5) - 0.5) / max(fwidth(fm), vec2(1e-6));
+    float trait_motif = int(v_motif.x * 255.0 + 0.5) == 2 ? 1.0 - min(min(lm.x, lm.y), 1.0) : 1.0 - min(lm.x, 1.0);
     vec3 vd = u_ortho ? -u_view_dir : normalize(u_eye - v_pos);
     if (dot(n, vd) < 0.0) n = -n;
     vec3 fill = normalize(vec3(-0.5, -0.7, 0.2));
@@ -155,7 +169,11 @@ void main() {
     float ndl = max(dot(n, u_soleil), 0.0);
     float ombre = (u_portees && ndl > 0.0) ? ensoleillement(v_pos, n, ndl) : 1.0;
     float ao = (u_ao && v_annot == 0u) ? occultation() : 1.0;
-    vec3 base = v_c.rgb;
+    vec3 base = blanc ? vec3(1.0) : v_c.rgb;
+    int motif = int(v_motif.x * 255.0 + 0.5);
+    if (!u_materiaux && v_annot == 0u && motif == 3) {
+        base = v_motif.yzw;
+    }
     float d;
     if (u_materiaux) {
         if (v_rendu.a > 0.5) {
@@ -164,7 +182,7 @@ void main() {
         // ciel (hémisphère), soleil, un peu de lumière vers l'œil ; l'occultation éteint
         // surtout le ciel, un peu le soleil
         d = (0.30 + 0.28 * (0.5 + 0.5 * n.z)) * ao + 0.62 * ndl * ombre * mix(1.0, ao, 0.35) + 0.05 * max(dot(n, vd), 0.0);
-    } else if (u_sans_eclairage) {
+    } else if (u_sans_eclairage || blanc) {
         // aplats : les ombres assombrissent sans éclairer
         d = (1.0 - 0.35 * (ndl > 0.0 ? 1.0 - ombre : 0.0)) * mix(0.55, 1.0, ao);
     } else {
@@ -173,6 +191,9 @@ void main() {
         d = 0.50 * ao + 0.38 * max(dot(n, sun), 0.0) * ombre + 0.12 * max(dot(n, fill), 0.0) * ao + 0.12 * max(dot(n, vd), 0.0);
     }
     vec3 c = base * d;
+    if (!u_materiaux && v_annot == 0u && (motif == 1 || motif == 2)) {
+        c = mix(c, v_motif.yzw, trait_motif);
+    }
     float a = v_c.a;
     if (v_selected == 1u) {
         c = mix(c, vec3(1.0, 0.55, 0.1), 0.65);
@@ -372,6 +393,9 @@ pub struct Renderer {
     u_boite_max: Option<glow::UniformLocation>,
     /// Couleurs de rendu des sommets (attribut 4), tampon à part.
     vbo_rendu: glow::Buffer,
+    /// Motifs de surface des sommets (attribut 5), tampon à part.
+    vbo_motifs: glow::Buffer,
+    u_pas_motif: Option<glow::UniformLocation>,
     /// Carte d'ombres du style Rendu : programme, tampon de trame, texture de profondeur.
     programme_ombre: glow::Program,
     u_mvp_ombre: Option<glow::UniformLocation>,
@@ -380,27 +404,24 @@ pub struct Renderer {
     passes: Vec<Passe>,
 }
 
-/// Style visuel d'une vue, comme dans Revit.
+/// Style visuel d'une vue. Les ombres portées et l'ombre ambiante, la couleur des faces
+/// et l'éclairage du style Graphique sont des réglages à part.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum StyleVisuel {
-    /// Dessin : faces blanches, arêtes vues, coupe (plans, élévations).
-    LignesCachees,
-    /// Faces éclairées et arêtes.
-    Ombre,
-    /// Couleurs des matériaux sans éclairage, et arêtes.
-    CouleursHomogenes,
-    /// Couleurs de rendu des matériaux, ciel et soleil, sans arêtes.
+    /// Fond blanc, faces colorées (ou blanches : dessin au trait) éclairées ou en aplat,
+    /// arêtes ; plans et coupes coupés, poché et hachures.
+    Graphique,
+    /// Couleurs de rendu des matériaux, ciel et soleil, sans arêtes ; parties coupées
+    /// remplies de la couleur du matériau.
     Realiste,
 }
 
 impl StyleVisuel {
-    pub const TOUS: [StyleVisuel; 4] = [StyleVisuel::LignesCachees, StyleVisuel::Ombre, StyleVisuel::CouleursHomogenes, StyleVisuel::Realiste];
+    pub const TOUS: [StyleVisuel; 2] = [StyleVisuel::Graphique, StyleVisuel::Realiste];
 
     pub fn libelle(self) -> &'static str {
         match self {
-            StyleVisuel::LignesCachees => "Lignes cachées",
-            StyleVisuel::Ombre => "Ombré",
-            StyleVisuel::CouleursHomogenes => "Couleurs homogènes",
+            StyleVisuel::Graphique => "Graphique",
             StyleVisuel::Realiste => "Réaliste",
         }
     }
@@ -408,16 +429,14 @@ impl StyleVisuel {
     /// Nom pour le pilote (commande `style`).
     pub fn nom(self) -> &'static str {
         match self {
-            StyleVisuel::LignesCachees => "lignes_cachees",
-            StyleVisuel::Ombre => "ombre",
-            StyleVisuel::CouleursHomogenes => "couleurs",
+            StyleVisuel::Graphique => "graphique",
             StyleVisuel::Realiste => "realiste",
         }
     }
 
     /// Style « papier » : fond blanc, traits noirs.
     pub fn papier(self) -> bool {
-        self == StyleVisuel::LignesCachees
+        self == StyleVisuel::Graphique
     }
 }
 
@@ -432,13 +451,18 @@ pub struct FrameParams {
     /// Style visuel de la vue principale (les fenêtres de vue d'une feuille restent
     /// ombrées).
     pub style: StyleVisuel,
+    /// Graphique : faces blanches (dessin au trait) et éclairage des faces.
+    pub faces_blanches: bool,
+    pub eclairage: bool,
+    /// Pas des motifs de surface (unités de la scène) : 2 mm du papier à l'échelle.
+    pub pas_motif: f32,
     /// Plan de coupe du mode dessin (n, d ; n·p + d ≥ 0 gardé) et tracé de la coupe.
     pub coupe: Option<Vec4>,
-    /// Ombres portées (hors Lignes cachées) : direction du soleil (vers lui), matrice
+    /// Ombres portées : direction du soleil (vers lui), matrice
     /// de la carte d'ombres et décalage des points le long de la normale contre l'acné
     /// d'ombre (unités de la scène).
     pub soleil: Option<(Vec3, Mat4, f32)>,
-    /// Ombre ambiante (hors Lignes cachées) : matrice de projection de la caméra, rayon
+    /// Ombre ambiante : matrice de projection de la caméra, rayon
     /// (unités de la scène).
     pub ao: Option<(Mat4, f32)>,
     /// Zone de coupe 3D (min, max), repère de la scène : vue principale seulement.
@@ -539,6 +563,14 @@ impl Renderer {
             gl.enable_vertex_attrib_array(4);
             gl.vertex_attrib_pointer_f32(4, 4, glow::UNSIGNED_BYTE, true, 4, 0);
             gl.vertex_attrib_4_f32(4, 0.0, 0.0, 0.0, 0.0);
+            let vbo_motifs = gl.create_buffer()?;
+            gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo_motifs));
+            gl.enable_vertex_attrib_array(5);
+            gl.vertex_attrib_pointer_f32(5, 4, glow::UNSIGNED_BYTE, true, 4, 0);
+            // la coupe n'a pas de motif : valeur par défaut, aucun
+            gl.bind_vertex_array(Some(vao_coupe));
+            gl.vertex_attrib_4_f32(5, 0.0, 0.0, 0.0, 0.0);
+            gl.bind_vertex_array(Some(vao));
             gl.bind_vertex_array(None);
             gl.bind_buffer(glow::ARRAY_BUFFER, None);
 
@@ -573,6 +605,8 @@ impl Renderer {
                 vao_vide: gl.create_vertex_array()?,
                 cibles_ao: std::cell::RefCell::new(None),
                 vbo_rendu,
+                vbo_motifs,
+                u_pas_motif: gl.get_uniform_location(program, "u_pas_motif"),
                 u_mvp_ombre: gl.get_uniform_location(programme_ombre, "u_mvp"),
                 programme_ombre,
                 fbo_ombres,
@@ -597,8 +631,10 @@ impl Renderer {
     }
 
     /// Sommets et leurs couleurs de rendu (même nombre, alpha 0 : aucune).
-    pub fn upload_vertices(&mut self, gl: &glow::Context, v: &[Vertex], rendu: &[[u8; 4]]) {
+    pub fn upload_vertices(&mut self, gl: &glow::Context, v: &[Vertex], rendu: &[[u8; 4]], motifs: &[[u8; 4]]) {
         unsafe {
+            gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.vbo_motifs));
+            gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, as_bytes(motifs), glow::STATIC_DRAW);
             gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.vbo_rendu));
             gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, as_bytes(rendu), glow::STATIC_DRAW);
             gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.vbo));
@@ -703,46 +739,6 @@ impl Renderer {
                 gl.draw_elements(glow::TRIANGLES, n[1], glow::UNSIGNED_INT, 0);
                 gl.depth_mask(true);
             }
-        }
-    }
-
-    /// Mode dessin : faces blanches (transparents compris) découpées par la coupe, traits
-    /// et arêtes vives par-dessus (parties cachées éliminées par la profondeur), puis le
-    /// tracé de la coupe (poché, hachures, contours), jamais découpé.
-    unsafe fn dessiner_plan(&self, gl: &glow::Context, p: &FrameParams) {
-        unsafe {
-            let decoupe = p.coupe.is_some() && !gl.version().is_embedded;
-            if let Some(c) = p.coupe.filter(|_| decoupe) {
-                gl.uniform_4_f32(self.u_coupe.as_ref(), c.x, c.y, c.z, c.w);
-            }
-            if decoupe {
-                gl.enable(glow::CLIP_DISTANCE0 + 2);
-            }
-            gl.disable(glow::BLEND);
-            // faces repoussées plus nettement qu'en 3D : les arêtes sont à leur profondeur
-            // exacte et les arrondis en f32 dépassent une unité du tampon de profondeur
-            gl.polygon_offset(1.0, 64.0);
-            gl.uniform_1_i32(self.u_dessin.as_ref(), 1);
-            for (ebo, n) in [(self.ebo_opaque, self.n_opaque), (self.ebo_transp, self.n_transp)] {
-                if n > 0 {
-                    gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ebo));
-                    gl.draw_elements(glow::TRIANGLES, n, glow::UNSIGNED_INT, 0);
-                }
-            }
-            gl.uniform_1_i32(self.u_dessin.as_ref(), 0);
-            gl.polygon_offset(1.0, 1.0);
-            gl.uniform_1_i32(self.u_flat.as_ref(), 1);
-            for (ebo, n) in [(self.ebo_lines, self.n_lines), (self.ebo_aretes, self.n_aretes)] {
-                if n > 0 {
-                    gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ebo));
-                    gl.draw_elements(glow::LINES, n, glow::UNSIGNED_INT, 0);
-                }
-            }
-            if decoupe {
-                gl.disable(glow::CLIP_DISTANCE0 + 2);
-                gl.uniform_4_f32(self.u_coupe.as_ref(), 0.0, 0.0, 0.0, 1.0);
-            }
-            gl.uniform_1_i32(self.u_flat.as_ref(), 0);
         }
     }
 
@@ -897,12 +893,12 @@ impl Renderer {
 
     pub fn paint(&self, gl: &glow::Context, p: &FrameParams, viewport: [i32; 4]) {
         unsafe {
-            if let (true, Some((_, lumiere, _))) = (p.style != StyleVisuel::LignesCachees, p.soleil) {
+            if let Some((_, lumiere, _)) = p.soleil {
                 self.passe_ombres(gl, lumiere);
             }
             // occultation ambiante : vue entière seulement (ni zone de coupe, ni cadrage, ni feuille)
             let ao = match p.ao {
-                Some((proj, rayon)) if p.style != StyleVisuel::LignesCachees && p.boite.is_none() && p.cadrage.is_empty() && p.passes.is_empty() => {
+                Some((proj, rayon)) if p.boite.is_none() && p.cadrage.is_empty() && p.passes.is_empty() => {
                     self.passe_ao(gl, p.mvp, proj, rayon, viewport[2], viewport[3])
                 }
                 _ => None,
@@ -923,6 +919,7 @@ impl Renderer {
             gl.uniform_3_f32(self.u_eye.as_ref(), p.eye.x, p.eye.y, p.eye.z);
             gl.uniform_1_i32(self.u_ortho.as_ref(), p.ortho as i32);
             gl.uniform_3_f32(self.u_view_dir.as_ref(), p.view_dir.x, p.view_dir.y, p.view_dir.z);
+            gl.uniform_1_f32(self.u_pas_motif.as_ref(), p.pas_motif);
             // plans de découpe neutres (distance positive ou nulle) hors de leur usage :
             // certains pilotes (llvmpipe) appliquent les distances écrites par le shader
             // même quand GL_CLIP_DISTANCEi n'est pas activé
@@ -990,9 +987,15 @@ impl Renderer {
                 gl.uniform_3_f32(self.u_boite_min.as_ref(), a.x, a.y, a.z);
                 gl.uniform_3_f32(self.u_boite_max.as_ref(), b.x, b.y, b.z);
             }
-            match p.style {
-                StyleVisuel::LignesCachees => self.dessiner_plan(gl, p),
-                style => {
+            // plan de coupe de la vue (plan, coupe) : partie retirée, quel que soit le style
+            let decoupe = p.coupe.is_some() && !gl.version().is_embedded;
+            if let Some(c) = p.coupe.filter(|_| decoupe) {
+                gl.uniform_4_f32(self.u_coupe.as_ref(), c.x, c.y, c.z, c.w);
+                gl.enable(glow::CLIP_DISTANCE0 + 2);
+            }
+            {
+                let style = p.style;
+                {
                     gl.uniform_3_f32(self.u_soleil.as_ref(), SOLEIL.x, SOLEIL.y, SOLEIL.z);
                     if let Some((soleil, lumiere, decalage)) = p.soleil {
                         gl.uniform_1_i32(self.u_portees.as_ref(), 1);
@@ -1013,10 +1016,13 @@ impl Renderer {
                         gl.uniform_1_i32(self.u_ao_tex.as_ref(), 2);
                     }
                     gl.active_texture(glow::TEXTURE0);
-                    gl.uniform_1_i32(self.u_materiaux.as_ref(), (style == StyleVisuel::Realiste) as i32);
-                    gl.uniform_1_i32(self.u_sans_eclairage.as_ref(), (style == StyleVisuel::CouleursHomogenes) as i32);
-                    self.dessiner(gl, [self.ebo_opaque, self.ebo_transp, self.ebo_lines], [self.n_opaque, self.n_transp, self.n_lines], style != StyleVisuel::Realiste);
+                    let graphique = style == StyleVisuel::Graphique;
+                    gl.uniform_1_i32(self.u_materiaux.as_ref(), (!graphique) as i32);
+                    gl.uniform_1_i32(self.u_dessin.as_ref(), (graphique && p.faces_blanches) as i32);
+                    gl.uniform_1_i32(self.u_sans_eclairage.as_ref(), (graphique && !p.eclairage) as i32);
+                    self.dessiner(gl, [self.ebo_opaque, self.ebo_transp, self.ebo_lines], [self.n_opaque, self.n_transp, self.n_lines], graphique);
                     gl.uniform_1_i32(self.u_sans_eclairage.as_ref(), 0);
+                    gl.uniform_1_i32(self.u_dessin.as_ref(), 0);
                     gl.uniform_1_i32(self.u_materiaux.as_ref(), 0);
                     gl.uniform_1_i32(self.u_portees.as_ref(), 0);
                     gl.uniform_1_i32(self.u_ao.as_ref(), 0);
@@ -1026,6 +1032,10 @@ impl Renderer {
                     gl.bind_texture(glow::TEXTURE_2D, None);
                     gl.active_texture(glow::TEXTURE0);
                 }
+            }
+            if decoupe {
+                gl.disable(glow::CLIP_DISTANCE0 + 2);
+                gl.uniform_4_f32(self.u_coupe.as_ref(), 0.0, 0.0, 0.0, 1.0);
             }
             if (p.coupe.is_some() || p.boite.is_some()) && self.n_coupe[0] + self.n_coupe[1] > 0 {
                 gl.disable(glow::BLEND);
@@ -1106,6 +1116,7 @@ impl Renderer {
             gl.delete_buffer(self.ebo_lines);
             gl.delete_buffer(self.ebo_aretes);
             gl.delete_buffer(self.vbo_rendu);
+            gl.delete_buffer(self.vbo_motifs);
             gl.delete_program(self.programme_ombre);
             gl.delete_framebuffer(self.fbo_ombres);
             gl.delete_texture(self.texture_ombres);

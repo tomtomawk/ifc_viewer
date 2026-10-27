@@ -1,5 +1,6 @@
 //! Jonctions des murs droits en plan, comme Revit les nettoie : angle (L) en onglet,
-//! arrivée sur un mur (T) arrêtée sur sa face. Un assemblage se raccorde d'un bloc :
+//! arrivée sur un mur (T) arrêtée sur sa face, deux murs alignés bout à bout continus
+//! (un troisième mur au même nœud s'arrête sur leur face). Un assemblage se raccorde d'un bloc :
 //! la même coupe s'applique à toutes ses couches, si bien que deux assemblages de
 //! même composition se rejoignent couche à couche. Calcul d'affichage seulement : les
 //! axes enregistrés ne changent pas.
@@ -99,6 +100,25 @@ pub fn coupes(p: &Projet) -> Coupes {
     let ls = logiques(p);
     // (mur logique, extrémité 0 début / 1 fin) → candidats (distance, coupe, est un L)
     let mut candidats: HashMap<(usize, usize), Vec<(f64, Coupe, bool)>> = HashMap::new();
+    // extrémités prolongées par un mur aligné bout à bout : jonction droite, sans onglet
+    let mut continues: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
+    for i in 0..ls.len() {
+        for j in i + 1..ls.len() {
+            let (a, b) = (&ls[i], &ls[j]);
+            let (da, db) = ((a.b - a.a).normalize(), (b.b - b.a).normalize());
+            if da.perp_dot(db).abs() >= 0.05 || (b.a - a.a).perp_dot(da).abs() > 5.0 {
+                continue;
+            }
+            for (ea, pa) in [(0, a.a), (1, a.b)] {
+                for (eb, pb) in [(0, b.a), (1, b.b)] {
+                    if pa.distance(pb) <= 5.0 {
+                        continues.insert((i, ea));
+                        continues.insert((j, eb));
+                    }
+                }
+            }
+        }
+    }
     for i in 0..ls.len() {
         for j in i + 1..ls.len() {
             let (a, b) = (&ls[i], &ls[j]);
@@ -123,7 +143,18 @@ pub fn coupes(p: &Projet) -> Coupes {
             };
             let ((ea, dist_a), (eb, dist_b)) = (bout(a), bout(b));
             let loin = |l: &Logique, e: usize| if e == 0 { l.b } else { l.a };
-            if dist_a <= tol && dist_b <= tol {
+            let (ca, cb) = (continues.contains(&(i, ea)), continues.contains(&(j, eb)));
+            if dist_a <= tol && dist_b <= tol && (ca || cb) {
+                // nœud d'un mur continu (deux murs alignés) : le troisième s'arrête sur sa face
+                if ca && cb {
+                    continue;
+                }
+                let (k, e, dist, porteur, arrivant) = if ca { (j, eb, dist_b, a, b) } else { (i, ea, dist_a, b, a) };
+                let dp = (porteur.b - porteur.a).normalize();
+                let cote = (loin(arrivant, e) - x).dot(dp.perp()).signum();
+                let point = x + dp.perp() * cote * porteur.epaisseur / 2.0;
+                candidats.entry((k, e)).or_default().push((dist, Coupe { point: point.to_array(), direction: dp.to_array() }, false));
+            } else if dist_a <= tol && dist_b <= tol {
                 // onglet : droite par les intersections des faces intérieures et extérieures
                 let (ua, ub) = ((loin(a, ea) - x).normalize(), (loin(b, eb) - x).normalize());
                 let s = ua.perp_dot(ub).signum();
@@ -224,6 +255,23 @@ mod tests {
         assert!((aire(&c[0]) + aire(&c[1]) - (5100.0 * 200.0 + 200.0 * 3900.0)).abs() < 1e-3);
         // T : le mur arrivant s'arrête sur la face y = 100
         assert!((c[2][1][1] - 100.0).abs() < 1e-6 && (c[2][2][1] - 100.0).abs() < 1e-6, "{:?}", c[2]);
+    }
+
+    #[test]
+    fn murs_alignes_continus_et_t_au_noeud() {
+        let mut p = Projet::nouveau("N");
+        let o = ParametresMur { epaisseur: 200.0, ..Default::default() };
+        p.ajouter_mur([0.0, 0.0], [3000.0, 0.0], &o).unwrap();
+        p.ajouter_mur([3000.0, 0.0], [6000.0, 0.0], &o).unwrap();
+        p.ajouter_mur([3000.0, 0.0], [3000.0, 3000.0], &o).unwrap();
+        let cs = coupes(&p);
+        let c: Vec<_> = p.murs.iter().map(|m| contour(&p, m, &cs).unwrap()).collect();
+        let proche = |a: [f64; 2], b: [f64; 2]| (a[0] - b[0]).hypot(a[1] - b[1]) < 1e-6;
+        // les deux murs alignés se touchent bout à bout, extrémités droites en x = 3000
+        assert!(proche(c[0][1], [3000.0, -100.0]) && proche(c[0][2], [3000.0, 100.0]), "{:?}", c[0]);
+        assert!(proche(c[1][0], [3000.0, -100.0]) && proche(c[1][3], [3000.0, 100.0]), "{:?}", c[1]);
+        // le troisième s'arrête sur leur face y = 100
+        assert!((c[2][0][1] - 100.0).abs() < 1e-6 && (c[2][3][1] - 100.0).abs() < 1e-6, "{:?}", c[2]);
     }
 
     #[test]

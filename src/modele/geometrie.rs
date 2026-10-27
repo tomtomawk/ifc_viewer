@@ -176,7 +176,7 @@ pub fn cercle(a: DVec2, b: DVec2, c: DVec2) -> Option<(DVec2, f64)> {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
 
     /// Boîte (mm) en 12 triangles orientés vers l'extérieur.

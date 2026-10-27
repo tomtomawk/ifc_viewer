@@ -175,14 +175,50 @@ impl MotifCoupe {
     }
 }
 
-/// Matériau nommé par les couches (`Couche::materiau`).
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+/// Matériau nommé par les couches (`Couche::materiau`), comme dans Revit : couleur de
+/// surface (fond, ombrage) et motif de surface (premier plan) ; en coupe, motif (premier
+/// plan) et couleur de fond.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct Materiau {
     pub nom: String,
-    /// Couleur d'affichage (sRGB).
+    /// Couleur de surface : fond des faces vues (sRGB).
     pub couleur: [u8; 3],
+    /// Motif de coupe (premier plan).
     #[serde(default)]
     pub motif: MotifCoupe,
+    /// Couleur du motif de coupe (None : encre par défaut du motif).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coupe_couleur: Option<[u8; 3]>,
+    /// Fond des parties coupées (None : blanc).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coupe_fond: Option<[u8; 3]>,
+    /// Motif de surface (premier plan) des faces vues (None : aucun).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surface_motif: Option<MotifCoupe>,
+    /// Couleur du motif de surface (None : gris foncé).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surface_couleur: Option<[u8; 3]>,
+}
+
+impl Materiau {
+    /// Encre du motif de coupe.
+    pub fn encre_coupe(&self) -> [u8; 3] {
+        self.coupe_couleur.unwrap_or(match self.motif {
+            MotifCoupe::Croisees => [110, 95, 40],
+            MotifCoupe::Uni => self.couleur,
+            _ => [70, 70, 70],
+        })
+    }
+
+    /// Fond des parties coupées.
+    pub fn fond_coupe(&self) -> [u8; 3] {
+        self.coupe_fond.unwrap_or([255, 255, 255])
+    }
+
+    /// Encre du motif de surface.
+    pub fn encre_surface(&self) -> [u8; 3] {
+        self.surface_couleur.unwrap_or([90, 90, 90])
+    }
 }
 
 /// Mur composé dont chaque couche est un mur indépendant (son type monocouche, ses
@@ -524,9 +560,12 @@ impl Projet {
         Projet { format: FORMAT.into(), version: VERSION, nom: nom.into(), ..Default::default() }
     }
 
-    /// Projet vide portant les types de murs du gabarit et leurs matériaux.
+    /// Projet vide portant les niveaux et les types de murs du gabarit, et leurs matériaux.
     pub fn depuis_gabarit(nom: &str, g: &crate::gabarit::Gabarit) -> Projet {
         let mut p = Projet::nouveau(nom);
+        for n in &g.niveaux {
+            p.niveaux.push(Niveau { id: identifiant("niveau", &format!("gabarit:{}", n.nom)), nom: n.nom.clone(), altitude: n.altitude, origine: None });
+        }
         for t in &g.types_murs {
             p.types_murs.push(TypeCompose { id: identifiant("type-mur", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), couches: t.couches.clone(), couches_detaillees: true, origine: None });
         }

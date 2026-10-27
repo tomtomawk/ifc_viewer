@@ -326,6 +326,10 @@ struct EtatVue {
     hidden_storeys: HashSet<Id>,
     isolated: Option<HashSet<u32>>,
     style: StyleVisuel,
+    faces_blanches: bool,
+    eclairage: bool,
+    ombres_portees: bool,
+    ombre_ambiante: bool,
     coupe: bool,
     coupe_niveau: Option<Id>,
     coupe_hauteur: f32,
@@ -456,7 +460,10 @@ pub struct ViewerApp {
     visible: Vec<bool>,
     visibility_dirty: bool,
     left_tab: LeftTab,
-    /// Ombres portées et ombre ambiante : réglages à part du style (hors Lignes cachées).
+    /// Graphique : faces blanches (dessin au trait), éclairage des faces.
+    faces_blanches: bool,
+    eclairage: bool,
+    /// Ombres portées et ombre ambiante : réglages à part du style.
     ombres_portees: bool,
     ombre_ambiante: bool,
     /// Pente donnée à une arête cochée (degrés), la dernière saisie.
@@ -512,6 +519,11 @@ pub struct ViewerApp {
     liste_niveaux: Vec<(Id, String, f32)>,
     /// Matériaux de la scène et éléments qui les portent (onglet Matériaux).
     liste_materiaux: Vec<scene::NavMateriau>,
+    /// Poignée d'extrémité de l'axe du mur sélectionné en cours de déplacement : élément,
+    /// extrémité (true : fin) et position courante (mm).
+    poignee_axe: Option<(String, bool, [f64; 2])>,
+    /// Matériau du projet natif dont les graphismes sont ouverts.
+    materiau_edite: Option<String>,
     /// Catégories de visibilité de la scène, et pour chaque objet sa catégorie et sa clé
     /// de masquage (voir [`Categorie`]).
     categories: Vec<Categorie>,
@@ -584,6 +596,8 @@ impl ViewerApp {
             pente_defaut: 35.0,
             ombres_portees: false,
             ombre_ambiante: false,
+            faces_blanches: false,
+            eclairage: true,
             options: {
                 let o = crate::options::Options::charger();
                 // gabarit choisi : lu au démarrage, défaut s'il est illisible
@@ -609,7 +623,7 @@ impl ViewerApp {
             rect_vue: egui::Rect::NOTHING,
             passes_feuille: Vec::new(),
             objets_feuille: Vec::new(),
-            style: StyleVisuel::Realiste,
+            style: StyleVisuel::Graphique,
             coupe: false,
             coupe_niveau: None,
             coupe_hauteur: 1.2,
@@ -623,6 +637,8 @@ impl ViewerApp {
             coupe_dirty: true,
             liste_niveaux: Vec::new(),
             liste_materiaux: Vec::new(),
+            materiau_edite: None,
+            poignee_axe: None,
             categories: Vec::new(),
             categorie_objet: Vec::new(),
             cle_objet: Vec::new(),
@@ -739,7 +755,7 @@ impl ViewerApp {
     fn install_scene(&mut self, scene: Scene) {
         self.nouveau_document();
         if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
-            r.upload_vertices(gl, &scene.vertices, &scene.couleurs_rendu);
+            r.upload_vertices(gl, &scene.vertices, &scene.couleurs_rendu, &scene.motifs_surface);
         }
         self.status = format!(
             "{} — {} — {} entités, {} objets 3D, {} triangles — {:.2} s",
@@ -786,7 +802,7 @@ impl ViewerApp {
         }
         self.visible = vec![true; scene.objects.len()];
         self.vue_active = None;
-        self.style = StyleVisuel::Realiste;
+        self.style = StyleVisuel::Graphique;
         self.vues_ouvertes = vec![None];
         self.etats_vues.clear();
         self.coupe_niveau = None;
@@ -851,7 +867,7 @@ impl ViewerApp {
     /// Plan de la coupe horizontale du mode dessin (n, d ; repère de la scène, partie
     /// gardée sous la cote de coupe), None hors mode dessin ou sans coupe.
     fn plan_coupe(&self) -> Option<Vec4> {
-        if self.style != StyleVisuel::LignesCachees || !self.coupe {
+        if !self.coupe {
             return None;
         }
         let s = self.scene.as_ref()?;
@@ -864,6 +880,12 @@ impl ViewerApp {
         Some(Vec4::new(0.0, 0.0, -1.0, base + self.coupe_hauteur))
     }
 
+    /// Poché des parties coupées : celui de la plage de vue en Graphique, la couleur des
+    /// matériaux en Réaliste.
+    fn poche_style(&self) -> Poche {
+        if self.style == StyleVisuel::Realiste { Poche::Materiau } else { self.poche }
+    }
+
     /// Recalcule le tracé de la coupe (poché, hachures, contours) s'il le faut.
     fn update_coupe(&mut self) {
         if !self.coupe_dirty {
@@ -874,13 +896,13 @@ impl ViewerApp {
         let elevation = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).is_some_and(|v| v.genre == "Élévation" && v.plan_coupe.is_some());
         let (mut tris, mut traits) = match (&self.scene, self.plan_coupe().filter(|_| !elevation)) {
             (Some(s), Some(p)) => {
-                let prims = dessin::coupe(s, &self.visible, p, self.echelle, self.poche);
+                let prims = dessin::coupe(s, &self.visible, p, self.echelle, self.poche_style());
                 dessin::sommets(s, &prims, p.truncate().as_dvec3().normalize(), self.echelle)
             }
             _ => Default::default(),
         };
         if let (Some(s), Some((a, b))) = (&self.scene, self.boite_appliquee()) {
-            let poche = (self.style == StyleVisuel::LignesCachees).then_some(self.poche);
+            let poche = (self.style == StyleVisuel::Graphique).then_some(self.poche);
             let (t, l) = dessin::sommets_boite(s, &self.visible, a, b, self.echelle, poche, self.style == StyleVisuel::Realiste);
             tris.extend(t);
             traits.extend(l);
@@ -907,7 +929,7 @@ impl ViewerApp {
         let mut primitives = Vec::new();
         let coupe = self.plan_coupe();
         if let Some(p) = coupe {
-            primitives.extend(dessin::coupe(s, &self.visible, p, self.echelle, self.poche));
+            primitives.extend(dessin::coupe(s, &self.visible, p, self.echelle, self.poche_style()));
         }
         primitives.extend(dessin::vu(s, &self.visible, droite, haut, -f, coupe, 4096));
         // éléments 2D de la vue Revit ouverte, s'ils sont affichés (repère du fichier →
@@ -1874,6 +1896,43 @@ impl ViewerApp {
         }
     }
 
+    /// Mur ou assemblage natif sélectionné : identifiant, axe (mm) et altitude de la base.
+    fn axe_selection(&self) -> Option<(String, [f64; 2], [f64; 2], f64)> {
+        let (projet, _) = self.natif.as_ref()?;
+        let sel = self.selected?;
+        let id = projet.assemblages.iter().find(|a| scene::id_natif("assemblage", &a.id) == sel).map(|a| a.id.clone())
+            .or_else(|| projet.murs.iter().find(|m| scene::id_natif("mur", &m.id) == sel).map(|m| m.id.clone()))?;
+        let (a, b, z) = projet.axe_element(&id)?;
+        Some((id, a, b, z))
+    }
+
+    /// Axe du mur sélectionné en tireté et ses extrémités ; pendant un déplacement, le
+    /// nouvel axe et sa longueur.
+    fn dessiner_axe(&self, ui: &egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>) {
+        let Some((_, mut a, mut b, z)) = self.axe_selection() else { return };
+        if let Some((_, fin, p)) = &self.poignee_axe {
+            if *fin { b = *p } else { a = *p }
+        }
+        let (Some(ea), Some(eb)) = (self.ecran_plan(rect, a, z), self.ecran_plan(rect, b, z)) else { return };
+        let painter = ui.painter().with_clip_rect(rect);
+        let bleu = Color32::from_rgb(40, 120, 210);
+        painter.add(egui::Shape::dashed_line(&[ea, eb], egui::Stroke::new(1.5, bleu), 8.0, 4.0));
+        for e in [ea, eb] {
+            let survole = survol.is_some_and(|s| s.distance(e) <= 9.0);
+            painter.circle(e, if survole { 6.5 } else { 5.0 }, Color32::WHITE, egui::Stroke::new(2.0, bleu));
+            if survole {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
+            }
+        }
+        if self.poignee_axe.is_some() {
+            let l = (b[0] - a[0]).hypot(b[1] - a[1]);
+            let g = painter.layout_no_wrap(format!("{} mm", crate::step::format_real(l.round())), egui::FontId::proportional(13.0), Color32::from_gray(30));
+            let cadre = egui::Rect::from_center_size(ea + (eb - ea) * 0.5 - egui::vec2(0.0, 16.0), g.size() + egui::vec2(10.0, 4.0));
+            painter.rect(cadre, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 235), egui::Stroke::new(1.0, bleu), egui::StrokeKind::Inside);
+            painter.galley(cadre.min + egui::vec2(5.0, 2.0), g, Color32::from_gray(30));
+        }
+    }
+
     /// Ajoute (pente par défaut) ou retire la pente de l'arête de l'élément sélectionné.
     fn basculer_pente(&mut self, c: usize, k: usize) {
         let (Some((projet, _)), Some(sel)) = (&self.natif, self.selected) else { return };
@@ -2044,10 +2103,14 @@ impl ViewerApp {
             if let Some((a, b)) = &mut etat.boite { *a += delta.as_vec3(); *b += delta.as_vec3(); }
         }
         if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
-            r.upload_vertices(gl, &scene.vertices, &scene.couleurs_rendu);
+            r.upload_vertices(gl, &scene.vertices, &scene.couleurs_rendu, &scene.motifs_surface);
         }
         self.liste_niveaux = niveaux(&scene);
-        self.liste_materiaux = materiaux_ifc(&scene);
+        // matériaux de l'arborescence native (ceux du projet), à défaut ceux de la scène
+        self.liste_materiaux = match &scene.navigateur {
+            Some(n) => n.materiaux.clone(),
+            None => materiaux_ifc(&scene),
+        };
         (self.categories, self.categorie_objet, self.cle_objet) = categories(&scene);
         self.visible = vec![true; scene.objects.len()];
         if self.selected.is_some_and(|id| !scene.model.file.entities.contains_key(&id)) {
@@ -2416,7 +2479,7 @@ impl ViewerApp {
             (self.categories, self.categorie_objet, self.cle_objet) = categories(s);
             self.visible = vec![true; s.objects.len()];
             if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
-                r.upload_vertices(gl, &s.vertices, &s.couleurs_rendu);
+                r.upload_vertices(gl, &s.vertices, &s.couleurs_rendu, &s.motifs_surface);
             }
         }
         self.restaurer_vue(self.vue_active);
@@ -3081,17 +3144,28 @@ impl ViewerApp {
                 }
             }
             ui.separator();
-            let actif = self.style != StyleVisuel::LignesCachees;
-            ui.add_enabled(actif, egui::Checkbox::new(&mut self.ombres_portees, "Ombres portées"))
-                .on_hover_text("Ombres du soleil, dans tous les styles sauf Lignes cachées");
-            ui.add_enabled(actif, egui::Checkbox::new(&mut self.ombre_ambiante, "Ombre ambiante"))
-                .on_hover_text("Assombrit les angles rentrants, pieds de murs et dessous des débords");
+            let graphique = self.style == StyleVisuel::Graphique;
+            let mut couleurs = !self.faces_blanches;
+            let mut change = ui.add_enabled(graphique, egui::Checkbox::new(&mut couleurs, "Couleurs des faces"))
+                .on_hover_text("Décoché : faces blanches, dessin au trait")
+                .changed();
+            self.faces_blanches = !couleurs;
+            change |= ui.add_enabled(graphique && couleurs, egui::Checkbox::new(&mut self.eclairage, "Éclairage"))
+                .on_hover_text("Décoché : couleurs en aplat")
+                .changed();
+            ui.separator();
+            change |= ui.checkbox(&mut self.ombres_portees, "Ombres portées").on_hover_text("Ombres du soleil").changed();
+            change |= ui.checkbox(&mut self.ombre_ambiante, "Ombre ambiante").on_hover_text("Assombrit les angles rentrants, pieds de murs et dessous des débords").changed();
+            if change {
+                self.visibility_dirty = true;
+            }
         })
         .response
         .on_hover_text("Style visuel et ombres");
         if let Some(st) = choisi {
             self.style = st;
             self.visibility_dirty = true;
+            self.coupe_dirty = true;
         }
     }
 
@@ -3367,6 +3441,8 @@ impl ViewerApp {
     fn materiaux_ui(&mut self, ui: &mut egui::Ui) {
         let q = self.filter.trim().to_lowercase();
         let mut isoler: Option<Vec<Id>> = None;
+        let natif = self.natif.is_some();
+        let mut editer: Option<String> = None;
         let mut n = 0;
         for m in self.liste_materiaux.iter().filter(|m| q.is_empty() || m.nom.to_lowercase().contains(&q)) {
             n += 1;
@@ -3376,6 +3452,9 @@ impl ViewerApp {
                 ui.painter().rect_filled(r, 2.0, Color32::from_rgb(cr, cg, cb));
                 ui.painter().rect_stroke(r, 2.0, egui::Stroke::new(1.0, Color32::from_gray(120)), egui::StrokeKind::Inside);
                 let texte = format!("{} ({})", m.nom, m.elements.len());
+                if natif && ui.small_button("…").on_hover_text("Graphismes du matériau : surface et coupe").clicked() {
+                    editer = Some(m.nom.clone());
+                }
                 let resp = ui.selectable_label(false, if m.elements.is_empty() { RichText::new(texte).weak() } else { RichText::new(texte) });
                 let resp = resp.on_hover_text(format!("Transparence {:.0} %\nClic : isoler les éléments qui le portent", m.transparence * 100.0));
                 if resp.clicked() && !m.elements.is_empty() {
@@ -3385,6 +3464,9 @@ impl ViewerApp {
         }
         if n == 0 {
             ui.label(RichText::new("Aucun matériau").weak());
+        }
+        if editer.is_some() {
+            self.materiau_edite = editer;
         }
         if let (Some(ids), Some(s)) = (isoler, &self.scene) {
             let objs: Vec<u32> = ids.iter().filter_map(|id| s.object_of.get(id).copied()).collect();
@@ -3554,6 +3636,10 @@ impl ViewerApp {
             hidden_storeys: self.hidden_storeys.clone(),
             isolated: self.isolated.clone(),
             style: self.style,
+            faces_blanches: self.faces_blanches,
+            eclairage: self.eclairage,
+            ombres_portees: self.ombres_portees,
+            ombre_ambiante: self.ombre_ambiante,
             coupe: self.coupe,
             coupe_niveau: self.coupe_niveau,
             coupe_hauteur: self.coupe_hauteur,
@@ -3575,6 +3661,10 @@ impl ViewerApp {
         self.hidden_storeys = e.hidden_storeys;
         self.isolated = e.isolated;
         self.style = e.style;
+        self.faces_blanches = e.faces_blanches;
+        self.eclairage = e.eclairage;
+        self.ombres_portees = e.ombres_portees;
+        self.ombre_ambiante = e.ombre_ambiante;
         self.coupe = e.coupe;
         self.coupe_niveau = e.coupe_niveau;
         self.coupe_hauteur = e.coupe_hauteur;
@@ -3737,7 +3827,7 @@ impl ViewerApp {
             self.hidden_storeys.clear();
             self.hidden_classes = HIDDEN_BY_DEFAULT.iter().map(|s| s.to_string()).collect();
             self.isolated = None;
-            self.style = StyleVisuel::Realiste;
+            self.style = StyleVisuel::Graphique;
             self.coupe = false;
             self.boite = None;
             self.boite_active = false;
@@ -3812,7 +3902,9 @@ impl ViewerApp {
         }
         match genre.as_str() {
             "Plan d'étage" | "Plan de plafond" | "Coupe" | "Élévation" => {
-                self.style = StyleVisuel::LignesCachees;
+                // dessin au trait des plans, coupes et élévations
+                self.style = StyleVisuel::Graphique;
+                self.faces_blanches = true;
                 self.coupe = genre == "Plan d'étage" || coupe_verticale;
                 if self.coupe && !coupe_verticale {
                     self.coupe_niveau = etage;
@@ -3822,8 +3914,8 @@ impl ViewerApp {
                     }
                 }
             }
-            // vue 3D : le style 3D en cours, réaliste en sortant d'un dessin
-            "Vue 3D" | "Feuille" if self.style == StyleVisuel::LignesCachees => self.style = StyleVisuel::Realiste,
+            // vue 3D : le style en cours, faces colorées en sortant d'un dessin
+            "Vue 3D" | "Feuille" => self.faces_blanches = false,
             _ => {}
         }
         // échelle de la barre de vue : celle de la vue ouverte
@@ -4185,7 +4277,80 @@ impl ViewerApp {
     }
 
     /// Propriétés de l'élément sélectionné (panneau de gauche, comme dans Revit).
+    /// Graphismes d'un matériau du projet natif, comme dans Revit : ombrage (couleur de
+    /// surface), motif de surface (premier plan, couleur), motif de coupe (premier plan,
+    /// couleur) et fond de coupe.
+    fn fenetre_materiau(&mut self, ctx: &egui::Context) {
+        use crate::modele::MotifCoupe;
+        let Some(nom) = self.materiau_edite.clone() else { return };
+        let Some((projet, _)) = &self.natif else { self.materiau_edite = None; return };
+        let Some(mut m) = projet.materiau(&nom).cloned() else { self.materiau_edite = None; return };
+        let avant = m.clone();
+        let mut ouvert = true;
+        egui::Window::new(format!("Matériau · {nom}")).id(egui::Id::unique("fenetre_materiau")).open(&mut ouvert).resizable(false).collapsible(false).show(ctx, |ui| {
+            let couleur = |ui: &mut egui::Ui, c: &mut Option<[u8; 3]>, defaut: [u8; 3], aucun: &str| {
+                let mut actif = c.is_some();
+                ui.horizontal(|ui| {
+                    let mut v = c.unwrap_or(defaut);
+                    if ui.color_edit_button_srgb(&mut v).changed() {
+                        actif = true;
+                    }
+                    ui.checkbox(&mut actif, "").on_hover_text(aucun);
+                    *c = actif.then_some(v);
+                });
+            };
+            let motif = |ui: &mut egui::Ui, id: &str, x: &mut Option<MotifCoupe>| {
+                egui::ComboBox::from_id_salt(id).width(110.0).selected_text(x.map_or("Aucun", |m| m.libelle())).show_ui(ui, |ui| {
+                    ui.selectable_value(x, None, "Aucun");
+                    for t in MotifCoupe::TOUS {
+                        ui.selectable_value(x, Some(t), t.libelle());
+                    }
+                });
+            };
+            egui::Grid::new("graphismes_materiau").num_columns(3).spacing([10.0, 6.0]).show(ui, |ui| {
+                ui.label(RichText::new("Surface").strong());
+                ui.end_row();
+                ui.label("Fond (ombrage)");
+                ui.color_edit_button_srgb(&mut m.couleur);
+                ui.end_row();
+                ui.label("Premier plan");
+                motif(ui, "motif_surface", &mut m.surface_motif);
+                let d = m.encre_surface();
+                couleur(ui, &mut m.surface_couleur, d, "Couleur propre (sinon gris foncé)");
+                ui.end_row();
+                ui.label(RichText::new("Coupe").strong());
+                ui.end_row();
+                ui.label("Fond");
+                ui.label("");
+                let d = m.fond_coupe();
+                couleur(ui, &mut m.coupe_fond, d, "Fond coloré (sinon blanc)");
+                ui.end_row();
+                ui.label("Premier plan");
+                let mut mc = Some(m.motif);
+                motif(ui, "motif_coupe", &mut mc);
+                m.motif = mc.unwrap_or(MotifCoupe::Vide);
+                let d = m.encre_coupe();
+                couleur(ui, &mut m.coupe_couleur, d, "Couleur propre (sinon encre du motif)");
+                ui.end_row();
+            });
+            ui.label(RichText::new("Le fond de surface sert aussi au poché du style Réaliste.").small().weak());
+        });
+        if !ouvert {
+            self.materiau_edite = None;
+        }
+        if m != avant {
+            let mut p = projet.clone();
+            if let Some(x) = p.materiaux.iter_mut().find(|x| x.nom == nom) {
+                *x = m;
+            }
+            if let Err(e) = self.appliquer_projet(p) {
+                self.error = Some(e);
+            }
+        }
+    }
+
     fn right_panel(&mut self, ui: &mut egui::Ui) {
+        self.fenetre_materiau(ui.ctx());
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
         if let Some((projet, _)) = &mut self.natif {
             if self.ruban_edition.contexte_creation(ui, projet) { self.natif_modifie = true; }
@@ -4235,7 +4400,7 @@ impl ViewerApp {
         if self.natif.is_some() {
             self.proprietes_vue_native(ui);
         }
-        if self.scene.is_some() && self.style == StyleVisuel::LignesCachees {
+        if self.scene.is_some() && (self.coupe || !self.vue_3d()) {
             self.plage_de_vue(ui);
             ui.separator();
         }
@@ -4573,6 +4738,42 @@ impl ViewerApp {
         if outil_coupe.is_none() { self.coupe_depart = None; }
         let altitude_coupe = self.altitude_vue_native();
         let mode_trace = mode_mur || dalle.is_some() || outil_coupe.is_some();
+        // axe du mur sélectionné : une extrémité saisie se déplace (accrochages du tracé)
+        let axe = if mode_trace { None } else { self.axe_selection() };
+        if let Some((id, a, b, z)) = &axe {
+            let (ea, eb) = (self.ecran_plan(rect, *a, *z), self.ecran_plan(rect, *b, *z));
+            if resp.drag_started_by(PointerButton::Primary)
+                && let Some(q) = ui.input(|i| i.pointer.press_origin())
+            {
+                let proche = |e: Option<egui::Pos2>| e.is_some_and(|e| e.distance(q) <= 9.0);
+                if proche(eb) {
+                    self.poignee_axe = Some((id.clone(), true, *b));
+                } else if proche(ea) {
+                    self.poignee_axe = Some((id.clone(), false, *a));
+                }
+            }
+            if let (Some((_, fin, _)), Some(q)) = (&self.poignee_axe, resp.interact_pointer_pos().or(resp.hover_pos())) {
+                let fixe = if *fin { *a } else { *b };
+                let shift = ui.input(|i| i.modifiers.shift);
+                if let Some((p, _)) = self.point_tracage(q, rect, shift, Some(fixe), *z)
+                    && let Some(x) = &mut self.poignee_axe
+                {
+                    x.2 = p;
+                }
+            }
+        } else {
+            self.poignee_axe = None;
+        }
+        if resp.drag_stopped() && let Some((id, fin, p)) = self.poignee_axe.take() {
+            if let Some((projet, _)) = &self.natif {
+                let mut copie = projet.clone();
+                match copie.deplacer_extremite(&id, fin, p).and_then(|_| self.appliquer_projet(copie)) {
+                    Ok(()) => self.status = "Mur modifié — Ctrl+S pour enregistrer.".into(),
+                    Err(e) => self.error = Some(e),
+                }
+            }
+        }
+        let mode_trace = mode_trace || self.poignee_axe.is_some();
         if mode_trace && resp.hovered() { ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair); }
         let ndc = |p: egui::Pos2| {
             Vec2::new((p.x - rect.left()) / rect.width() * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height() * 2.0)
@@ -4791,6 +4992,7 @@ impl ViewerApp {
         }
         if dalle.is_none() && !mode_mur && outil_coupe.is_none() {
             self.dessiner_aretes_pente(ui, rect, resp.hover_pos());
+            self.dessiner_axe(ui, rect, resp.hover_pos());
         }
         if self.scene.is_some() {
             self.poignees_boite(ui, rect);
@@ -4890,9 +5092,12 @@ impl ViewerApp {
             selected: self.plage_selection(),
             background: if self.style.papier() { [1.0, 1.0, 1.0] } else { [0.925, 0.933, 0.945] },
             style: self.style,
-            soleil: (self.ombres_portees && self.style != StyleVisuel::LignesCachees).then(|| self.soleil(aspect)).flatten(),
+            faces_blanches: self.faces_blanches,
+            eclairage: self.eclairage,
+            pas_motif: (2.0 * self.echelle / 1000.0) as f32,
+            soleil: self.ombres_portees.then(|| self.soleil(aspect)).flatten(),
             // occultation : rayon de l'ordre du mètre, réduit de près, élargi de loin
-            ao: (self.ombre_ambiante && self.style != StyleVisuel::LignesCachees).then(|| (self.camera.proj(aspect), (self.camera.dist * 0.04).clamp(0.15, 1.5))),
+            ao: self.ombre_ambiante.then(|| (self.camera.proj(aspect), (self.camera.dist * 0.04).clamp(0.15, 1.5))),
             coupe: self.plan_coupe(),
             boite: self.boite_appliquee(),
             cadrage: self.cadrage_vue(),
@@ -4996,7 +5201,7 @@ impl ViewerApp {
         p.push((
             "dessin",
             objet(&[
-                ("actif", (self.style == StyleVisuel::LignesCachees).to_string()),
+                ("actif", self.plan_coupe().is_some().to_string()),
                 ("style", texte(self.style.nom())),
                 ("coupe_z", self.plan_coupe().map_or("null".into(), |c| format!("{:.3}", c.w))),
                 ("niveau", self.coupe_niveau.map_or("null".into(), |n| self.decrire(n))),
@@ -5266,7 +5471,9 @@ impl ViewerApp {
                 self.etat()
             }
             "dessin" => {
-                self.style = if argument == "non" { StyleVisuel::Realiste } else { StyleVisuel::LignesCachees };
+                // dessin oui : graphique au trait (faces blanches) ; non : faces colorées
+                self.style = StyleVisuel::Graphique;
+                self.faces_blanches = argument != "non";
                 self.visibility_dirty = true;
                 self.etat()
             }
@@ -5281,20 +5488,25 @@ impl ViewerApp {
                 }
                 self.etat()
             }
-            "style" if argument == "rendu" => {
-                // ancien style Rendu : réaliste, ombres portées et ambiante
-                self.style = StyleVisuel::Realiste;
-                self.ombres_portees = true;
-                self.ombre_ambiante = true;
-                self.visibility_dirty = true;
-                self.etat()
-            }
             "style" => {
-                let Some(&st) = StyleVisuel::TOUS.iter().find(|x| x.nom() == argument) else {
-                    return erreur("usage : style lignes_cachees|ombre|couleurs|realiste");
+                // style graphique|realiste ; anciens noms : lignes_cachees, ombre, couleurs, rendu
+                let (style, blanches, eclairage, ombres) = match argument {
+                    "graphique" | "ombre" => (StyleVisuel::Graphique, false, true, None),
+                    "lignes_cachees" => (StyleVisuel::Graphique, true, true, None),
+                    "couleurs" => (StyleVisuel::Graphique, false, false, None),
+                    "realiste" => (StyleVisuel::Realiste, false, true, None),
+                    "rendu" => (StyleVisuel::Realiste, false, true, Some(true)),
+                    _ => return erreur("usage : style graphique|realiste (lignes_cachees, couleurs, rendu)"),
                 };
-                self.style = st;
+                self.style = style;
+                self.faces_blanches = blanches;
+                self.eclairage = eclairage;
+                if let Some(o) = ombres {
+                    self.ombres_portees = o;
+                    self.ombre_ambiante = o;
+                }
                 self.visibility_dirty = true;
+                self.coupe_dirty = true;
                 self.etat()
             }
             "coupe" => {
@@ -5313,7 +5525,8 @@ impl ViewerApp {
                         let Some(n) = n else { return erreur(&format!("niveau introuvable : {niveau}")) };
                         self.coupe_niveau = Some(n.0);
                     }
-                    self.style = StyleVisuel::LignesCachees;
+                    self.style = StyleVisuel::Graphique;
+                    self.faces_blanches = true;
                     self.coupe = true;
                 }
                 self.visibility_dirty = true;
@@ -5561,9 +5774,7 @@ fn icone_style(p: &egui::Painter, r: egui::Rect, style: StyleVisuel) {
     ];
     let remplissage = |i: usize| -> Option<Color32> {
         match style {
-            StyleVisuel::LignesCachees => Some(Color32::WHITE),
-            StyleVisuel::Ombre => Some(Color32::from_gray([235, 185, 150][i])),
-            StyleVisuel::CouleursHomogenes => Some(Color32::from_rgb(150, 180, 210)),
+            StyleVisuel::Graphique => Some(Color32::from_gray([235, 185, 150][i])),
             StyleVisuel::Realiste => Some([Color32::from_rgb(232, 196, 150), Color32::from_rgb(200, 150, 100), Color32::from_rgb(165, 118, 75)][i]),
         }
     };
