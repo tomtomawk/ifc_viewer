@@ -1601,26 +1601,38 @@ impl ViewerApp {
         self.select(Some(suivant.unwrap_or(assemblage)), true);
     }
 
-    /// Objets à surligner : celui de la sélection, ou ceux d'un nœud dont les objets
-    /// sont consécutifs (assemblage de murs).
-    fn plage_selection(&self) -> (u32, u32) {
-        if let Some(o) = self.selected_object() {
-            return (o, o);
+    /// Sélectionne les objets de la scène, y compris les couches des assemblages.
+    fn objets_selectionnes(&self) -> Vec<u8> {
+        let Some(scene) = &self.scene else { return Vec::new() };
+        let mut marques = vec![0; scene.objects.len()];
+        let mut entites = Vec::new();
+        if !self.bim.selection.is_empty() {
+            let selection: HashSet<&str> = self.bim.selection.iter().map(String::as_str).collect();
+            if let Some((p, _)) = &self.natif {
+                for (genre, cle) in p.murs.iter().map(|x| ("mur", &x.id))
+                    .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
+                    .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
+                    .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
+                    .chain(p.importes.iter().map(|x| ("importe", &x.id))) {
+                    if selection.contains(cle.as_str()) {
+                        entites.push(scene::id_natif(genre, cle));
+                    }
+                }
+            }
+        } else if let Some(id) = self.selected {
+            entites.push(id);
         }
-        let Some(id) = self.selected else { return (u32::MAX, u32::MAX) };
-        if self.scene.as_ref().is_none_or(|s| s.model.ty(id) != "IFCELEMENTASSEMBLY") {
-            return (u32::MAX, u32::MAX);
+        for id in entites {
+            let objets = if scene.model.ty(id) == "IFCELEMENTASSEMBLY" {
+                self.objects_under(id)
+            } else {
+                scene.object_of.get(&id).copied().into_iter().collect()
+            };
+            for objet in objets {
+                if let Some(marque) = marques.get_mut(objet as usize) { *marque = 255; }
+            }
         }
-        let objs = self.objects_under(id);
-        match (objs.iter().min(), objs.iter().max()) {
-            (Some(&a), Some(&b)) if (b - a) as usize + 1 == objs.len() && objs.len() <= 64 => (a, b),
-            _ => (u32::MAX, u32::MAX),
-        }
-    }
-
-    fn selected_object(&self) -> Option<u32> {
-        let s = self.scene.as_ref()?;
-        s.object_of.get(&self.selected?).copied()
+        marques
     }
 
     /// Objets 3D d'un nœud et de ses descendants.
@@ -5219,7 +5231,7 @@ impl ViewerApp {
             eye: self.camera.eye(),
             view_dir: self.camera.forward(),
             ortho: self.camera.ortho,
-            selected: self.plage_selection(),
+            selected: self.objets_selectionnes(),
             background: if self.style.papier() { [1.0, 1.0, 1.0] } else { [0.925, 0.933, 0.945] },
             style: self.style,
             faces_blanches: self.faces_blanches,

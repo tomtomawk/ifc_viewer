@@ -17,7 +17,7 @@ sont initialisées à vide. Aucun fichier RVT n'est écrit.
   verrouillées tant qu'elle n'est pas remplacée explicitement par un cadre natif.
 - **Modifier** propose déplacement, copie, rotation, alignement des axes et
   ajustement de l'extrémité d'un mur sur l'axe d'un autre. Ctrl+clic ou les cases de
-  la liste constituent une sélection multiple. Copier un assemblage recrée les
+  la liste constituent une sélection multiple, surlignée dans la vue. Copier un assemblage recrée les
   identifiants de ses couches et ouvertures. Supprimer demande confirmation des
   dépendances ; un niveau encore utilisé ne peut pas être supprimé.
 - Le panneau Modifier permet aussi d'éditer les sommets d'un élément horizontal,
