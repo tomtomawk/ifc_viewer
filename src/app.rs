@@ -308,6 +308,13 @@ enum OngletRuban {
     Sortie,
 }
 
+/// Une croix tracée au centre de son bouton, sans dépendre des métriques de police.
+fn dessiner_croix_onglet(painter: &egui::Painter, centre: egui::Pos2, couleur: Color32) {
+    let trace = egui::Stroke::new(1.2, couleur);
+    painter.line_segment([centre + egui::vec2(-3.0, -3.0), centre + egui::vec2(3.0, 3.0)], trace);
+    painter.line_segment([centre + egui::vec2(-3.0, 3.0), centre + egui::vec2(3.0, -3.0)], trace);
+}
+
 /// Teinte stable pendant toute la durée d'ouverture du fichier.
 fn couleur_document(id: usize) -> Color32 {
     const TEINTES: [[u8; 3]; 8] = [
@@ -3914,18 +3921,23 @@ impl ViewerApp {
             egui::vec2(24.0, 22.0),
         );
         let plusieurs_vues = self.vues_ouvertes.len() > 1 || self.documents.values().any(|d| d.vues.len() > 1);
-        let reduire = ui.put(rect_fermeture, egui::Button::new("×").sense(
+        let fermeture = ui.put(rect_fermeture, egui::Button::new("").min_size(rect_fermeture.size()).sense(
             if plusieurs_vues { Sense::click() } else { Sense::hover() },
-        )).on_hover_text("Fermer les autres onglets : garder la dernière vue ouverte de chaque document").clicked();
+        )).on_hover_text("Fermer les autres onglets : garder la dernière vue ouverte de chaque document");
+        fermeture.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, plusieurs_vues, "Fermer les autres onglets"));
+        dessiner_croix_onglet(ui.painter(), rect_fermeture.center(), if plusieurs_vues { ui.visuals().text_color() } else { ui.visuals().weak_text_color() });
+        let reduire = fermeture.clicked();
         let nombre = ((disponible / 180.0).floor() as usize).max(1).min(onglets.len().max(1));
         let actif = onglets.iter().position(|o| o.0 == self.document_actif && o.1 == self.vue_active).unwrap_or(0);
         let debut = actif.saturating_sub(nombre / 2).min(onglets.len().saturating_sub(nombre));
         let largeur = (disponible / nombre as f32).min(220.0);
-        for (droite, symbole) in [(false, "◀"), (true, "▶")] {
+        for droite in [false, true] {
             let x = if droite { barre.right() - marge - fleche } else { barre.left() + marge };
             let rect = egui::Rect::from_min_size(egui::pos2(x, barre.top() + 2.0), egui::vec2(fleche, 22.0));
-            ui.scope_builder(egui::UiBuilder::new().id_salt(("selecteur_vues", droite)).max_rect(rect), |ui| {
-                ui.menu_button(symbole, |ui| {
+            ui.scope_builder(egui::UiBuilder::new().id_salt(("selecteur_vues", droite)).max_rect(rect).layout(egui::Layout::centered_and_justified(egui::Direction::TopDown)), |ui| {
+                ui.spacing_mut().button_padding = egui::Vec2::ZERO;
+                let bouton = egui::Button::new("").min_size(rect.size());
+                let (reponse, _) = egui::containers::menu::MenuButton::from_button(bouton).ui(ui, |ui| {
                 let mut precedent = None;
                 for (id, vue, nom, infobulle) in &onglets {
                     if precedent != Some(*id) {
@@ -3935,12 +3947,18 @@ impl ViewerApp {
                         ui.label(RichText::new(&titres[id]).strong().color(couleur_document(*id)));
                         precedent = Some(*id);
                     }
-                    if ui.selectable_label(*id == self.document_actif && *vue == self.vue_active, RichText::new(format!("●  {nom}")).color(couleur_document(*id))).on_hover_text(infobulle).clicked() {
+                    if ui.selectable_label(*id == self.document_actif && *vue == self.vue_active, RichText::new(nom).color(couleur_document(*id))).on_hover_text(infobulle).clicked() {
                         activer = Some((*id, *vue));
                         ui.close();
                     }
                 }
-                }).response.on_hover_text("Liste des onglets ouverts");
+                });
+                let centre = rect.center();
+                let sens = if droite { 1.0 } else { -1.0 };
+                let points = vec![centre + egui::vec2(-sens * 2.0, -4.0), centre + egui::vec2(sens * 2.0, 0.0), centre + egui::vec2(-sens * 2.0, 4.0)];
+                ui.painter().add(egui::Shape::convex_polygon(points, ui.visuals().text_color(), egui::Stroke::NONE));
+                reponse.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Liste des onglets ouverts"));
+                reponse.on_hover_text("Liste des onglets ouverts");
             });
         }
         for (k, (id, vue, nom, infobulle)) in onglets.iter().skip(debut).take(nombre).enumerate() {
@@ -3961,7 +3979,12 @@ impl ViewerApp {
                         if reponse.clicked() {
                             activer = Some((*id, *vue));
                         }
-                        let fermer_clic = survole && ui.put(rect_croix, egui::Button::new("×").small().frame(false)).on_hover_text("Fermer la vue").clicked();
+                        let fermer_clic = if survole {
+                            let reponse = ui.put(rect_croix, egui::Button::new("").min_size(rect_croix.size()).frame(false)).on_hover_text("Fermer la vue");
+                            reponse.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Fermer la vue"));
+                            dessiner_croix_onglet(ui.painter(), rect_croix.center(), ui.visuals().text_color());
+                            reponse.clicked()
+                        } else { false };
                         if reponse.clicked_by(PointerButton::Middle) || fermer_clic {
                             fermer = Some((*id, *vue));
                         }
