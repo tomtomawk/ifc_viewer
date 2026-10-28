@@ -40,7 +40,10 @@ sont initialisées à vide. Aucun fichier RVT n'est écrit.
   d'attacher des murs à une toiture et de régler la priorité d'une couche aux
   croisements. Modifier un contour réinitialise ses pentes par arête.
 - **Annuler / Rétablir**, Ctrl+Z et Ctrl+Maj+Z, ont un historique propre à chaque
-  document. Un glissement est regroupé en une seule modification. L'historique
+  document. Les boutons après Sortie annulent ou rétablissent une étape ; leurs
+  flèches donnent accès à la liste pour remonter ou rétablir plusieurs étapes.
+  Les intitulés décrivent les éléments modifiés lorsqu'ils peuvent être identifiés.
+  Un glissement est regroupé en une seule modification. L'historique
   retient jusqu'à 100 instantanés, avec une cible de 64 Mio (au moins le dernier
   instantané est conservé, même s'il dépasse cette taille).
 - **Enregistrer / Enregistrer sous** valident le modèle et remplacent le fichier

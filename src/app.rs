@@ -2734,6 +2734,38 @@ impl ViewerApp {
             ] {
                 ui.selectable_value(&mut self.onglet_ruban, o, RichText::new(nom).strong());
             }
+            let disponible = self.natif.is_some() && self.loading.is_none() && self.sauvegarde.is_none();
+            let mut historique_choisi = None;
+            for (retablir, titre) in [(false, "Annuler"), (true, "Rétablir")] {
+                let libelles = self.historique.libelles(retablir);
+                let actif = disponible && !libelles.is_empty();
+                if ui.add_enabled(actif, egui::Button::new(titre).small()).on_hover_text(if retablir { "Rétablir (Ctrl+Maj+Z)" } else { "Annuler (Ctrl+Z)" }).clicked() {
+                    historique_choisi = Some((retablir, 1));
+                }
+                ui.add_enabled_ui(actif, |ui| {
+                    ui.scope(|ui| {
+                        ui.spacing_mut().button_padding = egui::Vec2::ZERO;
+                        let bouton = egui::Button::new("").min_size(egui::vec2(16.0, 20.0));
+                        let (reponse, _) = egui::containers::menu::MenuButton::from_button(bouton).ui(ui, |ui| {
+                            ui.label(if retablir { "Rétablir jusqu'à :" } else { "Annuler jusqu'à :" });
+                            egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                                for (i, nom) in libelles.iter().enumerate() {
+                                    if ui.button(format!("{}  {}", i + 1, nom)).clicked() {
+                                        historique_choisi = Some((retablir, i + 1));
+                                        ui.close();
+                                    }
+                                }
+                            });
+                        });
+                        let centre = reponse.rect.center();
+                        let c = if actif { ui.visuals().text_color() } else { ui.visuals().weak_text_color() };
+                        ui.painter().add(egui::Shape::convex_polygon(vec![centre + egui::vec2(-3.5,-2.0), centre + egui::vec2(3.5,-2.0), centre + egui::vec2(0.0,2.0)], c, egui::Stroke::NONE));
+                        reponse.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, actif, if retablir { "Historique des rétablissements" } else { "Historique des annulations" }));
+                        reponse.on_hover_text(if retablir { "Rétablir plusieurs modifications" } else { "Annuler plusieurs modifications" });
+                    });
+                });
+            }
+            if let Some((retablir, nombre)) = historique_choisi { self.parcourir_historique_n(retablir, nombre); }
             if self.loading.is_some() || self.sauvegarde.is_some() {
                 ui.spinner();
                 let texte = self.sauvegarde.as_ref().map_or(&self.status, |s| &s.progression);

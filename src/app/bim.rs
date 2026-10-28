@@ -2,10 +2,14 @@
 use super::*;
 impl ViewerApp {
     pub(super) fn parcourir_historique(&mut self, retablir: bool) {
+        self.parcourir_historique_n(retablir, 1);
+    }
+
+    pub(super) fn parcourir_historique_n(&mut self, retablir: bool, nombre: usize) {
         self.historique.geste(false);
         self.bim.barre_editee = None;
         let resultat = (|| {
-            let cible = self.historique.cible(retablir)?;
+            let cible = self.historique.cible_n(retablir, nombre)?;
             let actuel = self
                 .natif
                 .as_ref()
@@ -14,11 +18,20 @@ impl ViewerApp {
                 .clone();
             // appliquer_projet reconstruit avant toute mutation ; préserver la pile.
             let mut historique = std::mem::take(&mut self.historique);
-            let resultat = self.appliquer_projet(cible);
-            if resultat.is_ok() {
-                historique.confirmer(&actuel, retablir)?;
-            }
+            let resultat = self
+                .appliquer_projet(cible)
+                .and_then(|_| historique.confirmer_n(&actuel, retablir, nombre));
             self.historique = historique;
+            if resultat.is_ok() {
+                if let Some((projet, _)) = &self.natif {
+                    let ids = projet.identifiants();
+                    self.bim.selection.retain(|id| ids.contains(id));
+                }
+                if let Some(scene) = &self.scene {
+                    self.selection_multiple
+                        .retain(|id| scene.model.file.entities.contains_key(id));
+                }
+            }
             self.natif_modifie = self
                 .natif
                 .as_ref()
@@ -32,12 +45,18 @@ impl ViewerApp {
         })();
         match resultat {
             Ok(()) => {
-                self.status = if retablir {
-                    "Modification rétablie."
+                self.status = if nombre == 1 {
+                    if retablir {
+                        "Modification rétablie.".into()
+                    } else {
+                        "Modification annulée.".into()
+                    }
                 } else {
-                    "Modification annulée."
+                    format!(
+                        "{nombre} modifications {}.",
+                        if retablir { "rétablies" } else { "annulées" }
+                    )
                 }
-                .into()
             }
             Err(e) => self.error = Some(e),
         }
