@@ -11,6 +11,12 @@ sont initialisées à vide. Aucun fichier RVT n'est écrit.
   Les murs courbes, ouvertures et maillages importés sont maintenant affichables.
 - **Modéliser → Niveau** crée et modifie les niveaux. **Quadrillage** crée des axes
   droits, visibles dans les plans natifs. Les coordonnées de saisie sont en mm.
+- **Modéliser → Poteau / Poutre** crée des structures rectangulaires en saisissant
+  leurs coordonnées et dimensions en mm, relatives à un niveau. Les poteaux sont
+  verticaux et orientables ; les poutres sont horizontales et définies par leur axe.
+  Après sélection, **Modifier → Propriétés structurelles** permet de les modifier ;
+  les commandes de déplacement, rotation, copie, suppression et l'historique leur
+  sont applicables. Leurs quantités et classes `IfcColumn` / `IfcBeam` sont exportées.
 - **Ouverture** place une porte, une fenêtre ou une baie par clic sur un mur ou par
   abscisse depuis son départ. Une baie d'assemblage perce toutes ses couches. Une
   menuiserie importée conserve son maillage et suit son hôte ; ses dimensions sont
@@ -74,9 +80,10 @@ une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvre
   Le PDF d'une feuille respecte son format exact ; l'export d'une vue seule ajoute
   une marge. Imprimer à **100 %**, sans « ajuster à la page ».
 - Le cadre de porte/fenêtre natif est une représentation simple. Un configurateur
-  de familles, les poteaux/poutres/escaliers/garde-corps paramétriques, les symboles,
+  de familles, les escaliers/garde-corps paramétriques, les symboles,
   légendes et altimétries, la fusion d'import et la comparaison de réimportations
-  restent des itérations suivantes. Les outils non raccordés sont désactivés.
+  restent des itérations suivantes. Les sections circulaires et les poutres inclinées
+  ne sont pas encore prises en charge. Les outils non raccordés sont désactivés.
 - Les feuilles natives s'ouvrent dans le gestionnaire de documents avec un aperçu ;
   elles ne constituent pas encore des onglets de dessin éditables comme les vues.
 
@@ -90,6 +97,8 @@ utilise ces identifiants, **pas** les identifiants numériques de la scène.
 
 ```text
 editer {"action":"niveau","nom":"Étage","altitude":3000}
+editer {"action":"barre","barre":{"id":"","nom":"Poteau","genre":"poteau","niveau":"rdc","debut":[0,0,0],"fin":[0,0,2800],"largeur":300,"hauteur":300,"rotation":0}}
+editer {"action":"barre","barre":{"id":"","nom":"Poutre","genre":"poutre","niveau":"rdc","debut":[0,0,2600],"fin":[3000,0,2600],"largeur":200,"hauteur":400}}
 editer {"action":"deplacer","ids":["rdc-m0"],"delta":[1000,0,0]}
 editer {"action":"copier","ids":["rdc-m0"],"delta":[0,3000,0]}
 editer {"action":"tourner","ids":["rdc-m0"],"centre":[0,0],"angle":90}

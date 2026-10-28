@@ -260,7 +260,7 @@ chaque `.rfa` du dossier.
   Les croisements, priorités de couches et attaches aux toitures sont disponibles.
 - Assemblages courbes à la conversion (arc Revit ou IFC) et fonction des couches
   Revit (structure, isolation…). La mise à jour depuis un type natif est disponible.
-- Toits concaves à pentes différentes ; escaliers, poteaux, poutres paramétriques ;
+- Toits concaves à pentes différentes ; escaliers et garde-corps paramétriques ;
   familles paramétriques (portes, fenêtres) à la place des maillages de menuiserie.
 - Export de géométrie IFC paramétrique plus riche que les corps tessellés actuels.
 - Maillages des éléments importés dans un fichier binaire à côté du JSON (taille).

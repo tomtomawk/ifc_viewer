@@ -204,6 +204,12 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
                             .map(|m| m.nom.as_str())
                     })
                     .or_else(|| {
+                        p.barres
+                            .iter()
+                            .find(|b| &b.id == element)
+                            .map(|b| b.nom.as_str())
+                    })
+                    .or_else(|| {
                         p.importes
                             .iter()
                             .find(|m| &m.id == element)
@@ -439,6 +445,21 @@ pub fn tableau(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, String>
                 format!("{} ({})", d.nom, d.id)
             },
             p.volume_dalle(d).unwrap_or(0.0) / 1e9,
+        );
+    }
+    for b in &p.barres {
+        let categorie = match b.genre {
+            GenreBarre::Poteau => "Poteaux",
+            GenreBarre::Poutre => "Poutres",
+        };
+        ajouter(
+            categorie,
+            if n.regrouper {
+                b.nom.clone()
+            } else {
+                format!("{} ({})", b.nom, b.id)
+            },
+            geometrie::volume(&solides::barre(p, b)?) / 1e9,
         );
     }
     for o in &p.ouvertures {

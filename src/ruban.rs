@@ -21,6 +21,7 @@ pub(crate) enum Outil {
     Toiture,
     Plafond,
     Poteau,
+    Poutre,
     Escalier,
     GardeCorps,
     Ouverture,
@@ -55,6 +56,7 @@ impl Outil {
             Self::Toiture => "Toiture",
             Self::Plafond => "Plafond",
             Self::Poteau => "Poteau",
+            Self::Poutre => "Poutre",
             Self::Escalier => "Escalier",
             Self::GardeCorps => "Garde-corps",
             Self::Ouverture => "Ouverture",
@@ -178,7 +180,7 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
     match menu {
         Menu::Modeliser => &[
             ("Construire", &[Mur, Surfaces]),
-            ("Structure et accès", &[Poteau, Escalier, GardeCorps]),
+            ("Structure et accès", &[Poteau, Poutre, Escalier, GardeCorps]),
             ("Placer", &[Ouverture, Composant]),
             ("Références", &[Niveau, Quadrillage]),
         ],
@@ -364,12 +366,7 @@ fn champs(o: Outil) -> Vec<Champ> {
             Nombre("Épaisseur", 25.0, " mm"),
             Nombre("Hauteur sous plafond", 2500.0, " mm"),
         ],
-        Poteau => vec![
-            Choix("Section", &["Rectangulaire", "Circulaire"]),
-            Nombre("Largeur / diamètre", 300.0, " mm"),
-            Nombre("Profondeur", 300.0, " mm"),
-            Nombre("Hauteur", 2800.0, " mm"),
-        ],
+        Poteau | Poutre => vec![],
         Escalier => vec![
             Choix("Forme", &["Droit", "Quart tournant", "Demi tournant"]),
             Nombre("Largeur", 1000.0, " mm"),
@@ -783,7 +780,7 @@ impl RubanEdition {
                                 let actif = self.selection.map(Outil::commande) == Some(outil);
                                 // éléments horizontaux : un bouton ; la sorte se choisit dans le
                                 // sélecteur de type de Propriétés
-                                let disponible = matches!(outil, Outil::Mur|Outil::Surfaces|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Aligner|Outil::Ajuster|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::Ligne|Outil::Zone|Outil::Etiquette);
+                                let disponible = matches!(outil, Outil::Mur|Outil::Surfaces|Outil::Poteau|Outil::Poutre|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Aligner|Outil::Ajuster|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::Ligne|Outil::Zone|Outil::Etiquette);
                                 let mut bouton_ui=ui.new_child(egui::UiBuilder::new().max_rect(bouton));
                                 if !disponible {bouton_ui.disable();}
                                 let reponse=bouton_outil(&mut bouton_ui,bouton,outil,colonne.grande,actif);
@@ -2162,7 +2159,7 @@ fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             seg((0.45, 0.87), (0.94, 0.65));
             seg((0.25, 0.68), (0.74, 0.47));
         }
-        Poteau => {
+        Poteau | Poutre => {
             face(
                 &[(0.33, 0.22), (0.57, 0.12), (0.75, 0.22), (0.51, 0.33)],
                 0.09,

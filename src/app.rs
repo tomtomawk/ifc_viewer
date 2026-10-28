@@ -1612,6 +1612,7 @@ impl ViewerApp {
                 for (genre, cle) in p.murs.iter().map(|x| ("mur", &x.id))
                     .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
                     .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
+                    .chain(p.barres.iter().map(|x| ("barre", &x.id)))
                     .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
                     .chain(p.importes.iter().map(|x| ("importe", &x.id))) {
                     if selection.contains(cle.as_str()) {

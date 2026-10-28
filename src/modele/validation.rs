@@ -9,6 +9,7 @@ impl Projet {
             .map(|x| &x.id)
             .chain(self.murs.iter().map(|x| &x.id))
             .chain(self.dalles.iter().map(|x| &x.id))
+            .chain(self.barres.iter().map(|x| &x.id))
             .chain(self.assemblages.iter().map(|x| &x.id))
             .chain(self.ouvertures.iter().map(|x| &x.id))
             .chain(self.importes.iter().map(|x| &x.id))
@@ -105,6 +106,7 @@ impl Projet {
                 return Err("Pente hors de l'intervalle ]0, 89[ degrés.".into());
             }
         }
+        for b in &self.barres { solides::barre(self, b)?; }
         for e in &self.importes {
             if e.niveau.as_ref().is_some_and(|n| self.niveau(n).is_none()) {
                 return Err("Élément importé : niveau absent.".into());

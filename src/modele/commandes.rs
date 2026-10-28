@@ -5,6 +5,9 @@ use std::collections::{HashMap, HashSet};
 #[derive(Deserialize, Debug)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum Commande {
+    Barre {
+        barre: Barre,
+    },
     Niveau {
         nom: String,
         altitude: f64,
@@ -96,6 +99,7 @@ impl Projet {
             .chain(self.murs.iter().map(|x| x.id.clone()))
             .chain(self.assemblages.iter().map(|x| x.id.clone()))
             .chain(self.dalles.iter().map(|x| x.id.clone()))
+            .chain(self.barres.iter().map(|x| x.id.clone()))
             .chain(self.ouvertures.iter().map(|x| x.id.clone()))
             .chain(self.importes.iter().map(|x| x.id.clone()))
             .chain(self.vues.iter().map(|x| x.id.clone()))
@@ -138,6 +142,20 @@ impl Projet {
     }
     fn executer_interne(&mut self, c: Commande) -> Result<Vec<String>, String> {
         match c {
+            Commande::Barre { mut barre } => {
+                if barre.id.is_empty() {
+                    barre.id = identite(self, "structure");
+                }
+                let id = barre.id.clone();
+                if let Some(b) = self.barres.iter_mut().find(|b| b.id == id) {
+                    *b = barre;
+                } else if self.identifiants().contains(&id) {
+                    return Err("Identifiant déjà utilisé.".into());
+                } else {
+                    self.barres.push(barre);
+                }
+                Ok(vec![id])
+            }
             Commande::Quadrillage { nom, debut, fin } => {
                 let id = identite(self, "quadrillage");
                 self.quadrillages.push(documentation::Quadrillage {
@@ -467,6 +485,17 @@ impl Projet {
                         imports.push(x);
                     }
                 }
+                let barres: Vec<_> = self
+                    .barres
+                    .iter()
+                    .filter(|b| set.contains(&b.id))
+                    .map(|b| {
+                        let mut b = b.clone();
+                        b.id = map[&b.id].clone();
+                        b
+                    })
+                    .collect();
+                self.barres.extend(barres);
                 self.murs.extend(murs);
                 self.assemblages.extend(assems);
                 self.ouvertures.extend(baies);
@@ -497,6 +526,7 @@ impl Projet {
                             m.niveau == n.id
                                 || matches!(&m.haut,Haut::Niveau {niveau,..} if niveau==&n.id)
                         }) || self.dalles.iter().any(|d| d.niveau == n.id)
+                            || self.barres.iter().any(|b| b.niveau == n.id)
                             || self
                                 .importes
                                 .iter()
@@ -512,6 +542,7 @@ impl Projet {
                 self.assemblages.retain(|x| !set.contains(&x.id));
                 self.ouvertures.retain(|x| !set.contains(&x.id));
                 self.dalles.retain(|x| !set.contains(&x.id));
+                self.barres.retain(|x| !set.contains(&x.id));
                 self.importes.retain(|x| !set.contains(&x.id));
                 self.niveaux.retain(|x| !set.contains(&x.id));
                 self.vues.retain(|x| !set.contains(&x.id));
@@ -613,6 +644,19 @@ impl Projet {
                 *p = [xy[0], xy[1], p[2] + delta[2]];
             }
         };
+        for b in &mut self.barres {
+            if set.contains(&b.id) {
+                for p in [&mut b.debut, &mut b.fin] {
+                    let xy = point([p[0], p[1]]);
+                    p[0] = xy[0];
+                    p[1] = xy[1];
+                    p[2] += delta[2];
+                }
+                if b.genre == GenreBarre::Poteau {
+                    b.rotation += angle;
+                }
+            }
+        }
         for m in &mut self.murs {
             if set.contains(&m.id) {
                 match &mut m.axe {
@@ -710,6 +754,75 @@ mod tests {
         depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {})
             .unwrap()
             .0
+    }
+    #[test]
+    fn structures_creation_copie_rotation_suppression_et_validation() {
+        let p = projet();
+        let n = p.niveaux[0].id.clone();
+        let poteau = Barre {
+            id: String::new(),
+            nom: "Poteau".into(),
+            genre: GenreBarre::Poteau,
+            niveau: n.clone(),
+            debut: [100.0, 200.0, 0.0],
+            fin: [100.0, 200.0, 3000.0],
+            largeur: 300.0,
+            hauteur: 400.0,
+            rotation: 0.0,
+        };
+        let (p, ids) = p.executer(Commande::Barre { barre: poteau }).unwrap();
+        let b = &p.barres[0];
+        assert!((geometrie::volume(&solides::barre(&p, b).unwrap()) - 360_000_000.0).abs() < 0.1);
+        let (p, _) = p
+            .executer(Commande::Tourner {
+                ids: ids.clone(),
+                centre: [0.0, 0.0],
+                angle: 90.0,
+            })
+            .unwrap();
+        assert!((p.barres[0].rotation - 90.0).abs() < 1e-6);
+        let (copie, copies) = p
+            .executer(Commande::Copier {
+                ids: ids.clone(),
+                delta: [1000.0, 0.0, 0.0],
+            })
+            .unwrap();
+        assert_eq!(copie.barres.len(), 2);
+        let (retour, _) = copie.executer(Commande::Supprimer { ids: copies }).unwrap();
+        assert_eq!(retour.json().unwrap(), p.json().unwrap());
+        assert!(
+            p.executer(Commande::Supprimer {
+                ids: vec![n.clone()]
+            })
+            .is_err()
+        );
+        let poutre = Barre {
+            id: String::new(),
+            nom: "Poutre".into(),
+            genre: GenreBarre::Poutre,
+            niveau: n,
+            debut: [0.0, 0.0, 2500.0],
+            fin: [3000.0, 0.0, 2500.0],
+            largeur: 200.0,
+            hauteur: 400.0,
+            rotation: 0.0,
+        };
+        let (p, _) = p
+            .executer(Commande::Barre {
+                barre: poutre.clone(),
+            })
+            .unwrap();
+        assert!(
+            (geometrie::volume(&solides::barre(&p, &p.barres[1]).unwrap()) - 240_000_000.0).abs()
+                < 0.1
+        );
+        let mut invalide = poutre;
+        invalide.fin[2] += 1.0;
+        assert!(p.executer(Commande::Barre { barre: invalide }).is_err());
+        let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
+        crate::scene::depuis_natif(&relu, std::path::Path::new("test.modele.json")).unwrap();
+        let ifc = export_ifc::exporter(&relu).unwrap();
+        assert!(ifc.contains("IFCCOLUMN(") && ifc.contains("IFCBEAM("));
     }
     #[test]
     fn copier_assemblage_et_dependances_puis_supprimer_sans_perte() {

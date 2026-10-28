@@ -44,6 +44,10 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         };
         entite(id_natif("ouverture", &o.id), classe, &o.id, &o.nom, 9)?;
     }
+    for b in &projet.barres {
+        let classe = match b.genre { crate::modele::GenreBarre::Poteau => "IFCCOLUMN", crate::modele::GenreBarre::Poutre => "IFCBEAM" };
+        entite(id_natif("barre", &b.id), classe, &b.id, &b.nom, 9)?;
+    }
     for o in &projet.importes {
         let classe = o.origine.as_ref().map(|o| o.classe.to_uppercase()).filter(|c| c.starts_with("IFC"))
             .unwrap_or_else(|| if o.categorie.to_uppercase().starts_with("IFC") { o.categorie.to_uppercase() } else { "IFCBUILDINGELEMENTPROXY".into() });
@@ -157,6 +161,15 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         let tris = crate::modele::solides::ouverture(projet, o)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
         materiaux_parts.push(vec![None]);
         geoms.push(ProductGeom { id, parts: vec![Part { color: [0.55,0.40,0.24,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+    }
+    for b in &projet.barres {
+        let id = id_natif("barre", &b.id);
+        let parent = id_natif("niveau", &b.niveau);
+        model.parent.insert(id, parent);
+        model.children.entry(parent).or_default().push(id);
+        let tris = crate::modele::solides::barre(projet, b)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
+        materiaux_parts.push(vec![None]);
+        geoms.push(ProductGeom { id, parts: vec![Part { color: [0.65,0.68,0.72,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
     for o in &projet.importes {
         let id = id_natif("importe", &o.id);

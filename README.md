@@ -52,7 +52,7 @@ Sol (revêtement), Plafond et Toiture. Les paramètres sont juste en dessous et
 restent mémorisés séparément pour chaque catégorie. Les vignettes distinguent la
 dalle épaisse, le sol carrelé mince, le plafond suspendu et la toiture à deux pans.
 L'icône Mur présente une coupe en trois couches avec une face lisse.
-Modéliser comprend aussi Poteau, Escalier et Garde-corps.
+Modéliser comprend aussi Poteau et Poutre rectangulaires ; Escalier et Garde-corps restent à implémenter.
 Sur une fenêtre étroite, le bouton « ... » à droite
 de la colonne de l'outil actif donne accès à ses réglages ; Éléments horizontaux conserve son
 sélecteur et ses paramètres dans Propriétés à toutes les largeurs.

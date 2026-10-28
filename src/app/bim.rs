@@ -3,6 +3,7 @@ use super::*;
 impl ViewerApp {
     pub(super) fn parcourir_historique(&mut self, retablir: bool) {
         self.historique.geste(false);
+        self.bim.barre_editee = None;
         let resultat = (|| {
             let cible = self.historique.cible(retablir)?;
             let actuel = self
@@ -162,6 +163,8 @@ pub(super) struct EtatBim {
     delta: [f64; 3],
     centre: [f64; 2],
     abscisse: f64,
+    barre: crate::modele::Barre,
+    barre_editee: Option<crate::modele::Barre>,
     supprimer: bool,
     pub documentation: bool,
     pub feuille: usize,
@@ -184,6 +187,18 @@ impl Default for EtatBim {
             delta: [1000.0, 0.0, 0.0],
             centre: [0.0; 2],
             abscisse: 1500.0,
+            barre: crate::modele::Barre {
+                id: String::new(),
+                nom: "Structure".into(),
+                genre: crate::modele::GenreBarre::Poteau,
+                niveau: String::new(),
+                debut: [0.0, 0.0, 0.0],
+                fin: [0.0, 0.0, 2800.0],
+                largeur: 300.0,
+                hauteur: 300.0,
+                rotation: 0.0,
+            },
+            barre_editee: None,
             supprimer: false,
             documentation: false,
             feuille: 0,
@@ -209,6 +224,7 @@ impl ViewerApp {
             .map(|x| ("mur", &x.id))
             .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
             .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
+            .chain(p.barres.iter().map(|x| ("barre", &x.id)))
             .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
             .chain(p.importes.iter().map(|x| ("importe", &x.id)))
             .chain(p.niveaux.iter().map(|x| ("niveau", &x.id)))
@@ -227,6 +243,7 @@ impl ViewerApp {
             .executer(c)?;
         self.appliquer_projet(p)?;
         self.bim.selection = ids.clone();
+        self.bim.barre_editee = None;
         self.selected = None;
         self.status = "Modification appliquée — Ctrl+Z pour annuler.".into();
         Ok(ids)
@@ -310,6 +327,7 @@ impl ViewerApp {
                             .map(|x| (&x.id, &x.nom)),
                     )
                     .chain(p.dalles.iter().map(|x| (&x.id, &x.nom)))
+                    .chain(p.barres.iter().map(|x| (&x.id, &x.nom)))
                     .chain(p.importes.iter().map(|x| (&x.id, &x.nom)))
                 {
                     let mut oui = self.bim.selection.contains(id);
@@ -323,6 +341,30 @@ impl ViewerApp {
                     }
                 }
             });
+            if ids.len() == 1 {
+                let p = &self.natif.as_ref().unwrap().0;
+                if let Some(original) = p.barres.iter().find(|b| b.id == ids[0]) {
+                    if self
+                        .bim
+                        .barre_editee
+                        .as_ref()
+                        .is_none_or(|b| b.id != original.id)
+                    {
+                        self.bim.barre_editee = Some(original.clone());
+                    }
+                    ui.collapsing("Propriétés structurelles", |ui| {
+                        let b = self.bim.barre_editee.as_mut().unwrap();
+                        barre_ui(ui, b, &p.niveaux);
+                        if ui.button("Appliquer les propriétés").clicked() {
+                            commande = Some(Commande::Barre { barre: b.clone() });
+                        }
+                    });
+                } else {
+                    self.bim.barre_editee = None;
+                }
+            } else {
+                self.bim.barre_editee = None;
+            }
             match outil {
                 Some(Outil::Deplacer | Outil::Copier) => {
                     for (nom, v) in ["X", "Y", "Z"].into_iter().zip(&mut self.bim.delta) {
@@ -639,6 +681,35 @@ impl ViewerApp {
                         });
                     }
                 }
+                Some(Outil::Poteau | Outil::Poutre) => {
+                    use crate::modele::GenreBarre;
+                    let genre = if outil == Some(Outil::Poteau) {
+                        GenreBarre::Poteau
+                    } else {
+                        GenreBarre::Poutre
+                    };
+                    let b = &mut self.bim.barre;
+                    if b.genre != genre {
+                        b.genre = genre;
+                        b.fin = if genre == GenreBarre::Poteau {
+                            [b.debut[0], b.debut[1], b.debut[2] + 2800.0]
+                        } else {
+                            [b.debut[0] + 3000.0, b.debut[1], b.debut[2]]
+                        };
+                    }
+                    let niveaux = &self.natif.as_ref().unwrap().0.niveaux;
+                    if b.niveau.is_empty() {
+                        if let Some(n) = niveaux.first() {
+                            b.niveau = n.id.clone();
+                        }
+                    }
+                    barre_ui(ui, b, niveaux);
+                    if ui.button("Créer l'élément").clicked() {
+                        let mut b = b.clone();
+                        b.id.clear();
+                        commande = Some(Commande::Barre { barre: b });
+                    }
+                }
                 Some(Outil::Quadrillage) => {
                     points_ui(ui, &mut self.bim.points);
                     if ui.button("Créer le quadrillage droit").clicked() {
@@ -776,6 +847,92 @@ impl ViewerApp {
             .into_iter()
             .map(|a| a.translater(-origin))
             .collect()
+    }
+}
+
+fn barre_ui(ui: &mut egui::Ui, b: &mut crate::modele::Barre, niveaux: &[crate::modele::Niveau]) {
+    use crate::modele::GenreBarre;
+    ui.horizontal(|ui| {
+        ui.label("Nom");
+        ui.text_edit_singleline(&mut b.nom);
+    });
+    egui::ComboBox::from_id_salt("niveau_structure")
+        .selected_text(
+            niveaux
+                .iter()
+                .find(|n| n.id == b.niveau)
+                .map_or("Choisir un niveau", |n| n.nom.as_str()),
+        )
+        .show_ui(ui, |ui| {
+            for n in niveaux {
+                ui.selectable_value(&mut b.niveau, n.id.clone(), &n.nom);
+            }
+        });
+    for (i, nom) in ["X départ", "Y départ", "Z départ (relatif au niveau)"]
+        .iter()
+        .enumerate()
+    {
+        ui.horizontal(|ui| {
+            ui.label(*nom);
+            ui.add(
+                egui::DragValue::new(&mut b.debut[i])
+                    .speed(10.0)
+                    .suffix(" mm"),
+            );
+        });
+    }
+    if b.genre == GenreBarre::Poteau {
+        b.fin[0] = b.debut[0];
+        b.fin[1] = b.debut[1];
+        ui.horizontal(|ui| {
+            ui.label("Z sommet (relatif au niveau)");
+            ui.add(
+                egui::DragValue::new(&mut b.fin[2])
+                    .speed(10.0)
+                    .suffix(" mm"),
+            );
+        });
+        ui.horizontal(|ui| {
+            ui.label("Rotation");
+            ui.add(
+                egui::DragValue::new(&mut b.rotation)
+                    .speed(1.0)
+                    .suffix(" °"),
+            );
+        });
+    } else {
+        b.fin[2] = b.debut[2];
+        for (i, nom) in ["X arrivée", "Y arrivée"].iter().enumerate() {
+            ui.horizontal(|ui| {
+                ui.label(*nom);
+                ui.add(
+                    egui::DragValue::new(&mut b.fin[i])
+                        .speed(10.0)
+                        .suffix(" mm"),
+                );
+            });
+        }
+    }
+    for (nom, valeur) in [
+        ("Largeur", &mut b.largeur),
+        (
+            if b.genre == GenreBarre::Poteau {
+                "Profondeur"
+            } else {
+                "Hauteur de section"
+            },
+            &mut b.hauteur,
+        ),
+    ] {
+        ui.horizontal(|ui| {
+            ui.label(nom);
+            ui.add(
+                egui::DragValue::new(valeur)
+                    .speed(5.0)
+                    .range(1.0..=100000.0)
+                    .suffix(" mm"),
+            );
+        });
     }
 }
 

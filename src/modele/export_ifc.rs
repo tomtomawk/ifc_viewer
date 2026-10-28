@@ -226,6 +226,12 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             types[&d.type_dalle]
         ));
     }
+    for b in &p.barres {
+        let rep = w.mesh(&solides::barre(p, b)?, contexte);
+        let classe = match b.genre { GenreBarre::Poteau => "IFCCOLUMN", GenreBarre::Poutre => "IFCBEAM" };
+        let id = w.add(format!("{classe}('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&b.id, None), texte(&b.nom), ref_(rep)));
+        contenus.entry(niveaux[&b.niveau]).or_default().push(id);
+    }
     for o in &p.ouvertures {
         let (axe, e, niveau) = solides::hote(p, &o.mur)?;
         let z = p.niveau(&niveau).unwrap().altitude + o.allege;

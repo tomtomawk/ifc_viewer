@@ -56,6 +56,8 @@ pub struct Projet {
     pub materiaux: Vec<Materiau>,
     pub ouvertures: Vec<Ouverture>,
     pub dalles: Vec<Dalle>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub barres: Vec<Barre>,
     /// Vues du projet (arborescence) : plans d'étage et coupes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub vues: Vec<Vue>,
@@ -76,6 +78,26 @@ pub struct Projet {
     /// comptés par catégorie.
     pub ignores: BTreeMap<String, usize>,
 }
+
+/// Élément structurel à section rectangulaire, en millimètres.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Barre {
+    pub id: String,
+    pub nom: String,
+    pub genre: GenreBarre,
+    pub niveau: String,
+    /// Extrémités de l'axe, Z relatif au niveau.
+    pub debut: [f64; 3],
+    pub fin: [f64; 3],
+    pub largeur: f64,
+    pub hauteur: f64,
+    /// Orientation en degrés de la section d'un poteau.
+    #[serde(default)]
+    pub rotation: f64,
+}
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GenreBarre { Poteau, Poutre }
 
 /// Option de conception ; les identifiants distinguent les options homonymes.
 #[derive(Serialize, Deserialize, Debug, Clone)]
