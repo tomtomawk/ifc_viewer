@@ -245,6 +245,7 @@ impl ViewerApp {
             .executer(c)?;
         self.appliquer_projet(p)?;
         self.bim.selection = ids.clone();
+        self.selection_multiple.clear();
         self.bim.barre_editee = None;
         self.selected = None;
         self.status = "Modification appliquée — Ctrl+Z pour annuler.".into();
@@ -361,6 +362,7 @@ impl ViewerApp {
                     let mut oui = self.bim.selection.contains(id);
                     if ui.checkbox(&mut oui, nom).changed() {
                         self.selected = None;
+                        self.selection_multiple.clear();
                         if oui {
                             self.bim.selection.push(id.clone());
                         } else {

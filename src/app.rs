@@ -341,6 +341,9 @@ struct EtatVue {
     boite_active: bool,
 }
 
+#[derive(Clone, Copy)]
+struct FenetreSelection { debut: egui::Pos2, fin: egui::Pos2, glissement: bool, ajouter: bool }
+
 /// Fichier conservé en mémoire quand un autre document devient actif.
 struct DocumentOuvert {
     natif: Option<(crate::modele::Projet, PathBuf)>,
@@ -456,6 +459,8 @@ pub struct ViewerApp {
     error: Option<String>,
     camera: Camera,
     selected: Option<Id>,
+    selection_multiple: Vec<Id>,
+    fenetre_selection: Option<FenetreSelection>,
     reveal: Option<Id>,
     hidden_classes: HashSet<String>,
     hidden_objects: HashSet<u32>,
@@ -591,6 +596,8 @@ impl ViewerApp {
             error,
             camera: Camera::default(),
             selected: None,
+            selection_multiple: Vec::new(),
+            fenetre_selection: None,
             reveal: None,
             hidden_classes: HashSet::new(),
             hidden_objects: HashSet::new(),
@@ -799,6 +806,8 @@ impl ViewerApp {
         self.camera.scene_radius = (scene.max - scene.min).length() * 0.5;
         self.camera.fit(scene.min, scene.max);
         self.selected = None;
+        self.selection_multiple.clear();
+        self.fenetre_selection = None;
         self.reveal = None;
         self.nomenclature_ouverte = None;
         self.point_clique = None;
@@ -1275,6 +1284,7 @@ impl ViewerApp {
 
     fn select(&mut self, id: Option<Id>, reveal: bool) {
         self.bim.selection.clear();
+        self.selection_multiple.clear();
         self.selected = id;
         if reveal {
             self.reveal = id;
@@ -1620,6 +1630,8 @@ impl ViewerApp {
                     }
                 }
             }
+        } else if !self.selection_multiple.is_empty() {
+            entites.extend(self.selection_multiple.iter().copied());
         } else if let Some(id) = self.selected {
             entites.push(id);
         }
@@ -1634,6 +1646,50 @@ impl ViewerApp {
             }
         }
         marques
+    }
+
+    fn selectionner_rectangle(&mut self, vue: egui::Rect, fenetre: FenetreSelection) {
+        let Some(scene) = &self.scene else { return };
+        let rectangle = egui::Rect::from_two_pos(fenetre.debut, fenetre.fin);
+        let croisement = fenetre.fin.x < fenetre.debut.x;
+        let resultats = crate::selection_rectangle::objets(scene, &self.visible, self.camera.view_proj(vue.width() / vue.height().max(1.0)), vue, rectangle, self.plan_coupe(), self.boite_appliquee(), &self.cadrage_vue());
+        let mut ids = crate::selection_rectangle::groupes(scene.objects.iter().zip(resultats).map(|(o, r)| {
+            let id = scene.model.parent.get(&o.id).filter(|id| scene.model.ty(**id) == "IFCELEMENTASSEMBLY").copied().unwrap_or(o.id);
+            (id, r)
+        }), croisement);
+        ids.sort_unstable();
+        if fenetre.ajouter {
+            let mut ancienne = self.selection_multiple.clone();
+            if ancienne.is_empty() {
+                if !self.bim.selection.is_empty() {
+                    if let Some((p, _)) = &self.natif {
+                        let cles: HashSet<&str> = self.bim.selection.iter().map(String::as_str).collect();
+                        ancienne.extend(p.murs.iter().map(|x| ("mur", &x.id))
+                            .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
+                            .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
+                            .chain(p.barres.iter().map(|x| ("barre", &x.id)))
+                            .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
+                            .chain(p.importes.iter().map(|x| ("importe", &x.id)))
+                            .filter(|(_, id)| cles.contains(id.as_str())).map(|(genre, id)| scene::id_natif(genre, id)));
+                    }
+                } else if let Some(id) = self.selected { ancienne.push(id); }
+            }
+            ancienne.extend(ids); ancienne.sort_unstable(); ancienne.dedup(); ids = ancienne;
+        }
+        self.selected = ids.first().copied();
+        let recherches: HashSet<Id> = ids.iter().copied().collect();
+        self.bim.selection = self.natif.as_ref().map(|(p, _)| {
+            p.murs.iter().map(|x| ("mur", &x.id))
+                .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
+                .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
+                .chain(p.barres.iter().map(|x| ("barre", &x.id)))
+                .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
+                .chain(p.importes.iter().map(|x| ("importe", &x.id)))
+                .filter(|(genre, id)| recherches.contains(&scene::id_natif(genre, id)))
+                .map(|(_, id)| id.clone()).collect()
+        }).unwrap_or_default();
+        self.selection_multiple = ids;
+        self.status = format!("{} élément(s) sélectionné(s).", self.selection_multiple.len());
     }
 
     /// Objets 3D d'un nœud et de ses descendants.
@@ -2518,6 +2574,8 @@ impl ViewerApp {
     fn nouveau_document(&mut self) {
         self.stocker_document();
         self.bim = Default::default();
+        self.selection_multiple.clear();
+        self.fenetre_selection = None;
         self.natif_modifie = false;
         self.mur_depart = None;
         self.ruban_edition.niveau_mur = None;
@@ -2535,6 +2593,8 @@ impl ViewerApp {
         self.stocker_document();
         self.document_actif = id;
         self.bim = Default::default();
+        self.selection_multiple.clear();
+        self.fenetre_selection = None;
         self.natif = d.natif;
         self.historique = d.historique;
         self.natif_modifie = d.modifie;
@@ -2607,6 +2667,8 @@ impl ViewerApp {
         self.rvt_geom = Err(String::new());
         self.rvt_preview = None;
         self.selected = None;
+        self.selection_multiple.clear();
+        self.fenetre_selection = None;
         self.reveal = None;
         self.vue_active = None;
         self.point_clique = None;
@@ -4937,16 +4999,25 @@ impl ViewerApp {
                 s.pick(o, d, &app.visible, app.plan_coupe(), app.boite_appliquee()).map(|(obj, t)| (obj, o + d * t))
             };
 
+            if mode_trace { self.fenetre_selection = None; }
+            if !mode_trace && self.fenetre_selection.is_none() && resp.drag_started_by(PointerButton::Primary) {
+                if let Some(debut) = ui.input(|i| i.pointer.press_origin()) {
+                    if pick(self, debut).is_none() {
+                        self.fenetre_selection = Some(FenetreSelection { debut, fin: debut, glissement: true, ajouter: ui.input(|i| i.modifiers.ctrl || i.modifiers.command) });
+                    }
+                }
+            }
+            let rectangle_actif = self.fenetre_selection.is_some();
             // Orbite autour du point visé (vue 3D seulement).
-            if !mode_trace && resp.drag_started_by(PointerButton::Primary) && !ui.input(|i| i.modifiers.shift) && self.vue_3d() {
+            if !mode_trace && !rectangle_actif && resp.drag_started_by(PointerButton::Primary) && !ui.input(|i| i.modifiers.shift) && self.vue_3d() {
                 if let Some((_, p)) = resp.interact_pointer_pos().and_then(|pp| pick(self, pp)) {
                     self.camera.set_pivot(p);
                 }
             }
             let shift = ui.input(|i| i.modifiers.shift);
-            if !mode_trace { self.voler(ui, &resp); } else { self.vol.actif = false; }
+            if !mode_trace && !rectangle_actif { self.voler(ui, &resp); } else { self.vol.actif = false; }
             for b in [PointerButton::Primary, PointerButton::Secondary, PointerButton::Middle] {
-                if mode_trace && b != PointerButton::Middle { continue; }
+                if (mode_trace || rectangle_actif) && b != PointerButton::Middle { continue; }
                 if resp.dragged_by(b) && !(self.vol.actif && b == PointerButton::Secondary) {
                     self.glisser(b, resp.drag_delta(), shift, rect.height());
                 }
@@ -4970,7 +5041,17 @@ impl ViewerApp {
                 }
             }
 
-            if self.alignement_plan {
+            if rectangle_actif {
+                let curseur = ui.input(|i| i.pointer.interact_pos().or(i.pointer.hover_pos()));
+                if let Some(p) = curseur {
+                    if let Some(f) = &mut self.fenetre_selection { f.fin = p.clamp(rect.min, rect.max); }
+                }
+                let annuler = ui.input(|i| i.key_pressed(egui::Key::Escape)) || resp.clicked_by(PointerButton::Secondary);
+                if annuler { self.fenetre_selection = None; }
+                else if self.fenetre_selection.is_some_and(|f| (f.glissement && resp.drag_stopped_by(PointerButton::Primary)) || (!f.glissement && resp.clicked())) {
+                    if let Some(f) = self.fenetre_selection.take() { self.selectionner_rectangle(rect, f); }
+                }
+            } else if self.alignement_plan {
                 // Aligner (repère du plan) : l'élément cliqué devient horizontal
                 if resp.clicked() {
                     let hit = resp.interact_pointer_pos().and_then(|p| pick(self, p));
@@ -5085,8 +5166,18 @@ impl ViewerApp {
                 self.point_clique = hit.map(|(_, p)| p.as_dvec3() + self.scene.as_ref().unwrap().origin);
                 if self.natif.is_some() && self.ruban_edition.outil()==Some(crate::ruban::Outil::Ouverture) {
                     if let (Some(id),Some(p))=(id,self.point_clique) { self.placer_ouverture(id,[p.x*1000.0,p.y*1000.0]); }
+                } else if id.is_none() {
+                    if let Some(debut) = resp.interact_pointer_pos() {
+                        self.fenetre_selection = Some(FenetreSelection { debut, fin: debut, glissement: false, ajouter: ui.input(|i| i.modifiers.ctrl || i.modifiers.command) });
+                    }
                 } else {
-                    if ui.input(|i| i.modifiers.ctrl || i.modifiers.command) {
+                    if ui.input(|i| i.modifiers.ctrl || i.modifiers.command) && self.natif.is_none() {
+                        let mut ids = self.selection_multiple.clone();
+                        if ids.is_empty() { if let Some(sel) = self.selected { ids.push(sel); } }
+                        if let Some(id) = id { if let Some(pos) = ids.iter().position(|x| *x == id) { ids.remove(pos); } else { ids.push(id); } }
+                        self.select(ids.first().copied(), true);
+                        self.selection_multiple = ids;
+                    } else if ui.input(|i| i.modifiers.ctrl || i.modifiers.command) {
                         let mut selection=self.selection_bim();
                         if let Some(cle)=id.and_then(|id|self.cle_native(id)) {
                             if selection.contains(&cle){selection.retain(|s|s!=&cle);}else{selection.push(cle);}
@@ -5116,7 +5207,7 @@ impl ViewerApp {
                         _ => self.fit_all(),
                     }
                 }
-                if esc {
+                if esc && !rectangle_actif {
                     if self.isolated.is_some() {
                         self.isolated = None;
                         self.visibility_dirty = true;
@@ -5152,6 +5243,17 @@ impl ViewerApp {
             })),
         };
         ui.painter().add(callback);
+        if let Some(f) = self.fenetre_selection {
+            let r = egui::Rect::from_two_pos(f.debut, f.fin);
+            let croisement = f.fin.x < f.debut.x;
+            let couleur = if croisement { Color32::from_rgb(35, 160, 75) } else { Color32::from_rgb(35, 110, 220) };
+            let painter = ui.painter().with_clip_rect(rect);
+            painter.rect_filled(r, 0.0, couleur.gamma_multiply(0.18));
+            if croisement {
+                let points = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
+                painter.add(egui::Shape::dashed_line(&points, egui::Stroke::new(1.2, couleur), 5.0, 4.0));
+            } else { painter.rect_stroke(r, 0.0, egui::Stroke::new(1.2, couleur), egui::StrokeKind::Inside); }
+        }
         if self.natif.is_some() && self.vue_en_plan() {
             self.reperes_coupes(ui, rect, altitude_coupe);
         }
@@ -5413,6 +5515,9 @@ impl ViewerApp {
         masquees.sort();
         p.push(("classes_masquees", liste(masquees.into_iter().map(|c| texte(c)))));
         p.push(("isolement", self.isolated.as_ref().map_or("null".into(), |i| i.len().to_string())));
+        if !self.selection_multiple.is_empty() {
+            p.push(("selections", liste(self.selection_multiple.iter().map(|id| self.decrire(*id)))));
+        }
         if let Some(id) = self.selected {
             p.push(("selection", self.decrire(id)));
         }

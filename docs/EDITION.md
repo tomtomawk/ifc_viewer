@@ -26,7 +26,13 @@ sont initialisées à vide. Aucun fichier RVT n'est écrit.
   verrouillées tant qu'elle n'est pas remplacée explicitement par un cadre natif.
 - **Modifier** propose déplacement, copie, rotation, alignement des axes et
   ajustement de l'extrémité d'un mur sur l'axe d'un autre. Ctrl+clic ou les cases de
-  la liste constituent une sélection multiple, surlignée dans la vue. Copier un assemblage recrée les
+  la liste constituent une sélection multiple, surlignée dans la vue. On peut aussi
+  tracer un rectangle en glissant depuis le vide ou en cliquant deux coins : de
+  gauche à droite (bleu), seuls les éléments entièrement inclus sont retenus ; de
+  droite à gauche (vert), tous les éléments touchés sont retenus. Ctrl ajoute à la
+  sélection ; Échap ou clic droit annule le rectangle. Les objets visibles à travers
+  d'autres sont inclus, tandis que les éléments masqués et les parties découpées
+  sont exclus. Le glissement sur un objet conserve la navigation 3D. Copier un assemblage recrée les
   identifiants de ses couches et ouvertures. Supprimer demande confirmation des
   dépendances ; un niveau encore utilisé ne peut pas être supprimé.
 - Le panneau Modifier permet aussi d'éditer les sommets d'un élément horizontal,

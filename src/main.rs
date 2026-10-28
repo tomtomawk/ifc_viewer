@@ -16,6 +16,7 @@ mod render;
 mod ruban;
 mod rvt;
 mod scene;
+mod selection_rectangle;
 mod step;
 mod texte;
 mod trace2d;
