@@ -658,6 +658,9 @@ impl RubanEdition {
         self.toiture_plate = !oui;
     }
 
+    pub(crate) fn activer_structure(&mut self, poutre: bool) {
+        self.selection = Some(if poutre { Outil::Poutre } else { Outil::Poteau });
+    }
     pub fn activer_mur(&mut self) {
         self.selection = Some(Outil::Mur);
     }

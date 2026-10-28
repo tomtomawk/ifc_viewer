@@ -12,7 +12,10 @@ sont initialisées à vide. Aucun fichier RVT n'est écrit.
 - **Modéliser → Niveau** crée et modifie les niveaux. **Quadrillage** crée des axes
   droits, visibles dans les plans natifs. Les coordonnées de saisie sont en mm.
 - **Modéliser → Poteau / Poutre** crée des structures rectangulaires en saisissant
-  leurs coordonnées et dimensions en mm, relatives à un niveau. Les poteaux sont
+  leurs dimensions en mm et leur niveau. Placez un poteau par un clic dans la vue ;
+  pour une poutre, cliquez son départ puis son arrivée. Le placement utilise les
+  accrochages et Maj contraint la poutre aux axes du plan ; Échap ou clic droit
+  annule un départ. La saisie par coordonnées reste disponible. Les poteaux sont
   verticaux et orientables ; les poutres sont horizontales et définies par leur axe.
   Après sélection, **Modifier → Propriétés structurelles** permet de les modifier ;
   les commandes de déplacement, rotation, copie, suppression et l'historique leur

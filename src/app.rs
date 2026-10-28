@@ -4869,7 +4869,19 @@ impl ViewerApp {
         }
         if outil_coupe.is_none() { self.coupe_depart = None; }
         let altitude_coupe = self.altitude_vue_native();
-        let mode_trace = mode_mur || dalle.is_some() || outil_coupe.is_some();
+        let structure = if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() {
+            match self.ruban_edition.outil() {
+                Some(crate::ruban::Outil::Poteau) => Some(crate::modele::GenreBarre::Poteau),
+                Some(crate::ruban::Outil::Poutre) => Some(crate::modele::GenreBarre::Poutre),
+                _ => None,
+            }
+        } else { None };
+        if structure != Some(crate::modele::GenreBarre::Poutre) { self.bim.depart_structure = None; }
+        let altitude_structure = structure.and_then(|_| {
+            let p = &self.natif.as_ref()?.0;
+            Some(p.niveau(&self.bim.barre.niveau)?.altitude + self.bim.barre.debut[2])
+        });
+        let mode_trace = mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some();
         // axe du mur sélectionné : une extrémité saisie se déplace (accrochages du tracé)
         let axe = if mode_trace { None } else { self.axe_selection() };
         if let Some((id, a, b, z)) = &axe {
@@ -4970,6 +4982,28 @@ impl ViewerApp {
                             self.alignement_plan = false;
                         }
                         None => self.status = "Aligner : cliquer un élément du plan (Échap : annuler)".into(),
+                    }
+                }
+            } else if let Some(genre) = structure {
+                if resp.clicked_by(PointerButton::Secondary) { self.bim.depart_structure = None; }
+                if resp.clicked() {
+                    let point = altitude_structure.and_then(|alt| resp.interact_pointer_pos().and_then(|q| self.point_tracage(q, rect, shift, self.bim.depart_structure, alt)));
+                    if let Some((point, _)) = point {
+                        match genre {
+                            crate::modele::GenreBarre::Poteau => {
+                                if let Err(e) = self.placer_structure(point, None) { self.error = Some(e); }
+                            }
+                            crate::modele::GenreBarre::Poutre => {
+                                if let Some(debut) = self.bim.depart_structure {
+                                    match self.placer_structure(debut, Some(point)) {
+                                        Ok(()) => self.bim.depart_structure = None,
+                                        Err(e) => self.error = Some(e),
+                                    }
+                                } else { self.bim.depart_structure = Some(point); }
+                            }
+                        }
+                    } else {
+                        self.error = Some(if altitude_structure.is_none() { "Choisissez un niveau pour la structure." } else { "Le plan de placement est parallèle à la vue. Utilisez une vue de dessus ou une vue 3D inclinée." }.into());
                     }
                 }
             } else if let Some(prm) = &outil_coupe {
@@ -5133,7 +5167,29 @@ impl ViewerApp {
             let point = resp.hover_pos().and_then(|q| self.point_tracage_mur(q, rect, ui.input(|i| i.modifiers.shift)));
             self.apercu_mur(ui, rect, point);
         }
-        if dalle.is_none() && !mode_mur && outil_coupe.is_none() {
+        if let Some(genre) = structure {
+            let painter = ui.painter().with_clip_rect(rect);
+            let couleur = Color32::from_rgb(55, 130, 200);
+            let texte = match (genre, self.bim.depart_structure) {
+                (crate::modele::GenreBarre::Poteau, _) => "Poteau : cliquer pour placer · molette : zoom",
+                (_, None) => "Poutre : cliquer le départ · molette : zoom",
+                (_, Some(_)) => "Poutre : cliquer l'arrivée · Maj : orthogonal · Échap ou clic droit : annuler",
+            };
+            painter.text(rect.left_top()+egui::vec2(12.0,34.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
+            if let Some(alt) = altitude_structure {
+                let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.bim.depart_structure, alt));
+                if let Some((p, accroche)) = point {
+                    if let Some(q) = self.ecran_plan(rect, p, alt) { marqueur(&painter, q, accroche, couleur, Color32::from_rgb(230, 120, 20)); }
+                    if let Some(a) = self.bim.depart_structure {
+                        if let (Some(x), Some(y)) = (self.ecran_plan(rect, a, alt), self.ecran_plan(rect, p, alt)) {
+                            painter.line_segment([x, y], egui::Stroke::new(2.0, couleur));
+                            painter.text(x.lerp(y, 0.5) + egui::vec2(0.0, -16.0), egui::Align2::CENTER_CENTER, format!("{:.0} mm", (p[0]-a[0]).hypot(p[1]-a[1])), egui::FontId::proportional(13.0), couleur);
+                        }
+                    }
+                }
+            }
+        }
+        if dalle.is_none() && !mode_mur && outil_coupe.is_none() && structure.is_none() {
             self.dessiner_aretes_pente(ui, rect, resp.hover_pos());
             self.dessiner_axe(ui, rect, resp.hover_pos());
         }
@@ -5398,6 +5454,7 @@ impl ViewerApp {
             "outil" => {
                 match argument {
                     "mur" => { self.onglet_ruban = OngletRuban::Modeliser; self.ruban_edition.activer_mur(); }
+                    "poteau" | "poutre" => { self.onglet_ruban = OngletRuban::Modeliser; self.ruban_edition.activer_structure(argument == "poutre"); }
                     "coupe" => { self.onglet_ruban = OngletRuban::Annoter; self.ruban_edition.activer_coupe(); }
                     "dalle" | "sol" | "plafond" | "toiture" => {
                         use crate::modele::SorteDalle;
@@ -5406,7 +5463,7 @@ impl ViewerApp {
                         self.ruban_edition.activer_surface(sorte);
                     }
                     "aucun" => { self.ruban_edition.annuler(); self.mur_depart = None; }
-                    _ => return erreur("usage : outil mur|dalle|sol|coupe|aucun"),
+                    _ => return erreur("usage : outil mur|poteau|poutre|dalle|sol|coupe|aucun"),
                 }
                 self.etat()
             }
@@ -6161,7 +6218,9 @@ impl eframe::App for ViewerApp {
         }
         if self.ruban_edition.a_un_outil() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             // Échap : la saisie, puis le mur ou la dalle en cours, puis l'outil
-            if self.coupe_depart.is_some() {
+            if self.bim.depart_structure.take().is_some() {
+                // Le premier clic d'une poutre est abandonné sans modifier le projet.
+            } else if self.coupe_depart.is_some() {
                 self.coupe_depart = None;
             } else if !self.dalle_points.is_empty() {
                 self.dalle_points.clear();

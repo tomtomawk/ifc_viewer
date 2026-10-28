@@ -163,7 +163,8 @@ pub(super) struct EtatBim {
     delta: [f64; 3],
     centre: [f64; 2],
     abscisse: f64,
-    barre: crate::modele::Barre,
+    pub(super) barre: crate::modele::Barre,
+    pub(super) depart_structure: Option<[f64; 2]>,
     barre_editee: Option<crate::modele::Barre>,
     supprimer: bool,
     pub documentation: bool,
@@ -198,6 +199,7 @@ impl Default for EtatBim {
                 hauteur: 300.0,
                 rotation: 0.0,
             },
+            depart_structure: None,
             barre_editee: None,
             supprimer: false,
             documentation: false,
@@ -302,6 +304,32 @@ impl ViewerApp {
             self.error = Some(e);
         }
     }
+    /// Réutilise les paramètres saisis, sans modifier le modèle tant que le placement n'est pas valide.
+    pub(super) fn placer_structure(
+        &mut self,
+        debut: [f64; 2],
+        fin: Option<[f64; 2]>,
+    ) -> Result<(), String> {
+        let mut b = self.bim.barre.clone();
+        b.id.clear();
+        b.debut[0] = debut[0];
+        b.debut[1] = debut[1];
+        match b.genre {
+            crate::modele::GenreBarre::Poteau => {
+                b.fin[0] = debut[0];
+                b.fin[1] = debut[1];
+            }
+            crate::modele::GenreBarre::Poutre => {
+                let fin = fin.ok_or("Choisissez l'arrivée de la poutre.")?;
+                b.fin[0] = fin[0];
+                b.fin[1] = fin[1];
+                b.fin[2] = b.debut[2];
+            }
+        }
+        self.executer_bim(crate::modele::commandes::Commande::Barre { barre: b })?;
+        Ok(())
+    }
+
     pub(super) fn panneau_bim(&mut self, ui: &mut egui::Ui) -> bool {
         use crate::modele::commandes::Commande;
         use crate::ruban::Outil;
@@ -703,8 +731,10 @@ impl ViewerApp {
                             b.niveau = n.id.clone();
                         }
                     }
+                    ui.label(if genre == GenreBarre::Poteau { "Cliquez dans la vue pour placer le poteau." } else { "Cliquez le départ puis l'arrivée dans la vue ; Échap ou clic droit annule le départ." });
                     barre_ui(ui, b, niveaux);
                     if ui.button("Créer l'élément").clicked() {
+                        self.bim.depart_structure = None;
                         let mut b = b.clone();
                         b.id.clear();
                         commande = Some(Commande::Barre { barre: b });
