@@ -106,6 +106,7 @@ fn decouper(poly: &[DVec2], f: impl Fn(DVec2) -> f64) -> Vec<DVec2> {
 /// Morceaux plans de la surface décalée de `e` : (plan, polygone convexe orienté dans le
 /// sens trigonométrique).
 pub fn morceaux(contours: &[Vec<[f64; 2]>], plans: &[Plan], e: f64) -> Vec<(Plan, Vec<DVec2>)> {
+    if let Ok(Some(domaines))=domaines_concaves(contours,plans) {return domaines.into_iter().map(|(q,poly)|(q.decale(e),poly)).collect();}
     let Some(&o) = contours.first().and_then(|c| c.first()) else { return Vec::new() };
     let o = DVec2::from_array(o);
     // triangulation en coordonnées locales (f32) : précision gardée loin de l'origine
@@ -176,6 +177,14 @@ pub fn couche(contours: &[Vec<[f64; 2]>], plans: &[Plan], z0: f64, e0: f64, e1: 
         }
     }
     if tris.is_empty() {
+        return tris;
+    }
+    if matches!(domaines_concaves(contours,plans),Ok(Some(_))) {
+        let (zb,zh)=(e0*plans[0].secante,e1*plans[0].secante);
+        for (a,b,_,_) in aretes(contours) {
+            tris.push([p3(a,zb),p3(b,zb),p3(b,zh)]);
+            tris.push([p3(a,zb),p3(b,zh),p3(a,zh)]);
+        }
         return tris;
     }
     // faces latérales : hauteurs affines par morceaux le long de chaque arête
@@ -290,5 +299,66 @@ mod tests {
         let plat = toiture(vec![]);
         assert_eq!(plans(&plat), vec![PLAT]);
         assert!((volume(&plat.contours, &plans(&plat), -200.0, 0.0) - 60e6 * 200.0).abs() < 1.0);
+    }
+}
+
+/// Sur un contour concave, la propagation des arêtes doit s'arrêter aux noues.
+/// Le squelette droit fournit ces domaines pour les toits à pente uniforme.
+fn domaines_concaves(contours:&[Vec<[f64;2]>],plans:&[Plan])->Result<Option<Vec<(Plan,Vec<DVec2>)>>,String> {
+    if plans.len()<=1 {return Ok(None);}
+    let concave=contours.first().is_some_and(|c|{
+        let mut positif=false;let mut negatif=false;
+        for i in 0..c.len() {let (a,b,d)=(DVec2::from_array(c[i]),DVec2::from_array(c[(i+1)%c.len()]),DVec2::from_array(c[(i+2)%c.len()]));let z=(b-a).perp_dot(d-b);positif|=z>1e-6;negatif|=z < -1e-6;}
+        positif && negatif
+    });
+    if !concave {return Ok(None);}
+    let uniforme=plans.iter().all(|q|(q.secante-plans[0].secante).abs()<1e-8);
+    if !uniforme {return Err("Toiture concave : utilisez une pente identique sur toutes les arêtes ou des toitures séparées.".into());}
+    let origine=DVec2::from_array(*contours.first().and_then(|c|c.first()).ok_or("Contour vide")?);
+    let locaux:Vec<Vec<[f64;2]>>=contours.iter().map(|c|c.iter().map(|p|(DVec2::from_array(*p)-origine).to_array()).collect()).collect();
+    let sk=geo_straight_skeleton::Skeleton::build(&locaux).map_err(|e|format!("Toiture concave : {e}"))?;
+    let point=|i:usize|DVec2::new(sk.vertices[i][0],sk.vertices[i][1])+origine;
+    let mut faces=Vec::new();
+    for f in &sk.faces {
+        if f.vertices.len()<3 {continue;}
+        let (a,b)=(point(f.edge.0),point(f.edge.1));
+        let q=plans.iter().find(|q|q.hauteur(a).abs()<0.01 && q.hauteur(b).abs()<0.01 && q.gradient.dot((b-a).perp())>0.0)
+            .ok_or("Toiture concave : toutes les arêtes doivent définir la même pente.")?;
+        let poly:Vec<_>=f.vertices.iter().map(|&i|point(i)).collect();
+        // Trianguler les domaines éventuellement concaves ; les consommateurs reçoivent
+        // toujours des morceaux convexes, comme pour le calcul par enveloppe de plans.
+        let coords:Vec<_>=poly.iter().flat_map(|p|[p.x-origine.x,p.y-origine.y]).collect();
+        let indices=earcutr::earcut(&coords,&[],2).map_err(|e|e.to_string())?;
+        for t in indices.chunks_exact(3) {
+            let mut tri=vec![poly[t[0]],poly[t[1]],poly[t[2]]];
+            if aire(&tri)<0.0 {tri.swap(1,2);}faces.push((*q,tri));
+        }
+    }
+    Ok(Some(faces))
+}
+pub fn verifier_forme(d:&Dalle)->Result<(),String> { domaines_concaves(&d.contours,&plans(d)).map(|_|()) }
+
+pub fn bandes_contours(contours:&[Vec<[f64;2]>],plans:&[Plan],z0:f64,e0:f64,e1:f64)->Vec<Vec<glam::Vec4>> {
+    let Ok(Some(domaines))=domaines_concaves(contours,plans) else {return bandes(plans,z0,e0,e1)};
+    domaines.into_iter().map(|(q,poly)|{
+        let mut jeu=bandes(&[q],z0,e0,e1).remove(0);
+        for k in 0..poly.len() {let a=poly[k];let n=(poly[(k+1)%poly.len()]-a).normalize().perp();jeu.push(glam::Vec4::new(n.x as f32,n.y as f32,0.0,(-n.dot(a)*0.001) as f32));}
+        jeu
+    }).collect()
+}
+
+#[cfg(test)]
+mod tests_concaves {
+    use super::*;
+    #[test]
+    fn toit_en_l_sans_versant_dans_l_aile_voisine() {
+        let c=vec![vec![[0.,0.],[6000.,0.],[6000.,2000.],[2000.,2000.],[2000.,6000.],[0.,6000.]]];
+        let plans:Vec<_>=aretes(&c).iter().map(|(a,b,_,_)|{let g=(*b-*a).normalize().perp();Plan {gradient:g,origine:-g.dot(*a),secante:2.0_f64.sqrt()}}).collect();
+        let tris=couche(&c,&plans,3000.,0.,200.);
+        assert!(!tris.is_empty());assert!(tris.iter().flatten().all(|v|v.z>=2.999999));
+        let volume=crate::modele::geometrie::volume(&tris)*1e9;
+        let attendu=20e6*200.0*2.0_f64.sqrt();
+        assert!((volume/attendu-1.0).abs()<1e-6,"{volume}/{attendu}");
+        assert!((super::volume(&c,&plans,0.0,200.0)/attendu-1.0).abs()<1e-6);
     }
 }

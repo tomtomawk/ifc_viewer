@@ -8,6 +8,12 @@
 //! repère du projet).
 
 pub mod assemblage;
+pub mod solides;
+pub mod historique;
+pub mod commandes;
+pub mod export_ifc;
+pub mod documentation;
+mod validation;
 pub mod depuis_ifc;
 pub mod depuis_rvt;
 pub mod geometrie;
@@ -54,6 +60,18 @@ pub struct Projet {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub vues: Vec<Vue>,
     pub importes: Vec<ElementImporte>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub quadrillages: Vec<documentation::Quadrillage>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<documentation::Annotation>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub feuilles: Vec<documentation::Feuille>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nomenclatures: Vec<documentation::Nomenclature>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub attaches_toitures: BTreeMap<String,String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub priorites_jonction: BTreeMap<String,i32>,
     /// Éléments de la source qui n'ont rien donné (sans géométrie, hors du périmètre v0),
     /// comptés par catégorie.
     pub ignores: BTreeMap<String, usize>,

@@ -4,6 +4,7 @@
 //! panneaux s'ancrent d'un côté ou flottent ; sous la vue, la boîte de visibilité par
 //! catégorie de modèle et d'annotation.
 
+mod bim;
 use crate::camera::{Camera, MAX_PITCH};
 use crate::dessin::{self, Poche};
 use crate::model::pretty_type;
@@ -343,6 +344,7 @@ struct EtatVue {
 /// Fichier conservé en mémoire quand un autre document devient actif.
 struct DocumentOuvert {
     natif: Option<(crate::modele::Projet, PathBuf)>,
+    historique: crate::modele::historique::Historique,
     modifie: bool,
     scene: Option<Scene>,
     rvt: Option<RvtInfo>,
@@ -415,7 +417,9 @@ impl Vol {
 }
 
 pub struct ViewerApp {
+    bim: bim::EtatBim,
     natif: Option<(crate::modele::Projet, PathBuf)>,
+    historique: crate::modele::historique::Historique,
     natif_modifie: bool,
     mur_depart: Option<[f64; 2]>,
     /// Repère du plan : le prochain clic choisit l'élément à mettre à l'horizontale.
@@ -557,7 +561,9 @@ impl ViewerApp {
         };
         cc.egui_ctx.set_visuals(egui::Visuals::light());
         let mut app = ViewerApp {
+            bim: Default::default(),
             natif: None,
+            historique: Default::default(),
             natif_modifie: false,
             mur_depart: None,
             mur_saisie: String::new(),
@@ -657,6 +663,14 @@ impl ViewerApp {
     }
 
     fn open(&mut self, path: PathBuf, ctx: &egui::Context) {
+        let recuperation=crate::modele::enregistrement::chemin_recuperation(&path);
+        let restaurer=if path.extension().is_some_and(|e|e.eq_ignore_ascii_case("json")) && recuperation.exists() {
+            match rfd::MessageDialog::new().set_title("Récupération du projet").set_description("Une copie de récupération existe. Restaurer les modifications non enregistrées ?").set_buttons(rfd::MessageButtons::YesNoCancel).show() {
+                rfd::MessageDialogResult::Yes=>true,
+                rfd::MessageDialogResult::No=>false,
+                _=>return,
+            }
+        } else {false};
         let (tx, rx) = channel();
         let ctx = ctx.clone();
         self.loading = Some(rx);
@@ -670,7 +684,7 @@ impl ViewerApp {
                     ctx.request_repaint();
                 };
                 if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")) {
-                    let res = std::fs::read_to_string(&path).map_err(|e| format!("Lecture impossible : {e}"))
+                    let res = std::fs::read_to_string(if restaurer { &recuperation } else { &path }).map_err(|e| format!("Lecture impossible : {e}"))
                         .and_then(|json| crate::modele::Projet::lire_json(&json))
                         .and_then(|projet| scene::depuis_natif(&projet, &path).map(|scene| (Box::new(scene), projet, path)));
                     let _ = tx.send(LoadMsg::Natif(res));
@@ -694,12 +708,24 @@ impl ViewerApp {
 
     fn poll_loading(&mut self) {
         let Some(rx) = &self.loading else { return };
-        while let Ok(msg) = rx.try_recv() {
+        loop {
+            let msg=match rx.try_recv() {
+                Ok(msg)=>msg,
+                Err(std::sync::mpsc::TryRecvError::Empty)=>return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected)=>{
+                    self.loading=None;self.error=Some("Le chargement a été interrompu ; le document précédent est conservé.".into());return;
+                }
+            };
             match msg {
                 LoadMsg::Natif(Ok((scene, projet, chemin))) => {
                     self.loading = None;
                     self.install_scene(*scene);
                     self.status = format!("{} — projet natif v0", projet.nom);
+                    let _ = self.historique.enregistrer(&projet);
+                    if let Ok(ancien)=std::fs::read_to_string(&chemin).map_err(|e|e.to_string()).and_then(|s|crate::modele::Projet::lire_json(&s)) {
+                        let _=self.historique.enregistrer(&ancien);
+                        self.natif_modifie=self.historique.modifie(&projet);
+                    }
                     self.natif = Some((projet, chemin));
                     return;
                 }
@@ -907,6 +933,11 @@ impl ViewerApp {
             tris.extend(t);
             traits.extend(l);
         }
+        if let Some(s) = &self.scene {
+            let prims=self.annotations_natives();
+            let (t,l)=dessin::sommets(s,&prims,-self.camera.forward().as_dvec3(),self.echelle);
+            tris.extend(t); traits.extend(l);
+        }
         if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
             r.upload_coupe(gl, &tris, &traits);
         }
@@ -939,6 +970,7 @@ impl ViewerApp {
                 primitives.push(p.translater(-s.origin));
             }
         }
+        primitives.extend(self.annotations_natives());
         Ok(trace2d::Dessin { droite, haut, echelle: self.echelle, primitives })
     }
 
@@ -1242,6 +1274,7 @@ impl ViewerApp {
     }
 
     fn select(&mut self, id: Option<Id>, reveal: bool) {
+        self.bim.selection.clear();
         self.selected = id;
         if reveal {
             self.reveal = id;
@@ -1408,6 +1441,21 @@ impl ViewerApp {
                 None => {}
             });
             ui.separator();
+        } else if let Some(e) = projet.importes.iter().find(|e| scene::id_natif("importe", &e.id)==id) {
+            ui.heading(&e.nom); ui.label(&e.categorie); ui.label("Géométrie importée"); ui.label(&e.raison);
+            if let Some(n)=e.niveau.as_ref().and_then(|n|projet.niveau(n)) { ui.label(format!("Niveau : {}",n.nom)); }
+            if let Some(o)=&e.origine { ui.label(format!("Source : {} · {}",o.source,o.id)); if let Some(g)=&o.guid {ui.label(g);} }
+        } else if let Some(o) = projet.ouvertures.iter().find(|o| scene::id_natif("ouverture", &o.id)==id) {
+            let mut o=o.clone(); let mut change=false;
+            ui.heading(&o.nom);
+            for (nom,v) in [("Abscisse",&mut o.abscisse),("Largeur",&mut o.largeur),("Hauteur",&mut o.hauteur),("Allège",&mut o.allege)] {
+                ui.horizontal(|ui| { ui.label(nom); change|=ui.add_enabled(o.representation.is_none() || matches!(nom,"Abscisse"|"Allège"),egui::DragValue::new(v).suffix(" mm").speed(10.0)).changed(); });
+            }
+            if o.representation.is_some() && ui.button("Remplacer la menuiserie importée par un cadre paramétrique").clicked() {o.representation=None;change=true;}
+            if change {
+                if o.representation.is_some() { ui.label("La menuiserie importée est conservée ; sa forme n'est pas paramétrique."); }
+                let mut p=projet.clone(); *p.ouvertures.iter_mut().find(|x|x.id==o.id).unwrap()=o.clone(); nouveau=Some(p);
+            }
         } else {
             let dalle = projet.dalles.iter().find(|d| scene::id_natif("dalle", &d.id) == id)?;
             let mut d = dalle.clone();
@@ -1629,14 +1677,14 @@ impl ViewerApp {
         let nom = chemin.file_stem().map(|n| n.to_string_lossy().trim_end_matches(".modele").to_string()).unwrap_or_else(|| "Nouveau projet".into());
         let projet = crate::modele::Projet::depuis_gabarit(&nom, &crate::gabarit::actif());
         let resultat = scene::depuis_natif(&projet, &chemin).and_then(|scene| {
-            let json = projet.json()?;
-            std::fs::write(&chemin, json).map_err(|e| format!("Création impossible : {e}"))?;
+            crate::modele::enregistrement::enregistrer_natif(&projet, &chemin)?;
             Ok(scene)
         });
         match resultat {
             Ok(scene) => {
                 self.install_scene(scene);
                 self.status = format!("{} — nouveau projet natif v0", projet.nom);
+                let _ = self.historique.enregistrer(&projet);
                 self.natif = Some((projet, chemin));
                 self.error = None;
             }
@@ -1651,9 +1699,11 @@ impl ViewerApp {
             return;
         }
         let Some((projet, chemin)) = &self.natif else { return };
-        match projet.json().and_then(|json| std::fs::write(chemin, json).map_err(|e| format!("Enregistrement impossible : {e}"))) {
+        match crate::modele::enregistrement::enregistrer_natif(projet, chemin) {
             Ok(()) => {
                 self.natif_modifie = false;
+                let _ = self.historique.enregistrer(projet);
+                crate::modele::enregistrement::effacer_recuperation(chemin);
                 self.status = format!("{} — enregistré", chemin.display());
                 self.error = None;
             }
@@ -1686,16 +1736,21 @@ impl ViewerApp {
             if application {
                 for d in self.documents.values_mut().filter(|d| d.modifie) {
                     if let Some((p, chemin)) = &d.natif {
-                        if let Err(e) = p.json().and_then(|json| std::fs::write(chemin, json).map_err(|e| e.to_string())) {
+                        if let Err(e) = crate::modele::enregistrement::enregistrer_natif(p, chemin) {
                             self.error = Some(format!("Enregistrement impossible de {} : {e}", chemin.display()));
                             return;
                         }
                     }
+                    if let Some((p, chemin)) = &d.natif { let _ = d.historique.enregistrer(p); crate::modele::enregistrement::effacer_recuperation(chemin); }
                     d.modifie = false;
                 }
             }
         }
         self.confirmer_fermeture = None;
+        if action==1 {
+            if let Some((_,p))=&self.natif {crate::modele::enregistrement::effacer_recuperation(p);}
+            if application {for d in self.documents.values() {if let Some((_,p))=&d.natif {crate::modele::enregistrement::effacer_recuperation(p);}}}
+        }
         if application {
             self.natif_modifie = false;
             for d in self.documents.values_mut() { d.modifie = false; }
@@ -2090,9 +2145,29 @@ impl ViewerApp {
 
     /// Remplace le projet natif ouvert par `projet` (modifié) et reconstruit la scène,
     /// cadrage, niveaux, catégories et visibilité compris. Rien ne change en cas d'erreur.
-    fn appliquer_projet(&mut self, projet: crate::modele::Projet) -> Result<(), String> {
+    fn appliquer_projet(&mut self, mut projet: crate::modele::Projet) -> Result<(), String> {
         let chemin = self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.1.clone();
+        projet.recaler_menuiseries(&self.natif.as_ref().unwrap().0)?;
         let scene = scene::depuis_natif(&projet, &chemin)?;
+        self.historique.pousser(&self.natif.as_ref().unwrap().0, &projet)?;
+        // Les indices de vues et d'objets peuvent changer après suppression ou annulation.
+        // Retrouver leurs identifiants stables avant de remplacer la scène.
+        let anciens=self.scene.as_ref();
+        let ancienne_vue=|i:Option<usize>|->Option<Option<usize>> {
+            match i {
+                None=>Some(None),
+                Some(i)=>{let id=anciens?.navigateur.as_ref()?.vues.get(i)?.revit_id;
+                    scene.navigateur.as_ref()?.vues.iter().position(|v|v.revit_id==id).map(Some)}
+            }
+        };
+        self.vue_active=ancienne_vue(self.vue_active).flatten();
+        self.vues_ouvertes=self.vues_ouvertes.iter().filter_map(|i|ancienne_vue(*i)).collect();
+        self.etats_vues=std::mem::take(&mut self.etats_vues).into_iter().filter_map(|(i,e)|ancienne_vue(i).map(|i|(i,e))).collect();
+        if self.vues_ouvertes.is_empty(){self.vues_ouvertes.push(None);}
+        let nouvel_objet=|i:u32|anciens.and_then(|s|s.objects.get(i as usize)).and_then(|o|scene.object_of.get(&o.id)).copied();
+        self.hidden_objects=self.hidden_objects.iter().filter_map(|i|nouvel_objet(*i)).collect();
+        self.isolated=self.isolated.as_ref().map(|ids|ids.iter().filter_map(|i|nouvel_objet(*i)).collect());
+
         let delta = self.scene.as_ref().map_or(glam::DVec3::ZERO, |s| s.origin) - scene.origin;
         self.camera.target += delta.as_vec3();
         self.camera.scene_radius = ((scene.max - scene.min).length() * 0.5).max(1.0);
@@ -2117,11 +2192,15 @@ impl ViewerApp {
             self.selected = None;
         }
         self.scene = Some(scene);
+        self.bim.revision=self.bim.revision.wrapping_add(1);
+        self.natif_modifie = self.historique.modifie(&projet);
         self.natif = Some((projet, chemin));
-        self.natif_modifie = true;
         self.visibility_dirty = true;
         self.coupe_dirty = true;
         self.error = None;
+        if let Some((p, chemin)) = &self.natif {
+            if let Err(e) = crate::modele::enregistrement::recuperer_plus_tard(p, chemin) { self.error = Some(e); }
+        }
         Ok(())
     }
 
@@ -2397,6 +2476,7 @@ impl ViewerApp {
     // ------------------------------------------------------------------ UI
 
     fn stocker_document(&mut self) {
+        self.historique.geste(false);
         if self.scene.is_none() && self.rvt.is_none() {
             return;
         }
@@ -2404,6 +2484,7 @@ impl ViewerApp {
         let status = self.scene.as_ref().map(|s| format!("{} — {} objets 3D, {} triangles", s.file_name, s.objects.len(), s.triangles)).unwrap_or_else(|| self.status.clone());
         self.documents.insert(self.document_actif, DocumentOuvert {
             natif: self.natif.take(),
+            historique: std::mem::take(&mut self.historique),
             modifie: self.natif_modifie,
             scene: self.scene.take(),
             rvt: self.rvt.take(),
@@ -2423,6 +2504,7 @@ impl ViewerApp {
 
     fn nouveau_document(&mut self) {
         self.stocker_document();
+        self.bim = Default::default();
         self.natif_modifie = false;
         self.mur_depart = None;
         self.ruban_edition.niveau_mur = None;
@@ -2439,7 +2521,9 @@ impl ViewerApp {
         let Some(d) = self.documents.remove(&id) else { return };
         self.stocker_document();
         self.document_actif = id;
+        self.bim = Default::default();
         self.natif = d.natif;
+        self.historique = d.historique;
         self.natif_modifie = d.modifie;
         self.mur_depart = None;
         self.ruban_edition.niveau_mur = None;
@@ -2639,6 +2723,14 @@ impl ViewerApp {
             _ => None,
         };
         if let Some(menu) = edition {
+            if menu==crate::ruban::Menu::Annoter && self.natif.is_some() && ui.button("Feuilles / Nomenclatures").clicked() {self.bim.documentation=true;}
+
+            if menu == crate::ruban::Menu::Modifier {
+                ui.horizontal(|ui| {
+                    if ui.add_enabled(self.historique.peut_annuler(), egui::Button::new("Annuler")).clicked() { self.parcourir_historique(false); }
+                    if ui.add_enabled(self.historique.peut_retablir(), egui::Button::new("Rétablir")).clicked() { self.parcourir_historique(true); }
+                });
+            }
             self.ruban_edition.afficher(ui, menu, self.natif.as_ref().map(|n| &n.0));
             return;
         }
@@ -2653,7 +2745,7 @@ impl ViewerApp {
                 if ui.add_enabled(self.scene.is_some() || self.rvt.is_some() || self.loading.is_some(), egui::Button::new("Fermer")).clicked() {
                     self.fermer();
                 }
-                ui.add_enabled(false, egui::Button::new("Importer…")).on_disabled_hover_text("Import dans le modèle à venir");
+                if ui.add_enabled(self.loading.is_none(), egui::Button::new("Importer…")).on_hover_text("Convertir un IFC ou RVT en nouveau document natif").clicked() { self.importer_dialogue(&ctx); }
                 if self.rvt.is_some() && self.rvt_geom.is_ok() {
                     ui.toggle_value(&mut self.rvt_sheet, "Fiche Revit").on_hover_text("Métadonnées du fichier Revit");
                 }
@@ -2709,8 +2801,11 @@ impl ViewerApp {
                 if ui.add_enabled(disponible, egui::Button::new("Enregistrer")).on_hover_text("Enregistrer en modèle natif v0 (Ctrl+S)").clicked() {
                     self.enregistrer_projet(&ctx);
                 }
+                if ui.add_enabled(self.natif.is_some(), egui::Button::new("Enregistrer sous…")).clicked() { self.enregistrer_sous(); }
                 ui.add_enabled_ui(self.scene.is_some(), |ui| self.bouton_svg(ui));
-                ui.add_enabled(false, egui::Button::new("Imprimer…")).on_disabled_hover_text("Impression à venir");
+                if ui.add_enabled(self.scene.is_some(),egui::Button::new("Dessin PDF…")).clicked() {self.export_pdf_dialogue();}
+                if ui.add_enabled(self.natif.is_some(),egui::Button::new("IFC4…")).clicked() {self.export_ifc_dialogue();}
+                if ui.add_enabled(self.natif.is_some(),egui::Button::new("Feuilles / Nomenclatures")).clicked() {self.bim.documentation=true;}
             }
         });
     }
@@ -3479,6 +3574,18 @@ impl ViewerApp {
     /// vues qu'elles portent, familles par catégorie, groupes, liens. Clic : propriétés ;
     /// double-clic : ouvrir la vue (ou isoler les instances d'un type).
     fn navigateur_ui(&mut self, ui: &mut egui::Ui, section: LeftTab) {
+        if let Some((p,_))=&self.natif {
+            if matches!(section,LeftTab::Tout|LeftTab::Feuilles) && !p.feuilles.is_empty() {
+                egui::CollapsingHeader::new("Feuilles natives").default_open(true).show(ui,|ui| {
+                    for (k,f) in p.feuilles.iter().enumerate() {if ui.button(format!("{} — {}",f.numero,f.nom)).clicked(){self.bim.feuille=k;self.bim.documentation=true;}}
+                });
+            }
+            if matches!(section,LeftTab::Tout|LeftTab::Nomenclatures) && !p.nomenclatures.is_empty() {
+                egui::CollapsingHeader::new("Nomenclatures natives").default_open(true).show(ui,|ui| {
+                    for (k,n) in p.nomenclatures.iter().enumerate() {if ui.button(&n.nom).clicked(){self.bim.nomenclature=k;self.bim.documentation=true;}}
+                });
+            }
+        }
         let Some(s) = self.scene.as_ref() else { return };
         let Some(nav) = s.navigateur.as_ref() else { return };
         let q = self.filter.trim().to_lowercase();
@@ -4359,8 +4466,13 @@ impl ViewerApp {
     fn right_panel(&mut self, ui: &mut egui::Ui) {
         self.fenetre_materiau(ui.ctx());
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
-        if let Some((projet, _)) = &mut self.natif {
-            if self.ruban_edition.contexte_creation(ui, projet) { self.natif_modifie = true; }
+        if self.panneau_bim(ui) { return; }
+        if let Some((projet, _)) = &self.natif {
+            let mut contexte = projet.clone();
+            if self.ruban_edition.contexte_creation(ui, &mut contexte) {
+                if let Err(e) = self.appliquer_projet(contexte) { self.error = Some(e); }
+            }
+            let projet = &self.natif.as_ref().unwrap().0;
             ui.separator();
             // éditeur de type de mur : un type déjà porté par des murs les met à jour
             let mut copie = if self.ruban_edition.editeur_type_ouvert() { projet.clone() } else { crate::modele::Projet::default() };
@@ -4924,7 +5036,18 @@ impl ViewerApp {
                 let hit = resp.interact_pointer_pos().and_then(|p| pick(self, p));
                 let id = hit.map(|(obj, _)| self.cible_clic(self.scene.as_ref().unwrap().objects[obj as usize].id));
                 self.point_clique = hit.map(|(_, p)| p.as_dvec3() + self.scene.as_ref().unwrap().origin);
-                self.select(id, true);
+                if self.natif.is_some() && self.ruban_edition.outil()==Some(crate::ruban::Outil::Ouverture) {
+                    if let (Some(id),Some(p))=(id,self.point_clique) { self.placer_ouverture(id,[p.x*1000.0,p.y*1000.0]); }
+                } else {
+                    if ui.input(|i| i.modifiers.ctrl || i.modifiers.command) {
+                        let mut selection=self.selection_bim();
+                        if let Some(cle)=id.and_then(|id|self.cle_native(id)) {
+                            if selection.contains(&cle){selection.retain(|s|s!=&cle);}else{selection.push(cle);}
+                        }
+                        self.select(if selection.is_empty(){None}else{id},true);
+                        self.bim.selection=selection;
+                    } else {self.select(id,true);}
+                }
             }
 
             if (resp.hovered() || resp.has_focus()) && !self.vol.actif {
@@ -5250,6 +5373,15 @@ impl ViewerApp {
         use pilote::{erreur, liste, objet, succes, texte};
         match commande {
             "etat" => self.etat(),
+            "editer" => {
+                let resultat=serde_json::from_str::<crate::modele::commandes::Commande>(argument).map_err(|e|e.to_string()).and_then(|c|self.executer_bim(c));
+                match resultat { Ok(ids)=>succes(&[("ids",serde_json::to_string(&ids).unwrap())]), Err(e)=>erreur(&e) }
+            }
+            "annuler" | "retablir" => {
+                self.error=None; self.parcourir_historique(commande=="retablir");
+                match &self.error { Some(e)=>erreur(e),None=>self.etat() }
+            }
+            "projet_natif" => match &self.natif {Some((p,_))=>match p.json() {Ok(s)=>succes(&[("projet",s)]),Err(e)=>erreur(&e)},None=>erreur("Aucun projet natif.")},
             "outil" => {
                 match argument {
                     "mur" => { self.onglet_ruban = OngletRuban::Modeliser; self.ruban_edition.activer_mur(); }
@@ -5371,7 +5503,16 @@ impl ViewerApp {
                     };
                 }
                 if self.natif.is_none() { return erreur("aucun projet natif ou Revit ouvert") }
-                self.enregistrer_projet(&ctx);
+                if !argument.trim().is_empty() {
+                    let chemin=PathBuf::from(argument.trim().trim_matches('"'));
+                    let (p,ancien)=self.natif.as_ref().unwrap();
+                    if let Err(e)=crate::modele::enregistrement::enregistrer_natif(p,&chemin){return erreur(&e);}
+                    crate::modele::enregistrement::effacer_recuperation(ancien);
+                    let _=self.historique.enregistrer(p);
+                    self.natif.as_mut().unwrap().1=chemin;
+                    self.natif_modifie=false;
+                    self.error=None;
+                } else {self.enregistrer_projet(&ctx);}
                 if let Some(e) = &self.error { erreur(e) } else { self.etat() }
             }
             "taille" => {
@@ -5980,7 +6121,13 @@ fn load_state_fr(s: &str) -> &str {
 impl eframe::App for ViewerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        self.historique.geste(ctx.input(|i|i.pointer.any_down()));
         self.poll_sauvegarde();
+        self.fenetre_documentation(&ctx);
+        if !ctx.egui_wants_keyboard_input() {
+            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Z)) { self.parcourir_historique(true); }
+            else if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Z)) { self.parcourir_historique(false); }
+        }
         if ctx.input(|i| i.viewport().close_requested()) && self.sauvegarde.is_some() {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.error = Some("Un enregistrement est en cours ; attendez sa fin avant de quitter.".into());

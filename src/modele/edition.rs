@@ -217,7 +217,11 @@ impl Projet {
     pub fn supprimer_vue(&mut self, id: &str) -> Result<(), String> {
         let avant = self.vues.len();
         self.vues.retain(|v| v.id != id);
-        if self.vues.len() == avant { Err("Vue introuvable.".into()) } else { Ok(()) }
+        if self.vues.len() == avant { Err("Vue introuvable.".into()) } else {
+            self.annotations.retain(|a| a.vue!=id);
+            for f in &mut self.feuilles {f.vues.retain(|v|v.vue!=id);}
+            Ok(())
+        }
     }
 
     /// Axe d'un mur ou d'un assemblage (moyenne des axes de ses couches) : début, fin

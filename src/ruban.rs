@@ -1,5 +1,5 @@
 //! Présentation des commandes d'édition. Le contrôleur du viewer consomme les
-//! paramètres de Mur ; les autres commandes restent des sélections d'interface.
+//! paramètres des outils opérationnels ; les outils à venir sont désactivés.
 use eframe::egui::{self, Align, Color32, RichText, Sense};
 use std::collections::BTreeMap;
 
@@ -11,7 +11,7 @@ pub enum Menu {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-enum Outil {
+pub(crate) enum Outil {
     Niveau,
     Quadrillage,
     Mur,
@@ -381,7 +381,7 @@ fn champs(o: Outil) -> Vec<Champ> {
             Nombre("Décalage", 0.0, " mm"),
         ],
         Ouverture => vec![
-            Choix("Ouverture", &["Porte", "Fenêtre"]),
+            Choix("Ouverture", &["Porte", "Fenêtre", "Baie"]),
             Nombre("Largeur", 900.0, " mm"),
             Nombre("Hauteur", 2100.0, " mm"),
             Nombre("Allège", 900.0, " mm"),
@@ -607,6 +607,19 @@ impl RubanEdition {
     pub fn mur_actif(&self) -> bool {
         self.selection == Some(Outil::Mur)
     }
+    pub fn outil(&self) -> Option<Outil> { self.selection }
+    pub fn nombre_option(&self, outil: Outil, index: usize) -> f64 {
+        match self.valeurs.get(&(outil,index)) {
+            Some(Valeur::Nombre(v)) => *v,
+            _ => match champs(outil).get(index) { Some(Champ::Nombre(_,v,_)) => *v, _=>0.0 },
+        }
+    }
+    pub fn texte_option(&self, outil: Outil, index: usize) -> String {
+        match self.valeurs.get(&(outil,index)) {
+            Some(Valeur::Texte(v)) => v.clone(),
+            _ => match champs(outil).get(index) { Some(Champ::Saisie(_,v)) => (*v).into(), Some(Champ::Choix(_,v)) => v[0].into(), _=>String::new() },
+        }
+    }
     pub fn a_un_outil(&self) -> bool {
         self.selection.is_some()
     }
@@ -770,7 +783,11 @@ impl RubanEdition {
                                 let actif = self.selection.map(Outil::commande) == Some(outil);
                                 // éléments horizontaux : un bouton ; la sorte se choisit dans le
                                 // sélecteur de type de Propriétés
-                                if bouton_outil(ui, bouton, outil, colonne.grande, actif).clicked() {
+                                let disponible = matches!(outil, Outil::Mur|Outil::Surfaces|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Aligner|Outil::Ajuster|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::Ligne|Outil::Zone|Outil::Etiquette);
+                                let mut bouton_ui=ui.new_child(egui::UiBuilder::new().max_rect(bouton));
+                                if !disponible {bouton_ui.disable();}
+                                let reponse=bouton_outil(&mut bouton_ui,bouton,outil,colonne.grande,actif);
+                                if reponse.on_disabled_hover_text("Outil prévu, pas encore disponible").clicked() {
                                     self.selection = Some(if outil == Outil::Surfaces {
                                         let surface = self.derniere_surface.unwrap_or(Outil::Dalle);
                                         self.derniere_surface = Some(surface);

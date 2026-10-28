@@ -1,0 +1,527 @@
+{
+  "format": "ifc_viewer-modele",
+  "version": 0,
+  "nom": "Maison de démonstration",
+  "sources": [],
+  "phases": [],
+  "sous_projets": [],
+  "variantes": [],
+  "niveaux": [
+    {
+      "id": "rdc",
+      "nom": "RDC",
+      "altitude": 0,
+      "origine": null
+    },
+    {
+      "id": "etage",
+      "nom": "Étage",
+      "altitude": 3000,
+      "origine": null
+    }
+  ],
+  "types_murs": [
+    {
+      "id": "mur200",
+      "nom": "Voile béton 200",
+      "couches": [
+        {
+          "materiau": "Béton",
+          "epaisseur": 200,
+          "fonction": "structure"
+        }
+      ],
+      "couches_detaillees": true,
+      "origine": null
+    }
+  ],
+  "types_dalles": [
+    {
+      "id": "dalle200",
+      "nom": "Dalle béton 200",
+      "couches": [
+        {
+          "materiau": "Béton",
+          "epaisseur": 200,
+          "fonction": "structure"
+        }
+      ],
+      "couches_detaillees": true,
+      "origine": null
+    },
+    {
+      "id": "toit200",
+      "nom": "Toiture 200",
+      "couches": [
+        {
+          "materiau": "Tuiles",
+          "epaisseur": 200,
+          "fonction": "finition"
+        }
+      ],
+      "couches_detaillees": true,
+      "origine": null
+    }
+  ],
+  "types_ouvertures": [],
+  "murs": [
+    {
+      "id": "rdc-m0",
+      "nom": "Mur 1 rdc",
+      "type_mur": "mur200",
+      "niveau": "rdc",
+      "decalage_bas": 0,
+      "haut": {
+        "contrainte": "libre",
+        "hauteur": 3000
+      },
+      "axe": {
+        "forme": "droit",
+        "debut": [
+          0,
+          0
+        ],
+        "fin": [
+          8000,
+          0
+        ]
+      },
+      "origine": null
+    },
+    {
+      "id": "rdc-m1",
+      "nom": "Mur 2 rdc",
+      "type_mur": "mur200",
+      "niveau": "rdc",
+      "decalage_bas": 0,
+      "haut": {
+        "contrainte": "libre",
+        "hauteur": 3000
+      },
+      "axe": {
+        "forme": "droit",
+        "debut": [
+          8000,
+          0
+        ],
+        "fin": [
+          8000,
+          6000
+        ]
+      },
+      "origine": null
+    },
+    {
+      "id": "rdc-m2",
+      "nom": "Mur 3 rdc",
+      "type_mur": "mur200",
+      "niveau": "rdc",
+      "decalage_bas": 0,
+      "haut": {
+        "contrainte": "libre",
+        "hauteur": 3000
+      },
+      "axe": {
+        "forme": "droit",
+        "debut": [
+          8000,
+          6000
+        ],
+        "fin": [
+          0,
+          6000
+        ]
+      },
+      "origine": null
+    },
+    {
+      "id": "rdc-m3",
+      "nom": "Mur 4 rdc",
+      "type_mur": "mur200",
+      "niveau": "rdc",
+      "decalage_bas": 0,
+      "haut": {
+        "contrainte": "libre",
+        "hauteur": 3000
+      },
+      "axe": {
+        "forme": "droit",
+        "debut": [
+          0,
+          6000
+        ],
+        "fin": [
+          0,
+          0
+        ]
+      },
+      "origine": null
+    },
+    {
+      "id": "etage-m0",
+      "nom": "Mur 1 etage",
+      "type_mur": "mur200",
+      "niveau": "etage",
+      "decalage_bas": 0,
+      "haut": {
+        "contrainte": "libre",
+        "hauteur": 3000
+      },
+      "axe": {
+        "forme": "droit",
+        "debut": [
+          0,
+          0
+        ],
+        "fin": [
+          8000,
+          0
+        ]
+      },
+      "origine": null
+    },
+    {
+      "id": "etage-m1",
+      "nom": "Mur 2 etage",
+      "type_mur": "mur200",
+      "niveau": "etage",
+      "decalage_bas": 0,
+      "haut": {
+        "contrainte": "libre",
+        "hauteur": 3000
+      },
+      "axe": {
+        "forme": "droit",
+        "debut": [
+          8000,
+          0
+        ],
+        "fin": [
+          8000,
+          6000
+        ]
+      },
+      "origine": null
+    },
+    {
+      "id": "etage-m2",
+      "nom": "Mur 3 etage",
+      "type_mur": "mur200",
+      "niveau": "etage",
+      "decalage_bas": 0,
+      "haut": {
+        "contrainte": "libre",
+        "hauteur": 3000
+      },
+      "axe": {
+        "forme": "droit",
+        "debut": [
+          8000,
+          6000
+        ],
+        "fin": [
+          0,
+          6000
+        ]
+      },
+      "origine": null
+    },
+    {
+      "id": "etage-m3",
+      "nom": "Mur 4 etage",
+      "type_mur": "mur200",
+      "niveau": "etage",
+      "decalage_bas": 0,
+      "haut": {
+        "contrainte": "libre",
+        "hauteur": 3000
+      },
+      "axe": {
+        "forme": "droit",
+        "debut": [
+          0,
+          6000
+        ],
+        "fin": [
+          0,
+          0
+        ]
+      },
+      "origine": null
+    }
+  ],
+  "assemblages": [],
+  "materiaux": [
+    {
+      "nom": "Béton",
+      "couleur": [
+        190,
+        190,
+        180
+      ],
+      "motif": "diagonales"
+    },
+    {
+      "nom": "Tuiles",
+      "couleur": [
+        155,
+        76,
+        46
+      ],
+      "motif": "diagonales"
+    }
+  ],
+  "ouvertures": [
+    {
+      "id": "porte",
+      "nom": "Entrée",
+      "genre": "porte",
+      "mur": "rdc-m0",
+      "type_ouverture": null,
+      "abscisse": 2000,
+      "largeur": 900,
+      "hauteur": 2100,
+      "allege": 0,
+      "representation": null,
+      "origine": null
+    },
+    {
+      "id": "fenetre",
+      "nom": "Fenêtre séjour",
+      "genre": "fenetre",
+      "mur": "rdc-m0",
+      "type_ouverture": null,
+      "abscisse": 5500,
+      "largeur": 1400,
+      "hauteur": 1200,
+      "allege": 900,
+      "representation": null,
+      "origine": null
+    }
+  ],
+  "dalles": [
+    {
+      "id": "sol-rdc",
+      "nom": "Plancher rdc",
+      "type_dalle": "dalle200",
+      "niveau": "rdc",
+      "decalage": 0,
+      "contours": [
+        [
+          [
+            -100,
+            -100
+          ],
+          [
+            8100,
+            -100
+          ],
+          [
+            8100,
+            6100
+          ],
+          [
+            -100,
+            6100
+          ]
+        ]
+      ],
+      "origine": null
+    },
+    {
+      "id": "sol-etage",
+      "nom": "Plancher etage",
+      "type_dalle": "dalle200",
+      "niveau": "etage",
+      "decalage": 0,
+      "contours": [
+        [
+          [
+            -100,
+            -100
+          ],
+          [
+            8100,
+            -100
+          ],
+          [
+            8100,
+            6100
+          ],
+          [
+            -100,
+            6100
+          ]
+        ]
+      ],
+      "origine": null
+    },
+    {
+      "id": "toiture",
+      "nom": "Toiture quatre pans",
+      "sorte": "toiture",
+      "type_dalle": "toit200",
+      "niveau": "etage",
+      "decalage": 2800,
+      "contours": [
+        [
+          [
+            -500,
+            -500
+          ],
+          [
+            8500,
+            -500
+          ],
+          [
+            8500,
+            6500
+          ],
+          [
+            -500,
+            6500
+          ]
+        ]
+      ],
+      "pentes": [
+        [
+          35,
+          35,
+          35,
+          35
+        ]
+      ],
+      "origine": null
+    }
+  ],
+  "importes": [],
+  "ignores": {},
+  "vues": [
+    {
+      "id": "plan-rdc",
+      "nom": "Plan rdc",
+      "echelle": 100,
+      "genre": "plan",
+      "niveau": "rdc",
+      "coupe": 1200
+    },
+    {
+      "id": "plan-etage",
+      "nom": "Plan etage",
+      "echelle": 100,
+      "genre": "plan",
+      "niveau": "etage",
+      "coupe": 1200
+    },
+    {
+      "id": "coupe",
+      "nom": "Coupe A",
+      "echelle": 100,
+      "genre": "coupe",
+      "debut": [
+        -500,
+        3000
+      ],
+      "fin": [
+        8500,
+        3000
+      ],
+      "profondeur": 6000,
+      "elevation": false
+    }
+  ],
+  "quadrillages": [
+    {
+      "id": "axe-a",
+      "nom": "A",
+      "debut": [
+        -1000,
+        0
+      ],
+      "fin": [
+        9000,
+        0
+      ]
+    }
+  ],
+  "annotations": [
+    {
+      "id": "texte-sejour",
+      "vue": "plan-rdc",
+      "hauteur": 2.5,
+      "forme": "texte",
+      "point": [
+        1500,
+        2000
+      ],
+      "texte": "Séjour"
+    },
+    {
+      "id": "cote-largeur",
+      "vue": "plan-rdc",
+      "hauteur": 2.5,
+      "forme": "cote",
+      "debut": {
+        "ancrage": "mur",
+        "id": "rdc-m0",
+        "fin": false
+      },
+      "fin": {
+        "ancrage": "mur",
+        "id": "rdc-m0",
+        "fin": true
+      },
+      "decalage": -800
+    }
+  ],
+  "feuilles": [
+    {
+      "id": "feuille1",
+      "numero": "A01",
+      "nom": "Plans et coupe",
+      "largeur": 420,
+      "hauteur": 297,
+      "cartouche": "Maison de démonstration — IFC Viewer",
+      "vues": [
+        {
+          "vue": "plan-rdc",
+          "position": [
+            35,
+            60
+          ],
+          "echelle": 100
+        },
+        {
+          "vue": "plan-etage",
+          "position": [
+            180,
+            60
+          ],
+          "echelle": 100
+        },
+        {
+          "vue": "coupe",
+          "position": [
+            35,
+            180
+          ],
+          "echelle": 100
+        }
+      ]
+    }
+  ],
+  "nomenclatures": [
+    {
+      "id": "quantites",
+      "nom": "Quantités du projet",
+      "categorie": "",
+      "regrouper": true
+    }
+  ],
+  "attaches_toitures": {
+    "etage-m0": "toiture",
+    "etage-m1": "toiture",
+    "etage-m2": "toiture",
+    "etage-m3": "toiture"
+  }
+}

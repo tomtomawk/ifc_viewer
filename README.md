@@ -3,6 +3,19 @@
 Visionneuse IFC native, écrite de zéro : parseur STEP, géométrie et rendu OpenGL. Aucune dépendance IFC externe.
 Ouvre aussi les fichiers Revit (`.rvt`) : murs, sols, toits, escaliers, garde-corps, portes, fenêtres, mobilier et autres familles, pièces et grilles lus directement dans le fichier, sans export IFC ; feuilles affichées avec leur cartouche, leurs vues placées, leurs titres, textes et cotes.
 
+## Édition BIM native
+
+Le parcours d'édition est décrit dans [docs/EDITION.md](docs/EDITION.md) : import
+IFC/Revit en document natif, murs courbes et ouvertures, modifications réversibles,
+niveaux, quadrillages, trémies, jonctions, attachements aux toitures, annotations,
+feuilles et nomenclatures, exports IFC4/SVG/PDF/CSV.
+
+Pour essayer un projet complet :
+
+```sh
+cargo run --release -- samples/maison_native.modele.json
+```
+
 ## Utilisation
 
 ```
@@ -54,7 +67,7 @@ guide) ; Maj contraint le tracé horizontalement ou verticalement. L'option Cha�
 permet de continuer depuis le dernier point ; revenir au premier point de la chaîne
 l'arrête. Échap efface la saisie, puis annule le segment en cours, puis quitte
 l'outil ; le clic droit arrête le segment. Le niveau 0 est créé au premier
-mur si le projet est vide. Les autres commandes restent à raccorder.
+mur si le projet est vide. Les outils complémentaires disponibles et leurs limites sont décrits dans [Édition BIM](docs/EDITION.md).
 **Murs composés** : choisir un type dans Propriétés (ou en créer un avec « + » :
 couches, fonction, matériau, couleur, motif de coupe, épaisseur ; glisser la poignée ≡ d'une
 couche pour la déplacer). Chaque couche est
@@ -164,7 +177,7 @@ aucun viewer n'écoute, le serveur lance `target/release/ifc_viewer.exe` (ou
 - Les surfaces NURBS des IfcAdvancedBrep sont approchées par leurs arêtes : les faces fortement courbes sont facettisées grossièrement.
 - La CSG est sautée pour les hôtes de plus de 6 000 triangles ou les ouvertures de plus de 3 000 triangles (performance) ; l'élément est alors affiché plein.
 - Revit : surfaces `HermiteSurf`, `ConeSurf`, `OffsetSurf` et courbes `GEllipse` non décodées ; un solide qui en porte est écarté (le reste de l'élément est affiché) et compté dans les entités ignorées. Contenu des nomenclatures et paramètres calculés par Revit (surfaces, volumes) non lus. GlobalId : IfcGUID de Revit pour les formats 2024 et suivants, synthétiques (`RVT` + ElementId) avant.
-- Dessin 2D : la coupe ne suit que des plans horizontaux (pas encore le plan des vues de coupe Revit) ; ni éléments au-dessus de la coupe en pointillés, ni épaisseurs de trait par catégorie, ni export PDF ou DXF ; traits fins d'un pixel à l'écran ; export SVG des vues orthographiques seulement, pas des feuilles. Textes, cotes et cartouches Revit passent dans l'export en triangles (pas en texte SVG). Courbes en polylignes (pas d'arcs). En OpenGL ES (Raspberry Pi), les parties au-dessus de la coupe ne sont pas retirées, seuls les objets entièrement au-dessus le sont.
+- Dessin 2D : les coupes natives verticales sont prises en charge ; les limites de fidélité des vues Revit restent distinctes ; ni éléments au-dessus de la coupe en pointillés, ni épaisseurs de trait par catégorie, ni export DXF (export PDF désormais disponible) ; traits fins d'un pixel à l'écran ; export SVG/PDF des vues orthographiques et des feuilles natives ; les feuilles Revit ne sont pas exportées. Textes, cotes et cartouches Revit passent dans l'export en triangles (pas en texte SVG). Courbes en polylignes (pas d'arcs). En OpenGL ES (Raspberry Pi), les parties au-dessus de la coupe ne sont pas retirées, seuls les objets entièrement au-dessus le sont.
 - Non pris en charge : IfcSurfaceCurveSweptAreaSolid, IfcFixedReferenceSweptAreaSolid, IfcSectionedSolid, alignements IFC4X3, textures. Les entités ignorées sont listées dans la barre d'état et dans `--stats`.
 
 ## Tests

@@ -23,6 +23,7 @@ PORT = int(os.environ.get("IFC_VIEWER_PORT", "47811"))
 CAPTURES = os.path.join(tempfile.gettempdir(), "ifc-viewer-mcp")
 
 COMMANDES = """Commandes du viewer (outil viewer_commande) :
+projet_natif (JSON du document et identifiants natifs) ; editer <JSON> (transaction, voir docs/EDITION.md) ; annuler ; retablir ;
 etat ; ouvrir <chemin> ; capture vue|fenetre [LxH] <chemin.png> ; taille <largeur> <hauteur> ;
 outil mur|aucun ; mur <x0 mm> <y0 mm> <x1 mm> <y1 mm> [hauteur mm epaisseur mm] ;
 enregistrer [chemin.modele.json] (RVT : conversion en arrière-plan ; etat.enregistrement indique si elle est en cours) ;

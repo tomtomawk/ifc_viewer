@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod bim_cli;
 mod camera;
 mod orientation_plan;
 mod csg;
@@ -23,6 +24,9 @@ use std::path::PathBuf;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(resultat) = bim_cli::executer(&args) {
+        match resultat { Ok(())=>std::process::exit(0),Err(e)=>{eprintln!("{e}");std::process::exit(2);} }
+    }
 
     // Mode console : ifc_viewer --images fichier.rvt dossier (images et vignettes enregistrées)
     if args.first().map(|s| s.as_str()) == Some("--images") {
@@ -80,7 +84,8 @@ fn main() {
     let path = args.first().map(PathBuf::from);
     // anticrénelage 4×, sinon sans : pilotes ou serveurs X sans configuration
     // multiéchantillonnée (machines virtuelles, bureau à distance, Xvfb)
-    for multisampling in [4, 0] {
+    let essais = if std::env::var("IFC_VIEWER_MSAA").as_deref()==Ok("0") {vec![0]} else {vec![4,0]};
+    for multisampling in essais {
         let options = eframe::NativeOptions {
             viewport: eframe::egui::ViewportBuilder::default()
                 .with_title("IFC Viewer")
