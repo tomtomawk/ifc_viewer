@@ -5509,9 +5509,7 @@ impl ViewerApp {
                     if let Err(e)=crate::modele::enregistrement::enregistrer_natif(p,&chemin){return erreur(&e);}
                     crate::modele::enregistrement::effacer_recuperation(ancien);
                     let _=self.historique.enregistrer(p);
-                    self.natif.as_mut().unwrap().1=chemin;
-                    self.natif_modifie=false;
-                    self.error=None;
+                    self.finaliser_enregistrement_sous(chemin);
                 } else {self.enregistrer_projet(&ctx);}
                 if let Some(e) = &self.error { erreur(e) } else { self.etat() }
             }

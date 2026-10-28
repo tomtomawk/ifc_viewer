@@ -61,12 +61,25 @@ impl ViewerApp {
             Ok(()) => {
                 crate::modele::enregistrement::effacer_recuperation(ancien);
                 let _ = self.historique.enregistrer(p);
-                self.natif.as_mut().unwrap().1 = chemin;
-                self.natif_modifie = false;
-                self.status = "Projet enregistré.".into();
+                self.finaliser_enregistrement_sous(chemin);
             }
             Err(e) => self.error = Some(e),
         }
+    }
+
+    pub(super) fn finaliser_enregistrement_sous(&mut self, chemin: PathBuf) {
+        crate::modele::enregistrement::effacer_recuperation(&chemin);
+        if let Some(scene) = &mut self.scene {
+            scene.file_name = chemin
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
+        }
+        self.status = format!("{} — enregistré", chemin.display());
+        self.natif.as_mut().unwrap().1 = chemin;
+        self.natif_modifie = false;
+        self.error = None;
     }
 
     pub(super) fn importer_dialogue(&mut self, ctx: &egui::Context) {
