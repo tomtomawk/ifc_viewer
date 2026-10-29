@@ -209,6 +209,11 @@ impl Projet {
                     return Err("Vue placée non valide.".into());
                 }
             }
+            for n in &f.nomenclatures {
+                if !self.nomenclatures.iter().any(|x| x.id == n.nomenclature) || n.position.iter().any(|x| !x.is_finite()) {
+                    return Err("Nomenclature placée non valide.".into());
+                }
+            }
         }
         Ok(())
     }

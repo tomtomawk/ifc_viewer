@@ -74,6 +74,17 @@ pub struct Feuille {
     pub hauteur: f64,
     pub cartouche: String,
     pub vues: Vec<VuePlacee>,
+    /// Nomenclatures posées sur la feuille (tableaux).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nomenclatures: Vec<NomenclaturePlacee>,
+}
+
+/// Nomenclature posée sur une feuille : tableau dont le coin haut gauche est à
+/// `position` (mm du papier, origine en bas à gauche).
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct NomenclaturePlacee {
+    pub nomenclature: String,
+    pub position: [f64; 2],
 }
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Nomenclature {
@@ -532,10 +543,60 @@ pub fn vue_placee(p: &Projet, v: &VuePlacee) -> Result<(Vec<Primitive>, [f64; 4]
     Ok((primitives, e))
 }
 
+/// Tableau d'une nomenclature posée sur une feuille, en mètres du papier : titre
+/// (nom), ligne d'en-tête, lignes ; colonnes à la largeur de leur plus long texte. Et
+/// son étendue en mm du papier [x0, y0, x1, y1].
+pub fn nomenclature_placee(p: &Projet, n: &NomenclaturePlacee) -> Result<(Vec<Primitive>, [f64; 4]), String> {
+    let nom = p.nomenclatures.iter().find(|x| x.id == n.nomenclature).ok_or("Nomenclature absente.")?;
+    let lignes = tableau(p, nom)?;
+    // mm du papier : texte 2,5, en-tête et titre plus grands
+    let (texte_h, ligne_h, marge, titre_h) = (2.5, 6.0, 2.0, 3.5);
+    let largeur = |s: &str, h: f64| crate::texte::ligne(s, "Arial", h, false).largeur;
+    let ncol = lignes.iter().map(Vec::len).max().unwrap_or(0);
+    let mut colonnes = vec![12.0_f64; ncol];
+    for l in &lignes {
+        for (i, c) in l.iter().enumerate() {
+            colonnes[i] = colonnes[i].max(largeur(c, texte_h) + 2.0 * marge);
+        }
+    }
+    let total: f64 = colonnes.iter().sum::<f64>().max(largeur(&nom.nom, titre_h) + 2.0 * marge);
+    let [x0, y0] = n.position;
+    let noir = [20, 20, 20, 255];
+    let mut prims = Vec::new();
+    prims.push(texte(&nom.nom, pt_papier(x0 + marge, y0 - titre_h - 1.5), DVec3::X, DVec3::Y, titre_h / 1000.0, noir));
+    let haut = y0 - titre_h - 4.0;
+    let bas = haut - ligne_h * lignes.len() as f64;
+    // cadre, lignes, colonnes ; en-tête souligné plus fort
+    prims.push(trait_papier(vec![pt_papier(x0, haut), pt_papier(x0 + total, haut), pt_papier(x0 + total, bas), pt_papier(x0, bas)], true, 0.35));
+    for k in 1..lignes.len() {
+        let y = haut - ligne_h * k as f64;
+        prims.push(trait_papier(vec![pt_papier(x0, y), pt_papier(x0 + total, y)], false, if k == 1 { 0.35 } else { 0.13 }));
+    }
+    let mut x = x0;
+    for w in colonnes.iter().take(ncol.saturating_sub(1)) {
+        x += w;
+        prims.push(trait_papier(vec![pt_papier(x, haut), pt_papier(x, bas)], false, 0.13));
+    }
+    for (k, l) in lignes.iter().enumerate() {
+        let y = haut - ligne_h * (k as f64 + 1.0) + (ligne_h - texte_h) * 0.5;
+        let mut x = x0;
+        for (i, c) in l.iter().enumerate() {
+            if !c.is_empty() {
+                prims.push(texte(c, pt_papier(x + marge, y), DVec3::X, DVec3::Y, texte_h / 1000.0, noir));
+            }
+            x += colonnes[i];
+        }
+    }
+    Ok((prims, [x0, bas, x0 + total, y0]))
+}
+
 pub fn feuille(p: &Projet, f: &Feuille) -> Result<Dessin, String> {
     let mut primitives = cadre_feuille(p, f);
     for v in &f.vues {
         primitives.extend(vue_placee(p, v)?.0);
+    }
+    for n in &f.nomenclatures {
+        primitives.extend(nomenclature_placee(p, n)?.0);
     }
     Ok(Dessin { droite: DVec3::X, haut: DVec3::Y, echelle: 1.0, primitives })
 }
@@ -894,6 +955,7 @@ mod tests {
                 position: [30.0, 80.0],
                 echelle: 100.0,
             }],
+            nomenclatures: Vec::new(),
         };
         p.feuilles.push(f.clone());
         p.verifier().unwrap();
@@ -971,6 +1033,19 @@ mod tests {
         assert_eq!(detail.len() - 1, p.murs.len());
         assert_eq!(Colonne::depuis_titre("Famille et type"), Some(Colonne::Type));
         assert_eq!(Colonne::depuis_titre("Commentaires"), None);
+        // tableau posé sur une feuille : titre, une ligne par groupe, sous sa position
+        let mut q = p.clone();
+        q.nomenclatures.push(choisie.clone());
+        let posee = NomenclaturePlacee { nomenclature: choisie.id.clone(), position: [20.0, 200.0] };
+        let (prims, e) = nomenclature_placee(&q, &posee).unwrap();
+        assert!(!prims.is_empty() && e[3] == 200.0 && e[1] < 200.0 - 6.0 * t.len() as f64 && e[2] > 20.0, "{e:?}");
+        let f = Feuille { id: "f".into(), numero: "A01".into(), nom: "Quantités".into(), jeu: JEU_DEFAUT.into(), largeur: 420.0, hauteur: 297.0, cartouche: String::new(), vues: Vec::new(), nomenclatures: vec![posee] };
+        q.feuilles.push(f.clone());
+        q.verifier().unwrap();
+        assert!(svg_feuille(&q, &f).unwrap().len() > svg_feuille(&q, &Feuille { nomenclatures: Vec::new(), ..f.clone() }).unwrap().len());
+        // nomenclature supprimée : retirée de la feuille
+        let (q, _) = q.executer(crate::modele::commandes::Commande::Supprimer { ids: vec![choisie.id.clone()] }).unwrap();
+        assert!(q.feuilles[0].nomenclatures.is_empty());
         let t = tableau(&p, &n).unwrap();
         let count: usize = t
             .iter()

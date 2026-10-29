@@ -457,6 +457,7 @@ fn vues_et_feuilles(m: &Maquette, c: &mut Conversion, id_vue: &dyn Fn(i64) -> St
             hauteur: arrondi(e[3] - e[1]).clamp(50.0, 5000.0),
             cartouche: String::new(),
             vues,
+            nomenclatures: Vec::new(),
         });
     }
     for (k, n) in ignorees {

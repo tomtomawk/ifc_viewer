@@ -12,7 +12,11 @@ pub(super) struct VueGlissee(pub String);
 /// Feuille glissée dans l'arborescence pour la réordonner : identifiant.
 pub(super) struct FeuilleGlissee(pub String);
 
-/// Sélection dans le jeu ouvert : une feuille, ou une vue placée (feuille, rang).
+/// Nomenclature glissée depuis l'arborescence sur une feuille : identifiant.
+pub(super) struct NomenclatureGlissee(pub String);
+
+/// Sélection dans le jeu ouvert : une feuille, ou un objet placé (feuille, rang : les
+/// vues placées puis les nomenclatures posées).
 #[derive(Clone, PartialEq, Default)]
 pub(super) enum SelectionFeuille {
     #[default]
@@ -72,6 +76,14 @@ fn rendu(prims: &[crate::trace2d::Primitive], etendue: [f64; 4]) -> Rendu {
     r
 }
 
+/// Tableau d'une nomenclature posé en position nulle (coin haut gauche à l'origine).
+fn table_zero(p: &crate::modele::Projet, id: &str) -> Rendu {
+    match doc::nomenclature_placee(p, &doc::NomenclaturePlacee { nomenclature: id.into(), position: [0.0, 0.0] }) {
+        Ok((prims, e)) => rendu(&prims, e),
+        Err(e) => Rendu { erreur: Some(e), ..Default::default() },
+    }
+}
+
 #[derive(Default)]
 pub(super) struct EtatFeuilles {
     /// Pixels par mm du papier, position écran de l'origine du jeu (coin haut gauche de
@@ -89,6 +101,8 @@ pub(super) struct EtatFeuilles {
     vues: HashMap<(String, u64), Rendu>,
     /// Cadres et cartouches des feuilles.
     cadres: HashMap<String, Rendu>,
+    /// Tableaux des nomenclatures posées (position nulle), par nomenclature.
+    tables: HashMap<String, Rendu>,
     /// (révision, empreinte du modèle hors feuilles) : les dessins des vues ne sont
     /// recalculés que si le modèle change.
     empreinte: Option<(u64, u64)>,
@@ -126,7 +140,7 @@ impl ViewerApp {
         let derniere = p.feuilles.iter().rev().find(|f| f.jeu == jeu);
         let (largeur, hauteur) = derniere.map_or((420.0, 297.0), |f| (f.largeur, f.hauteur));
         let numero = (p.feuilles.len() + 1..).map(|n| format!("A{n:02}")).find(|n| !p.feuilles.iter().any(|f| &f.numero == n)).unwrap_or_default();
-        doc::Feuille { id: String::new(), numero, nom: "Nouvelle feuille".into(), jeu: jeu.into(), largeur, hauteur, cartouche: derniere.map_or(String::new(), |f| f.cartouche.clone()), vues: Vec::new() }
+        doc::Feuille { id: String::new(), numero, nom: "Nouvelle feuille".into(), jeu: jeu.into(), largeur, hauteur, cartouche: derniere.map_or(String::new(), |f| f.cartouche.clone()), vues: Vec::new(), nomenclatures: Vec::new() }
     }
 
     /// Ruban, Documenter → Feuilles : ouvre le premier jeu ; sans feuille, en crée une.
@@ -174,6 +188,7 @@ impl ViewerApp {
                     etat.vues.clear();
                 }
                 etat.cadres.clear();
+                etat.tables.clear();
                 etat.empreinte = Some((self.bim.revision, h));
             }
             let feuilles: Vec<&doc::Feuille> = p.feuilles.iter().filter(|f| f.jeu == jeu).collect();
@@ -234,18 +249,27 @@ impl ViewerApp {
                     });
                 }
                 etat.cadres.entry(f.id.clone()).or_insert_with(|| rendu(&doc::cadre_feuille(p, f), [0.0; 4]));
+                for n in &f.nomenclatures {
+                    etat.tables.entry(n.nomenclature.clone()).or_insert_with(|| table_zero(p, &n.nomenclature));
+                }
             }
             // cadre d'une vue placée sur sa feuille (mm du papier), titre compris
             let etendues: HashMap<(String, u64), [f64; 4]> = etat.vues.iter().map(|(c, r)| (c.clone(), r.etendue)).collect();
+            let etendues_tables: HashMap<String, [f64; 4]> = etat.tables.iter().map(|(c, r)| (c.clone(), r.etendue)).collect();
+            // objet j d'une feuille : ses vues placées, puis ses nomenclatures
             let boite = |f: &doc::Feuille, j: usize| -> Option<[f64; 4]> {
-                let v = f.vues.get(j)?;
-                let e = *etendues.get(&(v.vue.clone(), v.echelle.to_bits()))?;
-                Some([e[0] + v.position[0] - 2.0, e[1] + v.position[1] - 16.0, e[2] + v.position[0] + 2.0, e[3] + v.position[1] + 2.0])
+                if let Some(v) = f.vues.get(j) {
+                    let e = *etendues.get(&(v.vue.clone(), v.echelle.to_bits()))?;
+                    return Some([e[0] + v.position[0] - 2.0, e[1] + v.position[1] - 16.0, e[2] + v.position[0] + 2.0, e[3] + v.position[1] + 2.0]);
+                }
+                let n = f.nomenclatures.get(j - f.vues.len())?;
+                let e = *etendues_tables.get(&n.nomenclature)?;
+                Some([e[0] + n.position[0] - 2.0, e[1] + n.position[1] - 2.0, e[2] + n.position[0] + 2.0, e[3] + n.position[1] + 2.0])
             };
             let vue_sous = |q: egui::Pos2| -> Option<(usize, usize)> {
                 let (k, pt) = papier(q)?;
                 let f = feuilles[k];
-                (0..f.vues.len()).rev().find(|&j| boite(f, j).is_some_and(|b| pt[0] >= b[0] && pt[0] <= b[2] && pt[1] >= b[1] && pt[1] <= b[3])).map(|j| (k, j))
+                (0..f.vues.len() + f.nomenclatures.len()).rev().find(|&j| boite(f, j).is_some_and(|b| pt[0] >= b[0] && pt[0] <= b[2] && pt[1] >= b[1] && pt[1] <= b[3])).map(|j| (k, j))
             };
             // titre d'une feuille (au-dessus de la page) : poignée pour la déplacer
             let titre_sous = |q: egui::Pos2| -> Option<usize> {
@@ -287,9 +311,11 @@ impl ViewerApp {
                 if let Some((fid, j, d)) = etat.glisse.take() {
                     if let Some(f) = feuilles.iter().find(|f| f.id == fid) {
                         let mut f = (*f).clone();
-                        if let Some(v) = f.vues.get_mut(j) {
-                            v.position[0] += (d.x / z) as f64;
-                            v.position[1] -= (d.y / z) as f64;
+                        let nv = f.vues.len();
+                        let position = if j < nv { f.vues.get_mut(j).map(|v| &mut v.position) } else { f.nomenclatures.get_mut(j - nv).map(|n| &mut n.position) };
+                        if let Some(pos) = position {
+                            pos[0] += (d.x / z) as f64;
+                            pos[1] -= (d.y / z) as f64;
                             if d.length() > 1.0 {
                                 commandes.push(Commande::Feuille { feuille: f });
                             }
@@ -314,12 +340,19 @@ impl ViewerApp {
             }
             if resp.double_clicked() {
                 if let Some((k, j)) = resp.interact_pointer_pos().and_then(vue_sous) {
-                    ouvrir_vue = Some(feuilles[k].vues[j].vue.clone());
+                    match feuilles[k].vues.get(j) {
+                        Some(v) => ouvrir_vue = Some(v.vue.clone()),
+                        None => ouvrir_vue = feuilles[k].nomenclatures.get(j - feuilles[k].vues.len()).map(|n| format!("nomenclature:{}", n.nomenclature)),
+                    }
                 }
             }
             // vue déposée depuis l'arborescence : placée, centrée sur le curseur
-            let survol_depot = resp.dnd_hover_payload::<VueGlissee>().and_then(|_| resp.hover_pos().or(ui.input(|i| i.pointer.hover_pos()))).and_then(papier).map(|(k, _)| k);
-            if let Some(g) = resp.dnd_release_payload::<VueGlissee>() {
+            let survol_depot = resp.dnd_hover_payload::<VueGlissee>().map(|_| ()).or(resp.dnd_hover_payload::<NomenclatureGlissee>().map(|_| ())).and_then(|_| resp.hover_pos().or(ui.input(|i| i.pointer.hover_pos()))).and_then(papier).map(|(k, _)| k);
+            // (une lecture du dépôt retire l'objet glissé quel que soit son type : ne lire
+            // que celui qui est glissé)
+            let depot_vue = resp.dnd_hover_payload::<VueGlissee>().is_some();
+            let depot_table = resp.dnd_hover_payload::<NomenclatureGlissee>().is_some();
+            if let Some(g) = depot_vue.then(|| resp.dnd_release_payload::<VueGlissee>()).flatten() {
                 match ui.input(|i| i.pointer.hover_pos()).and_then(papier) {
                     Some((k, pt)) => {
                         let echelle = p.vues.iter().find(|v| v.id == g.0).map_or(100.0, |v| v.echelle);
@@ -339,6 +372,18 @@ impl ViewerApp {
                         }
                     }
                     None => self.status = "Déposer la vue sur une feuille.".into(),
+                }
+            }
+            // nomenclature déposée : tableau posé, coin haut gauche sous le curseur
+            if let Some(g) = depot_table.then(|| resp.dnd_release_payload::<NomenclatureGlissee>()).flatten() {
+                match ui.input(|i| i.pointer.hover_pos()).and_then(papier) {
+                    Some((k, pt)) => {
+                        let mut f = feuilles[k].clone();
+                        f.nomenclatures.push(doc::NomenclaturePlacee { nomenclature: g.0.clone(), position: pt });
+                        etat.selection = SelectionFeuille::Vue(f.id.clone(), f.vues.len() + f.nomenclatures.len() - 1);
+                        commandes.push(Commande::Feuille { feuille: f });
+                    }
+                    None => self.status = "Déposer la nomenclature sur une feuille.".into(),
                 }
             }
             // tracé : pages, cadres, vues, sélection
@@ -381,11 +426,33 @@ impl ViewerApp {
                         }
                         ajouter(rv, k, v.position[0], v.position[1], decal, &mut mesh, &mut traits);
                     }
-                    if etat.selection == SelectionFeuille::Vue(f.id.clone(), j) {
-                        if let Some(b) = boite(f, j) {
-                            let cadre = egui::Rect::from_two_pos(ecran(k, b[0], b[1]), ecran(k, b[2], b[3])).translate(decal);
-                            painter.add(egui::Shape::dashed_line(&[cadre.left_top(), cadre.right_top(), cadre.right_bottom(), cadre.left_bottom(), cadre.left_top()], egui::Stroke::new(1.5, bleu), 6.0, 4.0));
+                }
+                // nomenclatures posées
+                for (i, n) in f.nomenclatures.iter().enumerate() {
+                    let j = f.vues.len() + i;
+                    let decal = match &etat.glisse {
+                        Some((fid, jj, d)) if *fid == f.id && *jj == j => *d,
+                        _ => egui::Vec2::ZERO,
+                    };
+                    if let Some(rt) = etat.tables.get(&n.nomenclature) {
+                        if let Some(e) = &rt.erreur {
+                            painter.text(ecran(k, n.position[0], n.position[1]), egui::Align2::LEFT_TOP, e, egui::FontId::proportional(12.0), Color32::DARK_RED);
                         }
+                        ajouter(rt, k, n.position[0], n.position[1], decal, &mut mesh, &mut traits);
+                    }
+                }
+                // objet choisi : cadre en tirets
+                for j in 0..f.vues.len() + f.nomenclatures.len() {
+                    if etat.selection != SelectionFeuille::Vue(f.id.clone(), j) {
+                        continue;
+                    }
+                    let decal = match &etat.glisse {
+                        Some((fid, jj, d)) if *fid == f.id && *jj == j => *d,
+                        _ => egui::Vec2::ZERO,
+                    };
+                    if let Some(b) = boite(f, j) {
+                        let cadre = egui::Rect::from_two_pos(ecran(k, b[0], b[1]), ecran(k, b[2], b[3])).translate(decal);
+                        painter.add(egui::Shape::dashed_line(&[cadre.left_top(), cadre.right_top(), cadre.right_bottom(), cadre.left_bottom(), cadre.left_top()], egui::Stroke::new(1.5, bleu), 6.0, 4.0));
                     }
                 }
                 let choisie = matches!(&etat.selection, SelectionFeuille::Feuille(id) if *id == f.id);
@@ -422,7 +489,7 @@ impl ViewerApp {
             if feuilles.is_empty() {
                 painter.text(rect.center_top() + egui::vec2(0.0, 14.0), egui::Align2::CENTER_TOP, "Jeu vide : cliquer la page en pointillés", egui::FontId::proportional(13.0), Color32::from_gray(60));
             } else {
-                let aide = painter.layout_no_wrap("Glisser une vue de l'arborescence sur une feuille · glisser le titre d'une feuille : la déplacer · molette : zoom · glisser le fond : défiler · double-clic sur une vue : l'ouvrir · Suppr : retirer".into(), egui::FontId::proportional(12.0), Color32::from_gray(40));
+                let aide = painter.layout_no_wrap("Glisser une vue ou une nomenclature de l'arborescence sur une feuille · glisser le titre d'une feuille : la déplacer · molette : zoom · glisser le fond : défiler · double-clic sur une vue : l'ouvrir · Suppr : retirer".into(), egui::FontId::proportional(12.0), Color32::from_gray(40));
                 let cadre = egui::Rect::from_min_size(rect.left_bottom() + egui::vec2(8.0, -aide.size().y - 14.0), aide.size() + egui::vec2(12.0, 6.0));
                 painter.rect_filled(cadre, 4.0, Color32::from_rgba_unmultiplied(245, 245, 245, 230));
                 painter.galley(cadre.min + egui::vec2(6.0, 3.0), aide, Color32::from_gray(40));
@@ -451,7 +518,9 @@ impl ViewerApp {
                 self.error = Some(e);
             }
         }
-        if let Some(id) = ouvrir_vue {
+        if let Some(id) = ouvrir_vue.as_deref().and_then(|x| x.strip_prefix("nomenclature:")) {
+            self.ouvrir_nomenclature(id);
+        } else if let Some(id) = ouvrir_vue {
             let n = crate::scene::numero_vue(&id);
             if let Some(i) = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|nav| nav.vues.iter().position(|v| v.revit_id == n)) {
                 self.activer_vue(i);
@@ -513,6 +582,36 @@ impl ViewerApp {
         };
         let feuille = fid.and_then(|id| p.feuilles.iter().find(|f| f.id == id && f.jeu == jeu));
         match (feuille, &selection) {
+            (Some(f), SelectionFeuille::Vue(_, j)) if *j >= f.vues.len() && *j < f.vues.len() + f.nomenclatures.len() => {
+                let mut g = f.clone();
+                let k = *j - f.vues.len();
+                let n = &mut g.nomenclatures[k];
+                let id_nomenclature = n.nomenclature.clone();
+                let nom = p.nomenclatures.iter().find(|x| x.id == n.nomenclature).map_or("Nomenclature absente".to_string(), |x| x.nom.clone());
+                ui.heading("Nomenclature posée");
+                ui.label(RichText::new(&nom).strong());
+                egui::Grid::new("table_posee").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                    ui.label("Position X");
+                    ui.add(egui::DragValue::new(&mut n.position[0]).speed(1.0).max_decimals(1).suffix(" mm"));
+                    ui.end_row();
+                    ui.label("Position Y");
+                    ui.add(egui::DragValue::new(&mut n.position[1]).speed(1.0).max_decimals(1).suffix(" mm"));
+                    ui.end_row();
+                });
+                ui.label(RichText::new("Coin haut gauche du tableau ; colonnes et regroupement : ouvrir la nomenclature").small().weak());
+                ui.horizontal(|ui| {
+                    if ui.button("Ouvrir la nomenclature").clicked() {
+                        ouvrir = Some(format!("nomenclature:{id_nomenclature}"));
+                    }
+                    if ui.button("Retirer de la feuille").on_hover_text("Suppr").clicked() {
+                        g.nomenclatures.remove(k);
+                        self.feuilles.selection = SelectionFeuille::Feuille(g.id.clone());
+                    }
+                });
+                if serde_json::to_string(&g).ok() != serde_json::to_string(f).ok() {
+                    commande = Some(Commande::Feuille { feuille: g });
+                }
+            }
             (Some(f), SelectionFeuille::Vue(_, j)) if *j < f.vues.len() => {
                 let mut g = f.clone();
                 let v = &mut g.vues[*j];
@@ -583,7 +682,7 @@ impl ViewerApp {
                     ui.text_edit_singleline(&mut g.cartouche);
                     ui.end_row();
                 });
-                ui.label(RichText::new(format!("{} vue(s) placée(s) · glisser une vue de l'arborescence sur la feuille", f.vues.len())).small().weak());
+                ui.label(RichText::new(format!("{} vue(s) placée(s), {} nomenclature(s) · glisser une vue ou une nomenclature de l'arborescence sur la feuille", f.vues.len(), f.nomenclatures.len())).small().weak());
                 ui.horizontal(|ui| {
                     if ui.button("Exporter PDF…").clicked() {
                         export = Some(("pdf", f.id.clone()));
@@ -614,7 +713,9 @@ impl ViewerApp {
                 self.error = Some(e);
             }
         }
-        if let Some(o) = ouvrir {
+        if let Some(id) = ouvrir.as_deref().and_then(|o| o.strip_prefix("nomenclature:")) {
+            self.ouvrir_nomenclature(id);
+        } else if let Some(o) = ouvrir {
             match o.strip_prefix("vue:") {
                 Some(id) => {
                     let n = crate::scene::numero_vue(id);
@@ -668,6 +769,14 @@ impl ViewerApp {
         }
     }
 
+    /// Ouvre la fenêtre des nomenclatures sur la nomenclature `id`.
+    pub(super) fn ouvrir_nomenclature(&mut self, id: &str) {
+        if let Some(k) = self.natif.as_ref().and_then(|(p, _)| p.nomenclatures.iter().position(|n| n.id == id)) {
+            self.bim.nomenclature = k;
+            self.bim.documentation = true;
+        }
+    }
+
     /// Remet la feuille `id` dans le jeu `jeu`, avant la feuille `avant` (à la fin sans).
     pub(super) fn deplacer_feuille(&mut self, id: &str, jeu: &str, avant: Option<&str>) {
         let Some((p, _)) = &self.natif else { return };
@@ -687,9 +796,13 @@ impl ViewerApp {
         let Some(jeu) = self.jeu_actif() else { return false };
         let Some((p, _)) = &self.natif else { return false };
         let commande = match self.feuilles.selection.clone() {
-            SelectionFeuille::Vue(id, j) => p.feuilles.iter().find(|f| f.id == id && f.jeu == jeu && j < f.vues.len()).map(|f| {
+            SelectionFeuille::Vue(id, j) => p.feuilles.iter().find(|f| f.id == id && f.jeu == jeu && j < f.vues.len() + f.nomenclatures.len()).map(|f| {
                 let mut g = f.clone();
-                g.vues.remove(j);
+                if j < g.vues.len() {
+                    g.vues.remove(j);
+                } else {
+                    g.nomenclatures.remove(j - f.vues.len());
+                }
                 self.feuilles.selection = SelectionFeuille::Feuille(id.clone());
                 Commande::Feuille { feuille: g }
             }),

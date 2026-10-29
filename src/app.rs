@@ -4069,17 +4069,18 @@ impl ViewerApp {
         // projet natif : jeux de feuilles et leurs feuilles, nomenclatures ; vues
         // glissables vers une feuille
         // jeux : (nom, feuilles : (id, titre, vues placées : (numéro de vue, nom, échelle)))
-        type FeuilleNav = (String, String, Vec<(i64, String, f64)>);
-        let (jeux_natifs, nomenclatures_natives, glissables): (Vec<(String, Vec<FeuilleNav>)>, Vec<(usize, String)>, std::collections::HashMap<i64, String>) = match &self.natif {
+        type FeuilleNav = (String, String, Vec<(i64, String, f64)>, Vec<(String, String)>);
+        let (jeux_natifs, nomenclatures_natives, glissables): (Vec<(String, Vec<FeuilleNav>)>, Vec<(String, String)>, std::collections::HashMap<i64, String>) = match &self.natif {
             Some((p, _)) => (
                 crate::modele::documentation::jeux(p).into_iter().map(|j| {
                     let fs = p.feuilles.iter().filter(|f| f.jeu == j).map(|f| {
                         let vues = f.vues.iter().map(|v| (crate::scene::numero_vue(&v.vue), p.vues.iter().find(|x| x.id == v.vue).map_or("Vue absente".to_string(), |x| x.nom.clone()), v.echelle)).collect();
-                        (f.id.clone(), format!("{} - {}", f.numero, f.nom), vues)
+                        let tables = f.nomenclatures.iter().map(|n| (n.nomenclature.clone(), p.nomenclatures.iter().find(|x| x.id == n.nomenclature).map_or("Nomenclature absente".to_string(), |x| x.nom.clone()))).collect();
+                        (f.id.clone(), format!("{} - {}", f.numero, f.nom), vues, tables)
                     }).collect();
                     (j, fs)
                 }).collect(),
-                p.nomenclatures.iter().enumerate().map(|(k, n)| (k, n.nom.clone())).collect(),
+                p.nomenclatures.iter().map(|n| (n.id.clone(), n.nom.clone())).collect(),
                 p.vues.iter().map(|v| (crate::scene::numero_vue(&v.id), v.id.clone())).collect(),
             ),
             None => (Vec::new(), Vec::new(), std::collections::HashMap::new()),
@@ -4087,7 +4088,7 @@ impl ViewerApp {
         let mut ouvrir_jeu: Option<(String, Option<String>)> = None;
         // feuille glissée dans l'arborescence : (feuille, jeu, feuille devant laquelle)
         let mut deplacer: Option<(String, String, Option<String>)> = None;
-        let mut ouvrir_nomenclature: Option<usize> = None;
+        let mut ouvrir_nomenclature: Option<String> = None;
         let Some(s) = self.scene.as_ref() else { return };
         let Some(nav) = s.navigateur.as_ref() else { return };
         let q = self.filter.trim().to_lowercase();
@@ -4155,9 +4156,14 @@ impl ViewerApp {
             if nomenclatures.is_empty() && nomenclatures_natives.is_empty() {
                 ui.label(RichText::new("Aucune nomenclature").weak());
             }
-            for (k, nom) in &nomenclatures_natives {
-                if garde(nom) && ui.selectable_label(false, nom).on_hover_text("Ouvrir la nomenclature").clicked() {
-                    ouvrir_nomenclature = Some(*k);
+            for (id, nom) in &nomenclatures_natives {
+                if !garde(nom) {
+                    continue;
+                }
+                let r = ui.add(egui::Button::selectable(false, nom.as_str()).sense(Sense::click_and_drag())).on_hover_text("Clic : ouvrir la nomenclature · glisser sur une feuille d'un jeu pour y poser le tableau");
+                r.dnd_set_drag_payload(feuilles::NomenclatureGlissee(id.clone()));
+                if r.clicked() {
+                    ouvrir_nomenclature = Some(id.clone());
                 }
             }
             for &i in &nomenclatures {
@@ -4189,7 +4195,7 @@ impl ViewerApp {
                         if r.dnd_hover_payload::<feuilles::FeuilleGlissee>().is_some() {
                             ui.painter().rect_stroke(r.rect, 3.0, egui::Stroke::new(1.5, ui.visuals().selection.stroke.color), egui::StrokeKind::Inside);
                         }
-                        if let Some(g) = r.dnd_release_payload::<feuilles::FeuilleGlissee>() {
+                        if let Some(g) = r.dnd_hover_payload::<feuilles::FeuilleGlissee>().and_then(|_| r.dnd_release_payload::<feuilles::FeuilleGlissee>()) {
                             deplacer = Some((g.0.clone(), jeu.clone(), None));
                         }
                     })
@@ -4197,7 +4203,7 @@ impl ViewerApp {
                         // recherche : un jeu trouvé montre toutes ses feuilles ; une feuille,
                         // si son titre ou une de ses vues placées correspond
                         let jeu_trouve = garde(jeu);
-                        for (k, (fid, titre, vues)) in fs.iter().enumerate() {
+                        for (k, (fid, titre, vues, tables)) in fs.iter().enumerate() {
                             if !jeu_trouve && !garde(titre) && !vues.iter().any(|v| garde(&v.1)) {
                                 continue;
                             }
@@ -4206,8 +4212,13 @@ impl ViewerApp {
                             let etat = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id_feuille, true);
                             let (_, entete, _) = etat.show_header(ui, |ui| ui.add(egui::Button::selectable(false, titre.as_str()).sense(Sense::click_and_drag())).on_hover_text("Clic : afficher la feuille · glisser : la déplacer dans le jeu ou vers un autre jeu"))
                                 .body(|ui| {
-                                    if vues.is_empty() {
+                                    if vues.is_empty() && tables.is_empty() {
                                         ui.label(RichText::new("Aucune vue placée").weak().small());
+                                    }
+                                    for (id, nom) in tables {
+                                        if ui.selectable_label(false, format!("{nom} (nomenclature)")).on_hover_text("Clic : ouvrir la nomenclature").clicked() {
+                                            ouvrir_nomenclature = Some(id.clone());
+                                        }
                                     }
                                     for (n, nom, echelle) in vues {
                                         let i = indice.get(n).copied();
@@ -4228,7 +4239,7 @@ impl ViewerApp {
                                 let y = if dessous(ui.input(|i| i.pointer.hover_pos())) { r.rect.bottom() } else { r.rect.top() };
                                 ui.painter().line_segment([egui::pos2(r.rect.left(), y), egui::pos2(r.rect.right(), y)], egui::Stroke::new(2.5, ui.visuals().selection.stroke.color));
                             }
-                            if let Some(g) = r.dnd_release_payload::<feuilles::FeuilleGlissee>() {
+                            if let Some(g) = r.dnd_hover_payload::<feuilles::FeuilleGlissee>().and_then(|_| r.dnd_release_payload::<feuilles::FeuilleGlissee>()) {
                                 let avant = if dessous(ui.input(|i| i.pointer.hover_pos())) { fs.get(k + 1).map(|x| x.0.clone()) } else { Some(fid.clone()) };
                                 deplacer = Some((g.0.clone(), jeu.clone(), avant));
                             }
@@ -4304,9 +4315,8 @@ impl ViewerApp {
         if let Some((id, jeu, avant)) = deplacer {
             self.deplacer_feuille(&id, &jeu, avant.as_deref());
         }
-        if let Some(k) = ouvrir_nomenclature {
-            self.bim.nomenclature = k;
-            self.bim.documentation = true;
+        if let Some(id) = ouvrir_nomenclature {
+            self.ouvrir_nomenclature(&id);
         }
         match action {
             Some(ActionNav::Selection(e)) => self.select(Some(e), false),
@@ -7291,6 +7301,7 @@ impl eframe::App for ViewerApp {
         // vue ou feuille glissée dans l'arborescence : son nom suit le curseur
         let glissee = egui::DragAndDrop::payload::<feuilles::VueGlissee>(&ctx)
             .and_then(|g| self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|v| v.id == g.0)).map(|v| format!("Placer : {}", v.nom)))
+            .or_else(|| egui::DragAndDrop::payload::<feuilles::NomenclatureGlissee>(&ctx).and_then(|g| self.natif.as_ref().and_then(|(p, _)| p.nomenclatures.iter().find(|n| n.id == g.0)).map(|n| format!("Poser : {}", n.nom))))
             .or_else(|| egui::DragAndDrop::payload::<feuilles::FeuilleGlissee>(&ctx).and_then(|g| self.natif.as_ref().and_then(|(p, _)| p.feuilles.iter().find(|f| f.id == g.0)).map(|f| format!("Déplacer : {} - {}", f.numero, f.nom))));
         if let (Some(nom), Some(q)) = (glissee, ctx.pointer_hover_pos()) {
             let peintre = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("vue_glissee")));

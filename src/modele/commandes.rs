@@ -655,6 +655,7 @@ impl Projet {
                 self.nomenclatures.retain(|x| !set.contains(&x.id));
                 for f in &mut self.feuilles {
                     f.vues.retain(|v| !set.contains(&v.vue));
+                    f.nomenclatures.retain(|n| !set.contains(&n.nomenclature));
                 }
                 Ok(Vec::new())
             }
