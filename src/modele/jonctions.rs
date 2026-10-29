@@ -1,4 +1,5 @@
-//! Jonctions des murs droits en plan, comme Revit les nettoie : angle (L) en onglet,
+//! Jonctions des murs droits en plan, comme Revit les nettoie : angle (L) en onglet
+//! entre murs de même épaisseur, bout à bout entre épaisseurs différentes,
 //! arrivée sur un mur (T) arrêtée sur sa face, deux murs alignés bout à bout continus
 //! (un troisième mur au même nœud s'arrête sur leur face). Un assemblage se raccorde d'un bloc :
 //! la même coupe s'applique à toutes ses couches, si bien que deux assemblages de
@@ -275,6 +276,17 @@ pub fn jonctions(p: &Projet) -> (Coupes, Interruptions) {
                 }
                 let (k, e, dist, porteur, arrivant) = if ca { (j, eb, dist_b, a, b) } else { (i, ea, dist_a, b, a) };
                 arrivee(&mut candidats, k, e, dist, porteur, arrivant, x, loin(arrivant, e));
+            } else if dist_a <= tol && dist_b <= tol && (a.epaisseur - b.epaisseur).abs() > 0.5 {
+                // angle entre épaisseurs différentes : bout à bout, pas d'onglet. Le plus
+                // épais va jusqu'à la face extérieure de l'autre, qui s'arrête sur sa face
+                // (noyau prolongé jusqu'à son noyau, comme une arrivée en T)
+                let (kp, ep, dp, porteur, ka, eaa, da_, arrivant) =
+                    if a.epaisseur > b.epaisseur { (i, ea, dist_a, a, j, eb, dist_b, b) } else { (j, eb, dist_b, b, i, ea, dist_a, a) };
+                let d = (arrivant.b - arrivant.a).normalize();
+                let cote = (loin(porteur, ep) - x).dot(d.perp()).signum();
+                let coupe = Coupe { point: (x - d.perp() * cote * arrivant.epaisseur / 2.0).to_array(), direction: d.to_array() };
+                candidats.entry((kp, ep)).or_default().push((dp, coupe, true, Some(coupe), None));
+                arrivee(&mut candidats, ka, eaa, da_, porteur, arrivant, x, loin(arrivant, eaa));
             } else if dist_a <= tol && dist_b <= tol {
                 // onglet : droite par les intersections des faces intérieures et extérieures
                 let (ua, ub) = ((loin(a, ea) - x).normalize(), (loin(b, eb) - x).normalize());
@@ -426,8 +438,24 @@ mod tests {
     }
 
     #[test]
+    fn angle_d_epaisseurs_differentes_bout_a_bout() {
+        let mut p = Projet::nouveau("L");
+        p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &ParametresMur { epaisseur: 200.0, ..Default::default() }).unwrap();
+        p.ajouter_mur([5000.0, 0.0], [5000.0, 4000.0], &ParametresMur { epaisseur: 300.0, ..Default::default() }).unwrap();
+        let cs = coupes(&p);
+        let c: Vec<_> = p.murs.iter().map(|m| contour(&p, m, &cs).unwrap()).collect();
+        // le mince s'arrête droit sur la face du plus épais (x = 4850)
+        assert!((c[0][1][0] - 4850.0).abs() < 1e-6 && (c[0][2][0] - 4850.0).abs() < 1e-6, "{:?}", c[0]);
+        // le plus épais va droit jusqu'à la face extérieure du mince (y = −100)
+        assert!((c[1][0][1] + 100.0).abs() < 1e-6 && (c[1][3][1] + 100.0).abs() < 1e-6, "{:?}", c[1]);
+        // ni recouvrement ni manque
+        assert!((aire(&c[0]) + aire(&c[1]) - (4850.0 * 200.0 + 300.0 * 4100.0)).abs() < 1e-3);
+    }
+
+    #[test]
     fn angle_joint_par_les_noyaux() {
-        // deux compositions différentes : les bétons se rejoignent en onglet sur leurs faces
+        // deux compositions différentes : bout à bout, le béton du plus mince va jusqu'à la
+        // face du béton du plus épais
         let mut p = Projet::nouveau("L");
         let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None };
         p.types_murs.push(TypeCompose { id: "a".into(), nom: "A".into(), couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Béton", 200.0, FonctionCouche::Structure), c("Isolant", 100.0, FonctionCouche::Isolation)], couches_detaillees: true, origine: None });
@@ -441,9 +469,9 @@ mod tests {
             contour(&p, m, &cs).unwrap()
         };
         let (a, b) = (beton(0), beton(1));
-        // les deux sommets de la coupe du béton de A sont des sommets du béton de B
-        let communs = [a[1], a[2]].iter().filter(|x| b.iter().any(|y| (x[0] - y[0]).hypot(x[1] - y[1]) < 1e-6)).count();
-        assert_eq!(communs, 2, "{a:?} / {b:?}");
+        // coupe du béton de A droite (perpendiculaire à son axe), sur la face du béton de B
+        let xb = b.iter().map(|q| q[0]).fold(f64::MAX, f64::min);
+        assert!((a[1][0] - xb).abs() < 1e-6 && (a[2][0] - xb).abs() < 1e-6, "{a:?} / {b:?}");
     }
 
     #[test]

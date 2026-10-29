@@ -496,11 +496,12 @@ fn fusionner_materiaux(scene: &Scene, mut prims: Vec<Primitive>) -> Vec<Primitiv
 pub fn sommets(scene: &Scene, prims: &[Primitive], normale: DVec3, echelle: f64, fins: bool) -> (Vec<Vertex>, Vec<Vertex>) {
     let largeur = TRAIT_FORT_MM * echelle / 1000.0;
     let (mut tris, mut traits) = (Vec::new(), Vec::new());
+    let raccords = (!fins).then(|| crate::trace2d::Raccords::new(prims, echelle));
     for p in prims {
         let obj = p.element.and_then(|e| scene.object_of.get(&e).copied()).unwrap_or(u32::MAX);
         let decal = -normale * if p.role == Role::Coupe { (0.4 * largeur).min(0.004) } else { (0.2 * largeur).min(0.002) };
         let sommet = |q: DVec3| Vertex { pos: (q + decal).as_vec3().to_array(), normal: [0, 0, 0, 127], color: p.style.couleur, obj };
-        let m = maillage(p, normale, echelle, fins);
+        let m = maillage(p, normale, echelle, fins, raccords.as_ref());
         tris.extend(m.triangles.iter().flatten().map(|q| sommet(*q)));
         traits.extend(m.traits.iter().flatten().map(|q| sommet(*q)));
         // liseré d'un pixel des traits épais (contours, annotations) : jamais plus fins
@@ -512,14 +513,15 @@ pub fn sommets(scene: &Scene, prims: &[Primitive], normale: DVec3, echelle: f64,
     (tris, traits)
 }
 
-/// Maillage d'une primitive ; traits fins : ses traits épais ramenés à un pixel.
-fn maillage(p: &Primitive, normale: DVec3, echelle: f64, fins: bool) -> crate::trace2d::Maillage {
+/// Maillage d'une primitive ; traits fins : ses traits épais ramenés à un pixel ; sinon
+/// bouts raccordés aux traits rejoints.
+fn maillage(p: &Primitive, normale: DVec3, echelle: f64, fins: bool, raccords: Option<&crate::trace2d::Raccords>) -> crate::trace2d::Maillage {
     if fins && p.style.epaisseur > 0.0 {
         let mut fin = p.clone();
         fin.style.epaisseur = 0.0;
         return fin.mailler(normale, echelle);
     }
-    p.mailler(normale, echelle)
+    p.mailler_raccords(normale, echelle, raccords)
 }
 
 /// Ferme les six faces d'une section box. La triangulation précède le découpage
@@ -533,7 +535,9 @@ pub fn sommets_boite(scene: &Scene, visible: &[bool], a: Vec3, b: Vec3, echelle:
     let plans = [Vec3::X.extend(-a.x), Vec3::NEG_X.extend(b.x), Vec3::Y.extend(-a.y), Vec3::NEG_Y.extend(b.y), Vec3::Z.extend(-a.z), Vec3::NEG_Z.extend(b.z)];
     for plan in plans {
         let normale = plan.truncate().as_dvec3();
-        for mut p in coupe(scene, visible, plan, echelle, poche.unwrap_or(Poche::Vide)) {
+        let prims = coupe(scene, visible, plan, echelle, poche.unwrap_or(Poche::Vide));
+        let raccords = (!fins).then(|| crate::trace2d::Raccords::new(&prims, echelle));
+        for mut p in prims {
             let objet = p.element.and_then(|id| scene.object_of.get(&id).copied()).unwrap_or(u32::MAX);
             if poche.is_none() && p.role == Role::Poche {
                 let couleur_couche = match &p.forme {
@@ -555,7 +559,7 @@ pub fn sommets_boite(scene: &Scene, visible: &[bool], a: Vec3, b: Vec3, echelle:
                 }
             }
             let sommet = |q: DVec3| Vertex { pos: q.as_vec3().to_array(), normal: [0, 0, 0, 127], color: p.style.couleur, obj: objet };
-            let maillage = maillage(&p, normale, echelle, fins);
+            let maillage = maillage(&p, normale, echelle, fins, raccords.as_ref());
             for t in maillage.triangles {
                 let mut polygone = t.to_vec();
                 for limite in plans {

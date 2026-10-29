@@ -182,9 +182,12 @@ dans le projet au choix.
 
 ## Jonctions et édition des murs
 
-- Angle (L) en onglet, arrivée (T) arrêtée sur la face du mur traversé, deux murs alignés
+- Angle (L) en onglet entre murs de même épaisseur ; entre épaisseurs différentes,
+  bout à bout (pas d'onglet) : le plus épais va jusqu'à la face extérieure de l'autre,
+  qui s'arrête sur sa face, noyau prolongé jusqu'à son noyau (comme une arrivée en T).
+  Arrivée (T) arrêtée sur la face du mur traversé, deux murs alignés
   bout à bout continus : un troisième mur au même nœud s'arrête sur leur face.
-- Angle en L joint par les noyaux : les noyaux (couches porteuses) se coupent en onglet
+- Angle en L (même épaisseur) joint par les noyaux : les noyaux (couches porteuses) se coupent en onglet
   sur leurs propres faces ; chaque autre couche rejoint, sur l'autre mur, la ligne située
   à la même profondeur depuis le noyau (côté intérieur ou extérieur de l'angle) : à
   composition égale, onglet couche à couche ; à compositions différentes, noyaux alignés

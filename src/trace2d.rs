@@ -9,6 +9,7 @@
 
 use crate::step::Id;
 use glam::DVec3;
+use std::collections::HashMap;
 use std::fmt::Write;
 
 /// Forme d'une primitive.
@@ -110,13 +111,21 @@ impl Primitive {
     /// `echelle` (dénominateur) : traits épais en rubans, prolongés d'une demi-largeur à
     /// chaque bout pour fermer les angles.
     pub fn mailler(&self, normale: DVec3, echelle: f64) -> Maillage {
+        self.mailler_raccords(normale, echelle, None)
+    }
+
+    /// Comme `mailler`, les bouts des traits épais prolongés selon les traits qu'ils
+    /// rejoignent (`raccords`, construits à la même échelle).
+    pub fn mailler_raccords(&self, normale: DVec3, echelle: f64, raccords: Option<&Raccords>) -> Maillage {
         let mut m = Maillage::default();
         let largeur = self.style.epaisseur * echelle / 1000.0;
         let trait_ = |a: DVec3, b: DVec3, m: &mut Maillage| {
             if largeur <= 0.0 {
                 m.traits.push([a, b]);
             } else {
-                ruban(a, b, normale, largeur, &mut m.triangles);
+                let h = largeur / 2.0;
+                let (ea, eb) = raccords.map_or((h, h), |r| (r.prolongement(a, b, h), r.prolongement(b, a, h)));
+                ruban(a, b, normale, largeur, ea, eb, &mut m.triangles);
             }
         };
         match &self.forme {
@@ -141,18 +150,98 @@ impl Primitive {
 }
 
 /// Rectangle de largeur `l` le long de [a, b] dans le plan de normale `n`, prolongé de
-/// l/2 à chaque bout.
-fn ruban(a: DVec3, b: DVec3, n: DVec3, l: f64, out: &mut Vec<[DVec3; 3]>) {
+/// `ea` au début et `eb` à la fin.
+fn ruban(a: DVec3, b: DVec3, n: DVec3, l: f64, ea: f64, eb: f64, out: &mut Vec<[DVec3; 3]>) {
     let d = b - a;
     let cote = n.cross(d);
     if d.length() < 1e-12 || cote.length() < 1e-12 {
         return;
     }
-    let t = d.normalize() * (l / 2.0);
+    let u = d.normalize();
     let c = cote.normalize() * (l / 2.0);
-    let (p0, p1, p2, p3) = (a - t - c, b + t - c, b + t + c, a - t + c);
+    let (p0, p1, p2, p3) = (a - u * ea - c, b + u * eb - c, b + u * eb + c, a - u * ea + c);
     out.push([p0, p1, p2]);
     out.push([p0, p2, p3]);
+}
+
+/// Raccords des traits épais d'un dessin. Un trait prolongé de sa propre demi-largeur
+/// (bout carré) dépasse d'un trait plus fin qu'il rejoint : chaque bout est prolongé de
+/// la demi-largeur du trait qu'il rejoint (le plus épais s'il y en a plusieurs), si
+/// bien que deux traits d'épaisseurs différentes se raccordent sans débord.
+pub struct Raccords {
+    cellule: f64,
+    grille: HashMap<[i64; 3], Vec<usize>>,
+    /// Segments épais et leur demi-largeur (m).
+    segments: Vec<([DVec3; 2], f64)>,
+}
+
+impl Raccords {
+    pub fn new(prims: &[Primitive], echelle: f64) -> Raccords {
+        let mut segments = Vec::new();
+        for p in prims.iter().filter(|p| p.style.epaisseur > 0.0) {
+            let h = p.style.epaisseur * echelle / 2000.0;
+            match &p.forme {
+                Forme::Polyligne { points, fermee } => {
+                    segments.extend(points.windows(2).map(|w| ([w[0], w[1]], h)));
+                    if *fermee && points.len() > 2 {
+                        segments.push(([points[points.len() - 1], points[0]], h));
+                    }
+                }
+                Forme::Segments(s) => segments.extend(s.iter().map(|s| (*s, h))),
+                _ => {}
+            }
+        }
+        let cellule = 0.5;
+        let mut grille: HashMap<[i64; 3], Vec<usize>> = HashMap::new();
+        let case = |p: DVec3| (p / cellule).floor().as_i64vec3().to_array();
+        for (k, ([a, b], _)) in segments.iter().enumerate() {
+            // cases traversées (pas d'une demi-case) et leurs voisines
+            let n = ((*b - *a).length() / (cellule * 0.5)).ceil().min(100_000.0) as usize + 1;
+            let mut vues = std::collections::HashSet::new();
+            for i in 0..=n {
+                let c = case(a.lerp(*b, i as f64 / n as f64));
+                for dx in -1..=1 {
+                    for dy in -1..=1 {
+                        for dz in -1..=1 {
+                            vues.insert([c[0] + dx, c[1] + dy, c[2] + dz]);
+                        }
+                    }
+                }
+            }
+            for c in vues {
+                grille.entry(c).or_default().push(k);
+            }
+        }
+        Raccords { cellule, grille, segments }
+    }
+
+    /// Prolongement du bout `p` du trait [p, q] de demi-largeur `h` : demi-largeur du plus
+    /// épais des traits qu'il rejoint (bout ou milieu) ; 0 dans le prolongement d'un trait
+    /// aligné ; `h` s'il ne rejoint rien.
+    pub fn prolongement(&self, p: DVec3, q: DVec3, h: f64) -> f64 {
+        let Some(ks) = self.grille.get(&(p / self.cellule).floor().as_i64vec3().to_array()) else { return h };
+        let d = (q - p).normalize_or_zero();
+        let tol = 1e-5;
+        let (mut ext, mut aligne) = (None::<f64>, false);
+        for &k in ks {
+            let ([a, b], h2) = self.segments[k];
+            let ab = b - a;
+            let t = if ab.length_squared() > 0.0 { ((p - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0) } else { 0.0 };
+            if (a + ab * t).distance(p) > tol {
+                continue;
+            }
+            let e = ab.normalize_or_zero();
+            if d.cross(e).length() < 0.05 {
+                // même direction : le trait lui-même, un doublon ou un trait aligné ; ce
+                // dernier ne compte que s'il continue au-delà du bout
+                let au_dela = [a, b].iter().any(|x| (*x - p).dot(d) < -tol);
+                aligne |= au_dela;
+                continue;
+            }
+            ext = Some(ext.map_or(h2, |x: f64| x.max(h2)));
+        }
+        ext.unwrap_or(if aligne { 0.0 } else { h })
+    }
 }
 
 /// Repère orthonormé (x, y) d'un plan de normale `n`.
@@ -217,6 +306,7 @@ impl Dessin {
         );
         let _ = writeln!(s, "<title>{}</title>", echapper(titre));
         let _ = writeln!(s, r#"<rect x="{x0:.3}" y="{y0:.3}" width="{l:.3}" height="{h:.3}" fill="white"/>"#);
+        let raccords = Raccords::new(&self.primitives, self.echelle);
         let mut ordre: Vec<&Primitive> = self.primitives.iter().collect();
         ordre.sort_by_key(|p| p.role.rang());
         let mut role_ouvert = None;
@@ -228,7 +318,7 @@ impl Dessin {
                 let _ = writeln!(s, r#"<g id="{}">"#, pr.role.nom());
                 role_ouvert = Some(pr.role);
             }
-            self.svg_primitive(pr, &mut s);
+            self.svg_primitive(pr, &raccords, &mut s);
         }
         if role_ouvert.is_some() {
             s.push_str("</g>\n");
@@ -237,13 +327,38 @@ impl Dessin {
         s
     }
 
-    fn svg_primitive(&self, pr: &Primitive, s: &mut String) {
+    fn svg_primitive(&self, pr: &Primitive, raccords: &Raccords, s: &mut String) {
         let c = pr.style.couleur;
         let couleur = format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]);
         let opacite = if c[3] < 255 { format!(r#" opacity="{:.3}""#, c[3] as f64 / 255.0) } else { String::new() };
         let epaisseur = if pr.style.epaisseur > 0.0 { pr.style.epaisseur } else { pr.role.trait_fin() };
         let element = pr.element.map(|e| format!(r#" data-element="{e}""#)).unwrap_or_default();
         let pts = |ps: &[DVec3]| ps.iter().map(|p| self.papier(*p)).map(|[x, y]| format!("{x:.3},{y:.3}")).collect::<Vec<_>>().join(" ");
+        // traits épais : segments à bouts francs, prolongés selon les traits rejoints
+        let segments: Option<Vec<[DVec3; 2]>> = match &pr.forme {
+            _ if pr.style.epaisseur <= 0.0 => None,
+            Forme::Polyligne { points, fermee } => {
+                let mut v: Vec<[DVec3; 2]> = points.windows(2).map(|w| [w[0], w[1]]).collect();
+                if *fermee && points.len() > 2 {
+                    v.push([points[points.len() - 1], points[0]]);
+                }
+                Some(v)
+            }
+            Forme::Segments(seg) => Some(seg.clone()),
+            _ => None,
+        };
+        if let Some(seg) = segments {
+            let h = epaisseur * self.echelle / 2000.0;
+            let mut d = String::new();
+            for [a, b] in seg {
+                let u = (b - a).normalize_or_zero();
+                let (a2, b2) = (a - u * raccords.prolongement(a, b, h), b + u * raccords.prolongement(b, a, h));
+                let ([xa, ya], [xb, yb]) = (self.papier(a2), self.papier(b2));
+                let _ = write!(d, "M{xa:.3} {ya:.3}L{xb:.3} {yb:.3}");
+            }
+            let _ = writeln!(s, r#"<path d="{d}" fill="none" stroke="{couleur}" stroke-width="{epaisseur:.3}" stroke-linecap="butt"{opacite}{element}/>"#);
+            return;
+        }
         match &pr.forme {
             Forme::Polyligne { points, fermee } => {
                 let balise = if *fermee { "polygon" } else { "polyline" };
@@ -305,6 +420,22 @@ mod tests {
         assert!(trait_(vec![DVec3::ZERO, DVec3::X], 0.0, Role::Vu).mailler(DVec3::Z, 100.0).traits.len() == 1);
     }
 
+    /// Angle entre un trait de 0,5 mm et un de 0,18 mm au 1:100 : chaque bout prolongé de
+    /// la demi-largeur de l'autre, pas de la sienne ; bout libre : la sienne.
+    #[test]
+    fn raccord_d_epaisseurs_differentes() {
+        let fort = trait_(vec![DVec3::ZERO, DVec3::X], 0.5, Role::Coupe);
+        let fin = trait_(vec![DVec3::X, DVec3::new(1.0, 1.0, 0.0)], 0.18, Role::Coupe);
+        let r = Raccords::new(&[fort, fin], 100.0);
+        assert!((r.prolongement(DVec3::X, DVec3::ZERO, 0.025) - 0.009).abs() < 1e-12);
+        assert!((r.prolongement(DVec3::X, DVec3::new(1.0, 1.0, 0.0), 0.009) - 0.025).abs() < 1e-12);
+        assert!((r.prolongement(DVec3::ZERO, DVec3::X, 0.025) - 0.025).abs() < 1e-12);
+        // trait aligné qui continue : aucun prolongement
+        let suite = trait_(vec![DVec3::X, DVec3::new(2.0, 0.0, 0.0)], 0.18, Role::Coupe);
+        let r = Raccords::new(&[trait_(vec![DVec3::ZERO, DVec3::X], 0.5, Role::Coupe), suite], 100.0);
+        assert_eq!(r.prolongement(DVec3::X, DVec3::ZERO, 0.025), 0.0);
+    }
+
     /// Carré de 2 m percé d'un carré de 1 m : 3 m² de triangles.
     #[test]
     fn surface_trouee() {
@@ -326,7 +457,8 @@ mod tests {
             primitives: vec![trait_(vec![DVec3::ZERO, DVec3::new(1.0, 1.0, 0.0)], 0.35, Role::Coupe), trait_(vec![DVec3::ZERO, DVec3::X], 0.0, Role::Vu)],
         };
         let s = d.svg("Plan <RDC>");
-        assert!(s.contains(r#"points="0.000,0.000 20.000,-20.000""#), "{s}");
+        // trait épais : segment à bouts francs prolongé d'une demi-largeur (bout libre)
+        assert!(s.contains("M-0.124 0.124L20.124 -20.124") && s.contains(r#"stroke-linecap="butt""#), "{s}");
         assert!(s.contains(r#"stroke-width="0.350""#) && s.contains(r#"stroke-width="0.130""#));
         assert!(s.find(r#"<g id="vu">"#).unwrap() < s.find(r#"<g id="coupe">"#).unwrap());
         assert!(s.contains("Plan &lt;RDC&gt;") && s.contains(r#"data-element="7""#));
