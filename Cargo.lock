@@ -988,6 +988,7 @@ dependencies = [
  "geo-straight-skeleton",
  "glam",
  "miniz_oxide 0.8.9",
+ "pdf-writer",
  "png",
  "rayon",
  "rfd",

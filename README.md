@@ -40,7 +40,7 @@ ce document. La conversion v0 s'exécute en arrière-plan, écrit aussi le rappo
 `.modele.rapport.md` et conserve le RVT et ses vues ouverts. Un RVT modifié sur
 disque doit être rouvert avant conversion. Le fichier RVT source reste intact.
 
-Le ruban regroupe les commandes dans Début, Modéliser, Modifier, Documenter et Sortie ; tous les bandeaux ont la même hauteur et des icônes (Début : Nouveau, Ouvrir, Fermer, Importer, Fiche Revit, Options ; Sortie : Enregistrer, Enregistrer sous, Dessin SVG, Dessin PDF, IFC4 ; Documenter, groupe Documents : Feuilles, Nomenclatures).
+Le ruban regroupe les commandes dans Début, Modéliser, Modifier, Documenter et Sortie ; tous les bandeaux ont la même hauteur et des icônes (Début : Nouveau, Ouvrir, Fermer, Importer, Fiche Revit, Options ; Sortie : Enregistrer, Enregistrer sous, Dessin SVG, Dessin PDF, IFC4, Jeu PDF (jeu de feuilles en un PDF, une page par feuille) ; Documenter, groupe Documents : Feuilles, Nomenclatures).
 **Début → Options → Navigation IFC** (désactivée par défaut) affiche, pour les modèles Revit et natifs, l'arborescence spatiale IFC, la liste des classes et les attributs IFC des propriétés (classe, Id STEP, GlobalId, bouton Copier GlobalId). Le même menu choisit le gabarit. Les fichiers IFC gardent toujours cette navigation, qui est leur seule arborescence. L'option est enregistrée dans `%APPDATA%\ifc_viewer\options.json` (Windows) ou `~/.config/ifc_viewer/options.json`.
 Les commandes fréquentes (Mur, Éléments horizontaux, Ouverture, Déplacer, Copier, Aligner, Cote et
 Texte) disposent de grands boutons lorsque la largeur le permet ; les autres

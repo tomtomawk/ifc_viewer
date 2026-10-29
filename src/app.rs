@@ -3212,6 +3212,7 @@ impl ViewerApp {
                     C::new("svg", "Dessin SVG", I::Exporter("SVG"), "Exporter le dessin de la vue en SVG (vue orthographique)", self.scene.is_some()),
                     C::new("pdf", "Dessin PDF", I::Exporter("PDF"), "Exporter le dessin de la vue en PDF (vue orthographique)", self.scene.is_some()),
                     C::new("ifc", "IFC4", I::Exporter("IFC"), "Exporter le projet natif en IFC4", self.natif.is_some()),
+                    C::new("jeu_pdf", "Jeu PDF", I::Exporter("PDF"), "Exporter le jeu de feuilles ouvert (sinon le premier) en un PDF, une page par feuille", self.natif.as_ref().is_some_and(|(p, _)| !p.feuilles.is_empty())),
                 ];
                 for (cle, r) in crate::ruban::bandeau(ui, &[("Enregistrer", enregistrer), ("Exporter", exporter)]) {
                     if !r.clicked() {
@@ -3223,6 +3224,12 @@ impl ViewerApp {
                         "svg" => self.exporter_svg_dialogue(),
                         "pdf" => self.export_pdf_dialogue(),
                         "ifc" => self.export_ifc_dialogue(),
+                        "jeu_pdf" => {
+                            let jeu = self.jeu_actif().or_else(|| self.natif.as_ref().and_then(|(p, _)| crate::modele::documentation::jeux(p).into_iter().next()));
+                            if let Some(jeu) = jeu {
+                                self.exporter_jeu_dialogue(&jeu);
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -6644,6 +6651,19 @@ impl ViewerApp {
                 }
                 match self.exporter_svg(std::path::Path::new(chemin)) {
                     Ok(n) => succes(&[("chemin", texte(chemin)), ("primitives", n.to_string())]),
+                    Err(e) => erreur(&e),
+                }
+            }
+            "exporter_jeu" => {
+                // exporter_jeu <chemin.pdf> [jeu] : jeu ouvert, sinon le premier
+                let (chemin, jeu) = argument.trim().split_once(' ').map_or((argument.trim(), None), |(c, j)| (c, Some(j.trim().to_string())));
+                let jeu = jeu.or_else(|| self.jeu_actif()).or_else(|| self.natif.as_ref().and_then(|(p, _)| crate::modele::documentation::jeux(p).into_iter().next()));
+                let Some(jeu) = jeu else { return erreur("aucun jeu de feuilles") };
+                if !chemin.to_lowercase().ends_with(".pdf") {
+                    return erreur("usage : exporter_jeu <chemin.pdf> [jeu]");
+                }
+                match self.exporter_jeu(&jeu, std::path::Path::new(chemin)) {
+                    Ok(n) => succes(&[("chemin", texte(chemin)), ("jeu", texte(&jeu)), ("pages", n.to_string())]),
                     Err(e) => erreur(&e),
                 }
             }

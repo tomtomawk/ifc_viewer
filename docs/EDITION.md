@@ -76,7 +76,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   double-clic l'ouvre ; Suppr la retire (ou supprime la feuille choisie). La page en
   pointillés ajoute une feuille. Molette : zoom ; glisser le fond : défiler. Les
   réglages sont dans Propriétés, sans boîte de dialogue : nom du jeu (Entrée pour
-  renommer), Ajouter une feuille, Nouveau jeu ; feuille (numéro, nom, format A0 à A4,
+  renommer), Ajouter une feuille, Nouveau jeu, Exporter le jeu en PDF (un fichier, une
+  page par feuille dans l'ordre du jeu, chacune à son format ; aussi Sortie → Jeu PDF
+  et la commande du pilote `exporter_jeu <chemin.pdf> [jeu]`) ; feuille (numéro, nom, format A0 à A4,
   paysage/portrait, dimensions, cartouche, export PDF/SVG, suppression) ; vue placée
   (échelle, position, ouvrir, retirer). L'arborescence liste les jeux et leurs
   feuilles : clic sur une feuille pour l'amener à l'écran.

@@ -560,6 +560,55 @@ pub fn pdf(svg: &str) -> Result<Vec<u8>, String> {
     .map_err(|e| format!("PDF : {e}"))
 }
 
+/// PDF de plusieurs pages, une par SVG (chacune à son format, comme `pdf`).
+pub fn pdf_pages(svgs: &[String]) -> Result<Vec<u8>, String> {
+    use pdf_writer::{Content, Finish, Name, Pdf, Rect, Ref};
+    if svgs.is_empty() {
+        return Err("Aucune page à exporter.".into());
+    }
+    let mut alloc = Ref::new(1);
+    let (catalogue, arbre) = (alloc.bump(), alloc.bump());
+    let mut pages = Vec::new();
+    let mut morceaux = Vec::new();
+    for svg in svgs {
+        let tree = svg2pdf::usvg::Tree::from_str(svg, &svg2pdf::usvg::Options::default()).map_err(|e| format!("SVG : {e}"))?;
+        let (morceau, x) = svg2pdf::to_chunk(&tree, svg2pdf::ConversionOptions::default()).map_err(|e| format!("PDF : {e}"))?;
+        let mut renum = std::collections::HashMap::new();
+        let morceau = morceau.renumber(|ancien| *renum.entry(ancien).or_insert_with(|| alloc.bump()));
+        let x = *renum.get(&x).ok_or("PDF : objet de page absent")?;
+        // usvg lit les mm à 96 px/pouce ; points PDF à 72 par pouce
+        let (l, h) = (tree.size().width() * 0.75, tree.size().height() * 0.75);
+        pages.push((alloc.bump(), alloc.bump(), x, l, h));
+        morceaux.push(morceau);
+    }
+    let mut pdf = Pdf::new();
+    pdf.catalog(catalogue).pages(arbre);
+    pdf.pages(arbre).kids(pages.iter().map(|p| p.0)).count(pages.len() as i32);
+    for &(page, contenu, x, l, h) in &pages {
+        let mut pg = pdf.page(page);
+        pg.media_box(Rect::new(0.0, 0.0, l, h));
+        pg.parent(arbre);
+        pg.contents(contenu);
+        let mut ressources = pg.resources();
+        ressources.x_objects().pair(Name(b"F"), x);
+        ressources.finish();
+        pg.finish();
+        let mut c = Content::new();
+        c.transform([l, 0.0, 0.0, h, 0.0, 0.0]).x_object(Name(b"F"));
+        pdf.stream(contenu, &c.finish());
+    }
+    for m in &morceaux {
+        pdf.extend(m);
+    }
+    Ok(pdf.finish())
+}
+
+/// PDF d'un jeu de feuilles : ses feuilles dans l'ordre, une page chacune.
+pub fn pdf_jeu(p: &Projet, jeu: &str) -> Result<Vec<u8>, String> {
+    let svgs = p.feuilles.iter().filter(|f| f.jeu == jeu).map(|f| svg_feuille(p, f)).collect::<Result<Vec<_>, _>>()?;
+    pdf_pages(&svgs)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -609,6 +658,19 @@ mod tests {
         assert!(svg.contains("height=\"297mm\""));
         let pdf = pdf(&svg).unwrap();
         assert!(pdf.starts_with(b"%PDF-"));
+        // jeu de deux feuilles (A3 et A4 portrait) : un PDF de deux pages à leurs formats
+        let mut g = f.clone();
+        g.id = "g".into();
+        g.numero = "A02".into();
+        (g.largeur, g.hauteur) = (210.0, 297.0);
+        p.feuilles.push(g);
+        let jeu = pdf_jeu(&p, JEU_DEFAUT).unwrap();
+        let texte = String::from_utf8_lossy(&jeu);
+        assert!(jeu.starts_with(b"%PDF-"));
+        assert!(texte.contains("/Count 2"), "pages");
+        assert_eq!(texte.matches("/MediaBox").count(), 2);
+        assert!(texte.contains("1190.55") && texte.contains("595.27"), "formats A3 et A4 en points");
+        p.feuilles.truncate(1);
         p.supprimer_vue(&f.vues[0].vue).unwrap();
         assert!(p.annotations.is_empty());
         assert!(p.feuilles[0].vues.is_empty());

@@ -449,6 +449,9 @@ impl ViewerApp {
                 ouvrir = Some(nom);
             }
         });
+        if ui.add_enabled(n > 0, egui::Button::new("Exporter le jeu en PDF…")).on_hover_text("Un PDF, une page par feuille dans l'ordre du jeu, chacune à son format").clicked() {
+            export = Some(("jeu", String::new()));
+        }
         ui.separator();
         let selection = self.feuilles.selection.clone();
         let fid = match &selection {
@@ -569,9 +572,34 @@ impl ViewerApp {
                 None => self.ouvrir_jeu(&o, None),
             }
         }
-        if let Some((extension, id)) = export {
-            self.exporter_feuille(extension, &id);
+        match export {
+            Some(("jeu", _)) => self.exporter_jeu_dialogue(jeu),
+            Some((extension, id)) => self.exporter_feuille(extension, &id),
+            None => {}
         }
+    }
+
+    /// Demande le fichier, puis exporte le jeu `jeu` en un PDF de plusieurs pages.
+    pub(super) fn exporter_jeu_dialogue(&mut self, jeu: &str) {
+        let Some(path) = rfd::FileDialog::new().set_file_name(format!("{jeu}.pdf")).add_filter("pdf", &["pdf"]).save_file() else {
+            return;
+        };
+        match self.exporter_jeu(jeu, &path) {
+            Ok(n) => self.status = format!("Jeu « {jeu} » : {n} page(s) exportée(s) dans {}", path.display()),
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    /// PDF du jeu `jeu` (une page par feuille) écrit dans `chemin` ; nombre de pages.
+    pub(super) fn exporter_jeu(&self, jeu: &str, chemin: &std::path::Path) -> Result<usize, String> {
+        let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?;
+        let n = p.feuilles.iter().filter(|f| f.jeu == jeu).count();
+        if n == 0 {
+            return Err(format!("Le jeu « {jeu} » n'a aucune feuille."));
+        }
+        let pdf = doc::pdf_jeu(p, jeu)?;
+        crate::modele::enregistrement::ecrire_atomique(chemin, &pdf)?;
+        Ok(n)
     }
 
     fn exporter_feuille(&mut self, extension: &str, id: &str) {
