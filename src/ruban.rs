@@ -1639,10 +1639,10 @@ impl RubanEdition {
         ui.add_space(14.0);
         let p = ui.painter();
         let bord = Stroke::new(1.0, bleu);
-        let profondeur = vec2(7.0, -4.5);
+        let profondeur = vec2(4.5, -3.0);
         // mur vu de face (largeur), son chant à droite et son dessus
         let x1 = origine.x + largeur_croquis - 20.0;
-        let x0 = origine.x + 12.0;
+        let x0 = origine.x + 16.0;
         let (yh, yb) = limites_croquis_mur(&self.parametres_mur(), projet, centres[0] + 3.0, centres[1] + 3.0);
         let (a, h, b, bb) = (pos2(x0, yh), pos2(x1, yh), pos2(x1, yb), pos2(x0, yb));
         p.add(egui::Shape::convex_polygon(vec![a, h, b, bb], Color32::from_rgb(246, 251, 253), bord));
@@ -1674,7 +1674,7 @@ impl RubanEdition {
                 pos2((x0 + x1) * 0.5, (yh + yb) * 0.5),
                 Align2::CENTER_CENTER,
                 crate::options::unite().afficher(haut_z - bas_z),
-                FontId::proportional(9.0),
+                FontId::proportional(8.0),
                 ui.visuals().weak_text_color(),
             );
         }
