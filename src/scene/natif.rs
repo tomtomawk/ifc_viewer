@@ -1,7 +1,7 @@
 //! Adaptation du modèle natif vers la chaîne de rendu commune.
 use super::*;
 use crate::geom::{Part, ProductGeom};
-use crate::modele::{Axe, Projet, SorteDalle};
+use crate::modele::{Projet, SorteDalle};
 use crate::step::{Entity, Value};
 
 pub fn id_natif(genre: &str, id: &str) -> u64 {
@@ -9,9 +9,7 @@ pub fn id_natif(genre: &str, id: &str) -> u64 {
 }
 
 pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
-    if !projet.ouvertures.is_empty() || !projet.importes.is_empty() {
-        return Err("L’affichage natif prend actuellement en charge les niveaux, les murs droits et les dalles. Ce projet contient d’autres éléments ; son fichier est conservé.".into());
-    }
+    projet.verifier()?;
     let mut file = StepFile { schema: "Modèle natif v0".into(), entities: Default::default() };
     let mut entite = |id: u64, classe: &str, guid: &str, nom: &str, n: usize| -> Result<(), String> {
         let mut args = vec![Value::Null; n.max(3)];
@@ -38,6 +36,23 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         };
         entite(id_natif("dalle", &d.id), classe, &d.id, &d.nom, 9)?;
     }
+    for o in &projet.ouvertures {
+        let classe = match o.genre {
+            crate::modele::GenreOuverture::Porte => "IFCDOOR",
+            crate::modele::GenreOuverture::Fenetre => "IFCWINDOW",
+            crate::modele::GenreOuverture::Libre => "IFCOPENINGELEMENT",
+        };
+        entite(id_natif("ouverture", &o.id), classe, &o.id, &o.nom, 9)?;
+    }
+    for b in &projet.barres {
+        let classe = match b.genre { crate::modele::GenreBarre::Poteau => "IFCCOLUMN", crate::modele::GenreBarre::Poutre => "IFCBEAM" };
+        entite(id_natif("barre", &b.id), classe, &b.id, &b.nom, 9)?;
+    }
+    for o in &projet.importes {
+        let classe = o.origine.as_ref().map(|o| o.classe.to_uppercase()).filter(|c| c.starts_with("IFC"))
+            .unwrap_or_else(|| if o.categorie.to_uppercase().starts_with("IFC") { o.categorie.to_uppercase() } else { "IFCBUILDINGELEMENTPROXY".into() });
+        entite(id_natif("importe", &o.id), &classe, &o.id, &o.nom, 9)?;
+    }
     for n in &projet.niveaux { file.entities.get_mut(&id_natif("niveau", &n.id)).unwrap().args[9] = Value::Real(n.altitude); }
     let mut model = IfcModel::new(file);
     model.length_scale = 0.001;
@@ -59,7 +74,9 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     // matériau de chaque partie des éléments (jonctions sans arête entre mêmes matériaux)
     let mut materiaux_parts: Vec<Vec<Option<String>>> = Vec::new();
     let mut table_motifs: Vec<(String, [f32; 4])> = Vec::new();
-    let (jonctions, interruptions) = crate::modele::jonctions::jonctions(projet);
+    // jonctions (noyaux prolongés) ; les couches moins prioritaires s'arrêtent sur les
+    // faces des autres (solides)
+    let (jonctions, _) = crate::modele::jonctions::jonctions(projet);
     // couches d'un même assemblage consécutives (sélection d'un seul tenant)
     let mut ordre: Vec<&crate::modele::Mur> = projet.murs.iter().filter(|m| m.assemblage.is_none()).collect();
     for a in &projet.assemblages {
@@ -67,29 +84,9 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     }
     ordre.extend(projet.murs.iter().filter(|m| m.assemblage.as_ref().is_some_and(|a| projet.assemblage(a).is_none_or(|x| !x.couches.contains(&m.id)))));
     for m in ordre {
-        let Axe::Droit { debut, fin } = m.axe else { return Err(format!("{} : le mur courbe natif n’est pas encore affichable.", m.nom)); };
-        let type_mur = projet.type_mur(&m.type_mur).ok_or_else(|| format!("{} : type de mur introuvable.", m.nom))?;
-        if projet.niveau(&m.niveau).is_none() { return Err(format!("{} : niveau introuvable.", m.nom)); }
-        let (bas, haut) = projet.bas_haut(m).ok_or_else(|| format!("{} : contrainte de hauteur non valide.", m.nom))?;
-        let epaisseur = type_mur.epaisseur();
-        if !debut.iter().chain(&fin).chain([&bas, &haut, &epaisseur]).all(|x| x.is_finite()) || epaisseur <= 0.0 || haut <= bas {
-            return Err(format!("{} : dimensions non valides.", m.nom));
-        }
-        let d = glam::DVec2::from_array(fin) - glam::DVec2::from_array(debut);
-        if d.length() < 1.0 { return Err(format!("{} : longueur inférieure à 1 mm.", m.nom)); }
-        // contour en plan, extrémités raccordées aux murs voisins (angles, T)
-        let contour = crate::modele::jonctions::contour(projet, m, &jonctions)
-            .ok_or_else(|| format!("{} : contour non valide.", m.nom))?
-            .map(glam::DVec2::from_array);
-        // couches de finition traversées par le noyau d'un mur arrivant : interrompues
-        let morceaux = match interruptions.get(&m.id) {
-            Some(trous) => morceaux_mur(&contour, glam::DVec2::from_array(debut), d.normalize(), trous),
-            None => vec![contour.to_vec()],
-        };
-        let mut tris = Vec::new();
-        for poly in morceaux {
-            prisme_convexe(&poly, bas, haut, &mut tris);
-        }
+        let type_mur = projet.type_mur(&m.type_mur).ok_or("Type de mur introuvable.")?;
+        let tris = crate::modele::solides::mur(projet, m, &jonctions)?
+            .into_iter().map(|t| t.map(|v| v * 0.001)).collect();
         let id = id_natif("mur", &m.id);
         let parent = match m.assemblage.as_ref().filter(|a| projet.assemblage(a).is_some()) {
             Some(a) => id_natif("assemblage", a),
@@ -142,7 +139,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
             });
             if let Some(m) = &m {
                 // bandes de coupe entre le dessous et le dessus de la couche (m, repère du fichier)
-                for jeu in crate::modele::pente::bandes(&plans, z0, bas, haut) {
+                for jeu in crate::modele::pente::bandes_contours(&d.contours, &plans, z0, bas, haut) {
                     bandes.extend(coupe_materiau(projet, m, jeu));
                 }
             }
@@ -157,6 +154,38 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         if !bandes.is_empty() { bandes_dalles.push((id, bandes)); }
         materiaux_parts.push(noms);
         geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu, motifs });
+    }
+    for o in &projet.ouvertures {
+        let id = id_natif("ouverture", &o.id);
+        let (_, _, niveau) = crate::modele::solides::hote(projet, &o.mur)?;
+        let parent = id_natif("niveau", &niveau);
+        model.parent.insert(id, parent);
+        model.children.entry(parent).or_default().push(id);
+        let tris = crate::modele::solides::ouverture(projet, o)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
+        materiaux_parts.push(vec![None]);
+        geoms.push(ProductGeom { id, parts: vec![Part { color: [0.55,0.40,0.24,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+    }
+    for b in &projet.barres {
+        let id = id_natif("barre", &b.id);
+        let parent = id_natif("niveau", &b.niveau);
+        model.parent.insert(id, parent);
+        model.children.entry(parent).or_default().push(id);
+        let tris = crate::modele::solides::barre(projet, b)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
+        materiaux_parts.push(vec![None]);
+        geoms.push(ProductGeom { id, parts: vec![Part { color: [0.65,0.68,0.72,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+    }
+    for o in &projet.importes {
+        let id = id_natif("importe", &o.id);
+        let parent = match &o.niveau {
+            Some(n) if projet.niveau(n).is_some() => id_natif("niveau", n),
+            Some(_) => return Err(format!("{} : niveau introuvable.", o.nom)),
+            None => racine,
+        };
+        model.parent.insert(id, parent);
+        model.children.entry(parent).or_default().push(id);
+        let tris = crate::modele::solides::maillage(&o.maillage)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
+        materiaux_parts.push(vec![None]);
+        geoms.push(ProductGeom { id, parts: vec![Part { color: [0.65,0.68,0.72,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
     let aretes = aretes_jointes(&geoms, &materiaux_parts);
     let mut scene = crate::scene::assemble_avec(model, geoms, path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| projet.nom.clone()), aretes);
@@ -234,58 +263,6 @@ fn aretes_jointes(geoms: &[ProductGeom], materiaux: &[Vec<Option<String>>]) -> s
         }
     }
     par_objet
-}
-
-/// Morceaux du contour (convexe) d'un mur hors des intervalles `trous` (mm le long de
-/// l'axe `d` depuis `debut`).
-fn morceaux_mur(contour: &[glam::DVec2; 4], debut: glam::DVec2, d: glam::DVec2, trous: &[(f64, f64)]) -> Vec<Vec<glam::DVec2>> {
-    let mut trous = trous.to_vec();
-    trous.sort_by(|a, b| a.0.total_cmp(&b.0));
-    // garde la partie du polygone où signe · (t − t0) ≥ 0
-    let couper = |poly: &[glam::DVec2], t0: f64, signe: f64| -> Vec<glam::DVec2> {
-        let f = |p: glam::DVec2| signe * ((p - debut).dot(d) - t0);
-        let mut out = Vec::new();
-        for i in 0..poly.len() {
-            let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
-            let (fa, fb) = (f(a), f(b));
-            if fa >= 0.0 { out.push(a); }
-            if (fa >= 0.0) != (fb >= 0.0) { out.push(a + (b - a) * (fa / (fa - fb))); }
-        }
-        out
-    };
-    let mut bornes = Vec::new();
-    let mut lo = f64::NEG_INFINITY;
-    for (a, b) in trous {
-        bornes.push((lo, a));
-        lo = lo.max(b);
-    }
-    bornes.push((lo, f64::INFINITY));
-    bornes
-        .into_iter()
-        .filter(|(a, b)| b > a)
-        .filter_map(|(a, b)| {
-            let mut p = contour.to_vec();
-            if a.is_finite() { p = couper(&p, a, 1.0); }
-            if b.is_finite() { p = couper(&p, b, -1.0); }
-            (p.len() >= 3).then_some(p)
-        })
-        .collect()
-}
-
-/// Prisme vertical (m) d'un polygone convexe du plan (mm, sens trigonométrique) entre
-/// les altitudes `bas` et `haut` (mm) ; normales vers l'extérieur.
-fn prisme_convexe(poly: &[glam::DVec2], bas: f64, haut: f64, tris: &mut Vec<[DVec3; 3]>) {
-    let p = |q: glam::DVec2, z: f64| DVec3::new(q.x, q.y, z) * 0.001;
-    let n = poly.len();
-    for k in 1..n - 1 {
-        tris.push([p(poly[0], haut), p(poly[k], haut), p(poly[k + 1], haut)]);
-        tris.push([p(poly[0], bas), p(poly[k + 1], bas), p(poly[k], bas)]);
-    }
-    for i in 0..n {
-        let (a, b) = (poly[i], poly[(i + 1) % n]);
-        tris.push([p(a, bas), p(b, bas), p(b, haut)]);
-        tris.push([p(a, bas), p(b, haut), p(a, haut)]);
-    }
 }
 
 /// Identifiant numérique stable d'une vue native dans l'arborescence (« 3d » : la vue 3D).

@@ -4,6 +4,8 @@
 //! panneaux s'ancrent d'un côté ou flottent ; sous la vue, la boîte de visibilité par
 //! catégorie de modèle et d'annotation.
 
+mod bim;
+use crate::options::Dimensions;
 use crate::camera::{Camera, MAX_PITCH};
 use crate::dessin::{self, Poche};
 use crate::model::pretty_type;
@@ -307,6 +309,13 @@ enum OngletRuban {
     Sortie,
 }
 
+/// Une croix tracée au centre de son bouton, sans dépendre des métriques de police.
+fn dessiner_croix_onglet(painter: &egui::Painter, centre: egui::Pos2, couleur: Color32) {
+    let trace = egui::Stroke::new(1.2, couleur);
+    painter.line_segment([centre + egui::vec2(-3.0, -3.0), centre + egui::vec2(3.0, 3.0)], trace);
+    painter.line_segment([centre + egui::vec2(-3.0, 3.0), centre + egui::vec2(3.0, -3.0)], trace);
+}
+
 /// Teinte stable pendant toute la durée d'ouverture du fichier.
 fn couleur_document(id: usize) -> Color32 {
     const TEINTES: [[u8; 3]; 8] = [
@@ -340,9 +349,13 @@ struct EtatVue {
     boite_active: bool,
 }
 
+#[derive(Clone, Copy)]
+struct FenetreSelection { debut: egui::Pos2, fin: egui::Pos2, glissement: bool, ajouter: bool }
+
 /// Fichier conservé en mémoire quand un autre document devient actif.
 struct DocumentOuvert {
     natif: Option<(crate::modele::Projet, PathBuf)>,
+    historique: crate::modele::historique::Historique,
     modifie: bool,
     scene: Option<Scene>,
     rvt: Option<RvtInfo>,
@@ -415,7 +428,9 @@ impl Vol {
 }
 
 pub struct ViewerApp {
+    bim: bim::EtatBim,
     natif: Option<(crate::modele::Projet, PathBuf)>,
+    historique: crate::modele::historique::Historique,
     natif_modifie: bool,
     mur_depart: Option<[f64; 2]>,
     /// Repère du plan : le prochain clic choisit l'élément à mettre à l'horizontale.
@@ -430,6 +445,7 @@ pub struct ViewerApp {
     dalle_points: Vec<[f64; 2]>,
     /// Longueur du mur en cours tapée au clavier (mm).
     mur_saisie: String,
+    raccourci_en_attente: Option<(char, f64)>,
     confirmer_fermeture: Option<(bool, usize)>, // application entière, ou identifiant du document
     documents: BTreeMap<usize, DocumentOuvert>,
     document_actif: usize,
@@ -452,6 +468,8 @@ pub struct ViewerApp {
     error: Option<String>,
     camera: Camera,
     selected: Option<Id>,
+    selection_multiple: Vec<Id>,
+    fenetre_selection: Option<FenetreSelection>,
     reveal: Option<Id>,
     hidden_classes: HashSet<String>,
     hidden_objects: HashSet<u32>,
@@ -563,10 +581,13 @@ impl ViewerApp {
         };
         cc.egui_ctx.set_visuals(egui::Visuals::light());
         let mut app = ViewerApp {
+            bim: Default::default(),
             natif: None,
+            historique: Default::default(),
             natif_modifie: false,
             mur_depart: None,
             mur_saisie: String::new(),
+            raccourci_en_attente: None,
             dalle_points: Vec::new(),
             coupe_depart: None,
             nom_vue: None,
@@ -591,6 +612,8 @@ impl ViewerApp {
             error,
             camera: Camera::default(),
             selected: None,
+            selection_multiple: Vec::new(),
+            fenetre_selection: None,
             reveal: None,
             hidden_classes: HashSet::new(),
             hidden_objects: HashSet::new(),
@@ -606,6 +629,7 @@ impl ViewerApp {
             eclairage: true,
             options: {
                 let o = crate::options::Options::charger();
+                crate::options::definir_unite(o.unite);
                 // gabarit choisi : lu au démarrage, défaut s'il est illisible
                 if let Some(c) = &o.gabarit {
                     match crate::gabarit::Gabarit::charger(c) {
@@ -667,6 +691,14 @@ impl ViewerApp {
     }
 
     fn open(&mut self, path: PathBuf, ctx: &egui::Context) {
+        let recuperation=crate::modele::enregistrement::chemin_recuperation(&path);
+        let restaurer=if path.extension().is_some_and(|e|e.eq_ignore_ascii_case("json")) && recuperation.exists() {
+            match rfd::MessageDialog::new().set_title("Récupération du projet").set_description("Une copie de récupération existe. Restaurer les modifications non enregistrées ?").set_buttons(rfd::MessageButtons::YesNoCancel).show() {
+                rfd::MessageDialogResult::Yes=>true,
+                rfd::MessageDialogResult::No=>false,
+                _=>return,
+            }
+        } else {false};
         let (tx, rx) = channel();
         let ctx = ctx.clone();
         self.loading = Some(rx);
@@ -680,7 +712,7 @@ impl ViewerApp {
                     ctx.request_repaint();
                 };
                 if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")) {
-                    let res = std::fs::read_to_string(&path).map_err(|e| format!("Lecture impossible : {e}"))
+                    let res = std::fs::read_to_string(if restaurer { &recuperation } else { &path }).map_err(|e| format!("Lecture impossible : {e}"))
                         .and_then(|json| crate::modele::Projet::lire_json(&json))
                         .and_then(|projet| scene::depuis_natif(&projet, &path).map(|scene| (Box::new(scene), projet, path)));
                     let _ = tx.send(LoadMsg::Natif(res));
@@ -704,12 +736,24 @@ impl ViewerApp {
 
     fn poll_loading(&mut self) {
         let Some(rx) = &self.loading else { return };
-        while let Ok(msg) = rx.try_recv() {
+        loop {
+            let msg=match rx.try_recv() {
+                Ok(msg)=>msg,
+                Err(std::sync::mpsc::TryRecvError::Empty)=>return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected)=>{
+                    self.loading=None;self.error=Some("Le chargement a été interrompu ; le document précédent est conservé.".into());return;
+                }
+            };
             match msg {
                 LoadMsg::Natif(Ok((scene, projet, chemin))) => {
                     self.loading = None;
                     self.install_scene(*scene);
                     self.status = format!("{} — projet natif v0", projet.nom);
+                    let _ = self.historique.enregistrer(&projet);
+                    if let Ok(ancien)=std::fs::read_to_string(&chemin).map_err(|e|e.to_string()).and_then(|s|crate::modele::Projet::lire_json(&s)) {
+                        let _=self.historique.enregistrer(&ancien);
+                        self.natif_modifie=self.historique.modifie(&projet);
+                    }
                     self.natif = Some((projet, chemin));
                     return;
                 }
@@ -783,6 +827,8 @@ impl ViewerApp {
         self.camera.scene_radius = (scene.max - scene.min).length() * 0.5;
         self.camera.fit(scene.min, scene.max);
         self.selected = None;
+        self.selection_multiple.clear();
+        self.fenetre_selection = None;
         self.reveal = None;
         self.nomenclature_ouverte = None;
         self.point_clique = None;
@@ -917,6 +963,11 @@ impl ViewerApp {
             tris.extend(t);
             traits.extend(l);
         }
+        if let Some(s) = &self.scene {
+            let prims=self.annotations_natives();
+            let (t,l)=dessin::sommets(s,&prims,-self.camera.forward().as_dvec3(),self.echelle);
+            tris.extend(t); traits.extend(l);
+        }
         if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
             r.upload_coupe(gl, &tris, &traits);
         }
@@ -949,6 +1000,7 @@ impl ViewerApp {
                 primitives.push(p.translater(-s.origin));
             }
         }
+        primitives.extend(self.annotations_natives());
         Ok(trace2d::Dessin { droite, haut, echelle: self.echelle, primitives })
     }
 
@@ -1000,12 +1052,12 @@ impl ViewerApp {
                 match &mut nouvelle.genre {
                     GenreVue::Plan { coupe, .. } => {
                         ui.label("Hauteur de coupe");
-                        ui.add(egui::DragValue::new(coupe).speed(10.0).suffix(" mm")).on_hover_text("Plan de coupe au-dessus du niveau");
+                        ui.add(egui::DragValue::new(coupe).speed(10.0).dimensions()).on_hover_text("Plan de coupe au-dessus du niveau");
                         ui.end_row();
                     }
                     GenreVue::Coupe { profondeur, .. } => {
                         ui.label("Profondeur");
-                        ui.add(egui::DragValue::new(profondeur).speed(50.0).range(100.0..=200_000.0).suffix(" mm")).on_hover_text("Au-delà, le modèle n'est pas montré");
+                        ui.add(egui::DragValue::new(profondeur).speed(50.0).range(100.0..=200_000.0).dimensions()).on_hover_text("Au-delà, le modèle n'est pas montré");
                         ui.end_row();
                     }
                 }
@@ -1102,8 +1154,8 @@ impl ViewerApp {
                 for (k, nom) in ["X", "Y", "Z"].iter().enumerate() {
                     ui.label(*nom);
                     let (mut lo, mut hi) = (a[k] as f64 + o[k], b[k] as f64 + o[k]);
-                    ui.add(egui::DragValue::new(&mut lo).speed(0.05).max_decimals(3).suffix(" m"));
-                    ui.add(egui::DragValue::new(&mut hi).speed(0.05).max_decimals(3).suffix(" m"));
+                    ui.add(egui::DragValue::new(&mut lo).speed(0.05).max_decimals(3).dimensions_metres());
+                    ui.add(egui::DragValue::new(&mut hi).speed(0.05).max_decimals(3).dimensions_metres());
                     a[k] = (lo - o[k]) as f32;
                     b[k] = (hi - o[k]) as f32;
                     ui.end_row();
@@ -1218,7 +1270,7 @@ impl ViewerApp {
                 ui.end_row();
                 ui.add_enabled_ui(self.coupe, |ui| ui.label("Décalage du plan de coupe"));
                 ui.add_enabled_ui(self.coupe, |ui| {
-                    change |= ui.add(egui::DragValue::new(&mut self.coupe_hauteur).speed(0.01).range(-50.0..=200.0).suffix(" m")).on_hover_text("Hauteur du plan de coupe au-dessus du niveau").changed();
+                    change |= ui.add(egui::DragValue::new(&mut self.coupe_hauteur).speed(0.01).range(-50.0..=200.0).dimensions_metres()).on_hover_text("Hauteur du plan de coupe au-dessus du niveau").changed();
                 });
                 ui.end_row();
                 }
@@ -1252,6 +1304,9 @@ impl ViewerApp {
     }
 
     fn select(&mut self, id: Option<Id>, reveal: bool) {
+        self.bim.selection.clear();
+        self.selection_multiple.clear();
+        self.coupe_dirty = true;
         self.selected = id;
         if reveal {
             self.reveal = id;
@@ -1286,7 +1341,7 @@ impl ViewerApp {
                     if ui.link(nom).clicked() {
                         selection = Some(scene::id_natif("mur", &m.id));
                     }
-                    ui.label(format!("{} mm", c.map_or(0.0, |c| c.epaisseur)));
+                    ui.label(crate::options::unite().afficher(c.map_or(0.0, |c| c.epaisseur)));
                     ui.label(projet.bas_haut(m).map_or(String::new(), |(b, h)| format!("h {:.0}", h - b)));
                     ui.label(RichText::new(m.phase.as_deref().unwrap_or("")).weak());
                     ui.end_row();
@@ -1324,7 +1379,7 @@ impl ViewerApp {
                 });
                 ui.end_row();
                 ui.label("Décalage bas");
-                change |= ui.add(egui::DragValue::new(&mut m.decalage_bas).speed(10.0).suffix(" mm")).changed();
+                change |= ui.add(egui::DragValue::new(&mut m.decalage_bas).speed(10.0).dimensions()).changed();
                 ui.end_row();
                 ui.label("Contrainte haute");
                 let libre = matches!(m.haut, Haut::Libre { .. });
@@ -1347,11 +1402,11 @@ impl ViewerApp {
                 match &mut m.haut {
                     Haut::Libre { hauteur } => {
                         ui.label("Hauteur");
-                        change |= ui.add(egui::DragValue::new(hauteur).speed(10.0).range(1.0..=f64::MAX).suffix(" mm")).changed();
+                        change |= ui.add(egui::DragValue::new(hauteur).speed(10.0).range(1.0..=f64::MAX).dimensions()).changed();
                     }
                     Haut::Niveau { decalage, .. } => {
                         ui.label("Décalage haut");
-                        change |= ui.add(egui::DragValue::new(decalage).speed(10.0).suffix(" mm")).changed();
+                        change |= ui.add(egui::DragValue::new(decalage).speed(10.0).dimensions()).changed();
                     }
                 }
                 ui.end_row();
@@ -1362,12 +1417,12 @@ impl ViewerApp {
                 change |= liste(ui, &mut m.sous_projet, &projet.sous_projets, "mur_sous_projet", "Non renseigné");
                 ui.end_row();
                 ui.label("Variante");
-                ui.label(m.variante.as_ref().and_then(|id| projet.variantes.iter().find(|v| &v.id == id)).map_or_else(|| "Modèle principal".into(), |v| v.libelle()));
+                ui.label(m.variante.as_ref().and_then(|id| projet.variantes.iter().find(|v| &v.id == id)).map_or_else(|| "Principale".into(), |v| v.libelle()));
                 ui.end_row();
                 for (nom, valeur) in [
-                    ("Longueur", format!("{:.0} mm", m.axe.longueur())),
-                    ("Hauteur résultante", format!("{:.0} mm", haut - bas)),
-                    ("Épaisseur", format!("{epaisseur:.0} mm")),
+                    ("Longueur", crate::options::unite().afficher(m.axe.longueur())),
+                    ("Hauteur résultante", crate::options::unite().afficher(haut - bas)),
+                    ("Épaisseur", crate::options::unite().afficher(epaisseur)),
                     ("Volume", format!("{:.3} m³", projet.volume_mur(&m).unwrap_or(0.0) / 1e9)),
                 ] {
                     ui.label(nom);
@@ -1418,6 +1473,21 @@ impl ViewerApp {
                 None => {}
             });
             ui.separator();
+        } else if let Some(e) = projet.importes.iter().find(|e| scene::id_natif("importe", &e.id)==id) {
+            ui.heading(&e.nom); ui.label(&e.categorie); ui.label("Géométrie importée"); ui.label(&e.raison);
+            if let Some(n)=e.niveau.as_ref().and_then(|n|projet.niveau(n)) { ui.label(format!("Niveau : {}",n.nom)); }
+            if let Some(o)=&e.origine { ui.label(format!("Source : {} · {}",o.source,o.id)); if let Some(g)=&o.guid {ui.label(g);} }
+        } else if let Some(o) = projet.ouvertures.iter().find(|o| scene::id_natif("ouverture", &o.id)==id) {
+            let mut o=o.clone(); let mut change=false;
+            ui.heading(&o.nom);
+            for (nom,v) in [("Abscisse",&mut o.abscisse),("Largeur",&mut o.largeur),("Hauteur",&mut o.hauteur),("Allège",&mut o.allege)] {
+                ui.horizontal(|ui| { ui.label(nom); change|=ui.add_enabled(o.representation.is_none() || matches!(nom,"Abscisse"|"Allège"),egui::DragValue::new(v).dimensions().speed(10.0)).changed(); });
+            }
+            if o.representation.is_some() && ui.button("Remplacer la menuiserie importée par un cadre paramétrique").clicked() {o.representation=None;change=true;}
+            if change {
+                if o.representation.is_some() { ui.label("La menuiserie importée est conservée ; sa forme n'est pas paramétrique."); }
+                let mut p=projet.clone(); *p.ouvertures.iter_mut().find(|x|x.id==o.id).unwrap()=o.clone(); nouveau=Some(p);
+            }
         } else {
             let dalle = projet.dalles.iter().find(|d| scene::id_natif("dalle", &d.id) == id)?;
             let mut d = dalle.clone();
@@ -1429,7 +1499,7 @@ impl ViewerApp {
                         let [r, g, b] = c.materiau.as_ref().and_then(|n| projet.materiau(n)).map_or([200, 200, 196], |m| m.couleur);
                         let (q, _) = ui.allocate_exact_size(egui::vec2(16.0, 12.0), Sense::hover());
                         ui.painter().rect_filled(q, 0.0, Color32::from_rgb(r, g, b));
-                        ui.label(RichText::new(format!("{} · {} mm", c.materiau.as_deref().unwrap_or("Couche"), crate::step::format_real(c.epaisseur))).small());
+                        ui.label(RichText::new(format!("{} · {}", c.materiau.as_deref().unwrap_or("Couche"), crate::options::unite().afficher(c.epaisseur))).small());
                     });
                 }
             }
@@ -1457,7 +1527,7 @@ impl ViewerApp {
                     crate::modele::SorteDalle::Toiture => "Décalage (sous-face)",
                     _ => "Décalage (dessus)",
                 });
-                change |= ui.add(egui::DragValue::new(&mut d.decalage).speed(10.0).suffix(" mm")).changed();
+                change |= ui.add(egui::DragValue::new(&mut d.decalage).speed(10.0).dimensions()).changed();
                 ui.end_row();
                 for (nom, valeur, choix, sale) in [("Phase", &mut d.phase, &projet.phases, "dalle_phase"), ("Sous-projet", &mut d.sous_projet, &projet.sous_projets, "dalle_sous_projet")] {
                     ui.label(nom);
@@ -1471,7 +1541,7 @@ impl ViewerApp {
                 let aire = crate::modele::geometrie::aire_pair_impair(&d.contours);
                 for (nom, valeur) in [
                     ("Aire", format!("{:.2} m²", aire / 1e6)),
-                    ("Épaisseur", format!("{} mm", crate::step::format_real(t.map_or(0.0, |t| t.epaisseur())))),
+                    ("Épaisseur", crate::options::unite().afficher(t.map_or(0.0, |t| t.epaisseur()))),
                     ("Volume", format!("{:.3} m³", projet.volume_dalle(&d).unwrap_or(0.0) / 1e9)),
                 ] {
                     ui.label(nom);
@@ -1489,7 +1559,7 @@ impl ViewerApp {
                         for k in 0..n {
                             let (a, b) = (d.contours[c][k], d.contours[c][(k + 1) % n]);
                             let nom = if d.contours.len() > 1 { format!("{}.{}", c + 1, k + 1) } else { format!("{}", k + 1) };
-                            ui.label(format!("Arête {nom} · {:.2} m", (b[0] - a[0]).hypot(b[1] - a[1]) / 1000.0));
+                            ui.label(format!("Arête {nom} · {}", crate::options::unite().afficher((b[0] - a[0]).hypot(b[1] - a[1]))));
                             let mut pente = d.pente(c, k);
                             let mut oui = pente.is_some();
                             if ui.checkbox(&mut oui, "Pente").changed() {
@@ -1563,26 +1633,112 @@ impl ViewerApp {
         self.select(Some(suivant.unwrap_or(assemblage)), true);
     }
 
-    /// Objets à surligner : celui de la sélection, ou ceux d'un nœud dont les objets
-    /// sont consécutifs (assemblage de murs).
-    fn plage_selection(&self) -> (u32, u32) {
-        if let Some(o) = self.selected_object() {
-            return (o, o);
+    /// Sélectionne les objets de la scène, y compris les couches des assemblages.
+    fn objets_selectionnes(&self) -> Vec<u8> {
+        let Some(scene) = &self.scene else { return Vec::new() };
+        let mut marques = vec![0; scene.objects.len()];
+        let mut entites = Vec::new();
+        if !self.bim.selection.is_empty() {
+            let selection: HashSet<&str> = self.bim.selection.iter().map(String::as_str).collect();
+            if let Some((p, _)) = &self.natif {
+                for (genre, cle) in p.murs.iter().map(|x| ("mur", &x.id))
+                    .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
+                    .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
+                    .chain(p.barres.iter().map(|x| ("barre", &x.id)))
+                    .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
+                    .chain(p.importes.iter().map(|x| ("importe", &x.id))) {
+                    if selection.contains(cle.as_str()) {
+                        entites.push(scene::id_natif(genre, cle));
+                    }
+                }
+            }
+        } else if !self.selection_multiple.is_empty() {
+            entites.extend(self.selection_multiple.iter().copied());
+        } else if let Some(id) = self.selected {
+            entites.push(id);
         }
-        let Some(id) = self.selected else { return (u32::MAX, u32::MAX) };
-        if self.scene.as_ref().is_none_or(|s| s.model.ty(id) != "IFCELEMENTASSEMBLY") {
-            return (u32::MAX, u32::MAX);
+        for id in entites {
+            let objets = if scene.model.ty(id) == "IFCELEMENTASSEMBLY" {
+                self.objects_under(id)
+            } else {
+                scene.object_of.get(&id).copied().into_iter().collect()
+            };
+            for objet in objets {
+                if let Some(marque) = marques.get_mut(objet as usize) { *marque = 255; }
+            }
         }
-        let objs = self.objects_under(id);
-        match (objs.iter().min(), objs.iter().max()) {
-            (Some(&a), Some(&b)) if (b - a) as usize + 1 == objs.len() && objs.len() <= 64 => (a, b),
-            _ => (u32::MAX, u32::MAX),
-        }
+        marques
     }
 
-    fn selected_object(&self) -> Option<u32> {
-        let s = self.scene.as_ref()?;
-        s.object_of.get(&self.selected?).copied()
+    fn selectionner_rectangle(&mut self, vue: egui::Rect, fenetre: FenetreSelection) {
+        let Some(scene) = &self.scene else { return };
+        let rectangle = egui::Rect::from_two_pos(fenetre.debut, fenetre.fin);
+        let croisement = fenetre.fin.x < fenetre.debut.x;
+        let resultats = crate::selection_rectangle::objets(scene, &self.visible, self.camera.view_proj(vue.width() / vue.height().max(1.0)), vue, rectangle, self.plan_coupe(), self.boite_appliquee(), &self.cadrage_vue());
+        let mut ids = crate::selection_rectangle::groupes(scene.objects.iter().zip(resultats).map(|(o, r)| {
+            let id = scene.model.parent.get(&o.id).filter(|id| scene.model.ty(**id) == "IFCELEMENTASSEMBLY").copied().unwrap_or(o.id);
+            (id, r)
+        }), croisement);
+        ids.sort_unstable();
+        if fenetre.ajouter {
+            let mut ancienne = self.selection_multiple.clone();
+            if ancienne.is_empty() {
+                if !self.bim.selection.is_empty() {
+                    if let Some((p, _)) = &self.natif {
+                        let cles: HashSet<&str> = self.bim.selection.iter().map(String::as_str).collect();
+                        ancienne.extend(p.murs.iter().map(|x| ("mur", &x.id))
+                            .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
+                            .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
+                            .chain(p.barres.iter().map(|x| ("barre", &x.id)))
+                            .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
+                            .chain(p.importes.iter().map(|x| ("importe", &x.id)))
+                            .filter(|(_, id)| cles.contains(id.as_str())).map(|(genre, id)| scene::id_natif(genre, id)));
+                    }
+                } else if let Some(id) = self.selected { ancienne.push(id); }
+            }
+            ancienne.extend(ids); ancienne.sort_unstable(); ancienne.dedup(); ids = ancienne;
+        }
+        let mut vues = if fenetre.ajouter { self.bim.selection.clone() } else { Vec::new() };
+        if self.vue_en_plan() {
+            if let Some((p, _)) = &self.natif {
+                let z = self.altitude_vue_native();
+                for v in &p.vues {
+                    if let crate::modele::GenreVue::Coupe { debut, fin, .. } = &v.genre {
+                        if let (Some(a), Some(b)) = (self.ecran_plan(vue, *debut, z), self.ecran_plan(vue, *fin, z)) {
+                            if crate::selection_rectangle::segment(rectangle, a, b, croisement) { vues.push(v.id.clone()); }
+                        }
+                    }
+                }
+                for g in &p.quadrillages {
+                    if let (Some(a), Some(b)) = (self.ecran_plan(vue, g.debut, z), self.ecran_plan(vue, g.fin, z)) {
+                        if crate::selection_rectangle::segment(rectangle, a, b, croisement) { vues.push(g.id.clone()); }
+                    }
+                }
+            }
+        }
+        if let Some((p, _)) = &self.natif {
+            vues.retain(|id| p.vues.iter().any(|v| v.id == *id) || p.quadrillages.iter().any(|g| g.id == *id) || p.annotations.iter().any(|a| a.id == *id));
+        }
+        for (id, bounds) in self.rectangles_annotations(vue) {
+            if if croisement { rectangle.intersects(bounds) } else { rectangle.contains_rect(bounds) } { vues.push(id); }
+        }
+        vues.sort(); vues.dedup();
+        self.selected = ids.first().copied();
+        let recherches: HashSet<Id> = ids.iter().copied().collect();
+        self.bim.selection = self.natif.as_ref().map(|(p, _)| {
+            p.murs.iter().map(|x| ("mur", &x.id))
+                .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
+                .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
+                .chain(p.barres.iter().map(|x| ("barre", &x.id)))
+                .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
+                .chain(p.importes.iter().map(|x| ("importe", &x.id)))
+                .filter(|(genre, id)| recherches.contains(&scene::id_natif(genre, id)))
+                .map(|(_, id)| id.clone()).collect()
+        }).unwrap_or_default();
+        self.bim.selection.extend(vues);
+        self.coupe_dirty = true;
+        self.selection_multiple = ids;
+        self.status = format!("{} élément(s) sélectionné(s).", if self.natif.is_some() { self.bim.selection.len() } else { self.selection_multiple.len() });
     }
 
     /// Objets 3D d'un nœud et de ses descendants.
@@ -1639,14 +1795,14 @@ impl ViewerApp {
         let nom = chemin.file_stem().map(|n| n.to_string_lossy().trim_end_matches(".modele").to_string()).unwrap_or_else(|| "Nouveau projet".into());
         let projet = crate::modele::Projet::depuis_gabarit(&nom, &crate::gabarit::actif());
         let resultat = scene::depuis_natif(&projet, &chemin).and_then(|scene| {
-            let json = projet.json()?;
-            std::fs::write(&chemin, json).map_err(|e| format!("Création impossible : {e}"))?;
+            crate::modele::enregistrement::enregistrer_natif(&projet, &chemin)?;
             Ok(scene)
         });
         match resultat {
             Ok(scene) => {
                 self.install_scene(scene);
                 self.status = format!("{} — nouveau projet natif v0", projet.nom);
+                let _ = self.historique.enregistrer(&projet);
                 self.natif = Some((projet, chemin));
                 self.error = None;
             }
@@ -1661,9 +1817,11 @@ impl ViewerApp {
             return;
         }
         let Some((projet, chemin)) = &self.natif else { return };
-        match projet.json().and_then(|json| std::fs::write(chemin, json).map_err(|e| format!("Enregistrement impossible : {e}"))) {
+        match crate::modele::enregistrement::enregistrer_natif(projet, chemin) {
             Ok(()) => {
                 self.natif_modifie = false;
+                let _ = self.historique.enregistrer(projet);
+                crate::modele::enregistrement::effacer_recuperation(chemin);
                 self.status = format!("{} — enregistré", chemin.display());
                 self.error = None;
             }
@@ -1696,16 +1854,21 @@ impl ViewerApp {
             if application {
                 for d in self.documents.values_mut().filter(|d| d.modifie) {
                     if let Some((p, chemin)) = &d.natif {
-                        if let Err(e) = p.json().and_then(|json| std::fs::write(chemin, json).map_err(|e| e.to_string())) {
+                        if let Err(e) = crate::modele::enregistrement::enregistrer_natif(p, chemin) {
                             self.error = Some(format!("Enregistrement impossible de {} : {e}", chemin.display()));
                             return;
                         }
                     }
+                    if let Some((p, chemin)) = &d.natif { let _ = d.historique.enregistrer(p); crate::modele::enregistrement::effacer_recuperation(chemin); }
                     d.modifie = false;
                 }
             }
         }
         self.confirmer_fermeture = None;
+        if action==1 {
+            if let Some((_,p))=&self.natif {crate::modele::enregistrement::effacer_recuperation(p);}
+            if application {for d in self.documents.values() {if let Some((_,p))=&d.natif {crate::modele::enregistrement::effacer_recuperation(p);}}}
+        }
         if application {
             self.natif_modifie = false;
             for d in self.documents.values_mut() { d.modifie = false; }
@@ -1936,7 +2099,7 @@ impl ViewerApp {
         }
         if self.poignee_axe.is_some() {
             let l = (b[0] - a[0]).hypot(b[1] - a[1]);
-            let g = painter.layout_no_wrap(format!("{} mm", crate::step::format_real(l.round())), egui::FontId::proportional(13.0), Color32::from_gray(30));
+            let g = painter.layout_no_wrap(crate::options::unite().afficher(l), egui::FontId::proportional(13.0), Color32::from_gray(30));
             let cadre = egui::Rect::from_center_size(ea + (eb - ea) * 0.5 - egui::vec2(0.0, 16.0), g.size() + egui::vec2(10.0, 4.0));
             painter.rect(cadre, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 235), egui::Stroke::new(1.0, bleu), egui::StrokeKind::Inside);
             painter.galley(cadre.min + egui::vec2(5.0, 2.0), g, Color32::from_gray(30));
@@ -1995,11 +2158,54 @@ impl ViewerApp {
     fn reperes_coupes(&self, ui: &egui::Ui, rect: egui::Rect, z: f64) {
         let Some((projet, _)) = &self.natif else { return };
         let painter = ui.painter().with_clip_rect(rect);
-        for v in &projet.vues {
-            if let crate::modele::GenreVue::Coupe { debut, fin, profondeur, elevation } = &v.genre {
-                self.dessiner_repere_coupe(&painter, rect, *debut, *fin, z, *profondeur, *elevation, &v.nom, Color32::from_rgb(40, 90, 170));
+        for g in &projet.quadrillages {
+            if self.bim.selection.contains(&g.id) {
+                if let (Some(a), Some(b)) = (self.ecran_plan(rect, g.debut, z), self.ecran_plan(rect, g.fin, z)) {
+                    painter.line_segment([a, b], egui::Stroke::new(2.0, Color32::from_rgb(230, 120, 20)));
+                }
             }
         }
+        for v in &projet.vues {
+            if let crate::modele::GenreVue::Coupe { debut, fin, profondeur, elevation } = &v.genre {
+                let couleur = if self.bim.selection.contains(&v.id) { Color32::from_rgb(230, 120, 20) } else { Color32::from_rgb(40, 90, 170) };
+                self.dessiner_repere_coupe(&painter, rect, *debut, *fin, z, *profondeur, *elevation, &v.nom, couleur);
+            }
+        }
+    }
+
+    fn rectangles_annotations(&self, rect: egui::Rect) -> Vec<(String, egui::Rect)> {
+        let Some((p, _)) = &self.natif else { return Vec::new() };
+        let Some(vue) = self.vue_native_id().and_then(|id| p.vues.iter().find(|v| v.id == id)) else { return Vec::new() };
+        let Some(scene) = &self.scene else { return Vec::new() };
+        let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
+        let mut rectangles: std::collections::HashMap<u64, egui::Rect> = std::collections::HashMap::new();
+        for prim in crate::modele::documentation::annotations(p, vue) {
+            let Some(id) = prim.element else { continue };
+            let points: Vec<glam::DVec3> = match prim.forme {
+                crate::trace2d::Forme::Polyligne { points, .. } => points,
+                crate::trace2d::Forme::Segments(s) => s.into_iter().flatten().collect(),
+                crate::trace2d::Forme::Triangles(t) => t.into_iter().flatten().collect(),
+                crate::trace2d::Forme::Surface(c) => c.into_iter().flatten().collect(),
+            };
+            for p in points {
+                let c = vp * (p - scene.origin).as_vec3().extend(1.0);
+                if c.w <= 1e-6 || c.z < -c.w || c.z > c.w { continue; }
+                let q = egui::pos2(rect.left()+(c.x/c.w+1.0)*0.5*rect.width(), rect.top()+(1.0-c.y/c.w)*0.5*rect.height());
+                rectangles.entry(id).and_modify(|r| r.extend_with(q)).or_insert(egui::Rect::from_min_max(q,q));
+            }
+        }
+        p.annotations.iter().filter_map(|a| rectangles.remove(&scene::id_natif("annotation", &a.id)).map(|r| (a.id.clone(),r.expand(2.0)))).collect()
+    }
+
+    fn repere_coupe_proche(&self, rect: egui::Rect, q: egui::Pos2, z: f64) -> Option<String> {
+        let (p, _) = self.natif.as_ref()?;
+        p.vues.iter().filter_map(|v| if let crate::modele::GenreVue::Coupe { debut, fin, .. } = &v.genre { Some((&v.id, debut, fin)) } else { None })
+        .chain(p.quadrillages.iter().map(|g| (&g.id, &g.debut, &g.fin))).filter_map(|(id, debut, fin)| {
+            let (a, b) = (self.ecran_plan(rect, *debut, z)?, self.ecran_plan(rect, *fin, z)?);
+            let d = b-a; let t = if d.length_sq() > 0.0 { ((q-a).dot(d)/d.length_sq()).clamp(0.0,1.0) } else { 0.0 };
+            let distance = q.distance(a+d*t);
+            (distance <= 9.0).then_some((distance, id.clone()))
+        }).min_by(|a,b| a.0.total_cmp(&b.0)).map(|(_, id)| id)
     }
 
     /// Aperçu de la coupe en cours de tracé.
@@ -2100,9 +2306,29 @@ impl ViewerApp {
 
     /// Remplace le projet natif ouvert par `projet` (modifié) et reconstruit la scène,
     /// cadrage, niveaux, catégories et visibilité compris. Rien ne change en cas d'erreur.
-    fn appliquer_projet(&mut self, projet: crate::modele::Projet) -> Result<(), String> {
+    fn appliquer_projet(&mut self, mut projet: crate::modele::Projet) -> Result<(), String> {
         let chemin = self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.1.clone();
+        projet.recaler_menuiseries(&self.natif.as_ref().unwrap().0)?;
         let scene = scene::depuis_natif(&projet, &chemin)?;
+        self.historique.pousser(&self.natif.as_ref().unwrap().0, &projet)?;
+        // Les indices de vues et d'objets peuvent changer après suppression ou annulation.
+        // Retrouver leurs identifiants stables avant de remplacer la scène.
+        let anciens=self.scene.as_ref();
+        let ancienne_vue=|i:Option<usize>|->Option<Option<usize>> {
+            match i {
+                None=>Some(None),
+                Some(i)=>{let id=anciens?.navigateur.as_ref()?.vues.get(i)?.revit_id;
+                    scene.navigateur.as_ref()?.vues.iter().position(|v|v.revit_id==id).map(Some)}
+            }
+        };
+        self.vue_active=ancienne_vue(self.vue_active).flatten();
+        self.vues_ouvertes=self.vues_ouvertes.iter().filter_map(|i|ancienne_vue(*i)).collect();
+        self.etats_vues=std::mem::take(&mut self.etats_vues).into_iter().filter_map(|(i,e)|ancienne_vue(i).map(|i|(i,e))).collect();
+        if self.vues_ouvertes.is_empty(){self.vues_ouvertes.push(None);}
+        let nouvel_objet=|i:u32|anciens.and_then(|s|s.objects.get(i as usize)).and_then(|o|scene.object_of.get(&o.id)).copied();
+        self.hidden_objects=self.hidden_objects.iter().filter_map(|i|nouvel_objet(*i)).collect();
+        self.isolated=self.isolated.as_ref().map(|ids|ids.iter().filter_map(|i|nouvel_objet(*i)).collect());
+
         let delta = self.scene.as_ref().map_or(glam::DVec3::ZERO, |s| s.origin) - scene.origin;
         self.camera.target += delta.as_vec3();
         self.camera.scene_radius = ((scene.max - scene.min).length() * 0.5).max(1.0);
@@ -2127,11 +2353,15 @@ impl ViewerApp {
             self.selected = None;
         }
         self.scene = Some(scene);
+        self.bim.revision=self.bim.revision.wrapping_add(1);
+        self.natif_modifie = self.historique.modifie(&projet);
         self.natif = Some((projet, chemin));
-        self.natif_modifie = true;
         self.visibility_dirty = true;
         self.coupe_dirty = true;
         self.error = None;
+        if let Some((p, chemin)) = &self.natif {
+            if let Err(e) = crate::modele::enregistrement::recuperer_plus_tard(p, chemin) { self.error = Some(e); }
+        }
         Ok(())
     }
 
@@ -2278,6 +2508,7 @@ impl ViewerApp {
         // la saisie clavier remplace la longueur sous le curseur, dans sa direction
         let fin = match (fin, self.mur_depart, self.mur_saisie.parse::<f64>()) {
             (Some((b, acc)), Some(a), Ok(l)) if l > 0.0 => {
+                let l = l * crate::options::unite().facteur();
                 let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
                 let n = dx.hypot(dy).max(1e-9);
                 Some(([a[0] + dx / n * l, a[1] + dy / n * l], acc))
@@ -2331,9 +2562,9 @@ impl ViewerApp {
                         let angle = ((b[1] - a[1]).atan2(b[0] - a[0]) - self.angle_axes_plan()).to_degrees();
                         let angle = (angle + 180.0).rem_euclid(360.0) - 180.0;
                         let texte = if self.mur_saisie.is_empty() {
-                            format!("{longueur:.0} mm  ·  {angle:.0}°")
+                            format!("{}  ·  {angle:.0}°", crate::options::unite().afficher(longueur))
                         } else {
-                            format!("{} mm  (Entrée)", self.mur_saisie)
+                            format!("{}{}  (Entrée)", self.mur_saisie, crate::options::unite().suffixe())
                         };
                         let galee = painter.layout_no_wrap(texte, egui::FontId::proportional(13.0), Color32::from_gray(30));
                         let centre = p.lerp(q, 0.5) + egui::vec2(0.0, -18.0);
@@ -2379,6 +2610,7 @@ impl ViewerApp {
         });
         if !valider { return; }
         let (Some(a), Ok(l)) = (self.mur_depart, self.mur_saisie.parse::<f64>()) else { return };
+        let l = l * crate::options::unite().facteur();
         let Some((b, _)) = survol.and_then(|q| self.point_tracage_mur(q, rect, shift)) else { return };
         let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
         let n = dx.hypot(dy);
@@ -2407,6 +2639,7 @@ impl ViewerApp {
     // ------------------------------------------------------------------ UI
 
     fn stocker_document(&mut self) {
+        self.historique.geste(false);
         if self.scene.is_none() && self.rvt.is_none() {
             return;
         }
@@ -2414,6 +2647,7 @@ impl ViewerApp {
         let status = self.scene.as_ref().map(|s| format!("{} — {} objets 3D, {} triangles", s.file_name, s.objects.len(), s.triangles)).unwrap_or_else(|| self.status.clone());
         self.documents.insert(self.document_actif, DocumentOuvert {
             natif: self.natif.take(),
+            historique: std::mem::take(&mut self.historique),
             modifie: self.natif_modifie,
             scene: self.scene.take(),
             rvt: self.rvt.take(),
@@ -2433,6 +2667,9 @@ impl ViewerApp {
 
     fn nouveau_document(&mut self) {
         self.stocker_document();
+        self.bim = Default::default();
+        self.selection_multiple.clear();
+        self.fenetre_selection = None;
         self.natif_modifie = false;
         self.mur_depart = None;
         self.ruban_edition.niveau_mur = None;
@@ -2449,7 +2686,11 @@ impl ViewerApp {
         let Some(d) = self.documents.remove(&id) else { return };
         self.stocker_document();
         self.document_actif = id;
+        self.bim = Default::default();
+        self.selection_multiple.clear();
+        self.fenetre_selection = None;
         self.natif = d.natif;
+        self.historique = d.historique;
         self.natif_modifie = d.modifie;
         self.mur_depart = None;
         self.ruban_edition.niveau_mur = None;
@@ -2520,6 +2761,8 @@ impl ViewerApp {
         self.rvt_geom = Err(String::new());
         self.rvt_preview = None;
         self.selected = None;
+        self.selection_multiple.clear();
+        self.fenetre_selection = None;
         self.reveal = None;
         self.vue_active = None;
         self.point_clique = None;
@@ -2578,6 +2821,45 @@ impl ViewerApp {
             ] {
                 ui.selectable_value(&mut self.onglet_ruban, o, RichText::new(nom).strong());
             }
+            let disponible = self.natif.is_some() && self.loading.is_none() && self.sauvegarde.is_none();
+            let mut historique_choisi = None;
+            for (retablir, titre) in [(false, "Annuler"), (true, "Rétablir")] {
+                let libelles = self.historique.libelles(retablir);
+                let actif = disponible && !libelles.is_empty();
+                let reponse = ui.add_enabled(actif, egui::Button::new("").min_size(egui::vec2(22.0, 20.0)));
+                let centre = reponse.rect.center();
+                let sens = if retablir { -1.0 } else { 1.0 };
+                let couleur = if actif { ui.visuals().text_color() } else { ui.visuals().weak_text_color() };
+                let points: Vec<_> = [(-5.0, -2.0), (1.0, -2.0), (4.0, -1.0), (5.0, 2.0), (4.0, 5.0), (1.0, 6.0)].into_iter().map(|(x,y)| centre + egui::vec2(x * sens, y)).collect();
+                ui.painter().add(egui::Shape::line(points, egui::Stroke::new(1.5, couleur)));
+                let pointe = centre + egui::vec2(-5.0 * sens, -2.0);
+                ui.painter().add(egui::Shape::convex_polygon(vec![pointe + egui::vec2(-2.0*sens,0.0), pointe + egui::vec2(2.0*sens,-3.5), pointe + egui::vec2(2.0*sens,3.5)], couleur, egui::Stroke::NONE));
+                reponse.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, actif, titre));
+                if reponse.on_hover_text(if retablir { "Rétablir (Ctrl+Maj+Z)" } else { "Annuler (Ctrl+Z)" }).clicked() { historique_choisi = Some((retablir, 1)); }
+                ui.add_enabled_ui(actif, |ui| {
+                    ui.scope(|ui| {
+                        ui.spacing_mut().button_padding = egui::Vec2::ZERO;
+                        let bouton = egui::Button::new("").min_size(egui::vec2(16.0, 20.0));
+                        let (reponse, _) = egui::containers::menu::MenuButton::from_button(bouton).ui(ui, |ui| {
+                            ui.label(if retablir { "Rétablir jusqu'à :" } else { "Annuler jusqu'à :" });
+                            egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                                for (i, nom) in libelles.iter().enumerate() {
+                                    if ui.button(format!("{}  {}", i + 1, nom)).clicked() {
+                                        historique_choisi = Some((retablir, i + 1));
+                                        ui.close();
+                                    }
+                                }
+                            });
+                        });
+                        let centre = reponse.rect.center();
+                        let c = if actif { ui.visuals().text_color() } else { ui.visuals().weak_text_color() };
+                        ui.painter().add(egui::Shape::convex_polygon(vec![centre + egui::vec2(-3.5,-2.0), centre + egui::vec2(3.5,-2.0), centre + egui::vec2(0.0,2.0)], c, egui::Stroke::NONE));
+                        reponse.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, actif, if retablir { "Historique des rétablissements" } else { "Historique des annulations" }));
+                        reponse.on_hover_text(if retablir { "Rétablir plusieurs modifications" } else { "Annuler plusieurs modifications" });
+                    });
+                });
+            }
+            if let Some((retablir, nombre)) = historique_choisi { self.parcourir_historique_n(retablir, nombre); }
             if self.loading.is_some() || self.sauvegarde.is_some() {
                 ui.spinner();
                 let texte = self.sauvegarde.as_ref().map_or(&self.status, |s| &s.progression);
@@ -2649,7 +2931,21 @@ impl ViewerApp {
             _ => None,
         };
         if let Some(menu) = edition {
-            self.ruban_edition.afficher(ui, menu, self.natif.as_ref().map(|n| &n.0));
+            if menu==crate::ruban::Menu::Annoter && self.natif.is_some() && ui.button("Feuilles / Nomenclatures").clicked() {self.bim.documentation=true;}
+
+            if menu == crate::ruban::Menu::Modifier {
+                ui.horizontal(|ui| {
+                    if ui.add_enabled(self.historique.peut_annuler(), egui::Button::new("Annuler")).clicked() { self.parcourir_historique(false); }
+                    if ui.add_enabled(self.historique.peut_retablir(), egui::Button::new("Rétablir")).clicked() { self.parcourir_historique(true); }
+                });
+            }
+            match self.ruban_edition.afficher(ui, menu, self.natif.as_ref().map(|n| &n.0)) {
+                Some(crate::ruban::Outil::CreerIdentique) => {
+                    if let Err(e) = self.creer_identique() { self.error = Some(e); }
+                }
+                Some(crate::ruban::Outil::Supprimer) => self.demander_suppression(),
+                _ => {}
+            }
             return;
         }
         ui.horizontal(|ui| match self.onglet_ruban {
@@ -2663,11 +2959,16 @@ impl ViewerApp {
                 if ui.add_enabled(self.scene.is_some() || self.rvt.is_some() || self.loading.is_some(), egui::Button::new("Fermer")).clicked() {
                     self.fermer();
                 }
-                ui.add_enabled(false, egui::Button::new("Importer…")).on_disabled_hover_text("Import dans le modèle à venir");
+                if ui.add_enabled(self.loading.is_none(), egui::Button::new("Importer…")).on_hover_text("Convertir un IFC ou RVT en nouveau document natif").clicked() { self.importer_dialogue(&ctx); }
                 if self.rvt.is_some() && self.rvt_geom.is_ok() {
                     ui.toggle_value(&mut self.rvt_sheet, "Fiche Revit").on_hover_text("Métadonnées du fichier Revit");
                 }
                 ui.menu_button("Options", |ui| {
+                    ui.label("Unités de longueur du modèle");
+                    for (unite, nom) in [(crate::options::Unite::Millimetre, "Millimètres"), (crate::options::Unite::Centimetre, "Centimètres"), (crate::options::Unite::Metre, "Mètres")] {
+                        if ui.selectable_value(&mut self.options.unite, unite, nom).changed() { crate::options::definir_unite(unite); self.options.enregistrer(); self.coupe_dirty = true; self.bim.revision = self.bim.revision.wrapping_add(1); }
+                    }
+                    ui.separator();
                     if ui.checkbox(&mut self.options.navigation_ifc, "Navigation IFC")
                         .on_hover_text("Arborescence spatiale, classes et attributs IFC (GlobalId, Id STEP) pour les modèles Revit et natifs")
                         .changed()
@@ -2719,8 +3020,11 @@ impl ViewerApp {
                 if ui.add_enabled(disponible, egui::Button::new("Enregistrer")).on_hover_text("Enregistrer en modèle natif v0 (Ctrl+S)").clicked() {
                     self.enregistrer_projet(&ctx);
                 }
+                if ui.add_enabled(self.natif.is_some(), egui::Button::new("Enregistrer sous…")).clicked() { self.enregistrer_sous(); }
                 ui.add_enabled_ui(self.scene.is_some(), |ui| self.bouton_svg(ui));
-                ui.add_enabled(false, egui::Button::new("Imprimer…")).on_disabled_hover_text("Impression à venir");
+                if ui.add_enabled(self.scene.is_some(),egui::Button::new("Dessin PDF…")).clicked() {self.export_pdf_dialogue();}
+                if ui.add_enabled(self.natif.is_some(),egui::Button::new("IFC4…")).clicked() {self.export_ifc_dialogue();}
+                if ui.add_enabled(self.natif.is_some(),egui::Button::new("Feuilles / Nomenclatures")).clicked() {self.bim.documentation=true;}
             }
         });
     }
@@ -3358,9 +3662,9 @@ impl ViewerApp {
                 let texte = match &s.partage {
                     Some(r) => {
                         let q = r.partage(p);
-                        format!("E/O {:.3} · N/S {:.3} · Élév. {:.3} m ({})", q.x, q.y, q.z, r.nom)
+                        format!("E/O {} · N/S {} · Élév. {} ({})", self.options.unite.afficher(q.x*1000.0), self.options.unite.afficher(q.y*1000.0), self.options.unite.afficher(q.z*1000.0), r.nom)
                     }
-                    None => format!("X {:.3} · Y {:.3} · Z {:.3} m", p.x, p.y, p.z),
+                    None => format!("X {} · Y {} · Z {}", self.options.unite.afficher(p.x*1000.0), self.options.unite.afficher(p.y*1000.0), self.options.unite.afficher(p.z*1000.0)),
                 };
                 ui.label(texte).on_hover_text("Point cliqué");
             }
@@ -3489,6 +3793,18 @@ impl ViewerApp {
     /// vues qu'elles portent, familles par catégorie, groupes, liens. Clic : propriétés ;
     /// double-clic : ouvrir la vue (ou isoler les instances d'un type).
     fn navigateur_ui(&mut self, ui: &mut egui::Ui, section: LeftTab) {
+        if let Some((p,_))=&self.natif {
+            if matches!(section,LeftTab::Tout|LeftTab::Feuilles) && !p.feuilles.is_empty() {
+                egui::CollapsingHeader::new("Feuilles natives").default_open(true).show(ui,|ui| {
+                    for (k,f) in p.feuilles.iter().enumerate() {if ui.button(format!("{} — {}",f.numero,f.nom)).clicked(){self.bim.feuille=k;self.bim.documentation=true;}}
+                });
+            }
+            if matches!(section,LeftTab::Tout|LeftTab::Nomenclatures) && !p.nomenclatures.is_empty() {
+                egui::CollapsingHeader::new("Nomenclatures natives").default_open(true).show(ui,|ui| {
+                    for (k,n) in p.nomenclatures.iter().enumerate() {if ui.button(&n.nom).clicked(){self.bim.nomenclature=k;self.bim.documentation=true;}}
+                });
+            }
+        }
         let Some(s) = self.scene.as_ref() else { return };
         let Some(nav) = s.navigateur.as_ref() else { return };
         let q = self.filter.trim().to_lowercase();
@@ -3742,18 +4058,23 @@ impl ViewerApp {
             egui::vec2(24.0, 22.0),
         );
         let plusieurs_vues = self.vues_ouvertes.len() > 1 || self.documents.values().any(|d| d.vues.len() > 1);
-        let reduire = ui.put(rect_fermeture, egui::Button::new("×").sense(
+        let fermeture = ui.put(rect_fermeture, egui::Button::new("").min_size(rect_fermeture.size()).sense(
             if plusieurs_vues { Sense::click() } else { Sense::hover() },
-        )).on_hover_text("Fermer les autres onglets : garder la dernière vue ouverte de chaque document").clicked();
+        )).on_hover_text("Fermer les autres onglets : garder la dernière vue ouverte de chaque document");
+        fermeture.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, plusieurs_vues, "Fermer les autres onglets"));
+        dessiner_croix_onglet(ui.painter(), rect_fermeture.center(), if plusieurs_vues { ui.visuals().text_color() } else { ui.visuals().weak_text_color() });
+        let reduire = fermeture.clicked();
         let nombre = ((disponible / 180.0).floor() as usize).max(1).min(onglets.len().max(1));
         let actif = onglets.iter().position(|o| o.0 == self.document_actif && o.1 == self.vue_active).unwrap_or(0);
         let debut = actif.saturating_sub(nombre / 2).min(onglets.len().saturating_sub(nombre));
         let largeur = (disponible / nombre as f32).min(220.0);
-        for (droite, symbole) in [(false, "◀"), (true, "▶")] {
+        for droite in [false, true] {
             let x = if droite { barre.right() - marge - fleche } else { barre.left() + marge };
             let rect = egui::Rect::from_min_size(egui::pos2(x, barre.top() + 2.0), egui::vec2(fleche, 22.0));
-            ui.scope_builder(egui::UiBuilder::new().id_salt(("selecteur_vues", droite)).max_rect(rect), |ui| {
-                ui.menu_button(symbole, |ui| {
+            ui.scope_builder(egui::UiBuilder::new().id_salt(("selecteur_vues", droite)).max_rect(rect).layout(egui::Layout::centered_and_justified(egui::Direction::TopDown)), |ui| {
+                ui.spacing_mut().button_padding = egui::Vec2::ZERO;
+                let bouton = egui::Button::new("").min_size(rect.size());
+                let (reponse, _) = egui::containers::menu::MenuButton::from_button(bouton).ui(ui, |ui| {
                 let mut precedent = None;
                 for (id, vue, nom, infobulle) in &onglets {
                     if precedent != Some(*id) {
@@ -3763,12 +4084,18 @@ impl ViewerApp {
                         ui.label(RichText::new(&titres[id]).strong().color(couleur_document(*id)));
                         precedent = Some(*id);
                     }
-                    if ui.selectable_label(*id == self.document_actif && *vue == self.vue_active, RichText::new(format!("●  {nom}")).color(couleur_document(*id))).on_hover_text(infobulle).clicked() {
+                    if ui.selectable_label(*id == self.document_actif && *vue == self.vue_active, RichText::new(nom).color(couleur_document(*id))).on_hover_text(infobulle).clicked() {
                         activer = Some((*id, *vue));
                         ui.close();
                     }
                 }
-                }).response.on_hover_text("Liste des onglets ouverts");
+                });
+                let centre = rect.center();
+                let sens = if droite { 1.0 } else { -1.0 };
+                let points = vec![centre + egui::vec2(-sens * 2.0, -4.0), centre + egui::vec2(sens * 2.0, 0.0), centre + egui::vec2(-sens * 2.0, 4.0)];
+                ui.painter().add(egui::Shape::convex_polygon(points, ui.visuals().text_color(), egui::Stroke::NONE));
+                reponse.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Liste des onglets ouverts"));
+                reponse.on_hover_text("Liste des onglets ouverts");
             });
         }
         for (k, (id, vue, nom, infobulle)) in onglets.iter().skip(debut).take(nombre).enumerate() {
@@ -3789,7 +4116,12 @@ impl ViewerApp {
                         if reponse.clicked() {
                             activer = Some((*id, *vue));
                         }
-                        let fermer_clic = survole && ui.put(rect_croix, egui::Button::new("×").small().frame(false)).on_hover_text("Fermer la vue").clicked();
+                        let fermer_clic = if survole {
+                            let reponse = ui.put(rect_croix, egui::Button::new("").min_size(rect_croix.size()).frame(false)).on_hover_text("Fermer la vue");
+                            reponse.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Fermer la vue"));
+                            dessiner_croix_onglet(ui.painter(), rect_croix.center(), ui.visuals().text_color());
+                            reponse.clicked()
+                        } else { false };
                         if reponse.clicked_by(PointerButton::Middle) || fermer_clic {
                             fermer = Some((*id, *vue));
                         }
@@ -4544,8 +4876,19 @@ impl ViewerApp {
         self.fenetre_materiau(ui.ctx());
         self.fenetre_motifs(ui.ctx());
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
-        if let Some((projet, _)) = &mut self.natif {
-            if self.ruban_edition.contexte_creation(ui, projet) { self.natif_modifie = true; }
+        if self.natif.is_some() {
+            let ids = self.selection_bim();
+            if ids.is_empty() {
+                let mut contexte = self.natif.as_ref().unwrap().0.clone();
+                if self.ruban_edition.contexte_creation(ui, &mut contexte) {
+                    if let Err(e) = self.appliquer_projet(contexte) { self.error = Some(e); }
+                }
+            } else { self.contexte_selection(ui, &ids); }
+            ui.separator();
+        }
+        if self.panneau_bim(ui) { return; }
+        if self.natif.is_some() {
+            let projet = &self.natif.as_ref().unwrap().0;
             ui.separator();
             // éditeur de type de mur : un type déjà porté par des murs les met à jour
             let mut copie = if self.ruban_edition.editeur_type_ouvert() { projet.clone() } else { crate::modele::Projet::default() };
@@ -4589,10 +4932,11 @@ impl ViewerApp {
             }
         }
         ui.separator();
-        if self.natif.is_some() {
+        let element_selectionne = self.selected.is_some() || !self.selection_bim().is_empty();
+        if self.natif.is_some() && !element_selectionne {
             self.proprietes_vue_native(ui);
         }
-        if self.scene.is_some() && (self.coupe || !self.vue_3d()) {
+        if !element_selectionne && self.scene.is_some() && (self.coupe || !self.vue_3d()) {
             self.plage_de_vue(ui);
             ui.separator();
         }
@@ -4601,7 +4945,11 @@ impl ViewerApp {
             ui.separator();
         }
         let (Some(_), Some(id)) = (&self.scene, self.selected) else {
-            ui.label(RichText::new("Sélectionner un élément dans la vue ou l'arborescence.").weak());
+            if self.bim.selection.is_empty() {
+                ui.label(RichText::new("Sélectionner un élément dans la vue ou l'arborescence.").weak());
+            } else if self.onglet_ruban != OngletRuban::Modifier {
+                ui.label(RichText::new(format!("{} élément(s) sélectionné(s) · ouvrir Modifier pour les propriétés.", self.bim.selection.len())).weak());
+            }
             return;
         };
         if self.natif.is_some() {
@@ -4929,7 +5277,19 @@ impl ViewerApp {
         }
         if outil_coupe.is_none() { self.coupe_depart = None; }
         let altitude_coupe = self.altitude_vue_native();
-        let mode_trace = mode_mur || dalle.is_some() || outil_coupe.is_some();
+        let structure = if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() {
+            match self.ruban_edition.outil() {
+                Some(crate::ruban::Outil::Poteau) => Some(crate::modele::GenreBarre::Poteau),
+                Some(crate::ruban::Outil::Poutre) => Some(crate::modele::GenreBarre::Poutre),
+                _ => None,
+            }
+        } else { None };
+        if structure != Some(crate::modele::GenreBarre::Poutre) { self.bim.depart_structure = None; }
+        let altitude_structure = structure.and_then(|_| {
+            let p = &self.natif.as_ref()?.0;
+            Some(p.niveau(&self.bim.barre.niveau)?.altitude + self.bim.barre.debut[2])
+        });
+        let mode_trace = mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some();
         // axe du mur sélectionné : une extrémité saisie se déplace (accrochages du tracé)
         let axe = if mode_trace { None } else { self.axe_selection() };
         if let Some((id, a, b, z)) = &axe {
@@ -4985,16 +5345,25 @@ impl ViewerApp {
                 s.pick(o, d, &app.visible, app.plan_coupe(), app.boite_appliquee()).map(|(obj, t)| (obj, o + d * t))
             };
 
+            if mode_trace { self.fenetre_selection = None; }
+            if !mode_trace && self.fenetre_selection.is_none() && resp.drag_started_by(PointerButton::Primary) {
+                if let Some(debut) = ui.input(|i| i.pointer.press_origin()) {
+                    if pick(self, debut).is_none() {
+                        self.fenetre_selection = Some(FenetreSelection { debut, fin: debut, glissement: true, ajouter: ui.input(|i| i.modifiers.ctrl || i.modifiers.command) });
+                    }
+                }
+            }
+            let rectangle_actif = self.fenetre_selection.is_some();
             // Orbite autour du point visé (vue 3D seulement).
-            if !mode_trace && resp.drag_started_by(PointerButton::Primary) && !ui.input(|i| i.modifiers.shift) && self.vue_3d() {
+            if !mode_trace && !rectangle_actif && resp.drag_started_by(PointerButton::Primary) && !ui.input(|i| i.modifiers.shift) && self.vue_3d() {
                 if let Some((_, p)) = resp.interact_pointer_pos().and_then(|pp| pick(self, pp)) {
                     self.camera.set_pivot(p);
                 }
             }
             let shift = ui.input(|i| i.modifiers.shift);
-            if !mode_trace { self.voler(ui, &resp); } else { self.vol.actif = false; }
+            if !mode_trace && !rectangle_actif { self.voler(ui, &resp); } else { self.vol.actif = false; }
             for b in [PointerButton::Primary, PointerButton::Secondary, PointerButton::Middle] {
-                if mode_trace && b != PointerButton::Middle { continue; }
+                if (mode_trace || rectangle_actif) && b != PointerButton::Middle { continue; }
                 if resp.dragged_by(b) && !(self.vol.actif && b == PointerButton::Secondary) {
                     self.glisser(b, resp.drag_delta(), shift, rect.height());
                 }
@@ -5018,7 +5387,17 @@ impl ViewerApp {
                 }
             }
 
-            if self.alignement_plan {
+            if rectangle_actif {
+                let curseur = ui.input(|i| i.pointer.interact_pos().or(i.pointer.hover_pos()));
+                if let Some(p) = curseur {
+                    if let Some(f) = &mut self.fenetre_selection { f.fin = p.clamp(rect.min, rect.max); }
+                }
+                let annuler = ui.input(|i| i.key_pressed(egui::Key::Escape)) || resp.clicked_by(PointerButton::Secondary);
+                if annuler { self.fenetre_selection = None; }
+                else if self.fenetre_selection.is_some_and(|f| (f.glissement && resp.drag_stopped_by(PointerButton::Primary)) || (!f.glissement && resp.clicked())) {
+                    if let Some(f) = self.fenetre_selection.take() { self.selectionner_rectangle(rect, f); }
+                }
+            } else if self.alignement_plan {
                 // Aligner (repère du plan) : l'élément cliqué devient horizontal
                 if resp.clicked() {
                     let hit = resp.interact_pointer_pos().and_then(|p| pick(self, p));
@@ -5030,6 +5409,28 @@ impl ViewerApp {
                             self.alignement_plan = false;
                         }
                         None => self.status = "Aligner : cliquer un élément du plan (Échap : annuler)".into(),
+                    }
+                }
+            } else if let Some(genre) = structure {
+                if resp.clicked_by(PointerButton::Secondary) { self.bim.depart_structure = None; }
+                if resp.clicked() {
+                    let point = altitude_structure.and_then(|alt| resp.interact_pointer_pos().and_then(|q| self.point_tracage(q, rect, shift, self.bim.depart_structure, alt)));
+                    if let Some((point, _)) = point {
+                        match genre {
+                            crate::modele::GenreBarre::Poteau => {
+                                if let Err(e) = self.placer_structure(point, None) { self.error = Some(e); }
+                            }
+                            crate::modele::GenreBarre::Poutre => {
+                                if let Some(debut) = self.bim.depart_structure {
+                                    match self.placer_structure(debut, Some(point)) {
+                                        Ok(()) => self.bim.depart_structure = None,
+                                        Err(e) => self.error = Some(e),
+                                    }
+                                } else { self.bim.depart_structure = Some(point); }
+                            }
+                        }
+                    } else {
+                        self.error = Some(if altitude_structure.is_none() { "Choisissez un niveau pour la structure." } else { "Le plan de placement est parallèle à la vue. Utilisez une vue de dessus ou une vue 3D inclinée." }.into());
                     }
                 }
             } else if let Some(prm) = &outil_coupe {
@@ -5105,11 +5506,47 @@ impl ViewerApp {
             }) {
                 // repère d'arête de l'élément sélectionné : la pente est ajoutée ou retirée
                 self.basculer_pente(c, k);
+            } else if resp.clicked() && resp.interact_pointer_pos().is_some_and(|q| self.rectangles_annotations(rect).iter().any(|(_, r)| r.expand(4.0).contains(q))) {
+                let q = resp.interact_pointer_pos().unwrap();
+                let id = self.rectangles_annotations(rect).into_iter().find(|(_, r)| r.expand(4.0).contains(q)).unwrap().0;
+                let ctrl = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
+                let mut selection = if ctrl { self.selection_bim() } else { Vec::new() };
+                if let Some(i) = selection.iter().position(|x| x == &id) { selection.remove(i); } else { selection.push(id); }
+                self.select(None, false);
+                self.bim.selection = selection;
+            } else if resp.clicked() && self.vue_en_plan() && resp.interact_pointer_pos().and_then(|q| self.repere_coupe_proche(rect, q, altitude_coupe)).is_some() {
+                let id = self.repere_coupe_proche(rect, resp.interact_pointer_pos().unwrap(), altitude_coupe).unwrap();
+                let ctrl = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
+                let mut selection = if ctrl { self.selection_bim() } else { Vec::new() };
+                if let Some(i) = selection.iter().position(|x| x == &id) { selection.remove(i); } else { selection.push(id); }
+                self.select(None, false);
+                self.bim.selection = selection;
             } else if resp.clicked() {
                 let hit = resp.interact_pointer_pos().and_then(|p| pick(self, p));
                 let id = hit.map(|(obj, _)| self.cible_clic(self.scene.as_ref().unwrap().objects[obj as usize].id));
                 self.point_clique = hit.map(|(_, p)| p.as_dvec3() + self.scene.as_ref().unwrap().origin);
-                self.select(id, true);
+                if self.natif.is_some() && self.ruban_edition.outil()==Some(crate::ruban::Outil::Ouverture) {
+                    if let (Some(id),Some(p))=(id,self.point_clique) { self.placer_ouverture(id,[p.x*1000.0,p.y*1000.0]); }
+                } else if id.is_none() {
+                    if let Some(debut) = resp.interact_pointer_pos() {
+                        self.fenetre_selection = Some(FenetreSelection { debut, fin: debut, glissement: false, ajouter: ui.input(|i| i.modifiers.ctrl || i.modifiers.command) });
+                    }
+                } else {
+                    if ui.input(|i| i.modifiers.ctrl || i.modifiers.command) && self.natif.is_none() {
+                        let mut ids = self.selection_multiple.clone();
+                        if ids.is_empty() { if let Some(sel) = self.selected { ids.push(sel); } }
+                        if let Some(id) = id { if let Some(pos) = ids.iter().position(|x| *x == id) { ids.remove(pos); } else { ids.push(id); } }
+                        self.select(ids.first().copied(), true);
+                        self.selection_multiple = ids;
+                    } else if ui.input(|i| i.modifiers.ctrl || i.modifiers.command) {
+                        let mut selection=self.selection_bim();
+                        if let Some(cle)=id.and_then(|id|self.cle_native(id)) {
+                            if selection.contains(&cle){selection.retain(|s|s!=&cle);}else{selection.push(cle);}
+                        }
+                        self.select(if selection.is_empty(){None}else{id},true);
+                        self.bim.selection=selection;
+                    } else {self.select(id,true);}
+                }
             }
 
             if (resp.hovered() || resp.has_focus()) && !self.vol.actif {
@@ -5131,7 +5568,7 @@ impl ViewerApp {
                         _ => self.fit_all(),
                     }
                 }
-                if esc {
+                if esc && !rectangle_actif {
                     if self.isolated.is_some() {
                         self.isolated = None;
                         self.visibility_dirty = true;
@@ -5167,6 +5604,17 @@ impl ViewerApp {
             })),
         };
         ui.painter().add(callback);
+        if let Some(f) = self.fenetre_selection {
+            let r = egui::Rect::from_two_pos(f.debut, f.fin);
+            let croisement = f.fin.x < f.debut.x;
+            let couleur = if croisement { Color32::from_rgb(35, 160, 75) } else { Color32::from_rgb(35, 110, 220) };
+            let painter = ui.painter().with_clip_rect(rect);
+            painter.rect_filled(r, 0.0, couleur.gamma_multiply(0.18));
+            if croisement {
+                let points = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
+                painter.add(egui::Shape::dashed_line(&points, egui::Stroke::new(1.2, couleur), 5.0, 4.0));
+            } else { painter.rect_stroke(r, 0.0, egui::Stroke::new(1.2, couleur), egui::StrokeKind::Inside); }
+        }
         if self.natif.is_some() && self.vue_en_plan() {
             self.reperes_coupes(ui, rect, altitude_coupe);
         }
@@ -5182,7 +5630,29 @@ impl ViewerApp {
             let point = resp.hover_pos().and_then(|q| self.point_tracage_mur(q, rect, ui.input(|i| i.modifiers.shift)));
             self.apercu_mur(ui, rect, point);
         }
-        if dalle.is_none() && !mode_mur && outil_coupe.is_none() {
+        if let Some(genre) = structure {
+            let painter = ui.painter().with_clip_rect(rect);
+            let couleur = Color32::from_rgb(55, 130, 200);
+            let texte = match (genre, self.bim.depart_structure) {
+                (crate::modele::GenreBarre::Poteau, _) => "Poteau : cliquer pour placer · molette : zoom",
+                (_, None) => "Poutre : cliquer le départ · molette : zoom",
+                (_, Some(_)) => "Poutre : cliquer l'arrivée · Maj : orthogonal · Échap ou clic droit : annuler",
+            };
+            painter.text(rect.left_top()+egui::vec2(12.0,34.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
+            if let Some(alt) = altitude_structure {
+                let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.bim.depart_structure, alt));
+                if let Some((p, accroche)) = point {
+                    if let Some(q) = self.ecran_plan(rect, p, alt) { marqueur(&painter, q, accroche, couleur, Color32::from_rgb(230, 120, 20)); }
+                    if let Some(a) = self.bim.depart_structure {
+                        if let (Some(x), Some(y)) = (self.ecran_plan(rect, a, alt), self.ecran_plan(rect, p, alt)) {
+                            painter.line_segment([x, y], egui::Stroke::new(2.0, couleur));
+                            painter.text(x.lerp(y, 0.5) + egui::vec2(0.0, -16.0), egui::Align2::CENTER_CENTER, crate::options::unite().afficher((p[0]-a[0]).hypot(p[1]-a[1])), egui::FontId::proportional(13.0), couleur);
+                        }
+                    }
+                }
+            }
+        }
+        if dalle.is_none() && !mode_mur && outil_coupe.is_none() && structure.is_none() {
             self.dessiner_aretes_pente(ui, rect, resp.hover_pos());
             self.dessiner_axe(ui, rect, resp.hover_pos());
         }
@@ -5281,7 +5751,7 @@ impl ViewerApp {
             eye: self.camera.eye(),
             view_dir: self.camera.forward(),
             ortho: self.camera.ortho,
-            selected: self.plage_selection(),
+            selected: self.objets_selectionnes(),
             background: if self.style.papier() { [1.0, 1.0, 1.0] } else { [0.925, 0.933, 0.945] },
             style: self.style,
             faces_blanches: self.faces_blanches,
@@ -5407,6 +5877,12 @@ impl ViewerApp {
         masquees.sort();
         p.push(("classes_masquees", liste(masquees.into_iter().map(|c| texte(c)))));
         p.push(("isolement", self.isolated.as_ref().map_or("null".into(), |i| i.len().to_string())));
+        if self.natif.is_some() {
+            p.push(("selection_native", liste(self.selection_bim().iter().map(|id| texte(id)))));
+        }
+        if !self.selection_multiple.is_empty() {
+            p.push(("selections", liste(self.selection_multiple.iter().map(|id| self.decrire(*id)))));
+        }
         if let Some(id) = self.selected {
             p.push(("selection", self.decrire(id)));
         }
@@ -5436,9 +5912,19 @@ impl ViewerApp {
         use pilote::{erreur, liste, objet, succes, texte};
         match commande {
             "etat" => self.etat(),
+            "editer" => {
+                let resultat=serde_json::from_str::<crate::modele::commandes::Commande>(argument).map_err(|e|e.to_string()).and_then(|c|self.executer_bim(c));
+                match resultat { Ok(ids)=>succes(&[("ids",serde_json::to_string(&ids).unwrap())]), Err(e)=>erreur(&e) }
+            }
+            "annuler" | "retablir" => {
+                self.error=None; self.parcourir_historique(commande=="retablir");
+                match &self.error { Some(e)=>erreur(e),None=>self.etat() }
+            }
+            "projet_natif" => match &self.natif {Some((p,_))=>match p.json() {Ok(s)=>succes(&[("projet",s)]),Err(e)=>erreur(&e)},None=>erreur("Aucun projet natif.")},
             "outil" => {
                 match argument {
                     "mur" => { self.onglet_ruban = OngletRuban::Modeliser; self.ruban_edition.activer_mur(); }
+                    "poteau" | "poutre" => { self.onglet_ruban = OngletRuban::Modeliser; self.ruban_edition.activer_structure(argument == "poutre"); }
                     "coupe" => { self.onglet_ruban = OngletRuban::Annoter; self.ruban_edition.activer_coupe(); }
                     "dalle" | "sol" | "plafond" | "toiture" => {
                         use crate::modele::SorteDalle;
@@ -5447,7 +5933,7 @@ impl ViewerApp {
                         self.ruban_edition.activer_surface(sorte);
                     }
                     "aucun" => { self.ruban_edition.annuler(); self.mur_depart = None; }
-                    _ => return erreur("usage : outil mur|dalle|sol|coupe|aucun"),
+                    _ => return erreur("usage : outil mur|poteau|poutre|dalle|sol|coupe|aucun"),
                 }
                 self.etat()
             }
@@ -5557,7 +6043,14 @@ impl ViewerApp {
                     };
                 }
                 if self.natif.is_none() { return erreur("aucun projet natif ou Revit ouvert") }
-                self.enregistrer_projet(&ctx);
+                if !argument.trim().is_empty() {
+                    let chemin=PathBuf::from(argument.trim().trim_matches('"'));
+                    let (p,ancien)=self.natif.as_ref().unwrap();
+                    if let Err(e)=crate::modele::enregistrement::enregistrer_natif(p,&chemin){return erreur(&e);}
+                    crate::modele::enregistrement::effacer_recuperation(ancien);
+                    let _=self.historique.enregistrer(p);
+                    self.finaliser_enregistrement_sous(chemin);
+                } else {self.enregistrer_projet(&ctx);}
                 if let Some(e) = &self.error { erreur(e) } else { self.etat() }
             }
             "taille" => {
@@ -6166,7 +6659,13 @@ fn load_state_fr(s: &str) -> &str {
 impl eframe::App for ViewerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        self.historique.geste(ctx.input(|i|i.pointer.any_down()));
         self.poll_sauvegarde();
+        self.fenetre_documentation(&ctx);
+        if !ctx.egui_wants_keyboard_input() {
+            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Z)) { self.parcourir_historique(true); }
+            else if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Z)) { self.parcourir_historique(false); }
+        }
         if ctx.input(|i| i.viewport().close_requested()) && self.sauvegarde.is_some() {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.error = Some("Un enregistrement est en cours ; attendez sa fin avant de quitter.".into());
@@ -6189,7 +6688,9 @@ impl eframe::App for ViewerApp {
         }
         if self.ruban_edition.a_un_outil() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             // Échap : la saisie, puis le mur ou la dalle en cours, puis l'outil
-            if self.coupe_depart.is_some() {
+            if self.bim.depart_structure.take().is_some() {
+                // Le premier clic d'une poutre est abandonné sans modifier le projet.
+            } else if self.coupe_depart.is_some() {
                 self.coupe_depart = None;
             } else if !self.dalle_points.is_empty() {
                 self.dalle_points.clear();
@@ -6208,6 +6709,26 @@ impl eframe::App for ViewerApp {
         if let Some(p) = dropped.into_iter().next() {
             self.open(p, &ctx);
         }
+        if !ctx.egui_wants_keyboard_input() && self.scene.is_some() {
+            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::A)) && self.rect_vue.is_positive() {
+                let f = FenetreSelection { debut: egui::pos2(-100_000_000.0, -100_000_000.0), fin: egui::pos2(100_000_000.0, 100_000_000.0), glissement: false, ajouter: false };
+                self.selectionner_rectangle(self.rect_vue, f);
+            }
+            if self.natif.is_some() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete)) { self.demander_suppression(); }
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) { self.raccourci_en_attente = None; }
+        }
+        if !ctx.egui_wants_keyboard_input() && self.natif.is_some() && self.mur_depart.is_none() && self.coupe_depart.is_none() && self.dalle_points.is_empty() && self.bim.depart_structure.is_none() {
+            let (temps, textes) = ctx.input(|i| (i.time, if i.modifiers.ctrl || i.modifiers.alt || i.modifiers.command { Vec::new() } else { i.events.iter().filter_map(|e| if let egui::Event::Text(s) = e { Some(s.clone()) } else { None }).collect::<Vec<_>>() }));
+            if self.raccourci_en_attente.is_some_and(|(_, t)| temps - t > 2.0) { self.raccourci_en_attente = None; }
+            for c in textes.iter().flat_map(|s| s.chars()).filter(|c| c.is_ascii_alphabetic()).map(|c| c.to_ascii_uppercase()) {
+                if let Some((premier, _)) = self.raccourci_en_attente.take() {
+                    use crate::ruban::Outil;
+                    let outil = match (premier, c) { ('M','U') => Some((Outil::Mur, OngletRuban::Modeliser)), ('P','O') => Some((Outil::Poteau, OngletRuban::Modeliser)), ('P','P') => Some((Outil::Poutre, OngletRuban::Modeliser)), ('O','U') => Some((Outil::Ouverture, OngletRuban::Modeliser)), ('M','V') => Some((Outil::Deplacer, OngletRuban::Modifier)), ('C','O') => Some((Outil::Copier, OngletRuban::Modifier)), ('R','O') => Some((Outil::Tourner, OngletRuban::Modifier)), ('A','L') => Some((Outil::Aligner, OngletRuban::Modifier)), ('A','J') => Some((Outil::Ajuster, OngletRuban::Modifier)), _ => None };
+                    if (premier, c) == ('C','S') { if let Err(e) = self.creer_identique() { self.error = Some(e); } }
+                    else if let Some((outil, onglet)) = outil { self.onglet_ruban = onglet; self.ruban_edition.activer_outil(outil); }
+                } else if ['C','M','P','O','R','A'].contains(&c) { self.raccourci_en_attente = Some((c, temps)); }
+            }
+        } else { self.raccourci_en_attente = None; }
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::O)) {
             self.open_dialog(&ctx);
         }

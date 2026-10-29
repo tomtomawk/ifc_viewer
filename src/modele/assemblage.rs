@@ -148,6 +148,9 @@ impl Projet {
     /// Sort une couche de son assemblage : elle reste un mur indépendant. Un assemblage
     /// sans couche disparaît.
     pub fn dissocier(&mut self, mur: &str) -> Result<(), String> {
+        if self.murs.iter().find(|m|m.id==mur).and_then(|m|m.assemblage.as_ref()).and_then(|a|self.assemblage(a)).is_some_and(|a|a.couches.len()==1 && self.ouvertures.iter().any(|o|o.mur==a.id)) {
+            return Err("La dernière couche héberge des ouvertures : conservez l'assemblage ou supprimez les ouvertures.".into());
+        }
         let m = self.murs.iter_mut().find(|m| m.id == mur).ok_or("Mur introuvable.")?;
         let Some(a) = m.assemblage.take() else { return Ok(()) };
         if let Some(asm) = self.assemblages.iter_mut().find(|x| x.id == a) {

@@ -37,7 +37,7 @@ pub struct Bilan {
 }
 
 /// Prépare intégralement le fichier avant de remplacer une éventuelle sauvegarde.
-fn ecrire_atomique(chemin: &Path, contenu: &[u8]) -> Result<(), String> {
+pub fn ecrire_atomique(chemin: &Path, contenu: &[u8]) -> Result<(), String> {
     use std::io::Write;
     static SEQUENCE: AtomicU64 = AtomicU64::new(0);
     let nom = chemin.file_name().ok_or("Nom du fichier de destination invalide.")?.to_string_lossy();
@@ -123,3 +123,15 @@ mod tests {
         std::fs::remove_file(sortie).unwrap(); std::fs::remove_file(rapport).unwrap(); std::fs::remove_dir(p).unwrap();
     }
 }
+
+/// Valide et remplace un fichier natif sans écriture partielle.
+pub fn enregistrer_natif(p: &Projet, chemin: &Path) -> Result<(), String> {
+    if !chemin.extension().is_some_and(|e|e.eq_ignore_ascii_case("json")) {return Err("Un projet natif doit être enregistré dans un fichier .json.".into());}
+    p.verifier()?;
+    let json=p.json()?;
+    Projet::lire_json(&json)?;
+    ecrire_atomique(chemin,json.as_bytes())
+}
+pub fn chemin_recuperation(chemin: &Path) -> PathBuf { chemin.with_extension("recuperation.json") }
+pub fn recuperer_plus_tard(p: &Projet, chemin: &Path) -> Result<(),String> { enregistrer_natif(p,&chemin_recuperation(chemin)) }
+pub fn effacer_recuperation(chemin: &Path) { let _=std::fs::remove_file(chemin_recuperation(chemin)); }

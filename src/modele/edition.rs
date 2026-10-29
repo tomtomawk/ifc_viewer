@@ -217,7 +217,11 @@ impl Projet {
     pub fn supprimer_vue(&mut self, id: &str) -> Result<(), String> {
         let avant = self.vues.len();
         self.vues.retain(|v| v.id != id);
-        if self.vues.len() == avant { Err("Vue introuvable.".into()) } else { Ok(()) }
+        if self.vues.len() == avant { Err("Vue introuvable.".into()) } else {
+            self.annotations.retain(|a| a.vue!=id);
+            for f in &mut self.feuilles {f.vues.retain(|v|v.vue!=id);}
+            Ok(())
+        }
     }
 
     /// Axe d'un mur ou d'un assemblage (moyenne des axes de ses couches) : début, fin
@@ -312,7 +316,7 @@ impl Projet {
             k += 1;
         };
         if self.phases.is_empty() { self.phases.push(p.phase.clone().unwrap_or_else(|| "Projet".into())); }
-        if self.sous_projets.is_empty() { self.sous_projets.push(p.sous_projet.clone().unwrap_or_else(|| "Sous-projet 1".into())); }
+        if self.sous_projets.is_empty() { self.sous_projets.push(p.sous_projet.clone().unwrap_or_else(|| "A".into())); }
         self.dalles.push(Dalle {
             variante: p.variante.clone(),
             phase: p.phase.clone().or_else(|| self.phases.last().cloned()),
@@ -347,7 +351,7 @@ impl Projet {
             self.variantes.push(Variante { id: id.clone(), nom: nom.into(), jeu: jeu.into() });
             return Ok(id);
         }
-        let (choix, defaut) = match liste { ListeCreation::Phase => (&mut self.phases, "Projet"), _ => (&mut self.sous_projets, "Sous-projet 1") };
+        let (choix, defaut) = match liste { ListeCreation::Phase => (&mut self.phases, "Projet"), _ => (&mut self.sous_projets, "A") };
         if choix.iter().any(|v| v.eq_ignore_ascii_case(nom)) || (choix.is_empty() && defaut.eq_ignore_ascii_case(nom)) {
             return Err("Ce nom existe déjà.".into());
         }
@@ -409,7 +413,7 @@ impl Projet {
         }
         let compose = compose.is_some_and(|t| t.couches.len() > 1);
         if self.phases.is_empty() { self.phases.push(p.phase.clone().unwrap_or_else(|| "Projet".into())); }
-        if self.sous_projets.is_empty() { self.sous_projets.push(p.sous_projet.clone().unwrap_or_else(|| "Sous-projet 1".into())); }
+        if self.sous_projets.is_empty() { self.sous_projets.push(p.sous_projet.clone().unwrap_or_else(|| "A".into())); }
         let contrainte = match &p.niveau_haut {
             Some(niveau) => Haut::Niveau { niveau: niveau.clone(), decalage: p.decalage_haut },
             None => Haut::Libre { hauteur: haut - bas },
@@ -486,7 +490,7 @@ mod tests {
         assert_eq!(projet.ajouter_choix_creation(ListeCreation::Phase, "  Livraison  ", "").unwrap(), "Livraison");
         assert_eq!(projet.phases, ["Projet", "Livraison"]);
         projet.ajouter_choix_creation(ListeCreation::SousProjet, "Structure", "").unwrap();
-        assert_eq!(projet.sous_projets, ["Sous-projet 1", "Structure"]);
+        assert_eq!(projet.sous_projets, ["A", "Structure"]);
         let a = projet.ajouter_choix_creation(ListeCreation::Variante, "Option A", "Façade").unwrap();
         let b = projet.ajouter_choix_creation(ListeCreation::Variante, "Option A", "Structure").unwrap();
         assert_ne!(a,b);

@@ -1,6 +1,6 @@
 # Modèle natif v0
 
-Format d'édition du projet, source de vérité d'un futur éditeur. Un fichier Revit ou IFC est
+Format d'édition du projet, source de vérité de l’éditeur. Un fichier Revit ou IFC est
 **converti** vers ce modèle : ce qui est reconnu devient paramétrique, le reste devient un
 **élément importé** (géométrie figée). Rien n'est jeté sans être compté.
 
@@ -39,8 +39,9 @@ même épaisseur sont réutilisés. L'axe enregistré
 reste la ligne médiane de l'épaisseur ; les variantes d'implantation décalent cet axe.
 Les niveaux et murs droits natifs sont affichés par la chaîne de rendu commune,
 avec sélection et propriétés, et peuvent être rouverts après enregistrement.
-L'affichage natif des autres éléments et des murs courbes reste à implémenter :
-les fichiers qui en contiennent sont refusés explicitement, sans être modifiés.
+Les murs courbes, ouvertures et éléments importés sont également affichés. Les
+références et les maillages sont validés avant remplacement du document ouvert.
+Voir [EDITION.md](EDITION.md) pour les commandes, la documentation et les exports.
 
 Un RVT déjà ouvert peut aussi être enregistré en v0 avec **Sortie → Enregistrer**
 ou Ctrl+S. Une destination est demandée la première fois et mémorisée par document.
@@ -49,7 +50,7 @@ dont la taille et la date sont vérifiées par rapport à son ouverture. Elle ut
 les mêmes règles de reconnaissance et de conservation en éléments importés que
 la conversion en ligne de commande. Le JSON est validé avant remplacement du fichier
 de destination ; un rapport `.modele.rapport.md` est écrit à côté. L'application
-garde le RVT et ses vues ouverts, sans basculer vers le rendu natif limité.
+garde le RVT et ses vues ouverts, sans changer automatiquement de document (Début → Importer ouvre le document natif).
 
 1. **Deux niveaux** : paramétrique (niveaux, murs, ouvertures, dalles) ou importé (maillage +
    catégorie + raison). Un élément paramétrique n'est retenu que si ses paramètres reproduisent
@@ -64,7 +65,7 @@ garde le RVT et ses vues ouverts, sans basculer vers le rendu natif limité.
    incompatible incrémente la version (migrations).
 4. **Unités** : millimètres, repère du fichier source (Revit : origine interne ; IFC : repère
    du projet). Longueurs arrondies au micromètre.
-5. **Échange** : l'IFC reste le format d'échange (import ; export à venir). Pas d'écriture
+5. **Échange** : l'IFC reste le format d'échange (import et export IFC4 tessellé). Pas d'écriture
    `.rvt`.
 
 ## Schéma
@@ -82,7 +83,7 @@ garde le RVT et ses vues ouverts, sans basculer vers le rendu natif limité.
 | `types_ouvertures[]` | `id`, `nom`, `genre`, `largeur`, `hauteur` | Revit seulement en v0 (cotes du type) |
 | `murs[]` | `id`, `nom`, `type_mur`, `niveau`, `decalage_bas`, `haut`, `axe`, `origine`, `phase`, `sous_projet`, `variante` | `phase`, `sous_projet` et `variante` sont facultatifs (absents des anciens fichiers). `haut` : `{contrainte: libre, hauteur}` ou `{contrainte: niveau, niveau, decalage}` |
 | `axe` | `{forme: droit, debut, fin}` ou `{forme: arc, debut, fin, centre, direct}` | Ligne médiane de l'épaisseur, en plan (x, y) |
-| `ouvertures[]` | `id`, `nom`, `genre` (porte, fenetre, baie), `mur`, `type_ouverture`, `abscisse`, `largeur`, `hauteur`, `allege`, `representation`, `origine` | Baie rectangulaire à travers le mur ; `abscisse` = milieu de la baie le long de l'axe ; `allege` au-dessus du niveau du mur ; `representation` = menuiserie lue (maillage) |
+| `ouvertures[]` | `id`, `nom`, `genre` (porte, fenetre, libre), `mur`, `type_ouverture`, `abscisse`, `largeur`, `hauteur`, `allege`, `representation`, `origine` | Baie rectangulaire à travers le mur ; `abscisse` = milieu de la baie le long de l'axe ; `allege` au-dessus du niveau du mur ; `representation` = menuiserie lue (maillage) |
 | `dalles[]` | `id`, `nom`, `sorte`, `type_dalle`, `niveau`, `decalage`, `contours`, `pentes`, `phase`, `sous_projet`, `variante`, `origine` | `sorte` : `dalle` (défaut, omis), `sol`, `plafond`, `toiture`. `decalage` = dessus (dalle, sol) ou sous-face (plafond, toiture ; à l'égout si en pente) au-dessus du niveau ; `contours` en plan, pair-impair (trous) ; `pentes[c][k]` = pente en degrés de l'arête du sommet k au suivant du contour c, `null` sans pente (omis : élément plan) |
 | `vues[]` | `id`, `nom`, `type_vue`, `echelle`, `genre` : `plan` (`niveau`, `coupe` mm au-dessus du niveau) ou `coupe` (`debut`, `fin`, `profondeur` mm, `elevation`) | Arborescence du projet ; une coupe ou une élévation regarde vers la gauche de sa ligne |
 | `importes[]` | `id`, `nom`, `categorie`, `niveau`, `maillage`, `raison`, `origine` | `maillage` : `sommets` [x, y, z], `triangles` [i, j, k] |
@@ -141,8 +142,9 @@ pignons font une toiture à deux pans ; aucune arête en pente, un élément pla
   sélectionné (triangle plein et pente : arête en pente ; rond : sans pente).
 - Couches : épaisseur normale aux versants (verticale : épaisseur / cos pente), empilées
   depuis la sous-face. Coupe d'égout verticale. Une couche de coupe par versant.
-- Limite v0 : le plus bas des plans est exact pour un contour convexe ; sur un contour
-  concave (L, T), un versant prolongé peut couper l'aile voisine.
+- Contour convexe : enveloppe des plans par arête. Contour concave (L, T) :
+  squelette droit pour une pente uniforme sur toutes les arêtes ; les autres
+  combinaisons sont refusées explicitement (voir EDITION.md).
 
 ## Gabarit
 
@@ -220,7 +222,8 @@ pour les murs droits superposés en hauteur, un assemblage comptant pour un seul
   sens, se raccordent couche à couche.
 - **Arrivée (T)** : une extrémité proche d'un mur, loin de ses bouts, s'arrête sur sa
   face (toutes les couches de l'arrivant).
-- Plus de deux murs au même angle : extrémités laissées droites.
+- Les croisements et raccords multiples/courbes sont complétés par soustraction
+  volumétrique selon la priorité des couches (voir EDITION.md).
 - En coupe, le trait commun à deux couches du même matériau est retiré (régions
   fondues, comme le nettoyage des jonctions de Revit).
 
@@ -266,12 +269,17 @@ chaque `.rfa` du dossier.
 
 - Revit : contours d'esquisse des sols, extrémités du
   tracé des murs, ligne d'implantation, cotes de réservation des familles.
-- Jonctions : murs courbes, croisements (X) et angles à plus de deux murs, choix
-  onglet / aboutement et priorité des couches comme dans Revit ; murs attachés aux
-  toits, profils de murs non rectangulaires.
-- Assemblages courbes à la conversion (arc Revit ou IFC), fonction des couches Revit
-  (structure, isolation…), mise à jour des assemblages existants depuis leur type.
-- Toits, escaliers, poteaux, poutres paramétriques ; familles paramétriques (portes,
-  fenêtres) à la place des maillages de menuiserie.
-- Affichage des autres éléments natifs (hors niveaux et murs droits), export IFC.
+- Jonctions : choix explicite onglet / aboutement et profils de murs arbitraires.
+  Les croisements, priorités de couches et attaches aux toitures sont disponibles.
+- Assemblages courbes à la conversion (arc Revit ou IFC) et fonction des couches
+  Revit (structure, isolation…). La mise à jour depuis un type natif est disponible.
+- Toits concaves à pentes différentes ; escaliers et garde-corps paramétriques ;
+  familles paramétriques (portes, fenêtres) à la place des maillages de menuiserie.
+- Export de géométrie IFC paramétrique plus riche que les corps tessellés actuels.
 - Maillages des éléments importés dans un fichier binaire à côté du JSON (taille).
+
+## Édition et documentation additionnelles
+
+Les collections et tables facultatives de l'éditeur (annotations, quadrillages,
+feuilles, nomenclatures, attaches de toiture et priorités de jonction) sont détaillées
+avec leurs commandes et leurs limites dans [EDITION.md](EDITION.md).

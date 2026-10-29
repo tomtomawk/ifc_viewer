@@ -31,6 +31,16 @@ jobs:
       - run: cargo build --release
       - name: Statistiques sur l'échantillon IFC
         run: cargo run --release -- --stats samples/test_ifc4.ifc
+      - name: Livrables du projet natif autonome
+        run: |
+          cargo run --release -- --export-ifc samples/maison_native.modele.json target/maison.ifc
+          cargo run --release -- --export-feuille samples/maison_native.modele.json A01 target/maison.pdf
+          cargo run --release -- --quantites samples/maison_native.modele.json target/quantites.csv
+      - name: Validation IFC indépendante (Linux x64)
+        if: matrix.nom == 'linux-x64'
+        run: |
+          python3 -m pip install ifcopenshell==0.9.0.post1 pytest
+          python3 tools/valider_ifc.py target/maison.ifc
       - uses: actions/upload-artifact@v4
         with:
           name: ifc_viewer-${{ matrix.nom }}

@@ -12,8 +12,8 @@ layout(location = 3) in uint a_obj;
 layout(location = 4) in vec4 a_rendu;
 layout(location = 5) in vec4 a_motif;
 uniform mat4 u_mvp;
-uniform uint u_sel;
-uniform uint u_sel_fin;
+uniform sampler2D u_selection;
+uniform uint u_selection_nombre;
 uniform vec4 u_plans[2];
 uniform vec4 u_coupe;
 uniform vec3 u_eye;
@@ -34,8 +34,8 @@ void main() {
     // annotations (4ᵉ composante de la normale) : ni découpées ni blanchies en mode dessin
     v_annot = a_normal.w > 0.5 ? 1u : 0u;
     v_c = a_color;
-    // sélection : plage d'objets consécutifs (un assemblage et ses couches)
-    v_selected = (a_obj >= u_sel && a_obj <= u_sel_fin) ? 1u : 0u;
+    // Chaque objet est repéré par un octet dans la texture de sélection.
+    v_selected = a_obj < u_selection_nombre && texelFetch(u_selection, ivec2(int(a_obj % 1024u), int(a_obj / 1024u)), 0).r > 0.5 ? 1u : 0u;
     gl_Position = u_mvp * vec4(a_pos, 1.0);
     // annotations (cotes, textes, tracé de la coupe) un peu avancées en profondeur, en
     // proportion de la précision du tampon : elles ne se battent plus avec les faces
@@ -390,8 +390,9 @@ pub struct Renderer {
     vbo_coupe: glow::Buffer,
     n_coupe: [i32; 2],
     u_mvp: Option<glow::UniformLocation>,
-    u_sel: Option<glow::UniformLocation>,
-    u_sel_fin: Option<glow::UniformLocation>,
+    u_selection: Option<glow::UniformLocation>,
+    u_selection_nombre: Option<glow::UniformLocation>,
+    texture_selection: glow::Texture,
     u_eye: Option<glow::UniformLocation>,
     u_ortho: Option<glow::UniformLocation>,
     u_view_dir: Option<glow::UniformLocation>,
@@ -475,8 +476,8 @@ pub struct FrameParams {
     pub eye: Vec3,
     pub view_dir: Vec3,
     pub ortho: bool,
-    /// Objets sélectionnés, plage inclusive (u32::MAX : aucun).
-    pub selected: (u32, u32),
+    /// Un octet par objet de la scène, non nul si sélectionné.
+    pub selected: Vec<u8>,
     pub background: [f32; 3],
     /// Style visuel de la vue principale (les fenêtres de vue d'une feuille restent
     /// ombrées).
@@ -606,10 +607,12 @@ impl Renderer {
             gl.bind_vertex_array(None);
             gl.bind_buffer(glow::ARRAY_BUFFER, None);
 
+            let texture_selection = gl.create_texture()?;
             Ok(Renderer {
                 u_mvp: gl.get_uniform_location(program, "u_mvp"),
-                u_sel: gl.get_uniform_location(program, "u_sel"),
-                u_sel_fin: gl.get_uniform_location(program, "u_sel_fin"),
+                u_selection: gl.get_uniform_location(program, "u_selection"),
+                u_selection_nombre: gl.get_uniform_location(program, "u_selection_nombre"),
+                texture_selection,
                 u_eye: gl.get_uniform_location(program, "u_eye"),
                 u_ortho: gl.get_uniform_location(program, "u_ortho"),
                 u_view_dir: gl.get_uniform_location(program, "u_view_dir"),
@@ -947,8 +950,17 @@ impl Renderer {
             gl.disable(glow::CULL_FACE);
             gl.use_program(Some(self.program));
             gl.uniform_matrix_4_f32_slice(self.u_mvp.as_ref(), false, &p.mvp.to_cols_array());
-            gl.uniform_1_u32(self.u_sel.as_ref(), p.selected.0);
-            gl.uniform_1_u32(self.u_sel_fin.as_ref(), p.selected.1);
+            let hauteur = p.selected.len().max(1).div_ceil(1024);
+            let mut selection = p.selected.clone();
+            selection.resize(hauteur * 1024, 0);
+            gl.active_texture(glow::TEXTURE4);
+            gl.bind_texture(glow::TEXTURE_2D, Some(self.texture_selection));
+            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, glow::NEAREST as i32);
+            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::NEAREST as i32);
+            gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::R8 as i32, 1024, hauteur as i32, 0, glow::RED, glow::UNSIGNED_BYTE, glow::PixelUnpackData::Slice(Some(&selection)));
+            gl.uniform_1_i32(self.u_selection.as_ref(), 4);
+            gl.uniform_1_u32(self.u_selection_nombre.as_ref(), p.selected.len() as u32);
+            gl.active_texture(glow::TEXTURE0);
             gl.uniform_3_f32(self.u_eye.as_ref(), p.eye.x, p.eye.y, p.eye.z);
             gl.uniform_1_i32(self.u_ortho.as_ref(), p.ortho as i32);
             gl.uniform_3_f32(self.u_view_dir.as_ref(), p.view_dir.x, p.view_dir.y, p.view_dir.z);
@@ -1087,6 +1099,9 @@ impl Renderer {
             gl.uniform_1_i32(self.u_boite.as_ref(), 0);
             gl.uniform_1_i32(self.u_n_cadrage.as_ref(), 0);
             gl.disable(glow::POLYGON_OFFSET_FILL);
+            gl.active_texture(glow::TEXTURE4);
+            gl.bind_texture(glow::TEXTURE_2D, None);
+            gl.active_texture(glow::TEXTURE0);
             gl.bind_vertex_array(None);
             gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
             gl.disable(glow::DEPTH_TEST);
@@ -1158,6 +1173,7 @@ impl Renderer {
             gl.delete_program(self.programme_ombre);
             gl.delete_framebuffer(self.fbo_ombres);
             gl.delete_texture(self.texture_ombres);
+            gl.delete_texture(self.texture_selection);
             gl.delete_program(self.programme_ao);
             gl.delete_program(self.programme_flou);
             gl.delete_vertex_array(self.vao_vide);

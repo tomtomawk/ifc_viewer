@@ -222,7 +222,7 @@ pub fn convertir_modele(m: &IfcModel, geometries: &HashMap<Id, Vec<[DVec3; 3]>>,
             let genre = match remplissage.map(|f| m.ty(f)) {
                 Some("IFCDOOR" | "IFCDOORSTANDARDCASE") => GenreOuverture::Porte,
                 Some("IFCWINDOW" | "IFCWINDOWSTANDARDCASE") => GenreOuverture::Fenetre,
-                _ => GenreOuverture::Baie,
+                _ => GenreOuverture::Libre,
             };
             let source = remplissage.unwrap_or(o);
             if let Some(f) = remplissage {
@@ -346,7 +346,7 @@ mod tests {
         let (p, mesures) = convertir(Path::new("samples/test_ifc4.ifc"), &|_| {}).unwrap();
         assert_eq!(p.murs.len(), 1);
         assert_eq!(p.ouvertures.len(), 1);
-        assert_eq!(p.ouvertures[0].genre, GenreOuverture::Baie);
+        assert_eq!(p.ouvertures[0].genre, GenreOuverture::Libre);
         assert!((p.volume_mur(&p.murs[0]).unwrap() - 2.76e9).abs() < 1e6);
         assert_eq!(p.dalles.len(), 1);
         assert!(mesures.iter().all(|x| x.retenu), "{mesures:?}");
