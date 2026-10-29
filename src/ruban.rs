@@ -1319,7 +1319,7 @@ impl RubanEdition {
                 while projet.types_murs.iter().any(|t| t.nom == format!("Mur composé {n}")) {
                     n += 1;
                 }
-                let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f };
+                let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None };
                 (format!("Mur composé {n}"), vec![c("Enduit", 15.0, FonctionCouche::Finition), c("Béton", 200.0, FonctionCouche::Structure), c("Laine minérale", 120.0, FonctionCouche::Isolation), c("Plâtre", 13.0, FonctionCouche::Finition)])
             }
         };
@@ -1359,8 +1359,8 @@ impl RubanEdition {
                 // glisser-déposer : lignes (hauteur) et relâchement de la poignée
                 let mut lignes: Vec<egui::Rangef> = Vec::new();
                 let mut lacher = false;
-                egui::Grid::new("couches_type_mur").num_columns(7).spacing([6.0, 4.0]).striped(true).show(ui, |ui| {
-                    for t in ["", "Fonction", "Matériau", "", "Motif", "Épaisseur", ""] {
+                egui::Grid::new("couches_type_mur").num_columns(8).spacing([6.0, 4.0]).striped(true).show(ui, |ui| {
+                    for t in ["", "Fonction", "Matériau", "", "Motif", "Épaisseur", "Plume", ""] {
                         ui.label(RichText::new(t).small().weak());
                     }
                     ui.end_row();
@@ -1424,6 +1424,17 @@ impl RubanEdition {
                             }
                         }
                         ui.add(egui::DragValue::new(&mut c.epaisseur).speed(1.0).range(1.0..=2000.0).max_decimals(1).dimensions());
+                        // plume du contour de coupe : numéro et épaisseur de la table
+                        let plumes = projet.epaisseurs_plumes();
+                        let mut n_plume = c.plume();
+                        egui::ComboBox::from_id_salt(("plume", k)).width(70.0).selected_text(format!("{n_plume} · {}", crate::step::format_real(plumes[(n_plume - 1) as usize]))).show_ui(ui, |ui| {
+                            for (i, e) in plumes.iter().enumerate() {
+                                ui.selectable_value(&mut n_plume, i as u8 + 1, format!("{} · {} mm", i + 1, crate::step::format_real(*e)));
+                            }
+                        }).response.on_hover_text("Plume du contour de coupe de la couche");
+                        if n_plume != c.plume() {
+                            c.plume = Some(n_plume);
+                        }
                         if petit_bouton(ui, n > 1, Glyphe::Croix).on_hover_text("Supprimer la couche").clicked() { action = Some((k, 0)); }
                         ui.end_row();
                     }
@@ -1453,7 +1464,7 @@ impl RubanEdition {
                 }
                 ui.horizontal(|ui| {
                     if ui.button("+ Couche").clicked() {
-                        ed.couches.push(Couche { materiau: None, epaisseur: 50.0, fonction: FonctionCouche::Autre });
+                        ed.couches.push(Couche { materiau: None, epaisseur: 50.0, fonction: FonctionCouche::Autre, plume: None });
                     }
                     let total: f64 = ed.couches.iter().map(|c| c.epaisseur).sum();
                     ui.label(format!("Épaisseur totale : {}", crate::options::unite().afficher(total)));

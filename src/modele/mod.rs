@@ -54,6 +54,9 @@ pub struct Projet {
     /// Matériaux nommés par les couches : couleur et motif de coupe.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub materiaux: Vec<Materiau>,
+    /// Épaisseurs des plumes 1 à 12 (mm du papier) ; vide : celles du gabarit.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plumes: Vec<f64>,
     /// Motifs de hachures du projet (en plus de ceux du gabarit et de base).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub motifs: Vec<DefinitionMotif>,
@@ -170,6 +173,25 @@ pub struct Couche {
     pub epaisseur: f64,
     #[serde(default, skip_serializing_if = "FonctionCouche::est_autre")]
     pub fonction: FonctionCouche,
+    /// Plume du contour de coupe (1 à 12, table des épaisseurs) ; None : selon la fonction.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plume: Option<u8>,
+}
+
+/// Épaisseurs des plumes 1 à 12 (mm du papier) par défaut, comme les épaisseurs de
+/// lignes de Revit.
+pub const PLUMES: [f64; 12] = [0.10, 0.13, 0.18, 0.25, 0.35, 0.50, 0.70, 1.00, 1.40, 2.00, 0.05, 0.08];
+
+impl Couche {
+    /// Plume du contour de coupe : la sienne, sinon selon la fonction (structure 5,
+    /// isolation 3, finition et autre 2).
+    pub fn plume(&self) -> u8 {
+        self.plume.unwrap_or(match self.fonction {
+            FonctionCouche::Structure => 5,
+            FonctionCouche::Isolation => 3,
+            _ => 2,
+        })
+    }
 }
 
 /// Rôle d'une couche ; la structure sert de référence d'implantation (axe du porteur).
@@ -725,6 +747,20 @@ impl Projet {
         self.materiaux.iter().find(|m| m.nom == nom)
     }
 
+    /// Épaisseurs des plumes 1 à 12 (mm du papier) : du projet, sinon du gabarit, sinon
+    /// par défaut.
+    pub fn epaisseurs_plumes(&self) -> Vec<f64> {
+        let g = crate::gabarit::actif();
+        let mut v = if !self.plumes.is_empty() { self.plumes.clone() } else if !g.plumes.is_empty() { g.plumes.clone() } else { PLUMES.to_vec() };
+        v.resize(12, 0.25);
+        v
+    }
+
+    /// Épaisseur (mm du papier) du contour de coupe d'une couche.
+    pub fn trait_couche(&self, c: &Couche) -> f64 {
+        self.epaisseurs_plumes()[(c.plume().clamp(1, 12) - 1) as usize]
+    }
+
     /// Définition d'un motif de hachures : celle du projet, sinon du gabarit, sinon de base.
     pub fn definition_motif(&self, m: &MotifCoupe) -> Option<DefinitionMotif> {
         let nom = m.nom_hachures()?;
@@ -1033,6 +1069,25 @@ pub fn source(id: &str, chemin: &std::path::Path, format: &str) -> Source {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plume_par_couche() {
+        let mut p = Projet::nouveau("P");
+        let mut c = Couche { materiau: None, epaisseur: 200.0, fonction: FonctionCouche::Structure, plume: None };
+        // structure : plume 5 (0,35 mm) par défaut
+        assert_eq!(p.trait_couche(&c), 0.35);
+        c.plume = Some(8);
+        assert_eq!(p.trait_couche(&c), 1.0);
+        // table du projet prioritaire, complétée à 12 plumes
+        p.plumes = vec![0.1; 8];
+        assert_eq!(p.epaisseurs_plumes().len(), 12);
+        assert_eq!(p.trait_couche(&c), 0.1);
+        // plume non définie : absente du fichier, relue None
+        c.plume = None;
+        let texte = serde_json::to_string(&c).unwrap();
+        assert!(!texte.contains("plume"));
+        assert_eq!(serde_json::from_str::<Couche>(&texte).unwrap().plume, None);
+    }
 
     #[test]
     fn graphismes_materiau_comme_revit() {

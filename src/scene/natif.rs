@@ -106,7 +106,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         });
         if let Some(x) = &materiau {
             let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
-            couches_coupe.push((id, coupe_materiau(projet, x, vec![neutre, neutre])));
+            couches_coupe.push((id, coupe_materiau(projet, x, vec![neutre, neutre], type_mur.couches.first().map_or(crate::dessin::TRAIT_FORT_MM, |c| projet.trait_couche(c)))));
         }
         materiaux_parts.push(vec![materiau.as_ref().map(|m| m.nom.clone())]);
         geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.is_some().then_some(couleur)], motifs: vec![materiau.as_ref().and_then(|m| motif_surface(projet, m, &mut table_motifs))] });
@@ -140,7 +140,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
             if let Some(m) = &m {
                 // bandes de coupe entre le dessous et le dessus de la couche (m, repère du fichier)
                 for jeu in crate::modele::pente::bandes_contours(&d.contours, &plans, z0, bas, haut) {
-                    bandes.extend(coupe_materiau(projet, m, jeu));
+                    bandes.extend(coupe_materiau(projet, m, jeu, projet.trait_couche(c)));
                 }
             }
             rendu.push(m.is_some().then_some(couleur));
@@ -371,7 +371,7 @@ fn navigateur(projet: &Projet) -> Navigateur {
 /// Poché de coupe d'un matériau entre deux plans (neutres : tout l'élément) : premier
 /// plan (hachures du projet, aplat ou ligne d'isolant) et arrière-plan (aplat ou
 /// hachures), en mm du papier.
-fn coupe_materiau(projet: &Projet, m: &crate::modele::Materiau, plans: Vec<Vec4>) -> Vec<CoucheCoupe> {
+fn coupe_materiau(projet: &Projet, m: &crate::modele::Materiau, plans: Vec<Vec4>, trait_mm: f64) -> Vec<CoucheCoupe> {
     use crate::modele::MotifCoupe;
     use crate::rvt::vues::{GrilleMotif, Motif};
     let [r, g, b] = m.couleur;
@@ -397,5 +397,6 @@ fn coupe_materiau(projet: &Projet, m: &crate::modele::Materiau, plans: Vec<Vec4>
         couleur_motif: [er, eg, eb, 255],
         hachure_defaut: false,
         isolation: m.motif == MotifCoupe::Isolation,
+        trait_mm,
     }]
 }

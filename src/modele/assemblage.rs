@@ -91,7 +91,11 @@ impl Projet {
         if let Some(t) = self.types_murs.iter().find(|t| t.couches.len() == 1 && t.couches[0] == *c) {
             return t.id.clone();
         }
-        let cle = format!("{}|{}|{:?}", c.materiau.as_deref().unwrap_or(""), c.epaisseur, c.fonction);
+        let mut cle = format!("{}|{}|{:?}", c.materiau.as_deref().unwrap_or(""), c.epaisseur, c.fonction);
+        // plume choisie : type distinct (sans elle, la clé des projets existants ne change pas)
+        if let Some(n) = c.plume {
+            cle.push_str(&format!("|plume {n}"));
+        }
         let id = identifiant("type-couche", &cle);
         let nom = format!("{} · {} mm", c.materiau.as_deref().unwrap_or("Couche"), crate::step::format_real(c.epaisseur));
         self.types_murs.push(TypeCompose { id: id.clone(), nom, couches: vec![c.clone()], couches_detaillees: true, origine: None });
@@ -198,7 +202,7 @@ mod tests {
     use crate::modele::edition::ParametresMur;
 
     fn type_trois_couches() -> TypeCompose {
-        let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f };
+        let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None };
         TypeCompose {
             id: "t".into(),
             nom: "Mur isolé".into(),

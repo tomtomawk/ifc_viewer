@@ -19,6 +19,9 @@ pub struct Gabarit {
     /// Niveaux d'un nouveau projet.
     #[serde(default)]
     pub niveaux: Vec<NiveauGabarit>,
+    /// Épaisseurs des plumes 1 à 12 (mm du papier).
+    #[serde(default)]
+    pub plumes: Vec<f64>,
     /// Motifs de hachures proposés (en plus des motifs de base).
     #[serde(default)]
     pub motifs: Vec<DefinitionMotif>,

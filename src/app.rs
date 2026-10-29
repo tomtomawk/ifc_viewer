@@ -337,6 +337,7 @@ struct EtatVue {
     style: StyleVisuel,
     faces_blanches: bool,
     eclairage: bool,
+    traits_fins: bool,
     ombres_portees: bool,
     ombre_ambiante: bool,
     coupe: bool,
@@ -481,6 +482,8 @@ pub struct ViewerApp {
     /// Graphique : faces blanches (dessin au trait), éclairage des faces.
     faces_blanches: bool,
     eclairage: bool,
+    /// Traits fins : tous les traits à un pixel, plumes ignorées (comme Revit).
+    traits_fins: bool,
     /// Ombres portées et ombre ambiante : réglages à part du style.
     ombres_portees: bool,
     ombre_ambiante: bool,
@@ -626,6 +629,7 @@ impl ViewerApp {
             ombres_portees: false,
             ombre_ambiante: false,
             faces_blanches: false,
+            traits_fins: false,
             eclairage: true,
             options: {
                 let o = crate::options::Options::charger();
@@ -953,19 +957,19 @@ impl ViewerApp {
         let (mut tris, mut traits) = match (&self.scene, self.plan_coupe().filter(|_| !elevation)) {
             (Some(s), Some(p)) => {
                 let prims = dessin::coupe(s, &self.visible, p, self.echelle, self.poche_style());
-                dessin::sommets(s, &prims, p.truncate().as_dvec3().normalize(), self.echelle)
+                dessin::sommets(s, &prims, p.truncate().as_dvec3().normalize(), self.echelle, self.traits_fins)
             }
             _ => Default::default(),
         };
         if let (Some(s), Some((a, b))) = (&self.scene, self.boite_appliquee()) {
             let poche = (self.style == StyleVisuel::Graphique).then_some(self.poche);
-            let (t, l) = dessin::sommets_boite(s, &self.visible, a, b, self.echelle, poche, self.style == StyleVisuel::Realiste);
+            let (t, l) = dessin::sommets_boite(s, &self.visible, a, b, self.echelle, poche, self.style == StyleVisuel::Realiste, self.traits_fins);
             tris.extend(t);
             traits.extend(l);
         }
         if let Some(s) = &self.scene {
             let prims=self.annotations_natives();
-            let (t,l)=dessin::sommets(s,&prims,-self.camera.forward().as_dvec3(),self.echelle);
+            let (t,l)=dessin::sommets(s,&prims,-self.camera.forward().as_dvec3(),self.echelle,self.traits_fins);
             tris.extend(t); traits.extend(l);
         }
         if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
@@ -3158,6 +3162,10 @@ impl ViewerApp {
                 self.choix_detail(ui);
                 ui.separator();
                 self.choix_style(ui);
+                if ui.selectable_label(self.traits_fins, "Traits fins").on_hover_text("Tous les traits à un pixel, sans les épaisseurs des plumes").clicked() {
+                    self.traits_fins = !self.traits_fins;
+                    self.coupe_dirty = true;
+                }
                 ui.separator();
                 if ui.button("Cadrer").on_hover_text("Tout le modèle visible dans la vue (F)").clicked() {
                     self.fit_all();
@@ -3964,6 +3972,7 @@ impl ViewerApp {
             style: self.style,
             faces_blanches: self.faces_blanches,
             eclairage: self.eclairage,
+            traits_fins: self.traits_fins,
             ombres_portees: self.ombres_portees,
             ombre_ambiante: self.ombre_ambiante,
             coupe: self.coupe,
@@ -3989,6 +3998,7 @@ impl ViewerApp {
         self.style = e.style;
         self.faces_blanches = e.faces_blanches;
         self.eclairage = e.eclairage;
+        self.traits_fins = e.traits_fins;
         self.ombres_portees = e.ombres_portees;
         self.ombre_ambiante = e.ombre_ambiante;
         self.coupe = e.coupe;
@@ -6009,7 +6019,7 @@ impl ViewerApp {
                         Some("finition") => FonctionCouche::Finition,
                         _ => FonctionCouche::Autre,
                     };
-                    Some(Couche { materiau: Some(materiau), epaisseur, fonction })
+                    Some(Couche { materiau: Some(materiau), epaisseur, fonction, plume: None })
                 }).collect();
                 let (Some(couches), false) = (couches, nom.is_empty()) else { return erreur("usage : type_mur <nom>|<matériau>:<épaisseur>[:fonction]|…") };
                 let Some((projet, _)) = &self.natif else { return erreur("pas de projet natif ouvert") };
@@ -6154,6 +6164,12 @@ impl ViewerApp {
                         }
                     }
                 }
+                self.etat()
+            }
+            "traits_fins" => {
+                // traits_fins oui|non
+                self.traits_fins = argument != "non";
+                self.coupe_dirty = true;
                 self.etat()
             }
             "dessin" => {

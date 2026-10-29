@@ -199,6 +199,8 @@ pub struct CoucheCoupe {
     pub motif_fond: Option<Arc<crate::rvt::vues::Motif>>,
     /// Ligne d'isolant en boucles au milieu de la couche (premier plan).
     pub isolation: bool,
+    /// Épaisseur du contour de coupe (mm du papier, plume de la couche).
+    pub trait_mm: f64,
     pub motif: Option<Arc<crate::rvt::vues::Motif>>,
     pub couleur_motif: [u8; 4],
     pub hachure_defaut: bool,

@@ -306,13 +306,13 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
                             let (motif, facteur) = match &couche.motif {
                                 Some(m) => (m.as_ref(), if m.modele { 0.001 } else { echelle / 1000.0 }),
                                 None if couche.hachure_defaut => (&motif, 1.0),
-                                _ => { let contours = aretes(&tris).vives; detail.push(primitive(Forme::Segments(contours),NOIR,TRAIT_FORT_MM,Role::Coupe)); continue; }
+                                _ => { let contours = aretes(&tris).vives; detail.push(primitive(Forme::Segments(contours),NOIR,couche.trait_mm,Role::Coupe)); continue; }
                             };
                             let t2: Vec<_> = tris.iter().map(|t| t.map(|p| [(p-o).dot(e1),(p-o).dot(e2)])).collect();
                             let h = hachures_plan(&t2,motif,facteur,20_000).into_iter().map(|s| s.map(en_3d)).collect();
                             detail.push(primitive(Forme::Segments(h),couche.couleur_motif,0.0,Role::Hachure));
                         }
-                        detail.push(primitive(Forme::Segments(aretes(&tris).vives),NOIR,TRAIT_FORT_MM,Role::Coupe));
+                        detail.push(primitive(Forme::Segments(aretes(&tris).vives),NOIR,couche.trait_mm,Role::Coupe));
                     }
                     if !detail.is_empty() { return detail; }
                 }
@@ -492,14 +492,15 @@ fn fusionner_materiaux(scene: &Scene, mut prims: Vec<Primitive>) -> Vec<Primitiv
 /// Sommets GPU des primitives d'une coupe de normale `normale` : triangles (poché,
 /// contours) et traits (hachures), décalés vers l'observateur (côté retiré du plan) pour
 /// passer devant les faces coupées ; marqués comme annotations, jamais découpés.
-pub fn sommets(scene: &Scene, prims: &[Primitive], normale: DVec3, echelle: f64) -> (Vec<Vertex>, Vec<Vertex>) {
+/// `fins` : affichage traits fins, tous les traits à un pixel.
+pub fn sommets(scene: &Scene, prims: &[Primitive], normale: DVec3, echelle: f64, fins: bool) -> (Vec<Vertex>, Vec<Vertex>) {
     let largeur = TRAIT_FORT_MM * echelle / 1000.0;
     let (mut tris, mut traits) = (Vec::new(), Vec::new());
     for p in prims {
         let obj = p.element.and_then(|e| scene.object_of.get(&e).copied()).unwrap_or(u32::MAX);
         let decal = -normale * if p.role == Role::Coupe { (0.4 * largeur).min(0.004) } else { (0.2 * largeur).min(0.002) };
         let sommet = |q: DVec3| Vertex { pos: (q + decal).as_vec3().to_array(), normal: [0, 0, 0, 127], color: p.style.couleur, obj };
-        let m = p.mailler(normale, echelle);
+        let m = maillage(p, normale, echelle, fins);
         tris.extend(m.triangles.iter().flatten().map(|q| sommet(*q)));
         traits.extend(m.traits.iter().flatten().map(|q| sommet(*q)));
         // liseré d'un pixel des traits épais (contours, annotations) : jamais plus fins
@@ -511,10 +512,20 @@ pub fn sommets(scene: &Scene, prims: &[Primitive], normale: DVec3, echelle: f64)
     (tris, traits)
 }
 
+/// Maillage d'une primitive ; traits fins : ses traits épais ramenés à un pixel.
+fn maillage(p: &Primitive, normale: DVec3, echelle: f64, fins: bool) -> crate::trace2d::Maillage {
+    if fins && p.style.epaisseur > 0.0 {
+        let mut fin = p.clone();
+        fin.style.epaisseur = 0.0;
+        return fin.mailler(normale, echelle);
+    }
+    p.mailler(normale, echelle)
+}
+
 /// Ferme les six faces d'une section box. La triangulation précède le découpage
 /// par les autres faces : les trous des solides restent donc des trous.
 /// Sans poché demandé, le fond reprend la couleur de l'élément coupé.
-pub fn sommets_boite(scene: &Scene, visible: &[bool], a: Vec3, b: Vec3, echelle: f64, poche: Option<Poche>, rendu: bool) -> (Vec<Vertex>, Vec<Vertex>) {
+pub fn sommets_boite(scene: &Scene, visible: &[bool], a: Vec3, b: Vec3, echelle: f64, poche: Option<Poche>, rendu: bool, fins: bool) -> (Vec<Vertex>, Vec<Vertex>) {
     let (mut triangles, mut traits) = (Vec::new(), Vec::new());
     if !a.is_finite() || !b.is_finite() || a.cmpge(b).any() {
         return (triangles, traits);
@@ -544,7 +555,7 @@ pub fn sommets_boite(scene: &Scene, visible: &[bool], a: Vec3, b: Vec3, echelle:
                 }
             }
             let sommet = |q: DVec3| Vertex { pos: q.as_vec3().to_array(), normal: [0, 0, 0, 127], color: p.style.couleur, obj: objet };
-            let maillage = p.mailler(normale, echelle);
+            let maillage = maillage(&p, normale, echelle, fins);
             for t in maillage.triangles {
                 let mut polygone = t.to_vec();
                 for limite in plans {
@@ -875,7 +886,7 @@ mod tests {
         let s = scene_section(cube());
         let a = Vec3::splat(0.2);
         let b = Vec3::splat(0.8);
-        let (v, _) = sommets_boite(&s, &[true], a, b, 100.0, Some(Poche::Plein), false);
+        let (v, _) = sommets_boite(&s, &[true], a, b, 100.0, Some(Poche::Plein), false, false);
         assert!((aire_poche(&v) - 6.0 * 0.6 * 0.6).abs() < 1e-5);
         assert!(v.iter().all(|v| { let p = Vec3::from(v.pos); p.cmpge(a - Vec3::splat(1e-6)).all() && p.cmple(b + Vec3::splat(1e-6)).all() }));
     }
@@ -885,7 +896,7 @@ mod tests {
         let mut tris = cube();
         tris.extend(cube().into_iter().map(|t| t.map(|p| p * 0.5 + DVec3::splat(0.25))));
         let s = scene_section(tris);
-        let (v, _) = sommets_boite(&s, &[true], Vec3::splat(-1.0), Vec3::new(2.0, 2.0, 0.5), 100.0, Some(Poche::Plein), false);
+        let (v, _) = sommets_boite(&s, &[true], Vec3::splat(-1.0), Vec3::new(2.0, 2.0, 0.5), 100.0, Some(Poche::Plein), false, false);
         assert!((aire_poche(&v) - 0.75).abs() < 1e-6, "aire {}", aire_poche(&v));
     }
 
@@ -895,7 +906,7 @@ mod tests {
         tris.extend(cube().into_iter().map(|t| t.map(|p| p * 0.5 + DVec3::splat(0.25))));
         let mut s = scene_section(tris);
         let bande = |a: f32, b: f32, couleur| crate::scene::CoucheCoupe {
-            plans: vec![Vec3::X.extend(-a),Vec3::NEG_X.extend(b)], couleur, fond: [255,255,255,255], motif_fond: None, motif: None, couleur_motif: [70,70,70,255], hachure_defaut: true, isolation: false,
+            plans: vec![Vec3::X.extend(-a),Vec3::NEG_X.extend(b)], couleur, fond: [255,255,255,255], motif_fond: None, motif: None, couleur_motif: [70,70,70,255], hachure_defaut: true, isolation: false, trait_mm: TRAIT_FORT_MM,
         };
         s.couches_coupe.insert(1,vec![bande(0.0,0.2,[190,120,120,255]),bande(0.2,1.0,[120,190,120,255])]);
         let p = coupe(&s,&[true],Vec3::NEG_Z.extend(0.5),100.0,Poche::Hachure);
@@ -905,7 +916,7 @@ mod tests {
         assert!((aire(surfaces[0])-0.2).abs()<1e-6);
         assert!((aire(surfaces[1])-0.55).abs()<1e-6);
         assert!(p.iter().any(|p| p.role == Role::Hachure));
-        let (v,_) = sommets_boite(&s,&[true],Vec3::splat(-1.0),Vec3::new(2.,2.,0.5),100.0,None,false);
+        let (v,_) = sommets_boite(&s,&[true],Vec3::splat(-1.0),Vec3::new(2.,2.,0.5),100.0,None,false, false);
         assert!(v.iter().any(|v| v.color == [190,120,120,255]));
         assert!(v.iter().any(|v| v.color == [120,190,120,255]));
     }
@@ -914,7 +925,7 @@ mod tests {
     fn section_box_hachures_bornees() {
         let s = scene_section(cube());
         let (a, b) = (Vec3::splat(0.2), Vec3::splat(0.8));
-        let (_, traits) = sommets_boite(&s, &[true], a, b, 100.0, Some(Poche::Hachure), false);
+        let (_, traits) = sommets_boite(&s, &[true], a, b, 100.0, Some(Poche::Hachure), false, false);
         assert!(!traits.is_empty());
         assert!(traits.iter().all(|v| { let p = Vec3::from(v.pos); p.cmpge(a - Vec3::splat(1e-6)).all() && p.cmple(b + Vec3::splat(1e-6)).all() }));
     }
@@ -923,7 +934,7 @@ mod tests {
     fn section_box_sans_coupe_ou_objet_masque() {
         let s = scene_section(cube());
         for (visible, a, b) in [(true, Vec3::splat(-1.0), Vec3::splat(2.0)), (false, Vec3::splat(0.2), Vec3::splat(0.8))] {
-            let (v, t) = sommets_boite(&s, &[visible], a, b, 100.0, Some(Poche::Plein), false);
+            let (v, t) = sommets_boite(&s, &[visible], a, b, 100.0, Some(Poche::Plein), false, false);
             assert!(v.is_empty() && t.is_empty());
         }
     }
@@ -932,12 +943,12 @@ mod tests {
     fn section_box_couleur_matiere_et_modification() {
         let s = scene_section(cube());
         for rendu in [false, true] {
-            let (v, _) = sommets_boite(&s, &[true], Vec3::splat(0.2), Vec3::splat(0.8), 100.0, None, rendu);
+            let (v, _) = sommets_boite(&s, &[true], Vec3::splat(0.2), Vec3::splat(0.8), 100.0, None, rendu, false);
             let couleur = if rendu { [110, 130, 150, 255] } else { [140, 160, 180, 255] };
             assert!(v.iter().any(|v| v.color == couleur));
             assert!(v.iter().all(|v| v.obj == 0));
         }
-        let (v, _) = sommets_boite(&s, &[true], Vec3::splat(0.3), Vec3::splat(0.7), 100.0, Some(Poche::Plein), false);
+        let (v, _) = sommets_boite(&s, &[true], Vec3::splat(0.3), Vec3::splat(0.7), 100.0, Some(Poche::Plein), false, false);
         assert!((aire_poche(&v) - 6.0 * 0.4 * 0.4).abs() < 1e-5);
     }
 
