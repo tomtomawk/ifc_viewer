@@ -180,6 +180,24 @@ fn pile_couches(ui: &mut egui::Ui, r: egui::Rect, couches: &[crate::modele::Couc
     }
 }
 
+/// Projection indicative des limites du mur, bornée à la place disponible dans la palette.
+fn limites_croquis_mur(parametres: &crate::modele::edition::ParametresMur, projet: &crate::modele::Projet, haut_reference: f32, bas_reference: f32) -> (f32, f32) {
+    let base = parametres.niveau.as_ref().and_then(|id| projet.niveau(id))
+        .or_else(|| projet.niveaux.first()).map_or(0.0, |n| n.altitude);
+    let bas = base + parametres.decalage;
+    let haut = parametres.niveau_haut.as_ref().and_then(|id| projet.niveau(id))
+        .map_or(bas + parametres.hauteur, |n| n.altitude + parametres.decalage_haut);
+    let echelle = (bas_reference - haut_reference) as f64 / 2800.0;
+    let projeter = |z: f64, repli: f32| {
+        let y = (bas_reference as f64 - (z - base) * echelle) as f32;
+        if y.is_finite() { y } else { repli }
+    };
+    let marge = (bas_reference - haut_reference) * 0.38;
+    let yh = projeter(haut, haut_reference).clamp(haut_reference - marge, haut_reference + marge);
+    let yb = projeter(bas, bas_reference).clamp(bas_reference - marge, bas_reference + marge);
+    (yh, yb)
+}
+
 fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
     use Outil::*;
     match menu {
@@ -1535,6 +1553,8 @@ impl RubanEdition {
         let origine = ui.cursor().min;
         let mut centres = [0.0f32; 2];
         let mut gauche_champs = 0.0f32;
+        // Réserver de la place autour du croquis pour les décalages des limites.
+        ui.add_space(14.0);
         ui.horizontal_top(|ui| {
             ui.add_space(largeur_croquis);
             ui.vertical(|ui| {
@@ -1616,13 +1636,14 @@ impl RubanEdition {
                 }
             });
         });
+        ui.add_space(14.0);
         let p = ui.painter();
         let bord = Stroke::new(1.0, bleu);
         let profondeur = vec2(7.0, -4.5);
         // mur vu de face (largeur), son chant à droite et son dessus
         let x1 = origine.x + largeur_croquis - 20.0;
         let x0 = origine.x + 12.0;
-        let (yh, yb) = (centres[0] + 3.0, centres[1] + 3.0);
+        let (yh, yb) = limites_croquis_mur(&self.parametres_mur(), projet, centres[0] + 3.0, centres[1] + 3.0);
         let (a, h, b, bb) = (pos2(x0, yh), pos2(x1, yh), pos2(x1, yb), pos2(x0, yb));
         p.add(egui::Shape::convex_polygon(vec![a, h, b, bb], Color32::from_rgb(246, 251, 253), bord));
         p.add(egui::Shape::convex_polygon(
@@ -1652,8 +1673,8 @@ impl RubanEdition {
             p.text(
                 pos2((x0 + x1) * 0.5, (yh + yb) * 0.5),
                 Align2::CENTER_CENTER,
-                format!("{:.0}", haut_z - bas_z),
-                FontId::proportional(11.0),
+                crate::options::unite().afficher(haut_z - bas_z),
+                FontId::proportional(9.0),
                 ui.visuals().weak_text_color(),
             );
         }
@@ -2422,6 +2443,35 @@ fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn croquis_mur_suit_hauteur_niveaux_et_decalages() {
+        let mut projet = crate::modele::Projet::nouveau("Croquis");
+        projet.niveaux = vec![crate::modele::Niveau {
+            id: "bas".into(), nom: "Rez-de-chaussée".into(), altitude: 0.0, origine: None,
+        }];
+        projet.niveaux.push(crate::modele::Niveau {
+            id: "haut".into(), nom: "Étage".into(), altitude: 2800.0, origine: None,
+        });
+        let mut params = crate::modele::edition::ParametresMur::default();
+        let (haut, bas) = limites_croquis_mur(&params, &projet, 10.0, 46.0);
+        params.decalage = -200.0;
+        let (haut_decale, bas_decale) = limites_croquis_mur(&params, &projet, 10.0, 46.0);
+        assert!(haut_decale > haut && bas_decale > bas); // hauteur libre conservée
+        params.decalage = 0.0;
+        params.niveau_haut = Some("haut".into());
+        params.decalage_haut = -200.0;
+        let (haut_decale, bas_inchange) = limites_croquis_mur(&params, &projet, 10.0, 46.0);
+        assert!(haut_decale > haut && (bas_inchange - bas).abs() < 0.01);
+        params.decalage_haut = 200.0;
+        assert!(limites_croquis_mur(&params, &projet, 10.0, 46.0).0 < haut);
+        params.niveau_haut = None;
+        params.hauteur = 2400.0;
+        assert!(limites_croquis_mur(&params, &projet, 10.0, 46.0).0 > haut);
+        params.decalage = -100_000.0;
+        let (haut, bas) = limites_croquis_mur(&params, &projet, 10.0, 46.0);
+        assert!(haut < bas && bas < 60.0);
+    }
 
     #[test]
     fn boutons_modifier_declenchent_les_actions_sans_changer_outil() {
