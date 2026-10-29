@@ -190,6 +190,8 @@ pub(super) struct EtatBim {
     /// Suppression demandée depuis le panneau : exécutée à l'image suivante.
     pub(super) supprimer: bool,
     pub documentation: bool,
+    /// Fenêtre de documentation sur les nomenclatures (sinon les feuilles).
+    pub nomenclatures: bool,
     pub feuille: usize,
     pub nomenclature: usize,
     pub texte: String,
@@ -226,6 +228,7 @@ impl Default for EtatBim {
             annotation_identique: None,
             supprimer: false,
             documentation: false,
+            nomenclatures: false,
             feuille: 0,
             nomenclature: 0,
             texte: "Texte".into(),
@@ -1464,13 +1467,16 @@ impl ViewerApp {
         let mut ouvert = true;
         let mut commande = None;
         let mut export = None;
-        egui::Window::new("Feuilles et nomenclatures").open(&mut ouvert).default_width(640.0).show(ctx,|ui|{
+        let nomenclatures = self.bim.nomenclatures;
+        egui::Window::new(if nomenclatures { "Nomenclatures" } else { "Feuilles" }).id(egui::Id::unique("fenetre_documentation")).open(&mut ouvert).default_width(640.0).show(ctx,|ui|{
             ui.horizontal(|ui| {
-                if ui.button("Nouvelle feuille A3").clicked() {commande=Some(Commande::Feuille {feuille:d::Feuille {id:String::new(),numero:format!("A{:02}",p.feuilles.len()+1),nom:"Plans".into(),largeur:420.0,hauteur:297.0,cartouche:p.nom.clone(),vues:Vec::new()}});self.bim.feuille=p.feuilles.len();}
-                if ui.button("Nouvelle nomenclature").clicked() {commande=Some(Commande::Nomenclature {nomenclature:d::Nomenclature {id:String::new(),nom:"Quantités".into(),categorie:String::new(),regrouper:true}});self.bim.nomenclature=p.nomenclatures.len();}
+                if !nomenclatures && ui.button("Nouvelle feuille A3").clicked() {commande=Some(Commande::Feuille {feuille:d::Feuille {id:String::new(),numero:format!("A{:02}",p.feuilles.len()+1),nom:"Plans".into(),largeur:420.0,hauteur:297.0,cartouche:p.nom.clone(),vues:Vec::new()}});self.bim.feuille=p.feuilles.len();}
+                if nomenclatures && ui.button("Nouvelle nomenclature").clicked() {commande=Some(Commande::Nomenclature {nomenclature:d::Nomenclature {id:String::new(),nom:"Quantités".into(),categorie:String::new(),regrouper:true}});self.bim.nomenclature=p.nomenclatures.len();}
             });
             ui.separator();
-            if !p.feuilles.is_empty() {
+            if !nomenclatures && p.feuilles.is_empty() { ui.label(RichText::new("Aucune feuille : « Nouvelle feuille A3 » pour commencer.").weak()); }
+            if nomenclatures && p.nomenclatures.is_empty() { ui.label(RichText::new("Aucune nomenclature : « Nouvelle nomenclature » pour commencer.").weak()); }
+            if !nomenclatures && !p.feuilles.is_empty() {
                 self.bim.feuille=self.bim.feuille.min(p.feuilles.len()-1);
                 egui::ComboBox::from_id_salt("feuille_native").selected_text(&p.feuilles[self.bim.feuille].nom).show_ui(ui,|ui|{for (k,f) in p.feuilles.iter().enumerate(){ui.selectable_value(&mut self.bim.feuille,k,format!("{} — {}",f.numero,f.nom));}});
                 let mut f=p.feuilles[self.bim.feuille].clone();
@@ -1497,8 +1503,7 @@ impl ViewerApp {
                 });
                 ui.label("Positions en mm papier depuis le coin inférieur gauche ; impression à 100 %.");
             }
-            ui.separator();
-            if !p.nomenclatures.is_empty() {
+            if nomenclatures && !p.nomenclatures.is_empty() {
                 self.bim.nomenclature=self.bim.nomenclature.min(p.nomenclatures.len()-1);
                 egui::ComboBox::from_id_salt("nomenclature_native").selected_text(&p.nomenclatures[self.bim.nomenclature].nom).show_ui(ui,|ui|{for (k,n) in p.nomenclatures.iter().enumerate(){ui.selectable_value(&mut self.bim.nomenclature,k,&n.nom);}});
                 let mut n=p.nomenclatures[self.bim.nomenclature].clone();

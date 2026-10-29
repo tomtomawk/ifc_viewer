@@ -1310,8 +1310,8 @@ impl ViewerApp {
     }
 
     /// Export SVG du dessin de la vue, après choix du fichier.
-    fn bouton_svg(&mut self, ui: &mut egui::Ui) {
-        if ui.button("Dessin SVG…").on_hover_text("Exporter le dessin de la vue en SVG (vue orthographique)").clicked() {
+    fn exporter_svg_dialogue(&mut self) {
+        {
             let nom = self.scene.as_ref().map(|s| s.file_name.rsplit_once('.').map_or(s.file_name.clone(), |x| x.0.to_string())).unwrap_or_default();
             if let Some(chemin) = rfd::FileDialog::new().add_filter("SVG", &["svg"]).set_file_name(format!("{nom}.svg")).save_file() {
                 match self.exporter_svg(&chemin) {
@@ -3097,98 +3097,136 @@ impl ViewerApp {
                     if let Err(e) = self.creer_identique() { self.error = Some(e); }
                 }
                 Some(crate::ruban::Outil::Supprimer) => self.demander_suppression(),
+                Some(o @ (crate::ruban::Outil::Feuilles | crate::ruban::Outil::Nomenclatures)) => {
+                    if self.natif.is_some() {
+                        self.bim.nomenclatures = o == crate::ruban::Outil::Nomenclatures;
+                        self.bim.documentation = true;
+                    } else {
+                        self.status = "Feuilles et nomenclatures : ouvrir un projet natif.".into();
+                    }
+                }
                 _ => {}
             }
             return;
         }
-        ui.horizontal(|ui| match self.onglet_ruban {
+        match self.onglet_ruban {
             OngletRuban::Debut => {
-                if ui.add_enabled(self.loading.is_none(), egui::Button::new("Nouveau…")).on_hover_text("Créer un projet natif v0 (Ctrl+N)").clicked() {
-                    self.creer_projet();
-                }
-                if ui.button("Ouvrir…").on_hover_text("Ctrl+O").clicked() {
-                    self.open_dialog(&ctx);
-                }
-                if ui.add_enabled(self.scene.is_some() || self.rvt.is_some() || self.loading.is_some(), egui::Button::new("Fermer")).clicked() {
-                    self.fermer();
-                }
-                if ui.add_enabled(self.loading.is_none(), egui::Button::new("Importer…")).on_hover_text("Convertir un IFC ou RVT en nouveau document natif").clicked() { self.importer_dialogue(&ctx); }
+                use crate::ruban::{Commande as C, Icone as I};
+                let fichier = vec![
+                    C::new("nouveau", "Nouveau", I::Nouveau, "Créer un projet natif v0 (Ctrl+N)", self.loading.is_none()),
+                    C::new("ouvrir", "Ouvrir", I::Ouvrir, "Ouvrir un projet natif, un IFC, un RVT ou un RFA (Ctrl+O)", true),
+                    C::new("fermer", "Fermer", I::Fermer, "Fermer le document actif", self.scene.is_some() || self.rvt.is_some() || self.loading.is_some()),
+                    C::new("importer", "Importer", I::Importer, "Convertir un IFC ou RVT en nouveau document natif", self.loading.is_none()),
+                ];
+                let mut reglages = Vec::new();
                 if self.rvt.is_some() && self.rvt_geom.is_ok() {
-                    ui.toggle_value(&mut self.rvt_sheet, "Fiche Revit").on_hover_text("Métadonnées du fichier Revit");
+                    reglages.push(C { enfonce: self.rvt_sheet, ..C::new("fiche", "Fiche Revit", I::Fiche, "Métadonnées du fichier Revit", true) });
                 }
-                ui.menu_button("Options", |ui| {
-                    ui.label("Unités de longueur du modèle");
-                    for (unite, nom) in [(crate::options::Unite::Millimetre, "Millimètres"), (crate::options::Unite::Centimetre, "Centimètres"), (crate::options::Unite::Metre, "Mètres")] {
-                        if ui.selectable_value(&mut self.options.unite, unite, nom).changed() { crate::options::definir_unite(unite); self.options.enregistrer(); self.coupe_dirty = true; self.bim.revision = self.bim.revision.wrapping_add(1); }
-                    }
-                    ui.separator();
-                    if ui.checkbox(&mut self.options.navigation_ifc, "Navigation IFC")
-                        .on_hover_text("Arborescence spatiale, classes et attributs IFC (GlobalId, Id STEP) pour les modèles Revit et natifs")
-                        .changed()
-                    {
-                        self.options.enregistrer();
-                    }
-                    ui.separator();
-                    if ui.add_enabled(self.natif.is_some(), egui::Button::new("Épaisseurs de traits…"))
-                        .on_hover_text("Épaisseurs des 12 plumes du projet (mm du papier)")
-                        .on_disabled_hover_text("Ouvrir un projet natif")
-                        .clicked()
-                    {
-                        ui.close();
-                        self.editeur_plumes = self.natif.as_ref().map(|(p, _)| p.epaisseurs_plumes());
-                    }
-                    ui.separator();
-                    let g = crate::gabarit::actif();
-                    ui.label(RichText::new(format!("Gabarit : {}", g.nom)).strong())
-                        .on_hover_text(self.options.gabarit.as_ref().map_or("Gabarit embarqué".into(), |c| c.display().to_string()));
-                    ui.label(RichText::new(format!("{} types de murs · {} éléments horizontaux · {} vues", g.types_murs.len(), g.types_surfaces.len(), g.types_vues.len())).small().weak());
-                    if ui.button("Choisir un gabarit…").on_hover_text("Fichier .gabarit.json : matériaux, types de murs, d'éléments horizontaux et de vues").clicked() {
-                        ui.close();
-                        if let Some(c) = rfd::FileDialog::new().set_title("Gabarit").add_filter("Gabarit", &["json"]).pick_file() {
-                            match crate::gabarit::Gabarit::charger(&c) {
-                                Ok(g) => {
-                                    self.status = format!("Gabarit « {} » chargé", g.nom);
-                                    crate::gabarit::definir(g);
-                                    self.options.gabarit = Some(c);
-                                    self.options.enregistrer();
-                                }
-                                Err(e) => self.error = Some(e),
-                            }
+                reglages.push(C::new("options", "Options", I::Options, "Unités, navigation IFC, épaisseurs de traits, gabarit", true));
+                for (cle, r) in crate::ruban::bandeau(ui, &[("Fichier", fichier), ("Réglages", reglages)]) {
+                    match cle {
+                        "options" => {
+                            egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| self.menu_options(ui));
                         }
+                        _ if !r.clicked() => {}
+                        "nouveau" => self.creer_projet(),
+                        "ouvrir" => self.open_dialog(&ctx),
+                        "fermer" => self.fermer(),
+                        "importer" => self.importer_dialogue(&ctx),
+                        "fiche" => self.rvt_sheet = !self.rvt_sheet,
+                        _ => {}
                     }
-                    if ui.add_enabled(self.options.gabarit.is_some(), egui::Button::new("Gabarit par défaut")).clicked() {
-                        ui.close();
-                        crate::gabarit::definir(crate::gabarit::Gabarit::defaut());
-                        self.options.gabarit = None;
-                        self.options.enregistrer();
-                    }
-                    if ui.button("Enregistrer une copie du gabarit…").on_hover_text("Point de départ d'un gabarit d'agence, à modifier dans un éditeur de texte").clicked() {
-                        ui.close();
-                        if let Some(c) = rfd::FileDialog::new().set_title("Copie du gabarit").add_filter("Gabarit", &["json"]).set_file_name("agence.gabarit.json").save_file() {
-                            let texte = match &self.options.gabarit {
-                                Some(src) => std::fs::read_to_string(src).map_err(|e| e.to_string()),
-                                None => Ok(crate::gabarit::texte_defaut().to_string()),
-                            };
-                            if let Err(e) = texte.and_then(|t| std::fs::write(&c, t).map_err(|e| e.to_string())) {
-                                self.error = Some(format!("Copie du gabarit impossible : {e}"));
-                            }
-                        }
-                    }
-                });
+                }
             }
             OngletRuban::Modeliser | OngletRuban::Modifier | OngletRuban::Annoter => {}
             OngletRuban::Sortie => {
+                use crate::ruban::{Commande as C, Icone as I};
                 let disponible = (self.natif.is_some() || self.rvt_source.is_some()) && self.loading.is_none() && self.sauvegarde.is_none();
-                if ui.add_enabled(disponible, egui::Button::new("Enregistrer")).on_hover_text("Enregistrer en modèle natif v0 (Ctrl+S)").clicked() {
-                    self.enregistrer_projet(&ctx);
+                let enregistrer = vec![
+                    C::new("enregistrer", "Enregistrer", I::Enregistrer, "Enregistrer en modèle natif v0 (Ctrl+S)", disponible),
+                    C::new("enregistrer_sous", "Enregistrer sous", I::EnregistrerSous, "Enregistrer le projet natif dans un autre fichier", self.natif.is_some()),
+                ];
+                let exporter = vec![
+                    C::new("svg", "Dessin SVG", I::Exporter("SVG"), "Exporter le dessin de la vue en SVG (vue orthographique)", self.scene.is_some()),
+                    C::new("pdf", "Dessin PDF", I::Exporter("PDF"), "Exporter le dessin de la vue en PDF (vue orthographique)", self.scene.is_some()),
+                    C::new("ifc", "IFC4", I::Exporter("IFC"), "Exporter le projet natif en IFC4", self.natif.is_some()),
+                ];
+                for (cle, r) in crate::ruban::bandeau(ui, &[("Enregistrer", enregistrer), ("Exporter", exporter)]) {
+                    if !r.clicked() {
+                        continue;
+                    }
+                    match cle {
+                        "enregistrer" => self.enregistrer_projet(&ctx),
+                        "enregistrer_sous" => self.enregistrer_sous(),
+                        "svg" => self.exporter_svg_dialogue(),
+                        "pdf" => self.export_pdf_dialogue(),
+                        "ifc" => self.export_ifc_dialogue(),
+                        _ => {}
+                    }
                 }
-                if ui.add_enabled(self.natif.is_some(), egui::Button::new("Enregistrer sous…")).clicked() { self.enregistrer_sous(); }
-                ui.add_enabled_ui(self.scene.is_some(), |ui| self.bouton_svg(ui));
-                if ui.add_enabled(self.scene.is_some(),egui::Button::new("Dessin PDF…")).clicked() {self.export_pdf_dialogue();}
-                if ui.add_enabled(self.natif.is_some(),egui::Button::new("IFC4…")).clicked() {self.export_ifc_dialogue();}
-                if ui.add_enabled(self.natif.is_some(),egui::Button::new("Feuilles / Nomenclatures")).clicked() {self.bim.documentation=true;}
             }
-        });
+        }
+    }
+
+    /// Menu Options (Début) : unités, navigation IFC, épaisseurs de traits, gabarit.
+    fn menu_options(&mut self, ui: &mut egui::Ui) {
+            ui.label("Unités de longueur du modèle");
+            for (unite, nom) in [(crate::options::Unite::Millimetre, "Millimètres"), (crate::options::Unite::Centimetre, "Centimètres"), (crate::options::Unite::Metre, "Mètres")] {
+                if ui.selectable_value(&mut self.options.unite, unite, nom).changed() { crate::options::definir_unite(unite); self.options.enregistrer(); self.coupe_dirty = true; self.bim.revision = self.bim.revision.wrapping_add(1); }
+            }
+            ui.separator();
+            if ui.checkbox(&mut self.options.navigation_ifc, "Navigation IFC")
+                .on_hover_text("Arborescence spatiale, classes et attributs IFC (GlobalId, Id STEP) pour les modèles Revit et natifs")
+                .changed()
+            {
+                self.options.enregistrer();
+            }
+            ui.separator();
+            if ui.add_enabled(self.natif.is_some(), egui::Button::new("Épaisseurs de traits…"))
+                .on_hover_text("Épaisseurs des 12 plumes du projet (mm du papier)")
+                .on_disabled_hover_text("Ouvrir un projet natif")
+                .clicked()
+            {
+                ui.close();
+                self.editeur_plumes = self.natif.as_ref().map(|(p, _)| p.epaisseurs_plumes());
+            }
+            ui.separator();
+            let g = crate::gabarit::actif();
+            ui.label(RichText::new(format!("Gabarit : {}", g.nom)).strong())
+                .on_hover_text(self.options.gabarit.as_ref().map_or("Gabarit embarqué".into(), |c| c.display().to_string()));
+            ui.label(RichText::new(format!("{} types de murs · {} éléments horizontaux · {} vues", g.types_murs.len(), g.types_surfaces.len(), g.types_vues.len())).small().weak());
+            if ui.button("Choisir un gabarit…").on_hover_text("Fichier .gabarit.json : matériaux, types de murs, d'éléments horizontaux et de vues").clicked() {
+                ui.close();
+                if let Some(c) = rfd::FileDialog::new().set_title("Gabarit").add_filter("Gabarit", &["json"]).pick_file() {
+                    match crate::gabarit::Gabarit::charger(&c) {
+                        Ok(g) => {
+                            self.status = format!("Gabarit « {} » chargé", g.nom);
+                            crate::gabarit::definir(g);
+                            self.options.gabarit = Some(c);
+                            self.options.enregistrer();
+                        }
+                        Err(e) => self.error = Some(e),
+                    }
+                }
+            }
+            if ui.add_enabled(self.options.gabarit.is_some(), egui::Button::new("Gabarit par défaut")).clicked() {
+                ui.close();
+                crate::gabarit::definir(crate::gabarit::Gabarit::defaut());
+                self.options.gabarit = None;
+                self.options.enregistrer();
+            }
+            if ui.button("Enregistrer une copie du gabarit…").on_hover_text("Point de départ d'un gabarit d'agence, à modifier dans un éditeur de texte").clicked() {
+                ui.close();
+                if let Some(c) = rfd::FileDialog::new().set_title("Copie du gabarit").add_filter("Gabarit", &["json"]).set_file_name("agence.gabarit.json").save_file() {
+                    let texte = match &self.options.gabarit {
+                        Some(src) => std::fs::read_to_string(src).map_err(|e| e.to_string()),
+                        None => Ok(crate::gabarit::texte_defaut().to_string()),
+                    };
+                    if let Err(e) = texte.and_then(|t| std::fs::write(&c, t).map_err(|e| e.to_string())) {
+                        self.error = Some(format!("Copie du gabarit impossible : {e}"));
+                    }
+                }
+            }
     }
 
     /// Redimensionnement natif sur les bords de la fenêtre sans décoration.
@@ -3962,12 +4000,12 @@ impl ViewerApp {
         if let Some((p,_))=&self.natif {
             if matches!(section,LeftTab::Tout|LeftTab::Feuilles) && !p.feuilles.is_empty() {
                 egui::CollapsingHeader::new("Feuilles natives").default_open(true).show(ui,|ui| {
-                    for (k,f) in p.feuilles.iter().enumerate() {if ui.button(format!("{} — {}",f.numero,f.nom)).clicked(){self.bim.feuille=k;self.bim.documentation=true;}}
+                    for (k,f) in p.feuilles.iter().enumerate() {if ui.button(format!("{} — {}",f.numero,f.nom)).clicked(){self.bim.feuille=k;self.bim.nomenclatures=false;self.bim.documentation=true;}}
                 });
             }
             if matches!(section,LeftTab::Tout|LeftTab::Nomenclatures) && !p.nomenclatures.is_empty() {
                 egui::CollapsingHeader::new("Nomenclatures natives").default_open(true).show(ui,|ui| {
-                    for (k,n) in p.nomenclatures.iter().enumerate() {if ui.button(&n.nom).clicked(){self.bim.nomenclature=k;self.bim.documentation=true;}}
+                    for (k,n) in p.nomenclatures.iter().enumerate() {if ui.button(&n.nom).clicked(){self.bim.nomenclature=k;self.bim.nomenclatures=true;self.bim.documentation=true;}}
                 });
             }
         }

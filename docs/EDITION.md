@@ -47,7 +47,7 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   d'attacher des murs à une toiture et de régler la priorité d'une couche aux
   croisements. Modifier un contour réinitialise ses pentes par arête.
 - **Annuler / Rétablir**, Ctrl+Z et Ctrl+Maj+Z, ont un historique propre à chaque
-  document. Les boutons après Sortie annulent ou rétablissent une étape ; leurs
+  document. Les flèches après Sortie annulent ou rétablissent une étape ; leurs
   flèches donnent accès à la liste pour remonter ou rétablir plusieurs étapes.
   Les intitulés décrivent les éléments modifiés lorsqu'ils peuvent être identifiés.
   Un glissement est regroupé en une seule modification. L'historique
@@ -61,7 +61,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   dans la vue native ouverte. Avec un mur sélectionné, une cote référence ses
   extrémités ; sinon ses points sont fixes. Une référence supprimée est signalée
   en rouge, sans supprimer silencieusement la cote.
-- **Feuilles / Nomenclatures**, dans Sortie ou par l'arborescence, permet d'assembler des
+- **Feuilles** et **Nomenclatures**, icônes du groupe Documents de Documenter (ou par
+  l'arborescence), ouvrent chacune sa fenêtre : assembler des
   vues, régler format papier/cartouche/échelles, prévisualiser une feuille, exporter
   SVG/PDF, définir un filtre de catégorie et regrouper les quantités par type.
   Les feuilles et nomenclatures sont aussi accessibles depuis l'arborescence.
