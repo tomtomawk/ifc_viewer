@@ -38,8 +38,10 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   identifiants de ses couches et ouvertures. Les repères de coupe/élévation et les
   quadrillages se sélectionnent aussi en plan, ainsi que les annotations dans leur
   vue ; leurs propriétés sont accessibles dans Modifier. Les cotes liées gardent
-  leurs références : leur décalage est éditable dans leurs propriétés. Supprimer demande confirmation des
-  dépendances ; un niveau encore utilisé ne peut pas être supprimé.
+  leurs références : leur décalage est éditable dans leurs propriétés. Supprimer (icône de
+  Modifier, bouton du panneau, touche Suppr ou Retour arrière hors tracé) agit tout
+  de suite, couches et ouvertures hébergées comprises ; Ctrl+Z rétablit. Un niveau
+  encore utilisé ne peut pas être supprimé.
 - Le panneau Modifier permet aussi d'éditer les sommets d'un élément horizontal,
   d'y ajouter une trémie, de préparer/appliquer une composition depuis son type,
   d'attacher des murs à une toiture et de régler la priorité d'une couche aux
@@ -59,7 +61,7 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   dans la vue native ouverte. Avec un mur sélectionné, une cote référence ses
   extrémités ; sinon ses points sont fixes. Une référence supprimée est signalée
   en rouge, sans supprimer silencieusement la cote.
-- **Feuilles / Nomenclatures**, dans Documenter ou Sortie, permet d'assembler des
+- **Feuilles / Nomenclatures**, dans Sortie ou par l'arborescence, permet d'assembler des
   vues, régler format papier/cartouche/échelles, prévisualiser une feuille, exporter
   SVG/PDF, définir un filtre de catégorie et regrouper les quantités par type.
   Les feuilles et nomenclatures sont aussi accessibles depuis l'arborescence.

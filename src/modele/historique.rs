@@ -102,9 +102,11 @@ impl Historique {
     pub fn modifie(&self, p: &Projet) -> bool {
         p.json().ok().as_ref() != self.sauvegarde.as_ref()
     }
+    #[cfg(test)]
     pub fn peut_annuler(&self) -> bool {
         !self.avant.is_empty()
     }
+    #[cfg(test)]
     pub fn peut_retablir(&self) -> bool {
         !self.apres.is_empty()
     }

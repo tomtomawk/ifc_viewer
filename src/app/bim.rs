@@ -187,7 +187,8 @@ pub(super) struct EtatBim {
     pub(super) depart_structure: Option<[f64; 2]>,
     barre_editee: Option<crate::modele::Barre>,
     annotation_identique: Option<crate::modele::documentation::Annotation>,
-    supprimer: bool,
+    /// Suppression demandée depuis le panneau : exécutée à l'image suivante.
+    pub(super) supprimer: bool,
     pub documentation: bool,
     pub feuille: usize,
     pub nomenclature: usize,
@@ -375,10 +376,21 @@ impl ViewerApp {
         Ok(())
     }
 
+    /// Supprime la sélection tout de suite (couches et ouvertures hébergées comprises),
+    /// comme Revit ; Ctrl+Z la rétablit.
     pub(super) fn demander_suppression(&mut self) {
-        if !self.selection_bim().is_empty() {
-            self.onglet_ruban = OngletRuban::Modifier;
-            self.bim.supprimer = true;
+        let ids = self.selection_bim();
+        if ids.is_empty() {
+            self.status = "Supprimer : sélectionner d'abord un ou plusieurs éléments.".into();
+            return;
+        }
+        let n = self.natif.as_ref().and_then(|(p, _)| p.dependances(&ids).ok()).map_or(ids.len(), |s| s.len());
+        match self.executer_bim(crate::modele::commandes::Commande::Supprimer { ids }) {
+            Ok(_) => {
+                self.bim.selection.clear();
+                self.status = format!("{n} élément(s) supprimé(s) — Ctrl+Z pour annuler.");
+            }
+            Err(e) => self.error = Some(e),
         }
     }
 
@@ -1059,29 +1071,12 @@ impl ViewerApp {
                 });
             }
             if ui
-                .add_enabled(!ids.is_empty(), egui::Button::new("Supprimer…"))
+                .add_enabled(!ids.is_empty(), egui::Button::new("Supprimer"))
+                .on_hover_text("Supprimer la sélection, couches et ouvertures hébergées comprises (Suppr ; Ctrl+Z pour annuler)")
                 .clicked()
             {
+                // exécuté hors du panneau (sélection vidée ensuite)
                 self.bim.supprimer = true;
-            }
-            if self.bim.supprimer {
-                let n = self
-                    .natif
-                    .as_ref()
-                    .unwrap()
-                    .0
-                    .dependances(&ids)
-                    .map_or(0, |s| s.len());
-                ui.label(format!(
-                    "Supprimer {n} éléments, couches et ouvertures hébergées comprises ?"
-                ));
-                if ui.button("Confirmer la suppression").clicked() {
-                    commande = Some(Commande::Supprimer { ids });
-                    self.bim.supprimer = false;
-                }
-                if ui.button("Conserver").clicked() {
-                    self.bim.supprimer = false;
-                }
             }
         } else if self.onglet_ruban == OngletRuban::Modeliser {
             match outil {

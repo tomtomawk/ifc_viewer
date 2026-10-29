@@ -3092,14 +3092,6 @@ impl ViewerApp {
             _ => None,
         };
         if let Some(menu) = edition {
-            if menu==crate::ruban::Menu::Annoter && self.natif.is_some() && ui.button("Feuilles / Nomenclatures").clicked() {self.bim.documentation=true;}
-
-            if menu == crate::ruban::Menu::Modifier {
-                ui.horizontal(|ui| {
-                    if ui.add_enabled(self.historique.peut_annuler(), egui::Button::new("Annuler")).clicked() { self.parcourir_historique(false); }
-                    if ui.add_enabled(self.historique.peut_retablir(), egui::Button::new("Rétablir")).clicked() { self.parcourir_historique(true); }
-                });
-            }
             match self.ruban_edition.afficher(ui, menu, self.natif.as_ref().map(|n| &n.0)) {
                 Some(crate::ruban::Outil::CreerIdentique) => {
                     if let Err(e) = self.creer_identique() { self.error = Some(e); }
@@ -6980,12 +6972,15 @@ impl eframe::App for ViewerApp {
         if let Some(p) = dropped.into_iter().next() {
             self.open(p, &ctx);
         }
+        if std::mem::take(&mut self.bim.supprimer) { self.demander_suppression(); }
         if !ctx.egui_wants_keyboard_input() && self.scene.is_some() {
             if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::A)) && self.rect_vue.is_positive() {
                 let f = FenetreSelection { debut: egui::pos2(-100_000_000.0, -100_000_000.0), fin: egui::pos2(100_000_000.0, 100_000_000.0), glissement: false, ajouter: false };
                 self.selectionner_rectangle(self.rect_vue, f);
             }
-            if self.natif.is_some() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete)) { self.demander_suppression(); }
+            // Suppr, ou la touche « supprimer » des claviers Mac (Retour arrière) hors tracé
+            let trace = self.mur_depart.is_some() || self.coupe_depart.is_some() || !self.dalle_points.is_empty() || self.bim.depart_structure.is_some();
+            if self.natif.is_some() && !trace && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete) || i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace)) { self.demander_suppression(); }
             if ctx.input(|i| i.key_pressed(egui::Key::Escape)) { self.raccourci_en_attente = None; }
         }
         if !ctx.egui_wants_keyboard_input() && self.natif.is_some() && self.mur_depart.is_none() && self.coupe_depart.is_none() && self.dalle_points.is_empty() && self.bim.depart_structure.is_none() {
