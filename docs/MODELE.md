@@ -294,6 +294,8 @@ chaque `.rfa` du dossier.
 
 ## Édition et documentation additionnelles
 
+Une feuille porte aussi des nomenclatures posées (`nomenclatures[]` : `nomenclature`,
+`position` du coin haut gauche du tableau, mm du papier).
 Les feuilles appartiennent à un jeu (`jeu`, « Plans » par défaut, y compris pour les
 fichiers antérieurs) ; les feuilles d'un jeu se suivent dans l'ordre de `feuilles[]`.
 Les collections et tables facultatives de l'éditeur (annotations, quadrillages,

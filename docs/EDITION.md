@@ -93,6 +93,11 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   regroupées par type ou détaillées par élément, colonnes au choix (catégorie, type,
   élément, niveau, nombre, longueur, hauteur, largeur, épaisseur, surface, volume net ;
   regroupées, nombre, longueur, surface et volume sont totalisés), export CSV.
+  Glisser une nomenclature de l'arborescence sur une feuille y pose son tableau
+  (titre, en-tête, lignes ; coin haut gauche sous le curseur), tenu à jour avec le
+  modèle, déplacé à la souris, retiré par Suppr ; il est dans les exports PDF/SVG.
+  Sous chaque feuille, l'arborescence liste aussi ses nomenclatures. Les
+  nomenclatures posées sur les feuilles Revit ne sont pas encore lues à l'import.
 - **Sortie → IFC4** exporte niveaux, classes architecturales, compositions et
   relations d'ouverture avec une géométrie tessellée. Les GUID IFC valides de la
   source sont préservés ; les autres sont générés de manière stable.
