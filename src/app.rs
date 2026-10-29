@@ -564,6 +564,8 @@ pub struct ViewerApp {
     saisie_active: bool,
     /// Projet tel qu'avant la saisie en cours, si elle a modifié le projet.
     avant_saisie: Option<crate::modele::Projet>,
+    /// Échap pendant la saisie : elle est abandonnée, l'ancienne valeur rétablie.
+    saisie_annulee: bool,
     motif_choisi: Option<String>,
     nom_motif_saisi: String,
     tirets_saisis: (String, Vec<String>),
@@ -696,6 +698,7 @@ impl ViewerApp {
             editeur_plumes: None,
             saisie_active: false,
             avant_saisie: None,
+            saisie_annulee: false,
             motif_choisi: None,
             nom_motif_saisi: String::new(),
             tirets_saisis: (String::new(), Vec::new()),
@@ -2338,13 +2341,25 @@ impl ViewerApp {
     /// faites pendant celle-ci (scène reconstruite, une étape d'historique).
     fn valider_saisie(&mut self, ctx: &egui::Context) {
         let glisser_champ = ctx.dragged_id().is_some() && ctx.input(|i| i.pointer.press_origin()).is_some_and(|p| !self.rect_vue.contains(p));
+        let etait_active = self.saisie_active;
         self.saisie_active = ctx.egui_wants_keyboard_input() || glisser_champ;
+        // Échap : egui retire le clavier au champ avant cette image ; la saisie est
+        // abandonnée et la touche consommée (elle ne quitte pas l'outil en cours)
+        if (etait_active || self.saisie_active) && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+            self.saisie_annulee = true;
+        }
         if self.saisie_active {
             return;
         }
+        let annulee = std::mem::take(&mut self.saisie_annulee);
         let Some(avant) = self.avant_saisie.take() else { return };
         let Some((actuel, _)) = self.natif.as_mut() else { return };
         let projet = std::mem::replace(actuel, avant);
+        if annulee {
+            self.status = "Saisie annulée : ancienne valeur rétablie.".into();
+            self.bim.revision = self.bim.revision.wrapping_add(1);
+            return;
+        }
         if let Err(e) = self.appliquer_projet(projet) {
             self.error = Some(e);
         }
@@ -7023,11 +7038,11 @@ impl eframe::App for ViewerApp {
                 }
             });
         }
-        if self.alignement_plan && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        if self.alignement_plan && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             self.alignement_plan = false;
             self.arete_alignement = None;
         }
-        if self.ruban_edition.a_un_outil() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        if self.ruban_edition.a_un_outil() && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             // Échap : la saisie, puis le mur ou la dalle en cours, puis l'outil
             if self.bim.depart_structure.take().is_some() {
                 // Le premier clic d'une poutre est abandonné sans modifier le projet.
