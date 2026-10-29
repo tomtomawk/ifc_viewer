@@ -1474,7 +1474,7 @@ impl ViewerApp {
         let mut commande = None;
         let mut export = None;
         egui::Window::new("Nomenclatures").id(egui::Id::unique("fenetre_nomenclatures")).open(&mut ouvert).default_width(640.0).show(ctx,|ui|{
-            if ui.button("Nouvelle nomenclature").clicked() {commande=Some(Commande::Nomenclature {nomenclature:d::Nomenclature {id:String::new(),nom:"Quantités".into(),categorie:String::new(),regrouper:true}});self.bim.nomenclature=p.nomenclatures.len();}
+            if ui.button("Nouvelle nomenclature").clicked() {commande=Some(Commande::Nomenclature {nomenclature:d::Nomenclature {id:String::new(),nom:"Quantités".into(),categorie:String::new(),regrouper:true,colonnes:Vec::new()}});self.bim.nomenclature=p.nomenclatures.len();}
             ui.separator();
             if p.nomenclatures.is_empty() { ui.label(RichText::new("Aucune nomenclature : « Nouvelle nomenclature » pour commencer.").weak()); }
             if !p.nomenclatures.is_empty() {
@@ -1483,6 +1483,20 @@ impl ViewerApp {
                 let mut n=p.nomenclatures[self.bim.nomenclature].clone();
                 ui.horizontal(|ui|{ui.label("Nom");ui.text_edit_singleline(&mut n.nom);ui.label("Catégorie");ui.text_edit_singleline(&mut n.categorie);});
                 ui.checkbox(&mut n.regrouper,"Regrouper par type");
+                // colonnes : sans choix, catégorie, type ou élément, nombre, volume
+                ui.horizontal_wrapped(|ui|{
+                    ui.label("Colonnes");
+                    let defaut=[d::Colonne::Categorie, if n.regrouper {d::Colonne::Type} else {d::Colonne::Element}, d::Colonne::Nombre, d::Colonne::Volume];
+                    let actuelles: Vec<d::Colonne> = if n.colonnes.is_empty() { defaut.to_vec() } else { n.colonnes.clone() };
+                    for c in d::Colonne::TOUTES {
+                        let mut on = actuelles.contains(&c);
+                        if ui.toggle_value(&mut on, c.titre()).changed() {
+                            let mut v: Vec<d::Colonne> = d::Colonne::TOUTES.into_iter().filter(|x| if *x == c { on } else { actuelles.contains(x) }).collect();
+                            if v.is_empty() { v.push(d::Colonne::Type); }
+                            n.colonnes = v;
+                        }
+                    }
+                });
                 if serde_json::to_string(&n).ok()!=serde_json::to_string(&p.nomenclatures[self.bim.nomenclature]).ok() {commande=Some(Commande::Nomenclature {nomenclature:n.clone()});}
                 let cle=serde_json::to_string(&n).unwrap_or_default();
                 if self.bim.tableau_cache.as_ref().is_none_or(|(r,c,_)|*r!=self.bim.revision || *c!=cle) {self.bim.tableau_cache=Some((self.bim.revision,cle,d::tableau(p,&n)));}

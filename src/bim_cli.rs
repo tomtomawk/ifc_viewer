@@ -34,6 +34,7 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
                     nom: "Quantités".into(),
                     categorie: args.get(3).cloned().unwrap_or_default(),
                     regrouper: true,
+                    colonnes: Vec::new(),
                 };
                 let lignes = modele::documentation::tableau(&p, &n)?;
                 modele::enregistrement::ecrire_atomique(

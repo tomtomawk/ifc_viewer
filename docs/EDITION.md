@@ -90,7 +90,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   Revit converti (Début → Importer) apporte ses plans d'étage, coupes, élévations et
   feuilles (voir MODELE.md, conversion depuis Revit).
 - **Nomenclatures** (Documenter ou l'arborescence) : quantités par catégorie,
-  regroupées par type, export CSV.
+  regroupées par type ou détaillées par élément, colonnes au choix (catégorie, type,
+  élément, niveau, nombre, longueur, hauteur, largeur, épaisseur, surface, volume net ;
+  regroupées, nombre, longueur, surface et volume sont totalisés), export CSV.
 - **Sortie → IFC4** exporte niveaux, classes architecturales, compositions et
   relations d'ouverture avec une géométrie tessellée. Les GUID IFC valides de la
   source sont préservés ; les autres sont générés de manière stable.

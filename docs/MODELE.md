@@ -251,6 +251,7 @@ format en v0).
 | Murs-rideaux, toits, escaliers, garde-corps, terrain, autres familles, formes d'un `.rfa` | — | Importés |
 | Plans d'étage | niveau, hauteur du plan de coupe (plage de vue), nom, type, échelle | Orientation d'un plan pivoté non reprise (plan au nord du modèle, compté dans le rapport) |
 | Coupes, élévations verticales cadrées | ligne dans le plan proche du cadrage, sur sa largeur ; profondeur du cadrage (limite de vue), sinon 50 m ; même côté de regard | Coupes inclinées ou sans cadrage, vues 3D, plafonds, dessin, légendes, nomenclatures : ignorées (comptées) ; éléments 2D (cotes, textes) non repris |
+| Nomenclatures | nom, catégorie (Sols → Dalle, Toits → Toiture, Plafonds → Plafond, Poteaux, Ossature → Poutres, sinon le nom Revit), détail ou regroupement par type, champs que le modèle natif calcule (type, niveau, nombre, longueur, hauteur, largeur, épaisseur, surface, volume) | Autres champs (paramètres partagés, formules, marques…), filtres et tris : comptés non repris ; nomenclatures de clés ignorées |
 | Feuilles | numéro, nom, format (étendue du cartouche, sinon A1), vues placées converties à la même position et la même échelle, jeu « Plans » | Le cartouche Revit n'est pas repris (cartouche natif) ; une vue placée non convertie est comptée dans le rapport |
 
 Dans un document de famille de fenêtre ou de porte, le mur hôte du gabarit est percé par le

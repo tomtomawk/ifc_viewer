@@ -81,6 +81,87 @@ pub struct Nomenclature {
     pub nom: String,
     pub categorie: String,
     pub regrouper: bool,
+    /// Colonnes choisies ; vide : catégorie, type ou élément, nombre, volume net.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub colonnes: Vec<Colonne>,
+}
+
+/// Colonne d'une nomenclature, calculée sur le modèle natif. Regroupée par type, les
+/// colonnes Nombre, Longueur, Surface et Volume sont totalisées ; les autres
+/// distinguent les groupes.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum Colonne {
+    Categorie,
+    Type,
+    Element,
+    Niveau,
+    Nombre,
+    Longueur,
+    Hauteur,
+    Largeur,
+    Epaisseur,
+    Surface,
+    Volume,
+}
+
+impl Colonne {
+    pub const TOUTES: [Colonne; 11] = [Self::Categorie, Self::Type, Self::Element, Self::Niveau, Self::Nombre, Self::Longueur, Self::Hauteur, Self::Largeur, Self::Epaisseur, Self::Surface, Self::Volume];
+
+    pub fn titre(self) -> &'static str {
+        match self {
+            Self::Categorie => "Catégorie",
+            Self::Type => "Type",
+            Self::Element => "Élément",
+            Self::Niveau => "Niveau",
+            Self::Nombre => "Nombre",
+            Self::Longueur => "Longueur (mm)",
+            Self::Hauteur => "Hauteur (mm)",
+            Self::Largeur => "Largeur (mm)",
+            Self::Epaisseur => "Épaisseur (mm)",
+            Self::Surface => "Surface (m²)",
+            Self::Volume => "Volume net (m³)",
+        }
+    }
+
+    fn totalisee(self) -> bool {
+        matches!(self, Self::Nombre | Self::Longueur | Self::Surface | Self::Volume)
+    }
+
+    /// Colonne d'après le titre d'un champ de nomenclature Revit (« Famille et type »,
+    /// « Niveau de base »…) ; None si le modèle natif ne la calcule pas.
+    pub fn depuis_titre(titre: &str) -> Option<Colonne> {
+        let t = titre.trim().to_lowercase();
+        Some(match t.as_str() {
+            "catégorie" => Self::Categorie,
+            "type" | "famille et type" | "nom du type" | "famille" => Self::Type,
+            "nom" | "repère" => Self::Element,
+            "niveau" | "niveau de base" | "contrainte inférieure" | "niveau de référence" => Self::Niveau,
+            "nombre" => Self::Nombre,
+            "longueur" | "longueur de coupe" => Self::Longueur,
+            "hauteur" | "hauteur non contrainte" => Self::Hauteur,
+            "largeur" => Self::Largeur,
+            "épaisseur" | "largeur du mur" | "épaisseur par défaut" => Self::Epaisseur,
+            "surface" | "aire" => Self::Surface,
+            "volume" => Self::Volume,
+            _ => return None,
+        })
+    }
+}
+
+/// Élément d'une nomenclature : valeurs de ses colonnes (longueurs en mm, surface en
+/// m², volume en m³).
+struct LigneQuantite {
+    categorie: String,
+    type_nom: String,
+    element: String,
+    niveau: String,
+    longueur: Option<f64>,
+    hauteur: Option<f64>,
+    largeur: Option<f64>,
+    epaisseur: Option<f64>,
+    surface: Option<f64>,
+    volume: Option<f64>,
 }
 
 pub fn repere(p: &Projet, v: &Vue) -> (DVec3, DVec3, DVec3) {
@@ -461,6 +542,9 @@ pub fn feuille(p: &Projet, f: &Feuille) -> Result<Dessin, String> {
 
 /// Quantités nettes : murs percés, dalles avec trémies. Pas de double compte des assemblages.
 pub fn tableau(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, String> {
+    if !n.colonnes.is_empty() {
+        return tableau_colonnes(p, n);
+    }
     let mut groupes: BTreeMap<(String, String), (usize, f64)> = BTreeMap::new();
     let jonctions = jonctions::coupes(p);
     let mut ajouter = |cat: &str, nom: String, v: f64| {
@@ -573,6 +657,153 @@ pub fn pdf(svg: &str) -> Result<Vec<u8>, String> {
         svg2pdf::PageOptions { dpi: 96.0 },
     )
     .map_err(|e| format!("PDF : {e}"))
+}
+
+/// Tableau d'une nomenclature à colonnes choisies : une ligne par élément, ou par
+/// groupe (valeurs des colonnes non totalisées) si elle regroupe.
+fn tableau_colonnes(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, String> {
+    let jonctions = jonctions::coupes(p);
+    let nom_niveau = |id: &str| p.niveau(id).map_or(String::new(), |x| x.nom.clone());
+    let mut lignes: Vec<LigneQuantite> = Vec::new();
+    for m in &p.murs {
+        let t = p.type_mur(&m.type_mur);
+        let (l, h) = (m.axe.longueur(), p.bas_haut(m).map(|(a, b)| b - a));
+        lignes.push(LigneQuantite {
+            categorie: "Murs".into(),
+            type_nom: t.map_or(String::new(), |t| t.nom.clone()),
+            element: m.nom.clone(),
+            niveau: nom_niveau(&m.niveau),
+            longueur: Some(l),
+            hauteur: h,
+            largeur: None,
+            epaisseur: t.map(|t| t.epaisseur()),
+            surface: h.map(|h| l * h / 1e6),
+            volume: Some(geometrie::volume(&solides::mur(p, m, &jonctions)?) / 1e9),
+        });
+    }
+    for d in &p.dalles {
+        let t = p.type_dalle(&d.type_dalle);
+        lignes.push(LigneQuantite {
+            categorie: d.sorte.nom().into(),
+            type_nom: t.map_or(String::new(), |t| t.nom.clone()),
+            element: d.nom.clone(),
+            niveau: nom_niveau(&d.niveau),
+            longueur: None,
+            hauteur: None,
+            largeur: None,
+            epaisseur: t.map(|t| t.epaisseur()),
+            surface: Some(geometrie::aire_pair_impair(&d.contours) / 1e6),
+            volume: p.volume_dalle(d).map(|v| v / 1e9),
+        });
+    }
+    for b in &p.barres {
+        let l = DVec3::from_array(b.fin).distance(DVec3::from_array(b.debut));
+        lignes.push(LigneQuantite {
+            categorie: match b.genre {
+                GenreBarre::Poteau => "Poteaux",
+                GenreBarre::Poutre => "Poutres",
+            }
+            .into(),
+            type_nom: b.nom.clone(),
+            element: format!("{} ({})", b.nom, b.id),
+            niveau: nom_niveau(&b.niveau),
+            longueur: Some(l),
+            hauteur: Some(b.hauteur),
+            largeur: Some(b.largeur),
+            epaisseur: None,
+            surface: None,
+            volume: Some(geometrie::volume(&solides::barre(p, b)?) / 1e9),
+        });
+    }
+    for o in &p.ouvertures {
+        // niveau du mur hôte (ou de la première couche de son assemblage)
+        let hote = p.murs.iter().find(|m| m.id == o.mur || m.assemblage.as_deref() == Some(o.mur.as_str()));
+        lignes.push(LigneQuantite {
+            categorie: match o.genre {
+                GenreOuverture::Porte => "Portes",
+                GenreOuverture::Fenetre => "Fenêtres",
+                GenreOuverture::Libre => "Ouvertures libres",
+            }
+            .into(),
+            type_nom: o.type_ouverture.as_ref().and_then(|t| p.types_ouvertures.iter().find(|x| &x.id == t)).map_or(o.nom.clone(), |t| t.nom.clone()),
+            element: o.nom.clone(),
+            niveau: hote.map_or(String::new(), |m| nom_niveau(&m.niveau)),
+            longueur: None,
+            hauteur: Some(o.hauteur),
+            largeur: Some(o.largeur),
+            epaisseur: None,
+            surface: Some(o.largeur * o.hauteur / 1e6),
+            volume: None,
+        });
+    }
+    for e in &p.importes {
+        lignes.push(LigneQuantite {
+            categorie: e.categorie.clone(),
+            type_nom: e.nom.clone(),
+            element: format!("{} ({})", e.nom, e.id),
+            niveau: e.niveau.as_deref().map_or(String::new(), nom_niveau),
+            longueur: None,
+            hauteur: None,
+            largeur: None,
+            epaisseur: None,
+            surface: None,
+            volume: Some(geometrie::volume(&solides::maillage(&e.maillage)?) / 1e9),
+        });
+    }
+    let filtre = n.categorie.to_lowercase();
+    lignes.retain(|l| filtre.is_empty() || l.categorie.to_lowercase().contains(&filtre));
+    // valeur affichée d'une colonne non totalisée, et valeur d'une colonne totalisée
+    let texte = |l: &LigneQuantite, c: Colonne| -> String {
+        let mm = |v: Option<f64>| v.map_or(String::new(), |v| format!("{v:.0}"));
+        match c {
+            Colonne::Categorie => l.categorie.clone(),
+            Colonne::Type => l.type_nom.clone(),
+            Colonne::Element => l.element.clone(),
+            Colonne::Niveau => l.niveau.clone(),
+            Colonne::Hauteur => mm(l.hauteur),
+            Colonne::Largeur => mm(l.largeur),
+            Colonne::Epaisseur => mm(l.epaisseur),
+            _ => String::new(),
+        }
+    };
+    let somme = |l: &LigneQuantite, c: Colonne| -> Option<f64> {
+        match c {
+            Colonne::Nombre => Some(1.0),
+            Colonne::Longueur => l.longueur,
+            Colonne::Surface => l.surface,
+            Colonne::Volume => l.volume,
+            _ => None,
+        }
+    };
+    let format_somme = |c: Colonne, v: Option<f64>| match (c, v) {
+        (_, None) => String::new(),
+        (Colonne::Nombre, Some(v)) => format!("{v:.0}"),
+        (Colonne::Longueur, Some(v)) => format!("{v:.0}"),
+        (Colonne::Surface, Some(v)) => format!("{v:.2}"),
+        (_, Some(v)) => format!("{v:.3}"),
+    };
+    let cols = &n.colonnes;
+    // regroupement : clé = valeurs des colonnes non totalisées (et l'élément si on ne
+    // regroupe pas)
+    let mut groupes: BTreeMap<Vec<String>, Vec<Option<f64>>> = BTreeMap::new();
+    for (k, l) in lignes.iter().enumerate() {
+        let mut cle: Vec<String> = cols.iter().filter(|c| !c.totalisee()).map(|&c| texte(l, c)).collect();
+        if !n.regrouper {
+            cle.push(format!("{:08}", k));
+        }
+        let e = groupes.entry(cle).or_insert_with(|| vec![None; cols.len()]);
+        for (i, &c) in cols.iter().enumerate() {
+            if let Some(v) = somme(l, c) {
+                e[i] = Some(e[i].unwrap_or(0.0) + v);
+            }
+        }
+    }
+    let mut sortie = vec![cols.iter().map(|c| c.titre().to_string()).collect::<Vec<_>>()];
+    for (cle, sommes) in groupes {
+        let mut fixes = cle.into_iter();
+        sortie.push(cols.iter().enumerate().map(|(i, &c)| if c.totalisee() { format_somme(c, sommes[i]) } else { fixes.next().unwrap_or_default() }).collect());
+    }
+    Ok(sortie)
 }
 
 /// PDF de plusieurs pages, une par SVG (chacune à son format, comme `pdf`).
@@ -727,7 +958,19 @@ mod tests {
             nom: "Murs".into(),
             categorie: "Murs".into(),
             regrouper: true,
+            colonnes: Vec::new(),
         };
+        // colonnes choisies : type, niveau, nombre, longueur, volume ; regroupées par type
+        // et niveau, le nombre total reste celui des murs
+        let choisie = Nomenclature { colonnes: vec![Colonne::Type, Colonne::Niveau, Colonne::Nombre, Colonne::Longueur, Colonne::Volume], ..n.clone() };
+        let t = tableau(&p, &choisie).unwrap();
+        assert_eq!(t[0], ["Type", "Niveau", "Nombre", "Longueur (mm)", "Volume net (m³)"]);
+        let total: usize = t.iter().skip(1).map(|r| r[2].parse::<usize>().unwrap()).sum();
+        assert_eq!(total, p.murs.len());
+        let detail = tableau(&p, &Nomenclature { regrouper: false, ..choisie.clone() }).unwrap();
+        assert_eq!(detail.len() - 1, p.murs.len());
+        assert_eq!(Colonne::depuis_titre("Famille et type"), Some(Colonne::Type));
+        assert_eq!(Colonne::depuis_titre("Commentaires"), None);
         let t = tableau(&p, &n).unwrap();
         let count: usize = t
             .iter()

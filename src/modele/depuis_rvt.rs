@@ -259,11 +259,67 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
         c.importer(format!("{} [{}]", f.classe, f.id), categorie, niveau(f.niveau), &triangles(&f.geometrie), "forme de famille", origine(f.id, &f.classe));
     }
     vues_et_feuilles(m, c, &|v: i64| ident("vue", v), &|f: i64| ident("feuille", f), &niveau);
+    nomenclatures(m, c, &|v: i64| ident("nomenclature", v));
     let ignores = &mut c.projet.ignores;
     for (k, n) in [("Pièces, surfaces et zones", m.pieces.len()), ("Quadrillages", m.grilles.len()), ("Éléments 2D des vues", m.elements_2d.len())] {
         if n > 0 {
             *ignores.entry(k.into()).or_default() += n;
         }
+    }
+}
+
+/// Catégorie native d'une catégorie Revit, pour le filtre d'une nomenclature (les
+/// autres catégories gardent leur nom, celui des éléments importés).
+fn categorie_native(revit: &str) -> String {
+    match revit {
+        "Sols" => "Dalle",
+        "Plafonds" => "Plafond",
+        "Toits" => "Toiture",
+        "Poteaux porteurs" | "Poteaux" => "Poteaux",
+        "Ossature" => "Poutres",
+        autre => autre,
+    }
+    .into()
+}
+
+/// Nomenclatures de Revit en nomenclatures natives : nom, catégorie (nom natif),
+/// détail de chaque occurrence (sinon regroupée par type), champs que le modèle natif
+/// calcule (type, niveau, nombre, longueur, hauteur, largeur, épaisseur, surface,
+/// volume). Les autres champs, filtres et tris sont comptés non repris ; les
+/// nomenclatures de clés sont ignorées.
+fn nomenclatures(m: &Maquette, c: &mut Conversion, id_nomenclature: &dyn Fn(i64) -> String) {
+    use super::documentation::{Colonne, Nomenclature};
+    let mut ignorees: std::collections::BTreeMap<String, usize> = Default::default();
+    for v in m.vues.iter().filter(|v| !v.gabarit) {
+        let Some(d) = &v.nomenclature else { continue };
+        if d.cle {
+            *ignorees.entry("Nomenclatures de clés".into()).or_default() += 1;
+            continue;
+        }
+        let categorie = categorie_native(&m.nom_categorie(d.categorie));
+        let regrouper = !d.detail;
+        let mut colonnes: Vec<Colonne> = Vec::new();
+        for champ in d.champs.iter().filter(|x| !x.masque) {
+            match Colonne::depuis_titre(&champ.titre) {
+                Some(col) if !colonnes.contains(&col) => colonnes.push(col),
+                Some(_) => {}
+                None => *ignorees.entry("Champs de nomenclature non repris".into()).or_default() += 1,
+            }
+        }
+        // première colonne : le type (regroupée) ou l'élément
+        if !colonnes.contains(&Colonne::Type) && !colonnes.contains(&Colonne::Element) {
+            colonnes.insert(0, if regrouper { Colonne::Type } else { Colonne::Element });
+        }
+        if !d.filtres.is_empty() {
+            *ignorees.entry("Filtres de nomenclature non repris".into()).or_default() += d.filtres.len();
+        }
+        if !d.tris.is_empty() {
+            *ignorees.entry("Tris de nomenclature non repris (tri par colonnes)".into()).or_default() += 1;
+        }
+        c.projet.nomenclatures.push(Nomenclature { id: id_nomenclature(v.id), nom: v.nom.clone(), categorie, regrouper, colonnes });
+    }
+    for (k, n) in ignorees {
+        *c.projet.ignores.entry(k).or_default() += n;
     }
 }
 
@@ -324,7 +380,7 @@ fn vues_et_feuilles(m: &Maquette, c: &mut Conversion, id_vue: &dyn Fn(i64) -> St
     let mut ignorees: std::collections::BTreeMap<String, usize> = Default::default();
     let mut noms: std::collections::HashSet<String> = c.projet.vues.iter().map(|v| v.nom.clone()).collect();
     let mut pivotes = 0;
-    for v in m.vues.iter().filter(|v| !v.gabarit && v.genre != "Arborescence" && v.genre != "Feuille") {
+    for v in m.vues.iter().filter(|v| !v.gabarit && v.genre != "Arborescence" && v.genre != "Feuille" && v.nomenclature.is_none()) {
         let genre = match v.genre {
             "Plan d'étage" => {
                 let Some(n) = niveau(v.niveau) else {
@@ -436,6 +492,7 @@ mod tests_vues {
             let natif = [pos[0] + (p - o_n).dot(u) * echelle, pos[1] + (p - o_n).dot(DVec3::Z) * echelle];
             assert!((revit[0] - natif[0]).abs() < 1e-9 && (revit[1] - natif[1]).abs() < 1e-9, "{revit:?} {natif:?}");
         }
+        assert_eq!((categorie_native("Sols"), categorie_native("Murs"), categorie_native("Toits")), ("Dalle".into(), "Murs".into(), "Toiture".into()));
         // coupe regardant vers −Y : ligne retournée, toujours du bon côté
         let (_, _, _, u2) = ligne_de_coupe(&Cadre { axes: [DVec3::NEG_X, DVec3::Z, DVec3::NEG_Y], ..cadre }, DVec3::NEG_X, DVec3::Y).unwrap();
         assert!(u2.cross(DVec3::Z).dot(DVec3::Y) > 0.0);
