@@ -9,7 +9,13 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
 - **Début → Importer** convertit un IFC/RVT/RFA/RTE dans un nouveau document natif,
   conserve les documents ouverts et écrit le rapport `.rapport.md` à côté du JSON.
   Les murs courbes, ouvertures et maillages importés sont maintenant affichables.
-- **Modéliser → Niveau** crée et modifie les niveaux. **Quadrillage** crée des axes
+- **Saisie validée** : un nom ou une valeur tapé dans un champ (propriétés, niveaux,
+  matériaux, feuilles…) ou un nombre glissé n'est appliqué au modèle qu'à la fin de la
+  saisie (Entrée, clic ailleurs, fin du glisser) : la scène est alors reconstruite et
+  la modification forme une seule étape d'historique.
+- **Modéliser → Niveau** liste les niveaux (nom et altitude modifiables) ;
+  « Ajouter un niveau » crée « Niveau n » au-dessus du plus haut, à la hauteur du
+  dernier étage (3 m s'il n'y a qu'un niveau). **Quadrillage** crée des axes
   droits, visibles dans les plans natifs. Les dimensions du modèle sont saisies en
   centimètres par défaut ; Début → Options permet de choisir mm, cm ou m. Le JSON,
   les commandes CLI/MCP et les tailles sur papier restent en millimètres.

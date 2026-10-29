@@ -558,6 +558,12 @@ pub struct ViewerApp {
     editeur_motifs: bool,
     /// Fenêtre « Épaisseurs de traits » ouverte : table des 12 plumes en cours d'édition.
     editeur_plumes: Option<Vec<f64>>,
+    /// Saisie en cours dans un champ (texte, nombre tapé ou glissé hors de la vue) :
+    /// les modifications du projet attendent sa validation (Entrée, autre clic, fin du
+    /// glisser) pour être appliquées, en une seule étape d'historique.
+    saisie_active: bool,
+    /// Projet tel qu'avant la saisie en cours, si elle a modifié le projet.
+    avant_saisie: Option<crate::modele::Projet>,
     motif_choisi: Option<String>,
     nom_motif_saisi: String,
     tirets_saisis: (String, Vec<String>),
@@ -688,6 +694,8 @@ impl ViewerApp {
             materiau_edite: None,
             editeur_motifs: false,
             editeur_plumes: None,
+            saisie_active: false,
+            avant_saisie: None,
             motif_choisi: None,
             nom_motif_saisi: String::new(),
             tirets_saisis: (String::new(), Vec::new()),
@@ -774,6 +782,7 @@ impl ViewerApp {
                         self.natif_modifie=self.historique.modifie(&projet);
                     }
                     self.natif = Some((projet, chemin));
+                    self.avant_saisie = None;
                     return;
                 }
                 LoadMsg::Progress(s) => self.status = s,
@@ -1823,6 +1832,7 @@ impl ViewerApp {
                 self.status = format!("{} — nouveau projet natif v0", projet.nom);
                 let _ = self.historique.enregistrer(&projet);
                 self.natif = Some((projet, chemin));
+                self.avant_saisie = None;
                 self.error = None;
             }
             Err(e) => self.error = Some(e),
@@ -2323,9 +2333,36 @@ impl ViewerApp {
         painter.text(rect.left_top() + egui::vec2(12.0, 34.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
     }
 
+    /// Saisie en cours : un champ a le clavier, ou un nombre est glissé (glisser commencé
+    /// hors de la vue). À la fin de la saisie, applique en une fois les modifications
+    /// faites pendant celle-ci (scène reconstruite, une étape d'historique).
+    fn valider_saisie(&mut self, ctx: &egui::Context) {
+        let glisser_champ = ctx.dragged_id().is_some() && ctx.input(|i| i.pointer.press_origin()).is_some_and(|p| !self.rect_vue.contains(p));
+        self.saisie_active = ctx.egui_wants_keyboard_input() || glisser_champ;
+        if self.saisie_active {
+            return;
+        }
+        let Some(avant) = self.avant_saisie.take() else { return };
+        let Some((actuel, _)) = self.natif.as_mut() else { return };
+        let projet = std::mem::replace(actuel, avant);
+        if let Err(e) = self.appliquer_projet(projet) {
+            self.error = Some(e);
+        }
+    }
+
     /// Remplace le projet natif ouvert par `projet` (modifié) et reconstruit la scène,
     /// cadrage, niveaux, catégories et visibilité compris. Rien ne change en cas d'erreur.
     fn appliquer_projet(&mut self, mut projet: crate::modele::Projet) -> Result<(), String> {
+        // saisie en cours : le projet suit la frappe, la scène et l'historique attendent
+        // la validation (voir valider_saisie)
+        if self.saisie_active {
+            let (actuel, _) = self.natif.as_mut().ok_or("Aucun projet natif ouvert.")?;
+            if self.avant_saisie.is_none() {
+                self.avant_saisie = Some(actuel.clone());
+            }
+            *actuel = projet;
+            return Ok(());
+        }
         let chemin = self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.1.clone();
         projet.recaler_menuiseries(&self.natif.as_ref().unwrap().0)?;
         let scene = scene::depuis_natif(&projet, &chemin)?;
@@ -2851,6 +2888,7 @@ impl ViewerApp {
         self.selection_multiple.clear();
         self.fenetre_selection = None;
         self.natif = d.natif;
+        self.avant_saisie = None;
         self.historique = d.historique;
         self.natif_modifie = d.modifie;
         self.mur_depart = None;
@@ -2911,6 +2949,7 @@ impl ViewerApp {
         self.natif_modifie = false;
         self.mur_depart = None;
         self.natif = None;
+        self.avant_saisie = None;
         self.vues_ouvertes.clear();
         self.etats_vues.clear();
         self.loading = None;
@@ -6959,6 +6998,7 @@ fn load_state_fr(s: &str) -> &str {
 impl eframe::App for ViewerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        self.valider_saisie(&ctx);
         self.historique.geste(ctx.input(|i|i.pointer.any_down()));
         self.poll_sauvegarde();
         self.fenetre_documentation(&ctx);

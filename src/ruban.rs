@@ -369,8 +369,7 @@ fn champs(o: Outil) -> Vec<Champ> {
     use Champ::*;
     use Outil::*;
     match o {
-        Surfaces | CreerIdentique | Supprimer | Feuilles | Nomenclatures => vec![],
-        Niveau => vec![Saisie("Nom", "Niveau 1"), Nombre("Altitude", 3000.0, " mm")],
+        Surfaces | Niveau | CreerIdentique | Supprimer | Feuilles | Nomenclatures => vec![],
         Quadrillage => vec![Saisie("Repère", "A"), Choix("Tracé", &["Droit", "Arc"])],
         Mur => vec![
             Choix(

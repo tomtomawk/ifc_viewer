@@ -1105,11 +1105,19 @@ impl ViewerApp {
                             }
                         });
                     }
-                    if ui.button("Créer le niveau").clicked() {
-                        commande = Some(Commande::Niveau {
-                            nom: self.ruban_edition.texte_option(Outil::Niveau, 0),
-                            altitude: self.ruban_edition.nombre_option(Outil::Niveau, 1),
-                        });
+                    ui.label(RichText::new("Nom et altitude : valider par Entrée ou en cliquant ailleurs.").small().weak());
+                    // nouveau niveau au-dessus du plus haut, à la hauteur du dernier étage
+                    // (3 m s'il n'y en a qu'un)
+                    let mut alts: Vec<f64> = p.niveaux.iter().map(|n| n.altitude).collect();
+                    alts.sort_by(f64::total_cmp);
+                    let etage = match alts.as_slice() {
+                        [.., a, b] if b - a > 1.0 => b - a,
+                        _ => 3000.0,
+                    };
+                    let altitude = alts.last().map_or(0.0, |h| h + etage);
+                    let nom = (1..).map(|k| format!("Niveau {k}")).find(|n| !p.niveaux.iter().any(|x| &x.nom == n)).unwrap_or_default();
+                    if ui.button("Ajouter un niveau").on_hover_text(format!("« {nom} » à {}", crate::options::unite().afficher(altitude))).clicked() {
+                        commande = Some(Commande::Niveau { nom, altitude });
                     }
                 }
                 Some(Outil::Poteau | Outil::Poutre) => {
