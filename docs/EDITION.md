@@ -68,11 +68,20 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   dans la vue native ouverte. Avec un mur sélectionné, une cote référence ses
   extrémités ; sinon ses points sont fixes. Une référence supprimée est signalée
   en rouge, sans supprimer silencieusement la cote.
-- **Feuilles** et **Nomenclatures**, icônes du groupe Documents de Documenter (ou par
-  l'arborescence), ouvrent chacune sa fenêtre : assembler des
-  vues, régler format papier/cartouche/échelles, prévisualiser une feuille, exporter
-  SVG/PDF, définir un filtre de catégorie et regrouper les quantités par type.
-  Les feuilles et nomenclatures sont aussi accessibles depuis l'arborescence.
+- **Feuilles** (Documenter, groupe Documents, ou l'arborescence) ouvre un jeu de
+  feuilles dans un onglet : toutes ses feuilles l'une sous l'autre, comme les pages
+  d'InDesign, avec cadre et cartouche (projet, nom, cartouche libre, échelles,
+  numéro). Glisser un plan, une coupe ou une élévation depuis l'arborescence sur une
+  feuille la place, centrée sous le curseur ; glisser une vue placée la déplace ;
+  double-clic l'ouvre ; Suppr la retire (ou supprime la feuille choisie). La page en
+  pointillés ajoute une feuille. Molette : zoom ; glisser le fond : défiler. Les
+  réglages sont dans Propriétés, sans boîte de dialogue : nom du jeu (Entrée pour
+  renommer), Ajouter une feuille, Nouveau jeu ; feuille (numéro, nom, format A0 à A4,
+  paysage/portrait, dimensions, cartouche, export PDF/SVG, suppression) ; vue placée
+  (échelle, position, ouvrir, retirer). L'arborescence liste les jeux et leurs
+  feuilles : clic sur une feuille pour l'amener à l'écran.
+- **Nomenclatures** (Documenter ou l'arborescence) : quantités par catégorie,
+  regroupées par type, export CSV.
 - **Sortie → IFC4** exporte niveaux, classes architecturales, compositions et
   relations d'ouverture avec une géométrie tessellée. Les GUID IFC valides de la
   source sont préservés ; les autres sont générés de manière stable.

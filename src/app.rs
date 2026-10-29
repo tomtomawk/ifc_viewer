@@ -5,6 +5,7 @@
 //! catégorie de modèle et d'annotation.
 
 mod bim;
+mod feuilles;
 use crate::options::Dimensions;
 use crate::camera::{Camera, MAX_PITCH};
 use crate::dessin::{self, Poche};
@@ -213,7 +214,7 @@ fn rubrique(genre: &str) -> Option<(u8, &'static str)> {
         "Coupe" => (4, "Coupes"),
         "Vue de dessin" => (5, "Vues de dessin"),
         "Légende" => (6, "Légendes"),
-        "Nomenclature" | "Feuille" => return None,
+        "Nomenclature" | "Feuille" | "Jeu de feuilles" => return None,
         _ => (7, "Autres vues"),
     })
 }
@@ -430,6 +431,8 @@ impl Vol {
 
 pub struct ViewerApp {
     bim: bim::EtatBim,
+    /// Jeu de feuilles ouvert : cadrage, sélection, dessins préparés.
+    feuilles: feuilles::EtatFeuilles,
     natif: Option<(crate::modele::Projet, PathBuf)>,
     historique: crate::modele::historique::Historique,
     natif_modifie: bool,
@@ -566,6 +569,8 @@ pub struct ViewerApp {
     avant_saisie: Option<crate::modele::Projet>,
     /// Échap pendant la saisie : elle est abandonnée, l'ancienne valeur rétablie.
     saisie_annulee: bool,
+    /// Échap a abandonné une saisie à cette image (champs à tampon propre).
+    pub(crate) echap_saisie: bool,
     motif_choisi: Option<String>,
     nom_motif_saisi: String,
     tirets_saisis: (String, Vec<String>),
@@ -603,6 +608,7 @@ impl ViewerApp {
         cc.egui_ctx.set_visuals(egui::Visuals::light());
         let mut app = ViewerApp {
             bim: Default::default(),
+            feuilles: Default::default(),
             natif: None,
             historique: Default::default(),
             natif_modifie: false,
@@ -699,6 +705,7 @@ impl ViewerApp {
             saisie_active: false,
             avant_saisie: None,
             saisie_annulee: false,
+            echap_saisie: false,
             motif_choisi: None,
             nom_motif_saisi: String::new(),
             tirets_saisis: (String::new(), Vec::new()),
@@ -2345,7 +2352,8 @@ impl ViewerApp {
         self.saisie_active = ctx.egui_wants_keyboard_input() || glisser_champ;
         // Échap : egui retire le clavier au champ avant cette image ; la saisie est
         // abandonnée et la touche consommée (elle ne quitte pas l'outil en cours)
-        if (etait_active || self.saisie_active) && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        self.echap_saisie = (etait_active || self.saisie_active) && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+        if self.echap_saisie {
             self.saisie_annulee = true;
         }
         if self.saisie_active {
@@ -3151,12 +3159,12 @@ impl ViewerApp {
                     if let Err(e) = self.creer_identique() { self.error = Some(e); }
                 }
                 Some(crate::ruban::Outil::Supprimer) => self.demander_suppression(),
-                Some(o @ (crate::ruban::Outil::Feuilles | crate::ruban::Outil::Nomenclatures)) => {
+                Some(crate::ruban::Outil::Feuilles) => self.commande_feuilles(),
+                Some(crate::ruban::Outil::Nomenclatures) => {
                     if self.natif.is_some() {
-                        self.bim.nomenclatures = o == crate::ruban::Outil::Nomenclatures;
                         self.bim.documentation = true;
                     } else {
-                        self.status = "Feuilles et nomenclatures : ouvrir un projet natif.".into();
+                        self.status = "Nomenclatures : ouvrir un projet natif.".into();
                     }
                 }
                 _ => {}
@@ -4051,18 +4059,21 @@ impl ViewerApp {
     /// vues qu'elles portent, familles par catégorie, groupes, liens. Clic : propriétés ;
     /// double-clic : ouvrir la vue (ou isoler les instances d'un type).
     fn navigateur_ui(&mut self, ui: &mut egui::Ui, section: LeftTab) {
-        if let Some((p,_))=&self.natif {
-            if matches!(section,LeftTab::Tout|LeftTab::Feuilles) && !p.feuilles.is_empty() {
-                egui::CollapsingHeader::new("Feuilles natives").default_open(true).show(ui,|ui| {
-                    for (k,f) in p.feuilles.iter().enumerate() {if ui.button(format!("{} — {}",f.numero,f.nom)).clicked(){self.bim.feuille=k;self.bim.nomenclatures=false;self.bim.documentation=true;}}
-                });
-            }
-            if matches!(section,LeftTab::Tout|LeftTab::Nomenclatures) && !p.nomenclatures.is_empty() {
-                egui::CollapsingHeader::new("Nomenclatures natives").default_open(true).show(ui,|ui| {
-                    for (k,n) in p.nomenclatures.iter().enumerate() {if ui.button(&n.nom).clicked(){self.bim.nomenclature=k;self.bim.nomenclatures=true;self.bim.documentation=true;}}
-                });
-            }
-        }
+        // projet natif : jeux de feuilles et leurs feuilles, nomenclatures ; vues
+        // glissables vers une feuille
+        let (jeux_natifs, nomenclatures_natives, glissables): (Vec<(String, Vec<(String, String)>)>, Vec<(usize, String)>, std::collections::HashMap<i64, String>) = match &self.natif {
+            Some((p, _)) => (
+                crate::modele::documentation::jeux(p).into_iter().map(|j| {
+                    let fs = p.feuilles.iter().filter(|f| f.jeu == j).map(|f| (f.id.clone(), format!("{} - {}", f.numero, f.nom))).collect();
+                    (j, fs)
+                }).collect(),
+                p.nomenclatures.iter().enumerate().map(|(k, n)| (k, n.nom.clone())).collect(),
+                p.vues.iter().map(|v| (crate::scene::numero_vue(&v.id), v.id.clone())).collect(),
+            ),
+            None => (Vec::new(), Vec::new(), std::collections::HashMap::new()),
+        };
+        let mut ouvrir_jeu: Option<(String, Option<String>)> = None;
+        let mut ouvrir_nomenclature: Option<usize> = None;
         let Some(s) = self.scene.as_ref() else { return };
         let Some(nav) = s.navigateur.as_ref() else { return };
         let q = self.filter.trim().to_lowercase();
@@ -4073,7 +4084,17 @@ impl ViewerApp {
         let feuille = |ui: &mut egui::Ui, label: String, entite: Option<Id>, vue: Option<usize>, action: &mut Option<ActionNav>| {
             let actif = vue.is_some() && vue == active;
             let texte = if actif { RichText::new(label).strong() } else { RichText::new(label) };
-            let r = ui.selectable_label(entite.is_some() && entite == selection, texte);
+            // vue du projet natif : glissable sur une feuille d'un jeu
+            let glissable = vue.and_then(|i| nav.vues.get(i)).filter(|v| matches!(v.genre.as_str(), "Plan d'étage" | "Coupe" | "Élévation")).and_then(|v| glissables.get(&v.revit_id));
+            let mut bouton = egui::Button::selectable(entite.is_some() && entite == selection, texte);
+            if glissable.is_some() {
+                bouton = bouton.sense(Sense::click_and_drag());
+            }
+            let r = ui.add(bouton);
+            if let Some(id) = glissable {
+                r.dnd_set_drag_payload(feuilles::VueGlissee(id.clone()));
+            }
+            let r = if glissable.is_some() { r.on_hover_text("Double-clic : ouvrir · glisser sur une feuille d'un jeu pour la placer") } else { r };
             if r.double_clicked() {
                 *action = vue.map(ActionNav::Activer).or_else(|| entite.map(ActionNav::IsolerType));
             } else if r.clicked() {
@@ -4116,9 +4137,14 @@ impl ViewerApp {
         });
         let mut nomenclatures: Vec<usize> = (0..nav.vues.len()).filter(|&i| nav.vues[i].genre == "Nomenclature" && garde(&nav.vues[i].nom)).collect();
         nomenclatures.sort_by_key(|&i| nav.vues[i].nom.to_lowercase());
-        rubrique_nav(ui, LeftTab::Nomenclatures, format!("Nomenclatures/Quantités (tout) ({})", nomenclatures.len()), false, &mut |ui| {
-            if nomenclatures.is_empty() {
+        rubrique_nav(ui, LeftTab::Nomenclatures, format!("Nomenclatures/Quantités (tout) ({})", nomenclatures.len() + nomenclatures_natives.len()), false, &mut |ui| {
+            if nomenclatures.is_empty() && nomenclatures_natives.is_empty() {
                 ui.label(RichText::new("Aucune nomenclature").weak());
+            }
+            for (k, nom) in &nomenclatures_natives {
+                if garde(nom) && ui.selectable_label(false, nom).on_hover_text("Ouvrir la nomenclature").clicked() {
+                    ouvrir_nomenclature = Some(*k);
+                }
             }
             for &i in &nomenclatures {
                 feuille(ui, nav.vues[i].nom.clone(), nav.vues[i].entite, Some(i), &mut action);
@@ -4127,9 +4153,31 @@ impl ViewerApp {
         let mut feuilles: Vec<usize> = (0..nav.vues.len()).filter(|&i| nav.vues[i].genre == "Feuille").collect();
         feuilles.sort_by_key(|&i| (nav.vues[i].numero.clone(), nav.vues[i].nom.clone()));
         let indice: std::collections::HashMap<i64, usize> = nav.vues.iter().enumerate().map(|(i, v)| (v.revit_id, i)).collect();
-        rubrique_nav(ui, LeftTab::Feuilles, format!("Feuilles (tout) ({})", feuilles.len()), false, &mut |ui| {
-            if feuilles.is_empty() {
+        let jeu_ouvert = active.and_then(|i| nav.vues.get(i)).filter(|v| v.genre == "Jeu de feuilles").map(|v| v.nom.clone());
+        let n_natives: usize = jeux_natifs.iter().map(|(_, fs)| fs.len()).sum();
+        rubrique_nav(ui, LeftTab::Feuilles, format!("Feuilles (tout) ({})", feuilles.len() + n_natives), false, &mut |ui| {
+            if feuilles.is_empty() && jeux_natifs.is_empty() {
                 ui.label(RichText::new("Aucune feuille").weak());
+            }
+            // jeux du projet natif : clic sur le jeu : l'ouvrir ; sur une feuille : l'ouvrir
+            // à cette feuille
+            for (jeu, fs) in &jeux_natifs {
+                let id = ui.make_persistent_id(("nav-jeu", jeu));
+                egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
+                    .show_header(ui, |ui| {
+                        let texte = RichText::new(format!("{jeu} ({})", fs.len()));
+                        let texte = if jeu_ouvert.as_deref() == Some(jeu.as_str()) { texte.strong() } else { texte };
+                        if ui.selectable_label(false, texte).on_hover_text("Ouvrir le jeu : toutes ses feuilles à la suite").clicked() {
+                            ouvrir_jeu = Some((jeu.clone(), None));
+                        }
+                    })
+                    .body(|ui| {
+                        for (fid, titre) in fs {
+                            if garde(titre) && ui.selectable_label(false, titre).clicked() {
+                                ouvrir_jeu = Some((jeu.clone(), Some(fid.clone())));
+                            }
+                        }
+                    });
             }
             for &i in &feuilles {
                 let f = &nav.vues[i];
@@ -4193,6 +4241,13 @@ impl ViewerApp {
         });
         if section == LeftTab::Tout && !self.liste_materiaux.is_empty() {
             egui::CollapsingHeader::new(RichText::new(format!("Matériaux ({})", self.liste_materiaux.len())).strong()).id_salt(("nav", "materiaux")).open(ouvert.then_some(true)).show(ui, |ui| self.materiaux_ui(ui));
+        }
+        if let Some((jeu, f)) = ouvrir_jeu {
+            self.ouvrir_jeu(&jeu, f);
+        }
+        if let Some(k) = ouvrir_nomenclature {
+            self.bim.nomenclature = k;
+            self.bim.documentation = true;
         }
         match action {
             Some(ActionNav::Selection(e)) => self.select(Some(e), false),
@@ -4481,6 +4536,11 @@ impl ViewerApp {
                 (tous, if etage.is_empty() { modele.clone() } else { etage })
             }
             "Coupe" | "Élévation" => (modele.iter().chain(&annot).copied().collect(), modele.clone()),
+            "Jeu de feuilles" => {
+                self.vue_active = Some(i);
+                self.memoriser_vue();
+                return;
+            }
             "Nomenclature" => {
                 if let Some(e) = v.entite {
                     self.select(Some(e), false);
@@ -5206,6 +5266,10 @@ impl ViewerApp {
         self.fenetre_position_plan(ui.ctx());
         self.fenetre_plumes(ui.ctx());
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
+        if let Some(jeu) = self.jeu_actif() {
+            egui::ScrollArea::vertical().show(ui, |ui| self.proprietes_jeu(ui, &jeu));
+            return;
+        }
         if self.natif.is_some() {
             let ids = self.selection_bim();
             if ids.is_empty() {
@@ -7130,6 +7194,8 @@ impl eframe::App for ViewerApp {
                     ui.centered_and_justified(|ui| ui.label("Ouvrir une vue depuis l’arborescence du projet."));
                 } else if self.nomenclature_ouverte.is_some() {
                     self.vue_nomenclature(ui);
+                } else if self.jeu_actif().is_some() {
+                    self.vue_jeu(ui);
                 } else {
                     self.viewport(ui);
                 }
@@ -7149,6 +7215,15 @@ impl eframe::App for ViewerApp {
                 };
             }
             self.fenetre_visibilite(&ctx);
+        }
+        // vue glissée depuis l'arborescence : son nom suit le curseur
+        if let (Some(g), Some(q)) = (egui::DragAndDrop::payload::<feuilles::VueGlissee>(&ctx), ctx.pointer_hover_pos()) {
+            let nom = self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|v| v.id == g.0)).map_or(String::new(), |v| v.nom.clone());
+            let peintre = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("vue_glissee")));
+            let texte = peintre.layout_no_wrap(format!("Placer : {nom}"), egui::FontId::proportional(13.0), Color32::WHITE);
+            let cadre = egui::Rect::from_min_size(q + egui::vec2(14.0, 10.0), texte.size() + egui::vec2(12.0, 6.0));
+            peintre.rect_filled(cadre, 4.0, Color32::from_rgb(0, 120, 215));
+            peintre.galley(cadre.min + egui::vec2(6.0, 3.0), texte, Color32::WHITE);
         }
         self.unsupported_window(&ctx);
         self.confirmation_modifications(&ctx);

@@ -290,6 +290,8 @@ chaque `.rfa` du dossier.
 
 ## Édition et documentation additionnelles
 
+Les feuilles appartiennent à un jeu (`jeu`, « Plans » par défaut, y compris pour les
+fichiers antérieurs) ; les feuilles d'un jeu se suivent dans l'ordre de `feuilles[]`.
 Les collections et tables facultatives de l'éditeur (annotations, quadrillages,
 feuilles, nomenclatures, attaches de toiture et priorités de jonction) sont détaillées
 avec leurs commandes et leurs limites dans [EDITION.md](EDITION.md).

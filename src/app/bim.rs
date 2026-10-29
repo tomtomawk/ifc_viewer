@@ -190,9 +190,6 @@ pub(super) struct EtatBim {
     /// Suppression demandée depuis le panneau : exécutée à l'image suivante.
     pub(super) supprimer: bool,
     pub documentation: bool,
-    /// Fenêtre de documentation sur les nomenclatures (sinon les feuilles).
-    pub nomenclatures: bool,
-    pub feuille: usize,
     pub nomenclature: usize,
     pub texte: String,
     pub points: [[f64; 2]; 2],
@@ -201,7 +198,6 @@ pub(super) struct EtatBim {
     preview_type: Option<crate::modele::Projet>,
     toiture: String,
     priorite: i32,
-    apercu: Option<crate::trace2d::Dessin>,
     pub revision: u64,
     tableau_cache: Option<(u64, String, Result<Vec<Vec<String>>, String>)>,
 }
@@ -228,8 +224,6 @@ impl Default for EtatBim {
             annotation_identique: None,
             supprimer: false,
             documentation: false,
-            nomenclatures: false,
-            feuille: 0,
             nomenclature: 0,
             texte: "Texte".into(),
             points: [[0.0, 0.0], [3000.0, 0.0]],
@@ -238,7 +232,6 @@ impl Default for EtatBim {
             preview_type: None,
             toiture: String::new(),
             priorite: 30,
-            apercu: None,
             revision: 0,
             tableau_cache: None,
         }
@@ -382,6 +375,9 @@ impl ViewerApp {
     /// Supprime la sélection tout de suite (couches et ouvertures hébergées comprises),
     /// comme Revit ; Ctrl+Z la rétablit.
     pub(super) fn demander_suppression(&mut self) {
+        if self.supprimer_dans_jeu() {
+            return;
+        }
         let ids = self.selection_bim();
         if ids.is_empty() {
             self.status = "Supprimer : sélectionner d'abord un ou plusieurs éléments.".into();
@@ -1466,6 +1462,8 @@ impl ViewerApp {
             Err(e) => self.error = Some(e),
         }
     }
+    /// Fenêtre des nomenclatures du projet : créer, régler (nom, catégorie, regrouper),
+    /// tableau des quantités, export CSV.
     pub(super) fn fenetre_documentation(&mut self, ctx: &egui::Context) {
         use crate::modele::{commandes::Commande, documentation as d};
         if !self.bim.documentation {
@@ -1475,45 +1473,13 @@ impl ViewerApp {
         let mut ouvert = true;
         let mut commande = None;
         let mut export = None;
-        let nomenclatures = self.bim.nomenclatures;
-        egui::Window::new(if nomenclatures { "Nomenclatures" } else { "Feuilles" }).id(egui::Id::unique("fenetre_documentation")).open(&mut ouvert).default_width(640.0).show(ctx,|ui|{
-            ui.horizontal(|ui| {
-                if !nomenclatures && ui.button("Nouvelle feuille A3").clicked() {commande=Some(Commande::Feuille {feuille:d::Feuille {id:String::new(),numero:format!("A{:02}",p.feuilles.len()+1),nom:"Plans".into(),largeur:420.0,hauteur:297.0,cartouche:p.nom.clone(),vues:Vec::new()}});self.bim.feuille=p.feuilles.len();}
-                if nomenclatures && ui.button("Nouvelle nomenclature").clicked() {commande=Some(Commande::Nomenclature {nomenclature:d::Nomenclature {id:String::new(),nom:"Quantités".into(),categorie:String::new(),regrouper:true}});self.bim.nomenclature=p.nomenclatures.len();}
-            });
+        egui::Window::new("Nomenclatures").id(egui::Id::unique("fenetre_nomenclatures")).open(&mut ouvert).default_width(640.0).show(ctx,|ui|{
+            if ui.button("Nouvelle nomenclature").clicked() {commande=Some(Commande::Nomenclature {nomenclature:d::Nomenclature {id:String::new(),nom:"Quantités".into(),categorie:String::new(),regrouper:true}});self.bim.nomenclature=p.nomenclatures.len();}
             ui.separator();
-            if !nomenclatures && p.feuilles.is_empty() { ui.label(RichText::new("Aucune feuille : « Nouvelle feuille A3 » pour commencer.").weak()); }
-            if nomenclatures && p.nomenclatures.is_empty() { ui.label(RichText::new("Aucune nomenclature : « Nouvelle nomenclature » pour commencer.").weak()); }
-            if !nomenclatures && !p.feuilles.is_empty() {
-                self.bim.feuille=self.bim.feuille.min(p.feuilles.len()-1);
-                egui::ComboBox::from_id_salt("feuille_native").selected_text(&p.feuilles[self.bim.feuille].nom).show_ui(ui,|ui|{for (k,f) in p.feuilles.iter().enumerate(){ui.selectable_value(&mut self.bim.feuille,k,format!("{} — {}",f.numero,f.nom));}});
-                let mut f=p.feuilles[self.bim.feuille].clone();
-                ui.horizontal(|ui|{ui.label("Numéro");ui.text_edit_singleline(&mut f.numero);ui.label("Nom");ui.text_edit_singleline(&mut f.nom);});
-                ui.horizontal(|ui|{ui.label("Format");ui.add(egui::DragValue::new(&mut f.largeur).suffix(" mm"));ui.add(egui::DragValue::new(&mut f.hauteur).suffix(" mm"));});
-                ui.horizontal(|ui|{ui.label("Cartouche");ui.text_edit_singleline(&mut f.cartouche);});
-                let mut retirer=None;
-                for (k,v) in f.vues.iter_mut().enumerate() {ui.push_id(k,|ui|{ui.horizontal(|ui|{
-                    ui.label(p.vues.iter().find(|x|x.id==v.vue).map_or("Vue absente",|x|x.nom.as_str()));
-                    for c in &mut v.position {ui.add(egui::DragValue::new(c).suffix(" mm"));}
-                    ui.add(egui::DragValue::new(&mut v.echelle).prefix("1:"));
-                    if ui.button("Retirer").clicked(){retirer=Some(k);}
-                });});}
-                if let Some(k)=retirer {f.vues.remove(k);}
-                ui.menu_button("Placer une vue",|ui|{for v in &p.vues {if ui.button(&v.nom).clicked(){f.vues.push(d::VuePlacee {vue:v.id.clone(),position:[30.0,80.0],echelle:v.echelle});ui.close();}}});
-                // Mémoriser les éditions dans la transaction du document.
-                if serde_json::to_string(&f).ok()!=serde_json::to_string(&p.feuilles[self.bim.feuille]).ok() {commande=Some(Commande::Feuille {feuille:f.clone()});}
-                if ui.button("Aperçu de la feuille").clicked(){
-                    match d::feuille(p,&f){Ok(d)=>self.bim.apercu=Some(d),Err(e)=>self.error=Some(e)}
-                }
-                ui.horizontal(|ui|{
-                    if ui.button("Exporter la feuille SVG…").clicked(){export=Some(("svg",self.bim.feuille));}
-                    if ui.button("Exporter la feuille PDF…").clicked(){export=Some(("pdf",self.bim.feuille));}
-                });
-                ui.label("Positions en mm papier depuis le coin inférieur gauche ; impression à 100 %.");
-            }
-            if nomenclatures && !p.nomenclatures.is_empty() {
+            if p.nomenclatures.is_empty() { ui.label(RichText::new("Aucune nomenclature : « Nouvelle nomenclature » pour commencer.").weak()); }
+            if !p.nomenclatures.is_empty() {
                 self.bim.nomenclature=self.bim.nomenclature.min(p.nomenclatures.len()-1);
-                egui::ComboBox::from_id_salt("nomenclature_native").selected_text(&p.nomenclatures[self.bim.nomenclature].nom).show_ui(ui,|ui|{for (k,n) in p.nomenclatures.iter().enumerate(){ui.selectable_value(&mut self.bim.nomenclature,k,&n.nom);}});
+                egui::ComboBox::from_id_salt("nomenclature_projet").selected_text(&p.nomenclatures[self.bim.nomenclature].nom).show_ui(ui,|ui|{for (k,n) in p.nomenclatures.iter().enumerate(){ui.selectable_value(&mut self.bim.nomenclature,k,&n.nom);}});
                 let mut n=p.nomenclatures[self.bim.nomenclature].clone();
                 ui.horizontal(|ui|{ui.label("Nom");ui.text_edit_singleline(&mut n.nom);ui.label("Catégorie");ui.text_edit_singleline(&mut n.categorie);});
                 ui.checkbox(&mut n.regrouper,"Regrouper par type");
@@ -1521,102 +1487,28 @@ impl ViewerApp {
                 let cle=serde_json::to_string(&n).unwrap_or_default();
                 if self.bim.tableau_cache.as_ref().is_none_or(|(r,c,_)|*r!=self.bim.revision || *c!=cle) {self.bim.tableau_cache=Some((self.bim.revision,cle,d::tableau(p,&n)));}
                 match &self.bim.tableau_cache.as_ref().unwrap().2 {
-                    Ok(lignes)=>{egui::ScrollArea::both().max_height(230.0).show(ui,|ui|{egui::Grid::new("quantites_natives").striped(true).show(ui,|ui|{for l in lignes {for c in l {ui.label(c);}ui.end_row();}});});}
+                    Ok(lignes)=>{egui::ScrollArea::both().max_height(230.0).show(ui,|ui|{egui::Grid::new("quantites_projet").striped(true).show(ui,|ui|{for l in lignes {for c in l {ui.label(c);}ui.end_row();}});});}
                     Err(e)=>{ui.colored_label(Color32::DARK_RED,e);}
                 }
-                if ui.button("Exporter CSV…").clicked(){export=Some(("csv",self.bim.nomenclature));}
+                if ui.button("Exporter CSV…").clicked(){export=Some(self.bim.nomenclature);}
             }
         });
-        if let Some(d) = &self.bim.apercu {
-            let mut montrer = true;
-            egui::Window::new("Aperçu papier")
-                .open(&mut montrer)
-                .default_size([800.0, 580.0])
-                .show(ctx, |ui| apercu(ui, d));
-            if !montrer {
-                self.bim.apercu = None;
-            }
-        }
         self.bim.documentation = ouvert;
         if let Some(c) = commande {
             if let Err(e) = self.executer_bim(c) {
                 self.error = Some(e);
             }
         }
-        if let Some((extension, k)) = export {
-            let Some(path) = rfd::FileDialog::new()
-                .set_file_name(format!("document.{extension}"))
-                .add_filter(extension, &[extension])
-                .save_file()
-            else {
+        if let Some(k) = export {
+            let Some(path) = rfd::FileDialog::new().set_file_name("nomenclature.csv").add_filter("csv", &["csv"]).save_file() else {
                 return;
             };
             let p = &self.natif.as_ref().unwrap().0;
-            let contenu = if extension == "csv" {
-                d::tableau(p, &p.nomenclatures[k]).map(|l| d::csv(&l).into_bytes())
-            } else {
-                d::svg_feuille(p, &p.feuilles[k]).and_then(|s| {
-                    if extension == "pdf" {
-                        d::pdf(&s)
-                    } else {
-                        Ok(s.into_bytes())
-                    }
-                })
-            };
+            let contenu = d::tableau(p, &p.nomenclatures[k]).map(|l| d::csv(&l).into_bytes());
             match contenu.and_then(|b| crate::modele::enregistrement::ecrire_atomique(&path, &b)) {
                 Ok(()) => self.status = format!("Export : {}", path.display()),
                 Err(e) => self.error = Some(e),
             }
         }
-    }
-}
-fn apercu(ui: &mut egui::Ui, d: &crate::trace2d::Dessin) {
-    let (rect, _) = ui.allocate_exact_size(
-        ui.available_size().max(egui::vec2(300.0, 200.0)),
-        egui::Sense::hover(),
-    );
-    let mut triangles = Vec::new();
-    let mut lignes = Vec::new();
-    for p in &d.primitives {
-        let m = p.mailler(d.droite.cross(d.haut), 1.0);
-        triangles.extend(m.triangles.into_iter().map(|t| (t, p.style.couleur)));
-        lignes.extend(m.traits.into_iter().map(|t| (t, p.style.couleur)));
-    }
-    let proj = |p: glam::DVec3| egui::vec2(p.dot(d.droite) as f32, -p.dot(d.haut) as f32);
-    let mut bounds = egui::Rect::NOTHING;
-    for (t, _) in &triangles {
-        for p in t {
-            bounds.extend_with(egui::Pos2::ZERO + proj(*p));
-        }
-    }
-    for (t, _) in &lignes {
-        for p in t {
-            bounds.extend_with(egui::Pos2::ZERO + proj(*p));
-        }
-    }
-    if !bounds.is_finite() {
-        return;
-    }
-    let k = ((rect.width() - 20.0) / bounds.width().max(0.001))
-        .min((rect.height() - 20.0) / bounds.height().max(0.001));
-    let pos = |p| rect.center() + (proj(p) - bounds.center().to_vec2()) * k;
-    let mut mesh = egui::Mesh::default();
-    for (t, c) in triangles {
-        let start = mesh.vertices.len() as u32;
-        for p in t {
-            mesh.colored_vertex(
-                pos(p),
-                Color32::from_rgba_unmultiplied(c[0], c[1], c[2], c[3]),
-            );
-        }
-        mesh.add_triangle(start, start + 1, start + 2);
-    }
-    ui.painter().rect_filled(rect, 0.0, Color32::WHITE);
-    ui.painter().add(egui::Shape::mesh(mesh));
-    for (l, c) in lignes {
-        ui.painter().line_segment(
-            l.map(pos),
-            egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(c[0], c[1], c[2], c[3])),
-        );
     }
 }

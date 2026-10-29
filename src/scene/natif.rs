@@ -325,6 +325,11 @@ fn navigateur(projet: &Projet) -> Navigateur {
         }
         vues.push(n);
     }
+    // jeux de feuilles : une vue par jeu (toutes ses feuilles à la suite) ; identifiant
+    // tiré du rang du jeu, stable si on le renomme
+    for (k, jeu) in crate::modele::documentation::jeux(projet).iter().enumerate() {
+        vues.push(vue(num(&format!("jeu:{k}")), "Jeu de feuilles", jeu, 1.0));
+    }
     let types = |categorie: &str, nom: &str, ts: &[crate::modele::TypeCompose], genre: &str| NavFamille {
         categorie: categorie.into(),
         nom: nom.into(),

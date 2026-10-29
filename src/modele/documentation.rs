@@ -55,11 +55,21 @@ pub struct VuePlacee {
     pub position: [f64; 2],
     pub echelle: f64,
 }
+/// Jeu des feuilles enregistrées sans jeu.
+pub const JEU_DEFAUT: &str = "Plans";
+fn jeu_defaut() -> String {
+    JEU_DEFAUT.into()
+}
+
+/// Feuille : format papier (mm), cartouche, vues placées ; les feuilles d'un même jeu
+/// se suivent dans l'ordre du projet.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Feuille {
     pub id: String,
     pub numero: String,
     pub nom: String,
+    #[serde(default = "jeu_defaut")]
+    pub jeu: String,
     pub largeur: f64,
     pub hauteur: f64,
     pub cartouche: String,
@@ -322,99 +332,116 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
     })
 }
 
-pub fn feuille(p: &Projet, f: &Feuille) -> Result<Dessin, String> {
-    let pt = |x, y| DVec3::new(x / 1000.0, y / 1000.0, 0.0);
-    let mut primitives = vec![Primitive {
-        forme: Forme::Polyligne {
-            points: vec![
-                pt(0.0, 0.0),
-                pt(f.largeur, 0.0),
-                pt(f.largeur, f.hauteur),
-                pt(0.0, f.hauteur),
-            ],
-            fermee: true,
-        },
-        style: Style {
-            couleur: [20, 20, 20, 255],
-            epaisseur: 0.18,
-        },
-        role: Role::Annotation,
-        element: None,
-    }];
-    primitives.push(texte(
-        &format!("{} — {}", f.numero, f.nom),
-        pt(10.0, 10.0),
-        DVec3::X,
-        DVec3::Y,
-        0.003,
-        [20, 20, 20, 255],
-    ));
-    primitives.push(texte(
-        &f.cartouche,
-        pt(10.0, 5.0),
-        DVec3::X,
-        DVec3::Y,
-        0.002,
-        [20, 20, 20, 255],
-    ));
-    for v in &f.vues {
-        let mut projet = p.clone();
-        if let Some(vue) = projet.vues.iter_mut().find(|x| x.id == v.vue) {
-            vue.echelle = v.echelle;
+/// Jeux de feuilles du projet, dans l'ordre de leur première feuille.
+pub fn jeux(p: &Projet) -> Vec<String> {
+    let mut v: Vec<String> = Vec::new();
+    for f in &p.feuilles {
+        if !v.contains(&f.jeu) {
+            v.push(f.jeu.clone());
         }
-        let dessin = dessin_vue(&projet, &v.vue)?;
-        let vue = p.vues.iter().find(|x| x.id == v.vue).unwrap();
-        let (origine, _, _) = repere(p, vue);
-        let proj = |q: DVec3| {
-            let q = q - origine * 0.001;
-            pt(
-                v.position[0] + q.dot(dessin.droite) * 1000.0 / v.echelle,
-                v.position[1] + q.dot(dessin.haut) * 1000.0 / v.echelle,
-            )
-        };
-        let mut bas_titre = v.position[1];
-        for mut pr in dessin.primitives {
-            pr.forme = match pr.forme {
-                Forme::Polyligne { points, fermee } => Forme::Polyligne {
-                    points: points.into_iter().map(proj).collect(),
-                    fermee,
-                },
-                Forme::Segments(s) => Forme::Segments(s.into_iter().map(|s| s.map(proj)).collect()),
-                Forme::Triangles(t) => {
-                    Forme::Triangles(t.into_iter().map(|t| t.map(proj)).collect())
-                }
-                Forme::Surface(c) => Forme::Surface(
-                    c.into_iter()
-                        .map(|c| c.into_iter().map(proj).collect())
-                        .collect(),
-                ),
-            };
-            let points: Box<dyn Iterator<Item = &DVec3> + '_> = match &pr.forme {
-                Forme::Polyligne { points, .. } => Box::new(points.iter()),
-                Forme::Segments(s) => Box::new(s.iter().flatten()),
-                Forme::Triangles(t) => Box::new(t.iter().flatten()),
-                Forme::Surface(c) => Box::new(c.iter().flatten()),
-            };
-            for p in points {
-                bas_titre = bas_titre.min(p.y * 1000.0);
-            }
-            primitives.push(pr);
-        }
-        primitives.push(texte(
-            &format!("{} · 1:{}", vue.nom, v.echelle),
-            pt(v.position[0], bas_titre - 7.0),
-            DVec3::X,
-            DVec3::Y,
-            0.0025,
-            [20, 20, 20, 255],
-        ));
     }
-    Ok(Dessin {
-        droite: DVec3::X,
-        haut: DVec3::Y,
-        echelle: 1.0,
-        primitives,
-    })
+    v
+}
+
+/// Formats papier courants (paysage), mm.
+pub const FORMATS: [(&str, f64, f64); 5] = [("A0", 1189.0, 841.0), ("A1", 841.0, 594.0), ("A2", 594.0, 420.0), ("A3", 420.0, 297.0), ("A4", 297.0, 210.0)];
+
+/// Marge du cadre et taille du cartouche (mm).
+pub const MARGE: f64 = 10.0;
+pub const CARTOUCHE: [f64; 2] = [180.0, 40.0];
+
+fn pt_papier(x: f64, y: f64) -> DVec3 {
+    DVec3::new(x / 1000.0, y / 1000.0, 0.0)
+}
+
+fn trait_papier(points: Vec<DVec3>, fermee: bool, epaisseur: f64) -> Primitive {
+    Primitive { forme: Forme::Polyligne { points, fermee }, style: Style { couleur: [20, 20, 20, 255], epaisseur }, role: Role::Annotation, element: None }
+}
+
+/// Cadre et cartouche d'une feuille, en mètres du papier (origine en bas à gauche) :
+/// bord, cadre intérieur, cartouche en bas à droite (projet, cartouche libre, titre,
+/// numéro, échelles des vues placées).
+pub fn cadre_feuille(p: &Projet, f: &Feuille) -> Vec<Primitive> {
+    let (l, h, m) = (f.largeur, f.hauteur, MARGE);
+    let rect = |x0: f64, y0: f64, x1: f64, y1: f64, e: f64| trait_papier(vec![pt_papier(x0, y0), pt_papier(x1, y0), pt_papier(x1, y1), pt_papier(x0, y1)], true, e);
+    let mut v = vec![rect(0.0, 0.0, l, h, 0.0), rect(m, m, l - m, h - m, 0.5)];
+    let [cl, ch] = CARTOUCHE;
+    let (x0, y0, x1, y1) = (l - m - cl, m, l - m, m + ch);
+    if x0 > m && y1 < h - m {
+        v.push(rect(x0, y0, x1, y1, 0.35));
+        let xn = x1 - 40.0;
+        v.push(trait_papier(vec![pt_papier(xn, y0), pt_papier(xn, y1)], false, 0.25));
+        v.push(trait_papier(vec![pt_papier(x0, y0 + 14.0), pt_papier(xn, y0 + 14.0)], false, 0.18));
+        v.push(trait_papier(vec![pt_papier(x0, y1 - 10.0), pt_papier(xn, y1 - 10.0)], false, 0.18));
+        let noir = [20, 20, 20, 255];
+        v.push(texte(&p.nom, pt_papier(x0 + 3.0, y1 - 7.0), DVec3::X, DVec3::Y, 0.0035, noir));
+        v.push(texte(&f.nom, pt_papier(x0 + 3.0, y0 + 20.0), DVec3::X, DVec3::Y, 0.005, noir));
+        if !f.cartouche.is_empty() {
+            v.push(texte(&f.cartouche, pt_papier(x0 + 3.0, y0 + 9.0), DVec3::X, DVec3::Y, 0.0025, noir));
+        }
+        let mut echelles: Vec<String> = f.vues.iter().map(|x| format!("1:{}", x.echelle)).collect();
+        echelles.dedup();
+        if !echelles.is_empty() {
+            v.push(texte(&format!("Échelle {}", echelles.join(", ")), pt_papier(x0 + 3.0, y0 + 3.5), DVec3::X, DVec3::Y, 0.0025, noir));
+        }
+        v.push(texte(&f.numero, pt_papier(xn + 4.0, y0 + 15.0), DVec3::X, DVec3::Y, 0.009, noir));
+    }
+    v
+}
+
+/// Vue placée sur une feuille : dessin de la vue à l'échelle de la feuille, en mètres du
+/// papier (origine en bas à gauche), suivi de son titre (nom, échelle) souligné ; et
+/// l'étendue du dessin seul, en mm du papier [x0, y0, x1, y1].
+pub fn vue_placee(p: &Projet, v: &VuePlacee) -> Result<(Vec<Primitive>, [f64; 4]), String> {
+    let mut projet = p.clone();
+    if let Some(vue) = projet.vues.iter_mut().find(|x| x.id == v.vue) {
+        vue.echelle = v.echelle;
+    }
+    let dessin = dessin_vue(&projet, &v.vue)?;
+    let vue = p.vues.iter().find(|x| x.id == v.vue).ok_or("Vue absente.")?;
+    let (origine, _, _) = repere(p, vue);
+    let proj = |q: DVec3| {
+        let q = q - origine * 0.001;
+        pt_papier(v.position[0] + q.dot(dessin.droite) * 1000.0 / v.echelle, v.position[1] + q.dot(dessin.haut) * 1000.0 / v.echelle)
+    };
+    let mut primitives = Vec::new();
+    let mut e = [f64::MAX, f64::MAX, f64::MIN, f64::MIN];
+    for mut pr in dessin.primitives {
+        pr.forme = match pr.forme {
+            Forme::Polyligne { points, fermee } => Forme::Polyligne { points: points.into_iter().map(proj).collect(), fermee },
+            Forme::Segments(s) => Forme::Segments(s.into_iter().map(|s| s.map(proj)).collect()),
+            Forme::Triangles(t) => Forme::Triangles(t.into_iter().map(|t| t.map(proj)).collect()),
+            Forme::Surface(c) => Forme::Surface(c.into_iter().map(|c| c.into_iter().map(proj).collect()).collect()),
+        };
+        let points: Box<dyn Iterator<Item = &DVec3> + '_> = match &pr.forme {
+            Forme::Polyligne { points, .. } => Box::new(points.iter()),
+            Forme::Segments(s) => Box::new(s.iter().flatten()),
+            Forme::Triangles(t) => Box::new(t.iter().flatten()),
+            Forme::Surface(c) => Box::new(c.iter().flatten()),
+        };
+        for q in points {
+            e = [e[0].min(q.x * 1000.0), e[1].min(q.y * 1000.0), e[2].max(q.x * 1000.0), e[3].max(q.y * 1000.0)];
+        }
+        primitives.push(pr);
+    }
+    if e[0] > e[2] {
+        e = [v.position[0], v.position[1], v.position[0] + 10.0, v.position[1] + 10.0];
+    }
+    // titre sous le dessin : nom, échelle, trait
+    let y = e[1] - 8.0;
+    let noir = [20, 20, 20, 255];
+    primitives.push(texte(&vue.nom, pt_papier(e[0], y), DVec3::X, DVec3::Y, 0.004, noir));
+    primitives.push(texte(&format!("1:{}", v.echelle), pt_papier(e[0], y - 5.0), DVec3::X, DVec3::Y, 0.0025, noir));
+    primitives.push(trait_papier(vec![pt_papier(e[0], y - 1.2), pt_papier(e[0] + 60.0_f64.min(e[2] - e[0]).max(30.0), y - 1.2)], false, 0.35));
+    Ok((primitives, e))
+}
+
+pub fn feuille(p: &Projet, f: &Feuille) -> Result<Dessin, String> {
+    let mut primitives = cadre_feuille(p, f);
+    for v in &f.vues {
+        primitives.extend(vue_placee(p, v)?.0);
+    }
+    Ok(Dessin { droite: DVec3::X, haut: DVec3::Y, echelle: 1.0, primitives })
 }
 
 /// Quantités nettes : murs percés, dalles avec trémies. Pas de double compte des assemblages.
@@ -563,6 +590,7 @@ mod tests {
             id: "f".into(),
             numero: "A01".into(),
             nom: "Plan".into(),
+            jeu: JEU_DEFAUT.into(),
             largeur: 420.0,
             hauteur: 297.0,
             cartouche: "Agence & associés".into(),
@@ -585,6 +613,24 @@ mod tests {
         assert!(p.annotations.is_empty());
         assert!(p.feuilles[0].vues.is_empty());
     }
+    #[test]
+    fn feuilles_par_jeu_et_anciens_fichiers() {
+        // feuille enregistrée avant les jeux : jeu par défaut
+        let f: Feuille = serde_json::from_str(r#"{"id":"f","numero":"A01","nom":"Plan","largeur":420,"hauteur":297,"cartouche":"","vues":[]}"#).unwrap();
+        assert_eq!(f.jeu, JEU_DEFAUT);
+        let mut p = Projet::nouveau("J");
+        let mut g = f.clone();
+        g.id = "g".into();
+        g.jeu = "Détails".into();
+        let mut h = f.clone();
+        h.id = "h".into();
+        p.feuilles = vec![f, g, h];
+        assert_eq!(jeux(&p), vec![JEU_DEFAUT.to_string(), "Détails".to_string()]);
+        // cadre et cartouche dans la feuille
+        let cadre = cadre_feuille(&p, &p.feuilles[0]);
+        assert!(cadre.len() > 4);
+    }
+
     #[test]
     fn nomenclature_csv_et_quantites_sans_double_compte() {
         let (p, _) =
