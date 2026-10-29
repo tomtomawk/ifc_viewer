@@ -442,6 +442,8 @@ pub struct ViewerApp {
     aretes_objet: Option<(u32, Vec<[Vec3; 2]>)>,
     /// Orientations de plan enregistrées hors projet natif (session).
     positions_plan: Vec<(String, f32)>,
+    /// Boîte « Nouvelle position » ouverte : nom saisi.
+    nom_position_plan: Option<String>,
     /// Premier point d'une chaîne de murs (la refermer l'arrête).
     mur_chaine: Option<[f64; 2]>,
     /// Nom de la vue native ouverte en cours de saisie (identifiant, texte).
@@ -605,6 +607,7 @@ impl ViewerApp {
             arete_alignement: None,
             aretes_objet: None,
             positions_plan: Vec::new(),
+            nom_position_plan: None,
             confirmer_fermeture: None,
             documents: BTreeMap::new(),
             document_actif: 0,
@@ -2478,11 +2481,50 @@ impl ViewerApp {
         }
     }
 
-    /// Enregistre l'orientation en cours du plan (dans le projet natif s'il y en a un).
-    fn enregistrer_position_plan(&mut self) {
+    /// Boîte « Nouvelle position » : nom de l'orientation en cours, puis enregistrement.
+    fn fenetre_position_plan(&mut self, ctx: &egui::Context) {
+        let Some(mut nom) = self.nom_position_plan.take() else { return };
+        let (mut ouverte, mut valider, mut annuler) = (true, false, false);
+        egui::Window::new("Nouvelle position")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .open(&mut ouverte)
+            .show(ctx, |ui| {
+                ui.label(format!("Orientation en cours : {:.1}°", crate::orientation_plan::angle(&self.camera).to_degrees()));
+                let r = ui.add(egui::TextEdit::singleline(&mut nom).hint_text("Nom de la position").desired_width(220.0));
+                if !r.has_focus() && !r.lost_focus() {
+                    r.request_focus();
+                }
+                let entree = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                let existe = self.positions_plan_liste().iter().any(|(n, _)| n == nom.trim());
+                if existe {
+                    ui.colored_label(ui.visuals().warn_fg_color, "Une position porte déjà ce nom.");
+                }
+                ui.horizontal(|ui| {
+                    let ok = !nom.trim().is_empty() && !existe;
+                    if ui.add_enabled(ok, egui::Button::new("Enregistrer")).clicked() || (ok && entree) {
+                        valider = true;
+                    }
+                    if ui.button("Annuler").clicked() {
+                        annuler = true;
+                    }
+                });
+            });
+        if annuler || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            ouverte = false;
+        }
+        if valider {
+            self.enregistrer_position_plan(nom.trim().to_string());
+        } else if ouverte {
+            self.nom_position_plan = Some(nom);
+        }
+    }
+
+    /// Enregistre l'orientation en cours du plan sous `nom` (dans le projet natif s'il y
+    /// en a un).
+    fn enregistrer_position_plan(&mut self, nom: String) {
         let angle = crate::orientation_plan::angle(&self.camera);
-        let n = self.positions_plan_liste().len() + 1;
-        let nom = format!("Position {n}");
         match &self.natif {
             Some((p, _)) => {
                 let mut p = p.clone();
@@ -4997,6 +5039,7 @@ impl ViewerApp {
     fn right_panel(&mut self, ui: &mut egui::Ui) {
         self.fenetre_materiau(ui.ctx());
         self.fenetre_motifs(ui.ctx());
+        self.fenetre_position_plan(ui.ctx());
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
         if self.natif.is_some() {
             let ids = self.selection_bim();
@@ -5808,8 +5851,8 @@ impl ViewerApp {
                 self.alignement_plan = !self.alignement_plan;
                 self.arete_alignement = None;
             }
-            if r.enregistrer {
-                self.enregistrer_position_plan();
+            if r.nouvelle {
+                self.nom_position_plan = Some(format!("Position {}", positions.len() + 1));
             }
             if let Some(i) = r.supprimer {
                 self.supprimer_position_plan(i);

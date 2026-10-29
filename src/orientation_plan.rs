@@ -102,8 +102,9 @@ pub struct Reponse {
     /// « Aligner » cliqué : le prochain clic dans la vue choisit l'arête à mettre à
     /// l'horizontale.
     pub aligner: bool,
-    /// « Enregistrer la position » cliqué : mémoriser l'orientation en cours.
-    pub enregistrer: bool,
+    /// « Nouvelle… » choisi dans la liste des positions : nommer et mémoriser
+    /// l'orientation en cours.
+    pub nouvelle: bool,
     /// Position enregistrée à supprimer (indice).
     pub supprimer: Option<usize>,
 }
@@ -235,29 +236,36 @@ pub fn afficher(ui: &mut egui::Ui, vue: egui::Rect, camera: &mut Camera, origine
                 if r.on_hover_text("Angle du plan par rapport au nord du modèle").changed() {
                     orienter(camera, degres.to_radians());
                 }
-                ui.menu_button(egui::RichText::new("Positions").size(11.0), |ui| {
-                    if ui.button("Enregistrer la position").on_hover_text("Mémoriser l'orientation en cours du plan").clicked() {
-                        reponse.enregistrer = true;
-                        ui.close();
-                    }
-                    if !positions.is_empty() {
-                        ui.separator();
-                    }
-                    for (i, (nom, a)) in positions.iter().enumerate() {
-                        ui.horizontal(|ui| {
-                            if ui.button(format!("{nom} · {:.1}°", a.to_degrees())).on_hover_text("Revenir à cette orientation").clicked() {
-                                orienter(camera, *a);
-                                ui.close();
-                            }
-                            if ui.small_button("Supprimer").clicked() {
-                                reponse.supprimer = Some(i);
-                                ui.close();
-                            }
-                        });
-                    }
-                })
-                .response
-                .on_hover_text("Orientations enregistrées du plan");
+                // liste des positions : la position en cours (même angle) affichée ;
+                // « Nouvelle… » en dernier
+                let actuel = angle(camera);
+                let courante = positions.iter().find(|(_, a)| ecart(*a, actuel).abs() < 0.05_f32.to_radians()).map(|(n, _)| n.as_str());
+                egui::ComboBox::from_id_salt("positions_plan")
+                    .selected_text(egui::RichText::new(courante.unwrap_or("Positions")).size(11.0))
+                    .width(LARGEUR - 66.0 - 3.0)
+                    .show_ui(ui, |ui| {
+                        for (i, (nom, a)) in positions.iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                if ui.selectable_label(Some(nom.as_str()) == courante, format!("{nom} · {:.1}°", a.to_degrees())).on_hover_text("Revenir à cette orientation").clicked() {
+                                    orienter(camera, *a);
+                                    ui.close();
+                                }
+                                if ui.small_button("Supprimer").clicked() {
+                                    reponse.supprimer = Some(i);
+                                    ui.close();
+                                }
+                            });
+                        }
+                        if !positions.is_empty() {
+                            ui.separator();
+                        }
+                        if ui.selectable_label(false, "Nouvelle…").on_hover_text("Enregistrer l'orientation en cours sous un nom").clicked() {
+                            reponse.nouvelle = true;
+                            ui.close();
+                        }
+                    })
+                    .response
+                    .on_hover_text("Orientations enregistrées du plan");
             });
             let texte = if alignement { "Viser une arête…" } else { "Aligner sur…" };
             if ui
