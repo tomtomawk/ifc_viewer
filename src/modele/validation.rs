@@ -23,6 +23,9 @@ impl Projet {
                 return Err(format!("Identifiant vide ou dupliqué : {id}"));
             }
         }
+        if self.contextes.keys().any(|id| !ids.contains(id)) {
+            return Err("Contexte d'élément sans élément associé.".into());
+        }
         for n in &self.niveaux {
             if !n.altitude.is_finite() {
                 return Err("Altitude non finie.".into());
@@ -106,7 +109,9 @@ impl Projet {
                 return Err("Pente hors de l'intervalle ]0, 89[ degrés.".into());
             }
         }
-        for b in &self.barres { solides::barre(self, b)?; }
+        for b in &self.barres {
+            solides::barre(self, b)?;
+        }
         for e in &self.importes {
             if e.niveau.as_ref().is_some_and(|n| self.niveau(n).is_none()) {
                 return Err("Élément importé : niveau absent.".into());

@@ -24,6 +24,7 @@ mod trace2d;
 use std::path::PathBuf;
 
 fn main() {
+    options::definir_unite(options::Options::charger().unite);
     let args: Vec<String> = std::env::args().skip(1).collect();
     if let Some(resultat) = bim_cli::executer(&args) {
         match resultat { Ok(())=>std::process::exit(0),Err(e)=>{eprintln!("{e}");std::process::exit(2);} }

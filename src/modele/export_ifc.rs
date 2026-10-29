@@ -258,7 +258,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             guid(&format!("perc:{}", o.id), None),
             produits[&o.mur]
         ));
-        if o.genre != GenreOuverture::Baie {
+        if o.genre != GenreOuverture::Libre {
             let rep = w.mesh(&solides::ouverture(p, o)?, contexte);
             let classe = if o.genre == GenreOuverture::Porte {
                 "IFCDOOR"

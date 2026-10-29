@@ -8,6 +8,12 @@ pub enum Commande {
     Barre {
         barre: Barre,
     },
+    ModifierVue {
+        vue: Vue,
+    },
+    ModifierQuadrillage {
+        quadrillage: documentation::Quadrillage,
+    },
     Niveau {
         nom: String,
         altitude: f64,
@@ -34,6 +40,7 @@ pub enum Commande {
     Ouverture {
         mur: String,
         genre: GenreOuverture,
+        type_ouverture: Option<String>,
         abscisse: f64,
         largeur: f64,
         hauteur: f64,
@@ -142,6 +149,39 @@ impl Projet {
     }
     fn executer_interne(&mut self, c: Commande) -> Result<Vec<String>, String> {
         match c {
+            Commande::ModifierQuadrillage { quadrillage } => {
+                let actuel = self
+                    .quadrillages
+                    .iter_mut()
+                    .find(|g| g.id == quadrillage.id)
+                    .ok_or("Quadrillage absent.")?;
+                let id = quadrillage.id.clone();
+                *actuel = quadrillage;
+                Ok(vec![id])
+            }
+            Commande::ModifierVue { vue } => {
+                if vue.nom.trim().is_empty()
+                    || self
+                        .vues
+                        .iter()
+                        .any(|v| v.id != vue.id && v.nom.eq_ignore_ascii_case(vue.nom.trim()))
+                {
+                    return Err("Le nom de la vue est vide ou déjà utilisé.".into());
+                }
+                let actuel = self
+                    .vues
+                    .iter_mut()
+                    .find(|v| v.id == vue.id)
+                    .ok_or("Vue absente.")?;
+                if !matches!(actuel.genre, GenreVue::Coupe { .. })
+                    || !matches!(vue.genre, GenreVue::Coupe { .. })
+                {
+                    return Err("Sélectionnez une coupe ou une élévation.".into());
+                }
+                let id = vue.id.clone();
+                *actuel = vue;
+                Ok(vec![id])
+            }
             Commande::Barre { mut barre } => {
                 if barre.id.is_empty() {
                     barre.id = identite(self, "structure");
@@ -243,6 +283,7 @@ impl Projet {
             Commande::Ouverture {
                 mur,
                 genre,
+                type_ouverture,
                 abscisse,
                 largeur,
                 hauteur,
@@ -257,13 +298,13 @@ impl Projet {
                     || abscisse - largeur / 2.0 < 0.0
                     || abscisse + largeur / 2.0 > axe.longueur()
                 {
-                    return Err("La baie doit tenir dans la longueur du mur, avec des dimensions positives.".into());
+                    return Err("L’ouverture doit tenir dans la longueur du mur, avec des dimensions positives.".into());
                 }
                 let id = identite(self, "ouverture");
                 let nom = match genre {
                     GenreOuverture::Porte => "Porte",
                     GenreOuverture::Fenetre => "Fenêtre",
-                    GenreOuverture::Baie => "Baie",
+                    GenreOuverture::Libre => "Ouverture libre",
                 }
                 .into();
                 self.ouvertures.push(Ouverture {
@@ -271,7 +312,7 @@ impl Projet {
                     nom,
                     genre,
                     mur,
-                    type_ouverture: None,
+                    type_ouverture,
                     abscisse,
                     largeur,
                     hauteur,
@@ -407,9 +448,10 @@ impl Projet {
             Commande::Copier { ids, delta } => {
                 let set = self.dependances(&ids)?;
                 if self.niveaux.iter().any(|n| set.contains(&n.id))
-                    || self.vues.iter().any(|n| set.contains(&n.id))
-                    || self.annotations.iter().any(|n| set.contains(&n.id))
-                    || self.quadrillages.iter().any(|n| set.contains(&n.id))
+                    || self
+                        .vues
+                        .iter()
+                        .any(|n| set.contains(&n.id) && matches!(n.genre, GenreVue::Plan { .. }))
                     || self.feuilles.iter().any(|n| set.contains(&n.id))
                     || self.nomenclatures.iter().any(|n| set.contains(&n.id))
                 {
@@ -495,6 +537,62 @@ impl Projet {
                         b
                     })
                     .collect();
+                let vues: Vec<_> = self
+                    .vues
+                    .iter()
+                    .filter(|v| set.contains(&v.id))
+                    .map(|v| {
+                        let mut v = v.clone();
+                        v.id = map[&v.id].clone();
+                        v.nom = format!("{} (copie)", v.nom);
+                        v
+                    })
+                    .collect();
+                self.vues.extend(vues);
+                let annotations: Vec<_> = self
+                    .annotations
+                    .iter()
+                    .filter(|a| map.contains_key(&a.vue) && !set.contains(&a.id))
+                    .cloned()
+                    .collect();
+                for mut annotation in annotations {
+                    annotation.id = identite(self, "annotation");
+                    annotation.vue = map[&annotation.vue].clone();
+                    remapper_annotation(&mut annotation, &map);
+                    self.annotations.push(annotation);
+                }
+                let annotations: Vec<_> = self
+                    .annotations
+                    .iter()
+                    .filter(|a| set.contains(&a.id))
+                    .cloned()
+                    .collect();
+                for mut annotation in annotations {
+                    annotation.id = map[&annotation.id].clone();
+                    if let Some(id) = map.get(&annotation.vue) {
+                        annotation.vue = id.clone();
+                    }
+                    remapper_annotation(&mut annotation, &map);
+                    self.annotations.push(annotation);
+                }
+                let quadrillages: Vec<_> = self
+                    .quadrillages
+                    .iter()
+                    .filter(|g| set.contains(&g.id))
+                    .map(|g| {
+                        let mut g = g.clone();
+                        g.id = map[&g.id].clone();
+                        g.nom = format!("{} (copie)", g.nom);
+                        g
+                    })
+                    .collect();
+                self.quadrillages.extend(quadrillages);
+                let contextes: Vec<_> = self
+                    .contextes
+                    .iter()
+                    .filter_map(|(id, c)| map.get(id).map(|nouveau| (nouveau.clone(), c.clone())))
+                    .collect();
+                self.contextes.extend(contextes);
                 self.barres.extend(barres);
                 self.murs.extend(murs);
                 self.assemblages.extend(assems);
@@ -549,6 +647,7 @@ impl Projet {
                 self.attaches_toitures
                     .retain(|id, t| !set.contains(id) && !set.contains(t));
                 self.priorites_jonction.retain(|id, _| !set.contains(id));
+                self.contextes.retain(|id, _| !set.contains(id));
                 self.annotations
                     .retain(|x| !set.contains(&x.id) && !set.contains(&x.vue));
                 self.quadrillages.retain(|x| !set.contains(&x.id));
@@ -622,9 +721,10 @@ impl Projet {
             return Err("Transformation non finie.".into());
         }
         if self.niveaux.iter().any(|n| set.contains(&n.id))
-            || self.vues.iter().any(|n| set.contains(&n.id))
-            || self.annotations.iter().any(|n| set.contains(&n.id))
-            || self.quadrillages.iter().any(|n| set.contains(&n.id))
+            || self.vues.iter().any(|n| {
+                set.contains(&n.id) && (matches!(n.genre, GenreVue::Plan { .. }) || delta[2] != 0.0)
+            })
+            || (delta[2] != 0.0 && self.quadrillages.iter().any(|n| set.contains(&n.id)))
             || self.feuilles.iter().any(|n| set.contains(&n.id))
             || self.nomenclatures.iter().any(|n| set.contains(&n.id))
         {
@@ -644,6 +744,80 @@ impl Projet {
                 *p = [xy[0], xy[1], p[2] + delta[2]];
             }
         };
+        let directions: HashMap<String, DVec2> = self
+            .vues
+            .iter()
+            .filter_map(|v| match &v.genre {
+                GenreVue::Coupe { debut, fin, .. } => Some((
+                    v.id.clone(),
+                    (DVec2::from_array(*fin) - DVec2::from_array(*debut)).normalize_or_zero(),
+                )),
+                _ => None,
+            })
+            .collect();
+        for a in &mut self.annotations {
+            if !set.contains(&a.id) || set.contains(&a.vue) {
+                continue;
+            }
+            let direction = directions.get(&a.vue);
+            let translation_locale = if let Some(u) = direction {
+                let d = DVec2::new(delta[0], delta[1]);
+                if angle != 0.0 || d.dot(u.perp()).abs() > 1e-6 {
+                    return Err("Déplacez les annotations de coupe dans le plan de leur vue ; leur rotation doit être modifiée dans cette vue.".into());
+                }
+                Some([d.dot(*u), delta[2]])
+            } else {
+                if delta[2] != 0.0 {
+                    return Err("Une annotation de plan doit rester dans son plan de vue.".into());
+                }
+                None
+            };
+            let point_annotation = |p: [f64; 2]| {
+                if let Some(d) = translation_locale {
+                    [p[0] + d[0], p[1] + d[1]]
+                } else {
+                    point(p)
+                }
+            };
+            use documentation::{AnnotationForme as F, PointCote};
+            match &mut a.forme {
+                F::Texte { point: p, .. } | F::Etiquette { point: p, .. } => {
+                    *p = point_annotation(*p)
+                }
+                F::Ligne { debut, fin } => {
+                    *debut = point_annotation(*debut);
+                    *fin = point_annotation(*fin);
+                }
+                F::Zone { contour } => {
+                    for p in contour {
+                        *p = point_annotation(*p);
+                    }
+                }
+                F::Cote { debut, fin, .. } => {
+                    for p in [debut, fin] {
+                        match p {
+                            PointCote::Fixe { point: p } => *p = point_annotation(*p),
+                            PointCote::Mur { id, .. } if set.contains(id) => {},
+                            PointCote::Mur { .. } => return Err("Sélectionnez le mur lié avec sa cote, ou modifiez le décalage dans les propriétés.".into()),
+                        }
+                    }
+                }
+            }
+        }
+        for g in &mut self.quadrillages {
+            if set.contains(&g.id) {
+                g.debut = point(g.debut);
+                g.fin = point(g.fin);
+            }
+        }
+        for v in &mut self.vues {
+            if set.contains(&v.id) {
+                if let GenreVue::Coupe { debut, fin, .. } = &mut v.genre {
+                    *debut = point(*debut);
+                    *fin = point(*fin);
+                }
+            }
+        }
         for b in &mut self.barres {
             if set.contains(&b.id) {
                 for p in [&mut b.debut, &mut b.fin] {
@@ -723,6 +897,26 @@ impl Projet {
             }
         }
         Ok(())
+    }
+}
+fn remapper_annotation(annotation: &mut documentation::Annotation, ids: &HashMap<String, String>) {
+    use documentation::{AnnotationForme as F, PointCote};
+    match &mut annotation.forme {
+        F::Etiquette { element, .. } => {
+            if let Some(id) = ids.get(element) {
+                *element = id.clone();
+            }
+        }
+        F::Cote { debut, fin, .. } => {
+            for p in [debut, fin] {
+                if let PointCote::Mur { id, .. } = p {
+                    if let Some(nouveau) = ids.get(id) {
+                        *id = nouveau.clone();
+                    }
+                }
+            }
+        }
+        _ => {}
     }
 }
 fn croisement(a: &[[f64; 2]], b: &[[f64; 2]]) -> bool {
@@ -823,6 +1017,153 @@ mod tests {
         crate::scene::depuis_natif(&relu, std::path::Path::new("test.modele.json")).unwrap();
         let ifc = export_ifc::exporter(&relu).unwrap();
         assert!(ifc.contains("IFCCOLUMN(") && ifc.contains("IFCBEAM("));
+    }
+    #[test]
+    fn modifier_deplacer_copier_et_supprimer_une_coupe() {
+        let mut p = projet();
+        let id = p
+            .ajouter_vue_coupe([0.0, 0.0], [2000.0, 0.0], 6000.0, false, "Coupe", 100.0)
+            .unwrap();
+        let (moved, _) = p
+            .executer(Commande::Deplacer {
+                ids: vec![id.clone()],
+                delta: [500.0, 1000.0, 0.0],
+            })
+            .unwrap();
+        assert!(
+            matches!(moved.vues.iter().find(|v| v.id == id).unwrap().genre, GenreVue::Coupe { debut, .. } if debut == [500.0,1000.0])
+        );
+        assert!(
+            p.executer(Commande::Deplacer {
+                ids: vec![id.clone()],
+                delta: [0.0, 0.0, 10.0]
+            })
+            .is_err()
+        );
+        let (copie, ids) = moved
+            .executer(Commande::Copier {
+                ids: vec![id.clone()],
+                delta: [0.0, 2000.0, 0.0],
+            })
+            .unwrap();
+        assert!(
+            matches!(copie.vues.iter().find(|v| v.id == ids[0]).unwrap().genre, GenreVue::Coupe { debut, .. } if debut == [500.0,3000.0])
+        );
+        let (retour, _) = copie.executer(Commande::Supprimer { ids }).unwrap();
+        assert_eq!(retour.json().unwrap(), moved.json().unwrap());
+    }
+    #[test]
+    fn annotations_et_quadrillages_se_copient_et_se_deplacent() {
+        let p = Projet::lire_json(
+            &std::fs::read_to_string("samples/maison_native.modele.json").unwrap(),
+        )
+        .unwrap();
+        let texte = p
+            .annotations
+            .iter()
+            .find(|a| a.id == "texte-sejour")
+            .unwrap();
+        let ancien = match &texte.forme {
+            documentation::AnnotationForme::Texte { point, .. } => *point,
+            _ => panic!("texte attendu"),
+        };
+        let (deplace, _) = p
+            .executer(Commande::Deplacer {
+                ids: vec![texte.id.clone()],
+                delta: [100.0, 200.0, 0.0],
+            })
+            .unwrap();
+        assert!(
+            matches!(&deplace.annotations.iter().find(|a| a.id == texte.id).unwrap().forme, documentation::AnnotationForme::Texte { point, .. } if *point == [ancien[0] + 100.0, ancien[1] + 200.0])
+        );
+        let mut p = p;
+        p.contextes.insert(
+            "porte".into(),
+            ContexteElement {
+                phase: Some("Construction".into()),
+                sous_projet: Some("Structure".into()),
+                variante: None,
+            },
+        );
+        let mut note = p
+            .annotations
+            .iter()
+            .find(|a| a.id == "texte-sejour")
+            .unwrap()
+            .clone();
+        note.id = "note-coupe".into();
+        note.vue = "coupe".into();
+        p.annotations.push(note);
+        let (section, _) = p
+            .executer(Commande::Deplacer {
+                ids: vec!["note-coupe".into()],
+                delta: [100.0, 0.0, 200.0],
+            })
+            .unwrap();
+        assert!(
+            matches!(&section.annotations.iter().find(|a| a.id == "note-coupe").unwrap().forme, documentation::AnnotationForme::Texte { point, .. } if *point == [ancien[0]+100.0, ancien[1]+200.0])
+        );
+        assert!(
+            p.executer(Commande::Deplacer {
+                ids: vec!["note-coupe".into()],
+                delta: [0.0, 100.0, 0.0]
+            })
+            .is_err()
+        );
+        let (copie, ids) = p
+            .executer(Commande::Copier {
+                ids: vec!["coupe".into()],
+                delta: [100.0, 0.0, 0.0],
+            })
+            .unwrap();
+        assert!(copie.vues.iter().any(|v| v.id == ids[0]));
+        assert!(
+            copie
+                .annotations
+                .iter()
+                .any(|a| a.vue == ids[0] && a.id != "note-coupe")
+        );
+        let (retour, _) = copie.executer(Commande::Supprimer { ids }).unwrap();
+        assert_eq!(retour.json().unwrap(), p.json().unwrap());
+        let (copie, ids) = p
+            .executer(Commande::Copier {
+                ids: vec!["rdc-m0".into(), "cote-largeur".into()],
+                delta: [10000.0, 0.0, 0.0],
+            })
+            .unwrap();
+        let porte = copie
+            .ouvertures
+            .iter()
+            .find(|o| o.mur == ids[0] && o.genre == GenreOuverture::Porte)
+            .unwrap();
+        assert_eq!(
+            copie
+                .contextes
+                .get(&porte.id)
+                .unwrap()
+                .sous_projet
+                .as_deref(),
+            Some("Structure")
+        );
+        let cote = copie.annotations.iter().find(|a| a.id == ids[1]).unwrap();
+        assert!(
+            matches!(&cote.forme, documentation::AnnotationForme::Cote { debut: documentation::PointCote::Mur { id, .. }, .. } if id == &ids[0])
+        );
+        let (retour, _) = copie.executer(Commande::Supprimer { ids }).unwrap();
+        assert_eq!(retour.json().unwrap(), p.json().unwrap());
+        let grid = &p.quadrillages[0];
+        let (copie, ids) = p
+            .executer(Commande::Copier {
+                ids: vec![grid.id.clone()],
+                delta: [100.0, 0.0, 0.0],
+            })
+            .unwrap();
+        assert!(
+            copie
+                .quadrillages
+                .iter()
+                .any(|g| g.id == ids[0] && g.debut[0] == grid.debut[0] + 100.0)
+        );
     }
     #[test]
     fn copier_assemblage_et_dependances_puis_supprimer_sans_perte() {

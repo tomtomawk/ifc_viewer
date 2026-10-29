@@ -136,6 +136,7 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
     let mut out = Vec::new();
     let pt = |p: DVec2| (o + u * p.x + h * p.y) * 0.001;
     for a in p.annotations.iter().filter(|a| a.vue == v.id) {
+        let debut = out.len();
         let taille = a.hauteur * v.echelle * 0.001;
         match &a.forme {
             AnnotationForme::Texte { point, texte: s } => out.push(texte(
@@ -174,7 +175,7 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
                         ligne(pt(a + n), pt(b + n)),
                     ]);
                     out.push(texte(
-                        &format!("{:.0}", (b - a).length()),
+                        &crate::options::unite().afficher((b - a).length()),
                         pt((a + b) / 2.0 + n),
                         u,
                         h,
@@ -228,6 +229,9 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
                     },
                 ));
             }
+        }
+        for primitive in &mut out[debut..] {
+            primitive.element = Some(crate::scene::id_natif("annotation", &a.id));
         }
     }
     if matches!(v.genre, GenreVue::Plan { .. }) {
@@ -467,7 +471,7 @@ pub fn tableau(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, String>
             match o.genre {
                 GenreOuverture::Porte => "Portes",
                 GenreOuverture::Fenetre => "Fenêtres",
-                GenreOuverture::Baie => "Baies",
+                GenreOuverture::Libre => "Ouvertures libres",
             },
             o.nom.clone(),
             0.0,

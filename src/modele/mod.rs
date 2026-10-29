@@ -58,6 +58,9 @@ pub struct Projet {
     pub dalles: Vec<Dalle>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub barres: Vec<Barre>,
+    /// Contexte des éléments dont le format ne porte pas ces propriétés directement.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub contextes: BTreeMap<String, ContexteElement>,
     /// Vues du projet (arborescence) : plans d'étage et coupes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub vues: Vec<Vue>,
@@ -77,6 +80,13 @@ pub struct Projet {
     /// Éléments de la source qui n'ont rien donné (sans géométrie, hors du périmètre v0),
     /// comptés par catégorie.
     pub ignores: BTreeMap<String, usize>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct ContexteElement {
+    pub phase: Option<String>,
+    pub sous_projet: Option<String>,
+    pub variante: Option<String>,
 }
 
 /// Élément structurel à section rectangulaire, en millimètres.
@@ -393,8 +403,8 @@ pub struct Mur {
 pub enum GenreOuverture {
     Porte,
     Fenetre,
-    /// Trémie sans menuiserie.
-    Baie,
+    /// Ouverture libre sans menuiserie.
+    Libre,
 }
 
 /// Type de porte ou de fenêtre : dimensions de la baie qu'il ouvre.
@@ -608,7 +618,7 @@ impl Maillage {
 
 impl Projet {
     pub fn nouveau(nom: &str) -> Projet {
-        Projet { format: FORMAT.into(), version: VERSION, nom: nom.into(), ..Default::default() }
+        Projet { format: FORMAT.into(), version: VERSION, nom: nom.into(), sous_projets: vec!["A".into()], ..Default::default() }
     }
 
     /// Projet vide portant les niveaux et les types de murs du gabarit, et leurs matériaux.
@@ -842,7 +852,7 @@ impl Conversion {
                         let cat = match o.genre {
                             GenreOuverture::Porte => "Portes",
                             GenreOuverture::Fenetre => "Fenêtres",
-                            GenreOuverture::Baie => "Baies",
+                            GenreOuverture::Libre => "Ouvertures libres",
                         };
                         p.importes.push(ElementImporte { id: o.id, nom: o.nom, categorie: cat.into(), niveau: Some(m.niveau.clone()), maillage: r, raison: "hébergée par un mur importé".into(), origine: o.origine });
                     }
@@ -964,12 +974,18 @@ mod tests {
     /// Mur de 5 m × 3 m × 200 mm percé d'une baie de 1 m × 1,2 m : 2,76 m³ ; aller-retour
     /// JSON.
     #[test]
+    fn ouverture_libre_sans_ancien_alias() {
+        assert_eq!(serde_json::to_string(&GenreOuverture::Libre).unwrap(), "\"libre\"");
+        assert!(serde_json::from_str::<GenreOuverture>("\"baie\"").is_err());
+        assert_eq!(Projet::nouveau("x").sous_projets, ["A"]);
+    }
+    #[test]
     fn volume_et_json() {
         let mut p = Projet::nouveau("essai");
         p.niveaux.push(Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
         p.types_murs.push(TypeCompose { id: "t".into(), nom: "200".into(), couches: vec![Couche { materiau: None, epaisseur: 200.0, ..Default::default() }], couches_detaillees: false, origine: None });
         p.murs.push(Mur { variante: None, phase: None, sous_projet: None, id: "m".into(), nom: "Mur".into(), type_mur: "t".into(), assemblage: None, niveau: "n".into(), decalage_bas: 0.0, haut: Haut::Libre { hauteur: 3000.0 }, axe: Axe::Droit { debut: [0.0, 0.0], fin: [5000.0, 0.0] }, origine: None });
-        p.ouvertures.push(Ouverture { id: "o".into(), nom: String::new(), genre: GenreOuverture::Baie, mur: "m".into(), type_ouverture: None, abscisse: 1500.0, largeur: 1000.0, hauteur: 1200.0, allege: 900.0, representation: None, origine: None });
+        p.ouvertures.push(Ouverture { id: "o".into(), nom: String::new(), genre: GenreOuverture::Libre, mur: "m".into(), type_ouverture: None, abscisse: 1500.0, largeur: 1000.0, hauteur: 1200.0, allege: 900.0, representation: None, origine: None });
         assert!((p.volume_mur(&p.murs[0]).unwrap() - 2.76e9).abs() < 1.0);
         let q = Projet::lire_json(&p.json().unwrap()).unwrap();
         assert_eq!(q.murs[0].axe, p.murs[0].axe);

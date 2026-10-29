@@ -1,8 +1,8 @@
 # Éditeur BIM natif
 
 Le document `.modele.json` reste la source de vérité. Les ajouts de cette itération
-sont compatibles avec le format v0 : les collections absentes d'un ancien fichier
-sont initialisées à vide. Aucun fichier RVT n'est écrit.
+utilisent le format v0. Aucun fichier RVT n'est écrit. Pendant l'alpha, le genre
+d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
 
 ## Parcours disponible
 
@@ -10,9 +10,11 @@ sont initialisées à vide. Aucun fichier RVT n'est écrit.
   conserve les documents ouverts et écrit le rapport `.rapport.md` à côté du JSON.
   Les murs courbes, ouvertures et maillages importés sont maintenant affichables.
 - **Modéliser → Niveau** crée et modifie les niveaux. **Quadrillage** crée des axes
-  droits, visibles dans les plans natifs. Les coordonnées de saisie sont en mm.
+  droits, visibles dans les plans natifs. Les dimensions du modèle sont saisies en
+  centimètres par défaut ; Début → Options permet de choisir mm, cm ou m. Le JSON,
+  les commandes CLI/MCP et les tailles sur papier restent en millimètres.
 - **Modéliser → Poteau / Poutre** crée des structures rectangulaires en saisissant
-  leurs dimensions en mm et leur niveau. Placez un poteau par un clic dans la vue ;
+  leurs dimensions et leur niveau. Placez un poteau par un clic dans la vue ;
   pour une poutre, cliquez son départ puis son arrivée. Le placement utilise les
   accrochages et Maj contraint la poutre aux axes du plan ; Échap ou clic droit
   annule un départ. La saisie par coordonnées reste disponible. Les poteaux sont
@@ -20,8 +22,8 @@ sont initialisées à vide. Aucun fichier RVT n'est écrit.
   Après sélection, **Modifier → Propriétés structurelles** permet de les modifier ;
   les commandes de déplacement, rotation, copie, suppression et l'historique leur
   sont applicables. Leurs quantités et classes `IfcColumn` / `IfcBeam` sont exportées.
-- **Ouverture** place une porte, une fenêtre ou une baie par clic sur un mur ou par
-  abscisse depuis son départ. Une baie d'assemblage perce toutes ses couches. Une
+- **Ouverture** place une porte, une fenêtre ou une ouverture libre par clic sur un mur ou par
+  abscisse depuis son départ. Une ouverture d'assemblage perce toutes ses couches. Une
   menuiserie importée conserve son maillage et suit son hôte ; ses dimensions sont
   verrouillées tant qu'elle n'est pas remplacée explicitement par un cadre natif.
 - **Modifier** propose déplacement, copie, rotation, alignement des axes et
@@ -33,7 +35,10 @@ sont initialisées à vide. Aucun fichier RVT n'est écrit.
   sélection ; Échap ou clic droit annule le rectangle. Les objets visibles à travers
   d'autres sont inclus, tandis que les éléments masqués et les parties découpées
   sont exclus. Le glissement sur un objet conserve la navigation 3D. Copier un assemblage recrée les
-  identifiants de ses couches et ouvertures. Supprimer demande confirmation des
+  identifiants de ses couches et ouvertures. Les repères de coupe/élévation et les
+  quadrillages se sélectionnent aussi en plan, ainsi que les annotations dans leur
+  vue ; leurs propriétés sont accessibles dans Modifier. Les cotes liées gardent
+  leurs références : leur décalage est éditable dans leurs propriétés. Supprimer demande confirmation des
   dépendances ; un niveau encore utilisé ne peut pas être supprimé.
 - Le panneau Modifier permet aussi d'éditer les sommets d'un élément horizontal,
   d'y ajouter une trémie, de préparer/appliquer une composition depuis son type,
@@ -98,6 +103,19 @@ une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvre
   ne sont pas encore prises en charge. Les outils non raccordés sont désactivés.
 - Les feuilles natives s'ouvrent dans le gestionnaire de documents avec un aperçu ;
   elles ne constituent pas encore des onglets de dessin éditables comme les vues.
+
+## Raccourcis clavier
+
+Sans champ de texte actif, taper deux lettres à la suite : `CS` créer à l'identique,
+`MU` mur, `PO` poteau, `PP` poutre, `OU` ouverture, `MV` déplacer, `CO` copier,
+`RO` tourner, `AL` aligner, `AJ` ajuster. `Ctrl+A` sélectionne les éléments visibles ;
+Suppr demande confirmation de suppression. `CS` reprend les paramètres des murs,
+éléments horizontaux à pente uniforme, poteaux, poutres, ouvertures natives simples,
+quadrillages, coupes, élévations et annotations. Les menuiseries à géométrie importée
+et les pentes différentes par arête ne sont pas encore proposées en création identique.
+Les commandes Créer à l'identique et Supprimer sont aussi accessibles par leurs icônes dans l'onglet Modifier.
+Le sous-projet de base est `A` et la variante par défaut est `Principale` ; le contexte
+de la sélection est affiché dans Propriétés.
 
 ## Interfaces et commandes
 

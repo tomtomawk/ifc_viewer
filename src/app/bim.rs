@@ -1,5 +1,6 @@
 //! Commandes du document BIM ; interface et pilote utilisent les mêmes transactions.
 use super::*;
+use crate::options::Dimensions;
 impl ViewerApp {
     pub(super) fn parcourir_historique(&mut self, retablir: bool) {
         self.parcourir_historique_n(retablir, 1);
@@ -185,6 +186,7 @@ pub(super) struct EtatBim {
     pub(super) barre: crate::modele::Barre,
     pub(super) depart_structure: Option<[f64; 2]>,
     barre_editee: Option<crate::modele::Barre>,
+    annotation_identique: Option<crate::modele::documentation::Annotation>,
     supprimer: bool,
     pub documentation: bool,
     pub feuille: usize,
@@ -220,6 +222,7 @@ impl Default for EtatBim {
             },
             depart_structure: None,
             barre_editee: None,
+            annotation_identique: None,
             supprimer: false,
             documentation: false,
             feuille: 0,
@@ -256,12 +259,33 @@ impl ViewerApp {
         &mut self,
         c: crate::modele::commandes::Commande,
     ) -> Result<Vec<String>, String> {
-        let (p, ids) = self
-            .natif
-            .as_ref()
-            .ok_or("Aucun projet natif.")?
-            .0
-            .executer(c)?;
+        let original = &self.natif.as_ref().ok_or("Aucun projet natif.")?.0;
+        let connus = original.identifiants();
+        let (mut p, ids) = original.executer(c)?;
+        for id in &ids {
+            if !connus.contains(id)
+                && !p.contextes.contains_key(id)
+                && (p.barres.iter().any(|b| &b.id == id)
+                    || p.ouvertures.iter().any(|o| &o.id == id))
+            {
+                p.contextes.insert(
+                    id.clone(),
+                    crate::modele::ContexteElement {
+                        phase: self
+                            .ruban_edition
+                            .phase_creation
+                            .clone()
+                            .or_else(|| Some("Projet".into())),
+                        sous_projet: self
+                            .ruban_edition
+                            .sous_projet_creation
+                            .clone()
+                            .or_else(|| Some("A".into())),
+                        variante: self.ruban_edition.variante_creation.clone(),
+                    },
+                );
+            }
+        }
         self.appliquer_projet(p)?;
         self.bim.selection = ids.clone();
         self.selection_multiple.clear();
@@ -288,16 +312,17 @@ impl ViewerApp {
         crate::modele::commandes::Commande::Ouverture {
             mur,
             abscisse,
+            type_ouverture: self.ruban_edition.ouverture_type_identique.clone(),
             genre: if fenetre {
                 crate::modele::GenreOuverture::Fenetre
-            } else if self.ruban_edition.texte_option(Outil::Ouverture, 0) == "Baie" {
-                crate::modele::GenreOuverture::Baie
+            } else if self.ruban_edition.texte_option(Outil::Ouverture, 0) == "Libre" {
+                crate::modele::GenreOuverture::Libre
             } else {
                 crate::modele::GenreOuverture::Porte
             },
             largeur: self.ruban_edition.nombre_option(Outil::Ouverture, 1),
             hauteur: self.ruban_edition.nombre_option(Outil::Ouverture, 2),
-            allege: if fenetre {
+            allege: if fenetre || self.ruban_edition.texte_option(Outil::Ouverture, 0) == "Libre" {
                 self.ruban_edition.nombre_option(Outil::Ouverture, 3)
             } else {
                 0.0
@@ -350,6 +375,187 @@ impl ViewerApp {
         Ok(())
     }
 
+    pub(super) fn demander_suppression(&mut self) {
+        if !self.selection_bim().is_empty() {
+            self.onglet_ruban = OngletRuban::Modifier;
+            self.bim.supprimer = true;
+        }
+    }
+
+    pub(super) fn creer_identique(&mut self) -> Result<(), String> {
+        let ids = self.selection_bim();
+        if ids.len() != 1 {
+            return Err("Sélectionnez un seul élément pour créer à l'identique.".into());
+        }
+        let (p, _) = self.natif.as_ref().ok_or("Ouvrez un projet natif.")?;
+        let id = &ids[0];
+        let mur = p.murs.iter().find(|m| &m.id == id).or_else(|| {
+            p.assemblage(id)
+                .and_then(|a| a.couches.first())
+                .and_then(|id| p.murs.iter().find(|m| &m.id == id))
+        });
+        if let Some(mur) = mur {
+            self.ruban_edition.mur_identique(p, mur)?;
+        } else if let Some(d) = p.dalles.iter().find(|d| &d.id == id) {
+            self.ruban_edition.surface_identique(p, d)?;
+        } else if let Some(b) = p.barres.iter().find(|b| &b.id == id) {
+            if let Some(c) = p.contextes.get(id) {
+                self.ruban_edition.phase_creation = c.phase.clone();
+                self.ruban_edition.sous_projet_creation = c.sous_projet.clone();
+                self.ruban_edition.variante_creation = c.variante.clone();
+            }
+            self.bim.barre = b.clone();
+            self.bim.barre.id.clear();
+            self.ruban_edition
+                .activer_structure(b.genre == crate::modele::GenreBarre::Poutre);
+        } else if let Some(o) = p.ouvertures.iter().find(|o| &o.id == id) {
+            if let Some(c) = p.contextes.get(id) {
+                self.ruban_edition.phase_creation = c.phase.clone();
+                self.ruban_edition.sous_projet_creation = c.sous_projet.clone();
+                self.ruban_edition.variante_creation = c.variante.clone();
+            }
+            self.ruban_edition.ouverture_identique(o)?;
+        } else if let Some(annotation) = p.annotations.iter().find(|a| &a.id == id) {
+            use crate::modele::documentation::{AnnotationForme as F, PointCote};
+            use crate::ruban::Outil;
+            if self.vue_native_id().as_ref() != Some(&annotation.vue) {
+                return Err("Ouvrez la vue de l'annotation pour la créer à l'identique.".into());
+            }
+            let outil = match &annotation.forme {
+                F::Texte { point, texte } => {
+                    self.bim.points[0] = *point;
+                    self.bim.texte = texte.clone();
+                    Outil::Texte
+                }
+                F::Ligne { debut, fin } => {
+                    self.bim.points = [*debut, *fin];
+                    Outil::Ligne
+                }
+                F::Zone { contour } => {
+                    if let (Some(a), Some(b)) = (contour.first(), contour.get(2)) {
+                        self.bim.points = [*a, *b];
+                    }
+                    Outil::Zone
+                }
+                F::Cote { debut, fin, .. } => {
+                    if let PointCote::Fixe { point } = debut {
+                        self.bim.points[0] = *point;
+                    }
+                    if let PointCote::Fixe { point } = fin {
+                        self.bim.points[1] = *point;
+                    }
+                    Outil::Cote
+                }
+                F::Etiquette { point, .. } => {
+                    self.bim.points[0] = *point;
+                    Outil::Etiquette
+                }
+            };
+            self.bim.annotation_identique = Some(annotation.clone());
+            self.ruban_edition.activer_outil(outil);
+            self.onglet_ruban = OngletRuban::Annoter;
+            self.select(None, false);
+            self.status = "Créer à l'identique : placez la nouvelle annotation.".into();
+            return Ok(());
+        } else if let Some(vue) = p
+            .vues
+            .iter()
+            .find(|v| &v.id == id && matches!(v.genre, crate::modele::GenreVue::Coupe { .. }))
+        {
+            self.ruban_edition.coupe_identique(vue)?;
+            self.onglet_ruban = OngletRuban::Annoter;
+            self.select(None, false);
+            self.status = "Créer à l'identique : tracez la coupe ou l'élévation.".into();
+            return Ok(());
+        } else if let Some(g) = p.quadrillages.iter().find(|g| &g.id == id) {
+            self.bim.points = [g.debut, g.fin];
+            self.ruban_edition.quadrillage_identique(&g.nom);
+        } else {
+            return Err("Créer à l'identique est disponible pour les murs, éléments horizontaux, poteaux, poutres, quadrillages, coupes, élévations et ouvertures natives.".into());
+        }
+        self.onglet_ruban = OngletRuban::Modeliser;
+        self.select(None, false);
+        self.status = "Créer à l'identique : placez le nouvel élément.".into();
+        Ok(())
+    }
+
+    pub(super) fn contexte_selection(&self, ui: &mut egui::Ui, ids: &[String]) {
+        let Some((p, _)) = &self.natif else { return };
+        let mut contextes = Vec::new();
+        for id in ids {
+            if let Some(c) = p.contextes.get(id) {
+                contextes.push((
+                    c.phase.as_deref().unwrap_or("Projet").into(),
+                    c.sous_projet.as_deref().unwrap_or("A").into(),
+                    c.variante
+                        .as_ref()
+                        .and_then(|id| p.variantes.iter().find(|v| &v.id == id))
+                        .map_or_else(|| "Principale".into(), |v| v.libelle()),
+                ));
+                continue;
+            }
+            let hote = p
+                .ouvertures
+                .iter()
+                .find(|o| &o.id == id)
+                .map(|o| o.mur.as_str())
+                .unwrap_or(id);
+            let mur = p.murs.iter().find(|m| m.id == hote).or_else(|| {
+                p.assemblage(hote)
+                    .and_then(|a| a.couches.first())
+                    .and_then(|id| p.murs.iter().find(|m| &m.id == id))
+            });
+            let dalle = p.dalles.iter().find(|d| &d.id == id);
+            let (phase, sous, variante) = if let Some(m) = mur {
+                (&m.phase, &m.sous_projet, &m.variante)
+            } else if let Some(d) = dalle {
+                (&d.phase, &d.sous_projet, &d.variante)
+            } else {
+                contextes.push((
+                    "Projet".to_string(),
+                    "A".to_string(),
+                    "Principale".to_string(),
+                ));
+                continue;
+            };
+            contextes.push((
+                phase.as_deref().unwrap_or("Projet").to_string(),
+                sous.as_deref().unwrap_or("A").to_string(),
+                variante
+                    .as_ref()
+                    .and_then(|id| p.variantes.iter().find(|v| &v.id == id))
+                    .map_or_else(|| "Principale".to_string(), |v| v.libelle()),
+            ));
+        }
+        let valeur = |i: usize| {
+            let noms: Vec<_> = contextes
+                .iter()
+                .map(|c| match i {
+                    0 => &c.0,
+                    1 => &c.1,
+                    _ => &c.2,
+                })
+                .collect();
+            if noms.iter().all(|n| *n == noms[0]) {
+                noms[0].as_str()
+            } else {
+                "Multiple"
+            }
+        };
+        let largeur = ((ui.available_width() - 8.0) / 3.0).max(30.0);
+        ui.horizontal_top(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+            for (i, nom) in ["Phase", "Sous-projet", "Variante"].iter().enumerate() {
+                ui.vertical(|ui| {
+                    ui.set_width(largeur);
+                    ui.add(egui::Label::new(RichText::new(*nom).small()).truncate());
+                    ui.add(egui::Label::new(valeur(i)).truncate())
+                        .on_hover_text(valeur(i));
+                });
+            }
+        });
+    }
+
     pub(super) fn panneau_bim(&mut self, ui: &mut egui::Ui) -> bool {
         use crate::modele::commandes::Commande;
         use crate::ruban::Outil;
@@ -357,6 +563,19 @@ impl ViewerApp {
             return false;
         }
         let outil = self.ruban_edition.outil();
+        if let Some(annotation) = &self.bim.annotation_identique {
+            use crate::modele::documentation::AnnotationForme as F;
+            let attendu = match annotation.forme {
+                F::Texte { .. } => Outil::Texte,
+                F::Ligne { .. } => Outil::Ligne,
+                F::Zone { .. } => Outil::Zone,
+                F::Cote { .. } => Outil::Cote,
+                F::Etiquette { .. } => Outil::Etiquette,
+            };
+            if self.onglet_ruban != OngletRuban::Annoter || outil != Some(attendu) {
+                self.bim.annotation_identique = None;
+            }
+        }
         let ids = self.selection_bim();
         let mut commande = None;
         if self.onglet_ruban == OngletRuban::Modifier {
@@ -377,11 +596,20 @@ impl ViewerApp {
                     .chain(p.dalles.iter().map(|x| (&x.id, &x.nom)))
                     .chain(p.barres.iter().map(|x| (&x.id, &x.nom)))
                     .chain(p.importes.iter().map(|x| (&x.id, &x.nom)))
+                    .chain(p.annotations.iter().map(|a| (&a.id, &a.id)))
+                    .chain(
+                        p.vues
+                            .iter()
+                            .filter(|v| matches!(v.genre, crate::modele::GenreVue::Coupe { .. }))
+                            .map(|v| (&v.id, &v.nom)),
+                    )
+                    .chain(p.quadrillages.iter().map(|g| (&g.id, &g.nom)))
                 {
                     let mut oui = self.bim.selection.contains(id);
                     if ui.checkbox(&mut oui, nom).changed() {
                         self.selected = None;
                         self.selection_multiple.clear();
+                        self.coupe_dirty = true;
                         if oui {
                             self.bim.selection.push(id.clone());
                         } else {
@@ -392,6 +620,163 @@ impl ViewerApp {
             });
             if ids.len() == 1 {
                 let p = &self.natif.as_ref().unwrap().0;
+                if let Some(original) = p.vues.iter().find(|v| {
+                    v.id == ids[0] && matches!(v.genre, crate::modele::GenreVue::Coupe { .. })
+                }) {
+                    let mut vue = original.clone();
+                    ui.collapsing("Propriétés de la coupe / élévation", |ui| {
+                        let mut change = ui.text_edit_singleline(&mut vue.nom).changed();
+                        if let crate::modele::GenreVue::Coupe {
+                            debut,
+                            fin,
+                            profondeur,
+                            ..
+                        } = &mut vue.genre
+                        {
+                            for (nom, point) in [("Départ", debut), ("Arrivée", fin)] {
+                                ui.horizontal(|ui| {
+                                    ui.label(nom);
+                                    for x in point {
+                                        change |= ui
+                                            .add(egui::DragValue::new(x).speed(10.0).dimensions())
+                                            .changed();
+                                    }
+                                });
+                            }
+                            ui.horizontal(|ui| {
+                                ui.label("Profondeur");
+                                change |= ui
+                                    .add(
+                                        egui::DragValue::new(profondeur)
+                                            .speed(10.0)
+                                            .range(1.0..=200000.0)
+                                            .dimensions(),
+                                    )
+                                    .changed();
+                            });
+                        }
+                        if change {
+                            commande = Some(Commande::ModifierVue { vue });
+                        }
+                    });
+                }
+                if let Some(original) = p.quadrillages.iter().find(|g| g.id == ids[0]) {
+                    let mut quadrillage = original.clone();
+                    ui.collapsing("Propriétés du quadrillage", |ui| {
+                        let mut change = ui.text_edit_singleline(&mut quadrillage.nom).changed();
+                        for (nom, point) in [
+                            ("Départ", &mut quadrillage.debut),
+                            ("Arrivée", &mut quadrillage.fin),
+                        ] {
+                            ui.horizontal(|ui| {
+                                ui.label(nom);
+                                for x in point {
+                                    change |= ui
+                                        .add(egui::DragValue::new(x).speed(10.0).dimensions())
+                                        .changed();
+                                }
+                            });
+                        }
+                        if change {
+                            commande = Some(Commande::ModifierQuadrillage { quadrillage });
+                        }
+                    });
+                }
+                if let Some(original) = p.annotations.iter().find(|a| a.id == ids[0]) {
+                    let mut annotation = original.clone();
+                    ui.collapsing("Propriétés de l'annotation", |ui| {
+                        use crate::modele::documentation::{AnnotationForme as F, PointCote};
+                        let mut change = false;
+                        match &mut annotation.forme {
+                            F::Texte { point, texte } => {
+                                change |= ui.text_edit_singleline(texte).changed();
+                                ui.horizontal(|ui| {
+                                    ui.label("Position");
+                                    for x in point {
+                                        change |= ui
+                                            .add(egui::DragValue::new(x).speed(10.0).dimensions())
+                                            .changed();
+                                    }
+                                });
+                            }
+                            F::Etiquette { point, .. } => {
+                                ui.horizontal(|ui| {
+                                    ui.label("Position");
+                                    for x in point {
+                                        change |= ui
+                                            .add(egui::DragValue::new(x).speed(10.0).dimensions())
+                                            .changed();
+                                    }
+                                });
+                            }
+                            F::Ligne { debut, fin } => {
+                                for (nom, point) in [("Départ", debut), ("Arrivée", fin)] {
+                                    ui.horizontal(|ui| {
+                                        ui.label(nom);
+                                        for x in point {
+                                            change |= ui
+                                                .add(
+                                                    egui::DragValue::new(x)
+                                                        .speed(10.0)
+                                                        .dimensions(),
+                                                )
+                                                .changed();
+                                        }
+                                    });
+                                }
+                            }
+                            F::Cote {
+                                debut,
+                                fin,
+                                decalage,
+                            } => {
+                                ui.horizontal(|ui| {
+                                    ui.label("Décalage");
+                                    change |= ui
+                                        .add(
+                                            egui::DragValue::new(decalage).speed(10.0).dimensions(),
+                                        )
+                                        .changed();
+                                });
+                                for (nom, point) in [("Départ", debut), ("Arrivée", fin)] {
+                                    if let PointCote::Fixe { point } = point {
+                                        ui.horizontal(|ui| {
+                                            ui.label(nom);
+                                            for x in point {
+                                                change |= ui
+                                                    .add(
+                                                        egui::DragValue::new(x)
+                                                            .speed(10.0)
+                                                            .dimensions(),
+                                                    )
+                                                    .changed();
+                                            }
+                                        });
+                                    }
+                                }
+                            }
+                            F::Zone { contour } => {
+                                for (i, point) in contour.iter_mut().enumerate() {
+                                    ui.horizontal(|ui| {
+                                        ui.label(format!("Sommet {}", i + 1));
+                                        for x in point {
+                                            change |= ui
+                                                .add(
+                                                    egui::DragValue::new(x)
+                                                        .speed(10.0)
+                                                        .dimensions(),
+                                                )
+                                                .changed();
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                        if change {
+                            commande = Some(Commande::Annoter { annotation });
+                        }
+                    });
+                }
                 if let Some(original) = p.barres.iter().find(|b| b.id == ids[0]) {
                     if self
                         .bim
@@ -419,7 +804,7 @@ impl ViewerApp {
                     for (nom, v) in ["X", "Y", "Z"].into_iter().zip(&mut self.bim.delta) {
                         ui.horizontal(|ui| {
                             ui.label(nom);
-                            ui.add(egui::DragValue::new(v).speed(10.0).suffix(" mm"));
+                            ui.add(egui::DragValue::new(v).speed(10.0).dimensions());
                         });
                     }
                     if ui
@@ -442,7 +827,7 @@ impl ViewerApp {
                 Some(Outil::Tourner) => {
                     ui.label("Centre de rotation dans le plan du projet");
                     for v in &mut self.bim.centre {
-                        ui.add(egui::DragValue::new(v).speed(10.0).suffix(" mm"));
+                        ui.add(egui::DragValue::new(v).speed(10.0).dimensions());
                     }
                     if ui
                         .add_enabled(!ids.is_empty(), egui::Button::new("Tourner"))
@@ -572,9 +957,10 @@ impl ViewerApp {
                 if let Some(p) = &self.bim.preview_type {
                     for m in p.couches_assemblage(&ids[0]) {
                         ui.label(format!(
-                            "{} · {} mm",
+                            "{} · {}",
                             m.nom,
-                            p.type_mur(&m.type_mur).map_or(0.0, |t| t.epaisseur())
+                            crate::options::unite()
+                                .afficher(p.type_mur(&m.type_mur).map_or(0.0, |t| t.epaisseur()))
                         ));
                     }
                     if ui.button("Appliquer cette composition").clicked() {
@@ -619,7 +1005,7 @@ impl ViewerApp {
                                                 .add(
                                                     egui::DragValue::new(v)
                                                         .speed(10.0)
-                                                        .suffix(" mm"),
+                                                        .dimensions(),
                                                 )
                                                 .changed();
                                         }
@@ -709,9 +1095,7 @@ impl ViewerApp {
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut nom);
                                 ui.add(
-                                    egui::DragValue::new(&mut altitude)
-                                        .speed(10.0)
-                                        .suffix(" mm"),
+                                    egui::DragValue::new(&mut altitude).speed(10.0).dimensions(),
                                 );
                             });
                             if nom != n.nom || altitude != n.altitude {
@@ -772,11 +1156,11 @@ impl ViewerApp {
                     }
                 }
                 Some(Outil::Ouverture) => {
-                    ui.label("Cliquez sur un mur pour placer la baie, ou sélectionnez son hôte et saisissez l'abscisse.");
+                    ui.label("Cliquez sur un mur pour placer l’ouverture, ou sélectionnez son hôte et saisissez l'abscisse.");
                     ui.add(
                         egui::DragValue::new(&mut self.bim.abscisse)
                             .speed(10.0)
-                            .suffix(" mm"),
+                            .dimensions(),
                     );
                     if ui
                         .add_enabled(ids.len() == 1, egui::Button::new("Placer"))
@@ -845,11 +1229,53 @@ impl ViewerApp {
                     },
                     _ => F::Ligne { debut: a, fin: b },
                 };
+                let mut forme = forme;
+                let mut hauteur = 2.5;
+                if let Some(modele) = &self.bim.annotation_identique {
+                    hauteur = modele.hauteur;
+                    match &modele.forme {
+                        F::Etiquette { element, .. } => {
+                            forme = F::Etiquette {
+                                element: element.clone(),
+                                point: a,
+                            }
+                        }
+                        F::Cote {
+                            debut,
+                            fin,
+                            decalage,
+                        } => {
+                            forme = F::Cote {
+                                debut: if matches!(debut, PointCote::Fixe { .. }) {
+                                    PointCote::Fixe { point: a }
+                                } else {
+                                    debut.clone()
+                                },
+                                fin: if matches!(fin, PointCote::Fixe { .. }) {
+                                    PointCote::Fixe { point: b }
+                                } else {
+                                    fin.clone()
+                                },
+                                decalage: *decalage,
+                            };
+                        }
+                        F::Zone { contour } if !contour.is_empty() => {
+                            let origine = contour[0];
+                            forme = F::Zone {
+                                contour: contour
+                                    .iter()
+                                    .map(|p| [p[0] - origine[0] + a[0], p[1] - origine[1] + a[1]])
+                                    .collect(),
+                            };
+                        }
+                        _ => {}
+                    }
+                }
                 commande = Some(Commande::Annoter {
                     annotation: Annotation {
                         id: String::new(),
                         vue,
-                        hauteur: 2.5,
+                        hauteur,
                         forme,
                     },
                 });
@@ -894,9 +1320,20 @@ impl ViewerApp {
             return Vec::new();
         };
         let origin = self.scene.as_ref().map_or(glam::DVec3::ZERO, |s| s.origin);
+        let selection: HashSet<u64> = self
+            .bim
+            .selection
+            .iter()
+            .map(|id| scene::id_natif("annotation", id))
+            .collect();
         crate::modele::documentation::annotations(p, v)
             .into_iter()
-            .map(|a| a.translater(-origin))
+            .map(|mut a| {
+                if a.element.is_some_and(|id| selection.contains(&id)) {
+                    a.style.couleur = [230, 120, 20, 255];
+                }
+                a.translater(-origin)
+            })
             .collect()
     }
 }
@@ -928,7 +1365,7 @@ fn barre_ui(ui: &mut egui::Ui, b: &mut crate::modele::Barre, niveaux: &[crate::m
             ui.add(
                 egui::DragValue::new(&mut b.debut[i])
                     .speed(10.0)
-                    .suffix(" mm"),
+                    .dimensions(),
             );
         });
     }
@@ -937,11 +1374,7 @@ fn barre_ui(ui: &mut egui::Ui, b: &mut crate::modele::Barre, niveaux: &[crate::m
         b.fin[1] = b.debut[1];
         ui.horizontal(|ui| {
             ui.label("Z sommet (relatif au niveau)");
-            ui.add(
-                egui::DragValue::new(&mut b.fin[2])
-                    .speed(10.0)
-                    .suffix(" mm"),
-            );
+            ui.add(egui::DragValue::new(&mut b.fin[2]).speed(10.0).dimensions());
         });
         ui.horizontal(|ui| {
             ui.label("Rotation");
@@ -956,11 +1389,7 @@ fn barre_ui(ui: &mut egui::Ui, b: &mut crate::modele::Barre, niveaux: &[crate::m
         for (i, nom) in ["X arrivée", "Y arrivée"].iter().enumerate() {
             ui.horizontal(|ui| {
                 ui.label(*nom);
-                ui.add(
-                    egui::DragValue::new(&mut b.fin[i])
-                        .speed(10.0)
-                        .suffix(" mm"),
-                );
+                ui.add(egui::DragValue::new(&mut b.fin[i]).speed(10.0).dimensions());
             });
         }
     }
@@ -981,7 +1410,7 @@ fn barre_ui(ui: &mut egui::Ui, b: &mut crate::modele::Barre, niveaux: &[crate::m
                 egui::DragValue::new(valeur)
                     .speed(5.0)
                     .range(1.0..=100000.0)
-                    .suffix(" mm"),
+                    .dimensions(),
             );
         });
     }
@@ -992,7 +1421,7 @@ fn points_ui(ui: &mut egui::Ui, points: &mut [[f64; 2]; 2]) {
         ui.horizontal(|ui| {
             ui.label(format!("Point {}", k + 1));
             for v in p {
-                ui.add(egui::DragValue::new(v).speed(10.0).suffix(" mm"));
+                ui.add(egui::DragValue::new(v).speed(10.0).dimensions());
             }
         });
     }

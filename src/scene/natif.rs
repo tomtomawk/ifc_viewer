@@ -40,7 +40,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         let classe = match o.genre {
             crate::modele::GenreOuverture::Porte => "IFCDOOR",
             crate::modele::GenreOuverture::Fenetre => "IFCWINDOW",
-            crate::modele::GenreOuverture::Baie => "IFCOPENINGELEMENT",
+            crate::modele::GenreOuverture::Libre => "IFCOPENINGELEMENT",
         };
         entite(id_natif("ouverture", &o.id), classe, &o.id, &o.nom, 9)?;
     }

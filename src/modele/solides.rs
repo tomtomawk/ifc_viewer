@@ -413,7 +413,7 @@ pub fn ouverture(p: &Projet, o: &Ouverture) -> Result<Vec<Tri>, String> {
     }
     let (axe, e, niveau) = hote(p, &o.mur)?;
     let z = p.niveau(&niveau).ok_or("Niveau introuvable.")?.altitude + o.allege;
-    if o.genre == GenreOuverture::Baie {
+    if o.genre == GenreOuverture::Libre {
         return Ok(Vec::new());
     }
     let (c, u) = repere(&axe, o.abscisse);

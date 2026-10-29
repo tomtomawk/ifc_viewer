@@ -27,7 +27,7 @@ pub fn markdown(p: &Projet, mesures: &[Mesure], duree_s: f64) -> String {
         let c = match o.genre {
             GenreOuverture::Porte => "Portes",
             GenreOuverture::Fenetre => "Fenêtres",
-            GenreOuverture::Baie => "Baies",
+            GenreOuverture::Libre => "Ouvertures libres",
         };
         cat.entry(c.into()).or_default().0 += 1;
     }
@@ -42,7 +42,7 @@ pub fn markdown(p: &Projet, mesures: &[Mesure], duree_s: f64) -> String {
     let _ = writeln!(s, "| Murs paramétriques | {murs} |");
     let _ = writeln!(s, "| dont murs composés (assemblages : un mur par couche) | {} ({couches} couches) |", p.assemblages.len());
     let _ = writeln!(s, "| Murs à couches gardés d'un bloc (côté extérieur non vérifiable) | {non_eclates} |");
-    let _ = writeln!(s, "| Ouvertures (portes, fenêtres, baies) | {} |", p.ouvertures.len());
+    let _ = writeln!(s, "| Ouvertures (portes, fenêtres, ouvertures libres) | {} |", p.ouvertures.len());
     let _ = writeln!(s, "| Dalles paramétriques | {} |", p.dalles.len());
     let _ = writeln!(s, "| Éléments importés (géométrie figée) | {} |", p.importes.len());
     let _ = writeln!(s, "| **Part paramétrique** (murs, ouvertures, dalles / tous les éléments à géométrie) | **{}** |\n", taux(parametriques, total - parametriques));

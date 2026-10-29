@@ -116,6 +116,22 @@ pub fn objets(
         .collect()
 }
 
+pub fn segment(rect: Rect, a: Pos2, b: Pos2, croisement: bool) -> bool {
+    if !croisement {
+        return rect.contains(a) && rect.contains(b);
+    }
+    let mut poly = vec![Vec4::new(a.x, a.y, 0., 1.), Vec4::new(b.x, b.y, 0., 1.)];
+    for p in [
+        Vec4::new(1., 0., 0., -rect.left()),
+        Vec4::new(-1., 0., 0., rect.right()),
+        Vec4::new(0., 1., 0., -rect.top()),
+        Vec4::new(0., -1., 0., rect.bottom()),
+    ] {
+        poly = clip(&poly, |v| p.dot(v));
+    }
+    !poly.is_empty()
+}
+
 /// Une fenêtre inclut toutes les couches visibles d'un assemblage ; un croisement en touche une.
 pub fn groupes<T: Copy + Eq + std::hash::Hash>(
     objets: impl IntoIterator<Item = (T, (bool, bool, bool))>,
