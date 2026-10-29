@@ -83,8 +83,11 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   page par feuille dans l'ordre du jeu, chacune à son format ; aussi Sortie → Jeu PDF
   et la commande du pilote `exporter_jeu <chemin.pdf> [jeu]`) ; feuille (numéro, nom, format A0 à A4,
   paysage/portrait, dimensions, cartouche, export PDF/SVG, suppression) ; vue placée
-  (échelle, position, ouvrir, retirer). L'arborescence liste les jeux et leurs
-  feuilles : clic sur une feuille pour l'amener à l'écran.
+  (échelle, position, ouvrir, retirer). L'arborescence liste tous les jeux, toutes
+  leurs feuilles et, sous chaque feuille, ses vues placées (clic : ouvrir la vue) ; clic
+  sur une feuille pour l'amener à l'écran. La recherche garde un jeu entier si son nom
+  correspond, une feuille si son titre ou une de ses vues correspond. Les feuilles
+  d'un fichier Revit converti en natif ne sont pas reprises (ses vues ne le sont pas).
 - **Nomenclatures** (Documenter ou l'arborescence) : quantités par catégorie,
   regroupées par type, export CSV.
 - **Sortie → IFC4** exporte niveaux, classes architecturales, compositions et

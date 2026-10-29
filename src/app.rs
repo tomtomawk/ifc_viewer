@@ -4068,10 +4068,15 @@ impl ViewerApp {
     fn navigateur_ui(&mut self, ui: &mut egui::Ui, section: LeftTab) {
         // projet natif : jeux de feuilles et leurs feuilles, nomenclatures ; vues
         // glissables vers une feuille
-        let (jeux_natifs, nomenclatures_natives, glissables): (Vec<(String, Vec<(String, String)>)>, Vec<(usize, String)>, std::collections::HashMap<i64, String>) = match &self.natif {
+        // jeux : (nom, feuilles : (id, titre, vues placées : (numéro de vue, nom, échelle)))
+        type FeuilleNav = (String, String, Vec<(i64, String, f64)>);
+        let (jeux_natifs, nomenclatures_natives, glissables): (Vec<(String, Vec<FeuilleNav>)>, Vec<(usize, String)>, std::collections::HashMap<i64, String>) = match &self.natif {
             Some((p, _)) => (
                 crate::modele::documentation::jeux(p).into_iter().map(|j| {
-                    let fs = p.feuilles.iter().filter(|f| f.jeu == j).map(|f| (f.id.clone(), format!("{} - {}", f.numero, f.nom))).collect();
+                    let fs = p.feuilles.iter().filter(|f| f.jeu == j).map(|f| {
+                        let vues = f.vues.iter().map(|v| (crate::scene::numero_vue(&v.vue), p.vues.iter().find(|x| x.id == v.vue).map_or("Vue absente".to_string(), |x| x.nom.clone()), v.echelle)).collect();
+                        (f.id.clone(), format!("{} - {}", f.numero, f.nom), vues)
+                    }).collect();
                     (j, fs)
                 }).collect(),
                 p.nomenclatures.iter().enumerate().map(|(k, n)| (k, n.nom.clone())).collect(),
@@ -4189,11 +4194,30 @@ impl ViewerApp {
                         }
                     })
                     .body(|ui| {
-                        for (k, (fid, titre)) in fs.iter().enumerate() {
-                            if !garde(titre) {
+                        // recherche : un jeu trouvé montre toutes ses feuilles ; une feuille,
+                        // si son titre ou une de ses vues placées correspond
+                        let jeu_trouve = garde(jeu);
+                        for (k, (fid, titre, vues)) in fs.iter().enumerate() {
+                            if !jeu_trouve && !garde(titre) && !vues.iter().any(|v| garde(&v.1)) {
                                 continue;
                             }
-                            let r = ui.add(egui::Button::selectable(false, titre.as_str()).sense(Sense::click_and_drag())).on_hover_text("Clic : afficher la feuille · glisser : la déplacer dans le jeu ou vers un autre jeu");
+                            // feuille : dépliable sur ses vues placées (comme dans Revit)
+                            let id_feuille = ui.make_persistent_id(("nav-feuille-native", fid));
+                            let etat = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id_feuille, true);
+                            let (_, entete, _) = etat.show_header(ui, |ui| ui.add(egui::Button::selectable(false, titre.as_str()).sense(Sense::click_and_drag())).on_hover_text("Clic : afficher la feuille · glisser : la déplacer dans le jeu ou vers un autre jeu"))
+                                .body(|ui| {
+                                    if vues.is_empty() {
+                                        ui.label(RichText::new("Aucune vue placée").weak().small());
+                                    }
+                                    for (n, nom, echelle) in vues {
+                                        let i = indice.get(n).copied();
+                                        let r = ui.selectable_label(i.is_some() && i == active, format!("{nom} · 1:{echelle}")).on_hover_text("Clic : ouvrir la vue");
+                                        if r.clicked() {
+                                            action = i.map(ActionNav::Activer);
+                                        }
+                                    }
+                                });
+                            let r = entete.inner;
                             r.dnd_set_drag_payload(feuilles::FeuilleGlissee(fid.clone()));
                             if r.clicked() {
                                 ouvrir_jeu = Some((jeu.clone(), Some(fid.clone())));
