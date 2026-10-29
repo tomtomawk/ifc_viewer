@@ -74,7 +74,10 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   numéro). Glisser un plan, une coupe ou une élévation depuis l'arborescence sur une
   feuille la place, centrée sous le curseur ; glisser une vue placée la déplace ;
   double-clic l'ouvre ; Suppr la retire (ou supprime la feuille choisie). La page en
-  pointillés ajoute une feuille. Molette : zoom ; glisser le fond : défiler. Les
+  pointillés ajoute une feuille. Glisser le titre d'une feuille (au-dessus de la page)
+  la remet à un autre rang du jeu (barre bleue d'insertion) ; dans l'arborescence,
+  glisser une feuille au-dessus ou au-dessous d'une autre la déplace, la déposer sur
+  le nom d'un jeu la met à la fin de ce jeu. Ctrl+Z annule. Molette : zoom ; glisser le fond : défiler. Les
   réglages sont dans Propriétés, sans boîte de dialogue : nom du jeu (Entrée pour
   renommer), Ajouter une feuille, Nouveau jeu, Exporter le jeu en PDF (un fichier, une
   page par feuille dans l'ordre du jeu, chacune à son format ; aussi Sortie → Jeu PDF

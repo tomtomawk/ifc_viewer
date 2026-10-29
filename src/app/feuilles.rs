@@ -9,6 +9,9 @@ use std::collections::HashMap;
 /// Vue glissée depuis l'arborescence : identifiant de la vue du projet.
 pub(super) struct VueGlissee(pub String);
 
+/// Feuille glissée dans l'arborescence pour la réordonner : identifiant.
+pub(super) struct FeuilleGlissee(pub String);
+
 /// Sélection dans le jeu ouvert : une feuille, ou une vue placée (feuille, rang).
 #[derive(Clone, PartialEq, Default)]
 pub(super) enum SelectionFeuille {
@@ -80,6 +83,8 @@ pub(super) struct EtatFeuilles {
     pub selection: SelectionFeuille,
     /// Vue placée en cours de déplacement : feuille, rang, déplacement à l'écran.
     glisse: Option<(String, usize, egui::Vec2)>,
+    /// Feuille glissée par son titre pour la remettre à un autre rang du jeu.
+    glisse_feuille: Option<String>,
     /// Dessins des vues à l'échelle de la feuille, position nulle : (vue, échelle).
     vues: HashMap<(String, u64), Rendu>,
     /// Cadres et cartouches des feuilles.
@@ -152,6 +157,8 @@ impl ViewerApp {
         let Some(jeu) = self.jeu_actif() else { return };
         let mut etat = std::mem::take(&mut self.feuilles);
         let mut commandes: Vec<Commande> = Vec::new();
+        // feuille à déplacer : (feuille, feuille devant laquelle la mettre ; None : à la fin)
+        let mut deplacement: Option<(String, Option<String>)> = None;
         let mut ouvrir_vue: Option<String> = None;
         if let Some((p, _)) = &self.natif {
             // dessins des vues recalculés seulement si le modèle (hors feuilles) change
@@ -240,20 +247,43 @@ impl ViewerApp {
                 let f = feuilles[k];
                 (0..f.vues.len()).rev().find(|&j| boite(f, j).is_some_and(|b| pt[0] >= b[0] && pt[0] <= b[2] && pt[1] >= b[1] && pt[1] <= b[3])).map(|j| (k, j))
             };
-            // souris : sélection, déplacement d'une vue placée, défilement
+            // titre d'une feuille (au-dessus de la page) : poignée pour la déplacer
+            let titre_sous = |q: egui::Pos2| -> Option<usize> {
+                let w = (q - o) / z;
+                (0..feuilles.len()).find(|&k| w.x >= 0.0 && w.x <= feuilles[k].largeur as f32 && w.y >= ys[k] - ECART * 0.8 && w.y < ys[k])
+            };
+            // rang d'insertion sous le curseur : nombre de feuilles dont le milieu est au-dessus
+            let rang_sous = |q: egui::Pos2| -> usize {
+                let w = (q - o) / z;
+                (0..feuilles.len()).filter(|&k| ys[k] + feuilles[k].hauteur as f32 * 0.5 < w.y).count()
+            };
+            // souris : sélection, déplacement d'une vue placée ou d'une feuille, défilement
             if resp.drag_started_by(egui::PointerButton::Primary) {
-                if let Some((k, j)) = ui.input(|i| i.pointer.press_origin()).and_then(vue_sous) {
+                let depart = ui.input(|i| i.pointer.press_origin());
+                if let Some((k, j)) = depart.and_then(vue_sous) {
                     etat.glisse = Some((feuilles[k].id.clone(), j, egui::Vec2::ZERO));
                     etat.selection = SelectionFeuille::Vue(feuilles[k].id.clone(), j);
+                } else if let Some(k) = depart.and_then(titre_sous) {
+                    etat.glisse_feuille = Some(feuilles[k].id.clone());
+                    etat.selection = SelectionFeuille::Feuille(feuilles[k].id.clone());
                 }
             }
             if resp.dragged() {
                 match &mut etat.glisse {
                     Some((_, _, d)) => *d += resp.drag_delta(),
+                    None if etat.glisse_feuille.is_some() => {}
                     None => etat.decalage += resp.drag_delta(),
                 }
             }
             if resp.drag_stopped() {
+                if let (Some(id), Some(q)) = (etat.glisse_feuille.take(), resp.interact_pointer_pos().or(ui.input(|i| i.pointer.latest_pos()))) {
+                    let t = rang_sous(q);
+                    if let Some(k) = feuilles.iter().position(|f| f.id == id) {
+                        if t != k && t != k + 1 {
+                            deplacement = Some((id, feuilles.get(t).map(|f| f.id.clone())));
+                        }
+                    }
+                }
                 if let Some((fid, j, d)) = etat.glisse.take() {
                     if let Some(f) = feuilles.iter().find(|f| f.id == fid) {
                         let mut f = (*f).clone();
@@ -272,7 +302,10 @@ impl ViewerApp {
                 etat.selection = match (q.and_then(vue_sous), q.and_then(papier)) {
                     (Some((k, j)), _) => SelectionFeuille::Vue(feuilles[k].id.clone(), j),
                     (None, Some((k, _))) => SelectionFeuille::Feuille(feuilles[k].id.clone()),
-                    _ => SelectionFeuille::Aucune,
+                    _ => match q.and_then(titre_sous) {
+                        Some(k) => SelectionFeuille::Feuille(feuilles[k].id.clone()),
+                        None => SelectionFeuille::Aucune,
+                    },
                 };
                 if q.is_some_and(|q| page_ajout.contains(q)) {
                     let f = Self::nouvelle_feuille(p, &jeu);
@@ -356,13 +389,30 @@ impl ViewerApp {
                     }
                 }
                 let choisie = matches!(&etat.selection, SelectionFeuille::Feuille(id) if *id == f.id);
-                painter.text(r.left_top() - egui::vec2(0.0, 6.0), egui::Align2::LEFT_BOTTOM, format!("{} — {}", f.numero, f.nom), egui::FontId::proportional(13.0), if choisie { bleu } else { Color32::from_gray(40) });
+                // titre : poignée (trois traits) et numéro — nom ; glisser pour déplacer
+                let survol_titre = resp.hover_pos().and_then(titre_sous) == Some(k) || etat.glisse_feuille.as_deref() == Some(f.id.as_str());
+                let couleur_titre = if choisie || survol_titre { bleu } else { Color32::from_gray(40) };
+                let base = r.left_top() - egui::vec2(0.0, 10.0);
+                for d in [-3.0, 0.0, 3.0] {
+                    painter.line_segment([base + egui::vec2(0.0, d), base + egui::vec2(10.0, d)], egui::Stroke::new(1.4, couleur_titre));
+                }
+                painter.text(base + egui::vec2(16.0, 0.0), egui::Align2::LEFT_CENTER, format!("{} — {}", f.numero, f.nom), egui::FontId::proportional(13.0), couleur_titre);
                 if choisie {
                     painter.rect_stroke(r, 0.0, egui::Stroke::new(2.0, bleu), egui::StrokeKind::Outside);
                 }
             }
             painter.add(egui::Shape::mesh(mesh));
             painter.extend(traits);
+            // feuille glissée : barre d'insertion entre deux feuilles
+            if etat.glisse_feuille.is_some() {
+                if let Some(q) = ui.input(|i| i.pointer.latest_pos()) {
+                    let t = rang_sous(q);
+                    let y = if t < feuilles.len() { ys[t] - ECART * 0.9 } else { y_ajout - ECART * 0.9 };
+                    let a = o + egui::vec2(-10.0 / z, y) * z;
+                    painter.line_segment([a, a + egui::vec2((largeur_max + 20.0 / z) * z, 0.0)], egui::Stroke::new(4.0, bleu));
+                    painter.circle_filled(a, 5.0, bleu);
+                }
+            }
             // page « ajouter une feuille »
             let survol_ajout = resp.hover_pos().is_some_and(|q| page_ajout.contains(q));
             let gris = if survol_ajout { bleu } else { Color32::from_gray(120) };
@@ -372,16 +422,16 @@ impl ViewerApp {
             if feuilles.is_empty() {
                 painter.text(rect.center_top() + egui::vec2(0.0, 14.0), egui::Align2::CENTER_TOP, "Jeu vide : cliquer la page en pointillés", egui::FontId::proportional(13.0), Color32::from_gray(60));
             } else {
-                let aide = painter.layout_no_wrap("Glisser une vue de l'arborescence sur une feuille · molette : zoom · glisser le fond : défiler · double-clic sur une vue : l'ouvrir · Suppr : retirer".into(), egui::FontId::proportional(12.0), Color32::from_gray(40));
+                let aide = painter.layout_no_wrap("Glisser une vue de l'arborescence sur une feuille · glisser le titre d'une feuille : la déplacer · molette : zoom · glisser le fond : défiler · double-clic sur une vue : l'ouvrir · Suppr : retirer".into(), egui::FontId::proportional(12.0), Color32::from_gray(40));
                 let cadre = egui::Rect::from_min_size(rect.left_bottom() + egui::vec2(8.0, -aide.size().y - 14.0), aide.size() + egui::vec2(12.0, 6.0));
                 painter.rect_filled(cadre, 4.0, Color32::from_rgba_unmultiplied(245, 245, 245, 230));
                 painter.galley(cadre.min + egui::vec2(6.0, 3.0), aide, Color32::from_gray(40));
             }
-            let curseur = if etat.glisse.is_some() {
+            let curseur = if etat.glisse.is_some() || etat.glisse_feuille.is_some() {
                 Some(egui::CursorIcon::Grabbing)
             } else if survol_ajout {
                 Some(egui::CursorIcon::PointingHand)
-            } else if resp.hover_pos().and_then(vue_sous).is_some() {
+            } else if resp.hover_pos().and_then(vue_sous).is_some() || resp.hover_pos().and_then(titre_sous).is_some() {
                 Some(egui::CursorIcon::Grab)
             } else {
                 None
@@ -393,6 +443,9 @@ impl ViewerApp {
             ui.centered_and_justified(|ui| ui.label("Les feuilles demandent un projet natif."));
         }
         self.feuilles = etat;
+        if let Some((id, avant)) = deplacement {
+            self.deplacer_feuille(&id, &jeu, avant.as_deref());
+        }
         for c in commandes {
             if let Err(e) = self.executer_bim(c) {
                 self.error = Some(e);
@@ -611,6 +664,19 @@ impl ViewerApp {
         let contenu = doc::svg_feuille(p, f).and_then(|s| if extension == "pdf" { doc::pdf(&s) } else { Ok(s.into_bytes()) });
         match contenu.and_then(|b| crate::modele::enregistrement::ecrire_atomique(&path, &b)) {
             Ok(()) => self.status = format!("Export : {}", path.display()),
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    /// Remet la feuille `id` dans le jeu `jeu`, avant la feuille `avant` (à la fin sans).
+    pub(super) fn deplacer_feuille(&mut self, id: &str, jeu: &str, avant: Option<&str>) {
+        let Some((p, _)) = &self.natif else { return };
+        let mut q = p.clone();
+        match doc::deplacer_feuille(&mut q, id, jeu, avant).and_then(|_| self.appliquer_projet(q)) {
+            Ok(()) => {
+                self.feuilles.selection = SelectionFeuille::Feuille(id.into());
+                self.status = "Feuille déplacée — Ctrl+Z pour annuler.".into();
+            }
             Err(e) => self.error = Some(e),
         }
     }

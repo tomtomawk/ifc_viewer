@@ -4080,6 +4080,8 @@ impl ViewerApp {
             None => (Vec::new(), Vec::new(), std::collections::HashMap::new()),
         };
         let mut ouvrir_jeu: Option<(String, Option<String>)> = None;
+        // feuille glissée dans l'arborescence : (feuille, jeu, feuille devant laquelle)
+        let mut deplacer: Option<(String, String, Option<String>)> = None;
         let mut ouvrir_nomenclature: Option<usize> = None;
         let Some(s) = self.scene.as_ref() else { return };
         let Some(nav) = s.navigateur.as_ref() else { return };
@@ -4174,14 +4176,37 @@ impl ViewerApp {
                     .show_header(ui, |ui| {
                         let texte = RichText::new(format!("{jeu} ({})", fs.len()));
                         let texte = if jeu_ouvert.as_deref() == Some(jeu.as_str()) { texte.strong() } else { texte };
-                        if ui.selectable_label(false, texte).on_hover_text("Ouvrir le jeu : toutes ses feuilles à la suite").clicked() {
+                        let r = ui.selectable_label(false, texte).on_hover_text("Ouvrir le jeu : toutes ses feuilles à la suite ; y déposer une feuille la met à la fin du jeu");
+                        if r.clicked() {
                             ouvrir_jeu = Some((jeu.clone(), None));
+                        }
+                        // feuille déposée sur le jeu : à la fin du jeu
+                        if r.dnd_hover_payload::<feuilles::FeuilleGlissee>().is_some() {
+                            ui.painter().rect_stroke(r.rect, 3.0, egui::Stroke::new(1.5, ui.visuals().selection.stroke.color), egui::StrokeKind::Inside);
+                        }
+                        if let Some(g) = r.dnd_release_payload::<feuilles::FeuilleGlissee>() {
+                            deplacer = Some((g.0.clone(), jeu.clone(), None));
                         }
                     })
                     .body(|ui| {
-                        for (fid, titre) in fs {
-                            if garde(titre) && ui.selectable_label(false, titre).clicked() {
+                        for (k, (fid, titre)) in fs.iter().enumerate() {
+                            if !garde(titre) {
+                                continue;
+                            }
+                            let r = ui.add(egui::Button::selectable(false, titre.as_str()).sense(Sense::click_and_drag())).on_hover_text("Clic : afficher la feuille · glisser : la déplacer dans le jeu ou vers un autre jeu");
+                            r.dnd_set_drag_payload(feuilles::FeuilleGlissee(fid.clone()));
+                            if r.clicked() {
                                 ouvrir_jeu = Some((jeu.clone(), Some(fid.clone())));
+                            }
+                            // dépôt : au-dessus ou au-dessous de cette feuille selon le curseur
+                            let dessous = |q: Option<egui::Pos2>| q.is_some_and(|q| q.y > r.rect.center().y);
+                            if r.dnd_hover_payload::<feuilles::FeuilleGlissee>().is_some() {
+                                let y = if dessous(ui.input(|i| i.pointer.hover_pos())) { r.rect.bottom() } else { r.rect.top() };
+                                ui.painter().line_segment([egui::pos2(r.rect.left(), y), egui::pos2(r.rect.right(), y)], egui::Stroke::new(2.5, ui.visuals().selection.stroke.color));
+                            }
+                            if let Some(g) = r.dnd_release_payload::<feuilles::FeuilleGlissee>() {
+                                let avant = if dessous(ui.input(|i| i.pointer.hover_pos())) { fs.get(k + 1).map(|x| x.0.clone()) } else { Some(fid.clone()) };
+                                deplacer = Some((g.0.clone(), jeu.clone(), avant));
                             }
                         }
                     });
@@ -4251,6 +4276,9 @@ impl ViewerApp {
         }
         if let Some((jeu, f)) = ouvrir_jeu {
             self.ouvrir_jeu(&jeu, f);
+        }
+        if let Some((id, jeu, avant)) = deplacer {
+            self.deplacer_feuille(&id, &jeu, avant.as_deref());
         }
         if let Some(k) = ouvrir_nomenclature {
             self.bim.nomenclature = k;
@@ -7236,11 +7264,13 @@ impl eframe::App for ViewerApp {
             }
             self.fenetre_visibilite(&ctx);
         }
-        // vue glissée depuis l'arborescence : son nom suit le curseur
-        if let (Some(g), Some(q)) = (egui::DragAndDrop::payload::<feuilles::VueGlissee>(&ctx), ctx.pointer_hover_pos()) {
-            let nom = self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|v| v.id == g.0)).map_or(String::new(), |v| v.nom.clone());
+        // vue ou feuille glissée dans l'arborescence : son nom suit le curseur
+        let glissee = egui::DragAndDrop::payload::<feuilles::VueGlissee>(&ctx)
+            .and_then(|g| self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|v| v.id == g.0)).map(|v| format!("Placer : {}", v.nom)))
+            .or_else(|| egui::DragAndDrop::payload::<feuilles::FeuilleGlissee>(&ctx).and_then(|g| self.natif.as_ref().and_then(|(p, _)| p.feuilles.iter().find(|f| f.id == g.0)).map(|f| format!("Déplacer : {} - {}", f.numero, f.nom))));
+        if let (Some(nom), Some(q)) = (glissee, ctx.pointer_hover_pos()) {
             let peintre = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("vue_glissee")));
-            let texte = peintre.layout_no_wrap(format!("Placer : {nom}"), egui::FontId::proportional(13.0), Color32::WHITE);
+            let texte = peintre.layout_no_wrap(nom, egui::FontId::proportional(13.0), Color32::WHITE);
             let cadre = egui::Rect::from_min_size(q + egui::vec2(14.0, 10.0), texte.size() + egui::vec2(12.0, 6.0));
             peintre.rect_filled(cadre, 4.0, Color32::from_rgb(0, 120, 215));
             peintre.galley(cadre.min + egui::vec2(6.0, 3.0), texte, Color32::WHITE);

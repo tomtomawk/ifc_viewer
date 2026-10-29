@@ -343,6 +343,21 @@ pub fn jeux(p: &Projet) -> Vec<String> {
     v
 }
 
+/// Déplace la feuille `id` dans le jeu `jeu`, juste avant la feuille `avant` ; sans
+/// `avant` (ou s'il n'est pas dans ce jeu), après la dernière feuille du jeu.
+pub fn deplacer_feuille(p: &mut Projet, id: &str, jeu: &str, avant: Option<&str>) -> Result<(), String> {
+    let k = p.feuilles.iter().position(|f| f.id == id).ok_or("Feuille absente.")?;
+    let mut f = p.feuilles.remove(k);
+    f.jeu = jeu.into();
+    let rang = avant
+        .filter(|a| *a != id)
+        .and_then(|a| p.feuilles.iter().position(|g| g.id == a && g.jeu == jeu))
+        .or_else(|| p.feuilles.iter().rposition(|g| g.jeu == jeu).map(|r| r + 1))
+        .unwrap_or(p.feuilles.len());
+    p.feuilles.insert(rang, f);
+    Ok(())
+}
+
 /// Formats papier courants (paysage), mm.
 pub const FORMATS: [(&str, f64, f64); 5] = [("A0", 1189.0, 841.0), ("A1", 841.0, 594.0), ("A2", 594.0, 420.0), ("A3", 420.0, 297.0), ("A4", 297.0, 210.0)];
 
@@ -688,6 +703,15 @@ mod tests {
         h.id = "h".into();
         p.feuilles = vec![f, g, h];
         assert_eq!(jeux(&p), vec![JEU_DEFAUT.to_string(), "Détails".to_string()]);
+        // réordonner : h avant f, puis f à la fin du jeu Détails
+        deplacer_feuille(&mut p, "h", JEU_DEFAUT, Some("f")).unwrap();
+        let ordre = |p: &Projet| p.feuilles.iter().map(|f| format!("{}:{}", f.id, f.jeu)).collect::<Vec<_>>().join(" ");
+        assert_eq!(ordre(&p), "h:Plans f:Plans g:Détails");
+        deplacer_feuille(&mut p, "f", "Détails", None).unwrap();
+        assert_eq!(ordre(&p), "h:Plans g:Détails f:Détails");
+        deplacer_feuille(&mut p, "f", "Détails", Some("g")).unwrap();
+        assert_eq!(ordre(&p), "h:Plans f:Détails g:Détails");
+        assert!(deplacer_feuille(&mut p, "x", "Plans", None).is_err());
         // cadre et cartouche dans la feuille
         let cadre = cadre_feuille(&p, &p.feuilles[0]);
         assert!(cadre.len() > 4);
