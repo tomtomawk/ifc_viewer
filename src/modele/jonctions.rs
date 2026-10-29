@@ -29,6 +29,7 @@ struct Membre {
     sens: bool,
     porteur: bool,
     ecart: f64,
+    demi: f64,
 }
 
 /// Mur « logique » : un mur seul ou un assemblage (axe au milieu de l'épaisseur
@@ -68,7 +69,7 @@ fn logiques(p: &Projet) -> Vec<Logique> {
         let (Some((a, b)), Some((bas, haut))) = (droit(m), p.bas_haut(m)) else { continue };
         let e = epaisseur(m);
         if e > 0.0 && a.distance(b) > 1.0 {
-            out.push(Logique { a, b, epaisseur: e, bas, haut, membres: vec![Membre { id: m.id.clone(), sens: true, porteur: true, ecart: 0.0 }], noyau: Some((-e / 2.0, e / 2.0)) });
+            out.push(Logique { a, b, epaisseur: e, bas, haut, membres: vec![Membre { id: m.id.clone(), sens: true, porteur: true, ecart: 0.0, demi: e / 2.0 }], noyau: Some((-e / 2.0, e / 2.0)) });
         }
     }
     for asm in &p.assemblages {
@@ -101,7 +102,7 @@ fn logiques(p: &Projet) -> Vec<Logique> {
             haut = haut.max(zh);
             let porteur = p.type_mur(&c.type_mur).and_then(|t| t.couches.first()).is_some_and(|x| x.fonction == FonctionCouche::Structure);
             couches_n.push((o, h, porteur));
-            membres.push(Membre { id: c.id.clone(), sens: sens > 0.0, porteur, ecart: o });
+            membres.push(Membre { id: c.id.clone(), sens: sens > 0.0, porteur, ecart: o, demi: h });
         }
         if !valide || max <= min {
             continue;
@@ -122,6 +123,53 @@ fn logiques(p: &Projet) -> Vec<Logique> {
     out
 }
 
+/// Candidat de coupe d'une extrémité : distance au nœud, coupe commune, angle en L,
+/// coupe des couches porteuses (arrivée en T), coupes propres à chaque couche (angle).
+type Candidat = (f64, Coupe, bool, Option<Coupe>, Option<HashMap<String, Coupe>>);
+
+/// Angle en L joint par les noyaux, coupes des couches de `a` : une face de couche
+/// (écart f le long de `ua.perp()`) rejoint la ligne de `b` à la même profondeur depuis
+/// son noyau (côté intérieur de l'angle, `s` le long de `ua.perp()`, ou extérieur ; dans
+/// le noyau, en proportion) ; la coupe passe par les deux points ainsi obtenus. None sans
+/// noyau d'un côté.
+fn onglet_par_noyau(a: &Logique, b: &Logique, x: DVec2, ua: DVec2, ub: DVec2, s: f64) -> Option<HashMap<String, Coupe>> {
+    let (na, nb) = ((a.b - a.a).normalize().perp(), (b.b - b.a).normalize().perp());
+    let (sa, sb) = (ua.perp().dot(na).signum(), ub.perp().dot(nb).signum());
+    // noyaux le long de ua.perp() et ub.perp() : (face extérieure, face intérieure) de l'angle
+    let bornes = |(lo, hi): (f64, f64), signe: f64, cote: f64| {
+        let (p, q) = (lo * signe, hi * signe);
+        let (mn, mx) = (p.min(q), p.max(q));
+        if cote > 0.0 { (mn, mx) } else { (mx, mn) }
+    };
+    let (a_ext, a_int) = bornes(a.noyau?, sa, s);
+    let (b_ext, b_int) = bornes(b.noyau?, sb, -s);
+    // ligne de b correspondant à l'écart f de a
+    let homologue = |f: f64| -> f64 {
+        let d_int = s * (f - a_int);
+        let d_ext = s * (f - a_ext);
+        if d_int >= 0.0 {
+            b_int - s * d_int
+        } else if d_ext <= 0.0 {
+            b_ext - s * d_ext
+        } else {
+            let t = (f - a_ext) / (a_int - a_ext);
+            b_ext + (b_int - b_ext) * t
+        }
+    };
+    let mut out = HashMap::new();
+    for m in &a.membres {
+        let c = m.ecart * sa;
+        let (f1, f2) = (c - m.demi, c + m.demi);
+        let point = |f: f64| intersection(x + ua.perp() * f, ua, x + ub.perp() * homologue(f), ub);
+        let (Some(p), Some(q)) = (point(f1), point(f2)) else { continue };
+        if p.distance(q) < 1e-6 {
+            continue;
+        }
+        out.insert(m.id.clone(), Coupe { point: p.to_array(), direction: (q - p).to_array() });
+    }
+    Some(out)
+}
+
 /// Coupes de toutes les extrémités raccordées du projet.
 pub fn coupes(p: &Projet) -> Coupes {
     jonctions(p).0
@@ -133,12 +181,12 @@ pub fn jonctions(p: &Projet) -> (Coupes, Interruptions) {
     let ls = logiques(p);
     // (mur logique, extrémité 0 début / 1 fin) → candidats (distance, coupe, est un L,
     // coupe des couches porteuses)
-    let mut candidats: HashMap<(usize, usize), Vec<(f64, Coupe, bool, Option<Coupe>)>> = HashMap::new();
+    let mut candidats: HashMap<(usize, usize), Vec<Candidat>> = HashMap::new();
     let mut interruptions: Interruptions = HashMap::new();
     // arrivée en T de `arrivant` (extrémité e) sur `porteur` au point x : finitions
     // arrêtées sur la face, noyau prolongé jusqu'à la face du noyau du porteur, couches
     // de finition du porteur interrompues au passage
-    let mut arrivee = |candidats: &mut HashMap<(usize, usize), Vec<(f64, Coupe, bool, Option<Coupe>)>>, k: usize, e: usize, dist: f64, porteur: &Logique, arrivant: &Logique, x: DVec2, loin: DVec2| {
+    let mut arrivee = |candidats: &mut HashMap<(usize, usize), Vec<Candidat>>, k: usize, e: usize, dist: f64, porteur: &Logique, arrivant: &Logique, x: DVec2, loin: DVec2| {
         let dp = (porteur.b - porteur.a).normalize();
         let n = dp.perp();
         let cote = (loin - x).dot(n).signum();
@@ -174,7 +222,7 @@ pub fn jonctions(p: &Projet) -> (Coupes, Interruptions) {
                 }
             }
         }
-        candidats.entry((k, e)).or_default().push((dist, coupe, false, noyau_coupe));
+        candidats.entry((k, e)).or_default().push((dist, coupe, false, noyau_coupe, None));
     };
     // extrémités prolongées par un mur aligné bout à bout : jonction droite, sans onglet
     let mut continues: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
@@ -240,8 +288,11 @@ pub fn jonctions(p: &Projet) -> (Coupes, Interruptions) {
                     continue;
                 };
                 let c = Coupe { point: dedans.to_array(), direction: (dehors - dedans).to_array() };
-                candidats.entry((i, ea)).or_default().push((dist_a, c, true, None));
-                candidats.entry((j, eb)).or_default().push((dist_b, c, true, None));
+                // jonction des noyaux : chaque couche rejoint, sur l'autre mur, la ligne à la
+                // même profondeur depuis le noyau (noyaux en onglet sur leurs faces)
+                let (pa, pb) = (onglet_par_noyau(a, b, x, ua, ub, s), onglet_par_noyau(b, a, x, ub, ua, -s));
+                candidats.entry((i, ea)).or_default().push((dist_a, c, true, None, pa));
+                candidats.entry((j, eb)).or_default().push((dist_b, c, true, None, pb));
             } else {
                 // arrivée en T : arrêt sur la face du mur traversé, côté de l'arrivant
                 for (k, e, dist, porteur, arrivant) in [(i, ea, dist_a, b, a), (j, eb, dist_b, a, b)] {
@@ -260,12 +311,16 @@ pub fn jonctions(p: &Projet) -> (Coupes, Interruptions) {
             cs.retain(|c| !c.2);
         }
         cs.sort_by(|x, y| x.0.total_cmp(&y.0));
-        let Some(&(_, coupe, _, noyau)) = cs.first() else { continue };
+        let Some((_, coupe, _, noyau, par_membre)) = cs.first().cloned() else { continue };
         for m in &ls[k].membres {
             // extrémité du membre qui correspond à celle du mur logique ; couches porteuses
-            // prolongées jusqu'au noyau du mur rejoint
+            // prolongées jusqu'au noyau du mur rejoint ; à un angle, coupe propre à la couche
             let bout = if m.sens { e } else { 1 - e };
-            let c = if m.porteur { noyau.unwrap_or(coupe) } else { coupe };
+            let c = match par_membre.as_ref().and_then(|x| x.get(&m.id)) {
+                Some(c) => *c,
+                None if m.porteur => noyau.unwrap_or(coupe),
+                None => coupe,
+            };
             out.entry(m.id.clone()).or_insert([None, None])[bout] = Some(c);
         }
     }
@@ -368,6 +423,27 @@ mod tests {
         let y = |id: &String| { let m = p.murs.iter().find(|m| &m.id == id).unwrap(); contour(&p, m, &cs).unwrap()[1][1] };
         let (face_noyau, face) = (y(&refend[1]), y(&refend[0]));
         assert!(face - face_noyau > 15.0, "{face} {face_noyau}");
+    }
+
+    #[test]
+    fn angle_joint_par_les_noyaux() {
+        // deux compositions différentes : les bétons se rejoignent en onglet sur leurs faces
+        let mut p = Projet::nouveau("L");
+        let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f };
+        p.types_murs.push(TypeCompose { id: "a".into(), nom: "A".into(), couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Béton", 200.0, FonctionCouche::Structure), c("Isolant", 100.0, FonctionCouche::Isolation)], couches_detaillees: true, origine: None });
+        p.types_murs.push(TypeCompose { id: "b".into(), nom: "B".into(), couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Béton", 160.0, FonctionCouche::Structure), c("Isolant", 140.0, FonctionCouche::Isolation), c("Plâtre", 13.0, FonctionCouche::Finition)], couches_detaillees: true, origine: None });
+        p.ajouter_mur([0.0, 4000.0], [5000.0, 4000.0], &ParametresMur { type_mur: Some("a".into()), ..Default::default() }).unwrap();
+        p.ajouter_mur([5000.0, 4000.0], [5000.0, 0.0], &ParametresMur { type_mur: Some("b".into()), ..Default::default() }).unwrap();
+        let cs = coupes(&p);
+        let beton = |asm: usize| {
+            let id = &p.assemblages[asm].couches[1];
+            let m = p.murs.iter().find(|m| &m.id == id).unwrap();
+            contour(&p, m, &cs).unwrap()
+        };
+        let (a, b) = (beton(0), beton(1));
+        // les deux sommets de la coupe du béton de A sont des sommets du béton de B
+        let communs = [a[1], a[2]].iter().filter(|x| b.iter().any(|y| (x[0] - y[0]).hypot(x[1] - y[1]) < 1e-6)).count();
+        assert_eq!(communs, 2, "{a:?} / {b:?}");
     }
 
     #[test]

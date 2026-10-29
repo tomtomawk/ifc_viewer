@@ -183,6 +183,11 @@ dans le projet au choix.
 
 - Angle (L) en onglet, arrivée (T) arrêtée sur la face du mur traversé, deux murs alignés
   bout à bout continus : un troisième mur au même nœud s'arrête sur leur face.
+- Angle en L joint par les noyaux : les noyaux (couches porteuses) se coupent en onglet
+  sur leurs propres faces ; chaque autre couche rejoint, sur l'autre mur, la ligne située
+  à la même profondeur depuis le noyau (côté intérieur ou extérieur de l'angle) : à
+  composition égale, onglet couche à couche ; à compositions différentes, noyaux alignés
+  et finitions qui s'enveloppent.
 - Jonction des noyaux (comme Revit) : à une arrivée en T, les couches porteuses
   (fonction structure) du mur arrivant vont jusqu'à la face du noyau du mur rejoint ; ses
   couches de finition s'arrêtent sur sa face, et celles du mur rejoint sont interrompues
