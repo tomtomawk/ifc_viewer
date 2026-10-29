@@ -556,6 +556,8 @@ pub struct ViewerApp {
     /// Éditeur de hachures ouvert, motif choisi, nom et tirets en cours de saisie (motif,
     /// texte des tirets de chaque famille).
     editeur_motifs: bool,
+    /// Fenêtre « Épaisseurs de traits » ouverte : table des 12 plumes en cours d'édition.
+    editeur_plumes: Option<Vec<f64>>,
     motif_choisi: Option<String>,
     nom_motif_saisi: String,
     tirets_saisis: (String, Vec<String>),
@@ -685,6 +687,7 @@ impl ViewerApp {
             liste_materiaux: Vec::new(),
             materiau_edite: None,
             editeur_motifs: false,
+            editeur_plumes: None,
             motif_choisi: None,
             nom_motif_saisi: String::new(),
             tirets_saisis: (String::new(), Vec::new()),
@@ -3134,6 +3137,15 @@ impl ViewerApp {
                         self.options.enregistrer();
                     }
                     ui.separator();
+                    if ui.add_enabled(self.natif.is_some(), egui::Button::new("Épaisseurs de traits…"))
+                        .on_hover_text("Épaisseurs des 12 plumes du projet (mm du papier)")
+                        .on_disabled_hover_text("Ouvrir un projet natif")
+                        .clicked()
+                    {
+                        ui.close();
+                        self.editeur_plumes = self.natif.as_ref().map(|(p, _)| p.epaisseurs_plumes());
+                    }
+                    ui.separator();
                     let g = crate::gabarit::actif();
                     ui.label(RichText::new(format!("Gabarit : {}", g.nom)).strong())
                         .on_hover_text(self.options.gabarit.as_ref().map_or("Gabarit embarqué".into(), |c| c.display().to_string()));
@@ -4865,6 +4877,74 @@ impl ViewerApp {
     /// traits (angle, pas, glissement, origine, tirets en mm du papier) et aperçu. Un motif
     /// du gabarit ou de base modifié est copié dans le projet ; renommer un motif met à
     /// jour les matériaux qui s'en servent.
+    /// Fenêtre « Épaisseurs de traits » : épaisseur de chaque plume (mm du papier),
+    /// aperçu, couches qui l'utilisent ; table du projet, ou celle du gabarit rétablie.
+    fn fenetre_plumes(&mut self, ctx: &egui::Context) {
+        let Some(mut table) = self.editeur_plumes.take() else { return };
+        let Some((projet, _)) = &self.natif else { return };
+        let gabarit = crate::modele::Projet::default().epaisseurs_plumes();
+        let actuelle = projet.epaisseurs_plumes();
+        // couches (types de murs et de dalles) par plume
+        let mut usages = [0usize; 12];
+        for c in projet.types_murs.iter().chain(&projet.types_dalles).flat_map(|t| &t.couches) {
+            usages[(c.plume().clamp(1, 12) - 1) as usize] += 1;
+        }
+        let (mut ouvert, mut fermer, mut appliquer) = (true, false, false);
+        egui::Window::new("Épaisseurs de traits").id(egui::Id::unique("fenetre_plumes")).open(&mut ouvert).resizable(false).collapsible(false).show(ctx, |ui| {
+            ui.label(RichText::new("Épaisseur de chaque plume en mm du papier : un trait de 0,35 mm mesure 35 mm réels au 1:100.").small().weak());
+            ui.add_space(4.0);
+            egui::Grid::new("grille_plumes").num_columns(4).spacing([12.0, 4.0]).striped(true).show(ui, |ui| {
+                ui.label(RichText::new("Plume").strong());
+                ui.label(RichText::new("Épaisseur").strong());
+                ui.label(RichText::new("Aperçu").strong());
+                ui.label(RichText::new("Couches").strong());
+                ui.end_row();
+                for (i, e) in table.iter_mut().enumerate() {
+                    let n = i + 1;
+                    let defaut = match n { 5 => " (structure)", 3 => " (isolation)", 2 => " (autres)", _ => "" };
+                    ui.label(format!("{n}{defaut}"));
+                    ui.add(egui::DragValue::new(e).speed(0.005).range(0.01..=5.0).max_decimals(2).suffix(" mm"));
+                    // aperçu à l'échelle 1:1 du papier (environ 3,8 pixels par mm)
+                    let (r, _) = ui.allocate_exact_size(egui::vec2(90.0, 14.0), Sense::hover());
+                    ui.painter().line_segment([r.left_center(), r.right_center()], egui::Stroke::new((*e as f32 * 3.78).max(0.5), ui.visuals().text_color()));
+                    ui.label(if usages[i] > 0 { usages[i].to_string() } else { "—".into() }).on_hover_text("Couches de types de murs et de dalles qui utilisent cette plume (réglée ou par défaut)");
+                    ui.end_row();
+                }
+            });
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                let change = table.iter().zip(&actuelle).any(|(a, b)| (a - b).abs() > 1e-9);
+                if ui.add_enabled(change, egui::Button::new("Appliquer")).clicked() {
+                    appliquer = true;
+                }
+                if ui.add_enabled(table.iter().zip(&gabarit).any(|(a, b)| (a - b).abs() > 1e-9), egui::Button::new("Valeurs du gabarit"))
+                    .on_hover_text("Reprendre les épaisseurs du gabarit (Appliquer pour valider)")
+                    .clicked()
+                {
+                    table = gabarit.clone();
+                }
+                if ui.button("Fermer").clicked() {
+                    fermer = true;
+                }
+            });
+        });
+        if appliquer {
+            let mut p = projet.clone();
+            // table identique à celle du gabarit : le projet suit le gabarit
+            p.plumes = if table.iter().zip(&gabarit).all(|(a, b)| (a - b).abs() < 1e-9) { Vec::new() } else { table.clone() };
+            match self.appliquer_projet(p) {
+                Ok(()) => {
+                    self.coupe_dirty = true;
+                    self.status = "Épaisseurs de traits appliquées".into();
+                }
+                Err(e) => self.error = Some(e),
+            }
+        }
+        if ouvert && !fermer {
+            self.editeur_plumes = Some(table);
+        }
+    }
+
     fn fenetre_motifs(&mut self, ctx: &egui::Context) {
         use crate::modele::{DefinitionMotif, LigneMotif, MotifCoupe};
         if !self.editeur_motifs {
@@ -5040,6 +5120,7 @@ impl ViewerApp {
         self.fenetre_materiau(ui.ctx());
         self.fenetre_motifs(ui.ctx());
         self.fenetre_position_plan(ui.ctx());
+        self.fenetre_plumes(ui.ctx());
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
         if self.natif.is_some() {
             let ids = self.selection_bim();
