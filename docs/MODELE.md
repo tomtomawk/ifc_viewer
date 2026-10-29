@@ -249,6 +249,9 @@ format en v0).
 | Portes, fenêtres hébergées par un mur converti | largeur et hauteur du type, abscisse et allège du point d'insertion | Cotes du type ≠ réservation découpée dans le mur ; sans cotes de type : encombrement de la famille |
 | Sols, plafonds prismatiques | contour du dessus, épaisseur du type, décalage | Sols en pente : importés |
 | Murs-rideaux, toits, escaliers, garde-corps, terrain, autres familles, formes d'un `.rfa` | — | Importés |
+| Plans d'étage | niveau, hauteur du plan de coupe (plage de vue), nom, type, échelle | Orientation d'un plan pivoté non reprise (plan au nord du modèle, compté dans le rapport) |
+| Coupes, élévations verticales cadrées | ligne dans le plan proche du cadrage, sur sa largeur ; profondeur du cadrage (limite de vue), sinon 50 m ; même côté de regard | Coupes inclinées ou sans cadrage, vues 3D, plafonds, dessin, légendes, nomenclatures : ignorées (comptées) ; éléments 2D (cotes, textes) non repris |
+| Feuilles | numéro, nom, format (étendue du cartouche, sinon A1), vues placées converties à la même position et la même échelle, jeu « Plans » | Le cartouche Revit n'est pas repris (cartouche natif) ; une vue placée non convertie est comptée dans le rapport |
 
 Dans un document de famille de fenêtre ou de porte, le mur hôte du gabarit est percé par le
 vide de la famille, pas par une instance : son écart de volume le laisse importé.

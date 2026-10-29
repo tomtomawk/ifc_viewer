@@ -81,6 +81,21 @@ fn fenetres<'m>(m: &'m Maquette, f: &Vue) -> Vec<(&'m Element2D, &'m Vue)> {
         .collect()
 }
 
+/// Étendue du cartouche de la feuille `f` (mm du papier, repère de la feuille) :
+/// [xmin, ymin, xmax, ymax] des traits et faces de son dessin ; None sans cartouche lu.
+pub fn etendue_cartouche(m: &Maquette, f: &Vue) -> Option<[f64; 4]> {
+    let mut e = [f64::MAX, f64::MAX, f64::MIN, f64::MIN];
+    for i in m.instances_vue.iter().filter(|i| i.vue == f.id) {
+        let cartouche = m.types.get(&i.type_id).and_then(|t| m.familles.get(&t.famille)).is_some_and(|x| x.categorie == OST_TITLE_BLOCKS);
+        let Some(d) = m.dessins.get(&i.type_id).filter(|_| cartouche) else { continue };
+        let place = |p: DVec3| i.origine + i.axes * p;
+        for q in d.traits.iter().flatten().copied().chain(d.faces.iter().flat_map(|(_, t)| t.iter().flatten().copied())).map(place) {
+            e = [e[0].min(q.x), e[1].min(q.y), e[2].max(q.x), e[3].max(q.y)];
+        }
+    }
+    (e[0] < e[2] && e[1] < e[3]).then_some(e)
+}
+
 /// Valeur d'un paramètre affiché par le cartouche `instance` de la feuille `f`.
 pub fn valeur_cartouche(m: &Maquette, f: &Vue, instance: i64, param: i64) -> Option<String> {
     let rev = || revision_actuelle(m, f);

@@ -86,8 +86,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   (échelle, position, ouvrir, retirer). L'arborescence liste tous les jeux, toutes
   leurs feuilles et, sous chaque feuille, ses vues placées (clic : ouvrir la vue) ; clic
   sur une feuille pour l'amener à l'écran. La recherche garde un jeu entier si son nom
-  correspond, une feuille si son titre ou une de ses vues correspond. Les feuilles
-  d'un fichier Revit converti en natif ne sont pas reprises (ses vues ne le sont pas).
+  correspond, une feuille si son titre ou une de ses vues correspond. Un fichier
+  Revit converti (Début → Importer) apporte ses plans d'étage, coupes, élévations et
+  feuilles (voir MODELE.md, conversion depuis Revit).
 - **Nomenclatures** (Documenter ou l'arborescence) : quantités par catégorie,
   regroupées par type, export CSV.
 - **Sortie → IFC4** exporte niveaux, classes architecturales, compositions et

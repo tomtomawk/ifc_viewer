@@ -258,11 +258,187 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
         let categorie = format!("Formes ({})", m.categorie_famille(f.famille).0);
         c.importer(format!("{} [{}]", f.classe, f.id), categorie, niveau(f.niveau), &triangles(&f.geometrie), "forme de famille", origine(f.id, &f.classe));
     }
+    vues_et_feuilles(m, c, &|v: i64| ident("vue", v), &|f: i64| ident("feuille", f), &niveau);
     let ignores = &mut c.projet.ignores;
     for (k, n) in [("Pièces, surfaces et zones", m.pieces.len()), ("Quadrillages", m.grilles.len()), ("Éléments 2D des vues", m.elements_2d.len())] {
         if n > 0 {
             *ignores.entry(k.into()).or_default() += n;
         }
+    }
+}
+
+/// Ligne de coupe native d'une coupe ou élévation Revit verticale cadrée (mm) : début,
+/// fin, profondeur, direction de la ligne. La ligne est dans le plan proche du cadrage
+/// (plan de coupe), sur la largeur du cadrage ; elle suit la droite de la vue, retournée
+/// s'il le faut pour regarder du même côté (une coupe native regarde à gauche de sa
+/// ligne). None si le cadrage est trop étroit.
+fn ligne_de_coupe(cadre: &crate::rvt::vues::Cadre, droite: DVec3, direction: DVec3) -> Option<(DVec3, DVec3, f64, DVec3)> {
+    // profondeur : axe du cadrage qui s'éloigne de l'observateur
+    let mut a = cadre.axes[2].normalize_or_zero();
+    let (mut pres, mut loin) = (cadre.min[2], cadre.max[2]);
+    if a.dot(direction) > 0.0 {
+        a = -a;
+        (pres, loin) = (-cadre.max[2], -cadre.min[2]);
+    }
+    let p0 = cadre.origine + a * pres;
+    // largeur : coins du cadrage le long de la droite de la vue
+    let r = DVec3::new(droite.x, droite.y, 0.0).normalize_or_zero();
+    let (mut s0, mut s1) = (f64::MAX, f64::MIN);
+    for k in 0..8 {
+        let q = cadre.origine
+            + cadre.axes[0] * if k & 1 == 0 { cadre.min[0] } else { cadre.max[0] }
+            + cadre.axes[1] * if k & 2 == 0 { cadre.min[1] } else { cadre.max[1] }
+            + cadre.axes[2] * if k & 4 == 0 { cadre.min[2] } else { cadre.max[2] };
+        let t = (q - p0).dot(r);
+        (s0, s1) = (s0.min(t), s1.max(t));
+    }
+    if r == DVec3::ZERO || s1 - s0 < 100.0 {
+        return None;
+    }
+    let u = if r.cross(DVec3::Z).dot(direction) >= 0.0 { r } else { -r };
+    let (debut, fin) = if u == r { (p0 + r * s0, p0 + r * s1) } else { (p0 + r * s1, p0 + r * s0) };
+    let profondeur = if cadre.loin && loin > pres { loin - pres } else { 50_000.0 };
+    Some((debut, fin, profondeur, u))
+}
+
+/// Position native (mm du papier, repère de la feuille Revit) d'une vue placée : sur la
+/// feuille Revit, p ↦ décalage + (p − o)·(droite, haut) × échelle ; sur la feuille
+/// native, p ↦ position + (p − o_n)·(u_n, haut) / échelle native, avec droite = u_n.
+fn position_placee(decalage: DVec3, echelle: f64, origine: DVec3, haut: DVec3, o_n: DVec3, u_n: DVec3) -> [f64; 2] {
+    let d = o_n - origine;
+    [decalage.x + d.dot(u_n) * echelle, decalage.y + d.dot(haut) * echelle]
+}
+
+/// Vues et feuilles de Revit en vues et feuilles natives. Plans d'étage : niveau et
+/// hauteur du plan de coupe (plage de vue). Coupes et élévations verticales cadrées :
+/// ligne le long du plan de coupe (bord proche du cadrage), largeur et profondeur du
+/// cadrage, regard du même côté. Feuilles : numéro, nom, format du cartouche, vues
+/// placées converties à la même position et la même échelle (repère du cartouche). Les
+/// autres vues (3D, plafonds, dessin, légendes, nomenclatures) sont comptées ignorées.
+fn vues_et_feuilles(m: &Maquette, c: &mut Conversion, id_vue: &dyn Fn(i64) -> String, id_feuille: &dyn Fn(i64) -> String, niveau: &dyn Fn(i64) -> Option<String>) {
+    use super::{GenreVue, Vue as VueNative, documentation::{Feuille, VuePlacee, JEU_DEFAUT}};
+    let altitude = |n: i64| m.niveaux.iter().find(|x| x.id == n).map(|x| x.altitude);
+    let nom_type = |t: i64| m.types.get(&t).map(|x| x.nom.clone()).unwrap_or_default();
+    // vue Revit → (vue native, origine native (mm), axe horizontal natif)
+    let mut converties: HashMap<i64, (String, DVec3, DVec3)> = HashMap::new();
+    let mut ignorees: std::collections::BTreeMap<String, usize> = Default::default();
+    let mut noms: std::collections::HashSet<String> = c.projet.vues.iter().map(|v| v.nom.clone()).collect();
+    let mut pivotes = 0;
+    for v in m.vues.iter().filter(|v| !v.gabarit && v.genre != "Arborescence" && v.genre != "Feuille") {
+        let genre = match v.genre {
+            "Plan d'étage" => {
+                let Some(n) = niveau(v.niveau) else {
+                    *ignorees.entry("Plans d'étage sans niveau connu".into()).or_default() += 1;
+                    continue;
+                };
+                // plan de coupe : décalage depuis son niveau de référence, ramené au niveau de la vue
+                let coupe = v.plage_vue.map_or(1200.0, |p| {
+                    let (r, d) = p[1];
+                    let ecart = if r == -3 || r == v.niveau { 0.0 } else { altitude(r).zip(altitude(v.niveau)).map_or(0.0, |(a, b)| a - b) };
+                    ecart + d
+                });
+                if (v.droite - DVec3::X).length() > 1e-3 {
+                    pivotes += 1;
+                }
+                let z = altitude(v.niveau).unwrap_or(0.0) + coupe;
+                converties.insert(v.id, (id_vue(v.id), DVec3::new(0.0, 0.0, z), DVec3::X));
+                GenreVue::Plan { niveau: n, coupe }
+            }
+            "Coupe" | "Élévation" => {
+                let ligne = v.cadre.as_ref().filter(|_| v.haut.z > 0.99).and_then(|c| ligne_de_coupe(c, v.droite, v.direction));
+                let Some((debut, fin, profondeur, u)) = ligne else {
+                    *ignorees.entry("Coupes et élévations inclinées ou sans cadrage".into()).or_default() += 1;
+                    continue;
+                };
+                converties.insert(v.id, (id_vue(v.id), DVec3::new(debut.x, debut.y, 0.0), u));
+                GenreVue::Coupe { debut: [debut.x, debut.y], fin: [fin.x, fin.y], profondeur, elevation: v.genre == "Élévation" }
+            }
+            autre => {
+                *ignorees.entry(format!("Vues ({autre})")).or_default() += 1;
+                continue;
+            }
+        };
+        // nom unique parmi les vues natives
+        let mut nom = v.nom.clone();
+        let mut k = 2;
+        while noms.contains(&nom) {
+            nom = format!("{} ({k})", v.nom);
+            k += 1;
+        }
+        noms.insert(nom.clone());
+        c.projet.vues.push(VueNative { id: id_vue(v.id), nom, type_vue: nom_type(v.type_vue), echelle: if v.echelle > 0.0 { v.echelle } else { 100.0 }, genre });
+    }
+    if pivotes > 0 {
+        *ignorees.entry("Orientation des plans pivotés (plans repris au nord du modèle)".into()).or_default() += pivotes;
+    }
+    // feuilles : repère du cartouche (coin bas gauche), vues placées converties
+    let par_id: HashMap<i64, &crate::rvt::vues::Vue> = m.vues.iter().map(|v| (v.id, v)).collect();
+    let mut feuilles: Vec<&crate::rvt::vues::Vue> = m.vues.iter().filter(|v| !v.gabarit && v.genre == "Feuille").collect();
+    feuilles.sort_by(|a, b| a.numero.cmp(&b.numero).then(a.nom.cmp(&b.nom)));
+    for f in feuilles {
+        let e = crate::rvt::feuilles::etendue_cartouche(m, f).unwrap_or([0.0, 0.0, 841.0, 594.0]);
+        let arrondi = |x: f64| (x * 10.0).round() / 10.0;
+        let mut vues = Vec::new();
+        for el in m.elements_2d.iter().filter(|el| el.vue == f.id) {
+            let crate::rvt::vues::Contenu::FenetreDeVue { vue, decalage, echelle, .. } = &el.contenu else { continue };
+            let (Some((id, o_n, u_n)), Some(pv)) = (converties.get(vue), par_id.get(vue)) else {
+                *ignorees.entry("Vues placées sur des feuilles, non converties".into()).or_default() += 1;
+                continue;
+            };
+            if *echelle <= 0.0 {
+                continue;
+            }
+            let q = position_placee(*decalage, *echelle, pv.origine, pv.haut, *o_n, *u_n);
+            let position = [arrondi(q[0] - e[0]), arrondi(q[1] - e[1])];
+            vues.push(VuePlacee { vue: id.clone(), position, echelle: (1.0 / echelle).round().max(1.0) });
+        }
+        c.projet.feuilles.push(Feuille {
+            id: id_feuille(f.id),
+            numero: f.numero.clone(),
+            nom: f.nom.clone(),
+            jeu: JEU_DEFAUT.into(),
+            largeur: arrondi(e[2] - e[0]).clamp(50.0, 5000.0),
+            hauteur: arrondi(e[3] - e[1]).clamp(50.0, 5000.0),
+            cartouche: String::new(),
+            vues,
+        });
+    }
+    for (k, n) in ignorees {
+        *c.projet.ignores.entry(k).or_default() += n;
+    }
+}
+
+#[cfg(test)]
+mod tests_vues {
+    use super::*;
+    use crate::rvt::vues::Cadre;
+
+    /// Coupe Revit regardant vers +Y (observateur au sud, droite = +X) : la ligne
+    /// native va d'ouest en est sur le plan proche ; un point du modèle tombe au même
+    /// endroit de la feuille avant et après conversion.
+    #[test]
+    fn coupe_et_position_sur_feuille() {
+        let (droite, haut, direction) = (DVec3::X, DVec3::Z, DVec3::NEG_Y);
+        // cadrage : origine (1000, 2000, 0), axes droite, haut, profondeur vers +Y
+        let cadre = Cadre { origine: DVec3::new(1000.0, 2000.0, 0.0), axes: [DVec3::X, DVec3::Z, DVec3::Y], min: [-3000.0, -500.0, 0.0], max: [5000.0, 6000.0, 8000.0], actif: [true; 3], loin: true, annotation_active: false, annotation: [0.0; 4] };
+        let (debut, fin, profondeur, u) = ligne_de_coupe(&cadre, droite, direction).unwrap();
+        assert!((debut - DVec3::new(-2000.0, 2000.0, 0.0)).length() < 1e-9, "{debut}");
+        assert!((fin - DVec3::new(6000.0, 2000.0, 0.0)).length() < 1e-9, "{fin}");
+        assert_eq!((profondeur, u), (8000.0, DVec3::X));
+        // regard natif : vers la gauche de la ligne, observateur du côté de `direction`
+        assert!(u.cross(DVec3::Z).dot(direction) > 0.0);
+        // feuille : même point du papier pour un point du modèle
+        let (o, decalage, echelle) = (DVec3::new(1000.0, 2000.0, 1500.0), DVec3::new(300.0, 200.0, 0.0), 0.01);
+        let o_n = DVec3::new(debut.x, debut.y, 0.0);
+        let pos = position_placee(decalage, echelle, o, haut, o_n, u);
+        for p in [DVec3::new(0.0, 2500.0, 0.0), DVec3::new(4321.0, 9000.0, 2800.0)] {
+            let revit = [decalage.x + (p - o).dot(droite) * echelle, decalage.y + (p - o).dot(haut) * echelle];
+            let natif = [pos[0] + (p - o_n).dot(u) * echelle, pos[1] + (p - o_n).dot(DVec3::Z) * echelle];
+            assert!((revit[0] - natif[0]).abs() < 1e-9 && (revit[1] - natif[1]).abs() < 1e-9, "{revit:?} {natif:?}");
+        }
+        // coupe regardant vers −Y : ligne retournée, toujours du bon côté
+        let (_, _, _, u2) = ligne_de_coupe(&Cadre { axes: [DVec3::NEG_X, DVec3::Z, DVec3::NEG_Y], ..cadre }, DVec3::NEG_X, DVec3::Y).unwrap();
+        assert!(u2.cross(DVec3::Z).dot(DVec3::Y) > 0.0);
     }
 }
 
