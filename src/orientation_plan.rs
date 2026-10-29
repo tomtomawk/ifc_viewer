@@ -4,12 +4,17 @@ use eframe::egui::{self, Align2, Color32, PointerButton, Sense, Stroke, pos2, ve
 use glam::Vec3;
 use std::f32::consts::{FRAC_PI_2, TAU};
 
-/// Rayon de l'anneau, rayon des lettres N/E/S/O et taille de la zone (anneau puis
-/// une ligne de boutons).
+/// Anneau (rayons extérieur et intérieur), rayon des lettres N/E/S/O, rayon des
+/// flèches de rotation autour de l'anneau, taille de la zone (anneau puis deux lignes
+/// de boutons).
 const RAYON: f32 = 50.0;
-const RAYON_CARDINAUX: f32 = 41.0;
-const LARGEUR: f32 = 124.0;
-const HAUTEUR_ANNEAU: f32 = 108.0;
+const RAYON_INTERIEUR: f32 = 34.0;
+const RAYON_CARDINAUX: f32 = 42.0;
+const RAYON_FLECHES: f32 = 58.0;
+const LARGEUR: f32 = 132.0;
+const HAUTEUR_ANNEAU: f32 = 124.0;
+/// Demi-ouverture des flèches de rotation (degrés), de part et d'autre de l'horizontale.
+const OUVERTURE_FLECHES: f32 = 28.0;
 /// Aimantation du glisser : multiples de 15°, à 2° près (Maj : rotation libre).
 const PAS_AIMANT: f32 = 15.0;
 const TOLERANCE_AIMANT: f32 = 2.0;
@@ -20,6 +25,39 @@ pub fn zone(vue: egui::Rect) -> egui::Rect {
 
 fn centre(zone: egui::Rect) -> egui::Pos2 {
     pos2(zone.center().x, zone.top() + HAUTEUR_ANNEAU * 0.5)
+}
+
+/// Flèche de rotation sous le point (écran) : −1 à gauche (sens antihoraire), +1 à droite.
+fn fleche(p: egui::Pos2, centre: egui::Pos2) -> Option<f32> {
+    let d = p - centre;
+    if !(RAYON + 1.0..=RAYON_FLECHES + 8.0).contains(&d.length()) {
+        return None;
+    }
+    let a = d.y.atan2(d.x).to_degrees();
+    if a.abs() <= OUVERTURE_FLECHES + 6.0 {
+        Some(1.0)
+    } else if 180.0 - a.abs() <= OUVERTURE_FLECHES + 6.0 {
+        Some(-1.0)
+    } else {
+        None
+    }
+}
+
+/// Arc fléché concentrique à l'anneau, de `de` à `vers` (degrés écran, y vers le bas),
+/// pointe au bout `vers`.
+fn arc_fleche(p: &egui::Painter, centre: egui::Pos2, de: f32, vers: f32, trait_: Stroke) {
+    let n = 16;
+    let point = |a: f32| centre + vec2(a.to_radians().cos(), a.to_radians().sin()) * RAYON_FLECHES;
+    let pts: Vec<egui::Pos2> = (0..=n).map(|k| point(de + (vers - de) * k as f32 / n as f32)).collect();
+    p.add(egui::Shape::line(pts, trait_));
+    let bout = point(vers);
+    let tangente = (point(vers) - point(vers - (vers - de).signum() * 2.0)).normalized();
+    let normale = vec2(-tangente.y, tangente.x);
+    p.add(egui::Shape::convex_polygon(
+        vec![bout + tangente * 5.0, bout - tangente * 3.0 + normale * 5.0, bout - tangente * 3.0 - normale * 5.0],
+        trait_.color,
+        Stroke::NONE,
+    ));
 }
 
 pub fn angle(camera: &Camera) -> f32 {
@@ -61,15 +99,20 @@ fn aimanter(a: f32) -> f32 {
 pub struct Reponse {
     /// L'orientation de la caméra a changé.
     pub change: bool,
-    /// « Aligner » cliqué : le prochain clic dans la vue choisit l'élément à mettre à
+    /// « Aligner » cliqué : le prochain clic dans la vue choisit l'arête à mettre à
     /// l'horizontale.
     pub aligner: bool,
+    /// « Enregistrer la position » cliqué : mémoriser l'orientation en cours.
+    pub enregistrer: bool,
+    /// Position enregistrée à supprimer (indice).
+    pub supprimer: Option<usize>,
 }
 
 /// Repère plat : anneau à glisser (aimanté tous les 15°, Maj : libre), N/E/S/O pour
-/// mettre une direction en haut, PLAN pour l'orientation initiale, −90° / +90°,
-/// angle saisi, et Aligner (sur un élément). `alignement` : mode Aligner en cours.
-pub fn afficher(ui: &mut egui::Ui, vue: egui::Rect, camera: &mut Camera, origine: f32, alignement: bool) -> Reponse {
+/// mettre une direction en haut, PLAN pour l'orientation initiale, flèches autour de
+/// l'anneau pour tourner de 90°, angle saisi, positions enregistrées (`positions` :
+/// nom et angle) et Aligner (sur une arête). `alignement` : mode Aligner en cours.
+pub fn afficher(ui: &mut egui::Ui, vue: egui::Rect, camera: &mut Camera, origine: f32, alignement: bool, positions: &[(String, f32)]) -> Reponse {
     let zone = zone(vue);
     let anneau = egui::Rect::from_min_size(zone.min, vec2(LARGEUR, HAUTEUR_ANNEAU));
     let centre = centre(zone);
@@ -78,20 +121,22 @@ pub fn afficher(ui: &mut egui::Ui, vue: egui::Rect, camera: &mut Camera, origine
     let avant = camera.yaw;
     let mut reponse = Reponse::default();
     let pointer = resp.interact_pointer_pos();
-    // angle brut accumulé pendant le glisser, l'affichage étant aimanté
+    let sur_anneau = |p: egui::Pos2| (RAYON_INTERIEUR - 2.0..=RAYON + 2.0).contains(&(p - centre).length());
+    // angle brut accumulé pendant le glisser (None : glisser commencé hors de l'anneau),
+    // l'affichage étant aimanté
     let brut_id = id.with("brut");
     if resp.drag_started_by(PointerButton::Primary) {
-        ui.data_mut(|d| d.insert_temp(brut_id, angle(camera)));
+        let depart = ui.input(|i| i.pointer.press_origin()).is_some_and(sur_anneau);
+        ui.data_mut(|d| d.insert_temp(brut_id, depart.then(|| angle(camera))));
     }
     if resp.dragged_by(PointerButton::Primary) {
-        if let Some(position) = pointer {
+        if let (Some(position), Some(brut)) = (pointer, ui.data(|d| d.get_temp::<Option<f32>>(brut_id)).flatten()) {
             let precedent = position - ui.input(|i| i.pointer.delta());
             let a = position - centre;
             let b = precedent - centre;
             if a.length() > 12.0 && b.length() > 12.0 {
-                let delta = ecart(a.angle(), b.angle()) * camera.pitch.signum();
-                let brut = ui.data(|d| d.get_temp::<f32>(brut_id)).unwrap_or_else(|| angle(camera)) + delta;
-                ui.data_mut(|d| d.insert_temp(brut_id, brut));
+                let brut = brut + ecart(a.angle(), b.angle()) * camera.pitch.signum();
+                ui.data_mut(|d| d.insert_temp(brut_id, Some(brut)));
                 let libre = ui.input(|i| i.modifiers.shift);
                 orienter(camera, if libre { brut } else { aimanter(brut) });
             }
@@ -109,11 +154,14 @@ pub fn afficher(ui: &mut egui::Ui, vue: egui::Rect, camera: &mut Camera, origine
         ("O", Vec3::NEG_X, FRAC_PI_2),
     ];
     let survol = resp.hover_pos();
-    let cible = survol.and_then(|p| cardinaux.iter().position(|(_, v, _)| p.distance(direction(*v, RAYON_CARDINAUX)) < 11.0));
+    let cible = survol.and_then(|p| cardinaux.iter().position(|(_, v, _)| p.distance(direction(*v, RAYON_CARDINAUX)) < 9.0));
+    let fleche_survolee = survol.and_then(|p| fleche(p, centre));
     let sur_plan = |p: egui::Pos2| (p - centre).abs().x < 17.0 && (p - centre).abs().y < 10.0;
     if resp.clicked() {
         if let Some(i) = cible {
             orienter(camera, cardinaux[i].2);
+        } else if let Some(sens) = pointer.and_then(|p| fleche(p, centre)) {
+            orienter(camera, angle(camera) + sens * FRAC_PI_2);
         } else if pointer.is_some_and(sur_plan) {
             camera.yaw = origine;
         }
@@ -121,21 +169,34 @@ pub fn afficher(ui: &mut egui::Ui, vue: egui::Rect, camera: &mut Camera, origine
     let p = ui.painter_at(zone);
     let encre = ui.visuals().text_color();
     let bleu = ui.visuals().selection.stroke.color;
-    p.circle_filled(centre, RAYON, Color32::from_rgba_unmultiplied(248, 249, 251, 235));
+    // anneau : bande entre les deux rayons, le plan reste visible au centre
+    let milieu = (RAYON + RAYON_INTERIEUR) * 0.5;
+    let survol_anneau = survol.is_some_and(sur_anneau) && cible.is_none();
+    let fond = if survol_anneau || resp.dragged() { Color32::from_rgba_unmultiplied(214, 226, 244, 245) } else { Color32::from_rgba_unmultiplied(232, 235, 240, 240) };
+    p.circle_stroke(centre, milieu, Stroke::new(RAYON - RAYON_INTERIEUR, fond));
     p.circle_stroke(centre, RAYON, Stroke::new(1.0, encre));
-    // graduations tous les 15°, plus longues tous les 90°, tournant avec le plan
+    p.circle_stroke(centre, RAYON_INTERIEUR, Stroke::new(1.0, Color32::from_gray(150)));
+    // graduations tous les 15° sur le bord extérieur, tournant avec le plan
     for k in 0..24 {
+        if k % 6 == 0 {
+            continue;
+        }
         let a = k as f32 * TAU / 24.0;
         let d = (direction(Vec3::new(a.cos(), a.sin(), 0.0), 1.0) - centre).normalized();
-        let long = if k % 6 == 0 { 7.0 } else { 3.5 };
+        let long = if k % 3 == 0 { 5.0 } else { 3.0 };
         p.line_segment([centre + d * (RAYON - long), centre + d * RAYON], Stroke::new(1.0, Color32::from_gray(130)));
     }
     for (i, (nom, v, _)) in cardinaux.iter().enumerate() {
-        let point = direction(*v, RAYON_CARDINAUX - 6.0);
+        let point = direction(*v, RAYON_CARDINAUX);
         if cible == Some(i) {
-            p.circle_filled(point, 9.0, ui.visuals().selection.bg_fill);
+            p.circle_filled(point, 8.0, ui.visuals().selection.bg_fill);
         }
         p.text(point, Align2::CENTER_CENTER, nom, egui::FontId::proportional(12.0), if *nom == "N" { Color32::from_rgb(200, 45, 45) } else { encre });
+    }
+    // flèches concentriques : quart de tour antihoraire à gauche, horaire à droite
+    for (sens, de, vers) in [(-1.0, 180.0 + OUVERTURE_FLECHES, 180.0 - OUVERTURE_FLECHES), (1.0, -OUVERTURE_FLECHES, OUVERTURE_FLECHES)] {
+        let couleur = if fleche_survolee == Some(sens) { bleu } else { Color32::from_gray(110) };
+        arc_fleche(&p, centre, de, vers, Stroke::new(if fleche_survolee == Some(sens) { 3.0 } else { 2.2 }, couleur));
     }
     // axes du modèle projetés dans le même repère que le plan
     for (v, couleur) in [(Vec3::X, Color32::from_rgb(190, 55, 55)), (Vec3::Y, Color32::from_rgb(40, 135, 75))] {
@@ -151,33 +212,57 @@ pub fn afficher(ui: &mut egui::Ui, vue: egui::Rect, camera: &mut Camera, origine
     p.rect_filled(reset, 3.0, if survol_plan { ui.visuals().widgets.hovered.bg_fill } else { ui.visuals().widgets.inactive.bg_fill });
     p.rect_stroke(reset, 3.0, Stroke::new(1.0, bleu), egui::StrokeKind::Inside);
     p.text(centre, Align2::CENTER_CENTER, "PLAN", egui::FontId::proportional(10.0), encre);
-    resp.on_hover_cursor(if cible.is_some() || survol_plan { egui::CursorIcon::PointingHand } else { egui::CursorIcon::Grab }).on_hover_text(
-        "Glisser l'anneau pour tourner le plan (aimanté tous les 15°, Maj : libre) · N/E/S/O : direction en haut · PLAN : orientation initiale",
-    );
+    let curseur = if cible.is_some() || survol_plan || fleche_survolee.is_some() {
+        egui::CursorIcon::PointingHand
+    } else if survol_anneau {
+        egui::CursorIcon::Grab
+    } else {
+        egui::CursorIcon::Default
+    };
+    let aide = match fleche_survolee {
+        Some(s) if s < 0.0 => "Tourner le plan d'un quart de tour (sens antihoraire)",
+        Some(_) => "Tourner le plan d'un quart de tour (sens horaire)",
+        None => "Glisser l'anneau pour tourner le plan (aimanté tous les 15°, Maj : libre) · N/E/S/O : direction en haut · PLAN : orientation initiale",
+    };
+    resp.on_hover_cursor(curseur).on_hover_text(aide);
     let mut degres = angle(camera).to_degrees();
     ui.scope_builder(
         egui::UiBuilder::new().id_salt("angle_plan").max_rect(egui::Rect::from_min_size(zone.min + vec2(0.0, HAUTEUR_ANNEAU + 2.0), vec2(LARGEUR, 50.0))),
         |ui| {
             ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
             ui.horizontal(|ui| {
-                if ui.small_button("−90°").on_hover_text("Tourner de 90° vers la gauche").clicked() {
-                    orienter(camera, angle(camera) - FRAC_PI_2);
-                }
-                let r = ui.add_sized(
-                    [LARGEUR - 84.0, 18.0],
-                    egui::DragValue::new(&mut degres).speed(1.0).suffix("°").max_decimals(1),
-                );
+                let r = ui.add_sized([LARGEUR - 66.0, 18.0], egui::DragValue::new(&mut degres).speed(1.0).suffix("°").max_decimals(1));
                 if r.on_hover_text("Angle du plan par rapport au nord du modèle").changed() {
                     orienter(camera, degres.to_radians());
                 }
-                if ui.small_button("+90°").on_hover_text("Tourner de 90° vers la droite").clicked() {
-                    orienter(camera, angle(camera) + FRAC_PI_2);
-                }
+                ui.menu_button(egui::RichText::new("Positions").size(11.0), |ui| {
+                    if ui.button("Enregistrer la position").on_hover_text("Mémoriser l'orientation en cours du plan").clicked() {
+                        reponse.enregistrer = true;
+                        ui.close();
+                    }
+                    if !positions.is_empty() {
+                        ui.separator();
+                    }
+                    for (i, (nom, a)) in positions.iter().enumerate() {
+                        ui.horizontal(|ui| {
+                            if ui.button(format!("{nom} · {:.1}°", a.to_degrees())).on_hover_text("Revenir à cette orientation").clicked() {
+                                orienter(camera, *a);
+                                ui.close();
+                            }
+                            if ui.small_button("Supprimer").clicked() {
+                                reponse.supprimer = Some(i);
+                                ui.close();
+                            }
+                        });
+                    }
+                })
+                .response
+                .on_hover_text("Orientations enregistrées du plan");
             });
-            let texte = if alignement { "Cliquer un élément…" } else { "Aligner sur…" };
+            let texte = if alignement { "Viser une arête…" } else { "Aligner sur…" };
             if ui
                 .add_sized([LARGEUR, 20.0], egui::Button::new(egui::RichText::new(texte).size(11.0)).selected(alignement))
-                .on_hover_text("Cliquer ensuite un mur ou un élément du plan : sa direction principale devient horizontale (Échap : annuler)")
+                .on_hover_text("Viser ensuite une arête du plan (surlignée) et cliquer : elle devient horizontale (Échap : annuler)")
                 .clicked()
             {
                 reponse.aligner = true;
@@ -222,7 +307,7 @@ mod tests {
             },
             |ui| {
                 egui::CentralPanel::default().show(ui, |ui| {
-                    afficher(ui, vue, camera, -FRAC_PI_2, false);
+                    afficher(ui, vue, camera, -FRAC_PI_2, false, &[]);
                 });
             },
         );
@@ -252,7 +337,7 @@ mod tests {
         let centre = super::centre(zone(vue));
         image(&ctx, &mut camera, vec![]);
         image(&ctx, &mut camera, vec![]);
-        let est = centre + vec2(RAYON_CARDINAUX - 6.0, 0.0);
+        let est = centre + vec2(RAYON_CARDINAUX, 0.0);
         image(
             &ctx,
             &mut camera,
@@ -279,6 +364,22 @@ mod tests {
             "Anneau : {}",
             angle(&camera)
         );
+        // flèche de droite : un quart de tour de plus ; de gauche : retour
+        let fleche_droite = centre + vec2(RAYON_FLECHES, 0.0);
+        image(&ctx, &mut camera, vec![egui::Event::PointerMoved(fleche_droite), bouton(fleche_droite, true)]);
+        image(&ctx, &mut camera, vec![bouton(fleche_droite, false)]);
+        assert!(ecart(angle(&camera), FRAC_PI_2).abs() < 1e-4, "Flèche : {}", angle(&camera));
+        let fleche_gauche = centre - vec2(RAYON_FLECHES, 0.0);
+        image(&ctx, &mut camera, vec![egui::Event::PointerMoved(fleche_gauche), bouton(fleche_gauche, true)]);
+        image(&ctx, &mut camera, vec![bouton(fleche_gauche, false)]);
+        assert!(ecart(angle(&camera), 0.0).abs() < 1e-4, "Flèche : {}", angle(&camera));
+        // glisser commencé au centre (hors de l'anneau) : pas de rotation
+        let avant = camera.yaw;
+        let pres = centre + vec2(14.0, 14.0);
+        image(&ctx, &mut camera, vec![egui::Event::PointerMoved(pres), bouton(pres, true)]);
+        image(&ctx, &mut camera, vec![egui::Event::PointerMoved(centre + vec2(-20.0, 14.0))]);
+        image(&ctx, &mut camera, vec![bouton(centre + vec2(-20.0, 14.0), false)]);
+        assert_eq!(camera.yaw, avant);
         orienter(&mut camera, 0.7);
         image(
             &ctx,

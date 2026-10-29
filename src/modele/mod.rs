@@ -70,6 +70,9 @@ pub struct Projet {
     /// Vues du projet (arborescence) : plans d'étage et coupes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub vues: Vec<Vue>,
+    /// Orientations enregistrées des plans (repère du plan).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub positions_plan: Vec<PositionPlan>,
     pub importes: Vec<ElementImporte>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub quadrillages: Vec<documentation::Quadrillage>,
@@ -638,6 +641,14 @@ impl Dalle {
             self.pentes.clear();
         }
     }
+}
+
+/// Orientation enregistrée d'un plan : nom et angle du plan par rapport au nord du
+/// modèle (degrés).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct PositionPlan {
+    pub nom: String,
+    pub angle: f64,
 }
 
 /// Vue du projet, comme dans l'arborescence de Revit.

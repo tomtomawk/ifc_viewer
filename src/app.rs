@@ -434,8 +434,14 @@ pub struct ViewerApp {
     historique: crate::modele::historique::Historique,
     natif_modifie: bool,
     mur_depart: Option<[f64; 2]>,
-    /// Repère du plan : le prochain clic choisit l'élément à mettre à l'horizontale.
+    /// Repère du plan : le prochain clic choisit l'arête à mettre à l'horizontale.
     alignement_plan: bool,
+    /// Arête visée en mode Aligner (repère de la scène), surlignée.
+    arete_alignement: Option<[Vec3; 2]>,
+    /// Arêtes en plan de l'objet survolé en mode Aligner (cache).
+    aretes_objet: Option<(u32, Vec<[Vec3; 2]>)>,
+    /// Orientations de plan enregistrées hors projet natif (session).
+    positions_plan: Vec<(String, f32)>,
     /// Premier point d'une chaîne de murs (la refermer l'arrête).
     mur_chaine: Option<[f64; 2]>,
     /// Nom de la vue native ouverte en cours de saisie (identifiant, texte).
@@ -596,6 +602,9 @@ impl ViewerApp {
             nom_vue: None,
             mur_chaine: None,
             alignement_plan: false,
+            arete_alignement: None,
+            aretes_objet: None,
+            positions_plan: Vec::new(),
             confirmer_fermeture: None,
             documents: BTreeMap::new(),
             document_actif: 0,
@@ -2404,6 +2413,109 @@ impl ViewerApp {
         }
         let a = 0.5 * (2.0 * xy).atan2(xx - yy);
         Some(glam::Vec2::new(a.cos(), a.sin()))
+    }
+
+    /// Arête en plan de l'objet `obj` la plus proche du curseur `p` (écran), pour Aligner.
+    /// Arêtes vives de l'objet, verticales exclues.
+    fn arete_visee(&mut self, p: egui::Pos2, rect: egui::Rect, obj: u32) -> Option<[Vec3; 2]> {
+        if self.aretes_objet.as_ref().is_none_or(|(o, _)| *o != obj) {
+            let s = self.scene.as_ref()?;
+            let o = s.objects.get(obj as usize)?;
+            let tris: Vec<[glam::DVec3; 3]> = [o.opaque, o.transparent]
+                .iter()
+                .flat_map(|r| s.vertices[r.start as usize..(r.start + r.count) as usize].chunks_exact(3))
+                .map(|t| [0, 1, 2].map(|k| Vec3::from(t[k].pos).as_dvec3()))
+                .collect();
+            let aretes = dessin::aretes(&tris).vives.into_iter().filter(|[a, b]| (b.truncate() - a.truncate()).length() > 1e-4).map(|e| e.map(|q| q.as_vec3())).collect();
+            self.aretes_objet = Some((obj, aretes));
+        }
+        let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
+        let ecran = |q: Vec3| {
+            let c = vp * q.extend(1.0);
+            (c.w > 0.0).then(|| egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height()))
+        };
+        let (_, aretes) = self.aretes_objet.as_ref()?;
+        aretes
+            .iter()
+            .filter_map(|e| {
+                let (a, b) = (ecran(e[0])?, ecran(e[1])?);
+                let ab = b - a;
+                if ab.length_sq() < 4.0 {
+                    return None;
+                }
+                let t = ((p - a).dot(ab) / ab.length_sq()).clamp(0.0, 1.0);
+                Some((p.distance(a + ab * t), *e))
+            })
+            .min_by(|x, y| x.0.total_cmp(&y.0))
+            .map(|(_, e)| e)
+    }
+
+    /// Arête visée en mode Aligner : surlignée, prolongée en pointillés (future horizontale).
+    fn dessiner_arete_alignement(&self, ui: &egui::Ui, rect: egui::Rect) {
+        let Some([a, b]) = self.arete_alignement else { return };
+        let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
+        let ecran = |q: Vec3| {
+            let c = vp * q.extend(1.0);
+            (c.w > 0.0).then(|| egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height()))
+        };
+        let (Some(ea), Some(eb)) = (ecran(a), ecran(b)) else { return };
+        let painter = ui.painter().with_clip_rect(rect);
+        let couleur = Color32::from_rgb(0, 150, 255);
+        let d = (eb - ea).normalized();
+        let loin = rect.size().length();
+        painter.add(egui::Shape::dashed_line(&[ea - d * loin, eb + d * loin], egui::Stroke::new(1.0, couleur.gamma_multiply(0.7)), 6.0, 5.0));
+        painter.line_segment([ea, eb], egui::Stroke::new(4.0, couleur));
+        for e in [ea, eb] {
+            painter.circle_filled(e, 3.5, couleur);
+        }
+    }
+
+    /// Orientations de plan enregistrées : celles du projet natif, sinon de la session.
+    fn positions_plan_liste(&self) -> Vec<(String, f32)> {
+        match &self.natif {
+            Some((p, _)) => p.positions_plan.iter().map(|x| (x.nom.clone(), (x.angle as f32).to_radians())).collect(),
+            None => self.positions_plan.clone(),
+        }
+    }
+
+    /// Enregistre l'orientation en cours du plan (dans le projet natif s'il y en a un).
+    fn enregistrer_position_plan(&mut self) {
+        let angle = crate::orientation_plan::angle(&self.camera);
+        let n = self.positions_plan_liste().len() + 1;
+        let nom = format!("Position {n}");
+        match &self.natif {
+            Some((p, _)) => {
+                let mut p = p.clone();
+                p.positions_plan.push(crate::modele::PositionPlan { nom: nom.clone(), angle: (angle.to_degrees() as f64 * 10.0).round() / 10.0 });
+                let camera = self.camera.clone();
+                if let Err(e) = self.appliquer_projet(p) {
+                    self.error = Some(e);
+                    return;
+                }
+                self.camera = camera;
+            }
+            None => self.positions_plan.push((nom.clone(), angle)),
+        }
+        self.status = format!("{nom} enregistrée ({:.1}°)", angle.to_degrees());
+    }
+
+    fn supprimer_position_plan(&mut self, i: usize) {
+        match &self.natif {
+            Some((p, _)) if i < p.positions_plan.len() => {
+                let mut p = p.clone();
+                p.positions_plan.remove(i);
+                let camera = self.camera.clone();
+                if let Err(e) = self.appliquer_projet(p) {
+                    self.error = Some(e);
+                    return;
+                }
+                self.camera = camera;
+            }
+            None if i < self.positions_plan.len() => {
+                self.positions_plan.remove(i);
+            }
+            _ => {}
+        }
     }
 
     /// Point de tracé du mur sous le curseur, sur le plan de son niveau de base (mm),
@@ -5408,17 +5520,24 @@ impl ViewerApp {
                     if let Some(f) = self.fenetre_selection.take() { self.selectionner_rectangle(rect, f); }
                 }
             } else if self.alignement_plan {
-                // Aligner (repère du plan) : l'élément cliqué devient horizontal
+                // Aligner (repère du plan) : l'arête visée (surlignée) devient horizontale ;
+                // sans arête, la direction principale de l'élément
+                let curseur = resp.hover_pos().or(resp.interact_pointer_pos());
+                let hit = curseur.and_then(|p| pick(self, p).map(|(obj, _)| (p, obj)));
+                self.arete_alignement = hit.and_then(|(p, obj)| self.arete_visee(p, rect, obj));
                 if resp.clicked() {
-                    let hit = resp.interact_pointer_pos().and_then(|p| pick(self, p));
-                    let d = hit.and_then(|(obj, _)| self.direction_principale(obj));
+                    let d = match self.arete_alignement {
+                        Some([a, b]) => Some(glam::Vec2::new(b.x - a.x, b.y - a.y)),
+                        None => hit.and_then(|(_, obj)| self.direction_principale(obj)),
+                    };
                     match d.and_then(|d| crate::orientation_plan::angle_pour_horizontale(&self.camera, d)) {
                         Some(a) => {
                             crate::orientation_plan::orienter(&mut self.camera, a);
                             self.memoriser_vue();
                             self.alignement_plan = false;
+                            self.arete_alignement = None;
                         }
-                        None => self.status = "Aligner : cliquer un élément du plan (Échap : annuler)".into(),
+                        None => self.status = "Aligner : viser une arête du plan (Échap : annuler)".into(),
                     }
                 }
             } else if let Some(genre) = structure {
@@ -5666,6 +5785,9 @@ impl ViewerApp {
             self.dessiner_aretes_pente(ui, rect, resp.hover_pos());
             self.dessiner_axe(ui, rect, resp.hover_pos());
         }
+        if self.alignement_plan {
+            self.dessiner_arete_alignement(ui, rect);
+        }
         if self.scene.is_some() {
             self.poignees_boite(ui, rect);
         }
@@ -5680,9 +5802,17 @@ impl ViewerApp {
         }
         if repere_plan {
             let origine = self.orientation_initiale_plan();
-            let r = crate::orientation_plan::afficher(ui, rect, &mut self.camera, origine, self.alignement_plan);
+            let positions = self.positions_plan_liste();
+            let r = crate::orientation_plan::afficher(ui, rect, &mut self.camera, origine, self.alignement_plan, &positions);
             if r.aligner {
                 self.alignement_plan = !self.alignement_plan;
+                self.arete_alignement = None;
+            }
+            if r.enregistrer {
+                self.enregistrer_position_plan();
+            }
+            if let Some(i) = r.supprimer {
+                self.supprimer_position_plan(i);
             }
             if r.change {
                 self.memoriser_vue();
@@ -6701,6 +6831,7 @@ impl eframe::App for ViewerApp {
         }
         if self.alignement_plan && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             self.alignement_plan = false;
+            self.arete_alignement = None;
         }
         if self.ruban_edition.a_un_outil() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             // Échap : la saisie, puis le mur ou la dalle en cours, puis l'outil
