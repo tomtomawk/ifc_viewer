@@ -89,8 +89,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   reçoit `x,y` ou `x;y` (absolu), `@dx,dy` (relatif), `d<angle` ou `@d<angle`
   (polaire depuis le point précédent) ou une distance seule (dans la direction du
   curseur), dans l'unité d'affichage. Chaque forme achevée devient une annotation
-  de la vue. Ce moteur (`dessin2d.rs`) est indépendant de l'interface, pour servir
-  ensuite au tracé des murs et des éléments horizontaux.
+  de la vue. Le même moteur (`dessin2d.rs`) trace les murs (ligne, rectangle, arc,
+  cercle ; voir le README) : un arc donne un mur courbe (`axe` en arc), un cercle deux
+  demi-cercles, chaque forme une seule étape d'annulation.
 - **Documenter** crée aussi textes, zones rectangulaires, cotes et étiquettes
   dans la vue native ouverte. Avec un mur sélectionné, une cote référence ses
   extrémités ; sinon ses points sont fixes. Une référence supprimée est signalée

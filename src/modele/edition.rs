@@ -362,10 +362,19 @@ impl Projet {
 
     /// Valide entièrement la commande avant d'ajouter le niveau, le type et le mur.
     pub fn ajouter_mur(&mut self, debut: [f64; 2], fin: [f64; 2], p: &ParametresMur) -> Result<String, String> {
-        if !debut.iter().chain(&fin).all(|x| x.is_finite()) || ![p.hauteur, p.epaisseur, p.decalage].iter().all(|x| x.is_finite()) {
+        self.ajouter_mur_axe(Axe::Droit { debut, fin }, p)
+    }
+
+    /// Ajoute un mur droit ou courbe de ligne tracée `trace` (implantation de `p`).
+    pub fn ajouter_mur_axe(&mut self, trace: Axe, p: &ParametresMur) -> Result<String, String> {
+        let points = match trace {
+            Axe::Droit { debut, fin } => vec![debut, fin],
+            Axe::Arc { debut, fin, centre, .. } => vec![debut, fin, centre],
+        };
+        if !points.iter().flatten().all(|x| x.is_finite()) || ![p.hauteur, p.epaisseur, p.decalage].iter().all(|x| x.is_finite()) {
             return Err("Les coordonnées et dimensions du mur doivent être finies.".into());
         }
-        let longueur = (fin[0] - debut[0]).hypot(fin[1] - debut[1]);
+        let longueur = trace.longueur();
         if !longueur.is_finite() || longueur < 1.0 { return Err("Le mur doit avoir une longueur finie d’au moins 1 mm.".into()); }
         if p.hauteur <= 0.0 || p.epaisseur <= 0.0 { return Err("La hauteur et l’épaisseur doivent être positives.".into()); }
         let niveau = match &p.niveau {
@@ -403,8 +412,6 @@ impl Projet {
         // ligne tracée → milieu de l'épaisseur totale : décalage de la référence vers l'intérieur
         let gabarit = p.gabarit(self);
         let decalage = gabarit.decalage_reference(p.implantation.reference());
-        let n = [-(fin[1] - debut[1]) / longueur, (fin[0] - debut[0]) / longueur];
-        let deplacer = |q: [f64; 2]| [q[0] - n[0] * decalage, q[1] - n[1] * decalage];
         if self.niveaux.is_empty() {
             self.niveaux.push(Niveau { id: niveau.clone(), nom: "Niveau 0".into(), altitude: 0.0, origine: None });
         }
@@ -419,7 +426,7 @@ impl Projet {
             None => Haut::Libre { hauteur: haut - bas },
         };
         self.murs.push(Mur { variante: p.variante.clone(), phase: p.phase.clone().or_else(|| self.phases.last().cloned()), sous_projet: p.sous_projet.clone().or_else(|| self.sous_projets.first().cloned()), id: id.clone(), nom: format!("Mur {k}"), type_mur, assemblage: None, niveau, decalage_bas: p.decalage,
-            haut: contrainte, axe: Axe::Droit { debut: deplacer(debut), fin: deplacer(fin) }, origine: None });
+            haut: contrainte, axe: crate::modele::assemblage::decaler_axe(&trace, -decalage), origine: None });
         // type à plusieurs couches : un mur par couche, regroupés (même identifiant)
         if compose {
             self.eclater_mur(&id)?;
@@ -432,6 +439,20 @@ impl Projet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn mur_courbe_trace_et_implante() {
+        let mut p = Projet::nouveau("Arc");
+        // face extérieure (gauche du tracé, côté centre en parcours direct) sur le cercle
+        // de rayon 5 m : le milieu de l'épaisseur est à 5 m + 150 mm
+        let options = ParametresMur { implantation: Implantation::Exterieure, epaisseur: 300.0, ..Default::default() };
+        let id = p.ajouter_mur_axe(Axe::Arc { debut: [5000.0, 0.0], fin: [0.0, 5000.0], centre: [0.0, 0.0], direct: true }, &options).unwrap();
+        let m = p.murs.iter().find(|m| m.id == id).unwrap();
+        let Axe::Arc { debut, centre, direct: true, .. } = m.axe else { panic!("{:?}", m.axe) };
+        assert_eq!(centre, [0.0, 0.0]);
+        assert!((debut[0] - 5150.0).abs() < 1e-6, "{debut:?}");
+        assert!((m.axe.longueur() - 5150.0 * std::f64::consts::FRAC_PI_2).abs() < 1e-3);
+    }
+
     #[test]
     fn mur_contraintes_phases_et_sous_projets_persistes() {
         let mut p = Projet::nouveau("Contraintes");

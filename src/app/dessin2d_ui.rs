@@ -1,6 +1,8 @@
-//! Interface du dessin 2D (Documenter → Dessin 2D) : clics et saisie au clavier dans la
-//! vue native ouverte, accrochages, repérage polaire (Maj : ortho), aperçu élastique,
-//! invite et ligne de commande en bas de la vue, à la manière de CADCraft.
+//! Interface du dessin 2D : clics et saisie au clavier, accrochages, repérage polaire
+//! (Maj : ortho), aperçu élastique, invite et ligne de commande en bas de la vue, à la
+//! manière de CADCraft. Sert aux annotations (Documenter → Dessin 2D, dans le repère de
+//! la vue native ouverte) et aux murs (Modéliser → Mur, sur le plan horizontal de leur
+//! base : ligne, rectangle, arc ou cercle).
 use super::*;
 use crate::dessin2d::{self as d2, Accroche, Geom, OutilDessin, Trace};
 use crate::modele::commandes::Commande;
@@ -19,8 +21,44 @@ pub(super) struct EtatDessin2D {
     pub message: Option<String>,
 }
 
+/// Ce que produit le tracé.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum Usage {
+    /// Annotations de la vue native ouverte.
+    Annotation,
+    /// Murs, suivant le type et les réglages de l'outil Mur.
+    Mur,
+}
+
+/// Lignes tracées des murs d'une forme : un mur par segment, un mur courbe par arc, deux
+/// demi-cercles pour un cercle.
+pub(super) fn axes_murs(f: &d2::Forme2D) -> Vec<crate::modele::Axe> {
+    use crate::modele::Axe;
+    let droit = |a: DVec2, b: DVec2| Axe::Droit { debut: a.to_array(), fin: b.to_array() };
+    match f {
+        d2::Forme2D::Ligne([a, b]) => vec![droit(*a, *b)],
+        d2::Forme2D::Polyligne { points, fermee } | d2::Forme2D::Spline { points, fermee } => {
+            let mut v: Vec<Axe> = points.windows(2).map(|w| droit(w[0], w[1])).collect();
+            if *fermee && points.len() >= 3 {
+                v.push(droit(points[points.len() - 1], points[0]));
+            }
+            v
+        }
+        d2::Forme2D::Arc([a, b, c]) => d2::arc_3_points(*a, *b, *c)
+            .map(|(o, _, _, balayage)| Axe::Arc { debut: a.to_array(), fin: c.to_array(), centre: o.to_array(), direct: balayage > 0.0 })
+            .into_iter()
+            .collect(),
+        d2::Forme2D::Cercle { centre, rayon } => {
+            let (a, b) = (*centre + DVec2::X * *rayon, *centre - DVec2::X * *rayon);
+            let arc = |d: DVec2, f: DVec2| Axe::Arc { debut: d.to_array(), fin: f.to_array(), centre: centre.to_array(), direct: true };
+            vec![arc(a, b), arc(b, a)]
+        }
+    }
+}
+
 fn nom_outil(o: OutilDessin) -> &'static str {
     match o {
+        OutilDessin::Rectangle => "RECTANGLE",
         OutilDessin::Ligne => "LIGNE",
         OutilDessin::Polyligne => "POLYLIGNE",
         OutilDessin::Spline => "SPLINE",
@@ -30,36 +68,68 @@ fn nom_outil(o: OutilDessin) -> &'static str {
 }
 
 impl ViewerApp {
-    /// Outil de dessin 2D actif (Documenter, vue native ouverte).
+    /// Outil de dessin actif : annotation ou mur.
     pub(super) fn outil_dessin(&self) -> Option<OutilDessin> {
+        self.usage_dessin().map(|(_, o)| o)
+    }
+
+    /// Tracé actif et son usage : dessin 2D (Documenter, vue native ouverte) ou mur
+    /// (Modéliser, projet natif chargé).
+    pub(super) fn usage_dessin(&self) -> Option<(Usage, OutilDessin)> {
         use crate::ruban::Outil;
+        if self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.mur_actif() && self.natif.is_some() && self.scene.is_some() && self.loading.is_none() {
+            return Some((Usage::Mur, self.ruban_edition.forme_mur));
+        }
         if self.onglet_ruban != OngletRuban::Annoter || self.vue_native_id().is_none() {
             return None;
         }
-        Some(match self.ruban_edition.outil()? {
+        Some((Usage::Annotation, match self.ruban_edition.outil()? {
             Outil::Ligne => OutilDessin::Ligne,
             Outil::Polyligne => OutilDessin::Polyligne,
             Outil::Spline => OutilDessin::Spline,
             Outil::Cercle => OutilDessin::Cercle,
             Outil::Arc => OutilDessin::Arc,
             _ => return None,
-        })
+        }))
     }
 
-    /// Repère de la vue native ouverte : origine, droite, haut (mm).
+    /// Un tracé a des points en cours (les raccourcis et Suppr attendent).
+    pub(super) fn trace_en_cours(&self) -> bool {
+        self.dessin2d.trace.as_ref().is_some_and(|t| !t.points.is_empty())
+    }
+
+    /// Altitude de la base des murs tracés (mm) : niveau de base et décalage.
+    fn altitude_murs(&self) -> f64 {
+        let Some((p, _)) = &self.natif else { return 0.0 };
+        let o = self.ruban_edition.parametres_mur();
+        o.niveau.as_ref().and_then(|id| p.niveau(id)).or_else(|| p.niveaux.first()).map_or(0.0, |n| n.altitude) + o.decalage
+    }
+
+    /// Repère du tracé : origine, droite, haut (mm). Annotation : celui de la vue native
+    /// ouverte ; mur : plan horizontal de sa base.
     fn repere_dessin(&self) -> Option<(DVec3, DVec3, DVec3)> {
-        let id = self.vue_native_id()?;
-        let p = &self.natif.as_ref()?.0;
-        let v = p.vues.iter().find(|v| v.id == id)?;
-        Some(crate::modele::documentation::repere(p, v))
+        match self.usage_dessin()?.0 {
+            Usage::Mur => Some((DVec3::new(0.0, 0.0, self.altitude_murs()), DVec3::X, DVec3::Y)),
+            Usage::Annotation => {
+                let id = self.vue_native_id()?;
+                let p = &self.natif.as_ref()?.0;
+                let v = p.vues.iter().find(|v| v.id == id)?;
+                Some(crate::modele::documentation::repere(p, v))
+            }
+        }
+    }
+
+    /// Point du modèle (mm) à l'écran.
+    fn ecran_3d(&self, rect: egui::Rect, p: DVec3) -> Option<egui::Pos2> {
+        let s = self.scene.as_ref()?;
+        let w = (p * 0.001 - s.origin).as_vec3();
+        let c = self.camera.view_proj(rect.width() / rect.height().max(1.0)) * w.extend(1.0);
+        (c.w > 0.0).then(|| egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height()))
     }
 
     fn vers_ecran(&self, rect: egui::Rect, q: DVec2) -> Option<egui::Pos2> {
         let (o, u, h) = self.repere_dessin()?;
-        let s = self.scene.as_ref()?;
-        let w = ((o + u * q.x + h * q.y) * 0.001 - s.origin).as_vec3();
-        let c = self.camera.view_proj(rect.width() / rect.height().max(1.0)) * w.extend(1.0);
-        (c.w > 0.0).then(|| egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height()))
+        self.ecran_3d(rect, o + u * q.x + h * q.y)
     }
 
     fn depuis_ecran(&self, rect: egui::Rect, q: egui::Pos2) -> Option<DVec2> {
@@ -79,40 +149,66 @@ impl ViewerApp {
         Some(DVec2::new(p.dot(u), p.dot(h)))
     }
 
-    /// Géométries d'accrochage de la vue : annotations du dessin 2D, et en plan les murs
-    /// (contours et axes), éléments horizontaux et quadrillages.
+    /// Géométries d'accrochage. Annotation : dessins de la vue et, en plan, murs (contours
+    /// et axes), éléments horizontaux et quadrillages de son niveau. Mur : murs qui
+    /// traversent le plan de tracé, éléments horizontaux, quadrillages et dessins de la
+    /// vue en plan ouverte (calque de tracé).
     fn geoms_dessin(&mut self) -> Vec<Geom> {
-        let Some(vue) = self.vue_native_id() else { return Vec::new() };
-        if let Some((r, v, g)) = &self.dessin2d.geoms {
-            if *r == self.bim.revision && *v == vue {
+        let Some((usage, _)) = self.usage_dessin() else { return Vec::new() };
+        let vue = self.vue_native_id();
+        let altitude = self.altitude_murs();
+        let cle = format!("{usage:?}|{}|{altitude}", vue.as_deref().unwrap_or(""));
+        if let Some((r, k, g)) = &self.dessin2d.geoms {
+            if *r == self.bim.revision && *k == cle {
                 return g.clone();
             }
         }
         let Some((p, _)) = &self.natif else { return Vec::new() };
-        let mut g = Vec::new();
-        for a in p.annotations.iter().filter(|a| a.vue == vue) {
-            if let Some(f) = a.forme.forme_2d() {
-                g.extend(f.geoms());
-            }
-        }
-        let niveau = p.vues.iter().find(|v| v.id == vue).and_then(|v| match &v.genre {
+        let plan = vue.as_ref().and_then(|id| p.vues.iter().find(|v| &v.id == id)).and_then(|v| match &v.genre {
             crate::modele::GenreVue::Plan { niveau, .. } => Some(niveau.clone()),
             _ => None,
         });
-        if let Some(niveau) = niveau {
+        let mut g = Vec::new();
+        // dessins de la vue : toujours pour une annotation, en plan pour un mur
+        if let Some(vue) = vue.as_ref().filter(|_| usage == Usage::Annotation || plan.is_some()) {
+            for a in p.annotations.iter().filter(|a| &a.vue == vue) {
+                if let Some(f) = a.forme.forme_2d() {
+                    g.extend(f.geoms());
+                }
+            }
+        }
+        let modele = match usage {
+            Usage::Annotation => plan.is_some(),
+            Usage::Mur => true,
+        };
+        if modele {
             let seg = |a: [f64; 2], b: [f64; 2]| Geom::Segment([DVec2::from_array(a), DVec2::from_array(b)]);
             let coupes = crate::modele::jonctions::coupes(p);
-            for m in p.murs.iter().filter(|m| m.niveau == niveau) {
+            let retenu = |m: &crate::modele::Mur| match usage {
+                Usage::Annotation => plan.as_ref() == Some(&m.niveau),
+                Usage::Mur => p.bas_haut(m).is_some_and(|(b, h)| altitude >= b - 0.1 && altitude <= h + 0.1),
+            };
+            for m in p.murs.iter().filter(|m| retenu(m)) {
                 if let Some(c) = crate::modele::jonctions::contour(p, m, &coupes) {
                     for k in 0..4 {
                         g.push(seg(c[k], c[(k + 1) % 4]));
                     }
                 }
-                if let crate::modele::Axe::Droit { debut, fin } = m.axe {
-                    g.push(seg(debut, fin));
+                match m.axe {
+                    crate::modele::Axe::Droit { debut, fin } => g.push(seg(debut, fin)),
+                    crate::modele::Axe::Arc { debut, fin, centre, .. } => {
+                        let o = DVec2::from_array(centre);
+                        let (a, b) = (DVec2::from_array(debut), DVec2::from_array(fin));
+                        let r = a.distance(o);
+                        let a0 = (a - o).to_angle();
+                        let direct = matches!(m.axe, crate::modele::Axe::Arc { direct: true, .. });
+                        let mut balayage = (b - o).to_angle() - a0;
+                        balayage = if direct { balayage.rem_euclid(std::f64::consts::TAU) } else { -(-balayage).rem_euclid(std::f64::consts::TAU) };
+                        g.push(Geom::Arc { centre: o, rayon: r, depart: a0, balayage });
+                    }
                 }
             }
-            for d in p.dalles.iter().filter(|d| d.niveau == niveau) {
+            for d in p.dalles.iter().filter(|d| usage == Usage::Mur || plan.as_ref() == Some(&d.niveau)) {
                 for c in &d.contours {
                     for k in 0..c.len() {
                         g.push(seg(c[k], c[(k + 1) % c.len()]));
@@ -123,7 +219,7 @@ impl ViewerApp {
                 g.push(seg(q.debut, q.fin));
             }
         }
-        self.dessin2d.geoms = Some((self.bim.revision, vue, g.clone()));
+        self.dessin2d.geoms = Some((self.bim.revision, cle, g.clone()));
         g
     }
 
@@ -145,15 +241,55 @@ impl ViewerApp {
                 return a;
             }
         }
+        // repère du plan tourné : ortho et angles ronds suivent l'écran ; longueurs et
+        // coordonnées libres au pas de 10 mm pour un mur, 1 mm pour un dessin
+        let th = self.angle_axes_plan();
+        let pas = if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Mur) { 10.0 } else { 1.0 };
+        let tourner = |v: DVec2, a: f64| DVec2::from_angle(a).rotate(v);
+        let arrondi = |v: DVec2| {
+            let l = v.length();
+            if l < 1e-9 { v } else { v * ((l / pas).round() * pas / l) }
+        };
         match precedent {
-            Some(p) if maj => (d2::ortho(p, c), Accroche::Ortho),
-            Some(p) => d2::polaire(p, c, 15.0, 2.5).map_or((c, Accroche::Libre), |(q, a)| (q, Accroche::Polaire(a))),
-            None => (c, Accroche::Libre),
+            Some(p) if maj => (p + arrondi(tourner(d2::ortho(DVec2::ZERO, tourner(c - p, -th)), th)), Accroche::Ortho),
+            Some(p) => match d2::polaire(DVec2::ZERO, tourner(c - p, -th), 15.0, 2.5) {
+                Some((q, a)) => (p + arrondi(tourner(q, th)), Accroche::Polaire(a)),
+                None => ((c / pas).round() * pas, Accroche::Libre),
+            },
+            None => ((c / pas).round() * pas, Accroche::Libre),
         }
     }
 
-    /// Enregistre les formes achevées comme annotations de la vue.
+    /// Enregistre les formes achevées : annotations de la vue, ou murs (une étape
+    /// d'annulation par forme ; le dernier mur créé est sélectionné).
     fn enregistrer_formes(&mut self, formes: Vec<d2::Forme2D>) {
+        if formes.is_empty() {
+            return;
+        }
+        if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Mur) {
+            let options = self.ruban_edition.parametres_mur();
+            for f in &formes {
+                let Some((projet, _)) = &self.natif else { return };
+                let mut projet = projet.clone();
+                let ids: Result<Vec<String>, String> = axes_murs(f).into_iter().map(|axe| projet.ajouter_mur_axe(axe, &options)).collect();
+                match ids.and_then(|ids| self.appliquer_projet(projet).map(|()| ids)) {
+                    Ok(ids) => {
+                        if let Some(id) = ids.last() {
+                            let genre = if self.natif.as_ref().is_some_and(|(p, _)| p.assemblage(id).is_some()) { "assemblage" } else { "mur" };
+                            self.selected = Some(scene::id_natif(genre, id));
+                            self.reveal = self.selected;
+                        }
+                        self.status = format!("{} mur(s) créé(s) — Ctrl+S pour enregistrer.", ids.len());
+                    }
+                    Err(e) => self.error = Some(e),
+                }
+            }
+            // sans chaînage, chaque mur part d'un nouveau point
+            if let Some(t) = self.dessin2d.trace.as_mut().filter(|t| t.outil == OutilDessin::Ligne && !self.ruban_edition.chainer_murs) {
+                t.points.clear();
+            }
+            return;
+        }
         let Some(vue) = self.vue_native_id() else { return };
         for f in formes {
             let annotation = Annotation { id: String::new(), vue: vue.clone(), hauteur: 2.5, forme: AnnotationForme::depuis_forme_2d(&f) };
@@ -168,13 +304,13 @@ impl ViewerApp {
     /// ligne de commande, F fermer, Entrée ou Espace valider (vide : terminer),
     /// Retour arrière, Échap (saisie, puis tracé en cours, puis outil).
     pub(super) fn clavier_dessin(&mut self, ctx: &egui::Context) {
-        let Some(outil) = self.outil_dessin() else {
+        let Some((usage, outil)) = self.usage_dessin() else {
             self.dessin2d.trace = None;
             self.dessin2d.saisie.clear();
             return;
         };
         if self.dessin2d.trace.as_ref().is_none_or(|t| t.outil != outil) {
-            if self.dessin2d.trace.is_none() {
+            if self.dessin2d.trace.is_none() && usage == Usage::Annotation {
                 self.select(None, false);
             }
             self.dessin2d.trace = Some(Trace::new(outil));
@@ -186,17 +322,23 @@ impl ViewerApp {
         let mut valider = false;
         let mut echap = false;
         let mut effacer = false;
+        // F (fermer) seulement pendant un tracé : sinon F cadre la vue
+        let en_cours = self.trace_en_cours();
         ctx.input_mut(|i| {
             i.events.retain(|e| match e {
                 egui::Event::Text(t) => {
+                    let mut lu = false;
                     for ch in t.chars() {
-                        if ch.is_ascii_digit() || "@<,;.-".contains(ch) || ch.eq_ignore_ascii_case(&'f') {
+                        if ch.is_ascii_digit() || "@<,;.-".contains(ch) || (en_cours && ch.eq_ignore_ascii_case(&'f')) {
                             self.dessin2d.saisie.push(ch);
+                            lu = true;
                         } else if ch == ' ' {
                             valider = true;
+                            lu = true;
                         }
                     }
-                    false
+                    // les autres lettres restent aux raccourcis
+                    !lu
                 }
                 egui::Event::Key { key: egui::Key::Enter, pressed: true, .. } => {
                     valider = true;
@@ -210,7 +352,9 @@ impl ViewerApp {
                     effacer = true;
                     false
                 }
-                egui::Event::Key { key: egui::Key::Space | egui::Key::F | egui::Key::Delete, .. } => false,
+                egui::Event::Key { key: egui::Key::Space, .. } => false,
+                egui::Event::Key { key: egui::Key::Delete, .. } => !en_cours,
+                egui::Event::Key { key: egui::Key::F, .. } => !en_cours,
                 _ => true,
             });
         });
@@ -264,6 +408,10 @@ impl ViewerApp {
         let survol = resp.hover_pos().or(resp.interact_pointer_pos());
         self.dessin2d.curseur = survol.and_then(|q| self.depuis_ecran(rect, q));
         self.dessin2d.point = self.dessin2d.curseur.map(|c| self.point_dessin(rect, c, maj));
+        let angle = self.angle_axes_plan();
+        if let Some(t) = self.dessin2d.trace.as_mut() {
+            t.angle = angle;
+        }
         if resp.clicked() {
             if let (Some((p, _)), Some(t)) = (self.dessin2d.point, self.dessin2d.trace.as_mut()) {
                 self.dessin2d.saisie.clear();
@@ -293,8 +441,12 @@ impl ViewerApp {
                 let gris = Color32::from_rgba_unmultiplied(60, 60, 60, 160);
                 painter.line_segment([e - egui::vec2(28.0, 0.0), e + egui::vec2(28.0, 0.0)], egui::Stroke::new(1.0, gris));
                 painter.line_segment([e - egui::vec2(0.0, 28.0), e + egui::vec2(0.0, 28.0)], egui::Stroke::new(1.0, gris));
-                // aperçu
-                for l in trace.apercu(p) {
+                // aperçu : ligne tracée, et volume pour un mur
+                let apercu = trace.apercu(p);
+                if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Mur) {
+                    self.apercu_volume_murs(&painter, rect, &apercu);
+                }
+                for l in apercu {
                     let pts: Vec<egui::Pos2> = l.iter().filter_map(|q| self.vers_ecran(rect, *q)).collect();
                     painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, bleu)));
                 }
@@ -361,9 +513,13 @@ impl ViewerApp {
         }
         // ligne de commande : outil, invite, saisie (ou erreur)
         let u = crate::options::unite();
+        let nom = match self.usage_dessin() {
+            Some((Usage::Mur, o)) => format!("MUR · {}", nom_outil(o)),
+            _ => nom_outil(trace.outil).into(),
+        };
         let ligne = match &self.dessin2d.message {
-            Some(m) => format!("{} — {} : {}", nom_outil(trace.outil), trace.invite(), m),
-            None => format!("{} — {} : {}▏", nom_outil(trace.outil), trace.invite(), self.dessin2d.saisie),
+            Some(m) => format!("{nom} — {} : {}", trace.invite(), m),
+            None => format!("{nom} — {} : {}▏", trace.invite(), self.dessin2d.saisie),
         };
         let aide = format!("Clavier : x,y · @dx,dy · d<angle · distance seule ({}) · Maj : ortho · clic droit ou Entrée : terminer · Échap : annuler", u.suffixe().trim());
         let police = egui::FontId::monospace(13.0);
@@ -375,5 +531,81 @@ impl ViewerApp {
         let h1 = g1.size().y;
         painter.galley(bande.min + egui::vec2(10.0, 4.0), g1, Color32::WHITE);
         painter.galley(bande.min + egui::vec2(10.0, 8.0 + h1), g2, Color32::from_gray(200));
+    }
+
+    /// Volume des murs en cours : faces au sol et en tête, séparations des couches et
+    /// arêtes verticales aux extrémités, le long de chaque polyligne de l'aperçu.
+    fn apercu_volume_murs(&self, painter: &egui::Painter, rect: egui::Rect, lignes: &[Vec<DVec2>]) {
+        let Some((projet, _)) = &self.natif else { return };
+        let options = self.ruban_edition.parametres_mur();
+        let Ok((bas, haut)) = options.bornes(projet) else { return };
+        let gabarit = options.gabarit(projet);
+        let e = gabarit.epaisseur();
+        if e <= 0.0 || haut <= bas {
+            return;
+        }
+        // milieu de l'épaisseur : décalé de la ligne tracée selon l'implantation
+        let centre = -gabarit.decalage_reference(options.implantation.reference());
+        let mut separations = vec![-0.5, 0.5];
+        let mut k = 0.5;
+        for c in gabarit.couches.iter().take(gabarit.couches.len().saturating_sub(1)) {
+            k -= c.epaisseur / e;
+            separations.push(k);
+        }
+        let couleur = Color32::from_rgb(55, 130, 200);
+        let ecran = |q: DVec2, z: f64| self.ecran_3d(rect, DVec3::new(q.x, q.y, z));
+        for l in lignes {
+            for w in l.windows(2) {
+                let (a, b) = (w[0], w[1]);
+                let Some(n) = (b - a).try_normalize().map(|d| d.perp()) else { continue };
+                let c = |p: DVec2, k: f64| p + n * (centre + e * k);
+                let sol: Option<Vec<_>> = [c(a, -0.5), c(b, -0.5), c(b, 0.5), c(a, 0.5)].iter().map(|&q| ecran(q, bas)).collect();
+                if let Some(sol) = sol {
+                    painter.add(egui::Shape::convex_polygon(sol, couleur.gamma_multiply(0.18), egui::Stroke::NONE));
+                }
+                for (i, &k) in separations.iter().enumerate() {
+                    let trait_ = egui::Stroke::new(if i < 2 { 1.5 } else { 0.8 }, couleur.gamma_multiply(if i < 2 { 1.0 } else { 0.8 }));
+                    for z in [bas, haut] {
+                        if let (Some(p), Some(q)) = (ecran(c(a, k), z), ecran(c(b, k), z)) {
+                            painter.line_segment([p, q], trait_);
+                        }
+                    }
+                }
+            }
+            // arêtes verticales aux extrémités (pas pour une forme fermée)
+            let ferme = l.len() > 2 && l.first().zip(l.last()).is_some_and(|(a, b)| a.distance(*b) < 1e-6);
+            if ferme || l.len() < 2 {
+                continue;
+            }
+            for (p, voisin) in [(l[0], l[1]), (l[l.len() - 1], l[l.len() - 2])] {
+                let Some(n) = (p - voisin).try_normalize().map(|d| d.perp()) else { continue };
+                for k in [-0.5, 0.5] {
+                    let q = p + n * (centre + e * k);
+                    if let (Some(x), Some(y)) = (ecran(q, bas), ecran(q, haut)) {
+                        painter.line_segment([x, y], egui::Stroke::new(1.0, couleur));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Barre d'options de l'outil Mur, en haut de la vue : forme tracée et chaînage.
+    pub(super) fn options_trace_mur(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Forme");
+            for (forme, nom, aide) in [
+                (OutilDessin::Ligne, "Ligne", "Murs droits, point par point"),
+                (OutilDessin::Rectangle, "Rectangle", "Quatre murs par deux coins opposés"),
+                (OutilDessin::Arc, "Arc", "Mur courbe : départ, point de passage, fin"),
+                (OutilDessin::Cercle, "Cercle", "Deux murs en demi-cercle : centre puis rayon"),
+            ] {
+                if ui.selectable_label(self.ruban_edition.forme_mur == forme, nom).on_hover_text(aide).clicked() {
+                    self.ruban_edition.forme_mur = forme;
+                }
+            }
+            ui.separator();
+            ui.add_enabled(self.ruban_edition.forme_mur == OutilDessin::Ligne, egui::Checkbox::new(&mut self.ruban_edition.chainer_murs, "Chaîner"))
+                .on_hover_text("Le mur suivant part de la fin du précédent");
+        });
     }
 }

@@ -65,15 +65,21 @@ de la colonne de l'outil actif donne accès à ses réglages ; Éléments horizo
 sélecteur et ses paramètres dans Propriétés à toutes les largeurs.
 Les onglets d'édition présentent leurs groupes d'outils et les options de l'outil
 sélectionné directement à droite de son icône (Ouverture : Porte/Fenêtre ; Cote : Alignée/Orthogonale ; Texte :
-avec/sans flèche). **Mur** est opérationnel dans les projets natifs : régler
-hauteur, épaisseur, implantation et niveau de base, puis cliquer le départ et
-l'extrémité, ou taper la longueur au clavier puis Entrée (direction du curseur).
-L'aperçu montre le mur, sa longueur et son angle. Accrochages : extrémités (carré)
-et milieux (triangle) des murs du niveau, angles multiples de 15° à 3° près (ligne
-guide) ; Maj contraint le tracé horizontalement ou verticalement. L'option Chaîner
-permet de continuer depuis le dernier point ; revenir au premier point de la chaîne
-l'arrête. Échap efface la saisie, puis annule le segment en cours, puis quitte
-l'outil ; le clic droit arrête le segment. Le niveau 0 est créé au premier
+avec/sans flèche). **Mur** est opérationnel dans les projets natifs et se trace avec le moteur du
+dessin 2D : régler hauteur, épaisseur (ou type), implantation et niveau de base, puis
+choisir la forme dans la barre en haut de la vue : Ligne (départ puis extrémité),
+Rectangle (deux coins opposés, quatre murs), Arc (départ, point de passage, fin : mur
+courbe) ou Cercle (centre puis rayon : deux demi-cercles). Au clavier, la ligne de
+commande en bas de la vue reçoit `x,y`, `@dx,dy`, `d<angle` ou une longueur seule
+(direction du curseur), puis Entrée. L'aperçu montre le volume, les couches, la
+longueur et l'angle. Accrochages : extrémité, milieu, centre, quadrant, intersection,
+perpendiculaire et point proche, sur les murs qui traversent le plan de tracé (axes
+et faces), les éléments horizontaux, les quadrillages et les dessins 2D de la vue en
+plan ouverte ; sinon angles multiples de 15° (ligne guide) et pas de 10 mm ; Maj
+contraint le tracé horizontalement ou verticalement (axes du plan tourné). L'option
+Chaîner (forme Ligne) continue depuis le dernier point ; revenir au premier point
+ferme la chaîne et l'arrête. Échap efface la saisie, puis abandonne le tracé en
+cours, puis quitte l'outil ; le clic droit ou Entrée arrête la chaîne. Le niveau 0 est créé au premier
 mur si le projet est vide. Les outils complémentaires disponibles et leurs limites sont décrits dans [Édition BIM](docs/EDITION.md).
 **Murs composés** : choisir un type dans Propriétés (ou en créer un avec « + » :
 couches, fonction, matériau, couleur, motif de coupe, épaisseur ; glisser la poignée ≡ d'une

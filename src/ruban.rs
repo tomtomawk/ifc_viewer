@@ -332,6 +332,8 @@ pub struct RubanEdition {
     pub sous_projet_creation: Option<String>,
     pub variante_creation: Option<String>,
     pub chainer_murs: bool,
+    /// Forme tracée par l'outil Mur (moteur du dessin 2D) : ligne, rectangle, arc, cercle.
+    pub forme_mur: crate::dessin2d::OutilDessin,
     ajout_creation: Option<crate::modele::edition::ListeCreation>,
     nom_creation: String,
     jeu_creation: String,

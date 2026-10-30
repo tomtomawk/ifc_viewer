@@ -439,7 +439,6 @@ pub struct ViewerApp {
     natif: Option<(crate::modele::Projet, PathBuf)>,
     historique: crate::modele::historique::Historique,
     natif_modifie: bool,
-    mur_depart: Option<[f64; 2]>,
     /// Repère du plan : le prochain clic choisit l'arête à mettre à l'horizontale.
     alignement_plan: bool,
     /// Arête visée en mode Aligner (repère de la scène), surlignée.
@@ -450,16 +449,12 @@ pub struct ViewerApp {
     positions_plan: Vec<(String, f32)>,
     /// Boîte « Nouvelle position » ouverte : nom saisi.
     nom_position_plan: Option<String>,
-    /// Premier point d'une chaîne de murs (la refermer l'arrête).
-    mur_chaine: Option<[f64; 2]>,
     /// Nom de la vue native ouverte en cours de saisie (identifiant, texte).
     nom_vue: Option<(String, String)>,
     /// Début de la ligne de coupe en cours de tracé (mm).
     coupe_depart: Option<[f64; 2]>,
     /// Sommets de la dalle en cours de tracé (mm).
     dalle_points: Vec<[f64; 2]>,
-    /// Longueur du mur en cours tapée au clavier (mm).
-    mur_saisie: String,
     raccourci_en_attente: Option<(char, f64)>,
     confirmer_fermeture: Option<(bool, usize)>, // application entière, ou identifiant du document
     documents: BTreeMap<usize, DocumentOuvert>,
@@ -619,13 +614,10 @@ impl ViewerApp {
             natif: None,
             historique: Default::default(),
             natif_modifie: false,
-            mur_depart: None,
-            mur_saisie: String::new(),
             raccourci_en_attente: None,
             dalle_points: Vec::new(),
             coupe_depart: None,
             nom_vue: None,
-            mur_chaine: None,
             alignement_plan: false,
             dessin2d: Default::default(),
             arete_alignement: None,
@@ -2695,17 +2687,6 @@ impl ViewerApp {
         }
     }
 
-    /// Point de tracé du mur sous le curseur, sur le plan de son niveau de base (mm),
-    /// et l'accrochage retenu. Priorité : extrémité ou milieu d'un mur du niveau (dix
-    /// pixels près), puis Maj (horizontal / vertical), puis angle rond (multiple de 15°
-    /// à 3° près) depuis le départ ; sinon grille de 10 mm.
-    fn point_tracage_mur(&self, q: egui::Pos2, rect: egui::Rect, orthogonal: bool) -> Option<([f64; 2], AccrocheMur)> {
-        let (projet, _) = self.natif.as_ref()?;
-        let options = self.ruban_edition.parametres_mur();
-        let altitude = options.niveau.as_ref().and_then(|id| projet.niveau(id)).or_else(|| projet.niveaux.first()).map_or(0.0, |n| n.altitude) + options.decalage;
-        self.point_tracage(q, rect, orthogonal, self.mur_depart, altitude)
-    }
-
     /// Point de tracé sous le curseur sur le plan horizontal `altitude` (mm), et son
     /// accrochage : extrémité ou milieu d'un mur de ce niveau, angle d'un mur (contour
     /// raccordé), sommet d'une dalle ou du contour en cours, à dix pixels près ; puis
@@ -2782,141 +2763,6 @@ impl ViewerApp {
         Some((point, accroche))
     }
 
-    /// Aperçu du mur en cours : volume, repère d'accrochage, ligne guide d'un angle
-    /// rond, et étiquette longueur · angle (ou la longueur en cours de saisie).
-    fn apercu_mur(&self, ui: &egui::Ui, rect: egui::Rect, fin: Option<([f64; 2], AccrocheMur)>) {
-        let Some((projet, _)) = &self.natif else { return };
-        let Some(scene) = &self.scene else { return };
-        let options = self.ruban_edition.parametres_mur();
-        let Ok((altitude, sommet)) = options.bornes(projet) else { return };
-        let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
-        let ecran = |p: [f64; 2], z: f64| {
-            let p = (glam::DVec3::new(p[0], p[1], z) * 0.001 - scene.origin).as_vec3();
-            let c = vp * p.extend(1.0);
-            (c.w > 0.0).then(|| egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height()))
-        };
-        let painter = ui.painter().with_clip_rect(rect);
-        let couleur = Color32::from_rgb(55, 130, 200);
-        let accent = Color32::from_rgb(230, 120, 20);
-        // la saisie clavier remplace la longueur sous le curseur, dans sa direction
-        let fin = match (fin, self.mur_depart, self.mur_saisie.parse::<f64>()) {
-            (Some((b, acc)), Some(a), Ok(l)) if l > 0.0 => {
-                let l = l * crate::options::unite().facteur();
-                let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
-                let n = dx.hypot(dy).max(1e-9);
-                Some(([a[0] + dx / n * l, a[1] + dy / n * l], acc))
-            }
-            _ => fin,
-        };
-        if let Some((b, acc)) = fin {
-            if let Some(q) = ecran(b, altitude) {
-                marqueur(&painter, q, acc, couleur, accent);
-            }
-            if let Some(a) = self.mur_depart {
-                // ligne guide prolongée de l'angle accroché
-                if matches!(acc, AccrocheMur::Angle(_) | AccrocheMur::Orthogonal) {
-                    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
-                    let n = dx.hypot(dy).max(1e-9);
-                    let loin = |k: f64| [a[0] + dx / n * k, a[1] + dy / n * k];
-                    let etendue = (scene.max - scene.min).length() as f64 * 1000.0 + n * 2.0;
-                    if let (Some(p), Some(q)) = (ecran(loin(-etendue), altitude), ecran(loin(etendue), altitude)) {
-                        painter.add(egui::Shape::dashed_line(&[p, q], egui::Stroke::new(1.0, accent.gamma_multiply(0.7)), 6.0, 5.0));
-                    }
-                }
-                let longueur = (b[0] - a[0]).hypot(b[1] - a[1]);
-                let gabarit = options.gabarit(projet);
-                let e = gabarit.epaisseur();
-                if longueur >= 1.0 && sommet > altitude && e > 0.0 {
-                    // milieu de l'épaisseur décalé de la ligne tracée vers l'intérieur
-                    let centre = -gabarit.decalage_reference(options.implantation.reference());
-                    let n = [-(b[1]-a[1])/longueur, (b[0]-a[0])/longueur];
-                    let c = |p: [f64; 2], k: f64| [p[0]+n[0]*(centre+e*k), p[1]+n[1]*(centre+e*k)];
-                    let contour = [c(a,-0.5),c(b,-0.5),c(b,0.5),c(a,0.5)];
-                    if let Some(sol) = contour.iter().map(|&q| ecran(q, altitude)).collect::<Option<Vec<_>>>() {
-                        painter.add(egui::Shape::convex_polygon(sol, couleur.gamma_multiply(0.18), egui::Stroke::NONE));
-                    }
-                    // séparations des couches, au sol et en tête
-                    let mut k = 0.5;
-                    for couche in gabarit.couches.iter().take(gabarit.couches.len().saturating_sub(1)) {
-                        k -= couche.epaisseur / e;
-                        for z in [altitude, sommet] {
-                            if let (Some(p), Some(q)) = (ecran(c(a, k), z), ecran(c(b, k), z)) {
-                                painter.line_segment([p, q], egui::Stroke::new(0.8, couleur.gamma_multiply(0.8)));
-                            }
-                        }
-                    }
-                    for z in [altitude, sommet] {
-                        for k in 0..4 { if let (Some(a),Some(b)) = (ecran(contour[k],z),ecran(contour[(k+1)%4],z)) { painter.line_segment([a,b],egui::Stroke::new(1.5,couleur)); } }
-                    }
-                    for q in contour { if let (Some(a),Some(b)) = (ecran(q,altitude),ecran(q,sommet)) { painter.line_segment([a,b],egui::Stroke::new(1.0,couleur)); } }
-                    // étiquette au milieu du mur : longueur et angle, ou la saisie
-                    if let (Some(p), Some(q)) = (ecran(a, altitude), ecran(b, altitude)) {
-                        // angle par rapport à l'horizontale de l'écran en plan
-                        let angle = ((b[1] - a[1]).atan2(b[0] - a[0]) - self.angle_axes_plan()).to_degrees();
-                        let angle = (angle + 180.0).rem_euclid(360.0) - 180.0;
-                        let texte = if self.mur_saisie.is_empty() {
-                            format!("{}  ·  {angle:.0}°", crate::options::unite().afficher(longueur))
-                        } else {
-                            format!("{}{}  (Entrée)", self.mur_saisie, crate::options::unite().suffixe())
-                        };
-                        let galee = painter.layout_no_wrap(texte, egui::FontId::proportional(13.0), Color32::from_gray(30));
-                        let centre = p.lerp(q, 0.5) + egui::vec2(0.0, -18.0);
-                        let cadre = egui::Rect::from_center_size(centre, galee.size() + egui::vec2(12.0, 6.0));
-                        painter.rect(cadre, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 235), egui::Stroke::new(1.0, if self.mur_saisie.is_empty() { couleur } else { accent }), egui::StrokeKind::Inside);
-                        painter.galley(cadre.min + egui::vec2(6.0, 3.0), galee, Color32::from_gray(30));
-                    }
-                }
-            }
-        }
-        let texte = if !self.mur_saisie.is_empty() {
-            "Mur : Entrée valide la longueur saisie · Retour arrière corrige · Échap annule"
-        } else if self.mur_depart.is_some() {
-            "Mur : cliquer l’extrémité ou taper la longueur · Maj : orthogonal · clic droit : arrêter"
-        } else {
-            "Mur : cliquer le départ · molette : zoom · milieu : panoramique"
-        };
-        painter.text(rect.left_top()+egui::vec2(12.0,34.0),egui::Align2::LEFT_TOP,texte,egui::FontId::proportional(13.0),couleur);
-    }
-
-    /// Saisie de la longueur du mur au clavier (chiffres, virgule ou point, retour
-    /// arrière) ; Entrée crée le mur dans la direction du curseur.
-    fn saisie_longueur_mur(&mut self, ui: &egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>, shift: bool) {
-        if self.mur_depart.is_none() {
-            self.mur_saisie.clear();
-            return;
-        }
-        let mut valider = false;
-        ui.input(|i| {
-            for e in &i.events {
-                if let egui::Event::Key { key, pressed: true, .. } = e {
-                    use egui::Key::*;
-                    let chiffre = [Num0, Num1, Num2, Num3, Num4, Num5, Num6, Num7, Num8, Num9].iter().position(|k| k == key);
-                    match (chiffre, key) {
-                        (Some(c), _) if self.mur_saisie.len() < 9 => self.mur_saisie.push(char::from(b'0' + c as u8)),
-                        (_, Period | Comma) if !self.mur_saisie.contains('.') => self.mur_saisie.push('.'),
-                        (_, Backspace) => { self.mur_saisie.pop(); }
-                        (_, Enter) => valider = true,
-                        _ => {}
-                    }
-                }
-            }
-        });
-        if !valider { return; }
-        let (Some(a), Ok(l)) = (self.mur_depart, self.mur_saisie.parse::<f64>()) else { return };
-        let l = l * crate::options::unite().facteur();
-        let Some((b, _)) = survol.and_then(|q| self.point_tracage_mur(q, rect, shift)) else { return };
-        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
-        let n = dx.hypot(dy);
-        if l <= 0.0 || n < 1e-6 { return; }
-        let point = [a[0] + dx / n * l, a[1] + dy / n * l];
-        self.mur_saisie.clear();
-        let options = self.ruban_edition.parametres_mur();
-        match self.ajouter_mur_natif(a, point, &options) {
-            Ok(_) => self.mur_depart = self.ruban_edition.chainer_murs.then_some(point),
-            Err(e) => self.error = Some(e),
-        }
-    }
-
     fn open_dialog(&mut self, ctx: &egui::Context) {
         if let Some(p) = rfd::FileDialog::new()
             .add_filter("Modèle natif, IFC et Revit", &["json", "ifc", "IFC", "rvt", "rfa", "rte", "rft"])
@@ -2964,7 +2810,6 @@ impl ViewerApp {
         self.selection_multiple.clear();
         self.fenetre_selection = None;
         self.natif_modifie = false;
-        self.mur_depart = None;
         self.ruban_edition.niveau_mur = None;
         self.ruban_edition.niveau_haut_mur = None;
         self.ruban_edition.reinitialiser_contexte_creation();
@@ -2986,7 +2831,6 @@ impl ViewerApp {
         self.avant_saisie = None;
         self.historique = d.historique;
         self.natif_modifie = d.modifie;
-        self.mur_depart = None;
         self.ruban_edition.niveau_mur = None;
         self.ruban_edition.niveau_haut_mur = None;
         self.ruban_edition.reinitialiser_contexte_creation();
@@ -3042,7 +2886,6 @@ impl ViewerApp {
 
     fn fermer_document(&mut self) {
         self.natif_modifie = false;
-        self.mur_depart = None;
         self.natif = None;
         self.avant_saisie = None;
         self.vues_ouvertes.clear();
@@ -5794,7 +5637,6 @@ impl ViewerApp {
         let resp = ui.allocate_rect(rect, Sense::click_and_drag());
         let aspect = rect.width() / rect.height().max(1.0);
         let mode_mur = self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.mur_actif() && self.natif.is_some() && self.loading.is_none();
-        if !mode_mur { self.mur_depart = None; }
         // dalle (ou sol) : contour cliqué sur le plan de son dessus
         let dalle = if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() { self.ruban_edition.dalle_active() } else { None };
         let altitude_dalle = dalle.as_ref().and_then(|d| {
@@ -6017,30 +5859,6 @@ impl ViewerApp {
                         }
                     }
                 }
-            } else if mode_mur {
-                if resp.clicked_by(PointerButton::Secondary) { self.mur_depart = None; self.mur_chaine = None; }
-                let survol = resp.hover_pos();
-                self.saisie_longueur_mur(ui, rect, survol, shift);
-                if resp.clicked() {
-                    if let Some((point, _)) = resp.interact_pointer_pos().and_then(|q| self.point_tracage_mur(q, rect, shift)) {
-                        self.mur_saisie.clear();
-                        if let Some(debut) = self.mur_depart {
-                            let options = self.ruban_edition.parametres_mur();
-                            // chaîne refermée sur son premier point : on s'arrête
-                            let ferme = self.mur_chaine.is_some_and(|p| p == point);
-                            match self.ajouter_mur_natif(debut, point, &options) {
-                                Ok(_) => {
-                                    self.mur_depart = (self.ruban_edition.chainer_murs && !ferme).then_some(point);
-                                    if self.mur_depart.is_none() { self.mur_chaine = None; }
-                                }
-                                Err(e) => self.error = Some(e),
-                            }
-                        } else {
-                            self.mur_depart = Some(point);
-                            self.mur_chaine = Some(point);
-                        }
-                    } else { self.error = Some("Le plan de tracé est parallèle à la vue. Utilisez la vue de dessus ou une vue 3D inclinée.".into()); }
-                }
             } else if resp.double_clicked() {
                 match resp.interact_pointer_pos().and_then(|p| pick(self, p)) {
                     Some((obj, _)) => self.frame_objects(&[obj]),
@@ -6177,10 +5995,6 @@ impl ViewerApp {
             let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.dalle_points.last().copied(), alt));
             self.apercu_dalle(ui, rect, point, alt);
         }
-        if mode_mur {
-            let point = resp.hover_pos().and_then(|q| self.point_tracage_mur(q, rect, ui.input(|i| i.modifiers.shift)));
-            self.apercu_mur(ui, rect, point);
-        }
         if let Some(genre) = structure {
             let painter = ui.painter().with_clip_rect(rect);
             let couleur = Color32::from_rgb(55, 130, 200);
@@ -6212,6 +6026,14 @@ impl ViewerApp {
         }
         if self.outil_dessin().is_some() {
             self.dessiner_dessin2d(ui, rect);
+        }
+        if self.usage_dessin().is_some_and(|(u, _)| u == dessin2d_ui::Usage::Mur) {
+            egui::Area::new(egui::Id::unique("options_trace_mur"))
+                .fixed_pos(rect.left_top() + egui::vec2(8.0, 8.0))
+                .constrain_to(rect)
+                .show(ui.ctx(), |ui| {
+                    egui::Frame::popup(ui.style()).show(ui, |ui| self.options_trace_mur(ui));
+                });
         }
         if self.a_options_modifier() {
             egui::Area::new(egui::Id::unique("options_modifier"))
@@ -6504,7 +6326,7 @@ impl ViewerApp {
                         self.onglet_ruban = OngletRuban::Annoter;
                         self.ruban_edition.activer_outil(o);
                     }
-                    "aucun" => { self.ruban_edition.annuler(); self.mur_depart = None; }
+                    "aucun" => { self.ruban_edition.annuler(); }
                     _ => return erreur("usage : outil mur|poteau|poutre|dalle|sol|coupe|ligne|polyligne|spline|cercle|arc|aucun"),
                 }
                 self.etat()
@@ -7289,12 +7111,8 @@ impl eframe::App for ViewerApp {
                 self.coupe_depart = None;
             } else if !self.dalle_points.is_empty() {
                 self.dalle_points.clear();
-            } else if !self.mur_saisie.is_empty() {
-                self.mur_saisie.clear();
-            } else if self.mur_depart.take().is_none() {
-                self.ruban_edition.annuler();
             } else {
-                self.mur_chaine = None;
+                self.ruban_edition.annuler();
             }
         }
         self.poll_loading();
@@ -7311,11 +7129,11 @@ impl eframe::App for ViewerApp {
                 self.selectionner_rectangle(self.rect_vue, f);
             }
             // Suppr, ou la touche « supprimer » des claviers Mac (Retour arrière) hors tracé
-            let trace = self.mur_depart.is_some() || self.coupe_depart.is_some() || !self.dalle_points.is_empty() || self.bim.depart_structure.is_some();
+            let trace = self.trace_en_cours() || self.coupe_depart.is_some() || !self.dalle_points.is_empty() || self.bim.depart_structure.is_some();
             if self.natif.is_some() && !trace && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete) || i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace)) { self.demander_suppression(); }
             if ctx.input(|i| i.key_pressed(egui::Key::Escape)) { self.raccourci_en_attente = None; }
         }
-        if !ctx.egui_wants_keyboard_input() && self.natif.is_some() && self.mur_depart.is_none() && self.coupe_depart.is_none() && self.dalle_points.is_empty() && self.bim.depart_structure.is_none() {
+        if !ctx.egui_wants_keyboard_input() && self.natif.is_some() && !self.trace_en_cours() && self.coupe_depart.is_none() && self.dalle_points.is_empty() && self.bim.depart_structure.is_none() {
             let (temps, textes) = ctx.input(|i| (i.time, if i.modifiers.ctrl || i.modifiers.alt || i.modifiers.command { Vec::new() } else { i.events.iter().filter_map(|e| if let egui::Event::Text(s) = e { Some(s.clone()) } else { None }).collect::<Vec<_>>() }));
             if self.raccourci_en_attente.is_some_and(|(_, t)| temps - t > 2.0) { self.raccourci_en_attente = None; }
             for c in textes.iter().flat_map(|s| s.chars()).filter(|c| c.is_ascii_alphabetic()).map(|c| c.to_ascii_uppercase()) {

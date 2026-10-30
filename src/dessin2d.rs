@@ -374,13 +374,16 @@ pub fn lire_saisie(texte: &str, precedent: Option<DVec2>, direction: Option<DVec
 }
 
 /// Outil de dessin 2D.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum OutilDessin {
+    #[default]
     Ligne,
     Polyligne,
     Spline,
     Cercle,
     Arc,
+    /// Deux coins opposés, côtés parallèles au repère du tracé (`Trace::angle`).
+    Rectangle,
 }
 
 /// Tracé en cours : outil et points déjà donnés.
@@ -388,11 +391,13 @@ pub enum OutilDessin {
 pub struct Trace {
     pub outil: OutilDessin,
     pub points: Vec<DVec2>,
+    /// Orientation des côtés du rectangle (radians) : repère du plan tourné.
+    pub angle: f64,
 }
 
 impl Trace {
     pub fn new(outil: OutilDessin) -> Trace {
-        Trace { outil, points: Vec::new() }
+        Trace { outil, points: Vec::new(), angle: 0.0 }
     }
 
     /// Invite de la ligne de commande, avec ses mots-clés.
@@ -409,6 +414,8 @@ impl Trace {
             (Arc, 0) => "Début de l'arc",
             (Arc, 1) => "Point de passage de l'arc",
             (Arc, _) => "Fin de l'arc",
+            (Rectangle, 0) => "Premier coin",
+            (Rectangle, _) => "Coin opposé (point ou @dx,dy)",
         }
     }
 
@@ -426,7 +433,18 @@ impl Trace {
         self.points.push(p);
         use OutilDessin::*;
         match (self.outil, self.points.len()) {
+            // retour sur le premier point : la ligne se ferme et s'arrête
+            (Ligne, n) if n >= 4 && self.points[0].distance(p) < 1e-6 => {
+                let a = self.points[n - 2];
+                self.points.clear();
+                vec![Forme2D::Ligne([a, p])]
+            }
             (Ligne, n) if n >= 2 => vec![Forme2D::Ligne([self.points[n - 2], self.points[n - 1]])],
+            (Rectangle, 2) => {
+                let coins = self.rectangle(self.points[0], self.points[1]);
+                self.points.clear();
+                coins.map(|points| Forme2D::Polyligne { points: points.to_vec(), fermee: true }).into_iter().collect()
+            }
             (Cercle, 2) => {
                 let (c, q) = (self.points[0], self.points[1]);
                 self.points.clear();
@@ -462,6 +480,16 @@ impl Trace {
         }
     }
 
+    /// Coins du rectangle de diagonale `a`–`b`, côtés suivant `angle` ; None s'il est
+    /// plat.
+    pub fn rectangle(&self, a: DVec2, b: DVec2) -> Option<[DVec2; 4]> {
+        let u = DVec2::from_angle(self.angle);
+        let v = u.perp();
+        let d = b - a;
+        let (du, dv) = (d.dot(u), d.dot(v));
+        (du.abs() > 1e-6 && dv.abs() > 1e-6).then(|| [a, a + u * du, b, a + v * dv])
+    }
+
     /// Aperçu sous le curseur (élastique) : polylignes à dessiner.
     pub fn apercu(&self, curseur: DVec2) -> Vec<Vec<DVec2>> {
         use OutilDessin::*;
@@ -469,6 +497,10 @@ impl Trace {
         pts.push(curseur);
         match self.outil {
             Ligne if pts.len() >= 2 => vec![vec![pts[pts.len() - 2], curseur]],
+            Rectangle if pts.len() == 2 => match self.rectangle(pts[0], curseur) {
+                Some(c) => vec![vec![c[0], c[1], c[2], c[3], c[0]]],
+                None => vec![pts],
+            },
             Polyligne => vec![pts],
             Spline => vec![points_spline(&pts, false)],
             Cercle if pts.len() == 2 => vec![points_arc(pts[0], pts[0].distance(curseur), 0.0, std::f64::consts::TAU), vec![pts[0], curseur]],
@@ -524,6 +556,18 @@ mod tests {
         // distance directe dans la direction du curseur, en cm (facteur 10)
         assert!(proche_de(lire_saisie("25", prec, Some(DVec2::new(0.0, -3.0)), 10.0).unwrap(), DVec2::new(100.0, -150.0)));
         assert!(lire_saisie("abc", prec, None, 1.0).is_err());
+        // rectangle tourné de 90° : côtés suivant le repère
+        let mut t = Trace::new(OutilDessin::Rectangle);
+        t.angle = std::f64::consts::FRAC_PI_2;
+        t.ajouter(DVec2::ZERO);
+        let Some(Forme2D::Polyligne { points, fermee: true }) = t.ajouter(DVec2::new(300.0, 200.0)).pop() else { panic!() };
+        assert!(proche_de(points[1], DVec2::new(0.0, 200.0)) && proche_de(points[3], DVec2::new(300.0, 0.0)));
+        // ligne refermée sur son premier point
+        let mut t = Trace::new(OutilDessin::Ligne);
+        for p in [DVec2::ZERO, DVec2::X, DVec2::ONE, DVec2::ZERO] {
+            t.ajouter(p);
+        }
+        assert!(t.points.is_empty());
         assert!(lire_saisie("@1,2", None, None, 1.0).is_err());
     }
 
