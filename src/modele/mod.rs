@@ -9,6 +9,7 @@
 
 pub mod assemblage;
 pub mod famille;
+pub mod famille_modelee;
 pub mod solides;
 pub mod historique;
 pub mod commandes;
@@ -519,6 +520,9 @@ pub struct TypeOuverture {
     /// Famille paramétrique (fenêtre) ; absente : menuiserie générique.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub famille: Option<famille::FamilleFenetre>,
+    /// Famille modélisée (éditeur de familles) : prime sur `famille`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modele: Option<famille_modelee::FamilleModelee>,
     pub origine: Option<Origine>,
 }
 

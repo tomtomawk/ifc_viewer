@@ -344,6 +344,8 @@ pub struct RubanEdition {
     type_coupe: usize,
     coupe_identique: Option<(String, f64, bool)>,
     pub(crate) ouverture_type_identique: Option<String>,
+    /// Demande d'ouverture de l'éditeur de familles : type à éditer (None : nouveau).
+    pub demande_famille: Option<Option<String>>,
     /// Niveau des prochaines dalles (None : le premier).
     pub niveau_dalle: Option<String>,
     /// Type de mur du gabarit choisi, à copier dans le projet.
@@ -1722,6 +1724,68 @@ impl RubanEdition {
     /// Sélecteur de création placé en tête de la palette Propriétés, comme un
     /// sélecteur de type : vignette, choix explicite, puis paramètres de l'outil.
     /// Retourne false pour laisser la palette afficher la sélection du modèle.
+    /// Placement d'une ouverture : sélecteur de type en tête de Propriétés (générique :
+    /// cotes du ruban), édition de la famille du type ou nouvelle famille.
+    pub fn proprietes_ouverture(&mut self, ui: &mut egui::Ui, projet: Option<&crate::modele::Projet>) -> bool {
+        if self.selection != Some(Outil::Ouverture) {
+            return false;
+        }
+        use crate::modele::GenreOuverture;
+        let genre = match self.texte_option(Outil::Ouverture, 0).as_str() {
+            "Fenêtre" => GenreOuverture::Fenetre,
+            "Libre" => GenreOuverture::Libre,
+            _ => GenreOuverture::Porte,
+        };
+        ui.label(RichText::new("Placer une ouverture").strong());
+        let Some(projet) = projet else {
+            ui.label("Créez ou ouvrez un projet natif.");
+            return true;
+        };
+        let types: Vec<&crate::modele::TypeOuverture> = projet.types_ouvertures.iter().filter(|t| t.genre == genre).collect();
+        if self.ouverture_type_identique.as_ref().is_some_and(|id| !types.iter().any(|t| &t.id == id)) {
+            self.ouverture_type_identique = None;
+        }
+        let u = crate::options::unite();
+        let actuel = self.ouverture_type_identique.as_ref().and_then(|id| types.iter().find(|t| &t.id == id));
+        let texte = actuel.map_or_else(|| "Générique (cotes du ruban)".to_string(), |t| t.nom.clone());
+        let mut choix = self.ouverture_type_identique.clone();
+        egui::ComboBox::from_id_salt("type_ouverture_placement")
+            .width(ui.available_width() - 8.0)
+            .truncate()
+            .selected_text(RichText::new(texte).strong())
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut choix, None, "Générique (cotes du ruban)");
+                for t in &types {
+                    let famille = if t.modele.is_some() { " · famille" } else { "" };
+                    ui.selectable_value(&mut choix, Some(t.id.clone()), format!("{} — {} × {}{famille}", t.nom, u.afficher(t.largeur), u.afficher(t.hauteur)));
+                }
+            })
+            .response
+            .on_hover_text("Type de l'ouverture à placer : il impose ses cotes et sa famille");
+        if choix != self.ouverture_type_identique {
+            if let Some(t) = choix.as_ref().and_then(|id| types.iter().find(|t| &t.id == id)) {
+                self.valeurs.insert((Outil::Ouverture, 1), Valeur::Nombre(t.largeur));
+                self.valeurs.insert((Outil::Ouverture, 2), Valeur::Nombre(t.hauteur));
+            }
+            self.ouverture_type_identique = choix;
+        }
+        if let Some(t) = self.ouverture_type_identique.as_ref().and_then(|id| types.iter().find(|t| &t.id == id)) {
+            ui.label(RichText::new(format!("{} × {} (cotes du type)", u.afficher(t.largeur), u.afficher(t.hauteur))).weak());
+        }
+        if genre == GenreOuverture::Fenetre {
+            ui.horizontal(|ui| {
+                if ui.add_enabled(self.ouverture_type_identique.is_some(), egui::Button::new("Éditer la famille…")).clicked() {
+                    self.demande_famille = Some(self.ouverture_type_identique.clone());
+                }
+                if ui.button("Nouvelle famille…").on_hover_text("Éditeur de familles à partir du gabarit Fenêtre").clicked() {
+                    self.demande_famille = Some(None);
+                }
+            });
+        }
+        ui.separator();
+        true
+    }
+
     pub fn proprietes_surfaces(&mut self, ui: &mut egui::Ui, projet: Option<&crate::modele::Projet>) -> bool {
         let Some(mut surface) = self.selection.filter(|o| o.commande() == Outil::Surfaces) else {
             return false;

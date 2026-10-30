@@ -73,6 +73,10 @@ impl Projet {
             if let Some(f) = &t.famille {
                 f.valider(t.largeur, t.hauteur).map_err(|e| format!("{} : {e}", t.nom))?;
             }
+            // famille modélisée : contrôlée dans un mur d'essai de 300 mm
+            if let Some(f) = &t.modele {
+                f.valider(t.largeur, t.hauteur, 300.0).map_err(|e| format!("{} : {e}", t.nom))?;
+            }
         }
         for o in &self.ouvertures {
             solides::hote(self, &o.mur)?;

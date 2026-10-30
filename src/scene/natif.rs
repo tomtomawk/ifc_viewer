@@ -163,8 +163,8 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         model.children.entry(parent).or_default().push(id);
         // famille : couleur de la menuiserie, vitrage transparent, appui minéral
         use crate::modele::famille::Role;
-        let menuiserie = o.type_ouverture.as_ref().and_then(|t| projet.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.famille.as_ref())
-            .map_or([0.55, 0.40, 0.24, 1.0], |f| { let [r, g, b] = f.couleur.map(|c| c as f32 / 255.0); [r, g, b, 1.0] });
+        let menuiserie = o.type_ouverture.as_ref().and_then(|t| projet.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.modele.as_ref().map(|m| m.couleur).or(t.famille.as_ref().map(|f| f.couleur)))
+            .map_or([0.55, 0.40, 0.24, 1.0], |c| { let [r, g, b] = c.map(|c| c as f32 / 255.0); [r, g, b, 1.0] });
         let parts: Vec<Part> = crate::modele::solides::ouverture_parts(projet, o)?.into_iter().map(|(role, tris)| Part {
             color: match role {
                 Role::Vitrage => [0.62, 0.78, 0.86, 0.35],

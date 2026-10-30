@@ -946,6 +946,12 @@ impl ViewerApp {
                     }
                 }
                 Some(Outil::Ouverture) => {
+                    // type à placer (et éditeur de familles), en tête comme dans Revit
+                    if self.ruban_edition.proprietes_ouverture(ui, self.natif.as_ref().map(|(p, _)| p)) {
+                        if let Some(t) = self.ruban_edition.demande_famille.take() {
+                            self.ouvrir_editeur_famille_type(t);
+                        }
+                    }
                     ui.label("Cliquez sur un mur pour placer l’ouverture, ou sélectionnez son hôte et saisissez l'abscisse.");
                     ui.add(
                         egui::DragValue::new(&mut self.bim.abscisse)

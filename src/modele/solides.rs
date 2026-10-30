@@ -318,6 +318,17 @@ fn mur_brut(
         {
             return Err("Dimensions d'ouverture non valides.".into());
         }
+        // famille modélisée : ses vides percent le mur
+        if let Some(vides) = vides_famille(p, o)? {
+            for vide in vides {
+                if tris.is_empty() {
+                    break;
+                }
+                tris = crate::csg::boolean(&tris, &vide, crate::csg::Op::Difference, 1e-5)
+                    .ok_or("Calcul du percement trop complexe ; projet conservé.")?;
+            }
+            continue;
+        }
         // Marge transversale pour couper même les faces coplanaires d'une couche.
         let vide = prisme(
             &bande(
@@ -413,8 +424,47 @@ pub fn ouverture(p: &Projet, o: &Ouverture) -> Result<Vec<Tri>, String> {
 
 /// Menuiserie d'une ouverture par rôle (dormant, ouvrant, vitrage…) quand son type
 /// porte une famille paramétrique ; sinon une seule part (rôle dormant).
+/// Famille modélisée du type de l'ouverture.
+fn famille_modelee<'a>(p: &'a Projet, o: &Ouverture) -> Option<&'a super::famille_modelee::FamilleModelee> {
+    let t = o.type_ouverture.as_ref().and_then(|t| p.types_ouvertures.iter().find(|x| &x.id == t))?;
+    t.modele.as_ref().filter(|_| o.representation.is_none())
+}
+
+/// Boîtes résolues d'une famille modélisée placée : (prisme dans le projet, boîte).
+fn boites_famille(p: &Projet, o: &Ouverture, f: &super::famille_modelee::FamilleModelee) -> Result<Vec<(Vec<Tri>, super::famille_modelee::BoiteVolume)>, String> {
+    let (axe, e, niveau) = hote(p, &o.mur)?;
+    let z = p.niveau(&niveau).ok_or("Niveau introuvable.")?.altitude + o.allege;
+    let (c, u) = repere(&axe, o.abscisse);
+    let n = u.perp();
+    let r = f.resoudre(o.largeur, o.hauteur, e);
+    Ok(f.boites(&r)
+        .into_iter()
+        .map(|b| {
+            let contour = [(b.min.x, b.min.y), (b.max.x, b.min.y), (b.max.x, b.max.y), (b.min.x, b.max.y)].map(|(x, y)| (c + u * x + n * y).to_array());
+            (prisme(&contour, z + b.min.z, z + b.max.z), b)
+        })
+        .collect())
+}
+
+/// Vides de la famille modélisée de l'ouverture (None : percement rectangulaire).
+fn vides_famille(p: &Projet, o: &Ouverture) -> Result<Option<Vec<Vec<Tri>>>, String> {
+    let Some(f) = famille_modelee(p, o) else { return Ok(None) };
+    Ok(Some(boites_famille(p, o, f)?.into_iter().filter(|(_, b)| b.vide).map(|(t, _)| t).collect()))
+}
+
 pub fn ouverture_parts(p: &Projet, o: &Ouverture) -> Result<Vec<(super::famille::Role, Vec<Tri>)>, String> {
     use super::famille::Role;
+    if let Some(f) = famille_modelee(p, o) {
+        let mut parts: Vec<(Role, Vec<Tri>)> = Vec::new();
+        for (tris, b) in boites_famille(p, o, f)?.into_iter().filter(|(_, b)| !b.vide) {
+            let role = b.materiau.role();
+            match parts.iter_mut().find(|(r, _)| *r == role) {
+                Some((_, t)) => t.extend(tris),
+                None => parts.push((role, tris)),
+            }
+        }
+        return Ok(parts);
+    }
     let famille = o.type_ouverture.as_ref().and_then(|t| p.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.famille.as_ref());
     match famille {
         Some(f) if o.representation.is_none() && o.genre == GenreOuverture::Fenetre => {

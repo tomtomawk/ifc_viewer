@@ -189,7 +189,7 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
                 .entry(i.type_id)
                 .or_insert_with(|| {
                     let id = ident("type_ouverture", i.type_id);
-                    c.projet.types_ouvertures.push(TypeOuverture { id: id.clone(), nom: nom_type(i.type_id), genre, largeur: l, hauteur: h, famille: None, origine: origine(i.type_id, "FamilySymbol") });
+                    c.projet.types_ouvertures.push(TypeOuverture { id: id.clone(), nom: nom_type(i.type_id), genre, largeur: l, hauteur: h, famille: None, modele: None, origine: origine(i.type_id, "FamilySymbol") });
                     id
                 })
                 .clone()

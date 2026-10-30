@@ -2,9 +2,9 @@
 //! imposte, soubassement, vitrage et appui, définis par quelques cotes. La géométrie est
 //! une liste de boîtes dans le repère de la baie : x le long du mur (milieu de la baie
 //! en 0), y à travers le mur (extérieur positif, axe du mur en 0), z depuis le bas de la
-//! baie. Les symboles d'élévation suivent l'usage français : la pointe du triangle
-//! indique le côté des paumelles.
-use glam::{DVec2, DVec3};
+//! baie. Remplacée par la famille modélisée (`famille_modelee`) ; conservée pour les
+//! types qui la portent encore.
+use glam::DVec3;
 use serde::{Deserialize, Serialize};
 
 /// Fonctionnement d'un vantail, vu de l'intérieur.
@@ -22,30 +22,8 @@ pub enum Vantail {
 }
 
 impl Vantail {
-    pub const TOUS: [Vantail; 6] = [Self::Fixe, Self::BattantGauche, Self::BattantDroite, Self::OscilloBattantGauche, Self::OscilloBattantDroite, Self::Coulissant];
-
-    pub fn nom(self) -> &'static str {
-        match self {
-            Self::Fixe => "Fixe",
-            Self::BattantGauche => "Battant, paumelles à gauche",
-            Self::BattantDroite => "Battant, paumelles à droite",
-            Self::OscilloBattantGauche => "Oscillo-battant, paumelles à gauche",
-            Self::OscilloBattantDroite => "Oscillo-battant, paumelles à droite",
-            Self::Coulissant => "Coulissant",
-        }
-    }
-
     pub fn ouvrant(self) -> bool {
         self != Self::Fixe
-    }
-
-    /// Côté des paumelles : -1 gauche, 1 droite, 0 sans.
-    fn paumelles(self) -> f64 {
-        match self {
-            Self::BattantGauche | Self::OscilloBattantGauche => -1.0,
-            Self::BattantDroite | Self::OscilloBattantDroite => 1.0,
-            _ => 0.0,
-        }
     }
 }
 
@@ -56,18 +34,6 @@ pub enum Nu {
     Exterieur,
     Milieu,
     Interieur,
-}
-
-impl Nu {
-    pub const TOUS: [Nu; 3] = [Self::Exterieur, Self::Milieu, Self::Interieur];
-
-    pub fn nom(self) -> &'static str {
-        match self {
-            Self::Exterieur => "Nu extérieur",
-            Self::Milieu => "Milieu du mur",
-            Self::Interieur => "Nu intérieur",
-        }
-    }
 }
 
 /// Paramètres d'une fenêtre (mm, couleur RVB).
@@ -252,58 +218,6 @@ impl FamilleFenetre {
         }
         v
     }
-
-    /// Symboles d'ouverture en élévation intérieure (x, z) : triangle pointé vers les
-    /// paumelles, second triangle pointé vers le bas pour l'oscillo-battant, flèche
-    /// pour le coulissant.
-    pub fn symboles(&self, largeur: f64, hauteur: f64) -> Vec<[DVec2; 2]> {
-        let mut s = Vec::new();
-        for c in self.cases(largeur, hauteur).iter().take(self.vantaux.len()) {
-            let ([x0, x1], [z0, z1]) = (c.x, c.z);
-            let zm = (z0 + z1) / 2.0;
-            let p = c.vantail.paumelles();
-            if p != 0.0 {
-                let (charniere, oppose) = if p < 0.0 { (x0, x1) } else { (x1, x0) };
-                s.push([DVec2::new(charniere, zm), DVec2::new(oppose, z0)]);
-                s.push([DVec2::new(charniere, zm), DVec2::new(oppose, z1)]);
-            }
-            if matches!(c.vantail, Vantail::OscilloBattantGauche | Vantail::OscilloBattantDroite) {
-                let xm = (x0 + x1) / 2.0;
-                s.push([DVec2::new(xm, z0), DVec2::new(x0, z1)]);
-                s.push([DVec2::new(xm, z0), DVec2::new(x1, z1)]);
-            }
-            if c.vantail == Vantail::Coulissant {
-                let (a, b) = (DVec2::new(x0 + (x1 - x0) * 0.2, zm), DVec2::new(x1 - (x1 - x0) * 0.2, zm));
-                let t = (x1 - x0) * 0.08;
-                s.push([a, b]);
-                s.push([b, b + DVec2::new(-t, t)]);
-                s.push([b, b + DVec2::new(-t, -t)]);
-            }
-        }
-        s
-    }
-
-    /// Débattements en plan (repère de la baie, y extérieur positif) : vantail ouvert à
-    /// 90° vers l'intérieur et arc de rotation, par vantail battant.
-    pub fn debattements(&self, largeur: f64, hauteur: f64, e: f64) -> Vec<Vec<DVec2>> {
-        let y = self.centre(e) - self.profondeur.min(e) * 0.4;
-        let mut v = Vec::new();
-        for c in self.cases(largeur, hauteur).iter().take(self.vantaux.len()) {
-            let p = c.vantail.paumelles();
-            if p == 0.0 {
-                continue;
-            }
-            let (charniere, oppose) = if p < 0.0 { (c.x[0], c.x[1]) } else { (c.x[1], c.x[0]) };
-            let r = (oppose - charniere).abs();
-            let pivot = DVec2::new(charniere, y);
-            v.push(vec![pivot, pivot - DVec2::Y * r]);
-            v.push((0..=16).map(|k| {
-                let a = std::f64::consts::FRAC_PI_2 * k as f64 / 16.0;
-                pivot + DVec2::new((oppose - charniere).signum() * r * a.cos(), -r * a.sin())
-            }).collect());
-        }
-        v
-    }
 }
 
 #[cfg(test)]
@@ -311,7 +225,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pieces_cases_et_symboles() {
+    fn pieces_et_cases() {
         let f = FamilleFenetre { imposte: 400.0, soubassement: 300.0, ..Default::default() };
         f.valider(1200.0, 2150.0).unwrap();
         let cases = f.cases(1200.0, 2150.0);
@@ -325,11 +239,6 @@ mod tests {
         // au nu extérieur, le dormant affleure la face extérieure
         let dormant = pieces.iter().find(|b| b.role == Role::Dormant).unwrap();
         assert!((dormant.max.y - 150.0).abs() < 1e-9);
-        // chaque battant a son triangle, pointé vers ses paumelles
-        let s = f.symboles(1200.0, 2150.0);
-        assert_eq!(s.len(), 4);
-        assert!((s[0][0].x - cases[0].x[0]).abs() < 1e-9);
-        assert_eq!(f.debattements(1200.0, 2150.0, 300.0).len(), 4);
         // un fixe entre deux battants crée des meneaux
         let g = FamilleFenetre { vantaux: vec![Vantail::BattantGauche, Vantail::Fixe, Vantail::BattantDroite], ..Default::default() };
         let c = g.cases(1800.0, 1350.0);

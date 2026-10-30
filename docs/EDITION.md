@@ -64,19 +64,31 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   et haut des murs (attache à une toiture, priorité d'une couche aux croisements),
   mise à jour depuis le type, trémie ou contour rectangulaire d'un élément
   horizontal. Modifier un contour réinitialise ses pentes par arête.
-- **Éditeur de famille (prototype, fenêtres)** : une fenêtre sélectionnée propose
-  « Éditer la famille… » dans la barre d'options. Paramètres : dimensions de la baie,
-  dormant (largeur vue, profondeur, nu extérieur / milieu / intérieur et retrait),
-  1 à 6 vantaux (fixe, battant ou oscillo-battant à paumelles gauche ou droite,
-  coulissant ; meneau automatique à côté d'un fixe), largeur des ouvrants,
-  soubassement plein, imposte fixe, épaisseur du vitrage, débord de l'appui, couleur.
-  Élévation intérieure (triangles pointés vers les paumelles, oscillo, flèche du
-  coulissant) et plan en coupe (débattements) suivent chaque réglage ; rien n'est écrit
-  avant « Enregistrer le type » (le type et toutes ses fenêtres) ou « Nouveau type »
-  (affecté à la fenêtre, dont la menuiserie importée est alors remplacée). En 3D :
-  vitrage transparent, menuiserie de la couleur choisie, appui minéral. Limites :
-  fenêtres seulement, vantaux de largeurs égales, pas encore de symbole d'ouverture
-  dans les vues en plan du projet ni de choix de type au placement.
+- **Éditeur de familles (fenêtres, à la manière de Revit)** : « Éditer la famille… »
+  (barre d'options d'une fenêtre sélectionnée) ou, au placement, « Éditer la
+  famille… » / « Nouvelle famille… » sous le sélecteur de type de Propriétés. La
+  famille vit dans un mur générique : plans de référence sur trois axes (largeur,
+  épaisseur, hauteur ; « Centre » et « Bas » fixes, « Extérieur » et « Intérieur »
+  suivent les faces du mur hôte), paramètres à formules (`Largeur / 2 - Dormant` ;
+  `Largeur` et `Hauteur` sont les cotes du type, `Epaisseur` celle du mur),
+  contraintes de distance (cote libellée par un paramètre ou une formule) et
+  d'égalité (EQ), volumes pleins (menuiserie, vitrage, panneau, appui) et vides
+  dont chaque face est verrouillée sur un plan avec un décalage. Les contraintes
+  sont résolues axe par axe, par priorité décroissante (0 à 9 ; à égalité, la plus
+  ancienne) : une contrainte incompatible avec les précédentes est écartée et
+  signalée en rouge ; un plan non contraint garde sa position dessinée. Vues
+  élévation intérieure, plan et coupe ; outils Sélection (glisser un plan libre),
+  Plan |, Plan —, Volume et Vide (rectangle glissé, faces accrochées aux plans les
+  plus proches), Cote et EQ (cliquer les plans). Les valeurs d'essai font fléchir la
+  famille ; « Enregistrer le type » met à jour le type et ses fenêtres, « Nouveau
+  type » l'affecte à la fenêtre (ou au prochain placement). Dans la maquette, les
+  volumes pleins forment la menuiserie et les vides percent le mur à la place de la
+  baie rectangulaire. Gabarit Fenêtre : baie (vide), dormant, vitrage, appui.
+  Limites : extrusions rectangulaires, murs droits, pas encore de symboles 2D ni de
+  paramètres d'occurrence.
+- **Choix du type au placement** : l'outil Ouverture affiche en tête de Propriétés
+  le type à placer (générique : cotes du ruban) ; un type impose ses cotes, son nom
+  et sa famille.
 - **Annuler / Rétablir**, Ctrl+Z et Ctrl+Maj+Z, ont un historique propre à chaque
   document. Les flèches après Sortie annulent ou rétablissent une étape ; leurs
   flèches donnent accès à la liste pour remonter ou rétablir plusieurs étapes.

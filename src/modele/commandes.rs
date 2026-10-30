@@ -290,6 +290,10 @@ impl Projet {
                 allege,
             } => {
                 let (axe, _, _) = solides::hote(self, &mur)?;
+                // un type impose ses cotes
+                let type_choisi = type_ouverture.as_ref().map(|t| self.types_ouvertures.iter().find(|x| &x.id == t).ok_or("Type d'ouverture absent.")).transpose()?;
+                let (largeur, hauteur) = type_choisi.map_or((largeur, hauteur), |t| (t.largeur, t.hauteur));
+                let nom_type = type_choisi.map(|t| t.nom.clone());
                 if ![abscisse, largeur, hauteur, allege]
                     .iter()
                     .all(|x| x.is_finite())
@@ -301,12 +305,12 @@ impl Projet {
                     return Err("L’ouverture doit tenir dans la longueur du mur, avec des dimensions positives.".into());
                 }
                 let id = identite(self, "ouverture");
-                let nom = match genre {
+                let nom = nom_type.unwrap_or_else(|| match genre {
                     GenreOuverture::Porte => "Porte",
                     GenreOuverture::Fenetre => "Fenêtre",
                     GenreOuverture::Libre => "Ouverture libre",
                 }
-                .into();
+                .into());
                 self.ouvertures.push(Ouverture {
                     id: id.clone(),
                     nom,
