@@ -441,6 +441,10 @@ pub struct ViewerApp {
     famille: Option<famille_ui::EditeurFamille>,
     /// Onglet de l'éditeur de familles au premier plan.
     famille_active: bool,
+    /// Action des panneaux de l'éditeur de familles, traitée après leur tracé.
+    action_famille: Option<famille_ui::ActionFamille>,
+    /// Fermeture de l'onglet Famille à confirmer (modifications non chargées).
+    confirmer_famille: bool,
     natif: Option<(crate::modele::Projet, PathBuf)>,
     historique: crate::modele::historique::Historique,
     natif_modifie: bool,
@@ -624,6 +628,8 @@ impl ViewerApp {
             dessin2d: Default::default(),
             famille: None,
             famille_active: false,
+            action_famille: None,
+            confirmer_famille: false,
             arete_alignement: None,
             aretes_objet: None,
             positions_plan: Vec::new(),
@@ -3479,6 +3485,14 @@ impl ViewerApp {
 
     /// Contenu d'un panneau déplaçable.
     fn panneau(&mut self, ui: &mut egui::Ui, p: Panneau) {
+        // onglet Famille : les panneaux montrent la famille
+        if self.famille_active && self.famille.is_some() {
+            match p {
+                Panneau::Proprietes => self.proprietes_famille(ui),
+                Panneau::Arborescence => self.arborescence_famille(ui),
+            }
+            return;
+        }
         match p {
             Panneau::Proprietes => self.right_panel(ui),
             Panneau::Arborescence => self.left_panel(ui),
@@ -4184,7 +4198,35 @@ impl ViewerApp {
                 par_cat.entry(f.categorie.as_str()).or_default().push(f);
             }
         }
+        // projet natif : portes et fenêtres (familles modélisées), à ouvrir dans l'éditeur
+        let familles_natives = if self.natif.is_some() { Some(self.familles_projet()) } else { None };
+        let mut ouvrir_famille: Option<(Option<String>, crate::modele::GenreOuverture)> = None;
+        let mut charger_famille = false;
         rubrique_nav(ui, LeftTab::Familles, "Familles".into(), false, &mut |ui| {
+            if let Some(familles) = &familles_natives {
+                use crate::modele::GenreOuverture as G;
+                for (genre, titre) in [(G::Porte, "Portes"), (G::Fenetre, "Fenêtres")] {
+                    let liste: Vec<_> = familles.iter().filter(|f| f.2 == genre && garde(&f.1)).collect();
+                    egui::CollapsingHeader::new(format!("{titre} ({})", liste.len())).id_salt(("nav-ouvertures", titre)).open(ouvert.then_some(true)).show(ui, |ui| {
+                        for (id, nom, g) in liste {
+                            if ui.selectable_label(false, nom).on_hover_text("Clic : ouvrir la famille dans l'éditeur").clicked() {
+                                ouvrir_famille = Some((Some(id.clone()), *g));
+                            }
+                        }
+                    });
+                }
+                ui.horizontal_wrapped(|ui| {
+                    if ui.small_button("Nouvelle porte…").clicked() {
+                        ouvrir_famille = Some((None, G::Porte));
+                    }
+                    if ui.small_button("Nouvelle fenêtre…").clicked() {
+                        ouvrir_famille = Some((None, G::Fenetre));
+                    }
+                    if ui.small_button("Charger une famille…").on_hover_text("Fichier .famille.json : un nouveau type dans le projet").clicked() {
+                        charger_famille = true;
+                    }
+                });
+            }
             for (&cat, fams) in &par_cat {
                 egui::CollapsingHeader::new(cat).id_salt(("nav-cat", cat)).open(ouvert.then_some(true)).show(ui, |ui| {
                     for f in fams.iter() {
@@ -4221,6 +4263,22 @@ impl ViewerApp {
         }
         if let Some((jeu, f)) = ouvrir_jeu {
             self.ouvrir_jeu(&jeu, f);
+        }
+        if let Some((t, genre)) = ouvrir_famille {
+            if self.famille.as_ref().is_some_and(|e| e.modifiee()) {
+                // ne pas perdre la famille en cours : la montrer
+                self.famille_active = true;
+                self.status = "Famille en cours modifiée : la charger dans le projet ou fermer son onglet avant d'en ouvrir une autre.".into();
+            } else {
+                self.ouvrir_editeur_famille_type(t, genre);
+            }
+        }
+        if charger_famille {
+            if let Some(c) = rfd::FileDialog::new().add_filter("Famille", &["json"]).pick_file() {
+                if let Err(e) = self.charger_famille_fichier(&c) {
+                    self.error = Some(e);
+                }
+            }
         }
         if let Some((id, jeu, avant)) = deplacer {
             self.deplacer_feuille(&id, &jeu, avant.as_deref());
@@ -4450,7 +4508,7 @@ impl ViewerApp {
             }
         }
         if fermer.is_some_and(|o| o.0 == ONGLET_FAMILLE) {
-            self.fermer_famille();
+            self.demander_fermeture_famille();
         }
         if let Some((id, cible)) = fermer.filter(|o| o.0 != ONGLET_FAMILLE) {
             let precedent = self.document_actif;
@@ -6271,6 +6329,16 @@ impl ViewerApp {
         use pilote::{erreur, liste, objet, succes, texte};
         match commande {
             "etat" => self.etat(),
+            // famille_enregistrer|famille_ouvrir|famille_charger <chemin> : fichier de famille
+            "famille_enregistrer" | "famille_ouvrir" | "famille_charger" => {
+                let chemin = std::path::Path::new(argument.trim());
+                let r = match commande {
+                    "famille_enregistrer" => self.enregistrer_famille_fichier(chemin).map(|_| String::new()),
+                    "famille_ouvrir" => self.ouvrir_famille_fichier(chemin).map(|_| String::new()),
+                    _ => self.charger_famille_fichier(chemin),
+                };
+                match r { Ok(id) => succes(&[("id", texte(&id))]), Err(e) => erreur(&e) }
+            }
             "editer" => {
                 let resultat=serde_json::from_str::<crate::modele::commandes::Commande>(argument).map_err(|e|e.to_string()).and_then(|c|self.executer_bim(c));
                 match resultat { Ok(ids)=>succes(&[("ids",serde_json::to_string(&ids).unwrap())]), Err(e)=>erreur(&e) }
@@ -7121,7 +7189,13 @@ impl eframe::App for ViewerApp {
             self.creer_projet();
         }
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
-            self.enregistrer_projet(&ctx);
+            // onglet Famille : charger la famille dans le projet
+            if self.famille_active && self.famille.is_some() {
+                let nouveau = self.famille.as_ref().is_some_and(|e| e.nouvelle());
+                self.action_famille = Some(famille_ui::ActionFamille::Charger(nouveau));
+            } else {
+                self.enregistrer_projet(&ctx);
+            }
         }
 
         egui::Panel::top("top").show(ui, |ui| self.top_bar(ui));
@@ -7138,7 +7212,7 @@ impl eframe::App for ViewerApp {
             let ancrages = self.ancrages;
             // onglet Famille : l'éditeur a ses propres panneaux, ceux du projet se retirent
             let famille = self.famille_active && self.famille.is_some();
-            for p in Panneau::TOUS.into_iter().filter(|_| !famille) {
+            for p in Panneau::TOUS {
                 let id = egui::IdSalt::new((p.nom(), ancrages[p as usize].nom()));
                 let panneau = match ancrages[p as usize] {
                     Ancrage::Gauche => egui::Panel::left(id),
@@ -7168,7 +7242,7 @@ impl eframe::App for ViewerApp {
                     self.viewport(ui);
                 }
             });
-            for p in Panneau::TOUS.into_iter().filter(|p| !famille && ancrages[*p as usize] == Ancrage::Flottant) {
+            for p in Panneau::TOUS.into_iter().filter(|p| ancrages[*p as usize] == Ancrage::Flottant) {
                 let i = p as usize;
                 let mut fenetre = egui::Window::new(p.nom()).id(egui::Id::unique(("flottant", p.nom()))).title_bar(false).movable(false).resizable(true).default_size([self.largeurs_panneaux[i], 520.0]).min_width(220.0);
                 if let Some(q) = self.pos_imposee[i].take() {
@@ -7196,6 +7270,8 @@ impl eframe::App for ViewerApp {
             peintre.rect_filled(cadre, 4.0, Color32::from_rgb(0, 120, 215));
             peintre.galley(cadre.min + egui::vec2(6.0, 3.0), texte, Color32::WHITE);
         }
+        self.traiter_action_famille();
+        self.confirmation_famille(&ctx);
         self.unsupported_window(&ctx);
         self.confirmation_modifications(&ctx);
         self.apercu_ancrage(&ctx);

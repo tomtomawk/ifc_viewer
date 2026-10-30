@@ -80,6 +80,15 @@ enum SelectionFamille {
     Symbole(usize),
 }
 
+/// Action demandée depuis les panneaux de l'éditeur, traitée après leur tracé.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum ActionFamille {
+    /// Charger dans le projet : le type édité (false) ou un nouveau type (true).
+    Charger(bool),
+    EnregistrerSous,
+    Ouvrir,
+}
+
 pub(super) struct EditeurFamille {
     /// Fenêtre d'où l'éditeur a été ouvert : elle prend le type enregistré.
     ouverture: Option<String>,
@@ -106,6 +115,9 @@ pub(super) struct EditeurFamille {
     /// Matériaux du projet (nom, couleur) : valeurs des paramètres matériau.
     materiaux_projet: Vec<(String, [u8; 3])>,
     poignee: Option<Poignee>,
+    /// État chargé dans le projet ou enregistré (nom, cotes, famille) : modifiée s'il
+    /// diffère.
+    reference: (String, f64, f64, FamilleModelee),
     message: Option<String>,
     erreur: Option<String>,
 }
@@ -143,6 +155,30 @@ fn nom_libre(existants: impl Fn(&str) -> bool, base: &str) -> String {
 }
 
 impl EditeurFamille {
+    /// Modifiée depuis le dernier chargement dans le projet ou enregistrement.
+    /// Pas encore de type dans le projet.
+    pub(super) fn nouvelle(&self) -> bool {
+        self.type_id.is_none()
+    }
+
+    pub(super) fn modifiee(&self) -> bool {
+        self.type_id.is_none() || self.reference != (self.nom.clone(), self.largeur, self.hauteur, self.famille.clone())
+    }
+
+    fn marquer_enregistree(&mut self) {
+        self.reference = (self.nom.clone(), self.largeur, self.hauteur, self.famille.clone());
+    }
+
+    fn fichier(&self) -> crate::modele::famille_modelee::FichierFamille {
+        crate::modele::famille_modelee::FichierFamille {
+            format: crate::modele::famille_modelee::FORMAT_FAMILLE.into(),
+            nom: self.nom.trim().into(),
+            largeur: self.largeur,
+            hauteur: self.hauteur,
+            famille: self.famille.clone(),
+        }
+    }
+
     fn resoudre(&self) -> Resolution {
         self.famille.resoudre_occurrence(self.largeur, self.hauteur, self.epaisseur, &self.partages, &BTreeMap::new())
     }
@@ -271,6 +307,7 @@ impl ViewerApp {
             partages,
             materiaux_projet,
             poignee: None,
+            reference: (String::new(), 0.0, 0.0, FamilleModelee::gabarit_fenetre()),
             vue: VueFamille::Elevation,
             outil: OutilFamille::Selection,
             selection: SelectionFamille::Aucune,
@@ -280,6 +317,9 @@ impl ViewerApp {
             message: None,
             erreur: None,
         });
+        if let Some(ed) = self.famille.as_mut() {
+            ed.marquer_enregistree();
+        }
     }
 
     /// Enregistre la famille dans son type (ou un nouveau type) ; les fenêtres du type
@@ -309,9 +349,16 @@ impl ViewerApp {
                     }
                     k += 1;
                 };
+                // nom unique parmi les types du projet
+                let base = ed.nom.trim().to_string();
+                let (mut nom, mut j) = (base.clone(), 2);
+                while q.types_ouvertures.iter().any(|t| t.nom == nom) {
+                    nom = format!("{base} ({j})");
+                    j += 1;
+                }
                 q.types_ouvertures.push(crate::modele::TypeOuverture {
                     id: id.clone(),
-                    nom: ed.nom.trim().into(),
+                    nom,
                     genre: ed.famille.genre,
                     largeur: ed.largeur,
                     hauteur: ed.hauteur,
@@ -338,8 +385,9 @@ impl ViewerApp {
         self.appliquer_projet(q)?;
         if let Some(ed) = self.famille.as_mut() {
             ed.type_id = Some(id.clone());
+            ed.marquer_enregistree();
         }
-        self.status = "Famille chargée dans le projet — Ctrl+S pour enregistrer.".into();
+        self.status = "Famille chargée dans le projet — Ctrl+S (hors de la famille) pour enregistrer le projet.".into();
         Ok(id)
     }
 
@@ -348,7 +396,7 @@ impl ViewerApp {
     pub(super) fn titre_famille(&self) -> Option<String> {
         let ed = self.famille.as_ref()?;
         let genre = if ed.famille.genre == GenreOuverture::Porte { "Porte" } else { "Fenêtre" };
-        Some(format!("Famille {genre} : {}", ed.nom))
+        Some(format!("Famille {genre} : {}{}", ed.nom, if ed.modifiee() { " *" } else { "" }))
     }
 
     /// Ferme l'onglet de l'éditeur de familles (la famille non enregistrée est perdue).
@@ -357,60 +405,276 @@ impl ViewerApp {
         self.famille_active = false;
     }
 
-    /// Éditeur de familles dans la zone centrale (onglet « Famille ») : barre d'outils,
-    /// paramètres et contraintes à gauche, vue de travail à droite.
+    /// Vue centrale de l'onglet « Famille » : barre d'outils et vue de travail.
     pub(super) fn vue_famille(&mut self, ui: &mut egui::Ui) {
-        if self.famille.is_none() {
-            return;
-        }
-        let mut action: Option<bool> = None;
-        let placement = self.famille.as_ref().is_some_and(|e| e.ouverture.is_none());
+        let Some(ed) = self.famille.as_mut() else { return };
         egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(6.0).show(ui, |ui| {
             ui.set_min_size(ui.available_size());
-            let ed = self.famille.as_mut().unwrap();
             barre_outils(ui, ed);
             ui.separator();
-            ui.horizontal_top(|ui| {
-                ui.vertical(|ui| {
-                    ui.set_width(360.0);
-                    egui::ScrollArea::vertical().id_salt("famille_panneau").max_height((ui.available_height() - 70.0).max(200.0)).show(ui, |ui| panneau(ui, ed));
-                    ui.separator();
-                    let r = ed.resoudre();
-                    match (&ed.erreur, r.erreurs.first(), r.conflits.len()) {
-                        (Some(e), _, _) | (None, Some(e), _) => {
-                            ui.colored_label(Color32::from_rgb(200, 40, 40), e);
-                        }
-                        (None, None, n) if n > 0 => {
-                            ui.colored_label(Color32::from_rgb(200, 120, 20), format!("{n} contrainte(s) écartée(s) : priorité inférieure en conflit."));
-                        }
-                        _ => {
-                            ui.label(RichText::new("Contraintes satisfaites.").weak());
-                        }
+            canevas(ui, ed);
+        });
+    }
+
+    /// Panneau Propriétés dans l'onglet « Famille » : type, paramètres, contraintes,
+    /// plans, volumes, extrusions, symboles ; état des contraintes ; chargement dans le
+    /// projet et fichier.
+    pub(super) fn proprietes_famille(&mut self, ui: &mut egui::Ui) {
+        self.entete_panneau(ui, Panneau::Proprietes, "Propriétés de la famille");
+        let placement = self.famille.as_ref().is_some_and(|e| e.ouverture.is_none());
+        let mut action = None;
+        let Some(ed) = self.famille.as_mut() else { return };
+        let bas = 96.0;
+        egui::ScrollArea::vertical().id_salt("famille_panneau").max_height((ui.available_height() - bas).max(160.0)).show(ui, |ui| panneau(ui, ed));
+        ui.separator();
+        let r = ed.resoudre();
+        match (&ed.erreur, r.erreurs.first(), r.conflits.len()) {
+            (Some(e), _, _) | (None, Some(e), _) => {
+                ui.colored_label(Color32::from_rgb(200, 40, 40), e);
+            }
+            (None, None, n) if n > 0 => {
+                ui.colored_label(Color32::from_rgb(200, 120, 20), format!("{n} contrainte(s) écartée(s) : priorité inférieure en conflit."));
+            }
+            _ => {
+                ui.label(RichText::new("Contraintes satisfaites.").weak());
+            }
+        }
+        ui.horizontal_wrapped(|ui| {
+            if ui.add_enabled(ed.type_id.is_some(), egui::Button::new("Charger dans le projet")).on_hover_text("Met à jour le type et toutes ses ouvertures (Ctrl+S dans l'onglet)").clicked() {
+                action = Some(ActionFamille::Charger(false));
+            }
+            let aide = if placement { "Crée un type avec cette famille ; il sert au prochain placement" } else { "Crée un type avec cette famille et l'affecte à l'ouverture" };
+            if ui.button("Nouveau type").on_hover_text(aide).clicked() {
+                action = Some(ActionFamille::Charger(true));
+            }
+            if ui.button("Enregistrer sous…").on_hover_text("Fichier de famille .famille.json, à charger dans un autre projet").clicked() {
+                action = Some(ActionFamille::EnregistrerSous);
+            }
+            if ui.button("Ouvrir…").on_hover_text("Ouvrir un fichier de famille dans l'éditeur").clicked() {
+                action = Some(ActionFamille::Ouvrir);
+            }
+        });
+        if action.is_some() {
+            self.action_famille = action;
+        }
+    }
+
+    /// Arborescence dans l'onglet « Famille » : vues de la famille (clic : ouvrir),
+    /// paramètres, plans, volumes, extrusions et symboles (clic : sélectionner), puis
+    /// les familles du projet.
+    pub(super) fn arborescence_famille(&mut self, ui: &mut egui::Ui) {
+        let titre = self.titre_famille().unwrap_or_default();
+        self.entete_panneau(ui, Panneau::Arborescence, &format!("Arborescence - {titre}"));
+        let mut ouvrir_type = None;
+        let familles_projet = self.familles_projet();
+        let Some(ed) = self.famille.as_mut() else { return };
+        egui::ScrollArea::vertical().id_salt("famille_arborescence").auto_shrink([false, false]).show(ui, |ui| {
+            egui::CollapsingHeader::new(RichText::new("Vues").strong()).default_open(true).show(ui, |ui| {
+                for v in [VueFamille::Elevation, VueFamille::Plan, VueFamille::Coupe] {
+                    if ui.selectable_label(ed.vue == v, v.nom()).clicked() {
+                        ed.vue = v;
+                        ed.esquisse.clear();
+                        ed.debut = None;
                     }
-                    ui.horizontal(|ui| {
-                        if ui.add_enabled(ed.type_id.is_some(), egui::Button::new("Enregistrer le type")).on_hover_text("Met à jour le type et toutes ses ouvertures").clicked() {
-                            action = Some(false);
-                        }
-                        let aide = if placement { "Crée un type avec cette famille ; il sert au prochain placement" } else { "Crée un type avec cette famille et l'affecte à l'ouverture" };
-                        if ui.button("Nouveau type").on_hover_text(aide).clicked() {
-                            action = Some(true);
-                        }
-                    });
-                });
-                ui.separator();
-                ui.vertical(|ui| canevas(ui, ed));
+                }
+            });
+            egui::CollapsingHeader::new(RichText::new(format!("Paramètres ({})", ed.famille.parametres.len() + 3)).strong()).default_open(false).show(ui, |ui| {
+                for n in [LARGEUR, HAUTEUR, EPAISSEUR] {
+                    ui.label(RichText::new(format!("{n} (type / hôte)")).weak());
+                }
+                for p in &ed.famille.parametres {
+                    ui.label(format!("{} · {} · {}", p.nom, p.genre.nom(), p.portee.nom()));
+                }
+            });
+            egui::CollapsingHeader::new(RichText::new(format!("Plans de référence ({})", ed.famille.plans.len())).strong()).default_open(false).show(ui, |ui| {
+                for p in &ed.famille.plans {
+                    if ui.selectable_label(ed.selection == SelectionFamille::Plan(p.nom.clone()), format!("{} · {}", p.nom, p.axe.nom())).clicked() {
+                        ed.selection = SelectionFamille::Plan(p.nom.clone());
+                    }
+                }
+            });
+            egui::CollapsingHeader::new(RichText::new(format!("Volumes ({})", ed.famille.volumes.len())).strong()).default_open(true).show(ui, |ui| {
+                for (k, v) in ed.famille.volumes.iter().enumerate() {
+                    let texte = if v.vide { format!("{} (vide)", v.nom) } else { v.nom.clone() };
+                    if ui.selectable_label(ed.selection == SelectionFamille::Volume(k), texte).clicked() {
+                        ed.selection = SelectionFamille::Volume(k);
+                    }
+                }
+            });
+            egui::CollapsingHeader::new(RichText::new(format!("Extrusions ({})", ed.famille.extrusions.len())).strong()).default_open(true).show(ui, |ui| {
+                for (k, e) in ed.famille.extrusions.iter().enumerate() {
+                    let texte = if e.vide { format!("{} (vide)", e.nom) } else { e.nom.clone() };
+                    if ui.selectable_label(ed.selection == SelectionFamille::Extrusion(k), texte).clicked() {
+                        ed.selection = SelectionFamille::Extrusion(k);
+                        // la vue de son esquisse, pour ses poignées
+                        ed.vue = match e.vue {
+                            VueEsquisse::Elevation => VueFamille::Elevation,
+                            VueEsquisse::Plan => VueFamille::Plan,
+                            VueEsquisse::Coupe => VueFamille::Coupe,
+                        };
+                    }
+                }
+            });
+            egui::CollapsingHeader::new(RichText::new(format!("Symboles 2D ({})", ed.famille.symboles.len())).strong()).default_open(false).show(ui, |ui| {
+                for (k, sy) in ed.famille.symboles.iter().enumerate() {
+                    let texte = format!("{} {} · {}", if sy.arc { "Arc" } else { "Ligne" }, k + 1, match sy.vue { VueEsquisse::Plan => "plan", VueEsquisse::Elevation => "élévation", VueEsquisse::Coupe => "coupe" });
+                    if ui.selectable_label(ed.selection == SelectionFamille::Symbole(k), texte).clicked() {
+                        ed.selection = SelectionFamille::Symbole(k);
+                    }
+                }
+            });
+            ui.separator();
+            egui::CollapsingHeader::new(RichText::new("Familles du projet").strong()).default_open(true).show(ui, |ui| {
+                for (id, nom, genre) in &familles_projet {
+                    let courant = ed.type_id.as_ref() == Some(id);
+                    if ui.selectable_label(courant, format!("{nom} · {}", if *genre == GenreOuverture::Porte { "porte" } else { "fenêtre" })).on_hover_text("Ouvrir cette famille").clicked() && !courant {
+                        ouvrir_type = Some((id.clone(), *genre));
+                    }
+                }
             });
         });
-        if let Some(nouveau) = action {
-            let r = self.enregistrer_famille(nouveau);
-            if let Ok(id) = &r {
+        if let Some((id, genre)) = ouvrir_type {
+            if self.famille.as_ref().is_some_and(|e| e.modifiee()) {
+                self.status = "Famille en cours modifiée : la charger dans le projet ou fermer son onglet avant d'en ouvrir une autre.".into();
+            } else {
+                self.ouvrir_editeur_famille_type(Some(id), genre);
+            }
+        }
+    }
+
+    /// Portes et fenêtres du projet : (type, nom, catégorie), par catégorie puis nom.
+    pub(super) fn familles_projet(&self) -> Vec<(String, String, GenreOuverture)> {
+        let Some((p, _)) = &self.natif else { return Vec::new() };
+        let mut v: Vec<(String, String, GenreOuverture)> = p.types_ouvertures.iter().filter(|t| t.genre != GenreOuverture::Libre).map(|t| (t.id.clone(), t.nom.clone(), t.genre)).collect();
+        v.sort_by(|a, b| (a.2 != GenreOuverture::Porte, &a.1).cmp(&(b.2 != GenreOuverture::Porte, &b.1)));
+        v
+    }
+
+    /// Enregistre la famille de l'éditeur dans un fichier.
+    pub(super) fn enregistrer_famille_fichier(&mut self, chemin: &std::path::Path) -> Result<(), String> {
+        let ed = self.famille.as_mut().ok_or("Éditeur fermé.")?;
+        ed.famille.valider(ed.largeur, ed.hauteur, ed.epaisseur)?;
+        std::fs::write(chemin, ed.fichier().json()?).map_err(|e| format!("{} : {e}", chemin.display()))?;
+        self.status = format!("Famille enregistrée : {}", chemin.display());
+        Ok(())
+    }
+
+    /// Ouvre un fichier de famille dans l'éditeur (nouveau type, à charger ensuite).
+    pub(super) fn ouvrir_famille_fichier(&mut self, chemin: &std::path::Path) -> Result<(), String> {
+        let texte = std::fs::read_to_string(chemin).map_err(|e| format!("{} : {e}", chemin.display()))?;
+        let f = crate::modele::famille_modelee::FichierFamille::lire(&texte)?;
+        self.editeur_famille(None, None, f.largeur, f.hauteur, 300.0, f.famille.genre);
+        let ed = self.famille.as_mut().ok_or("Aucun projet natif.")?;
+        (ed.nom, ed.famille) = (f.nom, f.famille);
+        // ouverte depuis un fichier : pas encore dans le projet
+        ed.reference.0.clear();
+        Ok(())
+    }
+
+    /// Charge un fichier de famille dans le projet : un nouveau type (nom rendu unique).
+    pub(super) fn charger_famille_fichier(&mut self, chemin: &std::path::Path) -> Result<String, String> {
+        let texte = std::fs::read_to_string(chemin).map_err(|e| format!("{} : {e}", chemin.display()))?;
+        let f = crate::modele::famille_modelee::FichierFamille::lire(&texte)?;
+        let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
+        let mut q = p.clone();
+        let mut nom = f.nom.clone();
+        let mut k = 2;
+        while q.types_ouvertures.iter().any(|t| t.nom == nom) {
+            nom = format!("{} ({k})", f.nom);
+            k += 1;
+        }
+        let mut n = q.types_ouvertures.len() + 1;
+        let id = loop {
+            let id = crate::modele::identifiant("type-ouverture", &format!("famille-{n}"));
+            if q.types_ouvertures.iter().all(|t| t.id != id) {
+                break id;
+            }
+            n += 1;
+        };
+        q.types_ouvertures.push(crate::modele::TypeOuverture { id: id.clone(), nom: nom.clone(), genre: f.famille.genre, largeur: f.largeur, hauteur: f.hauteur, famille: None, modele: Some(f.famille), origine: None });
+        self.appliquer_projet(q)?;
+        self.status = format!("Famille « {nom} » chargée dans le projet.");
+        Ok(id)
+    }
+
+    /// Traite l'action demandée dans les panneaux de l'éditeur (après leur tracé).
+    pub(super) fn traiter_action_famille(&mut self) {
+        let Some(action) = self.action_famille.take() else { return };
+        let placement = self.famille.as_ref().is_some_and(|e| e.ouverture.is_none());
+        let r = match action {
+            ActionFamille::Charger(nouveau) => self.enregistrer_famille(nouveau).map(|id| {
                 if placement {
-                    self.ruban_edition.ouverture_type_identique = Some(id.clone());
+                    self.ruban_edition.ouverture_type_identique = Some(id);
+                }
+            }),
+            ActionFamille::EnregistrerSous => {
+                let nom = self.famille.as_ref().map_or_else(String::new, |e| e.nom.trim().to_string());
+                match rfd::FileDialog::new().add_filter("Famille", &["json"]).set_file_name(format!("{nom}.famille.json")).save_file() {
+                    Some(c) => self.enregistrer_famille_fichier(&c),
+                    None => Ok(()),
                 }
             }
-            if let Some(ed) = self.famille.as_mut() {
-                ed.erreur = r.err();
+            ActionFamille::Ouvrir => match rfd::FileDialog::new().add_filter("Famille", &["json"]).pick_file() {
+                Some(c) => self.ouvrir_famille_fichier(&c),
+                None => Ok(()),
+            },
+        };
+        if let Some(ed) = self.famille.as_mut() {
+            ed.erreur = r.err();
+        }
+    }
+
+    /// Fermeture de l'onglet : confirmation si la famille n'est pas chargée dans le
+    /// projet.
+    pub(super) fn demander_fermeture_famille(&mut self) {
+        if self.famille.as_ref().is_some_and(|e| e.modifiee()) {
+            self.confirmer_famille = true;
+        } else {
+            self.fermer_famille();
+        }
+    }
+
+    pub(super) fn confirmation_famille(&mut self, ctx: &egui::Context) {
+        if !self.confirmer_famille {
+            return;
+        }
+        let nouveau = self.famille.as_ref().is_some_and(|e| e.type_id.is_none());
+        let mut choix = None;
+        egui::Modal::new(egui::Id::unique("fermer_famille")).show(ctx, |ui| {
+            ui.set_width(380.0);
+            ui.heading("Famille modifiée");
+            ui.label("Les modifications ne sont pas chargées dans le projet.");
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui.button(if nouveau { "Créer le type et fermer" } else { "Charger et fermer" }).clicked() {
+                    choix = Some(0);
+                }
+                if ui.button("Fermer sans charger").clicked() {
+                    choix = Some(1);
+                }
+                if ui.button("Annuler").clicked() {
+                    choix = Some(2);
+                }
+            });
+        });
+        match choix {
+            Some(0) => {
+                self.confirmer_famille = false;
+                match self.enregistrer_famille(nouveau) {
+                    Ok(_) => self.fermer_famille(),
+                    Err(e) => {
+                        if let Some(ed) = self.famille.as_mut() {
+                            ed.erreur = Some(e);
+                        }
+                    }
+                }
             }
+            Some(1) => {
+                self.confirmer_famille = false;
+                self.fermer_famille();
+            }
+            Some(_) => self.confirmer_famille = false,
+            None => {}
         }
     }
 }

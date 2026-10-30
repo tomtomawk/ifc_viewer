@@ -942,9 +942,50 @@ impl FamilleModelee {
     }
 }
 
+/// Fichier de famille (`.famille.json`), à la manière d'un `.rfa` : la famille et les
+/// cotes de son type, à charger dans un autre projet.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct FichierFamille {
+    pub format: String,
+    pub nom: String,
+    pub largeur: f64,
+    pub hauteur: f64,
+    pub famille: FamilleModelee,
+}
+
+pub const FORMAT_FAMILLE: &str = "famille-ouverture 1";
+
+impl FichierFamille {
+    pub fn json(&self) -> Result<String, String> {
+        serde_json::to_string_pretty(self).map_err(|e| e.to_string())
+    }
+
+    /// Lit et contrôle un fichier de famille.
+    pub fn lire(texte: &str) -> Result<FichierFamille, String> {
+        let f: FichierFamille = serde_json::from_str(texte).map_err(|e| format!("Fichier de famille illisible : {e}"))?;
+        if f.format != FORMAT_FAMILLE {
+            return Err(format!("Format de famille inconnu : « {} ».", f.format));
+        }
+        if !(f.largeur > 0.0 && f.hauteur > 0.0 && f.largeur.is_finite() && f.hauteur.is_finite()) {
+            return Err("Cotes du type non valides.".into());
+        }
+        f.famille.valider(f.largeur, f.hauteur, 300.0)?;
+        Ok(f)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fichier_famille_aller_retour() {
+        let f = FichierFamille { format: FORMAT_FAMILLE.into(), nom: "Porte 90".into(), largeur: 900.0, hauteur: 2150.0, famille: FamilleModelee::gabarit_porte() };
+        let relu = FichierFamille::lire(&f.json().unwrap()).unwrap();
+        assert_eq!(relu, f);
+        assert!(FichierFamille::lire(&f.json().unwrap().replace(FORMAT_FAMILLE, "autre")).is_err());
+        assert!(FichierFamille::lire("{}").is_err());
+    }
 
     #[test]
     fn expressions() {

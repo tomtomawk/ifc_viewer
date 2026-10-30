@@ -69,11 +69,18 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   dans l'onglet voulu du sélecteur. Accès : « Éditer la famille… » (barre d'options
   d'une ouverture sélectionnée) ou, au placement, « Éditer la famille… » /
   « Nouvelle famille… » sous le sélecteur de type (gabarit Porte ou Fenêtre selon
-  l'onglet). L'éditeur s'ouvre dans un onglet « Famille … » de la barre des vues :
-  le panneau Propriétés, l'arborescence et la barre de vue se retirent tant qu'il est
-  au premier plan ; un autre onglet ramène aux vues sans perdre la famille en cours,
-  la croix de l'onglet ferme l'éditeur (sans enregistrer). La famille vit dans un
-  mur générique :
+  l'onglet), ou depuis la rubrique Familles de l'arborescence du projet (Portes,
+  Fenêtres : clic pour ouvrir ; « Nouvelle porte… », « Nouvelle fenêtre… »,
+  « Charger une famille… » pour un fichier `.famille.json`). L'éditeur s'ouvre dans
+  un onglet « Famille … » (« * » : modifications non chargées dans le projet) : le
+  panneau Propriétés montre la famille (type, paramètres, contraintes, plans,
+  volumes, extrusions, symboles) et ses commandes (« Charger dans le projet »,
+  « Nouveau type », « Enregistrer sous… » un fichier de famille, « Ouvrir… ») ;
+  l'arborescence montre ses vues (clic : ouvrir), paramètres, plans, volumes,
+  extrusions, symboles (clic : sélectionner) et les familles du projet. Dans
+  l'onglet, Ctrl+S charge la famille dans le projet ; un autre onglet ramène aux
+  vues sans perdre la famille ; fermer l'onglet avec des modifications demande de
+  les charger, de les abandonner ou d'annuler. La famille vit dans un mur générique :
   - plans de référence sur trois axes (largeur, épaisseur, hauteur ; « Centre » et
     « Bas » fixes, « Extérieur » et « Intérieur » suivent les faces du mur hôte) ;
   - paramètres à formules (`Largeur - 2 * Dormant`), de portée **Type** (valeur de
