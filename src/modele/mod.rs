@@ -8,6 +8,7 @@
 //! repère du projet).
 
 pub mod assemblage;
+pub mod famille;
 pub mod solides;
 pub mod historique;
 pub mod commandes;
@@ -515,6 +516,9 @@ pub struct TypeOuverture {
     pub genre: GenreOuverture,
     pub largeur: f64,
     pub hauteur: f64,
+    /// Famille paramétrique (fenêtre) ; absente : menuiserie générique.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub famille: Option<famille::FamilleFenetre>,
     pub origine: Option<Origine>,
 }
 

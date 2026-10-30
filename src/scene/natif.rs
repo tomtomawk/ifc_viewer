@@ -161,9 +161,20 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         let parent = id_natif("niveau", &niveau);
         model.parent.insert(id, parent);
         model.children.entry(parent).or_default().push(id);
-        let tris = crate::modele::solides::ouverture(projet, o)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
-        materiaux_parts.push(vec![None]);
-        geoms.push(ProductGeom { id, parts: vec![Part { color: [0.55,0.40,0.24,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+        // famille : couleur de la menuiserie, vitrage transparent, appui minéral
+        use crate::modele::famille::Role;
+        let menuiserie = o.type_ouverture.as_ref().and_then(|t| projet.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.famille.as_ref())
+            .map_or([0.55, 0.40, 0.24, 1.0], |f| { let [r, g, b] = f.couleur.map(|c| c as f32 / 255.0); [r, g, b, 1.0] });
+        let parts: Vec<Part> = crate::modele::solides::ouverture_parts(projet, o)?.into_iter().map(|(role, tris)| Part {
+            color: match role {
+                Role::Vitrage => [0.62, 0.78, 0.86, 0.35],
+                Role::Appui => [0.78, 0.76, 0.72, 1.0],
+                _ => menuiserie,
+            },
+            tris: tris.into_iter().map(|t| t.map(|v| v * 0.001)).collect(),
+        }).collect();
+        materiaux_parts.push(vec![None; parts.len()]);
+        geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
     for b in &projet.barres {
         let id = id_natif("barre", &b.id);

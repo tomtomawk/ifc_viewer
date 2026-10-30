@@ -69,6 +69,11 @@ impl Projet {
                 }
             }
         }
+        for t in &self.types_ouvertures {
+            if let Some(f) = &t.famille {
+                f.valider(t.largeur, t.hauteur).map_err(|e| format!("{} : {e}", t.nom))?;
+            }
+        }
         for o in &self.ouvertures {
             solides::hote(self, &o.mur)?;
             if ![o.largeur, o.hauteur, o.abscisse, o.allege]

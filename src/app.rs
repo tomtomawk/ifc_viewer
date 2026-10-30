@@ -7,6 +7,7 @@
 mod bim;
 mod feuilles;
 mod dessin2d_ui;
+mod famille_ui;
 use crate::options::Dimensions;
 use crate::camera::{Camera, MAX_PITCH};
 use crate::dessin::{self, Poche};
@@ -436,6 +437,8 @@ pub struct ViewerApp {
     feuilles: feuilles::EtatFeuilles,
     /// Dessin 2D (Documenter) : tracé, saisie, accrochage.
     dessin2d: dessin2d_ui::EtatDessin2D,
+    /// Éditeur de famille de fenêtre ouvert.
+    famille: Option<famille_ui::EditeurFamille>,
     natif: Option<(crate::modele::Projet, PathBuf)>,
     historique: crate::modele::historique::Historique,
     natif_modifie: bool,
@@ -617,6 +620,7 @@ impl ViewerApp {
             nom_vue: None,
             alignement_plan: false,
             dessin2d: Default::default(),
+            famille: None,
             arete_alignement: None,
             aretes_objet: None,
             positions_plan: Vec::new(),
@@ -6958,6 +6962,7 @@ impl eframe::App for ViewerApp {
         self.historique.geste(ctx.input(|i|i.pointer.any_down()));
         self.poll_sauvegarde();
         self.fenetre_documentation(&ctx);
+        self.fenetre_famille(&ctx);
         if !ctx.egui_wants_keyboard_input() {
             if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Z)) { self.parcourir_historique(true); }
             else if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Z)) { self.parcourir_historique(false); }

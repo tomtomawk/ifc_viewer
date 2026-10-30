@@ -408,6 +408,36 @@ pub fn mur(
 }
 
 pub fn ouverture(p: &Projet, o: &Ouverture) -> Result<Vec<Tri>, String> {
+    Ok(ouverture_parts(p, o)?.into_iter().flat_map(|(_, t)| t).collect())
+}
+
+/// Menuiserie d'une ouverture par rôle (dormant, ouvrant, vitrage…) quand son type
+/// porte une famille paramétrique ; sinon une seule part (rôle dormant).
+pub fn ouverture_parts(p: &Projet, o: &Ouverture) -> Result<Vec<(super::famille::Role, Vec<Tri>)>, String> {
+    use super::famille::Role;
+    let famille = o.type_ouverture.as_ref().and_then(|t| p.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.famille.as_ref());
+    match famille {
+        Some(f) if o.representation.is_none() && o.genre == GenreOuverture::Fenetre => {
+            let (axe, e, niveau) = hote(p, &o.mur)?;
+            let z = p.niveau(&niveau).ok_or("Niveau introuvable.")?.altitude + o.allege;
+            let (c, u) = repere(&axe, o.abscisse);
+            let n = u.perp();
+            let mut parts: Vec<(Role, Vec<Tri>)> = Vec::new();
+            for b in f.pieces(o.largeur, o.hauteur, e) {
+                let contour = [(b.min.x, b.min.y), (b.max.x, b.min.y), (b.max.x, b.max.y), (b.min.x, b.max.y)].map(|(x, y)| (c + u * x + n * y).to_array());
+                let tris = prisme(&contour, z + b.min.z, z + b.max.z);
+                match parts.iter_mut().find(|(r, _)| *r == b.role) {
+                    Some((_, t)) => t.extend(tris),
+                    None => parts.push((b.role, tris)),
+                }
+            }
+            Ok(parts)
+        }
+        _ => Ok(vec![(Role::Dormant, ouverture_generique(p, o)?)]),
+    }
+}
+
+fn ouverture_generique(p: &Projet, o: &Ouverture) -> Result<Vec<Tri>, String> {
     if let Some(m) = &o.representation {
         return maillage(m);
     }

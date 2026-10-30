@@ -64,6 +64,19 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   et haut des murs (attache à une toiture, priorité d'une couche aux croisements),
   mise à jour depuis le type, trémie ou contour rectangulaire d'un élément
   horizontal. Modifier un contour réinitialise ses pentes par arête.
+- **Éditeur de famille (prototype, fenêtres)** : une fenêtre sélectionnée propose
+  « Éditer la famille… » dans la barre d'options. Paramètres : dimensions de la baie,
+  dormant (largeur vue, profondeur, nu extérieur / milieu / intérieur et retrait),
+  1 à 6 vantaux (fixe, battant ou oscillo-battant à paumelles gauche ou droite,
+  coulissant ; meneau automatique à côté d'un fixe), largeur des ouvrants,
+  soubassement plein, imposte fixe, épaisseur du vitrage, débord de l'appui, couleur.
+  Élévation intérieure (triangles pointés vers les paumelles, oscillo, flèche du
+  coulissant) et plan en coupe (débattements) suivent chaque réglage ; rien n'est écrit
+  avant « Enregistrer le type » (le type et toutes ses fenêtres) ou « Nouveau type »
+  (affecté à la fenêtre, dont la menuiserie importée est alors remplacée). En 3D :
+  vitrage transparent, menuiserie de la couleur choisie, appui minéral. Limites :
+  fenêtres seulement, vantaux de largeurs égales, pas encore de symbole d'ouverture
+  dans les vues en plan du projet ni de choix de type au placement.
 - **Annuler / Rétablir**, Ctrl+Z et Ctrl+Maj+Z, ont un historique propre à chaque
   document. Les flèches après Sortie annulent ou rétablissent une étape ; leurs
   flèches donnent accès à la liste pour remonter ou rétablir plusieurs étapes.

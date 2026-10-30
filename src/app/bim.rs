@@ -1098,6 +1098,8 @@ impl ViewerApp {
         let Some((p, _)) = &self.natif else { return };
         let murs = ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some());
         let dalle = ids.len() == 1 && p.dalles.iter().any(|d| d.id == ids[0]);
+        let fenetre = (ids.len() == 1).then(|| p.ouvertures.iter().find(|o| o.id == ids[0] && o.genre == crate::modele::GenreOuverture::Fenetre)).flatten().map(|o| o.id.clone());
+        let mut editer_famille = false;
         // couche d'assemblage : la sortir ou prendre l'assemblage ; mur indépendant : le
         // rattacher à un assemblage du même niveau
         let mur = (ids.len() == 1).then(|| p.murs.iter().find(|m| m.id == ids[0])).flatten().cloned();
@@ -1109,6 +1111,9 @@ impl ViewerApp {
         let mut selection = None;
         let mut commande = None;
         ui.horizontal(|ui| {
+            if fenetre.is_some() && ui.button("Éditer la famille…").on_hover_text("Éditeur de famille : dormant, vantaux, imposte, vitrage, appui ; enregistré dans le type").clicked() {
+                editer_famille = true;
+            }
             if let Some(m) = &mur {
                 if let Some(a) = &m.assemblage {
                     if ui.button("Dissocier").on_hover_text("La couche devient un mur indépendant (elle garde sa place et ses réglages)").clicked() {
@@ -1342,6 +1347,9 @@ impl ViewerApp {
         if let Some(sel) = selection {
             self.select(Some(sel), true);
         }
+        if let Some(id) = fenetre.filter(|_| editer_famille) {
+            self.ouvrir_editeur_famille(&id);
+        }
     }
 
     /// Barre d'options affichée : Modifier, projet natif, outil à réglages ou sélection
@@ -1358,6 +1366,7 @@ impl ViewerApp {
         let ids = self.selection_bim();
         ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some())
             || (ids.len() == 1 && p.dalles.iter().any(|d| d.id == ids[0]))
+            || (ids.len() == 1 && p.ouvertures.iter().any(|o| o.id == ids[0] && o.genre == crate::modele::GenreOuverture::Fenetre))
     }
 
     pub(super) fn vue_native_id(&self) -> Option<String> {
