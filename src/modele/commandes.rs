@@ -794,6 +794,17 @@ impl Projet {
                         *p = point_annotation(*p);
                     }
                 }
+                F::Polyligne { points, .. } | F::Spline { points, .. } => {
+                    for p in points {
+                        *p = point_annotation(*p);
+                    }
+                }
+                F::Cercle { centre, .. } => *centre = point_annotation(*centre),
+                F::Arc { points } => {
+                    for p in points {
+                        *p = point_annotation(*p);
+                    }
+                }
                 F::Cote { debut, fin, .. } => {
                     for p in [debut, fin] {
                         match p {

@@ -6,6 +6,7 @@
 
 mod bim;
 mod feuilles;
+mod dessin2d_ui;
 use crate::options::Dimensions;
 use crate::camera::{Camera, MAX_PITCH};
 use crate::dessin::{self, Poche};
@@ -433,6 +434,8 @@ pub struct ViewerApp {
     bim: bim::EtatBim,
     /// Jeu de feuilles ouvert : cadrage, sélection, dessins préparés.
     feuilles: feuilles::EtatFeuilles,
+    /// Dessin 2D (Documenter) : tracé, saisie, accrochage.
+    dessin2d: dessin2d_ui::EtatDessin2D,
     natif: Option<(crate::modele::Projet, PathBuf)>,
     historique: crate::modele::historique::Historique,
     natif_modifie: bool,
@@ -624,6 +627,7 @@ impl ViewerApp {
             nom_vue: None,
             mur_chaine: None,
             alignement_plan: false,
+            dessin2d: Default::default(),
             arete_alignement: None,
             aretes_objet: None,
             positions_plan: Vec::new(),
@@ -1558,38 +1562,6 @@ impl ViewerApp {
                     _ => self.error = Some("La limite haute du mur doit être au-dessus de sa limite basse.".into()),
                 }
             }
-            // assemblage : sortir la couche, ou rattacher un mur indépendant
-            ui.horizontal_wrapped(|ui| match &m.assemblage {
-                Some(a) => {
-                    if ui.button("Dissocier").on_hover_text("La couche devient un mur indépendant (elle garde sa place et ses réglages)").clicked() {
-                        let mut p = projet.clone();
-                        if p.dissocier(&m.id).is_ok() {
-                            nouveau = Some(p);
-                        }
-                    }
-                    if ui.button("Assemblage").on_hover_text("Sélectionner l'assemblage entier").clicked() {
-                        selection = Some(scene::id_natif("assemblage", a));
-                    }
-                }
-                None if !projet.assemblages.is_empty() => {
-                    let mut choix: Option<String> = None;
-                    egui::ComboBox::from_id_salt("associer_mur").width(170.0).selected_text("Associer à un assemblage…").show_ui(ui, |ui| {
-                        for a in projet.assemblages.iter().filter(|a| projet.couches_assemblage(&a.id).first().is_some_and(|c| c.niveau == m.niveau)) {
-                            if ui.selectable_label(false, &a.nom).clicked() {
-                                choix = Some(a.id.clone());
-                            }
-                        }
-                    });
-                    if let Some(a) = choix {
-                        let mut p = projet.clone();
-                        match p.associer(&m.id, &a) {
-                            Ok(()) => nouveau = Some(p),
-                            Err(e) => self.error = Some(e),
-                        }
-                    }
-                }
-                None => {}
-            });
             ui.separator();
         } else if let Some(e) = projet.importes.iter().find(|e| scene::id_natif("importe", &e.id)==id) {
             ui.heading(&e.nom); ui.label(&e.categorie); ui.label("Géométrie importée"); ui.label(&e.raison);
@@ -3259,6 +3231,7 @@ impl ViewerApp {
                     if let Err(e) = self.creer_identique() { self.error = Some(e); }
                 }
                 Some(crate::ruban::Outil::Supprimer) => self.demander_suppression(),
+                Some(o @ (crate::ruban::Outil::Cadrer | crate::ruban::Outil::Isoler | crate::ruban::Outil::Masquer)) => self.visibilite_selection(o),
                 Some(crate::ruban::Outil::Feuilles) => self.commande_feuilles(),
                 Some(crate::ruban::Outil::Nomenclatures) => {
                     if self.natif.is_some() {
@@ -5517,7 +5490,7 @@ impl ViewerApp {
             if self.bim.selection.is_empty() {
                 ui.label(RichText::new("Sélectionner un élément dans la vue ou l'arborescence.").weak());
             } else if self.onglet_ruban != OngletRuban::Modifier {
-                ui.label(RichText::new(format!("{} élément(s) sélectionné(s) · ouvrir Modifier pour les propriétés.", self.bim.selection.len())).weak());
+                ui.label(RichText::new(format!("{} éléments sélectionnés", self.bim.selection.len())).weak());
             }
             return;
         };
@@ -5531,21 +5504,6 @@ impl ViewerApp {
         let model = &s.model;
         let has_obj = s.object_of.contains_key(&id);
         let under = self.objects_under(id);
-        let mut action = None;
-        ui.horizontal_wrapped(|ui| {
-            if ui.add_enabled(!under.is_empty(), egui::Button::new("Cadrer")).clicked() {
-                action = Some("frame");
-            }
-            if ui.add_enabled(!under.is_empty(), egui::Button::new("Isoler")).on_hover_text("I").clicked() {
-                action = Some("isolate");
-            }
-            if ui.add_enabled(!under.is_empty(), egui::Button::new("Masquer")).on_hover_text("H").clicked() {
-                action = Some("hide");
-            }
-            if ifc && ui.button("Copier GlobalId").clicked() {
-                ui.ctx().copy_text(model.global_id(id));
-            }
-        });
         if !has_obj && under.is_empty() {
             ui.label(RichText::new("Pas de géométrie affichable.").weak());
         }
@@ -5578,11 +5536,20 @@ impl ViewerApp {
                     });
             }
         });
-        match action {
-            Some("frame") => self.frame_objects(&under),
-            Some("isolate") => self.isolate(under),
-            Some("hide") => self.hide(under),
-            _ => {}
+    }
+
+    /// Cadrer, Isoler ou Masquer (ruban Modifier) : objets de la sélection courante.
+    fn visibilite_selection(&mut self, o: crate::ruban::Outil) {
+        use crate::ruban::Outil;
+        let mut objets: Vec<u32> = self.selected.into_iter().chain(self.selection_multiple.iter().copied()).flat_map(|id| self.objects_under(id)).collect();
+        objets.sort_unstable();
+        objets.dedup();
+        match o {
+            Outil::Cadrer if objets.is_empty() => self.fit_all(),
+            Outil::Cadrer => self.frame_objects(&objets),
+            _ if objets.is_empty() => self.status = "Sélectionner d'abord un élément.".into(),
+            Outil::Isoler => self.isolate(objets),
+            _ => self.hide(objets),
         }
     }
 
@@ -5966,6 +5933,8 @@ impl ViewerApp {
                 else if self.fenetre_selection.is_some_and(|f| (f.glissement && resp.drag_stopped_by(PointerButton::Primary)) || (!f.glissement && resp.clicked())) {
                     if let Some(f) = self.fenetre_selection.take() { self.selectionner_rectangle(rect, f); }
                 }
+            } else if self.outil_dessin().is_some() {
+                self.souris_dessin(ui, rect, &resp);
             } else if self.alignement_plan {
                 // Aligner (repère du plan) : l'arête visée (surlignée) devient horizontale ;
                 // sans arête, la direction principale de l'élément
@@ -6240,6 +6209,17 @@ impl ViewerApp {
         }
         if self.alignement_plan {
             self.dessiner_arete_alignement(ui, rect);
+        }
+        if self.outil_dessin().is_some() {
+            self.dessiner_dessin2d(ui, rect);
+        }
+        if self.a_options_modifier() {
+            egui::Area::new(egui::Id::unique("options_modifier"))
+                .fixed_pos(rect.left_top() + egui::vec2(8.0, 8.0))
+                .constrain_to(rect)
+                .show(ui.ctx(), |ui| {
+                    egui::Frame::popup(ui.style()).show(ui, |ui| self.options_modifier(ui));
+                });
         }
         if self.scene.is_some() {
             self.poignees_boite(ui, rect);
@@ -6518,8 +6498,14 @@ impl ViewerApp {
                         self.onglet_ruban = OngletRuban::Modeliser;
                         self.ruban_edition.activer_surface(sorte);
                     }
+                    "ligne" | "polyligne" | "spline" | "cercle" | "arc" => {
+                        use crate::ruban::Outil;
+                        let o = match argument { "ligne" => Outil::Ligne, "polyligne" => Outil::Polyligne, "spline" => Outil::Spline, "cercle" => Outil::Cercle, _ => Outil::Arc };
+                        self.onglet_ruban = OngletRuban::Annoter;
+                        self.ruban_edition.activer_outil(o);
+                    }
                     "aucun" => { self.ruban_edition.annuler(); self.mur_depart = None; }
-                    _ => return erreur("usage : outil mur|poteau|poutre|dalle|sol|coupe|aucun"),
+                    _ => return erreur("usage : outil mur|poteau|poutre|dalle|sol|coupe|ligne|polyligne|spline|cercle|arc|aucun"),
                 }
                 self.etat()
             }
@@ -7290,6 +7276,7 @@ impl eframe::App for ViewerApp {
                 }
             });
         }
+        self.clavier_dessin(&ctx);
         if self.alignement_plan && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             self.alignement_plan = false;
             self.arete_alignement = None;

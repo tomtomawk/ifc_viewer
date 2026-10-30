@@ -442,6 +442,10 @@ impl ViewerApp {
                     self.bim.points = [*debut, *fin];
                     Outil::Ligne
                 }
+                F::Polyligne { .. } => Outil::Polyligne,
+                F::Spline { .. } => Outil::Spline,
+                F::Cercle { .. } => Outil::Cercle,
+                F::Arc { .. } => Outil::Arc,
                 F::Zone { contour } => {
                     if let (Some(a), Some(b)) = (contour.first(), contour.get(2)) {
                         self.bim.points = [*a, *b];
@@ -579,6 +583,10 @@ impl ViewerApp {
             let attendu = match annotation.forme {
                 F::Texte { .. } => Outil::Texte,
                 F::Ligne { .. } => Outil::Ligne,
+                F::Polyligne { .. } => Outil::Polyligne,
+                F::Spline { .. } => Outil::Spline,
+                F::Cercle { .. } => Outil::Cercle,
+                F::Arc { .. } => Outil::Arc,
                 F::Zone { .. } => Outil::Zone,
                 F::Cote { .. } => Outil::Cote,
                 F::Etiquette { .. } => Outil::Etiquette,
@@ -590,45 +598,6 @@ impl ViewerApp {
         let ids = self.selection_bim();
         let mut commande = None;
         if self.onglet_ruban == OngletRuban::Modifier {
-            ui.label(format!("{} élément(s) sélectionné(s)", ids.len()));
-            ui.label("Ctrl + clic pour compléter la sélection.");
-            ui.collapsing("Sélection du modèle", |ui| {
-                let p = &self.natif.as_ref().unwrap().0;
-                for (id, nom) in p
-                    .assemblages
-                    .iter()
-                    .map(|x| (&x.id, &x.nom))
-                    .chain(
-                        p.murs
-                            .iter()
-                            .filter(|m| m.assemblage.is_none())
-                            .map(|x| (&x.id, &x.nom)),
-                    )
-                    .chain(p.dalles.iter().map(|x| (&x.id, &x.nom)))
-                    .chain(p.barres.iter().map(|x| (&x.id, &x.nom)))
-                    .chain(p.importes.iter().map(|x| (&x.id, &x.nom)))
-                    .chain(p.annotations.iter().map(|a| (&a.id, &a.id)))
-                    .chain(
-                        p.vues
-                            .iter()
-                            .filter(|v| matches!(v.genre, crate::modele::GenreVue::Coupe { .. }))
-                            .map(|v| (&v.id, &v.nom)),
-                    )
-                    .chain(p.quadrillages.iter().map(|g| (&g.id, &g.nom)))
-                {
-                    let mut oui = self.bim.selection.contains(id);
-                    if ui.checkbox(&mut oui, nom).changed() {
-                        self.selected = None;
-                        self.selection_multiple.clear();
-                        self.coupe_dirty = true;
-                        if oui {
-                            self.bim.selection.push(id.clone());
-                        } else {
-                            self.bim.selection.retain(|x| x != id);
-                        }
-                    }
-                }
-            });
             if ids.len() == 1 {
                 let p = &self.natif.as_ref().unwrap().0;
                 if let Some(original) = p.vues.iter().find(|v| {
@@ -699,6 +668,25 @@ impl ViewerApp {
                         use crate::modele::documentation::{AnnotationForme as F, PointCote};
                         let mut change = false;
                         match &mut annotation.forme {
+                            F::Polyligne { points, fermee } | F::Spline { points, fermee } => {
+                                ui.label(format!("{} points", points.len()));
+                                change |= ui.checkbox(fermee, "Fermée").changed();
+                            }
+                            F::Cercle { centre, rayon } => {
+                                ui.horizontal(|ui| {
+                                    ui.label("Centre");
+                                    for x in centre.iter_mut() {
+                                        change |= ui.add(egui::DragValue::new(x).speed(10.0).dimensions()).changed();
+                                    }
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.label("Rayon");
+                                    change |= ui.add(egui::DragValue::new(rayon).speed(10.0).range(1.0..=f64::MAX).dimensions()).changed();
+                                });
+                            }
+                            F::Arc { .. } => {
+                                ui.label("Arc par trois points");
+                            }
                             F::Texte { point, texte } => {
                                 change |= ui.text_edit_singleline(texte).changed();
                                 ui.horizontal(|ui| {
@@ -810,178 +798,6 @@ impl ViewerApp {
             } else {
                 self.bim.barre_editee = None;
             }
-            match outil {
-                Some(Outil::Deplacer | Outil::Copier) => {
-                    for (nom, v) in ["X", "Y", "Z"].into_iter().zip(&mut self.bim.delta) {
-                        ui.horizontal(|ui| {
-                            ui.label(nom);
-                            ui.add(egui::DragValue::new(v).speed(10.0).dimensions());
-                        });
-                    }
-                    if ui
-                        .add_enabled(!ids.is_empty(), egui::Button::new("Appliquer"))
-                        .clicked()
-                    {
-                        commande = Some(if outil == Some(Outil::Copier) {
-                            Commande::Copier {
-                                ids: ids.clone(),
-                                delta: self.bim.delta,
-                            }
-                        } else {
-                            Commande::Deplacer {
-                                ids: ids.clone(),
-                                delta: self.bim.delta,
-                            }
-                        });
-                    }
-                }
-                Some(Outil::Tourner) => {
-                    ui.label("Centre de rotation dans le plan du projet");
-                    for v in &mut self.bim.centre {
-                        ui.add(egui::DragValue::new(v).speed(10.0).dimensions());
-                    }
-                    if ui
-                        .add_enabled(!ids.is_empty(), egui::Button::new("Tourner"))
-                        .clicked()
-                    {
-                        commande = Some(Commande::Tourner {
-                            ids: ids.clone(),
-                            centre: self.bim.centre,
-                            angle: self.ruban_edition.nombre_option(Outil::Tourner, 0),
-                        });
-                    }
-                }
-                Some(Outil::Aligner | Outil::Ajuster) => {
-                    ui.label("Référence : axe d'un mur droit");
-                    egui::ComboBox::from_id_salt("reference_bim")
-                        .selected_text(&self.bim.reference)
-                        .show_ui(ui, |ui| {
-                            let p = &self.natif.as_ref().unwrap().0;
-                            for (id, nom) in p
-                                .murs
-                                .iter()
-                                .filter(|m| m.assemblage.is_none())
-                                .map(|m| (&m.id, &m.nom))
-                                .chain(p.assemblages.iter().map(|m| (&m.id, &m.nom)))
-                            {
-                                ui.selectable_value(&mut self.bim.reference, id.clone(), nom);
-                            }
-                        });
-                    if outil == Some(Outil::Ajuster) {
-                        ui.checkbox(&mut self.bim.fin, "Ajuster la fin (sinon le début)");
-                    }
-                    if ui
-                        .add_enabled(
-                            !ids.is_empty() && !self.bim.reference.is_empty(),
-                            egui::Button::new("Appliquer à l'axe"),
-                        )
-                        .clicked()
-                    {
-                        commande = Some(if outil == Some(Outil::Aligner) {
-                            Commande::Aligner {
-                                ids: ids.clone(),
-                                reference: self.bim.reference.clone(),
-                            }
-                        } else {
-                            Commande::Ajuster {
-                                id: ids[0].clone(),
-                                reference: self.bim.reference.clone(),
-                                fin: self.bim.fin,
-                            }
-                        });
-                    }
-                }
-                _ => {}
-            }
-            if !ids.is_empty() {
-                ui.collapsing("Jonctions et haut des murs", |ui| {
-                    egui::ComboBox::from_id_salt("toit_attache")
-                        .selected_text(if self.bim.toiture.is_empty() {
-                            "Toiture"
-                        } else {
-                            &self.bim.toiture
-                        })
-                        .show_ui(ui, |ui| {
-                            for d in self
-                                .natif
-                                .as_ref()
-                                .unwrap()
-                                .0
-                                .dalles
-                                .iter()
-                                .filter(|d| d.sorte == crate::modele::SorteDalle::Toiture)
-                            {
-                                ui.selectable_value(&mut self.bim.toiture, d.id.clone(), &d.nom);
-                            }
-                        });
-                    if ui
-                        .add_enabled(
-                            !self.bim.toiture.is_empty(),
-                            egui::Button::new("Attacher à la sous-face"),
-                        )
-                        .clicked()
-                    {
-                        commande = Some(Commande::Attacher {
-                            ids: ids.clone(),
-                            toiture: Some(self.bim.toiture.clone()),
-                        });
-                    }
-                    if ui.button("Détacher").clicked() {
-                        commande = Some(Commande::Attacher {
-                            ids: ids.clone(),
-                            toiture: None,
-                        });
-                    }
-                    ui.horizontal(|ui| {
-                        ui.label("Priorité de jonction");
-                        ui.add(egui::DragValue::new(&mut self.bim.priorite));
-                    });
-                    if ui
-                        .add_enabled(ids.len() == 1, egui::Button::new("Appliquer à la couche"))
-                        .clicked()
-                    {
-                        commande = Some(Commande::PrioriteJonction {
-                            id: ids[0].clone(),
-                            priorite: self.bim.priorite,
-                        });
-                    }
-                    ui.label("La priorité la plus élevée conserve son volume au croisement.");
-                });
-            }
-            if ids.len() == 1 && self.natif.as_ref().unwrap().0.assemblage(&ids[0]).is_some() {
-                if ui
-                    .button("Préparer la mise à jour depuis le type")
-                    .clicked()
-                {
-                    match self
-                        .natif
-                        .as_ref()
-                        .unwrap()
-                        .0
-                        .executer(Commande::ActualiserType {
-                            assemblage: ids[0].clone(),
-                        }) {
-                        Ok((p, _)) => self.bim.preview_type = Some(p),
-                        Err(e) => self.error = Some(e),
-                    }
-                }
-                if let Some(p) = &self.bim.preview_type {
-                    for m in p.couches_assemblage(&ids[0]) {
-                        ui.label(format!(
-                            "{} · {}",
-                            m.nom,
-                            crate::options::unite()
-                                .afficher(p.type_mur(&m.type_mur).map_or(0.0, |t| t.epaisseur()))
-                        ));
-                    }
-                    if ui.button("Appliquer cette composition").clicked() {
-                        commande = Some(Commande::ActualiserType {
-                            assemblage: ids[0].clone(),
-                        });
-                        self.bim.preview_type = None;
-                    }
-                }
-            }
             if ids.len() == 1
                 && self
                     .natif
@@ -1048,34 +864,6 @@ impl ViewerApp {
                     }
                     ui.label("Modifier le contour réinitialise les pentes par arête.");
                 });
-                ui.collapsing("Contour / trémie rectangulaire", |ui| {
-                    points_ui(ui, &mut self.bim.points);
-                    let [a, b] = self.bim.points;
-                    let contour = vec![a, [b[0], a[1]], b, [a[0], b[1]]];
-                    if ui.button("Ajouter une trémie").clicked() {
-                        commande = Some(Commande::Tremie {
-                            id: ids[0].clone(),
-                            contour: contour.clone(),
-                        });
-                    }
-                    if ui
-                        .button("Remplacer le contour (retire les pentes)")
-                        .clicked()
-                    {
-                        commande = Some(Commande::Contour {
-                            id: ids[0].clone(),
-                            contours: vec![contour],
-                        });
-                    }
-                });
-            }
-            if ui
-                .add_enabled(!ids.is_empty(), egui::Button::new("Supprimer"))
-                .on_hover_text("Supprimer la sélection, couches et ouvertures hébergées comprises (Suppr ; Ctrl+Z pour annuler)")
-                .clicked()
-            {
-                // exécuté hors du panneau (sélection vidée ensuite)
-                self.bim.supprimer = true;
             }
         } else if self.onglet_ruban == OngletRuban::Modeliser {
             match outil {
@@ -1176,7 +964,7 @@ impl ViewerApp {
         } else if self.onglet_ruban == OngletRuban::Annoter
             && matches!(
                 outil,
-                Some(Outil::Texte | Outil::Cote | Outil::Ligne | Outil::Zone | Outil::Etiquette)
+                Some(Outil::Texte | Outil::Cote | Outil::Zone | Outil::Etiquette)
             )
         {
             use crate::modele::documentation::{Annotation, AnnotationForme as F, PointCote};
@@ -1298,6 +1086,280 @@ impl ViewerApp {
     }
 }
 impl ViewerApp {
+    /// Barre d'options de Modifier, en haut de la vue : réglages de l'outil actif
+    /// (Déplacer, Copier, Tourner, Aligner, Ajuster) et commandes propres à la sélection
+    /// (jonctions, mise à jour depuis le type, trémie). Propriétés ne garde que les
+    /// informations de la sélection.
+    pub(super) fn options_modifier(&mut self, ui: &mut egui::Ui) {
+        use crate::modele::commandes::Commande;
+        use crate::ruban::Outil;
+        let outil = self.ruban_edition.outil();
+        let ids = self.selection_bim();
+        let Some((p, _)) = &self.natif else { return };
+        let murs = ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some());
+        let dalle = ids.len() == 1 && p.dalles.iter().any(|d| d.id == ids[0]);
+        // couche d'assemblage : la sortir ou prendre l'assemblage ; mur indépendant : le
+        // rattacher à un assemblage du même niveau
+        let mur = (ids.len() == 1).then(|| p.murs.iter().find(|m| m.id == ids[0])).flatten().cloned();
+        let assemblages: Vec<(String, String)> = mur.as_ref().filter(|m| m.assemblage.is_none()).map(|m| {
+            p.assemblages.iter().filter(|a| p.couches_assemblage(&a.id).first().is_some_and(|c| c.niveau == m.niveau)).map(|a| (a.id.clone(), a.nom.clone())).collect()
+        }).unwrap_or_default();
+        let mut dissocier = false;
+        let mut associer: Option<String> = None;
+        let mut selection = None;
+        let mut commande = None;
+        ui.horizontal(|ui| {
+            if let Some(m) = &mur {
+                if let Some(a) = &m.assemblage {
+                    if ui.button("Dissocier").on_hover_text("La couche devient un mur indépendant (elle garde sa place et ses réglages)").clicked() {
+                        dissocier = true;
+                    }
+                    if ui.button("Assemblage").on_hover_text("Sélectionner l'assemblage entier").clicked() {
+                        selection = Some(crate::scene::id_natif("assemblage", a));
+                    }
+                } else if !assemblages.is_empty() {
+                    egui::ComboBox::from_id_salt("associer_mur").width(170.0).selected_text("Associer à un assemblage…").show_ui(ui, |ui| {
+                        for (id, nom) in &assemblages {
+                            if ui.selectable_label(false, nom).clicked() {
+                                associer = Some(id.clone());
+                            }
+                        }
+                    });
+                }
+            }
+            match outil {
+                Some(Outil::Deplacer | Outil::Copier) => {
+                    for (nom, v) in ["X", "Y", "Z"].into_iter().zip(&mut self.bim.delta) {
+                        ui.horizontal(|ui| {
+                            ui.label(nom);
+                            ui.add(egui::DragValue::new(v).speed(10.0).dimensions());
+                        });
+                    }
+                    if ui
+                        .add_enabled(!ids.is_empty(), egui::Button::new("Appliquer"))
+                        .clicked()
+                    {
+                        commande = Some(if outil == Some(Outil::Copier) {
+                            Commande::Copier {
+                                ids: ids.clone(),
+                                delta: self.bim.delta,
+                            }
+                        } else {
+                            Commande::Deplacer {
+                                ids: ids.clone(),
+                                delta: self.bim.delta,
+                            }
+                        });
+                    }
+                }
+                Some(Outil::Tourner) => {
+                    ui.label("Centre de rotation dans le plan du projet");
+                    for v in &mut self.bim.centre {
+                        ui.add(egui::DragValue::new(v).speed(10.0).dimensions());
+                    }
+                    if ui
+                        .add_enabled(!ids.is_empty(), egui::Button::new("Tourner"))
+                        .clicked()
+                    {
+                        commande = Some(Commande::Tourner {
+                            ids: ids.clone(),
+                            centre: self.bim.centre,
+                            angle: self.ruban_edition.nombre_option(Outil::Tourner, 0),
+                        });
+                    }
+                }
+                Some(Outil::Aligner | Outil::Ajuster) => {
+                    ui.label("Référence : axe d'un mur droit");
+                    egui::ComboBox::from_id_salt("reference_bim")
+                        .selected_text(&self.bim.reference)
+                        .show_ui(ui, |ui| {
+                            let p = &self.natif.as_ref().unwrap().0;
+                            for (id, nom) in p
+                                .murs
+                                .iter()
+                                .filter(|m| m.assemblage.is_none())
+                                .map(|m| (&m.id, &m.nom))
+                                .chain(p.assemblages.iter().map(|m| (&m.id, &m.nom)))
+                            {
+                                ui.selectable_value(&mut self.bim.reference, id.clone(), nom);
+                            }
+                        });
+                    if outil == Some(Outil::Ajuster) {
+                        ui.checkbox(&mut self.bim.fin, "Ajuster la fin (sinon le début)");
+                    }
+                    if ui
+                        .add_enabled(
+                            !ids.is_empty() && !self.bim.reference.is_empty(),
+                            egui::Button::new("Appliquer à l'axe"),
+                        )
+                        .clicked()
+                    {
+                        commande = Some(if outil == Some(Outil::Aligner) {
+                            Commande::Aligner {
+                                ids: ids.clone(),
+                                reference: self.bim.reference.clone(),
+                            }
+                        } else {
+                            Commande::Ajuster {
+                                id: ids[0].clone(),
+                                reference: self.bim.reference.clone(),
+                                fin: self.bim.fin,
+                            }
+                        });
+                    }
+                }
+                _ => {}
+            }
+            if murs {
+                ui.menu_button("Jonctions et haut des murs", |ui| {
+                    egui::ComboBox::from_id_salt("toit_attache")
+                        .selected_text(if self.bim.toiture.is_empty() {
+                            "Toiture"
+                        } else {
+                            &self.bim.toiture
+                        })
+                        .show_ui(ui, |ui| {
+                            for d in self
+                                .natif
+                                .as_ref()
+                                .unwrap()
+                                .0
+                                .dalles
+                                .iter()
+                                .filter(|d| d.sorte == crate::modele::SorteDalle::Toiture)
+                            {
+                                ui.selectable_value(&mut self.bim.toiture, d.id.clone(), &d.nom);
+                            }
+                        });
+                    if ui
+                        .add_enabled(
+                            !self.bim.toiture.is_empty(),
+                            egui::Button::new("Attacher à la sous-face"),
+                        )
+                        .clicked()
+                    {
+                        commande = Some(Commande::Attacher {
+                            ids: ids.clone(),
+                            toiture: Some(self.bim.toiture.clone()),
+                        });
+                    }
+                    if ui.button("Détacher").clicked() {
+                        commande = Some(Commande::Attacher {
+                            ids: ids.clone(),
+                            toiture: None,
+                        });
+                    }
+                    ui.horizontal(|ui| {
+                        ui.label("Priorité de jonction");
+                        ui.add(egui::DragValue::new(&mut self.bim.priorite));
+                    });
+                    if ui
+                        .add_enabled(ids.len() == 1, egui::Button::new("Appliquer à la couche"))
+                        .clicked()
+                    {
+                        commande = Some(Commande::PrioriteJonction {
+                            id: ids[0].clone(),
+                            priorite: self.bim.priorite,
+                        });
+                    }
+                    ui.label("La priorité la plus élevée conserve son volume au croisement.");
+                });
+            }
+            if ids.len() == 1 && self.natif.as_ref().unwrap().0.assemblage(&ids[0]).is_some() {
+                ui.menu_button("Mise à jour depuis le type", |ui| {
+                if ui
+                    .button("Préparer la mise à jour depuis le type")
+                    .clicked()
+                {
+                    match self
+                        .natif
+                        .as_ref()
+                        .unwrap()
+                        .0
+                        .executer(Commande::ActualiserType {
+                            assemblage: ids[0].clone(),
+                        }) {
+                        Ok((p, _)) => self.bim.preview_type = Some(p),
+                        Err(e) => self.error = Some(e),
+                    }
+                }
+                if let Some(p) = &self.bim.preview_type {
+                    for m in p.couches_assemblage(&ids[0]) {
+                        ui.label(format!(
+                            "{} · {}",
+                            m.nom,
+                            crate::options::unite()
+                                .afficher(p.type_mur(&m.type_mur).map_or(0.0, |t| t.epaisseur()))
+                        ));
+                    }
+                    if ui.button("Appliquer cette composition").clicked() {
+                        commande = Some(Commande::ActualiserType {
+                            assemblage: ids[0].clone(),
+                        });
+                        self.bim.preview_type = None;
+                    }
+                }
+                });
+            }
+            if dalle {
+                ui.menu_button("Contour / trémie rectangulaire", |ui| {
+                    points_ui(ui, &mut self.bim.points);
+                    let [a, b] = self.bim.points;
+                    let contour = vec![a, [b[0], a[1]], b, [a[0], b[1]]];
+                    if ui.button("Ajouter une trémie").clicked() {
+                        commande = Some(Commande::Tremie {
+                            id: ids[0].clone(),
+                            contour: contour.clone(),
+                        });
+                    }
+                    if ui
+                        .button("Remplacer le contour (retire les pentes)")
+                        .clicked()
+                    {
+                        commande = Some(Commande::Contour {
+                            id: ids[0].clone(),
+                            contours: vec![contour],
+                        });
+                    }
+                });
+            }
+        });
+        if let Some(c) = commande {
+            if let Err(e) = self.executer_bim(c) {
+                self.error = Some(e);
+            }
+        }
+        if let Some(m) = mur.filter(|_| dissocier || associer.is_some()) {
+            let mut p = self.natif.as_ref().unwrap().0.clone();
+            let r = match &associer {
+                Some(a) => p.associer(&m.id, a),
+                None => p.dissocier(&m.id).map(|_| ()),
+            };
+            if let Err(e) = r.and_then(|()| self.appliquer_projet(p)) {
+                self.error = Some(e);
+            }
+        }
+        if let Some(sel) = selection {
+            self.select(Some(sel), true);
+        }
+    }
+
+    /// Barre d'options affichée : Modifier, projet natif, outil à réglages ou sélection
+    /// avec des commandes propres.
+    pub(super) fn a_options_modifier(&self) -> bool {
+        use crate::ruban::Outil;
+        let Some((p, _)) = &self.natif else { return false };
+        if self.onglet_ruban != OngletRuban::Modifier {
+            return false;
+        }
+        if matches!(self.ruban_edition.outil(), Some(Outil::Deplacer | Outil::Copier | Outil::Tourner | Outil::Aligner | Outil::Ajuster)) {
+            return true;
+        }
+        let ids = self.selection_bim();
+        ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some())
+            || (ids.len() == 1 && p.dalles.iter().any(|d| d.id == ids[0]))
+    }
+
     pub(super) fn vue_native_id(&self) -> Option<String> {
         let p = &self.natif.as_ref()?.0;
         let num = self

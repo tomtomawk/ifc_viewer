@@ -31,6 +31,25 @@ pub enum AnnotationForme {
     Zone {
         contour: Vec<[f64; 2]>,
     },
+    /// Dessin 2D : polyligne, spline (passant par ses points), cercle, arc par trois
+    /// points (début, passage, fin) ; mm dans le plan de la vue.
+    Polyligne {
+        points: Vec<[f64; 2]>,
+        #[serde(default)]
+        fermee: bool,
+    },
+    Spline {
+        points: Vec<[f64; 2]>,
+        #[serde(default)]
+        fermee: bool,
+    },
+    Cercle {
+        centre: [f64; 2],
+        rayon: f64,
+    },
+    Arc {
+        points: [[f64; 2]; 3],
+    },
     Cote {
         debut: PointCote,
         fin: PointCote,
@@ -41,6 +60,36 @@ pub enum AnnotationForme {
         point: [f64; 2],
     },
 }
+impl AnnotationForme {
+    /// Forme du dessin 2D (ligne, polyligne, spline, cercle, arc), None pour les autres.
+    pub fn forme_2d(&self) -> Option<crate::dessin2d::Forme2D> {
+        use crate::dessin2d::Forme2D as F;
+        let v = |p: &[f64; 2]| DVec2::from_array(*p);
+        Some(match self {
+            Self::Ligne { debut, fin } => F::Ligne([v(debut), v(fin)]),
+            Self::Polyligne { points, fermee } => F::Polyligne { points: points.iter().map(v).collect(), fermee: *fermee },
+            Self::Spline { points, fermee } => F::Spline { points: points.iter().map(v).collect(), fermee: *fermee },
+            Self::Cercle { centre, rayon } => F::Cercle { centre: v(centre), rayon: *rayon },
+            Self::Arc { points } => F::Arc(points.map(|p| v(&p))),
+            _ => return None,
+        })
+    }
+
+    /// Annotation d'une forme du dessin 2D.
+    pub fn depuis_forme_2d(f: &crate::dessin2d::Forme2D) -> AnnotationForme {
+        use crate::dessin2d::Forme2D as F;
+        let a = |p: &DVec2| p.to_array();
+        match f {
+            F::Ligne([d, e]) => Self::Ligne { debut: a(d), fin: a(e) },
+            F::Polyligne { points, fermee } => Self::Polyligne { points: points.iter().map(a).collect(), fermee: *fermee },
+            F::Spline { points, fermee } => Self::Spline { points: points.iter().map(a).collect(), fermee: *fermee },
+            F::Cercle { centre, rayon } => Self::Cercle { centre: a(centre), rayon: *rayon },
+            F::Arc(p) => Self::Arc { points: p.map(|q| q.to_array()) },
+        }
+    }
+
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Annotation {
     pub id: String,
@@ -253,6 +302,16 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
                 pt(DVec2::from_array(*debut)),
                 pt(DVec2::from_array(*fin)),
             )),
+            AnnotationForme::Polyligne { .. } | AnnotationForme::Spline { .. } | AnnotationForme::Cercle { .. } | AnnotationForme::Arc { .. } => {
+                for l in a.forme.forme_2d().map(|f| f.polylignes()).unwrap_or_default() {
+                    out.push(Primitive {
+                        forme: Forme::Polyligne { points: l.into_iter().map(pt).collect(), fermee: false },
+                        style: Style { couleur: [30, 30, 30, 255], epaisseur: 0.18 },
+                        role: Role::Annotation,
+                        element: None,
+                    });
+                }
+            }
             AnnotationForme::Zone { contour } => out.push(Primitive {
                 forme: Forme::Surface(vec![
                     contour.iter().map(|p| pt(DVec2::from_array(*p))).collect(),

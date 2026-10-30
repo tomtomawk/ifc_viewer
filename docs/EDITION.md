@@ -40,8 +40,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   type de son mur), mur seul (types à une couche), élément horizontal, porte ou
   fenêtre (dimensions du type).
 - **Modifier** propose déplacement, copie, rotation, alignement des axes et
-  ajustement de l'extrémité d'un mur sur l'axe d'un autre. Ctrl+clic ou les cases de
-  la liste constituent une sélection multiple, surlignée dans la vue. On peut aussi
+  ajustement de l'extrémité d'un mur sur l'axe d'un autre. Ctrl+clic constitue une
+  sélection multiple, surlignée dans la vue. On peut aussi
   tracer un rectangle en glissant depuis le vide ou en cliquant deux coins : de
   gauche à droite (bleu), seuls les éléments entièrement inclus sont retenus ; de
   droite à gauche (vert), tous les éléments touchés sont retenus. Ctrl ajoute à la
@@ -52,13 +52,18 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   quadrillages se sélectionnent aussi en plan, ainsi que les annotations dans leur
   vue ; leurs propriétés sont accessibles dans Modifier. Les cotes liées gardent
   leurs références : leur décalage est éditable dans leurs propriétés. Supprimer (icône de
-  Modifier, bouton du panneau, touche Suppr ou Retour arrière hors tracé) agit tout
+  Modifier, touche Suppr ou Retour arrière hors tracé) agit tout
   de suite, couches et ouvertures hébergées comprises ; Ctrl+Z rétablit. Un niveau
   encore utilisé ne peut pas être supprimé.
-- Le panneau Modifier permet aussi d'éditer les sommets d'un élément horizontal,
-  d'y ajouter une trémie, de préparer/appliquer une composition depuis son type,
-  d'attacher des murs à une toiture et de régler la priorité d'une couche aux
-  croisements. Modifier un contour réinitialise ses pentes par arête.
+- Le panneau Propriétés ne montre que les informations de la sélection (type,
+  paramètres, couches, sommets d'un élément horizontal). Les commandes sont ailleurs :
+  Cadrer, Isoler et Masquer dans le groupe Visibilité de Modifier (touches F, I, H) ;
+  dans la barre d'options en haut de la vue, les réglages de Déplacer, Copier,
+  Tourner, Aligner et Ajuster, et les commandes propres à la sélection : dissocier
+  une couche ou prendre son assemblage, associer un mur à un assemblage, jonctions
+  et haut des murs (attache à une toiture, priorité d'une couche aux croisements),
+  mise à jour depuis le type, trémie ou contour rectangulaire d'un élément
+  horizontal. Modifier un contour réinitialise ses pentes par arête.
 - **Annuler / Rétablir**, Ctrl+Z et Ctrl+Maj+Z, ont un historique propre à chaque
   document. Les flèches après Sortie annulent ou rétablissent une étape ; leurs
   flèches donnent accès à la liste pour remonter ou rétablir plusieurs étapes.
@@ -70,7 +75,23 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   atomiquement. Chaque modification appliquée écrit une copie `.recuperation.json`.
   À la réouverture, l'application propose de la restaurer. Enregistrer ou fermer
   explicitement sans enregistrer supprime cette copie de récupération.
-- **Documenter** crée textes, lignes, zones rectangulaires, cotes et étiquettes
+- **Dessin 2D** (Documenter) : ligne, polyligne, spline, cercle et arc se tracent
+  directement dans la vue native ouverte, à la manière de CADCraft ou d'AutoCAD.
+  Clic : point suivant ; clic droit, Entrée ou Espace : terminer ; F puis Entrée :
+  fermer la polyligne ou la spline ; Échap : effacer la saisie, puis abandonner le
+  tracé en cours, puis quitter l'outil. La ligne enchaîne les segments ; le cercle
+  se donne par centre et rayon, l'arc par départ, point de passage et fin ; la spline
+  passe par ses points (Catmull-Rom centripète). Accrochages : extrémité, milieu,
+  centre, quadrant, intersection, perpendiculaire et point proche, sur les dessins
+  de la vue et, en plan, sur les contours et axes des murs, les contours des éléments
+  horizontaux du niveau et les quadrillages. Sans accrochage, repérage polaire tous
+  les 15° ; Maj force l'orthogonal. Au clavier, la ligne de commande en bas de la vue
+  reçoit `x,y` ou `x;y` (absolu), `@dx,dy` (relatif), `d<angle` ou `@d<angle`
+  (polaire depuis le point précédent) ou une distance seule (dans la direction du
+  curseur), dans l'unité d'affichage. Chaque forme achevée devient une annotation
+  de la vue. Ce moteur (`dessin2d.rs`) est indépendant de l'interface, pour servir
+  ensuite au tracé des murs et des éléments horizontaux.
+- **Documenter** crée aussi textes, zones rectangulaires, cotes et étiquettes
   dans la vue native ouverte. Avec un mur sélectionné, une cote référence ses
   extrémités ; sinon ses points sont fixes. Une référence supprimée est signalée
   en rouge, sans supprimer silencieusement la cote.
@@ -203,7 +224,9 @@ si la destination est omise. Les commandes renvoient un code non nul en cas d'er
 Collections v0 ajoutées : `quadrillages`, `annotations`, `feuilles`, `nomenclatures`.
 Tables facultatives : `attaches_toitures` (id du mur/assemblage → id de toiture),
 `priorites_jonction` (id du mur/couche → entier). Les annotations appartiennent à une
-vue ; les positions et tailles des feuilles sont en mm papier. Aucun historique
+vue ; leurs formes : `texte`, `ligne`, `polyligne` (`points`, `fermee`), `spline`
+(`points` de passage, `fermee`), `cercle` (`centre`, `rayon`), `arc` (`points` :
+départ, passage, fin), `zone`, `cote`, `etiquette`, en mm dans le repère 2D de la vue ; les positions et tailles des feuilles sont en mm papier. Aucun historique
 Undo/Redo n'est sérialisé dans le projet.
 
 ## Vérifications

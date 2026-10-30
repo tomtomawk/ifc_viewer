@@ -34,12 +34,18 @@ pub(crate) enum Outil {
     Ajuster,
     CreerIdentique,
     Supprimer,
+    Cadrer,
+    Isoler,
+    Masquer,
     Cote,
     Altimetrie,
     Texte,
     Etiquette,
     Ligne,
     Arc,
+    Polyligne,
+    Spline,
+    Cercle,
     Zone,
     Symbole,
     Legende,
@@ -73,12 +79,18 @@ impl Outil {
             Self::Ajuster => "Ajuster",
             Self::CreerIdentique => "Créer à l'identique",
             Self::Supprimer => "Supprimer",
+            Self::Cadrer => "Cadrer",
+            Self::Isoler => "Isoler",
+            Self::Masquer => "Masquer",
             Self::Cote => "Cote",
             Self::Altimetrie => "Altimétrie",
             Self::Texte => "Texte",
             Self::Etiquette => "Étiquette",
             Self::Ligne => "Ligne",
             Self::Arc => "Arc",
+            Self::Polyligne => "Polyligne",
+            Self::Spline => "Spline",
+            Self::Cercle => "Cercle",
             Self::Zone => "Zone remplie",
             Self::Symbole => "Symbole",
             Self::Legende => "Légende",
@@ -215,12 +227,12 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
             ("Transformer", &[Deplacer, Copier, Tourner]),
             ("Ajuster", &[Aligner, Ajuster]),
             ("Édition", &[CreerIdentique, Supprimer]),
+            ("Visibilité", &[Cadrer, Isoler, Masquer]),
         ],
         Menu::Annoter => &[
             ("Vues", &[VuePlan, VueCoupe]),
-            ("Coter", &[Cote, Altimetrie]),
-            ("Texte", &[Texte, Etiquette]),
-            ("Détail", &[Ligne, Arc, Zone]),
+            ("Cotes et textes", &[Cote, Texte, Etiquette, Altimetrie]),
+            ("Dessin 2D", &[Ligne, Polyligne, Spline, Cercle, Arc, Zone]),
             ("Bibliothèque", &[Symbole, Legende]),
             ("Documents", &[Feuilles, Nomenclatures]),
         ],
@@ -369,7 +381,7 @@ fn champs(o: Outil) -> Vec<Champ> {
     use Champ::*;
     use Outil::*;
     match o {
-        Surfaces | Niveau | CreerIdentique | Supprimer | Feuilles | Nomenclatures => vec![],
+        Surfaces | Niveau | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | Feuilles | Nomenclatures => vec![],
         Quadrillage => vec![Saisie("Repère", "A"), Choix("Tracé", &["Droit", "Arc"])],
         Mur => vec![
             Choix(
@@ -446,10 +458,7 @@ fn champs(o: Outil) -> Vec<Champ> {
             Choix("Contenu", &["Type", "Repère", "Matériau"]),
             Nombre("Hauteur papier", 2.5, " mm"),
         ],
-        Ligne | Arc => vec![
-            Choix("Style", &["Trait fin", "Trait fort", "Pointillé"]),
-            Nombre("Épaisseur papier", 0.18, " mm"),
-        ],
+        Ligne | Arc | Polyligne | Spline | Cercle => vec![],
         Zone => vec![
             Choix("Motif", &["Diagonales 45°", "Béton", "Isolant", "Plein"]),
             Nombre("Pas papier", 2.0, " mm"),
@@ -799,7 +808,8 @@ impl RubanEdition {
                 .any(|(_, outils)| outils.contains(&o.commande()))
         });
         // Les surfaces se règlent dans l'encart en tête de Propriétés.
-        let outil_options = outil_options.filter(|o| o.commande() != Outil::Surfaces);
+        // Sans réglage (dessin 2D, actions), pas d'encart.
+        let outil_options = outil_options.filter(|o| o.commande() != Outil::Surfaces && !champs(*o).is_empty());
         let selection_options = outil_options.map(Outil::commande);
         let compact = largeur_commandes(ui, menu, &[]);
         let options_inline =
@@ -875,12 +885,12 @@ impl RubanEdition {
                                 let actif = self.selection.map(Outil::commande) == Some(outil);
                                 // éléments horizontaux : un bouton ; la sorte se choisit dans le
                                 // sélecteur de type de Propriétés
-                                let disponible = matches!(outil, Outil::Mur|Outil::Surfaces|Outil::Poteau|Outil::Poutre|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Aligner|Outil::Ajuster|Outil::CreerIdentique|Outil::Supprimer|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::Ligne|Outil::Zone|Outil::Etiquette|Outil::Feuilles|Outil::Nomenclatures);
+                                let disponible = matches!(outil, Outil::Mur|Outil::Surfaces|Outil::Poteau|Outil::Poutre|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Aligner|Outil::Ajuster|Outil::CreerIdentique|Outil::Supprimer|Outil::Cadrer|Outil::Isoler|Outil::Masquer|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::Ligne|Outil::Polyligne|Outil::Spline|Outil::Cercle|Outil::Arc|Outil::Zone|Outil::Etiquette|Outil::Feuilles|Outil::Nomenclatures);
                                 let mut bouton_ui=ui.new_child(egui::UiBuilder::new().max_rect(bouton));
                                 if !disponible {bouton_ui.disable();}
                                 let reponse=bouton_outil(&mut bouton_ui,bouton,outil,colonne.grande,actif);
                                 if reponse.on_disabled_hover_text("Outil prévu, pas encore disponible").clicked() {
-                                    if matches!(outil, Outil::CreerIdentique | Outil::Supprimer | Outil::Feuilles | Outil::Nomenclatures) {
+                                    if matches!(outil, Outil::CreerIdentique | Outil::Supprimer | Outil::Cadrer | Outil::Isoler | Outil::Masquer | Outil::Feuilles | Outil::Nomenclatures) {
                                         action = Some(outil);
                                         continue;
                                     }
@@ -2059,6 +2069,9 @@ fn bouton_outil(
     resp.on_hover_text(match outil {
         Outil::CreerIdentique => "Créer à l'identique (CS)",
         Outil::Supprimer => "Supprimer (Suppr)",
+        Outil::Cadrer => "Cadrer la sélection, sinon tout le modèle (F)",
+        Outil::Isoler => "Isoler la sélection (I) ; Échap dans la vue : tout réafficher",
+        Outil::Masquer => "Masquer la sélection (H)",
         Outil::Feuilles => "Feuilles : mise en page des vues, cartouche, export SVG/PDF",
         Outil::Nomenclatures => "Nomenclatures : quantités par catégorie et par type, export CSV",
         _ => outil.nom(),
@@ -2421,7 +2434,28 @@ fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             ));
             p.circle_stroke(pt(0.3, 0.3), 2.0, t);
         }
-        Ligne => seg((0.15, 0.85), (0.85, 0.15)),
+        Ligne => {
+            seg((0.15, 0.85), (0.85, 0.15));
+            p.circle_filled(pt(0.15, 0.85), r.width() * 0.06, c);
+            p.circle_filled(pt(0.85, 0.15), r.width() * 0.06, c);
+        }
+        Polyligne => {
+            p.add(egui::Shape::line(vec![pt(0.1, 0.85), pt(0.35, 0.3), pt(0.65, 0.65), pt(0.9, 0.15)], t));
+            for (x, y) in [(0.1, 0.85), (0.35, 0.3), (0.65, 0.65), (0.9, 0.15)] {
+                p.circle_filled(pt(x, y), r.width() * 0.05, c);
+            }
+        }
+        Spline => {
+            let pts = (0..=24).map(|k| {
+                let x = k as f32 / 24.0;
+                pt(0.1 + 0.8 * x, 0.5 - 0.32 * (x * std::f32::consts::TAU).sin())
+            }).collect();
+            p.add(egui::Shape::line(pts, t));
+        }
+        Cercle => {
+            p.circle_stroke(r.center(), r.width() * 0.38, t);
+            p.circle_filled(r.center(), r.width() * 0.05, c);
+        }
         Zone => {
             cadre(0.08, 0.08, 0.84, 0.84);
             for k in 0..5 {
@@ -2448,6 +2482,30 @@ fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
                 seg((0.1, y), (0.9, y));
             }
             seg((0.42, 0.12), (0.42, 0.88));
+        }
+        Cadrer => {
+            // coins de cadrage autour d'un objet
+            for (x, y, dx, dy) in [(0.08, 0.08, 1.0, 1.0), (0.92, 0.08, -1.0, 1.0), (0.08, 0.92, 1.0, -1.0), (0.92, 0.92, -1.0, -1.0)] {
+                seg((x, y), (x + 0.22 * dx, y));
+                seg((x, y), (x, y + 0.22 * dy));
+            }
+            cadre(0.32, 0.32, 0.36, 0.36);
+        }
+        Isoler => {
+            // objet plein, voisins en pointillé
+            face(&[(0.32, 0.32), (0.68, 0.32), (0.68, 0.68), (0.32, 0.68)], 0.6);
+            for (x, y) in [(0.05, 0.42), (0.8, 0.42)] {
+                p.add(egui::Shape::dashed_line(&[pt(x, y), pt(x + 0.15, y), pt(x + 0.15, y + 0.16), pt(x, y + 0.16), pt(x, y)], t, 2.0, 2.0));
+            }
+        }
+        Masquer => {
+            // œil barré
+            let pts = (0..=16).map(|k| { let a = std::f32::consts::PI * k as f32 / 16.0; pt(0.5 - 0.42 * a.cos(), 0.5 - 0.22 * a.sin()) }).collect();
+            p.add(egui::Shape::line(pts, t));
+            let pts = (0..=16).map(|k| { let a = std::f32::consts::PI * k as f32 / 16.0; pt(0.5 - 0.42 * a.cos(), 0.5 + 0.22 * a.sin()) }).collect();
+            p.add(egui::Shape::line(pts, t));
+            p.circle_stroke(r.center(), r.width() * 0.1, t);
+            seg((0.15, 0.85), (0.85, 0.15));
         }
         Legende => {
             for y in [0.2, 0.5, 0.8] {

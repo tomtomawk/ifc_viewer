@@ -183,6 +183,9 @@ impl Projet {
                 F::Texte { point: p, .. } | F::Etiquette { point: p, .. } => point(p),
                 F::Ligne { debut, fin } => point(debut) && point(fin) && debut != fin,
                 F::Zone { contour } => edition::contour_valide(contour).is_ok(),
+                F::Polyligne { points, .. } | F::Spline { points, .. } => points.len() >= 2 && points.iter().all(point),
+                F::Cercle { centre, rayon } => point(centre) && rayon.is_finite() && *rayon > 0.0,
+                F::Arc { points } => points.iter().all(point) && crate::dessin2d::arc_3_points(points[0].into(), points[1].into(), points[2].into()).is_some(),
                 F::Cote {
                     debut,
                     fin,

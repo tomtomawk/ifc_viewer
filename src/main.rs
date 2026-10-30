@@ -6,6 +6,7 @@ mod camera;
 mod orientation_plan;
 mod csg;
 mod dessin;
+mod dessin2d;
 mod gabarit;
 mod geom;
 mod model;
