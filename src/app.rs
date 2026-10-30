@@ -453,8 +453,6 @@ pub struct ViewerApp {
     nom_vue: Option<(String, String)>,
     /// Début de la ligne de coupe en cours de tracé (mm).
     coupe_depart: Option<[f64; 2]>,
-    /// Sommets de la dalle en cours de tracé (mm).
-    dalle_points: Vec<[f64; 2]>,
     raccourci_en_attente: Option<(char, f64)>,
     confirmer_fermeture: Option<(bool, usize)>, // application entière, ou identifiant du document
     documents: BTreeMap<usize, DocumentOuvert>,
@@ -615,7 +613,6 @@ impl ViewerApp {
             historique: Default::default(),
             natif_modifie: false,
             raccourci_en_attente: None,
-            dalle_points: Vec::new(),
             coupe_depart: None,
             nom_vue: None,
             alignement_plan: false,
@@ -2311,82 +2308,6 @@ impl ViewerApp {
         painter.text(rect.left_top() + egui::vec2(12.0, 34.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
     }
 
-    /// Rectangle de coins opposés `a` et `b`, côtés dans les axes du plan (repère tourné).
-    fn rectangle_plan(&self, a: [f64; 2], b: [f64; 2]) -> Vec<[f64; 2]> {
-        let t = self.angle_axes_plan();
-        let (u, v) = ([t.cos(), t.sin()], [-t.sin(), t.cos()]);
-        let d = [b[0] - a[0], b[1] - a[1]];
-        let (du, dv) = (d[0] * u[0] + d[1] * u[1], d[0] * v[0] + d[1] * v[1]);
-        vec![a, [a[0] + u[0] * du, a[1] + u[1] * du], [a[0] + u[0] * du + v[0] * dv, a[1] + u[1] * du + v[1] * dv], [a[0] + v[0] * dv, a[1] + v[1] * dv]]
-    }
-
-    /// Aperçu de la dalle en cours : contour (avec le curseur), surface et aire, repère
-    /// d'accrochage, premier sommet signalé quand le contour peut s'y refermer.
-    fn apercu_dalle(&self, ui: &egui::Ui, rect: egui::Rect, survol: Option<([f64; 2], AccrocheMur)>, altitude: f64) {
-        let Some(scene) = &self.scene else { return };
-        let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
-        let ecran = |p: [f64; 2]| {
-            let p = (glam::DVec3::new(p[0], p[1], altitude) * 0.001 - scene.origin).as_vec3();
-            let c = vp * p.extend(1.0);
-            (c.w > 0.0).then(|| egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height()))
-        };
-        let painter = ui.painter().with_clip_rect(rect);
-        let couleur = Color32::from_rgb(55, 130, 200);
-        let accent = Color32::from_rgb(230, 120, 20);
-        let mut pts = self.dalle_points.clone();
-        if let Some((p, _)) = survol {
-            if self.ruban_edition.dalle_rectangle {
-                if let Some(&a) = pts.first() {
-                    pts = self.rectangle_plan(a, p);
-                }
-            } else if pts.first() != Some(&p) || pts.len() < 3 {
-                pts.push(p);
-            }
-        }
-        let ecr: Vec<egui::Pos2> = pts.iter().filter_map(|&p| ecran(p)).collect();
-        if ecr.len() >= 3 {
-            let aire = crate::modele::geometrie::aire_pair_impair(std::slice::from_ref(&pts));
-            let maillage = crate::texte::trianguler(vec![ecr.iter().map(|p| [p.x, p.y]).collect()]);
-            let mut m = egui::Mesh::default();
-            for t in maillage {
-                for p in t {
-                    m.colored_vertex(egui::pos2(p[0], p[1]), couleur.gamma_multiply(0.18));
-                }
-            }
-            m.indices = (0..m.vertices.len() as u32).collect();
-            painter.add(egui::Shape::mesh(m));
-            let c = ecr.iter().fold(egui::Vec2::ZERO, |s, p| s + p.to_vec2()) / ecr.len() as f32;
-            let galee = painter.layout_no_wrap(format!("{:.2} m²", aire / 1e6), egui::FontId::proportional(13.0), Color32::from_gray(30));
-            let cadre = egui::Rect::from_center_size(c.to_pos2(), galee.size() + egui::vec2(12.0, 6.0));
-            painter.rect(cadre, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 235), egui::Stroke::new(1.0, couleur), egui::StrokeKind::Inside);
-            painter.galley(cadre.min + egui::vec2(6.0, 3.0), galee, Color32::from_gray(30));
-        }
-        if ecr.len() >= 2 {
-            let mut ligne = ecr.clone();
-            if self.ruban_edition.dalle_rectangle || ecr.len() >= 3 {
-                ligne.push(ecr[0]);
-            }
-            painter.add(egui::Shape::line(ligne, egui::Stroke::new(1.5, couleur)));
-        }
-        for (k, q) in self.dalle_points.iter().filter_map(|&p| ecran(p)).enumerate() {
-            let fermer = k == 0 && self.dalle_points.len() >= 3 && survol.is_some_and(|(p, _)| p == self.dalle_points[0]);
-            painter.circle(q, if fermer { 6.0 } else { 3.0 }, if fermer { accent } else { Color32::WHITE }, egui::Stroke::new(1.5, if fermer { accent } else { couleur }));
-        }
-        if let Some((p, acc)) = survol
-            && let Some(q) = ecran(p)
-        {
-            marqueur(&painter, q, acc, couleur, accent);
-        }
-        let texte = match (self.ruban_edition.dalle_rectangle, self.dalle_points.len()) {
-            (true, 0) => "Dalle : cliquer un premier coin · molette : zoom · milieu : panoramique",
-            (true, _) => "Dalle : cliquer le coin opposé · Échap : annuler",
-            (false, 0) => "Dalle : cliquer le premier sommet du contour",
-            (false, 1 | 2) => "Dalle : sommet suivant · Maj : orthogonal · Retour arrière : enlever le dernier",
-            _ => "Dalle : sommet suivant, recliquer le premier ou Entrée pour fermer · Échap : annuler",
-        };
-        painter.text(rect.left_top() + egui::vec2(12.0, 34.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
-    }
-
     /// Comme dans Revit : sélectionner un élément du projet natif (sans outil en cours)
     /// ouvre l'onglet Modifier ; tout désélectionner rend l'onglet d'avant.
     fn onglet_selon_selection(&mut self) {
@@ -2723,7 +2644,6 @@ impl ViewerApp {
         for d in &projet.dalles {
             candidats.extend(d.contours.iter().flatten().map(|&p| (p, AccrocheMur::Extremite)));
         }
-        candidats.extend(self.dalle_points.iter().map(|&p| (p, AccrocheMur::Extremite)));
         for (v, genre) in candidats {
             let p = (glam::DVec3::new(v[0], v[1], altitude) * 0.001 - scene.origin).as_vec3();
             let clip = vp * p.extend(1.0);
@@ -5639,12 +5559,6 @@ impl ViewerApp {
         let mode_mur = self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.mur_actif() && self.natif.is_some() && self.loading.is_none();
         // dalle (ou sol) : contour cliqué sur le plan de son dessus
         let dalle = if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() { self.ruban_edition.dalle_active() } else { None };
-        let altitude_dalle = dalle.as_ref().and_then(|d| {
-            let (projet, _) = self.natif.as_ref()?;
-            let n = d.niveau.as_ref().and_then(|id| projet.niveau(id)).or_else(|| projet.niveaux.first());
-            Some(n.map_or(0.0, |n| n.altitude) + d.decalage)
-        });
-        if dalle.is_none() { self.dalle_points.clear(); }
         // coupe : ligne à deux clics, sur le plan du niveau de la vue ouverte
         let outil_coupe = if self.onglet_ruban == OngletRuban::Annoter && self.natif.is_some() && self.loading.is_none() { self.ruban_edition.coupe_active() } else { None };
         // une coupe se trace dans une vue en plan (ou une vue de dessus)
@@ -5830,35 +5744,6 @@ impl ViewerApp {
                         None => self.coupe_depart = Some(p),
                     }
                 }
-            } else if let (Some(parametres), Some(alt)) = (&dalle, altitude_dalle) {
-                if resp.clicked_by(PointerButton::Secondary) { self.dalle_points.clear(); }
-                let (entree, retour) = ui.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Backspace)));
-                if retour { self.dalle_points.pop(); }
-                if entree && self.dalle_points.len() >= 3 {
-                    let pts = std::mem::take(&mut self.dalle_points);
-                    self.creer_dalle(&pts, parametres);
-                }
-                if resp.clicked() {
-                    let depart = self.dalle_points.last().copied();
-                    if let Some((p, _)) = resp.interact_pointer_pos().and_then(|q| self.point_tracage(q, rect, shift, depart, alt)) {
-                        if self.ruban_edition.dalle_rectangle {
-                            match self.dalle_points.first().copied() {
-                                Some(a) => {
-                                    let pts = self.rectangle_plan(a, p);
-                                    self.dalle_points.clear();
-                                    self.creer_dalle(&pts, parametres);
-                                }
-                                None => self.dalle_points.push(p),
-                            }
-                        } else if self.dalle_points.len() >= 3 && self.dalle_points[0] == p {
-                            // retour au premier sommet : contour fermé
-                            let pts = std::mem::take(&mut self.dalle_points);
-                            self.creer_dalle(&pts, parametres);
-                        } else {
-                            self.dalle_points.push(p);
-                        }
-                    }
-                }
             } else if resp.double_clicked() {
                 match resp.interact_pointer_pos().and_then(|p| pick(self, p)) {
                     Some((obj, _)) => self.frame_objects(&[obj]),
@@ -5991,10 +5876,6 @@ impl ViewerApp {
             let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.coupe_depart, altitude_coupe));
             self.apercu_coupe(ui, rect, point, altitude_coupe, prm);
         }
-        if let (Some(_), Some(alt)) = (&dalle, altitude_dalle) {
-            let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.dalle_points.last().copied(), alt));
-            self.apercu_dalle(ui, rect, point, alt);
-        }
         if let Some(genre) = structure {
             let painter = ui.painter().with_clip_rect(rect);
             let couleur = Color32::from_rgb(55, 130, 200);
@@ -6027,12 +5908,12 @@ impl ViewerApp {
         if self.outil_dessin().is_some() {
             self.dessiner_dessin2d(ui, rect);
         }
-        if self.usage_dessin().is_some_and(|(u, _)| u == dessin2d_ui::Usage::Mur) {
+        if self.usage_dessin().is_some_and(|(u, _)| u != dessin2d_ui::Usage::Annotation) {
             egui::Area::new(egui::Id::unique("options_trace_mur"))
                 .fixed_pos(rect.left_top() + egui::vec2(8.0, 8.0))
                 .constrain_to(rect)
                 .show(ui.ctx(), |ui| {
-                    egui::Frame::popup(ui.style()).show(ui, |ui| self.options_trace_mur(ui));
+                    egui::Frame::popup(ui.style()).show(ui, |ui| self.options_trace(ui));
                 });
         }
         if self.a_options_modifier() {
@@ -7109,8 +6990,6 @@ impl eframe::App for ViewerApp {
                 // Le premier clic d'une poutre est abandonné sans modifier le projet.
             } else if self.coupe_depart.is_some() {
                 self.coupe_depart = None;
-            } else if !self.dalle_points.is_empty() {
-                self.dalle_points.clear();
             } else {
                 self.ruban_edition.annuler();
             }
@@ -7129,11 +7008,11 @@ impl eframe::App for ViewerApp {
                 self.selectionner_rectangle(self.rect_vue, f);
             }
             // Suppr, ou la touche « supprimer » des claviers Mac (Retour arrière) hors tracé
-            let trace = self.trace_en_cours() || self.coupe_depart.is_some() || !self.dalle_points.is_empty() || self.bim.depart_structure.is_some();
+            let trace = self.trace_en_cours() || self.coupe_depart.is_some() || self.bim.depart_structure.is_some();
             if self.natif.is_some() && !trace && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete) || i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace)) { self.demander_suppression(); }
             if ctx.input(|i| i.key_pressed(egui::Key::Escape)) { self.raccourci_en_attente = None; }
         }
-        if !ctx.egui_wants_keyboard_input() && self.natif.is_some() && !self.trace_en_cours() && self.coupe_depart.is_none() && self.dalle_points.is_empty() && self.bim.depart_structure.is_none() {
+        if !ctx.egui_wants_keyboard_input() && self.natif.is_some() && !self.trace_en_cours() && self.coupe_depart.is_none() && self.bim.depart_structure.is_none() {
             let (temps, textes) = ctx.input(|i| (i.time, if i.modifiers.ctrl || i.modifiers.alt || i.modifiers.command { Vec::new() } else { i.events.iter().filter_map(|e| if let egui::Event::Text(s) = e { Some(s.clone()) } else { None }).collect::<Vec<_>>() }));
             if self.raccourci_en_attente.is_some_and(|(_, t)| temps - t > 2.0) { self.raccourci_en_attente = None; }
             for c in textes.iter().flat_map(|s| s.chars()).filter(|c| c.is_ascii_alphabetic()).map(|c| c.to_ascii_uppercase()) {

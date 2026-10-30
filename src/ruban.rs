@@ -351,7 +351,8 @@ pub struct RubanEdition {
     /// Toiture : arêtes tracées sans pente (toiture plate).
     toiture_plate: bool,
     /// Tracé des dalles par deux coins (sinon polygone).
-    pub dalle_rectangle: bool,
+    /// Forme tracée par les éléments horizontaux : polygone (défaut), rectangle, cercle.
+    pub forme_dalle: crate::dessin2d::OutilDessin,
     /// Type prédéfini choisi pour chaque sorte d'élément horizontal (indice).
     type_surface: BTreeMap<Outil, usize>,
     surface_identique: Option<(Outil, crate::modele::TypeCompose)>,
@@ -1841,12 +1842,6 @@ impl RubanEdition {
                             for n in &projet.niveaux {
                                 ui.selectable_value(&mut self.niveau_dalle, Some(n.id.clone()), &n.nom);
                             }
-                        });
-                        ui.end_row();
-                        ui.label("Tracé");
-                        ui.horizontal(|ui| {
-                            ui.selectable_value(&mut self.dalle_rectangle, false, "Polygone").on_hover_text("Cliquer les sommets ; recliquer le premier ou Entrée pour fermer");
-                            ui.selectable_value(&mut self.dalle_rectangle, true, "Rectangle").on_hover_text("Deux coins opposés, dans les axes du plan");
                         });
                         ui.end_row();
                         if surface == Outil::Toiture {

@@ -92,6 +92,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   de la vue. Le même moteur (`dessin2d.rs`) trace les murs (ligne, rectangle, arc,
   cercle ; voir le README) : un arc donne un mur courbe (`axe` en arc), un cercle deux
   demi-cercles, chaque forme une seule étape d'annulation.
+  Les éléments horizontaux (dalle, sol, plafond, toiture) l'utilisent aussi :
+  polygone, rectangle ou cercle sur le plan de leur altitude.
 - **Documenter** crée aussi textes, zones rectangulaires, cotes et étiquettes
   dans la vue native ouverte. Avec un mur sélectionné, une cote référence ses
   extrémités ; sinon ses points sont fixes. Une référence supprimée est signalée

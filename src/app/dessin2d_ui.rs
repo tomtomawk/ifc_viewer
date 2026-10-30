@@ -28,6 +28,24 @@ pub(super) enum Usage {
     Annotation,
     /// Murs, suivant le type et les réglages de l'outil Mur.
     Mur,
+    /// Élément horizontal (dalle, sol, plafond, toiture) : contour fermé.
+    Surface,
+}
+
+/// Contour d'élément horizontal d'une forme fermée (cercle : 48 côtés).
+pub(super) fn contour_surface(f: &d2::Forme2D) -> Option<Vec<[f64; 2]>> {
+    let pts: Vec<DVec2> = match f {
+        d2::Forme2D::Polyligne { points, .. } | d2::Forme2D::Spline { points, .. } if points.len() >= 3 => points.clone(),
+        d2::Forme2D::Cercle { centre, rayon } => {
+            let mut p = d2::points_arc(*centre, *rayon, 0.0, std::f64::consts::TAU);
+            p.pop();
+            // 48 côtés au plus, quelle que soit la finesse de l'aperçu
+            let pas = (p.len() / 48).max(1);
+            p.into_iter().step_by(pas).collect()
+        }
+        _ => return None,
+    };
+    Some(pts.into_iter().map(|p| p.to_array()).collect())
 }
 
 /// Lignes tracées des murs d'une forme : un mur par segment, un mur courbe par arc, deux
@@ -77,8 +95,16 @@ impl ViewerApp {
     /// (Modéliser, projet natif chargé).
     pub(super) fn usage_dessin(&self) -> Option<(Usage, OutilDessin)> {
         use crate::ruban::Outil;
-        if self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.mur_actif() && self.natif.is_some() && self.scene.is_some() && self.loading.is_none() {
+        let modeliser = self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.scene.is_some() && self.loading.is_none();
+        if modeliser && self.ruban_edition.mur_actif() {
             return Some((Usage::Mur, self.ruban_edition.forme_mur));
+        }
+        if modeliser && self.ruban_edition.dalle_active().is_some() {
+            let forme = match self.ruban_edition.forme_dalle {
+                f @ (OutilDessin::Rectangle | OutilDessin::Cercle) => f,
+                _ => OutilDessin::Polyligne,
+            };
+            return Some((Usage::Surface, forme));
         }
         if self.onglet_ruban != OngletRuban::Annoter || self.vue_native_id().is_none() {
             return None;
@@ -105,11 +131,23 @@ impl ViewerApp {
         o.niveau.as_ref().and_then(|id| p.niveau(id)).or_else(|| p.niveaux.first()).map_or(0.0, |n| n.altitude) + o.decalage
     }
 
+    /// Altitude du plan de tracé horizontal (mm) : base du mur, ou niveau et décalage de
+    /// l'élément horizontal (dessus d'une dalle ou d'un sol, sous-face d'un plafond).
+    fn altitude_trace(&self) -> f64 {
+        match self.usage_dessin().map(|(u, _)| u) {
+            Some(Usage::Surface) => {
+                let (Some((p, _)), Some(d)) = (&self.natif, self.ruban_edition.dalle_active()) else { return 0.0 };
+                d.niveau.as_ref().and_then(|id| p.niveau(id)).or_else(|| p.niveaux.first()).map_or(0.0, |n| n.altitude) + d.decalage
+            }
+            _ => self.altitude_murs(),
+        }
+    }
+
     /// Repère du tracé : origine, droite, haut (mm). Annotation : celui de la vue native
-    /// ouverte ; mur : plan horizontal de sa base.
+    /// ouverte ; mur ou élément horizontal : plan horizontal de son altitude.
     fn repere_dessin(&self) -> Option<(DVec3, DVec3, DVec3)> {
         match self.usage_dessin()?.0 {
-            Usage::Mur => Some((DVec3::new(0.0, 0.0, self.altitude_murs()), DVec3::X, DVec3::Y)),
+            Usage::Mur | Usage::Surface => Some((DVec3::new(0.0, 0.0, self.altitude_trace()), DVec3::X, DVec3::Y)),
             Usage::Annotation => {
                 let id = self.vue_native_id()?;
                 let p = &self.natif.as_ref()?.0;
@@ -156,7 +194,7 @@ impl ViewerApp {
     fn geoms_dessin(&mut self) -> Vec<Geom> {
         let Some((usage, _)) = self.usage_dessin() else { return Vec::new() };
         let vue = self.vue_native_id();
-        let altitude = self.altitude_murs();
+        let altitude = self.altitude_trace();
         let cle = format!("{usage:?}|{}|{altitude}", vue.as_deref().unwrap_or(""));
         if let Some((r, k, g)) = &self.dessin2d.geoms {
             if *r == self.bim.revision && *k == cle {
@@ -177,16 +215,13 @@ impl ViewerApp {
                 }
             }
         }
-        let modele = match usage {
-            Usage::Annotation => plan.is_some(),
-            Usage::Mur => true,
-        };
+        let modele = usage != Usage::Annotation || plan.is_some();
         if modele {
             let seg = |a: [f64; 2], b: [f64; 2]| Geom::Segment([DVec2::from_array(a), DVec2::from_array(b)]);
             let coupes = crate::modele::jonctions::coupes(p);
             let retenu = |m: &crate::modele::Mur| match usage {
                 Usage::Annotation => plan.as_ref() == Some(&m.niveau),
-                Usage::Mur => p.bas_haut(m).is_some_and(|(b, h)| altitude >= b - 0.1 && altitude <= h + 0.1),
+                Usage::Mur | Usage::Surface => p.bas_haut(m).is_some_and(|(b, h)| altitude >= b - 0.1 && altitude <= h + 0.1),
             };
             for m in p.murs.iter().filter(|m| retenu(m)) {
                 if let Some(c) = crate::modele::jonctions::contour(p, m, &coupes) {
@@ -208,7 +243,7 @@ impl ViewerApp {
                     }
                 }
             }
-            for d in p.dalles.iter().filter(|d| usage == Usage::Mur || plan.as_ref() == Some(&d.niveau)) {
+            for d in p.dalles.iter().filter(|d| usage != Usage::Annotation || plan.as_ref() == Some(&d.niveau)) {
                 for c in &d.contours {
                     for k in 0..c.len() {
                         g.push(seg(c[k], c[(k + 1) % c.len()]));
@@ -244,7 +279,7 @@ impl ViewerApp {
         // repère du plan tourné : ortho et angles ronds suivent l'écran ; longueurs et
         // coordonnées libres au pas de 10 mm pour un mur, 1 mm pour un dessin
         let th = self.angle_axes_plan();
-        let pas = if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Mur) { 10.0 } else { 1.0 };
+        let pas = if self.usage_dessin().is_some_and(|(u, _)| u != Usage::Annotation) { 10.0 } else { 1.0 };
         let tourner = |v: DVec2, a: f64| DVec2::from_angle(a).rotate(v);
         let arrondi = |v: DVec2| {
             let l = v.length();
@@ -264,6 +299,16 @@ impl ViewerApp {
     /// d'annulation par forme ; le dernier mur créé est sélectionné).
     fn enregistrer_formes(&mut self, formes: Vec<d2::Forme2D>) {
         if formes.is_empty() {
+            return;
+        }
+        if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Surface) {
+            let Some(parametres) = self.ruban_edition.dalle_active() else { return };
+            for f in &formes {
+                match contour_surface(f) {
+                    Some(c) => self.creer_dalle(&c, &parametres),
+                    None => self.dessin2d.message = Some("Contour fermé attendu : au moins trois sommets.".into()),
+                }
+            }
             return;
         }
         if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Mur) {
@@ -443,8 +488,10 @@ impl ViewerApp {
                 painter.line_segment([e - egui::vec2(0.0, 28.0), e + egui::vec2(0.0, 28.0)], egui::Stroke::new(1.0, gris));
                 // aperçu : ligne tracée, et volume pour un mur
                 let apercu = trace.apercu(p);
-                if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Mur) {
-                    self.apercu_volume_murs(&painter, rect, &apercu);
+                match self.usage_dessin().map(|(u, _)| u) {
+                    Some(Usage::Mur) => self.apercu_volume_murs(&painter, rect, &apercu),
+                    Some(Usage::Surface) => self.apercu_surface(&painter, rect, &apercu),
+                    _ => {}
                 }
                 for l in apercu {
                     let pts: Vec<egui::Pos2> = l.iter().filter_map(|q| self.vers_ecran(rect, *q)).collect();
@@ -515,6 +562,11 @@ impl ViewerApp {
         let u = crate::options::unite();
         let nom = match self.usage_dessin() {
             Some((Usage::Mur, o)) => format!("MUR · {}", nom_outil(o)),
+            Some((Usage::Surface, o)) => format!(
+                "{} · {}",
+                self.ruban_edition.dalle_active().map_or("SURFACE".into(), |d| d.sorte.nom().to_uppercase()),
+                if o == OutilDessin::Polyligne { "POLYGONE" } else { nom_outil(o) }
+            ),
             _ => nom_outil(trace.outil).into(),
         };
         let ligne = match &self.dessin2d.message {
@@ -589,8 +641,65 @@ impl ViewerApp {
         }
     }
 
+    /// Surface en cours : remplissage et aire du contour (fermé sur le curseur).
+    fn apercu_surface(&self, painter: &egui::Painter, rect: egui::Rect, lignes: &[Vec<DVec2>]) {
+        let couleur = Color32::from_rgb(55, 130, 200);
+        for l in lignes {
+            let mut pts = l.clone();
+            if pts.len() > 2 && pts.first().zip(pts.last()).is_some_and(|(a, b)| a.distance(*b) < 1e-6) {
+                pts.pop();
+            }
+            if pts.len() < 3 {
+                continue;
+            }
+            let Some(ecr) = pts.iter().map(|&q| self.vers_ecran(rect, q)).collect::<Option<Vec<_>>>() else { continue };
+            let contour: Vec<[f64; 2]> = pts.iter().map(|p| p.to_array()).collect();
+            let aire = crate::modele::geometrie::aire_pair_impair(std::slice::from_ref(&contour));
+            let mut m = egui::Mesh::default();
+            for t in crate::texte::trianguler(vec![ecr.iter().map(|p| [p.x, p.y]).collect()]) {
+                for p in t {
+                    m.colored_vertex(egui::pos2(p[0], p[1]), couleur.gamma_multiply(0.18));
+                }
+            }
+            m.indices = (0..m.vertices.len() as u32).collect();
+            painter.add(egui::Shape::mesh(m));
+            let mut ferme = ecr.clone();
+            ferme.push(ecr[0]);
+            painter.add(egui::Shape::dashed_line(&ferme[ferme.len() - 2..], egui::Stroke::new(1.0, couleur), 5.0, 4.0));
+            let c = ecr.iter().fold(egui::Vec2::ZERO, |s, p| s + p.to_vec2()) / ecr.len() as f32;
+            let galee = painter.layout_no_wrap(format!("{:.2} m²", aire / 1e6), egui::FontId::proportional(13.0), Color32::from_gray(30));
+            let cadre = egui::Rect::from_center_size(c.to_pos2(), galee.size() + egui::vec2(12.0, 6.0));
+            painter.rect(cadre, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 235), egui::Stroke::new(1.0, couleur), egui::StrokeKind::Inside);
+            painter.galley(cadre.min + egui::vec2(6.0, 3.0), galee, Color32::from_gray(30));
+        }
+    }
+
+    /// Barre d'options du tracé, en haut de la vue : forme du mur (et chaînage) ou de
+    /// l'élément horizontal.
+    pub(super) fn options_trace(&mut self, ui: &mut egui::Ui) {
+        match self.usage_dessin().map(|(u, _)| u) {
+            Some(Usage::Mur) => self.options_trace_mur(ui),
+            Some(Usage::Surface) => {
+                ui.horizontal(|ui| {
+                    ui.label("Forme");
+                    let actuelle = self.usage_dessin().map(|(_, o)| o);
+                    for (forme, nom, aide) in [
+                        (OutilDessin::Polyligne, "Polygone", "Cliquer les sommets ; recliquer le premier, F, Entrée ou clic droit pour fermer"),
+                        (OutilDessin::Rectangle, "Rectangle", "Deux coins opposés, dans les axes du plan"),
+                        (OutilDessin::Cercle, "Cercle", "Centre puis rayon (contour à 48 côtés)"),
+                    ] {
+                        if ui.selectable_label(actuelle == Some(forme), nom).on_hover_text(aide).clicked() {
+                            self.ruban_edition.forme_dalle = forme;
+                        }
+                    }
+                });
+            }
+            _ => {}
+        }
+    }
+
     /// Barre d'options de l'outil Mur, en haut de la vue : forme tracée et chaînage.
-    pub(super) fn options_trace_mur(&mut self, ui: &mut egui::Ui) {
+    fn options_trace_mur(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Forme");
             for (forme, nom, aide) in [

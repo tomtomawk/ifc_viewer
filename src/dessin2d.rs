@@ -440,6 +440,11 @@ impl Trace {
                 vec![Forme2D::Ligne([a, p])]
             }
             (Ligne, n) if n >= 2 => vec![Forme2D::Ligne([self.points[n - 2], self.points[n - 1]])],
+            // polyligne : recliquer le premier sommet ferme le contour
+            (Polyligne, n) if n >= 4 && self.points[0].distance(p) < 1e-6 => {
+                self.points.pop();
+                self.clore(true)
+            }
             (Rectangle, 2) => {
                 let coins = self.rectangle(self.points[0], self.points[1]);
                 self.points.clear();
@@ -568,6 +573,13 @@ mod tests {
             t.ajouter(p);
         }
         assert!(t.points.is_empty());
+        // polyligne refermée sur son premier sommet
+        let mut t = Trace::new(OutilDessin::Polyligne);
+        let mut formes = Vec::new();
+        for p in [DVec2::ZERO, DVec2::X, DVec2::ONE, DVec2::ZERO] {
+            formes = t.ajouter(p);
+        }
+        assert!(matches!(formes.as_slice(), [Forme2D::Polyligne { fermee: true, points }] if points.len() == 3));
         assert!(lire_saisie("@1,2", None, None, 1.0).is_err());
     }
 
