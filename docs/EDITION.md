@@ -64,31 +64,44 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   et haut des murs (attache à une toiture, priorité d'une couche aux croisements),
   mise à jour depuis le type, trémie ou contour rectangulaire d'un élément
   horizontal. Modifier un contour réinitialise ses pentes par arête.
-- **Éditeur de familles (fenêtres, à la manière de Revit)** : « Éditer la famille… »
-  (barre d'options d'une fenêtre sélectionnée) ou, au placement, « Éditer la
-  famille… » / « Nouvelle famille… » sous le sélecteur de type de Propriétés. La
-  famille vit dans un mur générique : plans de référence sur trois axes (largeur,
-  épaisseur, hauteur ; « Centre » et « Bas » fixes, « Extérieur » et « Intérieur »
-  suivent les faces du mur hôte), paramètres à formules (`Largeur / 2 - Dormant` ;
-  `Largeur` et `Hauteur` sont les cotes du type, `Epaisseur` celle du mur),
-  contraintes de distance (cote libellée par un paramètre ou une formule) et
-  d'égalité (EQ), volumes pleins (menuiserie, vitrage, panneau, appui) et vides
-  dont chaque face est verrouillée sur un plan avec un décalage. Les contraintes
-  sont résolues axe par axe, par priorité décroissante (0 à 9 ; à égalité, la plus
-  ancienne) : une contrainte incompatible avec les précédentes est écartée et
-  signalée en rouge ; un plan non contraint garde sa position dessinée. Vues
-  élévation intérieure, plan et coupe ; outils Sélection (glisser un plan libre),
-  Plan |, Plan —, Volume et Vide (rectangle glissé, faces accrochées aux plans les
-  plus proches), Cote et EQ (cliquer les plans). Les valeurs d'essai font fléchir la
-  famille ; « Enregistrer le type » met à jour le type et ses fenêtres, « Nouveau
-  type » l'affecte à la fenêtre (ou au prochain placement). Dans la maquette, les
-  volumes pleins forment la menuiserie et les vides percent le mur à la place de la
-  baie rectangulaire. Gabarit Fenêtre : baie (vide), dormant, vitrage, appui.
-  Limites : extrusions rectangulaires, murs droits, pas encore de symboles 2D ni de
-  paramètres d'occurrence.
+- **Éditeur de familles d'ouvertures (à la manière de Revit)** : portes et fenêtres
+  sont le même objet ; la catégorie (Porte / Fenêtre) de la famille range son type
+  dans l'onglet voulu du sélecteur. Accès : « Éditer la famille… » (barre d'options
+  d'une ouverture sélectionnée) ou, au placement, « Éditer la famille… » /
+  « Nouvelle famille… » sous le sélecteur de type (gabarit Porte ou Fenêtre selon
+  l'onglet). La famille vit dans un mur générique :
+  - plans de référence sur trois axes (largeur, épaisseur, hauteur ; « Centre » et
+    « Bas » fixes, « Extérieur » et « Intérieur » suivent les faces du mur hôte) ;
+  - paramètres à formules (`Largeur - 2 * Dormant`), de portée **Type** (valeur de
+    la famille), **Occurrence** (chaque ouverture placée la règle dans Propriétés,
+    « Défaut » reprend la formule) ou **Partagé** (valeur commune du projet, table
+    « Paramètres partagés du projet » ; « Depuis le projet… » réutilise un paramètre
+    partagé existant ; `Largeur`, `Hauteur` : cotes du type, `Epaisseur` : mur) ;
+  - contraintes de distance (cote libellée par un paramètre ou une formule) et
+    d'égalité (EQ), résolues axe par axe par priorité décroissante (0 à 9 ; à
+    égalité, la plus ancienne) : une contrainte incompatible est écartée et signalée
+    en rouge ; un plan non contraint garde sa position dessinée ;
+  - volumes rectangulaires (glisser) et extrusions de profils quelconques (cliquer
+    les sommets, recliquer le premier ou clic droit pour fermer), pleins
+    (menuiserie, vitrage, panneau, appui) ou vides ; chaque sommet ou face se
+    verrouille sur le plan le plus proche, avec un décalage au-delà de 7 px ;
+  - symboles 2D (ligne brisée, arc par trois points) en plan ou en élévation,
+    affichés dans les vues du projet et sur les feuilles : en plan, ceux des
+    ouvertures du niveau ; en coupe ou élévation, ceux des ouvertures vues de face.
+  Vues élévation intérieure, plan et coupe ; Échap abandonne l'esquisse en cours.
+  Les valeurs d'essai font fléchir la famille ; « Enregistrer le type » met à jour
+  le type et ses ouvertures (et les paramètres partagés du projet), « Nouveau type »
+  l'affecte à l'ouverture (ou au prochain placement). Dans la maquette, les solides
+  forment la menuiserie et les vides percent le mur à la place de la baie
+  rectangulaire. Une ouverture placée se **retourne** (intérieur ↔ extérieur) ou
+  s'**inverse** (main gauche ↔ droite) dans Propriétés. Gabarits : Fenêtre (baie,
+  dormant, vitrage, appui en pente esquissé en coupe, triangle d'ouverture) et Porte
+  (baie, dormant, vantail, débattement en plan, triangle en élévation). Limites :
+  murs droits, profils polygonaux (arcs discrétisés dans les symboles seulement).
 - **Choix du type au placement** : l'outil Ouverture affiche en tête de Propriétés
-  le type à placer (générique : cotes du ruban) ; un type impose ses cotes, son nom
-  et sa famille.
+  des onglets Porte / Fenêtre / Libre et le type à placer (générique : cotes du
+  ruban) ; un type impose ses cotes, son nom et sa famille ; l'outil garde le
+  dernier type choisi.
 - **Annuler / Rétablir**, Ctrl+Z et Ctrl+Maj+Z, ont un historique propre à chaque
   document. Les flèches après Sortie annulent ou rétablissent une étape ; leurs
   flèches donnent accès à la liste pour remonter ou rétablir plusieurs étapes.

@@ -1382,7 +1382,15 @@ impl ViewerApp {
             let types = p.types_dalles.iter().map(|t| (t.id.clone(), t.nom.clone(), crate::options::unite().afficher(t.epaisseur()))).collect();
             (Cible::Dalle(d.id.clone()), d.type_dalle.clone(), types)
         } else if let Some(o) = p.ouvertures.iter().find(|o| &o.id == id) {
-            let types = p.types_ouvertures.iter().filter(|t| t.genre == o.genre).map(|t| (t.id.clone(), t.nom.clone(), format!("{} × {}", crate::options::unite().afficher(t.largeur), crate::options::unite().afficher(t.hauteur)))).collect();
+            // portes et fenêtres : même objet, rangé par catégorie (libre à part)
+            use crate::modele::GenreOuverture as G;
+            let libre = o.genre == G::Libre;
+            let mut types: Vec<_> = p.types_ouvertures.iter().filter(|t| (t.genre == G::Libre) == libre).collect();
+            types.sort_by_key(|t| t.genre != G::Porte);
+            let types = types.into_iter().map(|t| {
+                let categorie = match t.genre { G::Porte => "Porte", G::Fenetre => "Fenêtre", G::Libre => "Libre" };
+                (t.id.clone(), t.nom.clone(), format!("{categorie} · {} × {}", crate::options::unite().afficher(t.largeur), crate::options::unite().afficher(t.hauteur)))
+            }).collect();
             (Cible::Ouverture(o.id.clone()), o.type_ouverture.clone().unwrap_or_default(), types)
         } else {
             return None;
@@ -1427,7 +1435,7 @@ impl ViewerApp {
                 let t = q.types_ouvertures.iter().find(|t| t.id == choisi).cloned();
                 if let (Some(x), Some(t)) = (q.ouvertures.iter_mut().find(|x| x.id == o), t) {
                     x.type_ouverture = Some(t.id);
-                    (x.largeur, x.hauteur) = (t.largeur, t.hauteur);
+                    (x.largeur, x.hauteur, x.genre) = (t.largeur, t.hauteur, t.genre);
                 }
             }
         }
@@ -1565,6 +1573,38 @@ impl ViewerApp {
             ui.heading(&o.nom);
             for (nom,v) in [("Abscisse",&mut o.abscisse),("Largeur",&mut o.largeur),("Hauteur",&mut o.hauteur),("Allège",&mut o.allege)] {
                 ui.horizontal(|ui| { ui.label(nom); change|=ui.add_enabled(o.representation.is_none() || matches!(nom,"Abscisse"|"Allège"),egui::DragValue::new(v).dimensions().speed(10.0)).changed(); });
+            }
+            // paramètres d'occurrence de la famille : propres à cette ouverture
+            if let Some(f) = o.type_ouverture.as_ref().and_then(|t| projet.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.modele.as_ref()) {
+                use crate::modele::famille_modelee::Portee;
+                let occurrences: Vec<&str> = f.parametres.iter().filter(|p| p.portee == Portee::Occurrence).map(|p| p.nom.as_str()).collect();
+                if !occurrences.is_empty() {
+                    let e = crate::modele::solides::hote(projet, &o.mur).map_or(200.0, |h| h.1);
+                    let mut surcharges = projet.parametres_partages.clone();
+                    surcharges.extend(o.valeurs.iter().map(|(k, v)| (k.clone(), *v)));
+                    let r = f.resoudre_avec(o.largeur, o.hauteur, e, &surcharges);
+                    ui.label(RichText::new("Paramètres d'occurrence").strong());
+                    for nom in occurrences {
+                        let mut v = r.valeurs.get(nom).copied().unwrap_or(0.0);
+                        ui.horizontal(|ui| {
+                            ui.label(nom);
+                            if ui.add(egui::DragValue::new(&mut v).dimensions().speed(5.0)).changed() {
+                                o.valeurs.insert(nom.to_string(), v);
+                                change = true;
+                            }
+                            if o.valeurs.contains_key(nom) && ui.small_button("Défaut").on_hover_text("Reprendre la valeur de la famille").clicked() {
+                                o.valeurs.remove(nom);
+                                change = true;
+                            }
+                        });
+                    }
+                }
+            }
+            if o.type_ouverture.as_ref().and_then(|t| projet.types_ouvertures.iter().find(|x| &x.id == t)).is_some_and(|t| t.modele.is_some()) {
+                ui.horizontal(|ui| {
+                    change |= ui.checkbox(&mut o.retournee, "Retourner").on_hover_text("Échange intérieur et extérieur : sens d'ouverture").changed();
+                    change |= ui.checkbox(&mut o.inversee, "Inverser").on_hover_text("Échange gauche et droite : main de la porte").changed();
+                });
             }
             if o.representation.is_some() && ui.button("Remplacer la menuiserie importée par un cadre paramétrique").clicked() {o.representation=None;change=true;}
             if change {

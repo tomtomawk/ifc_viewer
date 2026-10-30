@@ -65,6 +65,97 @@ pub struct PlanRef {
 pub struct Parametre {
     pub nom: String,
     pub formule: String,
+    #[serde(default, skip_serializing_if = "Portee::est_type")]
+    pub portee: Portee,
+}
+
+/// Portée d'un paramètre : valeur de la famille (type), propre à chaque ouverture
+/// placée (occurrence, la formule donne la valeur par défaut), ou partagée avec le
+/// projet (table `parametres_partages` ; la formule sert à défaut).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Portee {
+    #[default]
+    Type,
+    Occurrence,
+    Partage,
+}
+
+impl Portee {
+    pub const TOUTES: [Portee; 3] = [Self::Type, Self::Occurrence, Self::Partage];
+    pub fn est_type(&self) -> bool {
+        *self == Self::Type
+    }
+    pub fn nom(self) -> &'static str {
+        match self {
+            Self::Type => "Type",
+            Self::Occurrence => "Occurrence",
+            Self::Partage => "Partagé",
+        }
+    }
+}
+
+/// Vue d'esquisse d'un profil ou d'un symbole : ses deux axes, l'extrusion suit le
+/// troisième.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VueEsquisse {
+    /// Élévation : largeur × hauteur (extrusion dans l'épaisseur).
+    Elevation,
+    /// Plan : largeur × épaisseur (extrusion en hauteur).
+    Plan,
+    /// Coupe : épaisseur × hauteur (extrusion en largeur).
+    Coupe,
+}
+
+impl VueEsquisse {
+    /// Axes horizontal et vertical de l'esquisse, puis axe d'extrusion.
+    pub fn axes(self) -> (AxePlan, AxePlan, AxePlan) {
+        match self {
+            Self::Elevation => (AxePlan::X, AxePlan::Z, AxePlan::Y),
+            Self::Plan => (AxePlan::X, AxePlan::Y, AxePlan::Z),
+            Self::Coupe => (AxePlan::Y, AxePlan::Z, AxePlan::X),
+        }
+    }
+    /// Point de la famille depuis (h, v, profondeur).
+    pub fn point(self, h: f64, v: f64, d: f64) -> DVec3 {
+        let (ah, av, ad) = self.axes();
+        let mut p = [0.0; 3];
+        p[ah as usize] = h;
+        p[av as usize] = v;
+        p[ad as usize] = d;
+        DVec3::from_array(p)
+    }
+}
+
+/// Sommet d'esquisse verrouillé : une face par axe de l'esquisse.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct PointEsquisse {
+    pub h: Face,
+    pub v: Face,
+}
+
+/// Extrusion d'un profil quelconque (polygone fermé) entre deux faces.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct Extrusion {
+    pub nom: String,
+    #[serde(default)]
+    pub vide: bool,
+    #[serde(default = "menuiserie")]
+    pub materiau: Materiau,
+    pub vue: VueEsquisse,
+    pub profil: Vec<PointEsquisse>,
+    pub profondeur: [Face; 2],
+}
+
+/// Symbole 2D affiché dans les vues du projet : plan (sens d'ouverture, débattement)
+/// ou élévation (triangles d'ouverture). Arc : trois points (départ, passage, fin).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct Symbole {
+    pub vue: VueEsquisse,
+    pub points: Vec<PointEsquisse>,
+    #[serde(default)]
+    pub arc: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -146,6 +237,11 @@ pub struct Volume {
     pub max: [Face; 3],
 }
 
+/// Sommet d'esquisse : plan et décalage sur chacun des deux axes.
+fn point(h: &str, dh: f64, v: &str, dv: f64) -> PointEsquisse {
+    PointEsquisse { h: Face { plan: h.into(), decalage: dh }, v: Face { plan: v.into(), decalage: dv } }
+}
+
 fn menuiserie() -> Materiau {
     Materiau::Menuiserie
 }
@@ -157,8 +253,27 @@ pub struct FamilleModelee {
     pub plans: Vec<PlanRef>,
     pub contraintes: Vec<Contrainte>,
     pub volumes: Vec<Volume>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extrusions: Vec<Extrusion>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub symboles: Vec<Symbole>,
     #[serde(default = "couleur_defaut")]
     pub couleur: [u8; 3],
+    /// Catégorie : range le type parmi les portes ou les fenêtres.
+    #[serde(default = "fenetre")]
+    pub genre: super::GenreOuverture,
+}
+
+fn fenetre() -> super::GenreOuverture {
+    super::GenreOuverture::Fenetre
+}
+
+/// Solide résolu dans le repère de la famille : triangles, vide, matériau.
+#[derive(Debug, Clone)]
+pub struct SolideFamille {
+    pub tris: Vec<[DVec3; 3]>,
+    pub vide: bool,
+    pub materiau: Materiau,
 }
 
 fn couleur_defaut() -> [u8; 3] {
@@ -332,8 +447,16 @@ impl FamilleModelee {
 
     /// Valeurs des paramètres : type (Largeur, Hauteur), hôte (Epaisseur), puis les
     /// formules dans l'ordre où elles deviennent calculables.
-    pub fn valeurs(&self, largeur: f64, hauteur: f64, epaisseur: f64) -> (BTreeMap<String, f64>, Vec<String>) {
+    /// Valeurs avec `surcharges` : valeurs d'occurrence (ouverture placée) et
+    /// paramètres partagés (projet), qui remplacent la formule des paramètres de même
+    /// nom et de cette portée.
+    pub fn valeurs_avec(&self, largeur: f64, hauteur: f64, epaisseur: f64, surcharges: &BTreeMap<String, f64>) -> (BTreeMap<String, f64>, Vec<String>) {
         let mut v = BTreeMap::from([(LARGEUR.to_string(), largeur), (HAUTEUR.to_string(), hauteur), (EPAISSEUR.to_string(), epaisseur)]);
+        for p in self.parametres.iter().filter(|p| p.portee != Portee::Type) {
+            if let Some(x) = surcharges.get(&p.nom).filter(|x| x.is_finite()) {
+                v.insert(p.nom.clone(), *x);
+            }
+        }
         let mut restants: Vec<&Parametre> = self.parametres.iter().filter(|p| !v.contains_key(&p.nom)).collect();
         while !restants.is_empty() {
             let avant = restants.len();
@@ -356,7 +479,12 @@ impl FamilleModelee {
     /// plans hôtes, contraintes par priorité décroissante (à égalité, dans l'ordre de
     /// création), puis les positions dessinées des plans encore libres.
     pub fn resoudre(&self, largeur: f64, hauteur: f64, epaisseur: f64) -> Resolution {
-        let (valeurs, mut erreurs) = self.valeurs(largeur, hauteur, epaisseur);
+        self.resoudre_avec(largeur, hauteur, epaisseur, &BTreeMap::new())
+    }
+
+    /// Résolution avec valeurs d'occurrence et paramètres partagés (`valeurs_avec`).
+    pub fn resoudre_avec(&self, largeur: f64, hauteur: f64, epaisseur: f64, surcharges: &BTreeMap<String, f64>) -> Resolution {
+        let (valeurs, mut erreurs) = self.valeurs_avec(largeur, hauteur, epaisseur, surcharges);
         let mut r = Resolution { valeurs, ..Default::default() };
         let mut ordre: Vec<usize> = (0..self.contraintes.len()).collect();
         ordre.sort_by_key(|&i| std::cmp::Reverse(self.contraintes[i].priorite()));
@@ -444,6 +572,59 @@ impl FamilleModelee {
             .collect()
     }
 
+    /// Point d'esquisse résolu (h, v).
+    pub fn point_esquisse(&self, r: &Resolution, p: &PointEsquisse) -> (f64, f64) {
+        let pos = |f: &Face| r.positions.get(&f.plan).copied().unwrap_or(0.0) + f.decalage;
+        (pos(&p.h), pos(&p.v))
+    }
+
+    /// Volumes et extrusions résolus, en triangles dans le repère de la famille.
+    pub fn solides(&self, r: &Resolution) -> Vec<SolideFamille> {
+        let pos = |f: &Face| r.positions.get(&f.plan).copied().unwrap_or(0.0) + f.decalage;
+        let mut out: Vec<SolideFamille> = self
+            .boites(r)
+            .into_iter()
+            .map(|b| {
+                let contour = [[b.min.x, b.min.y], [b.max.x, b.min.y], [b.max.x, b.max.y], [b.min.x, b.max.y]];
+                SolideFamille { tris: super::solides::prisme(&contour, b.min.z, b.max.z), vide: b.vide, materiau: b.materiau }
+            })
+            .collect();
+        for e in &self.extrusions {
+            let contour: Vec<[f64; 2]> = e.profil.iter().map(|p| { let (h, v) = self.point_esquisse(r, p); [h, v] }).collect();
+            let (d0, d1) = (pos(&e.profondeur[0]), pos(&e.profondeur[1]));
+            // prisme local (h, v, d) ramené aux axes de la famille ; une permutation
+            // impaire (élévation) retourne les faces
+            let impaire = e.vue == VueEsquisse::Elevation;
+            let tris = super::solides::prisme(&contour, d0.min(d1), d0.max(d1))
+                .into_iter()
+                .map(|t| {
+                    let m = t.map(|p| e.vue.point(p.x, p.y, p.z));
+                    if impaire { [m[0], m[2], m[1]] } else { m }
+                })
+                .collect();
+            out.push(SolideFamille { tris, vide: e.vide, materiau: e.materiau });
+        }
+        out
+    }
+
+    /// Symboles de la vue `vue` résolus en polylignes (h, v) ; un arc est discrétisé.
+    pub fn symboles_resolus(&self, r: &Resolution, vue: VueEsquisse) -> Vec<Vec<(f64, f64)>> {
+        self.symboles
+            .iter()
+            .filter(|s| s.vue == vue)
+            .map(|s| {
+                let pts: Vec<(f64, f64)> = s.points.iter().map(|p| self.point_esquisse(r, p)).collect();
+                if s.arc && pts.len() == 3 {
+                    let v = |p: (f64, f64)| glam::DVec2::new(p.0, p.1);
+                    if let Some((o, rayon, depart, balayage)) = crate::dessin2d::arc_3_points(v(pts[0]), v(pts[1]), v(pts[2])) {
+                        return crate::dessin2d::points_arc(o, rayon, depart, balayage).into_iter().map(|p| (p.x, p.y)).collect();
+                    }
+                }
+                pts
+            })
+            .collect()
+    }
+
     /// Contrôle avant enregistrement : noms uniques, références existantes, formules
     /// calculables, volumes non plats.
     pub fn valider(&self, largeur: f64, hauteur: f64, epaisseur: f64) -> Result<(), String> {
@@ -467,6 +648,19 @@ impl FamilleModelee {
                 if self.plan(&f.plan).is_none() {
                     return Err(format!("{} : plan « {} » absent.", v.nom, f.plan));
                 }
+            }
+        }
+        for e in &self.extrusions {
+            let (ah, av, ad) = e.vue.axes();
+            let bon = |f: &Face, axe| self.plan(&f.plan).is_some_and(|p| p.axe == axe);
+            if e.profil.len() < 3 || !e.profil.iter().all(|p| bon(&p.h, ah) && bon(&p.v, av)) || !e.profondeur.iter().all(|f| bon(f, ad)) {
+                return Err(format!("{} : profil d'au moins trois sommets sur des plans de la vue d'esquisse attendu.", e.nom));
+            }
+        }
+        for (i, s) in self.symboles.iter().enumerate() {
+            let (ah, av, _) = s.vue.axes();
+            if s.points.len() < 2 || (s.arc && s.points.len() != 3) || !s.points.iter().all(|p| self.plan(&p.h.plan).is_some_and(|x| x.axe == ah) && self.plan(&p.v.plan).is_some_and(|x| x.axe == av)) {
+                return Err(format!("Symbole {} : points sur des plans absents.", i + 1));
             }
         }
         for (i, c) in self.contraintes.iter().enumerate() {
@@ -504,11 +698,11 @@ impl FamilleModelee {
         };
         FamilleModelee {
             parametres: vec![
-                Parametre { nom: "Dormant".into(), formule: "60".into() },
-                Parametre { nom: "Profondeur".into(), formule: "70".into() },
-                Parametre { nom: "Retrait".into(), formule: "0".into() },
-                Parametre { nom: "Vitrage".into(), formule: "28".into() },
-                Parametre { nom: "Appui".into(), formule: "40".into() },
+                Parametre { nom: "Dormant".into(), formule: "60".into(), portee: Portee::Type },
+                Parametre { nom: "Profondeur".into(), formule: "70".into(), portee: Portee::Type },
+                Parametre { nom: "Retrait".into(), formule: "0".into(), portee: Portee::Type },
+                Parametre { nom: "Vitrage".into(), formule: "28".into(), portee: Portee::Type },
+                Parametre { nom: "Appui".into(), formule: "40".into(), portee: Portee::Type },
             ],
             plans: vec![
                 plan("Centre", X, 0.0, true),
@@ -525,6 +719,7 @@ impl FamilleModelee {
                 plan("Haut", Z, 1350.0, false),
                 plan("Dormant bas", Z, 60.0, false),
                 plan("Dormant haut", Z, 1290.0, false),
+                plan("Mi-hauteur", Z, 675.0, false),
             ],
             contraintes: vec![
                 Contrainte::Egalite { a: "Gauche".into(), m: "Centre".into(), b: "Droite".into(), priorite: 9 },
@@ -537,6 +732,7 @@ impl FamilleModelee {
                 dist("Cadre ext", "Extérieur", "Retrait", 5),
                 dist("Cadre int", "Cadre ext", "Profondeur", 5),
                 dist("Extérieur", "Nu appui", "Appui", 5),
+                Contrainte::Egalite { a: "Dormant bas".into(), m: "Mi-hauteur".into(), b: "Dormant haut".into(), priorite: 5 },
             ],
             volumes: vec![
                 volume("Baie", true, Materiau::Menuiserie, [("Gauche", 0.0), ("Droite", 0.0)], [("Intérieur", -5.0), ("Extérieur", 5.0)], [("Bas", 0.0), ("Haut", 0.0)]),
@@ -545,9 +741,109 @@ impl FamilleModelee {
                 volume("Traverse basse", false, Materiau::Menuiserie, [("Dormant gauche", 0.0), ("Dormant droit", 0.0)], [("Cadre int", 0.0), ("Cadre ext", 0.0)], [("Bas", 0.0), ("Dormant bas", 0.0)]),
                 volume("Traverse haute", false, Materiau::Menuiserie, [("Dormant gauche", 0.0), ("Dormant droit", 0.0)], [("Cadre int", 0.0), ("Cadre ext", 0.0)], [("Dormant haut", 0.0), ("Haut", 0.0)]),
                 volume("Vitrage", false, Materiau::Vitrage, [("Dormant gauche", 0.0), ("Dormant droit", 0.0)], [("Cadre int", 21.0), ("Cadre ext", -21.0)], [("Dormant bas", 0.0), ("Dormant haut", 0.0)]),
-                volume("Appui", false, Materiau::Appui, [("Gauche", -20.0), ("Droite", 20.0)], [("Cadre ext", -10.0), ("Nu appui", 0.0)], [("Bas", -40.0), ("Bas", 0.0)]),
             ],
+            // appui en pente : profil esquissé en coupe, extrudé sur la largeur
+            extrusions: vec![Extrusion {
+                nom: "Appui".into(),
+                vide: false,
+                materiau: Materiau::Appui,
+                vue: VueEsquisse::Coupe,
+                profil: vec![point("Cadre ext", -10.0, "Bas", 0.0), point("Nu appui", 0.0, "Bas", -20.0), point("Nu appui", 0.0, "Bas", -45.0), point("Cadre ext", -10.0, "Bas", -45.0)],
+                profondeur: [face("Gauche", -20.0), face("Droite", 20.0)],
+            }],
+            // ouvrant à la française, paumelles à gauche (pointe du triangle)
+            symboles: vec![Symbole {
+                vue: VueEsquisse::Elevation,
+                points: vec![point("Dormant droit", 0.0, "Dormant bas", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)],
+                arc: false,
+            }],
             couleur: couleur_defaut(),
+            genre: super::GenreOuverture::Fenetre,
+        }
+    }
+
+    /// Gabarit de famille selon la catégorie.
+    pub fn gabarit(genre: super::GenreOuverture) -> FamilleModelee {
+        match genre {
+            super::GenreOuverture::Porte => Self::gabarit_porte(),
+            _ => Self::gabarit_fenetre(),
+        }
+    }
+
+    /// Gabarit de porte : baie (vide) depuis le sol, dormant sur trois côtés, vantail
+    /// plein, débattement en plan (vantail ouvert à 90° vers l'intérieur, arc) et
+    /// triangle d'ouverture en élévation.
+    pub fn gabarit_porte() -> FamilleModelee {
+        use AxePlan::*;
+        let plan = |nom: &str, axe, position, fixe| PlanRef { nom: nom.into(), axe, position, fixe, hote: None };
+        let hote = |nom: &str, h| PlanRef { nom: nom.into(), axe: Y, position: 0.0, fixe: false, hote: Some(h) };
+        let dist = |a: &str, b: &str, v: &str, priorite| Contrainte::Distance { a: a.into(), b: b.into(), valeur: v.into(), priorite };
+        let face = |plan: &str, decalage| Face { plan: plan.into(), decalage };
+        let volume = |nom: &str, vide, materiau, x: [(&str, f64); 2], y: [(&str, f64); 2], z: [(&str, f64); 2]| Volume {
+            nom: nom.into(),
+            vide,
+            materiau,
+            min: [face(x[0].0, x[0].1), face(y[0].0, y[0].1), face(z[0].0, z[0].1)],
+            max: [face(x[1].0, x[1].1), face(y[1].0, y[1].1), face(z[1].0, z[1].1)],
+        };
+        let param = |nom: &str, formule: &str| Parametre { nom: nom.into(), formule: formule.into(), portee: Portee::Type };
+        FamilleModelee {
+            parametres: vec![
+                param("Dormant", "60"),
+                param("Profondeur", "70"),
+                param("Retrait", "0"),
+                param("Vantail", "40"),
+                param("Passage", "Largeur - 2 * Dormant"),
+                param("Diagonale", "Passage * 0,7071"),
+            ],
+            plans: vec![
+                plan("Centre", X, 0.0, true),
+                plan("Gauche", X, -450.0, false),
+                plan("Droite", X, 450.0, false),
+                plan("Dormant gauche", X, -390.0, false),
+                plan("Dormant droit", X, 390.0, false),
+                plan("Arc x", X, 0.0, false),
+                hote("Extérieur", Hote::Exterieur),
+                hote("Intérieur", Hote::Interieur),
+                plan("Cadre ext", Y, 100.0, false),
+                plan("Cadre int", Y, 30.0, false),
+                plan("Ouvert", Y, -800.0, false),
+                plan("Arc y", Y, -500.0, false),
+                plan("Bas", Z, 0.0, true),
+                plan("Haut", Z, 2150.0, false),
+                plan("Dormant haut", Z, 2090.0, false),
+                plan("Mi-hauteur", Z, 1045.0, false),
+            ],
+            contraintes: vec![
+                Contrainte::Egalite { a: "Gauche".into(), m: "Centre".into(), b: "Droite".into(), priorite: 9 },
+                dist("Gauche", "Droite", LARGEUR, 9),
+                dist("Bas", "Haut", HAUTEUR, 9),
+                dist("Gauche", "Dormant gauche", "Dormant", 5),
+                dist("Dormant droit", "Droite", "Dormant", 5),
+                dist("Dormant haut", "Haut", "Dormant", 5),
+                dist("Cadre ext", "Extérieur", "Retrait", 5),
+                dist("Cadre int", "Cadre ext", "Profondeur", 5),
+                dist("Ouvert", "Cadre int", "Passage", 5),
+                dist("Dormant gauche", "Arc x", "Diagonale", 5),
+                dist("Arc y", "Cadre int", "Diagonale", 5),
+                Contrainte::Egalite { a: "Bas".into(), m: "Mi-hauteur".into(), b: "Dormant haut".into(), priorite: 5 },
+            ],
+            volumes: vec![
+                volume("Baie", true, Materiau::Menuiserie, [("Gauche", 0.0), ("Droite", 0.0)], [("Intérieur", -5.0), ("Extérieur", 5.0)], [("Bas", 0.0), ("Haut", 0.0)]),
+                volume("Montant gauche", false, Materiau::Menuiserie, [("Gauche", 0.0), ("Dormant gauche", 0.0)], [("Cadre int", 0.0), ("Cadre ext", 0.0)], [("Bas", 0.0), ("Haut", 0.0)]),
+                volume("Montant droit", false, Materiau::Menuiserie, [("Dormant droit", 0.0), ("Droite", 0.0)], [("Cadre int", 0.0), ("Cadre ext", 0.0)], [("Bas", 0.0), ("Haut", 0.0)]),
+                volume("Traverse haute", false, Materiau::Menuiserie, [("Dormant gauche", 0.0), ("Dormant droit", 0.0)], [("Cadre int", 0.0), ("Cadre ext", 0.0)], [("Dormant haut", 0.0), ("Haut", 0.0)]),
+                volume("Vantail", false, Materiau::Panneau, [("Dormant gauche", 2.0), ("Dormant droit", -2.0)], [("Cadre int", 0.0), ("Cadre int", 40.0)], [("Bas", 10.0), ("Dormant haut", -2.0)]),
+            ],
+            extrusions: Vec::new(),
+            symboles: vec![
+                // vantail ouvert à 90° vers l'intérieur et arc de débattement
+                Symbole { vue: VueEsquisse::Plan, points: vec![point("Dormant gauche", 0.0, "Cadre int", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], arc: false },
+                Symbole { vue: VueEsquisse::Plan, points: vec![point("Dormant droit", 0.0, "Cadre int", 0.0), point("Arc x", 0.0, "Arc y", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], arc: true },
+                Symbole { vue: VueEsquisse::Elevation, points: vec![point("Dormant droit", 0.0, "Bas", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)], arc: false },
+            ],
+            couleur: [190, 160, 120],
+            genre: super::GenreOuverture::Porte,
         }
     }
 }
@@ -583,6 +879,39 @@ mod tests {
         let boites = f.boites(&r);
         let baie = boites.iter().find(|b| b.vide).unwrap();
         assert!((baie.max.x - baie.min.x - 1400.0).abs() < 1e-9 && baie.max.y > 150.0 && baie.min.y < -150.0);
+    }
+
+    #[test]
+    fn extrusions_symboles_et_surcharges() {
+        let f = FamilleModelee::gabarit_fenetre();
+        let r = f.resoudre(1400.0, 1600.0, 300.0);
+        let solides = f.solides(&r);
+        // appui extrudé : volume fermé, en débord vers l'extérieur, sous la baie
+        let appui = solides.iter().find(|s| s.materiau == Materiau::Appui).unwrap();
+        let v = crate::modele::geometrie::volume(&appui.tris);
+        assert!(v > 0.0, "{v}");
+        assert!(appui.tris.iter().flatten().all(|p| p.z <= 1e-9) && appui.tris.iter().flatten().any(|p| p.y > 150.0));
+        let s = f.symboles_resolus(&r, VueEsquisse::Elevation);
+        assert_eq!(s.len(), 1);
+        assert!((s[0][1].0 + 640.0).abs() < 1e-9 && (s[0][1].1 - 800.0).abs() < 1e-9);
+        // porte : arc de débattement d'un quart de tour, du rayon du passage
+        let p = FamilleModelee::gabarit_porte();
+        p.valider(900.0, 2150.0, 200.0).unwrap();
+        let r = p.resoudre(900.0, 2150.0, 200.0);
+        assert!(r.conflits.is_empty(), "{:?}", r.conflits);
+        let arc = &p.symboles_resolus(&r, VueEsquisse::Plan)[1];
+        let pivot = (r.positions["Dormant gauche"], r.positions["Cadre int"]);
+        for q in arc {
+            assert!(((q.0 - pivot.0).hypot(q.1 - pivot.1) - 780.0).abs() < 1.0, "{q:?}");
+        }
+        // paramètre d'occurrence : surchargé par l'ouverture placée
+        let mut g = FamilleModelee::gabarit_fenetre();
+        g.parametres.iter_mut().find(|p| p.nom == "Retrait").unwrap().portee = Portee::Occurrence;
+        let r = g.resoudre_avec(1400.0, 1600.0, 300.0, &BTreeMap::from([("Retrait".to_string(), 50.0)]));
+        assert!((r.positions["Cadre ext"] - 100.0).abs() < 1e-9);
+        // un paramètre de type ne l'est pas
+        let r = FamilleModelee::gabarit_fenetre().resoudre_avec(1400.0, 1600.0, 300.0, &BTreeMap::from([("Retrait".to_string(), 50.0)]));
+        assert!((r.positions["Cadre ext"] - 150.0).abs() < 1e-9);
     }
 
     #[test]

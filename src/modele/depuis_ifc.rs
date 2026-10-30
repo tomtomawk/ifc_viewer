@@ -240,6 +240,9 @@ pub fn convertir_modele(m: &IfcModel, geometries: &HashMap<Id, Vec<[DVec3; 3]>>,
                 hauteur: z1 - z0,
                 allege: z0 - alt,
                 representation: rep,
+                valeurs: Default::default(),
+                    retournee: false,
+                    inversee: false,
                 origine: origine(source),
             });
         }

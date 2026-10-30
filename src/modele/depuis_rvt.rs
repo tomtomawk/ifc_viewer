@@ -206,6 +206,9 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
             hauteur,
             allege,
             representation,
+            valeurs: Default::default(),
+                    retournee: false,
+                    inversee: false,
             origine: origine(i.id, "FamilyInstance"),
         });
     }

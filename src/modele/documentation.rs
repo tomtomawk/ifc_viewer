@@ -409,6 +409,48 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
             ));
         }
     }
+    out.extend(symboles_familles(p, v));
+    out
+}
+
+/// Symboles 2D des familles d'ouvertures : en plan, ceux des ouvertures du niveau de
+/// la vue ; en coupe ou élévation, ceux des ouvertures vues de face (mur parallèle à
+/// la ligne de vue, dans sa profondeur et sa longueur), projetés sur le plan de vue.
+fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
+    use super::famille_modelee::VueEsquisse;
+    let (o, u, h) = repere(p, v);
+    let polyligne = |points: Vec<DVec3>| Primitive {
+        forme: Forme::Polyligne { points: points.into_iter().map(|q| q * 0.001).collect(), fermee: false },
+        style: Style { couleur: [30, 30, 30, 255], epaisseur: 0.18 },
+        role: Role::Annotation,
+        element: None,
+    };
+    let mut out = Vec::new();
+    for ouv in &p.ouvertures {
+        let Ok((axe, _, niveau)) = super::solides::hote(p, &ouv.mur) else { continue };
+        match &v.genre {
+            GenreVue::Plan { niveau: n, .. } if *n == niveau => {
+                for l in super::solides::symboles_ouverture(p, ouv, VueEsquisse::Plan) {
+                    out.push(polyligne(l.into_iter().map(|q| q.with_z(o.z)).collect()));
+                }
+            }
+            GenreVue::Coupe { debut, fin, profondeur, .. } => {
+                let (c, uw) = super::solides::repere(&axe, ouv.abscisse);
+                let d = DVec2::new(u.x, u.y).perp();
+                let rel = c - DVec2::new(o.x, o.y);
+                let longueur = DVec2::from_array(*fin).distance(DVec2::from_array(*debut));
+                let profondeur_c = rel.dot(d);
+                let lateral = rel.dot(DVec2::new(u.x, u.y));
+                if uw.dot(DVec2::new(u.x, u.y)).abs() < 0.98 || !(-1.0..=*profondeur).contains(&profondeur_c) || !(0.0..=longueur).contains(&lateral) {
+                    continue;
+                }
+                for l in super::solides::symboles_ouverture(p, ouv, VueEsquisse::Elevation) {
+                    out.push(polyligne(l.into_iter().map(|q| o + u * (q - o).dot(u) + h * (q - o).dot(h)).collect()));
+                }
+            }
+            _ => {}
+        }
+    }
     out
 }
 

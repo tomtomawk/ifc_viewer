@@ -430,18 +430,24 @@ fn famille_modelee<'a>(p: &'a Projet, o: &Ouverture) -> Option<&'a super::famill
     t.modele.as_ref().filter(|_| o.representation.is_none())
 }
 
-/// Boîtes résolues d'une famille modélisée placée : (prisme dans le projet, boîte).
-fn boites_famille(p: &Projet, o: &Ouverture, f: &super::famille_modelee::FamilleModelee) -> Result<Vec<(Vec<Tri>, super::famille_modelee::BoiteVolume)>, String> {
+/// Solides résolus d'une famille modélisée placée, dans le projet : valeurs
+/// d'occurrence de l'ouverture et paramètres partagés du projet appliqués.
+fn solides_famille(p: &Projet, o: &Ouverture, f: &super::famille_modelee::FamilleModelee) -> Result<Vec<super::famille_modelee::SolideFamille>, String> {
     let (axe, e, niveau) = hote(p, &o.mur)?;
     let z = p.niveau(&niveau).ok_or("Niveau introuvable.")?.altitude + o.allege;
     let (c, u) = repere(&axe, o.abscisse);
     let n = u.perp();
-    let r = f.resoudre(o.largeur, o.hauteur, e);
-    Ok(f.boites(&r)
+    let mut surcharges = p.parametres_partages.clone();
+    surcharges.extend(o.valeurs.iter().map(|(k, v)| (k.clone(), *v)));
+    let r = f.resoudre_avec(o.largeur, o.hauteur, e, &surcharges);
+    let monde = |q: DVec3| placer(o, c, u, n, z, q);
+    // un seul miroir retourne l'orientation des faces
+    let impair = o.retournee != o.inversee;
+    Ok(f.solides(&r)
         .into_iter()
-        .map(|b| {
-            let contour = [(b.min.x, b.min.y), (b.max.x, b.min.y), (b.max.x, b.max.y), (b.min.x, b.max.y)].map(|(x, y)| (c + u * x + n * y).to_array());
-            (prisme(&contour, z + b.min.z, z + b.max.z), b)
+        .map(|mut s| {
+            s.tris = s.tris.into_iter().map(|t| { let m = t.map(monde); if impair { [m[0], m[2], m[1]] } else { m } }).collect();
+            s
         })
         .collect())
 }
@@ -449,15 +455,43 @@ fn boites_famille(p: &Projet, o: &Ouverture, f: &super::famille_modelee::Famille
 /// Vides de la famille modélisée de l'ouverture (None : percement rectangulaire).
 fn vides_famille(p: &Projet, o: &Ouverture) -> Result<Option<Vec<Vec<Tri>>>, String> {
     let Some(f) = famille_modelee(p, o) else { return Ok(None) };
-    Ok(Some(boites_famille(p, o, f)?.into_iter().filter(|(_, b)| b.vide).map(|(t, _)| t).collect()))
+    Ok(Some(solides_famille(p, o, f)?.into_iter().filter(|s| s.vide).map(|s| s.tris).collect()))
+}
+
+/// Symboles 2D de la famille de l'ouverture dans le projet (mm) : vue d'esquisse
+/// `vue`, polylignes en 3D (plan : à l'altitude du bas de la baie ; élévation : dans
+/// le plan de l'axe du mur).
+pub fn symboles_ouverture(p: &Projet, o: &Ouverture, vue: super::famille_modelee::VueEsquisse) -> Vec<Vec<DVec3>> {
+    let Some(f) = famille_modelee(p, o) else { return Vec::new() };
+    let Ok((axe, e, niveau)) = hote(p, &o.mur) else { return Vec::new() };
+    let Some(n0) = p.niveau(&niveau) else { return Vec::new() };
+    let z = n0.altitude + o.allege;
+    let (c, u) = repere(&axe, o.abscisse);
+    let n = u.perp();
+    let mut surcharges = p.parametres_partages.clone();
+    surcharges.extend(o.valeurs.iter().map(|(k, v)| (k.clone(), *v)));
+    let r = f.resoudre_avec(o.largeur, o.hauteur, e, &surcharges);
+    f.symboles_resolus(&r, vue)
+        .into_iter()
+        .map(|l| l.into_iter().map(|(h, v)| placer(o, c, u, n, z, vue.point(h, v, 0.0))).collect())
+        .collect()
+}
+
+/// Point de la famille placé dans le projet : retournement et inversion de
+/// l'ouverture, puis repère de la baie (milieu `c`, direction `u`, extérieur `n`, bas
+/// de baie `z`).
+fn placer(o: &Ouverture, c: DVec2, u: DVec2, n: DVec2, z: f64, q: DVec3) -> DVec3 {
+    let x = if o.inversee { -q.x } else { q.x };
+    let y = if o.retournee { -q.y } else { q.y };
+    (c + u * x + n * y).extend(z + q.z)
 }
 
 pub fn ouverture_parts(p: &Projet, o: &Ouverture) -> Result<Vec<(super::famille::Role, Vec<Tri>)>, String> {
     use super::famille::Role;
     if let Some(f) = famille_modelee(p, o) {
         let mut parts: Vec<(Role, Vec<Tri>)> = Vec::new();
-        for (tris, b) in boites_famille(p, o, f)?.into_iter().filter(|(_, b)| !b.vide) {
-            let role = b.materiau.role();
+        for s in solides_famille(p, o, f)?.into_iter().filter(|s| !s.vide) {
+            let (role, tris) = (s.materiau.role(), s.tris);
             match parts.iter_mut().find(|(r, _)| *r == role) {
                 Some((_, t)) => t.extend(tris),
                 None => parts.push((role, tris)),
@@ -581,6 +615,9 @@ mod tests {
             hauteur: 2100.0,
             allege: 0.0,
             representation: None,
+            valeurs: Default::default(),
+                    retournee: false,
+                    inversee: false,
             origine: None,
         });
     }

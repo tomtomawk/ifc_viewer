@@ -739,7 +739,7 @@ impl RubanEdition {
         self.toiture_plate = !oui;
     }
 
-    pub(crate) fn activer_outil(&mut self, outil: Outil) { if outil == Outil::Ouverture { self.ouverture_type_identique = None; } self.selection = Some(outil); }
+    pub(crate) fn activer_outil(&mut self, outil: Outil) { self.selection = Some(outil); }
     pub(crate) fn mur_identique(&mut self, projet: &crate::modele::Projet, mur: &crate::modele::Mur) -> Result<(), String> {
         let (bas, haut) = projet.bas_haut(mur).ok_or("Contraintes du mur invalides.")?;
         self.selection = Some(Outil::Mur);
@@ -901,7 +901,7 @@ impl RubanEdition {
                                     }
                                     if outil == Outil::VueCoupe { self.coupe_identique = None; }
                                     if outil == Outil::Surfaces { self.surface_identique = None; }
-                                    if outil == Outil::Ouverture { self.ouverture_type_identique = None; }
+                                    // l'ouverture garde le dernier type choisi (comme Revit)
                                     self.selection = Some(if outil == Outil::Surfaces {
                                         let surface = self.derniere_surface.unwrap_or(Outil::Dalle);
                                         self.derniere_surface = Some(surface);
@@ -1737,6 +1737,15 @@ impl RubanEdition {
             _ => GenreOuverture::Porte,
         };
         ui.label(RichText::new("Placer une ouverture").strong());
+        // catégorie : un onglet par genre, comme les sortes d'éléments horizontaux
+        ui.horizontal(|ui| {
+            for (g, nom) in [(GenreOuverture::Porte, "Porte"), (GenreOuverture::Fenetre, "Fenêtre"), (GenreOuverture::Libre, "Libre")] {
+                if ui.selectable_label(genre == g, nom).clicked() && genre != g {
+                    self.valeurs.insert((Outil::Ouverture, 0), Valeur::Texte(nom.into()));
+                    self.ouverture_type_identique = None;
+                }
+            }
+        });
         let Some(projet) = projet else {
             ui.label("Créez ou ouvrez un projet natif.");
             return true;
@@ -1772,12 +1781,12 @@ impl RubanEdition {
         if let Some(t) = self.ouverture_type_identique.as_ref().and_then(|id| types.iter().find(|t| &t.id == id)) {
             ui.label(RichText::new(format!("{} × {} (cotes du type)", u.afficher(t.largeur), u.afficher(t.hauteur))).weak());
         }
-        if genre == GenreOuverture::Fenetre {
+        if genre != GenreOuverture::Libre {
             ui.horizontal(|ui| {
                 if ui.add_enabled(self.ouverture_type_identique.is_some(), egui::Button::new("Éditer la famille…")).clicked() {
                     self.demande_famille = Some(self.ouverture_type_identique.clone());
                 }
-                if ui.button("Nouvelle famille…").on_hover_text("Éditeur de familles à partir du gabarit Fenêtre").clicked() {
+                if ui.button("Nouvelle famille…").on_hover_text("Éditeur de familles à partir du gabarit de la catégorie").clicked() {
                     self.demande_famille = Some(None);
                 }
             });
@@ -1970,7 +1979,7 @@ impl RubanEdition {
         let champs: Vec<_> = champs(outil)
             .into_iter()
             .enumerate()
-            .filter(|(k, _)| outil != Outil::Ouverture || *k != 3 || fenetre)
+            .filter(|(k, _)| outil != Outil::Ouverture || (*k != 0 && (*k != 3 || fenetre)))
             // mur : décalage bas dans Propriétés ; hauteur seulement si le haut est libre
             // et l'épaisseur seulement pour un mur générique (sans type)
             .filter(|(k, _)| outil != Outil::Mur || (*k != 3 && (*k != 1 || self.niveau_haut_mur.is_none()) && (*k != 2 || self.type_mur.is_none())))

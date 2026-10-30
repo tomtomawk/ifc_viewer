@@ -10,7 +10,9 @@
 //! enregistrement ; rien n'est écrit dans le projet avant « Enregistrer le type » ou
 //! « Nouveau type ».
 use super::*;
-use crate::modele::famille_modelee::{AxePlan, Contrainte, Face, FamilleModelee, Hote, Materiau, Parametre, PlanRef, Resolution, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
+use crate::modele::famille_modelee::{AxePlan, Contrainte, Extrusion, Face, FamilleModelee, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
+use crate::modele::GenreOuverture;
+use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum VueFamille {
@@ -26,6 +28,13 @@ impl VueFamille {
             Self::Elevation => (AxePlan::X, AxePlan::Z),
             Self::Plan => (AxePlan::X, AxePlan::Y),
             Self::Coupe => (AxePlan::Y, AxePlan::Z),
+        }
+    }
+    fn esquisse(self) -> VueEsquisse {
+        match self {
+            Self::Elevation => VueEsquisse::Elevation,
+            Self::Plan => VueEsquisse::Plan,
+            Self::Coupe => VueEsquisse::Coupe,
         }
     }
     fn nom(self) -> &'static str {
@@ -46,6 +55,12 @@ enum OutilFamille {
     Vide,
     Cote,
     Egalite,
+    /// Profil quelconque cliqué sommet par sommet, extrudé (plein ou vide).
+    Extrusion,
+    ExtrusionVide,
+    /// Symbole 2D : ligne brisée, ou arc par trois points.
+    Ligne,
+    Arc,
 }
 
 #[derive(Clone, PartialEq)]
@@ -54,6 +69,8 @@ enum SelectionFamille {
     Plan(String),
     Volume(usize),
     Contrainte(usize),
+    Extrusion(usize),
+    Symbole(usize),
 }
 
 pub(super) struct EditeurFamille {
@@ -75,6 +92,10 @@ pub(super) struct EditeurFamille {
     debut: Option<(f64, f64)>,
     /// Plan déplacé à la souris.
     deplace: Option<String>,
+    /// Sommets de l'esquisse en cours (verrouillés et résolus).
+    esquisse: Vec<(PointEsquisse, (f64, f64))>,
+    /// Paramètres partagés du projet (copie modifiable, réécrite à l'enregistrement).
+    partages: BTreeMap<String, f64>,
     message: Option<String>,
     erreur: Option<String>,
 }
@@ -113,7 +134,7 @@ fn nom_libre(existants: impl Fn(&str) -> bool, base: &str) -> String {
 
 impl EditeurFamille {
     fn resoudre(&self) -> Resolution {
-        self.famille.resoudre(self.largeur, self.hauteur, self.epaisseur)
+        self.famille.resoudre_avec(self.largeur, self.hauteur, self.epaisseur, &self.partages)
     }
 
     fn position(&self, r: &Resolution, nom: &str) -> f64 {
@@ -162,6 +183,9 @@ impl EditeurFamille {
     /// extrêmes.
     fn faces_profondeur(&self, r: &Resolution, axe: AxePlan, vide: bool) -> [Face; 2] {
         let k = axe as usize;
+        if let Some(e) = self.famille.extrusions.iter().rev().find(|e| e.vide == vide && e.vue.axes().2 == axe) {
+            return e.profondeur.clone();
+        }
         if let Some(v) = self.famille.volumes.iter().rev().find(|v| v.vide == vide) {
             return [v.min[k].clone(), v.max[k].clone()];
         }
@@ -187,28 +211,36 @@ impl ViewerApp {
         let Some(o) = p.ouvertures.iter().find(|o| o.id == id) else { return };
         let e = crate::modele::solides::hote(p, &o.mur).map_or(200.0, |h| h.1);
         let t = o.type_ouverture.clone();
-        let (l, h, id) = (o.largeur, o.hauteur, o.id.clone());
-        self.editeur_famille(t, Some(id), l, h, e);
+        let (l, h, id, g) = (o.largeur, o.hauteur, o.id.clone(), o.genre);
+        self.editeur_famille(t, Some(id), l, h, e, g);
     }
 
-    /// Éditeur sur le type `t` (None : nouveau type), hors de toute fenêtre placée.
-    pub(super) fn ouvrir_editeur_famille_type(&mut self, t: Option<String>) {
-        self.editeur_famille(t, None, 1200.0, 1350.0, 300.0);
+    /// Éditeur sur le type `t` (None : nouvelle famille de la catégorie `genre`), hors
+    /// de toute ouverture placée.
+    pub(super) fn ouvrir_editeur_famille_type(&mut self, t: Option<String>, genre: GenreOuverture) {
+        let (l, h) = if genre == GenreOuverture::Porte { (900.0, 2150.0) } else { (1200.0, 1350.0) };
+        self.editeur_famille(t, None, l, h, 300.0, genre);
     }
 
-    fn editeur_famille(&mut self, t: Option<String>, ouverture: Option<String>, largeur: f64, hauteur: f64, epaisseur: f64) {
+    fn editeur_famille(&mut self, t: Option<String>, ouverture: Option<String>, largeur: f64, hauteur: f64, epaisseur: f64, genre: GenreOuverture) {
         let Some((p, _)) = &self.natif else { return };
         let t = t.and_then(|id| p.types_ouvertures.iter().find(|x| x.id == id));
         let u = crate::options::unite();
         let (largeur, hauteur) = t.map_or((largeur, hauteur), |t| (t.largeur, t.hauteur));
+        let genre = t.map_or(genre, |t| t.genre);
+        let famille = t.and_then(|t| t.modele.clone()).unwrap_or_else(|| FamilleModelee::gabarit(genre));
+        let prefixe = if famille.genre == GenreOuverture::Porte { "Porte" } else { "Fenêtre" };
+        let partages = p.parametres_partages.clone();
         self.famille = Some(EditeurFamille {
             ouverture,
             type_id: t.map(|t| t.id.clone()),
-            nom: t.map_or_else(|| format!("Fenêtre {} × {}", u.afficher(largeur), u.afficher(hauteur)), |t| t.nom.clone()),
+            nom: t.map_or_else(|| format!("{prefixe} {} × {}", u.afficher(largeur), u.afficher(hauteur)), |t| t.nom.clone()),
             largeur,
             hauteur,
             epaisseur,
-            famille: t.and_then(|t| t.modele.clone()).unwrap_or_else(FamilleModelee::gabarit_fenetre),
+            famille,
+            esquisse: Vec::new(),
+            partages,
             vue: VueFamille::Elevation,
             outil: OutilFamille::Selection,
             selection: SelectionFamille::Aucune,
@@ -234,7 +266,7 @@ impl ViewerApp {
         let id = match existant {
             Some(id) => {
                 let t = q.types_ouvertures.iter_mut().find(|t| t.id == id).unwrap();
-                (t.nom, t.largeur, t.hauteur, t.modele) = (ed.nom.trim().into(), ed.largeur, ed.hauteur, Some(ed.famille.clone()));
+                (t.nom, t.largeur, t.hauteur, t.modele, t.genre) = (ed.nom.trim().into(), ed.largeur, ed.hauteur, Some(ed.famille.clone()), ed.famille.genre);
                 t.famille = None;
                 id
             }
@@ -250,7 +282,7 @@ impl ViewerApp {
                 q.types_ouvertures.push(crate::modele::TypeOuverture {
                     id: id.clone(),
                     nom: ed.nom.trim().into(),
-                    genre: crate::modele::GenreOuverture::Fenetre,
+                    genre: ed.famille.genre,
                     largeur: ed.largeur,
                     hauteur: ed.hauteur,
                     famille: None,
@@ -266,9 +298,12 @@ impl ViewerApp {
                 o.representation = None;
             }
             if o.type_ouverture.as_ref() == Some(&id) {
-                (o.largeur, o.hauteur) = (ed.largeur, ed.hauteur);
+                (o.largeur, o.hauteur, o.genre) = (ed.largeur, ed.hauteur, ed.famille.genre);
+                // valeurs d'occurrence : seulement celles que la famille déclare
+                o.valeurs.retain(|k, _| ed.famille.parametres.iter().any(|p| &p.nom == k && p.portee == Portee::Occurrence));
             }
         }
+        q.parametres_partages = ed.partages.clone();
         self.appliquer_projet(q)?;
         if let Some(ed) = self.famille.as_mut() {
             ed.type_id = Some(id.clone());
@@ -285,7 +320,8 @@ impl ViewerApp {
         let mut ouverte = true;
         let mut action: Option<bool> = None;
         let placement = self.famille.as_ref().is_some_and(|e| e.ouverture.is_none());
-        egui::Window::new("Éditeur de familles — Fenêtre")
+        let titre = if self.famille.as_ref().is_some_and(|e| e.famille.genre == GenreOuverture::Porte) { "Éditeur de familles — Porte" } else { "Éditeur de familles — Fenêtre" };
+        egui::Window::new(titre)
             .id(egui::Id::unique("editeur_famille"))
             .open(&mut ouverte)
             .collapsible(false)
@@ -313,10 +349,10 @@ impl ViewerApp {
                             }
                         }
                         ui.horizontal(|ui| {
-                            if ui.add_enabled(ed.type_id.is_some(), egui::Button::new("Enregistrer le type")).on_hover_text("Met à jour le type et toutes ses fenêtres").clicked() {
+                            if ui.add_enabled(ed.type_id.is_some(), egui::Button::new("Enregistrer le type")).on_hover_text("Met à jour le type et toutes ses ouvertures").clicked() {
                                 action = Some(false);
                             }
-                            let aide = if placement { "Crée un type avec cette famille ; il sert au prochain placement" } else { "Crée un type avec cette famille et l'affecte à la fenêtre" };
+                            let aide = if placement { "Crée un type avec cette famille ; il sert au prochain placement" } else { "Crée un type avec cette famille et l'affecte à l'ouverture" };
                             if ui.button("Nouveau type").on_hover_text(aide).clicked() {
                                 action = Some(true);
                             }
@@ -350,6 +386,7 @@ fn barre_outils(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             if ui.selectable_label(ed.vue == v, v.nom()).clicked() {
                 ed.vue = v;
                 ed.debut = None;
+                ed.esquisse.clear();
             }
         }
         ui.separator();
@@ -362,11 +399,16 @@ fn barre_outils(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             (OutilFamille::Vide, "Vide", "Extrusion vide : perce le mur hôte une fois la famille chargée".to_string()),
             (OutilFamille::Cote, "Cote", "Cliquer deux plans parallèles ; libeller ensuite la cote par un paramètre".to_string()),
             (OutilFamille::Egalite, "EQ", "Cliquer trois plans parallèles : le second reste au milieu des deux autres".to_string()),
+            (OutilFamille::Extrusion, "Extrusion", "Profil quelconque : cliquer les sommets (accrochés aux plans), recliquer le premier ou clic droit pour fermer".to_string()),
+            (OutilFamille::ExtrusionVide, "Extr. vide", "Profil quelconque qui perce le mur hôte".to_string()),
+            (OutilFamille::Ligne, "Ligne 2D", "Symbole 2D (plan ou élévation) affiché dans les vues du projet : clic droit pour finir".to_string()),
+            (OutilFamille::Arc, "Arc 2D", "Symbole 2D en arc : départ, point de passage, fin".to_string()),
         ] {
             if ui.selectable_label(ed.outil == o, nom).on_hover_text(aide).clicked() {
                 ed.outil = o;
                 ed.clics.clear();
                 ed.debut = None;
+                ed.esquisse.clear();
             }
         }
         if let Some(m) = &ed.message {
@@ -382,6 +424,12 @@ fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
     egui::Grid::new("famille_type").num_columns(2).spacing([10.0, 5.0]).show(ui, |ui| {
         ui.label("Type");
         ui.text_edit_singleline(&mut ed.nom);
+        ui.end_row();
+        ui.label("Catégorie").on_hover_text("Range le type parmi les portes ou les fenêtres du sélecteur");
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut ed.famille.genre, GenreOuverture::Porte, "Porte");
+            ui.selectable_value(&mut ed.famille.genre, GenreOuverture::Fenetre, "Fenêtre");
+        });
         ui.end_row();
         ui.label(LARGEUR).on_hover_text("Paramètre de type : largeur de la baie");
         ui.add(egui::DragValue::new(&mut ed.largeur).speed(10.0).range(100.0..=20_000.0).dimensions());
@@ -399,10 +447,21 @@ fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
 
     egui::CollapsingHeader::new(RichText::new("Paramètres").strong()).default_open(true).show(ui, |ui| {
         let mut supprimer = None;
-        egui::Grid::new("famille_parametres").num_columns(4).spacing([6.0, 4.0]).show(ui, |ui| {
+        let mut partager = None;
+        egui::Grid::new("famille_parametres").num_columns(5).spacing([6.0, 4.0]).show(ui, |ui| {
             for (k, p) in ed.famille.parametres.iter_mut().enumerate() {
-                ui.add_sized([96.0, 20.0], egui::TextEdit::singleline(&mut p.nom));
-                ui.add_sized([120.0, 20.0], egui::TextEdit::singleline(&mut p.formule)).on_hover_text("Formule : nombres (mm), paramètres, + - * / ( )");
+                ui.add_sized([92.0, 20.0], egui::TextEdit::singleline(&mut p.nom));
+                if p.portee == Portee::Partage && ed.partages.contains_key(&p.nom) {
+                    ui.label(RichText::new("projet").weak()).on_hover_text("Valeur du paramètre partagé du projet (section ci-dessous) ; la formule sert à défaut");
+                } else {
+                    let aide = if p.portee == Portee::Occurrence { "Valeur par défaut ; chaque ouverture placée peut la changer dans Propriétés" } else { "Formule : nombres (mm), paramètres, + - * / ( )" };
+                    ui.add_sized([86.0, 20.0], egui::TextEdit::singleline(&mut p.formule)).on_hover_text(aide);
+                }
+                egui::ComboBox::from_id_salt(("portee", k)).width(78.0).selected_text(p.portee.nom()).show_ui(ui, |ui| {
+                    for x in Portee::TOUTES {
+                        ui.selectable_value(&mut p.portee, x, x.nom());
+                    }
+                }).response.on_hover_text("Type : valeur de la famille · Occurrence : propre à chaque ouverture · Partagé : valeur du projet");
                 match r.valeurs.get(&p.nom) {
                     Some(v) => ui.label(RichText::new(u.afficher(*v)).weak()),
                     None => ui.colored_label(Color32::from_rgb(200, 40, 40), "?"),
@@ -411,14 +470,57 @@ fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                     supprimer = Some(k);
                 }
                 ui.end_row();
+                if p.portee == Portee::Partage && !ed.partages.contains_key(&p.nom) {
+                    partager = Some(k);
+                }
             }
         });
+        // un paramètre déclaré partagé rejoint la table du projet avec sa valeur actuelle
+        if let Some(k) = partager {
+            let p = &ed.famille.parametres[k];
+            if let Some(v) = r.valeurs.get(&p.nom) {
+                ed.partages.insert(p.nom.clone(), *v);
+            }
+        }
         if let Some(k) = supprimer {
             ed.famille.parametres.remove(k);
         }
-        if ui.button("Ajouter un paramètre").clicked() {
-            let nom = (1..).map(|k| format!("Parametre{k}")).find(|n| ed.famille.parametres.iter().all(|p| &p.nom != n)).unwrap();
-            ed.famille.parametres.push(Parametre { nom, formule: "100".into() });
+        ui.horizontal(|ui| {
+            if ui.button("Ajouter un paramètre").clicked() {
+                let nom = (1..).map(|k| format!("Parametre{k}")).find(|n| ed.famille.parametres.iter().all(|p| &p.nom != n)).unwrap();
+                ed.famille.parametres.push(Parametre { nom, formule: "100".into(), portee: Portee::Type });
+            }
+            let disponibles: Vec<(String, f64)> = ed.partages.iter().filter(|(n, _)| ed.famille.parametres.iter().all(|p| &p.nom != *n)).map(|(n, v)| (n.clone(), *v)).collect();
+            ui.add_enabled_ui(!disponibles.is_empty(), |ui| {
+                ui.menu_button("Depuis le projet…", |ui| {
+                    for (n, v) in &disponibles {
+                        if ui.button(format!("{n} ({})", u.afficher(*v))).clicked() {
+                            ed.famille.parametres.push(Parametre { nom: n.clone(), formule: format!("{v}"), portee: Portee::Partage });
+                            ui.close();
+                        }
+                    }
+                })
+                .response
+                .on_hover_text("Réutiliser un paramètre partagé du projet");
+            });
+        });
+    });
+
+    egui::CollapsingHeader::new(RichText::new("Paramètres partagés du projet").strong()).default_open(false).show(ui, |ui| {
+        ui.label(RichText::new("Communs à toutes les familles qui les déclarent « Partagé » ; écrits dans le projet à l'enregistrement.").small().weak());
+        let mut retirer = None;
+        egui::Grid::new("famille_partages").num_columns(3).spacing([6.0, 4.0]).show(ui, |ui| {
+            for (n, v) in ed.partages.iter_mut() {
+                ui.label(n);
+                ui.add(egui::DragValue::new(v).speed(5.0).dimensions());
+                if ui.small_button("−").on_hover_text("Retirer du projet (les familles reprennent leur formule)").clicked() {
+                    retirer = Some(n.clone());
+                }
+                ui.end_row();
+            }
+        });
+        if let Some(n) = retirer {
+            ed.partages.remove(&n);
         }
     });
 
@@ -537,6 +639,124 @@ fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             }
         }
     });
+
+    egui::CollapsingHeader::new(RichText::new("Extrusions").strong()).default_open(true).show(ui, |ui| {
+        let mut supprimer = None;
+        for (k, e) in ed.famille.extrusions.iter().enumerate() {
+            ui.horizontal(|ui| {
+                let texte = format!("{} · {} sommets{}", e.nom, e.profil.len(), if e.vide { " (vide)" } else { "" });
+                if ui.selectable_label(ed.selection == SelectionFamille::Extrusion(k), texte).clicked() {
+                    ed.selection = SelectionFamille::Extrusion(k);
+                }
+                if ui.small_button("−").on_hover_text("Supprimer l'extrusion").clicked() {
+                    supprimer = Some(k);
+                }
+            });
+        }
+        if let Some(k) = supprimer {
+            ed.famille.extrusions.remove(k);
+            ed.selection = SelectionFamille::Aucune;
+        }
+        if let SelectionFamille::Extrusion(k) = ed.selection.clone() {
+            if let Some(e) = ed.famille.extrusions.get_mut(k) {
+                ui.separator();
+                extrusion_ui(ui, e, &ed.famille.plans, k);
+            }
+        }
+    });
+
+    egui::CollapsingHeader::new(RichText::new("Symboles 2D").strong()).default_open(true).show(ui, |ui| {
+        let mut supprimer = None;
+        for (k, s) in ed.famille.symboles.iter().enumerate() {
+            ui.horizontal(|ui| {
+                let vue = match s.vue {
+                    VueEsquisse::Plan => "plan",
+                    VueEsquisse::Elevation => "élévation",
+                    VueEsquisse::Coupe => "coupe (éditeur seulement)",
+                };
+                let texte = format!("{} {} · {vue}", if s.arc { "Arc" } else { "Ligne" }, k + 1);
+                if ui.selectable_label(ed.selection == SelectionFamille::Symbole(k), texte).clicked() {
+                    ed.selection = SelectionFamille::Symbole(k);
+                }
+                if ui.small_button("−").on_hover_text("Supprimer le symbole").clicked() {
+                    supprimer = Some(k);
+                }
+            });
+        }
+        if let Some(k) = supprimer {
+            ed.famille.symboles.remove(k);
+            ed.selection = SelectionFamille::Aucune;
+        }
+        ui.label(RichText::new("Les symboles de plan et d'élévation s'affichent dans les vues du projet et sur les feuilles.").small().weak());
+    });
+}
+
+/// Remplit un polygone quelconque (triangulé).
+fn remplir(painter: &egui::Painter, pts: &[egui::Pos2], couleur: Color32) {
+    let mut m = egui::Mesh::default();
+    for t in crate::texte::trianguler(vec![pts.iter().map(|p| [p.x, p.y]).collect()]) {
+        for p in t {
+            m.colored_vertex(egui::pos2(p[0], p[1]), couleur);
+        }
+    }
+    m.indices = (0..m.vertices.len() as u32).collect();
+    painter.add(egui::Shape::mesh(m));
+}
+
+fn distance_segment(q: egui::Pos2, a: egui::Pos2, b: egui::Pos2) -> f32 {
+    let ab = b - a;
+    let t = if ab.length_sq() > 0.0 { ((q - a).dot(ab) / ab.length_sq()).clamp(0.0, 1.0) } else { 0.0 };
+    q.distance(a + ab * t)
+}
+
+fn dans_polygone(q: egui::Pos2, p: &[egui::Pos2]) -> bool {
+    let mut dedans = false;
+    for i in 0..p.len() {
+        let (a, b) = (p[i], p[(i + 1) % p.len()]);
+        if (a.y > q.y) != (b.y > q.y) && q.x < a.x + (q.y - a.y) / (b.y - a.y) * (b.x - a.x) {
+            dedans = !dedans;
+        }
+    }
+    dedans
+}
+
+/// Propriétés de l'extrusion choisie : nom, plein ou vide, matériau, profondeur.
+fn extrusion_ui(ui: &mut egui::Ui, e: &mut Extrusion, plans: &[PlanRef], k: usize) {
+    egui::Grid::new(("extrusion", k)).num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
+        ui.label("Nom");
+        ui.text_edit_singleline(&mut e.nom);
+        ui.end_row();
+        ui.label("Genre");
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut e.vide, false, "Plein");
+            ui.selectable_value(&mut e.vide, true, "Vide").on_hover_text("Perce le mur hôte");
+        });
+        ui.end_row();
+        if !e.vide {
+            ui.label("Matériau");
+            egui::ComboBox::from_id_salt(("materiau_extrusion", k)).selected_text(e.materiau.nom()).show_ui(ui, |ui| {
+                for m in Materiau::TOUS {
+                    ui.selectable_value(&mut e.materiau, m, m.nom());
+                }
+            });
+            ui.end_row();
+        }
+        let axe = e.vue.axes().2;
+        let [d0, d1] = &mut e.profondeur;
+        for (cote, face) in [("début", d0), ("fin", d1)] {
+            ui.label(format!("{} {cote}", axe.nom()));
+            ui.horizontal(|ui| {
+                egui::ComboBox::from_id_salt(("profondeur", k, cote)).width(120.0).selected_text(face.plan.as_str()).show_ui(ui, |ui| {
+                    for p in plans.iter().filter(|p| p.axe == axe) {
+                        ui.selectable_value(&mut face.plan, p.nom.clone(), &p.nom);
+                    }
+                });
+                ui.add(egui::DragValue::new(&mut face.decalage).speed(1.0).dimensions());
+            });
+            ui.end_row();
+        }
+    });
+    ui.label(RichText::new(format!("Profil esquissé en {} : sommets verrouillés sur les plans.", match e.vue { VueEsquisse::Elevation => "élévation", VueEsquisse::Plan => "plan", VueEsquisse::Coupe => "coupe" })).small().weak());
 }
 
 /// Propriétés du volume choisi : nom, plein ou vide, matériau, faces verrouillées.
@@ -656,6 +876,60 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
         painter.add(egui::Shape::dashed_line(&pts, egui::Stroke::new(if choisi { 2.5 } else { 1.5 }, orange), 7.0, 4.0));
     }
 
+    // extrusions : profil dans leur vue d'esquisse, emprise ailleurs
+    let solides = ed.famille.solides(&r);
+    let decalage_ext = ed.famille.volumes.len();
+    let mut contours_ext: Vec<(usize, Vec<egui::Pos2>)> = Vec::new();
+    for (k, e) in ed.famille.extrusions.iter().enumerate() {
+        let pts: Vec<egui::Pos2> = if e.vue == ed.vue.esquisse() {
+            e.profil.iter().map(|p| { let (h, v) = ed.famille.point_esquisse(&r, p); cadre.ecran(h, v) }).collect()
+        } else {
+            let Some(s) = solides.get(decalage_ext + k) else { continue };
+            let (mut a, mut b) = ((f64::INFINITY, f64::INFINITY), (f64::NEG_INFINITY, f64::NEG_INFINITY));
+            for q in s.tris.iter().flatten() {
+                let q = q.to_array();
+                a = (a.0.min(q[ih]), a.1.min(q[iv]));
+                b = (b.0.max(q[ih]), b.1.max(q[iv]));
+            }
+            if !a.0.is_finite() {
+                continue;
+            }
+            let rr = boite(a, b);
+            vec![rr.left_top(), rr.right_top(), rr.right_bottom(), rr.left_bottom()]
+        };
+        if pts.len() < 3 {
+            continue;
+        }
+        let choisi = ed.selection == SelectionFamille::Extrusion(k);
+        let mut ferme = pts.clone();
+        ferme.push(pts[0]);
+        if e.vide {
+            remplir(&painter, &pts, Color32::WHITE);
+            painter.add(egui::Shape::dashed_line(&ferme, egui::Stroke::new(if choisi { 2.5 } else { 1.5 }, orange), 7.0, 4.0));
+        } else {
+            remplir(&painter, &pts, couleur_materiau(&ed.famille, e.materiau));
+            painter.add(egui::Shape::line(ferme, if choisi { egui::Stroke::new(2.5, orange) } else { encre }));
+        }
+        contours_ext.push((k, pts));
+    }
+
+    // symboles 2D de la vue
+    let marine = Color32::from_rgb(20, 40, 120);
+    let mut lignes_symboles: Vec<(usize, Vec<egui::Pos2>)> = Vec::new();
+    for (k, sy) in ed.famille.symboles.iter().enumerate() {
+        if sy.vue != ed.vue.esquisse() {
+            continue;
+        }
+        let mut seul = ed.famille.clone();
+        seul.symboles = vec![sy.clone()];
+        for l in seul.symboles_resolus(&r, sy.vue) {
+            let pts: Vec<egui::Pos2> = l.into_iter().map(|(h, v)| cadre.ecran(h, v)).collect();
+            let choisi = ed.selection == SelectionFamille::Symbole(k);
+            painter.add(egui::Shape::line(pts.clone(), egui::Stroke::new(if choisi { 2.5 } else { 1.4 }, if choisi { orange } else { marine })));
+            lignes_symboles.push((k, pts));
+        }
+    }
+
     // plans de référence
     let vert = Color32::from_rgb(40, 150, 90);
     let bleu = Color32::from_rgb(30, 90, 200);
@@ -735,6 +1009,12 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
 
     // interactions
     let curseur = resp.hover_pos().or(resp.interact_pointer_pos());
+    // Échap : abandonne l'esquisse, la cote ou le rectangle en cours
+    if (resp.hovered() || !ed.esquisse.is_empty() || !ed.clics.is_empty()) && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        ed.esquisse.clear();
+        ed.clics.clear();
+        ed.debut = None;
+    }
     let plan_vise = |q: egui::Pos2| {
         lignes
             .iter()
@@ -770,8 +1050,12 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                     let (h, v) = cadre.modele(q);
                     ed.selection = if let Some((k, _)) = etiquettes.iter().find(|(_, r)| r.contains(q)) {
                         SelectionFamille::Contrainte(*k)
+                    } else if let Some((k, _)) = lignes_symboles.iter().find(|(_, l)| l.windows(2).any(|w| distance_segment(q, w[0], w[1]) < 6.0)) {
+                        SelectionFamille::Symbole(*k)
                     } else if let Some(n) = plan_vise(q) {
                         SelectionFamille::Plan(n)
+                    } else if let Some((k, _)) = contours_ext.iter().rev().find(|(_, p)| dans_polygone(q, p)) {
+                        SelectionFamille::Extrusion(*k)
                     } else if let Some(b) = pleins.iter().rev().copied().chain(boites.iter().filter(|b| b.vide)).find(|b| (b.min[ih]..=b.max[ih]).contains(&h) && (b.min[iv]..=b.max[iv]).contains(&v)) {
                         SelectionFamille::Volume(b.indice)
                     } else {
@@ -836,6 +1120,75 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                         ed.selection = SelectionFamille::Volume(ed.famille.volumes.len() - 1);
                         ed.message = Some("Faces verrouillées sur les plans les plus proches (avec décalage au-delà de 7 px).".into());
                     }
+                }
+            }
+        }
+        OutilFamille::Extrusion | OutilFamille::ExtrusionVide | OutilFamille::Ligne | OutilFamille::Arc => {
+            // sommet accroché : sur chaque axe, le plan le plus proche (décalage au-delà
+            // de 7 px)
+            let accroche = |axe: AxePlan, x: f64| match ed.plan_proche(&r, axe, x) {
+                Some((n, d)) if d.abs() <= tol => (Face { plan: n, decalage: 0.0 }, x - d),
+                Some((n, d)) => (Face { plan: n, decalage: d.round() }, x - d + d.round()),
+                None => (Face { plan: String::new(), decalage: 0.0 }, x),
+            };
+            let point = |q: egui::Pos2| {
+                let (h, v) = cadre.modele(q);
+                let ((fh, h), (fv, v)) = (accroche(ah, h), accroche(av, v));
+                (PointEsquisse { h: fh, v: fv }, (h, v))
+            };
+            let profil = matches!(ed.outil, OutilFamille::Extrusion | OutilFamille::ExtrusionVide);
+            let premier = ed.esquisse.first().map(|(_, p)| cadre.ecran(p.0, p.1));
+            // élastique et repère d'accrochage
+            if let Some(q) = curseur.filter(|_| resp.hovered()) {
+                let (_, c) = point(q);
+                let c = cadre.ecran(c.0, c.1);
+                let mut pts: Vec<egui::Pos2> = ed.esquisse.iter().map(|(_, p)| cadre.ecran(p.0, p.1)).collect();
+                pts.push(c);
+                painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, orange)));
+                painter.circle_stroke(c, 4.0, egui::Stroke::new(1.5, orange));
+                if let Some(p0) = premier.filter(|p| profil && ed.esquisse.len() >= 3 && p.distance(q) < 9.0) {
+                    painter.circle_stroke(p0, 7.0, egui::Stroke::new(2.0, Color32::from_rgb(30, 140, 60)));
+                }
+            }
+            let mut finir = resp.clicked_by(PointerButton::Secondary);
+            if resp.clicked() {
+                if let Some(q) = resp.interact_pointer_pos() {
+                    if profil && ed.esquisse.len() >= 3 && premier.is_some_and(|p| p.distance(q) < 9.0) {
+                        finir = true;
+                    } else {
+                        let p = point(q);
+                        if p.0.h.plan.is_empty() || p.0.v.plan.is_empty() {
+                            ed.message = Some("Ajouter d'abord des plans de référence dans cette vue.".into());
+                        } else {
+                            ed.esquisse.push(p);
+                        }
+                    }
+                }
+                if ed.outil == OutilFamille::Arc && ed.esquisse.len() == 3 {
+                    finir = true;
+                }
+            }
+            if finir {
+                let points: Vec<PointEsquisse> = std::mem::take(&mut ed.esquisse).into_iter().map(|(p, _)| p).collect();
+                let vue = ed.vue.esquisse();
+                match ed.outil {
+                    OutilFamille::Extrusion | OutilFamille::ExtrusionVide if points.len() >= 3 => {
+                        let vide = ed.outil == OutilFamille::ExtrusionVide;
+                        let profondeur = ed.faces_profondeur(&r, vue.axes().2, vide);
+                        let nom = nom_libre(|n| ed.famille.extrusions.iter().any(|e| e.nom == n), if vide { "Extrusion vide" } else { "Extrusion" });
+                        ed.famille.extrusions.push(Extrusion { nom, vide, materiau: Materiau::Menuiserie, vue, profil: points, profondeur });
+                        ed.selection = SelectionFamille::Extrusion(ed.famille.extrusions.len() - 1);
+                        ed.message = Some("Extrusion créée : régler sa profondeur dans Extrusions.".into());
+                    }
+                    OutilFamille::Ligne if points.len() >= 2 => {
+                        ed.famille.symboles.push(Symbole { vue, points, arc: false });
+                        ed.selection = SelectionFamille::Symbole(ed.famille.symboles.len() - 1);
+                    }
+                    OutilFamille::Arc if points.len() == 3 => {
+                        ed.famille.symboles.push(Symbole { vue, points, arc: true });
+                        ed.selection = SelectionFamille::Symbole(ed.famille.symboles.len() - 1);
+                    }
+                    _ => ed.message = Some("Esquisse abandonnée : pas assez de points.".into()),
                 }
             }
         }

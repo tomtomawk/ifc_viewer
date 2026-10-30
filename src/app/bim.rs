@@ -949,7 +949,8 @@ impl ViewerApp {
                     // type à placer (et éditeur de familles), en tête comme dans Revit
                     if self.ruban_edition.proprietes_ouverture(ui, self.natif.as_ref().map(|(p, _)| p)) {
                         if let Some(t) = self.ruban_edition.demande_famille.take() {
-                            self.ouvrir_editeur_famille_type(t);
+                            let genre = if self.ruban_edition.texte_option(Outil::Ouverture, 0) == "Porte" { crate::modele::GenreOuverture::Porte } else { crate::modele::GenreOuverture::Fenetre };
+                            self.ouvrir_editeur_famille_type(t, genre);
                         }
                     }
                     ui.label("Cliquez sur un mur pour placer l’ouverture, ou sélectionnez son hôte et saisissez l'abscisse.");
@@ -1104,7 +1105,7 @@ impl ViewerApp {
         let Some((p, _)) = &self.natif else { return };
         let murs = ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some());
         let dalle = ids.len() == 1 && p.dalles.iter().any(|d| d.id == ids[0]);
-        let fenetre = (ids.len() == 1).then(|| p.ouvertures.iter().find(|o| o.id == ids[0] && o.genre == crate::modele::GenreOuverture::Fenetre)).flatten().map(|o| o.id.clone());
+        let fenetre = (ids.len() == 1).then(|| p.ouvertures.iter().find(|o| o.id == ids[0] && o.genre != crate::modele::GenreOuverture::Libre)).flatten().map(|o| o.id.clone());
         let mut editer_famille = false;
         // couche d'assemblage : la sortir ou prendre l'assemblage ; mur indépendant : le
         // rattacher à un assemblage du même niveau
@@ -1117,7 +1118,7 @@ impl ViewerApp {
         let mut selection = None;
         let mut commande = None;
         ui.horizontal(|ui| {
-            if fenetre.is_some() && ui.button("Éditer la famille…").on_hover_text("Éditeur de famille : dormant, vantaux, imposte, vitrage, appui ; enregistré dans le type").clicked() {
+            if fenetre.is_some() && ui.button("Éditer la famille…").on_hover_text("Éditeur de familles : plans, contraintes, volumes, vides et symboles ; enregistré dans le type").clicked() {
                 editer_famille = true;
             }
             if let Some(m) = &mur {
@@ -1372,7 +1373,7 @@ impl ViewerApp {
         let ids = self.selection_bim();
         ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some())
             || (ids.len() == 1 && p.dalles.iter().any(|d| d.id == ids[0]))
-            || (ids.len() == 1 && p.ouvertures.iter().any(|o| o.id == ids[0] && o.genre == crate::modele::GenreOuverture::Fenetre))
+            || (ids.len() == 1 && p.ouvertures.iter().any(|o| o.id == ids[0] && o.genre != crate::modele::GenreOuverture::Libre))
     }
 
     pub(super) fn vue_native_id(&self) -> Option<String> {

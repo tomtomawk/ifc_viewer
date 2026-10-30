@@ -322,6 +322,9 @@ impl Projet {
                     hauteur,
                     allege,
                     representation: None,
+                    valeurs: Default::default(),
+                    retournee: false,
+                    inversee: false,
                     origine: None,
                 });
                 Ok(vec![id])

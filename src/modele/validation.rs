@@ -88,6 +88,9 @@ impl Projet {
             {
                 return Err("Ouverture : dimensions non valides.".into());
             }
+            if !o.valeurs.values().all(|v| v.is_finite()) || !self.parametres_partages.values().all(|v| v.is_finite()) {
+                return Err("Ouverture : valeur de paramètre non finie.".into());
+            }
             if let Some(t) = &o.type_ouverture {
                 if !self.types_ouvertures.iter().any(|x| &x.id == t) {
                     return Err("Type d'ouverture absent.".into());
