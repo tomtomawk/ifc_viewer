@@ -90,6 +90,8 @@ pub(super) enum ActionFamille {
 }
 
 pub(super) struct EditeurFamille {
+    /// Rang d'ouverture : place stable de son onglet.
+    pub(super) ordre: usize,
     /// Fenêtre d'où l'éditeur a été ouvert : elle prend le type enregistré.
     ouverture: Option<String>,
     /// Type édité ; None : nouveau type.
@@ -285,6 +287,20 @@ impl ViewerApp {
     }
 
     fn editeur_famille(&mut self, t: Option<String>, ouverture: Option<String>, largeur: f64, hauteur: f64, epaisseur: f64, genre: GenreOuverture) {
+        // type déjà ouvert : son onglet passe au premier plan
+        if let Some(ordre) = t.as_ref().and_then(|id| self.onglets_familles().into_iter().find(|o| o.2.as_ref() == Some(id)).map(|o| o.0)) {
+            self.activer_famille(ordre);
+            return;
+        }
+        if self.natif.is_none() {
+            return;
+        }
+        // l'éditeur courant passe à l'arrière-plan
+        if let Some(ed) = self.famille.take() {
+            self.familles_inactives.push(ed);
+        }
+        self.prochain_ordre_famille += 1;
+        let ordre = self.prochain_ordre_famille;
         let Some((p, _)) = &self.natif else { return };
         let t = t.and_then(|id| p.types_ouvertures.iter().find(|x| x.id == id));
         let u = crate::options::unite();
@@ -296,6 +312,7 @@ impl ViewerApp {
         let materiaux_projet = p.materiaux.iter().map(|m| (m.nom.clone(), m.couleur)).collect();
         self.famille_active = true;
         self.famille = Some(EditeurFamille {
+            ordre,
             ouverture,
             type_id: t.map(|t| t.id.clone()),
             nom: t.map_or_else(|| format!("{prefixe} {} × {}", u.afficher(largeur), u.afficher(hauteur)), |t| t.nom.clone()),
@@ -392,17 +409,47 @@ impl ViewerApp {
     }
 
     /// Fenêtre de l'éditeur de familles.
-    /// Titre de l'onglet de l'éditeur : catégorie et type.
+    /// Titre de l'onglet de l'éditeur au premier plan : catégorie et type.
     pub(super) fn titre_famille(&self) -> Option<String> {
-        let ed = self.famille.as_ref()?;
-        let genre = if ed.famille.genre == GenreOuverture::Porte { "Porte" } else { "Fenêtre" };
-        Some(format!("Famille {genre} : {}{}", ed.nom, if ed.modifiee() { " *" } else { "" }))
+        self.famille.as_ref().map(titre_editeur)
     }
 
     /// Ferme l'onglet de l'éditeur de familles (la famille non enregistrée est perdue).
     pub(super) fn fermer_famille(&mut self) {
-        self.famille = None;
-        self.famille_active = false;
+        // la famille ouverte juste avant prend sa place, s'il y en a une
+        self.famille = self.familles_inactives.pop();
+        self.famille_active = self.famille.is_some();
+    }
+
+    /// Onglets de familles : (rang, titre, type), dans l'ordre d'ouverture.
+    pub(super) fn onglets_familles(&self) -> Vec<(usize, String, Option<String>)> {
+        let mut v: Vec<(usize, String, Option<String>)> = self.famille.iter().chain(&self.familles_inactives).map(|e| (e.ordre, titre_editeur(e), e.type_id.clone())).collect();
+        v.sort_by_key(|o| o.0);
+        v
+    }
+
+    /// Rang de la famille au premier plan.
+    pub(super) fn ordre_famille(&self) -> Option<usize> {
+        self.famille.as_ref().map(|e| e.ordre)
+    }
+
+    /// Met la famille de rang `ordre` au premier plan (onglet actif).
+    pub(super) fn activer_famille(&mut self, ordre: usize) {
+        if self.ordre_famille() != Some(ordre) {
+            if let Some(k) = self.familles_inactives.iter().position(|e| e.ordre == ordre) {
+                let ed = self.familles_inactives.remove(k);
+                if let Some(courante) = self.famille.replace(ed) {
+                    self.familles_inactives.push(courante);
+                }
+            }
+        }
+        self.famille_active = self.famille.is_some();
+    }
+
+    /// Fermeture de l'onglet de rang `ordre` (confirmation si besoin).
+    pub(super) fn fermer_onglet_famille(&mut self, ordre: usize) {
+        self.activer_famille(ordre);
+        self.demander_fermeture_famille();
     }
 
     /// Vue centrale de l'onglet « Famille » : barre d'outils et vue de travail.
@@ -534,11 +581,7 @@ impl ViewerApp {
             });
         });
         if let Some((id, genre)) = ouvrir_type {
-            if self.famille.as_ref().is_some_and(|e| e.modifiee()) {
-                self.status = "Famille en cours modifiée : la charger dans le projet ou fermer son onglet avant d'en ouvrir une autre.".into();
-            } else {
-                self.ouvrir_editeur_famille_type(Some(id), genre);
-            }
+            self.ouvrir_editeur_famille_type(Some(id), genre);
         }
     }
 
@@ -677,6 +720,12 @@ impl ViewerApp {
             None => {}
         }
     }
+}
+
+/// Titre d'onglet d'un éditeur : catégorie, type, « * » si non chargé.
+fn titre_editeur(ed: &EditeurFamille) -> String {
+    let genre = if ed.famille.genre == GenreOuverture::Porte { "Porte" } else { "Fenêtre" };
+    format!("{genre} : {}{}", ed.nom, if ed.modifiee() { " *" } else { "" })
 }
 
 fn barre_outils(ui: &mut egui::Ui, ed: &mut EditeurFamille) {

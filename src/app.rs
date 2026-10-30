@@ -441,6 +441,9 @@ pub struct ViewerApp {
     famille: Option<famille_ui::EditeurFamille>,
     /// Onglet de l'éditeur de familles au premier plan.
     famille_active: bool,
+    /// Autres familles ouvertes (onglets à l'arrière-plan).
+    familles_inactives: Vec<famille_ui::EditeurFamille>,
+    prochain_ordre_famille: usize,
     /// Action des panneaux de l'éditeur de familles, traitée après leur tracé.
     action_famille: Option<famille_ui::ActionFamille>,
     /// Fermeture de l'onglet Famille à confirmer (modifications non chargées).
@@ -628,6 +631,8 @@ impl ViewerApp {
             dessin2d: Default::default(),
             famille: None,
             famille_active: false,
+            familles_inactives: Vec::new(),
+            prochain_ordre_famille: 0,
             action_famille: None,
             confirmer_famille: false,
             arete_alignement: None,
@@ -4265,13 +4270,7 @@ impl ViewerApp {
             self.ouvrir_jeu(&jeu, f);
         }
         if let Some((t, genre)) = ouvrir_famille {
-            if self.famille.as_ref().is_some_and(|e| e.modifiee()) {
-                // ne pas perdre la famille en cours : la montrer
-                self.famille_active = true;
-                self.status = "Famille en cours modifiée : la charger dans le projet ou fermer son onglet avant d'en ouvrir une autre.".into();
-            } else {
-                self.ouvrir_editeur_famille_type(t, genre);
-            }
+            self.ouvrir_editeur_famille_type(t, genre);
         }
         if charger_famille {
             if let Some(c) = rfd::FileDialog::new().add_filter("Famille", &["json"]).pick_file() {
@@ -4400,12 +4399,14 @@ impl ViewerApp {
         ajouter(self.document_actif, self.scene.as_ref(), self.rvt.as_ref(), &self.vues_ouvertes, self.natif_modifie);
         onglets.sort_by_key(|o| o.0);
         // éditeur de familles : un onglet à part, après les vues
-        if let Some(t) = self.titre_famille() {
+        // éditeur de familles : un onglet par famille ouverte (rang dans `vue`)
+        for (ordre, t, _) in self.onglets_familles() {
             titres.insert(ONGLET_FAMILLE, "Éditeur de familles".into());
-            onglets.push((ONGLET_FAMILLE, None, t.clone(), t));
+            onglets.push((ONGLET_FAMILLE, Some(ordre), format!("Famille {t}"), format!("Éditeur de familles — {t}")));
         }
         let famille_active = self.famille_active && self.famille.is_some();
-        let est_actif = |id: usize, vue: Option<usize>, doc: usize, active: Option<usize>| if id == ONGLET_FAMILLE { famille_active } else { !famille_active && id == doc && vue == active };
+        let ordre_actif = self.ordre_famille();
+        let est_actif = |id: usize, vue: Option<usize>, doc: usize, active: Option<usize>| if id == ONGLET_FAMILLE { famille_active && vue == ordre_actif } else { !famille_active && id == doc && vue == active };
         let mut activer = None;
         let mut fermer = None;
         // Les sélecteurs disposent de leurs propres emplacements, indépendants des onglets.
@@ -4495,8 +4496,11 @@ impl ViewerApp {
         if reduire {
             self.garder_derniere_vue_par_document();
         }
-        if let Some((id, _)) = activer {
+        if let Some((id, vue)) = activer {
             self.famille_active = id == ONGLET_FAMILLE;
+            if let (ONGLET_FAMILLE, Some(ordre)) = (id, vue) {
+                self.activer_famille(ordre);
+            }
         }
         if let Some((id, vue)) = activer.filter(|o| o.0 != ONGLET_FAMILLE) {
             self.changer_document(id);
@@ -4507,8 +4511,8 @@ impl ViewerApp {
                 self.restaurer_vue(None);
             }
         }
-        if fermer.is_some_and(|o| o.0 == ONGLET_FAMILLE) {
-            self.demander_fermeture_famille();
+        if let Some((ONGLET_FAMILLE, Some(ordre))) = fermer {
+            self.fermer_onglet_famille(ordre);
         }
         if let Some((id, cible)) = fermer.filter(|o| o.0 != ONGLET_FAMILLE) {
             let precedent = self.document_actif;

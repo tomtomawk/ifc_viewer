@@ -72,7 +72,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   l'onglet), ou depuis la rubrique Familles de l'arborescence du projet (Portes,
   Fenêtres : clic pour ouvrir ; « Nouvelle porte… », « Nouvelle fenêtre… »,
   « Charger une famille… » pour un fichier `.famille.json`). L'éditeur s'ouvre dans
-  un onglet « Famille … » (« * » : modifications non chargées dans le projet) : le
+  un onglet « Famille … » (« * » : modifications non chargées dans le projet ;
+  plusieurs familles s'ouvrent chacune dans son onglet, rouvrir un type déjà ouvert
+  active son onglet) : le
   panneau Propriétés montre la famille (type, paramètres, contraintes, plans,
   volumes, extrusions, symboles) et ses commandes (« Charger dans le projet »,
   « Nouveau type », « Enregistrer sous… » un fichier de famille, « Ouvrir… ») ;
