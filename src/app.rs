@@ -1576,24 +1576,51 @@ impl ViewerApp {
             }
             // paramètres d'occurrence de la famille : propres à cette ouverture
             if let Some(f) = o.type_ouverture.as_ref().and_then(|t| projet.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.modele.as_ref()) {
-                use crate::modele::famille_modelee::Portee;
-                let occurrences: Vec<&str> = f.parametres.iter().filter(|p| p.portee == Portee::Occurrence).map(|p| p.nom.as_str()).collect();
+                use crate::modele::famille_modelee::{GenreParametre, Portee};
+                let occurrences: Vec<&crate::modele::famille_modelee::Parametre> = f.parametres.iter().filter(|p| p.portee == Portee::Occurrence).collect();
                 if !occurrences.is_empty() {
                     let e = crate::modele::solides::hote(projet, &o.mur).map_or(200.0, |h| h.1);
                     let mut surcharges = projet.parametres_partages.clone();
                     surcharges.extend(o.valeurs.iter().map(|(k, v)| (k.clone(), *v)));
-                    let r = f.resoudre_avec(o.largeur, o.hauteur, e, &surcharges);
+                    let r = f.resoudre_occurrence(o.largeur, o.hauteur, e, &surcharges, &o.materiaux);
                     ui.label(RichText::new("Paramètres d'occurrence").strong());
-                    for nom in occurrences {
-                        let mut v = r.valeurs.get(nom).copied().unwrap_or(0.0);
+                    for p in occurrences {
+                        let nom = p.nom.as_str();
                         ui.horizontal(|ui| {
                             ui.label(nom);
-                            if ui.add(egui::DragValue::new(&mut v).dimensions().speed(5.0)).changed() {
-                                o.valeurs.insert(nom.to_string(), v);
-                                change = true;
+                            match p.genre {
+                                GenreParametre::OuiNon => {
+                                    let mut oui = r.valeurs.get(nom).is_none_or(|v| v.abs() > 1e-9);
+                                    if ui.checkbox(&mut oui, "").changed() {
+                                        o.valeurs.insert(nom.to_string(), if oui { 1.0 } else { 0.0 });
+                                        change = true;
+                                    }
+                                }
+                                GenreParametre::Materiau => {
+                                    let mut m = r.materiaux.get(nom).cloned().unwrap_or_default();
+                                    let avant = m.clone();
+                                    egui::ComboBox::from_id_salt(("materiau_occurrence", nom)).width(140.0).selected_text(if m.is_empty() { "(rôle)" } else { m.as_str() }).show_ui(ui, |ui| {
+                                        ui.selectable_value(&mut m, String::new(), "(couleur du rôle)");
+                                        for x in &projet.materiaux {
+                                            ui.selectable_value(&mut m, x.nom.clone(), &x.nom);
+                                        }
+                                    });
+                                    if m != avant {
+                                        o.materiaux.insert(nom.to_string(), m);
+                                        change = true;
+                                    }
+                                }
+                                GenreParametre::Longueur => {
+                                    let mut v = r.valeurs.get(nom).copied().unwrap_or(0.0);
+                                    if ui.add(egui::DragValue::new(&mut v).dimensions().speed(5.0)).changed() {
+                                        o.valeurs.insert(nom.to_string(), v);
+                                        change = true;
+                                    }
+                                }
                             }
-                            if o.valeurs.contains_key(nom) && ui.small_button("Défaut").on_hover_text("Reprendre la valeur de la famille").clicked() {
+                            if (o.valeurs.contains_key(nom) || o.materiaux.contains_key(nom)) && ui.small_button("Défaut").on_hover_text("Reprendre la valeur de la famille").clicked() {
                                 o.valeurs.remove(nom);
+                                o.materiaux.remove(nom);
                                 change = true;
                             }
                         });

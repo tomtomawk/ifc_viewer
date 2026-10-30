@@ -207,6 +207,7 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
             allege,
             representation,
             valeurs: Default::default(),
+            materiaux: Default::default(),
                     retournee: false,
                     inversee: false,
             origine: origine(i.id, "FamilyInstance"),
@@ -319,7 +320,7 @@ fn nomenclatures(m: &Maquette, c: &mut Conversion, id_nomenclature: &dyn Fn(i64)
         if !d.tris.is_empty() {
             *ignorees.entry("Tris de nomenclature non repris (tri par colonnes)".into()).or_default() += 1;
         }
-        c.projet.nomenclatures.push(Nomenclature { id: id_nomenclature(v.id), nom: v.nom.clone(), categorie, regrouper, colonnes });
+        c.projet.nomenclatures.push(Nomenclature { id: id_nomenclature(v.id), nom: v.nom.clone(), categorie, regrouper, colonnes, parametres: Vec::new() });
     }
     for (k, n) in ignorees {
         *c.projet.ignores.entry(k).or_default() += n;

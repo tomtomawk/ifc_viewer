@@ -548,6 +548,9 @@ pub struct Ouverture {
     /// Valeurs des paramètres d'occurrence de sa famille (mm).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub valeurs: BTreeMap<String, f64>,
+    /// Matériaux des paramètres matériau d'occurrence de sa famille.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub materiaux: BTreeMap<String, String>,
     /// Famille retournée : intérieur et extérieur échangés (sens d'ouverture).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub retournee: bool,
@@ -1171,7 +1174,7 @@ mod tests {
         p.niveaux.push(Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
         p.types_murs.push(TypeCompose { id: "t".into(), nom: "200".into(), couches: vec![Couche { materiau: None, epaisseur: 200.0, ..Default::default() }], couches_detaillees: false, origine: None });
         p.murs.push(Mur { variante: None, phase: None, sous_projet: None, id: "m".into(), nom: "Mur".into(), type_mur: "t".into(), assemblage: None, niveau: "n".into(), decalage_bas: 0.0, haut: Haut::Libre { hauteur: 3000.0 }, axe: Axe::Droit { debut: [0.0, 0.0], fin: [5000.0, 0.0] }, origine: None });
-        p.ouvertures.push(Ouverture { id: "o".into(), nom: String::new(), genre: GenreOuverture::Libre, mur: "m".into(), type_ouverture: None, abscisse: 1500.0, largeur: 1000.0, hauteur: 1200.0, allege: 900.0, representation: None, valeurs: BTreeMap::new(), retournee: false, inversee: false, origine: None });
+        p.ouvertures.push(Ouverture { id: "o".into(), nom: String::new(), genre: GenreOuverture::Libre, mur: "m".into(), type_ouverture: None, abscisse: 1500.0, largeur: 1000.0, hauteur: 1200.0, allege: 900.0, representation: None, valeurs: BTreeMap::new(), materiaux: BTreeMap::new(), retournee: false, inversee: false, origine: None });
         assert!((p.volume_mur(&p.murs[0]).unwrap() - 2.76e9).abs() < 1.0);
         let q = Projet::lire_json(&p.json().unwrap()).unwrap();
         assert_eq!(q.murs[0].axe, p.murs[0].axe);

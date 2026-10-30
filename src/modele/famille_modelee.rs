@@ -67,6 +67,39 @@ pub struct Parametre {
     pub formule: String,
     #[serde(default, skip_serializing_if = "Portee::est_type")]
     pub portee: Portee,
+    #[serde(default, skip_serializing_if = "GenreParametre::est_longueur")]
+    pub genre: GenreParametre,
+}
+
+/// Nature d'un paramètre : longueur (mm, formule), oui/non (formule : 0 = non) ou
+/// matériau (nom d'un matériau du projet).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum GenreParametre {
+    #[default]
+    Longueur,
+    OuiNon,
+    Materiau,
+}
+
+impl GenreParametre {
+    pub const TOUS: [GenreParametre; 3] = [Self::Longueur, Self::OuiNon, Self::Materiau];
+    pub fn est_longueur(&self) -> bool {
+        *self == Self::Longueur
+    }
+    pub fn nom(self) -> &'static str {
+        match self {
+            Self::Longueur => "Longueur",
+            Self::OuiNon => "Oui/non",
+            Self::Materiau => "Matériau",
+        }
+    }
+}
+
+impl Parametre {
+    pub fn nouveau(nom: &str, formule: &str) -> Parametre {
+        Parametre { nom: nom.into(), formule: formule.into(), portee: Portee::Type, genre: GenreParametre::Longueur }
+    }
 }
 
 /// Portée d'un paramètre : valeur de la famille (type), propre à chaque ouverture
@@ -146,6 +179,10 @@ pub struct Extrusion {
     pub vue: VueEsquisse,
     pub profil: Vec<PointEsquisse>,
     pub profondeur: [Face; 2],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visible: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub materiau_parametre: Option<String>,
 }
 
 /// Symbole 2D affiché dans les vues du projet : plan (sens d'ouverture, débattement)
@@ -235,6 +272,12 @@ pub struct Volume {
     pub materiau: Materiau,
     pub min: [Face; 3],
     pub max: [Face; 3],
+    /// Paramètre oui/non qui commande l'affichage (None : toujours visible).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visible: Option<String>,
+    /// Paramètre matériau qui donne sa couleur dans le projet (None : celle du rôle).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub materiau_parametre: Option<String>,
 }
 
 /// Sommet d'esquisse : plan et décalage sur chacun des deux axes.
@@ -274,6 +317,11 @@ pub struct SolideFamille {
     pub tris: Vec<[DVec3; 3]>,
     pub vide: bool,
     pub materiau: Materiau,
+    /// Faux : masqué par son paramètre oui/non (les indices restent alignés sur les
+    /// volumes puis les extrusions).
+    pub visible: bool,
+    /// Matériau du projet donné par son paramètre matériau.
+    pub materiau_nom: Option<String>,
 }
 
 fn couleur_defaut() -> [u8; 3] {
@@ -286,6 +334,8 @@ fn couleur_defaut() -> [u8; 3] {
 pub struct Resolution {
     pub positions: BTreeMap<String, f64>,
     pub valeurs: BTreeMap<String, f64>,
+    /// Valeurs des paramètres matériau (noms de matériaux).
+    pub materiaux: BTreeMap<String, String>,
     pub conflits: Vec<usize>,
     pub libres: Vec<String>,
     pub erreurs: Vec<String>,
@@ -457,7 +507,7 @@ impl FamilleModelee {
                 v.insert(p.nom.clone(), *x);
             }
         }
-        let mut restants: Vec<&Parametre> = self.parametres.iter().filter(|p| !v.contains_key(&p.nom)).collect();
+        let mut restants: Vec<&Parametre> = self.parametres.iter().filter(|p| p.genre != GenreParametre::Materiau && !v.contains_key(&p.nom)).collect();
         while !restants.is_empty() {
             let avant = restants.len();
             restants.retain(|p| match evaluer(&p.formule, &v) {
@@ -483,6 +533,20 @@ impl FamilleModelee {
     }
 
     /// Résolution avec valeurs d'occurrence et paramètres partagés (`valeurs_avec`).
+    pub fn resoudre_occurrence(&self, largeur: f64, hauteur: f64, epaisseur: f64, surcharges: &BTreeMap<String, f64>, materiaux: &BTreeMap<String, String>) -> Resolution {
+        let mut r = self.resoudre_avec(largeur, hauteur, epaisseur, surcharges);
+        for p in self.parametres.iter().filter(|p| p.genre == GenreParametre::Materiau) {
+            let surcharge = materiaux.get(&p.nom).filter(|_| p.portee != Portee::Type);
+            r.materiaux.insert(p.nom.clone(), surcharge.cloned().unwrap_or_else(|| p.formule.trim().to_string()));
+        }
+        r
+    }
+
+    /// Visibilité d'un volume : son paramètre oui/non (absent ou non calculé : visible).
+    pub fn visible(&self, r: &Resolution, parametre: &Option<String>) -> bool {
+        parametre.as_ref().and_then(|n| r.valeurs.get(n)).is_none_or(|v| v.abs() > 1e-9)
+    }
+
     pub fn resoudre_avec(&self, largeur: f64, hauteur: f64, epaisseur: f64, surcharges: &BTreeMap<String, f64>) -> Resolution {
         let (valeurs, mut erreurs) = self.valeurs_avec(largeur, hauteur, epaisseur, surcharges);
         let mut r = Resolution { valeurs, ..Default::default() };
@@ -586,7 +650,14 @@ impl FamilleModelee {
             .into_iter()
             .map(|b| {
                 let contour = [[b.min.x, b.min.y], [b.max.x, b.min.y], [b.max.x, b.max.y], [b.min.x, b.max.y]];
-                SolideFamille { tris: super::solides::prisme(&contour, b.min.z, b.max.z), vide: b.vide, materiau: b.materiau }
+                let v = &self.volumes[b.indice];
+                SolideFamille {
+                    tris: super::solides::prisme(&contour, b.min.z, b.max.z),
+                    vide: b.vide,
+                    materiau: b.materiau,
+                    visible: self.visible(r, &v.visible),
+                    materiau_nom: v.materiau_parametre.as_ref().and_then(|n| r.materiaux.get(n)).filter(|m| !m.is_empty()).cloned(),
+                }
             })
             .collect();
         for e in &self.extrusions {
@@ -602,7 +673,13 @@ impl FamilleModelee {
                     if impaire { [m[0], m[2], m[1]] } else { m }
                 })
                 .collect();
-            out.push(SolideFamille { tris, vide: e.vide, materiau: e.materiau });
+            out.push(SolideFamille {
+                tris,
+                vide: e.vide,
+                materiau: e.materiau,
+                visible: self.visible(r, &e.visible),
+                materiau_nom: e.materiau_parametre.as_ref().and_then(|n| r.materiaux.get(n)).filter(|m| !m.is_empty()).cloned(),
+            });
         }
         out
     }
@@ -650,6 +727,15 @@ impl FamilleModelee {
                 }
             }
         }
+        let genre = |n: &str| self.parametres.iter().find(|p| p.nom == n).map(|p| p.genre);
+        for (nom, vis, mat) in self.volumes.iter().map(|v| (&v.nom, &v.visible, &v.materiau_parametre)).chain(self.extrusions.iter().map(|e| (&e.nom, &e.visible, &e.materiau_parametre))) {
+            if vis.as_deref().is_some_and(|n| genre(n) != Some(GenreParametre::OuiNon)) {
+                return Err(format!("{nom} : la visibilité attend un paramètre oui/non."));
+            }
+            if mat.as_deref().is_some_and(|n| genre(n) != Some(GenreParametre::Materiau)) {
+                return Err(format!("{nom} : le matériau attend un paramètre matériau."));
+            }
+        }
         for e in &self.extrusions {
             let (ah, av, ad) = e.vue.axes();
             let bon = |f: &Face, axe| self.plan(&f.plan).is_some_and(|p| p.axe == axe);
@@ -695,14 +781,18 @@ impl FamilleModelee {
             materiau,
             min: [face(x[0].0, x[0].1), face(y[0].0, y[0].1), face(z[0].0, z[0].1)],
             max: [face(x[1].0, x[1].1), face(y[1].0, y[1].1), face(z[1].0, z[1].1)],
+            visible: None,
+            materiau_parametre: None,
         };
         FamilleModelee {
             parametres: vec![
-                Parametre { nom: "Dormant".into(), formule: "60".into(), portee: Portee::Type },
-                Parametre { nom: "Profondeur".into(), formule: "70".into(), portee: Portee::Type },
-                Parametre { nom: "Retrait".into(), formule: "0".into(), portee: Portee::Type },
-                Parametre { nom: "Vitrage".into(), formule: "28".into(), portee: Portee::Type },
-                Parametre { nom: "Appui".into(), formule: "40".into(), portee: Portee::Type },
+                Parametre { nom: "Dormant".into(), formule: "60".into(), portee: Portee::Type, genre: GenreParametre::Longueur },
+                Parametre { nom: "Profondeur".into(), formule: "70".into(), portee: Portee::Type, genre: GenreParametre::Longueur },
+                Parametre { nom: "Retrait".into(), formule: "0".into(), portee: Portee::Type, genre: GenreParametre::Longueur },
+                Parametre { nom: "Vitrage".into(), formule: "28".into(), portee: Portee::Type, genre: GenreParametre::Longueur },
+                Parametre { nom: "Appui".into(), formule: "40".into(), portee: Portee::Type, genre: GenreParametre::Longueur },
+                Parametre { nom: "AvecAppui".into(), formule: "1".into(), portee: Portee::Occurrence, genre: GenreParametre::OuiNon },
+                Parametre { nom: "MateriauAppui".into(), formule: String::new(), portee: Portee::Type, genre: GenreParametre::Materiau },
             ],
             plans: vec![
                 plan("Centre", X, 0.0, true),
@@ -750,6 +840,8 @@ impl FamilleModelee {
                 vue: VueEsquisse::Coupe,
                 profil: vec![point("Cadre ext", -10.0, "Bas", 0.0), point("Nu appui", 0.0, "Bas", -20.0), point("Nu appui", 0.0, "Bas", -45.0), point("Cadre ext", -10.0, "Bas", -45.0)],
                 profondeur: [face("Gauche", -20.0), face("Droite", 20.0)],
+                visible: Some("AvecAppui".into()),
+                materiau_parametre: Some("MateriauAppui".into()),
             }],
             // ouvrant à la française, paumelles à gauche (pointe du triangle)
             symboles: vec![Symbole {
@@ -785,8 +877,10 @@ impl FamilleModelee {
             materiau,
             min: [face(x[0].0, x[0].1), face(y[0].0, y[0].1), face(z[0].0, z[0].1)],
             max: [face(x[1].0, x[1].1), face(y[1].0, y[1].1), face(z[1].0, z[1].1)],
+            visible: None,
+            materiau_parametre: None,
         };
-        let param = |nom: &str, formule: &str| Parametre { nom: nom.into(), formule: formule.into(), portee: Portee::Type };
+        let param = |nom: &str, formule: &str| Parametre { nom: nom.into(), formule: formule.into(), portee: Portee::Type, genre: GenreParametre::Longueur };
         FamilleModelee {
             parametres: vec![
                 param("Dormant", "60"),
@@ -912,6 +1006,25 @@ mod tests {
         // un paramètre de type ne l'est pas
         let r = FamilleModelee::gabarit_fenetre().resoudre_avec(1400.0, 1600.0, 300.0, &BTreeMap::from([("Retrait".to_string(), 50.0)]));
         assert!((r.positions["Cadre ext"] - 150.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn visibilite_et_materiau_par_parametre() {
+        let f = FamilleModelee::gabarit_fenetre();
+        f.valider(1400.0, 1600.0, 300.0).unwrap();
+        let appui = |r: &Resolution| f.solides(r).into_iter().find(|s| s.materiau == Materiau::Appui).unwrap();
+        let r = f.resoudre_occurrence(1400.0, 1600.0, 300.0, &BTreeMap::new(), &BTreeMap::new());
+        assert!(appui(&r).visible && appui(&r).materiau_nom.is_none());
+        // occurrence : sans appui ; le matériau de type ne se surcharge pas
+        let r = f.resoudre_occurrence(1400.0, 1600.0, 300.0, &BTreeMap::from([("AvecAppui".to_string(), 0.0)]), &BTreeMap::from([("MateriauAppui".to_string(), "Pierre".to_string())]));
+        assert!(!appui(&r).visible && appui(&r).materiau_nom.is_none());
+        let mut g = f.clone();
+        g.parametres.iter_mut().find(|p| p.nom == "MateriauAppui").unwrap().formule = "Pierre".into();
+        let r = g.resoudre_occurrence(1400.0, 1600.0, 300.0, &BTreeMap::new(), &BTreeMap::new());
+        assert_eq!(g.solides(&r).into_iter().find(|s| s.materiau == Materiau::Appui).unwrap().materiau_nom.as_deref(), Some("Pierre"));
+        // un paramètre longueur n'est pas accepté pour la visibilité
+        g.extrusions[0].visible = Some("Appui".into());
+        assert!(g.valider(1400.0, 1600.0, 300.0).is_err());
     }
 
     #[test]

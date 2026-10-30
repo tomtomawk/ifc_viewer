@@ -77,6 +77,10 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
     « Défaut » reprend la formule) ou **Partagé** (valeur commune du projet, table
     « Paramètres partagés du projet » ; « Depuis le projet… » réutilise un paramètre
     partagé existant ; `Largeur`, `Hauteur` : cotes du type, `Epaisseur` : mur) ;
+    chaque paramètre est une **longueur**, un **oui/non** (case à cocher ; « Visible
+    si » masque un volume ou une extrusion, un vide masqué ne perce plus) ou un
+    **matériau** du projet (« Matériau par » donne sa couleur au volume) ; les
+    paramètres d'occurrence oui/non et matériau se règlent aussi par ouverture ;
   - contraintes de distance (cote libellée par un paramètre ou une formule) et
     d'égalité (EQ), résolues axe par axe par priorité décroissante (0 à 9 ; à
     égalité, la plus ancienne) : une contrainte incompatible est écartée et signalée
@@ -89,6 +93,11 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
     affichés dans les vues du projet et sur les feuilles : en plan, ceux des
     ouvertures du niveau ; en coupe ou élévation, ceux des ouvertures vues de face.
   Vues élévation intérieure, plan et coupe ; Échap abandonne l'esquisse en cours.
+  Avec l'outil Sélection, l'élément choisi porte des **poignées** : sommets d'un
+  profil ou d'un symbole (glisser : réaccroché au plan le plus proche ; clic droit :
+  retirer), milieux d'arêtes (glisser : insérer un sommet), milieux des faces d'un
+  volume (glisser : reverrouiller la face). Un clic dans un objet le choisit avant
+  les plans qui le traversent (les plans se choisissent hors des objets).
   Les valeurs d'essai font fléchir la famille ; « Enregistrer le type » met à jour
   le type et ses ouvertures (et les paramètres partagés du projet), « Nouveau type »
   l'affecte à l'ouverture (ou au prochain placement). Dans la maquette, les solides
@@ -98,6 +107,10 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   dormant, vitrage, appui en pente esquissé en coupe, triangle d'ouverture) et Porte
   (baie, dormant, vantail, débattement en plan, triangle en élévation). Limites :
   murs droits, profils polygonaux (arcs discrétisés dans les symboles seulement).
+- **Nomenclatures** : la ligne « Paramètres » ajoute une colonne par paramètre des
+  familles (type, occurrence, partagés) ; pour une ouverture, la valeur tient compte
+  de ses valeurs d'occurrence et des paramètres partagés du projet (longueurs en mm,
+  oui/non, nom du matériau) ; ces colonnes distinguent les groupes.
 - **Choix du type au placement** : l'outil Ouverture affiche en tête de Propriétés
   des onglets Porte / Fenêtre / Libre et le type à placer (générique : cotes du
   ruban) ; un type impose ses cotes, son nom et sa famille ; l'outil garde le

@@ -144,6 +144,10 @@ pub struct Nomenclature {
     /// Colonnes choisies ; vide : catégorie, type ou élément, nombre, volume net.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub colonnes: Vec<Colonne>,
+    /// Colonnes de paramètres (familles : type, occurrence, partagés), après les
+    /// colonnes choisies ; elles distinguent les groupes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parametres: Vec<String>,
 }
 
 /// Colonne d'une nomenclature, calculée sur le modèle natif. Regroupée par type, les
@@ -222,6 +226,8 @@ struct LigneQuantite {
     epaisseur: Option<f64>,
     surface: Option<f64>,
     volume: Option<f64>,
+    /// Valeurs affichées des paramètres de famille (ouvertures).
+    parametres: BTreeMap<String, String>,
 }
 
 pub fn repere(p: &Projet, v: &Vue) -> (DVec3, DVec3, DVec3) {
@@ -704,7 +710,7 @@ pub fn feuille(p: &Projet, f: &Feuille) -> Result<Dessin, String> {
 
 /// Quantités nettes : murs percés, dalles avec trémies. Pas de double compte des assemblages.
 pub fn tableau(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, String> {
-    if !n.colonnes.is_empty() {
+    if !n.colonnes.is_empty() || !n.parametres.is_empty() {
         return tableau_colonnes(p, n);
     }
     let mut groupes: BTreeMap<(String, String), (usize, f64)> = BTreeMap::new();
@@ -841,6 +847,7 @@ fn tableau_colonnes(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, St
             epaisseur: t.map(|t| t.epaisseur()),
             surface: h.map(|h| l * h / 1e6),
             volume: Some(geometrie::volume(&solides::mur(p, m, &jonctions)?) / 1e9),
+            parametres: BTreeMap::new(),
         });
     }
     for d in &p.dalles {
@@ -856,6 +863,7 @@ fn tableau_colonnes(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, St
             epaisseur: t.map(|t| t.epaisseur()),
             surface: Some(geometrie::aire_pair_impair(&d.contours) / 1e6),
             volume: p.volume_dalle(d).map(|v| v / 1e9),
+            parametres: BTreeMap::new(),
         });
     }
     for b in &p.barres {
@@ -875,6 +883,7 @@ fn tableau_colonnes(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, St
             epaisseur: None,
             surface: None,
             volume: Some(geometrie::volume(&solides::barre(p, b)?) / 1e9),
+            parametres: BTreeMap::new(),
         });
     }
     for o in &p.ouvertures {
@@ -896,6 +905,7 @@ fn tableau_colonnes(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, St
             epaisseur: None,
             surface: Some(o.largeur * o.hauteur / 1e6),
             volume: None,
+            parametres: solides::parametres_ouverture(p, o),
         });
     }
     for e in &p.importes {
@@ -910,6 +920,7 @@ fn tableau_colonnes(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, St
             epaisseur: None,
             surface: None,
             volume: Some(geometrie::volume(&solides::maillage(&e.maillage)?) / 1e9),
+            parametres: BTreeMap::new(),
         });
     }
     let filtre = n.categorie.to_lowercase();
@@ -944,12 +955,16 @@ fn tableau_colonnes(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, St
         (Colonne::Surface, Some(v)) => format!("{v:.2}"),
         (_, Some(v)) => format!("{v:.3}"),
     };
-    let cols = &n.colonnes;
+    // sans colonnes choisies : catégorie, type ou élément, nombre, volume
+    let defaut = [Colonne::Categorie, if n.regrouper { Colonne::Type } else { Colonne::Element }, Colonne::Nombre, Colonne::Volume];
+    let cols: &[Colonne] = if n.colonnes.is_empty() { &defaut } else { &n.colonnes };
+    let valeur_parametre = |l: &LigneQuantite, nom: &String| l.parametres.get(nom).cloned().unwrap_or_default();
     // regroupement : clé = valeurs des colonnes non totalisées (et l'élément si on ne
     // regroupe pas)
     let mut groupes: BTreeMap<Vec<String>, Vec<Option<f64>>> = BTreeMap::new();
     for (k, l) in lignes.iter().enumerate() {
         let mut cle: Vec<String> = cols.iter().filter(|c| !c.totalisee()).map(|&c| texte(l, c)).collect();
+        cle.extend(n.parametres.iter().map(|nom| valeur_parametre(l, nom)));
         if !n.regrouper {
             cle.push(format!("{:08}", k));
         }
@@ -960,10 +975,13 @@ fn tableau_colonnes(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, St
             }
         }
     }
-    let mut sortie = vec![cols.iter().map(|c| c.titre().to_string()).collect::<Vec<_>>()];
+    let mut sortie = vec![cols.iter().map(|c| c.titre().to_string()).chain(n.parametres.iter().cloned()).collect::<Vec<_>>()];
     for (cle, sommes) in groupes {
         let mut fixes = cle.into_iter();
-        sortie.push(cols.iter().enumerate().map(|(i, &c)| if c.totalisee() { format_somme(c, sommes[i]) } else { fixes.next().unwrap_or_default() }).collect());
+        let mut ligne: Vec<String> = cols.iter().enumerate().map(|(i, &c)| if c.totalisee() { format_somme(c, sommes[i]) } else { fixes.next().unwrap_or_default() }).collect();
+        // les valeurs des paramètres suivent les colonnes fixes dans la clé
+        ligne.extend(fixes.take(n.parametres.len()));
+        sortie.push(ligne);
     }
     Ok(sortie)
 }
@@ -1112,6 +1130,33 @@ mod tests {
     }
 
     #[test]
+    fn nomenclature_parametres_de_famille() {
+        use crate::modele::famille_modelee::FamilleModelee;
+        let mut p = Projet::nouveau("Familles");
+        p.niveaux.push(Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
+        p.types_murs.push(TypeCompose { id: "t".into(), nom: "Mur".into(), couches: vec![Couche { epaisseur: 200.0, ..Default::default() }], couches_detaillees: true, origine: None });
+        p.murs.push(Mur { id: "m".into(), nom: "Mur".into(), type_mur: "t".into(), niveau: "n".into(), decalage_bas: 0.0, haut: Haut::Libre { hauteur: 3000.0 }, axe: Axe::Droit { debut: [0.0, 0.0], fin: [8000.0, 0.0] }, assemblage: None, phase: None, sous_projet: None, variante: None, origine: None });
+        let mut famille = FamilleModelee::gabarit_fenetre();
+        famille.parametres.iter_mut().find(|x| x.nom == "MateriauAppui").unwrap().formule = "Pierre".into();
+        p.types_ouvertures.push(TypeOuverture { id: "f".into(), nom: "F1".into(), genre: GenreOuverture::Fenetre, largeur: 1200.0, hauteur: 1350.0, famille: None, modele: Some(famille), origine: None });
+        for (k, avec) in [(0, true), (1, false), (2, true)] {
+            p.ouvertures.push(Ouverture {
+                id: format!("o{k}"), nom: format!("F{k}"), genre: GenreOuverture::Fenetre, mur: "m".into(), type_ouverture: Some("f".into()),
+                abscisse: 1500.0 + 2500.0 * k as f64, largeur: 1200.0, hauteur: 1350.0, allege: 900.0, representation: None,
+                valeurs: if avec { BTreeMap::new() } else { BTreeMap::from([("AvecAppui".to_string(), 0.0)]) },
+                materiaux: BTreeMap::new(), retournee: false, inversee: false, origine: None,
+            });
+        }
+        p.verifier().unwrap();
+        let n = Nomenclature { id: "n".into(), nom: "Fenêtres".into(), categorie: "Fenêtres".into(), regrouper: true, colonnes: vec![Colonne::Type, Colonne::Nombre], parametres: vec!["AvecAppui".into(), "MateriauAppui".into()] };
+        let t = tableau(&p, &n).unwrap();
+        assert_eq!(t[0], ["Type", "Nombre", "AvecAppui", "MateriauAppui"]);
+        // l'occurrence sans appui forme son propre groupe
+        assert!(t.contains(&vec!["F1".to_string(), "2".into(), "oui".into(), "Pierre".into()]), "{t:?}");
+        assert!(t.contains(&vec!["F1".to_string(), "1".into(), "non".into(), "Pierre".into()]), "{t:?}");
+    }
+
+    #[test]
     fn nomenclature_csv_et_quantites_sans_double_compte() {
         let (p, _) =
             depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {})
@@ -1122,6 +1167,7 @@ mod tests {
             categorie: "Murs".into(),
             regrouper: true,
             colonnes: Vec::new(),
+            parametres: Vec::new(),
         };
         // colonnes choisies : type, niveau, nombre, longueur, volume ; regroupées par type
         // et niveau, le nombre total reste celui des murs

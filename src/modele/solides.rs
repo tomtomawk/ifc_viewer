@@ -419,7 +419,7 @@ pub fn mur(
 }
 
 pub fn ouverture(p: &Projet, o: &Ouverture) -> Result<Vec<Tri>, String> {
-    Ok(ouverture_parts(p, o)?.into_iter().flat_map(|(_, t)| t).collect())
+    Ok(ouverture_parts(p, o)?.into_iter().flat_map(|(_, _, t)| t).collect())
 }
 
 /// Menuiserie d'une ouverture par rôle (dormant, ouvrant, vitrage…) quand son type
@@ -439,7 +439,7 @@ fn solides_famille(p: &Projet, o: &Ouverture, f: &super::famille_modelee::Famill
     let n = u.perp();
     let mut surcharges = p.parametres_partages.clone();
     surcharges.extend(o.valeurs.iter().map(|(k, v)| (k.clone(), *v)));
-    let r = f.resoudre_avec(o.largeur, o.hauteur, e, &surcharges);
+    let r = f.resoudre_occurrence(o.largeur, o.hauteur, e, &surcharges, &o.materiaux);
     let monde = |q: DVec3| placer(o, c, u, n, z, q);
     // un seul miroir retourne l'orientation des faces
     let impair = o.retournee != o.inversee;
@@ -455,7 +455,7 @@ fn solides_famille(p: &Projet, o: &Ouverture, f: &super::famille_modelee::Famill
 /// Vides de la famille modélisée de l'ouverture (None : percement rectangulaire).
 fn vides_famille(p: &Projet, o: &Ouverture) -> Result<Option<Vec<Vec<Tri>>>, String> {
     let Some(f) = famille_modelee(p, o) else { return Ok(None) };
-    Ok(Some(solides_famille(p, o, f)?.into_iter().filter(|s| s.vide).map(|s| s.tris).collect()))
+    Ok(Some(solides_famille(p, o, f)?.into_iter().filter(|s| s.vide && s.visible).map(|s| s.tris).collect()))
 }
 
 /// Symboles 2D de la famille de l'ouverture dans le projet (mm) : vue d'esquisse
@@ -477,6 +477,28 @@ pub fn symboles_ouverture(p: &Projet, o: &Ouverture, vue: super::famille_modelee
         .collect()
 }
 
+/// Valeurs affichées des paramètres de la famille modélisée d'une ouverture (type,
+/// occurrence, partagés) : longueurs en mm, oui/non, noms de matériaux.
+pub fn parametres_ouverture(p: &Projet, o: &Ouverture) -> BTreeMap<String, String> {
+    use super::famille_modelee::GenreParametre;
+    let Some(f) = famille_modelee(p, o) else { return BTreeMap::new() };
+    let e = hote(p, &o.mur).map_or(200.0, |h| h.1);
+    let mut surcharges = p.parametres_partages.clone();
+    surcharges.extend(o.valeurs.iter().map(|(k, v)| (k.clone(), *v)));
+    let r = f.resoudre_occurrence(o.largeur, o.hauteur, e, &surcharges, &o.materiaux);
+    f.parametres
+        .iter()
+        .map(|x| {
+            let v = match x.genre {
+                GenreParametre::Materiau => r.materiaux.get(&x.nom).cloned().unwrap_or_default(),
+                GenreParametre::OuiNon => r.valeurs.get(&x.nom).map_or(String::new(), |v| if v.abs() > 1e-9 { "oui".into() } else { "non".into() }),
+                GenreParametre::Longueur => r.valeurs.get(&x.nom).map_or(String::new(), |v| format!("{v:.0}")),
+            };
+            (x.nom.clone(), v)
+        })
+        .collect()
+}
+
 /// Point de la famille placé dans le projet : retournement et inversion de
 /// l'ouverture, puis repère de la baie (milieu `c`, direction `u`, extérieur `n`, bas
 /// de baie `z`).
@@ -486,15 +508,21 @@ fn placer(o: &Ouverture, c: DVec2, u: DVec2, n: DVec2, z: f64, q: DVec3) -> DVec
     (c + u * x + n * y).extend(z + q.z)
 }
 
-pub fn ouverture_parts(p: &Projet, o: &Ouverture) -> Result<Vec<(super::famille::Role, Vec<Tri>)>, String> {
+/// Parts de la menuiserie : rôle, matériau du projet (famille modélisée pilotée par
+/// un paramètre matériau) et triangles.
+pub fn ouverture_parts(p: &Projet, o: &Ouverture) -> Result<Vec<(super::famille::Role, Option<String>, Vec<Tri>)>, String> {
+    ouverture_parts_roles(p, o)
+}
+
+fn ouverture_parts_roles(p: &Projet, o: &Ouverture) -> Result<Vec<(super::famille::Role, Option<String>, Vec<Tri>)>, String> {
     use super::famille::Role;
     if let Some(f) = famille_modelee(p, o) {
-        let mut parts: Vec<(Role, Vec<Tri>)> = Vec::new();
-        for s in solides_famille(p, o, f)?.into_iter().filter(|s| !s.vide) {
-            let (role, tris) = (s.materiau.role(), s.tris);
-            match parts.iter_mut().find(|(r, _)| *r == role) {
-                Some((_, t)) => t.extend(tris),
-                None => parts.push((role, tris)),
+        let mut parts: Vec<(Role, Option<String>, Vec<Tri>)> = Vec::new();
+        for s in solides_famille(p, o, f)?.into_iter().filter(|s| !s.vide && s.visible) {
+            let (role, mat, tris) = (s.materiau.role(), s.materiau_nom, s.tris);
+            match parts.iter_mut().find(|(r, m, _)| *r == role && *m == mat) {
+                Some((_, _, t)) => t.extend(tris),
+                None => parts.push((role, mat, tris)),
             }
         }
         return Ok(parts);
@@ -506,18 +534,18 @@ pub fn ouverture_parts(p: &Projet, o: &Ouverture) -> Result<Vec<(super::famille:
             let z = p.niveau(&niveau).ok_or("Niveau introuvable.")?.altitude + o.allege;
             let (c, u) = repere(&axe, o.abscisse);
             let n = u.perp();
-            let mut parts: Vec<(Role, Vec<Tri>)> = Vec::new();
+            let mut parts: Vec<(Role, Option<String>, Vec<Tri>)> = Vec::new();
             for b in f.pieces(o.largeur, o.hauteur, e) {
                 let contour = [(b.min.x, b.min.y), (b.max.x, b.min.y), (b.max.x, b.max.y), (b.min.x, b.max.y)].map(|(x, y)| (c + u * x + n * y).to_array());
                 let tris = prisme(&contour, z + b.min.z, z + b.max.z);
-                match parts.iter_mut().find(|(r, _)| *r == b.role) {
-                    Some((_, t)) => t.extend(tris),
-                    None => parts.push((b.role, tris)),
+                match parts.iter_mut().find(|(r, _, _)| *r == b.role) {
+                    Some((_, _, t)) => t.extend(tris),
+                    None => parts.push((b.role, None, tris)),
                 }
             }
             Ok(parts)
         }
-        _ => Ok(vec![(Role::Dormant, ouverture_generique(p, o)?)]),
+        _ => Ok(vec![(Role::Dormant, None, ouverture_generique(p, o)?)]),
     }
 }
 
@@ -616,6 +644,7 @@ mod tests {
             allege: 0.0,
             representation: None,
             valeurs: Default::default(),
+            materiaux: Default::default(),
                     retournee: false,
                     inversee: false,
             origine: None,

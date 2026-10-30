@@ -323,6 +323,7 @@ impl Projet {
                     allege,
                     representation: None,
                     valeurs: Default::default(),
+            materiaux: Default::default(),
                     retournee: false,
                     inversee: false,
                     origine: None,

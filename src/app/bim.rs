@@ -1552,7 +1552,7 @@ impl ViewerApp {
         let mut commande = None;
         let mut export = None;
         egui::Window::new("Nomenclatures").id(egui::Id::unique("fenetre_nomenclatures")).open(&mut ouvert).default_width(640.0).show(ctx,|ui|{
-            if ui.button("Nouvelle nomenclature").clicked() {commande=Some(Commande::Nomenclature {nomenclature:d::Nomenclature {id:String::new(),nom:"Quantités".into(),categorie:String::new(),regrouper:true,colonnes:Vec::new()}});self.bim.nomenclature=p.nomenclatures.len();}
+            if ui.button("Nouvelle nomenclature").clicked() {commande=Some(Commande::Nomenclature {nomenclature:d::Nomenclature {id:String::new(),nom:"Quantités".into(),categorie:String::new(),regrouper:true,colonnes:Vec::new(),parametres:Vec::new()}});self.bim.nomenclature=p.nomenclatures.len();}
             ui.separator();
             if p.nomenclatures.is_empty() { ui.label(RichText::new("Aucune nomenclature : « Nouvelle nomenclature » pour commencer.").weak()); }
             if !p.nomenclatures.is_empty() {
@@ -1575,6 +1575,21 @@ impl ViewerApp {
                         }
                     }
                 });
+                // paramètres des familles (type, occurrence) et partagés du projet
+                let mut noms: std::collections::BTreeSet<String> = p.types_ouvertures.iter().filter_map(|t| t.modele.as_ref()).flat_map(|f| f.parametres.iter().map(|x| x.nom.clone())).collect();
+                noms.extend(p.parametres_partages.keys().cloned());
+                noms.extend(n.parametres.iter().cloned());
+                if !noms.is_empty() {
+                    ui.horizontal_wrapped(|ui|{
+                        ui.label("Paramètres").on_hover_text("Valeurs des familles d'ouvertures : type, occurrence (par ouverture) et partagés (projet)");
+                        for nom in &noms {
+                            let mut on = n.parametres.contains(nom);
+                            if ui.toggle_value(&mut on, nom).changed() {
+                                if on { n.parametres.push(nom.clone()); } else { n.parametres.retain(|x| x != nom); }
+                            }
+                        }
+                    });
+                }
                 if serde_json::to_string(&n).ok()!=serde_json::to_string(&p.nomenclatures[self.bim.nomenclature]).ok() {commande=Some(Commande::Nomenclature {nomenclature:n.clone()});}
                 let cle=serde_json::to_string(&n).unwrap_or_default();
                 if self.bim.tableau_cache.as_ref().is_none_or(|(r,c,_)|*r!=self.bim.revision || *c!=cle) {self.bim.tableau_cache=Some((self.bim.revision,cle,d::tableau(p,&n)));}

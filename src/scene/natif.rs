@@ -165,11 +165,13 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         use crate::modele::famille::Role;
         let menuiserie = o.type_ouverture.as_ref().and_then(|t| projet.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.modele.as_ref().map(|m| m.couleur).or(t.famille.as_ref().map(|f| f.couleur)))
             .map_or([0.55, 0.40, 0.24, 1.0], |c| { let [r, g, b] = c.map(|c| c as f32 / 255.0); [r, g, b, 1.0] });
-        let parts: Vec<Part> = crate::modele::solides::ouverture_parts(projet, o)?.into_iter().map(|(role, tris)| Part {
-            color: match role {
-                Role::Vitrage => [0.62, 0.78, 0.86, 0.35],
-                Role::Appui => [0.78, 0.76, 0.72, 1.0],
-                _ => menuiserie,
+        let parts: Vec<Part> = crate::modele::solides::ouverture_parts(projet, o)?.into_iter().map(|(role, materiau, tris)| Part {
+            // paramètre matériau : couleur du matériau du projet (le vitrage reste translucide)
+            color: match (materiau.as_ref().and_then(|m| projet.materiau(m)), role) {
+                (Some(m), r) => { let [cr, cg, cb] = m.couleur.map(|c| c as f32 / 255.0); [cr, cg, cb, if r == Role::Vitrage { 0.35 } else { 1.0 }] }
+                (None, Role::Vitrage) => [0.62, 0.78, 0.86, 0.35],
+                (None, Role::Appui) => [0.78, 0.76, 0.72, 1.0],
+                (None, _) => menuiserie,
             },
             tris: tris.into_iter().map(|t| t.map(|v| v * 0.001)).collect(),
         }).collect();
