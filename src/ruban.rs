@@ -416,14 +416,14 @@ fn champs(o: Outil) -> Vec<Champ> {
         ],
         Poteau | Poutre => vec![],
         Escalier => vec![
-            Choix("Forme", &["Droit", "Quart tournant", "Demi tournant"]),
             Nombre("Largeur", 1000.0, " mm"),
-            Nombre("Hauteur à franchir", 2800.0, " mm"),
-            Nombre("Marches", 16.0, ""),
+            Nombre("Hauteur de marche", 175.0, " mm"),
+            Choix("Garde-corps", &["Deux côtés", "Gauche", "Droite", "Aucun"]),
         ],
         GardeCorps => vec![
             Nombre("Hauteur", 1000.0, " mm"),
             Nombre("Décalage", 0.0, " mm"),
+            Choix("Remplissage", &["Barreaudage", "Panneau plein", "Vitrage"]),
         ],
         Ouverture => vec![
             Choix("Ouverture", &["Porte", "Fenêtre", "Libre"]),
@@ -890,7 +890,7 @@ impl RubanEdition {
                                 let actif = self.selection.map(Outil::commande) == Some(outil);
                                 // éléments horizontaux : un bouton ; la sorte se choisit dans le
                                 // sélecteur de type de Propriétés
-                                let disponible = matches!(outil, Outil::Mur|Outil::Surfaces|Outil::Poteau|Outil::Poutre|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Aligner|Outil::Ajuster|Outil::CreerIdentique|Outil::Supprimer|Outil::Cadrer|Outil::Isoler|Outil::Masquer|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::Ligne|Outil::Polyligne|Outil::Spline|Outil::Cercle|Outil::Arc|Outil::Zone|Outil::Etiquette|Outil::Feuilles|Outil::Nomenclatures);
+                                let disponible = matches!(outil, Outil::Mur|Outil::Surfaces|Outil::Poteau|Outil::Poutre|Outil::Escalier|Outil::GardeCorps|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Aligner|Outil::Ajuster|Outil::CreerIdentique|Outil::Supprimer|Outil::Cadrer|Outil::Isoler|Outil::Masquer|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::Ligne|Outil::Polyligne|Outil::Spline|Outil::Cercle|Outil::Arc|Outil::Zone|Outil::Etiquette|Outil::Feuilles|Outil::Nomenclatures);
                                 let mut bouton_ui=ui.new_child(egui::UiBuilder::new().max_rect(bouton));
                                 if !disponible {bouton_ui.disable();}
                                 let reponse=bouton_outil(&mut bouton_ui,bouton,outil,colonne.grande,actif);

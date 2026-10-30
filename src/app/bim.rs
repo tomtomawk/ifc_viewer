@@ -246,6 +246,8 @@ impl ViewerApp {
             .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
             .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
             .chain(p.barres.iter().map(|x| ("barre", &x.id)))
+                .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
+                .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
             .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
             .chain(p.importes.iter().map(|x| ("importe", &x.id)))
             .chain(p.niveaux.iter().map(|x| ("niveau", &x.id)))
@@ -263,6 +265,8 @@ impl ViewerApp {
             if !connus.contains(id)
                 && !p.contextes.contains_key(id)
                 && (p.barres.iter().any(|b| &b.id == id)
+                    || p.escaliers.iter().any(|e| &e.id == id)
+                    || p.garde_corps.iter().any(|g| &g.id == id)
                     || p.ouvertures.iter().any(|o| &o.id == id))
             {
                 p.contextes.insert(
@@ -1107,6 +1111,8 @@ impl ViewerApp {
         let dalle = ids.len() == 1 && p.dalles.iter().any(|d| d.id == ids[0]);
         let fenetre = (ids.len() == 1).then(|| p.ouvertures.iter().find(|o| o.id == ids[0] && o.genre != crate::modele::GenreOuverture::Libre)).flatten().map(|o| o.id.clone());
         let mut editer_famille = false;
+        let escalier = (ids.len() == 1).then(|| p.escaliers.iter().find(|e| e.id == ids[0])).flatten().map(|e| e.id.clone());
+        let mut garde_corps: Option<Vec<usize>> = None;
         // couche d'assemblage : la sortir ou prendre l'assemblage ; mur indépendant : le
         // rattacher à un assemblage du même niveau
         let mur = (ids.len() == 1).then(|| p.murs.iter().find(|m| m.id == ids[0])).flatten().cloned();
@@ -1118,6 +1124,14 @@ impl ViewerApp {
         let mut selection = None;
         let mut commande = None;
         ui.horizontal(|ui| {
+            if escalier.is_some() {
+                ui.label("Garde-corps");
+                for (nom, cotes) in [("Deux côtés", vec![0, 1]), ("Gauche", vec![0]), ("Droite", vec![1])] {
+                    if ui.button(nom).on_hover_text("Garde-corps qui suivent les marches (gauche / droite du sens de montée), réglages de l'outil Garde-corps").clicked() {
+                        garde_corps = Some(cotes);
+                    }
+                }
+            }
             if fenetre.is_some() && ui.button("Éditer la famille…").on_hover_text("Éditeur de familles : plans, contraintes, volumes, vides et symboles ; enregistré dans le type").clicked() {
                 editer_famille = true;
             }
@@ -1354,6 +1368,11 @@ impl ViewerApp {
         if let Some(sel) = selection {
             self.select(Some(sel), true);
         }
+        if let (Some(id), Some(cotes)) = (escalier, garde_corps) {
+            if let Err(e) = self.garde_corps_escalier(&id, &cotes) {
+                self.error = Some(e);
+            }
+        }
         if let Some(id) = fenetre.filter(|_| editer_famille) {
             self.ouvrir_editeur_famille(&id);
         }
@@ -1373,6 +1392,7 @@ impl ViewerApp {
         let ids = self.selection_bim();
         ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some())
             || (ids.len() == 1 && p.dalles.iter().any(|d| d.id == ids[0]))
+            || (ids.len() == 1 && p.escaliers.iter().any(|e| e.id == ids[0]))
             || (ids.len() == 1 && p.ouvertures.iter().any(|o| o.id == ids[0] && o.genre != crate::modele::GenreOuverture::Libre))
     }
 

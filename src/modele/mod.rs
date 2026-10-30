@@ -10,6 +10,8 @@
 pub mod assemblage;
 pub mod famille;
 pub mod famille_modelee;
+pub mod escalier;
+pub use escalier::{Escalier, GardeCorps, Remplissage};
 pub mod solides;
 pub mod historique;
 pub mod commandes;
@@ -66,6 +68,10 @@ pub struct Projet {
     pub dalles: Vec<Dalle>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub barres: Vec<Barre>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub escaliers: Vec<Escalier>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub garde_corps: Vec<GardeCorps>,
     /// Contexte des éléments dont le format ne porte pas ces propriétés directement.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub contextes: BTreeMap<String, ContexteElement>,

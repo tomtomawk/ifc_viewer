@@ -10,6 +10,8 @@ impl Projet {
             .chain(self.murs.iter().map(|x| &x.id))
             .chain(self.dalles.iter().map(|x| &x.id))
             .chain(self.barres.iter().map(|x| &x.id))
+            .chain(self.escaliers.iter().map(|x| &x.id))
+            .chain(self.garde_corps.iter().map(|x| &x.id))
             .chain(self.assemblages.iter().map(|x| &x.id))
             .chain(self.ouvertures.iter().map(|x| &x.id))
             .chain(self.importes.iter().map(|x| &x.id))
@@ -123,6 +125,15 @@ impl Projet {
         }
         for b in &self.barres {
             solides::barre(self, b)?;
+        }
+        for e in &self.escaliers {
+            e.calcul(self).map_err(|x| format!("{} : {x}", e.nom))?;
+        }
+        for g in &self.garde_corps {
+            if self.niveau(&g.niveau).is_none() || g.escalier.as_ref().is_some_and(|e| !self.escaliers.iter().any(|x| &x.id == e)) {
+                return Err(format!("{} : niveau ou escalier hôte absent.", g.nom));
+            }
+            g.solides(self).map_err(|x| format!("{} : {x}", g.nom))?;
         }
         for e in &self.importes {
             if e.niveau.as_ref().is_some_and(|n| self.niveau(n).is_none()) {

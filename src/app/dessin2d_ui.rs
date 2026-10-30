@@ -30,6 +30,10 @@ pub(super) enum Usage {
     Mur,
     /// Élément horizontal (dalle, sol, plafond, toiture) : contour fermé.
     Surface,
+    /// Escalier : ligne de foulée (palier à chaque sommet intermédiaire).
+    Escalier,
+    /// Garde-corps : tracé en plan.
+    GardeCorps,
 }
 
 /// Contour d'élément horizontal d'une forme fermée (cercle : 48 côtés).
@@ -106,6 +110,12 @@ impl ViewerApp {
             };
             return Some((Usage::Surface, forme));
         }
+        if modeliser && self.ruban_edition.outil() == Some(Outil::Escalier) {
+            return Some((Usage::Escalier, OutilDessin::Polyligne));
+        }
+        if modeliser && self.ruban_edition.outil() == Some(Outil::GardeCorps) {
+            return Some((Usage::GardeCorps, OutilDessin::Polyligne));
+        }
         if self.onglet_ruban != OngletRuban::Annoter || self.vue_native_id().is_none() {
             return None;
         }
@@ -135,6 +145,11 @@ impl ViewerApp {
     /// l'élément horizontal (dessus d'une dalle ou d'un sol, sous-face d'un plafond).
     fn altitude_trace(&self) -> f64 {
         match self.usage_dessin().map(|(u, _)| u) {
+            Some(Usage::Escalier | Usage::GardeCorps) => {
+                let Some((p, _)) = &self.natif else { return 0.0 };
+                let decalage = if self.usage_dessin().is_some_and(|(u, _)| u == Usage::GardeCorps) { self.ruban_edition.nombre_option(crate::ruban::Outil::GardeCorps, 1) } else { 0.0 };
+                self.niveau_trace().and_then(|n| p.niveau(&n)).map_or(0.0, |n| n.altitude) + decalage
+            }
             Some(Usage::Surface) => {
                 let (Some((p, _)), Some(d)) = (&self.natif, self.ruban_edition.dalle_active()) else { return 0.0 };
                 d.niveau.as_ref().and_then(|id| p.niveau(id)).or_else(|| p.niveaux.first()).map_or(0.0, |n| n.altitude) + d.decalage
@@ -147,7 +162,7 @@ impl ViewerApp {
     /// ouverte ; mur ou élément horizontal : plan horizontal de son altitude.
     fn repere_dessin(&self) -> Option<(DVec3, DVec3, DVec3)> {
         match self.usage_dessin()?.0 {
-            Usage::Mur | Usage::Surface => Some((DVec3::new(0.0, 0.0, self.altitude_trace()), DVec3::X, DVec3::Y)),
+            Usage::Mur | Usage::Surface | Usage::Escalier | Usage::GardeCorps => Some((DVec3::new(0.0, 0.0, self.altitude_trace()), DVec3::X, DVec3::Y)),
             Usage::Annotation => {
                 let id = self.vue_native_id()?;
                 let p = &self.natif.as_ref()?.0;
@@ -221,7 +236,7 @@ impl ViewerApp {
             let coupes = crate::modele::jonctions::coupes(p);
             let retenu = |m: &crate::modele::Mur| match usage {
                 Usage::Annotation => plan.as_ref() == Some(&m.niveau),
-                Usage::Mur | Usage::Surface => p.bas_haut(m).is_some_and(|(b, h)| altitude >= b - 0.1 && altitude <= h + 0.1),
+                _ => p.bas_haut(m).is_some_and(|(b, h)| altitude >= b - 0.1 && altitude <= h + 0.1),
             };
             for m in p.murs.iter().filter(|m| retenu(m)) {
                 if let Some(c) = crate::modele::jonctions::contour(p, m, &coupes) {
@@ -299,6 +314,21 @@ impl ViewerApp {
     /// d'annulation par forme ; le dernier mur créé est sélectionné).
     fn enregistrer_formes(&mut self, formes: Vec<d2::Forme2D>) {
         if formes.is_empty() {
+            return;
+        }
+        if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier || u == Usage::GardeCorps) {
+            let escalier = self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier);
+            for f in &formes {
+                let d2::Forme2D::Polyligne { points, .. } = f else { continue };
+                if points.len() < 2 {
+                    continue;
+                }
+                let trace: Vec<[f64; 2]> = points.iter().map(|p| p.to_array()).collect();
+                let r = if escalier { self.creer_escalier(trace) } else { self.creer_garde_corps(trace, None).map(|_| ()) };
+                if let Err(e) = r {
+                    self.dessin2d.message = Some(e);
+                }
+            }
             return;
         }
         if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Surface) {
@@ -491,6 +521,7 @@ impl ViewerApp {
                 match self.usage_dessin().map(|(u, _)| u) {
                     Some(Usage::Mur) => self.apercu_volume_murs(&painter, rect, &apercu),
                     Some(Usage::Surface) => self.apercu_surface(&painter, rect, &apercu),
+                    Some(Usage::Escalier) => self.apercu_escalier(&painter, rect, &apercu),
                     _ => {}
                 }
                 for l in apercu {
@@ -562,6 +593,8 @@ impl ViewerApp {
         let u = crate::options::unite();
         let nom = match self.usage_dessin() {
             Some((Usage::Mur, o)) => format!("MUR · {}", nom_outil(o)),
+            Some((Usage::Escalier, _)) => "ESCALIER · LIGNE DE FOULÉE".into(),
+            Some((Usage::GardeCorps, _)) => "GARDE-CORPS".into(),
             Some((Usage::Surface, o)) => format!(
                 "{} · {}",
                 self.ruban_edition.dalle_active().map_or("SURFACE".into(), |d| d.sorte.nom().to_uppercase()),
@@ -679,6 +712,12 @@ impl ViewerApp {
     pub(super) fn options_trace(&mut self, ui: &mut egui::Ui) {
         match self.usage_dessin().map(|(u, _)| u) {
             Some(Usage::Mur) => self.options_trace_mur(ui),
+            Some(Usage::Escalier) => {
+                ui.label("Ligne de foulée : départ, un sommet par palier, arrivée ; Entrée ou clic droit pour finir. Le nombre de marches suit la hauteur du niveau supérieur.");
+            }
+            Some(Usage::GardeCorps) => {
+                ui.label("Tracé du garde-corps : cliquer les sommets ; Entrée ou clic droit pour finir. Pour un escalier : le sélectionner, puis « Garde-corps » dans la barre d'options.");
+            }
             Some(Usage::Surface) => {
                 ui.horizontal(|ui| {
                     ui.label("Forme");
@@ -716,5 +755,107 @@ impl ViewerApp {
             ui.add_enabled(self.ruban_edition.forme_mur == OutilDessin::Ligne, egui::Checkbox::new(&mut self.ruban_edition.chainer_murs, "Chaîner"))
                 .on_hover_text("Le mur suivant part de la fin du précédent");
         });
+    }
+
+    /// Niveau du tracé d'un escalier ou d'un garde-corps : celui du plan ouvert, sinon
+    /// le plus bas.
+    pub(super) fn niveau_trace(&self) -> Option<String> {
+        let (p, _) = self.natif.as_ref()?;
+        let vue = self.vue_native_id().and_then(|id| p.vues.iter().find(|v| v.id == id));
+        if let Some(crate::modele::GenreVue::Plan { niveau, .. }) = vue.map(|v| &v.genre) {
+            return Some(niveau.clone());
+        }
+        p.niveaux.iter().min_by(|a, b| a.altitude.total_cmp(&b.altitude)).map(|n| n.id.clone())
+    }
+
+    /// Crée un escalier de ligne de foulée `trace` : du niveau de tracé au niveau
+    /// immédiatement au-dessus (sinon 2,80 m), avec ses garde-corps selon le ruban.
+    fn creer_escalier(&mut self, trace: Vec<[f64; 2]>) -> Result<(), String> {
+        use crate::ruban::Outil;
+        let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
+        let niveau = self.niveau_trace().ok_or("Créez d'abord un niveau.")?;
+        let alt = p.niveau(&niveau).map_or(0.0, |n| n.altitude);
+        let haut = p.niveaux.iter().filter(|n| n.altitude > alt + 1.0).min_by(|a, b| a.altitude.total_cmp(&b.altitude)).map(|n| n.id.clone());
+        let escalier = crate::modele::Escalier {
+            id: String::new(),
+            nom: format!("Escalier {}", p.escaliers.len() + 1),
+            niveau: niveau.clone(),
+            niveau_haut: haut,
+            decalage_bas: 0.0,
+            hauteur: 2800.0,
+            trace,
+            largeur: self.ruban_edition.nombre_option(Outil::Escalier, 0),
+            hauteur_marche: self.ruban_edition.nombre_option(Outil::Escalier, 1),
+            paillasse: 150.0,
+        };
+        let id = self.executer_bim(Commande::Escalier { escalier })?.into_iter().next().ok_or("Escalier non créé.")?;
+        let cotes = match self.ruban_edition.texte_option(Outil::Escalier, 2).as_str() {
+            "Gauche" => vec![0],
+            "Droite" => vec![1],
+            "Aucun" => vec![],
+            _ => vec![0, 1],
+        };
+        self.garde_corps_escalier(&id, &cotes)?;
+        self.status = "Escalier créé — Ctrl+S pour enregistrer.".into();
+        Ok(())
+    }
+
+    /// Garde-corps hébergés par l'escalier `id` : côtés 0 (gauche) et 1 (droite) du
+    /// sens de montée, à 50 mm du bord.
+    pub(super) fn garde_corps_escalier(&mut self, id: &str, cotes: &[usize]) -> Result<(), String> {
+        let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
+        let e = p.escaliers.iter().find(|e| e.id == id).ok_or("Escalier absent.")?.clone();
+        let traces = e.traces_garde_corps(50.0);
+        for &k in cotes {
+            self.creer_garde_corps(traces[k].clone(), Some(e.id.clone()))?;
+        }
+        Ok(())
+    }
+
+    /// Crée un garde-corps (réglages du ruban), hébergé ou non par un escalier.
+    fn creer_garde_corps(&mut self, trace: Vec<[f64; 2]>, escalier: Option<String>) -> Result<String, String> {
+        use crate::modele::Remplissage;
+        use crate::ruban::Outil;
+        let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
+        let niveau = match escalier.as_ref().and_then(|id| p.escaliers.iter().find(|e| &e.id == id)) {
+            Some(e) => e.niveau.clone(),
+            None => self.niveau_trace().ok_or("Créez d'abord un niveau.")?,
+        };
+        let remplissage = match self.ruban_edition.texte_option(Outil::GardeCorps, 2).as_str() {
+            "Panneau plein" => Remplissage::Plein,
+            "Vitrage" => Remplissage::Vitre,
+            _ => Remplissage::Barreaudage,
+        };
+        let garde_corps = crate::modele::GardeCorps {
+            id: String::new(),
+            nom: format!("Garde-corps {}", p.garde_corps.len() + 1),
+            niveau,
+            decalage: if escalier.is_some() { 0.0 } else { self.ruban_edition.nombre_option(Outil::GardeCorps, 1) },
+            trace,
+            hauteur: self.ruban_edition.nombre_option(Outil::GardeCorps, 0),
+            remplissage,
+            escalier,
+        };
+        self.executer_bim(Commande::GardeCorps { garde_corps })?.into_iter().next().ok_or_else(|| "Garde-corps non créé.".to_string())
+    }
+
+    /// Escalier en cours : emmarchement (bords de la largeur) et flèche de montée.
+    fn apercu_escalier(&self, painter: &egui::Painter, rect: egui::Rect, lignes: &[Vec<DVec2>]) {
+        let w = self.ruban_edition.nombre_option(crate::ruban::Outil::Escalier, 0) / 2.0;
+        let couleur = Color32::from_rgb(55, 130, 200);
+        for l in lignes.iter().filter(|l| l.len() >= 2) {
+            let trace: Vec<[f64; 2]> = l.iter().map(|p| p.to_array()).collect();
+            for d in [w, -w] {
+                let bord: Vec<egui::Pos2> = crate::modele::escalier::decaler_polyligne(&trace, d).iter().filter_map(|q| self.vers_ecran(rect, DVec2::from_array(*q))).collect();
+                painter.add(egui::Shape::line(bord, egui::Stroke::new(1.5, couleur)));
+            }
+            // flèche à l'arrivée
+            let (a, b) = (l[l.len() - 2], l[l.len() - 1]);
+            if let (Some(pa), Some(pb)) = (self.vers_ecran(rect, a), self.vers_ecran(rect, b)) {
+                let d = (pb - pa).normalized() * 12.0;
+                let n = egui::vec2(-d.y, d.x) * 0.5;
+                painter.add(egui::Shape::convex_polygon(vec![pb, pb - d + n, pb - d - n], couleur, egui::Stroke::NONE));
+            }
+        }
     }
 }

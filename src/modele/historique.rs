@@ -31,6 +31,8 @@ fn libelle(avant: &str, apres: &str) -> String {
         ("assemblages", "assemblage"),
         ("dalles", "élément horizontal"),
         ("barres", "structure"),
+        ("escaliers", "escalier"),
+        ("garde_corps", "garde-corps"),
         ("ouvertures", "ouverture"),
         ("importes", "élément importé"),
         ("vues", "vue"),

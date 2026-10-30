@@ -1652,6 +1652,84 @@ impl ViewerApp {
                 if o.representation.is_some() { ui.label("La menuiserie importée est conservée ; sa forme n'est pas paramétrique."); }
                 let mut p=projet.clone(); *p.ouvertures.iter_mut().find(|x|x.id==o.id).unwrap()=o.clone(); nouveau=Some(p);
             }
+        } else if let Some(e) = projet.escaliers.iter().find(|e| scene::id_natif("escalier", &e.id) == id) {
+            let mut e = e.clone();
+            let mut change = false;
+            ui.label(RichText::new(format!("Escalier · {}", e.nom)).strong());
+            egui::Grid::new("proprietes_escalier").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                ui.label("Nom");
+                change |= ui.text_edit_singleline(&mut e.nom).lost_focus();
+                ui.end_row();
+                let nom_niveau = |id: &str| projet.niveau(id).map_or(String::new(), |n| n.nom.clone());
+                ui.label("Niveau de base");
+                egui::ComboBox::from_id_salt("escalier_niveau").selected_text(nom_niveau(&e.niveau)).show_ui(ui, |ui| {
+                    for n in &projet.niveaux {
+                        change |= ui.selectable_value(&mut e.niveau, n.id.clone(), &n.nom).changed();
+                    }
+                });
+                ui.end_row();
+                ui.label("Niveau d'arrivée");
+                egui::ComboBox::from_id_salt("escalier_haut").selected_text(e.niveau_haut.as_deref().map_or("Hauteur libre".to_string(), nom_niveau)).show_ui(ui, |ui| {
+                    change |= ui.selectable_value(&mut e.niveau_haut, None, "Hauteur libre").changed();
+                    for n in &projet.niveaux {
+                        change |= ui.selectable_value(&mut e.niveau_haut, Some(n.id.clone()), &n.nom).changed();
+                    }
+                });
+                ui.end_row();
+                for (nom, v, actif) in [("Décalage bas", &mut e.decalage_bas, true), ("Hauteur libre", &mut e.hauteur, e.niveau_haut.is_none()), ("Largeur", &mut e.largeur, true), ("Hauteur de marche visée", &mut e.hauteur_marche, true), ("Paillasse", &mut e.paillasse, true)] {
+                    ui.label(nom);
+                    change |= ui.add_enabled(actif, egui::DragValue::new(v).dimensions().speed(5.0)).changed();
+                    ui.end_row();
+                }
+            });
+            // caractéristiques calculées et confort (Blondel)
+            match e.calcul(projet) {
+                Ok(c) => {
+                    let u = crate::options::unite();
+                    ui.label(format!("{} contremarches de {} · giron {} · {} palier(s)", c.contremarches, u.afficher(c.h), u.afficher(c.giron), c.paliers));
+                    let texte = format!("Blondel 2h + g = {}", u.afficher(c.blondel));
+                    if c.confortable() { ui.label(texte); } else { ui.colored_label(Color32::from_rgb(200, 120, 20), format!("{texte} : hors confort (60 à 65 cm, h ≤ 20 cm, g ≥ 22 cm)")); }
+                }
+                Err(x) => { ui.colored_label(Color32::from_rgb(200, 40, 40), x); }
+            }
+            if change {
+                let mut p = projet.clone();
+                let id = e.id.clone();
+                *p.escaliers.iter_mut().find(|x| x.id == id).unwrap() = e;
+                nouveau = Some(p);
+            }
+        } else if let Some(g) = projet.garde_corps.iter().find(|g| scene::id_natif("garde_corps", &g.id) == id) {
+            let mut g = g.clone();
+            let mut change = false;
+            ui.label(RichText::new(format!("Garde-corps · {}", g.nom)).strong());
+            egui::Grid::new("proprietes_garde_corps").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                ui.label("Nom");
+                change |= ui.text_edit_singleline(&mut g.nom).lost_focus();
+                ui.end_row();
+                ui.label("Hauteur");
+                change |= ui.add(egui::DragValue::new(&mut g.hauteur).dimensions().speed(5.0)).changed();
+                ui.end_row();
+                ui.label("Remplissage");
+                egui::ComboBox::from_id_salt("garde_corps_remplissage").selected_text(g.remplissage.nom()).show_ui(ui, |ui| {
+                    for r in crate::modele::Remplissage::TOUS {
+                        change |= ui.selectable_value(&mut g.remplissage, r, r.nom()).changed();
+                    }
+                });
+                ui.end_row();
+                if g.escalier.is_none() {
+                    ui.label("Décalage");
+                    change |= ui.add(egui::DragValue::new(&mut g.decalage).dimensions().speed(5.0)).changed();
+                    ui.end_row();
+                }
+            });
+            let hote = g.escalier.as_ref().and_then(|id| projet.escaliers.iter().find(|e| &e.id == id)).map(|e| e.nom.clone());
+            ui.label(RichText::new(match hote { Some(n) => format!("Suit l'escalier « {n} » · longueur {}", crate::options::unite().afficher(g.longueur())), None => format!("Longueur {}", crate::options::unite().afficher(g.longueur())) }).weak());
+            if change {
+                let mut p = projet.clone();
+                let id = g.id.clone();
+                *p.garde_corps.iter_mut().find(|x| x.id == id).unwrap() = g;
+                nouveau = Some(p);
+            }
         } else {
             let dalle = projet.dalles.iter().find(|d| scene::id_natif("dalle", &d.id) == id)?;
             let mut d = dalle.clone();
@@ -1809,6 +1887,8 @@ impl ViewerApp {
                     .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
                     .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
                     .chain(p.barres.iter().map(|x| ("barre", &x.id)))
+                .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
+                .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
                     .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
                     .chain(p.importes.iter().map(|x| ("importe", &x.id))) {
                     if selection.contains(cle.as_str()) {
@@ -1854,6 +1934,8 @@ impl ViewerApp {
                             .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
                             .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
                             .chain(p.barres.iter().map(|x| ("barre", &x.id)))
+                .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
+                .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
                             .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
                             .chain(p.importes.iter().map(|x| ("importe", &x.id)))
                             .filter(|(_, id)| cles.contains(id.as_str())).map(|(genre, id)| scene::id_natif(genre, id)));
@@ -1894,6 +1976,8 @@ impl ViewerApp {
                 .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
                 .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
                 .chain(p.barres.iter().map(|x| ("barre", &x.id)))
+                .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
+                .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
                 .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
                 .chain(p.importes.iter().map(|x| ("importe", &x.id)))
                 .filter(|(genre, id)| recherches.contains(&scene::id_natif(genre, id)))
@@ -2477,6 +2561,17 @@ impl ViewerApp {
         let nouvel_objet=|i:u32|anciens.and_then(|s|s.objects.get(i as usize)).and_then(|o|scene.object_of.get(&o.id)).copied();
         self.hidden_objects=self.hidden_objects.iter().filter_map(|i|nouvel_objet(*i)).collect();
         self.isolated=self.isolated.as_ref().map(|ids|ids.iter().filter_map(|i|nouvel_objet(*i)).collect());
+        // objets créés : visibles dans la vue active isolée (un plan d'étage n'isole que
+        // son niveau : ceux de ce niveau)
+        let etage = self.vue_active.and_then(|i| scene.navigateur.as_ref()?.vues.get(i)).filter(|v| v.genre == "Plan d'étage" || v.genre == "Plan de plafond").and_then(|v| v.etage);
+        if let Some(iso) = &mut self.isolated {
+            for (k, o) in scene.objects.iter().enumerate() {
+                let nouveau = anciens.is_none_or(|s| !s.object_of.contains_key(&o.id));
+                if nouveau && &*o.class != "IFCANNOTATION" && etage.is_none_or(|e| o.storey == Some(e)) {
+                    iso.insert(k as u32);
+                }
+            }
+        }
 
         let delta = self.scene.as_ref().map_or(glam::DVec3::ZERO, |s| s.origin) - scene.origin;
         self.camera.target += delta.as_vec3();

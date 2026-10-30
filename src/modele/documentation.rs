@@ -432,6 +432,19 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
         element: None,
     };
     let mut out = Vec::new();
+    // escaliers : ligne de foulée, rond au départ, flèche à l'arrivée
+    if let GenreVue::Plan { niveau, .. } = &v.genre {
+        for e in p.escaliers.iter().filter(|e| &e.niveau == niveau && e.trace.len() >= 2) {
+            let pts: Vec<DVec3> = e.trace.iter().map(|q| DVec3::new(q[0], q[1], o.z)).collect();
+            out.push(polyligne(pts.clone()));
+            let (a, b) = (pts[pts.len() - 2], pts[pts.len() - 1]);
+            let d = (b - a).normalize_or_zero() * 150.0;
+            let n = DVec3::new(-d.y, d.x, 0.0) * 0.4;
+            out.push(polyligne(vec![b - d + n, b, b - d - n]));
+            let c = pts[0];
+            out.push(polyligne((0..=16).map(|k| { let t = std::f64::consts::TAU * k as f64 / 16.0; c + DVec3::new(t.cos(), t.sin(), 0.0) * 60.0 }).collect()));
+        }
+    }
     for ouv in &p.ouvertures {
         let Ok((axe, _, niveau)) = super::solides::hote(p, &ouv.mur) else { continue };
         match &v.genre {
@@ -906,6 +919,37 @@ fn tableau_colonnes(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, St
             surface: Some(o.largeur * o.hauteur / 1e6),
             volume: None,
             parametres: solides::parametres_ouverture(p, o),
+        });
+    }
+    for e in &p.escaliers {
+        let c = e.calcul(p).ok();
+        lignes.push(LigneQuantite {
+            categorie: "Escaliers".into(),
+            type_nom: e.nom.clone(),
+            element: e.nom.clone(),
+            niveau: nom_niveau(&e.niveau),
+            longueur: c.map(|c| c.volees),
+            hauteur: c.map(|c| c.hauteur),
+            largeur: Some(e.largeur),
+            epaisseur: None,
+            surface: None,
+            volume: Some(geometrie::volume(&e.solide(p)?) / 1e9),
+            parametres: BTreeMap::new(),
+        });
+    }
+    for g in &p.garde_corps {
+        lignes.push(LigneQuantite {
+            categorie: "Garde-corps".into(),
+            type_nom: format!("Garde-corps {} · {}", g.remplissage.nom(), crate::options::unite().afficher(g.hauteur)),
+            element: g.nom.clone(),
+            niveau: nom_niveau(&g.niveau),
+            longueur: Some(g.longueur()),
+            hauteur: Some(g.hauteur),
+            largeur: None,
+            epaisseur: None,
+            surface: None,
+            volume: None,
+            parametres: BTreeMap::new(),
         });
     }
     for e in &p.importes {

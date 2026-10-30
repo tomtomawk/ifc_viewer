@@ -232,6 +232,17 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         let id = w.add(format!("{classe}('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&b.id, None), texte(&b.nom), ref_(rep)));
         contenus.entry(niveaux[&b.niveau]).or_default().push(id);
     }
+    for e in &p.escaliers {
+        let rep = w.mesh(&e.solide(p)?, contexte);
+        let id = w.add(format!("IFCSTAIR('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&e.id, None), texte(&e.nom), ref_(rep)));
+        contenus.entry(niveaux[&e.niveau]).or_default().push(id);
+    }
+    for g in &p.garde_corps {
+        let tris: Vec<_> = g.solides(p)?.into_iter().flat_map(|(_, t)| t).collect();
+        let rep = w.mesh(&tris, contexte);
+        let id = w.add(format!("IFCRAILING('{}',$,{},$,$,#{placement},{},$,.GUARDRAIL.)", guid(&g.id, None), texte(&g.nom), ref_(rep)));
+        contenus.entry(niveaux[&g.niveau]).or_default().push(id);
+    }
     for o in &p.ouvertures {
         let (axe, e, niveau) = solides::hote(p, &o.mur)?;
         let z = p.niveau(&niveau).unwrap().altitude + o.allege;

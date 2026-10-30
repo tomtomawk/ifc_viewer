@@ -128,6 +128,25 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   des onglets Porte / Fenêtre / Libre et le type à placer (générique : cotes du
   ruban) ; un type impose ses cotes, son nom et sa famille ; l'outil garde le
   dernier type choisi.
+- **Escalier** (Modéliser) : la ligne de foulée se trace avec le moteur du dessin 2D
+  dans le plan ouvert (départ, un sommet par palier, arrivée ; Entrée ou clic droit
+  pour finir) : droit, quart tournant ou demi-tournant selon le tracé, palier carré de
+  la largeur à chaque sommet intermédiaire. Il monte du niveau du plan au niveau
+  immédiatement au-dessus (sinon 2,80 m) ; le nombre de contremarches suit la
+  hauteur de marche visée du ruban, un palier compte pour une marche, le giron
+  partage la longueur des volées. Propriétés : niveaux de départ et d'arrivée (ou
+  hauteur libre), décalage, largeur, hauteur de marche visée, paillasse ; calcul
+  affiché (contremarches, giron, paliers, Blondel 2h + g, signalé hors confort :
+  60 à 65 cm, h ≤ 20 cm, g ≥ 22 cm). En plan : ligne de foulée, rond au départ,
+  flèche à l'arrivée. Le ruban choisit les garde-corps créés avec l'escalier (deux
+  côtés, gauche, droite, aucun).
+- **Garde-corps** (Modéliser) : tracé en plan (hauteur, décalage, remplissage
+  barreaudage, panneau plein ou vitrage) ; main courante, lisse basse, montants aux
+  sommets et tous les 1,5 m au plus, barreaux tous les 110 mm. Sur un escalier
+  sélectionné, la barre d'options ajoute des garde-corps hébergés (deux côtés,
+  gauche, droite) dont la base suit les marches ; ils suivent l'escalier copié et
+  partent avec lui. Escaliers et garde-corps se déplacent, se copient, se tournent,
+  s'exportent en IFC (IfcStair, IfcRailing) et entrent dans les nomenclatures.
 - **Annuler / Rétablir**, Ctrl+Z et Ctrl+Maj+Z, ont un historique propre à chaque
   document. Les flèches après Sortie annulent ou rétablissent une étape ; leurs
   flèches donnent accès à la liste pour remonter ou rétablir plusieurs étapes.

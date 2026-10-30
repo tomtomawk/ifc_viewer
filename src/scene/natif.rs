@@ -48,6 +48,12 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         let classe = match b.genre { crate::modele::GenreBarre::Poteau => "IFCCOLUMN", crate::modele::GenreBarre::Poutre => "IFCBEAM" };
         entite(id_natif("barre", &b.id), classe, &b.id, &b.nom, 9)?;
     }
+    for e in &projet.escaliers {
+        entite(id_natif("escalier", &e.id), "IFCSTAIR", &e.id, &e.nom, 9)?;
+    }
+    for g in &projet.garde_corps {
+        entite(id_natif("garde_corps", &g.id), "IFCRAILING", &g.id, &g.nom, 9)?;
+    }
     for o in &projet.importes {
         let classe = o.origine.as_ref().map(|o| o.classe.to_uppercase()).filter(|c| c.starts_with("IFC"))
             .unwrap_or_else(|| if o.categorie.to_uppercase().starts_with("IFC") { o.categorie.to_uppercase() } else { "IFCBUILDINGELEMENTPROXY".into() });
@@ -186,6 +192,28 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         let tris = crate::modele::solides::barre(projet, b)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
         materiaux_parts.push(vec![None]);
         geoms.push(ProductGeom { id, parts: vec![Part { color: [0.65,0.68,0.72,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+    }
+    for e in &projet.escaliers {
+        let id = id_natif("escalier", &e.id);
+        let parent = id_natif("niveau", &e.niveau);
+        model.parent.insert(id, parent);
+        model.children.entry(parent).or_default().push(id);
+        let tris = e.solide(projet)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
+        materiaux_parts.push(vec![None]);
+        geoms.push(ProductGeom { id, parts: vec![Part { color: [0.74, 0.73, 0.70, 1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+    }
+    for g in &projet.garde_corps {
+        let id = id_natif("garde_corps", &g.id);
+        let parent = id_natif("niveau", &g.niveau);
+        model.parent.insert(id, parent);
+        model.children.entry(parent).or_default().push(id);
+        // métal sombre, vitrage translucide
+        let parts: Vec<Part> = g.solides(projet)?.into_iter().map(|(vitre, t)| Part {
+            color: if vitre { [0.62, 0.78, 0.86, 0.35] } else { [0.30, 0.31, 0.33, 1.0] },
+            tris: t.into_iter().map(|t| t.map(|v| v * 0.001)).collect(),
+        }).collect();
+        materiaux_parts.push(vec![None; parts.len()]);
+        geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
     for o in &projet.importes {
         let id = id_natif("importe", &o.id);

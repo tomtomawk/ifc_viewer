@@ -8,6 +8,14 @@ pub enum Commande {
     Barre {
         barre: Barre,
     },
+    /// Crée (identifiant vide) ou remplace un escalier.
+    Escalier {
+        escalier: Escalier,
+    },
+    /// Crée (identifiant vide) ou remplace un garde-corps.
+    GardeCorps {
+        garde_corps: GardeCorps,
+    },
     ModifierVue {
         vue: Vue,
     },
@@ -107,6 +115,8 @@ impl Projet {
             .chain(self.assemblages.iter().map(|x| x.id.clone()))
             .chain(self.dalles.iter().map(|x| x.id.clone()))
             .chain(self.barres.iter().map(|x| x.id.clone()))
+            .chain(self.escaliers.iter().map(|x| x.id.clone()))
+            .chain(self.garde_corps.iter().map(|x| x.id.clone()))
             .chain(self.ouvertures.iter().map(|x| x.id.clone()))
             .chain(self.importes.iter().map(|x| x.id.clone()))
             .chain(self.vues.iter().map(|x| x.id.clone()))
@@ -145,6 +155,12 @@ impl Projet {
                 out.insert(o.id.clone());
             }
         }
+        // garde-corps hébergés : suivent leur escalier
+        for g in &self.garde_corps {
+            if g.escalier.as_ref().is_some_and(|e| out.contains(e)) {
+                out.insert(g.id.clone());
+            }
+        }
         Ok(out)
     }
     fn executer_interne(&mut self, c: Commande) -> Result<Vec<String>, String> {
@@ -180,6 +196,35 @@ impl Projet {
                 }
                 let id = vue.id.clone();
                 *actuel = vue;
+                Ok(vec![id])
+            }
+            Commande::Escalier { mut escalier } => {
+                if escalier.id.is_empty() {
+                    escalier.id = identite(self, "escalier");
+                }
+                escalier.calcul(self)?;
+                let id = escalier.id.clone();
+                if let Some(e) = self.escaliers.iter_mut().find(|e| e.id == id) {
+                    *e = escalier;
+                } else if self.identifiants().contains(&id) {
+                    return Err("Identifiant déjà utilisé.".into());
+                } else {
+                    self.escaliers.push(escalier);
+                }
+                Ok(vec![id])
+            }
+            Commande::GardeCorps { mut garde_corps } => {
+                if garde_corps.id.is_empty() {
+                    garde_corps.id = identite(self, "garde-corps");
+                }
+                let id = garde_corps.id.clone();
+                if let Some(g) = self.garde_corps.iter_mut().find(|g| g.id == id) {
+                    *g = garde_corps;
+                } else if self.identifiants().contains(&id) {
+                    return Err("Identifiant déjà utilisé.".into());
+                } else {
+                    self.garde_corps.push(garde_corps);
+                }
                 Ok(vec![id])
             }
             Commande::Barre { mut barre } => {
@@ -602,6 +647,15 @@ impl Projet {
                     .collect();
                 self.contextes.extend(contextes);
                 self.barres.extend(barres);
+                let escaliers: Vec<_> = self.escaliers.iter().filter(|e| set.contains(&e.id)).map(|e| Escalier { id: map[&e.id].clone(), ..e.clone() }).collect();
+                let garde_corps: Vec<_> = self
+                    .garde_corps
+                    .iter()
+                    .filter(|g| set.contains(&g.id))
+                    .map(|g| GardeCorps { id: map[&g.id].clone(), escalier: g.escalier.as_ref().map(|e| map.get(e).unwrap_or(e).clone()), ..g.clone() })
+                    .collect();
+                self.escaliers.extend(escaliers);
+                self.garde_corps.extend(garde_corps);
                 self.murs.extend(murs);
                 self.assemblages.extend(assems);
                 self.ouvertures.extend(baies);
@@ -633,6 +687,8 @@ impl Projet {
                                 || matches!(&m.haut,Haut::Niveau {niveau,..} if niveau==&n.id)
                         }) || self.dalles.iter().any(|d| d.niveau == n.id)
                             || self.barres.iter().any(|b| b.niveau == n.id)
+                            || self.escaliers.iter().any(|e| e.niveau == n.id || e.niveau_haut.as_ref() == Some(&n.id))
+                            || self.garde_corps.iter().any(|g| g.niveau == n.id)
                             || self
                                 .importes
                                 .iter()
@@ -649,6 +705,8 @@ impl Projet {
                 self.ouvertures.retain(|x| !set.contains(&x.id));
                 self.dalles.retain(|x| !set.contains(&x.id));
                 self.barres.retain(|x| !set.contains(&x.id));
+                self.escaliers.retain(|x| !set.contains(&x.id));
+                self.garde_corps.retain(|x| !set.contains(&x.id));
                 self.importes.retain(|x| !set.contains(&x.id));
                 self.niveaux.retain(|x| !set.contains(&x.id));
                 self.vues.retain(|x| !set.contains(&x.id));
@@ -837,6 +895,18 @@ impl Projet {
                     *fin = point(*fin);
                 }
             }
+        }
+        for e in self.escaliers.iter_mut().filter(|e| set.contains(&e.id)) {
+            for q in &mut e.trace {
+                *q = point(*q);
+            }
+            e.decalage_bas += delta[2];
+        }
+        for g in self.garde_corps.iter_mut().filter(|g| set.contains(&g.id)) {
+            for q in &mut g.trace {
+                *q = point(*q);
+            }
+            g.decalage += delta[2];
         }
         for b in &mut self.barres {
             if set.contains(&b.id) {
