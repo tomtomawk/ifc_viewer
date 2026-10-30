@@ -540,6 +540,10 @@ pub struct ViewerApp {
     /// Niveau de détail de la vue (barre de la vue), lu dans la vue Revit ouverte.
     detail: NiveauDetail,
     onglet_ruban: OngletRuban,
+    /// Onglet actif avant qu'une sélection n'ouvre Modifier (rétabli à la désélection),
+    /// et sélection native à l'image précédente.
+    onglet_avant_selection: Option<OngletRuban>,
+    selection_precedente: Vec<String>,
     ruban_edition: crate::ruban::RubanEdition,
     /// Zone de coupe 3D (min, max), repère de la scène ; appliquée aux vues 3D quand
     /// elle est active, modifiable par ses poignées dans toutes les vues.
@@ -693,6 +697,8 @@ impl ViewerApp {
             echelle: 100.0,
             detail: NiveauDetail::Moyen,
             onglet_ruban: OngletRuban::Debut,
+            onglet_avant_selection: None,
+            selection_precedente: Vec::new(),
             ruban_edition: Default::default(),
             boite: None,
             boite_active: false,
@@ -1357,6 +1363,80 @@ impl ViewerApp {
 
     /// Propriétés éditables d'un mur natif (mur seul ou couche d'assemblage) ou d'un
     /// assemblage. Retourne le projet modifié s'il a changé.
+    /// Sélecteur de type de l'élément natif sélectionné (seul) : mur composé (couches
+    /// reconstruites d'après le type), mur seul (types à une couche), couche d'un mur
+    /// composé (type du mur composé), élément horizontal, porte ou fenêtre. Projet
+    /// modifié si un autre type est choisi.
+    fn selecteur_type_selection(&mut self, ui: &mut egui::Ui) -> Option<crate::modele::Projet> {
+        use crate::modele::commandes::Commande;
+        let ids = self.selection_bim();
+        let [id] = ids.as_slice() else { return None };
+        let (p, _) = self.natif.as_ref()?;
+        // (élément, type actuel, types proposés (id, nom, détail), genre)
+        enum Cible { Assemblage(String), Mur(String), Dalle(String), Ouverture(String) }
+        let mur = p.murs.iter().find(|m| &m.id == id);
+        let (cible, actuel, types): (Cible, String, Vec<(String, String, String)>) = if let Some(a) = p.assemblage(id).or_else(|| mur.and_then(|m| m.assemblage.as_deref()).and_then(|a| p.assemblage(a))) {
+            let types = p.types_murs.iter().filter(|t| t.couches.len() > 1).map(|t| (t.id.clone(), t.nom.clone(), format!("{} couches · {}", t.couches.len(), crate::options::unite().afficher(t.epaisseur())))).collect();
+            (Cible::Assemblage(a.id.clone()), a.type_mur.clone(), types)
+        } else if let Some(m) = mur {
+            let types = p.types_murs.iter().filter(|t| t.couches.len() == 1).map(|t| (t.id.clone(), t.nom.clone(), crate::options::unite().afficher(t.epaisseur()))).collect();
+            (Cible::Mur(m.id.clone()), m.type_mur.clone(), types)
+        } else if let Some(d) = p.dalles.iter().find(|d| &d.id == id) {
+            let types = p.types_dalles.iter().map(|t| (t.id.clone(), t.nom.clone(), crate::options::unite().afficher(t.epaisseur()))).collect();
+            (Cible::Dalle(d.id.clone()), d.type_dalle.clone(), types)
+        } else if let Some(o) = p.ouvertures.iter().find(|o| &o.id == id) {
+            let types = p.types_ouvertures.iter().filter(|t| t.genre == o.genre).map(|t| (t.id.clone(), t.nom.clone(), format!("{} × {}", crate::options::unite().afficher(t.largeur), crate::options::unite().afficher(t.hauteur)))).collect();
+            (Cible::Ouverture(o.id.clone()), o.type_ouverture.clone().unwrap_or_default(), types)
+        } else {
+            return None;
+        };
+        let nom_actuel = types.iter().find(|t| t.0 == actuel).map_or_else(|| p.type_mur(&actuel).or_else(|| p.type_dalle(&actuel)).map_or("Type".to_string(), |t| t.nom.clone()), |t| t.1.clone());
+        let mut choisi = actuel.clone();
+        egui::ComboBox::from_id_salt("selecteur_type_selection")
+            .width(ui.available_width() - 8.0)
+            .truncate()
+            .selected_text(RichText::new(&nom_actuel).strong())
+            .show_ui(ui, |ui| {
+                for (tid, nom, detail) in &types {
+                    ui.selectable_value(&mut choisi, tid.clone(), format!("{nom} — {detail}"));
+                }
+            })
+            .response
+            .on_hover_text(match cible {
+                Cible::Assemblage(_) => "Type du mur composé : ses couches sont reconstruites d'après le type choisi",
+                _ => "Type de l'élément sélectionné",
+            });
+        ui.separator();
+        if choisi == actuel {
+            return None;
+        }
+        let mut q = p.clone();
+        match cible {
+            Cible::Assemblage(a) => {
+                if let Some(x) = q.assemblages.iter_mut().find(|x| x.id == a) {
+                    x.type_mur = choisi;
+                }
+                match q.executer(Commande::ActualiserType { assemblage: a }) {
+                    Ok((r, _)) => q = r,
+                    Err(e) => {
+                        self.error = Some(e);
+                        return None;
+                    }
+                }
+            }
+            Cible::Mur(m) => q.murs.iter_mut().filter(|x| x.id == m).for_each(|x| x.type_mur = choisi.clone()),
+            Cible::Dalle(d) => q.dalles.iter_mut().filter(|x| x.id == d).for_each(|x| x.type_dalle = choisi.clone()),
+            Cible::Ouverture(o) => {
+                let t = q.types_ouvertures.iter().find(|t| t.id == choisi).cloned();
+                if let (Some(x), Some(t)) = (q.ouvertures.iter_mut().find(|x| x.id == o), t) {
+                    x.type_ouverture = Some(t.id);
+                    (x.largeur, x.hauteur) = (t.largeur, t.hauteur);
+                }
+            }
+        }
+        Some(q)
+    }
+
     fn proprietes_natif(&mut self, ui: &mut egui::Ui, id: Id) -> Option<crate::modele::Projet> {
         use crate::modele::Haut;
         let mut pente_defaut = self.pente_defaut;
@@ -2341,6 +2421,26 @@ impl ViewerApp {
             _ => "Dalle : sommet suivant, recliquer le premier ou Entrée pour fermer · Échap : annuler",
         };
         painter.text(rect.left_top() + egui::vec2(12.0, 34.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
+    }
+
+    /// Comme dans Revit : sélectionner un élément du projet natif (sans outil en cours)
+    /// ouvre l'onglet Modifier ; tout désélectionner rend l'onglet d'avant.
+    fn onglet_selon_selection(&mut self) {
+        let ids = if self.natif.is_some() && self.jeu_actif().is_none() { self.selection_bim() } else { Vec::new() };
+        let outil = self.ruban_edition.a_un_outil();
+        let change = ids != self.selection_precedente;
+        if change && !ids.is_empty() && !outil && self.onglet_ruban != OngletRuban::Modifier {
+            self.onglet_avant_selection = Some(self.onglet_ruban);
+            self.onglet_ruban = OngletRuban::Modifier;
+        } else if change && ids.is_empty() && !outil && self.onglet_ruban == OngletRuban::Modifier {
+            if let Some(o) = self.onglet_avant_selection.take() {
+                self.onglet_ruban = o;
+            }
+        }
+        if self.onglet_ruban != OngletRuban::Modifier {
+            self.onglet_avant_selection = None;
+        }
+        self.selection_precedente = ids;
     }
 
     /// Saisie en cours : un champ a le clavier, ou un nombre est glissé (glisser commencé
@@ -5335,6 +5435,12 @@ impl ViewerApp {
         self.fenetre_position_plan(ui.ctx());
         self.fenetre_plumes(ui.ctx());
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
+        // sélecteur de type de l'élément sélectionné, en tête comme dans Revit
+        if self.jeu_actif().is_none() {
+            if let Some(projet) = self.selecteur_type_selection(ui) {
+                if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
+            }
+        }
         if let Some(jeu) = self.jeu_actif() {
             egui::ScrollArea::vertical().show(ui, |ui| self.proprietes_jeu(ui, &jeu));
             return;
@@ -5352,7 +5458,6 @@ impl ViewerApp {
         if self.panneau_bim(ui) { return; }
         if self.natif.is_some() {
             let projet = &self.natif.as_ref().unwrap().0;
-            ui.separator();
             // éditeur de type de mur : un type déjà porté par des murs les met à jour
             let mut copie = if self.ruban_edition.editeur_type_ouvert() { projet.clone() } else { crate::modele::Projet::default() };
             if self.ruban_edition.editeur_type_ouvert() && self.ruban_edition.editeur_type_mur(ui.ctx(), &mut copie) {
@@ -5390,11 +5495,12 @@ impl ViewerApp {
                 (true, None) => Some(classe),
                 (false, t) => t,
             };
-            if let Some(e) = entete {
+            // projet natif : le type est dans le sélecteur en tête du panneau
+            if let Some(e) = entete.filter(|_| self.natif.is_none() || ifc) {
                 ui.label(RichText::new(e).color(Color32::from_gray(70)));
+                ui.separator();
             }
         }
-        ui.separator();
         let element_selectionne = self.selected.is_some() || !self.selection_bim().is_empty();
         if self.natif.is_some() && !element_selectionne {
             self.proprietes_vue_native(ui);
@@ -5998,8 +6104,14 @@ impl ViewerApp {
                 if self.natif.is_some() && self.ruban_edition.outil()==Some(crate::ruban::Outil::Ouverture) {
                     if let (Some(id),Some(p))=(id,self.point_clique) { self.placer_ouverture(id,[p.x*1000.0,p.y*1000.0]); }
                 } else if id.is_none() {
+                    // clic dans le vide : désélectionne (comme Revit), puis un second clic
+                    // ferme une fenêtre de sélection
+                    let ajouter = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
+                    if !ajouter {
+                        self.select(None, false);
+                    }
                     if let Some(debut) = resp.interact_pointer_pos() {
-                        self.fenetre_selection = Some(FenetreSelection { debut, fin: debut, glissement: false, ajouter: ui.input(|i| i.modifiers.ctrl || i.modifiers.command) });
+                        self.fenetre_selection = Some(FenetreSelection { debut, fin: debut, glissement: false, ajouter });
                     }
                 } else {
                     if ui.input(|i| i.modifiers.ctrl || i.modifiers.command) && self.natif.is_none() {
@@ -6162,13 +6274,6 @@ impl ViewerApp {
             self.cube_orientation(ui, rect);
         }
 
-        // onglet de la vue ouverte, comme dans Revit
-        if let Some(v) = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)) {
-            let texte = if v.nom.is_empty() { v.genre.clone() } else { format!("{} : {}", v.genre, v.nom) };
-            let galet = egui::Rect::from_min_size(rect.left_top() + egui::vec2(6.0, 6.0), egui::vec2(texte.len() as f32 * 7.2 + 20.0, 22.0));
-            ui.painter().rect_filled(galet, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 230));
-            ui.painter().text(galet.left_center() + egui::vec2(10.0, 0.0), egui::Align2::LEFT_CENTER, texte, egui::FontId::proportional(14.0), Color32::from_gray(40));
-        }
         if self.scene.is_none() {
             let msg = if self.loading.is_some() { self.status.clone() } else { "Glisser un fichier .ifc ou .rvt ici\nou Ctrl+O".to_string() };
             ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, msg, egui::FontId::proportional(20.0), Color32::from_gray(110));
@@ -7160,6 +7265,7 @@ impl eframe::App for ViewerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.valider_saisie(&ctx);
+        self.onglet_selon_selection();
         self.historique.geste(ctx.input(|i|i.pointer.any_down()));
         self.poll_sauvegarde();
         self.fenetre_documentation(&ctx);

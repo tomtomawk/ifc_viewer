@@ -33,6 +33,12 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   abscisse depuis son départ. Une ouverture d'assemblage perce toutes ses couches. Une
   menuiserie importée conserve son maillage et suit son hôte ; ses dimensions sont
   verrouillées tant qu'elle n'est pas remplacée explicitement par un cadre natif.
+- **Sélection** : sélectionner un élément (sans outil en cours) ouvre l'onglet
+  Modifier ; tout désélectionner (clic dans le vide, Échap) rend l'onglet d'avant.
+  Le panneau Propriétés commence par le sélecteur de type de l'élément : mur composé
+  (couches reconstruites d'après le type choisi ; une couche sélectionnée montre le
+  type de son mur), mur seul (types à une couche), élément horizontal, porte ou
+  fenêtre (dimensions du type).
 - **Modifier** propose déplacement, copie, rotation, alignement des axes et
   ajustement de l'extrémité d'un mur sur l'axe d'un autre. Ctrl+clic ou les cases de
   la liste constituent une sélection multiple, surlignée dans la vue. On peut aussi
