@@ -439,6 +439,8 @@ pub struct ViewerApp {
     dessin2d: dessin2d_ui::EtatDessin2D,
     /// Éditeur de famille de fenêtre ouvert.
     famille: Option<famille_ui::EditeurFamille>,
+    /// Onglet de l'éditeur de familles au premier plan.
+    famille_active: bool,
     natif: Option<(crate::modele::Projet, PathBuf)>,
     historique: crate::modele::historique::Historique,
     natif_modifie: bool,
@@ -621,6 +623,7 @@ impl ViewerApp {
             alignement_plan: false,
             dessin2d: Default::default(),
             famille: None,
+            famille_active: false,
             arete_alignement: None,
             aretes_objet: None,
             positions_plan: Vec::new(),
@@ -4317,6 +4320,8 @@ impl ViewerApp {
     }
 
     fn onglets_vues(&mut self, ui: &mut egui::Ui) {
+        /// Identifiant de l'onglet de l'éditeur de familles (hors des documents).
+        const ONGLET_FAMILLE: usize = usize::MAX;
         let mut onglets = Vec::new();
         let mut titres = BTreeMap::new();
         let mut ajouter = |id: usize, scene: Option<&Scene>, rvt: Option<&RvtInfo>, vues: &[Option<usize>], modifie: bool| {
@@ -4336,6 +4341,13 @@ impl ViewerApp {
         }
         ajouter(self.document_actif, self.scene.as_ref(), self.rvt.as_ref(), &self.vues_ouvertes, self.natif_modifie);
         onglets.sort_by_key(|o| o.0);
+        // éditeur de familles : un onglet à part, après les vues
+        if let Some(t) = self.titre_famille() {
+            titres.insert(ONGLET_FAMILLE, "Éditeur de familles".into());
+            onglets.push((ONGLET_FAMILLE, None, t.clone(), t));
+        }
+        let famille_active = self.famille_active && self.famille.is_some();
+        let est_actif = |id: usize, vue: Option<usize>, doc: usize, active: Option<usize>| if id == ONGLET_FAMILLE { famille_active } else { !famille_active && id == doc && vue == active };
         let mut activer = None;
         let mut fermer = None;
         // Les sélecteurs disposent de leurs propres emplacements, indépendants des onglets.
@@ -4356,7 +4368,7 @@ impl ViewerApp {
         dessiner_croix_onglet(ui.painter(), rect_fermeture.center(), if plusieurs_vues { ui.visuals().text_color() } else { ui.visuals().weak_text_color() });
         let reduire = fermeture.clicked();
         let nombre = ((disponible / 180.0).floor() as usize).max(1).min(onglets.len().max(1));
-        let actif = onglets.iter().position(|o| o.0 == self.document_actif && o.1 == self.vue_active).unwrap_or(0);
+        let actif = onglets.iter().position(|o| est_actif(o.0, o.1, self.document_actif, self.vue_active)).unwrap_or(0);
         let debut = actif.saturating_sub(nombre / 2).min(onglets.len().saturating_sub(nombre));
         let largeur = (disponible / nombre as f32).min(220.0);
         for droite in [false, true] {
@@ -4375,7 +4387,7 @@ impl ViewerApp {
                         ui.label(RichText::new(&titres[id]).strong().color(couleur_document(*id)));
                         precedent = Some(*id);
                     }
-                    if ui.selectable_label(*id == self.document_actif && *vue == self.vue_active, RichText::new(nom).color(couleur_document(*id))).on_hover_text(infobulle).clicked() {
+                    if ui.selectable_label(est_actif(*id, *vue, self.document_actif, self.vue_active), RichText::new(nom).color(couleur_document(*id))).on_hover_text(infobulle).clicked() {
                         activer = Some((*id, *vue));
                         ui.close();
                     }
@@ -4393,7 +4405,7 @@ impl ViewerApp {
                         let x = barre.left() + marge + fleche + 6.0 + k as f32 * largeur;
                         let rect = egui::Rect::from_min_size(egui::pos2(x, barre.top() + 2.0), egui::vec2((largeur - 6.0).max(1.0), 22.0));
                         let couleur = couleur_document(*id);
-                        let actif = *id == self.document_actif && self.vue_active == *vue;
+                        let actif = est_actif(*id, *vue, self.document_actif, self.vue_active);
                         let diluer = |c: u8| ((c as u16 + 255 * if actif { 3 } else { 5 }) / if actif { 4 } else { 6 }) as u8;
                         let fond = Color32::from_rgb(diluer(couleur.r()), diluer(couleur.g()), diluer(couleur.b()));
                         let survole = ui.rect_contains_pointer(rect);
@@ -4403,7 +4415,8 @@ impl ViewerApp {
                         let rect_corps = egui::Rect::from_min_max(rect.min, egui::pos2(rect_croix.left(), rect.bottom()));
                         let reponse = ui.interact(rect_corps, ui.scope_id().with(("onglet_vue", id, vue)), Sense::click()).on_hover_text(infobulle);
                         let texte_rect = rect_corps.shrink2(egui::vec2(7.0, 2.0));
-                        ui.put(texte_rect, egui::Label::new(RichText::new(nom).color(ui.visuals().text_color())).truncate());
+                        // texte non sélectionnable : le clic revient à l'onglet
+                        ui.put(texte_rect, egui::Label::new(RichText::new(nom).color(ui.visuals().text_color())).truncate().selectable(false).sense(Sense::hover()));
                         if reponse.clicked() {
                             activer = Some((*id, *vue));
                         }
@@ -4424,7 +4437,10 @@ impl ViewerApp {
         if reduire {
             self.garder_derniere_vue_par_document();
         }
-        if let Some((id, vue)) = activer {
+        if let Some((id, _)) = activer {
+            self.famille_active = id == ONGLET_FAMILLE;
+        }
+        if let Some((id, vue)) = activer.filter(|o| o.0 != ONGLET_FAMILLE) {
             self.changer_document(id);
             if let Some(i) = vue {
                 self.activer_vue(i);
@@ -4433,7 +4449,10 @@ impl ViewerApp {
                 self.restaurer_vue(None);
             }
         }
-        if let Some((id, cible)) = fermer {
+        if fermer.is_some_and(|o| o.0 == ONGLET_FAMILLE) {
+            self.fermer_famille();
+        }
+        if let Some((id, cible)) = fermer.filter(|o| o.0 != ONGLET_FAMILLE) {
             let precedent = self.document_actif;
             self.changer_document(id);
             if let Some(k) = self.vues_ouvertes.iter().position(|&v| v == cible) {
@@ -7029,7 +7048,6 @@ impl eframe::App for ViewerApp {
         self.historique.geste(ctx.input(|i|i.pointer.any_down()));
         self.poll_sauvegarde();
         self.fenetre_documentation(&ctx);
-        self.fenetre_famille(&ctx);
         if !ctx.egui_wants_keyboard_input() {
             if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Z)) { self.parcourir_historique(true); }
             else if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Z)) { self.parcourir_historique(false); }
@@ -7118,7 +7136,9 @@ impl eframe::App for ViewerApp {
             // à droite ; chacun s'ancre d'un côté ou flotte (ancrages relevés en début
             // d'image, changés pour la suivante)
             let ancrages = self.ancrages;
-            for p in Panneau::TOUS {
+            // onglet Famille : l'éditeur a ses propres panneaux, ceux du projet se retirent
+            let famille = self.famille_active && self.famille.is_some();
+            for p in Panneau::TOUS.into_iter().filter(|_| !famille) {
                 let id = egui::IdSalt::new((p.nom(), ancrages[p as usize].nom()));
                 let panneau = match ancrages[p as usize] {
                     Ancrage::Gauche => egui::Panel::left(id),
@@ -7132,9 +7152,13 @@ impl eframe::App for ViewerApp {
             if self.scene.is_some() {
                 egui::Panel::top("onglets_vues").show(ui, |ui| self.onglets_vues(ui));
             }
-            egui::Panel::bottom("barre_vue").show(ui, |ui| self.barre_vue(ui));
+            if !famille {
+                egui::Panel::bottom("barre_vue").show(ui, |ui| self.barre_vue(ui));
+            }
             egui::CentralPanel::no_frame().show(ui, |ui| {
-                if self.scene.is_some() && self.vues_ouvertes.is_empty() {
+                if self.famille_active && self.famille.is_some() {
+                    self.vue_famille(ui);
+                } else if self.scene.is_some() && self.vues_ouvertes.is_empty() {
                     ui.centered_and_justified(|ui| ui.label("Ouvrir une vue depuis l’arborescence du projet."));
                 } else if self.nomenclature_ouverte.is_some() {
                     self.vue_nomenclature(ui);
@@ -7144,7 +7168,7 @@ impl eframe::App for ViewerApp {
                     self.viewport(ui);
                 }
             });
-            for p in Panneau::TOUS.into_iter().filter(|p| ancrages[*p as usize] == Ancrage::Flottant) {
+            for p in Panneau::TOUS.into_iter().filter(|p| !famille && ancrages[*p as usize] == Ancrage::Flottant) {
                 let i = p as usize;
                 let mut fenetre = egui::Window::new(p.nom()).id(egui::Id::unique(("flottant", p.nom()))).title_bar(false).movable(false).resizable(true).default_size([self.largeurs_panneaux[i], 520.0]).min_width(220.0);
                 if let Some(q) = self.pos_imposee[i].take() {

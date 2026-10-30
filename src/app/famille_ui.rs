@@ -258,6 +258,7 @@ impl ViewerApp {
         let prefixe = if famille.genre == GenreOuverture::Porte { "Porte" } else { "Fenêtre" };
         let partages = p.parametres_partages.clone();
         let materiaux_projet = p.materiaux.iter().map(|m| (m.nom.clone(), m.couleur)).collect();
+        self.famille_active = true;
         self.famille = Some(EditeurFamille {
             ouverture,
             type_id: t.map(|t| t.id.clone()),
@@ -343,59 +344,63 @@ impl ViewerApp {
     }
 
     /// Fenêtre de l'éditeur de familles.
-    pub(super) fn fenetre_famille(&mut self, ctx: &egui::Context) {
+    /// Titre de l'onglet de l'éditeur : catégorie et type.
+    pub(super) fn titre_famille(&self) -> Option<String> {
+        let ed = self.famille.as_ref()?;
+        let genre = if ed.famille.genre == GenreOuverture::Porte { "Porte" } else { "Fenêtre" };
+        Some(format!("Famille {genre} : {}", ed.nom))
+    }
+
+    /// Ferme l'onglet de l'éditeur de familles (la famille non enregistrée est perdue).
+    pub(super) fn fermer_famille(&mut self) {
+        self.famille = None;
+        self.famille_active = false;
+    }
+
+    /// Éditeur de familles dans la zone centrale (onglet « Famille ») : barre d'outils,
+    /// paramètres et contraintes à gauche, vue de travail à droite.
+    pub(super) fn vue_famille(&mut self, ui: &mut egui::Ui) {
         if self.famille.is_none() {
             return;
         }
-        let mut ouverte = true;
         let mut action: Option<bool> = None;
         let placement = self.famille.as_ref().is_some_and(|e| e.ouverture.is_none());
-        let titre = if self.famille.as_ref().is_some_and(|e| e.famille.genre == GenreOuverture::Porte) { "Éditeur de familles — Porte" } else { "Éditeur de familles — Fenêtre" };
-        egui::Window::new(titre)
-            .id(egui::Id::unique("editeur_famille"))
-            .open(&mut ouverte)
-            .collapsible(false)
-            .default_size([1180.0, 720.0])
-            .min_size([900.0, 560.0])
-            .show(ctx, |ui| {
-                let ed = self.famille.as_mut().unwrap();
-                barre_outils(ui, ed);
-                ui.separator();
-                ui.horizontal_top(|ui| {
-                    ui.vertical(|ui| {
-                        ui.set_width(360.0);
-                        egui::ScrollArea::vertical().id_salt("famille_panneau").max_height((ui.available_height() - 70.0).max(200.0)).show(ui, |ui| panneau(ui, ed));
-                        ui.separator();
-                        let r = ed.resoudre();
-                        match (&ed.erreur, r.erreurs.first(), r.conflits.len()) {
-                            (Some(e), _, _) | (None, Some(e), _) => {
-                                ui.colored_label(Color32::from_rgb(200, 40, 40), e);
-                            }
-                            (None, None, n) if n > 0 => {
-                                ui.colored_label(Color32::from_rgb(200, 120, 20), format!("{n} contrainte(s) écartée(s) : priorité inférieure en conflit."));
-                            }
-                            _ => {
-                                ui.label(RichText::new("Contraintes satisfaites.").weak());
-                            }
-                        }
-                        ui.horizontal(|ui| {
-                            if ui.add_enabled(ed.type_id.is_some(), egui::Button::new("Enregistrer le type")).on_hover_text("Met à jour le type et toutes ses ouvertures").clicked() {
-                                action = Some(false);
-                            }
-                            let aide = if placement { "Crée un type avec cette famille ; il sert au prochain placement" } else { "Crée un type avec cette famille et l'affecte à l'ouverture" };
-                            if ui.button("Nouveau type").on_hover_text(aide).clicked() {
-                                action = Some(true);
-                            }
-                        });
-                    });
+        egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(6.0).show(ui, |ui| {
+            ui.set_min_size(ui.available_size());
+            let ed = self.famille.as_mut().unwrap();
+            barre_outils(ui, ed);
+            ui.separator();
+            ui.horizontal_top(|ui| {
+                ui.vertical(|ui| {
+                    ui.set_width(360.0);
+                    egui::ScrollArea::vertical().id_salt("famille_panneau").max_height((ui.available_height() - 70.0).max(200.0)).show(ui, |ui| panneau(ui, ed));
                     ui.separator();
-                    ui.vertical(|ui| canevas(ui, ed));
+                    let r = ed.resoudre();
+                    match (&ed.erreur, r.erreurs.first(), r.conflits.len()) {
+                        (Some(e), _, _) | (None, Some(e), _) => {
+                            ui.colored_label(Color32::from_rgb(200, 40, 40), e);
+                        }
+                        (None, None, n) if n > 0 => {
+                            ui.colored_label(Color32::from_rgb(200, 120, 20), format!("{n} contrainte(s) écartée(s) : priorité inférieure en conflit."));
+                        }
+                        _ => {
+                            ui.label(RichText::new("Contraintes satisfaites.").weak());
+                        }
+                    }
+                    ui.horizontal(|ui| {
+                        if ui.add_enabled(ed.type_id.is_some(), egui::Button::new("Enregistrer le type")).on_hover_text("Met à jour le type et toutes ses ouvertures").clicked() {
+                            action = Some(false);
+                        }
+                        let aide = if placement { "Crée un type avec cette famille ; il sert au prochain placement" } else { "Crée un type avec cette famille et l'affecte à l'ouverture" };
+                        if ui.button("Nouveau type").on_hover_text(aide).clicked() {
+                            action = Some(true);
+                        }
+                    });
                 });
+                ui.separator();
+                ui.vertical(|ui| canevas(ui, ed));
             });
-        if !ouverte {
-            self.famille = None;
-            return;
-        }
+        });
         if let Some(nouveau) = action {
             let r = self.enregistrer_famille(nouveau);
             if let Ok(id) = &r {
@@ -411,7 +416,7 @@ impl ViewerApp {
 }
 
 fn barre_outils(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         for v in [VueFamille::Elevation, VueFamille::Plan, VueFamille::Coupe] {
             if ui.selectable_label(ed.vue == v, v.nom()).clicked() {
                 ed.vue = v;
