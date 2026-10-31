@@ -403,7 +403,9 @@
       "echelle": 100,
       "genre": "plan",
       "niveau": "rdc",
-      "coupe": 1200
+      "coupe": 1200,
+      "bas_niveau": "rdc",
+      "bas_decalage": 0
     },
     {
       "id": "plan-etage",
@@ -411,7 +413,9 @@
       "echelle": 100,
       "genre": "plan",
       "niveau": "etage",
-      "coupe": 1200
+      "coupe": 1200,
+      "bas_niveau": "etage",
+      "bas_decalage": 0
     },
     {
       "id": "coupe",
@@ -523,5 +527,6 @@
     "etage-m1": "toiture",
     "etage-m2": "toiture",
     "etage-m3": "toiture"
-  }
+  },
+  "implantations": {}
 }

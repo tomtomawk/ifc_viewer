@@ -406,6 +406,7 @@ impl ViewerApp {
                     for ch in t.chars() {
                         if ch.is_ascii_digit() || "@<,;.-".contains(ch) || (en_cours && ch.eq_ignore_ascii_case(&'f')) {
                             self.dessin2d.saisie.push(ch);
+                            self.dessin2d.message = None;
                             lu = true;
                         } else if ch == ' ' {
                             valider = true;

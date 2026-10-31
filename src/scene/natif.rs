@@ -110,9 +110,23 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
             let [r, g, b] = x.couleur.map(|c| c as f32 / 255.0);
             [r, g, b, 1.0]
         });
+        let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
         if let Some(x) = &materiau {
-            let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
             couches_coupe.push((id, coupe_materiau(projet, x, vec![neutre, neutre], type_mur.couches.first().map_or(crate::dessin::TRAIT_FORT_MM, |c| projet.trait_couche(c)))));
+        } else if type_mur.couches.len() == 1 {
+            // mur sans matériau : poché et hachures par défaut, mais en bande de coupe, pour
+            // que les jonctions entre murs identiques se lisent sans trait
+            couches_coupe.push((id, vec![CoucheCoupe {
+                plans: vec![neutre, neutre],
+                couleur: [184, 184, 176, 255],
+                fond: [255, 255, 255, 255],
+                motif_fond: None,
+                motif: None,
+                couleur_motif: [70, 70, 70, 255],
+                hachure_defaut: true,
+                isolation: false,
+                trait_mm: crate::dessin::TRAIT_FORT_MM,
+            }]));
         }
         materiaux_parts.push(vec![materiau.as_ref().map(|m| m.nom.clone())]);
         geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.is_some().then_some(couleur)], motifs: vec![materiau.as_ref().and_then(|m| motif_surface(projet, m, &mut table_motifs))] });
@@ -321,6 +335,7 @@ fn navigateur(projet: &Projet) -> Navigateur {
         phase: 0,
         filtre_phase: -1,
         coupe: None,
+        limite_basse: None,
         plan_coupe: None,
         cadrage: Vec::new(),
         tableau: None,
@@ -343,7 +358,8 @@ fn navigateur(projet: &Projet) -> Navigateur {
         let mut n = vue(num(&v.id), "", &v.nom, v.echelle);
         n.type_vue = v.type_vue.clone();
         match &v.genre {
-            GenreVue::Plan { niveau, coupe } => {
+            GenreVue::Plan { niveau, coupe, bas_niveau, bas_decalage } => {
+                n.limite_basse = projet.niveau(bas_niveau).map(|l| (l.altitude + bas_decalage) / 1000.0);
                 n.genre = "Plan d'étage".into();
                 n.etage = Some(id_natif("niveau", niveau));
                 n.coupe = Some(coupe / 1000.0);

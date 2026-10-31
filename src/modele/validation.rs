@@ -146,8 +146,8 @@ impl Projet {
                 return Err("Échelle non valide.".into());
             }
             match &v.genre {
-                GenreVue::Plan { niveau, coupe }
-                    if self.niveau(niveau).is_none() || !coupe.is_finite() =>
+                GenreVue::Plan { niveau, coupe, bas_niveau, bas_decalage }
+                    if self.niveau(niveau).is_none() || self.niveau(bas_niveau).is_none() || !coupe.is_finite() || !bas_decalage.is_finite() =>
                 {
                     return Err("Vue : niveau ou coupe non valide.".into());
                 }

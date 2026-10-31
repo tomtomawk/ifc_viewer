@@ -675,6 +675,8 @@ impl Projet {
                     .map(|(id, n)| (map[id].clone(), *n))
                     .collect();
                 self.priorites_jonction.extend(priorites);
+                let implantations: Vec<_> = self.implantations.iter().filter(|(id, _)| map.contains_key(*id)).map(|(id, r)| (map[id].clone(), *r)).collect();
+                self.implantations.extend(implantations);
                 self.transformer(&map.values().cloned().collect(), delta, [0.0; 2], 0.0)?;
                 Ok(ids.iter().map(|id| map[id].clone()).collect())
             }
@@ -694,7 +696,7 @@ impl Projet {
                                 .iter()
                                 .any(|i| i.niveau.as_ref() == Some(&n.id))
                             || self.vues.iter().any(
-                                |v| matches!(&v.genre,GenreVue::Plan {niveau,..} if niveau==&n.id),
+                                |v| matches!(&v.genre,GenreVue::Plan {niveau,bas_niveau,..} if niveau==&n.id || bas_niveau==&n.id),
                             ))
                     {
                         return Err("Ce niveau est encore utilisé.".into());
@@ -713,6 +715,7 @@ impl Projet {
                 self.attaches_toitures
                     .retain(|id, t| !set.contains(id) && !set.contains(t));
                 self.priorites_jonction.retain(|id, _| !set.contains(id));
+                self.implantations.retain(|id, _| !set.contains(id));
                 self.contextes.retain(|id, _| !set.contains(id));
                 self.annotations
                     .retain(|x| !set.contains(&x.id) && !set.contains(&x.vue));

@@ -232,7 +232,7 @@ struct LigneQuantite {
 
 pub fn repere(p: &Projet, v: &Vue) -> (DVec3, DVec3, DVec3) {
     match &v.genre {
-        GenreVue::Plan { niveau, coupe } => (
+        GenreVue::Plan { niveau, coupe, .. } => (
             DVec3::new(
                 0.0,
                 0.0,

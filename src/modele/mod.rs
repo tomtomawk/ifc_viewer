@@ -94,6 +94,9 @@ pub struct Projet {
     pub attaches_toitures: BTreeMap<String,String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub priorites_jonction: BTreeMap<String,i32>,
+    /// Ligne d'implantation (justification) choisie à la création d'un mur ou d'un
+    /// assemblage ; absente : axe médian.
+    pub implantations: BTreeMap<String, assemblage::Reference>,
     /// Paramètres partagés du projet (mm) : repris par les familles qui les déclarent.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub parametres_partages: BTreeMap<String, f64>,
@@ -697,8 +700,11 @@ pub struct Vue {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(tag = "genre", rename_all = "snake_case")]
 pub enum GenreVue {
-    /// Plan d'étage : coupe horizontale à `coupe` mm au-dessus du niveau.
-    Plan { niveau: String, coupe: f64 },
+    /// Plan d'étage : coupe horizontale à `coupe` mm au-dessus du niveau (limite haute) ;
+    /// limite basse : `bas_decalage` mm au-dessus du niveau `bas_niveau`. Les éléments
+    /// qui se terminent à la limite basse ne sont pas montrés (sauf les éléments
+    /// horizontaux, qui appartiennent au niveau).
+    Plan { niveau: String, coupe: f64, bas_niveau: String, bas_decalage: f64 },
     /// Coupe verticale le long de la ligne `debut` → `fin` (mm, plan) ; on regarde vers
     /// la gauche de la ligne (comme une coupe Revit tracée de gauche à droite regarde
     /// vers le haut), sur `profondeur` mm, entre les deux bouts de la ligne. Une
@@ -763,6 +769,10 @@ impl Projet {
         let mut p = Projet::nouveau(nom);
         for n in &g.niveaux {
             p.niveaux.push(Niveau { id: identifiant("niveau", &format!("gabarit:{}", n.nom)), nom: n.nom.clone(), altitude: n.altitude, origine: None });
+        }
+        // chaque niveau du gabarit a son plan d'étage dès l'ouverture du fichier
+        for id in p.niveaux.iter().map(|n| n.id.clone()).collect::<Vec<_>>() {
+            let _ = p.ajouter_vue_plan(&id, 1200.0);
         }
         for t in &g.types_murs {
             p.types_murs.push(TypeCompose { id: identifiant("type-mur", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), couches: t.couches.clone(), couches_detaillees: true, origine: None });

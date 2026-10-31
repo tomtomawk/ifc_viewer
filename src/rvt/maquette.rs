@@ -3218,6 +3218,7 @@ fn navigateur(m: &Maquette, entite_vue: &HashMap<i64, Id>, entite_type: &HashMap
         .filter(|v| !v.gabarit && v.genre != "Arborescence")
         .map(|v| NavVue {
             plan_coupe: None,
+            limite_basse: None,
             cadrage: Vec::new(),
             revit_id: v.id,
             phase: id_parametre(m, v.id, -1_012_102).unwrap_or(0),

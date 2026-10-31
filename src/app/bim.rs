@@ -185,6 +185,8 @@ pub(super) struct EtatBim {
     abscisse: f64,
     pub(super) barre: crate::modele::Barre,
     pub(super) depart_structure: Option<[f64; 2]>,
+    /// Déplacer / Copier graphique : point de base cliqué.
+    pub(super) depart_deplacement: Option<[f64; 2]>,
     barre_editee: Option<crate::modele::Barre>,
     annotation_identique: Option<crate::modele::documentation::Annotation>,
     /// Suppression demandée depuis le panneau : exécutée à l'image suivante.
@@ -220,6 +222,7 @@ impl Default for EtatBim {
                 rotation: 0.0,
             },
             depart_structure: None,
+            depart_deplacement: None,
             barre_editee: None,
             annotation_identique: None,
             supprimer: false,
@@ -498,69 +501,36 @@ impl ViewerApp {
         Ok(())
     }
 
-    pub(super) fn contexte_selection(&self, ui: &mut egui::Ui, ids: &[String]) {
-        let Some((p, _)) = &self.natif else { return };
-        let mut contextes = Vec::new();
+    /// Phase, sous-projet et variante de la sélection, modifiables d'ici : « Varié » quand
+    /// les éléments diffèrent. Retourne le projet modifié.
+    pub(super) fn contexte_selection(&self, ui: &mut egui::Ui, ids: &[String]) -> Option<crate::modele::Projet> {
+        let (p, _) = self.natif.as_ref()?;
+        // éléments portant le contexte : couches des assemblages, murs, dalles, autres
+        let mut cibles: Vec<String> = Vec::new();
         for id in ids {
-            if let Some(c) = p.contextes.get(id) {
-                contextes.push((
-                    c.phase.as_deref().unwrap_or("Projet").into(),
-                    c.sous_projet.as_deref().unwrap_or("A").into(),
-                    c.variante
-                        .as_ref()
-                        .and_then(|id| p.variantes.iter().find(|v| &v.id == id))
-                        .map_or_else(|| "Principale".into(), |v| v.libelle()),
-                ));
-                continue;
+            if let Some(a) = p.assemblage(id) {
+                cibles.extend(a.couches.iter().cloned());
+            } else if let Some(o) = p.ouvertures.iter().find(|o| &o.id == id) {
+                cibles.extend(p.assemblage(&o.mur).map_or_else(|| vec![o.mur.clone()], |a| a.couches.clone()));
+            } else {
+                cibles.push(id.clone());
             }
-            let hote = p
-                .ouvertures
-                .iter()
-                .find(|o| &o.id == id)
-                .map(|o| o.mur.as_str())
-                .unwrap_or(id);
-            let mur = p.murs.iter().find(|m| m.id == hote).or_else(|| {
-                p.assemblage(hote)
-                    .and_then(|a| a.couches.first())
-                    .and_then(|id| p.murs.iter().find(|m| &m.id == id))
-            });
-            let dalle = p.dalles.iter().find(|d| &d.id == id);
-            let (phase, sous, variante) = if let Some(m) = mur {
-                (&m.phase, &m.sous_projet, &m.variante)
-            } else if let Some(d) = dalle {
-                (&d.phase, &d.sous_projet, &d.variante)
-            } else {
-                contextes.push((
-                    "Projet".to_string(),
-                    "A".to_string(),
-                    "Principale".to_string(),
-                ));
-                continue;
-            };
-            contextes.push((
-                phase.as_deref().unwrap_or("Projet").to_string(),
-                sous.as_deref().unwrap_or("A").to_string(),
-                variante
-                    .as_ref()
-                    .and_then(|id| p.variantes.iter().find(|v| &v.id == id))
-                    .map_or_else(|| "Principale".to_string(), |v| v.libelle()),
-            ));
         }
-        let valeur = |i: usize| {
-            let noms: Vec<_> = contextes
-                .iter()
-                .map(|c| match i {
-                    0 => &c.0,
-                    1 => &c.1,
-                    _ => &c.2,
-                })
-                .collect();
-            if noms.iter().all(|n| *n == noms[0]) {
-                noms[0].as_str()
+        cibles.sort();
+        cibles.dedup();
+        // (phase, sous-projet, variante) de chaque cible
+        let lire = |id: &String| -> (Option<String>, Option<String>, Option<String>) {
+            if let Some(m) = p.murs.iter().find(|m| &m.id == id) {
+                (m.phase.clone(), m.sous_projet.clone(), m.variante.clone())
+            } else if let Some(d) = p.dalles.iter().find(|d| &d.id == id) {
+                (d.phase.clone(), d.sous_projet.clone(), d.variante.clone())
             } else {
-                "Multiple"
+                let c = p.contextes.get(id).cloned().unwrap_or_default();
+                (c.phase, c.sous_projet, c.variante)
             }
         };
+        let valeurs: Vec<_> = cibles.iter().map(lire).collect();
+        let mut resultat: Option<(usize, Option<String>)> = None;
         let largeur = ((ui.available_width() - 8.0) / 3.0).max(30.0);
         ui.horizontal_top(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
@@ -568,11 +538,48 @@ impl ViewerApp {
                 ui.vertical(|ui| {
                     ui.set_width(largeur);
                     ui.add(egui::Label::new(RichText::new(*nom).small()).truncate());
-                    ui.add(egui::Label::new(valeur(i)).truncate())
-                        .on_hover_text(valeur(i));
+                    let champ = |v: &(Option<String>, Option<String>, Option<String>)| match i { 0 => v.0.clone(), 1 => v.1.clone(), _ => v.2.clone() };
+                    let mixte = valeurs.iter().any(|v| champ(v) != valeurs.first().map(champ).unwrap_or(None));
+                    let actuel = valeurs.first().map(champ).unwrap_or(None);
+                    let libelle = |id: &Option<String>| match (i, id) {
+                        (0, None) => "Projet".to_string(),
+                        (1, None) => "A".to_string(),
+                        (_, None) => "Principale".to_string(),
+                        (2, Some(id)) => p.variantes.iter().find(|x| &x.id == id).map_or(id.clone(), |x| x.libelle()),
+                        (_, Some(v)) => v.clone(),
+                    };
+                    let choix: Vec<Option<String>> = match i {
+                        0 => p.phases.iter().cloned().map(Some).collect(),
+                        1 => p.sous_projets.iter().cloned().map(Some).collect(),
+                        _ => std::iter::once(None).chain(p.variantes.iter().map(|v| Some(v.id.clone()))).collect(),
+                    };
+                    egui::ComboBox::from_id_salt(("contexte_selection", i))
+                        .width(largeur)
+                        .truncate()
+                        .selected_text(if mixte { "Varié".to_string() } else { libelle(&actuel) })
+                        .show_ui(ui, |ui| {
+                            for c in &choix {
+                                if ui.selectable_label(!mixte && *c == actuel, libelle(c)).clicked() {
+                                    resultat = Some((i, c.clone()));
+                                }
+                            }
+                        });
                 });
             }
         });
+        let (i, valeur) = resultat?;
+        let mut q = p.clone();
+        for id in &cibles {
+            if let Some(m) = q.murs.iter_mut().find(|m| &m.id == id) {
+                match i { 0 => m.phase = valeur.clone(), 1 => m.sous_projet = valeur.clone(), _ => m.variante = valeur.clone() }
+            } else if let Some(d) = q.dalles.iter_mut().find(|d| &d.id == id) {
+                match i { 0 => d.phase = valeur.clone(), 1 => d.sous_projet = valeur.clone(), _ => d.variante = valeur.clone() }
+            } else {
+                let c = q.contextes.entry(id.clone()).or_default();
+                match i { 0 => c.phase = valeur.clone(), 1 => c.sous_projet = valeur.clone(), _ => c.variante = valeur.clone() }
+            }
+        }
+        Some(q)
     }
 
     pub(super) fn panneau_bim(&mut self, ui: &mut egui::Ui) -> bool {
@@ -608,7 +615,8 @@ impl ViewerApp {
                     v.id == ids[0] && matches!(v.genre, crate::modele::GenreVue::Coupe { .. })
                 }) {
                     let mut vue = original.clone();
-                    ui.collapsing("Propriétés de la coupe / élévation", |ui| {
+                    ui.label(RichText::new("Propriétés de la coupe / élévation").strong());
+                    ui.scope(|ui| {
                         let mut change = ui.text_edit_singleline(&mut vue.nom).changed();
                         if let crate::modele::GenreVue::Coupe {
                             debut,
@@ -646,7 +654,8 @@ impl ViewerApp {
                 }
                 if let Some(original) = p.quadrillages.iter().find(|g| g.id == ids[0]) {
                     let mut quadrillage = original.clone();
-                    ui.collapsing("Propriétés du quadrillage", |ui| {
+                    ui.label(RichText::new("Propriétés du quadrillage").strong());
+                    ui.scope(|ui| {
                         let mut change = ui.text_edit_singleline(&mut quadrillage.nom).changed();
                         for (nom, point) in [
                             ("Départ", &mut quadrillage.debut),
@@ -668,7 +677,8 @@ impl ViewerApp {
                 }
                 if let Some(original) = p.annotations.iter().find(|a| a.id == ids[0]) {
                     let mut annotation = original.clone();
-                    ui.collapsing("Propriétés de l'annotation", |ui| {
+                    ui.label(RichText::new("Propriétés de l'annotation").strong());
+                    ui.scope(|ui| {
                         use crate::modele::documentation::{AnnotationForme as F, PointCote};
                         let mut change = false;
                         match &mut annotation.forme {
@@ -789,10 +799,12 @@ impl ViewerApp {
                     {
                         self.bim.barre_editee = Some(original.clone());
                     }
-                    ui.collapsing("Propriétés structurelles", |ui| {
+                    ui.label(RichText::new("Propriétés structurelles").strong());
+                    ui.scope(|ui| {
                         let b = self.bim.barre_editee.as_mut().unwrap();
+                        let avant = serde_json::to_string(&*b).ok();
                         barre_ui(ui, b, &p.niveaux);
-                        if ui.button("Appliquer les propriétés").clicked() {
+                        if serde_json::to_string(&*b).ok() != avant {
                             commande = Some(Commande::Barre { barre: b.clone() });
                         }
                     });
@@ -812,7 +824,8 @@ impl ViewerApp {
                     .iter()
                     .any(|d| d.id == ids[0])
             {
-                ui.collapsing("Sommets du contour", |ui| {
+                ui.label(RichText::new("Sommets du contour").strong());
+                    ui.scope(|ui| {
                     let d = self
                         .natif
                         .as_ref()
@@ -903,7 +916,7 @@ impl ViewerApp {
                         _ => 3000.0,
                     };
                     let altitude = alts.last().map_or(0.0, |h| h + etage);
-                    let nom = (1..).map(|k| format!("Niveau {k}")).find(|n| !p.niveaux.iter().any(|x| &x.nom == n)).unwrap_or_default();
+                    let nom = if p.niveaux.is_empty() { "RDC".to_string() } else { (1..).map(|k| format!("R+{k}")).find(|n| !p.niveaux.iter().any(|x| &x.nom == n)).unwrap_or_default() };
                     if ui.button("Ajouter un niveau").on_hover_text(format!("« {nom} » à {}", crate::options::unite().afficher(altitude))).clicked() {
                         commande = Some(Commande::Niveau { nom, altitude });
                     }
@@ -1155,15 +1168,18 @@ impl ViewerApp {
             }
             match outil {
                 Some(Outil::Deplacer | Outil::Copier) => {
-                    for (nom, v) in ["X", "Y", "Z"].into_iter().zip(&mut self.bim.delta) {
-                        ui.horizontal(|ui| {
-                            ui.label(nom);
-                            ui.add(egui::DragValue::new(v).speed(10.0).dimensions());
-                        });
-                    }
-                    if ui
-                        .add_enabled(!ids.is_empty(), egui::Button::new("Appliquer"))
-                        .clicked()
+                    ui.label(if self.bim.depart_deplacement.is_some() { "Cliquer la destination · Maj : orthogonal · Échap ou clic droit : annuler" } else { "Cliquer le point de base dans la vue, puis la destination" });
+                    let mut appliquer = false;
+                    ui.collapsing("Saisie chiffrée", |ui| {
+                        for (nom, v) in ["X", "Y", "Z"].into_iter().zip(&mut self.bim.delta) {
+                            ui.horizontal(|ui| {
+                                ui.label(nom);
+                                ui.add(egui::DragValue::new(v).speed(10.0).dimensions());
+                            });
+                        }
+                        appliquer = ui.add_enabled(!ids.is_empty(), egui::Button::new("Appliquer")).clicked();
+                    });
+                    if appliquer
                     {
                         commande = Some(if outil == Some(Outil::Copier) {
                             Commande::Copier {

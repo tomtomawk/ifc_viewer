@@ -79,6 +79,8 @@ pub struct NavVue {
     pub filtre_phase: i64,
     /// Hauteur du plan de coupe d'un plan au-dessus de son niveau, m (plage de vue).
     pub coupe: Option<f64>,
+    /// Altitude absolue (m) de la limite basse d'un plan natif.
+    pub limite_basse: Option<f64>,
     /// Plan de coupe vertical d'une coupe native (n, d ; n·p + d ≥ 0 gardé, m, repère
     /// du fichier).
     pub plan_coupe: Option<DVec4>,

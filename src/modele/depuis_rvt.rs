@@ -402,7 +402,12 @@ fn vues_et_feuilles(m: &Maquette, c: &mut Conversion, id_vue: &dyn Fn(i64) -> St
                 }
                 let z = altitude(v.niveau).unwrap_or(0.0) + coupe;
                 converties.insert(v.id, (id_vue(v.id), DVec3::new(0.0, 0.0, z), DVec3::X));
-                GenreVue::Plan { niveau: n, coupe }
+                // limite basse de la plage de vue (niveau de la vue si non précisée)
+                let (bas_niveau, bas_decalage) = v.plage_vue.map_or((n.clone(), 0.0), |p| {
+                    let (r, d) = p[2];
+                    (if r == -3 || r == v.niveau { n.clone() } else { niveau(r).unwrap_or_else(|| n.clone()) }, d)
+                });
+                GenreVue::Plan { niveau: n, coupe, bas_niveau, bas_decalage }
             }
             "Coupe" | "Élévation" => {
                 let ligne = v.cadre.as_ref().filter(|_| v.haut.z > 0.99).and_then(|c| ligne_de_coupe(c, v.droite, v.direction));

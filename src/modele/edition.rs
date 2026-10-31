@@ -1,7 +1,7 @@
 //! Création paramétrique d'éléments natifs. Les coordonnées sont en millimètres.
 use super::*;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Implantation { Axe, Exterieure, Interieure, AxePorteur }
 
 impl Implantation {
@@ -162,7 +162,7 @@ impl Projet {
         let (id, _) = self.nouvelle_vue("plan");
         let deja = self.vues.iter().filter(|v| matches!(&v.genre, GenreVue::Plan { niveau: x, .. } if x == niveau)).count();
         let nom = if deja == 0 { n.nom.clone() } else { format!("{} ({})", n.nom, deja + 1) };
-        self.vues.push(Vue { id: id.clone(), nom, type_vue: String::new(), echelle: 100.0, genre: GenreVue::Plan { niveau: n.id, coupe } });
+        self.vues.push(Vue { id: id.clone(), nom, type_vue: String::new(), echelle: 100.0, genre: GenreVue::Plan { bas_niveau: n.id.clone(), bas_decalage: 0.0, niveau: n.id, coupe } });
         Ok(id)
     }
 
@@ -431,6 +431,9 @@ impl Projet {
         if compose {
             self.eclater_mur(&id)?;
         }
+        if p.implantation != Implantation::Axe {
+            self.implantations.insert(id.clone(), p.implantation.reference());
+        }
         self.arrondir();
         Ok(id)
     }
@@ -439,6 +442,19 @@ impl Projet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ligne_de_justification_retrouvee_apres_creation() {
+        for (implantation, attendu) in [(Implantation::Axe, 0.0), (Implantation::Exterieure, 0.0), (Implantation::Interieure, 0.0)] {
+            let mut p = Projet::nouveau("J");
+            let options = ParametresMur { implantation, epaisseur: 300.0, ..Default::default() };
+            let id = p.ajouter_mur([0.0, 0.0], [4000.0, 0.0], &options).unwrap();
+            let (a, b, ecart) = p.ligne_justification(&id).unwrap();
+            // la ligne retrouvée est la ligne tracée
+            assert!((a[1] - attendu).abs() < 1e-6 && (b[1] - attendu).abs() < 1e-6, "{implantation:?}: {a:?} {b:?}");
+            assert!((ecart - options.gabarit(&p).decalage_reference(implantation.reference())).abs() < 1e-6);
+        }
+    }
+
     #[test]
     fn mur_courbe_trace_et_implante() {
         let mut p = Projet::nouveau("Arc");

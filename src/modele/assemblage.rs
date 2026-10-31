@@ -10,7 +10,8 @@ pub fn materiau_par_defaut(nom: &str) -> Materiau {
 }
 
 /// Implantation d'un mur composé : ligne tracée par rapport à ses couches.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
 pub enum Reference {
     /// Milieu de l'épaisseur totale.
     Axe,
@@ -85,6 +86,28 @@ pub fn decaler_axe(axe: &Axe, d: f64) -> Axe {
 }
 
 impl Projet {
+    /// Ligne d'implantation (justification) choisie pour un mur ou un assemblage droit :
+    /// extrémités (mm) et distance, vers l'extérieur, qui la sépare de l'axe médian.
+    /// Sans implantation enregistrée, c'est l'axe médian.
+    pub fn ligne_justification(&self, id: &str) -> Option<([f64; 2], [f64; 2], f64)> {
+        let (premier, type_mur, rang) = match self.assemblage(id) {
+            Some(a) => (*self.couches_assemblage(id).first()?, self.type_mur(&a.type_mur)?, 0),
+            None => {
+                let m = self.murs.iter().find(|m| m.id == id)?;
+                (m, self.type_mur(&m.type_mur)?, 0)
+            }
+        };
+        let Axe::Droit { debut, fin } = premier.axe else { return None };
+        let n = normale_exterieure(&premier.axe)?;
+        // couche d'un assemblage : son axe est décalé du milieu de l'épaisseur totale
+        let depart = if self.assemblage(id).is_some() { type_mur.decalages_couches().get(rang).copied().unwrap_or(0.0) } else { 0.0 };
+        let reference = self.implantations.get(id).copied().unwrap_or(Reference::Axe);
+        let d = type_mur.decalage_reference(reference);
+        let k = d - depart;
+        let m = |p: [f64; 2]| [p[0] + n[0] * k, p[1] + n[1] * k];
+        Some((m(debut), m(fin), d))
+    }
+
     /// Type monocouche d'une couche (même matériau, épaisseur et fonction), créé s'il
     /// n'existe pas.
     pub fn type_couche(&mut self, c: &Couche) -> String {

@@ -56,7 +56,7 @@ La sélection par rectangle démarre dans le vide, par glissement ou par deux cl
 De gauche à droite, le cadre bleu sélectionne les éléments entièrement inclus ; de
 droite à gauche, le cadre vert sélectionne aussi les éléments touchés. Ctrl ajoute
 à la sélection et Échap ou clic droit annule le cadre. En 3D, le glissement sur un
-objet conserve l'orbite ; les objets non masqués sont sélectionnés même derrière
+objet n'est plus une navigation (orbite : Maj + clic milieu) ; les objets non masqués sont sélectionnés même derrière
 d'autres objets.
 
 Modéliser comprend aussi Poteau et Poutre rectangulaires ; Escalier et Garde-corps restent à implémenter.
@@ -113,9 +113,9 @@ force l'un ou l'autre.
 
 | Action | Commande |
 |---|---|
-| Orbite (autour du point visé, vue 3D) | clic gauche + glisser |
+| Orbite (autour du point visé, vue 3D) | Maj + clic milieu + glisser |
 | Navigation en vol (vue 3D, comme la vue Scène d'Unity) | clic droit maintenu : la souris oriente le regard ; Z/S avancer/reculer, Q/D gauche/droite, A/E descendre/monter (W/S, A/D, Q/E en QWERTY : touches lues par position) ; Maj : vitesse ×3 ; molette : vitesse |
-| Panoramique | clic milieu ou Maj + clic gauche ; clic gauche et droit aussi dans une vue 2D (plan, coupe, élévation, feuille) |
+| Panoramique | clic milieu (vue 3D) ; clic gauche, milieu et droit (vue 2D : plan, coupe, élévation, feuille) |
 | Zoom vers le curseur | molette |
 | Sélection | clic |
 | Cadrer l'objet / tout | double-clic / F |
