@@ -165,7 +165,7 @@ impl Projet {
         let (id, _) = self.nouvelle_vue("plan");
         let deja = self.vues.iter().filter(|v| matches!(&v.genre, GenreVue::Plan { niveau: x, .. } if x == niveau)).count();
         let nom = if deja == 0 { n.nom.clone() } else { format!("{} ({})", n.nom, deja + 1) };
-        self.vues.push(Vue { id: id.clone(), nom, type_vue: String::new(), echelle: 100.0, genre: GenreVue::Plan { bas_niveau: n.id.clone(), bas_decalage: 0.0, niveau: n.id, coupe } });
+        self.vues.push(Vue { id: id.clone(), nom, type_vue: String::new(), echelle: 100.0, orientation_plan: 0.0, coupe_active: None, poche_vue: None, genre: GenreVue::Plan { bas_niveau: n.id.clone(), bas_decalage: 0.0, niveau: n.id, coupe } });
         Ok(id)
     }
 
@@ -188,7 +188,7 @@ impl Projet {
         while self.vues.iter().any(|v| v.nom == format!("{nom} {k}")) {
             k += 1;
         }
-        self.vues.push(Vue { id: id.clone(), nom: format!("{nom} {k}"), type_vue: type_vue.into(), echelle, genre: GenreVue::Coupe { debut, fin, profondeur, elevation } });
+        self.vues.push(Vue { id: id.clone(), nom: format!("{nom} {k}"), type_vue: type_vue.into(), echelle, orientation_plan: 0.0, coupe_active: None, poche_vue: None, genre: GenreVue::Coupe { debut, fin, profondeur, elevation } });
         self.arrondir();
         Ok(id)
     }

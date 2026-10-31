@@ -36,6 +36,8 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         };
         entite(id_natif("dalle", &d.id), classe, &d.id, &d.nom, 9)?;
     }
+    for t in &projet.terrains { entite(id_natif("terrain", &t.id), "IFCGEOGRAPHICELEMENT", &t.id, &t.nom, 9)?; }
+    for l in &projet.limites_propriete { entite(id_natif("limite_propriete", &l.id), "IFCGEOGRAPHICELEMENT", &l.id, &l.nom, 9)?; }
     for o in &projet.ouvertures {
         let classe = match o.genre {
             crate::modele::GenreOuverture::Porte => "IFCDOOR",
@@ -229,6 +231,22 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         materiaux_parts.push(vec![None; parts.len()]);
         geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
+    for t in &projet.terrains {
+        let id = id_natif("terrain", &t.id);
+        model.parent.insert(id, racine);
+        model.children.entry(racine).or_default().push(id);
+        let tris = t.triangles()?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
+        materiaux_parts.push(vec![None]);
+        geoms.push(ProductGeom { id, parts: vec![Part { color: [0.48, 0.62, 0.38, 1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+    }
+    for l in &projet.limites_propriete {
+        let id = id_natif("limite_propriete", &l.id);
+        model.parent.insert(id, racine);
+        model.children.entry(racine).or_default().push(id);
+        let segs = (0..l.contour.len()).map(|i| [l.contour[i], l.contour[(i + 1) % l.contour.len()]].map(|p| glam::DVec3::new(p[0], p[1], l.altitude) * 0.001)).collect();
+        materiaux_parts.push(Vec::new());
+        geoms.push(ProductGeom { id, parts: Vec::new(), lignes: vec![crate::geom::Ligne { color: [0.75, 0.16, 0.16, 1.0], segs }], rendu: Vec::new(), motifs: Vec::new() });
+    }
     for o in &projet.importes {
         let id = id_natif("importe", &o.id);
         let parent = match &o.niveau {
@@ -364,7 +382,8 @@ fn navigateur(projet: &Projet) -> Navigateur {
                 n.etage = Some(id_natif("niveau", niveau));
                 n.coupe = Some(coupe / 1000.0);
                 n.direction = DVec3::Z;
-                n.haut = DVec3::Y;
+                let (sin, cos) = v.orientation_plan.sin_cos();
+                n.haut = DVec3::new(-sin, cos, 0.0);
             }
             GenreVue::Coupe { debut, fin, profondeur, elevation } => {
                 n.genre = if *elevation { "Élévation" } else { "Coupe" }.into();

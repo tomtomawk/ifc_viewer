@@ -13,6 +13,7 @@ pub mod famille_modelee;
 pub mod escalier;
 pub use escalier::{Escalier, GardeCorps, Remplissage};
 pub mod solides;
+pub mod site;
 pub mod historique;
 pub mod commandes;
 pub mod export_ifc;
@@ -66,6 +67,10 @@ pub struct Projet {
     pub motifs: Vec<DefinitionMotif>,
     pub ouvertures: Vec<Ouverture>,
     pub dalles: Vec<Dalle>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub terrains: Vec<site::Terrain>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub limites_propriete: Vec<site::LimitePropriete>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub barres: Vec<Barre>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -732,9 +737,19 @@ pub struct Vue {
     pub type_vue: String,
     /// Dénominateur de l'échelle (100 : 1:100).
     pub echelle: f64,
+    /// Rotation du plan en radians, indépendante des coordonnées des annotations.
+    #[serde(default, skip_serializing_if = "est_zero")]
+    pub orientation_plan: f64,
+    /// État de la coupe dans la vue ; absent dans les anciens projets : active.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coupe_active: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub poche_vue: Option<String>,
     #[serde(flatten)]
     pub genre: GenreVue,
 }
+
+fn est_zero(v: &f64) -> bool { *v == 0.0 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(tag = "genre", rename_all = "snake_case")]

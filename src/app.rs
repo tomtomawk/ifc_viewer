@@ -956,14 +956,15 @@ impl ViewerApp {
         // sols, toitures), qui appartiennent au niveau et dont le dessus affleure
         let limite_basse = self.coupe.then(|| self.vue_active.and_then(|i| scene.navigateur.as_ref()?.vues.get(i)?.limite_basse)).flatten().map(|z| (z - scene.origin.z) as f32);
         let dans_la_plage = |o: &scene::SceneObject| limite_basse.is_none_or(|bas| {
-            if matches!(&*o.class, "IFCSLAB" | "IFCCOVERING" | "IFCROOF" | "IFCANNOTATION") { o.max.z >= bas - 0.002 } else { o.max.z > bas + 0.002 }
+            if matches!(&*o.class, "IFCSLAB" | "IFCCOVERING" | "IFCROOF" | "IFCANNOTATION" | "IFCGEOGRAPHICELEMENT") { o.max.z >= bas - 0.002 } else { o.max.z > bas + 0.002 }
         });
         let mut opaque = Vec::new();
         let mut transp = Vec::new();
         let mut lines = Vec::new();
         let mut aretes = Vec::new();
         for (i, o) in scene.objects.iter().enumerate() {
-            let vis = !self.hidden_classes.contains(&*o.class)
+            let en_edition = self.objet_en_edition().is_some_and(|(id, annotation)| !annotation && o.id == scene::id_natif("dalle", id));
+            let vis = !en_edition && !self.hidden_classes.contains(&*o.class)
                 && !self.hidden_classes.contains(&*self.cle_objet[i])
                 && !self.hidden_objects.contains(&(i as u32))
                 && o.storey.is_none_or(|s| !self.hidden_storeys.contains(&s))
@@ -1382,6 +1383,8 @@ impl ViewerApp {
         });
         if change {
             self.visibility_dirty = true;
+            self.coupe_dirty = true;
+            self.memoriser_vue();
         }
     }
 
@@ -2548,6 +2551,23 @@ impl ViewerApp {
         }).min_by(|a,b| a.0.total_cmp(&b.0)).map(|(_, id)| id)
     }
 
+    fn limite_propriete_proche(&self, rect: egui::Rect, q: egui::Pos2) -> Option<String> {
+        let p = &self.natif.as_ref()?.0;
+        p.limites_propriete.iter().filter_map(|l| {
+            let scene = self.scene.as_ref()?;
+            let index = *scene.object_of.get(&scene::id_natif("limite_propriete", &l.id))? as usize;
+            if !self.visible.get(index).copied().unwrap_or(false) { return None; }
+            let distance = (0..l.contour.len()).filter_map(|i| {
+                let a = self.ecran_plan(rect, l.contour[i], l.altitude)?;
+                let b = self.ecran_plan(rect, l.contour[(i + 1) % l.contour.len()], l.altitude)?;
+                let v = b - a;
+                let t = if v.length_sq() > 0.0 { ((q-a).dot(v)/v.length_sq()).clamp(0.0, 1.0) } else { 0.0 };
+                Some(q.distance(a + v*t))
+            }).min_by(|a,b| a.total_cmp(b))?;
+            (distance <= 8.0).then_some((distance, l.id.clone()))
+        }).min_by(|a,b| a.0.total_cmp(&b.0)).map(|(_, id)| id)
+    }
+
     /// Aperçu de la coupe en cours de tracé.
     fn apercu_coupe(&self, ui: &egui::Ui, rect: egui::Rect, survol: Option<([f64; 2], AccrocheMur)>, z: f64, prm: &crate::ruban::ParametresCoupe) {
         let painter = ui.painter().with_clip_rect(rect);
@@ -2677,7 +2697,7 @@ impl ViewerApp {
         if let Some(iso) = &mut self.isolated {
             for (k, o) in scene.objects.iter().enumerate() {
                 let nouveau = anciens.is_none_or(|s| !s.object_of.contains_key(&o.id));
-                if nouveau && &*o.class != "IFCANNOTATION" && etage.is_none_or(|e| o.storey == Some(e)) {
+                if nouveau && &*o.class != "IFCANNOTATION" && (etage.is_none_or(|e| o.storey == Some(e)) || &*o.class == "IFCGEOGRAPHICELEMENT") {
                     iso.insert(k as u32);
                 }
             }
@@ -3279,7 +3299,10 @@ impl ViewerApp {
             _ => None,
         };
         if self.dessin2d.edition_contour.is_some() {
-            self.ruban_edition_contour(ui);
+            ui.label(RichText::new("Modification du tracé").strong());
+            ui.label("Sélectionner un trait puis Suppr · cliquer une extrémité ouverte pour reprendre · glisser un trait ou un sommet");
+            ui.label("Double-clic sur un trait : ajouter un sommet · clic droit sur un sommet : supprimer");
+            ui.label("Les pentes restent sur les arêtes inchangées ; elles sont retirées des arêtes modifiées.");
             return;
         }
         if let Some(menu) = edition {
@@ -4529,6 +4552,30 @@ impl ViewerApp {
         if !self.vues_ouvertes.contains(&self.vue_active) {
             return;
         }
+        // Les réglages qui définissent le dessin doivent aussi suivre la vue sur feuille
+        // et survivre à la fermeture du document.
+        let numero = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).map(|v| v.revit_id);
+        let altitude_coupe = self.plan_coupe().and_then(|p| self.scene.as_ref().map(|s| (p.w as f64 + s.origin.z) * 1000.0));
+        let orientation = crate::orientation_plan::angle(&self.camera) as f64;
+        if let (Some(numero), Some((projet, _))) = (numero, &mut self.natif) {
+            if let Some(index) = projet.vues.iter().position(|v| scene::numero_vue(&v.id) == numero) {
+                let mut vue = projet.vues[index].clone();
+                if let crate::modele::GenreVue::Plan { niveau, coupe, .. } = &mut vue.genre {
+                    if let Some(z) = altitude_coupe && let Some(n) = projet.niveau(niveau) { *coupe = (z - n.altitude).round(); }
+                    if (vue.orientation_plan - orientation).abs() > 1e-5 { vue.orientation_plan = orientation; }
+                }
+                if self.coupe != vue.coupe_active.unwrap_or(true) { vue.coupe_active = Some(self.coupe); }
+                let poche = self.poche.nom();
+                if poche != vue.poche_vue.as_deref().unwrap_or("hachure") { vue.poche_vue = Some(poche.into()); }
+                if vue != projet.vues[index] {
+                    let avant = projet.clone();
+                    projet.vues[index] = vue;
+                    if let Err(e) = self.historique.pousser(&avant, projet) { self.error = Some(e); }
+                    self.natif_modifie = true;
+                    self.bim.revision = self.bim.revision.wrapping_add(1);
+                }
+            }
+        }
         self.etats_vues.insert(self.vue_active, EtatVue {
             camera: self.camera.clone(),
             hidden_classes: self.hidden_classes.clone(),
@@ -4813,7 +4860,7 @@ impl ViewerApp {
         let (objs, cadre): (Vec<u32>, Vec<u32>) = match v.genre.as_str() {
             "Vue 3D" => (Vec::new(), modele.iter().copied().filter(|&o| !HIDDEN_BY_DEFAULT.contains(&&*s.objects[o as usize].class)).collect()),
             "Plan d'étage" | "Plan de plafond" => {
-                let etage: Vec<u32> = modele.iter().copied().filter(|&o| v.etage.is_some() && s.objects[o as usize].storey == v.etage).collect();
+                let etage: Vec<u32> = modele.iter().copied().filter(|&o| (v.etage.is_some() && s.objects[o as usize].storey == v.etage) || &*s.objects[o as usize].class == "IFCGEOGRAPHICELEMENT").collect();
                 let tous = etage.iter().chain(&annot).copied().collect();
                 (tous, if etage.is_empty() { modele.clone() } else { etage })
             }
@@ -4861,6 +4908,15 @@ impl ViewerApp {
             // vue 3D : le style en cours, faces colorées en sortant d'un dessin
             "Vue 3D" | "Feuille" => self.faces_blanches = false,
             _ => {}
+        }
+        if let Some(vue) = self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|vue| scene::numero_vue(&vue.id) == v.revit_id)) {
+            if let Some(active) = vue.coupe_active { self.coupe = active; }
+            self.poche = match vue.poche_vue.as_deref() {
+                Some("plein") => Poche::Plein,
+                Some("vide") => Poche::Vide,
+                Some("materiau") => Poche::Materiau,
+                _ => Poche::Hachure,
+            };
         }
         // échelle de la barre de vue : celle de la vue ouverte
         if echelle > 0.0 {
@@ -5977,7 +6033,7 @@ impl ViewerApp {
             _ => None,
         };
         if deplacement.is_none() { self.bim.depart_deplacement = None; }
-        let mode_trace = mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || deplacement.is_some() || self.dessin2d.edition_contour.is_some();
+        let mode_trace = mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || deplacement.is_some() || self.outil_dessin().is_some() || self.dessin2d.edition_contour.is_some();
         // axe du mur sélectionné : une extrémité saisie se déplace (accrochages du tracé)
         let axe = if mode_trace { None } else { self.axe_selection() };
         if let Some((id, a, b, z, _)) = &axe {
@@ -6170,6 +6226,13 @@ impl ViewerApp {
             }) {
                 // repère d'arête de l'élément sélectionné : la pente est ajoutée ou retirée
                 self.basculer_pente(c, k);
+            } else if resp.clicked() && resp.interact_pointer_pos().and_then(|q| self.limite_propriete_proche(rect, q)).is_some() {
+                let id = self.limite_propriete_proche(rect, resp.interact_pointer_pos().unwrap()).unwrap();
+                let ctrl = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
+                let mut selection = if ctrl { self.selection_bim() } else { Vec::new() };
+                if let Some(i) = selection.iter().position(|x| x == &id) { selection.remove(i); } else { selection.push(id); }
+                self.select(None, false);
+                self.bim.selection = selection;
             } else if resp.clicked() && resp.interact_pointer_pos().is_some_and(|q| self.rectangles_annotations(rect).iter().any(|(_, r)| r.expand(4.0).contains(q))) {
                 let q = resp.interact_pointer_pos().unwrap();
                 let id = self.rectangles_annotations(rect).into_iter().find(|(_, r)| r.expand(4.0).contains(q)).unwrap().0;
@@ -6327,23 +6390,7 @@ impl ViewerApp {
         if self.outil_dessin().is_some() {
             self.dessiner_dessin2d(ui, rect);
         }
-        if self.usage_dessin().is_some_and(|(u, _)| u != dessin2d_ui::Usage::Annotation) {
-            egui::Area::new(egui::Id::unique("options_trace_mur"))
-                .fixed_pos(rect.left_top() + egui::vec2(8.0, 8.0))
-                .constrain_to(rect)
-                .show(ui.ctx(), |ui| {
-                    egui::Frame::popup(ui.style()).show(ui, |ui| self.options_trace(ui));
-                });
-        }
         self.barre_commande(ui, rect);
-        if self.a_options_modifier() {
-            egui::Area::new(egui::Id::unique("options_modifier"))
-                .fixed_pos(rect.left_top() + egui::vec2(8.0, 8.0))
-                .constrain_to(rect)
-                .show(ui.ctx(), |ui| {
-                    egui::Frame::popup(ui.style()).show(ui, |ui| self.options_modifier(ui));
-                });
-        }
         if self.scene.is_some() {
             self.poignees_boite(ui, rect);
         }

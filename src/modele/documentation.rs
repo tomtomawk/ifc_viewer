@@ -476,7 +476,12 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
 pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
     let v = p.vues.iter().find(|v| v.id == id).ok_or("Vue absente.")?;
     let s = crate::scene::depuis_natif(p, std::path::Path::new("projet.modele.json"))?;
-    let (o, u, h) = repere(p, v);
+    let (o, mut u, mut h) = repere(p, v);
+    if matches!(v.genre, GenreVue::Plan { .. }) {
+        let (sin, cos) = v.orientation_plan.sin_cos();
+        u = DVec3::new(cos, sin, 0.0);
+        h = DVec3::new(-sin, cos, 0.0);
+    }
     let oeil = u.cross(h);
     let normale = -oeil;
     let plan = normale.extend(-normale.dot(o * 0.001 - s.origin)).as_vec4();
@@ -488,6 +493,22 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
         }
     );
     let mut visible = vec![true; s.objects.len()];
+    if let GenreVue::Plan { niveau, bas_niveau, bas_decalage, .. } = &v.genre {
+        let etage = crate::scene::id_natif("niveau", niveau);
+        let contient_etage = s.objects.iter().any(|o| o.storey == Some(etage) || &*o.class == "IFCGEOGRAPHICELEMENT");
+        if contient_etage {
+            for (i, obj) in s.objects.iter().enumerate() {
+                visible[i] = obj.storey == Some(etage) || &*obj.class == "IFCGEOGRAPHICELEMENT";
+            }
+        }
+        if v.coupe_active.unwrap_or(true) && let Some(niveau) = p.niveau(bas_niveau) {
+            let bas = (niveau.altitude + bas_decalage) * 0.001;
+            for (i, obj) in s.objects.iter().enumerate() {
+                let haut = obj.max.z as f64 + s.origin.z;
+                visible[i] &= if matches!(&*obj.class, "IFCSLAB" | "IFCCOVERING" | "IFCROOF" | "IFCANNOTATION" | "IFCGEOGRAPHICELEMENT") { haut >= bas - 0.002 } else { haut > bas + 0.002 };
+            }
+        }
+    }
     if let GenreVue::Coupe {
         debut,
         fin,
@@ -516,10 +537,17 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
                 && points.iter().any(|q| q.dot(n) <= *profondeur);
         }
     }
-    let mut primitives = if elevation {
+    let actif = v.coupe_active.unwrap_or(true);
+    let poche = match v.poche_vue.as_deref() {
+        Some("plein") => crate::dessin::Poche::Plein,
+        Some("vide") => crate::dessin::Poche::Vide,
+        Some("materiau") => crate::dessin::Poche::Materiau,
+        _ => crate::dessin::Poche::Hachure,
+    };
+    let mut primitives = if elevation || !actif {
         Vec::new()
     } else {
-        crate::dessin::coupe(&s, &visible, plan, v.echelle, crate::dessin::Poche::Hachure)
+        crate::dessin::coupe(&s, &visible, plan, v.echelle, poche)
     };
     primitives.extend(crate::dessin::vu(
         &s,
@@ -527,7 +555,7 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
         u,
         h,
         oeil,
-        Some(plan),
+        actif.then_some(plan),
         4096,
     ));
     // Revenir au repère absolu, comme les annotations.
@@ -1082,6 +1110,31 @@ pub fn pdf_jeu(p: &Projet, jeu: &str) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn vue_placee_respecte_rotation_et_limite_basse() {
+        let (mut p, _) = depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();
+        let niveau = p.niveaux[0].id.clone();
+        let id = p.ajouter_vue_plan(&niveau, 1200.0).unwrap();
+        let placee = VuePlacee { vue: id.clone(), position: [0.0, 0.0], echelle: 100.0 };
+        let dessin = dessin_vue(&p, &id).unwrap();
+        assert!(!dessin.primitives.is_empty());
+        let (_, avant) = vue_placee(&p, &placee).unwrap();
+        let vue = p.vues.iter_mut().find(|v| v.id == id).unwrap();
+        vue.orientation_plan = std::f64::consts::FRAC_PI_2;
+        let tourne = dessin_vue(&p, &id).unwrap();
+        assert!(tourne.droite.distance(DVec3::Y) < 1e-9);
+        let (_, apres) = vue_placee(&p, &placee).unwrap();
+        assert!(((avant[2] - avant[0]) - (apres[3] - apres[1])).abs() < 0.1);
+        let vue = p.vues.iter_mut().find(|v| v.id == id).unwrap();
+        if let GenreVue::Plan { bas_decalage, .. } = &mut vue.genre { *bas_decalage = 1_000_000.0; }
+        assert!(dessin_vue(&p, &id).unwrap().primitives.is_empty());
+        p.vues.iter_mut().find(|v| v.id == id).unwrap().coupe_active = Some(false);
+        assert!(!dessin_vue(&p, &id).unwrap().primitives.is_empty());
+        let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
+        let vue = relu.vues.iter().find(|v| v.id == id).unwrap();
+        assert_eq!(vue.coupe_active, Some(false));
+        assert_eq!(vue.orientation_plan, std::f64::consts::FRAC_PI_2);
+    }
     #[test]
     fn documents_compatibles_v0_references_et_pdf() {
         let (mut p, _) =

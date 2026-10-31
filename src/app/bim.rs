@@ -248,6 +248,8 @@ impl ViewerApp {
             .map(|x| ("mur", &x.id))
             .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
             .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
+            .chain(p.terrains.iter().map(|x| ("terrain", &x.id)))
+            .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
             .chain(p.barres.iter().map(|x| ("barre", &x.id)))
                 .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
                 .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
@@ -611,6 +613,26 @@ impl ViewerApp {
         if self.onglet_ruban == OngletRuban::Modifier {
             if ids.len() == 1 {
                 let p = &self.natif.as_ref().unwrap().0;
+                if let Some(original) = p.terrains.iter().find(|t| t.id == ids[0]) {
+                    let mut terrain = original.clone();
+                    ui.label(RichText::new("Terrain").strong());
+                    let mut change = ui.text_edit_singleline(&mut terrain.nom).changed();
+                    ui.label("Altitudes du contour");
+                    for (i, point) in terrain.contour.iter_mut().enumerate() {
+                        ui.horizontal(|ui| { ui.label(format!("Sommet {}", i + 1)); change |= ui.add(egui::DragValue::new(&mut point[2]).speed(10.0).suffix(" mm")).changed(); });
+                    }
+                    for (i, point) in terrain.points.iter_mut().enumerate() {
+                        ui.horizontal(|ui| { ui.label(format!("Point {}", i + 1)); change |= ui.add(egui::DragValue::new(&mut point[2]).speed(10.0).suffix(" mm")).changed(); });
+                    }
+                    if change { commande = Some(Commande::Terrain { terrain }); }
+                }
+                if let Some(original) = p.limites_propriete.iter().find(|l| l.id == ids[0]) {
+                    let mut limite = original.clone();
+                    ui.label(RichText::new("Limite de propriété").strong());
+                    let mut change = ui.text_edit_singleline(&mut limite.nom).changed();
+                    ui.horizontal(|ui| { ui.label("Altitude"); change |= ui.add(egui::DragValue::new(&mut limite.altitude).speed(10.0).suffix(" mm")).changed(); });
+                    if change { commande = Some(Commande::LimitePropriete { limite }); }
+                }
                 if let Some(original) = p.vues.iter().find(|v| {
                     v.id == ids[0] && matches!(v.genre, crate::modele::GenreVue::Coupe { .. })
                 }) {
@@ -1316,7 +1338,6 @@ impl ViewerApp {
         }
         let ids = self.selection_bim();
         ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some())
-            || (ids.len() == 1 && p.dalles.iter().any(|d| d.id == ids[0]))
             || (ids.len() == 1 && p.escaliers.iter().any(|e| e.id == ids[0]))
             || (ids.len() == 1 && p.ouvertures.iter().any(|o| o.id == ids[0] && o.genre != crate::modele::GenreOuverture::Libre))
     }
@@ -1353,6 +1374,7 @@ impl ViewerApp {
             .collect();
         crate::modele::documentation::annotations(p, v)
             .into_iter()
+            .filter(|a| !self.objet_en_edition().is_some_and(|(id, annotation)| annotation && a.element == Some(scene::id_natif("annotation", id))))
             .map(|mut a| {
                 if a.element.is_some_and(|id| selection.contains(&id)) {
                     a.style.couleur = [230, 120, 20, 255];

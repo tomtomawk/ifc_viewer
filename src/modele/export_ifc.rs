@@ -291,6 +291,22 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             ));
         }
     }
+    for t in &p.terrains {
+        let rep = w.mesh(&t.triangles()?, contexte);
+        let id = w.add(format!("IFCGEOGRAPHICELEMENT('{}',$,{},$,$,#{placement},{},$,.TERRAIN.)", guid(&t.id, None), texte(&t.nom), ref_(rep)));
+        contenus.entry(bat).or_default().push(id);
+    }
+    for limite in &p.limites_propriete {
+        limite.verifier()?;
+        let points: Vec<usize> = limite.contour.iter().map(|p| w.add(format!("IFCCARTESIANPOINT(({:.6},{:.6},{:.6}))", p[0], p[1], limite.altitude))).collect();
+        let mut ferme = points.clone();
+        ferme.push(points[0]);
+        let ligne = w.add(format!("IFCPOLYLINE({})", refs(&ferme)));
+        let rep = w.add(format!("IFCSHAPEREPRESENTATION(#{contexte},'Annotation','Curve3D',(#{ligne}))"));
+        let rep = w.add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,(#{rep}))"));
+        let id = w.add(format!("IFCANNOTATION('{}',$,{},$,$,#{placement},#{rep})", guid(&limite.id, None), texte(&limite.nom)));
+        contenus.entry(bat).or_default().push(id);
+    }
     for e in &p.importes {
         let rep = w.mesh(&solides::maillage(&e.maillage)?, contexte);
         let id = w.add(format!(

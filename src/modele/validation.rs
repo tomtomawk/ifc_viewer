@@ -9,6 +9,8 @@ impl Projet {
             .map(|x| &x.id)
             .chain(self.murs.iter().map(|x| &x.id))
             .chain(self.dalles.iter().map(|x| &x.id))
+            .chain(self.terrains.iter().map(|x| &x.id))
+            .chain(self.limites_propriete.iter().map(|x| &x.id))
             .chain(self.barres.iter().map(|x| &x.id))
             .chain(self.escaliers.iter().map(|x| &x.id))
             .chain(self.garde_corps.iter().map(|x| &x.id))
@@ -33,6 +35,8 @@ impl Projet {
                 return Err("Altitude non finie.".into());
             }
         }
+        for t in &self.terrains { t.triangles()?; }
+        for l in &self.limites_propriete { l.verifier()?; }
         for t in self.types_murs.iter().chain(&self.types_dalles) {
             if t.couches.is_empty()
                 || t.couches
@@ -142,6 +146,7 @@ impl Projet {
             solides::maillage(&e.maillage)?;
         }
         for v in &self.vues {
+            if !v.orientation_plan.is_finite() { return Err("Orientation de vue non finie.".into()); }
             if !v.echelle.is_finite() || v.echelle <= 0.0 {
                 return Err("Échelle non valide.".into());
             }

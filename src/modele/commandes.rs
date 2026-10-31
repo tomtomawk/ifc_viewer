@@ -5,6 +5,8 @@ use std::collections::{HashMap, HashSet};
 #[derive(Deserialize, Debug)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum Commande {
+    Terrain { terrain: site::Terrain },
+    LimitePropriete { limite: site::LimitePropriete },
     Barre {
         barre: Barre,
     },
@@ -114,6 +116,8 @@ impl Projet {
             .chain(self.murs.iter().map(|x| x.id.clone()))
             .chain(self.assemblages.iter().map(|x| x.id.clone()))
             .chain(self.dalles.iter().map(|x| x.id.clone()))
+            .chain(self.terrains.iter().map(|x| x.id.clone()))
+            .chain(self.limites_propriete.iter().map(|x| x.id.clone()))
             .chain(self.barres.iter().map(|x| x.id.clone()))
             .chain(self.escaliers.iter().map(|x| x.id.clone()))
             .chain(self.garde_corps.iter().map(|x| x.id.clone()))
@@ -165,6 +169,20 @@ impl Projet {
     }
     fn executer_interne(&mut self, c: Commande) -> Result<Vec<String>, String> {
         match c {
+            Commande::Terrain { mut terrain } => {
+                terrain.triangles()?;
+                if terrain.id.is_empty() { terrain.id = identite(self, "terrain"); }
+                let id = terrain.id.clone();
+                if let Some(t) = self.terrains.iter_mut().find(|t| t.id == id) { *t = terrain; } else { self.terrains.push(terrain); }
+                Ok(vec![id])
+            }
+            Commande::LimitePropriete { mut limite } => {
+                limite.verifier()?;
+                if limite.id.is_empty() { limite.id = identite(self, "limite-propriete"); }
+                let id = limite.id.clone();
+                if let Some(l) = self.limites_propriete.iter_mut().find(|l| l.id == id) { *l = limite; } else { self.limites_propriete.push(limite); }
+                Ok(vec![id])
+            }
             Commande::ModifierQuadrillage { quadrillage } => {
                 let actuel = self
                     .quadrillages
@@ -660,6 +678,10 @@ impl Projet {
                 self.assemblages.extend(assems);
                 self.ouvertures.extend(baies);
                 self.dalles.extend(dalles);
+                let terrains: Vec<_> = self.terrains.iter().filter(|t| set.contains(&t.id)).map(|t| { let mut t = t.clone(); t.id = map[&t.id].clone(); t }).collect();
+                let limites: Vec<_> = self.limites_propriete.iter().filter(|l| set.contains(&l.id)).map(|l| { let mut l = l.clone(); l.id = map[&l.id].clone(); l }).collect();
+                self.terrains.extend(terrains);
+                self.limites_propriete.extend(limites);
                 self.importes.extend(imports);
                 let attaches: Vec<_> = self
                     .attaches_toitures
@@ -710,6 +732,8 @@ impl Projet {
                 self.escaliers.retain(|x| !set.contains(&x.id));
                 self.garde_corps.retain(|x| !set.contains(&x.id));
                 self.importes.retain(|x| !set.contains(&x.id));
+                self.terrains.retain(|x| !set.contains(&x.id));
+                self.limites_propriete.retain(|x| !set.contains(&x.id));
                 self.niveaux.retain(|x| !set.contains(&x.id));
                 self.vues.retain(|x| !set.contains(&x.id));
                 self.attaches_toitures
@@ -1007,6 +1031,20 @@ impl Projet {
         for e in &mut self.importes {
             if set.contains(&e.id) {
                 mesh(&mut e.maillage);
+            }
+        }
+        for t in &mut self.terrains {
+            if set.contains(&t.id) {
+                for p in t.contour.iter_mut().chain(&mut t.points) {
+                    let xy = point([p[0], p[1]]);
+                    *p = [xy[0], xy[1], p[2] + delta[2]];
+                }
+            }
+        }
+        for l in &mut self.limites_propriete {
+            if set.contains(&l.id) {
+                l.contour.iter_mut().for_each(|p| *p = point(*p));
+                l.altitude += delta[2];
             }
         }
         Ok(())

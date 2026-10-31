@@ -6,6 +6,12 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
 
 ## Parcours disponible
 
+- **Modifier → Modifier tracé** permet de sélectionner un trait et de le supprimer
+  avec Suppr. Le contour s'ouvre : cliquer une extrémité, tracer le raccord puis
+  cliquer l'autre extrémité pour le refermer. Une dalle ne peut être validée que si
+  tous ses contours sont fermés. Les accrochages et la saisie près du curseur restent
+  disponibles pendant l'édition.
+
 - **Début → Importer** convertit un IFC/RVT/RFA/RTE dans un nouveau document natif,
   conserve les documents ouverts et écrit le rapport `.rapport.md` à côté du JSON.
   Les murs courbes, ouvertures et maillages importés sont maintenant affichables.
@@ -29,6 +35,15 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   Après sélection, **Modifier → Propriétés structurelles** permet de les modifier ;
   les commandes de déplacement, rotation, copie, suppression et l'historique leur
   sont applicables. Leurs quantités et classes `IfcColumn` / `IfcBeam` sont exportées.
+- **Modéliser → Terrain** : tracer un périmètre fermé et le fermer par clic droit,
+  F ou en cliquant le premier sommet. Régler les altitudes absolues des sommets en
+  millimètres ; activer « Placer des points cotés », saisir une altitude puis cliquer
+  à l'intérieur pour ajouter des points. Entrée ou Valider crée la surface triangulée.
+  Les altitudes restent modifiables dans les propriétés du terrain sélectionné.
+- **Modéliser → Limite de propriété** : tracer un ou plusieurs contours fermés par
+  polygone, rectangle ou cercle, comme pour les éléments horizontaux, puis valider.
+  Chaque contour crée une limite indépendante sur le plan du niveau courant. Le terrain est
+  exporté en `IfcGeographicElement` et la limite en courbe `IfcAnnotation`.
 - **Types de murs** : le sélecteur de l'outil Mur est organisé comme celui des éléments
   horizontaux, avec trois onglets — Mur, Mur composé, Cloison. La catégorie est un
   paramètre du type (`categorie` : `mur`, `compose`, `cloison`), choisi dans l'éditeur de

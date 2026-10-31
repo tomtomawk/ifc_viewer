@@ -232,7 +232,7 @@ pub fn afficher(ui: &mut egui::Ui, vue: egui::Rect, camera: &mut Camera, origine
         |ui| {
             ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
             ui.horizontal(|ui| {
-                let r = ui.add_sized([LARGEUR - 66.0, 18.0], egui::DragValue::new(&mut degres).speed(1.0).suffix("°").max_decimals(1));
+                let r = ui.add_sized([50.0, 18.0], egui::DragValue::new(&mut degres).speed(1.0).suffix("°").max_decimals(1));
                 if r.on_hover_text("Angle du plan par rapport au nord du modèle").changed() {
                     orienter(camera, degres.to_radians());
                 }
@@ -242,7 +242,8 @@ pub fn afficher(ui: &mut egui::Ui, vue: egui::Rect, camera: &mut Camera, origine
                 let courante = positions.iter().find(|(_, a)| ecart(*a, actuel).abs() < 0.05_f32.to_radians()).map(|(n, _)| n.as_str());
                 egui::ComboBox::from_id_salt("positions_plan")
                     .selected_text(egui::RichText::new(courante.unwrap_or("Positions")).size(11.0))
-                    .width(LARGEUR - 66.0 - 3.0)
+                    .width(LARGEUR - 50.0 - 3.0)
+                    .truncate()
                     .show_ui(ui, |ui| {
                         for (i, (nom, a)) in positions.iter().enumerate() {
                             ui.horizontal(|ui| {

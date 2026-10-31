@@ -16,6 +16,8 @@ pub(crate) enum Outil {
     Niveau,
     Quadrillage,
     Mur,
+    Terrain,
+    LimitePropriete,
     Surfaces,
     Dalle,
     Sol,
@@ -62,6 +64,8 @@ impl Outil {
             Self::Niveau => "Niveau",
             Self::Quadrillage => "Quadrillage",
             Self::Mur => "Mur",
+            Self::Terrain => "Terrain",
+            Self::LimitePropriete => "Limite de propriété",
             Self::Surfaces => "Éléments horizontaux",
             Self::Dalle => "Dalle",
             Self::Sol => "Sol",
@@ -249,6 +253,7 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
     match menu {
         Menu::Modeliser => &[
             ("Construire", &[Mur, Surfaces]),
+            ("Site", &[Terrain, LimitePropriete]),
             ("Structure et accès", &[Poteau, Poutre, Escalier, GardeCorps]),
             ("Placer", &[Ouverture, Composant]),
             ("Références", &[Niveau, Quadrillage]),
@@ -420,7 +425,7 @@ fn champs(o: Outil) -> Vec<Champ> {
     use Champ::*;
     use Outil::*;
     match o {
-        Surfaces | Niveau | ModifierContour | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | Feuilles | Nomenclatures => vec![],
+        Surfaces | Niveau | Terrain | LimitePropriete | ModifierContour | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | Feuilles | Nomenclatures => vec![],
         Quadrillage => vec![Saisie("Repère", "A"), Choix("Tracé", &["Droit", "Arc"])],
         Mur => vec![
             Choix(
@@ -926,7 +931,7 @@ impl RubanEdition {
                                 let actif = self.selection.map(Outil::commande) == Some(outil);
                                 // éléments horizontaux : un bouton ; la sorte se choisit dans le
                                 // sélecteur de type de Propriétés
-                                let disponible = matches!(outil, Outil::Mur|Outil::Surfaces|Outil::Poteau|Outil::Poutre|Outil::Escalier|Outil::GardeCorps|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Aligner|Outil::Ajuster|Outil::ModifierContour|Outil::CreerIdentique|Outil::Supprimer|Outil::Cadrer|Outil::Isoler|Outil::Masquer|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::Ligne|Outil::Polyligne|Outil::Spline|Outil::Cercle|Outil::Arc|Outil::Zone|Outil::Etiquette|Outil::Feuilles|Outil::Nomenclatures);
+                                let disponible = matches!(outil, Outil::Terrain|Outil::LimitePropriete|Outil::Mur|Outil::Surfaces|Outil::Poteau|Outil::Poutre|Outil::Escalier|Outil::GardeCorps|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Aligner|Outil::Ajuster|Outil::ModifierContour|Outil::CreerIdentique|Outil::Supprimer|Outil::Cadrer|Outil::Isoler|Outil::Masquer|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::Ligne|Outil::Polyligne|Outil::Spline|Outil::Cercle|Outil::Arc|Outil::Zone|Outil::Etiquette|Outil::Feuilles|Outil::Nomenclatures);
                                 let mut bouton_ui=ui.new_child(egui::UiBuilder::new().max_rect(bouton));
                                 if !disponible {bouton_ui.disable();}
                                 let reponse=bouton_outil(&mut bouton_ui,bouton,outil,colonne.grande,actif);
@@ -2461,6 +2466,20 @@ fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             seg((0.06, 0.61), (0.45, 0.87));
             seg((0.45, 0.87), (0.94, 0.65));
             seg((0.25, 0.68), (0.74, 0.47));
+        }
+        Terrain => {
+            face(&[(0.06,0.67),(0.25,0.39),(0.48,0.51),(0.69,0.22),(0.94,0.52),(0.94,0.72),(0.53,0.93)], 0.12);
+            seg((0.06,0.67),(0.53,0.93));
+            seg((0.25,0.39),(0.55,0.67));
+            seg((0.69,0.22),(0.55,0.67));
+            seg((0.55,0.67),(0.94,0.52));
+        }
+        LimitePropriete => {
+            seg((0.12,0.31),(0.65,0.10));
+            seg((0.65,0.10),(0.90,0.40));
+            seg((0.90,0.40),(0.44,0.89));
+            seg((0.44,0.89),(0.12,0.31));
+            for (x,y) in [(0.12,0.31),(0.65,0.10),(0.90,0.40),(0.44,0.89)] { cadre(x-0.05,y-0.05,0.10,0.10); }
         }
         Poteau => {
             face(
