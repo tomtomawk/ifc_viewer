@@ -736,13 +736,33 @@ impl Projet {
                     .iter()
                     .map(|c| edition::contour_valide(c))
                     .collect::<Result<Vec<_>, _>>()?;
+                for i in 0..contours.len() {
+                    for j in 0..i {
+                        if croisement(&contours[i], &contours[j]) {
+                            return Err("Les contours se croisent ou se touchent.".into());
+                        }
+                    }
+                }
                 let d = self
                     .dalles
                     .iter_mut()
                     .find(|d| d.id == id)
                     .ok_or("Dalle absente.")?;
-                d.contours = contours;
-                d.pentes.clear();
+                if d.contours != contours {
+                    let pentes: Vec<Vec<Option<f64>>> = contours.iter().map(|c| {
+                        (0..c.len()).map(|i| {
+                            let (a, b) = (c[i], c[(i + 1) % c.len()]);
+                            d.contours.iter().enumerate().find_map(|(ci, ancien)| {
+                                (0..ancien.len()).find_map(|k| {
+                                    (ancien[k] == a && ancien[(k + 1) % ancien.len()] == b)
+                                        .then(|| d.pente(ci, k)).flatten()
+                                })
+                            })
+                        }).collect()
+                    }).collect();
+                    d.contours = contours;
+                    d.pentes = pentes;
+                }
                 Ok(vec![id])
             }
             Commande::Tremie { id, contour } => {
@@ -1379,6 +1399,15 @@ mod tests {
             })
             .unwrap();
         assert!((q.volume_dalle(&q.dalles[0]).unwrap() / v - 29.0 / 30.0).abs() < 1e-8);
-        assert!(q.executer(Commande::Tremie { id, contour }).is_err());
+        assert!(q.executer(Commande::Tremie { id: id.clone(), contour: contour.clone() }).is_err());
+        let mut avec_pentes = q.clone();
+        avec_pentes.dalles[0].pentes = vec![vec![Some(15.0), Some(20.0), None, None]];
+        let mut modifies = avec_pentes.dalles[0].contours.clone();
+        modifies[0][0] = [-500.0, 0.0];
+        let (modifie, _) = avec_pentes.executer(Commande::Contour { id: id.clone(), contours: modifies.clone() }).unwrap();
+        assert_eq!(modifie.dalles[0].pente(0, 0), None);
+        assert_eq!(modifie.dalles[0].pente(0, 1), Some(20.0));
+        modifies[1] = vec![[5500.0, 1000.0], [6500.0, 1000.0], [6500.0, 2000.0], [5500.0, 2000.0]];
+        assert!(avec_pentes.executer(Commande::Contour { id, contours: modifies }).is_err());
     }
 }

@@ -32,6 +32,7 @@ pub(crate) enum Outil {
     Tourner,
     Aligner,
     Ajuster,
+    ModifierContour,
     CreerIdentique,
     Supprimer,
     Cadrer,
@@ -77,6 +78,7 @@ impl Outil {
             Self::Tourner => "Tourner",
             Self::Aligner => "Aligner",
             Self::Ajuster => "Ajuster",
+            Self::ModifierContour => "Modifier tracé",
             Self::CreerIdentique => "Créer à l'identique",
             Self::Supprimer => "Supprimer",
             Self::Cadrer => "Cadrer",
@@ -254,7 +256,7 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
         Menu::Modifier => &[
             ("Transformer", &[Deplacer, Copier, Tourner]),
             ("Ajuster", &[Aligner, Ajuster]),
-            ("Édition", &[CreerIdentique, Supprimer]),
+            ("Édition", &[ModifierContour, CreerIdentique, Supprimer]),
             ("Visibilité", &[Cadrer, Isoler, Masquer]),
         ],
         Menu::Annoter => &[
@@ -418,7 +420,7 @@ fn champs(o: Outil) -> Vec<Champ> {
     use Champ::*;
     use Outil::*;
     match o {
-        Surfaces | Niveau | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | Feuilles | Nomenclatures => vec![],
+        Surfaces | Niveau | ModifierContour | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | Feuilles | Nomenclatures => vec![],
         Quadrillage => vec![Saisie("Repère", "A"), Choix("Tracé", &["Droit", "Arc"])],
         Mur => vec![
             Choix(
@@ -924,12 +926,12 @@ impl RubanEdition {
                                 let actif = self.selection.map(Outil::commande) == Some(outil);
                                 // éléments horizontaux : un bouton ; la sorte se choisit dans le
                                 // sélecteur de type de Propriétés
-                                let disponible = matches!(outil, Outil::Mur|Outil::Surfaces|Outil::Poteau|Outil::Poutre|Outil::Escalier|Outil::GardeCorps|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Aligner|Outil::Ajuster|Outil::CreerIdentique|Outil::Supprimer|Outil::Cadrer|Outil::Isoler|Outil::Masquer|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::Ligne|Outil::Polyligne|Outil::Spline|Outil::Cercle|Outil::Arc|Outil::Zone|Outil::Etiquette|Outil::Feuilles|Outil::Nomenclatures);
+                                let disponible = matches!(outil, Outil::Mur|Outil::Surfaces|Outil::Poteau|Outil::Poutre|Outil::Escalier|Outil::GardeCorps|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Aligner|Outil::Ajuster|Outil::ModifierContour|Outil::CreerIdentique|Outil::Supprimer|Outil::Cadrer|Outil::Isoler|Outil::Masquer|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::Ligne|Outil::Polyligne|Outil::Spline|Outil::Cercle|Outil::Arc|Outil::Zone|Outil::Etiquette|Outil::Feuilles|Outil::Nomenclatures);
                                 let mut bouton_ui=ui.new_child(egui::UiBuilder::new().max_rect(bouton));
                                 if !disponible {bouton_ui.disable();}
                                 let reponse=bouton_outil(&mut bouton_ui,bouton,outil,colonne.grande,actif);
                                 if reponse.on_disabled_hover_text("Outil prévu, pas encore disponible").clicked() {
-                                    if matches!(outil, Outil::CreerIdentique | Outil::Supprimer | Outil::Cadrer | Outil::Isoler | Outil::Masquer | Outil::Feuilles | Outil::Nomenclatures) {
+                                    if matches!(outil, Outil::ModifierContour | Outil::CreerIdentique | Outil::Supprimer | Outil::Cadrer | Outil::Isoler | Outil::Masquer | Outil::Feuilles | Outil::Nomenclatures) {
                                         action = Some(outil);
                                         continue;
                                     }
@@ -2460,7 +2462,7 @@ fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             seg((0.45, 0.87), (0.94, 0.65));
             seg((0.25, 0.68), (0.74, 0.47));
         }
-        Poteau | Poutre => {
+        Poteau => {
             face(
                 &[(0.33, 0.22), (0.57, 0.12), (0.75, 0.22), (0.51, 0.33)],
                 0.09,
@@ -2475,6 +2477,21 @@ fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             );
             seg((0.16, 0.82), (0.49, 0.98));
             seg((0.49, 0.98), (0.91, 0.79));
+        }
+        Poutre => {
+            // Barre horizontale en perspective, avec sa section visible à gauche.
+            face(
+                &[(0.08, 0.46), (0.69, 0.18), (0.92, 0.30), (0.31, 0.58)],
+                0.09,
+            );
+            face(
+                &[(0.08, 0.46), (0.31, 0.58), (0.31, 0.78), (0.08, 0.66)],
+                0.06,
+            );
+            face(
+                &[(0.31, 0.58), (0.92, 0.30), (0.92, 0.50), (0.31, 0.78)],
+                0.17,
+            );
         }
         Escalier => {
             for k in 0..4 {
@@ -2530,6 +2547,15 @@ fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
         Copier => {
             cadre(0.1, 0.1, 0.55, 0.55);
             cadre(0.35, 0.35, 0.55, 0.55);
+        }
+        ModifierContour => {
+            seg((0.12, 0.24), (0.70, 0.12));
+            seg((0.70, 0.12), (0.87, 0.66));
+            seg((0.87, 0.66), (0.31, 0.88));
+            seg((0.31, 0.88), (0.12, 0.24));
+            for (x, y) in [(0.12, 0.24), (0.70, 0.12), (0.87, 0.66), (0.31, 0.88)] {
+                cadre(x - 0.05, y - 0.05, 0.10, 0.10);
+            }
         }
         CreerIdentique => {
             cadre(0.08, 0.12, 0.44, 0.44);

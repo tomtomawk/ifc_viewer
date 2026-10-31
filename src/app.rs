@@ -3278,8 +3278,13 @@ impl ViewerApp {
             OngletRuban::Annoter => Some(crate::ruban::Menu::Annoter),
             _ => None,
         };
+        if self.dessin2d.edition_contour.is_some() {
+            self.ruban_edition_contour(ui);
+            return;
+        }
         if let Some(menu) = edition {
             match self.ruban_edition.afficher(ui, menu, self.natif.as_ref().map(|n| &n.0)) {
+                Some(crate::ruban::Outil::ModifierContour) => self.commencer_edition_contour(),
                 Some(crate::ruban::Outil::CreerIdentique) => {
                     if let Err(e) = self.creer_identique() { self.error = Some(e); }
                 }
@@ -5972,7 +5977,7 @@ impl ViewerApp {
             _ => None,
         };
         if deplacement.is_none() { self.bim.depart_deplacement = None; }
-        let mode_trace = mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || deplacement.is_some();
+        let mode_trace = mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || deplacement.is_some() || self.dessin2d.edition_contour.is_some();
         // axe du mur sélectionné : une extrémité saisie se déplace (accrochages du tracé)
         let axe = if mode_trace { None } else { self.axe_selection() };
         if let Some((id, a, b, z, _)) = &axe {
@@ -6312,7 +6317,7 @@ impl ViewerApp {
         if deplacement.is_some() {
             self.apercu_deplacement(ui, rect, resp.hover_pos(), altitude_coupe);
         }
-        if dalle.is_none() && !mode_mur && outil_coupe.is_none() && structure.is_none() {
+        if dalle.is_none() && !mode_mur && outil_coupe.is_none() && structure.is_none() && self.dessin2d.edition_contour.is_none() {
             self.dessiner_aretes_pente(ui, rect, resp.hover_pos());
             self.dessiner_axe(ui, rect, resp.hover_pos());
         }
@@ -7384,7 +7389,7 @@ impl eframe::App for ViewerApp {
         self.historique.geste(ctx.input(|i|i.pointer.any_down()));
         self.poll_sauvegarde();
         self.fenetre_documentation(&ctx);
-        if !ctx.egui_wants_keyboard_input() {
+        if !ctx.egui_wants_keyboard_input() && self.dessin2d.edition_contour.is_none() {
             if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Z)) { self.parcourir_historique(true); }
             else if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Z)) { self.parcourir_historique(false); }
         }

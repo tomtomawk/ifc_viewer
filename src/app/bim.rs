@@ -814,74 +814,6 @@ impl ViewerApp {
             } else {
                 self.bim.barre_editee = None;
             }
-            if ids.len() == 1
-                && self
-                    .natif
-                    .as_ref()
-                    .unwrap()
-                    .0
-                    .dalles
-                    .iter()
-                    .any(|d| d.id == ids[0])
-            {
-                ui.label(RichText::new("Sommets du contour").strong());
-                    ui.scope(|ui| {
-                    let d = self
-                        .natif
-                        .as_ref()
-                        .unwrap()
-                        .0
-                        .dalles
-                        .iter()
-                        .find(|d| d.id == ids[0])
-                        .unwrap();
-                    let mut contours = d.contours.clone();
-                    let mut change = false;
-                    for (k, c) in contours.iter_mut().enumerate() {
-                        ui.push_id(k, |ui| {
-                            let mut retrait = None;
-                            for (i, p) in c.iter_mut().enumerate() {
-                                ui.push_id(i, |ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.label(format!("{}", i + 1));
-                                        for v in p {
-                                            change |= ui
-                                                .add(
-                                                    egui::DragValue::new(v)
-                                                        .speed(10.0)
-                                                        .dimensions(),
-                                                )
-                                                .changed();
-                                        }
-                                        if ui.button("−").clicked() {
-                                            retrait = Some(i);
-                                        }
-                                    });
-                                });
-                            }
-                            if let Some(i) = retrait {
-                                c.remove(i);
-                                change = true;
-                            }
-                            if ui.button("Ajouter un sommet au dernier côté").clicked()
-                                && c.len() >= 2
-                            {
-                                let a = c[0];
-                                let b = *c.last().unwrap();
-                                c.push([(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]);
-                                change = true;
-                            }
-                        });
-                    }
-                    if change {
-                        commande = Some(Commande::Contour {
-                            id: ids[0].clone(),
-                            contours,
-                        });
-                    }
-                    ui.label("Modifier le contour réinitialise les pentes par arête.");
-                });
-            }
         } else if self.onglet_ruban == OngletRuban::Modeliser {
             match outil {
                 Some(Outil::Niveau) => {
@@ -1121,7 +1053,6 @@ impl ViewerApp {
         let ids = self.selection_bim();
         let Some((p, _)) = &self.natif else { return };
         let murs = ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some());
-        let dalle = ids.len() == 1 && p.dalles.iter().any(|d| d.id == ids[0]);
         let fenetre = (ids.len() == 1).then(|| p.ouvertures.iter().find(|o| o.id == ids[0] && o.genre != crate::modele::GenreOuverture::Libre)).flatten().map(|o| o.id.clone());
         let mut editer_famille = false;
         let escalier = (ids.len() == 1).then(|| p.escaliers.iter().find(|e| e.id == ids[0])).flatten().map(|e| e.id.clone());
@@ -1341,28 +1272,6 @@ impl ViewerApp {
                         self.bim.preview_type = None;
                     }
                 }
-                });
-            }
-            if dalle {
-                ui.menu_button("Contour / trémie rectangulaire", |ui| {
-                    points_ui(ui, &mut self.bim.points);
-                    let [a, b] = self.bim.points;
-                    let contour = vec![a, [b[0], a[1]], b, [a[0], b[1]]];
-                    if ui.button("Ajouter une trémie").clicked() {
-                        commande = Some(Commande::Tremie {
-                            id: ids[0].clone(),
-                            contour: contour.clone(),
-                        });
-                    }
-                    if ui
-                        .button("Remplacer le contour (retire les pentes)")
-                        .clicked()
-                    {
-                        commande = Some(Commande::Contour {
-                            id: ids[0].clone(),
-                            contours: vec![contour],
-                        });
-                    }
                 });
             }
         });
