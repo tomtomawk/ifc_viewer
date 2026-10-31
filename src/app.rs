@@ -5578,7 +5578,7 @@ impl ViewerApp {
                 && let Some((projet, _)) = &self.natif
             {
                 let mut copie = projet.clone();
-                let r = self.ruban_edition.definir_type_mur(&mut copie, &t.nom, t.couches).and_then(|_| self.appliquer_projet(copie));
+                let r = self.ruban_edition.definir_type_mur(&mut copie, &t.nom, t.couches, t.categorie).and_then(|_| self.appliquer_projet(copie));
                 if let Err(e) = r { self.error = Some(e); }
             }
         }
@@ -6708,7 +6708,7 @@ impl ViewerApp {
                 let (Some(couches), false) = (couches, nom.is_empty()) else { return erreur("usage : type_mur <nom>|<matériau>:<épaisseur>[:fonction]|…") };
                 let Some((projet, _)) = &self.natif else { return erreur("pas de projet natif ouvert") };
                 let mut projet = projet.clone();
-                match self.ruban_edition.definir_type_mur(&mut projet, &nom, couches) {
+                match self.ruban_edition.definir_type_mur(&mut projet, &nom, couches, None) {
                     Ok(id) => match self.appliquer_projet(projet) {
                         Ok(()) => succes(&[("type", texte(&id))]),
                         Err(e) => erreur(&e),

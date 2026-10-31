@@ -174,6 +174,34 @@ fn types_surface(o: Outil) -> Vec<(String, Vec<crate::modele::Couche>)> {
     crate::gabarit::actif().surfaces(sorte).into_iter().map(|t| (t.nom.clone(), t.couches.clone())).collect()
 }
 
+/// Pictogramme d'une catégorie de mur, vu en plan : un trait épais (mur), plusieurs
+/// bandes (mur composé), un trait fin (cloison).
+fn icone_categorie_mur(ui: &egui::Ui, r: egui::Rect, c: crate::modele::CategorieMur) {
+    use crate::modele::CategorieMur;
+    let p = ui.painter();
+    let encre = ui.visuals().text_color();
+    let contour = egui::Stroke::new(1.2, encre);
+    let (l, h) = (r.width(), r.height());
+    let bande = |haut: f32, bas: f32| egui::Rect::from_min_max(egui::pos2(r.left(), r.top() + h * haut), egui::pos2(r.right(), r.top() + h * bas));
+    match c {
+        CategorieMur::Mur => {
+            p.rect_filled(bande(0.3, 0.7), 0.0, encre.gamma_multiply(0.35));
+            p.rect_stroke(bande(0.3, 0.7), 0.0, contour, egui::StrokeKind::Inside);
+        }
+        CategorieMur::Compose => {
+            for (a, b, f) in [(0.15, 0.3, 0.15), (0.3, 0.6, 0.45), (0.6, 0.8, 0.25), (0.8, 0.88, 0.15)] {
+                p.rect_filled(bande(a, b), 0.0, encre.gamma_multiply(f));
+            }
+            p.rect_stroke(bande(0.15, 0.88), 0.0, contour, egui::StrokeKind::Inside);
+        }
+        CategorieMur::Cloison => {
+            p.rect_filled(bande(0.42, 0.58), 0.0, encre.gamma_multiply(0.2));
+            p.rect_stroke(bande(0.42, 0.58), 0.0, contour, egui::StrokeKind::Inside);
+            let _ = l;
+        }
+    }
+}
+
 /// Composition d'un élément horizontal en coupe : couches empilées du haut vers le bas,
 /// hauteur proportionnelle à l'épaisseur (2 px au moins), couleur du matériau.
 fn pile_couches(ui: &mut egui::Ui, r: egui::Rect, couches: &[crate::modele::Couche]) {
@@ -348,6 +376,8 @@ pub struct RubanEdition {
     pub demande_famille: Option<Option<String>>,
     /// Niveau des prochaines dalles (None : le premier).
     pub niveau_dalle: Option<String>,
+    /// Onglet de catégorie ouvert dans le sélecteur de type de mur.
+    categorie_mur: Option<crate::modele::CategorieMur>,
     /// Type de mur du gabarit choisi, à copier dans le projet.
     type_mur_gabarit: Option<crate::gabarit::TypeGabarit>,
     /// Toiture : arêtes tracées sans pente (toiture plate).
@@ -368,6 +398,7 @@ struct EditeurType {
     /// None : nouveau type.
     id: Option<String>,
     nom: String,
+    categorie: crate::modele::CategorieMur,
     couches: Vec<crate::modele::Couche>,
     /// Matériaux du projet et ceux ajoutés dans l'éditeur (couleur, motif).
     materiaux: Vec<crate::modele::Materiau>,
@@ -653,7 +684,7 @@ impl RubanEdition {
         let pente = (outil == Outil::Toiture && !self.toiture_plate).then(|| nombre(2));
         Some(crate::modele::edition::ParametresDalle {
             sorte,
-            type_dalle: self.surface_identique.as_ref().filter(|(o,_)| *o == outil).map(|(_,t)| t.clone()).unwrap_or_else(|| crate::modele::TypeCompose { id: String::new(), nom, couches, couches_detaillees: true, origine: None }),
+            type_dalle: self.surface_identique.as_ref().filter(|(o,_)| *o == outil).map(|(_,t)| t.clone()).unwrap_or_else(|| crate::modele::TypeCompose { id: String::new(), nom, couches, categorie: None, couches_detaillees: true, origine: None }),
             pente,
             niveau: self.niveau_dalle.clone(),
             decalage: nombre(1),
@@ -1269,15 +1300,31 @@ impl RubanEdition {
     /// saisie) ou un type du projet ; composition en bande sous la liste ; Modifier /
     /// Nouveau ouvrent l'éditeur de type.
     fn selecteur_type_mur(&mut self, ui: &mut egui::Ui, projet: &crate::modele::Projet) {
-        let nom = self.type_mur.as_ref().and_then(|id| projet.type_mur(id)).map_or("Générique (épaisseur libre)", |t| t.nom.as_str());
+        use crate::modele::CategorieMur;
+        let actuel = self.type_mur.as_ref().and_then(|id| projet.type_mur(id));
+        let categorie_actuelle = actuel.map_or(CategorieMur::Mur, |t| t.categorie_mur());
+        let nom = actuel.map_or("Générique (épaisseur libre)", |t| t.nom.as_str());
+        let onglet = self.categorie_mur.unwrap_or(categorie_actuelle);
         // largeur du panneau mesurée hors de la ligne, qui grandirait avec la liste
         let largeur = ui.available_width();
-        let mut types: Vec<_> = projet.types_murs.iter().collect();
-        // composés d'abord, puis par nom
-        types.sort_by(|a, b| (a.couches.len() < 2, &a.nom).cmp(&(b.couches.len() < 2, &b.nom)));
+        // types de la catégorie : (type du projet, type du gabarit à ajouter, nom, couches)
+        type Ligne = (Option<String>, Option<crate::gabarit::TypeGabarit>, String, Vec<crate::modele::Couche>);
+        let mut lignes: Vec<Ligne> = Vec::new();
+        if onglet == CategorieMur::Mur {
+            lignes.push((None, None, "Générique (épaisseur libre)".into(), Vec::new()));
+        }
+        let mut types: Vec<_> = projet.types_murs.iter().filter(|t| t.categorie_mur() == onglet).collect();
+        types.sort_by(|a, b| a.nom.cmp(&b.nom));
+        lignes.extend(types.into_iter().map(|t| (Some(t.id.clone()), None, t.nom.clone(), t.couches.clone())));
+        // types du gabarit absents du projet : copiés dans le projet au choix
+        let gabarit = crate::gabarit::actif();
+        lignes.extend(gabarit.types_murs.iter().filter(|t| t.categorie_mur() == onglet && !projet.types_murs.iter().any(|p| p.nom == t.nom)).map(|t| (None, Some(t.clone()), t.nom.clone(), t.couches.clone())));
+        let rangs = CategorieMur::TOUTES.iter().map(|c| projet.types_murs.iter().filter(|t| t.categorie_mur() == *c).count() + gabarit.types_murs.iter().filter(|t| t.categorie_mur() == *c).count() + 1).max().unwrap_or(1);
+        let mut choix_onglet = None;
+        let mut choisi: Option<Ligne> = None;
         // boutons à droite d'abord, la liste prend la place restante (sans élargir le panneau)
         ui.allocate_ui_with_layout(egui::vec2(largeur, 22.0), egui::Layout::right_to_left(Align::Center), |ui| {
-            if ui.small_button("+").on_hover_text("Nouveau type de mur composé").clicked() {
+            if ui.small_button("+").on_hover_text("Nouveau type de mur").clicked() {
                 self.ouvrir_editeur_type(projet, None);
             }
             if ui.small_button("Modifier").on_hover_text("Modifier les couches du type (les murs déjà tracés gardent les leurs)").clicked() {
@@ -1285,31 +1332,70 @@ impl RubanEdition {
             }
             egui::ComboBox::from_id_salt("type_mur_creation")
                 .width(ui.available_width().max(60.0) - 8.0)
+                .height(400.0)
+                // les onglets de catégorie gardent la liste ouverte ; un type la ferme
+                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
                 .truncate()
-                .selected_text(RichText::new(nom).strong())
+                .selected_text(RichText::new(format!("{} · {nom}", categorie_actuelle.nom())).strong())
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.type_mur, None, "Générique (épaisseur libre)");
-                    for t in types {
-                        let texte = if t.couches.len() > 1 { format!("{} — {} couches, {}", t.nom, t.couches.len(), crate::options::unite().afficher(t.epaisseur())) } else { t.nom.clone() };
-                        ui.selectable_value(&mut self.type_mur, Some(t.id.clone()), texte);
-                    }
-                    // types du gabarit absents du projet : copiés dans le projet au choix
-                    let gabarit = crate::gabarit::actif();
-                    let absents: Vec<_> = gabarit.types_murs.iter().filter(|t| !projet.types_murs.iter().any(|p| p.nom == t.nom)).collect();
-                    if !absents.is_empty() {
-                        ui.separator();
-                        ui.label(RichText::new(format!("Gabarit · {}", gabarit.nom)).small().weak());
-                        for t in absents {
-                            let e: f64 = t.couches.iter().map(|c| c.epaisseur).sum();
-                            if ui.selectable_label(false, format!("{} — {}", t.nom, crate::options::unite().afficher(e))).clicked() {
-                                self.type_mur_gabarit = Some(t.clone());
+                    ui.set_min_width(300.0);
+                    // hauteur fixe (catégorie la plus fournie) : la liste ne saute pas d'un onglet à l'autre
+                    ui.set_min_height(86.0 + rangs as f32 * 27.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 2.0;
+                        for c in CategorieMur::TOUTES {
+                            let (r, reponse) = ui.allocate_exact_size(egui::vec2(96.0, 50.0), Sense::click());
+                            let actif = onglet == c;
+                            if actif || reponse.hovered() {
+                                ui.painter().rect_filled(r, 4.0, if actif { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
                             }
+                            icone_categorie_mur(ui, egui::Rect::from_center_size(r.center_top() + egui::vec2(0.0, 17.0), egui::vec2(26.0, 26.0)), c);
+                            ui.painter().text(r.center_bottom() - egui::vec2(0.0, 9.0), egui::Align2::CENTER_CENTER, c.nom(), egui::FontId::proportional(12.0), ui.visuals().text_color());
+                            if reponse.clicked() && !actif {
+                                choix_onglet = Some(c);
+                                ui.ctx().request_repaint();
+                            }
+                        }
+                    });
+                    ui.label(RichText::new(onglet.aide()).small().weak());
+                    ui.separator();
+                    for ligne in &lignes {
+                        let courant = match (&ligne.0, &self.type_mur) {
+                            (None, None) => ligne.1.is_none(),
+                            (Some(a), Some(b)) => a == b,
+                            _ => false,
+                        };
+                        let (r, reponse) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 24.0), Sense::click());
+                        if courant || reponse.hovered() {
+                            ui.painter().rect_filled(r, 3.0, if courant { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
+                        }
+                        if !ligne.3.is_empty() {
+                            pile_couches(ui, egui::Rect::from_min_size(r.min + egui::vec2(8.0, 4.0), egui::vec2(26.0, 16.0)), &ligne.3);
+                        }
+                        ui.painter().text(r.min + egui::vec2(42.0, 12.0), egui::Align2::LEFT_CENTER, &ligne.2, egui::FontId::proportional(12.0), ui.visuals().text_color());
+                        if !ligne.3.is_empty() {
+                            let e: f64 = ligne.3.iter().map(|c| c.epaisseur).sum();
+                            ui.painter().text(r.right_center() - egui::vec2(8.0, 0.0), egui::Align2::RIGHT_CENTER, crate::options::unite().afficher(e), egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
+                        }
+                        if reponse.clicked() {
+                            choisi = Some(ligne.clone());
+                            ui.close();
                         }
                     }
                 })
                 .response
                 .on_hover_text("Type des prochains murs. Un type à plusieurs couches crée un mur par couche, regroupés en assemblage.");
         });
+        if let Some(c) = choix_onglet {
+            self.categorie_mur = Some(c);
+        }
+        if let Some((id, gabarit, _, _)) = choisi {
+            self.categorie_mur = None;
+            match gabarit {
+                Some(t) => self.type_mur_gabarit = Some(t),
+                None => self.type_mur = id,
+            }
+        }
         if let Some(t) = self.type_mur.as_ref().and_then(|id| projet.type_mur(id)) {
             ui.scope(|ui| {
                 ui.set_max_width(largeur);
@@ -1350,7 +1436,7 @@ impl RubanEdition {
                 materiaux.push(crate::modele::assemblage::materiau_par_defaut(m));
             }
         }
-        self.editeur_type = Some(EditeurType { id: existant.map(|t| t.id.clone()), nom, couches, materiaux, erreur: None, glisse: None });
+        self.editeur_type = Some(EditeurType { id: existant.map(|t| t.id.clone()), nom, categorie: existant.map_or(crate::modele::CategorieMur::Compose, |t| t.categorie_mur()), couches, materiaux, erreur: None, glisse: None });
     }
 
     /// Fenêtre d'édition d'un type de mur composé : une ligne par couche, de
@@ -1370,6 +1456,11 @@ impl RubanEdition {
                 ui.horizontal(|ui| {
                     ui.label("Nom");
                     ui.add(egui::TextEdit::singleline(&mut ed.nom).desired_width(300.0));
+                    egui::ComboBox::from_id_salt("categorie_type_mur").selected_text(ed.categorie.nom()).show_ui(ui, |ui| {
+                        for c in crate::modele::CategorieMur::TOUTES {
+                            ui.selectable_value(&mut ed.categorie, c, c.nom());
+                        }
+                    }).response.on_hover_text("Catégorie du type : mur, mur composé ou cloison");
                 });
                 ui.add_space(4.0);
                 bande_couches_brouillon(ui, &ed.materiaux, &ed.couches, 18.0);
@@ -1525,6 +1616,7 @@ impl RubanEdition {
                 t.nom = nom;
                 t.couches = ed.couches.clone();
                 t.couches_detaillees = true;
+                t.categorie = Some(ed.categorie);
                 id.clone()
             }
             None => {
@@ -1534,7 +1626,7 @@ impl RubanEdition {
                     if projet.types_murs.iter().all(|t| t.id != id) { break id; }
                     k += 1;
                 };
-                projet.types_murs.push(crate::modele::TypeCompose { id: id.clone(), nom, couches: ed.couches.clone(), couches_detaillees: true, origine: None });
+                projet.types_murs.push(crate::modele::TypeCompose { id: id.clone(), nom, couches: ed.couches.clone(), categorie: Some(ed.categorie), couches_detaillees: true, origine: None });
                 id
             }
         };
@@ -1554,18 +1646,19 @@ impl RubanEdition {
     }
 
     /// Crée (ou remplace) un type composé et le choisit pour les prochains murs (pilote).
-    pub fn definir_type_mur(&mut self, projet: &mut crate::modele::Projet, nom: &str, couches: Vec<crate::modele::Couche>) -> Result<String, String> {
+    pub fn definir_type_mur(&mut self, projet: &mut crate::modele::Projet, nom: &str, couches: Vec<crate::modele::Couche>, categorie: Option<crate::modele::CategorieMur>) -> Result<String, String> {
         if couches.is_empty() || couches.iter().any(|c| !(c.epaisseur > 0.0 && c.epaisseur.is_finite())) {
             return Err("Chaque couche doit avoir une épaisseur positive.".into());
         }
         let id = match projet.types_murs.iter_mut().find(|t| t.nom == nom) {
             Some(t) => {
                 t.couches = couches;
+                t.categorie = categorie;
                 t.id.clone()
             }
             None => {
                 let id = crate::modele::identifiant("type-mur", &format!("compose:{nom}"));
-                projet.types_murs.push(crate::modele::TypeCompose { id: id.clone(), nom: nom.into(), couches, couches_detaillees: true, origine: None });
+                projet.types_murs.push(crate::modele::TypeCompose { id: id.clone(), nom: nom.into(), couches, categorie, couches_detaillees: true, origine: None });
                 id
             }
         };

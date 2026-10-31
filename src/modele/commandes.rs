@@ -1349,7 +1349,7 @@ mod tests {
                     epaisseur: 200.0,
                     ..Default::default()
                 }],
-                couches_detaillees: true,
+                categorie: None, couches_detaillees: true,
                 origine: None,
             },
             pente: None,

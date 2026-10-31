@@ -420,12 +420,51 @@ pub struct TypeCompose {
     /// Couches lues dans la source (false : une couche unique de l'épaisseur totale,
     /// détail non disponible).
     pub couches_detaillees: bool,
+    /// Catégorie d'un type de mur (paramètre de type) ; absente : selon le nombre de
+    /// couches. Sans objet pour les éléments horizontaux.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub categorie: Option<CategorieMur>,
     pub origine: Option<Origine>,
 }
 
 impl TypeCompose {
     pub fn epaisseur(&self) -> f64 {
         self.couches.iter().map(|c| c.epaisseur).sum()
+    }
+
+    /// Catégorie du type de mur : celle du paramètre de type, sinon mur composé s'il a
+    /// plusieurs couches, mur sinon.
+    pub fn categorie_mur(&self) -> CategorieMur {
+        self.categorie.unwrap_or(if self.couches.len() > 1 { CategorieMur::Compose } else { CategorieMur::Mur })
+    }
+}
+
+/// Catégorie d'un type de mur : mur, mur composé ou cloison.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CategorieMur {
+    Mur,
+    Compose,
+    Cloison,
+}
+
+impl CategorieMur {
+    pub const TOUTES: [CategorieMur; 3] = [Self::Mur, Self::Compose, Self::Cloison];
+
+    pub fn nom(self) -> &'static str {
+        match self {
+            Self::Mur => "Mur",
+            Self::Compose => "Mur composé",
+            Self::Cloison => "Cloison",
+        }
+    }
+
+    pub fn aide(self) -> &'static str {
+        match self {
+            Self::Mur => "Mur d'une seule matière : voile, maçonnerie",
+            Self::Compose => "Mur à plusieurs couches (enduit, isolant, structure, finition)",
+            Self::Cloison => "Cloison de distribution, non porteuse",
+        }
     }
 }
 
@@ -775,7 +814,7 @@ impl Projet {
             let _ = p.ajouter_vue_plan(&id, 1200.0);
         }
         for t in &g.types_murs {
-            p.types_murs.push(TypeCompose { id: identifiant("type-mur", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), couches: t.couches.clone(), couches_detaillees: true, origine: None });
+            p.types_murs.push(TypeCompose { id: identifiant("type-mur", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), couches: t.couches.clone(), categorie: t.categorie, couches_detaillees: true, origine: None });
         }
         p.completer_materiaux();
         p
@@ -1188,7 +1227,7 @@ mod tests {
     fn volume_et_json() {
         let mut p = Projet::nouveau("essai");
         p.niveaux.push(Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
-        p.types_murs.push(TypeCompose { id: "t".into(), nom: "200".into(), couches: vec![Couche { materiau: None, epaisseur: 200.0, ..Default::default() }], couches_detaillees: false, origine: None });
+        p.types_murs.push(TypeCompose { id: "t".into(), nom: "200".into(), couches: vec![Couche { materiau: None, epaisseur: 200.0, ..Default::default() }], categorie: None, couches_detaillees: false, origine: None });
         p.murs.push(Mur { variante: None, phase: None, sous_projet: None, id: "m".into(), nom: "Mur".into(), type_mur: "t".into(), assemblage: None, niveau: "n".into(), decalage_bas: 0.0, haut: Haut::Libre { hauteur: 3000.0 }, axe: Axe::Droit { debut: [0.0, 0.0], fin: [5000.0, 0.0] }, origine: None });
         p.ouvertures.push(Ouverture { id: "o".into(), nom: String::new(), genre: GenreOuverture::Libre, mur: "m".into(), type_ouverture: None, abscisse: 1500.0, largeur: 1000.0, hauteur: 1200.0, allege: 900.0, representation: None, valeurs: BTreeMap::new(), materiaux: BTreeMap::new(), retournee: false, inversee: false, origine: None });
         assert!((p.volume_mur(&p.murs[0]).unwrap() - 2.76e9).abs() < 1.0);

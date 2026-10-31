@@ -121,7 +121,7 @@ impl Projet {
         }
         let id = identifiant("type-couche", &cle);
         let nom = format!("{} · {} mm", c.materiau.as_deref().unwrap_or("Couche"), crate::step::format_real(c.epaisseur));
-        self.types_murs.push(TypeCompose { id: id.clone(), nom, couches: vec![c.clone()], couches_detaillees: true, origine: None });
+        self.types_murs.push(TypeCompose { id: id.clone(), nom, couches: vec![c.clone()], categorie: None, couches_detaillees: true, origine: None });
         id
     }
 
@@ -230,7 +230,7 @@ mod tests {
             id: "t".into(),
             nom: "Mur isolé".into(),
             couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Béton", 200.0, FonctionCouche::Structure), c("Laine de verre", 100.0, FonctionCouche::Isolation)],
-            couches_detaillees: true,
+            categorie: None, couches_detaillees: true,
             origine: None,
         }
     }

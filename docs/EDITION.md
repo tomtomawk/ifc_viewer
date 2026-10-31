@@ -29,6 +29,11 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   Après sélection, **Modifier → Propriétés structurelles** permet de les modifier ;
   les commandes de déplacement, rotation, copie, suppression et l'historique leur
   sont applicables. Leurs quantités et classes `IfcColumn` / `IfcBeam` sont exportées.
+- **Types de murs** : le sélecteur de l'outil Mur est organisé comme celui des éléments
+  horizontaux, avec trois onglets — Mur, Mur composé, Cloison. La catégorie est un
+  paramètre du type (`categorie` : `mur`, `compose`, `cloison`), choisi dans l'éditeur de
+  type ; absent, il suit le nombre de couches (une : mur, plusieurs : mur composé). Les
+  types du gabarit non encore dans le projet figurent dans leur onglet.
 - **Ouverture** place une porte, une fenêtre ou une ouverture libre par clic sur un mur ou par
   abscisse depuis son départ. Une ouverture d'assemblage perce toutes ses couches. Une
   menuiserie importée conserve son maillage et suit son hôte ; ses dimensions sont

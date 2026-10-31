@@ -131,7 +131,7 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
             .or_insert_with(|| {
                 let id = ident("type_mur", w.type_id);
                 let (couches, couches_detaillees) = couches_type(m, w.type_id, e);
-                c.projet.types_murs.push(TypeCompose { id: id.clone(), nom: nom_type(w.type_id), couches, couches_detaillees, origine: origine(w.type_id, "WallType") });
+                c.projet.types_murs.push(TypeCompose { id: id.clone(), nom: nom_type(w.type_id), couches, categorie: None, couches_detaillees, origine: origine(w.type_id, "WallType") });
                 id
             })
             .clone();
@@ -233,7 +233,7 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
             .or_insert_with(|| {
                 let id = ident("type_dalle", d.type_id);
                 let (couches, couches_detaillees) = couches_type(m, d.type_id, e);
-                c.projet.types_dalles.push(TypeCompose { id: id.clone(), nom: nom_type(d.type_id), couches, couches_detaillees, origine: origine(d.type_id, "FloorType") });
+                c.projet.types_dalles.push(TypeCompose { id: id.clone(), nom: nom_type(d.type_id), couches, categorie: None, couches_detaillees, origine: origine(d.type_id, "FloorType") });
                 id
             })
             .clone();

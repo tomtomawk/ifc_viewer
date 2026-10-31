@@ -417,7 +417,7 @@ mod tests {
     fn noyau_prolonge_jusqu_au_noyau_du_mur_rejoint() {
         let mut p = Projet::nouveau("N");
         let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None };
-        p.types_murs.push(TypeCompose { id: "t".into(), nom: "Mur".into(), couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Béton", 200.0, FonctionCouche::Structure), c("Isolant", 100.0, FonctionCouche::Isolation)], couches_detaillees: true, origine: None });
+        p.types_murs.push(TypeCompose { id: "t".into(), nom: "Mur".into(), couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Béton", 200.0, FonctionCouche::Structure), c("Isolant", 100.0, FonctionCouche::Isolation)], categorie: None, couches_detaillees: true, origine: None });
         let o = ParametresMur { type_mur: Some("t".into()), ..Default::default() };
         // porteur de x = 0 à 6000 (extérieur, l'enduit, à gauche : y > 0), refend arrivant
         // par le haut (côté enduit)
@@ -458,8 +458,8 @@ mod tests {
         // face du béton du plus épais
         let mut p = Projet::nouveau("L");
         let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None };
-        p.types_murs.push(TypeCompose { id: "a".into(), nom: "A".into(), couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Béton", 200.0, FonctionCouche::Structure), c("Isolant", 100.0, FonctionCouche::Isolation)], couches_detaillees: true, origine: None });
-        p.types_murs.push(TypeCompose { id: "b".into(), nom: "B".into(), couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Béton", 160.0, FonctionCouche::Structure), c("Isolant", 140.0, FonctionCouche::Isolation), c("Plâtre", 13.0, FonctionCouche::Finition)], couches_detaillees: true, origine: None });
+        p.types_murs.push(TypeCompose { id: "a".into(), nom: "A".into(), couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Béton", 200.0, FonctionCouche::Structure), c("Isolant", 100.0, FonctionCouche::Isolation)], categorie: None, couches_detaillees: true, origine: None });
+        p.types_murs.push(TypeCompose { id: "b".into(), nom: "B".into(), couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Béton", 160.0, FonctionCouche::Structure), c("Isolant", 140.0, FonctionCouche::Isolation), c("Plâtre", 13.0, FonctionCouche::Finition)], categorie: None, couches_detaillees: true, origine: None });
         p.ajouter_mur([0.0, 4000.0], [5000.0, 4000.0], &ParametresMur { type_mur: Some("a".into()), ..Default::default() }).unwrap();
         p.ajouter_mur([5000.0, 4000.0], [5000.0, 0.0], &ParametresMur { type_mur: Some("b".into()), ..Default::default() }).unwrap();
         let cs = coupes(&p);
@@ -478,7 +478,7 @@ mod tests {
     fn assemblages_raccordes_couche_a_couche() {
         let mut p = Projet::nouveau("A");
         let c = |m: &str, e: f64| Couche { materiau: Some(m.into()), epaisseur: e, ..Default::default() };
-        p.types_murs.push(TypeCompose { id: "t".into(), nom: "Mur".into(), couches: vec![c("Enduit", 20.0), c("Isolant", 100.0), c("Béton", 200.0)], couches_detaillees: true, origine: None });
+        p.types_murs.push(TypeCompose { id: "t".into(), nom: "Mur".into(), couches: vec![c("Enduit", 20.0), c("Isolant", 100.0), c("Béton", 200.0)], categorie: None, couches_detaillees: true, origine: None });
         let o = ParametresMur { type_mur: Some("t".into()), ..Default::default() };
         // tracé dans le sens horaire : extérieur à gauche, vers le dehors de l'angle
         p.ajouter_mur([0.0, 4000.0], [5000.0, 4000.0], &o).unwrap();

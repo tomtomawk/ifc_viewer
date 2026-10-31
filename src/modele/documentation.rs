@@ -1178,7 +1178,7 @@ mod tests {
         use crate::modele::famille_modelee::FamilleModelee;
         let mut p = Projet::nouveau("Familles");
         p.niveaux.push(Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
-        p.types_murs.push(TypeCompose { id: "t".into(), nom: "Mur".into(), couches: vec![Couche { epaisseur: 200.0, ..Default::default() }], couches_detaillees: true, origine: None });
+        p.types_murs.push(TypeCompose { id: "t".into(), nom: "Mur".into(), couches: vec![Couche { epaisseur: 200.0, ..Default::default() }], categorie: None, couches_detaillees: true, origine: None });
         p.murs.push(Mur { id: "m".into(), nom: "Mur".into(), type_mur: "t".into(), niveau: "n".into(), decalage_bas: 0.0, haut: Haut::Libre { hauteur: 3000.0 }, axe: Axe::Droit { debut: [0.0, 0.0], fin: [8000.0, 0.0] }, assemblage: None, phase: None, sous_projet: None, variante: None, origine: None });
         let mut famille = FamilleModelee::gabarit_fenetre();
         famille.parametres.iter_mut().find(|x| x.nom == "MateriauAppui").unwrap().formule = "Pierre".into();

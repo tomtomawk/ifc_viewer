@@ -33,7 +33,7 @@
   {"nom": "Voile BA 200", "couches": [{"materiau": "Béton armé", "epaisseur": 200.0, "fonction": "structure"}]},
   {"nom": "Mur BA 200 + doublage isolé", "couches": [{"materiau": "Enduit", "epaisseur": 15.0, "fonction": "finition"}, {"materiau": "Béton armé", "epaisseur": 200.0, "fonction": "structure"}, {"materiau": "Laine minérale", "epaisseur": 120.0, "fonction": "isolation"}, {"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}]},
   {"nom": "Mur ossature bois 145", "couches": [{"materiau": "Bardage bois", "epaisseur": 22.0, "fonction": "finition"}, {"materiau": "Lame d'air", "epaisseur": 25.0}, {"materiau": "Panneau fibre de bois", "epaisseur": 35.0, "fonction": "isolation"}, {"materiau": "Ossature bois + laine", "epaisseur": 145.0, "fonction": "structure"}, {"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}]},
-  {"nom": "Cloison 72/48", "couches": [{"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}, {"materiau": "Laine minérale", "epaisseur": 45.0, "fonction": "isolation"}, {"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}]}
+  {"nom": "Cloison 72/48", "categorie": "cloison", "couches": [{"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}, {"materiau": "Laine minérale", "epaisseur": 45.0, "fonction": "isolation"}, {"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}]}
  ],
  "types_surfaces": [
   {"sorte": "dalle", "nom": "Dalle BA 200", "couches": [{"materiau": "Béton armé", "epaisseur": 200.0, "fonction": "structure"}]},

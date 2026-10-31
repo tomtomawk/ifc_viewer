@@ -72,6 +72,14 @@ pub struct FamilleMateriau {
 pub struct TypeGabarit {
     pub nom: String,
     pub couches: Vec<Couche>,
+    /// Catégorie d'un type de mur ; absente : selon le nombre de couches.
+    pub categorie: Option<crate::modele::CategorieMur>,
+}
+
+impl TypeGabarit {
+    pub fn categorie_mur(&self) -> crate::modele::CategorieMur {
+        self.categorie.unwrap_or(if self.couches.len() > 1 { crate::modele::CategorieMur::Compose } else { crate::modele::CategorieMur::Mur })
+    }
 }
 
 /// Type d'élément horizontal : couches du haut vers le bas.

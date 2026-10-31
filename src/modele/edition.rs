@@ -46,7 +46,7 @@ impl ParametresMur {
             id: String::new(),
             nom: String::new(),
             couches: vec![Couche { materiau: None, epaisseur: self.epaisseur, ..Default::default() }],
-            couches_detaillees: true,
+            categorie: None, couches_detaillees: true,
             origine: None,
         })
     }
@@ -305,7 +305,7 @@ impl Projet {
                     if self.types_dalles.iter().all(|x| x.id != id) { break id; }
                     k += 1;
                 };
-                self.types_dalles.push(TypeCompose { id: id.clone(), nom: t.nom.clone(), couches: t.couches.clone(), couches_detaillees: true, origine: None });
+                self.types_dalles.push(TypeCompose { id: id.clone(), nom: t.nom.clone(), couches: t.couches.clone(), categorie: None, couches_detaillees: true, origine: None });
                 id
             }
         };
@@ -416,7 +416,7 @@ impl Projet {
             self.niveaux.push(Niveau { id: niveau.clone(), nom: "Niveau 0".into(), altitude: 0.0, origine: None });
         }
         if existant.is_none() {
-            self.types_murs.push(TypeCompose { id: type_mur.clone(), nom: format!("Mur · {} mm", p.epaisseur), couches: vec![Couche { materiau: None, epaisseur: p.epaisseur, ..Default::default() }], couches_detaillees: true, origine: None });
+            self.types_murs.push(TypeCompose { id: type_mur.clone(), nom: format!("Mur · {} mm", p.epaisseur), couches: vec![Couche { materiau: None, epaisseur: p.epaisseur, ..Default::default() }], categorie: None, couches_detaillees: true, origine: None });
         }
         let compose = compose.is_some_and(|t| t.couches.len() > 1);
         if self.phases.is_empty() { self.phases.push(p.phase.clone().unwrap_or_else(|| "Projet".into())); }
@@ -567,7 +567,7 @@ mod tests {
     fn dalle_creation_contour_et_relecture() {
         let mut p = Projet::nouveau("Dalle");
         let c = |m: &str, e: f64| Couche { materiau: Some(m.into()), epaisseur: e, ..Default::default() };
-        let t = TypeCompose { id: String::new(), nom: "Dalle BA 230 + chape".into(), couches: vec![c("Chape ciment", 50.0), c("Béton armé", 230.0)], couches_detaillees: true, origine: None };
+        let t = TypeCompose { id: String::new(), nom: "Dalle BA 230 + chape".into(), couches: vec![c("Chape ciment", 50.0), c("Béton armé", 230.0)], categorie: None, couches_detaillees: true, origine: None };
         let o = ParametresDalle { sorte: SorteDalle::Dalle, type_dalle: t, pente: None, niveau: None, decalage: 0.0, phase: None, sous_projet: None, variante: None };
         // contour en sens horaire, point de fermeture répété : réorienté et nettoyé
         let id = p.ajouter_dalle(&[[0.0, 0.0], [0.0, 4000.0], [5000.0, 4000.0], [5000.0, 0.0], [0.0, 0.0]], &o).unwrap();
@@ -601,7 +601,7 @@ mod tests {
         assert_eq!(p.niveaux.len(), 1);
         let type_de = |sorte| {
             let t = g.surfaces(sorte)[0];
-            TypeCompose { id: String::new(), nom: t.nom.clone(), couches: t.couches.clone(), couches_detaillees: true, origine: None }
+            TypeCompose { id: String::new(), nom: t.nom.clone(), couches: t.couches.clone(), categorie: None, couches_detaillees: true, origine: None }
         };
         let rect = [[0.0, 0.0], [10_000.0, 0.0], [10_000.0, 6_000.0], [0.0, 6_000.0]];
         let plafond = ParametresDalle { sorte: SorteDalle::Plafond, type_dalle: type_de(SorteDalle::Plafond), pente: None, niveau: None, decalage: 2500.0, phase: None, sous_projet: None, variante: None };
