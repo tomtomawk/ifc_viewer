@@ -1012,7 +1012,7 @@ fn remapper_annotation(annotation: &mut documentation::Annotation, ids: &HashMap
         _ => {}
     }
 }
-fn croisement(a: &[[f64; 2]], b: &[[f64; 2]]) -> bool {
+pub fn croisement(a: &[[f64; 2]], b: &[[f64; 2]]) -> bool {
     for i in 0..a.len() {
         for j in 0..b.len() {
             let (p, q, r, s) = (

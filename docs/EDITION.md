@@ -34,6 +34,16 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   paramètre du type (`categorie` : `mur`, `compose`, `cloison`), choisi dans l'éditeur de
   type ; absent, il suit le nombre de couches (une : mur, plusieurs : mur composé). Les
   types du gabarit non encore dans le projet figurent dans leur onglet.
+- **Quitter une commande** : une barre en haut à droite de la vue porte les boutons
+  Valider (✔, Entrée) et Annuler (✖, Échap). Valider termine le tracé en cours et ferme
+  l'outil ; Annuler abandonne tout et le ferme.
+- **Murs** : créés par défaut sur la face extérieure, en chaîne (le mur suivant part de
+  la fin du précédent). Espace inverse le sens du mur en cours de tracé (extérieur et
+  intérieur échangés).
+- **Éléments horizontaux** : un polygone se ferme par F, clic sur le premier sommet ou
+  clic droit ; Entrée ne le ferme plus, elle valide la commande. Un nouveau tracé
+  continue le même élément : un contour extérieur ajoute une partie, un contour
+  intérieur à un autre est une trémie. L'élément est créé à la validation.
 - **Ouverture** place une porte, une fenêtre ou une ouverture libre par clic sur un mur ou par
   abscisse depuis son départ. Une ouverture d'assemblage perce toutes ses couches. Une
   menuiserie importée conserve son maillage et suit son hôte ; ses dimensions sont

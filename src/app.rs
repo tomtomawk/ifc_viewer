@@ -2255,9 +2255,14 @@ impl ViewerApp {
 
     /// Crée une dalle de contour `pts` (mm) dans le projet natif et la sélectionne.
     fn creer_dalle(&mut self, pts: &[[f64; 2]], parametres: &crate::modele::edition::ParametresDalle) {
+        self.creer_dalle_contours(&[pts.to_vec()], parametres);
+    }
+
+    /// Crée une dalle de plusieurs contours (parties et trémies) et la sélectionne.
+    fn creer_dalle_contours(&mut self, contours: &[Vec<[f64; 2]>], parametres: &crate::modele::edition::ParametresDalle) {
         let Some((projet, _)) = &self.natif else { return };
         let mut projet = projet.clone();
-        match projet.ajouter_dalle(pts, parametres).and_then(|id| self.appliquer_projet(projet).map(|_| id)) {
+        match projet.ajouter_dalle_contours(contours, parametres).and_then(|id| self.appliquer_projet(projet).map(|_| id)) {
             Ok(id) => {
                 self.selected = Some(scene::id_natif("dalle", &id));
                 self.reveal = self.selected;
@@ -6325,6 +6330,7 @@ impl ViewerApp {
                     egui::Frame::popup(ui.style()).show(ui, |ui| self.options_trace(ui));
                 });
         }
+        self.barre_commande(ui, rect);
         if self.a_options_modifier() {
             egui::Area::new(egui::Id::unique("options_modifier"))
                 .fixed_pos(rect.left_top() + egui::vec2(8.0, 8.0))

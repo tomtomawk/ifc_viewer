@@ -199,7 +199,7 @@ impl Poche {
 }
 
 /// Contour des parties coupées, mm du papier.
-pub const TRAIT_FORT_MM: f64 = 0.35;
+pub const TRAIT_FORT_MM: f64 = 0.18;
 /// Pas des hachures du poché, mm du papier.
 pub const PAS_HACHURE_MM: f64 = 1.5;
 

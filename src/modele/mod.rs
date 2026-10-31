@@ -197,7 +197,7 @@ pub struct Couche {
 
 /// Épaisseurs des plumes 1 à 12 (mm du papier) par défaut, comme les épaisseurs de
 /// lignes de Revit.
-pub const PLUMES: [f64; 12] = [0.10, 0.13, 0.18, 0.25, 0.35, 0.50, 0.70, 1.00, 1.40, 2.00, 0.05, 0.08];
+pub const PLUMES: [f64; 12] = [0.05, 0.07, 0.09, 0.13, 0.18, 0.25, 0.35, 0.50, 0.70, 1.00, 0.025, 0.04];
 
 impl Couche {
     /// Plume du contour de coupe : la sienne, sinon selon la fonction (structure 5,
@@ -1163,10 +1163,10 @@ mod tests {
     fn plume_par_couche() {
         let mut p = Projet::nouveau("P");
         let mut c = Couche { materiau: None, epaisseur: 200.0, fonction: FonctionCouche::Structure, plume: None };
-        // structure : plume 5 (0,35 mm) par défaut
-        assert_eq!(p.trait_couche(&c), 0.35);
+        // structure : plume 5 (0,18 mm) par défaut
+        assert_eq!(p.trait_couche(&c), 0.18);
         c.plume = Some(8);
-        assert_eq!(p.trait_couche(&c), 1.0);
+        assert_eq!(p.trait_couche(&c), 0.50);
         // table du projet prioritaire, complétée à 12 plumes
         p.plumes = vec![0.1; 8];
         assert_eq!(p.epaisseurs_plumes().len(), 12);

@@ -19,6 +19,9 @@ pub(super) struct EtatDessin2D {
     point: Option<(DVec2, Accroche)>,
     geoms: Option<(u64, String, Vec<Geom>)>,
     pub message: Option<String>,
+    /// Contours fermés de l'élément horizontal en cours : parties et trémies, créés à la
+    /// validation.
+    pub dalle: Vec<Vec<[f64; 2]>>,
 }
 
 /// Ce que produit le tracé.
@@ -332,11 +335,21 @@ impl ViewerApp {
             return;
         }
         if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Surface) {
-            let Some(parametres) = self.ruban_edition.dalle_active() else { return };
+            // le contour fermé rejoint l'élément en cours ; il devient dalle à la validation
             for f in &formes {
-                match contour_surface(f) {
-                    Some(c) => self.creer_dalle(&c, &parametres),
-                    None => self.dessin2d.message = Some("Contour fermé attendu : au moins trois sommets.".into()),
+                let Some(c) = contour_surface(f) else {
+                    self.dessin2d.message = Some("Contour fermé attendu : au moins trois sommets.".into());
+                    continue;
+                };
+                match crate::modele::edition::contour_valide(&c) {
+                    Err(e) => self.dessin2d.message = Some(e),
+                    Ok(c) if self.dessin2d.dalle.iter().any(|x| crate::modele::commandes::croisement(x, &c)) => {
+                        self.dessin2d.message = Some("Le contour croise un contour déjà tracé.".into());
+                    }
+                    Ok(c) => {
+                        self.dessin2d.dalle.push(c);
+                        self.dessin2d.message = None;
+                    }
                 }
             }
             return;
@@ -359,10 +372,6 @@ impl ViewerApp {
                     Err(e) => self.error = Some(e),
                 }
             }
-            // sans chaînage, chaque mur part d'un nouveau point
-            if let Some(t) = self.dessin2d.trace.as_mut().filter(|t| t.outil == OutilDessin::Ligne && !self.ruban_edition.chainer_murs) {
-                t.points.clear();
-            }
             return;
         }
         let Some(vue) = self.vue_native_id() else { return };
@@ -382,6 +391,7 @@ impl ViewerApp {
         let Some((usage, outil)) = self.usage_dessin() else {
             self.dessin2d.trace = None;
             self.dessin2d.saisie.clear();
+            self.dessin2d.dalle.clear();
             return;
         };
         if self.dessin2d.trace.as_ref().is_none_or(|t| t.outil != outil) {
@@ -395,6 +405,7 @@ impl ViewerApp {
             return;
         }
         let mut valider = false;
+        let mut inverser = false;
         let mut echap = false;
         let mut effacer = false;
         // F (fermer) seulement pendant un tracé : sinon F cadre la vue
@@ -409,7 +420,8 @@ impl ViewerApp {
                             self.dessin2d.message = None;
                             lu = true;
                         } else if ch == ' ' {
-                            valider = true;
+                            // Espace inverse le sens d'un mur ; ailleurs, il valide comme Entrée
+                            if usage == Usage::Mur { inverser = true } else { valider = true }
                             lu = true;
                         }
                     }
@@ -449,13 +461,89 @@ impl ViewerApp {
                 self.dessin2d.trace = None;
             }
         }
+        if inverser {
+            self.ruban_edition.sens_inverse = !self.ruban_edition.sens_inverse;
+        }
         if valider {
-            self.valider_saisie_dessin();
+            // une valeur tapée donne un point ; sinon Entrée valide la commande
+            if self.dessin2d.saisie.is_empty() {
+                self.quitter_commande(true);
+            } else {
+                self.valider_saisie_dessin();
+            }
+        }
+    }
+
+    /// Quitte la commande en cours. Valider : le tracé en cours est terminé (comme Entrée),
+    /// puis l'outil se ferme ; Annuler : tout ce qui est en cours est abandonné, puis
+    /// l'outil se ferme.
+    pub(super) fn quitter_commande(&mut self, valider: bool) {
+        let surface = self.usage_dessin().is_some_and(|(u, _)| u == Usage::Surface);
+        if valider && self.dessin2d.trace.is_some() {
+            if !self.dessin2d.saisie.is_empty() {
+                self.valider_saisie_dessin();
+            }
+            if self.trace_en_cours() {
+                if surface {
+                    // polygone resté ouvert : fermé, il rejoint l'élément
+                    let formes = self.dessin2d.trace.as_mut().map(|t| t.fermer()).unwrap_or_default();
+                    self.enregistrer_formes(formes);
+                } else {
+                    self.valider_saisie_dessin();
+                }
+            }
+        }
+        if surface && valider {
+            let contours = std::mem::take(&mut self.dessin2d.dalle);
+            if let (false, Some(parametres)) = (contours.is_empty(), self.ruban_edition.dalle_active()) {
+                self.creer_dalle_contours(&contours, &parametres);
+            }
+        }
+        self.dessin2d.dalle.clear();
+        self.dessin2d.saisie.clear();
+        self.dessin2d.message = None;
+        self.dessin2d.trace = None;
+        self.bim.depart_deplacement = None;
+        self.bim.depart_structure = None;
+        self.coupe_depart = None;
+        self.alignement_plan = false;
+        self.arete_alignement = None;
+        self.ruban_edition.annuler();
+    }
+
+    /// Boutons Valider (Entrée) et Annuler (Échap), avec leur icône, en haut à droite de la
+    /// vue tant qu'une commande est active.
+    pub(super) fn barre_commande(&mut self, ui: &egui::Ui, rect: egui::Rect) {
+        if self.natif.is_none() || self.ruban_edition.outil().is_none() {
+            return;
+        }
+        let nom = self.ruban_edition.outil().map_or("", |o| o.nom());
+        let inverse = self.ruban_edition.mur_actif() && self.ruban_edition.sens_inverse;
+        let mut action = None;
+        egui::Area::new(egui::Id::unique("barre_commande"))
+            .pivot(egui::Align2::RIGHT_TOP)
+            .fixed_pos(rect.right_top() + egui::vec2(-8.0, 8.0))
+            .constrain_to(rect)
+            .show(ui.ctx(), |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(if inverse { format!("{nom} · sens inversé") } else { nom.to_string() }).strong());
+                        if bouton_commande(ui, true, "Valider").on_hover_text("Terminer et quitter la commande (Entrée)").clicked() {
+                            action = Some(true);
+                        }
+                        if bouton_commande(ui, false, "Annuler").on_hover_text("Abandonner et quitter la commande (Échap)").clicked() {
+                            action = Some(false);
+                        }
+                    });
+                });
+            });
+        if let Some(valider) = action {
+            self.quitter_commande(valider);
         }
     }
 
     /// Entrée : point saisi (coordonnées, distance), mot-clé F (fermer), ou fin du tracé.
-    fn valider_saisie_dessin(&mut self) {
+    pub(super) fn valider_saisie_dessin(&mut self) {
         let saisie = std::mem::take(&mut self.dessin2d.saisie);
         let Some(trace) = self.dessin2d.trace.as_mut() else { return };
         self.dessin2d.message = None;
@@ -584,6 +672,13 @@ impl ViewerApp {
                 }
             }
         }
+        // contours déjà fermés de l'élément horizontal en cours (parties et trémies)
+        if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Surface) {
+            for c in &self.dessin2d.dalle {
+                let pts: Vec<DVec2> = c.iter().map(|p| DVec2::from_array(*p)).collect();
+                self.apercu_surface(&painter, rect, &[pts]);
+            }
+        }
         // points déjà donnés
         for q in &trace.points {
             if let Some(e) = self.vers_ecran(rect, *q) {
@@ -607,7 +702,7 @@ impl ViewerApp {
             Some(m) => format!("{nom} — {} : {}", trace.invite(), m),
             None => format!("{nom} — {} : {}▏", trace.invite(), self.dessin2d.saisie),
         };
-        let aide = format!("Clavier : x,y · @dx,dy · d<angle · distance seule ({}) · Maj : ortho · clic droit ou Entrée : terminer · Échap : annuler", u.suffixe().trim());
+        let aide = format!("Clavier : x,y · @dx,dy · d<angle · distance seule ({}) · Maj : ortho · Entrée : valider · Échap : annuler", u.suffixe().trim());
         let police = egui::FontId::monospace(13.0);
         let g1 = painter.layout_no_wrap(ligne, police, if self.dessin2d.message.is_some() { Color32::from_rgb(255, 170, 150) } else { Color32::WHITE });
         let g2 = painter.layout_no_wrap(aide, egui::FontId::proportional(11.0), Color32::from_gray(200));
@@ -644,6 +739,7 @@ impl ViewerApp {
             for w in l.windows(2) {
                 let (a, b) = (w[0], w[1]);
                 let Some(n) = (b - a).try_normalize().map(|d| d.perp()) else { continue };
+                let n = if options.inverse { -n } else { n };
                 let c = |p: DVec2, k: f64| p + n * (centre + e * k);
                 let sol: Option<Vec<_>> = [c(a, -0.5), c(b, -0.5), c(b, 0.5), c(a, 0.5)].iter().map(|&q| ecran(q, bas)).collect();
                 if let Some(sol) = sol {
@@ -665,6 +761,7 @@ impl ViewerApp {
             }
             for (p, voisin) in [(l[0], l[1]), (l[l.len() - 1], l[l.len() - 2])] {
                 let Some(n) = (p - voisin).try_normalize().map(|d| d.perp()) else { continue };
+                let n = if options.inverse { -n } else { n };
                 for k in [-0.5, 0.5] {
                     let q = p + n * (centre + e * k);
                     if let (Some(x), Some(y)) = (ecran(q, bas), ecran(q, haut)) {
@@ -724,7 +821,7 @@ impl ViewerApp {
                     ui.label("Forme");
                     let actuelle = self.usage_dessin().map(|(_, o)| o);
                     for (forme, nom, aide) in [
-                        (OutilDessin::Polyligne, "Polygone", "Cliquer les sommets ; recliquer le premier, F, Entrée ou clic droit pour fermer"),
+                        (OutilDessin::Polyligne, "Polygone", "Cliquer les sommets ; recliquer le premier, F ou clic droit pour fermer. Un contour intérieur à un autre est une trémie, un contour extérieur une autre partie ; Entrée crée l'élément"),
                         (OutilDessin::Rectangle, "Rectangle", "Deux coins opposés, dans les axes du plan"),
                         (OutilDessin::Cercle, "Cercle", "Centre puis rayon (contour à 48 côtés)"),
                     ] {
@@ -753,8 +850,7 @@ impl ViewerApp {
                 }
             }
             ui.separator();
-            ui.add_enabled(self.ruban_edition.forme_mur == OutilDessin::Ligne, egui::Checkbox::new(&mut self.ruban_edition.chainer_murs, "Chaîner"))
-                .on_hover_text("Le mur suivant part de la fin du précédent");
+            ui.label(RichText::new("Espace : inverser le sens").weak());
         });
     }
 
@@ -859,4 +955,26 @@ impl ViewerApp {
             }
         }
     }
+}
+
+/// Bouton de la barre de commande : pictogramme dessiné (coche verte, croix rouge) et
+/// libellé.
+fn bouton_commande(ui: &mut egui::Ui, valider: bool, libelle: &str) -> egui::Response {
+    let police = egui::FontId::proportional(13.0);
+    let texte = ui.painter().layout_no_wrap(libelle.to_string(), police, ui.visuals().text_color());
+    let (r, reponse) = ui.allocate_exact_size(egui::vec2(texte.size().x + 36.0, 26.0), Sense::click());
+    if reponse.hovered() {
+        ui.painter().rect_filled(r, 4.0, ui.visuals().widgets.hovered.bg_fill);
+    }
+    let c = egui::pos2(r.left() + 14.0, r.center().y);
+    let (couleur, trait_) = if valider { (Color32::from_rgb(30, 150, 70), 2.2) } else { (Color32::from_rgb(200, 50, 45), 2.2) };
+    let t = egui::Stroke::new(trait_, couleur);
+    if valider {
+        ui.painter().add(egui::Shape::line(vec![c + egui::vec2(-6.0, 0.0), c + egui::vec2(-2.0, 5.0), c + egui::vec2(6.0, -5.0)], t));
+    } else {
+        ui.painter().line_segment([c + egui::vec2(-5.0, -5.0), c + egui::vec2(5.0, 5.0)], t);
+        ui.painter().line_segment([c + egui::vec2(-5.0, 5.0), c + egui::vec2(5.0, -5.0)], t);
+    }
+    ui.painter().galley(egui::pos2(r.left() + 28.0, r.center().y - texte.size().y / 2.0), texte, ui.visuals().text_color());
+    reponse
 }

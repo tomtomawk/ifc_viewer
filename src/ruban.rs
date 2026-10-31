@@ -56,7 +56,7 @@ pub(crate) enum Outil {
 }
 
 impl Outil {
-    fn nom(self) -> &'static str {
+    pub fn nom(self) -> &'static str {
         match self {
             Self::Niveau => "Niveau",
             Self::Quadrillage => "Quadrillage",
@@ -359,7 +359,8 @@ pub struct RubanEdition {
     pub phase_creation: Option<String>,
     pub sous_projet_creation: Option<String>,
     pub variante_creation: Option<String>,
-    pub chainer_murs: bool,
+    /// Sens inversé des prochains murs (Espace pendant le tracé).
+    pub sens_inverse: bool,
     /// Forme tracée par l'outil Mur (moteur du dessin 2D) : ligne, rectangle, arc, cercle.
     pub forme_mur: crate::dessin2d::OutilDessin,
     ajout_creation: Option<crate::modele::edition::ListeCreation>,
@@ -422,7 +423,7 @@ fn champs(o: Outil) -> Vec<Champ> {
         Mur => vec![
             Choix(
                 "Implantation",
-                &["Axe", "Face extérieure", "Face intérieure", "Axe du porteur"],
+                &["Face extérieure", "Axe", "Face intérieure", "Axe du porteur"],
             ),
             Nombre("Hauteur", 2800.0, " mm"),
             Nombre("Épaisseur", 300.0, " mm"),
@@ -798,6 +799,7 @@ impl RubanEdition {
         self.selection = Some(Outil::Mur);
     }
     pub fn annuler(&mut self) {
+        self.sens_inverse = false;
         self.coupe_identique = None;
         self.surface_identique = None;
         self.ouverture_type_identique = None;
@@ -810,10 +812,10 @@ impl RubanEdition {
             _ => defaut,
         };
         let implantation = match self.valeurs.get(&(Outil::Mur, 0)) {
-            Some(Valeur::Texte(v)) if v == "Face extérieure" => Implantation::Exterieure,
+            Some(Valeur::Texte(v)) if v == "Axe" => Implantation::Axe,
             Some(Valeur::Texte(v)) if v == "Face intérieure" => Implantation::Interieure,
             Some(Valeur::Texte(v)) if v == "Axe du porteur" => Implantation::AxePorteur,
-            _ => Implantation::Axe,
+            _ => Implantation::Exterieure,
         };
         ParametresMur {
             hauteur: nombre(1, 2800.0),
@@ -827,6 +829,7 @@ impl RubanEdition {
             sous_projet: self.sous_projet_creation.clone(),
             variante: self.variante_creation.clone(),
             type_mur: self.type_mur.clone(),
+            inverse: self.sens_inverse,
         }
     }
 
@@ -1275,21 +1278,17 @@ impl RubanEdition {
                         let v = self
                             .valeurs
                             .entry((Outil::Mur, 0))
-                            .or_insert_with(|| Valeur::Texte("Axe".into()));
+                            .or_insert_with(|| Valeur::Texte("Face extérieure".into()));
                         if let Valeur::Texte(v) = v {
                             egui::ComboBox::from_id_salt("implantation_proprietes_mur")
                                 .width(130.0)
                                 .selected_text(v.as_str())
                                 .show_ui(ui, |ui| {
-                                    for nom in ["Axe", "Face extérieure", "Face intérieure", "Axe du porteur"] {
+                                    for nom in ["Face extérieure", "Axe", "Face intérieure", "Axe du porteur"] {
                                         ui.selectable_value(v, nom.into(), nom);
                                     }
                                 });
                         }
-                        ui.end_row();
-                        ui.label("Chaîner");
-                        ui.checkbox(&mut self.chainer_murs, "")
-                            .on_hover_text("Le mur suivant part de la fin du précédent");
                         ui.end_row();
                     });
             });
@@ -2169,7 +2168,6 @@ impl RubanEdition {
                         ui.selectable_value(&mut self.niveau_mur, Some(n.id.clone()), &n.nom);
                     }
                 });
-            ui.checkbox(&mut self.chainer_murs, "Chaîner");
         });
     }
 }
@@ -2878,7 +2876,7 @@ mod tests {
                     _ => None,
                 })
                 .collect();
-            for attendu in ["Haut", "Bas", "Libre", "Épaisseur", "Implantation", "Chaîner"] {
+            for attendu in ["Haut", "Bas", "Libre", "Épaisseur", "Implantation"] {
                 assert!(textes.iter().any(|(t, _)| t == attendu), "Champ absent : {attendu}");
             }
             let position = |nom: &str| textes.iter().find(|(t, _)| t == nom).unwrap().1;

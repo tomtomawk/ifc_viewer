@@ -31,11 +31,14 @@ pub struct ParametresMur {
     /// Type de mur existant ; None : type monocouche de l'épaisseur `epaisseur`. Un type
     /// à plusieurs couches crée un assemblage (un mur par couche).
     pub type_mur: Option<String>,
+    /// Sens inversé : le mur est tracé de l'autre côté de la ligne (extérieur et intérieur
+    /// échangés).
+    pub inverse: bool,
 }
 
 impl Default for ParametresMur {
     fn default() -> Self {
-        Self { hauteur: 2800.0, epaisseur: 300.0, implantation: Implantation::Axe, niveau: None, decalage: 0.0, niveau_haut: None, decalage_haut: 0.0, phase: None, sous_projet: None, variante: None, type_mur: None }
+        Self { hauteur: 2800.0, epaisseur: 300.0, implantation: Implantation::Axe, niveau: None, decalage: 0.0, niveau_haut: None, decalage_haut: 0.0, phase: None, sous_projet: None, variante: None, type_mur: None, inverse: false }
     }
 }
 
@@ -274,8 +277,24 @@ impl Projet {
     /// Ajoute une dalle de contour `points` ; son type (couches du haut vers le bas) est
     /// repris s'il existe déjà (même nom et mêmes couches), sinon ajouté. Rien ne change
     /// en cas d'erreur.
+    #[cfg(test)]
     pub fn ajouter_dalle(&mut self, points: &[[f64; 2]], p: &ParametresDalle) -> Result<String, String> {
-        let contour = contour_valide(points)?;
+        self.ajouter_dalle_contours(&[points.to_vec()], p)
+    }
+
+    /// Ajoute un élément horizontal de plusieurs contours : un contour extérieur d'une
+    /// autre partie ajoute une partie, un contour intérieur à un autre est une trémie
+    /// (règle pair-impair). Les contours ne se croisent pas.
+    pub fn ajouter_dalle_contours(&mut self, contours: &[Vec<[f64; 2]>], p: &ParametresDalle) -> Result<String, String> {
+        let contours: Vec<Vec<[f64; 2]>> = contours.iter().map(|c| contour_valide(c)).collect::<Result<_, _>>()?;
+        if contours.is_empty() {
+            return Err("Aucun contour.".into());
+        }
+        for (i, a) in contours.iter().enumerate() {
+            if contours[i + 1..].iter().any(|b| super::commandes::croisement(a, b)) {
+                return Err("Les contours de l'élément se croisent.".into());
+            }
+        }
         if !p.decalage.is_finite() {
             return Err("Le décalage doit être fini.".into());
         }
@@ -327,8 +346,8 @@ impl Projet {
             niveau,
             sorte: p.sorte,
             decalage: p.decalage,
-            pentes: p.pente.map(|a| vec![vec![Some(a); contour.len()]]).unwrap_or_default(),
-            contours: vec![contour],
+            pentes: p.pente.map(|a| contours.iter().map(|c| vec![Some(a); c.len()]).collect()).unwrap_or_default(),
+            contours,
             origine: None,
         });
         self.completer_materiaux();
@@ -367,6 +386,12 @@ impl Projet {
 
     /// Ajoute un mur droit ou courbe de ligne tracée `trace` (implantation de `p`).
     pub fn ajouter_mur_axe(&mut self, trace: Axe, p: &ParametresMur) -> Result<String, String> {
+        // sens inversé : la ligne est parcourue en sens contraire
+        let trace = match (p.inverse, trace) {
+            (true, Axe::Droit { debut, fin }) => Axe::Droit { debut: fin, fin: debut },
+            (true, Axe::Arc { debut, fin, centre, direct }) => Axe::Arc { debut: fin, fin: debut, centre, direct: !direct },
+            (_, t) => t,
+        };
         let points = match trace {
             Axe::Droit { debut, fin } => vec![debut, fin],
             Axe::Arc { debut, fin, centre, .. } => vec![debut, fin, centre],
@@ -453,6 +478,35 @@ mod tests {
             assert!((a[1] - attendu).abs() < 1e-6 && (b[1] - attendu).abs() < 1e-6, "{implantation:?}: {a:?} {b:?}");
             assert!((ecart - options.gabarit(&p).decalage_reference(implantation.reference())).abs() < 1e-6);
         }
+    }
+
+    #[test]
+    fn dalle_a_plusieurs_contours_parties_et_tremie() {
+        let mut p = Projet::nouveau("D");
+        let t = TypeCompose { id: String::new(), nom: "Dalle".into(), couches: vec![Couche { epaisseur: 200.0, ..Default::default() }], categorie: None, couches_detaillees: true, origine: None };
+        let o = ParametresDalle { sorte: SorteDalle::Dalle, type_dalle: t, pente: None, niveau: None, decalage: 0.0, phase: None, sous_projet: None, variante: None };
+        let rect = |x: f64, y: f64, l: f64| vec![[x, y], [x + l, y], [x + l, y + l], [x, y + l]];
+        // partie principale, trémie à l'intérieur, seconde partie à l'extérieur
+        let id = p.ajouter_dalle_contours(&[rect(0.0, 0.0, 6000.0), rect(1000.0, 1000.0, 1000.0), rect(8000.0, 0.0, 2000.0)], &o).unwrap();
+        assert_eq!(p.dalles.iter().find(|d| d.id == id).unwrap().contours.len(), 3);
+        // contours qui se croisent : refusés, rien n'est ajouté
+        let avant = p.dalles.len();
+        assert!(p.ajouter_dalle_contours(&[rect(0.0, 0.0, 3000.0), rect(2000.0, 2000.0, 3000.0)], &o).is_err());
+        assert_eq!(p.dalles.len(), avant);
+    }
+
+    #[test]
+    fn mur_au_sens_inverse_passe_de_l_autre_cote_de_la_ligne() {
+        let mut y = Vec::new();
+        for inverse in [false, true] {
+            let mut p = Projet::nouveau("S");
+            let options = ParametresMur { implantation: Implantation::Exterieure, epaisseur: 300.0, inverse, ..Default::default() };
+            let id = p.ajouter_mur([0.0, 0.0], [4000.0, 0.0], &options).unwrap();
+            let m = p.murs.iter().find(|m| m.id == id).unwrap();
+            let Axe::Droit { debut, .. } = m.axe else { panic!() };
+            y.push(debut[1]);
+        }
+        assert!((y[0] + 150.0).abs() < 1e-6 && (y[1] - 150.0).abs() < 1e-6, "{y:?}");
     }
 
     #[test]
