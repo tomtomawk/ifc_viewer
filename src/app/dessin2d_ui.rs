@@ -99,6 +99,7 @@ pub(super) enum Usage {
     GardeCorps,
     Terrain,
     LimitePropriete,
+    Cadrage,
 }
 
 /// Contour d'élément horizontal d'une forme fermée (cercle : 48 côtés).
@@ -155,6 +156,9 @@ fn nom_outil(o: OutilDessin) -> &'static str {
 }
 
 impl ViewerApp {
+    pub(super) fn selection_traces_active(&self) -> bool {
+        self.dessin2d.edition_contour.as_ref().is_some_and(|e| !e.dessin)
+    }
     pub(super) fn objet_en_edition(&self) -> Option<(&str, bool)> {
         self.dessin2d.edition_contour.as_ref().map(|e| (e.id.as_str(), e.annotation.is_some()))
     }
@@ -254,7 +258,7 @@ impl ViewerApp {
             if ui.add_enabled(!trace_en_cours, egui::Button::selectable(!edition.dessin, "Modifier les sommets")).on_disabled_hover_text("Terminez ou annulez le tracé en cours.").clicked() { edition.dessin = false; }
             if !poly && ui.selectable_label(edition.dessin, "Ajouter un contour").clicked() { edition.dessin = true; }
             supprimer_trait = ui.add_enabled(edition.segment.is_some() && !trace_en_cours, egui::Button::new("Supprimer le trait")).clicked();
-            ui.label("│");
+            ui.separator();
             if !poly && ui.add_enabled(edition.selection.is_some() && self.dessin2d.dalle.len() > 1, egui::Button::new("Supprimer le contour sélectionné")).clicked() {
                 if let Some(i) = edition.selection.take() { self.dessin2d.dalle.remove(i); edition.fermees.remove(i); }
                 edition.segment = None;
@@ -272,6 +276,9 @@ impl ViewerApp {
     /// (Modéliser, projet natif chargé).
     pub(super) fn usage_dessin(&self) -> Option<(Usage, OutilDessin)> {
         use crate::ruban::Outil;
+        if self.ruban_edition.outil() == Some(Outil::Cadrer) && self.vue_en_plan() && self.vue_native_id().is_some() {
+            return Some((Usage::Cadrage, OutilDessin::Polyligne));
+        }
         if self.dessin2d.edition_contour.is_some() {
             if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.annotation.is_some()) { return Some((Usage::Annotation, OutilDessin::Polyligne)); }
             let o = match self.ruban_edition.forme_dalle {
@@ -335,7 +342,7 @@ impl ViewerApp {
     fn altitude_trace(&self) -> f64 {
         if let Some(e) = &self.dessin2d.edition_contour { return e.altitude; }
         match self.usage_dessin().map(|(u, _)| u) {
-            Some(Usage::Terrain | Usage::LimitePropriete) => self.niveau_trace().and_then(|n| self.natif.as_ref()?.0.niveau(&n).map(|n| n.altitude)).unwrap_or(0.0),
+            Some(Usage::Terrain | Usage::LimitePropriete | Usage::Cadrage) => self.niveau_trace().and_then(|n| self.natif.as_ref()?.0.niveau(&n).map(|n| n.altitude)).unwrap_or(0.0),
             Some(Usage::Escalier | Usage::GardeCorps) => {
                 let Some((p, _)) = &self.natif else { return 0.0 };
                 let decalage = if self.usage_dessin().is_some_and(|(u, _)| u == Usage::GardeCorps) { self.ruban_edition.nombre_option(crate::ruban::Outil::GardeCorps, 1) } else { 0.0 };
@@ -353,7 +360,7 @@ impl ViewerApp {
     /// ouverte ; mur ou élément horizontal : plan horizontal de son altitude.
     fn repere_dessin(&self) -> Option<(DVec3, DVec3, DVec3)> {
         match self.usage_dessin()?.0 {
-            Usage::Mur | Usage::Surface | Usage::Escalier | Usage::GardeCorps | Usage::Terrain | Usage::LimitePropriete => Some((DVec3::new(0.0, 0.0, self.altitude_trace()), DVec3::X, DVec3::Y)),
+            Usage::Mur | Usage::Surface | Usage::Escalier | Usage::GardeCorps | Usage::Terrain | Usage::LimitePropriete | Usage::Cadrage => Some((DVec3::new(0.0, 0.0, self.altitude_trace()), DVec3::X, DVec3::Y)),
             Usage::Annotation => {
                 let id = self.vue_native_id()?;
                 let p = &self.natif.as_ref()?.0;
@@ -595,7 +602,7 @@ impl ViewerApp {
             }
             return;
         }
-        if self.usage_dessin().is_some_and(|(u, _)| matches!(u, Usage::Surface | Usage::Terrain | Usage::LimitePropriete)) {
+        if self.usage_dessin().is_some_and(|(u, _)| matches!(u, Usage::Surface | Usage::Terrain | Usage::LimitePropriete | Usage::Cadrage)) {
             // le contour fermé rejoint l'élément en cours ; il devient dalle à la validation
             for f in &formes {
                 let Some(c) = contour_surface(f) else {
@@ -608,7 +615,7 @@ impl ViewerApp {
                         self.dessin2d.message = Some("Le contour croise un contour déjà tracé.".into());
                     }
                     Ok(c) => {
-                        if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain) && !self.dessin2d.dalle.is_empty() {
+                        if self.usage_dessin().is_some_and(|(u, _)| matches!(u, Usage::Terrain | Usage::Cadrage)) && !self.dessin2d.dalle.is_empty() {
                             self.dessin2d.message = Some("Un seul contour est attendu.".into());
                             continue;
                         }
@@ -778,7 +785,7 @@ impl ViewerApp {
             return;
         }
         let usage = self.usage_dessin().map(|(u, _)| u);
-        let surface = usage.is_some_and(|u| matches!(u, Usage::Surface | Usage::Terrain | Usage::LimitePropriete));
+        let surface = usage.is_some_and(|u| matches!(u, Usage::Surface | Usage::Terrain | Usage::LimitePropriete | Usage::Cadrage));
         if valider && self.dessin2d.trace.is_some() {
             if !self.dessin2d.saisie.is_empty() {
                 self.valider_saisie_dessin();
@@ -798,7 +805,17 @@ impl ViewerApp {
                 }
             }
         }
-        if valider && usage == Some(Usage::LimitePropriete) {
+        if valider && usage == Some(Usage::Cadrage) {
+            let Some(contour) = self.dessin2d.dalle.first().cloned() else { self.dessin2d.message = Some("Tracez d'abord un contour fermé.".into()); return; };
+            if contour.len() > 128 { self.dessin2d.message = Some("Le contour de cadrage ne peut pas dépasser 128 sommets.".into()); return; }
+            let Some(id) = self.vue_native_id() else { return };
+            let Some((mut projet, _)) = self.natif.clone() else { return };
+            if let Some(vue) = projet.vues.iter_mut().find(|v| v.id == id) { vue.contour_cadrage = contour; }
+            if let Err(e) = self.appliquer_projet(projet) { self.dessin2d.message = Some(e); return; }
+            self.visibility_dirty = true;
+            self.coupe_dirty = true;
+            self.status = "Cadrage de la vue modifié.".into();
+        } else if valider && usage == Some(Usage::LimitePropriete) {
             if self.dessin2d.dalle.is_empty() { self.dessin2d.message = Some("Tracez d'abord un contour fermé.".into()); return; }
             let Some((mut projet, _)) = self.natif.clone() else { return };
             let altitude = self.altitude_trace();
@@ -910,7 +927,7 @@ impl ViewerApp {
                                 });
                         }
                         if actif {
-                            if edition || options_dessin || options_modifier { ui.label("│"); }
+                            if edition || options_dessin || options_modifier { ui.separator(); }
                             if bouton_commande(ui, true, "Valider").on_hover_text("Terminer et quitter la commande (Entrée)").clicked() {
                                 action = Some(true);
                             }
@@ -919,7 +936,6 @@ impl ViewerApp {
                             }
                         }
                     });
-                    if edition && let Some(message) = &self.dessin2d.message { ui.colored_label(Color32::DARK_RED, message); }
                 });
             });
         if let Some(valider) = action {
@@ -1118,14 +1134,16 @@ impl ViewerApp {
         if let Some((p, accroche)) = self.dessin2d.point {
             if let Some(e) = self.vers_ecran(rect, p) {
                 // réticule
-                let gris = Color32::from_rgba_unmultiplied(60, 60, 60, 160);
-                painter.line_segment([e - egui::vec2(28.0, 0.0), e + egui::vec2(28.0, 0.0)], egui::Stroke::new(1.0, gris));
-                painter.line_segment([e - egui::vec2(0.0, 28.0), e + egui::vec2(0.0, 28.0)], egui::Stroke::new(1.0, gris));
+                if !self.selection_traces_active() {
+                    let gris = Color32::from_rgba_unmultiplied(60, 60, 60, 160);
+                    painter.line_segment([e - egui::vec2(28.0, 0.0), e + egui::vec2(28.0, 0.0)], egui::Stroke::new(1.0, gris));
+                    painter.line_segment([e - egui::vec2(0.0, 28.0), e + egui::vec2(0.0, 28.0)], egui::Stroke::new(1.0, gris));
+                }
                 // aperçu : ligne tracée, et volume pour un mur
                 let apercu = trace.apercu(p);
                 match self.usage_dessin().map(|(u, _)| u) {
                     Some(Usage::Mur) => self.apercu_volume_murs(&painter, rect, &apercu),
-                    Some(Usage::Surface | Usage::LimitePropriete) => self.apercu_surface(&painter, rect, &apercu),
+                    Some(Usage::Surface | Usage::LimitePropriete | Usage::Cadrage) => self.apercu_surface(&painter, rect, &apercu),
                     Some(Usage::Escalier) => self.apercu_escalier(&painter, rect, &apercu),
                     _ => {}
                 }
@@ -1190,7 +1208,7 @@ impl ViewerApp {
             }
         }
         // contours déjà fermés de l'élément horizontal en cours (parties et trémies)
-        if self.dessin2d.edition_contour.is_some() || self.usage_dessin().is_some_and(|(u, _)| matches!(u, Usage::Surface | Usage::Terrain | Usage::LimitePropriete)) {
+        if self.dessin2d.edition_contour.is_some() || self.usage_dessin().is_some_and(|(u, _)| matches!(u, Usage::Surface | Usage::Terrain | Usage::LimitePropriete | Usage::Cadrage)) {
             for (i, c) in self.dessin2d.dalle.iter().enumerate() {
                 let pts: Vec<DVec2> = c.iter().map(|p| DVec2::from_array(*p)).collect();
                 if let Some(edit) = &self.dessin2d.edition_contour {
@@ -1202,7 +1220,12 @@ impl ViewerApp {
                         painter.line_segment([ecran[k], ecran[k + 1]], egui::Stroke::new(4.0, Color32::from_rgb(230, 110, 20)));
                     }
                     if !edit.dessin { for p in ecran.iter().take(c.len()) { painter.circle_filled(*p, 4.0, couleur); } }
-                } else { self.apercu_surface(&painter, rect, &[pts]); }
+                } else {
+                    self.apercu_surface(&painter, rect, std::slice::from_ref(&pts));
+                    if let Some(ecran) = pts.iter().map(|&p| self.vers_ecran(rect, p)).collect::<Option<Vec<_>>>() {
+                        painter.add(egui::Shape::closed_line(ecran, egui::Stroke::new(1.5, bleu)));
+                    }
+                }
             }
         }
         if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain) {
@@ -1227,28 +1250,60 @@ impl ViewerApp {
                 painter.circle_filled(e, 3.0, bleu);
             }
         }
-        // ligne de commande : outil, invite, saisie (ou erreur)
+    }
+
+    /// Instructions de la commande active, dans la bande noire au bas de la vue.
+    pub(super) fn dessiner_instructions(&self, ui: &egui::Ui, rect: egui::Rect) {
+        use crate::ruban::Outil;
+        let painter = ui.painter().with_clip_rect(rect);
+        let edition = self.dessin2d.edition_contour.as_ref();
+        let usage = self.usage_dessin();
+        let outil = self.ruban_edition.outil();
+        let modification = if self.orientation_nord_en_cours { Some("Viser un trait puis cliquer près de l'extrémité indiquant le nord · Échap : annuler") } else { match outil {
+            Some(Outil::Deplacer | Outil::Copier) => Some(if self.bim.depart_deplacement.is_some() { "Cliquer la destination · Maj : orthogonal · Échap ou clic droit : annuler" } else { "Cliquer le point de base, puis la destination" }),
+            Some(Outil::Tourner) => Some("Régler le centre et l'angle, puis appliquer la rotation."),
+            Some(Outil::Aligner | Outil::Ajuster) => Some("Choisir une référence, puis appliquer à l'axe."),
+            _ => None,
+        }};
+        if edition.is_none() && usage.is_none() && modification.is_none() { return; }
         let u = crate::options::unite();
-        let nom = match self.usage_dessin() {
+        let nom = if self.orientation_nord_en_cours { "NORD DU PROJET".into() } else { match usage {
             Some((Usage::Mur, o)) => format!("MUR · {}", nom_outil(o)),
             Some((Usage::Escalier, _)) => "ESCALIER · LIGNE DE FOULÉE".into(),
             Some((Usage::GardeCorps, _)) => "GARDE-CORPS".into(),
             Some((Usage::LimitePropriete, o)) => format!("LIMITE DE PROPRIÉTÉ · {}", if o == OutilDessin::Polyligne { "POLYGONE" } else { nom_outil(o) }),
+            Some((Usage::Cadrage, _)) => "CADRAGE DE LA VUE".into(),
             Some((Usage::Surface, o)) => format!(
                 "{} · {}",
                 self.ruban_edition.dalle_active().map_or("SURFACE".into(), |d| d.sorte.nom().to_uppercase()),
                 if o == OutilDessin::Polyligne { "POLYGONE" } else { nom_outil(o) }
             ),
-            _ => nom_outil(trace.outil).into(),
-        };
+            _ => self.dessin2d.trace.as_ref().map_or("MODIFICATION".into(), |t| nom_outil(t.outil).into()),
+        }};
+        let invite = if let Some(e) = edition.filter(|_| self.selection_traces_active()) {
+            if e.segment.is_some() { "Trait sélectionné : Suppr pour le retirer ; glisser un sommet pour le déplacer" }
+            else { "Sélectionner un trait ou glisser un sommet ; cliquer un sommet ouvert pour prolonger" }
+        } else if usage.is_some_and(|(u, _)| u == Usage::Terrain) && !self.dessin2d.dalle.is_empty() {
+            "Régler les altitudes ; cliquer dans le terrain pour ajouter un point coté ; Entrée valide"
+        } else if let Some(m) = modification { m }
+        else { self.dessin2d.trace.as_ref().map_or("", |t| t.invite()) };
         let ligne = match &self.dessin2d.message {
-            Some(m) => format!("{nom} — {} : {}", trace.invite(), m),
-            None => format!("{nom} — {}", trace.invite()),
+            Some(m) => format!("{nom} — {invite} : {m}"),
+            None => format!("{nom} — {invite}"),
         };
-        let aide = format!("Clavier : x,y · @dx,dy · d<angle · distance seule ({}) · Maj : ortho · Entrée : valider · Échap : annuler", u.suffixe().trim());
+        let contexte = match usage.map(|(u, _)| u) {
+            Some(Usage::Mur) => "Espace : inverser le sens · ",
+            Some(Usage::Escalier) => "Départ, un sommet par palier, arrivée · Marches calculées selon le niveau supérieur · Entrée ou clic droit : finir · ",
+            Some(Usage::GardeCorps) => "Cliquer les sommets · Entrée ou clic droit : finir · Sur un escalier, sélectionner Garde-corps dans les options · ",
+            Some(Usage::Cadrage) => "Tracer un contour fermé, puis valider · ",
+            Some(Usage::Terrain) if self.dessin2d.dalle.is_empty() => "Tracer le périmètre fermé du terrain · ",
+            _ => "",
+        };
+        let aide = if usage.is_some() { format!("{contexte}Clavier : x,y · @dx,dy · d<angle · distance seule ({}) · Maj : ortho · Entrée : valider · Échap : annuler", u.suffixe().trim()) } else { "Entrée : valider · Échap : annuler".into() };
         let police = egui::FontId::monospace(13.0);
-        let g1 = painter.layout_no_wrap(ligne, police, if self.dessin2d.message.is_some() { Color32::from_rgb(255, 170, 150) } else { Color32::WHITE });
-        let g2 = painter.layout_no_wrap(aide, egui::FontId::proportional(11.0), Color32::from_gray(200));
+        let largeur = (rect.width() - 20.0).max(1.0);
+        let g1 = painter.layout(ligne, police, if self.dessin2d.message.is_some() { Color32::from_rgb(255, 170, 150) } else { Color32::WHITE }, largeur);
+        let g2 = painter.layout(aide, egui::FontId::proportional(11.0), Color32::from_gray(200), largeur);
         let hauteur = g1.size().y + g2.size().y + 12.0;
         let bande = egui::Rect::from_min_max(egui::pos2(rect.left(), rect.bottom() - hauteur), rect.right_bottom());
         painter.rect_filled(bande, 0.0, Color32::from_rgba_unmultiplied(30, 30, 30, 225));
@@ -1353,15 +1408,9 @@ impl ViewerApp {
     pub(super) fn options_trace(&mut self, ui: &mut egui::Ui) {
         match self.usage_dessin().map(|(u, _)| u) {
             Some(Usage::Mur) => self.options_trace_mur(ui),
-            Some(Usage::Escalier) => {
-                ui.label("Ligne de foulée : départ, un sommet par palier, arrivée ; Entrée ou clic droit pour finir. Le nombre de marches suit la hauteur du niveau supérieur.");
-            }
-            Some(Usage::GardeCorps) => {
-                ui.label("Tracé du garde-corps : cliquer les sommets ; Entrée ou clic droit pour finir. Pour un escalier : le sélectionner, puis « Garde-corps » dans la barre d'options.");
-            }
+            Some(Usage::Escalier | Usage::GardeCorps | Usage::Cadrage) => {}
             Some(Usage::Terrain) => {
-                if self.dessin2d.dalle.is_empty() { ui.label("Tracer le périmètre fermé du terrain."); }
-                else {
+                if !self.dessin2d.dalle.is_empty() {
                     ui.label("Altitudes absolues des sommets du contour (mm) :");
                     egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
                         for (i, z) in self.dessin2d.terrain_cotes.iter_mut().enumerate() {
@@ -1377,7 +1426,6 @@ impl ViewerApp {
                         ui.checkbox(&mut self.dessin2d.terrain_ajouter_point, "Placer des points cotés");
                         ui.add(egui::DragValue::new(&mut self.dessin2d.terrain_altitude).speed(10.0).prefix("Altitude ").suffix(" mm"));
                     });
-                    ui.label("Cliquer dans le terrain pour ajouter un point ; Entrée valide.");
                 }
             }
             Some(Usage::Surface | Usage::LimitePropriete) => {
@@ -1413,8 +1461,6 @@ impl ViewerApp {
                     self.ruban_edition.forme_mur = forme;
                 }
             }
-            ui.separator();
-            ui.label(RichText::new("Espace : inverser le sens").weak());
         });
     }
 

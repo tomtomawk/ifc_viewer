@@ -165,7 +165,7 @@ impl Projet {
         let (id, _) = self.nouvelle_vue("plan");
         let deja = self.vues.iter().filter(|v| matches!(&v.genre, GenreVue::Plan { niveau: x, .. } if x == niveau)).count();
         let nom = if deja == 0 { n.nom.clone() } else { format!("{} ({})", n.nom, deja + 1) };
-        self.vues.push(Vue { id: id.clone(), nom, type_vue: String::new(), echelle: 100.0, orientation_plan: 0.0, coupe_active: None, poche_vue: None, genre: GenreVue::Plan { bas_niveau: n.id.clone(), bas_decalage: 0.0, niveau: n.id, coupe } });
+        self.vues.push(Vue { id: id.clone(), nom, type_vue: String::new(), echelle: 100.0, orientation_plan: 0.0, coupe_active: None, poche_vue: None, elements_masques: Vec::new(), contour_cadrage: Vec::new(), genre: GenreVue::Plan { bas_niveau: n.id.clone(), bas_decalage: 0.0, niveau: n.id, coupe } });
         Ok(id)
     }
 
@@ -188,7 +188,7 @@ impl Projet {
         while self.vues.iter().any(|v| v.nom == format!("{nom} {k}")) {
             k += 1;
         }
-        self.vues.push(Vue { id: id.clone(), nom: format!("{nom} {k}"), type_vue: type_vue.into(), echelle, orientation_plan: 0.0, coupe_active: None, poche_vue: None, genre: GenreVue::Coupe { debut, fin, profondeur, elevation } });
+        self.vues.push(Vue { id: id.clone(), nom: format!("{nom} {k}"), type_vue: type_vue.into(), echelle, orientation_plan: 0.0, coupe_active: None, poche_vue: None, elements_masques: Vec::new(), contour_cadrage: Vec::new(), genre: GenreVue::Coupe { debut, fin, profondeur, elevation } });
         self.arrondir();
         Ok(id)
     }
@@ -707,6 +707,8 @@ mod tests {
         let nav = s.navigateur.as_ref().unwrap();
         let genres: Vec<&str> = nav.vues.iter().map(|v| v.genre.as_str()).collect();
         assert_eq!(genres, ["Vue 3D", "Plan d'étage", "Plan d'étage", "Coupe", "Élévation"]);
+        assert_eq!(nav.vues[0].nom, "Vue 3D");
+        assert_eq!(nav.vues.iter().filter(|v| v.genre == "Vue 3D").count(), 1);
         // élévation tracée de droite à gauche au nord : elle regarde vers le sud (−y)
         assert!((nav.vues[4].direction - glam::DVec3::Y).length() < 1e-9, "{:?}", nav.vues[4].direction);
         // cadrage : profondeur et deux côtés

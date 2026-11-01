@@ -292,7 +292,7 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
     let (o, u, h) = repere(p, v);
     let mut out = Vec::new();
     let pt = |p: DVec2| (o + u * p.x + h * p.y) * 0.001;
-    for a in p.annotations.iter().filter(|a| a.vue == v.id) {
+    for a in p.annotations.iter().filter(|a| a.vue == v.id && !v.elements_masques.contains(&a.id)) {
         let debut = out.len();
         let taille = a.hauteur * v.echelle * 0.001;
         match &a.forme {
@@ -403,6 +403,7 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
     }
     if matches!(v.genre, GenreVue::Plan { .. }) {
         for g in &p.quadrillages {
+            if v.elements_masques.contains(&g.id) { continue; }
             let (a, b) = (pt(DVec2::from_array(g.debut)), pt(DVec2::from_array(g.fin)));
             out.push(ligne(a, b));
             out.push(texte(
@@ -434,7 +435,7 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
     let mut out = Vec::new();
     // escaliers : ligne de foulée, rond au départ, flèche à l'arrivée
     if let GenreVue::Plan { niveau, .. } = &v.genre {
-        for e in p.escaliers.iter().filter(|e| &e.niveau == niveau && e.trace.len() >= 2) {
+        for e in p.escaliers.iter().filter(|e| &e.niveau == niveau && e.trace.len() >= 2 && !v.elements_masques.contains(&e.id)) {
             let pts: Vec<DVec3> = e.trace.iter().map(|q| DVec3::new(q[0], q[1], o.z)).collect();
             out.push(polyligne(pts.clone()));
             let (a, b) = (pts[pts.len() - 2], pts[pts.len() - 1]);
@@ -446,6 +447,7 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
         }
     }
     for ouv in &p.ouvertures {
+        if v.elements_masques.contains(&ouv.id) || v.elements_masques.contains(&ouv.mur) { continue; }
         let Ok((axe, _, niveau)) = super::solides::hote(p, &ouv.mur) else { continue };
         match &v.genre {
             GenreVue::Plan { niveau: n, .. } if *n == niveau => {
@@ -493,12 +495,27 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
         }
     );
     let mut visible = vec![true; s.objects.len()];
+    let masques = p.murs.iter().map(|x| ("mur", &x.id))
+        .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
+        .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
+        .chain(p.barres.iter().map(|x| ("barre", &x.id)))
+        .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
+        .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
+        .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
+        .chain(p.importes.iter().map(|x| ("importe", &x.id)))
+        .chain(p.terrains.iter().map(|x| ("terrain", &x.id)))
+        .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
+        .filter(|(_, id)| v.elements_masques.contains(id))
+        .map(|(genre, id)| crate::scene::id_natif(genre, id)).collect::<std::collections::HashSet<_>>();
+    for (i, objet) in s.objects.iter().enumerate() {
+        visible[i] = !masques.contains(&objet.id) && !s.model.parent.get(&objet.id).is_some_and(|id| masques.contains(id));
+    }
     if let GenreVue::Plan { niveau, bas_niveau, bas_decalage, .. } = &v.genre {
         let etage = crate::scene::id_natif("niveau", niveau);
         let contient_etage = s.objects.iter().any(|o| o.storey == Some(etage) || &*o.class == "IFCGEOGRAPHICELEMENT");
         if contient_etage {
             for (i, obj) in s.objects.iter().enumerate() {
-                visible[i] = obj.storey == Some(etage) || &*obj.class == "IFCGEOGRAPHICELEMENT";
+                visible[i] &= obj.storey == Some(etage) || &*obj.class == "IFCGEOGRAPHICELEMENT";
             }
         }
         if v.coupe_active.unwrap_or(true) && let Some(niveau) = p.niveau(bas_niveau) {
@@ -531,7 +548,7 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
             let points: Vec<_> = corners
                 .map(|q| (q + s.origin).truncate() * 1000.0 - a)
                 .collect();
-            visible[i] = points.iter().any(|q| q.dot(u) >= 0.0)
+            visible[i] &= points.iter().any(|q| q.dot(u) >= 0.0)
                 && points.iter().any(|q| q.dot(u) <= d.length())
                 && points.iter().any(|q| q.dot(n) >= 0.0)
                 && points.iter().any(|q| q.dot(n) <= *profondeur);
@@ -564,6 +581,7 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
         .map(|pr| pr.translater(s.origin))
         .collect();
     primitives.extend(annotations(p, v));
+    let primitives = super::cadrage::decouper(primitives, &v.contour_cadrage)?;
     Ok(Dessin {
         droite: u,
         haut: h,
@@ -603,7 +621,40 @@ pub const FORMATS: [(&str, f64, f64); 5] = [("A0", 1189.0, 841.0), ("A1", 841.0,
 
 /// Marge du cadre et taille du cartouche (mm).
 pub const MARGE: f64 = 10.0;
-pub const CARTOUCHE: [f64; 2] = [180.0, 40.0];
+
+/// Géométrie réutilisable d'un cartouche, en millimètres depuis son coin inférieur gauche.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FamilleCartouche {
+    pub nom: String,
+    pub largeur: f64,
+    pub hauteur: f64,
+    pub traits: Vec<[[f64; 2]; 2]>,
+    pub textes: Vec<TexteCartouche>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct TexteCartouche {
+    /// {projet}, {feuille}, {numero}, {cartouche} ou {echelles}, ou texte libre.
+    pub contenu: String,
+    pub position: [f64; 2],
+    pub hauteur: f64,
+}
+
+impl Default for FamilleCartouche {
+    fn default() -> Self {
+        Self {
+            nom: "Cartouche standard".into(), largeur: 180.0, hauteur: 40.0,
+            traits: vec![[[0.0,0.0],[180.0,0.0]], [[180.0,0.0],[180.0,40.0]], [[180.0,40.0],[0.0,40.0]], [[0.0,40.0],[0.0,0.0]], [[140.0,0.0],[140.0,40.0]], [[0.0,14.0],[140.0,14.0]], [[0.0,30.0],[140.0,30.0]]],
+            textes: vec![
+                TexteCartouche { contenu: "{projet}".into(), position: [3.0,33.0], hauteur: 3.5 },
+                TexteCartouche { contenu: "{feuille}".into(), position: [3.0,20.0], hauteur: 5.0 },
+                TexteCartouche { contenu: "{cartouche}".into(), position: [3.0,9.0], hauteur: 2.5 },
+                TexteCartouche { contenu: "{echelles}".into(), position: [3.0,3.5], hauteur: 2.5 },
+                TexteCartouche { contenu: "{numero}".into(), position: [144.0,15.0], hauteur: 9.0 },
+            ],
+        }
+    }
+}
 
 fn pt_papier(x: f64, y: f64) -> DVec3 {
     DVec3::new(x / 1000.0, y / 1000.0, 0.0)
@@ -620,26 +671,24 @@ pub fn cadre_feuille(p: &Projet, f: &Feuille) -> Vec<Primitive> {
     let (l, h, m) = (f.largeur, f.hauteur, MARGE);
     let rect = |x0: f64, y0: f64, x1: f64, y1: f64, e: f64| trait_papier(vec![pt_papier(x0, y0), pt_papier(x1, y0), pt_papier(x1, y1), pt_papier(x0, y1)], true, e);
     let mut v = vec![rect(0.0, 0.0, l, h, 0.0), rect(m, m, l - m, h - m, 0.5)];
-    let [cl, ch] = CARTOUCHE;
-    let (x0, y0, x1, y1) = (l - m - cl, m, l - m, m + ch);
+    let standard = FamilleCartouche::default();
+    let famille = p.cartouches_feuilles.get(&f.id).and_then(|nom| p.familles_cartouches.iter().find(|x| &x.nom == nom)).unwrap_or(&standard);
+    let [cl, ch] = [famille.largeur, famille.hauteur];
+    let (x0, y0, y1) = (l - m - cl, m, m + ch);
     if x0 > m && y1 < h - m {
-        v.push(rect(x0, y0, x1, y1, 0.35));
-        let xn = x1 - 40.0;
-        v.push(trait_papier(vec![pt_papier(xn, y0), pt_papier(xn, y1)], false, 0.25));
-        v.push(trait_papier(vec![pt_papier(x0, y0 + 14.0), pt_papier(xn, y0 + 14.0)], false, 0.18));
-        v.push(trait_papier(vec![pt_papier(x0, y1 - 10.0), pt_papier(xn, y1 - 10.0)], false, 0.18));
-        let noir = [20, 20, 20, 255];
-        v.push(texte(&p.nom, pt_papier(x0 + 3.0, y1 - 7.0), DVec3::X, DVec3::Y, 0.0035, noir));
-        v.push(texte(&f.nom, pt_papier(x0 + 3.0, y0 + 20.0), DVec3::X, DVec3::Y, 0.005, noir));
-        if !f.cartouche.is_empty() {
-            v.push(texte(&f.cartouche, pt_papier(x0 + 3.0, y0 + 9.0), DVec3::X, DVec3::Y, 0.0025, noir));
+        for t in &famille.traits {
+            v.push(trait_papier(vec![pt_papier(x0 + t[0][0], y0 + t[0][1]), pt_papier(x0 + t[1][0], y0 + t[1][1])], false, 0.25));
         }
+        let noir = [20, 20, 20, 255];
         let mut echelles: Vec<String> = f.vues.iter().map(|x| format!("1:{}", x.echelle)).collect();
         echelles.dedup();
-        if !echelles.is_empty() {
-            v.push(texte(&format!("Échelle {}", echelles.join(", ")), pt_papier(x0 + 3.0, y0 + 3.5), DVec3::X, DVec3::Y, 0.0025, noir));
+        let ech = if echelles.is_empty() { String::new() } else { format!("Échelle {}", echelles.join(", ")) };
+        for t in &famille.textes {
+            let contenu = t.contenu.replace("{projet}", &p.nom).replace("{feuille}", &f.nom).replace("{numero}", &f.numero).replace("{cartouche}", &f.cartouche).replace("{echelles}", &ech);
+            if !contenu.is_empty() {
+                v.push(texte(&contenu, pt_papier(x0 + t.position[0], y0 + t.position[1]), DVec3::X, DVec3::Y, t.hauteur / 1000.0, noir));
+            }
         }
-        v.push(texte(&f.numero, pt_papier(xn + 4.0, y0 + 15.0), DVec3::X, DVec3::Y, 0.009, noir));
     }
     v
 }
@@ -1136,6 +1185,35 @@ mod tests {
         assert_eq!(vue.orientation_plan, std::f64::consts::FRAC_PI_2);
     }
     #[test]
+    fn vue_placee_respecte_masquage_et_cadrage() {
+        let (mut p, _) = depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();
+        let niveau = p.niveaux[0].id.clone();
+        let id = p.ajouter_vue_plan(&niveau, 1200.0).unwrap();
+        let tous = dessin_vue(&p, &id).unwrap();
+        assert!(!tous.primitives.is_empty());
+        let elements: Vec<_> = p.murs.iter().map(|x| x.id.clone()).chain(p.dalles.iter().map(|x| x.id.clone())).chain(p.importes.iter().map(|x| x.id.clone())).chain(p.ouvertures.iter().map(|x| x.id.clone())).collect();
+        p.vues.iter_mut().find(|v| v.id == id).unwrap().elements_masques = elements;
+        let masque = dessin_vue(&p, &id).unwrap();
+        assert!(masque.primitives.len() < tous.primitives.len());
+        let masque_recharge = Projet::lire_json(&p.json().unwrap()).unwrap();
+        assert_eq!(dessin_vue(&masque_recharge, &id).unwrap().primitives.len(), masque.primitives.len());
+        let vue = p.vues.iter_mut().find(|v| v.id == id).unwrap();
+        vue.elements_masques.clear();
+        vue.contour_cadrage = vec![[0.,0.], [1000.,0.], [1000.,1000.], [0.,1000.]];
+        let recadre = dessin_vue(&p, &id).unwrap();
+        assert!(!recadre.primitives.is_empty());
+        for primitive in recadre.primitives {
+            let points: Vec<DVec3> = match primitive.forme {
+                Forme::Segments(s) => s.into_iter().flatten().collect(),
+                Forme::Triangles(t) => t.into_iter().flatten().collect(),
+                _ => panic!("La découpe doit produire des segments ou triangles"),
+            };
+            assert!(points.iter().all(|p| p.x >= -1e-6 && p.x <= 1.000001 && p.y >= -1e-6 && p.y <= 1.000001));
+        }
+        let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
+        assert_eq!(relu.vues.iter().find(|v| v.id == id).unwrap().contour_cadrage.len(), 4);
+    }
+    #[test]
     fn documents_compatibles_v0_references_et_pdf() {
         let (mut p, _) =
             depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {})
@@ -1224,6 +1302,25 @@ mod tests {
         // cadre et cartouche dans la feuille
         let cadre = cadre_feuille(&p, &p.feuilles[0]);
         assert!(cadre.len() > 4);
+    }
+
+    #[test]
+    fn famille_cartouche_partagee_est_enregistree_et_utilisee() {
+        let f: Feuille = serde_json::from_str(r#"{"id":"f","numero":"A01","nom":"Plan","largeur":420,"hauteur":297,"cartouche":"Agence","vues":[]}"#).unwrap();
+        let mut p = Projet::nouveau("Projet");
+        let mut g = f.clone();
+        g.id = "g".into();
+        p.feuilles = vec![f.clone(), g.clone()];
+        let famille = FamilleCartouche { nom: "Agence".into(), largeur: 80.0, hauteur: 25.0, traits: vec![[[0.0, 0.0], [80.0, 25.0]]], textes: vec![TexteCartouche { contenu: "{projet} - {numero}".into(), position: [2.0, 2.0], hauteur: 3.0 }] };
+        p.familles_cartouches.push(famille);
+        p.cartouches_feuilles.insert(f.id.clone(), "Agence".into());
+        p.cartouches_feuilles.insert(g.id.clone(), "Agence".into());
+        let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
+        assert_eq!(relu.familles_cartouches.len(), 1);
+        assert_eq!(relu.cartouches_feuilles.len(), 2);
+        assert_eq!(cadre_feuille(&relu, &f).len(), 4); // deux cadres, un trait et un texte
+        assert!(svg_feuille(&relu, &f).unwrap().contains("420mm"));
+        assert!(pdf_jeu(&relu, JEU_DEFAUT).unwrap().starts_with(b"%PDF-"));
     }
 
     #[test]

@@ -92,11 +92,13 @@ fn main() {
         let options = eframe::NativeOptions {
             viewport: eframe::egui::ViewportBuilder::default()
                 .with_title("IFC Viewer")
+                .with_icon(eframe::icon_data::from_png_bytes(include_bytes!("../assets/icone.png")).expect("Icône intégrée invalide"))
                 .with_decorations(cadre_natif())
                 .with_min_inner_size([800.0, 520.0])
                 .with_inner_size([1500.0, 920.0])
                 .with_drag_and_drop(true),
             depth_buffer: 24,
+            centered: true,
             multisampling,
             renderer: eframe::Renderer::Glow,
             ..Default::default()

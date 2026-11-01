@@ -252,7 +252,7 @@ fn axes(n: DVec3) -> (DVec3, DVec3) {
 }
 
 /// Triangulation de contours plans (pair-impair) dans le plan de normale `n`.
-fn trianguler(contours: &[Vec<DVec3>], n: DVec3) -> Vec<[DVec3; 3]> {
+pub(crate) fn trianguler(contours: &[Vec<DVec3>], n: DVec3) -> Vec<[DVec3; 3]> {
     let Some(&p0) = contours.iter().flatten().next() else { return Vec::new() };
     let (x, y) = axes(n);
     let plans: Vec<Vec<[f32; 2]>> = contours.iter().map(|c| c.iter().map(|p| [(*p - p0).dot(x) as f32, (*p - p0).dot(y) as f32]).collect()).collect();

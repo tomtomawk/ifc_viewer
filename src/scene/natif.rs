@@ -371,7 +371,7 @@ fn navigateur(projet: &Projet) -> Navigateur {
         fenetres: Vec::new(),
         primitives: Vec::new(),
     };
-    let mut vues = vec![vue(num("3d"), "Vue 3D", "{3D}", 100.0)];
+    let mut vues = vec![vue(num("3d"), "Vue 3D", "Vue 3D", 100.0)];
     for v in &projet.vues {
         let mut n = vue(num(&v.id), "", &v.nom, v.echelle);
         n.type_vue = v.type_vue.clone();

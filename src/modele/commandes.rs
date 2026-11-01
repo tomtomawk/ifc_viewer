@@ -736,6 +736,7 @@ impl Projet {
                 self.limites_propriete.retain(|x| !set.contains(&x.id));
                 self.niveaux.retain(|x| !set.contains(&x.id));
                 self.vues.retain(|x| !set.contains(&x.id));
+                for vue in &mut self.vues { vue.elements_masques.retain(|id| !set.contains(id)); }
                 self.attaches_toitures
                     .retain(|id, t| !set.contains(id) && !set.contains(t));
                 self.priorites_jonction.retain(|id, _| !set.contains(id));

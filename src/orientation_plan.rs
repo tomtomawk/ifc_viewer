@@ -83,6 +83,11 @@ pub fn orienter(camera: &mut Camera, angle: f32) {
     }
 }
 
+/// Rotation qui amène l'axe Y du projet dans la direction du nord choisi.
+pub fn angle_nord(direction: glam::Vec2) -> Option<f32> {
+    (direction.is_finite() && direction.length_squared() > 1e-12).then(|| (-direction.x).atan2(direction.y))
+}
+
 fn ecart(a: f32, b: f32) -> f32 {
     (a - b + std::f32::consts::PI).rem_euclid(TAU) - std::f32::consts::PI
 }
@@ -113,7 +118,7 @@ pub struct Reponse {
 /// mettre une direction en haut, PLAN pour l'orientation initiale, flèches autour de
 /// l'anneau pour tourner de 90°, angle saisi, positions enregistrées (`positions` :
 /// nom et angle) et Aligner (sur une arête). `alignement` : mode Aligner en cours.
-pub fn afficher(ui: &mut egui::Ui, vue: egui::Rect, camera: &mut Camera, origine: f32, alignement: bool, positions: &[(String, f32)]) -> Reponse {
+pub fn afficher(ui: &mut egui::Ui, vue: egui::Rect, camera: &mut Camera, origine: f32, alignement: bool, positions: &[(String, f32)], nord: f32) -> Reponse {
     let zone = zone(vue);
     let anneau = egui::Rect::from_min_size(zone.min, vec2(LARGEUR, HAUTEUR_ANNEAU));
     let centre = centre(zone);
@@ -148,11 +153,12 @@ pub fn afficher(ui: &mut egui::Ui, vue: egui::Rect, camera: &mut Camera, origine
         let q = rotation.transform_vector3(v);
         centre + vec2(q.x, -q.y).normalized() * rayon
     };
+    let rotation_nord = glam::Quat::from_rotation_z(nord);
     let cardinaux = [
-        ("N", Vec3::Y, 0.0),
-        ("E", Vec3::X, -FRAC_PI_2),
-        ("S", Vec3::NEG_Y, std::f32::consts::PI),
-        ("O", Vec3::NEG_X, FRAC_PI_2),
+        ("N", rotation_nord * Vec3::Y, nord),
+        ("E", rotation_nord * Vec3::X, nord - FRAC_PI_2),
+        ("S", rotation_nord * Vec3::NEG_Y, nord + std::f32::consts::PI),
+        ("O", rotation_nord * Vec3::NEG_X, nord + FRAC_PI_2),
     ];
     let survol = resp.hover_pos();
     let cible = survol.and_then(|p| cardinaux.iter().position(|(_, v, _)| p.distance(direction(*v, RAYON_CARDINAUX)) < 9.0));
@@ -233,7 +239,7 @@ pub fn afficher(ui: &mut egui::Ui, vue: egui::Rect, camera: &mut Camera, origine
             ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
             ui.horizontal(|ui| {
                 let r = ui.add_sized([50.0, 18.0], egui::DragValue::new(&mut degres).speed(1.0).suffix("°").max_decimals(1));
-                if r.on_hover_text("Angle du plan par rapport au nord du modèle").changed() {
+                if r.on_hover_text("Angle du plan par rapport aux axes du projet").changed() {
                     orienter(camera, degres.to_radians());
                 }
                 // liste des positions : la position en cours (même angle) affichée ;
@@ -307,6 +313,10 @@ mod tests {
     use crate::camera::MAX_PITCH;
 
     fn image(ctx: &egui::Context, camera: &mut Camera, events: Vec<egui::Event>) {
+        image_nord(ctx, camera, events, 0.0);
+    }
+
+    fn image_nord(ctx: &egui::Context, camera: &mut Camera, events: Vec<egui::Event>, nord: f32) {
         let vue = egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(800.0, 600.0));
         let mut sortie = ctx.run_ui(
             egui::RawInput {
@@ -316,11 +326,38 @@ mod tests {
             },
             |ui| {
                 egui::CentralPanel::default().show(ui, |ui| {
-                    afficher(ui, vue, camera, -FRAC_PI_2, false, &[]);
+                    afficher(ui, vue, camera, -FRAC_PI_2, false, &[], nord);
                 });
             },
         );
         sortie.textures_delta.clear();
+    }
+
+    #[test]
+    fn nord_oriente_et_conserve_dans_le_projet() {
+        for d in [glam::Vec2::X, glam::Vec2::Y, -glam::Vec2::X, -glam::Vec2::Y, glam::Vec2::new(3.0, 4.0)] {
+            let a = angle_nord(d).unwrap();
+            let nord = glam::Quat::from_rotation_z(a) * Vec3::Y;
+            assert!((nord.truncate() - d.normalize()).length() < 1e-5);
+        }
+        assert!(angle_nord(glam::Vec2::ZERO).is_none());
+        let mut projet = crate::modele::Projet::nouveau("Nord");
+        projet.orientation_nord = angle_nord(glam::Vec2::X).unwrap() as f64;
+        let relu = crate::modele::Projet::lire_json(&projet.json().unwrap()).unwrap();
+        assert!((relu.orientation_nord - projet.orientation_nord).abs() < 1e-8);
+    }
+
+    #[test]
+    fn clic_sur_nord_oriente_avec_le_projet() {
+        let ctx = egui::Context::default();
+        let mut camera = Camera { pitch: MAX_PITCH, yaw: -FRAC_PI_2, ortho: true, ..Default::default() };
+        let vue = egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(800.0, 600.0));
+        let nord = -FRAC_PI_2; // nord géographique dirigé vers X du modèle
+        let position = super::centre(zone(vue)) + vec2(RAYON_CARDINAUX, 0.0);
+        image_nord(&ctx, &mut camera, vec![], nord);
+        image_nord(&ctx, &mut camera, vec![egui::Event::PointerMoved(position), bouton(position, true)], nord);
+        image_nord(&ctx, &mut camera, vec![bouton(position, false)], nord);
+        assert!(ecart(angle(&camera), nord).abs() < 1e-5);
     }
 
     fn bouton(position: egui::Pos2, pressed: bool) -> egui::Event {

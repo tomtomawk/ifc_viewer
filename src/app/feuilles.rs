@@ -114,6 +114,122 @@ pub(super) struct EtatFeuilles {
 const ECART: f32 = 40.0;
 
 impl ViewerApp {
+    pub(super) fn editer_cartouche_feuille(&self, ctx: &egui::Context, id: &str) {
+        let Some((p, _)) = &self.natif else { return };
+        if !p.feuilles.iter().any(|f| f.id == id) { return; }
+        let original = p.cartouches_feuilles.get(id).cloned().unwrap_or_default();
+        let mut famille = p.familles_cartouches.iter().find(|x| x.nom == original).cloned().unwrap_or_default();
+        if original.is_empty() { famille.nom = "Cartouche personnalisé".into(); }
+        ctx.data_mut(|d| d.insert_temp(egui::Id::unique("editeur_cartouche"), (famille, id.to_string(), None::<[f64; 2]>, original)));
+    }
+    /// Éditeur 2D des familles de cartouches : traits dessinés et textes paramétriques.
+    pub(super) fn fenetre_famille_cartouche(&mut self, ctx: &egui::Context) {
+        let id = egui::Id::unique("editeur_cartouche");
+        let Some((mut famille, feuille, mut debut, original)) = ctx.data(|d| d.get_temp::<(doc::FamilleCartouche, String, Option<[f64; 2]>, String)>(id)) else { return };
+        let mut ouvert = true;
+        let mut enregistrer = false;
+        egui::Window::new("Famille de cartouche").open(&mut ouvert).default_width(600.0).resizable(true).show(ctx, |ui| {
+            ui.horizontal(|ui| { ui.label("Nom"); ui.text_edit_singleline(&mut famille.nom); });
+            ui.horizontal(|ui| {
+                ui.label("Largeur"); ui.add(egui::DragValue::new(&mut famille.largeur).range(10.0..=2000.0).suffix(" mm"));
+                ui.label("Hauteur"); ui.add(egui::DragValue::new(&mut famille.hauteur).range(10.0..=2000.0).suffix(" mm"));
+            });
+            ui.label("Dessiner un trait : cliquer ses deux extrémités. Supprimer les traits dans la liste ci-dessous.");
+            let largeur = ui.available_width().max(100.0);
+            let echelle = (largeur / famille.largeur as f32).min(240.0 / famille.hauteur as f32);
+            let taille = egui::vec2(famille.largeur as f32 * echelle, famille.hauteur as f32 * echelle);
+            let (rect, reponse) = ui.allocate_exact_size(taille, Sense::click());
+            let peintre = ui.painter_at(rect);
+            peintre.rect_filled(rect, 0.0, Color32::WHITE);
+            let ecran = |p: [f64; 2]| egui::pos2(rect.left() + p[0] as f32 * echelle, rect.bottom() - p[1] as f32 * echelle);
+            for t in &famille.traits { peintre.line_segment([ecran(t[0]), ecran(t[1])], egui::Stroke::new(1.0, Color32::BLACK)); }
+            for t in &famille.textes { peintre.text(ecran(t.position), egui::Align2::LEFT_BOTTOM, &t.contenu, egui::FontId::proportional((t.hauteur as f32 * echelle).clamp(8.0, 24.0)), Color32::DARK_GRAY); }
+            if let Some(a) = debut { if let Some(b) = reponse.hover_pos() { peintre.line_segment([ecran(a), b], egui::Stroke::new(1.0, Color32::from_rgb(0,120,220))); } }
+            if reponse.clicked() {
+                if let Some(p) = reponse.interact_pointer_pos() {
+                    let point = [((p.x - rect.left()) / echelle) as f64, ((rect.bottom() - p.y) / echelle) as f64];
+                    if let Some(a) = debut.take() { famille.traits.push([a, point]); } else { debut = Some(point); }
+                }
+            }
+            egui::CollapsingHeader::new("Traits").show(ui, |ui| {
+                let mut supprimer = None;
+                for (i, t) in famille.traits.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.label(format!("{}", i + 1));
+                        for point in t { for coord in point { ui.add(egui::DragValue::new(coord).speed(0.5).max_decimals(1)); } }
+                        if ui.small_button("✕").clicked() { supprimer = Some(i); }
+                    });
+                }
+                if let Some(i) = supprimer { famille.traits.remove(i); }
+            });
+            egui::CollapsingHeader::new("Textes et champs").show(ui, |ui| {
+                ui.label("Champs : {projet}, {feuille}, {numero}, {cartouche}, {echelles}");
+                let mut supprimer = None;
+                for (i, t) in famille.textes.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.add(egui::TextEdit::singleline(&mut t.contenu).desired_width(130.0));
+                        for coord in &mut t.position { ui.add(egui::DragValue::new(coord).speed(0.5)); }
+                        ui.add(egui::DragValue::new(&mut t.hauteur).range(0.5..=100.0).suffix(" mm"));
+                        if ui.small_button("✕").clicked() { supprimer = Some(i); }
+                    });
+                }
+                if let Some(i) = supprimer { famille.textes.remove(i); }
+                if ui.button("+ Texte").clicked() { famille.textes.push(doc::TexteCartouche { contenu: "Texte".into(), position: [3.0, 3.0], hauteur: 3.0 }); }
+            });
+            if ui.button("Enregistrer et appliquer à la feuille").clicked() { enregistrer = true; }
+        });
+        if enregistrer {
+            let nom = famille.nom.trim().to_string();
+            if let Some((p, _)) = &self.natif {
+                if nom.is_empty() || nom == "Cartouche standard" || p.familles_cartouches.iter().any(|f| f.nom == nom && f.nom != original) {
+                    self.error = Some("Choisir un nom de famille non vide et distinct des familles existantes.".into());
+                } else {
+                    famille.nom = nom.clone();
+                    let mut q = p.clone();
+                    if let Some(f) = q.familles_cartouches.iter_mut().find(|f| f.nom == original) { *f = famille.clone(); } else { q.familles_cartouches.push(famille.clone()); }
+                    if !original.is_empty() { for valeur in q.cartouches_feuilles.values_mut().filter(|v| **v == original) { *valeur = nom.clone(); } }
+                    q.cartouches_feuilles.insert(feuille.clone(), nom);
+                    match self.appliquer_projet(q) { Ok(()) => ouvert = false, Err(e) => self.error = Some(e) }
+                }
+            }
+        }
+        ctx.data_mut(|d| if ouvert { d.insert_temp(id, (famille, feuille, debut, original)); } else { d.remove::<(doc::FamilleCartouche, String, Option<[f64; 2]>, String)>(id); });
+    }
+
+    pub(super) fn creer_jeu_arborescence(&mut self, source: Option<&str>) {
+        let Some((p, _)) = &self.natif else { return };
+        let existants = doc::jeux(p);
+        let base = source.map_or("Jeu".to_string(), |s| format!("{s} - copie"));
+        let nom = if !existants.contains(&base) { base.clone() } else {
+            (2..).map(|n| format!("{base} {n}")).find(|n| !existants.contains(n)).unwrap_or_default()
+        };
+        let mut q = p.clone();
+        let copies: Vec<_> = source.map(|s| p.feuilles.iter().filter(|f| f.jeu == s).cloned().collect()).unwrap_or_default();
+        if copies.is_empty() {
+            let f = Self::nouvelle_feuille(&q, &nom);
+            match q.executer(Commande::Feuille { feuille: f }) {
+                Ok((projet, _)) => q = projet,
+                Err(e) => { self.error = Some(e); return; }
+            }
+        } else {
+            for mut f in copies {
+                let famille = q.cartouches_feuilles.get(&f.id).cloned();
+                f.id.clear();
+                f.jeu = nom.clone();
+                f.numero = Self::nouvelle_feuille(&q, &nom).numero;
+                match q.executer(Commande::Feuille { feuille: f }) {
+                    Ok((mut projet, ids)) => {
+                        if let (Some(nom), Some(id)) = (famille, ids.first()) { projet.cartouches_feuilles.insert(id.clone(), nom); }
+                        q = projet;
+                    },
+                    Err(e) => { self.error = Some(e); return; }
+                }
+            }
+        }
+        if let Err(e) = self.appliquer_projet(q) { self.error = Some(e); return; }
+        self.ouvrir_jeu(&nom, None);
+    }
+
     /// Nom du jeu de feuilles de la vue active, s'il y en a un.
     pub(super) fn jeu_actif(&self) -> Option<String> {
         let i = self.vue_active?;
@@ -130,6 +246,8 @@ impl ViewerApp {
             if let Some(f) = feuille {
                 self.feuilles.selection = SelectionFeuille::Feuille(f.clone());
                 self.feuilles.defiler_vers = Some(f);
+            } else {
+                self.feuilles.selection = SelectionFeuille::Aucune;
             }
         }
     }
@@ -281,6 +399,19 @@ impl ViewerApp {
                 let w = (q - o) / z;
                 (0..feuilles.len()).filter(|&k| ys[k] + feuilles[k].hauteur as f32 * 0.5 < w.y).count()
             };
+            if resp.secondary_clicked() {
+                    let q = resp.interact_pointer_pos();
+                    etat.selection = match (q.and_then(vue_sous), q.and_then(papier)) {
+                        (Some((k, j)), _) => SelectionFeuille::Vue(feuilles[k].id.clone(), j),
+                        (None, Some((k, _))) => SelectionFeuille::Feuille(feuilles[k].id.clone()),
+                        _ => etat.selection.clone(),
+                    };
+            }
+            resp.context_menu(|ui| {
+                if ui.button("Réglages…").clicked() {
+                    ui.close();
+                }
+            });
             // souris : sélection, déplacement d'une vue placée ou d'une feuille, défilement
             if resp.drag_started_by(egui::PointerButton::Primary) {
                 let depart = ui.input(|i| i.pointer.press_origin());
@@ -528,14 +659,14 @@ impl ViewerApp {
         }
     }
 
-    /// Propriétés du jeu ouvert : jeu (renommer, nouveau), feuille choisie (numéro, nom,
-    /// format, cartouche, export, suppression) ou vue placée (échelle, position).
+    /// Propriétés de la sélection dans le jeu, ou du jeu si rien n'est sélectionné.
     pub(super) fn proprietes_jeu(&mut self, ui: &mut egui::Ui, jeu: &str) {
         let Some((p, _)) = &self.natif else { return };
         let mut commande: Option<Commande> = None;
         let mut projet_modifie: Option<crate::modele::Projet> = None;
-        let mut export: Option<(&str, String)> = None;
         let mut ouvrir: Option<String> = None;
+        let selection = self.feuilles.selection.clone();
+        if matches!(selection, SelectionFeuille::Aucune) {
         ui.heading("Jeu de feuilles");
         // nom du jeu : tampon propre, appliqué à Entrée ou en quittant le champ (le jeu
         // ouvert est retrouvé par son nom)
@@ -552,30 +683,20 @@ impl ViewerApp {
         }
         if r.lost_focus() && !self.echap_saisie && nom_jeu.trim() != jeu && !nom_jeu.trim().is_empty() {
             let nom_jeu = nom_jeu.trim().to_string();
+            if doc::jeux(p).contains(&nom_jeu) {
+                self.error = Some("Un jeu porte déjà ce nom.".into());
+            } else {
             let mut q = p.clone();
             for f in q.feuilles.iter_mut().filter(|f| f.jeu == jeu) {
                 f.jeu = nom_jeu.clone();
             }
             projet_modifie = Some(q);
+            ouvrir = Some(nom_jeu);
+            }
         }
         let n = p.feuilles.iter().filter(|f| f.jeu == jeu).count();
         ui.label(RichText::new(format!("{n} feuille(s)")).weak());
-        ui.horizontal(|ui| {
-            if ui.button("Ajouter une feuille").clicked() {
-                commande = Some(Commande::Feuille { feuille: Self::nouvelle_feuille(p, jeu) });
-            }
-            if ui.button("Nouveau jeu").on_hover_text("Nouveau jeu de feuilles, avec une première feuille").clicked() {
-                let existants = doc::jeux(p);
-                let nom = (2..).map(|k| format!("Jeu {k}")).find(|n| !existants.contains(n)).unwrap_or_default();
-                commande = Some(Commande::Feuille { feuille: Self::nouvelle_feuille(p, &nom) });
-                ouvrir = Some(nom);
-            }
-        });
-        if ui.add_enabled(n > 0, egui::Button::new("Exporter le jeu en PDF…")).on_hover_text("Un PDF, une page par feuille dans l'ordre du jeu, chacune à son format").clicked() {
-            export = Some(("jeu", String::new()));
         }
-        ui.separator();
-        let selection = self.feuilles.selection.clone();
         let fid = match &selection {
             SelectionFeuille::Feuille(id) | SelectionFeuille::Vue(id, _) => Some(id.clone()),
             SelectionFeuille::Aucune => None,
@@ -586,7 +707,6 @@ impl ViewerApp {
                 let mut g = f.clone();
                 let k = *j - f.vues.len();
                 let n = &mut g.nomenclatures[k];
-                let id_nomenclature = n.nomenclature.clone();
                 let nom = p.nomenclatures.iter().find(|x| x.id == n.nomenclature).map_or("Nomenclature absente".to_string(), |x| x.nom.clone());
                 ui.heading("Nomenclature posée");
                 ui.label(RichText::new(&nom).strong());
@@ -599,15 +719,6 @@ impl ViewerApp {
                     ui.end_row();
                 });
                 ui.label(RichText::new("Coin haut gauche du tableau ; colonnes et regroupement : ouvrir la nomenclature").small().weak());
-                ui.horizontal(|ui| {
-                    if ui.button("Ouvrir la nomenclature").clicked() {
-                        ouvrir = Some(format!("nomenclature:{id_nomenclature}"));
-                    }
-                    if ui.button("Retirer de la feuille").on_hover_text("Suppr").clicked() {
-                        g.nomenclatures.remove(k);
-                        self.feuilles.selection = SelectionFeuille::Feuille(g.id.clone());
-                    }
-                });
                 if serde_json::to_string(&g).ok() != serde_json::to_string(f).ok() {
                     commande = Some(Commande::Feuille { feuille: g });
                 }
@@ -628,16 +739,6 @@ impl ViewerApp {
                     ui.label("Position Y");
                     ui.add(egui::DragValue::new(&mut v.position[1]).speed(1.0).max_decimals(1).suffix(" mm"));
                     ui.end_row();
-                });
-                let vue = v.vue.clone();
-                ui.horizontal(|ui| {
-                    if ui.button("Ouvrir la vue").clicked() {
-                        ouvrir = Some(format!("vue:{vue}"));
-                    }
-                    if ui.button("Retirer de la feuille").on_hover_text("Suppr").clicked() {
-                        g.vues.remove(*j);
-                        self.feuilles.selection = SelectionFeuille::Feuille(g.id.clone());
-                    }
                 });
                 if serde_json::to_string(&g).ok() != serde_json::to_string(f).ok() {
                     commande = Some(Commande::Feuille { feuille: g });
@@ -678,23 +779,24 @@ impl ViewerApp {
                         ui.add(egui::DragValue::new(&mut g.hauteur).speed(1.0).range(50.0..=5000.0).suffix(" mm"));
                     });
                     ui.end_row();
-                    ui.label("Cartouche");
+                    ui.label("Texte du cartouche");
                     ui.text_edit_singleline(&mut g.cartouche);
+                    ui.end_row();
+                    ui.label("Famille de cartouche");
+                    let actuelle = p.cartouches_feuilles.get(&f.id).map(String::as_str).unwrap_or("Cartouche standard");
+                    let mut choix = actuelle.to_string();
+                    egui::ComboBox::from_id_salt("famille_cartouche_feuille").selected_text(&choix).show_ui(ui, |ui| {
+                        ui.selectable_value(&mut choix, "Cartouche standard".into(), "Cartouche standard");
+                        for famille in &p.familles_cartouches { ui.selectable_value(&mut choix, famille.nom.clone(), &famille.nom); }
+                    });
+                    if choix != actuelle {
+                        let mut q = p.clone();
+                        if choix == "Cartouche standard" { q.cartouches_feuilles.remove(&f.id); } else { q.cartouches_feuilles.insert(f.id.clone(), choix); }
+                        projet_modifie = Some(q);
+                    }
                     ui.end_row();
                 });
                 ui.label(RichText::new(format!("{} vue(s) placée(s), {} nomenclature(s) · glisser une vue ou une nomenclature de l'arborescence sur la feuille", f.vues.len(), f.nomenclatures.len())).small().weak());
-                ui.horizontal(|ui| {
-                    if ui.button("Exporter PDF…").clicked() {
-                        export = Some(("pdf", f.id.clone()));
-                    }
-                    if ui.button("Exporter SVG…").clicked() {
-                        export = Some(("svg", f.id.clone()));
-                    }
-                });
-                if ui.button(RichText::new("Supprimer la feuille").color(Color32::from_rgb(180, 45, 40))).on_hover_text("Suppr").clicked() {
-                    commande = Some(Commande::Supprimer { ids: vec![f.id.clone()] });
-                    self.feuilles.selection = SelectionFeuille::Aucune;
-                }
                 if commande.is_none() && serde_json::to_string(&g).ok() != serde_json::to_string(f).ok() {
                     commande = Some(Commande::Feuille { feuille: g });
                 }
@@ -726,11 +828,6 @@ impl ViewerApp {
                 None => self.ouvrir_jeu(&o, None),
             }
         }
-        match export {
-            Some(("jeu", _)) => self.exporter_jeu_dialogue(jeu),
-            Some((extension, id)) => self.exporter_feuille(extension, &id),
-            None => {}
-        }
     }
 
     /// Demande le fichier, puis exporte le jeu `jeu` en un PDF de plusieurs pages.
@@ -756,7 +853,7 @@ impl ViewerApp {
         Ok(n)
     }
 
-    fn exporter_feuille(&mut self, extension: &str, id: &str) {
+    pub(super) fn exporter_feuille(&mut self, extension: &str, id: &str) {
         let Some((p, _)) = &self.natif else { return };
         let Some(f) = p.feuilles.iter().find(|f| f.id == id) else { return };
         let Some(path) = rfd::FileDialog::new().set_file_name(format!("{} {}.{extension}", f.numero, f.nom)).add_filter(extension, &[extension]).save_file() else {

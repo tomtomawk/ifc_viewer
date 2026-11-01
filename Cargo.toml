@@ -23,3 +23,6 @@ geo-straight-skeleton = "0.1.1"
 # numéro de build de Windows (cadre de fenêtre : Windows 10 ou 11)
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Registry"] }
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"

@@ -35,6 +35,7 @@ pub fn objets(
     coupe: Option<Vec4>,
     boite: Option<(Vec3, Vec3)>,
     cadrage: &[Vec4],
+    contour: &[glam::Vec2],
 ) -> Vec<(bool, bool, bool)> {
     let mut plans = cadrage.to_vec();
     if let Some(p) = coupe {
@@ -50,6 +51,14 @@ pub fn objets(
             Vec4::new(0., 0., -1., b.z),
         ]);
     }
+    let triangles: Vec<[glam::Vec2; 3]> = if contour.len() >= 3 {
+        let coords: Vec<f64> = contour.iter().flat_map(|p| [p.x as f64, p.y as f64]).collect();
+        earcutr::earcut(&coords, &[], 2).unwrap_or_default().chunks_exact(3).map(|t| {
+            let mut p = [contour[t[0]], contour[t[1]], contour[t[2]]];
+            if (p[1]-p[0]).perp_dot(p[2]-p[0]) < 0.0 { p.swap(1, 2); }
+            p
+        }).collect()
+    } else { Vec::new() };
     scene
         .objects
         .iter()
@@ -78,6 +87,17 @@ pub fn objets(
                             poly = clip(&poly, |v| p.dot(v));
                         }
                     }
+                    let morceaux: Vec<Vec<Vec4>> = if triangles.is_empty() { vec![poly] } else {
+                        triangles.iter().map(|t| {
+                            let mut fragment = poly.clone();
+                            for k in 0..3 {
+                                let (a, b) = (t[k], t[(k+1)%3]);
+                                fragment = clip(&fragment, |v| (b-a).perp_dot(v.truncate().truncate() - a));
+                            }
+                            fragment
+                        }).collect()
+                    };
+                    for mut poly in morceaux {
                     poly = poly.into_iter().map(|v| vp * v).collect();
                     poly = clip(&poly, |v| v.w - 1e-6);
                     poly = clip(&poly, |v| v.z + v.w);
@@ -108,6 +128,7 @@ pub fn objets(
                             q = clip(&q, |v| p.dot(v));
                         }
                         touche = !q.is_empty();
+                    }
                     }
                 }
             }
@@ -211,13 +232,16 @@ mod tests {
         );
         let vue = Rect::from_min_max(Pos2::ZERO, Pos2::new(100., 100.));
         let fenetre = Rect::from_min_max(Pos2::new(20., 40.), Pos2::new(40., 60.));
-        let result = objets(&s, &[true, true], camera, vue, fenetre, None, None, &[]);
+        let result = objets(&s, &[true, true], camera, vue, fenetre, None, None, &[], &[]);
         assert_eq!(result[0], (true, true, true));
         assert_eq!(result[1], (true, false, false));
+        let contour = [glam::Vec2::new(1.,-2.), glam::Vec2::new(5.,-2.), glam::Vec2::new(5.,2.), glam::Vec2::new(1.,2.)];
+        let cadre = objets(&s, &[true, true], camera, vue, fenetre, None, None, &[], &contour);
+        assert!(!cadre[0].0, "un objet entièrement hors cadrage doit être ignoré");
         let etroite = Rect::from_min_max(Pos2::new(34., 45.), Pos2::new(36., 55.));
-        let result = objets(&s, &[true, true], camera, vue, etroite, None, None, &[]);
+        let result = objets(&s, &[true, true], camera, vue, etroite, None, None, &[], &[]);
         assert_eq!(result[0], (true, false, true));
-        let result = objets(&s, &[false, true], camera, vue, fenetre, None, None, &[]);
+        let result = objets(&s, &[false, true], camera, vue, fenetre, None, None, &[], &[]);
         assert!(!result[0].0);
         let result = objets(
             &s,
@@ -227,6 +251,7 @@ mod tests {
             fenetre,
             Some(Vec4::new(1., 0., 0., 0.)),
             None,
+            &[],
             &[],
         );
         assert!(!result[0].0);

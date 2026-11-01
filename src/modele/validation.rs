@@ -2,6 +2,7 @@
 use super::*;
 impl Projet {
     pub fn verifier(&self) -> Result<(), String> {
+        if !self.orientation_nord.is_finite() { return Err("Orientation du nord non finie.".into()); }
         let mut ids = std::collections::HashSet::new();
         for id in self
             .niveaux
@@ -146,6 +147,10 @@ impl Projet {
             solides::maillage(&e.maillage)?;
         }
         for v in &self.vues {
+            if !v.contour_cadrage.is_empty() {
+                if !matches!(v.genre, GenreVue::Plan { .. }) || v.contour_cadrage.len() > 128 { return Err("Contour de cadrage non valide.".into()); }
+                edition::contour_valide(&v.contour_cadrage)?;
+            }
             if !v.orientation_plan.is_finite() { return Err("Orientation de vue non finie.".into()); }
             if !v.echelle.is_finite() || v.echelle <= 0.0 {
                 return Err("Échelle non valide.".into());

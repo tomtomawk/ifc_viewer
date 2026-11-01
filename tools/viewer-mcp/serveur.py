@@ -29,6 +29,7 @@ outil mur|poteau|poutre|aucun ; mur <x0 mm> <y0 mm> <x1 mm> <y1 mm> [hauteur mm 
 enregistrer [chemin.modele.json] (RVT : conversion en arrière-plan ; etat.enregistrement indique si elle est en cours) ;
 reduire ; restaurer ; quitter ;
 vues ; vue <indice|nom> ; camera dessus|face|iso|cadrer|ortho|perspective ;
+feuilles ; selection_feuille <JSON> ; proprietes_feuille (sélection et propriétés du jeu, de la feuille ou de la vue placée) ;
 camera <lacet°> <tangage°> [distance] (vue 3D seulement) ; zoom <facteur> ;
 zone on|off|ajuster ou zone <xmin> <ymin> <zmin> <xmax> <ymax> <zmax> (zone de coupe 3D, m) ;
 glisser <dx> <dy> [gauche|droit|milieu] [maj] (comme à la souris : orbite au bouton
@@ -129,6 +130,12 @@ OUTILS = [
     ("viewer_capture", "Capture du viewer, rendue en image PNG. zone « vue » (défaut) : vue 3D rendue hors écran, à la taille de la vue ou à largeur × hauteur, même fenêtre réduite. zone « fenetre » : interface entière ; largeur et hauteur redimensionnent alors la fenêtre.",
      _obj({"zone": {"type": "string", "enum": ["vue", "fenetre"]}, "largeur": {"type": "integer"}, "hauteur": {"type": "integer"}})),
     ("viewer_vues", "Liste des vues, feuilles et nomenclatures du fichier Revit ouvert (indice, genre, type, nom, échelle).", _obj({})),
+    ("viewer_feuilles", "Liste les jeux natifs, leurs feuilles et leurs vues et nomenclatures placées.", _obj({})),
+    ("viewer_selection_feuille", "Ouvre un jeu et sélectionne éventuellement une feuille puis une vue ou une nomenclature placée ; sans feuille, sélectionne le jeu.",
+     _obj({"jeu": {"type": "string"}, "feuille": {"type": "string", "description": "Identifiant natif de la feuille"}, "vue": {"type": "integer", "minimum": 0, "description": "Indice de la vue placée, puis des nomenclatures"}}, ["jeu"])),
+    ("viewer_proprietes_feuille", "Lit les propriétés affichées de la sélection dans le jeu ouvert.", _obj({})),
+    ("viewer_modifier_feuille", "Modifie une feuille native avec son objet complet obtenu par viewer_feuilles ou viewer_proprietes_feuille. La modification est enregistrée dans l'historique et nécessite ensuite un enregistrement du projet.",
+     _obj({"feuille": {"type": "object", "description": "Objet feuille complet avec son identifiant existant"}}, ["feuille"])),
     ("viewer_vue", "Ouvre une vue Revit comme un double-clic dans l'arborescence : par indice (voir viewer_vues) ou par nom (« Plan d'étage : Niveau 0 », ou une partie du nom).",
      _obj({"vue": {"type": "string"}}, ["vue"])),
     ("viewer_camera", "Règle la caméra : mode dessus|face|iso|cadrer|ortho|perspective, ou lacet et tangage en degrés (et distance en mètres).",
@@ -152,6 +159,26 @@ def appeler(nom, a):
         return capture(a.get("zone", "vue"), a.get("largeur"), a.get("hauteur"))
     if nom == "viewer_vues":
         return [texte(commande("vues"))], False
+    if nom == "viewer_feuilles":
+        r = commande("feuilles")
+        return [texte(r)], not r.get("ok")
+    if nom == "viewer_selection_feuille":
+        r = commande("selection_feuille " + json.dumps(a, ensure_ascii=False))
+        return [texte(r)], not r.get("ok")
+    if nom == "viewer_proprietes_feuille":
+        r = commande("proprietes_feuille")
+        return [texte(r)], not r.get("ok")
+    if nom == "viewer_modifier_feuille":
+        identifiant = a.get("feuille", {}).get("id")
+        if not identifiant:
+            raise ValueError("Indiquer l'identifiant d'une feuille existante")
+        existantes = commande("feuilles")
+        if not existantes.get("ok"):
+            return [texte(existantes)], True
+        if not any(f.get("id") == identifiant for jeu in existantes["jeux"] for f in jeu["feuilles"]):
+            raise ValueError("Feuille introuvable")
+        r = commande("editer " + json.dumps({"action": "feuille", "feuille": a["feuille"]}, ensure_ascii=False))
+        return [texte(r)], not r.get("ok")
     if nom == "viewer_vue":
         r = commande(f"vue {a['vue']}")
         return [texte(r)], not r.get("ok")

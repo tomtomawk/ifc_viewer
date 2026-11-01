@@ -6,6 +6,15 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
 
 ## Parcours disponible
 
+- Dans un **plan natif**, sélectionner des éléments puis **Modifier → Masquer**
+  (ou H) les masque uniquement dans cette vue ; **Tout afficher** les rétablit.
+  Les masquages sont enregistrés avec la vue et repris sur les feuilles.
+- **Cadrer** dans un plan natif permet de tracer une polyligne fermée, comme pour
+  une dalle : seule la partie intérieure reste visible, sur le plan et sur les
+  feuilles. **Retirer le cadrage** rétablit la vue entière ; F ajuste toujours le
+  zoom. La **zone de coupe** est une boîte disponible dans la vue 3D, réglable par
+  ses poignées ou dans les propriétés ; elle ne recadre pas les vues 2D.
+
 - **Modifier → Modifier tracé** permet de sélectionner un trait et de le supprimer
   avec Suppr. Le contour s'ouvre : cliquer une extrémité, tracer le raccord puis
   cliquer l'autre extrémité pour le refermer. Une dalle ne peut être validée que si
@@ -222,16 +231,21 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   glisser une feuille au-dessus ou au-dessous d'une autre la déplace, la déposer sur
   le nom d'un jeu la met à la fin de ce jeu. Ctrl+Z annule. Molette : zoom ; glisser le fond : défiler. Les
   réglages sont dans Propriétés, sans boîte de dialogue : nom du jeu (Entrée pour
-  renommer), Ajouter une feuille, Nouveau jeu, Exporter le jeu en PDF (un fichier, une
-  page par feuille dans l'ordre du jeu, chacune à son format ; aussi Sortie → Jeu PDF
-  et la commande du pilote `exporter_jeu <chemin.pdf> [jeu]`) ; feuille (numéro, nom, format A0 à A4,
-  paysage/portrait, dimensions, cartouche, export PDF/SVG, suppression) ; vue placée
-  (échelle, position, ouvrir, retirer). L'arborescence liste tous les jeux, toutes
+  renommer) lorsque rien n'est sélectionné ; feuille (numéro, nom, format A0 à A4,
+  paysage/portrait, dimensions, cartouche) ; vue placée (échelle et position).
+  L'arborescence liste tous les jeux, toutes
   leurs feuilles et, sous chaque feuille, ses vues placées (clic : ouvrir la vue) ; clic
   sur une feuille pour l'amener à l'écran. La recherche garde un jeu entier si son nom
   correspond, une feuille si son titre ou une de ses vues correspond. Un fichier
   Revit converti (Début → Importer) apporte ses plans d'étage, coupes, élévations et
   feuilles (voir MODELE.md, conversion depuis Revit).
+  L'arborescence propose la création et la duplication de jeux ; ses menus contextuels
+  ajoutent une feuille, exportent un jeu ou une feuille et ouvrent l'éditeur de cartouche.
+  Le pilote permet de lister les jeux
+  (`feuilles`), sélectionner un jeu ou une feuille (`selection_feuille {"jeu":"Plans","feuille":"id"}` ;
+  ajouter `"vue":0` pour une vue placée) et lire la sélection (`proprietes_feuille`).
+  L'outil MCP `viewer_modifier_feuille` ou `editer` permet de modifier les données
+  d'une feuille ; enregistrer ensuite le projet pour conserver la modification.
 - **Nomenclatures** (Documenter ou l'arborescence) : quantités par catégorie,
   regroupées par type ou détaillées par élément, colonnes au choix (catégorie, type,
   élément, niveau, nombre, longueur, hauteur, largeur, épaisseur, surface, volume net ;

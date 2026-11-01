@@ -455,6 +455,8 @@ pub struct ViewerApp {
     natif_modifie: bool,
     /// Repère du plan : le prochain clic choisit l'arête à mettre à l'horizontale.
     alignement_plan: bool,
+    /// Choix d'un trait donnant la direction du nord du projet.
+    orientation_nord_en_cours: bool,
     /// Arête visée en mode Aligner (repère de la scène), surlignée.
     arete_alignement: Option<[Vec3; 2]>,
     /// Arêtes en plan de l'objet survolé en mode Aligner (cache).
@@ -527,6 +529,7 @@ pub struct ViewerApp {
     vol: Vol,
     /// Commandes du serveur MCP (voir `pilote.rs`) et celles en attente de traitement.
     pilote: Option<Receiver<Requete>>,
+    prochaine_tentative_pilote: std::time::Instant,
     requetes: Vec<Requete>,
     /// Réponses des ouvertures demandées par le pilote, envoyées en fin de chargement.
     attente_ouverture: Vec<Sender<String>>,
@@ -632,6 +635,7 @@ impl ViewerApp {
             coupe_depart: None,
             nom_vue: None,
             alignement_plan: false,
+            orientation_nord_en_cours: false,
             dessin2d: Default::default(),
             famille: None,
             famille_active: false,
@@ -699,6 +703,7 @@ impl ViewerApp {
             vol: Vol::default(),
             nomenclature_ouverte: None,
             pilote: pilote::demarrer(cc.egui_ctx.clone()),
+            prochaine_tentative_pilote: std::time::Instant::now(),
             requetes: Vec::new(),
             attente_ouverture: Vec::new(),
             rect_vue: egui::Rect::NOTHING,
@@ -815,6 +820,7 @@ impl ViewerApp {
                     }
                     self.natif = Some((projet, chemin));
                     self.avant_saisie = None;
+                    self.ouvrir_plan_initial_natif();
                     return;
                 }
                 LoadMsg::Progress(s) => self.status = s,
@@ -958,13 +964,18 @@ impl ViewerApp {
         let dans_la_plage = |o: &scene::SceneObject| limite_basse.is_none_or(|bas| {
             if matches!(&*o.class, "IFCSLAB" | "IFCCOVERING" | "IFCROOF" | "IFCANNOTATION" | "IFCGEOGRAPHICELEMENT") { o.max.z >= bas - 0.002 } else { o.max.z > bas + 0.002 }
         });
+        let masques_vue: HashSet<Id> = self.vue_native_id().and_then(|id| self.natif.as_ref()?.0.vues.iter().find(|v| v.id == id)).map(|vue| {
+            scene.objects.iter().filter(|o| self.cle_native(o.id).is_some_and(|id| vue.elements_masques.contains(&id))
+                || scene.model.parent.get(&o.id).and_then(|id| self.cle_native(*id)).is_some_and(|id| vue.elements_masques.contains(&id)))
+                .map(|o| o.id).collect()
+        }).unwrap_or_default();
         let mut opaque = Vec::new();
         let mut transp = Vec::new();
         let mut lines = Vec::new();
         let mut aretes = Vec::new();
         for (i, o) in scene.objects.iter().enumerate() {
             let en_edition = self.objet_en_edition().is_some_and(|(id, annotation)| !annotation && o.id == scene::id_natif("dalle", id));
-            let vis = !en_edition && !self.hidden_classes.contains(&*o.class)
+            let vis = !en_edition && !masques_vue.contains(&o.id) && !self.hidden_classes.contains(&*o.class)
                 && !self.hidden_classes.contains(&*self.cle_objet[i])
                 && !self.hidden_objects.contains(&(i as u32))
                 && o.storey.is_none_or(|s| !self.hidden_storeys.contains(&s))
@@ -1070,6 +1081,10 @@ impl ViewerApp {
             }
         }
         primitives.extend(self.annotations_natives());
+        if let Some(vue) = self.vue_native_id().and_then(|id| self.natif.as_ref()?.0.vues.iter().find(|v| v.id == id)) && !vue.contour_cadrage.is_empty() {
+            primitives = crate::modele::cadrage::decouper(primitives.into_iter().map(|p| p.translater(s.origin)).collect(), &vue.contour_cadrage)?
+                .into_iter().map(|p| p.translater(-s.origin)).collect();
+        }
         Ok(trace2d::Dessin { droite, haut, echelle: self.echelle, primitives })
     }
 
@@ -1218,6 +1233,23 @@ impl ViewerApp {
         }).collect()
     }
 
+    fn contour_cadrage_vue(&self) -> Vec<glam::Vec2> {
+        if self.ruban_edition.outil() == Some(crate::ruban::Outil::Cadrer) { return Vec::new(); }
+        let Some(id) = self.vue_native_id() else { return Vec::new() };
+        let (Some((p, _)), Some(s)) = (&self.natif, &self.scene) else { return Vec::new() };
+        p.vues.iter().find(|v| v.id == id).map(|v| v.contour_cadrage.iter().map(|p| glam::Vec2::new((p[0] * 0.001 - s.origin.x) as f32, (p[1] * 0.001 - s.origin.y) as f32)).collect()).unwrap_or_default()
+    }
+
+    fn point_dans_cadrage(&self, rect: egui::Rect, q: egui::Pos2) -> bool {
+        let Some(id) = self.vue_native_id() else { return true };
+        let Some((p, _)) = &self.natif else { return true };
+        let Some(vue) = p.vues.iter().find(|v| v.id == id) else { return true };
+        if vue.contour_cadrage.is_empty() || self.ruban_edition.outil() == Some(crate::ruban::Outil::Cadrer) { return true; }
+        let z = self.altitude_vue_native();
+        let points: Option<Vec<[f64; 2]>> = vue.contour_cadrage.iter().map(|p| self.ecran_plan(rect, *p, z).map(|p| [p.x as f64, p.y as f64])).collect();
+        points.is_none_or(|points| crate::modele::geometrie::dedans([q.x as f64, q.y as f64], &points))
+    }
+
     /// Zone de coupe appliquée au rendu et à la sélection : active, vue 3D.
     fn boite_appliquee(&self) -> Option<(Vec3, Vec3)> {
         if self.boite_active && self.vue_3d() { self.boite } else { None }
@@ -1280,7 +1312,7 @@ impl ViewerApp {
     /// normale.
     fn poignees_boite(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
         let Some((a, b)) = self.boite else { return };
-        if !self.boite_active || self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).is_some_and(|v| v.genre == "Feuille") {
+        if !self.boite_active || !self.vue_3d() {
             return;
         }
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
@@ -1909,6 +1941,8 @@ impl ViewerApp {
                 for (genre, cle) in p.murs.iter().map(|x| ("mur", &x.id))
                     .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
                     .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
+                    .chain(p.terrains.iter().map(|x| ("terrain", &x.id)))
+                    .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
                     .chain(p.barres.iter().map(|x| ("barre", &x.id)))
                 .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
                 .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
@@ -1941,7 +1975,7 @@ impl ViewerApp {
         let Some(scene) = &self.scene else { return };
         let rectangle = egui::Rect::from_two_pos(fenetre.debut, fenetre.fin);
         let croisement = fenetre.fin.x < fenetre.debut.x;
-        let resultats = crate::selection_rectangle::objets(scene, &self.visible, self.camera.view_proj(vue.width() / vue.height().max(1.0)), vue, rectangle, self.plan_coupe(), self.boite_appliquee(), &self.cadrage_vue());
+        let resultats = crate::selection_rectangle::objets(scene, &self.visible, self.camera.view_proj(vue.width() / vue.height().max(1.0)), vue, rectangle, self.plan_coupe(), self.boite_appliquee(), &self.cadrage_vue(), &self.contour_cadrage_vue());
         let mut ids = crate::selection_rectangle::groupes(scene.objects.iter().zip(resultats).map(|(o, r)| {
             let id = scene.model.parent.get(&o.id).filter(|id| scene.model.ty(**id) == "IFCELEMENTASSEMBLY").copied().unwrap_or(o.id);
             (id, r)
@@ -1956,6 +1990,8 @@ impl ViewerApp {
                         ancienne.extend(p.murs.iter().map(|x| ("mur", &x.id))
                             .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
                             .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
+                            .chain(p.terrains.iter().map(|x| ("terrain", &x.id)))
+                            .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
                             .chain(p.barres.iter().map(|x| ("barre", &x.id)))
                 .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
                 .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
@@ -1971,7 +2007,9 @@ impl ViewerApp {
         if self.vue_en_plan() {
             if let Some((p, _)) = &self.natif {
                 let z = self.altitude_vue_native();
+                let masques = self.vue_native_id().and_then(|id| p.vues.iter().find(|v| v.id == id)).map(|v| v.elements_masques.as_slice()).unwrap_or(&[]);
                 for v in &p.vues {
+                    if masques.contains(&v.id) { continue; }
                     if let crate::modele::GenreVue::Coupe { debut, fin, .. } = &v.genre {
                         if let (Some(a), Some(b)) = (self.ecran_plan(vue, *debut, z), self.ecran_plan(vue, *fin, z)) {
                             if crate::selection_rectangle::segment(rectangle, a, b, croisement) { vues.push(v.id.clone()); }
@@ -1979,6 +2017,7 @@ impl ViewerApp {
                     }
                 }
                 for g in &p.quadrillages {
+                    if masques.contains(&g.id) { continue; }
                     if let (Some(a), Some(b)) = (self.ecran_plan(vue, g.debut, z), self.ecran_plan(vue, g.fin, z)) {
                         if crate::selection_rectangle::segment(rectangle, a, b, croisement) { vues.push(g.id.clone()); }
                     }
@@ -1998,6 +2037,8 @@ impl ViewerApp {
             p.murs.iter().map(|x| ("mur", &x.id))
                 .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
                 .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
+                .chain(p.terrains.iter().map(|x| ("terrain", &x.id)))
+                .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
                 .chain(p.barres.iter().map(|x| ("barre", &x.id)))
                 .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
                 .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
@@ -2074,18 +2115,23 @@ impl ViewerApp {
                 self.install_scene(scene);
                 self.status = format!("{} — nouveau projet natif v0", projet.nom);
                 let _ = self.historique.enregistrer(&projet);
-                let plan = projet.vues.first().map(|v| scene::numero_vue(&v.id));
                 self.natif = Some((projet, chemin));
                 self.avant_saisie = None;
                 self.error = None;
-                // le plan du premier niveau s'ouvre dès le démarrage
-                let indice = plan.and_then(|n| self.scene.as_ref()?.navigateur.as_ref()?.vues.iter().position(|v| v.revit_id == n));
-                if let Some(i) = indice {
-                    self.activer_vue(i);
-                }
+                self.ouvrir_plan_initial_natif();
             }
             Err(e) => self.error = Some(e),
         }
+    }
+
+    /// Le plan initial est ouvert seul ; la vue 3D nommée reste dans l'arborescence.
+    fn ouvrir_plan_initial_natif(&mut self) {
+        let plan = self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|v| matches!(v.genre, crate::modele::GenreVue::Plan { .. })).map(|v| scene::numero_vue(&v.id)));
+        let indice = plan.and_then(|n| self.scene.as_ref()?.navigateur.as_ref()?.vues.iter().position(|v| v.revit_id == n));
+        self.vues_ouvertes.clear();
+        self.etats_vues.clear();
+        self.vue_active = None;
+        if let Some(i) = indice { self.activer_vue(i); }
     }
 
     fn enregistrer_projet(&mut self, ctx: &egui::Context) {
@@ -2500,8 +2546,10 @@ impl ViewerApp {
     /// Repères des coupes natives dans une vue en plan.
     fn reperes_coupes(&self, ui: &egui::Ui, rect: egui::Rect, z: f64) {
         let Some((projet, _)) = &self.natif else { return };
+        let masques = self.vue_native_id().and_then(|id| projet.vues.iter().find(|v| v.id == id)).map(|v| v.elements_masques.as_slice()).unwrap_or(&[]);
         let painter = ui.painter().with_clip_rect(rect);
         for g in &projet.quadrillages {
+            if masques.contains(&g.id) { continue; }
             if self.bim.selection.contains(&g.id) {
                 if let (Some(a), Some(b)) = (self.ecran_plan(rect, g.debut, z), self.ecran_plan(rect, g.fin, z)) {
                     painter.line_segment([a, b], egui::Stroke::new(2.0, Color32::from_rgb(230, 120, 20)));
@@ -2509,6 +2557,7 @@ impl ViewerApp {
             }
         }
         for v in &projet.vues {
+            if masques.contains(&v.id) { continue; }
             if let crate::modele::GenreVue::Coupe { debut, fin, profondeur, elevation } = &v.genre {
                 let couleur = if self.bim.selection.contains(&v.id) { Color32::from_rgb(230, 120, 20) } else { Color32::from_rgb(40, 90, 170) };
                 self.dessiner_repere_coupe(&painter, rect, *debut, *fin, z, *profondeur, *elevation, &v.nom, couleur);
@@ -2541,9 +2590,12 @@ impl ViewerApp {
     }
 
     fn repere_coupe_proche(&self, rect: egui::Rect, q: egui::Pos2, z: f64) -> Option<String> {
+        if !self.point_dans_cadrage(rect, q) { return None; }
         let (p, _) = self.natif.as_ref()?;
+        let masques = self.vue_native_id().and_then(|id| p.vues.iter().find(|v| v.id == id)).map(|v| v.elements_masques.as_slice()).unwrap_or(&[]);
         p.vues.iter().filter_map(|v| if let crate::modele::GenreVue::Coupe { debut, fin, .. } = &v.genre { Some((&v.id, debut, fin)) } else { None })
         .chain(p.quadrillages.iter().map(|g| (&g.id, &g.debut, &g.fin))).filter_map(|(id, debut, fin)| {
+            if masques.contains(id) { return None; }
             let (a, b) = (self.ecran_plan(rect, *debut, z)?, self.ecran_plan(rect, *fin, z)?);
             let d = b-a; let t = if d.length_sq() > 0.0 { ((q-a).dot(d)/d.length_sq()).clamp(0.0,1.0) } else { 0.0 };
             let distance = q.distance(a+d*t);
@@ -2552,6 +2604,7 @@ impl ViewerApp {
     }
 
     fn limite_propriete_proche(&self, rect: egui::Rect, q: egui::Pos2) -> Option<String> {
+        if !self.point_dans_cadrage(rect, q) { return None; }
         let p = &self.natif.as_ref()?.0;
         p.limites_propriete.iter().filter_map(|l| {
             let scene = self.scene.as_ref()?;
@@ -2684,10 +2737,11 @@ impl ViewerApp {
                     scene.navigateur.as_ref()?.vues.iter().position(|v|v.revit_id==id).map(Some)}
             }
         };
+        let avait_vues = !self.vues_ouvertes.is_empty();
         self.vue_active=ancienne_vue(self.vue_active).flatten();
         self.vues_ouvertes=self.vues_ouvertes.iter().filter_map(|i|ancienne_vue(*i)).collect();
         self.etats_vues=std::mem::take(&mut self.etats_vues).into_iter().filter_map(|(i,e)|ancienne_vue(i).map(|i|(i,e))).collect();
-        if self.vues_ouvertes.is_empty(){self.vues_ouvertes.push(None);}
+        if avait_vues && self.vues_ouvertes.is_empty(){self.vues_ouvertes.push(None);}
         let nouvel_objet=|i:u32|anciens.and_then(|s|s.objects.get(i as usize)).and_then(|o|scene.object_of.get(&o.id)).copied();
         self.hidden_objects=self.hidden_objects.iter().filter_map(|i|nouvel_objet(*i)).collect();
         self.isolated=self.isolated.as_ref().map(|ids|ids.iter().filter_map(|i|nouvel_objet(*i)).collect());
@@ -2829,6 +2883,51 @@ impl ViewerApp {
         for e in [ea, eb] {
             painter.circle_filled(e, 3.5, couleur);
         }
+        if self.orientation_nord_en_cours {
+            if let Some(curseur) = ui.ctx().pointer_hover_pos() {
+                let (fin, dir) = if curseur.distance(ea) < curseur.distance(eb) { (ea, -d) } else { (eb, d) };
+                let n = egui::vec2(-dir.y, dir.x);
+                painter.add(egui::Shape::convex_polygon(vec![fin + dir * 11.0, fin - dir * 5.0 + n * 5.0, fin - dir * 5.0 - n * 5.0], couleur, egui::Stroke::NONE));
+            }
+        }
+    }
+
+    /// Trait d'annotation le plus proche du curseur, dans le repère local de la scène.
+    fn trait_annotation_vise(&self, q: egui::Pos2, rect: egui::Rect) -> Option<[Vec3; 2]> {
+        let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
+        let ecran = |p: Vec3| {
+            let c = vp * p.extend(1.0);
+            (c.w > 0.0).then(|| egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height()))
+        };
+        let mut meilleur: Option<(f32, [Vec3; 2])> = None;
+        for primitive in self.annotations_natives() {
+            if let crate::trace2d::Forme::Polyligne { points, fermee } = primitive.forme {
+                if points.len() < 2 { continue; }
+                let n = if fermee { points.len() } else { points.len() - 1 };
+                for i in 0..n {
+                    let segment = [points[i].as_vec3(), points[(i + 1) % points.len()].as_vec3()];
+                    let (Some(a), Some(b)) = (ecran(segment[0]), ecran(segment[1])) else { continue };
+                    let ab = b - a;
+                    if ab.length_sq() < 4.0 { continue; }
+                    let t = ((q - a).dot(ab) / ab.length_sq()).clamp(0.0, 1.0);
+                    let distance = q.distance(a + ab * t);
+                    if distance <= 10.0 && meilleur.as_ref().is_none_or(|(d, _)| distance < *d) { meilleur = Some((distance, segment)); }
+                }
+            }
+        }
+        meilleur.map(|(_, segment)| segment)
+    }
+
+    /// Sens du nord : l'extrémité du trait la plus proche du clic indique le nord.
+    fn angle_nord_depuis_trait(&self, segment: [Vec3; 2], clic: egui::Pos2, rect: egui::Rect) -> Option<f64> {
+        let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
+        let ecran = |p: Vec3| {
+            let c = vp * p.extend(1.0);
+            (c.w > 0.0).then(|| egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height()))
+        };
+        let (a, b) = (ecran(segment[0])?, ecran(segment[1])?);
+        let d = if clic.distance(a) < clic.distance(b) { segment[0] - segment[1] } else { segment[1] - segment[0] };
+        crate::orientation_plan::angle_nord(glam::Vec2::new(d.x, d.y)).map(f64::from)
     }
 
     /// Orientations de plan enregistrées : celles du projet natif, sinon de la session.
@@ -3048,6 +3147,8 @@ impl ViewerApp {
     }
 
     fn changer_document(&mut self, id: usize) {
+        self.orientation_nord_en_cours = false;
+        self.arete_alignement = None;
         if id == self.document_actif {
             return;
         }
@@ -3107,6 +3208,8 @@ impl ViewerApp {
     }
 
     fn fermer(&mut self) {
+        self.orientation_nord_en_cours = false;
+        self.arete_alignement = None;
         if self.natif_modifie {
             self.confirmer_fermeture = Some((false, self.document_actif));
             return;
@@ -3175,8 +3278,18 @@ impl ViewerApp {
         // cadre du système : ni boutons de fenêtre ni zones de déplacement dessinés ici
         let natif = crate::cadre_natif();
         let (barre, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 32.0), Sense::hover());
-        let titre = egui::Rect::from_min_size(barre.min, egui::vec2(88.0, barre.height()));
-        ui.put(titre, egui::Label::new(RichText::new("IFC Viewer").strong()));
+        let titre = egui::Rect::from_min_size(barre.min, egui::vec2(108.0, barre.height()));
+        let icone_id = egui::Id::unique("icone_application_texture");
+        let texture = ctx.data(|d| d.get_temp::<egui::TextureHandle>(icone_id)).unwrap_or_else(|| {
+            let image = eframe::icon_data::from_png_bytes(include_bytes!("../assets/icone.png")).expect("Icône intégrée invalide");
+            let pixels = egui::ColorImage::from_rgba_unmultiplied([image.width as usize, image.height as usize], &image.rgba);
+            let texture = ctx.load_texture("icone_application", pixels, egui::TextureOptions::LINEAR);
+            ctx.data_mut(|d| d.insert_temp(icone_id, texture.clone()));
+            texture
+        });
+        let rect_icone = egui::Rect::from_center_size(egui::pos2(titre.left() + 10.0, titre.center().y), egui::vec2(18.0, 18.0));
+        ui.painter().image(texture.id(), rect_icone, egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)), egui::Color32::WHITE);
+        ui.put(egui::Rect::from_min_max(egui::pos2(titre.left() + 23.0, titre.top()), titre.max), egui::Label::new(RichText::new("IFC Viewer").strong()));
         let mut zones_deplacement = vec![titre];
         let menus = egui::Rect::from_min_max(egui::pos2(titre.right() + 8.0, barre.top()), egui::pos2(barre.right() - if natif { 4.0 } else { 144.0 }, barre.bottom()));
         ui.scope_builder(egui::UiBuilder::new().id_salt("menu_fenetre").max_rect(menus).layout(egui::Layout::left_to_right(Align::Center)), |ui| {
@@ -3312,7 +3425,8 @@ impl ViewerApp {
                     if let Err(e) = self.creer_identique() { self.error = Some(e); }
                 }
                 Some(crate::ruban::Outil::Supprimer) => self.demander_suppression(),
-                Some(o @ (crate::ruban::Outil::Cadrer | crate::ruban::Outil::Isoler | crate::ruban::Outil::Masquer)) => self.visibilite_selection(o),
+                Some(crate::ruban::Outil::Cadrer) => self.demarrer_cadrage_vue(),
+                Some(o @ (crate::ruban::Outil::Isoler | crate::ruban::Outil::Masquer)) => self.visibilite_selection(o),
                 Some(crate::ruban::Outil::Feuilles) => self.commande_feuilles(),
                 Some(crate::ruban::Outil::Nomenclatures) => {
                     if self.natif.is_some() {
@@ -3339,7 +3453,8 @@ impl ViewerApp {
                     reglages.push(C { enfonce: self.rvt_sheet, ..C::new("fiche", "Fiche Revit", I::Fiche, "Métadonnées du fichier Revit", true) });
                 }
                 reglages.push(C::new("options", "Options", I::Options, "Unités, navigation IFC, épaisseurs de traits, gabarit", true));
-                for (cle, r) in crate::ruban::bandeau(ui, &[("Fichier", fichier), ("Réglages", reglages)]) {
+                let orientation = vec![C { enfonce: self.orientation_nord_en_cours, ..C::new("nord", "Orienter le nord", I::Nord, "Définir le nord du projet en sélectionnant un trait dans une vue de plan", self.natif.is_some() && self.vue_en_plan() && self.dessin2d.edition_contour.is_none()) }];
+                for (cle, r) in crate::ruban::bandeau(ui, &[("Fichier", fichier), ("Réglages", reglages), ("Projet", orientation)]) {
                     match cle {
                         "options" => {
                             egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| self.menu_options(ui));
@@ -3350,6 +3465,13 @@ impl ViewerApp {
                         "fermer" => self.fermer(),
                         "importer" => self.importer_dialogue(&ctx),
                         "fiche" => self.rvt_sheet = !self.rvt_sheet,
+                        "nord" => {
+                            self.orientation_nord_en_cours = !self.orientation_nord_en_cours;
+                            self.alignement_plan = false;
+                            self.arete_alignement = None;
+                            self.ruban_edition.annuler();
+                            self.status = if self.orientation_nord_en_cours { "Nord : viser un trait et cliquer près de l'extrémité qui indique le nord · Échap : annuler" } else { "Orientation du nord annulée." }.into();
+                        }
                         _ => {}
                     }
                 }
@@ -3592,23 +3714,33 @@ impl ViewerApp {
                     self.coupe_dirty = true;
                 }
                 ui.separator();
-                if ui.button("Cadrer").on_hover_text("Tout le modèle visible dans la vue (F)").clicked() {
-                    self.fit_all();
+                if ui.button("Cadrer").on_hover_text("Définir le contour du plan ; F ajuste le zoom").clicked() {
+                    self.demarrer_cadrage_vue();
                 }
+                if self.vue_native_id().and_then(|id| self.natif.as_ref()?.0.vues.iter().find(|v| v.id == id)).is_some_and(|v| !v.contour_cadrage.is_empty())
+                    && ui.button("Retirer le cadrage").clicked() { self.retirer_cadrage_vue(); }
                 ui.separator();
                 ui.toggle_value(&mut self.voir_visibilite, "Visibilité").on_hover_text("Catégories de modèle et d'annotation affichées dans la vue (V)");
                 if ui.button("Tout afficher").on_hover_text("Montrer les éléments masqués et isolés").clicked() {
+                    self.retablir_elements_vue();
                     self.hidden_objects.clear();
                     self.hidden_storeys.clear();
-                    self.isolated = None;
+                    self.isolated = self.vue_active.and_then(|i| {
+                        let s = self.scene.as_ref()?;
+                        let v = s.navigateur.as_ref()?.vues.get(i)?;
+                        if self.natif.is_none() || v.genre != "Plan d'étage" { return None; }
+                        let objets: HashSet<u32> = s.objects.iter().enumerate().filter(|(_, o)| o.storey == v.etage || &*o.class == "IFCGEOGRAPHICELEMENT").map(|(i, _)| i as u32).collect();
+                        (!objets.is_empty()).then_some(objets)
+                    });
+                    self.hidden_objects.extend(self.masques_variantes());
                     self.visibility_dirty = true;
                 }
-                ui.separator();
-                let mut zone = self.boite_active;
-                if ui.toggle_value(&mut zone, "Zone de coupe").on_hover_text("Boîte qui découpe le modèle dans les vues 3D ; ses faces se règlent aux poignées, en 3D, en plan ou en élévation, ou dans les propriétés").changed() {
-                    self.activer_boite(zone);
-                }
                 if self.vue_3d() {
+                    ui.separator();
+                    let mut zone = self.boite_active;
+                    if ui.toggle_value(&mut zone, "Zone de coupe").on_hover_text("Boîte qui découpe le modèle dans la vue 3D ; ses faces se règlent aux poignées ou dans les propriétés").changed() {
+                        self.activer_boite(zone);
+                    }
                     ui.toggle_value(&mut self.camera.ortho, "Ortho").on_hover_text("Projection orthographique (sinon perspective)");
                 }
             });
@@ -3973,7 +4105,8 @@ impl ViewerApp {
                 [au(a, R0), au(a, R1), au(b, R1), au(b, R0)]
             })
             .collect();
-        let cardinaux = [("N", Vec3::Y, "le nord"), ("E", Vec3::X, "l'est"), ("S", Vec3::NEG_Y, "le sud"), ("O", Vec3::NEG_X, "l'ouest")];
+        let rotation_nord = glam::Quat::from_rotation_z(self.natif.as_ref().map_or(0.0, |(p, _)| p.orientation_nord as f32));
+        let cardinaux = [("N", rotation_nord * Vec3::Y, "le nord"), ("E", rotation_nord * Vec3::X, "l'est"), ("S", rotation_nord * Vec3::NEG_Y, "le sud"), ("O", rotation_nord * Vec3::NEG_X, "l'ouest")];
         // lettre : centrée sur l'anneau, le haut vers l'extérieur
         let lettre = |d: Vec3| {
             let c = d * ((R0 + R1) / 2.0) + Vec3::Z * Z;
@@ -4254,6 +4387,13 @@ impl ViewerApp {
             None => (Vec::new(), Vec::new(), std::collections::HashMap::new()),
         };
         let mut ouvrir_jeu: Option<(String, Option<String>)> = None;
+        let mut creer_jeu = false;
+        let mut dupliquer_jeu: Option<String> = None;
+        let mut ajouter_feuille_jeu: Option<String> = None;
+        let mut exporter_jeu_nav: Option<String> = None;
+        let mut exporter_feuille_nav: Option<(&str, String)> = None;
+        let mut editer_cartouche_nav: Option<String> = None;
+        let mut regler_jeu: Option<(String, Option<String>)> = None;
         // feuille glissée dans l'arborescence : (feuille, jeu, feuille devant laquelle)
         let mut deplacer: Option<(String, String, Option<String>)> = None;
         let mut ouvrir_nomenclature: Option<String> = None;
@@ -4352,6 +4492,9 @@ impl ViewerApp {
         let jeu_ouvert = active.and_then(|i| nav.vues.get(i)).filter(|v| v.genre == "Jeu de feuilles").map(|v| v.nom.clone());
         let n_natives: usize = jeux_natifs.iter().map(|(_, fs)| fs.len()).sum();
         rubrique_nav(ui, LeftTab::Feuilles, format!("Feuilles (tout) ({})", feuilles.len() + n_natives), false, &mut |ui| {
+            if self.natif.is_some() && ui.small_button("+ Nouveau jeu").on_hover_text("Créer un jeu de feuilles").clicked() {
+                creer_jeu = true;
+            }
             if feuilles.is_empty() && jeux_natifs.is_empty() {
                 ui.label(RichText::new("Aucune feuille").weak());
             }
@@ -4367,6 +4510,26 @@ impl ViewerApp {
                         if r.clicked() {
                             ouvrir_jeu = Some((jeu.clone(), None));
                         }
+                        r.context_menu(|ui| {
+                            if ui.button("Propriétés du jeu").clicked() {
+                                regler_jeu = Some((jeu.clone(), None));
+                                ui.close();
+                            }
+                            if ui.button("Ajouter une feuille").clicked() {
+                                ajouter_feuille_jeu = Some(jeu.clone());
+                                ui.close();
+                            }
+                            if ui.button("Exporter le jeu en PDF…").clicked() {
+                                exporter_jeu_nav = Some(jeu.clone());
+                                ui.close();
+                            }
+                        });
+                        let (rect, copie) = ui.allocate_exact_size(egui::vec2(18.0, 18.0), Sense::click());
+                        let c = ui.visuals().text_color();
+                        let p = ui.painter();
+                        p.rect_stroke(egui::Rect::from_min_size(rect.min + egui::vec2(4.0, 2.0), egui::vec2(9.0, 11.0)), 1.0, egui::Stroke::new(1.0, c), egui::StrokeKind::Inside);
+                        p.rect_stroke(egui::Rect::from_min_size(rect.min + egui::vec2(7.0, 5.0), egui::vec2(9.0, 11.0)), 1.0, egui::Stroke::new(1.0, c), egui::StrokeKind::Inside);
+                        if copie.on_hover_text("Dupliquer le jeu et ses feuilles").clicked() { dupliquer_jeu = Some(jeu.clone()); }
                         // feuille déposée sur le jeu : à la fin du jeu
                         if r.dnd_hover_payload::<feuilles::FeuilleGlissee>().is_some() {
                             ui.painter().rect_stroke(r.rect, 3.0, egui::Stroke::new(1.5, ui.visuals().selection.stroke.color), egui::StrokeKind::Inside);
@@ -4405,6 +4568,24 @@ impl ViewerApp {
                                     }
                                 });
                             let r = entete.inner;
+                            r.context_menu(|ui| {
+                                if ui.button("Propriétés de la feuille").clicked() {
+                                    regler_jeu = Some((jeu.clone(), Some(fid.clone())));
+                                    ui.close();
+                                }
+                                if ui.button("Modifier la famille de cartouche…").clicked() {
+                                    editer_cartouche_nav = Some(fid.clone());
+                                    ui.close();
+                                }
+                                if ui.button("Exporter en PDF…").clicked() {
+                                    exporter_feuille_nav = Some(("pdf", fid.clone()));
+                                    ui.close();
+                                }
+                                if ui.button("Exporter en SVG…").clicked() {
+                                    exporter_feuille_nav = Some(("svg", fid.clone()));
+                                    ui.close();
+                                }
+                            });
                             r.dnd_set_drag_payload(feuilles::FeuilleGlissee(fid.clone()));
                             if r.clicked() {
                                 ouvrir_jeu = Some((jeu.clone(), Some(fid.clone())));
@@ -4452,10 +4633,24 @@ impl ViewerApp {
         }
         // projet natif : portes et fenêtres (familles modélisées), à ouvrir dans l'éditeur
         let familles_natives = if self.natif.is_some() { Some(self.familles_projet()) } else { None };
+        let cartouches_natifs = self.natif.as_ref().map(|(p, _)| p.familles_cartouches.iter().map(|f| {
+            let feuille = p.cartouches_feuilles.iter().find(|(_, nom)| *nom == &f.nom).map(|(id, _)| id.clone()).or_else(|| p.feuilles.first().map(|f| f.id.clone()));
+            (f.clone(), feuille)
+        }).collect::<Vec<_>>()).unwrap_or_default();
         let mut ouvrir_famille: Option<(Option<String>, crate::modele::GenreOuverture)> = None;
         let mut charger_famille = false;
         rubrique_nav(ui, LeftTab::Familles, "Familles".into(), false, &mut |ui| {
             if let Some(familles) = &familles_natives {
+                egui::CollapsingHeader::new("Cartouches").id_salt("nav-familles-cartouches").show(ui, |ui| {
+                    ui.label("Cartouche standard");
+                    for (famille, feuille) in &cartouches_natifs {
+                        if ui.selectable_label(false, &famille.nom).on_hover_text("Modifier la famille de cartouche").clicked() {
+                            if let Some(feuille) = feuille {
+                                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("editeur_cartouche"), (famille.clone(), feuille.clone(), None::<[f64; 2]>, famille.nom.clone())));
+                            }
+                        }
+                    }
+                });
                 use crate::modele::GenreOuverture as G;
                 for (genre, titre) in [(G::Porte, "Portes"), (G::Fenetre, "Fenêtres")] {
                     let liste: Vec<_> = familles.iter().filter(|f| f.2 == genre && garde(&f.1)).collect();
@@ -4515,6 +4710,20 @@ impl ViewerApp {
         }
         if let Some((jeu, f)) = ouvrir_jeu {
             self.ouvrir_jeu(&jeu, f);
+        }
+        if creer_jeu { self.creer_jeu_arborescence(None); }
+        if let Some(jeu) = dupliquer_jeu { self.creer_jeu_arborescence(Some(&jeu)); }
+        if let Some(jeu) = ajouter_feuille_jeu {
+            if let Some((p, _)) = &self.natif {
+                let f = Self::nouvelle_feuille(p, &jeu);
+                if let Err(e) = self.executer_bim(crate::modele::commandes::Commande::Feuille { feuille: f }) { self.error = Some(e); }
+            }
+        }
+        if let Some(jeu) = exporter_jeu_nav { self.exporter_jeu_dialogue(&jeu); }
+        if let Some((extension, id)) = exporter_feuille_nav { self.exporter_feuille(extension, &id); }
+        if let Some(id) = editer_cartouche_nav { self.editer_cartouche_feuille(ui.ctx(), &id); }
+        if let Some((jeu, feuille)) = regler_jeu {
+            self.ouvrir_jeu(&jeu, feuille);
         }
         if let Some((t, genre)) = ouvrir_famille {
             self.ouvrir_editeur_famille_type(t, genre);
@@ -4806,6 +5015,10 @@ impl ViewerApp {
             }
         }
         if self.scene.is_some() && self.vues_ouvertes.is_empty() && ui.button("Ouvrir la vue 3D du modèle").clicked() {
+            if self.natif.is_some() {
+                let indice = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|n| n.vues.iter().position(|v| v.revit_id == scene::numero_vue("3d")));
+                if let Some(i) = indice { self.activer_vue(i); return; }
+            }
             self.vues_ouvertes.push(None);
             self.vue_active = None;
             self.nomenclature_ouverte = None;
@@ -4840,6 +5053,8 @@ impl ViewerApp {
         if self.vue_active == Some(i) && self.vues_ouvertes.contains(&Some(i)) {
             return;
         }
+        self.orientation_nord_en_cours = false;
+        self.arete_alignement = None;
         self.memoriser_vue();
         if self.etats_vues.contains_key(&Some(i)) {
             self.restaurer_vue(Some(i));
@@ -5603,6 +5818,7 @@ impl ViewerApp {
         self.fenetre_motifs(ui.ctx());
         self.fenetre_position_plan(ui.ctx());
         self.fenetre_plumes(ui.ctx());
+        self.fenetre_famille_cartouche(ui.ctx());
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
         // sélecteur de type de l'élément sélectionné, en tête comme dans Revit
         if self.jeu_actif().is_none() {
@@ -5687,7 +5903,7 @@ impl ViewerApp {
             self.plage_de_vue(ui);
             ui.separator();
         }
-        if self.boite_active {
+        if self.boite_active && self.vue_3d() {
             self.proprietes_boite(ui);
             ui.separator();
         }
@@ -5750,6 +5966,7 @@ impl ViewerApp {
     /// Cadrer, Isoler ou Masquer (ruban Modifier) : objets de la sélection courante.
     fn visibilite_selection(&mut self, o: crate::ruban::Outil) {
         use crate::ruban::Outil;
+        if o == Outil::Masquer && self.masquer_elements_vue() { return; }
         let mut objets: Vec<u32> = self.selected.into_iter().chain(self.selection_multiple.iter().copied()).flat_map(|id| self.objects_under(id)).collect();
         objets.sort_unstable();
         objets.dedup();
@@ -5760,6 +5977,50 @@ impl ViewerApp {
             Outil::Isoler => self.isolate(objets),
             _ => self.hide(objets),
         }
+    }
+
+    fn demarrer_cadrage_vue(&mut self) {
+        if self.vue_en_plan() && self.vue_native_id().is_some() {
+            self.ruban_edition.activer_outil(crate::ruban::Outil::Cadrer);
+            self.status = "Tracez le contour de cadrage du plan, puis validez.".into();
+        } else { self.fit_all(); }
+    }
+
+    fn retirer_cadrage_vue(&mut self) {
+        let Some(id) = self.vue_native_id() else { return };
+        let Some((projet, _)) = &self.natif else { return };
+        let mut copie = projet.clone();
+        if let Some(vue) = copie.vues.iter_mut().find(|v| v.id == id) { vue.contour_cadrage.clear(); }
+        if let Err(e) = self.appliquer_projet(copie) { self.error = Some(e); }
+        self.visibility_dirty = true;
+        self.coupe_dirty = true;
+    }
+
+    fn masquer_elements_vue(&mut self) -> bool {
+        let Some(vue_id) = self.vue_native_id() else { return false };
+        let ids = self.selection_bim();
+        if ids.is_empty() { self.status = "Sélectionnez les éléments à masquer dans cette vue.".into(); return true; }
+        let Some((projet, _)) = &self.natif else { return false };
+        let mut copie = projet.clone();
+        let Some(vue) = copie.vues.iter_mut().find(|v| v.id == vue_id) else { return false };
+        for id in &ids { if !vue.elements_masques.contains(id) { vue.elements_masques.push(id.clone()); } }
+        if let Err(e) = self.appliquer_projet(copie) { self.error = Some(e); return true; }
+        self.select(None, false);
+        self.visibility_dirty = true;
+        self.coupe_dirty = true;
+        self.memoriser_vue();
+        self.status = "Éléments masqués dans cette vue ; Tout afficher les rétablit.".into();
+        true
+    }
+
+    fn retablir_elements_vue(&mut self) {
+        let Some(id) = self.vue_native_id() else { return };
+        let Some((projet, _)) = &self.natif else { return };
+        if projet.vues.iter().find(|v| v.id == id).is_none_or(|v| v.elements_masques.is_empty()) { return; }
+        let mut copie = projet.clone();
+        copie.vues.iter_mut().find(|v| v.id == id).unwrap().elements_masques.clear();
+        if let Err(e) = self.appliquer_projet(copie) { self.error = Some(e); }
+        self.coupe_dirty = true;
     }
 
     fn isolate(&mut self, objs: Vec<u32>) {
@@ -6033,7 +6294,7 @@ impl ViewerApp {
             _ => None,
         };
         if deplacement.is_none() { self.bim.depart_deplacement = None; }
-        let mode_trace = mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || deplacement.is_some() || self.outil_dessin().is_some() || self.dessin2d.edition_contour.is_some();
+        let mode_trace = mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || deplacement.is_some() || self.outil_dessin().is_some() || self.dessin2d.edition_contour.is_some() || self.alignement_plan || self.orientation_nord_en_cours;
         // axe du mur sélectionné : une extrémité saisie se déplace (accrochages du tracé)
         let axe = if mode_trace { None } else { self.axe_selection() };
         if let Some((id, a, b, z, _)) = &axe {
@@ -6075,7 +6336,9 @@ impl ViewerApp {
             }
         }
         let mode_trace = mode_trace || self.poignee_axe.is_some();
-        if mode_trace && resp.hovered() { ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair); }
+        if mode_trace && resp.hovered() {
+            ui.ctx().set_cursor_icon(if self.selection_traces_active() { egui::CursorIcon::Default } else { egui::CursorIcon::Crosshair });
+        }
         let ndc = |p: egui::Pos2| {
             Vec2::new((p.x - rect.left()) / rect.width() * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height() * 2.0)
         };
@@ -6088,6 +6351,7 @@ impl ViewerApp {
         });
         if self.scene.is_some() && !sur_repere_plan {
             let pick = |app: &Self, p: egui::Pos2| -> Option<(u32, Vec3)> {
+                if !app.point_dans_cadrage(rect, p) { return None; }
                 let s = app.scene.as_ref()?;
                 let n = ndc(p);
                 let (o, d) = app.camera.ray(n.x, n.y, aspect);
@@ -6148,6 +6412,29 @@ impl ViewerApp {
                 }
             } else if self.outil_dessin().is_some() {
                 self.souris_dessin(ui, rect, &resp);
+            } else if self.orientation_nord_en_cours {
+                let curseur = resp.hover_pos().or(resp.interact_pointer_pos());
+                let hit = curseur.and_then(|p| pick(self, p).map(|(obj, _)| (p, obj)));
+                self.arete_alignement = curseur.and_then(|q| self.trait_annotation_vise(q, rect)).or_else(|| hit.and_then(|(p, obj)| self.arete_visee(p, rect, obj)));
+                if resp.clicked_by(PointerButton::Secondary) {
+                    self.orientation_nord_en_cours = false;
+                    self.arete_alignement = None;
+                    self.status = "Orientation du nord annulée.".into();
+                } else if resp.clicked() {
+                    let angle = self.arete_alignement.zip(curseur).and_then(|(trait_, q)| self.angle_nord_depuis_trait(trait_, q, rect));
+                    if let (Some(angle), Some((p, _))) = (angle, &self.natif) {
+                        let mut projet = p.clone();
+                        projet.orientation_nord = angle;
+                        match self.appliquer_projet(projet) {
+                            Ok(()) => {
+                                self.orientation_nord_en_cours = false;
+                                self.arete_alignement = None;
+                                self.status = "Nord du projet orienté — Ctrl+S pour enregistrer.".into();
+                            }
+                            Err(e) => self.error = Some(e),
+                        }
+                    } else { self.status = "Nord : viser un trait du plan, près de l'extrémité indiquant le nord.".into(); }
+                }
             } else if self.alignement_plan {
                 // Aligner (repère du plan) : l'arête visée (surlignée) devient horizontale ;
                 // sans arête, la direction principale de l'élément
@@ -6231,9 +6518,10 @@ impl ViewerApp {
                 let ctrl = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
                 let mut selection = if ctrl { self.selection_bim() } else { Vec::new() };
                 if let Some(i) = selection.iter().position(|x| x == &id) { selection.remove(i); } else { selection.push(id); }
-                self.select(None, false);
+                let selection_id = selection.iter().find_map(|cle| self.scene.as_ref()?.objects.iter().find(|o| self.cle_native(o.id).as_deref() == Some(cle)).map(|o| o.id));
+                self.select(selection_id, false);
                 self.bim.selection = selection;
-            } else if resp.clicked() && resp.interact_pointer_pos().is_some_and(|q| self.rectangles_annotations(rect).iter().any(|(_, r)| r.expand(4.0).contains(q))) {
+            } else if resp.clicked() && resp.interact_pointer_pos().is_some_and(|q| self.point_dans_cadrage(rect, q) && self.rectangles_annotations(rect).iter().any(|(_, r)| r.expand(4.0).contains(q))) {
                 let q = resp.interact_pointer_pos().unwrap();
                 let id = self.rectangles_annotations(rect).into_iter().find(|(_, r)| r.expand(4.0).contains(q)).unwrap().0;
                 let ctrl = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
@@ -6309,11 +6597,9 @@ impl ViewerApp {
                         self.select(None, false);
                     }
                 }
+                if h && !self.selection_bim().is_empty() && self.vue_native_id().is_some() { self.masquer_elements_vue(); }
+                else if h && let Some(sel) = self.selected { let o = self.objects_under(sel); self.hide(o); }
                 if let Some(sel) = self.selected {
-                    if h {
-                        let o = self.objects_under(sel);
-                        self.hide(o);
-                    }
                     if i {
                         let o = self.objects_under(sel);
                         self.isolate(o);
@@ -6384,12 +6670,13 @@ impl ViewerApp {
             self.dessiner_aretes_pente(ui, rect, resp.hover_pos());
             self.dessiner_axe(ui, rect, resp.hover_pos());
         }
-        if self.alignement_plan {
+        if self.alignement_plan || self.orientation_nord_en_cours {
             self.dessiner_arete_alignement(ui, rect);
         }
         if self.outil_dessin().is_some() {
             self.dessiner_dessin2d(ui, rect);
         }
+        self.dessiner_instructions(ui, rect);
         self.barre_commande(ui, rect);
         if self.scene.is_some() {
             self.poignees_boite(ui, rect);
@@ -6406,9 +6693,11 @@ impl ViewerApp {
         if repere_plan {
             let origine = self.orientation_initiale_plan();
             let positions = self.positions_plan_liste();
-            let r = crate::orientation_plan::afficher(ui, rect, &mut self.camera, origine, self.alignement_plan, &positions);
+            let nord = self.natif.as_ref().map_or(0.0, |(p, _)| p.orientation_nord as f32);
+            let r = crate::orientation_plan::afficher(ui, rect, &mut self.camera, origine, self.alignement_plan, &positions, nord);
             if r.aligner {
                 self.alignement_plan = !self.alignement_plan;
+                self.orientation_nord_en_cours = false;
                 self.arete_alignement = None;
             }
             if r.nouvelle {
@@ -6500,6 +6789,7 @@ impl ViewerApp {
             coupe: self.plan_coupe(),
             boite: self.boite_appliquee(),
             cadrage: self.cadrage_vue(),
+            contour_vue: self.contour_cadrage_vue(),
         }
     }
 
@@ -6830,6 +7120,50 @@ impl ViewerApp {
                 };
                 self.left_tab = o;
                 self.etat()
+            }
+            "feuilles" => {
+                let Some((p, _)) = &self.natif else { return erreur("aucun projet natif") };
+                let jeux: Vec<_> = crate::modele::documentation::jeux(p).into_iter().map(|nom| {
+                    let feuilles: Vec<_> = p.feuilles.iter().filter(|f| f.jeu == nom).collect();
+                    serde_json::json!({"nom": nom, "feuilles": feuilles})
+                }).collect();
+                serde_json::json!({"ok":true, "jeux":jeux}).to_string()
+            }
+            "selection_feuille" => {
+                let Ok(a) = serde_json::from_str::<serde_json::Value>(argument) else { return erreur("usage : selection_feuille {\"jeu\":\"nom\",\"feuille\":\"id\",\"vue\":0} ; feuille et vue facultatives") };
+                let Some((p, _)) = &self.natif else { return erreur("aucun projet natif") };
+                let jeu = a.get("jeu").and_then(|v| v.as_str()).map(str::to_string).or_else(|| self.jeu_actif());
+                let Some(jeu) = jeu else { return erreur("indiquer le nom du jeu") };
+                if !crate::modele::documentation::jeux(p).contains(&jeu) { return erreur("jeu introuvable") }
+                let fid = a.get("feuille").and_then(|v| v.as_str()).map(str::to_string);
+                let vue = if let Some(v) = a.get("vue") {
+                    let Some(i) = v.as_u64().and_then(|n| usize::try_from(n).ok()) else { return erreur("vue doit être un indice entier positif") };
+                    Some(i)
+                } else { None };
+                if let Some(fid) = &fid {
+                    let Some(f) = p.feuilles.iter().find(|f| &f.id == fid && f.jeu == jeu) else { return erreur("feuille introuvable dans ce jeu") };
+                    if vue.is_some_and(|i| i >= f.vues.len() + f.nomenclatures.len()) { return erreur("indice de vue ou nomenclature placée invalide") }
+                } else if vue.is_some() { return erreur("indiquer la feuille contenant la vue") }
+                self.ouvrir_jeu(&jeu, fid.clone());
+                if let (Some(fid), Some(i)) = (fid, vue) { self.feuilles.selection = feuilles::SelectionFeuille::Vue(fid, i); }
+                self.commande(ctx, "proprietes_feuille", "")
+            }
+            "proprietes_feuille" => {
+                let Some(jeu) = self.jeu_actif() else { return erreur("aucun jeu de feuilles ouvert") };
+                let Some((p, _)) = &self.natif else { return erreur("aucun projet natif") };
+                let selection = match &self.feuilles.selection {
+                    feuilles::SelectionFeuille::Aucune => serde_json::json!({"type":"jeu", "nom":jeu, "nombre_feuilles":p.feuilles.iter().filter(|f| f.jeu == jeu).count()}),
+                    feuilles::SelectionFeuille::Feuille(id) => match p.feuilles.iter().find(|f| &f.id == id && f.jeu == jeu) {
+                        Some(f) => serde_json::json!({"type":"feuille", "feuille":f, "famille_cartouche": p.cartouches_feuilles.get(id).map_or("Cartouche standard", String::as_str)}),
+                        None => return erreur("feuille sélectionnée introuvable"),
+                    },
+                    feuilles::SelectionFeuille::Vue(id, i) => match p.feuilles.iter().find(|f| &f.id == id && f.jeu == jeu) {
+                        Some(f) if *i < f.vues.len() => serde_json::json!({"type":"vue", "feuille":id, "indice":i, "proprietes":f.vues[*i]}),
+                        Some(f) if *i < f.vues.len() + f.nomenclatures.len() => serde_json::json!({"type":"nomenclature", "feuille":id, "indice":i, "proprietes":f.nomenclatures[*i - f.vues.len()]}),
+                        _ => return erreur("élément sélectionné introuvable"),
+                    },
+                };
+                serde_json::json!({"ok":true, "jeu":jeu, "selection":selection}).to_string()
             }
             "vues" => {
                 let Some(nav) = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()) else { return erreur("pas de vues Revit") };
@@ -7430,6 +7764,13 @@ fn load_state_fr(s: &str) -> &str {
 impl eframe::App for ViewerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        if self.pilote.is_none() {
+            if std::time::Instant::now() >= self.prochaine_tentative_pilote {
+                self.pilote = pilote::demarrer(ctx.clone());
+                self.prochaine_tentative_pilote = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            }
+            if self.pilote.is_none() { ctx.request_repaint_after(std::time::Duration::from_secs(2)); }
+        }
         self.valider_saisie(&ctx);
         self.niveau_creation_courant();
         self.onglet_selon_selection();
@@ -7461,6 +7802,11 @@ impl eframe::App for ViewerApp {
         if self.alignement_plan && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             self.alignement_plan = false;
             self.arete_alignement = None;
+        }
+        if self.orientation_nord_en_cours && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+            self.orientation_nord_en_cours = false;
+            self.arete_alignement = None;
+            self.status = "Orientation du nord annulée.".into();
         }
         if self.ruban_edition.a_un_outil() && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             // Échap : la saisie, puis le mur ou la dalle en cours, puis l'outil

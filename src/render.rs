@@ -96,6 +96,8 @@ uniform vec3 u_eye;
 uniform bool u_ortho;
 uniform vec3 u_view_dir;
 uniform bool u_flat;
+uniform vec2 u_contour_vue[128];
+uniform int u_nb_contour_vue;
 uniform bool u_dessin;
 uniform bool u_sans_eclairage;
 // style Réaliste : couleurs de rendu des matériaux, ciel et soleil
@@ -152,6 +154,17 @@ float occultation() {
 }
 
 void main() {
+    if (u_nb_contour_vue >= 3) {
+        bool dedans = false;
+        vec2 p = v_pos.xy;
+        for (int i = 0; i < 128; ++i) {
+            if (i >= u_nb_contour_vue) break;
+            int j = (i + 1 == u_nb_contour_vue) ? 0 : i + 1;
+            vec2 a = u_contour_vue[i], b = u_contour_vue[j];
+            if ((a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) dedans = !dedans;
+        }
+        if (!dedans) discard;
+    }
     if (u_boite && v_annot == 0u && (any(lessThan(v_pos, u_boite_min)) || any(greaterThan(v_pos, u_boite_max)))) {
         discard;
     }
@@ -419,6 +432,8 @@ pub struct Renderer {
     u_boite: Option<glow::UniformLocation>,
     u_cadrage: Option<glow::UniformLocation>,
     u_n_cadrage: Option<glow::UniformLocation>,
+    u_contour_vue: Option<glow::UniformLocation>,
+    u_nb_contour_vue: Option<glow::UniformLocation>,
     u_boite_min: Option<glow::UniformLocation>,
     u_boite_max: Option<glow::UniformLocation>,
     /// Couleurs de rendu des sommets (attribut 4), tampon à part.
@@ -502,6 +517,7 @@ pub struct FrameParams {
     pub boite: Option<(Vec3, Vec3)>,
     /// Cadrage de la vue principale (coupe, élévation) : plans gardés, 4 au plus.
     pub cadrage: Vec<Vec4>,
+    pub contour_vue: Vec<glam::Vec2>,
     /// Passes des fenêtres de vue (feuille ouverte), dans l'ordre des indices envoyés
     /// par `upload_passes`.
     pub passes: Vec<ParamsPasse>,
@@ -629,6 +645,8 @@ impl Renderer {
                 u_boite: gl.get_uniform_location(program, "u_boite"),
                 u_cadrage: gl.get_uniform_location(program, "u_cadrage[0]").or_else(|| gl.get_uniform_location(program, "u_cadrage")),
                 u_n_cadrage: gl.get_uniform_location(program, "u_n_cadrage"),
+                u_contour_vue: gl.get_uniform_location(program, "u_contour_vue[0]"),
+                u_nb_contour_vue: gl.get_uniform_location(program, "u_nb_contour_vue"),
                 u_boite_min: gl.get_uniform_location(program, "u_boite_min"),
                 u_boite_max: gl.get_uniform_location(program, "u_boite_max"),
                 u_decalage_ombre: gl.get_uniform_location(program, "u_decalage_ombre"),
@@ -1024,6 +1042,11 @@ impl Renderer {
                 gl.uniform_matrix_4_f32_slice(self.u_mvp.as_ref(), false, &p.mvp.to_cols_array());
                 gl.uniform_3_f32(self.u_view_dir.as_ref(), p.view_dir.x, p.view_dir.y, p.view_dir.z);
             }
+            if !p.contour_vue.is_empty() {
+                let points: Vec<f32> = p.contour_vue.iter().take(128).flat_map(|p| [p.x, p.y]).collect();
+                gl.uniform_2_f32_slice(self.u_contour_vue.as_ref(), &points);
+                gl.uniform_1_i32(self.u_nb_contour_vue.as_ref(), (points.len() / 2) as i32);
+            }
             if !p.cadrage.is_empty() {
                 let mut plans = [0f32; 16];
                 for (k, pl) in p.cadrage.iter().take(4).enumerate() {
@@ -1098,6 +1121,7 @@ impl Renderer {
             }
             gl.uniform_1_i32(self.u_boite.as_ref(), 0);
             gl.uniform_1_i32(self.u_n_cadrage.as_ref(), 0);
+            gl.uniform_1_i32(self.u_nb_contour_vue.as_ref(), 0);
             gl.disable(glow::POLYGON_OFFSET_FILL);
             gl.active_texture(glow::TEXTURE4);
             gl.bind_texture(glow::TEXTURE_2D, None);

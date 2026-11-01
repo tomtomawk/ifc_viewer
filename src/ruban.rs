@@ -2237,7 +2237,7 @@ fn bouton_outil(
     resp.on_hover_text(match outil {
         Outil::CreerIdentique => "Créer à l'identique (CS)",
         Outil::Supprimer => "Supprimer (Suppr)",
-        Outil::Cadrer => "Cadrer la sélection, sinon tout le modèle (F)",
+        Outil::Cadrer => "Définir le contour de cadrage du plan ; F ajuste le zoom",
         Outil::Isoler => "Isoler la sélection (I) ; Échap dans la vue : tout réafficher",
         Outil::Masquer => "Masquer la sélection (H)",
         Outil::Feuilles => "Feuilles : mise en page des vues, cartouche, export SVG/PDF",
@@ -3193,6 +3193,7 @@ pub enum Icone {
     Importer,
     Fiche,
     Options,
+    Nord,
     Enregistrer,
     EnregistrerSous,
     Exporter(&'static str),
@@ -3285,6 +3286,11 @@ fn icone_commande(p: &egui::Painter, r: egui::Rect, i: Icone, c: Color32) {
         p.rect_stroke(egui::Rect::from_min_max(pt(0.26, 0.54), pt(0.74, 0.88)), 0.0, t, egui::StrokeKind::Inside);
     };
     match i {
+        Icone::Nord => {
+            p.circle_stroke(r.center(), r.width() * 0.42, t);
+            p.add(egui::Shape::convex_polygon(vec![pt(0.5, 0.12), pt(0.37, 0.62), pt(0.5, 0.53), pt(0.63, 0.62)], c, egui::Stroke::NONE));
+            seg((0.5, 0.53), (0.5, 0.84));
+        }
         Icone::Nouveau => {
             document();
             seg((0.5, 0.48), (0.5, 0.78));

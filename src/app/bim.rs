@@ -1121,7 +1121,6 @@ impl ViewerApp {
             }
             match outil {
                 Some(Outil::Deplacer | Outil::Copier) => {
-                    ui.label(if self.bim.depart_deplacement.is_some() { "Cliquer la destination · Maj : orthogonal · Échap ou clic droit : annuler" } else { "Cliquer le point de base dans la vue, puis la destination" });
                     let mut appliquer = false;
                     ui.collapsing("Saisie chiffrée", |ui| {
                         for (nom, v) in ["X", "Y", "Z"].into_iter().zip(&mut self.bim.delta) {
@@ -1374,6 +1373,7 @@ impl ViewerApp {
             .collect();
         crate::modele::documentation::annotations(p, v)
             .into_iter()
+            .filter(|a| !a.element.is_some_and(|id| v.elements_masques.iter().any(|cle| scene::id_natif("annotation", cle) == id)))
             .filter(|a| !self.objet_en_edition().is_some_and(|(id, annotation)| annotation && a.element == Some(scene::id_natif("annotation", id))))
             .map(|mut a| {
                 if a.element.is_some_and(|id| selection.contains(&id)) {

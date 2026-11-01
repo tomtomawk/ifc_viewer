@@ -14,6 +14,7 @@ pub mod escalier;
 pub use escalier::{Escalier, GardeCorps, Remplissage};
 pub mod solides;
 pub mod site;
+pub mod cadrage;
 pub mod historique;
 pub mod commandes;
 pub mod export_ifc;
@@ -86,6 +87,9 @@ pub struct Projet {
     /// Orientations enregistrées des plans (repère du plan).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub positions_plan: Vec<PositionPlan>,
+    /// Rotation du nord géographique par rapport à l'axe Y du projet, en radians.
+    #[serde(default)]
+    pub orientation_nord: f64,
     pub importes: Vec<ElementImporte>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub quadrillages: Vec<documentation::Quadrillage>,
@@ -93,6 +97,11 @@ pub struct Projet {
     pub annotations: Vec<documentation::Annotation>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub feuilles: Vec<documentation::Feuille>,
+    /// Familles de cartouches et affectation aux feuilles ; absence : cartouche standard.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub familles_cartouches: Vec<documentation::FamilleCartouche>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub cartouches_feuilles: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub nomenclatures: Vec<documentation::Nomenclature>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -745,6 +754,12 @@ pub struct Vue {
     pub coupe_active: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub poche_vue: Option<String>,
+    /// Identifiants des éléments masqués uniquement dans cette vue.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub elements_masques: Vec<String>,
+    /// Périmètre de cadrage d'un plan, en coordonnées du modèle (mm).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub contour_cadrage: Vec<[f64; 2]>,
     #[serde(flatten)]
     pub genre: GenreVue,
 }
