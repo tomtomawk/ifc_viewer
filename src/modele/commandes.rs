@@ -7,6 +7,8 @@ use std::collections::{HashMap, HashSet};
 pub enum Commande {
     Terrain { terrain: site::Terrain },
     LimitePropriete { limite: site::LimitePropriete },
+    /// Coordonnées de l'origine du projet : E/O, N/S, cote NGF (mm).
+    CoordonneesOrigine { coordonnees: [f64; 3] },
     Barre {
         barre: Barre,
     },
@@ -169,19 +171,25 @@ impl Projet {
     }
     fn executer_interne(&mut self, c: Commande) -> Result<Vec<String>, String> {
         match c {
+            // éléments du site : créés dans la phase Existant
             Commande::Terrain { mut terrain } => {
                 terrain.triangles()?;
                 if terrain.id.is_empty() { terrain.id = identite(self, "terrain"); }
                 let id = terrain.id.clone();
-                if let Some(t) = self.terrains.iter_mut().find(|t| t.id == id) { *t = terrain; } else { self.terrains.push(terrain); }
+                if let Some(t) = self.terrains.iter_mut().find(|t| t.id == id) { *t = terrain; } else { self.terrains.push(terrain); self.ranger_existant(&id); }
                 Ok(vec![id])
             }
             Commande::LimitePropriete { mut limite } => {
                 limite.verifier()?;
                 if limite.id.is_empty() { limite.id = identite(self, "limite-propriete"); }
                 let id = limite.id.clone();
-                if let Some(l) = self.limites_propriete.iter_mut().find(|l| l.id == id) { *l = limite; } else { self.limites_propriete.push(limite); }
+                if let Some(l) = self.limites_propriete.iter_mut().find(|l| l.id == id) { *l = limite; } else { self.limites_propriete.push(limite); self.ranger_existant(&id); }
                 Ok(vec![id])
+            }
+            Commande::CoordonneesOrigine { coordonnees } => {
+                if !coordonnees.iter().all(|x| x.is_finite()) { return Err("Coordonnées de l'origine non valides.".into()); }
+                self.coordonnees_origine = coordonnees;
+                Ok(Vec::new())
             }
             Commande::ModifierQuadrillage { quadrillage } => {
                 let actuel = self

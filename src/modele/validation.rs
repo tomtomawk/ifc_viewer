@@ -36,7 +36,18 @@ impl Projet {
                 return Err("Altitude non finie.".into());
             }
         }
-        for t in &self.terrains { t.triangles()?; }
+        if !self.coordonnees_origine.iter().all(|x| x.is_finite()) { return Err("Coordonnées de l'origine non valides.".into()); }
+        let mut types_terrains = std::collections::HashSet::new();
+        for t in &self.types_terrains {
+            if t.id.is_empty() || !types_terrains.insert(&t.id) || t.nom.trim().is_empty() || !(t.epaisseur > 0.0 && t.epaisseur.is_finite()) {
+                return Err("Type de terrain non valide (identifiant, nom ou épaisseur).".into());
+            }
+            if t.materiau.as_ref().is_some_and(|m| self.materiau(m).is_none()) { return Err(format!("{} : matériau introuvable.", t.nom)); }
+        }
+        for t in &self.terrains {
+            t.triangles()?;
+            if t.type_terrain.as_ref().is_some_and(|id| !types_terrains.contains(id)) { return Err(format!("{} : type de terrain introuvable.", t.nom)); }
+        }
         for l in &self.limites_propriete { l.verifier()?; }
         for t in self.types_murs.iter().chain(&self.types_dalles) {
             if t.couches.is_empty()
@@ -227,6 +238,18 @@ impl Projet {
             };
             if !valide {
                 return Err("Coordonnées d'annotation non valides.".into());
+            }
+            if let F::Polyligne { fermee, remplissage: Some(r), .. } = &a.forme {
+                use super::documentation::RemplissageContour;
+                if !fermee {
+                    return Err("Seule une polyligne fermée peut être remplie.".into());
+                }
+                match r {
+                    RemplissageContour::Materiau { materiau } if self.materiau(materiau).is_none() => return Err(format!("RemplissageContour : matériau « {materiau} » absent.")),
+                    RemplissageContour::Motif { motif: MotifCoupe::Vide | MotifCoupe::Isolation } => return Err("RemplissageContour : motif non valide.".into()),
+                    RemplissageContour::Motif { motif } if motif.nom_hachures().is_some() && self.definition_motif(motif).is_none() => return Err(format!("RemplissageContour : motif « {} » absent.", motif.libelle())),
+                    _ => {}
+                }
             }
         }
         for f in &self.feuilles {

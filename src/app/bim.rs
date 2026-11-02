@@ -202,10 +202,13 @@ pub(super) struct EtatBim {
     priorite: i32,
     pub revision: u64,
     tableau_cache: Option<(u64, String, Result<Vec<Vec<String>>, String>)>,
+    /// Origine du projet sélectionnée (trait invisible) : ses coordonnées dans Propriétés.
+    pub(super) origine: bool,
 }
 impl Default for EtatBim {
     fn default() -> Self {
         Self {
+            origine: false,
             selection: Vec::new(),
             delta: [1000.0, 0.0, 0.0],
             centre: [0.0; 2],
@@ -704,7 +707,7 @@ impl ViewerApp {
                         use crate::modele::documentation::{AnnotationForme as F, PointCote};
                         let mut change = false;
                         match &mut annotation.forme {
-                            F::Polyligne { points, fermee } | F::Spline { points, fermee } => {
+                            F::Polyligne { points, fermee, .. } | F::Spline { points, fermee } => {
                                 ui.label(format!("{} points", points.len()));
                                 change |= ui.checkbox(fermee, "Fermée").changed();
                             }
@@ -806,6 +809,10 @@ impl ViewerApp {
                                     });
                                 }
                             }
+                        }
+                        // une polyligne ouverte perd son remplissage
+                        if let F::Polyligne { fermee: false, remplissage, .. } = &mut annotation.forme {
+                            *remplissage = None;
                         }
                         if change {
                             commande = Some(Commande::Annoter { annotation });

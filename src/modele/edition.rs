@@ -579,7 +579,8 @@ mod tests {
     fn listes_creation_ajout_validation_et_persistance() {
         let mut projet = Projet::nouveau("Listes");
         assert_eq!(projet.ajouter_choix_creation(ListeCreation::Phase, "  Livraison  ", "").unwrap(), "Livraison");
-        assert_eq!(projet.phases, ["Projet", "Livraison"]);
+        // un nouveau projet a les phases Existant et Projet
+        assert_eq!(projet.phases, ["Existant", "Projet", "Livraison"]);
         projet.ajouter_choix_creation(ListeCreation::SousProjet, "Structure", "").unwrap();
         assert_eq!(projet.sous_projets, ["A", "Structure"]);
         let a = projet.ajouter_choix_creation(ListeCreation::Variante, "Option A", "Façade").unwrap();

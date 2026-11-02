@@ -166,6 +166,26 @@ impl Forme2D {
         }
     }
 
+    /// Longueur du tracé (mm) ; un contour fermé compte son côté de fermeture.
+    pub fn longueur(&self) -> f64 {
+        match self {
+            Self::Cercle { rayon, .. } => std::f64::consts::TAU * rayon,
+            _ => self.polylignes().iter().map(|l| l.windows(2).map(|w| w[0].distance(w[1])).sum::<f64>()).sum(),
+        }
+    }
+
+    /// Surface d'une forme fermée (mm²) : polyligne ou spline fermée, cercle ; None sinon.
+    pub fn surface(&self) -> Option<f64> {
+        match self {
+            Self::Cercle { rayon, .. } => Some(std::f64::consts::PI * rayon * rayon),
+            Self::Polyligne { fermee: true, .. } | Self::Spline { fermee: true, .. } => {
+                let l = self.polylignes().remove(0);
+                Some((l.windows(2).map(|w| w[0].perp_dot(w[1])).sum::<f64>() + l.last().zip(l.first()).map_or(0.0, |(a, b)| a.perp_dot(*b))).abs() * 0.5)
+            }
+            _ => None,
+        }
+    }
+
     /// Géométries d'accrochage.
     pub fn geoms(&self) -> Vec<Geom> {
         match self {
@@ -525,6 +545,22 @@ mod tests {
 
     fn proche_de(a: DVec2, b: DVec2) -> bool {
         a.distance(b) < 1e-6
+    }
+
+    #[test]
+    fn longueur_et_surface() {
+        let carre = vec![DVec2::ZERO, DVec2::new(2000.0, 0.0), DVec2::new(2000.0, 1000.0), DVec2::new(0.0, 1000.0)];
+        let ferme = Forme2D::Polyligne { points: carre.clone(), fermee: true };
+        assert!((ferme.longueur() - 6000.0).abs() < 1e-9);
+        assert!((ferme.surface().unwrap() - 2e6).abs() < 1e-6);
+        // ouverte : sans le côté de fermeture, sans surface
+        let ouverte = Forme2D::Polyligne { points: carre, fermee: false };
+        assert!((ouverte.longueur() - 5000.0).abs() < 1e-9);
+        assert_eq!(ouverte.surface(), None);
+        let cercle = Forme2D::Cercle { centre: DVec2::ZERO, rayon: 1000.0 };
+        assert!((cercle.longueur() - std::f64::consts::TAU * 1000.0).abs() < 1e-9);
+        assert!((cercle.surface().unwrap() - std::f64::consts::PI * 1e6).abs() < 1e-6);
+        assert_eq!(Forme2D::Ligne([DVec2::ZERO, DVec2::new(3.0, 4.0)]).longueur(), 5.0);
     }
 
     #[test]

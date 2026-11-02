@@ -231,13 +231,22 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         materiaux_parts.push(vec![None; parts.len()]);
         geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
+    // terrains : solide de l'épaisseur du type, sous la surface (cotes NGF ramenées à
+    // l'origine du projet) ; couleur et poché du matériau du type
     for t in &projet.terrains {
         let id = id_natif("terrain", &t.id);
         model.parent.insert(id, racine);
         model.children.entry(racine).or_default().push(id);
-        let tris = t.triangles()?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
-        materiaux_parts.push(vec![None]);
-        geoms.push(ProductGeom { id, parts: vec![Part { color: [0.48, 0.62, 0.38, 1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+        let type_terrain = projet.type_terrain(t);
+        let tris = t.solide(projet.ngf(), type_terrain.epaisseur)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
+        let materiau = type_terrain.materiau.as_ref().and_then(|n| projet.materiau(n));
+        let couleur = materiau.map_or([0.48, 0.62, 0.38, 1.0], |m| { let [r, g, b] = m.couleur.map(|c| c as f32 / 255.0); [r, g, b, 1.0] });
+        if let Some(m) = materiau {
+            let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
+            couches_coupe.push((id, coupe_materiau(projet, m, vec![neutre, neutre], crate::dessin::TRAIT_FORT_MM)));
+        }
+        materiaux_parts.push(vec![materiau.map(|m| m.nom.clone())]);
+        geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.map(|_| couleur)], motifs: vec![materiau.and_then(|m| motif_surface(projet, m, &mut table_motifs))] });
     }
     for l in &projet.limites_propriete {
         let id = id_natif("limite_propriete", &l.id);
@@ -260,8 +269,18 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         materiaux_parts.push(vec![None]);
         geoms.push(ProductGeom { id, parts: vec![Part { color: [0.65,0.68,0.72,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
-    let aretes = aretes_jointes(&geoms, &materiaux_parts);
+    let mut aretes = aretes_jointes(&geoms, &materiaux_parts);
+    // terrains : apparence lissée, sans arête
+    for t in &projet.terrains {
+        aretes.insert(id_natif("terrain", &t.id), Default::default());
+    }
     let mut scene = crate::scene::assemble_avec(model, geoms, path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| projet.nom.clone()), aretes);
+    for t in &projet.terrains {
+        if let Some(&o) = scene.object_of.get(&id_natif("terrain", &t.id)) {
+            let r = scene.objects[o as usize].opaque;
+            lisser(&mut scene.vertices[r.start as usize..(r.start + r.count) as usize]);
+        }
+    }
     scene.couches_coupe.extend(couches_coupe);
     scene.table_motifs = table_motifs.into_iter().map(|t| t.1).collect();
     // plans des bandes ramenés au repère de la scène (origine retirée)
@@ -277,6 +296,28 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     if scene.objects.is_empty() { scene.min = Vec3::splat(-5.0); scene.max = Vec3::splat(5.0); }
     scene.navigateur = Some(navigateur(projet));
     Ok(scene)
+}
+
+/// Normales lissées : chaque sommet prend la moyenne des normales des facettes qui le
+/// partagent, à moins de 45° de la sienne (le dessus d'un terrain s'arrondit, ses
+/// côtés restent nets).
+fn lisser(sommets: &mut [Vertex]) {
+    let cle = |v: &Vertex| v.pos.map(|x| (x * 1000.0).round() as i64);
+    let normale = |v: &Vertex| Vec3::new(v.normal[0] as f32, v.normal[1] as f32, v.normal[2] as f32) / 127.0;
+    let mut groupes: std::collections::HashMap<[i64; 3], Vec<usize>> = std::collections::HashMap::new();
+    for (i, v) in sommets.iter().enumerate() {
+        groupes.entry(cle(v)).or_default().push(i);
+    }
+    let normales: Vec<Vec3> = sommets.iter().map(normale).collect();
+    for indices in groupes.values() {
+        for &i in indices {
+            let n = normales[i];
+            let somme: Vec3 = indices.iter().map(|&j| normales[j]).filter(|m| m.dot(n) > std::f32::consts::FRAC_1_SQRT_2).sum();
+            let m = somme.normalize_or(n);
+            let v = &mut sommets[i];
+            v.normal = [(m.x * 127.0) as i8, (m.y * 127.0) as i8, (m.z * 127.0) as i8, v.normal[3]];
+        }
+    }
 }
 
 /// Motifs de surface d'un matériau pour le rendu : [premier plan | arrière-plan << 4,

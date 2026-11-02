@@ -292,7 +292,8 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         }
     }
     for t in &p.terrains {
-        let rep = w.mesh(&t.triangles()?, contexte);
+        // solide de l'épaisseur du type, cotes NGF ramenées à l'origine du projet
+        let rep = w.mesh(&t.solide(p.ngf(), p.type_terrain(t).epaisseur)?, contexte);
         let id = w.add(format!("IFCGEOGRAPHICELEMENT('{}',$,{},$,$,#{placement},{},$,.TERRAIN.)", guid(&t.id, None), texte(&t.nom), ref_(rep)));
         contenus.entry(bat).or_default().push(id);
     }

@@ -44,15 +44,27 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   Après sélection, **Modifier → Propriétés structurelles** permet de les modifier ;
   les commandes de déplacement, rotation, copie, suppression et l'historique leur
   sont applicables. Leurs quantités et classes `IfcColumn` / `IfcBeam` sont exportées.
-- **Modéliser → Terrain** : tracer un périmètre fermé et le fermer par clic droit,
-  F ou en cliquant le premier sommet. Régler les altitudes absolues des sommets en
-  millimètres ; activer « Placer des points cotés », saisir une altitude puis cliquer
-  à l'intérieur pour ajouter des points. Entrée ou Valider crée la surface triangulée.
-  Les altitudes restent modifiables dans les propriétés du terrain sélectionné.
+- **Modéliser → Terrain** : choisir le type (épaisseur, matériau), tracer un périmètre
+  fermé et le fermer par clic droit, F ou en cliquant le premier sommet. Les cotes sont
+  **NGF**, dans l'unité du projet, et se règlent à côté de chaque sommet (S1, S2…) et de
+  chaque point coté. Glisser un sommet ou un point le déplace ; glisser le milieu d'un
+  côté insère un sommet ; clic droit retire un point (ou un sommet, trois au moins).
+  « Placer des points cotés » ajoute un point à chaque clic, à la cote indiquée. L'aperçu
+  se teinte selon la cote, avec ses courbes de niveau. Entrée ou Valider crée le terrain :
+  un solide de l'épaisseur du type, triangulé (Delaunay contraint par le contour), à
+  l'apparence lissée et sans arête. **Modifier → Modifier tracé** reprend un terrain
+  sélectionné dans le même outil. Propriétés : type (Dupliquer pour en créer un),
+  épaisseur et matériau du type, cotes extrêmes, surface en plan.
+- **Origine et cote NGF** : **Début → Coordonnées**, ou un clic sur l'origine (trait
+  invisible d'une vue), règle X, Y et la cote NGF de l'origine du projet (niveau 0).
+  Le terrain suit ses cotes NGF : changer celle de l'origine remonte ou descend tout le
+  projet par rapport à lui (`editer {"action":"coordonnees_origine","coordonnees":[x,y,z]}`).
 - **Modéliser → Limite de propriété** : tracer un ou plusieurs contours fermés par
   polygone, rectangle ou cercle, comme pour les éléments horizontaux, puis valider.
   Chaque contour crée une limite indépendante sur le plan du niveau courant. Le terrain est
-  exporté en `IfcGeographicElement` et la limite en courbe `IfcAnnotation`.
+  exporté en `IfcGeographicElement` et la limite en courbe `IfcAnnotation`. Terrains et
+  limites sont créés dans la phase **Existant**, présente dans tout nouveau projet (et
+  ajoutée au besoin).
 - **Types de murs** : le sélecteur de l'outil Mur est organisé comme celui des éléments
   horizontaux, avec trois onglets — Mur, Mur composé, Cloison. La catégorie est un
   paramètre du type (`categorie` : `mur`, `compose`, `cloison`), choisi dans l'éditeur de

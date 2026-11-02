@@ -25,10 +25,19 @@ pub(super) struct EtatDessin2D {
     /// Contours fermés de l'élément horizontal en cours : parties et trémies, créés à la
     /// validation.
     pub dalle: Vec<Vec<[f64; 2]>>,
+    /// Terrain en cours : cote NGF de chaque sommet du contour (`dalle[0]`), points cotés
+    /// (cote NGF), cote des prochains points, placement de points.
     terrain_cotes: Vec<f64>,
     terrain_points: Vec<[f64; 3]>,
     terrain_altitude: f64,
     terrain_ajouter_point: bool,
+    /// Terrain existant repris par Modifier tracé (identifiant, nom), type choisi.
+    terrain_modifie: Option<(String, String)>,
+    terrain_type: Option<String>,
+    /// Poignée sous le curseur, poignée glissée et état d'avant le glissé (repris si le
+    /// terrain devient impossible à trianguler).
+    terrain_survol: Option<PoigneeTerrain>,
+    terrain_glisse: Option<(PoigneeTerrain, Vec<[f64; 2]>, Vec<f64>, Vec<[f64; 3]>)>,
     dernier_usage: Option<Usage>,
     pub edition_contour: Option<EditionContour>,
 }
@@ -43,6 +52,15 @@ pub(super) struct EditionContour {
     annotation: Option<Annotation>,
     fermees: Vec<bool>,
     raccord: Option<(usize, bool)>,
+}
+
+/// Poignée du terrain en cours : sommet du contour, point coté, milieu d'un côté (le
+/// glisser insère un sommet).
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum PoigneeTerrain {
+    Sommet(usize),
+    Point(usize),
+    Milieu(usize),
 }
 
 #[derive(Clone, Copy)]
@@ -226,9 +244,62 @@ impl ViewerApp {
         } else if trace.points.last().is_none_or(|q| q.distance(p) > 1e-6) { trace.points.push(p); }
         true
     }
+    /// Terrain repris par Modifier tracé, pendant l'outil Terrain.
+    pub(super) fn terrain_en_edition(&self) -> Option<&str> {
+        self.dessin2d.terrain_modifie.as_ref().filter(|_| self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain)).map(|(id, _)| id.as_str())
+    }
+
+    fn reinitialiser_terrain(&mut self) {
+        let d = &mut self.dessin2d;
+        d.terrain_cotes.clear();
+        d.terrain_points.clear();
+        d.terrain_ajouter_point = false;
+        d.terrain_modifie = None;
+        d.terrain_survol = None;
+        d.terrain_glisse = None;
+    }
+
+    /// Terrain du tracé en cours (contour fermé, cotes, points, type).
+    fn terrain_courant(&self) -> Option<crate::modele::site::Terrain> {
+        let contour = self.dessin2d.dalle.first()?;
+        let (id, nom) = self.dessin2d.terrain_modifie.clone().unwrap_or_else(|| (String::new(), "Terrain".into()));
+        Some(crate::modele::site::Terrain {
+            id,
+            nom,
+            contour: contour.iter().zip(&self.dessin2d.terrain_cotes).map(|(p, z)| [p[0], p[1], *z]).collect(),
+            points: self.dessin2d.terrain_points.clone(),
+            type_terrain: self.dessin2d.terrain_type.clone(),
+        })
+    }
+
+    /// Modifier tracé d'un terrain : l'outil Terrain reprend son contour, ses cotes, ses
+    /// points et son type ; la validation remplace le terrain.
+    fn commencer_edition_terrain(&mut self, id: &str) {
+        let Some(t) = self.natif.as_ref().and_then(|(p, _)| p.terrains.iter().find(|t| t.id == id)).cloned() else { return };
+        self.ruban_edition.activer_outil(crate::ruban::Outil::Terrain);
+        self.onglet_ruban = OngletRuban::Modeliser;
+        self.dessin2d.edition_contour = None;
+        self.dessin2d.dalle = vec![t.contour.iter().map(|p| [p[0], p[1]]).collect()];
+        self.dessin2d.terrain_cotes = t.contour.iter().map(|p| p[2]).collect();
+        self.dessin2d.terrain_points = t.points.clone();
+        self.dessin2d.terrain_altitude = t.contour.first().map_or(0.0, |p| p[2]);
+        self.dessin2d.terrain_ajouter_point = false;
+        self.dessin2d.terrain_type = t.type_terrain.clone();
+        self.dessin2d.terrain_modifie = Some((t.id.clone(), t.nom.clone()));
+        self.dessin2d.dernier_usage = Some(Usage::Terrain);
+        self.dessin2d.trace = Some(Trace::new(OutilDessin::Polyligne));
+        self.visibility_dirty = true;
+        self.status = "Terrain : glisser les sommets et les points, cotes à côté de chacun · Entrée : valider · Échap : annuler".into();
+    }
+
     pub(super) fn commencer_edition_contour(&mut self) {
         let ids = self.selection_bim();
         let Some((p, _)) = &self.natif else { return };
+        if ids.len() == 1 && p.terrains.iter().any(|t| t.id == ids[0]) {
+            let id = ids[0].clone();
+            self.commencer_edition_terrain(&id);
+            return;
+        }
         if ids.len() != 1 { self.status = "Sélectionnez un élément horizontal ou une polyligne.".into(); return; }
         let (altitude, contours, annotation) = if let Some(d) = p.dalles.iter().find(|d| d.id == ids[0]) {
             (p.niveau(&d.niveau).map_or(0.0, |n| n.altitude) + d.decalage, d.contours.clone(), None)
@@ -620,8 +691,10 @@ impl ViewerApp {
                             continue;
                         }
                         if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain) {
-                            self.dessin2d.terrain_cotes = vec![self.altitude_trace(); c.len()];
-                            self.dessin2d.terrain_altitude = self.altitude_trace();
+                            // cotes NGF : niveau du tracé, rapporté à la cote NGF de l'origine
+                            let ngf = self.natif.as_ref().map_or(0.0, |(p, _)| p.ngf()) + self.altitude_trace();
+                            self.dessin2d.terrain_cotes = vec![ngf; c.len()];
+                            self.dessin2d.terrain_altitude = ngf;
                         }
                         self.dessin2d.dalle.push(c);
                         if let Some(e) = &mut self.dessin2d.edition_contour { e.fermees.push(true); }
@@ -673,16 +746,12 @@ impl ViewerApp {
             self.dessin2d.guides.clear();
             self.dessin2d.saisie.clear();
             self.dessin2d.dalle.clear();
-            self.dessin2d.terrain_cotes.clear();
-            self.dessin2d.terrain_points.clear();
-            self.dessin2d.terrain_ajouter_point = false;
+            self.reinitialiser_terrain();
             return;
         };
         if self.dessin2d.dernier_usage.is_some_and(|u| u != usage) {
             self.dessin2d.dalle.clear();
-            self.dessin2d.terrain_cotes.clear();
-            self.dessin2d.terrain_points.clear();
-            self.dessin2d.terrain_ajouter_point = false;
+            self.reinitialiser_terrain();
             self.dessin2d.trace = None;
         }
         self.dessin2d.dernier_usage = Some(usage);
@@ -832,10 +901,9 @@ impl ViewerApp {
             self.selected = ids.last().map(|id| scene::id_natif("limite_propriete", id));
             self.reveal = self.selected;
         } else if valider && usage == Some(Usage::Terrain) {
-            let Some(contour) = self.dessin2d.dalle.first().cloned() else { self.dessin2d.message = Some("Tracez d'abord un contour fermé.".into()); return; };
-            let sommets = contour.iter().zip(&self.dessin2d.terrain_cotes).map(|(p, z)| [p[0], p[1], *z]).collect();
-            let commande = Commande::Terrain { terrain: crate::modele::site::Terrain { id: String::new(), nom: "Terrain".into(), contour: sommets, points: self.dessin2d.terrain_points.clone() } };
-            match self.executer_bim(commande) {
+            // création, ou terrain repris par Modifier tracé (même identifiant)
+            let Some(terrain) = self.terrain_courant() else { self.dessin2d.message = Some("Tracez d'abord un contour fermé.".into()); return; };
+            match self.executer_bim(Commande::Terrain { terrain }) {
                 Ok(ids) => {
                     if let Some(id) = ids.first() {
                         self.selected = Some(scene::id_natif("terrain", id));
@@ -858,7 +926,12 @@ impl ViewerApp {
                 }
                 let mut annotation = modele.clone();
                 if i > 0 { annotation.id.clear(); }
-                annotation.forme = AnnotationForme::Polyligne { points: points.clone(), fermee };
+                // le remplissage reste tant que la polyligne est fermée
+                let remplissage = match &modele.forme {
+                    AnnotationForme::Polyligne { remplissage, .. } if fermee => remplissage.clone(),
+                    _ => None,
+                };
+                annotation.forme = AnnotationForme::Polyligne { points: points.clone(), fermee, remplissage };
                 match projet.executer(Commande::Annoter { annotation }) {
                     Ok((p, nouveaux)) => { projet = p; ids.extend(nouveaux); }
                     Err(e) => { self.dessin2d.message = Some(e); return; }
@@ -882,9 +955,7 @@ impl ViewerApp {
             }
         }
         self.dessin2d.dalle.clear();
-        self.dessin2d.terrain_cotes.clear();
-        self.dessin2d.terrain_points.clear();
-        self.dessin2d.terrain_ajouter_point = false;
+        self.reinitialiser_terrain();
         self.dessin2d.edition_contour = None;
         self.visibility_dirty = true;
         self.coupe_dirty = true;
@@ -898,6 +969,49 @@ impl ViewerApp {
         self.alignement_plan = false;
         self.arete_alignement = None;
         self.ruban_edition.annuler();
+    }
+
+    /// Terrain en cours : altitude absolue de chaque sommet du contour (S1, S2…) et de
+    /// chaque point coté (1, 2… ; × le retire), modifiable à côté du point, dans l'unité
+    /// du projet.
+    pub(super) fn cotes_terrain(&mut self, ui: &egui::Ui, rect: egui::Rect) {
+        if self.dessin2d.dalle.is_empty() || !self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain) {
+            return;
+        }
+        let (bleu, vert) = (Color32::from_rgb(0, 120, 215), Color32::from_rgb(20, 160, 60));
+        let sommets: Vec<DVec2> = self.dessin2d.dalle[0].iter().map(|p| DVec2::from_array(*p)).collect();
+        let points: Vec<DVec2> = self.dessin2d.terrain_points.iter().map(|p| DVec2::new(p[0], p[1])).collect();
+        let mut retrait = None;
+        for (point, (nom, couleur, k)) in sommets.iter().zip((0..).map(|i| (format!("S{}", i + 1), bleu, i))).chain(points.iter().zip((0..).map(|i| (format!("{}", i + 1), vert, sommets.len() + i)))) {
+            let Some(q) = self.vers_ecran(rect, *point) else { continue };
+            if !rect.contains(q) {
+                continue;
+            }
+            egui::Area::new(egui::Id::unique(("cote_terrain", k)))
+                .fixed_pos(q + egui::vec2(7.0, -24.0))
+                .constrain_to(rect)
+                .show(ui.ctx(), |ui| {
+                    egui::Frame::NONE.fill(Color32::from_white_alpha(225)).corner_radius(3.0).inner_margin(egui::Margin::symmetric(3, 1)).show(ui, |ui| {
+                        ui.spacing_mut().item_spacing.x = 3.0;
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(nom).color(couleur).small().strong());
+                            let z = match k.checked_sub(sommets.len()) {
+                                None => self.dessin2d.terrain_cotes.get_mut(k),
+                                Some(j) => self.dessin2d.terrain_points.get_mut(j).map(|p| &mut p[2]),
+                            };
+                            if let Some(z) = z {
+                                ui.add(egui::DragValue::new(z).speed(10.0).dimensions()).on_hover_text("Altitude absolue");
+                            }
+                            if let Some(j) = k.checked_sub(sommets.len()) && ui.small_button("×").on_hover_text("Retirer ce point").clicked() {
+                                retrait = Some(j);
+                            }
+                        });
+                    });
+                });
+        }
+        if let Some(j) = retrait {
+            self.dessin2d.terrain_points.remove(j);
+        }
     }
 
     /// Options et actions de la commande active, regroupées en haut à gauche de la vue.
@@ -919,7 +1033,7 @@ impl ViewerApp {
                         if edition || options_dessin || options_modifier {
                             egui::ScrollArea::horizontal().id_salt("options_barre_commande")
                                 .max_width((rect.width() - if actif { 190.0 } else { 30.0 }).max(80.0))
-                                .max_height(if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain) { 250.0 } else { 75.0 })
+                                .max_height(75.0)
                                 .auto_shrink([true, true]).show(ui, |ui| {
                                     if edition { self.options_edition_contour(ui); }
                                     else if options_dessin { self.options_trace(ui); }
@@ -975,22 +1089,154 @@ impl ViewerApp {
         self.enregistrer_formes(formes);
     }
 
+    /// Aperçu du terrain en cours, mis à jour à chaque glissé : surface teintée selon la
+    /// cote (bas : vert, haut : sable), courbes de niveau à un pas rond, contour fin.
+    fn apercu_terrain(&self, painter: &egui::Painter, rect: egui::Rect) {
+        let Some(contour) = self.dessin2d.dalle.first() else { return };
+        let ngf = self.natif.as_ref().map_or(0.0, |(p, _)| p.ngf());
+        let bleu = Color32::from_rgb(0, 120, 215);
+        let Some(Ok(tris)) = self.terrain_courant().map(|t| t.triangles()) else {
+            let pts: Vec<DVec2> = contour.iter().map(|p| DVec2::from_array(*p)).collect();
+            self.apercu_surface(painter, rect, std::slice::from_ref(&pts));
+            return;
+        };
+        let (bas, haut) = tris.iter().flatten().fold((f64::MAX, f64::MIN), |(a, b), p| (a.min(p.z), b.max(p.z)));
+        let etendue = (haut - bas).max(1e-6);
+        let teinte = |z: f64| {
+            let t = ((z - bas) / etendue) as f32;
+            let (a, b, u) = if t < 0.5 { ([62.0, 138.0, 112.0], [150.0, 182.0, 96.0], t * 2.0) } else { ([150.0, 182.0, 96.0], [200.0, 158.0, 104.0], t * 2.0 - 1.0) };
+            let c: [f32; 3] = std::array::from_fn(|k| a[k] + (b[k] - a[k]) * u);
+            Color32::from_rgba_unmultiplied(c[0] as u8, c[1] as u8, c[2] as u8, 130)
+        };
+        let ecran = |p: DVec3| self.ecran_3d(rect, DVec3::new(p.x, p.y, p.z - ngf));
+        let mut maillage = egui::Mesh::default();
+        for t in &tris {
+            let Some(e) = t.iter().map(|p| ecran(*p)).collect::<Option<Vec<_>>>() else { continue };
+            let k = maillage.vertices.len() as u32;
+            for (p, q) in t.iter().zip(e) {
+                maillage.colored_vertex(q, teinte(p.z));
+            }
+            maillage.add_triangle(k, k + 1, k + 2);
+        }
+        painter.add(egui::Shape::mesh(maillage));
+        // courbes de niveau : une dizaine au plus, au pas rond le plus fin
+        if haut - bas > 1.0 {
+            let pas = [50.0, 100.0, 200.0, 250.0, 500.0, 1000.0, 2000.0, 5000.0, 10_000.0].into_iter().find(|p| etendue / p <= 12.0).unwrap_or(20_000.0);
+            let trait_ = egui::Stroke::new(1.0, Color32::from_white_alpha(150));
+            for t in &tris {
+                let mut z = (t.iter().map(|p| p.z).fold(f64::MAX, f64::min) / pas).ceil() * pas;
+                let zmax = t.iter().map(|p| p.z).fold(f64::MIN, f64::max);
+                while z < zmax {
+                    let coupe: Vec<DVec3> = (0..3).filter_map(|i| {
+                        let (a, b) = (t[i], t[(i + 1) % 3]);
+                        ((a.z - z) * (b.z - z) < 0.0).then(|| a + (b - a) * ((z - a.z) / (b.z - a.z)))
+                    }).collect();
+                    if let [a, b] = coupe[..] && let (Some(a), Some(b)) = (ecran(a), ecran(b)) {
+                        painter.line_segment([a, b], trait_);
+                    }
+                    z += pas;
+                }
+            }
+        }
+        let bord: Vec<egui::Pos2> = contour.iter().zip(&self.dessin2d.terrain_cotes).filter_map(|(p, z)| ecran(DVec3::new(p[0], p[1], *z))).collect();
+        painter.add(egui::Shape::closed_line(bord, egui::Stroke::new(1.2, bleu.gamma_multiply(0.8))));
+    }
+
+    /// Poignées du terrain en cours à l'écran : sommets, points cotés, milieux des côtés.
+    fn poignees_terrain(&self, rect: egui::Rect) -> Vec<(PoigneeTerrain, egui::Pos2)> {
+        let Some(contour) = self.dessin2d.dalle.first() else { return Vec::new() };
+        let n = contour.len();
+        let ecran = |p: DVec2| self.vers_ecran(rect, p);
+        let sommets = contour.iter().enumerate().filter_map(|(i, p)| Some((PoigneeTerrain::Sommet(i), ecran(DVec2::from_array(*p))?)));
+        let points = self.dessin2d.terrain_points.iter().enumerate().filter_map(|(i, p)| Some((PoigneeTerrain::Point(i), ecran(DVec2::new(p[0], p[1]))?)));
+        let milieux = (0..n).filter_map(|i| Some((PoigneeTerrain::Milieu(i), ecran((DVec2::from_array(contour[i]) + DVec2::from_array(contour[(i + 1) % n])) * 0.5)?)));
+        sommets.chain(points).chain(milieux).collect()
+    }
+
+    /// Terrain en cours : survol des poignées, glissé d'un sommet ou d'un point (un milieu
+    /// insère un sommet à la cote moyenne), clic droit : retirer, clic : point coté si
+    /// « Placer des points cotés ». Un glissé qui rend le terrain impossible est repris.
+    fn souris_terrain(&mut self, ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response) {
+        let poignees = self.poignees_terrain(rect);
+        let proche = |q: egui::Pos2| poignees.iter().filter(|(_, e)| e.distance(q) < 10.0).min_by(|a, b| a.1.distance(q).total_cmp(&b.1.distance(q))).map(|(p, _)| *p);
+        if self.dessin2d.terrain_glisse.is_none() {
+            self.dessin2d.terrain_survol = resp.hover_pos().and_then(proche);
+        }
+        let d = &mut self.dessin2d;
+        if resp.drag_started_by(PointerButton::Primary) && let Some(p) = ui.input(|i| i.pointer.press_origin()).and_then(proche) {
+            let avant = (d.dalle[0].clone(), d.terrain_cotes.clone(), d.terrain_points.clone());
+            let p = match p {
+                PoigneeTerrain::Milieu(i) => {
+                    let n = d.dalle[0].len();
+                    let (a, b) = (DVec2::from_array(d.dalle[0][i]), DVec2::from_array(d.dalle[0][(i + 1) % n]));
+                    d.dalle[0].insert(i + 1, ((a + b) * 0.5).to_array());
+                    let z = (d.terrain_cotes[i] + d.terrain_cotes[(i + 1) % n]) * 0.5;
+                    d.terrain_cotes.insert(i + 1, z);
+                    PoigneeTerrain::Sommet(i + 1)
+                }
+                p => p,
+            };
+            d.terrain_glisse = Some((p, avant.0, avant.1, avant.2));
+            d.terrain_survol = Some(p);
+        }
+        if let Some((p, ..)) = self.dessin2d.terrain_glisse
+            && let Some(q) = resp.interact_pointer_pos().and_then(|q| self.depuis_ecran(rect, q))
+        {
+            let d = &mut self.dessin2d;
+            match p {
+                PoigneeTerrain::Sommet(i) => if let Some(s) = d.dalle[0].get_mut(i) { *s = q.to_array(); },
+                PoigneeTerrain::Point(i) => if let Some(s) = d.terrain_points.get_mut(i) { s[0] = q.x; s[1] = q.y; },
+                PoigneeTerrain::Milieu(_) => {}
+            }
+        }
+        if resp.drag_stopped() && let Some((_, contour, cotes, points)) = self.dessin2d.terrain_glisse.take() {
+            match self.terrain_courant().map(|t| t.triangles()) {
+                Some(Err(e)) => {
+                    let d = &mut self.dessin2d;
+                    (d.dalle[0], d.terrain_cotes, d.terrain_points) = (contour, cotes, points);
+                    d.message = Some(e);
+                }
+                _ => self.dessin2d.message = None,
+            }
+        }
+        // clic droit sur une poignée : retirer le point ou le sommet (trois au moins)
+        if resp.secondary_clicked() && let Some(p) = resp.interact_pointer_pos().and_then(proche) {
+            let d = &mut self.dessin2d;
+            match p {
+                PoigneeTerrain::Point(i) => { d.terrain_points.remove(i); }
+                PoigneeTerrain::Sommet(i) if d.dalle[0].len() > 3 => {
+                    let avant = (d.dalle[0].clone(), d.terrain_cotes.clone());
+                    d.dalle[0].remove(i);
+                    d.terrain_cotes.remove(i);
+                    if let Some(Err(e)) = self.terrain_courant().map(|t| t.triangles()) {
+                        (self.dessin2d.dalle[0], self.dessin2d.terrain_cotes) = avant;
+                        self.dessin2d.message = Some(e);
+                    }
+                }
+                PoigneeTerrain::Sommet(_) => self.dessin2d.message = Some("Le contour garde au moins trois sommets.".into()),
+                PoigneeTerrain::Milieu(_) => {}
+            }
+            self.dessin2d.terrain_survol = None;
+        }
+        if self.dessin2d.terrain_ajouter_point && resp.clicked() && self.dessin2d.terrain_survol.is_none()
+            && let Some(p) = resp.interact_pointer_pos().and_then(|q| self.depuis_ecran(rect, q))
+        {
+            self.dessin2d.terrain_points.push([p.x, p.y, self.dessin2d.terrain_altitude]);
+            match self.terrain_courant().map(|t| t.triangles()) {
+                Some(Err(e)) => { self.dessin2d.terrain_points.pop(); self.dessin2d.message = Some(e); }
+                _ => self.dessin2d.message = None,
+            }
+        }
+        if self.dessin2d.terrain_survol.is_some() {
+            ui.ctx().set_cursor_icon(if self.dessin2d.terrain_glisse.is_some() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab });
+        }
+    }
+
     /// Souris dans la vue avec un outil de dessin 2D : point accroché sous le curseur,
     /// clic gauche : point, clic droit : terminer (comme Entrée).
     pub(super) fn souris_dessin(&mut self, ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response) {
         if !self.dessin2d.dalle.is_empty() && self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain) {
-            if self.dessin2d.terrain_ajouter_point && resp.clicked() {
-                if let Some(p) = resp.interact_pointer_pos().and_then(|q| self.depuis_ecran(rect, q)) {
-                    let mut points = self.dessin2d.terrain_points.clone();
-                    points.push([p.x, p.y, self.dessin2d.terrain_altitude]);
-                    let contour = self.dessin2d.dalle[0].iter().zip(&self.dessin2d.terrain_cotes).map(|(p, z)| [p[0], p[1], *z]).collect();
-                    let terrain = crate::modele::site::Terrain { id: String::new(), nom: String::new(), contour, points: points.clone() };
-                    match terrain.triangles() {
-                        Ok(_) => { self.dessin2d.terrain_points = points; self.dessin2d.message = None; }
-                        Err(e) => self.dessin2d.message = Some(e),
-                    }
-                }
-            }
+            self.souris_terrain(ui, rect, resp);
             self.dessin2d.point = None;
             return;
         }
@@ -1208,7 +1454,7 @@ impl ViewerApp {
             }
         }
         // contours déjà fermés de l'élément horizontal en cours (parties et trémies)
-        if self.dessin2d.edition_contour.is_some() || self.usage_dessin().is_some_and(|(u, _)| matches!(u, Usage::Surface | Usage::Terrain | Usage::LimitePropriete | Usage::Cadrage)) {
+        if self.dessin2d.edition_contour.is_some() || self.usage_dessin().is_some_and(|(u, _)| matches!(u, Usage::Surface | Usage::LimitePropriete | Usage::Cadrage)) {
             for (i, c) in self.dessin2d.dalle.iter().enumerate() {
                 let pts: Vec<DVec2> = c.iter().map(|p| DVec2::from_array(*p)).collect();
                 if let Some(edit) = &self.dessin2d.edition_contour {
@@ -1228,19 +1474,28 @@ impl ViewerApp {
                 }
             }
         }
+        // terrain en cours : surface colorée selon la cote, contour fin, poignées ; les
+        // cotes sont à côté de chaque point (cotes_terrain)
         if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain) {
-            if let Some(contour) = self.dessin2d.dalle.first() {
-                for (i, p) in contour.iter().enumerate() {
-                    if let Some(q) = self.vers_ecran(rect, DVec2::from_array(*p)) {
-                        painter.circle_filled(q, 4.0, bleu);
-                        painter.text(q + egui::vec2(6.0, -6.0), egui::Align2::LEFT_BOTTOM, format!("S{}", i + 1), egui::FontId::proportional(12.0), bleu);
+            self.apercu_terrain(&painter, rect);
+            for (p, q) in self.poignees_terrain(rect) {
+                let survol = self.dessin2d.terrain_survol == Some(p);
+                match p {
+                    PoigneeTerrain::Sommet(_) | PoigneeTerrain::Point(_) => {
+                        let c = if matches!(p, PoigneeTerrain::Point(_)) { vert } else { bleu };
+                        painter.circle_filled(q, if survol { 7.0 } else { 5.0 }, if survol { c } else { Color32::WHITE });
+                        painter.circle_stroke(q, if survol { 7.0 } else { 5.0 }, egui::Stroke::new(2.0, c));
                     }
-                }
-            }
-            for (i, p) in self.dessin2d.terrain_points.iter().enumerate() {
-                if let Some(q) = self.vers_ecran(rect, DVec2::new(p[0], p[1])) {
-                    painter.circle_filled(q, 4.0, vert);
-                    painter.text(q + egui::vec2(6.0, -6.0), egui::Align2::LEFT_BOTTOM, format!("{}", i + 1), egui::FontId::proportional(12.0), vert);
+                    // milieu : insérer un sommet en le glissant
+                    PoigneeTerrain::Milieu(_) => {
+                        let r = if survol { 5.0 } else { 3.5 };
+                        painter.circle_filled(q, r, Color32::from_white_alpha(if survol { 255 } else { 200 }));
+                        painter.circle_stroke(q, r, egui::Stroke::new(1.2, bleu.gamma_multiply(if survol { 1.0 } else { 0.6 })));
+                        if survol {
+                            painter.line_segment([q - egui::vec2(2.5, 0.0), q + egui::vec2(2.5, 0.0)], egui::Stroke::new(1.2, bleu));
+                            painter.line_segment([q - egui::vec2(0.0, 2.5), q + egui::vec2(0.0, 2.5)], egui::Stroke::new(1.2, bleu));
+                        }
+                    }
                 }
             }
         }
@@ -1284,7 +1539,8 @@ impl ViewerApp {
             if e.segment.is_some() { "Trait sélectionné : Suppr pour le retirer ; glisser un sommet pour le déplacer" }
             else { "Sélectionner un trait ou glisser un sommet ; cliquer un sommet ouvert pour prolonger" }
         } else if usage.is_some_and(|(u, _)| u == Usage::Terrain) && !self.dessin2d.dalle.is_empty() {
-            "Régler les altitudes ; cliquer dans le terrain pour ajouter un point coté ; Entrée valide"
+            if self.dessin2d.terrain_ajouter_point { "Cliquer dans le terrain pour placer un point coté · glisser un point pour le déplacer · clic droit : retirer · Entrée : valider" }
+            else { "Glisser un sommet ou un point · glisser un milieu de côté pour ajouter un sommet · clic droit : retirer · cotes NGF à côté de chaque point · Entrée : valider" }
         } else if let Some(m) = modification { m }
         else { self.dessin2d.trace.as_ref().map_or("", |t| t.invite()) };
         let ligne = match &self.dessin2d.message {
@@ -1410,23 +1666,28 @@ impl ViewerApp {
             Some(Usage::Mur) => self.options_trace_mur(ui),
             Some(Usage::Escalier | Usage::GardeCorps | Usage::Cadrage) => {}
             Some(Usage::Terrain) => {
-                if !self.dessin2d.dalle.is_empty() {
-                    ui.label("Altitudes absolues des sommets du contour (mm) :");
-                    egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
-                        for (i, z) in self.dessin2d.terrain_cotes.iter_mut().enumerate() {
-                            ui.horizontal(|ui| { ui.label(format!("Sommet {}", i + 1)); ui.add(egui::DragValue::new(z).speed(10.0).suffix(" mm")); });
+                // type (épaisseur) ; cotes NGF des sommets et des points : à côté de chacun
+                // dans la vue
+                let types = self.natif.as_ref().map(|(p, _)| p.types_terrains_disponibles()).unwrap_or_default();
+                ui.horizontal(|ui| {
+                    ui.label("Type");
+                    let actuel = self.dessin2d.terrain_type.as_ref().and_then(|id| types.iter().find(|t| &t.id == id)).or(types.first());
+                    let libelle = |t: &crate::modele::site::TypeTerrain| format!("{} · {}", t.nom, crate::options::unite().afficher(t.epaisseur));
+                    egui::ComboBox::from_id_salt("type_terrain_trace").selected_text(actuel.map(libelle).unwrap_or_default()).show_ui(ui, |ui| {
+                        for t in &types {
+                            if ui.selectable_label(actuel.is_some_and(|a| a.id == t.id), libelle(t)).clicked() {
+                                // le type par défaut n'est pas enregistré tant que le projet n'en a aucun
+                                self.dessin2d.terrain_type = self.natif.as_ref().is_some_and(|(p, _)| !p.types_terrains.is_empty()).then(|| t.id.clone());
+                            }
                         }
-                        let mut retrait = None;
-                        for (i, p) in self.dessin2d.terrain_points.iter_mut().enumerate() {
-                            ui.horizontal(|ui| { ui.label(format!("Point {}", i + 1)); ui.add(egui::DragValue::new(&mut p[2]).speed(10.0).suffix(" mm")); if ui.button("×").clicked() { retrait = Some(i); } });
-                        }
-                        if let Some(i) = retrait { self.dessin2d.terrain_points.remove(i); }
                     });
-                    ui.horizontal(|ui| {
+                    if !self.dessin2d.dalle.is_empty() {
+                        ui.separator();
                         ui.checkbox(&mut self.dessin2d.terrain_ajouter_point, "Placer des points cotés");
-                        ui.add(egui::DragValue::new(&mut self.dessin2d.terrain_altitude).speed(10.0).prefix("Altitude ").suffix(" mm"));
-                    });
-                }
+                        ui.label("Cote NGF");
+                        ui.add(egui::DragValue::new(&mut self.dessin2d.terrain_altitude).speed(10.0).dimensions()).on_hover_text("Cote NGF des prochains points cotés");
+                    }
+                });
             }
             Some(Usage::Surface | Usage::LimitePropriete) => {
                 ui.horizontal(|ui| {

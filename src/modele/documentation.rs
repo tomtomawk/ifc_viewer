@@ -37,6 +37,9 @@ pub enum AnnotationForme {
         points: Vec<[f64; 2]>,
         #[serde(default)]
         fermee: bool,
+        /// Polyligne fermée : remplissage (motif d'un matériau ou choisi).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        remplissage: Option<RemplissageContour>,
     },
     Spline {
         points: Vec<[f64; 2]>,
@@ -67,7 +70,7 @@ impl AnnotationForme {
         let v = |p: &[f64; 2]| DVec2::from_array(*p);
         Some(match self {
             Self::Ligne { debut, fin } => F::Ligne([v(debut), v(fin)]),
-            Self::Polyligne { points, fermee } => F::Polyligne { points: points.iter().map(v).collect(), fermee: *fermee },
+            Self::Polyligne { points, fermee, .. } => F::Polyligne { points: points.iter().map(v).collect(), fermee: *fermee },
             Self::Spline { points, fermee } => F::Spline { points: points.iter().map(v).collect(), fermee: *fermee },
             Self::Cercle { centre, rayon } => F::Cercle { centre: v(centre), rayon: *rayon },
             Self::Arc { points } => F::Arc(points.map(|p| v(&p))),
@@ -81,13 +84,79 @@ impl AnnotationForme {
         let a = |p: &DVec2| p.to_array();
         match f {
             F::Ligne([d, e]) => Self::Ligne { debut: a(d), fin: a(e) },
-            F::Polyligne { points, fermee } => Self::Polyligne { points: points.iter().map(a).collect(), fermee: *fermee },
+            F::Polyligne { points, fermee } => Self::Polyligne { points: points.iter().map(a).collect(), fermee: *fermee, remplissage: None },
             F::Spline { points, fermee } => Self::Spline { points: points.iter().map(a).collect(), fermee: *fermee },
             F::Cercle { centre, rayon } => Self::Cercle { centre: a(centre), rayon: *rayon },
             F::Arc(p) => Self::Arc { points: p.map(|q| q.to_array()) },
         }
     }
 
+}
+
+/// Remplissage d'une polyligne fermée : motif de coupe d'un matériau (premier plan, encre
+/// et arrière-plan du matériau), ou motif choisi (hachures du projet ou aplat) à l'encre
+/// gris foncé.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(tag = "source", rename_all = "snake_case")]
+pub enum RemplissageContour {
+    Materiau { materiau: String },
+    Motif { motif: MotifCoupe },
+}
+
+impl RemplissageContour {
+    /// Encre d'un motif choisi.
+    pub const ENCRE: [u8; 3] = [70, 70, 70];
+
+    pub fn libelle(&self) -> String {
+        match self {
+            Self::Materiau { materiau } => format!("Matériau : {materiau}"),
+            Self::Motif { motif } => format!("Motif : {}", motif.libelle()),
+        }
+    }
+}
+
+/// Primitives du remplissage d'un contour (mm du plan de la vue) : arrière-plan (aplat
+/// s'il n'est pas blanc, ou hachures) puis premier plan, hachures à l'échelle de la vue.
+fn primitives_remplissage(p: &Projet, r: &RemplissageContour, contour: &[[f64; 2]], echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
+    use crate::rvt::vues::{GrilleMotif, Motif, hachures_plan};
+    let (motif, encre, fond) = match r {
+        RemplissageContour::Materiau { materiau } => match p.materiau(materiau) {
+            Some(m) => (m.motif.clone(), m.encre_coupe(), Some(m.fond_coupe())),
+            None => return Vec::new(),
+        },
+        RemplissageContour::Motif { motif } => (motif.clone(), RemplissageContour::ENCRE, None),
+    };
+    let contours = vec![contour.iter().map(|q| [q[0] as f32, q[1] as f32]).collect()];
+    let tris: Vec<[[f64; 2]; 3]> = crate::texte::trianguler(contours).iter().map(|t| t.map(|q| [q[0] as f64, q[1] as f64])).collect();
+    let couleur = |c: [u8; 3]| [c[0], c[1], c[2], 255];
+    let aplat = |c: [u8; 3]| Primitive {
+        forme: Forme::Triangles(tris.iter().map(|t| t.map(|q| pt(DVec2::from_array(q)))).collect()),
+        style: Style { couleur: couleur(c), epaisseur: 0.0 },
+        role: Role::Hachure,
+        element: None,
+    };
+    let hachures = |m: &MotifCoupe, c: [u8; 3]| -> Option<Primitive> {
+        let d = p.definition_motif(m)?;
+        let motif = Motif {
+            nom: d.nom.clone(),
+            modele: false,
+            grilles: d.lignes.iter().map(|l| GrilleMotif { angle: l.angle.to_radians(), origine: l.origine, glissement: l.glissement, decalage: l.pas, tirets: l.tirets.iter().map(|t| t.abs()).collect() }).collect(),
+        };
+        let segments = hachures_plan(&tris, &motif, echelle, 20_000);
+        Some(Primitive { forme: Forme::Segments(segments.into_iter().map(|s| s.map(|q| pt(DVec2::from_array(q)))).collect()), style: Style { couleur: couleur(c), epaisseur: 0.0 }, role: Role::Hachure, element: None })
+    };
+    let mut out = Vec::new();
+    match fond {
+        Some((MotifCoupe::Uni, c)) if c != [255, 255, 255] => out.push(aplat(c)),
+        Some((m, c)) if m != MotifCoupe::Uni => out.extend(hachures(&m, c)),
+        _ => {}
+    }
+    match motif {
+        MotifCoupe::Uni => out.push(aplat(encre)),
+        MotifCoupe::Vide | MotifCoupe::Isolation => {}
+        m => out.extend(hachures(&m, encre)),
+    }
+    out
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -309,6 +378,10 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
                 pt(DVec2::from_array(*fin)),
             )),
             AnnotationForme::Polyligne { .. } | AnnotationForme::Spline { .. } | AnnotationForme::Cercle { .. } | AnnotationForme::Arc { .. } => {
+                // remplissage sous le contour
+                if let AnnotationForme::Polyligne { points, fermee: true, remplissage: Some(r) } = &a.forme && points.len() >= 3 {
+                    out.extend(primitives_remplissage(p, r, points, v.echelle, &pt));
+                }
                 for l in a.forme.forme_2d().map(|f| f.polylignes()).unwrap_or_default() {
                     out.push(Primitive {
                         forme: Forme::Polyligne { points: l.into_iter().map(pt).collect(), fermee: false },
@@ -1348,6 +1421,35 @@ mod tests {
         // l'occurrence sans appui forme son propre groupe
         assert!(t.contains(&vec!["F1".to_string(), "2".into(), "oui".into(), "Pierre".into()]), "{t:?}");
         assert!(t.contains(&vec!["F1".to_string(), "1".into(), "non".into(), "Pierre".into()]), "{t:?}");
+    }
+
+    #[test]
+    fn polyligne_fermee_remplie() {
+        let (mut p, _) = depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();
+        let niveau = p.niveaux[0].id.clone();
+        let vue = p.ajouter_vue_plan(&niveau, 1200.0).unwrap();
+        let contour = vec![[0.0, 0.0], [2000.0, 0.0], [2000.0, 1000.0], [0.0, 1000.0]];
+        let annotation = |remplissage, fermee| Annotation { id: "zone".into(), vue: vue.clone(), hauteur: 2.5, forme: AnnotationForme::Polyligne { points: contour.clone(), fermee, remplissage } };
+        let hachures = |p: &Projet| annotations(p, p.vues.iter().find(|v| v.id == vue).unwrap()).into_iter().filter(|x| x.role == Role::Hachure).collect::<Vec<_>>();
+        // motif choisi : hachures de la définition, encre gris foncé
+        p.annotations = vec![annotation(Some(RemplissageContour::Motif { motif: MotifCoupe::Croisees }), true)];
+        p.verifier().unwrap();
+        let h = hachures(&p);
+        assert!(matches!(&h[..], [x] if matches!(&x.forme, Forme::Segments(s) if s.len() > 10) && x.style.couleur == [70, 70, 70, 255]));
+        // matériau : son motif de coupe ; aplat : triangles
+        let nom = p.materiaux[0].nom.clone();
+        p.annotations = vec![annotation(Some(RemplissageContour::Materiau { materiau: nom }), true)];
+        p.verifier().unwrap();
+        assert!(!hachures(&p).is_empty());
+        p.annotations = vec![annotation(Some(RemplissageContour::Motif { motif: MotifCoupe::Uni }), true)];
+        assert!(matches!(&hachures(&p)[..], [x] if matches!(&x.forme, Forme::Triangles(t) if t.len() == 2)));
+        // relu tel quel ; refusé sur une polyligne ouverte ou un matériau absent
+        let relu: Annotation = serde_json::from_str(&serde_json::to_string(&p.annotations[0]).unwrap()).unwrap();
+        assert!(matches!(relu.forme, AnnotationForme::Polyligne { remplissage: Some(RemplissageContour::Motif { motif: MotifCoupe::Uni }), .. }));
+        p.annotations = vec![annotation(Some(RemplissageContour::Motif { motif: MotifCoupe::Uni }), false)];
+        assert!(p.verifier().is_err());
+        p.annotations = vec![annotation(Some(RemplissageContour::Materiau { materiau: "Inconnu".into() }), true)];
+        assert!(p.verifier().is_err());
     }
 
     #[test]

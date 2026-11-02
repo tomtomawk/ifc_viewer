@@ -274,4 +274,156 @@ impl ViewerApp {
             None => Ok(nouveau),
         }
     }
+
+    /// Terrains sélectionnés : type (épaisseur, matériau : modifiés pour tous les terrains
+    /// du type ; Dupliquer en crée un), cotes NGF extrêmes, surface en plan. Retourne le
+    /// projet modifié.
+    pub(super) fn proprietes_terrains(&self, ui: &mut egui::Ui, ids: &[String]) -> Option<Projet> {
+        let (projet, _) = self.natif.as_ref()?;
+        let terrains: Vec<&crate::modele::site::Terrain> = projet.terrains.iter().filter(|t| ids.contains(&t.id)).collect();
+        if terrains.is_empty() {
+            return None;
+        }
+        let types = projet.types_terrains_disponibles();
+        let (type_actuel, mixte) = melange(terrains.iter().map(|t| projet.type_terrain(t)));
+        let type_actuel = type_actuel?;
+        let mut p = projet.clone();
+        // le type par défaut devient un type du projet dès qu'on le modifie
+        let enregistrer_types = |p: &mut Projet| if p.types_terrains.is_empty() { p.types_terrains = types.clone(); };
+        let mut modifie = false;
+        ui.label(RichText::new(format!("Terrain ({})", terrains.len())).strong());
+        egui::Grid::new("terrains").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
+            ui.label("Type");
+            ui.horizontal(|ui| {
+                let texte = if mixte { "Varié".to_string() } else { type_actuel.nom.clone() };
+                egui::ComboBox::from_id_salt("type_terrain_selection").width(110.0).truncate().selected_text(texte).show_ui(ui, |ui| {
+                    for t in &types {
+                        if ui.selectable_label(!mixte && t.id == type_actuel.id, &t.nom).clicked() {
+                            enregistrer_types(&mut p);
+                            p.terrains.iter_mut().filter(|x| ids.contains(&x.id)).for_each(|x| x.type_terrain = Some(t.id.clone()));
+                            modifie = true;
+                        }
+                    }
+                });
+                if ui.small_button("Dupliquer").on_hover_text("Nouveau type d'après celui-ci, affecté à la sélection").clicked() {
+                    enregistrer_types(&mut p);
+                    let mut k = 2;
+                    let (id, nom) = loop {
+                        let (id, nom) = (format!("{}-{k}", type_actuel.id), format!("{} {k}", type_actuel.nom));
+                        if p.types_terrains.iter().all(|t| t.id != id && t.nom != nom) { break (id, nom); }
+                        k += 1;
+                    };
+                    p.types_terrains.push(crate::modele::site::TypeTerrain { id: id.clone(), nom, ..type_actuel.clone() });
+                    p.terrains.iter_mut().filter(|x| ids.contains(&x.id)).for_each(|x| x.type_terrain = Some(id.clone()));
+                    modifie = true;
+                }
+            });
+            ui.end_row();
+            if !mixte {
+                ui.label("Épaisseur").on_hover_text("Sous la surface du terrain, pour tous les terrains de ce type");
+                let mut e = type_actuel.epaisseur;
+                if ui.add(egui::DragValue::new(&mut e).speed(10.0).range(1.0..=1e6).dimensions()).changed() {
+                    enregistrer_types(&mut p);
+                    if let Some(t) = p.types_terrains.iter_mut().find(|t| t.id == type_actuel.id) { t.epaisseur = e; }
+                    modifie = true;
+                }
+                ui.end_row();
+                ui.label("Matériau");
+                let texte = type_actuel.materiau.clone().unwrap_or_else(|| "Par défaut".into());
+                egui::ComboBox::from_id_salt("materiau_type_terrain").width(110.0).truncate().selected_text(texte).show_ui(ui, |ui| {
+                    for m in std::iter::once(None).chain(projet.materiaux.iter().map(|m| Some(m.nom.clone()))) {
+                        if ui.selectable_label(m == type_actuel.materiau, m.clone().unwrap_or_else(|| "Par défaut".into())).clicked() {
+                            enregistrer_types(&mut p);
+                            if let Some(t) = p.types_terrains.iter_mut().find(|t| t.id == type_actuel.id) { t.materiau = m.clone(); }
+                            modifie = true;
+                        }
+                    }
+                });
+                ui.end_row();
+            }
+            let cotes = terrains.iter().flat_map(|t| t.contour.iter().chain(&t.points)).map(|p| p[2]);
+            let (bas, haut) = cotes.fold((f64::MAX, f64::MIN), |(a, b), z| (a.min(z), b.max(z)));
+            ui.label("Cotes NGF");
+            ui.label(format!("{} à {}", crate::options::unite().afficher(bas.round()), crate::options::unite().afficher(haut.round())));
+            ui.end_row();
+            let surface: f64 = terrains.iter().map(|t| crate::modele::geometrie::aire_pair_impair(&[t.contour.iter().map(|p| [p[0], p[1]]).collect()])).sum();
+            ui.label(if terrains.len() > 1 { "Surface en plan (total)" } else { "Surface en plan" });
+            ui.label(format!("{:.2} m²", surface / 1e6));
+            ui.end_row();
+        });
+        ui.separator();
+        modifie.then_some(p)
+    }
+
+    /// Formes du dessin 2D sélectionnées (lignes, polylignes, splines, cercles, arcs) :
+    /// périmètre et surface, cumulés sur la sélection ; remplissage des polylignes fermées.
+    /// Retourne le projet modifié.
+    pub(super) fn proprietes_formes_2d(&self, ui: &mut egui::Ui, ids: &[String]) -> Option<Projet> {
+        use crate::modele::MotifCoupe;
+        use crate::modele::documentation::{AnnotationForme, RemplissageContour};
+        let (projet, _) = self.natif.as_ref()?;
+        let formes: Vec<_> = projet.annotations.iter().filter(|a| ids.contains(&a.id)).filter_map(|a| Some((a, a.forme.forme_2d()?))).collect();
+        if formes.is_empty() {
+            return None;
+        }
+        let longueur: f64 = formes.iter().map(|(_, f)| f.longueur()).sum();
+        let surfaces: Vec<f64> = formes.iter().filter_map(|(_, f)| f.surface()).collect();
+        let remplissages: Vec<Option<RemplissageContour>> = formes
+            .iter()
+            .filter_map(|(a, _)| match &a.forme {
+                AnnotationForme::Polyligne { fermee: true, remplissage, .. } => Some(remplissage.clone()),
+                _ => None,
+            })
+            .collect();
+        let total = if formes.len() > 1 { " (total)" } else { "" };
+        let mut choix: Option<Option<RemplissageContour>> = None;
+        ui.label(RichText::new(format!("Dessin 2D ({})", formes.len())).strong());
+        egui::Grid::new("formes_2d").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
+            ui.label(format!("Périmètre{total}"));
+            // au mm près
+            ui.label(crate::options::unite().afficher(longueur.round()));
+            ui.end_row();
+            if !surfaces.is_empty() {
+                ui.label(format!("Surface{total}")).on_hover_text("Formes fermées : polylignes et splines fermées, cercles");
+                ui.label(format!("{:.2} m²", surfaces.iter().sum::<f64>() / 1e6));
+                ui.end_row();
+            }
+            if !remplissages.is_empty() {
+                let (actuel, mixte) = melange(remplissages.iter().cloned());
+                let texte = if mixte { "Varié".to_string() } else { actuel.flatten().map_or("Aucun".into(), |r| r.libelle()) };
+                ui.label("Remplissage").on_hover_text("Polylignes fermées : motif de coupe d'un matériau, ou motif choisi");
+                egui::ComboBox::from_id_salt("remplissage_formes_2d").width(150.0).truncate().selected_text(texte).show_ui(ui, |ui| {
+                    if ui.selectable_label(false, "Aucun").clicked() {
+                        choix = Some(None);
+                    }
+                    if !projet.materiaux.is_empty() {
+                        ui.separator();
+                        ui.label(RichText::new("Matériaux").small().weak());
+                        for m in &projet.materiaux {
+                            if ui.selectable_label(false, &m.nom).clicked() {
+                                choix = Some(Some(RemplissageContour::Materiau { materiau: m.nom.clone() }));
+                            }
+                        }
+                    }
+                    ui.separator();
+                    ui.label(RichText::new("Motifs").small().weak());
+                    for motif in std::iter::once(MotifCoupe::Uni).chain(projet.noms_motifs().iter().map(|n| MotifCoupe::hachures(n))) {
+                        if ui.selectable_label(false, motif.libelle()).clicked() {
+                            choix = Some(Some(RemplissageContour::Motif { motif }));
+                        }
+                    }
+                });
+                ui.end_row();
+            }
+        });
+        ui.separator();
+        let choix = choix?;
+        let mut p = projet.clone();
+        for a in p.annotations.iter_mut().filter(|a| ids.contains(&a.id)) {
+            if let AnnotationForme::Polyligne { fermee: true, remplissage, .. } = &mut a.forme {
+                *remplissage = choix.clone();
+            }
+        }
+        Some(p)
+    }
 }

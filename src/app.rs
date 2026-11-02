@@ -971,7 +971,8 @@ impl ViewerApp {
         let mut lines = Vec::new();
         let mut aretes = Vec::new();
         for (i, o) in scene.objects.iter().enumerate() {
-            let en_edition = self.objet_en_edition().is_some_and(|(id, annotation)| !annotation && o.id == scene::id_natif("dalle", id));
+            let en_edition = self.objet_en_edition().is_some_and(|(id, annotation)| !annotation && o.id == scene::id_natif("dalle", id))
+                || self.terrain_en_edition().is_some_and(|id| o.id == scene::id_natif("terrain", id));
             let vis = !en_edition && !masques_vue.contains(&o.id) && !self.hidden_classes.contains(&*o.class)
                 && !self.hidden_classes.contains(&*self.cle_objet[i])
                 && !self.hidden_objects.contains(&(i as u32))
@@ -1432,6 +1433,7 @@ impl ViewerApp {
 
     fn select(&mut self, id: Option<Id>, reveal: bool) {
         self.bim.selection.clear();
+        self.bim.origine = false;
         self.selection_multiple.clear();
         self.coupe_dirty = true;
         self.selected = id;
@@ -2540,6 +2542,84 @@ impl ViewerApp {
         painter.text(pa + egui::vec2(-10.0, -10.0), egui::Align2::RIGHT_BOTTOM, nom, egui::FontId::proportional(12.0), couleur);
     }
 
+    /// Traits invisibles de la vue native ouverte (plan, coupe), en tirets gris : contour
+    /// du cadrage et origine du projet. Dessinés par-dessus la vue seulement : ni sur les
+    /// feuilles ni à l'export.
+    fn traits_invisibles(&self, ui: &egui::Ui, rect: egui::Rect) {
+        let Some(id) = self.vue_native_id() else { return };
+        let Some((projet, _)) = &self.natif else { return };
+        let Some(vue) = projet.vues.iter().find(|v| v.id == id) else { return };
+        let painter = ui.painter().with_clip_rect(rect);
+        let trait_ = egui::Stroke::new(1.0, Color32::from_gray(150));
+        let plan = matches!(vue.genre, crate::modele::GenreVue::Plan { .. });
+        let z = if plan { self.altitude_vue_native() } else { 0.0 };
+        // le contour s'édite avec l'outil Cadrer, qui le dessine lui-même
+        if self.ruban_edition.outil() != Some(crate::ruban::Outil::Cadrer) && vue.contour_cadrage.len() > 2
+            && let Some(mut points) = vue.contour_cadrage.iter().map(|q| self.ecran_plan(rect, *q, z)).collect::<Option<Vec<_>>>()
+        {
+            points.push(points[0]);
+            painter.add(egui::Shape::dashed_line(&points, trait_, 6.0, 4.0));
+        }
+        // origine (0, 0, 0) du projet : cercle et croix ; sélectionnée, en trait plein
+        // orange avec ses coordonnées
+        if let Some(o) = self.origine_ecran(rect) {
+            let r = 7.0;
+            let cercle: Vec<_> = (0..=24).map(|k| o + egui::Vec2::angled(k as f32 / 24.0 * std::f32::consts::TAU) * r).collect();
+            if self.bim.origine {
+                let orange = egui::Stroke::new(1.6, Color32::from_rgb(230, 120, 20));
+                painter.add(egui::Shape::line(cercle, orange));
+                for d in [egui::vec2(1.0, 0.0), egui::vec2(0.0, 1.0)] {
+                    painter.line_segment([o - d * 2.0 * r, o + d * 2.0 * r], orange);
+                }
+                let [x, y, z] = projet.coordonnees_origine;
+                let u = crate::options::unite();
+                painter.text(o + egui::vec2(2.2 * r, -2.2 * r), egui::Align2::LEFT_BOTTOM, format!("X {} · Y {} · Z {} NGF", u.afficher(x), u.afficher(y), u.afficher(z)), egui::FontId::proportional(12.0), orange.color);
+            } else {
+                painter.add(egui::Shape::dashed_line(&cercle, trait_, 3.0, 2.0));
+                for d in [egui::vec2(1.0, 0.0), egui::vec2(0.0, 1.0)] {
+                    painter.add(egui::Shape::dashed_line(&[o - d * 2.0 * r, o + d * 2.0 * r], trait_, 4.0, 2.0));
+                }
+            }
+        }
+    }
+
+    /// Origine du projet à l'écran, dans une vue native (plan : à l'altitude du plan).
+    fn origine_ecran(&self, rect: egui::Rect) -> Option<egui::Pos2> {
+        let id = self.vue_native_id()?;
+        let vue = self.natif.as_ref()?.0.vues.iter().find(|v| v.id == id)?;
+        let z = if matches!(vue.genre, crate::modele::GenreVue::Plan { .. }) { self.altitude_vue_native() } else { 0.0 };
+        self.ecran_plan(rect, [0.0, 0.0], z).filter(|o| rect.contains(*o))
+    }
+
+    /// Coordonnées de l'origine du projet : E/O, N/S et cote NGF, dans l'unité du projet ;
+    /// appliquées en fin de saisie (une étape d'annulation). La cote NGF remonte ou
+    /// descend le projet par rapport au terrain, dont les cotes sont NGF.
+    fn editeur_coordonnees(&mut self, ui: &mut egui::Ui) {
+        let Some(actuel) = self.natif.as_ref().map(|(p, _)| p.coordonnees_origine) else { return };
+        let id = egui::Id::unique("saisie_coordonnees_origine");
+        let mut c = ui.data(|d| d.get_temp::<[f64; 3]>(id)).unwrap_or(actuel);
+        let mut fini = false;
+        egui::Grid::new("coordonnees_origine").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+            for (k, (nom, aide)) in [("X (E/O)", "Coordonnée est-ouest de l'origine"), ("Y (N/S)", "Coordonnée nord-sud de l'origine"), ("Z (NGF)", "Cote NGF de l'origine du projet (niveau 0) : la modifier remonte ou descend le projet par rapport au terrain")].into_iter().enumerate() {
+                ui.label(nom).on_hover_text(aide);
+                let r = ui.add(egui::DragValue::new(&mut c[k]).speed(10.0).dimensions());
+                fini |= r.drag_stopped() || r.lost_focus();
+                ui.end_row();
+            }
+        });
+        if fini && c != actuel {
+            ui.data_mut(|d| d.remove::<[f64; 3]>(id));
+            match self.executer_bim(crate::modele::commandes::Commande::CoordonneesOrigine { coordonnees: c }) {
+                Ok(_) => self.status = "Coordonnées de l'origine modifiées — Ctrl+Z pour annuler.".into(),
+                Err(e) => self.error = Some(e),
+            }
+        } else if c != actuel {
+            ui.data_mut(|d| d.insert_temp(id, c));
+        } else {
+            ui.data_mut(|d| d.remove::<[f64; 3]>(id));
+        }
+    }
+
     /// Repères des coupes natives dans une vue en plan.
     fn reperes_coupes(&self, ui: &egui::Ui, rect: egui::Rect, z: f64) {
         let Some((projet, _)) = &self.natif else { return };
@@ -3450,11 +3530,21 @@ impl ViewerApp {
                     reglages.push(C { enfonce: self.rvt_sheet, ..C::new("fiche", "Fiche Revit", I::Fiche, "Métadonnées du fichier Revit", true) });
                 }
                 reglages.push(C::new("options", "Options", I::Options, "Unités, navigation IFC, épaisseurs de traits, gabarit", true));
-                let orientation = vec![C { enfonce: self.orientation_nord_en_cours, ..C::new("nord", "Orienter le nord", I::Nord, "Définir le nord du projet en sélectionnant un trait dans une vue de plan", self.natif.is_some() && self.vue_en_plan() && self.dessin2d.edition_contour.is_none()) }];
+                let orientation = vec![
+                    C { enfonce: self.orientation_nord_en_cours, ..C::new("nord", "Orienter le nord", I::Nord, "Définir le nord du projet en sélectionnant un trait dans une vue de plan", self.natif.is_some() && self.vue_en_plan() && self.dessin2d.edition_contour.is_none()) },
+                    C::new("coordonnees", "Coordonnées", I::Coordonnees, "Coordonnées de l'origine du projet et cote NGF du niveau 0 : la modifier remonte ou descend le projet par rapport au terrain (aussi : cliquer l'origine dans une vue)", self.natif.is_some()),
+                ];
                 for (cle, r) in crate::ruban::bandeau(ui, &[("Fichier", fichier), ("Réglages", reglages), ("Projet", orientation)]) {
                     match cle {
                         "options" => {
                             egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| self.menu_options(ui));
+                        }
+                        "coordonnees" => {
+                            egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+                                ui.label(RichText::new("Origine du projet").strong());
+                                ui.label(RichText::new("Cote NGF du niveau 0 : le terrain, en cotes NGF, suit.").small().weak());
+                                self.editeur_coordonnees(ui);
+                            });
                         }
                         _ if !r.clicked() => {}
                         "nouveau" => self.creer_projet(),
@@ -5827,6 +5917,12 @@ impl ViewerApp {
             egui::ScrollArea::vertical().show(ui, |ui| self.proprietes_jeu(ui, &jeu));
             return;
         }
+        if self.natif.is_some() && self.bim.origine {
+            ui.label(RichText::new("Origine du projet").strong());
+            ui.label(RichText::new("Coordonnées partagées et cote NGF du niveau 0 ; les cotes du terrain sont NGF.").small().weak());
+            self.editeur_coordonnees(ui);
+            return;
+        }
         if self.natif.is_some() {
             let ids = self.selection_bim();
             if ids.is_empty() {
@@ -5838,6 +5934,9 @@ impl ViewerApp {
                 if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
             }
             ui.separator();
+            if let Some(projet) = self.proprietes_formes_2d(ui, &ids).or_else(|| self.proprietes_terrains(ui, &ids)) {
+                if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
+            }
             if ids.len() > 1 {
                 match self.proprietes_communes(ui, &ids) {
                     Ok(Some(projet)) => if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); },
@@ -6510,6 +6609,10 @@ impl ViewerApp {
             }) {
                 // repère d'arête de l'élément sélectionné : la pente est ajoutée ou retirée
                 self.basculer_pente(c, k);
+            } else if resp.clicked() && resp.interact_pointer_pos().zip(self.origine_ecran(rect)).is_some_and(|(q, o)| q.distance(o) <= 10.0) {
+                // origine du projet (trait invisible) : ses coordonnées dans Propriétés
+                self.select(None, false);
+                self.bim.origine = true;
             } else if resp.clicked() && resp.interact_pointer_pos().and_then(|q| self.limite_propriete_proche(rect, q)).is_some() {
                 let id = self.limite_propriete_proche(rect, resp.interact_pointer_pos().unwrap()).unwrap();
                 let ctrl = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
@@ -6628,6 +6731,9 @@ impl ViewerApp {
         if self.natif.is_some() && self.vue_en_plan() {
             self.reperes_coupes(ui, rect, altitude_coupe);
         }
+        if self.natif.is_some() && self.jeu_actif().is_none() {
+            self.traits_invisibles(ui, rect);
+        }
         if let Some(prm) = &outil_coupe {
             let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.coupe_depart, altitude_coupe));
             self.apercu_coupe(ui, rect, point, altitude_coupe, prm);
@@ -6668,6 +6774,7 @@ impl ViewerApp {
             self.dessiner_dessin2d(ui, rect);
         }
         self.dessiner_instructions(ui, rect);
+        self.cotes_terrain(ui, rect);
         self.barre_commande(ui, rect);
         if self.scene.is_some() {
             self.poignees_boite(ui, rect);
@@ -6965,8 +7072,9 @@ impl ViewerApp {
                         self.onglet_ruban = OngletRuban::Annoter;
                         self.ruban_edition.activer_outil(o);
                     }
+                    "terrain" => { self.onglet_ruban = OngletRuban::Modeliser; self.ruban_edition.activer_outil(crate::ruban::Outil::Terrain); }
                     "aucun" => { self.ruban_edition.annuler(); }
-                    _ => return erreur("usage : outil mur|poteau|poutre|dalle|sol|coupe|ligne|polyligne|spline|cercle|arc|aucun"),
+                    _ => return erreur("usage : outil mur|poteau|poutre|dalle|sol|coupe|ligne|polyligne|spline|cercle|arc|terrain|aucun"),
                 }
                 self.etat()
             }
@@ -7009,6 +7117,15 @@ impl ViewerApp {
                     },
                 };
                 match r { Ok(()) => self.etat(), Err(e) => erreur(&e) }
+            }
+            "modifier_trace" => {
+                // modifier_trace <id natif> : Modifier tracé (contour, polyligne, terrain)
+                let Some((projet, _)) = &self.natif else { return erreur("pas de projet natif ouvert") };
+                if !projet.identifiants().contains(argument.trim()) { return erreur("élément introuvable") }
+                self.select(None, false);
+                self.bim.selection = vec![argument.trim().to_string()];
+                self.commencer_edition_contour();
+                self.etat()
             }
             "pente" => {
                 // pente <id|dernier> <arête 1…n|toutes> <degrés|aucune>

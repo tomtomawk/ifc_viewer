@@ -70,6 +70,9 @@ pub struct Projet {
     pub dalles: Vec<Dalle>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub terrains: Vec<site::Terrain>,
+    /// Types de terrain (épaisseur, matériau) ; vide : le type par défaut.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub types_terrains: Vec<site::TypeTerrain>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub limites_propriete: Vec<site::LimitePropriete>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -90,6 +93,11 @@ pub struct Projet {
     /// Rotation du nord géographique par rapport à l'axe Y du projet, en radians.
     #[serde(default)]
     pub orientation_nord: f64,
+    /// Coordonnées de l'origine du projet : E/O et N/S (mm, système de coordonnées du
+    /// site), cote NGF (mm). Changer la cote NGF remonte ou descend le projet par
+    /// rapport au terrain.
+    #[serde(default, skip_serializing_if = "origine_nulle_3d")]
+    pub coordonnees_origine: [f64; 3],
     pub importes: Vec<ElementImporte>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub quadrillages: Vec<documentation::Quadrillage>,
@@ -329,6 +337,13 @@ fn est_nul(x: &f64) -> bool {
 fn origine_nulle(o: &[f64; 2]) -> bool {
     o[0] == 0.0 && o[1] == 0.0
 }
+
+fn origine_nulle_3d(o: &[f64; 3]) -> bool {
+    o.iter().all(|x| *x == 0.0)
+}
+
+/// Phase des éléments du site (terrains, limites de propriété), créée par défaut.
+pub const PHASE_EXISTANT: &str = "Existant";
 
 /// Motif de hachures nommé : familles de traits.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -829,8 +844,35 @@ impl Maillage {
 }
 
 impl Projet {
+    /// Projet vide : phases Existant et Projet (les nouveaux éléments vont dans la
+    /// dernière), sous-projet A.
     pub fn nouveau(nom: &str) -> Projet {
-        Projet { format: FORMAT.into(), version: VERSION, nom: nom.into(), sous_projets: vec!["A".into()], ..Default::default() }
+        Projet { format: FORMAT.into(), version: VERSION, nom: nom.into(), phases: vec![PHASE_EXISTANT.into(), "Projet".into()], sous_projets: vec!["A".into()], ..Default::default() }
+    }
+
+    /// Cote NGF de l'origine du projet (mm).
+    pub fn ngf(&self) -> f64 {
+        self.coordonnees_origine[2]
+    }
+
+    /// Type d'un terrain : le sien, sinon le premier du projet, sinon le type par défaut.
+    pub fn type_terrain(&self, t: &site::Terrain) -> site::TypeTerrain {
+        t.type_terrain.as_ref().and_then(|id| self.types_terrains.iter().find(|x| &x.id == id)).or(self.types_terrains.first()).cloned().unwrap_or_else(site::TypeTerrain::defaut)
+    }
+
+    /// Types de terrain proposés : ceux du projet, sinon le type par défaut.
+    pub fn types_terrains_disponibles(&self) -> Vec<site::TypeTerrain> {
+        if self.types_terrains.is_empty() { vec![site::TypeTerrain::defaut()] } else { self.types_terrains.clone() }
+    }
+
+    /// Range un élément du site nouvellement créé dans la phase Existant (créée au
+    /// besoin, en premier), sauf s'il a déjà un contexte.
+    pub fn ranger_existant(&mut self, id: &str) {
+        if !self.phases.iter().any(|p| p == PHASE_EXISTANT) {
+            if self.phases.is_empty() { self.phases.push("Projet".into()); }
+            self.phases.insert(0, PHASE_EXISTANT.into());
+        }
+        self.contextes.entry(id.into()).or_insert_with(|| ContexteElement { phase: Some(PHASE_EXISTANT.into()), ..Default::default() });
     }
 
     /// Projet vide portant les niveaux et les types de murs du gabarit, et leurs matériaux.

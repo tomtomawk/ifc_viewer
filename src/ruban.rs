@@ -111,7 +111,7 @@ impl Outil {
     /// L'ordre permet de conserver Mur / Déplacer / Cote en grand le plus longtemps.
     fn priorite(self) -> u8 {
         match self {
-            Self::Mur | Self::Deplacer | Self::Cote => 3,
+            Self::Mur | Self::Deplacer | Self::Cote | Self::ModifierContour => 3,
             Self::Ouverture | Self::Copier | Self::Texte | Self::VueCoupe => 2,
             Self::VuePlan => 1,
             Self::Surfaces | Self::Aligner => 1,
@@ -261,13 +261,16 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
         Menu::Modifier => &[
             ("Transformer", &[Deplacer, Copier, Tourner]),
             ("Ajuster", &[Aligner, Ajuster]),
-            ("Édition", &[ModifierContour, CreerIdentique, Supprimer]),
+            ("Édition", &[CreerIdentique, Supprimer]),
             ("Visibilité", &[Cadrer, Isoler, Masquer]),
+            // tout ce qui est tracé : contours, polylignes, terrains
+            ("Tracé", &[ModifierContour]),
         ],
         Menu::Annoter => &[
             ("Vues", &[VuePlan, VueCoupe]),
             ("Cotes et textes", &[Cote, Texte, Etiquette, Altimetrie]),
-            ("Dessin 2D", &[Ligne, Polyligne, Spline, Cercle, Arc, Zone]),
+            // les régions remplies sont des polylignes fermées (Remplissage dans Propriétés)
+            ("Dessin 2D", &[Ligne, Polyligne, Spline, Cercle, Arc]),
             ("Bibliothèque", &[Symbole, Legende]),
             ("Documents", &[Feuilles, Nomenclatures]),
         ],
@@ -2646,6 +2649,10 @@ fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             p.circle_filled(pt(0.85, 0.15), r.width() * 0.06, c);
         }
         Polyligne => {
+            // petite hachure sous le premier creux : une polyligne fermée peut être remplie
+            for (a, b) in [((0.194, 0.644), (0.32, 0.77)), ((0.241, 0.541), (0.43, 0.73)), ((0.287, 0.437), (0.54, 0.69))] {
+                p.line_segment([pt(a.0, a.1), pt(b.0, b.1)], egui::Stroke::new(t.width * 0.6, t.color));
+            }
             p.add(egui::Shape::line(vec![pt(0.1, 0.85), pt(0.35, 0.3), pt(0.65, 0.65), pt(0.9, 0.15)], t));
             for (x, y) in [(0.1, 0.85), (0.35, 0.3), (0.65, 0.65), (0.9, 0.15)] {
                 p.circle_filled(pt(x, y), r.width() * 0.05, c);
@@ -3194,6 +3201,8 @@ pub enum Icone {
     Fiche,
     Options,
     Nord,
+    /// Origine et cote NGF : repère X, Y, Z.
+    Coordonnees,
     Enregistrer,
     EnregistrerSous,
     Exporter(&'static str),
@@ -3290,6 +3299,18 @@ fn icone_commande(p: &egui::Painter, r: egui::Rect, i: Icone, c: Color32) {
             p.circle_stroke(r.center(), r.width() * 0.42, t);
             p.add(egui::Shape::convex_polygon(vec![pt(0.5, 0.12), pt(0.37, 0.62), pt(0.5, 0.53), pt(0.63, 0.62)], c, egui::Stroke::NONE));
             seg((0.5, 0.53), (0.5, 0.84));
+        }
+        Icone::Coordonnees => {
+            // repère : Z vers le haut, X et Y en perspective, origine pleine ; repère NGF
+            // (trait de niveau) à droite
+            let o = (0.38, 0.66);
+            seg(o, (0.38, 0.12));
+            seg(o, (0.88, 0.66));
+            seg(o, (0.12, 0.9));
+            p.circle_filled(pt(o.0, o.1), r.width() * 0.06, c);
+            p.add(egui::Shape::convex_polygon(vec![pt(0.38, 0.08), pt(0.31, 0.22), pt(0.45, 0.22)], c, egui::Stroke::NONE));
+            seg((0.6, 0.3), (0.92, 0.3));
+            p.add(egui::Shape::convex_polygon(vec![pt(0.76, 0.3), pt(0.69, 0.18), pt(0.83, 0.18)], c, egui::Stroke::NONE));
         }
         Icone::Nouveau => {
             document();
