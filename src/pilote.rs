@@ -1,6 +1,6 @@
 //! Pilotage du viewer par un autre programme (serveur MCP `tools/viewer-mcp/`).
 //!
-//! Le viewer écoute sur 127.0.0.1 (port 47811, ou la variable `IFC_VIEWER_PORT`). Une
+//! Le viewer écoute sur 127.0.0.1 (port 47811, ou la variable `BIMEDIT_PORT`). Une
 //! connexion envoie une ligne « commande argument » en UTF-8 et reçoit une ligne JSON.
 //! Les commandes sont traitées par l'application entre deux images (`ViewerApp::piloter`).
 
@@ -19,9 +19,9 @@ pub struct Requete {
     pub reponse: Sender<String>,
 }
 
-/// Port d'écoute : `IFC_VIEWER_PORT` ou [`PORT`].
+/// Port d'écoute : `BIMEDIT_PORT` ou [`PORT`].
 pub fn port() -> u16 {
-    std::env::var("IFC_VIEWER_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(PORT)
+    std::env::var("BIMEDIT_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(PORT)
 }
 
 /// Démarre l'écoute ; None si le port est déjà pris (autre viewer ouvert).

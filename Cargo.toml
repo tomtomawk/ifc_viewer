@@ -1,12 +1,12 @@
 [package]
-name = "ifc_viewer"
+name = "bimedit"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 earcutr = "0.5.0"
 epaint_default_fonts = "0.37.0"
-eframe = { version = "0.37.0", default-features = false, features = ["glow", "default_fonts", "wayland", "x11"] }
+eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "default_fonts", "wayland", "x11"] }
 glam = "0.34.1"
 miniz_oxide = "0.8"
 png = "0.18"

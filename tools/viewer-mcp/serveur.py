@@ -2,7 +2,7 @@
 
 Il pilote le viewer par son canal local (127.0.0.1:47811, voir src/pilote.rs) : une
 ligne « commande argument » envoyée, une ligne JSON reçue. Si aucun viewer n'écoute, il
-en lance un (IFC_VIEWER_EXE, sinon target/release).
+en lance un (BIMEDIT_EXE, sinon target/release).
 
 Outils : ouvrir un fichier, capturer la vue ou la fenêtre (image PNG rendue au client),
 lister et ouvrir les vues Revit, régler la caméra, lire les propriétés, désigner
@@ -19,8 +19,8 @@ import tempfile
 import time
 
 RACINE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PORT = int(os.environ.get("IFC_VIEWER_PORT", "47811"))
-CAPTURES = os.path.join(tempfile.gettempdir(), "ifc-viewer-mcp")
+PORT = int(os.environ.get("BIMEDIT_PORT", "47811"))
+CAPTURES = os.path.join(tempfile.gettempdir(), "bimedit-mcp")
 
 COMMANDES = """Commandes du viewer (outil viewer_commande) :
 projet_natif (JSON du document et identifiants natifs) ; editer <JSON> (transaction, voir docs/EDITION.md) ; annuler ; retablir ;
@@ -47,15 +47,15 @@ exporter <chemin.svg> (dessin vectoriel de la vue orthographique : coupe, arête
 sans parties cachées, éléments 2D de la vue Revit ouverte)."""
 
 
-NOM_EXE = "ifc_viewer.exe" if os.name == "nt" else "ifc_viewer"
+NOM_EXE = "bimedit.exe" if os.name == "nt" else "bimedit"
 
 
 def executable():
     # variable explicite d'abord, sinon l'exe compilé
-    candidats = [os.environ.get("IFC_VIEWER_EXE", ""), os.path.join(RACINE, "target", "release", NOM_EXE)]
+    candidats = [os.environ.get("BIMEDIT_EXE", ""), os.path.join(RACINE, "target", "release", NOM_EXE)]
     existants = [c for c in candidats if c and os.path.isfile(c)]
     if not existants:
-        raise RuntimeError("viewer introuvable : construire avec cargo build --release ou fixer IFC_VIEWER_EXE")
+        raise RuntimeError("viewer introuvable : construire avec cargo build --release ou fixer BIMEDIT_EXE")
     return existants[0]
 
 
@@ -237,7 +237,7 @@ def main():
             repondre(id_, {
                 "protocolVersion": p.get("protocolVersion", "2025-06-18"),
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "ifc-viewer", "version": "1.0"},
+                "serverInfo": {"name": "bimedit", "version": "1.0"},
                 "instructions": "Pilote le viewer IFC/Revit du projet : viewer_ouvrir puis viewer_capture pour voir le rendu ; viewer_vue pour ouvrir une vue Revit.",
             })
         elif methode == "ping":

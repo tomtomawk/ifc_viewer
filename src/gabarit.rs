@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
-pub const FORMAT: &str = "ifc_viewer.gabarit";
+pub const FORMAT: &str = "bimedit.gabarit";
 const DEFAUT: &str = include_str!("../gabarits/defaut.gabarit.json");
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

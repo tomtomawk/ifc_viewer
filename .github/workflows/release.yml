@@ -31,18 +31,18 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgl1-mesa-dev
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev
       - run: cargo build --release
       # Windows : l'exe seul ; Linux et macOS : archive, qui garde le droit d'exécution
       - name: Paquet
         shell: bash
         run: |
           mkdir paquet
-          nom="ifc_viewer-${GITHUB_REF_NAME}-${{ matrix.nom }}"
+          nom="bimedit-${GITHUB_REF_NAME}-${{ matrix.nom }}"
           if [ "$RUNNER_OS" = Windows ]; then
-            cp target/release/ifc_viewer.exe "paquet/$nom.exe"
+            cp target/release/bimedit.exe "paquet/$nom.exe"
           else
-            tar -czf "paquet/$nom.tar.gz" -C target/release ifc_viewer
+            tar -czf "paquet/$nom.tar.gz" -C target/release bimedit
           fi
       - uses: actions/upload-artifact@v4
         with:

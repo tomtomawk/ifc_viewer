@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "ifc-viewer": {
+    "bimedit": {
       "command": "python",
       "args": ["tools/viewer-mcp/serveur.py"]
     }

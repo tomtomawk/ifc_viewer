@@ -97,7 +97,7 @@ pub struct Options {
     pub gabarit: Option<PathBuf>,
 }
 
-/// `%APPDATA%\ifc_viewer\options.json`, `$XDG_CONFIG_HOME/ifc_viewer/options.json` ou `~/.config/ifc_viewer/options.json`.
+/// `%APPDATA%\bimedit\options.json`, `$XDG_CONFIG_HOME/bimedit/options.json` ou `~/.config/bimedit/options.json`.
 fn chemin() -> Option<PathBuf> {
     let base = if cfg!(windows) {
         std::env::var_os("APPDATA").map(PathBuf::from)
@@ -106,7 +106,7 @@ fn chemin() -> Option<PathBuf> {
             .map(PathBuf::from)
             .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
     }?;
-    Some(base.join("ifc_viewer").join("options.json"))
+    Some(base.join("bimedit").join("options.json"))
 }
 
 impl Options {

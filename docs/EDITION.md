@@ -372,4 +372,4 @@ Le dernier contrôle nécessite IfcOpenShell et pytest, seulement pour la valida
 indépendante (`python -m pip install ifcopenshell pytest`). Les tests essentiels
 utilisent les exemples du dépôt ; les tests du corpus RVT externe continuent à être
 sautés lorsque ce corpus n'est pas disponible. Pour un serveur graphique de test
-sans anticrénelage, `IFC_VIEWER_MSAA=0` sélectionne directement ce mode.
+sans multiéchantillonnage, `BIMEDIT_MSAA=0` désactive l'anticrénelage de la vue 3D.

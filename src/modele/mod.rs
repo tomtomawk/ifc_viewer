@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// Nom du format, en tête de chaque fichier.
-pub const FORMAT: &str = "ifc_viewer-modele";
+pub const FORMAT: &str = "bimedit-modele";
 /// Version du schéma ; toute évolution incompatible l'incrémente (migrations).
 pub const VERSION: u32 = 0;
 

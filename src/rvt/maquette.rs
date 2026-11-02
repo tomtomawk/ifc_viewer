@@ -630,7 +630,7 @@ impl Sorte {
     }
 }
 
-/// Mesure du décodage d'un fichier (`ifc_viewer --decodage`) : part des flux OLE lus par
+/// Mesure du décodage d'un fichier (`bimedit --decodage`) : part des flux OLE lus par
 /// le lecteur (octets), des enregistrements d'éléments (section 0x66) lus en entier par
 /// le schéma, de ceux dont la classe est exploitée (`Sorte`), et des compléments de
 /// géométrie (section 0x67) lus en entier ; en nombre et en octets.

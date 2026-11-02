@@ -1,5 +1,5 @@
 {
-  "format": "ifc_viewer-modele",
+  "format": "bimedit-modele",
   "version": 0,
   "nom": "Maison de démonstration",
   "sources": [],
@@ -485,7 +485,7 @@
       "nom": "Plans et coupe",
       "largeur": 420,
       "hauteur": 297,
-      "cartouche": "Maison de démonstration — IFC Viewer",
+      "cartouche": "Maison de démonstration — BIMedit",
       "vues": [
         {
           "vue": "plan-rdc",

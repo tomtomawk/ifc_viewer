@@ -13,11 +13,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { nom: windows-x64, os: windows-latest, artefact: ifc_viewer.exe }
-          - { nom: windows-arm64, os: windows-11-arm, artefact: ifc_viewer.exe }
-          - { nom: linux-x64, os: ubuntu-latest, artefact: ifc_viewer }
-          - { nom: linux-arm64, os: ubuntu-24.04-arm, artefact: ifc_viewer }
-          - { nom: macos-arm64, os: macos-14, artefact: ifc_viewer }
+          - { nom: windows-x64, os: windows-latest, artefact: bimedit.exe }
+          - { nom: windows-arm64, os: windows-11-arm, artefact: bimedit.exe }
+          - { nom: linux-x64, os: ubuntu-latest, artefact: bimedit }
+          - { nom: linux-arm64, os: ubuntu-24.04-arm, artefact: bimedit }
+          - { nom: macos-arm64, os: macos-14, artefact: bimedit }
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -26,7 +26,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgl1-mesa-dev
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev
       - run: cargo test --release
       - run: cargo build --release
       - name: Statistiques sur l'échantillon IFC
@@ -43,5 +43,5 @@ jobs:
           python3 tools/valider_ifc.py target/maison.ifc
       - uses: actions/upload-artifact@v4
         with:
-          name: ifc_viewer-${{ matrix.nom }}
+          name: bimedit-${{ matrix.nom }}
           path: target/release/${{ matrix.artefact }}

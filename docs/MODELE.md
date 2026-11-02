@@ -8,7 +8,7 @@ Code : `src/modele/` (types : `mod.rs` ; conversions : `depuis_rvt.rs`, `depuis_
 lecture de paramètres dans une géométrie : `geometrie.rs` ; rapport : `rapport.rs`).
 
 ```
-ifc_viewer --modele <fichier.rvt|.rfa|.ifc> [sortie.json]
+bimedit --modele <fichier.rvt|.rfa|.ifc> [sortie.json]
 ```
 
 écrit le projet (`fichier.modele.json` par défaut), le rapport de conversion
@@ -60,7 +60,7 @@ garde le RVT et ses vues ouverts, sans changer automatiquement de document (Déb
    IfcGUID, classe). Les identifiants du modèle sont **stables** : même élément source, même
    identifiant d'une conversion à l'autre (hachage de l'UniqueId Revit ou du GlobalId IFC),
    ce qui permettra de comparer une réimportation à la précédente.
-3. **Format** : JSON, en-tête `format` = `ifc_viewer-modele` et `version` (0). Une version
+3. **Format** : JSON, en-tête `format` = `bimedit-modele` et `version` (0). Une version
    plus récente que celle du programme est refusée à la lecture ; toute évolution
    incompatible incrémente la version (migrations).
 4. **Unités** : millimètres, repère du fichier source (Revit : origine interne ; IFC : repère
@@ -163,7 +163,7 @@ revenir au défaut, ou enregistrer une copie pour en faire un gabarit d'agence.
 
 ```json
 {
- "format": "ifc_viewer.gabarit", "version": 1, "nom": "Agence",
+ "format": "bimedit.gabarit", "version": 1, "nom": "Agence",
  "materiaux": [{"mots": ["béton"], "couleur": [176, 176, 170], "motif": "diagonales"}],
  "types_murs": [{"nom": "Voile BA 200", "couches": [{"materiau": "Béton armé", "epaisseur": 200.0, "fonction": "structure"}]}],
  "types_surfaces": [{"sorte": "toiture", "nom": "Bac acier", "couches": [{"materiau": "Bac acier", "epaisseur": 40.0}]}],

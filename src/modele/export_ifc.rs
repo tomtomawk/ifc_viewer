@@ -338,7 +338,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         ));
     }
     let mut out = String::from(
-        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION(('ViewDefinition [ReferenceView_V1.2]'),'2;1');\nFILE_NAME('modele.ifc','',(''),(''),'ifc_viewer','ifc_viewer','');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n",
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION(('ViewDefinition [ReferenceView_V1.2]'),'2;1');\nFILE_NAME('modele.ifc','',(''),(''),'bimedit','bimedit','');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n",
     );
     for (i, l) in w.lignes.iter().enumerate() {
         let _ = writeln!(out, "#{}={l};", i + 1);

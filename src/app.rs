@@ -20,12 +20,11 @@ use crate::scene::{self, Scene};
 use crate::trace2d;
 use crate::step::Id;
 use eframe::egui::{self, Align, Color32, PointerButton, RichText, Sense};
-use eframe::glow;
 use glam::{DMat4, Mat4, Vec2, Vec3, Vec4};
 use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 enum LoadMsg {
     Natif(Result<(Box<Scene>, crate::modele::Projet, PathBuf), String>),
@@ -474,8 +473,7 @@ pub struct ViewerApp {
     documents: BTreeMap<usize, DocumentOuvert>,
     document_actif: usize,
     prochain_document: usize,
-    gl: Option<Arc<glow::Context>>,
-    renderer: Arc<Mutex<Option<Renderer>>>,
+    renderer: Option<Renderer>,
     scene: Option<Scene>,
     /// Métadonnées du fichier Revit ouvert.
     rvt: Option<RvtInfo>,
@@ -613,14 +611,14 @@ pub struct ViewerApp {
 impl ViewerApp {
     pub fn new(cc: &eframe::CreationContext<'_>, path: Option<PathBuf>) -> Self {
         let mut error = None;
-        let renderer = match cc.gl.as_ref().map(|gl| Renderer::new(gl)) {
+        let renderer = match cc.wgpu_render_state.as_ref().map(Renderer::new) {
             Some(Ok(r)) => Some(r),
             Some(Err(e)) => {
                 error = Some(e);
                 None
             }
             None => {
-                error = Some("Contexte OpenGL indisponible".into());
+                error = Some("Rendu wgpu indisponible".into());
                 None
             }
         };
@@ -651,8 +649,7 @@ impl ViewerApp {
             documents: BTreeMap::new(),
             document_actif: 0,
             prochain_document: 1,
-            gl: cc.gl.clone(),
-            renderer: Arc::new(Mutex::new(renderer)),
+            renderer,
             scene: None,
             rvt: None,
             rvt_source: None,
@@ -874,8 +871,8 @@ impl ViewerApp {
 
     fn install_scene(&mut self, scene: Scene) {
         self.nouveau_document();
-        if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
-            r.upload_vertices(gl, &scene.vertices, &scene.couleurs_rendu, &scene.motifs_surface);
+        if let Some(r) = self.renderer.as_mut() {
+            r.upload_vertices(&scene.vertices, &scene.couleurs_rendu, &scene.motifs_surface);
         }
         self.status = format!(
             "{} — {} — {} entités, {} objets 3D, {} triangles — {:.2} s",
@@ -990,8 +987,8 @@ impl ViewerApp {
                 aretes.extend(o.aretes.start..o.aretes.start + o.aretes.count);
             }
         }
-        if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
-            r.upload_indices(gl, &opaque, &transp, &lines, &aretes);
+        if let Some(r) = self.renderer.as_mut() {
+            r.upload_indices(&opaque, &transp, &lines, &aretes);
         }
         self.coupe_dirty = true;
     }
@@ -1048,8 +1045,8 @@ impl ViewerApp {
             let (t,l)=dessin::sommets(s,&prims,-self.camera.forward().as_dvec3(),self.echelle,self.traits_fins);
             tris.extend(t); traits.extend(l);
         }
-        if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
-            r.upload_coupe(gl, &tris, &traits);
+        if let Some(r) = self.renderer.as_mut() {
+            r.upload_coupe(&tris, &traits);
         }
     }
 
@@ -2766,8 +2763,8 @@ impl ViewerApp {
             etat.camera.scene_radius = self.camera.scene_radius;
             if let Some((a, b)) = &mut etat.boite { *a += delta.as_vec3(); *b += delta.as_vec3(); }
         }
-        if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
-            r.upload_vertices(gl, &scene.vertices, &scene.couleurs_rendu, &scene.motifs_surface);
+        if let Some(r) = self.renderer.as_mut() {
+            r.upload_vertices(&scene.vertices, &scene.couleurs_rendu, &scene.motifs_surface);
         }
         self.liste_niveaux = niveaux(&scene);
         // matériaux de l'arborescence native (ceux du projet), à défaut ceux de la scène
@@ -3198,8 +3195,8 @@ impl ViewerApp {
             self.liste_materiaux = s.navigateur.as_ref().map_or_else(|| materiaux_ifc(s), |n| n.materiaux.clone());
             (self.categories, self.categorie_objet, self.cle_objet) = categories(s);
             self.visible = vec![true; s.objects.len()];
-            if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
-                r.upload_vertices(gl, &s.vertices, &s.couleurs_rendu, &s.motifs_surface);
+            if let Some(r) = self.renderer.as_mut() {
+                r.upload_vertices(&s.vertices, &s.couleurs_rendu, &s.motifs_surface);
             }
         }
         self.restaurer_vue(self.vue_active);
@@ -3289,7 +3286,7 @@ impl ViewerApp {
         });
         let rect_icone = egui::Rect::from_center_size(egui::pos2(titre.left() + 10.0, titre.center().y), egui::vec2(18.0, 18.0));
         ui.painter().image(texture.id(), rect_icone, egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)), egui::Color32::WHITE);
-        ui.put(egui::Rect::from_min_max(egui::pos2(titre.left() + 23.0, titre.top()), titre.max), egui::Label::new(RichText::new("IFC Viewer").strong()));
+        ui.put(egui::Rect::from_min_max(egui::pos2(titre.left() + 23.0, titre.top()), titre.max), egui::Label::new(RichText::new("BIMedit").strong()));
         let mut zones_deplacement = vec![titre];
         let menus = egui::Rect::from_min_max(egui::pos2(titre.right() + 8.0, barre.top()), egui::pos2(barre.right() - if natif { 4.0 } else { 144.0 }, barre.bottom()));
         ui.scope_builder(egui::UiBuilder::new().id_salt("menu_fenetre").max_rect(menus).layout(egui::Layout::left_to_right(Align::Center)), |ui| {
@@ -5291,8 +5288,8 @@ impl ViewerApp {
                 }
             }
         }
-        if let (Some(gl), Some(r)) = (&self.gl, self.renderer.lock().unwrap().as_mut()) {
-            r.upload_passes(gl, &indices);
+        if let Some(r) = self.renderer.as_mut() {
+            r.upload_passes(&indices);
         }
         self.passes_feuille = passes;
         // un objet de plusieurs vues placées compte une fois
@@ -6612,17 +6609,11 @@ impl ViewerApp {
         self.update_coupe();
 
         let params = self.frame_params(aspect);
-        let renderer = self.renderer.clone();
-        let callback = egui::PaintCallback {
-            rect,
-            callback: Arc::new(eframe::egui_glow::CallbackFn::new(move |info, painter| {
-                let vp = info.viewport_in_pixels();
-                if let Some(r) = renderer.lock().unwrap().as_ref() {
-                    r.paint(painter.gl(), &params, [vp.left_px, vp.from_bottom_px, vp.width_px, vp.height_px]);
-                }
-            })),
-        };
-        ui.painter().add(callback);
+        let ppp = ui.ctx().pixels_per_point();
+        let (largeur, hauteur) = ((rect.width() * ppp).round() as u32, (rect.height() * ppp).round() as u32);
+        if largeur > 0 && hauteur > 0 && let Some(id) = self.renderer.as_mut().and_then(|r| r.paint(&params, largeur, hauteur)) {
+            ui.painter().image(id, rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
+        }
         if let Some(f) = self.fenetre_selection {
             let r = egui::Rect::from_two_pos(f.debut, f.fin);
             let croisement = f.fin.x < f.debut.x;
@@ -6819,7 +6810,7 @@ impl ViewerApp {
             }
         };
         if zone == "fenetre" {
-            // egui_glow ne lit pas une fenêtre de taille nulle (réduite)
+            // egui ne lit pas une fenêtre de taille nulle (réduite)
             if ctx.input(|i| i.viewport().minimized.unwrap_or(false)) {
                 let _ = reponse.send(pilote::erreur("fenêtre réduite : seule la vue 3D se capture (zone « vue »)"));
                 return;
@@ -6838,9 +6829,9 @@ impl ViewerApp {
         self.update_visibility();
         self.update_coupe();
         let params = self.frame_params(l as f32 / h as f32);
-        let res = match (&self.gl, self.renderer.lock().unwrap().as_ref()) {
-            (Some(gl), Some(r)) => r.capture(gl, &params, l as i32, h as i32),
-            _ => Err("rendu OpenGL indisponible".into()),
+        let res = match self.renderer.as_mut() {
+            Some(r) => r.capture(&params, l as i32, h as i32),
+            None => Err("rendu wgpu indisponible".into()),
         };
         let _ = reponse.send(match res {
             Ok(rgba) => ecrire(l as usize, h as usize, &rgba),
@@ -7954,12 +7945,6 @@ impl eframe::App for ViewerApp {
         if !self.requetes.is_empty() || !self.attente_ouverture.is_empty() {
             ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaintWhileHidden);
             ctx.request_repaint();
-        }
-    }
-
-    fn on_exit(&mut self, gl: Option<&glow::Context>) {
-        if let (Some(gl), Some(r)) = (gl, self.renderer.lock().unwrap().as_ref()) {
-            r.destroy(gl);
         }
     }
 }

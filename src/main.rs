@@ -31,52 +31,52 @@ fn main() {
         match resultat { Ok(())=>std::process::exit(0),Err(e)=>{eprintln!("{e}");std::process::exit(2);} }
     }
 
-    // Mode console : ifc_viewer --images fichier.rvt dossier (images et vignettes enregistrées)
+    // Mode console : bimedit --images fichier.rvt dossier (images et vignettes enregistrées)
     if args.first().map(|s| s.as_str()) == Some("--images") {
         let (Some(path), Some(dossier)) = (args.get(1), args.get(2)) else {
-            eprintln!("Usage : ifc_viewer --images <fichier.rvt|.rfa|.rte> <dossier>");
+            eprintln!("Usage : bimedit --images <fichier.rvt|.rfa|.rte> <dossier>");
             std::process::exit(2);
         };
         std::process::exit(rvt_images(&PathBuf::from(path), &PathBuf::from(dossier)));
     }
-    // Mode console : ifc_viewer --decodage fichier.rvt|.rfa|.rte (part décodée, JSON)
+    // Mode console : bimedit --decodage fichier.rvt|.rfa|.rte (part décodée, JSON)
     if args.first().map(|s| s.as_str()) == Some("--decodage") {
         let Some(path) = args.get(1) else {
-            eprintln!("Usage : ifc_viewer --decodage <fichier.rvt|.rfa|.rte>");
+            eprintln!("Usage : bimedit --decodage <fichier.rvt|.rfa|.rte>");
             std::process::exit(2);
         };
         std::process::exit(rvt_decodage(&PathBuf::from(path)));
     }
-    // Mode console : ifc_viewer --nomenclatures fichier.rvt (contenu calculé, JSON par ligne)
+    // Mode console : bimedit --nomenclatures fichier.rvt (contenu calculé, JSON par ligne)
     if args.first().map(|s| s.as_str()) == Some("--nomenclatures") {
         let Some(path) = args.get(1) else {
-            eprintln!("Usage : ifc_viewer --nomenclatures <fichier.rvt>");
+            eprintln!("Usage : bimedit --nomenclatures <fichier.rvt>");
             std::process::exit(2);
         };
         std::process::exit(rvt_nomenclatures(&PathBuf::from(path)));
     }
-    // Mode console : ifc_viewer --parametres fichier.rvt (valeurs brutes, unités internes)
+    // Mode console : bimedit --parametres fichier.rvt (valeurs brutes, unités internes)
     if args.first().map(|s| s.as_str()) == Some("--parametres") {
         let Some(path) = args.get(1) else {
-            eprintln!("Usage : ifc_viewer --parametres <fichier.rvt|.rfa|.rte>");
+            eprintln!("Usage : bimedit --parametres <fichier.rvt|.rfa|.rte>");
             std::process::exit(2);
         };
         std::process::exit(rvt_parametres(&PathBuf::from(path)));
     }
-    // Mode console : ifc_viewer --modele fichier.rvt|.ifc [sortie.json]
+    // Mode console : bimedit --modele fichier.rvt|.ifc [sortie.json]
     if args.first().map(|s| s.as_str()) == Some("--modele") {
         let Some(path) = args.get(1) else {
-            eprintln!("Usage : ifc_viewer --modele <fichier.rvt|.rfa|.ifc> [sortie.json]");
+            eprintln!("Usage : bimedit --modele <fichier.rvt|.rfa|.ifc> [sortie.json]");
             std::process::exit(2);
         };
         let entree = PathBuf::from(path);
         let sortie = args.get(2).map(PathBuf::from).unwrap_or_else(|| PathBuf::from(format!("{path}.modele.json")));
         std::process::exit(modele(entree, sortie));
     }
-    // Mode console : ifc_viewer --stats fichier.ifc
+    // Mode console : bimedit --stats fichier.ifc
     if args.first().map(|s| s.as_str()) == Some("--stats") {
         let Some(path) = args.get(1) else {
-            eprintln!("Usage : ifc_viewer --stats <fichier.ifc|.rvt|.rfa|.rte>");
+            eprintln!("Usage : bimedit --stats <fichier.ifc|.rvt|.rfa|.rte>");
             std::process::exit(2);
         };
         let path = PathBuf::from(path);
@@ -85,39 +85,32 @@ fn main() {
     }
 
     let path = args.first().map(PathBuf::from);
-    // anticrénelage 4×, sinon sans : pilotes ou serveurs X sans configuration
-    // multiéchantillonnée (machines virtuelles, bureau à distance, Xvfb)
-    let essais = if std::env::var("IFC_VIEWER_MSAA").as_deref()==Ok("0") {vec![0]} else {vec![4,0]};
-    for multisampling in essais {
-        let options = eframe::NativeOptions {
-            viewport: eframe::egui::ViewportBuilder::default()
-                .with_title("IFC Viewer")
-                .with_icon(eframe::icon_data::from_png_bytes(include_bytes!("../assets/icone.png")).expect("Icône intégrée invalide"))
-                .with_decorations(cadre_natif())
-                .with_min_inner_size([800.0, 520.0])
-                .with_inner_size([1500.0, 920.0])
-                .with_drag_and_drop(true),
-            depth_buffer: 24,
-            centered: true,
-            multisampling,
-            renderer: eframe::Renderer::Glow,
-            ..Default::default()
-        };
-        let path = path.clone();
-        match eframe::run_native("IFC Viewer", options, Box::new(move |cc| Ok(Box::new(app::ViewerApp::new(cc, path))))) {
-            Ok(()) => return,
-            Err(e) => eprintln!("Erreur (anticrénelage {multisampling}×) : {e}"),
-        }
+    // l'anticrénelage de la vue 3D est celui du rendu (BIMEDIT_MSAA), pas de la fenêtre
+    let options = eframe::NativeOptions {
+        viewport: eframe::egui::ViewportBuilder::default()
+            .with_title("BIMedit")
+            .with_icon(eframe::icon_data::from_png_bytes(include_bytes!("../assets/icone.png")).expect("Icône intégrée invalide"))
+            .with_decorations(cadre_natif())
+            .with_min_inner_size([800.0, 520.0])
+            .with_inner_size([1500.0, 920.0])
+            .with_drag_and_drop(true),
+        centered: true,
+        renderer: eframe::Renderer::Wgpu,
+        ..Default::default()
+    };
+    if let Err(e) = eframe::run_native("BIMedit", options, Box::new(move |cc| Ok(Box::new(app::ViewerApp::new(cc, path))))) {
+        eprintln!("Erreur : {e}");
+        std::process::exit(1);
     }
 }
 
 /// Cadre de fenêtre du système (barre de titre, bords) plutôt que la barre dessinée par
 /// l'application. Par défaut sous Windows 10 seulement : une fenêtre sans décoration y
 /// garde une bande en haut de la zone cliente, qui décale l'affichage par rapport aux
-/// clics (Windows 11 n'a pas ce défaut). `IFC_VIEWER_CADRE=natif` ou `perso` force l'un
+/// clics (Windows 11 n'a pas ce défaut). `BIMEDIT_CADRE=natif` ou `perso` force l'un
 /// ou l'autre.
 pub fn cadre_natif() -> bool {
-    match std::env::var("IFC_VIEWER_CADRE").as_deref() {
+    match std::env::var("BIMEDIT_CADRE").as_deref() {
         Ok("natif") => true,
         Ok("perso") => false,
         _ => windows_10(),

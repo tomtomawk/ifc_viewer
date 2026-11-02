@@ -1,367 +1,524 @@
-//! Rendu OpenGL (glow) appelé depuis un PaintCallback egui.
+//! Rendu wgpu de la vue 3D : la scène est dessinée hors écran (multiéchantillonnée),
+//! puis affichée par egui comme une image.
 
 use crate::scene::Vertex;
-use eframe::glow::{self, HasContext};
+use eframe::egui;
+use eframe::egui_wgpu;
+use eframe::wgpu::{self, util::DeviceExt};
 use glam::{Mat4, Vec3, Vec4};
+use std::sync::Arc;
 
-const VS: &str = r#"
-layout(location = 0) in vec3 a_pos;
-layout(location = 1) in vec4 a_normal;
-layout(location = 2) in vec4 a_color;
-layout(location = 3) in uint a_obj;
-layout(location = 4) in vec4 a_rendu;
-layout(location = 5) in vec4 a_motif;
-uniform mat4 u_mvp;
-uniform sampler2D u_selection;
-uniform uint u_selection_nombre;
-uniform vec4 u_plans[2];
-uniform vec4 u_coupe;
-uniform vec3 u_eye;
-uniform bool u_ortho;
-uniform vec3 u_view_dir;
-out vec3 v_pos;
-out vec3 v_n;
-out vec4 v_c;
-out vec4 v_rendu;
-flat out vec4 v_motif;
-flat out uint v_selected;
-flat out uint v_annot;
-void main() {
-    v_pos = a_pos;
-    v_rendu = a_rendu;
-    v_motif = a_motif;
-    v_n = a_normal.xyz;
-    // annotations (4ᵉ composante de la normale) : ni découpées ni blanchies en mode dessin
-    v_annot = a_normal.w > 0.5 ? 1u : 0u;
-    v_c = a_color;
-    // Chaque objet est repéré par un octet dans la texture de sélection.
-    v_selected = a_obj < u_selection_nombre && texelFetch(u_selection, ivec2(int(a_obj % 1024u), int(a_obj / 1024u)), 0).r > 0.5 ? 1u : 0u;
-    gl_Position = u_mvp * vec4(a_pos, 1.0);
-    // annotations (cotes, textes, tracé de la coupe) un peu avancées en profondeur, en
-    // proportion de la précision du tampon : elles ne se battent plus avec les faces
-    // coplanaires quand on s'éloigne
-    if (v_annot == 1u) {
-        gl_Position.z -= 4e-5 * gl_Position.w;
-    }
-    // arête douce (4ᵉ composante de la normale négative) : normales des deux facettes
-    // dans a_normal et a_color ; tracée en noir sur la silhouette seulement, sinon
-    // envoyée hors du volume de vue
-    if (a_normal.w < -0.5) {
-        vec3 vers_oeil = u_ortho ? -u_view_dir : u_eye - a_pos;
-        if (dot(a_normal.xyz, vers_oeil) * dot(a_color.rgb * 2.0 - 1.0, vers_oeil) > 0.0) {
-            gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-        }
-        v_c = vec4(0.08, 0.08, 0.08, 1.0);
-    }
-#ifndef GL_ES
-    // plans de découpe des passes (fenêtres de vue) : actifs seulement si demandés
-    gl_ClipDistance[0] = dot(u_plans[0], vec4(a_pos, 1.0));
-    gl_ClipDistance[1] = dot(u_plans[1], vec4(a_pos, 1.0));
-    // coupe du mode dessin (plan) : partie retirée, sauf annotations
-    gl_ClipDistance[2] = v_annot == 1u ? 1.0 : dot(u_coupe, vec4(a_pos, 1.0));
-#endif
+/// Uniformes communes aux shaders (même disposition que `Globales` côté Rust).
+const COMMUN: &str = r#"
+struct Globales {
+    lumiere: mat4x4f,
+    proj: mat4x4f,
+    proj_inv: mat4x4f,
+    // xyz : œil, w : 1 si vue orthographique
+    eye: vec4f,
+    // xyz : direction du soleil (vers lui), w : décalage contre l'acné d'ombre
+    soleil: vec4f,
+    boite_min: vec4f,
+    boite_max: vec4f,
+    // x : unités de la scène par mm du papier, y : rayon de l'occultation ambiante,
+    // zw : taille de l'image (pixels)
+    divers: vec4f,
+    cadrage: array<vec4f, 4>,
+    table_motifs: array<vec4f, 14>,
+    // contour de la vue : deux points par élément
+    contour: array<vec4f, 64>,
+    // x : nombre d'objets de la texture de sélection
+    selection: vec4u,
+}
+
+// Uniformes d'un dessin : matrice, direction de vue, plan de coupe du mode dessin,
+// plans des fenêtres de vue (n·p + d ≥ 0 gardé) et réglages.
+struct Passe {
+    mvp: mat4x4f,
+    view_dir: vec4f,
+    coupe: vec4f,
+    plans: array<vec4f, 2>,
+    // dessin, sans éclairage, matériaux, ombres portées
+    drapeaux: vec4u,
+    // ombre ambiante, zone de coupe, plans de cadrage, points du contour
+    drapeaux2: vec4u,
+}
+
+@group(0) @binding(0) var<uniform> g: Globales;
+@group(0) @binding(1) var<uniform> passe: Passe;
+
+// Profondeur [-1, 1] d'OpenGL (matrices de glam) vers [0, 1].
+fn vers_wgpu(p: vec4f) -> vec4f {
+    return vec4f(p.xy, 0.5 * (p.z + p.w), p.w);
 }
 "#;
 
-const FS: &str = r#"
-in vec3 v_pos;
-in vec3 v_n;
-in vec4 v_c;
-in vec4 v_rendu;
-flat in vec4 v_motif;
-flat in uint v_selected;
-flat in uint v_annot;
-// motifs de surface des matériaux : unités de la scène par mm du papier, table des
-// motifs (deux familles de traits : angle en radians, pas en mm ; pas nul : aucune)
-uniform float u_mm;
-uniform vec4 u_table_motifs[14];
+const SCENE: &str = r#"
+@group(1) @binding(0) var t_selection: texture_2d<f32>;
+@group(1) @binding(1) var t_ombres: texture_depth_2d;
+@group(1) @binding(2) var s_ombres: sampler_comparison;
+@group(1) @binding(3) var t_ao: texture_2d<f32>;
 
-// part d'un trait d'une famille (angle, pas) au point uv du plan de la face (anticrénelé
-// avec les dérivées dx, dy calculées hors des branches)
-float famille(vec2 uv, vec2 dx, vec2 dy, float angle, float pas_mm) {
-    if (pas_mm <= 0.0) return 0.0;
-    float pas = pas_mm * u_mm;
-    vec2 nrm = vec2(-sin(angle), cos(angle));
-    float f = dot(uv, nrm) / pas;
-    float w = (abs(dot(dx, nrm)) + abs(dot(dy, nrm))) / pas;
+struct Sommet {
+    @location(0) pos: vec3f,
+    @location(1) normale: vec4f,
+    @location(2) couleur: vec4f,
+    @location(3) obj: u32,
+    @location(4) rendu: vec4f,
+    @location(5) motif: vec4f,
+}
+
+struct Varie {
+    @builtin(position) clip: vec4f,
+    @location(0) pos: vec3f,
+    @location(1) n: vec3f,
+    @location(2) c: vec4f,
+    @location(3) rendu: vec4f,
+    @location(4) @interpolate(flat) motif: vec4f,
+    @location(5) @interpolate(flat) selection: u32,
+    @location(6) @interpolate(flat) annot: u32,
+}
+
+struct Segment {
+    @location(0) pos_a: vec3f,
+    @location(1) normale_a: vec4f,
+    @location(2) couleur_a: vec4f,
+    @location(3) obj_a: u32,
+    @location(6) pos_b: vec3f,
+    @location(7) normale_b: vec4f,
+    @location(8) couleur_b: vec4f,
+    @location(9) obj_b: u32,
+}
+
+// Épaisseur des traits (pixels de l'image).
+const LARGEUR_TRAIT: f32 = 1.0;
+
+// chaque objet est repéré par un octet dans la texture de sélection
+fn selectionne(obj: u32) -> u32 {
+    if obj < g.selection.x && textureLoad(t_selection, vec2i(i32(obj % 1024u), i32(obj / 1024u)), 0).r > 0.5 {
+        return 1u;
+    }
+    return 0u;
+}
+
+@vertex
+fn vs_main(s: Sommet) -> Varie {
+    var o: Varie;
+    o.pos = s.pos;
+    o.rendu = s.rendu;
+    o.motif = s.motif;
+    o.n = s.normale.xyz;
+    // annotations (4ᵉ composante de la normale) : ni découpées ni blanchies en mode dessin
+    o.annot = select(0u, 1u, s.normale.w > 0.5);
+    o.c = s.couleur;
+    o.selection = selectionne(s.obj);
+    var p = passe.mvp * vec4f(s.pos, 1.0);
+    // annotations (cotes, textes, tracé de la coupe) un peu avancées en profondeur, en
+    // proportion de la précision du tampon : elles ne se battent plus avec les faces
+    // coplanaires quand on s'éloigne
+    if o.annot == 1u {
+        p.z -= 4e-5 * p.w;
+    }
+    // arête douce (4ᵉ composante de la normale négative) : normales des deux facettes
+    // dans la normale et la couleur ; tracée en noir sur la silhouette seulement, sinon
+    // envoyée hors du volume de vue
+    if s.normale.w < -0.5 {
+        let vers_oeil = select(g.eye.xyz - s.pos, -passe.view_dir.xyz, g.eye.w > 0.5);
+        if dot(s.normale.xyz, vers_oeil) * dot(s.couleur.rgb * 2.0 - 1.0, vers_oeil) > 0.0 {
+            p = vec4f(2.0, 2.0, 2.0, 1.0);
+        }
+        o.c = vec4f(0.08, 0.08, 0.08, 1.0);
+    }
+    o.clip = vers_wgpu(p);
+    return o;
+}
+
+// Trait en bande de LARGEUR_TRAIT pixels (deux triangles par segment, une instance par
+// segment) : net et d'épaisseur égale avec l'anticrénelage, contrairement aux lignes du
+// matériel qui n'y couvrent qu'une partie des échantillons.
+@vertex
+fn vs_trait(s: Segment, @builtin(vertex_index) i: u32) -> Varie {
+    var o: Varie;
+    let annot = s.normale_a.w > 0.5;
+    o.annot = select(0u, 1u, annot);
+    o.n = s.normale_a.xyz;
+    // sommet hors du volume de vue : segment écarté
+    let ecarte = vec4f(2.0, 2.0, 2.0, 1.0);
+    // arête douce (4ᵉ composante de la normale négative) : normales des deux facettes
+    // dans la normale et la couleur ; tracée en noir sur la silhouette seulement (test au
+    // milieu du segment)
+    if s.normale_a.w < -0.5 {
+        let m = 0.5 * (s.pos_a + s.pos_b);
+        let vers_oeil = select(g.eye.xyz - m, -passe.view_dir.xyz, g.eye.w > 0.5);
+        if dot(s.normale_a.xyz, vers_oeil) * dot(s.couleur_a.rgb * 2.0 - 1.0, vers_oeil) > 0.0 {
+            o.clip = ecarte;
+            return o;
+        }
+    }
+    var a = passe.mvp * vec4f(s.pos_a, 1.0);
+    var b = passe.mvp * vec4f(s.pos_b, 1.0);
+    // annotations un peu avancées en profondeur (voir vs_main)
+    if annot {
+        a.z -= 4e-5 * a.w;
+        b.z -= 4e-5 * b.w;
+    }
+    // segment coupé par le plan proche (z ≥ -w) avant la projection
+    var pa = s.pos_a;
+    var pb = s.pos_b;
+    let da = a.z + a.w;
+    let db = b.z + b.w;
+    if da < 0.0 && db < 0.0 {
+        o.clip = ecarte;
+        return o;
+    }
+    if da < 0.0 {
+        let t = da / (da - db);
+        a = mix(a, b, t);
+        pa = mix(pa, pb, t);
+    } else if db < 0.0 {
+        let t = db / (db - da);
+        b = mix(b, a, t);
+        pb = mix(pb, pa, t);
+    }
+    // direction et normale du segment à l'écran (pixels)
+    let demi_taille = 0.5 * g.divers.zw;
+    let ea = a.xy / a.w * demi_taille;
+    let eb = b.xy / b.w * demi_taille;
+    let l = length(eb - ea);
+    let d = select(vec2f(1.0, 0.0), (eb - ea) / l, l > 1e-6);
+    let nrm = vec2f(-d.y, d.x);
+    // sommet i : extrémité (a ou b) et côté de la bande ; bouts prolongés d'une
+    // demi-largeur (angles des contours fermés)
+    var bouts = array<u32, 6>(0u, 1u, 1u, 0u, 1u, 0u);
+    var cotes = array<f32, 6>(-1.0, -1.0, 1.0, -1.0, 1.0, 1.0);
+    let en_b = bouts[i] == 1u;
+    let decalage = (nrm * cotes[i] + d * select(-1.0, 1.0, en_b)) * (0.5 * LARGEUR_TRAIT);
+    let p = select(a, b, en_b);
+    o.clip = vers_wgpu(vec4f(p.xy + decalage / demi_taille * p.w, p.zw));
+    o.pos = select(pa, pb, en_b);
+    o.c = select(s.couleur_a, s.couleur_b, en_b);
+    if s.normale_a.w < -0.5 {
+        o.c = vec4f(0.08, 0.08, 0.08, 1.0);
+    }
+    o.selection = selectionne(select(s.obj_a, s.obj_b, en_b));
+    return o;
+}
+
+// Profondeur seule (carte d'ombres, occultation ambiante).
+@vertex
+fn vs_profondeur(@location(0) pos: vec3f) -> @builtin(position) vec4f {
+    return vers_wgpu(passe.mvp * vec4f(pos, 1.0));
+}
+
+// Profondeur écrite en couleur (occultation ambiante) : une texture de profondeur ne se
+// lit pas texel par texel en GLSL (backend OpenGL de wgpu).
+@fragment
+fn fs_profondeur(@builtin(position) p: vec4f) -> @location(0) vec4f {
+    return vec4f(p.z, 0.0, 0.0, 1.0);
+}
+
+// Vrai si le fragment est retiré : plans des fenêtres de vue, coupe du mode dessin (sauf
+// annotations), contour de la vue, zone de coupe 3D, cadrage.
+fn retire(e: Varie) -> bool {
+    let p4 = vec4f(e.pos, 1.0);
+    if dot(passe.plans[0], p4) < 0.0 || dot(passe.plans[1], p4) < 0.0 {
+        return true;
+    }
+    if e.annot == 0u && dot(passe.coupe, p4) < 0.0 {
+        return true;
+    }
+    let nb = i32(passe.drapeaux2.w);
+    if nb >= 3 {
+        var dedans = false;
+        let p = e.pos.xy;
+        for (var i = 0; i < 128; i++) {
+            if i >= nb {
+                break;
+            }
+            let j = select(i + 1, 0, i + 1 == nb);
+            let a = select(g.contour[i / 2].xy, g.contour[i / 2].zw, (i & 1) == 1);
+            let b = select(g.contour[j / 2].xy, g.contour[j / 2].zw, (j & 1) == 1);
+            if (a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x {
+                dedans = !dedans;
+            }
+        }
+        if !dedans {
+            return true;
+        }
+    }
+    if e.annot == 0u {
+        if passe.drapeaux2.y == 1u && (any(e.pos < g.boite_min.xyz) || any(e.pos > g.boite_max.xyz)) {
+            return true;
+        }
+        for (var i = 0u; i < 4u; i++) {
+            if i < passe.drapeaux2.z && dot(g.cadrage[i], p4) < 0.0 {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// motifs de surface des matériaux : part d'un trait d'une famille (angle en radians, pas
+// en mm ; pas nul : aucune) au point uv du plan de la face (anticrénelé avec les dérivées
+// dx, dy calculées hors des branches)
+fn famille(uv: vec2f, dx: vec2f, dy: vec2f, angle: f32, pas_mm: f32) -> f32 {
+    if pas_mm <= 0.0 {
+        return 0.0;
+    }
+    let pas = pas_mm * g.divers.x;
+    let nrm = vec2f(-sin(angle), cos(angle));
+    let f = dot(uv, nrm) / pas;
+    let w = (abs(dot(dx, nrm)) + abs(dot(dy, nrm))) / pas;
     return 1.0 - min(abs(fract(f + 0.5) - 0.5) / max(w, 1e-6), 1.0);
 }
 
-float traits_motif(int code, vec2 uv, vec2 dx, vec2 dy) {
-    if (code < 1 || code > 14) return 0.0;
-    vec4 t = u_table_motifs[code - 1];
+fn traits_motif(code: i32, uv: vec2f, dx: vec2f, dy: vec2f) -> f32 {
+    if code < 1 || code > 14 {
+        return 0.0;
+    }
+    let t = g.table_motifs[code - 1];
     return max(famille(uv, dx, dy, t.x, t.y), famille(uv, dx, dy, t.z, t.w));
 }
-uniform vec3 u_eye;
-uniform bool u_ortho;
-uniform vec3 u_view_dir;
-uniform bool u_flat;
-uniform vec2 u_contour_vue[128];
-uniform int u_nb_contour_vue;
-uniform bool u_dessin;
-uniform bool u_sans_eclairage;
-// style Réaliste : couleurs de rendu des matériaux, ciel et soleil
-uniform bool u_materiaux;
-// direction du soleil (vers lui) ; ombres portées (carte d'ombres), réglage à part
-uniform vec3 u_soleil;
-uniform bool u_portees;
-uniform mat4 u_lumiere;
-uniform highp sampler2DShadow u_ombres;
-uniform float u_decalage_ombre;
-// ombre ambiante (réglage à part) : occultation lissée et zone d'affichage (pixels)
-uniform bool u_ao;
-uniform highp sampler2D u_ao_tex;
-uniform vec4 u_vp;
-// zone de coupe 3D (boîte alignée sur les axes) : modèle retiré hors de la boîte
-uniform bool u_boite;
-uniform vec3 u_boite_min;
-uniform vec3 u_boite_max;
-// cadrage d'une coupe ou d'une élévation : plans n·p + d ≥ 0 gardés (u_n_cadrage)
-uniform vec4 u_cadrage[4];
-uniform int u_n_cadrage;
-out vec4 o_color;
 
 // part du soleil reçue en p (0 : à l'ombre) : 12 échantillons d'un disque de Poisson
 // tourné à chaque pixel, chacun filtré par le matériel (comparaison bilinéaire)
-const vec2 POISSON[12] = vec2[](
-    vec2(-0.326, -0.406), vec2(-0.840, -0.074), vec2(-0.696, 0.457), vec2(-0.203, 0.621),
-    vec2(0.962, -0.195), vec2(0.473, -0.480), vec2(0.519, 0.767), vec2(0.185, -0.893),
-    vec2(0.507, 0.064), vec2(0.896, 0.412), vec2(-0.322, -0.933), vec2(-0.792, -0.598));
-float ensoleillement(vec3 p, vec3 n, float ndl) {
+fn ensoleillement(p: vec3f, n: vec3f, ndl: f32, pixel: vec2f) -> f32 {
+    var poisson = array<vec2f, 12>(
+        vec2f(-0.326, -0.406), vec2f(-0.840, -0.074), vec2f(-0.696, 0.457), vec2f(-0.203, 0.621),
+        vec2f(0.962, -0.195), vec2f(0.473, -0.480), vec2f(0.519, 0.767), vec2f(0.185, -0.893),
+        vec2f(0.507, 0.064), vec2f(0.896, 0.412), vec2f(-0.322, -0.933), vec2f(-0.792, -0.598));
     // décalage le long de la normale, plus fort en lumière rasante (acné d'ombre)
-    vec4 l = u_lumiere * vec4(p + n * u_decalage_ombre * (1.0 + 2.0 * (1.0 - ndl)), 1.0);
-    vec3 q = l.xyz / l.w * 0.5 + 0.5;
-    if (q.x < 0.0 || q.x > 1.0 || q.y < 0.0 || q.y > 1.0 || q.z > 1.0) {
+    let l = g.lumiere * vec4f(p + n * g.soleil.w * (1.0 + 2.0 * (1.0 - ndl)), 1.0);
+    let q0 = l.xyz / l.w * 0.5 + 0.5;
+    if q0.x < 0.0 || q0.x > 1.0 || q0.y < 0.0 || q0.y > 1.0 || q0.z > 1.0 {
         return 1.0;
     }
-    vec2 pas = 1.6 / vec2(textureSize(u_ombres, 0));
-    float a = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
-    mat2 r = mat2(cos(a), sin(a), -sin(a), cos(a));
-    float s = 0.0;
-    for (int i = 0; i < 12; i++) {
-        s += textureLod(u_ombres, vec3(q.xy + r * POISSON[i] * pas, q.z - 0.0002), 0.0);
+    // ligne 0 de la texture en haut
+    let q = vec3f(q0.x, 1.0 - q0.y, q0.z);
+    let pas = 1.6 / vec2f(textureDimensions(t_ombres));
+    let a = 6.2831853 * fract(52.9829189 * fract(dot(pixel, vec2f(0.06711056, 0.00583715))));
+    let r = mat2x2f(cos(a), sin(a), -sin(a), cos(a));
+    var s = 0.0;
+    for (var i = 0; i < 12; i++) {
+        s += textureSampleCompareLevel(t_ombres, s_ombres, q.xy + r * poisson[i] * pas, q.z - 0.0002);
     }
     // fondu vers le bord de la carte (portée des ombres) : pas de limite franche
-    float bord = max(abs(q.x - 0.5), abs(q.y - 0.5)) * 2.0;
+    let bord = max(abs(q.x - 0.5), abs(q.y - 0.5)) * 2.0;
     return mix(s / 12.0, 1.0, smoothstep(0.85, 1.0, bord));
 }
 
 // occultation ambiante lissée (passes à part), à la taille de la vue
-float occultation() {
-    // lecture exacte du pixel (pas de dérivées : appel dans une branche)
-    ivec2 t = textureSize(u_ao_tex, 0);
-    return texelFetch(u_ao_tex, clamp(ivec2(gl_FragCoord.xy - u_vp.xy), ivec2(0), t - 1), 0).r;
+fn occultation(pixel: vec2f) -> f32 {
+    let t = vec2i(textureDimensions(t_ao));
+    return textureLoad(t_ao, clamp(vec2i(pixel), vec2i(0), t - 1), 0).r;
 }
 
-void main() {
-    if (u_nb_contour_vue >= 3) {
-        bool dedans = false;
-        vec2 p = v_pos.xy;
-        for (int i = 0; i < 128; ++i) {
-            if (i >= u_nb_contour_vue) break;
-            int j = (i + 1 == u_nb_contour_vue) ? 0 : i + 1;
-            vec2 a = u_contour_vue[i], b = u_contour_vue[j];
-            if ((a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) dedans = !dedans;
-        }
-        if (!dedans) discard;
-    }
-    if (u_boite && v_annot == 0u && (any(lessThan(v_pos, u_boite_min)) || any(greaterThan(v_pos, u_boite_max)))) {
+@fragment
+fn fs_main(e: Varie) -> @location(0) vec4f {
+    var n = normalize(e.n);
+    // motif de surface : traits dans le plan de la face, épaisseur d'un pixel (dérivées
+    // calculées avant toute branche)
+    let an = abs(n);
+    let uvm = select(vec2f(dot(e.pos, normalize(vec3f(-n.y, n.x, 0.0) + vec3f(1e-6, 0.0, 0.0))), e.pos.z), e.pos.xy, an.z > 0.7);
+    let dxm = dpdx(uvm);
+    let dym = dpdy(uvm);
+    if retire(e) {
         discard;
     }
-    if (v_annot == 0u) {
-        for (int i = 0; i < 4; i++) {
-            if (i < u_n_cadrage && dot(u_cadrage[i], vec4(v_pos, 1.0)) < 0.0) {
-                discard;
-            }
-        }
-    }
-    if (u_flat) {
-        vec3 l = v_selected == 1u ? mix(v_c.rgb, vec3(1.0, 0.55, 0.1), 0.65) : v_c.rgb;
-        o_color = vec4(l, 1.0);
-        return;
-    }
+    let dessin = passe.drapeaux.x == 1u;
+    let sans_eclairage = passe.drapeaux.y == 1u;
+    let materiaux = passe.drapeaux.z == 1u;
+    let portees = passe.drapeaux.w == 1u;
+    let ao_actif = passe.drapeaux2.x == 1u;
     // faces du dessin : blanches, elles masquent les arêtes cachées
-    bool blanc = u_dessin && v_annot == 0u;
-    if (blanc && !u_portees && !u_ao) {
-        o_color = vec4(v_selected == 1u ? vec3(1.0, 0.82, 0.62) : vec3(1.0), 1.0);
-        return;
+    let blanc = dessin && e.annot == 0u;
+    if blanc && !portees && !ao_actif {
+        return vec4f(select(vec3f(1.0), vec3f(1.0, 0.82, 0.62), e.selection == 1u), 1.0);
     }
-    vec3 n = normalize(v_n);
-    // motif de surface (premier plan) : traits dans le plan de la face, épaisseur d'un
-    // pixel (dérivées calculées hors des branches)
-    vec3 an = abs(n);
-    vec2 uvm = an.z > 0.7 ? v_pos.xy : vec2(dot(v_pos, normalize(vec3(-n.y, n.x, 0.0) + vec3(1e-6, 0.0, 0.0))), v_pos.z);
-    vec2 dxm = dFdx(uvm);
-    vec2 dym = dFdy(uvm);
     // premier plan (4 bits bas : 0 aucun, 15 uni, sinon motif de la table) et arrière-plan
     // (4 bits hauts : 0 uni, sinon motif de la table)
-    int code_motif = int(v_motif.x * 255.0 + 0.5);
-    int premier = code_motif & 15;
-    int arriere = code_motif >> 4;
-    float trait_premier = traits_motif(premier, uvm, dxm, dym);
-    float trait_arriere = traits_motif(arriere, uvm, dxm, dym);
-    vec3 vd = u_ortho ? -u_view_dir : normalize(u_eye - v_pos);
-    if (dot(n, vd) < 0.0) n = -n;
-    vec3 fill = normalize(vec3(-0.5, -0.7, 0.2));
-    // ombres, réglages indépendants du style : part du soleil reçue, lumière ambiante reçue
-    float ndl = max(dot(n, u_soleil), 0.0);
-    float ombre = (u_portees && ndl > 0.0) ? ensoleillement(v_pos, n, ndl) : 1.0;
-    float ao = (u_ao && v_annot == 0u) ? occultation() : 1.0;
-    bool motifs = !u_materiaux && v_annot == 0u;
-    // arrière-plan de surface : uni (couleur des faces), sinon faces blanches
-    vec3 base = (blanc || (motifs && arriere != 0)) ? vec3(1.0) : v_c.rgb;
-    if (motifs && premier == 15) {
-        base = v_motif.yzw;
+    let code_motif = i32(e.motif.x * 255.0 + 0.5);
+    let premier = code_motif & 15;
+    let arriere = code_motif >> 4u;
+    let trait_premier = traits_motif(premier, uvm, dxm, dym);
+    let trait_arriere = traits_motif(arriere, uvm, dxm, dym);
+    let vd = select(normalize(g.eye.xyz - e.pos), -passe.view_dir.xyz, g.eye.w > 0.5);
+    if dot(n, vd) < 0.0 {
+        n = -n;
     }
-    float d;
-    if (u_materiaux) {
-        if (v_rendu.a > 0.5) {
-            base = v_rendu.rgb;
+    let fill = normalize(vec3f(-0.5, -0.7, 0.2));
+    // ombres, réglages indépendants du style : part du soleil reçue, lumière ambiante reçue
+    let ndl = max(dot(n, g.soleil.xyz), 0.0);
+    var ombre = 1.0;
+    if portees && ndl > 0.0 {
+        ombre = ensoleillement(e.pos, n, ndl, e.clip.xy);
+    }
+    var ao = 1.0;
+    if ao_actif && e.annot == 0u {
+        ao = occultation(e.clip.xy);
+    }
+    let motifs = !materiaux && e.annot == 0u;
+    // arrière-plan de surface : uni (couleur des faces), sinon faces blanches
+    var base = select(e.c.rgb, vec3f(1.0), blanc || (motifs && arriere != 0));
+    if motifs && premier == 15 {
+        base = e.motif.yzw;
+    }
+    var d: f32;
+    if materiaux {
+        if e.rendu.a > 0.5 {
+            base = e.rendu.rgb;
         }
         // ciel (hémisphère), soleil, un peu de lumière vers l'œil ; l'occultation éteint
         // surtout le ciel, un peu le soleil
         d = (0.30 + 0.28 * (0.5 + 0.5 * n.z)) * ao + 0.62 * ndl * ombre * mix(1.0, ao, 0.35) + 0.05 * max(dot(n, vd), 0.0);
-    } else if (u_sans_eclairage || blanc) {
+    } else if sans_eclairage || blanc {
         // aplats : les ombres assombrissent sans éclairer
-        d = (1.0 - 0.35 * (ndl > 0.0 ? 1.0 - ombre : 0.0)) * mix(0.55, 1.0, ao);
+        d = (1.0 - 0.35 * select(0.0, 1.0 - ombre, ndl > 0.0)) * mix(0.55, 1.0, ao);
     } else {
         // éclairage graphique ; soleil des ombres quand elles sont portées
-        vec3 sun = u_portees ? u_soleil : normalize(vec3(0.35, 0.25, 0.9));
+        let sun = select(normalize(vec3f(0.35, 0.25, 0.9)), g.soleil.xyz, portees);
         d = 0.50 * ao + 0.38 * max(dot(n, sun), 0.0) * ombre + 0.12 * max(dot(n, fill), 0.0) * ao + 0.12 * max(dot(n, vd), 0.0);
     }
-    vec3 c = base * d;
-    if (motifs && arriere != 0) {
-        c = mix(c, v_c.rgb, trait_arriere);
+    var c = base * d;
+    if motifs && arriere != 0 {
+        c = mix(c, e.c.rgb, trait_arriere);
     }
-    if (motifs && premier != 0 && premier != 15) {
-        c = mix(c, v_motif.yzw, trait_premier);
+    if motifs && premier != 0 && premier != 15 {
+        c = mix(c, e.motif.yzw, trait_premier);
     }
-    float a = v_c.a;
-    if (v_selected == 1u) {
-        c = mix(c, vec3(1.0, 0.55, 0.1), 0.65);
+    var a = e.c.a;
+    if e.selection == 1u {
+        c = mix(c, vec3f(1.0, 0.55, 0.1), 0.65);
         a = max(a, 0.8);
     }
-    o_color = vec4(c, a);
+    return vec4f(c, a);
+}
+
+// Traits et tracé de la coupe : sans ombrage.
+@fragment
+fn fs_plat(e: Varie) -> @location(0) vec4f {
+    if retire(e) {
+        discard;
+    }
+    return vec4f(select(e.c.rgb, mix(e.c.rgb, vec3f(1.0, 0.55, 0.1), 0.65), e.selection == 1u), 1.0);
 }
 "#;
 
-/// Passe d'ombre : profondeur vue du soleil.
-const VS_OMBRE: &str = r#"
-layout(location = 0) in vec3 a_pos;
-uniform mat4 u_mvp;
-void main() {
-    gl_Position = u_mvp * vec4(a_pos, 1.0);
-}
-"#;
+/// Occultation ambiante à partir de la profondeur de la vue, puis flou.
+const AO: &str = r#"
+// profondeur de la vue écrite en couleur (fs_profondeur)
+@group(1) @binding(0) var t_profondeur: texture_2d<f32>;
+@group(1) @binding(1) var t_ao_brut: texture_2d<f32>;
 
-const FS_OMBRE: &str = r#"
-out vec4 o_color;
-void main() {
-    o_color = vec4(1.0);
+struct Plein {
+    @builtin(position) p: vec4f,
+    // coordonnées de texture (ligne 0 en haut)
+    @location(0) uv: vec2f,
 }
-"#;
 
-/// Triangle couvrant la vue (passes plein écran).
-const VS_PLEIN: &str = r#"
-out vec2 v_uv;
-void main() {
-    vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
-    v_uv = p;
-    gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+// Triangle couvrant la vue.
+@vertex
+fn vs_plein(@builtin(vertex_index) i: u32) -> Plein {
+    let p = vec2f(f32((i << 1u) & 2u), f32(i & 2u));
+    var o: Plein;
+    o.p = vec4f(p * 2.0 - 1.0, 0.0, 1.0);
+    o.uv = vec2f(p.x, 1.0 - p.y);
+    return o;
 }
-"#;
 
-/// Occultation ambiante à partir de la profondeur de la vue : 12 points de l'hémisphère
-/// de la normale (reconstruite depuis la profondeur), base tournée selon un motif 4 × 4
-/// que le flou efface.
-const FS_AO: &str = r#"
-in vec2 v_uv;
-uniform highp sampler2D u_profondeur;
-uniform mat4 u_proj;
-uniform mat4 u_proj_inv;
-uniform float u_rayon;
-out vec4 o_color;
-const vec3 NOYAU[12] = vec3[](
-    vec3(0.538, 0.186, 0.465), vec3(-0.270, 0.441, 0.282), vec3(0.099, -0.508, 0.415),
-    vec3(-0.431, -0.197, 0.170), vec3(0.142, 0.062, 0.141), vec3(0.712, -0.403, 0.389),
-    vec3(-0.622, 0.536, 0.433), vec3(0.235, 0.716, 0.341), vec3(-0.143, -0.233, 0.738),
-    vec3(-0.815, -0.239, 0.317), vec3(0.383, 0.105, 0.887), vec3(0.020, -0.869, 0.402));
-vec3 position(vec2 uv) {
-    float d = textureLod(u_profondeur, uv, 0.0).r;
-    vec4 s = u_proj_inv * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
+fn profondeur(uv: vec2f) -> f32 {
+    let t = vec2i(textureDimensions(t_profondeur));
+    return textureLoad(t_profondeur, clamp(vec2i(uv * vec2f(t)), vec2i(0), t - 1), 0).r;
+}
+
+// point de la vue (repère de la caméra) en uv
+fn position(uv: vec2f) -> vec3f {
+    let s = g.proj_inv * vec4f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, profondeur(uv) * 2.0 - 1.0, 1.0);
     return s.xyz / s.w;
 }
-void main() {
-    float d0 = textureLod(u_profondeur, v_uv, 0.0).r;
-    if (d0 >= 1.0) { o_color = vec4(1.0); return; }
-    vec2 px = 1.0 / vec2(textureSize(u_profondeur, 0));
-    vec3 p = position(v_uv);
-    // normale : différences du côté le plus proche (pas de normale à cheval sur un bord)
-    vec3 g = position(v_uv - vec2(px.x, 0.0)), dr = position(v_uv + vec2(px.x, 0.0));
-    vec3 b = position(v_uv - vec2(0.0, px.y)), h = position(v_uv + vec2(0.0, px.y));
-    vec3 dx = abs(dr.z - p.z) < abs(p.z - g.z) ? dr - p : p - g;
-    vec3 dy = abs(h.z - p.z) < abs(p.z - b.z) ? h - p : p - b;
-    vec3 n = normalize(cross(dx, dy));
-    if (dot(n, -p) < 0.0 && u_proj[3][3] < 0.5) n = -n;
-    if (u_proj[3][3] > 0.5 && n.z < 0.0) n = -n;
-    ivec2 q = ivec2(gl_FragCoord.xy) & 3;
-    int k = q.x + 4 * q.y;
-    // motif 4 × 4 (ordre de Bayer) : 16 rotations
-    int bayer[16] = int[](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
-    float a = 6.2831853 * (float(bayer[k]) + 0.5) / 16.0;
-    vec3 r = vec3(cos(a), sin(a), 0.0);
-    vec3 t = normalize(r - n * dot(r, n));
-    if (any(isnan(t))) t = normalize(cross(n, vec3(0.0, 1.0, 0.0)));
-    vec3 bt = cross(n, t);
-    float o = 0.0;
-    for (int i = 0; i < 12; i++) {
-        vec3 e = p + (t * NOYAU[i].x + bt * NOYAU[i].y + n * NOYAU[i].z) * u_rayon;
-        vec4 c = u_proj * vec4(e, 1.0);
-        vec2 uv = c.xy / c.w * 0.5 + 0.5;
-        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) continue;
-        float z = position(uv).z;
-        float portee = smoothstep(0.0, 1.0, u_rayon / max(abs(p.z - z), 1e-4));
-        o += (z >= e.z + 0.03 * u_rayon ? 1.0 : 0.0) * portee;
-    }
-    o_color = vec4(1.0 - o / 12.0, 0.0, 0.0, 1.0);
-}
-"#;
 
-/// Flou 4 × 4 de l'occultation (efface le motif), pondéré par l'écart de profondeur :
-/// pas de halo d'un objet sur le fond.
-const FS_FLOU: &str = r#"
-in vec2 v_uv;
-uniform highp sampler2D u_ao_brut;
-uniform highp sampler2D u_profondeur;
-uniform mat4 u_proj_inv;
-out vec4 o_color;
-float z(vec2 uv) {
-    vec4 s = u_proj_inv * vec4(uv * 2.0 - 1.0, textureLod(u_profondeur, uv, 0.0).r * 2.0 - 1.0, 1.0);
+// 12 points de l'hémisphère de la normale (reconstruite depuis la profondeur), base
+// tournée selon un motif 4 × 4 que le flou efface
+@fragment
+fn fs_ao(e: Plein) -> @location(0) vec4f {
+    var noyau = array<vec3f, 12>(
+        vec3f(0.538, 0.186, 0.465), vec3f(-0.270, 0.441, 0.282), vec3f(0.099, -0.508, 0.415),
+        vec3f(-0.431, -0.197, 0.170), vec3f(0.142, 0.062, 0.141), vec3f(0.712, -0.403, 0.389),
+        vec3f(-0.622, 0.536, 0.433), vec3f(0.235, 0.716, 0.341), vec3f(-0.143, -0.233, 0.738),
+        vec3f(-0.815, -0.239, 0.317), vec3f(0.383, 0.105, 0.887), vec3f(0.020, -0.869, 0.402));
+    // motif 4 × 4 (ordre de Bayer) : 16 rotations
+    var bayer = array<f32, 16>(0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
+    let rayon = g.divers.y;
+    if profondeur(e.uv) >= 1.0 {
+        return vec4f(1.0);
+    }
+    let px = 1.0 / vec2f(textureDimensions(t_profondeur));
+    let p = position(e.uv);
+    // normale : différences du côté le plus proche (pas de normale à cheval sur un bord)
+    let gc = position(e.uv - vec2f(px.x, 0.0));
+    let dr = position(e.uv + vec2f(px.x, 0.0));
+    let b = position(e.uv - vec2f(0.0, px.y));
+    let h = position(e.uv + vec2f(0.0, px.y));
+    let dx = select(p - gc, dr - p, abs(dr.z - p.z) < abs(p.z - gc.z));
+    let dy = select(p - b, h - p, abs(h.z - p.z) < abs(p.z - b.z));
+    var n = normalize(cross(dx, dy));
+    if dot(n, -p) < 0.0 && g.proj[3][3] < 0.5 {
+        n = -n;
+    }
+    if g.proj[3][3] > 0.5 && n.z < 0.0 {
+        n = -n;
+    }
+    let q = vec2u(e.p.xy) & vec2u(3u);
+    let a = 6.2831853 * (bayer[q.x + 4u * q.y] + 0.5) / 16.0;
+    let r = vec3f(cos(a), sin(a), 0.0);
+    var t = r - n * dot(r, n);
+    if length(t) < 1e-6 {
+        t = cross(n, vec3f(0.0, 1.0, 0.0));
+    }
+    t = normalize(t);
+    let bt = cross(n, t);
+    var o = 0.0;
+    for (var i = 0; i < 12; i++) {
+        let k = noyau[i];
+        let ech = p + (t * k.x + bt * k.y + n * k.z) * rayon;
+        let c = g.proj * vec4f(ech, 1.0);
+        let uv = vec2f(c.x / c.w * 0.5 + 0.5, 0.5 - c.y / c.w * 0.5);
+        if uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 {
+            continue;
+        }
+        let z = position(uv).z;
+        let portee = smoothstep(0.0, 1.0, rayon / max(abs(p.z - z), 1e-4));
+        o += select(0.0, 1.0, z >= ech.z + 0.03 * rayon) * portee;
+    }
+    return vec4f(1.0 - o / 12.0, 0.0, 0.0, 1.0);
+}
+
+fn z_vue(uv: vec2f) -> f32 {
+    let s = g.proj_inv * vec4f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, profondeur(uv) * 2.0 - 1.0, 1.0);
     return s.z / s.w;
 }
-void main() {
-    vec2 px = 1.0 / vec2(textureSize(u_ao_brut, 0));
-    float z0 = z(v_uv);
-    float s = 0.0, w = 0.0;
-    for (int i = -2; i < 2; i++) {
-        for (int j = -2; j < 2; j++) {
-            vec2 uv = v_uv + (vec2(i, j) + 0.5) * px;
-            float p = 1.0 / (1.0 + 40.0 * abs(z(uv) - z0) / max(abs(z0), 1e-3));
-            s += textureLod(u_ao_brut, uv, 0.0).r * p;
+
+// Flou 4 × 4 de l'occultation (efface le motif), pondéré par l'écart de profondeur : pas
+// de halo d'un objet sur le fond.
+@fragment
+fn fs_flou(e: Plein) -> @location(0) vec4f {
+    let taille = vec2i(textureDimensions(t_ao_brut));
+    let px = 1.0 / vec2f(taille);
+    let z0 = z_vue(e.uv);
+    var s = 0.0;
+    var w = 0.0;
+    for (var i = -2; i < 2; i++) {
+        for (var j = -2; j < 2; j++) {
+            let uv = e.uv + (vec2f(f32(i), f32(j)) + 0.5) * px;
+            let p = 1.0 / (1.0 + 40.0 * abs(z_vue(uv) - z0) / max(abs(z0), 1e-3));
+            s += textureLoad(t_ao_brut, clamp(vec2i(uv * vec2f(taille)), vec2i(0), taille - 1), 0).r * p;
             w += p;
         }
     }
-    o_color = vec4(s / max(w, 1e-4), 0.0, 0.0, 1.0);
+    return vec4f(s / max(w, 1e-4), 0.0, 0.0, 1.0);
 }
 "#;
-
-/// Cibles de l'occultation ambiante : profondeur de la vue, occultation brute et lissée.
-struct CiblesAo {
-    largeur: i32,
-    hauteur: i32,
-    fbo: [glow::Framebuffer; 3],
-    textures: [glow::Texture; 3],
-}
 
 /// Direction du soleil (vers lui), repère de la scène : éclairage du style Réaliste et
 /// des ombres portées.
@@ -370,10 +527,55 @@ pub const SOLEIL: Vec3 = Vec3::new(-0.4504, -0.6006, 0.6606);
 /// Côté de la carte d'ombres (pixels).
 pub const TAILLE_OMBRES: i32 = 2048;
 
-/// Indices d'une passe supplémentaire (fenêtre de vue d'une feuille).
+const COULEUR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+const PROFONDEUR: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+const OCCULTATION: wgpu::TextureFormat = wgpu::TextureFormat::R8Unorm;
+/// Profondeur écrite en couleur pour être relue (occultation ambiante).
+const PROFONDEUR_LUE: wgpu::TextureFormat = wgpu::TextureFormat::R32Float;
+
+/// Pas des uniformes de dessin dans leur tampon (alignement des décalages dynamiques).
+const PAS_PASSE: u64 = 256;
+/// Emplacements des uniformes de dessin : modèle, tracé de la coupe, carte d'ombres,
+/// profondeur de l'occultation, puis fenêtres de vue.
+const PASSE_MODELE: u32 = 0;
+const PASSE_COUPE: u32 = 1;
+const PASSE_OMBRES: u32 = 2;
+const PASSE_AO: u32 = 3;
+const PREMIERE_FENETRE: u32 = 4;
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Globales {
+    lumiere: [f32; 16],
+    proj: [f32; 16],
+    proj_inv: [f32; 16],
+    eye: [f32; 4],
+    soleil: [f32; 4],
+    boite_min: [f32; 4],
+    boite_max: [f32; 4],
+    divers: [f32; 4],
+    cadrage: [[f32; 4]; 4],
+    table_motifs: [[f32; 4]; 14],
+    contour: [[f32; 4]; 64],
+    selection: [u32; 4],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct UniformesPasse {
+    mvp: [f32; 16],
+    view_dir: [f32; 4],
+    coupe: [f32; 4],
+    plans: [[f32; 4]; 2],
+    drapeaux: [u32; 4],
+    drapeaux2: [u32; 4],
+}
+
+/// Indices des triangles (opaques, transparents) et segments des traits (sommets par
+/// paires) d'une passe supplémentaire (fenêtre de vue d'une feuille).
 struct Passe {
-    ebo: [glow::Buffer; 3],
-    n: [i32; 3],
+    ebo: [wgpu::Buffer; 3],
+    n: [u32; 3],
 }
 
 /// Paramètres d'une passe : matrice, direction de vue (éclairage), rectangle de
@@ -386,68 +588,72 @@ pub struct ParamsPasse {
     pub plans: Vec<Vec4>,
 }
 
+/// Cibles d'une image : couleur multiéchantillonnée, profondeur, image résolue,
+/// occultation ambiante (profondeur, brute, lissée).
+struct Cibles {
+    largeur: u32,
+    hauteur: u32,
+    couleur_ms: Option<wgpu::TextureView>,
+    profondeur: wgpu::TextureView,
+    resultat: wgpu::Texture,
+    vue_resultat: wgpu::TextureView,
+    /// Profondeur de l'occultation : tampon de profondeur et sa copie en couleur, lue.
+    ao_tampon: wgpu::TextureView,
+    ao_profondeur: wgpu::TextureView,
+    ao_brut: wgpu::TextureView,
+    ao_lisse: wgpu::TextureView,
+    groupe_ao: wgpu::BindGroup,
+    groupe_flou: wgpu::BindGroup,
+}
+
 pub struct Renderer {
-    program: glow::Program,
-    vao: glow::VertexArray,
-    vbo: glow::Buffer,
-    ebo_opaque: glow::Buffer,
-    ebo_transp: glow::Buffer,
-    ebo_lines: glow::Buffer,
-    ebo_aretes: glow::Buffer,
-    n_opaque: i32,
-    n_transp: i32,
-    n_lines: i32,
-    n_aretes: i32,
-    /// Coupe du mode dessin : sommets propres (triangles puis traits).
-    vao_coupe: glow::VertexArray,
-    vbo_coupe: glow::Buffer,
-    n_coupe: [i32; 2],
-    u_mvp: Option<glow::UniformLocation>,
-    u_selection: Option<glow::UniformLocation>,
-    u_selection_nombre: Option<glow::UniformLocation>,
-    texture_selection: glow::Texture,
-    u_eye: Option<glow::UniformLocation>,
-    u_ortho: Option<glow::UniformLocation>,
-    u_view_dir: Option<glow::UniformLocation>,
-    u_flat: Option<glow::UniformLocation>,
-    u_plans: Option<glow::UniformLocation>,
-    u_coupe: Option<glow::UniformLocation>,
-    u_dessin: Option<glow::UniformLocation>,
-    u_sans_eclairage: Option<glow::UniformLocation>,
-    u_materiaux: Option<glow::UniformLocation>,
-    u_portees: Option<glow::UniformLocation>,
-    u_soleil: Option<glow::UniformLocation>,
-    u_lumiere: Option<glow::UniformLocation>,
-    u_ombres: Option<glow::UniformLocation>,
-    u_decalage_ombre: Option<glow::UniformLocation>,
-    u_ao: Option<glow::UniformLocation>,
-    u_ao_tex: Option<glow::UniformLocation>,
-    u_vp: Option<glow::UniformLocation>,
-    /// Occultation ambiante : programmes (calcul, flou), tableau de sommets vide des
-    /// passes plein écran, cibles recréées quand la vue change de taille.
-    programme_ao: glow::Program,
-    programme_flou: glow::Program,
-    vao_vide: glow::VertexArray,
-    cibles_ao: std::cell::RefCell<Option<CiblesAo>>,
-    u_boite: Option<glow::UniformLocation>,
-    u_cadrage: Option<glow::UniformLocation>,
-    u_n_cadrage: Option<glow::UniformLocation>,
-    u_contour_vue: Option<glow::UniformLocation>,
-    u_nb_contour_vue: Option<glow::UniformLocation>,
-    u_boite_min: Option<glow::UniformLocation>,
-    u_boite_max: Option<glow::UniformLocation>,
-    /// Couleurs de rendu des sommets (attribut 4), tampon à part.
-    vbo_rendu: glow::Buffer,
-    /// Motifs de surface des sommets (attribut 5), tampon à part.
-    vbo_motifs: glow::Buffer,
-    u_mm: Option<glow::UniformLocation>,
-    u_table_motifs: Option<glow::UniformLocation>,
-    /// Carte d'ombres du style Rendu : programme, tampon de trame, texture de profondeur.
-    programme_ombre: glow::Program,
-    u_mvp_ombre: Option<glow::UniformLocation>,
-    fbo_ombres: glow::Framebuffer,
-    texture_ombres: glow::Texture,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    egui: Arc<egui::mutex::RwLock<egui_wgpu::Renderer>>,
+    echantillons: u32,
+    opaque: wgpu::RenderPipeline,
+    opaque_aretes: wgpu::RenderPipeline,
+    transparent: wgpu::RenderPipeline,
+    traits: wgpu::RenderPipeline,
+    coupe: wgpu::RenderPipeline,
+    pipeline_ombres: wgpu::RenderPipeline,
+    pipeline_ao_profondeur: wgpu::RenderPipeline,
+    pipeline_ao: wgpu::RenderPipeline,
+    pipeline_flou: wgpu::RenderPipeline,
+    disposition_0: wgpu::BindGroupLayout,
+    disposition_1: wgpu::BindGroupLayout,
+    disposition_ao: wgpu::BindGroupLayout,
+    globales: wgpu::Buffer,
+    uniformes_passes: wgpu::Buffer,
+    groupe_0: wgpu::BindGroup,
+    sommets: wgpu::Buffer,
+    /// Couleurs de rendu et motifs de surface des sommets, tampons à part.
+    rendu: wgpu::Buffer,
+    motifs: wgpu::Buffer,
+    ebo_opaque: wgpu::Buffer,
+    ebo_transp: wgpu::Buffer,
+    /// Traits et arêtes vives : sommets par paires, une instance par segment.
+    segments_traits: wgpu::Buffer,
+    segments_aretes: wgpu::Buffer,
+    /// Copie des sommets : segments rassemblés à l'envoi des indices.
+    sommets_cpu: Vec<Vertex>,
+    n_opaque: u32,
+    n_transp: u32,
+    n_lines: u32,
+    n_aretes: u32,
+    /// Coupe du mode dessin : sommets propres (triangles puis traits), sans couleur de
+    /// rendu ni motif (tampon nul).
+    sommets_coupe: wgpu::Buffer,
+    nul_coupe: wgpu::Buffer,
+    n_coupe: [u32; 2],
+    texture_selection: wgpu::Texture,
+    vue_ombres: wgpu::TextureView,
+    echantillonneur_ombres: wgpu::Sampler,
+    ao_vide: wgpu::TextureView,
     passes: Vec<Passe>,
+    /// Image de la vue et son identifiant egui.
+    cibles: Option<Cibles>,
+    texture_egui: Option<egui::TextureId>,
 }
 
 /// Style visuel d'une vue. Les ombres portées et l'ombre ambiante, la couleur des faces
@@ -523,695 +729,738 @@ pub struct FrameParams {
     pub passes: Vec<ParamsPasse>,
 }
 
-/// Programme GLSL (en-tête de version selon OpenGL ou OpenGL ES).
-unsafe fn compiler(gl: &glow::Context, vs: &str, fs: &str) -> Result<glow::Program, String> {
-    unsafe {
-        let version = if gl.version().is_embedded { "#version 300 es\nprecision highp float;\nprecision highp int;\n" } else { "#version 330 core\n" };
-        let program = gl.create_program()?;
-        let mut shaders = Vec::new();
-        for (ty, src) in [(glow::VERTEX_SHADER, vs), (glow::FRAGMENT_SHADER, fs)] {
-            let sh = gl.create_shader(ty)?;
-            gl.shader_source(sh, &format!("{version}{src}"));
-            gl.compile_shader(sh);
-            if !gl.get_shader_compile_status(sh) {
-                return Err(format!("Shader : {}", gl.get_shader_info_log(sh)));
-            }
-            gl.attach_shader(program, sh);
-            shaders.push(sh);
-        }
-        gl.link_program(program);
-        if !gl.get_program_link_status(program) {
-            return Err(format!("Programme : {}", gl.get_program_info_log(program)));
-        }
-        for sh in shaders {
-            gl.detach_shader(program, sh);
-            gl.delete_shader(sh);
-        }
-        Ok(program)
-    }
-}
-
 fn as_bytes<T>(s: &[T]) -> &[u8] {
-    // SAFETY: types Copy repr(C) sans padding non initialisé (Vertex : 24 octets, u32).
+    // SAFETY: types Copy repr(C) sans padding non initialisé (Vertex : 24 octets, u32,
+    // uniformes faites de f32 et u32).
     unsafe { std::slice::from_raw_parts(s.as_ptr() as *const u8, std::mem::size_of_val(s)) }
 }
 
+fn v4(v: Vec3, w: f32) -> [f32; 4] {
+    [v.x, v.y, v.z, w]
+}
+
+/// Plan neutre : tout est gardé.
+const NEUTRE: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+
 impl Renderer {
-    pub fn new(gl: &glow::Context) -> Result<Self, String> {
-        unsafe {
-            let program = compiler(gl, VS, FS)?;
-            let programme_ombre = compiler(gl, VS_OMBRE, FS_OMBRE)?;
-            // carte d'ombres : texture de profondeur seule
-            let texture_ombres = gl.create_texture()?;
-            gl.bind_texture(glow::TEXTURE_2D, Some(texture_ombres));
-            gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::DEPTH_COMPONENT24 as i32, TAILLE_OMBRES, TAILLE_OMBRES, 0, glow::DEPTH_COMPONENT, glow::UNSIGNED_INT, glow::PixelUnpackData::Slice(None));
-            // comparaison de profondeur par le matériel, filtrée (bords adoucis)
-            for (k, v) in [
-                (glow::TEXTURE_MIN_FILTER, glow::LINEAR),
-                (glow::TEXTURE_MAG_FILTER, glow::LINEAR),
-                (glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE),
-                (glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE),
-                (glow::TEXTURE_COMPARE_MODE, glow::COMPARE_REF_TO_TEXTURE),
-                (glow::TEXTURE_COMPARE_FUNC, glow::LEQUAL),
-            ] {
-                gl.tex_parameter_i32(glow::TEXTURE_2D, k, v as i32);
-            }
-            gl.bind_texture(glow::TEXTURE_2D, None);
-            let fbo_ombres = gl.create_framebuffer()?;
-            gl.bind_framebuffer(glow::FRAMEBUFFER, Some(fbo_ombres));
-            gl.framebuffer_texture_2d(glow::FRAMEBUFFER, glow::DEPTH_ATTACHMENT, glow::TEXTURE_2D, Some(texture_ombres), 0);
-            gl.draw_buffers(&[glow::NONE]);
-            gl.read_buffer(glow::NONE);
-            gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+    pub fn new(rs: &egui_wgpu::RenderState) -> Result<Self, String> {
+        let device = rs.device.clone();
+        // anticrénelage 4×, sauf BIMEDIT_MSAA=0 (pilotes sans multiéchantillonnage)
+        let echantillons = if std::env::var("BIMEDIT_MSAA").as_deref() == Ok("0") { 1 } else { 4 };
+        let module_scene = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("scène"),
+            source: wgpu::ShaderSource::Wgsl(format!("{COMMUN}{SCENE}").into()),
+        });
+        let module_ao = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("occultation"),
+            source: wgpu::ShaderSource::Wgsl(format!("{COMMUN}{AO}").into()),
+        });
+        let uniforme = |binding, taille: usize, dynamique| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: dynamique,
+                min_binding_size: wgpu::BufferSize::new(taille as u64),
+            },
+            count: None,
+        };
+        let texture = |binding, sample_type, visibility| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility,
+            ty: wgpu::BindingType::Texture { sample_type, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+            count: None,
+        };
+        let flottant = wgpu::TextureSampleType::Float { filterable: false };
+        let disposition_0 = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("uniformes"),
+            entries: &[uniforme(0, size_of::<Globales>(), false), uniforme(1, size_of::<UniformesPasse>(), true)],
+        });
+        let disposition_1 = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("textures de la scène"),
+            entries: &[
+                texture(0, flottant, wgpu::ShaderStages::VERTEX),
+                texture(1, wgpu::TextureSampleType::Depth, wgpu::ShaderStages::FRAGMENT),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+                    count: None,
+                },
+                texture(3, flottant, wgpu::ShaderStages::FRAGMENT),
+            ],
+        });
+        let disposition_ao = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("textures de l'occultation"),
+            entries: &[texture(0, flottant, wgpu::ShaderStages::FRAGMENT), texture(1, flottant, wgpu::ShaderStages::FRAGMENT)],
+        });
+        let layout = |groupes: &[Option<&wgpu::BindGroupLayout>]| {
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: None, bind_group_layouts: groupes, immediate_size: 0 })
+        };
+        let layout_scene = layout(&[Some(&disposition_0), Some(&disposition_1)]);
+        let layout_profondeur = layout(&[Some(&disposition_0)]);
+        let layout_ao = layout(&[Some(&disposition_0), Some(&disposition_ao)]);
 
-            let vao = gl.create_vertex_array()?;
-            let vbo = gl.create_buffer()?;
-            let ebo_opaque = gl.create_buffer()?;
-            let ebo_transp = gl.create_buffer()?;
-            let ebo_lines = gl.create_buffer()?;
-            let ebo_aretes = gl.create_buffer()?;
-            let (vao_coupe, vbo_coupe) = (gl.create_vertex_array()?, gl.create_buffer()?);
-            let stride = std::mem::size_of::<Vertex>() as i32;
-            for (a, b) in [(vao, vbo), (vao_coupe, vbo_coupe)] {
-                gl.bind_vertex_array(Some(a));
-                gl.bind_buffer(glow::ARRAY_BUFFER, Some(b));
-                gl.enable_vertex_attrib_array(0);
-                gl.vertex_attrib_pointer_f32(0, 3, glow::FLOAT, false, stride, 0);
-                gl.enable_vertex_attrib_array(1);
-                gl.vertex_attrib_pointer_f32(1, 4, glow::BYTE, true, stride, 12);
-                gl.enable_vertex_attrib_array(2);
-                gl.vertex_attrib_pointer_f32(2, 4, glow::UNSIGNED_BYTE, true, stride, 16);
-                gl.enable_vertex_attrib_array(3);
-                gl.vertex_attrib_pointer_i32(3, 1, glow::UNSIGNED_INT, stride, 20);
-            }
-            // couleurs de rendu : attribut 4 du modèle, tampon à part (la coupe n'en a pas :
-            // valeur par défaut, alpha nul)
-            let vbo_rendu = gl.create_buffer()?;
-            gl.bind_vertex_array(Some(vao));
-            gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo_rendu));
-            gl.enable_vertex_attrib_array(4);
-            gl.vertex_attrib_pointer_f32(4, 4, glow::UNSIGNED_BYTE, true, 4, 0);
-            gl.vertex_attrib_4_f32(4, 0.0, 0.0, 0.0, 0.0);
-            let vbo_motifs = gl.create_buffer()?;
-            gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo_motifs));
-            gl.enable_vertex_attrib_array(5);
-            gl.vertex_attrib_pointer_f32(5, 4, glow::UNSIGNED_BYTE, true, 4, 0);
-            // la coupe n'a pas de motif : valeur par défaut, aucun
-            gl.bind_vertex_array(Some(vao_coupe));
-            gl.vertex_attrib_4_f32(5, 0.0, 0.0, 0.0, 0.0);
-            gl.bind_vertex_array(Some(vao));
-            gl.bind_vertex_array(None);
-            gl.bind_buffer(glow::ARRAY_BUFFER, None);
+        let attributs_sommet = wgpu::vertex_attr_array![0 => Float32x3, 1 => Snorm8x4, 2 => Unorm8x4, 3 => Uint32];
+        let attribut_rendu = wgpu::vertex_attr_array![4 => Unorm8x4];
+        let attribut_motif = wgpu::vertex_attr_array![5 => Unorm8x4];
+        let attribut_position = wgpu::vertex_attr_array![0 => Float32x3];
+        let pas_sommet = size_of::<Vertex>() as u64;
+        let tampons_scene = [
+            Some(wgpu::VertexBufferLayout { array_stride: pas_sommet, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attributs_sommet }),
+            Some(wgpu::VertexBufferLayout { array_stride: 4, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attribut_rendu }),
+            Some(wgpu::VertexBufferLayout { array_stride: 4, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attribut_motif }),
+        ];
+        let tampons_profondeur = [Some(wgpu::VertexBufferLayout { array_stride: pas_sommet, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attribut_position })];
 
-            let texture_selection = gl.create_texture()?;
-            Ok(Renderer {
-                u_mvp: gl.get_uniform_location(program, "u_mvp"),
-                u_selection: gl.get_uniform_location(program, "u_selection"),
-                u_selection_nombre: gl.get_uniform_location(program, "u_selection_nombre"),
-                texture_selection,
-                u_eye: gl.get_uniform_location(program, "u_eye"),
-                u_ortho: gl.get_uniform_location(program, "u_ortho"),
-                u_view_dir: gl.get_uniform_location(program, "u_view_dir"),
-                u_flat: gl.get_uniform_location(program, "u_flat"),
-                u_plans: gl.get_uniform_location(program, "u_plans[0]").or_else(|| gl.get_uniform_location(program, "u_plans")),
-                u_coupe: gl.get_uniform_location(program, "u_coupe"),
-                u_dessin: gl.get_uniform_location(program, "u_dessin"),
-                u_sans_eclairage: gl.get_uniform_location(program, "u_sans_eclairage"),
-                u_materiaux: gl.get_uniform_location(program, "u_materiaux"),
-                u_portees: gl.get_uniform_location(program, "u_portees"),
-                u_soleil: gl.get_uniform_location(program, "u_soleil"),
-                u_lumiere: gl.get_uniform_location(program, "u_lumiere"),
-                u_ombres: gl.get_uniform_location(program, "u_ombres"),
-                u_boite: gl.get_uniform_location(program, "u_boite"),
-                u_cadrage: gl.get_uniform_location(program, "u_cadrage[0]").or_else(|| gl.get_uniform_location(program, "u_cadrage")),
-                u_n_cadrage: gl.get_uniform_location(program, "u_n_cadrage"),
-                u_contour_vue: gl.get_uniform_location(program, "u_contour_vue[0]"),
-                u_nb_contour_vue: gl.get_uniform_location(program, "u_nb_contour_vue"),
-                u_boite_min: gl.get_uniform_location(program, "u_boite_min"),
-                u_boite_max: gl.get_uniform_location(program, "u_boite_max"),
-                u_decalage_ombre: gl.get_uniform_location(program, "u_decalage_ombre"),
-                u_ao: gl.get_uniform_location(program, "u_ao"),
-                u_ao_tex: gl.get_uniform_location(program, "u_ao_tex"),
-                u_vp: gl.get_uniform_location(program, "u_vp"),
-                programme_ao: compiler(gl, VS_PLEIN, FS_AO)?,
-                programme_flou: compiler(gl, VS_PLEIN, FS_FLOU)?,
-                vao_vide: gl.create_vertex_array()?,
-                cibles_ao: std::cell::RefCell::new(None),
-                vbo_rendu,
-                vbo_motifs,
-                u_mm: gl.get_uniform_location(program, "u_mm"),
-                u_table_motifs: gl.get_uniform_location(program, "u_table_motifs[0]").or_else(|| gl.get_uniform_location(program, "u_table_motifs")),
-                u_mvp_ombre: gl.get_uniform_location(programme_ombre, "u_mvp"),
-                programme_ombre,
-                fbo_ombres,
-                texture_ombres,
-                passes: Vec::new(),
-                program,
-                vao,
-                vbo,
-                ebo_opaque,
-                ebo_transp,
-                ebo_lines,
-                ebo_aretes,
-                n_opaque: 0,
-                n_transp: 0,
-                n_lines: 0,
-                n_aretes: 0,
-                vao_coupe,
-                vbo_coupe,
-                n_coupe: [0, 0],
+        // pipeline de la scène : (constante, pente) du décalage de profondeur des faces,
+        // fusion des transparents
+        let scene = |label, vs, tampons: &[Option<wgpu::VertexBufferLayout>], fs, decalage: Option<(i32, f32)>, transparent: bool| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&layout_scene),
+                vertex: wgpu::VertexState { module: &module_scene, entry_point: Some(vs), compilation_options: Default::default(), buffers: tampons },
+                primitive: Default::default(),
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: PROFONDEUR,
+                    depth_write_enabled: Some(!transparent),
+                    depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                    stencil: Default::default(),
+                    bias: decalage.map_or_else(Default::default, |(constant, slope_scale)| wgpu::DepthBiasState { constant, slope_scale, clamp: 0.0 }),
+                }),
+                multisample: wgpu::MultisampleState { count: echantillons, ..Default::default() },
+                fragment: Some(wgpu::FragmentState {
+                    module: &module_scene,
+                    entry_point: Some(fs),
+                    compilation_options: Default::default(),
+                    // l'alpha reste opaque : l'image est posée telle quelle dans l'interface
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: COULEUR,
+                        blend: transparent.then_some(wgpu::BlendState {
+                            color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::SrcAlpha, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add },
+                            alpha: wgpu::BlendComponent::REPLACE,
+                        }),
+                        write_mask: wgpu::ColorWrites::COLOR,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
             })
+        };
+        // segment : ses deux sommets à la suite, par instance
+        let attributs_segment = wgpu::vertex_attr_array![
+            0 => Float32x3, 1 => Snorm8x4, 2 => Unorm8x4, 3 => Uint32,
+            6 => Float32x3, 7 => Snorm8x4, 8 => Unorm8x4, 9 => Uint32
+        ];
+        let tampons_segment = [Some(wgpu::VertexBufferLayout { array_stride: 2 * pas_sommet, step_mode: wgpu::VertexStepMode::Instance, attributes: &attributs_segment })];
+        let opaque = scene("opaques", "vs_main", &tampons_scene, "fs_main", Some((1, 1.0)), false);
+        // arêtes à leur profondeur exacte : faces repoussées nettement
+        let opaque_aretes = scene("opaques sous arêtes", "vs_main", &tampons_scene, "fs_main", Some((64, 1.0)), false);
+        let transparent = scene("transparents", "vs_main", &tampons_scene, "fs_main", Some((1, 1.0)), true);
+        let traits = scene("traits", "vs_trait", &tampons_segment, "fs_plat", None, false);
+        let coupe = scene("coupe", "vs_main", &tampons_scene, "fs_plat", Some((1, 1.0)), false);
+
+        // couleur : profondeur aussi écrite dans une texture de ce format
+        let profondeur = |label, couleur: Option<wgpu::TextureFormat>, decalage: wgpu::DepthBiasState| {
+            let cibles = [couleur.map(wgpu::ColorTargetState::from)];
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&layout_profondeur),
+                vertex: wgpu::VertexState { module: &module_scene, entry_point: Some("vs_profondeur"), compilation_options: Default::default(), buffers: &tampons_profondeur },
+                primitive: Default::default(),
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: PROFONDEUR,
+                    depth_write_enabled: Some(true),
+                    depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                    stencil: Default::default(),
+                    bias: decalage,
+                }),
+                multisample: Default::default(),
+                fragment: couleur.map(|_| wgpu::FragmentState {
+                    module: &module_scene,
+                    entry_point: Some("fs_profondeur"),
+                    compilation_options: Default::default(),
+                    targets: &cibles,
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let pipeline_ombres = profondeur("carte d'ombres", None, wgpu::DepthBiasState { constant: 4, slope_scale: 2.0, clamp: 0.0 });
+        let pipeline_ao_profondeur = profondeur("profondeur de l'occultation", Some(PROFONDEUR_LUE), Default::default());
+        let plein = |label, fs| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&layout_ao),
+                vertex: wgpu::VertexState { module: &module_ao, entry_point: Some("vs_plein"), compilation_options: Default::default(), buffers: &[] },
+                primitive: Default::default(),
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &module_ao,
+                    entry_point: Some(fs),
+                    compilation_options: Default::default(),
+                    targets: &[Some(OCCULTATION.into())],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let pipeline_ao = plein("occultation", "fs_ao");
+        let pipeline_flou = plein("flou de l'occultation", "fs_flou");
+
+        let globales = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("globales"),
+            size: size_of::<Globales>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let uniformes_passes = Self::tampon_passes(&device, PREMIERE_FENETRE as u64 + 4);
+        let groupe_0 = Self::groupe_0(&device, &disposition_0, &globales, &uniformes_passes);
+
+        let ombres = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("carte d'ombres"),
+            size: wgpu::Extent3d { width: TAILLE_OMBRES as u32, height: TAILLE_OMBRES as u32, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: PROFONDEUR,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        // comparaison de profondeur par le matériel, filtrée (bords adoucis)
+        let echantillonneur_ombres = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("ombres"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            compare: Some(wgpu::CompareFunction::LessEqual),
+            ..Default::default()
+        });
+        let ao_vide = Self::texture(&device, "occultation vide", 1, 1, 1, OCCULTATION, wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST);
+        rs.queue.write_texture(ao_vide.as_image_copy(), &[255], wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(1), rows_per_image: None }, wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 });
+        let vide = |label| Self::tampon(&device, label, &[0u8; 16], wgpu::BufferUsages::VERTEX);
+        let index_vide = |label| Self::tampon(&device, label, &[0u8; 16], wgpu::BufferUsages::INDEX);
+        Ok(Renderer {
+            texture_selection: Self::texture(&device, "sélection", 1024, 1, 1, OCCULTATION, wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST),
+            vue_ombres: ombres.create_view(&Default::default()),
+            echantillonneur_ombres,
+            ao_vide: ao_vide.create_view(&Default::default()),
+            sommets: vide("sommets"),
+            rendu: vide("couleurs de rendu"),
+            motifs: vide("motifs"),
+            ebo_opaque: index_vide("opaques"),
+            ebo_transp: index_vide("transparents"),
+            segments_traits: vide("traits"),
+            segments_aretes: vide("arêtes"),
+            sommets_cpu: Vec::new(),
+            n_opaque: 0,
+            n_transp: 0,
+            n_lines: 0,
+            n_aretes: 0,
+            sommets_coupe: vide("coupe"),
+            nul_coupe: vide("coupe sans rendu"),
+            n_coupe: [0, 0],
+            passes: Vec::new(),
+            cibles: None,
+            texture_egui: None,
+            opaque,
+            opaque_aretes,
+            transparent,
+            traits,
+            coupe,
+            pipeline_ombres,
+            pipeline_ao_profondeur,
+            pipeline_ao,
+            pipeline_flou,
+            disposition_0,
+            disposition_1,
+            disposition_ao,
+            globales,
+            uniformes_passes,
+            groupe_0,
+            echantillons,
+            egui: rs.renderer.clone(),
+            queue: rs.queue.clone(),
+            device,
+        })
+    }
+
+    fn tampon(device: &wgpu::Device, label: &str, contenu: &[u8], usage: wgpu::BufferUsages) -> wgpu::Buffer {
+        // un tampon vide n'est pas lié : quelques octets nuls
+        let contenu = if contenu.is_empty() { &[0u8; 16][..] } else { contenu };
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some(label), contents: contenu, usage })
+    }
+
+    fn texture(device: &wgpu::Device, label: &str, largeur: u32, hauteur: u32, echantillons: u32, format: wgpu::TextureFormat, usage: wgpu::TextureUsages) -> wgpu::Texture {
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(label),
+            size: wgpu::Extent3d { width: largeur, height: hauteur, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: echantillons,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage,
+            view_formats: &[],
+        })
+    }
+
+    fn tampon_passes(device: &wgpu::Device, places: u64) -> wgpu::Buffer {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("uniformes des dessins"),
+            size: places * PAS_PASSE,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        })
+    }
+
+    fn groupe_0(device: &wgpu::Device, disposition: &wgpu::BindGroupLayout, globales: &wgpu::Buffer, passes: &wgpu::Buffer) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("uniformes"),
+            layout: disposition,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: globales.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: passes, offset: 0, size: wgpu::BufferSize::new(size_of::<UniformesPasse>() as u64) }),
+                },
+            ],
+        })
+    }
+
+    fn cibles(&self, largeur: u32, hauteur: u32) -> Cibles {
+        let d = &self.device;
+        let attache = wgpu::TextureUsages::RENDER_ATTACHMENT;
+        let lue = attache | wgpu::TextureUsages::TEXTURE_BINDING;
+        let vue = |t: wgpu::Texture| t.create_view(&Default::default());
+        let couleur_ms = (self.echantillons > 1).then(|| vue(Self::texture(d, "couleur", largeur, hauteur, self.echantillons, COULEUR, attache)));
+        let resultat = Self::texture(d, "image de la vue", largeur, hauteur, 1, COULEUR, lue | wgpu::TextureUsages::COPY_SRC);
+        let ao_tampon = vue(Self::texture(d, "tampon de profondeur de l'occultation", largeur, hauteur, 1, PROFONDEUR, attache));
+        let ao_profondeur = vue(Self::texture(d, "profondeur de l'occultation", largeur, hauteur, 1, PROFONDEUR_LUE, lue));
+        let ao_brut = vue(Self::texture(d, "occultation brute", largeur, hauteur, 1, OCCULTATION, lue));
+        let ao_lisse = vue(Self::texture(d, "occultation lissée", largeur, hauteur, 1, OCCULTATION, lue));
+        let groupe = |t: &wgpu::TextureView| {
+            d.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("occultation"),
+                layout: &self.disposition_ao,
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&ao_profondeur) },
+                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(t) },
+                ],
+            })
+        };
+        // le calcul lit la profondeur seule (texture lissée liée pour la forme), le flou
+        // lit l'occultation brute
+        let groupe_ao = groupe(&ao_lisse);
+        let groupe_flou = groupe(&ao_brut);
+        Cibles {
+            largeur,
+            hauteur,
+            couleur_ms,
+            profondeur: vue(Self::texture(d, "profondeur", largeur, hauteur, self.echantillons, PROFONDEUR, attache)),
+            vue_resultat: resultat.create_view(&Default::default()),
+            resultat,
+            ao_tampon,
+            ao_profondeur,
+            ao_brut,
+            ao_lisse,
+            groupe_ao,
+            groupe_flou,
         }
     }
 
     /// Sommets et leurs couleurs de rendu (même nombre, alpha 0 : aucune).
-    pub fn upload_vertices(&mut self, gl: &glow::Context, v: &[Vertex], rendu: &[[u8; 4]], motifs: &[[u8; 4]]) {
-        unsafe {
-            gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.vbo_motifs));
-            gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, as_bytes(motifs), glow::STATIC_DRAW);
-            gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.vbo_rendu));
-            gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, as_bytes(rendu), glow::STATIC_DRAW);
-            gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.vbo));
-            gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, as_bytes(v), glow::STATIC_DRAW);
-            gl.bind_buffer(glow::ARRAY_BUFFER, None);
-        }
+    pub fn upload_vertices(&mut self, v: &[Vertex], rendu: &[[u8; 4]], motifs: &[[u8; 4]]) {
+        let usage = wgpu::BufferUsages::VERTEX;
+        self.sommets = Self::tampon(&self.device, "sommets", as_bytes(v), usage);
+        self.rendu = Self::tampon(&self.device, "couleurs de rendu", as_bytes(rendu), usage);
+        self.motifs = Self::tampon(&self.device, "motifs", as_bytes(motifs), usage);
+        self.sommets_cpu = v.to_vec();
         self.n_opaque = 0;
         self.n_transp = 0;
         self.n_lines = 0;
         self.n_aretes = 0;
     }
 
+    /// Sommets des segments (paires d'indices), à la suite ; une paire hors des sommets
+    /// est ignorée.
+    fn segments(&self, label: &str, indices: &[u32]) -> (wgpu::Buffer, u32) {
+        let v = &self.sommets_cpu;
+        let paires: Vec<Vertex> = indices
+            .chunks_exact(2)
+            .filter_map(|p| Some([*v.get(p[0] as usize)?, *v.get(p[1] as usize)?]))
+            .flatten()
+            .collect();
+        (Self::tampon(&self.device, label, as_bytes(&paires), wgpu::BufferUsages::VERTEX), (paires.len() / 2) as u32)
+    }
+
     /// Indices des triangles opaques, transparents, des traits et des arêtes vives
     /// (paires) à tracer.
-    pub fn upload_indices(&mut self, gl: &glow::Context, opaque: &[u32], transp: &[u32], lines: &[u32], aretes: &[u32]) {
-        unsafe {
-            gl.bind_vertex_array(Some(self.vao));
-            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_opaque));
-            gl.buffer_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, as_bytes(opaque), glow::DYNAMIC_DRAW);
-            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_transp));
-            gl.buffer_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, as_bytes(transp), glow::DYNAMIC_DRAW);
-            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_lines));
-            gl.buffer_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, as_bytes(lines), glow::DYNAMIC_DRAW);
-            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_aretes));
-            gl.buffer_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, as_bytes(aretes), glow::DYNAMIC_DRAW);
-            gl.bind_vertex_array(None);
-            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
-        }
-        self.n_opaque = opaque.len() as i32;
-        self.n_transp = transp.len() as i32;
-        self.n_lines = lines.len() as i32;
-        self.n_aretes = aretes.len() as i32;
+    pub fn upload_indices(&mut self, opaque: &[u32], transp: &[u32], lines: &[u32], aretes: &[u32]) {
+        let usage = wgpu::BufferUsages::INDEX;
+        self.ebo_opaque = Self::tampon(&self.device, "opaques", as_bytes(opaque), usage);
+        self.ebo_transp = Self::tampon(&self.device, "transparents", as_bytes(transp), usage);
+        (self.segments_traits, self.n_lines) = self.segments("traits", lines);
+        (self.segments_aretes, self.n_aretes) = self.segments("arêtes", aretes);
+        self.n_opaque = opaque.len() as u32;
+        self.n_transp = transp.len() as u32;
     }
 
     /// Tracé de la coupe du mode dessin : triangles (poché, contours) et traits (hachures).
-    pub fn upload_coupe(&mut self, gl: &glow::Context, tris: &[Vertex], traits: &[Vertex]) {
-        unsafe {
-            gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.vbo_coupe));
-            let tout: Vec<Vertex> = tris.iter().chain(traits).copied().collect();
-            gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, as_bytes(&tout), glow::DYNAMIC_DRAW);
-            gl.bind_buffer(glow::ARRAY_BUFFER, None);
-        }
-        self.n_coupe = [tris.len() as i32, traits.len() as i32];
+    pub fn upload_coupe(&mut self, tris: &[Vertex], traits: &[Vertex]) {
+        let tout: Vec<Vertex> = tris.iter().chain(traits).copied().collect();
+        self.sommets_coupe = Self::tampon(&self.device, "coupe", as_bytes(&tout), wgpu::BufferUsages::VERTEX);
+        self.nul_coupe = Self::tampon(&self.device, "coupe sans rendu", &vec![0u8; 4 * tout.len()], wgpu::BufferUsages::VERTEX);
+        self.n_coupe = [tris.len() as u32, traits.len() as u32];
     }
 
     /// Indices (triangles opaques, transparents, traits) de chaque passe ; une liste vide
     /// retire les passes.
-    pub fn upload_passes(&mut self, gl: &glow::Context, passes: &[[Vec<u32>; 3]]) {
-        unsafe {
-            while self.passes.len() < passes.len() {
-                let ebo = [gl.create_buffer().unwrap(), gl.create_buffer().unwrap(), gl.create_buffer().unwrap()];
-                self.passes.push(Passe { ebo, n: [0; 3] });
-            }
-            gl.bind_vertex_array(Some(self.vao));
-            for (k, ps) in self.passes.iter_mut().enumerate() {
-                for j in 0..3 {
-                    let idx: &[u32] = passes.get(k).map(|x| x[j].as_slice()).unwrap_or_default();
-                    gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ps.ebo[j]));
-                    gl.buffer_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, as_bytes(idx), glow::DYNAMIC_DRAW);
-                    ps.n[j] = idx.len() as i32;
-                }
-            }
-            gl.bind_vertex_array(None);
-            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
-        }
+    pub fn upload_passes(&mut self, passes: &[[Vec<u32>; 3]]) {
+        self.passes = passes
+            .iter()
+            .map(|p| {
+                let index = |j: usize| Self::tampon(&self.device, "fenêtre de vue", as_bytes(&p[j]), wgpu::BufferUsages::INDEX);
+                let (traits, n_traits) = self.segments("traits de la fenêtre de vue", &p[2]);
+                Passe { ebo: [index(0), index(1), traits], n: [p[0].len() as u32, p[1].len() as u32, n_traits] }
+            })
+            .collect();
     }
 
-    /// Triangles opaques, traits (et arêtes vives si `aretes`) puis triangles
+    /// Uniformes et sélection d'une image de `largeur` × `hauteur` pixels.
+    fn preparer(&mut self, p: &FrameParams, largeur: u32, hauteur: u32) {
+        // sélection : un octet par objet, lignes de 1024
+        let lignes = p.selected.len().max(1).div_ceil(1024) as u32;
+        if self.texture_selection.height() != lignes {
+            self.texture_selection = Self::texture(&self.device, "sélection", 1024, lignes, 1, OCCULTATION, wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST);
+        }
+        let mut selection = p.selected.clone();
+        selection.resize(lignes as usize * 1024, 0);
+        self.queue.write_texture(
+            self.texture_selection.as_image_copy(),
+            &selection,
+            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(1024), rows_per_image: None },
+            self.texture_selection.size(),
+        );
+
+        // SAFETY: structure de f32 et u32, zéro valide partout.
+        let mut g: Globales = unsafe { std::mem::zeroed() };
+        g.eye = v4(p.eye, p.ortho as u32 as f32);
+        g.soleil = v4(SOLEIL, 0.0);
+        if let Some((soleil, lumiere, decalage)) = p.soleil {
+            g.soleil = v4(soleil, decalage);
+            g.lumiere = lumiere.to_cols_array();
+        }
+        if let Some((proj, rayon)) = p.ao {
+            g.proj = proj.to_cols_array();
+            g.proj_inv = proj.inverse().to_cols_array();
+            g.divers[1] = rayon;
+        }
+        g.divers[0] = p.mm;
+        g.divers[2] = largeur as f32;
+        g.divers[3] = hauteur as f32;
+        if let Some((a, b)) = p.boite {
+            g.boite_min = v4(a, 0.0);
+            g.boite_max = v4(b, 0.0);
+        }
+        for (k, pl) in p.cadrage.iter().take(4).enumerate() {
+            g.cadrage[k] = pl.to_array();
+        }
+        for (k, t) in p.table_motifs.iter().take(14).enumerate() {
+            g.table_motifs[k] = *t;
+        }
+        for (k, q) in p.contour_vue.iter().take(128).enumerate() {
+            g.contour[k / 2][2 * (k % 2)..2 * (k % 2) + 2].copy_from_slice(&[q.x, q.y]);
+        }
+        g.selection[0] = p.selected.len() as u32;
+        self.queue.write_buffer(&self.globales, 0, as_bytes(std::slice::from_ref(&g)));
+
+        // dessins : modèle (réglages de la vue), tracé de la coupe, profondeurs, fenêtres
+        // de vue (ombrées, sans coupe, zone, cadrage ni contour)
+        let graphique = p.style == StyleVisuel::Graphique;
+        let ao = self.ao_actif(p);
+        let modele = UniformesPasse {
+            mvp: p.mvp.to_cols_array(),
+            view_dir: v4(p.view_dir, 0.0),
+            coupe: p.coupe.map_or(NEUTRE, |c| c.to_array()),
+            plans: [[0.0; 4]; 2],
+            drapeaux: [(graphique && p.faces_blanches) as u32, (graphique && !p.eclairage) as u32, (!graphique) as u32, p.soleil.is_some() as u32],
+            drapeaux2: [ao as u32, p.boite.is_some() as u32, p.cadrage.len().min(4) as u32, p.contour_vue.len().min(128) as u32],
+        };
+        let mut uniformes = vec![modele, UniformesPasse { coupe: NEUTRE, drapeaux: [0; 4], ..modele }];
+        uniformes.push(UniformesPasse { mvp: p.soleil.map_or(Mat4::IDENTITY, |s| s.1).to_cols_array(), ..Default::default() });
+        uniformes.push(UniformesPasse { mvp: p.mvp.to_cols_array(), ..Default::default() });
+        for pp in &p.passes {
+            let mut plans = [[0.0; 4]; 2];
+            for (k, pl) in pp.plans.iter().take(2).enumerate() {
+                plans[k] = pl.to_array();
+            }
+            uniformes.push(UniformesPasse { mvp: pp.mvp.to_cols_array(), view_dir: v4(pp.view_dir, 0.0), coupe: NEUTRE, plans, ..Default::default() });
+        }
+        let places = uniformes.len() as u64;
+        if self.uniformes_passes.size() < places * PAS_PASSE {
+            self.uniformes_passes = Self::tampon_passes(&self.device, places.next_power_of_two());
+            self.groupe_0 = Self::groupe_0(&self.device, &self.disposition_0, &self.globales, &self.uniformes_passes);
+        }
+        let mut octets = vec![0u8; (places * PAS_PASSE) as usize];
+        for (k, u) in uniformes.iter().enumerate() {
+            let o = k * PAS_PASSE as usize;
+            octets[o..o + size_of::<UniformesPasse>()].copy_from_slice(as_bytes(std::slice::from_ref(u)));
+        }
+        self.queue.write_buffer(&self.uniformes_passes, 0, &octets);
+    }
+
+    /// Occultation ambiante : vue entière seulement (ni zone de coupe, ni cadrage, ni feuille).
+    fn ao_actif(&self, p: &FrameParams) -> bool {
+        p.ao.is_some() && p.boite.is_none() && p.cadrage.is_empty() && p.passes.is_empty()
+    }
+
+    fn sommets_scene(&self, passe: &mut wgpu::RenderPass<'_>) {
+        passe.set_vertex_buffer(0, self.sommets.slice(..));
+        passe.set_vertex_buffer(1, self.rendu.slice(..));
+        passe.set_vertex_buffer(2, self.motifs.slice(..));
+    }
+
+    /// Triangles opaques, traits (segments, et arêtes vives si `aretes`) puis triangles
     /// transparents des tampons donnés.
-    unsafe fn dessiner(&self, gl: &glow::Context, ebo: [glow::Buffer; 3], n: [i32; 3], aretes: bool) {
-        unsafe {
-            gl.disable(glow::BLEND);
-            if aretes {
-                // arêtes à leur profondeur exacte : faces repoussées nettement
-                gl.polygon_offset(1.0, 64.0);
-            }
-            if n[0] > 0 {
-                gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ebo[0]));
-                gl.draw_elements(glow::TRIANGLES, n[0], glow::UNSIGNED_INT, 0);
-            }
-            if n[2] > 0 || aretes {
-                // traits sans ombrage ; les faces sont repoussées par le décalage de polygone
-                gl.uniform_1_i32(self.u_flat.as_ref(), 1);
-                if n[2] > 0 {
-                    gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ebo[2]));
-                    gl.draw_elements(glow::LINES, n[2], glow::UNSIGNED_INT, 0);
-                }
-                if aretes && self.n_aretes > 0 {
-                    gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_aretes));
-                    gl.draw_elements(glow::LINES, self.n_aretes, glow::UNSIGNED_INT, 0);
-                }
-                gl.uniform_1_i32(self.u_flat.as_ref(), 0);
-            }
-            if aretes {
-                gl.polygon_offset(1.0, 1.0);
-            }
-            if n[1] > 0 {
-                gl.enable(glow::BLEND);
-                gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
-                gl.depth_mask(false);
-                gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ebo[1]));
-                gl.draw_elements(glow::TRIANGLES, n[1], glow::UNSIGNED_INT, 0);
-                gl.depth_mask(true);
-            }
+    fn dessiner(&self, passe: &mut wgpu::RenderPass<'_>, ebo: [&wgpu::Buffer; 3], n: [u32; 3], aretes: bool) {
+        let index = |passe: &mut wgpu::RenderPass<'_>, b: &wgpu::Buffer, n: u32| {
+            passe.set_index_buffer(b.slice(..), wgpu::IndexFormat::Uint32);
+            passe.draw_indexed(0..n, 0, 0..1);
+        };
+        if n[0] > 0 {
+            passe.set_pipeline(if aretes { &self.opaque_aretes } else { &self.opaque });
+            index(passe, ebo[0], n[0]);
+        }
+        // traits sans ombrage ; les faces sont repoussées par le décalage de profondeur
+        passe.set_pipeline(&self.traits);
+        let segments = |passe: &mut wgpu::RenderPass<'_>, b: &wgpu::Buffer, n: u32| {
+            passe.set_vertex_buffer(0, b.slice(..));
+            passe.draw(0..6, 0..n);
+        };
+        if n[2] > 0 {
+            segments(passe, ebo[2], n[2]);
+        }
+        if aretes && self.n_aretes > 0 {
+            segments(passe, &self.segments_aretes, self.n_aretes);
+        }
+        if n[1] > 0 {
+            self.sommets_scene(passe);
+            passe.set_pipeline(&self.transparent);
+            index(passe, ebo[1], n[1]);
         }
     }
 
-    /// Profondeur de la scène vue du soleil dans la carte d'ombres (triangles opaques),
-    /// puis retour au tampon de trame et à la zone d'affichage en cours.
-    unsafe fn passe_ombres(&self, gl: &glow::Context, lumiere: Mat4) {
-        unsafe {
-            let tampon = gl.get_parameter_framebuffer(glow::DRAW_FRAMEBUFFER_BINDING);
-            let mut zone = [0i32; 4];
-            gl.get_parameter_i32_slice(glow::VIEWPORT, &mut zone);
-            let ciseaux = gl.is_enabled(glow::SCISSOR_TEST);
-            gl.bind_framebuffer(glow::FRAMEBUFFER, Some(self.fbo_ombres));
-            gl.viewport(0, 0, TAILLE_OMBRES, TAILLE_OMBRES);
-            gl.disable(glow::SCISSOR_TEST);
-            gl.enable(glow::DEPTH_TEST);
-            gl.depth_func(glow::LEQUAL);
-            gl.depth_mask(true);
-            gl.clear(glow::DEPTH_BUFFER_BIT);
-            gl.enable(glow::POLYGON_OFFSET_FILL);
-            gl.polygon_offset(2.0, 4.0);
-            gl.use_program(Some(self.programme_ombre));
-            gl.uniform_matrix_4_f32_slice(self.u_mvp_ombre.as_ref(), false, &lumiere.to_cols_array());
-            gl.bind_vertex_array(Some(self.vao));
-            if self.n_opaque > 0 {
-                gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_opaque));
-                gl.draw_elements(glow::TRIANGLES, self.n_opaque, glow::UNSIGNED_INT, 0);
-            }
-            gl.bind_vertex_array(None);
-            gl.disable(glow::POLYGON_OFFSET_FILL);
-            gl.bind_framebuffer(glow::FRAMEBUFFER, tampon);
-            gl.viewport(zone[0], zone[1], zone[2], zone[3]);
-            if ciseaux {
-                gl.enable(glow::SCISSOR_TEST);
-            }
+    /// Image de `p` dans `c` (commandes envoyées).
+    fn rendre(&self, c: &Cibles, p: &FrameParams) {
+        let mut enc = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("vue 3D") });
+        let decalage = |place: u32| [place * PAS_PASSE as u32];
+        // profondeur, aussi écrite dans `couleur` (effacée au plus loin)
+        let profondeur_seule = |enc: &mut wgpu::CommandEncoder, vue: &wgpu::TextureView, couleur: Option<&wgpu::TextureView>| {
+            let attache = couleur.map(|view| wgpu::RenderPassColorAttachment {
+                view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::WHITE), store: wgpu::StoreOp::Store },
+            });
+            enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: if attache.is_some() { std::slice::from_ref(&attache) } else { &[] },
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: vue,
+                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            })
+            .forget_lifetime()
+        };
+        // profondeur de la scène vue du soleil dans la carte d'ombres (triangles opaques)
+        if p.soleil.is_some() && self.n_opaque > 0 {
+            let mut passe = profondeur_seule(&mut enc, &self.vue_ombres, None);
+            passe.set_pipeline(&self.pipeline_ombres);
+            passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_OMBRES));
+            passe.set_vertex_buffer(0, self.sommets.slice(..));
+            passe.set_index_buffer(self.ebo_opaque.slice(..), wgpu::IndexFormat::Uint32);
+            passe.draw_indexed(0..self.n_opaque, 0, 0..1);
         }
-    }
-
-    /// Cibles de l'occultation à la taille de la vue : profondeur, occultation brute et
-    /// lissée (une composante).
-    unsafe fn cibles_ao(&self, gl: &glow::Context, largeur: i32, hauteur: i32) -> Option<([glow::Framebuffer; 3], [glow::Texture; 3])> {
-        unsafe {
-            let mut cibles = self.cibles_ao.borrow_mut();
-            if cibles.as_ref().is_none_or(|c| c.largeur != largeur || c.hauteur != hauteur) {
-                if let Some(c) = cibles.take() {
-                    c.fbo.iter().for_each(|f| gl.delete_framebuffer(*f));
-                    c.textures.iter().for_each(|t| gl.delete_texture(*t));
-                }
-                let tampon = gl.get_parameter_framebuffer(glow::DRAW_FRAMEBUFFER_BINDING);
-                let mut fbo = Vec::new();
-                let mut textures = Vec::new();
-                let mut complet = true;
-                for k in 0..3 {
-                    let t = gl.create_texture().ok()?;
-                    gl.bind_texture(glow::TEXTURE_2D, Some(t));
-                    if k == 0 {
-                        gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::DEPTH_COMPONENT24 as i32, largeur, hauteur, 0, glow::DEPTH_COMPONENT, glow::UNSIGNED_INT, glow::PixelUnpackData::Slice(None));
-                    } else {
-                        gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::R8 as i32, largeur, hauteur, 0, glow::RED, glow::UNSIGNED_BYTE, glow::PixelUnpackData::Slice(None));
-                    }
-                    for (p, v) in [(glow::TEXTURE_MIN_FILTER, glow::NEAREST), (glow::TEXTURE_MAG_FILTER, glow::NEAREST), (glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE), (glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE)] {
-                        gl.tex_parameter_i32(glow::TEXTURE_2D, p, v as i32);
-                    }
-                    let f = gl.create_framebuffer().ok()?;
-                    gl.bind_framebuffer(glow::FRAMEBUFFER, Some(f));
-                    if k == 0 {
-                        gl.framebuffer_texture_2d(glow::FRAMEBUFFER, glow::DEPTH_ATTACHMENT, glow::TEXTURE_2D, Some(t), 0);
-                        gl.draw_buffers(&[glow::NONE]);
-                        gl.read_buffer(glow::NONE);
-                    } else {
-                        gl.framebuffer_texture_2d(glow::FRAMEBUFFER, glow::COLOR_ATTACHMENT0, glow::TEXTURE_2D, Some(t), 0);
-                        gl.draw_buffers(&[glow::COLOR_ATTACHMENT0]);
-                    }
-                    complet &= gl.check_framebuffer_status(glow::FRAMEBUFFER) == glow::FRAMEBUFFER_COMPLETE;
-                    fbo.push(f);
-                    textures.push(t);
-                }
-                gl.bind_texture(glow::TEXTURE_2D, None);
-                gl.bind_framebuffer(glow::FRAMEBUFFER, tampon);
-                let c = CiblesAo { largeur, hauteur, fbo: [fbo[0], fbo[1], fbo[2]], textures: [textures[0], textures[1], textures[2]] };
-                if !complet {
-                    c.fbo.iter().for_each(|f| gl.delete_framebuffer(*f));
-                    c.textures.iter().for_each(|t| gl.delete_texture(*t));
-                    return None;
-                }
-                *cibles = Some(c);
-            }
-            cibles.as_ref().map(|c| (c.fbo, c.textures))
-        }
-    }
-
-    /// Occultation ambiante de la vue : profondeur (triangles opaques), occultation brute
-    /// puis lissée ; retourne la texture lissée.
-    unsafe fn passe_ao(&self, gl: &glow::Context, mvp: Mat4, proj: Mat4, rayon: f32, largeur: i32, hauteur: i32) -> Option<glow::Texture> {
-        unsafe {
-            let (fbo, tex) = self.cibles_ao(gl, largeur, hauteur)?;
-            let tampon = gl.get_parameter_framebuffer(glow::DRAW_FRAMEBUFFER_BINDING);
-            let mut zone = [0i32; 4];
-            gl.get_parameter_i32_slice(glow::VIEWPORT, &mut zone);
-            let ciseaux = gl.is_enabled(glow::SCISSOR_TEST);
-            gl.viewport(0, 0, largeur, hauteur);
-            gl.disable(glow::SCISSOR_TEST);
-            // profondeur
-            gl.bind_framebuffer(glow::FRAMEBUFFER, Some(fbo[0]));
-            gl.enable(glow::DEPTH_TEST);
-            gl.depth_func(glow::LEQUAL);
-            gl.depth_mask(true);
-            gl.clear(glow::DEPTH_BUFFER_BIT);
-            gl.use_program(Some(self.programme_ombre));
-            gl.uniform_matrix_4_f32_slice(self.u_mvp_ombre.as_ref(), false, &mvp.to_cols_array());
-            gl.bind_vertex_array(Some(self.vao));
-            if self.n_opaque > 0 {
-                gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ebo_opaque));
-                gl.draw_elements(glow::TRIANGLES, self.n_opaque, glow::UNSIGNED_INT, 0);
-            }
-            // occultation brute puis lissée, sans profondeur
-            gl.disable(glow::DEPTH_TEST);
-            gl.disable(glow::BLEND);
-            gl.bind_vertex_array(Some(self.vao_vide));
-            let inv = proj.inverse().to_cols_array();
-            gl.active_texture(glow::TEXTURE2);
-            gl.bind_texture(glow::TEXTURE_2D, Some(tex[0]));
-            gl.bind_framebuffer(glow::FRAMEBUFFER, Some(fbo[1]));
-            gl.use_program(Some(self.programme_ao));
-            let u = |n: &str| gl.get_uniform_location(self.programme_ao, n);
-            gl.uniform_1_i32(u("u_profondeur").as_ref(), 2);
-            gl.uniform_matrix_4_f32_slice(u("u_proj").as_ref(), false, &proj.to_cols_array());
-            gl.uniform_matrix_4_f32_slice(u("u_proj_inv").as_ref(), false, &inv);
-            gl.uniform_1_f32(u("u_rayon").as_ref(), rayon);
-            gl.draw_arrays(glow::TRIANGLES, 0, 3);
-            gl.bind_framebuffer(glow::FRAMEBUFFER, Some(fbo[2]));
-            gl.use_program(Some(self.programme_flou));
-            let u = |n: &str| gl.get_uniform_location(self.programme_flou, n);
-            gl.active_texture(glow::TEXTURE3);
-            gl.bind_texture(glow::TEXTURE_2D, Some(tex[1]));
-            gl.uniform_1_i32(u("u_ao_brut").as_ref(), 3);
-            gl.uniform_1_i32(u("u_profondeur").as_ref(), 2);
-            gl.uniform_matrix_4_f32_slice(u("u_proj_inv").as_ref(), false, &inv);
-            gl.draw_arrays(glow::TRIANGLES, 0, 3);
-            gl.bind_texture(glow::TEXTURE_2D, None);
-            gl.active_texture(glow::TEXTURE2);
-            gl.bind_texture(glow::TEXTURE_2D, None);
-            gl.active_texture(glow::TEXTURE0);
-            gl.bind_vertex_array(None);
-            gl.bind_framebuffer(glow::FRAMEBUFFER, tampon);
-            gl.viewport(zone[0], zone[1], zone[2], zone[3]);
-            if ciseaux {
-                gl.enable(glow::SCISSOR_TEST);
-            }
-            Some(tex[2])
-        }
-    }
-
-    pub fn paint(&self, gl: &glow::Context, p: &FrameParams, viewport: [i32; 4]) {
-        unsafe {
-            if let Some((_, lumiere, _)) = p.soleil {
-                self.passe_ombres(gl, lumiere);
-            }
-            // occultation ambiante : vue entière seulement (ni zone de coupe, ni cadrage, ni feuille)
-            let ao = match p.ao {
-                Some((proj, rayon)) if p.boite.is_none() && p.cadrage.is_empty() && p.passes.is_empty() => {
-                    self.passe_ao(gl, p.mvp, proj, rayon, viewport[2], viewport[3])
-                }
-                _ => None,
-            };
-            gl.enable(glow::SCISSOR_TEST);
-            gl.scissor(viewport[0], viewport[1], viewport[2], viewport[3]);
-            gl.clear_color(p.background[0], p.background[1], p.background[2], 1.0);
-            gl.depth_mask(true);
-            gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
-
-            gl.enable(glow::DEPTH_TEST);
-            gl.depth_func(glow::LEQUAL);
-            gl.disable(glow::CULL_FACE);
-            gl.use_program(Some(self.program));
-            gl.uniform_matrix_4_f32_slice(self.u_mvp.as_ref(), false, &p.mvp.to_cols_array());
-            let hauteur = p.selected.len().max(1).div_ceil(1024);
-            let mut selection = p.selected.clone();
-            selection.resize(hauteur * 1024, 0);
-            gl.active_texture(glow::TEXTURE4);
-            gl.bind_texture(glow::TEXTURE_2D, Some(self.texture_selection));
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, glow::NEAREST as i32);
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::NEAREST as i32);
-            gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::R8 as i32, 1024, hauteur as i32, 0, glow::RED, glow::UNSIGNED_BYTE, glow::PixelUnpackData::Slice(Some(&selection)));
-            gl.uniform_1_i32(self.u_selection.as_ref(), 4);
-            gl.uniform_1_u32(self.u_selection_nombre.as_ref(), p.selected.len() as u32);
-            gl.active_texture(glow::TEXTURE0);
-            gl.uniform_3_f32(self.u_eye.as_ref(), p.eye.x, p.eye.y, p.eye.z);
-            gl.uniform_1_i32(self.u_ortho.as_ref(), p.ortho as i32);
-            gl.uniform_3_f32(self.u_view_dir.as_ref(), p.view_dir.x, p.view_dir.y, p.view_dir.z);
-            gl.uniform_1_f32(self.u_mm.as_ref(), p.mm);
-            let mut table = [0f32; 56];
-            for (k, t) in p.table_motifs.iter().take(14).enumerate() {
-                table[4 * k..4 * k + 4].copy_from_slice(t);
-            }
-            gl.uniform_4_f32_slice(self.u_table_motifs.as_ref(), &table);
-            // plans de découpe neutres (distance positive ou nulle) hors de leur usage :
-            // certains pilotes (llvmpipe) appliquent les distances écrites par le shader
-            // même quand GL_CLIP_DISTANCEi n'est pas activé
-            gl.uniform_4_f32(self.u_coupe.as_ref(), 0.0, 0.0, 0.0, 1.0);
-            gl.uniform_4_f32_slice(self.u_plans.as_ref(), &[0.0; 8]);
-            gl.bind_vertex_array(Some(self.vao));
-
-            gl.enable(glow::POLYGON_OFFSET_FILL);
-            gl.polygon_offset(1.0, 1.0);
-            // fenêtres de vue d'une feuille : chacune dans son rectangle, profondeur
-            // effacée, découpée par ses plans ; la feuille (cartouche, titres) par-dessus
-            for (pp, ps) in p.passes.iter().zip(&self.passes) {
-                let r = match pp.ciseaux {
-                    Some(c) => {
-                        let px = |x: f32| viewport[0] as f32 + (x.clamp(-1.0, 1.0) + 1.0) * 0.5 * viewport[2] as f32;
-                        let py = |y: f32| viewport[1] as f32 + (y.clamp(-1.0, 1.0) + 1.0) * 0.5 * viewport[3] as f32;
-                        let (x0, y0, x1, y1) = (px(c[0]).floor() as i32, py(c[1]).floor() as i32, px(c[2]).ceil() as i32, py(c[3]).ceil() as i32);
-                        if x1 <= x0 || y1 <= y0 {
-                            continue;
-                        }
-                        [x0, y0, x1 - x0, y1 - y0]
-                    }
-                    None => viewport,
-                };
-                gl.scissor(r[0], r[1], r[2], r[3]);
-                gl.clear(glow::DEPTH_BUFFER_BIT);
-                gl.uniform_matrix_4_f32_slice(self.u_mvp.as_ref(), false, &pp.mvp.to_cols_array());
-                gl.uniform_3_f32(self.u_view_dir.as_ref(), pp.view_dir.x, pp.view_dir.y, pp.view_dir.z);
-                let mut plans = [0f32; 8];
-                for (k, pl) in pp.plans.iter().take(2).enumerate() {
-                    plans[4 * k..4 * k + 4].copy_from_slice(&pl.to_array());
-                }
-                gl.uniform_4_f32_slice(self.u_plans.as_ref(), &plans);
-                // gl_ClipDistance n'existe pas en OpenGL ES : vue non découpée dans ce cas
-                let decoupe = !gl.version().is_embedded;
-                for k in 0..pp.plans.len().min(2) {
-                    if decoupe {
-                        gl.enable(glow::CLIP_DISTANCE0 + k as u32);
-                    }
-                }
-                self.dessiner(gl, ps.ebo, ps.n, false);
-                if decoupe {
-                    for k in 0..2 {
-                        gl.disable(glow::CLIP_DISTANCE0 + k);
-                    }
-                }
-            }
-            if !p.passes.is_empty() {
-                gl.uniform_4_f32_slice(self.u_plans.as_ref(), &[0.0; 8]);
-                gl.scissor(viewport[0], viewport[1], viewport[2], viewport[3]);
-                gl.clear(glow::DEPTH_BUFFER_BIT);
-                gl.uniform_matrix_4_f32_slice(self.u_mvp.as_ref(), false, &p.mvp.to_cols_array());
-                gl.uniform_3_f32(self.u_view_dir.as_ref(), p.view_dir.x, p.view_dir.y, p.view_dir.z);
-            }
-            if !p.contour_vue.is_empty() {
-                let points: Vec<f32> = p.contour_vue.iter().take(128).flat_map(|p| [p.x, p.y]).collect();
-                gl.uniform_2_f32_slice(self.u_contour_vue.as_ref(), &points);
-                gl.uniform_1_i32(self.u_nb_contour_vue.as_ref(), (points.len() / 2) as i32);
-            }
-            if !p.cadrage.is_empty() {
-                let mut plans = [0f32; 16];
-                for (k, pl) in p.cadrage.iter().take(4).enumerate() {
-                    plans[4 * k..4 * k + 4].copy_from_slice(&pl.to_array());
-                }
-                gl.uniform_4_f32_slice(self.u_cadrage.as_ref(), &plans);
-                gl.uniform_1_i32(self.u_n_cadrage.as_ref(), p.cadrage.len().min(4) as i32);
-            }
-            if let Some((a, b)) = p.boite {
-                gl.uniform_1_i32(self.u_boite.as_ref(), 1);
-                gl.uniform_3_f32(self.u_boite_min.as_ref(), a.x, a.y, a.z);
-                gl.uniform_3_f32(self.u_boite_max.as_ref(), b.x, b.y, b.z);
-            }
-            // plan de coupe de la vue (plan, coupe) : partie retirée, quel que soit le style
-            let decoupe = p.coupe.is_some() && !gl.version().is_embedded;
-            if let Some(c) = p.coupe.filter(|_| decoupe) {
-                gl.uniform_4_f32(self.u_coupe.as_ref(), c.x, c.y, c.z, c.w);
-                gl.enable(glow::CLIP_DISTANCE0 + 2);
-            }
+        // occultation ambiante : profondeur (triangles opaques), occultation brute puis lissée
+        let ao = self.ao_actif(p);
+        if ao {
             {
-                let style = p.style;
-                {
-                    gl.uniform_3_f32(self.u_soleil.as_ref(), SOLEIL.x, SOLEIL.y, SOLEIL.z);
-                    if let Some((soleil, lumiere, decalage)) = p.soleil {
-                        gl.uniform_1_i32(self.u_portees.as_ref(), 1);
-                        gl.uniform_3_f32(self.u_soleil.as_ref(), soleil.x, soleil.y, soleil.z);
-                        gl.uniform_matrix_4_f32_slice(self.u_lumiere.as_ref(), false, &lumiere.to_cols_array());
-                        gl.uniform_1_f32(self.u_decalage_ombre.as_ref(), decalage);
-                        // carte d'ombres sur l'unité 1 (egui se sert de la 0)
-                        gl.active_texture(glow::TEXTURE1);
-                        gl.bind_texture(glow::TEXTURE_2D, Some(self.texture_ombres));
-                        gl.uniform_1_i32(self.u_ombres.as_ref(), 1);
-                    }
-                    if let Some(t) = ao {
-                        gl.uniform_1_i32(self.u_ao.as_ref(), 1);
-                        gl.uniform_4_f32(self.u_vp.as_ref(), viewport[0] as f32, viewport[1] as f32, viewport[2] as f32, viewport[3] as f32);
-                        // occultation lissée sur l'unité 2
-                        gl.active_texture(glow::TEXTURE2);
-                        gl.bind_texture(glow::TEXTURE_2D, Some(t));
-                        gl.uniform_1_i32(self.u_ao_tex.as_ref(), 2);
-                    }
-                    gl.active_texture(glow::TEXTURE0);
-                    let graphique = style == StyleVisuel::Graphique;
-                    gl.uniform_1_i32(self.u_materiaux.as_ref(), (!graphique) as i32);
-                    gl.uniform_1_i32(self.u_dessin.as_ref(), (graphique && p.faces_blanches) as i32);
-                    gl.uniform_1_i32(self.u_sans_eclairage.as_ref(), (graphique && !p.eclairage) as i32);
-                    self.dessiner(gl, [self.ebo_opaque, self.ebo_transp, self.ebo_lines], [self.n_opaque, self.n_transp, self.n_lines], graphique);
-                    gl.uniform_1_i32(self.u_sans_eclairage.as_ref(), 0);
-                    gl.uniform_1_i32(self.u_dessin.as_ref(), 0);
-                    gl.uniform_1_i32(self.u_materiaux.as_ref(), 0);
-                    gl.uniform_1_i32(self.u_portees.as_ref(), 0);
-                    gl.uniform_1_i32(self.u_ao.as_ref(), 0);
-                    gl.active_texture(glow::TEXTURE2);
-                    gl.bind_texture(glow::TEXTURE_2D, None);
-                    gl.active_texture(glow::TEXTURE1);
-                    gl.bind_texture(glow::TEXTURE_2D, None);
-                    gl.active_texture(glow::TEXTURE0);
+                let mut passe = profondeur_seule(&mut enc, &c.ao_tampon, Some(&c.ao_profondeur));
+                if self.n_opaque > 0 {
+                    passe.set_pipeline(&self.pipeline_ao_profondeur);
+                    passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_AO));
+                    passe.set_vertex_buffer(0, self.sommets.slice(..));
+                    passe.set_index_buffer(self.ebo_opaque.slice(..), wgpu::IndexFormat::Uint32);
+                    passe.draw_indexed(0..self.n_opaque, 0, 0..1);
                 }
             }
-            if decoupe {
-                gl.disable(glow::CLIP_DISTANCE0 + 2);
-                gl.uniform_4_f32(self.u_coupe.as_ref(), 0.0, 0.0, 0.0, 1.0);
+            for (pipeline, groupe, cible) in [(&self.pipeline_ao, &c.groupe_ao, &c.ao_brut), (&self.pipeline_flou, &c.groupe_flou, &c.ao_lisse)] {
+                let mut passe = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: None,
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: cible,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::WHITE), store: wgpu::StoreOp::Store },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                passe.set_pipeline(pipeline);
+                passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_MODELE));
+                passe.set_bind_group(1, groupe, &[]);
+                passe.draw(0..3, 0..1);
             }
-            if (p.coupe.is_some() || p.boite.is_some()) && self.n_coupe[0] + self.n_coupe[1] > 0 {
-                gl.disable(glow::BLEND);
-                gl.depth_mask(true);
-                gl.uniform_1_i32(self.u_flat.as_ref(), 1);
-                gl.bind_vertex_array(Some(self.vao_coupe));
-                gl.draw_arrays(glow::TRIANGLES, 0, self.n_coupe[0]);
-                gl.draw_arrays(glow::LINES, self.n_coupe[0], self.n_coupe[1]);
-                gl.uniform_1_i32(self.u_flat.as_ref(), 0);
-            }
-            gl.uniform_1_i32(self.u_boite.as_ref(), 0);
-            gl.uniform_1_i32(self.u_n_cadrage.as_ref(), 0);
-            gl.uniform_1_i32(self.u_nb_contour_vue.as_ref(), 0);
-            gl.disable(glow::POLYGON_OFFSET_FILL);
-            gl.active_texture(glow::TEXTURE4);
-            gl.bind_texture(glow::TEXTURE_2D, None);
-            gl.active_texture(glow::TEXTURE0);
-            gl.bind_vertex_array(None);
-            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
-            gl.disable(glow::DEPTH_TEST);
         }
+        let groupe_1 = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("textures de la scène"),
+            layout: &self.disposition_1,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&self.texture_selection.create_view(&Default::default())) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&self.vue_ombres) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.echantillonneur_ombres) },
+                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(if ao { &c.ao_lisse } else { &self.ao_vide }) },
+            ],
+        });
+
+        // fenêtres de vue d'une feuille : chacune dans son rectangle, profondeur effacée,
+        // découpée par ses plans ; la feuille (cartouche, titres) par-dessus. Chaque dessin
+        // a sa passe : la première efface la couleur, la dernière résout l'anticrénelage.
+        let [r, v, b] = p.background.map(f64::from);
+        let mut premiere = true;
+        let mut passe_couleur = |enc: &mut wgpu::CommandEncoder, derniere: bool| {
+            let load = if std::mem::take(&mut premiere) { wgpu::LoadOp::Clear(wgpu::Color { r, g: v, b, a: 1.0 }) } else { wgpu::LoadOp::Load };
+            enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: c.couleur_ms.as_ref().unwrap_or(&c.vue_resultat),
+                    depth_slice: None,
+                    resolve_target: if derniere { c.couleur_ms.as_ref().map(|_| &c.vue_resultat) } else { None },
+                    ops: wgpu::Operations { load, store: wgpu::StoreOp::Store },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &c.profondeur,
+                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Discard }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            })
+            .forget_lifetime()
+        };
+        let (l, h) = (c.largeur as f32, c.hauteur as f32);
+        for (k, (pp, ps)) in p.passes.iter().zip(&self.passes).enumerate() {
+            let rect = match pp.ciseaux {
+                Some(q) => {
+                    let px = |x: f32| (x.clamp(-1.0, 1.0) + 1.0) * 0.5 * l;
+                    // ligne 0 de l'image en haut
+                    let py = |y: f32| (1.0 - y.clamp(-1.0, 1.0)) * 0.5 * h;
+                    let (x0, y0) = (px(q[0]).floor() as u32, py(q[3]).floor() as u32);
+                    let (x1, y1) = ((px(q[2]).ceil() as u32).min(c.largeur), (py(q[1]).ceil() as u32).min(c.hauteur));
+                    if x1 <= x0 || y1 <= y0 {
+                        continue;
+                    }
+                    [x0, y0, x1 - x0, y1 - y0]
+                }
+                None => [0, 0, c.largeur, c.hauteur],
+            };
+            let mut passe = passe_couleur(&mut enc, false);
+            passe.set_scissor_rect(rect[0], rect[1], rect[2], rect[3]);
+            passe.set_bind_group(0, &self.groupe_0, &decalage(PREMIERE_FENETRE + k as u32));
+            passe.set_bind_group(1, &groupe_1, &[]);
+            self.sommets_scene(&mut passe);
+            self.dessiner(&mut passe, [&ps.ebo[0], &ps.ebo[1], &ps.ebo[2]], ps.n, false);
+        }
+        {
+            let mut passe = passe_couleur(&mut enc, true);
+            passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_MODELE));
+            passe.set_bind_group(1, &groupe_1, &[]);
+            self.sommets_scene(&mut passe);
+            let graphique = p.style == StyleVisuel::Graphique;
+            self.dessiner(&mut passe, [&self.ebo_opaque, &self.ebo_transp, &self.segments_traits], [self.n_opaque, self.n_transp, self.n_lines], graphique);
+            // tracé de la coupe (poché, contours, hachures) : non découpé par le plan de coupe
+            if (p.coupe.is_some() || p.boite.is_some()) && self.n_coupe[0] + self.n_coupe[1] > 0 {
+                passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_COUPE));
+                passe.set_vertex_buffer(0, self.sommets_coupe.slice(..));
+                passe.set_vertex_buffer(1, self.nul_coupe.slice(..));
+                passe.set_vertex_buffer(2, self.nul_coupe.slice(..));
+                if self.n_coupe[0] > 0 {
+                    passe.set_pipeline(&self.coupe);
+                    passe.draw(0..self.n_coupe[0], 0..1);
+                }
+                // hachures : sommets par paires après les triangles
+                if self.n_coupe[1] > 1 {
+                    passe.set_pipeline(&self.traits);
+                    passe.set_vertex_buffer(0, self.sommets_coupe.slice(self.n_coupe[0] as u64 * size_of::<Vertex>() as u64..));
+                    passe.draw(0..6, 0..self.n_coupe[1] / 2);
+                }
+            }
+        }
+        self.queue.submit([enc.finish()]);
     }
 
-    /// Rendu hors écran (tampon de trame multiéchantillonné) en pixels RGBA opaques, ligne
-    /// du haut en premier : captures du pilote, fenêtre réduite comprise.
-    pub fn capture(&self, gl: &glow::Context, p: &FrameParams, largeur: i32, hauteur: i32) -> Result<Vec<u8>, String> {
-        let mut pixels = vec![0u8; (largeur * hauteur * 4) as usize];
-        unsafe {
-            let (ms, res) = (gl.create_framebuffer()?, gl.create_framebuffer()?);
-            let (couleur_ms, profondeur_ms, couleur) = (gl.create_renderbuffer()?, gl.create_renderbuffer()?, gl.create_renderbuffer()?);
-            let echantillons = gl.get_parameter_i32(glow::MAX_SAMPLES).clamp(1, 4);
-            gl.bind_renderbuffer(glow::RENDERBUFFER, Some(couleur_ms));
-            gl.renderbuffer_storage_multisample(glow::RENDERBUFFER, echantillons, glow::RGBA8, largeur, hauteur);
-            gl.bind_renderbuffer(glow::RENDERBUFFER, Some(profondeur_ms));
-            gl.renderbuffer_storage_multisample(glow::RENDERBUFFER, echantillons, glow::DEPTH_COMPONENT24, largeur, hauteur);
-            gl.bind_renderbuffer(glow::RENDERBUFFER, Some(couleur));
-            gl.renderbuffer_storage(glow::RENDERBUFFER, glow::RGBA8, largeur, hauteur);
-            gl.bind_framebuffer(glow::FRAMEBUFFER, Some(res));
-            gl.framebuffer_renderbuffer(glow::FRAMEBUFFER, glow::COLOR_ATTACHMENT0, glow::RENDERBUFFER, Some(couleur));
-            gl.bind_framebuffer(glow::FRAMEBUFFER, Some(ms));
-            gl.framebuffer_renderbuffer(glow::FRAMEBUFFER, glow::COLOR_ATTACHMENT0, glow::RENDERBUFFER, Some(couleur_ms));
-            gl.framebuffer_renderbuffer(glow::FRAMEBUFFER, glow::DEPTH_ATTACHMENT, glow::RENDERBUFFER, Some(profondeur_ms));
-            let complet = gl.check_framebuffer_status(glow::FRAMEBUFFER) == glow::FRAMEBUFFER_COMPLETE;
-            if complet {
-                gl.viewport(0, 0, largeur, hauteur);
-                self.paint(gl, p, [0, 0, largeur, hauteur]);
-                gl.disable(glow::SCISSOR_TEST);
-                gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(ms));
-                gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(res));
-                gl.blit_framebuffer(0, 0, largeur, hauteur, 0, 0, largeur, hauteur, glow::COLOR_BUFFER_BIT, glow::NEAREST);
-                gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(res));
-                gl.pixel_store_i32(glow::PACK_ALIGNMENT, 1);
-                gl.read_pixels(0, 0, largeur, hauteur, glow::RGBA, glow::UNSIGNED_BYTE, glow::PixelPackData::Slice(Some(&mut pixels)));
+    /// Image de la vue (pixels) affichable par egui ; recréée quand la taille change.
+    pub fn paint(&mut self, p: &FrameParams, largeur: u32, hauteur: u32) -> Option<egui::TextureId> {
+        let max = self.device.limits().max_texture_dimension_2d;
+        let (largeur, hauteur) = (largeur.clamp(1, max), hauteur.clamp(1, max));
+        if self.cibles.as_ref().is_none_or(|c| c.largeur != largeur || c.hauteur != hauteur) {
+            let c = self.cibles(largeur, hauteur);
+            let mut egui = self.egui.write();
+            match self.texture_egui {
+                Some(id) => egui.update_egui_texture_from_wgpu_texture(&self.device, &c.vue_resultat, wgpu::FilterMode::Nearest, id),
+                None => self.texture_egui = Some(egui.register_native_texture(&self.device, &c.vue_resultat, wgpu::FilterMode::Nearest)),
             }
-            gl.bind_framebuffer(glow::FRAMEBUFFER, None);
-            gl.bind_renderbuffer(glow::RENDERBUFFER, None);
-            gl.delete_framebuffer(ms);
-            gl.delete_framebuffer(res);
-            gl.delete_renderbuffer(couleur_ms);
-            gl.delete_renderbuffer(profondeur_ms);
-            gl.delete_renderbuffer(couleur);
-            if !complet {
-                return Err("tampon de trame hors écran incomplet".into());
-            }
+            self.cibles = Some(c);
         }
-        // OpenGL lit de bas en haut
-        let ligne = (largeur * 4) as usize;
-        let mut out: Vec<u8> = pixels.chunks_exact(ligne).rev().flatten().copied().collect();
+        self.preparer(p, largeur, hauteur);
+        self.rendre(self.cibles.as_ref()?, p);
+        self.texture_egui
+    }
+
+    /// Rendu hors écran en pixels RGBA opaques, ligne du haut en premier : captures du
+    /// pilote, fenêtre réduite comprise.
+    pub fn capture(&mut self, p: &FrameParams, largeur: i32, hauteur: i32) -> Result<Vec<u8>, String> {
+        let (largeur, hauteur) = (largeur.max(1) as u32, hauteur.max(1) as u32);
+        let c = self.cibles(largeur, hauteur);
+        self.preparer(p, largeur, hauteur);
+        self.rendre(&c, p);
+        // lignes du tampon alignées sur 256 octets
+        let ligne = 4 * largeur;
+        let ligne_alignee = ligne.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let tampon = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("capture"),
+            size: (ligne_alignee * hauteur) as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut enc = self.device.create_command_encoder(&Default::default());
+        enc.copy_texture_to_buffer(
+            c.resultat.as_image_copy(),
+            wgpu::TexelCopyBufferInfo { buffer: &tampon, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(ligne_alignee), rows_per_image: None } },
+            c.resultat.size(),
+        );
+        self.queue.submit([enc.finish()]);
+        let tranche = tampon.slice(..);
+        let (envoi, reception) = std::sync::mpsc::channel();
+        tranche.map_async(wgpu::MapMode::Read, move |r| {
+            let _ = envoi.send(r);
+        });
+        self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).map_err(|e| e.to_string())?;
+        reception.recv().map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
+        let mut out = Vec::with_capacity((ligne * hauteur) as usize);
+        for l in tranche.get_mapped_range().map_err(|e| e.to_string())?.chunks_exact(ligne_alignee as usize) {
+            out.extend_from_slice(&l[..ligne as usize]);
+        }
         for a in out.iter_mut().skip(3).step_by(4) {
             *a = 255;
         }
         Ok(out)
-    }
-
-    pub fn destroy(&self, gl: &glow::Context) {
-        unsafe {
-            gl.delete_program(self.program);
-            gl.delete_vertex_array(self.vao);
-            gl.delete_buffer(self.vbo);
-            gl.delete_buffer(self.ebo_opaque);
-            gl.delete_buffer(self.ebo_transp);
-            gl.delete_buffer(self.ebo_lines);
-            gl.delete_buffer(self.ebo_aretes);
-            gl.delete_buffer(self.vbo_rendu);
-            gl.delete_buffer(self.vbo_motifs);
-            gl.delete_program(self.programme_ombre);
-            gl.delete_framebuffer(self.fbo_ombres);
-            gl.delete_texture(self.texture_ombres);
-            gl.delete_texture(self.texture_selection);
-            gl.delete_program(self.programme_ao);
-            gl.delete_program(self.programme_flou);
-            gl.delete_vertex_array(self.vao_vide);
-            if let Some(c) = self.cibles_ao.borrow_mut().take() {
-                c.fbo.iter().for_each(|f| gl.delete_framebuffer(*f));
-                c.textures.iter().for_each(|t| gl.delete_texture(*t));
-            }
-            gl.delete_vertex_array(self.vao_coupe);
-            gl.delete_buffer(self.vbo_coupe);
-            for ps in &self.passes {
-                for b in ps.ebo {
-                    gl.delete_buffer(b);
-                }
-            }
-        }
     }
 }

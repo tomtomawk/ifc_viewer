@@ -1,6 +1,6 @@
-# IFC Viewer (Rust)
+# BIMedit (Rust)
 
-Visionneuse IFC native, écrite de zéro : parseur STEP, géométrie et rendu OpenGL. Aucune dépendance IFC externe.
+Visionneuse IFC native, écrite de zéro : parseur STEP, géométrie et rendu wgpu (Vulkan, DirectX 12, Metal). Aucune dépendance IFC externe.
 Ouvre aussi les fichiers Revit (`.rvt`) : murs, sols, toits, escaliers, garde-corps, portes, fenêtres, mobilier et autres familles, pièces et grilles lus directement dans le fichier, sans export IFC ; feuilles affichées avec leur cartouche, leurs vues placées, leurs titres, textes et cotes.
 
 ## Édition BIM native
@@ -41,7 +41,7 @@ ce document. La conversion v0 s'exécute en arrière-plan, écrit aussi le rappo
 disque doit être rouvert avant conversion. Le fichier RVT source reste intact.
 
 Le ruban regroupe les commandes dans Début, Modéliser, Modifier, Documenter et Sortie ; tous les bandeaux ont la même hauteur et des icônes (Début : Nouveau, Ouvrir, Fermer, Importer, Fiche Revit, Options ; Sortie : Enregistrer, Enregistrer sous, Dessin SVG, Dessin PDF, IFC4, Jeu PDF (jeu de feuilles en un PDF, une page par feuille) ; Documenter, groupe Documents : Feuilles, Nomenclatures).
-**Début → Options → Navigation IFC** (désactivée par défaut) affiche, pour les modèles Revit et natifs, l'arborescence spatiale IFC, la liste des classes et les attributs IFC des propriétés (classe, Id STEP, GlobalId, bouton Copier GlobalId). Le même menu choisit le gabarit. Les fichiers IFC gardent toujours cette navigation, qui est leur seule arborescence. L'option est enregistrée dans `%APPDATA%\ifc_viewer\options.json` (Windows) ou `~/.config/ifc_viewer/options.json`.
+**Début → Options → Navigation IFC** (désactivée par défaut) affiche, pour les modèles Revit et natifs, l'arborescence spatiale IFC, la liste des classes et les attributs IFC des propriétés (classe, Id STEP, GlobalId, bouton Copier GlobalId). Le même menu choisit le gabarit. Les fichiers IFC gardent toujours cette navigation, qui est leur seule arborescence. L'option est enregistrée dans `%APPDATA%\bimedit\options.json` (Windows) ou `~/.config/bimedit/options.json`.
 Les commandes fréquentes (Mur, Éléments horizontaux, Ouverture, Déplacer, Copier, Aligner, Cote et
 Texte) disposent de grands boutons lorsque la largeur le permet ; les autres
 restent empilées avec de petites icônes. Les grands boutons se replient selon leur
@@ -108,8 +108,12 @@ git push origin v0.2.0
 
 Fenêtre : barre dessinée par l'application ; sous Windows 10 (build antérieur à 22000),
 cadre du système (barre de titre et bords natifs), la fenêtre sans décoration y décalant
-l'affichage par rapport aux clics. `IFC_VIEWER_CADRE=natif` ou `IFC_VIEWER_CADRE=perso`
+l'affichage par rapport aux clics. `BIMEDIT_CADRE=natif` ou `BIMEDIT_CADRE=perso`
 force l'un ou l'autre.
+
+Rendu : wgpu choisit DirectX 12, Vulkan ou Metal, à défaut OpenGL. `WGPU_BACKEND=gl`
+(ou `dx12`, `vulkan`) force un backend ; `BIMEDIT_MSAA=0` retire l'anticrénelage de la
+vue 3D (pilotes sans multiéchantillonnage).
 
 | Action | Commande |
 |---|---|
@@ -160,7 +164,7 @@ force l'un ou l'autre.
 | `src/geom.rs` | Placements, profils, courbes, solides → triangles en mètres |
 | `src/csg.rs` | Booléens sur maillages par arbre BSP (portage de csg.js) |
 | `src/scene.rs` | Chargement complet, tampons de sommets, picking CPU par rayon |
-| `src/render.rs` | Shaders et dessin OpenGL (glow) via un PaintCallback egui |
+| `src/render.rs` | Shaders WGSL et rendu wgpu hors écran (ombres, occultation ambiante), affiché comme image egui |
 | `src/trace2d.rs` | Primitives 2D vectorielles (polylignes, segments, surfaces, triangles ; style en mm du papier, rôle, élément d'origine), maillage pour le GPU, export SVG |
 | `src/dessin.rs` | Dessin 2D : arêtes vives et douces (silhouettes) des maillages, coupe par un plan (poché, hachures, contours en trait fort), arêtes vues sans parties cachées pour l'export |
 | `src/camera.rs` | Caméra orbitale Z vers le haut, perspective / orthographique |
@@ -179,14 +183,14 @@ force l'un ou l'autre.
 
 ## Pilotage par MCP
 
-Le viewer écoute sur `127.0.0.1:47811` (variable `IFC_VIEWER_PORT`) des commandes d'une
+Le viewer écoute sur `127.0.0.1:47811` (variable `BIMEDIT_PORT`) des commandes d'une
 ligne. `tools/viewer-mcp/serveur.py` (Python 3, sans dépendance) les expose en serveur MCP,
-déclaré dans `.mcp.json` sous le nom `ifc-viewer` : un agent ouvre un fichier, choisit une
+déclaré dans `.mcp.json` sous le nom `bimedit` : un agent ouvre un fichier, choisit une
 vue Revit, règle la caméra, lit les propriétés, désigne l'objet sous un point et reçoit des
 captures PNG. La vue 3D est rendue hors écran (tampon de trame), à la taille demandée, même
 fenêtre réduite ; la capture de la fenêtre entière exige qu'elle ne soit pas réduite. Si
-aucun viewer n'écoute, le serveur lance `target/release/ifc_viewer.exe` (ou
-`IFC_VIEWER_EXE`). Liste des commandes : description de l'outil `viewer_commande`.
+aucun viewer n'écoute, le serveur lance `target/release/bimedit.exe` (ou
+`BIMEDIT_EXE`). Liste des commandes : description de l'outil `viewer_commande`.
 
 ## Limites connues
 
