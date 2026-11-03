@@ -698,6 +698,8 @@ pub const MARGE: f64 = 10.0;
 /// Géométrie réutilisable d'un cartouche, en millimètres depuis son coin inférieur gauche.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FamilleCartouche {
+    #[serde(default)]
+    pub id: String,
     pub nom: String,
     pub largeur: f64,
     pub hauteur: f64,
@@ -716,6 +718,7 @@ pub struct TexteCartouche {
 impl Default for FamilleCartouche {
     fn default() -> Self {
         Self {
+            id: super::collaboration::uuid(),
             nom: "Cartouche standard".into(), largeur: 180.0, hauteur: 40.0,
             traits: vec![[[0.0,0.0],[180.0,0.0]], [[180.0,0.0],[180.0,40.0]], [[180.0,40.0],[0.0,40.0]], [[0.0,40.0],[0.0,0.0]], [[140.0,0.0],[140.0,40.0]], [[0.0,14.0],[140.0,14.0]], [[0.0,30.0],[140.0,30.0]]],
             textes: vec![
@@ -1384,7 +1387,7 @@ mod tests {
         let mut g = f.clone();
         g.id = "g".into();
         p.feuilles = vec![f.clone(), g.clone()];
-        let famille = FamilleCartouche { nom: "Agence".into(), largeur: 80.0, hauteur: 25.0, traits: vec![[[0.0, 0.0], [80.0, 25.0]]], textes: vec![TexteCartouche { contenu: "{projet} - {numero}".into(), position: [2.0, 2.0], hauteur: 3.0 }] };
+        let famille = FamilleCartouche { id: super::collaboration::uuid(), nom: "Agence".into(), largeur: 80.0, hauteur: 25.0, traits: vec![[[0.0, 0.0], [80.0, 25.0]]], textes: vec![TexteCartouche { contenu: "{projet} - {numero}".into(), position: [2.0, 2.0], hauteur: 3.0 }] };
         p.familles_cartouches.push(famille);
         p.cartouches_feuilles.insert(f.id.clone(), "Agence".into());
         p.cartouches_feuilles.insert(g.id.clone(), "Agence".into());

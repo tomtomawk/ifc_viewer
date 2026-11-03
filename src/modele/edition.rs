@@ -142,12 +142,14 @@ impl ListeCreation {
     }
 }
 
+fn identifiant_natif(espace: &str, _cle: &str) -> String { format!("{espace}-{}", super::collaboration::uuid()) }
+
 impl Projet {
     /// Identifiant libre pour une nouvelle vue et son nom (« Coupe 3 »).
     fn nouvelle_vue(&self, prefixe: &str) -> (String, usize) {
         let mut k = 1;
         loop {
-            let id = identifiant("vue", &format!("{prefixe}-{k}"));
+            let id = identifiant_natif("vue", &format!("{prefixe}-{k}"));
             if self.vues.iter().all(|v| v.id != id) {
                 return (id, k);
             }
@@ -307,7 +309,7 @@ impl Projet {
         }
         let niveau = match &p.niveau {
             Some(id) => self.niveau(id).ok_or("Niveau introuvable.")?.id.clone(),
-            None => self.niveaux.first().map(|n| n.id.clone()).unwrap_or_else(|| identifiant("niveau", "niveau-0")),
+            None => self.niveaux.first().map(|n| n.id.clone()).unwrap_or_else(|| identifiant_natif("niveau", "niveau-0")),
         };
         if p.variante.as_ref().is_some_and(|id| !self.variantes.iter().any(|v| &v.id == id)) {
             return Err("Variante introuvable.".into());
@@ -320,7 +322,7 @@ impl Projet {
             None => {
                 let mut k = self.types_dalles.len() + 1;
                 let id = loop {
-                    let id = identifiant("type-dalle", &format!("{}:{k}", t.nom));
+                    let id = identifiant_natif("type-dalle", &format!("{}:{k}", t.nom));
                     if self.types_dalles.iter().all(|x| x.id != id) { break id; }
                     k += 1;
                 };
@@ -330,7 +332,7 @@ impl Projet {
         };
         let mut k = self.dalles.len() + 1;
         let id = loop {
-            let id = identifiant("dalle", &format!("natif-{k}"));
+            let id = identifiant_natif("dalle", &format!("natif-{k}"));
             if self.dalles.iter().all(|d| d.id != id) { break id; }
             k += 1;
         };
@@ -365,7 +367,7 @@ impl Projet {
             if self.variantes.iter().any(|v| v.jeu.eq_ignore_ascii_case(jeu) && v.nom.eq_ignore_ascii_case(nom)) {
                 return Err("Cette variante existe déjà dans ce jeu.".into());
             }
-            let id = identifiant("variante", &format!("{}:{jeu}:{nom}", jeu.len()));
+            let id = identifiant_natif("variante", &format!("{}:{jeu}:{nom}", jeu.len()));
             if self.variantes.iter().any(|v| v.id == id) { return Err("Identifiant de variante déjà utilisé.".into()); }
             self.variantes.push(Variante { id: id.clone(), nom: nom.into(), jeu: jeu.into() });
             return Ok(id);
@@ -404,7 +406,7 @@ impl Projet {
         if p.hauteur <= 0.0 || p.epaisseur <= 0.0 { return Err("La hauteur et l’épaisseur doivent être positives.".into()); }
         let niveau = match &p.niveau {
             Some(id) => self.niveau(id).ok_or("Niveau de base introuvable.")?.id.clone(),
-            None => self.niveaux.first().map(|n| n.id.clone()).unwrap_or_else(|| identifiant("niveau", "niveau-0")),
+            None => self.niveaux.first().map(|n| n.id.clone()).unwrap_or_else(|| identifiant_natif("niveau", "niveau-0")),
         };
         let (bas, haut) = p.bornes(self)?;
         for (valeur, choix, nom) in [(&p.phase, &self.phases, "Phase"), (&p.sous_projet, &self.sous_projets, "Sous-projet")] {
@@ -430,10 +432,10 @@ impl Projet {
         };
         let type_mur = existant.clone().unwrap_or_else(|| {
             let mut k = self.types_murs.len() + 1;
-            loop { let id = identifiant("type-mur", &format!("natif-{k}")); if self.types_murs.iter().all(|t| t.id != id) { break id; } k += 1; }
+            loop { let id = identifiant_natif("type-mur", &format!("natif-{k}")); if self.types_murs.iter().all(|t| t.id != id) { break id; } k += 1; }
         });
         let mut k = self.murs.len() + self.assemblages.len() + 1;
-        let id = loop { let id = identifiant("mur", &format!("natif-{k}")); if self.murs.iter().all(|m| m.id != id) && self.assemblages.iter().all(|a| a.id != id) { break id; } k += 1; };
+        let id = loop { let id = identifiant_natif("mur", &format!("natif-{k}")); if self.murs.iter().all(|m| m.id != id) && self.assemblages.iter().all(|a| a.id != id) { break id; } k += 1; };
         // ligne tracée → milieu de l'épaisseur totale : décalage de la référence vers l'intérieur
         let gabarit = p.gabarit(self);
         let decalage = gabarit.decalage_reference(p.implantation.reference());

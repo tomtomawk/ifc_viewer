@@ -103,13 +103,10 @@ pub enum Commande {
         contour: Vec<[f64; 2]>,
     },
 }
-fn identite(p: &Projet, prefixe: &str) -> String {
-    let ids = p.identifiants();
-    (1u64..)
-        .map(|n| format!("{prefixe}-{n}"))
-        .find(|id| !ids.contains(id))
-        .unwrap()
+fn identite(_p: &Projet, prefixe: &str) -> String {
+    format!("{prefixe}-{}", super::collaboration::uuid())
 }
+
 impl Projet {
     pub fn identifiants(&self) -> HashSet<String> {
         self.niveaux

@@ -28,6 +28,7 @@ pub mod pente;
 pub mod edition;
 pub mod enregistrement;
 pub mod rapport;
+pub mod collaboration;
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -35,10 +36,12 @@ use std::collections::BTreeMap;
 /// Nom du format, en tête de chaque fichier.
 pub const FORMAT: &str = "bimedit-modele";
 /// Version du schéma ; toute évolution incompatible l'incrémente (migrations).
-pub const VERSION: u32 = 0;
+pub const VERSION: u32 = 1;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Projet {
+    #[serde(default)]
+    pub identite: String,
     pub format: String,
     pub version: u32,
     pub nom: String,
@@ -348,6 +351,8 @@ pub const PHASE_EXISTANT: &str = "Existant";
 /// Motif de hachures nommé : familles de traits.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct DefinitionMotif {
+    #[serde(default)]
+    pub id: String,
     pub nom: String,
     pub lignes: Vec<LigneMotif>,
 }
@@ -357,8 +362,8 @@ impl DefinitionMotif {
     pub fn base() -> Vec<DefinitionMotif> {
         let l = |angle: f64, pas: f64| LigneMotif { angle, pas, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() };
         vec![
-            DefinitionMotif { nom: "Diagonales".into(), lignes: vec![l(45.0, 2.0)] },
-            DefinitionMotif { nom: "Croisées".into(), lignes: vec![l(45.0, 1.5), l(-45.0, 1.5)] },
+            DefinitionMotif { id: collaboration::uuid(), nom: "Diagonales".into(), lignes: vec![l(45.0, 2.0)] },
+            DefinitionMotif { id: collaboration::uuid(), nom: "Croisées".into(), lignes: vec![l(45.0, 1.5), l(-45.0, 1.5)] },
         ]
     }
 }
@@ -369,6 +374,8 @@ impl DefinitionMotif {
 /// défaut, donne la couleur des faces.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct Materiau {
+    #[serde(default)]
+    pub id: String,
     pub nom: String,
     /// Surface, arrière-plan : couleur (sRGB) ; aussi la couleur du style Réaliste.
     pub couleur: [u8; 3],
@@ -747,6 +754,8 @@ impl Dalle {
 /// modèle (degrés).
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct PositionPlan {
+    #[serde(default)]
+    pub id: String,
     pub nom: String,
     pub angle: f64,
 }
@@ -847,7 +856,7 @@ impl Projet {
     /// Projet vide : phases Existant et Projet (les nouveaux éléments vont dans la
     /// dernière), sous-projet A.
     pub fn nouveau(nom: &str) -> Projet {
-        Projet { format: FORMAT.into(), version: VERSION, nom: nom.into(), phases: vec![PHASE_EXISTANT.into(), "Projet".into()], sous_projets: vec!["A".into()], ..Default::default() }
+        Projet { identite: collaboration::uuid(), format: FORMAT.into(), version: VERSION, nom: nom.into(), phases: vec![PHASE_EXISTANT.into(), "Projet".into()], sous_projets: vec!["A".into()], ..Default::default() }
     }
 
     /// Cote NGF de l'origine du projet (mm).
@@ -1043,13 +1052,19 @@ impl Projet {
     }
 
     pub fn lire_json(texte: &str) -> Result<Projet, String> {
-        let p: Projet = serde_json::from_str(texte).map_err(|e| e.to_string())?;
+        let mut p: Projet = serde_json::from_str(texte).map_err(|e| e.to_string())?;
         if p.format != FORMAT {
             return Err(format!("format inconnu : {}", p.format));
         }
         if p.version > VERSION {
             return Err(format!("version {} plus récente que celle prise en charge ({VERSION})", p.version));
         }
+        if p.identite.is_empty() { p.identite = identifiant("projet-migration-v1", &collaboration::hash(&serde_json::from_str::<serde_json::Value>(texte).map_err(|e|e.to_string())?)); }
+        p.version = VERSION;
+        for m in &mut p.materiaux { if m.id.is_empty() { m.id = identifiant("materiau-migration-v1", &m.nom); } }
+        for m in &mut p.motifs { if m.id.is_empty() { m.id = identifiant("motif-migration-v1", &m.nom); } }
+        for m in &mut p.familles_cartouches { if m.id.is_empty() { m.id = identifiant("cartouche-migration-v1", &m.nom); } }
+        for m in &mut p.positions_plan { if m.id.is_empty() { m.id = identifiant("position-migration-v1", &m.nom); } }
         Ok(p)
     }
 }

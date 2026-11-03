@@ -1,6 +1,7 @@
 //! Enregistrement v0 d'une source RVT ouverte, sans modifier le fichier Revit.
 use super::Projet;
 use std::path::{Path, PathBuf};
+#[cfg(test)]
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Instant, SystemTime};
 
@@ -39,9 +40,8 @@ pub struct Bilan {
 /// Prépare intégralement le fichier avant de remplacer une éventuelle sauvegarde.
 pub fn ecrire_atomique(chemin: &Path, contenu: &[u8]) -> Result<(), String> {
     use std::io::Write;
-    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
     let nom = chemin.file_name().ok_or("Nom du fichier de destination invalide.")?.to_string_lossy();
-    let temporaire = chemin.with_file_name(format!(".{nom}.{}-{}.tmp", std::process::id(), SEQUENCE.fetch_add(1,Ordering::Relaxed)));
+    let temporaire = chemin.with_file_name(format!(".{nom}.{}.tmp", super::collaboration::uuid()));
     let mut fichier = std::fs::OpenOptions::new().write(true).create_new(true).open(&temporaire).map_err(|e| format!("Création impossible de {} : {e}", temporaire.display()))?;
     let resultat = fichier.write_all(contenu).and_then(|_| fichier.sync_all());
     drop(fichier);
@@ -116,7 +116,7 @@ mod tests {
         let bilan = enregistrer_rvt(&source,&sortie,&|_|{}).unwrap();
         assert_eq!(bilan.murs,1);
         let relu = Projet::lire_json(&std::fs::read_to_string(&sortie).unwrap()).unwrap();
-        assert_eq!(relu.version,0); assert_eq!(relu.murs.len(),1);
+        assert_eq!(relu.version,super::super::VERSION); assert_eq!(relu.murs.len(),1);
         assert_eq!(relu.sources[0].format,"RVT");
         let rapport = bilan.rapport.unwrap(); assert!(std::fs::read_to_string(&rapport).unwrap().contains("Conversion"));
         source.verifier().unwrap();
