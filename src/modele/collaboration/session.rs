@@ -1,0 +1,169 @@
+//! Copie de travail persistante et synchronisation sur un thread dédié.
+use super::*;
+use super::stockage::{Depot, Etat};
+use super::texte::{Editeur, EtatTexte};
+use std::path::PathBuf;
+use std::sync::mpsc::{self, Receiver};
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Copie {
+    pub session: String,
+    pub central: PathBuf,
+    pub base: Etat,
+    pub attente: Vec<Transaction>,
+    pub conflits: BTreeMap<String, Vec<Conflit>>,
+    pub annulations: Vec<Transaction>,
+    pub retablissements: Vec<Transaction>,
+}
+pub struct Session {
+    pub copie: Copie,
+    pub chemin: PathBuf,
+    pub etat: String,
+    pub mesure_sync_ms: f64,
+    pub mesure_validation_ms: f64,
+    messages: Option<Receiver<Resultat<(Etat, Vec<Transaction>, BTreeMap<String,Vec<Conflit>>, f64)>>>,
+    editeurs: BTreeMap<String, Editeur>,
+    // Le verrou local reste vivant pour interdire deux propriétaires de la même queue.
+    _local: std::fs::File,
+}
+fn overlay(base: &Etat, transactions: &[Transaction]) -> Resultat<Etat> {
+    let mut etat=base.clone();
+    for t in transactions {
+        if etat.acceptes.contains_key(&t.id) {continue;}
+        let mut local=t.clone();
+        // Les préconditions sont vérifiées contre la nouvelle base ; aucune proposition
+        // refusée n'est superposée silencieusement à l'état accepté.
+        for c in &local.changements {if sensible(&c.cle) {
+            etat.baux.insert(c.cle.clone(),Bail{proprietaire:local.session.clone(),generation:1,actif:true}); local.reservations.insert(c.cle.clone(),1);
+        }}
+        etat=etat.accepter(&local).map_err(|c|format!("Conflit de réapplication : {c:?}"))?;
+    }
+    Ok(etat)
+}
+impl Session {
+    pub fn ouvrir(p: &Projet, fichier_local: PathBuf, central: PathBuf) -> Resultat<Self> {
+        let chemin=fichier_local.with_extension("collaboration.json");
+        let verrou=chemin.with_extension("lock");
+        let mut opts=std::fs::OpenOptions::new(); opts.write(true).create(true).truncate(false);
+        #[cfg(windows)] {use std::os::windows::fs::OpenOptionsExt;opts.share_mode(0);}
+        let local=opts.open(verrou).map_err(|e|format!("Copie locale déjà ouverte : {e}"))?;
+        #[cfg(not(windows))] local.try_lock().map_err(|e|e.to_string())?;
+        let copie=if chemin.exists() {
+            let c: Copie=serde_json::from_slice(&std::fs::read(&chemin).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?;
+            if c.base.projet!=p.identite || c.central!=central {return Err("La copie locale appartient à un autre dépôt/projet".into());} c
+        } else {Copie{session:uuid(),central,base:Etat::initial(p)?,attente:Vec::new(),conflits:BTreeMap::new(),annulations:Vec::new(),retablissements:Vec::new()}};
+        let s=Self{copie,chemin,etat:"Enregistré localement".into(),mesure_sync_ms:0.0,mesure_validation_ms:0.0,messages:None,editeurs:BTreeMap::new(),_local:local};s.persister()?;Ok(s)
+    }
+    pub fn persister(&self) -> Resultat<()> {stockage::sauver_local(&self.chemin,&encoder(&self.copie)?)}
+    pub fn travail(&self) -> Resultat<Projet> { overlay(&self.copie.base,&self.copie.attente.iter().filter(|t|!self.copie.conflits.contains_key(&t.id)).cloned().collect::<Vec<_>>())?.projection() }
+    fn texte_local(&self, id: &str) -> Resultat<EtatTexte> {
+        let mut e=self.copie.base.textes.get(id).cloned().unwrap_or_default();
+        for t in &self.copie.attente {if let Some(u)=t.textes.get(id) {e.recevoir(u)?;}}
+        Ok(e)
+    }
+    pub fn editer(&mut self, avant: &Projet, apres: &Projet) -> Resultat<()> {
+        let debut=std::time::Instant::now();
+        if !self.copie.conflits.is_empty() {return Err("Résoudre les conflits avant de poursuivre l'édition".into());}
+        let mut t=Transaction::entre(avant,apres,&self.copie.session,self.copie.base.revision)?;
+        for c in &t.changements {if sensible(&c.cle) {if let Some(b)=self.copie.base.baux.get(&c.cle).filter(|b|b.actif && b.proprietaire==self.copie.session){t.reservations.insert(c.cle.clone(),b.generation);}}}
+        for a in &apres.annotations {if let super::super::documentation::AnnotationForme::Texte{texte,..}=&a.forme {
+            let precedent=avant.annotations.iter().find(|b|b.id==a.id).and_then(|b|if let super::super::documentation::AnnotationForme::Texte{texte,..}=&b.forme {Some(texte.as_str())}else{None});
+            if precedent!=Some(texte.as_str()) {
+                if !self.editeurs.contains_key(&a.id) {self.editeurs.insert(a.id.clone(),Editeur::ouvrir(&self.texte_local(&a.id)?,&self.copie.session)?);}
+                t.textes.insert(a.id.clone(),self.editeurs.get_mut(&a.id).unwrap().remplacer(texte));
+            }
+        }}
+        if t.changements.is_empty() && t.textes.is_empty() {return Ok(());}
+        // Les propositions successives observent l'overlay, pas une ancienne révision.
+        t.base=self.copie.base.revision+self.copie.attente.len() as u64;
+        let sauvegarde=self.copie.clone();
+        self.copie.annulations.push(t.clone()); self.copie.retablissements.clear(); self.copie.attente.push(t);
+        if let Err(e)=self.travail().and_then(|_|self.persister()) {self.copie=sauvegarde;self.editeurs.clear();return Err(e);}
+        self.mesure_validation_ms=debut.elapsed().as_secs_f64()*1000.0;
+        self.etat="Enregistré localement — en attente".into(); Ok(())
+    }
+    pub fn synchroniser(&mut self, reservation: Option<(Vec<String>,bool,bool)>, instantane: bool) -> Resultat<()> {
+        if self.messages.is_some() {return Err("Synchronisation déjà en cours".into());}
+        self.persister()?;
+        let copie=self.copie.clone(); let journal_local=self.chemin.clone(); let (tx,rx)=mpsc::channel(); self.messages=Some(rx); self.etat="Synchronisation…".into();
+        std::thread::Builder::new().name("collaboration-nas".into()).spawn(move|| {
+            let debut=std::time::Instant::now();
+            let resultat=(|| {
+                let depot=Depot::nouveau(copie.central); depot.preparer()?;
+                let mut a=depot.proteger()?;
+                let mut etat=a.initialiser(&copie.base.projection()?)?;
+                if let Some((cles,reprise,liberer))=reservation {a.reserver(&mut etat,&cles,&copie.session,reprise,liberer)?;}
+                let mut attente=Vec::new();let mut conflits=BTreeMap::new();
+                for mut t in copie.attente {
+                    // Une réponse perdue se résout par UUID avant toute autre action.
+                    if etat.acceptes.contains_key(&t.id) {continue;}
+                    let prepare=journal_local.with_extension(format!("prepare-{}.json",t.id));
+                    if prepare.exists(){t=serde_json::from_slice(&std::fs::read(&prepare).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?;}
+                    if !attente.is_empty() {attente.push(t);continue;}
+                    let cles:Vec<_>=t.changements.iter().filter(|c|sensible(&c.cle)).map(|c|c.cle.clone()).collect();
+                    // Une génération déjà enregistrée ne doit jamais être remplacée.
+                    if t.reservations.is_empty() {
+                        if let Err(e)=a.reserver(&mut etat,&cles,&copie.session,false,false) {
+                            conflits.insert(t.id.clone(),vec![Conflit{cle:"réservation".into(),base:None,locale:None,acceptee:None,raison:e}]);attente.push(t);continue;
+                        }
+                        for k in cles {t.reservations.insert(k.clone(),etat.baux[&k].generation);}
+                    }
+                    // La révision d'origine reste informative, les préconditions portent
+                    // la causalité exacte des lectures et des effets.
+                    t.base=t.base.min(etat.revision);
+                    stockage::sauver_local(&prepare,&encoder(&t)?)?;
+                    let c=a.publier(&mut etat,&t)?;
+                    if !c.is_empty() {conflits.insert(t.id.clone(),c);attente.push(t);}
+                }
+                if instantane {a.instantane(&etat)?;}
+                Ok((etat,attente,conflits,debut.elapsed().as_secs_f64()*1000.0))
+            })();let _=tx.send(resultat);
+        }).map_err(|e|e.to_string())?;Ok(())
+    }
+    /// Appelé uniquement hors saisie : une réponse n'écrase jamais un champ actif.
+    pub fn recevoir(&mut self) -> Resultat<Option<Projet>> {
+        let Some(rx)=&self.messages else {return Ok(None);};
+        let resultat=match rx.try_recv() {Ok(r)=>r,Err(mpsc::TryRecvError::Empty)=>return Ok(None),Err(e)=>Err(e.to_string())};self.messages=None;
+        match resultat {
+            Err(e)=>{self.etat=format!("Hors connexion / erreur : {e}");Ok(None)},
+            Ok((base,mut attente,conflits,ms))=>{
+                // Conserve les éditions effectuées pendant le transfert.
+                let presents:BTreeSet<_>=attente.iter().map(|t|t.id.clone()).chain(base.acceptes.keys().cloned()).collect();
+                for t in &self.copie.attente {if !presents.contains(&t.id){attente.push(t.clone());}}
+                self.copie.base=base;self.copie.attente=attente;self.copie.conflits=conflits;self.mesure_sync_ms=ms;
+                // Réapplication séquentielle ; un refus conserve la proposition entière.
+                let mut valides=Vec::new();
+                for t in &self.copie.attente {if self.copie.conflits.contains_key(&t.id) {continue;}
+                    let mut essais=valides.clone();essais.push(t.clone());
+                    if let Err(e)=overlay(&self.copie.base,&essais){self.copie.conflits.insert(t.id.clone(),vec![Conflit{cle:"réapplication".into(),base:None,locale:None,acceptee:None,raison:e}]);}else{valides=essais;}
+                }
+                for (id,e) in &mut self.editeurs {if let Some(t)=self.copie.base.textes.get(id) {for u in t.mises_a_jour.values(){e.recevoir(u)?;}}}
+                self.etat=if !self.copie.conflits.is_empty(){"Conflit — propositions conservées"}else if self.copie.attente.is_empty(){"Synchronisé"}else{"Enregistré localement — en attente"}.into();
+                self.persister()?;Ok(Some(self.travail()?))
+            }
+        }
+    }
+    pub fn abandonner(&mut self, id: &str) -> Resultat<Projet> {
+        // Abandon explicite, archivé dans le fichier local de récupération.
+        let archive=self.chemin.with_extension(format!("conflit-{}.json",uuid()));stockage::sauver_local(&archive,&encoder(&self.copie)?)?;
+        self.copie.attente.retain(|t|t.id!=id);self.copie.conflits.remove(id);self.persister()?;self.travail()
+    }
+    pub fn annuler(&mut self, retablir: bool) -> Resultat<Projet> {
+        if !self.copie.conflits.is_empty(){return Err("Résoudre le conflit avant compensation".into());}
+        let pile=if retablir{&self.copie.retablissements}else{&self.copie.annulations};
+        let original=pile.last().cloned().ok_or("Historique collaboratif vide")?;
+        let mut t=original.inverse(self.copie.base.revision+self.copie.attente.len() as u64);
+        let actuel=self.travail()?;
+        // Les effets inverses portent leurs propres valeurs attendues. Les références
+        // et le modèle résultant sont validés à nouveau.
+        let o=objets(&actuel)?;let index=Index::construire(&o);t.lectures.clear();
+        if t.changements.iter().any(|c|sensible(&c.cle)){t.lectures.insert("#spatial".into(),spatial(&o));}
+        for c in &t.changements{t.lectures.insert(format!("#usages/{}",c.cle),index.empreinte(&c.cle,&o));}
+        t.reservations.clear();t.textes.clear();
+        for id in original.textes.keys(){if let Some(e)=self.editeurs.get_mut(id){t.textes.insert(id.clone(),e.annuler(retablir)?);}else{return Err("Annulation textuelle disponible dans la session d'édition d'origine".into());}}
+        let sauvegarde=self.copie.clone();self.copie.attente.push(t.clone());
+        let p=match self.travail(){Ok(p)=>p,Err(e)=>{self.copie=sauvegarde;return Err(e)}};
+        if retablir{self.copie.retablissements.pop();self.copie.annulations.push(t);}else{self.copie.annulations.pop();self.copie.retablissements.push(t);}
+        self.persister()?;self.etat="Compensation enregistrée localement — en attente".into();Ok(p)
+    }
+}
