@@ -698,6 +698,15 @@ fn reponse_perdue_retrouve_uuid_et_contenu_prepare_sans_republication() {
     s.synchroniser(None, false).unwrap();
     let depot = Depot::nouveau(&central);
     let fin = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    // Attendre le dépôt préparé sans prendre l'autorité que le worker doit acquérir.
+    while !s
+        .chemin
+        .with_extension(format!("prepare-{id}.json"))
+        .exists()
+    {
+        assert!(std::time::Instant::now() < fin);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
     loop {
         if let Ok(mut a) = depot.proteger() {
             if a.lire().unwrap().unwrap().acceptes.contains_key(&id) {
@@ -813,4 +822,24 @@ fn annulation_textuelle_locale_restauree_apres_redemarrage() {
     assert!(
         matches!(&q.annotations.iter().find(|a|a.id=="texte-durable").unwrap().forme,super::super::documentation::AnnotationForme::Texte{texte,..} if texte=="B Initial A")
     );
+}
+
+#[test]
+fn parent_futur_et_ressource_requise_absente_ne_sont_pas_acceptes() {
+    let p = exemple();
+    let mut q = p.clone();
+    q.vues[0].nom = "Attente ressource".into();
+    let mut t = transaction(&p, &q);
+    let e = Etat::initial(&p).unwrap();
+    t.base = 99;
+    assert!(e.accepter(&t).is_err());
+    t.base = 0;
+    t.ressources.insert(empreinte(b"ressource manquante"));
+    let d = Depot::nouveau(dossier());
+    d.preparer().unwrap();
+    let mut a = d.proteger().unwrap();
+    let mut e = a.initialiser(&p).unwrap();
+    assert!(a.publier(&mut e, &t).is_err());
+    assert_eq!(e.revision, 0);
+    assert_eq!(a.lire().unwrap().unwrap().revision, 0);
 }

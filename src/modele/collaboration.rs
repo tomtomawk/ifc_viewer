@@ -269,9 +269,14 @@ impl Transaction {
             })
             .collect();
         let index = Index::construire(&a);
+        let index_apres = Index::construire(&b);
         let mut lectures = BTreeMap::new();
         for c in &changements {
-            for (cible, utilisateurs) in &index.utilisateurs {
+            for (cible, utilisateurs) in index
+                .utilisateurs
+                .iter()
+                .chain(index_apres.utilisateurs.iter())
+            {
                 if cible != &c.cle && utilisateurs.contains(&c.cle) {
                     lectures.insert(cible.clone(), hash(&a.get(cible)));
                 }
@@ -453,6 +458,15 @@ pub fn appliquer(
         erreurs.push(conflit(
             "protocole".into(),
             "Protocole, projet ou parent incompatible",
+        ));
+    }
+    if t.changements
+        .iter()
+        .any(|c| matches!(c.cle.as_str(), "@/identite" | "@/format" | "@/version"))
+    {
+        erreurs.push(conflit(
+            "protocole".into(),
+            "Identité et schéma du projet sont immuables dans une transaction",
         ));
     }
     let index = Index::construire(courant);

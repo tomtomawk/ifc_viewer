@@ -256,7 +256,11 @@ impl Session {
                 let resultat = (|| {
                     let depot = Depot::nouveau(copie.central);
                     depot.preparer()?;
-                    let mut a = depot.proteger()?;
+                    let limite=std::time::Instant::now()+std::time::Duration::from_secs(2);
+                    let mut a=loop{match depot.proteger(){Ok(a)=>break a,Err(e)=>{
+                        if std::time::Instant::now()>=limite{return Err(e);}
+                        std::thread::sleep(std::time::Duration::from_millis(20));
+                    }}};
                     let mut etat = a.initialiser_etat(&copie.base)?;
                     if let Some((cles, reprise, liberer)) = reservation {
                         a.reserver(&mut etat, &cles, &copie.session, reprise, liberer)?;
@@ -313,9 +317,8 @@ impl Session {
                                 t.reservations.insert(k.clone(), etat.baux[&k].generation);
                             }
                         }
-                        // La révision d'origine reste informative, les préconditions portent
-                        // la causalité exacte des lectures et des effets.
-                        t.base = t.base.min(etat.revision);
+                        // Ne jamais abaisser une révision future pour contourner un
+                        // parent absent ; les transactions locales sont publiées dans l'ordre.
                         Self::depot_local(&journal_local).ecrire_document(&prepare, &t)?;
                         let c = a.publier(&mut etat, &t)?;
                         if !c.is_empty() {
