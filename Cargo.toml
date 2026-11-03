@@ -2,6 +2,16 @@
 name = "bimedit"
 version = "0.1.0"
 edition = "2024"
+default-run = "bimedit"
+
+[[bin]]
+name = "bimedit"
+path = "src/main.rs"
+
+# serveur MCP (stdio) qui pilote le viewer par son canal local
+[[bin]]
+name = "bimedit-mcp"
+path = "tools/viewer-mcp/serveur.rs"
 
 [dependencies]
 earcutr = "0.5.0"

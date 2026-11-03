@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "bimedit": {
-      "command": "python",
-      "args": ["tools/viewer-mcp/serveur.py"]
+      "command": "cargo",
+      "args": ["run", "--quiet", "--release", "--bin", "bimedit-mcp"]
     }
   }
 }

@@ -179,18 +179,18 @@ vue 3D (pilotes sans multiéchantillonnage).
 | `src/rvt/parametres.rs` | Revit : définitions et valeurs des paramètres, mise en forme, UniqueId et IfcGUID ; tables relevées dans Revit dans `src/rvt/donnees/` |
 | `src/rvt/maquette.rs` | Revit : niveaux, types, familles, matériaux et éléments, traduits en modèle IFC synthétique pour l'affichage |
 | `src/modele/` | Modèle natif v0 (format d'édition) et conversions depuis Revit et IFC, rapport de conversion : [docs/MODELE.md](docs/MODELE.md) |
-| `tools/viewer-mcp/serveur.py` | Serveur MCP (stdio) qui pilote le viewer : ouverture, vues, caméra, propriétés, captures |
+| `tools/viewer-mcp/serveur.rs` | Serveur MCP (stdio, binaire `bimedit-mcp`) qui pilote le viewer : ouverture, vues, caméra, propriétés, captures |
 
 ## Pilotage par MCP
 
 Le viewer écoute sur `127.0.0.1:47811` (variable `BIMEDIT_PORT`) des commandes d'une
-ligne. `tools/viewer-mcp/serveur.py` (Python 3, sans dépendance) les expose en serveur MCP,
-déclaré dans `.mcp.json` sous le nom `bimedit` : un agent ouvre un fichier, choisit une
+ligne. `tools/viewer-mcp/serveur.rs` (binaire Rust `bimedit-mcp`, sans dépendance supplémentaire) les expose en serveur MCP,
+déclaré dans `.mcp.json` sous le nom `bimedit` (lancé par `cargo run --release --bin bimedit-mcp`) : un agent ouvre un fichier, choisit une
 vue Revit, règle la caméra, lit les propriétés, désigne l'objet sous un point et reçoit des
 captures PNG. La vue 3D est rendue hors écran (tampon de trame), à la taille demandée, même
 fenêtre réduite ; la capture de la fenêtre entière exige qu'elle ne soit pas réduite. Si
-aucun viewer n'écoute, le serveur lance `target/release/bimedit.exe` (ou
-`BIMEDIT_EXE`). Liste des commandes : description de l'outil `viewer_commande`.
+aucun viewer n'écoute, le serveur lance `bimedit` à côté de lui, sinon `target/release/bimedit`
+(`bimedit.exe` sous Windows), ou `BIMEDIT_EXE`. Liste des commandes : description de l'outil `viewer_commande`.
 
 ## Limites connues
 
