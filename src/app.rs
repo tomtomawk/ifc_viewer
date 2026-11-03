@@ -8014,7 +8014,7 @@ impl eframe::App for ViewerApp {
                     Ancrage::Droite => egui::Panel::right(id),
                     Ancrage::Flottant => continue,
                 };
-                let reponse = panneau.resizable(true).default_size(self.largeurs_panneaux[p as usize]).show(ui, |ui| self.panneau(ui, p));
+                let reponse = panneau.resizable(true).min_size(24.0).default_size(self.largeurs_panneaux[p as usize]).show(ui, |ui| self.panneau(ui, p));
                 self.largeurs_panneaux[p as usize] = reponse.response.rect.width();
             }
             // sous la vue seulement, entre les panneaux ancrés
@@ -8039,7 +8039,7 @@ impl eframe::App for ViewerApp {
             });
             for p in Panneau::TOUS.into_iter().filter(|p| ancrages[*p as usize] == Ancrage::Flottant) {
                 let i = p as usize;
-                let mut fenetre = egui::Window::new(p.nom()).id(egui::Id::unique(("flottant", p.nom()))).title_bar(false).movable(false).resizable(true).default_size([self.largeurs_panneaux[i], 520.0]).min_width(220.0);
+                let mut fenetre = egui::Window::new(p.nom()).id(egui::Id::unique(("flottant", p.nom()))).title_bar(false).movable(false).resizable(true).default_size([self.largeurs_panneaux[i], 520.0]).min_width(24.0);
                 if let Some(q) = self.pos_imposee[i].take() {
                     fenetre = fenetre.current_pos(q);
                 }
