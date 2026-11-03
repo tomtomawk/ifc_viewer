@@ -2571,9 +2571,6 @@ impl ViewerApp {
                 for d in [egui::vec2(1.0, 0.0), egui::vec2(0.0, 1.0)] {
                     painter.line_segment([o - d * 2.0 * r, o + d * 2.0 * r], orange);
                 }
-                let [x, y, z] = projet.coordonnees_origine;
-                let u = crate::options::unite();
-                painter.text(o + egui::vec2(2.2 * r, -2.2 * r), egui::Align2::LEFT_BOTTOM, format!("X {} · Y {} · Z {} NGF", u.afficher(x), u.afficher(y), u.afficher(z)), egui::FontId::proportional(12.0), orange.color);
             } else {
                 painter.add(egui::Shape::dashed_line(&cercle, trait_, 3.0, 2.0));
                 for d in [egui::vec2(1.0, 0.0), egui::vec2(0.0, 1.0)] {
@@ -2581,6 +2578,23 @@ impl ViewerApp {
                 }
             }
         }
+    }
+
+    /// Origine sélectionnée : X, Y et cote NGF à saisir à côté d'elle, dans la vue
+    /// (mêmes champs que Propriétés).
+    fn saisie_origine(&mut self, ui: &egui::Ui, rect: egui::Rect) {
+        if !self.bim.origine { return; }
+        let Some(o) = self.origine_ecran(rect) else { return };
+        egui::Area::new(egui::Id::unique("saisie_origine"))
+            .fixed_pos(o + egui::vec2(18.0, -18.0))
+            .pivot(egui::Align2::LEFT_BOTTOM)
+            .constrain_to(rect)
+            .show(ui.ctx(), |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.label(RichText::new("Origine du projet").strong().color(Color32::from_rgb(200, 100, 15)));
+                    self.editeur_coordonnees(ui);
+                });
+            });
     }
 
     /// Origine du projet à l'écran, dans une vue native (plan : à l'altitude du plan).
@@ -6733,6 +6747,7 @@ impl ViewerApp {
         }
         if self.natif.is_some() && self.jeu_actif().is_none() {
             self.traits_invisibles(ui, rect);
+            self.saisie_origine(ui, rect);
         }
         if let Some(prm) = &outil_coupe {
             let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.coupe_depart, altitude_coupe));
@@ -7564,6 +7579,12 @@ impl ViewerApp {
                     }
                 }
                 succes(&[("elements", liste(out))])
+            }
+            // origine du projet : ses coordonnées se saisissent à côté d'elle
+            "selectionner" if argument.trim() == "origine" => {
+                self.select(None, false);
+                self.bim.origine = true;
+                self.etat()
             }
             "selectionner" => match self.entite(argument) {
                 Ok(id) => {
