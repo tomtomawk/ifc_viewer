@@ -10,6 +10,10 @@ IFC/Revit en document natif, murs courbes et ouvertures, modifications réversib
 niveaux, quadrillages, trémies, jonctions, attachements aux toitures, annotations,
 feuilles et nomenclatures, exports IFC4/SVG/PDF/CSV.
 
+La collaboration entre copies locales via un partage de fichiers est décrite dans
+[docs/COLLABORATION.md](docs/COLLABORATION.md) : transactions atomiques, réservations,
+texte Yrs, conflits, instantanés, récupération et qualification NAS à deux machines.
+
 Pour essayer un projet complet :
 
 ```sh

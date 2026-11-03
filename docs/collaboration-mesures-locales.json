@@ -1,0 +1,24 @@
+{
+  "comparaison_ms": 0.4212,
+  "donnees_essai": "C:\\Users\\theba\\AppData\\Local\\Temp\\bimedit-mesures-835947a1-1532-48d7-a6e4-b6a8a0f71610",
+  "fichiers_initialisation_et_publication": {
+    "ecritures": 5,
+    "exclusion_ms": 30.879,
+    "lectures": 3,
+    "octets_ecrits": 7429,
+    "octets_lus": 6950,
+    "publications": 2
+  },
+  "initialisation_ms": 0.39080000000000004,
+  "latence_evenement_interface_ms": null,
+  "materiel": "disque local Windows ; NAS non qualifié",
+  "memoire_residente_octets": 13643776,
+  "ouverture_instantane_et_queue_ms": 5.6996,
+  "ouverture_journal_ms": 6.3282,
+  "profil": "release",
+  "reconstruction_geometrique_ms": 2.6377,
+  "sommets": 2332,
+  "taille_etat_serialise_octets": 6527,
+  "transfert_gpu_ms": null,
+  "validation_et_commit_local_ms": 14.107099999999999
+}

@@ -1,0 +1,96 @@
+{
+  "essai": "C:\\Users\\theba\\AppData\\Local\\Temp\\bimedit-ui-collaboration-r77g9swc",
+  "latences_rpc_geometrie_ms": [
+    {
+      "latence_rpc_ms": 10.729999979957938,
+      "mesures": {
+        "comparaison_validation_ms": 4.429200000000001,
+        "conflits": {},
+        "en_attente": 1,
+        "etat": "Enregistré localement — en attente",
+        "fichiers": {
+          "ecritures": 2,
+          "exclusion_ms": 7.954299999999999,
+          "lectures": 2,
+          "octets_ecrits": 8183,
+          "octets_lus": 8033,
+          "publications": 1
+        },
+        "geometrie_ms": 2.0014,
+        "preparation_transfert_gpu_ms": 0.0843,
+        "revision": 0,
+        "synchronisation_ms": 9.350000000000001
+      }
+    },
+    {
+      "latence_rpc_ms": 33.302800031378865,
+      "mesures": {
+        "comparaison_validation_ms": 4.8686,
+        "conflits": {},
+        "en_attente": 1,
+        "etat": "Enregistré localement — en attente",
+        "fichiers": {
+          "ecritures": 0,
+          "exclusion_ms": 0.3191,
+          "lectures": 2,
+          "octets_ecrits": 0,
+          "octets_lus": 8183,
+          "publications": 0
+        },
+        "geometrie_ms": 1.9108,
+        "preparation_transfert_gpu_ms": 0.0492,
+        "revision": 0,
+        "synchronisation_ms": 0.7928
+      }
+    }
+  ],
+  "texte_convergent": "B Texte partagé A",
+  "texte_apres_annulation_locale": "B Texte partagé",
+  "texte_retabli": "B Texte partagé A",
+  "mesures": [
+    {
+      "port": 47991,
+      "latence_rpc_texte_ms": 5.387100041843951,
+      "apres_edition_texte": {
+        "comparaison_validation_ms": 3.9458999999999995,
+        "conflits": {},
+        "en_attente": 1,
+        "etat": "Enregistré localement — en attente",
+        "fichiers": {
+          "ecritures": 2,
+          "exclusion_ms": 13.8867,
+          "lectures": 5,
+          "octets_ecrits": 1687,
+          "octets_lus": 11341,
+          "publications": 1
+        },
+        "geometrie_ms": 0.0,
+        "preparation_transfert_gpu_ms": 0.0,
+        "revision": 3,
+        "synchronisation_ms": 14.3839
+      }
+    },
+    {
+      "port": 47992,
+      "latence_rpc_texte_ms": 21.285700029693544,
+      "apres_edition_texte": {
+        "comparaison_validation_ms": 4.4659,
+        "conflits": {},
+        "en_attente": 1,
+        "etat": "Enregistré localement — en attente",
+        "fichiers": {
+          "ecritures": 0,
+          "exclusion_ms": 2.0402,
+          "lectures": 5,
+          "octets_ecrits": 0,
+          "octets_lus": 11580,
+          "publications": 0
+        },
+        "geometrie_ms": 0.0,
+        "preparation_transfert_gpu_ms": 0.0,
+        "revision": 3,
+        "synchronisation_ms": 2.451
+      }
+    }
+  ]
+}
