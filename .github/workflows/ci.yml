@@ -19,7 +19,7 @@ jobs:
           - { nom: linux-arm64, os: ubuntu-24.04-arm, artefact: bimedit }
           - { nom: macos-arm64, os: macos-14, artefact: bimedit }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Dépendances système (Linux)
@@ -41,7 +41,7 @@ jobs:
         run: |
           python3 -m pip install ifcopenshell==0.9.0.post1 pytest
           python3 tools/valider_ifc.py target/maison.ifc
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: bimedit-${{ matrix.nom }}
           path: target/release/${{ matrix.artefact }}
