@@ -3435,7 +3435,10 @@ impl ViewerApp {
             let disponible = self.natif.is_some() && self.loading.is_none() && self.sauvegarde.is_none();
             let mut historique_choisi = None;
             for (retablir, titre) in [(false, "Annuler"), (true, "Rétablir")] {
-                let libelles = self.historique.libelles(retablir);
+                let libelles = if let Some(c)=&self.collaboration {
+                    let pile=if retablir{&c.copie.retablissements}else{&c.copie.annulations};
+                    pile.last().map(|t|format!("Transaction {} — {}",t.id,if c.copie.base.acceptes.contains_key(&t.id){"partagée"}else{"locale"})).into_iter().collect()
+                } else {self.historique.libelles(retablir)};
                 let actif = disponible && !libelles.is_empty();
                 let reponse = ui.add_enabled(actif, egui::Button::new("").min_size(egui::vec2(22.0, 20.0)));
                 let centre = reponse.rect.center();
@@ -5933,7 +5936,7 @@ impl ViewerApp {
                 } else {
                     // copie renommée ; les matériaux qui se servaient de l'ancien suivent
                     p.motifs.retain(|x| x.nom != choisi);
-                    p.motifs.push(DefinitionMotif { id: crate::modele::collaboration::uuid(), nom: n.clone(), ..d.clone() });
+                    p.motifs.push(DefinitionMotif { id: if d.id.is_empty() { crate::modele::collaboration::uuid() } else { d.id.clone() }, nom: n.clone(), ..d.clone() });
                     let (ancien, neuf) = (MotifCoupe::hachures(&choisi), MotifCoupe::hachures(&n));
                     for m in &mut p.materiaux {
                         for x in [&mut m.motif].into_iter().chain([&mut m.surface_motif, &mut m.surface_fond_motif, &mut m.coupe_fond_motif].into_iter().flatten()) {
