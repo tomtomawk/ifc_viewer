@@ -70,6 +70,7 @@ impl ViewerApp {
     }
 
     pub(super) fn enregistrer_sous(&mut self) {
+        if self.collaboration.is_some(){self.error=Some("La copie collaborative conserve son chemin local. Pour un export autonome, utilisez les commandes d'export ; pour un autre poste, associez une copie locale distincte.".into());return;}
         let Some((p, ancien)) = &self.natif else {
             return;
         };

@@ -2,6 +2,7 @@
 use super::*;
 impl Projet {
     pub fn verifier(&self) -> Result<(), String> {
+        if self.format!=FORMAT || self.version>VERSION || self.identite.is_empty(){return Err("Format, version ou identité projet non valide".into());}
         if !self.orientation_nord.is_finite() { return Err("Orientation du nord non finie.".into()); }
         let mut ids = std::collections::HashSet::new();
         for id in self
@@ -30,6 +31,15 @@ impl Projet {
         }
         if self.contextes.keys().any(|id| !ids.contains(id)) {
             return Err("Contexte d'élément sans élément associé.".into());
+        }
+        // Les objets renommables ne sont pas identifiés par leur libellé.
+        for (collection, identites) in [
+            ("matériaux",self.materiaux.iter().map(|m|m.id.as_str()).collect::<Vec<_>>()),
+            ("motifs",self.motifs.iter().map(|m|m.id.as_str()).collect()),
+            ("cartouches",self.familles_cartouches.iter().map(|m|m.id.as_str()).collect()),
+        ] {
+            let mut uniques=std::collections::HashSet::new();
+            if identites.iter().filter(|id|!id.is_empty()).any(|id|!uniques.insert(id)){return Err(format!("Identités dupliquées : {collection}"));}
         }
         for n in &self.niveaux {
             if !n.altitude.is_finite() {
@@ -221,10 +231,11 @@ impl Projet {
             let point = |p: &[f64; 2]| p.iter().all(|x| x.is_finite());
             let cote = |p: &PointCote| match p {
                 PointCote::Fixe { point: p } => point(p),
-                PointCote::Mur { .. } => true,
+                PointCote::Mur { id, .. } => self.murs.iter().any(|m|&m.id==id) || self.assemblages.iter().any(|m|&m.id==id),
             };
             let valide = match &a.forme {
-                F::Texte { point: p, .. } | F::Etiquette { point: p, .. } => point(p),
+                F::Texte { point: p, .. } => point(p),
+                F::Etiquette { point:p,element } => point(p) && ids.iter().any(|id|id.as_str()==element),
                 F::Ligne { debut, fin } => point(debut) && point(fin) && debut != fin,
                 F::Zone { contour } => edition::contour_valide(contour).is_ok(),
                 F::Polyligne { points, .. } | F::Spline { points, .. } => points.len() >= 2 && points.iter().all(point),

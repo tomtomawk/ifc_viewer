@@ -2830,11 +2830,14 @@ impl ViewerApp {
         if !distant { projet.recaler_menuiseries(&self.natif.as_ref().unwrap().0)?; }
         projet.verifier()?;
         let texte_seul = crate::modele::collaboration::objets(&projet)? == crate::modele::collaboration::objets(&self.natif.as_ref().unwrap().0)?;
+        let debut_geometrie=std::time::Instant::now();
         let scene_preparee = if texte_seul && self.collaboration.is_some() { None } else { Some(scene::depuis_natif(&projet, &chemin)?) };
+        if let Some(c)=&mut self.collaboration{c.mesure_geometrie_ms=debut_geometrie.elapsed().as_secs_f64()*1000.0;}
         // Le commit local durable précède toute installation dans la scène.
         // Une réception utilise déjà un état accepté et ne crée pas de transaction.
         if !distant && let Some(c) = &mut self.collaboration { c.editer(&self.natif.as_ref().unwrap().0, &projet)?; }
         if texte_seul && self.collaboration.is_some() {
+            if let Some(c)=&mut self.collaboration{c.mesure_geometrie_ms=0.0;c.mesure_gpu_ms=0.0;}
             self.natif.as_mut().unwrap().0 = projet;
             self.bim.revision = self.bim.revision.wrapping_add(1);
             self.natif_modifie = true;
@@ -2881,9 +2884,11 @@ impl ViewerApp {
             etat.camera.scene_radius = self.camera.scene_radius;
             if let Some((a, b)) = &mut etat.boite { *a += delta.as_vec3(); *b += delta.as_vec3(); }
         }
+        let debut_gpu=std::time::Instant::now();
         if let Some(r) = self.renderer.as_mut() {
             r.upload_vertices(&scene.vertices, &scene.couleurs_rendu, &scene.motifs_surface);
         }
+        if let Some(c)=&mut self.collaboration{c.mesure_gpu_ms=debut_gpu.elapsed().as_secs_f64()*1000.0;}
         self.liste_niveaux = niveaux(&scene);
         // matériaux de l'arborescence native (ceux du projet), à défaut ceux de la scène
         self.liste_materiaux = match &scene.navigateur {
@@ -7012,6 +7017,7 @@ impl ViewerApp {
             ("sortie_v0", self.natif.as_ref().map(|n| &n.1).or(self.rvt_sortie.as_ref()).map_or("null".into(), |p| texte(&p.to_string_lossy()))),
             ("fiche_revit", (self.rvt.is_some() && self.rvt_sheet).to_string()),
         ];
+        if let Some(c)=&self.collaboration { p.push(("collaboration",serde_json::json!({"etat":c.etat,"revision":c.copie.base.revision,"en_attente":c.copie.attente.len(),"conflits":c.copie.conflits,"comparaison_validation_ms":c.mesure_validation_ms,"geometrie_ms":c.mesure_geometrie_ms,"preparation_transfert_gpu_ms":c.mesure_gpu_ms,"synchronisation_ms":c.mesure_sync_ms,"fichiers":c.mesures_fichiers}).to_string())); }
         if let Some(e) = &self.error {
             p.push(("erreur_chargement", texte(e)));
         }
@@ -7090,6 +7096,8 @@ impl ViewerApp {
     fn commande(&mut self, ctx: &egui::Context, commande: &str, argument: &str) -> String {
         use pilote::{erreur, liste, objet, succes, texte};
         match commande {
+            "collaboration_associer" => match self.associer_collaboration(PathBuf::from(argument.trim_matches('"'))) { Ok(())=>succes(&[("etat",texte("Association locale effectuée ; synchronisation en cours"))]),Err(e)=>erreur(&e) },
+            "collaboration_sync" | "collaboration_instantane" => match self.collaboration.as_mut().ok_or_else(||"Copie non associée".to_string()).and_then(|c|c.synchroniser(None,commande=="collaboration_instantane")) {Ok(())=>succes(&[("etat",texte("Synchronisation demandée"))]),Err(e)=>erreur(&e)},
             "etat" => self.etat(),
             // famille_enregistrer|famille_ouvrir|famille_charger <chemin> : fichier de famille
             "famille_enregistrer" | "famille_ouvrir" | "famille_charger" => {
@@ -7251,6 +7259,7 @@ impl ViewerApp {
                 if !argument.trim().is_empty() {
                     let chemin=PathBuf::from(argument.trim().trim_matches('"'));
                     let (p,ancien)=self.natif.as_ref().unwrap();
+                    if self.collaboration.is_some() && &chemin!=ancien{return erreur("La copie collaborative conserve son chemin local");}
                     if let Err(e)=crate::modele::enregistrement::enregistrer_natif(p,&chemin){return erreur(&e);}
                     crate::modele::enregistrement::effacer_recuperation(ancien);
                     let _=self.historique.enregistrer(p);

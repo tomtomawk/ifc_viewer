@@ -16,6 +16,10 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
         let arg = args.get(2).ok_or("Argument manquant.")?;
         match commande {
             "--editer" => {
+                if Path::new(entree).with_extension("collaboration.json").exists() {
+                    if args.get(3).is_some_and(|s| s != entree) { return Err("En collaboration, utilisez une copie locale distincte pour Enregistrer sous".into()); }
+                    return modele::collaboration::cli::executer(&["--collaboration".into(),"editer".into(),entree.clone(),arg.clone()]).ok_or("Routage collaboratif absent")?;
+                }
                 let json = std::fs::read_to_string(arg).map_err(|e| e.to_string())?;
                 let c = serde_json::from_str(&json).map_err(|e| e.to_string())?;
                 let (p, ids) = p.executer(c)?;

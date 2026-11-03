@@ -348,57 +348,9 @@ impl ViewerApp {
         }
         ed.famille.valider(ed.largeur, ed.hauteur, ed.epaisseur)?;
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
-        let mut q = p.clone();
-        let existant = ed.type_id.clone().filter(|id| !nouveau && q.types_ouvertures.iter().any(|t| &t.id == id));
-        let id = match existant {
-            Some(id) => {
-                let t = q.types_ouvertures.iter_mut().find(|t| t.id == id).unwrap();
-                (t.nom, t.largeur, t.hauteur, t.modele, t.genre) = (ed.nom.trim().into(), ed.largeur, ed.hauteur, Some(ed.famille.clone()), ed.famille.genre);
-                t.famille = None;
-                id
-            }
-            None => {
-                let mut k = q.types_ouvertures.len() + 1;
-                let id = loop {
-                    let id = crate::modele::identifiant("type-ouverture", &format!("famille-{k}"));
-                    if q.types_ouvertures.iter().all(|t| t.id != id) {
-                        break id;
-                    }
-                    k += 1;
-                };
-                // nom unique parmi les types du projet
-                let base = ed.nom.trim().to_string();
-                let (mut nom, mut j) = (base.clone(), 2);
-                while q.types_ouvertures.iter().any(|t| t.nom == nom) {
-                    nom = format!("{base} ({j})");
-                    j += 1;
-                }
-                q.types_ouvertures.push(crate::modele::TypeOuverture {
-                    id: id.clone(),
-                    nom,
-                    genre: ed.famille.genre,
-                    largeur: ed.largeur,
-                    hauteur: ed.hauteur,
-                    famille: None,
-                    modele: Some(ed.famille.clone()),
-                    origine: None,
-                });
-                id
-            }
-        };
-        for o in q.ouvertures.iter_mut() {
-            if ed.ouverture.as_ref() == Some(&o.id) {
-                o.type_ouverture = Some(id.clone());
-                o.representation = None;
-            }
-            if o.type_ouverture.as_ref() == Some(&id) {
-                (o.largeur, o.hauteur, o.genre) = (ed.largeur, ed.hauteur, ed.famille.genre);
-                // valeurs d'occurrence : seulement celles que la famille déclare
-                o.valeurs.retain(|k, _| ed.famille.parametres.iter().any(|p| &p.nom == k && p.portee == Portee::Occurrence));
-                o.materiaux.retain(|k, _| ed.famille.parametres.iter().any(|p| &p.nom == k && p.portee == Portee::Occurrence && p.genre == GenreParametre::Materiau));
-            }
-        }
-        q.parametres_partages = ed.partages.clone();
+        let cible=ed.type_id.as_deref().filter(|_|!nouveau);
+        let fichier=crate::modele::famille_modelee::FichierFamille{format:crate::modele::famille_modelee::FORMAT_FAMILLE.into(),nom:ed.nom.clone(),largeur:ed.largeur,hauteur:ed.hauteur,famille:ed.famille.clone()};
+        let (q,id)=p.avec_famille(cible,ed.ouverture.as_deref(),&fichier,ed.epaisseur,ed.partages.clone())?;
         self.appliquer_projet(q)?;
         if let Some(ed) = self.famille.as_mut() {
             ed.type_id = Some(id.clone());
@@ -607,14 +559,7 @@ impl ViewerApp {
             nom = format!("{} ({k})", f.nom);
             k += 1;
         }
-        let mut n = q.types_ouvertures.len() + 1;
-        let id = loop {
-            let id = crate::modele::identifiant("type-ouverture", &format!("famille-{n}"));
-            if q.types_ouvertures.iter().all(|t| t.id != id) {
-                break id;
-            }
-            n += 1;
-        };
+        let id = crate::modele::collaboration::uuid();
         q.types_ouvertures.push(crate::modele::TypeOuverture { id: id.clone(), nom: nom.clone(), genre: f.famille.genre, largeur: f.largeur, hauteur: f.hauteur, famille: None, modele: Some(f.famille), origine: None });
         self.appliquer_projet(q)?;
         self.status = format!("Famille « {nom} » chargée dans le projet.");

@@ -26,6 +26,7 @@ pub mod geometrie;
 pub mod jonctions;
 pub mod pente;
 pub mod edition;
+pub mod edition_famille;
 pub mod enregistrement;
 pub mod rapport;
 pub mod collaboration;
@@ -42,6 +43,8 @@ pub const VERSION: u32 = 1;
 pub struct Projet {
     #[serde(default)]
     pub identite: String,
+    #[serde(default)]
+    pub references_figees: bool,
     pub format: String,
     pub version: u32,
     pub nom: String,
@@ -853,6 +856,17 @@ impl Maillage {
 }
 
 impl Projet {
+    /// Les valeurs graphiques d'un projet partagé ne dépendent plus du poste lecteur.
+    pub fn figer_references(&mut self) {
+        if self.references_figees{return;}
+        self.plumes=self.epaisseurs_plumes();
+        for mut motif in crate::gabarit::actif().motifs.iter().cloned().chain(DefinitionMotif::base()) {
+            if !self.motifs.iter().any(|m|m.nom==motif.nom){
+                motif.id=identifiant("motif-fige",&format!("{}:{}",self.identite,motif.nom));self.motifs.push(motif);
+            }
+        }
+        self.completer_materiaux();self.references_figees=true;
+    }
     /// Projet vide : phases Existant et Projet (les nouveaux éléments vont dans la
     /// dernière), sous-projet A.
     pub fn nouveau(nom: &str) -> Projet {
@@ -938,8 +952,8 @@ impl Projet {
             .iter()
             .find(|d| d.nom == nom)
             .cloned()
-            .or_else(|| crate::gabarit::actif().motifs.iter().find(|d| d.nom == nom).cloned())
-            .or_else(|| DefinitionMotif::base().into_iter().find(|d| d.nom == nom))
+            .or_else(|| (!self.references_figees).then(||crate::gabarit::actif().motifs.iter().find(|d| d.nom == nom).cloned()).flatten())
+            .or_else(|| (!self.references_figees).then(||DefinitionMotif::base().into_iter().find(|d| d.nom == nom)).flatten())
     }
 
     /// Noms des motifs de hachures disponibles : projet, gabarit, base, sans doublon.

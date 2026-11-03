@@ -1629,12 +1629,7 @@ impl RubanEdition {
                 id.clone()
             }
             None => {
-                let mut k = projet.types_murs.len() + 1;
-                let id = loop {
-                    let id = crate::modele::identifiant("type-mur", &format!("compose-{k}"));
-                    if projet.types_murs.iter().all(|t| t.id != id) { break id; }
-                    k += 1;
-                };
+                let id = crate::modele::collaboration::uuid();
                 projet.types_murs.push(crate::modele::TypeCompose { id: id.clone(), nom, couches: ed.couches.clone(), categorie: Some(ed.categorie), couches_detaillees: true, origine: None });
                 id
             }
@@ -1666,7 +1661,7 @@ impl RubanEdition {
                 t.id.clone()
             }
             None => {
-                let id = crate::modele::identifiant("type-mur", &format!("compose:{nom}"));
+                let id = crate::modele::collaboration::uuid();
                 projet.types_murs.push(crate::modele::TypeCompose { id: id.clone(), nom: nom.into(), couches, categorie, couches_detaillees: true, origine: None });
                 id
             }

@@ -3,13 +3,19 @@ use super::*;
 use crate::modele::collaboration::{self as collab, session::Session};
 
 impl ViewerApp {
+    pub(super) fn associer_collaboration(&mut self,central:PathBuf)->Result<(),String>{
+        let (p,path)=self.natif.as_ref().ok_or("Projet natif requis")?;
+        let c=Session::ouvrir(p,path.clone(),central)?;let travail=c.travail()?;
+        self.collaboration=Some(c);self.appliquer_projet_interne(travail,true)?;
+        self.collaboration.as_mut().unwrap().synchroniser(None,false)
+    }
     pub(super) fn rouvrir_collaboration(&mut self) {
         self.collaboration=None;
         let Some((p,path))=&self.natif else{return;};
         let sidecar=path.with_extension("collaboration.json");
         if !sidecar.exists(){return;}
         let resultat=(||{
-            let copie:collab::session::Copie=serde_json::from_slice(&std::fs::read(sidecar).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?;
+            let copie=Session::lire_copie(&sidecar)?;
             Session::ouvrir(p,path.clone(),copie.central)
         })();
         match resultat {Ok(c)=>{let travail=c.travail();self.collaboration=Some(c);if let Err(e)=travail.and_then(|p|self.appliquer_projet_interne(p,true)){self.error=Some(e);}},Err(e)=>self.error=Some(e)}
@@ -29,8 +35,7 @@ impl ViewerApp {
         if self.collaboration.is_none(){
             if ui.button("Collaboration : associer cette copie locale…").clicked(){
                 if let Some(central)=rfd::FileDialog::new().set_title("Dépôt partagé BIMedit (dossier dédié)").pick_folder(){
-                    let (p,path)=self.natif.as_ref().unwrap();
-                    match Session::ouvrir(p,path.clone(),central){Ok(mut c)=>{if let Err(e)=c.synchroniser(None,false){self.error=Some(e);}self.collaboration=Some(c);},Err(e)=>self.error=Some(e)}
+                    if let Err(e)=self.associer_collaboration(central){self.error=Some(e);}
                 }
             } return;
         }
@@ -66,6 +71,9 @@ impl ViewerApp {
                 });
             });
         }
+        ui.collapsing("Textes d'annotations supprimées récupérables",|ui|{
+            for(id,t)in &c.copie.base.textes{if t.supprime{ui.label(id);if let Ok(texte)=t.contenu(){ui.label(&texte);if ui.button(format!("Copier le texte {id}")).clicked(){ui.ctx().copy_text(texte);}}}}
+        });
         if let Some(id)=abandon{let r=self.collaboration.as_mut().unwrap().abandonner(&id).and_then(|p|self.appliquer_projet_interne(p,true));if let Err(e)=r{self.error=Some(e);}}
         if let Some(id)=locale{let r=self.collaboration.as_mut().unwrap().resoudre_locale(&id).and_then(|p|self.appliquer_projet_interne(p,true));if let Err(e)=r{self.error=Some(e);}}
         ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));

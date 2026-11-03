@@ -1303,7 +1303,7 @@ mod tests {
             hauteur: 2.5,
             forme: AnnotationForme::Cote {
                 debut: PointCote::Mur {
-                    id: "supprime".into(),
+                    id: p.murs[0].id.clone(),
                     fin: false,
                 },
                 fin: PointCote::Fixe {
