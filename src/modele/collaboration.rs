@@ -1,5 +1,6 @@
 //! Transactions de valeurs persistantes, indépendantes de l'interface et du transport.
 pub mod cli;
+pub mod partage;
 pub mod session;
 pub mod stockage;
 #[cfg(test)]

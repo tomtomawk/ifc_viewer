@@ -8,6 +8,8 @@ use std::sync::mpsc::{self, Receiver};
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Copie {
     #[serde(default)]
+    pub partage:Option<PathBuf>,
+    #[serde(default)]
     pub editeurs: BTreeMap<String, texte::SauvegardeEditeur>,
     pub session: String,
     pub central: PathBuf,
@@ -93,9 +95,9 @@ impl Session {
         }
         let local = opts
             .open(verrou)
-            .map_err(|e| format!("Copie locale déjà ouverte : {e}"))?;
+            .map_err(|e| if e.raw_os_error()==Some(32)||e.kind()==std::io::ErrorKind::WouldBlock{format!("Copie locale déjà ouverte : {e}")}else{format!("Protection de la copie locale impossible : {e}")})?;
         #[cfg(not(windows))]
-        local.try_lock().map_err(|e| e.to_string())?;
+        local.try_lock().map_err(|e| format!("Copie locale déjà ouverte : {e}"))?;
         let copie = if chemin.exists() {
             let c = Self::lire_copie(&chemin)?;
             if c.base.projet != p.identite || c.central != central {
@@ -106,6 +108,7 @@ impl Session {
             let mut p = p.clone();
             p.figer_references();
             Copie {
+                partage:None,
                 editeurs: BTreeMap::new(),
                 session: uuid(),
                 central,
@@ -237,6 +240,11 @@ impl Session {
         reservation: Option<(Vec<String>, bool, bool)>,
         instantane: bool,
     ) -> Resultat<()> {
+        self.synchroniser_interne(reservation,instantane,true)
+    }
+    pub fn reception_seule(&mut self)->Resultat<()>{self.synchroniser_interne(None,false,false)}
+    pub fn synchronisation_en_cours(&self)->bool{self.messages.is_some()}
+    fn synchroniser_interne(&mut self,reservation:Option<(Vec<String>,bool,bool)>,instantane:bool,publier_attente:bool)->Resultat<()>{
         if self.messages.is_some() {
             return Err("Synchronisation déjà en cours".into());
         }
@@ -255,13 +263,14 @@ impl Session {
                 let debut = std::time::Instant::now();
                 let resultat = (|| {
                     let depot = Depot::nouveau(copie.central);
-                    depot.preparer()?;
+                    if publier_attente {depot.preparer()?;}
                     let limite=std::time::Instant::now()+std::time::Duration::from_secs(2);
                     let mut a=loop{match depot.proteger(){Ok(a)=>break a,Err(e)=>{
                         if std::time::Instant::now()>=limite{return Err(e);}
                         std::thread::sleep(std::time::Duration::from_millis(20));
                     }}};
-                    let mut etat = a.initialiser_etat(&copie.base)?;
+                    let mut etat = if publier_attente {a.initialiser_etat(&copie.base)?}else{a.lire()?.ok_or("Dépôt partagé sans état initial")?};
+                    if etat.projet!=copie.base.projet || etat.revision<copie.base.revision{return Err("Identité du dépôt incorrecte ou révision centrale antérieure à la copie locale".into());}
                     if let Some((cles, reprise, liberer)) = reservation {
                         a.reserver(&mut etat, &cles, &copie.session, reprise, liberer)?;
                     }
@@ -278,6 +287,7 @@ impl Session {
                             if digest!=&hash(&t){return Err("Décision connue mais contenu local différent : conserver la copie pour diagnostic".into());}
                             continue;
                         }
+                        if !publier_attente {attente.push(t);continue;}
                         if !attente.is_empty() {
                             attente.push(t);
                             continue;
