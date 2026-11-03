@@ -457,8 +457,9 @@ impl ViewerApp {
         let Some(ed) = self.famille.as_mut() else { return };
         egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(6.0).show(ui, |ui| {
             ui.set_min_size(ui.available_size());
-            barre_outils(ui, ed);
-            ui.separator();
+            if let Some(m) = &ed.message {
+                ui.label(RichText::new(m).weak());
+            }
             canevas(ui, ed);
         });
     }
@@ -468,10 +469,8 @@ impl ViewerApp {
     /// projet et fichier.
     pub(super) fn proprietes_famille(&mut self, ui: &mut egui::Ui) {
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés de la famille");
-        let placement = self.famille.as_ref().is_some_and(|e| e.ouverture.is_none());
-        let mut action = None;
         let Some(ed) = self.famille.as_mut() else { return };
-        let bas = 96.0;
+        let bas = 40.0;
         egui::ScrollArea::vertical().id_salt("famille_panneau").max_height((ui.available_height() - bas).max(160.0)).show(ui, |ui| panneau(ui, ed));
         ui.separator();
         let r = ed.resoudre();
@@ -485,24 +484,6 @@ impl ViewerApp {
             _ => {
                 ui.label(RichText::new("Contraintes satisfaites.").weak());
             }
-        }
-        ui.horizontal_wrapped(|ui| {
-            if ui.add_enabled(ed.type_id.is_some(), egui::Button::new("Charger dans le projet")).on_hover_text("Met à jour le type et toutes ses ouvertures (Ctrl+S dans l'onglet)").clicked() {
-                action = Some(ActionFamille::Charger(false));
-            }
-            let aide = if placement { "Crée un type avec cette famille ; il sert au prochain placement" } else { "Crée un type avec cette famille et l'affecte à l'ouverture" };
-            if ui.button("Nouveau type").on_hover_text(aide).clicked() {
-                action = Some(ActionFamille::Charger(true));
-            }
-            if ui.button("Enregistrer sous…").on_hover_text("Fichier de famille .famille.json, à charger dans un autre projet").clicked() {
-                action = Some(ActionFamille::EnregistrerSous);
-            }
-            if ui.button("Ouvrir…").on_hover_text("Ouvrir un fichier de famille dans l'éditeur").clicked() {
-                action = Some(ActionFamille::Ouvrir);
-            }
-        });
-        if action.is_some() {
-            self.action_famille = action;
         }
     }
 
@@ -728,42 +709,104 @@ fn titre_editeur(ed: &EditeurFamille) -> String {
     format!("{genre} : {}{}", ed.nom, if ed.modifiee() { " *" } else { "" })
 }
 
-fn barre_outils(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
-    ui.horizontal_wrapped(|ui| {
-        for v in [VueFamille::Elevation, VueFamille::Plan, VueFamille::Coupe] {
-            if ui.selectable_label(ed.vue == v, v.nom()).clicked() {
+impl ViewerApp {
+    /// Ruban de l'éditeur de familles : outils de création (onglet Créer), chargement dans
+    /// le projet et fichiers (onglet Sortie).
+    pub(super) fn ruban_famille(&mut self, ui: &mut egui::Ui, sortie: bool) {
+        use crate::ruban::{bandeau, Commande as C, Icone as I};
+        let Some(ed) = self.famille.as_ref() else { return };
+        if sortie {
+            let placement = ed.ouverture.is_none();
+            let nouveau = ed.type_id.is_none();
+            let charger = vec![
+                C::new("charger", "Charger dans le projet", I::Charger, if nouveau { "Crée le type avec cette famille dans le projet (Ctrl+S)" } else { "Met à jour le type et toutes ses ouvertures (Ctrl+S)" }, true),
+                C::new("nouveau_type", "Nouveau type", I::Nouveau, if placement { "Crée un type avec cette famille ; il sert au prochain placement" } else { "Crée un type avec cette famille et l'affecte à l'ouverture" }, true),
+            ];
+            let fichier = vec![
+                C::new("enregistrer_sous", "Enregistrer sous", I::EnregistrerSous, "Fichier de famille .famille.json, à charger dans un autre projet", true),
+                C::new("ouvrir", "Ouvrir", I::Ouvrir, "Ouvrir un fichier de famille dans l'éditeur", true),
+            ];
+            let mut action = None;
+            for (cle, r) in bandeau(ui, &[("Charger", charger), ("Fichier", fichier)]) {
+                if !r.clicked() {
+                    continue;
+                }
+                action = match cle {
+                    "charger" => Some(ActionFamille::Charger(nouveau)),
+                    "nouveau_type" => Some(ActionFamille::Charger(true)),
+                    "enregistrer_sous" => Some(ActionFamille::EnregistrerSous),
+                    "ouvrir" => Some(ActionFamille::Ouvrir),
+                    _ => None,
+                };
+            }
+            if action.is_some() {
+                self.action_famille = action;
+            }
+            return;
+        }
+        let (vue, outil) = (ed.vue, ed.outil);
+        let vues: Vec<C> = [(VueFamille::Elevation, "elevation", "Élévation intérieure : largeur × hauteur"), (VueFamille::Plan, "plan", "Plan : largeur × épaisseur, extérieur en haut"), (VueFamille::Coupe, "coupe", "Coupe : épaisseur × hauteur, extérieur à droite")]
+            .into_iter()
+            .map(|(v, cle, aide)| C { enfonce: vue == v, ..C::new(cle, v.nom(), I::Famille(cle), aide, true) })
+            .collect();
+        let outils = |liste: &[(OutilFamille, &'static str, &'static str, &'static str)]| -> Vec<C> {
+            liste.iter().map(|&(o, cle, nom, aide)| C { enfonce: outil == o, ..C::new(cle, nom, I::Famille(cle), aide, true) }).collect()
+        };
+        let selection = outils(&[(OutilFamille::Selection, "selection", "Sélection", "Choisir un plan, un volume ou une cote ; glisser un plan libre pour le déplacer")]);
+        let references = outils(&[
+            (OutilFamille::PlanVertical, "plan_v", "Plan vertical", "Plan de référence vertical : cliquer pour le poser"),
+            (OutilFamille::PlanHorizontal, "plan_h", "Plan horizontal", "Plan de référence horizontal : cliquer pour le poser"),
+            (OutilFamille::Cote, "cote", "Cote", "Cliquer deux plans parallèles ; libeller ensuite la cote par un paramètre"),
+            (OutilFamille::Egalite, "egalite", "Égalité", "Cliquer trois plans parallèles : le second reste au milieu des deux autres"),
+        ]);
+        let formes = outils(&[
+            (OutilFamille::Volume, "volume", "Volume", "Extrusion pleine : glisser un rectangle ; ses faces se verrouillent sur les plans les plus proches"),
+            (OutilFamille::Vide, "vide", "Vide", "Extrusion vide : perce le mur hôte une fois la famille chargée"),
+            (OutilFamille::Extrusion, "extrusion", "Extrusion", "Profil quelconque : cliquer les sommets (accrochés aux plans), recliquer le premier ou clic droit pour fermer"),
+            (OutilFamille::ExtrusionVide, "extrusion_vide", "Extrusion vide", "Profil quelconque qui perce le mur hôte"),
+        ]);
+        let symboles = outils(&[
+            (OutilFamille::Ligne, "ligne", "Ligne 2D", "Symbole 2D (plan ou élévation) affiché dans les vues du projet : clic droit pour finir"),
+            (OutilFamille::Arc, "arc", "Arc 2D", "Symbole 2D en arc : départ, point de passage, fin"),
+        ]);
+        let reponses = bandeau(ui, &[("Vue", vues), ("Sélection", selection), ("Références", references), ("Formes", formes), ("Symboles 2D", symboles)]);
+        let Some(ed) = self.famille.as_mut() else { return };
+        for (cle, r) in reponses {
+            if !r.clicked() {
+                continue;
+            }
+            let v = match cle {
+                "elevation" => Some(VueFamille::Elevation),
+                "plan" => Some(VueFamille::Plan),
+                "coupe" => Some(VueFamille::Coupe),
+                _ => None,
+            };
+            if let Some(v) = v {
                 ed.vue = v;
                 ed.debut = None;
                 ed.esquisse.clear();
+                continue;
             }
+            let o = match cle {
+                "selection" => OutilFamille::Selection,
+                "plan_v" => OutilFamille::PlanVertical,
+                "plan_h" => OutilFamille::PlanHorizontal,
+                "cote" => OutilFamille::Cote,
+                "egalite" => OutilFamille::Egalite,
+                "volume" => OutilFamille::Volume,
+                "vide" => OutilFamille::Vide,
+                "extrusion" => OutilFamille::Extrusion,
+                "extrusion_vide" => OutilFamille::ExtrusionVide,
+                "ligne" => OutilFamille::Ligne,
+                "arc" => OutilFamille::Arc,
+                _ => continue,
+            };
+            ed.outil = o;
+            ed.clics.clear();
+            ed.debut = None;
+            ed.esquisse.clear();
         }
-        ui.separator();
-        let (h, v) = ed.vue.axes();
-        for (o, nom, aide) in [
-            (OutilFamille::Selection, "Sélection", "Choisir un plan, un volume ou une cote ; glisser un plan libre pour le déplacer".to_string()),
-            (OutilFamille::PlanVertical, "Plan |", format!("Plan de référence vertical ({}) : cliquer pour le poser", h.nom())),
-            (OutilFamille::PlanHorizontal, "Plan —", format!("Plan de référence horizontal ({}) : cliquer pour le poser", v.nom())),
-            (OutilFamille::Volume, "Volume", "Extrusion pleine : glisser un rectangle ; ses faces se verrouillent sur les plans les plus proches".to_string()),
-            (OutilFamille::Vide, "Vide", "Extrusion vide : perce le mur hôte une fois la famille chargée".to_string()),
-            (OutilFamille::Cote, "Cote", "Cliquer deux plans parallèles ; libeller ensuite la cote par un paramètre".to_string()),
-            (OutilFamille::Egalite, "EQ", "Cliquer trois plans parallèles : le second reste au milieu des deux autres".to_string()),
-            (OutilFamille::Extrusion, "Extrusion", "Profil quelconque : cliquer les sommets (accrochés aux plans), recliquer le premier ou clic droit pour fermer".to_string()),
-            (OutilFamille::ExtrusionVide, "Extr. vide", "Profil quelconque qui perce le mur hôte".to_string()),
-            (OutilFamille::Ligne, "Ligne 2D", "Symbole 2D (plan ou élévation) affiché dans les vues du projet : clic droit pour finir".to_string()),
-            (OutilFamille::Arc, "Arc 2D", "Symbole 2D en arc : départ, point de passage, fin".to_string()),
-        ] {
-            if ui.selectable_label(ed.outil == o, nom).on_hover_text(aide).clicked() {
-                ed.outil = o;
-                ed.clics.clear();
-                ed.debut = None;
-                ed.esquisse.clear();
-            }
-        }
-        if let Some(m) = &ed.message {
-            ui.separator();
-            ui.label(RichText::new(m).weak());
-        }
-    });
+    }
 }
 
 fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {

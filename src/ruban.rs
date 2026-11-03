@@ -3206,6 +3206,10 @@ pub enum Icone {
     Enregistrer,
     EnregistrerSous,
     Exporter(&'static str),
+    /// Charger la famille dans le projet : document et flèche qui y entre.
+    Charger,
+    /// Outils et vues de l'éditeur de familles, par leur clé.
+    Famille(&'static str),
 }
 
 /// Commande d'un bandeau à icônes (Début, Sortie).
@@ -3355,6 +3359,117 @@ fn icone_commande(p: &egui::Painter, r: egui::Rect, i: Icone, c: Color32) {
         Icone::Exporter(format) => {
             document();
             p.text(pt(0.5, 0.64), egui::Align2::CENTER_CENTER, format, egui::FontId::proportional(r.width() * 0.26), c);
+        }
+        Icone::Charger => {
+            document();
+            seg((0.02, 0.58), (0.5, 0.58));
+            p.add(egui::Shape::line(vec![pt(0.32, 0.42), pt(0.5, 0.58), pt(0.32, 0.74)], t));
+        }
+        Icone::Famille(cle) => {
+            let cadre = |x: f32, y: f32, w: f32, h: f32| {
+                p.rect_stroke(egui::Rect::from_min_max(pt(x, y), pt(x + w, y + h)), 0.0, t, egui::StrokeKind::Inside);
+            };
+            let tirets = |a: (f32, f32), b: (f32, f32)| {
+                let n = 6;
+                for k in (0..n).step_by(2) {
+                    let (u, v) = (k as f32 / n as f32, (k + 1) as f32 / n as f32);
+                    seg((a.0 + (b.0 - a.0) * u, a.1 + (b.1 - a.1) * u), (a.0 + (b.0 - a.0) * v, a.1 + (b.1 - a.1) * v));
+                }
+            };
+            let boite_tiretee = |x: f32, y: f32, w: f32, h: f32| {
+                tirets((x, y), (x + w, y));
+                tirets((x + w, y), (x + w, y + h));
+                tirets((x + w, y + h), (x, y + h));
+                tirets((x, y + h), (x, y));
+            };
+            match cle {
+                "elevation" => {
+                    cadre(0.16, 0.1, 0.68, 0.8);
+                    cadre(0.3, 0.24, 0.4, 0.52);
+                    seg((0.5, 0.24), (0.5, 0.76));
+                }
+                "plan" => {
+                    cadre(0.08, 0.3, 0.84, 0.4);
+                    seg((0.08, 0.5), (0.92, 0.5));
+                    seg((0.5, 0.06), (0.5, 0.3));
+                    p.add(egui::Shape::convex_polygon(vec![pt(0.5, 0.06), pt(0.42, 0.2), pt(0.58, 0.2)], c, egui::Stroke::NONE));
+                }
+                "coupe" => {
+                    cadre(0.3, 0.1, 0.4, 0.8);
+                    for y in [0.3, 0.46, 0.62, 0.78] {
+                        seg((0.3, y + 0.1), (0.7, y - 0.1));
+                    }
+                }
+                "selection" => {
+                    p.add(egui::Shape::convex_polygon(vec![pt(0.24, 0.08), pt(0.24, 0.8), pt(0.42, 0.64), pt(0.56, 0.92), pt(0.66, 0.86), pt(0.52, 0.58), pt(0.76, 0.56)], c.gamma_multiply(0.25), t));
+                }
+                "plan_v" => {
+                    tirets((0.5, 0.04), (0.5, 0.96));
+                    p.circle_stroke(pt(0.5, 0.1), r.width() * 0.07, t);
+                }
+                "plan_h" => {
+                    tirets((0.04, 0.5), (0.96, 0.5));
+                    p.circle_stroke(pt(0.1, 0.5), r.width() * 0.07, t);
+                }
+                "cote" => {
+                    seg((0.14, 0.2), (0.14, 0.8));
+                    seg((0.86, 0.2), (0.86, 0.8));
+                    seg((0.14, 0.5), (0.86, 0.5));
+                    p.add(egui::Shape::convex_polygon(vec![pt(0.14, 0.5), pt(0.26, 0.42), pt(0.26, 0.58)], c, egui::Stroke::NONE));
+                    p.add(egui::Shape::convex_polygon(vec![pt(0.86, 0.5), pt(0.74, 0.42), pt(0.74, 0.58)], c, egui::Stroke::NONE));
+                }
+                "egalite" => {
+                    for x in [0.12, 0.5, 0.88] {
+                        seg((x, 0.14), (x, 0.5));
+                    }
+                    seg((0.12, 0.32), (0.88, 0.32));
+                    p.text(pt(0.5, 0.74), egui::Align2::CENTER_CENTER, "EQ", egui::FontId::proportional(r.width() * 0.3), c);
+                }
+                "volume" => {
+                    p.add(egui::Shape::convex_polygon(vec![pt(0.14, 0.32), pt(0.6, 0.32), pt(0.6, 0.88), pt(0.14, 0.88)], c.gamma_multiply(0.3), t));
+                    p.add(egui::Shape::convex_polygon(vec![pt(0.14, 0.32), pt(0.38, 0.1), pt(0.84, 0.1), pt(0.6, 0.32)], c.gamma_multiply(0.15), t));
+                    p.add(egui::Shape::convex_polygon(vec![pt(0.6, 0.32), pt(0.84, 0.1), pt(0.84, 0.66), pt(0.6, 0.88)], c.gamma_multiply(0.45), t));
+                }
+                "vide" => {
+                    boite_tiretee(0.14, 0.3, 0.46, 0.58);
+                    tirets((0.14, 0.3), (0.38, 0.1));
+                    tirets((0.6, 0.3), (0.84, 0.1));
+                    tirets((0.38, 0.1), (0.84, 0.1));
+                    tirets((0.84, 0.1), (0.84, 0.64));
+                    tirets((0.6, 0.88), (0.84, 0.64));
+                }
+                "extrusion" => {
+                    p.add(egui::Shape::convex_polygon(vec![pt(0.12, 0.84), pt(0.12, 0.34), pt(0.44, 0.16), pt(0.76, 0.34), pt(0.76, 0.84)], c.gamma_multiply(0.3), t));
+                    seg((0.76, 0.34), (0.9, 0.24));
+                    seg((0.76, 0.84), (0.9, 0.74));
+                    seg((0.9, 0.24), (0.9, 0.74));
+                }
+                "extrusion_vide" => {
+                    for (a, b) in [((0.12, 0.84), (0.12, 0.34)), ((0.12, 0.34), (0.44, 0.16)), ((0.44, 0.16), (0.76, 0.34)), ((0.76, 0.34), (0.76, 0.84)), ((0.76, 0.84), (0.12, 0.84))] {
+                        tirets(a, b);
+                    }
+                    tirets((0.76, 0.34), (0.9, 0.24));
+                    tirets((0.76, 0.84), (0.9, 0.74));
+                    tirets((0.9, 0.24), (0.9, 0.74));
+                }
+                "ligne" => {
+                    p.add(egui::Shape::line(vec![pt(0.12, 0.8), pt(0.4, 0.3), pt(0.64, 0.6), pt(0.88, 0.16)], t));
+                    for (x, y) in [(0.12, 0.8), (0.4, 0.3), (0.64, 0.6), (0.88, 0.16)] {
+                        p.circle_filled(pt(x, y), r.width() * 0.05, c);
+                    }
+                }
+                "arc" => {
+                    let pts: Vec<egui::Pos2> = (0..=16).map(|k| {
+                        let a = std::f32::consts::PI * (1.0 + k as f32 / 16.0);
+                        pt(0.5 + 0.38 * a.cos(), 0.78 + 0.6 * a.sin())
+                    }).collect();
+                    p.add(egui::Shape::line(pts, t));
+                    for (x, y) in [(0.12, 0.78), (0.5, 0.18), (0.88, 0.78)] {
+                        p.circle_filled(pt(x, y), r.width() * 0.05, c);
+                    }
+                }
+                _ => cadre(0.2, 0.2, 0.6, 0.6),
+            }
         }
     }
 }

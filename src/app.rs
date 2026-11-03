@@ -311,6 +311,10 @@ enum OngletRuban {
     Modifier,
     Annoter,
     Sortie,
+    /// Ruban de l'éditeur de familles : outils de création.
+    FamilleCreer,
+    /// Ruban de l'éditeur de familles : chargement dans le projet et fichiers.
+    FamilleSortie,
 }
 
 /// Une croix tracée au centre de son bouton, sans dépendre des métriques de police.
@@ -3366,6 +3370,14 @@ impl ViewerApp {
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         let maximise = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
+        // famille ouverte : son propre ruban, comme un document indépendant
+        let mode_famille = self.famille_active && self.famille.is_some() && !(self.rvt.is_some() && self.rvt_sheet);
+        let onglet_famille = matches!(self.onglet_ruban, OngletRuban::FamilleCreer | OngletRuban::FamilleSortie);
+        if mode_famille && !onglet_famille {
+            self.onglet_ruban = OngletRuban::FamilleCreer;
+        } else if !mode_famille && onglet_famille {
+            self.onglet_ruban = OngletRuban::Debut;
+        }
         // cadre du système : ni boutons de fenêtre ni zones de déplacement dessinés ici
         let natif = crate::cadre_natif();
         let (barre, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 32.0), Sense::hover());
@@ -3384,13 +3396,12 @@ impl ViewerApp {
         let mut zones_deplacement = vec![titre];
         let menus = egui::Rect::from_min_max(egui::pos2(titre.right() + 8.0, barre.top()), egui::pos2(barre.right() - if natif { 4.0 } else { 144.0 }, barre.bottom()));
         ui.scope_builder(egui::UiBuilder::new().id_salt("menu_fenetre").max_rect(menus).layout(egui::Layout::left_to_right(Align::Center)), |ui| {
-            for (o, nom) in [
-                (OngletRuban::Debut, "Début"),
-                (OngletRuban::Modeliser, "Modéliser"),
-                (OngletRuban::Modifier, "Modifier"),
-                (OngletRuban::Annoter, "Documenter"),
-                (OngletRuban::Sortie, "Sortie"),
-            ] {
+            let onglets: &[(OngletRuban, &str)] = if mode_famille {
+                &[(OngletRuban::FamilleCreer, "Créer"), (OngletRuban::FamilleSortie, "Sortie")]
+            } else {
+                &[(OngletRuban::Debut, "Début"), (OngletRuban::Modeliser, "Modéliser"), (OngletRuban::Modifier, "Modifier"), (OngletRuban::Annoter, "Documenter"), (OngletRuban::Sortie, "Sortie")]
+            };
+            for &(o, nom) in onglets {
                 ui.selectable_value(&mut self.onglet_ruban, o, RichText::new(nom).strong());
             }
             let disponible = self.natif.is_some() && self.loading.is_none() && self.sauvegarde.is_none();
@@ -3496,6 +3507,10 @@ impl ViewerApp {
         }
         ui.separator();
         ui.set_min_height(28.0);
+        if mode_famille {
+            self.ruban_famille(ui, self.onglet_ruban == OngletRuban::FamilleSortie);
+            return;
+        }
         let edition = match self.onglet_ruban {
             OngletRuban::Modeliser => Some(crate::ruban::Menu::Modeliser),
             OngletRuban::Modifier => Some(crate::ruban::Menu::Modifier),
@@ -3577,7 +3592,7 @@ impl ViewerApp {
                     }
                 }
             }
-            OngletRuban::Modeliser | OngletRuban::Modifier | OngletRuban::Annoter => {}
+            OngletRuban::Modeliser | OngletRuban::Modifier | OngletRuban::Annoter | OngletRuban::FamilleCreer | OngletRuban::FamilleSortie => {}
             OngletRuban::Sortie => {
                 use crate::ruban::{Commande as C, Icone as I};
                 let disponible = (self.natif.is_some() || self.rvt_source.is_some()) && self.loading.is_none() && self.sauvegarde.is_none();
@@ -7965,7 +7980,7 @@ impl eframe::App for ViewerApp {
             if self.natif.is_some() && !trace && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete) || i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace)) { self.demander_suppression(); }
             if ctx.input(|i| i.key_pressed(egui::Key::Escape)) { self.raccourci_en_attente = None; }
         }
-        if !ctx.egui_wants_keyboard_input() && self.natif.is_some() && !self.trace_en_cours() && self.coupe_depart.is_none() && self.bim.depart_structure.is_none() && self.bim.depart_deplacement.is_none() {
+        if !ctx.egui_wants_keyboard_input() && self.natif.is_some() && !(self.famille_active && self.famille.is_some()) && !self.trace_en_cours() && self.coupe_depart.is_none() && self.bim.depart_structure.is_none() && self.bim.depart_deplacement.is_none() {
             let (temps, textes) = ctx.input(|i| (i.time, if i.modifiers.ctrl || i.modifiers.alt || i.modifiers.command { Vec::new() } else { i.events.iter().filter_map(|e| if let egui::Event::Text(s) = e { Some(s.clone()) } else { None }).collect::<Vec<_>>() }));
             if self.raccourci_en_attente.is_some_and(|(_, t)| temps - t > 2.0) { self.raccourci_en_attente = None; }
             for c in textes.iter().flat_map(|s| s.chars()).filter(|c| c.is_ascii_alphabetic()).map(|c| c.to_ascii_uppercase()) {
