@@ -7,6 +7,12 @@ impl ViewerApp {
     }
 
     pub(super) fn parcourir_historique_n(&mut self, retablir: bool, nombre: usize) {
+        if self.collaboration.is_some() {
+            if nombre != 1 { self.error = Some("En collaboration, annulez une transaction à la fois.".into()); return; }
+            let resultat = self.collaboration.as_mut().unwrap().annuler(retablir).and_then(|p|self.appliquer_projet_interne(p,true));
+            if let Err(e)=resultat {self.error=Some(e);}
+            return;
+        }
         self.historique.geste(false);
         self.bim.barre_editee = None;
         let resultat = (|| {

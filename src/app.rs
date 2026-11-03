@@ -9,6 +9,7 @@ mod communes;
 mod feuilles;
 mod dessin2d_ui;
 mod famille_ui;
+mod collaboration;
 use crate::options::Dimensions;
 use crate::camera::{Camera, MAX_PITCH};
 use crate::dessin::{self, Poche};
@@ -365,6 +366,7 @@ struct FenetreSelection { debut: egui::Pos2, fin: egui::Pos2, glissement: bool, 
 struct DocumentOuvert {
     natif: Option<(crate::modele::Projet, PathBuf)>,
     historique: crate::modele::historique::Historique,
+    collaboration: Option<crate::modele::collaboration::session::Session>,
     modifie: bool,
     scene: Option<Scene>,
     rvt: Option<RvtInfo>,
@@ -455,6 +457,7 @@ pub struct ViewerApp {
     confirmer_famille: bool,
     natif: Option<(crate::modele::Projet, PathBuf)>,
     historique: crate::modele::historique::Historique,
+    collaboration: Option<crate::modele::collaboration::session::Session>,
     natif_modifie: bool,
     /// Repère du plan : le prochain clic choisit l'arête à mettre à l'horizontale.
     alignement_plan: bool,
@@ -632,6 +635,7 @@ impl ViewerApp {
             feuilles: Default::default(),
             natif: None,
             historique: Default::default(),
+            collaboration: None,
             natif_modifie: false,
             raccourci_en_attente: None,
             coupe_depart: None,
@@ -820,6 +824,7 @@ impl ViewerApp {
                         self.natif_modifie=self.historique.modifie(&projet);
                     }
                     self.natif = Some((projet, chemin));
+                    self.rouvrir_collaboration();
                     self.avant_saisie = None;
                     self.ouvrir_plan_initial_natif();
                     return;
@@ -2807,7 +2812,10 @@ impl ViewerApp {
 
     /// Remplace le projet natif ouvert par `projet` (modifié) et reconstruit la scène,
     /// cadrage, niveaux, catégories et visibilité compris. Rien ne change en cas d'erreur.
-    fn appliquer_projet(&mut self, mut projet: crate::modele::Projet) -> Result<(), String> {
+    fn appliquer_projet(&mut self, projet: crate::modele::Projet) -> Result<(), String> {
+        self.appliquer_projet_interne(projet, false)
+    }
+    fn appliquer_projet_interne(&mut self, mut projet: crate::modele::Projet, distant: bool) -> Result<(), String> {
         // saisie en cours : le projet suit la frappe, la scène et l'historique attendent
         // la validation (voir valider_saisie)
         if self.saisie_active {
@@ -2819,9 +2827,21 @@ impl ViewerApp {
             return Ok(());
         }
         let chemin = self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.1.clone();
-        projet.recaler_menuiseries(&self.natif.as_ref().unwrap().0)?;
-        let scene = scene::depuis_natif(&projet, &chemin)?;
-        self.historique.pousser(&self.natif.as_ref().unwrap().0, &projet)?;
+        if !distant { projet.recaler_menuiseries(&self.natif.as_ref().unwrap().0)?; }
+        projet.verifier()?;
+        let texte_seul = crate::modele::collaboration::objets(&projet)? == crate::modele::collaboration::objets(&self.natif.as_ref().unwrap().0)?;
+        let scene_preparee = if texte_seul && self.collaboration.is_some() { None } else { Some(scene::depuis_natif(&projet, &chemin)?) };
+        // Le commit local durable précède toute installation dans la scène.
+        // Une réception utilise déjà un état accepté et ne crée pas de transaction.
+        if !distant && let Some(c) = &mut self.collaboration { c.editer(&self.natif.as_ref().unwrap().0, &projet)?; }
+        if texte_seul && self.collaboration.is_some() {
+            self.natif.as_mut().unwrap().0 = projet;
+            self.bim.revision = self.bim.revision.wrapping_add(1);
+            self.natif_modifie = true;
+            return Ok(());
+        }
+        let scene = scene_preparee.ok_or("Scène préparée absente")?;
+        if !distant && self.collaboration.is_none() { self.historique.pousser(&self.natif.as_ref().unwrap().0, &projet)?; }
         // Les indices de vues et d'objets peuvent changer après suppression ou annulation.
         // Retrouver leurs identifiants stables avant de remplacer la scène.
         let anciens=self.scene.as_ref();
@@ -3080,7 +3100,7 @@ impl ViewerApp {
         match &self.natif {
             Some((p, _)) => {
                 let mut p = p.clone();
-                p.positions_plan.push(crate::modele::PositionPlan { nom: nom.clone(), angle: (angle.to_degrees() as f64 * 10.0).round() / 10.0 });
+                p.positions_plan.push(crate::modele::PositionPlan { id: crate::modele::collaboration::uuid(), nom: nom.clone(), angle: (angle.to_degrees() as f64 * 10.0).round() / 10.0 });
                 let camera = self.camera.clone();
                 if let Err(e) = self.appliquer_projet(p) {
                     self.error = Some(e);
@@ -3211,6 +3231,7 @@ impl ViewerApp {
         self.documents.insert(self.document_actif, DocumentOuvert {
             natif: self.natif.take(),
             historique: std::mem::take(&mut self.historique),
+            collaboration: self.collaboration.take(),
             modifie: self.natif_modifie,
             scene: self.scene.take(),
             rvt: self.rvt.take(),
@@ -3256,6 +3277,7 @@ impl ViewerApp {
         self.natif = d.natif;
         self.avant_saisie = None;
         self.historique = d.historique;
+        self.collaboration = d.collaboration;
         self.natif_modifie = d.modifie;
         self.ruban_edition.niveau_mur = None;
         self.ruban_edition.niveau_haut_mur = None;
@@ -3313,6 +3335,7 @@ impl ViewerApp {
     }
 
     fn fermer_document(&mut self) {
+        self.collaboration = None;
         self.natif_modifie = false;
         self.natif = None;
         self.avant_saisie = None;
@@ -4874,6 +4897,7 @@ impl ViewerApp {
     }
 
     fn memoriser_vue(&mut self) {
+        if self.saisie_active { return; }
         if !self.vues_ouvertes.contains(&self.vue_active) {
             return;
         }
@@ -4895,7 +4919,8 @@ impl ViewerApp {
                 if vue != projet.vues[index] {
                     let avant = projet.clone();
                     projet.vues[index] = vue;
-                    if let Err(e) = self.historique.pousser(&avant, projet) { self.error = Some(e); }
+                    let resultat = if let Some(c) = &mut self.collaboration { c.editer(&avant, projet) } else { self.historique.pousser(&avant, projet) };
+                    if let Err(e) = resultat { *projet = avant; self.error = Some(e); }
                     self.natif_modifie = true;
                     self.bim.revision = self.bim.revision.wrapping_add(1);
                 }
@@ -5881,13 +5906,13 @@ impl ViewerApp {
         match action {
             Some("nouveau") => {
                 let n = libre(&p, "Motif");
-                p.motifs.push(DefinitionMotif { nom: n.clone(), lignes: vec![LigneMotif { angle: 45.0, pas: 2.0, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() }] });
+                p.motifs.push(DefinitionMotif { id: crate::modele::collaboration::uuid(), nom: n.clone(), lignes: vec![LigneMotif { angle: 45.0, pas: 2.0, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() }] });
                 self.motif_choisi = Some(n);
                 change = true;
             }
             Some("dupliquer") => {
                 let n = libre(&p, &format!("{} (copie)", d.nom));
-                p.motifs.push(DefinitionMotif { nom: n.clone(), ..d.clone() });
+                p.motifs.push(DefinitionMotif { id: crate::modele::collaboration::uuid(), nom: n.clone(), ..d.clone() });
                 self.motif_choisi = Some(n);
                 change = true;
             }
@@ -5903,7 +5928,7 @@ impl ViewerApp {
                 } else {
                     // copie renommée ; les matériaux qui se servaient de l'ancien suivent
                     p.motifs.retain(|x| x.nom != choisi);
-                    p.motifs.push(DefinitionMotif { nom: n.clone(), ..d.clone() });
+                    p.motifs.push(DefinitionMotif { id: crate::modele::collaboration::uuid(), nom: n.clone(), ..d.clone() });
                     let (ancien, neuf) = (MotifCoupe::hachures(&choisi), MotifCoupe::hachures(&n));
                     for m in &mut p.materiaux {
                         for x in [&mut m.motif].into_iter().chain([&mut m.surface_motif, &mut m.surface_fond_motif, &mut m.coupe_fond_motif].into_iter().flatten()) {
@@ -7916,6 +7941,7 @@ impl eframe::App for ViewerApp {
             if self.pilote.is_none() { ctx.request_repaint_after(std::time::Duration::from_secs(2)); }
         }
         self.valider_saisie(&ctx);
+        self.recevoir_collaboration();
         self.niveau_creation_courant();
         self.onglet_selon_selection();
         self.historique.geste(ctx.input(|i|i.pointer.any_down()));
@@ -8009,7 +8035,7 @@ impl eframe::App for ViewerApp {
         }
 
         egui::Panel::top("top").show(ui, |ui| self.top_bar(ui));
-        egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
+        egui::Panel::bottom("status").show(ui, |ui| { self.barre_collaboration(ui); self.status_bar(ui); });
         self.zone_panneaux = ui.available_rect_before_wrap();
         self.deplacer_panneau(&ctx);
         if self.rvt.is_some() && self.rvt_sheet {
