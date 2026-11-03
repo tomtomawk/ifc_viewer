@@ -57,8 +57,11 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         entite(id_natif("garde_corps", &g.id), "IFCRAILING", &g.id, &g.nom, 9)?;
     }
     for o in &projet.importes {
+        // topographie de Revit : élément géographique, comme un terrain natif (visible dans
+        // les plans de tous les niveaux dont la plage de vue la touche)
+        let topo = o.origine.as_ref().is_some_and(|o| o.classe.starts_with("Toposolid") || o.classe == "SiteSurface");
         let classe = o.origine.as_ref().map(|o| o.classe.to_uppercase()).filter(|c| c.starts_with("IFC"))
-            .unwrap_or_else(|| if o.categorie.to_uppercase().starts_with("IFC") { o.categorie.to_uppercase() } else { "IFCBUILDINGELEMENTPROXY".into() });
+            .unwrap_or_else(|| if topo { "IFCGEOGRAPHICELEMENT".into() } else if o.categorie.to_uppercase().starts_with("IFC") { o.categorie.to_uppercase() } else { "IFCBUILDINGELEMENTPROXY".into() });
         entite(id_natif("importe", &o.id), &classe, &o.id, &o.nom, 9)?;
     }
     for n in &projet.niveaux { file.entities.get_mut(&id_natif("niveau", &n.id)).unwrap().args[9] = Value::Real(n.altitude); }
@@ -272,7 +275,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     let mut aretes = aretes_jointes(&geoms, &materiaux_parts);
     // terrains : apparence lissée, sans arête
     for t in &projet.terrains {
-        aretes.insert(id_natif("terrain", &t.id), Default::default());
+        aretes.insert(id_natif("terrain", &t.id), aretes_terrain(t, projet.ngf()));
     }
     let mut scene = crate::scene::assemble_avec(model, geoms, path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| projet.nom.clone()), aretes);
     for t in &projet.terrains {
@@ -521,4 +524,84 @@ fn coupe_materiau(projet: &Projet, m: &crate::modele::Materiau, plans: Vec<Vec4>
         isolation: m.motif == MotifCoupe::Isolation,
         trait_mm,
     }]
+}
+
+/// Traits d'un terrain en plan : périmètre de sa surface et courbes de niveau à un pas
+/// rond (une douzaine au plus). La surface lissée n'a pas d'arête : sans ces traits, la
+/// partie vue sous le plan de coupe (faces blanches) ne se distingue pas du papier.
+fn aretes_terrain(t: &crate::modele::site::Terrain, ngf: f64) -> crate::dessin::Aretes {
+    use glam::DVec3;
+    let decalage = DVec3::new(0.0, 0.0, -ngf);
+    let m = |p: DVec3| (p + decalage) * 0.001;
+    let mut vives: Vec<[DVec3; 2]> = (0..t.contour.len()).map(|i| [t.contour[i], t.contour[(i + 1) % t.contour.len()]].map(|p| m(DVec3::from_array(p)))).collect();
+    if let Ok(tris) = t.triangles() {
+        let z = tris.iter().flatten().map(|p| p.z);
+        let (bas, haut) = z.fold((f64::MAX, f64::MIN), |(a, b), z| (a.min(z), b.max(z)));
+        if haut - bas > 1.0 {
+            let etendue = haut - bas;
+            let pas = [50.0, 100.0, 200.0, 250.0, 500.0, 1000.0, 2000.0, 5000.0, 10_000.0].into_iter().find(|p| etendue / p <= 12.0).unwrap_or(20_000.0);
+            for tri in &tris {
+                let zmax = tri.iter().map(|p| p.z).fold(f64::MIN, f64::max);
+                let mut z = (tri.iter().map(|p| p.z).fold(f64::MAX, f64::min) / pas).ceil() * pas;
+                while z < zmax {
+                    let pts: Vec<DVec3> = (0..3).filter_map(|i| {
+                        let (a, b) = (tri[i], tri[(i + 1) % 3]);
+                        ((a.z - z) * (b.z - z) < 0.0).then(|| a + (b - a) * ((z - a.z) / (b.z - a.z)))
+                    }).collect();
+                    if let [a, b] = pts[..] {
+                        vives.push([m(a), m(b)]);
+                    }
+                    z += pas;
+                }
+            }
+        }
+    }
+    crate::dessin::Aretes { vives, douces: Vec::new() }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::modele::{ElementImporte, Maillage, Origine};
+
+    /// Topographie importée de Revit : élément géographique, que les plans d'étage gardent
+    /// (la plage de vue décide ensuite de ce qui est vu).
+    #[test]
+    fn topographie_revit_importee_est_geographique() {
+        let mut p = Projet::nouveau("T");
+        let tris = [[DVec3::ZERO, DVec3::new(1000.0, 0.0, 0.0), DVec3::new(0.0, 1000.0, 500.0)]];
+        for (id, classe) in [("a", "Toposolid"), ("b", "SiteSurface"), ("c", "Wall")] {
+            let origine = Some(Origine { source: "rvt".into(), id: id.into(), guid: None, classe: classe.into() });
+            p.importes.push(ElementImporte { id: id.into(), nom: id.into(), categorie: "Autres".into(), niveau: None, maillage: Maillage::depuis_triangles(&tris), raison: String::new(), origine });
+        }
+        let s = depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
+        let classe = |id: &str| &*s.objects[s.object_of[&id_natif("importe", id)] as usize].class;
+        assert_eq!(classe("a"), "IFCGEOGRAPHICELEMENT");
+        assert_eq!(classe("b"), "IFCGEOGRAPHICELEMENT");
+        assert_eq!(classe("c"), "IFCBUILDINGELEMENTPROXY");
+    }
+
+    /// Terrain recoupant un mur : en plan, le clic sur le mur le sélectionne (le terrain
+    /// n'est pris que faute d'autre objet) et le terrain porte ses traits (périmètre et
+    /// courbes de niveau).
+    #[test]
+    fn terrain_sous_le_mur_et_ses_traits() {
+        use crate::modele::{edition::ParametresMur, site::Terrain};
+        let mut p = Projet::nouveau("T");
+        p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &ParametresMur { epaisseur: 200.0, ..Default::default() }).unwrap();
+        let z = |x: f64| 200.0 + x / 10.0;
+        p.terrains.push(Terrain { id: "t".into(), nom: "Topo".into(), contour: vec![[-5000.0, -5000.0, z(-5000.0)], [10000.0, -5000.0, z(10000.0)], [10000.0, 5000.0, z(10000.0)], [-5000.0, 5000.0, z(-5000.0)]], points: vec![], type_terrain: None });
+        let s = depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
+        let visible = vec![true; s.objects.len()];
+        let plan = glam::Vec4::new(0.0, 0.0, -1.0, 1.2 - s.origin.z as f32);
+        let haut = glam::Vec3::new(2.5 - s.origin.x as f32, -s.origin.y as f32, 10.0);
+        let (i, _) = s.pick(haut, glam::Vec3::NEG_Z, &visible, Some(plan), None).unwrap();
+        assert_eq!(&*s.objects[i as usize].class, "IFCWALL");
+        // hors du mur, le terrain reste sélectionnable
+        let loin = glam::Vec3::new(-2.0 - s.origin.x as f32, 3.0 - s.origin.y as f32, 10.0);
+        let (i, _) = s.pick(loin, glam::Vec3::NEG_Z, &visible, Some(plan), None).unwrap();
+        assert_eq!(&*s.objects[i as usize].class, "IFCGEOGRAPHICELEMENT");
+        let topo = s.objects.iter().find(|o| &*o.class == "IFCGEOGRAPHICELEMENT").unwrap();
+        assert!(topo.aretes.count > 8, "{}", topo.aretes.count);
+    }
 }

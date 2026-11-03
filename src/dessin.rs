@@ -414,10 +414,15 @@ fn fusionner_materiaux(scene: &Scene, mut prims: Vec<Primitive>) -> Vec<Primitiv
         let [b] = c.as_slice() else { return None };
         Some((b.couleur, b.motif.as_ref().map_or_else(String::new, |m| m.nom.clone())))
     };
-    // traits de coupe rangés par droite porteuse : (primitive, rang, t0, t1, élément)
+    // traits de coupe rangés par droite porteuse : (primitive, rang, t0, t1, élément).
+    // Une droite regroupe les traits dont les deux extrémités sont à moins de 0,1 mm d'elle,
+    // quel que soit leur sens : une clé arrondie sépare à tort un trait court (direction
+    // bruitée) ou un onglet à 45° (signe de la direction canonique instable) de sa droite.
     type Trait = (usize, usize, f64, f64, Option<crate::step::Id>);
-    let q = |x: f64| (x * 1e4).round() as i64;
-    let mut droites: HashMap<([i64; 3], [i64; 3]), (DVec3, Vec<Trait>)> = HashMap::new();
+    const TOLERANCE: f64 = 1e-4;
+    let case = |u: DVec3| [(u.x * 20.0).floor() as i64, (u.y * 20.0).floor() as i64, (u.z * 20.0).floor() as i64];
+    let mut droites: Vec<(DVec3, DVec3, Vec<Trait>)> = Vec::new();
+    let mut index: HashMap<[i64; 3], Vec<usize>> = HashMap::new();
     for (k, p) in prims.iter().enumerate() {
         if let (Role::Coupe, Forme::Segments(segs)) = (p.role, &p.forme) {
             if materiau(p.element).is_none() {
@@ -428,22 +433,42 @@ fn fusionner_materiaux(scene: &Scene, mut prims: Vec<Primitive>) -> Vec<Primitiv
                 if d.length() < 1e-9 {
                     continue;
                 }
-                let mut u = d.normalize();
-                let m = if u.x.abs() >= u.y.abs() && u.x.abs() >= u.z.abs() { u.x } else if u.y.abs() >= u.z.abs() { u.y } else { u.z };
-                if m < 0.0 {
-                    u = -u;
+                let u = d.normalize();
+                let distance = |q: DVec3, v: DVec3| (q - v * q.dot(v)).length();
+                // droite existante : cases voisines de u et de −u
+                let mut trouvee = None;
+                'cherche: for signe in [1.0, -1.0] {
+                    let c = case(u * signe);
+                    for dx in -1..=1 {
+                        for dy in -1..=1 {
+                            for dz in -1..=1 {
+                                let Some(liste) = index.get(&[c[0] + dx, c[1] + dy, c[2] + dz]) else { continue };
+                                for &n in liste {
+                                    let (v, o, _) = droites[n];
+                                    if distance(s[0] - o, v) < TOLERANCE && distance(s[1] - o, v) < TOLERANCE {
+                                        trouvee = Some(n);
+                                        break 'cherche;
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-                let p0 = s[0] - u * s[0].dot(u);
-                let cle = ([q(u.x), q(u.y), q(u.z)], [q(p0.x), q(p0.y), q(p0.z)]);
-                let (ta, tb) = (s[0].dot(u), s[1].dot(u));
-                droites.entry(cle).or_insert((u, Vec::new())).1.push((k, i, ta.min(tb), ta.max(tb), p.element));
+                let n = trouvee.unwrap_or_else(|| {
+                    droites.push((u, s[0], Vec::new()));
+                    index.entry(case(u)).or_default().push(droites.len() - 1);
+                    droites.len() - 1
+                });
+                let v = droites[n].0;
+                let (ta, tb) = (s[0].dot(v), s[1].dot(v));
+                droites[n].2.push((k, i, ta.min(tb), ta.max(tb), p.element));
             }
         }
     }
     // partie de chaque trait recouverte par un trait d'un autre élément du même matériau :
     // retirée des deux (un trait court posé sur un trait long compris)
     let mut remplacer: HashMap<(usize, usize), Vec<[DVec3; 2]>> = HashMap::new();
-    for (u, traits) in droites.values() {
+    for (u, _, traits) in &droites {
         for &(k, i, t0, t1, e) in traits {
             let mut couverts: Vec<(f64, f64)> = traits
                 .iter()
@@ -499,7 +524,7 @@ pub fn sommets(scene: &Scene, prims: &[Primitive], normale: DVec3, echelle: f64,
     let raccords = (!fins).then(|| crate::trace2d::Raccords::new(prims, echelle));
     for p in prims {
         let obj = p.element.and_then(|e| scene.object_of.get(&e).copied()).unwrap_or(u32::MAX);
-        let decal = -normale * if p.role == Role::Coupe { (0.4 * largeur).min(0.004) } else { (0.2 * largeur).min(0.002) };
+        let decal = -normale * if p.role == crate::trace2d::Role::Coupe { (0.4 * largeur).min(0.004) } else { (0.2 * largeur).min(0.002) };
         let sommet = |q: DVec3| Vertex { pos: (q + decal).as_vec3().to_array(), normal: [0, 0, 0, 127], color: p.style.couleur, obj };
         let m = maillage(p, normale, echelle, fins, raccords.as_ref());
         tris.extend(m.triangles.iter().flatten().map(|q| sommet(*q)));
@@ -1045,5 +1070,31 @@ mod mesure {
         let t0 = std::time::Instant::now();
         let a = super::aretes(&t);
         println!("{} triangles : {} vives, {} douces en {:?}", t.len(), a.vives.len(), a.douces.len(), t0.elapsed());
+    }
+
+    /// Deux murs de même type à un angle quelconque : la coupe en plan ne garde que le
+    /// contour extérieur, aucun reste du trait d'onglet.
+    #[test]
+    fn angle_quelconque_sans_reste_d_onglet() {
+        use crate::modele::{edition::ParametresMur, Projet};
+        for deg in [90.0_f64, 70.0, 55.0, 35.0, 123.0] {
+            let mut p = Projet::nouveau("A");
+            let o = ParametresMur { epaisseur: 200.0, ..Default::default() };
+            let r = deg.to_radians();
+            let c = [5000.0 + 4000.0 * r.cos(), 4000.0 * r.sin()];
+            p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &o).unwrap();
+            p.ajouter_mur([5000.0, 0.0], c, &o).unwrap();
+            let s = crate::scene::depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
+            let visible = vec![true; s.objects.len()];
+            let prims = crate::dessin::coupe(&s, &visible, glam::Vec4::new(0.0, 0.0, 1.0, -1.0), 100.0, crate::dessin::Poche::Hachure);
+            let mut segs: Vec<[glam::DVec3; 2]> = Vec::new();
+            for pr in prims.iter().filter(|p| p.role == crate::trace2d::Role::Coupe) {
+                if let crate::trace2d::Forme::Segments(v) = &pr.forme { segs.extend(v.iter().copied()); }
+            }
+            // contour d'un angle plein : 6 côtés (18,4 m), sans reste du trait d'onglet
+            let total: f64 = segs.iter().map(|s| s[0].distance(s[1])).sum();
+            assert_eq!(segs.len(), 6, "{deg}° : {segs:?}");
+            assert!((total - 18.4).abs() < 1e-3, "{deg}° : {total}");
+        }
     }
 }

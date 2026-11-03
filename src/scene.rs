@@ -446,16 +446,21 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
 
 impl Scene {
     /// Objet visible le plus proche le long du rayon ; avec une coupe (n, d), seuls les
-    /// points gardés (n·p + d ≥ 0) des objets du modèle comptent.
+    /// points gardés (n·p + d ≥ 0) des objets du modèle comptent. Sous une coupe (plan,
+    /// coupe verticale), la topographie n'est prise que faute d'autre objet : elle passe
+    /// sous les murs qu'elle recoupe au lieu de les masquer.
     pub fn pick(&self, origin: Vec3, dir: Vec3, visible: &[bool], coupe: Option<Vec4>, boite: Option<(Vec3, Vec3)>) -> Option<(u32, f32)> {
         let inv = dir.recip();
         let mut best: Option<(u32, f32)> = None;
+        let mut topo: Option<(u32, f32)> = None;
         for (i, o) in self.objects.iter().enumerate() {
             if !visible[i] {
                 continue;
             }
             let Some(tmin) = ray_aabb(origin, inv, o.min, o.max) else { continue };
-            if best.is_some_and(|b| tmin > b.1) {
+            let au_fond = coupe.is_some() && &*o.class == "IFCGEOGRAPHICELEMENT";
+            let cible = if au_fond { topo } else { best };
+            if cible.is_some_and(|b| tmin > b.1) {
                 continue;
             }
             for r in [o.opaque, o.transparent] {
@@ -465,14 +470,17 @@ impl Scene {
                     if let Some(d) = ray_tri(origin, dir, a, b, c) {
                         let q = origin + dir * d;
                         let garde = t[0].normal[3] > 0 || (coupe.is_none_or(|p| p.truncate().dot(q) + p.w >= 0.0) && boite.is_none_or(|(a, b)| q.cmpge(a).all() && q.cmple(b).all()));
-                        if garde && best.is_none_or(|b| d < b.1) {
-                            best = Some((i as u32, d));
+                        if garde {
+                            let cible = if au_fond { &mut topo } else { &mut best };
+                            if cible.is_none_or(|b| d < b.1) {
+                                *cible = Some((i as u32, d));
+                            }
                         }
                     }
                 }
             }
         }
-        best
+        best.or(topo)
     }
 }
 
