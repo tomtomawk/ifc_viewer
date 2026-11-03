@@ -114,12 +114,7 @@ impl Projet {
         if let Some(t) = self.types_murs.iter().find(|t| t.couches.len() == 1 && t.couches[0] == *c) {
             return t.id.clone();
         }
-        let mut cle = format!("{}|{}|{:?}", c.materiau.as_deref().unwrap_or(""), c.epaisseur, c.fonction);
-        // plume choisie : type distinct (sans elle, la clé des projets existants ne change pas)
-        if let Some(n) = c.plume {
-            cle.push_str(&format!("|plume {n}"));
-        }
-        let id = identifiant("type-couche", &cle);
+        let id = collaboration::uuid();
         let nom = format!("{} · {} mm", c.materiau.as_deref().unwrap_or("Couche"), crate::step::format_real(c.epaisseur));
         self.types_murs.push(TypeCompose { id: id.clone(), nom, couches: vec![c.clone()], categorie: None, couches_detaillees: true, origine: None });
         id
@@ -153,7 +148,7 @@ impl Projet {
         let mut nouveaux = Vec::new();
         for (k, (c, d)) in t.couches.iter().zip(t.decalages_couches()).enumerate() {
             let type_mur = self.type_couche(c);
-            let cid = identifiant("couche", &format!("{}:{k}", m.id));
+            let cid = collaboration::uuid();
             couches.push(cid.clone());
             nouveaux.push(Mur {
                 id: cid,

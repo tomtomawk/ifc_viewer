@@ -446,7 +446,7 @@ impl Projet {
                     let mut m = anciens.get(k).unwrap_or(premier).clone();
                     m.id = anciens
                         .get(k)
-                        .map_or_else(|| format!("{}-type-{k}", a.id), |m| m.id.clone());
+                        .map_or_else(super::collaboration::uuid, |m| m.id.clone());
                     if k >= anciens.len() && self.identifiants().contains(&m.id) {
                         return Err("Identifiant de couche déjà utilisé.".into());
                     }
