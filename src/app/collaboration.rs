@@ -154,6 +154,10 @@ impl ViewerApp {
             return;
         };
         ui.label(&c.etat);
+        ui.label(format!("Session : {}", c.copie.session));
+        if let Some((_, local)) = &self.natif {
+            ui.label(format!("Copie locale : {}", local.display()));
+        }
         ui.label(format!(
             "Révision {} · {} modification(s) en attente",
             c.copie.base.revision,

@@ -3,6 +3,7 @@
 python tools/test_partage_ui.py [target/release/bimedit.exe]
 Les fichiers et captures sont conservés dans un répertoire temporaire dédié.
 """
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
@@ -73,6 +74,32 @@ try:
     assert local_a!=local_b and local_a.is_relative_to(cache) and local_b.is_relative_to(cache)
     assert local_a.is_file() and local_b.is_file()
     rpc(ports[0],'ruban sortie');rpc(ports[0],f'capture fenetre {root / "sortie.png"}')
+    # Les publications géométriques des deux postes partent de la même base.
+    murs=[]
+    for port,y in zip(ports,[20000,40000]):
+        murs.append(rpc(port,f'mur 20000 {y} 24000 {y} 2800 200')['mur'])
+    with ThreadPoolExecutor(max_workers=2) as pool:list(pool.map(synchro,ports))
+    synchro(ports[0]);synchro(ports[1])
+    for port in ports:
+        p=rpc(port,'projet_natif')['projet']
+        assert set(murs)<=set(m['id'] for m in p['murs'])
+    for port,ident,dx in zip(ports,murs,[500,-500]):
+        rpc(port,'editer '+json.dumps(dict(action='deplacer',ids=[ident],delta=[dx,0,0])))
+    with ThreadPoolExecutor(max_workers=2) as pool:list(pool.map(synchro,ports))
+    synchro(ports[0]);synchro(ports[1])
+    for port in ports:
+        p=rpc(port,'projet_natif')['projet']
+        for ident,x in zip(murs,[20500,19500]):
+            mur=next(m for m in p['murs'] if m['id']==ident)
+            assert mur['axe']['debut'][0]==x
+    for port,y in zip(ports,[20000,40000]):
+        niveau=rpc(port,'projet_natif')['projet']['niveaux'][0]['id']
+        rpc(port,'editer '+json.dumps(dict(action='barre',barre=dict(id='',nom='Poteau de test',genre='poteau',niveau=niveau,debut=[40000,y,0],fin=[40000,y,3000],largeur=250,hauteur=250,rotation=0))))
+    with ThreadPoolExecutor(max_workers=2) as pool:list(pool.map(synchro,ports))
+    synchro(ports[0]);synchro(ports[1])
+    for port in ports:
+        assert sum(b['nom']=='Poteau de test' for b in rpc(port,'projet_natif')['projet']['barres'])==2
+    assert rpc(ports[0],'projet_natif')['projet']==rpc(ports[1],'projet_natif')['projet']
     grille(ports[0],'PARTAGE-A',1200);synchro(ports[0]);synchro(ports[1])
     # Une proposition de B est durable, mais ne doit pas se publier à sa réouverture.
     grille(ports[1],'PARTAGE-B',2400)

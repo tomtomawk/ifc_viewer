@@ -1,4 +1,4 @@
-# Collaboration hybride — protocole 1
+# Collaboration hybride — protocole 2
 
 ## État initial et invariants
 
@@ -134,7 +134,15 @@ dossier ou une révision centrale inférieure à celle connue sont diagnostiqué
 
 Les réservations sont dans **Sortie → Gérer** : réserver avant une édition sensible,
 synchroniser les modifications, puis libérer la sélection. Elles n'expirent pas.
+Les prises automatiques nécessaires à une publication sont libérées après sa décision,
+sous la même protection centrale. Une réservation explicite reste active jusqu'à sa
+libération ou sa reprise explicite. Après une interruption, vérifier les réservations
+dans Gérer : elles ne sont jamais abandonnées par expiration.
 « Enregistré localement — en attente » ne signifie jamais « publié ».
+
+Gérer affiche aussi l'identité de session et le chemin de la copie locale. Deux
+instances occupées ont des répertoires UUID distincts ; elles partagent uniquement
+le dépôt central. L'horodatage ne sert pas à identifier les copies.
 
 Si les pilotes locaux sont utilisés sur le même ordinateur, attribuer BIMEDIT_PORT=47811
 et BIMEDIT_PORT=47812 aux instances. Ils restent sans rôle dans le protocole NAS.
@@ -220,11 +228,26 @@ acceptée refuse de réinitialiser silencieusement un registre central devenu vi
 
 L'index dérivé observe les références (y compris les clés des cartes), utilisateurs
 et versions de leurs collections. Il couvre aussi les références nommées aux matériaux,
-motifs et cartouches. La précondition spatiale est volontairement globale pour une
-transaction géométrique : deux géométries éloignées peuvent donc être refusées.
+motifs et cartouches. Les implantations, contextes, priorités de jonction, attaches
+de toiture et affectations de cartouche sont comparés par objet : modifier une entrée
+ne réserve plus toute la collection. Les listes d'ordre ne sont pas des utilisateurs
+géométriques de tous leurs éléments.
+
+Les lectures spatiales portent sur les emprises avant/après des objets affectés,
+leurs voisins et leurs dépendances. Les types et niveaux propagent ces lectures à
+leurs utilisateurs. Un hôte, une relation ou une géométrie voisine modifiés peuvent
+toujours invalider une proposition ; une géométrie éloignée et indépendante ne le fait
+plus. Si une emprise ne peut pas être établie de manière conservative, le contrôle
+spatial global est conservé. La correction concerne toutes les catégories d'objets,
+sans déclarer arbitrairement leurs champs géométriques indépendants.
 Seuls `nom` et `type_vue` d'une vue sont déclarés indépendants entre eux. Les ajouts
 en fin d'une liste significative peuvent fusionner ; les réordonnancements concurrents
 restent conflictuels. Aucun champ BIM ne reçoit un arbitrage silencieux par date.
+
+Les deux instances doivent utiliser cette version. Les historiques acceptés du
+protocole 1 restent lisibles et conservent leur vérification d'origine ; les nouvelles
+transactions utilisent le protocole 2. Après leur publication, les anciens exécutables
+doivent refuser ce protocole. La mise à jour ne réécrit pas les anciennes décisions.
 
 Une édition géométrique conserve la reconstruction de scène existante. Le format
 indexe les clés touchées pour permettre une invalidation plus fine ultérieure ; le
@@ -264,6 +287,25 @@ texte reçu avant création ou après suppression, Unicode, annulation locale Yr
 restauration de sa pile, réponse perdue, reconnexion et compensation après intervention
 du collègue, instantané concurrent, ressources manquantes/corrompues et protocoles.
 Les tests enfants sont de vrais processus, pas des mocks de système de fichiers.
+
+Régression des conflits entre objets indépendants : `test_partage_ui.py` lance deux
+processus graphiques avec une même racine de cache et vérifie leurs copies distinctes.
+Il publie simultanément deux nouveaux murs depuis une même base, déplace ensuite
+ces deux murs indépendamment, puis crée deux poteaux et leurs contextes. Les deux
+instances doivent recevoir tous les objets. Les tests Rust couvrent aussi les cinq
+cartes de relations, ouvertures sur des hôtes distincts, dalles, assemblages, terrains,
+imports, escaliers, garde-corps, niveaux, types et objets de documentation. Ils
+vérifient le maintien des refus sur géométries dépendantes et des générations de
+réservation, ainsi que la lecture d'un ancien registre après publication au protocole 2.
+
+Essais du correctif du 4 novembre 2026 : deux processus graphiques sur NTFS local,
+convergence dans les deux sens et réouverture d'une copie non publiée réussies.
+La suite release complète passe : 218 tests applicatifs et 4 tests du pilote,
+aucun échec, un test préexistant ignoré ; build release réussi. Le script de
+coédition textuelle entre deux applications passe également, annuler/rétablir compris.
+L'audit d'une copie d'un dépôt réel au protocole 1, suivi d'une publication au protocole
+2, conserve les identifiants existants. Les originaux ne sont pas modifiés par cet essai.
+Ces résultats ne constituent pas une qualification SMB ou NAS.
 
 Le script PowerShell 7 vérifie deux copies, deux processus de publication, convergence,
 instantané et audit d'une sauvegarde restaurable. Le script Python lance deux vraies
