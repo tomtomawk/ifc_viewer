@@ -61,9 +61,12 @@ cohérence BIM sont trois garanties distinctes.
 
 ## Fonctionnalité raccordée
 
-Le bandeau inférieur du document natif permet d'associer sa copie locale à un dépôt,
-de demander une synchronisation ou un instantané et de réserver/libérer/reprendre
-la sélection. Les propriétaires sont les UUID de session (l'auteur figure également
+Le ruban **Début → Collaborer** enregistre un projet partagé sur le serveur et
+prépare automatiquement la copie locale. **Sortie → Synchro** publie et reçoit les
+modifications. **Sortie → Gérer** regroupe réservations, libération, reprise explicite,
+instantanés et récupération des textes supprimés. La barre inférieure de collaboration
+et l'ancienne barre d'état sont supprimées ; l'état partagé reste visible dans le
+ruban et les erreurs sont présentées dans une fenêtre dédiée. Les propriétaires sont les UUID de session (l'auteur figure également
 dans les transactions). Une synchronisation est une demande explicite exécutée sur
 un thread de travail ; elle n'est pas lancée à chaque frappe. La contention initiale
 est réessayée pendant deux secondes avec de nouvelles acquisitions. Une erreur après
@@ -88,7 +91,7 @@ transaction complète. L'utilisateur peut conserver l'état accepté ou choisir 
 proposition locale comme nouvelle transaction avec de nouvelles préconditions. La
 proposition antérieure est archivée localement avant résolution. Une compensation
 explicite peut restaurer une annotation supprimée ; une mise à jour Yrs seule ne peut
-jamais le faire. Les textes supprimés restent consultables et copiables dans le bandeau.
+jamais le faire. Les textes supprimés restent consultables et copiables dans **Sortie → Gérer**.
 
 Les références graphiques du gabarit (plumes, motifs, matériaux nécessaires) sont
 figées à l'association. Les fichiers natifs passent au schéma 1. La migration 0→1
@@ -99,24 +102,53 @@ pas une politique de résolution collaborative.
 
 ## Démarrer deux postes
 
-1. Construire avec `cargo build --release` dans ce worktree.
-2. Copier le même JSON initial sur les disques locaux des deux postes. Ne pas copier
-   un sidecar de session pour créer un autre poste : chaque copie crée son UUID.
-3. Ouvrir les deux JSON et cliquer sur « Collaboration : associer cette copie locale… ».
-   Choisir le même dossier NAS dédié, vide à la première association. Le premier
-   poste établit l'état initial ; le deuxième reçoit cet état à sa première sync.
-4. Éditer et utiliser « Synchroniser ». Réserver les groupes sensibles avant les
-   travaux longs ; les changements géométriques non réservés sont réservés à la
-   publication, sous la même autorité. Aucune réservation n'expire automatiquement.
-5. Après les publications des collègues, demander une nouvelle synchronisation pour
-   recevoir leurs résultats. « Enregistré localement » ne signifie jamais « publié ».
+1. Ouvrir ou créer le projet natif, puis cliquer sur **Début → Collaborer**.
+2. Dans le dialogue d'enregistrement, choisir le serveur et un nom, par exemple
+   `\\NAS\BIMedit\Maison.bimpartage`.
+3. BIMedit écrit l'état complet, ressources et CRDT compris, dans le dossier voisin
+   `Maison.collaboration`, puis publie le fichier `.bimpartage` en dernier. Il bascule
+   automatiquement la session sur une copie locale. Le fichier d'origine est conservé.
+4. Dans l'autre instance, utiliser **Ouvrir** et sélectionner le même fichier
+   `Maison.bimpartage`. Aucune copie manuelle ni association de dossier n'est nécessaire.
+5. Travailler puis utiliser **Sortie → Synchro**. Après la publication d'un collègue,
+   cliquer également sur Synchro pour recevoir ses modifications.
 
-Sur un même ordinateur utiliser deux fichiers locaux distincts. Si les pilotes sont
-utilisés, attribuer par exemple BIMEDIT_PORT=47811 et BIMEDIT_PORT=47812 avant chaque
-lancement. Ces pilotes restent des contrôles locaux, sans rôle dans le protocole NAS.
-Une copie déjà ouverte est protégée par son propre handle local, y compris pendant
-la fin d'une synchronisation après fermeture du document. Enregistrer sous est refusé
-pour une copie associée afin de ne pas dupliquer l'identité d'une session et sa queue.
+Le fichier `.bimpartage` est un point d'entrée identifiable par son extension et son
+format `bimedit-projet-partage`. Il contient l'identité du projet et le nom relatif
+**d'un dossier voisin**, pas un JSON de modèle écrasé à chaque sauvegarde. Les ouvertures
+lisent l'état accepté actuel du registre et de ses instantanés. Déplacer ou sauvegarder
+le fichier partagé et son dossier ensemble ; conserver une seule autorité active.
+
+Les copies sont gérées dans `%LOCALAPPDATA%\BIMedit\Collaboration` sous Windows.
+Chaque copie a sa propre session et son verrou ; deux instances sur le même ordinateur
+ouvrant le même point d'entrée reçoivent des copies distinctes si la première est occupée.
+Une copie disponible est réutilisée à l'ouverture suivante, avec ses propositions et son
+historique. La réouverture reçoit les nouveautés et réapplique les propositions locales,
+**sans les publier** : cette publication attend un clic sur Synchro.
+
+Une entrée connue et sa copie locale restent ouvrables hors connexion. Le point d'entrée
+est également mis en cache localement. Sans copie existante, une première ouverture exige
+le serveur. Un dépôt disparu ou un contrôle absent n'est jamais réinitialisé par l'ouverture
+ou la synchronisation d'un `.bimpartage`. Une entrée incompatible, un autre projet dans le
+dossier ou une révision centrale inférieure à celle connue sont diagnostiqués.
+
+Les réservations sont dans **Sortie → Gérer** : réserver avant une édition sensible,
+synchroniser les modifications, puis libérer la sélection. Elles n'expirent pas.
+« Enregistré localement — en attente » ne signifie jamais « publié ».
+
+Si les pilotes locaux sont utilisés sur le même ordinateur, attribuer BIMEDIT_PORT=47811
+et BIMEDIT_PORT=47812 aux instances. Ils restent sans rôle dans le protocole NAS.
+Une copie est verrouillée jusqu'à la fin d'une synchronisation, même après fermeture
+du document. Enregistrer sous est désactivé pour une copie collaborative.
+
+L'environnement `BIMEDIT_CACHE_COLLABORATION` permet de définir une racine locale
+spécifique pour les essais. Ne pas supprimer ce cache si des propositions sont en attente.
+Le code utilise le mode synchronisé de Yrs pour transférer la session préparée par le
+thread de chargement à l'interface, sans relâcher son verrou local entre les deux.
+
+Les commandes suivantes restent disponibles pour l'administration et les essais du
+protocole sur des copies locales explicitement désignées ; le parcours normal passe
+par Collaborer et Ouvrir.
 
 Équivalent console (utiliser `cargo run --release --` comme préfixe sous PowerShell,
 ou Start-Process -Wait, car le binaire Windows release est un exécutable graphique) :
@@ -221,6 +253,7 @@ cargo test --release
 cargo build --release
 ./tools/qualifier_collaboration.ps1
 python tools/test_collaboration_ui.py
+python tools/test_partage_ui.py
 cargo run --release -- --collaboration mesures samples/maison_native.modele.json rapport.json
 ```
 
@@ -270,7 +303,7 @@ Vérifier les droits permettant création, écriture, flush et renommage dans le
 
 1. Exécuter le script PowerShell avec `-DepotParent \\NAS\Qualification` et conserver
    son résultat. Cela teste un client SMB ; cela ne remplace pas les étapes suivantes.
-2. Sur A et B, créer deux copies locales et les associer au même sous-dossier dédié.
+2. Sur A, créer le projet partagé avec Début → Collaborer ; sur B, ouvrir son .bimpartage.
    Synchroniser, créer simultanément, puis publier les deux et recevoir après barrière.
 3. Réserver le même groupe simultanément depuis A et B : un seul propriétaire. Avec
    le handle de contrôle ouvert sur A, tenter depuis B une autre ouverture exclusive,
@@ -295,3 +328,21 @@ Vérifier les droits permettant création, écriture, flush et renommage dans le
 La réussite locale fournit des preuves sur le code et NTFS. La disponibilité des
 handles, les caches, la reconnexion et la durabilité physique du partage réel restent
 à qualifier. Aucun résultat fourni ici ne qualifie NFS ou un accès mixte SMB/NFS.
+
+## Vérification du parcours automatique
+
+`tools/test_partage_ui.py` lance deux vraies applications sur le même fichier partagé,
+avec une racine de cache commune. Il vérifie la création du dossier voisin, deux copies
+locales distinctes, la publication et la réception, le redémarrage avec une proposition
+non publiée et sa publication uniquement à la demande. Il capture les rubans Début et
+Sortie et vérifie que le fichier source et le point d'entrée n'ont pas été écrasés.
+Les tests Rust vérifient également la réutilisation d'une copie, le mode hors connexion,
+le refus d'une entrée incompatible ou d'une traversée de chemin et l'absence de recréation
+d'un contrôle central disparu. Une création interrompue avant publication du point
+d'entrée peut laisser un dossier de dépôt à diagnostiquer ; elle n'expose pas un projet
+partagé partiellement écrit comme une création réussie.
+
+Validation finale du parcours : `cargo test --release` — 211 tests applicatifs et
+4 tests du pilote réussis, 1 test préexistant ignoré ; build release sans avertissement.
+`tools/test_partage_ui.py` a passé avec deux applications graphiques, réouverture
+du cache contenant une proposition non publiée et convergence après Synchro.

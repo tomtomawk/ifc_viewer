@@ -1,0 +1,95 @@
+"""Parcours réel : Collaborer, puis Ouvrir le même .bimpartage dans deux instances.
+
+python tools/test_partage_ui.py [target/release/bimedit.exe]
+Les fichiers et captures sont conservés dans un répertoire temporaire dédié.
+"""
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+
+repo=Path(__file__).resolve().parent.parent
+exe=Path(sys.argv[1]).resolve() if len(sys.argv)>1 else repo/'target/release/bimedit.exe'
+root=Path(tempfile.mkdtemp(prefix='bimedit-partage-ui-'))
+entree=root/'Maison.bimpartage'
+cache=root/'cache-local'
+source=root/'maison.modele.json'
+shutil.copyfile(repo/'samples/maison_native.modele.json',source)
+empreinte_source=hashlib.sha256(source.read_bytes()).hexdigest()
+processus=[]
+journaux=[]
+ports=[47993,47994]
+
+def rpc(port,commande):
+    with socket.create_connection(('127.0.0.1',port),timeout=5) as s:
+        s.settimeout(30);s.sendall((commande+'\n').encode('utf-8'))
+        with s.makefile('r',encoding='utf-8') as f:r=json.loads(f.readline())
+    if not r.get('ok',True):raise RuntimeError(r)
+    return r
+
+def attendre(port,critere):
+    fin=time.monotonic()+60
+    while time.monotonic()<fin:
+        try:
+            r=rpc(port,'etat')
+            if r.get('erreur_chargement'):raise RuntimeError(r)
+            if critere(r):return r
+        except (OSError,ValueError):pass
+        time.sleep(.05)
+    raise RuntimeError(f'Délai dépassé : {root}')
+
+def lancer(port,path):
+    with socket.socket() as s:s.bind(('127.0.0.1',port))
+    log=open(root/f'{port}-{len(processus)}.log','w',encoding='utf-8');journaux.append(log)
+    env=dict(os.environ,BIMEDIT_PORT=str(port),BIMEDIT_CACHE_COLLABORATION=str(cache))
+    p=subprocess.Popen([str(exe),str(path)],env=env,stdout=log,stderr=log,creationflags=0x08000000 if os.name=='nt' else 0)
+    processus.append(p)
+    r=attendre(port,lambda r:not r.get('chargement',True) and 'selection_native' in r)
+    return p,r
+
+def synchro(port):
+    rpc(port,'collaboration_sync')
+    return attendre(port,lambda r:r.get('collaboration',{}).get('etat')=='Synchronisé')
+
+def grille(port,nom,y):
+    rpc(port,'editer '+json.dumps(dict(action='quadrillage',nom=nom,debut=[0,y],fin=[1000,y])))
+
+try:
+    a,_=lancer(ports[0],source)
+    rpc(ports[0],'ruban debut');rpc(ports[0],f'capture fenetre {root / "debut.png"}')
+    rpc(ports[0],f'collaborer {entree}')
+    ra=attendre(ports[0],lambda r:not r.get('chargement',True) and r.get('collaboration',{}).get('etat')=='Synchronisé')
+    manifeste=json.loads(entree.read_text(encoding='utf-8'))
+    assert manifeste['format']=='bimedit-projet-partage'
+    assert (root/manifeste['depot']/'controle').is_file()
+    b,rb=lancer(ports[1],entree)
+    local_a=Path(ra['sortie_v0']);local_b=Path(rb['sortie_v0'])
+    assert local_a!=local_b and local_a.is_relative_to(cache) and local_b.is_relative_to(cache)
+    assert local_a.is_file() and local_b.is_file()
+    rpc(ports[0],'ruban sortie');rpc(ports[0],f'capture fenetre {root / "sortie.png"}')
+    grille(ports[0],'PARTAGE-A',1200);synchro(ports[0]);synchro(ports[1])
+    # Une proposition de B est durable, mais ne doit pas se publier à sa réouverture.
+    grille(ports[1],'PARTAGE-B',2400)
+    b.terminate();b.wait(timeout=15)
+    b,rb=lancer(ports[1],entree)
+    assert Path(rb['sortie_v0'])==local_b
+    assert rb['collaboration']['en_attente']==1
+    assert any(x['nom']=='PARTAGE-B' for x in rpc(ports[1],'projet_natif')['projet']['quadrillages'])
+    assert not any(x['nom']=='PARTAGE-B' for x in rpc(ports[0],'projet_natif')['projet']['quadrillages'])
+    synchro(ports[1]);synchro(ports[0])
+    for port in ports:
+        noms={x['nom'] for x in rpc(port,'projet_natif')['projet']['quadrillages']}
+        assert {'PARTAGE-A','PARTAGE-B'}<=noms
+    assert hashlib.sha256(source.read_bytes()).hexdigest()==empreinte_source
+    assert json.loads(entree.read_text(encoding='utf-8'))==manifeste
+    print(json.dumps(dict(essai=str(root),fichier_partage=str(entree),copie_a=str(local_a),copie_b=str(local_b),reprise_locale_sans_publication=True,convergence=True,captures=['debut.png','sortie.png']),ensure_ascii=False,indent=2))
+finally:
+    for p in processus:
+        if p.poll() is None:p.terminate();p.wait(timeout=15)
+    for log in journaux:log.close()
