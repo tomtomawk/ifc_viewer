@@ -481,6 +481,8 @@ pub struct ViewerApp {
     nom_position_plan: Option<String>,
     /// Nom de la vue native ouverte en cours de saisie (identifiant, texte).
     nom_vue: Option<(String, String)>,
+    copie_presse: Option<(usize,Vec<String>)>,
+    copie_niveau: Option<String>,
     /// Début de la ligne de coupe en cours de tracé (mm).
     coupe_depart: Option<[f64; 2]>,
     raccourci_en_attente: Option<(String, f64)>,
@@ -653,6 +655,8 @@ impl ViewerApp {
             raccourci_en_attente: None,
             coupe_depart: None,
             nom_vue: None,
+            copie_presse: None,
+            copie_niveau: None,
             alignement_plan: false,
             orientation_nord_en_cours: false,
             dessin2d: Default::default(),
@@ -1628,7 +1632,6 @@ impl ViewerApp {
                 }
             } else {self.ruban_edition.type_mur.clone()};
             self.ruban_edition.type_mur=type_creation;
-            ui.separator();
             let Some(choisi)=choisi.filter(|id|id!=&actuel) else{return None};
             match cible {
                 Cible::Assemblage(a)=>{
@@ -3705,11 +3708,13 @@ impl ViewerApp {
         let zone_theme=egui::Rect::from_min_size(egui::pos2(theme_x,barre.top()),egui::vec2(34.0,barre.height()));
         ui.scope_builder(egui::UiBuilder::new().id_salt("theme_fenetre").max_rect(zone_theme).layout(egui::Layout::left_to_right(Align::Center)),|ui| {
             let mut theme=self.options.theme_interface;
-            ui.menu_button("◐",|ui| {
+            let (reponse,_) = egui::containers::menu::MenuButton::from_button(egui::Button::new("").min_size(egui::vec2(26.0,24.0))).ui(ui,|ui| {
                 for (valeur,nom) in [(crate::options::ThemeInterface::Clair,"Clair"),(crate::options::ThemeInterface::Sombre,"Sombre"),(crate::options::ThemeInterface::Systeme,"Système")] {
                     if ui.selectable_value(&mut theme,valeur,nom).clicked() {ui.close();}
                 }
-            }).response.on_hover_text("Thème de l'interface");
+            });
+            icone_theme(ui.painter(),reponse.rect.shrink(5.0),ui.visuals().text_color());
+            reponse.on_hover_text("Thème de l'interface");
             if theme!=self.options.theme_interface {
                 self.options.theme_interface=theme;
                 if let Some(p)=&mut self.parametres {p.brouillon.theme_interface=theme;}
@@ -4040,11 +4045,13 @@ impl ViewerApp {
                 self.choix_detail(ui);
                 ui.separator();
                 self.choix_style(ui);
-                ui.menu_button("☀",|ui| {
+                let (ombres,_) = egui::containers::menu::MenuButton::from_button(egui::Button::new("").min_size(egui::vec2(26.0,24.0))).ui(ui,|ui| {
                     let mut change=ui.checkbox(&mut self.ombres_portees,"Ombres du soleil").changed();
                     change |= ui.checkbox(&mut self.ombre_ambiante,"Ombre ambiante").changed();
                     if change {self.visibility_dirty=true;}
-                }).response.on_hover_text("Ombres");
+                });
+                icone_soleil(ui.painter(),ombres.rect.shrink(5.0),ui.visuals().text_color());
+                ombres.on_hover_text("Ombres");
                 if self.vue_en_plan() {self.choix_fond_plan(ui);}
                 if ui.selectable_label(self.traits_fins, "Traits fins").on_hover_text("Tous les traits à un pixel, sans les épaisseurs des plumes").clicked() {
                     self.traits_fins = !self.traits_fins;
@@ -6131,12 +6138,6 @@ impl ViewerApp {
         self.fenetre_plumes(ui.ctx());
         self.fenetre_famille_cartouche(ui.ctx());
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
-        // sélecteur de type de l'élément sélectionné, en tête comme dans Revit
-        if self.jeu_actif().is_none() && !self.ruban_edition.mur_actif() {
-            if let Some(projet) = self.selecteur_type_selection(ui) {
-                if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
-            }
-        }
         if let Some(jeu) = self.jeu_actif() {
             egui::ScrollArea::vertical().show(ui, |ui| self.proprietes_jeu(ui, &jeu));
             return;
@@ -6157,7 +6158,13 @@ impl ViewerApp {
             } else if let Some(projet) = self.contexte_selection(ui, &ids) {
                 if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
             }
-            ui.separator();
+            // Le type vient immédiatement après Phase / Sous-projet / Variante,
+            // au même emplacement que pendant la création d'un mur.
+            if self.jeu_actif().is_none() && !self.ruban_edition.mur_actif() {
+                if let Some(projet)=self.selecteur_type_selection(ui) {
+                    if let Err(e)=self.appliquer_projet(projet) {self.error=Some(e);}
+                }
+            }
             if let Some(projet) = self.proprietes_formes_2d(ui, &ids).or_else(|| self.proprietes_terrains(ui, &ids)) {
                 if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
             }
@@ -6297,6 +6304,39 @@ impl ViewerApp {
             Outil::Isoler => self.isolate(objets),
             _ => self.hide(objets),
         }
+    }
+
+    fn memoriser_copie_niveau(&mut self,ids:Vec<String>) {
+        if ids.is_empty() {self.status="Sélectionnez les éléments à copier.".into();return;}
+        self.copie_presse=Some((self.document_actif,ids));
+        self.status="Sélection copiée : Ctrl+V pour choisir le niveau de destination.".into();
+    }
+    fn ouvrir_coller_niveau(&mut self) {
+        if self.copie_presse.as_ref().is_none_or(|(document,_)|*document!=self.document_actif) {
+            self.status="Copiez d'abord une sélection dans ce projet.".into();return;
+        }
+        self.copie_niveau=Some(String::new());
+    }
+    fn fenetre_coller_niveau(&mut self,ctx:&egui::Context) {
+        let Some(mut niveau)=self.copie_niveau.take() else{return};
+        let Some((document,ids))=self.copie_presse.clone() else{return};
+        if document!=self.document_actif {return;}
+        let Some((p,_))=&self.natif else{return};
+        let niveaux:Vec<_>=p.niveaux.iter().map(|n|(n.id.clone(),n.nom.clone(),n.altitude)).collect();
+        let mut ouvert=true;let mut valider=false;
+        egui::Window::new("Coller sur un niveau").collapsible(false).resizable(false).open(&mut ouvert).show(ctx,|ui| {
+            ui.label(format!("{} élément(s) sélectionné(s) · position en plan conservée",ids.len()));
+            egui::ComboBox::from_id_salt("destination_copie_niveau").selected_text(niveaux.iter().find(|n|n.0==niveau).map_or("Choisir un niveau",|n|n.1.as_str())).show_ui(ui,|ui| {
+                for (id,nom,z) in &niveaux {ui.selectable_value(&mut niveau,id.clone(),format!("{} · {}",nom,crate::options::unite().afficher(*z)));}
+            });
+            valider=ui.add_enabled(!niveau.is_empty(),egui::Button::new("Coller")).clicked();
+        });
+        if valider {
+            match self.executer_bim(crate::modele::commandes::Commande::CopierSurNiveau{ids,niveau}) {
+                Ok(copies)=>self.status=format!("{} élément(s) collé(s) sur le niveau — Ctrl+Z pour annuler.",copies.len()),
+                Err(e)=>self.error=Some(e),
+            }
+        } else if ouvert {self.copie_niveau=Some(niveau);}
     }
 
     fn demarrer_cadrage_vue(&mut self) {
@@ -7876,6 +7916,20 @@ fn marqueur(painter: &egui::Painter, q: egui::Pos2, acc: AccrocheMur, couleur: C
 }
 
 /// Icône du niveau de détail : un, deux ou trois traits, comme dans Revit.
+/// Icônes vectorielles : indépendantes des caractères disponibles dans la police.
+fn icone_theme(p:&egui::Painter,r:egui::Rect,c:Color32) {
+    let centre=r.center();let rayon=r.width().min(r.height())*0.43;
+    let mut demi=vec![centre];
+    for k in 0..=24 {let a=-std::f32::consts::FRAC_PI_2 + std::f32::consts::PI*k as f32/24.;demi.push(centre+egui::vec2(a.cos(),a.sin())*rayon);}
+    p.add(egui::Shape::convex_polygon(demi,c,egui::Stroke::NONE));
+    p.circle_stroke(centre,rayon,egui::Stroke::new(1.4,c));
+}
+fn icone_soleil(p:&egui::Painter,r:egui::Rect,c:Color32) {
+    let centre=r.center();let rayon=r.width().min(r.height())*0.22;
+    p.circle_stroke(centre,rayon,egui::Stroke::new(1.3,c));
+    for k in 0..8 {let a=k as f32*std::f32::consts::TAU/8.;let d=egui::vec2(a.cos(),a.sin());p.line_segment([centre+d*(rayon+2.),centre+d*(rayon+4.)],egui::Stroke::new(1.3,c));}
+}
+
 fn icone_detail(p: &egui::Painter, r: egui::Rect, d: NiveauDetail) {
     let n = match d {
         NiveauDetail::Faible => 1,
@@ -8179,6 +8233,7 @@ impl eframe::App for ViewerApp {
 
         egui::Panel::top("top").show(ui, |ui| self.top_bar(ui));
         self.fenetre_parametres(&ctx);
+        self.fenetre_coller_niveau(&ctx);
         self.fenetres_collaboration(&ctx);
         self.fenetre_erreur_document(&ctx);
         self.zone_panneaux = ui.available_rect_before_wrap();

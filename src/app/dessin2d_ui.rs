@@ -565,6 +565,26 @@ impl ViewerApp {
                 g.push(seg(q.debut, q.fin));
             }
         }
+        // Le fond de plan est visible : ses contours projetés participent aussi aux
+        // accrochages, sans rendre ses éléments sélectionnables ou modifiables.
+        if let Some(source)=vue.as_ref().and_then(|id|p.vues.iter().find(|v|&v.id==id)).and_then(|v|v.fond_plan.as_ref()).and_then(|id|p.vues.iter().find(|v|&v.id==id)) {
+            if let Some(scene)=&self.scene {
+                let point=|v:glam::DVec3| (v+scene.origin).truncate()*1000.0;
+                for prim in self.primitives_fond_plan() {
+                    match prim.forme {
+                        crate::trace2d::Forme::Segments(segments)=>for [a,b] in segments {g.push(Geom::Segment([point(a),point(b)]));},
+                        crate::trace2d::Forme::Polyligne{points,fermee}=>{
+                            for w in points.windows(2) {g.push(Geom::Segment([point(w[0]),point(w[1])]));}
+                            if fermee && points.len()>2 {g.push(Geom::Segment([point(*points.last().unwrap()),point(points[0])]));}
+                        },
+                        _=>{}
+                    }
+                }
+                for a in p.annotations.iter().filter(|a|a.vue==source.id && !source.elements_masques.contains(&a.id)) {
+                    if let Some(f)=a.forme.forme_2d() {g.extend(f.geoms());}
+                }
+            }
+        }
         self.dessin2d.geoms = Some((self.bim.revision, cle, g.clone()));
         g
     }

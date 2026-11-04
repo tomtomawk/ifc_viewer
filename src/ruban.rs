@@ -1237,7 +1237,6 @@ impl RubanEdition {
         if !self.mur_actif() {
             return false;
         }
-        ui.label(RichText::new("Créer un mur").strong());
         let Some(projet) = projet else {
             ui.label("Créez ou ouvrez un projet natif pour dessiner un mur.");
             return true;

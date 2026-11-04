@@ -1088,6 +1088,7 @@ impl ViewerApp {
         let Some((p, _)) = &self.natif else { return };
         let murs = ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some());
         let fenetre = (ids.len() == 1).then(|| p.ouvertures.iter().find(|o| o.id == ids[0] && o.genre != crate::modele::GenreOuverture::Libre)).flatten().map(|o| o.id.clone());
+        let mut copier_niveau=false;
         let mut editer_famille = false;
         let escalier = (ids.len() == 1).then(|| p.escaliers.iter().find(|e| e.id == ids[0])).flatten().map(|e| e.id.clone());
         let mut garde_corps: Option<Vec<usize>> = None;
@@ -1102,6 +1103,8 @@ impl ViewerApp {
         let mut selection = None;
         let mut commande = None;
         ui.horizontal(|ui| {
+            if !ids.is_empty() && ui.button("Copier sur un niveau…").on_hover_text("Conserver la position en plan et choisir le niveau de destination").clicked() {copier_niveau=true;}
+
             if escalier.is_some() {
                 ui.label("Garde-corps");
                 for (nom, cotes) in [("Deux côtés", vec![0, 1]), ("Gauche", vec![0]), ("Droite", vec![1])] {
@@ -1293,6 +1296,7 @@ impl ViewerApp {
                 });
             }
         });
+        if copier_niveau {self.memoriser_copie_niveau(ids.clone());self.ouvrir_coller_niveau();}
         if let Some(c) = commande {
             if let Err(e) = self.executer_bim(c) {
                 self.error = Some(e);
@@ -1333,6 +1337,7 @@ impl ViewerApp {
             return true;
         }
         let ids = self.selection_bim();
+        if !ids.is_empty() {return true;}
         ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some())
             || (ids.len() == 1 && p.escaliers.iter().any(|e| e.id == ids[0]))
             || (ids.len() == 1 && p.ouvertures.iter().any(|o| o.id == ids[0] && o.genre != crate::modele::GenreOuverture::Libre))

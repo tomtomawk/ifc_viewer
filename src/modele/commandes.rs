@@ -62,6 +62,7 @@ pub enum Commande {
         ids: Vec<String>,
         delta: [f64; 3],
     },
+    CopierSurNiveau { ids:Vec<String>, niveau:String },
     Copier {
         ids: Vec<String>,
         delta: [f64; 3],
@@ -521,6 +522,49 @@ impl Projet {
                 let set = self.dependances(&ids)?;
                 self.transformer(&set, [0.0; 3], centre, angle)?;
                 Ok(ids)
+            }
+            Commande::CopierSurNiveau {ids,niveau} => {
+                let cible=self.niveau(&niveau).ok_or("Niveau de destination introuvable")?.altitude;
+                for id in &ids {
+                    let admis=self.murs.iter().any(|x|&x.id==id) || self.assemblage(id).is_some()
+                        || self.dalles.iter().any(|x|&x.id==id) || self.barres.iter().any(|x|&x.id==id)
+                        || self.escaliers.iter().any(|x|&x.id==id) || self.garde_corps.iter().any(|x|&x.id==id)
+                        || self.importes.iter().any(|x|&x.id==id && x.niveau.is_some());
+                    if !admis {return Err("La sélection contient un élément qui ne peut pas être copié sur un niveau ; les ouvertures suivent leur mur hôte.".into());}
+                }
+                let niveaux=self.niveaux.clone();
+                let altitude=|id:&str|niveaux.iter().find(|n|n.id==id).map(|n|n.altitude).ok_or("Niveau d'origine introuvable".to_string());
+                let copies=self.executer_interne(Commande::Copier{ids,delta:[0.;3]})?;
+                let ensemble=self.dependances(&copies)?;
+                for m in self.murs.iter_mut().filter(|m|ensemble.contains(&m.id)) {
+                    let origine=altitude(&m.niveau)?;
+                    if let Haut::Niveau{niveau:haut,decalage}=&mut m.haut {
+                        let ancien=altitude(haut)?;let voulu=cible+(ancien-origine);
+                        if let Some(n)=niveaux.iter().find(|n|(n.altitude-voulu).abs()<0.001) {*haut=n.id.clone();}
+                        else {*decalage+=cible-origine;}
+                    }
+                    m.niveau=niveau.clone();
+                }
+                for d in self.dalles.iter_mut().filter(|d|ensemble.contains(&d.id)) {d.niveau=niveau.clone();}
+                for b in self.barres.iter_mut().filter(|b|ensemble.contains(&b.id)) {b.niveau=niveau.clone();}
+                for e in self.escaliers.iter_mut().filter(|e|ensemble.contains(&e.id)) {
+                    let origine=altitude(&e.niveau)?;
+                    if let Some(haut)=&e.niveau_haut {
+                        let ancien=altitude(haut)?;let voulu=cible+(ancien-origine);
+                        e.niveau_haut=niveaux.iter().find(|n|(n.altitude-voulu).abs()<0.001).map(|n|n.id.clone());
+                        if e.niveau_haut.is_none() {e.hauteur=ancien-origine-e.decalage_bas;}
+                    }
+                    e.niveau=niveau.clone();
+                }
+                for g in self.garde_corps.iter_mut().filter(|g|ensemble.contains(&g.id)) {g.niveau=niveau.clone();}
+                for e in self.importes.iter_mut().filter(|e|ensemble.contains(&e.id)) {
+                    let ancien=e.niveau.as_deref().ok_or("Un élément importé n'a pas de niveau")?;
+                    let dz=cible-altitude(ancien)?;
+                    for p in &mut e.maillage.sommets {p[2]+=dz;}
+                    e.niveau=Some(niveau.clone());
+                }
+                self.arrondir();
+                Ok(copies)
             }
             Commande::Copier { ids, delta } => {
                 let set = self.dependances(&ids)?;

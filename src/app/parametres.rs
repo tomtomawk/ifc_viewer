@@ -279,6 +279,8 @@ impl ViewerApp {
 
     fn executer_raccourci(&mut self, ctx: &egui::Context, action: &str) {
         match action {
+            "copier_presse" => self.memoriser_copie_niveau(self.selection_bim()),
+            "coller_niveau" => self.ouvrir_coller_niveau(),
             "nouveau" if self.loading.is_none() => self.creer_projet(),
             "ouvrir" => self.open_dialog(ctx),
             "fermer" => self.fermer(),
