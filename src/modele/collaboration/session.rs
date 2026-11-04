@@ -8,7 +8,7 @@ use std::sync::mpsc::{self, Receiver};
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Copie {
     #[serde(default)]
-    pub partage:Option<PathBuf>,
+    pub partage: Option<PathBuf>,
     #[serde(default)]
     pub editeurs: BTreeMap<String, texte::SauvegardeEditeur>,
     pub session: String,
@@ -52,18 +52,16 @@ fn overlay(base: &Etat, transactions: &[Transaction]) -> Resultat<Etat> {
         let mut local = t.clone();
         // Les préconditions sont vérifiées contre la nouvelle base ; aucune proposition
         // refusée n'est superposée silencieusement à l'état accepté.
-        for c in &local.changements {
-            if sensible(&c.cle) {
-                etat.baux.insert(
-                    c.cle.clone(),
-                    Bail {
-                        proprietaire: local.session.clone(),
-                        generation: 1,
-                        actif: true,
-                    },
-                );
-                local.reservations.insert(c.cle.clone(), 1);
-            }
+        for cle in local.cles_reservation(&etat.objets) {
+            etat.baux.insert(
+                cle.clone(),
+                Bail {
+                    proprietaire: local.session.clone(),
+                    generation: 1,
+                    actif: true,
+                },
+            );
+            local.reservations.insert(cle, 1);
         }
         etat = etat
             .accepter(&local)
@@ -93,11 +91,17 @@ impl Session {
             use std::os::windows::fs::OpenOptionsExt;
             opts.share_mode(0);
         }
-        let local = opts
-            .open(verrou)
-            .map_err(|e| if e.raw_os_error()==Some(32)||e.kind()==std::io::ErrorKind::WouldBlock{format!("Copie locale déjà ouverte : {e}")}else{format!("Protection de la copie locale impossible : {e}")})?;
+        let local = opts.open(verrou).map_err(|e| {
+            if e.raw_os_error() == Some(32) || e.kind() == std::io::ErrorKind::WouldBlock {
+                format!("Copie locale déjà ouverte : {e}")
+            } else {
+                format!("Protection de la copie locale impossible : {e}")
+            }
+        })?;
         #[cfg(not(windows))]
-        local.try_lock().map_err(|e| format!("Copie locale déjà ouverte : {e}"))?;
+        local
+            .try_lock()
+            .map_err(|e| format!("Copie locale déjà ouverte : {e}"))?;
         let copie = if chemin.exists() {
             let c = Self::lire_copie(&chemin)?;
             if c.base.projet != p.identite || c.central != central {
@@ -108,7 +112,7 @@ impl Session {
             let mut p = p.clone();
             p.figer_references();
             Copie {
-                partage:None,
+                partage: None,
                 editeurs: BTreeMap::new(),
                 session: uuid(),
                 central,
@@ -174,17 +178,15 @@ impl Session {
         }
         let mut t =
             Transaction::entre(avant, apres, &self.copie.session, self.copie.base.revision)?;
-        for c in &t.changements {
-            if sensible(&c.cle) {
-                if let Some(b) = self
-                    .copie
-                    .base
-                    .baux
-                    .get(&c.cle)
-                    .filter(|b| b.actif && b.proprietaire == self.copie.session)
-                {
-                    t.reservations.insert(c.cle.clone(), b.generation);
-                }
+        for cle in t.cles_reservation(&objets(avant)?) {
+            if let Some(b) = self
+                .copie
+                .base
+                .baux
+                .get(&cle)
+                .filter(|b| b.actif && b.proprietaire == self.copie.session)
+            {
+                t.reservations.insert(cle, b.generation);
             }
         }
         for a in &apres.annotations {
@@ -240,11 +242,20 @@ impl Session {
         reservation: Option<(Vec<String>, bool, bool)>,
         instantane: bool,
     ) -> Resultat<()> {
-        self.synchroniser_interne(reservation,instantane,true)
+        self.synchroniser_interne(reservation, instantane, true)
     }
-    pub fn reception_seule(&mut self)->Resultat<()>{self.synchroniser_interne(None,false,false)}
-    pub fn synchronisation_en_cours(&self)->bool{self.messages.is_some()}
-    fn synchroniser_interne(&mut self,reservation:Option<(Vec<String>,bool,bool)>,instantane:bool,publier_attente:bool)->Resultat<()>{
+    pub fn reception_seule(&mut self) -> Resultat<()> {
+        self.synchroniser_interne(None, false, false)
+    }
+    pub fn synchronisation_en_cours(&self) -> bool {
+        self.messages.is_some()
+    }
+    fn synchroniser_interne(
+        &mut self,
+        reservation: Option<(Vec<String>, bool, bool)>,
+        instantane: bool,
+        publier_attente: bool,
+    ) -> Resultat<()> {
         if self.messages.is_some() {
             return Err("Synchronisation déjà en cours".into());
         }
@@ -293,17 +304,13 @@ impl Session {
                             attente.push(t);
                             continue;
                         }
-                        let cles: Vec<_> = t
-                            .changements
-                            .iter()
-                            .filter(|c| sensible(&c.cle))
-                            .map(|c| c.cle.clone())
-                            .collect();
+                        let cles=t.cles_reservation(&etat.objets);
                         // Une génération déjà enregistrée ne doit jamais être remplacée.
                         let manquantes: Vec<_> = cles
                             .into_iter()
                             .filter(|k| !t.reservations.contains_key(k))
                             .collect();
+                        let temporaires:Vec<_>=manquantes.iter().filter(|k|!etat.baux.get(*k).is_some_and(|b|b.actif)).cloned().collect();
                         if !manquantes.is_empty() {
                             if let Err(e) =
                                 a.reserver(&mut etat, &manquantes, &copie.session, false, false)
@@ -332,6 +339,9 @@ impl Session {
                         // parent absent ; les transactions locales sont publiées dans l'ordre.
                         Self::depot_local(&journal_local).ecrire_document(&prepare, &t)?;
                         let c = a.publier(&mut etat, &t)?;
+                        // Libération explicite sous la même autorité des seules prises
+                        // nécessaires à cette publication. Un bail demandé par l'utilisateur reste actif.
+                        if !temporaires.is_empty(){a.reserver(&mut etat,&temporaires,&copie.session,false,true)?;}
                         if !c.is_empty() {
                             conflits.insert(t.id.clone(), c);
                             attente.push(t);
@@ -452,15 +462,8 @@ impl Session {
             .ok_or("Proposition absente")?;
         let courant = self.travail()?;
         let mut cibles = objets(&courant)?;
-        for c in &proposition.changements {
-            match &c.apres {
-                Some(v) => {
-                    cibles.insert(c.cle.clone(), v.clone());
-                }
-                None => {
-                    cibles.remove(&c.cle);
-                }
-            }
+        for c in concurrence::decomposer(proposition.changements.clone()) {
+            concurrence::affecter(&mut cibles, &c.cle, c.apres.clone());
         }
         let cible = projet(&cibles)?;
         let mut resolution = Transaction::entre(
@@ -511,9 +514,7 @@ impl Session {
         let o = objets(&actuel)?;
         let index = Index::construire(&o);
         t.lectures.clear();
-        if t.changements.iter().any(|c| sensible(&c.cle)) {
-            t.lectures.insert("#spatial".into(), spatial(&o));
-        }
+        concurrence::ajouter_spatial(&mut t, &o);
         for c in &t.changements {
             t.lectures
                 .insert(format!("#usages/{}", c.cle), index.empreinte(&c.cle, &o));

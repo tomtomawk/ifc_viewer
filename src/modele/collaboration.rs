@@ -1,5 +1,6 @@
 //! Transactions de valeurs persistantes, indépendantes de l'interface et du transport.
 pub mod cli;
+pub mod concurrence;
 pub mod partage;
 pub mod session;
 pub mod stockage;
@@ -13,7 +14,10 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const PROTOCOLE: u32 = 1;
+pub const PROTOCOLE: u32 = 2;
+pub fn protocole_lisible(v: u32) -> bool {
+    matches!(v, 1 | 2)
+}
 pub type Objets = BTreeMap<String, Value>;
 pub type Resultat<T> = Result<T, String>;
 pub fn uuid() -> String {
@@ -189,6 +193,12 @@ pub struct Index {
 }
 impl Index {
     pub fn construire(o: &Objets) -> Self {
+        Self::construire_interne(o, true)
+    }
+    fn construire_legacy(o: &Objets) -> Self {
+        Self::construire_interne(o, false)
+    }
+    fn construire_interne(o: &Objets, cible: bool) -> Self {
         let mut ids: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
         for (k, v) in o {
             if let Some(id) = v.get("id").and_then(Value::as_str) {
@@ -230,10 +240,28 @@ impl Index {
         }
         let mut i = Self::default();
         for (k, v) in o {
-            let mut r = BTreeSet::new();
-            refs(v, &ids, &mut r);
-            for cible in r {
-                i.utilisateurs.entry(cible).or_default().insert(k.clone());
+            if cible && k.starts_with("@ordre/") {
+                continue;
+            }
+            let mut entrees = Vec::new();
+            if cible && k.strip_prefix("@/").is_some_and(concurrence::carte_objet) {
+                for (id, v) in v.as_object().into_iter().flatten() {
+                    entrees.push((format!("{k}/{id}"), v, Some(id)));
+                }
+            } else {
+                entrees.push((k.clone(), v, None));
+            }
+            for (cle, v, id) in entrees {
+                let mut r = BTreeSet::new();
+                refs(v, &ids, &mut r);
+                if let Some(id) = id {
+                    if let Some(cles) = ids.get(id.as_str()) {
+                        r.extend(cles.iter().map(|k| (*k).to_string()));
+                    }
+                }
+                for cible in r {
+                    i.utilisateurs.entry(cible).or_default().insert(cle.clone());
+                }
             }
         }
         i
@@ -246,7 +274,7 @@ impl Index {
                 .get(cle)
                 .into_iter()
                 .flatten()
-                .map(|k| (k, o.get(k)))
+                .map(|k| (k, concurrence::valeur(o, k)))
                 .collect::<BTreeMap<_, _>>(),
         )
     }
@@ -269,6 +297,7 @@ impl Transaction {
                 cle,
             })
             .collect();
+        let changements = concurrence::decomposer(changements);
         let index = Index::construire(&a);
         let index_apres = Index::construire(&b);
         let mut lectures = BTreeMap::new();
@@ -282,11 +311,6 @@ impl Transaction {
                     lectures.insert(cible.clone(), hash(&a.get(cible)));
                 }
             }
-        }
-        // Domaine spatial conservateur : toute édition géométrique observe l'ensemble
-        // de la géométrie et ses collections (les ajouts sont donc détectés).
-        if changements.iter().any(|c| sensible(&c.cle)) {
-            lectures.insert("#spatial".into(), spatial(&a));
         }
         for c in &changements {
             lectures.insert(format!("#usages/{}", c.cle), index.empreinte(&c.cle, &a));
@@ -316,7 +340,7 @@ impl Transaction {
                 ressources(v, &mut requises);
             }
         }
-        Ok(Self {
+        let mut transaction = Self {
             protocole: PROTOCOLE,
             projet: avant.identite.clone(),
             id: uuid(),
@@ -329,16 +353,20 @@ impl Transaction {
             reservations: BTreeMap::new(),
             textes: BTreeMap::new(),
             compense: None,
-        })
+        };
+        concurrence::ajouter_spatial(&mut transaction, &a);
+        Ok(transaction)
     }
     pub fn inverse(&self, base: u64) -> Self {
         let mut t = self.clone();
         t.id = uuid();
         t.base = base;
         t.compense = Some(self.id.clone());
+        t.protocole = PROTOCOLE;
         for c in &mut t.changements {
             std::mem::swap(&mut c.avant, &mut c.apres);
         }
+        t.changements = concurrence::decomposer(t.changements);
         t
     }
 }
@@ -455,7 +483,7 @@ pub fn appliquer(
         acceptee: None,
         raison: raison.into(),
     };
-    if t.protocole != PROTOCOLE || t.projet != projet_id || t.base > revision {
+    if !protocole_lisible(t.protocole) || t.projet != projet_id || t.base > revision {
         erreurs.push(conflit(
             "protocole".into(),
             "Protocole, projet ou parent incompatible",
@@ -470,14 +498,30 @@ pub fn appliquer(
             "Identité et schéma du projet sont immuables dans une transaction",
         ));
     }
-    let index = Index::construire(courant);
+    let index = if t.protocole == 1 {
+        Index::construire_legacy(courant)
+    } else {
+        Index::construire(courant)
+    };
     for (cle, attendu) in &t.lectures {
         let actuel = if cle == "#spatial" {
             spatial(courant)
+        } else if cle == "#types-terrains-defaut" {
+            concurrence::empreinte_types_terrain(courant)
+        } else if cle == "#usagers-terrain-defaut" {
+            concurrence::empreinte_usagers_terrain(courant)
+        } else if let Some(z) = cle.strip_prefix("#zones/") {
+            match serde_json::from_str::<Vec<concurrence::Zone>>(z) {
+                Ok(z) => concurrence::empreinte_zone(courant, &z),
+                Err(_) => {
+                    erreurs.push(conflit(cle.clone(), "Emprise spatiale invalide"));
+                    continue;
+                }
+            }
         } else if let Some(k) = cle.strip_prefix("#usages/") {
             index.empreinte(k, courant)
         } else {
-            hash(&courant.get(cle))
+            hash(&concurrence::valeur(courant, cle))
         };
         if &actuel != attendu {
             erreurs.push(conflit(
@@ -488,18 +532,18 @@ pub fn appliquer(
     }
     let mut out = courant.clone();
     for c in &t.changements {
-        match fusion(c, courant.get(&c.cle)) {
+        match fusion(c, concurrence::valeur(courant, &c.cle)) {
             Some(Some(v)) => {
-                out.insert(c.cle.clone(), v);
+                concurrence::affecter(&mut out, &c.cle, Some(v));
             }
             Some(None) => {
-                out.remove(&c.cle);
+                concurrence::affecter(&mut out, &c.cle, None);
             }
             None => erreurs.push(Conflit {
                 cle: c.cle.clone(),
                 base: c.avant.clone(),
                 locale: c.apres.clone(),
-                acceptee: courant.get(&c.cle).cloned(),
+                acceptee: concurrence::valeur(courant, &c.cle).cloned(),
                 raison: "Propositions concurrentes incompatibles".into(),
             }),
         }
@@ -511,7 +555,7 @@ pub fn appliquer(
                     cle: c.cle.clone(),
                     base: c.avant.clone(),
                     locale: c.apres.clone(),
-                    acceptee: courant.get(&c.cle).cloned(),
+                    acceptee: concurrence::valeur(courant, &c.cle).cloned(),
                     raison: "Transaction entière retenue après refus de précondition".into(),
                 });
             }

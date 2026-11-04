@@ -185,12 +185,7 @@ fn mesurer(p: &Projet, chemin: &Path, sortie: &Path) -> Resultat<()> {
     {
         let mut a = d.proteger()?;
         let mut e = a.initialiser(p)?;
-        let cles: Vec<_> = t
-            .changements
-            .iter()
-            .filter(|c| sensible(&c.cle))
-            .map(|c| c.cle.clone())
-            .collect();
+        let cles: Vec<_> = t.cles_reservation(&e.objets).into_iter().collect();
         a.reserver(&mut e, &cles, "mesure", false, false)?;
         for k in cles {
             t.reservations.insert(k.clone(), e.baux[&k].generation);

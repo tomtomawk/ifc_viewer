@@ -89,12 +89,7 @@ impl Etat {
                 raison,
             }]
         };
-        let necessaires: BTreeSet<_> = t
-            .changements
-            .iter()
-            .filter(|c| sensible(&c.cle))
-            .map(|c| c.cle.clone())
-            .collect();
+        let necessaires = t.cles_reservation(&self.objets);
         for k in necessaires {
             let bail = self
                 .baux
@@ -140,6 +135,7 @@ impl Etat {
         }
         // Seule la projection Yrs est réinjectée, jamais une chaîne concurrente.
         out.objets = objets(&out.projection().map_err(erreur)?).map_err(erreur)?;
+        out.protocole = out.protocole.max(t.protocole);
         out.revision += 1;
         out.acceptes.insert(t.id.clone(), hash(t));
         Ok(out)
@@ -474,7 +470,10 @@ impl Autorite {
                 }
             }
         }
-        if etat.as_ref().is_some_and(|e| e.protocole != PROTOCOLE) {
+        if etat
+            .as_ref()
+            .is_some_and(|e| !protocole_lisible(e.protocole))
+        {
             return Err("Protocole incompatible".into());
         }
         Ok(etat)

@@ -23,7 +23,7 @@ impl Partage {
     fn verifier(&self) -> Resultat<()> {
         if self.format != FORMAT_PARTAGE
             || self.version != 1
-            || self.protocole != PROTOCOLE
+            || !protocole_lisible(self.protocole)
             || self.projet.is_empty()
         {
             return Err("Fichier partagé incompatible ou incomplet".into());

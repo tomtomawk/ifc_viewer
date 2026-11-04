@@ -17,18 +17,16 @@ fn exemple() -> Projet {
     p
 }
 fn autoriser(e: &mut Etat, t: &mut Transaction) {
-    for c in &t.changements {
-        if sensible(&c.cle) {
-            e.baux.insert(
-                c.cle.clone(),
-                Bail {
-                    proprietaire: t.session.clone(),
-                    generation: 1,
-                    actif: true,
-                },
-            );
-            t.reservations.insert(c.cle.clone(), 1);
-        }
+    for cle in t.cles_reservation(&e.objets) {
+        e.baux.insert(
+            cle.clone(),
+            Bail {
+                proprietaire: t.session.clone(),
+                generation: 1,
+                actif: true,
+            },
+        );
+        t.reservations.insert(cle, 1);
     }
 }
 fn accepter(e: &mut Etat, mut t: Transaction) {
@@ -842,4 +840,376 @@ fn parent_futur_et_ressource_requise_absente_ne_sont_pas_acceptes() {
     assert!(a.publier(&mut e, &t).is_err());
     assert_eq!(e.revision, 0);
     assert_eq!(a.lire().unwrap().unwrap().revision, 0);
+}
+
+#[test]
+fn murs_distincts_crees_et_deplaces_hors_connexion_fusionnent_sans_verrou_global() {
+    let mut p = exemple();
+    p.figer_references();
+    let n = p.niveaux[0].id.clone();
+    let options = super::super::edition::ParametresMur {
+        niveau: Some(n),
+        implantation: super::super::edition::Implantation::Exterieure,
+        ..Default::default()
+    };
+    let mut a = p.clone();
+    let ia = a
+        .ajouter_mur([20000.0, 0.0], [24000.0, 0.0], &options)
+        .unwrap();
+    let mut b = p.clone();
+    let ib = b
+        .ajouter_mur([20000.0, 20000.0], [24000.0, 20000.0], &options)
+        .unwrap();
+    let mut e = Etat::initial(&p).unwrap();
+    accepter(&mut e, Transaction::entre(&p, &a, "a", 0).unwrap());
+    accepter(&mut e, Transaction::entre(&p, &b, "b", 0).unwrap());
+    let r = e.projection().unwrap();
+    assert!(r.murs.iter().any(|m| m.id == ia));
+    assert!(r.murs.iter().any(|m| m.id == ib));
+    assert!(r.implantations.contains_key(&ia) && r.implantations.contains_key(&ib));
+    assert!(!e.baux.contains_key("@/implantations"));
+    let mut a = r.clone();
+    let mut b = r.clone();
+    a.deplacer_extremite(&ia, true, [25000.0, 0.0]).unwrap();
+    b.deplacer_extremite(&ib, true, [25000.0, 20000.0]).unwrap();
+    accepter(&mut e, Transaction::entre(&r, &a, "a", 2).unwrap());
+    accepter(&mut e, Transaction::entre(&r, &b, "b", 2).unwrap());
+}
+
+#[test]
+fn relations_de_tous_les_objets_sont_independantes_par_identite() {
+    for nom in [
+        "implantations",
+        "contextes",
+        "priorites_jonction",
+        "attaches_toitures",
+        "cartouches_feuilles",
+    ] {
+        let cle = format!("@/{nom}");
+        let mut o = Objets::new();
+        o.insert(cle.clone(), serde_json::json!({"a":0,"b":0}));
+        let ca = concurrence::decomposer(vec![Changement {
+            cle: cle.clone(),
+            avant: o.get(&cle).cloned(),
+            apres: Some(serde_json::json!({"a":1,"b":0})),
+        }]);
+        let cb = concurrence::decomposer(vec![Changement {
+            cle: cle.clone(),
+            avant: o.get(&cle).cloned(),
+            apres: Some(serde_json::json!({"a":0,"b":2})),
+        }]);
+        for c in ca.iter().chain(&cb) {
+            assert_eq!(concurrence::valeur(&o, &c.cle), c.avant.as_ref());
+            concurrence::affecter(&mut o, &c.cle, c.apres.clone());
+        }
+        assert_eq!(o[&cle], serde_json::json!({"a":1,"b":2}));
+    }
+}
+
+#[test]
+fn session_publique_puis_autre_session_cree_un_mur_sans_prise_globale() {
+    let p = exemple();
+    let central = dossier();
+    let local = dossier();
+    let mut a = session::Session::ouvrir(&p, local.join("a.json"), central.clone()).unwrap();
+    let mut b = session::Session::ouvrir(&p, local.join("b.json"), central).unwrap();
+    a.synchroniser(None, false).unwrap();
+    let pa = attendre(&mut a);
+    b.synchroniser(None, false).unwrap();
+    let pb = attendre(&mut b);
+    let mut qa = pa.clone();
+    qa.ajouter_mur([20000.0, 0.0], [24000.0, 0.0], &Default::default())
+        .unwrap();
+    a.editer(&pa, &qa).unwrap();
+    a.synchroniser(None, false).unwrap();
+    attendre(&mut a);
+    let mut qb = pb.clone();
+    qb.ajouter_mur([20000.0, 20000.0], [24000.0, 20000.0], &Default::default())
+        .unwrap();
+    b.editer(&pb, &qb).unwrap();
+    b.synchroniser(None, false).unwrap();
+    let r = attendre(&mut b);
+    assert!(b.copie.conflits.is_empty(), "{:?}", b.copie.conflits);
+    assert!(b.copie.attente.is_empty());
+    assert_eq!(r.murs.len(), p.murs.len() + 2);
+    assert!(b.copie.base.baux.values().all(|b| !b.actif));
+}
+
+#[test]
+fn voisinage_geometrique_et_meme_objet_restent_conflictuels() {
+    let p = exemple();
+    let mut a = p.clone();
+    let mut b = p.clone();
+    a.ajouter_mur([20000.0, 0.0], [24000.0, 0.0], &Default::default())
+        .unwrap();
+    b.ajouter_mur([22000.0, -1000.0], [22000.0, 1000.0], &Default::default())
+        .unwrap();
+    let mut e = Etat::initial(&p).unwrap();
+    accepter(&mut e, transaction(&p, &a));
+    let mut t = transaction(&p, &b);
+    autoriser(&mut e, &mut t);
+    assert!(e.accepter(&t).is_err());
+}
+
+#[test]
+fn creations_independantes_barres_escaliers_gardes_terrains_importes_et_types() {
+    use super::super::*;
+    let mut p = exemple();
+    p.figer_references();
+    let niveau = p.niveaux[0].id.clone();
+    let mut multi = p.types_murs[0].clone();
+    multi.id = "multi-essai".into();
+    multi.couches = vec![
+        Couche {
+            epaisseur: 100.0,
+            ..Default::default()
+        },
+        Couche {
+            epaisseur: 200.0,
+            ..Default::default()
+        },
+    ];
+    p.types_murs.push(multi);
+    for genre in [
+        "barre",
+        "escalier",
+        "garde_corps",
+        "terrain",
+        "importe",
+        "niveau",
+        "type",
+        "assemblage",
+        "annotation",
+        "vue",
+        "feuille",
+        "nomenclature",
+        "materiau",
+        "motif",
+        "cartouche",
+    ] {
+        let mut propositions = Vec::new();
+        for (poste, y) in [("a", 20000.0), ("b", 40000.0)] {
+            let mut q = p.clone();
+            let id = uuid();
+            match genre {
+                "assemblage" => {
+                    q.ajouter_mur(
+                        [20000.0, y],
+                        [25000.0, y],
+                        &edition::ParametresMur {
+                            type_mur: Some("multi-essai".into()),
+                            implantation: edition::Implantation::Exterieure,
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+                }
+                "annotation" => q.annotations.push(documentation::Annotation {
+                    id,
+                    vue: p.vues[0].id.clone(),
+                    hauteur: 2.5,
+                    forme: documentation::AnnotationForme::Ligne {
+                        debut: [20000.0, y],
+                        fin: [25000.0, y],
+                    },
+                }),
+                "vue" => {
+                    let mut v = p.vues[0].clone();
+                    v.id = id;
+                    v.nom = poste.into();
+                    q.vues.push(v);
+                }
+                "feuille" => {
+                    let mut v = p.feuilles[0].clone();
+                    v.id = id;
+                    v.numero = poste.into();
+                    q.feuilles.push(v);
+                }
+                "nomenclature" => {
+                    let mut v = p.nomenclatures[0].clone();
+                    v.id = id;
+                    v.nom = poste.into();
+                    q.nomenclatures.push(v);
+                }
+                "materiau" => {
+                    let mut v = p.materiaux[0].clone();
+                    v.id = id;
+                    v.nom = poste.into();
+                    q.materiaux.push(v);
+                }
+                "motif" => {
+                    let mut v = p.motifs[0].clone();
+                    v.id = id;
+                    v.nom = poste.into();
+                    q.motifs.push(v);
+                }
+                "cartouche" => {
+                    let mut v = documentation::FamilleCartouche::default();
+                    v.id = id;
+                    v.nom = poste.into();
+                    q.familles_cartouches.push(v);
+                }
+                "barre" => q.barres.push(Barre {
+                    id,
+                    nom: poste.into(),
+                    genre: GenreBarre::Poutre,
+                    niveau: niveau.clone(),
+                    debut: [20000.0, y, 0.0],
+                    fin: [25000.0, y, 0.0],
+                    largeur: 200.0,
+                    hauteur: 300.0,
+                    rotation: 0.0,
+                }),
+                "escalier" => q.escaliers.push(Escalier {
+                    id,
+                    nom: poste.into(),
+                    niveau: niveau.clone(),
+                    niveau_haut: None,
+                    decalage_bas: 0.0,
+                    hauteur: 2800.0,
+                    trace: vec![[20000.0, y], [25000.0, y]],
+                    largeur: 1000.0,
+                    hauteur_marche: 175.0,
+                    paillasse: 150.0,
+                }),
+                "garde_corps" => q.garde_corps.push(GardeCorps {
+                    id,
+                    nom: poste.into(),
+                    niveau: niveau.clone(),
+                    decalage: 0.0,
+                    trace: vec![[20000.0, y], [25000.0, y]],
+                    hauteur: 1000.0,
+                    remplissage: Remplissage::Plein,
+                    escalier: None,
+                }),
+                "terrain" => q.terrains.push(site::Terrain {
+                    id,
+                    nom: poste.into(),
+                    contour: vec![
+                        [20000.0, y, 0.0],
+                        [25000.0, y, 0.0],
+                        [25000.0, y + 5000.0, 0.0],
+                        [20000.0, y + 5000.0, 0.0],
+                    ],
+                    points: vec![],
+                    type_terrain: None,
+                }),
+                "importe" => q.importes.push(ElementImporte {
+                    id,
+                    nom: poste.into(),
+                    categorie: "Divers".into(),
+                    niveau: Some(niveau.clone()),
+                    maillage: Maillage {
+                        sommets: vec![
+                            [20000.0, y, 0.0],
+                            [25000.0, y, 0.0],
+                            [25000.0, y + 5000.0, 0.0],
+                        ],
+                        triangles: vec![[0, 1, 2]],
+                    },
+                    raison: "Essai de concurrence".into(),
+                    origine: None,
+                }),
+                "niveau" => q.niveaux.push(Niveau {
+                    id,
+                    nom: poste.into(),
+                    altitude: y,
+                    origine: None,
+                }),
+                "type" => {
+                    let mut ty = q.types_murs[0].clone();
+                    ty.id = id;
+                    ty.nom = poste.into();
+                    q.types_murs.push(ty);
+                }
+                _ => unreachable!(),
+            }
+            q.verifier().unwrap();
+            propositions.push(Transaction::entre(&p, &q, poste, 0).unwrap());
+        }
+        let mut e = Etat::initial(&p).unwrap();
+        for mut t in propositions {
+            autoriser(&mut e, &mut t);
+            e = e.accepter(&t).unwrap_or_else(|c| panic!("{genre} : {c:?}"));
+        }
+        assert_eq!(e.revision, 2);
+    }
+}
+
+#[test]
+fn ouverture_sur_deux_hotes_distincts_et_dalles_independantes() {
+    use super::super::*;
+    let mut p = exemple();
+    let h1 = p
+        .ajouter_mur([20000.0, 0.0], [25000.0, 0.0], &Default::default())
+        .unwrap();
+    let h2 = p
+        .ajouter_mur([20000.0, 20000.0], [25000.0, 20000.0], &Default::default())
+        .unwrap();
+    let mut e = Etat::initial(&p).unwrap();
+    for (host, poste) in [(h1, "a"), (h2, "b")] {
+        let (q, _) = p
+            .executer(commandes::Commande::Ouverture {
+                mur: host,
+                genre: GenreOuverture::Porte,
+                type_ouverture: None,
+                abscisse: 1500.0,
+                largeur: 900.0,
+                hauteur: 2100.0,
+                allege: 0.0,
+            })
+            .unwrap();
+        accepter(&mut e, Transaction::entre(&p, &q, poste, 0).unwrap());
+    }
+    let p = exemple();
+    let mut e = Etat::initial(&p).unwrap();
+    for (poste, y) in [("a", 20000.0), ("b", 40000.0)] {
+        let mut q = p.clone();
+        let mut ty = p.types_dalles[0].clone();
+        ty.id = String::new();
+        let opt = edition::ParametresDalle {
+            sorte: SorteDalle::Dalle,
+            type_dalle: ty,
+            pente: None,
+            niveau: Some(p.niveaux[0].id.clone()),
+            decalage: 0.0,
+            phase: None,
+            sous_projet: None,
+            variante: None,
+        };
+        q.ajouter_dalle_contours(
+            &[vec![
+                [20000.0, y],
+                [25000.0, y],
+                [25000.0, y + 5000.0],
+                [20000.0, y + 5000.0],
+            ]],
+            &opt,
+        )
+        .unwrap();
+        accepter(&mut e, Transaction::entre(&p, &q, poste, 0).unwrap());
+    }
+    assert_eq!(e.revision, 2);
+}
+
+#[test]
+fn journal_protocole_un_reste_lisible_et_nouvelles_acceptations_passent_en_deux() {
+    let p = exemple();
+    let mut legacy = Etat::initial(&p).unwrap();
+    legacy.protocole = 1;
+    let d = Depot::nouveau(dossier());
+    d.preparer().unwrap();
+    {
+        let mut a = d.proteger().unwrap();
+        a.initialiser_etat(&legacy).unwrap();
+    }
+    let mut a = d.proteger().unwrap();
+    let mut e = a.lire().unwrap().unwrap();
+    assert_eq!(e.protocole, 1);
+    let mut q = p.clone();
+    q.vues[0].nom = "Nouveau protocole".into();
+    a.publier(&mut e, &transaction(&p, &q)).unwrap();
+    assert_eq!(e.protocole, 2);
+    drop(a);
+    assert_eq!(d.proteger().unwrap().lire().unwrap().unwrap().protocole, 2);
 }
