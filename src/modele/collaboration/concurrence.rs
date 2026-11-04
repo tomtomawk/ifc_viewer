@@ -297,6 +297,65 @@ fn references(index: &Index, cle: &str) -> Vec<String> {
         .map(|(k, _)| k.clone())
         .collect()
 }
+
+/// Protocole 3 : bande autour de l'axe droit, plutôt que tout son rectangle.
+/// Les autres géométries gardent une enveloppe conservatrice.
+#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
+pub enum Voisinage {
+    Bande { debut:[f64;2], fin:[f64;2], rayon:f64 },
+    Rectangle(Zone),
+}
+impl Voisinage {
+    pub fn valide(&self)->bool {
+        match self {
+            Self::Bande{debut,fin,rayon}=>debut.iter().chain(fin).all(|x|x.is_finite()) && rayon.is_finite() && *rayon>=0.0,
+            Self::Rectangle(z)=>z.0.iter().all(|x|x.is_finite()) && z.0[0]<=z.0[2] && z.0[1]<=z.0[3],
+        }
+    }
+    fn touche(self,b:Self)->bool {
+        match (self,b) {
+            (Self::Bande{debut:a,fin:b,rayon:r},Self::Bande{debut:c,fin:d,rayon:s})=>distance_segments(a,b,c,d)<=(r+s).powi(2),
+            (Self::Bande{debut:a,fin:b,rayon:r},Self::Rectangle(z)) | (Self::Rectangle(z),Self::Bande{debut:a,fin:b,rayon:r})=>{
+                let dedans=|p:[f64;2]|p[0]>=z.0[0]&&p[0]<=z.0[2]&&p[1]>=z.0[1]&&p[1]<=z.0[3];
+                let coins=[[z.0[0],z.0[1]],[z.0[2],z.0[1]],[z.0[2],z.0[3]],[z.0[0],z.0[3]]];
+                dedans(a)||dedans(b)||(0..4).any(|i|distance_segments(a,b,coins[i],coins[(i+1)%4])<=r*r)
+            }
+            (Self::Rectangle(a),Self::Rectangle(b))=>a.touche(b),
+        }
+    }
+}
+fn distance_segments(a:[f64;2],b:[f64;2],c:[f64;2],d:[f64;2])->f64 {
+    let [a,b,c,d]=[a,b,c,d].map(glam::DVec2::from_array);
+    let ab=b-a;let cd=d-c;
+    let croix=ab.perp_dot(cd);
+    if croix!=0.0 {
+        let t=(c-a).perp_dot(cd)/croix;
+        let u=(c-a).perp_dot(ab)/croix;
+        if (0.0..=1.0).contains(&t)&&(0.0..=1.0).contains(&u){return 0.0;}
+    }
+    let point=|p:glam::DVec2,x:glam::DVec2,y:glam::DVec2|{
+        let v=y-x;
+        let t=if v.length_squared()>0.0{((p-x).dot(v)/v.length_squared()).clamp(0.0,1.0)}else{0.0};
+        (p-(x+t*v)).length_squared()
+    };
+    point(a,c,d).min(point(b,c,d)).min(point(c,a,b)).min(point(d,a,b))
+}
+fn voisinage(k:&str,v:&Value,o:&Objets)->Option<Voisinage> {
+    if k.starts_with("murs/") && v.get("axe")?.get("forme")?.as_str()?=="droit" {
+        let axe=&v["axe"];
+        let point=|cle:&str|->Option<[f64;2]>{let a=axe.get(cle)?.as_array()?;Some([a.first()?.as_f64()?,a.get(1)?.as_f64()?])};
+        let b=Voisinage::Bande{debut:point("debut")?,fin:point("fin")?,rayon:2.0*largeur(v,o)?+15.0};
+        return b.valide().then_some(b);
+    }
+    emprise(k,v,o).map(Voisinage::Rectangle)
+}
+pub fn empreinte_voisinage(o:&Objets,zones:&[Voisinage])->String {
+    let index=Index::construire(o);
+    let mut selection:BTreeSet<String>=o.iter().filter(|(k,v)|physique(k)&&voisinage(k,v,o).is_none_or(|b|zones.iter().any(|z|z.touche(b)))).map(|(k,_)|k.clone()).collect();
+    completer_selection(o,&index,&mut selection);
+    hash(&selection.iter().map(|k|(k,valeur(o,k))).collect::<BTreeMap<_,_>>())
+}
+
 pub fn empreinte_zone(o: &Objets, zones: &[Zone]) -> String {
     let index = Index::construire(o);
     let mut selection: BTreeSet<String> = o
@@ -306,6 +365,10 @@ pub fn empreinte_zone(o: &Objets, zones: &[Zone]) -> String {
         })
         .map(|(k, _)| k.clone())
         .collect();
+    completer_selection(o,&index,&mut selection);
+    hash(&selection.iter().map(|k| (k, valeur(o, k))).collect::<BTreeMap<_, _>>())
+}
+fn completer_selection(o:&Objets,index:&Index,selection:&mut BTreeSet<String>) {
     let mut front: Vec<_> = selection.iter().cloned().collect();
     while let Some(k) = front.pop() {
         for r in references(&index, &k) {
@@ -342,12 +405,6 @@ pub fn empreinte_zone(o: &Objets, zones: &[Zone]) -> String {
         .cloned()
         .collect();
     selection.extend(liens);
-    hash(
-        &selection
-            .iter()
-            .map(|k| (k, valeur(o, k)))
-            .collect::<BTreeMap<_, _>>(),
-    )
 }
 pub fn empreinte_types_terrain(o: &Objets) -> String {
     hash(
@@ -439,12 +496,14 @@ pub fn ajouter_spatial(t: &mut Transaction, a: &Objets) {
         }
     }
     let mut zones = Vec::new();
+    let mut voisinages = Vec::new();
     for k in &touches {
         if physique(k) {
             for o in [a, &b] {
                 if let Some(v) = o.get(k) {
                     if let Some(z) = emprise(k, v, o) {
                         zones.push(z);
+                        voisinages.push(voisinage(k,v,o).unwrap_or(Voisinage::Rectangle(z)));
                     } else {
                         t.lectures.insert("#spatial".into(), spatial(a));
                         return;
@@ -457,6 +516,11 @@ pub fn ajouter_spatial(t: &mut Transaction, a: &Objets) {
         }
     }
     if !zones.is_empty() {
+        if t.protocole>=3 {
+            let key=format!("#voisinage3/{}",serde_json::to_string(&voisinages).expect("voisinages finis"));
+            t.lectures.insert(key,empreinte_voisinage(a,&voisinages));
+            return;
+        }
         let key = format!(
             "#zones/{}",
             serde_json::to_string(&zones).expect("emprises finies")

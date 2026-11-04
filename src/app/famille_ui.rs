@@ -102,6 +102,8 @@ pub(super) struct EditeurFamille {
     epaisseur: f64,
     famille: FamilleModelee,
     vue: VueFamille,
+    navigation: [NavigationFamille;3],
+    rect_navigation: egui::Rect,
     outil: OutilFamille,
     selection: SelectionFamille,
     /// Plans choisis pour la cote ou l'égalité en cours.
@@ -122,6 +124,30 @@ pub(super) struct EditeurFamille {
     reference: (String, f64, f64, FamilleModelee),
     message: Option<String>,
     erreur: Option<String>,
+}
+
+#[derive(Clone,Copy)]
+struct NavigationFamille { zoom:f64, decalage:(f64,f64) }
+impl Default for NavigationFamille {
+    fn default()->Self {Self{zoom:1.0,decalage:(0.0,0.0)}}
+}
+impl NavigationFamille {
+    fn cadre(&self,base:&Cadre)->Cadre {
+        Cadre{centre:base.centre,milieu:(base.milieu.0+self.decalage.0,base.milieu.1+self.decalage.1),echelle:base.echelle*self.zoom}
+    }
+    fn naviguer(&mut self,base:&Cadre,curseur:egui::Pos2,molette:f32,pan:egui::Vec2) {
+        let avant=self.cadre(base);
+        if molette!=0.0 {
+            let point=avant.modele(curseur);
+            self.zoom=(self.zoom*(molette as f64*0.003).exp()).clamp(0.05,100.0);
+            let apres=self.cadre(base).modele(curseur);
+            self.decalage.0+=point.0-apres.0;
+            self.decalage.1+=point.1-apres.1;
+        }
+        let echelle=base.echelle*self.zoom;
+        self.decalage.0-=pan.x as f64/echelle;
+        self.decalage.1+=pan.y as f64/echelle;
+    }
 }
 
 /// Transformation de la vue : repère de la famille (h, v) ↔ écran.
@@ -268,6 +294,53 @@ impl EditeurFamille {
 }
 
 impl ViewerApp {
+    /// Contrat sans dialogue de l'éditeur ; même validation et chargement que le ruban.
+    pub(super) fn piloter_famille(&mut self, commande: &str, argument: &str) -> Option<Result<serde_json::Value, String>> {
+        if commande=="famille_navigation" {
+            return Some((|| {
+                let ed=self.famille.as_mut().ok_or("Éditeur fermé")?;
+                match argument {
+                    "plan"=>ed.vue=VueFamille::Plan,"coupe"=>ed.vue=VueFamille::Coupe,"elevation"=>ed.vue=VueFamille::Elevation,
+                    "cadrer"=>ed.navigation[ed.vue as usize]=Default::default(),
+                    ""|"etat"=>{},_=>return Err("famille_navigation etat|plan|coupe|elevation|cadrer".into())
+                }
+                let n=ed.navigation[ed.vue as usize];
+                Ok(serde_json::json!({"vue":ed.vue.nom(),"zoom":n.zoom,"decalage":[n.decalage.0,n.decalage.1],"rectangle":[ed.rect_navigation.min.x,ed.rect_navigation.min.y,ed.rect_navigation.max.x,ed.rect_navigation.max.y]}))
+            })());
+        }
+        if !["famille_nouvelle","famille_document","famille_modifier","famille_charger_projet","famille_fermer"].contains(&commande) { return None; }
+        Some((|| {
+            self.pilote_disponible()?;
+            match commande {
+                "famille_nouvelle" => {
+                    if self.natif.is_none() {return Err("Projet natif requis".into());}
+                    let genre=match argument {"porte"=>GenreOuverture::Porte,"fenetre"=>GenreOuverture::Fenetre,_=>return Err("genre : porte|fenetre".into())};
+                    self.ouvrir_editeur_famille_type(None,genre);
+                }
+                "famille_modifier" => {
+                    let f=crate::modele::famille_modelee::FichierFamille::lire(argument)?;
+                    if f.nom.trim().is_empty() {return Err("Nom de famille vide".into());}
+                    let ed=self.famille.as_mut().ok_or("Éditeur fermé")?;
+                    f.famille.valider(f.largeur,f.hauteur,ed.epaisseur)?;
+                    ed.nom=f.nom;ed.largeur=f.largeur;ed.hauteur=f.hauteur;ed.famille=f.famille;
+                }
+                "famille_charger_projet" => {
+                    if !argument.is_empty() && argument!="nouveau" {return Err("usage : famille_charger_projet [nouveau]".into());}
+                    let id=self.enregistrer_famille(argument=="nouveau")?;
+                    return Ok(serde_json::json!({"id":id}));
+                }
+                "famille_fermer" => {
+                    if !argument.is_empty() && argument!="abandonner" {return Err("usage : famille_fermer [abandonner]".into());}
+                    if self.famille.as_ref().is_some_and(|e|e.modifiee()) && argument!="abandonner" {return Err("Famille modifiée : charger dans le projet ou famille_fermer abandonner".into());}
+                    self.fermer_famille();
+                    return Ok(serde_json::json!({}));
+                }
+                _=>{}
+            }
+            let ed=self.famille.as_ref().ok_or("Éditeur fermé")?;
+            Ok(serde_json::json!({"fichier":ed.fichier(),"modifie":ed.modifiee(),"type":ed.type_id}))
+        })())
+    }
     /// Éditeur sur la famille du type de la fenêtre `id` (gabarit si le type n'a pas de
     /// famille modélisée).
     pub(super) fn ouvrir_editeur_famille(&mut self, id: &str) {
@@ -326,6 +399,8 @@ impl ViewerApp {
             poignee: None,
             reference: (String::new(), 0.0, 0.0, FamilleModelee::gabarit_fenetre()),
             vue: VueFamille::Elevation,
+            navigation: Default::default(),
+            rect_navigation: egui::Rect::NOTHING,
             outil: OutilFamille::Selection,
             selection: SelectionFamille::Aucune,
             clics: Vec::new(),
@@ -405,6 +480,10 @@ impl ViewerApp {
     }
 
     /// Vue centrale de l'onglet « Famille » : barre d'outils et vue de travail.
+    pub(super) fn cadrer_famille(&mut self) {
+        if let Some(ed)=self.famille.as_mut(){ed.navigation[ed.vue as usize]=Default::default();}
+    }
+
     pub(super) fn vue_famille(&mut self, ui: &mut egui::Ui) {
         let Some(ed) = self.famille.as_mut() else { return };
         egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(6.0).show(ui, |ui| {
@@ -412,6 +491,13 @@ impl ViewerApp {
             if let Some(m) = &ed.message {
                 ui.label(RichText::new(m).weak());
             }
+            ui.horizontal(|ui| {
+                for v in [VueFamille::Elevation,VueFamille::Plan,VueFamille::Coupe] {
+                    if ui.selectable_value(&mut ed.vue,v,v.nom()).clicked() {ed.debut=None;ed.esquisse.clear();}
+                }
+                if ui.button("Cadrer").clicked(){ed.navigation[ed.vue as usize]=Default::default();}
+                ui.label(RichText::new("Molette : zoom · bouton central maintenu : déplacer").small().weak());
+            });
             canevas(ui, ed);
         });
     }
@@ -1199,7 +1285,7 @@ fn volume_ui(ui: &mut egui::Ui, v: &mut Volume, plans: &[PlanRef], parametres: &
 /// Vue de travail : mur générique, volumes, vides, plans, cotes ; interactions selon
 /// l'outil.
 fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
-    let taille = ui.available_size().max(egui::vec2(400.0, 400.0));
+    let taille = ui.available_size().max(egui::vec2(80.0, 80.0));
     let (rect, resp) = ui.allocate_exact_size(taille, Sense::click_and_drag());
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 4.0, Color32::WHITE);
@@ -1220,7 +1306,22 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
     let marge = (h1 - h0).max(v1 - v0) * 0.25 + 150.0;
     let (h0, h1, v0, v1) = (h0 - marge, h1 + marge, v0 - marge, v1 + marge);
     let echelle = (rect.width() as f64 / (h1 - h0)).min(rect.height() as f64 / (v1 - v0));
-    let cadre = Cadre { centre: rect.center(), milieu: ((h0 + h1) / 2.0, (v0 + v1) / 2.0), echelle };
+    let base_cadre = Cadre { centre: rect.center(), milieu: ((h0 + h1) / 2.0, (v0 + v1) / 2.0), echelle };
+    ed.rect_navigation=rect;
+    let nav=&mut ed.navigation[ed.vue as usize];
+    let survole=resp.hovered();
+    let panoramique=resp.dragged_by(PointerButton::Middle);
+    if survole || panoramique {
+        let (molette,pan,q)=ui.input_mut(|i| {
+            let molette=if survole {let d=i.smooth_scroll_delta.y;i.smooth_scroll_delta=egui::Vec2::ZERO;d}else{0.0};
+            (molette,if panoramique {i.pointer.delta()}else{egui::Vec2::ZERO},i.pointer.hover_pos().unwrap_or(rect.center()))
+        });
+        nav.naviguer(&base_cadre,q,molette,pan);
+        if resp.dragged_by(PointerButton::Middle){ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);}
+        if resp.double_clicked_by(PointerButton::Middle){*nav=Default::default();}
+    }
+    let cadre=nav.cadre(&base_cadre);
+    let echelle=cadre.echelle;
     let boite = |a: (f64, f64), b: (f64, f64)| egui::Rect::from_two_pos(cadre.ecran(a.0, a.1), cadre.ecran(b.0, b.1));
     let (ih, iv) = (ah as usize, av as usize);
     let boites = ed.famille.boites(&r);
@@ -1492,7 +1593,7 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             }
             // point d'appui du glissement (egui signale le glissement après quelques pixels)
             let appui = ui.input(|i| i.pointer.press_origin()).or(resp.interact_pointer_pos());
-            if resp.drag_started() {
+            if resp.drag_started_by(PointerButton::Primary) {
                 ed.poignee = None;
                 if let Some((p, _, milieu)) = appui.and_then(visee) {
                     // milieu d'arête : un nouveau sommet est inséré puis déplacé
@@ -1504,7 +1605,7 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                     ed.poignee = Some(p);
                 }
             }
-            if let (Some(p), Some(q)) = (ed.poignee, resp.interact_pointer_pos().filter(|_| resp.dragged())) {
+            if let (Some(p), Some(q)) = (ed.poignee, resp.interact_pointer_pos().filter(|_| resp.dragged_by(PointerButton::Primary))) {
                 let (h, v) = cadre.modele(q);
                 match p {
                     Poignee::Sommet { extrusion, k, i } => {
@@ -1525,13 +1626,13 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                 }
                 ed.message = Some("Poignée : accrochée au plan le plus proche (décalage au-delà de 7 px) ; clic droit sur un sommet pour le retirer.".into());
             }
-            if resp.drag_stopped() {
+            if resp.drag_stopped_by(PointerButton::Primary) {
                 ed.poignee = None;
             }
-            if resp.drag_started() && ed.poignee.is_none() {
+            if resp.drag_started_by(PointerButton::Primary) && ed.poignee.is_none() {
                 ed.deplace = appui.and_then(plan_vise);
             }
-            if let (Some(nom), Some(q)) = (ed.deplace.clone(), resp.interact_pointer_pos().filter(|_| resp.dragged())) {
+            if let (Some(nom), Some(q)) = (ed.deplace.clone(), resp.interact_pointer_pos().filter(|_| resp.dragged_by(PointerButton::Primary))) {
                 let (h, v) = cadre.modele(q);
                 let contraint = ed.famille.contraintes.iter().any(|c| c.plans().contains(&nom.as_str()));
                 if let Some(p) = ed.famille.plans.iter_mut().find(|p| p.nom == nom) {
@@ -1544,7 +1645,7 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                 }
                 ed.selection = SelectionFamille::Plan(nom);
             }
-            if resp.drag_stopped() {
+            if resp.drag_stopped_by(PointerButton::Primary) {
                 ed.deplace = None;
             }
             if resp.clicked() {
@@ -1590,7 +1691,7 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
         }
         OutilFamille::Volume | OutilFamille::Vide => {
             let vide = ed.outil == OutilFamille::Vide;
-            if resp.drag_started() {
+            if resp.drag_started_by(PointerButton::Primary) {
                 ed.debut = resp.interact_pointer_pos().map(|q| cadre.modele(q));
             }
             if let (Some(a), Some(q)) = (ed.debut, curseur) {
@@ -1602,7 +1703,7 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                     painter.rect(r, 0.0, couleur_materiau(&ed.famille, Materiau::Menuiserie).gamma_multiply(0.6), egui::Stroke::new(1.5, orange), egui::StrokeKind::Inside);
                 }
             }
-            if resp.drag_stopped() {
+            if resp.drag_stopped_by(PointerButton::Primary) {
                 if let (Some(a), Some(q)) = (ed.debut.take(), resp.interact_pointer_pos()) {
                     let b = cadre.modele(q);
                     let accroche = |axe: AxePlan, x: f64| match ed.plan_proche(&r, axe, x) {
@@ -1728,5 +1829,24 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
     }
     if resp.hovered() && ed.outil != OutilFamille::Selection {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+    }
+}
+
+#[cfg(test)]
+mod tests_navigation_famille {
+    use super::*;
+    #[test]
+    fn zoom_conserve_le_point_sous_la_souris_et_pan_deplace_la_vue() {
+        let base=Cadre{centre:egui::pos2(500.,400.),milieu:(0.,1000.),echelle:0.2};
+        let mut n=NavigationFamille::default();
+        let q=egui::pos2(650.,250.);
+        let avant=n.cadre(&base).modele(q);
+        n.naviguer(&base,q,200.,egui::Vec2::ZERO);
+        let apres=n.cadre(&base).modele(q);
+        assert!((avant.0-apres.0).abs()<1e-9 && (avant.1-apres.1).abs()<1e-9);
+        let ecran=n.cadre(&base).ecran(avant.0,avant.1);
+        n.naviguer(&base,q,0.,egui::vec2(30.,-20.));
+        let suivant=n.cadre(&base).ecran(avant.0,avant.1);
+        assert!((suivant-ecran-egui::vec2(30.,-20.)).length()<1e-4);
     }
 }

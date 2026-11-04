@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU8, Ordering};
+pub mod raccourcis;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -86,15 +87,34 @@ impl<'a> Dimensions<'a> for eframe::egui::DragValue<'a> {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all="snake_case")]
+pub enum ThemeInterface { Clair, Sombre, #[default] Systeme }
+impl ThemeInterface {
+    pub fn appliquer(self,ctx:&eframe::egui::Context) {
+        ctx.set_theme(match self {
+            Self::Clair=>eframe::egui::ThemePreference::Light,
+            Self::Sombre=>eframe::egui::ThemePreference::Dark,
+            Self::Systeme=>eframe::egui::ThemePreference::System,
+        });
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(default)]
 pub struct Options {
+    pub theme_interface:ThemeInterface,
+    pub delai_accrochage:f64,
+    pub raccourcis:std::collections::BTreeMap<String,String>,
     /// Arborescence spatiale, classes et attributs IFC pour les modèles Revit et natifs.
     pub navigation_ifc: bool,
     pub unite: Unite,
     /// Gabarit choisi (None : gabarit par défaut embarqué).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gabarit: Option<PathBuf>,
+}
+impl Default for Options {
+    fn default()->Self {Self{theme_interface:ThemeInterface::default(),navigation_ifc:false,unite:Unite::default(),gabarit:None,delai_accrochage:0.8,raccourcis:Default::default()}}
 }
 
 /// `%APPDATA%\bimedit\options.json`, `$XDG_CONFIG_HOME/bimedit/options.json` ou `~/.config/bimedit/options.json`.
@@ -111,20 +131,25 @@ fn chemin() -> Option<PathBuf> {
 
 impl Options {
     pub fn charger() -> Self {
-        chemin()
+        let mut o:Self=chemin()
             .and_then(|c| std::fs::read_to_string(c).ok())
             .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_default()
+            .unwrap_or_default();
+        if o.verifier().is_err() {o.raccourcis.clear();o.delai_accrochage=0.8;}
+        o
     }
 
     pub fn enregistrer(&self) {
-        let Some(c) = chemin() else { return };
+        let _=self.sauver();
+    }
+    pub fn sauver(&self)->Result<(),String> {
+        self.verifier()?;
+        let c=chemin().ok_or("Dossier de configuration introuvable")?;
         if let Some(d) = c.parent() {
-            let _ = std::fs::create_dir_all(d);
+            std::fs::create_dir_all(d).map_err(|e|e.to_string())?;
         }
-        if let Ok(t) = serde_json::to_string_pretty(self) {
-            let _ = std::fs::write(c, t);
-        }
+        let t=serde_json::to_vec_pretty(self).map_err(|e|e.to_string())?;
+        crate::modele::enregistrement::ecrire_atomique(&c,&t)
     }
 }
 
@@ -137,6 +162,17 @@ mod tests {
         assert!(!Options::default().navigation_ifc);
         let o: Options = serde_json::from_str("{}").unwrap();
         assert_eq!(o, Options::default());
+    }
+    #[test]
+    fn migration_et_persistance_des_preferences_personnelles() {
+        let mut o:Options=serde_json::from_str(r#"{"navigation_ifc":true,"unite":"metre"}"#).unwrap();
+        assert_eq!(o.delai_accrochage,0.8);
+        assert_eq!(o.raccourci(&raccourcis::COMMANDES[0]),"Ctrl+N");
+        o.raccourcis.insert("mur".into(),"MW".into());
+        o.verifier().unwrap();
+        let r:Options=serde_json::from_str(&serde_json::to_string(&o).unwrap()).unwrap();
+        assert_eq!(r,o);
+        o.delai_accrochage=f64::NAN;assert!(o.verifier().is_err());
     }
     #[test]
     fn centimetrage_par_defaut_et_conversion() {

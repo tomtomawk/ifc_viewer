@@ -10,6 +10,11 @@ mod feuilles;
 mod dessin2d_ui;
 mod famille_ui;
 mod collaboration;
+mod pilotage;
+mod parametres;
+mod ajuster;
+mod volets;
+mod murs_courbes;
 use crate::options::Dimensions;
 use crate::camera::{Camera, MAX_PITCH};
 use crate::dessin::{self, Poche};
@@ -252,10 +257,11 @@ enum Ancrage {
     Gauche,
     Droite,
     Flottant,
+    Externe,
 }
 
 impl Ancrage {
-    const TOUS: [Ancrage; 3] = [Ancrage::Gauche, Ancrage::Droite, Ancrage::Flottant];
+    const TOUS: [Ancrage; 4] = [Ancrage::Gauche, Ancrage::Droite, Ancrage::Flottant, Ancrage::Externe];
 
     /// Nom pour le pilote (commande `panneau`).
     fn nom(self) -> &'static str {
@@ -263,6 +269,7 @@ impl Ancrage {
             Ancrage::Gauche => "gauche",
             Ancrage::Droite => "droite",
             Ancrage::Flottant => "flottant",
+            Ancrage::Externe => "externe",
         }
     }
 }
@@ -361,7 +368,7 @@ struct EtatVue {
 }
 
 #[derive(Clone, Copy)]
-struct FenetreSelection { debut: egui::Pos2, fin: egui::Pos2, glissement: bool, ajouter: bool }
+struct FenetreSelection { debut: egui::Pos2, fin: egui::Pos2, ajouter: bool }
 
 /// Fichier conservé en mémoire quand un autre document devient actif.
 struct DocumentOuvert {
@@ -476,7 +483,7 @@ pub struct ViewerApp {
     nom_vue: Option<(String, String)>,
     /// Début de la ligne de coupe en cours de tracé (mm).
     coupe_depart: Option<[f64; 2]>,
-    raccourci_en_attente: Option<(char, f64)>,
+    raccourci_en_attente: Option<(String, f64)>,
     confirmer_fermeture: Option<(bool, usize)>, // application entière, ou identifiant du document
     documents: BTreeMap<usize, DocumentOuvert>,
     document_actif: usize,
@@ -521,6 +528,9 @@ pub struct ViewerApp {
     pente_defaut: f64,
     /// Options de l'application (menu Début > Options).
     options: crate::options::Options,
+    parametres: Option<parametres::Parametres>,
+    ajustement: Option<ajuster::EtatAjustement>,
+    volets: [volets::FenetreVolet;2],
     filter: String,
     show_unsupported: bool,
     /// Vue Revit ouverte (indice dans `Navigateur::vues`).
@@ -538,6 +548,8 @@ pub struct ViewerApp {
     pilote: Option<Receiver<Requete>>,
     prochaine_tentative_pilote: std::time::Instant,
     requetes: Vec<Requete>,
+    saisies_pilote: std::collections::VecDeque<egui::Event>,
+    saisie_pilote_image: bool,
     /// Réponses des ouvertures demandées par le pilote, envoyées en fin de chargement.
     attente_ouverture: Vec<Sender<String>>,
     /// Zone de la vue 3D dans la fenêtre (points), pour les captures.
@@ -612,7 +624,7 @@ pub struct ViewerApp {
     ancrages: [Ancrage; 2],
     pos_flottants: [egui::Pos2; 2],
     pos_imposee: [Option<egui::Pos2>; 2],
-    deplacement_panneau: Option<(Panneau, egui::Vec2)>,
+    deplacement_panneau: Option<(Panneau, egui::Vec2, egui::ViewportId)>,
     zone_panneaux: egui::Rect,
     largeurs_panneaux: [f32; 2],
 }
@@ -631,7 +643,6 @@ impl ViewerApp {
                 None
             }
         };
-        cc.egui_ctx.set_visuals(egui::Visuals::light());
         let mut app = ViewerApp {
             bim: Default::default(),
             feuilles: Default::default(),
@@ -690,9 +701,13 @@ impl ViewerApp {
             faces_blanches: false,
             traits_fins: false,
             eclairage: true,
+            parametres: None,
+            ajustement: None,
+            volets: Default::default(),
             options: {
                 let o = crate::options::Options::charger();
                 crate::options::definir_unite(o.unite);
+                o.theme_interface.appliquer(&cc.egui_ctx);
                 // gabarit choisi : lu au démarrage, défaut s'il est illisible
                 if let Some(c) = &o.gabarit {
                     match crate::gabarit::Gabarit::charger(c) {
@@ -713,6 +728,8 @@ impl ViewerApp {
             pilote: pilote::demarrer(cc.egui_ctx.clone()),
             prochaine_tentative_pilote: std::time::Instant::now(),
             requetes: Vec::new(),
+            saisies_pilote: Default::default(),
+            saisie_pilote_image: false,
             attente_ouverture: Vec::new(),
             rect_vue: egui::Rect::NOTHING,
             passes_feuille: Vec::new(),
@@ -1053,6 +1070,68 @@ impl ViewerApp {
         if self.style == StyleVisuel::Realiste { Poche::Materiau } else { self.poche }
     }
 
+    /// Trait atténué d'un autre plan, projeté derrière la coupe courante.
+    fn primitives_fond_plan(&self)->Vec<crate::trace2d::Primitive> {
+        let (Some(s),Some((projet,_)),Some(courant),Some(plan_courant))=(&self.scene,&self.natif,self.vue_native_id(),self.plan_coupe()) else{return Vec::new()};
+        let Some(source)=projet.vues.iter().find(|v|v.id==courant && matches!(v.genre,crate::modele::GenreVue::Plan{..})).and_then(|v|v.fond_plan.as_ref()).and_then(|id|projet.vues.iter().find(|v|&v.id==id)) else{return Vec::new()};
+        let crate::modele::GenreVue::Plan{niveau,coupe,..}=&source.genre else{return Vec::new()};
+        let Some(n)=projet.niveau(niveau) else{return Vec::new()};
+        let z=(n.altitude+coupe)*0.001-s.origin.z;
+        let cible=plan_courant.w as f64;
+        let niveau_id=scene::id_natif("niveau",niveau);
+        let vis:Vec<bool>=s.objects.iter().map(|o|o.storey==Some(niveau_id) && !source.elements_masques.iter().any(|id|self.cle_native(o.id).as_deref()==Some(id.as_str()))).collect();
+        let mut prims=dessin::coupe(s,&vis,Vec4::new(0.,0.,-1.,z as f32),self.echelle,Poche::Vide);
+        prims.retain(|p|matches!(p.role,crate::trace2d::Role::Coupe | crate::trace2d::Role::Vu));
+        prims.extend(crate::modele::documentation::annotations(projet,source).into_iter().filter(|p|p.role==crate::trace2d::Role::Annotation).map(|p|p.translater(-s.origin)));
+        for p in &mut prims {*p=p.translater(glam::DVec3::new(0.,0.,cible-z-0.001));p.style.couleur=[165,165,165,255];p.style.epaisseur=0.;}
+        prims
+    }
+
+    /// Éléments du niveau courant entièrement au-dessus de la coupe et sous la limite haute.
+    fn primitives_au_dessus_plan(&self)->Vec<crate::trace2d::Primitive> {
+        let (Some(s),Some((p,_)),Some(id),Some(plan))=(&self.scene,&self.natif,self.vue_native_id(),self.plan_coupe()) else{return Vec::new()};
+        let Some(v)=p.vues.iter().find(|v|v.id==id) else{return Vec::new()};
+        let crate::modele::GenreVue::Plan{niveau,..}=&v.genre else{return Vec::new()};
+        let Some(haut)=p.niveau(v.limite_haute_niveau.as_deref().unwrap_or(niveau)) else{return Vec::new()};
+        let limite=((haut.altitude+v.limite_haute_decalage)*0.001-s.origin.z) as f32;
+        let coupe=plan.w;
+        if limite<=coupe {return Vec::new();}
+        let niveau_id=scene::id_natif("niveau",niveau);
+        let visible:Vec<bool>=s.objects.iter().enumerate().map(|(i,o)| {
+            let masque_vue=self.cle_native(o.id).is_some_and(|id|v.elements_masques.contains(&id))
+                || s.model.parent.get(&o.id).and_then(|id|self.cle_native(*id)).is_some_and(|id|v.elements_masques.contains(&id));
+            o.storey==Some(niveau_id) && o.min.z>coupe+1e-5 && o.min.z<limite
+                && !masque_vue && !self.hidden_classes.contains(&*o.class)
+                && !self.hidden_classes.contains(&*self.cle_objet[i])
+                && !self.hidden_objects.contains(&(i as u32))
+                && !self.hidden_storeys.contains(&niveau_id)
+                && self.isolated.as_ref().is_none_or(|iso|iso.contains(&(i as u32)))
+        }).collect();
+        let f=self.camera.forward().as_dvec3().normalize();
+        let droite=f.cross(self.camera.up().as_dvec3()).normalize();
+        let haut=droite.cross(f);
+        let mut prims=dessin::vu(s,&visible,droite,haut,-f,Some(Vec4::new(0.,0.,-1.,limite)),1024);
+        let longueur=(self.echelle*0.003).max(0.01);let intervalle=longueur*1.5;
+        for p in &mut prims {
+            if let crate::trace2d::Forme::Segments(segments)=&p.forme {
+                let mut pointilles=Vec::new();
+                for segment in segments {
+                    let a=segment[0];let b=segment[1];let d=b-a;let l=d.length();
+                    if l<=1e-9 {continue;}
+                    let mut t=0.0;let pas=intervalle.max(l/20000.0);
+                    while t<l {pointilles.push([a+d*(t/l),a+d*((t+longueur).min(l)/l)]);t+=pas;}
+                }
+                p.forme=crate::trace2d::Forme::Segments(pointilles);
+            }
+            // Le contour est projeté derrière la coupe du plan, au même endroit en XY.
+            match &mut p.forme {
+                crate::trace2d::Forme::Segments(segments)=>for seg in segments {for q in seg {q.z=coupe as f64-0.0005;}},
+                _=>{}
+            }
+        }
+        prims
+    }
+
     /// Recalcule le tracé de la coupe (poché, hachures, contours) s'il le faut.
     fn update_coupe(&mut self) {
         if !self.coupe_dirty {
@@ -1068,6 +1147,12 @@ impl ViewerApp {
             }
             _ => Default::default(),
         };
+        if let Some(s)=&self.scene {
+            let mut prims=self.primitives_fond_plan();
+            prims.extend(self.primitives_au_dessus_plan());
+            let (t,l)=dessin::sommets(s,&prims,glam::DVec3::Z,self.echelle,true);
+            tris.extend(t);traits.extend(l);
+        }
         if let (Some(s), Some((a, b))) = (&self.scene, self.boite_appliquee()) {
             let poche = (self.style == StyleVisuel::Graphique).then_some(self.poche);
             let (t, l) = dessin::sommets_boite(s, &self.visible, a, b, self.echelle, poche, self.style == StyleVisuel::Realiste, self.traits_fins);
@@ -1098,7 +1183,8 @@ impl ViewerApp {
         let f = self.camera.forward().as_dvec3().normalize();
         let droite = f.cross(self.camera.up().as_dvec3()).normalize();
         let haut = droite.cross(f);
-        let mut primitives = Vec::new();
+        let mut primitives = self.primitives_fond_plan();
+        primitives.extend(self.primitives_au_dessus_plan());
         let coupe = self.plan_coupe();
         if let Some(p) = coupe {
             primitives.extend(dessin::coupe(s, &self.visible, p, self.echelle, self.poche_style()));
@@ -1164,13 +1250,14 @@ impl ViewerApp {
                 ui.label("Échelle");
                 ui.add(egui::DragValue::new(&mut nouvelle.echelle).speed(1.0).range(1.0..=10_000.0).prefix("1 : "));
                 ui.end_row();
+                let haut_niveau=&mut nouvelle.limite_haute_niveau;
+                let haut_decalage=&mut nouvelle.limite_haute_decalage;
                 match &mut nouvelle.genre {
                     GenreVue::Plan { niveau, coupe, bas_niveau, bas_decalage } => {
-                        // plage de vue : limite haute (plan de coupe) et limite basse,
-                        // chacune un niveau et un décalage sur une même ligne
+                        // Plan de coupe, limite basse et limite haute sont distincts.
                         let niveaux: Vec<(String, String)> = projet.niveaux.iter().map(|n| (n.id.clone(), n.nom.clone())).collect();
                         let nom = |id: &str| niveaux.iter().find(|n| n.0 == id).map_or(String::new(), |n| n.1.clone());
-                        for (titre, aide, niv, dec) in [("Limite haute", "Plan de coupe : niveau et décalage au-dessus", niveau, coupe), ("Limite basse", "Les éléments du niveau d'en dessous qui s'arrêtent ici ne sont pas montrés", bas_niveau, bas_decalage)] {
+                        for (titre, aide, niv, dec) in [("Plan de coupe", "Niveau et décalage du plan de coupe", &mut *niveau, coupe), ("Limite basse", "Les éléments du niveau d'en dessous qui s'arrêtent ici ne sont pas montrés", bas_niveau, bas_decalage)] {
                             ui.label(titre).on_hover_text(aide);
                             ui.horizontal(|ui| {
                                 egui::ComboBox::from_id_salt(("plage_niveau", titre)).width(90.0).truncate().selected_text(nom(niv)).show_ui(ui, |ui| {
@@ -1182,6 +1269,17 @@ impl ViewerApp {
                             });
                             ui.end_row();
                         }
+                        ui.label("Limite haute").on_hover_text("Éléments au-dessus du plan de coupe, en pointillés ; seuls les éléments de ce niveau sont retenus.");
+                        ui.horizontal(|ui| {
+                            let mut choisi=haut_niveau.clone().unwrap_or_else(||niveau.clone());
+                            let avant=choisi.clone();
+                            egui::ComboBox::from_id_salt("plage_limite_haute").width(90.0).truncate().selected_text(nom(&choisi)).show_ui(ui,|ui| {
+                                for (id,n) in &niveaux {ui.selectable_value(&mut choisi,id.clone(),n);}
+                            });
+                            if choisi!=avant {*haut_niveau=Some(choisi);*haut_decalage=0.0;}
+                            ui.add(egui::DragValue::new(haut_decalage).speed(10.0).dimensions()).on_hover_text("Décalage de la limite haute par rapport au niveau choisi");
+                        });
+                        ui.end_row();
                     }
                     GenreVue::Coupe { profondeur, .. } => {
                         ui.label("Profondeur");
@@ -1516,6 +1614,44 @@ impl ViewerApp {
         } else {
             return None;
         };
+        if matches!(cible,Cible::Mur(_) | Cible::Assemblage(_)) {
+            // Le même widget que pour la création, avec le type du mur sélectionné.
+            let projet=p.clone();
+            let type_creation=self.ruban_edition.type_mur.clone();
+            self.ruban_edition.type_mur=Some(actuel.clone());
+            self.ruban_edition.selecteur_type_mur(ui,&projet,false);
+            let mut q=projet.clone();
+            let gabarit=self.ruban_edition.prendre_type_gabarit();
+            let choisi=if let Some(t)=gabarit {
+                match self.ruban_edition.definir_type_mur(&mut q,&t.nom,t.couches,t.categorie) {
+                    Ok(id)=>Some(id),Err(e)=>{self.error=Some(e);None}
+                }
+            } else {self.ruban_edition.type_mur.clone()};
+            self.ruban_edition.type_mur=type_creation;
+            ui.separator();
+            let Some(choisi)=choisi.filter(|id|id!=&actuel) else{return None};
+            match cible {
+                Cible::Assemblage(a)=>{
+                    let axe=match crate::modele::solides::hote(&q,&a) {Ok((axe,_,_))=>axe,Err(e)=>{self.error=Some(e);return None}};
+                    let decalage=q.type_mur(&choisi).and_then(|t|t.decalages_couches().first().copied()).unwrap_or(0.0);
+                    let premiere=q.assemblage(&a).and_then(|x|x.couches.first()).cloned();
+                    if let Some(x)=q.assemblages.iter_mut().find(|x|x.id==a) {x.type_mur=choisi;}
+                    if let Some(m)=q.murs.iter_mut().find(|m|Some(&m.id)==premiere.as_ref()) {m.axe=crate::modele::assemblage::decaler_axe(&axe,decalage);}
+                    match q.executer(Commande::ActualiserType{assemblage:a}) {
+                        Ok((r,_))=>q=r,Err(e)=>{self.error=Some(e);return None}
+                    }
+                    if let Err(e)=q.recaler_menuiseries(&projet).and_then(|_|q.verifier()) {self.error=Some(e);return None;}
+                }
+                Cible::Mur(id)=>{
+                    if let Some(m)=q.murs.iter_mut().find(|m|m.id==id) {m.type_mur=choisi;}
+                    if let Err(e)=q.eclater_mur(&id).and_then(|_|q.recaler_menuiseries(&projet)).and_then(|_|q.verifier()) {
+                        self.error=Some(e);return None;
+                    }
+                }
+                _=>unreachable!(),
+            }
+            return Some(q);
+        }
         let nom_actuel = types.iter().find(|t| t.0 == actuel).map_or_else(|| p.type_mur(&actuel).or_else(|| p.type_dalle(&actuel)).map_or("Type".to_string(), |t| t.nom.clone()), |t| t.1.clone());
         let mut choisi = actuel.clone();
         egui::ComboBox::from_id_salt("selecteur_type_selection")
@@ -1575,6 +1711,17 @@ impl ViewerApp {
                 ui.label(RichText::new(&t.nom).weak());
             }
             let couches = projet.couches_assemblage(&a.id);
+            egui::Grid::new("assemblage_identite").num_columns(2).striped(true).show(ui,|ui| {
+                if let Some(m)=couches.first() {
+                    ui.label("Niveau de base");ui.label(projet.niveau(&m.niveau).map_or("",|n|n.nom.as_str()));ui.end_row();
+                    ui.label("Contrainte haute");
+                    ui.label(match &m.haut {Haut::Libre{hauteur}=>crate::options::unite().afficher(*hauteur),Haut::Niveau{niveau,..}=>projet.niveau(niveau).map_or_else(||niveau.clone(),|n|n.nom.clone())});ui.end_row();
+                }
+                ui.label("Nom");ui.label(&a.nom);ui.end_row();
+                if let Some((axe,_))=projet.trajectoire_justification(&a.id) {ui.label("Longueur");ui.label(crate::options::unite().afficher(axe.longueur()));ui.end_row();}
+                let volume:f64=couches.iter().filter_map(|m|projet.volume_mur(m)).sum();
+                ui.label("Volume");ui.label(format!("{:.3} m³",volume/1e9));ui.end_row();
+            });
             let compo: Vec<crate::modele::Couche> = couches.iter().filter_map(|m| projet.type_mur(&m.type_mur).and_then(|t| t.couches.first().cloned())).collect();
             crate::ruban::bande_couches(ui, projet, &compo, 14.0);
             ui.label(RichText::new("Couches, de l'extérieur vers l'intérieur (clic : sélectionner ; Tab parcourt)").small().weak());
@@ -1644,8 +1791,10 @@ impl ViewerApp {
                     }
                 });
                 ui.end_row();
+                ui.label("Nom");ui.label(&m.nom);ui.end_row();
+                let longueur=projet.trajectoire_justification(m.assemblage.as_deref().unwrap_or(&m.id)).map_or_else(||m.axe.longueur(),|(axe,_)|axe.longueur());
                 for (nom, valeur) in [
-                    ("Longueur", crate::options::unite().afficher(m.axe.longueur())),
+                    ("Longueur", crate::options::unite().afficher(longueur)),
                     ("Hauteur résultante", crate::options::unite().afficher(haut - bas)),
                     ("Épaisseur", crate::options::unite().afficher(epaisseur)),
                     ("Volume", format!("{:.3} m³", projet.volume_mur(&m).unwrap_or(0.0) / 1e9)),
@@ -2473,26 +2622,31 @@ impl ViewerApp {
     /// (extrémités en mm), altitude de la base et écart de cette ligne à l'axe médian.
     fn axe_selection(&self) -> Option<(String, [f64; 2], [f64; 2], f64, f64)> {
         let (projet, _) = self.natif.as_ref()?;
-        let sel = self.selected?;
-        let id = projet.assemblages.iter().find(|a| scene::id_natif("assemblage", &a.id) == sel).map(|a| a.id.clone())
-            .or_else(|| projet.murs.iter().find(|m| scene::id_natif("mur", &m.id) == sel).map(|m| m.id.clone()))?;
+        let ids=self.selection_bim();
+        if ids.len()!=1 {return None;}
+        let id=ids[0].clone();
         let (_, _, z) = projet.axe_element(&id)?;
         let (a, b, ecart) = projet.ligne_justification(&id)?;
         Some((id, a, b, z, ecart))
     }
 
-    /// Extrémité de l'axe médian qui correspond à l'extrémité `p` de la ligne
-    /// d'implantation, l'autre extrémité `fixe` restant en place.
-    fn extremite_mediane(p: [f64; 2], fixe: [f64; 2], fin: bool, ecart: f64) -> [f64; 2] {
-        let (a, b) = if fin { (fixe, p) } else { (p, fixe) };
-        let l = (b[0] - a[0]).hypot(b[1] - a[1]);
-        if l < 1e-9 { return p; }
-        [p[0] + (b[1] - a[1]) / l * ecart, p[1] - (b[0] - a[0]) / l * ecart]
+    /// Retrouve l'axe médian depuis le point accroché de la ligne d'implantation.
+    /// L'autre extrémité médiane est fixe : la normale doit être celle du NOUVEL axe.
+    #[cfg(test)]
+    fn extremite_mediane(p:[f64;2],fixe:[f64;2],fin:bool,ecart:f64)->Result<[f64;2],String> {
+        let p=glam::DVec2::from_array(p);
+        let v=p-glam::DVec2::from_array(fixe);
+        let e=if fin {ecart}else{-ecart};
+        let l2=v.length_squared()-e*e;
+        if l2<=1e-12 {return Err("L'extrémité est trop proche pour conserver la ligne d'implantation du mur.".into());}
+        let u=(v*l2.sqrt()-glam::DVec2::new(-v.y,v.x)*e)/v.length_squared();
+        Ok((p-glam::DVec2::new(-u.y,u.x)*e).to_array())
     }
 
     /// Axe du mur sélectionné en tireté et ses extrémités ; pendant un déplacement, le
     /// nouvel axe et sa longueur.
     fn dessiner_axe(&self, ui: &egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>) {
+        self.dessiner_axes_courbes(ui,rect,survol);
         // sélection multiple : ligne d'implantation de chaque mur, sans poignées
         if self.bim.selection.len() > 1 && let Some((projet, _)) = &self.natif {
             let painter = ui.painter().with_clip_rect(rect);
@@ -2516,7 +2670,7 @@ impl ViewerApp {
             let survole = survol.is_some_and(|s| s.distance(e) <= 9.0);
             painter.circle(e, if survole { 6.5 } else { 5.0 }, Color32::WHITE, egui::Stroke::new(2.0, bleu));
             if survole {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
             }
         }
         if self.poignee_axe.is_some() {
@@ -3282,6 +3436,7 @@ impl ViewerApp {
     }
 
     fn nouveau_document(&mut self) {
+        self.ajustement=None;
         self.stocker_document();
         self.bim = Default::default();
         self.selection_multiple.clear();
@@ -3295,6 +3450,7 @@ impl ViewerApp {
     }
 
     fn changer_document(&mut self, id: usize) {
+        self.ajustement=None;
         self.orientation_nord_en_cours = false;
         self.arete_alignement = None;
         if id == self.document_actif {
@@ -3367,6 +3523,17 @@ impl ViewerApp {
     }
 
     fn fermer_document(&mut self) {
+        self.ajustement=None;
+        self.ruban_edition.annuler();
+        self.dessin2d=Default::default();
+        self.bim=Default::default();
+        self.historique=Default::default();
+        self.poignee_axe=None;
+        if let Some(r)=self.renderer.as_mut() {
+            r.upload_vertices(&[],&[],&[]);
+            r.upload_coupe(&[],&[]);
+            r.upload_passes(&[]);
+        }
         self.partage_en_cours=false;
         self.collaboration = None;
         self.natif_modifie = false;
@@ -3422,6 +3589,26 @@ impl ViewerApp {
         }
     }
 
+    /// Le dernier onglet représente aussi le document : garder sa vue jusqu'à
+    /// la décision d'enregistrement, puis fermer réellement le projet.
+    fn fermer_onglet_projet(&mut self,id:usize,cible:Option<usize>) {
+        let precedent=self.document_actif;
+        self.changer_document(id);
+        if let Some(k)=self.vues_ouvertes.iter().position(|v|*v==cible) {
+            if self.vues_ouvertes.len()==1 {self.fermer();}
+            else {
+                let vue=self.vues_ouvertes.remove(k);
+                self.etats_vues.remove(&vue);
+                if self.vue_active==vue {
+                    self.nomenclature_ouverte=None;
+                    let suivante=self.vues_ouvertes[k.min(self.vues_ouvertes.len()-1)];
+                    self.restaurer_vue(suivante);
+                }
+            }
+        } else {self.fermer();}
+        if precedent!=id {self.changer_document(precedent);}
+    }
+
     /// Ruban en haut : onglets, puis les commandes de l'onglet ouvert.
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
@@ -3450,7 +3637,7 @@ impl ViewerApp {
         ui.painter().image(texture.id(), rect_icone, egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)), egui::Color32::WHITE);
         ui.put(egui::Rect::from_min_max(egui::pos2(titre.left() + 23.0, titre.top()), titre.max), egui::Label::new(RichText::new("BIMedit").strong()));
         let mut zones_deplacement = vec![titre];
-        let menus = egui::Rect::from_min_max(egui::pos2(titre.right() + 8.0, barre.top()), egui::pos2(barre.right() - if natif { 4.0 } else { 144.0 }, barre.bottom()));
+        let menus = egui::Rect::from_min_max(egui::pos2(titre.right() + 8.0, barre.top()), egui::pos2(barre.right() - if natif { 40.0 } else { 180.0 }, barre.bottom()));
         ui.scope_builder(egui::UiBuilder::new().id_salt("menu_fenetre").max_rect(menus).layout(egui::Layout::left_to_right(Align::Center)), |ui| {
             let onglets: &[(OngletRuban, &str)] = if mode_famille {
                 &[(OngletRuban::FamilleCreer, "Créer"), (OngletRuban::FamilleSortie, "Sortie")]
@@ -3512,6 +3699,23 @@ impl ViewerApp {
             }
             let (libre, _) = ui.allocate_exact_size(egui::vec2(ui.available_width().max(0.0), 32.0), Sense::hover());
             zones_deplacement.push(libre);
+        });
+        // Placé immédiatement avant les commandes de fenêtre, sans zone de glissement.
+        let theme_x=barre.right()-if natif {36.0}else{174.0};
+        let zone_theme=egui::Rect::from_min_size(egui::pos2(theme_x,barre.top()),egui::vec2(34.0,barre.height()));
+        ui.scope_builder(egui::UiBuilder::new().id_salt("theme_fenetre").max_rect(zone_theme).layout(egui::Layout::left_to_right(Align::Center)),|ui| {
+            let mut theme=self.options.theme_interface;
+            ui.menu_button("◐",|ui| {
+                for (valeur,nom) in [(crate::options::ThemeInterface::Clair,"Clair"),(crate::options::ThemeInterface::Sombre,"Sombre"),(crate::options::ThemeInterface::Systeme,"Système")] {
+                    if ui.selectable_value(&mut theme,valeur,nom).clicked() {ui.close();}
+                }
+            }).response.on_hover_text("Thème de l'interface");
+            if theme!=self.options.theme_interface {
+                self.options.theme_interface=theme;
+                if let Some(p)=&mut self.parametres {p.brouillon.theme_interface=theme;}
+                theme.appliquer(&ctx);
+                if let Err(e)=self.options.sauver() {self.error=Some(e);}
+            }
         });
         if natif {
             zones_deplacement.clear();
@@ -3620,7 +3824,7 @@ impl ViewerApp {
                 if self.rvt.is_some() && self.rvt_geom.is_ok() {
                     reglages.push(C { enfonce: self.rvt_sheet, ..C::new("fiche", "Fiche Revit", I::Fiche, "Métadonnées du fichier Revit", true) });
                 }
-                reglages.push(C::new("options", "Options", I::Options, "Unités, navigation IFC, épaisseurs de traits, gabarit", true));
+                reglages.push(C::new("options", "Paramètres", I::Options, "Unités, navigation IFC, épaisseurs de traits, gabarit", true));
                 let orientation = vec![
                     C { enfonce: self.orientation_nord_en_cours, ..C::new("nord", "Orienter le nord", I::Nord, "Définir le nord du projet en sélectionnant un trait dans une vue de plan", self.natif.is_some() && self.vue_en_plan() && self.dessin2d.edition_contour.is_none()) },
                     C::new("coordonnees", "Coordonnées", I::Coordonnees, "Coordonnées de l'origine du projet et cote NGF du niveau 0 : la modifier remonte ou descend le projet par rapport au terrain (aussi : cliquer l'origine dans une vue)", self.natif.is_some()),
@@ -3628,7 +3832,7 @@ impl ViewerApp {
                 for (cle, r) in crate::ruban::bandeau(ui, &[("Fichier", fichier), ("Réglages", reglages), ("Projet", orientation)]) {
                     match cle {
                         "options" => {
-                            egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| self.menu_options(ui));
+                            if r.clicked() {self.ouvrir_parametres();}
                         }
                         "coordonnees" => {
                             egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
@@ -3699,67 +3903,6 @@ impl ViewerApp {
                 }
             }
         }
-    }
-
-    /// Menu Options (Début) : unités, navigation IFC, épaisseurs de traits, gabarit.
-    fn menu_options(&mut self, ui: &mut egui::Ui) {
-            ui.label("Unités de longueur du modèle");
-            for (unite, nom) in [(crate::options::Unite::Millimetre, "Millimètres"), (crate::options::Unite::Centimetre, "Centimètres"), (crate::options::Unite::Metre, "Mètres")] {
-                if ui.selectable_value(&mut self.options.unite, unite, nom).changed() { crate::options::definir_unite(unite); self.options.enregistrer(); self.coupe_dirty = true; self.bim.revision = self.bim.revision.wrapping_add(1); }
-            }
-            ui.separator();
-            if ui.checkbox(&mut self.options.navigation_ifc, "Navigation IFC")
-                .on_hover_text("Arborescence spatiale, classes et attributs IFC (GlobalId, Id STEP) pour les modèles Revit et natifs")
-                .changed()
-            {
-                self.options.enregistrer();
-            }
-            ui.separator();
-            if ui.add_enabled(self.natif.is_some(), egui::Button::new("Épaisseurs de traits…"))
-                .on_hover_text("Épaisseurs des 12 plumes du projet (mm du papier)")
-                .on_disabled_hover_text("Ouvrir un projet natif")
-                .clicked()
-            {
-                ui.close();
-                self.editeur_plumes = self.natif.as_ref().map(|(p, _)| p.epaisseurs_plumes());
-            }
-            ui.separator();
-            let g = crate::gabarit::actif();
-            ui.label(RichText::new(format!("Gabarit : {}", g.nom)).strong())
-                .on_hover_text(self.options.gabarit.as_ref().map_or("Gabarit embarqué".into(), |c| c.display().to_string()));
-            ui.label(RichText::new(format!("{} types de murs · {} éléments horizontaux · {} vues", g.types_murs.len(), g.types_surfaces.len(), g.types_vues.len())).small().weak());
-            if ui.button("Choisir un gabarit…").on_hover_text("Fichier .gabarit.json : matériaux, types de murs, d'éléments horizontaux et de vues").clicked() {
-                ui.close();
-                if let Some(c) = rfd::FileDialog::new().set_title("Gabarit").add_filter("Gabarit", &["json"]).pick_file() {
-                    match crate::gabarit::Gabarit::charger(&c) {
-                        Ok(g) => {
-                            self.status = format!("Gabarit « {} » chargé", g.nom);
-                            crate::gabarit::definir(g);
-                            self.options.gabarit = Some(c);
-                            self.options.enregistrer();
-                        }
-                        Err(e) => self.error = Some(e),
-                    }
-                }
-            }
-            if ui.add_enabled(self.options.gabarit.is_some(), egui::Button::new("Gabarit par défaut")).clicked() {
-                ui.close();
-                crate::gabarit::definir(crate::gabarit::Gabarit::defaut());
-                self.options.gabarit = None;
-                self.options.enregistrer();
-            }
-            if ui.button("Enregistrer une copie du gabarit…").on_hover_text("Point de départ d'un gabarit d'agence, à modifier dans un éditeur de texte").clicked() {
-                ui.close();
-                if let Some(c) = rfd::FileDialog::new().set_title("Copie du gabarit").add_filter("Gabarit", &["json"]).set_file_name("agence.gabarit.json").save_file() {
-                    let texte = match &self.options.gabarit {
-                        Some(src) => std::fs::read_to_string(src).map_err(|e| e.to_string()),
-                        None => Ok(crate::gabarit::texte_defaut().to_string()),
-                    };
-                    if let Err(e) = texte.and_then(|t| std::fs::write(&c, t).map_err(|e| e.to_string())) {
-                        self.error = Some(format!("Copie du gabarit impossible : {e}"));
-                    }
-                }
-            }
     }
 
     /// Redimensionnement natif sur les bords de la fenêtre sans décoration.
@@ -3897,12 +4040,18 @@ impl ViewerApp {
                 self.choix_detail(ui);
                 ui.separator();
                 self.choix_style(ui);
+                ui.menu_button("☀",|ui| {
+                    let mut change=ui.checkbox(&mut self.ombres_portees,"Ombres du soleil").changed();
+                    change |= ui.checkbox(&mut self.ombre_ambiante,"Ombre ambiante").changed();
+                    if change {self.visibility_dirty=true;}
+                }).response.on_hover_text("Ombres");
+                if self.vue_en_plan() {self.choix_fond_plan(ui);}
                 if ui.selectable_label(self.traits_fins, "Traits fins").on_hover_text("Tous les traits à un pixel, sans les épaisseurs des plumes").clicked() {
                     self.traits_fins = !self.traits_fins;
                     self.coupe_dirty = true;
                 }
                 ui.separator();
-                if ui.button("Cadrer").on_hover_text("Définir le contour du plan ; F ajuste le zoom").clicked() {
+                if ui.button("Cadre").on_hover_text("Définir le contour du plan ; F ajuste le zoom").clicked() {
                     self.demarrer_cadrage_vue();
                 }
                 if self.vue_native_id().and_then(|id| self.natif.as_ref()?.0.vues.iter().find(|v| v.id == id)).is_some_and(|v| !v.contour_cadrage.is_empty())
@@ -4049,6 +4198,24 @@ impl ViewerApp {
 
     /// Contenu d'un panneau déplaçable.
     fn panneau(&mut self, ui: &mut egui::Ui, p: Panneau) {
+        // Le contenu garde une largeur lisible sans imposer cette largeur au volet.
+        // Le défilement permet de retrouver les champs même dans un volet très étroit.
+        if self.ancrages[p as usize]!=Ancrage::Externe {
+            self.volets[p as usize].taille=Some(ui.available_size());
+        }
+        let largeur = ui.available_width().max(280.0);
+        egui::ScrollArea::both()
+            .id_salt(("contenu_panneau", p.nom()))
+            .min_scrolled_width(0.0)
+            .min_scrolled_height(0.0)
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                ui.set_width(largeur);
+                self.contenu_panneau(ui, p);
+            });
+    }
+
+    fn contenu_panneau(&mut self, ui: &mut egui::Ui, p: Panneau) {
         // onglet Famille : les panneaux montrent la famille
         if self.famille_active && self.famille.is_some() {
             match p {
@@ -4063,7 +4230,7 @@ impl ViewerApp {
         }
     }
 
-    /// Le titre entier sert de poignée, sans menu d'ancrage.
+    /// Poignée de déplacement et menu pour détacher ou réancrer le volet.
     fn entete_panneau(&mut self, ui: &mut egui::Ui, p: Panneau, titre: &str) {
         let i = p as usize;
         ui.horizontal(|ui| {
@@ -4072,55 +4239,48 @@ impl ViewerApp {
             let encre = ui.visuals().strong_text_color();
             ui.painter_at(rect).text(rect.left_center(), egui::Align2::LEFT_CENTER, titre, egui::FontId::proportional(15.0), encre);
             if resp.drag_started_by(PointerButton::Primary) {
-                if let Some(q) = resp.interact_pointer_pos() {
-                    let decalage = if self.ancrages[i] == Ancrage::Flottant {
-                        q - self.pos_flottants[i]
-                    } else {
-                        egui::vec2((q.x - rect.left()).clamp(20.0, 140.0), 16.0)
-                    };
-                    self.pos_imposee[i] = Some(q - decalage);
-                    self.deplacement_panneau = Some((p, decalage));
-                    self.ancrer(p, Ancrage::Flottant);
+                if let Some(q)=resp.interact_pointer_pos() {
+                    let appui=ui.input(|i|i.pointer.press_origin()).unwrap_or(q);
+                    let decalage=appui-rect.min;
+                    let origine=ui.ctx().input(|i|i.viewport().inner_rect.map_or(egui::Pos2::ZERO,|r|r.min));
+                    self.volets[i].position=Some(origine+(q-decalage).to_vec2());
+                    self.deplacement_panneau=Some((p,decalage,ui.ctx().viewport_id()));
+                    self.ancrer(p,Ancrage::Externe);
                 }
             }
+            self.volets[i].entete=Some(rect);
+            self.menu_volet(&resp,p);
+            if self.ancrages[i]==Ancrage::Externe && resp.double_clicked() {
+                self.ancrer(p,if p==Panneau::Proprietes {Ancrage::Gauche}else{Ancrage::Droite});
+            }
             let survol = if resp.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab };
-            resp.on_hover_cursor(survol).on_hover_text("Glisser pour déplacer ; relâcher contre un bord de la fenêtre pour ancrer");
+            resp.on_hover_cursor(survol).on_hover_text(if self.ancrages[i]==Ancrage::Externe {"Glisser pour déplacer ; double-clic pour réintégrer le volet"} else {"Glisser le titre pour détacher et déplacer le volet sur un autre écran"});
         });
     }
 
     fn cible_ancrage(&self, q: egui::Pos2) -> Option<Ancrage> {
-        let r = self.zone_panneaux;
-        if !r.is_positive() || q.y < r.top() || q.y > r.bottom() {
-            return None;
-        }
-        if q.x <= r.left() + 64.0 { Some(Ancrage::Gauche) }
-        else if q.x >= r.right() - 64.0 { Some(Ancrage::Droite) }
-        else { None }
+        volets::cible_volet(self.zone_panneaux,q)
     }
 
     /// Le suivi reste actif pendant le passage d'un panneau ancré à une fenêtre flottante.
     fn deplacer_panneau(&mut self, ctx: &egui::Context) {
-        let Some((p, decalage)) = self.deplacement_panneau else { return };
-        let (position, enfonce) = ctx.input(|i| (i.pointer.latest_pos(), i.pointer.primary_down()));
-        if let Some(q) = position {
-            let r = self.zone_panneaux;
-            let v = q - decalage;
-            self.pos_imposee[p as usize] = Some(egui::pos2(v.x.clamp(r.left(), (r.right() - 80.0).max(r.left())), v.y.clamp(r.top(), (r.bottom() - 30.0).max(r.top()))));
+        let Some((p,decalage,source))=self.deplacement_panneau else{return};
+        // Lire le viewport où le geste a commencé, aussi bien ancré que déjà flottant.
+        if let Some((position,local,enfonce))=volets::suivre_pointeur(ctx,source,decalage) {
+            self.volets[p as usize].position=Some(position);
+            self.volets[p as usize].cible=self.cible_ancrage(local);
             if !enfonce {
-                if let Some(a) = self.cible_ancrage(q) {
-                    self.ancrer(p, a);
-                }
+                if let Some(a)=self.volets[p as usize].cible {self.ancrer(p,a);}
+                self.deplacement_panneau=None;
+                self.volets[p as usize].cible=None;
             }
-        }
-        if !enfonce {
-            self.deplacement_panneau = None;
         }
         ctx.request_repaint();
     }
 
     fn apercu_ancrage(&self, ctx: &egui::Context) {
-        let Some((p, _)) = self.deplacement_panneau else { return };
-        let Some(cible) = ctx.pointer_latest_pos().and_then(|q| self.cible_ancrage(q)) else { return };
+        let Some((p, _, _)) = self.deplacement_panneau else { return };
+        let Some(cible) = self.volets[p as usize].cible else { return };
         let zone = self.zone_panneaux;
         let largeur = self.largeurs_panneaux[p as usize].min(zone.width() * 0.45);
         let x = if cible == Ancrage::Gauche { zone.left() } else { zone.right() - largeur };
@@ -4199,10 +4359,8 @@ impl ViewerApp {
 
     /// Style visuel : bouton à l'icône du style en cours, menu des styles.
     fn choix_style(&mut self, ui: &mut egui::Ui) {
-        let (r, _) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), Sense::hover());
-        icone_style(ui.painter(), r.shrink(2.0), self.style);
         let mut choisi = None;
-        ui.menu_button(self.style.libelle(), |ui| {
+        let (reponse,_) = egui::containers::menu::MenuButton::from_button(egui::Button::new("").min_size(egui::vec2(24.0,24.0))).ui(ui, |ui| {
             for st in StyleVisuel::TOUS {
                 let (r, resp) = ui.allocate_exact_size(egui::vec2(190.0, 24.0), Sense::click());
                 let v = ui.visuals();
@@ -4228,19 +4386,34 @@ impl ViewerApp {
             change |= ui.add_enabled(graphique && couleurs, egui::Checkbox::new(&mut self.eclairage, "Éclairage"))
                 .on_hover_text("Décoché : couleurs en aplat")
                 .changed();
-            ui.separator();
-            change |= ui.checkbox(&mut self.ombres_portees, "Ombres portées").on_hover_text("Ombres du soleil").changed();
-            change |= ui.checkbox(&mut self.ombre_ambiante, "Ombre ambiante").on_hover_text("Assombrit les angles rentrants, pieds de murs et dessous des débords").changed();
             if change {
                 self.visibility_dirty = true;
             }
-        })
-        .response
-        .on_hover_text("Style visuel et ombres");
+        });
+        icone_style(ui.painter(), reponse.rect.shrink(4.0), self.style);
+        reponse.on_hover_text("Style visuel");
         if let Some(st) = choisi {
             self.style = st;
             self.visibility_dirty = true;
             self.coupe_dirty = true;
+        }
+    }
+
+    fn choix_fond_plan(&mut self,ui:&mut egui::Ui) {
+        let Some(id)=self.vue_native_id() else{return};
+        let Some((p,_))=&self.natif else{return};
+        let Some(v)=p.vues.iter().find(|v|v.id==id && matches!(v.genre,crate::modele::GenreVue::Plan{..})) else{return};
+        let mut choisi=v.fond_plan.clone();
+        let vues:Vec<_>=p.vues.iter().filter(|v|v.id!=id && matches!(v.genre,crate::modele::GenreVue::Plan{..})).map(|v|(v.id.clone(),v.nom.clone())).collect();
+        let nom=choisi.as_ref().and_then(|id|vues.iter().find(|v|&v.0==id)).map_or("Aucun",|v|v.1.as_str());
+        egui::ComboBox::from_id_salt("fond_plan_vue").selected_text(format!("Fond : {nom}")).show_ui(ui,|ui| {
+            ui.selectable_value(&mut choisi,None,"Aucun");
+            for (id,nom) in vues {ui.selectable_value(&mut choisi,Some(id),nom);}
+        });
+        if choisi!=v.fond_plan {
+            let mut projet=p.clone();
+            if let Some(v)=projet.vues.iter_mut().find(|v|v.id==id) {v.fond_plan=choisi;}
+            match self.appliquer_projet(projet) {Ok(())=>{self.coupe_dirty=true;self.visibility_dirty=true;},Err(e)=>self.error=Some(e)}
         }
     }
 
@@ -5149,24 +5322,9 @@ impl ViewerApp {
             self.fermer_onglet_famille(ordre);
         }
         if let Some((id, cible)) = fermer.filter(|o| o.0 != ONGLET_FAMILLE) {
-            let precedent = self.document_actif;
-            self.changer_document(id);
-            if let Some(k) = self.vues_ouvertes.iter().position(|&v| v == cible) {
-                let vue = self.vues_ouvertes.remove(k);
-                self.etats_vues.remove(&vue);
-                if self.vue_active == vue {
-                    self.nomenclature_ouverte = None;
-                    if let Some(&suivante) = self.vues_ouvertes.get(k.min(self.vues_ouvertes.len().saturating_sub(1))) {
-                        self.restaurer_vue(suivante);
-                    }
-                }
-            } else {
-                self.fermer();
-            }
-            if precedent != id {
-                self.changer_document(precedent);
-            }
+            self.fermer_onglet_projet(id,cible);
         }
+
         if self.scene.is_some() && self.vues_ouvertes.is_empty() && ui.button("Ouvrir la vue 3D du modèle").clicked() {
             if self.natif.is_some() {
                 let indice = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|n| n.vues.iter().position(|v| v.revit_id == scene::numero_vue("3d")));
@@ -5974,7 +6132,7 @@ impl ViewerApp {
         self.fenetre_famille_cartouche(ui.ctx());
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
         // sélecteur de type de l'élément sélectionné, en tête comme dans Revit
-        if self.jeu_actif().is_none() {
+        if self.jeu_actif().is_none() && !self.ruban_edition.mur_actif() {
             if let Some(projet) = self.selecteur_type_selection(ui) {
                 if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
             }
@@ -6143,6 +6301,7 @@ impl ViewerApp {
 
     fn demarrer_cadrage_vue(&mut self) {
         if self.vue_en_plan() && self.vue_native_id().is_some() {
+            self.reinitialiser_forme_cadrage();
             self.ruban_edition.activer_outil(crate::ruban::Outil::Cadrer);
             self.status = "Tracez le contour de cadrage du plan, puis validez.".into();
         } else { self.fit_all(); }
@@ -6424,7 +6583,13 @@ impl ViewerApp {
             self.rect_vue = rect;
         }
         let resp = ui.allocate_rect(rect, Sense::click_and_drag());
+        if self.scene.is_none() {
+            ui.painter().rect_filled(rect,0.0,ui.visuals().panel_fill);
+            ui.painter().text(rect.center(),egui::Align2::CENTER_CENTER,"Ouvrir ou créer un projet",egui::FontId::proportional(16.0),ui.visuals().weak_text_color());
+            return;
+        }
         let aspect = rect.width() / rect.height().max(1.0);
+        let mode_ajuster=self.preparer_outil_ajuster();
         let mode_mur = self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.mur_actif() && self.natif.is_some() && self.loading.is_none();
         // dalle (ou sol) : contour cliqué sur le plan de son dessus
         let dalle = if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() { self.ruban_edition.dalle_active() } else { None };
@@ -6456,9 +6621,10 @@ impl ViewerApp {
             _ => None,
         };
         if deplacement.is_none() { self.bim.depart_deplacement = None; }
-        let mode_trace = mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || deplacement.is_some() || self.outil_dessin().is_some() || self.dessin2d.edition_contour.is_some() || self.alignement_plan || self.orientation_nord_en_cours;
+        let mode_trace = mode_ajuster || mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || deplacement.is_some() || self.outil_dessin().is_some() || self.dessin2d.edition_contour.is_some() || self.alignement_plan || self.orientation_nord_en_cours;
         // axe du mur sélectionné : une extrémité saisie se déplace (accrochages du tracé)
-        let axe = if mode_trace { None } else { self.axe_selection() };
+        let edition_arc=self.souris_arc_mur(ui,rect,&resp,mode_trace);
+        let axe = if mode_trace || edition_arc { None } else { self.axe_selection() };
         if let Some((id, a, b, z, _)) = &axe {
             let (ea, eb) = (self.ecran_plan(rect, *a, *z), self.ecran_plan(rect, *b, *z));
             if resp.drag_started_by(PointerButton::Primary)
@@ -6474,7 +6640,7 @@ impl ViewerApp {
             if let (Some((_, fin, _)), Some(q)) = (&self.poignee_axe, resp.interact_pointer_pos().or(resp.hover_pos())) {
                 let fixe = if *fin { *a } else { *b };
                 let shift = ui.input(|i| i.modifiers.shift);
-                if let Some((p, _)) = self.point_tracage(q, rect, shift, Some(fixe), *z)
+                if let Some(p) = self.point_edition_axe(ui,rect,q,shift,fixe)
                     && let Some(x) = &mut self.poignee_axe
                 {
                     x.2 = p;
@@ -6483,21 +6649,27 @@ impl ViewerApp {
         } else {
             self.poignee_axe = None;
         }
+        if self.poignee_axe.is_some() && (ui.input(|i|i.key_pressed(egui::Key::Escape))||resp.clicked_by(PointerButton::Secondary)) {
+            self.poignee_axe=None;
+            self.terminer_edition_axe();
+        }
         if resp.drag_stopped() && let Some((id, fin, p)) = self.poignee_axe.take() {
+            self.terminer_edition_axe();
             if let Some((projet, _)) = &self.natif {
-                // la poignée est sur la ligne d'implantation ; l'axe médian suit
-                let p = match self.axe_selection() {
-                    Some((_, a, b, _, ecart)) if ecart != 0.0 => Self::extremite_mediane(p, if fin { a } else { b }, fin, ecart),
-                    _ => p,
-                };
-                let mut copie = projet.clone();
-                match copie.deplacer_extremite(&id, fin, p).and_then(|_| self.appliquer_projet(copie)) {
-                    Ok(()) => self.status = "Mur modifié — Ctrl+S pour enregistrer.".into(),
-                    Err(e) => self.error = Some(e),
+                let resultat=(|| {
+                    let mut copie=projet.clone();
+                    copie.deplacer_extremite_justification(&id,fin,p)?;
+                    copie.recaler_menuiseries(projet)?;
+                    copie.verifier()?;
+                    Ok::<_,String>(copie)
+                })();
+                match resultat.and_then(|p|self.appliquer_projet(p)) {
+                    Ok(())=>self.status="Mur modifié — Ctrl+S pour enregistrer.".into(),
+                    Err(e)=>self.error=Some(e),
                 }
             }
         }
-        let mode_trace = mode_trace || self.poignee_axe.is_some();
+        let mode_trace = mode_trace || self.poignee_axe.is_some() || edition_arc;
         if mode_trace && resp.hovered() {
             ui.ctx().set_cursor_icon(if self.selection_traces_active() { egui::CursorIcon::Default } else { egui::CursorIcon::Crosshair });
         }
@@ -6524,7 +6696,7 @@ impl ViewerApp {
             if !mode_trace && self.fenetre_selection.is_none() && resp.drag_started_by(PointerButton::Primary) {
                 if let Some(debut) = ui.input(|i| i.pointer.press_origin()) {
                     if pick(self, debut).is_none() {
-                        self.fenetre_selection = Some(FenetreSelection { debut, fin: debut, glissement: true, ajouter: ui.input(|i| i.modifiers.ctrl || i.modifiers.command) });
+                        self.fenetre_selection = Some(FenetreSelection { debut, fin: debut, ajouter: ui.input(|i| i.modifiers.ctrl || i.modifiers.command) });
                     }
                 }
             }
@@ -6562,6 +6734,12 @@ impl ViewerApp {
                 }
             }
 
+            // Le double-clic central cadre la vue entière, même pendant un outil.
+            // Le double-clic gauche conserve son cadrage sur l'objet visé.
+            if resp.double_clicked_by(PointerButton::Middle) {
+                self.fit_all();
+            }
+
             if rectangle_actif {
                 let curseur = ui.input(|i| i.pointer.interact_pos().or(i.pointer.hover_pos()));
                 if let Some(p) = curseur {
@@ -6569,9 +6747,12 @@ impl ViewerApp {
                 }
                 let annuler = ui.input(|i| i.key_pressed(egui::Key::Escape)) || resp.clicked_by(PointerButton::Secondary);
                 if annuler { self.fenetre_selection = None; }
-                else if self.fenetre_selection.is_some_and(|f| (f.glissement && resp.drag_stopped_by(PointerButton::Primary)) || (!f.glissement && resp.clicked())) {
+                else if resp.drag_stopped_by(PointerButton::Primary) {
                     if let Some(f) = self.fenetre_selection.take() { self.selectionner_rectangle(rect, f); }
                 }
+            } else if mode_ajuster {
+                let hit=resp.hover_pos().or(resp.interact_pointer_pos()).and_then(|q|pick(self,q).map(|(obj,_)|obj));
+                self.souris_ajuster(ui,rect,&resp,hit);
             } else if self.outil_dessin().is_some() {
                 self.souris_dessin(ui, rect, &resp);
             } else if self.orientation_nord_en_cours {
@@ -6709,14 +6890,10 @@ impl ViewerApp {
                 if self.natif.is_some() && self.ruban_edition.outil()==Some(crate::ruban::Outil::Ouverture) {
                     if let (Some(id),Some(p))=(id,self.point_clique) { self.placer_ouverture(id,[p.x*1000.0,p.y*1000.0]); }
                 } else if id.is_none() {
-                    // clic dans le vide : désélectionne (comme Revit), puis un second clic
-                    // ferme une fenêtre de sélection
-                    let ajouter = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
-                    if !ajouter {
+                    // Un clic bref désélectionne seulement. Le rectangle est réservé
+                    // au glissement avec le bouton gauche maintenu depuis le vide.
+                    if !ui.input(|i| i.modifiers.ctrl || i.modifiers.command) {
                         self.select(None, false);
-                    }
-                    if let Some(debut) = resp.interact_pointer_pos() {
-                        self.fenetre_selection = Some(FenetreSelection { debut, fin: debut, glissement: false, ajouter });
                     }
                 } else {
                     if ui.input(|i| i.modifiers.ctrl || i.modifiers.command) && self.natif.is_none() {
@@ -6736,43 +6913,12 @@ impl ViewerApp {
                 }
             }
 
-            if (resp.hovered() || resp.has_focus()) && !self.vol.actif {
-                let (f, esc, h, i, v) = ui.input(|i| {
-                    (
-                        i.key_pressed(egui::Key::F),
-                        i.key_pressed(egui::Key::Escape),
-                        i.key_pressed(egui::Key::H),
-                        i.key_pressed(egui::Key::I),
-                        i.key_pressed(egui::Key::V),
-                    )
-                });
-                if v {
-                    self.voir_visibilite = !self.voir_visibilite;
-                }
-                if f {
-                    match self.selected.map(|s| self.objects_under(s)) {
-                        Some(o) if !o.is_empty() => self.frame_objects(&o),
-                        _ => self.fit_all(),
-                    }
-                }
-                if esc && !rectangle_actif {
-                    if self.isolated.is_some() {
-                        self.isolated = None;
-                        self.visibility_dirty = true;
-                    } else {
-                        self.select(None, false);
-                    }
-                }
-                if h && !self.selection_bim().is_empty() && self.vue_native_id().is_some() { self.masquer_elements_vue(); }
-                else if h && let Some(sel) = self.selected { let o = self.objects_under(sel); self.hide(o); }
-                if let Some(sel) = self.selected {
-                    if i {
-                        let o = self.objects_under(sel);
-                        self.isolate(o);
-                    }
-                }
+            if (resp.hovered() || resp.has_focus()) && !self.vol.actif && ui.input(|i|i.key_pressed(egui::Key::Escape)) && !rectangle_actif {
+                if self.isolated.is_some() {self.isolated=None;self.visibility_dirty=true;}
+                else {self.select(None,false);}
             }
         }
+
 
         self.update_visibility();
         self.update_coupe();
@@ -6830,13 +6976,15 @@ impl ViewerApp {
         if deplacement.is_some() {
             self.apercu_deplacement(ui, rect, resp.hover_pos(), altitude_coupe);
         }
-        if dalle.is_none() && !mode_mur && outil_coupe.is_none() && structure.is_none() && self.dessin2d.edition_contour.is_none() {
+        if !mode_ajuster && dalle.is_none() && !mode_mur && outil_coupe.is_none() && structure.is_none() && self.dessin2d.edition_contour.is_none() {
             self.dessiner_aretes_pente(ui, rect, resp.hover_pos());
             self.dessiner_axe(ui, rect, resp.hover_pos());
+            if self.poignee_axe.is_some() {self.dessiner_dessin2d(ui,rect);}
         }
         if self.alignement_plan || self.orientation_nord_en_cours {
             self.dessiner_arete_alignement(ui, rect);
         }
+        if mode_ajuster {self.dessiner_ajustement(ui,rect);}
         if self.outil_dessin().is_some() {
             self.dessiner_dessin2d(ui, rect);
         }
@@ -7024,6 +7172,10 @@ impl ViewerApp {
             ("sortie_v0", self.natif.as_ref().map(|n| &n.1).or(self.rvt_sortie.as_ref()).map_or("null".into(), |p| texte(&p.to_string_lossy()))),
             ("fiche_revit", (self.rvt.is_some() && self.rvt_sheet).to_string()),
         ];
+        p.push(("saisies_en_attente", (self.saisies_pilote.len()+usize::from(self.saisie_pilote_image)).to_string()));
+        p.push(("selection_native", serde_json::to_string(&self.selection_bim()).unwrap()));
+        p.push(("outil", self.ruban_edition.outil().map_or("null".into(), |o|texte(o.nom()))));
+        p.push(("rectangle_vue", serde_json::to_string(&[self.rect_vue.min.x,self.rect_vue.min.y,self.rect_vue.width(),self.rect_vue.height()]).unwrap()));
         if let Some(c)=&self.collaboration { p.push(("collaboration",serde_json::json!({"etat":c.etat,"revision":c.copie.base.revision,"en_attente":c.copie.attente.len(),"conflits":c.copie.conflits,"comparaison_validation_ms":c.mesure_validation_ms,"geometrie_ms":c.mesure_geometrie_ms,"preparation_transfert_gpu_ms":c.mesure_gpu_ms,"synchronisation_ms":c.mesure_sync_ms,"fichiers":c.mesures_fichiers}).to_string())); }
         if let Some(e) = &self.error {
             p.push(("erreur_chargement", texte(e)));
@@ -7103,8 +7255,14 @@ impl ViewerApp {
 
     fn commande(&mut self, ctx: &egui::Context, commande: &str, argument: &str) -> String {
         use pilote::{erreur, liste, objet, succes, texte};
+        if matches!(commande,"editer"|"annuler"|"retablir"|"mur"|"dalle"|"pente"|"type_mur"|"vue_plan"|"coupe_vue"|"enregistrer"|"modifier_trace"|"famille_ouvrir"|"famille_charger"|"famille_enregistrer"|"collaborer"|"collaboration_associer") {
+            if let Err(e)=self.pilote_disponible() {return erreur(&e);}
+        }
+        if let Some(r) = self.commande_complete(ctx, commande, argument) {
+            return match r { Ok(v) => { let mut v = v; if v.get("ok").is_none() { v["ok"] = true.into(); } v.to_string() }, Err(e) => erreur(&e) };
+        }
         match commande {
-            "ruban" => {self.onglet_ruban=match argument{"debut"=>OngletRuban::Debut,"sortie"=>OngletRuban::Sortie,_=>return erreur("usage : ruban debut|sortie")};self.etat()},
+            "ruban" => {self.onglet_ruban=match argument{"debut"=>OngletRuban::Debut,"modeliser"=>OngletRuban::Modeliser,"modifier"=>OngletRuban::Modifier,"documenter"|"annoter"=>OngletRuban::Annoter,"sortie"=>OngletRuban::Sortie,"famille_creer"=>OngletRuban::FamilleCreer,"famille_sortie"=>OngletRuban::FamilleSortie,_=>return erreur("usage : ruban debut|modeliser|modifier|documenter|sortie|famille_creer|famille_sortie")};self.etat()},
             "collaborer" => match self.creer_partage(PathBuf::from(argument.trim_matches('"')),ctx){Ok(())=>succes(&[("etat",texte("Création du projet partagé en cours"))]),Err(e)=>erreur(&e)},
             "collaboration_associer" => match self.associer_collaboration(PathBuf::from(argument.trim_matches('"'))) { Ok(())=>succes(&[("etat",texte("Association locale effectuée ; synchronisation en cours"))]),Err(e)=>erreur(&e) },
             "collaboration_sync" | "collaboration_instantane" => match self.collaboration.as_mut().ok_or_else(||"Copie non associée".to_string()).and_then(|c|c.synchroniser(None,commande=="collaboration_instantane")) {Ok(())=>succes(&[("etat",texte("Synchronisation demandée"))]),Err(e)=>erreur(&e)},
@@ -7127,30 +7285,7 @@ impl ViewerApp {
                 self.error=None; self.parcourir_historique(commande=="retablir");
                 match &self.error { Some(e)=>erreur(e),None=>self.etat() }
             }
-            "projet_natif" => match &self.natif {Some((p,_))=>match p.json() {Ok(s)=>succes(&[("projet",s)]),Err(e)=>erreur(&e)},None=>erreur("Aucun projet natif.")},
-            "outil" => {
-                match argument {
-                    "mur" => { self.onglet_ruban = OngletRuban::Modeliser; self.ruban_edition.activer_mur(); }
-                    "poteau" | "poutre" => { self.onglet_ruban = OngletRuban::Modeliser; self.ruban_edition.activer_structure(argument == "poutre"); }
-                    "coupe" => { self.onglet_ruban = OngletRuban::Annoter; self.ruban_edition.activer_coupe(); }
-                    "dalle" | "sol" | "plafond" | "toiture" => {
-                        use crate::modele::SorteDalle;
-                        let sorte = match argument { "sol" => SorteDalle::Sol, "plafond" => SorteDalle::Plafond, "toiture" => SorteDalle::Toiture, _ => SorteDalle::Dalle };
-                        self.onglet_ruban = OngletRuban::Modeliser;
-                        self.ruban_edition.activer_surface(sorte);
-                    }
-                    "ligne" | "polyligne" | "spline" | "cercle" | "arc" => {
-                        use crate::ruban::Outil;
-                        let o = match argument { "ligne" => Outil::Ligne, "polyligne" => Outil::Polyligne, "spline" => Outil::Spline, "cercle" => Outil::Cercle, _ => Outil::Arc };
-                        self.onglet_ruban = OngletRuban::Annoter;
-                        self.ruban_edition.activer_outil(o);
-                    }
-                    "terrain" => { self.onglet_ruban = OngletRuban::Modeliser; self.ruban_edition.activer_outil(crate::ruban::Outil::Terrain); }
-                    "aucun" => { self.ruban_edition.annuler(); }
-                    _ => return erreur("usage : outil mur|poteau|poutre|dalle|sol|coupe|ligne|polyligne|spline|cercle|arc|terrain|aucun"),
-                }
-                self.etat()
-            }
+            "projet_natif" => match &self.natif {Some((p,_))=>match p.json() {Ok(s)=>succes(&[("empreinte",texte(&crate::modele::collaboration::hash(&serde_json::to_value(p).unwrap()))),("projet",s)]),Err(e)=>erreur(&e)},None=>erreur("Aucun projet natif.")},
             "vue_plan" => {
                 // vue_plan <nom ou id du niveau> [hauteur de coupe mm]
                 let (nom, h) = argument.rsplit_once(' ').and_then(|(n, h)| Some((n, h.parse::<f64>().ok()?))).unwrap_or((argument, 1200.0));
@@ -7288,6 +7423,17 @@ impl ViewerApp {
                 succes(&[])
             }
             "quitter" => {
+                if let Err(e)=self.pilote_disponible() { return erreur(&e); }
+                if !argument.is_empty() && argument!="abandonner" { return erreur("usage : quitter [abandonner]"); }
+                if self.natif_modifie || self.documents.values().any(|d|d.modifie) {
+                    if argument!="abandonner" { return erreur("Modifications non enregistrées : enregistrer les documents ou quitter abandonner"); }
+                    if let Some((_,p))=&self.natif {crate::modele::enregistrement::effacer_recuperation(p);}
+                    self.natif_modifie=false;
+                    for d in self.documents.values_mut() {
+                        if let Some((_,p))=&d.natif {crate::modele::enregistrement::effacer_recuperation(p);}
+                        d.modifie=false;
+                    }
+                }
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 succes(&[])
             }
@@ -7533,11 +7679,17 @@ impl ViewerApp {
                 self.etat()
             }
             "panneau" => {
-                // panneau proprietes|arborescence gauche|droite|flottant
+                // panneau proprietes|arborescence gauche|droite|flottant|externe
                 let (p, a) = argument.split_once(' ').unwrap_or((argument, ""));
                 let p = Panneau::TOUS.into_iter().find(|x| x.nom() == p);
+                if a.trim()=="fermer" {
+                    let Some(p)=p else{return erreur("Volet inconnu")};
+                    if self.ancrages[p as usize]!=Ancrage::Externe {return erreur("Le volet n'est pas une fenêtre externe")}
+                    ctx.send_viewport_cmd_to(egui::ViewportId::from_hash_of(("volet_externe",p.nom())),egui::ViewportCommand::Close);
+                    return self.etat();
+                }
                 let a = Ancrage::TOUS.into_iter().find(|x| x.nom() == a.trim());
-                let (Some(p), Some(a)) = (p, a) else { return erreur("usage : panneau proprietes|arborescence gauche|droite|flottant") };
+                let (Some(p), Some(a)) = (p, a) else { return erreur("usage : panneau proprietes|arborescence gauche|droite|flottant|externe") };
                 self.ancrer(p, a);
                 self.etat()
             }
@@ -7950,6 +8102,25 @@ fn load_state_fr(s: &str) -> &str {
 }
 
 impl eframe::App for ViewerApp {
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        let terminer = self.saisie_pilote_image && self.saisies_pilote.is_empty();
+        self.saisie_pilote_image = !self.saisies_pilote.is_empty();
+        // Une étape par image : egui observe bien l'appui puis le relâchement.
+        if let Some(e) = self.saisies_pilote.pop_front() {
+            let modifiers = match &e {
+                egui::Event::PointerButton { modifiers, .. } | egui::Event::Key { modifiers, .. } | egui::Event::MouseWheel { modifiers, .. } => *modifiers,
+                _ => egui::Modifiers::NONE,
+            };
+            raw_input.events.push(egui::Event::ModifiersChanged(modifiers));
+            raw_input.events.push(e);
+            ctx.request_repaint();
+        }
+        else if terminer {
+            // Ne pas laisser Ctrl/Maj artificiellement enfoncé après la dernière entrée.
+            // Les événements physiques du système conservent la priorité.
+            if raw_input.events.is_empty() { raw_input.events.push(egui::Event::ModifiersChanged(egui::Modifiers::NONE)); }
+        }
+    }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         if self.pilote.is_none() {
@@ -7963,29 +8134,15 @@ impl eframe::App for ViewerApp {
         self.recevoir_collaboration();
         self.niveau_creation_courant();
         self.onglet_selon_selection();
-        self.historique.geste(ctx.input(|i|i.pointer.any_down()));
+        self.historique.geste(ctx.input(|i|i.pointer.any_down()) || self.volets.iter().any(|v|v.interaction));
         self.poll_sauvegarde();
         self.fenetre_documentation(&ctx);
-        if !ctx.egui_wants_keyboard_input() && self.dessin2d.edition_contour.is_none() {
-            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Z)) { self.parcourir_historique(true); }
-            else if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Z)) { self.parcourir_historique(false); }
-        }
         if ctx.input(|i| i.viewport().close_requested()) && self.sauvegarde.is_some() {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.error = Some("Un enregistrement est en cours ; attendez sa fin avant de quitter.".into());
         } else if ctx.input(|i| i.viewport().close_requested()) && (self.natif_modifie || self.documents.values().any(|d| d.modifie)) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.confirmer_fermeture = Some((true, self.document_actif));
-        }
-        if self.selected.is_some() && !ctx.egui_wants_keyboard_input() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab)) {
-            self.tab_selection();
-            // Tab sert ici à la sélection, pas au passage du focus entre les champs
-            ctx.memory_mut(|m| {
-                m.move_focus(egui::FocusDirection::None);
-                if let Some(id) = m.focused() {
-                    m.surrender_focus(id);
-                }
-            });
         }
         self.clavier_dessin(&ctx);
         if self.alignement_plan && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
@@ -7999,7 +8156,10 @@ impl eframe::App for ViewerApp {
         }
         if self.ruban_edition.a_un_outil() && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             // Échap : la saisie, puis le mur ou la dalle en cours, puis l'outil
-            if self.bim.depart_deplacement.take().is_some() || self.bim.depart_structure.take().is_some() {
+            if self.ruban_edition.outil()==Some(crate::ruban::Outil::Ajuster) && self.ajustement.as_ref().is_some_and(|a|a.reference.is_some()) {
+                self.ajustement=Some(Default::default());
+                self.status="Ajuster / prolonger : choisir une nouvelle limite, ou Échap pour terminer.".into();
+            } else if self.bim.depart_deplacement.take().is_some() || self.bim.depart_structure.take().is_some() {
                 // Le premier clic d'une poutre est abandonné sans modifier le projet.
             } else if self.coupe_depart.is_some() {
                 self.coupe_depart = None;
@@ -8015,45 +8175,10 @@ impl eframe::App for ViewerApp {
             self.open(p, &ctx);
         }
         if std::mem::take(&mut self.bim.supprimer) { self.demander_suppression(); }
-        if !ctx.egui_wants_keyboard_input() && self.scene.is_some() {
-            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::A)) && self.rect_vue.is_positive() {
-                let f = FenetreSelection { debut: egui::pos2(-100_000_000.0, -100_000_000.0), fin: egui::pos2(100_000_000.0, 100_000_000.0), glissement: false, ajouter: false };
-                self.selectionner_rectangle(self.rect_vue, f);
-            }
-            // Suppr, ou la touche « supprimer » des claviers Mac (Retour arrière) hors tracé
-            let trace = self.trace_en_cours() || self.coupe_depart.is_some() || self.bim.depart_structure.is_some() || self.bim.depart_deplacement.is_some();
-            if self.natif.is_some() && !trace && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete) || i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace)) { self.demander_suppression(); }
-            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) { self.raccourci_en_attente = None; }
-        }
-        if !ctx.egui_wants_keyboard_input() && self.natif.is_some() && !(self.famille_active && self.famille.is_some()) && !self.trace_en_cours() && self.coupe_depart.is_none() && self.bim.depart_structure.is_none() && self.bim.depart_deplacement.is_none() {
-            let (temps, textes) = ctx.input(|i| (i.time, if i.modifiers.ctrl || i.modifiers.alt || i.modifiers.command { Vec::new() } else { i.events.iter().filter_map(|e| if let egui::Event::Text(s) = e { Some(s.clone()) } else { None }).collect::<Vec<_>>() }));
-            if self.raccourci_en_attente.is_some_and(|(_, t)| temps - t > 2.0) { self.raccourci_en_attente = None; }
-            for c in textes.iter().flat_map(|s| s.chars()).filter(|c| c.is_ascii_alphabetic()).map(|c| c.to_ascii_uppercase()) {
-                if let Some((premier, _)) = self.raccourci_en_attente.take() {
-                    use crate::ruban::Outil;
-                    let outil = match (premier, c) { ('M','U') => Some((Outil::Mur, OngletRuban::Modeliser)), ('P','O') => Some((Outil::Poteau, OngletRuban::Modeliser)), ('P','P') => Some((Outil::Poutre, OngletRuban::Modeliser)), ('O','U') => Some((Outil::Ouverture, OngletRuban::Modeliser)), ('M','V') => Some((Outil::Deplacer, OngletRuban::Modifier)), ('C','O') => Some((Outil::Copier, OngletRuban::Modifier)), ('R','O') => Some((Outil::Tourner, OngletRuban::Modifier)), ('A','L') => Some((Outil::Aligner, OngletRuban::Modifier)), ('A','J') => Some((Outil::Ajuster, OngletRuban::Modifier)), _ => None };
-                    if (premier, c) == ('C','S') { if let Err(e) = self.creer_identique() { self.error = Some(e); } }
-                    else if let Some((outil, onglet)) = outil { self.onglet_ruban = onglet; self.ruban_edition.activer_outil(outil); }
-                } else if ['C','M','P','O','R','A'].contains(&c) { self.raccourci_en_attente = Some((c, temps)); }
-            }
-        } else { self.raccourci_en_attente = None; }
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::O)) {
-            self.open_dialog(&ctx);
-        }
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::N)) && self.loading.is_none() {
-            self.creer_projet();
-        }
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
-            // onglet Famille : charger la famille dans le projet
-            if self.famille_active && self.famille.is_some() {
-                let nouveau = self.famille.as_ref().is_some_and(|e| e.nouvelle());
-                self.action_famille = Some(famille_ui::ActionFamille::Charger(nouveau));
-            } else {
-                self.enregistrer_projet(&ctx);
-            }
-        }
+        self.clavier_raccourcis(&ctx);
 
         egui::Panel::top("top").show(ui, |ui| self.top_bar(ui));
+        self.fenetre_parametres(&ctx);
         self.fenetres_collaboration(&ctx);
         self.fenetre_erreur_document(&ctx);
         self.zone_panneaux = ui.available_rect_before_wrap();
@@ -8073,7 +8198,7 @@ impl eframe::App for ViewerApp {
                 let panneau = match ancrages[p as usize] {
                     Ancrage::Gauche => egui::Panel::left(id),
                     Ancrage::Droite => egui::Panel::right(id),
-                    Ancrage::Flottant => continue,
+                    Ancrage::Flottant | Ancrage::Externe => continue,
                 };
                 let reponse = panneau.resizable(true).min_size(24.0).default_size(self.largeurs_panneaux[p as usize]).show(ui, |ui| self.panneau(ui, p));
                 self.largeurs_panneaux[p as usize] = reponse.response.rect.width();
@@ -8112,6 +8237,7 @@ impl eframe::App for ViewerApp {
                     (None, None) => self.pos_flottants[i],
                 };
             }
+            self.fenetres_volets(&ctx);
             self.fenetre_visibilite(&ctx);
         }
         // vue ou feuille glissée dans l'arborescence : son nom suit le curseur
@@ -8162,5 +8288,24 @@ fn apercu_motif(p: &egui::Painter, r: egui::Rect, d: &crate::modele::DefinitionM
     for [a, b] in hachures_plan(&tris, &m, 1.0, 4_000) {
         let q = |x: [f64; 2]| egui::pos2(r.left() + x[0] as f32 * px_mm, r.bottom() - x[1] as f32 * px_mm);
         p.line_segment([q(a), q(b)], egui::Stroke::new(1.0, Color32::from_gray(40)));
+    }
+}
+
+#[cfg(test)]
+mod tests_axe_accroche {
+    use super::*;
+    #[test]
+    fn implantation_reste_exactement_sur_la_cible_apres_rotation() {
+        for fin in [false,true] {
+            for ecart in [-150.0,0.0,150.0] {
+                let cible=glam::DVec2::new(3000.0,2000.0);
+                let fixe=glam::DVec2::new(0.0,150.0);
+                let median=glam::DVec2::from_array(ViewerApp::extremite_mediane(cible.to_array(),fixe.to_array(),fin,ecart).unwrap());
+                let u=if fin{(median-fixe).normalize()}else{(fixe-median).normalize()};
+                let retrouve=median+glam::DVec2::new(-u.y,u.x)*ecart;
+                assert!(retrouve.distance(cible)<1e-8);
+            }
+        }
+        assert!(ViewerApp::extremite_mediane([0.0,0.0],[0.0,0.0],true,150.0).is_err());
     }
 }

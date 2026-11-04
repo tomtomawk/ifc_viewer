@@ -14,9 +14,9 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const PROTOCOLE: u32 = 2;
+pub const PROTOCOLE: u32 = 3;
 pub fn protocole_lisible(v: u32) -> bool {
-    matches!(v, 1 | 2)
+    matches!(v, 1 | 2 | 3)
 }
 pub type Objets = BTreeMap<String, Value>;
 pub type Resultat<T> = Result<T, String>;
@@ -510,6 +510,11 @@ pub fn appliquer(
             concurrence::empreinte_types_terrain(courant)
         } else if cle == "#usagers-terrain-defaut" {
             concurrence::empreinte_usagers_terrain(courant)
+        } else if let Some(z) = cle.strip_prefix("#voisinage3/") {
+            match serde_json::from_str::<Vec<concurrence::Voisinage>>(z) {
+                Ok(z) if t.protocole>=3 && z.iter().all(concurrence::Voisinage::valide) => concurrence::empreinte_voisinage(courant,&z),
+                _ => {erreurs.push(conflit(cle.clone(),"Voisinage spatial invalide"));continue;}
+            }
         } else if let Some(z) = cle.strip_prefix("#zones/") {
             match serde_json::from_str::<Vec<concurrence::Zone>>(z) {
                 Ok(z) => concurrence::empreinte_zone(courant, &z),

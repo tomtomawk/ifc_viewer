@@ -76,7 +76,7 @@ impl ViewerApp {
     pub(super) fn associer_collaboration(&mut self, central: PathBuf) -> Result<(), String> {
         let (p, path) = self.natif.as_ref().ok_or("Projet natif requis")?;
         let c = Session::ouvrir(p, path.clone(), central)?;
-        let travail = c.travail()?;
+        let travail = c.affichage()?;
         self.collaboration = Some(c);
         self.appliquer_projet_interne(travail, true)?;
         self.collaboration
@@ -99,7 +99,7 @@ impl ViewerApp {
         })();
         match resultat {
             Ok(c) => {
-                let travail = c.travail();
+                let travail = c.affichage();
                 self.collaboration = Some(c);
                 if let Err(e) = travail.and_then(|p| self.appliquer_projet_interne(p, true)) {
                     self.error = Some(e);
@@ -114,8 +114,9 @@ impl ViewerApp {
         }
         if let Some(c) = &mut self.collaboration {
             match c.recevoir() {
-                Ok(Some(p)) => {
-                    if let Err(e) = self.appliquer_projet_interne(p, true) {
+                Ok(Some(_)) => {
+                    let affichage=c.affichage();
+                    if let Err(e) = affichage.and_then(|p|self.appliquer_projet_interne(p, true)) {
                         self.error = Some(e);
                     }
                 }
@@ -124,7 +125,7 @@ impl ViewerApp {
             }
         }
     }
-    fn cles_collaboration(&self) -> Vec<String> {
+    pub(super) fn cles_collaboration(&self) -> Vec<String> {
         let ids = self.selection_bim();
         self.natif
             .as_ref()
@@ -254,6 +255,9 @@ impl ViewerApp {
         let c = self.collaboration.as_ref().unwrap();
         if !c.copie.conflits.is_empty() {
             egui::Window::new("Conflits collaboratifs — propositions conservées").show(ctx, |ui| {
+                if c.copie.apercu_conflit.is_some() {
+                    ui.label("Vos modifications locales restent affichées et sauvegardées dans la copie locale. Elles ne sont pas publiées tant que le conflit n'est pas résolu.");
+                }
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     for (id, conflits) in &c.copie.conflits {
                         ui.label(format!("Transaction {id}"));

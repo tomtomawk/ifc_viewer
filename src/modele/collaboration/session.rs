@@ -16,6 +16,9 @@ pub struct Copie {
     pub base: Etat,
     pub attente: Vec<Transaction>,
     pub conflits: BTreeMap<String, Vec<Conflit>>,
+    /// Dernier document local valide, affiché sans le publier pendant un conflit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub apercu_conflit: Option<Projet>,
     pub annulations: Vec<Transaction>,
     pub retablissements: Vec<Transaction>,
 }
@@ -119,6 +122,7 @@ impl Session {
                 base: Etat::initial(&p)?,
                 attente: Vec::new(),
                 conflits: BTreeMap::new(),
+                apercu_conflit: None,
                 annulations: Vec::new(),
                 retablissements: Vec::new(),
             }
@@ -161,6 +165,11 @@ impl Session {
                 .collect::<Vec<_>>(),
         )?
         .projection()
+    }
+    /// L'affichage d'une proposition n'est jamais un état accepté ni une base d'édition.
+    pub fn affichage(&self) -> Resultat<Projet> {
+        if !self.copie.conflits.is_empty() && let Some(p)=&self.copie.apercu_conflit {return Ok(p.clone());}
+        self.travail()
     }
     pub fn texte_local(&self, id: &str) -> Resultat<EtatTexte> {
         let mut e = self.copie.base.textes.get(id).cloned().unwrap_or_default();
@@ -382,6 +391,7 @@ impl Session {
                 Ok(None)
             }
             Ok((base, mut attente, conflits, ms, mesures)) => {
+                let apercu = self.affichage()?;
                 // Conserve les éditions effectuées pendant le transfert.
                 let presents: BTreeSet<_> = attente
                     .iter()
@@ -429,13 +439,14 @@ impl Session {
                     }
                 }
                 self.etat = if !self.copie.conflits.is_empty() {
-                    "Conflit — propositions conservées"
+                    "Conflit — modifications locales conservées à l'écran"
                 } else if self.copie.attente.is_empty() {
                     "Synchronisé"
                 } else {
                     "Enregistré localement — en attente"
                 }
                 .into();
+                self.copie.apercu_conflit = (!self.copie.conflits.is_empty()).then_some(apercu);
                 self.persister()?;
                 Ok(Some(self.travail()?))
             }
@@ -449,6 +460,7 @@ impl Session {
         stockage::sauver_local(&archive, &encoder(&self.copie)?)?;
         self.copie.attente.retain(|t| t.id != id);
         self.copie.conflits.remove(id);
+        self.copie.apercu_conflit = None;
         self.persister()?;
         self.travail()
     }
@@ -481,6 +493,7 @@ impl Session {
         let sauvegarde = self.copie.clone();
         self.copie.attente.retain(|t| t.id != id);
         self.copie.conflits.remove(id);
+        self.copie.apercu_conflit = None;
         self.copie.attente.push(resolution.clone());
         match self.travail().and_then(|p| {
             self.persister()?;

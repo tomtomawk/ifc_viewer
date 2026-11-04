@@ -952,6 +952,95 @@ fn voisinage_geometrique_et_meme_objet_restent_conflictuels() {
 }
 
 #[test]
+fn premiere_synchro_de_plusieurs_murs_preserve_les_deux_copies_distinctes() {
+    let mut p = Projet::depuis_gabarit("Première synchronisation", &crate::gabarit::Gabarit::defaut());
+    p.ajouter_mur([30000.0, 30000.0], [34000.0, 30000.0], &Default::default()).unwrap();
+    let root = dossier();
+    let entree = root.join("projet.bimpartage");
+    partage::creer(&p, &entree).unwrap();
+    let (mut a, _, mut sa) = partage::ouvrir(&entree, &root.join("a")).unwrap();
+    let (mut b, _, mut sb) = partage::ouvrir(&entree, &root.join("b")).unwrap();
+    let options = super::super::edition::ParametresMur {epaisseur:300.0,..Default::default()};
+    // Le rectangle englobant du mur diagonal atteint celui du mur vertical,
+    // alors que leurs bandes de jonction sont séparées de plus de deux mètres.
+    for (debut,fin) in [([-4000.0,-500.0],[0.0,-2500.0]),([-6000.0,-5000.0],[-2000.0,-5000.0]),([2000.0,-5000.0],[6000.0,-5000.0])] {
+        let mut q=a.clone();q.ajouter_mur(debut,fin,&options).unwrap();sa.editer(&a,&q).unwrap();a=q;
+    }
+    for (debut,fin) in [([0.0,5000.0],[0.0,0.0]),([0.0,0.0],[4000.0,0.0]),([4000.0,0.0],[4000.0,5000.0])] {
+        let mut q=b.clone();q.ajouter_mur(debut,fin,&options).unwrap();sb.editer(&b,&q).unwrap();b=q;
+    }
+    let id=b.murs.last().unwrap().id.clone();
+    for dx in [50.0,100.0] {
+        let (q,_)=b.executer(super::super::commandes::Commande::Deplacer {ids:vec![id.clone()],delta:[dx,0.0,0.0]}).unwrap();
+        sb.editer(&b,&q).unwrap();b=q;
+    }
+    sa.synchroniser(None,false).unwrap();attendre(&mut sa);
+    sb.synchroniser(None,false).unwrap();let resultat=attendre(&mut sb);
+    assert!(sb.copie.conflits.is_empty(),"{:?}",sb.copie.conflits);
+    assert!(sb.copie.attente.is_empty());
+    assert_eq!(resultat.murs.len(),p.murs.len()+6);
+    assert!(a.murs.iter().chain(&b.murs).all(|m|resultat.murs.iter().any(|r|r.id==m.id)));
+    sa.synchroniser(None,false).unwrap();let autre=attendre(&mut sa);
+    assert_eq!(objets(&autre).unwrap(),objets(&resultat).unwrap());
+}
+
+#[test]
+fn conflit_reel_preserve_les_murs_locaux_a_lecran_et_apres_reouverture() {
+    let p=Projet::depuis_gabarit("Conflit local",&crate::gabarit::Gabarit::defaut());
+    let root=dossier();let entree=root.join("projet.bimpartage");
+    partage::creer(&p,&entree).unwrap();
+    let (a,_,mut sa)=partage::ouvrir(&entree,&root.join("a")).unwrap();
+    let (b,local,mut sb)=partage::ouvrir(&entree,&root.join("b")).unwrap();
+    let mut qa=a.clone();qa.ajouter_mur([0.0,0.0],[4000.0,0.0],&Default::default()).unwrap();
+    let mut qb=b.clone();let id=qb.ajouter_mur([2000.0,-2000.0],[2000.0,2000.0],&Default::default()).unwrap();
+    sa.editer(&a,&qa).unwrap();sb.editer(&b,&qb).unwrap();
+    let mut suite=qb.clone();let id2=suite.ajouter_mur([10000.0,10000.0],[14000.0,10000.0],&Default::default()).unwrap();
+    sb.editer(&qb,&suite).unwrap();
+    sa.synchroniser(None,false).unwrap();attendre(&mut sa);
+    sb.synchroniser(None,false).unwrap();attendre(&mut sb);
+    assert!(!sb.copie.conflits.is_empty());
+    for id in [&id,&id2] {
+        assert!(sb.affichage().unwrap().murs.iter().any(|m|&m.id==id));
+        assert!(!sb.travail().unwrap().murs.iter().any(|m|&m.id==id));
+    }
+    assert!(sb.editer(&suite,&suite).is_err());
+    super::super::enregistrement::enregistrer_natif(&sb.affichage().unwrap(),&local).unwrap();
+    drop(sb);
+    let (visible,_,s)=partage::ouvrir(&entree,&root.join("b")).unwrap();
+    assert!(s.copie.apercu_conflit.is_some());
+    assert!(visible.murs.iter().any(|m|m.id==id));
+    assert!(visible.murs.iter().any(|m|m.id==id2));
+    assert!(s.copie.base.projection().unwrap().murs.iter().all(|m|m.id!=id&&m.id!=id2));
+}
+
+#[test]
+fn historique_spatial_protocole_deux_reste_verifiable_apres_mise_a_jour() {
+    let mut p=exemple();p.figer_references();
+    let mut base=Etat::initial(&p).unwrap();base.protocole=2;
+    let d=Depot::nouveau(dossier());d.preparer().unwrap();
+    let mut a=d.proteger().unwrap();a.initialiser_etat(&base).unwrap();
+    let mut e=a.lire().unwrap().unwrap();
+    let mut q=p.clone();q.ajouter_mur([20000.0,0.0],[24000.0,0.0],&Default::default()).unwrap();
+    let mut ancien=transaction(&p,&q);ancien.protocole=2;
+    ancien.lectures.retain(|k,_|!k.starts_with("#voisinage3/"));
+    concurrence::ajouter_spatial(&mut ancien,&objets(&p).unwrap());
+    assert!(ancien.lectures.keys().any(|k|k.starts_with("#zones/")));
+    let cles:Vec<_>=ancien.cles_reservation(&e.objets).into_iter().collect();
+    a.reserver(&mut e,&cles,&ancien.session,false,false).unwrap();
+    for k in cles {ancien.reservations.insert(k.clone(),e.baux[&k].generation);}
+    assert!(a.publier(&mut e,&ancien).unwrap().is_empty());
+    assert_eq!(e.protocole,2);
+    let ancienne_revision=hash(&e);drop(a);
+    let mut a=d.proteger().unwrap();let mut e=a.lire().unwrap().unwrap();
+    assert_eq!(hash(&e),ancienne_revision);
+    let p=e.projection().unwrap();let mut q=p.clone();q.vues[0].nom="Après mise à jour".into();
+    let mut nouvelle=transaction(&p,&q);nouvelle.base=e.revision;
+    assert!(a.publier(&mut e,&nouvelle).unwrap().is_empty());
+    assert_eq!(e.protocole,3);drop(a);
+    assert_eq!(d.proteger().unwrap().lire().unwrap().unwrap().protocole,3);
+}
+
+#[test]
 fn creations_independantes_barres_escaliers_gardes_terrains_importes_et_types() {
     use super::super::*;
     let mut p = exemple();
@@ -1193,7 +1282,7 @@ fn ouverture_sur_deux_hotes_distincts_et_dalles_independantes() {
 }
 
 #[test]
-fn journal_protocole_un_reste_lisible_et_nouvelles_acceptations_passent_en_deux() {
+fn journal_protocole_un_reste_lisible_et_nouvelles_acceptations_passent_en_trois() {
     let p = exemple();
     let mut legacy = Etat::initial(&p).unwrap();
     legacy.protocole = 1;
@@ -1209,7 +1298,7 @@ fn journal_protocole_un_reste_lisible_et_nouvelles_acceptations_passent_en_deux(
     let mut q = p.clone();
     q.vues[0].nom = "Nouveau protocole".into();
     a.publier(&mut e, &transaction(&p, &q)).unwrap();
-    assert_eq!(e.protocole, 2);
+    assert_eq!(e.protocole, 3);
     drop(a);
-    assert_eq!(d.proteger().unwrap().lire().unwrap().unwrap().protocole, 2);
+    assert_eq!(d.proteger().unwrap().lire().unwrap().unwrap().protocole, 3);
 }

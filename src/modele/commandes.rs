@@ -80,6 +80,10 @@ pub enum Commande {
         reference: String,
         fin: bool,
     },
+    /// Raccorde les deux extrémités à l'intersection, en une seule transaction.
+    AjusterAngle { id: String, reference: String, fin: bool, fin_reference: bool },
+    ModifierTrajectoireMur {id:String,points:[[f64;2];3]},
+    InverserMur { id: String },
     ActualiserType {
         assemblage: String,
     },
@@ -430,9 +434,7 @@ impl Projet {
                     .cloned()
                     .collect();
                 let premier = anciens.first().ok_or("Assemblage vide.")?;
-                let (debut, fin, _) = self
-                    .axe_element(&a.id)
-                    .ok_or("Actualisation réservée aux assemblages droits.")?;
+                let (axe, _, _) = crate::modele::solides::hote(self, &a.id)?;
                 if anciens
                     .iter()
                     .skip(t.couches.len())
@@ -440,7 +442,6 @@ impl Projet {
                 {
                     return Err("Une couche supprimée porte une ouverture ; réhébergez-la avant de changer le type.".into());
                 }
-                let axe = Axe::Droit { debut, fin };
                 let mut nouveaux = Vec::new();
                 for (k, (c, d)) in t.couches.iter().zip(t.decalages_couches()).enumerate() {
                     let mut m = anciens.get(k).unwrap_or(premier).clone();
@@ -488,27 +489,27 @@ impl Projet {
                 }
                 Ok(ids)
             }
+            Commande::InverserMur { id } => {
+                self.inverser_mur(&id)?;
+                Ok(vec![id])
+            }
+            Commande::ModifierTrajectoireMur{id,points}=>{
+                self.modifier_trajectoire_courbe(&id,points)?;
+                Ok(vec![id])
+            }
+            Commande::AjusterAngle { id, reference, fin, fin_reference } => {
+                let point = self.cible_ajustement(&id, &reference, fin)?;
+                self.cible_ajustement(&reference, &id, fin_reference)?;
+                let z1 = self.axe_element(&id).ok_or("Mur absent")?.2;
+                let z2 = self.axe_element(&reference).ok_or("Référence absente")?.2;
+                if (z1-z2).abs()>1e-6 { return Err("Les murs doivent être au même niveau pour former un angle.".into()); }
+                self.deplacer_extremite(&id, fin, point)?;
+                self.deplacer_extremite(&reference, fin_reference, point)?;
+                Ok(vec![id, reference])
+            }
             Commande::Ajuster { id, reference, fin } => {
-                if id == reference {
-                    return Err("Deux murs distincts sont requis.".into());
-                }
-                let (a, b, _) = self.axe_element(&id).ok_or("Mur droit requis.")?;
-                let (c, d, _) = self
-                    .axe_element(&reference)
-                    .ok_or("Référence droite requise.")?;
-                let (a, b, c, d) = (
-                    DVec2::from_array(a),
-                    DVec2::from_array(b),
-                    DVec2::from_array(c),
-                    DVec2::from_array(d),
-                );
-                let (u, v) = (b - a, d - c);
-                let den = u.perp_dot(v);
-                if den.abs() < 1e-9 * u.length() * v.length() {
-                    return Err("Murs parallèles : pas d'intersection.".into());
-                }
-                let point = a + u * ((c - a).perp_dot(v) / den);
-                self.deplacer_extremite(&id, fin, point.to_array())?;
+                let point=self.cible_ajustement(&id,&reference,fin)?;
+                self.deplacer_extremite(&id, fin, point)?;
                 Ok(vec![id])
             }
             Commande::Deplacer { ids, delta } => {
@@ -723,7 +724,7 @@ impl Projet {
                                 .iter()
                                 .any(|i| i.niveau.as_ref() == Some(&n.id))
                             || self.vues.iter().any(
-                                |v| matches!(&v.genre,GenreVue::Plan {niveau,bas_niveau,..} if niveau==&n.id || bas_niveau==&n.id),
+                                |v| matches!(&v.genre,GenreVue::Plan {niveau,bas_niveau,..} if niveau==&n.id || bas_niveau==&n.id) || v.limite_haute_niveau.as_ref()==Some(&n.id),
                             ))
                     {
                         return Err("Ce niveau est encore utilisé.".into());

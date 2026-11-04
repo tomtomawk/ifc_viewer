@@ -93,7 +93,7 @@ pub fn executer(args: &[String]) -> Option<Resultat<()>> {
             }
             "recuperer" => {
                 let sortie = Path::new(args.get(3).ok_or("Sortie JSON requise")?);
-                super::super::enregistrement::enregistrer_natif(&s.travail()?, sortie)?;
+                super::super::enregistrement::enregistrer_natif(&s.affichage()?, sortie)?;
                 return Ok(());
             }
             "texte-recuperer" => {
@@ -122,8 +122,8 @@ pub fn executer(args: &[String]) -> Option<Resultat<()>> {
         }
         let limite = Instant::now() + std::time::Duration::from_secs(120);
         loop {
-            if let Some(p) = s.recevoir()? {
-                super::super::enregistrement::enregistrer_natif(&p, &chemin)?;
+            if s.recevoir()?.is_some() {
+                super::super::enregistrement::enregistrer_natif(&s.affichage()?, &chemin)?;
                 println!("{} · r{}", s.etat, s.copie.base.revision);
                 break;
             }

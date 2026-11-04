@@ -203,7 +203,6 @@ pub(super) struct EtatBim {
     pub texte: String,
     pub points: [[f64; 2]; 2],
     reference: String,
-    fin: bool,
     preview_type: Option<crate::modele::Projet>,
     toiture: String,
     priorite: i32,
@@ -241,7 +240,6 @@ impl Default for EtatBim {
             texte: "Texte".into(),
             points: [[0.0, 0.0], [3000.0, 0.0]],
             reference: String::new(),
-            fin: true,
             preview_type: None,
             toiture: String::new(),
             priorite: 30,
@@ -1176,45 +1174,30 @@ impl ViewerApp {
                         });
                     }
                 }
-                Some(Outil::Aligner | Outil::Ajuster) => {
+                Some(Outil::Aligner) => {
                     ui.label("Référence : axe d'un mur droit");
-                    egui::ComboBox::from_id_salt("reference_bim")
-                        .selected_text(&self.bim.reference)
-                        .show_ui(ui, |ui| {
-                            let p = &self.natif.as_ref().unwrap().0;
-                            for (id, nom) in p
-                                .murs
-                                .iter()
-                                .filter(|m| m.assemblage.is_none())
-                                .map(|m| (&m.id, &m.nom))
-                                .chain(p.assemblages.iter().map(|m| (&m.id, &m.nom)))
-                            {
-                                ui.selectable_value(&mut self.bim.reference, id.clone(), nom);
-                            }
-                        });
-                    if outil == Some(Outil::Ajuster) {
-                        ui.checkbox(&mut self.bim.fin, "Ajuster la fin (sinon le début)");
+                    egui::ComboBox::from_id_salt("reference_bim").selected_text(&self.bim.reference).show_ui(ui,|ui| {
+                        for (id,nom) in p.murs.iter().filter(|m|m.assemblage.is_none()).map(|m|(&m.id,&m.nom)).chain(p.assemblages.iter().map(|m|(&m.id,&m.nom))) {
+                            ui.selectable_value(&mut self.bim.reference,id.clone(),nom);
+                        }
+                    });
+                    if ui.add_enabled(!ids.is_empty()&&!self.bim.reference.is_empty(),egui::Button::new("Appliquer à l'axe")).clicked() {
+                        commande=Some(Commande::Aligner{ids:ids.clone(),reference:self.bim.reference.clone()});
                     }
-                    if ui
-                        .add_enabled(
-                            !ids.is_empty() && !self.bim.reference.is_empty(),
-                            egui::Button::new("Appliquer à l'axe"),
-                        )
-                        .clicked()
-                    {
-                        commande = Some(if outil == Some(Outil::Aligner) {
-                            Commande::Aligner {
-                                ids: ids.clone(),
-                                reference: self.bim.reference.clone(),
-                            }
-                        } else {
-                            Commande::Ajuster {
-                                id: ids[0].clone(),
-                                reference: self.bim.reference.clone(),
-                                fin: self.bim.fin,
-                            }
-                        });
+                }
+                Some(Outil::Ajuster) => {
+                    if ui.checkbox(&mut self.ruban_edition.prolonger_angle,"Prolonger en angle")
+                        .on_hover_text("Cliquez près des deux extrémités à raccorder ; les deux murs sont ajustés ensemble.").changed() {
+                        self.ajustement=Some(Default::default());
                     }
+
+                    let reference=self.ajustement.as_ref().and_then(|a|a.reference.as_deref());
+                    if let Some(id)=reference {
+                        let nom=p.murs.iter().find(|m|m.id==id).map(|m|m.nom.as_str()).or_else(||p.assemblage(id).map(|a|a.nom.as_str())).unwrap_or("mur");
+                        ui.label(format!("Limite : axe de {nom}"));
+                        if ui.button("Changer la limite").clicked(){self.ajustement=Some(Default::default());}
+                    } else {ui.label("Cliquez le mur de référence dans la vue.");}
+                    if ui.button("Terminer").clicked(){self.ruban_edition.annuler();self.ajustement=None;}
                 }
                 _ => {}
             }

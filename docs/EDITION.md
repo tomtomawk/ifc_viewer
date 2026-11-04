@@ -93,7 +93,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
 - **Modifier** propose déplacement, copie, rotation, alignement des axes et
   ajustement de l'extrémité d'un mur sur l'axe d'un autre. Ctrl+clic constitue une
   sélection multiple, surlignée dans la vue. On peut aussi
-  tracer un rectangle en glissant depuis le vide ou en cliquant deux coins : de
+  tracer un rectangle en maintenant le bouton gauche et en glissant depuis le vide
+  (un clic bref désélectionne seulement) : de
   gauche à droite (bleu), seuls les éléments entièrement inclus sont retenus ; de
   droite à gauche (vert), tous les éléments touchés sont retenus. Ctrl ajoute à la
   sélection ; Échap ou clic droit annule le rectangle. Les objets visibles à travers
@@ -115,6 +116,64 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   et haut des murs (attache à une toiture, priorité d'une couche aux croisements),
   mise à jour depuis le type, trémie ou contour rectangulaire d'un élément
   horizontal. Modifier un contour réinitialise ses pentes par arête.
+- **Raccords des murs droits** : l'onglet se forme quand les extrémités des lignes
+  de contrôle se touchent, y compris avec une implantation sur une face et un angle
+  aigu. Une tolérance de 0,01 mm absorbe seulement l'arrondi des coordonnées ;
+  l'épaisseur ne sert plus de distance d'activation. Une arrivée en T demande le
+  contact de l'extrémité avec la ligne de contrôle du mur rejoint. Des points séparés
+  n'ajoutent aucun volume de raccord. La fusion des volumes réellement superposés
+  reste active et les axes enregistrés ne sont pas déplacés.
+- **Propriétés des murs** : le sélecteur de type est commun à la création et à
+  la sélection, avec les mêmes catégories, aperçu et types du gabarit. Le nom est
+  affiché parmi les propriétés, sous les contraintes de hauteur. La longueur suit
+  la ligne d'implantation ; le volume est calculé sur le solide réel, raccords,
+  intersections et ouvertures compris.
+- **Trajectoires des murs** : la barre propose Sélection, Ligne, Rectangle, Arc
+  et Cercle. Sélection reprend un trait existant de la vue en plan avec un aperçu ;
+  les arcs restent courbes et le dessin d'origine est conservé. Un cercle sélectionné
+  demande ensuite les deux limites du périmètre. Le mode Cercle utilise quatre clics :
+  centre, rayon, début et fin du périmètre (sens antihoraire ; recliquer le début pour
+  un cercle complet). Le rayon est un guide pointillé, sans volume de mur.
+  Les murs courbes sélectionnés montrent leur ligne d'implantation courbe et trois
+  poignées : début, point de passage et fin. Les glisser modifie la trajectoire avec
+  accrochages, conserve les couches et se rétablit avec Ctrl+Z ; Échap annule le glissé.
+- **Thème de l'interface** : le bouton ◐ près de Réduire choisit Clair, Sombre ou
+  Système. Le choix est enregistré sur le poste ; Système suit le thème du système.
+- **Plage de vue en plan** : les propriétés distinguent Plan de coupe, Limite
+  basse et Limite haute (niveau et décalage). Entre le plan de coupe et la limite
+  haute, les objets non coupés du niveau de la vue sont représentés en pointillés,
+  notamment les poutres et plafonds. Les objets rattachés à un autre niveau sont
+  exclus, même si la limite haute utilise ce niveau comme référence.
+- **Barre de vue** : le cube ouvre les styles visuels et l'icône soleil donne accès
+  séparément aux ombres du soleil et à l'ombre ambiante. En plan, « Cadre » propose
+  Rectangle (par défaut) ou Ligne pour tracer le contour. « Fond » permet de choisir
+  une autre vue en plan du projet : ses traits et annotations apparaissent en gris
+  derrière la vue courante et sont enregistrés avec celle-ci.
+- **Volets latéraux** : glisser directement le titre de Propriétés ou de
+  l'Arborescence pour détacher le volet dans une fenêtre native et le déplacer sur
+  un second écran. Aucun bouton n'est nécessaire. Relâcher près d'un bord intérieur
+  de la fenêtre principale le réancre de ce côté. Une fois détaché, son titre permet
+  de le déplacer ; un double-clic sur le titre du contenu ou la fermeture de sa
+  fenêtre le réintègre. Un clic droit sur le titre offre les autres emplacements.
+  Le contenu reste lié au document et à la sélection courants, y compris dans
+  l'éditeur de familles. « Paramètres → Général → Réintégrer les volets latéraux »
+  retrouve les deux volets si un écran est débranché.
+- **Ajuster / prolonger (`AJ`)** : cliquez un mur droit pour choisir son axe
+  comme limite, puis cliquez près de l'extrémité d'un autre mur à modifier.
+  La limite apparaît en orange et le résultat au survol en bleu, avant validation.
+  La même limite reste active pour les murs suivants. Le mode « Prolonger seulement »
+  interdit le raccourcissement. Échap ou clic droit efface d'abord la limite,
+  puis termine l'outil ; Ctrl+Z annule une modification. Les assemblages droits
+  sont traités avec toutes leurs couches. La case **Prolonger en angle** de la
+  barre d'options ajuste les deux murs ensemble : cliquer près de chacune des deux
+  extrémités à raccorder à leur intersection. Un cercle orange repère la première ;
+  l'aperçu bleu montre les deux murs. Un seul Ctrl+Z annule tout le raccord.
+  Les deux murs doivent être au même niveau. Les axes parallèles et les déplacements
+  qui inverseraient le mur sont refusés. Le formulaire textuel d'Ajuster est supprimé.
+- **Navigation des vues de menuiserie** : molette pour zoomer vers le curseur,
+  bouton central maintenu pour déplacer la vue, double-clic central, bouton Cadrer (ou raccourci F)
+  pour retrouver la famille. Plan, Coupe et Élévation conservent chacun leur
+  zoom et leur déplacement ; ces actions ne modifient pas la famille.
 - **Éditeur de familles d'ouvertures (à la manière de Revit)** : portes et fenêtres
   sont le même objet ; la catégorie (Porte / Fenêtre) de la famille range son type
   dans l'onglet voulu du sélecteur. Accès : « Éditer la famille… » (barre d'options
@@ -224,8 +283,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   (polaire depuis le point précédent) ou une distance seule (dans la direction du
   curseur), dans l'unité d'affichage. Chaque forme achevée devient une annotation
   de la vue. Le même moteur (`dessin2d.rs`) trace les murs (ligne, rectangle, arc,
-  cercle ; voir le README) : un arc donne un mur courbe (`axe` en arc), un cercle deux
-  demi-cercles, chaque forme une seule étape d'annulation.
+  cercle ; voir le README) : un arc donne un mur courbe (`axe` en arc), un cercle
+  complet deux demi-cercles ; chaque forme constitue une seule étape d'annulation.
   Les éléments horizontaux (dalle, sol, plafond, toiture) l'utilisent aussi :
   polygone, rectangle ou cercle sur le plan de leur altitude.
 - **Documenter** crée aussi textes, zones rectangulaires, cotes et étiquettes

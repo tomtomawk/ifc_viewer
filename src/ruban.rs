@@ -81,11 +81,11 @@ impl Outil {
             Self::Copier => "Copier",
             Self::Tourner => "Tourner",
             Self::Aligner => "Aligner",
-            Self::Ajuster => "Ajuster",
+            Self::Ajuster => "Ajuster / prolonger",
             Self::ModifierContour => "Modifier tracé",
             Self::CreerIdentique => "Créer à l'identique",
             Self::Supprimer => "Supprimer",
-            Self::Cadrer => "Cadrer",
+            Self::Cadrer => "Cadre",
             Self::Isoler => "Isoler",
             Self::Masquer => "Masquer",
             Self::Cote => "Cote",
@@ -360,6 +360,8 @@ enum Valeur {
 
 #[derive(Default)]
 pub struct RubanEdition {
+    pub prolonger_angle: bool,
+    pub selection_mur: bool,
     selection: Option<Outil>,
     derniere_surface: Option<Outil>,
     valeurs: BTreeMap<(Outil, usize), Valeur>,
@@ -487,7 +489,7 @@ fn champs(o: Outil) -> Vec<Champ> {
         Copier => vec![Nombre("Copies", 1.0, ""), Nombre("Distance", 1000.0, " mm")],
         Tourner => vec![Nombre("Angle", 90.0, " °")],
         Aligner => vec![Choix("Référence", &["Face", "Axe"])],
-        Ajuster => vec![Choix("Mode", &["Raccorder", "Prolonger"])],
+        Ajuster => vec![Choix("Mode", &["Ajuster ou prolonger", "Prolonger seulement"])],
         Cote => vec![
             Choix("Mode", &["Alignée", "Orthogonale"]),
             Nombre("Décalage papier", 8.0, " mm"),
@@ -1255,7 +1257,7 @@ impl RubanEdition {
         egui::ScrollArea::vertical()
             .id_salt("creation_mur")
             .show(ui, |ui| {
-                self.selecteur_type_mur(ui, projet);
+                self.selecteur_type_mur(ui, projet, true);
                 ui.add_space(2.0);
                 egui::Frame::new()
                     .fill(ui.visuals().faint_bg_color)
@@ -1308,7 +1310,7 @@ impl RubanEdition {
     /// Sélecteur de type en tête de la palette, comme dans Revit : générique (épaisseur
     /// saisie) ou un type du projet ; composition en bande sous la liste ; Modifier /
     /// Nouveau ouvrent l'éditeur de type.
-    fn selecteur_type_mur(&mut self, ui: &mut egui::Ui, projet: &crate::modele::Projet) {
+    pub fn selecteur_type_mur(&mut self, ui: &mut egui::Ui, projet: &crate::modele::Projet, generique: bool) {
         use crate::modele::CategorieMur;
         let actuel = self.type_mur.as_ref().and_then(|id| projet.type_mur(id));
         let categorie_actuelle = actuel.map_or(CategorieMur::Mur, |t| t.categorie_mur());
@@ -1319,7 +1321,7 @@ impl RubanEdition {
         // types de la catégorie : (type du projet, type du gabarit à ajouter, nom, couches)
         type Ligne = (Option<String>, Option<crate::gabarit::TypeGabarit>, String, Vec<crate::modele::Couche>);
         let mut lignes: Vec<Ligne> = Vec::new();
-        if onglet == CategorieMur::Mur {
+        if generique && onglet == CategorieMur::Mur {
             lignes.push((None, None, "Générique (épaisseur libre)".into(), Vec::new()));
         }
         let mut types: Vec<_> = projet.types_murs.iter().filter(|t| t.categorie_mur() == onglet).collect();

@@ -207,11 +207,11 @@ fn etat_central(partage: &Partage, entree: &Path) -> Resultat<Etat> {
 fn actualiser(s: &mut Session) -> Resultat<Projet> {
     s.reception_seule()?;
     loop {
-        if let Some(p) = s.recevoir()? {
-            return Ok(p);
+        if s.recevoir()?.is_some() {
+            return s.affichage();
         }
         if !s.synchronisation_en_cours() {
-            return s.travail();
+            return s.affichage();
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
@@ -349,7 +349,8 @@ mod tests {
         drop(sb);
         let (p, reutilise, s) = ouvrir(&entree, &cache).unwrap();
         assert_eq!(reutilise, local_b);
-        assert_eq!(p.vues[0].nom, "Architecte A");
+        assert_eq!(p.vues[0].nom, "Architecte B");
+        assert_eq!(s.travail().unwrap().vues[0].nom,"Architecte A");
         assert_eq!(s.copie.attente.len(), 1);
         assert!(!s.copie.conflits.is_empty());
     }

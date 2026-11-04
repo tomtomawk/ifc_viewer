@@ -431,7 +431,7 @@ fn vues_et_feuilles(m: &Maquette, c: &mut Conversion, id_vue: &dyn Fn(i64) -> St
             k += 1;
         }
         noms.insert(nom.clone());
-        c.projet.vues.push(VueNative { id: id_vue(v.id), nom, type_vue: nom_type(v.type_vue), echelle: if v.echelle > 0.0 { v.echelle } else { 100.0 }, orientation_plan: 0.0, coupe_active: None, poche_vue: None, elements_masques: Vec::new(), contour_cadrage: Vec::new(), genre });
+        c.projet.vues.push(VueNative { id: id_vue(v.id), nom, type_vue: nom_type(v.type_vue), echelle: if v.echelle > 0.0 { v.echelle } else { 100.0 }, orientation_plan: 0.0, coupe_active: None, poche_vue: None, elements_masques: Vec::new(), contour_cadrage: Vec::new(), fond_plan: None, limite_haute_niveau: None, limite_haute_decalage: 2800.0, genre });
     }
     if pivotes > 0 {
         *ignorees.entry("Orientation des plans pivotés (plans repris au nord du modèle)".into()).or_default() += pivotes;

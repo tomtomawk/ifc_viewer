@@ -1001,7 +1001,8 @@ fn tableau_colonnes(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, St
     let mut lignes: Vec<LigneQuantite> = Vec::new();
     for m in &p.murs {
         let t = p.type_mur(&m.type_mur);
-        let (l, h) = (m.axe.longueur(), p.bas_haut(m).map(|(a, b)| b - a));
+        let l=p.trajectoire_justification(m.assemblage.as_deref().unwrap_or(&m.id)).map_or_else(||m.axe.longueur(),|(axe,_)|axe.longueur());
+        let h=p.bas_haut(m).map(|(a,b)|b-a);
         lignes.push(LigneQuantite {
             categorie: "Murs".into(),
             type_nom: t.map_or(String::new(), |t| t.nom.clone()),

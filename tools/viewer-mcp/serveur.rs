@@ -18,29 +18,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 const RACINE: &str = env!("CARGO_MANIFEST_DIR");
 const NOM_EXE: &str = if cfg!(windows) { "bimedit.exe" } else { "bimedit" };
 
-const COMMANDES: &str = "Commandes du viewer (outil viewer_commande) :
-projet_natif (JSON du document et identifiants natifs) ; editer <JSON> (transaction, voir docs/EDITION.md) ; annuler ; retablir ;
-etat ; ouvrir <chemin> ; capture vue|fenetre [LxH] <chemin.png> ; taille <largeur> <hauteur> ;
-outil mur|poteau|poutre|terrain|aucun ; modifier_trace <id natif> (contour, polyligne, terrain) ; mur <x0 mm> <y0 mm> <x1 mm> <y1 mm> [hauteur mm epaisseur mm] ;
-enregistrer [chemin.modele.json] (RVT : conversion en arrière-plan ; etat.enregistrement indique si elle est en cours) ;
-reduire ; restaurer ; quitter ;
-vues ; vue <indice|nom> ; camera dessus|face|iso|cadrer|ortho|perspective ;
-feuilles ; selection_feuille <JSON> ; proprietes_feuille (sélection et propriétés du jeu, de la feuille ou de la vue placée) ;
-camera <lacet°> <tangage°> [distance] (vue 3D seulement) ; zoom <facteur> ;
-zone on|off|ajuster ou zone <xmin> <ymin> <zmin> <xmax> <ymax> <zmax> (zone de coupe 3D, m) ;
-glisser <dx> <dy> [gauche|droit|milieu] [maj] (comme à la souris : orbite au bouton
-gauche et regard sur place au bouton droit en vue 3D, panoramique sinon) ; afficher <CLASSES> ;
-masquer <CLASSES> ; tout_afficher ; classes ; categories (catégories de modèle et
-d'annotation) ; visibilite oui|non (boîte de visibilité) ; visibilite <catégorie> oui|non ;
-panneau proprietes|arborescence gauche|droite|flottant ; elements [CLASSE|*] [texte] ;
-selectionner <id> ; isoler <id> ; cadrer <id> ; proprietes [id] ; objet <x> <y>
-(0..1 depuis le coin haut gauche de la vue) ; fiche oui|non (fiche Revit) ;
-onglet tout|vues|feuilles|nomenclatures|familles|materiaux|groupes|liens|modele|classes ;
-style filaire|lignes_cachees|ombre|couleurs|realiste|rendu (style visuel) ; dessin oui|non (lignes cachées ou réaliste) ; coupe non | coupe <hauteur m> [niveau]
-(coupe horizontale au-dessus du niveau, mode dessin) ; niveaux ; poche hachure|plein|vide ;
-echelle <dénominateur> (épaisseur des contours coupés, pas des hachures) ;
-exporter <chemin.svg> (dessin vectoriel de la vue orthographique : coupe, arêtes vues
-sans parties cachées, éléments 2D de la vue Revit ouverte).";
+const AIDE: &str = include_str!("../../docs/PILOTE.md");
+const COMMANDES: &str = "Commandes BIMedit : aide ; etat ; nouveau <JSON> ; ouvrir <chemin> ; fermer [abandonner] ; importer <JSON> ; enregistrer [chemin] ; projet_natif ; editer <JSON> ; modifier_projet <JSON Patch avec empreinte> ; selection_native <JSON> ; outil <nom> ; saisie <JSON> ; annuler ; retablir ; historique ; historique_parcourir <JSON> ; exporter <chemin.svg> ; export <JSON> ; exporter_pdf <chemin> ; exporter_ifc <chemin> ; exporter_csv <JSON> ; exporter_jeu <chemin> [jeu] ; nomenclature <JSON> ; documents ; document <id> ; fermer_vue [autres] ; familles ; famille_editer <id> ; famille_ouvrir|famille_charger|famille_enregistrer <chemin> ; collaborer <chemin> ; collaboration_associer <chemin> ; collaboration_sync ; collaboration_instantane ; collaboration_etat ; collaboration_reserver|collaboration_liberer|collaboration_reprendre <ids JSON> ; collaboration_resoudre <JSON> ; options [JSON] ; gabarit [chemin|defaut] ; ruban <onglet> ; vues ; vue <nom|indice> ; feuilles ; selection_feuille <JSON> ; proprietes_feuille ; camera <mode|angles> ; zoom <facteur> ; zone <bornes|on|off|ajuster> ; glisser <dx dy bouton> ; capture vue|fenetre ; taille <L H> ; reduire ; restaurer ; quitter. La commande aide ou viewer_aide détaille TOUTES les syntaxes, les unités et les outils de modélisation, annotation et visibilité.";
 
 /// Résultat d'un outil : contenu MCP et indicateur d'erreur.
 type Sortie = (Vec<Value>, bool);
@@ -71,6 +50,7 @@ fn executable() -> Result<PathBuf, String> {
 
 /// Envoie une ligne au viewer et lit la ligne JSON de réponse.
 fn envoyer(ligne: &str, delai: Duration) -> std::io::Result<Value> {
+    if ligne.contains(['\n','\r']) { return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput,"Une seule ligne de commande est autorisée")); }
     let adresse = SocketAddr::from((Ipv4Addr::LOCALHOST, port()));
     let mut flux = TcpStream::connect_timeout(&adresse, delai)?;
     flux.set_read_timeout(Some(delai))?;
@@ -186,9 +166,9 @@ fn obj(props: Value, requis: &[&str]) -> Value {
 }
 
 fn outils() -> Vec<(&'static str, String, Value)> {
-    vec![
+    let mut liste = vec![
         ("viewer_etat", "État du viewer : fichier ouvert, vue active, caméra, classes masquées, sélection. Lance le viewer s'il ne tourne pas.".into(), obj(json!({}), &[])),
-        ("viewer_ouvrir", "Ouvre un fichier IFC ou Revit (.rvt, .rfa, .rte) et attend la fin du chargement.".into(),
+        ("viewer_ouvrir", "Ouvre un projet natif, partagé (.bimpartage), IFC ou Revit (.rvt, .rfa, .rte) et attend la fin du chargement.".into(),
          obj(json!({"chemin": {"type": "string", "description": "Chemin absolu du fichier"}}), &["chemin"])),
         ("viewer_capture", "Capture du viewer, rendue en image PNG. zone « vue » (défaut) : vue 3D rendue hors écran, à la taille de la vue ou à largeur × hauteur, même fenêtre réduite. zone « fenetre » : interface entière ; largeur et hauteur redimensionnent alors la fenêtre.".into(),
          obj(json!({"zone": {"type": "string", "enum": ["vue", "fenetre"]}, "largeur": {"type": "integer"}, "hauteur": {"type": "integer"}}), &[])),
@@ -209,7 +189,9 @@ fn outils() -> Vec<(&'static str, String, Value)> {
          obj(json!({"x": {"type": "number"}, "y": {"type": "number"}}), &["x", "y"])),
         ("viewer_commande", format!("Commande brute du viewer.\n{COMMANDES}"),
          obj(json!({"commande": {"type": "string", "description": "Ligne « commande argument »"}}), &["commande"])),
-    ]
+    ];
+    liste.extend(outils_complets());
+    liste
 }
 
 /// Argument rendu comme texte (les chaînes sans guillemets, les nombres tels quels).
@@ -223,6 +205,66 @@ fn arg(a: &Map<String, Value>, cle: &str) -> Result<String, String> {
 
 fn arg_opt(a: &Map<String, Value>, cle: &str) -> Option<String> {
     arg(a, cle).ok()
+}
+
+fn outils_complets() -> Vec<(&'static str, String, Value)> {
+    let texte = json!({"type":"string","minLength":1});
+    let ids = json!({"type":"array","items":{"type":"string"}});
+    vec![
+        ("viewer_aide", "Documentation complète du pilote ; sujets edition/modele pour les formats JSON, commandes pour le contrat métier Rust sérialisable. Sans lancer BIMedit.".into(),obj(json!({"sujet":{"type":"string","enum":["pilote","edition","modele","commandes"]}}),&[])),
+        ("viewer_nouveau", "Crée un projet natif sans dialogue et l'ouvre en conservant les documents précédents. Refuse un chemin existant.".into(),obj(json!({"chemin":texte,"nom":texte}),&["chemin"])),
+        ("viewer_importer", "Convertit IFC/RVT/RFA/RTE en nouveau projet natif sans dialogue. Consulter viewer_etat jusqu'à chargement=false puis vérifier erreur_chargement.".into(),obj(json!({"source":texte,"sortie":texte}),&["source","sortie"])),
+        ("viewer_projet_natif", "Lit le document JSON complet et son empreinte pour une modification optimiste.".into(),obj(json!({}),&[])),
+        ("viewer_editer", "Exécute une commande métier BIM atomique, annulable et collaborative. Les coordonnées sont en mm. Voir viewer_aide et docs/EDITION.md.".into(),obj(json!({"transaction":{"type":"object","required":["action"],"properties":{"action":{"type":"string","enum":["terrain","limite_propriete","coordonnees_origine","barre","escalier","garde_corps","modifier_vue","modifier_quadrillage","niveau","quadrillage","annoter","feuille","nomenclature","modifier_niveau","ouverture","deplacer","copier","tourner","aligner","ajuster","ajuster_angle","modifier_trajectoire_mur","actualiser_type","attacher","priorite_jonction","supprimer","contour","tremie"]}}}}),&["transaction"])),
+        ("viewer_modifier_projet", "Modifie toutes les propriétés natives (matériaux, types, familles, phases, vues, plumes…). JSON Patch atomique, validé, avec historique et collaboration. Empreinte requise de viewer_projet_natif ; refus si le document a changé.".into(),obj(json!({"empreinte":texte,"operations":{"type":"array","minItems":1,"items":{"type":"object","required":["op","path"],"properties":{"op":{"type":"string","enum":["add","replace","remove","test","copy","move"]},"path":{"type":"string"},"from":{"type":"string"},"value":{}}}}}),&["empreinte","operations"])),
+        ("viewer_selection_native", "Sélectionne plusieurs éléments par identifiants natifs ; tableau vide pour désélectionner.".into(),obj(json!({"ids":ids}),&["ids"])),
+        ("viewer_outil", "Active un outil opérationnel du ruban. Voir viewer_aide pour la liste ; utiliser viewer_saisie pour les réglages et tracés, ou viewer_editer pour une édition directe.".into(),obj(json!({"outil":texte}),&["outil"])),
+        ("viewer_saisie", "Envoie des entrées graphiques egui (clic, pointer, bouton, defiler, texte, touche) en points logiques de la fenêtre. Une étape par image ; attendre viewer_etat.saisies_en_attente=0. Ne pilote pas les dialogues natifs du système.".into(),obj(json!({"entrees":{"type":"array","items":{"type":"object","required":["action"],"properties":{"action":{"type":"string","enum":["clic","pointer","bouton","defiler","texte","touche"]},"x":{"type":"number"},"y":{"type":"number"},"dx":{"type":"number"},"dy":{"type":"number"},"bouton":{"type":"string","enum":["gauche","droit","milieu"]},"appuye":{"type":"boolean"},"texte":{"type":"string"},"touche":{"type":"string"},"maj":{"type":"boolean"},"ctrl":{"type":"boolean"},"alt":{"type":"boolean"}}}}}),&["entrees"])),
+        ("viewer_exporter", "Exporte sans dialogue : dessin SVG/PDF, projet IFC4, nomenclature CSV (id requis), jeu de feuilles PDF (jeu optionnel), feuille seule SVG/PDF (id requis).".into(),obj(json!({"format":{"type":"string","enum":["svg","pdf","ifc","csv","jeu_pdf","feuille_svg","feuille_pdf"]},"chemin":texte,"id":texte,"jeu":texte}),&["format","chemin"])),
+        ("viewer_collaboration", "État complet, création/association, synchro, instantané, réservation/libération/reprise explicite ou résolution d'un conflit. Les opérations de synchronisation sont asynchrones ; vérifier l'état ensuite.".into(),obj(json!({"action":{"type":"string","enum":["etat","creer","associer","sync","instantane","reserver","liberer","reprendre","resoudre"]},"chemin":texte,"ids":ids,"transaction":texte,"choix":{"type":"string","enum":["locale","acceptee"]}}),&["action"])),
+        ("viewer_options", "Lit les options, ou modifie et mémorise les options fournies (unités de l'interface et navigation IFC). Les commandes restent en mm.".into(),obj(json!({"navigation_ifc":{"type":"boolean"},"unite":{"type":"string","enum":["millimetre","centimetre","metre"]},"delai_accrochage":{"type":"number","minimum":0.1,"maximum":5},"raccourcis":{"type":"object","additionalProperties":{"type":"string"}}}),&[])),
+        ("viewer_famille", "Éditeur de familles sans dialogue : nouvelle, lire, modifier le fichier complet, charger dans le projet, fermer, ouvrir/enregistrer un fichier, importer un type dans le projet. Lire avant de modifier ; charger propage les occurrences via l'historique et la collaboration.".into(),obj(json!({"action":{"type":"string","enum":["nouvelle","lire","modifier","charger","fermer","ouvrir","enregistrer","importer"]},"genre":{"type":"string","enum":["porte","fenetre"]},"fichier":{"type":"object"},"chemin":texte,"nouveau":{"type":"boolean"},"abandonner":{"type":"boolean"}}),&["action"])),
+        ("viewer_historique", "Lit l'historique, ou annule/rétablit un nombre d'étapes (une transaction à la fois en collaboration).".into(),obj(json!({"action":{"type":"string","enum":["annuler","retablir"]},"nombre":{"type":"integer","minimum":1}}),&[])),
+    ]
+}
+
+/// Construction testable, indépendante du canal TCP ; aucun argument n'est exécuté par un shell.
+fn ligne_complete(nom: &str, a: &Map<String, Value>) -> Result<Option<String>, String> {
+    let json = |v: &Value| serde_json::to_string(v).map_err(|e|e.to_string());
+    let objet = Value::Object(a.clone());
+    let ligne = match nom {
+        "viewer_nouveau" => format!("nouveau {}",json(&objet)?),
+        "viewer_importer" => format!("importer {}",json(&objet)?),
+        "viewer_projet_natif" => "projet_natif".into(),
+        "viewer_editer" => format!("editer {}",json(a.get("transaction").filter(|v|v.is_object()).ok_or("Objet transaction requis")?)?),
+        "viewer_modifier_projet" => format!("modifier_projet {}",json(&objet)?),
+        "viewer_selection_native" => format!("selection_native {}",json(a.get("ids").filter(|v|v.is_array()).ok_or("Tableau ids requis")?)?),
+        "viewer_outil" => format!("outil {}",arg(a,"outil")?),
+        "viewer_saisie" => format!("saisie {}",json(a.get("entrees").filter(|v|v.is_array()).ok_or("Tableau entrees requis")?)?),
+        "viewer_exporter" => format!("export {}",json(&objet)?),
+        "viewer_options" => format!("options {}",json(&objet)?),
+        "viewer_famille" => match arg(a,"action")?.as_str() {
+            "nouvelle"=>format!("famille_nouvelle {}",arg(a,"genre")?),"lire"=>"famille_document".into(),
+            "modifier"=>format!("famille_modifier {}",json(a.get("fichier").filter(|v|v.is_object()).ok_or("Objet fichier requis")?)?),
+            "charger"=>format!("famille_charger_projet {}",if a.get("nouveau").and_then(Value::as_bool).unwrap_or(false) {"nouveau"} else {""}),
+            "fermer"=>format!("famille_fermer {}",if a.get("abandonner").and_then(Value::as_bool).unwrap_or(false) {"abandonner"} else {""}),
+            "ouvrir"=>format!("famille_ouvrir {}",arg(a,"chemin")?),"enregistrer"=>format!("famille_enregistrer {}",arg(a,"chemin")?),"importer"=>format!("famille_charger {}",arg(a,"chemin")?),
+            _=>return Err("Action de famille inconnue".into()),
+        },
+        "viewer_historique" => if a.contains_key("action") {
+            let mut v=objet; if v.get("nombre").is_none() {v["nombre"]=1.into();}
+            format!("historique_parcourir {}",json(&v)?)
+        } else {"historique".into()},
+        "viewer_collaboration" => match arg(a,"action")?.as_str() {
+            "etat"=>"collaboration_etat".into(),"sync"=>"collaboration_sync".into(),"instantane"=>"collaboration_instantane".into(),
+            "creer"=>format!("collaborer {}",arg(a,"chemin")?),"associer"=>format!("collaboration_associer {}",arg(a,"chemin")?),
+            action @ ("reserver"|"liberer"|"reprendre")=>format!("collaboration_{action} {}",a.get("ids").map(json).transpose()?.unwrap_or_default()),
+            "resoudre"=>format!("collaboration_resoudre {}",json(&json!({"transaction":arg(a,"transaction")?,"choix":arg(a,"choix")?}))?),
+            _=>return Err("Action collaborative inconnue".into()),
+        },
+        _=>return Ok(None),
+    };
+    Ok(Some(ligne))
 }
 
 /// Nombre non nul (équivalent d'un « truthy »).
@@ -248,14 +290,22 @@ fn capture_brute(ligne: &str) -> Result<Sortie, String> {
 }
 
 fn appeler(nom: &str, a: &Map<String, Value>) -> Result<Sortie, String> {
+    if nom == "viewer_aide" {
+        let texte=match a.get("sujet").and_then(Value::as_str).unwrap_or("pilote") {
+            "pilote"=>AIDE,"edition"=>include_str!("../../docs/EDITION.md"),"modele"=>include_str!("../../docs/MODELE.md"),"commandes"=>include_str!("../../src/modele/commandes.rs"),
+            _=>return Err("Sujet : pilote|edition|modele|commandes".into()),
+        };
+        return Ok((vec![json!({"type":"text","text":texte})],false));
+    }
+    if let Some(ligne) = ligne_complete(nom,a)? { return Ok(reponse(commande(&ligne)?)); }
     match nom {
-        "viewer_etat" => Ok((vec![texte(&commande("etat")?)], false)),
+        "viewer_etat" => Ok(reponse(commande("etat")?)),
         "viewer_ouvrir" => Ok(reponse(commande(&format!("ouvrir {}", arg(a, "chemin")?))?)),
         "viewer_capture" => {
             let zone = a.get("zone").and_then(Value::as_str).unwrap_or("vue");
             capture(zone, arg_opt(a, "largeur"), arg_opt(a, "hauteur"))
         }
-        "viewer_vues" => Ok((vec![texte(&commande("vues")?)], false)),
+        "viewer_vues" => Ok(reponse(commande("vues")?)),
         "viewer_feuilles" => Ok(reponse(commande("feuilles")?)),
         "viewer_selection_feuille" => {
             let corps = serde_json::to_string(a).map_err(|e| e.to_string())?;
@@ -338,7 +388,7 @@ fn traiter(msg: &Value) {
             "protocolVersion": p.get("protocolVersion").cloned().unwrap_or_else(|| json!("2025-06-18")),
             "capabilities": {"tools": {}},
             "serverInfo": {"name": "bimedit", "version": "1.0"},
-            "instructions": "Pilote le viewer IFC/Revit du projet : viewer_ouvrir puis viewer_capture pour voir le rendu ; viewer_vue pour ouvrir une vue Revit.",
+            "instructions": "Pilote BIMedit : viewer_aide décrit toutes les capacités. viewer_projet_natif puis viewer_editer ou viewer_modifier_projet pour les transactions ; viewer_outil puis viewer_saisie pour tracer. viewer_collaboration pilote synchronisation et conflits. viewer_capture permet de vérifier le rendu.",
         }))),
         "ping" => repondre(&id, Ok(json!({}))),
         "tools/list" => {
@@ -407,9 +457,34 @@ mod tests {
     }
 
     #[test]
-    fn treize_outils_avec_schema() {
+    fn outils_avec_schema_et_noms_uniques() {
         let o = outils();
-        assert_eq!(o.len(), 13);
+        assert_eq!(o.len(), 27);
         assert!(o.iter().all(|(_, _, s)| s["type"] == "object"));
+        let noms: std::collections::HashSet<_> = o.iter().map(|(n,_,_)|n).collect();
+        assert_eq!(noms.len(),o.len());
+    }
+
+    #[test]
+    fn commandes_structurees_preservent_les_chemins_et_le_json() {
+        let args=json!({"format":"pdf","chemin":"C:/Projet partagé/étage 1.pdf"}).as_object().cloned().unwrap();
+        let ligne=ligne_complete("viewer_exporter",&args).unwrap().unwrap();
+        let (_,json)=ligne.split_once(' ').unwrap();
+        assert_eq!(serde_json::from_str::<Value>(json).unwrap()["chemin"],args["chemin"]);
+        let args=json!({"transaction":{"action":"annoter","texte":"Ligne 1\nLigne 2"}}).as_object().cloned().unwrap();
+        let ligne=ligne_complete("viewer_editer",&args).unwrap().unwrap();
+        assert!(!ligne.contains('\n'));
+        assert!(ligne_complete("viewer_editer",&Map::new()).is_err());
+    }
+
+    #[test]
+    fn routage_collaboration_et_historique() {
+        let a=json!({"action":"reserver","ids":["mur-1","mur-2"]}).as_object().cloned().unwrap();
+        assert_eq!(ligne_complete("viewer_collaboration",&a).unwrap().unwrap(),r#"collaboration_reserver ["mur-1","mur-2"]"#);
+        let a=json!({"action":"annuler"}).as_object().cloned().unwrap();
+        let ligne=ligne_complete("viewer_historique",&a).unwrap().unwrap();
+        let (_,j)=ligne.split_once(' ').unwrap();
+        assert_eq!(serde_json::from_str::<Value>(j).unwrap()["nombre"],1);
+        assert!(envoyer("etat\nquitter",Duration::from_millis(1)).is_err());
     }
 }

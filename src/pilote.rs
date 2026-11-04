@@ -4,6 +4,19 @@
 //! connexion envoie une ligne « commande argument » en UTF-8 et reçoit une ligne JSON.
 //! Les commandes sont traitées par l'application entre deux images (`ViewerApp::piloter`).
 
+pub mod edition;
+pub mod saisie;
+pub const AIDE: &str = include_str!("../docs/PILOTE.md");
+pub fn documentation(sujet: &str) -> Result<&'static str, String> {
+    match sujet {
+        "" | "pilote" => Ok(AIDE),
+        "edition" => Ok(include_str!("../docs/EDITION.md")),
+        "modele" => Ok(include_str!("../docs/MODELE.md")),
+        "commandes" => Ok(include_str!("modele/commandes.rs")),
+        _ => Err("Sujet : pilote|edition|modele|commandes".into()),
+    }
+}
+
 use eframe::egui;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};

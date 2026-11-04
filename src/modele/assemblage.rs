@@ -86,6 +86,68 @@ pub fn decaler_axe(axe: &Axe, d: f64) -> Axe {
 }
 
 impl Projet {
+    /// Trajectoire d'implantation, droite ou courbe, à l'altitude de base du mur.
+    pub fn trajectoire_justification(&self,id:&str)->Option<(Axe,f64)> {
+        let (m,t,decalage)=if let Some(a)=self.assemblage(id) {
+            let t=self.type_mur(&a.type_mur)?;
+            (*self.couches_assemblage(id).first()?,t,t.decalages_couches().first().copied().unwrap_or(0.))
+        } else {let m=self.murs.iter().find(|m|m.id==id)?;(m,self.type_mur(&m.type_mur)?,0.)};
+        let reference=self.implantations.get(id).copied().unwrap_or(Reference::Axe);
+        Some((decaler_axe(&m.axe,t.decalage_reference(reference)-decalage),self.niveau(&m.niveau)?.altitude+m.decalage_bas))
+    }
+
+    pub fn modifier_trajectoire_courbe(&mut self,id:&str,points:[[f64;2];3])->Result<(),String> {
+        let (ancien,_)=self.trajectoire_justification(id).ok_or("Mur introuvable")?;
+        let Axe::Arc{debut,centre,direct,..}=ancien else {return Err("Mur courbe requis".into())};
+        if !points.iter().flatten().all(|x|x.is_finite()) {return Err("Coordonnées non finies".into());}
+        let [a,b,c]=points.map(glam::DVec2::from_array);
+        let (o,r,_,balayage)=crate::dessin2d::arc_3_points(a,b,c).ok_or("Les trois points de contrôle doivent définir un arc.".to_string())?;
+        let nouvel=Axe::Arc{debut:a.to_array(),fin:c.to_array(),centre:o.to_array(),direct:balayage>0.};
+        let rayon0=(debut[0]-centre[0]).hypot(debut[1]-centre[1]);
+        let couches=self.assemblage(id).map(|a|a.couches.clone()).unwrap_or_else(||vec![id.into()]);
+        for m in self.murs.iter_mut().filter(|m|couches.contains(&m.id)) {
+            let Axe::Arc{debut,centre,..}=m.axe else {return Err("Couche courbe attendue".into())};
+            let rayon=(debut[0]-centre[0]).hypot(debut[1]-centre[1]);
+            let d=(rayon0-rayon)*if direct {1.}else{-1.};
+            if r+if balayage>0. {-d}else{d} <= 0.5 {return Err("Le rayon est trop petit pour les couches du mur.".into());}
+            m.axe=decaler_axe(&nouvel,d);
+        }
+        self.arrondir();
+        Ok(())
+    }
+
+    /// Inverse les faces autour de la ligne d'implantation, pour toutes les couches.
+    pub fn inverser_mur(&mut self,id:&str)->Result<(),String> {
+        let (reference,_)=self.trajectoire_justification(id).ok_or("Mur introuvable")?;
+        let inverse=match reference {
+            Axe::Droit{debut,fin}=>Axe::Droit{debut:fin,fin:debut},
+            Axe::Arc{debut,fin,centre,direct}=>Axe::Arc{debut:fin,fin:debut,centre,direct:!direct},
+        };
+        let couches=self.assemblage(id).map(|a|a.couches.clone()).unwrap_or_else(||vec![id.to_string()]);
+        let ouvertures:Vec<(String,f64)>=self.ouvertures.iter().filter(|o|o.mur==id || couches.contains(&o.mur))
+            .filter_map(|o|super::solides::hote(self,&o.mur).ok().map(|(axe,_,_)|(o.id.clone(),axe.longueur())))
+            .collect();
+        for o in &mut self.ouvertures {
+            if let Some((_,longueur))=ouvertures.iter().find(|(id,_)|id==&o.id) {o.abscisse=*longueur-o.abscisse;}
+        }
+        for m in self.murs.iter_mut().filter(|m|couches.contains(&m.id)) {
+            let d=match (reference,m.axe) {
+                (Axe::Droit{debut,fin},Axe::Droit{debut:point,..})=>{
+                    let a=glam::DVec2::from_array(debut);let b=glam::DVec2::from_array(fin);
+                    (glam::DVec2::from_array(point)-a).dot((b-a).normalize_or_zero().perp())
+                },
+                (Axe::Arc{debut,centre,direct,..},Axe::Arc{debut:point,..})=>{
+                    let c=glam::DVec2::from_array(centre);
+                    (glam::DVec2::from_array(debut).distance(c)-glam::DVec2::from_array(point).distance(c))*if direct {1.} else {-1.}
+                },
+                _=>return Err("Trajectoires du mur incompatibles".into()),
+            };
+            m.axe=decaler_axe(&inverse,d);
+        }
+        self.arrondir();
+        Ok(())
+    }
+
     /// Ligne d'implantation (justification) choisie pour un mur ou un assemblage droit :
     /// extrémités (mm) et distance, vers l'extérieur, qui la sépare de l'axe médian.
     /// Sans implantation enregistrée, c'est l'axe médian.

@@ -145,6 +145,21 @@ impl ListeCreation {
 fn identifiant_natif(espace: &str, _cle: &str) -> String { format!("{espace}-{}", super::collaboration::uuid()) }
 
 impl Projet {
+    /// Intersection pour Ajuster/Prolonger ; l'extrémité opposée reste fixe.
+    pub fn cible_ajustement(&self,id:&str,reference:&str,fin:bool)->Result<[f64;2],String> {
+        use glam::DVec2;
+        if id==reference {return Err("Choisissez un mur différent de la limite.".into());}
+        let (a,b,_)=self.axe_element(id).ok_or("Mur droit requis.")?;
+        let (c,d,_)=self.axe_element(reference).ok_or("Référence droite requise.")?;
+        let [a,b,c,d]=[a,b,c,d].map(DVec2::from_array);
+        let (u,v)=(b-a,d-c);let den=u.perp_dot(v);
+        if u.length_squared()<1e-12 || v.length_squared()<1e-12 || den.abs()<1e-9*u.length()*v.length() {return Err("Murs parallèles : aucune intersection.".into());}
+        let t=(c-a).perp_dot(v)/den;
+        if !t.is_finite() || (fin&&t<=1e-9) || (!fin&&t>=1.0-1e-9) {return Err("La limite dépasserait l'autre extrémité du mur.".into());}
+        let point=a+u*t;
+        if !point.is_finite(){return Err("Intersection non valide.".into());}
+        Ok(point.to_array())
+    }
     /// Identifiant libre pour une nouvelle vue et son nom (« Coupe 3 »).
     fn nouvelle_vue(&self, prefixe: &str) -> (String, usize) {
         let mut k = 1;
@@ -167,7 +182,7 @@ impl Projet {
         let (id, _) = self.nouvelle_vue("plan");
         let deja = self.vues.iter().filter(|v| matches!(&v.genre, GenreVue::Plan { niveau: x, .. } if x == niveau)).count();
         let nom = if deja == 0 { n.nom.clone() } else { format!("{} ({})", n.nom, deja + 1) };
-        self.vues.push(Vue { id: id.clone(), nom, type_vue: String::new(), echelle: 100.0, orientation_plan: 0.0, coupe_active: None, poche_vue: None, elements_masques: Vec::new(), contour_cadrage: Vec::new(), genre: GenreVue::Plan { bas_niveau: n.id.clone(), bas_decalage: 0.0, niveau: n.id, coupe } });
+        self.vues.push(Vue { id: id.clone(), nom, type_vue: String::new(), echelle: 100.0, orientation_plan: 0.0, coupe_active: None, poche_vue: None, elements_masques: Vec::new(), contour_cadrage: Vec::new(), fond_plan: None, limite_haute_niveau: None, limite_haute_decalage: 2800.0, genre: GenreVue::Plan { bas_niveau: n.id.clone(), bas_decalage: 0.0, niveau: n.id, coupe } });
         Ok(id)
     }
 
@@ -190,7 +205,7 @@ impl Projet {
         while self.vues.iter().any(|v| v.nom == format!("{nom} {k}")) {
             k += 1;
         }
-        self.vues.push(Vue { id: id.clone(), nom: format!("{nom} {k}"), type_vue: type_vue.into(), echelle, orientation_plan: 0.0, coupe_active: None, poche_vue: None, elements_masques: Vec::new(), contour_cadrage: Vec::new(), genre: GenreVue::Coupe { debut, fin, profondeur, elevation } });
+        self.vues.push(Vue { id: id.clone(), nom: format!("{nom} {k}"), type_vue: type_vue.into(), echelle, orientation_plan: 0.0, coupe_active: None, poche_vue: None, elements_masques: Vec::new(), contour_cadrage: Vec::new(), fond_plan: None, limite_haute_niveau: None, limite_haute_decalage: 2800.0, genre: GenreVue::Coupe { debut, fin, profondeur, elevation } });
         self.arrondir();
         Ok(id)
     }
@@ -271,6 +286,28 @@ impl Projet {
             let ecart = (DVec2::from_array(debut) - a).dot(n0);
             let _ = fin;
             m.axe = Axe::Droit { debut: (na + n1 * ecart).to_array(), fin: (nb + n1 * ecart).to_array() };
+        }
+        self.arrondir();
+        Ok(())
+    }
+
+    /// Déplace une poignée de la ligne de justification en gardant l'autre fixe.
+    pub fn deplacer_extremite_justification(&mut self,id:&str,fin:bool,point:[f64;2])->Result<(),String> {
+        use glam::DVec2;
+        let (a,b,_)=self.axe_element(id).ok_or("Mur droit introuvable")?;
+        let (ca,cb,ecart)=self.ligne_justification(id).ok_or("Ligne de justification introuvable")?;
+        if !point.iter().all(|x|x.is_finite()) {return Err("Coordonnées non finies".into());}
+        let (ca,cb)=if fin {(DVec2::from_array(ca),DVec2::from_array(point))}else{(DVec2::from_array(point),DVec2::from_array(cb))};
+        if ca.distance(cb)<1.0 {return Err("Le mur doit mesurer au moins 1 mm.".into());}
+        let (a,b)=(DVec2::from_array(a),DVec2::from_array(b));
+        let ancien=(b-a).normalize_or_zero().perp();
+        let nouveau=(cb-ca).normalize().perp();
+        let (na,nb)=(ca-nouveau*ecart,cb-nouveau*ecart);
+        let couches=self.assemblage(id).map(|a|a.couches.clone()).unwrap_or_else(||vec![id.to_string()]);
+        for m in self.murs.iter_mut().filter(|m|couches.contains(&m.id)) {
+            let Axe::Droit{debut,..}=m.axe else{return Err("Mur droit requis".into())};
+            let d=(DVec2::from_array(debut)-a).dot(ancien);
+            m.axe=Axe::Droit{debut:(na+nouveau*d).to_array(),fin:(nb+nouveau*d).to_array()};
         }
         self.arrondir();
         Ok(())
@@ -469,6 +506,24 @@ impl Projet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn poignee_garde_fixe_autre_extremite_sur_la_justification() {
+        for implantation in [Implantation::Axe,Implantation::Exterieure,Implantation::Interieure,Implantation::AxePorteur] {
+            for fin in [false,true] {
+                let mut p=Projet::nouveau("Poignée");
+                let id=p.ajouter_mur([0.,0.],[4000.,0.],&ParametresMur{implantation,..Default::default()}).unwrap();
+                let (a,b,_)=p.ligne_justification(&id).unwrap();
+                let fixe=if fin {a}else{b};
+                let cible=if fin {[4500.,1800.]}else{[-500.,1800.]};
+                p.deplacer_extremite_justification(&id,fin,cible).unwrap();
+                let (ap,bp,_)=p.ligne_justification(&id).unwrap();
+                let proche=|a:[f64;2],b:[f64;2]|(a[0]-b[0]).hypot(a[1]-b[1])<0.002;
+                assert!(proche(if fin {ap}else{bp},fixe));
+                assert!(proche(if fin {bp}else{ap},cible));
+            }
+        }
+    }
+
     #[test]
     fn ligne_de_justification_retrouvee_apres_creation() {
         for (implantation, attendu) in [(Implantation::Axe, 0.0), (Implantation::Exterieure, 0.0), (Implantation::Interieure, 0.0)] {

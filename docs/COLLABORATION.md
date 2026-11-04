@@ -1,4 +1,23 @@
-# Collaboration hybride — protocole 2
+# Collaboration hybride — protocole 3
+
+## Correction de la première synchronisation (protocole 3)
+
+Les murs droits sont observés par une bande autour de leur axe, avec la même marge
+de jonction qu'avant. Le seul recouvrement des rectangles englobants de deux murs
+diagonaux ou éloignés ne bloque plus leurs créations indépendantes. Les croisements,
+voisinages réels, changements d'hôte et modifications du même objet restent contrôlés.
+Les autres géométries gardent leurs enveloppes conservatrices.
+
+Un vrai conflit conserve à l'écran le dernier projet local valide et le sauvegarde
+dans le journal local (`apercu_conflit`). Cet aperçu n'est pas publié, ne sert pas de
+base à une nouvelle édition et reste visible après réouverture. Les décisions de
+résolution sont explicites et archivent les propositions avant de changer cet aperçu.
+
+Les nouvelles transactions portent le protocole 3 et des lectures `#voisinage3/…`.
+Les décisions déjà acceptées des protocoles 1 et 2 gardent leur vérification exacte ;
+aucun journal central n'est réécrit. Les deux instances doivent être mises à jour
+avant une nouvelle publication. Les anciennes propositions refusées restent
+récupérables dans leurs archives et ne sont pas republiées automatiquement.
 
 ## État initial et invariants
 
@@ -244,9 +263,9 @@ Seuls `nom` et `type_vue` d'une vue sont déclarés indépendants entre eux. Les
 en fin d'une liste significative peuvent fusionner ; les réordonnancements concurrents
 restent conflictuels. Aucun champ BIM ne reçoit un arbitrage silencieux par date.
 
-Les deux instances doivent utiliser cette version. Les historiques acceptés du
-protocole 1 restent lisibles et conservent leur vérification d'origine ; les nouvelles
-transactions utilisent le protocole 2. Après leur publication, les anciens exécutables
+Les deux instances doivent utiliser cette version. Les historiques acceptés des
+protocoles 1 et 2 restent lisibles et conservent leur vérification d'origine ; les nouvelles
+transactions utilisent désormais le protocole 3. Après leur publication, les anciens exécutables
 doivent refuser ce protocole. La mise à jour ne réécrit pas les anciennes décisions.
 
 Une édition géométrique conserve la reconstruction de scène existante. Le format

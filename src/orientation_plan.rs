@@ -177,10 +177,24 @@ pub fn afficher(ui: &mut egui::Ui, vue: egui::Rect, camera: &mut Camera, origine
     let encre = ui.visuals().text_color();
     let bleu = ui.visuals().selection.stroke.color;
     // anneau : bande entre les deux rayons, le plan reste visible au centre
-    let milieu = (RAYON + RAYON_INTERIEUR) * 0.5;
     let survol_anneau = survol.is_some_and(sur_anneau) && cible.is_none();
     let fond = if survol_anneau || resp.dragged() { Color32::from_rgba_unmultiplied(214, 226, 244, 245) } else { Color32::from_rgba_unmultiplied(232, 235, 240, 240) };
-    p.circle_stroke(centre, milieu, Stroke::new(RAYON - RAYON_INTERIEUR, fond));
+    // Le fond est un anneau borné par les deux cercles, légèrement en retrait
+    // des contours pour éviter que l'anticrénelage déborde du tracé.
+    let mut anneau=egui::Mesh::default();
+    const N:u32=96;
+    for i in 0..N {
+        let a=i as f32*TAU/N as f32;
+        let d=vec2(a.cos(),a.sin());
+        anneau.colored_vertex(centre+d*(RAYON_INTERIEUR+0.75),fond);
+        anneau.colored_vertex(centre+d*(RAYON-0.75),fond);
+    }
+    for i in 0..N {
+        let suivant=(i+1)%N;
+        anneau.add_triangle(2*i,2*i+1,2*suivant);
+        anneau.add_triangle(2*i+1,2*suivant+1,2*suivant);
+    }
+    p.add(egui::Shape::mesh(anneau));
     p.circle_stroke(centre, RAYON, Stroke::new(1.0, encre));
     p.circle_stroke(centre, RAYON_INTERIEUR, Stroke::new(1.0, Color32::from_gray(150)));
     // graduations tous les 15° sur le bord extérieur, tournant avec le plan

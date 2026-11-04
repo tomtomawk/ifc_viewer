@@ -787,11 +787,20 @@ pub struct Vue {
     /// Périmètre de cadrage d'un plan, en coordonnées du modèle (mm).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub contour_cadrage: Vec<[f64; 2]>,
+    /// Autre vue en plan affichée en arrière-plan.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fond_plan: Option<String>,
+    /// Limite haute relative à un niveau, pour les éléments en projection au-dessus.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limite_haute_niveau: Option<String>,
+    #[serde(default = "limite_haute_defaut")]
+    pub limite_haute_decalage: f64,
     #[serde(flatten)]
     pub genre: GenreVue,
 }
 
 fn est_zero(v: &f64) -> bool { *v == 0.0 }
+fn limite_haute_defaut() -> f64 { 2800.0 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(tag = "genre", rename_all = "snake_case")]
@@ -982,25 +991,10 @@ impl Projet {
         Some((bas, haut))
     }
 
-    /// Volume d'un mur déduit de ses paramètres (mm³) : longueur de l'axe × épaisseur du
-    /// type × hauteur, moins ses baies (bornées à la hauteur du mur). Les jonctions entre
-    /// murs ne sont pas modélisées en v0.
+    /// Volume réel du mur : raccords, intersections, ouvertures et attaches compris (mm³).
     pub fn volume_mur(&self, m: &Mur) -> Option<f64> {
-        let e = self.type_mur(&m.type_mur)?.epaisseur();
-        let (bas, haut) = self.bas_haut(m)?;
-        let h = haut - bas;
-        let base = self.niveau(&m.niveau)?.altitude;
-        let vides: f64 = self
-            .ouvertures
-            .iter()
-            // baies du mur, ou de son assemblage (elles traversent toutes les couches)
-            .filter(|o| o.mur == m.id || m.assemblage.as_ref() == Some(&o.mur))
-            .map(|o| {
-                let (z0, z1) = ((base + o.allege).max(bas), (base + o.allege + o.hauteur).min(haut));
-                o.largeur * (z1 - z0).max(0.0)
-            })
-            .sum();
-        Some((m.axe.longueur() * h - vides) * e)
+        let coupes=jonctions::coupes(self);
+        solides::mur(self,m,&coupes).ok().map(|tris|geometrie::volume(&tris))
     }
 
     /// Volume d'une dalle déduit de ses paramètres (mm³) : aire des contours × épaisseur

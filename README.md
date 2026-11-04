@@ -45,18 +45,18 @@ ce document. La conversion v0 s'exécute en arrière-plan, écrit aussi le rappo
 disque doit être rouvert avant conversion. Le fichier RVT source reste intact.
 
 Le ruban regroupe les commandes dans Début, Modéliser, Modifier, Documenter et Sortie ; tous les bandeaux ont la même hauteur et des icônes (Début : Nouveau, Ouvrir, Fermer, Importer, Fiche Revit, Options ; Sortie : Enregistrer, Enregistrer sous, Dessin SVG, Dessin PDF, IFC4, Jeu PDF (jeu de feuilles en un PDF, une page par feuille) ; Documenter, groupe Documents : Feuilles, Nomenclatures).
-**Début → Options → Navigation IFC** (désactivée par défaut) affiche, pour les modèles Revit et natifs, l'arborescence spatiale IFC, la liste des classes et les attributs IFC des propriétés (classe, Id STEP, GlobalId, bouton Copier GlobalId). Le même menu choisit le gabarit. Les fichiers IFC gardent toujours cette navigation, qui est leur seule arborescence. L'option est enregistrée dans `%APPDATA%\bimedit\options.json` (Windows) ou `~/.config/bimedit/options.json`.
+**Début → Paramètres → Navigation IFC** (désactivée par défaut) affiche, pour les modèles Revit et natifs, l'arborescence spatiale IFC, la liste des classes et les attributs IFC des propriétés (classe, Id STEP, GlobalId, bouton Copier GlobalId). Le même menu choisit le gabarit. Les fichiers IFC gardent toujours cette navigation, qui est leur seule arborescence. L'option est enregistrée dans `%APPDATA%\bimedit\options.json` (Windows) ou `~/.config/bimedit/options.json`.
 Les commandes fréquentes (Mur, Éléments horizontaux, Ouverture, Déplacer, Copier, Aligner, Cote et
 Texte) disposent de grands boutons lorsque la largeur le permet ; les autres
 restent empilées avec de petites icônes. Les grands boutons se replient selon leur
-priorité quand la fenêtre rétrécit. Le bouton Éléments horizontaux superpose sol, plafond et toiture dans une seule icône ; la sorte (Dalle, Sol, Plafond, Toiture) et son type se choisissent dans le sélecteur de type en tête de Propriétés : un onglet par sorte, puis des types prédéfinis (dalles BA ou bois, sols carrelage, parquet, PVC, résine, plafonds plaque de plâtre ou dalles acoustiques, toitures tuiles, terrasse, bac acier, végétalisée) avec leur composition ; l'épaisseur est celle du type. **Dalle**, **Sol**, **Plafond** et **Toiture** sont opérationnels dans les projets natifs : tracés avec le moteur du dessin 2D (mêmes accrochages, repérage polaire, ligne de commande que les murs), forme choisie dans la barre en haut de la vue : Polygone (recliquer le premier sommet, F, Entrée ou clic droit pour fermer), Rectangle ou Cercle (48 côtés) ; aperçu rempli avec l'aire ; une couleur par couche. Le plafond se cale par sa hauteur sous plafond, la toiture par sa sous-face ; la pente se donne arête par arête (croupes, deux pans, plat), dans les propriétés ou en cliquant les repères des arêtes dans la vue. Les types, matériaux et types de vues viennent du gabarit (`gabarits/defaut.gabarit.json`, autre gabarit au choix dans Début → Options) ; détails dans `docs/MODELE.md`.
+priorité quand la fenêtre rétrécit. Le bouton Éléments horizontaux superpose sol, plafond et toiture dans une seule icône ; la sorte (Dalle, Sol, Plafond, Toiture) et son type se choisissent dans le sélecteur de type en tête de Propriétés : un onglet par sorte, puis des types prédéfinis (dalles BA ou bois, sols carrelage, parquet, PVC, résine, plafonds plaque de plâtre ou dalles acoustiques, toitures tuiles, terrasse, bac acier, végétalisée) avec leur composition ; l'épaisseur est celle du type. **Dalle**, **Sol**, **Plafond** et **Toiture** sont opérationnels dans les projets natifs : tracés avec le moteur du dessin 2D (mêmes accrochages, repérage polaire, ligne de commande que les murs), forme choisie dans la barre en haut de la vue : Polygone (recliquer le premier sommet, F, Entrée ou clic droit pour fermer), Rectangle ou Cercle (48 côtés) ; aperçu rempli avec l'aire ; une couleur par couche. Le plafond se cale par sa hauteur sous plafond, la toiture par sa sous-face ; la pente se donne arête par arête (croupes, deux pans, plat), dans les propriétés ou en cliquant les repères des arêtes dans la vue. Les types, matériaux et types de vues viennent du gabarit (`gabarits/defaut.gabarit.json`, autre gabarit au choix dans Début → Paramètres) ; détails dans `docs/MODELE.md`.
 Les projets natifs ont une arborescence (vue 3D, plans d'étage, coupes, types, matériaux) ; l'onglet **Documenter** crée les vues en plan (une par niveau) et, avec un même outil, les coupes et les élévations (type choisi dans le sélecteur, deux clics dans un plan), enregistrées dans le projet ; une vue ouverte se renomme, se retourne ou se supprime dans Propriétés. Son sélecteur se trouve dans un encart en tête de
 Propriétés, avec une vignette et une liste déroulante distinguant Dalle (structure),
 Sol (revêtement), Plafond et Toiture. Les paramètres sont juste en dessous et
 restent mémorisés séparément pour chaque catégorie. Les vignettes distinguent la
 dalle épaisse, le sol carrelé mince, le plafond suspendu et la toiture à deux pans.
 L'icône Mur présente une coupe en trois couches avec une face lisse.
-La sélection par rectangle démarre dans le vide, par glissement ou par deux clics.
+La sélection par rectangle démarre dans le vide en maintenant le bouton gauche et en glissant. Un clic bref désélectionne seulement.
 De gauche à droite, le cadre bleu sélectionne les éléments entièrement inclus ; de
 droite à gauche, le cadre vert sélectionne aussi les éléments touchés. Ctrl ajoute
 à la sélection et Échap ou clic droit annule le cadre. En 3D, le glissement sur un
@@ -71,9 +71,9 @@ Les onglets d'édition présentent leurs groupes d'outils et les options de l'ou
 sélectionné directement à droite de son icône (Ouverture : Porte/Fenêtre ; Cote : Alignée/Orthogonale ; Texte :
 avec/sans flèche). **Mur** est opérationnel dans les projets natifs et se trace avec le moteur du
 dessin 2D : régler hauteur, épaisseur (ou type), implantation et niveau de base, puis
-choisir la forme dans la barre en haut de la vue : Ligne (départ puis extrémité),
+choisir le tracé dans la barre en haut de la vue : Sélection (trait existant), Ligne (départ puis extrémité),
 Rectangle (deux coins opposés, quatre murs), Arc (départ, point de passage, fin : mur
-courbe) ou Cercle (centre puis rayon : deux demi-cercles). Au clavier, la ligne de
+courbe) ou Cercle (centre, rayon, début puis fin du périmètre ; même début et fin pour un cercle complet en deux demi-cercles). Les arcs sélectionnés affichent leur ligne de contrôle et trois poignées modifiables. Au clavier, la ligne de
 commande en bas de la vue reçoit `x,y`, `@dx,dy`, `d<angle` ou une longueur seule
 (direction du curseur), puis Entrée. L'aperçu montre le volume, les couches, la
 longueur et l'angle. Accrochages : extrémité, milieu, centre, quadrant, intersection,
@@ -187,6 +187,13 @@ vue 3D (pilotes sans multiéchantillonnage).
 
 ## Pilotage par MCP
 
+Le contrat complet est dans [docs/PILOTE.md](docs/PILOTE.md), également accessible
+par `viewer_aide` sans lancer l'application. Les outils MCP couvrent l'édition
+native, les propriétés du projet, les fichiers sans dialogue, les exports, les
+réservations/conflits collaboratifs et la saisie graphique des outils du ruban.
+`python tools/test-pilote.py --exe target/release/bimedit.exe` vérifie le parcours
+sur une instance, un port, un cache collaboratif et des documents temporaires isolés.
+
 Le viewer écoute sur `127.0.0.1:47811` (variable `BIMEDIT_PORT`) des commandes d'une
 ligne. `tools/viewer-mcp/serveur.rs` (binaire Rust `bimedit-mcp`, sans dépendance supplémentaire) les expose en serveur MCP,
 déclaré dans `.mcp.json` sous le nom `bimedit` (lancé par `cargo run --release --bin bimedit-mcp`) : un agent ouvre un fichier, choisit une
@@ -218,3 +225,18 @@ cargo run --release -- --stats samples/test_ifc4.ifc
 Les tests Revit (`src/rvt/maquette.rs`) lisent des fichiers hors dépôt, avec des valeurs relevées dans Revit 2026 : `essais\2026\E04_mur.rvt` (6,711 562 m³, boîte 12 345,6 × 200 × 2 718,2 mm), `essais\2026\E12_grilles.rvt` (3 grilles), `fichiers\Projet1.rvt` (59 murs, matériaux, sols, escaliers, garde-corps, pièces, instances et géométrie des familles, cotes d'une porte) et `fichiers\Kerreut 2025.rvt`, copie d'un projet du corpus d'agence (10 toits, escalier assemblé, familles). Ces fichiers sont dans le dossier du décodage `C:\Users\theba\Projets code\Decodage RVT` (essais, fichiers de référence, sorties de l'API de Revit, scripts RiveTT ; provenance de chaque fichier dans son `SOURCES.md`), remplaçable par la variable `RVT_ESSAIS` ; fichier absent : test sauté avec un message.
 
 Le décodage RVT est fait dans ce dépôt ; [rvt-rs](https://github.com/DrunkOnJava/rvt-rs) (Apache-2.0) n'a été consulté que partiellement, comme référence de comparaison, sans reprise de code (détail : `LISEZMOI-RVT.md` § 10, dossier de décodage hors dépôt).
+
+## Paramètres personnels
+
+**Début → Paramètres** (Ctrl+, par défaut) ouvre les catégories Général, Dessin et
+accrochages, Raccourcis clavier, Graphisme et Gabarit. Les raccourcis de commande
+sont personnalisables (touche, combinaison ou séquence de deux à trois lettres),
+avec recherche, détection des doublons/préfixes ambigus et remise à zéro. Les
+préférences sont mémorisées dans le fichier de configuration du poste.
+Le repérage d'un point de référence s'active après **0,8 seconde** par défaut ;
+les accrochages aux objets restent immédiats, y compris en déplaçant une extrémité
+de mur. La croix et les marqueurs montrent le point retenu.
+
+Fermer le dernier onglet ferme aussi son projet, après la demande d'enregistrement
+si nécessaire. Fermer un fichier vide les buffers de rendu avant de revenir à un
+autre document ou à l'écran d'accueil.

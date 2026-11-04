@@ -37,6 +37,7 @@ struct Membre {
 /// totale), avec ses membres et son noyau (couches porteuses : écarts de ses faces à
 /// l'axe ; None : pas de couche porteuse).
 struct Logique {
+    controle: [DVec2;2],
     a: DVec2,
     b: DVec2,
     epaisseur: f64,
@@ -70,7 +71,7 @@ fn logiques(p: &Projet) -> Vec<Logique> {
         let (Some((a, b)), Some((bas, haut))) = (droit(m), p.bas_haut(m)) else { continue };
         let e = epaisseur(m);
         if e > 0.0 && a.distance(b) > 1.0 {
-            out.push(Logique { a, b, epaisseur: e, bas, haut, membres: vec![Membre { id: m.id.clone(), sens: true, porteur: true, ecart: 0.0, demi: e / 2.0 }], noyau: Some((-e / 2.0, e / 2.0)) });
+            out.push(Logique { controle:p.trajectoire_justification(&m.id).map(|(axe,_)|match axe {Axe::Droit{debut,fin}=>[v(debut),v(fin)],_=>[a,b]}).unwrap_or([a,b]), a, b, epaisseur: e, bas, haut, membres: vec![Membre { id: m.id.clone(), sens: true, porteur: true, ecart: 0.0, demi: e / 2.0 }], noyau: Some((-e / 2.0, e / 2.0)) });
         }
     }
     for asm in &p.assemblages {
@@ -119,9 +120,24 @@ fn logiques(p: &Projet) -> Vec<Logique> {
             let (lo, hi) = (c.0 - c.1 - milieu, c.0 + c.1 - milieu);
             Some(acc.map_or((lo, hi), |(a, b)| (a.min(lo), b.max(hi))))
         });
-        out.push(Logique { a: a0 + decale, b: b0 + decale, epaisseur: max - min, bas, haut, membres, noyau });
+        out.push(Logique { controle:p.trajectoire_justification(&asm.id).map(|(axe,_)|match axe {Axe::Droit{debut,fin}=>[v(debut),v(fin)],_=>[a0+decale,b0+decale]}).unwrap_or([a0+decale,b0+decale]), a: a0 + decale, b: b0 + decale, epaisseur: max - min, bas, haut, membres, noyau });
     }
     out
+}
+
+// Les modèles sont arrondis au millième de mm : cette tolérance absorbe uniquement
+// cet arrondi, sans transformer une proximité liée à l'épaisseur en contact.
+const CONTACT: f64=0.01;
+fn contacts_bouts(a:&Logique,b:&Logique)->Option<(usize,usize)> {
+    (0..2).flat_map(|i|(0..2).map(move |j|(i,j)))
+        .filter(|&(i,j)|a.controle[i].distance(b.controle[j])<=CONTACT)
+        .min_by(|&(i,j),&(k,l)|a.controle[i].distance(b.controle[j]).total_cmp(&a.controle[k].distance(b.controle[l])))
+}
+fn bout_sur_controle(a:&Logique,e:usize,b:&Logique)->bool {
+    let d=b.controle[1]-b.controle[0];let longueur=d.length();
+    if longueur<=CONTACT {return false;}
+    let u=d/longueur;let q=a.controle[e]-b.controle[0];let t=q.dot(u);
+    t>CONTACT && t<longueur-CONTACT && q.perp_dot(u).abs()<=CONTACT
 }
 
 /// Candidat de coupe d'une extrémité : distance au nœud, coupe commune, angle en L,
@@ -231,12 +247,13 @@ pub fn jonctions(p: &Projet) -> (Coupes, Interruptions) {
         for j in i + 1..ls.len() {
             let (a, b) = (&ls[i], &ls[j]);
             let (da, db) = ((a.b - a.a).normalize(), (b.b - b.a).normalize());
-            if da.perp_dot(db).abs() >= 0.05 || (b.a - a.a).perp_dot(da).abs() > 5.0 {
+            if a.haut.min(b.haut)-a.bas.max(b.bas)<=1.0 {continue;}
+            if da.perp_dot(db).abs() >= 1e-9 || (b.a - a.a).perp_dot(da).abs() > CONTACT {
                 continue;
             }
-            for (ea, pa) in [(0, a.a), (1, a.b)] {
-                for (eb, pb) in [(0, b.a), (1, b.b)] {
-                    if pa.distance(pb) <= 5.0 {
+            for (ea, pa) in a.controle.into_iter().enumerate() {
+                for (eb, pb) in b.controle.into_iter().enumerate() {
+                    if pa.distance(pb) <= CONTACT {
                         continues.insert((i, ea));
                         continues.insert((j, eb));
                     }
@@ -252,11 +269,11 @@ pub fn jonctions(p: &Projet) -> (Coupes, Interruptions) {
                 continue;
             }
             let (da, db) = ((a.b - a.a).normalize(), (b.b - b.a).normalize());
-            if da.perp_dot(db).abs() < 0.05 {
+            if da.perp_dot(db).abs() < 1e-9 {
                 continue;
             }
             let Some(x) = intersection(a.a, da, b.a, db) else { continue };
-            let tol = a.epaisseur + b.epaisseur + 5.0;
+            let contact=contacts_bouts(a,b);
             let bout = |l: &Logique| -> (usize, f64) {
                 let (d0, d1) = (l.a.distance(x), l.b.distance(x));
                 if d0 <= d1 { (0, d0) } else { (1, d1) }
@@ -264,19 +281,21 @@ pub fn jonctions(p: &Projet) -> (Coupes, Interruptions) {
             let interieur = |l: &Logique| {
                 let d = (l.b - l.a).normalize();
                 let t = (x - l.a).dot(d);
-                t > tol && t < l.a.distance(l.b) - tol
+                t > CONTACT && t < l.a.distance(l.b) - CONTACT
             };
-            let ((ea, dist_a), (eb, dist_b)) = (bout(a), bout(b));
+            let ((ea,dist_a),(eb,dist_b))=if let Some((ea,eb))=contact {
+                ((ea,if ea==0 {a.a}else{a.b}.distance(x)),(eb,if eb==0 {b.a}else{b.b}.distance(x)))
+            } else {(bout(a),bout(b))};
             let loin = |l: &Logique, e: usize| if e == 0 { l.b } else { l.a };
             let (ca, cb) = (continues.contains(&(i, ea)), continues.contains(&(j, eb)));
-            if dist_a <= tol && dist_b <= tol && (ca || cb) {
+            if contact.is_some() && (ca || cb) {
                 // nœud d'un mur continu (deux murs alignés) : le troisième s'arrête sur sa face
                 if ca && cb {
                     continue;
                 }
                 let (k, e, dist, porteur, arrivant) = if ca { (j, eb, dist_b, a, b) } else { (i, ea, dist_a, b, a) };
                 arrivee(&mut candidats, k, e, dist, porteur, arrivant, x, loin(arrivant, e));
-            } else if dist_a <= tol && dist_b <= tol && (a.epaisseur - b.epaisseur).abs() > 0.5 {
+            } else if contact.is_some() && (a.epaisseur - b.epaisseur).abs() > 0.5 {
                 // angle entre épaisseurs différentes : bout à bout, pas d'onglet. Le plus
                 // épais va jusqu'à la face extérieure de l'autre, qui s'arrête sur sa face
                 // (noyau prolongé jusqu'à son noyau, comme une arrivée en T)
@@ -287,7 +306,7 @@ pub fn jonctions(p: &Projet) -> (Coupes, Interruptions) {
                 let coupe = Coupe { point: (x - d.perp() * cote * arrivant.epaisseur / 2.0).to_array(), direction: d.to_array() };
                 candidats.entry((kp, ep)).or_default().push((dp, coupe, true, Some(coupe), None));
                 arrivee(&mut candidats, ka, eaa, da_, porteur, arrivant, x, loin(arrivant, eaa));
-            } else if dist_a <= tol && dist_b <= tol {
+            } else if contact.is_some() {
                 // onglet : droite par les intersections des faces intérieures et extérieures
                 let (ua, ub) = ((loin(a, ea) - x).normalize(), (loin(b, eb) - x).normalize());
                 let s = ua.perp_dot(ub).signum();
@@ -308,7 +327,7 @@ pub fn jonctions(p: &Projet) -> (Coupes, Interruptions) {
             } else {
                 // arrivée en T : arrêt sur la face du mur traversé, côté de l'arrivant
                 for (k, e, dist, porteur, arrivant) in [(i, ea, dist_a, b, a), (j, eb, dist_b, a, b)] {
-                    if dist <= tol && interieur(porteur) {
+                    if bout_sur_controle(arrivant,e,porteur) && interieur(porteur) {
                         arrivee(&mut candidats, k, e, dist, porteur, arrivant, x, loin(arrivant, e));
                     }
                 }
@@ -355,7 +374,7 @@ pub fn contour(p: &Projet, m: &Mur, coupes: &Coupes) -> Option<[[f64; 2]; 4]> {
             let (droite, gauche) = if bout == 0 { (0, 3) } else { (1, 2) };
             let base = if bout == 0 { a } else { b };
             // garde-fou : une coupe presque parallèle au mur n'étire pas l'extrémité à l'infini
-            if d.perp_dot(w.normalize_or_zero()).abs() < 0.05 {
+            if d.perp_dot(w.normalize_or_zero()).abs() < 1e-9 {
                 continue;
             }
             if let (Some(x), Some(y)) = (intersection(base - n, d, q, w), intersection(base + n, d, q, w)) {
@@ -374,6 +393,53 @@ mod tests {
 
     fn aire(c: &[[f64; 2]; 4]) -> f64 {
         (0..4).map(|k| c[k][0] * c[(k + 1) % 4][1] - c[(k + 1) % 4][0] * c[k][1]).sum::<f64>().abs() / 2.0
+    }
+
+    #[test]
+    fn angle_aigu_raccorde_des_que_les_points_de_controle_se_touchent() {
+        use crate::modele::edition::Implantation;
+        let mut p=Projet::nouveau("Angle aigu");
+        let o=ParametresMur{epaisseur:300.,implantation:Implantation::Exterieure,..Default::default()};
+        let a=p.ajouter_mur([5410.,4650.],[8519.865,4650.],&o).unwrap();
+        let b=p.ajouter_mur([8519.865,4650.],[3890.,5500.],&o).unwrap();
+        let avant=p.json().unwrap();
+        let cs=coupes(&p);
+        assert!(cs.get(&a).is_some_and(|c|c[1].is_some()));
+        assert!(cs.get(&b).is_some_and(|c|c[0].is_some()));
+        let ma=p.murs.iter().find(|m|m.id==a).unwrap();let mb=p.murs.iter().find(|m|m.id==b).unwrap();
+        let ca=contour(&p,ma,&cs).unwrap();let cb=contour(&p,mb,&cs).unwrap();
+        for point in [ca[1],ca[2]] {assert!([cb[0],cb[3]].iter().any(|q|v(*q).distance(v(point))<1e-5),"{ca:?} / {cb:?}");}
+        for m in &p.murs {
+            let tris=super::super::solides::mur(&p,m,&cs).unwrap();
+            assert!(tris.iter().flatten().all(|v|v.is_finite()));
+            assert!(super::super::geometrie::volume(&tris)>0.);
+        }
+        assert_eq!(p.json().unwrap(),avant,"Le raccord d'affichage ne déplace pas les murs");
+    }
+
+    #[test]
+    fn points_separes_ne_creent_jamais_de_volume_de_raccord() {
+        for ecart in [0.1,1.,5.,100.,500.] {
+            let mut p=Projet::nouveau("Points séparés");let o=ParametresMur{epaisseur:300.,..Default::default()};
+            p.ajouter_mur([0.,0.],[5000.,0.],&o).unwrap();
+            p.ajouter_mur([5000.+ecart,0.],[5000.+ecart,4000.],&o).unwrap();
+            let (cs,interruptions)=jonctions(&p);
+            assert!(cs.is_empty() && interruptions.is_empty(),"Raccord indu pour {ecart} mm");
+            for (m,longueur) in p.murs.iter().zip([5000.,4000.]) {
+                assert!((aire(&contour(&p,m,&cs).unwrap())-300.*longueur).abs()<1e-5);
+            }
+        }
+    }
+
+    #[test]
+    fn chevauchement_reste_fusionne_sans_points_de_controle_en_contact() {
+        let mut p=Projet::nouveau("Fusion sans prolongement");let o=ParametresMur{epaisseur:200.,..Default::default()};
+        p.ajouter_mur([0.,0.],[5000.,0.],&o).unwrap();
+        p.ajouter_mur([4950.,-100.],[4950.,4000.],&o).unwrap();
+        let cs=coupes(&p);assert!(cs.is_empty());
+        let volume:f64=p.murs.iter().map(|m|super::super::geometrie::volume(&super::super::solides::mur(&p,m,&cs).unwrap())).sum();
+        let attendu=(5000.*200.+4100.*200.-150.*200.)*2800.;
+        assert!((volume-attendu).abs()<1.,"{volume} / {attendu}");
     }
 
     #[test]

@@ -406,6 +406,14 @@ pub enum OutilDessin {
     Rectangle,
 }
 
+pub fn perimetre_cercle(c:DVec2,r:f64,debut:DVec2,fin:DVec2)->Option<Forme2D> {
+    if r<1e-6 || debut.distance(c)<1e-6 || fin.distance(c)<1e-6 {return None;}
+    let a=(debut-c).to_angle();let b=(fin-c).to_angle();
+    let balayage=(b-a).rem_euclid(std::f64::consts::TAU);
+    if balayage<1e-8 || std::f64::consts::TAU-balayage<1e-8 {return Some(Forme2D::Cercle{centre:c,rayon:r});}
+    Some(Forme2D::Arc([c+DVec2::from_angle(a)*r,c+DVec2::from_angle(a+balayage/2.0)*r,c+DVec2::from_angle(a+balayage)*r]))
+}
+
 /// Tracé en cours : outil et points déjà donnés.
 #[derive(Clone, Debug)]
 pub struct Trace {
@@ -413,16 +421,21 @@ pub struct Trace {
     pub points: Vec<DVec2>,
     /// Orientation des côtés du rectangle (radians) : repère du plan tourné.
     pub angle: f64,
+    /// Cercle de mur : centre, rayon, début et fin du périmètre.
+    pub perimetre: bool,
 }
 
 impl Trace {
     pub fn new(outil: OutilDessin) -> Trace {
-        Trace { outil, points: Vec::new(), angle: 0.0 }
+        Trace { outil, points: Vec::new(), angle: 0.0, perimetre:false }
     }
 
     /// Invite de la ligne de commande, avec ses mots-clés.
     pub fn invite(&self) -> &'static str {
         use OutilDessin::*;
+        if self.outil==Cercle && self.perimetre {
+            return match self.points.len() {0=>"Centre du cercle",1=>"Rayon (point ou distance)",2=>"Début du périmètre",_=>"Fin du périmètre (même point : cercle complet)"};
+        }
         match (self.outil, self.points.len()) {
             (Ligne | Polyligne | Spline, 0) => "Premier point",
             (Ligne, 1) | (Polyligne, 1) => "Point suivant (Entrée : terminer)",
@@ -441,13 +454,13 @@ impl Trace {
 
     /// Point précédent (départ du repérage polaire et des saisies relatives).
     pub fn precedent(&self) -> Option<DVec2> {
-        self.points.last().copied()
+        if self.perimetre && self.outil==OutilDessin::Cercle && self.points.len()>=2 {self.points.first().copied()} else {self.points.last().copied()}
     }
 
     /// Ajoute un point ; rend les formes achevées par ce point (la ligne est une suite
     /// de segments, comme LIGNE dans AutoCAD).
     pub fn ajouter(&mut self, p: DVec2) -> Vec<Forme2D> {
-        if self.points.last().is_some_and(|q| q.distance(p) < 1e-6) {
+        if !(self.perimetre && self.outil==OutilDessin::Cercle && self.points.len()>=2) && self.points.last().is_some_and(|q| q.distance(p) < 1e-6) {
             return Vec::new();
         }
         self.points.push(p);
@@ -470,7 +483,12 @@ impl Trace {
                 self.points.clear();
                 coins.map(|points| Forme2D::Polyligne { points: points.to_vec(), fermee: true }).into_iter().collect()
             }
-            (Cercle, 2) => {
+            (Cercle,4) if self.perimetre => {
+                let forme=perimetre_cercle(self.points[0],self.points[0].distance(self.points[1]),self.points[2],self.points[3]);
+                self.points.clear();
+                forme.into_iter().collect()
+            }
+            (Cercle, 2) if !self.perimetre => {
                 let (c, q) = (self.points[0], self.points[1]);
                 self.points.clear();
                 vec![Forme2D::Cercle { centre: c, rayon: c.distance(q) }]
@@ -528,6 +546,12 @@ impl Trace {
             },
             Polyligne => vec![pts],
             Spline => vec![points_spline(&pts, false)],
+            Cercle if self.perimetre && self.points.len()==1 => vec![points_arc(self.points[0],self.points[0].distance(curseur),0.0,std::f64::consts::TAU)],
+            Cercle if self.perimetre && self.points.len()>=2 => {
+                let c=self.points[0];let r=c.distance(self.points[1]);
+                if self.points.len()==2 {vec![points_arc(c,r,0.0,std::f64::consts::TAU)]}
+                else {perimetre_cercle(c,r,self.points[2],curseur).map(|f|f.polylignes()).unwrap_or_default()}
+            }
             Cercle if pts.len() == 2 => vec![points_arc(pts[0], pts[0].distance(curseur), 0.0, std::f64::consts::TAU), vec![pts[0], curseur]],
             Arc if pts.len() == 2 => vec![pts],
             Arc if pts.len() == 3 => match arc_3_points(pts[0], pts[1], pts[2]) {
@@ -647,5 +671,26 @@ mod tests {
         let pts = [DVec2::ZERO, DVec2::new(100.0, 50.0), DVec2::new(200.0, 0.0)];
         let s = points_spline(&pts, false);
         assert!(pts.iter().all(|p| s.iter().any(|q| proche_de(*p, *q))));
+    }
+}
+
+#[cfg(test)]
+mod tests_perimetre_mur {
+    use super::*;
+    #[test]
+    fn cercle_mur_attend_les_deux_limites_et_ne_previsualise_pas_le_rayon_comme_mur() {
+        let mut t=Trace::new(OutilDessin::Cercle);t.perimetre=true;
+        assert!(t.ajouter(DVec2::ZERO).is_empty());
+        assert_eq!(t.apercu(DVec2::new(3000.,0.)).len(),1);
+        assert!(t.ajouter(DVec2::new(3000.,0.)).is_empty());
+        assert_eq!(t.invite(),"Début du périmètre");
+        assert!(t.ajouter(DVec2::new(3000.,0.)).is_empty());
+        let f=t.ajouter(DVec2::new(0.,5000.));
+        let Forme2D::Arc([a,_,b])=f[0] else {panic!("Arc attendu")};
+        assert!((a-DVec2::new(3000.,0.)).length()<1e-8);
+        assert!((b-DVec2::new(0.,3000.)).length()<1e-8);
+        assert!(t.points.is_empty());
+        for p in [DVec2::ZERO,DVec2::new(3000.,0.),DVec2::new(0.,3000.)] {assert!(t.ajouter(p).is_empty());}
+        assert!(matches!(t.ajouter(DVec2::new(0.,3000.)).as_slice(),[Forme2D::Cercle{..}]));
     }
 }

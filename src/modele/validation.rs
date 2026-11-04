@@ -168,6 +168,7 @@ impl Projet {
             solides::maillage(&e.maillage)?;
         }
         for v in &self.vues {
+            if !v.limite_haute_decalage.is_finite() || v.limite_haute_niveau.as_ref().is_some_and(|id|self.niveau(id).is_none()) {return Err("Limite haute de la vue invalide.".into());}
             if !v.contour_cadrage.is_empty() {
                 if !matches!(v.genre, GenreVue::Plan { .. }) || v.contour_cadrage.len() > 128 { return Err("Contour de cadrage non valide.".into()); }
                 edition::contour_valide(&v.contour_cadrage)?;
