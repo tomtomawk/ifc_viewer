@@ -346,9 +346,8 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
     fusionner_materiaux(scene, prims)
 }
 
-/// Ligne d'isolant en boucles (laine, comme le composant « isolant » de Revit) au milieu
-/// d'une région de coupe (triangles 2D) : axe le long de sa plus grande dimension,
-/// boucles de la hauteur de son épaisseur, segments gardés dans la région.
+/// Ligne d'isolant en zigzag (symbole traditionnel) d'une région de coupe (triangles 2D) :
+/// le long de sa plus grande dimension, de face à face, segments gardés dans la région.
 pub fn ligne_isolation(tris: &[[[f64; 2]; 3]]) -> Vec<[[f64; 2]; 2]> {
     use glam::DVec2;
     let pts: Vec<DVec2> = tris.iter().flatten().map(|p| DVec2::from_array(*p)).collect();
@@ -379,26 +378,25 @@ pub fn ligne_isolation(tris: &[[[f64; 2]; 3]]) -> Vec<[[f64; 2]; 2]> {
     if !(e > 1e-6) || u1 - u0 < e {
         return Vec::new();
     }
-    let milieu = c + v * ((v0 + v1) / 2.0);
-    // cycloïde allongée : boucles de hauteur 0,9 × épaisseur, une boucle par 0,6 × épaisseur
-    let (d, r) = (0.45 * e, 0.6 * e / std::f64::consts::TAU);
+    // zigzag traditionnel : de face à face, demi-période = 0,5 × épaisseur, extrémités calées
+    let n = (((u1 - u0) / (0.5 * e)).round() as usize).max(2);
     let dedans = |p: DVec2| tris.iter().any(|t| {
         let [a, b, c] = t.map(DVec2::from_array);
         let s = |x: DVec2, y: DVec2| (y - x).perp_dot(p - x);
         let (s1, s2, s3) = (s(a, b), s(b, c), s(c, a));
         (s1 >= -1e-12 && s2 >= -1e-12 && s3 >= -1e-12) || (s1 <= 1e-12 && s2 <= 1e-12 && s3 <= 1e-12)
     });
-    let point = |th: f64| milieu + u * (u0 + d + r * th - d * th.sin()) + v * (-d * th.cos());
-    let fin = ((u1 - u0 - 2.0 * d) / r).max(0.0);
-    let pas = 0.2;
+    let sommet = |k: usize| c + u * (u0 + (u1 - u0) * k as f64 / n as f64) + v * (if k % 2 == 0 { v0 } else { v1 });
     let mut out = Vec::new();
-    let mut th = 0.0;
-    while th < fin {
-        let (p, q) = (point(th), point((th + pas).min(fin)));
-        if dedans((p + q) * 0.5) {
-            out.push([p.to_array(), q.to_array()]);
+    const PIECES: usize = 8;
+    for k in 0..n {
+        let (p, q) = (sommet(k), sommet(k + 1));
+        for i in 0..PIECES {
+            let (a, b) = (p.lerp(q, i as f64 / PIECES as f64), p.lerp(q, (i + 1) as f64 / PIECES as f64));
+            if dedans((a + b) * 0.5) {
+                out.push([a.to_array(), b.to_array()]);
+            }
         }
-        th += pas;
     }
     out
 }

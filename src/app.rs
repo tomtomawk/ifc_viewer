@@ -3340,7 +3340,20 @@ impl ViewerApp {
         let mut distance = 10.0;
         let mut candidats: Vec<([f64; 2], AccrocheMur)> = Vec::new();
         let jonctions = crate::modele::jonctions::coupes(projet);
+        // Destination d'un déplacement ou d'une copie : la sélection (et toutes les couches
+        // d'un mur composé) reste à sa place d'origine pendant le choix, elle n'attire pas le point.
+        let en_deplacement = depart.is_some()
+            && self.onglet_ruban == OngletRuban::Modifier
+            && matches!(self.ruban_edition.outil(), Some(crate::ruban::Outil::Deplacer | crate::ruban::Outil::Copier));
+        let mut deplaces: std::collections::HashSet<String> = std::collections::HashSet::new();
+        if en_deplacement {
+            for id in self.selection_bim() {
+                if projet.assemblage(&id).is_some() { deplaces.extend(projet.couches_assemblage(&id).into_iter().map(|m| m.id.clone())); }
+                deplaces.insert(id);
+            }
+        }
         for m in &projet.murs {
+            if deplaces.contains(&m.id) { continue; }
             // murs qui traversent ce plan (base au niveau, ou plus bas et plus haut)
             if projet.bas_haut(m).is_none_or(|(b, h)| altitude < b - 0.1 || altitude > h + 0.1) { continue; }
             let (crate::modele::Axe::Droit { debut, fin } | crate::modele::Axe::Arc { debut, fin, .. }) = m.axe;
@@ -3353,7 +3366,7 @@ impl ViewerApp {
                 candidats.extend(c.into_iter().map(|p| (p, AccrocheMur::Angle(f64::NAN))));
             }
         }
-        for d in &projet.dalles {
+        for d in projet.dalles.iter().filter(|d| !deplaces.contains(&d.id)) {
             candidats.extend(d.contours.iter().flatten().map(|&p| (p, AccrocheMur::Extremite)));
         }
         for (v, genre) in candidats {

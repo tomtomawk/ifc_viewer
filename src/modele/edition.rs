@@ -294,20 +294,21 @@ impl Projet {
     /// Déplace une poignée de la ligne de justification en gardant l'autre fixe.
     pub fn deplacer_extremite_justification(&mut self,id:&str,fin:bool,point:[f64;2])->Result<(),String> {
         use glam::DVec2;
-        let (a,b,_)=self.axe_element(id).ok_or("Mur droit introuvable")?;
-        let (ca,cb,ecart)=self.ligne_justification(id).ok_or("Ligne de justification introuvable")?;
+        self.axe_element(id).ok_or("Mur droit introuvable")?;
+        let (ca0,cb0,_)=self.ligne_justification(id).ok_or("Ligne de justification introuvable")?;
         if !point.iter().all(|x|x.is_finite()) {return Err("Coordonnées non finies".into());}
-        let (ca,cb)=if fin {(DVec2::from_array(ca),DVec2::from_array(point))}else{(DVec2::from_array(point),DVec2::from_array(cb))};
+        let (ca0,cb0)=(DVec2::from_array(ca0),DVec2::from_array(cb0));
+        let (ca,cb)=if fin {(ca0,DVec2::from_array(point))}else{(DVec2::from_array(point),cb0)};
         if ca.distance(cb)<1.0 {return Err("Le mur doit mesurer au moins 1 mm.".into());}
-        let (a,b)=(DVec2::from_array(a),DVec2::from_array(b));
-        let ancien=(b-a).normalize_or_zero().perp();
+        // Chaque couche garde son écart à la ligne d'implantation elle-même (et non à une
+        // moyenne des axes de couches, qui n'est pas le milieu de l'épaisseur totale).
+        let ancien=(cb0-ca0).normalize_or_zero().perp();
         let nouveau=(cb-ca).normalize().perp();
-        let (na,nb)=(ca-nouveau*ecart,cb-nouveau*ecart);
         let couches=self.assemblage(id).map(|a|a.couches.clone()).unwrap_or_else(||vec![id.to_string()]);
         for m in self.murs.iter_mut().filter(|m|couches.contains(&m.id)) {
             let Axe::Droit{debut,..}=m.axe else{return Err("Mur droit requis".into())};
-            let d=(DVec2::from_array(debut)-a).dot(ancien);
-            m.axe=Axe::Droit{debut:(na+nouveau*d).to_array(),fin:(nb+nouveau*d).to_array()};
+            let d=(DVec2::from_array(debut)-ca0).dot(ancien);
+            m.axe=Axe::Droit{debut:(ca+nouveau*d).to_array(),fin:(cb+nouveau*d).to_array()};
         }
         self.arrondir();
         Ok(())
@@ -520,6 +521,29 @@ mod tests {
                 let proche=|a:[f64;2],b:[f64;2]|(a[0]-b[0]).hypot(a[1]-b[1])<0.002;
                 assert!(proche(if fin {ap}else{bp},fixe));
                 assert!(proche(if fin {bp}else{ap},cible));
+            }
+        }
+    }
+
+    #[test]
+    fn poignee_mur_compose_garde_les_couches_et_la_ligne() {
+        use crate::modele::{Couche,FonctionCouche,TypeCompose};
+        let c=|m:&str,e:f64,f|Couche{materiau:Some(m.into()),epaisseur:e,fonction:f,plume:None};
+        for implantation in [Implantation::Axe,Implantation::Exterieure,Implantation::Interieure] {
+            for fin in [false,true] {
+                let mut p=Projet::nouveau("Poignée composée");
+                p.types_murs.push(TypeCompose{id:"t".into(),nom:"Mur".into(),couches:vec![c("Enduit",20.,FonctionCouche::Finition),c("Béton",200.,FonctionCouche::Structure),c("Isolant",100.,FonctionCouche::Isolation)],categorie:None,couches_detaillees:true,origine:None});
+                let id=p.ajouter_mur([0.,0.],[4000.,0.],&ParametresMur{implantation,type_mur:Some("t".into()),..Default::default()}).unwrap();
+                let (a,b,_)=p.ligne_justification(&id).unwrap();
+                let epaisseurs=|p:&Projet|p.couches_assemblage(&id).iter().map(|m|match m.axe{Axe::Droit{debut,fin}=>(debut[0]-fin[0]).hypot(debut[1]-fin[1]),_=>0.}).collect::<Vec<_>>();
+                let fixe=if fin {a}else{b};
+                let cible=if fin {[4500.,1800.]}else{[-500.,1800.]};
+                p.deplacer_extremite_justification(&id,fin,cible).unwrap();
+                let (ap,bp,_)=p.ligne_justification(&id).unwrap();
+                let proche=|a:[f64;2],b:[f64;2]|(a[0]-b[0]).hypot(a[1]-b[1])<0.002;
+                assert!(proche(if fin {ap}else{bp},fixe),"{implantation:?} fixe");
+                assert!(proche(if fin {bp}else{ap},cible),"{implantation:?} cible {ap:?} {bp:?} {cible:?}");
+                assert_eq!(epaisseurs(&p).len(),3);
             }
         }
     }
