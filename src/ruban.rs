@@ -3189,6 +3189,8 @@ mod tests {
 /// Pictogramme générique d'une commande des bandeaux Début et Sortie.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Icone {
+    Collaborer,
+    Synchro,
     Nouveau,
     Ouvrir,
     Fermer,
@@ -3294,6 +3296,14 @@ fn icone_commande(p: &egui::Painter, r: egui::Rect, i: Icone, c: Color32) {
         p.rect_stroke(egui::Rect::from_min_max(pt(0.26, 0.54), pt(0.74, 0.88)), 0.0, t, egui::StrokeKind::Inside);
     };
     match i {
+        Icone::Collaborer => {
+            for(x,y)in [(0.25,0.3),(0.75,0.3),(0.5,0.7)]{p.circle_stroke(pt(x,y),r.width()*0.1,t);}
+            for(a,b)in [((0.25,0.42),(0.5,0.59)),((0.75,0.42),(0.5,0.59)),((0.38,0.3),(0.62,0.3))]{seg(a,b);}
+        }
+        Icone::Synchro => {
+            seg((0.2,0.35),(0.8,0.35));seg((0.8,0.35),(0.62,0.17));seg((0.8,0.35),(0.62,0.53));
+            seg((0.8,0.68),(0.2,0.68));seg((0.2,0.68),(0.38,0.5));seg((0.2,0.68),(0.38,0.86));
+        }
         Icone::Nord => {
             p.circle_stroke(r.center(), r.width() * 0.42, t);
             p.add(egui::Shape::convex_polygon(vec![pt(0.5, 0.12), pt(0.37, 0.62), pt(0.5, 0.53), pt(0.63, 0.62)], c, egui::Stroke::NONE));

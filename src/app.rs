@@ -28,6 +28,7 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::Arc;
 
 enum LoadMsg {
+    Partage(Result<(Box<Scene>, crate::modele::Projet, PathBuf, crate::modele::collaboration::session::Session), String>, Option<usize>),
     Natif(Result<(Box<Scene>, crate::modele::Projet, PathBuf), String>),
     Progress(String),
     Done(Result<Box<Scene>, String>),
@@ -493,6 +494,7 @@ pub struct ViewerApp {
     rvt_geom: Result<String, String>,
     rvt_preview: Option<egui::TextureHandle>,
     loading: Option<Receiver<LoadMsg>>,
+    partage_en_cours: bool,
     status: String,
     error: Option<String>,
     camera: Camera,
@@ -667,6 +669,7 @@ impl ViewerApp {
             rvt_geom: Err(String::new()),
             rvt_preview: None,
             loading: None,
+            partage_en_cours: false,
             status: "Ouvrir un fichier IFC ou Revit (Ctrl+O), ou le glisser dans la fenêtre.".into(),
             error,
             camera: Camera::default(),
@@ -770,6 +773,7 @@ impl ViewerApp {
         } else {false};
         let (tx, rx) = channel();
         let ctx = ctx.clone();
+        self.partage_en_cours=false;
         self.loading = Some(rx);
         self.error = None;
         self.status = format!("Chargement de {}…", path.display());
@@ -780,11 +784,18 @@ impl ViewerApp {
                     let _ = tx.send(LoadMsg::Progress(s));
                     ctx.request_repaint();
                 };
-                if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")) {
-                    let res = std::fs::read_to_string(if restaurer { &recuperation } else { &path }).map_err(|e| format!("Lecture impossible : {e}"))
-                        .and_then(|json| crate::modele::Projet::lire_json(&json))
-                        .and_then(|projet| scene::depuis_natif(&projet, &path).map(|scene| (Box::new(scene), projet, path)));
-                    let _ = tx.send(LoadMsg::Natif(res));
+                if crate::modele::collaboration::partage::extension_partage(&path) {
+                    let res=Self::charger_partage(&path,&progress);
+                    let _=tx.send(LoadMsg::Partage(res,None));
+                } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")) {
+                    match std::fs::read_to_string(if restaurer{&recuperation}else{&path}).map_err(|e|format!("Lecture impossible : {e}")) {
+                        Ok(json) if crate::modele::collaboration::partage::contenu_partage(&json)=>{let _=tx.send(LoadMsg::Partage(Self::charger_partage(&path,&progress),None));},
+                        texte=>{
+                            let res=texte.and_then(|json|crate::modele::Projet::lire_json(&json))
+                                .and_then(|projet|scene::depuis_natif(&projet,&path).map(|scene|(Box::new(scene),projet,path)));
+                            let _=tx.send(LoadMsg::Natif(res));
+                        }
+                    }
                 } else if is_revit_file(&path) {
                     progress(format!("Lecture des métadonnées Revit de {}…", path.display()));
                     let res = crate::modele::enregistrement::SourceRvt::ouvrir(&path).and_then(|source| rvt::load(&path).map(|info| {
@@ -810,10 +821,20 @@ impl ViewerApp {
                 Ok(msg)=>msg,
                 Err(std::sync::mpsc::TryRecvError::Empty)=>return,
                 Err(std::sync::mpsc::TryRecvError::Disconnected)=>{
-                    self.loading=None;self.error=Some("Le chargement a été interrompu ; le document précédent est conservé.".into());return;
+                    self.loading=None;self.partage_en_cours=false;self.error=Some("Le chargement a été interrompu ; le document précédent est conservé.".into());return;
                 }
             };
             match msg {
+                LoadMsg::Partage(Ok((scene,projet,chemin,session)),remplacer)=>{
+                    self.loading=None;self.partage_en_cours=false;
+                    if remplacer==Some(self.document_actif){self.installer_scene_courante(*scene);self.historique=Default::default();}
+                    else{self.install_scene(*scene);}
+                    let _=self.historique.enregistrer(&projet);
+                    self.status=format!("{} — projet partagé",projet.nom);
+                    self.natif=Some((projet,chemin));self.collaboration=Some(session);self.natif_modifie=false;self.avant_saisie=None;
+                    self.ouvrir_plan_initial_natif();return;
+                }
+                LoadMsg::Partage(Err(e),_)=>{self.loading=None;self.partage_en_cours=false;self.error=Some(e);return;}
                 LoadMsg::Natif(Ok((scene, projet, chemin))) => {
                     self.loading = None;
                     self.install_scene(*scene);
@@ -880,6 +901,9 @@ impl ViewerApp {
 
     fn install_scene(&mut self, scene: Scene) {
         self.nouveau_document();
+        self.installer_scene_courante(scene);
+    }
+    fn installer_scene_courante(&mut self, scene: Scene) {
         if let Some(r) = self.renderer.as_mut() {
             r.upload_vertices(&scene.vertices, &scene.couleurs_rendu, &scene.motifs_surface);
         }
@@ -2107,6 +2131,7 @@ impl ViewerApp {
     }
 
     fn creer_projet(&mut self) {
+        if self.partage_en_cours {self.error=Some("Attendre la fin de la création du partage".into());return;}
         let Some(mut chemin) = rfd::FileDialog::new().set_title("Nouveau projet natif v0")
             .add_filter("Modèle natif v0", &["json"]).set_file_name("Nouveau projet.modele.json").save_file() else { return };
         if chemin.extension().is_none() {
@@ -2813,6 +2838,7 @@ impl ViewerApp {
     /// Remplace le projet natif ouvert par `projet` (modifié) et reconstruit la scène,
     /// cadrage, niveaux, catégories et visibilité compris. Rien ne change en cas d'erreur.
     fn appliquer_projet(&mut self, projet: crate::modele::Projet) -> Result<(), String> {
+        if self.partage_en_cours{return Err("Création du partage en cours ; attendre la fin de l'enregistrement".into());}
         self.appliquer_projet_interne(projet, false)
     }
     fn appliquer_projet_interne(&mut self, mut projet: crate::modele::Projet, distant: bool) -> Result<(), String> {
@@ -3214,8 +3240,9 @@ impl ViewerApp {
 
     fn open_dialog(&mut self, ctx: &egui::Context) {
         if let Some(p) = rfd::FileDialog::new()
-            .add_filter("Modèle natif, IFC et Revit", &["json", "ifc", "IFC", "rvt", "rfa", "rte", "rft"])
-            .add_filter("Modèle natif v0", &["json"])
+             .add_filter("Projet BIMedit, IFC et Revit", &["bimpartage", "json", "ifc", "IFC", "rvt", "rfa", "rte", "rft"])
+            .add_filter("Projet partagé BIMedit", &["bimpartage"])
+            .add_filter("Modèle natif", &["json"])
             .add_filter("IFC", &["ifc", "IFC"])
             .add_filter("Revit (murs et métadonnées)", &["rvt", "rfa", "rte", "rft"])
             .pick_file()
@@ -3340,6 +3367,7 @@ impl ViewerApp {
     }
 
     fn fermer_document(&mut self) {
+        self.partage_en_cours=false;
         self.collaboration = None;
         self.natif_modifie = false;
         self.natif = None;
@@ -3433,6 +3461,8 @@ impl ViewerApp {
                 ui.selectable_value(&mut self.onglet_ruban, o, RichText::new(nom).strong());
             }
             let disponible = self.natif.is_some() && self.loading.is_none() && self.sauvegarde.is_none();
+            if let Some(c)=&self.collaboration{let largeur=(ui.available_width()-90.0).clamp(0.0,220.0);ui.add_sized([largeur,20.0],egui::Label::new(RichText::new(format!("Partagé · {}",c.etat)).small()).truncate()).on_hover_text(&c.etat);}
+            else if self.loading.is_some(){ui.label(RichText::new(&self.status).small());}
             let mut historique_choisi = None;
             for (retablir, titre) in [(false, "Annuler"), (true, "Rétablir")] {
                 let libelles = if let Some(c)=&self.collaboration {
@@ -3583,6 +3613,7 @@ impl ViewerApp {
                     C::new("nouveau", "Nouveau", I::Nouveau, "Créer un projet natif v0 (Ctrl+N)", self.loading.is_none()),
                     C::new("ouvrir", "Ouvrir", I::Ouvrir, "Ouvrir un projet natif, un IFC, un RVT ou un RFA (Ctrl+O)", true),
                     C::new("fermer", "Fermer", I::Fermer, "Fermer le document actif", self.scene.is_some() || self.rvt.is_some() || self.loading.is_some()),
+                    C::new("collaborer", "Collaborer", I::Collaborer, "Enregistrer un projet partagé sur le serveur et créer sa copie locale", self.natif.is_some() && self.collaboration.is_none() && self.loading.is_none() && self.sauvegarde.is_none() && !self.saisie_active),
                     C::new("importer", "Importer", I::Importer, "Convertir un IFC ou RVT en nouveau document natif", self.loading.is_none()),
                 ];
                 let mut reglages = Vec::new();
@@ -3607,6 +3638,7 @@ impl ViewerApp {
                             });
                         }
                         _ if !r.clicked() => {}
+                        "collaborer" => self.collaborer_dialogue(&ctx),
                         "nouveau" => self.creer_projet(),
                         "ouvrir" => self.open_dialog(&ctx),
                         "fermer" => self.fermer(),
@@ -3629,7 +3661,7 @@ impl ViewerApp {
                 let disponible = (self.natif.is_some() || self.rvt_source.is_some()) && self.loading.is_none() && self.sauvegarde.is_none();
                 let enregistrer = vec![
                     C::new("enregistrer", "Enregistrer", I::Enregistrer, "Enregistrer en modèle natif v0 (Ctrl+S)", disponible),
-                    C::new("enregistrer_sous", "Enregistrer sous", I::EnregistrerSous, "Enregistrer le projet natif dans un autre fichier", self.natif.is_some()),
+                    C::new("enregistrer_sous", "Enregistrer sous", I::EnregistrerSous, "Enregistrer le projet natif dans un autre fichier", self.natif.is_some() && self.collaboration.is_none()),
                 ];
                 let exporter = vec![
                     C::new("svg", "Dessin SVG", I::Exporter("SVG"), "Exporter le dessin de la vue en SVG (vue orthographique)", self.scene.is_some()),
@@ -3637,11 +3669,20 @@ impl ViewerApp {
                     C::new("ifc", "IFC4", I::Exporter("IFC"), "Exporter le projet natif en IFC4", self.natif.is_some()),
                     C::new("jeu_pdf", "Jeu PDF", I::Exporter("PDF"), "Exporter le jeu de feuilles ouvert (sinon le premier) en un PDF, une page par feuille", self.natif.as_ref().is_some_and(|(p, _)| !p.feuilles.is_empty())),
                 ];
-                for (cle, r) in crate::ruban::bandeau(ui, &[("Enregistrer", enregistrer), ("Exporter", exporter)]) {
+                let partage_disponible=self.collaboration.as_ref().is_some_and(|c|!c.synchronisation_en_cours())&&self.loading.is_none()&&!self.saisie_active&&self.avant_saisie.is_none();
+                let collaboration=vec![
+                    C::new("synchro","Synchro",I::Synchro,"Publier les modifications locales et recevoir celles des collègues",partage_disponible),
+                    C::new("gerer_collaboration","Gérer",I::Collaborer,"Réservations, reprise explicite, instantané et textes récupérables",self.collaboration.is_some()),
+                ];
+                for (cle, r) in crate::ruban::bandeau(ui, &[("Enregistrer", enregistrer), ("Collaboration", collaboration), ("Exporter", exporter)]) {
+                    if cle=="gerer_collaboration"{
+                        egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui|self.menu_collaboration(ui));continue;
+                    }
                     if !r.clicked() {
                         continue;
                     }
                     match cle {
+                        "synchro" => self.demander_synchro(),
                         "enregistrer" => self.enregistrer_projet(&ctx),
                         "enregistrer_sous" => self.enregistrer_sous(),
                         "svg" => self.exporter_svg_dialogue(),
@@ -4368,43 +4409,6 @@ impl ViewerApp {
         }
     }
 
-    fn status_bar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            if let Some(e) = &self.error {
-                ui.colored_label(Color32::from_rgb(200, 40, 40), format!("Erreur : {e}"));
-                ui.separator();
-            }
-            if self.loading.is_none() {
-                ui.label(&self.status);
-            }
-            if let (Some(p), Some(s)) = (self.point_clique, &self.scene) {
-                // coordonnées partagées (Revit placé) ou du fichier
-                ui.separator();
-                let texte = match &s.partage {
-                    Some(r) => {
-                        let q = r.partage(p);
-                        format!("E/O {} · N/S {} · Élév. {} ({})", self.options.unite.afficher(q.x*1000.0), self.options.unite.afficher(q.y*1000.0), self.options.unite.afficher(q.z*1000.0), r.nom)
-                    }
-                    None => format!("X {} · Y {} · Z {}", self.options.unite.afficher(p.x*1000.0), self.options.unite.afficher(p.y*1000.0), self.options.unite.afficher(p.z*1000.0)),
-                };
-                ui.label(texte).on_hover_text("Point cliqué");
-            }
-            if let Some(s) = &self.scene {
-                if !s.unsupported.is_empty() {
-                    let n: usize = s.unsupported.iter().map(|u| u.1).sum();
-                    ui.separator();
-                    if ui.link(format!("{n} entités géométriques ignorées")).clicked() {
-                        self.show_unsupported = !self.show_unsupported;
-                    }
-                }
-            }
-            ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                let aide = if self.vue_3d() { "Maj + milieu : orbite · Milieu : pan · Droit : vol" } else { "Gauche/droit/milieu : pan" };
-                ui.label(RichText::new(format!("{aide} · Molette : zoom · Double-clic : cadrer")).weak());
-            });
-        });
-    }
-
     /// Arborescence du projet (panneau de droite, comme dans Revit).
     fn left_panel(&mut self, ui: &mut egui::Ui) {
         let nom = self.scene.as_ref().map(|s| s.file_name.clone()).unwrap_or_default();
@@ -4905,7 +4909,7 @@ impl ViewerApp {
     }
 
     fn memoriser_vue(&mut self) {
-        if self.saisie_active { return; }
+        if self.saisie_active || self.partage_en_cours { return; }
         if !self.vues_ouvertes.contains(&self.vue_active) {
             return;
         }
@@ -7026,6 +7030,7 @@ impl ViewerApp {
         }
         if let Some(s) = &self.scene {
             p.push(("schema", texte(&s.model.file.schema)));
+            p.push(("repere_geographique",s.partage.as_ref().map(|r|texte(&r.nom)).unwrap_or_else(||"null".into())));
             p.push(("objets", s.objects.len().to_string()));
             p.push(("objets_visibles", self.visible.iter().filter(|v| **v).count().to_string()));
             p.push(("triangles", s.triangles.to_string()));
@@ -7099,6 +7104,8 @@ impl ViewerApp {
     fn commande(&mut self, ctx: &egui::Context, commande: &str, argument: &str) -> String {
         use pilote::{erreur, liste, objet, succes, texte};
         match commande {
+            "ruban" => {self.onglet_ruban=match argument{"debut"=>OngletRuban::Debut,"sortie"=>OngletRuban::Sortie,_=>return erreur("usage : ruban debut|sortie")};self.etat()},
+            "collaborer" => match self.creer_partage(PathBuf::from(argument.trim_matches('"')),ctx){Ok(())=>succes(&[("etat",texte("Création du projet partagé en cours"))]),Err(e)=>erreur(&e)},
             "collaboration_associer" => match self.associer_collaboration(PathBuf::from(argument.trim_matches('"'))) { Ok(())=>succes(&[("etat",texte("Association locale effectuée ; synchronisation en cours"))]),Err(e)=>erreur(&e) },
             "collaboration_sync" | "collaboration_instantane" => match self.collaboration.as_mut().ok_or_else(||"Copie non associée".to_string()).and_then(|c|c.synchroniser(None,commande=="collaboration_instantane")) {Ok(())=>succes(&[("etat",texte("Synchronisation demandée"))]),Err(e)=>erreur(&e)},
             "etat" => self.etat(),
@@ -8047,7 +8054,8 @@ impl eframe::App for ViewerApp {
         }
 
         egui::Panel::top("top").show(ui, |ui| self.top_bar(ui));
-        egui::Panel::bottom("status").show(ui, |ui| { self.barre_collaboration(ui); self.status_bar(ui); });
+        self.fenetres_collaboration(&ctx);
+        self.fenetre_erreur_document(&ctx);
         self.zone_panneaux = ui.available_rect_before_wrap();
         self.deplacer_panneau(&ctx);
         if self.rvt.is_some() && self.rvt_sheet {
