@@ -292,8 +292,14 @@ impl Depot {
         serde_json::from_value(v).map_err(|e| e.to_string())
     }
     pub fn proteger(&self) -> Resultat<Autorite> {
+        self.proteger_interne(true)
+    }
+    pub fn proteger_existant(&self) -> Resultat<Autorite> {
+        self.proteger_interne(false)
+    }
+    fn proteger_interne(&self, creer: bool) -> Resultat<Autorite> {
         let mut opts = OpenOptions::new();
-        opts.read(true).write(true).create(true).truncate(false);
+        opts.read(true).write(true).create(creer).truncate(false);
         #[cfg(windows)]
         {
             use std::os::windows::fs::OpenOptionsExt;

@@ -188,7 +188,7 @@ fn etat_central(partage: &Partage, entree: &Path) -> Resultat<Etat> {
     let d = Depot::nouveau(partage.depot(entree)?);
     let fin = std::time::Instant::now() + std::time::Duration::from_secs(2);
     let mut a = loop {
-        match d.proteger() {
+        match d.proteger_existant() {
             Ok(a) => break a,
             Err(e) => {
                 if std::time::Instant::now() >= fin {
@@ -311,20 +311,65 @@ mod tests {
         assert!(ouvrir(&entree, &root.join("cache")).is_err());
     }
     #[test]
+    fn ouvrir_ne_recree_jamais_un_controle_central_disparu() {
+        let root = dossier();
+        let entree = root.join("Maison.bimpartage");
+        let partage = creer(&projet_test(), &entree).unwrap();
+        let controle = partage.depot(&entree).unwrap().join("controle");
+        std::fs::remove_file(&controle).unwrap();
+        assert!(ouvrir(&entree, &root.join("cache")).is_err());
+        assert!(!controle.exists());
+    }
+    #[test]
+    fn reouverture_conserve_les_conflits_et_les_propositions() {
+        let root = dossier();
+        let entree = root.join("Maison.bimpartage");
+        creer(&projet_test(), &entree).unwrap();
+        let cache = root.join("cache");
+        let (a, _, mut sa) = ouvrir(&entree, &cache).unwrap();
+        let (b, local_b, mut sb) = ouvrir(&entree, &cache).unwrap();
+        let mut pa = a.clone();
+        pa.vues[0].nom = "Architecte A".into();
+        let mut pb = b.clone();
+        pb.vues[0].nom = "Architecte B".into();
+        sa.editer(&a, &pa).unwrap();
+        sb.editer(&b, &pb).unwrap();
+        for s in [&mut sa, &mut sb] {
+            s.synchroniser(None, false).unwrap();
+            let fin = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            loop {
+                if s.recevoir().unwrap().is_some() {
+                    break;
+                }
+                assert!(std::time::Instant::now() < fin);
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        }
+        assert!(!sb.copie.conflits.is_empty());
+        drop(sb);
+        let (p, reutilise, s) = ouvrir(&entree, &cache).unwrap();
+        assert_eq!(reutilise, local_b);
+        assert_eq!(p.vues[0].nom, "Architecte A");
+        assert_eq!(s.copie.attente.len(), 1);
+        assert!(!s.copie.conflits.is_empty());
+    }
+    #[test]
     fn entree_absente_retrouve_copie_hors_connexion() {
         let root = dossier();
         let entree = root.join("Maison.bimpartage");
         let p = projet_test();
-        let partage=creer(&p, &entree).unwrap();
+        let partage = creer(&p, &entree).unwrap();
         let cache = root.join("cache");
         let (_, local, s) = ouvrir(&entree, &cache).unwrap();
         drop(s);
         std::fs::remove_file(&entree).unwrap();
-        let central=partage.depot(&entree).unwrap();
-        let arret=root.join("serveur-indisponible");std::fs::rename(&central,&arret).unwrap();
+        let central = partage.depot(&entree).unwrap();
+        let arret = root.join("serveur-indisponible");
+        std::fs::rename(&central, &arret).unwrap();
         let (r, reutilise, s) = ouvrir(&entree, &cache).unwrap();
         assert_eq!(local, reutilise);
         assert_eq!(r.identite, p.identite);
-        assert!(s.etat.starts_with("Hors connexion"));assert!(!central.exists());
+        assert!(s.etat.starts_with("Hors connexion"));
+        assert!(!central.exists());
     }
 }

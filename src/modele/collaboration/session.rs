@@ -262,20 +262,21 @@ impl Session {
                 stockage::reinitialiser_mesures();
                 let debut = std::time::Instant::now();
                 let resultat = (|| {
+                    let existant=copie.partage.is_some()||!publier_attente;
                     let depot = Depot::nouveau(copie.central);
-                    if publier_attente {depot.preparer()?;}
+                    if !existant {depot.preparer()?;}
                     let limite=std::time::Instant::now()+std::time::Duration::from_secs(2);
-                    let mut a=loop{match depot.proteger(){Ok(a)=>break a,Err(e)=>{
+                    let mut a=loop{match if existant{depot.proteger_existant()}else{depot.proteger()}{Ok(a)=>break a,Err(e)=>{
                         if std::time::Instant::now()>=limite{return Err(e);}
                         std::thread::sleep(std::time::Duration::from_millis(20));
                     }}};
-                    let mut etat = if publier_attente {a.initialiser_etat(&copie.base)?}else{a.lire()?.ok_or("Dépôt partagé sans état initial")?};
+                    let mut etat = if !existant {a.initialiser_etat(&copie.base)?}else{a.lire()?.ok_or("Dépôt partagé sans état initial")?};
                     if etat.projet!=copie.base.projet || etat.revision<copie.base.revision{return Err("Identité du dépôt incorrecte ou révision centrale antérieure à la copie locale".into());}
                     if let Some((cles, reprise, liberer)) = reservation {
                         a.reserver(&mut etat, &cles, &copie.session, reprise, liberer)?;
                     }
                     let mut attente = Vec::new();
-                    let mut conflits = BTreeMap::new();
+                    let mut conflits = if publier_attente{BTreeMap::new()}else{copie.conflits.clone()};
                     for mut t in copie.attente {
                         let prepare =
                             journal_local.with_extension(format!("prepare-{}.json", t.id));
@@ -285,7 +286,7 @@ impl Session {
                         // Une réponse perdue se résout par UUID ET contenu préparé.
                         if let Some(digest)=etat.acceptes.get(&t.id){
                             if digest!=&hash(&t){return Err("Décision connue mais contenu local différent : conserver la copie pour diagnostic".into());}
-                            continue;
+                            conflits.remove(&t.id);continue;
                         }
                         if !publier_attente {attente.push(t);continue;}
                         if !attente.is_empty() {
@@ -348,6 +349,7 @@ impl Session {
                         stockage::mesures(),
                     ))
                 })();
+                drop(_protection_locale);
                 let _ = tx.send(resultat);
             })
             .map_err(|e| e.to_string())?;
