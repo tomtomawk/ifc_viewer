@@ -364,6 +364,8 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
     for a in p.annotations.iter().filter(|a| a.vue == v.id && !v.elements_masques.contains(&a.id)) {
         let debut = out.len();
         let taille = a.hauteur * v.echelle * 0.001;
+        // traits obliques des cotes : 0,6 × la hauteur du texte, en mm du modèle
+        let oblique = a.hauteur * v.echelle * 0.6;
         match &a.forme {
             AnnotationForme::Texte { point, texte: s } => out.push(texte(
                 s,
@@ -408,20 +410,11 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
                 decalage,
             } => match (point_cote(p, v, debut), point_cote(p, v, fin)) {
                 (Some(a), Some(b)) => {
-                    let n = (b - a).normalize_or_zero().perp() * decalage;
-                    out.extend([
-                        ligne(pt(a), pt(a + n)),
-                        ligne(pt(b), pt(b + n)),
-                        ligne(pt(a + n), pt(b + n)),
-                    ]);
-                    out.push(texte(
-                        &crate::options::unite().afficher((b - a).length()),
-                        pt((a + b) / 2.0 + n),
-                        u,
-                        h,
-                        taille,
-                        [30, 30, 30, 255],
-                    ));
+                    let g = geometrie_cote(&[a, b], *decalage, oblique);
+                    out.extend(g.traits.iter().map(|[x, y]| ligne(pt(*x), pt(*y))));
+                    for (position, valeur) in g.textes {
+                        out.push(texte(&crate::options::unite().afficher(valeur), pt(position), u, h, taille, [30, 30, 30, 255]));
+                    }
                 }
                 _ => out.push(texte(
                     "Cote : référence perdue",
@@ -505,6 +498,26 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
         role: Role::Annotation,
         element: None,
     };
+    // région 2D d'une famille, dans le plan de la vue : aplat gris ou hachures à 45°
+    // (pas de 2 mm du papier)
+    let pas = 2.0 * v.echelle;
+    let region = |points: Vec<DVec3>, m: super::famille_modelee::Remplissage| -> Vec<Primitive> {
+        use super::famille_modelee::Remplissage;
+        if points.len() < 3 { return Vec::new(); }
+        match m {
+            Remplissage::Plein => vec![Primitive {
+                forme: Forme::Surface(vec![points.iter().map(|q| *q * 0.001).collect()]),
+                style: Style { couleur: [185, 185, 185, 255], epaisseur: 0.0 },
+                role: Role::Annotation,
+                element: None,
+            }],
+            Remplissage::Hachure => {
+                let plan: Vec<DVec2> = points.iter().map(|q| DVec2::new((*q - o).dot(u), (*q - o).dot(h))).collect();
+                let segments = hachures_45(&plan, pas).into_iter().map(|[a, b]| [(o + u * a.x + h * a.y) * 0.001, (o + u * b.x + h * b.y) * 0.001]).collect();
+                vec![Primitive { forme: Forme::Segments(segments), style: Style { couleur: [60, 60, 60, 255], epaisseur: 0.0 }, role: Role::Annotation, element: None }]
+            }
+        }
+    };
     let mut out = Vec::new();
     // escaliers : ligne de foulée, rond au départ, flèche à l'arrivée
     if let GenreVue::Plan { niveau, .. } = &v.genre {
@@ -524,6 +537,9 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
         let Ok((axe, _, niveau)) = super::solides::hote(p, &ouv.mur) else { continue };
         match &v.genre {
             GenreVue::Plan { niveau: n, .. } if *n == niveau => {
+                for (l, m) in super::solides::regions_ouverture(p, ouv, VueEsquisse::Plan) {
+                    out.extend(region(l.into_iter().map(|q| q.with_z(o.z)).collect(), m));
+                }
                 for l in super::solides::symboles_ouverture(p, ouv, VueEsquisse::Plan) {
                     out.push(polyligne(l.into_iter().map(|q| q.with_z(o.z)).collect()));
                 }
@@ -538,12 +554,65 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
                 if uw.dot(DVec2::new(u.x, u.y)).abs() < 0.98 || !(-1.0..=*profondeur).contains(&profondeur_c) || !(0.0..=longueur).contains(&lateral) {
                     continue;
                 }
+                for (l, m) in super::solides::regions_ouverture(p, ouv, VueEsquisse::Elevation) {
+                    out.extend(region(l.into_iter().map(|q| o + u * (q - o).dot(u) + h * (q - o).dot(h)).collect(), m));
+                }
                 for l in super::solides::symboles_ouverture(p, ouv, VueEsquisse::Elevation) {
                     out.push(polyligne(l.into_iter().map(|q| o + u * (q - o).dot(u) + h * (q - o).dot(h)).collect()));
                 }
             }
             _ => {}
         }
+    }
+    out
+}
+
+/// Hachures à 45° d'un polygone (règle pair-impair), lignes espacées de `pas`.
+/// Géométrie d'une cote, commune aux vues du projet et à l'éditeur de familles.
+pub struct GeometrieCote {
+    /// Lignes d'attache, ligne de cote et traits obliques.
+    pub traits: Vec<[DVec2; 2]>,
+    /// Milieu de chaque intervalle sur la ligne de cote, et sa longueur.
+    pub textes: Vec<(DVec2, f64)>,
+}
+
+/// Cote (ou chaîne de cotes) sur des points alignés : la ligne de cote passe à
+/// `decalage` des points, perpendiculairement au premier → dernier ; un trait oblique
+/// de longueur `oblique` marque chaque point.
+pub fn geometrie_cote(points: &[DVec2], decalage: f64, oblique: f64) -> GeometrieCote {
+    let mut g = GeometrieCote { traits: Vec::new(), textes: Vec::new() };
+    let (Some(&a), Some(&b)) = (points.first(), points.last()) else { return g };
+    let d = (b - a).normalize_or_zero();
+    let n = d.perp() * decalage;
+    let o = (d + d.perp()).normalize_or_zero() * oblique * 0.5;
+    for &p in points {
+        g.traits.push([p, p + n]);
+        g.traits.push([p + n - o, p + n + o]);
+    }
+    g.traits.push([a + n, b + n]);
+    for w in points.windows(2) {
+        g.textes.push(((w[0] + w[1]) / 2.0 + n, (w[1] - w[0]).dot(d).abs()));
+    }
+    g
+}
+
+/// Hachures à 45° d'un contour fermé, au pas `pas` (vues, feuilles, éditeur de familles).
+pub fn hachures_45(poly: &[DVec2], pas: f64) -> Vec<[DVec2; 2]> {
+    let (r, rinv) = (|p: DVec2| DVec2::new(p.x - p.y, p.x + p.y) / std::f64::consts::SQRT_2, |q: DVec2| DVec2::new(q.x + q.y, q.y - q.x) / std::f64::consts::SQRT_2);
+    let q: Vec<DVec2> = poly.iter().map(|p| r(*p)).collect();
+    if q.len() < 3 || !(pas > 0.0) { return Vec::new(); }
+    let (t0, t1) = q.iter().fold((f64::MAX, f64::MIN), |(a, b), p| (a.min(p.y), b.max(p.y)));
+    if (t1 - t0) / pas > 5000.0 { return Vec::new(); }
+    let mut out = Vec::new();
+    let mut t = (t0 / pas).floor() * pas + pas * 0.5;
+    while t < t1 {
+        let mut xs: Vec<f64> = (0..q.len()).filter_map(|i| {
+            let (a, b) = (q[i], q[(i + 1) % q.len()]);
+            ((a.y <= t) != (b.y <= t)).then(|| a.x + (t - a.y) / (b.y - a.y) * (b.x - a.x))
+        }).collect();
+        xs.sort_by(f64::total_cmp);
+        for w in xs.chunks_exact(2) { out.push([rinv(DVec2::new(w[0], t)), rinv(DVec2::new(w[1], t))]); }
+        t += pas;
     }
     out
 }
@@ -1427,6 +1496,19 @@ mod tests {
         assert!(t.contains(&vec!["F1".to_string(), "1".into(), "non".into(), "Pierre".into()]), "{t:?}");
     }
 
+    #[test]
+    fn geometrie_cote_commune_et_chaine() {
+        let g = geometrie_cote(&[DVec2::ZERO, DVec2::new(1000.0, 0.0)], 300.0, 100.0);
+        // deux attaches, deux obliques, une ligne de cote
+        assert_eq!(g.traits.len(), 5);
+        assert_eq!(g.traits[0], [DVec2::ZERO, DVec2::new(0.0, 300.0)]);
+        assert_eq!(g.traits[4], [DVec2::new(0.0, 300.0), DVec2::new(1000.0, 300.0)]);
+        assert_eq!(g.textes, vec![(DVec2::new(500.0, 300.0), 1000.0)]);
+        // chaîne EQ : un texte par intervalle
+        let eq = geometrie_cote(&[DVec2::ZERO, DVec2::new(0.0, 400.0), DVec2::new(0.0, 1000.0)], 50.0, 10.0);
+        assert_eq!(eq.textes.iter().map(|t| t.1).collect::<Vec<_>>(), vec![400.0, 600.0]);
+        assert!(eq.textes.iter().all(|t| (t.0.x + 50.0).abs() < 1e-9));
+    }
     #[test]
     fn polyligne_fermee_remplie() {
         let (mut p, _) = depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();

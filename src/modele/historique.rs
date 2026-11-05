@@ -1,19 +1,72 @@
 //! Transactions atomiques par document. Les instantanés sont bornés en mémoire.
+//! La même pile sert au projet et à chaque famille ouverte dans l'éditeur.
+use super::famille_modelee::FichierFamille;
 use super::Projet;
 use std::collections::VecDeque;
+use std::marker::PhantomData;
+
+/// Document dont l'historique garde des instantanés JSON.
+pub trait Instantane: Sized {
+    fn instantane(&self) -> Result<String, String>;
+    /// Relit un instantané, sans contrôle : un état intermédiaire peut être invalide.
+    fn restaurer(json: &str) -> Result<Self, String>;
+    fn libelle(avant: &str, apres: &str) -> String;
+}
+
+impl Instantane for Projet {
+    fn instantane(&self) -> Result<String, String> {
+        self.json()
+    }
+    fn restaurer(json: &str) -> Result<Self, String> {
+        Projet::lire_json(json)
+    }
+    fn libelle(avant: &str, apres: &str) -> String {
+        libelle(avant, apres)
+    }
+}
+
+impl Instantane for FichierFamille {
+    fn instantane(&self) -> Result<String, String> {
+        serde_json::to_string(self).map_err(|e| e.to_string())
+    }
+    fn restaurer(json: &str) -> Result<Self, String> {
+        serde_json::from_str(json).map_err(|e| e.to_string())
+    }
+    fn libelle(avant: &str, apres: &str) -> String {
+        let famille = |t: &str| serde_json::from_str::<serde_json::Value>(t).ok().and_then(|v| v.get("famille").cloned());
+        let (Some(a), Some(b)) = (famille(avant), famille(apres)) else {
+            return "Modifier la famille".into();
+        };
+        let categories = [
+            ("parametres", "paramètre"),
+            ("plans", "plan de référence"),
+            ("contraintes", "contrainte"),
+            ("volumes", "volume"),
+            ("extrusions", "extrusion"),
+            ("symboles", "symbole 2D"),
+        ];
+        libelle_collections(&a, &b, &categories, "nom", "Modifier la famille")
+    }
+}
 
 struct Entree {
     json: String,
     libelle: String,
 }
 
-#[derive(Default)]
-pub struct Historique {
+pub struct Historique<T: Instantane = Projet> {
     avant: VecDeque<Entree>,
     apres: Vec<Entree>,
     sauvegarde: Option<String>,
     geste: bool,
     debut_geste: Option<Entree>,
+    document: PhantomData<fn() -> T>,
+}
+
+impl<T: Instantane> Default for Historique<T> {
+    fn default() -> Self {
+        Self { avant: VecDeque::new(), apres: Vec::new(), sauvegarde: None, geste: false, debut_geste: None, document: PhantomData }
+    }
 }
 
 /// Décrit les collections modifiées, sans prétendre connaître une commande lorsque
@@ -25,7 +78,10 @@ fn libelle(avant: &str, apres: &str) -> String {
     ) else {
         return "Modifier le projet".into();
     };
-    let categories = [
+    libelle_collections(&a, &b, &CATEGORIES_PROJET, "id", "Modifier le projet")
+}
+
+const CATEGORIES_PROJET: [(&str, &str); 17] = [
         ("niveaux", "niveau"),
         ("murs", "mur"),
         ("assemblages", "assemblage"),
@@ -43,11 +99,15 @@ fn libelle(avant: &str, apres: &str) -> String {
         ("types_murs", "type de mur"),
         ("types_dalles", "type de dalle"),
         ("materiaux", "matériau"),
-    ];
+];
+
+/// Libellé d'une étape : la seule collection modifiée et, si un seul objet change,
+/// son nom ; les objets sont appariés par `cle`.
+fn libelle_collections(a: &serde_json::Value, b: &serde_json::Value, categories: &[(&str, &str)], cle: &str, defaut: &str) -> String {
     let mut changements = Vec::new();
-    for (cle, nom) in categories {
-        let va = a.get(cle).and_then(|v| v.as_array());
-        let vb = b.get(cle).and_then(|v| v.as_array());
+    for &(champ, nom) in categories {
+        let va = a.get(champ).and_then(|v| v.as_array());
+        let vb = b.get(champ).and_then(|v| v.as_array());
         let na = va.map_or(0, Vec::len);
         let nb = vb.map_or(0, Vec::len);
         if na != nb || (na > 0 && va != vb) {
@@ -68,10 +128,10 @@ fn libelle(avant: &str, apres: &str) -> String {
                 .into_iter()
                 .flat_map(|v| v.iter())
                 .filter(|objet| {
-                    let Some(id) = objet.get("id") else {
+                    let Some(id) = objet.get(cle) else {
                         return false;
                     };
-                    let precedent = autre.and_then(|v| v.iter().find(|x| x.get("id") == Some(id)));
+                    let precedent = autre.and_then(|v| v.iter().find(|x| x.get(cle) == Some(id)));
                     if na == nb {
                         precedent.is_some_and(|p| p != *objet)
                     } else {
@@ -91,18 +151,18 @@ fn libelle(avant: &str, apres: &str) -> String {
                 format!("{action} {nom}")
             }
         }
-        _ => "Modifier le projet".into(),
+        _ => defaut.into(),
     }
 }
 
-impl Historique {
-    pub fn enregistrer(&mut self, p: &Projet) -> Result<(), String> {
+impl<T: Instantane> Historique<T> {
+    pub fn enregistrer(&mut self, p: &T) -> Result<(), String> {
         self.geste(false);
-        self.sauvegarde = Some(p.json()?);
+        self.sauvegarde = Some(p.instantane()?);
         Ok(())
     }
-    pub fn modifie(&self, p: &Projet) -> bool {
-        p.json().ok().as_ref() != self.sauvegarde.as_ref()
+    pub fn modifie(&self, p: &T) -> bool {
+        p.instantane().ok().as_ref() != self.sauvegarde.as_ref()
     }
     #[cfg(test)]
     pub fn peut_annuler(&self) -> bool {
@@ -134,15 +194,15 @@ impl Historique {
             self.avant.pop_front();
         }
     }
-    pub fn pousser(&mut self, avant: &Projet, apres: &Projet) -> Result<(), String> {
-        let a = avant.json()?;
-        let b = apres.json()?;
+    pub fn pousser(&mut self, avant: &T, apres: &T) -> Result<(), String> {
+        let a = avant.instantane()?;
+        let b = apres.instantane()?;
         if a == b {
             return Ok(());
         }
         if !self.geste || self.debut_geste.is_none() {
             let entree = Entree {
-                libelle: libelle(&a, &b),
+                libelle: T::libelle(&a, &b),
                 json: a,
             };
             if self.geste {
@@ -156,7 +216,7 @@ impl Historique {
         Ok(())
     }
     /// Le contrôleur valide et reconstruit la cible avant de déplacer les piles.
-    pub fn cible_n(&self, retablir: bool, nombre: usize) -> Result<Projet, String> {
+    pub fn cible_n(&self, retablir: bool, nombre: usize) -> Result<T, String> {
         if nombre == 0 {
             return Err("Nombre de modifications invalide.".into());
         }
@@ -166,11 +226,11 @@ impl Historique {
             self.avant.iter().rev().nth(nombre - 1)
         }
         .ok_or("Historique insuffisant.")?;
-        Projet::lire_json(&s.json)
+        T::restaurer(&s.json)
     }
     pub fn confirmer_n(
         &mut self,
-        actuel: &Projet,
+        actuel: &T,
         retablir: bool,
         nombre: usize,
     ) -> Result<(), String> {
@@ -184,7 +244,7 @@ impl Historique {
         {
             return Err("Historique insuffisant.".into());
         }
-        let mut courant = actuel.json()?;
+        let mut courant = actuel.instantane()?;
         for _ in 0..nombre {
             let entree = if retablir {
                 self.apres.pop().unwrap()
@@ -206,11 +266,11 @@ impl Historique {
         Ok(())
     }
     #[cfg(test)]
-    pub fn cible(&self, retablir: bool) -> Result<Projet, String> {
+    pub fn cible(&self, retablir: bool) -> Result<T, String> {
         self.cible_n(retablir, 1)
     }
     #[cfg(test)]
-    pub fn confirmer(&mut self, actuel: &Projet, retablir: bool) -> Result<(), String> {
+    pub fn confirmer(&mut self, actuel: &T, retablir: bool) -> Result<(), String> {
         self.confirmer_n(actuel, retablir, 1)
     }
 }
@@ -218,6 +278,20 @@ impl Historique {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn famille_a_sa_propre_pile_et_ses_libelles() {
+        use crate::modele::famille_modelee::{FamilleModelee, PlanRef, AxePlan, FORMAT_FAMILLE};
+        let a = FichierFamille { format: FORMAT_FAMILLE.into(), nom: "OF".into(), largeur: 1200.0, hauteur: 1350.0, famille: FamilleModelee::gabarit_fenetre() };
+        let mut b = a.clone();
+        b.famille.plans.push(PlanRef { nom: "Plan 9".into(), axe: AxePlan::X, position: 100.0, fixe: false, hote: None });
+        let mut h: Historique<FichierFamille> = Historique::default();
+        h.pousser(&a, &b).unwrap();
+        assert_eq!(h.libelles(false), vec!["Ajouter plan de référence « Plan 9 »".to_string()]);
+        let retour = h.cible(false).unwrap();
+        assert_eq!(retour, a);
+        h.confirmer(&b, false).unwrap();
+        assert_eq!(h.cible(true).unwrap(), b);
+    }
     #[test]
     fn sauvegarde_annulation_branche_et_documents_isoles() {
         let a = Projet::nouveau("a");

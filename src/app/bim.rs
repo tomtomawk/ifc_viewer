@@ -7,6 +7,16 @@ impl ViewerApp {
     }
 
     pub(super) fn parcourir_historique_n(&mut self, retablir: bool, nombre: usize) {
+        // onglet Famille : un document à part, avec sa propre pile
+        if self.famille_active {
+            if let Some(ed) = self.famille.as_mut() {
+                match ed.parcourir_historique(retablir, nombre) {
+                    Ok(()) => self.status = format!("Famille : {nombre} modification(s) {}.", if retablir { "rétablie(s)" } else { "annulée(s)" }),
+                    Err(e) => self.error = Some(e),
+                }
+                return;
+            }
+        }
         if self.collaboration.is_some() {
             if nombre != 1 { self.error = Some("En collaboration, annulez une transaction à la fois.".into()); return; }
             let resultat = self.collaboration.as_mut().unwrap().annuler(retablir).and_then(|p|self.appliquer_projet_interne(p,true));

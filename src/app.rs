@@ -9,6 +9,8 @@ mod communes;
 mod feuilles;
 mod dessin2d_ui;
 mod famille_ui;
+mod accrochage;
+use accrochage::{AccrocheMur, marqueur};
 mod collaboration;
 mod pilotage;
 mod parametres;
@@ -299,19 +301,6 @@ struct PasseFeuille {
     direction: Vec3,
 }
 
-/// Accrochage du point de tracé d'un mur.
-#[derive(Clone, Copy, PartialEq, Debug)]
-enum AccrocheMur {
-    Grille,
-    Extremite,
-    Milieu,
-    Orthogonal,
-    /// Angle rond depuis le départ (degrés).
-    Angle(f64),
-    /// Angle d'un mur (contour raccordé).
-    Coin,
-}
-
 /// Onglet du ruban en haut de la fenêtre.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum OngletRuban {
@@ -367,8 +356,32 @@ struct EtatVue {
     boite_active: bool,
 }
 
+/// Fenêtre de sélection, commune aux vues du projet et à l'éditeur de familles : de
+/// gauche à droite, fenêtre (éléments entièrement dedans) ; de droite à gauche,
+/// croisement (éléments touchés). Ctrl : ajouter à la sélection.
 #[derive(Clone, Copy)]
 struct FenetreSelection { debut: egui::Pos2, fin: egui::Pos2, ajouter: bool }
+
+impl FenetreSelection {
+    fn rectangle(&self) -> egui::Rect {
+        egui::Rect::from_two_pos(self.debut, self.fin)
+    }
+    fn croisement(&self) -> bool {
+        self.fin.x < self.debut.x
+    }
+    /// Croisement : vert en tirets ; fenêtre : bleu plein.
+    fn dessiner(&self, painter: &egui::Painter) {
+        let r = self.rectangle();
+        let couleur = if self.croisement() { Color32::from_rgb(35, 160, 75) } else { Color32::from_rgb(35, 110, 220) };
+        painter.rect_filled(r, 0.0, couleur.gamma_multiply(0.18));
+        if self.croisement() {
+            let points = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
+            painter.add(egui::Shape::dashed_line(&points, egui::Stroke::new(1.2, couleur), 5.0, 4.0));
+        } else {
+            painter.rect_stroke(r, 0.0, egui::Stroke::new(1.2, couleur), egui::StrokeKind::Inside);
+        }
+    }
+}
 
 /// Fichier conservé en mémoire quand un autre document devient actif.
 struct DocumentOuvert {
@@ -489,6 +502,9 @@ pub struct ViewerApp {
     confirmer_fermeture: Option<(bool, usize)>, // application entière, ou identifiant du document
     documents: BTreeMap<usize, DocumentOuvert>,
     document_actif: usize,
+    /// Registre des changements de document actif (projets et familles), lu par le
+    /// pilote : le plus récent en dernier.
+    journal_documents: Vec<serde_json::Value>,
     prochain_document: usize,
     renderer: Option<Renderer>,
     scene: Option<Scene>,
@@ -673,6 +689,7 @@ impl ViewerApp {
             confirmer_fermeture: None,
             documents: BTreeMap::new(),
             document_actif: 0,
+            journal_documents: Vec::new(),
             prochain_document: 1,
             renderer,
             scene: None,
@@ -1091,17 +1108,88 @@ impl ViewerApp {
         prims
     }
 
-    /// Éléments du niveau courant entièrement au-dessus de la coupe et sous la limite haute.
+    /// Éléments du niveau courant entièrement au-dessus de la coupe et sous la limite haute,
+    /// en pointillés.
     fn primitives_au_dessus_plan(&self)->Vec<crate::trace2d::Primitive> {
-        let (Some(s),Some((p,_)),Some(id),Some(plan))=(&self.scene,&self.natif,self.vue_native_id(),self.plan_coupe()) else{return Vec::new()};
-        let Some(v)=p.vues.iter().find(|v|v.id==id) else{return Vec::new()};
-        let crate::modele::GenreVue::Plan{niveau,..}=&v.genre else{return Vec::new()};
-        let Some(haut)=p.niveau(v.limite_haute_niveau.as_deref().unwrap_or(niveau)) else{return Vec::new()};
+        let (Some(plan),mut prims)=(self.plan_coupe(),self.aretes_au_dessus_plan()) else{return Vec::new()};
+        let coupe=plan.w;
+        // Pointillés calés sur une phase commune à chaque droite du plan : les arêtes
+        // superposées en projection (dessus et dessous d'un élément, éléments voisins,
+        // tronçons découpés par les parties cachées) tracent les mêmes tirets au lieu
+        // de tirets décalés qui se chevauchent. Doublons retirés.
+        let longueur=(self.echelle*0.003).max(0.01);let pas=longueur*2.5;
+        let z=coupe as f64-0.0005;
+        let mut vus=std::collections::HashSet::new();
+        for p in &mut prims {
+            let crate::trace2d::Forme::Segments(segments)=&p.forme else{continue};
+            let mut pointilles=Vec::new();
+            for segment in segments {
+                let (mut a,mut b)=(glam::DVec2::new(segment[0].x,segment[0].y),glam::DVec2::new(segment[1].x,segment[1].y));
+                let l=a.distance(b);
+                if l<=1e-6 {continue;}
+                let mut u=(b-a)/l;
+                if u.x< -1e-9 || (u.x.abs()<=1e-9 && u.y<0.0) {std::mem::swap(&mut a,&mut b);u=-u;}
+                let cle=|x:f64|(x*1e4).round() as i64;
+                let decalage=u.perp_dot(a);
+                if !vus.insert((cle(u.x),cle(u.y),cle(decalage),cle(a.dot(u)),cle(b.dot(u)))) {continue;}
+                let (s0,s1)=(a.dot(u),b.dot(u));
+                if (s1-s0)/pas>20000.0 {continue;}
+                let mut k=(s0/pas).floor();
+                while k*pas<s1 {
+                    let (t0,t1)=((k*pas).max(s0),(k*pas+longueur).min(s1));
+                    if t1>t0+1e-9 {
+                        let q=|t:f64|{let v=a+u*(t-s0);glam::DVec3::new(v.x,v.y,z)};
+                        pointilles.push([q(t0),q(t1)]);
+                    }
+                    k+=1.0;
+                }
+            }
+            p.forme=crate::trace2d::Forme::Segments(pointilles);
+        }
+        prims
+    }
+
+    /// Objet de la plage haute dont une arête passe à moins de 6 px du clic (vue en plan).
+    fn objet_plage_haute(&self,rect:egui::Rect,q:egui::Pos2)->Option<u32> {
+        if !self.vue_en_plan() {return None;}
+        let s=self.scene.as_ref()?;
+        let vp=self.camera.view_proj(rect.width()/rect.height().max(1.0));
+        let ecran=|p:glam::DVec3|{let c=vp*p.as_vec3().extend(1.0);(c.w>0.0).then(||egui::pos2(rect.left()+(c.x/c.w+1.0)*0.5*rect.width(),rect.top()+(1.0-c.y/c.w)*0.5*rect.height()))};
+        let mut meilleur:Option<(f32,u32)>=None;
+        for p in self.aretes_au_dessus_plan() {
+            let (Some(e),crate::trace2d::Forme::Segments(segments))=(p.element,&p.forme) else{continue};
+            let Some(&obj)=s.object_of.get(&e) else{continue};
+            for seg in segments {
+                let (Some(a),Some(b))=(ecran(seg[0]),ecran(seg[1])) else{continue};
+                let d=b-a;let t=((q-a).dot(d)/d.length_sq().max(1e-6)).clamp(0.0,1.0);
+                let distance=(a+d*t).distance(q);
+                if distance<=6.0 && meilleur.is_none_or(|m|distance<m.0) {meilleur=Some((distance,obj));}
+            }
+        }
+        meilleur.map(|m|m.1)
+    }
+
+    /// Arêtes vues des éléments de la plage haute, sans pointillés.
+    fn aretes_au_dessus_plan(&self)->Vec<crate::trace2d::Primitive> {
+        let (Some(s),Some((visible,limite)))=(&self.scene,self.masque_plage_haute()) else{return Vec::new()};
+        let f=self.camera.forward().as_dvec3().normalize();
+        let droite=f.cross(self.camera.up().as_dvec3()).normalize();
+        let haut=droite.cross(f);
+        dessin::vu(s,&visible,droite,haut,-f,Some(Vec4::new(0.,0.,-1.,limite)),1024)
+    }
+
+    /// Plage haute de la vue en plan native ouverte : objets du niveau entièrement au-dessus
+    /// de la coupe et sous la limite haute, et altitude de cette limite (repère de la scène).
+    fn masque_plage_haute(&self)->Option<(Vec<bool>,f32)> {
+        let (Some(s),Some((p,_)),Some(id),Some(plan))=(&self.scene,&self.natif,self.vue_native_id(),self.plan_coupe()) else{return None};
+        let v=p.vues.iter().find(|v|v.id==id)?;
+        let crate::modele::GenreVue::Plan{niveau,..}=&v.genre else{return None};
+        let haut=p.niveau(v.limite_haute_niveau.as_deref().unwrap_or(niveau))?;
         let limite=((haut.altitude+v.limite_haute_decalage)*0.001-s.origin.z) as f32;
         let coupe=plan.w;
-        if limite<=coupe {return Vec::new();}
+        if limite<=coupe {return None;}
         let niveau_id=scene::id_natif("niveau",niveau);
-        let visible:Vec<bool>=s.objects.iter().enumerate().map(|(i,o)| {
+        let visible=s.objects.iter().enumerate().map(|(i,o)| {
             let masque_vue=self.cle_native(o.id).is_some_and(|id|v.elements_masques.contains(&id))
                 || s.model.parent.get(&o.id).and_then(|id|self.cle_native(*id)).is_some_and(|id|v.elements_masques.contains(&id));
             o.storey==Some(niveau_id) && o.min.z>coupe+1e-5 && o.min.z<limite
@@ -1111,29 +1199,7 @@ impl ViewerApp {
                 && !self.hidden_storeys.contains(&niveau_id)
                 && self.isolated.as_ref().is_none_or(|iso|iso.contains(&(i as u32)))
         }).collect();
-        let f=self.camera.forward().as_dvec3().normalize();
-        let droite=f.cross(self.camera.up().as_dvec3()).normalize();
-        let haut=droite.cross(f);
-        let mut prims=dessin::vu(s,&visible,droite,haut,-f,Some(Vec4::new(0.,0.,-1.,limite)),1024);
-        let longueur=(self.echelle*0.003).max(0.01);let intervalle=longueur*1.5;
-        for p in &mut prims {
-            if let crate::trace2d::Forme::Segments(segments)=&p.forme {
-                let mut pointilles=Vec::new();
-                for segment in segments {
-                    let a=segment[0];let b=segment[1];let d=b-a;let l=d.length();
-                    if l<=1e-9 {continue;}
-                    let mut t=0.0;let pas=intervalle.max(l/20000.0);
-                    while t<l {pointilles.push([a+d*(t/l),a+d*((t+longueur).min(l)/l)]);t+=pas;}
-                }
-                p.forme=crate::trace2d::Forme::Segments(pointilles);
-            }
-            // Le contour est projeté derrière la coupe du plan, au même endroit en XY.
-            match &mut p.forme {
-                crate::trace2d::Forme::Segments(segments)=>for seg in segments {for q in seg {q.z=coupe as f64-0.0005;}},
-                _=>{}
-            }
-        }
-        prims
+        Some((visible,limite))
     }
 
     /// Recalcule le tracé de la coupe (poché, hachures, contours) s'il le faut.
@@ -1261,6 +1327,18 @@ impl ViewerApp {
                         // Plan de coupe, limite basse et limite haute sont distincts.
                         let niveaux: Vec<(String, String)> = projet.niveaux.iter().map(|n| (n.id.clone(), n.nom.clone())).collect();
                         let nom = |id: &str| niveaux.iter().find(|n| n.0 == id).map_or(String::new(), |n| n.1.clone());
+                        // ordre de la plage de vue : du haut vers le bas
+                        ui.label("Limite haute").on_hover_text("Éléments au-dessus du plan de coupe, en pointillés ; seuls les éléments de ce niveau sont retenus.");
+                        ui.horizontal(|ui| {
+                            let mut choisi=haut_niveau.clone().unwrap_or_else(||niveau.clone());
+                            let avant=choisi.clone();
+                            egui::ComboBox::from_id_salt("plage_limite_haute").width(90.0).truncate().selected_text(nom(&choisi)).show_ui(ui,|ui| {
+                                for (id,n) in &niveaux {ui.selectable_value(&mut choisi,id.clone(),n);}
+                            });
+                            if choisi!=avant {*haut_niveau=Some(choisi);*haut_decalage=0.0;}
+                            ui.add(egui::DragValue::new(haut_decalage).speed(10.0).dimensions()).on_hover_text("Décalage de la limite haute par rapport au niveau choisi");
+                        });
+                        ui.end_row();
                         for (titre, aide, niv, dec) in [("Plan de coupe", "Niveau et décalage du plan de coupe", &mut *niveau, coupe), ("Limite basse", "Les éléments du niveau d'en dessous qui s'arrêtent ici ne sont pas montrés", bas_niveau, bas_decalage)] {
                             ui.label(titre).on_hover_text(aide);
                             ui.horizontal(|ui| {
@@ -1273,17 +1351,6 @@ impl ViewerApp {
                             });
                             ui.end_row();
                         }
-                        ui.label("Limite haute").on_hover_text("Éléments au-dessus du plan de coupe, en pointillés ; seuls les éléments de ce niveau sont retenus.");
-                        ui.horizontal(|ui| {
-                            let mut choisi=haut_niveau.clone().unwrap_or_else(||niveau.clone());
-                            let avant=choisi.clone();
-                            egui::ComboBox::from_id_salt("plage_limite_haute").width(90.0).truncate().selected_text(nom(&choisi)).show_ui(ui,|ui| {
-                                for (id,n) in &niveaux {ui.selectable_value(&mut choisi,id.clone(),n);}
-                            });
-                            if choisi!=avant {*haut_niveau=Some(choisi);*haut_decalage=0.0;}
-                            ui.add(egui::DragValue::new(haut_decalage).speed(10.0).dimensions()).on_hover_text("Décalage de la limite haute par rapport au niveau choisi");
-                        });
-                        ui.end_row();
                     }
                     GenreVue::Coupe { profondeur, .. } => {
                         ui.label("Profondeur");
@@ -2157,9 +2224,14 @@ impl ViewerApp {
 
     fn selectionner_rectangle(&mut self, vue: egui::Rect, fenetre: FenetreSelection) {
         let Some(scene) = &self.scene else { return };
-        let rectangle = egui::Rect::from_two_pos(fenetre.debut, fenetre.fin);
-        let croisement = fenetre.fin.x < fenetre.debut.x;
-        let resultats = crate::selection_rectangle::objets(scene, &self.visible, self.camera.view_proj(vue.width() / vue.height().max(1.0)), vue, rectangle, self.plan_coupe(), self.boite_appliquee(), &self.cadrage_vue(), &self.contour_cadrage_vue());
+        let rectangle = fenetre.rectangle();
+        let croisement = fenetre.croisement();
+        let mut resultats = crate::selection_rectangle::objets(scene, &self.visible, self.camera.view_proj(vue.width() / vue.height().max(1.0)), vue, rectangle, self.plan_coupe(), self.boite_appliquee(), &self.cadrage_vue(), &self.contour_cadrage_vue());
+        // plan : les éléments de la plage haute (au-dessus de la coupe) se sélectionnent aussi
+        if self.vue_en_plan() && let Some((haut, limite)) = self.masque_plage_haute() {
+            let autres = crate::selection_rectangle::objets(scene, &haut, self.camera.view_proj(vue.width() / vue.height().max(1.0)), vue, rectangle, Some(Vec4::new(0., 0., -1., limite)), self.boite_appliquee(), &self.cadrage_vue(), &self.contour_cadrage_vue());
+            for (r, a) in resultats.iter_mut().zip(autres) { if a.0 { *r = a; } }
+        }
         let mut ids = crate::selection_rectangle::groupes(scene.objects.iter().zip(resultats).map(|(o, r)| {
             let id = scene.model.parent.get(&o.id).filter(|id| scene.model.ty(**id) == "IFCELEMENTASSEMBLY").copied().unwrap_or(o.id);
             (id, r)
@@ -3010,7 +3082,12 @@ impl ViewerApp {
             return Ok(());
         }
         let chemin = self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.1.clone();
-        if !distant { projet.recaler_menuiseries(&self.natif.as_ref().unwrap().0)?; }
+        if !distant {
+            let avant=&self.natif.as_ref().unwrap().0;
+            let detachees=projet.detacher_couches_disjointes(avant);
+            if !detachees.is_empty() {self.status=format!("{} couche(s) détachée(s) du mur composé : plus alignée(s) ou plus en contact.",detachees.len());}
+            projet.recaler_menuiseries(&self.natif.as_ref().unwrap().0)?;
+        }
         projet.verifier()?;
         let texte_seul = crate::modele::collaboration::objets(&projet)? == crate::modele::collaboration::objets(&self.natif.as_ref().unwrap().0)?;
         let debut_geometrie=std::time::Instant::now();
@@ -3334,10 +3411,9 @@ impl ViewerApp {
         let t = (altitude * 0.001 - scene.origin.z - o.z as f64) / d.z as f64;
         if !t.is_finite() || t <= 0.0 { return None; }
         let p = (o.as_dvec3() + d.as_dvec3() * t + scene.origin) * 1000.0;
-        let mut point = [(p.x / 10.0).round() * 10.0, (p.y / 10.0).round() * 10.0];
-        let mut accroche = AccrocheMur::Grille;
+        let point = [(p.x / 10.0).round() * 10.0, (p.y / 10.0).round() * 10.0];
+        let accroche = AccrocheMur::Grille;
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
-        let mut distance = 10.0;
         let mut candidats: Vec<([f64; 2], AccrocheMur)> = Vec::new();
         let jonctions = crate::modele::jonctions::coupes(projet);
         // Destination d'un déplacement ou d'une copie : la sélection (et toutes les couches
@@ -3369,42 +3445,17 @@ impl ViewerApp {
         for d in projet.dalles.iter().filter(|d| !deplaces.contains(&d.id)) {
             candidats.extend(d.contours.iter().flatten().map(|&p| (p, AccrocheMur::Extremite)));
         }
-        for (v, genre) in candidats {
+        let ecrans = candidats.into_iter().filter_map(|(v, genre)| {
             let p = (glam::DVec3::new(v[0], v[1], altitude) * 0.001 - scene.origin).as_vec3();
             let clip = vp * p.extend(1.0);
-            if clip.w <= 0.0 { continue; }
+            if clip.w <= 0.0 { return None; }
             let n = clip.truncate() / clip.w;
-            let ecran = egui::pos2(rect.left() + (n.x + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - n.y) * 0.5 * rect.height());
-            // à distance égale, l'extrémité l'emporte sur le milieu et l'angle
-            let d = q.distance(ecran) + if genre == AccrocheMur::Extremite { 0.0 } else { 0.5 };
-            if d < distance {
-                point = v;
-                distance = d;
-                accroche = if matches!(genre, AccrocheMur::Angle(_)) { AccrocheMur::Coin } else { genre };
-            }
-        }
-        if accroche != AccrocheMur::Grille { return Some((point, accroche)); }
+            Some((v, egui::pos2(rect.left() + (n.x + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - n.y) * 0.5 * rect.height()), genre))
+        });
+        if let Some(c) = accrochage::meilleur(q, ecrans) { return Some(c); }
         let Some(a) = depart else { return Some((point, accroche)) };
-        let (dx, dy) = (point[0] - a[0], point[1] - a[1]);
-        let longueur = dx.hypot(dy);
         // axes du plan tourné (repère du plan) : Maj et angles ronds suivent l'écran
-        let theta = self.angle_axes_plan();
-        let (u, v) = ([theta.cos(), theta.sin()], [-theta.sin(), theta.cos()]);
-        if orthogonal {
-            let (du, dv) = (dx * u[0] + dy * u[1], dx * v[0] + dy * v[1]);
-            let (axe, l) = if du.abs() >= dv.abs() { (u, du) } else { (v, dv) };
-            let l = (l / 10.0).round() * 10.0;
-            return Some(([a[0] + axe[0] * l, a[1] + axe[1] * l], AccrocheMur::Orthogonal));
-        }
-        if longueur > 1.0 {
-            let angle = (dy.atan2(dx) - theta).to_degrees();
-            let rond = (angle / 15.0).round() * 15.0;
-            if (angle - rond).abs() < 3.0 {
-                let l = (longueur / 10.0).round() * 10.0;
-                let r = rond.to_radians() + theta;
-                return Some(([a[0] + l * r.cos(), a[1] + l * r.sin()], AccrocheMur::Angle(rond)));
-            }
-        }
+        if let Some(c) = accrochage::contraindre(a, point, self.angle_axes_plan(), orthogonal, 10.0) { return Some(c); }
         Some((point, accroche))
     }
 
@@ -3668,7 +3719,8 @@ impl ViewerApp {
             else if self.loading.is_some(){ui.label(RichText::new(&self.status).small());}
             let mut historique_choisi = None;
             for (retablir, titre) in [(false, "Annuler"), (true, "Rétablir")] {
-                let libelles = if let Some(c)=&self.collaboration {
+                let famille = self.famille.as_ref().filter(|_| mode_famille);
+                let libelles = if let Some(ed)=famille {ed.libelles_historique(retablir)} else if let Some(c)=&self.collaboration {
                     let pile=if retablir{&c.copie.retablissements}else{&c.copie.annulations};
                     pile.last().map(|t|format!("Transaction {} — {}",t.id,if c.copie.base.acceptes.contains_key(&t.id){"partagée"}else{"locale"})).into_iter().collect()
                 } else {self.historique.libelles(retablir)};
@@ -6774,7 +6826,7 @@ impl ViewerApp {
             } else if let Some(hp) = resp.hover_pos() {
                 let scroll = ui.input(|i| i.smooth_scroll_delta.y);
                 if scroll != 0.0 {
-                    let factor = (-scroll * 0.0018).exp();
+                    let factor = 1.0 / accrochage::facteur_molette(scroll) as f32;
                     let target = pick(self, hp).map(|(_, p)| p).or_else(|| {
                         // Point sur le plan de visée à la distance de la cible.
                         let n = ndc(hp);
@@ -6937,7 +6989,13 @@ impl ViewerApp {
                 self.select(None, false);
                 self.bim.selection = selection;
             } else if resp.clicked() {
-                let hit = resp.interact_pointer_pos().and_then(|p| pick(self, p));
+                // Plan : une arête en pointillés de la plage haute (au-dessus de la coupe)
+                // est prioritaire sur l'élément coupé ou vu dessous.
+                let haut = (self.ruban_edition.outil()!=Some(crate::ruban::Outil::Ouverture)).then(|| resp.interact_pointer_pos().and_then(|q| self.objet_plage_haute(rect, q))).flatten();
+                let hit = match haut {
+                    Some(obj) => Some((obj, self.scene.as_ref().map_or(Vec3::ZERO, |s| s.objects[obj as usize].min))),
+                    None => resp.interact_pointer_pos().and_then(|p| pick(self, p)),
+                };
                 let id = hit.map(|(obj, _)| self.cible_clic(self.scene.as_ref().unwrap().objects[obj as usize].id));
                 self.point_clique = hit.map(|(_, p)| p.as_dvec3() + self.scene.as_ref().unwrap().origin);
                 if self.natif.is_some() && self.ruban_edition.outil()==Some(crate::ruban::Outil::Ouverture) {
@@ -6983,15 +7041,7 @@ impl ViewerApp {
             ui.painter().image(id, rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
         }
         if let Some(f) = self.fenetre_selection {
-            let r = egui::Rect::from_two_pos(f.debut, f.fin);
-            let croisement = f.fin.x < f.debut.x;
-            let couleur = if croisement { Color32::from_rgb(35, 160, 75) } else { Color32::from_rgb(35, 110, 220) };
-            let painter = ui.painter().with_clip_rect(rect);
-            painter.rect_filled(r, 0.0, couleur.gamma_multiply(0.18));
-            if croisement {
-                let points = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
-                painter.add(egui::Shape::dashed_line(&points, egui::Stroke::new(1.2, couleur), 5.0, 4.0));
-            } else { painter.rect_stroke(r, 0.0, egui::Stroke::new(1.2, couleur), egui::StrokeKind::Inside); }
+            f.dessiner(&ui.painter().with_clip_rect(rect));
         }
         if self.natif.is_some() && self.vue_en_plan() {
             self.reperes_coupes(ui, rect, altitude_coupe);
@@ -7117,7 +7167,7 @@ impl ViewerApp {
                 }
                 _ => self.commande(ctx, &r.commande, &r.argument),
             };
-            let _ = r.reponse.send(reponse);
+            let _ = r.reponse.send(self.avec_document_actif(reponse));
         }
     }
 
@@ -7225,6 +7275,7 @@ impl ViewerApp {
             ("sortie_v0", self.natif.as_ref().map(|n| &n.1).or(self.rvt_sortie.as_ref()).map_or("null".into(), |p| texte(&p.to_string_lossy()))),
             ("fiche_revit", (self.rvt.is_some() && self.rvt_sheet).to_string()),
         ];
+        p.push(("document_actif", self.document_actif_pilote().to_string()));
         p.push(("saisies_en_attente", (self.saisies_pilote.len()+usize::from(self.saisie_pilote_image)).to_string()));
         p.push(("selection_native", serde_json::to_string(&self.selection_bim()).unwrap()));
         p.push(("outil", self.ruban_edition.outil().map_or("null".into(), |o|texte(o.nom()))));
@@ -7420,7 +7471,7 @@ impl ViewerApp {
                         Some("finition") => FonctionCouche::Finition,
                         _ => FonctionCouche::Autre,
                     };
-                    Some(Couche { materiau: Some(materiau), epaisseur, fonction, plume: None })
+                    Some(Couche { materiau: Some(materiau), epaisseur, fonction, plume: None, retour: false })
                 }).collect();
                 let (Some(couches), false) = (couches, nom.is_empty()) else { return erreur("usage : type_mur <nom>|<matériau>:<épaisseur>[:fonction]|…") };
                 let Some((projet, _)) = &self.natif else { return erreur("pas de projet natif ouvert") };
@@ -7906,28 +7957,6 @@ impl ViewerApp {
 }
 
 /// Icône d'un style visuel : petit cube en perspective, tracé dans `r`.
-/// Repère d'accrochage du tracé : carré (extrémité), triangle (milieu), losange
-/// (angle d'un mur), cercle sinon.
-fn marqueur(painter: &egui::Painter, q: egui::Pos2, acc: AccrocheMur, couleur: Color32, accent: Color32) {
-    let t = egui::Stroke::new(2.0, accent);
-    match acc {
-        AccrocheMur::Extremite => {
-            painter.rect_stroke(egui::Rect::from_center_size(q, egui::vec2(11.0, 11.0)), 0.0, t, egui::StrokeKind::Middle);
-        }
-        AccrocheMur::Milieu => {
-            let h = 7.0;
-            painter.add(egui::Shape::closed_line(vec![q + egui::vec2(0.0, -h), q + egui::vec2(h, h * 0.8), q + egui::vec2(-h, h * 0.8)], t));
-        }
-        AccrocheMur::Coin => {
-            let h = 7.0;
-            painter.add(egui::Shape::closed_line(vec![q + egui::vec2(0.0, -h), q + egui::vec2(h, 0.0), q + egui::vec2(0.0, h), q + egui::vec2(-h, 0.0)], t));
-        }
-        _ => {
-            painter.circle_stroke(q, 4.0, egui::Stroke::new(1.5, couleur));
-        }
-    }
-}
-
 /// Icône du niveau de détail : un, deux ou trois traits, comme dans Revit.
 /// Icônes vectorielles : indépendantes des caractères disponibles dans la police.
 fn icone_theme(p:&egui::Painter,r:egui::Rect,c:Color32) {
@@ -8322,6 +8351,11 @@ impl eframe::App for ViewerApp {
         }
         self.traiter_action_famille();
         self.confirmation_famille(&ctx);
+        let geste = ctx.input(|i| i.pointer.any_down()) || ctx.egui_wants_keyboard_input();
+        if let Some(ed) = self.famille.as_mut() {
+            ed.suivre_historique(geste);
+        }
+        self.suivre_document_actif();
         self.unsupported_window(&ctx);
         self.confirmation_modifications(&ctx);
         self.apercu_ancrage(&ctx);

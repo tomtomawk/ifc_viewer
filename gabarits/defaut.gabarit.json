@@ -31,7 +31,7 @@
  ],
  "types_murs": [
   {"nom": "Voile BA 200", "couches": [{"materiau": "Béton armé", "epaisseur": 200.0, "fonction": "structure"}]},
-  {"nom": "Mur BA 200 + doublage isolé", "couches": [{"materiau": "Enduit", "epaisseur": 15.0, "fonction": "finition"}, {"materiau": "Béton armé", "epaisseur": 200.0, "fonction": "structure"}, {"materiau": "Laine minérale", "epaisseur": 120.0, "fonction": "isolation"}, {"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}]},
+  {"nom": "Mur BA 200 + doublage isolé", "couches": [{"materiau": "Enduit", "epaisseur": 15.0, "fonction": "finition", "retour": true}, {"materiau": "Béton armé", "epaisseur": 200.0, "fonction": "structure"}, {"materiau": "Laine minérale", "epaisseur": 120.0, "fonction": "isolation", "retour": true}, {"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition", "retour": true}]},
   {"nom": "Mur ossature bois 145", "couches": [{"materiau": "Bardage bois", "epaisseur": 22.0, "fonction": "finition"}, {"materiau": "Lame d'air", "epaisseur": 25.0}, {"materiau": "Panneau fibre de bois", "epaisseur": 35.0, "fonction": "isolation"}, {"materiau": "Ossature bois + laine", "epaisseur": 145.0, "fonction": "structure"}, {"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}]},
   {"nom": "Cloison 72/48", "categorie": "cloison", "couches": [{"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}, {"materiau": "Laine minérale", "epaisseur": 45.0, "fonction": "isolation"}, {"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}]}
  ],
@@ -58,5 +58,703 @@
   {"elevation": false, "nom": "Coupe de détail", "aide": "Détail constructif", "echelle": 10.0, "profondeur": 600.0},
   {"elevation": true, "nom": "Élévation extérieure", "aide": "Façade vue depuis l'extérieur", "echelle": 100.0, "profondeur": 30000.0},
   {"elevation": true, "nom": "Élévation intérieure", "aide": "Paroi d'une pièce vue de l'intérieur", "echelle": 50.0, "profondeur": 6000.0}
+ ],
+ "types_ouvertures": [
+  {"nom": "Fenêtre OF 1 vantail", "largeur": 1200.0, "hauteur": 1350.0, "famille": {
+    "parametres": [
+     {
+      "nom": "Dormant",
+      "formule": "60"
+     },
+     {
+      "nom": "Profondeur",
+      "formule": "70"
+     },
+     {
+      "nom": "Retrait",
+      "formule": "50"
+     },
+     {
+      "nom": "Vitrage",
+      "formule": "28"
+     },
+     {
+      "nom": "Appui",
+      "formule": "40"
+     },
+     {
+      "nom": "AvecAppui",
+      "formule": "1",
+      "portee": "occurrence",
+      "genre": "oui_non"
+     },
+     {
+      "nom": "MateriauAppui",
+      "formule": "",
+      "genre": "materiau"
+     },
+     {
+      "nom": "Passage",
+      "formule": "Largeur - 2 * Dormant"
+     },
+     {
+      "nom": "Diagonale",
+      "formule": "Passage * 0,7071"
+     }
+    ],
+    "plans": [
+     {
+      "nom": "Centre",
+      "axe": "x",
+      "position": 0.0,
+      "fixe": true
+     },
+     {
+      "nom": "Gauche",
+      "axe": "x",
+      "position": -600.0,
+      "fixe": false
+     },
+     {
+      "nom": "Droite",
+      "axe": "x",
+      "position": 600.0,
+      "fixe": false
+     },
+     {
+      "nom": "Dormant gauche",
+      "axe": "x",
+      "position": -540.0,
+      "fixe": false
+     },
+     {
+      "nom": "Dormant droit",
+      "axe": "x",
+      "position": 540.0,
+      "fixe": false
+     },
+     {
+      "nom": "Extérieur",
+      "axe": "y",
+      "position": 0.0,
+      "fixe": false,
+      "hote": "exterieur"
+     },
+     {
+      "nom": "Intérieur",
+      "axe": "y",
+      "position": 0.0,
+      "fixe": false,
+      "hote": "interieur"
+     },
+     {
+      "nom": "Cadre ext",
+      "axe": "y",
+      "position": 100.0,
+      "fixe": false
+     },
+     {
+      "nom": "Cadre int",
+      "axe": "y",
+      "position": 30.0,
+      "fixe": false
+     },
+     {
+      "nom": "Nu appui",
+      "axe": "y",
+      "position": 190.0,
+      "fixe": false
+     },
+     {
+      "nom": "Bas",
+      "axe": "z",
+      "position": 0.0,
+      "fixe": true
+     },
+     {
+      "nom": "Haut",
+      "axe": "z",
+      "position": 1350.0,
+      "fixe": false
+     },
+     {
+      "nom": "Dormant bas",
+      "axe": "z",
+      "position": 60.0,
+      "fixe": false
+     },
+     {
+      "nom": "Dormant haut",
+      "axe": "z",
+      "position": 1290.0,
+      "fixe": false
+     },
+     {
+      "nom": "Mi-hauteur",
+      "axe": "z",
+      "position": 675.0,
+      "fixe": false
+     },
+     {
+      "nom": "Retour extérieur",
+      "axe": "y",
+      "position": 100.0,
+      "fixe": false
+     },
+     {
+      "nom": "Retour intérieur",
+      "axe": "y",
+      "position": 30.0,
+      "fixe": false
+     },
+     {
+      "nom": "Arc x",
+      "axe": "x",
+      "position": 0.0,
+      "fixe": false
+     },
+     {
+      "nom": "Ouvert",
+      "axe": "y",
+      "position": -1050.0,
+      "fixe": false
+     },
+     {
+      "nom": "Arc y",
+      "axe": "y",
+      "position": -730.0,
+      "fixe": false
+     }
+    ],
+    "contraintes": [
+     {
+      "genre": "egalite",
+      "a": "Gauche",
+      "m": "Centre",
+      "b": "Droite",
+      "priorite": 9
+     },
+     {
+      "genre": "distance",
+      "a": "Gauche",
+      "b": "Droite",
+      "valeur": "Largeur",
+      "priorite": 9
+     },
+     {
+      "genre": "distance",
+      "a": "Bas",
+      "b": "Haut",
+      "valeur": "Hauteur",
+      "priorite": 9
+     },
+     {
+      "genre": "distance",
+      "a": "Gauche",
+      "b": "Dormant gauche",
+      "valeur": "Dormant",
+      "priorite": 5
+     },
+     {
+      "genre": "distance",
+      "a": "Dormant droit",
+      "b": "Droite",
+      "valeur": "Dormant",
+      "priorite": 5
+     },
+     {
+      "genre": "distance",
+      "a": "Bas",
+      "b": "Dormant bas",
+      "valeur": "Dormant",
+      "priorite": 5
+     },
+     {
+      "genre": "distance",
+      "a": "Dormant haut",
+      "b": "Haut",
+      "valeur": "Dormant",
+      "priorite": 5
+     },
+     {
+      "genre": "distance",
+      "a": "Cadre ext",
+      "b": "Extérieur",
+      "valeur": "Retrait",
+      "priorite": 5
+     },
+     {
+      "genre": "distance",
+      "a": "Cadre int",
+      "b": "Cadre ext",
+      "valeur": "Profondeur",
+      "priorite": 5
+     },
+     {
+      "genre": "distance",
+      "a": "Extérieur",
+      "b": "Nu appui",
+      "valeur": "Appui",
+      "priorite": 5
+     },
+     {
+      "genre": "egalite",
+      "a": "Dormant bas",
+      "m": "Mi-hauteur",
+      "b": "Dormant haut",
+      "priorite": 5
+     },
+     {
+      "genre": "distance",
+      "a": "Retour extérieur",
+      "b": "Extérieur",
+      "valeur": "Retrait",
+      "priorite": 5
+     },
+     {
+      "genre": "distance",
+      "a": "Retour intérieur",
+      "b": "Extérieur",
+      "valeur": "Retrait + Profondeur",
+      "priorite": 5
+     },
+     {
+      "genre": "distance",
+      "a": "Ouvert",
+      "b": "Cadre int",
+      "valeur": "Passage",
+      "priorite": 5
+     },
+     {
+      "genre": "distance",
+      "a": "Dormant gauche",
+      "b": "Arc x",
+      "valeur": "Diagonale",
+      "priorite": 5
+     },
+     {
+      "genre": "distance",
+      "a": "Arc y",
+      "b": "Cadre int",
+      "valeur": "Diagonale",
+      "priorite": 5
+     }
+    ],
+    "volumes": [
+     {
+      "nom": "Baie",
+      "vide": true,
+      "materiau": "menuiserie",
+      "min": [
+       {
+        "plan": "Gauche",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Intérieur",
+        "decalage": -5.0
+       },
+       {
+        "plan": "Bas",
+        "decalage": 0.0
+       }
+      ],
+      "max": [
+       {
+        "plan": "Droite",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Extérieur",
+        "decalage": 5.0
+       },
+       {
+        "plan": "Haut",
+        "decalage": 0.0
+       }
+      ]
+     },
+     {
+      "nom": "Montant gauche",
+      "vide": false,
+      "materiau": "menuiserie",
+      "min": [
+       {
+        "plan": "Gauche",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Cadre int",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Bas",
+        "decalage": 0.0
+       }
+      ],
+      "max": [
+       {
+        "plan": "Dormant gauche",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Cadre ext",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Haut",
+        "decalage": 0.0
+       }
+      ]
+     },
+     {
+      "nom": "Montant droit",
+      "vide": false,
+      "materiau": "menuiserie",
+      "min": [
+       {
+        "plan": "Dormant droit",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Cadre int",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Bas",
+        "decalage": 0.0
+       }
+      ],
+      "max": [
+       {
+        "plan": "Droite",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Cadre ext",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Haut",
+        "decalage": 0.0
+       }
+      ]
+     },
+     {
+      "nom": "Traverse basse",
+      "vide": false,
+      "materiau": "menuiserie",
+      "min": [
+       {
+        "plan": "Dormant gauche",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Cadre int",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Bas",
+        "decalage": 0.0
+       }
+      ],
+      "max": [
+       {
+        "plan": "Dormant droit",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Cadre ext",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Dormant bas",
+        "decalage": 0.0
+       }
+      ]
+     },
+     {
+      "nom": "Traverse haute",
+      "vide": false,
+      "materiau": "menuiserie",
+      "min": [
+       {
+        "plan": "Dormant gauche",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Cadre int",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Dormant haut",
+        "decalage": 0.0
+       }
+      ],
+      "max": [
+       {
+        "plan": "Dormant droit",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Cadre ext",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Haut",
+        "decalage": 0.0
+       }
+      ]
+     },
+     {
+      "nom": "Vitrage",
+      "vide": false,
+      "materiau": "vitrage",
+      "min": [
+       {
+        "plan": "Dormant gauche",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Cadre int",
+        "decalage": 21.0
+       },
+       {
+        "plan": "Dormant bas",
+        "decalage": 0.0
+       }
+      ],
+      "max": [
+       {
+        "plan": "Dormant droit",
+        "decalage": 0.0
+       },
+       {
+        "plan": "Cadre ext",
+        "decalage": -21.0
+       },
+       {
+        "plan": "Dormant haut",
+        "decalage": 0.0
+       }
+      ]
+     }
+    ],
+    "extrusions": [
+     {
+      "nom": "Appui",
+      "vide": false,
+      "materiau": "appui",
+      "vue": "coupe",
+      "profil": [
+       {
+        "h": {
+         "plan": "Cadre ext",
+         "decalage": -10.0
+        },
+        "v": {
+         "plan": "Bas",
+         "decalage": 0.0
+        }
+       },
+       {
+        "h": {
+         "plan": "Nu appui",
+         "decalage": 0.0
+        },
+        "v": {
+         "plan": "Bas",
+         "decalage": -20.0
+        }
+       },
+       {
+        "h": {
+         "plan": "Nu appui",
+         "decalage": 0.0
+        },
+        "v": {
+         "plan": "Bas",
+         "decalage": -45.0
+        }
+       },
+       {
+        "h": {
+         "plan": "Cadre ext",
+         "decalage": -10.0
+        },
+        "v": {
+         "plan": "Bas",
+         "decalage": -45.0
+        }
+       }
+      ],
+      "profondeur": [
+       {
+        "plan": "Gauche",
+        "decalage": -20.0
+       },
+       {
+        "plan": "Droite",
+        "decalage": 20.0
+       }
+      ],
+      "visible": "AvecAppui",
+      "materiau_parametre": "MateriauAppui"
+     }
+    ],
+    "symboles": [
+     {
+      "vue": "elevation",
+      "points": [
+       {
+        "h": {
+         "plan": "Dormant droit",
+         "decalage": 0.0
+        },
+        "v": {
+         "plan": "Dormant bas",
+         "decalage": 0.0
+        }
+       },
+       {
+        "h": {
+         "plan": "Dormant gauche",
+         "decalage": 0.0
+        },
+        "v": {
+         "plan": "Mi-hauteur",
+         "decalage": 0.0
+        }
+       },
+       {
+        "h": {
+         "plan": "Dormant droit",
+         "decalage": 0.0
+        },
+        "v": {
+         "plan": "Dormant haut",
+         "decalage": 0.0
+        }
+       }
+      ],
+      "arc": false
+     },
+     {
+      "vue": "plan",
+      "points": [
+       {
+        "h": {
+         "plan": "Dormant gauche",
+         "decalage": 0.0
+        },
+        "v": {
+         "plan": "Cadre int",
+         "decalage": 0.0
+        }
+       },
+       {
+        "h": {
+         "plan": "Dormant gauche",
+         "decalage": 0.0
+        },
+        "v": {
+         "plan": "Ouvert",
+         "decalage": 0.0
+        }
+       }
+      ],
+      "arc": false
+     },
+     {
+      "vue": "plan",
+      "points": [
+       {
+        "h": {
+         "plan": "Dormant droit",
+         "decalage": 0.0
+        },
+        "v": {
+         "plan": "Cadre int",
+         "decalage": 0.0
+        }
+       },
+       {
+        "h": {
+         "plan": "Arc x",
+         "decalage": 0.0
+        },
+        "v": {
+         "plan": "Arc y",
+         "decalage": 0.0
+        }
+       },
+       {
+        "h": {
+         "plan": "Dormant gauche",
+         "decalage": 0.0
+        },
+        "v": {
+         "plan": "Ouvert",
+         "decalage": 0.0
+        }
+       }
+      ],
+      "arc": true
+     },
+     {
+      "vue": "plan",
+      "points": [
+       {
+        "h": {
+         "plan": "Gauche",
+         "decalage": -20.0
+        },
+        "v": {
+         "plan": "Cadre ext",
+         "decalage": -10.0
+        }
+       },
+       {
+        "h": {
+         "plan": "Droite",
+         "decalage": 20.0
+        },
+        "v": {
+         "plan": "Cadre ext",
+         "decalage": -10.0
+        }
+       },
+       {
+        "h": {
+         "plan": "Droite",
+         "decalage": 20.0
+        },
+        "v": {
+         "plan": "Nu appui",
+         "decalage": 0.0
+        }
+       },
+       {
+        "h": {
+         "plan": "Gauche",
+         "decalage": -20.0
+        },
+        "v": {
+         "plan": "Nu appui",
+         "decalage": 0.0
+        }
+       }
+      ],
+      "arc": false,
+      "remplissage": "hachure"
+     }
+    ],
+    "couleur": [
+     235,
+     235,
+     230
+    ],
+    "genre": "fenetre"
+   }}
  ]
 }

@@ -190,10 +190,14 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   « Nouveau type », « Enregistrer sous… » un fichier de famille, « Ouvrir… ») ;
   l'arborescence montre ses vues (clic : ouvrir), paramètres, plans, volumes,
   extrusions, symboles (clic : sélectionner) et les familles du projet. Dans
-  l'onglet, Ctrl+S charge la famille dans le projet ; un autre onglet ramène aux
+  l'onglet, Ctrl+S charge la famille dans le projet ; Ctrl+Z / Ctrl+Maj+Z et les
+  flèches Annuler / Rétablir agissent sur la famille seule (sa propre pile, un
+  glissement ou une saisie font une étape) ; un autre onglet ramène aux
   vues sans perdre la famille ; fermer l'onglet avec des modifications demande de
   les charger, de les abandonner ou d'annuler. La famille vit dans un mur générique :
-  - plans de référence sur trois axes (largeur, épaisseur, hauteur ; « Centre » et
+  - plans de référence tracés par deux points (outil « Plan de référence » : le
+    plan passe par le premier point, vertical ou horizontal selon la direction
+    dominante du tracé), sur trois axes (largeur, épaisseur, hauteur ; « Centre » et
     « Bas » fixes, « Extérieur » et « Intérieur » suivent les faces du mur hôte) ;
   - paramètres à formules (`Largeur - 2 * Dormant`), de portée **Type** (valeur de
     la famille), **Occurrence** (chaque ouverture placée la règle dans Propriétés,
@@ -204,7 +208,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
     si » masque un volume ou une extrusion, un vide masqué ne perce plus) ou un
     **matériau** du projet (« Matériau par » donne sa couleur au volume) ; les
     paramètres d'occurrence oui/non et matériau se règlent aussi par ouverture ;
-  - contraintes de distance (cote libellée par un paramètre ou une formule) et
+  - contraintes de distance (cote libellée par un paramètre ou une formule ; à la
+    pose, le plan visé se colore en bleu, en rouge s'il n'est pas parallèle, et une
+    cote provisoire le relie au plan déjà choisi) et
     d'égalité (EQ), résolues axe par axe par priorité décroissante (0 à 9 ; à
     égalité, la plus ancienne) : une contrainte incompatible est écartée et signalée
     en rouge ; un plan non contraint garde sa position dessinée ;
@@ -215,8 +221,19 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   - symboles 2D (ligne brisée, arc par trois points) en plan ou en élévation,
     affichés dans les vues du projet et sur les feuilles : en plan, ceux des
     ouvertures du niveau ; en coupe ou élévation, ceux des ouvertures vues de face.
-  Vues élévation intérieure, plan et coupe ; Échap abandonne l'esquisse en cours.
-  Avec l'outil Sélection, l'élément choisi porte des **poignées** : sommets d'un
+  Vues élévation intérieure, plan et coupe, ouvertes depuis l'arborescence. Comme
+  dans le projet, la sélection est le mode par défaut : Échap abandonne la saisie
+  en cours, puis revient à la sélection, puis vide la sélection ; recliquer l'outil
+  actif du ruban y revient aussi.
+  Comme dans le projet : Ctrl+clic ajoute ou retire un élément ; glisser hors
+  d'un élément trace une fenêtre (gauche → droite : éléments entièrement dedans ;
+  droite → gauche : éléments touchés ; Ctrl : ajouter) ; Suppr supprime toute la
+  sélection (les plans encore utilisés restent). Les cotes ont le dessin des cotes
+  du projet (attaches, traits obliques) ; glisser une cote ou son texte déplace sa
+  ligne, enregistrée dans la famille. L'accrochage est celui du projet : croisements
+  de plans (croix), sommets (carré), milieux (triangle) ; Maj : orthogonal depuis le
+  point précédent, angles ronds de 15° ; la molette zoome du même pas que les vues.
+  En sélection, l'élément choisi porte des **poignées** : sommets d'un
   profil ou d'un symbole (glisser : réaccroché au plan le plus proche ; clic droit :
   retirer), milieux d'arêtes (glisser : insérer un sommet), milieux des faces d'un
   volume (glisser : reverrouiller la face). Un clic dans un objet le choisit avant

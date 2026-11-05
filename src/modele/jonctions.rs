@@ -482,7 +482,7 @@ mod tests {
     #[test]
     fn noyau_prolonge_jusqu_au_noyau_du_mur_rejoint() {
         let mut p = Projet::nouveau("N");
-        let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None };
+        let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None, retour: false };
         p.types_murs.push(TypeCompose { id: "t".into(), nom: "Mur".into(), couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Béton", 200.0, FonctionCouche::Structure), c("Isolant", 100.0, FonctionCouche::Isolation)], categorie: None, couches_detaillees: true, origine: None });
         let o = ParametresMur { type_mur: Some("t".into()), ..Default::default() };
         // porteur de x = 0 à 6000 (extérieur, l'enduit, à gauche : y > 0), refend arrivant
@@ -523,7 +523,7 @@ mod tests {
         // deux compositions différentes : bout à bout, le béton du plus mince va jusqu'à la
         // face du béton du plus épais
         let mut p = Projet::nouveau("L");
-        let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None };
+        let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None, retour: false };
         p.types_murs.push(TypeCompose { id: "a".into(), nom: "A".into(), couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Béton", 200.0, FonctionCouche::Structure), c("Isolant", 100.0, FonctionCouche::Isolation)], categorie: None, couches_detaillees: true, origine: None });
         p.types_murs.push(TypeCompose { id: "b".into(), nom: "B".into(), couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Béton", 160.0, FonctionCouche::Structure), c("Isolant", 140.0, FonctionCouche::Isolation), c("Plâtre", 13.0, FonctionCouche::Finition)], categorie: None, couches_detaillees: true, origine: None });
         p.ajouter_mur([0.0, 4000.0], [5000.0, 4000.0], &ParametresMur { type_mur: Some("a".into()), ..Default::default() }).unwrap();

@@ -35,6 +35,18 @@ pub struct Gabarit {
     pub types_surfaces: Vec<TypeSurface>,
     #[serde(default)]
     pub types_vues: Vec<TypeVue>,
+    /// Types d'ouvertures chargés dans un nouveau projet, avec leur famille modélisée.
+    #[serde(default)]
+    pub types_ouvertures: Vec<TypeOuvertureGabarit>,
+}
+
+/// Type d'ouverture du gabarit : nom, cotes et famille.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TypeOuvertureGabarit {
+    pub nom: String,
+    pub largeur: f64,
+    pub hauteur: f64,
+    pub famille: crate::modele::famille_modelee::FamilleModelee,
 }
 
 /// Niveau d'un nouveau projet : nom et altitude (mm).

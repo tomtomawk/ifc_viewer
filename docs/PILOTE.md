@@ -15,7 +15,14 @@ zone de coupe sont en m. Les angles de caméra et de pente sont en degrés.
   attente et rectangle de la vue (points logiques de la fenêtre).
 - `erreur_effacer` : ferme le message d'erreur courant.
 - `projet_natif` : objet `projet` complet et `empreinte` de cet état.
-- `documents` ; `document <id>` : lister et activer les documents ouverts.
+- `documents` ; `document <id>` : lister et activer les documents ouverts, projets
+  (`"id":"3"`) et familles en édition (`"id":"famille:2"`), avec `genre`, `nom`,
+  `actif`, `modifie`. `documents` rend aussi `actif` et le `registre` des changements
+  de document actif (`rang`, `document`, `precedent` ; 100 derniers), qu'ils viennent
+  de l'interface ou du pilote. Chaque réponse objet du pilote porte `document_actif`
+  (`id`, `genre`, `nom`, `modifie`) : vérifier qu'il s'agit du bon document avant
+  d'enchaîner. Dans une famille, `annuler` / `retablir` et `historique_parcourir`
+  agissent sur la famille.
 - `fermer_vue [autres]` : fermer la vue active (et son projet si elle est la dernière), ou garder la dernière vue de chaque document. Le dernier onglet modifié exige un enregistrement préalable par le pilote.
 
 ## Fichiers et sorties sans boîte de dialogue

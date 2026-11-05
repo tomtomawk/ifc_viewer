@@ -410,22 +410,11 @@ impl ViewerApp {
                     self.appliquer_projet_interne(p, true)?;
                     Ok(vide)
                 }
-                "documents" => {
-                    let mut d: Vec<Value> = self.documents.iter().map(|(id,d)|json!({"id":id,"actif":false,"fichier":d.scene.as_ref().map(|s|&s.file_name),"modifie":d.modifie})).collect();
-                    if self.scene.is_some() || self.rvt.is_some() {
-                        d.push(json!({"id":self.document_actif,"actif":true,"fichier":self.scene.as_ref().map(|s|&s.file_name),"modifie":self.natif_modifie}));
-                    }
-                    Ok(json!({"documents":d}))
-                }
+                "documents" => Ok(self.documents_pilote()),
                 "document" => {
                     self.pilote_disponible()?;
-                    let id = argument
-                        .parse::<usize>()
-                        .map_err(|_| "Identifiant de document requis")?;
-                    if id != self.document_actif && !self.documents.contains_key(&id) {
-                        return Err("Document absent".into());
-                    }
-                    self.changer_document(id);
+                    self.activer_document_pilote(argument.trim())?;
+                    self.suivre_document_actif();
                     lire(&self.etat())
                 }
                 "fermer_vue" => {
@@ -445,7 +434,9 @@ impl ViewerApp {
                     }
                     Ok(vide)
                 }
-                "historique" => Ok(if let Some(c) = &self.collaboration {
+                "historique" => Ok(if let Some(ed) = self.famille.as_ref().filter(|_| self.famille_active) {
+                    json!({"modifie":ed.modifiee(),"annuler":ed.libelles_historique(false),"retablir":ed.libelles_historique(true),"collaboratif":false,"famille":true})
+                } else if let Some(c) = &self.collaboration {
                     json!({"modifie":self.natif_modifie,"annuler":c.copie.annulations,"retablir":c.copie.retablissements,"collaboratif":true})
                 } else {
                     json!({"modifie":self.natif_modifie,"annuler":self.historique.libelles(false),"retablir":self.historique.libelles(true),"collaboratif":false})

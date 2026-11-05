@@ -13,6 +13,7 @@ pub mod famille_modelee;
 pub mod escalier;
 pub use escalier::{Escalier, GardeCorps, Remplissage};
 pub mod solides;
+pub mod retours;
 pub mod site;
 pub mod cadrage;
 pub mod historique;
@@ -221,6 +222,11 @@ pub struct Couche {
     /// Plume du contour de coupe (1 à 12, table des épaisseurs) ; None : selon la fonction.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plume: Option<u8>,
+    /// Retour aux insertions : la couche tourne dans les tableaux et le linteau des
+    /// ouvertures, dans l'épaisseur du mur, jusqu'au plan « Retour extérieur » ou
+    /// « Retour intérieur » de la famille (selon le côté de la couche).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub retour: bool,
 }
 
 /// Épaisseurs des plumes 1 à 12 (mm du papier) par défaut, comme les épaisseurs de
@@ -920,6 +926,9 @@ impl Projet {
         for t in &g.types_murs {
             p.types_murs.push(TypeCompose { id: identifiant("type-mur", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), couches: t.couches.clone(), categorie: t.categorie, couches_detaillees: true, origine: None });
         }
+        for t in &g.types_ouvertures {
+            p.types_ouvertures.push(TypeOuverture { id: identifiant("type-ouverture", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), genre: t.famille.genre, largeur: t.largeur, hauteur: t.hauteur, famille: None, modele: Some(t.famille.clone()), origine: None });
+        }
         p.completer_materiaux();
         p
     }
@@ -1257,7 +1266,7 @@ mod tests {
     #[test]
     fn plume_par_couche() {
         let mut p = Projet::nouveau("P");
-        let mut c = Couche { materiau: None, epaisseur: 200.0, fonction: FonctionCouche::Structure, plume: None };
+        let mut c = Couche { materiau: None, epaisseur: 200.0, fonction: FonctionCouche::Structure, plume: None, retour: false };
         // structure : plume 5 (0,18 mm) par défaut
         assert_eq!(p.trait_couche(&c), 0.18);
         c.plume = Some(8);

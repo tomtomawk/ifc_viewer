@@ -244,7 +244,45 @@ impl Projet {
         Ok(())
     }
 
-    /// Rattache un mur indépendant à un assemblage, à sa place de l'extérieur vers
+    /// Couche d'assemblage modifiée seule depuis `avant` (axe changé) qui n'est plus
+    /// parallèle aux autres couches ou ne touche plus aucune d'elles : elle devient un mur
+    /// indépendant. Un déplacement de l'assemblage entier garde parallélisme et contacts.
+    /// Retourne les couches détachées.
+    pub fn detacher_couches_disjointes(&mut self, avant: &Projet) -> Vec<String> {
+        use glam::DVec2;
+        let droite = |m: &Mur| match m.axe {
+            Axe::Droit { debut, fin } => Some((DVec2::from_array(debut), DVec2::from_array(fin))),
+            Axe::Arc { .. } => None,
+        };
+        let epaisseur = |p: &Projet, m: &Mur| p.type_mur(&m.type_mur).map(|t| t.epaisseur());
+        let mut detachees = Vec::new();
+        for asm in self.assemblages.clone() {
+            if asm.couches.len() < 2 { continue; }
+            let murs: Vec<&Mur> = asm.couches.iter().filter_map(|c| self.murs.iter().find(|m| &m.id == c)).collect();
+            let editee = |m: &Mur| avant.murs.iter().find(|x| x.id == m.id).is_some_and(|x| x.axe != m.axe);
+            if !murs.iter().any(|m| editee(m)) { continue; }
+            // référence : les couches restées en place, sinon toutes
+            let fixes: Vec<&Mur> = murs.iter().copied().filter(|m| !editee(m)).collect();
+            for m in murs.iter().copied().filter(|m| editee(m)) {
+                let (Some((a, b)), Some(e)) = (droite(m), epaisseur(self, m)) else { continue };
+                let Some(u) = (b - a).try_normalize() else { continue };
+                let autres: Vec<&Mur> = if fixes.is_empty() { murs.iter().copied().filter(|x| x.id != m.id).collect() } else { fixes.clone() };
+                let parallele = autres.iter().all(|o| droite(o).and_then(|(c, d)| (d - c).try_normalize()).is_some_and(|v| u.perp_dot(v).abs() < 1e-3));
+                let contact = autres.iter().any(|o| {
+                    let (Some((c, d)), Some(eo)) = (droite(o), epaisseur(self, o)) else { return false };
+                    let ecart = (c - a).dot(u.perp()).abs();
+                    let (t0, t1) = ((c - a).dot(u), (d - a).dot(u));
+                    let recouvrement = t0.max(t1).min((b - a).length()) - t0.min(t1).max(0.0);
+                    (ecart - (e + eo) / 2.0).abs() < 1.0 && recouvrement > 1.0
+                });
+                if !(parallele && contact) { detachees.push(m.id.clone()); }
+            }
+        }
+        detachees.retain(|id| self.dissocier(id).is_ok());
+        detachees
+    }
+
+    /// Rattache un mur indépendantà un assemblage, à sa place de l'extérieur vers
     /// l'intérieur (position de son axe le long de la normale de l'assemblage).
     pub fn associer(&mut self, mur: &str, assemblage: &str) -> Result<(), String> {
         let m = self.murs.iter().find(|m| m.id == mur).ok_or("Mur introuvable.")?;
@@ -282,7 +320,7 @@ mod tests {
     use crate::modele::edition::ParametresMur;
 
     fn type_trois_couches() -> TypeCompose {
-        let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None };
+        let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None, retour: false };
         TypeCompose {
             id: "t".into(),
             nom: "Mur isolé".into(),
@@ -309,6 +347,36 @@ mod tests {
         let ecarts: Vec<f64> = x.iter().map(|x| (x - a[0]).round()).collect();
         assert_eq!(ecarts, [-(150.0 - 80.0 / 3.0f64).round(), -(40.0 - 80.0 / 3.0f64).round(), (110.0 + 80.0 / 3.0f64).round()]);
         assert!(p.deplacer_extremite(&id, true, a).is_err());
+    }
+
+    #[test]
+    fn couche_editee_hors_du_mur_compose_se_detache() {
+        use crate::modele::commandes::Commande;
+        let mut p = Projet::nouveau("A");
+        p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &ParametresMur::default()).unwrap();
+        p.types_murs.push(type_trois_couches());
+        let id = p.murs[0].id.clone();
+        p.murs[0].type_mur = "t".into();
+        p.eclater_mur(&id).unwrap();
+        let couches = p.assemblage(&id).unwrap().couches.clone();
+        let assemblage = |p: &Projet, c: &str| p.murs.iter().find(|m| m.id == c).unwrap().assemblage.clone();
+        // glissée le long de l'axe : toujours parallèle et en contact
+        let (q, _) = p.executer(Commande::Deplacer { ids: vec![couches[2].clone()], delta: [300.0, 0.0, 0.0] }).unwrap();
+        assert_eq!(assemblage(&q, &couches[2]).as_deref(), Some(id.as_str()));
+        // écartée de 500 mm : plus en contact
+        let (q, _) = p.executer(Commande::Deplacer { ids: vec![couches[2].clone()], delta: [0.0, -500.0, 0.0] }).unwrap();
+        assert!(assemblage(&q, &couches[2]).is_none());
+        assert_eq!(q.assemblage(&id).unwrap().couches.len(), 2);
+        // tournée de 10° : plus colinéaire
+        let (q, _) = p.executer(Commande::Tourner { ids: vec![couches[0].clone()], centre: [0.0, 150.0], angle: 10.0 }).unwrap();
+        assert!(assemblage(&q, &couches[0]).is_none());
+        // poignée d'une couche tirée de biais
+        let mut q = p.clone();
+        q.deplacer_extremite_justification(&couches[1], true, [5000.0, 800.0]).unwrap();
+        assert_eq!(q.detacher_couches_disjointes(&p), vec![couches[1].clone()]);
+        // assemblage entier déplacé et tourné : rien ne se détache
+        let (q, _) = p.executer(Commande::Tourner { ids: vec![id.clone()], centre: [0.0, 0.0], angle: 30.0 }).unwrap();
+        assert_eq!(q.assemblage(&id).unwrap().couches, couches);
     }
 
     #[test]

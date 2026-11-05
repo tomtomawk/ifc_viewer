@@ -138,11 +138,17 @@ impl Projet {
     pub fn executer(&self, c: Commande) -> Result<(Projet, Vec<String>), String> {
         let mut p = self.clone();
         let ids = p.executer_interne(c)?;
+        p.detacher_couches_disjointes(self);
         p.recaler_menuiseries(self)?;
         p.verifier()?;
         Ok((p, ids))
     }
     pub fn dependances(&self, ids: &[String]) -> Result<HashSet<String>, String> {
+        self.dependances_avec(ids, false)
+    }
+    /// `couche_seule` : une couche d'assemblage peut être transformée seule (déplacer,
+    /// tourner) ; elle se détache ensuite si elle quitte le mur composé.
+    fn dependances_avec(&self, ids: &[String], couche_seule: bool) -> Result<HashSet<String>, String> {
         let connus = self.identifiants();
         if ids.is_empty() || ids.iter().any(|id| !connus.contains(id)) {
             return Err("Sélection vide ou identifiant absent.".into());
@@ -154,7 +160,7 @@ impl Projet {
             }
         }
         for m in &self.murs {
-            if out.contains(&m.id) && m.assemblage.as_ref().is_some_and(|a| !out.contains(a)) {
+            if !couche_seule && out.contains(&m.id) && m.assemblage.as_ref().is_some_and(|a| !out.contains(a)) {
                 return Err("Sélectionnez l'assemblage entier ou dissociez la couche avant cette opération.".into());
             }
         }
@@ -514,12 +520,12 @@ impl Projet {
                 Ok(vec![id])
             }
             Commande::Deplacer { ids, delta } => {
-                let set = self.dependances(&ids)?;
+                let set = self.dependances_avec(&ids, true)?;
                 self.transformer(&set, delta, [0.0; 2], 0.0)?;
                 Ok(ids)
             }
             Commande::Tourner { ids, centre, angle } => {
-                let set = self.dependances(&ids)?;
+                let set = self.dependances_avec(&ids, true)?;
                 self.transformer(&set, [0.0; 3], centre, angle)?;
                 Ok(ids)
             }

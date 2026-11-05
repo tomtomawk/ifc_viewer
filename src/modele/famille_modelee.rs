@@ -193,15 +193,50 @@ pub struct Symbole {
     pub points: Vec<PointEsquisse>,
     #[serde(default)]
     pub arc: bool,
+    /// Région 2D : contour fermé rempli (plein ou hachuré) ; None : simple trait.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remplissage: Option<Remplissage>,
+}
+
+/// Remplissage d'une région 2D de famille.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Remplissage {
+    /// Aplat gris.
+    Plein,
+    /// Hachures à 45°.
+    Hachure,
+}
+
+impl Remplissage {
+    pub fn nom(self) -> &'static str {
+        match self { Self::Plein => "Plein", Self::Hachure => "Hachuré" }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(tag = "genre", rename_all = "snake_case")]
 pub enum Contrainte {
     /// Cote : position(b) - position(a) = valeur (expression).
-    Distance { a: String, b: String, valeur: String, priorite: u8 },
+    Distance {
+        a: String,
+        b: String,
+        valeur: String,
+        priorite: u8,
+        /// Position de la ligne de cote sur l'axe perpendiculaire (mm) ; None : rangée
+        /// au bord de la vue.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ligne: Option<f64>,
+    },
     /// Égalité (EQ) : `m` au milieu de `a` et `b`.
-    Egalite { a: String, m: String, b: String, priorite: u8 },
+    Egalite {
+        a: String,
+        m: String,
+        b: String,
+        priorite: u8,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ligne: Option<f64>,
+    },
 }
 
 impl Contrainte {
@@ -213,6 +248,17 @@ impl Contrainte {
     pub fn priorite_mut(&mut self) -> &mut u8 {
         match self {
             Self::Distance { priorite, .. } | Self::Egalite { priorite, .. } => priorite,
+        }
+    }
+    /// Ligne de cote déplacée dans la vue.
+    pub fn ligne_mut(&mut self) -> &mut Option<f64> {
+        match self {
+            Self::Distance { ligne, .. } | Self::Egalite { ligne, .. } => ligne,
+        }
+    }
+    pub fn ligne(&self) -> Option<f64> {
+        match self {
+            Self::Distance { ligne, .. } | Self::Egalite { ligne, .. } => *ligne,
         }
     }
     pub fn plans(&self) -> Vec<&str> {
@@ -697,8 +743,22 @@ impl FamilleModelee {
                         return crate::dessin2d::points_arc(o, rayon, depart, balayage).into_iter().map(|p| (p.x, p.y)).collect();
                     }
                 }
+                // région : contour fermé
+                let mut pts = pts;
+                if s.remplissage.is_some() && pts.len() >= 3 {
+                    pts.push(pts[0]);
+                }
                 pts
             })
+            .collect()
+    }
+
+    /// Régions 2D remplies de la vue `vue` : contour fermé (h, v) et remplissage.
+    pub fn regions_resolues(&self, r: &Resolution, vue: VueEsquisse) -> Vec<(Vec<(f64, f64)>, Remplissage)> {
+        self.symboles
+            .iter()
+            .filter(|s| s.vue == vue && s.points.len() >= 3)
+            .filter_map(|s| Some((s.points.iter().map(|p| self.point_esquisse(r, p)).collect(), s.remplissage?)))
             .collect()
     }
 
@@ -773,7 +833,7 @@ impl FamilleModelee {
         use AxePlan::*;
         let plan = |nom: &str, axe, position, fixe| PlanRef { nom: nom.into(), axe, position, fixe, hote: None };
         let hote = |nom: &str, h| PlanRef { nom: nom.into(), axe: Y, position: 0.0, fixe: false, hote: Some(h) };
-        let dist = |a: &str, b: &str, v: &str, priorite| Contrainte::Distance { a: a.into(), b: b.into(), valeur: v.into(), priorite };
+        let dist = |a: &str, b: &str, v: &str, priorite| Contrainte::Distance { a: a.into(), b: b.into(), valeur: v.into(), priorite, ligne: None };
         let face = |plan: &str, decalage| Face { plan: plan.into(), decalage };
         let volume = |nom: &str, vide, materiau, x: [(&str, f64); 2], y: [(&str, f64); 2], z: [(&str, f64); 2]| Volume {
             nom: nom.into(),
@@ -812,7 +872,7 @@ impl FamilleModelee {
                 plan("Mi-hauteur", Z, 675.0, false),
             ],
             contraintes: vec![
-                Contrainte::Egalite { a: "Gauche".into(), m: "Centre".into(), b: "Droite".into(), priorite: 9 },
+                Contrainte::Egalite { a: "Gauche".into(), m: "Centre".into(), b: "Droite".into(), priorite: 9, ligne: None },
                 dist("Gauche", "Droite", LARGEUR, 9),
                 dist("Bas", "Haut", HAUTEUR, 9),
                 dist("Gauche", "Dormant gauche", "Dormant", 5),
@@ -822,7 +882,7 @@ impl FamilleModelee {
                 dist("Cadre ext", "Extérieur", "Retrait", 5),
                 dist("Cadre int", "Cadre ext", "Profondeur", 5),
                 dist("Extérieur", "Nu appui", "Appui", 5),
-                Contrainte::Egalite { a: "Dormant bas".into(), m: "Mi-hauteur".into(), b: "Dormant haut".into(), priorite: 5 },
+                Contrainte::Egalite { a: "Dormant bas".into(), m: "Mi-hauteur".into(), b: "Dormant haut".into(), priorite: 5, ligne: None },
             ],
             volumes: vec![
                 volume("Baie", true, Materiau::Menuiserie, [("Gauche", 0.0), ("Droite", 0.0)], [("Intérieur", -5.0), ("Extérieur", 5.0)], [("Bas", 0.0), ("Haut", 0.0)]),
@@ -847,11 +907,47 @@ impl FamilleModelee {
             symboles: vec![Symbole {
                 vue: VueEsquisse::Elevation,
                 points: vec![point("Dormant droit", 0.0, "Dormant bas", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)],
-                arc: false,
+                arc: false, remplissage: None
             }],
             couleur: couleur_defaut(),
             genre: super::GenreOuverture::Fenetre,
         }
+    }
+
+    /// Famille d'exemple du gabarit de projet : fenêtre à un vantail ouvrant à la
+    /// française vers l'intérieur. Les plans « Retour extérieur » et « Retour intérieur »
+    /// (sur les faces du dormant) limitent les retours des couches du mur ; en plan, le
+    /// débattement du vantail et l'appui hachuré.
+    #[cfg_attr(not(test), allow(dead_code))] // source de la famille du gabarit (vérifiée par test)
+    pub fn exemple_of() -> FamilleModelee {
+        use AxePlan::*;
+        let mut f = Self::gabarit_fenetre();
+        // dormant en tableau, 50 mm en retrait du nu extérieur : l'enduit s'y retourne
+        if let Some(r) = f.parametres.iter_mut().find(|x| x.nom == "Retrait") { r.formule = "50".into(); }
+        let plan = |nom: &str, axe, position| PlanRef { nom: nom.into(), axe, position, fixe: false, hote: None };
+        let dist = |a: &str, b: &str, v: &str| Contrainte::Distance { a: a.into(), b: b.into(), valeur: v.into(), priorite: 5, ligne: None };
+        let param = |nom: &str, formule: &str| Parametre { nom: nom.into(), formule: formule.into(), portee: Portee::Type, genre: GenreParametre::Longueur };
+        f.parametres.extend([param("Passage", "Largeur - 2 * Dormant"), param("Diagonale", "Passage * 0,7071")]);
+        f.plans.extend([plan("Retour extérieur", Y, 100.0), plan("Retour intérieur", Y, 30.0), plan("Arc x", X, 0.0), plan("Ouvert", Y, -1050.0), plan("Arc y", Y, -730.0)]);
+        f.contraintes.extend([
+            dist("Retour extérieur", "Extérieur", "Retrait"),
+            dist("Retour intérieur", "Extérieur", "Retrait + Profondeur"),
+            dist("Ouvert", "Cadre int", "Passage"),
+            dist("Dormant gauche", "Arc x", "Diagonale"),
+            dist("Arc y", "Cadre int", "Diagonale"),
+        ]);
+        let trait_ = |points: Vec<PointEsquisse>, arc| Symbole { vue: VueEsquisse::Plan, points, arc, remplissage: None };
+        f.symboles.extend([
+            trait_(vec![point("Dormant gauche", 0.0, "Cadre int", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], false),
+            trait_(vec![point("Dormant droit", 0.0, "Cadre int", 0.0), point("Arc x", 0.0, "Arc y", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], true),
+            Symbole {
+                vue: VueEsquisse::Plan,
+                points: vec![point("Gauche", -20.0, "Cadre ext", -10.0), point("Droite", 20.0, "Cadre ext", -10.0), point("Droite", 20.0, "Nu appui", 0.0), point("Gauche", -20.0, "Nu appui", 0.0)],
+                arc: false,
+                remplissage: Some(Remplissage::Hachure),
+            },
+        ]);
+        f
     }
 
     /// Gabarit de famille selon la catégorie.
@@ -869,7 +965,7 @@ impl FamilleModelee {
         use AxePlan::*;
         let plan = |nom: &str, axe, position, fixe| PlanRef { nom: nom.into(), axe, position, fixe, hote: None };
         let hote = |nom: &str, h| PlanRef { nom: nom.into(), axe: Y, position: 0.0, fixe: false, hote: Some(h) };
-        let dist = |a: &str, b: &str, v: &str, priorite| Contrainte::Distance { a: a.into(), b: b.into(), valeur: v.into(), priorite };
+        let dist = |a: &str, b: &str, v: &str, priorite| Contrainte::Distance { a: a.into(), b: b.into(), valeur: v.into(), priorite, ligne: None };
         let face = |plan: &str, decalage| Face { plan: plan.into(), decalage };
         let volume = |nom: &str, vide, materiau, x: [(&str, f64); 2], y: [(&str, f64); 2], z: [(&str, f64); 2]| Volume {
             nom: nom.into(),
@@ -909,7 +1005,7 @@ impl FamilleModelee {
                 plan("Mi-hauteur", Z, 1045.0, false),
             ],
             contraintes: vec![
-                Contrainte::Egalite { a: "Gauche".into(), m: "Centre".into(), b: "Droite".into(), priorite: 9 },
+                Contrainte::Egalite { a: "Gauche".into(), m: "Centre".into(), b: "Droite".into(), priorite: 9, ligne: None },
                 dist("Gauche", "Droite", LARGEUR, 9),
                 dist("Bas", "Haut", HAUTEUR, 9),
                 dist("Gauche", "Dormant gauche", "Dormant", 5),
@@ -920,7 +1016,7 @@ impl FamilleModelee {
                 dist("Ouvert", "Cadre int", "Passage", 5),
                 dist("Dormant gauche", "Arc x", "Diagonale", 5),
                 dist("Arc y", "Cadre int", "Diagonale", 5),
-                Contrainte::Egalite { a: "Bas".into(), m: "Mi-hauteur".into(), b: "Dormant haut".into(), priorite: 5 },
+                Contrainte::Egalite { a: "Bas".into(), m: "Mi-hauteur".into(), b: "Dormant haut".into(), priorite: 5, ligne: None },
             ],
             volumes: vec![
                 volume("Baie", true, Materiau::Menuiserie, [("Gauche", 0.0), ("Droite", 0.0)], [("Intérieur", -5.0), ("Extérieur", 5.0)], [("Bas", 0.0), ("Haut", 0.0)]),
@@ -932,9 +1028,9 @@ impl FamilleModelee {
             extrusions: Vec::new(),
             symboles: vec![
                 // vantail ouvert à 90° vers l'intérieur et arc de débattement
-                Symbole { vue: VueEsquisse::Plan, points: vec![point("Dormant gauche", 0.0, "Cadre int", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], arc: false },
-                Symbole { vue: VueEsquisse::Plan, points: vec![point("Dormant droit", 0.0, "Cadre int", 0.0), point("Arc x", 0.0, "Arc y", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], arc: true },
-                Symbole { vue: VueEsquisse::Elevation, points: vec![point("Dormant droit", 0.0, "Bas", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)], arc: false },
+                Symbole { vue: VueEsquisse::Plan, points: vec![point("Dormant gauche", 0.0, "Cadre int", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], arc: false, remplissage: None },
+                Symbole { vue: VueEsquisse::Plan, points: vec![point("Dormant droit", 0.0, "Cadre int", 0.0), point("Arc x", 0.0, "Arc y", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], arc: true, remplissage: None },
+                Symbole { vue: VueEsquisse::Elevation, points: vec![point("Dormant droit", 0.0, "Bas", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)], arc: false, remplissage: None },
             ],
             couleur: [190, 160, 120],
             genre: super::GenreOuverture::Porte,
@@ -1072,7 +1168,7 @@ mod tests {
     fn priorite_et_conflits() {
         let mut f = FamilleModelee::gabarit_fenetre();
         // cote de priorité basse qui contredit la largeur : écartée, la largeur gagne
-        f.contraintes.push(Contrainte::Distance { a: "Gauche".into(), b: "Droite".into(), valeur: "1000".into(), priorite: 1 });
+        f.contraintes.push(Contrainte::Distance { a: "Gauche".into(), b: "Droite".into(), valeur: "1000".into(), priorite: 1, ligne: None });
         let r = f.resoudre(1400.0, 1600.0, 300.0);
         assert_eq!(r.conflits, vec![f.contraintes.len() - 1]);
         assert!((r.positions["Droite"] - 700.0).abs() < 1e-9);

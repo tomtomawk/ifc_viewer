@@ -192,6 +192,13 @@ pub fn bande(axe: &Axe, debut: f64, fin: f64, epaisseur: f64) -> Result<Vec<[f64
     Ok(c)
 }
 
+/// Hôte d'une ouverture pour la découpe et la famille : murs parallèles jointifs
+/// compris (voir `retours::hote_elargi`).
+pub fn hote_ouverture(p: &Projet, o: &Ouverture) -> Result<(Axe, f64, String), String> {
+    let h = super::retours::hote_elargi(p, o)?;
+    Ok((h.axe, h.epaisseur, h.niveau))
+}
+
 /// Axe et épaisseur totale d'un hôte, indépendamment des décalages de ses couches.
 pub fn hote(p: &Projet, id: &str) -> Result<(Axe, f64, String), String> {
     if let Some(a) = p.assemblage(id) {
@@ -302,9 +309,9 @@ fn mur_brut(
     for o in p
         .ouvertures
         .iter()
-        .filter(|o| o.mur == m.id || m.assemblage.as_ref() == Some(&o.mur))
+        .filter(|o| super::retours::perce(p, o, m))
     {
-        let (axe, ep, niveau) = hote(p, &o.mur)?;
+        let (axe, ep, niveau) = hote_ouverture(p, o)?;
         let z = p
             .niveau(&niveau)
             .ok_or("Niveau de l'ouverture introuvable.")?
@@ -318,6 +325,14 @@ fn mur_brut(
         {
             return Err("Dimensions d'ouverture non valides.".into());
         }
+        // retours aux insertions : place laissée aux couches qui se retournent, puis
+        // retour de cette couche
+        let retours = super::retours::retours(p, o, &m.id)?;
+        for r in &retours.retirer {
+            if tris.is_empty() { break; }
+            tris = crate::csg::boolean(&tris, r, crate::csg::Op::Difference, 1e-5)
+                .ok_or("Calcul du retour trop complexe ; projet conservé.")?;
+        }
         // famille modélisée : ses vides percent le mur
         if let Some(vides) = vides_famille(p, o)? {
             for vide in vides {
@@ -326,6 +341,10 @@ fn mur_brut(
                 }
                 tris = crate::csg::boolean(&tris, &vide, crate::csg::Op::Difference, 1e-5)
                     .ok_or("Calcul du percement trop complexe ; projet conservé.")?;
+            }
+            for a in &retours.ajouter {
+                tris = crate::csg::boolean(&tris, a, crate::csg::Op::Union, 1e-5)
+                    .ok_or("Calcul du retour trop complexe ; projet conservé.")?;
             }
             continue;
         }
@@ -433,7 +452,7 @@ fn famille_modelee<'a>(p: &'a Projet, o: &Ouverture) -> Option<&'a super::famill
 /// Solides résolus d'une famille modélisée placée, dans le projet : valeurs
 /// d'occurrence de l'ouverture et paramètres partagés du projet appliqués.
 fn solides_famille(p: &Projet, o: &Ouverture, f: &super::famille_modelee::FamilleModelee) -> Result<Vec<super::famille_modelee::SolideFamille>, String> {
-    let (axe, e, niveau) = hote(p, &o.mur)?;
+    let (axe, e, niveau) = hote_ouverture(p, o)?;
     let z = p.niveau(&niveau).ok_or("Niveau introuvable.")?.altitude + o.allege;
     let (c, u) = repere(&axe, o.abscisse);
     let n = u.perp();
@@ -463,7 +482,7 @@ fn vides_famille(p: &Projet, o: &Ouverture) -> Result<Option<Vec<Vec<Tri>>>, Str
 /// le plan de l'axe du mur).
 pub fn symboles_ouverture(p: &Projet, o: &Ouverture, vue: super::famille_modelee::VueEsquisse) -> Vec<Vec<DVec3>> {
     let Some(f) = famille_modelee(p, o) else { return Vec::new() };
-    let Ok((axe, e, niveau)) = hote(p, &o.mur) else { return Vec::new() };
+    let Ok((axe, e, niveau)) = hote_ouverture(p, o) else { return Vec::new() };
     let Some(n0) = p.niveau(&niveau) else { return Vec::new() };
     let z = n0.altitude + o.allege;
     let (c, u) = repere(&axe, o.abscisse);
@@ -477,12 +496,30 @@ pub fn symboles_ouverture(p: &Projet, o: &Ouverture, vue: super::famille_modelee
         .collect()
 }
 
+/// Régions 2D remplies de la famille de l'ouverture dans le projet (mm), placées comme
+/// ses symboles.
+pub fn regions_ouverture(p: &Projet, o: &Ouverture, vue: super::famille_modelee::VueEsquisse) -> Vec<(Vec<DVec3>, super::famille_modelee::Remplissage)> {
+    let Some(f) = famille_modelee(p, o) else { return Vec::new() };
+    let Ok((axe, e, niveau)) = hote_ouverture(p, o) else { return Vec::new() };
+    let Some(n0) = p.niveau(&niveau) else { return Vec::new() };
+    let z = n0.altitude + o.allege;
+    let (c, u) = repere(&axe, o.abscisse);
+    let n = u.perp();
+    let mut surcharges = p.parametres_partages.clone();
+    surcharges.extend(o.valeurs.iter().map(|(k, v)| (k.clone(), *v)));
+    let r = f.resoudre_avec(o.largeur, o.hauteur, e, &surcharges);
+    f.regions_resolues(&r, vue)
+        .into_iter()
+        .map(|(l, m)| (l.into_iter().map(|(h, v)| placer(o, c, u, n, z, vue.point(h, v, 0.0))).collect(), m))
+        .collect()
+}
+
 /// Valeurs affichées des paramètres de la famille modélisée d'une ouverture (type,
 /// occurrence, partagés) : longueurs en mm, oui/non, noms de matériaux.
 pub fn parametres_ouverture(p: &Projet, o: &Ouverture) -> BTreeMap<String, String> {
     use super::famille_modelee::GenreParametre;
     let Some(f) = famille_modelee(p, o) else { return BTreeMap::new() };
-    let e = hote(p, &o.mur).map_or(200.0, |h| h.1);
+    let e = hote_ouverture(p, o).map_or(200.0, |h| h.1);
     let mut surcharges = p.parametres_partages.clone();
     surcharges.extend(o.valeurs.iter().map(|(k, v)| (k.clone(), *v)));
     let r = f.resoudre_occurrence(o.largeur, o.hauteur, e, &surcharges, &o.materiaux);
@@ -530,7 +567,7 @@ fn ouverture_parts_roles(p: &Projet, o: &Ouverture) -> Result<Vec<(super::famill
     let famille = o.type_ouverture.as_ref().and_then(|t| p.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.famille.as_ref());
     match famille {
         Some(f) if o.representation.is_none() && o.genre == GenreOuverture::Fenetre => {
-            let (axe, e, niveau) = hote(p, &o.mur)?;
+            let (axe, e, niveau) = hote_ouverture(p, o)?;
             let z = p.niveau(&niveau).ok_or("Niveau introuvable.")?.altitude + o.allege;
             let (c, u) = repere(&axe, o.abscisse);
             let n = u.perp();
@@ -553,7 +590,7 @@ fn ouverture_generique(p: &Projet, o: &Ouverture) -> Result<Vec<Tri>, String> {
     if let Some(m) = &o.representation {
         return maillage(m);
     }
-    let (axe, e, niveau) = hote(p, &o.mur)?;
+    let (axe, e, niveau) = hote_ouverture(p, o)?;
     let z = p.niveau(&niveau).ok_or("Niveau introuvable.")?.altitude + o.allege;
     if o.genre == GenreOuverture::Libre {
         return Ok(Vec::new());

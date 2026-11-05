@@ -4,13 +4,16 @@
 //! plans. Les vides percent le mur une fois la famille chargée dans la maquette.
 //!
 //! Vues : élévation intérieure (largeur × hauteur), plan (largeur × épaisseur, extérieur
-//! en haut), coupe (épaisseur × hauteur, extérieur à droite). Outils : sélection (et
-//! déplacement des plans libres), plan de référence, volume, vide, cote, égalité. Les
+//! en haut), coupe (épaisseur × hauteur, extérieur à droite), ouvertes depuis
+//! l'arborescence. Sélection par défaut (Échap y revient), plan de référence par deux
+//! points, volume, vide, cote, égalité. Annuler / Rétablir propres à la famille. Les
 //! valeurs d'essai (largeur, hauteur, épaisseur du mur) font fléchir la famille avant
 //! enregistrement ; rien n'est écrit dans le projet avant « Enregistrer le type » ou
 //! « Nouveau type ».
 use super::*;
-use crate::modele::famille_modelee::{AxePlan, Contrainte, Extrusion, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
+use super::accrochage;
+use crate::modele::famille_modelee::{AxePlan, Contrainte, Extrusion, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Remplissage, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
+use crate::modele::famille_modelee::FichierFamille;
 use crate::modele::GenreOuverture;
 use std::collections::BTreeMap;
 
@@ -48,9 +51,11 @@ impl VueFamille {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum OutilFamille {
+    /// Outil par défaut, comme dans le projet : Échap y revient.
     Selection,
-    PlanVertical,
-    PlanHorizontal,
+    /// Plan de référence tracé par deux points ; vertical ou horizontal selon le
+    /// tracé.
+    PlanReference,
     Volume,
     Vide,
     Cote,
@@ -61,6 +66,8 @@ enum OutilFamille {
     /// Symbole 2D : ligne brisée, ou arc par trois points.
     Ligne,
     Arc,
+    /// Région 2D : contour fermé rempli (plein ou hachuré).
+    Region,
 }
 
 /// Poignée déplacée dans la vue : sommet d'un profil ou d'un symbole, face d'un volume.
@@ -124,6 +131,17 @@ pub(super) struct EditeurFamille {
     reference: (String, f64, f64, FamilleModelee),
     message: Option<String>,
     erreur: Option<String>,
+    /// Annuler / Rétablir propres à la famille : même pile que le projet.
+    historique: crate::modele::historique::Historique<FichierFamille>,
+    /// Dernier état versé à l'historique.
+    instantane: FichierFamille,
+    /// Cote dont la ligne est glissée.
+    cote_deplacee: Option<usize>,
+    /// Autres éléments sélectionnés (Ctrl+clic, fenêtre) ; `selection` reste
+    /// l'élément principal (panneau, poignées).
+    multiple: Vec<SelectionFamille>,
+    /// Fenêtre de sélection en cours (même règle que le projet).
+    fenetre: Option<FenetreSelection>,
 }
 
 #[derive(Clone,Copy)]
@@ -139,7 +157,7 @@ impl NavigationFamille {
         let avant=self.cadre(base);
         if molette!=0.0 {
             let point=avant.modele(curseur);
-            self.zoom=(self.zoom*(molette as f64*0.003).exp()).clamp(0.05,100.0);
+            self.zoom=(self.zoom*super::accrochage::facteur_molette(molette)).clamp(0.05,100.0);
             let apres=self.cadre(base).modele(curseur);
             self.decalage.0+=point.0-apres.0;
             self.decalage.1+=point.1-apres.1;
@@ -197,14 +215,167 @@ impl EditeurFamille {
         self.reference = (self.nom.clone(), self.largeur, self.hauteur, self.famille.clone());
     }
 
-    fn fichier(&self) -> crate::modele::famille_modelee::FichierFamille {
-        crate::modele::famille_modelee::FichierFamille {
+    fn fichier(&self) -> FichierFamille {
+        FichierFamille { nom: self.nom.trim().into(), ..self.etat() }
+    }
+
+    /// État édité, tel que l'historique le garde.
+    fn etat(&self) -> FichierFamille {
+        FichierFamille {
             format: crate::modele::famille_modelee::FORMAT_FAMILLE.into(),
-            nom: self.nom.trim().into(),
+            nom: self.nom.clone(),
             largeur: self.largeur,
             hauteur: self.hauteur,
             famille: self.famille.clone(),
         }
+    }
+
+    /// Verse la modification de l'image dans l'historique ; un geste (souris enfoncée,
+    /// saisie) reste une seule étape.
+    pub(super) fn suivre_historique(&mut self, geste: bool) {
+        self.historique.geste(geste);
+        let etat = self.etat();
+        if etat != self.instantane {
+            let _ = self.historique.pousser(&self.instantane, &etat);
+            self.instantane = etat;
+        }
+    }
+
+    /// Repart d'un état neuf : rien à annuler.
+    fn historique_neuf(&mut self) {
+        self.historique = Default::default();
+        self.instantane = self.etat();
+    }
+
+    pub(super) fn libelles_historique(&self, retablir: bool) -> Vec<String> {
+        self.historique.libelles(retablir)
+    }
+
+    /// Annule ou rétablit `nombre` étapes de la famille.
+    pub(super) fn parcourir_historique(&mut self, retablir: bool, nombre: usize) -> Result<(), String> {
+        self.suivre_historique(false);
+        let cible = self.historique.cible_n(retablir, nombre)?;
+        let actuel = self.etat();
+        self.historique.confirmer_n(&actuel, retablir, nombre)?;
+        (self.nom, self.largeur, self.hauteur, self.famille) = (cible.nom.clone(), cible.largeur, cible.hauteur, cible.famille.clone());
+        self.instantane = cible;
+        self.abandonner_saisie();
+        let existe = match &self.selection {
+            SelectionFamille::Aucune => true,
+            SelectionFamille::Plan(n) => self.famille.plan(n).is_some(),
+            SelectionFamille::Volume(k) => *k < self.famille.volumes.len(),
+            SelectionFamille::Contrainte(k) => *k < self.famille.contraintes.len(),
+            SelectionFamille::Extrusion(k) => *k < self.famille.extrusions.len(),
+            SelectionFamille::Symbole(k) => *k < self.famille.symboles.len(),
+        };
+        if !existe {
+            self.selection = SelectionFamille::Aucune;
+        }
+        self.multiple.clear();
+        Ok(())
+    }
+
+    /// Supprime un élément de la famille (panneau ou touche Suppr) ; un plan hôte ou
+    /// encore utilisé reste.
+    fn supprimer(&mut self, element: &SelectionFamille) -> Result<(), String> {
+        let f = &mut self.famille;
+        match element {
+            SelectionFamille::Aucune => return Ok(()),
+            SelectionFamille::Plan(nom) => {
+                let k = f.plans.iter().position(|p| &p.nom == nom).ok_or("Plan introuvable.")?;
+                if f.plans[k].hote.is_some() || f.plans[k].fixe {
+                    return Err(format!("« {nom} » est un plan fixe de la famille."));
+                }
+                let point = |p: &PointEsquisse| p.h.plan == *nom || p.v.plan == *nom;
+                let utilise = f.contraintes.iter().any(|c| c.plans().contains(&nom.as_str()))
+                    || f.volumes.iter().any(|v| v.min.iter().chain(&v.max).any(|x| &x.plan == nom))
+                    || f.extrusions.iter().any(|e| e.profil.iter().any(point) || e.profondeur.iter().any(|x| &x.plan == nom))
+                    || f.symboles.iter().any(|s| s.points.iter().any(point));
+                if utilise {
+                    return Err(format!("« {nom} » est utilisé par une contrainte, un volume, une extrusion ou un symbole."));
+                }
+                f.plans.remove(k);
+            }
+            SelectionFamille::Volume(k) if *k < f.volumes.len() => drop(f.volumes.remove(*k)),
+            SelectionFamille::Contrainte(k) if *k < f.contraintes.len() => drop(f.contraintes.remove(*k)),
+            SelectionFamille::Extrusion(k) if *k < f.extrusions.len() => drop(f.extrusions.remove(*k)),
+            SelectionFamille::Symbole(k) if *k < f.symboles.len() => drop(f.symboles.remove(*k)),
+            _ => return Err("Élément introuvable.".into()),
+        }
+        if self.selection == *element {
+            self.selection = SelectionFamille::Aucune;
+        }
+        Ok(())
+    }
+
+    /// Supprime la sélection (touche Suppr dans l'onglet Famille) : objets par indice
+    /// décroissant, puis les plans devenus libres.
+    pub(super) fn supprimer_selection(&mut self) {
+        let mut liste = self.selectionnes();
+        if liste.is_empty() {
+            self.message = Some("Supprimer : sélectionner d'abord un élément de la famille.".into());
+            return;
+        }
+        let rang = |s: &SelectionFamille| match s {
+            SelectionFamille::Contrainte(k) => (0, usize::MAX - k),
+            SelectionFamille::Volume(k) => (1, usize::MAX - k),
+            SelectionFamille::Extrusion(k) => (2, usize::MAX - k),
+            SelectionFamille::Symbole(k) => (3, usize::MAX - k),
+            _ => (4, 0),
+        };
+        liste.sort_by_key(rang);
+        let (mut n, mut erreurs) = (0, Vec::new());
+        for e in &liste {
+            match self.supprimer(e) {
+                Ok(()) => n += 1,
+                Err(x) => erreurs.push(x),
+            }
+        }
+        self.selectionner(Vec::new());
+        self.message = Some(format!("{n} élément(s) supprimé(s) — Ctrl+Z pour annuler."));
+        self.erreur = (!erreurs.is_empty()).then(|| erreurs.join(" "));
+    }
+
+    /// Abandonne la saisie en cours (esquisse, cote, rectangle, glissement).
+    fn abandonner_saisie(&mut self) {
+        self.esquisse.clear();
+        self.clics.clear();
+        self.debut = None;
+        self.deplace = None;
+        self.poignee = None;
+        self.cote_deplacee = None;
+        self.fenetre = None;
+    }
+
+    /// Élément sélectionné (principal ou parmi les autres).
+    fn choisi(&self, e: &SelectionFamille) -> bool {
+        self.selection == *e || self.multiple.contains(e)
+    }
+
+    /// Tous les éléments sélectionnés, le principal d'abord.
+    fn selectionnes(&self) -> Vec<SelectionFamille> {
+        std::iter::once(self.selection.clone()).filter(|s| *s != SelectionFamille::Aucune).chain(self.multiple.iter().cloned()).collect()
+    }
+
+    /// Remplace la sélection (le premier devient le principal).
+    fn selectionner(&mut self, mut liste: Vec<SelectionFamille>) {
+        liste.retain(|s| *s != SelectionFamille::Aucune);
+        liste.dedup();
+        self.selection = if liste.is_empty() { SelectionFamille::Aucune } else { liste.remove(0) };
+        self.multiple = liste;
+    }
+
+    /// Change d'outil ; la sélection reste l'outil par défaut.
+    fn choisir_outil(&mut self, o: OutilFamille) {
+        self.outil = o;
+        self.abandonner_saisie();
+    }
+
+    /// Ouvre une vue de la famille.
+    fn ouvrir_vue(&mut self, v: VueFamille) {
+        self.vue = v;
+        self.debut = None;
+        self.esquisse.clear();
     }
 
     fn resoudre(&self) -> Resolution {
@@ -300,7 +471,7 @@ impl ViewerApp {
             return Some((|| {
                 let ed=self.famille.as_mut().ok_or("Éditeur fermé")?;
                 match argument {
-                    "plan"=>ed.vue=VueFamille::Plan,"coupe"=>ed.vue=VueFamille::Coupe,"elevation"=>ed.vue=VueFamille::Elevation,
+                    "plan"=>ed.ouvrir_vue(VueFamille::Plan),"coupe"=>ed.ouvrir_vue(VueFamille::Coupe),"elevation"=>ed.ouvrir_vue(VueFamille::Elevation),
                     "cadrer"=>ed.navigation[ed.vue as usize]=Default::default(),
                     ""|"etat"=>{},_=>return Err("famille_navigation etat|plan|coupe|elevation|cadrer".into())
                 }
@@ -341,6 +512,74 @@ impl ViewerApp {
             Ok(serde_json::json!({"fichier":ed.fichier(),"modifie":ed.modifiee(),"type":ed.type_id}))
         })())
     }
+    /// Document au premier plan, tel que le pilote le voit : une famille (`famille:<rang>`)
+    /// ou un projet (`<id>`).
+    pub(super) fn document_actif_pilote(&self) -> serde_json::Value {
+        match self.famille.as_ref().filter(|_| self.famille_active) {
+            Some(ed) => serde_json::json!({"id": format!("famille:{}", ed.ordre), "genre": "famille", "nom": titre_editeur(ed), "type": ed.type_id, "modifie": ed.modifiee()}),
+            None => serde_json::json!({"id": self.document_actif.to_string(), "genre": "projet", "nom": self.scene.as_ref().map(|s| s.file_name.clone()), "modifie": self.natif_modifie}),
+        }
+    }
+
+    /// Inscrit au registre tout changement de document actif.
+    pub(super) fn suivre_document_actif(&mut self) {
+        let actuel = self.document_actif_pilote();
+        let precedent = self.journal_documents.last().map(|e| e["document"]["id"].clone());
+        if precedent.as_ref() != Some(&actuel["id"]) {
+            let rang = self.journal_documents.last().and_then(|e| e["rang"].as_u64()).map_or(1, |r| r + 1);
+            self.journal_documents.push(serde_json::json!({"rang": rang, "document": actuel, "precedent": precedent}));
+            if self.journal_documents.len() > 100 {
+                self.journal_documents.remove(0);
+            }
+        }
+    }
+
+    /// Ajoute le document actif à une réponse JSON du pilote.
+    pub(super) fn avec_document_actif(&self, reponse: String) -> String {
+        match serde_json::from_str::<serde_json::Value>(&reponse) {
+            Ok(serde_json::Value::Object(mut o)) if !o.contains_key("document_actif") => {
+                o.insert("document_actif".into(), self.document_actif_pilote());
+                serde_json::Value::Object(o).to_string()
+            }
+            _ => reponse,
+        }
+    }
+
+    /// Documents ouverts pour le pilote : projets puis familles, et le registre.
+    pub(super) fn documents_pilote(&self) -> serde_json::Value {
+        let famille_active = self.famille_active && self.famille.is_some();
+        let mut d: Vec<serde_json::Value> = self.documents.iter().map(|(id, d)| serde_json::json!({"id": id.to_string(), "genre": "projet", "actif": false, "nom": d.scene.as_ref().map(|s| &s.file_name), "modifie": d.modifie})).collect();
+        if self.scene.is_some() || self.rvt.is_some() {
+            d.push(serde_json::json!({"id": self.document_actif.to_string(), "genre": "projet", "actif": !famille_active, "nom": self.scene.as_ref().map(|s| &s.file_name), "modifie": self.natif_modifie}));
+        }
+        let mut familles: Vec<&EditeurFamille> = self.famille.iter().chain(&self.familles_inactives).collect();
+        familles.sort_by_key(|e| e.ordre);
+        for e in familles {
+            let actif = famille_active && self.famille.as_ref().is_some_and(|f| f.ordre == e.ordre);
+            d.push(serde_json::json!({"id": format!("famille:{}", e.ordre), "genre": "famille", "actif": actif, "nom": titre_editeur(e), "type": e.type_id, "modifie": e.modifiee()}));
+        }
+        serde_json::json!({"documents": d, "actif": self.document_actif_pilote(), "registre": self.journal_documents})
+    }
+
+    /// Active un document par son identifiant de pilote (`famille:<rang>` ou `<id>`).
+    pub(super) fn activer_document_pilote(&mut self, id: &str) -> Result<(), String> {
+        if let Some(rang) = id.strip_prefix("famille:") {
+            let rang: usize = rang.parse().map_err(|_| "Rang de famille invalide")?;
+            if !self.onglets_familles().iter().any(|o| o.0 == rang) {
+                return Err("Famille absente".into());
+            }
+            self.activer_famille(rang);
+            return Ok(());
+        }
+        let id: usize = id.parse().map_err(|_| "Identifiant de document requis : <id> ou famille:<rang>")?;
+        if id != self.document_actif && !self.documents.contains_key(&id) {
+            return Err("Document absent".into());
+        }
+        self.famille_active = false;
+        self.changer_document(id);
+        Ok(())
+    }
+
     /// Éditeur sur la famille du type de la fenêtre `id` (gabarit si le type n'a pas de
     /// famille modélisée).
     pub(super) fn ouvrir_editeur_famille(&mut self, id: &str) {
@@ -408,9 +647,15 @@ impl ViewerApp {
             deplace: None,
             message: None,
             erreur: None,
+            historique: Default::default(),
+            cote_deplacee: None,
+            multiple: Vec::new(),
+            fenetre: None,
+            instantane: FichierFamille { format: String::new(), nom: String::new(), largeur: 0.0, hauteur: 0.0, famille: FamilleModelee::gabarit_fenetre() },
         });
         if let Some(ed) = self.famille.as_mut() {
             ed.marquer_enregistree();
+            ed.historique_neuf();
         }
     }
 
@@ -491,12 +736,11 @@ impl ViewerApp {
             if let Some(m) = &ed.message {
                 ui.label(RichText::new(m).weak());
             }
+            // les vues s'ouvrent depuis l'arborescence, comme dans le projet
             ui.horizontal(|ui| {
-                for v in [VueFamille::Elevation,VueFamille::Plan,VueFamille::Coupe] {
-                    if ui.selectable_value(&mut ed.vue,v,v.nom()).clicked() {ed.debut=None;ed.esquisse.clear();}
-                }
+                ui.label(RichText::new(ed.vue.nom()).strong());
                 if ui.button("Cadrer").clicked(){ed.navigation[ed.vue as usize]=Default::default();}
-                ui.label(RichText::new("Molette : zoom · bouton central maintenu : déplacer").small().weak());
+                ui.label(RichText::new("Molette : zoom · bouton central maintenu : déplacer · Échap : sélection").small().weak());
             });
             canevas(ui, ed);
         });
@@ -538,9 +782,7 @@ impl ViewerApp {
             egui::CollapsingHeader::new(RichText::new("Vues").strong()).default_open(true).show(ui, |ui| {
                 for v in [VueFamille::Elevation, VueFamille::Plan, VueFamille::Coupe] {
                     if ui.selectable_label(ed.vue == v, v.nom()).clicked() {
-                        ed.vue = v;
-                        ed.esquisse.clear();
-                        ed.debut = None;
+                        ed.ouvrir_vue(v);
                     }
                 }
             });
@@ -554,24 +796,27 @@ impl ViewerApp {
             });
             egui::CollapsingHeader::new(RichText::new(format!("Plans de référence ({})", ed.famille.plans.len())).strong()).default_open(false).show(ui, |ui| {
                 for p in &ed.famille.plans {
-                    if ui.selectable_label(ed.selection == SelectionFamille::Plan(p.nom.clone()), format!("{} · {}", p.nom, p.axe.nom())).clicked() {
+                    if ui.selectable_label(ed.choisi(&SelectionFamille::Plan(p.nom.clone())), format!("{} · {}", p.nom, p.axe.nom())).clicked() {
                         ed.selection = SelectionFamille::Plan(p.nom.clone());
+                        ed.multiple.clear();
                     }
                 }
             });
             egui::CollapsingHeader::new(RichText::new(format!("Volumes ({})", ed.famille.volumes.len())).strong()).default_open(true).show(ui, |ui| {
                 for (k, v) in ed.famille.volumes.iter().enumerate() {
                     let texte = if v.vide { format!("{} (vide)", v.nom) } else { v.nom.clone() };
-                    if ui.selectable_label(ed.selection == SelectionFamille::Volume(k), texte).clicked() {
+                    if ui.selectable_label(ed.choisi(&SelectionFamille::Volume(k)), texte).clicked() {
                         ed.selection = SelectionFamille::Volume(k);
+                        ed.multiple.clear();
                     }
                 }
             });
             egui::CollapsingHeader::new(RichText::new(format!("Extrusions ({})", ed.famille.extrusions.len())).strong()).default_open(true).show(ui, |ui| {
                 for (k, e) in ed.famille.extrusions.iter().enumerate() {
                     let texte = if e.vide { format!("{} (vide)", e.nom) } else { e.nom.clone() };
-                    if ui.selectable_label(ed.selection == SelectionFamille::Extrusion(k), texte).clicked() {
+                    if ui.selectable_label(ed.choisi(&SelectionFamille::Extrusion(k)), texte).clicked() {
                         ed.selection = SelectionFamille::Extrusion(k);
+                        ed.multiple.clear();
                         // la vue de son esquisse, pour ses poignées
                         ed.vue = match e.vue {
                             VueEsquisse::Elevation => VueFamille::Elevation,
@@ -584,8 +829,9 @@ impl ViewerApp {
             egui::CollapsingHeader::new(RichText::new(format!("Symboles 2D ({})", ed.famille.symboles.len())).strong()).default_open(false).show(ui, |ui| {
                 for (k, sy) in ed.famille.symboles.iter().enumerate() {
                     let texte = format!("{} {} · {}", if sy.arc { "Arc" } else { "Ligne" }, k + 1, match sy.vue { VueEsquisse::Plan => "plan", VueEsquisse::Elevation => "élévation", VueEsquisse::Coupe => "coupe" });
-                    if ui.selectable_label(ed.selection == SelectionFamille::Symbole(k), texte).clicked() {
+                    if ui.selectable_label(ed.choisi(&SelectionFamille::Symbole(k)), texte).clicked() {
                         ed.selection = SelectionFamille::Symbole(k);
+                        ed.multiple.clear();
                     }
                 }
             });
@@ -628,6 +874,7 @@ impl ViewerApp {
         self.editeur_famille(None, None, f.largeur, f.hauteur, 300.0, f.famille.genre);
         let ed = self.famille.as_mut().ok_or("Aucun projet natif.")?;
         (ed.nom, ed.famille) = (f.nom, f.famille);
+        ed.historique_neuf();
         // ouverte depuis un fichier : pas encore dans le projet
         ed.reference.0.clear();
         Ok(())
@@ -775,19 +1022,13 @@ impl ViewerApp {
             }
             return;
         }
-        let (vue, outil) = (ed.vue, ed.outil);
-        let vues: Vec<C> = [(VueFamille::Elevation, "elevation", "Élévation intérieure : largeur × hauteur"), (VueFamille::Plan, "plan", "Plan : largeur × épaisseur, extérieur en haut"), (VueFamille::Coupe, "coupe", "Coupe : épaisseur × hauteur, extérieur à droite")]
-            .into_iter()
-            .map(|(v, cle, aide)| C { enfonce: vue == v, ..C::new(cle, v.nom(), I::Famille(cle), aide, true) })
-            .collect();
+        let outil = ed.outil;
         let outils = |liste: &[(OutilFamille, &'static str, &'static str, &'static str)]| -> Vec<C> {
             liste.iter().map(|&(o, cle, nom, aide)| C { enfonce: outil == o, ..C::new(cle, nom, I::Famille(cle), aide, true) }).collect()
         };
-        let selection = outils(&[(OutilFamille::Selection, "selection", "Sélection", "Choisir un plan, un volume ou une cote ; glisser un plan libre pour le déplacer")]);
         let references = outils(&[
-            (OutilFamille::PlanVertical, "plan_v", "Plan vertical", "Plan de référence vertical : cliquer pour le poser"),
-            (OutilFamille::PlanHorizontal, "plan_h", "Plan horizontal", "Plan de référence horizontal : cliquer pour le poser"),
-            (OutilFamille::Cote, "cote", "Cote", "Cliquer deux plans parallèles ; libeller ensuite la cote par un paramètre"),
+            (OutilFamille::PlanReference, "plan_ref", "Plan de référence", "Cliquer deux points : le plan suit la direction dominante du tracé (vertical ou horizontal)"),
+            (OutilFamille::Cote, "cote", "Cote", "Cliquer deux plans parallèles (le plan visé se colore) ; libeller ensuite la cote par un paramètre"),
             (OutilFamille::Egalite, "egalite", "Égalité", "Cliquer trois plans parallèles : le second reste au milieu des deux autres"),
         ]);
         let formes = outils(&[
@@ -799,29 +1040,16 @@ impl ViewerApp {
         let symboles = outils(&[
             (OutilFamille::Ligne, "ligne", "Ligne 2D", "Symbole 2D (plan ou élévation) affiché dans les vues du projet : clic droit pour finir"),
             (OutilFamille::Arc, "arc", "Arc 2D", "Symbole 2D en arc : départ, point de passage, fin"),
+            (OutilFamille::Region, "region", "Région 2D", "Contour fermé rempli (plein ou hachuré) : cliquer les sommets, recliquer le premier ou clic droit pour fermer"),
         ]);
-        let reponses = bandeau(ui, &[("Vue", vues), ("Sélection", selection), ("Références", references), ("Formes", formes), ("Symboles 2D", symboles)]);
+        let reponses = bandeau(ui, &[("Références", references), ("Formes", formes), ("Symboles 2D", symboles)]);
         let Some(ed) = self.famille.as_mut() else { return };
         for (cle, r) in reponses {
             if !r.clicked() {
                 continue;
             }
-            let v = match cle {
-                "elevation" => Some(VueFamille::Elevation),
-                "plan" => Some(VueFamille::Plan),
-                "coupe" => Some(VueFamille::Coupe),
-                _ => None,
-            };
-            if let Some(v) = v {
-                ed.vue = v;
-                ed.debut = None;
-                ed.esquisse.clear();
-                continue;
-            }
             let o = match cle {
-                "selection" => OutilFamille::Selection,
-                "plan_v" => OutilFamille::PlanVertical,
-                "plan_h" => OutilFamille::PlanHorizontal,
+                "plan_ref" => OutilFamille::PlanReference,
                 "cote" => OutilFamille::Cote,
                 "egalite" => OutilFamille::Egalite,
                 "volume" => OutilFamille::Volume,
@@ -830,12 +1058,11 @@ impl ViewerApp {
                 "extrusion_vide" => OutilFamille::ExtrusionVide,
                 "ligne" => OutilFamille::Ligne,
                 "arc" => OutilFamille::Arc,
+                "region" => OutilFamille::Region,
                 _ => continue,
             };
-            ed.outil = o;
-            ed.clics.clear();
-            ed.debut = None;
-            ed.esquisse.clear();
+            // recliquer l'outil actif revient à la sélection
+            ed.choisir_outil(if ed.outil == o { OutilFamille::Selection } else { o });
         }
     }
 }
@@ -1020,8 +1247,7 @@ fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             }
         });
         if let Some(k) = supprimer {
-            ed.famille.contraintes.remove(k);
-            ed.selection = SelectionFamille::Aucune;
+            ed.erreur = ed.supprimer(&SelectionFamille::Contrainte(k)).err();
         }
     });
 
@@ -1060,14 +1286,15 @@ fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
         }
         if let Some(k) = supprimer {
             let nom = ed.famille.plans[k].nom.clone();
-            let utilise = ed.famille.contraintes.iter().any(|c| c.plans().contains(&nom.as_str())) || ed.famille.volumes.iter().any(|v| v.min.iter().chain(&v.max).any(|f| f.plan == nom));
-            if utilise {
-                ed.erreur = Some(format!("« {nom} » est utilisé par une contrainte ou un volume."));
-            } else {
-                ed.famille.plans.remove(k);
-                ed.selection = SelectionFamille::Aucune;
-            }
+            ed.erreur = ed.supprimer(&SelectionFamille::Plan(nom)).err();
         }
+        // limites des retours des couches du mur hôte
+        let retour = |nom: &str| ed.famille.plans.iter().any(|p| p.axe == AxePlan::Y && p.nom.to_lowercase().replace('é', "e") == nom);
+        let etat = |ok: bool| if ok { "présent" } else { "absent" };
+        ui.label(RichText::new(format!(
+            "Retours des couches : nommer un plan d'épaisseur « Retour extérieur » (limite des couches côté extérieur, {}) et « Retour intérieur » ({}). Sans ces plans, pas de retour.",
+            etat(retour("retour exterieur")), etat(retour("retour interieur"))
+        )).small().weak());
     });
 
     egui::CollapsingHeader::new(RichText::new("Volumes").strong()).default_open(true).show(ui, |ui| {
@@ -1084,8 +1311,7 @@ fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             });
         }
         if let Some(k) = supprimer {
-            ed.famille.volumes.remove(k);
-            ed.selection = SelectionFamille::Aucune;
+            ed.erreur = ed.supprimer(&SelectionFamille::Volume(k)).err();
         }
         if let SelectionFamille::Volume(k) = ed.selection.clone() {
             if let Some(v) = ed.famille.volumes.get_mut(k) {
@@ -1109,8 +1335,7 @@ fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             });
         }
         if let Some(k) = supprimer {
-            ed.famille.extrusions.remove(k);
-            ed.selection = SelectionFamille::Aucune;
+            ed.erreur = ed.supprimer(&SelectionFamille::Extrusion(k)).err();
         }
         if let SelectionFamille::Extrusion(k) = ed.selection.clone() {
             if let Some(e) = ed.famille.extrusions.get_mut(k) {
@@ -1122,6 +1347,7 @@ fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
 
     egui::CollapsingHeader::new(RichText::new("Symboles 2D").strong()).default_open(true).show(ui, |ui| {
         let mut supprimer = None;
+        let mut changer_remplissage = None;
         for (k, s) in ed.famille.symboles.iter().enumerate() {
             ui.horizontal(|ui| {
                 let vue = match s.vue {
@@ -1129,18 +1355,28 @@ fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                     VueEsquisse::Elevation => "élévation",
                     VueEsquisse::Coupe => "coupe (éditeur seulement)",
                 };
-                let texte = format!("{} {} · {vue}", if s.arc { "Arc" } else { "Ligne" }, k + 1);
+                let genre = if s.remplissage.is_some() { "Région" } else if s.arc { "Arc" } else { "Ligne" };
+                let texte = format!("{genre} {} · {vue}", k + 1);
                 if ui.selectable_label(ed.selection == SelectionFamille::Symbole(k), texte).clicked() {
                     ed.selection = SelectionFamille::Symbole(k);
+                }
+                if let Some(m) = s.remplissage {
+                    let mut choix = m;
+                    egui::ComboBox::from_id_salt(("remplissage", k)).width(80.0).selected_text(choix.nom()).show_ui(ui, |ui| {
+                        for x in [Remplissage::Plein, Remplissage::Hachure] { ui.selectable_value(&mut choix, x, x.nom()); }
+                    });
+                    if choix != m { changer_remplissage = Some((k, choix)); }
                 }
                 if ui.small_button("−").on_hover_text("Supprimer le symbole").clicked() {
                     supprimer = Some(k);
                 }
             });
         }
+        if let Some((k, m)) = changer_remplissage {
+            ed.famille.symboles[k].remplissage = Some(m);
+        }
         if let Some(k) = supprimer {
-            ed.famille.symboles.remove(k);
-            ed.selection = SelectionFamille::Aucune;
+            ed.erreur = ed.supprimer(&SelectionFamille::Symbole(k)).err();
         }
         ui.label(RichText::new("Les symboles de plan et d'élévation s'affichent dans les vues du projet et sur les feuilles.").small().weak());
     });
@@ -1285,6 +1521,8 @@ fn volume_ui(ui: &mut egui::Ui, v: &mut Volume, plans: &[PlanRef], parametres: &
 /// Vue de travail : mur générique, volumes, vides, plans, cotes ; interactions selon
 /// l'outil.
 fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
+    let selection_avant = ed.selection.clone();
+    let mut garder_multiple = false;
     let taille = ui.available_size().max(egui::vec2(80.0, 80.0));
     let (rect, resp) = ui.allocate_exact_size(taille, Sense::click_and_drag());
     let painter = ui.painter_at(rect);
@@ -1364,7 +1602,7 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
     let encre = egui::Stroke::new(1.0, Color32::from_gray(50));
     let orange = Color32::from_rgb(230, 120, 20);
     for b in &pleins {
-        let choisi = ed.selection == SelectionFamille::Volume(b.indice);
+        let choisi = ed.choisi(&SelectionFamille::Volume(b.indice));
         // masqué par son paramètre oui/non : estompé
         let vol = &ed.famille.volumes[b.indice];
         let mut couleur = ed.couleur_solide(&r, b.materiau, &vol.materiau_parametre);
@@ -1375,7 +1613,7 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
     }
     for b in boites.iter().filter(|b| b.vide) {
         let r = boite((b.min[ih], b.min[iv]), (b.max[ih], b.max[iv]));
-        let choisi = ed.selection == SelectionFamille::Volume(b.indice);
+        let choisi = ed.choisi(&SelectionFamille::Volume(b.indice));
         let pts = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
         painter.add(egui::Shape::dashed_line(&pts, egui::Stroke::new(if choisi { 2.5 } else { 1.5 }, orange), 7.0, 4.0));
     }
@@ -1404,7 +1642,7 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
         if pts.len() < 3 {
             continue;
         }
-        let choisi = ed.selection == SelectionFamille::Extrusion(k);
+        let choisi = ed.choisi(&SelectionFamille::Extrusion(k));
         let mut ferme = pts.clone();
         ferme.push(pts[0]);
         if e.vide {
@@ -1432,9 +1670,22 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
         }
         let mut seul = ed.famille.clone();
         seul.symboles = vec![sy.clone()];
+        for (l, m) in seul.regions_resolues(&r, sy.vue) {
+            let pts: Vec<egui::Pos2> = l.iter().map(|&(h, v)| cadre.ecran(h, v)).collect();
+            match m {
+                Remplissage::Plein => remplir(&painter, &pts, Color32::from_rgba_unmultiplied(120, 120, 120, 110)),
+                // hachures du projet, calculées dans le repère de la famille (pas de 8 px)
+                Remplissage::Hachure => {
+                    let contour: Vec<glam::DVec2> = l.iter().map(|&(h, v)| glam::DVec2::new(h, v)).collect();
+                    for [a, b] in crate::modele::documentation::hachures_45(&contour, 8.0 / echelle) {
+                        painter.line_segment([cadre.ecran(a.x, a.y), cadre.ecran(b.x, b.y)], egui::Stroke::new(1.0, marine.gamma_multiply(0.7)));
+                    }
+                }
+            }
+        }
         for l in seul.symboles_resolus(&r, sy.vue) {
             let pts: Vec<egui::Pos2> = l.into_iter().map(|(h, v)| cadre.ecran(h, v)).collect();
-            let choisi = ed.selection == SelectionFamille::Symbole(k);
+            let choisi = ed.choisi(&SelectionFamille::Symbole(k));
             painter.add(egui::Shape::line(pts.clone(), egui::Stroke::new(if choisi { 2.5 } else { 1.4 }, if choisi { orange } else { marine })));
             lignes_symboles.push((k, pts));
         }
@@ -1450,7 +1701,7 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
         let vertical = p.axe == ah;
         let quinconce = if vertical { rang_pv += 1; (rang_pv % 3) as f32 * 13.0 } else { rang_ph += 1; (rang_ph % 2) as f32 * 90.0 };
         let x = pos(&p.nom);
-        let choisi = ed.selection == SelectionFamille::Plan(p.nom.clone()) || ed.clics.contains(&p.nom);
+        let choisi = ed.choisi(&SelectionFamille::Plan(p.nom.clone())) || ed.clics.contains(&p.nom);
         let couleur = if choisi { bleu } else if p.hote.is_some() { Color32::from_rgb(140, 90, 40) } else { vert };
         let trait_ = egui::Stroke::new(if choisi { 1.8 } else { 1.0 }, couleur);
         let (a, b, etiquette) = if vertical {
@@ -1467,8 +1718,10 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
         lignes.push((p.nom.clone(), vertical, if vertical { a.x } else { a.y }));
     }
 
-    // cotes et égalités dont les plans sont visibles ; étiquettes cliquables
+    // cotes et égalités dont les plans sont visibles, dessinées comme celles du projet
+    // (geometrie_cote) ; la ligne de cote se glisse, sinon elle est rangée au bord
     let mut etiquettes: Vec<(usize, egui::Rect)> = Vec::new();
+    let mut lignes_cotes: Vec<(usize, [egui::Pos2; 2])> = Vec::new();
     let (mut rang_h, mut rang_v) = (0, 0);
     for (k, c) in ed.famille.contraintes.iter().enumerate() {
         let noms = c.plans();
@@ -1478,52 +1731,52 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
         }
         let horizontale = axe == ah;
         let conflit = r.conflits.contains(&k);
-        let choisie = ed.selection == SelectionFamille::Contrainte(k);
+        let choisie = ed.choisi(&SelectionFamille::Contrainte(k)) || ed.cote_deplacee == Some(k);
         let couleur = if conflit { Color32::from_rgb(210, 40, 40) } else if choisie { bleu } else { Color32::from_gray(40) };
-        let (rang, base) = if horizontale {
-            rang_h += 1;
-            (rang_h, rect.top() + 14.0)
-        } else {
-            rang_v += 1;
-            (rang_v, rect.left() + 14.0)
-        };
-        let decal = base + 18.0 * (rang - 1) as f32;
-        let coord = |nom: &str| if horizontale { cadre.ecran(pos(nom), 0.0).x } else { cadre.ecran(0.0, pos(nom)).y };
-        let segment = |a: f32, b: f32| if horizontale { [egui::pos2(a, decal), egui::pos2(b, decal)] } else { [egui::pos2(decal, a), egui::pos2(decal, b)] };
-        let xs: Vec<f32> = noms.iter().map(|n| coord(n)).collect();
-        let trait_ = egui::Stroke::new(1.0, couleur);
-        for w in xs.windows(2) {
-            painter.line_segment(segment(w[0], w[1]), trait_);
+        let rang = if horizontale { rang_h += 1; rang_h } else { rang_v += 1; rang_v };
+        let bord = 14.0 + 18.0 * (rang - 1) as f32;
+        let ligne = c.ligne().unwrap_or_else(|| if horizontale { cadre.modele(egui::pos2(0.0, rect.top() + bord)).1 } else { cadre.modele(egui::pos2(rect.left() + bord, 0.0)).0 });
+        let (attache, oblique) = (10.0 / echelle, 8.0 / echelle);
+        let mut xs: Vec<f64> = noms.iter().map(|n| pos(n)).collect();
+        xs.sort_by(f64::total_cmp);
+        let points: Vec<glam::DVec2> = xs.iter().map(|&x| if horizontale { glam::DVec2::new(x, ligne - attache) } else { glam::DVec2::new(ligne + attache, x) }).collect();
+        let g = crate::modele::documentation::geometrie_cote(&points, attache, oblique);
+        let ecran = |p: glam::DVec2| cadre.ecran(p.x, p.y);
+        let trait_ = egui::Stroke::new(if choisie { 1.6 } else { 1.0 }, couleur);
+        for [a, b] in &g.traits {
+            painter.line_segment([ecran(*a), ecran(*b)], trait_);
         }
-        for &x in &xs {
-            let [p, _] = segment(x, x);
-            let t = if horizontale { egui::vec2(0.0, 5.0) } else { egui::vec2(5.0, 0.0) };
-            painter.line_segment([p - t, p + t], trait_);
+        if let (Some(a), Some(b)) = (points.first(), points.last()) {
+            let n = if horizontale { glam::DVec2::new(0.0, attache) } else { glam::DVec2::new(-attache, 0.0) };
+            lignes_cotes.push((k, [ecran(*a + n), ecran(*b + n)]));
         }
-        let texte = match c {
-            Contrainte::Distance { valeur, .. } => {
-                let v = pos(noms[1]) - pos(noms[0]);
-                if valeur.trim().parse::<f64>().is_ok() { crate::options::unite().afficher(v) } else { format!("{valeur} = {}", crate::options::unite().afficher(v)) }
-            }
-            Contrainte::Egalite { .. } => "EQ".into(),
+        let textes: Vec<(glam::DVec2, String)> = match c {
+            Contrainte::Distance { valeur, .. } => g.textes.iter().map(|&(p, v)| (p, if valeur.trim().parse::<f64>().is_ok() { crate::options::unite().afficher(v) } else { format!("{valeur} = {}", crate::options::unite().afficher(v)) })).collect(),
+            Contrainte::Egalite { .. } => g.textes.iter().map(|&(p, _)| (p, "EQ".to_string())).collect(),
         };
-        let milieu = (xs[0] + xs[xs.len() - 1]) / 2.0;
-        let [p, _] = segment(milieu, milieu);
-        let galee = painter.layout_no_wrap(texte, police.clone(), couleur);
-        let decalage_texte = if horizontale { egui::vec2(0.0, -8.0) } else { egui::vec2(10.0 + galee.size().x / 2.0, 0.0) };
-        let cadre_txt = egui::Rect::from_center_size(p + decalage_texte, galee.size() + egui::vec2(6.0, 2.0));
-        painter.rect_filled(cadre_txt, 2.0, Color32::from_rgba_unmultiplied(255, 255, 255, 230));
-        painter.galley(cadre_txt.min + egui::vec2(3.0, 1.0), galee, couleur);
-        etiquettes.push((k, cadre_txt));
+        for (p, texte) in textes {
+            let galee = painter.layout_no_wrap(texte, police.clone(), couleur);
+            let decalage_texte = if horizontale { egui::vec2(0.0, -8.0) } else { egui::vec2(10.0 + galee.size().x / 2.0, 0.0) };
+            let cadre_txt = egui::Rect::from_center_size(ecran(p) + decalage_texte, galee.size() + egui::vec2(6.0, 2.0));
+            painter.rect_filled(cadre_txt, 2.0, Color32::from_rgba_unmultiplied(255, 255, 255, 230));
+            painter.galley(cadre_txt.min + egui::vec2(3.0, 1.0), galee, couleur);
+            etiquettes.push((k, cadre_txt));
+        }
     }
 
     // interactions
     let curseur = resp.hover_pos().or(resp.interact_pointer_pos());
-    // Échap : abandonne l'esquisse, la cote ou le rectangle en cours
-    if (resp.hovered() || !ed.esquisse.is_empty() || !ed.clics.is_empty()) && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
-        ed.esquisse.clear();
-        ed.clics.clear();
-        ed.debut = None;
+    // Échap, comme dans le projet : abandonne la saisie en cours, sinon revient à la
+    // sélection, sinon vide la sélection
+    let en_cours = !ed.esquisse.is_empty() || !ed.clics.is_empty() || ed.debut.is_some() || ed.fenetre.is_some();
+    if (resp.hovered() || en_cours) && !ui.ctx().egui_wants_keyboard_input() && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        if en_cours {
+            ed.abandonner_saisie();
+        } else if ed.outil != OutilFamille::Selection {
+            ed.choisir_outil(OutilFamille::Selection);
+        } else {
+            ed.selection = SelectionFamille::Aucune;
+        }
     }
     let plan_vise = |q: egui::Pos2| {
         lignes
@@ -1534,6 +1787,53 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             .map(|x| x.0)
     };
     let tol = 7.0 / echelle;
+    // accrochage commun avec le projet : croisements des plans de la vue, sommets et
+    // milieux des profils et symboles ; Maj : orthogonal depuis le point précédent
+    let candidats: Vec<([f64; 2], egui::Pos2, AccrocheMur)> = {
+        let mut c = Vec::new();
+        let hs: Vec<f64> = ed.famille.plans.iter().filter(|p| p.axe == ah).map(|p| pos(&p.nom)).collect();
+        let vs: Vec<f64> = ed.famille.plans.iter().filter(|p| p.axe == av).map(|p| pos(&p.nom)).collect();
+        for &h in &hs {
+            for &v in &vs {
+                c.push(([h, v], cadre.ecran(h, v), AccrocheMur::Intersection));
+            }
+        }
+        let vue = ed.vue.esquisse();
+        let contours = ed.famille.extrusions.iter().filter(|e| e.vue == vue).map(|e| (&e.profil, true)).chain(ed.famille.symboles.iter().filter(|s| s.vue == vue).map(|s| (&s.points, s.remplissage.is_some())));
+        for (points, ferme) in contours {
+            let pts: Vec<(f64, f64)> = points.iter().map(|p| ed.famille.point_esquisse(&r, p)).collect();
+            for (i, &(h, v)) in pts.iter().enumerate() {
+                c.push(([h, v], cadre.ecran(h, v), AccrocheMur::Extremite));
+                if i + 1 < pts.len() || (ferme && pts.len() > 2) {
+                    let (h2, v2) = pts[(i + 1) % pts.len()];
+                    let m = ((h + h2) / 2.0, (v + v2) / 2.0);
+                    c.push(([m.0, m.1], cadre.ecran(m.0, m.1), AccrocheMur::Milieu));
+                }
+            }
+        }
+        c
+    };
+    let maj = ui.input(|i| i.modifiers.shift);
+    let viser = |q: egui::Pos2, depart: Option<(f64, f64)>| -> ((f64, f64), AccrocheMur) {
+        let m = cadre.modele(q);
+        if let Some((p, a)) = accrochage::meilleur(q, candidats.iter().copied()) {
+            return ((p[0], p[1]), a);
+        }
+        match depart.and_then(|a| accrochage::contraindre([a.0, a.1], [m.0, m.1], 0.0, maj, 1.0)) {
+            Some((p, a)) => ((p[0], p[1]), a),
+            None => (m, AccrocheMur::Grille),
+        }
+    };
+    // repère d'accrochage sous la souris (hors sélection)
+    if ed.outil != OutilFamille::Selection || ed.poignee.is_some() {
+        if let Some(q) = curseur.filter(|_| resp.hovered() || ed.poignee.is_some()) {
+            let depart = ed.esquisse.last().map(|(_, p)| *p).or(ed.debut);
+            let (p, a) = viser(q, depart);
+            if a != AccrocheMur::Grille {
+                marqueur(&painter, cadre.ecran(p.0, p.1), a, orange, orange);
+            }
+        }
+    }
     match ed.outil {
         OutilFamille::Selection => {
             // poignées de l'élément choisi : sommets et milieux d'arêtes (insertion) d'un
@@ -1593,7 +1893,25 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             }
             // point d'appui du glissement (egui signale le glissement après quelques pixels)
             let appui = ui.input(|i| i.pointer.press_origin()).or(resp.interact_pointer_pos());
+            // ligne de cote glissée : étiquette ou ligne visée
             if resp.drag_started_by(PointerButton::Primary) {
+                ed.cote_deplacee = appui.and_then(|q| {
+                    etiquettes.iter().find(|(_, r)| r.contains(q)).map(|e| e.0).or_else(|| lignes_cotes.iter().find(|(_, [a, b])| distance_segment(q, *a, *b) < 5.0).map(|l| l.0))
+                });
+            }
+            if let (Some(k), Some(q)) = (ed.cote_deplacee, resp.interact_pointer_pos().filter(|_| resp.dragged_by(PointerButton::Primary))) {
+                let (h, v) = cadre.modele(q);
+                let horizontale = ed.famille.contraintes.get(k).and_then(|c| ed.famille.plan(c.plans()[0])).is_some_and(|p| p.axe == ah);
+                if let Some(c) = ed.famille.contraintes.get_mut(k) {
+                    *c.ligne_mut() = Some((if horizontale { v } else { h }).round());
+                }
+                ed.selection = SelectionFamille::Contrainte(k);
+            }
+            if resp.drag_stopped_by(PointerButton::Primary) && ed.cote_deplacee.take().is_some() {
+                ed.poignee = None;
+                ed.deplace = None;
+            }
+            if resp.drag_started_by(PointerButton::Primary) && ed.cote_deplacee.is_none() {
                 ed.poignee = None;
                 if let Some((p, _, milieu)) = appui.and_then(visee) {
                     // milieu d'arête : un nouveau sommet est inséré puis déplacé
@@ -1609,6 +1927,7 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                 let (h, v) = cadre.modele(q);
                 match p {
                     Poignee::Sommet { extrusion, k, i } => {
+                        let (h, v) = viser(q, None).0;
                         if let (Some(fh), Some(fv)) = (ed.accrocher(&r, ah, h, tol), ed.accrocher(&r, av, v, tol)) {
                             let points = if extrusion { &mut ed.famille.extrusions[k].profil } else { &mut ed.famille.symboles[k].points };
                             if let Some(pt) = points.get_mut(i) {
@@ -1629,7 +1948,7 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             if resp.drag_stopped_by(PointerButton::Primary) {
                 ed.poignee = None;
             }
-            if resp.drag_started_by(PointerButton::Primary) && ed.poignee.is_none() {
+            if resp.drag_started_by(PointerButton::Primary) && ed.poignee.is_none() && ed.cote_deplacee.is_none() {
                 ed.deplace = appui.and_then(plan_vise);
             }
             if let (Some(nom), Some(q)) = (ed.deplace.clone(), resp.interact_pointer_pos().filter(|_| resp.dragged_by(PointerButton::Primary))) {
@@ -1651,7 +1970,7 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             if resp.clicked() {
                 if let Some(q) = resp.interact_pointer_pos() {
                     let (h, v) = cadre.modele(q);
-                    ed.selection = if let Some((k, _)) = etiquettes.iter().find(|(_, r)| r.contains(q)) {
+                    let cible = if let Some((k, _)) = etiquettes.iter().find(|(_, r)| r.contains(q)) {
                         SelectionFamille::Contrainte(*k)
                     } else if let Some((k, _)) = lignes_symboles.iter().find(|(_, l)| l.windows(2).any(|w| distance_segment(q, w[0], w[1]) < 6.0)) {
                         SelectionFamille::Symbole(*k)
@@ -1666,36 +1985,128 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                     } else {
                         SelectionFamille::Aucune
                     };
+                    // Ctrl+clic, comme dans le projet : ajoute ou retire
+                    if ui.input(|i| i.modifiers.ctrl || i.modifiers.command) {
+                        let mut liste = ed.selectionnes();
+                        if let Some(k) = liste.iter().position(|s| *s == cible) {
+                            liste.remove(k);
+                        } else {
+                            liste.insert(0, cible);
+                        }
+                        ed.selectionner(liste);
+                        garder_multiple = true;
+                    } else {
+                        ed.selection = cible;
+                    }
+                }
+            }
+            // fenêtre de sélection : glisser hors des poignées, cotes et plans
+            if resp.drag_started_by(PointerButton::Primary) && ed.poignee.is_none() && ed.cote_deplacee.is_none() && ed.deplace.is_none() {
+                ed.fenetre = appui.map(|d| FenetreSelection { debut: d, fin: d, ajouter: ui.input(|i| i.modifiers.ctrl || i.modifiers.command) });
+            }
+            if let (Some(f), Some(q)) = (ed.fenetre.as_mut(), resp.interact_pointer_pos()) {
+                f.fin = q.clamp(rect.min, rect.max);
+            }
+            if let Some(f) = ed.fenetre {
+                f.dessiner(&painter);
+            }
+            if resp.drag_stopped_by(PointerButton::Primary) {
+                if let Some(f) = ed.fenetre.take() {
+                    // segments de chaque élément à l'écran, puis la règle commune
+                    let mut elements: Vec<(SelectionFamille, Vec<[egui::Pos2; 2]>)> = Vec::new();
+                    let fermes = |pts: &[egui::Pos2]| (0..pts.len()).map(|i| [pts[i], pts[(i + 1) % pts.len()]]).collect::<Vec<_>>();
+                    for b in &boites {
+                        let r = boite((b.min[ih], b.min[iv]), (b.max[ih], b.max[iv]));
+                        elements.push((SelectionFamille::Volume(b.indice), fermes(&[r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom()])));
+                    }
+                    for (k, pts) in &contours_ext {
+                        elements.push((SelectionFamille::Extrusion(*k), fermes(pts)));
+                    }
+                    for (k, pts) in &lignes_symboles {
+                        elements.push((SelectionFamille::Symbole(*k), pts.windows(2).map(|w| [w[0], w[1]]).collect()));
+                    }
+                    for (n, vertical, c) in &lignes {
+                        let seg = if *vertical { [egui::pos2(*c, rect.top()), egui::pos2(*c, rect.bottom())] } else { [egui::pos2(rect.left(), *c), egui::pos2(rect.right(), *c)] };
+                        elements.push((SelectionFamille::Plan(n.clone()), vec![seg]));
+                    }
+                    for (k, seg) in &lignes_cotes {
+                        elements.push((SelectionFamille::Contrainte(*k), vec![*seg]));
+                    }
+                    let (zone, croisement) = (f.rectangle(), f.croisement());
+                    let mut ids = crate::selection_rectangle::groupes(
+                        elements.iter().enumerate().flat_map(|(i, (_, segs))| segs.iter().map(move |&[a, b]| (i, (true, crate::selection_rectangle::segment(zone, a, b, false), crate::selection_rectangle::segment(zone, a, b, true))))),
+                        croisement,
+                    );
+                    ids.sort_unstable();
+                    let mut liste: Vec<SelectionFamille> = if f.ajouter { ed.selectionnes() } else { Vec::new() };
+                    liste.extend(ids.into_iter().map(|i| elements[i].0.clone()).filter(|e| !ed.choisi(e) || !f.ajouter));
+                    ed.selectionner(liste);
+                    garder_multiple = true;
                 }
             }
         }
-        OutilFamille::PlanVertical | OutilFamille::PlanHorizontal => {
-            let vertical = ed.outil == OutilFamille::PlanVertical;
+        OutilFamille::PlanReference => {
+            // deux points : le plan passe par le premier et suit la direction dominante
+            let vertical = |a: (f64, f64), b: (f64, f64)| (b.1 - a.1).abs() > (b.0 - a.0).abs();
+            let poser = |ed: &mut EditeurFamille, a: (f64, f64), b: (f64, f64)| {
+                let v = vertical(a, b);
+                let nom = nom_libre(|n| ed.famille.plan(n).is_some(), "Plan");
+                ed.famille.plans.push(PlanRef { nom: nom.clone(), axe: if v { ah } else { av }, position: (if v { a.0 } else { a.1 }).round(), fixe: false, hote: None });
+                ed.selection = SelectionFamille::Plan(nom);
+                ed.message = Some("Plan posé : le nommer dans Plans de référence ; Échap pour revenir à la sélection.".into());
+            };
+            let assez_long = |a: (f64, f64), q: egui::Pos2| cadre.ecran(a.0, a.1).distance(q) > 4.0;
             if let Some(q) = curseur.filter(|_| resp.hovered()) {
-                let trait_ = egui::Stroke::new(1.0, vert.gamma_multiply(0.6));
-                if vertical {
-                    painter.line_segment([egui::pos2(q.x, rect.top()), egui::pos2(q.x, rect.bottom())], trait_);
-                } else {
-                    painter.line_segment([egui::pos2(rect.left(), q.y), egui::pos2(rect.right(), q.y)], trait_);
+                let trait_ = egui::Stroke::new(1.0, vert);
+                match ed.debut {
+                    None => {
+                        painter.circle_stroke(q, 4.0, trait_);
+                    }
+                    Some(a) => {
+                        let c = viser(q, Some(a)).0;
+                        let v = vertical(a, c);
+                        let (ea, fin) = (cadre.ecran(a.0, a.1), if v { cadre.ecran(a.0, c.1) } else { cadre.ecran(c.0, a.1) });
+                        let ligne = if v { [egui::pos2(ea.x, rect.top()), egui::pos2(ea.x, rect.bottom())] } else { [egui::pos2(rect.left(), ea.y), egui::pos2(rect.right(), ea.y)] };
+                        painter.add(egui::Shape::dashed_line(&ligne, egui::Stroke::new(1.0, vert.gamma_multiply(0.6)), 8.0, 3.0));
+                        painter.line_segment([ea, fin], egui::Stroke::new(2.0, vert));
+                        painter.circle_filled(ea, 3.5, vert);
+                        painter.circle_filled(fin, 3.5, vert);
+                    }
                 }
             }
-            if resp.clicked() {
+            if resp.drag_started_by(PointerButton::Primary) && ed.debut.is_none() {
+                ed.debut = ui.input(|i| i.pointer.press_origin()).map(|q| viser(q, None).0);
+            }
+            if resp.drag_stopped_by(PointerButton::Primary) {
+                if let (Some(a), Some(q)) = (ed.debut, resp.interact_pointer_pos()) {
+                    if assez_long(a, q) {
+                        ed.debut = None;
+                        poser(ed, a, viser(q, Some(a)).0);
+                    }
+                }
+            } else if resp.clicked() {
                 if let Some(q) = resp.interact_pointer_pos() {
-                    let (h, v) = cadre.modele(q);
-                    let axe = if vertical { ah } else { av };
-                    let nom = nom_libre(|n| ed.famille.plan(n).is_some(), "Plan");
-                    ed.famille.plans.push(PlanRef { nom: nom.clone(), axe, position: (if vertical { h } else { v }).round(), fixe: false, hote: None });
-                    ed.selection = SelectionFamille::Plan(nom);
+                    match ed.debut {
+                        Some(a) if assez_long(a, q) => {
+                            ed.debut = None;
+                            poser(ed, a, viser(q, Some(a)).0);
+                        }
+                        Some(_) => {}
+                        None => {
+                            ed.debut = Some(viser(q, None).0);
+                            ed.message = Some("Plan de référence : cliquer le second point.".into());
+                        }
+                    }
                 }
             }
         }
         OutilFamille::Volume | OutilFamille::Vide => {
             let vide = ed.outil == OutilFamille::Vide;
             if resp.drag_started_by(PointerButton::Primary) {
-                ed.debut = resp.interact_pointer_pos().map(|q| cadre.modele(q));
+                ed.debut = ui.input(|i| i.pointer.press_origin()).map(|q| viser(q, None).0);
             }
             if let (Some(a), Some(q)) = (ed.debut, curseur) {
-                let r = boite(a, cadre.modele(q));
+                let r = boite(a, viser(q, None).0);
                 if vide {
                     let pts = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
                     painter.add(egui::Shape::dashed_line(&pts, egui::Stroke::new(1.5, orange), 7.0, 4.0));
@@ -1705,7 +2116,7 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             }
             if resp.drag_stopped_by(PointerButton::Primary) {
                 if let (Some(a), Some(q)) = (ed.debut.take(), resp.interact_pointer_pos()) {
-                    let b = cadre.modele(q);
+                    let b = viser(q, None).0;
                     let accroche = |axe: AxePlan, x: f64| match ed.plan_proche(&r, axe, x) {
                         Some((n, d)) if d.abs() <= tol => Face { plan: n, decalage: 0.0 },
                         Some((n, d)) => Face { plan: n, decalage: d.round() },
@@ -1728,7 +2139,7 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                 }
             }
         }
-        OutilFamille::Extrusion | OutilFamille::ExtrusionVide | OutilFamille::Ligne | OutilFamille::Arc => {
+        OutilFamille::Extrusion | OutilFamille::ExtrusionVide | OutilFamille::Ligne | OutilFamille::Arc | OutilFamille::Region => {
             // sommet accroché : sur chaque axe, le plan le plus proche (décalage au-delà
             // de 7 px)
             let accroche = |axe: AxePlan, x: f64| match ed.plan_proche(&r, axe, x) {
@@ -1736,12 +2147,13 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                 Some((n, d)) => (Face { plan: n, decalage: d.round() }, x - d + d.round()),
                 None => (Face { plan: String::new(), decalage: 0.0 }, x),
             };
+            let depart = ed.esquisse.last().map(|(_, p)| *p);
             let point = |q: egui::Pos2| {
-                let (h, v) = cadre.modele(q);
+                let (h, v) = viser(q, depart).0;
                 let ((fh, h), (fv, v)) = (accroche(ah, h), accroche(av, v));
                 (PointEsquisse { h: fh, v: fv }, (h, v))
             };
-            let profil = matches!(ed.outil, OutilFamille::Extrusion | OutilFamille::ExtrusionVide);
+            let profil = matches!(ed.outil, OutilFamille::Extrusion | OutilFamille::ExtrusionVide | OutilFamille::Region);
             let premier = ed.esquisse.first().map(|(_, p)| cadre.ecran(p.0, p.1));
             // élastique et repère d'accrochage
             if let Some(q) = curseur.filter(|_| resp.hovered()) {
@@ -1750,7 +2162,6 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                 let mut pts: Vec<egui::Pos2> = ed.esquisse.iter().map(|(_, p)| cadre.ecran(p.0, p.1)).collect();
                 pts.push(c);
                 painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, orange)));
-                painter.circle_stroke(c, 4.0, egui::Stroke::new(1.5, orange));
                 if let Some(p0) = premier.filter(|p| profil && ed.esquisse.len() >= 3 && p.distance(q) < 9.0) {
                     painter.circle_stroke(p0, 7.0, egui::Stroke::new(2.0, Color32::from_rgb(30, 140, 60)));
                 }
@@ -1786,11 +2197,16 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                         ed.message = Some("Extrusion créée : régler sa profondeur dans Extrusions.".into());
                     }
                     OutilFamille::Ligne if points.len() >= 2 => {
-                        ed.famille.symboles.push(Symbole { vue, points, arc: false });
+                        ed.famille.symboles.push(Symbole { vue, points, arc: false, remplissage: None });
                         ed.selection = SelectionFamille::Symbole(ed.famille.symboles.len() - 1);
                     }
+                    OutilFamille::Region if points.len() >= 3 => {
+                        ed.famille.symboles.push(Symbole { vue, points, arc: false, remplissage: Some(Remplissage::Hachure) });
+                        ed.selection = SelectionFamille::Symbole(ed.famille.symboles.len() - 1);
+                        ed.message = Some("Région créée : choisir plein ou hachuré dans Symboles 2D.".into());
+                    }
                     OutilFamille::Arc if points.len() == 3 => {
-                        ed.famille.symboles.push(Symbole { vue, points, arc: true });
+                        ed.famille.symboles.push(Symbole { vue, points, arc: true, remplissage: None });
                         ed.selection = SelectionFamille::Symbole(ed.famille.symboles.len() - 1);
                     }
                     _ => ed.message = Some("Esquisse abandonnée : pas assez de points.".into()),
@@ -1799,6 +2215,30 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
         }
         OutilFamille::Cote | OutilFamille::Egalite => {
             let n = if ed.outil == OutilFamille::Cote { 2 } else { 3 };
+            // plan visé : coloré (rouge s'il n'est pas parallèle aux plans déjà choisis),
+            // et cote provisoire depuis le dernier plan choisi
+            let axe_choisi = ed.clics.first().and_then(|p| ed.famille.plan(p)).map(|p| p.axe);
+            if let Some((q, nom)) = curseur.filter(|_| resp.hovered()).and_then(|q| plan_vise(q).map(|n| (q, n))) {
+                if let Some((_, vertical, c)) = lignes.iter().find(|l| l.0 == nom) {
+                    let parallele = axe_choisi.is_none() || ed.famille.plan(&nom).map(|p| p.axe) == axe_choisi;
+                    let couleur = if parallele { Color32::from_rgb(0, 160, 230) } else { Color32::from_rgb(210, 40, 40) };
+                    let (a, b) = if *vertical { (egui::pos2(*c, rect.top()), egui::pos2(*c, rect.bottom())) } else { (egui::pos2(rect.left(), *c), egui::pos2(rect.right(), *c)) };
+                    painter.line_segment([a, b], egui::Stroke::new(3.0, couleur.gamma_multiply(0.35)));
+                    painter.line_segment([a, b], egui::Stroke::new(1.5, couleur));
+                    let precedent = ed.clics.last().filter(|p| **p != nom).and_then(|p| lignes.iter().find(|l| &l.0 == p));
+                    if let Some((_, _, c0)) = precedent.filter(|_| parallele) {
+                        let (p0, p1) = if *vertical { (egui::pos2(*c0, q.y), egui::pos2(*c, q.y)) } else { (egui::pos2(q.x, *c0), egui::pos2(q.x, *c)) };
+                        let trait_ = egui::Stroke::new(1.0, couleur);
+                        painter.line_segment([p0, p1], trait_);
+                        let t = if *vertical { egui::vec2(0.0, 5.0) } else { egui::vec2(5.0, 0.0) };
+                        for p in [p0, p1] {
+                            painter.line_segment([p - t, p + t], trait_);
+                        }
+                        let valeur = (pos(&nom) - pos(&ed.clics[ed.clics.len() - 1])).abs();
+                        painter.text(p0.lerp(p1, 0.5) - t * 2.0, egui::Align2::CENTER_BOTTOM, crate::options::unite().afficher(valeur), police.clone(), couleur);
+                    }
+                }
+            }
             if resp.clicked() {
                 if let Some(nom) = resp.interact_pointer_pos().and_then(plan_vise) {
                     let axe = ed.famille.plan(&nom).map(|p| p.axe);
@@ -1814,9 +2254,9 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                         // sens croissant : la valeur est positive
                         let (a, b) = if pos(&p[0]) <= pos(&p[1]) { (p[0].clone(), p[1].clone()) } else { (p[1].clone(), p[0].clone()) };
                         let v = (pos(&b) - pos(&a)).round();
-                        Contrainte::Distance { a, b, valeur: format!("{v}"), priorite: 5 }
+                        Contrainte::Distance { a, b, valeur: format!("{v}"), priorite: 5, ligne: None }
                     } else {
-                        Contrainte::Egalite { a: p[0].clone(), m: p[1].clone(), b: p[2].clone(), priorite: 5 }
+                        Contrainte::Egalite { a: p[0].clone(), m: p[1].clone(), b: p[2].clone(), priorite: 5, ligne: None }
                     };
                     ed.famille.contraintes.push(c);
                     ed.selection = SelectionFamille::Contrainte(ed.famille.contraintes.len() - 1);
@@ -1829,6 +2269,9 @@ fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
     }
     if resp.hovered() && ed.outil != OutilFamille::Selection {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+    }
+    if !garder_multiple && ed.selection != selection_avant {
+        ed.multiple.clear();
     }
 }
 

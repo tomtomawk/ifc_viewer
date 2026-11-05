@@ -1434,7 +1434,7 @@ impl RubanEdition {
                 while projet.types_murs.iter().any(|t| t.nom == format!("Mur composé {n}")) {
                     n += 1;
                 }
-                let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None };
+                let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None, retour: false };
                 (format!("Mur composé {n}"), vec![c("Enduit", 15.0, FonctionCouche::Finition), c("Béton", 200.0, FonctionCouche::Structure), c("Laine minérale", 120.0, FonctionCouche::Isolation), c("Plâtre", 13.0, FonctionCouche::Finition)])
             }
         };
@@ -1479,8 +1479,8 @@ impl RubanEdition {
                 // glisser-déposer : lignes (hauteur) et relâchement de la poignée
                 let mut lignes: Vec<egui::Rangef> = Vec::new();
                 let mut lacher = false;
-                egui::Grid::new("couches_type_mur").num_columns(8).spacing([6.0, 4.0]).striped(true).show(ui, |ui| {
-                    for t in ["", "Fonction", "Matériau", "", "Motif", "Épaisseur", "Plume", ""] {
+                egui::Grid::new("couches_type_mur").num_columns(9).spacing([6.0, 4.0]).striped(true).show(ui, |ui| {
+                    for t in ["", "Fonction", "Matériau", "", "Motif", "Épaisseur", "Plume", "Retour", ""] {
                         ui.label(RichText::new(t).small().weak());
                     }
                     ui.end_row();
@@ -1555,6 +1555,9 @@ impl RubanEdition {
                         if n_plume != c.plume() {
                             c.plume = Some(n_plume);
                         }
+                        ui.add_enabled(c.fonction != FonctionCouche::Structure, egui::Checkbox::without_text(&mut c.retour))
+                            .on_hover_text("Retour aux insertions : la couche tourne dans les tableaux et le linteau des ouvertures, jusqu'au plan « Retour extérieur » ou « Retour intérieur » de leur famille")
+                            .on_disabled_hover_text("Une couche de structure ne se retourne pas");
                         if petit_bouton(ui, n > 1, Glyphe::Croix).on_hover_text("Supprimer la couche").clicked() { action = Some((k, 0)); }
                         ui.end_row();
                     }
@@ -1584,7 +1587,7 @@ impl RubanEdition {
                 }
                 ui.horizontal(|ui| {
                     if ui.button("+ Couche").clicked() {
-                        ed.couches.push(Couche { materiau: None, epaisseur: 50.0, fonction: FonctionCouche::Autre, plume: None });
+                        ed.couches.push(Couche { materiau: None, epaisseur: 50.0, fonction: FonctionCouche::Autre, plume: None, retour: false });
                     }
                     let total: f64 = ed.couches.iter().map(|c| c.epaisseur).sum();
                     ui.label(format!("Épaisseur totale : {}", crate::options::unite().afficher(total)));
@@ -3406,16 +3409,11 @@ fn icone_commande(p: &egui::Painter, r: egui::Rect, i: Icone, c: Color32) {
                         seg((0.3, y + 0.1), (0.7, y - 0.1));
                     }
                 }
-                "selection" => {
-                    p.add(egui::Shape::convex_polygon(vec![pt(0.24, 0.08), pt(0.24, 0.8), pt(0.42, 0.64), pt(0.56, 0.92), pt(0.66, 0.86), pt(0.52, 0.58), pt(0.76, 0.56)], c.gamma_multiply(0.25), t));
-                }
-                "plan_v" => {
-                    tirets((0.5, 0.04), (0.5, 0.96));
-                    p.circle_stroke(pt(0.5, 0.1), r.width() * 0.07, t);
-                }
-                "plan_h" => {
+                "plan_ref" => {
+                    // plan tracé par deux points
                     tirets((0.04, 0.5), (0.96, 0.5));
-                    p.circle_stroke(pt(0.1, 0.5), r.width() * 0.07, t);
+                    p.circle_filled(pt(0.22, 0.5), r.width() * 0.07, c);
+                    p.circle_filled(pt(0.78, 0.5), r.width() * 0.07, c);
                 }
                 "cote" => {
                     seg((0.14, 0.2), (0.14, 0.8));
@@ -3462,6 +3460,14 @@ fn icone_commande(p: &egui::Painter, r: egui::Rect, i: Icone, c: Color32) {
                     p.add(egui::Shape::line(vec![pt(0.12, 0.8), pt(0.4, 0.3), pt(0.64, 0.6), pt(0.88, 0.16)], t));
                     for (x, y) in [(0.12, 0.8), (0.4, 0.3), (0.64, 0.6), (0.88, 0.16)] {
                         p.circle_filled(pt(x, y), r.width() * 0.05, c);
+                    }
+                }
+                "region" => {
+                    let contour = vec![pt(0.14, 0.82), pt(0.2, 0.22), pt(0.62, 0.14), pt(0.86, 0.5), pt(0.6, 0.86)];
+                    p.add(egui::Shape::convex_polygon(contour.clone(), c.gamma_multiply(0.25), t));
+                    for k in 0..4 {
+                        let x = 0.26 + 0.16 * k as f32;
+                        seg((x, 0.78), (x + 0.2, 0.3));
                     }
                 }
                 "arc" => {

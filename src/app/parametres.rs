@@ -278,6 +278,12 @@ impl ViewerApp {
     }
 
     fn executer_raccourci(&mut self, ctx: &egui::Context, action: &str) {
+        // onglet Famille : les raccourcis du projet (masquer, isoler, copier…) agiraient
+        // sur la maquette masquée
+        let famille = ["nouveau", "ouvrir", "fermer", "parametres", "enregistrer", "annuler", "retablir", "supprimer", "cadrer"];
+        if self.famille_active && self.famille.is_some() && !famille.contains(&action) {
+            return;
+        }
         match action {
             "copier_presse" => self.memoriser_copie_niveau(self.selection_bim()),
             "coller_niveau" => self.ouvrir_coller_niveau(),
@@ -312,6 +318,10 @@ impl ViewerApp {
                         m.surrender_focus(id);
                     }
                 });
+            }
+            // onglet Famille : Suppr agit sur la famille, jamais sur le projet masqué
+            "supprimer" if self.famille_active && self.famille.is_some() => {
+                if let Some(ed) = self.famille.as_mut() { ed.supprimer_selection(); }
             }
             "supprimer" if self.natif.is_some() => self.demander_suppression(),
             "cadrer" if self.famille_active && self.famille.is_some() => self.cadrer_famille(),
