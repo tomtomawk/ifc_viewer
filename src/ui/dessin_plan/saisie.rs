@@ -492,7 +492,7 @@ impl ViewerApp {
         self.dessin2d.trace = None;
         self.dessin2d.historique_depart = None;
         self.dessin2d.commande_cle = None;
-        self.bim.depart_deplacement = None;
+        self.transfo.reinitialiser();
         self.bim.depart_structure = None;
         self.coupe_depart = None;
         self.alignement_plan = false;

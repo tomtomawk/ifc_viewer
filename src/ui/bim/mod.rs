@@ -200,12 +200,9 @@ impl ViewerApp {
 pub(super) struct EtatBim {
     pub selection: Vec<String>,
     delta: [f64; 3],
-    centre: [f64; 2],
     abscisse: f64,
     pub(super) barre: crate::modele::Barre,
     pub(super) depart_structure: Option<[f64; 2]>,
-    /// Déplacer / Copier graphique : point de base cliqué.
-    pub(super) depart_deplacement: Option<[f64; 2]>,
     barre_editee: Option<crate::modele::Barre>,
     annotation_identique: Option<crate::modele::documentation::Annotation>,
     /// Suppression demandée depuis le panneau : exécutée à l'image suivante.
@@ -214,7 +211,6 @@ pub(super) struct EtatBim {
     pub nomenclature: usize,
     pub texte: String,
     pub points: [[f64; 2]; 2],
-    reference: String,
     preview_type: Option<crate::modele::Projet>,
     toiture: String,
     priorite: i32,
@@ -229,7 +225,6 @@ impl Default for EtatBim {
             origine: false,
             selection: Vec::new(),
             delta: [1000.0, 0.0, 0.0],
-            centre: [0.0; 2],
             abscisse: 1500.0,
             barre: crate::modele::Barre {
                 id: String::new(),
@@ -243,7 +238,6 @@ impl Default for EtatBim {
                 rotation: 0.0,
             },
             depart_structure: None,
-            depart_deplacement: None,
             barre_editee: None,
             annotation_identique: None,
             supprimer: false,
@@ -251,7 +245,6 @@ impl Default for EtatBim {
             nomenclature: 0,
             texte: "Texte".into(),
             points: [[0.0, 0.0], [3000.0, 0.0]],
-            reference: String::new(),
             preview_type: None,
             toiture: String::new(),
             priorite: 30,
@@ -357,6 +350,23 @@ fn elements_natifs(p: &crate::modele::Projet) -> impl Iterator<Item = (&'static 
             .chain(p.niveaux.iter().map(|x| ("niveau", &x.id)))
 }
 impl ViewerApp {
+    /// Deux commandes enchaînées (la seconde reçoit les identifiants rendus par la
+    /// première), appliquées en une seule transaction : un seul Ctrl+Z.
+    pub(super) fn executer_bim_suite(
+        &mut self,
+        premiere: crate::modele::edition::commandes::Commande,
+        suite: impl FnOnce(Vec<String>) -> crate::modele::edition::commandes::Commande,
+    ) -> Result<(), String> {
+        let original = &self.natif.as_ref().ok_or("Aucun projet natif.")?.0;
+        let (p, ids) = original.executer(premiere)?;
+        let (p, ids) = p.executer(suite(ids))?;
+        self.appliquer_projet(p)?;
+        self.bim.selection = ids;
+        self.selection_multiple.clear();
+        self.selected = None;
+        self.status = "Modification appliquée — Ctrl+Z pour annuler.".into();
+        Ok(())
+    }
     pub(super) fn executer_bim(
         &mut self,
         c: crate::modele::edition::commandes::Commande,

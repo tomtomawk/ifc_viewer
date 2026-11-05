@@ -28,6 +28,10 @@ impl Unite {
             Self::Metre => " m",
         }
     }
+    /// Valeur tapée dans l'unité d'affichage, convertie en millimètres.
+    pub fn vers_mm(self, valeur: f64) -> f64 {
+        valeur * self.facteur()
+    }
     pub fn afficher(self, mm: f64) -> String {
         format!(
             "{}{}",

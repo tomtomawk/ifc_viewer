@@ -181,7 +181,7 @@ impl ViewerApp {
             || self.poignee_axe.is_some()
             || self.coupe_depart.is_some()
             || self.bim.depart_structure.is_some()
-            || self.bim.depart_deplacement.is_some();
+            || !self.transfo.points.is_empty();
         let modeliser = self.natif.is_some()
             && !(self.famille_active && self.famille.is_some())
             && !trace

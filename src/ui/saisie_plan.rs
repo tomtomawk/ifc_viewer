@@ -145,44 +145,6 @@ impl ViewerApp {
         }
     }
 
-    /// Déplacer / Copier : marqueur d'accrochage, vecteur base → curseur avec sa
-    /// longueur et, pour les murs et éléments horizontaux sélectionnés, leur position
-    /// après déplacement.
-    pub(super) fn apercu_deplacement(&self, ui: &egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>, altitude: f64) {
-        let painter = ui.painter().with_clip_rect(rect);
-        let bleu = Color32::from_rgb(55, 130, 200);
-        let texte = if self.bim.depart_deplacement.is_some() { "Cliquer la destination · Maj : orthogonal · Échap ou clic droit : annuler" } else { "Cliquer le point de base · molette : zoom" };
-        painter.text(rect.left_top() + egui::vec2(12.0, 34.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), bleu);
-        let Some(q) = survol else { return };
-        let Some((p, accroche)) = self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.bim.depart_deplacement, altitude) else { return };
-        if let Some(e) = self.ecran_plan(rect, p, altitude) {
-            marqueur(&painter, e, accroche, bleu, Color32::from_rgb(230, 120, 20));
-        }
-        let Some(a) = self.bim.depart_deplacement else { return };
-        let d = [p[0] - a[0], p[1] - a[1]];
-        if let (Some(x), Some(y)) = (self.ecran_plan(rect, a, altitude), self.ecran_plan(rect, p, altitude)) {
-            painter.add(egui::Shape::dashed_line(&[x, y], egui::Stroke::new(1.5, bleu), 6.0, 4.0));
-            painter.circle_filled(x, 3.5, bleu);
-            painter.text(x.lerp(y, 0.5) + egui::vec2(0.0, -16.0), egui::Align2::CENTER_CENTER, crate::config::options::unite().afficher(d[0].hypot(d[1])), egui::FontId::proportional(13.0), bleu);
-        }
-        let Some((projet, _)) = &self.natif else { return };
-        let ids = self.selection_bim();
-        for id in &ids {
-            let (Some((_, _, z)), Some((s, f, _))) = (projet.axe_element(id), projet.ligne_justification(id)) else { continue };
-            let t = |v: [f64; 2]| [v[0] + d[0], v[1] + d[1]];
-            if let (Some(x), Some(y)) = (self.ecran_plan(rect, t(s), z), self.ecran_plan(rect, t(f), z)) {
-                painter.line_segment([x, y], egui::Stroke::new(2.5, bleu.gamma_multiply(0.7)));
-            }
-        }
-        for dalle in projet.dalles.iter().filter(|x| ids.contains(&x.id)) {
-            let z = projet.niveau(&dalle.niveau).map_or(0.0, |n| n.altitude) + dalle.decalage;
-            for c in &dalle.contours {
-                let pts: Vec<egui::Pos2> = c.iter().chain(c.first()).filter_map(|v| self.ecran_plan(rect, [v[0] + d[0], v[1] + d[1]], z)).collect();
-                painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, bleu.gamma_multiply(0.7))));
-            }
-        }
-    }
-
     /// Mur ou assemblage natif sélectionné : identifiant, ligne d'implantation choisie
     /// (extrémités en mm), altitude de la base et écart de cette ligne à l'axe médian.
     pub(super) fn axe_selection(&self) -> Option<(String, [f64; 2], [f64; 2], f64, f64)> {

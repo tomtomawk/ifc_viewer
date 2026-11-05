@@ -141,6 +141,7 @@ impl ViewerApp {
         p.push(("document_actif", self.document_actif_pilote().to_string()));
         p.push(("saisies_en_attente", (self.saisies_pilote.len()+usize::from(self.saisie_pilote_image)).to_string()));
         p.push(("selection_native", serde_json::to_string(&self.selection_bim()).unwrap()));
+        p.push(("transformation", self.etat_transformation().to_string()));
         p.push(("cadenas", serde_json::to_string(&self.cadenas_ecran.iter().map(|(id, q)| serde_json::json!({"id": id, "ecran": [q.x, q.y]})).collect::<Vec<_>>()).unwrap()));
         p.push(("outil", self.ruban_edition.outil().map_or("null".into(), |o|texte(o.nom()))));
         p.push(("rectangle_vue", serde_json::to_string(&[self.rect_vue.min.x,self.rect_vue.min.y,self.rect_vue.width(),self.rect_vue.height()]).unwrap()));

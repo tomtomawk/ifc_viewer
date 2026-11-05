@@ -50,11 +50,11 @@ Contrôle de chaque fonction : un script `tools/test-*.py` la joue par le pilote
 
 | # | Fonction | Raccourci | Sélection | Saisie | Options | État actuel |
 |---|---|---|---|---|---|---|
-| 1 | **Aligner** | AL | aucune préalable | 1. ligne de référence (axe, face, ligne de quadrillage) ; 2. éléments à aligner, clic par clic | Référence : axe / face extérieure / face intérieure / face du noyau ; Verrouiller l'alignement (cadenas) | `Aligner` existe, sans choix de face ni cadenas |
-| 2 | **Déplacer** | MV | éléments | point de départ → point d'arrivée, ou distance saisie | Copier ; Contraindre ; Déconnecter (détacher les jonctions) ; Déplacer en Z | `Deplacer` existe (delta 3D) |
+| 1 | **Aligner** | AL | aucune préalable | 1. ligne de référence (axe, face, ligne de quadrillage) ; 2. éléments à aligner, clic par clic | Référence : axe / face extérieure / face intérieure / face du noyau ; Verrouiller l'alignement (cadenas) | **graphique** : référence cliquée puis éléments cliqués, survol surligné ; reste : choix de face, cadenas |
+| 2 | **Déplacer** | MV | éléments | point de départ → point d'arrivée, ou distance saisie | Copier ; Contraindre ; Déconnecter (détacher les jonctions) ; Déplacer en Z | **graphique** : deux clics ou distance tapée, case Copier ; reste : Déconnecter, Z |
 | 3 | **Décaler** | DE | murs, lignes, contours | côté par la souris + distance, ou clic de passage | Copier (par défaut : oui) ; Mesure : axe / face | **à créer** |
-| 4 | **Tourner** | RO | éléments | centre (sélection par défaut, déplaçable) → direction de départ → angle, ou angle saisi | Copier ; Pas angulaire | `Tourner` existe |
-| 5 | **Copier** | CO | éléments | point de départ → point(s) d'arrivée | Multiple ; Sur un niveau (= `CopierSurNiveau`) | `Copier` et `CopierSurNiveau` existent |
+| 4 | **Tourner** | RO | éléments | centre (sélection par défaut, déplaçable) → direction de départ → angle, ou angle saisi | Copier ; Pas angulaire | **graphique** : centre déplaçable au clic, rapporteur, Maj 15°, angle tapé, case Copier (une seule annulation) |
+| 5 | **Copier** | CO | éléments | point de départ → point(s) d'arrivée | Multiple ; Sur un niveau (= `CopierSurNiveau`) | **graphique** : deux clics, Multiple |
 | 6 | **Réseau** | RE | éléments | linéaire : 2 points + nombre ; polaire : centre + angle + nombre | Linéaire / polaire ; Dernier = distance totale ou pas ; Grouper | **à créer** (une commande produisant N copies) |
 | 7 | **Échelle** | EC | éléments 2D, contours, terrains, annotations | point de base → facteur (saisi ou 2 longueurs) | Graphique / numérique | **à créer**. Interdit sur murs, ouvertures, familles : le type porte l'épaisseur |
 | 8 | **Symétrie** | SY | éléments | axe : élément existant ou 2 points | Copier (par défaut : oui) ; Symétriser les familles (sens d'ouverture des portes) | **à créer** ; `InverserMur` couvre seulement l'inversion d'un mur sur place |
@@ -122,7 +122,7 @@ Règle : le verrouillage s'applique au **modèle** (partagé en collaboration). 
 
 ## 6. Ordre de mise en œuvre conseillé
 
-1. **Socle commun** : cycle sélection → saisie → aperçu → transaction, barre de commande, case Copier et filtre « verrouillés ». Le reste s'appuie dessus.
+1. **Socle commun** : fait pour Déplacer, Copier, Tourner, Aligner (`src/ui/transformer.rs`, test `tools/test-transformer.py`) : consigne au curseur, survol, aperçu, cotes temporaires, valeur tapée, Échap d'une étape, clic droit, une transaction. Reste : menu du clic droit, répétition de la dernière commande, poignées hors commande.
 2. **Verrouiller / Déverrouiller** : fait. Une sélection mixte ignore les éléments verrouillés ; une sélection entièrement verrouillée est refusée.
 3. **Symétrie et Réseau** : ce sont des compositions de `Transformer` (`transformations.rs`), qui existe déjà.
 4. **Décaler et Scinder** : géométrie des axes de murs, en réutilisant `jonctions`.

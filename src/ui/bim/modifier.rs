@@ -61,7 +61,12 @@ impl ViewerApp {
                 }
             }
             match outil.filter(|_| !selection_seule) {
-                Some(Outil::Deplacer | Outil::Copier) => {
+                Some(o @ (Outil::Deplacer | Outil::Copier)) => {
+                    if o == Outil::Deplacer {
+                        ui.checkbox(&mut self.transfo.copie, "Copier").on_hover_text("Déplacer une copie ; l'original reste en place");
+                    } else {
+                        ui.checkbox(&mut self.transfo.multiple, "Multiple").on_hover_text("Copies successives depuis le même point de base ; Échap pour terminer");
+                    }
                     let mut appliquer = false;
                     ui.collapsing("Saisie chiffrée", |ui| {
                         for (nom, v) in ["X", "Y", "Z"].into_iter().zip(&mut self.bim.delta) {
@@ -74,7 +79,7 @@ impl ViewerApp {
                     });
                     if appliquer
                     {
-                        commande = Some(if outil == Some(Outil::Copier) {
+                        commande = Some(if outil == Some(Outil::Copier) || self.transfo.copie {
                             Commande::Copier {
                                 ids: ids.clone(),
                                 delta: self.bim.delta,
@@ -88,30 +93,25 @@ impl ViewerApp {
                     }
                 }
                 Some(Outil::Tourner) => {
-                    ui.label("Centre de rotation dans le plan du projet");
-                    for v in &mut self.bim.centre {
-                        ui.add(egui::DragValue::new(v).speed(10.0).dimensions());
+                    ui.checkbox(&mut self.transfo.copie, "Copier").on_hover_text("Tourner une copie ; l'original reste en place");
+                    ui.label(if self.transfo.centre.is_some() { "Centre : placé" } else { "Centre : milieu de la sélection" });
+                    if ui.add_enabled(!self.transfo.placer_centre, egui::Button::new("Placer le centre")).on_hover_text("Le prochain clic place le centre de rotation ; ou cliquer sur le centre dans la vue").clicked() {
+                        self.transfo.placer_centre = true;
                     }
-                    if ui
-                        .add_enabled(!ids.is_empty(), egui::Button::new("Tourner"))
-                        .clicked()
-                    {
-                        commande = Some(Commande::Tourner {
-                            ids: ids.clone(),
-                            centre: self.bim.centre,
-                            angle: self.ruban_edition.nombre_option(Outil::Tourner, 0),
-                        });
+                    if self.transfo.centre.is_some() && ui.button("Centre de la sélection").clicked() {
+                        self.transfo.centre = None;
                     }
                 }
                 Some(Outil::Aligner) => {
-                    ui.label("Référence : axe d'un mur droit");
-                    egui::ComboBox::from_id_salt("reference_bim").selected_text(&self.bim.reference).show_ui(ui,|ui| {
-                        for (id,nom) in p.murs.iter().filter(|m|m.assemblage.is_none()).map(|m|(&m.id,&m.nom)).chain(p.assemblages.iter().map(|m|(&m.id,&m.nom))) {
-                            ui.selectable_value(&mut self.bim.reference,id.clone(),nom);
+                    match self.transfo.reference.as_deref() {
+                        Some(r) => {
+                            let nom = p.murs.iter().find(|m| m.id == r).map(|m| m.nom.as_str()).or_else(|| p.assemblage(r).map(|a| a.nom.as_str())).unwrap_or("mur");
+                            ui.label(format!("Référence : axe de {nom}"));
+                            if ui.button("Changer la référence").clicked() {
+                                self.transfo.reinitialiser();
+                            }
                         }
-                    });
-                    if ui.add_enabled(!ids.is_empty()&&!self.bim.reference.is_empty(),egui::Button::new("Appliquer à l'axe")).clicked() {
-                        commande=Some(Commande::Aligner{ids:ids.clone(),reference:self.bim.reference.clone()});
+                        None => { ui.label("Cliquez la référence dans la vue."); }
                     }
                 }
                 Some(Outil::Ajuster) => {

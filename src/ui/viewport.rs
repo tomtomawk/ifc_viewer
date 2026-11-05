@@ -41,12 +41,9 @@ impl ViewerApp {
             let p = &self.natif.as_ref()?.0;
             Some(p.niveau(&self.bim.barre.niveau)?.altitude + self.bim.barre.debut[2])
         });
-        // Déplacer / Copier : base puis destination cliquées sur le plan de la vue
-        let deplacement = match (self.onglet_ruban == OngletRuban::Modifier && self.natif.is_some() && self.loading.is_none()).then(|| self.ruban_edition.outil()).flatten() {
-            Some(o @ (crate::ui::ruban::Outil::Deplacer | crate::ui::ruban::Outil::Copier)) if !self.selection_bim().is_empty() => Some(o),
-            _ => None,
-        };
-        if deplacement.is_none() { self.bim.depart_deplacement = None; }
+        // Déplacer, Copier, Tourner, Aligner : socle commun (transformer.rs)
+        self.suivre_transformation();
+        let deplacement = self.transfo.outil;
         let mode_trace = mode_ajuster || mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || deplacement.is_some() || self.outil_dessin().is_some() || self.dessin2d.edition_contour.is_some() || self.alignement_plan || self.orientation_nord_en_cours;
         // axe du mur sélectionné : une extrémité saisie se déplace (accrochages du tracé)
         let edition_arc=self.souris_arc_mur(ui,rect,&resp,mode_trace);
@@ -248,18 +245,15 @@ impl ViewerApp {
                     }
                 }
             } else if let Some(outil) = deplacement {
-                use crate::modele::edition::commandes::Commande;
-                if resp.clicked_by(PointerButton::Secondary) { self.bim.depart_deplacement = None; }
-                if resp.clicked()
-                    && let Some((p, _)) = resp.interact_pointer_pos().and_then(|q| self.point_tracage(q, rect, shift, self.bim.depart_deplacement, altitude_coupe))
-                {
-                    match self.bim.depart_deplacement.take() {
-                        Some(a) => {
-                            let (ids, delta) = (self.selection_bim(), [p[0] - a[0], p[1] - a[1], 0.0]);
-                            let c = if outil == crate::ui::ruban::Outil::Copier { Commande::Copier { ids, delta } } else { Commande::Deplacer { ids, delta } };
-                            if let Err(e) = self.executer_bim(c) { self.error = Some(e); }
-                        }
-                        None => self.bim.depart_deplacement = Some(p),
+                // élément sous le curseur : surligné avant le clic, cible d'Aligner
+                let cible = |app: &Self, q: egui::Pos2| pick(app, q).and_then(|(obj, _)| app.scene.as_ref()?.objects.get(obj as usize).map(|o| o.id)).and_then(|id| app.cle_native(app.cible_clic(id)));
+                self.transfo.cible = resp.hover_pos().and_then(|q| cible(self, q));
+                if resp.clicked_by(PointerButton::Secondary) && !self.transfo.reculer() { self.ruban_edition.annuler(); }
+                if resp.clicked() && let Some(q) = resp.interact_pointer_pos() {
+                    let depart = matches!(outil, crate::ui::ruban::Outil::Deplacer | crate::ui::ruban::Outil::Copier).then(|| self.transfo.points.first().copied()).flatten();
+                    if let Some((p, _)) = self.point_tracage(q, rect, shift && depart.is_some(), depart, altitude_coupe) {
+                        let c = cible(self, q);
+                        self.clic_transformation(outil, p, q, rect, altitude_coupe, shift, c);
                     }
                 }
             } else if let Some(prm) = &outil_coupe {
@@ -407,7 +401,7 @@ impl ViewerApp {
         }
         self.dessiner_cadenas(ui, rect, None);
         if deplacement.is_some() {
-            self.apercu_deplacement(ui, rect, resp.hover_pos(), altitude_coupe);
+            self.apercu_transformation(ui, rect, resp.hover_pos(), altitude_coupe);
         }
         if !mode_ajuster && dalle.is_none() && !mode_mur && outil_coupe.is_none() && structure.is_none() && self.dessin2d.edition_contour.is_none() {
             self.dessiner_aretes_pente(ui, rect, resp.hover_pos());

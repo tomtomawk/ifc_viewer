@@ -19,6 +19,7 @@ mod ajuster;
 mod volets;
 mod murs_courbes;
 mod aides;
+mod transformer;
 use aides::*;
 mod documents;
 mod coupe;
@@ -665,6 +666,8 @@ pub struct ViewerApp {
     largeurs_panneaux: [f32; 2],
     /// Cadenas affichés à la dernière image : élément natif et position écran.
     cadenas_ecran: Vec<(String, egui::Pos2)>,
+    /// Commande de transformation en cours (Déplacer, Copier, Tourner, Aligner).
+    transfo: transformer::Transformation,
 }
 
 impl ViewerApp {
@@ -814,6 +817,7 @@ impl ViewerApp {
             zone_panneaux: egui::Rect::NOTHING,
             largeurs_panneaux: [300.0, 320.0],
             cadenas_ecran: Vec::new(),
+            transfo: Default::default(),
         };
         if let Some(p) = path {
             app.open(p, &cc.egui_ctx);
@@ -867,6 +871,7 @@ impl eframe::App for ViewerApp {
             self.confirmer_fermeture = Some((true, self.document_actif));
         }
         self.clavier_dessin(&ctx);
+        self.clavier_transformation(&ctx);
         if self.alignement_plan && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             self.alignement_plan = false;
             self.arete_alignement = None;
@@ -881,7 +886,9 @@ impl eframe::App for ViewerApp {
             if self.ruban_edition.outil()==Some(crate::ui::ruban::Outil::Ajuster) && self.ajustement.as_ref().is_some_and(|a|a.reference.is_some()) {
                 self.ajustement=Some(Default::default());
                 self.status="Ajuster / prolonger : choisir une nouvelle limite, ou Échap pour terminer.".into();
-            } else if self.bim.depart_deplacement.take().is_some() || self.bim.depart_structure.take().is_some() {
+            } else if self.transfo.outil.is_some() && self.transfo.reculer() {
+                // Déplacer, Copier, Tourner, Aligner : une étape en arrière
+            } else if self.bim.depart_structure.take().is_some() {
                 // Le premier clic d'une poutre est abandonné sans modifier le projet.
             } else if self.coupe_depart.is_some() {
                 self.coupe_depart = None;

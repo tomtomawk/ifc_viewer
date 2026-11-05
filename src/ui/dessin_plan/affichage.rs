@@ -480,10 +480,10 @@ impl ViewerApp {
         let edition = self.dessin2d.edition_contour.as_ref();
         let usage = self.usage_dessin();
         let outil = self.ruban_edition.outil();
+        let consigne_transfo = self.transfo.outil.map(|o| self.transfo.consigne(o));
         let modification = if self.orientation_nord_en_cours { Some("Viser un trait puis cliquer près de l'extrémité indiquant le nord · Échap : annuler") } else { match outil {
-            Some(Outil::Deplacer | Outil::Copier) => Some(if self.bim.depart_deplacement.is_some() { "Cliquer la destination · Maj : orthogonal · Échap ou clic droit : annuler" } else { "Cliquer le point de base, puis la destination" }),
-            Some(Outil::Tourner) => Some("Régler le centre et l'angle, puis appliquer la rotation."),
-            Some(Outil::Aligner) => Some("Choisir une référence, puis appliquer à l'axe."),
+            Some(Outil::Deplacer | Outil::Copier | Outil::Tourner | Outil::Aligner) if consigne_transfo.is_some() => consigne_transfo.as_deref(),
+            Some(Outil::Deplacer | Outil::Copier | Outil::Tourner) => Some("Sélectionner d'abord les éléments à transformer"),
             Some(Outil::Ajuster) if self.ruban_edition.prolonger_angle => Some(if self.ajustement.as_ref().is_some_and(|a|a.reference.is_some()) {"Cliquer près de la seconde extrémité · Les deux murs sont raccordés · Aperçu bleu"} else {"Prolonger en angle : cliquer près de la première extrémité à raccorder"}),
             Some(Outil::Ajuster) => Some(if self.ajustement.as_ref().is_some_and(|a|a.reference.is_some()) {"Cliquer près de l'extrémité du mur à ajuster · Aperçu bleu · Échap / clic droit : changer de limite"} else {"Cliquer le mur de référence (son axe devient la limite) · Échap / clic droit : terminer"}),
             _ => None,
