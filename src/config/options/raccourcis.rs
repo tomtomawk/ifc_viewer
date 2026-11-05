@@ -60,6 +60,8 @@ pub const COMMANDES: &[Commande] = &[
     commande!("ajuster", "Ajuster", "Modifier", "AJ"),
     commande!("creer_identique", "Créer à l'identique", "Modifier", "CS"),
     commande!("modifier_trace", "Modifier le tracé", "Modifier", "MT"),
+    commande!("verrouiller", "Verrouiller", "Modifier", "CD"),
+    commande!("deverrouiller", "Déverrouiller", "Modifier", "DC"),
     commande!("texte", "Texte", "Documenter", "TX"),
     commande!("cote", "Cote", "Documenter", "DI"),
     commande!("ligne", "Ligne", "Documenter", "LI"),

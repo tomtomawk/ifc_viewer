@@ -141,6 +141,7 @@ impl ViewerApp {
         p.push(("document_actif", self.document_actif_pilote().to_string()));
         p.push(("saisies_en_attente", (self.saisies_pilote.len()+usize::from(self.saisie_pilote_image)).to_string()));
         p.push(("selection_native", serde_json::to_string(&self.selection_bim()).unwrap()));
+        p.push(("cadenas", serde_json::to_string(&self.cadenas_ecran.iter().map(|(id, q)| serde_json::json!({"id": id, "ecran": [q.x, q.y]})).collect::<Vec<_>>()).unwrap()));
         p.push(("outil", self.ruban_edition.outil().map_or("null".into(), |o|texte(o.nom()))));
         p.push(("rectangle_vue", serde_json::to_string(&[self.rect_vue.min.x,self.rect_vue.min.y,self.rect_vue.width(),self.rect_vue.height()]).unwrap()));
         if let Some(c)=&self.collaboration { p.push(("collaboration",serde_json::json!({"etat":c.etat,"revision":c.copie.base.revision,"en_attente":c.copie.attente.len(),"conflits":c.copie.conflits,"comparaison_validation_ms":c.mesure_validation_ms,"geometrie_ms":c.mesure_geometrie_ms,"preparation_transfert_gpu_ms":c.mesure_gpu_ms,"synchronisation_ms":c.mesure_sync_ms,"fichiers":c.mesures_fichiers}).to_string())); }

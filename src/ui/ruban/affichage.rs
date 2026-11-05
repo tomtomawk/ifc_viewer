@@ -93,7 +93,7 @@ impl RubanEdition {
                                 let actif = self.selection.map(Outil::commande) == Some(outil);
                                 // éléments horizontaux : un bouton ; la sorte se choisit dans le
                                 // sélecteur de type de Propriétés
-                                let disponible = matches!(outil, Outil::Terrain|Outil::LimitePropriete|Outil::Mur|Outil::Surfaces|Outil::Poteau|Outil::Poutre|Outil::Escalier|Outil::GardeCorps|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Aligner|Outil::Ajuster|Outil::ModifierContour|Outil::CopierNiveau|Outil::Jonctions|Outil::CreerIdentique|Outil::Supprimer|Outil::Cadrer|Outil::Isoler|Outil::Masquer|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::Ligne|Outil::Polyligne|Outil::Spline|Outil::Cercle|Outil::Arc|Outil::Zone|Outil::Etiquette|Outil::Feuilles|Outil::Nomenclatures);
+                                let disponible = matches!(outil, Outil::Terrain|Outil::LimitePropriete|Outil::Mur|Outil::Surfaces|Outil::Poteau|Outil::Poutre|Outil::Escalier|Outil::GardeCorps|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Aligner|Outil::Ajuster|Outil::ModifierContour|Outil::CopierNiveau|Outil::Jonctions|Outil::CreerIdentique|Outil::Supprimer|Outil::Cadrer|Outil::Isoler|Outil::Masquer|Outil::Verrouiller|Outil::Deverrouiller|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::Ligne|Outil::Polyligne|Outil::Spline|Outil::Cercle|Outil::Arc|Outil::Zone|Outil::Etiquette|Outil::Feuilles|Outil::Nomenclatures);
                                 let mut bouton_ui=ui.new_child(egui::UiBuilder::new().max_rect(bouton));
                                 let raison = if !disponible {
                                     Some("Outil prévu, pas encore disponible")
@@ -111,7 +111,7 @@ impl RubanEdition {
                                 if outil == Outil::Jonctions { self.bouton_jonctions = Some(reponse.clone()); }
                                 if reponse.on_disabled_hover_text(raison.unwrap_or("")).clicked() {
                                     if outil == Outil::Jonctions { continue; }
-                                    if matches!(outil, Outil::ModifierContour | Outil::CopierNiveau | Outil::CreerIdentique | Outil::Supprimer | Outil::Cadrer | Outil::Isoler | Outil::Masquer | Outil::Feuilles | Outil::Nomenclatures) {
+                                    if matches!(outil, Outil::ModifierContour | Outil::CopierNiveau | Outil::CreerIdentique | Outil::Supprimer | Outil::Cadrer | Outil::Isoler | Outil::Masquer | Outil::Verrouiller | Outil::Deverrouiller | Outil::Feuilles | Outil::Nomenclatures) {
                                         action = Some(outil);
                                         continue;
                                     }

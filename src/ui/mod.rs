@@ -663,6 +663,8 @@ pub struct ViewerApp {
     deplacement_panneau: Option<(Panneau, egui::Vec2, egui::ViewportId)>,
     zone_panneaux: egui::Rect,
     largeurs_panneaux: [f32; 2],
+    /// Cadenas affichés à la dernière image : élément natif et position écran.
+    cadenas_ecran: Vec<(String, egui::Pos2)>,
 }
 
 impl ViewerApp {
@@ -811,6 +813,7 @@ impl ViewerApp {
             deplacement_panneau: None,
             zone_panneaux: egui::Rect::NOTHING,
             largeurs_panneaux: [300.0, 320.0],
+            cadenas_ecran: Vec::new(),
         };
         if let Some(p) = path {
             app.open(p, &cc.egui_ctx);

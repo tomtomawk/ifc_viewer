@@ -11,6 +11,7 @@ pub fn carte_objet(nom: &str) -> bool {
         nom,
         "implantations"
             | "contextes"
+            | "verrous"
             | "priorites_jonction"
             | "attaches_toitures"
             | "cartouches_feuilles"

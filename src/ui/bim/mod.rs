@@ -263,6 +263,85 @@ impl Default for EtatBim {
 impl ViewerApp {
     pub(super) fn cle_native(&self, id: Id) -> Option<String> {
         let p = &self.natif.as_ref()?.0;
+        elements_natifs(p)
+            .find(|(genre, cle)| scene::id_natif(genre, cle) == id)
+            .map(|(_, cle)| cle.clone())
+    }
+    /// Objets de la scène dont l'élément natif est verrouillé.
+    pub(super) fn objets_verrouilles(&self) -> Vec<Id> {
+        let Some((p, _)) = &self.natif else { return Vec::new() };
+        if p.verrous.is_empty() {
+            return Vec::new();
+        }
+        elements_natifs(p).filter(|(_, cle)| p.verrous.contains_key(*cle)).map(|(genre, cle)| scene::id_natif(genre, cle)).collect()
+    }
+    /// Verrouille ou déverrouille la sélection (ruban Modifier, CD / DC).
+    pub(super) fn verrouiller_selection(&mut self, verrou: bool) {
+        let ids = self.selection_bim();
+        if ids.is_empty() {
+            self.status = format!("{} : sélectionner d'abord un ou plusieurs éléments.", if verrou { "Verrouiller" } else { "Déverrouiller" });
+            return;
+        }
+        let n = ids.len();
+        match self.executer_bim(crate::modele::edition::commandes::Commande::Verrouiller { ids, verrou }) {
+            Ok(_) => self.status = format!("{n} élément(s) {} — Ctrl+Z pour annuler.", if verrou { "verrouillé(s)" } else { "déverrouillé(s)" }),
+            Err(e) => self.error = Some(e),
+        }
+    }
+    /// Cadenas sur les éléments verrouillés ; un clic sur un cadenas déverrouille l'élément.
+    /// Rend vrai si le clic a été consommé.
+    pub(super) fn dessiner_cadenas(&mut self, ui: &egui::Ui, rect: egui::Rect, clic: Option<egui::Pos2>) -> bool {
+        let objets = self.objets_verrouilles();
+        if clic.is_none() {
+            self.cadenas_ecran.clear();
+        }
+        if objets.is_empty() || self.scene.is_none() {
+            return false;
+        }
+        let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
+        let mut cible = None;
+        for id in objets {
+            let sous = self.objects_under(id);
+            let s = self.scene.as_ref().unwrap();
+            let (mut mn, mut mx) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+            for o in sous.iter().filter_map(|&i| s.objects.get(i as usize)) {
+                mn = mn.min(o.min);
+                mx = mx.max(o.max);
+            }
+            if mn.x > mx.x {
+                continue;
+            }
+            let c = vp * ((mn + mx) * 0.5).extend(1.0);
+            if c.w <= 0.0 {
+                continue;
+            }
+            let q = egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height());
+            if !rect.contains(q) {
+                continue;
+            }
+            let survol = ui.ctx().pointer_hover_pos().is_some_and(|h| h.distance(q) < 11.0);
+            icone_cadenas(ui.painter(), egui::Rect::from_center_size(q, egui::vec2(18.0, 18.0)), true, survol);
+            if clic.is_none() {
+                if let Some(cle) = self.cle_native(id) {
+                    self.cadenas_ecran.push((cle, q));
+                }
+            }
+            if clic.is_some_and(|h| h.distance(q) < 11.0) {
+                cible = self.cle_native(id);
+            }
+        }
+        if let Some(id) = cible {
+            match self.executer_bim(crate::modele::edition::commandes::Commande::Verrouiller { ids: vec![id], verrou: false }) {
+                Ok(_) => self.status = "Élément déverrouillé — Ctrl+Z pour annuler.".into(),
+                Err(e) => self.error = Some(e),
+            }
+            return true;
+        }
+        false
+    }
+}
+
+fn elements_natifs(p: &crate::modele::Projet) -> impl Iterator<Item = (&'static str, &String)> {
         p.murs
             .iter()
             .map(|x| ("mur", &x.id))
@@ -276,9 +355,8 @@ impl ViewerApp {
             .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
             .chain(p.importes.iter().map(|x| ("importe", &x.id)))
             .chain(p.niveaux.iter().map(|x| ("niveau", &x.id)))
-            .find(|(genre, cle)| scene::id_natif(genre, cle) == id)
-            .map(|(_, cle)| cle.clone())
-    }
+}
+impl ViewerApp {
     pub(super) fn executer_bim(
         &mut self,
         c: crate::modele::edition::commandes::Commande,

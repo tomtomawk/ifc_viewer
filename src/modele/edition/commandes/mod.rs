@@ -103,6 +103,11 @@ pub enum Commande {
     Supprimer {
         ids: Vec<String>,
     },
+    /// Verrouille (`verrou` vrai) ou déverrouille les éléments.
+    Verrouiller {
+        ids: Vec<String>,
+        verrou: bool,
+    },
     Contour {
         id: String,
         contours: Vec<Vec<[f64; 2]>>,
@@ -141,7 +146,9 @@ impl Projet {
     /// Copie de travail : une erreur ne laisse jamais de modification partielle.
     pub fn executer(&self, c: Commande) -> Result<(Projet, Vec<String>), String> {
         let mut p = self.clone();
+        let c = self.filtrer_verrouilles(c)?;
         let ids = p.executer_interne(c)?;
+        super::verrous::verifier(self, &p)?;
         p.detacher_couches_disjointes(self);
         p.recaler_menuiseries(self)?;
         p.verifier()?;
@@ -761,6 +768,20 @@ impl Projet {
                 self.implantations.extend(implantations);
                 self.transformer(&map.values().cloned().collect(), delta, [0.0; 2], 0.0)?;
                 Ok(ids.iter().map(|id| map[id].clone()).collect())
+            }
+            Commande::Verrouiller { ids, verrou } => {
+                let connus = self.identifiants();
+                for id in &ids {
+                    if !connus.contains(id) {
+                        return Err(format!("Élément introuvable : {id}"));
+                    }
+                    if verrou {
+                        self.verrous.insert(id.clone(), true);
+                    } else {
+                        self.verrous.remove(id);
+                    }
+                }
+                Ok(ids)
             }
             Commande::Supprimer { ids } => {
                 let set = self.dependances(&ids)?;

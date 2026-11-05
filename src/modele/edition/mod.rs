@@ -1,6 +1,7 @@
 //! Création paramétrique d'éléments natifs. Les coordonnées sont en millimètres.
 pub mod commandes;
 pub mod historique;
+pub mod verrous;
 pub(crate) mod validation;
 use crate::modele::*;
 

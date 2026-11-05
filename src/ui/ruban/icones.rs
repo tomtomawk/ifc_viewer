@@ -65,6 +65,8 @@ pub(super) fn bouton_outil(
         Outil::Cadrer => "Définir le contour de cadrage du plan ; F ajuste le zoom",
         Outil::Isoler => "Isoler la sélection (I) ; Échap dans la vue : tout réafficher",
         Outil::Masquer => "Masquer la sélection (H)",
+        Outil::Verrouiller => "Verrouiller la sélection (CD) : ni déplacée, ni modifiée, ni supprimée",
+        Outil::Deverrouiller => "Déverrouiller la sélection (DC) ; ou clic sur un cadenas dans la vue",
         Outil::Feuilles => "Feuilles : mise en page des vues, cartouche, export SVG/PDF",
         Outil::Nomenclatures => "Nomenclatures : quantités par catégorie et par type, export CSV",
         _ => outil.nom(),
@@ -550,6 +552,18 @@ pub(super) fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             p.add(egui::Shape::line(pts, t));
             p.circle_stroke(r.center(), r.width() * 0.1, t);
             seg((0.15, 0.85), (0.85, 0.15));
+        }
+        Verrouiller | Deverrouiller => {
+            let ferme = o == Verrouiller;
+            let corps = egui::Rect::from_min_max(pt(0.22, 0.48), pt(0.78, 0.9));
+            p.rect_stroke(corps, 2.0, t, egui::StrokeKind::Middle);
+            let d = if ferme { 0.0 } else { 0.2 };
+            let pts: Vec<egui::Pos2> = (0..=12).map(|k| { let a = std::f32::consts::PI * k as f32 / 12.0; pt(0.5 - 0.18 * a.cos() + d, 0.3 - 0.18 * a.sin()) }).collect();
+            let mut arc = vec![pt(0.32 + d, if ferme { 0.48 } else { 0.4 })];
+            arc.extend(pts);
+            arc.push(pt(0.68 + d, if ferme { 0.48 } else { 0.4 }));
+            p.add(egui::Shape::line(arc, t));
+            p.circle_filled(pt(0.5, 0.66), r.width() * 0.05, t.color);
         }
         Legende => {
             for y in [0.2, 0.5, 0.8] {

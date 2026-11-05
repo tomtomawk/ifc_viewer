@@ -259,3 +259,25 @@ pub(super) fn apercu_motif(p: &egui::Painter, r: egui::Rect, d: &crate::modele::
         p.line_segment([q(a), q(b)], egui::Stroke::new(1.0, Color32::from_gray(40)));
     }
 }
+
+/// Cadenas fermé (verrouillé) ou ouvert, dans `r` ; `survol` : surligné (clic = déverrouiller).
+pub(super) fn icone_cadenas(p: &egui::Painter, r: egui::Rect, ferme: bool, survol: bool) {
+    let fond = if survol { Color32::from_rgb(255, 220, 120) } else { Color32::from_rgba_unmultiplied(255, 255, 255, 220) };
+    let c = Color32::from_rgb(60, 60, 70);
+    let t = egui::Stroke::new(1.6, c);
+    let w = r.width();
+    let corps = egui::Rect::from_min_max(egui::pos2(r.left() + w * 0.18, r.top() + w * 0.45), egui::pos2(r.right() - w * 0.18, r.bottom() - w * 0.05));
+    p.circle_filled(r.center(), w * 0.62, fond);
+    p.rect_filled(corps, 2.0, c);
+    let (cx, haut) = (r.center().x, r.top() + w * 0.1);
+    let rayon = w * 0.22;
+    let decalage = if ferme { 0.0 } else { w * 0.22 };
+    let pts: Vec<egui::Pos2> = (0..=12).map(|k| {
+        let a = std::f32::consts::PI * k as f32 / 12.0;
+        egui::pos2(cx - rayon * a.cos() + decalage, haut + rayon - rayon * a.sin())
+    }).collect();
+    let mut arc = vec![egui::pos2(cx - rayon + decalage, corps.top())];
+    arc.extend(pts);
+    arc.push(egui::pos2(cx + rayon + decalage, if ferme { corps.top() } else { haut + rayon * 1.6 }));
+    p.add(egui::Shape::line(arc, t));
+}

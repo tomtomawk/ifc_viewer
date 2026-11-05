@@ -881,6 +881,7 @@ fn relations_de_tous_les_objets_sont_independantes_par_identite() {
     for nom in [
         "implantations",
         "contextes",
+        "verrous",
         "priorites_jonction",
         "attaches_toitures",
         "cartouches_feuilles",

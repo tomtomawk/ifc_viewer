@@ -573,6 +573,7 @@ impl ViewerApp {
         }
         let chemin = self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.1.clone();
         if !distant {
+            crate::modele::edition::verrous::verifier(&self.natif.as_ref().unwrap().0, &projet)?;
             let avant=&self.natif.as_ref().unwrap().0;
             let detachees=projet.detacher_couches_disjointes(avant);
             if !detachees.is_empty() {self.status=format!("{} couche(s) détachée(s) du mur composé : plus alignée(s) ou plus en contact.",detachees.len());}

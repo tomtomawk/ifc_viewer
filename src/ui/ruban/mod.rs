@@ -52,6 +52,8 @@ pub(crate) enum Outil {
     Cadrer,
     Isoler,
     Masquer,
+    Verrouiller,
+    Deverrouiller,
     Cote,
     Altimetrie,
     Texte,
@@ -102,6 +104,8 @@ impl Outil {
             Self::Cadrer => "Cadre",
             Self::Isoler => "Isoler",
             Self::Masquer => "Masquer",
+            Self::Verrouiller => "Verrouiller",
+            Self::Deverrouiller => "Déverrouiller",
             Self::Cote => "Cote",
             Self::Altimetrie => "Altimétrie",
             Self::Texte => "Texte",
@@ -276,6 +280,7 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
             ("Transformer", &[Deplacer, Copier, Tourner]),
             ("Ajuster", &[Aligner, Ajuster]),
             ("Édition", &[CreerIdentique, Supprimer]),
+            ("Verrou", &[Verrouiller, Deverrouiller]),
             ("Visibilité", &[Cadrer, Isoler, Masquer]),
             // Modifier : contours, polylignes, terrains ; commandes propres à la sélection
             ("Éléments", &[ModifierContour, CopierNiveau, Jonctions]),
@@ -450,7 +455,7 @@ fn champs(o: Outil) -> Vec<Champ> {
     use Champ::*;
     use Outil::*;
     match o {
-        Surfaces | Niveau | Terrain | LimitePropriete | ModifierContour | CopierNiveau | Jonctions | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | Feuilles | Nomenclatures => vec![],
+        Surfaces | Niveau | Terrain | LimitePropriete | ModifierContour | CopierNiveau | Jonctions | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | Verrouiller | Deverrouiller | Feuilles | Nomenclatures => vec![],
         Quadrillage => vec![Saisie("Repère", "A"), Choix("Tracé", &["Droit", "Arc"])],
         Mur => vec![
             Choix(

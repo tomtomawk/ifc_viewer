@@ -85,6 +85,9 @@ pub struct Projet {
     /// Contexte des éléments dont le format ne porte pas ces propriétés directement.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub contextes: BTreeMap<String, ContexteElement>,
+    /// Éléments verrouillés (identifiant → vrai) : ni déplacés, ni modifiés, ni supprimés.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub verrous: BTreeMap<String, bool>,
     /// Vues du projet (arborescence) : plans d'étage et coupes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub vues: Vec<Vue>,

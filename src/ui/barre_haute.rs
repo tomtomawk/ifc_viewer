@@ -206,6 +206,7 @@ impl ViewerApp {
                 Some(crate::ui::ruban::Outil::Supprimer) => self.demander_suppression(),
                 Some(crate::ui::ruban::Outil::Cadrer) => self.demarrer_cadrage_vue(),
                 Some(o @ (crate::ui::ruban::Outil::Isoler | crate::ui::ruban::Outil::Masquer)) => self.visibilite_selection(o),
+                Some(o @ (crate::ui::ruban::Outil::Verrouiller | crate::ui::ruban::Outil::Deverrouiller)) => self.verrouiller_selection(o == crate::ui::ruban::Outil::Verrouiller),
                 Some(crate::ui::ruban::Outil::Feuilles) => self.commande_feuilles(),
                 Some(crate::ui::ruban::Outil::Nomenclatures) => {
                     if self.natif.is_some() {

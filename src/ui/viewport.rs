@@ -272,6 +272,8 @@ impl ViewerApp {
                         None => self.coupe_depart = Some(p),
                     }
                 }
+            } else if resp.clicked() && self.dessiner_cadenas(ui, rect, resp.interact_pointer_pos()) {
+                // clic sur un cadenas : élément déverrouillé
             } else if let Some(id) = resp.double_clicked().then(|| resp.interact_pointer_pos()).flatten()
                 .and_then(|q| self.repere_coupe_proche(rect, q, altitude_coupe))
                 .filter(|id| self.natif.as_ref().is_some_and(|(p, _)| p.vues.iter().any(|v| &v.id == id)))
@@ -403,6 +405,7 @@ impl ViewerApp {
                 }
             }
         }
+        self.dessiner_cadenas(ui, rect, None);
         if deplacement.is_some() {
             self.apercu_deplacement(ui, rect, resp.hover_pos(), altitude_coupe);
         }
