@@ -236,8 +236,11 @@ impl EditeurFamille {
         self.historique.geste(geste);
         let etat = self.etat();
         if etat != self.instantane {
-            let _ = self.historique.pousser(&self.instantane, &etat);
-            self.instantane = etat;
+            match self.historique.pousser(&self.instantane, &etat) {
+                Ok(_) => self.instantane = etat,
+                // L'instantané reste l'état précédent : l'étape sera reprise au prochain essai.
+                Err(e) => self.message = Some(format!("Historique : {e}")),
+            }
         }
     }
 

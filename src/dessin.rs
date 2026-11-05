@@ -347,8 +347,46 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
 }
 
 /// Ligne d'isolant en série de S (symbole traditionnel) d'une région de coupe (triangles
-/// 2D) : le long de sa plus grande dimension, de face à face, segments gardés dans la région.
+/// 2D) : chaque morceau connexe est traité seul, le motif suit sa plus longue face.
 pub fn ligne_isolation(tris: &[[[f64; 2]; 3]]) -> Vec<[[f64; 2]; 2]> {
+    composantes(tris).iter().flat_map(|c| ligne_isolation_morceau(c)).collect()
+}
+
+/// Regroupe les triangles qui partagent une arête (morceaux disjoints d'une même couche).
+fn composantes(tris: &[[[f64; 2]; 3]]) -> Vec<Vec<[[f64; 2]; 3]>> {
+    let cle = |p: [f64; 2]| ((p[0] * 100.0).round() as i64, (p[1] * 100.0).round() as i64);
+    let mut parent: Vec<usize> = (0..tris.len()).collect();
+    fn racine(p: &mut [usize], mut i: usize) -> usize {
+        while p[i] != i {
+            p[i] = p[p[i]];
+            i = p[i];
+        }
+        i
+    }
+    let mut vues: std::collections::HashMap<((i64, i64), (i64, i64)), usize> = std::collections::HashMap::new();
+    for (i, t) in tris.iter().enumerate() {
+        for k in 0..3 {
+            let (ka, kb) = (cle(t[k]), cle(t[(k + 1) % 3]));
+            let k = if ka <= kb { (ka, kb) } else { (kb, ka) };
+            if let Some(&j) = vues.get(&k) {
+                let (ri, rj) = (racine(&mut parent, i), racine(&mut parent, j));
+                parent[ri] = rj;
+            } else {
+                vues.insert(k, i);
+            }
+        }
+    }
+    let mut groupes: std::collections::BTreeMap<usize, Vec<[[f64; 2]; 3]>> = Default::default();
+    for (i, t) in tris.iter().enumerate() {
+        groupes.entry(racine(&mut parent, i)).or_default().push(*t);
+    }
+    groupes.into_values().collect()
+}
+
+/// Nombre maximal de boucles par morceau : borne le coût d'une couche très mince et longue.
+const BOUCLES_ISOLANT_MAX: f64 = 2000.0;
+
+fn ligne_isolation_morceau(tris: &[[[f64; 2]; 3]]) -> Vec<[[f64; 2]; 2]> {
     use glam::DVec2;
     let pts: Vec<DVec2> = tris.iter().flatten().map(|p| DVec2::from_array(*p)).collect();
     if pts.len() < 3 {
@@ -369,20 +407,35 @@ pub fn ligne_isolation(tris: &[[[f64; 2]; 3]]) -> Vec<[[f64; 2]; 2]> {
             aretes.entry(k).or_insert((0, a, b)).0 += 1;
         }
     }
-    let Some(u) = aretes.values().filter(|(n, _, _)| *n == 1).max_by(|x, y| x.1.distance(x.2).total_cmp(&y.1.distance(y.2))).and_then(|(_, a, b)| (*b - *a).try_normalize()) else {
+    let contour: Vec<(DVec2, DVec2)> = aretes.values().filter(|(n, _, _)| *n == 1).map(|(_, a, b)| (*a, *b)).collect();
+    let Some(&(fa, fb)) = contour.iter().max_by(|x, y| x.0.distance(x.1).total_cmp(&y.0.distance(y.1))) else {
+        return Vec::new();
+    };
+    let Some(u) = (fb - fa).try_normalize() else {
         return Vec::new();
     };
     let v = u.perp();
-    let (mut u0, mut u1, mut v0, mut v1) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
+    // Épaisseur de la couche (pas de l'enveloppe) : une bande d'aire A et de périmètre P
+    // vérifie e² − (P/2)·e + A = 0, y compris pour un retour en L en tableau.
+    let aire: f64 = tris.iter().map(|t| {
+        let [a, b, c] = t.map(DVec2::from_array);
+        0.5 * (b - a).perp_dot(c - a).abs()
+    }).sum();
+    let perimetre: f64 = contour.iter().map(|(a, b)| a.distance(*b)).sum();
+    let delta = perimetre * perimetre / 4.0 - 4.0 * aire;
+    let e = if delta >= 0.0 { 0.5 * (perimetre / 2.0 - delta.sqrt()) } else { perimetre / 4.0 };
+    // Faces : la plus longue arête, et sa parallèle à e vers l'intérieur.
+    let face = (fa - c).dot(v);
+    let (v0, v1) = if face <= 0.0 { (face, face + e) } else { (face - e, face) };
+    let (mut u0, mut u1) = (f64::MAX, f64::MIN);
     for p in &pts {
         let d = *p - c;
-        u0 = u0.min(d.dot(u));
-        u1 = u1.max(d.dot(u));
-        v0 = v0.min(d.dot(v));
-        v1 = v1.max(d.dot(v));
+        if (d.dot(v) - v0) > -1e-6 && (d.dot(v) - v1) < 1e-6 {
+            u0 = u0.min(d.dot(u));
+            u1 = u1.max(d.dot(u));
+        }
     }
-    let e = v1 - v0;
-    if !(e > 1e-6) || u1 - u0 < e {
+    if !(e > 1e-6) || !(u1 - u0 >= e) || (u1 - u0) / (0.25 * e) > BOUCLES_ISOLANT_MAX {
         return Vec::new();
     }
     // Série de S (isolant souple, motif traditionnel) : cercles de rayon e/4 posés
@@ -390,7 +443,14 @@ pub fn ligne_isolation(tris: &[[[f64; 2]; 3]]) -> Vec<[[f64; 2]; 2]> {
     // reliés par leurs tangentes intérieures ; les boucles se recoupent en gouttes.
     let r = 0.25 * e;
     let pas = 0.25 * e;
-    let dedans = |p: DVec2| tris.iter().any(|t| {
+    let boites: Vec<(DVec2, DVec2)> = tris.iter().map(|t| {
+        let [a, b, c] = t.map(DVec2::from_array);
+        (a.min(b).min(c) - DVec2::splat(1e-9), a.max(b).max(c) + DVec2::splat(1e-9))
+    }).collect();
+    let dedans = |p: DVec2| tris.iter().zip(&boites).any(|(t, (mn, mx))| {
+        if p.x < mn.x || p.y < mn.y || p.x > mx.x || p.y > mx.y {
+            return false;
+        }
         let [a, b, c] = t.map(DVec2::from_array);
         let s = |x: DVec2, y: DVec2| (y - x).perp_dot(p - x);
         let (s1, s2, s3) = (s(a, b), s(b, c), s(c, a));
@@ -906,6 +966,51 @@ pub(crate) fn chainer(segs: &[[[f64; 2]; 2]]) -> (Vec<Polyligne>, Vec<Polyligne>
 
 #[cfg(test)]
 mod tests {
+
+    fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Vec<[[f64; 2]; 3]> {
+        vec![[[x0, y0], [x1, y0], [x1, y1]], [[x0, y0], [x1, y1], [x0, y1]]]
+    }
+
+    #[test]
+    fn isolant_rectangle_motif_dans_la_couche_et_le_long_de_l_axe() {
+        let t = rect(0.0, 0.0, 6000.0, 100.0);
+        let s = super::ligne_isolation(&t);
+        assert!(!s.is_empty());
+        for [a, b] in &s {
+            for p in [a, b] {
+                assert!(p[1] > -1e-6 && p[1] < 100.0 + 1e-6, "hors couche {p:?}");
+            }
+        }
+        let (xmin, xmax) = s.iter().flatten().fold((f64::MAX, f64::MIN), |(m, n), p| (m.min(p[0]), n.max(p[0])));
+        assert!(xmin < 100.0 && xmax > 5900.0, "motif incomplet {xmin} {xmax}");
+    }
+
+    #[test]
+    fn isolant_en_l_garde_l_epaisseur_de_la_couche() {
+        // couche de 100 retournée en tableau sur 400 : le motif reste à l'échelle de 100.
+        let l: Vec<[f32; 2]> = vec![[0.0, 0.0], [3000.0, 0.0], [3000.0, 100.0], [100.0, 100.0], [100.0, 500.0], [0.0, 500.0]];
+        let t: Vec<[[f64; 2]; 3]> = crate::texte::trianguler(vec![l]).iter().map(|t| t.map(|p| [p[0] as f64, p[1] as f64])).collect();
+        assert_eq!(super::composantes(&t).len(), 1);
+        let s = super::ligne_isolation(&t);
+        assert!(!s.is_empty());
+        let ymax = s.iter().flatten().map(|p| p[1]).fold(f64::MIN, f64::max);
+        assert!(ymax <= 100.0 + 1e-6, "motif dans le retour : {ymax}");
+    }
+
+    #[test]
+    fn isolant_morceaux_disjoints_traites_separement() {
+        let mut t = rect(0.0, 0.0, 2000.0, 100.0);
+        t.extend(rect(3000.0, 0.0, 5000.0, 100.0));
+        let s = super::ligne_isolation(&t);
+        assert!(s.iter().any(|[a, _]| a[0] < 2000.0) && s.iter().any(|[a, _]| a[0] > 3000.0));
+        assert!(s.iter().all(|[a, b]| !(a[0] > 2000.0 + 1e-6 && a[0] < 3000.0 - 1e-6) || !(b[0] > 2000.0 && b[0] < 3000.0)));
+    }
+
+    #[test]
+    fn isolant_tres_mince_et_long_n_explose_pas() {
+        let s = super::ligne_isolation(&rect(0.0, 0.0, 30000.0, 1.0));
+        assert!(s.is_empty());
+    }
     use super::*;
 
     /// Deux pavés du même matériau bout à bout : la jonction ne trace aucune arête ; en

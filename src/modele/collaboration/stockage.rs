@@ -198,18 +198,25 @@ impl Depot {
             .open(&tmp)
             .map_err(|e| e.to_string())?;
         frontiere("temporaire-cree");
-        f.write_all(bytes).map_err(|e| e.to_string())?;
-        ecrit(bytes.len());
-        frontiere("temporaire-ecrit");
-        f.sync_all().map_err(|e| e.to_string())?;
-        frontiere("temporaire-durable");
-        drop(f);
-        if std::fs::metadata(&tmp).map_err(|e| e.to_string())?.len() != bytes.len() as u64
-            || empreinte(&std::fs::read(&tmp).map_err(|e| e.to_string())?) != id
-        {
-            return Err("Dépôt incomplet".into());
+        let ecrire = || -> Resultat<()> {
+            f.write_all(bytes).map_err(|e| e.to_string())?;
+            ecrit(bytes.len());
+            frontiere("temporaire-ecrit");
+            f.sync_all().map_err(|e| e.to_string())?;
+            frontiere("temporaire-durable");
+            drop(f);
+            if std::fs::metadata(&tmp).map_err(|e| e.to_string())?.len() != bytes.len() as u64
+                || empreinte(&std::fs::read(&tmp).map_err(|e| e.to_string())?) != id
+            {
+                return Err("Dépôt incomplet".into());
+            }
+            std::fs::rename(&tmp, &dest).map_err(|e| e.to_string())
+        };
+        if let Err(e) = ecrire() {
+            // Un échec ne laisse pas de temporaire orphelin sur le NAS.
+            let _ = std::fs::remove_file(&tmp);
+            return Err(e);
         }
-        std::fs::rename(&tmp, &dest).map_err(|e| e.to_string())?;
         MESURES.with(|m| m.borrow_mut().publications += 1);
         frontiere("ressource-publiee");
         self.lire(categorie, &id)?;
@@ -292,6 +299,17 @@ impl Depot {
     }
     pub fn proteger_existant(&self) -> Resultat<Autorite> {
         self.proteger_interne(false)
+    }
+    /// Réessaie la prise de l'autorité pendant `delai` (verrou tenu par un autre poste).
+    pub fn proteger_attente(&self, creer: bool, delai: std::time::Duration) -> Resultat<Autorite> {
+        let limite = std::time::Instant::now() + delai;
+        loop {
+            match self.proteger_interne(creer) {
+                Ok(a) => return Ok(a),
+                Err(e) if std::time::Instant::now() >= limite => return Err(e),
+                Err(_) => std::thread::sleep(std::time::Duration::from_millis(20)),
+            }
+        }
     }
     fn proteger_interne(&self, creer: bool) -> Resultat<Autorite> {
         let mut opts = OpenOptions::new();

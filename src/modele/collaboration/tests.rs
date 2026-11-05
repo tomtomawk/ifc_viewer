@@ -1303,3 +1303,52 @@ fn journal_protocole_un_reste_lisible_et_nouvelles_acceptations_passent_en_trois
     drop(a);
     assert_eq!(d.proteger().unwrap().lire().unwrap().unwrap().protocole, 3);
 }
+
+#[test]
+fn depot_central_disparu_n_est_pas_recree_en_silence() {
+    let p = exemple();
+    let central = dossier();
+    let local = dossier();
+    let mut a = session::Session::ouvrir(&p, local.join("a.json"), central.clone()).unwrap();
+    a.synchroniser(None, false).unwrap();
+    attendre(&mut a);
+    assert!(a.copie.central_connu);
+    std::fs::remove_dir_all(&central).unwrap();
+    a.synchroniser(None, false).unwrap();
+    while a.synchronisation_en_cours() {
+        a.recevoir().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(a.etat.starts_with("Hors connexion"), "{}", a.etat);
+    assert!(!central.exists(), "dépôt recréé");
+}
+
+#[test]
+fn abandon_refuse_pendant_synchro_et_retire_de_l_annulation() {
+    let p = exemple();
+    let central = dossier();
+    let local = dossier();
+    let mut a = session::Session::ouvrir(&p, local.join("a.json"), central.clone()).unwrap();
+    let mut b = session::Session::ouvrir(&p, local.join("b.json"), central).unwrap();
+    a.synchroniser(None, false).unwrap();
+    attendre(&mut a);
+    b.synchroniser(None, false).unwrap();
+    attendre(&mut b);
+    let mut pa = p.clone();
+    pa.vues[0].nom = "A".into();
+    a.editer(&p, &pa).unwrap();
+    let mut pb = p.clone();
+    pb.vues[0].nom = "B".into();
+    b.editer(&p, &pb).unwrap();
+    b.synchroniser(None, false).unwrap();
+    attendre(&mut b);
+    a.synchroniser(None, false).unwrap();
+    let id = a.copie.attente[0].id.clone();
+    assert!(a.abandonner(&id).is_err(), "abandon accepté pendant la synchro");
+    assert!(a.resoudre_locale(&id).is_err(), "résolution acceptée pendant la synchro");
+    attendre(&mut a);
+    assert!(a.copie.conflits.contains_key(&id));
+    let r = a.abandonner(&id).unwrap();
+    assert_eq!(r.vues[0].nom, "B");
+    assert!(a.copie.annulations.iter().all(|t| t.id != id));
+}

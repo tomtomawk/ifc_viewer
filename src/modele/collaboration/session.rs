@@ -16,6 +16,10 @@ pub struct Copie {
     pub base: Etat,
     pub attente: Vec<Transaction>,
     pub conflits: BTreeMap<String, Vec<Conflit>>,
+    /// Vrai dès qu'une synchronisation a trouvé ou créé le dépôt central :
+    /// un dépôt disparu n'est alors jamais recréé en silence.
+    #[serde(default)]
+    pub central_connu: bool,
     /// Dernier document local valide, affiché sans le publier pendant un conflit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub apercu_conflit: Option<Projet>,
@@ -122,6 +126,7 @@ impl Session {
                 base: Etat::initial(&p)?,
                 attente: Vec::new(),
                 conflits: BTreeMap::new(),
+                central_connu: false,
                 apercu_conflit: None,
                 annulations: Vec::new(),
                 retablissements: Vec::new(),
@@ -282,14 +287,10 @@ impl Session {
                 stockage::reinitialiser_mesures();
                 let debut = std::time::Instant::now();
                 let resultat = (|| {
-                    let existant=copie.partage.is_some()||!publier_attente;
+                    let existant=copie.partage.is_some()||copie.central_connu||!publier_attente;
                     let depot = Depot::nouveau(copie.central);
                     if !existant {depot.preparer()?;}
-                    let limite=std::time::Instant::now()+std::time::Duration::from_secs(2);
-                    let mut a=loop{match if existant{depot.proteger_existant()}else{depot.proteger()}{Ok(a)=>break a,Err(e)=>{
-                        if std::time::Instant::now()>=limite{return Err(e);}
-                        std::thread::sleep(std::time::Duration::from_millis(20));
-                    }}};
+                    let mut a=depot.proteger_attente(!existant,std::time::Duration::from_secs(2))?;
                     let mut etat = if !existant {a.initialiser_etat(&copie.base)?}else{a.lire()?.ok_or("Dépôt partagé sans état initial")?};
                     if etat.projet!=copie.base.projet || etat.revision<copie.base.revision{return Err("Identité du dépôt incorrecte ou révision centrale antérieure à la copie locale".into());}
                     if let Some((cles, reprise, liberer)) = reservation {
@@ -406,6 +407,11 @@ impl Session {
                 self.copie.base = base;
                 self.copie.attente = attente;
                 self.copie.conflits = conflits;
+                self.copie.central_connu = true;
+                // Les préparations des transactions acceptées ne servent plus.
+                for id in self.copie.base.acceptes.keys() {
+                    let _ = std::fs::remove_file(self.chemin.with_extension(format!("prepare-{id}.json")));
+                }
                 self.mesure_sync_ms = ms;
                 self.mesures_fichiers = mesures;
                 // Réapplication séquentielle ; un refus conserve la proposition entière.
@@ -453,18 +459,26 @@ impl Session {
         }
     }
     pub fn abandonner(&mut self, id: &str) -> Resultat<Projet> {
+        if self.messages.is_some() {
+            return Err("Synchronisation en cours : attendre sa fin avant d'abandonner".into());
+        }
         // Abandon explicite, archivé dans le fichier local de récupération.
         let archive = self
             .chemin
             .with_extension(format!("conflit-{}.json", uuid()));
         stockage::sauver_local(&archive, &encoder(&self.copie)?)?;
         self.copie.attente.retain(|t| t.id != id);
+        self.copie.annulations.retain(|t| t.id != id);
+        self.copie.retablissements.retain(|t| t.id != id);
         self.copie.conflits.remove(id);
         self.copie.apercu_conflit = None;
         self.persister()?;
         self.travail()
     }
     pub fn resoudre_locale(&mut self, id: &str) -> Resultat<Projet> {
+        if self.messages.is_some() {
+            return Err("Synchronisation en cours : attendre sa fin avant de résoudre".into());
+        }
         let proposition = self
             .copie
             .attente
@@ -492,6 +506,7 @@ impl Session {
         stockage::sauver_local(&archive, &encoder(&self.copie)?)?;
         let sauvegarde = self.copie.clone();
         self.copie.attente.retain(|t| t.id != id);
+        self.copie.annulations.retain(|t| t.id != id);
         self.copie.conflits.remove(id);
         self.copie.apercu_conflit = None;
         self.copie.attente.push(resolution.clone());

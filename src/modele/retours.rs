@@ -62,16 +62,23 @@ pub fn hote_elargi(p: &Projet, o: &Ouverture) -> Result<HoteElargi, String> {
         let y = (c - a).dot(n);
         Some((y - ep / 2.0, y + ep / 2.0))
     };
+    // Une couche non parallèle (désaxée, courbe) est ignorée seule ; les autres restent empilées.
     let mut membres: Vec<Membre> = couches.iter().filter_map(|m| faces(m).map(|(y0, y1)| Membre { id: m.id.clone(), y0, y1 })).collect();
-    if membres.len() != couches.len() {
+    if membres.is_empty() {
         return Ok(HoteElargi { axe, epaisseur: e, niveau, membres: couches.iter().map(|m| Membre { id: m.id.clone(), y0: -e / 2.0, y1: e / 2.0 }).collect() });
     }
+    let Some(hote) = p.murs.iter().find(|m| m.id == o.mur).or(couches.first().copied()) else {
+        return Ok(HoteElargi { axe, epaisseur: e, niveau, membres });
+    };
     // voisins jointifs, de proche en proche
     loop {
         let (lo, hi) = membres.iter().fold((f64::MAX, f64::MIN), |(lo, hi), m| (lo.min(m.y0), hi.max(m.y1)));
         let mut ajout = false;
         for m in &p.murs {
             if membres.iter().any(|x| x.id == m.id) {
+                continue;
+            }
+            if m.phase != hote.phase || m.variante != hote.variante || m.sous_projet != hote.sous_projet {
                 continue;
             }
             let Some((y0, y1)) = faces(m) else { continue };

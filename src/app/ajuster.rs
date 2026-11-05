@@ -72,7 +72,10 @@ fn preparer(
         point,
         z,
         contours,
-        angle: angle.map(|fin| {let (a,b,z)=q.axe_element(reference).unwrap();(fin,a,b,z)}),
+        angle: match angle {
+            Some(fin) => {let (a,b,z)=q.axe_element(reference).ok_or("Référence introuvable après l'ajustement.")?;Some((fin,a,b,z))}
+            None => None,
+        },
     })
 }
 
@@ -244,7 +247,7 @@ impl ViewerApp {
             return;
         }
         let commande = match &etat.apercu {
-            Some(Ok(a)) => Some(commande_ajuster(&a.id,etat.reference.as_deref().unwrap(),a.fin,a.angle.map(|a|a.0))),
+            Some(Ok(a)) => etat.reference.as_deref().map(|r| commande_ajuster(&a.id,r,a.fin,a.angle.map(|a|a.0))),
             Some(Err(e)) => {
                 self.status = e.clone();
                 None

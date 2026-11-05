@@ -253,6 +253,7 @@ impl ViewerApp {
         let mut abandon = None;
         let mut locale = None;
         let c = self.collaboration.as_ref().unwrap();
+        let libre = !c.synchronisation_en_cours();
         if !c.copie.conflits.is_empty() {
             egui::Window::new("Conflits collaboratifs — propositions conservées").show(ctx, |ui| {
                 if c.copie.apercu_conflit.is_some() {
@@ -286,13 +287,13 @@ impl ViewerApp {
                             }
                         });
                         if ui
-                            .button("Conserver l'état accepté et archiver cette proposition")
+                            .add_enabled(libre, egui::Button::new("Conserver l'état accepté et archiver cette proposition"))
                             .clicked()
                         {
                             abandon = Some(id.clone());
                         }
                         if ui
-                            .button("Choisir la proposition locale : nouvelle transaction validée")
+                            .add_enabled(libre, egui::Button::new("Choisir la proposition locale : nouvelle transaction validée"))
                             .clicked()
                         {
                             locale = Some(id.clone());

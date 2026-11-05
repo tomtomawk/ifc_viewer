@@ -186,18 +186,7 @@ fn lire(entree: &Path, cache: &Path) -> Resultat<Partage> {
 }
 fn etat_central(partage: &Partage, entree: &Path) -> Resultat<Etat> {
     let d = Depot::nouveau(partage.depot(entree)?);
-    let fin = std::time::Instant::now() + std::time::Duration::from_secs(2);
-    let mut a = loop {
-        match d.proteger_existant() {
-            Ok(a) => break a,
-            Err(e) => {
-                if std::time::Instant::now() >= fin {
-                    return Err(e);
-                }
-                std::thread::sleep(std::time::Duration::from_millis(20));
-            }
-        }
-    };
+    let mut a = d.proteger_attente(false, std::time::Duration::from_secs(2))?;
     let e = a.lire()?.ok_or("Dépôt partagé sans état initial")?;
     if e.projet != partage.projet {
         return Err("Le fichier partagé et son dossier ne désignent pas le même projet".into());
@@ -206,7 +195,14 @@ fn etat_central(partage: &Partage, entree: &Path) -> Resultat<Etat> {
 }
 fn actualiser(s: &mut Session) -> Resultat<Projet> {
     s.reception_seule()?;
+    // Un NAS qui ne répond plus ne bloque pas l'ouverture : la copie locale
+    // s'affiche et la réponse sera reçue plus tard par l'interface.
+    let limite = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
+        if std::time::Instant::now() >= limite {
+            s.etat = "Hors connexion : dépôt central sans réponse".into();
+            return s.affichage();
+        }
         if s.recevoir()?.is_some() {
             return s.affichage();
         }
@@ -237,7 +233,16 @@ pub fn ouvrir(entree: &Path, cache: &Path) -> Resultat<(Projet, PathBuf, Session
         if !local.exists() {
             continue;
         }
-        let p = Projet::lire_json(&std::fs::read_to_string(&local).map_err(|e| e.to_string())?)?;
+        let p = match std::fs::read_to_string(&local)
+            .map_err(|e| e.to_string())
+            .and_then(|t| Projet::lire_json(&t))
+        {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("Copie locale ignorée ({}) : {e}", local.display());
+                continue;
+            }
+        };
         match Session::ouvrir(&p, local.clone(), central.clone()) {
             Ok(mut s) => {
                 s.copie.partage = Some(entree.clone());
@@ -246,7 +251,10 @@ pub fn ouvrir(entree: &Path, cache: &Path) -> Resultat<(Projet, PathBuf, Session
                 return Ok((p, local, s));
             }
             Err(e) if e.starts_with("Copie locale déjà ouverte") => continue,
-            Err(e) => return Err(e),
+            Err(e) => {
+                eprintln!("Copie locale ignorée ({}) : {e}", local.display());
+                continue;
+            }
         }
     }
     let e = etat_central(&partage, &entree)?;

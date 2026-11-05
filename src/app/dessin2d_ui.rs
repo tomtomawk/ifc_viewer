@@ -242,6 +242,9 @@ impl ViewerApp {
 
     fn ajouter_point_raccord(&mut self, p: DVec2) -> bool {
         let Some((c, premier)) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.raccord) else { return false };
+        if self.dessin2d.trace.is_none() {
+            return false;
+        }
         let autre = self.dessin2d.dalle.iter().enumerate().filter(|(i, _)| *i != c && !self.dessin2d.edition_contour.as_ref().unwrap().fermee(*i)).find_map(|(i, t)| {
             if DVec2::from_array(t[0]).distance(p) < 1e-6 { Some((i, true)) }
             else if DVec2::from_array(*t.last().unwrap()).distance(p) < 1e-6 { Some((i, false)) }

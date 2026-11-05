@@ -246,7 +246,7 @@ pub fn jonctions(p: &Projet) -> (Coupes, Interruptions) {
     for i in 0..ls.len() {
         for j in i + 1..ls.len() {
             let (a, b) = (&ls[i], &ls[j]);
-            let (da, db) = ((a.b - a.a).normalize(), (b.b - b.a).normalize());
+            let (Some(da), Some(db)) = ((a.b - a.a).try_normalize(), (b.b - b.a).try_normalize()) else { continue };
             if a.haut.min(b.haut)-a.bas.max(b.bas)<=1.0 {continue;}
             if da.perp_dot(db).abs() >= 1e-9 || (b.a - a.a).perp_dot(da).abs() > CONTACT {
                 continue;
@@ -268,7 +268,8 @@ pub fn jonctions(p: &Projet) -> (Coupes, Interruptions) {
             if a.haut.min(b.haut) - a.bas.max(b.bas) <= 1.0 {
                 continue;
             }
-            let (da, db) = ((a.b - a.a).normalize(), (b.b - b.a).normalize());
+            // mur de longueur nulle : aucune direction, aucune jonction
+            let (Some(da), Some(db)) = ((a.b - a.a).try_normalize(), (b.b - b.a).try_normalize()) else { continue };
             if da.perp_dot(db).abs() < 1e-9 {
                 continue;
             }
