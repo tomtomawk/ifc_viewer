@@ -482,7 +482,68 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
             ));
         }
     }
+    if matches!(v.genre, GenreVue::Coupe { .. }) {
+        out.extend(niveaux_et_limites_en_coupe(p, v));
+    }
     out.extend(symboles_familles(p, v));
+    out
+}
+
+fn trait_couleur(a: DVec3, b: DVec3, couleur: [u8; 4], epaisseur: f64) -> Primitive {
+    Primitive {
+        forme: Forme::Segments(vec![[a, b]]),
+        style: Style { couleur, epaisseur },
+        role: Role::Annotation,
+        element: None,
+    }
+}
+
+/// Coupes et élévations : un repère par niveau (trait sur toute la largeur de la vue,
+/// nom et cote) et un repère vertical là où une limite de propriété coupe le plan de
+/// la vue.
+fn niveaux_et_limites_en_coupe(p: &Projet, v: &Vue) -> Vec<Primitive> {
+    let GenreVue::Coupe { debut, fin, .. } = &v.genre else { return Vec::new() };
+    let (o, u, h) = repere(p, v);
+    let pt = |x: f64, z: f64| (o + u * x + h * z) * 0.001;
+    let a = DVec2::from_array(*debut);
+    let d = DVec2::from_array(*fin) - a;
+    let longueur = d.length();
+    if longueur < 1e-6 {
+        return Vec::new();
+    }
+    let (axe_u, axe_n) = (d / longueur, (d / longueur).perp());
+    let taille = 2.5 * v.echelle * 0.001;
+    let mut out = Vec::new();
+    for n in &p.niveaux {
+        if v.elements_masques.contains(&n.id) {
+            continue;
+        }
+        let bleu = [18, 120, 170, 255];
+        out.push(trait_couleur(pt(-500.0, n.altitude), pt(longueur + 500.0, n.altitude), bleu, 0.13));
+        out.push(texte(&format!("{} ({:.2} m)", n.nom, n.altitude / 1000.0), pt(longueur + 700.0, n.altitude), u, h, taille, bleu));
+    }
+    for l in &p.limites_propriete {
+        if v.elements_masques.contains(&l.id) || l.contour.len() < 2 {
+            continue;
+        }
+        let rouge = [190, 40, 40, 255];
+        for i in 0..l.contour.len() {
+            let rel = |q: [f64; 2]| {
+                let r = DVec2::from_array(q) - a;
+                DVec2::new(r.dot(axe_u), r.dot(axe_n))
+            };
+            let (b0, b1) = (rel(l.contour[i]), rel(l.contour[(i + 1) % l.contour.len()]));
+            // la limite coupe le plan de la vue : repère vertical à cet endroit
+            if (b0.y > 0.0) == (b1.y > 0.0) {
+                continue;
+            }
+            let x = b0.x + (b1.x - b0.x) * (b0.y / (b0.y - b1.y));
+            if !(0.0..=longueur).contains(&x) {
+                continue;
+            }
+            out.push(trait_couleur(pt(x, l.altitude), pt(x, l.altitude + 3000.0), rouge, 0.35));
+        }
+    }
     out
 }
 

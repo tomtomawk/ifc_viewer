@@ -1155,6 +1155,7 @@ fn creations_independantes_barres_escaliers_gardes_terrains_importes_et_types() 
                     niveau: niveau.clone(),
                     niveau_haut: None,
                     decalage_bas: 0.0,
+                    decalage_haut: 0.0,
                     hauteur: 2800.0,
                     trace: vec![[20000.0, y], [25000.0, y]],
                     largeur: 1000.0,

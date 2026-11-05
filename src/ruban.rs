@@ -35,6 +35,8 @@ pub(crate) enum Outil {
     Aligner,
     Ajuster,
     ModifierContour,
+    CopierNiveau,
+    Jonctions,
     CreerIdentique,
     Supprimer,
     Cadrer,
@@ -82,7 +84,9 @@ impl Outil {
             Self::Tourner => "Tourner",
             Self::Aligner => "Aligner",
             Self::Ajuster => "Ajuster / prolonger",
-            Self::ModifierContour => "Modifier tracé",
+            Self::ModifierContour => "Modifier",
+            Self::CopierNiveau => "Copier sur niveaux",
+            Self::Jonctions => "Jonctions",
             Self::CreerIdentique => "Créer à l'identique",
             Self::Supprimer => "Supprimer",
             Self::Cadrer => "Cadre",
@@ -263,8 +267,8 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
             ("Ajuster", &[Aligner, Ajuster]),
             ("Édition", &[CreerIdentique, Supprimer]),
             ("Visibilité", &[Cadrer, Isoler, Masquer]),
-            // tout ce qui est tracé : contours, polylignes, terrains
-            ("Tracé", &[ModifierContour]),
+            // Modifier : contours, polylignes, terrains ; commandes propres à la sélection
+            ("Éléments", &[ModifierContour, CopierNiveau, Jonctions]),
         ],
         Menu::Annoter => &[
             ("Vues", &[VuePlan, VueCoupe]),
@@ -360,6 +364,12 @@ enum Valeur {
 
 #[derive(Default)]
 pub struct RubanEdition {
+    /// Sélection du projet, renseignée par l'application avant `afficher` : active
+    /// Copier sur niveaux (éléments) et Jonctions (murs).
+    pub selection_elements: bool,
+    pub selection_murs: bool,
+    /// Bouton Jonctions de cette image : le menu s'ancre dessus.
+    pub bouton_jonctions: Option<egui::Response>,
     pub prolonger_angle: bool,
     pub selection_mur: bool,
     selection: Option<Outil>,
@@ -430,7 +440,7 @@ fn champs(o: Outil) -> Vec<Champ> {
     use Champ::*;
     use Outil::*;
     match o {
-        Surfaces | Niveau | Terrain | LimitePropriete | ModifierContour | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | Feuilles | Nomenclatures => vec![],
+        Surfaces | Niveau | Terrain | LimitePropriete | ModifierContour | CopierNiveau | Jonctions | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | Feuilles | Nomenclatures => vec![],
         Quadrillage => vec![Saisie("Repère", "A"), Choix("Tracé", &["Droit", "Arc"])],
         Mur => vec![
             Choix(
@@ -717,6 +727,9 @@ impl RubanEdition {
             _ => match champs(outil).get(index) { Some(Champ::Nombre(_,v,_)) => *v, _=>0.0 },
         }
     }
+    pub fn definir_nombre_option(&mut self, outil: Outil, index: usize, valeur: f64) {
+        self.valeurs.insert((outil, index), Valeur::Nombre(valeur));
+    }
     pub fn texte_option(&self, outil: Outil, index: usize) -> String {
         match self.valeurs.get(&(outil,index)) {
             Some(Valeur::Texte(v)) => v.clone(),
@@ -936,12 +949,25 @@ impl RubanEdition {
                                 let actif = self.selection.map(Outil::commande) == Some(outil);
                                 // éléments horizontaux : un bouton ; la sorte se choisit dans le
                                 // sélecteur de type de Propriétés
-                                let disponible = matches!(outil, Outil::Terrain|Outil::LimitePropriete|Outil::Mur|Outil::Surfaces|Outil::Poteau|Outil::Poutre|Outil::Escalier|Outil::GardeCorps|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Aligner|Outil::Ajuster|Outil::ModifierContour|Outil::CreerIdentique|Outil::Supprimer|Outil::Cadrer|Outil::Isoler|Outil::Masquer|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::Ligne|Outil::Polyligne|Outil::Spline|Outil::Cercle|Outil::Arc|Outil::Zone|Outil::Etiquette|Outil::Feuilles|Outil::Nomenclatures);
+                                let disponible = matches!(outil, Outil::Terrain|Outil::LimitePropriete|Outil::Mur|Outil::Surfaces|Outil::Poteau|Outil::Poutre|Outil::Escalier|Outil::GardeCorps|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Aligner|Outil::Ajuster|Outil::ModifierContour|Outil::CopierNiveau|Outil::Jonctions|Outil::CreerIdentique|Outil::Supprimer|Outil::Cadrer|Outil::Isoler|Outil::Masquer|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::Ligne|Outil::Polyligne|Outil::Spline|Outil::Cercle|Outil::Arc|Outil::Zone|Outil::Etiquette|Outil::Feuilles|Outil::Nomenclatures);
                                 let mut bouton_ui=ui.new_child(egui::UiBuilder::new().max_rect(bouton));
-                                if !disponible {bouton_ui.disable();}
+                                let raison = if !disponible {
+                                    Some("Outil prévu, pas encore disponible")
+                                } else if projet.is_none() {
+                                    Some("Ouvrir ou créer un projet pour utiliser cet outil")
+                                } else if outil == Outil::CopierNiveau && !self.selection_elements {
+                                    Some("Sélectionner d'abord un ou plusieurs éléments")
+                                } else if outil == Outil::Jonctions && !self.selection_murs {
+                                    Some("Sélectionner d'abord un mur")
+                                } else {
+                                    None
+                                };
+                                if raison.is_some() {bouton_ui.disable();}
                                 let reponse=bouton_outil(&mut bouton_ui,bouton,outil,colonne.grande,actif);
-                                if reponse.on_disabled_hover_text("Outil prévu, pas encore disponible").clicked() {
-                                    if matches!(outil, Outil::ModifierContour | Outil::CreerIdentique | Outil::Supprimer | Outil::Cadrer | Outil::Isoler | Outil::Masquer | Outil::Feuilles | Outil::Nomenclatures) {
+                                if outil == Outil::Jonctions { self.bouton_jonctions = Some(reponse.clone()); }
+                                if reponse.on_disabled_hover_text(raison.unwrap_or("")).clicked() {
+                                    if outil == Outil::Jonctions { continue; }
+                                    if matches!(outil, Outil::ModifierContour | Outil::CopierNiveau | Outil::CreerIdentique | Outil::Supprimer | Outil::Cadrer | Outil::Isoler | Outil::Masquer | Outil::Feuilles | Outil::Nomenclatures) {
                                         action = Some(outil);
                                         continue;
                                     }
@@ -2237,6 +2263,9 @@ fn bouton_outil(
         egui::WidgetInfo::selected(egui::Role::Button, ui.is_enabled(), actif, outil.nom())
     });
     resp.on_hover_text(match outil {
+        Outil::ModifierContour => "Modifier le tracé d'un contour, d'une polyligne ou d'un terrain (MT)",
+        Outil::CopierNiveau => "Copier la sélection sur un niveau en conservant la position en plan",
+        Outil::Jonctions => "Jonctions et haut des murs : attacher à une toiture, priorité de jonction",
         Outil::CreerIdentique => "Créer à l'identique (CS)",
         Outil::Supprimer => "Supprimer (Suppr)",
         Outil::Cadrer => "Définir le contour de cadrage du plan ; F ajuste le zoom",
@@ -2569,6 +2598,21 @@ fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             cadre(0.1, 0.1, 0.55, 0.55);
             cadre(0.35, 0.35, 0.55, 0.55);
         }
+        CopierNiveau => {
+            seg((0.05, 0.92), (0.95, 0.92));
+            seg((0.05, 0.50), (0.95, 0.50));
+            cadre(0.25, 0.60, 0.5, 0.32);
+            cadre(0.25, 0.08, 0.5, 0.32);
+            seg((0.5, 0.40), (0.5, 0.60));
+        }
+        Jonctions => {
+            // deux murs en L, onglet à l'angle
+            seg((0.1, 0.9), (0.1, 0.1));
+            seg((0.1, 0.1), (0.9, 0.1));
+            seg((0.38, 0.9), (0.38, 0.38));
+            seg((0.38, 0.38), (0.9, 0.38));
+            seg((0.1, 0.1), (0.38, 0.38));
+        }
         ModifierContour => {
             seg((0.12, 0.24), (0.70, 0.12));
             seg((0.70, 0.12), (0.87, 0.66));
@@ -2789,7 +2833,7 @@ mod tests {
                 ..Default::default()
             }, |ui| {
                 egui::Panel::top("modifier_test").show(ui, |ui| {
-                    if let Some(a) = ruban.afficher(ui, Menu::Modifier, None) { action = Some(a); }
+                    if let Some(a) = ruban.afficher(ui, Menu::Modifier, Some(&crate::modele::Projet::default())) { action = Some(a); }
                 });
             }); output.textures_delta.clear(); output };
             frame(vec![]);
@@ -2826,7 +2870,7 @@ mod tests {
             },
             |ui| {
                 egui::Panel::top("ruban_test")
-                    .show(ui, |ui| ruban.afficher(ui, Menu::Modeliser, None));
+                    .show(ui, |ui| ruban.afficher(ui, Menu::Modeliser, Some(&crate::modele::Projet::default())));
                 egui::Panel::left("proprietes_test")
                     .exact_size(284.0)
                     .show(ui, |ui| {
@@ -3036,7 +3080,7 @@ mod tests {
             };
             let mut sortie = ctx.run_ui(input, |ui| {
                 egui::CentralPanel::default()
-                    .show(ui, |ui| ruban.afficher(ui, Menu::Modeliser, None));
+                    .show(ui, |ui| ruban.afficher(ui, Menu::Modeliser, Some(&crate::modele::Projet::default())));
             });
             sortie.textures_delta.clear();
             sortie

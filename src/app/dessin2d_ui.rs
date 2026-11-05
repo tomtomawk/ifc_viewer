@@ -11,9 +11,41 @@ use glam::{DVec2, DVec3};
 
 /// État du dessin 2D : tracé en cours, saisie au clavier, point sous le curseur (brut
 /// et accroché), géométries d'accrochage de la vue (révision, vue).
+/// Limite haute d'un escalier en création.
+#[derive(Default, Clone, PartialEq)]
+pub(super) enum HautEscalier {
+    /// Premier niveau au-dessus de la base.
+    #[default]
+    Auto,
+    Niveau(String),
+    Libre,
+}
+
 #[derive(Default)]
 pub(super) struct EtatDessin2D {
+    /// Outil de la commande en cours et profondeur de l'historique à son démarrage :
+    /// la croix Annuler défait tout ce que la commande a créé.
+    commande_cle: Option<crate::ruban::Outil>,
+    historique_depart: Option<usize>,
+    /// Bas de la barre de commande (depuis le haut de la vue) : les aides s'y alignent.
+    pub bas_barre: f32,
     pub trace: Option<Trace>,
+    /// Contours laissés ouverts par Échap, au stade où le tracé s'est arrêté : un clic
+    /// sur une extrémité reprend le tracé. Ils bloquent la validation.
+    pub ouverts: Vec<Vec<DVec2>>,
+    /// Giron imposé à l'escalier en création (mm) ; None : celui du tracé.
+    pub giron_impose: Option<f64>,
+    /// Limites de l'escalier en création : niveau bas (None : niveau du plan) et son
+    /// décalage, limite haute, hauteur si elle est libre (0 : 2,80 m).
+    pub esc_bas: Option<String>,
+    pub esc_decalage_bas: f64,
+    pub esc_decalage_haut: f64,
+    pub esc_haut: HautEscalier,
+    pub esc_hauteur_libre: f64,
+    /// Justification de la ligne tracée d'un escalier : 0 axe, 1 bord gauche, 2 bord droit.
+    pub justification_escalier: u8,
+    /// Justification figée de chaque volée déjà posée du tracé d'escalier en cours.
+    pub just_segments: Vec<u8>,
     forme_cadrage: Option<OutilDessin>,
     ligne_selection: Option<d2::Forme2D>,
     pub arc_glisse: Option<(String,usize,[DVec2;3])>,
@@ -247,6 +279,25 @@ impl ViewerApp {
         } else if trace.points.last().is_none_or(|q| q.distance(p) > 1e-6) { trace.points.push(p); }
         true
     }
+    /// Clic sur une extrémité d'un contour laissé ouvert : le tracé reprend de là.
+    fn reprendre_contour_ouvert(&mut self, rect: egui::Rect, clic: Option<egui::Pos2>) -> bool {
+        let Some(clic) = clic else { return false };
+        if self.dessin2d.ouverts.is_empty() || self.dessin2d.trace.as_ref().is_none_or(|t| !t.points.is_empty() || t.outil != OutilDessin::Polyligne) {
+            return false;
+        }
+        let proche = |q: &DVec2| self.vers_ecran(rect, *q).is_some_and(|e| e.distance(clic) <= 10.0);
+        let trouve = self.dessin2d.ouverts.iter().enumerate().find_map(|(i, c)| {
+            if c.last().is_some_and(&proche) { Some((i, false)) } else if c.first().is_some_and(&proche) { Some((i, true)) } else { None }
+        });
+        let Some((i, debut)) = trouve else { return false };
+        let mut points = self.dessin2d.ouverts.remove(i);
+        if debut { points.reverse(); }
+        if let Some(t) = self.dessin2d.trace.as_mut() { t.points = points; }
+        self.dessin2d.saisie.clear();
+        self.dessin2d.message = None;
+        true
+    }
+
     /// Terrain repris par Modifier tracé, pendant l'outil Terrain.
     pub(super) fn terrain_en_edition(&self) -> Option<&str> {
         self.dessin2d.terrain_modifie.as_ref().filter(|_| self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain)).map(|(id, _)| id.as_str())
@@ -805,8 +856,18 @@ impl ViewerApp {
     /// ligne de commande, F fermer, Entrée ou Espace valider (vide : terminer),
     /// Retour arrière, Échap (saisie, puis tracé en cours, puis outil).
     pub(super) fn clavier_dessin(&mut self, ctx: &egui::Context) {
+        let cle = self.ruban_edition.outil();
+        let segments = if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier) { self.dessin2d.trace.as_ref().map_or(0, |t| t.points.len().saturating_sub(1)) } else { 0 };
+        let courante = self.dessin2d.justification_escalier;
+        self.dessin2d.just_segments.truncate(segments);
+        while self.dessin2d.just_segments.len() < segments { self.dessin2d.just_segments.push(courante); }
+        if cle != self.dessin2d.commande_cle || (cle.is_none() && self.dessin2d.historique_depart.is_some()) {
+            self.dessin2d.commande_cle = cle;
+            if cle != Some(crate::ruban::Outil::Escalier) { self.dessin2d.giron_impose = None; }
+            self.dessin2d.historique_depart = cle.map(|_| self.profondeur_historique());
+        }
         if self.ruban_edition.selection_mur && self.usage_dessin().is_some_and(|(u,_)|u==Usage::Mur) {
-            if self.dessin2d.dernier_usage!=Some(Usage::Mur) {self.dessin2d.dalle.clear();}
+            if self.dessin2d.dernier_usage!=Some(Usage::Mur) {self.dessin2d.dalle.clear();self.dessin2d.ouverts.clear();}
             self.dessin2d.dernier_usage=Some(Usage::Mur);
             return;
         }
@@ -818,12 +879,12 @@ impl ViewerApp {
             self.dessin2d.survol_accroche = None;
             self.dessin2d.guides.clear();
             self.dessin2d.saisie.clear();
-            self.dessin2d.dalle.clear();
+            self.dessin2d.dalle.clear();self.dessin2d.ouverts.clear();
             self.reinitialiser_terrain();
             return;
         };
         if self.dessin2d.dernier_usage.is_some_and(|u| u != usage) {
-            self.dessin2d.dalle.clear();
+            self.dessin2d.dalle.clear();self.dessin2d.ouverts.clear();
             self.reinitialiser_terrain();
             self.dessin2d.trace = None;
         }
@@ -844,6 +905,7 @@ impl ViewerApp {
         }
         let mut valider = false;
         let mut inverser = false;
+        let mut justifier = false;
         let mut echap = false;
         let mut effacer = false;
         let mut supprimer_trait = false;
@@ -860,7 +922,7 @@ impl ViewerApp {
                             lu = true;
                         } else if ch == ' ' {
                             // Espace inverse le sens d'un mur ; ailleurs, il valide comme Entrée
-                            if usage == Usage::Mur { inverser = true } else { valider = true }
+                            if usage == Usage::Mur { inverser = true } else if usage == Usage::Escalier { justifier = true } else { valider = true }
                             lu = true;
                         }
                     }
@@ -894,14 +956,25 @@ impl ViewerApp {
             self.dessin2d.message = None;
             if !self.dessin2d.saisie.is_empty() {
                 self.dessin2d.saisie.clear();
-            } else if let Some(t) = self.dessin2d.trace.as_mut().filter(|t| !t.points.is_empty()) {
-                // Échap abandonne le tracé en cours ; la ligne garde ses segments déjà créés
-                t.points.clear();
+            } else if self.dessin2d.trace.as_ref().is_some_and(|t| !t.points.is_empty()) {
+                // Échap interrompt le tracé en cours ; ce qui est déjà dessiné reste
+                if usage != Usage::Mur && self.dessin2d.edition_contour.is_none() {
+                    self.interrompre_trace(usage);
+                }
+                if let Some(t) = self.dessin2d.trace.as_mut() { t.points.clear(); }
                 if let Some(e) = &mut self.dessin2d.edition_contour && e.raccord.take().is_some() { e.dessin = false; }
+            } else if self.dessin2d.edition_contour.is_some() {
+                self.quitter_commande(false);
+            } else if matches!(usage, Usage::Surface | Usage::LimitePropriete) && !(self.dessin2d.dalle.is_empty() && self.dessin2d.ouverts.is_empty()) {
+                // sortir de l'outil garde les contours tracés (comme les murs déjà créés)
+                self.quitter_commande(true);
             } else {
-                if self.dessin2d.edition_contour.is_some() { self.quitter_commande(false); }
-                else { self.ruban_edition.annuler(); self.dessin2d.trace = None; }
+                self.ruban_edition.annuler();
+                self.dessin2d.trace = None;
             }
+        }
+        if justifier {
+            self.dessin2d.justification_escalier = (self.dessin2d.justification_escalier + 1) % 3;
         }
         if inverser {
             self.ruban_edition.sens_inverse = !self.ruban_edition.sens_inverse;
@@ -913,6 +986,44 @@ impl ViewerApp {
             } else {
                 self.valider_saisie_dessin();
             }
+        }
+    }
+
+    /// Profondeur de la pile d'annulation du document actif.
+    fn profondeur_historique(&self) -> usize {
+        match &self.collaboration {
+            Some(c) => c.copie.annulations.len(),
+            None => self.historique.libelles(false).len(),
+        }
+    }
+
+    /// Croix Annuler : défait ce que la commande a créé depuis son démarrage, puis la quitte.
+    pub(super) fn annuler_commande(&mut self) {
+        if self.dessin2d.edition_contour.is_none() && let Some(depart) = self.dessin2d.historique_depart {
+            let n = self.profondeur_historique().saturating_sub(depart);
+            if n > 0 {
+                if self.collaboration.is_some() {
+                    for _ in 0..n { self.parcourir_historique_n(false, 1); }
+                } else {
+                    self.parcourir_historique_n(false, n);
+                }
+            }
+        }
+        self.quitter_commande(false);
+    }
+
+    /// Échap pendant un tracé : le tracé s'arrête là où il en est. Un contour ouvert
+    /// d'au moins trois sommets est fermé et conservé ; les autres tracés se terminent
+    /// comme avec Entrée.
+    fn interrompre_trace(&mut self, usage: Usage) {
+        if matches!(usage, Usage::Surface | Usage::Terrain | Usage::LimitePropriete | Usage::Cadrage) {
+            // le contour reste ouvert, au stade où il en était
+            if let Some(t) = self.dessin2d.trace.as_ref().filter(|t| t.outil == OutilDessin::Polyligne && t.points.len() >= 2) {
+                self.dessin2d.ouverts.push(t.points.clone());
+                self.dessin2d.message = Some("Contour laissé ouvert : cliquer une de ses extrémités pour le reprendre.".into());
+            }
+        } else {
+            self.valider_saisie_dessin();
         }
     }
 
@@ -948,6 +1059,10 @@ impl ViewerApp {
                     self.valider_saisie_dessin();
                 }
             }
+        }
+        if valider && surface && !self.dessin2d.ouverts.is_empty() {
+            self.dessin2d.message = Some("Contour non fermé : reprendre son tracé (clic sur une extrémité) et le fermer, ou annuler avec la croix.".into());
+            return;
         }
         if valider && usage == Some(Usage::Cadrage) {
             let Some(contour) = self.dessin2d.dalle.first().cloned() else { self.dessin2d.message = Some("Tracez d'abord un contour fermé.".into()); return; };
@@ -1029,7 +1144,7 @@ impl ViewerApp {
                 self.creer_dalle_contours(&contours, &parametres);
             }
         }
-        self.dessin2d.dalle.clear();
+        self.dessin2d.dalle.clear();self.dessin2d.ouverts.clear();
         self.reinitialiser_terrain();
         self.dessin2d.edition_contour = None;
         self.visibility_dirty = true;
@@ -1038,6 +1153,8 @@ impl ViewerApp {
         self.dessin2d.saisie.clear();
         self.dessin2d.message = None;
         self.dessin2d.trace = None;
+        self.dessin2d.historique_depart = None;
+        self.dessin2d.commande_cle = None;
         self.bim.depart_deplacement = None;
         self.bim.depart_structure = None;
         self.coupe_depart = None;
@@ -1096,23 +1213,24 @@ impl ViewerApp {
         let options_dessin = !edition && self.usage_dessin().is_some_and(|(u, _)| u != Usage::Annotation);
         let options_modifier = !edition && self.a_options_modifier();
         if self.natif.is_none() || (!actif && !options_modifier) {
+            self.dessin2d.bas_barre = 0.0;
             return;
         }
         let mut action = None;
-        egui::Area::new(egui::Id::unique("barre_commande"))
+        let zone = egui::Area::new(egui::Id::unique("barre_commande"))
             .fixed_pos(rect.left_top() + egui::vec2(8.0, 8.0))
             .constrain_to(rect)
             .show(ui.ctx(), |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.horizontal_top(|ui| {
+                    ui.horizontal(|ui| {
                         if edition || options_dessin || options_modifier {
                             egui::ScrollArea::horizontal().id_salt("options_barre_commande")
-                                .max_width((rect.width() - if actif { 190.0 } else { 30.0 }).max(80.0))
+                                .max_width((rect.width() - if actif { 120.0 } else { 30.0 }).max(80.0))
                                 .max_height(75.0)
                                 .auto_shrink([true, true]).show(ui, |ui| {
                                     if edition { self.options_edition_contour(ui); }
                                     else if options_dessin { self.options_trace(ui); }
-                                    else { self.options_modifier(ui); }
+                                    else { self.options_modifier(ui, false); }
                                 });
                         }
                         if actif {
@@ -1127,8 +1245,9 @@ impl ViewerApp {
                     });
                 });
             });
+        self.dessin2d.bas_barre = zone.response.rect.bottom() - rect.top();
         if let Some(valider) = action {
-            self.quitter_commande(valider);
+            if valider { self.quitter_commande(true); } else { self.annuler_commande(); }
         }
     }
 
@@ -1431,12 +1550,25 @@ impl ViewerApp {
         let temps = ui.input(|i| i.time);
         self.dessin2d.point = self.dessin2d.curseur.map(|c| self.point_dessin(rect, c, maj, temps));
         if self.dessin2d.survol_accroche.is_some() { ui.ctx().request_repaint_after(std::time::Duration::from_millis(100)); }
+        // escalier : la longueur de la volée est magnétisée au pas de marche (giron)
+        if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier) && self.dessin2d.saisie.is_empty() {
+            let giron = self.giron_vise();
+            let precedent = self.dessin2d.trace.as_ref().and_then(Trace::precedent);
+            if let (Some((p, a)), Some(prec)) = (self.dessin2d.point, precedent) && matches!(a, Accroche::Libre | Accroche::Polaire(_) | Accroche::Ortho) {
+                let v = p - prec;
+                if v.length() > 1e-6 && giron > 1.0 {
+                    let k = (v.length() / giron).round().max(1.0);
+                    self.dessin2d.point = Some((prec + v.normalize() * k * giron, a));
+                }
+            }
+        }
         let angle = self.angle_axes_plan();
         if let Some(t) = self.dessin2d.trace.as_mut() {
             t.angle = angle;
         }
         if resp.clicked() {
             if let Some((p, _)) = self.dessin2d.point && self.ajouter_point_raccord(p) { return; }
+            if self.reprendre_contour_ouvert(rect, resp.interact_pointer_pos()) { return; }
             if let (Some((p, _)), Some(t)) = (self.dessin2d.point, self.dessin2d.trace.as_mut()) {
                 self.dessin2d.saisie.clear();
                 self.dessin2d.message = None;
@@ -1471,6 +1603,13 @@ impl ViewerApp {
         let painter = ui.painter().with_clip_rect(rect);
         let bleu = Color32::from_rgb(0, 120, 215);
         let vert = Color32::from_rgb(20, 160, 60);
+        for c in &self.dessin2d.ouverts {
+            let pts: Vec<egui::Pos2> = c.iter().filter_map(|q| self.vers_ecran(rect, *q)).collect();
+            painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, bleu)));
+            for q in [c.first(), c.last()].into_iter().flatten().filter_map(|q| self.vers_ecran(rect, *q)) {
+                painter.rect_stroke(egui::Rect::from_center_size(q, egui::vec2(10.0, 10.0)), 0.0, egui::Stroke::new(2.0, Color32::from_rgb(200, 50, 45)), egui::StrokeKind::Middle);
+            }
+        }
         for &(origine, direction) in &self.dessin2d.guides {
             if let (Some(a), Some(b)) = (self.vers_ecran(rect, origine), self.vers_ecran(rect, origine + direction * 1000.0)) {
                 let d = (b - a).normalized();
@@ -1615,7 +1754,7 @@ impl ViewerApp {
         }
     }
 
-    /// Instructions de la commande active, dans la bande noire au bas de la vue.
+    /// Instructions de la commande active : texte bleu juste sous la barre de commande.
     pub(super) fn dessiner_instructions(&self, ui: &egui::Ui, rect: egui::Rect) {
         use crate::ruban::Outil;
         let painter = ui.painter().with_clip_rect(rect);
@@ -1634,7 +1773,7 @@ impl ViewerApp {
         let u = crate::options::unite();
         let nom = if self.orientation_nord_en_cours { "NORD DU PROJET".into() } else { match usage {
             Some((Usage::Mur, o)) => format!("MUR · {}", nom_outil(o)),
-            Some((Usage::Escalier, _)) => "ESCALIER · LIGNE DE FOULÉE".into(),
+            Some((Usage::Escalier, _)) => format!("ESCALIER · LIGNE = {}", ["AXE", "BORD GAUCHE", "BORD DROIT"][self.dessin2d.justification_escalier as usize % 3]),
             Some((Usage::GardeCorps, _)) => "GARDE-CORPS".into(),
             Some((Usage::LimitePropriete, o)) => format!("LIMITE DE PROPRIÉTÉ · {}", if o == OutilDessin::Polyligne { "POLYGONE" } else { nom_outil(o) }),
             Some((Usage::Cadrage, _)) => "CADRAGE DE LA VUE".into(),
@@ -1659,7 +1798,7 @@ impl ViewerApp {
         };
         let contexte = match usage.map(|(u, _)| u) {
             Some(Usage::Mur) => "Espace : inverser le sens · ",
-            Some(Usage::Escalier) => "Départ, un sommet par palier, arrivée · Marches calculées selon le niveau supérieur · Entrée ou clic droit : finir · ",
+            Some(Usage::Escalier) => "Espace : justification de la ligne · Longueur magnétisée au giron · Départ, un sommet par palier, arrivée · Marches calculées selon le niveau supérieur · Entrée ou clic droit : finir · ",
             Some(Usage::GardeCorps) => "Cliquer les sommets · Entrée ou clic droit : finir · Sur un escalier, sélectionner Garde-corps dans les options · ",
             Some(Usage::Cadrage) => "Tracer un contour fermé, puis valider · ",
             Some(Usage::Terrain) if self.dessin2d.dalle.is_empty() => "Tracer le périmètre fermé du terrain · ",
@@ -1668,14 +1807,15 @@ impl ViewerApp {
         let aide = if usage.is_some() { format!("{contexte}Clavier : x,y · @dx,dy · d<angle · distance seule ({}) · Maj : ortho · Entrée : valider · Échap : annuler", u.suffixe().trim()) } else { "Entrée : valider · Échap : annuler".into() };
         let police = egui::FontId::monospace(13.0);
         let largeur = (rect.width() - 20.0).max(1.0);
-        let g1 = painter.layout(ligne, police, if self.dessin2d.message.is_some() { Color32::from_rgb(255, 170, 150) } else { Color32::WHITE }, largeur);
-        let g2 = painter.layout(aide, egui::FontId::proportional(11.0), Color32::from_gray(200), largeur);
-        let hauteur = g1.size().y + g2.size().y + 12.0;
-        let bande = egui::Rect::from_min_max(egui::pos2(rect.left(), rect.bottom() - hauteur), rect.right_bottom());
-        painter.rect_filled(bande, 0.0, Color32::from_rgba_unmultiplied(30, 30, 30, 225));
+        let bleu = Color32::from_rgb(55, 130, 200);
+        let g1 = painter.layout(ligne, police, if self.dessin2d.message.is_some() { Color32::from_rgb(200, 50, 45) } else { bleu }, largeur);
+        let g2 = painter.layout(aide, egui::FontId::proportional(11.0), bleu.gamma_multiply(0.85), largeur);
         let h1 = g1.size().y;
-        painter.galley(bande.min + egui::vec2(10.0, 4.0), g1, Color32::WHITE);
-        painter.galley(bande.min + egui::vec2(10.0, 8.0 + h1), g2, Color32::from_gray(200));
+        let haut = rect.top() + self.dessin2d.bas_barre.max(4.0) + 8.0;
+        let zone = egui::Rect::from_min_size(egui::pos2(rect.left() + 8.0, haut), egui::vec2(g1.size().x.max(g2.size().x) + 8.0, h1 + g2.size().y + 6.0));
+        painter.rect_filled(zone, 3.0, Color32::from_white_alpha(185));
+        painter.galley(zone.min + egui::vec2(4.0, 2.0), g1, bleu);
+        painter.galley(zone.min + egui::vec2(4.0, 4.0 + h1), g2, bleu);
     }
 
     /// Volume des murs en cours : faces au sol et en tête, séparations des couches et
@@ -1774,7 +1914,7 @@ impl ViewerApp {
     pub(super) fn reinitialiser_forme_cadrage(&mut self) {
         self.dessin2d.forme_cadrage=Some(OutilDessin::Rectangle);
         self.dessin2d.trace=None;
-        self.dessin2d.dalle.clear();
+        self.dessin2d.dalle.clear();self.dessin2d.ouverts.clear();
     }
 
     pub(super) fn options_trace(&mut self, ui: &mut egui::Ui) {
@@ -1784,7 +1924,7 @@ impl ViewerApp {
             Some(Usage::Cadrage) => { ui.horizontal(|ui| {
                 let forme=self.dessin2d.forme_cadrage.unwrap_or(OutilDessin::Rectangle);
                 for (valeur,nom) in [(OutilDessin::Rectangle,"Rectangle"),(OutilDessin::Polyligne,"Ligne")] {
-                    if ui.selectable_label(forme==valeur,nom).clicked() {self.dessin2d.forme_cadrage=Some(valeur);self.dessin2d.trace=None;self.dessin2d.dalle.clear();}
+                    if ui.selectable_label(forme==valeur,nom).clicked() {self.dessin2d.forme_cadrage=Some(valeur);self.dessin2d.trace=None;self.dessin2d.dalle.clear();self.dessin2d.ouverts.clear();}
                 }
             }); }
             Some(Usage::Terrain) => {
@@ -1901,16 +2041,16 @@ impl ViewerApp {
     fn creer_escalier(&mut self, trace: Vec<[f64; 2]>) -> Result<(), String> {
         use crate::ruban::Outil;
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
-        let niveau = self.niveau_trace().ok_or("Créez d'abord un niveau.")?;
-        let alt = p.niveau(&niveau).map_or(0.0, |n| n.altitude);
-        let haut = p.niveaux.iter().filter(|n| n.altitude > alt + 1.0).min_by(|a, b| a.altitude.total_cmp(&b.altitude)).map(|n| n.id.clone());
+        let (niveau, haut, hauteur, decalage_bas) = self.base_escalier().ok_or("Créez d'abord un niveau.")?;
+        let trace = self.trace_justifie(&trace);
         let escalier = crate::modele::Escalier {
             id: String::new(),
             nom: format!("Escalier {}", p.escaliers.len() + 1),
             niveau: niveau.clone(),
             niveau_haut: haut,
-            decalage_bas: 0.0,
-            hauteur: 2800.0,
+            decalage_bas,
+            decalage_haut: self.dessin2d.esc_decalage_haut,
+            hauteur,
             trace,
             largeur: self.ruban_edition.nombre_option(Outil::Escalier, 0),
             hauteur_marche: self.ruban_edition.nombre_option(Outil::Escalier, 1),
@@ -1967,12 +2107,261 @@ impl ViewerApp {
         self.executer_bim(Commande::GardeCorps { garde_corps })?.into_iter().next().ok_or_else(|| "Garde-corps non créé.".to_string())
     }
 
+    /// Niveau de départ, niveau d'arrivée, hauteur à franchir et décalage de la base de
+    /// l'escalier en création, selon ses limites (par défaut : niveau du plan, premier
+    /// niveau au-dessus, 2,80 m sans niveau au-dessus).
+    fn base_escalier(&self) -> Option<(String, Option<String>, f64, f64)> {
+        let (p, _) = self.natif.as_ref()?;
+        let d = &self.dessin2d;
+        let niveau = d.esc_bas.clone().filter(|id| p.niveau(id).is_some()).or_else(|| self.niveau_trace())?;
+        let base = p.niveau(&niveau).map_or(0.0, |n| n.altitude) + d.esc_decalage_bas;
+        let libre = if d.esc_hauteur_libre > 0.0 { d.esc_hauteur_libre } else { 2800.0 };
+        let (haut, hauteur) = match &d.esc_haut {
+            HautEscalier::Niveau(id) if p.niveau(id).is_some() => (Some(id.clone()), p.niveau(id).map_or(0.0, |n| n.altitude) + d.esc_decalage_haut - base),
+            HautEscalier::Libre => (None, libre),
+            _ => match p.niveaux.iter().filter(|n| n.altitude + d.esc_decalage_haut > base + 1.0).min_by(|a, b| a.altitude.total_cmp(&b.altitude)) {
+                Some(n) => (Some(n.id.clone()), n.altitude + d.esc_decalage_haut - base),
+                None => (None, libre),
+            },
+        };
+        Some((niveau, haut, hauteur, d.esc_decalage_bas))
+    }
+
+    /// Croquis des limites de l'escalier, comme pour le mur : un escalier en coupe entre
+    /// ses deux limites, Haut et Bas sur une ligne chacune (niveau, puis décalage de la
+    /// base ou hauteur libre).
+    fn croquis_limites_escalier(&mut self, ui: &mut egui::Ui) {
+        use crate::options::Dimensions;
+        let Some((p, _)) = self.natif.as_ref() else { return };
+        let niveaux: Vec<(String, String)> = p.niveaux.iter().map(|n| (n.id.clone(), n.nom.clone())).collect();
+        let nom_plan = self.niveau_trace().and_then(|id| p.niveau(&id).map(|n| n.nom.clone())).unwrap_or_default();
+        let nom = |id: &str| niveaux.iter().find(|(i, _)| i == id).map_or(String::new(), |(_, n)| n.clone());
+        let bleu = Color32::from_rgb(18, 158, 205);
+        let origine = ui.cursor().min;
+        let mut centres = [0.0_f32; 2];
+        let mut gauche = 0.0_f32;
+        ui.add_space(10.0);
+        ui.horizontal_top(|ui| {
+            ui.add_space(64.0);
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 14.0;
+                for haut in [true, false] {
+                    let ligne = ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        ui.add_sized([30.0, 20.0], egui::Label::new(RichText::new(if haut { "Haut" } else { "Bas" }).color(bleu)));
+                        let champ = 72.0;
+                        let largeur = (ui.available_width() - champ - 4.0).max(60.0);
+                        if haut {
+                            let texte = match &self.dessin2d.esc_haut {
+                                HautEscalier::Auto => "Niveau suivant".to_string(),
+                                HautEscalier::Niveau(id) => nom(id),
+                                HautEscalier::Libre => "Libre".to_string(),
+                            };
+                            egui::ComboBox::from_id_salt("esc_haut").width(largeur).truncate().selected_text(texte).show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.dessin2d.esc_haut, HautEscalier::Auto, "Niveau suivant");
+                                for (id, n) in &niveaux {
+                                    ui.selectable_value(&mut self.dessin2d.esc_haut, HautEscalier::Niveau(id.clone()), n);
+                                }
+                                ui.selectable_value(&mut self.dessin2d.esc_haut, HautEscalier::Libre, "Libre (hauteur)");
+                            }).response.on_hover_text("Limite haute : un niveau, le niveau suivant, ou libre (hauteur saisie)");
+                            if self.dessin2d.esc_haut == HautEscalier::Libre || (self.dessin2d.esc_haut == HautEscalier::Auto && self.base_escalier().is_some_and(|b| b.1.is_none())) {
+                                if self.dessin2d.esc_hauteur_libre <= 0.0 { self.dessin2d.esc_hauteur_libre = 2800.0; }
+                                ui.add_sized([champ, 20.0], egui::DragValue::new(&mut self.dessin2d.esc_hauteur_libre).speed(10.0).range(1.0..=f64::MAX).dimensions()).on_hover_text("Hauteur à franchir");
+                            } else {
+                                ui.add_sized([champ, 20.0], egui::DragValue::new(&mut self.dessin2d.esc_decalage_haut).speed(10.0).dimensions()).on_hover_text("Décalage de l'arrivée par rapport au niveau");
+                            }
+                        } else {
+                            let texte = self.dessin2d.esc_bas.as_deref().map_or(nom_plan.clone(), |id| nom(id));
+                            egui::ComboBox::from_id_salt("esc_bas").width(largeur).truncate().selected_text(texte).show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.dessin2d.esc_bas, None, format!("Niveau du plan ({nom_plan})"));
+                                for (id, n) in &niveaux {
+                                    ui.selectable_value(&mut self.dessin2d.esc_bas, Some(id.clone()), n);
+                                }
+                            }).response.on_hover_text("Limite basse : niveau de départ de l'escalier");
+                            ui.add_sized([champ, 20.0], egui::DragValue::new(&mut self.dessin2d.esc_decalage_bas).speed(10.0).dimensions()).on_hover_text("Décalage de la base par rapport au niveau");
+                        }
+                    });
+                    gauche = ligne.response.rect.left();
+                    centres[if haut { 0 } else { 1 }] = ligne.response.rect.center().y;
+                }
+            });
+        });
+        ui.add_space(10.0);
+        let peintre = ui.painter();
+        let (x0, x1) = (origine.x + 6.0, origine.x + 54.0);
+        let (yh, yb) = (centres[0], centres[1]);
+        let niveau_trait = egui::Stroke::new(1.5, bleu);
+        peintre.line_segment([egui::pos2(x0 - 4.0, yh), egui::pos2(x1 + 4.0, yh)], niveau_trait);
+        peintre.line_segment([egui::pos2(x0 - 4.0, yb), egui::pos2(x1 + 4.0, yb)], niveau_trait);
+        let (dx, dy) = ((x1 - x0) / 4.0, (yb - yh) / 4.0);
+        let mut points = vec![egui::pos2(x0, yb)];
+        for _ in 0..4 {
+            let b = points[points.len() - 1];
+            points.push(b - egui::vec2(0.0, dy));
+            points.push(b + egui::vec2(dx, -dy));
+        }
+        peintre.add(egui::Shape::line(points, egui::Stroke::new(1.4, ui.visuals().text_color())));
+        // rappels vers les lignes de limites
+        let rappel = egui::Stroke::new(0.8, bleu.gamma_multiply(0.8));
+        for y in [yh, yb] {
+            let mut x = x1 + 6.0;
+            while x < gauche - 3.0 {
+                peintre.line_segment([egui::pos2(x, y), egui::pos2((x + 2.5).min(gauche - 3.0), y)], rappel);
+                x += 5.0;
+            }
+        }
+    }
+
+    /// Giron visé (pas de marche, jamais appliqué au dessin) : imposé, sinon celui que donne Blondel (2h + g = 630) pour la
+    /// hauteur de marche choisie. Sert au magnétisme de la longueur des volées.
+    fn giron_vise(&self) -> f64 {
+        use crate::ruban::Outil;
+        let Some((_, _, hauteur, _)) = self.base_escalier() else { return 280.0 };
+        let hauteur = hauteur.max(1.0);
+        let vise = self.ruban_edition.nombre_option(Outil::Escalier, 1).max(50.0);
+        let h = hauteur / ((hauteur / vise).round().max(2.0));
+        self.dessin2d.giron_impose.unwrap_or((630.0 - 2.0 * h).max(150.0))
+    }
+
+    /// Ligne de foulée centrée à partir de la ligne tracée : chaque volée a sa
+    /// justification (axe, bord gauche, bord droit), figée quand elle est posée ; Espace
+    /// ne change que celle de la volée en cours.
+    fn trace_justifie(&self, trace: &[[f64; 2]]) -> Vec<[f64; 2]> {
+        let l = self.ruban_edition.nombre_option(crate::ruban::Outil::Escalier, 0);
+        let segments = trace.len().saturating_sub(1);
+        let d: Vec<f64> = (0..segments).map(|i| match self.dessin2d.just_segments.get(i).copied().unwrap_or(self.dessin2d.justification_escalier) {
+            1 => -l / 2.0,
+            2 => l / 2.0,
+            _ => 0.0,
+        }).collect();
+        if d.is_empty() || d.iter().all(|x| *x == d[0]) {
+            return crate::modele::escalier::decaler_polyligne(trace, d.first().copied().unwrap_or(0.0));
+        }
+        let p: Vec<DVec2> = trace.iter().map(|q| DVec2::from_array(*q)).collect();
+        let t: Vec<DVec2> = (0..segments).map(|i| (p[i + 1] - p[i]).normalize_or_zero()).collect();
+        let mut sortie = vec![p[0] + t[0].perp() * d[0]];
+        for k in 1..segments {
+            let (a0, a1) = (p[k] + t[k - 1].perp() * d[k - 1], p[k] + t[k].perp() * d[k]);
+            let den = t[k - 1].perp_dot(t[k]);
+            let milieu = (a0 + a1) / 2.0;
+            sortie.push(if den.abs() < 1e-6 {
+                milieu
+            } else {
+                let q = a0 + t[k - 1] * ((a1 - a0).perp_dot(t[k]) / den);
+                if q.distance(p[k]) > 3.0 * l.max(1.0) { milieu } else { q }
+            });
+        }
+        sortie.push(p[segments] + t[segments - 1].perp() * d[segments - 1]);
+        sortie.into_iter().map(|q| q.to_array()).collect()
+    }
+
+    /// Propriétés de l'escalier en création : schéma de trois marches (fixe) avec, à côté
+    /// de chaque cote, son champ modifiable : giron, hauteur de marche, nombre de marches
+    /// et Blondel. Un champ ne s'applique qu'à Entrée ou en le quittant.
+    pub(super) fn schema_escalier(&mut self, ui: &mut egui::Ui) {
+        use crate::ruban::Outil;
+        ui.label(RichText::new("Escalier").strong());
+        self.croquis_limites_escalier(ui);
+        let Some((_, _, hauteur, _)) = self.base_escalier() else { return };
+        if hauteur <= 1.0 {
+            ui.colored_label(Color32::from_rgb(200, 40, 40), "L'escalier doit monter : limite haute au-dessus de la base.");
+            return;
+        }
+        let vise = self.ruban_edition.nombre_option(Outil::Escalier, 1).max(50.0);
+        let nombre = ((hauteur / vise).round() as u32).max(2);
+        let h = hauteur / nombre as f64;
+        let impose = self.dessin2d.giron_impose;
+        // le giron saisi ou par défaut (Blondel) ne suit jamais le tracé : il sert de pas
+        let giron = impose.unwrap_or((630.0 - 2.0 * h).max(150.0));
+        let blondel = (2.0 * h + giron) / 10.0;
+        let hors = !(60.0..=64.0).contains(&blondel);
+        let u = crate::options::unite();
+        let (zone, _) = ui.allocate_exact_size(egui::vec2(ui.available_width().max(220.0), 100.0), Sense::hover());
+        let painter = ui.painter_at(zone);
+        let trait_ = egui::Stroke::new(1.6, ui.visuals().text_color());
+        let cote = egui::Stroke::new(1.0, Color32::from_rgb(55, 130, 200));
+        // trois marches, géométrie fixe
+        let (g, hm) = (46.0_f32, 22.0_f32);
+        let x0 = zone.left() + 84.0;
+        let y0 = zone.top() + 70.0;
+        let mut points = vec![egui::pos2(x0, y0)];
+        for _ in 0..3 {
+            let b = points[points.len() - 1];
+            points.push(b - egui::vec2(0.0, hm));
+            points.push(b + egui::vec2(g, -hm));
+        }
+        painter.add(egui::Shape::line(points, trait_));
+        painter.line_segment([egui::pos2(x0 - 12.0, y0), egui::pos2(x0 + 3.0 * g + 8.0, y0)], egui::Stroke::new(1.0, ui.visuals().weak_text_color()));
+        // cote de hauteur (première contremarche) et de giron (deuxième marche)
+        painter.line_segment([egui::pos2(x0 - 6.0, y0), egui::pos2(x0 - 6.0, y0 - hm)], cote);
+        painter.line_segment([egui::pos2(x0 + g, y0 + 6.0), egui::pos2(x0 + 2.0 * g, y0 + 6.0)], cote);
+        let champ = |ui: &mut egui::Ui, rect: egui::Rect, nom: &str, v: f64, facteur: f64, decimales: Option<usize>| -> Option<f64> {
+            // new_child : n'avance pas le curseur du panneau (scope_builder le ramènerait dans le schéma)
+            let mut enfant = ui.new_child(egui::UiBuilder::new().max_rect(rect));
+            champ_valeur(&mut enfant, nom, v, facteur, decimales, rect.width())
+        };
+        let (l, hc) = (58.0, 20.0);
+        let r_h = egui::Rect::from_min_size(egui::pos2(x0 - 12.0 - l, y0 - hm / 2.0 - hc / 2.0), egui::vec2(l, hc));
+        let r_g = egui::Rect::from_min_size(egui::pos2(x0 + 1.5 * g - l / 2.0, y0 + 10.0), egui::vec2(l, hc));
+        let r_n = egui::Rect::from_min_size(egui::pos2(x0 + 3.0 * g + 12.0, y0 - 3.0 * hm), egui::vec2(l, hc));
+        painter.text(egui::pos2(r_h.left(), r_h.top() - 1.0), egui::Align2::LEFT_BOTTOM, "hauteur", egui::FontId::proportional(10.0), cote.color);
+        painter.text(egui::pos2(r_g.right() + 4.0, r_g.center().y), egui::Align2::LEFT_CENTER, "giron", egui::FontId::proportional(10.0), cote.color);
+        painter.text(egui::pos2(r_n.left(), r_n.top() - 1.0), egui::Align2::LEFT_BOTTOM, "marches", egui::FontId::proportional(10.0), cote.color);
+        let nouvelle_h = champ(ui, r_h, "esc_h", h, u.facteur(), None);
+        let nouveau_giron = champ(ui, r_g, "esc_g", giron, u.facteur(), None);
+        let nouveau_nombre = champ(ui, r_n, "esc_n", nombre as f64, 1.0, Some(0));
+        ui.horizontal(|ui| {
+            ui.label("Blondel 2h + g");
+            let rouge = Color32::from_rgb(200, 40, 40);
+            if hors { ui.visuals_mut().override_text_color = Some(rouge); }
+            let nouveau = champ_valeur(ui, "esc_b", blondel * 10.0, 10.0, Some(1), 52.0);
+            ui.label("cm");
+            if hors { ui.label("hors confort (60 à 64)"); }
+            if let Some(b) = nouveau { self.dessin2d.giron_impose = Some((b - 2.0 * h).max(50.0)); }
+            if impose.is_some() && ui.small_button("↺").on_hover_text("Revenir au giron calculé d'après le tracé").clicked() {
+                self.dessin2d.giron_impose = None;
+            }
+        });
+        if let Some(n) = nouveau_nombre {
+            let n = n.round().clamp(2.0, 100.0);
+            self.ruban_edition.definir_nombre_option(Outil::Escalier, 1, hauteur / n);
+        } else if let Some(v) = nouvelle_h {
+            self.ruban_edition.definir_nombre_option(Outil::Escalier, 1, v.clamp(50.0, 400.0));
+        }
+        if let Some(v) = nouveau_giron {
+            self.dessin2d.giron_impose = Some(v.max(50.0));
+        }
+    }
+
     /// Escalier en cours : emmarchement (bords de la largeur) et flèche de montée.
     fn apercu_escalier(&self, painter: &egui::Painter, rect: egui::Rect, lignes: &[Vec<DVec2>]) {
         let w = self.ruban_edition.nombre_option(crate::ruban::Outil::Escalier, 0) / 2.0;
         let couleur = Color32::from_rgb(55, 130, 200);
+        let giron = self.giron_vise();
         for l in lignes.iter().filter(|l| l.len() >= 2) {
-            let trace: Vec<[f64; 2]> = l.iter().map(|p| p.to_array()).collect();
+            let brut: Vec<[f64; 2]> = l.iter().map(|p| p.to_array()).collect();
+            // justification : la ligne tracée est l'axe ou un bord ; la foulée est au centre
+            let trace = self.trace_justifie(&brut);
+            // marches en pointillé : un trait toutes les `giron` le long de chaque volée
+            let n = trace.len();
+            for i in 0..n - 1 {
+                let (a, b) = (DVec2::from_array(trace[i]), DVec2::from_array(trace[i + 1]));
+                let d = (b - a).normalize_or_zero();
+                if d == DVec2::ZERO { continue; }
+                let debut = if i > 0 { w } else { 0.0 };
+                let fin = a.distance(b) - if i + 2 < n { w } else { 0.0 };
+                let mut t = debut + giron;
+                let mut k = 0;
+                while t <= fin + 1e-6 && k < 300 {
+                    let c = a + d * t;
+                    let nrm = d.perp() * w;
+                    if let (Some(p), Some(q)) = (self.vers_ecran(rect, c - nrm), self.vers_ecran(rect, c + nrm)) {
+                        painter.add(egui::Shape::dashed_line(&[p, q], egui::Stroke::new(1.0, couleur), 4.0, 3.0));
+                    }
+                    t += giron;
+                    k += 1;
+                }
+            }
             for d in [w, -w] {
                 let bord: Vec<egui::Pos2> = crate::modele::escalier::decaler_polyligne(&trace, d).iter().filter_map(|q| self.vers_ecran(rect, DVec2::from_array(*q))).collect();
                 painter.add(egui::Shape::line(bord, egui::Stroke::new(1.5, couleur)));
@@ -1988,24 +2377,47 @@ impl ViewerApp {
     }
 }
 
-/// Bouton de la barre de commande : pictogramme dessiné (coche verte, croix rouge) et
-/// libellé.
+/// Bouton de la barre de commande : pictogramme seul (coche verte, croix rouge), à la
+/// hauteur des autres commandes de la barre ; le libellé est dans l'infobulle.
 fn bouton_commande(ui: &mut egui::Ui, valider: bool, libelle: &str) -> egui::Response {
-    let police = egui::FontId::proportional(13.0);
-    let texte = ui.painter().layout_no_wrap(libelle.to_string(), police, ui.visuals().text_color());
-    let (r, reponse) = ui.allocate_exact_size(egui::vec2(texte.size().x + 36.0, 26.0), Sense::click());
+    let h = ui.spacing().interact_size.y;
+    let (r, reponse) = ui.allocate_exact_size(egui::vec2(h * 1.4, h), Sense::click());
     if reponse.hovered() {
         ui.painter().rect_filled(r, 4.0, ui.visuals().widgets.hovered.bg_fill);
     }
-    let c = egui::pos2(r.left() + 14.0, r.center().y);
-    let (couleur, trait_) = if valider { (Color32::from_rgb(30, 150, 70), 2.2) } else { (Color32::from_rgb(200, 50, 45), 2.2) };
-    let t = egui::Stroke::new(trait_, couleur);
+    let c = r.center();
+    let u = h / 26.0;
+    let couleur = if valider { Color32::from_rgb(30, 150, 70) } else { Color32::from_rgb(200, 50, 45) };
+    let t = egui::Stroke::new(2.0, couleur);
     if valider {
-        ui.painter().add(egui::Shape::line(vec![c + egui::vec2(-6.0, 0.0), c + egui::vec2(-2.0, 5.0), c + egui::vec2(6.0, -5.0)], t));
+        ui.painter().add(egui::Shape::line(vec![c + egui::vec2(-6.0, 0.0) * u, c + egui::vec2(-2.0, 5.0) * u, c + egui::vec2(6.0, -5.0) * u], t));
     } else {
-        ui.painter().line_segment([c + egui::vec2(-5.0, -5.0), c + egui::vec2(5.0, 5.0)], t);
-        ui.painter().line_segment([c + egui::vec2(-5.0, 5.0), c + egui::vec2(5.0, -5.0)], t);
+        ui.painter().line_segment([c + egui::vec2(-5.0, -5.0) * u, c + egui::vec2(5.0, 5.0) * u], t);
+        ui.painter().line_segment([c + egui::vec2(-5.0, 5.0) * u, c + egui::vec2(5.0, -5.0) * u], t);
     }
-    ui.painter().galley(egui::pos2(r.left() + 28.0, r.center().y - texte.size().y / 2.0), texte, ui.visuals().text_color());
+    reponse.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, libelle));
     reponse
+}
+
+
+/// Champ numérique dont la saisie n'est appliquée qu'à Entrée ou à la perte du focus :
+/// rien n'est recalculé pendant la frappe. `facteur` : unité affichée (mm → cm = 10).
+fn champ_valeur(ui: &mut egui::Ui, nom: &str, valeur: f64, facteur: f64, decimales: Option<usize>, largeur: f32) -> Option<f64> {
+    let id = ui.make_persistent_id(("champ_valeur", nom));
+    let tampon = ui.data(|d| d.get_temp::<String>(id));
+    let mut texte = tampon.unwrap_or_else(|| match decimales {
+        Some(n) => format!("{:.*}", n, valeur / facteur),
+        None => crate::step::format_real(valeur / facteur),
+    });
+    let reponse = ui.add(egui::TextEdit::singleline(&mut texte).desired_width(largeur));
+    let mut resultat = None;
+    if reponse.has_focus() {
+        ui.data_mut(|d| d.insert_temp(id, texte.clone()));
+    } else {
+        ui.data_mut(|d| d.remove::<String>(id));
+        if reponse.lost_focus() {
+            resultat = texte.trim().replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite()).map(|v| v * facteur);
+        }
+    }
+    resultat
 }

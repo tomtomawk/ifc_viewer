@@ -868,7 +868,9 @@ impl ViewerApp {
                             let mut nom = n.nom.clone();
                             let mut altitude = n.altitude;
                             ui.horizontal(|ui| {
-                                ui.text_edit_singleline(&mut nom);
+                                // largeur relative : l'altitude reste visible quel que soit le panneau
+                                let largeur = (ui.available_width() - 90.0).clamp(40.0, 180.0);
+                                ui.add(egui::TextEdit::singleline(&mut nom).desired_width(largeur));
                                 ui.add(
                                     egui::DragValue::new(&mut altitude).speed(10.0).dimensions(),
                                 );
@@ -1090,15 +1092,13 @@ impl ViewerApp {
     /// (Déplacer, Copier, Tourner, Aligner, Ajuster) et commandes propres à la sélection
     /// (jonctions, mise à jour depuis le type, trémie). Propriétés ne garde que les
     /// informations de la sélection.
-    pub(super) fn options_modifier(&mut self, ui: &mut egui::Ui) {
+    pub(super) fn options_modifier(&mut self, ui: &mut egui::Ui, selection_seule: bool) {
         use crate::modele::commandes::Commande;
         use crate::ruban::Outil;
         let outil = self.ruban_edition.outil();
         let ids = self.selection_bim();
         let Some((p, _)) = &self.natif else { return };
-        let murs = ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some());
         let fenetre = (ids.len() == 1).then(|| p.ouvertures.iter().find(|o| o.id == ids[0] && o.genre != crate::modele::GenreOuverture::Libre)).flatten().map(|o| o.id.clone());
-        let mut copier_niveau=false;
         let mut editer_famille = false;
         let escalier = (ids.len() == 1).then(|| p.escaliers.iter().find(|e| e.id == ids[0])).flatten().map(|e| e.id.clone());
         let mut garde_corps: Option<Vec<usize>> = None;
@@ -1112,10 +1112,12 @@ impl ViewerApp {
         let mut associer: Option<String> = None;
         let mut selection = None;
         let mut commande = None;
-        ui.horizontal(|ui| {
-            if !ids.is_empty() && ui.button("Copier sur un niveau…").on_hover_text("Conserver la position en plan et choisir le niveau de destination").clicked() {copier_niveau=true;}
-
-            if escalier.is_some() {
+        let assemblage_seul = ids.len() == 1 && p.assemblage(&ids[0]).is_some();
+        if selection_seule && escalier.is_none() && fenetre.is_none() && mur.is_none() && !assemblage_seul {
+            return;
+        }
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(selection_seule), |ui| {
+            if selection_seule && escalier.is_some() {
                 ui.label("Garde-corps");
                 for (nom, cotes) in [("Deux côtés", vec![0, 1]), ("Gauche", vec![0]), ("Droite", vec![1])] {
                     if ui.button(nom).on_hover_text("Garde-corps qui suivent les marches (gauche / droite du sens de montée), réglages de l'outil Garde-corps").clicked() {
@@ -1123,10 +1125,10 @@ impl ViewerApp {
                     }
                 }
             }
-            if fenetre.is_some() && ui.button("Éditer la famille…").on_hover_text("Éditeur de familles : plans, contraintes, volumes, vides et symboles ; enregistré dans le type").clicked() {
+            if selection_seule && fenetre.is_some() && ui.button("Éditer la famille…").on_hover_text("Éditeur de familles : plans, contraintes, volumes, vides et symboles ; enregistré dans le type").clicked() {
                 editer_famille = true;
             }
-            if let Some(m) = &mur {
+            if let Some(m) = mur.as_ref().filter(|_| selection_seule) {
                 if let Some(a) = &m.assemblage {
                     if ui.button("Dissocier").on_hover_text("La couche devient un mur indépendant (elle garde sa place et ses réglages)").clicked() {
                         dissocier = true;
@@ -1144,7 +1146,7 @@ impl ViewerApp {
                     });
                 }
             }
-            match outil {
+            match outil.filter(|_| !selection_seule) {
                 Some(Outil::Deplacer | Outil::Copier) => {
                     let mut appliquer = false;
                     ui.collapsing("Saisie chiffrée", |ui| {
@@ -1214,62 +1216,7 @@ impl ViewerApp {
                 }
                 _ => {}
             }
-            if murs {
-                ui.menu_button("Jonctions et haut des murs", |ui| {
-                    egui::ComboBox::from_id_salt("toit_attache")
-                        .selected_text(if self.bim.toiture.is_empty() {
-                            "Toiture"
-                        } else {
-                            &self.bim.toiture
-                        })
-                        .show_ui(ui, |ui| {
-                            for d in self
-                                .natif
-                                .as_ref()
-                                .unwrap()
-                                .0
-                                .dalles
-                                .iter()
-                                .filter(|d| d.sorte == crate::modele::SorteDalle::Toiture)
-                            {
-                                ui.selectable_value(&mut self.bim.toiture, d.id.clone(), &d.nom);
-                            }
-                        });
-                    if ui
-                        .add_enabled(
-                            !self.bim.toiture.is_empty(),
-                            egui::Button::new("Attacher à la sous-face"),
-                        )
-                        .clicked()
-                    {
-                        commande = Some(Commande::Attacher {
-                            ids: ids.clone(),
-                            toiture: Some(self.bim.toiture.clone()),
-                        });
-                    }
-                    if ui.button("Détacher").clicked() {
-                        commande = Some(Commande::Attacher {
-                            ids: ids.clone(),
-                            toiture: None,
-                        });
-                    }
-                    ui.horizontal(|ui| {
-                        ui.label("Priorité de jonction");
-                        ui.add(egui::DragValue::new(&mut self.bim.priorite));
-                    });
-                    if ui
-                        .add_enabled(ids.len() == 1, egui::Button::new("Appliquer à la couche"))
-                        .clicked()
-                    {
-                        commande = Some(Commande::PrioriteJonction {
-                            id: ids[0].clone(),
-                            priorite: self.bim.priorite,
-                        });
-                    }
-                    ui.label("La priorité la plus élevée conserve son volume au croisement.");
-                });
-            }
-            if ids.len() == 1 && self.natif.as_ref().unwrap().0.assemblage(&ids[0]).is_some() {
+            if selection_seule && assemblage_seul {
                 ui.menu_button("Mise à jour depuis le type", |ui| {
                 if ui
                     .button("Préparer la mise à jour depuis le type")
@@ -1306,7 +1253,6 @@ impl ViewerApp {
                 });
             }
         });
-        if copier_niveau {self.memoriser_copie_niveau(ids.clone());self.ouvrir_coller_niveau();}
         if let Some(c) = commande {
             if let Err(e) = self.executer_bim(c) {
                 self.error = Some(e);
@@ -1335,22 +1281,54 @@ impl ViewerApp {
         }
     }
 
+    /// Jonctions et haut des murs, ouvert depuis le bouton Jonctions du ruban (Modifier).
+    pub(super) fn menu_jonctions(&mut self, ui: &mut egui::Ui) {
+        use crate::modele::commandes::Commande;
+        let ids = self.selection_bim();
+        let toitures: Vec<(String, String)> = self.natif.as_ref().map(|(p, _)| {
+            p.dalles.iter().filter(|d| d.sorte == crate::modele::SorteDalle::Toiture).map(|d| (d.id.clone(), d.nom.clone())).collect()
+        }).unwrap_or_default();
+        let mut commande = None;
+        egui::ComboBox::from_id_salt("toit_attache")
+            .selected_text(if self.bim.toiture.is_empty() { "Toiture" } else { &self.bim.toiture })
+            .show_ui(ui, |ui| {
+                for (id, nom) in &toitures {
+                    ui.selectable_value(&mut self.bim.toiture, id.clone(), nom);
+                }
+            });
+        if ui.add_enabled(!self.bim.toiture.is_empty(), egui::Button::new("Attacher à la sous-face")).clicked() {
+            commande = Some(Commande::Attacher { ids: ids.clone(), toiture: Some(self.bim.toiture.clone()) });
+        }
+        if ui.button("Détacher").clicked() {
+            commande = Some(Commande::Attacher { ids: ids.clone(), toiture: None });
+        }
+        ui.horizontal(|ui| {
+            ui.label("Priorité de jonction");
+            ui.add(egui::DragValue::new(&mut self.bim.priorite));
+        });
+        if ui.add_enabled(ids.len() == 1, egui::Button::new("Appliquer à la couche")).clicked() {
+            commande = Some(Commande::PrioriteJonction { id: ids[0].clone(), priorite: self.bim.priorite });
+        }
+        ui.label("La priorité la plus élevée conserve son volume au croisement.");
+        if let Some(c) = commande {
+            if let Err(e) = self.executer_bim(c) {
+                self.error = Some(e);
+            }
+            ui.close();
+        }
+    }
+
     /// Barre d'options affichée : Modifier, projet natif, outil à réglages ou sélection
     /// avec des commandes propres.
     pub(super) fn a_options_modifier(&self) -> bool {
         use crate::ruban::Outil;
-        let Some((p, _)) = &self.natif else { return false };
+        if self.natif.is_none() { return false; }
         if self.onglet_ruban != OngletRuban::Modifier {
             return false;
         }
-        if matches!(self.ruban_edition.outil(), Some(Outil::Deplacer | Outil::Copier | Outil::Tourner | Outil::Aligner | Outil::Ajuster)) {
-            return true;
-        }
-        let ids = self.selection_bim();
-        if !ids.is_empty() {return true;}
-        ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some())
-            || (ids.len() == 1 && p.escaliers.iter().any(|e| e.id == ids[0]))
-            || (ids.len() == 1 && p.ouvertures.iter().any(|o| o.id == ids[0] && o.genre != crate::modele::GenreOuverture::Libre))
+        // la barre n'apparaît que pendant un outil ; les commandes de la sélection sont
+        // dans le ruban (Jonctions, Copier sur niveaux) et dans Propriétés
+        matches!(self.ruban_edition.outil(), Some(Outil::Deplacer | Outil::Copier | Outil::Tourner | Outil::Aligner | Outil::Ajuster))
     }
 
     pub(super) fn vue_native_id(&self) -> Option<String> {

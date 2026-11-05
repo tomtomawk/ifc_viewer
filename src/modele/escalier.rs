@@ -27,6 +27,9 @@ pub struct Escalier {
     pub niveau_haut: Option<String>,
     #[serde(default)]
     pub decalage_bas: f64,
+    /// Décalage de l'arrivée par rapport au niveau d'arrivée (mm).
+    #[serde(default, skip_serializing_if = "est_nul")]
+    pub decalage_haut: f64,
     /// Hauteur à franchir sans niveau d'arrivée (mm).
     pub hauteur: f64,
     /// Ligne de foulée en plan (mm), du départ à l'arrivée.
@@ -144,7 +147,7 @@ impl Escalier {
         let n0 = p.niveau(&self.niveau).ok_or("Niveau de l'escalier absent.")?;
         let base = n0.altitude + self.decalage_bas;
         let hauteur = match &self.niveau_haut {
-            Some(id) => p.niveau(id).ok_or("Niveau d'arrivée de l'escalier absent.")?.altitude - base,
+            Some(id) => p.niveau(id).ok_or("Niveau d'arrivée de l'escalier absent.")?.altitude + self.decalage_haut - base,
             None => self.hauteur,
         };
         if !(hauteur > 0.0 && hauteur.is_finite()) {
@@ -412,7 +415,7 @@ mod tests {
     }
 
     fn escalier(trace: Vec<[f64; 2]>) -> Escalier {
-        Escalier { id: "e".into(), nom: "Escalier".into(), niveau: "rdc".into(), niveau_haut: Some("r1".into()), decalage_bas: 0.0, hauteur: 2800.0, trace, largeur: 1000.0, hauteur_marche: 175.0, paillasse: 150.0 }
+        Escalier { id: "e".into(), nom: "Escalier".into(), niveau: "rdc".into(), niveau_haut: Some("r1".into()), decalage_bas: 0.0, decalage_haut: 0.0, hauteur: 2800.0, trace, largeur: 1000.0, hauteur_marche: 175.0, paillasse: 150.0 }
     }
 
     #[test]

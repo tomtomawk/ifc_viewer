@@ -1988,6 +1988,8 @@ impl ViewerApp {
                     });
                     if e.niveau_haut.is_none() {
                         change |= ui.add(egui::DragValue::new(&mut e.hauteur).dimensions().speed(5.0)).on_hover_text("Hauteur libre").changed();
+                    } else {
+                        change |= ui.add(egui::DragValue::new(&mut e.decalage_haut).dimensions().speed(5.0)).on_hover_text("Décalage de l'arrivée par rapport au niveau").changed();
                     }
                 });
                 ui.end_row();
@@ -2555,6 +2557,15 @@ impl ViewerApp {
         let numero = scene::numero_vue(&id);
         let indice = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()?.vues.iter().position(|v| v.revit_id == numero));
         if ouvrir && let Some(i) = indice {
+            self.activer_vue(i);
+        }
+    }
+
+    /// Ouvre la vue native `id` (coupe, élévation, plan) dans le navigateur de vues.
+    fn ouvrir_vue_native(&mut self, id: &str) {
+        let numero = scene::numero_vue(id);
+        let indice = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()?.vues.iter().position(|v| v.revit_id == numero));
+        if let Some(i) = indice {
             self.activer_vue(i);
         }
     }
@@ -3860,8 +3871,20 @@ impl ViewerApp {
             return;
         }
         if let Some(menu) = edition {
-            match self.ruban_edition.afficher(ui, menu, self.natif.as_ref().map(|n| &n.0)) {
+            let ids = self.selection_bim();
+            self.ruban_edition.selection_elements = !ids.is_empty();
+            self.ruban_edition.selection_murs = self.natif.as_ref().is_some_and(|(p, _)| ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some()));
+            self.ruban_edition.bouton_jonctions = None;
+            let action = self.ruban_edition.afficher(ui, menu, self.natif.as_ref().map(|n| &n.0));
+            if let Some(r) = self.ruban_edition.bouton_jonctions.take() {
+                egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| self.menu_jonctions(ui));
+            }
+            match action {
                 Some(crate::ruban::Outil::ModifierContour) => self.commencer_edition_contour(),
+                Some(crate::ruban::Outil::CopierNiveau) => {
+                    self.memoriser_copie_niveau(ids);
+                    self.ouvrir_coller_niveau();
+                }
                 Some(crate::ruban::Outil::CreerIdentique) => {
                     if let Err(e) = self.creer_identique() { self.error = Some(e); }
                 }
@@ -6223,6 +6246,9 @@ impl ViewerApp {
             } else if let Some(projet) = self.contexte_selection(ui, &ids) {
                 if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
             }
+            if !ids.is_empty() && self.onglet_ruban == OngletRuban::Modifier {
+                self.options_modifier(ui, true);
+            }
             // Le type vient immédiatement après Phase / Sous-projet / Variante,
             // au même emplacement que pendant la création d'un mur.
             if self.jeu_actif().is_none() && !self.ruban_edition.mur_actif() {
@@ -6255,6 +6281,11 @@ impl ViewerApp {
                 let r = self.ruban_edition.definir_type_mur(&mut copie, &t.nom, t.couches, t.categorie).and_then(|_| self.appliquer_projet(copie));
                 if let Err(e) = r { self.error = Some(e); }
             }
+        }
+        // création d'un escalier : comme le mur, ses réglages remplacent les propriétés de la vue
+        if self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.outil() == Some(crate::ruban::Outil::Escalier) && self.selection_bim().is_empty() {
+            self.schema_escalier(ui);
+            return;
         }
         if self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.proprietes_mur(ui, self.natif.as_ref().map(|(p, _)| p)) {
             return;
@@ -6951,6 +6982,12 @@ impl ViewerApp {
                         None => self.coupe_depart = Some(p),
                     }
                 }
+            } else if let Some(id) = resp.double_clicked().then(|| resp.interact_pointer_pos()).flatten()
+                .and_then(|q| self.repere_coupe_proche(rect, q, altitude_coupe))
+                .filter(|id| self.natif.as_ref().is_some_and(|(p, _)| p.vues.iter().any(|v| &v.id == id)))
+            {
+                // double-clic sur le repère d'une coupe ou d'une élévation : ouvrir la vue
+                self.ouvrir_vue_native(&id);
             } else if resp.double_clicked() {
                 match resp.interact_pointer_pos().and_then(|p| pick(self, p)) {
                     Some((obj, _)) => self.frame_objects(&[obj]),
@@ -7062,7 +7099,7 @@ impl ViewerApp {
                 (_, None) => "Poutre : cliquer le départ · molette : zoom",
                 (_, Some(_)) => "Poutre : cliquer l'arrivée · Maj : orthogonal · Échap ou clic droit : annuler",
             };
-            painter.text(rect.left_top()+egui::vec2(12.0,34.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
+            painter.text(rect.left_top()+egui::vec2(12.0,self.dessin2d.bas_barre.max(4.0)+8.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
             if let Some(alt) = altitude_structure {
                 let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.bim.depart_structure, alt));
                 if let Some((p, accroche)) = point {
