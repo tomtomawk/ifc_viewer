@@ -346,8 +346,8 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
     fusionner_materiaux(scene, prims)
 }
 
-/// Ligne d'isolant en zigzag (symbole traditionnel) d'une région de coupe (triangles 2D) :
-/// le long de sa plus grande dimension, de face à face, segments gardés dans la région.
+/// Ligne d'isolant en série de S (symbole traditionnel) d'une région de coupe (triangles
+/// 2D) : le long de sa plus grande dimension, de face à face, segments gardés dans la région.
 pub fn ligne_isolation(tris: &[[[f64; 2]; 3]]) -> Vec<[[f64; 2]; 2]> {
     use glam::DVec2;
     let pts: Vec<DVec2> = tris.iter().flatten().map(|p| DVec2::from_array(*p)).collect();
@@ -355,16 +355,23 @@ pub fn ligne_isolation(tris: &[[[f64; 2]; 3]]) -> Vec<[[f64; 2]; 2]> {
         return Vec::new();
     }
     let c = pts.iter().copied().sum::<DVec2>() / pts.len() as f64;
-    // direction principale (covariance des sommets)
-    let (mut xx, mut xy, mut yy) = (0.0, 0.0, 0.0);
-    for p in &pts {
-        let d = *p - c;
-        xx += d.x * d.x;
-        xy += d.x * d.y;
-        yy += d.y * d.y;
+    // direction : plus long côté du contour (arête portée par un seul triangle). La
+    // covariance des sommets est faussée par la triangulation (diagonales, doublons) et
+    // inclinait le motif dans la couche.
+    let cle = |p: DVec2| ((p.x * 100.0).round() as i64, (p.y * 100.0).round() as i64);
+    let mut aretes: std::collections::HashMap<((i64, i64), (i64, i64)), (usize, DVec2, DVec2)> = std::collections::HashMap::new();
+    for t in tris {
+        let t = t.map(DVec2::from_array);
+        for k in 0..3 {
+            let (a, b) = (t[k], t[(k + 1) % 3]);
+            let (ka, kb) = (cle(a), cle(b));
+            let k = if ka <= kb { (ka, kb) } else { (kb, ka) };
+            aretes.entry(k).or_insert((0, a, b)).0 += 1;
+        }
     }
-    let a = 0.5 * (2.0 * xy).atan2(xx - yy);
-    let u = DVec2::new(a.cos(), a.sin());
+    let Some(u) = aretes.values().filter(|(n, _, _)| *n == 1).max_by(|x, y| x.1.distance(x.2).total_cmp(&y.1.distance(y.2))).and_then(|(_, a, b)| (*b - *a).try_normalize()) else {
+        return Vec::new();
+    };
     let v = u.perp();
     let (mut u0, mut u1, mut v0, mut v1) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
     for p in &pts {
@@ -378,21 +385,66 @@ pub fn ligne_isolation(tris: &[[[f64; 2]; 3]]) -> Vec<[[f64; 2]; 2]> {
     if !(e > 1e-6) || u1 - u0 < e {
         return Vec::new();
     }
-    // zigzag traditionnel : de face à face, demi-période = 0,5 × épaisseur, extrémités calées
-    let n = (((u1 - u0) / (0.5 * e)).round() as usize).max(2);
+    // Série de S (isolant souple, motif traditionnel) : cercles de rayon e/4 posés
+    // alternativement contre chaque face, au pas e/4, parcourus en sens alternés et
+    // reliés par leurs tangentes intérieures ; les boucles se recoupent en gouttes.
+    let r = 0.25 * e;
+    let pas = 0.25 * e;
     let dedans = |p: DVec2| tris.iter().any(|t| {
         let [a, b, c] = t.map(DVec2::from_array);
         let s = |x: DVec2, y: DVec2| (y - x).perp_dot(p - x);
         let (s1, s2, s3) = (s(a, b), s(b, c), s(c, a));
         (s1 >= -1e-12 && s2 >= -1e-12 && s3 >= -1e-12) || (s1 <= 1e-12 && s2 <= 1e-12 && s3 <= 1e-12)
     });
-    let sommet = |k: usize| c + u * (u0 + (u1 - u0) * k as f64 / n as f64) + v * (if k % 2 == 0 { v0 } else { v1 });
+    let local = |x: f64, y: f64| c + u * x + v * y;
+    // cercle k : centre (x, y) local, sens (−1 horaire contre la face v1, +1 antihoraire contre v0)
+    let n = ((u1 - u0) / pas).ceil() as i64 + 2;
+    let cercles: Vec<(DVec2, f64)> = (-1..=n)
+        .map(|k| {
+            let haut = k.rem_euclid(2) == 0;
+            (DVec2::new(u0 + k as f64 * pas, if haut { v1 - r } else { v0 + r }), if haut { -1.0 } else { 1.0 })
+        })
+        .collect();
+    // tangente intérieure de A (sens sa) vers B : passe par le milieu, vitesse continue
+    let tangente = |a: DVec2, sa: f64, b: DVec2| -> Option<(DVec2, DVec2)> {
+        let m = (a + b) * 0.5;
+        let w = m - a;
+        let l = w.length();
+        if l <= r { return None; }
+        let phi = (r / l).acos();
+        let w = w / l;
+        [phi, -phi].into_iter().map(|ang| a + DVec2::from_angle(ang).rotate(w) * r).find(|t| {
+            let rayon = *t - a;
+            let vitesse = if sa < 0.0 { DVec2::new(rayon.y, -rayon.x) } else { DVec2::new(-rayon.y, rayon.x) };
+            vitesse.dot(m - *t) > 0.0
+        }).map(|t| (t, 2.0 * m - t))
+    };
+    let mut trace: Vec<DVec2> = Vec::new();
+    let mut entree: Option<DVec2> = None;
+    for k in 0..cercles.len() - 1 {
+        let ((ca, sa), (cb, _)) = (cercles[k], cercles[k + 1]);
+        let Some((sortie, arrivee)) = tangente(ca, sa, cb) else { return Vec::new() };
+        // arc de l'entrée à la sortie dans le sens du cercle
+        if let Some(e0) = entree {
+            let (t0, t1) = ((e0 - ca).to_angle(), (sortie - ca).to_angle());
+            let balayage = if sa > 0.0 { (t1 - t0).rem_euclid(std::f64::consts::TAU) } else { -(t0 - t1).rem_euclid(std::f64::consts::TAU) };
+            let pas_arc = ((balayage.abs() / 0.15).ceil() as usize).max(2);
+            for i in 0..=pas_arc {
+                trace.push(ca + DVec2::from_angle(t0 + balayage * i as f64 / pas_arc as f64) * r);
+            }
+        } else {
+            trace.push(sortie);
+        }
+        trace.push(arrivee);
+        entree = Some(arrivee);
+    }
     let mut out = Vec::new();
-    const PIECES: usize = 8;
-    for k in 0..n {
-        let (p, q) = (sommet(k), sommet(k + 1));
-        for i in 0..PIECES {
-            let (a, b) = (p.lerp(q, i as f64 / PIECES as f64), p.lerp(q, (i + 1) as f64 / PIECES as f64));
+    const PIECES: usize = 6;
+    for w in trace.windows(2) {
+        let (p, q) = (local(w[0].x, w[0].y), local(w[1].x, w[1].y));
+        let morceaux = if p.distance(q) > 0.3 * r { PIECES } else { 1 };
+        for i in 0..morceaux {
+            let (a, b) = (p.lerp(q, i as f64 / morceaux as f64), p.lerp(q, (i + 1) as f64 / morceaux as f64));
             if dedans((a + b) * 0.5) {
                 out.push([a.to_array(), b.to_array()]);
             }
