@@ -1,34 +1,21 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod app;
-mod bim_cli;
-mod camera;
-mod orientation_plan;
-mod csg;
+mod config;
 mod dessin;
-mod dessin2d;
-mod gabarit;
-mod geom;
-mod model;
+mod formats;
 mod modele;
-mod options;
+mod noyau;
 mod pilote;
-mod render;
-mod ruban;
-mod rvt;
-mod scene;
-mod selection_rectangle;
-mod step;
-mod texte;
-mod trace2d;
+mod rendu;
+mod ui;
 
 use std::path::PathBuf;
 
 fn main() {
-    options::definir_unite(options::Options::charger().unite);
+    config::options::definir_unite(config::options::Options::charger().unite);
     let args: Vec<String> = std::env::args().skip(1).collect();
     if let Some(resultat)=modele::collaboration::cli::executer(&args){match resultat{Ok(())=>std::process::exit(0),Err(e)=>{eprintln!("{e}");std::process::exit(2);}}}
-    if let Some(resultat) = bim_cli::executer(&args) {
+    if let Some(resultat) = pilote::cli::executer(&args) {
         match resultat { Ok(())=>std::process::exit(0),Err(e)=>{eprintln!("{e}");std::process::exit(2);} }
     }
 
@@ -81,7 +68,7 @@ fn main() {
             std::process::exit(2);
         };
         let path = PathBuf::from(path);
-        let code = if rvt::is_revit_path(&path) { rvt_stats(&path) } else { stats(path) };
+        let code = if formats::rvt::is_revit_path(&path) { rvt_stats(&path) } else { stats(path) };
         std::process::exit(code);
     }
 
@@ -99,7 +86,7 @@ fn main() {
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
-    if let Err(e) = eframe::run_native("BIMedit", options, Box::new(move |cc| Ok(Box::new(app::ViewerApp::new(cc, path))))) {
+    if let Err(e) = eframe::run_native("BIMedit", options, Box::new(move |cc| Ok(Box::new(ui::ViewerApp::new(cc, path))))) {
         eprintln!("Erreur : {e}");
         std::process::exit(1);
     }
@@ -154,7 +141,7 @@ fn modele(entree: PathBuf, sortie: PathBuf) -> i32 {
         .stack_size(64 << 20)
         .spawn(move || {
             let progress = |s: String| eprintln!("{s}");
-            if rvt::is_revit_path(&e) { modele::depuis_rvt::convertir(&e, &progress) } else { modele::depuis_ifc::convertir(&e, &progress) }
+            if formats::rvt::is_revit_path(&e) { modele::echanges::depuis_rvt::convertir(&e, &progress) } else { modele::echanges::depuis_ifc::convertir(&e, &progress) }
         })
         .unwrap();
     let (projet, mesures) = match handle.join() {
@@ -168,7 +155,7 @@ fn modele(entree: PathBuf, sortie: PathBuf) -> i32 {
             return 1;
         }
     };
-    let rapport = modele::rapport::markdown(&projet, &mesures, t0.elapsed().as_secs_f64());
+    let rapport = modele::echanges::rapport::markdown(&projet, &mesures, t0.elapsed().as_secs_f64());
     let json = match projet.json() {
         Ok(j) => j,
         Err(e) => {
@@ -195,7 +182,7 @@ fn modele(entree: PathBuf, sortie: PathBuf) -> i32 {
 fn stats(path: PathBuf) -> i32 {
     let handle = std::thread::Builder::new()
         .stack_size(64 << 20)
-        .spawn(move || scene::load(&path, &|s| eprintln!("{s}")))
+        .spawn(move || rendu::scene::load(&path, &|s| eprintln!("{s}")))
         .unwrap();
     match handle.join().unwrap() {
         Ok(s) => {
@@ -216,7 +203,7 @@ fn stats(path: PathBuf) -> i32 {
             }
             println!("Par classe   :");
             for (c, n) in by_class {
-                println!("  {:<32} {n}", model::pretty_type(&c));
+                println!("  {:<32} {n}", formats::ifc::semantique::pretty_type(&c));
             }
             if s.objects.len() <= 50 {
                 println!("Volumes (m3) :");
@@ -236,7 +223,7 @@ fn stats(path: PathBuf) -> i32 {
             if !s.unsupported.is_empty() {
                 println!("Non pris en charge :");
                 for (t, n) in &s.unsupported {
-                    println!("  {:<32} {n}", model::pretty_type(t));
+                    println!("  {:<32} {n}", formats::ifc::semantique::pretty_type(t));
                 }
             }
             0
@@ -251,8 +238,8 @@ fn stats(path: PathBuf) -> i32 {
 /// Valeurs de paramètres décodées, une par ligne : élément, paramètre, stockage, valeur
 /// brute (unités internes de Revit), pour comparaison avec l'API.
 fn rvt_parametres(path: &std::path::Path) -> i32 {
-    use rvt::parametres::{Brut, Stockage, integres};
-    let m = match rvt::maquette::lire(path, &|_| {}) {
+    use formats::rvt::parametres::{Brut, Stockage, integres};
+    let m = match formats::rvt::maquette::lire(path, &|_| {}) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("Erreur : {e}");
@@ -289,7 +276,7 @@ fn rvt_parametres(path: &std::path::Path) -> i32 {
 /// non_calculees}.
 /// Écrit les images (types d'image) et les vignettes des apparences d'un fichier Revit.
 fn rvt_images(path: &std::path::Path, dossier: &std::path::Path) -> i32 {
-    let m = match rvt::maquette::lire(path, &|_| {}) {
+    let m = match formats::rvt::maquette::lire(path, &|_| {}) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("Erreur : {e}");
@@ -302,7 +289,7 @@ fn rvt_images(path: &std::path::Path, dossier: &std::path::Path) -> i32 {
     }
     let propre = |s: &str| s.chars().map(|c| if r#"\/:*?"<>|"#.contains(c) { '_' } else { c }).collect::<String>();
     let mut n = 0;
-    let mut ecrire = |nom: String, r: &rvt::medias::Raster| {
+    let mut ecrire = |nom: String, r: &formats::rvt::medias::Raster| {
         let f = dossier.join(format!("{}.{}", propre(&nom), r.format));
         match std::fs::write(&f, &r.donnees) {
             Ok(()) => {
@@ -333,7 +320,7 @@ fn rvt_images(path: &std::path::Path, dossier: &std::path::Path) -> i32 {
 }
 
 fn rvt_decodage(path: &std::path::Path) -> i32 {
-    match rvt::maquette::decodage(path) {
+    match formats::rvt::maquette::decodage(path) {
         Ok(d) => {
             println!(
                 "{{\"non_interpretees\":[{}],\"flux\":[{},{}],\"non_lus\":[{}],\"elements\":[{},{},{}],\"octets_elements\":[{},{},{}],\"octets_nommes\":{},\"geometries\":[{},{}],\"octets_geometries\":[{},{}]}}",
@@ -352,7 +339,7 @@ fn rvt_decodage(path: &std::path::Path) -> i32 {
 }
 
 fn rvt_nomenclatures(path: &std::path::Path) -> i32 {
-    let m = match rvt::maquette::lire(path, &|_| {}) {
+    let m = match formats::rvt::maquette::lire(path, &|_| {}) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("Erreur : {e}");
@@ -362,19 +349,19 @@ fn rvt_nomenclatures(path: &std::path::Path) -> i32 {
     let j = |s: &str| pilote::texte(s);
     for v in &m.vues {
         let Some(d) = &v.nomenclature else { continue };
-        let t = rvt::nomenclatures::calculer(&m, d);
+        let t = formats::rvt::nomenclatures::calculer(&m, d);
         let liste = |l: &[String]| format!("[{}]", l.iter().map(|x| j(x)).collect::<Vec<_>>().join(","));
         let lignes = t.lignes.iter().map(|l| liste(l)).collect::<Vec<_>>().join(",");
         let nc = t.non_calculees.iter().map(usize::to_string).collect::<Vec<_>>().join(",");
         // colonnes visibles calculées par une formule
-        let formules = d.champs.iter().filter(|c| !c.masque).enumerate().filter(|(_, c)| c.genre == rvt::nomenclatures::GenreChamp::Formule).map(|(k, _)| k.to_string()).collect::<Vec<_>>().join(",");
+        let formules = d.champs.iter().filter(|c| !c.masque).enumerate().filter(|(_, c)| c.genre == formats::rvt::nomenclatures::GenreChamp::Formule).map(|(k, _)| k.to_string()).collect::<Vec<_>>().join(",");
         println!("{{\"id\":{},\"nom\":{},\"titres\":{},\"lignes\":[{lignes}],\"non_calculees\":[{nc}],\"formules\":[{formules}]}}", v.id, j(&v.nom), liste(&t.titres));
     }
     0
 }
 
 fn rvt_stats(path: &std::path::Path) -> i32 {
-    let info = match rvt::load(path) {
+    let info = match formats::rvt::load(path) {
         Ok(i) => i,
         Err(e) => {
             eprintln!("Erreur : {e}");
@@ -385,7 +372,7 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
     println!("Type         : {} Revit {}", info.kind, info.format().unwrap_or("?"));
     println!("Taille       : {:.1} Mo", info.file_size as f64 / 1e6);
     for (k, v) in &info.basic {
-        println!("  {:<34} {v}", rvt::basic_label(k));
+        println!("  {:<34} {v}", formats::rvt::basic_label(k));
     }
     if let Some(t) = &info.title {
         println!("Titre        : {t}");
@@ -407,7 +394,7 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
     }
     let preview = match info.preview_png.as_deref() {
         None => "absente".to_string(),
-        Some(p) => match rvt::decode_png_rgba(p) {
+        Some(p) => match formats::rvt::decode_png_rgba(p) {
             Some((w, h, _)) => format!("PNG {w} x {h} px ({} octets)", p.len()),
             None => format!("PNG illisible ({} octets)", p.len()),
         },
@@ -419,7 +406,7 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
         println!("Avertissement : {w}");
     }
     let t0 = std::time::Instant::now();
-    let m = match rvt::maquette::lire(path, &|s| eprintln!("{s}")) {
+    let m = match formats::rvt::maquette::lire(path, &|s| eprintln!("{s}")) {
         Ok(m) => m,
         Err(e) => {
             println!("Géométrie    : illisible ({e})");
@@ -428,7 +415,7 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
     };
     println!("Niveaux      : {}", m.niveaux.len());
     for n in &m.niveaux {
-        println!("  {:<34} {} mm", n.nom, step::format_real((n.altitude * 10.0).round() / 10.0));
+        println!("  {:<34} {} mm", n.nom, formats::ifc::step::format_real((n.altitude * 10.0).round() / 10.0));
     }
     let mut genres = std::collections::BTreeMap::<&str, usize>::new();
     for d in m.definitions.values() {
@@ -444,7 +431,7 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
         m.parametres.len()
     );
     println!("Identifiants : {} épisodes, {} éléments avec UniqueId", m.episodes.len(), m.episode_de.len());
-    if let Ok(i) = rvt::maquette::infos_document(path) {
+    if let Ok(i) = formats::rvt::maquette::infos_document(path) {
         println!(
             "Document : logiciel {}, {} versions de Revit ({}), sous-projets {:?}, {} enregistrements (dernier par {}), {} documents de famille embarqués",
             i.logiciel,
@@ -528,7 +515,7 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
             println!("  {:>10} {:<8} non maillé : {}", w.id, w.classe, w.geometrie.as_ref().err().unwrap());
         }
     }
-    let bilan = |nom: &str, gs: &mut dyn Iterator<Item = &rvt::maquette::Geometrie>| {
+    let bilan = |nom: &str, gs: &mut dyn Iterator<Item = &formats::rvt::maquette::Geometrie>| {
         let (mut n, mut ok, mut vol) = (0, 0, 0.0);
         let mut causes: std::collections::BTreeMap<String, usize> = Default::default();
         let mut partiels: std::collections::BTreeMap<String, usize> = Default::default();
@@ -608,7 +595,7 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
     // régions remplies : unies, hachurées (nombre de traits découpés), sans type connu
     let (mut unies, mut hachurees, mut traits, mut sans_type) = (0, 0, 0, 0);
     for e in &m.elements_2d {
-        let rvt::vues::Contenu::Region { type_id } = &e.contenu else { continue };
+        let formats::rvt::vues::Contenu::Region { type_id } = &e.contenu else { continue };
         let (Some(t), Some(v), Ok(g)) = (m.types_regions.get(type_id), m.vues.iter().find(|v| v.id == e.vue), &e.geometrie) else {
             sans_type += 1;
             continue;
@@ -616,7 +603,7 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
         match m.motifs.get(&t.avant) {
             Some(x) if !x.grilles.is_empty() => {
                 let face: Vec<[glam::DVec3; 3]> = g.faces.iter().flat_map(|f| f.triangles.iter().map(|t| t.map(|i| g.sommets[i]))).collect();
-                traits += rvt::vues::hachures(&face, x, v.echelle, v.droite, v.haut, 20_000).len();
+                traits += formats::rvt::vues::hachures(&face, x, v.echelle, v.droite, v.haut, 20_000).len();
                 hachurees += 1;
             }
             _ => unies += 1,
@@ -634,7 +621,7 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
     println!("Durée géom.  : {} ms", t0.elapsed().as_millis());
     // scène du viewer : objets, triangles, traits (motifs de surface)
     let t1 = std::time::Instant::now();
-    let s = rvt::maquette::scene(&m, "", String::new(), "");
+    let s = formats::rvt::maquette::scene(&m, "", String::new(), "");
     let traits: u32 = s.objects.iter().map(|o| o.lines.count / 2).sum();
     let motifs = s.objects.iter().filter(|o| &*o.class == "IFCSURFACEFEATURE").count();
     println!("Scène        : {} objets, {} triangles, {traits} traits ({motifs} objets de motifs), {} ms", s.objects.len(), s.triangles, t1.elapsed().as_millis());

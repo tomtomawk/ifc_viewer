@@ -1,0 +1,828 @@
+//! Documentation native : références, annotations par vue, feuilles et nomenclatures.
+
+mod feuilles;
+pub use feuilles::*;
+mod nomenclatures;
+pub use nomenclatures::*;
+#[cfg(test)]
+mod tests;
+pub use super::*;
+use crate::noyau::trace2d::{Dessin, Forme, Primitive, Role, Style};
+use glam::{DVec2, DVec3};
+use std::collections::BTreeMap;
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Quadrillage {
+    pub id: String,
+    pub nom: String,
+    pub debut: [f64; 2],
+    pub fin: [f64; 2],
+}
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "ancrage", rename_all = "snake_case")]
+pub enum PointCote {
+    Fixe { point: [f64; 2] },
+    Mur { id: String, fin: bool },
+}
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "forme", rename_all = "snake_case")]
+pub enum AnnotationForme {
+    Texte {
+        point: [f64; 2],
+        texte: String,
+    },
+    Ligne {
+        debut: [f64; 2],
+        fin: [f64; 2],
+    },
+    Zone {
+        contour: Vec<[f64; 2]>,
+    },
+    /// Dessin 2D : polyligne, spline (passant par ses points), cercle, arc par trois
+    /// points (début, passage, fin) ; mm dans le plan de la vue.
+    Polyligne {
+        points: Vec<[f64; 2]>,
+        #[serde(default)]
+        fermee: bool,
+        /// Polyligne fermée : remplissage (motif d'un matériau ou choisi).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        remplissage: Option<RemplissageContour>,
+    },
+    Spline {
+        points: Vec<[f64; 2]>,
+        #[serde(default)]
+        fermee: bool,
+    },
+    Cercle {
+        centre: [f64; 2],
+        rayon: f64,
+    },
+    Arc {
+        points: [[f64; 2]; 3],
+    },
+    Cote {
+        debut: PointCote,
+        fin: PointCote,
+        decalage: f64,
+    },
+    Etiquette {
+        element: String,
+        point: [f64; 2],
+    },
+}
+impl AnnotationForme {
+    /// Forme du dessin 2D (ligne, polyligne, spline, cercle, arc), None pour les autres.
+    pub fn forme_2d(&self) -> Option<crate::dessin::dao::Forme2D> {
+        use crate::dessin::dao::Forme2D as F;
+        let v = |p: &[f64; 2]| DVec2::from_array(*p);
+        Some(match self {
+            Self::Ligne { debut, fin } => F::Ligne([v(debut), v(fin)]),
+            Self::Polyligne { points, fermee, .. } => F::Polyligne { points: points.iter().map(v).collect(), fermee: *fermee },
+            Self::Spline { points, fermee } => F::Spline { points: points.iter().map(v).collect(), fermee: *fermee },
+            Self::Cercle { centre, rayon } => F::Cercle { centre: v(centre), rayon: *rayon },
+            Self::Arc { points } => F::Arc(points.map(|p| v(&p))),
+            _ => return None,
+        })
+    }
+
+    /// Annotation d'une forme du dessin 2D.
+    pub fn depuis_forme_2d(f: &crate::dessin::dao::Forme2D) -> AnnotationForme {
+        use crate::dessin::dao::Forme2D as F;
+        let a = |p: &DVec2| p.to_array();
+        match f {
+            F::Ligne([d, e]) => Self::Ligne { debut: a(d), fin: a(e) },
+            F::Polyligne { points, fermee } => Self::Polyligne { points: points.iter().map(a).collect(), fermee: *fermee, remplissage: None },
+            F::Spline { points, fermee } => Self::Spline { points: points.iter().map(a).collect(), fermee: *fermee },
+            F::Cercle { centre, rayon } => Self::Cercle { centre: a(centre), rayon: *rayon },
+            F::Arc(p) => Self::Arc { points: p.map(|q| q.to_array()) },
+        }
+    }
+
+}
+
+/// Remplissage d'une polyligne fermée : motif de coupe d'un matériau (premier plan, encre
+/// et arrière-plan du matériau), ou motif choisi (hachures du projet ou aplat) à l'encre
+/// gris foncé.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(tag = "source", rename_all = "snake_case")]
+pub enum RemplissageContour {
+    Materiau { materiau: String },
+    Motif { motif: MotifCoupe },
+}
+
+impl RemplissageContour {
+    /// Encre d'un motif choisi.
+    pub const ENCRE: [u8; 3] = [70, 70, 70];
+
+    pub fn libelle(&self) -> String {
+        match self {
+            Self::Materiau { materiau } => format!("Matériau : {materiau}"),
+            Self::Motif { motif } => format!("Motif : {}", motif.libelle()),
+        }
+    }
+}
+
+/// Primitives du remplissage d'un contour (mm du plan de la vue) : arrière-plan (aplat
+/// s'il n'est pas blanc, ou hachures) puis premier plan, hachures à l'échelle de la vue.
+fn primitives_remplissage(p: &Projet, r: &RemplissageContour, contour: &[[f64; 2]], echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
+    use crate::formats::rvt::vues::{GrilleMotif, Motif, hachures_plan};
+    let (motif, encre, fond) = match r {
+        RemplissageContour::Materiau { materiau } => match p.materiau(materiau) {
+            Some(m) => (m.motif.clone(), m.encre_coupe(), Some(m.fond_coupe())),
+            None => return Vec::new(),
+        },
+        RemplissageContour::Motif { motif } => (motif.clone(), RemplissageContour::ENCRE, None),
+    };
+    let contours = vec![contour.iter().map(|q| [q[0] as f32, q[1] as f32]).collect()];
+    let tris: Vec<[[f64; 2]; 3]> = crate::noyau::texte::trianguler(contours).iter().map(|t| t.map(|q| [q[0] as f64, q[1] as f64])).collect();
+    let couleur = |c: [u8; 3]| [c[0], c[1], c[2], 255];
+    let aplat = |c: [u8; 3]| Primitive {
+        forme: Forme::Triangles(tris.iter().map(|t| t.map(|q| pt(DVec2::from_array(q)))).collect()),
+        style: Style { couleur: couleur(c), epaisseur: 0.0 },
+        role: Role::Hachure,
+        element: None,
+    };
+    let hachures = |m: &MotifCoupe, c: [u8; 3]| -> Option<Primitive> {
+        let d = p.definition_motif(m)?;
+        let motif = Motif {
+            nom: d.nom.clone(),
+            modele: false,
+            grilles: d.lignes.iter().map(|l| GrilleMotif { angle: l.angle.to_radians(), origine: l.origine, glissement: l.glissement, decalage: l.pas, tirets: l.tirets.iter().map(|t| t.abs()).collect() }).collect(),
+        };
+        let segments = hachures_plan(&tris, &motif, echelle, 20_000);
+        Some(Primitive { forme: Forme::Segments(segments.into_iter().map(|s| s.map(|q| pt(DVec2::from_array(q)))).collect()), style: Style { couleur: couleur(c), epaisseur: 0.0 }, role: Role::Hachure, element: None })
+    };
+    let mut out = Vec::new();
+    match fond {
+        Some((MotifCoupe::Uni, c)) if c != [255, 255, 255] => out.push(aplat(c)),
+        Some((m, c)) if m != MotifCoupe::Uni => out.extend(hachures(&m, c)),
+        _ => {}
+    }
+    match motif {
+        MotifCoupe::Uni => out.push(aplat(encre)),
+        MotifCoupe::Vide | MotifCoupe::Isolation => {}
+        m => out.extend(hachures(&m, encre)),
+    }
+    out
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Annotation {
+    pub id: String,
+    pub vue: String,
+    pub hauteur: f64,
+    #[serde(flatten)]
+    pub forme: AnnotationForme,
+}
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct VuePlacee {
+    pub vue: String,
+    pub position: [f64; 2],
+    pub echelle: f64,
+}
+/// Jeu des feuilles enregistrées sans jeu.
+pub const JEU_DEFAUT: &str = "Plans";
+fn jeu_defaut() -> String {
+    JEU_DEFAUT.into()
+}
+
+/// Feuille : format papier (mm), cartouche, vues placées ; les feuilles d'un même jeu
+/// se suivent dans l'ordre du projet.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Feuille {
+    pub id: String,
+    pub numero: String,
+    pub nom: String,
+    #[serde(default = "jeu_defaut")]
+    pub jeu: String,
+    pub largeur: f64,
+    pub hauteur: f64,
+    pub cartouche: String,
+    pub vues: Vec<VuePlacee>,
+    /// Nomenclatures posées sur la feuille (tableaux).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nomenclatures: Vec<NomenclaturePlacee>,
+}
+
+/// Nomenclature posée sur une feuille : tableau dont le coin haut gauche est à
+/// `position` (mm du papier, origine en bas à gauche).
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct NomenclaturePlacee {
+    pub nomenclature: String,
+    pub position: [f64; 2],
+}
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Nomenclature {
+    pub id: String,
+    pub nom: String,
+    pub categorie: String,
+    pub regrouper: bool,
+    /// Colonnes choisies ; vide : catégorie, type ou élément, nombre, volume net.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub colonnes: Vec<Colonne>,
+    /// Colonnes de paramètres (familles : type, occurrence, partagés), après les
+    /// colonnes choisies ; elles distinguent les groupes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parametres: Vec<String>,
+}
+
+/// Colonne d'une nomenclature, calculée sur le modèle natif. Regroupée par type, les
+/// colonnes Nombre, Longueur, Surface et Volume sont totalisées ; les autres
+/// distinguent les groupes.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum Colonne {
+    Categorie,
+    Type,
+    Element,
+    Niveau,
+    Nombre,
+    Longueur,
+    Hauteur,
+    Largeur,
+    Epaisseur,
+    Surface,
+    Volume,
+}
+
+impl Colonne {
+    pub const TOUTES: [Colonne; 11] = [Self::Categorie, Self::Type, Self::Element, Self::Niveau, Self::Nombre, Self::Longueur, Self::Hauteur, Self::Largeur, Self::Epaisseur, Self::Surface, Self::Volume];
+
+    pub fn titre(self) -> &'static str {
+        match self {
+            Self::Categorie => "Catégorie",
+            Self::Type => "Type",
+            Self::Element => "Élément",
+            Self::Niveau => "Niveau",
+            Self::Nombre => "Nombre",
+            Self::Longueur => "Longueur (mm)",
+            Self::Hauteur => "Hauteur (mm)",
+            Self::Largeur => "Largeur (mm)",
+            Self::Epaisseur => "Épaisseur (mm)",
+            Self::Surface => "Surface (m²)",
+            Self::Volume => "Volume net (m³)",
+        }
+    }
+
+    fn totalisee(self) -> bool {
+        matches!(self, Self::Nombre | Self::Longueur | Self::Surface | Self::Volume)
+    }
+
+    /// Colonne d'après le titre d'un champ de nomenclature Revit (« Famille et type »,
+    /// « Niveau de base »…) ; None si le modèle natif ne la calcule pas.
+    pub fn depuis_titre(titre: &str) -> Option<Colonne> {
+        let t = titre.trim().to_lowercase();
+        Some(match t.as_str() {
+            "catégorie" => Self::Categorie,
+            "type" | "famille et type" | "nom du type" | "famille" => Self::Type,
+            "nom" | "repère" => Self::Element,
+            "niveau" | "niveau de base" | "contrainte inférieure" | "niveau de référence" => Self::Niveau,
+            "nombre" => Self::Nombre,
+            "longueur" | "longueur de coupe" => Self::Longueur,
+            "hauteur" | "hauteur non contrainte" => Self::Hauteur,
+            "largeur" => Self::Largeur,
+            "épaisseur" | "largeur du mur" | "épaisseur par défaut" => Self::Epaisseur,
+            "surface" | "aire" => Self::Surface,
+            "volume" => Self::Volume,
+            _ => return None,
+        })
+    }
+}
+
+/// Élément d'une nomenclature : valeurs de ses colonnes (longueurs en mm, surface en
+/// m², volume en m³).
+struct LigneQuantite {
+    categorie: String,
+    type_nom: String,
+    element: String,
+    niveau: String,
+    longueur: Option<f64>,
+    hauteur: Option<f64>,
+    largeur: Option<f64>,
+    epaisseur: Option<f64>,
+    surface: Option<f64>,
+    volume: Option<f64>,
+    /// Valeurs affichées des paramètres de famille (ouvertures).
+    parametres: BTreeMap<String, String>,
+}
+
+pub fn repere(p: &Projet, v: &Vue) -> (DVec3, DVec3, DVec3) {
+    match &v.genre {
+        GenreVue::Plan { niveau, coupe, .. } => (
+            DVec3::new(
+                0.0,
+                0.0,
+                p.niveau(niveau).map_or(0.0, |n| n.altitude) + coupe,
+            ),
+            DVec3::X,
+            DVec3::Y,
+        ),
+        GenreVue::Coupe { debut, fin, .. } => {
+            let a = DVec2::from_array(*debut);
+            let u = (DVec2::from_array(*fin) - a).normalize_or_zero();
+            (a.extend(0.0), u.extend(0.0), DVec3::Z)
+        }
+    }
+}
+fn texte(s: &str, pos: DVec3, u: DVec3, v: DVec3, hauteur: f64, couleur: [u8; 4]) -> Primitive {
+    let t = crate::noyau::texte::ligne(s, "Arial", hauteur, false);
+    Primitive {
+        forme: Forme::Triangles(
+            t.triangles
+                .into_iter()
+                .map(|t| t.map(|p| pos + u * p[0] + v * p[1]))
+                .collect(),
+        ),
+        style: Style {
+            couleur,
+            epaisseur: 0.0,
+        },
+        role: Role::Annotation,
+        element: None,
+    }
+}
+fn ligne(a: DVec3, b: DVec3) -> Primitive {
+    Primitive {
+        forme: Forme::Segments(vec![[a, b]]),
+        style: Style {
+            couleur: [30, 30, 30, 255],
+            epaisseur: 0.18,
+        },
+        role: Role::Annotation,
+        element: None,
+    }
+}
+fn point_cote(p: &Projet, v: &Vue, point: &PointCote) -> Option<DVec2> {
+    match point {
+        PointCote::Fixe { point } => Some(DVec2::from_array(*point)),
+        PointCote::Mur { id, fin } => {
+            let (a, b, z) = p.axe_element(id)?;
+            let pt = DVec2::from_array(if *fin { b } else { a }).extend(z);
+            let (o, u, h) = repere(p, v);
+            let d = pt - o;
+            Some(DVec2::new(d.dot(u), d.dot(h)))
+        }
+    }
+}
+pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
+    let (o, u, h) = repere(p, v);
+    let mut out = Vec::new();
+    let pt = |p: DVec2| (o + u * p.x + h * p.y) * 0.001;
+    for a in p.annotations.iter().filter(|a| a.vue == v.id && !v.elements_masques.contains(&a.id)) {
+        let debut = out.len();
+        let taille = a.hauteur * v.echelle * 0.001;
+        // traits obliques des cotes : 0,6 × la hauteur du texte, en mm du modèle
+        let oblique = a.hauteur * v.echelle * 0.6;
+        match &a.forme {
+            AnnotationForme::Texte { point, texte: s } => out.push(texte(
+                s,
+                pt(DVec2::from_array(*point)),
+                u,
+                h,
+                taille,
+                [30, 30, 30, 255],
+            )),
+            AnnotationForme::Ligne { debut, fin } => out.push(ligne(
+                pt(DVec2::from_array(*debut)),
+                pt(DVec2::from_array(*fin)),
+            )),
+            AnnotationForme::Polyligne { .. } | AnnotationForme::Spline { .. } | AnnotationForme::Cercle { .. } | AnnotationForme::Arc { .. } => {
+                // remplissage sous le contour
+                if let AnnotationForme::Polyligne { points, fermee: true, remplissage: Some(r) } = &a.forme && points.len() >= 3 {
+                    out.extend(primitives_remplissage(p, r, points, v.echelle, &pt));
+                }
+                for l in a.forme.forme_2d().map(|f| f.polylignes()).unwrap_or_default() {
+                    out.push(Primitive {
+                        forme: Forme::Polyligne { points: l.into_iter().map(pt).collect(), fermee: false },
+                        style: Style { couleur: [30, 30, 30, 255], epaisseur: 0.18 },
+                        role: Role::Annotation,
+                        element: None,
+                    });
+                }
+            }
+            AnnotationForme::Zone { contour } => out.push(Primitive {
+                forme: Forme::Surface(vec![
+                    contour.iter().map(|p| pt(DVec2::from_array(*p))).collect(),
+                ]),
+                style: Style {
+                    couleur: [215, 215, 210, 255],
+                    epaisseur: 0.0,
+                },
+                role: Role::Annotation,
+                element: None,
+            }),
+            AnnotationForme::Cote {
+                debut,
+                fin,
+                decalage,
+            } => match (point_cote(p, v, debut), point_cote(p, v, fin)) {
+                (Some(a), Some(b)) => {
+                    let g = geometrie_cote(&[a, b], *decalage, oblique);
+                    out.extend(g.traits.iter().map(|[x, y]| ligne(pt(*x), pt(*y))));
+                    for (position, valeur) in g.textes {
+                        out.push(texte(&crate::config::options::unite().afficher(valeur), pt(position), u, h, taille, [30, 30, 30, 255]));
+                    }
+                }
+                _ => out.push(texte(
+                    "Cote : référence perdue",
+                    o * 0.001,
+                    u,
+                    h,
+                    taille,
+                    [190, 35, 35, 255],
+                )),
+            },
+            AnnotationForme::Etiquette { element, point } => {
+                let nom = p
+                    .murs
+                    .iter()
+                    .find(|m| &m.id == element)
+                    .map(|m| m.nom.as_str())
+                    .or_else(|| {
+                        p.dalles
+                            .iter()
+                            .find(|m| &m.id == element)
+                            .map(|m| m.nom.as_str())
+                    })
+                    .or_else(|| {
+                        p.barres
+                            .iter()
+                            .find(|b| &b.id == element)
+                            .map(|b| b.nom.as_str())
+                    })
+                    .or_else(|| {
+                        p.importes
+                            .iter()
+                            .find(|m| &m.id == element)
+                            .map(|m| m.nom.as_str())
+                    });
+                out.push(texte(
+                    nom.unwrap_or("Référence perdue"),
+                    pt(DVec2::from_array(*point)),
+                    u,
+                    h,
+                    taille,
+                    if nom.is_some() {
+                        [30, 30, 30, 255]
+                    } else {
+                        [190, 35, 35, 255]
+                    },
+                ));
+            }
+        }
+        for primitive in &mut out[debut..] {
+            primitive.element = Some(crate::rendu::scene::id_natif("annotation", &a.id));
+        }
+    }
+    if matches!(v.genre, GenreVue::Plan { .. }) {
+        for g in &p.quadrillages {
+            if v.elements_masques.contains(&g.id) { continue; }
+            let (a, b) = (pt(DVec2::from_array(g.debut)), pt(DVec2::from_array(g.fin)));
+            out.push(ligne(a, b));
+            out.push(texte(
+                &g.nom,
+                b,
+                u,
+                h,
+                2.5 * v.echelle * 0.001,
+                [70, 70, 70, 255],
+            ));
+        }
+    }
+    if matches!(v.genre, GenreVue::Coupe { .. }) {
+        out.extend(niveaux_et_limites_en_coupe(p, v));
+    }
+    out.extend(symboles_familles(p, v));
+    out
+}
+
+fn trait_couleur(a: DVec3, b: DVec3, couleur: [u8; 4], epaisseur: f64) -> Primitive {
+    Primitive {
+        forme: Forme::Segments(vec![[a, b]]),
+        style: Style { couleur, epaisseur },
+        role: Role::Annotation,
+        element: None,
+    }
+}
+
+/// Coupes et élévations : un repère par niveau (trait sur toute la largeur de la vue,
+/// nom et cote) et un repère vertical là où une limite de propriété coupe le plan de
+/// la vue.
+fn niveaux_et_limites_en_coupe(p: &Projet, v: &Vue) -> Vec<Primitive> {
+    let GenreVue::Coupe { debut, fin, .. } = &v.genre else { return Vec::new() };
+    let (o, u, h) = repere(p, v);
+    let pt = |x: f64, z: f64| (o + u * x + h * z) * 0.001;
+    let a = DVec2::from_array(*debut);
+    let d = DVec2::from_array(*fin) - a;
+    let longueur = d.length();
+    if longueur < 1e-6 {
+        return Vec::new();
+    }
+    let (axe_u, axe_n) = (d / longueur, (d / longueur).perp());
+    let taille = 2.5 * v.echelle * 0.001;
+    let mut out = Vec::new();
+    for n in &p.niveaux {
+        if v.elements_masques.contains(&n.id) {
+            continue;
+        }
+        let bleu = [18, 120, 170, 255];
+        out.push(trait_couleur(pt(-500.0, n.altitude), pt(longueur + 500.0, n.altitude), bleu, 0.13));
+        out.push(texte(&format!("{} ({:.2} m)", n.nom, n.altitude / 1000.0), pt(longueur + 700.0, n.altitude), u, h, taille, bleu));
+    }
+    for l in &p.limites_propriete {
+        if v.elements_masques.contains(&l.id) || l.contour.len() < 2 {
+            continue;
+        }
+        let rouge = [190, 40, 40, 255];
+        for i in 0..l.contour.len() {
+            let rel = |q: [f64; 2]| {
+                let r = DVec2::from_array(q) - a;
+                DVec2::new(r.dot(axe_u), r.dot(axe_n))
+            };
+            let (b0, b1) = (rel(l.contour[i]), rel(l.contour[(i + 1) % l.contour.len()]));
+            // la limite coupe le plan de la vue : repère vertical à cet endroit
+            if (b0.y > 0.0) == (b1.y > 0.0) {
+                continue;
+            }
+            let x = b0.x + (b1.x - b0.x) * (b0.y / (b0.y - b1.y));
+            if !(0.0..=longueur).contains(&x) {
+                continue;
+            }
+            out.push(trait_couleur(pt(x, l.altitude), pt(x, l.altitude + 3000.0), rouge, 0.35));
+        }
+    }
+    out
+}
+
+/// Symboles 2D des familles d'ouvertures : en plan, ceux des ouvertures du niveau de
+/// la vue ; en coupe ou élévation, ceux des ouvertures vues de face (mur parallèle à
+/// la ligne de vue, dans sa profondeur et sa longueur), projetés sur le plan de vue.
+fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
+    use super::famille::modelee::VueEsquisse;
+    let (o, u, h) = repere(p, v);
+    let polyligne = |points: Vec<DVec3>| Primitive {
+        forme: Forme::Polyligne { points: points.into_iter().map(|q| q * 0.001).collect(), fermee: false },
+        style: Style { couleur: [30, 30, 30, 255], epaisseur: 0.18 },
+        role: Role::Annotation,
+        element: None,
+    };
+    // région 2D d'une famille, dans le plan de la vue : aplat gris ou hachures à 45°
+    // (pas de 2 mm du papier)
+    let pas = 2.0 * v.echelle;
+    let region = |points: Vec<DVec3>, m: super::famille::modelee::Remplissage| -> Vec<Primitive> {
+        use super::famille::modelee::Remplissage;
+        if points.len() < 3 { return Vec::new(); }
+        match m {
+            Remplissage::Plein => vec![Primitive {
+                forme: Forme::Surface(vec![points.iter().map(|q| *q * 0.001).collect()]),
+                style: Style { couleur: [185, 185, 185, 255], epaisseur: 0.0 },
+                role: Role::Annotation,
+                element: None,
+            }],
+            Remplissage::Hachure => {
+                let plan: Vec<DVec2> = points.iter().map(|q| DVec2::new((*q - o).dot(u), (*q - o).dot(h))).collect();
+                let segments = hachures_45(&plan, pas).into_iter().map(|[a, b]| [(o + u * a.x + h * a.y) * 0.001, (o + u * b.x + h * b.y) * 0.001]).collect();
+                vec![Primitive { forme: Forme::Segments(segments), style: Style { couleur: [60, 60, 60, 255], epaisseur: 0.0 }, role: Role::Annotation, element: None }]
+            }
+        }
+    };
+    let mut out = Vec::new();
+    // escaliers : ligne de foulée, rond au départ, flèche à l'arrivée
+    if let GenreVue::Plan { niveau, .. } = &v.genre {
+        for e in p.escaliers.iter().filter(|e| &e.niveau == niveau && e.trace.len() >= 2 && !v.elements_masques.contains(&e.id)) {
+            let pts: Vec<DVec3> = e.trace.iter().map(|q| DVec3::new(q[0], q[1], o.z)).collect();
+            out.push(polyligne(pts.clone()));
+            let (a, b) = (pts[pts.len() - 2], pts[pts.len() - 1]);
+            let d = (b - a).normalize_or_zero() * 150.0;
+            let n = DVec3::new(-d.y, d.x, 0.0) * 0.4;
+            out.push(polyligne(vec![b - d + n, b, b - d - n]));
+            let c = pts[0];
+            out.push(polyligne((0..=16).map(|k| { let t = std::f64::consts::TAU * k as f64 / 16.0; c + DVec3::new(t.cos(), t.sin(), 0.0) * 60.0 }).collect()));
+        }
+    }
+    for ouv in &p.ouvertures {
+        if v.elements_masques.contains(&ouv.id) || v.elements_masques.contains(&ouv.mur) { continue; }
+        let Ok((axe, _, niveau)) = super::volumes::solides::hote(p, &ouv.mur) else { continue };
+        match &v.genre {
+            GenreVue::Plan { niveau: n, .. } if *n == niveau => {
+                for (l, m) in super::volumes::solides::regions_ouverture(p, ouv, VueEsquisse::Plan) {
+                    out.extend(region(l.into_iter().map(|q| q.with_z(o.z)).collect(), m));
+                }
+                for l in super::volumes::solides::symboles_ouverture(p, ouv, VueEsquisse::Plan) {
+                    out.push(polyligne(l.into_iter().map(|q| q.with_z(o.z)).collect()));
+                }
+            }
+            GenreVue::Coupe { debut, fin, profondeur, .. } => {
+                let (c, uw) = super::volumes::solides::repere(&axe, ouv.abscisse);
+                let d = DVec2::new(u.x, u.y).perp();
+                let rel = c - DVec2::new(o.x, o.y);
+                let longueur = DVec2::from_array(*fin).distance(DVec2::from_array(*debut));
+                let profondeur_c = rel.dot(d);
+                let lateral = rel.dot(DVec2::new(u.x, u.y));
+                if uw.dot(DVec2::new(u.x, u.y)).abs() < 0.98 || !(-1.0..=*profondeur).contains(&profondeur_c) || !(0.0..=longueur).contains(&lateral) {
+                    continue;
+                }
+                for (l, m) in super::volumes::solides::regions_ouverture(p, ouv, VueEsquisse::Elevation) {
+                    out.extend(region(l.into_iter().map(|q| o + u * (q - o).dot(u) + h * (q - o).dot(h)).collect(), m));
+                }
+                for l in super::volumes::solides::symboles_ouverture(p, ouv, VueEsquisse::Elevation) {
+                    out.push(polyligne(l.into_iter().map(|q| o + u * (q - o).dot(u) + h * (q - o).dot(h)).collect()));
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Hachures à 45° d'un polygone (règle pair-impair), lignes espacées de `pas`.
+/// Géométrie d'une cote, commune aux vues du projet et à l'éditeur de familles.
+pub struct GeometrieCote {
+    /// Lignes d'attache, ligne de cote et traits obliques.
+    pub traits: Vec<[DVec2; 2]>,
+    /// Milieu de chaque intervalle sur la ligne de cote, et sa longueur.
+    pub textes: Vec<(DVec2, f64)>,
+}
+
+/// Cote (ou chaîne de cotes) sur des points alignés : la ligne de cote passe à
+/// `decalage` des points, perpendiculairement au premier → dernier ; un trait oblique
+/// de longueur `oblique` marque chaque point.
+pub fn geometrie_cote(points: &[DVec2], decalage: f64, oblique: f64) -> GeometrieCote {
+    let mut g = GeometrieCote { traits: Vec::new(), textes: Vec::new() };
+    let (Some(&a), Some(&b)) = (points.first(), points.last()) else { return g };
+    let d = (b - a).normalize_or_zero();
+    let n = d.perp() * decalage;
+    let o = (d + d.perp()).normalize_or_zero() * oblique * 0.5;
+    for &p in points {
+        g.traits.push([p, p + n]);
+        g.traits.push([p + n - o, p + n + o]);
+    }
+    g.traits.push([a + n, b + n]);
+    for w in points.windows(2) {
+        g.textes.push(((w[0] + w[1]) / 2.0 + n, (w[1] - w[0]).dot(d).abs()));
+    }
+    g
+}
+
+/// Hachures à 45° d'un contour fermé, au pas `pas` (vues, feuilles, éditeur de familles).
+pub fn hachures_45(poly: &[DVec2], pas: f64) -> Vec<[DVec2; 2]> {
+    let (r, rinv) = (|p: DVec2| DVec2::new(p.x - p.y, p.x + p.y) / std::f64::consts::SQRT_2, |q: DVec2| DVec2::new(q.x + q.y, q.y - q.x) / std::f64::consts::SQRT_2);
+    let q: Vec<DVec2> = poly.iter().map(|p| r(*p)).collect();
+    if q.len() < 3 || !(pas > 0.0) { return Vec::new(); }
+    let (t0, t1) = q.iter().fold((f64::MAX, f64::MIN), |(a, b), p| (a.min(p.y), b.max(p.y)));
+    if (t1 - t0) / pas > 5000.0 { return Vec::new(); }
+    let mut out = Vec::new();
+    let mut t = (t0 / pas).floor() * pas + pas * 0.5;
+    while t < t1 {
+        let mut xs: Vec<f64> = (0..q.len()).filter_map(|i| {
+            let (a, b) = (q[i], q[(i + 1) % q.len()]);
+            ((a.y <= t) != (b.y <= t)).then(|| a.x + (t - a.y) / (b.y - a.y) * (b.x - a.x))
+        }).collect();
+        xs.sort_by(f64::total_cmp);
+        for w in xs.chunks_exact(2) { out.push([rinv(DVec2::new(w[0], t)), rinv(DVec2::new(w[1], t))]); }
+        t += pas;
+    }
+    out
+}
+
+pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
+    let v = p.vues.iter().find(|v| v.id == id).ok_or("Vue absente.")?;
+    let s = crate::rendu::scene::depuis_natif(p, std::path::Path::new("projet.modele.json"))?;
+    let (o, mut u, mut h) = repere(p, v);
+    if matches!(v.genre, GenreVue::Plan { .. }) {
+        let (sin, cos) = v.orientation_plan.sin_cos();
+        u = DVec3::new(cos, sin, 0.0);
+        h = DVec3::new(-sin, cos, 0.0);
+    }
+    let oeil = u.cross(h);
+    let normale = -oeil;
+    let plan = normale.extend(-normale.dot(o * 0.001 - s.origin)).as_vec4();
+    let elevation = matches!(
+        v.genre,
+        GenreVue::Coupe {
+            elevation: true,
+            ..
+        }
+    );
+    let mut visible = vec![true; s.objects.len()];
+    let masques = p.murs.iter().map(|x| ("mur", &x.id))
+        .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
+        .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
+        .chain(p.barres.iter().map(|x| ("barre", &x.id)))
+        .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
+        .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
+        .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
+        .chain(p.importes.iter().map(|x| ("importe", &x.id)))
+        .chain(p.terrains.iter().map(|x| ("terrain", &x.id)))
+        .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
+        .filter(|(_, id)| v.elements_masques.contains(id))
+        .map(|(genre, id)| crate::rendu::scene::id_natif(genre, id)).collect::<std::collections::HashSet<_>>();
+    for (i, objet) in s.objects.iter().enumerate() {
+        visible[i] = !masques.contains(&objet.id) && !s.model.parent.get(&objet.id).is_some_and(|id| masques.contains(id));
+    }
+    if let GenreVue::Plan { niveau, bas_niveau, bas_decalage, .. } = &v.genre {
+        let etage = crate::rendu::scene::id_natif("niveau", niveau);
+        let contient_etage = s.objects.iter().any(|o| o.storey == Some(etage) || &*o.class == "IFCGEOGRAPHICELEMENT");
+        if contient_etage {
+            for (i, obj) in s.objects.iter().enumerate() {
+                visible[i] &= obj.storey == Some(etage) || &*obj.class == "IFCGEOGRAPHICELEMENT";
+            }
+        }
+        if v.coupe_active.unwrap_or(true) && let Some(niveau) = p.niveau(bas_niveau) {
+            let bas = (niveau.altitude + bas_decalage) * 0.001;
+            for (i, obj) in s.objects.iter().enumerate() {
+                let haut = obj.max.z as f64 + s.origin.z;
+                visible[i] &= if matches!(&*obj.class, "IFCSLAB" | "IFCCOVERING" | "IFCROOF" | "IFCANNOTATION" | "IFCGEOGRAPHICELEMENT") { haut >= bas - 0.002 } else { haut > bas + 0.002 };
+            }
+        }
+    }
+    if let GenreVue::Coupe {
+        debut,
+        fin,
+        profondeur,
+        ..
+    } = &v.genre
+    {
+        let a = DVec2::from_array(*debut);
+        let d = DVec2::from_array(*fin) - a;
+        let u = d.normalize();
+        let n = u.perp();
+        for (i, obj) in s.objects.iter().enumerate() {
+            let corners = (0..8).map(|k| {
+                DVec3::new(
+                    if k & 1 == 0 { obj.min.x } else { obj.max.x } as f64,
+                    if k & 2 == 0 { obj.min.y } else { obj.max.y } as f64,
+                    if k & 4 == 0 { obj.min.z } else { obj.max.z } as f64,
+                )
+            });
+            let points: Vec<_> = corners
+                .map(|q| (q + s.origin).truncate() * 1000.0 - a)
+                .collect();
+            visible[i] &= points.iter().any(|q| q.dot(u) >= 0.0)
+                && points.iter().any(|q| q.dot(u) <= d.length())
+                && points.iter().any(|q| q.dot(n) >= 0.0)
+                && points.iter().any(|q| q.dot(n) <= *profondeur);
+        }
+    }
+    let actif = v.coupe_active.unwrap_or(true);
+    let poche = match v.poche_vue.as_deref() {
+        Some("plein") => crate::dessin::Poche::Plein,
+        Some("vide") => crate::dessin::Poche::Vide,
+        Some("materiau") => crate::dessin::Poche::Materiau,
+        _ => crate::dessin::Poche::Hachure,
+    };
+    let mut primitives = if elevation || !actif {
+        Vec::new()
+    } else {
+        crate::dessin::coupe(&s, &visible, plan, v.echelle, poche)
+    };
+    primitives.extend(crate::dessin::vu(
+        &s,
+        &visible,
+        u,
+        h,
+        oeil,
+        actif.then_some(plan),
+        4096,
+    ));
+    // Revenir au repère absolu, comme les annotations.
+    let mut primitives: Vec<_> = primitives
+        .into_iter()
+        .map(|pr| pr.translater(s.origin))
+        .collect();
+    primitives.extend(annotations(p, v));
+    let primitives = super::elements::cadrage::decouper(primitives, &v.contour_cadrage)?;
+    Ok(Dessin {
+        droite: u,
+        haut: h,
+        echelle: v.echelle,
+        primitives,
+    })
+}
+
+/// Formats papier courants (paysage), mm.
+pub const FORMATS: [(&str, f64, f64); 5] = [("A0", 1189.0, 841.0), ("A1", 841.0, 594.0), ("A2", 594.0, 420.0), ("A3", 420.0, 297.0), ("A4", 297.0, 210.0)];
+
+/// Marge du cadre et taille du cartouche (mm).
+pub const MARGE: f64 = 10.0;
+
+/// Géométrie réutilisable d'un cartouche, en millimètres depuis son coin inférieur gauche.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FamilleCartouche {
+    #[serde(default)]
+    pub id: String,
+    pub nom: String,
+    pub largeur: f64,
+    pub hauteur: f64,
+    pub traits: Vec<[[f64; 2]; 2]>,
+    pub textes: Vec<TexteCartouche>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct TexteCartouche {
+    /// {projet}, {feuille}, {numero}, {cartouche} ou {echelles}, ou texte libre.
+    pub contenu: String,
+    pub position: [f64; 2],
+    pub hauteur: f64,
+}
+

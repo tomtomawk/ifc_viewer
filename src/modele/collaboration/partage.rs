@@ -247,7 +247,7 @@ pub fn ouvrir(entree: &Path, cache: &Path) -> Resultat<(Projet, PathBuf, Session
             Ok(mut s) => {
                 s.copie.partage = Some(entree.clone());
                 let p = actualiser(&mut s)?;
-                super::super::enregistrement::enregistrer_natif(&p, &local)?;
+                super::super::echanges::enregistrement::enregistrer_natif(&p, &local)?;
                 return Ok((p, local, s));
             }
             Err(e) if e.starts_with("Copie locale déjà ouverte") => continue,
@@ -267,7 +267,7 @@ pub fn ouvrir(entree: &Path, cache: &Path) -> Resultat<(Projet, PathBuf, Session
     s.copie.partage = Some(entree.clone());
     s.etat = "Synchronisé".into();
     s.persister()?;
-    super::super::enregistrement::enregistrer_natif(&p, &local)?;
+    super::super::echanges::enregistrement::enregistrer_natif(&p, &local)?;
     Ok((p, local, s))
 }
 

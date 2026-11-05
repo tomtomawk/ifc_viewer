@@ -1,0 +1,464 @@
+//! Zone de vue : interaction souris, rendu, superpositions.
+use super::*;
+
+impl ViewerApp {
+    pub(super) fn viewport(&mut self, ui: &mut egui::Ui) {
+        let rect = ui.available_rect_before_wrap();
+        // fenêtre réduite : on garde la dernière zone, taille des captures hors écran
+        if rect.is_positive() {
+            self.rect_vue = rect;
+        }
+        let resp = ui.allocate_rect(rect, Sense::click_and_drag());
+        if self.scene.is_none() {
+            ui.painter().rect_filled(rect,0.0,ui.visuals().panel_fill);
+            ui.painter().text(rect.center(),egui::Align2::CENTER_CENTER,"Ouvrir ou créer un projet",egui::FontId::proportional(16.0),ui.visuals().weak_text_color());
+            return;
+        }
+        let aspect = rect.width() / rect.height().max(1.0);
+        let mode_ajuster=self.preparer_outil_ajuster();
+        let mode_mur = self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.mur_actif() && self.natif.is_some() && self.loading.is_none();
+        // dalle (ou sol) : contour cliqué sur le plan de son dessus
+        let dalle = if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() { self.ruban_edition.dalle_active() } else { None };
+        // coupe : ligne à deux clics, sur le plan du niveau de la vue ouverte
+        let outil_coupe = if self.onglet_ruban == OngletRuban::Annoter && self.natif.is_some() && self.loading.is_none() { self.ruban_edition.coupe_active() } else { None };
+        // une coupe se trace dans une vue en plan (ou une vue de dessus)
+        let coupe_hors_plan = outil_coupe.is_some() && !self.vue_en_plan();
+        let outil_coupe = outil_coupe.filter(|_| !coupe_hors_plan);
+        if coupe_hors_plan {
+            ui.painter().text(rect.left_top() + egui::vec2(12.0, 34.0), egui::Align2::LEFT_TOP, "Coupe / élévation : ouvrir une vue en plan pour tracer la ligne", egui::FontId::proportional(13.0), Color32::from_rgb(55, 130, 200));
+        }
+        if outil_coupe.is_none() { self.coupe_depart = None; }
+        let altitude_coupe = self.altitude_vue_native();
+        let structure = if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() {
+            match self.ruban_edition.outil() {
+                Some(crate::ui::ruban::Outil::Poteau) => Some(crate::modele::GenreBarre::Poteau),
+                Some(crate::ui::ruban::Outil::Poutre) => Some(crate::modele::GenreBarre::Poutre),
+                _ => None,
+            }
+        } else { None };
+        if structure != Some(crate::modele::GenreBarre::Poutre) { self.bim.depart_structure = None; }
+        let altitude_structure = structure.and_then(|_| {
+            let p = &self.natif.as_ref()?.0;
+            Some(p.niveau(&self.bim.barre.niveau)?.altitude + self.bim.barre.debut[2])
+        });
+        // Déplacer / Copier : base puis destination cliquées sur le plan de la vue
+        let deplacement = match (self.onglet_ruban == OngletRuban::Modifier && self.natif.is_some() && self.loading.is_none()).then(|| self.ruban_edition.outil()).flatten() {
+            Some(o @ (crate::ui::ruban::Outil::Deplacer | crate::ui::ruban::Outil::Copier)) if !self.selection_bim().is_empty() => Some(o),
+            _ => None,
+        };
+        if deplacement.is_none() { self.bim.depart_deplacement = None; }
+        let mode_trace = mode_ajuster || mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || deplacement.is_some() || self.outil_dessin().is_some() || self.dessin2d.edition_contour.is_some() || self.alignement_plan || self.orientation_nord_en_cours;
+        // axe du mur sélectionné : une extrémité saisie se déplace (accrochages du tracé)
+        let edition_arc=self.souris_arc_mur(ui,rect,&resp,mode_trace);
+        let axe = if mode_trace || edition_arc { None } else { self.axe_selection() };
+        if let Some((id, a, b, z, _)) = &axe {
+            let (ea, eb) = (self.ecran_plan(rect, *a, *z), self.ecran_plan(rect, *b, *z));
+            if resp.drag_started_by(PointerButton::Primary)
+                && let Some(q) = ui.input(|i| i.pointer.press_origin())
+            {
+                let proche = |e: Option<egui::Pos2>| e.is_some_and(|e| e.distance(q) <= 9.0);
+                if proche(eb) {
+                    self.poignee_axe = Some((id.clone(), true, *b));
+                } else if proche(ea) {
+                    self.poignee_axe = Some((id.clone(), false, *a));
+                }
+            }
+            if let (Some((_, fin, _)), Some(q)) = (&self.poignee_axe, resp.interact_pointer_pos().or(resp.hover_pos())) {
+                let fixe = if *fin { *a } else { *b };
+                let shift = ui.input(|i| i.modifiers.shift);
+                if let Some(p) = self.point_edition_axe(ui,rect,q,shift,fixe)
+                    && let Some(x) = &mut self.poignee_axe
+                {
+                    x.2 = p;
+                }
+            }
+        } else {
+            self.poignee_axe = None;
+        }
+        if self.poignee_axe.is_some() && (ui.input(|i|i.key_pressed(egui::Key::Escape))||resp.clicked_by(PointerButton::Secondary)) {
+            self.poignee_axe=None;
+            self.terminer_edition_axe();
+        }
+        if resp.drag_stopped() && let Some((id, fin, p)) = self.poignee_axe.take() {
+            self.terminer_edition_axe();
+            if let Some((projet, _)) = &self.natif {
+                let resultat=(|| {
+                    let mut copie=projet.clone();
+                    copie.deplacer_extremite_justification(&id,fin,p)?;
+                    copie.recaler_menuiseries(projet)?;
+                    copie.verifier()?;
+                    Ok::<_,String>(copie)
+                })();
+                match resultat.and_then(|p|self.appliquer_projet(p)) {
+                    Ok(())=>self.status="Mur modifié — Ctrl+S pour enregistrer.".into(),
+                    Err(e)=>self.error=Some(e),
+                }
+            }
+        }
+        let mode_trace = mode_trace || self.poignee_axe.is_some() || edition_arc;
+        if mode_trace && resp.hovered() {
+            ui.ctx().set_cursor_icon(if self.selection_traces_active() { egui::CursorIcon::Default } else { egui::CursorIcon::Crosshair });
+        }
+        let ndc = |p: egui::Pos2| {
+            Vec2::new((p.x - rect.left()) / rect.width() * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height() * 2.0)
+        };
+
+        let repere_plan = self.scene.is_some() && self.vue_en_plan();
+        let sur_repere_plan = repere_plan && ui.input(|i| {
+            let zone = crate::rendu::orientation_plan::zone(rect);
+            i.pointer.hover_pos().is_some_and(|p| zone.contains(p))
+                || (i.pointer.any_down() && i.pointer.press_origin().is_some_and(|p| zone.contains(p)))
+        });
+        if self.scene.is_some() && !sur_repere_plan {
+            let pick = |app: &Self, p: egui::Pos2| -> Option<(u32, Vec3)> {
+                if !app.point_dans_cadrage(rect, p) { return None; }
+                let s = app.scene.as_ref()?;
+                let n = ndc(p);
+                let (o, d) = app.camera.ray(n.x, n.y, aspect);
+                s.pick(o, d, &app.visible, app.plan_coupe(), app.boite_appliquee()).map(|(obj, t)| (obj, o + d * t))
+            };
+
+            if mode_trace { self.fenetre_selection = None; }
+            if !mode_trace && self.fenetre_selection.is_none() && resp.drag_started_by(PointerButton::Primary) {
+                if let Some(debut) = ui.input(|i| i.pointer.press_origin()) {
+                    if pick(self, debut).is_none() {
+                        self.fenetre_selection = Some(FenetreSelection { debut, fin: debut, ajouter: ui.input(|i| i.modifiers.ctrl || i.modifiers.command) });
+                    }
+                }
+            }
+            let rectangle_actif = self.fenetre_selection.is_some();
+            // Orbite autour du point visé (vue 3D seulement).
+            if !mode_trace && !rectangle_actif && resp.drag_started_by(PointerButton::Middle) && ui.input(|i| i.modifiers.shift) && self.vue_3d() {
+                if let Some((_, p)) = resp.interact_pointer_pos().and_then(|pp| pick(self, pp)) {
+                    self.camera.set_pivot(p);
+                }
+            }
+            let shift = ui.input(|i| i.modifiers.shift);
+            if !mode_trace && !rectangle_actif { self.voler(ui, &resp); } else { self.vol.actif = false; }
+            for b in [PointerButton::Primary, PointerButton::Secondary, PointerButton::Middle] {
+                if (mode_trace || rectangle_actif) && b != PointerButton::Middle { continue; }
+                if resp.dragged_by(b) && !(self.vol.actif && b == PointerButton::Secondary) {
+                    self.glisser(b, resp.drag_delta(), shift, rect.height());
+                }
+            }
+
+            if self.vol.actif {
+                // molette : vitesse du vol, pas de zoom
+            } else if let Some(hp) = resp.hover_pos() {
+                let scroll = ui.input(|i| i.smooth_scroll_delta.y);
+                if scroll != 0.0 {
+                    let factor = 1.0 / accrochage::facteur_molette(scroll) as f32;
+                    let target = pick(self, hp).map(|(_, p)| p).or_else(|| {
+                        // Point sur le plan de visée à la distance de la cible.
+                        let n = ndc(hp);
+                        let (o, dir) = self.camera.ray(n.x, n.y, aspect);
+                        let f = self.camera.forward();
+                        let t = (self.camera.target - o).dot(f) / dir.dot(f).max(1e-6);
+                        Some(o + dir * t)
+                    });
+                    self.camera.zoom(factor, if self.camera.ortho { None } else { target });
+                }
+            }
+
+            // Le double-clic central cadre la vue entière, même pendant un outil.
+            // Le double-clic gauche conserve son cadrage sur l'objet visé.
+            if resp.double_clicked_by(PointerButton::Middle) {
+                self.fit_all();
+            }
+
+            if rectangle_actif {
+                let curseur = ui.input(|i| i.pointer.interact_pos().or(i.pointer.hover_pos()));
+                if let Some(p) = curseur {
+                    if let Some(f) = &mut self.fenetre_selection { f.fin = p.clamp(rect.min, rect.max); }
+                }
+                let annuler = ui.input(|i| i.key_pressed(egui::Key::Escape)) || resp.clicked_by(PointerButton::Secondary);
+                if annuler { self.fenetre_selection = None; }
+                else if resp.drag_stopped_by(PointerButton::Primary) {
+                    if let Some(f) = self.fenetre_selection.take() { self.selectionner_rectangle(rect, f); }
+                }
+            } else if mode_ajuster {
+                let hit=resp.hover_pos().or(resp.interact_pointer_pos()).and_then(|q|pick(self,q).map(|(obj,_)|obj));
+                self.souris_ajuster(ui,rect,&resp,hit);
+            } else if self.outil_dessin().is_some() {
+                self.souris_dessin(ui, rect, &resp);
+            } else if self.orientation_nord_en_cours {
+                let curseur = resp.hover_pos().or(resp.interact_pointer_pos());
+                let hit = curseur.and_then(|p| pick(self, p).map(|(obj, _)| (p, obj)));
+                self.arete_alignement = curseur.and_then(|q| self.trait_annotation_vise(q, rect)).or_else(|| hit.and_then(|(p, obj)| self.arete_visee(p, rect, obj)));
+                if resp.clicked_by(PointerButton::Secondary) {
+                    self.orientation_nord_en_cours = false;
+                    self.arete_alignement = None;
+                    self.status = "Orientation du nord annulée.".into();
+                } else if resp.clicked() {
+                    let angle = self.arete_alignement.zip(curseur).and_then(|(trait_, q)| self.angle_nord_depuis_trait(trait_, q, rect));
+                    if let (Some(angle), Some((p, _))) = (angle, &self.natif) {
+                        let mut projet = p.clone();
+                        projet.orientation_nord = angle;
+                        match self.appliquer_projet(projet) {
+                            Ok(()) => {
+                                self.orientation_nord_en_cours = false;
+                                self.arete_alignement = None;
+                                self.status = "Nord du projet orienté — Ctrl+S pour enregistrer.".into();
+                            }
+                            Err(e) => self.error = Some(e),
+                        }
+                    } else { self.status = "Nord : viser un trait du plan, près de l'extrémité indiquant le nord.".into(); }
+                }
+            } else if self.alignement_plan {
+                // Aligner (repère du plan) : l'arête visée (surlignée) devient horizontale ;
+                // sans arête, la direction principale de l'élément
+                let curseur = resp.hover_pos().or(resp.interact_pointer_pos());
+                let hit = curseur.and_then(|p| pick(self, p).map(|(obj, _)| (p, obj)));
+                self.arete_alignement = hit.and_then(|(p, obj)| self.arete_visee(p, rect, obj));
+                if resp.clicked() {
+                    let d = match self.arete_alignement {
+                        Some([a, b]) => Some(glam::Vec2::new(b.x - a.x, b.y - a.y)),
+                        None => hit.and_then(|(_, obj)| self.direction_principale(obj)),
+                    };
+                    match d.and_then(|d| crate::rendu::orientation_plan::angle_pour_horizontale(&self.camera, d)) {
+                        Some(a) => {
+                            crate::rendu::orientation_plan::orienter(&mut self.camera, a);
+                            self.memoriser_vue();
+                            self.alignement_plan = false;
+                            self.arete_alignement = None;
+                        }
+                        None => self.status = "Aligner : viser une arête du plan (Échap : annuler)".into(),
+                    }
+                }
+            } else if let Some(genre) = structure {
+                if resp.clicked_by(PointerButton::Secondary) { self.bim.depart_structure = None; }
+                if resp.clicked() {
+                    let point = altitude_structure.and_then(|alt| resp.interact_pointer_pos().and_then(|q| self.point_tracage(q, rect, shift, self.bim.depart_structure, alt)));
+                    if let Some((point, _)) = point {
+                        match genre {
+                            crate::modele::GenreBarre::Poteau => {
+                                if let Err(e) = self.placer_structure(point, None) { self.error = Some(e); }
+                            }
+                            crate::modele::GenreBarre::Poutre => {
+                                if let Some(debut) = self.bim.depart_structure {
+                                    match self.placer_structure(debut, Some(point)) {
+                                        Ok(()) => self.bim.depart_structure = None,
+                                        Err(e) => self.error = Some(e),
+                                    }
+                                } else { self.bim.depart_structure = Some(point); }
+                            }
+                        }
+                    } else {
+                        self.error = Some(if altitude_structure.is_none() { "Choisissez un niveau pour la structure." } else { "Le plan de placement est parallèle à la vue. Utilisez une vue de dessus ou une vue 3D inclinée." }.into());
+                    }
+                }
+            } else if let Some(outil) = deplacement {
+                use crate::modele::edition::commandes::Commande;
+                if resp.clicked_by(PointerButton::Secondary) { self.bim.depart_deplacement = None; }
+                if resp.clicked()
+                    && let Some((p, _)) = resp.interact_pointer_pos().and_then(|q| self.point_tracage(q, rect, shift, self.bim.depart_deplacement, altitude_coupe))
+                {
+                    match self.bim.depart_deplacement.take() {
+                        Some(a) => {
+                            let (ids, delta) = (self.selection_bim(), [p[0] - a[0], p[1] - a[1], 0.0]);
+                            let c = if outil == crate::ui::ruban::Outil::Copier { Commande::Copier { ids, delta } } else { Commande::Deplacer { ids, delta } };
+                            if let Err(e) = self.executer_bim(c) { self.error = Some(e); }
+                        }
+                        None => self.bim.depart_deplacement = Some(p),
+                    }
+                }
+            } else if let Some(prm) = &outil_coupe {
+                if resp.clicked_by(PointerButton::Secondary) { self.coupe_depart = None; }
+                if resp.clicked()
+                    && let Some((p, _)) = resp.interact_pointer_pos().and_then(|q| self.point_tracage(q, rect, shift, self.coupe_depart, altitude_coupe))
+                {
+                    match self.coupe_depart.take() {
+                        Some(a) => self.creer_vue(|projet| projet.ajouter_vue_coupe(a, p, prm.profondeur, prm.elevation, &prm.type_vue, prm.echelle), false),
+                        None => self.coupe_depart = Some(p),
+                    }
+                }
+            } else if let Some(id) = resp.double_clicked().then(|| resp.interact_pointer_pos()).flatten()
+                .and_then(|q| self.repere_coupe_proche(rect, q, altitude_coupe))
+                .filter(|id| self.natif.as_ref().is_some_and(|(p, _)| p.vues.iter().any(|v| &v.id == id)))
+            {
+                // double-clic sur le repère d'une coupe ou d'une élévation : ouvrir la vue
+                self.ouvrir_vue_native(&id);
+            } else if resp.double_clicked() {
+                match resp.interact_pointer_pos().and_then(|p| pick(self, p)) {
+                    Some((obj, _)) => self.frame_objects(&[obj]),
+                    None => self.fit_all(),
+                }
+            } else if let Some((c, k)) = resp.clicked().then(|| resp.interact_pointer_pos()).flatten().and_then(|q| {
+                self.aretes_pente(rect).into_iter().find(|a| a.2.distance(q) <= 9.0).map(|a| (a.0, a.1))
+            }) {
+                // repère d'arête de l'élément sélectionné : la pente est ajoutée ou retirée
+                self.basculer_pente(c, k);
+            } else if resp.clicked() && resp.interact_pointer_pos().zip(self.origine_ecran(rect)).is_some_and(|(q, o)| q.distance(o) <= 10.0) {
+                // origine du projet (trait invisible) : ses coordonnées dans Propriétés
+                self.select(None, false);
+                self.bim.origine = true;
+            } else if resp.clicked() && resp.interact_pointer_pos().and_then(|q| self.limite_propriete_proche(rect, q)).is_some() {
+                let id = self.limite_propriete_proche(rect, resp.interact_pointer_pos().unwrap()).unwrap();
+                let ctrl = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
+                let mut selection = if ctrl { self.selection_bim() } else { Vec::new() };
+                if let Some(i) = selection.iter().position(|x| x == &id) { selection.remove(i); } else { selection.push(id); }
+                let selection_id = selection.iter().find_map(|cle| self.scene.as_ref()?.objects.iter().find(|o| self.cle_native(o.id).as_deref() == Some(cle)).map(|o| o.id));
+                self.select(selection_id, false);
+                self.bim.selection = selection;
+            } else if resp.clicked() && resp.interact_pointer_pos().is_some_and(|q| self.point_dans_cadrage(rect, q) && self.rectangles_annotations(rect).iter().any(|(_, r)| r.expand(4.0).contains(q))) {
+                let q = resp.interact_pointer_pos().unwrap();
+                let id = self.rectangles_annotations(rect).into_iter().find(|(_, r)| r.expand(4.0).contains(q)).unwrap().0;
+                let ctrl = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
+                let mut selection = if ctrl { self.selection_bim() } else { Vec::new() };
+                if let Some(i) = selection.iter().position(|x| x == &id) { selection.remove(i); } else { selection.push(id); }
+                self.select(None, false);
+                self.bim.selection = selection;
+            } else if resp.clicked() && self.vue_en_plan() && resp.interact_pointer_pos().and_then(|q| self.repere_coupe_proche(rect, q, altitude_coupe)).is_some() {
+                let id = self.repere_coupe_proche(rect, resp.interact_pointer_pos().unwrap(), altitude_coupe).unwrap();
+                let ctrl = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
+                let mut selection = if ctrl { self.selection_bim() } else { Vec::new() };
+                if let Some(i) = selection.iter().position(|x| x == &id) { selection.remove(i); } else { selection.push(id); }
+                self.select(None, false);
+                self.bim.selection = selection;
+            } else if resp.clicked() {
+                // Plan : une arête en pointillés de la plage haute (au-dessus de la coupe)
+                // est prioritaire sur l'élément coupé ou vu dessous.
+                let haut = (self.ruban_edition.outil()!=Some(crate::ui::ruban::Outil::Ouverture)).then(|| resp.interact_pointer_pos().and_then(|q| self.objet_plage_haute(rect, q))).flatten();
+                let hit = match haut {
+                    Some(obj) => Some((obj, self.scene.as_ref().map_or(Vec3::ZERO, |s| s.objects[obj as usize].min))),
+                    None => resp.interact_pointer_pos().and_then(|p| pick(self, p)),
+                };
+                let id = hit.map(|(obj, _)| self.cible_clic(self.scene.as_ref().unwrap().objects[obj as usize].id));
+                self.point_clique = hit.map(|(_, p)| p.as_dvec3() + self.scene.as_ref().unwrap().origin);
+                if self.natif.is_some() && self.ruban_edition.outil()==Some(crate::ui::ruban::Outil::Ouverture) {
+                    if let (Some(id),Some(p))=(id,self.point_clique) { self.placer_ouverture(id,[p.x*1000.0,p.y*1000.0]); }
+                } else if id.is_none() {
+                    // Un clic bref désélectionne seulement. Le rectangle est réservé
+                    // au glissement avec le bouton gauche maintenu depuis le vide.
+                    if !ui.input(|i| i.modifiers.ctrl || i.modifiers.command) {
+                        self.select(None, false);
+                    }
+                } else {
+                    if ui.input(|i| i.modifiers.ctrl || i.modifiers.command) && self.natif.is_none() {
+                        let mut ids = self.selection_multiple.clone();
+                        if ids.is_empty() { if let Some(sel) = self.selected { ids.push(sel); } }
+                        if let Some(id) = id { if let Some(pos) = ids.iter().position(|x| *x == id) { ids.remove(pos); } else { ids.push(id); } }
+                        self.select(ids.first().copied(), true);
+                        self.selection_multiple = ids;
+                    } else if ui.input(|i| i.modifiers.ctrl || i.modifiers.command) {
+                        let mut selection=self.selection_bim();
+                        if let Some(cle)=id.and_then(|id|self.cle_native(id)) {
+                            if selection.contains(&cle){selection.retain(|s|s!=&cle);}else{selection.push(cle);}
+                        }
+                        self.select(if selection.is_empty(){None}else{id},true);
+                        self.bim.selection=selection;
+                    } else {self.select(id,true);}
+                }
+            }
+
+            if (resp.hovered() || resp.has_focus()) && !self.vol.actif && ui.input(|i|i.key_pressed(egui::Key::Escape)) && !rectangle_actif {
+                if self.isolated.is_some() {self.isolated=None;self.visibility_dirty=true;}
+                else {self.select(None,false);}
+            }
+        }
+
+
+        self.update_visibility();
+        self.update_coupe();
+
+        let params = self.frame_params(aspect);
+        let ppp = ui.ctx().pixels_per_point();
+        let (largeur, hauteur) = ((rect.width() * ppp).round() as u32, (rect.height() * ppp).round() as u32);
+        if largeur > 0 && hauteur > 0 && let Some(id) = self.renderer.as_mut().and_then(|r| r.paint(&params, largeur, hauteur)) {
+            ui.painter().image(id, rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
+        }
+        if let Some(f) = self.fenetre_selection {
+            f.dessiner(&ui.painter().with_clip_rect(rect));
+        }
+        if self.natif.is_some() && self.vue_en_plan() {
+            self.reperes_coupes(ui, rect, altitude_coupe);
+        }
+        if self.natif.is_some() && self.jeu_actif().is_none() {
+            self.traits_invisibles(ui, rect);
+            self.saisie_origine(ui, rect);
+        }
+        if let Some(prm) = &outil_coupe {
+            let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.coupe_depart, altitude_coupe));
+            self.apercu_coupe(ui, rect, point, altitude_coupe, prm);
+        }
+        if let Some(genre) = structure {
+            let painter = ui.painter().with_clip_rect(rect);
+            let couleur = Color32::from_rgb(55, 130, 200);
+            let texte = match (genre, self.bim.depart_structure) {
+                (crate::modele::GenreBarre::Poteau, _) => "Poteau : cliquer pour placer · molette : zoom",
+                (_, None) => "Poutre : cliquer le départ · molette : zoom",
+                (_, Some(_)) => "Poutre : cliquer l'arrivée · Maj : orthogonal · Échap ou clic droit : annuler",
+            };
+            painter.text(rect.left_top()+egui::vec2(12.0,self.dessin2d.bas_barre.max(4.0)+8.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
+            if let Some(alt) = altitude_structure {
+                let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.bim.depart_structure, alt));
+                if let Some((p, accroche)) = point {
+                    if let Some(q) = self.ecran_plan(rect, p, alt) { marqueur(&painter, q, accroche, couleur, Color32::from_rgb(230, 120, 20)); }
+                    if let Some(a) = self.bim.depart_structure {
+                        if let (Some(x), Some(y)) = (self.ecran_plan(rect, a, alt), self.ecran_plan(rect, p, alt)) {
+                            painter.line_segment([x, y], egui::Stroke::new(2.0, couleur));
+                            painter.text(x.lerp(y, 0.5) + egui::vec2(0.0, -16.0), egui::Align2::CENTER_CENTER, crate::config::options::unite().afficher((p[0]-a[0]).hypot(p[1]-a[1])), egui::FontId::proportional(13.0), couleur);
+                        }
+                    }
+                }
+            }
+        }
+        if deplacement.is_some() {
+            self.apercu_deplacement(ui, rect, resp.hover_pos(), altitude_coupe);
+        }
+        if !mode_ajuster && dalle.is_none() && !mode_mur && outil_coupe.is_none() && structure.is_none() && self.dessin2d.edition_contour.is_none() {
+            self.dessiner_aretes_pente(ui, rect, resp.hover_pos());
+            self.dessiner_axe(ui, rect, resp.hover_pos());
+            if self.poignee_axe.is_some() {self.dessiner_dessin2d(ui,rect);}
+        }
+        if self.alignement_plan || self.orientation_nord_en_cours {
+            self.dessiner_arete_alignement(ui, rect);
+        }
+        if mode_ajuster {self.dessiner_ajustement(ui,rect);}
+        if self.outil_dessin().is_some() {
+            self.dessiner_dessin2d(ui, rect);
+        }
+        self.dessiner_instructions(ui, rect);
+        self.cotes_terrain(ui, rect);
+        self.barre_commande(ui, rect);
+        if self.scene.is_some() {
+            self.poignees_boite(ui, rect);
+        }
+        if self.vol.actif {
+            ui.painter().text(
+                rect.left_bottom() + egui::vec2(10.0, -10.0),
+                egui::Align2::LEFT_BOTTOM,
+                format!("Vol · vitesse ×{:.2} (molette) · ZQSD/WASD, A/E : descendre/monter, Maj ×3", self.vol.vitesse),
+                egui::FontId::proportional(12.0),
+                ui.visuals().strong_text_color(),
+            );
+        }
+        if repere_plan {
+            let origine = self.orientation_initiale_plan();
+            let positions = self.positions_plan_liste();
+            let nord = self.natif.as_ref().map_or(0.0, |(p, _)| p.orientation_nord as f32);
+            let r = crate::rendu::orientation_plan::afficher(ui, rect, &mut self.camera, origine, self.alignement_plan, &positions, nord);
+            if r.aligner {
+                self.alignement_plan = !self.alignement_plan;
+                self.orientation_nord_en_cours = false;
+                self.arete_alignement = None;
+            }
+            if r.nouvelle {
+                self.nom_position_plan = Some(format!("Position {}", positions.len() + 1));
+            }
+            if let Some(i) = r.supprimer {
+                self.supprimer_position_plan(i);
+            }
+            if r.change {
+                self.memoriser_vue();
+            }
+        } else if self.scene.is_some() && self.vue_3d() {
+            self.cube_orientation(ui, rect);
+        }
+
+        if self.scene.is_none() {
+            let msg = if self.loading.is_some() { self.status.clone() } else { "Glisser un fichier .ifc ou .rvt ici\nou Ctrl+O".to_string() };
+            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, msg, egui::FontId::proportional(20.0), Color32::from_gray(110));
+        }
+    }
+}

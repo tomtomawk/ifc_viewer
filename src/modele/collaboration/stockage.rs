@@ -297,9 +297,6 @@ impl Depot {
     pub fn proteger(&self) -> Resultat<Autorite> {
         self.proteger_interne(true)
     }
-    pub fn proteger_existant(&self) -> Resultat<Autorite> {
-        self.proteger_interne(false)
-    }
     /// Réessaie la prise de l'autorité pendant `delai` (verrou tenu par un autre poste).
     pub fn proteger_attente(&self, creer: bool, delai: std::time::Duration) -> Resultat<Autorite> {
         let limite = std::time::Instant::now() + delai;
@@ -625,5 +622,5 @@ pub fn sauver_local(path: &Path, bytes: &[u8]) -> Resultat<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    super::super::enregistrement::ecrire_atomique(path, bytes)
+    super::super::echanges::enregistrement::ecrire_atomique(path, bytes)
 }

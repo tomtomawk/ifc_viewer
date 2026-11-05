@@ -62,7 +62,7 @@ terrain, limite_propriete, coordonnees_origine, barre, escalier, garde_corps,
 modifier_vue, modifier_quadrillage, niveau, quadrillage, annoter, feuille,
 nomenclature, modifier_niveau, ouverture, deplacer, copier, tourner, aligner,
 ajuster, actualiser_type, attacher, priorite_jonction, supprimer, contour, tremie.
-Les champs et types sont ceux de `src/modele/commandes.rs`.
+Les champs et types sont ceux de `src/modele/edition/commandes/mod.rs`.
 
 Pour les autres propriétés (types, matériaux, plumes, motifs, phases, variantes,
 sous-projets, contextes, murs, dalles, familles paramétriques, cartouches, vues,

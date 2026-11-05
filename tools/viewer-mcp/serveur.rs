@@ -1,6 +1,6 @@
 //! Serveur MCP du viewer IFC/Revit (stdio, JSON-RPC 2.0).
 //!
-//! Il pilote le viewer par son canal local (127.0.0.1:47811, voir `src/pilote.rs`) : une
+//! Il pilote le viewer par son canal local (127.0.0.1:47811, voir `src/pilote/mod.rs`) : une
 //! ligne « commande argument » envoyée, une ligne JSON reçue. Si aucun viewer n'écoute, il
 //! en lance un (`BIMEDIT_EXE`, sinon l'exécutable voisin, sinon `target/release`).
 //!
@@ -292,7 +292,7 @@ fn capture_brute(ligne: &str) -> Result<Sortie, String> {
 fn appeler(nom: &str, a: &Map<String, Value>) -> Result<Sortie, String> {
     if nom == "viewer_aide" {
         let texte=match a.get("sujet").and_then(Value::as_str).unwrap_or("pilote") {
-            "pilote"=>AIDE,"edition"=>include_str!("../../docs/EDITION.md"),"modele"=>include_str!("../../docs/MODELE.md"),"commandes"=>include_str!("../../src/modele/commandes.rs"),
+            "pilote"=>AIDE,"edition"=>include_str!("../../docs/EDITION.md"),"modele"=>include_str!("../../docs/MODELE.md"),"commandes"=>include_str!("../../src/modele/edition/commandes/mod.rs"),
             _=>return Err("Sujet : pilote|edition|modele|commandes".into()),
         };
         return Ok((vec![json!({"type":"text","text":texte})],false));

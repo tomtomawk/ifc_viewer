@@ -26,7 +26,7 @@ pub fn executer(args: &[String]) -> Option<Resultat<()>> {
                     let f = f.map_err(|e| e.to_string())?;
                     let nom = f.file_name();
                     let b = depot.lire(categorie, &nom.to_string_lossy())?;
-                    super::super::enregistrement::ecrire_atomique(
+                    super::super::echanges::enregistrement::ecrire_atomique(
                         &destination.join(categorie).join(nom),
                         &b,
                     )?;
@@ -40,7 +40,7 @@ pub fn executer(args: &[String]) -> Option<Resultat<()>> {
                     } else {
                         std::fs::read(source).map_err(|e| e.to_string())?
                     };
-                    super::super::enregistrement::ecrire_atomique(&destination.join(nom), &b)?;
+                    super::super::echanges::enregistrement::ecrire_atomique(&destination.join(nom), &b)?;
                 }
             }
             println!("Sauvegarde cohérente : {}", destination.display());
@@ -85,21 +85,21 @@ pub fn executer(args: &[String]) -> Option<Resultat<()>> {
                 let avant = s.travail()?;
                 let (apres, ids) =
                     avant.executer(serde_json::from_str(&commande).map_err(|e| e.to_string())?)?;
-                crate::scene::depuis_natif(&apres, &chemin)?;
+                crate::rendu::scene::depuis_natif(&apres, &chemin)?;
                 s.editer(&avant, &apres)?;
-                super::super::enregistrement::enregistrer_natif(&apres, &chemin)?;
+                super::super::echanges::enregistrement::enregistrer_natif(&apres, &chemin)?;
                 println!("Enregistré localement — en attente : {ids:?}");
                 return Ok(());
             }
             "recuperer" => {
                 let sortie = Path::new(args.get(3).ok_or("Sortie JSON requise")?);
-                super::super::enregistrement::enregistrer_natif(&s.affichage()?, sortie)?;
+                super::super::echanges::enregistrement::enregistrer_natif(&s.affichage()?, sortie)?;
                 return Ok(());
             }
             "texte-recuperer" => {
                 let id = args.get(3).ok_or("Identifiant annotation requis")?;
                 let sortie = Path::new(args.get(4).ok_or("Fichier texte de sortie requis")?);
-                super::super::enregistrement::ecrire_atomique(
+                super::super::echanges::enregistrement::ecrire_atomique(
                     sortie,
                     s.texte_local(id)?.contenu()?.as_bytes(),
                 )?;
@@ -123,7 +123,7 @@ pub fn executer(args: &[String]) -> Option<Resultat<()>> {
         let limite = Instant::now() + std::time::Duration::from_secs(120);
         loop {
             if s.recevoir()?.is_some() {
-                super::super::enregistrement::enregistrer_natif(&s.affichage()?, &chemin)?;
+                super::super::echanges::enregistrement::enregistrer_natif(&s.affichage()?, &chemin)?;
                 println!("{} · r{}", s.etat, s.copie.base.revision);
                 break;
             }
@@ -179,7 +179,7 @@ fn mesurer(p: &Projet, chemin: &Path, sortie: &Path) -> Resultat<()> {
     c.editer(p, &apres)?;
     let validation_commit_local_ms = debut.elapsed().as_secs_f64() * 1000.0;
     let debut = Instant::now();
-    let scene = crate::scene::depuis_natif(&apres, chemin)?;
+    let scene = crate::rendu::scene::depuis_natif(&apres, chemin)?;
     let geometrie_ms = debut.elapsed().as_secs_f64() * 1000.0;
     stockage::reinitialiser_mesures();
     {
@@ -212,7 +212,7 @@ fn mesurer(p: &Projet, chemin: &Path, sortie: &Path) -> Resultat<()> {
     }
     let instantane_queue_ms = debut.elapsed().as_secs_f64() * 1000.0;
     let rapport = serde_json::json!({"profil":if cfg!(debug_assertions){"debug"}else{"release"},"materiel":"disque local Windows ; NAS non qualifié","initialisation_ms":initial_ms,"comparaison_ms":comparaison_ms,"validation_et_commit_local_ms":validation_commit_local_ms,"reconstruction_geometrique_ms":geometrie_ms,"transfert_gpu_ms":null,"latence_evenement_interface_ms":null,"memoire_residente_octets":memoire_residente(),"taille_etat_serialise_octets":encoder(&initial)?.len(),"sommets":scene.vertices.len(),"ouverture_journal_ms":rattrapage_ms,"ouverture_instantane_et_queue_ms":instantane_queue_ms,"fichiers_initialisation_et_publication":fichiers,"donnees_essai":racine});
-    super::super::enregistrement::ecrire_atomique(
+    super::super::echanges::enregistrement::ecrire_atomique(
         sortie,
         &serde_json::to_vec_pretty(&rapport).map_err(|e| e.to_string())?,
     )?;

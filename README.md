@@ -161,28 +161,20 @@ vue 3D (pilotes sans multiéchantillonnage).
 
 ## Architecture
 
-| Fichier | Rôle |
+Le code est rangé par domaine ; le sens des dépendances va de `noyau` vers `ui`
+(`noyau` ← `formats` ← `modele` ← `dessin` / `rendu` ← `ui`). Le dossier `modele/` n'importe jamais egui.
+
+| Dossier | Rôle |
 |---|---|
-| `src/step.rs` | Parseur ISO 10303-21 (découpage séquentiel, analyse parallèle avec rayon, décodage `\X2\` pour les accents) |
-| `src/model.rs` | Unités, relations (agrégation, contenu, propriétés, type, matériaux, ouvertures), styles |
-| `src/geom.rs` | Placements, profils, courbes, solides → triangles en mètres |
-| `src/csg.rs` | Booléens sur maillages par arbre BSP (portage de csg.js) |
-| `src/scene.rs` | Chargement complet, tampons de sommets, picking CPU par rayon |
-| `src/render.rs` | Shaders WGSL et rendu wgpu hors écran (ombres, occultation ambiante), affiché comme image egui |
-| `src/trace2d.rs` | Primitives 2D vectorielles (polylignes, segments, surfaces, triangles ; style en mm du papier, rôle, élément d'origine), maillage pour le GPU, export SVG |
-| `src/dessin.rs` | Dessin 2D : arêtes vives et douces (silhouettes) des maillages, coupe par un plan (poché, hachures, contours en trait fort), arêtes vues sans parties cachées pour l'export |
-| `src/camera.rs` | Caméra orbitale Z vers le haut, perspective / orthographique |
-| `src/app.rs` | Interface egui (panneaux, arborescence, propriétés, interaction 3D), commandes du pilote |
-| `src/pilote.rs` | Canal de commande local (TCP 127.0.0.1:47811) du serveur MCP |
-| `src/rvt.rs` | Revit : conteneur OLE, métadonnées |
-| `src/rvt/objets.rs` | Revit : retrait des blocs intercalés, décompression, cadrage des partitions, table des éléments |
-| `src/rvt/schema.rs` | Revit : schéma de classes `Formats/Latest` |
-| `src/rvt/champs.rs` | Revit : lecteur générique des objets, piloté par le schéma |
-| `src/rvt/geometrie.rs` | Revit : B-rep `GElement` → triangles (faces planes, cylindriques, réglées et de révolution, trous, faces courbes densifiées ; vides écartés) ; familles (`GInstance`) : filtres de vue, repère, géométrie des types partagée |
-| `src/rvt/vues.rs` | Revit : vues, éléments 2D, hachures et motifs de surface |
-| `src/rvt/parametres.rs` | Revit : définitions et valeurs des paramètres, mise en forme, UniqueId et IfcGUID ; tables relevées dans Revit dans `src/rvt/donnees/` |
-| `src/rvt/maquette.rs` | Revit : niveaux, types, familles, matériaux et éléments, traduits en modèle IFC synthétique pour l'affichage |
-| `src/modele/` | Modèle natif v0 (format d'édition) et conversions depuis Revit et IFC, rapport de conversion : [docs/MODELE.md](docs/MODELE.md) |
+| `src/noyau/` | Briques sans dépendance au modèle : booléens par arbre BSP (`csg.rs`, portage de csg.js), textes en triangles (`texte.rs`), primitives 2D vectorielles et export SVG (`trace2d.rs`) |
+| `src/formats/ifc/` | IFC : parseur ISO 10303-21 (`step.rs`), couche sémantique (`semantique.rs` : unités, relations, matériaux, styles), placements, profils et solides → triangles (`geom.rs`) |
+| `src/formats/rvt/` | Revit : conteneur OLE et métadonnées (`mod.rs`), objets, schéma, champs, géométrie B-rep, vues, paramètres (tables dans `donnees/`), maquette (`maquette/` : lecture, conversion en scène, tests) |
+| `src/modele/` | Modèle natif (format d'édition) : types dans `mod.rs` ; `murs/` (assemblages, jonctions, retours), `elements/` (escaliers, terrain, cadrage, pentes), `volumes/` (géométrie, solides), `famille/`, `edition/` (commandes, historique, validation), `documentation/` (annotations, feuilles, nomenclatures), `echanges/` (import IFC/Revit, export IFC, enregistrement, rapport), `collaboration/` ; voir [docs/MODELE.md](docs/MODELE.md) |
+| `src/dessin/` | Dessin 2D : arêtes, coupe par un plan (poché, hachures, contours), motifs (`motifs.rs` : isolant), outils de DAO (`dao.rs`) |
+| `src/rendu/` | Vue 3D : scène et picking (`scene/`), rendu wgpu (`gpu.rs`), caméra, repère des plans, sélection à l'écran |
+| `src/ui/` | Interface egui : état et boucle (`mod.rs`), un fichier par zone (barre haute, panneaux, navigateur, vues, viewport, propriétés, sélection…), `ruban/`, `dessin_plan/` (saisie en plan), `editeur_famille/`, `bim/` |
+| `src/pilote/` | Canal de commande local (TCP 127.0.0.1:47811) du serveur MCP et commandes en ligne (`cli.rs`) |
+| `src/config/` | Options utilisateur, raccourcis, gabarits de projet |
 | `tools/viewer-mcp/serveur.rs` | Serveur MCP (stdio, binaire `bimedit-mcp`) qui pilote le viewer : ouverture, vues, caméra, propriétés, captures |
 
 ## Pilotage par MCP
@@ -222,7 +214,7 @@ cargo run --release -- --stats samples/test_ifc4.ifc
 
 `samples/test_ifc4.ifc` couvre mur percé, dalle à profil avec arc indexé, item mappé coloré, faces triangulées et découpe par demi-espace ; les volumes attendus sont en commentaire dans le fichier.
 
-Les tests Revit (`src/rvt/maquette.rs`) lisent des fichiers hors dépôt, avec des valeurs relevées dans Revit 2026 : `essais\2026\E04_mur.rvt` (6,711 562 m³, boîte 12 345,6 × 200 × 2 718,2 mm), `essais\2026\E12_grilles.rvt` (3 grilles), `fichiers\Projet1.rvt` (59 murs, matériaux, sols, escaliers, garde-corps, pièces, instances et géométrie des familles, cotes d'une porte) et `fichiers\Kerreut 2025.rvt`, copie d'un projet du corpus d'agence (10 toits, escalier assemblé, familles). Ces fichiers sont dans le dossier du décodage `C:\Users\theba\Projets code\Decodage RVT` (essais, fichiers de référence, sorties de l'API de Revit, scripts RiveTT ; provenance de chaque fichier dans son `SOURCES.md`), remplaçable par la variable `RVT_ESSAIS` ; fichier absent : test sauté avec un message.
+Les tests Revit (`src/formats/rvt/maquette/tests.rs`) lisent des fichiers hors dépôt, avec des valeurs relevées dans Revit 2026 : `essais\2026\E04_mur.rvt` (6,711 562 m³, boîte 12 345,6 × 200 × 2 718,2 mm), `essais\2026\E12_grilles.rvt` (3 grilles), `fichiers\Projet1.rvt` (59 murs, matériaux, sols, escaliers, garde-corps, pièces, instances et géométrie des familles, cotes d'une porte) et `fichiers\Kerreut 2025.rvt`, copie d'un projet du corpus d'agence (10 toits, escalier assemblé, familles). Ces fichiers sont dans le dossier du décodage `C:\Users\theba\Projets code\Decodage RVT` (essais, fichiers de référence, sorties de l'API de Revit, scripts RiveTT ; provenance de chaque fichier dans son `SOURCES.md`), remplaçable par la variable `RVT_ESSAIS` ; fichier absent : test sauté avec un message.
 
 Le décodage RVT est fait dans ce dépôt ; [rvt-rs](https://github.com/DrunkOnJava/rvt-rs) (Apache-2.0) n'a été consulté que partiellement, comme référence de comparaison, sans reprise de code (détail : `LISEZMOI-RVT.md` § 10, dossier de décodage hors dépôt).
 

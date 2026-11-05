@@ -50,7 +50,7 @@ fn texte_annotation(p: &mut Projet, id: &str, s: &str) {
 
 #[test]
 fn identites_distribuees_et_migration_preserve_les_objets() {
-    use super::super::commandes::Commande;
+    use super::super::edition::commandes::Commande;
     let p = exemple();
     let a = p
         .executer(Commande::Niveau {
@@ -135,7 +135,7 @@ fn suppression_hote_observe_ajout_ouverture_et_collection() {
     sup.ouvertures.retain(|o| o.mur != hote);
     sup.contextes.remove(&hote);
     let t = Transaction::entre(&p, &sup, "a", 0).unwrap();
-    let cmd = super::super::commandes::Commande::Ouverture {
+    let cmd = super::super::edition::commandes::Commande::Ouverture {
         mur: hote,
         genre: super::super::GenreOuverture::Porte,
         type_ouverture: None,
@@ -609,7 +609,7 @@ fn actualisation_assemblage_transporte_couches_et_effets_atomiques() {
             ..Default::default()
         });
     let (q, _) = p
-        .executer(super::super::commandes::Commande::ActualiserType {
+        .executer(super::super::edition::commandes::Commande::ActualiserType {
             assemblage: id.clone(),
         })
         .unwrap();
@@ -623,7 +623,7 @@ fn actualisation_assemblage_transporte_couches_et_effets_atomiques() {
 
 #[test]
 fn propagation_famille_valide_instances_et_transporte_tout_le_resultat() {
-    use super::super::famille_modelee::*;
+    use super::super::famille::modelee::*;
     let mut p = Projet::nouveau("Famille");
     p.ajouter_mur(
         [0.0, 0.0],
@@ -633,7 +633,7 @@ fn propagation_famille_valide_instances_et_transporte_tout_le_resultat() {
     .unwrap();
     let mur = p.murs[0].id.clone();
     let (p, ids) = p
-        .executer(super::super::commandes::Commande::Ouverture {
+        .executer(super::super::edition::commandes::Commande::Ouverture {
             mur,
             genre: super::super::GenreOuverture::Porte,
             type_ouverture: None,
@@ -953,7 +953,7 @@ fn voisinage_geometrique_et_meme_objet_restent_conflictuels() {
 
 #[test]
 fn premiere_synchro_de_plusieurs_murs_preserve_les_deux_copies_distinctes() {
-    let mut p = Projet::depuis_gabarit("Première synchronisation", &crate::gabarit::Gabarit::defaut());
+    let mut p = Projet::depuis_gabarit("Première synchronisation", &crate::config::gabarit::Gabarit::defaut());
     p.ajouter_mur([30000.0, 30000.0], [34000.0, 30000.0], &Default::default()).unwrap();
     let root = dossier();
     let entree = root.join("projet.bimpartage");
@@ -971,7 +971,7 @@ fn premiere_synchro_de_plusieurs_murs_preserve_les_deux_copies_distinctes() {
     }
     let id=b.murs.last().unwrap().id.clone();
     for dx in [50.0,100.0] {
-        let (q,_)=b.executer(super::super::commandes::Commande::Deplacer {ids:vec![id.clone()],delta:[dx,0.0,0.0]}).unwrap();
+        let (q,_)=b.executer(super::super::edition::commandes::Commande::Deplacer {ids:vec![id.clone()],delta:[dx,0.0,0.0]}).unwrap();
         sb.editer(&b,&q).unwrap();b=q;
     }
     sa.synchroniser(None,false).unwrap();attendre(&mut sa);
@@ -986,7 +986,7 @@ fn premiere_synchro_de_plusieurs_murs_preserve_les_deux_copies_distinctes() {
 
 #[test]
 fn conflit_reel_preserve_les_murs_locaux_a_lecran_et_apres_reouverture() {
-    let p=Projet::depuis_gabarit("Conflit local",&crate::gabarit::Gabarit::defaut());
+    let p=Projet::depuis_gabarit("Conflit local",&crate::config::gabarit::Gabarit::defaut());
     let root=dossier();let entree=root.join("projet.bimpartage");
     partage::creer(&p,&entree).unwrap();
     let (a,_,mut sa)=partage::ouvrir(&entree,&root.join("a")).unwrap();
@@ -1004,7 +1004,7 @@ fn conflit_reel_preserve_les_murs_locaux_a_lecran_et_apres_reouverture() {
         assert!(!sb.travail().unwrap().murs.iter().any(|m|&m.id==id));
     }
     assert!(sb.editer(&suite,&suite).is_err());
-    super::super::enregistrement::enregistrer_natif(&sb.affichage().unwrap(),&local).unwrap();
+    super::super::echanges::enregistrement::enregistrer_natif(&sb.affichage().unwrap(),&local).unwrap();
     drop(sb);
     let (visible,_,s)=partage::ouvrir(&entree,&root.join("b")).unwrap();
     assert!(s.copie.apercu_conflit.is_some());

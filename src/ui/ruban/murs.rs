@@ -1,0 +1,600 @@
+//! Propriétés, types et croquis des murs.
+use super::*;
+
+impl RubanEdition {
+    /// Palette de création du mur : croquis des deux limites (haut, bas) avec leur
+    /// réglage sur la même ligne, puis les propriétés du type en grille.
+    pub fn proprietes_mur(
+        &mut self,
+        ui: &mut egui::Ui,
+        projet: Option<&crate::modele::Projet>,
+    ) -> bool {
+        if !self.mur_actif() {
+            return false;
+        }
+        let Some(projet) = projet else {
+            ui.label("Créez ou ouvrez un projet natif pour dessiner un mur.");
+            return true;
+        };
+        // Un changement de document ne doit jamais réutiliser une référence étrangère.
+        for niveau in [&mut self.niveau_mur, &mut self.niveau_haut_mur] {
+            if niveau
+                .as_ref()
+                .is_some_and(|id| projet.niveau(id).is_none())
+            {
+                *niveau = None;
+            }
+        }
+        if self.type_mur.as_ref().is_some_and(|id| projet.type_mur(id).is_none()) {
+            self.type_mur = None;
+        }
+        egui::ScrollArea::vertical()
+            .id_salt("creation_mur")
+            .show(ui, |ui| {
+                self.selecteur_type_mur(ui, projet, true);
+                ui.add_space(2.0);
+                egui::Frame::new()
+                    .fill(ui.visuals().faint_bg_color)
+                    .corner_radius(6.0)
+                    .inner_margin(egui::Margin::symmetric(8, 6))
+                    .show(ui, |ui| {
+                        ui.set_min_width(ui.available_width());
+                        self.croquis_mur_creation(ui, projet);
+                    });
+                if let Err(e) = self.parametres_mur().bornes(projet) {
+                    ui.colored_label(ui.visuals().error_fg_color, e);
+                }
+                ui.add_space(4.0);
+                egui::Grid::new("grille_creation_mur")
+                    .num_columns(2)
+                    .striped(true)
+                    .spacing([10.0, 4.0])
+                    .min_col_width(80.0)
+                    .show(ui, |ui| {
+                        ui.label("Épaisseur");
+                        match self.type_mur.as_ref().and_then(|id| projet.type_mur(id)) {
+                            Some(t) => {
+                                ui.label(crate::config::options::unite().afficher(t.epaisseur()))
+                                    .on_hover_text("Épaisseur du type (somme des couches)");
+                            }
+                            None => self.nombre_mur(ui, 2, 300.0),
+                        }
+                        ui.end_row();
+                        ui.label("Implantation");
+                        let v = self
+                            .valeurs
+                            .entry((Outil::Mur, 0))
+                            .or_insert_with(|| Valeur::Texte("Face extérieure".into()));
+                        if let Valeur::Texte(v) = v {
+                            egui::ComboBox::from_id_salt("implantation_proprietes_mur")
+                                .width(130.0)
+                                .selected_text(v.as_str())
+                                .show_ui(ui, |ui| {
+                                    for nom in ["Face extérieure", "Axe", "Face intérieure", "Axe du porteur"] {
+                                        ui.selectable_value(v, nom.into(), nom);
+                                    }
+                                });
+                        }
+                        ui.end_row();
+                    });
+            });
+        true
+    }
+
+    /// Sélecteur de type en tête de la palette, comme dans Revit : générique (épaisseur
+    /// saisie) ou un type du projet ; composition en bande sous la liste ; Modifier /
+    /// Nouveau ouvrent l'éditeur de type.
+    pub fn selecteur_type_mur(&mut self, ui: &mut egui::Ui, projet: &crate::modele::Projet, generique: bool) {
+        use crate::modele::CategorieMur;
+        let actuel = self.type_mur.as_ref().and_then(|id| projet.type_mur(id));
+        let categorie_actuelle = actuel.map_or(CategorieMur::Mur, |t| t.categorie_mur());
+        let nom = actuel.map_or("Générique (épaisseur libre)", |t| t.nom.as_str());
+        let onglet = self.categorie_mur.unwrap_or(categorie_actuelle);
+        // largeur du panneau mesurée hors de la ligne, qui grandirait avec la liste
+        let largeur = ui.available_width();
+        // types de la catégorie : (type du projet, type du gabarit à ajouter, nom, couches)
+        type Ligne = (Option<String>, Option<crate::config::gabarit::TypeGabarit>, String, Vec<crate::modele::Couche>);
+        let mut lignes: Vec<Ligne> = Vec::new();
+        if generique && onglet == CategorieMur::Mur {
+            lignes.push((None, None, "Générique (épaisseur libre)".into(), Vec::new()));
+        }
+        let mut types: Vec<_> = projet.types_murs.iter().filter(|t| t.categorie_mur() == onglet).collect();
+        types.sort_by(|a, b| a.nom.cmp(&b.nom));
+        lignes.extend(types.into_iter().map(|t| (Some(t.id.clone()), None, t.nom.clone(), t.couches.clone())));
+        // types du gabarit absents du projet : copiés dans le projet au choix
+        let gabarit = crate::config::gabarit::actif();
+        lignes.extend(gabarit.types_murs.iter().filter(|t| t.categorie_mur() == onglet && !projet.types_murs.iter().any(|p| p.nom == t.nom)).map(|t| (None, Some(t.clone()), t.nom.clone(), t.couches.clone())));
+        let rangs = CategorieMur::TOUTES.iter().map(|c| projet.types_murs.iter().filter(|t| t.categorie_mur() == *c).count() + gabarit.types_murs.iter().filter(|t| t.categorie_mur() == *c).count() + 1).max().unwrap_or(1);
+        let mut choix_onglet = None;
+        let mut choisi: Option<Ligne> = None;
+        // boutons à droite d'abord, la liste prend la place restante (sans élargir le panneau)
+        ui.allocate_ui_with_layout(egui::vec2(largeur, 22.0), egui::Layout::right_to_left(Align::Center), |ui| {
+            if ui.small_button("+").on_hover_text("Nouveau type de mur").clicked() {
+                self.ouvrir_editeur_type(projet, None);
+            }
+            if ui.small_button("Modifier").on_hover_text("Modifier les couches du type (les murs déjà tracés gardent les leurs)").clicked() {
+                self.ouvrir_editeur_type(projet, self.type_mur.clone());
+            }
+            egui::ComboBox::from_id_salt("type_mur_creation")
+                .width(ui.available_width().max(60.0) - 8.0)
+                .height(400.0)
+                // les onglets de catégorie gardent la liste ouverte ; un type la ferme
+                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                .truncate()
+                .selected_text(RichText::new(format!("{} · {nom}", categorie_actuelle.nom())).strong())
+                .show_ui(ui, |ui| {
+                    ui.set_min_width(300.0);
+                    // hauteur fixe (catégorie la plus fournie) : la liste ne saute pas d'un onglet à l'autre
+                    ui.set_min_height(86.0 + rangs as f32 * 27.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 2.0;
+                        for c in CategorieMur::TOUTES {
+                            let (r, reponse) = ui.allocate_exact_size(egui::vec2(96.0, 50.0), Sense::click());
+                            let actif = onglet == c;
+                            if actif || reponse.hovered() {
+                                ui.painter().rect_filled(r, 4.0, if actif { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
+                            }
+                            icone_categorie_mur(ui, egui::Rect::from_center_size(r.center_top() + egui::vec2(0.0, 17.0), egui::vec2(26.0, 26.0)), c);
+                            ui.painter().text(r.center_bottom() - egui::vec2(0.0, 9.0), egui::Align2::CENTER_CENTER, c.nom(), egui::FontId::proportional(12.0), ui.visuals().text_color());
+                            if reponse.clicked() && !actif {
+                                choix_onglet = Some(c);
+                                ui.ctx().request_repaint();
+                            }
+                        }
+                    });
+                    ui.label(RichText::new(onglet.aide()).small().weak());
+                    ui.separator();
+                    for ligne in &lignes {
+                        let courant = match (&ligne.0, &self.type_mur) {
+                            (None, None) => ligne.1.is_none(),
+                            (Some(a), Some(b)) => a == b,
+                            _ => false,
+                        };
+                        let (r, reponse) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 24.0), Sense::click());
+                        if courant || reponse.hovered() {
+                            ui.painter().rect_filled(r, 3.0, if courant { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
+                        }
+                        if !ligne.3.is_empty() {
+                            pile_couches(ui, egui::Rect::from_min_size(r.min + egui::vec2(8.0, 4.0), egui::vec2(26.0, 16.0)), &ligne.3);
+                        }
+                        ui.painter().text(r.min + egui::vec2(42.0, 12.0), egui::Align2::LEFT_CENTER, &ligne.2, egui::FontId::proportional(12.0), ui.visuals().text_color());
+                        if !ligne.3.is_empty() {
+                            let e: f64 = ligne.3.iter().map(|c| c.epaisseur).sum();
+                            ui.painter().text(r.right_center() - egui::vec2(8.0, 0.0), egui::Align2::RIGHT_CENTER, crate::config::options::unite().afficher(e), egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
+                        }
+                        if reponse.clicked() {
+                            choisi = Some(ligne.clone());
+                            ui.close();
+                        }
+                    }
+                })
+                .response
+                .on_hover_text("Type des prochains murs. Un type à plusieurs couches crée un mur par couche, regroupés en assemblage.");
+        });
+        if let Some(c) = choix_onglet {
+            self.categorie_mur = Some(c);
+        }
+        if let Some((id, gabarit, _, _)) = choisi {
+            self.categorie_mur = None;
+            match gabarit {
+                Some(t) => self.type_mur_gabarit = Some(t),
+                None => self.type_mur = id,
+            }
+        }
+        if let Some(t) = self.type_mur.as_ref().and_then(|id| projet.type_mur(id)) {
+            ui.scope(|ui| {
+                ui.set_max_width(largeur);
+                bande_couches(ui, projet, &t.couches, 12.0);
+            });
+        }
+    }
+
+    /// Type de mur du gabarit choisi dans le sélecteur, à ajouter au projet.
+    pub fn prendre_type_gabarit(&mut self) -> Option<crate::config::gabarit::TypeGabarit> {
+        self.type_mur_gabarit.take()
+    }
+
+    pub fn editeur_type_ouvert(&self) -> bool {
+        self.editeur_type.is_some()
+    }
+
+    pub(super) fn ouvrir_editeur_type(&mut self, projet: &crate::modele::Projet, id: Option<String>) {
+        use crate::modele::{Couche, FonctionCouche};
+        let existant = id.as_ref().and_then(|id| projet.type_mur(id));
+        let (nom, couches) = match existant {
+            Some(t) => (t.nom.clone(), t.couches.clone()),
+            None => {
+                // générique en cours : sa seule couche ; sinon un mur isolé type
+                let mut n = projet.types_murs.len() + 1;
+                while projet.types_murs.iter().any(|t| t.nom == format!("Mur composé {n}")) {
+                    n += 1;
+                }
+                let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None, retour: false };
+                (format!("Mur composé {n}"), vec![c("Enduit", 15.0, FonctionCouche::Finition), c("Béton", 200.0, FonctionCouche::Structure), c("Laine minérale", 120.0, FonctionCouche::Isolation), c("Plâtre", 13.0, FonctionCouche::Finition)])
+            }
+        };
+        let mut materiaux = projet.materiaux.clone();
+        for c in &couches {
+            if let Some(m) = &c.materiau
+                && !materiaux.iter().any(|x| &x.nom == m)
+            {
+                materiaux.push(crate::modele::murs::assemblage::materiau_par_defaut(m));
+            }
+        }
+        self.editeur_type = Some(EditeurType { id: existant.map(|t| t.id.clone()), nom, categorie: existant.map_or(crate::modele::CategorieMur::Compose, |t| t.categorie_mur()), couches, materiaux, erreur: None, glisse: None });
+    }
+
+    /// Fenêtre d'édition d'un type de mur composé : une ligne par couche, de
+    /// l'extérieur (en haut) vers l'intérieur. Retourne vrai si le projet a changé.
+    pub fn editeur_type_mur(&mut self, ctx: &egui::Context, projet: &mut crate::modele::Projet) -> bool {
+        use crate::modele::{Couche, FonctionCouche, MotifCoupe};
+        let Some(ed) = &mut self.editeur_type else { return false };
+        let (mut ouvert, mut enregistrer, mut annuler) = (true, false, false);
+        egui::Window::new(if ed.id.is_some() { "Modifier le type de mur" } else { "Nouveau type de mur" })
+            .id(egui::Id::unique("editeur_type_mur"))
+            .open(&mut ouvert)
+            .collapsible(false)
+            .resizable(false)
+            .default_width(560.0)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Nom");
+                    ui.add(egui::TextEdit::singleline(&mut ed.nom).desired_width(300.0));
+                    egui::ComboBox::from_id_salt("categorie_type_mur").selected_text(ed.categorie.nom()).show_ui(ui, |ui| {
+                        for c in crate::modele::CategorieMur::TOUTES {
+                            ui.selectable_value(&mut ed.categorie, c, c.nom());
+                        }
+                    }).response.on_hover_text("Catégorie du type : mur, mur composé ou cloison");
+                });
+                ui.add_space(4.0);
+                bande_couches_brouillon(ui, &ed.materiaux, &ed.couches, 18.0);
+                ui.label(RichText::new("Extérieur").small().weak());
+                let mut action: Option<(usize, i32)> = None; // (couche, 0 supprimer)
+                // glisser-déposer : lignes (hauteur) et relâchement de la poignée
+                let mut lignes: Vec<egui::Rangef> = Vec::new();
+                let mut lacher = false;
+                egui::Grid::new("couches_type_mur").num_columns(9).spacing([6.0, 4.0]).striped(true).show(ui, |ui| {
+                    for t in ["", "Fonction", "Matériau", "", "Motif", "Épaisseur", "Plume", "Retour", ""] {
+                        ui.label(RichText::new(t).small().weak());
+                    }
+                    ui.end_row();
+                    let n = ed.couches.len();
+                    for (k, c) in ed.couches.iter_mut().enumerate() {
+                        ui.push_id(k, |ui| {
+                            // poignée : glisser la ligne vers une autre position
+                            let (r, poignee) = ui.allocate_exact_size(egui::vec2(18.0, 20.0), Sense::drag());
+                            let v = ui.visuals();
+                            let encre = if poignee.hovered() || ed.glisse == Some(k) { v.strong_text_color() } else { v.weak_text_color() };
+                            for dy in [-4.0, 0.0, 4.0] {
+                                ui.painter().line_segment([r.center() + egui::vec2(-5.0, dy), r.center() + egui::vec2(5.0, dy)], egui::Stroke::new(1.3, encre));
+                            }
+                            if poignee.drag_started() {
+                                ed.glisse = Some(k);
+                            }
+                            if poignee.drag_stopped() {
+                                lacher = true;
+                            }
+                            lignes.push(r.y_range());
+                            poignee.on_hover_cursor(egui::CursorIcon::Grab).on_hover_text("Glisser pour déplacer la couche");
+                        });
+                        egui::ComboBox::from_id_salt(("fonction", k)).width(84.0).selected_text(c.fonction.libelle()).show_ui(ui, |ui| {
+                            for f in FonctionCouche::TOUTES {
+                                ui.selectable_value(&mut c.fonction, f, f.libelle());
+                            }
+                        });
+                        // matériau : nom libre, ou choisi dans ceux du projet
+                        let mut nom = c.materiau.clone().unwrap_or_default();
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 0.0;
+                            ui.add(egui::TextEdit::singleline(&mut nom).desired_width(130.0).hint_text("Matériau"));
+                            let liste = petit_bouton(ui, !ed.materiaux.is_empty(), Glyphe::Liste).on_hover_text("Matériaux du projet");
+                            egui::Popup::menu(&liste).show(|ui| {
+                                for m in &ed.materiaux {
+                                    if ui.button(&m.nom).clicked() {
+                                        nom = m.nom.clone();
+                                        ui.close();
+                                    }
+                                }
+                            });
+                        });
+                        let nom = nom.trim().to_string();
+                        c.materiau = (!nom.is_empty()).then_some(nom.clone());
+                        if !nom.is_empty() && !ed.materiaux.iter().any(|m| m.nom == nom) {
+                            ed.materiaux.push(crate::modele::murs::assemblage::materiau_par_defaut(&nom));
+                        }
+                        match ed.materiaux.iter_mut().find(|m| m.nom == nom) {
+                            Some(m) => {
+                                ui.color_edit_button_srgb(&mut m.couleur).on_hover_text("Couleur du matériau (tous ses usages)");
+                                egui::ComboBox::from_id_salt(("motif", k)).width(80.0).selected_text(m.motif.libelle()).show_ui(ui, |ui| {
+                                    for x in MotifCoupe::TOUS {
+                                        let l = x.libelle().to_string();
+                                        ui.selectable_value(&mut m.motif, x, l);
+                                    }
+                                });
+                            }
+                            None => {
+                                ui.label("");
+                                ui.label("");
+                            }
+                        }
+                        ui.add(egui::DragValue::new(&mut c.epaisseur).speed(1.0).range(1.0..=2000.0).max_decimals(1).dimensions());
+                        // plume du contour de coupe : numéro et épaisseur de la table
+                        let plumes = projet.epaisseurs_plumes();
+                        let mut n_plume = c.plume();
+                        egui::ComboBox::from_id_salt(("plume", k)).width(70.0).selected_text(format!("{n_plume} · {}", crate::formats::ifc::step::format_real(plumes[(n_plume - 1) as usize]))).show_ui(ui, |ui| {
+                            for (i, e) in plumes.iter().enumerate() {
+                                ui.selectable_value(&mut n_plume, i as u8 + 1, format!("{} · {} mm", i + 1, crate::formats::ifc::step::format_real(*e)));
+                            }
+                        }).response.on_hover_text("Plume du contour de coupe de la couche");
+                        if n_plume != c.plume() {
+                            c.plume = Some(n_plume);
+                        }
+                        ui.add_enabled(c.fonction != FonctionCouche::Structure, egui::Checkbox::without_text(&mut c.retour))
+                            .on_hover_text("Retour aux insertions : la couche tourne dans les tableaux et le linteau des ouvertures, jusqu'au plan « Retour extérieur » ou « Retour intérieur » de leur famille")
+                            .on_disabled_hover_text("Une couche de structure ne se retourne pas");
+                        if petit_bouton(ui, n > 1, Glyphe::Croix).on_hover_text("Supprimer la couche").clicked() { action = Some((k, 0)); }
+                        ui.end_row();
+                    }
+                });
+                ui.label(RichText::new("Intérieur").small().weak());
+                // position d'insertion sous le pointeur : nombre de lignes dont le milieu est au-dessus
+                if let (Some(k), Some(y)) = (ed.glisse, ui.input(|i| i.pointer.interact_pos().map(|p| p.y))) {
+                    let cible = lignes.iter().filter(|l| l.center() < y).count();
+                    if let (Some(premiere), Some(derniere)) = (lignes.first(), lignes.last()) {
+                        let yl = if cible == 0 { premiere.min - 2.0 } else { lignes[cible - 1].max + 2.0 }.clamp(premiere.min - 2.0, derniere.max + 2.0);
+                        let x = ui.min_rect().x_range();
+                        ui.painter().line_segment([egui::pos2(x.min, yl), egui::pos2(x.max, yl)], egui::Stroke::new(2.0, ui.visuals().selection.stroke.color));
+                    }
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                    if lacher {
+                        let couche = ed.couches.remove(k);
+                        let cible = if cible > k { cible - 1 } else { cible };
+                        ed.couches.insert(cible.min(ed.couches.len()), couche);
+                        ed.glisse = None;
+                    }
+                }
+                if lacher {
+                    ed.glisse = None;
+                }
+                if let Some((k, 0)) = action {
+                    ed.couches.remove(k);
+                }
+                ui.horizontal(|ui| {
+                    if ui.button("+ Couche").clicked() {
+                        ed.couches.push(Couche { materiau: None, epaisseur: 50.0, fonction: FonctionCouche::Autre, plume: None, retour: false });
+                    }
+                    let total: f64 = ed.couches.iter().map(|c| c.epaisseur).sum();
+                    ui.label(format!("Épaisseur totale : {}", crate::config::options::unite().afficher(total)));
+                });
+                if let Some(e) = &ed.erreur {
+                    ui.colored_label(ui.visuals().error_fg_color, e);
+                }
+                ui.label(RichText::new("Chaque couche sera tracée comme un mur indépendant, regroupé avec les autres en assemblage. Les murs déjà tracés gardent leurs couches.").small().weak());
+                ui.separator();
+                ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 24.0), egui::Layout::right_to_left(Align::Center), |ui| {
+                    annuler = ui.button("Annuler").clicked();
+                    enregistrer = ui.button(RichText::new("Enregistrer").strong()).clicked();
+                });
+            });
+        if !ouvert || annuler {
+            self.editeur_type = None;
+            return false;
+        }
+        if !enregistrer {
+            return false;
+        }
+        let ed = self.editeur_type.as_mut().unwrap();
+        let nom = ed.nom.trim().to_string();
+        if nom.is_empty() {
+            ed.erreur = Some("Donnez un nom au type.".into());
+            return false;
+        }
+        if ed.couches.is_empty() || ed.couches.iter().any(|c| !(c.epaisseur > 0.0 && c.epaisseur.is_finite())) {
+            ed.erreur = Some("Chaque couche doit avoir une épaisseur positive.".into());
+            return false;
+        }
+        if projet.types_murs.iter().any(|t| t.nom == nom && Some(&t.id) != ed.id.as_ref()) {
+            ed.erreur = Some("Un autre type porte déjà ce nom.".into());
+            return false;
+        }
+        let id = match &ed.id {
+            Some(id) => {
+                let t = projet.types_murs.iter_mut().find(|t| &t.id == id).unwrap();
+                t.nom = nom;
+                t.couches = ed.couches.clone();
+                t.couches_detaillees = true;
+                t.categorie = Some(ed.categorie);
+                id.clone()
+            }
+            None => {
+                let id = crate::modele::collaboration::uuid();
+                projet.types_murs.push(crate::modele::TypeCompose { id: id.clone(), nom, couches: ed.couches.clone(), categorie: Some(ed.categorie), couches_detaillees: true, origine: None });
+                id
+            }
+        };
+        // matériaux utilisés : ajoutés ou mis à jour (couleur, motif)
+        for m in &ed.materiaux {
+            if !ed.couches.iter().any(|c| c.materiau.as_ref() == Some(&m.nom)) && projet.materiau(&m.nom).is_none() {
+                continue;
+            }
+            match projet.materiaux.iter_mut().find(|x| x.nom == m.nom) {
+                Some(x) => *x = m.clone(),
+                None => projet.materiaux.push(m.clone()),
+            }
+        }
+        self.type_mur = Some(id);
+        self.editeur_type = None;
+        true
+    }
+
+    /// Crée (ou remplace) un type composé et le choisit pour les prochains murs (pilote).
+    pub fn definir_type_mur(&mut self, projet: &mut crate::modele::Projet, nom: &str, couches: Vec<crate::modele::Couche>, categorie: Option<crate::modele::CategorieMur>) -> Result<String, String> {
+        if couches.is_empty() || couches.iter().any(|c| !(c.epaisseur > 0.0 && c.epaisseur.is_finite())) {
+            return Err("Chaque couche doit avoir une épaisseur positive.".into());
+        }
+        let id = match projet.types_murs.iter_mut().find(|t| t.nom == nom) {
+            Some(t) => {
+                t.couches = couches;
+                t.categorie = categorie;
+                t.id.clone()
+            }
+            None => {
+                let id = crate::modele::collaboration::uuid();
+                projet.types_murs.push(crate::modele::TypeCompose { id: id.clone(), nom: nom.into(), couches, categorie, couches_detaillees: true, origine: None });
+                id
+            }
+        };
+        projet.completer_materiaux();
+        self.type_mur = Some(id.clone());
+        Ok(id)
+    }
+
+    /// Croquis de saisie : mur en perspective à gauche, ses deux limites à droite, sur
+    /// une ligne chacune (niveau, puis décalage, ou hauteur si le haut est libre),
+    /// rappelées par un pointillé depuis l'arête correspondante du mur.
+    pub(super) fn croquis_mur_creation(&mut self, ui: &mut egui::Ui, projet: &crate::modele::Projet) {
+        use egui::{Align2, FontId, Stroke, pos2, vec2};
+        let bleu = Color32::from_rgb(18, 158, 205);
+        let largeur_croquis = 64.0;
+        let origine = ui.cursor().min;
+        let mut centres = [0.0f32; 2];
+        let mut gauche_champs = 0.0f32;
+        // Réserver de la place autour du croquis pour les décalages des limites.
+        ui.add_space(14.0);
+        ui.horizontal_top(|ui| {
+            ui.add_space(largeur_croquis);
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 16.0;
+                for haut in [true, false] {
+                    let ligne = ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        ui.add_sized(
+                            [30.0, 20.0],
+                            egui::Label::new(RichText::new(if haut { "Haut" } else { "Bas" }).color(bleu)),
+                        );
+                        let niveau = if haut {
+                            &mut self.niveau_haut_mur
+                        } else {
+                            &mut self.niveau_mur
+                        };
+                        let nom = niveau
+                            .as_ref()
+                            .and_then(|id| projet.niveau(id))
+                            .or_else(|| if haut { None } else { projet.niveaux.first() })
+                            .map_or(if haut { "Libre" } else { "Niveau 0" }, |n| n.nom.as_str());
+                        let champ = 72.0;
+                        egui::ComboBox::from_id_salt(("limite_creation_mur", haut))
+                            .width((ui.available_width() - champ - 4.0).max(60.0))
+                            .truncate()
+                            .selected_text(nom)
+                            .show_ui(ui, |ui| {
+                                if haut || projet.niveaux.is_empty() {
+                                    ui.selectable_value(
+                                        niveau,
+                                        None,
+                                        if haut { "Libre (hauteur)" } else { "Niveau 0" },
+                                    );
+                                }
+                                for n in &projet.niveaux {
+                                    ui.selectable_value(niveau, Some(n.id.clone()), &n.nom);
+                                }
+                            })
+                            .response
+                            .on_hover_text(if haut {
+                                "Limite haute : un niveau, ou libre (hauteur saisie)"
+                            } else {
+                                "Limite basse : niveau de base du mur"
+                            });
+                        if haut && self.niveau_haut_mur.is_none() {
+                            // haut libre : la valeur est la hauteur, sans décalage
+                            self.decalage_haut_mur = 0.0;
+                            let v = self
+                                .valeurs
+                                .entry((Outil::Mur, 1))
+                                .or_insert(Valeur::Nombre(2800.0));
+                            if let Valeur::Nombre(v) = v {
+                                ui.add_sized(
+                                    [champ, 20.0],
+                                    egui::DragValue::new(v).speed(10.0).range(1.0..=f64::MAX).dimensions(),
+                                )
+                                .on_hover_text("Hauteur du mur");
+                            }
+                        } else {
+                            let v = if haut {
+                                &mut self.decalage_haut_mur
+                            } else {
+                                match self.valeurs.entry((Outil::Mur, 3)).or_insert(Valeur::Nombre(0.0)) {
+                                    Valeur::Nombre(v) => v,
+                                    Valeur::Texte(_) => unreachable!(),
+                                }
+                            };
+                            ui.add_sized(
+                                [champ, 20.0],
+                                egui::DragValue::new(v)
+                                    .speed(10.0)
+                                    .dimensions(),
+                            )
+                            .on_hover_text("Décalage par rapport au niveau");
+                        }
+                    });
+                    gauche_champs = ligne.response.rect.left();
+                    centres[if haut { 0 } else { 1 }] = ligne.response.rect.center().y;
+                }
+            });
+        });
+        ui.add_space(14.0);
+        let p = ui.painter();
+        let bord = Stroke::new(1.0, bleu);
+        let profondeur = vec2(4.5, -3.0);
+        // mur vu de face (largeur), son chant à droite et son dessus
+        let x1 = origine.x + largeur_croquis - 20.0;
+        let x0 = origine.x + 16.0;
+        let (yh, yb) = limites_croquis_mur(&self.parametres_mur(), projet, centres[0] + 3.0, centres[1] + 3.0);
+        let (a, h, b, bb) = (pos2(x0, yh), pos2(x1, yh), pos2(x1, yb), pos2(x0, yb));
+        p.add(egui::Shape::convex_polygon(vec![a, h, b, bb], Color32::from_rgb(246, 251, 253), bord));
+        p.add(egui::Shape::convex_polygon(
+            vec![h, h + profondeur, b + profondeur, b],
+            Color32::from_rgb(222, 242, 249),
+            bord,
+        ));
+        p.add(egui::Shape::convex_polygon(
+            vec![a, a + profondeur, h + profondeur, h],
+            Color32::from_rgb(236, 248, 252),
+            bord,
+        ));
+        // rappels : de l'arête du mur à la ligne de sa limite
+        let rappel = Stroke::new(0.8, bleu.gamma_multiply(0.8));
+        for (depuis, y) in [(h + profondeur, centres[0]), (b + profondeur, centres[1])] {
+            let fin = gauche_champs - 3.0;
+            let mut x = depuis.x + 3.0;
+            while x < fin {
+                p.line_segment([pos2(x, y), pos2((x + 2.5).min(fin), y)], rappel);
+                x += 5.0;
+            }
+            p.line_segment([depuis, pos2(depuis.x + 2.0, y)], rappel);
+            p.circle_filled(depuis, 1.5, bleu);
+        }
+        // hauteur résultante, le long du mur
+        if let Ok((bas_z, haut_z)) = self.parametres_mur().bornes(projet) {
+            p.text(
+                pos2((x0 + x1) * 0.5, (yh + yb) * 0.5),
+                Align2::CENTER_CENTER,
+                crate::config::options::unite().afficher(haut_z - bas_z),
+                FontId::proportional(8.0),
+                ui.visuals().weak_text_color(),
+            );
+        }
+    }
+
+    pub(super) fn nombre_mur(&mut self, ui: &mut egui::Ui, cle: usize, defaut: f64) {
+        let v = self
+            .valeurs
+            .entry((Outil::Mur, cle))
+            .or_insert(Valeur::Nombre(defaut));
+        if let Valeur::Nombre(v) = v {
+            ui.add_sized([130.0, 20.0], egui::DragValue::new(v).speed(10.0).range(1.0..=f64::MAX).dimensions());
+        }
+    }
+
+}

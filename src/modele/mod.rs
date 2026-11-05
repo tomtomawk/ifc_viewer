@@ -7,30 +7,24 @@
 //! Unités : millimètres ; coordonnées du fichier source (Revit : origine interne ; IFC :
 //! repère du projet).
 
-pub mod assemblage;
-pub mod famille;
-pub mod famille_modelee;
-pub mod escalier;
-pub use escalier::{Escalier, GardeCorps, Remplissage};
-pub mod solides;
-pub mod retours;
-pub mod site;
-pub mod cadrage;
-pub mod historique;
-pub mod commandes;
-pub mod export_ifc;
-pub mod documentation;
-mod validation;
-pub mod depuis_ifc;
-pub mod depuis_rvt;
-pub mod geometrie;
-pub mod jonctions;
-pub mod pente;
-pub mod edition;
-pub mod edition_famille;
-pub mod enregistrement;
-pub mod rapport;
 pub mod collaboration;
+pub mod documentation;
+pub mod echanges;
+pub mod edition;
+pub mod elements;
+pub mod famille;
+pub mod murs;
+pub mod volumes;
+pub use elements::escalier::{Escalier, GardeCorps, Remplissage};
+// Noms courts des sous-modules, visibles dans tout `modele` (par `use crate::modele::*`).
+#[allow(unused_imports)]
+use {
+    echanges::{depuis_ifc, depuis_rvt, enregistrement, export_ifc, rapport},
+    edition::{commandes, historique, validation},
+    elements::{cadrage, escalier, pente, site},
+    murs::{assemblage, jonctions, retours},
+    volumes::{geometrie, solides},
+};
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -618,7 +612,7 @@ pub struct TypeOuverture {
     pub famille: Option<famille::FamilleFenetre>,
     /// Famille modélisée (éditeur de familles) : prime sur `famille`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub modele: Option<famille_modelee::FamilleModelee>,
+    pub modele: Option<famille::modelee::FamilleModelee>,
     pub origine: Option<Origine>,
 }
 
@@ -875,7 +869,7 @@ impl Projet {
     pub fn figer_references(&mut self) {
         if self.references_figees{return;}
         self.plumes=self.epaisseurs_plumes();
-        for mut motif in crate::gabarit::actif().motifs.iter().cloned().chain(DefinitionMotif::base()) {
+        for mut motif in crate::config::gabarit::actif().motifs.iter().cloned().chain(DefinitionMotif::base()) {
             if !self.motifs.iter().any(|m|m.nom==motif.nom){
                 motif.id=identifiant("motif-fige",&format!("{}:{}",self.identite,motif.nom));self.motifs.push(motif);
             }
@@ -914,7 +908,7 @@ impl Projet {
     }
 
     /// Projet vide portant les niveaux et les types de murs du gabarit, et leurs matériaux.
-    pub fn depuis_gabarit(nom: &str, g: &crate::gabarit::Gabarit) -> Projet {
+    pub fn depuis_gabarit(nom: &str, g: &crate::config::gabarit::Gabarit) -> Projet {
         let mut p = Projet::nouveau(nom);
         for n in &g.niveaux {
             p.niveaux.push(Niveau { id: identifiant("niveau", &format!("gabarit:{}", n.nom)), nom: n.nom.clone(), altitude: n.altitude, origine: None });
@@ -952,7 +946,7 @@ impl Projet {
     /// Épaisseurs des plumes 1 à 12 (mm du papier) : du projet, sinon du gabarit, sinon
     /// par défaut.
     pub fn epaisseurs_plumes(&self) -> Vec<f64> {
-        let g = crate::gabarit::actif();
+        let g = crate::config::gabarit::actif();
         let mut v = if !self.plumes.is_empty() { self.plumes.clone() } else if !g.plumes.is_empty() { g.plumes.clone() } else { PLUMES.to_vec() };
         v.resize(12, 0.25);
         v
@@ -970,14 +964,14 @@ impl Projet {
             .iter()
             .find(|d| d.nom == nom)
             .cloned()
-            .or_else(|| (!self.references_figees).then(||crate::gabarit::actif().motifs.iter().find(|d| d.nom == nom).cloned()).flatten())
+            .or_else(|| (!self.references_figees).then(||crate::config::gabarit::actif().motifs.iter().find(|d| d.nom == nom).cloned()).flatten())
             .or_else(|| (!self.references_figees).then(||DefinitionMotif::base().into_iter().find(|d| d.nom == nom)).flatten())
     }
 
     /// Noms des motifs de hachures disponibles : projet, gabarit, base, sans doublon.
     pub fn noms_motifs(&self) -> Vec<String> {
         let mut noms: Vec<String> = Vec::new();
-        let g = crate::gabarit::actif();
+        let g = crate::config::gabarit::actif();
         for d in DefinitionMotif::base().iter().chain(g.motifs.iter()).chain(self.motifs.iter()) {
             if !noms.contains(&d.nom) {
                 noms.push(d.nom.clone());
