@@ -320,7 +320,7 @@ impl RubanEdition {
     /// Fenêtre d'édition d'un type de mur composé : une ligne par couche, de
     /// l'extérieur (en haut) vers l'intérieur. Retourne vrai si le projet a changé.
     pub fn editeur_type_mur(&mut self, ctx: &egui::Context, projet: &mut crate::modele::Projet) -> bool {
-        use crate::modele::{Couche, FonctionCouche, MotifCoupe};
+        use crate::modele::{Couche, FonctionCouche};
         let Some(ed) = &mut self.editeur_type else { return false };
         let (mut ouvert, mut enregistrer, mut annuler) = (true, false, false);
         egui::Window::new(if ed.id.is_some() { "Modifier le type de mur" } else { "Nouveau type de mur" })
@@ -396,15 +396,15 @@ impl RubanEdition {
                         if !nom.is_empty() && !ed.materiaux.iter().any(|m| m.nom == nom) {
                             ed.materiaux.push(crate::modele::murs::assemblage::materiau_par_defaut(&nom));
                         }
-                        match ed.materiaux.iter_mut().find(|m| m.nom == nom) {
+                        // couleur et motif : hérités du matériau, affichés en lecture seule
+                        match ed.materiaux.iter().find(|m| m.nom == nom) {
                             Some(m) => {
-                                ui.color_edit_button_srgb(&mut m.couleur).on_hover_text("Couleur du matériau (tous ses usages)");
-                                egui::ComboBox::from_id_salt(("motif", k)).width(80.0).selected_text(m.motif.libelle()).show_ui(ui, |ui| {
-                                    for x in MotifCoupe::TOUS {
-                                        let l = x.libelle().to_string();
-                                        ui.selectable_value(&mut m.motif, x, l);
-                                    }
-                                });
+                                let [r, g, b] = m.couleur;
+                                let (rect, rep) = ui.allocate_exact_size(egui::vec2(20.0, 16.0), Sense::hover());
+                                ui.painter().rect_filled(rect, 2.0, egui::Color32::from_rgb(r, g, b));
+                                ui.painter().rect_stroke(rect, 2.0, egui::Stroke::new(1.0, ui.visuals().weak_text_color()), egui::StrokeKind::Inside);
+                                rep.on_hover_text("Couleur héritée du matériau");
+                                ui.label(m.motif.libelle()).on_hover_text("Motif de coupe hérité du matériau");
                             }
                             None => {
                                 ui.label("");
@@ -506,14 +506,10 @@ impl RubanEdition {
                 id
             }
         };
-        // matériaux utilisés : ajoutés ou mis à jour (couleur, motif)
+        // matériaux nouveaux utilisés : ajoutés au projet (les existants ne sont pas modifiés ici)
         for m in &ed.materiaux {
-            if !ed.couches.iter().any(|c| c.materiau.as_ref() == Some(&m.nom)) && projet.materiau(&m.nom).is_none() {
-                continue;
-            }
-            match projet.materiaux.iter_mut().find(|x| x.nom == m.nom) {
-                Some(x) => *x = m.clone(),
-                None => projet.materiaux.push(m.clone()),
+            if ed.couches.iter().any(|c| c.materiau.as_ref() == Some(&m.nom)) && projet.materiau(&m.nom).is_none() {
+                projet.materiaux.push(m.clone());
             }
         }
         self.type_mur = Some(id);

@@ -311,6 +311,7 @@ pub enum MotifCoupe {
 }
 
 impl MotifCoupe {
+    #[allow(dead_code)] // réservé à un futur éditeur de matériaux
     pub const TOUS: [MotifCoupe; 5] = [Self::Diagonales, Self::Croisees, Self::Uni, Self::Vide, Self::Isolation];
 
     pub fn libelle(&self) -> &str {
