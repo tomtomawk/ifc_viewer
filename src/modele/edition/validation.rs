@@ -40,9 +40,13 @@ impl Projet {
             ("motifs",self.motifs.iter().map(|m|m.id.as_str()).collect()),
             ("cartouches",self.familles_cartouches.iter().map(|m|m.id.as_str()).collect()),
             ("étiquettes",self.familles_etiquettes.iter().map(|m|m.id.as_str()).collect()),
+            ("types de trait",self.types_traits.iter().map(|m|m.id.as_str()).collect()),
         ] {
             let mut uniques=std::collections::HashSet::new();
             if identites.iter().filter(|id|!id.is_empty()).any(|id|!uniques.insert(id)){return Err(format!("Identités dupliquées : {collection}"));}
+        }
+        for t in &self.types_traits {
+            t.valider()?;
         }
         for n in &self.niveaux {
             if !n.altitude.is_finite() {
@@ -267,6 +271,15 @@ impl Projet {
             };
             if !valide {
                 return Err("Coordonnées d'annotation non valides.".into());
+            }
+            if let F::Polyligne { points, fermee, traits, .. } = &a.forme {
+                let n = points.len() - 1 + usize::from(*fermee && points.len() > 2);
+                if traits.len() > n {
+                    return Err("Polyligne : plus de types de trait que de segments.".into());
+                }
+                if let Some(t) = traits.iter().find(|t| !t.is_empty() && !self.types_traits.iter().any(|x| &x.id == *t)) {
+                    return Err(format!("Polyligne : type de trait « {t} » absent."));
+                }
             }
             if let F::Polyligne { fermee, remplissage: Some(r), .. } = &a.forme {
                 use crate::modele::documentation::RemplissageContour;

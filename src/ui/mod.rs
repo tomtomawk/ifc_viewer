@@ -6,6 +6,7 @@
 
 mod bim;
 mod communes;
+mod types_traits;
 mod feuilles;
 mod dessin_plan;
 mod editeur_famille;

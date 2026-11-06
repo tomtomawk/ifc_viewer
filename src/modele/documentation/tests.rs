@@ -209,7 +209,7 @@ fn polyligne_fermee_remplie() {
     let niveau = p.niveaux[0].id.clone();
     let vue = p.ajouter_vue_plan(&niveau, 1200.0).unwrap();
     let contour = vec![[0.0, 0.0], [2000.0, 0.0], [2000.0, 1000.0], [0.0, 1000.0]];
-    let annotation = |remplissage, fermee| Annotation { id: "zone".into(), vue: vue.clone(), hauteur: 2.5, forme: AnnotationForme::Polyligne { points: contour.clone(), fermee, remplissage } };
+    let annotation = |remplissage, fermee| Annotation { id: "zone".into(), vue: vue.clone(), hauteur: 2.5, forme: AnnotationForme::Polyligne { points: contour.clone(), fermee, remplissage, traits: Vec::new() } };
     let hachures = |p: &Projet| annotations(p, p.vues.iter().find(|v| v.id == vue).unwrap()).into_iter().filter(|x| x.role == Role::Hachure).collect::<Vec<_>>();
     // motif choisi : hachures de la définition, encre gris foncé
     p.annotations = vec![annotation(Some(RemplissageContour::Motif { motif: MotifCoupe::Croisees }), true)];
@@ -280,4 +280,35 @@ fn nomenclature_csv_et_quantites_sans_double_compte() {
         csv(&[vec!["A;B".into(), "Il dit \"oui\"".into()]]),
         "\"A;B\";\"Il dit \"\"oui\"\"\"\r\n"
     );
+}
+
+/// Polyligne à types de trait par segment : épaisseur du type, tirets à l'échelle de la
+/// vue, segment sans type en continu fin ; type absent refusé.
+#[test]
+fn polyligne_types_de_trait_par_segment() {
+    let mut p = Projet::depuis_gabarit("Traits", &crate::config::gabarit::Gabarit::defaut());
+    assert_eq!(p.types_traits, types_traits_standard());
+    let vue = p.ajouter_vue_plan(&p.niveaux[0].id.clone(), 100.0).unwrap();
+    let echelle = p.vues.iter().find(|v| v.id == vue).unwrap().echelle;
+    // trois segments de 10 m : fort, tirets, sans type
+    let points = vec![[0.0, 0.0], [10_000.0, 0.0], [10_000.0, 10_000.0], [0.0, 10_000.0]];
+    let traits = vec!["trait-continu-fort".to_string(), "trait-tirets".into()];
+    p.annotations.push(Annotation { id: "pl".into(), vue: vue.clone(), hauteur: 2.5, forme: AnnotationForme::Polyligne { points, fermee: false, remplissage: None, traits } });
+    p.verifier().unwrap();
+    let v = p.vues.iter().find(|v| v.id == vue).unwrap();
+    let prims = annotations(&p, v);
+    assert_eq!(prims.len(), 3, "un trait par type");
+    assert!((prims[0].style.epaisseur - 0.50).abs() < 1e-9);
+    let Forme::Segments(s) = &prims[1].forme else { panic!("tirets en segments") };
+    // tirets de 3 mm papier, blancs de 1,5 : période 4,5 × échelle sur 10 m
+    let periode = 4.5 * echelle;
+    assert_eq!(s.len(), (10_000.0 / periode).ceil() as usize);
+    let tire = s[0][0].distance(s[0][1]) * 1000.0;
+    assert!((tire - 3.0 * echelle).abs() < 1e-6, "{tire}");
+    assert!((prims[2].style.epaisseur - 0.18).abs() < 1e-9 && matches!(prims[2].forme, Forme::Polyligne { .. }));
+    // type inconnu : refusé
+    if let AnnotationForme::Polyligne { traits, .. } = &mut p.annotations[0].forme {
+        traits[1] = "inconnu".into();
+    }
+    assert!(p.verifier().is_err());
 }

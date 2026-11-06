@@ -18,6 +18,87 @@ pub struct Quadrillage {
     pub debut: [f64; 2],
     pub fin: [f64; 2],
 }
+/// Type de trait du dessin 2D : épaisseur et motif de tirets, en mm du papier (même
+/// aspect à toutes les échelles).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct TypeTrait {
+    pub id: String,
+    pub nom: String,
+    /// Épaisseur, mm du papier.
+    pub epaisseur: f64,
+    /// Longueurs alternées trait, blanc, trait… (mm du papier) ; vide : trait continu.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tirets: Vec<f64>,
+}
+
+impl TypeTrait {
+    /// Trait d'un segment sans type : continu fin.
+    pub fn standard() -> TypeTrait {
+        TypeTrait { id: String::new(), nom: "Continu fin".into(), epaisseur: 0.18, tirets: Vec::new() }
+    }
+
+    pub fn valider(&self) -> Result<(), String> {
+        if self.nom.trim().is_empty() {
+            return Err("Type de trait sans nom.".into());
+        }
+        if !(self.epaisseur > 0.0 && self.epaisseur <= 5.0) {
+            return Err(format!("{} : épaisseur entre 0 et 5 mm.", self.nom));
+        }
+        if self.tirets.iter().any(|t| !(t.is_finite() && *t > 0.0)) || (!self.tirets.is_empty() && self.tirets.len() % 2 == 1) {
+            return Err(format!("{} : tirets en paires trait, blanc de longueurs positives.", self.nom));
+        }
+        Ok(())
+    }
+
+    /// Parties tracées du segment `a`–`b` (mm du modèle), `echelle` : mm du modèle par
+    /// mm du papier ; `phase` : avancée dans le motif, reportée au segment suivant.
+    pub fn decouper(&self, a: DVec2, b: DVec2, echelle: f64, phase: &mut f64) -> Vec<[DVec2; 2]> {
+        let l = a.distance(b);
+        let periode: f64 = self.tirets.iter().sum::<f64>() * echelle;
+        if self.tirets.is_empty() || !(periode > 1e-9) || l < 1e-9 {
+            return vec![[a, b]];
+        }
+        let u = (b - a) / l;
+        let mut out = Vec::new();
+        let mut s = 0.0;
+        // nombre de pas borné : un motif trop fin pour la longueur reste continu
+        if l / periode * self.tirets.len() as f64 > 20_000.0 {
+            return vec![[a, b]];
+        }
+        while s < l {
+            let mut t = phase.rem_euclid(periode);
+            let mut k = 0;
+            while t >= self.tirets[k] * echelle {
+                t -= self.tirets[k] * echelle;
+                k = (k + 1) % self.tirets.len();
+            }
+            let reste = self.tirets[k] * echelle - t;
+            let pas = reste.min(l - s);
+            if k % 2 == 0 {
+                out.push([a + u * s, a + u * (s + pas)]);
+            }
+            s += pas;
+            *phase += pas;
+        }
+        out
+    }
+}
+
+/// Types de trait du gabarit par défaut (sa section `types_traits`, contrôlée par test).
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn types_traits_standard() -> Vec<TypeTrait> {
+    let t = |id: &str, nom: &str, e: f64, tirets: &[f64]| TypeTrait { id: id.into(), nom: nom.into(), epaisseur: e, tirets: tirets.to_vec() };
+    vec![
+        t("trait-continu-fin", "Continu fin", 0.18, &[]),
+        t("trait-continu-moyen", "Continu moyen", 0.35, &[]),
+        t("trait-continu-fort", "Continu fort", 0.50, &[]),
+        t("trait-tirets", "Tirets", 0.18, &[3.0, 1.5]),
+        t("trait-pointilles", "Pointillés", 0.18, &[0.5, 1.0]),
+        t("trait-axe", "Axe", 0.13, &[6.0, 1.0, 1.0, 1.0]),
+        t("trait-cache", "Caché", 0.25, &[2.0, 1.0]),
+    ]
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "ancrage", rename_all = "snake_case")]
 pub enum PointCote {
@@ -47,6 +128,10 @@ pub enum AnnotationForme {
         /// Polyligne fermée : remplissage (motif d'un matériau ou choisi).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         remplissage: Option<RemplissageContour>,
+        /// Type de trait de chaque segment (id d'un type du projet) ; absent ou vide :
+        /// continu fin.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        traits: Vec<String>,
     },
     Spline {
         points: Vec<[f64; 2]>,
@@ -91,7 +176,7 @@ impl AnnotationForme {
         let a = |p: &DVec2| p.to_array();
         match f {
             F::Ligne([d, e]) => Self::Ligne { debut: a(d), fin: a(e) },
-            F::Polyligne { points, fermee } => Self::Polyligne { points: points.iter().map(a).collect(), fermee: *fermee, remplissage: None },
+            F::Polyligne { points, fermee } => Self::Polyligne { points: points.iter().map(a).collect(), fermee: *fermee, remplissage: None, traits: Vec::new() },
             F::Spline { points, fermee } => Self::Spline { points: points.iter().map(a).collect(), fermee: *fermee },
             F::Cercle { centre, rayon } => Self::Cercle { centre: a(centre), rayon: *rayon },
             F::Arc(p) => Self::Arc { points: p.map(|q| q.to_array()) },
@@ -408,6 +493,41 @@ fn point_cote(p: &Projet, v: &Vue, point: &PointCote) -> Option<DVec2> {
         }
     }
 }
+/// Traits d'une polyligne : segments consécutifs de même type regroupés (raccords
+/// continus), tirets reportés d'un segment à l'autre.
+fn primitives_polyligne(p: &Projet, points: &[[f64; 2]], fermee: bool, traits: &[String], echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
+    let pts: Vec<DVec2> = points.iter().map(|q| DVec2::from_array(*q)).collect();
+    let mut segments: Vec<[DVec2; 2]> = pts.windows(2).map(|w| [w[0], w[1]]).collect();
+    if fermee && pts.len() > 2 {
+        segments.push([pts[pts.len() - 1], pts[0]]);
+    }
+    let mut out = Vec::new();
+    let mut k = 0;
+    while k < segments.len() {
+        let id = traits.get(k).map_or("", |s| s.as_str());
+        let mut fin = k + 1;
+        while fin < segments.len() && traits.get(fin).map_or("", |s| s.as_str()) == id {
+            fin += 1;
+        }
+        let t = p.type_trait(id);
+        let style = Style { couleur: [30, 30, 30, 255], epaisseur: t.epaisseur };
+        if t.tirets.is_empty() {
+            let mut l: Vec<DVec3> = segments[k..fin].iter().map(|s| pt(s[0])).collect();
+            let ferme = k == 0 && fin == segments.len() && fermee && pts.len() > 2;
+            if !ferme {
+                l.push(pt(segments[fin - 1][1]));
+            }
+            out.push(Primitive { forme: Forme::Polyligne { points: l, fermee: ferme }, style, role: Role::Annotation, element: None });
+        } else {
+            let mut phase = 0.0;
+            let s: Vec<[DVec3; 2]> = segments[k..fin].iter().flat_map(|s| t.decouper(s[0], s[1], echelle, &mut phase)).map(|[a, b]| [pt(a), pt(b)]).collect();
+            out.push(Primitive { forme: Forme::Segments(s), style, role: Role::Annotation, element: None });
+        }
+        k = fin;
+    }
+    out
+}
+
 pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
     let (o, u, h) = repere(p, v);
     let mut out = Vec::new();
@@ -432,8 +552,13 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
             )),
             AnnotationForme::Polyligne { .. } | AnnotationForme::Spline { .. } | AnnotationForme::Cercle { .. } | AnnotationForme::Arc { .. } => {
                 // remplissage sous le contour
-                if let AnnotationForme::Polyligne { points, fermee: true, remplissage: Some(r) } = &a.forme && points.len() >= 3 {
+                if let AnnotationForme::Polyligne { points, fermee: true, remplissage: Some(r), .. } = &a.forme && points.len() >= 3 {
                     out.extend(primitives_remplissage(p, r, points, v.echelle, &pt));
+                }
+                // polyligne : un type de trait par segment (épaisseur, tirets)
+                if let AnnotationForme::Polyligne { points, fermee, traits, .. } = &a.forme {
+                    out.extend(primitives_polyligne(p, points, *fermee, traits, v.echelle, &pt));
+                    continue;
                 }
                 for l in a.forme.forme_2d().map(|f| f.polylignes()).unwrap_or_default() {
                     out.push(Primitive {
@@ -908,6 +1033,11 @@ impl FamilleEtiquette {
 }
 
 impl Projet {
+    /// Type de trait d'id `id`, sinon le continu fin.
+    pub fn type_trait(&self, id: &str) -> TypeTrait {
+        self.types_traits.iter().find(|t| !id.is_empty() && t.id == id).cloned().unwrap_or_else(TypeTrait::standard)
+    }
+
     /// Famille d'étiquette d'une pièce : la sienne, sinon la standard.
     pub fn famille_etiquette(&self, x: &crate::modele::Piece) -> FamilleEtiquette {
         self.familles_etiquettes.iter().find(|f| !x.etiquette.is_empty() && f.id == x.etiquette).cloned().unwrap_or_else(FamilleEtiquette::standard)

@@ -35,6 +35,9 @@ pub struct Gabarit {
     pub types_surfaces: Vec<TypeSurface>,
     #[serde(default)]
     pub types_vues: Vec<TypeVue>,
+    /// Types de trait du dessin 2D d'un nouveau projet.
+    #[serde(default)]
+    pub types_traits: Vec<crate::modele::documentation::TypeTrait>,
     /// Types d'ouvertures chargés dans un nouveau projet, avec leur famille modélisée.
     #[serde(default)]
     pub types_ouvertures: Vec<TypeOuvertureGabarit>,
@@ -223,6 +226,9 @@ mod tests {
             assert!(!g.surfaces(s).is_empty(), "{s:?}");
         }
         assert!(!g.types_murs.is_empty());
+        // types de trait du gabarit : ceux du code, valides
+        assert_eq!(g.types_traits, crate::modele::documentation::types_traits_standard());
+        g.types_traits.iter().try_for_each(|t| t.valider()).unwrap();
         assert!(!g.niveaux.is_empty());
         assert_eq!(g.materiau("Laine minérale").motif, MotifCoupe::Isolation);
         assert!(g.motifs.iter().any(|m| m.nom == "Béton"));

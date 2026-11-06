@@ -5,7 +5,7 @@ use super::*;
 use crate::modele::{Haut, Projet};
 
 /// Valeur commune (la première) et indication que les valeurs diffèrent.
-fn melange<T: PartialEq + Clone>(valeurs: impl IntoIterator<Item = T>) -> (Option<T>, bool) {
+pub(super) fn melange<T: PartialEq + Clone>(valeurs: impl IntoIterator<Item = T>) -> (Option<T>, bool) {
     let v: Vec<T> = valeurs.into_iter().collect();
     (v.first().cloned(), v.iter().any(|x| Some(x) != v.first()))
 }
@@ -416,6 +416,11 @@ impl ViewerApp {
                 ui.end_row();
             }
         });
+        // types de trait des segments des polylignes
+        if let Some(q) = self.traits_polylignes(ui, projet, ids) {
+            ui.separator();
+            return Some(q);
+        }
         ui.separator();
         let choix = choix?;
         let mut p = projet.clone();

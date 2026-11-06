@@ -128,6 +128,10 @@ pub struct Projet {
     /// Familles d'étiquettes de pièces ; absence : étiquette standard.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub familles_etiquettes: Vec<documentation::FamilleEtiquette>,
+    /// Types de trait du dessin 2D (épaisseur et tirets), affectés aux segments des
+    /// polylignes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub types_traits: Vec<documentation::TypeTrait>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub cartouches_feuilles: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -939,6 +943,7 @@ impl Projet {
         for t in &g.types_murs {
             p.types_murs.push(TypeCompose { id: identifiant("type-mur", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), couches: t.couches.clone(), categorie: t.categorie, couches_detaillees: true, origine: None });
         }
+        p.types_traits = g.types_traits.clone();
         for t in &g.types_ouvertures {
             p.types_ouvertures.push(TypeOuverture { id: identifiant("type-ouverture", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), genre: t.famille.genre, largeur: t.largeur, hauteur: t.hauteur, famille: None, modele: Some(t.famille.clone()), origine: None });
         }

@@ -464,7 +464,13 @@ impl ViewerApp {
                     AnnotationForme::Polyligne { remplissage, .. } if fermee => remplissage.clone(),
                     _ => None,
                 };
-                annotation.forme = AnnotationForme::Polyligne { points: points.clone(), fermee, remplissage };
+                // types de trait des segments gardés, ramenés au nombre de segments
+                let mut traits = match &modele.forme {
+                    AnnotationForme::Polyligne { traits, .. } if i == 0 => traits.clone(),
+                    _ => Vec::new(),
+                };
+                traits.truncate(points.len() - 1 + usize::from(fermee));
+                annotation.forme = AnnotationForme::Polyligne { points: points.clone(), fermee, remplissage, traits };
                 match projet.executer(Commande::Annoter { annotation }) {
                     Ok((p, nouveaux)) => { projet = p; ids.extend(nouveaux); }
                     Err(e) => { self.dessin2d.message = Some(e); return; }
