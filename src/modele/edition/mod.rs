@@ -150,6 +150,69 @@ fn identifiant_natif(espace: &str, _cle: &str) -> String { format!("{espace}-{}"
 
 impl Projet {
     /// Intersection pour Ajuster/Prolonger ; l'extrémité opposée reste fixe.
+    /// Intersection de la ligne de justification de `id` avec la droite `ligne` : nouvelle
+    /// extrémité (`fin` : extrémité de fin) quand on ajuste ou prolonge jusqu'à `ligne`.
+    /// Ligne qu'Ajuster/prolonger déplace : ligne de justification d'un mur droit (ou
+    /// composé), axe en plan d'une poutre.
+    pub fn ligne_ajustable(&self,id:&str)->Option<([f64;2],[f64;2])> {
+        if let Some(b)=self.barres.iter().find(|b|b.id==id&&b.genre==GenreBarre::Poutre) {
+            return Some(([b.debut[0],b.debut[1]],[b.fin[0],b.fin[1]]));
+        }
+        self.ligne_justification(id).map(|(a,b,_)|(a,b))
+    }
+    /// Altitude (mm) de la ligne ajustable, pour l'affichage.
+    pub fn altitude_ajustable(&self,id:&str)->Option<f64> {
+        if let Some(b)=self.barres.iter().find(|b|b.id==id) {
+            return Some(self.niveau(&b.niveau).map_or(0.0,|n|n.altitude)+b.debut[2]);
+        }
+        self.axe_element(id).map(|x|x.2)
+    }
+    /// Arêtes en plan d'un mur (contour de chaque couche) ou d'une poutre (rectangle de
+    /// sa section) : limites possibles d'Ajuster/prolonger.
+    pub fn aretes_plan(&self,id:&str)->Vec<[[f64;2];2]> {
+        use glam::DVec2;
+        if let Some(b)=self.barres.iter().find(|b|b.id==id) {
+            let (a,f)=(DVec2::new(b.debut[0],b.debut[1]),DVec2::new(b.fin[0],b.fin[1]));
+            let Some(u)=(f-a).try_normalize() else {return Vec::new()};
+            let n=u.perp()*b.largeur/2.0;
+            let c=[a-n,f-n,f+n,a+n].map(|p|p.to_array());
+            return (0..4).map(|i|[c[i],c[(i+1)%4]]).collect();
+        }
+        let coupes=crate::modele::murs::jonctions::coupes(self);
+        let couches:Vec<&Mur>=match self.assemblage(id) {Some(_)=>self.couches_assemblage(id),None=>self.murs.iter().filter(|m|m.id==id).collect()};
+        couches.into_iter().filter_map(|m|crate::modele::murs::jonctions::contour(self,m,&coupes)).flat_map(|c|(0..4).map(move |i|[c[i],c[(i+1)%4]])).collect()
+    }
+    /// Déplace l'extrémité de la ligne ajustable (mur : justification ; poutre : axe, la
+    /// hauteur suit la pente de la poutre).
+    pub fn deplacer_extremite_ajustable(&mut self,id:&str,fin:bool,point:[f64;2])->Result<(),String> {
+        use glam::DVec3;
+        if let Some(b)=self.barres.iter_mut().find(|b|b.id==id&&b.genre==GenreBarre::Poutre) {
+            let (a,f)=(DVec3::from_array(b.debut),DVec3::from_array(b.fin));
+            let l=(f-a).truncate().length();
+            if l<1e-6 {return Err("Poutre de longueur nulle.".into());}
+            let t=(glam::DVec2::from_array(point)-a.truncate()).dot((f-a).truncate()/l)/l;
+            let z=a.z+(f.z-a.z)*t;
+            let q=[point[0],point[1],z];
+            if fin {b.fin=q} else {b.debut=q}
+            let (a,f)=(DVec3::from_array(b.debut),DVec3::from_array(b.fin));
+            if (f-a).truncate().length()<1.0 {return Err("La poutre doit mesurer au moins 1 mm.".into());}
+            return Ok(());
+        }
+        self.deplacer_extremite_justification(id,fin,point)
+    }
+    pub fn cible_justification(&self,id:&str,ligne:[[f64;2];2],fin:bool)->Result<[f64;2],String> {
+        use glam::DVec2;
+        let (a,b)=self.ligne_ajustable(id).ok_or("Mur droit ou poutre requis.")?;
+        let [a,b,c,d]=[a,b,ligne[0],ligne[1]].map(DVec2::from_array);
+        let (u,v)=(b-a,d-c);let den=u.perp_dot(v);
+        if u.length_squared()<1e-12 || v.length_squared()<1e-12 || den.abs()<1e-9*u.length()*v.length() {return Err("Arête parallèle au mur : aucune intersection.".into());}
+        let t=(c-a).perp_dot(v)/den;
+        if !t.is_finite() || (fin&&t<=1e-9) || (!fin&&t>=1.0-1e-9) {return Err("La limite dépasserait l'autre extrémité du mur.".into());}
+        let point=a+u*t;
+        if !point.is_finite(){return Err("Intersection non valide.".into());}
+        Ok(point.to_array())
+    }
+    #[allow(dead_code)]
     pub fn cible_ajustement(&self,id:&str,reference:&str,fin:bool)->Result<[f64;2],String> {
         use glam::DVec2;
         if id==reference {return Err("Choisissez un mur différent de la limite.".into());}
@@ -269,6 +332,7 @@ impl Projet {
 
     /// Déplace une extrémité (`fin` : la fin, sinon le début) de l'axe d'un mur ou d'un
     /// assemblage ; les couches d'un assemblage gardent leur écart à l'axe.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn deplacer_extremite(&mut self, id: &str, fin: bool, p: [f64; 2]) -> Result<(), String> {
         use glam::DVec2;
         let (a, b, _) = self.axe_element(id).ok_or("Mur introuvable ou courbe.")?;

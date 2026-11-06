@@ -138,17 +138,10 @@ impl ViewerApp {
                 }
                 Some(Outil::Ajuster) => {
                     if ui.checkbox(&mut self.ruban_edition.prolonger_angle,"Prolonger en angle")
-                        .on_hover_text("Cliquez près des deux extrémités à raccorder ; les deux murs sont ajustés ensemble.").changed() {
+                        .on_hover_text("Les deux éléments sont raccordés sur leurs lignes de justification").changed() {
                         self.ajustement=Some(Default::default());
                     }
 
-                    let reference=self.ajustement.as_ref().and_then(|a|a.reference.as_deref());
-                    if let Some(id)=reference {
-                        let nom=p.murs.iter().find(|m|m.id==id).map(|m|m.nom.as_str()).or_else(||p.assemblage(id).map(|a|a.nom.as_str())).unwrap_or("mur");
-                        ui.label(format!("Limite : axe de {nom}"));
-                        if ui.button("Changer la limite").clicked(){self.ajustement=Some(Default::default());}
-                    } else {ui.label("Cliquez le mur de référence dans la vue.");}
-                    if ui.button("Terminer").clicked(){self.ruban_edition.annuler();self.ajustement=None;}
                 }
                 _ => {}
             }

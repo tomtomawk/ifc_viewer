@@ -584,7 +584,10 @@ impl ViewerApp {
                 Usage::Annotation => plan.as_ref() == Some(&m.niveau),
                 _ => p.bas_haut(m).is_some_and(|(b, h)| altitude >= b - 0.1 && altitude <= h + 0.1),
             };
-            for m in p.murs.iter().filter(|m| retenu(m)&&exclu!=Some(m.id.as_str())&&exclu!=m.assemblage.as_deref()) {
+            // `exclu` : mur dont on déplace la poignée (et ses couches) ; sans poignée, aucun
+            // mur n'est exclu (comparer deux `None` excluait tous les murs simples)
+            let exclu_mur = |m: &crate::modele::Mur| exclu.is_some_and(|e| e == m.id || m.assemblage.as_deref() == Some(e));
+            for m in p.murs.iter().filter(|m| retenu(m) && !exclu_mur(m)) {
                 if let Some(c) = crate::modele::murs::jonctions::contour(p, m, &coupes) {
                     for k in 0..4 {
                         g.push(seg(c[k], c[(k + 1) % 4]));
@@ -670,7 +673,7 @@ impl ViewerApp {
         self.dessin2d.survol_accroche=None;
     }
     pub(super) fn etat_accrochage(&self)->serde_json::Value {
-        serde_json::json!({"reference":self.dessin2d.reference.map(|p|p.to_array()),"point":self.dessin2d.point.map(|(p,a)|serde_json::json!({"position":p.to_array(),"accroche":a.libelle()}))})
+        serde_json::json!({"trace":self.dessin2d.trace.as_ref().map(|t|t.points.iter().map(|p|p.to_array()).collect::<Vec<_>>()),"reference":self.dessin2d.reference.map(|p|p.to_array()),"point":self.dessin2d.point.map(|(p,a)|serde_json::json!({"position":p.to_array(),"accroche":a.libelle()}))})
     }
 
 }

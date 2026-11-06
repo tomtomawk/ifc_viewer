@@ -50,7 +50,12 @@ impl ViewerApp {
             if let Some(t) = &self.dessin2d.trace {
                 if let [.., a, b] = t.points.as_slice() {
                     let d = *b - *a;
-                    if d.length_squared() > 1e-12 { lignes.push((*b, d.normalize())); }
+                    if d.length_squared() > 1e-12 {
+                        // prolongement du dernier trait et sa perpendiculaire au dernier point
+                        let d = d.normalize();
+                        lignes.push((*b, d));
+                        lignes.push((*b, d.perp()));
+                    }
                 }
                 if let Some(p) = precedent { lignes.extend([(p, u), (p, v)]); }
             }

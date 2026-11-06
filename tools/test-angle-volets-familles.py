@@ -78,7 +78,11 @@ def run(exe, captures):
             murs=lambda p:{m["id"]:m for m in p["projet"]["murs"]}
             m0,m1=murs(avant),murs(apres)
             assert {i for i in m0 if m0[i]!=m1[i]}=={ref,id},(m0,m1)
-            assert m1[ref]["axe"]["fin"]==m1[id]["axe"]["fin"],m1
+            # les lignes de justification (et non les axes) se rejoignent : raccord sur les faces
+            justif=lambda x:(commande("selection_native",[x]),commande("axe_selection"))[1]["fin"]
+            jr,ji=justif(ref),justif(id)
+            assert all(abs(u-v)<0.01 for u,v in zip(jr,ji)),(jr,ji)
+            commande("outil","ajuster") if commande("etat")["outil"]!="Ajuster / prolonger" else None
             commande("annuler")
             assert commande("projet_natif")["empreinte"]==avant["empreinte"]
             commande("retablir")

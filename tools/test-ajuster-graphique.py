@@ -78,6 +78,13 @@ def run(exe, captures):
                 assert commande("projet_natif")["empreinte"]==avant,"Le survol a modifié le projet"
                 clic(pt)
                 assert commande("projet_natif")["empreinte"]!=avant
+                # la ligne de justification (pas l'axe) arrive sur l'arête choisie (x constant)
+                ligne=commande("ajuster_etat")["ligne"]
+                assert ligne and abs(ligne[0][0]-ligne[1][0])<1e-6,ligne
+                commande("selection_native",[id]);j=commande("axe_selection")
+                bout=j["fin"] if fin else j["debut"]
+                assert abs(bout[0]-ligne[0][0])<0.01,(bout,ligne)
+                commande("outil","ajuster") if not commande("ajuster_etat")["actif"] else None
                 commande("annuler")
                 assert commande("projet_natif")["empreinte"]==avant
                 commande("retablir")

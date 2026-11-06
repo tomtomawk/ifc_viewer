@@ -164,6 +164,12 @@ pub(super) fn distance_signee(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
     (ux * (p[1] - a[1]) - uy * (p[0] - a[0])) / l
 }
 
+/// Angle tapé ou affiché (positif : sens horaire, négatif : antihoraire) ⇄ angle du
+/// modèle (sens trigonométrique). La conversion est sa propre inverse.
+pub(super) fn angle_tape(angle: f64) -> f64 {
+    -angle
+}
+
 /// Valeur tapée : nombre décimal (virgule ou point).
 pub(super) fn lire_valeur(saisie: &str) -> Option<f64> {
     saisie.replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite())
@@ -507,7 +513,7 @@ impl ViewerApp {
         let Some(centre) = self.centre_rotation() else { return };
         let copie = self.transfo.copie;
         self.appliquer_transformation(|ids| Commande::Tourner { ids, centre, angle }, copie);
-        self.fin_commande(&format!("Rotation de {angle:.1}° appliquée"));
+        self.fin_commande(&format!("Rotation de {:.1}° appliquée", angle_tape(angle)));
     }
 
     fn valider_reseau(&mut self, delta: [f64; 3], angle: f64) {
@@ -601,8 +607,9 @@ impl ViewerApp {
                     self.valider_deplacement(outil, delta);
                 }
             }
-            Outil::Tourner => self.valider_rotation(v),
-            Outil::Reseau if self.transfo.polaire => self.valider_reseau([0.0; 3], v),
+            // angle tapé : positif horaire, négatif (−) antihoraire
+            Outil::Tourner => self.valider_rotation(angle_tape(v)),
+            Outil::Reseau if self.transfo.polaire => self.valider_reseau([0.0; 3], angle_tape(v)),
             Outil::Reseau => {
                 if let Some(delta) = vers_curseur(self, unite.vers_mm(v)) {
                     self.valider_reseau(delta, 0.0);
@@ -699,7 +706,7 @@ impl ViewerApp {
             while balayage < -std::f32::consts::PI { balayage += std::f32::consts::TAU; }
             let pts: Vec<egui::Pos2> = (0..=24).map(|k| ce + egui::Vec2::angled(a0 + balayage * k as f32 / 24.0) * r).collect();
             painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, orange)));
-            painter.text(ce + egui::Vec2::angled(a0 + balayage / 2.0) * (r + 16.0), egui::Align2::CENTER_CENTER, format!("{angle:.1}°"), egui::FontId::proportional(13.0), orange);
+            painter.text(ce + egui::Vec2::angled(a0 + balayage / 2.0) * (r + 16.0), egui::Align2::CENTER_CENTER, format!("{:.1}°", angle_tape(angle)), egui::FontId::proportional(13.0), orange);
         };
         match outil {
             Outil::Deplacer | Outil::Copier => {
@@ -721,7 +728,7 @@ impl ViewerApp {
                     }
                     return;
                 };
-                let angle = lire_valeur(&self.transfo.saisie).or_else(|| point.and_then(|(p, _)| self.angle_tourner(p, maj)));
+                let angle = lire_valeur(&self.transfo.saisie).map(angle_tape).or_else(|| point.and_then(|(p, _)| self.angle_tourner(p, maj)));
                 let Some(angle) = angle else { return };
                 let (Some(de), Some(ae)) = (self.ecran_plan(rect, depart, altitude), self.ecran_plan(rect, tourner_point(depart, c, angle), altitude)) else { return };
                 rapporteur(ce, de, ae, angle);
@@ -931,6 +938,8 @@ mod tests {
         assert!((distance_signee([0.0, 2.0], [0.0, 0.0], [5.0, 0.0]) - 2.0).abs() < 1e-9);
         assert!((distance_signee([0.0, -2.0], [0.0, 0.0], [5.0, 0.0]) + 2.0).abs() < 1e-9);
         assert_eq!(lire_valeur("12,5"), Some(12.5));
+        // « -90 » tapé : antihoraire, soit +90° dans le sens trigonométrique du modèle
+        assert_eq!(angle_tape(-90.0), 90.0);
         assert_eq!(lire_valeur("-"), None);
     }
 

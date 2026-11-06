@@ -82,12 +82,18 @@ pub enum Commande {
         ids: Vec<String>,
         reference: String,
     },
+    /// Prolonge (ou raccourcit) la ligne de justification du mur `id` jusqu'à `ligne`
+    /// (une arête du mur `reference`) ; sans `ligne`, jusqu'à la ligne de justification
+    /// de `reference`.
     Ajuster {
         id: String,
         reference: String,
         fin: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ligne: Option<[[f64; 2]; 2]>,
     },
-    /// Raccorde les deux extrémités à l'intersection, en une seule transaction.
+    /// Raccorde les lignes de justification des deux murs à leur intersection, en une
+    /// seule transaction.
     AjusterAngle { id: String, reference: String, fin: bool, fin_reference: bool },
     ModifierTrajectoireMur {id:String,points:[[f64;2];3]},
     InverserMur { id: String },
@@ -572,18 +578,29 @@ impl Projet {
                 Ok(vec![id])
             }
             Commande::AjusterAngle { id, reference, fin, fin_reference } => {
-                let point = self.cible_ajustement(&id, &reference, fin)?;
-                self.cible_ajustement(&reference, &id, fin_reference)?;
-                let z1 = self.axe_element(&id).ok_or("Mur absent")?.2;
-                let z2 = self.axe_element(&reference).ok_or("Référence absente")?.2;
-                if (z1-z2).abs()>1e-6 { return Err("Les murs doivent être au même niveau pour former un angle.".into()); }
-                self.deplacer_extremite(&id, fin, point)?;
-                self.deplacer_extremite(&reference, fin_reference, point)?;
+                if id == reference { return Err("Choisissez un mur différent de la limite.".into()); }
+                let (ra, rb) = self.ligne_ajustable(&reference).ok_or("Référence droite requise.")?;
+                let (ia, ib) = self.ligne_ajustable(&id).ok_or("Mur droit ou poutre requis.")?;
+                let point = self.cible_justification(&id, [ra, rb], fin)?;
+                self.cible_justification(&reference, [ia, ib], fin_reference)?;
+                let poutre = |p: &Projet, x: &str| p.barres.iter().any(|b| b.id == x);
+                if !poutre(self, &id) && !poutre(self, &reference) {
+                    let z1 = self.axe_element(&id).ok_or("Mur absent")?.2;
+                    let z2 = self.axe_element(&reference).ok_or("Référence absente")?.2;
+                    if (z1-z2).abs()>1e-6 { return Err("Les murs doivent être au même niveau pour former un angle.".into()); }
+                }
+                self.deplacer_extremite_ajustable(&id, fin, point)?;
+                self.deplacer_extremite_ajustable(&reference, fin_reference, point)?;
                 Ok(vec![id, reference])
             }
-            Commande::Ajuster { id, reference, fin } => {
-                let point=self.cible_ajustement(&id,&reference,fin)?;
-                self.deplacer_extremite(&id, fin, point)?;
+            Commande::Ajuster { id, reference, fin, ligne } => {
+                if id == reference && ligne.is_none() { return Err("Choisissez un mur différent de la limite.".into()); }
+                let ligne = match ligne {
+                    Some(l) => l,
+                    None => { let (a, b) = self.ligne_ajustable(&reference).ok_or("Référence droite requise.")?; [a, b] }
+                };
+                let point = self.cible_justification(&id, ligne, fin)?;
+                self.deplacer_extremite_ajustable(&id, fin, point)?;
                 Ok(vec![id])
             }
             Commande::Deplacer { ids, delta } => {

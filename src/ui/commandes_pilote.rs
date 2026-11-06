@@ -147,6 +147,7 @@ impl ViewerApp {
         p.push(("afficher_masques", self.afficher_masques.to_string()));
         p.push(("objets_masques", self.objets_masques.len().to_string()));
         p.push(("transformation", self.etat_transformation().to_string()));
+        p.push(("accrochage", self.etat_accrochage().to_string()));
         p.push(("cadenas", serde_json::to_string(&self.cadenas_ecran.iter().map(|(id, q)| serde_json::json!({"id": id, "ecran": [q.x, q.y]})).collect::<Vec<_>>()).unwrap()));
         p.push(("outil", self.ruban_edition.outil().map_or("null".into(), |o|texte(o.nom()))));
         p.push(("rectangle_vue", serde_json::to_string(&[self.rect_vue.min.x,self.rect_vue.min.y,self.rect_vue.width(),self.rect_vue.height()]).unwrap()));
