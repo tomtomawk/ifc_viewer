@@ -207,11 +207,6 @@ fn nom_libre(existants: impl Fn(&str) -> bool, base: &str) -> String {
 }
 
 impl EditeurFamille {
-    /// Famille éditée et dimensions du type (nom, largeur, hauteur, épaisseur) : source
-    /// d'un type de composant.
-    pub(super) fn modele_courant(&self) -> (String, f64, f64, f64, FamilleModelee) {
-        (self.nom.clone(), self.largeur, self.hauteur, self.epaisseur, self.famille.clone())
-    }
 
     /// Modifiée depuis le dernier chargement dans le projet ou enregistrement.
     /// Pas encore de type dans le projet.

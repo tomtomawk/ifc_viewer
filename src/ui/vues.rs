@@ -383,6 +383,8 @@ impl ViewerApp {
             self.visibility_dirty = true;
         } else {
             self.isolate(objs);
+            // isolement propre à la vue (objets de l'étage), pas un masquage temporaire
+            self.isolement_utilisateur = false;
         }
         // filtre de phase de la vue : objets dont l'état dans la phase de la vue est masqué
         let masques = self.masques_de_phase(i);

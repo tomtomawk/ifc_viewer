@@ -39,6 +39,7 @@ impl Projet {
             ("matériaux",self.materiaux.iter().map(|m|m.id.as_str()).collect::<Vec<_>>()),
             ("motifs",self.motifs.iter().map(|m|m.id.as_str()).collect()),
             ("cartouches",self.familles_cartouches.iter().map(|m|m.id.as_str()).collect()),
+            ("étiquettes",self.familles_etiquettes.iter().map(|m|m.id.as_str()).collect()),
         ] {
             let mut uniques=std::collections::HashSet::new();
             if identites.iter().filter(|id|!id.is_empty()).any(|id|!uniques.insert(id)){return Err(format!("Identités dupliquées : {collection}"));}

@@ -9,6 +9,7 @@ impl ViewerApp {
         self.fenetre_position_plan(ui.ctx());
         self.fenetre_plumes(ui.ctx());
         self.fenetre_famille_cartouche(ui.ctx());
+        self.fenetre_famille_etiquette(ui.ctx());
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
         if let Some(jeu) = self.jeu_actif() {
             egui::ScrollArea::vertical().show(ui, |ui| self.proprietes_jeu(ui, &jeu));

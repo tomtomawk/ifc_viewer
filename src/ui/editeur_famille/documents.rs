@@ -22,8 +22,13 @@ impl ViewerApp {
             match commande {
                 "famille_nouvelle" => {
                     if self.natif.is_none() {return Err("Projet natif requis".into());}
-                    let genre=match argument {"porte"=>GenreOuverture::Porte,"fenetre"=>GenreOuverture::Fenetre,_=>return Err("genre : porte|fenetre".into())};
-                    self.ouvrir_editeur_famille_type(None,genre);
+                    match argument {
+                        "porte"=>self.ouvrir_editeur_famille_type(None,GenreOuverture::Porte),
+                        "fenetre"=>self.ouvrir_editeur_famille_type(None,GenreOuverture::Fenetre),
+                        "composant"=>self.ouvrir_editeur_composant(None),
+                        a if a.starts_with("composant ")=>self.ouvrir_editeur_composant(Some(a[10..].trim().into())),
+                        _=>return Err("genre : porte|fenetre|composant [type]".into())
+                    }
                 }
                 "famille_modifier" => {
                     let f=crate::modele::famille::modelee::FichierFamille::lire(argument)?;
@@ -196,6 +201,32 @@ impl ViewerApp {
         }
     }
 
+    /// Éditeur sur un type de composant (None : nouvelle famille, sur la base de la table).
+    /// Une famille de composant a la catégorie « libre » ; l'épaisseur y est la profondeur.
+    pub(in crate::ui) fn ouvrir_editeur_composant(&mut self, t: Option<String>) {
+        if let Some(ordre) = t.as_ref().and_then(|id| self.onglets_familles().into_iter().find(|o| o.2.as_ref() == Some(id)).map(|o| o.0)) {
+            self.activer_famille(ordre);
+            return;
+        }
+        let Some((p, _)) = &self.natif else { return };
+        let defaut = crate::modele::elements::composant::type_table();
+        let (dans_projet, tc) = match t.as_ref().and_then(|id| p.types_composants.iter().find(|x| &x.id == id)) {
+            Some(x) => (true, x.clone()),
+            // le type par défaut n'entre dans le projet qu'à son premier placement ou enregistrement
+            None if t.as_deref() == Some(defaut.id.as_str()) => (false, defaut),
+            None => (false, crate::modele::TypeComposant { id: String::new(), nom: "Nouveau composant".into(), ..defaut }),
+        };
+        self.editeur_famille(None, None, tc.largeur, tc.hauteur, tc.profondeur, GenreOuverture::Fenetre);
+        if let Some(ed) = self.famille.as_mut() {
+            ed.type_id = (!tc.id.is_empty()).then(|| tc.id.clone());
+            ed.nom = tc.nom;
+            ed.famille = tc.modele;
+            ed.famille.genre = GenreOuverture::Libre;
+            if dans_projet { ed.marquer_enregistree(); } else { ed.reference.0 = String::new(); }
+            ed.historique_neuf();
+        }
+    }
+
     /// Enregistre la famille dans son type (ou un nouveau type) ; les fenêtres du type
     /// prennent ses dimensions ; la fenêtre d'origine prend le type.
     pub(in crate::ui) fn enregistrer_famille(&mut self, nouveau: bool) -> Result<String, String> {
@@ -204,6 +235,19 @@ impl ViewerApp {
             return Err("Nommer le type.".into());
         }
         ed.famille.valider(ed.largeur, ed.hauteur, ed.epaisseur)?;
+        if ed.famille.genre == GenreOuverture::Libre {
+            // famille de composant : son type (créé ou mis à jour), donc tous ses composants
+            let id = if nouveau { String::new() } else { ed.type_id.clone().unwrap_or_default() };
+            let t = crate::modele::TypeComposant { id, nom: ed.nom.trim().into(), largeur: ed.largeur, profondeur: ed.epaisseur, hauteur: ed.hauteur, modele: ed.famille.clone() };
+            let id = self.executer_bim(crate::modele::edition::commandes::Commande::TypeComposant { type_composant: t })?.into_iter().next().unwrap_or_default();
+            if let Some(ed) = self.famille.as_mut() {
+                ed.type_id = Some(id.clone());
+                ed.marquer_enregistree();
+            }
+            self.bim.composant.type_composant = id.clone();
+            self.status = "Famille de composant chargée dans le projet.".into();
+            return Ok(id);
+        }
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
         let cible=ed.type_id.as_deref().filter(|_|!nouveau);
         let fichier=crate::modele::famille::modelee::FichierFamille{format:crate::modele::famille::modelee::FORMAT_FAMILLE.into(),nom:ed.nom.clone(),largeur:ed.largeur,hauteur:ed.hauteur,famille:ed.famille.clone()};
@@ -376,14 +420,14 @@ impl ViewerApp {
             egui::CollapsingHeader::new(RichText::new("Familles du projet").strong()).default_open(true).show(ui, |ui| {
                 for (id, nom, genre) in &familles_projet {
                     let courant = ed.type_id.as_ref() == Some(id);
-                    if ui.selectable_label(courant, format!("{nom} · {}", if *genre == GenreOuverture::Porte { "porte" } else { "fenêtre" })).on_hover_text("Ouvrir cette famille").clicked() && !courant {
+                    if ui.selectable_label(courant, format!("{nom} · {}", match genre { GenreOuverture::Porte => "porte", GenreOuverture::Libre => "composant", GenreOuverture::Fenetre => "fenêtre" })).on_hover_text("Ouvrir cette famille").clicked() && !courant {
                         ouvrir_type = Some((id.clone(), *genre));
                     }
                 }
             });
         });
         if let Some((id, genre)) = ouvrir_type {
-            self.ouvrir_editeur_famille_type(Some(id), genre);
+            if genre == GenreOuverture::Libre { self.ouvrir_editeur_composant(Some(id)); } else { self.ouvrir_editeur_famille_type(Some(id), genre); }
         }
     }
 
@@ -391,7 +435,9 @@ impl ViewerApp {
     pub(in crate::ui) fn familles_projet(&self) -> Vec<(String, String, GenreOuverture)> {
         let Some((p, _)) = &self.natif else { return Vec::new() };
         let mut v: Vec<(String, String, GenreOuverture)> = p.types_ouvertures.iter().filter(|t| t.genre != GenreOuverture::Libre).map(|t| (t.id.clone(), t.nom.clone(), t.genre)).collect();
-        v.sort_by(|a, b| (a.2 != GenreOuverture::Porte, &a.1).cmp(&(b.2 != GenreOuverture::Porte, &b.1)));
+        v.extend(p.types_composants.iter().map(|t| (t.id.clone(), t.nom.clone(), GenreOuverture::Libre)));
+        let rang = |g: GenreOuverture| match g { GenreOuverture::Porte => 0, GenreOuverture::Fenetre => 1, GenreOuverture::Libre => 2 };
+        v.sort_by(|a, b| (rang(a.2), &a.1).cmp(&(rang(b.2), &b.1)));
         v
     }
 
@@ -520,6 +566,6 @@ impl ViewerApp {
 
 /// Titre d'onglet d'un éditeur : catégorie, type, « * » si non chargé.
 pub(super) fn titre_editeur(ed: &EditeurFamille) -> String {
-    let genre = if ed.famille.genre == GenreOuverture::Porte { "Porte" } else { "Fenêtre" };
+    let genre = match ed.famille.genre { GenreOuverture::Porte => "Porte", GenreOuverture::Libre => "Composant", GenreOuverture::Fenetre => "Fenêtre" };
     format!("{genre} : {}{}", ed.nom, if ed.modifiee() { " *" } else { "" })
 }

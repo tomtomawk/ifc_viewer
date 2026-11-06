@@ -206,6 +206,8 @@ pub(super) struct EtatBim {
     /// Composant à placer (type vide : type par défaut) et nom des pièces créées.
     pub(super) composant: crate::modele::Composant,
     pub(super) nom_piece: String,
+    /// Famille d'étiquette des pièces créées ; vide : standard.
+    pub(super) etiquette_piece: String,
     barre_editee: Option<crate::modele::Barre>,
     annotation_identique: Option<crate::modele::documentation::Annotation>,
     /// Suppression demandée depuis le panneau : exécutée à l'image suivante.
@@ -243,6 +245,7 @@ impl Default for EtatBim {
             depart_structure: None,
             composant: crate::modele::Composant { id: String::new(), nom: String::new(), type_composant: String::new(), niveau: String::new(), position: [0.0; 2], decalage: 0.0, rotation: 0.0 },
             nom_piece: "Pièce".into(),
+            etiquette_piece: String::new(),
             barre_editee: None,
             annotation_identique: None,
             supprimer: false,
@@ -498,7 +501,7 @@ impl ViewerApp {
     /// Crée une pièce au point `point` (contour détecté depuis les murs du niveau de la vue).
     pub(super) fn placer_piece(&mut self, point: [f64; 2]) -> Result<(), String> {
         let niveau = self.niveau_vue_native().ok_or("Pièce : aucun niveau.")?;
-        let piece = crate::modele::Piece { id: String::new(), nom: self.bim.nom_piece.clone(), numero: String::new(), niveau, point, contour: Vec::new() };
+        let piece = crate::modele::Piece { id: String::new(), nom: self.bim.nom_piece.clone(), numero: String::new(), niveau, point, contour: Vec::new(), etiquette: self.bim.etiquette_piece.clone() };
         self.executer_bim(crate::modele::edition::commandes::Commande::Piece { piece })?;
         Ok(())
     }
@@ -758,6 +761,8 @@ impl ViewerApp {
         }
         let ids = self.selection_bim();
         let mut commande = None;
+        let mut ouvrir_composant: Option<Option<String>> = None;
+        let mut ouvrir_etiquette: Option<(Option<String>, Option<String>)> = None;
         if self.onglet_ruban == OngletRuban::Modifier {
             if ids.len() == 1 {
                 let p = &self.natif.as_ref().unwrap().0;
@@ -981,6 +986,17 @@ impl ViewerApp {
                         ui.label("Périmètre");
                         ui.label(crate::config::options::unite().afficher(x.perimetre()));
                         ui.end_row();
+                        ui.label("Étiquette");
+                        change |= choix_famille_etiquette(ui, "etiquette_piece_selection", &mut x.etiquette, &p.familles_etiquettes);
+                        ui.end_row();
+                    });
+                    ui.horizontal(|ui| {
+                        if ui.button("Modifier la famille").on_hover_text("Éditer la famille de cette étiquette : textes à champs et traits ; toutes les pièces qui l'utilisent suivent").clicked() {
+                            ouvrir_etiquette = Some((Some(x.etiquette.clone()), Some(x.id.clone())));
+                        }
+                        if ui.button("Nouvelle famille").on_hover_text("Nouvelle famille d'étiquette, sur la base de celle-ci, affectée à cette pièce").clicked() {
+                            ouvrir_etiquette = Some((None, Some(x.id.clone())));
+                        }
                     });
                     if change && !x.nom.trim().is_empty() && !x.numero.trim().is_empty() {
                         commande = Some(Commande::Piece { piece: x });
@@ -1011,6 +1027,9 @@ impl ViewerApp {
                         change |= ui.add(egui::DragValue::new(&mut x.rotation).speed(1.0).suffix(" °")).changed();
                         ui.end_row();
                     });
+                    if ui.button("Modifier la famille").on_hover_text("Ouvre la famille de son type dans l'éditeur ; « Charger dans le projet » met à jour tous les composants du type").clicked() {
+                        ouvrir_composant = Some(Some(original.type_composant.clone()));
+                    }
                     if change {
                         commande = Some(Commande::Composant { composant: x });
                     }
@@ -1135,17 +1154,29 @@ impl ViewerApp {
                         ui.end_row();
                     });
                     ui.label("Cliquez dans la vue pour placer le composant (niveau de la vue) ; Espace : rotation de 90°.");
-                    if let Some((nom, largeur, hauteur, epaisseur, modele)) = self.famille.as_ref().map(|f| f.modele_courant()) {
-                        if ui.button("Créer un type depuis la famille éditée").on_hover_text(format!("« {nom} » : largeur {largeur:.0}, profondeur {epaisseur:.0}, hauteur {hauteur:.0} mm")).clicked() {
-                            commande = Some(Commande::TypeComposant { type_composant: crate::modele::TypeComposant { id: String::new(), nom, largeur, profondeur: epaisseur, hauteur, modele } });
+                    let choisi = c.type_composant.clone();
+                    ui.horizontal(|ui| {
+                        if ui.button("Modifier la famille").on_hover_text("Ouvre la famille du type dans l'éditeur ; « Charger dans le projet » met à jour tous ses composants").clicked() {
+                            ouvrir_composant = Some(Some(choisi));
                         }
-                    }
+                        if ui.button("Nouvelle famille").on_hover_text("Nouvelle famille de composant dans l'éditeur, sur la base de la table").clicked() {
+                            ouvrir_composant = Some(None);
+                        }
+                    });
                 }
                 Some(Outil::Piece) => {
                     ui.label(RichText::new("Pièce").strong());
                     ui.horizontal(|ui| {
                         ui.label("Nom");
                         ui.text_edit_singleline(&mut self.bim.nom_piece);
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Étiquette");
+                        let familles = self.natif.as_ref().map(|(p, _)| p.familles_etiquettes.clone()).unwrap_or_default();
+                        choix_famille_etiquette(ui, "etiquette_piece_outil", &mut self.bim.etiquette_piece, &familles);
+                        if ui.button("Modifier").on_hover_text("Éditer cette famille d'étiquette").clicked() {
+                            ouvrir_etiquette = Some((Some(self.bim.etiquette_piece.clone()), None));
+                        }
                     });
                     ui.label("Cliquez dans un espace fermé par des murs du niveau de la vue : le contour suit les faces intérieures ; le numéro s'incrémente.");
                 }
@@ -1295,6 +1326,12 @@ impl ViewerApp {
         } else {
             return false;
         }
+        if let Some((famille, piece)) = ouvrir_etiquette {
+            self.editer_famille_etiquette(ui.ctx(), famille, piece);
+        }
+        if let Some(t) = ouvrir_composant {
+            self.ouvrir_editeur_composant(t);
+        }
         if let Some(c) = commande {
             if let Err(e) = self.executer_bim(c) {
                 self.error = Some(e);
@@ -1308,6 +1345,19 @@ impl ViewerApp {
 }
 
 /// Liste des types de composants ; vrai si le choix a changé.
+fn choix_famille_etiquette(ui: &mut egui::Ui, salt: &str, choix: &mut String, familles: &[crate::modele::documentation::FamilleEtiquette]) -> bool {
+    let avant = choix.clone();
+    egui::ComboBox::from_id_salt(salt)
+        .selected_text(familles.iter().find(|f| &f.id == choix).map_or("Étiquette standard", |f| f.nom.as_str()))
+        .show_ui(ui, |ui| {
+            ui.selectable_value(choix, String::new(), "Étiquette standard");
+            for f in familles {
+                ui.selectable_value(choix, f.id.clone(), &f.nom);
+            }
+        });
+    *choix != avant
+}
+
 fn choix_type_composant(ui: &mut egui::Ui, salt: &str, choix: &mut String, types: &[crate::modele::TypeComposant]) -> bool {
     let avant = choix.clone();
     egui::ComboBox::from_id_salt(salt)

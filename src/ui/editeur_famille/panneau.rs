@@ -88,20 +88,25 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
         ui.label("Type");
         ui.text_edit_singleline(&mut ed.nom);
         ui.end_row();
-        ui.label("Catégorie").on_hover_text("Range le type parmi les portes ou les fenêtres du sélecteur");
-        ui.horizontal(|ui| {
-            ui.selectable_value(&mut ed.famille.genre, GenreOuverture::Porte, "Porte");
-            ui.selectable_value(&mut ed.famille.genre, GenreOuverture::Fenetre, "Fenêtre");
-        });
+        let composant = ed.famille.genre == GenreOuverture::Libre;
+        ui.label("Catégorie").on_hover_text(if composant { "Composant posé librement (mobilier, équipement), sans hôte" } else { "Range le type parmi les portes ou les fenêtres du sélecteur" });
+        if composant {
+            ui.label("Composant");
+        } else {
+            ui.horizontal(|ui| {
+                ui.selectable_value(&mut ed.famille.genre, GenreOuverture::Porte, "Porte");
+                ui.selectable_value(&mut ed.famille.genre, GenreOuverture::Fenetre, "Fenêtre");
+            });
+        }
         ui.end_row();
-        ui.label(LARGEUR).on_hover_text("Paramètre de type : largeur de la baie");
-        ui.add(egui::DragValue::new(&mut ed.largeur).speed(10.0).range(100.0..=20_000.0).dimensions());
+        ui.label(LARGEUR).on_hover_text(if composant { "Paramètre de type : largeur du composant (entre Gauche et Droite)" } else { "Paramètre de type : largeur de la baie" });
+        ui.add(egui::DragValue::new(&mut ed.largeur).speed(10.0).range(10.0..=20_000.0).dimensions());
         ui.end_row();
-        ui.label(HAUTEUR).on_hover_text("Paramètre de type : hauteur de la baie");
-        ui.add(egui::DragValue::new(&mut ed.hauteur).speed(10.0).range(100.0..=20_000.0).dimensions());
+        ui.label(HAUTEUR).on_hover_text(if composant { "Paramètre de type : hauteur du composant" } else { "Paramètre de type : hauteur de la baie" });
+        ui.add(egui::DragValue::new(&mut ed.hauteur).speed(10.0).range(10.0..=20_000.0).dimensions());
         ui.end_row();
-        ui.label(EPAISSEUR).on_hover_text("Épaisseur du mur hôte : essai seulement, la maquette donne celle du mur");
-        ui.add(egui::DragValue::new(&mut ed.epaisseur).speed(10.0).range(50.0..=2000.0).dimensions());
+        ui.label(if composant { "Profondeur" } else { EPAISSEUR }).on_hover_text(if composant { "Paramètre de type : profondeur du composant (entre Intérieur et Extérieur ; Epaisseur dans les formules)" } else { "Épaisseur du mur hôte : essai seulement, la maquette donne celle du mur" });
+        ui.add(egui::DragValue::new(&mut ed.epaisseur).speed(10.0).range(10.0..=20_000.0).dimensions());
         ui.end_row();
         ui.label("Couleur");
         ui.color_edit_button_srgb(&mut ed.famille.couleur);

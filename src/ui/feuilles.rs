@@ -122,6 +122,122 @@ impl ViewerApp {
         if original.is_empty() { famille.nom = "Cartouche personnalisé".into(); }
         ctx.data_mut(|d| d.insert_temp(egui::Id::unique("editeur_cartouche"), (famille, id.to_string(), None::<[f64; 2]>, original)));
     }
+    /// Ouvre l'éditeur d'une famille d'étiquette de pièce : `famille` (Some("") : la
+    /// standard ; None : nouvelle, copie de celle de la pièce), affectée à `piece`.
+    pub(super) fn editer_famille_etiquette(&self, ctx: &egui::Context, famille: Option<String>, piece: Option<String>) {
+        let Some((p, _)) = &self.natif else { return };
+        let actuelle = piece.as_ref().and_then(|id| p.pieces.iter().find(|x| &x.id == id)).map(|x| p.famille_etiquette(x));
+        let mut f = match &famille {
+            Some(id) => p.familles_etiquettes.iter().find(|f| &f.id == id).cloned().unwrap_or_else(doc::FamilleEtiquette::standard),
+            None => actuelle.unwrap_or_else(doc::FamilleEtiquette::standard),
+        };
+        let original = if famille.is_some() { f.id.clone() } else { String::new() };
+        if f.id.is_empty() {
+            // la standard ou une copie : nouvelle famille à l'enregistrement
+            let base = if famille.is_none() { format!("{} (copie)", f.nom) } else { "Étiquette de pièce".to_string() };
+            f.nom = (1..).map(|k| if k == 1 { base.clone() } else { format!("{base} {k}") }).find(|n| !p.familles_etiquettes.iter().any(|x| &x.nom == n)).unwrap();
+            f.id = String::new();
+        } else if famille.is_none() {
+            f.id = String::new();
+            f.nom = format!("{} (copie)", f.nom);
+        }
+        ctx.data_mut(|d| d.insert_temp(egui::Id::unique("editeur_etiquette"), (f, piece, None::<[f64; 2]>, original)));
+    }
+
+    /// Éditeur 2D des familles d'étiquettes de pièces : textes à champs et traits, en mm
+    /// du papier autour du point de la pièce (croix rouge).
+    pub(super) fn fenetre_famille_etiquette(&mut self, ctx: &egui::Context) {
+        let id = egui::Id::unique("editeur_etiquette");
+        type Etat = (doc::FamilleEtiquette, Option<String>, Option<[f64; 2]>, String);
+        let Some((mut famille, piece, mut debut, original)) = ctx.data(|d| d.get_temp::<Etat>(id)) else { return };
+        let mut ouvert = true;
+        let mut enregistrer = false;
+        let exemple = self.natif.as_ref().and_then(|(p, _)| piece.as_ref().and_then(|i| p.pieces.iter().find(|x| &x.id == i)).cloned().map(|x| (p.clone(), x)));
+        egui::Window::new("Famille d'étiquette de pièce").open(&mut ouvert).default_width(520.0).resizable(true).show(ctx, |ui| {
+            ui.horizontal(|ui| { ui.label("Nom"); ui.text_edit_singleline(&mut famille.nom); });
+            ui.label("Dessiner un trait : cliquer ses deux extrémités. La croix rouge est le point de la pièce.");
+            // zone de 60 × 30 mm du papier centrée sur le point
+            let (demi_l, demi_h) = (30.0f32, 15.0f32);
+            let largeur = ui.available_width().max(200.0);
+            let echelle = largeur / (2.0 * demi_l);
+            let (rect, reponse) = ui.allocate_exact_size(egui::vec2(largeur, 2.0 * demi_h * echelle), Sense::click());
+            let peintre = ui.painter_at(rect);
+            peintre.rect_filled(rect, 0.0, Color32::WHITE);
+            let ecran = |p: [f64; 2]| egui::pos2(rect.center().x + p[0] as f32 * echelle, rect.center().y - p[1] as f32 * echelle);
+            let rouge = egui::Stroke::new(1.0, Color32::from_rgb(220, 40, 40));
+            peintre.line_segment([rect.center() - egui::vec2(6.0, 0.0), rect.center() + egui::vec2(6.0, 0.0)], rouge);
+            peintre.line_segment([rect.center() - egui::vec2(0.0, 6.0), rect.center() + egui::vec2(0.0, 6.0)], rouge);
+            for t in &famille.traits { peintre.line_segment([ecran(t[0]), ecran(t[1])], egui::Stroke::new(1.0, Color32::BLACK)); }
+            for t in &famille.textes {
+                let texte = exemple.as_ref().map_or(t.contenu.clone(), |(p, x)| doc::FamilleEtiquette::remplir(&t.contenu, p, x));
+                peintre.text(ecran(t.position), egui::Align2::CENTER_BOTTOM, texte, egui::FontId::proportional((t.hauteur as f32 * echelle).clamp(6.0, 40.0)), Color32::from_gray(30));
+            }
+            if let Some(a) = debut { if let Some(b) = reponse.hover_pos() { peintre.line_segment([ecran(a), b], egui::Stroke::new(1.0, Color32::from_rgb(0, 120, 220))); } }
+            if reponse.clicked() {
+                if let Some(q) = reponse.interact_pointer_pos() {
+                    let point = [((q.x - rect.center().x) / echelle) as f64, ((rect.center().y - q.y) / echelle) as f64];
+                    if let Some(a) = debut.take() { famille.traits.push([a, point]); } else { debut = Some(point); }
+                }
+            }
+            egui::CollapsingHeader::new("Textes et champs").default_open(true).show(ui, |ui| {
+                ui.label(format!("Champs : {}", doc::CHAMPS_ETIQUETTE));
+                let mut supprimer = None;
+                for (i, t) in famille.textes.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.add(egui::TextEdit::singleline(&mut t.contenu).desired_width(140.0));
+                        for coord in &mut t.position { ui.add(egui::DragValue::new(coord).speed(0.25).suffix(" mm")); }
+                        ui.add(egui::DragValue::new(&mut t.hauteur).range(0.5..=20.0).speed(0.1).suffix(" mm"));
+                        if ui.small_button("✕").clicked() { supprimer = Some(i); }
+                    });
+                }
+                if let Some(i) = supprimer { famille.textes.remove(i); }
+                if ui.button("+ Texte").clicked() { famille.textes.push(doc::TexteCartouche { contenu: "{numero}".into(), position: [0.0, -6.0], hauteur: 2.0 }); }
+            });
+            egui::CollapsingHeader::new(format!("Traits ({})", famille.traits.len())).show(ui, |ui| {
+                let mut supprimer = None;
+                for (i, t) in famille.traits.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.label(format!("{}", i + 1));
+                        for point in t { for coord in point { ui.add(egui::DragValue::new(coord).speed(0.25).max_decimals(2)); } }
+                        if ui.small_button("✕").clicked() { supprimer = Some(i); }
+                    });
+                }
+                if let Some(i) = supprimer { famille.traits.remove(i); }
+            });
+            if ui.button(if piece.is_some() { "Enregistrer et appliquer à la pièce" } else { "Enregistrer" }).clicked() { enregistrer = true; }
+        });
+        if enregistrer {
+            match self.enregistrer_famille_etiquette(famille.clone(), piece.clone(), &original) {
+                Ok(_) => ouvert = false,
+                Err(e) => self.error = Some(e),
+            }
+        }
+        ctx.data_mut(|d| if ouvert { d.insert_temp(id, (famille, piece, debut, original)); } else { d.remove::<Etat>(id); });
+    }
+
+    /// Enregistre une famille d'étiquette (nouvelle si son identifiant est vide) et
+    /// l'affecte à la pièce `piece` ; rend son identifiant.
+    pub(super) fn enregistrer_famille_etiquette(&mut self, mut famille: doc::FamilleEtiquette, piece: Option<String>, original: &str) -> Result<String, String> {
+        let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
+        let nom = famille.nom.trim().to_string();
+        if nom.is_empty() || nom == "Étiquette standard" || p.familles_etiquettes.iter().any(|f| f.nom == nom && f.id != original) {
+            return Err("Choisir un nom de famille non vide et distinct des familles existantes.".into());
+        }
+        famille.nom = nom;
+        let mut q = p.clone();
+        if famille.id.is_empty() {
+            famille.id = (1..).map(|k| format!("etiquette-piece-{k}")).find(|i| !q.familles_etiquettes.iter().any(|f| &f.id == i)).unwrap();
+        }
+        let id = famille.id.clone();
+        match q.familles_etiquettes.iter_mut().find(|f| f.id == id) { Some(f) => *f = famille, None => q.familles_etiquettes.push(famille) }
+        if let Some(x) = piece.and_then(|i| q.pieces.iter_mut().find(|x| x.id == i)) { x.etiquette = id.clone(); }
+        if piece_outil_suit(&self.bim.etiquette_piece, original) { self.bim.etiquette_piece = id.clone(); }
+        self.appliquer_projet(q)?;
+        self.coupe_dirty = true;
+        self.status = "Famille d'étiquette enregistrée — Ctrl+Z pour annuler.".into();
+        Ok(id)
+    }
+
     /// Éditeur 2D des familles de cartouches : traits dessinés et textes paramétriques.
     pub(super) fn fenetre_famille_cartouche(&mut self, ctx: &egui::Context) {
         let id = egui::Id::unique("editeur_cartouche");
@@ -915,4 +1031,9 @@ impl ViewerApp {
         }
         true
     }
+}
+
+/// L'outil Pièce suit la famille enregistrée s'il utilisait celle qu'on vient d'éditer.
+fn piece_outil_suit(outil: &str, original: &str) -> bool {
+    !original.is_empty() && outil == original
 }

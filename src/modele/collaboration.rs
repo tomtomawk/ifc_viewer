@@ -119,6 +119,7 @@ fn collection_identifiee(c: &str) -> bool {
             | "nomenclatures"
             | "motifs"
             | "familles_cartouches"
+            | "familles_etiquettes"
             | "positions_plan"
     )
 }
@@ -209,7 +210,7 @@ impl Index {
             }
             if matches!(
                 k.split('/').next().unwrap_or(""),
-                "materiaux" | "motifs" | "familles_cartouches"
+                "materiaux" | "motifs" | "familles_cartouches" | "familles_etiquettes"
             ) {
                 if let Some(nom) = v.get("nom").and_then(Value::as_str) {
                     ids.entry(nom).or_default().insert(k);
@@ -396,6 +397,7 @@ pub fn sensible(k: &str) -> bool {
             | "materiaux"
             | "motifs"
             | "familles_cartouches"
+            | "familles_etiquettes"
     ) || matches!(
         k,
         "@/coordonnees_origine"

@@ -148,6 +148,14 @@ def run(exe, captures=None):
             commande("editer", {"action": "piece", "piece": dict(projet()["pieces"][0], nom="Séjour", numero="101")})
             x = projet()["pieces"][0]
             assert (x["nom"], x["numero"]) == ("Séjour", "101"), x
+            # étiquette en famille : textes à champs et traits, affectée à la pièce
+            r = commande("projet_natif")
+            famille = {"id": "etiquette-piece-1", "nom": "Encadrée", "traits": [[[-12, -4], [12, -4]], [[-12, 4], [12, 4]]],
+                       "textes": [{"contenu": "{numero}", "position": [0, -1], "hauteur": 3}, {"contenu": "{nom} · {surface}", "position": [0, -7.5], "hauteur": 2}]}
+            commande("modifier_projet", {"empreinte": r["empreinte"], "operations": [{"op": "add", "path": "/familles_etiquettes", "value": [famille]}]})
+            commande("editer", {"action": "piece", "piece": dict(projet()["pieces"][0], etiquette="etiquette-piece-1")})
+            assert projet()["pieces"][0]["etiquette"] == "etiquette-piece-1"
+
 
             # sélection au clic sur l'étiquette, suppression, annulation
             commande("selection_native", [])
@@ -199,14 +207,45 @@ def run(exe, captures=None):
             commande("annuler"); commande("annuler")
             assert abs(projet()["composants"][0]["rotation"] - 90) < 1e-6
 
+            # 5 bis. Famille du composant éditée comme celle d'une fenêtre : le type et ses
+            # composants suivent ; nouvelle famille de composant = nouveau type
+            t0 = projet()["composants"][0]["type_composant"]
+            commande("outil", "aucun")
+            f = commande("famille_nouvelle", "composant " + t0)["fichier"]
+            assert commande("etat")["document_actif"]["nom"].startswith("Composant"), commande("etat")["document_actif"]
+            f["largeur"] = 2000
+            commande("famille_modifier", f)
+            assert commande("famille_charger_projet")["id"] == t0
+            t = next(t for t in projet()["types_composants"] if t["id"] == t0)
+            assert t["largeur"] == 2000 and t["modele"]["genre"] == "libre", t["largeur"]
+            commande("famille_fermer")
+            f = commande("famille_nouvelle", "composant")["fichier"]
+            f["nom"] = "Bureau"
+            commande("famille_modifier", f)
+            t1 = commande("famille_charger_projet")["id"]
+            assert t1 != t0 and any(t["id"] == t1 and t["nom"] == "Bureau" for t in projet()["types_composants"])
+            commande("famille_fermer")
+            commande("annuler"); commande("annuler")
+            assert len(projet()["types_composants"]) == 1
+
             # 6. Export IFC : espace et mobilier
             ifc = root / "export.ifc"
             commande("exporter_ifc", str(ifc))
             texte = ifc.read_text(encoding="utf-8")
             assert "IFCSPACE(" in texte and "IFCFURNITURE(" in texte, texte[-2000:]
 
+            # 7. Rouvrir le fichier : le plan d'étage n'est pas en visibilité temporaire
+            commande("enregistrer")
+            chemin = str(root / "Pieces.modele.json")
+            commande("fermer")
+            commande("ouvrir", chemin)
+            attendre(lambda: len(projet().get("pieces", [])) > 0)
+            time.sleep(1)
+            e = commande("etat")
+            assert not e["visibilite_temporaire"] and e["croix_temporaire"] is None, e
+
             commande("quitter", "abandonner"); p.wait(timeout=15)
-            print(f"Pièces et composants : {nombre} requêtes validées ; pièce au clic, refus, aplat, recalcul, composant, Espace, transformations, IFC OK")
+            print(f"Pièces et composants : {nombre} requêtes validées ; pièce au clic, refus, aplat, recalcul, composant, Espace, transformations, famille éditable, IFC, réouverture sans masquage OK")
         except Exception:
             log.flush(); print((root / "instance.log").read_text(encoding="utf-8")[-2500:]); raise
         finally:

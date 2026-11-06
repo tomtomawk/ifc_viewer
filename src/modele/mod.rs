@@ -125,6 +125,9 @@ pub struct Projet {
     /// Familles de cartouches et affectation aux feuilles ; absence : cartouche standard.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub familles_cartouches: Vec<documentation::FamilleCartouche>,
+    /// Familles d'étiquettes de pièces ; absence : étiquette standard.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub familles_etiquettes: Vec<documentation::FamilleEtiquette>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub cartouches_feuilles: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

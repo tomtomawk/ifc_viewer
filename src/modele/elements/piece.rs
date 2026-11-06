@@ -17,6 +17,9 @@ pub struct Piece {
     /// Contour calculé (mm, sens trigonométrique) ; vide : pièce non fermée.
     #[serde(default)]
     pub contour: Vec<[f64; 2]>,
+    /// Famille de son étiquette (identifiant) ; vide : étiquette standard.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub etiquette: String,
 }
 
 impl Piece {
@@ -290,7 +293,7 @@ mod tests {
     }
 
     fn piece(p: &Projet, point: [f64; 2]) -> Piece {
-        Piece { id: String::new(), nom: "Séjour".into(), numero: String::new(), niveau: p.niveaux[0].id.clone(), point, contour: Vec::new() }
+        Piece { id: String::new(), nom: "Séjour".into(), numero: String::new(), niveau: p.niveaux[0].id.clone(), point, contour: Vec::new(), etiquette: String::new() }
     }
 
     #[test]
@@ -309,6 +312,27 @@ mod tests {
         assert_eq!(q2.pieces[1].numero, "2");
         assert!(q.executer(Commande::Piece { piece: piece(&q, [9000.0, 2000.0]) }).is_err());
         assert!(q.executer(Commande::Piece { piece: piece(&q, [0.0, 2000.0]) }).is_err());
+    }
+
+    #[test]
+    fn etiquette_famille_de_la_piece() {
+        use crate::modele::documentation::{primitives_pieces, FamilleEtiquette, TexteCartouche};
+        let mut p = projet();
+        rectangle(&mut p, &ParametresMur { epaisseur: 200.0, ..Default::default() });
+        let (mut q, ids) = p.executer(Commande::Piece { piece: piece(&p, [2500.0, 2000.0]) }).unwrap();
+        let x = q.pieces.iter().find(|x| x.id == ids[0]).unwrap().clone();
+        let vid = q.ajouter_vue_plan(&x.niveau, 1200.0).unwrap();
+        let vue = q.vues.iter().find(|v| v.id == vid).unwrap().clone();
+        // standard : aplat et deux lignes
+        assert_eq!(primitives_pieces(&q, &vue).len(), 3);
+        let t = |c: &str, y| TexteCartouche { contenu: c.into(), position: [0.0, y], hauteur: 2.0 };
+        q.familles_etiquettes.push(FamilleEtiquette { id: "e1".into(), nom: "Cadre".into(), traits: vec![[[-10.0, -5.0], [10.0, -5.0]], [[-10.0, 5.0], [10.0, 5.0]]], textes: vec![t("{nom}", 2.0), t("N° {numero}", -1.0), t("{perimetre} · {niveau}", -4.0)] });
+        q.pieces[0].etiquette = "e1".into();
+        assert_eq!(primitives_pieces(&q, &vue).len(), 1 + 3 + 2);
+        assert_eq!(FamilleEtiquette::remplir("N° {numero} — {surface}", &q, &q.pieces[0]), "N° 1 — 18.24 m²");
+        // famille absente : retour à la standard
+        q.familles_etiquettes.clear();
+        assert_eq!(primitives_pieces(&q, &vue).len(), 3);
     }
 
     #[test]

@@ -331,7 +331,6 @@ pub fn primitives_pieces(p: &Projet, v: &Vue) -> Vec<Primitive> {
     let GenreVue::Plan { niveau, .. } = &v.genre else { return Vec::new() };
     let (o, u, h) = repere(p, v);
     let sol = p.niveau(niveau).map_or(0.0, |n| n.altitude) + 2.0;
-    let taille = 2.5 * v.echelle * 0.001;
     let mut out = Vec::new();
     for x in p.pieces.iter().filter(|x| &x.niveau == niveau && !v.elements_masques.contains(&x.id)) {
         let element = Some(crate::rendu::scene::id_natif("annotation", &x.id));
@@ -343,14 +342,28 @@ pub fn primitives_pieces(p: &Projet, v: &Vue) -> Vec<Primitive> {
                 element,
             });
         }
-        let surface = if x.fermee() { format!("{:.2} m²", x.aire() / 1e6) } else { "Non fermée".into() };
-        let lignes = [format!("{} {}", x.nom, x.numero), surface];
-        for (k, l) in lignes.iter().enumerate() {
-            let largeur = crate::noyau::texte::ligne(l, "Arial", taille, false).largeur;
-            let pos = (o + DVec3::new(x.point[0], x.point[1], 0.0)) * 0.001 - u * largeur / 2.0 + h * taille * (0.3 - 1.5 * k as f64);
-            let mut t = texte(l, pos, u, h, taille, if x.fermee() { [30, 30, 30, 255] } else { [190, 35, 35, 255] });
-            t.element = element;
-            out.push(t);
+        // étiquette : famille de la pièce, en mm du papier autour de son point
+        let famille = p.famille_etiquette(x);
+        // mm du papier → m du modèle
+        let papier = v.echelle * 0.001;
+        let centre = (o + DVec3::new(x.point[0], x.point[1], 0.0)) * 0.001;
+        let couleur = if x.fermee() { [30, 30, 30, 255] } else { [190, 35, 35, 255] };
+        for t in &famille.textes {
+            let l = FamilleEtiquette::remplir(&t.contenu, p, x);
+            if l.trim().is_empty() { continue; }
+            let taille = t.hauteur * papier;
+            let largeur = crate::noyau::texte::ligne(&l, "Arial", taille, false).largeur;
+            let pos = centre + (u * t.position[0] + h * t.position[1]) * papier - u * largeur / 2.0;
+            let mut prim = texte(&l, pos, u, h, taille, couleur);
+            prim.element = element;
+            out.push(prim);
+        }
+        for t in &famille.traits {
+            let [a, b] = t.map(|q| centre + (u * q[0] + h * q[1]) * papier);
+            let mut prim = ligne(a, b);
+            prim.style.couleur = couleur;
+            prim.element = element;
+            out.push(prim);
         }
     }
     out
@@ -857,7 +870,51 @@ pub struct FamilleCartouche {
     pub textes: Vec<TexteCartouche>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+/// Famille d'étiquette de pièce : traits et textes à champs, en mm du papier autour du
+/// point de la pièce (textes centrés sur leur position).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct FamilleEtiquette {
+    pub id: String,
+    pub nom: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub traits: Vec<[[f64; 2]; 2]>,
+    pub textes: Vec<TexteCartouche>,
+}
+
+/// Champs d'une étiquette de pièce.
+pub const CHAMPS_ETIQUETTE: &str = "{nom}, {numero}, {surface}, {perimetre}, {niveau}";
+
+impl FamilleEtiquette {
+    /// Étiquette standard : nom et numéro, surface dessous.
+    pub fn standard() -> FamilleEtiquette {
+        FamilleEtiquette {
+            id: String::new(),
+            nom: "Étiquette standard".into(),
+            traits: Vec::new(),
+            textes: vec![
+                TexteCartouche { contenu: "{nom} {numero}".into(), position: [0.0, 0.75], hauteur: 2.5 },
+                TexteCartouche { contenu: "{surface}".into(), position: [0.0, -3.0], hauteur: 2.5 },
+            ],
+        }
+    }
+
+    /// Texte `contenu` avec les champs de la pièce `x`.
+    pub fn remplir(contenu: &str, p: &Projet, x: &crate::modele::Piece) -> String {
+        let surface = if x.fermee() { format!("{:.2} m²", x.aire() / 1e6) } else { "Non fermée".into() };
+        let perimetre = if x.fermee() { format!("{:.2} m", x.perimetre() / 1e3) } else { String::new() };
+        let niveau = p.niveau(&x.niveau).map_or(String::new(), |n| n.nom.clone());
+        contenu.replace("{nom}", &x.nom).replace("{numero}", &x.numero).replace("{surface}", &surface).replace("{perimetre}", &perimetre).replace("{niveau}", &niveau)
+    }
+}
+
+impl Projet {
+    /// Famille d'étiquette d'une pièce : la sienne, sinon la standard.
+    pub fn famille_etiquette(&self, x: &crate::modele::Piece) -> FamilleEtiquette {
+        self.familles_etiquettes.iter().find(|f| !x.etiquette.is_empty() && f.id == x.etiquette).cloned().unwrap_or_else(FamilleEtiquette::standard)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct TexteCartouche {
     /// {projet}, {feuille}, {numero}, {cartouche} ou {echelles}, ou texte libre.
     pub contenu: String,
