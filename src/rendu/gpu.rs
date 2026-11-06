@@ -411,12 +411,13 @@ fn effet_apparence(r: i32, uvm: vec2f, dxm: vec2f, dym: vec2f, n0: vec3f, n: vec
         e.metal = mix(e.metal, carte(k, 2, uv, dx, dy).r, intensite(k, 2));
     }
     if a_carte(k, 3) {
-        // relief : pente de la hauteur (2 mm pour l'échelle complète) sur un texel
+        // relief : pente de la hauteur (10 mm pour l'échelle complète, joint de maçonnerie)
+        // sur un texel
         let pas = max(apparences[k + 9].xy, vec2f(1.0)) / 512.0;
         let h0 = carte(k, 3, uv, dx, dy).r;
         let hx = carte(k, 3, uv + vec2f(pas.x, 0.0), dx, dy).r;
         let hy = carte(k, 3, uv + vec2f(0.0, pas.y), dx, dy).r;
-        let gr = vec2f(hx - h0, hy - h0) / pas * 2.0 * intensite(k, 3);
+        let gr = vec2f(hx - h0, hy - h0) / pas * 10.0 * intensite(k, 3);
         e.n = normalize(e.n - u * gr.x - v * gr.y);
     }
     if a_carte(k, 4) {
@@ -537,8 +538,18 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
         let h = normalize(g.soleil.xyz + vd);
         let brillance = mix(256.0, 4.0, fx.rug);
         let reflet = pow(max(dot(n, h), 0.0), brillance) * (1.0 - fx.rug) * max(dot(n, g.soleil.xyz), 0.0) * ombre;
-        c += mix(vec3f(0.35), fx.base, fx.metal) * reflet + fx.emis;
-        a = fx.alpha;
+        // reflet du ciel (ciel bleuté en haut, sol chaud en bas) : part de Fresnel (Schlick),
+        // estompée par la rugosité ; un métal reflète dans sa couleur
+        let rv = reflect(-vd, n);
+        let ciel = mix(vec3f(0.42, 0.40, 0.37), mix(vec3f(0.80, 0.86, 0.93), vec3f(0.45, 0.62, 0.85), smoothstep(0.0, 0.8, rv.z)), smoothstep(-0.15, 0.05, rv.z));
+        let f0 = mix(vec3f(0.04), fx.base, fx.metal);
+        let fresnel = f0 + (1.0 - f0) * pow(1.0 - max(dot(n, vd), 0.0), 5.0);
+        let poli = (1.0 - fx.rug) * (1.0 - fx.rug);
+        let part = fresnel * poli;
+        c = c * (1.0 - part) + ciel * part * mix(1.0, ao, 0.5) + mix(vec3f(0.6), f0, fx.metal) * reflet * 2.0 + fx.emis;
+        c = min(c, vec3f(1.0));
+        // le verre reflète : plus opaque en vue rasante
+        a = max(fx.alpha, max(part.r, max(part.g, part.b)));
     }
     if motifs && arriere != 0 {
         c = mix(c, e.c.rgb, trait_arriere);
