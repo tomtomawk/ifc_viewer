@@ -17,60 +17,35 @@ impl RubanEdition {
             "Libre" => GenreOuverture::Libre,
             _ => GenreOuverture::Porte,
         };
-        ui.label(RichText::new("Placer une ouverture").strong());
-        // catégorie : un onglet par genre, comme les sortes d'éléments horizontaux
-        ui.horizontal(|ui| {
-            for (g, nom) in [(GenreOuverture::Porte, "Porte"), (GenreOuverture::Fenetre, "Fenêtre"), (GenreOuverture::Libre, "Libre")] {
-                if ui.selectable_label(genre == g, nom).clicked() && genre != g {
-                    self.valeurs.insert((Outil::Ouverture, 0), Valeur::Texte(nom.into()));
-                    self.ouverture_type_identique = None;
-                }
-            }
-        });
         let Some(projet) = projet else {
             ui.label("Créez ou ouvrez un projet natif.");
             return true;
         };
-        let types: Vec<&crate::modele::TypeOuverture> = projet.types_ouvertures.iter().filter(|t| t.genre == genre).collect();
-        if self.ouverture_type_identique.as_ref().is_some_and(|id| !types.iter().any(|t| &t.id == id)) {
+        if self.ouverture_type_identique.as_ref().is_some_and(|id| !projet.types_ouvertures.iter().any(|t| &t.id == id && t.genre == genre)) {
             self.ouverture_type_identique = None;
         }
-        let u = crate::config::options::unite();
-        let actuel = self.ouverture_type_identique.as_ref().and_then(|id| types.iter().find(|t| &t.id == id));
-        let texte = actuel.map_or_else(|| "Générique (cotes du ruban)".to_string(), |t| t.nom.clone());
-        let mut choix = self.ouverture_type_identique.clone();
-        egui::ComboBox::from_id_salt("type_ouverture_placement")
-            .width(ui.available_width() - 8.0)
-            .truncate()
-            .selected_text(RichText::new(texte).strong())
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut choix, None, "Générique (cotes du ruban)");
-                for t in &types {
-                    let famille = if t.modele.is_some() { " · famille" } else { "" };
-                    ui.selectable_value(&mut choix, Some(t.id.clone()), format!("{} — {} × {}{famille}", t.nom, u.afficher(t.largeur), u.afficher(t.hauteur)));
-                }
-            })
-            .response
-            .on_hover_text("Type de l'ouverture à placer : il impose ses cotes et sa famille");
-        if choix != self.ouverture_type_identique {
-            if let Some(t) = choix.as_ref().and_then(|id| types.iter().find(|t| &t.id == id)) {
+        // sélecteur de type à onglets de catégorie, comme celui des murs
+        let actuel = self.ouverture_type_identique.clone();
+        let choix = self.selecteur_type_ouverture(ui, projet, genre, actuel.as_deref(), &[GenreOuverture::Porte, GenreOuverture::Fenetre, GenreOuverture::Libre], true);
+        let prendre_genre = |s: &mut Self, g: GenreOuverture| {
+            s.valeurs.insert((Outil::Ouverture, 0), Valeur::Texte(super::ouvertures::nom_genre(g).into()));
+        };
+        if let Some((id, g)) = choix.type_choisi {
+            prendre_genre(self, g);
+            if let Some(t) = id.as_ref().and_then(|id| projet.types_ouvertures.iter().find(|t| &t.id == id)) {
                 self.valeurs.insert((Outil::Ouverture, 1), Valeur::Nombre(t.largeur));
                 self.valeurs.insert((Outil::Ouverture, 2), Valeur::Nombre(t.hauteur));
             }
-            self.ouverture_type_identique = choix;
+            self.ouverture_type_identique = id;
         }
-        if let Some(t) = self.ouverture_type_identique.as_ref().and_then(|id| types.iter().find(|t| &t.id == id)) {
-            ui.label(RichText::new(format!("{} × {} (cotes du type)", u.afficher(t.largeur), u.afficher(t.hauteur))).weak());
+        if let Some((id, g)) = choix.editer {
+            prendre_genre(self, g);
+            self.demande_famille = Some(Some(id));
         }
-        if genre != GenreOuverture::Libre {
-            ui.horizontal(|ui| {
-                if ui.add_enabled(self.ouverture_type_identique.is_some(), egui::Button::new("Éditer la famille…")).clicked() {
-                    self.demande_famille = Some(self.ouverture_type_identique.clone());
-                }
-                if ui.button("Nouvelle famille…").on_hover_text("Éditeur de familles à partir du gabarit de la catégorie").clicked() {
-                    self.demande_famille = Some(None);
-                }
-            });
+        if let Some(g) = choix.nouveau {
+            prendre_genre(self, g);
+            self.ouverture_type_identique = None;
+            self.demande_famille = Some(None);
         }
         ui.separator();
         true

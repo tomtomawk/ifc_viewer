@@ -50,21 +50,45 @@ fn centre_courbure(tris: &[[[f64; 2]; 3]]) -> Option<[f64; 2]> {
         }
         (m.determinant().abs() > 1e-6 * m.x_axis.x.max(m.y_axis.y).powi(2).max(1e-12)).then(|| m.inverse() * v)
     };
-    let mut o = resoudre(&|_| true)?;
+    // estimation robuste : médiane des intersections de médiatrices deux à deux. Les
+    // arêtes d'extrémité (non radiales) donnent des points aberrants qui fausseraient
+    // les moindres carrés sur toutes les arêtes.
+    let mut xs = Vec::new();
+    let mut ys = Vec::new();
+    let pas = (droites.len() / 3).max(1);
+    for (i, a) in droites.iter().enumerate() {
+        for b in [&droites[(i + pas) % droites.len()], &droites[(i + 2 * pas) % droites.len()]] {
+            let m = DMat2::from_cols(DVec2::new(a.0.x, b.0.x), DVec2::new(a.0.y, b.0.y));
+            if m.determinant().abs() > 1e-3 {
+                let x = m.inverse() * DVec2::new(a.1, b.1);
+                xs.push(x.x);
+                ys.push(x.y);
+            }
+        }
+    }
+    if xs.is_empty() {
+        return None;
+    }
+    xs.sort_by(f64::total_cmp);
+    ys.sort_by(f64::total_cmp);
+    let mut o = DVec2::new(xs[xs.len() / 2], ys[ys.len() / 2]);
     let taille = contour.iter().map(|(a, b)| a.distance(*b)).sum::<f64>();
     for _ in 0..3 {
         let tol = 1e-3 * taille.max(1.0);
         o = resoudre(&|d| (d.0.dot(o) - d.1).abs() < tol.max(1e-6))?;
     }
-    // faces sur deux cercles : chaque sommet à l'un des deux rayons
-    let r: Vec<f64> = contour.iter().flat_map(|(a, b)| [a.distance(o), b.distance(o)]).collect();
-    let (r0, r1) = r.iter().fold((f64::MAX, f64::MIN), |(a, b), x| (a.min(*x), b.max(*x)));
+    // faces sur deux cercles : presque tous les sommets à l'un des deux rayons. Les
+    // extrémités (coupées par une jonction, non radiales) ont quelques sommets hors des
+    // cercles : les rayons sont pris aux déciles, pas aux extrêmes.
+    let mut r: Vec<f64> = contour.iter().flat_map(|(a, b)| [a.distance(o), b.distance(o)]).collect();
+    r.sort_by(f64::total_cmp);
+    let (r0, r1) = (r[r.len() / 10], r[r.len() - 1 - r.len() / 10]);
     let e = r1 - r0;
     if !(e > 1e-6) || r0 < e || r0 > 1e3 * taille {
         return None;
     }
     let sur_cercle = r.iter().filter(|x| (*x - r0).abs() < 0.02 * e || (*x - r1).abs() < 0.02 * e).count();
-    (sur_cercle == r.len()).then_some(o.to_array())
+    (sur_cercle * 10 >= r.len() * 8).then_some(o.to_array())
 }
 
 /// Ligne d'isolant d'une couche courbe : motif tracé en coordonnées polaires (abscisse le

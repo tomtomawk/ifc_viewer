@@ -4,6 +4,7 @@
 mod affichage;
 mod murs;
 mod options;
+mod ouvertures;
 mod icones;
 use icones::*;
 mod barre_commandes;
@@ -438,6 +439,8 @@ pub struct RubanEdition {
     pub niveau_dalle: Option<String>,
     /// Onglet de catégorie ouvert dans le sélecteur de type de mur.
     categorie_mur: Option<crate::modele::CategorieMur>,
+    /// Onglet du sélecteur de type d'ouverture (None : celui du type courant).
+    categorie_ouverture: Option<crate::modele::GenreOuverture>,
     /// Type de mur du gabarit choisi, à copier dans le projet.
     type_mur_gabarit: Option<crate::config::gabarit::TypeGabarit>,
     /// Toiture : arêtes tracées sans pente (toiture plate).

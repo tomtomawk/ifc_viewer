@@ -54,6 +54,30 @@ impl ViewerApp {
         } else {
             return None;
         };
+        if let Cible::Ouverture(o) = &cible {
+            // même sélecteur qu'à la création ; portes et fenêtres s'échangent, libre à part
+            use crate::modele::GenreOuverture as G;
+            let projet = p.clone();
+            let ouverture = projet.ouvertures.iter().find(|x| &x.id == o)?;
+            let categories: &[G] = if ouverture.genre == G::Libre { &[G::Libre] } else { &[G::Porte, G::Fenetre] };
+            let actuel = ouverture.type_ouverture.clone();
+            let choix = self.ruban_edition.selecteur_type_ouverture(ui, &projet, ouverture.genre, actuel.as_deref(), categories, false);
+            ui.separator();
+            if let Some((id, g)) = choix.editer {
+                self.ouvrir_editeur_famille_type(Some(id), g);
+            }
+            if let Some(g) = choix.nouveau {
+                self.ouvrir_editeur_famille_type(None, g);
+            }
+            let choisi = choix.type_choisi.and_then(|(id, _)| id).filter(|id| Some(id) != actuel.as_ref())?;
+            let mut q = projet;
+            let t = q.types_ouvertures.iter().find(|t| t.id == choisi).cloned()?;
+            if let Some(x) = q.ouvertures.iter_mut().find(|x| &x.id == o) {
+                x.type_ouverture = Some(t.id);
+                (x.largeur, x.hauteur, x.genre) = (t.largeur, t.hauteur, t.genre);
+            }
+            return Some(q);
+        }
         if matches!(cible,Cible::Mur(_) | Cible::Assemblage(_)) {
             // Le même widget que pour la création, avec le type du mur sélectionné.
             let projet=p.clone();

@@ -1111,3 +1111,31 @@ mod mesure {
         }
     }
 }
+
+#[cfg(test)]
+mod test_isolant_arc {
+    use crate::modele::*;
+    use crate::modele::edition::ParametresMur;
+
+    /// Mur courbe isolé passé par toute la chaîne (projet, scène, coupe) : extrémités non
+    /// radiales comprises, le motif d'isolant couvre tout l'arc.
+    #[test]
+    fn isolant_d_un_mur_courbe_reel() {
+        let mut p = Projet::nouveau("Arc");
+        let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None, retour: false };
+        p.types_murs.push(TypeCompose { id: "t".into(), nom: "Mur".into(), couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Isolant", 100.0, FonctionCouche::Isolation), c("Béton", 200.0, FonctionCouche::Structure)], categorie: None, couches_detaillees: true, origine: None });
+        let o = ParametresMur { type_mur: Some("t".into()), ..Default::default() };
+        p.ajouter_mur_axe(Axe::Arc { debut: [5000.0, 0.0], fin: [0.0, 5000.0], centre: [0.0, 0.0], direct: true }, &o).unwrap();
+        let s = crate::rendu::scene::depuis_natif(&p, std::path::Path::new("t.json")).unwrap();
+        let prims = super::coupe(&s, &vec![true; s.objects.len()], glam::Vec3::NEG_Z.extend(1.0), 100.0, super::Poche::Hachure);
+        // la ligne d'isolant (série de boucles : la plus fournie des hachures) : elle doit couvrir l'arc
+        // (corde de 5 m × √2 ≈ 6,9 m), pas un morceau droit
+        let isolant = prims.iter().filter(|p| p.role == super::Role::Hachure).filter_map(|p| match &p.forme {
+            super::Forme::Segments(v) => Some(v),
+            _ => None,
+        }).max_by_key(|v| v.len()).expect("ligne d'isolant");
+        let pts: Vec<_> = isolant.iter().flatten().collect();
+        let etendue = pts.iter().flat_map(|a| pts.iter().map(move |b| a.distance(**b))).fold(0.0, f64::max);
+        assert!(etendue > 6.0, "motif d'isolant limité à {etendue:.2} m");
+    }
+}
