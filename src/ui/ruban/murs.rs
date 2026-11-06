@@ -264,6 +264,11 @@ impl RubanEdition {
         self.editeur_type.is_some()
     }
 
+    /// Matériau à ouvrir dans la fenêtre Matériau, demandé par un double-clic.
+    pub fn prendre_materiau_a_editer(&mut self) -> Option<String> {
+        self.materiau_a_editer.take()
+    }
+
     /// Dupliquer un type : l'éditeur s'ouvre sur ses couches, enregistrées sous un
     /// nouveau nom (le type d'origine ne change pas).
     pub(super) fn dupliquer_type(&mut self, projet: &crate::modele::Projet, nom: &str, couches: Vec<crate::modele::Couche>) {
@@ -322,6 +327,13 @@ impl RubanEdition {
     pub fn editeur_type_mur(&mut self, ctx: &egui::Context, projet: &mut crate::modele::Projet) -> bool {
         use crate::modele::{Couche, FonctionCouche};
         let Some(ed) = &mut self.editeur_type else { return false };
+        // matériaux existants : toujours ceux du projet (modifiés dans la fenêtre Matériau)
+        for m in &mut ed.materiaux {
+            if let Some(x) = projet.materiau(&m.nom) {
+                *m = x.clone();
+            }
+        }
+        let mut a_editer: Option<String> = None;
         let (mut ouvert, mut enregistrer, mut annuler) = (true, false, false);
         egui::Window::new(if ed.id.is_some() { "Modifier le type de mur" } else { "Nouveau type de mur" })
             .id(egui::Id::unique("editeur_type_mur"))
@@ -400,11 +412,18 @@ impl RubanEdition {
                         match ed.materiaux.iter().find(|m| m.nom == nom) {
                             Some(m) => {
                                 let [r, g, b] = m.couleur;
-                                let (rect, rep) = ui.allocate_exact_size(egui::vec2(20.0, 16.0), Sense::hover());
+                                let existe = projet.materiau(&m.nom).is_some();
+                                let aide = if existe { "Hérité du matériau · double-clic : modifier le matériau" } else { "Hérité du matériau · enregistrez le type pour pouvoir modifier ce nouveau matériau" };
+                                let (rect, rep) = ui.allocate_exact_size(egui::vec2(20.0, 16.0), Sense::click());
                                 ui.painter().rect_filled(rect, 2.0, egui::Color32::from_rgb(r, g, b));
                                 ui.painter().rect_stroke(rect, 2.0, egui::Stroke::new(1.0, ui.visuals().weak_text_color()), egui::StrokeKind::Inside);
-                                rep.on_hover_text("Couleur héritée du matériau");
-                                ui.label(m.motif.libelle()).on_hover_text("Motif de coupe hérité du matériau");
+                                let rep2 = ui.add(egui::Label::new(m.motif.libelle()).sense(Sense::click()));
+                                let double = rep.double_clicked() || rep2.double_clicked();
+                                rep.on_hover_text(aide);
+                                rep2.on_hover_text(aide);
+                                if double && existe {
+                                    a_editer = Some(m.nom.clone());
+                                }
                             }
                             None => {
                                 ui.label("");
@@ -470,6 +489,9 @@ impl RubanEdition {
                     enregistrer = ui.button(RichText::new("Enregistrer").strong()).clicked();
                 });
             });
+        if a_editer.is_some() {
+            self.materiau_a_editer = a_editer;
+        }
         if !ouvert || annuler {
             self.editeur_type = None;
             return false;

@@ -456,6 +456,8 @@ pub struct RubanEdition {
     surface_identique: Option<(Outil, crate::modele::TypeCompose)>,
     /// Type composé en cours d'édition (fenêtre « Type de mur »).
     editeur_type: Option<EditeurType>,
+    /// Matériau dont la fenêtre doit s'ouvrir (double-clic dans l'éditeur de type).
+    materiau_a_editer: Option<String>,
 }
 
 /// Brouillon d'un type de mur composé : rien n'est écrit dans le projet avant

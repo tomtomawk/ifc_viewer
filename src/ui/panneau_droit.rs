@@ -62,6 +62,9 @@ impl ViewerApp {
             let mut copie = if self.ruban_edition.editeur_type_ouvert() { projet.clone() } else { crate::modele::Projet::default() };
             if self.ruban_edition.editeur_type_ouvert() && self.ruban_edition.editeur_type_mur(ui.ctx(), &mut copie) {
                 if let Err(e) = self.appliquer_projet(copie) { self.error = Some(e); }
+            } else if let Some(nom) = self.ruban_edition.prendre_materiau_a_editer() {
+                // double-clic sur un matériau dans l'éditeur de type : fenêtre Matériau
+                self.materiau_edite = Some(nom);
             } else if let Some(t) = self.ruban_edition.prendre_type_gabarit()
                 && let Some((projet, _)) = &self.natif
             {
