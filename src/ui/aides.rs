@@ -4,12 +4,34 @@ use super::*;
 /// Icône d'un style visuel : petit cube en perspective, tracé dans `r`.
 /// Icône du niveau de détail : un, deux ou trois traits, comme dans Revit.
 /// Icônes vectorielles : indépendantes des caractères disponibles dans la police.
-pub(super) fn icone_theme(p:&egui::Painter,r:egui::Rect,c:Color32) {
-    let centre=r.center();let rayon=r.width().min(r.height())*0.43;
-    let mut demi=vec![centre];
-    for k in 0..=24 {let a=-std::f32::consts::FRAC_PI_2 + std::f32::consts::PI*k as f32/24.;demi.push(centre+egui::vec2(a.cos(),a.sin())*rayon);}
-    p.add(egui::Shape::convex_polygon(demi,c,egui::Stroke::NONE));
-    p.circle_stroke(centre,rayon,egui::Stroke::new(1.4,c));
+/// Mode sombre : croissant de lune.
+pub(super) fn icone_lune(p:&egui::Painter,r:egui::Rect,c:Color32) {
+    let centre=r.center();let rayon=r.width().min(r.height())*0.42;
+    let decale=centre+egui::vec2(rayon*0.55,-rayon*0.35);
+    let mut contour=Vec::new();
+    for k in 0..=32 {
+        let a=std::f32::consts::TAU*k as f32/32.;
+        let q=centre+egui::vec2(a.cos(),a.sin())*rayon;
+        if (q-decale).length()>=rayon*0.85 {contour.push(q);}
+    }
+    p.add(egui::Shape::line(contour,egui::Stroke::new(1.4,c)));
+    let ext=|s:f32|{let d=(decale-centre).length();let a=((rayon*rayon+d*d-(rayon*0.85).powi(2))/(2.*rayon*d)).clamp(-1.,1.).acos();let b=(decale-centre).angle();(b-s*a,b+s*a)};
+    let (a0,a1)=ext(1.);
+    let p0=centre+egui::vec2(a0.cos(),a0.sin())*rayon;let p1=centre+egui::vec2(a1.cos(),a1.sin())*rayon;
+    let (u0,u1)=((p0-decale).angle(),(p1-decale).angle());
+    let mut fin=u1;if fin>u0 {fin-=std::f32::consts::TAU;}
+    let interieur:Vec<_>=(0..=16).map(|k|{let a=u0+(fin-u0)*k as f32/16.;decale+egui::vec2(a.cos(),a.sin())*rayon*0.85}).collect();
+    p.add(egui::Shape::line(interieur,egui::Stroke::new(1.4,c)));
+}
+
+/// Mode système : écran sur pied.
+pub(super) fn icone_moniteur(p:&egui::Painter,r:egui::Rect,c:Color32) {
+    let t=egui::Stroke::new(1.3,c);
+    let ecran=egui::Rect::from_min_max(r.left_top()+egui::vec2(0.,r.height()*0.1),r.right_bottom()-egui::vec2(0.,r.height()*0.3));
+    p.rect_stroke(ecran,1.5,t,egui::StrokeKind::Inside);
+    let x=r.center().x;
+    p.line_segment([egui::pos2(x,ecran.bottom()),egui::pos2(x,r.bottom()-1.)],t);
+    p.line_segment([egui::pos2(x-r.width()*0.25,r.bottom()-1.),egui::pos2(x+r.width()*0.25,r.bottom()-1.)],t);
 }
 
 pub(super) fn icone_soleil(p:&egui::Painter,r:egui::Rect,c:Color32) {

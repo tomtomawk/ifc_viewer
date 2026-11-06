@@ -94,6 +94,7 @@ impl Projet {
             let interdit = self.murs.iter().any(|x| set.contains(&x.id))
                 || self.ouvertures.iter().any(|x| set.contains(&x.id))
                 || self.barres.iter().any(|x| set.contains(&x.id))
+                || self.composants.iter().any(|x| set.contains(&x.id))
                 || self.escaliers.iter().any(|x| set.contains(&x.id))
                 || self.garde_corps.iter().any(|x| set.contains(&x.id))
                 || self.importes.iter().any(|x| set.contains(&x.id))
@@ -221,6 +222,16 @@ impl Projet {
                 *q = point(*q);
             }
             g.decalage += dz;
+        }
+        for c in self.composants.iter_mut().filter(|c| set.contains(&c.id)) {
+            c.position = point(c.position);
+            c.decalage += dz;
+            let (s, co) = c.rotation.to_radians().sin_cos();
+            let d = f.direction([co, s]);
+            c.rotation = d[1].atan2(d[0]).to_degrees();
+        }
+        for x in self.pieces.iter_mut().filter(|x| set.contains(&x.id)) {
+            x.point = point(x.point);
         }
         for b in &mut self.barres {
             if set.contains(&b.id) {

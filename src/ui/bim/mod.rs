@@ -203,6 +203,9 @@ pub(super) struct EtatBim {
     abscisse: f64,
     pub(super) barre: crate::modele::Barre,
     pub(super) depart_structure: Option<[f64; 2]>,
+    /// Composant à placer (type vide : type par défaut) et nom des pièces créées.
+    pub(super) composant: crate::modele::Composant,
+    pub(super) nom_piece: String,
     barre_editee: Option<crate::modele::Barre>,
     annotation_identique: Option<crate::modele::documentation::Annotation>,
     /// Suppression demandée depuis le panneau : exécutée à l'image suivante.
@@ -238,6 +241,8 @@ impl Default for EtatBim {
                 rotation: 0.0,
             },
             depart_structure: None,
+            composant: crate::modele::Composant { id: String::new(), nom: String::new(), type_composant: String::new(), niveau: String::new(), position: [0.0; 2], decalage: 0.0, rotation: 0.0 },
+            nom_piece: "Pièce".into(),
             barre_editee: None,
             annotation_identique: None,
             supprimer: false,
@@ -349,7 +354,7 @@ fn elements_natifs(p: &crate::modele::Projet) -> impl Iterator<Item = (&'static 
             .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
             .chain(p.terrains.iter().map(|x| ("terrain", &x.id)))
             .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
-            .chain(p.barres.iter().map(|x| ("barre", &x.id)))
+            .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id)))
                 .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
                 .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
             .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
@@ -385,6 +390,7 @@ impl ViewerApp {
             if !connus.contains(id)
                 && !p.contextes.contains_key(id)
                 && (p.barres.iter().any(|b| &b.id == id)
+                    || p.composants.iter().any(|b| &b.id == id)
                     || p.escaliers.iter().any(|e| &e.id == id)
                     || p.garde_corps.iter().any(|g| &g.id == id)
                     || p.ouvertures.iter().any(|o| &o.id == id))
@@ -470,6 +476,33 @@ impl ViewerApp {
             self.error = Some(e);
         }
     }
+    /// Place le composant de l'outil au point `position`, au niveau de la vue.
+    pub(super) fn placer_composant(&mut self, position: [f64; 2]) -> Result<(), String> {
+        let mut c = self.bim.composant.clone();
+        c.id.clear();
+        c.nom.clear();
+        c.position = position;
+        c.niveau = self.niveau_vue_native().ok_or("Composant : aucun niveau.")?;
+        let p = &self.natif.as_ref().ok_or("Aucun projet natif.")?.0;
+        // type par défaut : chargé au premier placement
+        if !p.types_composants.iter().any(|t| t.id == c.type_composant) {
+            if c.type_composant != crate::modele::elements::composant::type_table().id {
+                return Err("Type de composant introuvable.".into());
+            }
+            c.type_composant.clear();
+        }
+        self.executer_bim(crate::modele::edition::commandes::Commande::Composant { composant: c })?;
+        Ok(())
+    }
+
+    /// Crée une pièce au point `point` (contour détecté depuis les murs du niveau de la vue).
+    pub(super) fn placer_piece(&mut self, point: [f64; 2]) -> Result<(), String> {
+        let niveau = self.niveau_vue_native().ok_or("Pièce : aucun niveau.")?;
+        let piece = crate::modele::Piece { id: String::new(), nom: self.bim.nom_piece.clone(), numero: String::new(), niveau, point, contour: Vec::new() };
+        self.executer_bim(crate::modele::edition::commandes::Commande::Piece { piece })?;
+        Ok(())
+    }
+
     /// Réutilise les paramètres saisis, sans modifier le modèle tant que le placement n'est pas valide.
     pub(super) fn placer_structure(
         &mut self,
@@ -931,6 +964,57 @@ impl ViewerApp {
                         }
                     });
                 }
+                if let Some(original) = p.pieces.iter().find(|x| x.id == ids[0]) {
+                    let mut x = original.clone();
+                    ui.label(RichText::new("Pièce").strong());
+                    let mut change = false;
+                    egui::Grid::new("proprietes_piece").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                        ui.label("Nom");
+                        change |= ui.text_edit_singleline(&mut x.nom).changed();
+                        ui.end_row();
+                        ui.label("Numéro");
+                        change |= ui.text_edit_singleline(&mut x.numero).changed();
+                        ui.end_row();
+                        ui.label("Surface");
+                        ui.label(if x.fermee() { format!("{:.2} m²", x.aire() / 1e6) } else { "Non fermée".into() });
+                        ui.end_row();
+                        ui.label("Périmètre");
+                        ui.label(crate::config::options::unite().afficher(x.perimetre()));
+                        ui.end_row();
+                    });
+                    if change && !x.nom.trim().is_empty() && !x.numero.trim().is_empty() {
+                        commande = Some(Commande::Piece { piece: x });
+                    }
+                }
+                if let Some(original) = p.composants.iter().find(|x| x.id == ids[0]) {
+                    let mut x = original.clone();
+                    ui.label(RichText::new("Composant").strong());
+                    let mut change = false;
+                    egui::Grid::new("proprietes_composant").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                        ui.label("Nom");
+                        change |= ui.text_edit_singleline(&mut x.nom).changed();
+                        ui.end_row();
+                        ui.label("Type");
+                        change |= choix_type_composant(ui, "type_composant_selection", &mut x.type_composant, &p.types_composants);
+                        ui.end_row();
+                        ui.label("Position");
+                        ui.horizontal(|ui| {
+                            for v in &mut x.position {
+                                change |= ui.add(egui::DragValue::new(v).speed(10.0).dimensions()).changed();
+                            }
+                        });
+                        ui.end_row();
+                        ui.label("Décalage");
+                        change |= ui.add(egui::DragValue::new(&mut x.decalage).speed(10.0).dimensions()).changed();
+                        ui.end_row();
+                        ui.label("Rotation");
+                        change |= ui.add(egui::DragValue::new(&mut x.rotation).speed(1.0).suffix(" °")).changed();
+                        ui.end_row();
+                    });
+                    if change {
+                        commande = Some(Commande::Composant { composant: x });
+                    }
+                }
                 if let Some(original) = p.barres.iter().find(|b| b.id == ids[0]) {
                     if self
                         .bim
@@ -1026,6 +1110,44 @@ impl ViewerApp {
                         b.id.clear();
                         commande = Some(Commande::Barre { barre: b });
                     }
+                }
+                Some(Outil::Composant) => {
+                    let p = &self.natif.as_ref().unwrap().0;
+                    let mut types = p.types_composants.clone();
+                    let defaut = crate::modele::elements::composant::type_table();
+                    if !types.iter().any(|t| t.id == defaut.id) {
+                        types.insert(0, defaut.clone());
+                    }
+                    let c = &mut self.bim.composant;
+                    if !types.iter().any(|t| t.id == c.type_composant) {
+                        c.type_composant = types[0].id.clone();
+                    }
+                    ui.label(RichText::new("Composant").strong());
+                    egui::Grid::new("outil_composant").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                        ui.label("Type");
+                        choix_type_composant(ui, "type_composant_outil", &mut c.type_composant, &types);
+                        ui.end_row();
+                        ui.label("Rotation");
+                        ui.add(egui::DragValue::new(&mut c.rotation).speed(1.0).suffix(" °"));
+                        ui.end_row();
+                        ui.label("Décalage");
+                        ui.add(egui::DragValue::new(&mut c.decalage).speed(10.0).dimensions());
+                        ui.end_row();
+                    });
+                    ui.label("Cliquez dans la vue pour placer le composant (niveau de la vue) ; Espace : rotation de 90°.");
+                    if let Some((nom, largeur, hauteur, epaisseur, modele)) = self.famille.as_ref().map(|f| f.modele_courant()) {
+                        if ui.button("Créer un type depuis la famille éditée").on_hover_text(format!("« {nom} » : largeur {largeur:.0}, profondeur {epaisseur:.0}, hauteur {hauteur:.0} mm")).clicked() {
+                            commande = Some(Commande::TypeComposant { type_composant: crate::modele::TypeComposant { id: String::new(), nom, largeur, profondeur: epaisseur, hauteur, modele } });
+                        }
+                    }
+                }
+                Some(Outil::Piece) => {
+                    ui.label(RichText::new("Pièce").strong());
+                    ui.horizontal(|ui| {
+                        ui.label("Nom");
+                        ui.text_edit_singleline(&mut self.bim.nom_piece);
+                    });
+                    ui.label("Cliquez dans un espace fermé par des murs du niveau de la vue : le contour suit les faces intérieures ; le numéro s'incrémente.");
                 }
                 Some(Outil::Quadrillage) => {
                     points_ui(ui, &mut self.bim.points);
@@ -1183,6 +1305,19 @@ impl ViewerApp {
         }
         self.onglet_ruban != OngletRuban::Modifier
     }
+}
+
+/// Liste des types de composants ; vrai si le choix a changé.
+fn choix_type_composant(ui: &mut egui::Ui, salt: &str, choix: &mut String, types: &[crate::modele::TypeComposant]) -> bool {
+    let avant = choix.clone();
+    egui::ComboBox::from_id_salt(salt)
+        .selected_text(types.iter().find(|t| &t.id == choix).map_or("Choisir un type", |t| t.nom.as_str()))
+        .show_ui(ui, |ui| {
+            for t in types {
+                ui.selectable_value(choix, t.id.clone(), &t.nom);
+            }
+        });
+    *choix != avant
 }
 
 fn barre_ui(ui: &mut egui::Ui, b: &mut crate::modele::Barre, niveaux: &[crate::modele::Niveau]) {

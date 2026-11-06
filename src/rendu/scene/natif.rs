@@ -53,6 +53,12 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     for e in &projet.escaliers {
         entite(id_natif("escalier", &e.id), "IFCSTAIR", &e.id, &e.nom, 9)?;
     }
+    for t in &projet.types_composants {
+        entite(id_natif("type-composant", &t.id), "IFCFURNITURETYPE", &t.id, &t.nom, 10)?;
+    }
+    for c in &projet.composants {
+        entite(id_natif("composant", &c.id), "IFCFURNISHINGELEMENT", &c.id, &c.nom, 9)?;
+    }
     for g in &projet.garde_corps {
         entite(id_natif("garde_corps", &g.id), "IFCRAILING", &g.id, &g.nom, 9)?;
     }
@@ -211,6 +217,23 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         let tris = crate::modele::volumes::solides::barre(projet, b)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
         materiaux_parts.push(vec![None]);
         geoms.push(ProductGeom { id, parts: vec![Part { color: [0.65,0.68,0.72,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+    }
+    for c in &projet.composants {
+        let id = id_natif("composant", &c.id);
+        let parent = id_natif("niveau", &c.niveau);
+        model.parent.insert(id, parent);
+        model.children.entry(parent).or_default().push(id);
+        model.type_of.insert(id, id_natif("type-composant", &c.type_composant));
+        let couleur = projet.types_composants.iter().find(|t| t.id == c.type_composant).map_or([0.77, 0.63, 0.44, 1.0], |t| {
+            let [r, g, b] = t.modele.couleur.map(|x| x as f32 / 255.0);
+            [r, g, b, 1.0]
+        });
+        let parts: Vec<Part> = c.solides(projet)?.into_iter().map(|(materiau, tris)| Part {
+            color: materiau.as_ref().and_then(|m| projet.materiau(m)).map_or(couleur, |m| { let [r, g, b] = m.couleur.map(|x| x as f32 / 255.0); [r, g, b, 1.0] }),
+            tris: tris.into_iter().map(|t| t.map(|v| v * 0.001)).collect(),
+        }).collect();
+        materiaux_parts.push(vec![None; parts.len()]);
+        geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
     for e in &projet.escaliers {
         let id = id_natif("escalier", &e.id);

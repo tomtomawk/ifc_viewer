@@ -12,6 +12,17 @@ pub(super) struct Parametres {
     erreur: Option<String>,
 }
 impl ViewerApp {
+    /// Applique et enregistre le mode d'apparence (bouton de la barre haute, commande).
+    pub(super) fn changer_theme(&mut self, ctx: &egui::Context, theme: crate::config::options::ThemeInterface) {
+        self.options.theme_interface = theme;
+        if let Some(p) = &mut self.parametres {
+            p.brouillon.theme_interface = theme;
+        }
+        theme.appliquer(ctx);
+        if let Err(e) = self.options.sauver() {
+            self.error = Some(e);
+        }
+    }
     pub(super) fn ouvrir_parametres(&mut self) {
         if self.parametres.is_none() {
             self.parametres = Some(Parametres {
@@ -280,7 +291,7 @@ impl ViewerApp {
     fn executer_raccourci(&mut self, ctx: &egui::Context, action: &str) {
         // onglet Famille : les raccourcis du projet (masquer, isoler, copier…) agiraient
         // sur la maquette masquée
-        let famille = ["nouveau", "ouvrir", "fermer", "parametres", "enregistrer", "annuler", "retablir", "supprimer", "cadrer"];
+        let famille = ["nouveau", "ouvrir", "fermer", "parametres", "theme_suivant", "enregistrer", "annuler", "retablir", "supprimer", "cadrer"];
         if self.famille_active && self.famille.is_some() && !famille.contains(&action) {
             return;
         }
@@ -291,6 +302,7 @@ impl ViewerApp {
             "ouvrir" => self.open_dialog(ctx),
             "fermer" => self.fermer(),
             "parametres" => self.ouvrir_parametres(),
+            "theme_suivant" => self.changer_theme(ctx, self.options.theme_interface.suivant()),
             "enregistrer" => {
                 if self.famille_active && self.famille.is_some() {
                     self.action_famille = Some(editeur_famille::ActionFamille::Charger(

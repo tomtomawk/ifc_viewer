@@ -845,6 +845,26 @@ mod tests {
     }
 
     #[test]
+    fn isolant_suit_une_couche_courbe() {
+        // couronne de rayons 5000 à 5100 sur 90°, en 48 facettes
+        let mut t = Vec::new();
+        let p = |r: f64, a: f64| [r * a.cos(), r * a.sin()];
+        for k in 0..48 {
+            let (a0, a1) = (k as f64 / 48.0 * std::f64::consts::FRAC_PI_2, (k + 1) as f64 / 48.0 * std::f64::consts::FRAC_PI_2);
+            t.push([p(5000.0, a0), p(5100.0, a0), p(5100.0, a1)]);
+            t.push([p(5000.0, a0), p(5100.0, a1), p(5000.0, a1)]);
+        }
+        let s = super::ligne_isolation(&t);
+        assert!(s.len() > 100);
+        for p in s.iter().flatten() {
+            let r = p[0].hypot(p[1]);
+            assert!(r > 4999.0 && r < 5101.0, "hors couche {r}");
+        }
+        let angles: Vec<f64> = s.iter().flatten().map(|p| p[1].atan2(p[0])).collect();
+        assert!(angles.iter().any(|a| *a < 0.1) && angles.iter().any(|a| *a > 1.47), "motif incomplet");
+    }
+
+    #[test]
     fn isolant_tres_mince_et_long_n_explose_pas() {
         let s = super::ligne_isolation(&rect(0.0, 0.0, 30000.0, 1.0));
         assert!(s.is_empty());

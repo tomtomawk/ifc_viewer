@@ -6,7 +6,84 @@ const BOUCLES_ISOLANT_MAX: f64 = 2000.0;
 /// Ligne d'isolant en série de S (symbole traditionnel) d'une région de coupe (triangles
 /// 2D) : chaque morceau connexe est traité seul, le motif suit sa plus longue face.
 pub fn ligne_isolation(tris: &[[[f64; 2]; 3]]) -> Vec<[[f64; 2]; 2]> {
-    composantes(tris).iter().flat_map(|c| ligne_isolation_morceau(c)).collect()
+    composantes(tris).iter().flat_map(|c| match centre_courbure(c) {
+        Some(o) => ligne_isolation_courbe(c, o),
+        None => ligne_isolation_morceau(c, None),
+    }).collect()
+}
+
+/// Arêtes du contour d'un morceau (portées par un seul triangle).
+fn contour_morceau(tris: &[[[f64; 2]; 3]]) -> Vec<(glam::DVec2, glam::DVec2)> {
+    use glam::DVec2;
+    let cle = |p: DVec2| ((p.x * 100.0).round() as i64, (p.y * 100.0).round() as i64);
+    let mut aretes: std::collections::HashMap<((i64, i64), (i64, i64)), (usize, DVec2, DVec2)> = std::collections::HashMap::new();
+    for t in tris {
+        let t = t.map(DVec2::from_array);
+        for k in 0..3 {
+            let (a, b) = (t[k], t[(k + 1) % 3]);
+            let (ka, kb) = (cle(a), cle(b));
+            let k = if ka <= kb { (ka, kb) } else { (kb, ka) };
+            aretes.entry(k).or_insert((0, a, b)).0 += 1;
+        }
+    }
+    aretes.values().filter(|(n, _, _)| *n == 1).map(|(_, a, b)| (*a, *b)).collect()
+}
+
+/// Centre d'une couche courbe (secteur de couronne) : point commun des médiatrices des
+/// arêtes de ses faces ; None pour une couche droite.
+fn centre_courbure(tris: &[[[f64; 2]; 3]]) -> Option<[f64; 2]> {
+    use glam::{DMat2, DVec2};
+    let contour = contour_morceau(tris);
+    if contour.len() < 8 {
+        return None;
+    }
+    // médiatrice de (a, b) : n·x = n·m, n = (b − a) normé
+    let droites: Vec<(DVec2, f64, f64)> = contour.iter().filter_map(|(a, b)| {
+        let n = (*b - *a).try_normalize()?;
+        Some((n, n.dot((*a + *b) * 0.5), a.distance(*b)))
+    }).collect();
+    let resoudre = |garde: &dyn Fn(&(DVec2, f64, f64)) -> bool| -> Option<DVec2> {
+        let (mut m, mut v) = (DMat2::ZERO, DVec2::ZERO);
+        for d in droites.iter().filter(|d| garde(d)) {
+            m += DMat2::from_cols(d.0 * d.0.x, d.0 * d.0.y);
+            v += d.0 * d.1;
+        }
+        (m.determinant().abs() > 1e-6 * m.x_axis.x.max(m.y_axis.y).powi(2).max(1e-12)).then(|| m.inverse() * v)
+    };
+    let mut o = resoudre(&|_| true)?;
+    let taille = contour.iter().map(|(a, b)| a.distance(*b)).sum::<f64>();
+    for _ in 0..3 {
+        let tol = 1e-3 * taille.max(1.0);
+        o = resoudre(&|d| (d.0.dot(o) - d.1).abs() < tol.max(1e-6))?;
+    }
+    // faces sur deux cercles : chaque sommet à l'un des deux rayons
+    let r: Vec<f64> = contour.iter().flat_map(|(a, b)| [a.distance(o), b.distance(o)]).collect();
+    let (r0, r1) = r.iter().fold((f64::MAX, f64::MIN), |(a, b), x| (a.min(*x), b.max(*x)));
+    let e = r1 - r0;
+    if !(e > 1e-6) || r0 < e || r0 > 1e3 * taille {
+        return None;
+    }
+    let sur_cercle = r.iter().filter(|x| (*x - r0).abs() < 0.02 * e || (*x - r1).abs() < 0.02 * e).count();
+    (sur_cercle == r.len()).then_some(o.to_array())
+}
+
+/// Ligne d'isolant d'une couche courbe : motif tracé en coordonnées polaires (abscisse le
+/// long du rayon moyen, ordonnée radiale) puis ramené dans le plan.
+fn ligne_isolation_courbe(tris: &[[[f64; 2]; 3]], o: [f64; 2]) -> Vec<[[f64; 2]; 2]> {
+    use glam::DVec2;
+    let o = DVec2::from_array(o);
+    let pts: Vec<DVec2> = tris.iter().flatten().map(|p| DVec2::from_array(*p)).collect();
+    let g = pts.iter().copied().sum::<DVec2>() / pts.len().max(1) as f64;
+    let reference = (g - o).to_angle();
+    let rm = pts.iter().map(|p| p.distance(o)).sum::<f64>() / pts.len().max(1) as f64;
+    let vers_polaire = |p: [f64; 2]| {
+        let d = DVec2::from_array(p) - o;
+        let a = (d.to_angle() - reference + std::f64::consts::PI).rem_euclid(std::f64::consts::TAU) - std::f64::consts::PI;
+        [a * rm, d.length()]
+    };
+    let depuis_polaire = |q: [f64; 2]| (o + DVec2::from_angle(reference + q[0] / rm) * q[1]).to_array();
+    let polaires: Vec<_> = tris.iter().map(|t| t.map(vers_polaire)).collect();
+    ligne_isolation_morceau(&polaires, Some(DVec2::X)).into_iter().map(|s| s.map(depuis_polaire)).collect()
 }
 
 /// Regroupe les triangles qui partagent une arête (morceaux disjoints d'une même couche).
@@ -40,7 +117,8 @@ pub(super) fn composantes(tris: &[[[f64; 2]; 3]]) -> Vec<Vec<[[f64; 2]; 3]>> {
     groupes.into_values().collect()
 }
 
-pub(super) fn ligne_isolation_morceau(tris: &[[[f64; 2]; 3]]) -> Vec<[[f64; 2]; 2]> {
+/// `direction` : sens du motif imposé (couche courbe dépliée) ; None : plus longue face.
+pub(super) fn ligne_isolation_morceau(tris: &[[[f64; 2]; 3]], direction: Option<glam::DVec2>) -> Vec<[[f64; 2]; 2]> {
     use glam::DVec2;
     let pts: Vec<DVec2> = tris.iter().flatten().map(|p| DVec2::from_array(*p)).collect();
     if pts.len() < 3 {
@@ -50,22 +128,11 @@ pub(super) fn ligne_isolation_morceau(tris: &[[[f64; 2]; 3]]) -> Vec<[[f64; 2]; 
     // direction : plus long côté du contour (arête portée par un seul triangle). La
     // covariance des sommets est faussée par la triangulation (diagonales, doublons) et
     // inclinait le motif dans la couche.
-    let cle = |p: DVec2| ((p.x * 100.0).round() as i64, (p.y * 100.0).round() as i64);
-    let mut aretes: std::collections::HashMap<((i64, i64), (i64, i64)), (usize, DVec2, DVec2)> = std::collections::HashMap::new();
-    for t in tris {
-        let t = t.map(DVec2::from_array);
-        for k in 0..3 {
-            let (a, b) = (t[k], t[(k + 1) % 3]);
-            let (ka, kb) = (cle(a), cle(b));
-            let k = if ka <= kb { (ka, kb) } else { (kb, ka) };
-            aretes.entry(k).or_insert((0, a, b)).0 += 1;
-        }
-    }
-    let contour: Vec<(DVec2, DVec2)> = aretes.values().filter(|(n, _, _)| *n == 1).map(|(_, a, b)| (*a, *b)).collect();
+    let contour = contour_morceau(tris);
     let Some(&(fa, fb)) = contour.iter().max_by(|x, y| x.0.distance(x.1).total_cmp(&y.0.distance(y.1))) else {
         return Vec::new();
     };
-    let Some(u) = (fb - fa).try_normalize() else {
+    let Some(u) = direction.or_else(|| (fb - fa).try_normalize()) else {
         return Vec::new();
     };
     let v = u.perp();
@@ -79,7 +146,11 @@ pub(super) fn ligne_isolation_morceau(tris: &[[[f64; 2]; 3]]) -> Vec<[[f64; 2]; 
     let delta = perimetre * perimetre / 4.0 - 4.0 * aire;
     let e = if delta >= 0.0 { 0.5 * (perimetre / 2.0 - delta.sqrt()) } else { perimetre / 4.0 };
     // Faces : la plus longue arête, et sa parallèle à e vers l'intérieur.
-    let face = (fa - c).dot(v);
+    let face = if direction.is_some() {
+        pts.iter().map(|p| (*p - c).dot(v)).fold(f64::MAX, f64::min)
+    } else {
+        (fa - c).dot(v)
+    };
     let (v0, v1) = if face <= 0.0 { (face, face + e) } else { (face - e, face) };
     let (mut u0, mut u1) = (f64::MAX, f64::MIN);
     for p in &pts {

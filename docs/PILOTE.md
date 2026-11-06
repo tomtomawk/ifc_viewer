@@ -61,7 +61,8 @@ zone de coupe sont en m. Les angles de caméra et de pente sont en degrés.
 terrain, limite_propriete, coordonnees_origine, barre, escalier, garde_corps,
 modifier_vue, modifier_quadrillage, niveau, quadrillage, annoter, feuille,
 nomenclature, modifier_niveau, ouverture, deplacer, copier, tourner, aligner,
-ajuster, actualiser_type, attacher, priorite_jonction, supprimer, contour, tremie.
+ajuster, actualiser_type, attacher, priorite_jonction, supprimer, contour, tremie,
+piece, composant, type_composant.
 Les champs et types sont ceux de `src/modele/edition/commandes/mod.rs`.
 
 Pour les autres propriétés (types, matériaux, plumes, motifs, phases, variantes,
@@ -96,7 +97,8 @@ pour déplacer, copier, supprimer et régler les ouvertures.
 
 `outil <nom>` active tous les outils opérationnels du ruban :
 niveau, quadrillage, mur, terrain, limite_propriete, dalle, sol, plafond, toiture,
-poteau, poutre, escalier, garde_corps, ouverture, deplacer, copier, tourner, aligner,
+poteau, poutre, escalier, garde_corps, ouverture, composant, piece, deplacer, copier,
+tourner, aligner,
 ajuster, modifier_trace, creer_identique, supprimer, cadrer, isoler, masquer, texte,
 cote, etiquette, ligne, polyligne, spline, cercle, arc, zone, vue_plan, coupe,
 vue_coupe, feuilles, nomenclatures. `outil aucun` annule l'outil.
@@ -185,6 +187,12 @@ une poignée, de contrôler la référence acquise et de relâcher ou annuler.
 le survol d'une extrémité prépare l'aperçu et un second clic valide.
 `ajuster_etat` expose en lecture seule la référence, le survol, l'aperçu et
 l'éventuel motif de refus, pour contrôler la saisie graphique sans modifier le projet.
+
+`ecran <x> <y>` donne la position écran d'un point du plan (mm) à l'altitude du niveau
+de la vue. `composant_outil [JSON]` lit ou règle le composant à placer
+(`type_composant`, `rotation`, `decalage`) et liste les types ; Espace (`touche Space`)
+tourne l'aperçu de 90°. L'outil `piece` crée une pièce au clic dans un espace fermé
+par des murs (refus si le contour n'est pas fermé).
 
 `ajuster_angle oui|non` active la case du raccord en angle ; la transaction métier
 `ajuster_angle` reçoit `id`, `reference`, `fin` et `fin_reference` et modifie les deux

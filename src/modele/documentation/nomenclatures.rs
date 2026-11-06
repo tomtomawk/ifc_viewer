@@ -53,6 +53,12 @@ pub fn tableau(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, String>
             geometrie::volume(&solides::barre(p, b)?) / 1e9,
         );
     }
+    for c in &p.composants {
+        ajouter("Composants", if n.regrouper { c.nom.clone() } else { format!("{} ({})", c.nom, c.id) }, 0.0);
+    }
+    for x in &p.pieces {
+        ajouter("Pièces", if n.regrouper { x.nom.clone() } else { format!("{} {} ({})", x.numero, x.nom, x.id) }, x.aire() / 1e6);
+    }
     for o in &p.ouvertures {
         ajouter(
             match o.genre {
@@ -144,6 +150,37 @@ pub(super) fn tableau_colonnes(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<S
             epaisseur: None,
             surface: None,
             volume: Some(geometrie::volume(&solides::barre(p, b)?) / 1e9),
+            parametres: BTreeMap::new(),
+        });
+    }
+    for c in &p.composants {
+        let t = p.types_composants.iter().find(|t| t.id == c.type_composant);
+        lignes.push(LigneQuantite {
+            categorie: "Composants".into(),
+            type_nom: t.map_or(String::new(), |t| t.nom.clone()),
+            element: format!("{} ({})", c.nom, c.id),
+            niveau: nom_niveau(&c.niveau),
+            longueur: t.map(|t| t.largeur),
+            hauteur: t.map(|t| t.hauteur),
+            largeur: t.map(|t| t.profondeur),
+            epaisseur: None,
+            surface: None,
+            volume: None,
+            parametres: BTreeMap::new(),
+        });
+    }
+    for x in &p.pieces {
+        lignes.push(LigneQuantite {
+            categorie: "Pièces".into(),
+            type_nom: x.nom.clone(),
+            element: format!("{} {} ({})", x.numero, x.nom, x.id),
+            niveau: nom_niveau(&x.niveau),
+            longueur: Some(x.perimetre()),
+            hauteur: None,
+            largeur: None,
+            epaisseur: None,
+            surface: Some(x.aire() / 1e6),
+            volume: None,
             parametres: BTreeMap::new(),
         });
     }

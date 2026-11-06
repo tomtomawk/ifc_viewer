@@ -37,6 +37,15 @@ impl ViewerApp {
             }
         } else { None };
         if structure != Some(crate::modele::GenreBarre::Poutre) { self.bim.depart_structure = None; }
+        // Composant (vrai) ou Pièce (faux) : un clic place l'élément au niveau de la vue
+        let placement = if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() {
+            match self.ruban_edition.outil() {
+                Some(crate::ui::ruban::Outil::Composant) => Some(true),
+                Some(crate::ui::ruban::Outil::Piece) => Some(false),
+                _ => None,
+            }
+        } else { None };
+        let altitude_placement = self.altitude_vue_native() + if placement == Some(true) { self.bim.composant.decalage } else { 0.0 };
         let altitude_structure = structure.and_then(|_| {
             let p = &self.natif.as_ref()?.0;
             Some(p.niveau(&self.bim.barre.niveau)?.altitude + self.bim.barre.debut[2])
@@ -44,7 +53,7 @@ impl ViewerApp {
         // Déplacer, Copier, Tourner, Aligner : socle commun (transformer.rs)
         self.suivre_transformation();
         let deplacement = self.transfo.outil;
-        let mode_trace = mode_ajuster || mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || deplacement.is_some() || self.outil_dessin().is_some() || self.dessin2d.edition_contour.is_some() || self.alignement_plan || self.orientation_nord_en_cours;
+        let mode_trace = mode_ajuster || mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || placement.is_some() || deplacement.is_some() || self.outil_dessin().is_some() || self.dessin2d.edition_contour.is_some() || self.alignement_plan || self.orientation_nord_en_cours;
         // axe du mur sélectionné : une extrémité saisie se déplace (accrochages du tracé)
         let edition_arc=self.souris_arc_mur(ui,rect,&resp,mode_trace);
         let axe = if mode_trace || edition_arc { None } else { self.axe_selection() };
@@ -251,6 +260,19 @@ impl ViewerApp {
                         self.error = Some(if altitude_structure.is_none() { "Choisissez un niveau pour la structure." } else { "Le plan de placement est parallèle à la vue. Utilisez une vue de dessus ou une vue 3D inclinée." }.into());
                     }
                 }
+            } else if let Some(composant) = placement {
+                if composant && ui.memory(|m| m.focused().is_none()) && ui.input(|i| i.key_pressed(egui::Key::Space)) {
+                    self.bim.composant.rotation = (self.bim.composant.rotation + 90.0).rem_euclid(360.0);
+                }
+                if resp.clicked()
+                    && let Some((point, _)) = resp.interact_pointer_pos().and_then(|q| self.point_tracage(q, rect, false, None, altitude_placement))
+                {
+                    let r = if composant { self.placer_composant(point) } else { self.placer_piece(point) };
+                    match r {
+                        Ok(()) => self.status = format!("{} créé(e) — Ctrl+Z pour annuler.", if composant { "Composant" } else { "Pièce" }),
+                        Err(e) => self.error = Some(e),
+                    }
+                }
             } else if let Some(outil) = deplacement {
                 // élément sous le curseur : surligné avant le clic, cible d'Aligner
                 let cible = |app: &Self, q: egui::Pos2| pick(app, q).and_then(|(obj, _)| app.scene.as_ref()?.objects.get(obj as usize).map(|o| o.id)).and_then(|id| app.cle_native(app.cible_clic(id)));
@@ -409,15 +431,40 @@ impl ViewerApp {
                 }
             }
         }
+        if let Some(composant) = placement {
+            let painter = ui.painter().with_clip_rect(rect);
+            let couleur = Color32::from_rgb(55, 130, 200);
+            let texte = if composant { "Composant : cliquer pour placer · Espace : rotation de 90° · molette : zoom" } else { "Pièce : cliquer dans un espace fermé par des murs" };
+            painter.text(rect.left_top()+egui::vec2(12.0,self.dessin2d.bas_barre.max(4.0)+8.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
+            if let Some((p, accroche)) = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, false, None, altitude_placement)) {
+                if let Some(q) = self.ecran_plan(rect, p, altitude_placement) { marqueur(&painter, q, accroche, couleur, Color32::from_rgb(230, 120, 20)); }
+                if composant {
+                    let c = &self.bim.composant;
+                    let defaut = crate::modele::elements::composant::type_table();
+                    let t = self.natif.as_ref().and_then(|(x, _)| x.types_composants.iter().find(|t| t.id == c.type_composant)).unwrap_or(&defaut);
+                    let (s, co) = c.rotation.to_radians().sin_cos();
+                    let (u, n) = ([co, s], [-s, co]);
+                    let coin = |a: f64, b: f64| [p[0] + u[0] * a * t.largeur / 2.0 + n[0] * b * t.profondeur / 2.0, p[1] + u[1] * a * t.largeur / 2.0 + n[1] * b * t.profondeur / 2.0];
+                    let coins: Vec<egui::Pos2> = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)].iter().filter_map(|&(a, b)| self.ecran_plan(rect, coin(a, b), altitude_placement)).collect();
+                    if coins.len() == 4 {
+                        painter.add(egui::Shape::closed_line(coins, egui::Stroke::new(2.0, couleur)));
+                    }
+                    // sens de la famille : trait vers l'avant (Y négatif, côté « Intérieur »)
+                    if let (Some(a), Some(b)) = (self.ecran_plan(rect, p, altitude_placement), self.ecran_plan(rect, coin(0.0, -1.0), altitude_placement)) {
+                        painter.line_segment([a, b], egui::Stroke::new(1.0, couleur));
+                    }
+                }
+            }
+        }
         self.dessiner_cadenas(ui, rect, None);
         let temporaire = !self.masques_utilisateur.is_empty() || self.isolement_utilisateur;
         if self.afficher_masques || temporaire {
             let couleur = if self.afficher_masques { Color32::from_rgb(235, 50, 190) } else { Color32::from_rgb(0, 150, 150) };
             ui.painter().rect_stroke(rect.shrink(2.0), 0.0, egui::Stroke::new(3.0, couleur), egui::StrokeKind::Inside);
             let texte = if self.afficher_masques { "ÉLÉMENTS MASQUÉS · clic pour réafficher · Échap pour sortir" } else { "VISIBILITÉ TEMPORAIRE" };
-            // croix en haut du cadre, au centre (le coin droit porte le repère du plan) :
+            // croix dans le coin bas droit du cadre (le haut porte barres et repère du plan) :
             // quitter le mode
-            let croix = egui::Rect::from_center_size(egui::pos2(rect.center().x, rect.top() + 18.0), egui::vec2(24.0, 24.0));
+            let croix = egui::Rect::from_center_size(egui::pos2(rect.right() - 20.0, rect.bottom() - 20.0), egui::vec2(24.0, 24.0));
             ui.painter().text(egui::pos2(croix.left() - 8.0, croix.center().y), egui::Align2::RIGHT_CENTER, texte, egui::FontId::proportional(12.0), couleur);
             let r = ui.interact(croix, egui::Id::unique("quitter_visibilite_temporaire"), Sense::click()).on_hover_text(if self.afficher_masques { "Quitter l'affichage des éléments masqués" } else { "Quitter le masquage temporaire : tout réafficher" });
             let fond = if r.hovered() { couleur } else { Color32::from_rgba_unmultiplied(255, 255, 255, 230) };

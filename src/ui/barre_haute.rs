@@ -98,20 +98,25 @@ impl ViewerApp {
         let theme_x=barre.right()-if natif {36.0}else{174.0};
         let zone_theme=egui::Rect::from_min_size(egui::pos2(theme_x,barre.top()),egui::vec2(34.0,barre.height()));
         ui.scope_builder(egui::UiBuilder::new().id_salt("theme_fenetre").max_rect(zone_theme).layout(egui::Layout::left_to_right(Align::Center)),|ui| {
-            let mut theme=self.options.theme_interface;
-            let (reponse,_) = egui::containers::menu::MenuButton::from_button(egui::Button::new("").min_size(egui::vec2(26.0,24.0))).ui(ui,|ui| {
-                for (valeur,nom) in [(crate::config::options::ThemeInterface::Clair,"Clair"),(crate::config::options::ThemeInterface::Sombre,"Sombre"),(crate::config::options::ThemeInterface::Systeme,"Système")] {
-                    if ui.selectable_value(&mut theme,valeur,nom).clicked() {ui.close();}
+            // Comme photocraft : l'icône montre le mode, le clic passe au suivant,
+            // le clic droit propose les trois modes.
+            let actuel=self.options.theme_interface;
+            let reponse=ui.add(egui::Button::new("").min_size(egui::vec2(26.0,24.0)));
+            let (r,c)=(reponse.rect.shrink(5.0),ui.visuals().text_color());
+            match actuel {
+                crate::config::options::ThemeInterface::Systeme=>icone_moniteur(ui.painter(),r,c),
+                crate::config::options::ThemeInterface::Clair=>icone_soleil(ui.painter(),r,c),
+                crate::config::options::ThemeInterface::Sombre=>icone_lune(ui.painter(),r,c),
+            }
+            let mut choix=None;
+            if reponse.clicked() {choix=Some(actuel.suivant());}
+            reponse.context_menu(|ui| {
+                for t in crate::config::options::ThemeInterface::TOUS {
+                    if ui.selectable_label(t==actuel,t.nom()).clicked() {choix=Some(t);ui.close();}
                 }
             });
-            icone_theme(ui.painter(),reponse.rect.shrink(5.0),ui.visuals().text_color());
-            reponse.on_hover_text("Thème de l'interface");
-            if theme!=self.options.theme_interface {
-                self.options.theme_interface=theme;
-                if let Some(p)=&mut self.parametres {p.brouillon.theme_interface=theme;}
-                theme.appliquer(&ctx);
-                if let Err(e)=self.options.sauver() {self.error=Some(e);}
-            }
+            reponse.on_hover_text(format!("Mode d'apparence : {} (clic : {})",actuel.nom(),actuel.suivant().nom()));
+            if let Some(t)=choix {self.changer_theme(&ctx,t);}
         });
         if natif {
             zones_deplacement.clear();

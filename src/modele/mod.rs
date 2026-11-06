@@ -16,6 +16,8 @@ pub mod famille;
 pub mod murs;
 pub mod volumes;
 pub use elements::escalier::{Escalier, GardeCorps, Remplissage};
+pub use elements::composant::{Composant, TypeComposant};
+pub use elements::piece::Piece;
 // Noms courts des sous-modules, visibles dans tout `modele` (par `use crate::modele::*`).
 #[allow(unused_imports)]
 use {
@@ -80,6 +82,14 @@ pub struct Projet {
     pub barres: Vec<Barre>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub escaliers: Vec<Escalier>,
+    /// Pièces : point placé et contour calculé depuis les murs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pieces: Vec<Piece>,
+    /// Types de composants : familles modélisées chargées (mobilier, équipements).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub types_composants: Vec<TypeComposant>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub composants: Vec<Composant>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub garde_corps: Vec<GardeCorps>,
     /// Contexte des éléments dont le format ne porte pas ces propriétés directement.

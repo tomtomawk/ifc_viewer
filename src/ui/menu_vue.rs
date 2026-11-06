@@ -28,6 +28,8 @@ pub(super) fn categorie(p: &crate::modele::Projet, id: &str) -> &'static str {
     else if p.dalles.iter().any(|x| x.id == id) { "Dalles" }
     else if p.ouvertures.iter().any(|x| x.id == id) { "Ouvertures" }
     else if p.barres.iter().any(|x| x.id == id) { "Structures" }
+    else if p.composants.iter().any(|x| x.id == id) { "Composants" }
+    else if p.pieces.iter().any(|x| x.id == id) { "Pièces" }
     else if p.escaliers.iter().any(|x| x.id == id) || p.garde_corps.iter().any(|x| x.id == id) { "Escaliers et garde-corps" }
     else if p.terrains.iter().any(|x| x.id == id) || p.limites_propriete.iter().any(|x| x.id == id) { "Site" }
     else { "Autres" }

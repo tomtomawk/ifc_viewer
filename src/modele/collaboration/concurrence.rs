@@ -97,6 +97,9 @@ fn physique(k: &str) -> bool {
             | "dalles"
             | "terrains"
             | "barres"
+            | "pieces"
+            | "composants"
+            | "types_composants"
             | "escaliers"
             | "garde_corps"
             | "importes"
@@ -267,6 +270,16 @@ fn emprise(k: &str, v: &Value, o: &Objets) -> Option<Zone> {
             points(v.get("debut")?, &mut p);
             points(v.get("fin")?, &mut p);
             marge += v.get("largeur")?.as_f64()?.max(v.get("hauteur")?.as_f64()?);
+        }
+        "composants" => {
+            points(v.get("position")?, &mut p);
+            marge += 3000.0;
+        }
+        "pieces" => {
+            points(v.get("point")?, &mut p);
+            if let Some(c) = v.get("contour") {
+                points(c, &mut p);
+            }
         }
         "escaliers" => {
             points(v.get("trace")?, &mut p);

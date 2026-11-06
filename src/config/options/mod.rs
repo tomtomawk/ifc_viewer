@@ -95,6 +95,10 @@ impl<'a> Dimensions<'a> for eframe::egui::DragValue<'a> {
 #[serde(rename_all="snake_case")]
 pub enum ThemeInterface { Clair, Sombre, #[default] Systeme }
 impl ThemeInterface {
+    /// Cycle du bouton de la barre haute, comme photocraft : Système → Clair → Sombre → Système.
+    pub fn suivant(self)->Self {match self {Self::Systeme=>Self::Clair,Self::Clair=>Self::Sombre,Self::Sombre=>Self::Systeme}}
+    pub fn nom(self)->&'static str {match self {Self::Clair=>"Clair",Self::Sombre=>"Sombre",Self::Systeme=>"Système"}}
+    pub const TOUS:[Self;3]=[Self::Systeme,Self::Clair,Self::Sombre];
     pub fn appliquer(self,ctx:&eframe::egui::Context) {
         ctx.set_theme(match self {
             Self::Clair=>eframe::egui::ThemePreference::Light,

@@ -119,10 +119,10 @@ def run(exe, captures):
                 clic(x,y);assert len(murs())==avant
             clic(6000,8500)
             assert len(murs())==avant+2 and all(m["axe"]["forme"]=="arc" for m in murs()[-2:])
-            # Le mode arc par trois points reste disponible.
+            # Arc : début, fin, puis courbure.
             commande("mur_trace","arc")
             avant=len(murs())
-            for x,y in [(-6000,-5000),(-4000,-3000),(-2000,-5000)]:clic(x,y)
+            for x,y in [(-6000,-5000),(-2000,-5000),(-4000,-3000)]:clic(x,y)  # début, fin, courbure
             assert len(murs())==avant+1 and murs()[-1]["axe"]["forme"]=="arc"
             commande("outil","aucun")
             commande("quitter","abandonner");p.wait(timeout=15)

@@ -70,6 +70,16 @@ impl ViewerApp {
 
     /// Altitude (mm) du plan de tracé d'une vue native : niveau du plan ouvert, sinon le
     /// premier niveau.
+    /// Niveau de la vue ouverte (sinon le premier niveau).
+    pub(super) fn niveau_vue_native(&self) -> Option<String> {
+        let (projet, _) = self.natif.as_ref()?;
+        let etage = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)?.etage);
+        etage
+            .and_then(|e| projet.niveaux.iter().find(|n| scene::id_natif("niveau", &n.id) == e))
+            .or(projet.niveaux.first())
+            .map(|n| n.id.clone())
+    }
+
     pub(super) fn altitude_vue_native(&self) -> f64 {
         let Some((projet, _)) = &self.natif else { return 0.0 };
         let etage = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)?.etage);
@@ -377,8 +387,11 @@ impl ViewerApp {
         let Some(scene) = &self.scene else { return Vec::new() };
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
         let mut rectangles: std::collections::HashMap<u64, egui::Rect> = std::collections::HashMap::new();
+        // pièces : seule l'étiquette se vise (l'aplat laisse sélectionner les murs)
+        let pieces: std::collections::HashSet<u64> = p.pieces.iter().map(|x| scene::id_natif("annotation", &x.id)).collect();
         for prim in crate::modele::documentation::annotations(p, vue) {
             let Some(id) = prim.element else { continue };
+            if pieces.contains(&id) && matches!(prim.forme, crate::noyau::trace2d::Forme::Surface(_)) { continue; }
             let points: Vec<glam::DVec3> = match prim.forme {
                 crate::noyau::trace2d::Forme::Polyligne { points, .. } => points,
                 crate::noyau::trace2d::Forme::Segments(s) => s.into_iter().flatten().collect(),
@@ -392,7 +405,7 @@ impl ViewerApp {
                 rectangles.entry(id).and_modify(|r| r.extend_with(q)).or_insert(egui::Rect::from_min_max(q,q));
             }
         }
-        p.annotations.iter().filter_map(|a| rectangles.remove(&scene::id_natif("annotation", &a.id)).map(|r| (a.id.clone(),r.expand(2.0)))).collect()
+        p.annotations.iter().map(|a| &a.id).chain(p.pieces.iter().map(|x| &x.id)).filter_map(|id| rectangles.remove(&scene::id_natif("annotation", id)).map(|r| (id.clone(),r.expand(2.0)))).collect()
     }
 
     pub(super) fn repere_coupe_proche(&self, rect: egui::Rect, q: egui::Pos2, z: f64) -> Option<String> {

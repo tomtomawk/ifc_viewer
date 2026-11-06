@@ -34,6 +34,29 @@ impl ViewerApp {
             })());
         }
         if nom=="volets_etat" {return Some(Ok(self.etat_volets()));}
+        if nom=="ecran" {
+            return Some((|| {
+                let v: Vec<f64> = argument.split_whitespace().map(|s| s.parse::<f64>().map_err(|e| e.to_string())).collect::<Result<_, _>>()?;
+                let [x, y] = v[..] else { return Err("ecran <x> <y> (mm)".into()) };
+                let q = self.ecran_plan(self.rect_vue, [x, y], self.altitude_vue_native()).ok_or("Point hors de la vue")?;
+                Ok(json!({"ecran": [q.x, q.y]}))
+            })());
+        }
+        if nom=="composant_outil" {
+            return Some((|| {
+                if !argument.trim().is_empty() {
+                    let v: Value = serde_json::from_str(argument).map_err(|e| e.to_string())?;
+                    let c = &mut self.bim.composant;
+                    if let Some(t) = v.get("type_composant").and_then(Value::as_str) { c.type_composant = t.into(); }
+                    if let Some(r) = v.get("rotation").and_then(Value::as_f64) { c.rotation = r; }
+                    if let Some(d) = v.get("decalage").and_then(Value::as_f64) { c.decalage = d; }
+                }
+                let mut types: Vec<Value> = self.natif.as_ref().map(|(p, _)| p.types_composants.iter().map(|t| json!({"id": t.id, "nom": t.nom})).collect()).unwrap_or_default();
+                let defaut = crate::modele::elements::composant::type_table();
+                if !types.iter().any(|t| t["id"] == defaut.id.as_str()) { types.insert(0, json!({"id": defaut.id, "nom": defaut.nom})); }
+                Ok(json!({"composant": self.bim.composant, "types": types}))
+            })());
+        }
         if nom=="volets_retablir" {self.retablir_volets();return Some(Ok(self.etat_volets()));}
         if nom=="ajuster_angle" {
             return Some((|| {
@@ -524,6 +547,8 @@ impl ViewerApp {
             "escalier" => (O::Escalier, OngletRuban::Modeliser),
             "garde_corps" => (O::GardeCorps, OngletRuban::Modeliser),
             "ouverture" => (O::Ouverture, OngletRuban::Modeliser),
+            "composant" => (O::Composant, OngletRuban::Modeliser),
+            "piece" => (O::Piece, OngletRuban::Modeliser),
             "deplacer" => (O::Deplacer, OngletRuban::Modifier),
             "copier" => (O::Copier, OngletRuban::Modifier),
             "tourner" => (O::Tourner, OngletRuban::Modifier),

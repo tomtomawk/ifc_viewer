@@ -14,6 +14,8 @@ impl Projet {
             .chain(self.terrains.iter().map(|x| &x.id))
             .chain(self.limites_propriete.iter().map(|x| &x.id))
             .chain(self.barres.iter().map(|x| &x.id))
+            .chain(self.pieces.iter().map(|x| &x.id))
+            .chain(self.composants.iter().map(|x| &x.id))
             .chain(self.escaliers.iter().map(|x| &x.id))
             .chain(self.garde_corps.iter().map(|x| &x.id))
             .chain(self.assemblages.iter().map(|x| &x.id))
@@ -151,6 +153,20 @@ impl Projet {
         }
         for b in &self.barres {
             solides::barre(self, b)?;
+        }
+        for x in &self.pieces {
+            if self.niveau(&x.niveau).is_none() || !x.point.iter().all(|v| v.is_finite()) {
+                return Err(format!("Pièce {} : niveau absent ou point non valide.", x.numero));
+            }
+        }
+        let mut types = std::collections::HashSet::new();
+        for t in &self.types_composants {
+            if t.id.is_empty() || !types.insert(&t.id) {
+                return Err(format!("Type de composant : identifiant vide ou dupliqué : {}", t.id));
+            }
+        }
+        for c in &self.composants {
+            c.solides(self)?;
         }
         for e in &self.escaliers {
             e.calcul(self).map_err(|x| format!("{} : {x}", e.nom))?;

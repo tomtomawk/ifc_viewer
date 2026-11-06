@@ -107,7 +107,7 @@ impl ViewerApp {
             for (forme, nom, aide) in [
                 (OutilDessin::Ligne, "Ligne", "Murs droits, point par point"),
                 (OutilDessin::Rectangle, "Rectangle", "Quatre murs par deux coins opposés"),
-                (OutilDessin::Arc, "Arc", "Mur courbe : départ, point de passage, fin"),
+                (OutilDessin::Arc, "Arc", "Mur courbe : début, fin, puis courbure"),
                 (OutilDessin::Cercle, "Cercle", "Centre, rayon, début et fin du périmètre"),
             ] {
                 if ui.selectable_label(!self.ruban_edition.selection_mur && self.ruban_edition.forme_mur == forme, nom).on_hover_text(aide).clicked() {

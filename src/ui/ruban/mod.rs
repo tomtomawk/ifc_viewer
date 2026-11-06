@@ -39,6 +39,7 @@ pub(crate) enum Outil {
     GardeCorps,
     Ouverture,
     Composant,
+    Piece,
     Deplacer,
     Copier,
     Tourner,
@@ -102,6 +103,7 @@ impl Outil {
             Self::GardeCorps => "Garde-corps",
             Self::Ouverture => "Ouverture",
             Self::Composant => "Composant",
+            Self::Piece => "Pièce",
             Self::Deplacer => "Déplacer",
             Self::Copier => "Copier",
             Self::Tourner => "Tourner",
@@ -295,7 +297,7 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
             ("Construire", &[Mur, Surfaces]),
             ("Site", &[Terrain, LimitePropriete]),
             ("Structure et accès", &[Poteau, Poutre, Escalier, GardeCorps]),
-            ("Placer", &[Ouverture, Composant]),
+            ("Placer", &[Ouverture, Composant, Piece]),
             ("Références", &[Niveau, Quadrillage]),
         ],
         Menu::Modifier => &[
@@ -520,13 +522,7 @@ fn champs(o: Outil) -> Vec<Champ> {
             Nombre("Hauteur", 2100.0, " mm"),
             Nombre("Allège", 900.0, " mm"),
         ],
-        Composant => vec![
-            Choix(
-                "Composant",
-                &["Mobilier", "Équipement", "Élément générique"],
-            ),
-            Nombre("Rotation", 0.0, " °"),
-        ],
+        Composant | Piece => vec![],
         Deplacer => vec![
             Nombre("Distance", 1000.0, " mm"),
             Choix("Contrainte", &["Libre", "Horizontale", "Verticale"]),

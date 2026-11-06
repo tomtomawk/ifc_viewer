@@ -18,6 +18,19 @@ pub enum Commande {
     Barre {
         barre: Barre,
     },
+    /// Crée (identifiant vide : numéro suivant, contour détecté depuis les murs ; refusée
+    /// si l'espace n'est pas fermé) ou modifie une pièce.
+    Piece {
+        piece: Piece,
+    },
+    /// Crée (identifiant vide ; type vide : type par défaut) ou modifie un composant.
+    Composant {
+        composant: Composant,
+    },
+    /// Crée (identifiant vide) ou remplace un type de composant.
+    TypeComposant {
+        type_composant: TypeComposant,
+    },
     /// Crée (identifiant vide) ou remplace un escalier.
     Escalier {
         escalier: Escalier,
@@ -194,6 +207,8 @@ impl Projet {
             .chain(self.terrains.iter().map(|x| x.id.clone()))
             .chain(self.limites_propriete.iter().map(|x| x.id.clone()))
             .chain(self.barres.iter().map(|x| x.id.clone()))
+            .chain(self.pieces.iter().map(|x| x.id.clone()))
+            .chain(self.composants.iter().map(|x| x.id.clone()))
             .chain(self.escaliers.iter().map(|x| x.id.clone()))
             .chain(self.garde_corps.iter().map(|x| x.id.clone()))
             .chain(self.ouvertures.iter().map(|x| x.id.clone()))
@@ -213,6 +228,7 @@ impl Projet {
         super::verrous::verifier(self, &p)?;
         p.detacher_couches_disjointes(self);
         p.recaler_menuiseries(self)?;
+        p.actualiser_pieces();
         p.verifier()?;
         Ok((p, ids))
     }
@@ -331,6 +347,74 @@ impl Projet {
                     return Err("Identifiant déjà utilisé.".into());
                 } else {
                     self.garde_corps.push(garde_corps);
+                }
+                Ok(vec![id])
+            }
+            Commande::Piece { mut piece } => {
+                self.niveau(&piece.niveau).ok_or("Pièce : niveau introuvable.")?;
+                if !piece.point.iter().all(|x| x.is_finite()) {
+                    return Err("Pièce : point non valide.".into());
+                }
+                if piece.id.is_empty() {
+                    piece.id = identite(self, "piece");
+                    piece.contour = crate::modele::elements::piece::detecter(self, &piece.niveau, piece.point)?;
+                }
+                if piece.numero.trim().is_empty() {
+                    piece.numero = self.numero_piece_suivant();
+                }
+                if piece.nom.trim().is_empty() {
+                    piece.nom = "Pièce".into();
+                }
+                let id = piece.id.clone();
+                if let Some(x) = self.pieces.iter_mut().find(|x| x.id == id) {
+                    *x = piece;
+                } else if self.identifiants().contains(&id) {
+                    return Err("Identifiant déjà utilisé.".into());
+                } else {
+                    self.pieces.push(piece);
+                }
+                Ok(vec![id])
+            }
+            Commande::TypeComposant { mut type_composant } => {
+                if type_composant.nom.trim().is_empty() || ![type_composant.largeur, type_composant.profondeur, type_composant.hauteur].iter().all(|x| x.is_finite() && *x > 0.0) {
+                    return Err("Type de composant : nom et dimensions positives requis.".into());
+                }
+                if type_composant.id.is_empty() {
+                    type_composant.id = identite(self, "type-composant");
+                }
+                let id = type_composant.id.clone();
+                match self.types_composants.iter_mut().find(|t| t.id == id) {
+                    Some(t) => *t = type_composant,
+                    None => self.types_composants.push(type_composant),
+                }
+                Ok(vec![id])
+            }
+            Commande::Composant { mut composant } => {
+                if composant.type_composant.is_empty() {
+                    let defaut = crate::modele::elements::composant::type_table();
+                    if !self.types_composants.iter().any(|t| t.id == defaut.id) {
+                        self.types_composants.push(defaut.clone());
+                    }
+                    composant.type_composant = defaut.id;
+                }
+                let t = self.types_composants.iter().find(|t| t.id == composant.type_composant).ok_or("Type de composant introuvable.")?;
+                if composant.nom.trim().is_empty() {
+                    composant.nom = t.nom.clone();
+                }
+                self.niveau(&composant.niveau).ok_or("Composant : niveau introuvable.")?;
+                if !composant.position.iter().chain([&composant.decalage, &composant.rotation]).all(|x| x.is_finite()) {
+                    return Err("Composant : position non valide.".into());
+                }
+                if composant.id.is_empty() {
+                    composant.id = identite(self, "composant");
+                }
+                let id = composant.id.clone();
+                if let Some(x) = self.composants.iter_mut().find(|x| x.id == id) {
+                    *x = composant;
+                } else if self.identifiants().contains(&id) {
+                    return Err("Identifiant déjà utilisé.".into());
+                } else {
+                    self.composants.push(composant);
                 }
                 Ok(vec![id])
             }
@@ -618,6 +702,7 @@ impl Projet {
                 for id in &ids {
                     let admis=self.murs.iter().any(|x|&x.id==id) || self.assemblage(id).is_some()
                         || self.dalles.iter().any(|x|&x.id==id) || self.barres.iter().any(|x|&x.id==id)
+                        || self.composants.iter().any(|x|&x.id==id) || self.pieces.iter().any(|x|&x.id==id)
                         || self.escaliers.iter().any(|x|&x.id==id) || self.garde_corps.iter().any(|x|&x.id==id)
                         || self.importes.iter().any(|x|&x.id==id && x.niveau.is_some());
                     if !admis {return Err("La sélection contient un élément qui ne peut pas être copié sur un niveau ; les ouvertures suivent leur mur hôte.".into());}
@@ -637,6 +722,8 @@ impl Projet {
                 }
                 for d in self.dalles.iter_mut().filter(|d|ensemble.contains(&d.id)) {d.niveau=niveau.clone();}
                 for b in self.barres.iter_mut().filter(|b|ensemble.contains(&b.id)) {b.niveau=niveau.clone();}
+                for b in self.composants.iter_mut().filter(|b|ensemble.contains(&b.id)) {b.niveau=niveau.clone();}
+                for b in self.pieces.iter_mut().filter(|b|ensemble.contains(&b.id)) {b.niveau=niveau.clone();}
                 for e in self.escaliers.iter_mut().filter(|e|ensemble.contains(&e.id)) {
                     let origine=altitude(&e.niveau)?;
                     if let Some(haut)=&e.niveau_haut {
@@ -805,6 +892,13 @@ impl Projet {
                     .collect();
                 self.contextes.extend(contextes);
                 self.barres.extend(barres);
+                let pieces: Vec<_> = self.pieces.iter().filter(|x| set.contains(&x.id)).map(|x| Piece { id: map[&x.id].clone(), ..x.clone() }).collect();
+                for mut x in pieces {
+                    x.numero = self.numero_piece_suivant();
+                    self.pieces.push(x);
+                }
+                let composants: Vec<_> = self.composants.iter().filter(|x| set.contains(&x.id)).map(|x| Composant { id: map[&x.id].clone(), ..x.clone() }).collect();
+                self.composants.extend(composants);
                 let escaliers: Vec<_> = self.escaliers.iter().filter(|e| set.contains(&e.id)).map(|e| Escalier { id: map[&e.id].clone(), ..e.clone() }).collect();
                 let garde_corps: Vec<_> = self
                     .garde_corps
@@ -874,6 +968,8 @@ impl Projet {
                                 || matches!(&m.haut,Haut::Niveau {niveau,..} if niveau==&n.id)
                         }) || self.dalles.iter().any(|d| d.niveau == n.id)
                             || self.barres.iter().any(|b| b.niveau == n.id)
+                            || self.pieces.iter().any(|b| b.niveau == n.id)
+                            || self.composants.iter().any(|b| b.niveau == n.id)
                             || self.escaliers.iter().any(|e| e.niveau == n.id || e.niveau_haut.as_ref() == Some(&n.id))
                             || self.garde_corps.iter().any(|g| g.niveau == n.id)
                             || self
@@ -892,6 +988,8 @@ impl Projet {
                 self.ouvertures.retain(|x| !set.contains(&x.id));
                 self.dalles.retain(|x| !set.contains(&x.id));
                 self.barres.retain(|x| !set.contains(&x.id));
+                self.pieces.retain(|x| !set.contains(&x.id));
+                self.composants.retain(|x| !set.contains(&x.id));
                 self.escaliers.retain(|x| !set.contains(&x.id));
                 self.garde_corps.retain(|x| !set.contains(&x.id));
                 self.importes.retain(|x| !set.contains(&x.id));

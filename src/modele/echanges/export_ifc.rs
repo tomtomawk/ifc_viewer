@@ -232,6 +232,25 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         let id = w.add(format!("{classe}('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&b.id, None), texte(&b.nom), ref_(rep)));
         contenus.entry(niveaux[&b.niveau]).or_default().push(id);
     }
+    for c in &p.composants {
+        let tris: Vec<_> = c.solides(p)?.into_iter().flat_map(|(_, t)| t).collect();
+        let rep = w.mesh(&tris, contexte);
+        let id = w.add(format!("IFCFURNITURE('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&c.id, None), texte(&c.nom), ref_(rep)));
+        contenus.entry(niveaux[&c.niveau]).or_default().push(id);
+    }
+    // pièces : volumes du sol au niveau supérieur (2,5 m au dernier), agrégés au niveau
+    let mut espaces: std::collections::BTreeMap<usize, Vec<usize>> = Default::default();
+    for x in p.pieces.iter().filter(|x| x.fermee()) {
+        let z = p.niveau(&x.niveau).ok_or("Pièce : niveau absent")?.altitude;
+        let haut = p.niveaux.iter().map(|n| n.altitude).filter(|a| *a > z + 1.0).fold(f64::INFINITY, f64::min);
+        let haut = if haut.is_finite() { haut } else { z + 2500.0 };
+        let rep = w.mesh(&solides::prisme(&x.contour, z, haut), contexte);
+        let id = w.add(format!("IFCSPACE('{}',$,{},$,$,#{placement},{},{},.ELEMENT.,.INTERNAL.,$)", guid(&x.id, None), texte(&x.numero), ref_(rep), texte(&x.nom)));
+        espaces.entry(niveaux[&x.niveau]).or_default().push(id);
+    }
+    for (n, ids) in espaces {
+        w.add(format!("IFCRELAGGREGATES('{}',$,$,$,#{n},{})", guid(&format!("espaces:{n}"), None), refs(&ids)));
+    }
     for e in &p.escaliers {
         let rep = w.mesh(&e.solide(p)?, contexte);
         let id = w.add(format!("IFCSTAIR('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&e.id, None), texte(&e.nom), ref_(rep)));

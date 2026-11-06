@@ -445,8 +445,8 @@ impl Trace {
             (Cercle, 0) => "Centre du cercle",
             (Cercle, _) => "Rayon (point ou distance)",
             (Arc, 0) => "Début de l'arc",
-            (Arc, 1) => "Point de passage de l'arc",
-            (Arc, _) => "Fin de l'arc",
+            (Arc, 1) => "Fin de l'arc",
+            (Arc, _) => "Courbure : point de passage de l'arc",
             (Rectangle, 0) => "Premier coin",
             (Rectangle, _) => "Coin opposé (point ou @dx,dy)",
         }
@@ -494,7 +494,8 @@ impl Trace {
                 vec![Forme2D::Cercle { centre: c, rayon: c.distance(q) }]
             }
             (Arc, 3) => {
-                let [a, b, c] = [self.points[0], self.points[1], self.points[2]];
+                // saisie : début, fin, puis courbure (point de passage)
+                let [a, c, b] = [self.points[0], self.points[1], self.points[2]];
                 self.points.clear();
                 if arc_3_points(a, b, c).is_some() { vec![Forme2D::Arc([a, b, c])] } else { Vec::new() }
             }
@@ -554,7 +555,7 @@ impl Trace {
             }
             Cercle if pts.len() == 2 => vec![points_arc(pts[0], pts[0].distance(curseur), 0.0, std::f64::consts::TAU), vec![pts[0], curseur]],
             Arc if pts.len() == 2 => vec![pts],
-            Arc if pts.len() == 3 => match arc_3_points(pts[0], pts[1], pts[2]) {
+            Arc if pts.len() == 3 => match arc_3_points(pts[0], pts[2], pts[1]) {
                 Some((o, r, d, s)) => vec![points_arc(o, r, d, s)],
                 None => vec![pts],
             },

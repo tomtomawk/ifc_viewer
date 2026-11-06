@@ -324,6 +324,37 @@ pub fn repere(p: &Projet, v: &Vue) -> (DVec3, DVec3, DVec3) {
         }
     }
 }
+/// Pièces du niveau d'un plan : aplat clair (rôle poché, sous les traits) sur le sol du
+/// niveau, et étiquette centrée sur le point (nom, numéro, surface). Élément :
+/// `id_natif("annotation", id)`, comme les annotations (sélection, surbrillance).
+pub fn primitives_pieces(p: &Projet, v: &Vue) -> Vec<Primitive> {
+    let GenreVue::Plan { niveau, .. } = &v.genre else { return Vec::new() };
+    let (o, u, h) = repere(p, v);
+    let sol = p.niveau(niveau).map_or(0.0, |n| n.altitude) + 2.0;
+    let taille = 2.5 * v.echelle * 0.001;
+    let mut out = Vec::new();
+    for x in p.pieces.iter().filter(|x| &x.niveau == niveau && !v.elements_masques.contains(&x.id)) {
+        let element = Some(crate::rendu::scene::id_natif("annotation", &x.id));
+        if x.fermee() {
+            out.push(Primitive {
+                forme: Forme::Surface(vec![x.contour.iter().map(|q| DVec3::new(q[0], q[1], sol) * 0.001).collect()]),
+                style: Style { couleur: [226, 236, 248, 255], epaisseur: 0.0 },
+                role: Role::Poche,
+                element,
+            });
+        }
+        let surface = if x.fermee() { format!("{:.2} m²", x.aire() / 1e6) } else { "Non fermée".into() };
+        let lignes = [format!("{} {}", x.nom, x.numero), surface];
+        for (k, l) in lignes.iter().enumerate() {
+            let largeur = crate::noyau::texte::ligne(l, "Arial", taille, false).largeur;
+            let pos = (o + DVec3::new(x.point[0], x.point[1], 0.0)) * 0.001 - u * largeur / 2.0 + h * taille * (0.3 - 1.5 * k as f64);
+            let mut t = texte(l, pos, u, h, taille, if x.fermee() { [30, 30, 30, 255] } else { [190, 35, 35, 255] });
+            t.element = element;
+            out.push(t);
+        }
+    }
+    out
+}
 fn texte(s: &str, pos: DVec3, u: DVec3, v: DVec3, hauteur: f64, couleur: [u8; 4]) -> Primitive {
     let t = crate::noyau::texte::ligne(s, "Arial", hauteur, false);
     Primitive {
@@ -474,6 +505,7 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
             primitive.element = Some(crate::rendu::scene::id_natif("annotation", &a.id));
         }
     }
+    out.extend(primitives_pieces(p, v));
     if matches!(v.genre, GenreVue::Plan { .. }) {
         for g in &p.quadrillages {
             if v.elements_masques.contains(&g.id) { continue; }
@@ -600,6 +632,13 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
             out.push(polyligne((0..=16).map(|k| { let t = std::f64::consts::TAU * k as f64 / 16.0; c + DVec3::new(t.cos(), t.sin(), 0.0) * 60.0 }).collect()));
         }
     }
+    if let GenreVue::Plan { niveau, .. } = &v.genre {
+        for c in p.composants.iter().filter(|c| &c.niveau == niveau && !v.elements_masques.contains(&c.id)) {
+            for l in c.symboles_plan(p) {
+                out.push(polyligne(l.into_iter().map(|q| q.with_z(o.z)).collect()));
+            }
+        }
+    }
     for ouv in &p.ouvertures {
         if v.elements_masques.contains(&ouv.id) || v.elements_masques.contains(&ouv.mur) { continue; }
         let Ok((axe, _, niveau)) = super::volumes::solides::hote(p, &ouv.mur) else { continue };
@@ -708,7 +747,7 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
     let masques = p.murs.iter().map(|x| ("mur", &x.id))
         .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
         .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
-        .chain(p.barres.iter().map(|x| ("barre", &x.id)))
+        .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id)))
         .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
         .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
         .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))

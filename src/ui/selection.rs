@@ -185,7 +185,7 @@ impl ViewerApp {
                     .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
                     .chain(p.terrains.iter().map(|x| ("terrain", &x.id)))
                     .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
-                    .chain(p.barres.iter().map(|x| ("barre", &x.id)))
+                    .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id)))
                 .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
                 .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
                     .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
@@ -252,7 +252,7 @@ impl ViewerApp {
                             .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
                             .chain(p.terrains.iter().map(|x| ("terrain", &x.id)))
                             .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
-                            .chain(p.barres.iter().map(|x| ("barre", &x.id)))
+                            .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id)))
                 .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
                 .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
                             .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
@@ -285,7 +285,7 @@ impl ViewerApp {
             }
         }
         if let Some((p, _)) = &self.natif {
-            vues.retain(|id| p.vues.iter().any(|v| v.id == *id) || p.quadrillages.iter().any(|g| g.id == *id) || p.annotations.iter().any(|a| a.id == *id));
+            vues.retain(|id| p.vues.iter().any(|v| v.id == *id) || p.quadrillages.iter().any(|g| g.id == *id) || p.annotations.iter().any(|a| a.id == *id) || p.pieces.iter().any(|a| a.id == *id));
         }
         for (id, bounds) in self.rectangles_annotations(vue) {
             if if croisement { rectangle.intersects(bounds) } else { rectangle.contains_rect(bounds) } { vues.push(id); }
@@ -299,7 +299,7 @@ impl ViewerApp {
                 .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
                 .chain(p.terrains.iter().map(|x| ("terrain", &x.id)))
                 .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
-                .chain(p.barres.iter().map(|x| ("barre", &x.id)))
+                .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id)))
                 .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
                 .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
                 .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))

@@ -28,6 +28,7 @@ pub const COMMANDES: &[Commande] = &[
     ),
     commande!("fermer", "Fermer le projet", "Fichiers", "Ctrl+W"),
     commande!("parametres", "Paramètres", "Fichiers", "Ctrl+,"),
+    commande!("theme_suivant", "Mode d'apparence suivant", "Fichiers", ""),
     commande!("copier_presse", "Copier la sélection", "Édition", "Ctrl+C"),
     commande!("coller_niveau", "Coller sur un niveau", "Édition", "Ctrl+V"),
     commande!("annuler", "Annuler", "Édition", "Ctrl+Z"),
