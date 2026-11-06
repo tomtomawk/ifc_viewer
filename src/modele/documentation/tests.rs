@@ -298,6 +298,8 @@ fn polyligne_types_de_trait_par_segment() {
     let v = p.vues.iter().find(|v| v.id == vue).unwrap();
     let prims = annotations(&p, v);
     assert_eq!(prims.len(), 3, "un trait par type");
+    // traits rattachés à la polyligne : elle se sélectionne au clic
+    assert!(prims.iter().all(|x| x.element == Some(crate::rendu::scene::id_natif("annotation", "pl"))));
     assert!((prims[0].style.epaisseur - 0.50).abs() < 1e-9);
     let Forme::Segments(s) = &prims[1].forme else { panic!("tirets en segments") };
     // tirets de 3 mm papier, blancs de 1,5 : période 4,5 × échelle sur 10 m

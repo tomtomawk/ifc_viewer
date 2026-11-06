@@ -20,7 +20,7 @@ pub(super) fn apercu_trait(ui: &egui::Ui, r: egui::Rect, t: &TypeTrait) {
 
 /// Liste de choix d'un type de trait (id ; vide : continu fin). `actuel` None : varié.
 /// Retourne l'id choisi.
-pub(super) fn choix_type_trait(ui: &mut egui::Ui, salt: impl std::hash::Hash + std::fmt::Debug, actuel: Option<&str>, types: &[TypeTrait]) -> Option<String> {
+pub(in crate::ui) fn choix_type_trait(ui: &mut egui::Ui, salt: impl std::hash::Hash + std::fmt::Debug, actuel: Option<&str>, types: &[TypeTrait]) -> Option<String> {
     let standard = TypeTrait::standard();
     let courant = actuel.map(|id| types.iter().find(|t| t.id == id).unwrap_or(&standard));
     let mut choix = None;

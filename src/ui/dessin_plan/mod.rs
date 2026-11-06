@@ -388,6 +388,49 @@ impl ViewerApp {
         self.coupe_dirty = true;
     }
 
+    /// Modifier une polyligne, segment sélectionné : son type de trait dans Propriétés
+    /// (porté par la polyligne en cours d'édition, enregistré à la validation).
+    /// Retourne vrai si la section est affichée.
+    pub(in crate::ui) fn proprietes_segment_edition(&mut self, ui: &mut egui::Ui) -> bool {
+        let Some(e) = self.dessin2d.edition_contour.as_ref() else { return false };
+        let Some(a) = e.annotation.as_ref() else { return false };
+        let types = self.natif.as_ref().map(|(p, _)| p.types_traits.clone()).unwrap_or_default();
+        ui.label(RichText::new("Polyligne en modification").strong());
+        let Some((c, i)) = e.segment.filter(|(c, _)| *c == 0) else {
+            ui.label(RichText::new("Cliquez un segment pour voir et changer son type de trait ; Échap : désélectionner, puis quitter.").small().weak());
+            ui.separator();
+            return true;
+        };
+        let actuel = match &a.forme {
+            AnnotationForme::Polyligne { traits, .. } => traits.get(i).cloned().unwrap_or_default(),
+            _ => String::new(),
+        };
+        let points = &self.dessin2d.dalle[c];
+        let longueur = DVec2::from_array(points[i]).distance(DVec2::from_array(points[(i + 1) % points.len()]));
+        let mut choix = None;
+        egui::Grid::new("segment_edition").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+            ui.label(format!("Segment {}", i + 1));
+            ui.label(crate::config::options::unite().afficher(longueur.round()));
+            ui.end_row();
+            ui.label("Type de trait");
+            choix = crate::ui::types_traits::choix_type_trait(ui, "trait_segment_edition", Some(&actuel), &types);
+            ui.end_row();
+        });
+        ui.separator();
+        if let Some(id) = choix
+            && let Some(AnnotationForme::Polyligne { traits, .. }) = self.dessin2d.edition_contour.as_mut().and_then(|e| e.annotation.as_mut()).map(|a| &mut a.forme)
+        {
+            if traits.len() <= i {
+                traits.resize(i + 1, String::new());
+            }
+            traits[i] = id;
+            if traits.iter().all(String::is_empty) {
+                traits.clear();
+            }
+        }
+        true
+    }
+
     pub(super) fn options_edition_contour(&mut self, ui: &mut egui::Ui) {
         let trace_en_cours = self.trace_en_cours();
         let poly = self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.annotation.is_some());

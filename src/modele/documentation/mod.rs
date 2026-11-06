@@ -558,9 +558,9 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
                 // polyligne : un type de trait par segment (épaisseur, tirets)
                 if let AnnotationForme::Polyligne { points, fermee, traits, .. } = &a.forme {
                     out.extend(primitives_polyligne(p, points, *fermee, traits, v.echelle, &pt));
-                    continue;
                 }
-                for l in a.forme.forme_2d().map(|f| f.polylignes()).unwrap_or_default() {
+                let autres = if matches!(a.forme, AnnotationForme::Polyligne { .. }) { Vec::new() } else { a.forme.forme_2d().map(|f| f.polylignes()).unwrap_or_default() };
+                for l in autres {
                     out.push(Primitive {
                         forme: Forme::Polyligne { points: l.into_iter().map(pt).collect(), fermee: false },
                         style: Style { couleur: [30, 30, 30, 255], epaisseur: 0.18 },

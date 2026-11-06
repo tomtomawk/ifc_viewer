@@ -42,7 +42,9 @@ impl ViewerApp {
                     if let Err(e)=self.appliquer_projet(projet) {self.error=Some(e);}
                 }
             }
-            if let Some(projet) = self.proprietes_formes_2d(ui, &ids).or_else(|| self.proprietes_terrains(ui, &ids)) {
+            if self.proprietes_segment_edition(ui) {
+                // polyligne en modification : le segment sélectionné et son type de trait
+            } else if let Some(projet) = self.proprietes_formes_2d(ui, &ids).or_else(|| self.proprietes_terrains(ui, &ids)) {
                 if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
             }
             if ids.len() > 1 {

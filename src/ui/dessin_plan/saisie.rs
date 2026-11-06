@@ -306,6 +306,11 @@ impl ViewerApp {
                 }
                 if let Some(t) = self.dessin2d.trace.as_mut() { t.points.clear(); }
                 if let Some(e) = &mut self.dessin2d.edition_contour && e.raccord.take().is_some() { e.dessin = false; }
+            } else if let Some(e) = self.dessin2d.edition_contour.as_mut()
+                && (e.segment.is_some() || e.selection.is_some() || e.dessin)
+            {
+                // premier Échap : retour à la sélection des segments et des sommets
+                (e.segment, e.selection, e.dessin) = (None, None, false);
             } else if self.dessin2d.edition_contour.is_some() {
                 self.quitter_commande(false);
             } else if matches!(usage, Usage::Surface | Usage::LimitePropriete) && !(self.dessin2d.dalle.is_empty() && self.dessin2d.ouverts.is_empty()) {
