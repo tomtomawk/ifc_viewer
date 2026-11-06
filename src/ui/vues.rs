@@ -255,6 +255,7 @@ impl ViewerApp {
             self.vue_active = None;
             self.nomenclature_ouverte = None;
             self.hidden_objects.clear();
+        self.masques_utilisateur.clear();
             self.hidden_storeys.clear();
             self.hidden_classes = HIDDEN_BY_DEFAULT.iter().map(|s| s.to_string()).collect();
             self.isolated = None;
@@ -371,6 +372,7 @@ impl ViewerApp {
         }
         self.vue_active = Some(i);
         self.hidden_objects.clear();
+        self.masques_utilisateur.clear();
         self.hidden_storeys.clear();
         // visibilité propre à chaque vue : celle par défaut, puis les objets isolés
         self.hidden_classes = HIDDEN_BY_DEFAULT.iter().map(|s| s.to_string()).collect();

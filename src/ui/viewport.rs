@@ -92,7 +92,13 @@ impl ViewerApp {
                 }
             }
         }
-        let mode_trace = mode_trace || self.poignee_axe.is_some() || edition_arc;
+        // poignée du milieu (déplacer) et flèches d'inversion du mur sélectionné
+        let poignee_milieu = self.poignee_axe.is_none() && !mode_trace && !edition_arc && self.poignee_milieu(ui, rect, &resp, &axe);
+        let mode_trace = mode_trace || self.poignee_axe.is_some() || edition_arc || poignee_milieu || self.glisse_milieu.is_some();
+        // clic droit hors commande : répéter, annuler, sélection, visibilité, verrou, démolir
+        if !mode_trace && self.ruban_edition.outil().is_none() && !self.afficher_masques {
+            self.menu_contextuel(&resp);
+        }
         if mode_trace && resp.hovered() {
             ui.ctx().set_cursor_icon(if self.selection_traces_active() { egui::CursorIcon::Default } else { egui::CursorIcon::Crosshair });
         }
@@ -267,6 +273,8 @@ impl ViewerApp {
                         None => self.coupe_depart = Some(p),
                     }
                 }
+            } else if resp.clicked() && self.afficher_masques && resp.interact_pointer_pos().and_then(|q| pick(self, q)).is_some_and(|(obj, _)| self.reafficher(obj)) {
+                // mode Afficher : élément magenta réaffiché
             } else if resp.clicked() && self.dessiner_cadenas(ui, rect, resp.interact_pointer_pos()) {
                 // clic sur un cadenas : élément déverrouillé
             } else if let Some(id) = resp.double_clicked().then(|| resp.interact_pointer_pos()).flatten()
@@ -401,6 +409,13 @@ impl ViewerApp {
             }
         }
         self.dessiner_cadenas(ui, rect, None);
+        let temporaire = !self.masques_utilisateur.is_empty() || self.isolated.is_some() && self.natif.is_some() && self.vue_native_id().is_none();
+        if self.afficher_masques || temporaire {
+            let couleur = if self.afficher_masques { Color32::from_rgb(235, 50, 190) } else { Color32::from_rgb(0, 150, 150) };
+            ui.painter().rect_stroke(rect.shrink(2.0), 0.0, egui::Stroke::new(3.0, couleur), egui::StrokeKind::Inside);
+            let texte = if self.afficher_masques { "ÉLÉMENTS MASQUÉS · clic pour réafficher · Échap pour sortir" } else { "VISIBILITÉ TEMPORAIRE · Tout afficher pour réinitialiser" };
+            ui.painter().text(rect.right_bottom() + egui::vec2(-10.0, -10.0), egui::Align2::RIGHT_BOTTOM, texte, egui::FontId::proportional(12.0), couleur);
+        }
         if deplacement.is_some() {
             self.apercu_transformation(ui, rect, resp.hover_pos(), altitude_coupe);
         }

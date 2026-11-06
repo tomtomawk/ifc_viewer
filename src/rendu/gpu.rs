@@ -94,12 +94,25 @@ struct Segment {
 const LARGEUR_TRAIT: f32 = 1.0;
 
 // chaque objet est repéré par un octet dans la texture de sélection
+// 1 : sélectionné (octet 255) ; 2 : masqué montré par « Afficher les éléments masqués » (128) ;
+// 3 : démoli (48), teinté rouge et estompé
 fn selectionne(obj: u32) -> u32 {
-    if obj < g.selection.x && textureLoad(t_selection, vec2i(i32(obj % 1024u), i32(obj / 1024u)), 0).r > 0.5 {
-        return 1u;
+    if obj < g.selection.x {
+        let r = textureLoad(t_selection, vec2i(i32(obj % 1024u), i32(obj / 1024u)), 0).r;
+        if r > 0.75 {
+            return 1u;
+        }
+        if r > 0.25 {
+            return 2u;
+        }
+        if r > 0.1 {
+            return 3u;
+        }
     }
     return 0u;
 }
+const MAGENTA = vec3f(0.92, 0.2, 0.75);
+const DEMOLI = vec3f(0.85, 0.25, 0.2);
 
 @vertex
 fn vs_main(s: Sommet) -> Varie {
@@ -334,6 +347,12 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
     // faces du dessin : blanches, elles masquent les arêtes cachées
     let blanc = dessin && e.annot == 0u;
     if blanc && !portees && !ao_actif {
+        if e.selection == 2u {
+            return vec4f(mix(vec3f(1.0), MAGENTA, 0.45), 1.0);
+        }
+        if e.selection == 3u {
+            return vec4f(mix(vec3f(1.0), DEMOLI, 0.3), 1.0);
+        }
         return vec4f(select(vec3f(1.0), vec3f(1.0, 0.82, 0.62), e.selection == 1u), 1.0);
     }
     // premier plan (4 bits bas : 0 aucun, 15 uni, sinon motif de la table) et arrière-plan
@@ -392,6 +411,13 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
         c = mix(c, vec3f(1.0, 0.55, 0.1), 0.65);
         a = max(a, 0.8);
     }
+    if e.selection == 2u {
+        c = mix(c, MAGENTA, 0.7);
+        a = max(a, 0.6);
+    }
+    if e.selection == 3u {
+        c = mix(c, DEMOLI, 0.55);
+    }
     return vec4f(c, a);
 }
 
@@ -400,6 +426,12 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
 fn fs_plat(e: Varie) -> @location(0) vec4f {
     if retire(e) {
         discard;
+    }
+    if e.selection == 2u {
+        return vec4f(mix(e.c.rgb, MAGENTA, 0.8), 1.0);
+    }
+    if e.selection == 3u {
+        return vec4f(mix(e.c.rgb, DEMOLI, 0.8), 1.0);
     }
     return vec4f(select(e.c.rgb, mix(e.c.rgb, vec3f(1.0, 0.55, 0.1), 0.65), e.selection == 1u), 1.0);
 }

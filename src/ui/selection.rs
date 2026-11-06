@@ -210,6 +210,19 @@ impl ViewerApp {
                 if let Some(marque) = marques.get_mut(objet as usize) { *marque = 255; }
             }
         }
+        for &o in &self.objets_masques {
+            if let Some(marque) = marques.get_mut(o as usize).filter(|m| **m == 0) { *marque = 128; }
+        }
+        // éléments démolis : teinte de démolition (octet 48)
+        if let Some((p, _)) = &self.natif {
+            if !p.demolitions.is_empty() {
+                for (i, o) in scene.objects.iter().enumerate() {
+                    if marques[i] == 0 && self.cle_native(self.cible_clic(o.id)).is_some_and(|id| p.demolitions.contains_key(&id)) {
+                        marques[i] = 48;
+                    }
+                }
+            }
+        }
         marques
     }
 

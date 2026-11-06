@@ -1,6 +1,7 @@
 //! Commandes d'édition sérialisables pour l'interface et le pilote MCP.
 
 mod modifier;
+pub use modifier::decaler_polygone;
 mod transformations;
 #[cfg(test)]
 mod tests;
@@ -136,6 +137,27 @@ pub enum Commande {
         id: String,
         point: [f64; 2],
         ecart: f64,
+    },
+    /// Démolit les éléments dans `phase` (absente : annule la démolition).
+    Demolir {
+        ids: Vec<String>,
+        phase: Option<String>,
+    },
+    /// Reproduit le type et les paramètres de `source` sur `cibles` (même catégorie).
+    Reproduire {
+        source: String,
+        cibles: Vec<String>,
+    },
+    /// Place l'ouverture `id` sur le mur `mur`, centrée sur la projection de `point`.
+    ChangerHote {
+        id: String,
+        mur: String,
+        point: [f64; 2],
+    },
+    /// Inverse le côté d'ouverture d'une menuiserie, ou le sens de ses paumelles.
+    InverserOuverture {
+        id: String,
+        paumelles: bool,
     },
     /// Verrouille (`verrou` vrai) ou déverrouille les éléments.
     Verrouiller {
@@ -808,6 +830,10 @@ impl Projet {
             Commande::Reseau { ids, nombre, delta, centre, angle } => self.reseau(ids, nombre, delta, centre, angle),
             Commande::Decaler { id, distance, copie } => self.decaler(id, distance, copie),
             Commande::Scinder { id, point, ecart } => self.scinder(id, point, ecart),
+            Commande::Demolir { ids, phase } => self.demolir(ids, phase),
+            Commande::Reproduire { source, cibles } => self.reproduire(source, cibles),
+            Commande::ChangerHote { id, mur, point } => self.changer_hote(id, mur, point),
+            Commande::InverserOuverture { id, paumelles } => self.inverser_ouverture(id, paumelles),
             Commande::Verrouiller { ids, verrou } => {
                 let connus = self.identifiants();
                 for id in &ids {

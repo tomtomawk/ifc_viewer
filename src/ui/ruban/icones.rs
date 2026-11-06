@@ -69,11 +69,17 @@ pub(super) fn bouton_outil(
         Outil::Echelle => "Échelle (EC) : point de base, longueur de référence, nouvelle longueur ou facteur tapé ; annotations, contours, terrains",
         Outil::Aligner => "Aligner (AL) : référence, puis éléments à aligner",
         Outil::Decaler => "Décaler (DE) : clic sur le mur, puis côté et distance ; Copier coché par défaut",
-        Outil::Scinder => "Scinder (SC) : clic sur le mur au point de coupure ; écart réglable",
+        Outil::Scinder => "Scinder (SC) : clic sur le mur ou la poutre au point de coupure ; écart réglable",
+        Outil::Demolir => "Démolir (DM) : clic sur l'élément, démoli dans la dernière phase ; clic à nouveau pour annuler",
+        Outil::Reproduire => "Reproduire les propriétés (RP) : pipette sur la source, pinceau sur les cibles",
+        Outil::ChangerHote => "Changer d'hôte (CH) : clic sur l'ouverture, puis sur le nouveau mur",
+        Outil::Inverser => "Inverser (NV) : sens d'un mur, côté d'une ouverture (Maj : paumelles)",
         Outil::Supprimer => "Supprimer (Suppr)",
         Outil::Cadrer => "Définir le contour de cadrage du plan ; F ajuste le zoom",
         Outil::Isoler => "Isoler la sélection (I) ; Échap dans la vue : tout réafficher",
-        Outil::Masquer => "Masquer la sélection (H)",
+        Outil::Masquer => "Masquer temporairement la sélection (H) ; perdu à la fermeture de la vue",
+        Outil::MasquerVue => "Masquer la sélection dans cette vue (MQ) ; enregistré avec la vue",
+        Outil::Afficher => "Afficher les éléments masqués (AF) : en magenta, clic pour réafficher ; Échap pour sortir",
         Outil::Verrouiller => "Verrouiller la sélection (CD) : ni déplacée, ni modifiée, ni supprimée",
         Outil::Deverrouiller => "Déverrouiller la sélection (DC) ; ou clic sur un cadenas dans la vue",
         Outil::Feuilles => "Feuilles : mise en page des vues, cartouche, export SVG/PDF",
@@ -474,6 +480,31 @@ pub(super) fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             seg((0.5, 0.7), (0.43, 0.6));
             seg((0.5, 0.7), (0.57, 0.6));
         }
+        Demolir => {
+            // marteau
+            p.rect_filled(egui::Rect::from_min_max(pt(0.15, 0.15), pt(0.7, 0.38)), 1.0, t.color);
+            seg((0.45, 0.38), (0.45, 0.95));
+        }
+        Reproduire => {
+            // pinceau
+            cadre(0.2, 0.1, 0.6, 0.3);
+            seg((0.5, 0.4), (0.5, 0.55));
+            p.add(egui::Shape::closed_line(vec![pt(0.38, 0.55), pt(0.62, 0.55), pt(0.58, 0.95), pt(0.42, 0.95)], t));
+        }
+        ChangerHote => {
+            cadre(0.05, 0.6, 0.4, 0.15);
+            cadre(0.55, 0.6, 0.4, 0.15);
+            cadre(0.15, 0.25, 0.2, 0.3);
+            seg((0.38, 0.4), (0.7, 0.4));
+            seg((0.7, 0.4), (0.62, 0.33));
+            seg((0.7, 0.4), (0.62, 0.47));
+        }
+        Inverser => {
+            seg((0.15, 0.35), (0.85, 0.35));
+            seg((0.15, 0.35), (0.27, 0.25));
+            seg((0.85, 0.65), (0.15, 0.65));
+            seg((0.85, 0.65), (0.73, 0.75));
+        }
         Scinder => {
             seg((0.05, 0.5), (0.42, 0.5));
             seg((0.58, 0.5), (0.95, 0.5));
@@ -582,6 +613,21 @@ pub(super) fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             for (x, y) in [(0.05, 0.42), (0.8, 0.42)] {
                 p.add(egui::Shape::dashed_line(&[pt(x, y), pt(x + 0.15, y), pt(x + 0.15, y + 0.16), pt(x, y + 0.16), pt(x, y)], t, 2.0, 2.0));
             }
+        }
+        MasquerVue => {
+            let pts = (0..=16).map(|k| { let a = std::f32::consts::PI * k as f32 / 16.0; pt(0.5 - 0.42 * a.cos(), 0.45 - 0.22 * a.sin()) }).collect();
+            p.add(egui::Shape::line(pts, t));
+            let pts = (0..=16).map(|k| { let a = std::f32::consts::PI * k as f32 / 16.0; pt(0.5 - 0.42 * a.cos(), 0.45 + 0.22 * a.sin()) }).collect();
+            p.add(egui::Shape::line(pts, t));
+            seg((0.15, 0.8), (0.85, 0.1));
+            cadre(0.1, 0.78, 0.8, 0.17);
+        }
+        Afficher => {
+            let pts = (0..=16).map(|k| { let a = std::f32::consts::PI * k as f32 / 16.0; pt(0.5 - 0.42 * a.cos(), 0.5 - 0.22 * a.sin()) }).collect();
+            p.add(egui::Shape::line(pts, t));
+            let pts = (0..=16).map(|k| { let a = std::f32::consts::PI * k as f32 / 16.0; pt(0.5 - 0.42 * a.cos(), 0.5 + 0.22 * a.sin()) }).collect();
+            p.add(egui::Shape::line(pts, t));
+            p.circle_filled(r.center(), r.width() * 0.11, Color32::from_rgb(235, 50, 190));
         }
         Masquer => {
             // œil barré

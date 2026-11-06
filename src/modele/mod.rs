@@ -88,6 +88,9 @@ pub struct Projet {
     /// Éléments verrouillés (identifiant → vrai) : ni déplacés, ni modifiés, ni supprimés.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub verrous: BTreeMap<String, bool>,
+    /// Éléments démolis (identifiant → phase de démolition).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub demolitions: BTreeMap<String, String>,
     /// Vues du projet (arborescence) : plans d'étage et coupes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub vues: Vec<Vue>,

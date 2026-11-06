@@ -173,6 +173,7 @@ impl ViewerApp {
         self.coupe_dirty = true;
         self.vol = Vol::default();
         self.hidden_objects.clear();
+        self.masques_utilisateur.clear();
         self.hidden_storeys.clear();
         self.isolated = None;
         self.hidden_classes = HIDDEN_BY_DEFAULT.iter().map(|s| s.to_string()).collect();
@@ -243,12 +244,20 @@ impl ViewerApp {
         let mut transp = Vec::new();
         let mut lines = Vec::new();
         let mut aretes = Vec::new();
+        let mut objets_masques = HashSet::new();
         for (i, o) in scene.objects.iter().enumerate() {
             let en_edition = self.objet_en_edition().is_some_and(|(id, annotation)| !annotation && o.id == scene::id_natif("dalle", id))
                 || self.terrain_en_edition().is_some_and(|id| o.id == scene::id_natif("terrain", id));
-            let vis = !en_edition && !masques_vue.contains(&o.id) && !self.hidden_classes.contains(&*o.class)
+            // masqué par l'utilisateur (temporaire ou dans la vue) : montré en magenta dans le
+            // mode « Afficher les éléments masqués »
+            let masque_utilisateur = masques_vue.contains(&o.id) || (self.masques_utilisateur.contains(&(i as u32)) && self.hidden_objects.contains(&(i as u32)));
+            let revele = self.afficher_masques && masque_utilisateur;
+            if revele {
+                objets_masques.insert(i as u32);
+            }
+            let vis = !en_edition && (revele || !masques_vue.contains(&o.id)) && !self.hidden_classes.contains(&*o.class)
                 && !self.hidden_classes.contains(&*self.cle_objet[i])
-                && !self.hidden_objects.contains(&(i as u32))
+                && (revele || !self.hidden_objects.contains(&(i as u32)))
                 && o.storey.is_none_or(|s| !self.hidden_storeys.contains(&s))
                 && self.isolated.as_ref().is_none_or(|iso| iso.contains(&(i as u32)))
                 && dans_la_plage(o)
@@ -261,6 +270,7 @@ impl ViewerApp {
                 aretes.extend(o.aretes.start..o.aretes.start + o.aretes.count);
             }
         }
+        self.objets_masques = objets_masques;
         if let Some(r) = self.renderer.as_mut() {
             r.upload_indices(&opaque, &transp, &lines, &aretes);
         }
@@ -602,6 +612,7 @@ impl ViewerApp {
         self.objets_feuille.clear();
         self.hidden_classes.clear();
         self.hidden_objects.clear();
+        self.masques_utilisateur.clear();
         self.hidden_storeys.clear();
         self.isolated = None;
         self.visible.clear();

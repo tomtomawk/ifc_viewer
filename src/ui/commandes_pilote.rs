@@ -141,6 +141,8 @@ impl ViewerApp {
         p.push(("document_actif", self.document_actif_pilote().to_string()));
         p.push(("saisies_en_attente", (self.saisies_pilote.len()+usize::from(self.saisie_pilote_image)).to_string()));
         p.push(("selection_native", serde_json::to_string(&self.selection_bim()).unwrap()));
+        p.push(("afficher_masques", self.afficher_masques.to_string()));
+        p.push(("objets_masques", self.objets_masques.len().to_string()));
         p.push(("transformation", self.etat_transformation().to_string()));
         p.push(("cadenas", serde_json::to_string(&self.cadenas_ecran.iter().map(|(id, q)| serde_json::json!({"id": id, "ecran": [q.x, q.y]})).collect::<Vec<_>>()).unwrap()));
         p.push(("outil", self.ruban_edition.outil().map_or("null".into(), |o|texte(o.nom()))));
@@ -231,7 +233,7 @@ impl ViewerApp {
             return match r { Ok(v) => { let mut v = v; if v.get("ok").is_none() { v["ok"] = true.into(); } v.to_string() }, Err(e) => erreur(&e) };
         }
         match commande {
-            "ruban" => {self.onglet_ruban=match argument{"debut"=>OngletRuban::Debut,"modeliser"=>OngletRuban::Modeliser,"modifier"=>OngletRuban::Modifier,"documenter"|"annoter"=>OngletRuban::Annoter,"sortie"=>OngletRuban::Sortie,"famille_creer"=>OngletRuban::FamilleCreer,"famille_sortie"=>OngletRuban::FamilleSortie,_=>return erreur("usage : ruban debut|modeliser|modifier|documenter|sortie|famille_creer|famille_sortie")};self.etat()},
+            "ruban" => {self.onglet_ruban=match argument{"debut"=>OngletRuban::Debut,"modeliser"=>OngletRuban::Modeliser,"modifier"=>OngletRuban::Modifier,"vue"=>OngletRuban::Vue,"documenter"|"annoter"=>OngletRuban::Annoter,"sortie"=>OngletRuban::Sortie,"famille_creer"=>OngletRuban::FamilleCreer,"famille_sortie"=>OngletRuban::FamilleSortie,_=>return erreur("usage : ruban debut|modeliser|modifier|vue|documenter|sortie|famille_creer|famille_sortie")};self.etat()},
             "collaborer" => match self.creer_partage(PathBuf::from(argument.trim_matches('"')),ctx){Ok(())=>succes(&[("etat",texte("Création du projet partagé en cours"))]),Err(e)=>erreur(&e)},
             "collaboration_associer" => match self.associer_collaboration(PathBuf::from(argument.trim_matches('"'))) { Ok(())=>succes(&[("etat",texte("Association locale effectuée ; synchronisation en cours"))]),Err(e)=>erreur(&e) },
             "collaboration_sync" | "collaboration_instantane" => match self.collaboration.as_mut().ok_or_else(||"Copie non associée".to_string()).and_then(|c|c.synchroniser(None,commande=="collaboration_instantane")) {Ok(())=>succes(&[("etat",texte("Synchronisation demandée"))]),Err(e)=>erreur(&e)},
@@ -245,6 +247,29 @@ impl ViewerApp {
                     _ => self.charger_famille_fichier(chemin),
                 };
                 match r { Ok(id) => succes(&[("id", texte(&id))]), Err(e) => erreur(&e) }
+            }
+            "menu" => {
+                use super::menu_vue::ActionMenu as A;
+                let a = match argument.trim() {
+                    "repeter" => match self.derniere_commande { Some(o) => A::Repeter(o), None => return erreur("aucune commande à répéter") },
+                    "identiques_vue" => A::Identiques { dans_la_vue: true },
+                    "identiques_projet" => A::Identiques { dans_la_vue: false },
+                    "verrouiller" => A::Verrou(true),
+                    "deverrouiller" => A::Verrou(false),
+                    "demolir" => A::Demolir,
+                    "inverser" => A::Inverser,
+                    "masquer" => A::Masquer,
+                    "masquer_vue" => A::MasquerVue,
+                    "isoler" => A::Isoler,
+                    g if g.starts_with("garder ") => match &g[7..] {
+                        "murs" => A::Garder("Murs"), "dalles" => A::Garder("Dalles"), "ouvertures" => A::Garder("Ouvertures"), "structures" => A::Garder("Structures"),
+                        _ => return erreur("garder murs|dalles|ouvertures|structures"),
+                    },
+                    _ => return erreur("usage : menu repeter|identiques_vue|identiques_projet|garder <catégorie>|verrouiller|deverrouiller|demolir|inverser|masquer|masquer_vue|isoler"),
+                };
+                self.error = None;
+                self.action_menu(a);
+                match &self.error { Some(e) => erreur(e), None => self.etat() }
             }
             "transformation" => match serde_json::from_str::<serde_json::Value>(argument).map_err(|e| e.to_string()).and_then(|v| self.regler_transformation(&v)) {
                 Ok(()) => succes(&[("transformation", self.etat_transformation().to_string())]),
@@ -727,6 +752,7 @@ impl ViewerApp {
             "tout_afficher" => {
                 self.memoriser_vue();
                 self.hidden_objects.clear();
+        self.masques_utilisateur.clear();
                 self.hidden_storeys.clear();
                 self.isolated = None;
                 self.vue_active = None;

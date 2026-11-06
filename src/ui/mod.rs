@@ -20,6 +20,7 @@ mod volets;
 mod murs_courbes;
 mod aides;
 mod transformer;
+mod menu_vue;
 use aides::*;
 mod documents;
 mod coupe;
@@ -326,6 +327,8 @@ enum OngletRuban {
     Debut,
     Modeliser,
     Modifier,
+    /// Visibilité : isoler, masquer, afficher les masqués, cadrage.
+    Vue,
     Annoter,
     Sortie,
     /// Ruban de l'éditeur de familles : outils de création.
@@ -666,8 +669,18 @@ pub struct ViewerApp {
     largeurs_panneaux: [f32; 2],
     /// Cadenas affichés à la dernière image : élément natif et position écran.
     cadenas_ecran: Vec<(String, egui::Pos2)>,
+    /// Objets masqués par l'utilisateur (Masquer temporaire), distincts des variantes.
+    masques_utilisateur: HashSet<u32>,
+    /// Mode « Afficher les éléments masqués » : masqués rendus en magenta, clic = réafficher.
+    afficher_masques: bool,
+    /// Objets masqués rendus visibles par ce mode (dernier calcul de visibilité).
+    objets_masques: HashSet<u32>,
     /// Commande de transformation en cours (Déplacer, Copier, Tourner, Aligner).
     transfo: transformer::Transformation,
+    /// Dernière commande de modification utilisée : Entrée ou clic droit la relance.
+    derniere_commande: Option<crate::ui::ruban::Outil>,
+    /// Poignée du milieu du mur en cours de glissement : mur, départ, position courante.
+    glisse_milieu: Option<(String, [f64; 2], [f64; 2])>,
 }
 
 impl ViewerApp {
@@ -817,7 +830,12 @@ impl ViewerApp {
             zone_panneaux: egui::Rect::NOTHING,
             largeurs_panneaux: [300.0, 320.0],
             cadenas_ecran: Vec::new(),
+            masques_utilisateur: HashSet::new(),
+            afficher_masques: false,
+            objets_masques: HashSet::new(),
             transfo: Default::default(),
+            derniere_commande: None,
+            glisse_milieu: None,
         };
         if let Some(p) = path {
             app.open(p, &cc.egui_ctx);
@@ -872,6 +890,7 @@ impl eframe::App for ViewerApp {
         }
         self.clavier_dessin(&ctx);
         self.clavier_transformation(&ctx);
+        self.repeter_commande(&ctx);
         if self.alignement_plan && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             self.alignement_plan = false;
             self.arete_alignement = None;
@@ -880,6 +899,9 @@ impl eframe::App for ViewerApp {
             self.orientation_nord_en_cours = false;
             self.arete_alignement = None;
             self.status = "Orientation du nord annulée.".into();
+        }
+        if self.afficher_masques && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+            self.basculer_afficher_masques();
         }
         if self.ruban_edition.a_un_outil() && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             // Échap : la saisie, puis le mur ou la dalle en cours, puis l'outil

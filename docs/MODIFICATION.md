@@ -52,14 +52,14 @@ Contrôle de chaque fonction : un script `tools/test-*.py` la joue par le pilote
 |---|---|---|---|---|---|---|
 | 1 | **Aligner** | AL | aucune préalable | 1. ligne de référence (axe, face, ligne de quadrillage) ; 2. éléments à aligner, clic par clic | Référence : axe / face extérieure / face intérieure / face du noyau ; Verrouiller l'alignement (cadenas) | **graphique** : référence cliquée puis éléments cliqués, survol surligné ; reste : choix de face, cadenas |
 | 2 | **Déplacer** | MV | éléments | point de départ → point d'arrivée, ou distance saisie | Copier ; Contraindre ; Déconnecter (détacher les jonctions) ; Déplacer en Z | **graphique** : deux clics ou distance tapée, case Copier ; reste : Déconnecter, Z |
-| 3 | **Décaler** | DE | murs, lignes, contours | côté par la souris + distance, ou clic de passage | Copier (par défaut : oui) ; Mesure : axe / face | **graphique** : clic sur le mur, côté et distance au curseur ou tapée, Copier coché ; reste : contours et murs courbes |
+| 3 | **Décaler** | DE | murs, lignes, contours | côté par la souris + distance, ou clic de passage | Copier (par défaut : oui) ; Mesure : axe / face | **graphique** : murs droits, courbes (arc concentrique) et composés, contour de dalle (vers l'extérieur ou l'intérieur), distance au curseur ou tapée, Copier coché ; lignes d'annotation par le pilote |
 | 4 | **Tourner** | RO | éléments | centre (sélection par défaut, déplaçable) → direction de départ → angle, ou angle saisi | Copier ; Pas angulaire | **graphique** : centre déplaçable au clic, rapporteur, Maj 15°, angle tapé, case Copier (une seule annulation) |
 | 5 | **Copier** | CO | éléments | point de départ → point(s) d'arrivée | Multiple ; Sur un niveau (= `CopierSurNiveau`) | **graphique** : deux clics, Multiple |
 | 6 | **Réseau** | RE | éléments | linéaire : 2 points + nombre ; polaire : centre + angle + nombre | Linéaire / polaire ; Dernier = distance totale ou pas ; Grouper | **graphique** : linéaire (base, 2ᵉ élément ou pas tapé) et polaire (centre, angle entre éléments), nombre réglable ; reste : Grouper |
 | 7 | **Échelle** | EC | éléments 2D, contours, terrains, annotations | point de base → facteur (saisi ou 2 longueurs) | Graphique / numérique | **graphique** : base, référence, nouvelle longueur ou facteur tapé ; refusée sur murs, menuiseries, structures |
 | 8 | **Symétrie** | SY | éléments | axe : élément existant ou 2 points | Copier (par défaut : oui) ; Symétriser les familles (sens d'ouverture des portes) | **graphique** : deux points de l'axe, Copier coché par défaut, face extérieure des murs gardée dehors, paumelles inversées ; reste : axe pris sur un élément |
 | 9 | **Ajuster / prolonger** | AJ | aucune préalable | 1. référence ; 2. élément, côté à conserver | Un seul / plusieurs éléments vers une même référence ; En angle (deux éléments à l'intersection) | `Ajuster` et `AjusterAngle` existent ; mode « plusieurs » absent |
-| 10 | **Scinder** | SC | aucune préalable | clic sur l'élément au point de coupure | Écart (scinder avec espace) ; Supprimer le segment intérieur (2 clics) | **graphique** : clic au point de coupure, écart réglable, ouvertures réparties, murs composés compris ; refus si une ouverture est coupée ; reste : poutres, lignes |
+| 10 | **Scinder** | SC | aucune préalable | clic sur l'élément au point de coupure | Écart (scinder avec espace) ; Supprimer le segment intérieur (2 clics) | **graphique** : murs droits et composés, poutres (hauteur interpolée), écart réglable, ouvertures réparties ; lignes d'annotation par le pilote |
 | 11 | **Supprimer** | Suppr | éléments | aucune | Rapport des dépendants supprimés (ouvertures, cotes, étiquettes) avant validation | `Supprimer` existe ; rapport des dépendants absent |
 
 ## 3. Visibilité
@@ -75,8 +75,8 @@ Deux portées distinctes, à ne pas confondre :
 |---|---|---|---|---|
 | 12 | **Verrouiller** | CD | l'élément ne peut être ni déplacé, ni modifié, ni supprimé ; il reste sélectionnable et copiable ; cadenas affiché sur l'élément dans la vue | **fait** : `Projet::verrous`, `Commande::Verrouiller`, contrôle dans `executer` et à chaque édition (`modele/edition/verrous.rs`), test `tools/test-verrou.py` ; reste : propriétés grisées |
 | 13 | **Déverrouiller** | DC | lève le verrou ; ou clic sur le cadenas dans la vue | **fait** |
-| 14 | **Masquer** | H (temporaire), HV (dans la vue) | élément, catégorie ou filtre | `Masquer` (H) et `masquer_elements_vue` existent ; à séparer en deux commandes explicites |
-| 15 | **Afficher** | — | mode « Afficher les éléments masqués » : masqués en magenta, clic pour les réafficher | partiel : `retablir_elements_vue` réaffiche tout, pas élément par élément |
+| 14 | **Masquer** | H (temporaire), MQ (dans la vue) | deux commandes : temporaire (perdu à la fermeture de la vue, cadre turquoise) ou enregistré avec la vue ; onglet Vue | **fait** |
+| 15 | **Afficher** | AF | mode « Afficher les éléments masqués » : masqués en magenta, clic sur un élément pour le réafficher (temporaire ou de la vue), Échap pour sortir | **fait** |
 | — | **Isoler** | I | temporaire | existe |
 
 Règle : le verrouillage s'applique au **modèle** (partagé en collaboration). Le masquage s'applique à la **vue** ou à la **session**.
@@ -103,22 +103,22 @@ Règle : le verrouillage s'applique au **modèle** (partagé en collaboration). 
 
 ## 5. Fonctions ajoutées (oubliées dans la liste initiale)
 
-| Priorité | Fonction | Interaction graphique |
-|---|---|---|
-| 1 | Démolir | clic sur l'élément (curseur marteau) → phase « démoli », graphisme de démolition immédiat |
-| 1 | Sélectionner tous les identiques | clic droit sur l'élément → « dans la vue / dans le projet » |
-| 1 | Filtre de sélection | après une fenêtre de sélection, cases par catégorie dans la barre d'options |
-| 1 | Reproduire les propriétés | clic sur la source (pipette) → clics sur les cibles (pinceau) |
-| 1 | Remplacer le type | sélection → liste des types dans la barre d'options |
-| 1 | Joindre / détacher, attacher haut / bas | clic sur l'élément → clic sur la cible |
-| 1 | Coller aligné sur niveaux | Ctrl+V → cocher les niveaux dans la liste, aperçu sur chacun |
-| 2 | Grouper / dissocier | sélection → bouton ; groupe encadré au survol |
-| 2 | Changer d'hôte | clic sur l'ouverture → clic sur le nouveau mur, aperçu glissant |
-| 2 | Inverser | flèches d'inversion sur l'élément sélectionné |
-| 2 | Remplacer le graphisme dans la vue | sélection → plume, couleur, demi-teinte dans la barre d'options |
-| 2 | Cadenas des cotes et alignements | cadenas cliquable sur la cote |
-| 3 | Peindre un matériau | matériau choisi → clic sur la face |
-| 3 | Diviser une face | tracer le contour sur la face |
+| Priorité | Fonction | Interaction graphique | État |
+|---|---|---|---|
+| 1 | Démolir (DM) | clic sur l'élément → démoli dans la dernière phase, teinte rouge ; nouveau clic : annuler | **fait** (`Projet::demolitions`) ; reste : trait de démolition dans les plans imprimés |
+| 1 | Sélectionner tous les identiques | clic droit sur l'élément → « dans la vue / dans le projet » | **fait** |
+| 1 | Filtre de sélection | clic droit → Filtrer la sélection → « Garder seulement : catégorie (n) » | **fait** |
+| 1 | Reproduire les propriétés (RP) | pipette sur la source → pinceau sur les cibles (murs simples, dalles, ouvertures, poteaux et poutres) | **fait** |
+| 1 | Remplacer le type | sélection → sélecteur de type du panneau Propriétés | existait |
+| 1 | Joindre / détacher, attacher haut / bas | bouton Jonctions du ruban Modifier | existait ; reste : version clic sur la cible |
+| 1 | Coller aligné sur niveaux | Ctrl+C puis Ctrl+V → niveau de destination | existait (un niveau à la fois) ; reste : plusieurs niveaux d'un coup |
+| 2 | Grouper / dissocier | sélection → bouton ; groupe encadré au survol | **à faire** |
+| 2 | Changer d'hôte (CH) | clic sur l'ouverture (ou sur la baie) → clic sur le nouveau mur à l'emplacement voulu | **fait** ; reste : aperçu glissant |
+| 2 | Inverser (NV) | outil : clic sur un mur (sens) ou une ouverture (côté, Maj : paumelles) ; flèches d'inversion à côté du mur sélectionné | **fait** |
+| 2 | Remplacer le graphisme dans la vue | sélection → plume, couleur, demi-teinte dans la barre d'options | **à faire** |
+| 2 | Cadenas des cotes et alignements | cadenas cliquable sur la cote | **à faire** |
+| 3 | Peindre un matériau | matériau choisi → clic sur la face | **à faire** |
+| 3 | Diviser une face | tracer le contour sur la face | **à faire** |
 
 ## 6. Ordre de mise en œuvre conseillé
 
@@ -130,4 +130,11 @@ Règle : le verrouillage s'applique au **modèle** (partagé en collaboration). 
 
 Test graphique de l'ensemble : `tools/test-transformer.py` (clics et frappes simulés, annulation).
 
-Reste à faire : Supprimer avec rapport des dépendants, Ajuster plusieurs éléments, Masquer temporaire / dans la vue en deux commandes, Afficher élément par élément, menu du clic droit, répétition de la dernière commande, poignées hors commande, fonctions de la section 5.
+Fait ensuite (`src/ui/menu_vue.rs`, `tools/test-visibilite.py`, `tools/test-elements.py`) :
+- Visibilité : onglet **Vue** du ruban (Isoler, Masquer, Masquer vue, Afficher, Cadre).
+- Clic droit dans la vue hors commande : répéter la dernière commande, annuler, rétablir, identiques, filtre, verrou, masquer, isoler, démolir, inverser, supprimer.
+- Entrée sans commande active : relance la dernière commande de modification.
+- Poignée carrée au milieu du mur sélectionné (glisser = déplacer) et flèches d'inversion.
+- Un clic qui ne touche aucune face (bord du mur en plan, vide d'une baie) vise le mur ou l'ouverture qui contient le point.
+
+Reste à faire : Supprimer avec rapport des dépendants, Ajuster plusieurs éléments, menu du clic droit pendant une commande (Valider / Annuler), poignées des dalles et des poutres, Décaler et Scinder des lignes d'annotation à la souris, fonctions de la section 5 marquées « à faire ».

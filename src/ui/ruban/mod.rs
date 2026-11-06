@@ -18,6 +18,7 @@ use std::collections::BTreeMap;
 pub enum Menu {
     Modeliser,
     Modifier,
+    Vue,
     Annoter,
 }
 
@@ -47,6 +48,10 @@ pub(crate) enum Outil {
     Echelle,
     Decaler,
     Scinder,
+    Demolir,
+    Reproduire,
+    ChangerHote,
+    Inverser,
     Aligner,
     Ajuster,
     ModifierContour,
@@ -57,6 +62,8 @@ pub(crate) enum Outil {
     Cadrer,
     Isoler,
     Masquer,
+    MasquerVue,
+    Afficher,
     Verrouiller,
     Deverrouiller,
     Cote,
@@ -104,6 +111,10 @@ impl Outil {
             Self::Echelle => "Échelle",
             Self::Decaler => "Décaler",
             Self::Scinder => "Scinder",
+            Self::Demolir => "Démolir",
+            Self::Reproduire => "Pinceau",
+            Self::ChangerHote => "Hôte",
+            Self::Inverser => "Inverser",
             Self::Aligner => "Aligner",
             Self::Ajuster => "Ajuster / prolonger",
             Self::ModifierContour => "Modifier",
@@ -114,6 +125,8 @@ impl Outil {
             Self::Cadrer => "Cadre",
             Self::Isoler => "Isoler",
             Self::Masquer => "Masquer",
+            Self::MasquerVue => "Masquer vue",
+            Self::Afficher => "Afficher",
             Self::Verrouiller => "Verrouiller",
             Self::Deverrouiller => "Déverrouiller",
             Self::Cote => "Cote",
@@ -289,9 +302,12 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
         Menu::Modifier => &[
             ("Transformer", &[Deplacer, Copier, Tourner, Symetrie, Reseau, Echelle]),
             ("Ajuster", &[Aligner, Decaler, Ajuster, Scinder, CreerIdentique, Supprimer]),
-            ("Verrou et visibilité", &[Verrouiller, Deverrouiller, Cadrer, Isoler, Masquer]),
-            // Modifier : contours, polylignes, terrains ; commandes propres à la sélection
-            ("Éléments", &[ModifierContour, CopierNiveau, Jonctions]),
+            // contours, terrains, jonctions ; démolition, propriétés, hôte, sens ; verrou
+            ("Éléments", &[ModifierContour, CopierNiveau, Jonctions, Demolir, Reproduire, ChangerHote, Inverser, Verrouiller, Deverrouiller]),
+        ],
+        Menu::Vue => &[
+            ("Visibilité", &[Isoler, Masquer, MasquerVue, Afficher]),
+            ("Plan", &[Cadrer]),
         ],
         Menu::Annoter => &[
             ("Vues", &[VuePlan, VueCoupe]),
@@ -463,7 +479,7 @@ fn champs(o: Outil) -> Vec<Champ> {
     use Champ::*;
     use Outil::*;
     match o {
-        Surfaces | Niveau | Terrain | LimitePropriete | ModifierContour | CopierNiveau | Jonctions | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | Verrouiller | Deverrouiller | Feuilles | Nomenclatures => vec![],
+        Surfaces | Niveau | Terrain | LimitePropriete | ModifierContour | CopierNiveau | Jonctions | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | MasquerVue | Afficher | Verrouiller | Deverrouiller | Feuilles | Nomenclatures => vec![],
         Quadrillage => vec![Saisie("Repère", "A"), Choix("Tracé", &["Droit", "Arc"])],
         Mur => vec![
             Choix(
@@ -521,7 +537,7 @@ fn champs(o: Outil) -> Vec<Champ> {
         ],
         Copier => vec![Nombre("Copies", 1.0, ""), Nombre("Distance", 1000.0, " mm")],
         Tourner => vec![Nombre("Angle", 90.0, " °")],
-        Symetrie | Reseau | Echelle | Decaler | Scinder => vec![],
+        Symetrie | Reseau | Echelle | Decaler | Scinder | Demolir | Reproduire | ChangerHote | Inverser => vec![],
         Aligner => vec![Choix("Référence", &["Face", "Axe"])],
         Ajuster => vec![Choix("Mode", &["Ajuster ou prolonger", "Prolonger seulement"])],
         Cote => vec![

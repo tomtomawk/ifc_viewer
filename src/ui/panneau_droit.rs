@@ -173,8 +173,14 @@ impl ViewerApp {
     /// Cadrer, Isoler ou Masquer (ruban Modifier) : objets de la sélection courante.
     pub(super) fn visibilite_selection(&mut self, o: crate::ui::ruban::Outil) {
         use crate::ui::ruban::Outil;
-        if o == Outil::Masquer && self.masquer_elements_vue() { return; }
-        let mut objets: Vec<u32> = self.selected.into_iter().chain(self.selection_multiple.iter().copied()).flat_map(|id| self.objects_under(id)).collect();
+        if o == Outil::MasquerVue {
+            if !self.masquer_elements_vue() {
+                self.status = "Masquer dans la vue : ouvrir une vue du projet (plan ou coupe).".into();
+            }
+            return;
+        }
+        // toutes les sélections (scène, multiple, éléments natifs) : objets marqués au rendu
+        let mut objets: Vec<u32> = self.objets_selectionnes().iter().enumerate().filter(|(_, m)| **m == 255).map(|(i, _)| i as u32).collect();
         objets.sort_unstable();
         objets.dedup();
         match o {
@@ -280,8 +286,57 @@ impl ViewerApp {
     }
 
     pub(super) fn hide(&mut self, objs: Vec<u32>) {
+        self.masques_utilisateur.extend(objs.iter().copied());
         self.hidden_objects.extend(objs);
         self.visibility_dirty = true;
+        self.status = "Masqué temporairement — Afficher (AF) ou Tout afficher pour réafficher.".into();
+    }
+
+    /// Mode « Afficher les éléments masqués » : bascule.
+    pub(super) fn basculer_afficher_masques(&mut self) {
+        self.afficher_masques = !self.afficher_masques;
+        self.visibility_dirty = true;
+        self.status = if self.afficher_masques {
+            "Éléments masqués en magenta : cliquer pour réafficher · Échap ou Afficher pour sortir".into()
+        } else {
+            "Mode Afficher terminé.".into()
+        };
+    }
+
+    /// Mode Afficher : réaffiche l'objet masqué cliqué (temporaire ou dans la vue). Vrai si
+    /// le clic a été consommé.
+    pub(super) fn reafficher(&mut self, objet: u32) -> bool {
+        if !self.afficher_masques || !self.objets_masques.contains(&objet) {
+            return false;
+        }
+        let Some(s) = &self.scene else { return false };
+        let id = s.objects[objet as usize].id;
+        // élément entier : toutes ses parties (mur composé, menuiserie…)
+        // même cible qu'un clic de sélection : l'élément, ou son mur composé
+        let racine = self.cible_clic(id);
+        let mut parties = self.objects_under(racine);
+        parties.push(objet);
+        for o in &parties {
+            self.hidden_objects.remove(o);
+            self.masques_utilisateur.remove(o);
+        }
+        if let (Some(cle), Some(vue_id)) = (self.cle_native(racine), self.vue_native_id()) {
+            if let Some((projet, _)) = &self.natif {
+                if projet.vues.iter().find(|v| v.id == vue_id).is_some_and(|v| v.elements_masques.contains(&cle)) {
+                    let mut copie = projet.clone();
+                    if let Some(v) = copie.vues.iter_mut().find(|v| v.id == vue_id) {
+                        v.elements_masques.retain(|x| x != &cle);
+                    }
+                    if let Err(e) = self.appliquer_projet(copie) {
+                        self.error = Some(e);
+                    }
+                    self.coupe_dirty = true;
+                }
+            }
+        }
+        self.visibility_dirty = true;
+        self.status = "Élément réaffiché — cliquer un autre élément magenta, Échap pour sortir.".into();
+        true
     }
 
 }

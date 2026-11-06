@@ -6,6 +6,7 @@
 //! droit pour revenir d'une étape.
 use super::*;
 use crate::modele::edition::commandes::Commande;
+use crate::modele::Axe;
 use crate::ui::ruban::Outil;
 
 /// Nombre d'éléments d'un réseau quand aucun n'est réglé.
@@ -105,9 +106,15 @@ impl Transformation {
             Outil::Echelle => "Cliquer la nouvelle longueur".into(),
             Outil::Aligner if self.reference.is_none() => "Cliquer la référence (axe d'un mur)".into(),
             Outil::Aligner => "Cliquer les éléments à aligner · Échap : changer de référence".into(),
-            Outil::Decaler if self.element.is_none() => "Cliquer le mur à décaler".into(),
+            Outil::Decaler if self.element.is_none() => "Cliquer le mur ou la dalle à décaler".into(),
             Outil::Decaler => format!("Cliquer le côté et la distance, ou taper la distance{valeur}"),
-            Outil::Scinder => "Cliquer le mur au point de coupure".into(),
+            Outil::Scinder => "Cliquer le mur ou la poutre au point de coupure".into(),
+            Outil::Demolir => "Cliquer les éléments à démolir (clic sur un élément démoli : annuler)".into(),
+            Outil::Reproduire if self.element.is_none() => "Pipette : cliquer l'élément source".into(),
+            Outil::Reproduire => "Pinceau : cliquer les éléments à mettre à jour · Échap : changer de source".into(),
+            Outil::ChangerHote if self.element.is_none() => "Cliquer l'ouverture à déplacer".into(),
+            Outil::ChangerHote => "Cliquer le nouveau mur hôte à l'emplacement voulu".into(),
+            Outil::Inverser => "Cliquer un mur (sens) ou une ouverture (côté ; Maj : paumelles)".into(),
             _ => String::new(),
         }
     }
@@ -170,7 +177,7 @@ impl ViewerApp {
         }
         match self.ruban_edition.outil()? {
             o @ (Outil::Deplacer | Outil::Copier | Outil::Tourner | Outil::Symetrie | Outil::Reseau | Outil::Echelle) if !self.selection_bim().is_empty() => Some(o),
-            o @ (Outil::Aligner | Outil::Decaler | Outil::Scinder) => Some(o),
+            o @ (Outil::Aligner | Outil::Decaler | Outil::Scinder | Outil::Demolir | Outil::Reproduire | Outil::ChangerHote | Outil::Inverser) => Some(o),
             _ => None,
         }
     }
@@ -180,6 +187,9 @@ impl ViewerApp {
         let outil = self.outil_transformation();
         if outil != self.transfo.outil {
             self.transfo.commencer(outil);
+            if outil.is_some() {
+                self.derniere_commande = outil;
+            }
         }
     }
 
@@ -233,6 +243,45 @@ impl ViewerApp {
         p.axe_element(id)
     }
 
+    /// Distance de décalage (mm) donnée par le curseur `p` pour l'élément `id` : à gauche
+    /// du sens d'un mur droit, vers le centre d'un arc trigonométrique, vers l'extérieur
+    /// d'un contour de dalle.
+    fn distance_decalage(&self, id: &str, p: [f64; 2]) -> Option<f64> {
+        let (projet, _) = self.natif.as_ref()?;
+        if let Some(d) = projet.dalles.iter().find(|d| d.id == id) {
+            let c = d.contours.first()?;
+            let n = c.len();
+            let dist = (0..n).map(|i| {
+                let (a, b) = (c[i], c[(i + 1) % n]);
+                let (ux, uy) = (b[0] - a[0], b[1] - a[1]);
+                let l2 = (ux * ux + uy * uy).max(1e-9);
+                let t = (((p[0] - a[0]) * ux + (p[1] - a[1]) * uy) / l2).clamp(0.0, 1.0);
+                (p[0] - a[0] - ux * t).hypot(p[1] - a[1] - uy * t)
+            }).fold(f64::MAX, f64::min);
+            let mut dedans = false;
+            for i in 0..n {
+                let (a, b) = (c[i], c[(i + n - 1) % n]);
+                if (a[1] > p[1]) != (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0] {
+                    dedans = !dedans;
+                }
+            }
+            return Some(if dedans { -dist } else { dist });
+        }
+        let couche = projet.assemblage(id).and_then(|a| a.couches.first().cloned()).unwrap_or(id.to_string());
+        if let Some(Axe::Arc { debut, centre, direct, .. }) = projet.murs.iter().find(|m| m.id == couche).map(|m| m.axe.clone()) {
+            let r = (debut[0] - centre[0]).hypot(debut[1] - centre[1]);
+            let rp = (p[0] - centre[0]).hypot(p[1] - centre[1]);
+            return Some(if direct { r - rp } else { rp - r });
+        }
+        let (a, b, _) = self.axe_mur(id)?;
+        Some(distance_signee(p, a, b))
+    }
+
+    /// Élément décalable : mur (droit, courbe, composé) ou dalle.
+    fn decalable(&self, id: &str) -> bool {
+        self.axe_mur(id).is_some() || self.natif.as_ref().is_some_and(|(p, _)| p.dalles.iter().any(|d| d.id == id))
+    }
+
     /// Exécute la transformation de la sélection en une seule transaction ; `copie` : sur
     /// une copie de la sélection (copie puis transformation, un seul Ctrl+Z).
     fn appliquer_transformation(&mut self, commande: impl FnOnce(Vec<String>) -> Commande, copie: bool) {
@@ -248,7 +297,22 @@ impl ViewerApp {
     }
 
     /// Clic dans la vue pendant une commande. `cible` : élément natif sous le clic.
+    /// Mur (ou mur composé) dont l'épaisseur contient `p` : cible d'un clic qui ne touche
+    /// aucune face (bord du mur, vue en plan).
+    pub(super) fn mur_proche(&self, p: [f64; 2]) -> Option<String> {
+        let (projet, _) = self.natif.as_ref()?;
+        let ids = projet.murs.iter().filter(|m| m.assemblage.is_none()).map(|m| m.id.clone()).chain(projet.assemblages.iter().map(|a| a.id.clone()));
+        ids.filter_map(|id| {
+            let (axe, epaisseur, _) = crate::modele::volumes::solides::hote(projet, &id).ok()?;
+            let s = axe.abscisse(p);
+            let (q, _) = crate::modele::volumes::solides::repere(&axe, s);
+            let d = (q.x - p[0]).hypot(q.y - p[1]);
+            (d <= epaisseur / 2.0 + 20.0).then_some((d, id))
+        }).min_by(|a, b| a.0.total_cmp(&b.0)).map(|(_, id)| id)
+    }
+
     pub(super) fn clic_transformation(&mut self, outil: Outil, p: [f64; 2], ecran: egui::Pos2, rect: egui::Rect, altitude: f64, maj: bool, cible: Option<String>) {
+        let cible = cible.or_else(|| self.mur_proche(p));
         // centre déplaçable (Tourner, réseau polaire) : clic dessus, puis nouveau centre
         if self.transfo.polaire_avec_centre(outil) {
             let pres_du_centre = self.centre_rotation().and_then(|c| self.ecran_plan(rect, c, altitude)).is_some_and(|c| c.distance(ecran) <= 10.0);
@@ -324,16 +388,79 @@ impl ViewerApp {
                 }
             }
             Outil::Decaler => match self.transfo.element.clone() {
-                None => match cible.filter(|id| self.axe_mur(id).is_some()) {
+                None => match cible.filter(|id| self.decalable(id)) {
                     Some(id) => self.transfo.element = Some(id),
-                    None => self.status = "Décaler : cliquer un mur droit.".into(),
+                    None => self.status = "Décaler : cliquer un mur ou une dalle.".into(),
                 },
                 Some(id) => {
-                    let Some((a, b, _)) = self.axe_mur(&id) else { return };
-                    self.valider_decalage(&id, distance_signee(p, a, b));
+                    if let Some(d) = self.distance_decalage(&id, p) {
+                        self.valider_decalage(&id, d);
+                    }
                 }
             },
-            Outil::Scinder => match cible.filter(|id| self.axe_mur(id).is_some()) {
+            Outil::Demolir => match cible {
+                Some(id) => {
+                    let (deja, phase) = self.natif.as_ref().map_or((false, None), |(p, _)| (p.demolitions.contains_key(&id), p.phases.last().cloned()));
+                    let phase = if deja { None } else { phase };
+                    match self.executer_bim(Commande::Demolir { ids: vec![id], phase }) {
+                        Ok(_) => self.status = if deja { "Démolition annulée — Ctrl+Z pour annuler.".into() } else { "Élément démoli — cliquer le suivant, Ctrl+Z pour annuler.".into() },
+                        Err(e) => self.error = Some(e),
+                    }
+                    self.bim.selection.clear();
+                }
+                None => self.status = "Démolir : cliquer sur un élément.".into(),
+            },
+            Outil::Reproduire => match (self.transfo.element.clone(), cible) {
+                (_, None) => self.status = "Reproduire : cliquer sur un élément.".into(),
+                (None, Some(id)) => self.transfo.element = Some(id),
+                (Some(source), Some(id)) if source == id => {}
+                (Some(source), Some(id)) => match self.executer_bim(Commande::Reproduire { source, cibles: vec![id] }) {
+                    Ok(_) => {
+                        self.bim.selection.clear();
+                        self.status = "Propriétés reproduites — cliquer la cible suivante, Ctrl+Z pour annuler.".into();
+                    }
+                    Err(e) => self.error = Some(e),
+                },
+            },
+            Outil::ChangerHote => {
+                let ouverture = |app: &Self, id: &String| app.natif.as_ref().is_some_and(|(p, _)| p.ouvertures.iter().any(|o| &o.id == id));
+                // un clic sur le mur à l'endroit d'une ouverture choisit cette ouverture
+                // (le clic peut aussi tomber dans le vide de la baie : aucun objet touché)
+                let cible = match (&self.transfo.element, cible) {
+                    (None, c) if c.as_ref().is_none_or(|id| !ouverture(self, id)) => self.natif.as_ref().and_then(|(projet, _)| {
+                        projet.ouvertures.iter().find(|o| {
+                            crate::modele::volumes::solides::hote(projet, &o.mur).is_ok_and(|(axe, epaisseur, _)| {
+                                let s = axe.abscisse(p);
+                                let (q, _) = crate::modele::volumes::solides::repere(&axe, s);
+                                (s - o.abscisse).abs() <= o.largeur / 2.0 && (q.x - p[0]).hypot(q.y - p[1]) <= epaisseur / 2.0 + 100.0
+                            })
+                        }).map(|o| o.id.clone())
+                    }).or(c),
+                    (_, c) => c,
+                };
+                match (self.transfo.element.clone(), cible) {
+                    (None, Some(id)) if ouverture(self, &id) => self.transfo.element = Some(id),
+                    (None, _) => self.status = "Changer d'hôte : cliquer une porte ou une fenêtre.".into(),
+                    (Some(id), Some(mur)) if self.axe_mur(&mur).is_some() => match self.executer_bim(Commande::ChangerHote { id, mur, point: p }) {
+                        Ok(_) => self.fin_commande("Ouverture placée sur le nouveau mur"),
+                        Err(e) => self.error = Some(e),
+                    },
+                    (Some(_), _) => self.status = "Changer d'hôte : cliquer un mur.".into(),
+                }
+            }
+            Outil::Inverser => {
+                let Some(id) = cible else {
+                    self.status = "Inverser : cliquer un mur ou une ouverture.".into();
+                    return;
+                };
+                let ouverture = self.natif.as_ref().is_some_and(|(p, _)| p.ouvertures.iter().any(|o| o.id == id));
+                let c = if ouverture { Commande::InverserOuverture { id, paumelles: maj } } else { Commande::InverserMur { id } };
+                match self.executer_bim(c) {
+                    Ok(_) => self.status = "Inversé — Ctrl+Z pour annuler.".into(),
+                    Err(e) => self.error = Some(e),
+                }
+            }
+            Outil::Scinder => match cible.filter(|id| self.axe_mur(id).is_some() || self.natif.as_ref().is_some_and(|(p, _)| p.barres.iter().any(|b| &b.id == id && b.genre == crate::modele::GenreBarre::Poutre))) {
                 Some(id) => {
                     let ecart = self.transfo.ecart.max(0.0);
                     match self.executer_bim(Commande::Scinder { id, point: p, ecart }) {
@@ -341,7 +468,7 @@ impl ViewerApp {
                         Err(e) => self.error = Some(e),
                     }
                 }
-                None => self.status = "Scinder : cliquer sur un mur droit.".into(),
+                None => self.status = "Scinder : cliquer sur un mur droit ou une poutre.".into(),
             },
             _ => {}
         }
@@ -410,6 +537,23 @@ impl ViewerApp {
         }
     }
 
+    /// Entrée sans commande active : relance la dernière commande de modification.
+    pub(super) fn repeter_commande(&mut self, ctx: &egui::Context) {
+        if self.ruban_edition.outil().is_some() || self.saisie_active || ctx.egui_wants_keyboard_input() || self.parametres.is_some() {
+            return;
+        }
+        let Some(o) = self.derniere_commande else { return };
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)) {
+            self.relancer_commande(o);
+        }
+    }
+
+    pub(super) fn relancer_commande(&mut self, o: Outil) {
+        self.onglet_ruban = OngletRuban::Modifier;
+        self.ruban_edition.activer_outil(o);
+        self.status = format!("{} : commande relancée.", o.nom());
+    }
+
     /// Clavier : chiffres, virgule, signe moins, Retour arrière et Entrée pour une valeur
     /// tapée. Lu avant les raccourcis, uniquement quand l'étape attend une valeur.
     pub(super) fn clavier_transformation(&mut self, ctx: &egui::Context) {
@@ -468,9 +612,8 @@ impl ViewerApp {
             Outil::Echelle => self.status = "Échelle : le facteur doit être positif.".into(),
             Outil::Decaler => {
                 let (Some(id), Some(c)) = (self.transfo.element.clone(), self.transfo.curseur) else { return };
-                let Some((a, b, _)) = self.axe_mur(&id) else { return };
                 // côté du curseur, distance tapée
-                let cote = if distance_signee(c, a, b) < 0.0 { -1.0 } else { 1.0 };
+                let cote = if self.distance_decalage(&id, c).unwrap_or(1.0) < 0.0 { -1.0 } else { 1.0 };
                 self.valider_decalage(&id, cote * unite.vers_mm(v.abs()));
             }
             _ => {}
@@ -645,10 +788,28 @@ impl ViewerApp {
                     }
                 }
                 Some(id) => {
+                    let Some((p, _)) = point else { return };
+                    let Some(mut d) = self.distance_decalage(&id, p) else { return };
+                    if let Some(v) = lire_valeur(&self.transfo.saisie) {
+                        d = d.signum() * unite.vers_mm(v.abs());
+                    }
+                    // dalle : contour décalé en fantôme
+                    if let Some((projet, _)) = &self.natif {
+                        if let Some(dalle) = projet.dalles.iter().find(|x| x.id == id) {
+                            let z = projet.niveau(&dalle.niveau).map_or(0.0, |n| n.altitude) + dalle.decalage;
+                            if let Some(g) = dalle.contours.first().and_then(|c| crate::modele::edition::commandes::decaler_polygone(c, d)) {
+                                let pts: Vec<egui::Pos2> = g.iter().chain(g.first()).filter_map(|v| self.ecran_plan(rect, *v, z)).collect();
+                                painter.add(egui::Shape::line(pts, egui::Stroke::new(2.0, bleu.gamma_multiply(0.8))));
+                            }
+                            if let Some(q) = survol {
+                                painter.text(q + egui::vec2(16.0, -18.0), egui::Align2::LEFT_BOTTOM, unite.afficher(d.abs()), egui::FontId::proportional(13.0), bleu);
+                            }
+                            return;
+                        }
+                    }
                     let Some((a, b, z)) = self.axe_mur(&id) else { return };
                     trait_axe(&id, bleu, 2.0);
-                    let Some((p, _)) = point else { return };
-                    let mut d = distance_signee(p, a, b);
+                    let _ = distance_signee(p, a, b);
                     if let Some(v) = lire_valeur(&self.transfo.saisie) {
                         d = d.signum() * unite.vers_mm(v.abs());
                     }
@@ -663,6 +824,23 @@ impl ViewerApp {
                     cote(m, [m[0] + n[0], m[1] + n[1]], unite.afficher(d.abs()));
                 }
             },
+            Outil::Demolir | Outil::Reproduire | Outil::ChangerHote | Outil::Inverser => {
+                if let Some(source) = self.transfo.element.as_ref() {
+                    trait_axe(source, bleu, 2.0);
+                }
+                if let Some(id) = cible {
+                    trait_axe(&id, orange, 3.0);
+                    if let (Some(q), Some((projet, _))) = (survol, &self.natif) {
+                        let nom = projet.murs.iter().find(|m| m.id == id).map(|m| m.nom.clone())
+                            .or_else(|| projet.assemblage(&id).map(|a| a.nom.clone()))
+                            .or_else(|| projet.ouvertures.iter().find(|o| o.id == id).map(|o| o.nom.clone()))
+                            .or_else(|| projet.dalles.iter().find(|d| d.id == id).map(|d| d.nom.clone()))
+                            .unwrap_or_default();
+                        let etat = projet.demolitions.get(&id).map(|ph| format!(" · démoli ({ph})")).unwrap_or_default();
+                        painter.text(q + egui::vec2(16.0, -18.0), egui::Align2::LEFT_BOTTOM, format!("{nom}{etat}"), egui::FontId::proportional(12.0), orange);
+                    }
+                }
+            }
             Outil::Scinder => {
                 let Some(id) = cible else { return };
                 trait_axe(&id, orange, 3.0);
@@ -706,6 +884,8 @@ impl ViewerApp {
             "polaire": self.transfo.polaire,
             "ecart": self.transfo.ecart,
             "saisie": self.transfo.saisie,
+            "derniere": self.derniere_commande.map(|o| o.nom()),
+            "cible": self.transfo.cible,
         })
     }
 

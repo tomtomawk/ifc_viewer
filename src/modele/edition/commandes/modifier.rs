@@ -54,10 +54,13 @@ impl Projet {
         if !distance.is_finite() || distance.abs() < 1e-6 {
             return Err("Décaler : distance nulle.".into());
         }
+        if self.couches_de(&id).iter().any(|c| self.murs.iter().any(|m| &m.id == c && matches!(m.axe, Axe::Arc { .. }))) {
+            return self.decaler_arc(id, distance, copie);
+        }
+        if self.dalles.iter().any(|d| d.id == id) {
+            return self.decaler_contour(id, distance, copie);
+        }
         let (a, b) = if let Some((a, b, _)) = self.axe_element(&id) {
-            if self.couches_de(&id).iter().any(|c| self.murs.iter().any(|m| &m.id == c && matches!(m.axe, Axe::Arc { .. }))) {
-                return Err("Décaler : mur droit seulement (un mur courbe se modifie par son arc).".into());
-            }
             (a, b)
         } else if let Some(x) = self.annotations.iter().find(|x| x.id == id) {
             match x.forme {
@@ -85,9 +88,15 @@ impl Projet {
         if !(ecart.is_finite() && ecart >= 0.0) {
             return Err("Scinder : écart négatif.".into());
         }
+        if self.barres.iter().any(|b| b.id == id && b.genre == GenreBarre::Poutre) {
+            return self.scinder_poutre(id, point, ecart);
+        }
+        if self.annotations.iter().any(|a| a.id == id) {
+            return self.scinder_ligne(id, point, ecart);
+        }
         let couches = self.couches_de(&id);
         if couches.is_empty() || !couches.iter().all(|c| self.murs.iter().any(|m| &m.id == c && matches!(m.axe, Axe::Droit { .. }))) {
-            return Err("Scinder : mur droit seulement.".into());
+            return Err("Scinder : mur droit, poutre ou ligne d'annotation seulement.".into());
         }
         let (axe, _, _) = solides::hote(self, &id)?;
         let longueur = axe.longueur();
@@ -138,6 +147,252 @@ impl Projet {
         }
         Ok(vec![id, copie])
     }
+}
+
+impl Projet {
+    /// Décaler un mur courbe (ou composé courbe) : arc concentrique, de `distance` vers la
+    /// gauche du sens de l'arc ; les ouvertures gardent leur position angulaire.
+    fn decaler_arc(&mut self, id: String, distance: f64, copie: bool) -> Result<Vec<String>, String> {
+        let cible = if copie { self.executer_interne(Commande::Copier { ids: vec![id.clone()], delta: [0.0; 3] })?.remove(0) } else { id.clone() };
+        let couches = self.couches_de(&cible);
+        let mut rapport = None;
+        for c in &couches {
+            let m = self.murs.iter_mut().find(|m| &m.id == c).ok_or("Couche introuvable.")?;
+            let Axe::Arc { debut, fin, centre, direct } = &mut m.axe else { return Err("Décaler : mur composé mêlant arcs et droites.".into()) };
+            let r = (debut[0] - centre[0]).hypot(debut[1] - centre[1]);
+            // à gauche du sens : vers le centre pour un arc trigonométrique
+            let nouveau = if *direct { r - distance } else { r + distance };
+            if nouveau < 10.0 {
+                return Err("Décaler : le rayon deviendrait nul.".into());
+            }
+            let k = nouveau / r;
+            for p in [&mut *debut, &mut *fin] {
+                *p = [centre[0] + (p[0] - centre[0]) * k, centre[1] + (p[1] - centre[1]) * k];
+            }
+            rapport.get_or_insert(k);
+        }
+        let k = rapport.unwrap_or(1.0);
+        for o in self.ouvertures.iter_mut().filter(|o| o.mur == cible || couches.contains(&o.mur)) {
+            o.abscisse *= k;
+        }
+        Ok(vec![cible])
+    }
+
+    /// Décaler le contour extérieur d'une dalle : `distance` positive vers l'extérieur.
+    fn decaler_contour(&mut self, id: String, distance: f64, copie: bool) -> Result<Vec<String>, String> {
+        let cible = if copie { self.executer_interne(Commande::Copier { ids: vec![id.clone()], delta: [0.0; 3] })?.remove(0) } else { id.clone() };
+        let d = self.dalles.iter_mut().find(|d| d.id == cible).ok_or("Dalle introuvable.")?;
+        let contour = d.contours.first_mut().ok_or("Dalle sans contour.")?;
+        *contour = decaler_polygone(contour, distance).ok_or("Décaler : contour dégénéré après décalage.")?;
+        Ok(vec![cible])
+    }
+
+    /// Scinder une poutre au point projeté (hauteur interpolée), avec un écart.
+    fn scinder_poutre(&mut self, id: String, point: [f64; 2], ecart: f64) -> Result<Vec<String>, String> {
+        let b = self.barres.iter().find(|b| b.id == id).ok_or("Poutre introuvable.")?;
+        let (a, f) = (glam::DVec3::from_array(b.debut), glam::DVec3::from_array(b.fin));
+        let l = (f - a).truncate().length();
+        if l < 1.0 {
+            return Err("Scinder : poutre de longueur nulle.".into());
+        }
+        let u = (f - a).truncate() / l;
+        let s = (DVec2::from_array(point) - a.truncate()).dot(u);
+        if s - ecart / 2.0 < 1.0 || s + ecart / 2.0 > l - 1.0 {
+            return Err("Scinder : le point de coupure doit être à l'intérieur de la poutre.".into());
+        }
+        let p = |t: f64| (a + (f - a) * (t / l)).to_array();
+        let (q1, q2) = (p(s - ecart / 2.0), p(s + ecart / 2.0));
+        let copie = self.executer_interne(Commande::Copier { ids: vec![id.clone()], delta: [0.0; 3] })?.remove(0);
+        if let Some(b) = self.barres.iter_mut().find(|b| b.id == id) { b.fin = q1; }
+        if let Some(b) = self.barres.iter_mut().find(|b| b.id == copie) { b.debut = q2; }
+        Ok(vec![id, copie])
+    }
+
+    /// Scinder une ligne d'annotation au point projeté, avec un écart.
+    fn scinder_ligne(&mut self, id: String, point: [f64; 2], ecart: f64) -> Result<Vec<String>, String> {
+        use documentation::AnnotationForme as F;
+        let x = self.annotations.iter().find(|x| x.id == id).ok_or("Annotation introuvable.")?;
+        let F::Ligne { debut, fin } = x.forme else { return Err("Scinder : ligne d'annotation seulement.".into()) };
+        let (a, f) = (DVec2::from_array(debut), DVec2::from_array(fin));
+        let l = (f - a).length();
+        let u = (f - a).try_normalize().ok_or("Scinder : ligne de longueur nulle.")?;
+        let s = (DVec2::from_array(point) - a).dot(u);
+        if s - ecart / 2.0 < 0.01 || s + ecart / 2.0 > l - 0.01 {
+            return Err("Scinder : le point de coupure doit être sur la ligne.".into());
+        }
+        let copie = self.executer_interne(Commande::Copier { ids: vec![id.clone()], delta: [0.0; 3] })?.remove(0);
+        for (cle, d, fi) in [(&id, debut, (a + u * (s - ecart / 2.0)).to_array()), (&copie, (a + u * (s + ecart / 2.0)).to_array(), fin)] {
+            if let Some(x) = self.annotations.iter_mut().find(|x| &x.id == cle) {
+                x.forme = F::Ligne { debut: d, fin: fi };
+            }
+        }
+        Ok(vec![id, copie])
+    }
+
+    /// Phase de création d'un élément (champ propre ou contexte).
+    pub fn phase_element(&self, id: &str) -> Option<String> {
+        self.murs.iter().find(|m| m.id == id).and_then(|m| m.phase.clone())
+            .or_else(|| self.dalles.iter().find(|d| d.id == id).and_then(|d| d.phase.clone()))
+            .or_else(|| self.assemblage(id).and_then(|a| self.couches_assemblage(&a.id).first().and_then(|m| m.phase.clone())))
+            .or_else(|| self.contextes.get(id).and_then(|c| c.phase.clone()))
+    }
+
+    /// Démolir (ou annuler la démolition si `phase` est absente) : phase de démolition.
+    pub(super) fn demolir(&mut self, ids: Vec<String>, phase: Option<String>) -> Result<Vec<String>, String> {
+        let connus = self.identifiants();
+        if let Some(ph) = &phase {
+            let rang = self.phases.iter().position(|p| p == ph).ok_or_else(|| format!("Phase inconnue : {ph}"))?;
+            for id in &ids {
+                if let Some(creation) = self.phase_element(id) {
+                    if self.phases.iter().position(|p| p == &creation).is_some_and(|c| c > rang) {
+                        return Err(format!("Démolir : un élément créé en phase {creation} ne peut pas être démoli en phase {ph}."));
+                    }
+                }
+            }
+        }
+        for id in &ids {
+            if !connus.contains(id) {
+                return Err(format!("Élément introuvable : {id}"));
+            }
+            match &phase {
+                Some(ph) => { self.demolitions.insert(id.clone(), ph.clone()); }
+                None => { self.demolitions.remove(id); }
+            }
+        }
+        Ok(ids)
+    }
+
+    /// Reproduire les propriétés de `source` (type et paramètres, sans la géométrie) sur
+    /// des éléments de la même catégorie.
+    pub(super) fn reproduire(&mut self, source: String, cibles: Vec<String>) -> Result<Vec<String>, String> {
+        if let Some(m) = self.murs.iter().find(|m| m.id == source && m.assemblage.is_none()).cloned() {
+            for c in &cibles {
+                let x = self.murs.iter_mut().find(|x| &x.id == c && x.assemblage.is_none()).ok_or("Reproduire : la cible doit être un mur simple, comme la source.")?;
+                x.type_mur = m.type_mur.clone();
+                x.decalage_bas = m.decalage_bas;
+                x.haut = m.haut.clone();
+                x.phase = m.phase.clone();
+            }
+        } else if let Some(d) = self.dalles.iter().find(|d| d.id == source).cloned() {
+            for c in &cibles {
+                let x = self.dalles.iter_mut().find(|x| &x.id == c).ok_or("Reproduire : la cible doit être une dalle, comme la source.")?;
+                x.type_dalle = d.type_dalle.clone();
+                x.decalage = d.decalage;
+                x.sorte = d.sorte.clone();
+                x.phase = d.phase.clone();
+            }
+        } else if let Some(o) = self.ouvertures.iter().find(|o| o.id == source).cloned() {
+            for c in &cibles {
+                let x = self.ouvertures.iter_mut().find(|x| &x.id == c).ok_or("Reproduire : la cible doit être une ouverture, comme la source.")?;
+                x.genre = o.genre.clone();
+                x.type_ouverture = o.type_ouverture.clone();
+                x.largeur = o.largeur;
+                x.hauteur = o.hauteur;
+                x.allege = o.allege;
+                x.valeurs = o.valeurs.clone();
+                x.materiaux = o.materiaux.clone();
+            }
+        } else if let Some(b) = self.barres.iter().find(|b| b.id == source).cloned() {
+            for c in &cibles {
+                let x = self.barres.iter_mut().find(|x| &x.id == c && x.genre == b.genre).ok_or("Reproduire : la cible doit être une barre du même genre.")?;
+                x.largeur = b.largeur;
+                x.hauteur = b.hauteur;
+            }
+        } else {
+            return Err("Reproduire : source non prise en charge (mur simple, dalle, ouverture, poteau ou poutre).".into());
+        }
+        if let Some(ctx) = self.contextes.get(&source).cloned() {
+            for c in &cibles {
+                if self.contextes.contains_key(c) {
+                    self.contextes.insert(c.clone(), ctx.clone());
+                }
+            }
+        }
+        Ok(cibles)
+    }
+
+    /// Changer d'hôte : l'ouverture passe sur le mur `mur`, centrée à la projection de `point`.
+    pub(super) fn changer_hote(&mut self, id: String, mur: String, point: [f64; 2]) -> Result<Vec<String>, String> {
+        let (axe, _, _) = solides::hote(self, &mur)?;
+        let o = self.ouvertures.iter().find(|o| o.id == id).ok_or("Ouverture introuvable.")?;
+        if o.mur == mur {
+            return Err("Changer d'hôte : choisir un autre mur.".into());
+        }
+        let abscisse = axe.abscisse(point);
+        if abscisse - o.largeur / 2.0 < 0.0 || abscisse + o.largeur / 2.0 > axe.longueur() {
+            return Err("Changer d'hôte : l'ouverture dépasse du nouveau mur.".into());
+        }
+        let o = self.ouvertures.iter_mut().find(|o| o.id == id).unwrap();
+        o.mur = mur;
+        o.abscisse = abscisse;
+        o.representation = None;
+        Ok(vec![id])
+    }
+
+    /// Inverser une ouverture : côté d'ouverture (`retournee`) ou sens des paumelles.
+    pub(super) fn inverser_ouverture(&mut self, id: String, paumelles: bool) -> Result<Vec<String>, String> {
+        let o = self.ouvertures.iter_mut().find(|o| o.id == id).ok_or("Ouverture introuvable.")?;
+        if paumelles { o.inversee = !o.inversee; } else { o.retournee = !o.retournee; }
+        Ok(vec![id])
+    }
+
+    /// Éléments du même type que `id` (même catégorie), `id` compris.
+    pub fn identiques(&self, id: &str) -> Vec<String> {
+        if let Some(a) = self.assemblage(id) {
+            return self.assemblages.iter().filter(|x| x.type_mur == a.type_mur).map(|x| x.id.clone()).collect();
+        }
+        if let Some(m) = self.murs.iter().find(|m| m.id == id) {
+            return self.murs.iter().filter(|x| x.assemblage.is_none() && x.type_mur == m.type_mur).map(|x| x.id.clone()).collect();
+        }
+        if let Some(d) = self.dalles.iter().find(|d| d.id == id) {
+            return self.dalles.iter().filter(|x| x.type_dalle == d.type_dalle && x.sorte == d.sorte).map(|x| x.id.clone()).collect();
+        }
+        if let Some(o) = self.ouvertures.iter().find(|o| o.id == id) {
+            return self.ouvertures.iter().filter(|x| x.genre == o.genre && x.type_ouverture == o.type_ouverture && (o.type_ouverture.is_some() || (x.largeur == o.largeur && x.hauteur == o.hauteur))).map(|x| x.id.clone()).collect();
+        }
+        if let Some(b) = self.barres.iter().find(|b| b.id == id) {
+            return self.barres.iter().filter(|x| x.genre == b.genre && x.largeur == b.largeur && x.hauteur == b.hauteur).map(|x| x.id.clone()).collect();
+        }
+        for (liste, nom) in [(self.escaliers.iter().map(|x| x.id.clone()).collect::<Vec<_>>(), "escalier"), (self.garde_corps.iter().map(|x| x.id.clone()).collect(), "garde-corps")] {
+            let _ = nom;
+            if liste.iter().any(|x| x == id) {
+                return liste;
+            }
+        }
+        vec![id.to_string()]
+    }
+}
+
+/// Polygone décalé de `d` vers l'extérieur (négatif : vers l'intérieur), angles en onglet.
+pub fn decaler_polygone(pts: &[[f64; 2]], d: f64) -> Option<Vec<[f64; 2]>> {
+    let n = pts.len();
+    if n < 3 {
+        return None;
+    }
+    let aire: f64 = (0..n).map(|i| { let (a, b) = (pts[i], pts[(i + 1) % n]); a[0] * b[1] - b[0] * a[1] }).sum::<f64>() / 2.0;
+    // extérieur à droite du sens pour un contour trigonométrique
+    let s = if aire > 0.0 { 1.0 } else { -1.0 };
+    let normale = |a: [f64; 2], b: [f64; 2]| -> Option<DVec2> {
+        let u = (DVec2::from_array(b) - DVec2::from_array(a)).try_normalize()?;
+        Some(DVec2::new(u.y, -u.x) * s)
+    };
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let (p0, p1, p2) = (pts[(i + n - 1) % n], pts[i], pts[(i + 1) % n]);
+        let (n1, n2) = (normale(p0, p1)?, normale(p1, p2)?);
+        let bis = n1 + n2;
+        let cos = bis.length() / 2.0;
+        let q = if cos < 1e-6 { DVec2::from_array(p1) + n1 * d } else { DVec2::from_array(p1) + bis.normalize() * (d / cos) };
+        out.push(q.to_array());
+    }
+    let aire2: f64 = (0..n).map(|i| { let (a, b) = (out[i], out[(i + 1) % n]); a[0] * b[1] - b[0] * a[1] }).sum::<f64>() / 2.0;
+    // une arête retournée signale un contour qui s'est croisé (décalage trop grand)
+    let retournee = (0..n).any(|i| {
+        let (a, b) = (DVec2::from_array(pts[i]), DVec2::from_array(pts[(i + 1) % n]));
+        let (c, e) = (DVec2::from_array(out[i]), DVec2::from_array(out[(i + 1) % n]));
+        (b - a).dot(e - c) <= 0.0
+    });
+    (!retournee && aire2.abs() > 1.0 && aire2.signum() == aire.signum()).then_some(out)
 }
 
 #[cfg(test)]
@@ -213,6 +468,48 @@ mod tests {
         assert_eq!(q.murs.len(), 2);
         assert!(proche(axe(&q, &id).0, [0.0, 0.0]));
         assert!(proche(axe(&q, &ids[0]).0, [0.0, -300.0]));
+    }
+
+    #[test]
+    fn decaler_arc_et_contour_de_dalle() {
+        let mut p = Projet::nouveau("A");
+        p.ajouter_mur([1000.0, 0.0], [-1000.0, 0.0], &ParametresMur::default()).unwrap();
+        let id = p.murs[0].id.clone();
+        if let Axe::Droit { .. } = p.murs[0].axe {
+            p.murs[0].axe = Axe::Arc { debut: [1000.0, 0.0], fin: [-1000.0, 0.0], centre: [0.0, 0.0], direct: true };
+        }
+        let (q, _) = p.executer(Commande::Decaler { id: id.clone(), distance: 200.0, copie: false }).unwrap();
+        let Axe::Arc { debut, .. } = q.murs[0].axe else { unreachable!() };
+        assert!(proche(debut, [800.0, 0.0]), "{debut:?}");
+        let carre = vec![[0.0, 0.0], [1000.0, 0.0], [1000.0, 1000.0], [0.0, 1000.0]];
+        let g = super::decaler_polygone(&carre, 100.0).unwrap();
+        assert!(proche(g[0], [-100.0, -100.0]) && proche(g[2], [1100.0, 1100.0]), "{g:?}");
+        let g = super::decaler_polygone(&carre, -100.0).unwrap();
+        assert!(proche(g[0], [100.0, 100.0]));
+        assert!(super::decaler_polygone(&carre, -600.0).is_none());
+    }
+
+    #[test]
+    fn demolir_reproduire_changer_d_hote_et_identiques() {
+        let mut p = Projet::nouveau("P");
+        let a = mur(&mut p, [0.0, 0.0], [4000.0, 0.0]);
+        let b = mur(&mut p, [0.0, 3000.0], [4000.0, 3000.0]);
+        let (p2, _) = p.executer(Commande::Demolir { ids: vec![a.clone()], phase: Some("Projet".into()) }).unwrap();
+        assert_eq!(p2.demolitions.get(&a).map(String::as_str), Some("Projet"));
+        let (p3, _) = p2.executer(Commande::Demolir { ids: vec![a.clone()], phase: None }).unwrap();
+        assert!(p3.demolitions.is_empty());
+        assert!(p.executer(Commande::Demolir { ids: vec![a.clone()], phase: Some("Inconnue".into()) }).is_err());
+        assert_eq!(p.identiques(&a).len(), 2);
+        let mut q = p.clone();
+        q.murs[0].decalage_bas = 250.0;
+        let (q, _) = q.executer(Commande::Reproduire { source: a.clone(), cibles: vec![b.clone()] }).unwrap();
+        assert_eq!(q.murs[1].decalage_bas, 250.0);
+        let p = p.executer(Commande::Ouverture { mur: a.clone(), genre: crate::modele::GenreOuverture::Porte, type_ouverture: None, abscisse: 1000.0, largeur: 900.0, hauteur: 2100.0, allege: 0.0 }).unwrap().0;
+        let o = p.ouvertures[0].id.clone();
+        let (p, _) = p.executer(Commande::ChangerHote { id: o.clone(), mur: b.clone(), point: [2500.0, 3000.0] }).unwrap();
+        assert_eq!(p.ouvertures[0].mur, b);
+        assert!((p.ouvertures[0].abscisse - 2500.0).abs() < 1e-6);
+        assert!(p.executer(Commande::ChangerHote { id: o, mur: a, point: [3900.0, 0.0] }).is_err(), "dépasse du mur");
     }
 
     #[test]

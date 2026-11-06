@@ -264,7 +264,7 @@ impl ViewerApp {
         }
         // la barre n'apparaît que pendant un outil ; les commandes de la sélection sont
         // dans le ruban (Jonctions, Copier sur niveaux) et dans Propriétés
-        matches!(self.ruban_edition.outil(), Some(Outil::Deplacer | Outil::Copier | Outil::Tourner | Outil::Symetrie | Outil::Reseau | Outil::Echelle | Outil::Aligner | Outil::Decaler | Outil::Scinder | Outil::Ajuster))
+        matches!(self.ruban_edition.outil(), Some(Outil::Deplacer | Outil::Copier | Outil::Tourner | Outil::Symetrie | Outil::Reseau | Outil::Echelle | Outil::Aligner | Outil::Decaler | Outil::Scinder | Outil::Demolir | Outil::Reproduire | Outil::ChangerHote | Outil::Inverser | Outil::Ajuster))
     }
 
     pub(in crate::ui) fn vue_native_id(&self) -> Option<String> {
