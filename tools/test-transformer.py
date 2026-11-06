@@ -154,9 +154,55 @@ def run(exe):
             assert abs(r["debut"][1]) < 1.0 and abs(r["fin"][1]) < 1.0, r
             commande("annuler")
             assert proche(axe(b)["debut"], bx["debut"])
+            nb = lambda: len(commande("projet_natif")["projet"]["murs"])
+
+            # 8. Symétrie : axe = deux extrémités du mur B (y = 1500), copie par défaut
+            commande("outil", "aucun"); commande("selection_native", [a]); commande("outil", "symetrie")
+            assert transfo()["copie"] is True
+            clic(bx["debut_ecran"]); clic(bx["fin_ecran"])
+            assert nb() == 3
+            nouveau = next(m for m in commande("projet_natif")["projet"]["murs"] if m["id"] not in (a, b))
+            n = axe(nouveau["id"])
+            assert all(2600 < y < 3400 for y in (n["debut"][1], n["fin"][1])), n  # image de y≈0 par l'axe y≈1500
+            assert abs(abs(n["debut"][0] - n["fin"][0]) - 4000) < 1.0, n
+
+            commande("annuler"); assert nb() == 2
+
+            # 9. Réseau linéaire de 3 : base puis 2ᵉ élément (pas = longueur du mur)
+            commande("outil", "aucun"); commande("selection_native", [a]); commande("outil", "reseau")
+            commande("transformation", {"nombre": 3, "polaire": False})
+            assert transfo()["nombre"] == 3
+            clic(ax["debut_ecran"]); clic(ax["fin_ecran"])
+            assert nb() == 4, nb()
+            commande("annuler"); assert nb() == 2
+
+            # 10. Échelle refusée sur un mur (épaisseur de type), projet inchangé
+            avant = commande("projet_natif")["empreinte"]
+            commande("outil", "aucun"); commande("selection_native", [a]); commande("outil", "echelle")
+            clic(ax["debut_ecran"]); clic(milieu(ax)); clic(ax["fin_ecran"])
+            assert commande("projet_natif")["empreinte"] == avant
+            commande("outil", "aucun")
+
+            # 11. Décaler : clic sur le mur, côté au curseur (vers B), distance tapée 50 cm
+            commande("selection_native", []); commande("outil", "decaler")
+            clic(milieu(ax))
+            assert transfo()["element"] == a, transfo()
+            saisie([{"action": "pointer", "x": bx["debut_ecran"][0], "y": bx["debut_ecran"][1]}])
+            saisie([{"action": "texte", "texte": "50"}, {"action": "touche", "touche": "Enter"}])
+            assert nb() == 3, nb()
+            assert proche(axe(a)["debut"], ax["debut"]), "l'original reste (Copier coché)"
+            commande("annuler"); assert nb() == 2
+
+            # 12. Scinder : clic au milieu du mur A → deux murs
+            commande("outil", "aucun"); commande("selection_native", []); commande("outil", "scinder")
+            clic(milieu(ax))
+            assert nb() == 3, nb()
+            r = axe(a)
+            assert abs(r["fin"][0] - 2000) < 60, r
+            commande("annuler"); assert nb() == 2
 
             commande("quitter", "abandonner"); p.wait(timeout=15)
-            print(f"Transformations : {nombre} requêtes validées ; déplacer, copier, tourner, aligner à la souris, valeurs tapées et Échap OK")
+            print(f"Transformations : {nombre} requêtes validées ; déplacer, copier, tourner, symétrie, réseau, échelle, aligner, décaler, scinder à la souris, valeurs tapées et Échap OK")
         except Exception:
             log.flush(); print((root / "instance.log").read_text(encoding="utf-8")[-2500:]); raise
         finally:

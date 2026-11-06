@@ -61,6 +61,15 @@ pub(super) fn bouton_outil(
         Outil::CopierNiveau => "Copier la sélection sur un niveau en conservant la position en plan",
         Outil::Jonctions => "Jonctions et haut des murs : attacher à une toiture, priorité de jonction",
         Outil::CreerIdentique => "Créer à l'identique (CS)",
+        Outil::Deplacer => "Déplacer (MV) : point de base, puis destination ou distance tapée",
+        Outil::Copier => "Copier (CO) : point de base, puis destination ; Multiple pour enchaîner",
+        Outil::Tourner => "Tourner (RO) : direction de départ, puis d'arrivée ou angle tapé ; clic sur le centre pour le déplacer",
+        Outil::Symetrie => "Symétrie (SY) : deux points de l'axe ; Copier coché par défaut",
+        Outil::Reseau => "Réseau (RE) : linéaire (base puis 2ᵉ élément) ou polaire (centre, angle entre éléments)",
+        Outil::Echelle => "Échelle (EC) : point de base, longueur de référence, nouvelle longueur ou facteur tapé ; annotations, contours, terrains",
+        Outil::Aligner => "Aligner (AL) : référence, puis éléments à aligner",
+        Outil::Decaler => "Décaler (DE) : clic sur le mur, puis côté et distance ; Copier coché par défaut",
+        Outil::Scinder => "Scinder (SC) : clic sur le mur au point de coupure ; écart réglable",
         Outil::Supprimer => "Supprimer (Suppr)",
         Outil::Cadrer => "Définir le contour de cadrage du plan ; F ajuste le zoom",
         Outil::Isoler => "Isoler la sélection (I) ; Échap dans la vue : tout réafficher",
@@ -439,6 +448,36 @@ pub(super) fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
                 seg((0.85, 0.57), (0.9, 0.28));
                 seg((0.85, 0.57), (0.62, 0.52));
             }
+        }
+        Symetrie => {
+            p.add(egui::Shape::dashed_line(&[pt(0.5, 0.05), pt(0.5, 0.95)], t, 3.0, 2.0));
+            p.add(egui::Shape::closed_line(vec![pt(0.1, 0.75), pt(0.4, 0.75), pt(0.4, 0.25)], t));
+            p.add(egui::Shape::closed_line(vec![pt(0.9, 0.75), pt(0.6, 0.75), pt(0.6, 0.25)], t));
+        }
+        Reseau => {
+            for k in 0..3 {
+                let x = 0.08 + k as f32 * 0.3;
+                cadre(x, 0.35, 0.22, 0.3);
+            }
+        }
+        Echelle => {
+            cadre(0.1, 0.5, 0.35, 0.35);
+            cadre(0.1, 0.15, 0.75, 0.7);
+            seg((0.45, 0.5), (0.8, 0.2));
+            seg((0.8, 0.2), (0.66, 0.22));
+            seg((0.8, 0.2), (0.78, 0.34));
+        }
+        Decaler => {
+            seg((0.1, 0.3), (0.9, 0.3));
+            p.add(egui::Shape::dashed_line(&[pt(0.1, 0.75), pt(0.9, 0.75)], t, 3.0, 2.0));
+            seg((0.5, 0.35), (0.5, 0.7));
+            seg((0.5, 0.7), (0.43, 0.6));
+            seg((0.5, 0.7), (0.57, 0.6));
+        }
+        Scinder => {
+            seg((0.05, 0.5), (0.42, 0.5));
+            seg((0.58, 0.5), (0.95, 0.5));
+            seg((0.5, 0.15), (0.5, 0.85));
         }
         Aligner => {
             seg((0.15, 0.05), (0.15, 0.95));

@@ -1,5 +1,6 @@
 //! Commandes d'édition sérialisables pour l'interface et le pilote MCP.
 
+mod modifier;
 mod transformations;
 #[cfg(test)]
 mod tests;
@@ -102,6 +103,39 @@ pub enum Commande {
     },
     Supprimer {
         ids: Vec<String>,
+    },
+    /// Symétrie par rapport à la droite (a, b) ; la face extérieure des murs reste dehors.
+    Symetrie {
+        ids: Vec<String>,
+        a: [f64; 2],
+        b: [f64; 2],
+    },
+    /// Mise à l'échelle autour de `centre` (annotations, contours, terrains).
+    Echelle {
+        ids: Vec<String>,
+        centre: [f64; 2],
+        facteur: f64,
+    },
+    /// Réseau de `nombre` éléments (original compris) : copie k tournée de k·angle autour
+    /// de `centre` puis déplacée de k·delta.
+    Reseau {
+        ids: Vec<String>,
+        nombre: usize,
+        delta: [f64; 3],
+        centre: [f64; 2],
+        angle: f64,
+    },
+    /// Décale un mur droit ou une ligne de `distance` (positive : à gauche du sens).
+    Decaler {
+        id: String,
+        distance: f64,
+        copie: bool,
+    },
+    /// Scinde un mur droit au point projeté, avec un écart éventuel.
+    Scinder {
+        id: String,
+        point: [f64; 2],
+        ecart: f64,
     },
     /// Verrouille (`verrou` vrai) ou déverrouille les éléments.
     Verrouiller {
@@ -769,6 +803,11 @@ impl Projet {
                 self.transformer(&map.values().cloned().collect(), delta, [0.0; 2], 0.0)?;
                 Ok(ids.iter().map(|id| map[id].clone()).collect())
             }
+            Commande::Symetrie { ids, a, b } => self.symetrie(ids, a, b),
+            Commande::Echelle { ids, centre, facteur } => self.echelle(ids, centre, facteur),
+            Commande::Reseau { ids, nombre, delta, centre, angle } => self.reseau(ids, nombre, delta, centre, angle),
+            Commande::Decaler { id, distance, copie } => self.decaler(id, distance, copie),
+            Commande::Scinder { id, point, ecart } => self.scinder(id, point, ecart),
             Commande::Verrouiller { ids, verrou } => {
                 let connus = self.identifiants();
                 for id in &ids {

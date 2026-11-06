@@ -52,14 +52,14 @@ Contrôle de chaque fonction : un script `tools/test-*.py` la joue par le pilote
 |---|---|---|---|---|---|---|
 | 1 | **Aligner** | AL | aucune préalable | 1. ligne de référence (axe, face, ligne de quadrillage) ; 2. éléments à aligner, clic par clic | Référence : axe / face extérieure / face intérieure / face du noyau ; Verrouiller l'alignement (cadenas) | **graphique** : référence cliquée puis éléments cliqués, survol surligné ; reste : choix de face, cadenas |
 | 2 | **Déplacer** | MV | éléments | point de départ → point d'arrivée, ou distance saisie | Copier ; Contraindre ; Déconnecter (détacher les jonctions) ; Déplacer en Z | **graphique** : deux clics ou distance tapée, case Copier ; reste : Déconnecter, Z |
-| 3 | **Décaler** | DE | murs, lignes, contours | côté par la souris + distance, ou clic de passage | Copier (par défaut : oui) ; Mesure : axe / face | **à créer** |
+| 3 | **Décaler** | DE | murs, lignes, contours | côté par la souris + distance, ou clic de passage | Copier (par défaut : oui) ; Mesure : axe / face | **graphique** : clic sur le mur, côté et distance au curseur ou tapée, Copier coché ; reste : contours et murs courbes |
 | 4 | **Tourner** | RO | éléments | centre (sélection par défaut, déplaçable) → direction de départ → angle, ou angle saisi | Copier ; Pas angulaire | **graphique** : centre déplaçable au clic, rapporteur, Maj 15°, angle tapé, case Copier (une seule annulation) |
 | 5 | **Copier** | CO | éléments | point de départ → point(s) d'arrivée | Multiple ; Sur un niveau (= `CopierSurNiveau`) | **graphique** : deux clics, Multiple |
-| 6 | **Réseau** | RE | éléments | linéaire : 2 points + nombre ; polaire : centre + angle + nombre | Linéaire / polaire ; Dernier = distance totale ou pas ; Grouper | **à créer** (une commande produisant N copies) |
-| 7 | **Échelle** | EC | éléments 2D, contours, terrains, annotations | point de base → facteur (saisi ou 2 longueurs) | Graphique / numérique | **à créer**. Interdit sur murs, ouvertures, familles : le type porte l'épaisseur |
-| 8 | **Symétrie** | SY | éléments | axe : élément existant ou 2 points | Copier (par défaut : oui) ; Symétriser les familles (sens d'ouverture des portes) | **à créer** ; `InverserMur` couvre seulement l'inversion d'un mur sur place |
+| 6 | **Réseau** | RE | éléments | linéaire : 2 points + nombre ; polaire : centre + angle + nombre | Linéaire / polaire ; Dernier = distance totale ou pas ; Grouper | **graphique** : linéaire (base, 2ᵉ élément ou pas tapé) et polaire (centre, angle entre éléments), nombre réglable ; reste : Grouper |
+| 7 | **Échelle** | EC | éléments 2D, contours, terrains, annotations | point de base → facteur (saisi ou 2 longueurs) | Graphique / numérique | **graphique** : base, référence, nouvelle longueur ou facteur tapé ; refusée sur murs, menuiseries, structures |
+| 8 | **Symétrie** | SY | éléments | axe : élément existant ou 2 points | Copier (par défaut : oui) ; Symétriser les familles (sens d'ouverture des portes) | **graphique** : deux points de l'axe, Copier coché par défaut, face extérieure des murs gardée dehors, paumelles inversées ; reste : axe pris sur un élément |
 | 9 | **Ajuster / prolonger** | AJ | aucune préalable | 1. référence ; 2. élément, côté à conserver | Un seul / plusieurs éléments vers une même référence ; En angle (deux éléments à l'intersection) | `Ajuster` et `AjusterAngle` existent ; mode « plusieurs » absent |
-| 10 | **Scinder** | SC | aucune préalable | clic sur l'élément au point de coupure | Écart (scinder avec espace) ; Supprimer le segment intérieur (2 clics) | **à créer** (mur, poutre, ligne, contour) |
+| 10 | **Scinder** | SC | aucune préalable | clic sur l'élément au point de coupure | Écart (scinder avec espace) ; Supprimer le segment intérieur (2 clics) | **graphique** : clic au point de coupure, écart réglable, ouvertures réparties, murs composés compris ; refus si une ouverture est coupée ; reste : poutres, lignes |
 | 11 | **Supprimer** | Suppr | éléments | aucune | Rapport des dépendants supprimés (ouvertures, cotes, étiquettes) avant validation | `Supprimer` existe ; rapport des dépendants absent |
 
 ## 3. Visibilité
@@ -124,6 +124,10 @@ Règle : le verrouillage s'applique au **modèle** (partagé en collaboration). 
 
 1. **Socle commun** : fait pour Déplacer, Copier, Tourner, Aligner (`src/ui/transformer.rs`, test `tools/test-transformer.py`) : consigne au curseur, survol, aperçu, cotes temporaires, valeur tapée, Échap d'une étape, clic droit, une transaction. Reste : menu du clic droit, répétition de la dernière commande, poignées hors commande.
 2. **Verrouiller / Déverrouiller** : fait. Une sélection mixte ignore les éléments verrouillés ; une sélection entièrement verrouillée est refusée.
-3. **Symétrie et Réseau** : ce sont des compositions de `Transformer` (`transformations.rs`), qui existe déjà.
-4. **Décaler et Scinder** : géométrie des axes de murs, en réutilisant `jonctions`.
-5. **Échelle** : réservée au 2D, en dernier.
+3. **Symétrie et Réseau** : faits (`Commande::Symetrie`, `Commande::Reseau`, transformation affine dans `transformations.rs`).
+4. **Décaler et Scinder** : faits pour les murs droits et composés (`commandes/modifier.rs`).
+5. **Échelle** : faite, réservée aux annotations, contours, terrains et quadrillages.
+
+Test graphique de l'ensemble : `tools/test-transformer.py` (clics et frappes simulés, annulation).
+
+Reste à faire : Supprimer avec rapport des dépendants, Ajuster plusieurs éléments, Masquer temporaire / dans la vue en deux commandes, Afficher élément par élément, menu du clic droit, répétition de la dernière commande, poignées hors commande, fonctions de la section 5.

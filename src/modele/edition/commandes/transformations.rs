@@ -1,7 +1,65 @@
-//! Transformations géométriques des commandes : déplacer, copier, pivoter, symétrie.
+//! Transformations géométriques des commandes : déplacer, copier, pivoter, symétrie,
+//! mise à l'échelle. Toutes passent par une transformation affine du plan.
 use super::*;
 
+/// Transformation affine du plan : `p' = m·p + t` (millimètres).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Affine {
+    pub m: [[f64; 2]; 2],
+    pub t: [f64; 2],
+}
+
+impl Affine {
+    /// Rotation de `angle` degrés autour de `centre`, puis translation `delta`.
+    pub fn rotation(centre: [f64; 2], angle: f64, delta: [f64; 2]) -> Self {
+        let (s, c) = angle.to_radians().sin_cos();
+        let m = [[c, -s], [s, c]];
+        let t = [centre[0] - (c * centre[0] - s * centre[1]) + delta[0], centre[1] - (s * centre[0] + c * centre[1]) + delta[1]];
+        Self { m, t }
+    }
+    /// Symétrie par rapport à la droite (a, b).
+    pub fn symetrie(a: [f64; 2], b: [f64; 2]) -> Option<Self> {
+        let u = (DVec2::from_array(b) - DVec2::from_array(a)).try_normalize()?;
+        let m = [[2.0 * u.x * u.x - 1.0, 2.0 * u.x * u.y], [2.0 * u.x * u.y, 2.0 * u.y * u.y - 1.0]];
+        let t = [a[0] - (m[0][0] * a[0] + m[0][1] * a[1]), a[1] - (m[1][0] * a[0] + m[1][1] * a[1])];
+        Some(Self { m, t })
+    }
+    /// Homothétie de rapport `facteur` autour de `centre`.
+    pub fn echelle(centre: [f64; 2], facteur: f64) -> Self {
+        Self { m: [[facteur, 0.0], [0.0, facteur]], t: [centre[0] * (1.0 - facteur), centre[1] * (1.0 - facteur)] }
+    }
+    pub fn point(&self, p: [f64; 2]) -> [f64; 2] {
+        [self.m[0][0] * p[0] + self.m[0][1] * p[1] + self.t[0], self.m[1][0] * p[0] + self.m[1][1] * p[1] + self.t[1]]
+    }
+    /// Image d'une direction (sans translation).
+    pub fn direction(&self, v: [f64; 2]) -> [f64; 2] {
+        [self.m[0][0] * v[0] + self.m[0][1] * v[1], self.m[1][0] * v[0] + self.m[1][1] * v[1]]
+    }
+    fn det(&self) -> f64 {
+        self.m[0][0] * self.m[1][1] - self.m[0][1] * self.m[1][0]
+    }
+    /// Translation pure.
+    pub fn est_translation(&self) -> bool {
+        (self.m[0][0] - 1.0).abs() < 1e-12 && (self.m[1][1] - 1.0).abs() < 1e-12 && self.m[0][1].abs() < 1e-12 && self.m[1][0].abs() < 1e-12
+    }
+    /// Inverse l'orientation (symétrie).
+    pub fn est_miroir(&self) -> bool {
+        self.det() < 0.0
+    }
+    /// Rapport des longueurs.
+    pub fn rapport(&self) -> f64 {
+        self.det().abs().sqrt()
+    }
+    fn conserve_longueurs(&self) -> bool {
+        (self.rapport() - 1.0).abs() < 1e-9
+    }
+    fn finie(&self) -> bool {
+        self.m.iter().flatten().chain(&self.t).all(|v| v.is_finite())
+    }
+}
+
 impl Projet {
+    /// Rotation de `angle` degrés autour de `centre` puis translation `delta` (Z compris).
     pub(super) fn transformer(
         &mut self,
         set: &HashSet<String>,
@@ -9,36 +67,53 @@ impl Projet {
         centre: [f64; 2],
         angle: f64,
     ) -> Result<(), String> {
-        if !delta
-            .iter()
-            .chain(&centre)
-            .chain([&angle])
-            .all(|v| v.is_finite())
-        {
+        if !delta.iter().chain(&centre).chain([&angle]).all(|v| v.is_finite()) {
+            return Err("Transformation non finie.".into());
+        }
+        self.transformer_affine(set, Affine::rotation(centre, angle, [delta[0], delta[1]]), delta[2])
+    }
+
+    /// Applique `f` aux éléments de `set`, et `dz` en hauteur. Une symétrie garde les
+    /// faces extérieures dehors (sens des murs inversé) ; un changement d'échelle est
+    /// réservé aux éléments sans épaisseur de type (contours, terrains, annotations).
+    pub(crate) fn transformer_affine(&mut self, set: &HashSet<String>, f: Affine, dz: f64) -> Result<(), String> {
+        if !f.finie() || !dz.is_finite() {
             return Err("Transformation non finie.".into());
         }
         if self.niveaux.iter().any(|n| set.contains(&n.id))
             || self.vues.iter().any(|n| {
-                set.contains(&n.id) && (matches!(n.genre, GenreVue::Plan { .. }) || delta[2] != 0.0)
+                set.contains(&n.id) && (matches!(n.genre, GenreVue::Plan { .. }) || dz != 0.0)
             })
-            || (delta[2] != 0.0 && self.quadrillages.iter().any(|n| set.contains(&n.id)))
+            || (dz != 0.0 && self.quadrillages.iter().any(|n| set.contains(&n.id)))
             || self.feuilles.iter().any(|n| set.contains(&n.id))
             || self.nomenclatures.iter().any(|n| set.contains(&n.id))
         {
             return Err("Transformation réservée aux éléments du modèle.".into());
         }
-        let a = angle.to_radians();
-        let (s, c) = a.sin_cos();
-        let o = DVec2::from_array(centre);
-        let point = |p: [f64; 2]| {
-            let p = DVec2::from_array(p) - o;
-            (o + DVec2::new(c * p.x - s * p.y, s * p.x + c * p.y) + DVec2::new(delta[0], delta[1]))
-                .to_array()
-        };
+        if !f.conserve_longueurs() {
+            let interdit = self.murs.iter().any(|x| set.contains(&x.id))
+                || self.ouvertures.iter().any(|x| set.contains(&x.id))
+                || self.barres.iter().any(|x| set.contains(&x.id))
+                || self.escaliers.iter().any(|x| set.contains(&x.id))
+                || self.garde_corps.iter().any(|x| set.contains(&x.id))
+                || self.importes.iter().any(|x| set.contains(&x.id))
+                || self.vues.iter().any(|x| set.contains(&x.id));
+            if interdit {
+                return Err("Échelle : réservée aux annotations, contours, terrains et quadrillages ; l'épaisseur des murs, menuiseries et structures vient de leur type.".into());
+            }
+        }
+        let miroir = f.est_miroir();
+        let point = |p: [f64; 2]| f.point(p);
         let mesh = |m: &mut Maillage| {
             for p in &mut m.sommets {
                 let xy = point([p[0], p[1]]);
-                *p = [xy[0], xy[1], p[2] + delta[2]];
+                *p = [xy[0], xy[1], p[2] + dz];
+            }
+            if miroir {
+                // l'orientation s'inverse : les faces restent tournées vers l'extérieur
+                for t in &mut m.triangles {
+                    t.swap(1, 2);
+                }
             }
         };
         let directions: HashMap<String, DVec2> = self
@@ -58,13 +133,13 @@ impl Projet {
             }
             let direction = directions.get(&a.vue);
             let translation_locale = if let Some(u) = direction {
-                let d = DVec2::new(delta[0], delta[1]);
-                if angle != 0.0 || d.dot(u.perp()).abs() > 1e-6 {
+                let d = DVec2::from_array(f.t);
+                if !f.est_translation() || d.dot(u.perp()).abs() > 1e-6 {
                     return Err("Déplacez les annotations de coupe dans le plan de leur vue ; leur rotation doit être modifiée dans cette vue.".into());
                 }
-                Some([d.dot(*u), delta[2]])
+                Some([d.dot(*u), dz])
             } else {
-                if delta[2] != 0.0 {
+                if dz != 0.0 {
                     return Err("Une annotation de plan doit rester dans son plan de vue.".into());
                 }
                 None
@@ -86,22 +161,27 @@ impl Projet {
                     *fin = point_annotation(*fin);
                 }
                 F::Zone { contour } => {
-                    for p in contour {
+                    for p in contour.iter_mut() {
                         *p = point_annotation(*p);
                     }
+                    if miroir { contour.reverse(); }
                 }
                 F::Polyligne { points, .. } | F::Spline { points, .. } => {
                     for p in points {
                         *p = point_annotation(*p);
                     }
                 }
-                F::Cercle { centre, .. } => *centre = point_annotation(*centre),
+                F::Cercle { centre, rayon } => {
+                    *centre = point_annotation(*centre);
+                    *rayon *= f.rapport();
+                }
                 F::Arc { points } => {
                     for p in points {
                         *p = point_annotation(*p);
                     }
                 }
-                F::Cote { debut, fin, .. } => {
+                F::Cote { debut, fin, decalage } => {
+                    *decalage *= if miroir { -f.rapport() } else { f.rapport() };
                     for p in [debut, fin] {
                         match p {
                             PointCote::Fixe { point: p } => *p = point_annotation(*p),
@@ -123,6 +203,10 @@ impl Projet {
                 if let GenreVue::Coupe { debut, fin, .. } = &mut v.genre {
                     *debut = point(*debut);
                     *fin = point(*fin);
+                    if miroir {
+                        // le regard reste du même côté de la ligne par rapport au modèle
+                        std::mem::swap(debut, fin);
+                    }
                 }
             }
         }
@@ -130,13 +214,13 @@ impl Projet {
             for q in &mut e.trace {
                 *q = point(*q);
             }
-            e.decalage_bas += delta[2];
+            e.decalage_bas += dz;
         }
         for g in self.garde_corps.iter_mut().filter(|g| set.contains(&g.id)) {
             for q in &mut g.trace {
                 *q = point(*q);
             }
-            g.decalage += delta[2];
+            g.decalage += dz;
         }
         for b in &mut self.barres {
             if set.contains(&b.id) {
@@ -144,10 +228,12 @@ impl Projet {
                     let xy = point([p[0], p[1]]);
                     p[0] = xy[0];
                     p[1] = xy[1];
-                    p[2] += delta[2];
+                    p[2] += dz;
                 }
                 if b.genre == GenreBarre::Poteau {
-                    b.rotation += angle;
+                    let (s, c) = b.rotation.to_radians().sin_cos();
+                    let d = f.direction([c, s]);
+                    b.rotation = d[1].atan2(d[0]).to_degrees();
                 }
             }
         }
@@ -157,36 +243,41 @@ impl Projet {
                     Axe::Droit { debut, fin } => {
                         *debut = point(*debut);
                         *fin = point(*fin);
+                        if miroir {
+                            // sens inversé : la face extérieure reste dehors
+                            std::mem::swap(debut, fin);
+                        }
                     }
-                    Axe::Arc {
-                        debut, fin, centre, ..
-                    } => {
+                    Axe::Arc { debut, fin, centre, .. } => {
                         *debut = point(*debut);
                         *fin = point(*fin);
                         *centre = point(*centre);
+                        if miroir {
+                            std::mem::swap(debut, fin);
+                        }
                     }
                 }
-                m.decalage_bas += delta[2];
+                m.decalage_bas += dz;
                 if let Haut::Niveau { decalage, .. } = &mut m.haut {
-                    *decalage += delta[2];
+                    *decalage += dz;
                 }
             }
         }
         let hotes: HashMap<_, _> = self
             .ouvertures
             .iter()
-            .filter(|o| set.contains(&o.id) && !set.contains(&o.mur))
+            .filter(|o| set.contains(&o.id))
             .map(|o| Ok((o.mur.clone(), solides::hote(self, &o.mur)?.0)))
             .collect::<Result<_, String>>()?;
         for b in &mut self.ouvertures {
             if set.contains(&b.id) {
+                let axe = &hotes[&b.mur];
                 if !set.contains(&b.mur) {
-                    if angle != 0.0 {
+                    if !f.est_translation() {
                         return Err("Une ouverture reste orientée par son hôte.".into());
                     }
-                    let axe = &hotes[&b.mur];
                     let (p, u) = solides::repere(axe, b.abscisse);
-                    let d = DVec2::new(delta[0], delta[1]);
+                    let d = DVec2::from_array(f.t);
                     if d.dot(u.perp()).abs() > 0.01 {
                         return Err("Déplacez l'ouverture le long du mur.".into());
                     }
@@ -196,8 +287,12 @@ impl Projet {
                         return Err("Ouverture hors du mur.".into());
                     }
                     b.abscisse = nouveau;
+                } else if miroir {
+                    // l'hôte est retourné : même position image, paumelles en miroir
+                    b.abscisse = axe.longueur() - b.abscisse;
+                    b.inversee = !b.inversee;
                 }
-                b.allege += delta[2];
+                b.allege += dz;
                 if let Some(m) = &mut b.representation {
                     mesh(m);
                 }
@@ -205,10 +300,13 @@ impl Projet {
         }
         for d in &mut self.dalles {
             if set.contains(&d.id) {
-                for p in d.contours.iter_mut().flatten() {
-                    *p = point(*p);
+                for c in &mut d.contours {
+                    for p in c.iter_mut() {
+                        *p = point(*p);
+                    }
+                    if miroir { c.reverse(); }
                 }
-                d.decalage += delta[2];
+                d.decalage += dz;
             }
         }
         for e in &mut self.importes {
@@ -220,14 +318,16 @@ impl Projet {
             if set.contains(&t.id) {
                 for p in t.contour.iter_mut().chain(&mut t.points) {
                     let xy = point([p[0], p[1]]);
-                    *p = [xy[0], xy[1], p[2] + delta[2]];
+                    *p = [xy[0], xy[1], p[2] + dz];
                 }
+                if miroir { t.contour.reverse(); }
             }
         }
         for l in &mut self.limites_propriete {
             if set.contains(&l.id) {
                 l.contour.iter_mut().for_each(|p| *p = point(*p));
-                l.altitude += delta[2];
+                if miroir { l.contour.reverse(); }
+                l.altitude += dz;
             }
         }
         Ok(())

@@ -1,35 +1,46 @@
-//! Socle graphique des commandes de transformation (voir docs/MODIFICATION.md) :
-//! Déplacer, Copier, Tourner et Aligner se font entièrement à la souris dans la vue.
-//! Chaque commande suit le même cycle : consigne au curseur, survol de la cible,
-//! aperçu fantôme, cotes temporaires, valeur tapée facultative (Entrée), une seule
-//! transaction à la validation, Échap pour revenir d'une étape.
+//! Socle graphique des commandes de modification (voir docs/MODIFICATION.md) :
+//! Déplacer, Copier, Tourner, Symétrie, Réseau, Échelle, Aligner, Décaler et Scinder se
+//! font entièrement à la souris dans la vue. Chaque commande suit le même cycle :
+//! consigne au curseur, survol de la cible, aperçu fantôme, cotes temporaires, valeur
+//! tapée facultative (Entrée), une seule transaction à la validation, Échap ou clic
+//! droit pour revenir d'une étape.
 use super::*;
 use crate::modele::edition::commandes::Commande;
 use crate::ui::ruban::Outil;
 
-/// État de la commande de transformation en cours.
+/// Nombre d'éléments d'un réseau quand aucun n'est réglé.
+pub(super) const NOMBRE_RESEAU: usize = 4;
+
+/// État de la commande de modification en cours.
 #[derive(Default)]
 pub(super) struct Transformation {
-    /// Points cliqués (mm, plan du projet) : base puis destination, ou direction de
-    /// départ puis direction d'arrivée pour Tourner.
+    /// Points cliqués (mm, plan du projet), dans l'ordre des étapes de la commande.
     pub points: Vec<[f64; 2]>,
-    /// Tourner : centre de rotation ; absent, celui de la sélection.
+    /// Tourner, réseau polaire : centre ; absent, celui de la sélection.
     pub centre: Option<[f64; 2]>,
-    /// Tourner : le prochain clic place le centre.
+    /// Le prochain clic place le centre.
     pub placer_centre: bool,
     /// Aligner : élément de référence (mur ou mur composé).
     pub reference: Option<String>,
-    /// Déplacer / Tourner : la transformation porte sur une copie.
+    /// Décaler : élément choisi.
+    pub element: Option<String>,
+    /// Déplacer, Tourner, Symétrie, Décaler : la transformation porte sur une copie.
     pub copie: bool,
     /// Copier : la commande reste sur le même point de base après chaque copie.
     pub multiple: bool,
-    /// Valeur tapée au clavier (distance en unité d'affichage, ou angle en degrés).
+    /// Réseau : nombre d'éléments, original compris (0 : valeur par défaut).
+    pub nombre: usize,
+    /// Réseau : polaire (autour d'un centre) plutôt que linéaire.
+    pub polaire: bool,
+    /// Scinder : écart laissé entre les deux parties (mm).
+    pub ecart: f64,
+    /// Valeur tapée au clavier (distance en unité d'affichage, angle en degrés, facteur).
     pub saisie: String,
     /// Dernière position du curseur dans le plan (mm), pour une valeur tapée.
     pub curseur: Option<[f64; 2]>,
     /// Outil auquel l'état se rapporte : un changement d'outil le remet à zéro.
     pub outil: Option<Outil>,
-    /// Élément natif sous le curseur (Aligner : surligné avant le clic).
+    /// Élément natif sous le curseur : surligné avant le clic.
     pub cible: Option<String>,
 }
 
@@ -41,36 +52,62 @@ impl Transformation {
         } else if self.placer_centre {
             self.placer_centre = false;
         } else if self.points.pop().is_some() {
+        } else if self.element.take().is_some() {
         } else if self.reference.take().is_some() {
         } else {
             return false;
         }
         true
     }
-    /// Remet l'état à zéro en gardant les options (copie, multiple).
+    /// Remet l'état à zéro en gardant les options.
     pub fn reinitialiser(&mut self) {
-        let (copie, multiple, outil) = (self.copie, self.multiple, self.outil);
-        *self = Self { copie, multiple, outil, ..Default::default() };
+        let (copie, multiple, outil, nombre, polaire, ecart) = (self.copie, self.multiple, self.outil, self.nombre, self.polaire, self.ecart);
+        *self = Self { copie, multiple, outil, nombre, polaire, ecart, ..Default::default() };
+    }
+    /// Nouvel outil : options par défaut de la commande (Symétrie et Décaler copient).
+    pub fn commencer(&mut self, outil: Option<Outil>) {
+        let (nombre, polaire, ecart) = (self.nombre, self.polaire, self.ecart);
+        *self = Self { outil, nombre, polaire, ecart, copie: matches!(outil, Some(Outil::Symetrie | Outil::Decaler)), ..Default::default() };
+    }
+    pub fn nombre_reseau(&self) -> usize {
+        if self.nombre >= 2 { self.nombre } else { NOMBRE_RESEAU }
+    }
+    fn polaire_avec_centre(&self, outil: Outil) -> bool {
+        outil == Outil::Tourner || (outil == Outil::Reseau && self.polaire)
     }
     /// Valeur tapée attendue à l'étape courante.
     pub fn attend_valeur(&self, outil: Outil) -> bool {
         match outil {
             Outil::Deplacer | Outil::Copier => self.points.len() == 1,
-            Outil::Tourner => !self.placer_centre,
+            o if self.polaire_avec_centre(o) => !self.placer_centre,
+            Outil::Reseau | Outil::Echelle => self.points.len() == 1,
+            Outil::Decaler => self.element.is_some(),
             _ => false,
         }
     }
     /// Consigne de l'étape courante, affichée au curseur et sous la barre de commande.
     pub fn consigne(&self, outil: Outil) -> String {
         let valeur = if self.saisie.is_empty() { String::new() } else { format!(" · valeur : {} (Entrée)", self.saisie) };
+        let n = self.nombre_reseau();
         match outil {
             Outil::Deplacer | Outil::Copier if self.points.is_empty() => "Cliquer le point de base".into(),
             Outil::Deplacer | Outil::Copier => format!("Cliquer la destination, ou taper la distance{valeur} · Maj : orthogonal"),
-            Outil::Tourner if self.placer_centre => "Cliquer le nouveau centre de rotation".into(),
-            Outil::Tourner if self.points.is_empty() => format!("Cliquer la direction de départ, ou taper l'angle{valeur} · clic sur le centre : le déplacer"),
+            o if self.polaire_avec_centre(o) && self.placer_centre => "Cliquer le nouveau centre".into(),
+            o if self.polaire_avec_centre(o) && self.points.is_empty() => format!("Cliquer la direction de départ, ou taper l'angle{valeur} · clic sur le centre : le déplacer"),
             Outil::Tourner => format!("Cliquer la direction d'arrivée, ou taper l'angle{valeur} · Maj : pas de 15°"),
+            Outil::Reseau if self.polaire => format!("Cliquer la direction du 2ᵉ élément, ou taper l'angle entre éléments{valeur} · {n} éléments"),
+            Outil::Reseau if self.points.is_empty() => format!("Réseau linéaire de {n} éléments : cliquer le point de base"),
+            Outil::Reseau => format!("Cliquer la position du 2ᵉ élément, ou taper le pas{valeur} · Maj : orthogonal"),
+            Outil::Symetrie if self.points.is_empty() => "Cliquer le premier point de l'axe de symétrie".into(),
+            Outil::Symetrie => "Cliquer le second point de l'axe · Maj : orthogonal".into(),
+            Outil::Echelle if self.points.is_empty() => "Cliquer le point de base (fixe)".into(),
+            Outil::Echelle if self.points.len() == 1 => format!("Cliquer la longueur de référence, ou taper le facteur{valeur}"),
+            Outil::Echelle => "Cliquer la nouvelle longueur".into(),
             Outil::Aligner if self.reference.is_none() => "Cliquer la référence (axe d'un mur)".into(),
             Outil::Aligner => "Cliquer les éléments à aligner · Échap : changer de référence".into(),
+            Outil::Decaler if self.element.is_none() => "Cliquer le mur à décaler".into(),
+            Outil::Decaler => format!("Cliquer le côté et la distance, ou taper la distance{valeur}"),
+            Outil::Scinder => "Cliquer le mur au point de coupure".into(),
             _ => String::new(),
         }
     }
@@ -101,20 +138,39 @@ pub(super) fn tourner_point(p: [f64; 2], centre: [f64; 2], angle: f64) -> [f64; 
     [centre[0] + x * c - y * s, centre[1] + x * s + y * c]
 }
 
+/// Image de `p` par la symétrie d'axe (a, b) ; `p` si l'axe est nul.
+pub(super) fn miroir_point(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> [f64; 2] {
+    let (ux, uy) = (b[0] - a[0], b[1] - a[1]);
+    let l2 = ux * ux + uy * uy;
+    if l2 < 1e-18 {
+        return p;
+    }
+    let t = ((p[0] - a[0]) * ux + (p[1] - a[1]) * uy) / l2;
+    let h = [a[0] + ux * t, a[1] + uy * t];
+    [2.0 * h[0] - p[0], 2.0 * h[1] - p[1]]
+}
+
+/// Distance signée de `p` à la droite (a, b) : positive à gauche du sens a→b.
+pub(super) fn distance_signee(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
+    let (ux, uy) = (b[0] - a[0], b[1] - a[1]);
+    let l = ux.hypot(uy).max(1e-12);
+    (ux * (p[1] - a[1]) - uy * (p[0] - a[0])) / l
+}
+
 /// Valeur tapée : nombre décimal (virgule ou point).
 pub(super) fn lire_valeur(saisie: &str) -> Option<f64> {
     saisie.replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
 impl ViewerApp {
-    /// Outil de transformation actif dans l'onglet Modifier, s'il peut s'exécuter.
+    /// Outil de modification graphique actif dans l'onglet Modifier, s'il peut s'exécuter.
     pub(super) fn outil_transformation(&self) -> Option<Outil> {
         if self.onglet_ruban != OngletRuban::Modifier || self.natif.is_none() || self.loading.is_some() {
             return None;
         }
         match self.ruban_edition.outil()? {
-            o @ (Outil::Deplacer | Outil::Copier | Outil::Tourner) if !self.selection_bim().is_empty() => Some(o),
-            Outil::Aligner => Some(Outil::Aligner),
+            o @ (Outil::Deplacer | Outil::Copier | Outil::Tourner | Outil::Symetrie | Outil::Reseau | Outil::Echelle) if !self.selection_bim().is_empty() => Some(o),
+            o @ (Outil::Aligner | Outil::Decaler | Outil::Scinder) => Some(o),
             _ => None,
         }
     }
@@ -123,8 +179,7 @@ impl ViewerApp {
     pub(super) fn suivre_transformation(&mut self) {
         let outil = self.outil_transformation();
         if outil != self.transfo.outil {
-            self.transfo.outil = outil;
-            self.transfo.reinitialiser();
+            self.transfo.commencer(outil);
         }
     }
 
@@ -144,6 +199,9 @@ impl ViewerApp {
         for b in projet.barres.iter().filter(|b| ids.contains(&b.id)) {
             pts.extend([[b.debut[0], b.debut[1]], [b.fin[0], b.fin[1]]]);
         }
+        for t in projet.terrains.iter().filter(|t| ids.contains(&t.id)) {
+            pts.extend(t.contour.iter().map(|p| [p[0], p[1]]));
+        }
         if pts.is_empty() {
             return None;
         }
@@ -161,7 +219,7 @@ impl ViewerApp {
         self.transfo.centre.or_else(|| self.centre_selection())
     }
 
-    /// Angle courant de Tourner pour une direction d'arrivée `p` (Maj : pas de 15°).
+    /// Angle courant pour une direction d'arrivée `p` (Maj : pas de 15°).
     fn angle_tourner(&self, p: [f64; 2], maj: bool) -> Option<f64> {
         let c = self.centre_rotation()?;
         let depart = *self.transfo.points.first()?;
@@ -169,11 +227,17 @@ impl ViewerApp {
         Some(if maj { accrocher_angle(a, 15.0) } else { a })
     }
 
-    /// Exécute la transformation finale en une seule transaction. `copie` : sur une copie.
+    /// Axe (justification) d'un mur ou mur composé.
+    fn axe_mur(&self, id: &str) -> Option<([f64; 2], [f64; 2], f64)> {
+        let (p, _) = self.natif.as_ref()?;
+        p.axe_element(id)
+    }
+
+    /// Exécute la transformation de la sélection en une seule transaction ; `copie` : sur
+    /// une copie de la sélection (copie puis transformation, un seul Ctrl+Z).
     fn appliquer_transformation(&mut self, commande: impl FnOnce(Vec<String>) -> Commande, copie: bool) {
         let ids = self.selection_bim();
         let resultat = if copie {
-            // copie puis transformation des copies : une seule étape d'annulation
             self.executer_bim_suite(Commande::Copier { ids, delta: [0.0; 3] }, commande)
         } else {
             self.executer_bim(commande(ids)).map(|_| ())
@@ -183,53 +247,110 @@ impl ViewerApp {
         }
     }
 
-    /// Clic dans la vue pendant une transformation. `cible` : élément natif sous le clic.
+    /// Clic dans la vue pendant une commande. `cible` : élément natif sous le clic.
     pub(super) fn clic_transformation(&mut self, outil: Outil, p: [f64; 2], ecran: egui::Pos2, rect: egui::Rect, altitude: f64, maj: bool, cible: Option<String>) {
+        // centre déplaçable (Tourner, réseau polaire) : clic dessus, puis nouveau centre
+        if self.transfo.polaire_avec_centre(outil) {
+            let pres_du_centre = self.centre_rotation().and_then(|c| self.ecran_plan(rect, c, altitude)).is_some_and(|c| c.distance(ecran) <= 10.0);
+            if self.transfo.placer_centre {
+                self.transfo.centre = Some(p);
+                self.transfo.placer_centre = false;
+                return;
+            }
+            if self.transfo.points.is_empty() && pres_du_centre {
+                self.transfo.placer_centre = true;
+                return;
+            }
+        }
         match outil {
             Outil::Deplacer | Outil::Copier => match self.transfo.points.first().copied() {
                 None => self.transfo.points.push(p),
-                Some(a) => {
-                    let delta = [p[0] - a[0], p[1] - a[1], 0.0];
-                    self.valider_deplacement(outil, delta);
-                }
+                Some(a) => self.valider_deplacement(outil, [p[0] - a[0], p[1] - a[1], 0.0]),
             },
             Outil::Tourner => {
-                let pres_du_centre = self.centre_rotation().and_then(|c| self.ecran_plan(rect, c, altitude)).is_some_and(|c| c.distance(ecran) <= 10.0);
-                if self.transfo.placer_centre {
-                    self.transfo.centre = Some(p);
-                    self.transfo.placer_centre = false;
-                } else if self.transfo.points.is_empty() && pres_du_centre {
-                    self.transfo.placer_centre = true;
-                } else if self.transfo.points.is_empty() {
+                if self.transfo.points.is_empty() {
                     self.transfo.points.push(p);
                 } else if let Some(angle) = self.angle_tourner(p, maj) {
                     self.valider_rotation(angle);
                 }
             }
+            Outil::Reseau if self.transfo.polaire => {
+                if self.transfo.points.is_empty() {
+                    self.transfo.points.push(p);
+                } else if let Some(angle) = self.angle_tourner(p, maj) {
+                    self.valider_reseau([0.0; 3], angle);
+                }
+            }
+            Outil::Reseau => match self.transfo.points.first().copied() {
+                None => self.transfo.points.push(p),
+                Some(a) => self.valider_reseau([p[0] - a[0], p[1] - a[1], 0.0], 0.0),
+            },
+            Outil::Symetrie => match self.transfo.points.first().copied() {
+                None => self.transfo.points.push(p),
+                Some(a) if (p[0] - a[0]).hypot(p[1] - a[1]) < 1.0 => self.status = "Symétrie : le second point doit être distinct du premier.".into(),
+                Some(a) => {
+                    let copie = self.transfo.copie;
+                    self.appliquer_transformation(|ids| Commande::Symetrie { ids, a, b: p }, copie);
+                    self.fin_commande("Symétrie appliquée");
+                }
+            },
+            Outil::Echelle => match self.transfo.points.len() {
+                0 | 1 => self.transfo.points.push(p),
+                _ => {
+                    let (c, r) = (self.transfo.points[0], self.transfo.points[1]);
+                    let l1 = (r[0] - c[0]).hypot(r[1] - c[1]);
+                    let l2 = (p[0] - c[0]).hypot(p[1] - c[1]);
+                    if l1 < 1.0 {
+                        self.status = "Échelle : longueur de référence nulle.".into();
+                        self.transfo.points.truncate(1);
+                    } else {
+                        self.valider_echelle(l2 / l1);
+                    }
+                }
+            },
             Outil::Aligner => {
                 let Some(id) = cible else {
                     self.status = "Aligner : cliquer sur un élément.".into();
                     return;
                 };
                 match self.transfo.reference.clone() {
-                    None => {
-                        if self.natif.as_ref().is_some_and(|(p, _)| p.axe_element(&id).is_some()) {
-                            self.transfo.reference = Some(id);
-                        } else {
-                            self.status = "Aligner : la référence doit être un mur droit.".into();
-                        }
-                    }
+                    None if self.axe_mur(&id).is_some() => self.transfo.reference = Some(id),
+                    None => self.status = "Aligner : la référence doit être un mur droit.".into(),
                     Some(r) if r == id => self.status = "Aligner : choisir un autre élément que la référence.".into(),
-                    Some(r) => {
-                        if let Err(e) = self.executer_bim(Commande::Aligner { ids: vec![id], reference: r }) {
-                            self.error = Some(e);
-                        } else {
-                            self.status = "Élément aligné — cliquer le suivant, Ctrl+Z pour annuler.".into();
-                        }
-                    }
+                    Some(r) => match self.executer_bim(Commande::Aligner { ids: vec![id], reference: r }) {
+                        Ok(_) => self.status = "Élément aligné — cliquer le suivant, Ctrl+Z pour annuler.".into(),
+                        Err(e) => self.error = Some(e),
+                    },
                 }
             }
+            Outil::Decaler => match self.transfo.element.clone() {
+                None => match cible.filter(|id| self.axe_mur(id).is_some()) {
+                    Some(id) => self.transfo.element = Some(id),
+                    None => self.status = "Décaler : cliquer un mur droit.".into(),
+                },
+                Some(id) => {
+                    let Some((a, b, _)) = self.axe_mur(&id) else { return };
+                    self.valider_decalage(&id, distance_signee(p, a, b));
+                }
+            },
+            Outil::Scinder => match cible.filter(|id| self.axe_mur(id).is_some()) {
+                Some(id) => {
+                    let ecart = self.transfo.ecart.max(0.0);
+                    match self.executer_bim(Commande::Scinder { id, point: p, ecart }) {
+                        Ok(_) => self.status = "Mur scindé — cliquer un autre point, Ctrl+Z pour annuler.".into(),
+                        Err(e) => self.error = Some(e),
+                    }
+                }
+                None => self.status = "Scinder : cliquer sur un mur droit.".into(),
+            },
             _ => {}
+        }
+    }
+
+    fn fin_commande(&mut self, message: &str) {
+        self.transfo.reinitialiser();
+        if self.error.is_none() {
+            self.status = format!("{message} — Ctrl+Z pour annuler.");
         }
     }
 
@@ -259,9 +380,33 @@ impl ViewerApp {
         let Some(centre) = self.centre_rotation() else { return };
         let copie = self.transfo.copie;
         self.appliquer_transformation(|ids| Commande::Tourner { ids, centre, angle }, copie);
-        self.transfo.reinitialiser();
-        if self.error.is_none() {
-            self.status = format!("Rotation de {angle:.1}° appliquée — Ctrl+Z pour annuler.");
+        self.fin_commande(&format!("Rotation de {angle:.1}° appliquée"));
+    }
+
+    fn valider_reseau(&mut self, delta: [f64; 3], angle: f64) {
+        let centre = self.centre_rotation().unwrap_or([0.0; 2]);
+        let nombre = self.transfo.nombre_reseau();
+        let ids = self.selection_bim();
+        match self.executer_bim(Commande::Reseau { ids: ids.clone(), nombre, delta, centre, angle }) {
+            Ok(_) => {
+                self.bim.selection = ids;
+                self.fin_commande(&format!("Réseau de {nombre} éléments créé"));
+            }
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    fn valider_echelle(&mut self, facteur: f64) {
+        let Some(centre) = self.transfo.points.first().copied() else { return };
+        self.appliquer_transformation(|ids| Commande::Echelle { ids, centre, facteur }, false);
+        self.fin_commande(&format!("Échelle {facteur:.3} appliquée"));
+    }
+
+    fn valider_decalage(&mut self, id: &str, distance: f64) {
+        let copie = self.transfo.copie;
+        match self.executer_bim(Commande::Decaler { id: id.to_string(), distance, copie }) {
+            Ok(_) => self.fin_commande(&format!("Décalage de {} appliqué", crate::config::options::unite().afficher(distance.abs()))),
+            Err(e) => self.error = Some(e),
         }
     }
 
@@ -300,39 +445,62 @@ impl ViewerApp {
             return;
         };
         self.transfo.saisie.clear();
+        let unite = crate::config::options::unite();
+        let vers_curseur = |app: &Self, d: f64| {
+            let base = app.transfo.points.first().copied()?;
+            let p = point_a_distance(base, app.transfo.curseur?, d)?;
+            Some([p[0] - base[0], p[1] - base[1], 0.0])
+        };
         match outil {
             Outil::Deplacer | Outil::Copier => {
-                let (Some(base), Some(curseur)) = (self.transfo.points.first().copied(), self.transfo.curseur) else { return };
-                let d = crate::config::options::unite().vers_mm(v);
-                if let Some(p) = point_a_distance(base, curseur, d) {
-                    self.valider_deplacement(outil, [p[0] - base[0], p[1] - base[1], 0.0]);
+                if let Some(delta) = vers_curseur(self, unite.vers_mm(v)) {
+                    self.valider_deplacement(outil, delta);
                 }
             }
             Outil::Tourner => self.valider_rotation(v),
+            Outil::Reseau if self.transfo.polaire => self.valider_reseau([0.0; 3], v),
+            Outil::Reseau => {
+                if let Some(delta) = vers_curseur(self, unite.vers_mm(v)) {
+                    self.valider_reseau(delta, 0.0);
+                }
+            }
+            Outil::Echelle if v > 0.0 => self.valider_echelle(v),
+            Outil::Echelle => self.status = "Échelle : le facteur doit être positif.".into(),
+            Outil::Decaler => {
+                let (Some(id), Some(c)) = (self.transfo.element.clone(), self.transfo.curseur) else { return };
+                let Some((a, b, _)) = self.axe_mur(&id) else { return };
+                // côté du curseur, distance tapée
+                let cote = if distance_signee(c, a, b) < 0.0 { -1.0 } else { 1.0 };
+                self.valider_decalage(&id, cote * unite.vers_mm(v.abs()));
+            }
             _ => {}
         }
     }
 
-    /// Aperçu de la transformation : consigne au curseur, accrochage, cotes temporaires,
-    /// fantôme de la sélection transformée, centre de rotation, référence d'alignement.
+    /// Aperçu de la commande : consigne au curseur, accrochage, cotes temporaires,
+    /// fantôme de la sélection transformée, centre, axe, cible survolée.
     pub(super) fn apercu_transformation(&mut self, ui: &egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>, altitude: f64) {
-        let cible = self.transfo.cible.clone();
         let Some(outil) = self.transfo.outil else { return };
+        let cible = self.transfo.cible.clone();
         let painter = ui.painter().with_clip_rect(rect);
         let bleu = Color32::from_rgb(55, 130, 200);
         let orange = Color32::from_rgb(230, 120, 20);
         let maj = ui.input(|i| i.modifiers.shift);
         let unite = crate::config::options::unite();
+        let orthogonal = maj && matches!(outil, Outil::Deplacer | Outil::Copier | Outil::Symetrie) || maj && outil == Outil::Reseau && !self.transfo.polaire;
         let point = survol.and_then(|q| {
-            let depart = match outil { Outil::Deplacer | Outil::Copier => self.transfo.points.first().copied(), _ => None };
-            self.point_tracage(q, rect, maj && matches!(outil, Outil::Deplacer | Outil::Copier), depart, altitude)
+            let depart = match outil {
+                Outil::Deplacer | Outil::Copier | Outil::Symetrie | Outil::Echelle => self.transfo.points.first().copied(),
+                Outil::Reseau if !self.transfo.polaire => self.transfo.points.first().copied(),
+                _ => None,
+            };
+            self.point_tracage(q, rect, orthogonal, depart, altitude)
         });
         self.transfo.curseur = point.map(|(p, _)| p);
         if let (Some(q), Some((p, acc))) = (survol, point) {
             if let Some(e) = self.ecran_plan(rect, p, altitude) {
                 marqueur(&painter, e, acc, bleu, orange);
             }
-            // consigne au curseur
             painter.text(q + egui::vec2(16.0, 14.0), egui::Align2::LEFT_TOP, self.transfo.consigne(outil), egui::FontId::proportional(12.0), bleu);
         }
         let fantome = |app: &Self, f: &dyn Fn([f64; 2]) -> [f64; 2]| {
@@ -352,85 +520,177 @@ impl ViewerApp {
                 }
             }
         };
+        let cote = |a: [f64; 2], b: [f64; 2], texte: String| {
+            if let (Some(x), Some(y)) = (self.ecran_plan(rect, a, altitude), self.ecran_plan(rect, b, altitude)) {
+                painter.add(egui::Shape::dashed_line(&[x, y], egui::Stroke::new(1.5, bleu), 6.0, 4.0));
+                painter.circle_filled(x, 3.5, bleu);
+                painter.text(x.lerp(y, 0.5) + egui::vec2(0.0, -16.0), egui::Align2::CENTER_CENTER, texte, egui::FontId::proportional(13.0), bleu);
+            }
+        };
+        let trait_axe = |id: &str, couleur: Color32, epaisseur: f32| {
+            if let Some((a, b, z)) = self.axe_mur(id) {
+                if let (Some(x), Some(y)) = (self.ecran_plan(rect, a, z), self.ecran_plan(rect, b, z)) {
+                    painter.add(egui::Shape::dashed_line(&[x, y], egui::Stroke::new(epaisseur, couleur), 8.0, 4.0));
+                }
+            }
+        };
+        // centre (Tourner, réseau polaire) : croix cerclée, orange au survol (clic : le déplacer)
+        let dessiner_centre = |app: &Self| -> Option<egui::Pos2> {
+            let c = app.centre_rotation()?;
+            let ce = app.ecran_plan(rect, c, altitude)?;
+            let proche = survol.is_some_and(|q| q.distance(ce) <= 10.0) || app.transfo.placer_centre;
+            let couleur = if proche { orange } else { bleu };
+            painter.circle_stroke(ce, 7.0, egui::Stroke::new(1.8, couleur));
+            painter.line_segment([ce - egui::vec2(10.0, 0.0), ce + egui::vec2(10.0, 0.0)], egui::Stroke::new(1.2, couleur));
+            painter.line_segment([ce - egui::vec2(0.0, 10.0), ce + egui::vec2(0.0, 10.0)], egui::Stroke::new(1.2, couleur));
+            Some(ce)
+        };
+        // rapporteur : arc et valeur de l'angle à l'écran
+        let rapporteur = |ce: egui::Pos2, de: egui::Pos2, ae: egui::Pos2, angle: f64| {
+            painter.line_segment([ce, de], egui::Stroke::new(1.2, bleu));
+            painter.line_segment([ce, ae], egui::Stroke::new(1.8, orange));
+            let r = ce.distance(de).clamp(30.0, 90.0);
+            let a0 = (de - ce).angle();
+            let mut balayage = (ae - ce).angle() - a0;
+            while balayage > std::f32::consts::PI { balayage -= std::f32::consts::TAU; }
+            while balayage < -std::f32::consts::PI { balayage += std::f32::consts::TAU; }
+            let pts: Vec<egui::Pos2> = (0..=24).map(|k| ce + egui::Vec2::angled(a0 + balayage * k as f32 / 24.0) * r).collect();
+            painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, orange)));
+            painter.text(ce + egui::Vec2::angled(a0 + balayage / 2.0) * (r + 16.0), egui::Align2::CENTER_CENTER, format!("{angle:.1}°"), egui::FontId::proportional(13.0), orange);
+        };
         match outil {
             Outil::Deplacer | Outil::Copier => {
                 let (Some(a), Some((p, _))) = (self.transfo.points.first().copied(), point) else { return };
                 let p = lire_valeur(&self.transfo.saisie).and_then(|v| point_a_distance(a, p, unite.vers_mm(v))).unwrap_or(p);
                 let d = [p[0] - a[0], p[1] - a[1]];
-                if let (Some(x), Some(y)) = (self.ecran_plan(rect, a, altitude), self.ecran_plan(rect, p, altitude)) {
-                    painter.add(egui::Shape::dashed_line(&[x, y], egui::Stroke::new(1.5, bleu), 6.0, 4.0));
-                    painter.circle_filled(x, 3.5, bleu);
-                    painter.text(x.lerp(y, 0.5) + egui::vec2(0.0, -16.0), egui::Align2::CENTER_CENTER, unite.afficher(d[0].hypot(d[1])), egui::FontId::proportional(13.0), bleu);
-                }
+                cote(a, p, unite.afficher(d[0].hypot(d[1])));
                 fantome(self, &|v| [v[0] + d[0], v[1] + d[1]]);
             }
-            Outil::Tourner => {
-                let Some(c) = self.centre_rotation() else { return };
-                let Some(ce) = self.ecran_plan(rect, c, altitude) else { return };
-                // centre : croix cerclée, surlignée au survol (clic : le déplacer)
-                let proche = survol.is_some_and(|q| q.distance(ce) <= 10.0) || self.transfo.placer_centre;
-                let couleur = if proche { orange } else { bleu };
-                painter.circle_stroke(ce, 7.0, egui::Stroke::new(1.8, couleur));
-                painter.line_segment([ce - egui::vec2(10.0, 0.0), ce + egui::vec2(10.0, 0.0)], egui::Stroke::new(1.2, couleur));
-                painter.line_segment([ce - egui::vec2(0.0, 10.0), ce + egui::vec2(0.0, 10.0)], egui::Stroke::new(1.2, couleur));
+            o if self.transfo.polaire_avec_centre(o) => {
+                let Some(ce) = dessiner_centre(self) else { return };
                 if self.transfo.placer_centre {
                     return;
                 }
+                let Some(c) = self.centre_rotation() else { return };
                 let Some(depart) = self.transfo.points.first().copied() else {
-                    if let Some((p, _)) = point {
-                        if let Some(e) = self.ecran_plan(rect, p, altitude) {
-                            painter.add(egui::Shape::dashed_line(&[ce, e], egui::Stroke::new(1.2, bleu), 5.0, 4.0));
-                        }
+                    if let Some(e) = point.and_then(|(p, _)| self.ecran_plan(rect, p, altitude)) {
+                        painter.add(egui::Shape::dashed_line(&[ce, e], egui::Stroke::new(1.2, bleu), 5.0, 4.0));
                     }
                     return;
                 };
                 let angle = lire_valeur(&self.transfo.saisie).or_else(|| point.and_then(|(p, _)| self.angle_tourner(p, maj)));
                 let Some(angle) = angle else { return };
-                let Some(de) = self.ecran_plan(rect, depart, altitude) else { return };
-                let arrivee = tourner_point(depart, c, angle);
-                let Some(ae) = self.ecran_plan(rect, arrivee, altitude) else { return };
-                painter.line_segment([ce, de], egui::Stroke::new(1.2, bleu));
-                painter.line_segment([ce, ae], egui::Stroke::new(1.8, orange));
-                // rapporteur : arc de l'angle à l'écran
-                let r = ce.distance(de).clamp(30.0, 90.0);
-                let a0 = (de - ce).angle();
-                let a1 = (ae - ce).angle();
-                let mut balayage = a1 - a0;
-                while balayage > std::f32::consts::PI { balayage -= std::f32::consts::TAU; }
-                while balayage < -std::f32::consts::PI { balayage += std::f32::consts::TAU; }
-                let pts: Vec<egui::Pos2> = (0..=24).map(|k| ce + egui::Vec2::angled(a0 + balayage * k as f32 / 24.0) * r).collect();
-                painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, orange)));
-                let milieu = ce + egui::Vec2::angled(a0 + balayage / 2.0) * (r + 16.0);
-                painter.text(milieu, egui::Align2::CENTER_CENTER, format!("{angle:.1}°"), egui::FontId::proportional(13.0), orange);
-                fantome(self, &|v| tourner_point(v, c, angle));
+                let (Some(de), Some(ae)) = (self.ecran_plan(rect, depart, altitude), self.ecran_plan(rect, tourner_point(depart, c, angle), altitude)) else { return };
+                rapporteur(ce, de, ae, angle);
+                if o == Outil::Tourner {
+                    fantome(self, &|v| tourner_point(v, c, angle));
+                } else {
+                    for k in 1..self.transfo.nombre_reseau() {
+                        let a = angle * k as f64;
+                        fantome(self, &|v| tourner_point(v, c, a));
+                    }
+                }
+            }
+            Outil::Reseau => {
+                let (Some(a), Some((p, _))) = (self.transfo.points.first().copied(), point) else { return };
+                let p = lire_valeur(&self.transfo.saisie).and_then(|v| point_a_distance(a, p, unite.vers_mm(v))).unwrap_or(p);
+                let d = [p[0] - a[0], p[1] - a[1]];
+                cote(a, p, format!("pas {}", unite.afficher(d[0].hypot(d[1]))));
+                for k in 1..self.transfo.nombre_reseau() {
+                    let k = k as f64;
+                    fantome(self, &|v| [v[0] + d[0] * k, v[1] + d[1] * k]);
+                }
+            }
+            Outil::Symetrie => {
+                let (Some(a), Some((p, _))) = (self.transfo.points.first().copied(), point) else { return };
+                if let (Some(x), Some(y)) = (self.ecran_plan(rect, a, altitude), self.ecran_plan(rect, p, altitude)) {
+                    // axe prolongé en tirets
+                    let v = (y - x).normalized() * 4000.0;
+                    painter.add(egui::Shape::dashed_line(&[x - v, y + v], egui::Stroke::new(1.5, orange), 10.0, 5.0));
+                }
+                if (p[0] - a[0]).hypot(p[1] - a[1]) > 1.0 {
+                    fantome(self, &|v| miroir_point(v, a, p));
+                }
+            }
+            Outil::Echelle => {
+                let Some(c) = self.transfo.points.first().copied() else { return };
+                let Some((p, _)) = point else { return };
+                match self.transfo.points.get(1).copied() {
+                    None => {
+                        if let Some(f) = lire_valeur(&self.transfo.saisie).filter(|f| *f > 0.0) {
+                            fantome(self, &|v| [c[0] + (v[0] - c[0]) * f, c[1] + (v[1] - c[1]) * f]);
+                        }
+                        cote(c, p, format!("référence {}", unite.afficher((p[0] - c[0]).hypot(p[1] - c[1]))));
+                    }
+                    Some(r) => {
+                        let l1 = (r[0] - c[0]).hypot(r[1] - c[1]).max(1e-9);
+                        let f = (p[0] - c[0]).hypot(p[1] - c[1]) / l1;
+                        cote(c, p, format!("facteur {f:.3}"));
+                        fantome(self, &|v| [c[0] + (v[0] - c[0]) * f, c[1] + (v[1] - c[1]) * f]);
+                    }
+                }
             }
             Outil::Aligner => {
-                let Some((projet, _)) = &self.natif else { return };
-                let trait_axe = |id: &str, couleur: Color32, epaisseur: f32| {
-                    if let Some((a, b, z)) = projet.axe_element(id) {
-                        if let (Some(x), Some(y)) = (self.ecran_plan(rect, a, z), self.ecran_plan(rect, b, z)) {
-                            painter.add(egui::Shape::dashed_line(&[x, y], egui::Stroke::new(epaisseur, couleur), 8.0, 4.0));
-                        }
-                    }
-                };
                 if let Some(r) = &self.transfo.reference {
                     trait_axe(r, bleu, 2.0);
                 }
-                // survol : la cible du prochain clic est surlignée avant le clic
                 if let Some(id) = cible.filter(|id| Some(id) != self.transfo.reference.as_ref()) {
                     trait_axe(&id, if self.transfo.reference.is_some() { orange } else { bleu }, 3.0);
                 }
+            }
+            Outil::Decaler => match self.transfo.element.clone() {
+                None => {
+                    if let Some(id) = cible {
+                        trait_axe(&id, orange, 3.0);
+                    }
+                }
+                Some(id) => {
+                    let Some((a, b, z)) = self.axe_mur(&id) else { return };
+                    trait_axe(&id, bleu, 2.0);
+                    let Some((p, _)) = point else { return };
+                    let mut d = distance_signee(p, a, b);
+                    if let Some(v) = lire_valeur(&self.transfo.saisie) {
+                        d = d.signum() * unite.vers_mm(v.abs());
+                    }
+                    let (ux, uy) = (b[0] - a[0], b[1] - a[1]);
+                    let l = ux.hypot(uy).max(1e-9);
+                    let n = [-uy / l * d, ux / l * d];
+                    let (a2, b2) = ([a[0] + n[0], a[1] + n[1]], [b[0] + n[0], b[1] + n[1]]);
+                    if let (Some(x), Some(y)) = (self.ecran_plan(rect, a2, z), self.ecran_plan(rect, b2, z)) {
+                        painter.line_segment([x, y], egui::Stroke::new(2.5, bleu.gamma_multiply(0.7)));
+                    }
+                    let m = [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0];
+                    cote(m, [m[0] + n[0], m[1] + n[1]], unite.afficher(d.abs()));
+                }
+            },
+            Outil::Scinder => {
+                let Some(id) = cible else { return };
+                trait_axe(&id, orange, 3.0);
+                let (Some((a, b, z)), Some((p, _))) = (self.axe_mur(&id), point) else { return };
+                // marque de coupure : projection du curseur sur l'axe, cotes vers les extrémités
+                let (ux, uy) = (b[0] - a[0], b[1] - a[1]);
+                let l2 = (ux * ux + uy * uy).max(1e-9);
+                let t = (((p[0] - a[0]) * ux + (p[1] - a[1]) * uy) / l2).clamp(0.0, 1.0);
+                let q = [a[0] + ux * t, a[1] + uy * t];
+                if let Some(e) = self.ecran_plan(rect, q, z) {
+                    let n = egui::vec2(-(uy as f32), ux as f32).normalized() * 14.0;
+                    let n = egui::vec2(n.x, -n.y);
+                    painter.line_segment([e - n, e + n], egui::Stroke::new(2.5, orange));
+                }
+                let l = l2.sqrt();
+                cote(a, q, unite.afficher(l * t));
+                cote(q, b, unite.afficher(l * (1.0 - t)));
             }
             _ => {}
         }
     }
 
-    /// État de la transformation pour le pilote : étape, consigne, centre à l'écran.
+    /// État de la commande pour le pilote : étape, consigne, centre à l'écran.
     pub(super) fn etat_transformation(&self) -> serde_json::Value {
         let Some(outil) = self.transfo.outil else { return serde_json::Value::Null };
         let rect = self.rect_vue;
         let altitude = self.altitude_vue_native();
-        let centre = (outil == Outil::Tourner).then(|| self.centre_rotation()).flatten();
+        let centre = self.transfo.polaire_avec_centre(outil).then(|| self.centre_rotation()).flatten();
         serde_json::json!({
             "outil": outil.nom(),
             "consigne": self.transfo.consigne(outil),
@@ -439,10 +699,31 @@ impl ViewerApp {
             "centre_ecran": centre.and_then(|c| self.ecran_plan(rect, c, altitude)).map(|e| [e.x, e.y]),
             "placer_centre": self.transfo.placer_centre,
             "reference": self.transfo.reference,
+            "element": self.transfo.element,
             "copie": self.transfo.copie,
             "multiple": self.transfo.multiple,
+            "nombre": self.transfo.nombre_reseau(),
+            "polaire": self.transfo.polaire,
+            "ecart": self.transfo.ecart,
             "saisie": self.transfo.saisie,
         })
+    }
+
+    /// Réglage d'une option de la commande en cours par le pilote (comme la barre d'options).
+    pub(super) fn regler_transformation(&mut self, v: &serde_json::Value) -> Result<(), String> {
+        self.suivre_transformation();
+        let o = v.as_object().ok_or("options : objet JSON attendu")?;
+        for (cle, val) in o {
+            match cle.as_str() {
+                "copie" => self.transfo.copie = val.as_bool().ok_or("copie : booléen")?,
+                "multiple" => self.transfo.multiple = val.as_bool().ok_or("multiple : booléen")?,
+                "polaire" => self.transfo.polaire = val.as_bool().ok_or("polaire : booléen")?,
+                "nombre" => self.transfo.nombre = val.as_u64().filter(|n| (2..=500).contains(n)).ok_or("nombre : de 2 à 500")? as usize,
+                "ecart" => self.transfo.ecart = val.as_f64().filter(|e| *e >= 0.0).ok_or("ecart : mm positif")?,
+                _ => return Err(format!("Option inconnue : {cle}")),
+            }
+        }
+        Ok(())
     }
 }
 
@@ -460,12 +741,15 @@ mod tests {
     }
 
     #[test]
-    fn distance_tapee_et_rotation() {
+    fn distance_tapee_rotation_miroir_et_cote() {
         let p = point_a_distance([0.0, 0.0], [3.0, 4.0], 10.0).unwrap();
         assert!((p[0] - 6.0).abs() < 1e-9 && (p[1] - 8.0).abs() < 1e-9);
         assert!(point_a_distance([1.0, 1.0], [1.0, 1.0], 5.0).is_none());
         let q = tourner_point([2.0, 0.0], [1.0, 0.0], 90.0);
         assert!((q[0] - 1.0).abs() < 1e-9 && (q[1] - 1.0).abs() < 1e-9);
+        assert_eq!(miroir_point([3.0, 2.0], [0.0, 0.0], [0.0, 1.0]), [-3.0, 2.0]);
+        assert!((distance_signee([0.0, 2.0], [0.0, 0.0], [5.0, 0.0]) - 2.0).abs() < 1e-9);
+        assert!((distance_signee([0.0, -2.0], [0.0, 0.0], [5.0, 0.0]) + 2.0).abs() < 1e-9);
         assert_eq!(lire_valeur("12,5"), Some(12.5));
         assert_eq!(lire_valeur("-"), None);
     }
@@ -481,5 +765,15 @@ mod tests {
         assert!(t.reference.is_none());
         assert!(!t.reculer());
         assert!(t.copie, "les options survivent");
+    }
+
+    #[test]
+    fn symetrie_et_decaler_copient_par_defaut() {
+        let mut t = Transformation::default();
+        t.commencer(Some(Outil::Symetrie));
+        assert!(t.copie);
+        t.commencer(Some(Outil::Tourner));
+        assert!(!t.copie);
+        assert_eq!(t.nombre_reseau(), NOMBRE_RESEAU);
     }
 }

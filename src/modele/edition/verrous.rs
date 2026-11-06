@@ -30,6 +30,8 @@ impl Projet {
             Commande::Deplacer { ids, .. }
             | Commande::Tourner { ids, .. }
             | Commande::Aligner { ids, .. }
+            | Commande::Symetrie { ids, .. }
+            | Commande::Echelle { ids, .. }
             | Commande::Attacher { ids, .. }
             | Commande::Supprimer { ids } => ids,
             _ => return Ok(c),

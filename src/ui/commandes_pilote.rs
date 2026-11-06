@@ -246,6 +246,10 @@ impl ViewerApp {
                 };
                 match r { Ok(id) => succes(&[("id", texte(&id))]), Err(e) => erreur(&e) }
             }
+            "transformation" => match serde_json::from_str::<serde_json::Value>(argument).map_err(|e| e.to_string()).and_then(|v| self.regler_transformation(&v)) {
+                Ok(()) => succes(&[("transformation", self.etat_transformation().to_string())]),
+                Err(e) => erreur(&e),
+            },
             "editer" => {
                 let resultat=serde_json::from_str::<crate::modele::edition::commandes::Commande>(argument).map_err(|e|e.to_string()).and_then(|c|self.executer_bim(c));
                 match resultat { Ok(ids)=>succes(&[("ids",serde_json::to_string(&ids).unwrap())]), Err(e)=>erreur(&e) }

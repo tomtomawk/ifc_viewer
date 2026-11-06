@@ -102,6 +102,28 @@ impl ViewerApp {
                         self.transfo.centre = None;
                     }
                 }
+                Some(Outil::Symetrie) => {
+                    ui.checkbox(&mut self.transfo.copie, "Copier").on_hover_text("Symétrie d'une copie ; décocher pour retourner l'original");
+                }
+                Some(Outil::Reseau) => {
+                    ui.selectable_value(&mut self.transfo.polaire, false, "Linéaire");
+                    ui.selectable_value(&mut self.transfo.polaire, true, "Polaire");
+                    let mut n = self.transfo.nombre_reseau();
+                    ui.label("Nombre");
+                    if ui.add(egui::DragValue::new(&mut n).range(2..=500)).on_hover_text("Éléments au total, original compris").changed() {
+                        self.transfo.nombre = n;
+                    }
+                }
+                Some(Outil::Echelle) => {
+                    ui.label("Annotations, contours, terrains : l'épaisseur des murs vient de leur type.");
+                }
+                Some(Outil::Decaler) => {
+                    ui.checkbox(&mut self.transfo.copie, "Copier").on_hover_text("Créer un mur décalé ; décocher pour déplacer le mur");
+                }
+                Some(Outil::Scinder) => {
+                    ui.label("Écart");
+                    ui.add(egui::DragValue::new(&mut self.transfo.ecart).range(0.0..=10_000.0).speed(5.0).dimensions());
+                }
                 Some(Outil::Aligner) => {
                     match self.transfo.reference.as_deref() {
                         Some(r) => {
@@ -242,7 +264,7 @@ impl ViewerApp {
         }
         // la barre n'apparaît que pendant un outil ; les commandes de la sélection sont
         // dans le ruban (Jonctions, Copier sur niveaux) et dans Propriétés
-        matches!(self.ruban_edition.outil(), Some(Outil::Deplacer | Outil::Copier | Outil::Tourner | Outil::Aligner | Outil::Ajuster))
+        matches!(self.ruban_edition.outil(), Some(Outil::Deplacer | Outil::Copier | Outil::Tourner | Outil::Symetrie | Outil::Reseau | Outil::Echelle | Outil::Aligner | Outil::Decaler | Outil::Scinder | Outil::Ajuster))
     }
 
     pub(in crate::ui) fn vue_native_id(&self) -> Option<String> {

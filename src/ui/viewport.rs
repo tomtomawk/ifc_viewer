@@ -250,7 +250,8 @@ impl ViewerApp {
                 self.transfo.cible = resp.hover_pos().and_then(|q| cible(self, q));
                 if resp.clicked_by(PointerButton::Secondary) && !self.transfo.reculer() { self.ruban_edition.annuler(); }
                 if resp.clicked() && let Some(q) = resp.interact_pointer_pos() {
-                    let depart = matches!(outil, crate::ui::ruban::Outil::Deplacer | crate::ui::ruban::Outil::Copier).then(|| self.transfo.points.first().copied()).flatten();
+                    use crate::ui::ruban::Outil as O;
+                    let depart = (matches!(outil, O::Deplacer | O::Copier | O::Symetrie | O::Echelle) || (outil == O::Reseau && !self.transfo.polaire)).then(|| self.transfo.points.first().copied()).flatten();
                     if let Some((p, _)) = self.point_tracage(q, rect, shift && depart.is_some(), depart, altitude_coupe) {
                         let c = cible(self, q);
                         self.clic_transformation(outil, p, q, rect, altitude_coupe, shift, c);
