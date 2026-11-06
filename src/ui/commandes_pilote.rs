@@ -103,10 +103,13 @@ impl ViewerApp {
                 let _ = reponse.send(pilote::erreur("fenêtre réduite : seule la vue 3D se capture (zone « vue »)"));
                 return;
             }
+            let attente = self.captures_en_attente.clone();
+            attente.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
             ctx.request_screenshot(move |image| {
                 let [w, h] = image.size;
                 let rgba: Vec<u8> = image.pixels.iter().flat_map(|p| [p.r(), p.g(), p.b(), 255]).collect();
                 let _ = reponse.send(ecrire(w, h, &rgba));
+                attente.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
             });
             ctx.request_repaint();
             return;

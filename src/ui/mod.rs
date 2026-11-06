@@ -681,6 +681,9 @@ pub struct ViewerApp {
     derniere_commande: Option<crate::ui::ruban::Outil>,
     /// Poignée du milieu du mur en cours de glissement : mur, départ, position courante.
     glisse_milieu: Option<(String, [f64; 2], [f64; 2])>,
+    /// Captures de fenêtre demandées par le pilote et pas encore reçues : egui ne livre
+    /// l'image qu'à une image suivante, il faut donc continuer à redessiner.
+    captures_en_attente: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl ViewerApp {
@@ -836,6 +839,7 @@ impl ViewerApp {
             transfo: Default::default(),
             derniere_commande: None,
             glisse_milieu: None,
+            captures_en_attente: Default::default(),
         };
         if let Some(p) = path {
             app.open(p, &cc.egui_ctx);
@@ -867,6 +871,11 @@ impl eframe::App for ViewerApp {
     }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        // une capture de fenêtre arrive à une image ultérieure : sans souris ni clavier,
+        // egui ne redessinerait plus et la capture n'aboutirait jamais
+        if self.captures_en_attente.load(std::sync::atomic::Ordering::Acquire) > 0 {
+            ctx.request_repaint();
+        }
         if self.pilote.is_none() {
             if std::time::Instant::now() >= self.prochaine_tentative_pilote {
                 self.pilote = pilote::demarrer(ctx.clone());
