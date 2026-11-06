@@ -482,25 +482,19 @@ impl ViewerApp {
         Ok(id)
     }
 
-    /// Charge un type d'ouverture du gabarit dans le projet (une fois, par son nom) et
-    /// le prend pour les prochaines ouvertures.
-    pub(in crate::ui) fn charger_type_ouverture_gabarit(&mut self, t: crate::config::gabarit::TypeOuvertureGabarit) -> Result<(), String> {
-        let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
-        let id = match p.types_ouvertures.iter().find(|x| x.nom == t.nom) {
-            Some(x) => x.id.clone(),
-            None => {
-                let mut q = p.clone();
-                let id = crate::modele::collaboration::uuid();
-                q.types_ouvertures.push(crate::modele::TypeOuverture { id: id.clone(), nom: t.nom.clone(), genre: t.famille.genre, largeur: t.largeur, hauteur: t.hauteur, famille: None, modele: Some(t.famille), origine: None });
-                self.appliquer_projet(q)?;
-                self.status = format!("Famille « {} » du gabarit chargée dans le projet.", t.nom);
-                id
-            }
-        };
-        use crate::ui::ruban::Outil;
-        self.ruban_edition.definir_nombre_option(Outil::Ouverture, 1, t.largeur);
-        self.ruban_edition.definir_nombre_option(Outil::Ouverture, 2, t.hauteur);
-        self.ruban_edition.ouverture_type_identique = Some(id);
+    /// Charger une famille : choix d'un fichier `.famille.json`, chargé dans le projet ;
+    /// `placer` : le nouveau type devient celui des prochaines ouvertures.
+    pub(in crate::ui) fn charger_famille_dialogue(&mut self, placer: bool) -> Result<(), String> {
+        let Some(chemin) = rfd::FileDialog::new().add_filter("Famille", &["json"]).set_title("Charger une famille").pick_file() else { return Ok(()) };
+        let id = self.charger_famille_fichier(&chemin)?;
+        let Some(t) = self.natif.as_ref().and_then(|(p, _)| p.types_ouvertures.iter().find(|t| t.id == id)).cloned() else { return Ok(()) };
+        if placer {
+            use crate::ui::ruban::Outil;
+            self.ruban_edition.definir_texte_option(Outil::Ouverture, 0, crate::ui::ruban::nom_genre(t.genre));
+            self.ruban_edition.definir_nombre_option(Outil::Ouverture, 1, t.largeur);
+            self.ruban_edition.definir_nombre_option(Outil::Ouverture, 2, t.hauteur);
+            self.ruban_edition.ouverture_type_identique = Some(id);
+        }
         Ok(())
     }
 

@@ -436,6 +436,17 @@ impl ViewerApp {
         }
         ids
     }
+    /// Une porte ou une fenêtre se place toujours avec une famille du projet.
+    fn verifier_type_ouverture(&self) -> Result<(), String> {
+        use crate::ui::ruban::Outil;
+        let libre = self.ruban_edition.texte_option(Outil::Ouverture, 0) == "Libre";
+        if libre || self.ruban_edition.ouverture_type_identique.is_some() {
+            Ok(())
+        } else {
+            Err("Aucune famille de ce genre dans le projet : chargez-en une (sélecteur de type > Charger une famille…).".into())
+        }
+    }
+
     fn commande_ouverture(&self, mur: String, abscisse: f64) -> crate::modele::edition::commandes::Commande {
         use crate::ui::ruban::Outil;
         let fenetre = self.ruban_edition.texte_option(Outil::Ouverture, 0) == "Fenêtre";
@@ -472,6 +483,7 @@ impl ViewerApp {
                 id = a;
             }
             let (axe, _, _) = crate::modele::volumes::solides::hote(p, &id)?;
+            self.verifier_type_ouverture()?;
             self.executer_bim(self.commande_ouverture(id, axe.abscisse(point)))?;
             Ok(())
         })();
@@ -1193,8 +1205,8 @@ impl ViewerApp {
                 Some(Outil::Ouverture) => {
                     // type à placer (et éditeur de familles), en tête comme dans Revit
                     if self.ruban_edition.proprietes_ouverture(ui, self.natif.as_ref().map(|(p, _)| p)) {
-                        if let Some(t) = self.ruban_edition.type_ouverture_gabarit.take()
-                            && let Err(e) = self.charger_type_ouverture_gabarit(t)
+                        if std::mem::take(&mut self.ruban_edition.demande_charger_famille)
+                            && let Err(e) = self.charger_famille_dialogue(true)
                         {
                             self.error = Some(e);
                         }
@@ -1213,7 +1225,10 @@ impl ViewerApp {
                         .add_enabled(ids.len() == 1, egui::Button::new("Placer"))
                         .clicked()
                     {
-                        commande = Some(self.commande_ouverture(ids[0].clone(), self.bim.abscisse));
+                        match self.verifier_type_ouverture() {
+                            Ok(()) => commande = Some(self.commande_ouverture(ids[0].clone(), self.bim.abscisse)),
+                            Err(e) => self.error = Some(e),
+                        }
                     }
                 }
                 _ => return false,

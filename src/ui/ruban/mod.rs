@@ -5,6 +5,7 @@ mod affichage;
 mod murs;
 mod options;
 mod ouvertures;
+pub(crate) use ouvertures::nom_genre;
 mod icones;
 use icones::*;
 mod barre_commandes;
@@ -435,8 +436,8 @@ pub struct RubanEdition {
     pub(crate) ouverture_type_identique: Option<String>,
     /// Demande d'ouverture de l'éditeur de familles : type à éditer (None : nouveau).
     pub demande_famille: Option<Option<String>>,
-    /// Type d'ouverture du gabarit à charger dans le projet (puis à placer).
-    pub type_ouverture_gabarit: Option<crate::config::gabarit::TypeOuvertureGabarit>,
+    /// Charger une famille d'ouverture depuis un fichier (demandé par le sélecteur).
+    pub demande_charger_famille: bool,
     /// Niveau des prochaines dalles (None : le premier).
     pub niveau_dalle: Option<String>,
     /// Onglet de catégorie ouvert dans le sélecteur de type de mur.
@@ -766,6 +767,9 @@ impl RubanEdition {
     }
     pub fn definir_nombre_option(&mut self, outil: Outil, index: usize, valeur: f64) {
         self.valeurs.insert((outil, index), Valeur::Nombre(valeur));
+    }
+    pub fn definir_texte_option(&mut self, outil: Outil, index: usize, valeur: &str) {
+        self.valeurs.insert((outil, index), Valeur::Texte(valeur.into()));
     }
     pub fn texte_option(&self, outil: Outil, index: usize) -> String {
         match self.valeurs.get(&(outil,index)) {

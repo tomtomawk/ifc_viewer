@@ -11,10 +11,8 @@ pub struct ChoixOuverture {
     pub type_choisi: Option<(Option<String>, GenreOuverture)>,
     /// Famille du type à ouvrir dans l'éditeur.
     pub editer: Option<(String, GenreOuverture)>,
-    /// Nouvelle famille de cette catégorie.
-    pub nouveau: Option<GenreOuverture>,
-    /// Type du gabarit choisi, à charger dans le projet.
-    pub gabarit: Option<crate::config::gabarit::TypeOuvertureGabarit>,
+    /// Charger une famille depuis un fichier (`.famille.json`).
+    pub charger: bool,
 }
 
 pub(crate) fn nom_genre(g: GenreOuverture) -> &'static str {
@@ -61,8 +59,8 @@ pub(crate) fn vignette_ouverture(p: &egui::Painter, r: egui::Rect, genre: GenreO
 impl RubanEdition {
     /// Sélecteur de type d'ouverture. `actuel` : type courant (None : générique) ;
     /// `categories` : onglets proposés ; `generique` : ligne « Générique » proposée
-    /// dans l'onglet Libre (portes et fenêtres ont toujours une famille). Les types du
-    /// gabarit absents du projet suivent ceux du projet et y sont chargés au choix.
+    /// dans l'onglet Libre (portes et fenêtres ont toujours une famille). En fin de
+    /// liste : charger une famille depuis un fichier.
     pub fn selecteur_type_ouverture(&mut self, ui: &mut egui::Ui, projet: &crate::modele::Projet, genre: GenreOuverture, actuel: Option<&str>, categories: &[GenreOuverture], generique: bool) -> ChoixOuverture {
         let mut sortie = ChoixOuverture::default();
         let unite = crate::config::options::unite();
@@ -70,18 +68,16 @@ impl RubanEdition {
         let genre_actuel = type_actuel.map_or(genre, |t| t.genre);
         let onglet = self.categorie_ouverture.filter(|c| categories.contains(c)).unwrap_or(genre_actuel);
         let largeur = ui.available_width();
-        // (id, nom, largeur, hauteur, type du gabarit à charger)
-        type Ligne = (Option<String>, String, f64, f64, Option<crate::config::gabarit::TypeOuvertureGabarit>);
-        let gabarit = crate::config::gabarit::actif();
+        // (id, nom, largeur, hauteur)
+        type Ligne = (Option<String>, String, f64, f64);
         let lignes_de = |g: GenreOuverture| -> Vec<Ligne> {
             let mut v: Vec<Ligne> = Vec::new();
             if generique && g == GenreOuverture::Libre {
-                v.push((None, "Générique (cotes du ruban)".into(), 0.0, 0.0, None));
+                v.push((None, "Générique (cotes du ruban)".into(), 0.0, 0.0));
             }
             let mut t: Vec<_> = projet.types_ouvertures.iter().filter(|t| t.genre == g).collect();
             t.sort_by(|a, b| a.nom.cmp(&b.nom));
-            v.extend(t.into_iter().map(|t| (Some(t.id.clone()), t.nom.clone(), t.largeur, t.hauteur, None)));
-            v.extend(gabarit.types_ouvertures.iter().filter(|t| t.famille.genre == g && !projet.types_ouvertures.iter().any(|p| p.nom == t.nom)).map(|t| (None, t.nom.clone(), t.largeur, t.hauteur, Some(t.clone()))));
+            v.extend(t.into_iter().map(|t| (Some(t.id.clone()), t.nom.clone(), t.largeur, t.hauteur)));
             v
         };
         let lignes = lignes_de(onglet);
@@ -97,7 +93,7 @@ impl RubanEdition {
         let (nom, cotes) = match type_actuel {
             Some(t) => (t.nom.clone(), Some(format!("{} × {}", unite.afficher(t.largeur), unite.afficher(t.hauteur)))),
             None if genre_actuel == GenreOuverture::Libre => ("Générique (cotes du ruban)".into(), None),
-            None => ("Aucun type : choisir une famille".into(), None),
+            None => ("Aucun type : charger une famille".into(), None),
         };
         let mut droite = fleche.left() - 6.0;
         if let Some(c) = &cotes {
@@ -140,19 +136,16 @@ impl RubanEdition {
                 ui.label(RichText::new(aide_genre(onglet)).small().weak());
                 ui.separator();
                 for ligne in &lignes {
-                    let courant = ligne.4.is_none() && ligne.0.as_deref() == actuel && (ligne.0.is_some() || onglet == genre_actuel);
+                    let courant = ligne.0.as_deref() == actuel && (ligne.0.is_some() || onglet == genre_actuel);
                     let (r, reponse) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 30.0), Sense::click());
                     let survol = ui.rect_contains_pointer(r);
                     if courant || survol {
                         ui.painter().rect_filled(r, 3.0, if courant { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
                     }
-                    if ligne.0.is_some() || ligne.4.is_some() {
+                    if ligne.0.is_some() {
                         vignette_ouverture(ui.painter(), egui::Rect::from_min_size(r.min + egui::vec2(8.0, 3.0), egui::vec2(30.0, 24.0)), onglet, ligne.2, ligne.3, ui.visuals().text_color());
                     }
                     ui.painter().text(r.min + egui::vec2(50.0, 15.0), egui::Align2::LEFT_CENTER, &ligne.1, police.clone(), ui.visuals().text_color());
-                    if ligne.4.is_some() {
-                        ui.painter().text(r.min + egui::vec2(58.0 + largeur_texte(ui, &ligne.1, &police), 15.0), egui::Align2::LEFT_CENTER, "gabarit", egui::FontId::proportional(10.0), ui.visuals().weak_text_color());
-                    }
                     let mut icone_cliquee = false;
                     // au survol : crayon (modifier la famille) ; sinon les cotes
                     if survol && onglet != GenreOuverture::Libre && let Some(id) = &ligne.0 {
@@ -168,13 +161,10 @@ impl RubanEdition {
                             sortie.editer = Some((id.clone(), onglet));
                             ui.close();
                         }
-                    } else if ligne.0.is_some() || ligne.4.is_some() {
+                    } else if ligne.0.is_some() {
                         ui.painter().text(r.right_center() - egui::vec2(8.0, 0.0), egui::Align2::RIGHT_CENTER, format!("{} × {}", unite.afficher(ligne.2), unite.afficher(ligne.3)), egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
                     }
-                    if reponse.clicked() && !icone_cliquee && let Some(t) = &ligne.4 {
-                        sortie.gabarit = Some(t.clone());
-                        ui.close();
-                    } else if reponse.clicked() && !icone_cliquee {
+                    if reponse.clicked() && !icone_cliquee {
                         sortie.type_choisi = Some((ligne.0.clone(), onglet));
                         ui.close();
                     }
@@ -186,9 +176,9 @@ impl RubanEdition {
                         ui.painter().rect_filled(r, 3.0, ui.visuals().widgets.hovered.bg_fill);
                     }
                     ui.painter().text(r.min + egui::vec2(23.0, 13.0), egui::Align2::CENTER_CENTER, "+", egui::FontId::proportional(16.0), ui.visuals().strong_text_color());
-                    ui.painter().text(r.min + egui::vec2(50.0, 13.0), egui::Align2::LEFT_CENTER, format!("Nouvelle famille de {}…", nom_genre(onglet).to_lowercase()), police.clone(), ui.visuals().text_color());
+                    ui.painter().text(r.min + egui::vec2(50.0, 13.0), egui::Align2::LEFT_CENTER, "Charger une famille…", police.clone(), ui.visuals().text_color());
                     if reponse.clicked() {
-                        sortie.nouveau = Some(onglet);
+                        sortie.charger = true;
                         ui.close();
                     }
                 }
@@ -196,7 +186,7 @@ impl RubanEdition {
         if let Some(c) = choix_onglet {
             self.categorie_ouverture = Some(c);
         }
-        if sortie.type_choisi.is_some() || sortie.editer.is_some() || sortie.nouveau.is_some() || sortie.gabarit.is_some() {
+        if sortie.type_choisi.is_some() || sortie.editer.is_some() || sortie.charger {
             self.categorie_ouverture = None;
         }
         sortie
