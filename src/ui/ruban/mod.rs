@@ -435,6 +435,8 @@ pub struct RubanEdition {
     pub(crate) ouverture_type_identique: Option<String>,
     /// Demande d'ouverture de l'éditeur de familles : type à éditer (None : nouveau).
     pub demande_famille: Option<Option<String>>,
+    /// Type d'ouverture du gabarit à charger dans le projet (puis à placer).
+    pub type_ouverture_gabarit: Option<crate::config::gabarit::TypeOuvertureGabarit>,
     /// Niveau des prochaines dalles (None : le premier).
     pub niveau_dalle: Option<String>,
     /// Onglet de catégorie ouvert dans le sélecteur de type de mur.

@@ -69,8 +69,19 @@ impl ViewerApp {
             if let Some(g) = choix.nouveau {
                 self.ouvrir_editeur_famille_type(None, g);
             }
-            let choisi = choix.type_choisi.and_then(|(id, _)| id).filter(|id| Some(id) != actuel.as_ref())?;
             let mut q = projet;
+            // type du gabarit : chargé dans le projet (une fois, par son nom) puis appliqué
+            let choisi = match choix.gabarit {
+                Some(t) => match q.types_ouvertures.iter().find(|x| x.nom == t.nom) {
+                    Some(x) => x.id.clone(),
+                    None => {
+                        let id = crate::modele::collaboration::uuid();
+                        q.types_ouvertures.push(crate::modele::TypeOuverture { id: id.clone(), nom: t.nom.clone(), genre: t.famille.genre, largeur: t.largeur, hauteur: t.hauteur, famille: None, modele: Some(t.famille), origine: None });
+                        id
+                    }
+                },
+                None => choix.type_choisi.and_then(|(id, _)| id).filter(|id| Some(id) != actuel.as_ref())?,
+            };
             let t = q.types_ouvertures.iter().find(|t| t.id == choisi).cloned()?;
             if let Some(x) = q.ouvertures.iter_mut().find(|x| &x.id == o) {
                 x.type_ouverture = Some(t.id);

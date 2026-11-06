@@ -9,6 +9,7 @@
 //! l'intérieur), Y à travers le mur (axe du mur en 0, extérieur positif), Z depuis le bas
 //! de la baie (allège). Les plans hôtes « Extérieur » et « Intérieur » suivent les faces
 //! du mur ; l'épaisseur vient du mur hôte (paramètre `Epaisseur`).
+mod catalogue;
 use crate::modele::famille::Role;
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
@@ -912,42 +913,6 @@ impl FamilleModelee {
             couleur: couleur_defaut(),
             genre: crate::modele::GenreOuverture::Fenetre,
         }
-    }
-
-    /// Famille d'exemple du gabarit de projet : fenêtre à un vantail ouvrant à la
-    /// française vers l'intérieur. Les plans « Retour extérieur » et « Retour intérieur »
-    /// (sur les faces du dormant) limitent les retours des couches du mur ; en plan, le
-    /// débattement du vantail et l'appui hachuré.
-    #[cfg_attr(not(test), allow(dead_code))] // source de la famille du gabarit (vérifiée par test)
-    pub fn exemple_of() -> FamilleModelee {
-        use AxePlan::*;
-        let mut f = Self::gabarit_fenetre();
-        // dormant en tableau, 50 mm en retrait du nu extérieur : l'enduit s'y retourne
-        if let Some(r) = f.parametres.iter_mut().find(|x| x.nom == "Retrait") { r.formule = "50".into(); }
-        let plan = |nom: &str, axe, position| PlanRef { nom: nom.into(), axe, position, fixe: false, hote: None };
-        let dist = |a: &str, b: &str, v: &str| Contrainte::Distance { a: a.into(), b: b.into(), valeur: v.into(), priorite: 5, ligne: None };
-        let param = |nom: &str, formule: &str| Parametre { nom: nom.into(), formule: formule.into(), portee: Portee::Type, genre: GenreParametre::Longueur };
-        f.parametres.extend([param("Passage", "Largeur - 2 * Dormant"), param("Diagonale", "Passage * 0,7071")]);
-        f.plans.extend([plan("Retour extérieur", Y, 100.0), plan("Retour intérieur", Y, 30.0), plan("Arc x", X, 0.0), plan("Ouvert", Y, -1050.0), plan("Arc y", Y, -730.0)]);
-        f.contraintes.extend([
-            dist("Retour extérieur", "Extérieur", "Retrait"),
-            dist("Retour intérieur", "Extérieur", "Retrait + Profondeur"),
-            dist("Ouvert", "Cadre int", "Passage"),
-            dist("Dormant gauche", "Arc x", "Diagonale"),
-            dist("Arc y", "Cadre int", "Diagonale"),
-        ]);
-        let trait_ = |points: Vec<PointEsquisse>, arc| Symbole { vue: VueEsquisse::Plan, points, arc, remplissage: None };
-        f.symboles.extend([
-            trait_(vec![point("Dormant gauche", 0.0, "Cadre int", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], false),
-            trait_(vec![point("Dormant droit", 0.0, "Cadre int", 0.0), point("Arc x", 0.0, "Arc y", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], true),
-            Symbole {
-                vue: VueEsquisse::Plan,
-                points: vec![point("Gauche", -20.0, "Cadre ext", -10.0), point("Droite", 20.0, "Cadre ext", -10.0), point("Droite", 20.0, "Nu appui", 0.0), point("Gauche", -20.0, "Nu appui", 0.0)],
-                arc: false,
-                remplissage: Some(Remplissage::Hachure),
-            },
-        ]);
-        f
     }
 
     /// Gabarit de famille selon la catégorie.

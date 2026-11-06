@@ -24,6 +24,20 @@ impl RubanEdition {
         if self.ouverture_type_identique.as_ref().is_some_and(|id| !projet.types_ouvertures.iter().any(|t| &t.id == id && t.genre == genre)) {
             self.ouverture_type_identique = None;
         }
+        // porte et fenêtre : toujours une famille ; à défaut, la première du projet, ou
+        // celle du gabarit (chargée dans le projet)
+        if self.ouverture_type_identique.is_none() && genre != GenreOuverture::Libre && self.type_ouverture_gabarit.is_none() {
+            let mut t: Vec<_> = projet.types_ouvertures.iter().filter(|t| t.genre == genre).collect();
+            t.sort_by(|a, b| a.nom.cmp(&b.nom));
+            match t.first() {
+                Some(t) => {
+                    self.valeurs.insert((Outil::Ouverture, 1), Valeur::Nombre(t.largeur));
+                    self.valeurs.insert((Outil::Ouverture, 2), Valeur::Nombre(t.hauteur));
+                    self.ouverture_type_identique = Some(t.id.clone());
+                }
+                None => self.type_ouverture_gabarit = crate::config::gabarit::actif().types_ouvertures.iter().find(|t| t.famille.genre == genre).cloned(),
+            }
+        }
         // sélecteur de type à onglets de catégorie, comme celui des murs
         let actuel = self.ouverture_type_identique.clone();
         let choix = self.selecteur_type_ouverture(ui, projet, genre, actuel.as_deref(), &[GenreOuverture::Porte, GenreOuverture::Fenetre, GenreOuverture::Libre], true);
@@ -41,6 +55,10 @@ impl RubanEdition {
         if let Some((id, g)) = choix.editer {
             prendre_genre(self, g);
             self.demande_famille = Some(Some(id));
+        }
+        if let Some(t) = choix.gabarit {
+            prendre_genre(self, t.famille.genre);
+            self.type_ouverture_gabarit = Some(t);
         }
         if let Some(g) = choix.nouveau {
             prendre_genre(self, g);

@@ -300,10 +300,13 @@ mod tests {
     #[test]
     fn gabarit_charge_l_of_et_retourne_le_mur_double() {
         let g = crate::config::gabarit::Gabarit::defaut();
-        let of = &g.types_ouvertures.iter().find(|t| t.nom == "Fenêtre OF 1 vantail").unwrap().famille;
-        assert_eq!(of, &FamilleModelee::exemple_of(), "famille du gabarit à régénérer depuis exemple_of()");
+        let livrees = crate::config::gabarit::familles_livrees();
+        assert_eq!(g.types_ouvertures.len(), livrees.len());
+        for (a, b) in g.types_ouvertures.iter().zip(&livrees) {
+            assert_eq!((&a.nom, a.largeur, a.hauteur, &a.famille), (&b.nom, b.largeur, b.hauteur, &b.famille), "gabarit à régénérer : cargo test --bin bimedit -- --ignored ecrire_familles_du_gabarit");
+        }
         let mut p = Projet::depuis_gabarit("OF", &g);
-        let t = p.types_ouvertures.iter().find(|t| t.nom == "Fenêtre OF 1 vantail").unwrap().clone();
+        let t = p.types_ouvertures.iter().find(|t| t.nom == "Fenêtre OF 2 vantaux").unwrap().clone();
         let tm = p.types_murs.iter().find(|t| t.nom.starts_with("Mur BA 200 + doublage")).unwrap().id.clone();
         let mur = p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &crate::modele::edition::ParametresMur { type_mur: Some(tm), ..Default::default() }).unwrap();
         let sans = volumes(&p);

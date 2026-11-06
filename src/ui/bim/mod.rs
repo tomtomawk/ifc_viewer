@@ -1193,6 +1193,11 @@ impl ViewerApp {
                 Some(Outil::Ouverture) => {
                     // type à placer (et éditeur de familles), en tête comme dans Revit
                     if self.ruban_edition.proprietes_ouverture(ui, self.natif.as_ref().map(|(p, _)| p)) {
+                        if let Some(t) = self.ruban_edition.type_ouverture_gabarit.take()
+                            && let Err(e) = self.charger_type_ouverture_gabarit(t)
+                        {
+                            self.error = Some(e);
+                        }
                         if let Some(t) = self.ruban_edition.demande_famille.take() {
                             let genre = if self.ruban_edition.texte_option(Outil::Ouverture, 0) == "Porte" { crate::modele::GenreOuverture::Porte } else { crate::modele::GenreOuverture::Fenetre };
                             self.ouvrir_editeur_famille_type(t, genre);

@@ -196,6 +196,17 @@ pub fn definir(g: Gabarit) {
     }
 }
 
+/// Familles d'ouvertures livrées dans le gabarit par défaut (source de sa section
+/// `types_ouvertures`).
+#[cfg_attr(not(test), allow(dead_code))] // source du gabarit, lue par les tests
+pub fn familles_livrees() -> Vec<TypeOuvertureGabarit> {
+    use crate::modele::famille::modelee::FamilleModelee;
+    vec![
+        TypeOuvertureGabarit { nom: "Fenêtre OF 2 vantaux".into(), largeur: 1200.0, hauteur: 1350.0, famille: FamilleModelee::fenetre_of_2_vantaux() },
+        TypeOuvertureGabarit { nom: "Porte intérieure 1 vantail".into(), largeur: 900.0, hauteur: 2150.0, famille: FamilleModelee::porte_1_vantail() },
+    ]
+}
+
 /// Texte du gabarit par défaut (base d'un gabarit d'agence).
 pub fn texte_defaut() -> &'static str {
     DEFAUT
