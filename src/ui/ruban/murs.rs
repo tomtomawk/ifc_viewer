@@ -114,27 +114,33 @@ impl RubanEdition {
         let epaisseur = |c: &[crate::modele::Couche]| c.iter().map(|c| c.epaisseur).sum::<f64>();
         let police = egui::FontId::proportional(12.0);
         let largeur_texte = |ui: &egui::Ui, t: &str, f: &egui::FontId| ui.fonts_mut(|x| x.layout_no_wrap(t.to_string(), f.clone(), Color32::WHITE).size().x);
-        // Sélecteur fermé : dessin en plan des couches, catégorie et nom, épaisseur.
+        // Sélecteur fermé : catégorie, nom et épaisseur en haut ; dessous, sur toute la
+        // largeur, le plan des couches (de l'extérieur vers l'intérieur).
         let couches_actuelles = actuel.map(|t| t.couches.clone()).unwrap_or_default();
-        let (r, bouton) = ui.allocate_exact_size(egui::vec2(largeur, 30.0), Sense::click());
+        let hauteur = if couches_actuelles.is_empty() { 30.0 } else { 56.0 };
+        let (r, bouton) = ui.allocate_exact_size(egui::vec2(largeur, hauteur), Sense::click());
         let visuel = ui.style().interact(&bouton).clone();
         ui.painter().rect(r, 3.0, visuel.bg_fill, visuel.bg_stroke, egui::StrokeKind::Inside);
-        let plan = egui::Rect::from_min_size(r.min + egui::vec2(8.0, 7.0), egui::vec2(40.0, 16.0));
-        if !couches_actuelles.is_empty() {
-            pile_couches(ui, plan, &couches_actuelles);
-        }
-        let fleche = egui::Rect::from_center_size(egui::pos2(r.right() - 12.0, r.center().y), egui::vec2(8.0, 8.0));
+        let ligne = egui::Rect::from_min_size(r.min, egui::vec2(r.width(), 28.0));
+        let fleche = egui::Rect::from_center_size(egui::pos2(r.right() - 12.0, ligne.center().y), egui::vec2(8.0, 8.0));
         triangle_bas(ui.painter(), fleche.center(), visuel.fg_stroke.color);
         let droite_texte = if couches_actuelles.is_empty() { fleche.left() - 6.0 } else {
             let e = unite.afficher(epaisseur(&couches_actuelles));
             let x = fleche.left() - 6.0;
-            ui.painter().text(egui::pos2(x, r.center().y), egui::Align2::RIGHT_CENTER, &e, egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
+            ui.painter().text(egui::pos2(x, ligne.center().y), egui::Align2::RIGHT_CENTER, &e, egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
             x - largeur_texte(ui, &e, &egui::FontId::proportional(11.0)) - 8.0
         };
         let titre = format!("{} · {nom}", categorie_actuelle.nom());
-        let zone_titre = egui::Rect::from_min_max(egui::pos2(plan.right() + 8.0, r.top()), egui::pos2(droite_texte, r.bottom()));
-        ui.painter().with_clip_rect(zone_titre).text(egui::pos2(zone_titre.left(), r.center().y), egui::Align2::LEFT_CENTER, &titre, egui::FontId::proportional(13.0), visuel.text_color());
-        let bouton = bouton.on_hover_text(format!("{titre}\nType des prochains murs. Un type à plusieurs couches crée un mur par couche, regroupés en assemblage."));
+        let zone_titre = egui::Rect::from_min_max(egui::pos2(r.left() + 10.0, ligne.top()), egui::pos2(droite_texte, ligne.bottom()));
+        ui.painter().with_clip_rect(zone_titre).text(egui::pos2(zone_titre.left(), ligne.center().y), egui::Align2::LEFT_CENTER, &titre, egui::FontId::proportional(13.0), visuel.text_color());
+        let mut bulle = format!("{titre}\nType des prochains murs. Un type à plusieurs couches crée un mur par couche, regroupés en assemblage.");
+        if !couches_actuelles.is_empty() {
+            let plan = egui::Rect::from_min_max(egui::pos2(r.left() + 8.0, ligne.bottom()), egui::pos2(r.right() - 8.0, r.bottom() - 7.0));
+            if let Some(c) = peindre_bande_couches(ui.painter(), plan, &projet.materiaux, &couches_actuelles, bouton.hover_pos()) {
+                bulle = texte_couche(c);
+            }
+        }
+        let bouton = bouton.on_hover_text(bulle);
         // Liste : assez large pour le dessin en plan, le nom le plus long et l'épaisseur.
         let plus_long = lignes.iter().map(|l| largeur_texte(ui, &l.2, &police)).fold(0.0f32, f32::max);
         let largeur_liste = (8.0 + 40.0 + 10.0 + plus_long + 16.0 + 64.0 + 50.0 + 8.0).max(largeur).max(CategorieMur::TOUTES.len() as f32 * 98.0 + 12.0);
@@ -175,7 +181,7 @@ impl RubanEdition {
                         ui.painter().rect_filled(r, 3.0, if courant { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
                     }
                     if !ligne.3.is_empty() {
-                        pile_couches(ui, egui::Rect::from_min_size(r.min + egui::vec2(8.0, 5.0), egui::vec2(40.0, 16.0)), &ligne.3);
+                        peindre_bande_couches(ui.painter(), egui::Rect::from_min_size(r.min + egui::vec2(8.0, 6.0), egui::vec2(40.0, 14.0)), &projet.materiaux, &ligne.3, None);
                     }
                     ui.painter().text(r.min + egui::vec2(58.0, 13.0), egui::Align2::LEFT_CENTER, &ligne.2, police.clone(), ui.visuals().text_color());
                     if ligne.1.is_some() {

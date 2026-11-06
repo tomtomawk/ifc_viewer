@@ -5,7 +5,7 @@ mod affichage;
 mod murs;
 mod options;
 mod icones;
-pub use icones::*;
+use icones::*;
 mod barre_commandes;
 pub use barre_commandes::*;
 #[cfg(test)]

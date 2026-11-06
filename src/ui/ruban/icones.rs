@@ -90,34 +90,41 @@ pub(super) fn bouton_outil(
 
 /// Composition d'un type en bande horizontale : une case par couche, largeur
 /// proportionnelle à l'épaisseur, couleur du matériau ; extérieur à gauche.
-pub fn bande_couches(ui: &mut egui::Ui, projet: &crate::modele::Projet, couches: &[crate::modele::Couche], hauteur: f32) {
-    bande_couches_brouillon(ui, &projet.materiaux, couches, hauteur);
-}
-
 pub(super) fn bande_couches_brouillon(ui: &mut egui::Ui, materiaux: &[crate::modele::Materiau], couches: &[crate::modele::Couche], hauteur: f32) {
     let (r, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), hauteur), Sense::hover());
+    if let Some(c) = peindre_bande_couches(ui.painter(), r, materiaux, couches, resp.hover_pos()) {
+        resp.on_hover_text(texte_couche(c));
+    }
+}
+
+/// Plan des couches dans `r`, de l'extérieur (à gauche) vers l'intérieur, chaque couche
+/// à la largeur de son épaisseur et à la couleur de son matériau. Rend la couche survolée.
+pub(super) fn peindre_bande_couches<'a>(p: &egui::Painter, r: egui::Rect, materiaux: &[crate::modele::Materiau], couches: &'a [crate::modele::Couche], survol: Option<egui::Pos2>) -> Option<&'a crate::modele::Couche> {
     let total: f64 = couches.iter().map(|c| c.epaisseur.max(0.0)).sum();
     if total <= 0.0 {
-        return;
+        return None;
     }
-    let p = ui.painter();
     let mut x = r.left();
-    let mut survol = None;
+    let mut vise = None;
     for c in couches {
         let l = (c.epaisseur.max(0.0) / total) as f32 * r.width();
-        let case = egui::Rect::from_min_size(egui::pos2(x, r.top()), egui::vec2(l, hauteur));
-        let m = c.materiau.as_ref().and_then(|n| materiaux.iter().find(|m| &m.nom == n));
-        let [cr, cg, cb] = m.map_or([200, 200, 196], |m| m.couleur);
+        let case = egui::Rect::from_min_size(egui::pos2(x, r.top()), egui::vec2(l, r.height()));
+        let m = c.materiau.as_ref().and_then(|n| materiaux.iter().find(|m| &m.nom == n)).cloned()
+            .unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(c.materiau.as_deref().unwrap_or("")));
+        let [cr, cg, cb] = m.couleur;
         p.rect_filled(case, 0.0, Color32::from_rgb(cr, cg, cb));
         p.rect_stroke(case, 0.0, egui::Stroke::new(0.6, Color32::from_gray(90)), egui::StrokeKind::Inside);
-        if resp.hover_pos().is_some_and(|q| case.contains(q)) {
-            survol = Some(c);
+        if survol.is_some_and(|q| case.contains(q)) {
+            vise = Some(c);
         }
         x += l;
     }
-    if let Some(c) = survol {
-        resp.on_hover_text(format!("{} · {} · {}", c.materiau.as_deref().unwrap_or("Sans matériau"), c.fonction.libelle(), crate::config::options::unite().afficher(c.epaisseur)));
-    }
+    vise
+}
+
+/// Infobulle d'une couche : matériau, fonction, épaisseur.
+pub(super) fn texte_couche(c: &crate::modele::Couche) -> String {
+    format!("{} · {} · {}", c.materiau.as_deref().unwrap_or("Sans matériau"), c.fonction.libelle(), crate::config::options::unite().afficher(c.epaisseur))
 }
 
 /// Petit bouton à pictogramme dessiné (la police n'a pas ✕ ▾).

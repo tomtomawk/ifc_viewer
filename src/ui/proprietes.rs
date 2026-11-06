@@ -25,8 +25,7 @@ impl ViewerApp {
                 let volume:f64=couches.iter().filter_map(|m|projet.volume_mur(m)).sum();
                 ui.label("Volume");ui.label(format!("{:.3} m³",volume/1e9));ui.end_row();
             });
-            let compo: Vec<crate::modele::Couche> = couches.iter().filter_map(|m| projet.type_mur(&m.type_mur).and_then(|t| t.couches.first().cloned())).collect();
-            crate::ui::ruban::bande_couches(ui, projet, &compo, 14.0);
+            // le plan des couches est dans le sélecteur de type, juste au-dessus
             ui.label(RichText::new("Couches, de l'extérieur vers l'intérieur (clic : sélectionner ; Tab parcourt)").small().weak());
             egui::Grid::new("couches_assemblage").num_columns(4).striped(true).spacing([8.0, 3.0]).show(ui, |ui| {
                 for m in &couches {
