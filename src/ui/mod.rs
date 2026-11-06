@@ -635,6 +635,8 @@ pub struct ViewerApp {
     poignee_axe: Option<(String, bool, [f64; 2])>,
     /// Matériau du projet natif dont les graphismes sont ouverts.
     materiau_edite: Option<String>,
+    /// Onglet de la fenêtre Matériau : Graphique (faux) ou Apparence (vrai).
+    materiau_apparence: bool,
     /// Éditeur de hachures ouvert, motif choisi, nom et tirets en cours de saisie (motif,
     /// texte des tirets de chaque famille).
     editeur_motifs: bool,
@@ -818,6 +820,7 @@ impl ViewerApp {
             liste_niveaux: Vec::new(),
             liste_materiaux: Vec::new(),
             materiau_edite: None,
+            materiau_apparence: false,
             editeur_motifs: false,
             editeur_plumes: None,
             saisie_active: false,

@@ -14,6 +14,7 @@ impl ViewerApp {
         let hachures: Vec<MotifCoupe> = projet.noms_motifs().iter().map(|n| MotifCoupe::hachures(n)).collect();
         let mut ouvert = true;
         let mut editeur = false;
+        let mut onglet_apparence = self.materiau_apparence;
         egui::Window::new(format!("Matériau · {nom}")).id(egui::Id::unique("fenetre_materiau")).open(&mut ouvert).resizable(false).collapsible(false).show(ctx, |ui| {
             let choix = |ui: &mut egui::Ui, id: &str, x: &mut MotifCoupe, speciaux: &[MotifCoupe]| {
                 egui::ComboBox::from_id_salt(id).width(130.0).selected_text(x.libelle().to_string()).show_ui(ui, |ui| {
@@ -29,6 +30,15 @@ impl ViewerApp {
                     *c = Some(v);
                 }
             };
+            ui.horizontal(|ui| {
+                ui.selectable_value(&mut onglet_apparence, false, "Graphique");
+                ui.selectable_value(&mut onglet_apparence, true, "Apparence");
+            });
+            ui.separator();
+            if onglet_apparence {
+                apparence_materiau(ui, &mut m);
+                return;
+            }
             egui::Grid::new("graphismes_materiau").num_columns(3).spacing([10.0, 6.0]).show(ui, |ui| {
                 ui.label(RichText::new("Motifs de surface").strong());
                 ui.end_row();
@@ -64,6 +74,7 @@ impl ViewerApp {
                 editeur = true;
             }
         });
+        self.materiau_apparence = onglet_apparence;
         if editeur {
             self.editeur_motifs = true;
         }
@@ -323,4 +334,90 @@ impl ViewerApp {
         }
     }
 
+}
+
+/// Onglet Apparence de la fenêtre Matériau : réglages physiques et cartes de texture
+/// (image, taille réelle, décalage, rotation, intensité).
+fn apparence_materiau(ui: &mut egui::Ui, m: &mut crate::modele::Materiau) {
+    use crate::modele::{CarteTexture, Texture};
+    let a = &mut m.apparence;
+    egui::Grid::new("apparence_materiau").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+        ui.label(RichText::new("Réglages").strong());
+        ui.end_row();
+        ui.label("Teinte");
+        ui.horizontal(|ui| {
+            let mut v = a.teinte.unwrap_or(m.couleur);
+            if ui.color_edit_button_srgb(&mut v).on_hover_text("Multipliée à la texture de couleur ; par défaut la couleur du matériau").changed() {
+                a.teinte = Some(v);
+            }
+            if a.teinte.is_some() && ui.small_button("Couleur du matériau").clicked() {
+                a.teinte = None;
+            }
+        });
+        ui.end_row();
+        ui.label("Rugosité");
+        ui.add(egui::Slider::new(&mut a.rugosite, 0.0..=1.0));
+        ui.end_row();
+        ui.label("Métallique");
+        ui.add(egui::Slider::new(&mut a.metallique, 0.0..=1.0));
+        ui.end_row();
+        ui.label("Transparence");
+        ui.add(egui::Slider::new(&mut a.transparence, 0.0..=1.0));
+        ui.end_row();
+        ui.label("Indice de réfraction");
+        ui.add(egui::DragValue::new(&mut a.refraction).speed(0.01).range(1.0..=3.0));
+        ui.end_row();
+        ui.label("Émission");
+        ui.add(egui::DragValue::new(&mut a.emission).speed(1.0).range(0.0..=100_000.0).suffix(" cd/m²"));
+        ui.end_row();
+    });
+    ui.add_space(6.0);
+    ui.label(RichText::new("Textures").strong());
+    let mut retirer = None;
+    for carte in CarteTexture::TOUTES {
+        ui.push_id(carte, |ui| {
+            ui.horizontal(|ui| {
+                ui.add_sized([130.0, 18.0], egui::Label::new(carte.libelle()));
+                let nom = a.textures.get(&carte).map_or("Aucune".to_string(), |t| std::path::Path::new(&t.chemin).file_name().map_or(t.chemin.clone(), |n| n.to_string_lossy().into_owned()));
+                let r = ui.add_sized([170.0, 18.0], egui::Button::new(nom).truncate());
+                let r = match a.textures.get(&carte) { Some(t) => r.on_hover_text(&t.chemin), None => r.on_hover_text("Choisir une image") };
+                if r.clicked()
+                    && let Some(f) = rfd::FileDialog::new().set_title(carte.libelle()).add_filter("Images", &["png", "jpg", "jpeg", "bmp", "tga", "tif", "tiff", "exr", "hdr", "webp"]).pick_file()
+                {
+                    let chemin = f.to_string_lossy().into_owned();
+                    match a.textures.get_mut(&carte) {
+                        Some(t) => t.chemin = chemin,
+                        None => { a.textures.insert(carte, Texture::nouvelle(chemin)); }
+                    }
+                }
+                if a.textures.contains_key(&carte) && ui.small_button("✕").on_hover_text("Retirer la texture").clicked() {
+                    retirer = Some(carte);
+                }
+            });
+            if let Some(t) = a.textures.get_mut(&carte) {
+                ui.indent("placement", |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Taille");
+                        ui.add(egui::DragValue::new(&mut t.largeur).speed(10.0).range(1.0..=100_000.0).suffix(" mm"));
+                        ui.label("×");
+                        ui.add(egui::DragValue::new(&mut t.hauteur).speed(10.0).range(1.0..=100_000.0).suffix(" mm"));
+                        ui.label("Rotation");
+                        ui.add(egui::DragValue::new(&mut t.rotation).speed(1.0).range(-360.0..=360.0).suffix(" °"));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Décalage");
+                        ui.add(egui::DragValue::new(&mut t.decalage[0]).speed(10.0).suffix(" mm"));
+                        ui.add(egui::DragValue::new(&mut t.decalage[1]).speed(10.0).suffix(" mm"));
+                        ui.label("Intensité");
+                        ui.add(egui::Slider::new(&mut t.intensite, 0.0..=1.0));
+                        ui.checkbox(&mut t.inverser, "Inverser");
+                    });
+                });
+            }
+        });
+    }
+    if let Some(c) = retirer {
+        a.textures.remove(&c);
+    }
+    ui.label(RichText::new("Les textures sont enregistrées avec le matériau ; la vue 3D n'en affiche pas encore le rendu.").small().weak());
 }

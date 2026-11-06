@@ -167,6 +167,7 @@ impl Gabarit {
                 surface_fond_motif: f.surface_fond_motif.clone(),
                 surface_motif: f.surface_motif.clone(),
                 surface_couleur: f.surface_couleur,
+                apparence: Default::default(),
             },
             None => {
                 // couleur assez claire pour les hachures

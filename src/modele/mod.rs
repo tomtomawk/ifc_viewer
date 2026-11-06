@@ -425,6 +425,101 @@ pub struct Materiau {
     pub coupe_fond: Option<[u8; 3]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coupe_fond_motif: Option<MotifCoupe>,
+    /// Apparence de rendu (onglet Apparence) : réglages physiques et textures.
+    #[serde(default, skip_serializing_if = "Apparence::est_defaut")]
+    pub apparence: Apparence,
+}
+
+/// Cartes de texture d'une apparence, comme les ressources d'apparence Revit.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum CarteTexture {
+    Couleur,
+    Rugosite,
+    Metallique,
+    Relief,
+    Normale,
+    Occlusion,
+    Transparence,
+    Decoupe,
+    Emission,
+}
+
+impl CarteTexture {
+    pub const TOUTES: [CarteTexture; 9] = [Self::Couleur, Self::Rugosite, Self::Metallique, Self::Relief, Self::Normale, Self::Occlusion, Self::Transparence, Self::Decoupe, Self::Emission];
+    pub fn libelle(self) -> &'static str {
+        match self {
+            Self::Couleur => "Couleur (albédo)",
+            Self::Rugosite => "Rugosité",
+            Self::Metallique => "Métallique",
+            Self::Relief => "Relief (hauteur)",
+            Self::Normale => "Normales",
+            Self::Occlusion => "Occlusion ambiante",
+            Self::Transparence => "Transparence",
+            Self::Decoupe => "Découpe",
+            Self::Emission => "Émission",
+        }
+    }
+}
+
+/// Une texture : image et placement sur les faces (taille réelle en mm, décalage, rotation).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct Texture {
+    pub chemin: String,
+    #[serde(default = "Texture::taille_defaut")]
+    pub largeur: f64,
+    #[serde(default = "Texture::taille_defaut")]
+    pub hauteur: f64,
+    #[serde(default)]
+    pub decalage: [f64; 2],
+    #[serde(default)]
+    pub rotation: f64,
+    /// Intensité de la carte (0 à 1).
+    #[serde(default = "Texture::intensite_defaut")]
+    pub intensite: f32,
+    #[serde(default)]
+    pub inverser: bool,
+}
+
+impl Texture {
+    fn taille_defaut() -> f64 { 1000.0 }
+    fn intensite_defaut() -> f32 { 1.0 }
+    pub fn nouvelle(chemin: String) -> Self {
+        Texture { chemin, largeur: 1000.0, hauteur: 1000.0, decalage: [0.0, 0.0], rotation: 0.0, intensite: 1.0, inverser: false }
+    }
+}
+
+/// Apparence de rendu d'un matériau : réglages physiques et cartes de texture.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct Apparence {
+    /// Teinte multipliée à la carte de couleur (None : couleur du matériau).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub teinte: Option<[u8; 3]>,
+    #[serde(default = "Apparence::rugosite_defaut")]
+    pub rugosite: f32,
+    #[serde(default)]
+    pub metallique: f32,
+    /// Transparence globale (0 opaque, 1 invisible).
+    #[serde(default)]
+    pub transparence: f32,
+    #[serde(default = "Apparence::refraction_defaut")]
+    pub refraction: f32,
+    /// Luminance propre (cd/m²).
+    #[serde(default)]
+    pub emission: f32,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub textures: std::collections::BTreeMap<CarteTexture, Texture>,
+}
+
+impl Default for Apparence {
+    fn default() -> Self {
+        Apparence { teinte: None, rugosite: 0.5, metallique: 0.0, transparence: 0.0, refraction: 1.5, emission: 0.0, textures: Default::default() }
+    }
+}
+
+impl Apparence {
+    fn rugosite_defaut() -> f32 { 0.5 }
+    fn refraction_defaut() -> f32 { 1.5 }
+    pub fn est_defaut(&self) -> bool { *self == Self::default() }
 }
 
 /// Un arrière-plan est uni ou hachuré (ni vide ni isolant).
