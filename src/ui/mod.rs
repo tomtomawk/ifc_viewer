@@ -327,8 +327,6 @@ enum OngletRuban {
     Debut,
     Modeliser,
     Modifier,
-    /// Visibilité : isoler, masquer, afficher les masqués, cadrage.
-    Vue,
     Annoter,
     Sortie,
     /// Ruban de l'éditeur de familles : outils de création.
@@ -671,6 +669,10 @@ pub struct ViewerApp {
     cadenas_ecran: Vec<(String, egui::Pos2)>,
     /// Objets masqués par l'utilisateur (Masquer temporaire), distincts des variantes.
     masques_utilisateur: HashSet<u32>,
+    /// Isoler a été demandé (visibilité temporaire) : la croix du cadre le lève.
+    isolement_utilisateur: bool,
+    /// Centre à l'écran de la croix du cadre de visibilité temporaire (pilote, tests).
+    croix_temporaire: Option<egui::Pos2>,
     /// Mode « Afficher les éléments masqués » : masqués rendus en magenta, clic = réafficher.
     afficher_masques: bool,
     /// Objets masqués rendus visibles par ce mode (dernier calcul de visibilité).
@@ -834,6 +836,8 @@ impl ViewerApp {
             largeurs_panneaux: [300.0, 320.0],
             cadenas_ecran: Vec::new(),
             masques_utilisateur: HashSet::new(),
+            isolement_utilisateur: false,
+            croix_temporaire: None,
             afficher_masques: false,
             objets_masques: HashSet::new(),
             transfo: Default::default(),

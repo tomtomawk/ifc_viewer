@@ -30,7 +30,9 @@ impl ViewerApp {
         if selection_seule && escalier.is_none() && fenetre.is_none() && mur.is_none() && !assemblage_seul {
             return;
         }
-        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(selection_seule), |ui| {
+        // dans Propriétés (sélection seule), aligné en haut : un alignement centré prenait
+        // toute la hauteur du panneau et laissait un grand blanc
+        ui.with_layout(egui::Layout::left_to_right(if selection_seule { egui::Align::Min } else { egui::Align::Center }).with_main_wrap(selection_seule), |ui| {
             if selection_seule && escalier.is_some() {
                 ui.label("Garde-corps");
                 for (nom, cotes) in [("Deux côtés", vec![0, 1]), ("Gauche", vec![0]), ("Droite", vec![1])] {

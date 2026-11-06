@@ -104,7 +104,8 @@ impl ViewerApp {
         };
         match precedent {
             Some(p) if maj => (p + arrondi(tourner(d2::ortho(DVec2::ZERO, tourner(c - p, -th)), th)), Accroche::Ortho),
-            Some(p) => match d2::polaire(DVec2::ZERO, tourner(c - p, -th), 15.0, 2.5) {
+            // suivi polaire : multiples de 45° seulement (15° proposait trop de directions)
+            Some(p) => match d2::polaire(DVec2::ZERO, tourner(c - p, -th), 45.0, 2.5) {
                 Some((q, a)) => (p + arrondi(tourner(q, th)), Accroche::Polaire(a)),
                 None => ((c / pas).round() * pas, Accroche::Libre),
             },

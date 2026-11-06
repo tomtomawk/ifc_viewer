@@ -75,6 +75,20 @@ def run(exe):
             projet = commande("projet_natif")["projet"]
             assert all(a not in v.get("elements_masques", []) for v in projet["vues"])
 
+            # 1 bis. Cadre temporaire : la croix en haut à droite réaffiche tout
+            assert etat()["visibilite_temporaire"] is True
+            croix = attendre(lambda: etat()["croix_temporaire"])
+            clic(croix)
+            assert attendre(lambda: etat()["visibilite_temporaire"] is False)
+            assert etat()["croix_temporaire"] is None or not etat()["visibilite_temporaire"]
+            # Isoler, puis la croix
+            commande("outil", "aucun"); commande("selection_native", [b]); commande("outil", "isoler")
+            assert etat()["visibilite_temporaire"] is True
+            clic(attendre(lambda: etat()["croix_temporaire"]))
+            assert attendre(lambda: etat()["visibilite_temporaire"] is False)
+            # de nouveau masqué temporairement, pour la suite
+            commande("outil", "aucun"); commande("selection_native", [a]); commande("outil", "masquer")
+
             # 2. Afficher : l'élément masqué apparaît (magenta), clic = réaffiché
             commande("outil", "afficher")
             assert etat()["afficher_masques"] is True
@@ -100,7 +114,7 @@ def run(exe):
             assert etat()["afficher_masques"] is False
 
             commande("quitter", "abandonner"); p.wait(timeout=15)
-            print(f"Visibilité : {nombre} requêtes validées ; masquer temporaire, masquer dans la vue, afficher au clic OK")
+            print(f"Visibilité : {nombre} requêtes validées ; masquer temporaire, croix de sortie, isoler, masquer dans la vue, afficher au clic OK")
         except Exception:
             log.flush(); print((root / "instance.log").read_text(encoding="utf-8")[-2500:]); raise
         finally:

@@ -282,7 +282,31 @@ impl ViewerApp {
             }
         }
         self.isolated = Some(objs.into_iter().collect());
+        self.isolement_utilisateur = true;
         self.visibility_dirty = true;
+    }
+
+    /// Isolement propre à la vue ouverte (plan d'étage natif : objets de l'étage), sans
+    /// isolement demandé par l'utilisateur.
+    pub(super) fn isolement_de_vue(&self) -> Option<HashSet<u32>> {
+        let i = self.vue_active?;
+        let s = self.scene.as_ref()?;
+        let v = s.navigateur.as_ref()?.vues.get(i)?;
+        if self.natif.is_none() || v.genre != "Plan d'étage" { return None; }
+        let objets: HashSet<u32> = s.objects.iter().enumerate().filter(|(_, o)| o.storey == v.etage || &*o.class == "IFCGEOGRAPHICELEMENT").map(|(i, _)| i as u32).collect();
+        (!objets.is_empty()).then_some(objets)
+    }
+
+    /// Croix du cadre de visibilité temporaire : réaffiche ce qui a été masqué ou isolé
+    /// temporairement ; les masquages enregistrés dans la vue restent.
+    pub(super) fn quitter_visibilite_temporaire(&mut self) {
+        let masques = std::mem::take(&mut self.masques_utilisateur);
+        self.hidden_objects.retain(|o| !masques.contains(o));
+        if std::mem::take(&mut self.isolement_utilisateur) {
+            self.isolated = self.isolement_de_vue();
+        }
+        self.visibility_dirty = true;
+        self.status = "Visibilité temporaire réinitialisée.".into();
     }
 
     pub(super) fn hide(&mut self, objs: Vec<u32>) {

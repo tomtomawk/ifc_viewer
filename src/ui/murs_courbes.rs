@@ -33,7 +33,7 @@ impl ViewerApp {
         }
         if let (Some((_,i,pts)),Some(q))=(self.dessin2d.arc_glisse.clone(),resp.interact_pointer_pos().or(resp.hover_pos())) {
             let fixe=pts[if i==0 {2}else{0}].to_array();
-            if let Some(p)=self.point_edition_axe(ui,rect,q,ui.input(|i|i.modifiers.shift),fixe) {
+            if let Some(p)=self.point_edition_axe(ui,rect,q,ui.input(|i|i.modifiers.shift),fixe,fixe) {
                 if let Some((_,i,pts))=&mut self.dessin2d.arc_glisse {pts[*i]=DVec2::from_array(p);}
             }
         }

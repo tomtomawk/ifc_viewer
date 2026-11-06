@@ -176,6 +176,7 @@ impl ViewerApp {
         self.masques_utilisateur.clear();
         self.hidden_storeys.clear();
         self.isolated = None;
+        self.isolement_utilisateur = false;
         self.hidden_classes = HIDDEN_BY_DEFAULT.iter().map(|s| s.to_string()).collect();
         // fichier sans objet visible par défaut (famille 2D de Revit : traits et textes
         // seulement) : on montre les annotations
@@ -615,6 +616,7 @@ impl ViewerApp {
         self.masques_utilisateur.clear();
         self.hidden_storeys.clear();
         self.isolated = None;
+        self.isolement_utilisateur = false;
         self.visible.clear();
         self.liste_niveaux.clear();
         self.liste_materiaux.clear();

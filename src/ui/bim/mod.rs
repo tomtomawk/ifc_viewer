@@ -268,6 +268,13 @@ impl ViewerApp {
         }
         elements_natifs(p).filter(|(_, cle)| p.verrous.contains_key(*cle)).map(|(genre, cle)| scene::id_natif(genre, cle)).collect()
     }
+    /// Bouton Verrou du ruban : verrouille la sélection, ou la déverrouille si elle l'est
+    /// déjà entièrement.
+    pub(super) fn basculer_verrou_selection(&mut self) {
+        let ids = self.selection_bim();
+        let tous = !ids.is_empty() && self.natif.as_ref().is_some_and(|(p, _)| ids.iter().all(|id| p.verrous.contains_key(id)));
+        self.verrouiller_selection(!tous);
+    }
     /// Verrouille ou déverrouille la sélection (ruban Modifier, CD / DC).
     pub(super) fn verrouiller_selection(&mut self, verrou: bool) {
         let ids = self.selection_bim();

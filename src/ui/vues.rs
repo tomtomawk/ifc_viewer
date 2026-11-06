@@ -259,6 +259,7 @@ impl ViewerApp {
             self.hidden_storeys.clear();
             self.hidden_classes = HIDDEN_BY_DEFAULT.iter().map(|s| s.to_string()).collect();
             self.isolated = None;
+            self.isolement_utilisateur = false;
             self.style = StyleVisuel::Graphique;
             self.coupe = false;
             self.boite = None;
@@ -378,6 +379,7 @@ impl ViewerApp {
         self.hidden_classes = HIDDEN_BY_DEFAULT.iter().map(|s| s.to_string()).collect();
         if objs.is_empty() {
             self.isolated = None;
+            self.isolement_utilisateur = false;
             self.visibility_dirty = true;
         } else {
             self.isolate(objs);

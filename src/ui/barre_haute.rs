@@ -35,7 +35,7 @@ impl ViewerApp {
             let onglets: &[(OngletRuban, &str)] = if mode_famille {
                 &[(OngletRuban::FamilleCreer, "Créer"), (OngletRuban::FamilleSortie, "Sortie")]
             } else {
-                &[(OngletRuban::Debut, "Début"), (OngletRuban::Modeliser, "Modéliser"), (OngletRuban::Modifier, "Modifier"), (OngletRuban::Vue, "Vue"), (OngletRuban::Annoter, "Documenter"), (OngletRuban::Sortie, "Sortie")]
+                &[(OngletRuban::Debut, "Début"), (OngletRuban::Modeliser, "Modéliser"), (OngletRuban::Modifier, "Modifier"), (OngletRuban::Annoter, "Documenter"), (OngletRuban::Sortie, "Sortie")]
             };
             for &(o, nom) in onglets {
                 ui.selectable_value(&mut self.onglet_ruban, o, RichText::new(nom).strong());
@@ -175,7 +175,6 @@ impl ViewerApp {
         let edition = match self.onglet_ruban {
             OngletRuban::Modeliser => Some(crate::ui::ruban::Menu::Modeliser),
             OngletRuban::Modifier => Some(crate::ui::ruban::Menu::Modifier),
-            OngletRuban::Vue => Some(crate::ui::ruban::Menu::Vue),
             OngletRuban::Annoter => Some(crate::ui::ruban::Menu::Annoter),
             _ => None,
         };
@@ -208,7 +207,8 @@ impl ViewerApp {
                 Some(crate::ui::ruban::Outil::Cadrer) => self.demarrer_cadrage_vue(),
                 Some(o @ (crate::ui::ruban::Outil::Isoler | crate::ui::ruban::Outil::Masquer | crate::ui::ruban::Outil::MasquerVue)) => self.visibilite_selection(o),
                 Some(crate::ui::ruban::Outil::Afficher) => self.basculer_afficher_masques(),
-                Some(o @ (crate::ui::ruban::Outil::Verrouiller | crate::ui::ruban::Outil::Deverrouiller)) => self.verrouiller_selection(o == crate::ui::ruban::Outil::Verrouiller),
+                Some(crate::ui::ruban::Outil::Verrouiller) => self.basculer_verrou_selection(),
+                Some(crate::ui::ruban::Outil::Deverrouiller) => self.verrouiller_selection(false),
                 Some(crate::ui::ruban::Outil::Feuilles) => self.commande_feuilles(),
                 Some(crate::ui::ruban::Outil::Nomenclatures) => {
                     if self.natif.is_some() {
@@ -270,7 +270,7 @@ impl ViewerApp {
                     }
                 }
             }
-            OngletRuban::Modeliser | OngletRuban::Modifier | OngletRuban::Vue | OngletRuban::Annoter | OngletRuban::FamilleCreer | OngletRuban::FamilleSortie => {}
+            OngletRuban::Modeliser | OngletRuban::Modifier | OngletRuban::Annoter | OngletRuban::FamilleCreer | OngletRuban::FamilleSortie => {}
             OngletRuban::Sortie => {
                 use crate::ui::ruban::{Commande as C, Icone as I};
                 let disponible = (self.natif.is_some() || self.rvt_source.is_some()) && self.loading.is_none() && self.sauvegarde.is_none();
@@ -476,13 +476,8 @@ impl ViewerApp {
                     self.hidden_objects.clear();
         self.masques_utilisateur.clear();
                     self.hidden_storeys.clear();
-                    self.isolated = self.vue_active.and_then(|i| {
-                        let s = self.scene.as_ref()?;
-                        let v = s.navigateur.as_ref()?.vues.get(i)?;
-                        if self.natif.is_none() || v.genre != "Plan d'étage" { return None; }
-                        let objets: HashSet<u32> = s.objects.iter().enumerate().filter(|(_, o)| o.storey == v.etage || &*o.class == "IFCGEOGRAPHICELEMENT").map(|(i, _)| i as u32).collect();
-                        (!objets.is_empty()).then_some(objets)
-                    });
+                    self.isolated = self.isolement_de_vue();
+                    self.isolement_utilisateur = false;
                     self.hidden_objects.extend(self.masques_variantes());
                     self.visibility_dirty = true;
                 }

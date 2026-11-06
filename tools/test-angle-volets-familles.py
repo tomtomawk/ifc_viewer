@@ -82,7 +82,7 @@ def run(exe, captures):
             justif=lambda x:(commande("selection_native",[x]),commande("axe_selection"))[1]["fin"]
             jr,ji=justif(ref),justif(id)
             assert all(abs(u-v)<0.01 for u,v in zip(jr,ji)),(jr,ji)
-            commande("outil","ajuster") if commande("etat")["outil"]!="Ajuster / prolonger" else None
+            commande("outil","ajuster") if commande("etat")["outil"]!="Ajuster" else None
             commande("annuler")
             assert commande("projet_natif")["empreinte"]==avant["empreinte"]
             commande("retablir")

@@ -18,7 +18,6 @@ use std::collections::BTreeMap;
 pub enum Menu {
     Modeliser,
     Modifier,
-    Vue,
     Annoter,
 }
 
@@ -116,7 +115,7 @@ impl Outil {
             Self::ChangerHote => "Hôte",
             Self::Inverser => "Inverser",
             Self::Aligner => "Aligner",
-            Self::Ajuster => "Ajuster / prolonger",
+            Self::Ajuster => "Ajuster",
             Self::ModifierContour => "Modifier",
             Self::CopierNiveau => "Sur niveaux",
             Self::Jonctions => "Jonctions",
@@ -127,7 +126,7 @@ impl Outil {
             Self::Masquer => "Masquer",
             Self::MasquerVue => "Masquer vue",
             Self::Afficher => "Afficher",
-            Self::Verrouiller => "Verrouiller",
+            Self::Verrouiller => "Verrou",
             Self::Deverrouiller => "Déverrouiller",
             Self::Cote => "Cote",
             Self::Altimetrie => "Altimétrie",
@@ -302,12 +301,9 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
         Menu::Modifier => &[
             ("Transformer", &[Deplacer, Copier, Tourner, Symetrie, Reseau, Echelle]),
             ("Ajuster", &[Aligner, Decaler, Ajuster, Scinder, CreerIdentique, Supprimer]),
-            // contours, terrains, jonctions ; démolition, propriétés, hôte, sens ; verrou
-            ("Éléments", &[ModifierContour, CopierNiveau, Jonctions, Demolir, Reproduire, ChangerHote, Inverser, Verrouiller, Deverrouiller]),
-        ],
-        Menu::Vue => &[
-            ("Visibilité", &[Isoler, Masquer, MasquerVue, Afficher]),
-            ("Plan", &[Cadrer]),
+            ("Éléments", &[ModifierContour, CopierNiveau, Jonctions, Demolir, Reproduire, ChangerHote]),
+            // verrou (bascule) et visibilité ; Déverrouiller : DC, clic sur le cadenas, menu
+            ("Verrou et visibilité", &[Inverser, Verrouiller, Isoler, Masquer, MasquerVue, Afficher]),
         ],
         Menu::Annoter => &[
             ("Vues", &[VuePlan, VueCoupe]),

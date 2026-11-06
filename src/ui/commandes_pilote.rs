@@ -145,6 +145,8 @@ impl ViewerApp {
         p.push(("saisies_en_attente", (self.saisies_pilote.len()+usize::from(self.saisie_pilote_image)).to_string()));
         p.push(("selection_native", serde_json::to_string(&self.selection_bim()).unwrap()));
         p.push(("afficher_masques", self.afficher_masques.to_string()));
+        p.push(("visibilite_temporaire", (!self.masques_utilisateur.is_empty() || self.isolement_utilisateur).to_string()));
+        p.push(("croix_temporaire", serde_json::to_string(&self.croix_temporaire.map(|c| [c.x, c.y])).unwrap()));
         p.push(("objets_masques", self.objets_masques.len().to_string()));
         p.push(("transformation", self.etat_transformation().to_string()));
         p.push(("accrochage", self.etat_accrochage().to_string()));
@@ -237,7 +239,7 @@ impl ViewerApp {
             return match r { Ok(v) => { let mut v = v; if v.get("ok").is_none() { v["ok"] = true.into(); } v.to_string() }, Err(e) => erreur(&e) };
         }
         match commande {
-            "ruban" => {self.onglet_ruban=match argument{"debut"=>OngletRuban::Debut,"modeliser"=>OngletRuban::Modeliser,"modifier"=>OngletRuban::Modifier,"vue"=>OngletRuban::Vue,"documenter"|"annoter"=>OngletRuban::Annoter,"sortie"=>OngletRuban::Sortie,"famille_creer"=>OngletRuban::FamilleCreer,"famille_sortie"=>OngletRuban::FamilleSortie,_=>return erreur("usage : ruban debut|modeliser|modifier|vue|documenter|sortie|famille_creer|famille_sortie")};self.etat()},
+            "ruban" => {self.onglet_ruban=match argument{"debut"=>OngletRuban::Debut,"modeliser"=>OngletRuban::Modeliser,"modifier"|"vue"=>OngletRuban::Modifier,"documenter"|"annoter"=>OngletRuban::Annoter,"sortie"=>OngletRuban::Sortie,"famille_creer"=>OngletRuban::FamilleCreer,"famille_sortie"=>OngletRuban::FamilleSortie,_=>return erreur("usage : ruban debut|modeliser|modifier|vue|documenter|sortie|famille_creer|famille_sortie")};self.etat()},
             "collaborer" => match self.creer_partage(PathBuf::from(argument.trim_matches('"')),ctx){Ok(())=>succes(&[("etat",texte("Création du projet partagé en cours"))]),Err(e)=>erreur(&e)},
             "collaboration_associer" => match self.associer_collaboration(PathBuf::from(argument.trim_matches('"'))) { Ok(())=>succes(&[("etat",texte("Association locale effectuée ; synchronisation en cours"))]),Err(e)=>erreur(&e) },
             "collaboration_sync" | "collaboration_instantane" => match self.collaboration.as_mut().ok_or_else(||"Copie non associée".to_string()).and_then(|c|c.synchroniser(None,commande=="collaboration_instantane")) {Ok(())=>succes(&[("etat",texte("Synchronisation demandée"))]),Err(e)=>erreur(&e)},
@@ -759,6 +761,7 @@ impl ViewerApp {
         self.masques_utilisateur.clear();
                 self.hidden_storeys.clear();
                 self.isolated = None;
+                self.isolement_utilisateur = false;
                 self.vue_active = None;
                 self.nomenclature_ouverte = None;
                 if !self.vues_ouvertes.contains(&None) {

@@ -335,7 +335,7 @@ fn commandes_et_options_tiennent_aux_largeurs_du_viewer() {
     ctx.set_visuals(egui::Visuals::light());
     let projet = crate::modele::Projet::nouveau("Ruban");
     for largeur in [800.0, 1000.0, 1280.0, 1500.0] {
-        for menu in [Menu::Modeliser, Menu::Modifier, Menu::Vue, Menu::Annoter] {
+        for menu in [Menu::Modeliser, Menu::Modifier, Menu::Annoter] {
             let outils: Vec<_> = groupes(menu)
                 .iter()
                 .flat_map(|(_, outils)| outils.iter().copied())

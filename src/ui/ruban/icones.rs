@@ -80,7 +80,7 @@ pub(super) fn bouton_outil(
         Outil::Masquer => "Masquer temporairement la sélection (H) ; perdu à la fermeture de la vue",
         Outil::MasquerVue => "Masquer la sélection dans cette vue (MQ) ; enregistré avec la vue",
         Outil::Afficher => "Afficher les éléments masqués (AF) : en magenta, clic pour réafficher ; Échap pour sortir",
-        Outil::Verrouiller => "Verrouiller la sélection (CD) : ni déplacée, ni modifiée, ni supprimée",
+        Outil::Verrouiller => "Verrouiller la sélection (CD) ; déjà verrouillée : la déverrouiller. Un élément verrouillé n'est ni déplacé, ni modifié, ni supprimé",
         Outil::Deverrouiller => "Déverrouiller la sélection (DC) ; ou clic sur un cadenas dans la vue",
         Outil::Feuilles => "Feuilles : mise en page des vues, cartouche, export SVG/PDF",
         Outil::Nomenclatures => "Nomenclatures : quantités par catégorie et par type, export CSV",
@@ -671,5 +671,19 @@ pub(super) fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
                 p.add(egui::Shape::convex_polygon(vec![pt(x - 0.1, 0.38), pt(x + 0.1, 0.38), pt(x, 0.2)], c, egui::Stroke::NONE));
             }
         }
+    }
+}
+
+/// Icône d'action d'une ligne de type : crayon (modifier) ou deux feuilles (dupliquer).
+pub(super) fn icone_action_type(p: &egui::Painter, r: egui::Rect, crayon: bool, c: Color32) {
+    let t = egui::Stroke::new(1.4, c);
+    let pt = |x: f32, y: f32| egui::pos2(r.left() + x * r.width(), r.top() + y * r.height());
+    if crayon {
+        p.add(egui::Shape::closed_line(vec![pt(0.15, 0.85), pt(0.2, 0.62), pt(0.68, 0.14), pt(0.86, 0.32), pt(0.38, 0.8)], t));
+        p.line_segment([pt(0.58, 0.24), pt(0.76, 0.42)], t);
+        p.line_segment([pt(0.15, 0.85), pt(0.38, 0.8)], t);
+    } else {
+        p.rect_stroke(egui::Rect::from_min_max(pt(0.1, 0.3), pt(0.65, 0.9)), 1.0, t, egui::StrokeKind::Middle);
+        p.add(egui::Shape::line(vec![pt(0.35, 0.3), pt(0.35, 0.1), pt(0.9, 0.1), pt(0.9, 0.7), pt(0.65, 0.7)], t));
     }
 }

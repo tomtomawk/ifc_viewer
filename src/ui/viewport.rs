@@ -63,7 +63,8 @@ impl ViewerApp {
             if let (Some((_, fin, _)), Some(q)) = (&self.poignee_axe, resp.interact_pointer_pos().or(resp.hover_pos())) {
                 let fixe = if *fin { *a } else { *b };
                 let shift = ui.input(|i| i.modifiers.shift);
-                if let Some(p) = self.point_edition_axe(ui,rect,q,shift,fixe)
+                let origine = if *fin { *b } else { *a };
+                if let Some(p) = self.point_edition_axe(ui,rect,q,shift,fixe,origine)
                     && let Some(x) = &mut self.poignee_axe
                 {
                     x.2 = p;
@@ -409,12 +410,26 @@ impl ViewerApp {
             }
         }
         self.dessiner_cadenas(ui, rect, None);
-        let temporaire = !self.masques_utilisateur.is_empty() || self.isolated.is_some() && self.natif.is_some() && self.vue_native_id().is_none();
+        let temporaire = !self.masques_utilisateur.is_empty() || self.isolement_utilisateur;
         if self.afficher_masques || temporaire {
             let couleur = if self.afficher_masques { Color32::from_rgb(235, 50, 190) } else { Color32::from_rgb(0, 150, 150) };
             ui.painter().rect_stroke(rect.shrink(2.0), 0.0, egui::Stroke::new(3.0, couleur), egui::StrokeKind::Inside);
-            let texte = if self.afficher_masques { "ÉLÉMENTS MASQUÉS · clic pour réafficher · Échap pour sortir" } else { "VISIBILITÉ TEMPORAIRE · Tout afficher pour réinitialiser" };
-            ui.painter().text(rect.right_bottom() + egui::vec2(-10.0, -10.0), egui::Align2::RIGHT_BOTTOM, texte, egui::FontId::proportional(12.0), couleur);
+            let texte = if self.afficher_masques { "ÉLÉMENTS MASQUÉS · clic pour réafficher · Échap pour sortir" } else { "VISIBILITÉ TEMPORAIRE" };
+            // croix en haut du cadre, au centre (le coin droit porte le repère du plan) :
+            // quitter le mode
+            let croix = egui::Rect::from_center_size(egui::pos2(rect.center().x, rect.top() + 18.0), egui::vec2(24.0, 24.0));
+            ui.painter().text(egui::pos2(croix.left() - 8.0, croix.center().y), egui::Align2::RIGHT_CENTER, texte, egui::FontId::proportional(12.0), couleur);
+            let r = ui.interact(croix, egui::Id::unique("quitter_visibilite_temporaire"), Sense::click()).on_hover_text(if self.afficher_masques { "Quitter l'affichage des éléments masqués" } else { "Quitter le masquage temporaire : tout réafficher" });
+            let fond = if r.hovered() { couleur } else { Color32::from_rgba_unmultiplied(255, 255, 255, 230) };
+            ui.painter().rect_filled(croix, 4.0, fond);
+            ui.painter().rect_stroke(croix, 4.0, egui::Stroke::new(1.5, couleur), egui::StrokeKind::Inside);
+            dessiner_croix_onglet(ui.painter(), croix.center(), if r.hovered() { Color32::WHITE } else { couleur });
+            if r.clicked() {
+                if self.afficher_masques { self.basculer_afficher_masques(); } else { self.quitter_visibilite_temporaire(); }
+            }
+            self.croix_temporaire = Some(croix.center());
+        } else {
+            self.croix_temporaire = None;
         }
         if deplacement.is_some() {
             self.apercu_transformation(ui, rect, resp.hover_pos(), altitude_coupe);

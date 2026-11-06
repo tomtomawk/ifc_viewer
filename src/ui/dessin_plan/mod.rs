@@ -567,7 +567,8 @@ impl ViewerApp {
             crate::modele::GenreVue::Plan { niveau, .. } => Some(niveau.clone()),
             _ => None,
         });
-        let mut g = Vec::new();
+        // origine du projet : point accrochable (segment de longueur nulle)
+        let mut g = vec![Geom::Segment([DVec2::ZERO, DVec2::ZERO])];
         // dessins de la vue : toujours pour une annotation, en plan pour un mur
         if let Some(vue) = vue.as_ref().filter(|_| usage == Usage::Annotation || plan.is_some()) {
             for a in p.annotations.iter().filter(|a| &a.vue == vue && self.dessin2d.edition_contour.as_ref().is_none_or(|e| e.id != a.id)) {
@@ -651,11 +652,17 @@ impl ViewerApp {
         g
     }
 
-    pub(super) fn point_edition_axe(&mut self,ui:&egui::Ui,rect:egui::Rect,q:egui::Pos2,maj:bool,fixe:[f64;2])->Option<[f64;2]> {
+    /// Extrémité de mur glissée : accrochages du tracé, plus le prolongement de la ligne
+    /// d'origine du mur (`fixe` → `origine`) et sa perpendiculaire.
+    pub(super) fn point_edition_axe(&mut self,ui:&egui::Ui,rect:egui::Rect,q:egui::Pos2,maj:bool,fixe:[f64;2],origine:[f64;2])->Option<[f64;2]> {
         let c=self.depuis_ecran(rect,q)?;
         let fixe=DVec2::from_array(fixe);
         let mut trace=Trace::new(OutilDessin::Ligne);
         trace.points.push(fixe);
+        // ancienne extrémité : la ligne du mur devient un trait de construction (magnétisme
+        // sur son prolongement)
+        let origine=DVec2::from_array(origine);
+        if origine.distance(fixe)>1e-6 {trace.points.push(origine);}
         self.dessin2d.trace=Some(trace);
         let point=self.point_dessin_depuis(rect,c,maj,ui.input(|i|i.time),Some(fixe));
         self.dessin2d.curseur=Some(c);

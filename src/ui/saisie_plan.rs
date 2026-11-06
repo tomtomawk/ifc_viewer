@@ -867,7 +867,8 @@ impl ViewerApp {
         let point = [(p.x / 10.0).round() * 10.0, (p.y / 10.0).round() * 10.0];
         let accroche = AccrocheMur::Grille;
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
-        let mut candidats: Vec<([f64; 2], AccrocheMur)> = Vec::new();
+        // origine du projet : toujours accrochable
+        let mut candidats: Vec<([f64; 2], AccrocheMur)> = vec![([0.0, 0.0], AccrocheMur::Extremite)];
         let jonctions = crate::modele::murs::jonctions::coupes(projet);
         // Destination d'un déplacement ou d'une copie : la sélection (et toutes les couches
         // d'un mur composé) reste à sa place d'origine pendant le choix, elle n'attire pas le point.

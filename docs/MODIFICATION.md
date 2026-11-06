@@ -75,7 +75,7 @@ Deux portées distinctes, à ne pas confondre :
 |---|---|---|---|---|
 | 12 | **Verrouiller** | CD | l'élément ne peut être ni déplacé, ni modifié, ni supprimé ; il reste sélectionnable et copiable ; cadenas affiché sur l'élément dans la vue | **fait** : `Projet::verrous`, `Commande::Verrouiller`, contrôle dans `executer` et à chaque édition (`modele/edition/verrous.rs`), test `tools/test-verrou.py` ; reste : propriétés grisées |
 | 13 | **Déverrouiller** | DC | lève le verrou ; ou clic sur le cadenas dans la vue | **fait** |
-| 14 | **Masquer** | H (temporaire), MQ (dans la vue) | deux commandes : temporaire (perdu à la fermeture de la vue, cadre turquoise) ou enregistré avec la vue ; onglet Vue | **fait** |
+| 14 | **Masquer** | H (temporaire), MQ (dans la vue) | deux commandes : temporaire (perdu à la fermeture de la vue, cadre turquoise avec une croix en haut pour en sortir) ou enregistré avec la vue ; ruban Modifier, groupe « Verrou et visibilité » | **fait** |
 | 15 | **Afficher** | AF | mode « Afficher les éléments masqués » : masqués en magenta, clic sur un élément pour le réafficher (temporaire ou de la vue), Échap pour sortir | **fait** |
 | — | **Isoler** | I | temporaire | existe |
 
@@ -131,7 +131,8 @@ Règle : le verrouillage s'applique au **modèle** (partagé en collaboration). 
 Test graphique de l'ensemble : `tools/test-transformer.py` (clics et frappes simulés, annulation).
 
 Fait ensuite (`src/ui/menu_vue.rs`, `tools/test-visibilite.py`, `tools/test-elements.py`) :
-- Visibilité : onglet **Vue** du ruban (Isoler, Masquer, Masquer vue, Afficher, Cadre).
+- Visibilité dans le ruban Modifier (groupe « Verrou et visibilité » : Verrou en bascule, Isoler, Masquer, Masquer vue, Afficher) ; Cadre dans la barre de vue. Croix en haut du cadre temporaire pour tout réafficher.
+- Accrochages du tracé : murs existants, origine du projet, prolongement et perpendiculaire du dernier trait, prolongement du mur dont on glisse une extrémité ; suivi polaire tous les 45°.
 - Clic droit dans la vue hors commande : répéter la dernière commande, annuler, rétablir, identiques, filtre, verrou, masquer, isoler, démolir, inverser, supprimer.
 - Entrée sans commande active : relance la dernière commande de modification.
 - Poignée carrée au milieu du mur sélectionné (glisser = déplacer) et flèches d'inversion.
