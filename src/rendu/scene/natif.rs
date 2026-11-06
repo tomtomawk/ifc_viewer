@@ -91,6 +91,8 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     // matériau de chaque partie des éléments (jonctions sans arête entre mêmes matériaux)
     let mut materiaux_parts: Vec<Vec<Option<String>>> = Vec::new();
     let mut table_motifs: Vec<(String, [f32; 4])> = Vec::new();
+    // apparences de rendu (onglet Apparence) indexées par les couleurs de rendu
+    let mut table_apparences: Vec<(String, crate::modele::Apparence)> = Vec::new();
     // jonctions (noyaux prolongés) ; les couches moins prioritaires s'arrêtent sur les
     // faces des autres (solides)
     let (jonctions, _) = crate::modele::murs::jonctions::jonctions(projet);
@@ -121,6 +123,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
             let [r, g, b] = x.couleur.map(|c| c as f32 / 255.0);
             [r, g, b, 1.0]
         });
+        let couleur = opacite(materiau.as_ref(), couleur);
         let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
         if let Some(x) = &materiau {
             couches_coupe.push((id, coupe_materiau(projet, x, vec![neutre, neutre], type_mur.couches.first().map_or(crate::dessin::TRAIT_FORT_MM, |c| projet.trait_couche(c)))));
@@ -140,7 +143,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
             }]));
         }
         materiaux_parts.push(vec![materiau.as_ref().map(|m| m.nom.clone())]);
-        geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.is_some().then_some(couleur)], motifs: vec![materiau.as_ref().and_then(|m| motif_surface(projet, m, &mut table_motifs))] });
+        geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.as_ref().map(|m| rendu_materiau(m, couleur, &mut table_apparences))], motifs: vec![materiau.as_ref().and_then(|m| motif_surface(projet, m, &mut table_motifs))] });
     }
     // dalles : un prisme par couche, du dessus (niveau + décalage) vers le bas
     let mut bandes_dalles: Vec<(u64, Vec<CoucheCoupe>)> = Vec::new();
@@ -168,13 +171,14 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
                 let [r, g, b] = x.couleur.map(|c| c as f32 / 255.0);
                 [r, g, b, 1.0]
             });
+            let couleur = opacite(m.as_ref(), couleur);
             if let Some(m) = &m {
                 // bandes de coupe entre le dessous et le dessus de la couche (m, repère du fichier)
                 for jeu in crate::modele::elements::pente::bandes_contours(&d.contours, &plans, z0, bas, haut) {
                     bandes.extend(coupe_materiau(projet, m, jeu, projet.trait_couche(c)));
                 }
             }
-            rendu.push(m.is_some().then_some(couleur));
+            rendu.push(m.as_ref().map(|m| rendu_materiau(m, couleur, &mut table_apparences)));
             noms.push(m.as_ref().map(|m| m.nom.clone()));
             motifs.push(m.as_ref().and_then(|m| motif_surface(projet, m, &mut table_motifs)));
             parts.push(Part { color: couleur, tris });
@@ -267,12 +271,13 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         let tris = t.solide(projet.ngf(), type_terrain.epaisseur)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
         let materiau = type_terrain.materiau.as_ref().and_then(|n| projet.materiau(n));
         let couleur = materiau.map_or([0.48, 0.62, 0.38, 1.0], |m| { let [r, g, b] = m.couleur.map(|c| c as f32 / 255.0); [r, g, b, 1.0] });
+        let couleur = opacite(materiau, couleur);
         if let Some(m) = materiau {
             let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
             couches_coupe.push((id, coupe_materiau(projet, m, vec![neutre, neutre], crate::dessin::TRAIT_FORT_MM)));
         }
         materiaux_parts.push(vec![materiau.map(|m| m.nom.clone())]);
-        geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.map(|_| couleur)], motifs: vec![materiau.and_then(|m| motif_surface(projet, m, &mut table_motifs))] });
+        geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.map(|m| rendu_materiau(m, couleur, &mut table_apparences))], motifs: vec![materiau.and_then(|m| motif_surface(projet, m, &mut table_motifs))] });
     }
     for l in &projet.limites_propriete {
         let id = id_natif("limite_propriete", &l.id);
@@ -309,6 +314,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     }
     scene.couches_coupe.extend(couches_coupe);
     scene.table_motifs = table_motifs.into_iter().map(|t| t.1).collect();
+    scene.apparences = table_apparences.into_iter().map(|t| t.1).collect();
     // plans des bandes ramenés au repère de la scène (origine retirée)
     let o = scene.origin;
     for (id, mut bandes) in bandes_dalles {
@@ -344,6 +350,40 @@ fn lisser(sommets: &mut [Vertex]) {
             v.normal = [(m.x * 127.0) as i8, (m.y * 127.0) as i8, (m.z * 127.0) as i8, v.normal[3]];
         }
     }
+}
+
+/// Transparence de l'apparence (ou carte de transparence, de découpe) : la partie passe
+/// avec les faces transparentes.
+fn opacite(m: Option<&crate::modele::Materiau>, mut c: [f32; 4]) -> [f32; 4] {
+    use crate::modele::CarteTexture;
+    if let Some(a) = m.map(|m| &m.apparence) {
+        c[3] = (1.0 - a.transparence).clamp(0.05, 1.0);
+        if c[3] > 0.98 && (a.textures.contains_key(&CarteTexture::Transparence) || a.textures.contains_key(&CarteTexture::Decoupe)) {
+            c[3] = 0.98;
+        }
+    }
+    c
+}
+
+/// Couleur de rendu d'un matériau (style Réaliste). Un matériau dont l'apparence est
+/// réglée y porte son rang dans la table des apparences, codé dans l'alpha (128 + rang,
+/// au-delà de 1 : voir `assemble_avec`) ; sa couleur est alors la teinte de l'apparence.
+fn rendu_materiau(m: &crate::modele::Materiau, couleur: [f32; 4], table: &mut Vec<(String, crate::modele::Apparence)>) -> [f32; 4] {
+    if m.apparence.est_defaut() {
+        return couleur;
+    }
+    let rang = match table.iter().position(|t| t.0 == m.nom) {
+        Some(k) => k,
+        None => {
+            table.push((m.nom.clone(), m.apparence.clone()));
+            table.len() - 1
+        }
+    };
+    if rang >= crate::rendu::gpu::MAX_APPARENCES {
+        return couleur;
+    }
+    let [r, g, b] = m.apparence.teinte.unwrap_or(m.couleur).map(|c| c as f32 / 255.0);
+    [r, g, b, 128.0 + rang as f32]
 }
 
 /// Motifs de surface d'un matériau pour le rendu : [premier plan | arrière-plan << 4,

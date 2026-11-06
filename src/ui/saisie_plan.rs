@@ -613,6 +613,7 @@ impl ViewerApp {
         let debut_gpu=std::time::Instant::now();
         if let Some(r) = self.renderer.as_mut() {
             r.upload_vertices(&scene.vertices, &scene.couleurs_rendu, &scene.motifs_surface);
+            r.upload_apparences(&scene.apparences);
         }
         if let Some(c)=&mut self.collaboration{c.mesure_gpu_ms=debut_gpu.elapsed().as_secs_f64()*1000.0;}
         self.liste_niveaux = niveaux(&scene);

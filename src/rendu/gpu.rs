@@ -8,6 +8,12 @@ use eframe::wgpu::{self, util::DeviceExt};
 use glam::{Mat4, Vec3, Vec4};
 use std::sync::Arc;
 
+/// Apparences de matériaux transmises au rendu (rang codé dans les couleurs de rendu).
+pub const MAX_APPARENCES: usize = 32;
+/// Couches d'images des apparences et leur côté (pixels, mipmaps jusqu'à 1).
+const MAX_COUCHES: usize = 64;
+const COTE_TEXTURE: u32 = 512;
+
 /// Uniformes communes aux shaders (même disposition que `Globales` côté Rust).
 const COMMUN: &str = r#"
 struct Globales {
@@ -58,6 +64,14 @@ const SCENE: &str = r#"
 @group(1) @binding(1) var t_ombres: texture_depth_2d;
 @group(1) @binding(2) var s_ombres: sampler_comparison;
 @group(1) @binding(3) var t_ao: texture_2d<f32>;
+// apparences des matériaux (style Réaliste) : images en couches, réglages par rang
+// (20 vec4 : teinte et rugosité ; métallique, transparence, émission, teinte réglée ;
+// puis par carte (couche, intensité, inverser, rotation) et (largeur, hauteur, décalage)
+// en mm, couche < 0 : aucune)
+@group(1) @binding(4) var t_apparences: texture_2d_array<f32>;
+@group(1) @binding(5) var s_apparences: sampler;
+@group(1) @binding(6) var<uniform> apparences: array<vec4f, 640>;
+const MAX_APPARENCES: i32 = 32;
 
 struct Sommet {
     @location(0) pos: vec3f,
@@ -327,9 +341,111 @@ fn occultation(pixel: vec2f) -> f32 {
     return textureLoad(t_ao, clamp(vec2i(pixel), vec2i(0), t - 1), 0).r;
 }
 
+// carte j de l'apparence de rang r au point uv (mm, plan de la face), dérivées dx, dy
+fn carte(k: i32, j: i32, uv: vec2f, dx: vec2f, dy: vec2f) -> vec4f {
+    let a = apparences[k + 2 + 2 * j];
+    let b = apparences[k + 3 + 2 * j];
+    let c = cos(a.w);
+    let s = sin(a.w);
+    let rot = mat2x2f(c, -s, s, c);
+    let taille = max(b.xy, vec2f(1.0));
+    let q = rot * (uv - b.zw) / taille;
+    let inv = vec2f(1.0, -1.0);
+    var t = textureSampleGrad(t_apparences, s_apparences, vec2f(q.x, 1.0 - q.y), i32(a.x), rot * dx / taille * inv, rot * dy / taille * inv);
+    if a.z > 0.5 {
+        t = vec4f(1.0 - t.rgb, t.a);
+    }
+    return t;
+}
+
+fn a_carte(k: i32, j: i32) -> bool {
+    return apparences[k + 2 + 2 * j].x >= 0.0;
+}
+
+fn intensite(k: i32, j: i32) -> f32 {
+    return apparences[k + 2 + 2 * j].y;
+}
+
+struct Effet {
+    base: vec3f,
+    n: vec3f,
+    alpha: f32,
+    occl: f32,
+    rug: f32,
+    metal: f32,
+    emis: vec3f,
+    coupe: bool,
+}
+
+// Apparence de rang r : couleur, rugosité, métallique, relief, normales, occlusion,
+// transparence, découpe et émission (cartes dans l'ordre de `CarteTexture::TOUTES`).
+fn effet_apparence(r: i32, uvm: vec2f, dxm: vec2f, dym: vec2f, n0: vec3f, n: vec3f, base: vec3f) -> Effet {
+    let k = r * 20;
+    let p0 = apparences[k];
+    let p1 = apparences[k + 1];
+    // scène en mètres, textures en mm réels
+    let uv = uvm * 1000.0;
+    let dx = dxm * 1000.0;
+    let dy = dym * 1000.0;
+    // repère du plan de la face (le même que celui des motifs de surface)
+    let vert = abs(n0.z) <= 0.7;
+    let u = select(vec3f(1.0, 0.0, 0.0), normalize(vec3f(-n0.y, n0.x, 0.0) + vec3f(1e-6, 0.0, 0.0)), vert);
+    let v = select(vec3f(0.0, 1.0, 0.0), vec3f(0.0, 0.0, 1.0), vert);
+    var e: Effet;
+    e.base = base;
+    e.n = n;
+    e.alpha = 1.0 - p1.y;
+    e.occl = 1.0;
+    e.rug = p0.w;
+    e.metal = p1.x;
+    e.coupe = false;
+    if a_carte(k, 0) {
+        let t = carte(k, 0, uv, dx, dy);
+        let teinte = select(vec3f(1.0), p0.rgb, p1.w > 0.5);
+        e.base = mix(base, t.rgb * teinte, intensite(k, 0));
+    }
+    if a_carte(k, 1) {
+        e.rug = mix(e.rug, carte(k, 1, uv, dx, dy).r, intensite(k, 1));
+    }
+    if a_carte(k, 2) {
+        e.metal = mix(e.metal, carte(k, 2, uv, dx, dy).r, intensite(k, 2));
+    }
+    if a_carte(k, 3) {
+        // relief : pente de la hauteur (2 mm pour l'échelle complète) sur un texel
+        let pas = max(apparences[k + 9].xy, vec2f(1.0)) / 512.0;
+        let h0 = carte(k, 3, uv, dx, dy).r;
+        let hx = carte(k, 3, uv + vec2f(pas.x, 0.0), dx, dy).r;
+        let hy = carte(k, 3, uv + vec2f(0.0, pas.y), dx, dy).r;
+        let gr = vec2f(hx - h0, hy - h0) / pas * 2.0 * intensite(k, 3);
+        e.n = normalize(e.n - u * gr.x - v * gr.y);
+    }
+    if a_carte(k, 4) {
+        let t = carte(k, 4, uv, dx, dy).xyz * 2.0 - 1.0;
+        e.n = normalize(mix(e.n, normalize(u * t.x + v * t.y + e.n * max(t.z, 0.05)), intensite(k, 4)));
+    }
+    if a_carte(k, 5) {
+        e.occl = mix(1.0, carte(k, 5, uv, dx, dy).r, intensite(k, 5));
+    }
+    // transparence (noir : transparent) et découpe (noir : retiré)
+    if a_carte(k, 6) {
+        e.alpha *= mix(1.0, carte(k, 6, uv, dx, dy).r, intensite(k, 6));
+    }
+    if a_carte(k, 7) {
+        e.coupe = mix(1.0, carte(k, 7, uv, dx, dy).r, intensite(k, 7)) < 0.5;
+    }
+    // émission : luminance ramenée à 1 pour 1000 cd/m²
+    let lum = clamp(p1.z / 1000.0, 0.0, 1.0);
+    e.emis = e.base * lum;
+    if a_carte(k, 8) {
+        e.emis = carte(k, 8, uv, dx, dy).rgb * intensite(k, 8) * select(1.0, lum, p1.z > 0.0);
+    }
+    return e;
+}
+
 @fragment
 fn fs_main(e: Varie) -> @location(0) vec4f {
     var n = normalize(e.n);
+    let n0 = n;
     // motif de surface : traits dans le plan de la face, épaisseur d'un pixel (dérivées
     // calculées avant toute branche)
     let an = abs(n);
@@ -384,10 +500,25 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
         base = e.motif.yzw;
     }
     var d: f32;
+    // apparence du matériau (rang codé dans l'alpha de la couleur de rendu : 128 + rang)
+    var app = false;
+    var fx: Effet;
     if materiaux {
         if e.rendu.a > 0.5 {
             base = e.rendu.rgb;
         }
+        let rang = i32(e.rendu.a * 255.0 + 0.5) - 128;
+        if e.annot == 0u && rang >= 0 && rang < MAX_APPARENCES {
+            app = true;
+            fx = effet_apparence(rang, uvm, dxm, dym, n0, n, base);
+            if fx.coupe {
+                discard;
+            }
+            base = fx.base * (1.0 - 0.85 * fx.metal);
+            n = fx.n;
+            ao *= fx.occl;
+        }
+        let ndl = max(dot(n, g.soleil.xyz), 0.0);
         // ciel (hémisphère), soleil, un peu de lumière vers l'œil ; l'occultation éteint
         // surtout le ciel, un peu le soleil
         d = (0.30 + 0.28 * (0.5 + 0.5 * n.z)) * ao + 0.62 * ndl * ombre * mix(1.0, ao, 0.35) + 0.05 * max(dot(n, vd), 0.0);
@@ -400,13 +531,21 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
         d = 0.50 * ao + 0.38 * max(dot(n, sun), 0.0) * ombre + 0.12 * max(dot(n, fill), 0.0) * ao + 0.12 * max(dot(n, vd), 0.0);
     }
     var c = base * d;
+    var a = e.c.a;
+    if app {
+        // reflet du soleil (rugosité, métallique) et émission
+        let h = normalize(g.soleil.xyz + vd);
+        let brillance = mix(256.0, 4.0, fx.rug);
+        let reflet = pow(max(dot(n, h), 0.0), brillance) * (1.0 - fx.rug) * max(dot(n, g.soleil.xyz), 0.0) * ombre;
+        c += mix(vec3f(0.35), fx.base, fx.metal) * reflet + fx.emis;
+        a = fx.alpha;
+    }
     if motifs && arriere != 0 {
         c = mix(c, e.c.rgb, trait_arriere);
     }
     if motifs && premier != 0 && premier != 15 {
         c = mix(c, e.motif.yzw, trait_premier);
     }
-    var a = e.c.a;
     if e.selection == 1u {
         c = mix(c, vec3f(1.0, 0.55, 0.1), 0.65);
         a = max(a, 0.8);
@@ -686,6 +825,13 @@ pub struct Renderer {
     /// Image de la vue et son identifiant egui.
     cibles: Option<Cibles>,
     texture_egui: Option<egui::TextureId>,
+    /// Apparences : images en couches, échantillonneur répété, réglages par rang ; images
+    /// chargées (chemin, date) et couches envoyées.
+    vue_apparences: wgpu::TextureView,
+    echantillonneur_apparences: wgpu::Sampler,
+    uniformes_apparences: wgpu::Buffer,
+    images_apparences: std::collections::HashMap<String, (Option<std::time::SystemTime>, Option<Arc<Vec<Vec<u8>>>>)>,
+    couches_apparences: Vec<(String, Option<std::time::SystemTime>)>,
 }
 
 /// Style visuel d'une vue. Les ombres portées et l'ombre ambiante, la couleur des faces
@@ -820,6 +966,24 @@ impl Renderer {
                     count: None,
                 },
                 texture(3, flottant, wgpu::ShaderStages::FRAGMENT),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2Array, multisampled: false },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 5,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 6,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: wgpu::BufferSize::new((MAX_APPARENCES * 20 * 16) as u64) },
+                    count: None,
+                },
             ],
         });
         let disposition_ao = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -972,7 +1136,23 @@ impl Renderer {
         rs.queue.write_texture(ao_vide.as_image_copy(), &[255], wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(1), rows_per_image: None }, wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 });
         let vide = |label| Self::tampon(&device, label, &[0u8; 16], wgpu::BufferUsages::VERTEX);
         let index_vide = |label| Self::tampon(&device, label, &[0u8; 16], wgpu::BufferUsages::INDEX);
+        let echantillonneur_apparences = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("apparences"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            ..Default::default()
+        });
+        let uniformes_apparences = Self::tampon(&device, "apparences", &vec![0u8; MAX_APPARENCES * 20 * 16], wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST);
+        let vue_apparences = Self::couches_images(&device, &rs.queue, &[]);
         Ok(Renderer {
+            vue_apparences,
+            echantillonneur_apparences,
+            uniformes_apparences,
+            images_apparences: Default::default(),
+            couches_apparences: Vec::new(),
             texture_selection: Self::texture(&device, "sélection", 1024, 1, 1, OCCULTATION, wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST),
             vue_ombres: ombres.create_view(&Default::default()),
             echantillonneur_ombres,
@@ -1097,6 +1277,94 @@ impl Renderer {
             ao_lisse,
             groupe_ao,
             groupe_flou,
+        }
+    }
+
+    /// Tableau de textures des apparences : une couche par image (mipmaps), une couche
+    /// blanche s'il n'y en a aucune.
+    fn couches_images(device: &wgpu::Device, queue: &wgpu::Queue, images: &[Arc<Vec<Vec<u8>>>]) -> wgpu::TextureView {
+        let niveaux = COTE_TEXTURE.ilog2() + 1;
+        let n = images.len().max(1) as u32;
+        let t = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("apparences"),
+            size: wgpu::Extent3d { width: COTE_TEXTURE, height: COTE_TEXTURE, depth_or_array_layers: n },
+            mip_level_count: niveaux,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let blanc: Vec<Vec<u8>> = (0..niveaux).map(|m| vec![255u8; ((COTE_TEXTURE >> m).pow(2) * 4) as usize]).collect();
+        for z in 0..n {
+            let mips = images.get(z as usize).map_or(&blanc, |i| i.as_ref());
+            for (m, donnees) in mips.iter().enumerate() {
+                let cote = COTE_TEXTURE >> m;
+                queue.write_texture(
+                    wgpu::TexelCopyTextureInfo { texture: &t, mip_level: m as u32, origin: wgpu::Origin3d { x: 0, y: 0, z }, aspect: wgpu::TextureAspect::All },
+                    donnees,
+                    wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(4 * cote), rows_per_image: Some(cote) },
+                    wgpu::Extent3d { width: cote, height: cote, depth_or_array_layers: 1 },
+                );
+            }
+        }
+        t.create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() })
+    }
+
+    /// Image d'une texture ramenée au carré de COTE_TEXTURE, avec ses mipmaps ; gardée
+    /// tant que le fichier n'a pas changé. None : illisible.
+    fn image_apparence(&mut self, chemin: &str) -> (Option<std::time::SystemTime>, Option<Arc<Vec<Vec<u8>>>>) {
+        let date = std::fs::metadata(chemin).and_then(|m| m.modified()).ok();
+        if let Some(x) = self.images_apparences.get(chemin).filter(|x| x.0 == date) {
+            return x.clone();
+        }
+        let image = image::open(chemin).ok().map(|i| {
+            let mut i = i.resize_exact(COTE_TEXTURE, COTE_TEXTURE, image::imageops::FilterType::Triangle).to_rgba8();
+            let mut mips = vec![i.as_raw().clone()];
+            while i.width() > 1 {
+                i = image::imageops::resize(&i, i.width() / 2, i.height() / 2, image::imageops::FilterType::Triangle);
+                mips.push(i.as_raw().clone());
+            }
+            Arc::new(mips)
+        });
+        self.images_apparences.insert(chemin.to_string(), (date, image.clone()));
+        (date, image)
+    }
+
+    /// Apparences de la scène : réglages par rang et images (couches renvoyées seulement
+    /// si leur liste ou un fichier a changé).
+    pub fn upload_apparences(&mut self, apparences: &[crate::modele::Apparence]) {
+        use crate::modele::CarteTexture;
+        let mut u = vec![[0.0f32; 4]; MAX_APPARENCES * 20];
+        let mut couches: Vec<(String, Option<std::time::SystemTime>)> = Vec::new();
+        let mut images: Vec<Arc<Vec<Vec<u8>>>> = Vec::new();
+        for (r, a) in apparences.iter().take(MAX_APPARENCES).enumerate() {
+            let k = r * 20;
+            let [tr, tg, tb] = a.teinte.unwrap_or([255; 3]).map(|c| c as f32 / 255.0);
+            u[k] = [tr, tg, tb, a.rugosite];
+            u[k + 1] = [a.metallique, a.transparence, a.emission, if a.teinte.is_some() { 1.0 } else { 0.0 }];
+            for (j, carte) in CarteTexture::TOUTES.iter().enumerate() {
+                u[k + 2 + 2 * j] = [-1.0, 0.0, 0.0, 0.0];
+                let Some(t) = a.textures.get(carte) else { continue };
+                let (date, image) = self.image_apparence(&t.chemin);
+                let Some(image) = image else { continue };
+                let couche = match couches.iter().position(|c| c.0 == t.chemin) {
+                    Some(c) => c,
+                    None if couches.len() < MAX_COUCHES => {
+                        couches.push((t.chemin.clone(), date));
+                        images.push(image);
+                        couches.len() - 1
+                    }
+                    None => continue,
+                };
+                u[k + 2 + 2 * j] = [couche as f32, t.intensite, if t.inverser { 1.0 } else { 0.0 }, (t.rotation as f32).to_radians()];
+                u[k + 3 + 2 * j] = [t.largeur as f32, t.hauteur as f32, t.decalage[0] as f32, t.decalage[1] as f32];
+            }
+        }
+        self.queue.write_buffer(&self.uniformes_apparences, 0, as_bytes(&u));
+        if couches != self.couches_apparences {
+            self.vue_apparences = Self::couches_images(&self.device, &self.queue, &images);
+            self.couches_apparences = couches;
         }
     }
 
@@ -1358,6 +1626,9 @@ impl Renderer {
                 wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&self.vue_ombres) },
                 wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.echantillonneur_ombres) },
                 wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(if ao { &c.ao_lisse } else { &self.ao_vide }) },
+                wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(&self.vue_apparences) },
+                wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::Sampler(&self.echantillonneur_apparences) },
+                wgpu::BindGroupEntry { binding: 6, resource: self.uniformes_apparences.as_entire_binding() },
             ],
         });
 
@@ -1494,5 +1765,17 @@ impl Renderer {
             *a = 255;
         }
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Le shader de la scène (avec les apparences) se lit et se valide.
+    #[test]
+    fn shader_scene_valide() {
+        use eframe::wgpu::naga;
+        let source = format!("{}{}", super::COMMUN, super::SCENE);
+        let module = naga::front::wgsl::parse_str(&source).unwrap_or_else(|e| panic!("{}", e.emit_to_string(&source)));
+        naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all()).validate(&module).unwrap_or_else(|e| panic!("{e:?}"));
     }
 }

@@ -146,6 +146,7 @@ impl ViewerApp {
     pub(super) fn installer_scene_courante(&mut self, scene: Scene) {
         if let Some(r) = self.renderer.as_mut() {
             r.upload_vertices(&scene.vertices, &scene.couleurs_rendu, &scene.motifs_surface);
+            r.upload_apparences(&scene.apparences);
         }
         self.status = format!(
             "{} — {} — {} entités, {} objets 3D, {} triangles — {:.2} s",
@@ -558,6 +559,7 @@ impl ViewerApp {
             self.visible = vec![true; s.objects.len()];
             if let Some(r) = self.renderer.as_mut() {
                 r.upload_vertices(&s.vertices, &s.couleurs_rendu, &s.motifs_surface);
+                r.upload_apparences(&s.apparences);
             }
         }
         self.restaurer_vue(self.vue_active);

@@ -172,6 +172,9 @@ pub struct Scene {
     /// Motifs de surface de la scène, indexés par les codes des sommets (moins un) :
     /// deux familles de traits (angle en radians, pas en mm du papier).
     pub table_motifs: Vec<[f32; 4]>,
+    /// Apparences de rendu des matériaux, indexées par l'alpha des couleurs de rendu
+    /// (128 + rang).
+    pub apparences: Vec<crate::modele::Apparence>,
     pub objects: Vec<SceneObject>,
     pub object_of: IdMap<u32>,
     /// Origine (mètres, repère du fichier) soustraite aux coordonnées f32.
@@ -322,7 +325,11 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
         let mut mx = Vec3::splat(f32::MIN);
         for (k, p) in g.parts.iter().enumerate() {
             let color = p.color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8);
-            let rendu = g.rendu.get(k).copied().flatten().map_or([0; 4], |c| [c[0], c[1], c[2], 1.0].map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8));
+            // alpha au-delà de 1 : rang d'apparence codé (128 + rang), sinon 255
+            let rendu = g.rendu.get(k).copied().flatten().map_or([0; 4], |c| {
+                let [r, v, b] = [c[0], c[1], c[2]].map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8);
+                [r, v, b, if c[3] > 1.5 { c[3].clamp(128.0, 254.0) as u8 } else { 255 }]
+            });
             let motif = g.motifs.get(k).copied().flatten().unwrap_or([0; 4]);
             let (dst, dst_r, dst_m) = if p.color[3] < 0.99 { (&mut transp, &mut rendu_t, &mut motifs_t) } else { (&mut opaque, &mut rendu_o, &mut motifs_o) };
             for t in &p.tris {
@@ -429,6 +436,7 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
         couleurs_rendu,
         motifs_surface,
         table_motifs: Vec::new(),
+        apparences: Vec::new(),
         objects,
         object_of,
         origin,

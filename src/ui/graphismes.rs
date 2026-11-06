@@ -419,5 +419,5 @@ fn apparence_materiau(ui: &mut egui::Ui, m: &mut crate::modele::Materiau) {
     if let Some(c) = retirer {
         a.textures.remove(&c);
     }
-    ui.label(RichText::new("Les textures sont enregistrées avec le matériau ; la vue 3D n'en affiche pas encore le rendu.").small().weak());
+    ui.label(RichText::new("Rendu dans le style Réaliste. Textures projetées sur le plan de chaque face, à leur taille réelle. Transparence et découpe : noir = transparent / retiré.").small().weak());
 }
