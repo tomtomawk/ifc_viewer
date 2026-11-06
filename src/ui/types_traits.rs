@@ -31,7 +31,8 @@ pub(in crate::ui) fn choix_type_trait(ui: &mut egui::Ui, salt: impl std::hash::H
         }
         egui::ComboBox::from_id_salt(salt).width(150.0).truncate().selected_text(courant.map_or("Varié".to_string(), |t| t.nom.clone())).show_ui(ui, |ui| {
             ui.set_min_width(220.0);
-            let liste: Vec<&TypeTrait> = std::iter::once(&standard).chain(types.iter().filter(|t| !t.id.is_empty())).collect();
+            // le continu fin standard (segment sans type) n'est proposé qu'à défaut de types
+            let liste: Vec<&TypeTrait> = if types.is_empty() { vec![&standard] } else { types.iter().collect() };
             for t in liste {
                 let (r, rep) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 22.0), Sense::click());
                 let actif = courant.is_some_and(|c| c.id == t.id);
@@ -59,6 +60,11 @@ pub(super) fn segments_polyligne(points: &[[f64; 2]], fermee: bool) -> usize {
 const FENETRE: &str = "fenetre_types_traits";
 
 impl ViewerApp {
+    /// Message de confirmation en bas de la vue (quelques secondes).
+    pub(in crate::ui) fn confirmer(&mut self, texte: String) {
+        self.confirmation = Some((texte, std::time::Instant::now()));
+    }
+
     /// Types de trait des polylignes sélectionnées : un choix pour tous leurs segments,
     /// puis, pour une seule polyligne, un choix par segment. Retourne le projet modifié.
     pub(super) fn traits_polylignes(&self, ui: &mut egui::Ui, projet: &Projet, ids: &[String]) -> Option<Projet> {
@@ -214,6 +220,7 @@ impl ViewerApp {
         q.types_traits = types;
         self.appliquer_projet(q)?;
         self.status = "Types de trait enregistrés.".into();
+        self.confirmer("Types de trait enregistrés".into());
         Ok(())
     }
 }

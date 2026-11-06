@@ -80,6 +80,8 @@ pub(super) struct EtatDessin2D {
     terrain_glisse: Option<(PoigneeTerrain, Vec<[f64; 2]>, Vec<f64>, Vec<[f64; 3]>)>,
     dernier_usage: Option<Usage>,
     pub edition_contour: Option<EditionContour>,
+    /// Type de trait des polylignes créées (id ; vide : continu fin).
+    pub trait_creation: String,
 }
 
 pub(super) struct EditionContour {
@@ -386,6 +388,26 @@ impl ViewerApp {
         self.ruban_edition.annuler();
         self.visibility_dirty = true;
         self.coupe_dirty = true;
+    }
+
+    /// Outil Polyligne actif : type de trait des polylignes créées, dans Propriétés.
+    pub(in crate::ui) fn proprietes_creation_polyligne(&mut self, ui: &mut egui::Ui) {
+        if self.dessin2d.edition_contour.is_some() || self.usage_dessin() != Some((Usage::Annotation, OutilDessin::Polyligne)) {
+            return;
+        }
+        let types = self.natif.as_ref().map(|(p, _)| p.types_traits.clone()).unwrap_or_default();
+        if !types.iter().any(|t| t.id == self.dessin2d.trait_creation) {
+            self.dessin2d.trait_creation.clear();
+        }
+        ui.label(RichText::new("Polyligne").strong());
+        egui::Grid::new("creation_polyligne").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+            ui.label("Type de trait").on_hover_text("Type de trait des segments de la polyligne créée ; chaque segment se change ensuite dans Modifier");
+            if let Some(id) = crate::ui::types_traits::choix_type_trait(ui, "trait_creation", Some(&self.dessin2d.trait_creation), &types) {
+                self.dessin2d.trait_creation = id;
+            }
+            ui.end_row();
+        });
+        ui.separator();
     }
 
     /// Modifier une polyligne, segment sélectionné : son type de trait dans Propriétés

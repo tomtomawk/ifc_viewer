@@ -107,6 +107,9 @@ impl ViewerApp {
             }
         }
         let element_selectionne = self.selected.is_some() || !self.selection_bim().is_empty();
+        if self.natif.is_some() {
+            self.proprietes_creation_polyligne(ui);
+        }
         if self.natif.is_some() && !element_selectionne {
             self.proprietes_vue_native(ui);
         }

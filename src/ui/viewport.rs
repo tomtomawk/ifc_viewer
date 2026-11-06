@@ -395,6 +395,22 @@ impl ViewerApp {
         if largeur > 0 && hauteur > 0 && let Some(id) = self.renderer.as_mut().and_then(|r| r.paint(&params, largeur, hauteur)) {
             ui.painter().image(id, rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
         }
+        // confirmation d'enregistrement : 2,5 s en bas de la vue
+        if let Some((texte, debut)) = &self.confirmation {
+            let age = debut.elapsed().as_secs_f32();
+            if age < 2.5 {
+                let alpha = ((2.5 - age) / 0.5).min(1.0);
+                let police = egui::FontId::proportional(13.0);
+                let galet = ui.fonts_mut(|f| f.layout_no_wrap(texte.clone(), police.clone(), Color32::WHITE));
+                let centre = egui::pos2(rect.center().x, rect.bottom() - 48.0);
+                let fond = egui::Rect::from_center_size(centre, galet.size() + egui::vec2(24.0, 12.0));
+                ui.painter().rect_filled(fond, 6.0, Color32::from_rgba_unmultiplied(40, 120, 60, (230.0 * alpha) as u8));
+                ui.painter().text(centre, egui::Align2::CENTER_CENTER, texte.as_str(), police, Color32::from_white_alpha((255.0 * alpha) as u8));
+                ui.ctx().request_repaint();
+            } else {
+                self.confirmation = None;
+            }
+        }
         if let Some(f) = self.fenetre_selection {
             f.dessiner(&ui.painter().with_clip_rect(rect));
         }

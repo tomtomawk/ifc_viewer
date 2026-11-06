@@ -186,11 +186,23 @@ impl ViewerApp {
             return;
         }
         let Some(vue) = self.vue_native_id() else { return };
+        let mut crees = 0;
         for f in formes {
-            let annotation = Annotation { id: String::new(), vue: vue.clone(), hauteur: 2.5, forme: AnnotationForme::depuis_forme_2d(&f) };
-            if let Err(e) = self.executer_bim(Commande::Annoter { annotation }) {
-                self.error = Some(e);
+            let mut forme = AnnotationForme::depuis_forme_2d(&f);
+            // polyligne : type de trait choisi à la création, pour tous ses segments
+            if let AnnotationForme::Polyligne { points, fermee, traits, .. } = &mut forme
+                && !self.dessin2d.trait_creation.is_empty()
+            {
+                *traits = vec![self.dessin2d.trait_creation.clone(); crate::ui::types_traits::segments_polyligne(points, *fermee)];
             }
+            let annotation = Annotation { id: String::new(), vue: vue.clone(), hauteur: 2.5, forme };
+            match self.executer_bim(Commande::Annoter { annotation }) {
+                Ok(_) => crees += 1,
+                Err(e) => self.error = Some(e),
+            }
+        }
+        if crees > 0 {
+            self.confirmer(if crees == 1 { "Dessin enregistré".into() } else { format!("{crees} dessins enregistrés") });
         }
         self.bim.selection.clear();
     }
@@ -305,6 +317,12 @@ impl ViewerApp {
                     self.interrompre_trace(usage);
                 }
                 if let Some(t) = self.dessin2d.trace.as_mut() { t.points.clear(); }
+                // dessin 2D : ce qui est tracé reste et l'outil se ferme, la sélection
+                // est de nouveau possible
+                if usage == Usage::Annotation && self.dessin2d.edition_contour.is_none() {
+                    self.ruban_edition.annuler();
+                    self.dessin2d.trace = None;
+                }
                 if let Some(e) = &mut self.dessin2d.edition_contour && e.raccord.take().is_some() { e.dessin = false; }
             } else if let Some(e) = self.dessin2d.edition_contour.as_mut()
                 && (e.segment.is_some() || e.selection.is_some() || e.dessin)
@@ -484,6 +502,7 @@ impl ViewerApp {
             if let Err(e) = self.appliquer_projet(projet) { self.dessin2d.message = Some(e); return; }
             self.bim.selection = ids;
             self.status = "Polyligne modifiée — Ctrl+S pour enregistrer.".into();
+            self.confirmer("Polyligne modifiée".into());
         } else if surface && valider && self.dessin2d.edition_contour.is_some() {
             let id = self.dessin2d.edition_contour.as_ref().unwrap().id.clone();
             let contours = self.dessin2d.dalle.clone();

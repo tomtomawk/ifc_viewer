@@ -37,8 +37,12 @@ impl ViewerApp {
             } else {
                 &[(OngletRuban::Debut, "Début"), (OngletRuban::Modeliser, "Modéliser"), (OngletRuban::Modifier, "Modifier"), (OngletRuban::Annoter, "Documenter"), (OngletRuban::Sortie, "Sortie")]
             };
+            // pendant une création (outil actif), Modifier est grisé
+            let creation = self.ruban_edition.a_un_outil() && self.dessin2d.edition_contour.is_none();
             for &(o, nom) in onglets {
-                ui.selectable_value(&mut self.onglet_ruban, o, RichText::new(nom).strong());
+                let actif = !(creation && o == OngletRuban::Modifier) || self.onglet_ruban == o;
+                ui.add_enabled_ui(actif, |ui| ui.selectable_value(&mut self.onglet_ruban, o, RichText::new(nom).strong()))
+                    .response.on_disabled_hover_text("Terminez ou quittez la création en cours (Échap) pour modifier.");
             }
             let disponible = self.natif.is_some() && self.loading.is_none() && self.sauvegarde.is_none();
             if let Some(c)=&self.collaboration{let largeur=(ui.available_width()-90.0).clamp(0.0,220.0);ui.add_sized([largeur,20.0],egui::Label::new(RichText::new(format!("Partagé · {}",c.etat)).small()).truncate()).on_hover_text(&c.etat);}

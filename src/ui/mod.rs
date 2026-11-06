@@ -542,6 +542,8 @@ pub struct ViewerApp {
     loading: Option<Receiver<LoadMsg>>,
     partage_en_cours: bool,
     status: String,
+    /// Message de confirmation affiché quelques secondes en bas de la vue.
+    confirmation: Option<(String, std::time::Instant)>,
     error: Option<String>,
     camera: Camera,
     selected: Option<Id>,
@@ -745,6 +747,7 @@ impl ViewerApp {
             loading: None,
             partage_en_cours: false,
             status: "Ouvrir un fichier IFC ou Revit (Ctrl+O), ou le glisser dans la fenêtre.".into(),
+            confirmation: None,
             error,
             camera: Camera::default(),
             selected: None,
