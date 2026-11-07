@@ -190,7 +190,7 @@ def tex(fichier, largeur, hauteur, **x):
 
 
 MATERIAUX = [
-    materiau("Brique", [150, 70, 48], apparence={"rugosite": 0.8, "textures": {"Couleur": tex("brique.png", 920, 600), "Relief": tex("brique_relief.png", 920, 600, intensite=0.8)}}),
+    materiau("Brique", [150, 70, 48], apparence={"rugosite": 0.8, "textures": {"Couleur": tex("brique.png", 920, 600), "Relief": tex("brique_relief.png", 920, 600, intensite=0.8, profondeur=12)}}),
     materiau("Béton banché", [190, 190, 184], apparence={"rugosite": 0.75, "textures": {"Couleur": tex("beton.png", 2500, 2500), "Relief": tex("beton_relief.png", 2500, 2500, intensite=0.3)}}),
     materiau("Enduit blanc", [236, 233, 222], apparence={"rugosite": 0.85, "textures": {"Couleur": tex("enduit.png", 1000, 1000), "Relief": tex("enduit_relief.png", 1000, 1000, intensite=0.15)}}),
     materiau("Bardage bois", [150, 104, 66], apparence={"rugosite": 0.7, "textures": {"Couleur": tex("bois.png", 960, 960), "Relief": tex("bois_relief.png", 960, 960, intensite=0.6)}}),
@@ -199,9 +199,16 @@ MATERIAUX = [
     materiau("Verre", [160, 190, 200], motif="uni", apparence={"teinte": [150, 185, 195], "rugosite": 0.03, "transparence": 0.6}),
     materiau("Feuillage", [70, 105, 45], apparence={"rugosite": 0.8, "textures": {"Couleur": tex("feuillage.png", 1500, 1500), "Relief": tex("feuillage_relief.png", 1500, 1500, intensite=1.0)}}),
     materiau("Écorce", [96, 80, 64], apparence={"rugosite": 0.9, "textures": {"Couleur": tex("ecorce.png", 600, 600), "Relief": tex("ecorce_relief.png", 600, 600, intensite=0.8)}}),
-    materiau("Pelouse", [84, 122, 52], apparence={"rugosite": 0.95, "textures": {"Couleur": tex("pelouse.png", 2000, 2000)}}),
+    # pelouse : « Grass004 » d'ambientCG (CC0, ambientcg.com), carreau de 1,5 m,
+    # anti-répétition, parallaxe, brins de 60 mm
+    materiau("Pelouse", [84, 122, 52], apparence={"rugosite": 0.95, "herbe": 60, "textures": {
+        "Couleur": tex("herbe_diff.jpg", 1500, 1500, anti_repetition=True),
+        "Normale": tex("herbe_nor_gl.jpg", 1500, 1500, anti_repetition=True, intensite=0.8),
+        "Relief": tex("herbe_disp.jpg", 1500, 1500, anti_repetition=True, profondeur=15, intensite=1.0),
+        "Rugosite": tex("herbe_rough.jpg", 1500, 1500, anti_repetition=True),
+        "Occlusion": tex("herbe_ao.jpg", 1500, 1500, anti_repetition=True)}}),
     materiau("Enrobé", [70, 70, 70], apparence={"rugosite": 0.9, "textures": {"Couleur": tex("enrobe.png", 1000, 1000)}}),
-    materiau("Pavés", [160, 155, 145], apparence={"rugosite": 0.8, "textures": {"Couleur": tex("paves.png", 800, 800), "Relief": tex("paves_relief.png", 800, 800, intensite=0.5)}}),
+    materiau("Pavés", [160, 155, 145], apparence={"rugosite": 0.8, "textures": {"Couleur": tex("paves.png", 800, 800), "Relief": tex("paves_relief.png", 800, 800, intensite=0.8, profondeur=10)}}),
 ]
 
 
@@ -418,6 +425,7 @@ def projet():
 
 if __name__ == "__main__":
     os.makedirs(TEX, exist_ok=True)
+    # pelouse.png : ancienne texture procédurale, gardée pour les anciens projets
     for f in (briques, beton, enduit, bois, tuiles, zinc, feuillage, ecorce, pelouse, enrobe, paves):
         f()
     with open(os.path.join(SORTIE, "ilot_demo.modele.json"), "w", encoding="utf-8") as fichier:

@@ -371,6 +371,9 @@ fn apparence_materiau(ui: &mut egui::Ui, m: &mut crate::modele::Materiau, dossie
         ui.label("Émission");
         ui.add(egui::DragValue::new(&mut a.emission).speed(1.0).range(0.0..=100_000.0).suffix(" cd/m²"));
         ui.end_row();
+        ui.label("Herbe").on_hover_text("Brins en volume au-dessus de la surface (style Réaliste, près de la caméra) ; 0 : surface plate");
+        ui.add(egui::DragValue::new(&mut a.herbe).speed(1.0).range(0.0..=300.0).suffix(" mm"));
+        ui.end_row();
     });
     ui.add_space(6.0);
     ui.label(RichText::new("Textures").strong());
@@ -416,6 +419,13 @@ fn apparence_materiau(ui: &mut egui::Ui, m: &mut crate::modele::Materiau, dossie
                         ui.label("Intensité");
                         ui.add(egui::Slider::new(&mut t.intensite, 0.0..=1.0));
                         ui.checkbox(&mut t.inverser, "Inverser");
+                    });
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut t.anti_repetition, "Anti-répétition").on_hover_text("Casse le motif répété au loin (deux échantillonnages tournés, mélangés)");
+                        if carte == CarteTexture::Relief {
+                            ui.label("Profondeur").on_hover_text("Parallaxe : profondeur du relief pour toute la plage de gris");
+                            ui.add(egui::DragValue::new(&mut t.profondeur).speed(0.5).range(0.0..=200.0).suffix(" mm"));
+                        }
                     });
                 });
             }

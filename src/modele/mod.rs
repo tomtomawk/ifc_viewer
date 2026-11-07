@@ -489,13 +489,21 @@ pub struct Texture {
     pub intensite: f32,
     #[serde(default)]
     pub inverser: bool,
+    /// Anti-répétition : deux échantillonnages tournés, mélangés selon un bruit à grande
+    /// échelle (motif répété invisible au loin).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub anti_repetition: bool,
+    /// Carte de relief : profondeur de la parallaxe (mm) pour toute la plage de gris.
+    #[serde(default = "Texture::profondeur_defaut")]
+    pub profondeur: f64,
 }
 
 impl Texture {
     fn taille_defaut() -> f64 { 1000.0 }
     fn intensite_defaut() -> f32 { 1.0 }
+    fn profondeur_defaut() -> f64 { 10.0 }
     pub fn nouvelle(chemin: String) -> Self {
-        Texture { chemin, largeur: 1000.0, hauteur: 1000.0, decalage: [0.0, 0.0], rotation: 0.0, intensite: 1.0, inverser: false }
+        Texture { chemin, largeur: 1000.0, hauteur: 1000.0, decalage: [0.0, 0.0], rotation: 0.0, intensite: 1.0, inverser: false, anti_repetition: false, profondeur: 10.0 }
     }
 }
 
@@ -519,11 +527,16 @@ pub struct Apparence {
     pub emission: f32,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub textures: std::collections::BTreeMap<CarteTexture, Texture>,
+    /// Herbe en volume : hauteur des brins (mm), 0 : surface plate (style Réaliste).
+    #[serde(default, skip_serializing_if = "est_nul_f32")]
+    pub herbe: f32,
 }
+
+fn est_nul_f32(v: &f32) -> bool { *v == 0.0 }
 
 impl Default for Apparence {
     fn default() -> Self {
-        Apparence { teinte: None, rugosite: 0.5, metallique: 0.0, transparence: 0.0, refraction: 1.5, emission: 0.0, textures: Default::default() }
+        Apparence { teinte: None, rugosite: 0.5, metallique: 0.0, transparence: 0.0, refraction: 1.5, emission: 0.0, textures: Default::default(), herbe: 0.0 }
     }
 }
 

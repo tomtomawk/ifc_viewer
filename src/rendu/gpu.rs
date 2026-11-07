@@ -12,7 +12,7 @@ use std::sync::Arc;
 pub const MAX_APPARENCES: usize = 32;
 /// Couches d'images des apparences et leur côté (pixels, mipmaps jusqu'à 1).
 const MAX_COUCHES: usize = 64;
-const COTE_TEXTURE: u32 = 512;
+const COTE_TEXTURE: u32 = 1024;
 
 /// Uniformes communes aux shaders (même disposition que `Globales` côté Rust).
 const COMMUN: &str = r#"
@@ -74,12 +74,13 @@ const SCENE: &str = r#"
 @group(1) @binding(2) var s_ombres: sampler_comparison;
 @group(1) @binding(3) var t_ao: texture_2d<f32>;
 // apparences des matériaux (style Réaliste) : images en couches, réglages par rang
-// (20 vec4 : teinte et rugosité ; métallique, transparence, émission, teinte réglée ;
-// puis par carte (couche, intensité, inverser, rotation) et (largeur, hauteur, décalage)
-// en mm, couche < 0 : aucune)
+// (22 vec4 : teinte et rugosité ; métallique, transparence, émission, teinte réglée ;
+// profondeur du relief (mm), hauteur de l'herbe (mm) ; puis par carte (couche,
+// intensité, drapeaux : 1 inverser + 2 anti-répétition, rotation) et (largeur, hauteur,
+// décalage) en mm, couche < 0 : aucune)
 @group(1) @binding(4) var t_apparences: texture_2d_array<f32>;
 @group(1) @binding(5) var s_apparences: sampler;
-@group(1) @binding(6) var<uniform> apparences: array<vec4f, 640>;
+@group(1) @binding(6) var<uniform> apparences: array<vec4f, 704>;
 const MAX_APPARENCES: i32 = 32;
 // ciel physique : vue du ciel depuis le sol (voir `rendu::ciel`)
 @group(1) @binding(7) var t_ciel: texture_2d<f32>;
@@ -241,6 +242,93 @@ fn vs_trait(s: Segment, @builtin(vertex_index) i: u32) -> Varie {
     }
     o.selection = selectionne(select(s.obj_a, s.obj_b, en_b));
     return o;
+}
+
+// Herbe en volume : la surface redessinée en couches (une instance par couche) jusqu'à
+// la hauteur des brins ; chaque couche ne garde que les brins (un par cellule, hauteur
+// et inclinaison tirées au hasard), effilés vers la pointe.
+const COUCHES_HERBE: u32 = 20u;
+
+struct VarieHerbe {
+    @builtin(position) clip: vec4f,
+    @location(0) pos: vec3f,
+    @location(1) n: vec3f,
+    @location(2) @interpolate(flat) rang: i32,
+    @location(3) fraction: f32,
+    @location(4) couleur: vec3f,
+}
+
+@vertex
+fn vs_herbe(s: Sommet, @builtin(instance_index) i: u32) -> VarieHerbe {
+    var o: VarieHerbe;
+    let rang = i32(s.rendu.a * 255.0 + 0.5) - 128;
+    o.rang = rang;
+    var h = 0.0;
+    if rang >= 0 && rang < MAX_APPARENCES {
+        h = apparences[rang * 22 + 2].y * 0.001;
+    }
+    let f = (f32(i) + 1.0) / f32(COUCHES_HERBE);
+    let n = normalize(s.normale.xyz);
+    let p = s.pos + n * h * f;
+    o.pos = p;
+    o.n = n;
+    o.fraction = f;
+    o.couleur = s.rendu.rgb;
+    o.clip = vers_wgpu(passe.mvp * vec4f(p, 1.0));
+    if h <= 0.0 {
+        o.clip = vec4f(2.0, 2.0, 2.0, 1.0);
+    }
+    return o;
+}
+
+@fragment
+fn fs_herbe(e: VarieHerbe) -> @location(0) vec4f {
+    let uvm = select(vec2f(dot(e.pos, normalize(vec3f(-e.n.y, e.n.x, 0.0) + vec3f(1e-6, 0.0, 0.0))), e.pos.z), e.pos.xy, abs(e.n.z) > 0.7);
+    let uv = uvm * 1000.0;
+    let dx = dpdx(uv);
+    let dy = dpdy(uv);
+    let k = e.rang * 22;
+    let dist = length(e.pos - g.eye.xyz);
+    // brins : un par cellule de 20 mm, moins de couches gardées au loin
+    let cellule = floor(uv / 20.0);
+    let local = fract(uv / 20.0) - 0.5;
+    let hb = 0.4 + 0.6 * hachage(cellule + vec2f(2.7, 9.1));
+    // brins effacés quand un brin couvre moins de 2 pixels (pas de moiré), et au loin
+    let empreinte = max(length(dx), length(dy));
+    let fondu = (1.0 - smoothstep(6.0, 30.0, empreinte)) * (1.0 - smoothstep(20.0, 50.0, dist));
+    let t = e.fraction / hb;
+    if t > fondu {
+        discard;
+    }
+    let penche = (vec2f(hachage(cellule), hachage(cellule + vec2f(7.1, 3.3))) - 0.5) * 0.7 * t * t;
+    if length(local - penche) > 0.46 * (1.0 - t) + 0.04 {
+        discard;
+    }
+    var base = e.couleur;
+    if a_carte(k, 0) {
+        base = carte(k, 0, uv, dx, dy).rgb;
+    }
+    // occlusion de la texture, comme la surface
+    if a_carte(k, 5) {
+        base *= mix(1.0, carte(k, 5, uv, dx, dy).r, intensite(k, 5));
+    }
+    // racine sombre, pointe claire ; vers la teinte moyenne du sol quand les brins s'effacent
+    base *= mix(0.78, mix(0.5, 1.0, t) * (0.85 + 0.3 * hachage(cellule + vec2f(5.3, 1.7))), fondu);
+    let ndl = max(dot(e.n, g.soleil.xyz), 0.0);
+    var ombre = 1.0;
+    if passe.drapeaux.w == 1u && ndl > 0.0 {
+        ombre = ensoleillement(e.pos, e.n, ndl, e.clip.xy);
+    }
+    var c: vec3f;
+    if g.ciel[1].w > 0.5 {
+        let li = lumiere();
+        // même éclairage que la surface (soleil, ciel au-dessus), un peu moins de ciel au pied
+        let soleil = li.soleil * ndl * mix(ombre, 1.0, 0.85 * g.ciel[1].y);
+        c = vers_srgb(compresser(vers_lineaire(base) * (soleil + li.e_ciel * mix(0.7, 1.0, t)) * li.k));
+    } else {
+        c = base * (0.45 + 0.55 * ndl * ombre);
+    }
+    return vec4f(c, 1.0);
 }
 
 // Profondeur seule (carte d'ombres, occultation ambiante).
@@ -503,27 +591,51 @@ fn fs_ciel(e: VarieCiel) -> @location(0) vec4f {
 
 // carte j de l'apparence de rang r au point uv (mm, plan de la face), dérivées dx, dy
 fn carte(k: i32, j: i32, uv: vec2f, dx: vec2f, dy: vec2f) -> vec4f {
-    let a = apparences[k + 2 + 2 * j];
-    let b = apparences[k + 3 + 2 * j];
+    let a = apparences[k + 3 + 2 * j];
+    let b = apparences[k + 4 + 2 * j];
     let c = cos(a.w);
     let s = sin(a.w);
     let rot = mat2x2f(c, -s, s, c);
     let taille = max(b.xy, vec2f(1.0));
     let q = rot * (uv - b.zw) / taille;
     let inv = vec2f(1.0, -1.0);
-    var t = textureSampleGrad(t_apparences, s_apparences, vec2f(q.x, 1.0 - q.y), i32(a.x), rot * dx / taille * inv, rot * dy / taille * inv);
-    if a.z > 0.5 {
+    let gx = rot * dx / taille * inv;
+    let gy = rot * dy / taille * inv;
+    var t = textureSampleGrad(t_apparences, s_apparences, vec2f(q.x, 1.0 - q.y), i32(a.x), gx, gy);
+    let drapeaux = u32(a.z + 0.5);
+    if (drapeaux & 2u) != 0u {
+        // anti-répétition : second échantillonnage tourné de 37° et réduit, mélangé selon
+        // un bruit à grande échelle (6 m)
+        let r2 = mat2x2f(0.7986, -0.6018, 0.6018, 0.7986);
+        let q2 = r2 * q * 0.73 + vec2f(0.37, 0.61);
+        let t2 = textureSampleGrad(t_apparences, s_apparences, vec2f(q2.x, 1.0 - q2.y), i32(a.x), r2 * gx * 0.73, r2 * gy * 0.73);
+        let m = bruit_valeur(uv / 6000.0) * 0.65 + bruit_valeur(uv / 1700.0) * 0.35;
+        t = mix(t, t2, smoothstep(0.35, 0.65, m));
+    }
+    if (drapeaux & 1u) != 0u {
         t = vec4f(1.0 - t.rgb, t.a);
     }
     return t;
 }
 
+fn hachage(p: vec2f) -> f32 {
+    return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);
+}
+
+// bruit de valeurs (0..1), lissé
+fn bruit_valeur(p: vec2f) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    let w = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hachage(i), hachage(i + vec2f(1.0, 0.0)), w.x), mix(hachage(i + vec2f(0.0, 1.0)), hachage(i + vec2f(1.0, 1.0)), w.x), w.y);
+}
+
 fn a_carte(k: i32, j: i32) -> bool {
-    return apparences[k + 2 + 2 * j].x >= 0.0;
+    return apparences[k + 3 + 2 * j].x >= 0.0;
 }
 
 fn intensite(k: i32, j: i32) -> f32 {
-    return apparences[k + 2 + 2 * j].y;
+    return apparences[k + 3 + 2 * j].y;
 }
 
 struct Effet {
@@ -539,18 +651,42 @@ struct Effet {
 
 // Apparence de rang r : couleur, rugosité, métallique, relief, normales, occlusion,
 // transparence, découpe et émission (cartes dans l'ordre de `CarteTexture::TOUTES`).
-fn effet_apparence(r: i32, uvm: vec2f, dxm: vec2f, dym: vec2f, n0: vec3f, n: vec3f, base: vec3f) -> Effet {
-    let k = r * 20;
+fn effet_apparence(r: i32, uvm: vec2f, dxm: vec2f, dym: vec2f, n0: vec3f, n: vec3f, base: vec3f, vd: vec3f) -> Effet {
+    let k = r * 22;
     let p0 = apparences[k];
     let p1 = apparences[k + 1];
     // scène en mètres, textures en mm réels
-    let uv = uvm * 1000.0;
+    var uv = uvm * 1000.0;
     let dx = dxm * 1000.0;
     let dy = dym * 1000.0;
     // repère du plan de la face (le même que celui des motifs de surface)
     let vert = abs(n0.z) <= 0.7;
     let u = select(vec3f(1.0, 0.0, 0.0), normalize(vec3f(-n0.y, n0.x, 0.0) + vec3f(1e-6, 0.0, 0.0)), vert);
     let v = select(vec3f(0.0, 1.0, 0.0), vec3f(0.0, 0.0, 1.0), vert);
+    let p2 = apparences[k + 2];
+    // parallaxe (relief) : marche dans la carte de hauteur le long du regard, 16 pas ;
+    // le point trouvé sert à toutes les cartes
+    if a_carte(k, 3) && p2.x > 0.0 {
+        let nf = select(n0, -n0, dot(n0, vd) < 0.0);
+        let vt = vec3f(dot(vd, u), dot(vd, v), max(dot(vd, nf), 0.08));
+        let decal = -vt.xy / vt.z * p2.x * intensite(k, 3);
+        let depart = uv;
+        var couche = 0.0;
+        var precedent = 0.0;
+        for (var i = 0; i < 16; i++) {
+            let profondeur = 1.0 - carte(k, 3, depart + decal * couche, dx, dy).r;
+            if couche >= profondeur {
+                // affinage entre les deux derniers pas
+                let avant = 1.0 - carte(k, 3, depart + decal * precedent, dx, dy).r;
+                let t = clamp((avant - precedent) / max((avant - precedent) - (profondeur - couche), 1e-4), 0.0, 1.0);
+                couche = mix(precedent, couche, t);
+                break;
+            }
+            precedent = couche;
+            couche += 1.0 / 16.0;
+        }
+        uv = depart + decal * couche;
+    }
     var e: Effet;
     e.base = base;
     e.n = n;
@@ -573,11 +709,11 @@ fn effet_apparence(r: i32, uvm: vec2f, dxm: vec2f, dym: vec2f, n0: vec3f, n: vec
     if a_carte(k, 3) {
         // relief : pente de la hauteur (10 mm pour l'échelle complète, joint de maçonnerie)
         // sur un texel
-        let pas = max(apparences[k + 9].xy, vec2f(1.0)) / 512.0;
+        let pas = max(apparences[k + 10].xy, vec2f(1.0)) / 1024.0;
         let h0 = carte(k, 3, uv, dx, dy).r;
         let hx = carte(k, 3, uv + vec2f(pas.x, 0.0), dx, dy).r;
         let hy = carte(k, 3, uv + vec2f(0.0, pas.y), dx, dy).r;
-        let gr = vec2f(hx - h0, hy - h0) / pas * 10.0 * intensite(k, 3);
+        let gr = vec2f(hx - h0, hy - h0) / pas * max(p2.x, 2.0) * intensite(k, 3);
         e.n = normalize(e.n - u * gr.x - v * gr.y);
     }
     if a_carte(k, 4) {
@@ -678,7 +814,7 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
         let rang = i32(e.rendu.a * 255.0 + 0.5) - 128;
         if e.annot == 0u && rang >= 0 && rang < MAX_APPARENCES {
             app = true;
-            fx = effet_apparence(rang, uvm, dxm, dym, n0, n, base);
+            fx = effet_apparence(rang, uvm, dxm, dym, n0, n, base, vd);
             if fx.coupe {
                 discard;
             }
@@ -1064,6 +1200,14 @@ pub struct Renderer {
     ciel: crate::rendu::ciel::Ciel,
     echantillonneur_ciel: wgpu::Sampler,
     pipeline_ciel: wgpu::RenderPipeline,
+    /// Herbe en volume : pipeline, triangles des matériaux à herbe, rang d'apparence des
+    /// sommets, matériaux à herbe, indices opaques (copie).
+    pipeline_herbe: wgpu::RenderPipeline,
+    ebo_herbe: wgpu::Buffer,
+    n_herbe: u32,
+    rangs_sommets: Vec<u8>,
+    herbe_rangs: Vec<bool>,
+    indices_opaques: Vec<u32>,
     images_apparences: std::collections::HashMap<String, (Option<std::time::SystemTime>, Option<Arc<Vec<Vec<u8>>>>)>,
     couches_apparences: Vec<(String, Option<std::time::SystemTime>)>,
 }
@@ -1249,8 +1393,8 @@ impl Renderer {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 6,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: wgpu::BufferSize::new((MAX_APPARENCES * 20 * 16) as u64) },
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: wgpu::BufferSize::new((MAX_APPARENCES * 22 * 16) as u64) },
                     count: None,
                 },
             ],
@@ -1326,6 +1470,7 @@ impl Renderer {
         let coupe = scene("coupe", "vs_main", &tampons_scene, "fs_plat", Some((1, 1.0)), false);
         // fond de ciel : sans tampon de sommets ni écriture de profondeur
         let pipeline_ciel = scene("ciel", "vs_ciel", &[], "fs_ciel", None, true);
+        let pipeline_herbe = scene("herbe", "vs_herbe", &tampons_scene, "fs_herbe", None, false);
 
         // couleur : profondeur aussi écrite dans une texture de ce format
         let profondeur = |label, couleur: Option<wgpu::TextureFormat>, decalage: wgpu::DepthBiasState| {
@@ -1416,7 +1561,7 @@ impl Renderer {
             mipmap_filter: wgpu::MipmapFilterMode::Linear,
             ..Default::default()
         });
-        let uniformes_apparences = Self::tampon(&device, "apparences", &vec![0u8; MAX_APPARENCES * 20 * 16], wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST);
+        let uniformes_apparences = Self::tampon(&device, "apparences", &vec![0u8; MAX_APPARENCES * 22 * 16], wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST);
         let vue_apparences = Self::couches_images(&device, &rs.queue, &[]);
         let ciel = crate::rendu::ciel::Ciel::nouveau(&device);
         let echantillonneur_ciel = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -1431,6 +1576,12 @@ impl Renderer {
             ciel,
             echantillonneur_ciel,
             pipeline_ciel,
+            pipeline_herbe,
+            ebo_herbe: index_vide("herbe"),
+            n_herbe: 0,
+            rangs_sommets: Vec::new(),
+            herbe_rangs: Vec::new(),
+            indices_opaques: Vec::new(),
             vue_apparences,
             echantillonneur_apparences,
             uniformes_apparences,
@@ -1621,16 +1772,17 @@ impl Renderer {
     /// si leur liste ou un fichier a changé).
     pub fn upload_apparences(&mut self, apparences: &[crate::modele::Apparence]) {
         use crate::modele::CarteTexture;
-        let mut u = vec![[0.0f32; 4]; MAX_APPARENCES * 20];
+        let mut u = vec![[0.0f32; 4]; MAX_APPARENCES * 22];
         let mut couches: Vec<(String, Option<std::time::SystemTime>)> = Vec::new();
         let mut images: Vec<Arc<Vec<Vec<u8>>>> = Vec::new();
         for (r, a) in apparences.iter().take(MAX_APPARENCES).enumerate() {
-            let k = r * 20;
+            let k = r * 22;
             let [tr, tg, tb] = a.teinte.unwrap_or([255; 3]).map(|c| c as f32 / 255.0);
             u[k] = [tr, tg, tb, a.rugosite];
             u[k + 1] = [a.metallique, a.transparence, a.emission, if a.teinte.is_some() { 1.0 } else { 0.0 }];
+            u[k + 2] = [a.textures.get(&CarteTexture::Relief).map_or(0.0, |t| t.profondeur as f32), a.herbe, 0.0, 0.0];
             for (j, carte) in CarteTexture::TOUTES.iter().enumerate() {
-                u[k + 2 + 2 * j] = [-1.0, 0.0, 0.0, 0.0];
+                u[k + 3 + 2 * j] = [-1.0, 0.0, 0.0, 0.0];
                 let Some(t) = a.textures.get(carte) else { continue };
                 let (date, image) = self.image_apparence(&t.chemin);
                 let Some(image) = image else { continue };
@@ -1643,11 +1795,14 @@ impl Renderer {
                     }
                     None => continue,
                 };
-                u[k + 2 + 2 * j] = [couche as f32, t.intensite, if t.inverser { 1.0 } else { 0.0 }, (t.rotation as f32).to_radians()];
-                u[k + 3 + 2 * j] = [t.largeur as f32, t.hauteur as f32, t.decalage[0] as f32, t.decalage[1] as f32];
+                let drapeaux = t.inverser as u32 + 2 * t.anti_repetition as u32;
+                u[k + 3 + 2 * j] = [couche as f32, t.intensite, drapeaux as f32, (t.rotation as f32).to_radians()];
+                u[k + 4 + 2 * j] = [t.largeur as f32, t.hauteur as f32, t.decalage[0] as f32, t.decalage[1] as f32];
             }
         }
         self.queue.write_buffer(&self.uniformes_apparences, 0, as_bytes(&u));
+        self.herbe_rangs = apparences.iter().take(MAX_APPARENCES).map(|a| a.herbe > 0.0).collect();
+        self.refaire_herbe();
         if couches != self.couches_apparences {
             self.vue_apparences = Self::couches_images(&self.device, &self.queue, &images);
             self.couches_apparences = couches;
@@ -1656,6 +1811,7 @@ impl Renderer {
 
     /// Sommets et leurs couleurs de rendu (même nombre, alpha 0 : aucune).
     pub fn upload_vertices(&mut self, v: &[Vertex], rendu: &[[u8; 4]], motifs: &[[u8; 4]]) {
+        self.rangs_sommets = rendu.iter().map(|c| if (128..255).contains(&c[3]) { c[3] - 128 } else { 255 }).collect();
         let usage = wgpu::BufferUsages::VERTEX;
         self.sommets = Self::tampon(&self.device, "sommets", as_bytes(v), usage);
         self.rendu = Self::tampon(&self.device, "couleurs de rendu", as_bytes(rendu), usage);
@@ -1681,7 +1837,17 @@ impl Renderer {
 
     /// Indices des triangles opaques, transparents, des traits et des arêtes vives
     /// (paires) à tracer.
+    /// Triangles opaques dont le matériau porte de l'herbe (rang d'apparence du premier
+    /// sommet).
+    fn refaire_herbe(&mut self) {
+        let herbe = |i: u32| self.rangs_sommets.get(i as usize).and_then(|&r| self.herbe_rangs.get(r as usize)).copied().unwrap_or(false);
+        let tris: Vec<u32> = self.indices_opaques.chunks_exact(3).filter(|t| herbe(t[0])).flatten().copied().collect();
+        self.n_herbe = tris.len() as u32;
+        self.ebo_herbe = Self::tampon(&self.device, "herbe", if tris.is_empty() { &[0u8; 16] } else { as_bytes(&tris) }, wgpu::BufferUsages::INDEX);
+    }
+
     pub fn upload_indices(&mut self, opaque: &[u32], transp: &[u32], lines: &[u32], aretes: &[u32]) {
+        self.indices_opaques = opaque.to_vec();
         let usage = wgpu::BufferUsages::INDEX;
         self.ebo_opaque = Self::tampon(&self.device, "opaques", as_bytes(opaque), usage);
         self.ebo_transp = Self::tampon(&self.device, "transparents", as_bytes(transp), usage);
@@ -1689,6 +1855,7 @@ impl Renderer {
         (self.segments_aretes, self.n_aretes) = self.segments("arêtes", aretes);
         self.n_opaque = opaque.len() as u32;
         self.n_transp = transp.len() as u32;
+        self.refaire_herbe();
     }
 
     /// Tracé de la coupe du mode dessin : triangles (poché, contours) et traits (hachures).
@@ -1996,6 +2163,12 @@ impl Renderer {
                 passe.draw(0..3, 0..1);
             }
             self.sommets_scene(&mut passe);
+            // herbe en volume (style Réaliste)
+            if p.ciel.is_some() && self.n_herbe > 0 {
+                passe.set_pipeline(&self.pipeline_herbe);
+                passe.set_index_buffer(self.ebo_herbe.slice(..), wgpu::IndexFormat::Uint32);
+                passe.draw_indexed(0..self.n_herbe, 0, 0..20);
+            }
             let graphique = p.style == StyleVisuel::Graphique;
             self.dessiner(&mut passe, [&self.ebo_opaque, &self.ebo_transp, &self.segments_traits], [self.n_opaque, self.n_transp, self.n_lines], graphique);
             // tracé de la coupe (poché, contours, hachures) : non découpé par le plan de coupe

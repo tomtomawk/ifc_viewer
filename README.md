@@ -256,3 +256,9 @@ Il est produit par `tools/projet_demo_ilot.py` (numpy, Pillow).
 diamètre du houppier, décalage ; symbole en plan, géométrie générée (variée d'un arbre à
 l'autre), matériaux « Feuillage » et « Écorce » du projet s'ils existent. Le champ
 `asset` est réservé au remplacement par un modèle de bibliothèque dans le style Réaliste.
+
+Texture de pelouse de l'îlot (`samples/ilot_demo/textures/herbe_*.jpg`) : « Grass004 »
+d'[ambientCG](https://ambientcg.com), licence CC0.
+
+**Apparence avancée** : anti-répétition par texture, parallaxe sur la carte de relief
+(profondeur en mm), herbe en volume (hauteur des brins) dans le style Réaliste.

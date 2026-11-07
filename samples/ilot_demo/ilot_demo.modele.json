@@ -3259,7 +3259,8 @@
       "chemin": "textures/brique_relief.png",
       "largeur": 920,
       "hauteur": 600,
-      "intensite": 0.8
+      "intensite": 0.8,
+      "profondeur": 12
      }
     }
    }
@@ -3468,11 +3469,40 @@
    "motif": "diagonales",
    "apparence": {
     "rugosite": 0.95,
+    "herbe": 60,
     "textures": {
      "Couleur": {
-      "chemin": "textures/pelouse.png",
-      "largeur": 2000,
-      "hauteur": 2000
+      "chemin": "textures/herbe_diff.jpg",
+      "largeur": 1500,
+      "hauteur": 1500,
+      "anti_repetition": true
+     },
+     "Normale": {
+      "chemin": "textures/herbe_nor_gl.jpg",
+      "largeur": 1500,
+      "hauteur": 1500,
+      "anti_repetition": true,
+      "intensite": 0.8
+     },
+     "Relief": {
+      "chemin": "textures/herbe_disp.jpg",
+      "largeur": 1500,
+      "hauteur": 1500,
+      "anti_repetition": true,
+      "profondeur": 15,
+      "intensite": 1.0
+     },
+     "Rugosite": {
+      "chemin": "textures/herbe_rough.jpg",
+      "largeur": 1500,
+      "hauteur": 1500,
+      "anti_repetition": true
+     },
+     "Occlusion": {
+      "chemin": "textures/herbe_ao.jpg",
+      "largeur": 1500,
+      "hauteur": 1500,
+      "anti_repetition": true
      }
     }
    }
@@ -3516,7 +3546,8 @@
       "chemin": "textures/paves_relief.png",
       "largeur": 800,
       "hauteur": 800,
-      "intensite": 0.5
+      "intensite": 0.8,
+      "profondeur": 10
      }
     }
    }
