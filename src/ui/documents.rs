@@ -322,6 +322,7 @@ impl ViewerApp {
             self.enregistrer_rvt_dialogue(ctx);
             return;
         }
+        self.enregistrer_rendu_vue();
         let Some((projet, chemin)) = &self.natif else { return };
         match crate::modele::echanges::enregistrement::enregistrer_natif(projet, chemin) {
             Ok(()) => {

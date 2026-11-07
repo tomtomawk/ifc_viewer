@@ -479,6 +479,7 @@ impl ViewerApp {
                         ui.close();
                     }
                     if change {self.visibility_dirty=true;}
+                    if !ui.input(|i| i.pointer.any_down()) {self.enregistrer_rendu_vue();}
                 });
                 icone_soleil(ui.painter(),ombres.rect.shrink(5.0),ui.visuals().text_color());
                 ombres.on_hover_text("Ombres");

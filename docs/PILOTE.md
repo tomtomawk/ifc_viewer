@@ -165,6 +165,9 @@ Raccourcis existants :
 - `style filaire|lignes_cachees|ombre|couleurs|realiste|rendu` ; `dessin oui|non` ; `traits_fins oui|non`.
 - `soleil jour mois heure` : date (sans année) et heure légale (heures décimales) du soleil de la vue ;
   rend `azimut` et `hauteur` (degrés), calculés au lieu du projet (`projet.lieu`, Rennes par défaut).
+- `ciel [JSON]` : lit ou modifie les réglages du ciel physique de la vue (`ambiance` Clair|Voile|Nuageux|Couvert|Brumeux,
+  `nuages`, `brume`, `intensite_soleil`, `intensite_ciel`, `taille_soleil`, `sol`, `exposition_auto`, `exposition` en EV).
+  Style, ombres, soleil et ciel sont enregistrés par vue dans `projet.rendus_vues`.
 - `ombres portees|ambiante oui|non` ; `coupe non` ou `coupe hauteur [niveau]` ; `niveaux` ;
   `poche hachure|plein|vide` ; `echelle denominateur`.
 - `capture vue|fenetre [LxH] <chemin.png>` ; `taille largeur hauteur` ; `reduire` ; `restaurer`.

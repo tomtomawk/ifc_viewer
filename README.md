@@ -232,3 +232,17 @@ de mur. La croix et les marqueurs montrent le point retenu.
 Fermer le dernier onglet ferme aussi son projet, après la demande d'enregistrement
 si nécessaire. Fermer un fichier vide les buffers de rendu avant de revenir à un
 autre document ou à l'écran d'accueil.
+
+## Soleil et ciel physique
+
+**Début → Lieu** fixe la position géographique du projet (ville, coordonnées collées
+depuis une carte, fuseau, heure d'été). Le menu **Ombres** de la barre de vue règle
+la date (sans année) et l'heure du soleil ; **Ciel…** ouvre les réglages du ciel
+physique du style Réaliste (ambiance, nuages, brume, intensités, taille du soleil,
+sol, exposition). Style, ombres, soleil et ciel sont enregistrés avec chaque vue
+(`rendus_vues` du projet, « 3d » pour la vue 3D).
+
+Le ciel (`src/rendu/ciel.rs`) suit la méthode de Hillaire (EGSR 2020) et reprend en
+la réadaptant l'implémentation du module `atmosphere` de
+[Bevy](https://github.com/bevyengine/bevy) 0.20, distribué sous licence MIT ou
+Apache 2.0 (Copyright © Bevy Contributors).

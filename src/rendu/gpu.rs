@@ -35,6 +35,11 @@ struct Globales {
     contour: array<vec4f, 64>,
     // x : nombre d'objets de la texture de sélection
     selection: vec4u,
+    // inverse de la matrice de vue (rayons du fond de ciel)
+    inv_vp: mat4x4f,
+    // ciel physique : [0] couleur du soleil (rgb), exposition fixe (w, 0 : auto) ;
+    // [1] intensité du ciel, nuages, taille du soleil, actif ; [2] albédo du sol
+    ciel: array<vec4f, 3>,
 }
 
 // Uniformes d'un dessin : matrice, direction de vue, plan de coupe du mode dessin,
@@ -72,6 +77,9 @@ const SCENE: &str = r#"
 @group(1) @binding(5) var s_apparences: sampler;
 @group(1) @binding(6) var<uniform> apparences: array<vec4f, 640>;
 const MAX_APPARENCES: i32 = 32;
+// ciel physique : vue du ciel depuis le sol (voir `rendu::ciel`)
+@group(1) @binding(7) var t_ciel: texture_2d<f32>;
+@group(1) @binding(8) var s_ciel: sampler;
 
 struct Sommet {
     @location(0) pos: vec3f,
@@ -323,7 +331,7 @@ fn ensoleillement(p: vec3f, n: vec3f, ndl: f32, pixel: vec2f) -> f32 {
     }
     // ligne 0 de la texture en haut
     let q = vec3f(q0.x, 1.0 - q0.y, q0.z);
-    let pas = 1.6 / vec2f(textureDimensions(t_ombres));
+    let pas = 1.6 * select(1.0, g.ciel[1].z, g.ciel[1].w > 0.5) / vec2f(textureDimensions(t_ombres));
     let a = 6.2831853 * fract(52.9829189 * fract(dot(pixel, vec2f(0.06711056, 0.00583715))));
     let r = mat2x2f(cos(a), sin(a), -sin(a), cos(a));
     var s = 0.0;
@@ -339,6 +347,132 @@ fn ensoleillement(p: vec3f, n: vec3f, ndl: f32, pixel: vec2f) -> f32 {
 fn occultation(pixel: vec2f) -> f32 {
     let t = vec2i(textureDimensions(t_ao));
     return textureLoad(t_ao, clamp(vec2i(pixel), vec2i(0), t - 1), 0).r;
+}
+
+// Ciel physique : luminance de la vue du ciel dans la direction d (même paramétrage
+// que la table, voir `rendu::ciel`).
+fn lut_ciel(d0: vec3f) -> vec3f {
+    let d = normalize(d0);
+    let r = 6360200.0;
+    let rs = 6360000.0;
+    let n = vec2f(192.0, 108.0);
+    let u = atan2(d.y, d.x) / 6.2831853 + 0.5;
+    let horizon = 3.14159265 - acos(sqrt(r * r - rs * rs) / r);
+    let l = acos(clamp(d.z, -1.0, 1.0)) - horizon;
+    let v = 0.5 + 0.5 * sign(l) * sqrt(abs(l) / 1.5707963);
+    let uv = (vec2f(u, v) + 0.5 / n) * (n / (n + 1.0));
+    // lignes du haut de la table : zénith
+    return textureSampleLevel(t_ciel, s_ciel, uv, 0.0).rgb;
+}
+
+fn luminance(c: vec3f) -> f32 {
+    return dot(c, vec3f(0.2126, 0.7152, 0.0722));
+}
+
+struct Lumiere {
+    soleil: vec3f,
+    // éclairement du ciel sur une face horizontale tournée vers le haut
+    e_ciel: vec3f,
+    // luminance au zénith d'un ciel couvert (ciel couvert CIE)
+    gris: vec3f,
+    // exposition
+    k: f32,
+}
+
+// Soleil (transmis par l'atmosphère, voilé par les nuages), éclairement du ciel et
+// exposition (automatique : face horizontale au soleil ramenée à 1).
+fn lumiere() -> Lumiere {
+    var li: Lumiere;
+    let zenith = lut_ciel(vec3f(0.0, 0.0, 1.0));
+    var horizon = vec3f(0.0);
+    for (var i = 0; i < 6; i++) {
+        let a = f32(i) * 1.0471976;
+        horizon += lut_ciel(vec3f(cos(a), sin(a), 0.25)) / 6.0;
+    }
+    let e_clair = 3.14159265 * (0.45 * zenith + 0.55 * horizon) * g.ciel[1].x;
+    let hauteur = max(g.soleil.z, 0.0);
+    let nuages = g.ciel[1].y;
+    // couvert : les nuages laissent passer le quart de la lumière du jour clair ; ciel
+    // couvert CIE, L(h) = Lz (1 + 2 sin h) / 3, éclairement 7π/9 Lz
+    let e_couvert = luminance(g.ciel[0].rgb * hauteur + e_clair) * 0.25;
+    li.gris = vec3f(e_couvert * 9.0 / (7.0 * 3.14159265)) * vec3f(0.97, 0.99, 1.0);
+    li.e_ciel = mix(e_clair, li.gris * (7.0 * 3.14159265 / 9.0), nuages);
+    li.soleil = g.ciel[0].rgb * (1.0 - 0.92 * nuages);
+    let e = luminance(li.soleil) * hauteur + luminance(li.e_ciel);
+    // automatique : face horizontale ramenée à 0,9 ; plafonnée au crépuscule (le ciel
+    // ne devient pas blanc quand la lumière baisse)
+    let e_jour = luminance(g.ciel[0].rgb) * 0.25 + 0.04;
+    li.k = select(0.9 / max(e, max(e_jour, 0.02)), g.ciel[0].w, g.ciel[0].w > 0.0);
+    return li;
+}
+
+// luminance du ciel vu dans la direction d (nuages : vers le gris du ciel couvert)
+fn radiance_ciel(d: vec3f, li: Lumiere) -> vec3f {
+    let horizon = normalize(vec3f(d.xy, 0.0) + vec3f(1e-6, 0.0, 0.0));
+    let couvert = li.gris * (1.0 + 2.0 * max(d.z, 0.0)) / 3.0;
+    if d.z >= 0.0 {
+        return mix(lut_ciel(d) * g.ciel[1].x, couvert, g.ciel[1].y);
+    }
+    // sol : albédo sous l'éclairement du soleil et du ciel, voilé vers l'horizon
+    let sol = g.ciel[2].rgb * (li.soleil * max(g.soleil.z, 0.0) + li.e_ciel) / 3.14159265;
+    let voile = mix(lut_ciel(horizon) * g.ciel[1].x, li.gris / 3.0, g.ciel[1].y);
+    return mix(sol, voile, exp(d.z * 25.0));
+}
+
+fn vers_lineaire(c: vec3f) -> vec3f {
+    return pow(max(c, vec3f(0.0)), vec3f(2.2));
+}
+
+fn vers_srgb(c: vec3f) -> vec3f {
+    return pow(max(c, vec3f(0.0)), vec3f(1.0 / 2.2));
+}
+
+// compression douce des hautes lumières (au-delà de 0,8)
+fn compresser(c: vec3f) -> vec3f {
+    let x = max(c - 0.8, vec3f(0.0));
+    return min(c, vec3f(0.8)) + 0.2 * (1.0 - exp(-x / 0.2));
+}
+
+// Fond de ciel : triangle plein écran au plus loin.
+struct VarieCiel {
+    @builtin(position) clip: vec4f,
+    @location(0) ndc: vec2f,
+}
+
+@vertex
+fn vs_ciel(@builtin(vertex_index) i: u32) -> VarieCiel {
+    var o: VarieCiel;
+    let p = vec2f(f32((i << 1u) & 2u), f32(i & 2u)) * 2.0 - 1.0;
+    o.clip = vec4f(p, 1.0, 1.0);
+    o.ndc = p;
+    return o;
+}
+
+fn point_ecran(ndc: vec2f, z: f32) -> vec3f {
+    let q = g.inv_vp * vec4f(ndc, z, 1.0);
+    return q.xyz / q.w;
+}
+
+@fragment
+fn fs_ciel(e: VarieCiel) -> @location(0) vec4f {
+    let pres = point_ecran(e.ndc, -1.0);
+    var d = normalize(point_ecran(e.ndc, 1.0) - pres);
+    // vue orthographique : rayons parallèles, ouverts comme une perspective de 60°
+    if g.eye.w > 0.5 {
+        let centre = point_ecran(vec2f(0.0), -1.0);
+        let demi = max(length(point_ecran(vec2f(1.0, 0.0), -1.0) - centre), 1e-6);
+        d = normalize(d + (pres - centre) / demi * 0.58);
+    }
+    let li = lumiere();
+    // luminance du ciel à l'échelle des surfaces (blanc diffus : éclairement / π)
+    var c = radiance_ciel(d, li) * li.k * 3.14159265;
+    // disque du soleil (0,27° de rayon apparent, agrandi par la taille du soleil)
+    let rayon = 0.0047 * g.ciel[1].z;
+    let a = acos(clamp(dot(d, g.soleil.xyz), -1.0, 1.0));
+    let w = max(fwidth(a), 1e-5);
+    let disque = 1.0 - smoothstep(rayon - w, rayon + w, a);
+    c += li.soleil * li.k * disque * 40.0 * select(1.0, 0.0, d.z < 0.0);
+    return vec4f(vers_srgb(compresser(c)), 1.0);
 }
 
 // carte j de l'apparence de rang r au point uv (mm, plan de la face), dérivées dx, dy
@@ -501,6 +635,13 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
         base = e.motif.yzw;
     }
     var d: f32;
+    // ciel physique (style Réaliste) : soleil, ciel et exposition
+    let physique = materiaux && g.ciel[1].w > 0.5;
+    var li: Lumiere;
+    if physique {
+        li = lumiere();
+    }
+    var eclairement = vec3f(1.0);
     // apparence du matériau (rang codé dans l'alpha de la couleur de rendu : 128 + rang)
     var app = false;
     var fx: Effet;
@@ -519,10 +660,25 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
             n = fx.n;
             ao *= fx.occl;
         }
+        // calcul physique en valeurs linéaires (retour en sRGB à la fin)
+        if physique {
+            base = vers_lineaire(base);
+            if app {
+                fx.base = vers_lineaire(fx.base);
+            }
+        }
         let ndl = max(dot(n, g.soleil.xyz), 0.0);
         // ciel (hémisphère), soleil, un peu de lumière vers l'œil ; l'occultation éteint
         // surtout le ciel, un peu le soleil
         d = (0.30 + 0.28 * (0.5 + 0.5 * n.z)) * ao + 0.62 * ndl * ombre * mix(1.0, ao, 0.35) + 0.05 * max(dot(n, vd), 0.0);
+        if physique {
+            // ciel au-dessus, sol (albédo) au-dessous ; ombres adoucies par les nuages
+            let e_sol = g.ciel[2].rgb * (luminance(li.soleil) * max(g.soleil.z, 0.0) + luminance(li.e_ciel));
+            let e_n = li.e_ciel * (0.5 + 0.5 * n.z) + e_sol * (0.5 - 0.5 * n.z);
+            let ombre_n = mix(ombre, 1.0, 0.85 * g.ciel[1].y);
+            eclairement = (li.soleil * ndl * ombre_n * mix(1.0, ao, 0.35) + e_n * ao) * li.k;
+            d = 1.0;
+        }
     } else if sans_eclairage || blanc {
         // aplats : les ombres assombrissent sans éclairer
         d = (1.0 - 0.35 * select(0.0, 1.0 - ombre, ndl > 0.0)) * mix(0.55, 1.0, ao);
@@ -531,7 +687,7 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
         let sun = select(normalize(vec3f(0.35, 0.25, 0.9)), g.soleil.xyz, portees);
         d = 0.50 * ao + 0.38 * max(dot(n, sun), 0.0) * ombre + 0.12 * max(dot(n, fill), 0.0) * ao + 0.12 * max(dot(n, vd), 0.0);
     }
-    var c = base * d;
+    var c = base * d * eclairement;
     var a = e.c.a;
     if app {
         // reflet du soleil (rugosité, métallique) et émission
@@ -541,16 +697,21 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
         // reflet du ciel (ciel bleuté en haut, sol chaud en bas) : part de Fresnel (Schlick),
         // estompée par la rugosité ; un métal reflète dans sa couleur
         let rv = reflect(-vd, n);
-        let ciel = mix(vec3f(0.42, 0.40, 0.37), mix(vec3f(0.80, 0.86, 0.93), vec3f(0.45, 0.62, 0.85), smoothstep(0.0, 0.8, rv.z)), smoothstep(-0.15, 0.05, rv.z));
+        var ciel = mix(vec3f(0.42, 0.40, 0.37), mix(vec3f(0.80, 0.86, 0.93), vec3f(0.45, 0.62, 0.85), smoothstep(0.0, 0.8, rv.z)), smoothstep(-0.15, 0.05, rv.z));
+        var soleil_reflet = vec3f(1.0);
+        if physique {
+            ciel = radiance_ciel(rv, li) * li.k * 3.14159265;
+            soleil_reflet = li.soleil * li.k;
+        }
         let f0 = mix(vec3f(0.04), fx.base, fx.metal);
         let fresnel = f0 + (1.0 - f0) * pow(1.0 - max(dot(n, vd), 0.0), 5.0);
         let poli = (1.0 - fx.rug) * (1.0 - fx.rug);
         let part = fresnel * poli;
-        c = c * (1.0 - part) + ciel * part * mix(1.0, ao, 0.5) + mix(vec3f(0.6), f0, fx.metal) * reflet * 2.0 + fx.emis;
-        c = min(c, vec3f(1.0));
+        c = c * (1.0 - part) + ciel * part * mix(1.0, ao, 0.5) + mix(vec3f(0.6), f0, fx.metal) * reflet * 2.0 * soleil_reflet + fx.emis;
         // le verre reflète : plus opaque en vue rasante
         a = max(fx.alpha, max(part.r, max(part.g, part.b)));
     }
+    c = select(min(c, vec3f(1.0)), vers_srgb(compresser(c)), physique);
     if motifs && arriere != 0 {
         c = mix(c, e.c.rgb, trait_arriere);
     }
@@ -736,6 +897,8 @@ struct Globales {
     table_motifs: [[f32; 4]; 14],
     contour: [[f32; 4]; 64],
     selection: [u32; 4],
+    inv_vp: [f32; 16],
+    ciel: [[f32; 4]; 3],
 }
 
 #[repr(C)]
@@ -837,6 +1000,10 @@ pub struct Renderer {
     vue_apparences: wgpu::TextureView,
     echantillonneur_apparences: wgpu::Sampler,
     uniformes_apparences: wgpu::Buffer,
+    /// Ciel physique : tables, échantillonneur (azimut répété) et passe du fond.
+    ciel: crate::rendu::ciel::Ciel,
+    echantillonneur_ciel: wgpu::Sampler,
+    pipeline_ciel: wgpu::RenderPipeline,
     images_apparences: std::collections::HashMap<String, (Option<std::time::SystemTime>, Option<Arc<Vec<Vec<u8>>>>)>,
     couches_apparences: Vec<(String, Option<std::time::SystemTime>)>,
 }
@@ -877,6 +1044,20 @@ impl StyleVisuel {
     }
 }
 
+/// Réglages du ciel physique d'une image.
+#[derive(Clone, Copy, Debug)]
+pub struct CielRendu {
+    pub brume: f32,
+    pub nuages: f32,
+    pub intensite_soleil: f32,
+    pub intensite_ciel: f32,
+    pub taille_soleil: f32,
+    /// Albédo du sol (linéaire, 0 à 1).
+    pub sol: [f32; 3],
+    /// Exposition fixe (EV), None : automatique.
+    pub exposition: Option<f32>,
+}
+
 pub struct FrameParams {
     pub mvp: Mat4,
     pub eye: Vec3,
@@ -903,6 +1084,8 @@ pub struct FrameParams {
     pub soleil: Option<(Vec3, Mat4, f32)>,
     /// Direction vers le soleil (date, heure et lieu de la vue), aussi sans ombres portées.
     pub direction_soleil: Vec3,
+    /// Ciel physique (style Réaliste) : fond, lumière du soleil et du ciel, reflets.
+    pub ciel: Option<CielRendu>,
     /// Ombre ambiante : matrice de projection de la caméra, rayon
     /// (unités de la scène).
     pub ao: Option<(Mat4, f32)>,
@@ -988,6 +1171,18 @@ impl Renderer {
                     count: None,
                 },
                 wgpu::BindGroupLayoutEntry {
+                    binding: 7,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 8,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
                     binding: 6,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: wgpu::BufferSize::new((MAX_APPARENCES * 20 * 16) as u64) },
@@ -1064,6 +1259,8 @@ impl Renderer {
         let transparent = scene("transparents", "vs_main", &tampons_scene, "fs_main", Some((1, 1.0)), true);
         let traits = scene("traits", "vs_trait", &tampons_segment, "fs_plat", None, false);
         let coupe = scene("coupe", "vs_main", &tampons_scene, "fs_plat", Some((1, 1.0)), false);
+        // fond de ciel : sans tampon de sommets ni écriture de profondeur
+        let pipeline_ciel = scene("ciel", "vs_ciel", &[], "fs_ciel", None, true);
 
         // couleur : profondeur aussi écrite dans une texture de ce format
         let profondeur = |label, couleur: Option<wgpu::TextureFormat>, decalage: wgpu::DepthBiasState| {
@@ -1156,7 +1353,19 @@ impl Renderer {
         });
         let uniformes_apparences = Self::tampon(&device, "apparences", &vec![0u8; MAX_APPARENCES * 20 * 16], wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST);
         let vue_apparences = Self::couches_images(&device, &rs.queue, &[]);
+        let ciel = crate::rendu::ciel::Ciel::nouveau(&device);
+        let echantillonneur_ciel = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("ciel"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
         Ok(Renderer {
+            ciel,
+            echantillonneur_ciel,
+            pipeline_ciel,
             vue_apparences,
             echantillonneur_apparences,
             uniformes_apparences,
@@ -1481,6 +1690,15 @@ impl Renderer {
             g.contour[k / 2][2 * (k % 2)..2 * (k % 2) + 2].copy_from_slice(&[q.x, q.y]);
         }
         g.selection[0] = p.selected.len() as u32;
+        g.inv_vp = p.mvp.inverse().to_cols_array();
+        g.ciel[1] = [1.0, 0.0, 1.0, 0.0];
+        if let Some(c) = p.ciel {
+            self.ciel.preparer(&self.device, &self.queue, p.direction_soleil, c.brume, c.sol);
+            let soleil = crate::rendu::ciel::couleur_soleil(p.direction_soleil, c.brume) * c.intensite_soleil;
+            g.ciel[0] = [soleil.x, soleil.y, soleil.z, c.exposition.map_or(0.0, |ev| 2f32.powf(ev))];
+            g.ciel[1] = [c.intensite_ciel, c.nuages.clamp(0.0, 1.0), c.taille_soleil.max(0.1), 1.0];
+            g.ciel[2] = [c.sol[0], c.sol[1], c.sol[2], 0.0];
+        }
         self.queue.write_buffer(&self.globales, 0, as_bytes(std::slice::from_ref(&g)));
 
         // dessins : modèle (réglages de la vue), tracé de la coupe, profondeurs, fenêtres
@@ -1638,6 +1856,8 @@ impl Renderer {
                 wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(&self.vue_apparences) },
                 wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::Sampler(&self.echantillonneur_apparences) },
                 wgpu::BindGroupEntry { binding: 6, resource: self.uniformes_apparences.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::TextureView(&self.ciel.vue_ciel) },
+                wgpu::BindGroupEntry { binding: 8, resource: wgpu::BindingResource::Sampler(&self.echantillonneur_ciel) },
             ],
         });
 
@@ -1694,6 +1914,10 @@ impl Renderer {
             let mut passe = passe_couleur(&mut enc, true);
             passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_MODELE));
             passe.set_bind_group(1, &groupe_1, &[]);
+            if p.ciel.is_some() && p.passes.is_empty() {
+                passe.set_pipeline(&self.pipeline_ciel);
+                passe.draw(0..3, 0..1);
+            }
             self.sommets_scene(&mut passe);
             let graphique = p.style == StyleVisuel::Graphique;
             self.dessiner(&mut passe, [&self.ebo_opaque, &self.ebo_transp, &self.segments_traits], [self.n_opaque, self.n_transp, self.n_lines], graphique);

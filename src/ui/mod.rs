@@ -371,7 +371,7 @@ struct EtatVue {
     soleil_jour: u32,
     soleil_mois: u32,
     soleil_heure: f32,
-    ciel: soleil::ReglagesCiel,
+    ciel: crate::modele::soleil::ReglagesCiel,
     coupe: bool,
     coupe_niveau: Option<Id>,
     coupe_hauteur: f32,
@@ -575,7 +575,7 @@ pub struct ViewerApp {
     soleil_mois: u32,
     soleil_heure: f32,
     /// Ciel physique de la vue (réglages) et fenêtre Ciel ouverte.
-    ciel: soleil::ReglagesCiel,
+    ciel: crate::modele::soleil::ReglagesCiel,
     ciel_ouvert: bool,
     /// Pente donnée à une arête cochée (degrés), la dernière saisie.
     pente_defaut: f64,

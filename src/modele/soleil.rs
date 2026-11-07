@@ -126,6 +126,95 @@ pub fn direction(azimut: f64, hauteur: f64, nord: f64) -> [f64; 3] {
     [c * x - s * y, s * x + c * y, h.sin()]
 }
 
+/// Ambiances de ciel, comme les préréglages d'Enscape.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AmbianceCiel {
+    Clair,
+    Voile,
+    Nuageux,
+    Couvert,
+    Brumeux,
+}
+
+impl AmbianceCiel {
+    pub const TOUTES: [AmbianceCiel; 5] = [Self::Clair, Self::Voile, Self::Nuageux, Self::Couvert, Self::Brumeux];
+    pub fn nom(self) -> &'static str {
+        match self {
+            Self::Clair => "Ciel clair",
+            Self::Voile => "Légèrement voilé",
+            Self::Nuageux => "Nuageux",
+            Self::Couvert => "Couvert",
+            Self::Brumeux => "Brumeux",
+        }
+    }
+    /// Réglages de l'ambiance (brume, nuages, intensités), le reste inchangé.
+    pub fn appliquer(self, c: &mut ReglagesCiel) {
+        let (brume, nuages, soleil, ciel) = match self {
+            Self::Clair => (0.15, 0.0, 1.0, 1.0),
+            Self::Voile => (0.35, 0.25, 0.85, 1.0),
+            Self::Nuageux => (0.3, 0.55, 0.7, 0.9),
+            Self::Couvert => (0.45, 0.95, 0.15, 0.75),
+            Self::Brumeux => (0.85, 0.2, 0.5, 0.85),
+        };
+        c.ambiance = self;
+        c.brume = brume;
+        c.nuages = nuages;
+        c.intensite_soleil = soleil;
+        c.intensite_ciel = ciel;
+    }
+}
+
+/// Réglages simples du ciel physique d'une vue (style Réaliste).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(default)]
+pub struct ReglagesCiel {
+    pub ambiance: AmbianceCiel,
+    /// Brume (aérosols) : 0 air pur, 1 très brumeux.
+    pub brume: f32,
+    /// Couverture nuageuse : 0 à 1.
+    pub nuages: f32,
+    /// Intensité du soleil et du ciel (1 : valeur physique).
+    pub intensite_soleil: f32,
+    pub intensite_ciel: f32,
+    /// Taille apparente du soleil (1 : réelle, plus grand : ombres plus douces).
+    pub taille_soleil: f32,
+    /// Couleur du sol vu à l'horizon et renvoyée vers le ciel.
+    pub sol: [u8; 3],
+    /// Exposition automatique, sinon valeur d'exposition fixe (EV).
+    pub exposition_auto: bool,
+    pub exposition: f32,
+}
+
+impl Default for ReglagesCiel {
+    fn default() -> Self {
+        let mut c = ReglagesCiel { ambiance: AmbianceCiel::Clair, brume: 0.0, nuages: 0.0, intensite_soleil: 1.0, intensite_ciel: 1.0, taille_soleil: 1.0, sol: [120, 115, 100], exposition_auto: true, exposition: 0.0 };
+        AmbianceCiel::Clair.appliquer(&mut c);
+        c
+    }
+}
+
+/// Réglages de rendu d'une vue enregistrés avec elle : style, ombres, soleil (date sans
+/// année, heure légale) et ciel physique.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(default)]
+pub struct RenduVue {
+    /// Style visuel (« graphique », « realiste »), None : celui du genre de vue.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<String>,
+    pub ombres_portees: bool,
+    pub ombre_ambiante: bool,
+    pub jour: u32,
+    pub mois: u32,
+    pub heure: f32,
+    pub ciel: ReglagesCiel,
+}
+
+impl Default for RenduVue {
+    fn default() -> Self {
+        RenduVue { style: None, ombres_portees: false, ombre_ambiante: false, jour: 21, mois: 6, heure: 15.0, ciel: ReglagesCiel::default() }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,73 +1,7 @@
 //! Lieu du projet (Début), date et heure du soleil de la vue (menu Ombres) et réglages
 //! du ciel physique (fenêtre Ciel, pas encore reliée au rendu).
 use super::*;
-use crate::modele::soleil::{self, Lieu};
-
-/// Ambiances de ciel, comme les préréglages d'Enscape.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum AmbianceCiel {
-    Clair,
-    Voile,
-    Nuageux,
-    Couvert,
-    Brumeux,
-}
-
-impl AmbianceCiel {
-    pub const TOUTES: [AmbianceCiel; 5] = [Self::Clair, Self::Voile, Self::Nuageux, Self::Couvert, Self::Brumeux];
-    pub fn nom(self) -> &'static str {
-        match self {
-            Self::Clair => "Ciel clair",
-            Self::Voile => "Légèrement voilé",
-            Self::Nuageux => "Nuageux",
-            Self::Couvert => "Couvert",
-            Self::Brumeux => "Brumeux",
-        }
-    }
-    /// Réglages de l'ambiance (brume, nuages, intensités), le reste inchangé.
-    fn appliquer(self, c: &mut ReglagesCiel) {
-        let (brume, nuages, soleil, ciel) = match self {
-            Self::Clair => (0.15, 0.0, 1.0, 1.0),
-            Self::Voile => (0.35, 0.25, 0.85, 1.0),
-            Self::Nuageux => (0.3, 0.55, 0.7, 0.9),
-            Self::Couvert => (0.45, 0.95, 0.15, 0.75),
-            Self::Brumeux => (0.85, 0.2, 0.5, 0.85),
-        };
-        c.ambiance = self;
-        c.brume = brume;
-        c.nuages = nuages;
-        c.intensite_soleil = soleil;
-        c.intensite_ciel = ciel;
-    }
-}
-
-/// Réglages simples du ciel physique d'une vue (style Réaliste).
-#[derive(Clone, Debug, PartialEq)]
-pub struct ReglagesCiel {
-    pub ambiance: AmbianceCiel,
-    /// Brume (aérosols) : 0 air pur, 1 très brumeux.
-    pub brume: f32,
-    /// Couverture nuageuse : 0 à 1.
-    pub nuages: f32,
-    /// Intensité du soleil et du ciel (1 : valeur physique).
-    pub intensite_soleil: f32,
-    pub intensite_ciel: f32,
-    /// Taille apparente du soleil (1 : réelle, plus grand : ombres plus douces).
-    pub taille_soleil: f32,
-    /// Couleur du sol vu à l'horizon et renvoyée vers le ciel.
-    pub sol: [u8; 3],
-    /// Exposition automatique, sinon valeur d'exposition fixe (EV).
-    pub exposition_auto: bool,
-    pub exposition: f32,
-}
-
-impl Default for ReglagesCiel {
-    fn default() -> Self {
-        let mut c = ReglagesCiel { ambiance: AmbianceCiel::Clair, brume: 0.0, nuages: 0.0, intensite_soleil: 1.0, intensite_ciel: 1.0, taille_soleil: 1.0, sol: [120, 115, 100], exposition_auto: true, exposition: 0.0 };
-        AmbianceCiel::Clair.appliquer(&mut c);
-        c
-    }
-}
+use crate::modele::soleil::{self, AmbianceCiel, Lieu, ReglagesCiel};
 
 const MOIS: [&str; 12] = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 
@@ -77,6 +11,64 @@ fn heure_texte(h: f32) -> String {
 }
 
 impl ViewerApp {
+    /// Identifiant de la vue active pour ses réglages de rendu : vue du projet, ou « 3d ».
+    pub(super) fn id_vue_rendu(&self) -> Option<String> {
+        let numero = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).map(|v| v.revit_id)?;
+        let projet = &self.natif.as_ref()?.0;
+        if scene::numero_vue("3d") == numero {
+            return Some("3d".into());
+        }
+        projet.vues.iter().find(|v| scene::numero_vue(&v.id) == numero).map(|v| v.id.clone())
+    }
+
+    /// Réglages de rendu en cours de la vue.
+    pub(super) fn rendu_vue_courant(&self) -> soleil::RenduVue {
+        soleil::RenduVue {
+            style: Some(self.style.nom().into()),
+            ombres_portees: self.ombres_portees,
+            ombre_ambiante: self.ombre_ambiante,
+            jour: self.soleil_jour,
+            mois: self.soleil_mois,
+            heure: self.soleil_heure,
+            ciel: self.ciel.clone(),
+        }
+    }
+
+    /// Enregistre les réglages de rendu de la vue active dans le projet s'ils ont changé
+    /// (une étape d'annulation).
+    pub(super) fn enregistrer_rendu_vue(&mut self) {
+        if self.saisie_active || self.partage_en_cours { return; }
+        let Some(id) = self.id_vue_rendu() else { return };
+        let rendu = self.rendu_vue_courant();
+        let Some((projet, _)) = &mut self.natif else { return };
+        if projet.rendus_vues.get(&id) == Some(&rendu) {
+            return;
+        }
+        let avant = projet.clone();
+        projet.rendus_vues.insert(id, rendu);
+        let resultat = if let Some(c) = &mut self.collaboration { c.editer(&avant, projet) } else { self.historique.pousser(&avant, projet) };
+        if let Err(e) = resultat {
+            *projet = avant;
+            self.error = Some(e);
+            return;
+        }
+        self.natif_modifie = true;
+    }
+
+    /// Applique les réglages de rendu enregistrés de la vue `id` (ouverture de la vue).
+    pub(super) fn appliquer_rendu_vue(&mut self, id: &str) {
+        let Some(r) = self.natif.as_ref().and_then(|(p, _)| p.rendus_vues.get(id).cloned()) else { return };
+        if let Some(s) = r.style.as_deref().and_then(|n| StyleVisuel::TOUS.into_iter().find(|s| s.nom() == n)) {
+            self.style = s;
+        }
+        self.ombres_portees = r.ombres_portees;
+        self.ombre_ambiante = r.ombre_ambiante;
+        self.soleil_mois = r.mois.clamp(1, 12);
+        self.soleil_jour = r.jour.clamp(1, soleil::jours_du_mois(self.soleil_mois));
+        self.soleil_heure = r.heure.clamp(0.0, 23.99);
+        self.ciel = r.ciel;
+    }
+
     /// Lieu du projet (Rennes par défaut).
     pub(super) fn lieu_projet(&self) -> Lieu {
         self.natif.as_ref().and_then(|(p, _)| p.lieu.clone()).unwrap_or_default()
@@ -261,10 +253,13 @@ impl ViewerApp {
             ui.separator();
             self.reglages_soleil_vue(ui);
             ui.add_space(4.0);
-            ui.label(RichText::new("Réglages gardés avec la vue. Le ciel physique n'est pas encore relié au rendu.").small().weak());
+            ui.label(RichText::new("Style Réaliste. Réglages enregistrés avec la vue.").small().weak());
         });
         if c != self.ciel {
             self.ciel = c;
+        }
+        if !ctx.input(|i| i.pointer.any_down()) {
+            self.enregistrer_rendu_vue();
         }
         if !ouvert {
             self.ciel_ouvert = false;

@@ -119,6 +119,10 @@ pub struct Projet {
     /// Lieu géographique du projet (soleil des ombres et du ciel) ; None : Rennes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lieu: Option<soleil::Lieu>,
+    /// Réglages de rendu de chaque vue (style, ombres, soleil, ciel), par identifiant de
+    /// vue (« 3d » : la vue 3D).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub rendus_vues: BTreeMap<String, soleil::RenduVue>,
     pub importes: Vec<ElementImporte>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub quadrillages: Vec<documentation::Quadrillage>,

@@ -202,6 +202,7 @@ impl ViewerApp {
             self.style = st;
             self.visibility_dirty = true;
             self.coupe_dirty = true;
+            self.enregistrer_rendu_vue();
         }
     }
 

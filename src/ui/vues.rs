@@ -32,6 +32,7 @@ impl ViewerApp {
                 }
             }
         }
+        self.enregistrer_rendu_vue();
         self.etats_vues.insert(self.vue_active, EtatVue {
             camera: self.camera.clone(),
             hidden_classes: self.hidden_classes.clone(),
@@ -374,6 +375,11 @@ impl ViewerApp {
                 Some("materiau") => Poche::Materiau,
                 _ => Poche::Hachure,
             };
+        }
+        // réglages de rendu enregistrés (style, ombres, soleil, ciel)
+        let id_rendu = if scene::numero_vue("3d") == v.revit_id { Some("3d".to_string()) } else { self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|vue| scene::numero_vue(&vue.id) == v.revit_id)).map(|vue| vue.id.clone()) };
+        if let Some(id) = id_rendu {
+            self.appliquer_rendu_vue(&id);
         }
         // échelle de la barre de vue : celle de la vue ouverte
         if echelle > 0.0 {

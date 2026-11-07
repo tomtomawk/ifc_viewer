@@ -64,6 +64,18 @@ impl ViewerApp {
             table_motifs: self.scene.as_ref().map(|s| s.table_motifs.clone()).unwrap_or_default(),
             soleil: self.ombres_portees.then(|| self.soleil(aspect)).flatten(),
             direction_soleil: self.direction_soleil(),
+            ciel: (self.style == StyleVisuel::Realiste).then(|| {
+                let c = &self.ciel;
+                crate::rendu::gpu::CielRendu {
+                    brume: c.brume,
+                    nuages: c.nuages,
+                    intensite_soleil: c.intensite_soleil,
+                    intensite_ciel: c.intensite_ciel,
+                    taille_soleil: c.taille_soleil,
+                    sol: c.sol.map(|x| (x as f32 / 255.0).powf(2.2)),
+                    exposition: (!c.exposition_auto).then_some(c.exposition),
+                }
+            }),
             // occultation : rayon de l'ordre du mètre, réduit de près, élargi de loin
             ao: self.ombre_ambiante.then(|| (self.camera.proj(aspect), (self.camera.dist * 0.04).clamp(0.15, 1.5))),
             coupe: self.plan_coupe(),
@@ -588,6 +600,25 @@ impl ViewerApp {
                 self.visibility_dirty = true;
                 self.etat()
             }
+            "ciel" => {
+                // ciel {"ambiance":"Couvert","brume":0.3,"exposition_auto":false,"exposition":1.0} : réglages partiels
+                let mut v = serde_json::to_value(&self.ciel).unwrap_or_default();
+                if !argument.trim().is_empty() {
+                    let Ok(serde_json::Value::Object(m)) = serde_json::from_str::<serde_json::Value>(argument) else { return erreur("usage : ciel {objet JSON des réglages}") };
+                    if let Some(a) = m.get("ambiance").and_then(|a| serde_json::from_value::<crate::modele::soleil::AmbianceCiel>(a.clone()).ok()) {
+                        let mut c = self.ciel.clone();
+                        a.appliquer(&mut c);
+                        v = serde_json::to_value(&c).unwrap_or_default();
+                    }
+                    for (k, x) in m { if k != "ambiance" { v[k] = x; } }
+                    match serde_json::from_value(v.clone()) {
+                        Ok(c) => self.ciel = c,
+                        Err(e) => return erreur(&format!("ciel : {e}")),
+                    }
+                    self.enregistrer_rendu_vue();
+                }
+                serde_json::json!({"ok": true, "ciel": v}).to_string()
+            }
             "soleil" => {
                 // soleil jour mois heure (heures décimales) : date et heure du soleil de la vue
                 let v: Vec<f64> = argument.split_whitespace().filter_map(|x| x.replace(',', ".").parse().ok()).collect();
@@ -596,6 +627,7 @@ impl ViewerApp {
                 self.soleil_mois = mois as u32;
                 self.soleil_jour = (jour as u32).clamp(1, crate::modele::soleil::jours_du_mois(self.soleil_mois));
                 self.soleil_heure = heure as f32;
+                self.enregistrer_rendu_vue();
                 let (az, h) = self.position_soleil();
                 serde_json::json!({"ok": true, "soleil": {"jour": self.soleil_jour, "mois": self.soleil_mois, "heure": self.soleil_heure, "azimut": az, "hauteur": h}}).to_string()
             }
@@ -608,7 +640,7 @@ impl ViewerApp {
                     "ambiante" => self.ombre_ambiante = oui,
                     _ => return erreur("usage : ombres portees|ambiante oui|non"),
                 }
-                self.etat()
+                { self.enregistrer_rendu_vue(); self.etat() }
             }
             "style" => {
                 // style graphique|realiste ; anciens noms : lignes_cachees, ombre, couleurs, rendu
@@ -629,7 +661,7 @@ impl ViewerApp {
                 }
                 self.visibility_dirty = true;
                 self.coupe_dirty = true;
-                self.etat()
+                { self.enregistrer_rendu_vue(); self.etat() }
             }
             "coupe" => {
                 // coupe non | coupe <hauteur m> [niveau : id ou nom]
