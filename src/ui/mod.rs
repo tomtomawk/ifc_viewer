@@ -34,6 +34,7 @@ mod panneaux;
 mod navigateur;
 mod vues;
 mod graphismes;
+mod soleil;
 mod panneau_droit;
 mod vue_revit;
 mod viewport;
@@ -367,6 +368,10 @@ struct EtatVue {
     traits_fins: bool,
     ombres_portees: bool,
     ombre_ambiante: bool,
+    soleil_jour: u32,
+    soleil_mois: u32,
+    soleil_heure: f32,
+    ciel: soleil::ReglagesCiel,
     coupe: bool,
     coupe_niveau: Option<Id>,
     coupe_hauteur: f32,
@@ -565,6 +570,13 @@ pub struct ViewerApp {
     /// Ombres portées et ombre ambiante : réglages à part du style.
     ombres_portees: bool,
     ombre_ambiante: bool,
+    /// Soleil de la vue : date sans année et heure légale (heures décimales).
+    soleil_jour: u32,
+    soleil_mois: u32,
+    soleil_heure: f32,
+    /// Ciel physique de la vue (réglages) et fenêtre Ciel ouverte.
+    ciel: soleil::ReglagesCiel,
+    ciel_ouvert: bool,
     /// Pente donnée à une arête cochée (degrés), la dernière saisie.
     pente_defaut: f64,
     /// Options de l'application (menu Début > Options).
@@ -766,6 +778,11 @@ impl ViewerApp {
             pente_defaut: 35.0,
             ombres_portees: false,
             ombre_ambiante: false,
+            soleil_jour: 21,
+            soleil_mois: 6,
+            soleil_heure: 15.0,
+            ciel: Default::default(),
+            ciel_ouvert: false,
             faces_blanches: false,
             traits_fins: false,
             eclairage: true,

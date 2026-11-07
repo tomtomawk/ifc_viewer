@@ -4,6 +4,7 @@ impl Projet {
     pub fn verifier(&self) -> Result<(), String> {
         if self.format!=FORMAT || self.version>VERSION || self.identite.is_empty(){return Err("Format, version ou identité projet non valide".into());}
         if !self.orientation_nord.is_finite() { return Err("Orientation du nord non finie.".into()); }
+        if let Some(l) = &self.lieu && !(l.latitude.abs() <= 90.0 && l.longitude.abs() <= 180.0 && l.fuseau.abs() <= 14.0) { return Err("Lieu du projet : coordonnées non valides.".into()); }
         let mut ids = std::collections::HashSet::new();
         for id in self
             .niveaux

@@ -102,6 +102,18 @@ pub(super) fn icone_commande(p: &egui::Painter, r: egui::Rect, i: Icone, c: Colo
             seg((0.6, 0.3), (0.92, 0.3));
             p.add(egui::Shape::convex_polygon(vec![pt(0.76, 0.3), pt(0.69, 0.18), pt(0.83, 0.18)], c, egui::Stroke::NONE));
         }
+        Icone::Lieu => {
+            // globe (méridien, parallèles) et repère de position
+            let c0 = pt(0.44, 0.56);
+            let rg = r.width() * 0.34;
+            p.circle_stroke(c0, rg, t);
+            p.add(egui::Shape::ellipse_stroke(c0, egui::vec2(rg * 0.45, rg), t));
+            seg((0.1, 0.56), (0.78, 0.56));
+            seg((0.15, 0.39), (0.73, 0.39));
+            seg((0.15, 0.73), (0.73, 0.73));
+            p.circle_filled(pt(0.76, 0.22), r.width() * 0.13, c);
+            p.add(egui::Shape::convex_polygon(vec![pt(0.66, 0.27), pt(0.86, 0.27), pt(0.76, 0.46)], c, egui::Stroke::NONE));
+        }
         Icone::Nouveau => {
             document();
             seg((0.5, 0.48), (0.5, 0.78));

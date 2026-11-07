@@ -923,6 +923,8 @@ pub enum Icone {
     Nord,
     /// Origine et cote NGF : repère X, Y, Z.
     Coordonnees,
+    /// Lieu géographique : globe et repère.
+    Lieu,
     Enregistrer,
     EnregistrerSous,
     Exporter(&'static str),

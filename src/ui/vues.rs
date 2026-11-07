@@ -44,6 +44,10 @@ impl ViewerApp {
             traits_fins: self.traits_fins,
             ombres_portees: self.ombres_portees,
             ombre_ambiante: self.ombre_ambiante,
+            soleil_jour: self.soleil_jour,
+            soleil_mois: self.soleil_mois,
+            soleil_heure: self.soleil_heure,
+            ciel: self.ciel.clone(),
             coupe: self.coupe,
             coupe_niveau: self.coupe_niveau,
             coupe_hauteur: self.coupe_hauteur,
@@ -70,6 +74,10 @@ impl ViewerApp {
         self.traits_fins = e.traits_fins;
         self.ombres_portees = e.ombres_portees;
         self.ombre_ambiante = e.ombre_ambiante;
+        self.soleil_jour = e.soleil_jour;
+        self.soleil_mois = e.soleil_mois;
+        self.soleil_heure = e.soleil_heure;
+        self.ciel = e.ciel;
         self.coupe = e.coupe;
         self.coupe_niveau = e.coupe_niveau;
         self.coupe_hauteur = e.coupe_hauteur;

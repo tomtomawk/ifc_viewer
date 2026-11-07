@@ -702,10 +702,6 @@ fn fs_flou(e: Plein) -> @location(0) vec4f {
 }
 "#;
 
-/// Direction du soleil (vers lui), repère de la scène : éclairage du style Réaliste et
-/// des ombres portées.
-pub const SOLEIL: Vec3 = Vec3::new(-0.4504, -0.6006, 0.6606);
-
 /// Côté de la carte d'ombres (pixels).
 pub const TAILLE_OMBRES: i32 = 2048;
 
@@ -905,6 +901,8 @@ pub struct FrameParams {
     /// de la carte d'ombres et décalage des points le long de la normale contre l'acné
     /// d'ombre (unités de la scène).
     pub soleil: Option<(Vec3, Mat4, f32)>,
+    /// Direction vers le soleil (date, heure et lieu de la vue), aussi sans ombres portées.
+    pub direction_soleil: Vec3,
     /// Ombre ambiante : matrice de projection de la caméra, rayon
     /// (unités de la scène).
     pub ao: Option<(Mat4, f32)>,
@@ -1456,7 +1454,7 @@ impl Renderer {
         // SAFETY: structure de f32 et u32, zéro valide partout.
         let mut g: Globales = unsafe { std::mem::zeroed() };
         g.eye = v4(p.eye, p.ortho as u32 as f32);
-        g.soleil = v4(SOLEIL, 0.0);
+        g.soleil = v4(p.direction_soleil, 0.0);
         if let Some((soleil, lumiere, decalage)) = p.soleil {
             g.soleil = v4(soleil, decalage);
             g.lumiere = lumiere.to_cols_array();

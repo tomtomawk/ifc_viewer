@@ -120,7 +120,7 @@ impl ViewerApp {
     /// pixels pour que les ombres ne frémissent pas quand la caméra bouge.
     pub(super) fn soleil(&self, aspect: f32) -> Option<(Vec3, Mat4, f32)> {
         let s = self.scene.as_ref()?;
-        let dir = crate::rendu::gpu::SOLEIL;
+        let dir = self.direction_soleil();
         let (c, r) = ((s.min + s.max) * 0.5, ((s.max - s.min).length() * 0.5).max(0.1) * 1.02);
         let vue = glam::camera::rh::view::look_at_mat4(c + dir * r * 2.0, c, Vec3::Z);
         let coins_scene: Vec<Vec3> = (0..8).map(|k| Vec3::new(if k & 1 == 0 { s.min.x } else { s.max.x }, if k & 2 == 0 { s.min.y } else { s.max.y }, if k & 4 == 0 { s.min.z } else { s.max.z })).collect();

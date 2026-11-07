@@ -404,6 +404,7 @@ pub fn sensible(k: &str) -> bool {
         k,
         "@/coordonnees_origine"
             | "@/orientation_nord"
+            | "@/lieu"
             | "@/parametres_partages"
             | "@/attaches_toitures"
             | "@/priorites_jonction"

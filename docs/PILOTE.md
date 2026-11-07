@@ -163,6 +163,8 @@ Raccourcis existants :
 - `panneau proprietes|arborescence gauche|droite|flottant|externe|fermer` ; `fiche oui|non`.
 - `onglet tout|vues|feuilles|nomenclatures|familles|materiaux|groupes|liens|modele|classes`.
 - `style filaire|lignes_cachees|ombre|couleurs|realiste|rendu` ; `dessin oui|non` ; `traits_fins oui|non`.
+- `soleil jour mois heure` : date (sans année) et heure légale (heures décimales) du soleil de la vue ;
+  rend `azimut` et `hauteur` (degrés), calculés au lieu du projet (`projet.lieu`, Rennes par défaut).
 - `ombres portees|ambiante oui|non` ; `coupe non` ou `coupe hauteur [niveau]` ; `niveaux` ;
   `poche hachure|plein|vide` ; `echelle denominateur`.
 - `capture vue|fenetre [LxH] <chemin.png>` ; `taille largeur hauteur` ; `reduire` ; `restaurer`.

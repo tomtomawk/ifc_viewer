@@ -14,6 +14,7 @@ pub mod edition;
 pub mod elements;
 pub mod famille;
 pub mod murs;
+pub mod soleil;
 pub mod volumes;
 pub use elements::escalier::{Escalier, GardeCorps, Remplissage};
 pub use elements::composant::{Composant, TypeComposant};
@@ -115,6 +116,9 @@ pub struct Projet {
     /// rapport au terrain.
     #[serde(default, skip_serializing_if = "origine_nulle_3d")]
     pub coordonnees_origine: [f64; 3],
+    /// Lieu géographique du projet (soleil des ombres et du ciel) ; None : Rennes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lieu: Option<soleil::Lieu>,
     pub importes: Vec<ElementImporte>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub quadrillages: Vec<documentation::Quadrillage>,

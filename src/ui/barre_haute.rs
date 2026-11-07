@@ -247,12 +247,20 @@ impl ViewerApp {
                 reglages.push(C::new("options", "Paramètres", I::Options, "Unités, navigation IFC, épaisseurs de traits, gabarit", true));
                 let orientation = vec![
                     C { enfonce: self.orientation_nord_en_cours, ..C::new("nord", "Orienter le nord", I::Nord, "Définir le nord du projet en sélectionnant un trait dans une vue de plan", self.natif.is_some() && self.vue_en_plan() && self.dessin2d.edition_contour.is_none()) },
+                    C::new("lieu", "Lieu", I::Lieu, "Lieu géographique du projet : ville ou coordonnées (soleil des ombres et du ciel)", self.natif.is_some()),
                     C::new("coordonnees", "Coordonnées", I::Coordonnees, "Coordonnées de l'origine du projet et cote NGF du niveau 0 : la modifier remonte ou descend le projet par rapport au terrain (aussi : cliquer l'origine dans une vue)", self.natif.is_some()),
                 ];
                 for (cle, r) in crate::ui::ruban::bandeau(ui, &[("Fichier", fichier), ("Réglages", reglages), ("Projet", orientation)]) {
                     match cle {
                         "options" => {
                             if r.clicked() {self.ouvrir_parametres();}
+                        }
+                        "lieu" => {
+                            egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+                                ui.label(RichText::new("Lieu du projet").strong());
+                                ui.label(RichText::new("Position du soleil des ombres et du ciel ; le nord se règle avec « Orienter le nord ».").small().weak());
+                                self.editeur_lieu(ui);
+                            });
                         }
                         "coordonnees" => {
                             egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
@@ -463,6 +471,13 @@ impl ViewerApp {
                 let (ombres,_) = egui::containers::menu::MenuButton::from_button(egui::Button::new("").min_size(egui::vec2(26.0,24.0))).ui(ui,|ui| {
                     let mut change=ui.checkbox(&mut self.ombres_portees,"Ombres du soleil").changed();
                     change |= ui.checkbox(&mut self.ombre_ambiante,"Ombre ambiante").changed();
+                    ui.separator();
+                    change |= self.reglages_soleil_vue(ui);
+                    ui.separator();
+                    if ui.button("Ciel…").on_hover_text("Ambiance, nuages, brume et intensités du ciel physique (style Réaliste)").clicked() {
+                        self.ciel_ouvert = true;
+                        ui.close();
+                    }
                     if change {self.visibility_dirty=true;}
                 });
                 icone_soleil(ui.painter(),ombres.rect.shrink(5.0),ui.visuals().text_color());

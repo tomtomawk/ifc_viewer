@@ -5,6 +5,7 @@ impl ViewerApp {
     /// Propriétés de l'élément sélectionné (panneau de gauche, comme dans Revit).
     pub(super) fn right_panel(&mut self, ui: &mut egui::Ui) {
         self.fenetre_materiau(ui.ctx());
+        self.fenetre_ciel(ui.ctx());
         self.fenetre_motifs(ui.ctx());
         self.fenetre_position_plan(ui.ctx());
         self.fenetre_plumes(ui.ctx());

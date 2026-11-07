@@ -395,6 +395,7 @@ fn completer_selection(o:&Objets,index:&Index,selection:&mut BTreeSet<String>) {
     for k in [
         "@/coordonnees_origine",
         "@/orientation_nord",
+        "@/lieu",
         "@/parametres_partages",
     ] {
         selection.insert(k.into());
