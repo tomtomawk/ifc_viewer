@@ -151,11 +151,11 @@
    "origine": null
   },
   {
-   "id": "tuiles200",
-   "nom": "Toiture tuiles 200",
+   "id": "ardoise200",
+   "nom": "Toiture ardoise 200",
    "couches": [
     {
-     "materiau": "Tuiles",
+     "materiau": "Ardoise",
      "epaisseur": 200,
      "fonction": "structure"
     }
@@ -2845,26 +2845,27 @@
    }
   },
   {
-   "nom": "Tuiles",
+   "nom": "Ardoise",
    "couleur": [
-    158,
+    66,
     72,
-    46
+    82
    ],
    "motif": "diagonales",
    "apparence": {
-    "rugosite": 0.6,
+    "rugosite": 0.45,
     "textures": {
      "Couleur": {
-      "chemin": "textures/tuiles.png",
+      "chemin": "textures/ardoise.png",
       "largeur": 800,
-      "hauteur": 800
+      "hauteur": 520
      },
      "Relief": {
-      "chemin": "textures/tuiles_relief.png",
+      "chemin": "textures/ardoise_relief.png",
       "largeur": 800,
-      "hauteur": 800,
-      "intensite": 1.0
+      "hauteur": 520,
+      "intensite": 1.0,
+      "profondeur": 6
      }
     }
    }
@@ -6179,7 +6180,7 @@
    "id": "C1-toit",
    "nom": "Toiture maison 1",
    "sorte": "toiture",
-   "type_dalle": "tuiles200",
+   "type_dalle": "ardoise200",
    "niveau": "n1",
    "decalage": 2800,
    "contours": [
@@ -6274,7 +6275,7 @@
    "id": "C2-toit",
    "nom": "Toiture maison 2",
    "sorte": "toiture",
-   "type_dalle": "tuiles200",
+   "type_dalle": "ardoise200",
    "niveau": "n1",
    "decalage": 2800,
    "contours": [
@@ -6369,7 +6370,7 @@
    "id": "C3-toit",
    "nom": "Toiture maison 3",
    "sorte": "toiture",
-   "type_dalle": "tuiles200",
+   "type_dalle": "ardoise200",
    "niveau": "n1",
    "decalage": 2800,
    "contours": [

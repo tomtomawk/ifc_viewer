@@ -2,7 +2,7 @@
 """Génère le projet de démonstration « Îlot de démonstration » (samples/ilot_demo) :
 rue (chaussée, trottoirs, alignement d'arbres), logements R+3 en brique avec vitrine au
 rez-de-chaussée, bureaux R+4 à mur-rideau sur parvis, cour-jardin, trois maisons
-enduit/bois à toiture tuiles avec jardins ; textures (procédurales et pelouse CC0
+enduit/bois à toiture en ardoise avec jardins ; textures (procédurales et pelouse CC0
 d'ambientCG), réglages de rendu et trois vues caméra (rue, cour, aérienne).
 
 Les arbres sont contrôlés : aucun houppier ne touche un bâtiment ni la chaussée.
@@ -107,20 +107,22 @@ def bois():
     enregistrer("bois_relief.png", gris(np.where(joint, 0.1, 0.7 + 0.2 * fil)))
 
 
-def tuiles():
-    # tuiles de 200 x 200 mm à recouvrement (carreau 800 mm)
+def ardoise():
+    # ardoises rectangulaires 200 x 300 mm, pureau 130 mm, posées à joints croisés
+    # (carreau de 800 x 520 mm : 4 ardoises sur 4 rangs)
     y, x = np.mgrid[0:N, 0:N]
     rang = y * 4 // N
     xx = (x + (rang % 2) * (N // 8)) % N
     t = (y * 4 % N) / (N / 4)
     col = xx * 4 // N
     h = rng.random((4, 4))
-    ombre = 0.55 + 0.45 * t
-    bord = (xx * 4 % N) < 4
-    coul = np.array([158, 70, 44])[None, None, :] * (0.8 + 0.3 * h[rang, col][:, :, None]) * ombre[:, :, None]
-    coul[bord] *= 0.6
-    enregistrer("tuiles.png", coul)
-    enregistrer("tuiles_relief.png", gris(np.where(bord, 0.2, t)))
+    n = bruit(64, 16)
+    ombre = 0.62 + 0.38 * t
+    joint = (xx * 4 % N) < 3
+    coul = np.array([62, 68, 78])[None, None, :] * (0.82 + 0.3 * h[rang, col][:, :, None]) * (0.9 + 0.2 * n[:, :, None]) * ombre[:, :, None]
+    coul[joint] *= 0.55
+    enregistrer("ardoise.png", coul)
+    enregistrer("ardoise_relief.png", gris(np.where(joint, 0.15, t)))
 
 
 def zinc():
@@ -227,7 +229,7 @@ MATERIAUX = [
     materiau("Béton banché", [190, 190, 184], apparence={"rugosite": 0.75, "textures": {"Couleur": tex("beton.png", 2500, 2500), "Relief": tex("beton_relief.png", 2500, 2500, intensite=0.3)}}),
     materiau("Enduit blanc", [236, 233, 222], apparence={"rugosite": 0.85, "textures": {"Couleur": tex("enduit.png", 1000, 1000), "Relief": tex("enduit_relief.png", 1000, 1000, intensite=0.15)}}),
     materiau("Bardage bois", [150, 104, 66], apparence={"rugosite": 0.7, "textures": {"Couleur": tex("bois.png", 960, 960), "Relief": tex("bois_relief.png", 960, 960, intensite=0.6)}}),
-    materiau("Tuiles", [158, 72, 46], apparence={"rugosite": 0.6, "textures": {"Couleur": tex("tuiles.png", 800, 800), "Relief": tex("tuiles_relief.png", 800, 800, intensite=1.0)}}),
+    materiau("Ardoise", [66, 72, 82], apparence={"rugosite": 0.45, "textures": {"Couleur": tex("ardoise.png", 800, 520), "Relief": tex("ardoise_relief.png", 800, 520, intensite=1.0, profondeur=6)}}),
     materiau("Zinc", [150, 156, 162], apparence={"rugosite": 0.35, "metallique": 0.8, "textures": {"Couleur": tex("zinc.png", 1000, 1000), "Relief": tex("zinc_relief.png", 1000, 1000, intensite=0.5)}}),
     materiau("Verre", [160, 190, 200], motif="uni", apparence={"teinte": [150, 185, 195], "rugosite": 0.03, "transparence": 0.6}),
     # feuillage des arbres (style Réaliste) : feuilles détourées, découpe
@@ -395,7 +397,7 @@ def projet():
     plancher("B-toit", "Toiture bureaux", "dalle300", "n5", bx0, by0, bx1, by1, (30, 100, 100, 30), (1000, 0, 0, 0))
     boite("B-acr", bx0, by0, bx1, by1, "n5", 1000, "beton200", "Acrotère bureaux")
 
-    # maisons R+1 : enduit au rez-de-chaussée, bois à l'étage, tuiles à 35°
+    # maisons R+1 : enduit au rez-de-chaussée, bois à l'étage, ardoise à 35°
     attaches = {}
     for i, (x0, y0, x1, y1) in enumerate(MAISONS):
         p = f"C{i + 1}"
@@ -410,7 +412,7 @@ def projet():
             attaches[m] = f"{p}-toit"
         plancher(f"{p}-p0", f"Plancher maison {i + 1}", "dalle250", "n0", x0, y0, x1, y1, (100, 100, 100, 100))
         plancher(f"{p}-p1", f"Plancher étage maison {i + 1}", "dalle250", "n1", x0, y0, x1, y1, (100, 100, 100, 100))
-        dalle(f"{p}-toit", f"Toiture maison {i + 1}", "tuiles200", "n1", 2800, rectangle(x0 - 500, y0 - 600, x1 + 500, y1 + 600), sorte="toiture", pentes=[35, None, 35, None])
+        dalle(f"{p}-toit", f"Toiture maison {i + 1}", "ardoise200", "n1", 2800, rectangle(x0 - 500, y0 - 600, x1 + 500, y1 + 600), sorte="toiture", pentes=[35, None, 35, None])
 
     # rue, trottoirs, parvis, allées
     dalle("chaussee", "Chaussée", "enrobe120", "n0", -20, rectangle(*CHAUSSEE), sorte="sol")
@@ -440,7 +442,7 @@ def projet():
         "types_dalles": [
             type_dalle("dalle250", "Dalle béton 250", "Béton banché", 250),
             type_dalle("dalle300", "Dalle béton 300", "Béton banché", 300),
-            type_dalle("tuiles200", "Toiture tuiles 200", "Tuiles", 200),
+            type_dalle("ardoise200", "Toiture ardoise 200", "Ardoise", 200),
             type_dalle("enrobe120", "Enrobé 120", "Enrobé", 120),
             type_dalle("paves120", "Pavés 120", "Pavés", 120),
         ],
@@ -481,7 +483,7 @@ def projet():
 
 if __name__ == "__main__":
     os.makedirs(TEX, exist_ok=True)
-    for f in (briques, beton, enduit, bois, tuiles, feuilles, ecorce, enrobe, paves):
+    for f in (briques, beton, enduit, bois, ardoise, feuilles, ecorce, enrobe, paves):
         f()
     with open(os.path.join(SORTIE, "ilot_demo.modele.json"), "w", encoding="utf-8") as fichier:
         json.dump(projet(), fichier, ensure_ascii=False, indent=1)

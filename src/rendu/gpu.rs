@@ -769,7 +769,7 @@ fn bruit_valeur(p: vec2f) -> f32 {
 fn seuil_decoupe(k: i32, j: i32, dx: vec2f, dy: vec2f) -> f32 {
     let taille = max(apparences[k + 4 + 2 * j].xy, vec2f(1.0));
     let lod = log2(max(max(length(dx / taille), length(dy / taille)) * 1024.0, 1.0));
-    return 0.5 * (1.0 - clamp(lod * 0.12, 0.0, 0.75));
+    return 0.5 * (1.0 - clamp((lod - 2.0) * 0.1, 0.0, 0.55));
 }
 
 fn a_carte(k: i32, j: i32) -> bool {
