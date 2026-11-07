@@ -201,6 +201,9 @@ pub struct RenduVue {
     /// Style visuel (« graphique », « realiste »), None : celui du genre de vue.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub style: Option<String>,
+    /// Projection de la vue 3D (« perspective », « deux_points », « ortho »).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub projection: Option<String>,
     pub ombres_portees: bool,
     pub ombre_ambiante: bool,
     pub jour: u32,
@@ -211,7 +214,7 @@ pub struct RenduVue {
 
 impl Default for RenduVue {
     fn default() -> Self {
-        RenduVue { style: None, ombres_portees: false, ombre_ambiante: false, jour: 21, mois: 6, heure: 15.0, ciel: ReglagesCiel::default() }
+        RenduVue { style: None, projection: None, ombres_portees: false, ombre_ambiante: false, jour: 21, mois: 6, heure: 15.0, ciel: ReglagesCiel::default() }
     }
 }
 

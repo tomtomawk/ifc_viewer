@@ -545,6 +545,7 @@ impl ViewerApp {
             }
         } else if self.scene.is_some() && self.vue_3d() {
             self.cube_orientation(ui, rect);
+            self.choix_projection(ui, rect);
         }
 
         if self.scene.is_none() {

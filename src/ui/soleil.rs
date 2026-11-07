@@ -25,6 +25,7 @@ impl ViewerApp {
     pub(super) fn rendu_vue_courant(&self) -> soleil::RenduVue {
         soleil::RenduVue {
             style: Some(self.style.nom().into()),
+            projection: self.vue_3d().then(|| self.camera.projection().nom().into()),
             ombres_portees: self.ombres_portees,
             ombre_ambiante: self.ombre_ambiante,
             jour: self.soleil_jour,
@@ -60,6 +61,9 @@ impl ViewerApp {
         let Some(r) = self.natif.as_ref().and_then(|(p, _)| p.rendus_vues.get(id).cloned()) else { return };
         if let Some(s) = r.style.as_deref().and_then(|n| StyleVisuel::TOUS.into_iter().find(|s| s.nom() == n)) {
             self.style = s;
+        }
+        if id == "3d" && let Some(p) = r.projection.as_deref().and_then(crate::rendu::camera::Projection::depuis_nom) {
+            self.camera.definir_projection(p);
         }
         self.ombres_portees = r.ombres_portees;
         self.ombre_ambiante = r.ombre_ambiante;

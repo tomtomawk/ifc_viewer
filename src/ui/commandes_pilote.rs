@@ -53,7 +53,7 @@ impl ViewerApp {
             passes,
             mvp: vp,
             eye: self.camera.eye(),
-            view_dir: self.camera.forward(),
+            view_dir: self.camera.direction_vue(),
             ortho: self.camera.ortho,
             selected: self.objets_selectionnes(),
             background: if self.style.papier() { [1.0, 1.0, 1.0] } else { [0.925, 0.933, 0.945] },
@@ -570,8 +570,9 @@ impl ViewerApp {
                         c.pitch = 0.6;
                         c.yaw = -2.3;
                     }
-                    "ortho" => c.ortho = true,
-                    "perspective" => c.ortho = false,
+                    "ortho" => c.definir_projection(crate::rendu::camera::Projection::Orthographique),
+                    "perspective" => c.definir_projection(crate::rendu::camera::Projection::Perspective),
+                    "deux_points" | "verticales" => c.definir_projection(crate::rendu::camera::Projection::VerticalesDroites),
                     "cadrer" => self.fit_all(),
                     _ => {
                         let v: Vec<f32> = argument.split_whitespace().filter_map(|x| x.parse().ok()).collect();

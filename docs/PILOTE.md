@@ -154,7 +154,7 @@ Raccourcis existants :
 - `gabarit` lit ; `gabarit <chemin.gabarit.json>` charge ; `gabarit defaut` rétablit.
 - `gabarit_exporter <chemin.gabarit.json>` enregistre une copie du gabarit actif.
 - `vues` ; `vue <indice|nom>` ; `feuilles` ; `selection_feuille <JSON>` ; `proprietes_feuille`.
-- `camera dessus|face|iso|cadrer|ortho|perspective` ou `camera lacet tangage [distance]` ; `zoom facteur`.
+- `camera dessus|face|iso|cadrer|ortho|perspective|deux_points` (deux_points : perspective à verticales droites, enregistrée avec la vue 3D) ou `camera lacet tangage [distance]` ; `zoom facteur`.
 - `zone on|off|ajuster` ou `zone xmin ymin zmin xmax ymax zmax`.
 - `glisser dx dy [gauche|droit|milieu] [maj]` ; `objet x y` (0..1 dans la vue).
 - `selectionner <id STEP>` ; `isoler <id>` ; `cadrer <id>` ; `proprietes [id]`.

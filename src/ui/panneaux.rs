@@ -229,12 +229,47 @@ impl ViewerApp {
     /// tourner autour. Boussole en anneau à sa base : clic sur N, E, S ou O pour regarder
     /// depuis ce point cardinal (inclinaison gardée) ; glisser l'anneau pour tourner autour
     /// de la verticale.
+    /// Choix de la projection sous le cube : perspective, verticales droites (deux
+    /// points), orthographique.
+    pub(super) fn choix_projection(&mut self, ui: &mut egui::Ui, vue: egui::Rect) {
+        use crate::rendu::camera::Projection;
+        let largeur = 132.0;
+        let zone = egui::Rect::from_min_size(egui::pos2(vue.right() - largeur - 8.0, vue.top() + 8.0 + 132.0 + 4.0), egui::vec2(largeur, 22.0));
+        let actuelle = self.camera.projection();
+        let mut choisie = actuelle;
+        // fond : lisible sur le ciel comme sur le modèle
+        let v = ui.visuals();
+        ui.painter().rect_filled(zone.expand(1.0), 4.0, v.window_fill.gamma_multiply(0.85));
+        ui.painter().rect_stroke(zone.expand(1.0), 4.0, v.window_stroke, egui::StrokeKind::Inside);
+        ui.scope_builder(egui::UiBuilder::new().max_rect(zone), |ui| {
+            ui.horizontal_centered(|ui| {
+                ui.spacing_mut().item_spacing.x = 2.0;
+                for (p, texte, aide) in [
+                    (Projection::Perspective, "Persp.", "Perspective"),
+                    (Projection::VerticalesDroites, "2 points", "Perspective à verticales droites (deux points) : les verticales restent verticales ; au-delà de 60° d'inclinaison, perspective ordinaire"),
+                    (Projection::Orthographique, "Ortho", "Projection orthographique"),
+                ] {
+                    let r = ui.add_sized([42.0, 20.0], egui::Button::selectable(choisie == p, RichText::new(texte).small()));
+                    if r.on_hover_text(aide).clicked() {
+                        choisie = p;
+                    }
+                }
+            });
+        });
+        if choisie != actuelle {
+            self.camera.definir_projection(choisie);
+            self.visibility_dirty = true;
+            self.enregistrer_rendu_vue();
+        }
+    }
+
     pub(super) fn cube_orientation(&mut self, ui: &mut egui::Ui, vue: egui::Rect) {
         use egui::{Stroke, pos2};
         let cote = 132.0;
         let zone = egui::Rect::from_min_size(pos2(vue.right() - cote - 8.0, vue.top() + 8.0), egui::vec2(cote, cote));
         let resp = ui.interact(zone, ui.make_persistent_id("cube_orientation"), Sense::click_and_drag());
-        let rot = self.camera.view();
+        // orientation réelle de la caméra (y compris inclinée en verticales droites)
+        let rot = glam::camera::rh::view::look_at_mat4(self.camera.eye(), self.camera.target, self.camera.up());
         let centre = zone.center();
         let k = cote * 0.2;
         let ecran = |p: Vec3| {

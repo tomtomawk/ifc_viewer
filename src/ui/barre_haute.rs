@@ -512,7 +512,6 @@ impl ViewerApp {
                     if ui.toggle_value(&mut zone, "Zone de coupe").on_hover_text("Boîte qui découpe le modèle dans la vue 3D ; ses faces se règlent aux poignées ou dans les propriétés").changed() {
                         self.activer_boite(zone);
                     }
-                    ui.toggle_value(&mut self.camera.ortho, "Ortho").on_hover_text("Projection orthographique (sinon perspective)");
                 }
             });
         });
