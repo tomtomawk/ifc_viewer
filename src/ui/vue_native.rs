@@ -20,6 +20,7 @@ impl ViewerApp {
             GenreVue::Plan { .. } => "Plan d'étage",
             GenreVue::Coupe { elevation: true, .. } => "Élévation",
             GenreVue::Coupe { .. } => "Coupe",
+            GenreVue::Camera { .. } => "Vue caméra",
         };
         egui::CollapsingHeader::new(RichText::new(format!("Vue · {sorte}")).strong()).id_salt("vue_native").default_open(true).show(ui, |ui| {
             egui::Grid::new("grille_vue_native").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
@@ -72,6 +73,14 @@ impl ViewerApp {
                     GenreVue::Coupe { profondeur, .. } => {
                         ui.label("Profondeur");
                         ui.add(egui::DragValue::new(profondeur).speed(50.0).range(100.0..=200_000.0).dimensions()).on_hover_text("Au-delà, le modèle n'est pas montré");
+                        ui.end_row();
+                    }
+                    GenreVue::Camera { oeil, champ, .. } => {
+                        ui.label("Altitude de l'œil").on_hover_text("Altitude de l'œil depuis le niveau 0 (en vue piéton : 1,60 m au-dessus du sol)");
+                        ui.add(egui::DragValue::new(&mut oeil[2]).speed(10.0).dimensions());
+                        ui.end_row();
+                        ui.label("Champ de vision").on_hover_text("Angle vertical");
+                        ui.add(egui::DragValue::new(champ).speed(0.5).range(15.0..=110.0).suffix(" °"));
                         ui.end_row();
                     }
                 }

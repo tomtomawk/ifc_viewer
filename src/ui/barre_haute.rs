@@ -424,7 +424,7 @@ impl ViewerApp {
         if !self.vol.actif {
             self.vol.actif = true;
             self.camera.ortho = false;
-            self.camera.rapprocher_cible((self.camera.scene_radius * 0.25).max(1.0));
+            self.camera.rapprocher_cible(if self.pieton { 3.0 } else { (self.camera.scene_radius * 0.25).max(1.0) });
         }
         let (delta, molette, maj, dt) = ui.input(|i| {
             for e in &i.events {
@@ -449,8 +449,15 @@ impl ViewerApp {
         if dir != Vec3::ZERO {
             let f = self.camera.forward();
             let droite = f.cross(Vec3::Z).normalize_or(Vec3::X);
-            let v = (self.camera.scene_radius * 0.3).max(1.0) * self.vol.vitesse * if maj { 3.0 } else { 1.0 };
-            self.camera.deplacer((f * dir.x + droite * dir.y + Vec3::Z * dir.z) * v * dt);
+            if self.pieton {
+                // marche : à l'horizontale, 1,4 m/s (×3 avec Maj), l'œil suit le sol
+                let avant = Vec3::new(f.x, f.y, 0.0).normalize_or(Vec3::X);
+                let v = 1.4 * self.vol.vitesse * if maj { 3.0 } else { 1.0 };
+                self.marcher((avant * dir.x + droite * dir.y) * v * dt);
+            } else {
+                let v = (self.camera.scene_radius * 0.3).max(1.0) * self.vol.vitesse * if maj { 3.0 } else { 1.0 };
+                self.camera.deplacer((f * dir.x + droite * dir.y + Vec3::Z * dir.z) * v * dt);
+            }
             ui.ctx().request_repaint();
         }
     }

@@ -407,6 +407,13 @@ pub fn repere(p: &Projet, v: &Vue) -> (DVec3, DVec3, DVec3) {
             let u = (DVec2::from_array(*fin) - a).normalize_or_zero();
             (a.extend(0.0), u.extend(0.0), DVec3::Z)
         }
+        // vue caméra : plan perpendiculaire au regard, à l'œil
+        GenreVue::Camera { oeil, cible, .. } => {
+            let o = DVec3::from_array(*oeil);
+            let d = (DVec3::from_array(*cible) - o).normalize_or(DVec3::Y);
+            let u = d.cross(DVec3::Z).normalize_or(DVec3::X);
+            (o, u, u.cross(d))
+        }
     }
 }
 /// Pièces du niveau d'un plan : aplat clair (rôle poché, sous les traits) sur le sol du

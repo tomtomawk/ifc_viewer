@@ -161,6 +161,89 @@ impl ReperePartage {
     }
 }
 
+impl Scene {
+    /// Altitude du dessus le plus haut sous (x, y) sans dépasser `z_max` (repère de la
+    /// scène) : sol, dalle, marche ou terrain, pour la marche en vue piéton. Les
+    /// annotations et les ouvertures sont ignorées.
+    pub fn sol_sous(&self, x: f32, y: f32, z_max: f32) -> Option<f32> {
+        let mut meilleur: Option<f32> = None;
+        for o in &self.objects {
+            if matches!(&*o.class, "IFCANNOTATION" | "IFCOPENINGELEMENT" | "IFCSPACE" | "IFCVIRTUALELEMENT") {
+                continue;
+            }
+            let r = o.opaque;
+            let fin = (r.start + r.count) as usize;
+            if fin > self.vertices.len() || o.min.x > x || o.max.x < x || o.min.y > y || o.max.y < y || o.min.z > z_max {
+                continue;
+            }
+            for t in self.vertices[r.start as usize..fin].chunks_exact(3) {
+                let [a, b, c] = [t[0].pos, t[1].pos, t[2].pos];
+                let d = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]);
+                if d.abs() < 1e-9 {
+                    continue;
+                }
+                let u = ((x - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (y - a[1])) / d;
+                let v = ((b[0] - a[0]) * (y - a[1]) - (x - a[0]) * (b[1] - a[1])) / d;
+                if u < 0.0 || v < 0.0 || u + v > 1.0 {
+                    continue;
+                }
+                let z = a[2] + u * (b[2] - a[2]) + v * (c[2] - a[2]);
+                if z <= z_max && meilleur.is_none_or(|m| z > m) {
+                    meilleur = Some(z);
+                }
+            }
+        }
+        meilleur
+    }
+
+    /// Distance du premier obstacle (face opaque ou vitrée) le long du rayon `o + t·d`
+    /// (d unitaire), jusqu'à `max` : collision de la marche en vue piéton.
+    pub fn obstacle(&self, o: Vec3, d: Vec3, max: f32) -> Option<f32> {
+        let fin_rayon = o + d * max;
+        let (bmin, bmax) = (o.min(fin_rayon), o.max(fin_rayon));
+        let mut proche: Option<f32> = None;
+        for ob in &self.objects {
+            if matches!(&*ob.class, "IFCANNOTATION" | "IFCOPENINGELEMENT" | "IFCSPACE" | "IFCVIRTUALELEMENT") {
+                continue;
+            }
+            if ob.min.cmpgt(bmax).any() || ob.max.cmplt(bmin).any() {
+                continue;
+            }
+            for r in [ob.opaque, ob.transparent] {
+                let fin = (r.start + r.count) as usize;
+                if fin > self.vertices.len() {
+                    continue;
+                }
+                for t in self.vertices[r.start as usize..fin].chunks_exact(3) {
+                    let [a, b, c] = [Vec3::from(t[0].pos), Vec3::from(t[1].pos), Vec3::from(t[2].pos)];
+                    // Möller-Trumbore
+                    let (e1, e2) = (b - a, c - a);
+                    let p = d.cross(e2);
+                    let det = e1.dot(p);
+                    if det.abs() < 1e-9 {
+                        continue;
+                    }
+                    let s = o - a;
+                    let u = s.dot(p) / det;
+                    if !(0.0..=1.0).contains(&u) {
+                        continue;
+                    }
+                    let q = s.cross(e1);
+                    let v = d.dot(q) / det;
+                    if v < 0.0 || u + v > 1.0 {
+                        continue;
+                    }
+                    let tt = e2.dot(q) / det;
+                    if tt > 0.0 && tt <= max && proche.is_none_or(|m| tt < m) {
+                        proche = Some(tt);
+                    }
+                }
+            }
+        }
+        proche
+    }
+}
+
 pub struct Scene {
     pub model: IfcModel,
     pub vertices: Vec<Vertex>,

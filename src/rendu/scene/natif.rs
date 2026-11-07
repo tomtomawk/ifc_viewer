@@ -517,6 +517,11 @@ fn navigateur(projet: &Projet) -> Navigateur {
                 let plan = |n: glam::DVec2, p: glam::DVec2| n.extend(0.0).extend(-n.dot(p));
                 n.cadrage = vec![plan(-gauche, a + gauche * (profondeur / 1000.0)), plan(u, a), plan(-u, b)];
             }
+            // vue caméra : vue 3D (point de vue appliqué à l'ouverture)
+            GenreVue::Camera { oeil, cible, .. } => {
+                n.genre = "Vue 3D".into();
+                n.direction = -(glam::DVec3::from_array(*cible) - glam::DVec3::from_array(*oeil)).normalize_or(DVec3::Y);
+            }
         }
         vues.push(n);
     }

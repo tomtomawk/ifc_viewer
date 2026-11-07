@@ -261,6 +261,30 @@ impl ViewerApp {
             self.visibility_dirty = true;
             self.enregistrer_rendu_vue();
         }
+        // vue piéton et enregistrement du point de vue
+        let zone2 = zone.translate(egui::vec2(0.0, 26.0));
+        let v = ui.visuals();
+        ui.painter().rect_filled(zone2.expand(1.0), 4.0, v.window_fill.gamma_multiply(0.85));
+        ui.painter().rect_stroke(zone2.expand(1.0), 4.0, v.window_stroke, egui::StrokeKind::Inside);
+        let (mut pieton, mut vue) = (false, false);
+        ui.scope_builder(egui::UiBuilder::new().max_rect(zone2), |ui| {
+            ui.horizontal_centered(|ui| {
+                ui.spacing_mut().item_spacing.x = 2.0;
+                pieton = ui.add_sized([64.0, 20.0], egui::Button::selectable(self.pieton, RichText::new("Piéton").small()))
+                    .on_hover_text("Vue piéton : œil à 1,60 m au-dessus du sol, la marche (clic droit + ZQSD) suit le terrain, les dalles et les marches")
+                    .clicked();
+                vue = ui.add_enabled(self.natif.is_some(), egui::Button::new(RichText::new("+ Vue").small()).min_size(egui::vec2(64.0, 20.0)))
+                    .on_hover_text("Enregistrer ce point de vue comme vue 3D du projet (avec le style, le soleil et le ciel)")
+                    .on_disabled_hover_text("Projet natif seulement")
+                    .clicked();
+            });
+        });
+        if pieton {
+            self.basculer_pieton();
+        }
+        if vue && let Err(e) = self.enregistrer_vue_camera(None) {
+            self.error = Some(e);
+        }
     }
 
     pub(super) fn cube_orientation(&mut self, ui: &mut egui::Ui, vue: egui::Rect) {

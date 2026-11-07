@@ -927,6 +927,7 @@ pub struct Vue {
 }
 
 fn est_zero(v: &f64) -> bool { *v == 0.0 }
+fn champ_camera_defaut() -> f64 { 50.0 }
 fn limite_haute_defaut() -> f64 { 2800.0 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -947,6 +948,14 @@ pub enum GenreVue {
         profondeur: f64,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         elevation: bool,
+    },
+    /// Vue caméra (vue 3D enregistrée, vue piéton) : œil, point visé (mm, repère du
+    /// projet, z depuis le niveau 0) et champ de vision vertical (degrés).
+    Camera {
+        oeil: [f64; 3],
+        cible: [f64; 3],
+        #[serde(default = "champ_camera_defaut")]
+        champ: f64,
     },
 }
 

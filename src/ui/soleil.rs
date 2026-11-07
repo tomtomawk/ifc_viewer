@@ -3,6 +3,9 @@
 use super::*;
 use crate::modele::soleil::{self, AmbianceCiel, Lieu, ReglagesCiel};
 
+/// Hauteur de l'œil en vue piéton (m).
+const HAUTEUR_OEIL: f32 = 1.6;
+
 const MOIS: [&str; 12] = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 
 fn heure_texte(h: f32) -> String {
@@ -54,6 +57,124 @@ impl ViewerApp {
             return;
         }
         self.natif_modifie = true;
+    }
+
+    /// À l'ouverture d'une vue 3D : projection enregistrée et, pour une vue caméra, point
+    /// de vue et champ de vision.
+    pub(super) fn appliquer_camera_vue(&mut self) {
+        let Some(id) = self.id_vue_rendu() else { return };
+        let Some((projet, _)) = &self.natif else { return };
+        let camera = projet.vues.iter().find(|v| v.id == id).and_then(|v| match &v.genre {
+            crate::modele::GenreVue::Camera { oeil, cible, champ } => Some((*oeil, *cible, *champ)),
+            _ => None,
+        });
+        let projection = projet.rendus_vues.get(&id).and_then(|r| r.projection.as_deref()).and_then(crate::rendu::camera::Projection::depuis_nom);
+        if id != "3d" && camera.is_none() {
+            return;
+        }
+        if let Some(p) = projection {
+            self.camera.definir_projection(p);
+        } else {
+            self.camera.definir_projection(crate::rendu::camera::Projection::Perspective);
+        }
+        if let (Some((oeil, cible, champ)), Some(s)) = (camera, &self.scene) {
+            let vers = |p: [f64; 3]| (glam::DVec3::from_array(p) / 1000.0 - s.origin).as_vec3();
+            self.camera.placer(vers(oeil), vers(cible));
+            self.camera.fov_y = (champ as f32).clamp(15.0, 110.0).to_radians();
+        }
+    }
+
+    /// Mode piéton : œil à 1,60 m au-dessus du sol sous le point visé, regard horizontal,
+    /// champ de 60° ; en sortant, la caméra d'avant revient.
+    pub(super) fn basculer_pieton(&mut self) {
+        if self.pieton {
+            self.pieton = false;
+            if let Some(c) = self.camera_avant_pieton.take() {
+                self.camera = c;
+            }
+            self.status = "Vue piéton terminée.".into();
+            return;
+        }
+        let Some(s) = &self.scene else { return };
+        self.camera_avant_pieton = Some(self.camera.clone());
+        let p = self.camera.target;
+        let sol = s.sol_sous(p.x, p.y, f32::MAX).unwrap_or(s.min.z);
+        let oeil = Vec3::new(p.x, p.y, sol + HAUTEUR_OEIL);
+        let horizontal = Vec3::new(-self.camera.yaw.cos(), -self.camera.yaw.sin(), 0.0);
+        self.camera.ortho = false;
+        self.camera.fov_y = 60f32.to_radians();
+        self.camera.placer(oeil, oeil + horizontal * 3.0);
+        self.pieton = true;
+        self.visibility_dirty = true;
+        self.status = "Vue piéton : clic droit maintenu + ZQSD pour marcher (Maj : courir), souris pour regarder · « + Vue » enregistre ce point de vue.".into();
+    }
+
+    /// Pas de marche en vue piéton : déplacement horizontal `d` arrêté à 30 cm d'un
+    /// obstacle (rayons à hauteur de genou et d'œil), puis l'œil suit le sol.
+    pub(super) fn marcher(&mut self, d: Vec3) {
+        let l = d.length();
+        if !(l > 1e-6) {
+            return;
+        }
+        let dir = d / l;
+        let oeil = self.camera.eye();
+        let mut pas = l;
+        if let Some(s) = &self.scene {
+            for h in [HAUTEUR_OEIL - 0.6, 0.0] {
+                if let Some(t) = s.obstacle(oeil - Vec3::Z * h, dir, l + 0.3) {
+                    pas = pas.min((t - 0.3).max(0.0));
+                }
+            }
+        }
+        self.camera.deplacer(dir * pas);
+        self.suivre_sol();
+    }
+
+    /// Marche en vue piéton : l'œil suit le dessus le plus haut sous lui (sol, dalle,
+    /// marche de 60 cm au plus), à 1,60 m.
+    pub(super) fn suivre_sol(&mut self) {
+        let Some(s) = &self.scene else { return };
+        let oeil = self.camera.eye();
+        let pied = oeil.z - HAUTEUR_OEIL;
+        if let Some(z) = s.sol_sous(oeil.x, oeil.y, pied + 0.6) {
+            self.camera.hauteur_oeil(z + HAUTEUR_OEIL);
+        }
+    }
+
+    /// Enregistre le point de vue courant comme vue caméra du projet (avec les réglages
+    /// de rendu de la vue) et l'ouvre dans l'arborescence.
+    pub(super) fn enregistrer_vue_camera(&mut self, nom: Option<String>) -> Result<String, String> {
+        let Some(s) = &self.scene else { return Err("Aucune scène.".into()) };
+        let Some((projet, _)) = &self.natif else { return Err("Vue caméra : projet natif seulement.".into()) };
+        let mm = |p: Vec3| ((p.as_dvec3() + s.origin) * 1000.0).round().to_array();
+        let base = if self.pieton { "Vue piéton" } else { "Vue caméra" };
+        let nom = nom.unwrap_or_else(|| (1..).map(|k| format!("{base} {k}")).find(|n| !projet.vues.iter().any(|v| &v.nom == n)).unwrap_or_default());
+        if projet.vues.iter().any(|v| v.nom == nom) {
+            return Err(format!("Une vue s'appelle déjà « {nom} »."));
+        }
+        let id = crate::modele::collaboration::uuid();
+        let mut p = projet.clone();
+        p.vues.push(crate::modele::Vue {
+            id: id.clone(),
+            nom: nom.clone(),
+            type_vue: base.into(),
+            echelle: 100.0,
+            orientation_plan: 0.0,
+            coupe_active: None,
+            poche_vue: None,
+            elements_masques: Vec::new(),
+            contour_cadrage: Vec::new(),
+            fond_plan: None,
+            limite_haute_niveau: None,
+            limite_haute_decalage: 2800.0,
+            genre: crate::modele::GenreVue::Camera { oeil: mm(self.camera.eye()), cible: mm(self.camera.target), champ: (self.camera.fov_y.to_degrees() as f64 * 10.0).round() / 10.0 },
+        });
+        let mut rendu = self.rendu_vue_courant();
+        rendu.projection = Some(self.camera.projection().nom().into());
+        p.rendus_vues.insert(id, rendu);
+        self.appliquer_projet(p)?;
+        self.status = format!("« {nom} » enregistrée dans les vues 3D.");
+        Ok(nom)
     }
 
     /// Applique les réglages de rendu enregistrés de la vue `id` (ouverture de la vue).

@@ -163,6 +163,8 @@ Raccourcis existants :
 - `panneau proprietes|arborescence gauche|droite|flottant|externe|fermer` ; `fiche oui|non`.
 - `onglet tout|vues|feuilles|nomenclatures|familles|materiaux|groupes|liens|modele|classes`.
 - `style filaire|lignes_cachees|ombre|couleurs|realiste|rendu` ; `dessin oui|non` ; `traits_fins oui|non`.
+- `pieton oui|non|avancer <m>` : vue piéton (œil à 1,60 m au-dessus du sol, marche qui suit le sol et s'arrête aux murs) ;
+  `vue_camera [nom]` : enregistre le point de vue courant comme vue 3D du projet (genre `camera` : `oeil`, `cible` en mm, `champ` en degrés).
 - `soleil jour mois heure` : date (sans année) et heure légale (heures décimales) du soleil de la vue ;
   rend `azimut` et `hauteur` (degrés), calculés au lieu du projet (`projet.lieu`, Rennes par défaut).
 - `ciel [JSON]` : lit ou modifie les réglages du ciel physique de la vue (`ambiance` Clair|Voile|Nuageux|Couvert|Brumeux,

@@ -298,6 +298,7 @@ impl Projet {
                 Ok(())
             }
             GenreVue::Plan { .. } => Err("Un plan ne se retourne pas.".into()),
+            GenreVue::Camera { .. } => Err("Une vue caméra ne se retourne pas.".into()),
         }
     }
 

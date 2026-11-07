@@ -577,6 +577,9 @@ pub struct ViewerApp {
     /// Ciel physique de la vue (réglages) et fenêtre Ciel ouverte.
     ciel: crate::modele::soleil::ReglagesCiel,
     ciel_ouvert: bool,
+    /// Vue piéton : œil à hauteur d'homme, la marche suit le sol ; caméra d'avant.
+    pieton: bool,
+    camera_avant_pieton: Option<Camera>,
     /// Pente donnée à une arête cochée (degrés), la dernière saisie.
     pente_defaut: f64,
     /// Options de l'application (menu Début > Options).
@@ -783,6 +786,8 @@ impl ViewerApp {
             soleil_heure: 15.0,
             ciel: Default::default(),
             ciel_ouvert: false,
+            pieton: false,
+            camera_avant_pieton: None,
             faces_blanches: false,
             traits_fins: false,
             eclairage: true,

@@ -601,6 +601,31 @@ impl ViewerApp {
                 self.visibility_dirty = true;
                 self.etat()
             }
+            "pieton" => {
+                // pieton oui|non : vue piéton à 1,60 m ; pieton avancer <m> : marche droit devant
+                let mut mots = argument.split_whitespace();
+                match mots.next().unwrap_or("oui") {
+                    "oui" => { if !self.pieton { self.basculer_pieton(); } }
+                    "non" => { if self.pieton { self.basculer_pieton(); } }
+                    "avancer" => {
+                        let Some(d) = mots.next().and_then(|x| x.parse::<f32>().ok()) else { return erreur("usage : pieton avancer <mètres>") };
+                        let f = self.camera.forward();
+                        let avant = Vec3::new(f.x, f.y, 0.0).normalize_or(Vec3::X);
+                        let n = (d.abs() / 0.25).ceil().max(1.0) as i32;
+                        for _ in 0..n { if self.pieton { self.marcher(avant * d / n as f32); } else { self.camera.deplacer(avant * d / n as f32); } }
+                    }
+                    _ => return erreur("usage : pieton oui|non|avancer <m>"),
+                }
+                let o = self.camera.eye();
+                serde_json::json!({"ok": true, "pieton": self.pieton, "oeil": [o.x, o.y, o.z]}).to_string()
+            }
+            "vue_camera" => {
+                // vue_camera [nom] : enregistre le point de vue courant comme vue 3D
+                match self.enregistrer_vue_camera((!argument.trim().is_empty()).then(|| argument.trim().to_string())) {
+                    Ok(nom) => serde_json::json!({"ok": true, "nom": nom}).to_string(),
+                    Err(e) => erreur(&e),
+                }
+            }
             "ciel" => {
                 // ciel {"ambiance":"Couvert","brume":0.3,"exposition_auto":false,"exposition":1.0} : réglages partiels
                 let mut v = serde_json::to_value(&self.ciel).unwrap_or_default();

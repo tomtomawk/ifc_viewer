@@ -12,6 +12,7 @@ impl ViewerApp {
         let numero = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).map(|v| v.revit_id);
         let altitude_coupe = self.plan_coupe().and_then(|p| self.scene.as_ref().map(|s| (p.w as f64 + s.origin.z) * 1000.0));
         let orientation = crate::rendu::orientation_plan::angle(&self.camera) as f64;
+        let origine = self.scene.as_ref().map(|s| s.origin);
         if let (Some(numero), Some((projet, _))) = (numero, &mut self.natif) {
             if let Some(index) = projet.vues.iter().position(|v| scene::numero_vue(&v.id) == numero) {
                 let mut vue = projet.vues[index].clone();
@@ -20,6 +21,12 @@ impl ViewerApp {
                     if (vue.orientation_plan - orientation).abs() > 1e-5 { vue.orientation_plan = orientation; }
                 }
                 if self.coupe != vue.coupe_active.unwrap_or(true) { vue.coupe_active = Some(self.coupe); }
+                // vue caméra : point de vue et champ de la caméra (mm, au mm près)
+                if let (crate::modele::GenreVue::Camera { oeil, cible, champ }, Some(o)) = (&mut vue.genre, origine) {
+                    let mm = |p: glam::Vec3| ((p.as_dvec3() + o) * 1000.0).round().to_array();
+                    let (no, nc, nf) = (mm(self.camera.eye()), mm(self.camera.target), (self.camera.fov_y.to_degrees() as f64 * 10.0).round() / 10.0);
+                    if *oeil != no || *cible != nc || (*champ - nf).abs() > 0.05 { (*oeil, *cible, *champ) = (no, nc, nf); }
+                }
                 let poche = self.poche.nom();
                 if poche != vue.poche_vue.as_deref().unwrap_or("hachure") { vue.poche_vue = Some(poche.into()); }
                 if vue != projet.vues[index] {
@@ -423,6 +430,9 @@ impl ViewerApp {
         if genre_feuille {
             self.cadrer_rectangle(&cadre);
         }
+        // vue 3D : projection enregistrée, point de vue d'une vue caméra
+        self.pieton = false;
+        self.appliquer_camera_vue();
         if let Some(e) = entite {
             self.select(Some(e), false);
         }

@@ -159,6 +159,25 @@ impl Camera {
         self.target = eye + self.forward() * self.dist;
     }
 
+    /// Place l'œil et le point visé (orbite autour du point visé).
+    pub fn placer(&mut self, oeil: Vec3, cible: Vec3) {
+        let d = cible - oeil;
+        let l = d.length();
+        if !(l > 1e-6) {
+            return;
+        }
+        let f = d / l;
+        self.target = cible;
+        self.dist = l;
+        self.yaw = (-f.y).atan2(-f.x);
+        self.pitch = (-f.z).clamp(-1.0, 1.0).asin().clamp(-MAX_PITCH, MAX_PITCH);
+    }
+
+    /// Monte ou descend l'œil (et la cible) à l'altitude `z`.
+    pub fn hauteur_oeil(&mut self, z: f32) {
+        self.target.z += z - self.eye().z;
+    }
+
     /// Déplace l'œil et la cible ensemble (navigation en vol).
     pub fn deplacer(&mut self, d: Vec3) {
         self.target += d;
