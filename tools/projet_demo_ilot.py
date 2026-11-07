@@ -144,6 +144,36 @@ def feuillage():
     enregistrer("feuillage_relief.png", gris(v))
 
 
+def feuilles():
+    """Feuilles détourées raccordables (carreau de 700 mm) : couleur et masque de
+    découpe (blanc : feuille), pour les plans de feuillage des arbres."""
+    from PIL import ImageDraw
+    n = 1024
+    coul = Image.new("RGB", (n, n), (40, 60, 30))
+    masque = Image.new("L", (n, n), 0)
+    dc, dm = ImageDraw.Draw(coul), ImageDraw.Draw(masque)
+    g = np.random.default_rng(21)
+    for _ in range(620):
+        cx, cy = g.random() * n, g.random() * n
+        long, larg = g.uniform(38, 70), g.uniform(16, 30)
+        a = g.uniform(0, np.pi)
+        ton = g.uniform(0.65, 1.2)
+        base = np.array([70, 112, 45]) * ton + g.uniform(-12, 12, 3)
+        t = np.linspace(0, 2 * np.pi, 18)
+        # feuille : ellipse pointue
+        x, y = np.cos(t) * long / 2, np.sin(t) * larg / 2 * (1 - 0.35 * np.cos(t) ** 2)
+        pts = np.stack([x * np.cos(a) - y * np.sin(a), x * np.sin(a) + y * np.cos(a)], 1)
+        for ox in (-n, 0, n):
+            for oy in (-n, 0, n):
+                poly = [(cx + px + ox, cy + py + oy) for px, py in pts]
+                dc.polygon(poly, fill=tuple(int(v) for v in np.clip(base, 0, 255)))
+                dm.polygon(poly, fill=255)
+                # nervure claire
+                dc.line([poly[0], poly[9]], fill=tuple(int(v) for v in np.clip(base * 1.25, 0, 255)), width=1)
+    coul.save(os.path.join(TEX, "feuilles.png"))
+    masque.save(os.path.join(TEX, "feuilles_masque.png"))
+
+
 def ecorce():
     y, x = np.mgrid[0:N, 0:N]
     n = bruit(6, 15)
@@ -200,7 +230,8 @@ MATERIAUX = [
     materiau("Tuiles", [158, 72, 46], apparence={"rugosite": 0.6, "textures": {"Couleur": tex("tuiles.png", 800, 800), "Relief": tex("tuiles_relief.png", 800, 800, intensite=1.0)}}),
     materiau("Zinc", [150, 156, 162], apparence={"rugosite": 0.35, "metallique": 0.8, "textures": {"Couleur": tex("zinc.png", 1000, 1000), "Relief": tex("zinc_relief.png", 1000, 1000, intensite=0.5)}}),
     materiau("Verre", [160, 190, 200], motif="uni", apparence={"teinte": [150, 185, 195], "rugosite": 0.03, "transparence": 0.6}),
-    materiau("Feuillage", [70, 105, 45], apparence={"rugosite": 0.8, "textures": {"Couleur": tex("feuillage.png", 1500, 1500), "Relief": tex("feuillage_relief.png", 1500, 1500, intensite=1.0)}}),
+    # feuillage des arbres (style Réaliste) : feuilles détourées, découpe
+    materiau("Feuillage", [70, 105, 45], apparence={"rugosite": 0.7, "textures": {"Couleur": tex("feuilles.png", 700, 700), "Decoupe": tex("feuilles_masque.png", 700, 700)}}),
     materiau("Écorce", [96, 80, 64], apparence={"rugosite": 0.9, "textures": {"Couleur": tex("ecorce.png", 600, 600), "Relief": tex("ecorce_relief.png", 600, 600, intensite=0.8)}}),
     # pelouse : « Grass004 » d'ambientCG (CC0, ambientcg.com), carreau de 1,5 m,
     # anti-répétition, parallaxe, brins de 60 mm
@@ -208,7 +239,6 @@ MATERIAUX = [
         "Couleur": tex("herbe_diff.jpg", 1500, 1500, anti_repetition=True),
         "Normale": tex("herbe_nor_gl.jpg", 1500, 1500, anti_repetition=True, intensite=0.8),
         "Relief": tex("herbe_disp.jpg", 1500, 1500, anti_repetition=True, profondeur=15, intensite=1.0),
-        "Rugosite": tex("herbe_rough.jpg", 1500, 1500, anti_repetition=True),
         "Occlusion": tex("herbe_ao.jpg", 1500, 1500, anti_repetition=True)}}),
     materiau("Enrobé", [70, 70, 70], apparence={"rugosite": 0.9, "textures": {"Couleur": tex("enrobe.png", 1000, 1000)}}),
     materiau("Pavés", [160, 155, 145], apparence={"rugosite": 0.8, "textures": {"Couleur": tex("paves.png", 800, 800), "Relief": tex("paves_relief.png", 800, 800, intensite=0.8, profondeur=10)}}),
@@ -451,7 +481,7 @@ def projet():
 
 if __name__ == "__main__":
     os.makedirs(TEX, exist_ok=True)
-    for f in (briques, beton, enduit, bois, tuiles, feuillage, ecorce, enrobe, paves):
+    for f in (briques, beton, enduit, bois, tuiles, feuilles, ecorce, enrobe, paves):
         f()
     with open(os.path.join(SORTIE, "ilot_demo.modele.json"), "w", encoding="utf-8") as fichier:
         json.dump(projet(), fichier, ensure_ascii=False, indent=1)

@@ -172,6 +172,14 @@ fn vs_main(s: Sommet) -> Varie {
         }
         o.c = vec4f(0.08, 0.08, 0.08, 1.0);
     }
+    // géométrie propre à un style (arbres : proxy en Graphique, remplacement en Réaliste) :
+    // motif sans code, 4ᵉ octet 1 (Graphique seulement) ou 2 (Réaliste seulement)
+    if u32(s.motif.x * 255.0 + 0.5) == 0u {
+        let style = u32(s.motif.w * 255.0 + 0.5);
+        if (style == 1u && passe.drapeaux.z == 1u) || (style == 2u && passe.drapeaux.z == 0u) {
+            p = vec4f(2.0, 2.0, 2.0, 1.0);
+        }
+    }
     o.clip = vers_wgpu(p);
     return o;
 }
@@ -309,14 +317,17 @@ fn fs_herbe(e: VarieHerbe) -> @location(0) vec4f {
     }
     var base = e.couleur;
     if a_carte(k, 0) {
-        base = carte(k, 0, uv, dx, dy).rgb;
+        // détail du brin mêlé à la teinte moyenne de la texture (celle de la surface au
+        // loin) : pas de démarcation de couleur où les brins s'effacent
+        let moyenne = carte(k, 0, uv, dx * 48.0, dy * 48.0).rgb;
+        base = mix(moyenne, carte(k, 0, uv, dx, dy).rgb, 0.45);
     }
     // occlusion de la texture, comme la surface
     if a_carte(k, 5) {
         base *= mix(1.0, carte(k, 5, uv, dx, dy).r, intensite(k, 5));
     }
     // racine sombre, pointe claire ; vers la teinte moyenne du sol quand les brins s'effacent
-    base *= mix(0.78, mix(0.5, 1.0, t) * (0.85 + 0.3 * hachage(cellule + vec2f(5.3, 1.7))), fondu);
+    base *= mix(1.0, mix(0.62, 1.12, t) * (0.85 + 0.3 * hachage(cellule + vec2f(5.3, 1.7))), fondu);
     let ndl = max(dot(e.n, g.soleil.xyz), 0.0);
     var ombre = 1.0;
     if passe.drapeaux.w == 1u && ndl > 0.0 {
@@ -327,7 +338,7 @@ fn fs_herbe(e: VarieHerbe) -> @location(0) vec4f {
         let li = lumiere();
         // même éclairage que la surface (soleil, ciel au-dessus), un peu moins de ciel au pied
         let soleil = li.soleil * ndl * mix(ombre, 1.0, 0.85 * g.ciel[1].y);
-        c = vers_srgb(compresser(vers_lineaire(base) * (soleil + li.e_ciel * mix(0.7, 1.0, t)) * li.k));
+        c = vers_srgb(compresser(vers_lineaire(base) * (soleil + li.e_ciel * mix(0.75, 1.0, t)) * li.k));
     } else {
         c = base * (0.45 + 0.55 * ndl * ombre);
     }
@@ -338,6 +349,35 @@ fn fs_herbe(e: VarieHerbe) -> @location(0) vec4f {
 @vertex
 fn vs_profondeur(@location(0) pos: vec3f) -> @builtin(position) vec4f {
     return vers_wgpu(passe.mvp * vec4f(pos, 1.0));
+}
+
+// Carte d'ombres des surfaces découpées (feuillage) : pixels retirés par la carte de
+// découpe de leur apparence.
+@vertex
+fn vs_ombre_decoupe(s: Sommet) -> Varie {
+    var o: Varie;
+    o.pos = s.pos;
+    o.n = s.normale.xyz;
+    o.rendu = s.rendu;
+    o.clip = vers_wgpu(passe.mvp * vec4f(s.pos, 1.0));
+    return o;
+}
+
+@fragment
+fn fs_ombre_decoupe(e: Varie) {
+    let n = normalize(e.n);
+    let an = abs(n);
+    let uvm = select(vec2f(dot(e.pos, normalize(vec3f(-n.y, n.x, 0.0) + vec3f(1e-6, 0.0, 0.0))), e.pos.z), e.pos.xy, an.z > 0.7);
+    let uv = uvm * 1000.0;
+    let dx = dpdx(uv);
+    let dy = dpdy(uv);
+    let rang = i32(e.rendu.a * 255.0 + 0.5) - 128;
+    if rang >= 0 && rang < MAX_APPARENCES {
+        let k = rang * 22;
+        if a_carte(k, 7) && mix(1.0, carte(k, 7, uv, dx, dy).r, intensite(k, 7)) < 0.5 {
+            discard;
+        }
+    }
 }
 
 // Profondeur écrite en couleur (occultation ambiante) : une texture de profondeur ne se
@@ -704,6 +744,8 @@ struct Effet {
     metal: f32,
     emis: vec3f,
     coupe: bool,
+    // surface découpée (feuillage) : éclairage enveloppant, comme une végétation translucide
+    feuillage: bool,
 }
 
 // Apparence de rang r : couleur, rugosité, métallique, relief, normales, occlusion,
@@ -752,6 +794,7 @@ fn effet_apparence(r: i32, uvm: vec2f, dxm: vec2f, dym: vec2f, n0: vec3f, n: vec
     e.rug = p0.w;
     e.metal = p1.x;
     e.coupe = false;
+    e.feuillage = a_carte(k, 7);
     if a_carte(k, 0) {
         let t = carte(k, 0, uv, dx, dy);
         let teinte = select(vec3f(1.0), p0.rgb, p1.w > 0.5);
@@ -886,7 +929,10 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
                 fx.base = vers_lineaire(fx.base);
             }
         }
-        let ndl = max(dot(n, g.soleil.xyz), 0.0);
+        var ndl = max(dot(n, g.soleil.xyz), 0.0);
+        if app && fx.feuillage {
+            ndl = 0.35 + 0.65 * ndl;
+        }
         // ciel (hémisphère), soleil, un peu de lumière vers l'œil ; l'occultation éteint
         // surtout le ciel, un peu le soleil
         d = (0.30 + 0.28 * (0.5 + 0.5 * n.z)) * ao + 0.62 * ndl * ombre * mix(1.0, ao, 0.35) + 0.05 * max(dot(n, vd), 0.0);
@@ -1276,6 +1322,17 @@ pub struct Renderer {
     n_herbe: u32,
     rangs_sommets: Vec<u8>,
     herbe_rangs: Vec<bool>,
+    /// Ombres et profondeur par style (sans la géométrie de l'autre style) ; surfaces
+    /// découpées (feuillage) à part, avec leur pipeline ; style des sommets (motif),
+    /// apparences découpées.
+    ebo_ombres: [wgpu::Buffer; 2],
+    n_ombres: [u32; 2],
+    ebo_decoupe: wgpu::Buffer,
+    n_decoupe: u32,
+    pipeline_ombres_decoupe: wgpu::RenderPipeline,
+    ombres_vides: wgpu::TextureView,
+    style_sommets: Vec<u8>,
+    decoupe_rangs: Vec<bool>,
     indices_opaques: Vec<u32>,
     images_apparences: std::collections::HashMap<String, (Option<std::time::SystemTime>, Option<Arc<Vec<Vec<u8>>>>)>,
     couches_apparences: Vec<(String, Option<std::time::SystemTime>)>,
@@ -1547,6 +1604,36 @@ impl Renderer {
         // fond de ciel : sans tampon de sommets ni écriture de profondeur
         let pipeline_ciel = scene("ciel", "vs_ciel", &[], "fs_ciel", None, true);
         let pipeline_herbe = scene("herbe", "vs_herbe", &tampons_scene, "fs_herbe", None, false);
+        let pipeline_ombres_decoupe = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("carte d'ombres découpée"),
+            layout: Some(&layout_scene),
+            vertex: wgpu::VertexState { module: &module_scene, entry_point: Some("vs_ombre_decoupe"), compilation_options: Default::default(), buffers: &tampons_scene },
+            primitive: Default::default(),
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: PROFONDEUR,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                stencil: Default::default(),
+                bias: wgpu::DepthBiasState { constant: 4, slope_scale: 2.0, clamp: 0.0 },
+            }),
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState { module: &module_scene, entry_point: Some("fs_ombre_decoupe"), compilation_options: Default::default(), targets: &[] }),
+            multiview_mask: None,
+            cache: None,
+        });
+        // carte d'ombres vide (liée pendant l'écriture de la vraie)
+        let ombres_vides = device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("ombres vides"),
+                size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: PROFONDEUR,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            })
+            .create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
 
         // couleur : profondeur aussi écrite dans une texture de ce format
         let profondeur = |label, couleur: Option<wgpu::TextureFormat>, decalage: wgpu::DepthBiasState| {
@@ -1654,6 +1741,14 @@ impl Renderer {
             pipeline_ciel,
             pipeline_herbe,
             ebo_herbe: index_vide("herbe"),
+            ebo_ombres: [index_vide("ombres graphique"), index_vide("ombres réaliste")],
+            n_ombres: [0, 0],
+            ebo_decoupe: index_vide("découpe"),
+            n_decoupe: 0,
+            pipeline_ombres_decoupe,
+            ombres_vides,
+            style_sommets: Vec::new(),
+            decoupe_rangs: Vec::new(),
             n_herbe: 0,
             rangs_sommets: Vec::new(),
             herbe_rangs: Vec::new(),
@@ -1882,6 +1977,7 @@ impl Renderer {
         }
         self.queue.write_buffer(&self.uniformes_apparences, 0, as_bytes(&u));
         self.herbe_rangs = apparences.iter().take(MAX_APPARENCES).map(|a| a.herbe > 0.0).collect();
+        self.decoupe_rangs = apparences.iter().take(MAX_APPARENCES).map(|a| a.textures.contains_key(&CarteTexture::Decoupe)).collect();
         self.refaire_herbe();
         if couches != self.couches_apparences {
             self.vue_apparences = Self::couches_images(&self.device, &self.queue, &images);
@@ -1892,6 +1988,7 @@ impl Renderer {
     /// Sommets et leurs couleurs de rendu (même nombre, alpha 0 : aucune).
     pub fn upload_vertices(&mut self, v: &[Vertex], rendu: &[[u8; 4]], motifs: &[[u8; 4]]) {
         self.rangs_sommets = rendu.iter().map(|c| if (128..255).contains(&c[3]) { c[3] - 128 } else { 255 }).collect();
+        self.style_sommets = motifs.iter().map(|m| if m[0] == 0 { m[3] } else { 0 }).collect();
         let usage = wgpu::BufferUsages::VERTEX;
         self.sommets = Self::tampon(&self.device, "sommets", as_bytes(v), usage);
         self.rendu = Self::tampon(&self.device, "couleurs de rendu", as_bytes(rendu), usage);
@@ -1917,13 +2014,48 @@ impl Renderer {
 
     /// Indices des triangles opaques, transparents, des traits et des arêtes vives
     /// (paires) à tracer.
+    /// Textures de la scène (groupe 1) : carte d'ombres, occultation, copie et profondeur
+    /// des surfaces opaques (reflets du verre).
+    fn groupe_scene(&self, ombres: &wgpu::TextureView, ao: &wgpu::TextureView, copie: &wgpu::TextureView, profondeur: &wgpu::TextureView) -> wgpu::BindGroup {
+        self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("textures de la scène"),
+            layout: &self.disposition_1,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&self.texture_selection.create_view(&Default::default())) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(ombres) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.echantillonneur_ombres) },
+                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(ao) },
+                wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(&self.vue_apparences) },
+                wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::Sampler(&self.echantillonneur_apparences) },
+                wgpu::BindGroupEntry { binding: 6, resource: self.uniformes_apparences.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::TextureView(&self.ciel.vue_ciel) },
+                wgpu::BindGroupEntry { binding: 8, resource: wgpu::BindingResource::Sampler(&self.echantillonneur_ciel) },
+                wgpu::BindGroupEntry { binding: 9, resource: wgpu::BindingResource::TextureView(copie) },
+                wgpu::BindGroupEntry { binding: 10, resource: wgpu::BindingResource::TextureView(profondeur) },
+            ],
+        })
+    }
+
     /// Triangles opaques dont le matériau porte de l'herbe (rang d'apparence du premier
     /// sommet).
     fn refaire_herbe(&mut self) {
-        let herbe = |i: u32| self.rangs_sommets.get(i as usize).and_then(|&r| self.herbe_rangs.get(r as usize)).copied().unwrap_or(false);
-        let tris: Vec<u32> = self.indices_opaques.chunks_exact(3).filter(|t| herbe(t[0])).flatten().copied().collect();
-        self.n_herbe = tris.len() as u32;
-        self.ebo_herbe = Self::tampon(&self.device, "herbe", if tris.is_empty() { &[0u8; 16] } else { as_bytes(&tris) }, wgpu::BufferUsages::INDEX);
+        let rang = |i: u32| self.rangs_sommets.get(i as usize).copied().unwrap_or(255) as usize;
+        let herbe = |i: u32| self.herbe_rangs.get(rang(i)).copied().unwrap_or(false);
+        let decoupe = |i: u32| self.decoupe_rangs.get(rang(i)).copied().unwrap_or(false);
+        let style = |i: u32| self.style_sommets.get(i as usize).copied().unwrap_or(0);
+        let tampon = |d: &wgpu::Device, label: &str, t: &[u32]| Self::tampon(d, label, if t.is_empty() { &[0u8; 16] } else { as_bytes(t) }, wgpu::BufferUsages::INDEX);
+        let tris = self.indices_opaques.chunks_exact(3);
+        let liste = |f: &dyn Fn(&[u32]) -> bool| -> Vec<u32> { tris.clone().filter(|t| f(t)).flatten().copied().collect() };
+        let herbe_t = liste(&|t| herbe(t[0]));
+        let ombres_g = liste(&|t| style(t[0]) != 2);
+        let ombres_r = liste(&|t| style(t[0]) != 1 && !decoupe(t[0]));
+        let decoupe_t = liste(&|t| style(t[0]) != 1 && decoupe(t[0]));
+        self.n_herbe = herbe_t.len() as u32;
+        self.ebo_herbe = tampon(&self.device, "herbe", &herbe_t);
+        self.n_ombres = [ombres_g.len() as u32, ombres_r.len() as u32];
+        self.ebo_ombres = [tampon(&self.device, "ombres graphique", &ombres_g), tampon(&self.device, "ombres réaliste", &ombres_r)];
+        self.n_decoupe = decoupe_t.len() as u32;
+        self.ebo_decoupe = tampon(&self.device, "découpe", &decoupe_t);
     }
 
     pub fn upload_indices(&mut self, opaque: &[u32], transp: &[u32], lines: &[u32], aretes: &[u32]) {
@@ -2127,14 +2259,26 @@ impl Renderer {
             .forget_lifetime()
         };
         // profondeur de la scène vue du soleil dans la carte d'ombres (triangles opaques)
+        // géométrie du style de la vue (arbres : proxy ou remplacement)
+        let realiste = p.style == StyleVisuel::Realiste;
+        let (ebo_prof, n_prof) = (&self.ebo_ombres[realiste as usize], self.n_ombres[realiste as usize]);
+        let groupe_ombres = (realiste && self.n_decoupe > 0).then(|| self.groupe_scene(&self.ombres_vides, &self.ao_vide, &self.copie_vide, &self.ao_vide));
         if p.soleil.is_some() && self.n_opaque > 0 {
             for (k, vue) in self.vues_cascades.iter().enumerate() {
                 let mut passe = profondeur_seule(&mut enc, vue, None);
                 passe.set_pipeline(&self.pipeline_ombres);
                 passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_OMBRES + k as u32));
                 passe.set_vertex_buffer(0, self.sommets.slice(..));
-                passe.set_index_buffer(self.ebo_opaque.slice(..), wgpu::IndexFormat::Uint32);
-                passe.draw_indexed(0..self.n_opaque, 0, 0..1);
+                passe.set_index_buffer(ebo_prof.slice(..), wgpu::IndexFormat::Uint32);
+                passe.draw_indexed(0..n_prof, 0, 0..1);
+                // feuillage : découpé par sa texture
+                if let Some(g1) = &groupe_ombres {
+                    passe.set_pipeline(&self.pipeline_ombres_decoupe);
+                    passe.set_bind_group(1, g1, &[]);
+                    self.sommets_scene(&mut passe);
+                    passe.set_index_buffer(self.ebo_decoupe.slice(..), wgpu::IndexFormat::Uint32);
+                    passe.draw_indexed(0..self.n_decoupe, 0, 0..1);
+                }
             }
         }
         // occultation ambiante : profondeur (triangles opaques), occultation brute puis lissée ;
@@ -2147,8 +2291,8 @@ impl Renderer {
                 passe.set_pipeline(&self.pipeline_ao_profondeur);
                 passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_AO));
                 passe.set_vertex_buffer(0, self.sommets.slice(..));
-                passe.set_index_buffer(self.ebo_opaque.slice(..), wgpu::IndexFormat::Uint32);
-                passe.draw_indexed(0..self.n_opaque, 0, 0..1);
+                passe.set_index_buffer(ebo_prof.slice(..), wgpu::IndexFormat::Uint32);
+                passe.draw_indexed(0..n_prof, 0, 0..1);
             }
         }
         if ao {
@@ -2158,8 +2302,8 @@ impl Renderer {
                     passe.set_pipeline(&self.pipeline_ao_profondeur);
                     passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_AO));
                     passe.set_vertex_buffer(0, self.sommets.slice(..));
-                    passe.set_index_buffer(self.ebo_opaque.slice(..), wgpu::IndexFormat::Uint32);
-                    passe.draw_indexed(0..self.n_opaque, 0, 0..1);
+                    passe.set_index_buffer(ebo_prof.slice(..), wgpu::IndexFormat::Uint32);
+                    passe.draw_indexed(0..n_prof, 0, 0..1);
                 }
             }
             for (pipeline, groupe, cible) in [(&self.pipeline_ao, &c.groupe_ao, &c.ao_brut), (&self.pipeline_flou, &c.groupe_flou, &c.ao_lisse)] {
@@ -2182,23 +2326,7 @@ impl Renderer {
                 passe.draw(0..3, 0..1);
             }
         }
-        let groupe_1 = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("textures de la scène"),
-            layout: &self.disposition_1,
-            entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&self.texture_selection.create_view(&Default::default())) },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&self.vue_ombres) },
-                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.echantillonneur_ombres) },
-                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(if ao { &c.ao_lisse } else { &self.ao_vide }) },
-                wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(&self.vue_apparences) },
-                wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::Sampler(&self.echantillonneur_apparences) },
-                wgpu::BindGroupEntry { binding: 6, resource: self.uniformes_apparences.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::TextureView(&self.ciel.vue_ciel) },
-                wgpu::BindGroupEntry { binding: 8, resource: wgpu::BindingResource::Sampler(&self.echantillonneur_ciel) },
-                wgpu::BindGroupEntry { binding: 9, resource: wgpu::BindingResource::TextureView(if ssr { &c.vue_copie } else { &self.copie_vide }) },
-                wgpu::BindGroupEntry { binding: 10, resource: wgpu::BindingResource::TextureView(if ssr { &c.ao_profondeur } else { &self.ao_vide }) },
-            ],
-        });
+        let groupe_1 = self.groupe_scene(&self.vue_ombres, if ao { &c.ao_lisse } else { &self.ao_vide }, if ssr { &c.vue_copie } else { &self.copie_vide }, if ssr { &c.ao_profondeur } else { &self.ao_vide });
 
         // fenêtres de vue d'une feuille : chacune dans son rectangle, profondeur effacée,
         // découpée par ses plans ; la feuille (cartouche, titres) par-dessus. Chaque dessin

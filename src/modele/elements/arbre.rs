@@ -142,7 +142,107 @@ fn tronc(bas: DVec3, haut: f64, r0: f64, r1: f64, n: usize) -> Vec<[DVec3; 3]> {
     out
 }
 
+/// Plan de feuillage carré de côté `c`, centré en `centre`, de normale `n`.
+fn carte(centre: DVec3, n: DVec3, c: f64, tourne: f64) -> [[DVec3; 3]; 2] {
+    let n = n.normalize_or(DVec3::Z);
+    let t0 = if n.z.abs() < 0.9 { n.cross(DVec3::Z) } else { n.cross(DVec3::X) }.normalize();
+    let b0 = n.cross(t0);
+    let (s, co) = tourne.sin_cos();
+    let (t, b) = (t0 * co + b0 * s, b0 * co - t0 * s);
+    let h = c * 0.5;
+    let p = |x: f64, y: f64| centre + t * x * h + b * y * h;
+    [[p(-1.0, -1.0), p(1.0, -1.0), p(1.0, 1.0)], [p(-1.0, -1.0), p(1.0, 1.0), p(-1.0, 1.0)]]
+}
+
+/// Point tiré uniformément dans la boule unité.
+fn dans_boule(alea: &mut Alea) -> DVec3 {
+    loop {
+        let p = DVec3::new(alea.entre(-1.0, 1.0), alea.entre(-1.0, 1.0), alea.entre(-1.0, 1.0));
+        if p.length_squared() <= 1.0 {
+            return p;
+        }
+    }
+}
+
+/// Géométrie de remplacement (style Réaliste) : tronc et branches, plans de feuillage
+/// (texture de feuilles découpée par le matériau « Feuillage »).
+pub struct Remplacement {
+    pub bois: Vec<[DVec3; 3]>,
+    pub feuillage: Vec<[DVec3; 3]>,
+}
+
 impl Arbre {
+    /// Arbre de remplacement du style Réaliste (mm, pied à l'altitude `z0`) : tronc,
+    /// branches vers le houppier et 150 à 260 plans de feuillage orientés au hasard dans
+    /// son volume (ellipsoïde, cône ou colonne selon l'essence).
+    pub fn remplacement(&self, z0: f64) -> Remplacement {
+        let mut alea = Alea::de(&format!("{}-feuillage", self.id));
+        let pied = DVec3::new(self.position[0], self.position[1], z0 + self.decalage);
+        let (h, d) = (self.hauteur.max(500.0), self.diametre.max(300.0));
+        let rt = (d * 0.035).clamp(60.0, 400.0);
+        let mut bois = Vec::new();
+        let mut feuillage = Vec::new();
+        // volume du houppier : centre, demi-axes, forme
+        let (fut, centre, rh, rv) = match self.essence {
+            Essence::Feuillu => (h * 0.35, h * 0.35 + (h - h * 0.35) * 0.5, d * 0.5, (h - h * 0.35) * 0.5),
+            Essence::Conifere => (h * 0.12, h * 0.12 + (h - h * 0.12) * 0.5, d * 0.5, (h - h * 0.12) * 0.5),
+            Essence::Fastigie => (h * 0.1, h * 0.1 + (h - h * 0.1) * 0.5, d * 0.5, (h - h * 0.1) * 0.5),
+        };
+        let haut_tronc = match self.essence { Essence::Conifere => h * 0.92, _ => fut + rv * 0.9 };
+        bois.extend(tronc(pied, haut_tronc, rt, rt * 0.35, 10));
+        // branches : du tronc vers la périphérie du houppier
+        let nb_branches = match self.essence { Essence::Feuillu => 7, Essence::Conifere => 10, Essence::Fastigie => 5 };
+        for k in 0..nb_branches {
+            let z = fut + (haut_tronc - fut) * (k as f64 + 0.5) / nb_branches as f64 * 0.8;
+            let a = k as f64 * 2.39996 + alea.entre(-0.3, 0.3);
+            let portee = rh * match self.essence { Essence::Conifere => 0.9 * (1.0 - (z - fut) / (h - fut)), _ => 0.65 };
+            let depart = pied + DVec3::Z * z;
+            let fin = depart + DVec3::new(a.cos() * portee, a.sin() * portee, portee * 0.5);
+            let dir = fin - depart;
+            let l = dir.length();
+            // cylindre orienté : rebâti dans le repère de la branche
+            let n = dir / l;
+            let t = n.cross(DVec3::Z).normalize_or(DVec3::X);
+            let b = n.cross(t);
+            let r0 = rt * 0.35;
+            for i in 0..6 {
+                let (u0, u1) = (i as f64 / 6.0 * std::f64::consts::TAU, (i + 1) as f64 / 6.0 * std::f64::consts::TAU);
+                let p = |u: f64, r: f64, s: f64| depart + n * s + (t * u.cos() + b * u.sin()) * r;
+                bois.push([p(u0, r0, 0.0), p(u1, r0, 0.0), p(u1, r0 * 0.3, l)]);
+                bois.push([p(u0, r0, 0.0), p(u1, r0 * 0.3, l), p(u0, r0 * 0.3, l)]);
+            }
+        }
+        // plans de feuillage
+        let (n_cartes, cote) = match self.essence {
+            Essence::Feuillu => ((d * d / 220_000.0) as usize, d * 0.2),
+            Essence::Conifere => ((d * h / 260_000.0) as usize, d * 0.22),
+            Essence::Fastigie => ((d * h / 160_000.0) as usize, d * 0.38),
+        };
+        for _ in 0..n_cartes.clamp(120, 260) {
+            let q = dans_boule(&mut alea);
+            let c = match self.essence {
+                Essence::Conifere => {
+                    // cône : rayon décroissant avec la hauteur
+                    let zr = alea.entre(-1.0, 0.95);
+                    let rmax = (1.0 - (zr + 1.0) / 2.0) * 0.95;
+                    DVec3::new(q.x * rh * rmax, q.y * rh * rmax, zr * rv)
+                }
+                _ => {
+                    // vers la surface : le cœur du houppier reste plus clair
+                    let r = q.length().max(1e-6);
+                    let q = q / r * r.powf(0.45) * 0.88;
+                    DVec3::new(q.x * rh, q.y * rh, q.z * rv)
+                }
+            };
+            let centre_carte = pied + DVec3::Z * centre + c;
+            // orientation : surtout vers l'extérieur, un peu au hasard
+            let n = (DVec3::new(c.x / rh, c.y / rh, c.z / rv * 0.6) + dans_boule(&mut alea) * 0.9).normalize_or(DVec3::Z);
+            let tc = cote * alea.entre(0.75, 1.2);
+            feuillage.extend(carte(centre_carte, n, tc, alea.entre(0.0, std::f64::consts::TAU)));
+        }
+        Remplacement { bois, feuillage }
+    }
+
     /// Géométrie (mm, repère du projet) : tronc et houppier, pied à l'altitude `z0`.
     pub fn solides(&self, z0: f64) -> (Vec<[DVec3; 3]>, Vec<[DVec3; 3]>) {
         let mut alea = Alea::de(&self.id);
@@ -250,5 +350,19 @@ mod tests {
         assert_eq!(p.arbres.len(), 1);
         let (p, _) = p.executer(Commande::Supprimer { ids }).unwrap();
         assert!(p.arbres.is_empty());
+    }
+
+    #[test]
+    fn remplacement_dans_le_volume() {
+        for e in Essence::TOUTES {
+            let a = arbre(e);
+            let r = a.remplacement(0.0);
+            assert!(r.feuillage.len() >= 240 && !r.bois.is_empty());
+            let pts: Vec<DVec3> = r.feuillage.iter().flatten().copied().collect();
+            let zmax = pts.iter().map(|p| p.z).fold(f64::MIN, f64::max);
+            let rmax = pts.iter().map(|p| ((p.x - 1000.0).powi(2) + (p.y - 2000.0).powi(2)).sqrt()).fold(0.0, f64::max);
+            assert!(zmax < a.hauteur * 1.12 && zmax > a.hauteur * 0.8, "{e:?} {zmax}");
+            assert!(rmax < a.diametre * 0.75, "{e:?} {rmax}");
+        }
     }
 }

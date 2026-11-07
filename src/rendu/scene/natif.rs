@@ -234,20 +234,26 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         model.parent.insert(id, parent);
         model.children.entry(parent).or_default().push(id);
         let z0 = projet.niveau(&a.niveau).map_or(0.0, |n| n.altitude);
+        // proxy (style Graphique, plans) et remplacement (style Réaliste : branches et
+        // plans de feuillage découpés), choisis par le shader selon le style (4ᵉ octet du
+        // motif : 1 Graphique seulement, 2 Réaliste seulement)
         let (tronc, houppier) = a.solides(z0);
+        let r = a.remplacement(z0);
         let defaut = |nom: &str, couleur: [u8; 3]| crate::modele::Materiau { nom: nom.into(), couleur, ..Default::default() };
         let ecorce = projet.materiau(MATERIAU_ECORCE).cloned().unwrap_or_else(|| defaut(MATERIAU_ECORCE, [92, 76, 62]));
         let feuillage = projet.materiau(MATERIAU_FEUILLAGE).cloned().unwrap_or_else(|| defaut(MATERIAU_FEUILLAGE, a.essence.couleur()));
         let mut parts = Vec::new();
         let mut rendu = Vec::new();
-        for (m, tris) in [(ecorce, tronc), (feuillage, houppier)] {
-            let [r, g, b] = m.couleur.map(|x| x as f32 / 255.0);
-            let couleur = opacite(Some(&m), [r, g, b, 1.0]);
-            rendu.push(Some(rendu_materiau(&m, couleur, &mut table_apparences)));
+        let mut motifs = Vec::new();
+        for (m, tris, style) in [(&ecorce, tronc, 1u8), (&feuillage, houppier, 1), (&ecorce, r.bois, 2), (&feuillage, r.feuillage, 2)] {
+            let [cr, cg, cb] = m.couleur.map(|x| x as f32 / 255.0);
+            let couleur = opacite(Some(m), [cr, cg, cb, 1.0]);
+            rendu.push(Some(rendu_materiau(m, couleur, &mut table_apparences)));
+            motifs.push(Some([0, 0, 0, style]));
             parts.push(Part { color: couleur, tris: tris.into_iter().map(|t| t.map(|v| v * 0.001)).collect() });
         }
-        materiaux_parts.push(vec![Some(MATERIAU_ECORCE.into()), Some(MATERIAU_FEUILLAGE.into())]);
-        geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu, motifs: Vec::new() });
+        materiaux_parts.push(vec![Some(MATERIAU_ECORCE.into()), Some(MATERIAU_FEUILLAGE.into()), Some(MATERIAU_ECORCE.into()), Some(MATERIAU_FEUILLAGE.into())]);
+        geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu, motifs });
     }
     for c in &projet.composants {
         let id = id_natif("composant", &c.id);
@@ -410,7 +416,9 @@ fn opacite(m: Option<&crate::modele::Materiau>, mut c: [f32; 4]) -> [f32; 4] {
     use crate::modele::CarteTexture;
     if let Some(a) = m.map(|m| &m.apparence) {
         c[3] = (1.0 - a.transparence).clamp(0.05, 1.0);
-        if c[3] > 0.98 && (a.textures.contains_key(&CarteTexture::Transparence) || a.textures.contains_key(&CarteTexture::Decoupe)) {
+        // la découpe reste opaque (pixels retirés) : seule la transparence passe avec les
+        // faces transparentes
+        if c[3] > 0.98 && a.textures.contains_key(&CarteTexture::Transparence) {
             c[3] = 0.98;
         }
     }

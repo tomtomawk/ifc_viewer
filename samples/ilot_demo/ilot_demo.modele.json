@@ -2896,18 +2896,17 @@
    ],
    "motif": "diagonales",
    "apparence": {
-    "rugosite": 0.8,
+    "rugosite": 0.7,
     "textures": {
      "Couleur": {
-      "chemin": "textures/feuillage.png",
-      "largeur": 1500,
-      "hauteur": 1500
+      "chemin": "textures/feuilles.png",
+      "largeur": 700,
+      "hauteur": 700
      },
-     "Relief": {
-      "chemin": "textures/feuillage_relief.png",
-      "largeur": 1500,
-      "hauteur": 1500,
-      "intensite": 1.0
+     "Decoupe": {
+      "chemin": "textures/feuilles_masque.png",
+      "largeur": 700,
+      "hauteur": 700
      }
     }
    }
@@ -2969,12 +2968,6 @@
       "anti_repetition": true,
       "profondeur": 15,
       "intensite": 1.0
-     },
-     "Rugosite": {
-      "chemin": "textures/herbe_rough.jpg",
-      "largeur": 1500,
-      "hauteur": 1500,
-      "anti_repetition": true
      },
      "Occlusion": {
       "chemin": "textures/herbe_ao.jpg",
