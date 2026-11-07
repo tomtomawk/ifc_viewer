@@ -81,7 +81,7 @@ fn libelle(avant: &str, apres: &str) -> String {
     libelle_collections(&a, &b, &CATEGORIES_PROJET, "id", "Modifier le projet")
 }
 
-const CATEGORIES_PROJET: [(&str, &str); 19] = [
+const CATEGORIES_PROJET: [(&str, &str); 20] = [
         ("niveaux", "niveau"),
         ("murs", "mur"),
         ("assemblages", "assemblage"),
@@ -89,6 +89,7 @@ const CATEGORIES_PROJET: [(&str, &str); 19] = [
         ("barres", "structure"),
         ("pieces", "pièce"),
         ("composants", "composant"),
+        ("arbres", "arbre"),
         ("escaliers", "escalier"),
         ("garde_corps", "garde-corps"),
         ("ouvertures", "ouverture"),

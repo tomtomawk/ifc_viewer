@@ -391,6 +391,21 @@ pub(super) fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             seg((0.62, 0.55), (0.9, 0.55));
             seg((0.45, 0.1), (0.45, 0.55));
         }
+        Arbre => {
+            // houppier festonné, tronc
+            let c = egui::pos2(r.left() + 0.5 * r.width(), r.top() + 0.4 * r.height());
+            let n = 40;
+            let pts: Vec<egui::Pos2> = (0..n)
+                .map(|k| {
+                    let a = k as f32 / n as f32 * std::f32::consts::TAU;
+                    let rr = r.width() * (0.3 + 0.04 * (a * 6.0).cos().abs());
+                    c + egui::vec2(a.cos() * rr, a.sin() * rr)
+                })
+                .collect();
+            p.add(egui::Shape::closed_line(pts, t));
+            seg((0.5, 0.62), (0.5, 0.94));
+            seg((0.38, 0.94), (0.62, 0.94));
+        }
         Composant => {
             for (x, y) in [(0.1, 0.1), (0.55, 0.1), (0.1, 0.55), (0.55, 0.55)] {
                 cadre(x, y, 0.32, 0.32);

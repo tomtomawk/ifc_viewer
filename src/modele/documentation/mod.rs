@@ -416,6 +416,49 @@ pub fn repere(p: &Projet, v: &Vue) -> (DVec3, DVec3, DVec3) {
         }
     }
 }
+/// Arbres du niveau d'un plan : contour du houppier (festonné pour un feuillu, étoilé
+/// pour un conifère, cercle pour un fastigié), tronc et croix au pied. Élément : l'arbre
+/// (`id_natif("arbre", id)`), sélectionnable en cliquant le symbole.
+pub fn primitives_arbres(p: &Projet, v: &Vue) -> Vec<Primitive> {
+    use crate::modele::elements::arbre::Essence;
+    let GenreVue::Plan { niveau, .. } = &v.genre else { return Vec::new() };
+    let z = p.niveau(niveau).map_or(0.0, |n| n.altitude) + 5.0;
+    let mut out = Vec::new();
+    for a in p.arbres.iter().filter(|a| &a.niveau == niveau && !v.elements_masques.contains(&a.id)) {
+        // au pied de l'arbre (sur un talus, au-dessus du terrain)
+        let c = DVec3::new(a.position[0], a.position[1], z + a.decalage.max(0.0));
+        let r = a.diametre * 0.5;
+        let n = 48;
+        let rayon = |k: usize| {
+            let t = k as f64 / n as f64;
+            match a.essence {
+                // festons : 8 lobes
+                Essence::Feuillu => r * (0.9 + 0.1 * (t * 8.0 * std::f64::consts::TAU).cos().abs()),
+                // dents : 16 pointes
+                Essence::Conifere => r * if k % 3 == 0 { 1.0 } else { 0.86 },
+                Essence::Fastigie => r,
+            }
+        };
+        let point = |k: usize, rr: f64| {
+            let ang = k as f64 / n as f64 * std::f64::consts::TAU;
+            (c + DVec3::new(ang.cos() * rr, ang.sin() * rr, 0.0)) * 0.001
+        };
+        let mut segs: Vec<[DVec3; 2]> = (0..n).map(|k| [point(k, rayon(k)), point(k + 1, rayon((k + 1) % n))]).collect();
+        let rt = (a.diametre * 0.035).clamp(60.0, 400.0);
+        segs.extend((0..16).map(|k| [point(k * 3, rt), point(k * 3 + 3, rt)]));
+        let croix = r * 0.12;
+        segs.push([(c - DVec3::X * croix) * 0.001, (c + DVec3::X * croix) * 0.001]);
+        segs.push([(c - DVec3::Y * croix) * 0.001, (c + DVec3::Y * croix) * 0.001]);
+        out.push(Primitive {
+            forme: Forme::Segments(segs),
+            style: Style { couleur: [60, 110, 50, 255], epaisseur: 0.18 },
+            role: Role::Annotation,
+            element: Some(crate::rendu::scene::id_natif("arbre", &a.id)),
+        });
+    }
+    out
+}
+
 /// Pièces du niveau d'un plan : aplat clair (rôle poché, sous les traits) sur le sol du
 /// niveau, et étiquette centrée sur le point (nom, numéro, surface). Élément :
 /// `id_natif("annotation", id)`, comme les annotations (sélection, surbrillance).
@@ -651,6 +694,7 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
         }
     }
     out.extend(primitives_pieces(p, v));
+    out.extend(primitives_arbres(p, v));
     if matches!(v.genre, GenreVue::Plan { .. }) {
         for g in &p.quadrillages {
             if v.elements_masques.contains(&g.id) { continue; }
@@ -892,7 +936,7 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
     let masques = p.murs.iter().map(|x| ("mur", &x.id))
         .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
         .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
-        .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id)))
+        .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id))).chain(p.arbres.iter().map(|x| ("arbre", &x.id)))
         .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
         .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
         .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))

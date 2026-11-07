@@ -117,6 +117,37 @@ impl ViewerApp {
                 }
             }
             ui.separator();
+        } else if let Some(arbre) = projet.arbres.iter().find(|a| scene::id_natif("arbre", &a.id) == id) {
+            use crate::modele::elements::arbre::Essence;
+            let mut a = arbre.clone();
+            ui.label(RichText::new(format!("Arbre · {}", a.nom)).strong());
+            let mut change = false;
+            egui::Grid::new("arbre_proprietes").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
+                ui.label("Essence");
+                egui::ComboBox::from_id_salt("arbre_essence").selected_text(a.essence.nom()).show_ui(ui, |ui| {
+                    for e in Essence::TOUTES {
+                        change |= ui.selectable_value(&mut a.essence, e, e.nom()).changed();
+                    }
+                });
+                ui.end_row();
+                ui.label("Hauteur");
+                change |= ui.add(egui::DragValue::new(&mut a.hauteur).speed(50.0).range(500.0..=60_000.0).dimensions()).changed();
+                ui.end_row();
+                ui.label("Houppier");
+                change |= ui.add(egui::DragValue::new(&mut a.diametre).speed(50.0).range(300.0..=40_000.0).dimensions()).changed();
+                ui.end_row();
+                ui.label("Décalage");
+                change |= ui.add(egui::DragValue::new(&mut a.decalage).speed(10.0).dimensions()).changed();
+                ui.end_row();
+            });
+            if change {
+                let mut p = projet.clone();
+                if let Some(x) = p.arbres.iter_mut().find(|x| x.id == a.id) {
+                    *x = a;
+                }
+                nouveau = Some(p);
+            }
+            ui.separator();
         } else if let Some(e) = projet.importes.iter().find(|e| scene::id_natif("importe", &e.id)==id) {
             ui.heading(&e.nom); ui.label(&e.categorie); ui.label("Géométrie importée"); ui.label(&e.raison);
             if let Some(n)=e.niveau.as_ref().and_then(|n|projet.niveau(n)) { ui.label(format!("Niveau : {}",n.nom)); }

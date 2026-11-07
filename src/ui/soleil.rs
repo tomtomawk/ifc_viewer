@@ -141,6 +141,33 @@ impl ViewerApp {
         }
     }
 
+    /// Vue caméra active : son point de vue enregistré prend celui de la caméra
+    /// (« Mettre à jour la vue ») ; une étape d'annulation.
+    pub(super) fn mettre_a_jour_vue_camera(&mut self) -> Result<(), String> {
+        let id = self.id_vue_rendu().ok_or("Aucune vue active.")?;
+        let s = self.scene.as_ref().ok_or("Aucune scène.")?;
+        let mm = |p: Vec3| ((p.as_dvec3() + s.origin) * 1000.0).round().to_array();
+        let (o, c, f) = (mm(self.camera.eye()), mm(self.camera.target), (self.camera.fov_y.to_degrees() as f64 * 10.0).round() / 10.0);
+        let mut p = self.natif.as_ref().ok_or("Projet natif seulement.")?.0.clone();
+        let vue = p.vues.iter_mut().find(|v| v.id == id).ok_or("Vue introuvable.")?;
+        let crate::modele::GenreVue::Camera { oeil, cible, champ } = &mut vue.genre else { return Err("La vue active n'est pas une vue caméra.".into()) };
+        (*oeil, *cible, *champ) = (o, c, f);
+        let nom = vue.nom.clone();
+        let mut rendu = self.rendu_vue_courant();
+        rendu.projection = Some(self.camera.projection().nom().into());
+        p.rendus_vues.insert(id, rendu);
+        self.appliquer_projet(p)?;
+        self.status = format!("Point de vue de « {nom} » mis à jour.");
+        Ok(())
+    }
+
+    /// Vue caméra active : la caméra revient au point de vue enregistré.
+    pub(super) fn retablir_vue_camera(&mut self) {
+        self.pieton = false;
+        self.appliquer_camera_vue();
+        self.visibility_dirty = true;
+    }
+
     /// Enregistre le point de vue courant comme vue caméra du projet (avec les réglages
     /// de rendu de la vue) et l'ouvre dans l'arborescence.
     pub(super) fn enregistrer_vue_camera(&mut self, nom: Option<String>) -> Result<String, String> {

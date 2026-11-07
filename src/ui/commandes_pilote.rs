@@ -619,6 +619,11 @@ impl ViewerApp {
                 let o = self.camera.eye();
                 serde_json::json!({"ok": true, "pieton": self.pieton, "oeil": [o.x, o.y, o.z]}).to_string()
             }
+            "vue_camera_maj" => match self.mettre_a_jour_vue_camera() {
+                Ok(()) => serde_json::json!({"ok": true}).to_string(),
+                Err(e) => erreur(&e),
+            },
+            "vue_camera_retablir" => { self.retablir_vue_camera(); serde_json::json!({"ok": true}).to_string() }
             "vue_camera" => {
                 // vue_camera [nom] : enregistre le point de vue courant comme vue 3D
                 match self.enregistrer_vue_camera((!argument.trim().is_empty()).then(|| argument.trim().to_string())) {

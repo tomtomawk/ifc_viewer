@@ -27,6 +27,10 @@ pub enum Commande {
     Composant {
         composant: Composant,
     },
+    /// Crée (identifiant vide) ou modifie un arbre.
+    Arbre {
+        arbre: crate::modele::elements::arbre::Arbre,
+    },
     /// Crée (identifiant vide) ou remplace un type de composant.
     TypeComposant {
         type_composant: TypeComposant,
@@ -386,6 +390,27 @@ impl Projet {
                 match self.types_composants.iter_mut().find(|t| t.id == id) {
                     Some(t) => *t = type_composant,
                     None => self.types_composants.push(type_composant),
+                }
+                Ok(vec![id])
+            }
+            Commande::Arbre { mut arbre } => {
+                self.niveau(&arbre.niveau).ok_or("Arbre : niveau introuvable.")?;
+                if !arbre.position.iter().chain([&arbre.decalage, &arbre.hauteur, &arbre.diametre]).all(|x| x.is_finite()) || arbre.hauteur <= 0.0 || arbre.diametre <= 0.0 {
+                    return Err("Arbre : position ou dimensions non valides.".into());
+                }
+                if arbre.nom.trim().is_empty() {
+                    arbre.nom = arbre.essence.nom().into();
+                }
+                if arbre.id.is_empty() {
+                    arbre.id = identite(self, "arbre");
+                }
+                let id = arbre.id.clone();
+                if let Some(x) = self.arbres.iter_mut().find(|x| x.id == id) {
+                    *x = arbre;
+                } else if self.identifiants().contains(&id) {
+                    return Err("Identifiant déjà utilisé.".into());
+                } else {
+                    self.arbres.push(arbre);
                 }
                 Ok(vec![id])
             }
@@ -970,6 +995,7 @@ impl Projet {
                             || self.barres.iter().any(|b| b.niveau == n.id)
                             || self.pieces.iter().any(|b| b.niveau == n.id)
                             || self.composants.iter().any(|b| b.niveau == n.id)
+                            || self.arbres.iter().any(|b| b.niveau == n.id)
                             || self.escaliers.iter().any(|e| e.niveau == n.id || e.niveau_haut.as_ref() == Some(&n.id))
                             || self.garde_corps.iter().any(|g| g.niveau == n.id)
                             || self
@@ -990,6 +1016,7 @@ impl Projet {
                 self.barres.retain(|x| !set.contains(&x.id));
                 self.pieces.retain(|x| !set.contains(&x.id));
                 self.composants.retain(|x| !set.contains(&x.id));
+                self.arbres.retain(|x| !set.contains(&x.id));
                 self.escaliers.retain(|x| !set.contains(&x.id));
                 self.garde_corps.retain(|x| !set.contains(&x.id));
                 self.importes.retain(|x| !set.contains(&x.id));

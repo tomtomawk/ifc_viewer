@@ -249,5 +249,10 @@ Apache 2.0 (Copyright © Bevy Contributors).
 
 Projet de démonstration : `samples/ilot_demo/ilot_demo.modele.json` (îlot à Rennes :
 logements R+3 en brique, bureaux R+2 à façade vitrée, gymnase en zinc, trois maisons,
-voirie, parvis, terrain avec butte ; textures dans `textures/`, en chemins relatifs).
+voirie, parvis, terrain avec butte, 33 arbres ; textures dans `textures/`, en chemins relatifs).
 Il est produit par `tools/projet_demo_ilot.py` (numpy, Pillow).
+
+**Arbres** (Modéliser › Site › Arbre) : essence (feuillu, conifère, fastigié), hauteur,
+diamètre du houppier, décalage ; symbole en plan, géométrie générée (variée d'un arbre à
+l'autre), matériaux « Feuillage » et « Écorce » du projet s'ils existent. Le champ
+`asset` est réservé au remplacement par un modèle de bibliothèque dans le style Réaliste.

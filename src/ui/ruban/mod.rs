@@ -42,6 +42,7 @@ pub(crate) enum Outil {
     Ouverture,
     Composant,
     Piece,
+    Arbre,
     Deplacer,
     Copier,
     Tourner,
@@ -106,6 +107,7 @@ impl Outil {
             Self::Ouverture => "Ouverture",
             Self::Composant => "Composant",
             Self::Piece => "Pièce",
+            Self::Arbre => "Arbre",
             Self::Deplacer => "Déplacer",
             Self::Copier => "Copier",
             Self::Tourner => "Tourner",
@@ -297,7 +299,7 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
     match menu {
         Menu::Modeliser => &[
             ("Construire", &[Mur, Surfaces]),
-            ("Site", &[Terrain, LimitePropriete]),
+            ("Site", &[Terrain, LimitePropriete, Arbre]),
             ("Structure et accès", &[Poteau, Poutre, Escalier, GardeCorps]),
             ("Placer", &[Ouverture, Composant, Piece]),
             ("Références", &[Niveau, Quadrillage]),
@@ -530,7 +532,7 @@ fn champs(o: Outil) -> Vec<Champ> {
             Nombre("Hauteur", 2100.0, " mm"),
             Nombre("Allège", 900.0, " mm"),
         ],
-        Composant | Piece => vec![],
+        Composant | Piece | Arbre => vec![],
         Deplacer => vec![
             Nombre("Distance", 1000.0, " mm"),
             Choix("Contrainte", &["Libre", "Horizontale", "Verticale"]),

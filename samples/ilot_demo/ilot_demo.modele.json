@@ -1345,6 +1345,424 @@
    "type_terrain": "pelouse"
   }
  ],
+ "arbres": [
+  {
+   "id": "alignement-0",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    3000,
+    1200
+   ],
+   "decalage": -100,
+   "essence": "feuillu",
+   "hauteur": 9000,
+   "diametre": 6500
+  },
+  {
+   "id": "alignement-1",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    15000,
+    1200
+   ],
+   "decalage": -100,
+   "essence": "feuillu",
+   "hauteur": 10000,
+   "diametre": 6500
+  },
+  {
+   "id": "alignement-2",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    27000,
+    1200
+   ],
+   "decalage": -100,
+   "essence": "feuillu",
+   "hauteur": 11000,
+   "diametre": 6500
+  },
+  {
+   "id": "alignement-3",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    39000,
+    1200
+   ],
+   "decalage": -100,
+   "essence": "feuillu",
+   "hauteur": 9000,
+   "diametre": 6500
+  },
+  {
+   "id": "alignement-4",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    51000,
+    1200
+   ],
+   "decalage": -100,
+   "essence": "feuillu",
+   "hauteur": 10000,
+   "diametre": 6500
+  },
+  {
+   "id": "alignement-5",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    63000,
+    1200
+   ],
+   "decalage": -100,
+   "essence": "feuillu",
+   "hauteur": 11000,
+   "diametre": 6500
+  },
+  {
+   "id": "alignement-6",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    75000,
+    1200
+   ],
+   "decalage": -100,
+   "essence": "feuillu",
+   "hauteur": 9000,
+   "diametre": 6500
+  },
+  {
+   "id": "alignement-7",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    87000,
+    1200
+   ],
+   "decalage": -100,
+   "essence": "feuillu",
+   "hauteur": 10000,
+   "diametre": 6500
+  },
+  {
+   "id": "alignement-8",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    99000,
+    1200
+   ],
+   "decalage": -100,
+   "essence": "feuillu",
+   "hauteur": 11000,
+   "diametre": 6500
+  },
+  {
+   "id": "alignement-9",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    111000,
+    1200
+   ],
+   "decalage": -100,
+   "essence": "feuillu",
+   "hauteur": 9000,
+   "diametre": 6500
+  },
+  {
+   "id": "alignement-10",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    123000,
+    1200
+   ],
+   "decalage": -100,
+   "essence": "feuillu",
+   "hauteur": 10000,
+   "diametre": 6500
+  },
+  {
+   "id": "alignement-11",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    135000,
+    1200
+   ],
+   "decalage": -100,
+   "essence": "feuillu",
+   "hauteur": 11000,
+   "diametre": 6500
+  },
+  {
+   "id": "alignement-12",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    147000,
+    1200
+   ],
+   "decalage": -100,
+   "essence": "feuillu",
+   "hauteur": 9000,
+   "diametre": 6500
+  },
+  {
+   "id": "allee-0",
+   "nom": "Charme fastigié",
+   "niveau": "n0",
+   "position": [
+    108000,
+    16000
+   ],
+   "decalage": -100,
+   "essence": "fastigie",
+   "hauteur": 13000,
+   "diametre": 3000
+  },
+  {
+   "id": "allee-1",
+   "nom": "Charme fastigié",
+   "niveau": "n0",
+   "position": [
+    108000,
+    23000
+   ],
+   "decalage": -100,
+   "essence": "fastigie",
+   "hauteur": 13000,
+   "diametre": 3000
+  },
+  {
+   "id": "allee-2",
+   "nom": "Charme fastigié",
+   "niveau": "n0",
+   "position": [
+    108000,
+    30000
+   ],
+   "decalage": -100,
+   "essence": "fastigie",
+   "hauteur": 13000,
+   "diametre": 3000
+  },
+  {
+   "id": "allee-3",
+   "nom": "Charme fastigié",
+   "niveau": "n0",
+   "position": [
+    108000,
+    37000
+   ],
+   "decalage": -100,
+   "essence": "fastigie",
+   "hauteur": 13000,
+   "diametre": 3000
+  },
+  {
+   "id": "allee-4",
+   "nom": "Charme fastigié",
+   "niveau": "n0",
+   "position": [
+    108000,
+    44000
+   ],
+   "decalage": -100,
+   "essence": "fastigie",
+   "hauteur": 13000,
+   "diametre": 3000
+  },
+  {
+   "id": "allee-5",
+   "nom": "Charme fastigié",
+   "niveau": "n0",
+   "position": [
+    108000,
+    51000
+   ],
+   "decalage": -100,
+   "essence": "fastigie",
+   "hauteur": 13000,
+   "diametre": 3000
+  },
+  {
+   "id": "allee-6",
+   "nom": "Charme fastigié",
+   "niveau": "n0",
+   "position": [
+    108000,
+    58000
+   ],
+   "decalage": -100,
+   "essence": "fastigie",
+   "hauteur": 13000,
+   "diametre": 3000
+  },
+  {
+   "id": "pins-0",
+   "nom": "Pin",
+   "niveau": "n0",
+   "position": [
+    20912,
+    82841
+   ],
+   "decalage": -100,
+   "essence": "conifere",
+   "hauteur": 14205,
+   "diametre": 5373
+  },
+  {
+   "id": "pins-1",
+   "nom": "Pin",
+   "niveau": "n0",
+   "position": [
+    21200,
+    85197
+   ],
+   "decalage": -100,
+   "essence": "conifere",
+   "hauteur": 12916,
+   "diametre": 4739
+  },
+  {
+   "id": "pins-2",
+   "nom": "Pin",
+   "niveau": "n0",
+   "position": [
+    42975,
+    81364
+   ],
+   "decalage": -100,
+   "essence": "conifere",
+   "hauteur": 12564,
+   "diametre": 5275
+  },
+  {
+   "id": "pins-3",
+   "nom": "Pin",
+   "niveau": "n0",
+   "position": [
+    32641,
+    87041
+   ],
+   "decalage": -100,
+   "essence": "conifere",
+   "hauteur": 13951,
+   "diametre": 5934
+  },
+  {
+   "id": "pins-4",
+   "nom": "Pin",
+   "niveau": "n0",
+   "position": [
+    27662,
+    87782
+   ],
+   "decalage": -100,
+   "essence": "conifere",
+   "hauteur": 13784,
+   "diametre": 4939
+  },
+  {
+   "id": "pins-5",
+   "nom": "Pin",
+   "niveau": "n0",
+   "position": [
+    18050,
+    91681
+   ],
+   "decalage": -100,
+   "essence": "conifere",
+   "hauteur": 12193,
+   "diametre": 4970
+  },
+  {
+   "id": "pins-6",
+   "nom": "Pin",
+   "niveau": "n0",
+   "position": [
+    48318,
+    87021
+   ],
+   "decalage": -100,
+   "essence": "conifere",
+   "hauteur": 12885,
+   "diametre": 5659
+  },
+  {
+   "id": "butte-0",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    76000,
+    84000
+   ],
+   "decalage": 2151,
+   "essence": "feuillu",
+   "hauteur": 11000,
+   "diametre": 8000
+  },
+  {
+   "id": "butte-1",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    86000,
+    88000
+   ],
+   "decalage": 1794,
+   "essence": "feuillu",
+   "hauteur": 11400,
+   "diametre": 8000
+  },
+  {
+   "id": "butte-2",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    70000,
+    90000
+   ],
+   "decalage": 1056,
+   "essence": "feuillu",
+   "hauteur": 11800,
+   "diametre": 8000
+  },
+  {
+   "id": "butte-3",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    90000,
+    80000
+   ],
+   "decalage": 1056,
+   "essence": "feuillu",
+   "hauteur": 12200,
+   "diametre": 8000
+  },
+  {
+   "id": "butte-4",
+   "nom": "Tilleul",
+   "niveau": "n0",
+   "position": [
+    80000,
+    95000
+   ],
+   "decalage": 1249,
+   "essence": "feuillu",
+   "hauteur": 12600,
+   "diametre": 8000
+  }
+ ],
  "murs": [
   {
    "id": "A-n0-0",
@@ -2988,6 +3406,56 @@
     ],
     "rugosite": 0.03,
     "transparence": 0.6
+   }
+  },
+  {
+   "nom": "Feuillage",
+   "couleur": [
+    70,
+    105,
+    45
+   ],
+   "motif": "diagonales",
+   "apparence": {
+    "rugosite": 0.8,
+    "textures": {
+     "Couleur": {
+      "chemin": "textures/feuillage.png",
+      "largeur": 1500,
+      "hauteur": 1500
+     },
+     "Relief": {
+      "chemin": "textures/feuillage_relief.png",
+      "largeur": 1500,
+      "hauteur": 1500,
+      "intensite": 1.0
+     }
+    }
+   }
+  },
+  {
+   "nom": "Écorce",
+   "couleur": [
+    96,
+    80,
+    64
+   ],
+   "motif": "diagonales",
+   "apparence": {
+    "rugosite": 0.9,
+    "textures": {
+     "Couleur": {
+      "chemin": "textures/ecorce.png",
+      "largeur": 600,
+      "hauteur": 600
+     },
+     "Relief": {
+      "chemin": "textures/ecorce_relief.png",
+      "largeur": 600,
+      "hauteur": 600,
+      "intensite": 0.8
+     }
+    }
    }
   },
   {

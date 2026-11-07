@@ -97,7 +97,7 @@ pour déplacer, copier, supprimer et régler les ouvertures.
 
 `outil <nom>` active tous les outils opérationnels du ruban :
 niveau, quadrillage, mur, terrain, limite_propriete, dalle, sol, plafond, toiture,
-poteau, poutre, escalier, garde_corps, ouverture, composant, piece, deplacer, copier,
+poteau, poutre, escalier, garde_corps, ouverture, composant, piece, arbre, deplacer, copier,
 tourner, aligner,
 ajuster, modifier_trace, creer_identique, supprimer, cadrer, isoler, masquer, texte,
 cote, etiquette, ligne, polyligne, spline, cercle, arc, zone, vue_plan, coupe,
@@ -163,6 +163,8 @@ Raccourcis existants :
 - `panneau proprietes|arborescence gauche|droite|flottant|externe|fermer` ; `fiche oui|non`.
 - `onglet tout|vues|feuilles|nomenclatures|familles|materiaux|groupes|liens|modele|classes`.
 - `style filaire|lignes_cachees|ombre|couleurs|realiste|rendu` ; `dessin oui|non` ; `traits_fins oui|non`.
+- `vue_camera_maj` : enregistre le point de vue courant dans la vue caméra active (« Mettre à jour la vue ») ; `vue_camera_retablir` : y revient.
+  Naviguer dans une vue caméra ne modifie plus son point de vue enregistré.
 - `pieton oui|non|avancer <m>` : vue piéton (œil à 1,60 m au-dessus du sol, marche qui suit le sol et s'arrête aux murs) ;
   `vue_camera [nom]` : enregistre le point de vue courant comme vue 3D du projet (genre `camera` : `oeil`, `cible` en mm, `champ` en degrés).
 - `soleil jour mois heure` : date (sans année) et heure légale (heures décimales) du soleil de la vue ;

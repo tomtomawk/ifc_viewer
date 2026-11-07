@@ -89,6 +89,9 @@ pub struct Projet {
     /// Types de composants : familles modélisées chargées (mobilier, équipements).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub types_composants: Vec<TypeComposant>,
+    /// Arbres (site) : essence, hauteur, houppier.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arbres: Vec<elements::arbre::Arbre>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub composants: Vec<Composant>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

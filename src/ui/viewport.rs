@@ -41,11 +41,13 @@ impl ViewerApp {
         let placement = if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() {
             match self.ruban_edition.outil() {
                 Some(crate::ui::ruban::Outil::Composant) => Some(true),
-                Some(crate::ui::ruban::Outil::Piece) => Some(false),
+                Some(crate::ui::ruban::Outil::Piece) | Some(crate::ui::ruban::Outil::Arbre) => Some(false),
                 _ => None,
             }
         } else { None };
-        let altitude_placement = self.altitude_vue_native() + if placement == Some(true) { self.bim.composant.decalage } else { 0.0 };
+        // arbre : placé comme une pièce (point au niveau de la vue)
+        let arbre = placement == Some(false) && self.ruban_edition.outil() == Some(crate::ui::ruban::Outil::Arbre);
+        let altitude_placement = self.altitude_vue_native() + if placement == Some(true) { self.bim.composant.decalage } else if arbre { self.bim.arbre.decalage } else { 0.0 };
         let altitude_structure = structure.and_then(|_| {
             let p = &self.natif.as_ref()?.0;
             Some(p.niveau(&self.bim.barre.niveau)?.altitude + self.bim.barre.debut[2])
@@ -267,9 +269,9 @@ impl ViewerApp {
                 if resp.clicked()
                     && let Some((point, _)) = resp.interact_pointer_pos().and_then(|q| self.point_tracage(q, rect, false, None, altitude_placement))
                 {
-                    let r = if composant { self.placer_composant(point) } else { self.placer_piece(point) };
+                    let r = if composant { self.placer_composant(point) } else if arbre { self.placer_arbre(point) } else { self.placer_piece(point) };
                     match r {
-                        Ok(()) => self.status = format!("{} créé(e) — Ctrl+Z pour annuler.", if composant { "Composant" } else { "Pièce" }),
+                        Ok(()) => self.status = format!("{} créé(e) — Ctrl+Z pour annuler.", if composant { "Composant" } else if arbre { "Arbre" } else { "Pièce" }),
                         Err(e) => self.error = Some(e),
                     }
                 }
@@ -450,10 +452,21 @@ impl ViewerApp {
         if let Some(composant) = placement {
             let painter = ui.painter().with_clip_rect(rect);
             let couleur = Color32::from_rgb(55, 130, 200);
-            let texte = if composant { "Composant : cliquer pour placer · Espace : rotation de 90° · molette : zoom" } else { "Pièce : cliquer dans un espace fermé par des murs" };
+            let texte = if composant { "Composant : cliquer pour placer · Espace : rotation de 90° · molette : zoom" } else if arbre { "Arbre : cliquer pour planter" } else { "Pièce : cliquer dans un espace fermé par des murs" };
             painter.text(rect.left_top()+egui::vec2(12.0,self.dessin2d.bas_barre.max(4.0)+8.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
             if let Some((p, accroche)) = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, false, None, altitude_placement)) {
                 if let Some(q) = self.ecran_plan(rect, p, altitude_placement) { marqueur(&painter, q, accroche, couleur, Color32::from_rgb(230, 120, 20)); }
+                if arbre {
+                    // aperçu : cercle du houppier
+                    let a = &self.bim.arbre;
+                    let pts: Vec<egui::Pos2> = (0..36).filter_map(|k| {
+                        let ang = k as f64 / 36.0 * std::f64::consts::TAU;
+                        self.ecran_plan(rect, [p[0] + ang.cos() * a.diametre / 2.0, p[1] + ang.sin() * a.diametre / 2.0], altitude_placement)
+                    }).collect();
+                    if pts.len() == 36 {
+                        painter.add(egui::Shape::closed_line(pts, egui::Stroke::new(1.5, Color32::from_rgb(60, 140, 60))));
+                    }
+                }
                 if composant {
                     let c = &self.bim.composant;
                     let defaut = crate::modele::elements::composant::type_table();

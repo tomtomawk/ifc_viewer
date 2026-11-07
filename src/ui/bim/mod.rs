@@ -205,6 +205,8 @@ pub(super) struct EtatBim {
     pub(super) depart_structure: Option<[f64; 2]>,
     /// Composant à placer (type vide : type par défaut) et nom des pièces créées.
     pub(super) composant: crate::modele::Composant,
+    /// Arbre à placer (essence, hauteur, houppier, décalage).
+    pub(super) arbre: crate::modele::elements::arbre::Arbre,
     pub(super) nom_piece: String,
     /// Famille d'étiquette des pièces créées ; vide : standard.
     pub(super) etiquette_piece: String,
@@ -244,6 +246,7 @@ impl Default for EtatBim {
             },
             depart_structure: None,
             composant: crate::modele::Composant { id: String::new(), nom: String::new(), type_composant: String::new(), niveau: String::new(), position: [0.0; 2], decalage: 0.0, rotation: 0.0 },
+            arbre: crate::modele::elements::arbre::Arbre { id: String::new(), nom: String::new(), niveau: String::new(), position: [0.0; 2], decalage: 0.0, essence: Default::default(), hauteur: 10_000.0, diametre: 7_000.0, asset: None },
             nom_piece: "Pièce".into(),
             etiquette_piece: String::new(),
             barre_editee: None,
@@ -357,7 +360,7 @@ fn elements_natifs(p: &crate::modele::Projet) -> impl Iterator<Item = (&'static 
             .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
             .chain(p.terrains.iter().map(|x| ("terrain", &x.id)))
             .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
-            .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id)))
+            .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id))).chain(p.arbres.iter().map(|x| ("arbre", &x.id)))
                 .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
                 .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
             .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
@@ -492,6 +495,16 @@ impl ViewerApp {
         }
     }
     /// Place le composant de l'outil au point `position`, au niveau de la vue.
+    pub(super) fn placer_arbre(&mut self, position: [f64; 2]) -> Result<(), String> {
+        let mut a = self.bim.arbre.clone();
+        a.id.clear();
+        a.nom.clear();
+        a.position = position;
+        a.niveau = self.niveau_vue_native().ok_or("Arbre : aucun niveau.")?;
+        self.executer_bim(crate::modele::edition::commandes::Commande::Arbre { arbre: a })?;
+        Ok(())
+    }
+
     pub(super) fn placer_composant(&mut self, position: [f64; 2]) -> Result<(), String> {
         let mut c = self.bim.composant.clone();
         c.id.clear();
@@ -1175,6 +1188,34 @@ impl ViewerApp {
                             ouvrir_composant = Some(None);
                         }
                     });
+                }
+                Some(Outil::Arbre) => {
+                    use crate::modele::elements::arbre::Essence;
+                    let a = &mut self.bim.arbre;
+                    ui.label(RichText::new("Arbre").strong());
+                    egui::Grid::new("outil_arbre").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                        ui.label("Essence");
+                        let avant = a.essence;
+                        egui::ComboBox::from_id_salt("essence_arbre").selected_text(a.essence.nom()).show_ui(ui, |ui| {
+                            for e in Essence::TOUTES {
+                                ui.selectable_value(&mut a.essence, e, e.nom());
+                            }
+                        });
+                        if a.essence != avant {
+                            (a.hauteur, a.diametre) = a.essence.dimensions();
+                        }
+                        ui.end_row();
+                        ui.label("Hauteur");
+                        ui.add(egui::DragValue::new(&mut a.hauteur).speed(50.0).range(500.0..=60_000.0).dimensions());
+                        ui.end_row();
+                        ui.label("Houppier").on_hover_text("Diamètre du houppier");
+                        ui.add(egui::DragValue::new(&mut a.diametre).speed(50.0).range(300.0..=40_000.0).dimensions());
+                        ui.end_row();
+                        ui.label("Décalage").on_hover_text("Hauteur du pied par rapport au niveau de la vue");
+                        ui.add(egui::DragValue::new(&mut a.decalage).speed(10.0).dimensions());
+                        ui.end_row();
+                    });
+                    ui.label("Cliquez dans la vue pour planter l'arbre (niveau de la vue).");
                 }
                 Some(Outil::Piece) => {
                     ui.label(RichText::new("Pièce").strong());

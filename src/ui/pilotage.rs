@@ -549,6 +549,7 @@ impl ViewerApp {
             "ouverture" => (O::Ouverture, OngletRuban::Modeliser),
             "composant" => (O::Composant, OngletRuban::Modeliser),
             "piece" => (O::Piece, OngletRuban::Modeliser),
+            "arbre" => (O::Arbre, OngletRuban::Modeliser),
             "deplacer" => (O::Deplacer, OngletRuban::Modifier),
             "copier" => (O::Copier, OngletRuban::Modifier),
             "tourner" => (O::Tourner, OngletRuban::Modifier),

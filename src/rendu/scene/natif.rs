@@ -59,6 +59,9 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     for c in &projet.composants {
         entite(id_natif("composant", &c.id), "IFCFURNISHINGELEMENT", &c.id, &c.nom, 9)?;
     }
+    for a in &projet.arbres {
+        entite(id_natif("arbre", &a.id), "IFCGEOGRAPHICELEMENT", &a.id, &a.nom, 9)?;
+    }
     for g in &projet.garde_corps {
         entite(id_natif("garde_corps", &g.id), "IFCRAILING", &g.id, &g.nom, 9)?;
     }
@@ -222,6 +225,30 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         materiaux_parts.push(vec![None]);
         geoms.push(ProductGeom { id, parts: vec![Part { color: [0.65,0.68,0.72,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
+    // arbres : tronc (matériau « Écorce ») et houppier (« Feuillage »), couleurs par
+    // défaut sans ces matériaux
+    for a in &projet.arbres {
+        use crate::modele::elements::arbre::{MATERIAU_ECORCE, MATERIAU_FEUILLAGE};
+        let id = id_natif("arbre", &a.id);
+        let parent = id_natif("niveau", &a.niveau);
+        model.parent.insert(id, parent);
+        model.children.entry(parent).or_default().push(id);
+        let z0 = projet.niveau(&a.niveau).map_or(0.0, |n| n.altitude);
+        let (tronc, houppier) = a.solides(z0);
+        let defaut = |nom: &str, couleur: [u8; 3]| crate::modele::Materiau { nom: nom.into(), couleur, ..Default::default() };
+        let ecorce = projet.materiau(MATERIAU_ECORCE).cloned().unwrap_or_else(|| defaut(MATERIAU_ECORCE, [92, 76, 62]));
+        let feuillage = projet.materiau(MATERIAU_FEUILLAGE).cloned().unwrap_or_else(|| defaut(MATERIAU_FEUILLAGE, a.essence.couleur()));
+        let mut parts = Vec::new();
+        let mut rendu = Vec::new();
+        for (m, tris) in [(ecorce, tronc), (feuillage, houppier)] {
+            let [r, g, b] = m.couleur.map(|x| x as f32 / 255.0);
+            let couleur = opacite(Some(&m), [r, g, b, 1.0]);
+            rendu.push(Some(rendu_materiau(&m, couleur, &mut table_apparences)));
+            parts.push(Part { color: couleur, tris: tris.into_iter().map(|t| t.map(|v| v * 0.001)).collect() });
+        }
+        materiaux_parts.push(vec![Some(MATERIAU_ECORCE.into()), Some(MATERIAU_FEUILLAGE.into())]);
+        geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu, motifs: Vec::new() });
+    }
     for c in &projet.composants {
         let id = id_natif("composant", &c.id);
         let parent = id_natif("niveau", &c.niveau);
@@ -305,7 +332,20 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     for t in &projet.terrains {
         aretes.insert(id_natif("terrain", &t.id), aretes_terrain(t, projet.ngf()));
     }
+    // arbres : surfaces courbes, arêtes sur la silhouette seulement
+    for a in &projet.arbres {
+        let z0 = projet.niveau(&a.niveau).map_or(0.0, |n| n.altitude);
+        let (t, h) = a.solides(z0);
+        let tris: Vec<[glam::DVec3; 3]> = t.into_iter().chain(h).map(|t| t.map(|v| v * 0.001)).collect();
+        aretes.insert(id_natif("arbre", &a.id), aretes_silhouette(&tris));
+    }
     let mut scene = crate::rendu::scene::assemble_avec(model, geoms, path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| projet.nom.clone()), aretes);
+    for a in &projet.arbres {
+        if let Some(&o) = scene.object_of.get(&id_natif("arbre", &a.id)) {
+            let r = scene.objects[o as usize].opaque;
+            lisser(&mut scene.vertices[r.start as usize..(r.start + r.count) as usize]);
+        }
+    }
     for t in &projet.terrains {
         if let Some(&o) = scene.object_of.get(&id_natif("terrain", &t.id)) {
             let r = scene.objects[o as usize].opaque;
@@ -609,6 +649,31 @@ fn coupe_materiau(projet: &Projet, m: &crate::modele::Materiau, plans: Vec<Vec4>
 /// Traits d'un terrain en plan : périmètre de sa surface et courbes de niveau à un pas
 /// rond (une douzaine au plus). La surface lissée n'a pas d'arête : sans ces traits, la
 /// partie vue sous le plan de coupe (faces blanches) ne se distingue pas du papier.
+/// Arêtes d'une surface courbe (arbre) : toutes « douces », tracées sur la silhouette
+/// seulement ; bords libres en arêtes vives.
+fn aretes_silhouette(tris: &[[glam::DVec3; 3]]) -> crate::dessin::Aretes {
+    use glam::DVec3;
+    let cle = |p: DVec3| (p * 10_000.0).round().as_i64vec3().to_array();
+    let mut bords: std::collections::HashMap<([i64; 3], [i64; 3]), ([DVec3; 2], Vec<DVec3>)> = std::collections::HashMap::new();
+    for t in tris {
+        let n = (t[1] - t[0]).cross(t[2] - t[0]).normalize_or_zero();
+        for i in 0..3 {
+            let (a, b) = (t[i], t[(i + 1) % 3]);
+            let (ka, kb) = (cle(a), cle(b));
+            let k = if ka < kb { (ka, kb) } else { (kb, ka) };
+            bords.entry(k).or_insert(([a, b], Vec::new())).1.push(n);
+        }
+    }
+    let mut out = crate::dessin::Aretes::default();
+    for (seg, normales) in bords.into_values() {
+        match normales[..] {
+            [n1, n2] => out.douces.push((seg, n1, n2)),
+            _ => out.vives.push(seg),
+        }
+    }
+    out
+}
+
 fn aretes_terrain(t: &crate::modele::elements::site::Terrain, ngf: f64) -> crate::dessin::Aretes {
     use glam::DVec3;
     let decalage = DVec3::new(0.0, 0.0, -ngf);

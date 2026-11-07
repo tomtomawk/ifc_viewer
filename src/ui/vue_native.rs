@@ -16,6 +16,7 @@ impl ViewerApp {
         }
         let mut nouvelle = vue.clone();
         let (mut renommer, mut retourner) = (false, false);
+        let (mut maj_camera, mut retablir_camera) = (false, false);
         let sorte = match &vue.genre {
             GenreVue::Plan { .. } => "Plan d'étage",
             GenreVue::Coupe { elevation: true, .. } => "Élévation",
@@ -89,9 +90,21 @@ impl ViewerApp {
                 if matches!(vue.genre, GenreVue::Coupe { .. }) {
                     retourner = ui.button("Retourner").on_hover_text("Regarder de l'autre côté de la ligne").clicked();
                 }
+                if matches!(vue.genre, GenreVue::Camera { .. }) {
+                    maj_camera = ui.button("Mettre à jour la vue").on_hover_text("Enregistrer le point de vue actuel (position, regard, champ, projection, soleil, ciel) dans cette vue").clicked();
+                    retablir_camera = ui.button("Rétablir").on_hover_text("Revenir au point de vue enregistré").clicked();
+                }
             });
         });
         ui.separator();
+        if maj_camera {
+            if let Err(e) = self.mettre_a_jour_vue_camera() { self.error = Some(e); }
+            return;
+        }
+        if retablir_camera {
+            self.retablir_vue_camera();
+            return;
+        }
         if !(renommer || retourner || nouvelle != vue) {
             return;
         }

@@ -131,6 +131,25 @@ def zinc():
     enregistrer("zinc_relief.png", gris(np.where(joint, 1.0, 0.3)))
 
 
+def feuillage():
+    # touffes de feuilles : bruit fin contrasté, reflets clairs
+    n = bruit(48, 13)
+    m = bruit(8, 14)
+    v = np.clip((n - 0.35) * 1.8, 0, 1)
+    coul = np.array([62, 96, 40])[None, None, :] * (0.55 + 0.75 * v[:, :, None]) * (0.85 + 0.3 * m[:, :, None])
+    enregistrer("feuillage.png", coul)
+    enregistrer("feuillage_relief.png", gris(v))
+
+
+def ecorce():
+    y, x = np.mgrid[0:N, 0:N]
+    n = bruit(6, 15)
+    sillons = np.abs(np.sin((x + 40 * n) * 0.12)) ** 0.5
+    coul = np.array([96, 80, 64])[None, None, :] * (0.6 + 0.45 * sillons[:, :, None])
+    enregistrer("ecorce.png", coul)
+    enregistrer("ecorce_relief.png", gris(sillons))
+
+
 def pelouse():
     n = bruit(32, 9)
     m = bruit(4, 10)
@@ -178,6 +197,8 @@ MATERIAUX = [
     materiau("Tuiles", [158, 72, 46], apparence={"rugosite": 0.6, "textures": {"Couleur": tex("tuiles.png", 800, 800), "Relief": tex("tuiles_relief.png", 800, 800, intensite=1.0)}}),
     materiau("Zinc", [150, 156, 162], apparence={"rugosite": 0.35, "metallique": 0.8, "textures": {"Couleur": tex("zinc.png", 1000, 1000), "Relief": tex("zinc_relief.png", 1000, 1000, intensite=0.5)}}),
     materiau("Verre", [160, 190, 200], motif="uni", apparence={"teinte": [150, 185, 195], "rugosite": 0.03, "transparence": 0.6}),
+    materiau("Feuillage", [70, 105, 45], apparence={"rugosite": 0.8, "textures": {"Couleur": tex("feuillage.png", 1500, 1500), "Relief": tex("feuillage_relief.png", 1500, 1500, intensite=1.0)}}),
+    materiau("Écorce", [96, 80, 64], apparence={"rugosite": 0.9, "textures": {"Couleur": tex("ecorce.png", 600, 600), "Relief": tex("ecorce_relief.png", 600, 600, intensite=0.8)}}),
     materiau("Pelouse", [84, 122, 52], apparence={"rugosite": 0.95, "textures": {"Couleur": tex("pelouse.png", 2000, 2000)}}),
     materiau("Enrobé", [70, 70, 70], apparence={"rugosite": 0.9, "textures": {"Couleur": tex("enrobe.png", 1000, 1000)}}),
     materiau("Pavés", [160, 155, 145], apparence={"rugosite": 0.8, "textures": {"Couleur": tex("paves.png", 800, 800), "Relief": tex("paves_relief.png", 800, 800, intensite=0.5)}}),
@@ -245,6 +266,31 @@ def points_terrain():
             d2 = ((x - 80000) ** 2 + (y - 85000) ** 2) / 18000.0 ** 2
             pts.append([x, y, round(29900 + 2500 * np.exp(-2.0 * d2)) if d2 < 1.5 else 29900])
     return pts
+
+
+def hauteur_terrain(x, y):
+    d2 = ((x - 80000) ** 2 + (y - 85000) ** 2) / 18000.0 ** 2
+    return 2500 * np.exp(-2.0 * d2) if d2 < 1.5 else 0.0
+
+
+def arbres():
+    """Alignement le long de la voirie, fastigiés le long de l'allée, bosquet de
+    conifères derrière le gymnase, feuillus sur la butte."""
+    out = []
+
+    def arbre(id, x, y, essence, hauteur, diametre):
+        out.append({"id": id, "nom": {"feuillu": "Tilleul", "conifere": "Pin", "fastigie": "Charme fastigié"}[essence], "niveau": "n0", "position": [x, y],
+                    "decalage": round(hauteur_terrain(x, y) - 100), "essence": essence, "hauteur": hauteur, "diametre": diametre})
+    for i, x in enumerate(range(0, 150000, 12000)):
+        arbre(f"alignement-{i}", x + 3000, 1200, "feuillu", 9000 + (i % 3) * 1000, 6500)
+    for i, y in enumerate(range(16000, 62000, 7000)):
+        arbre(f"allee-{i}", 108000, y, "fastigie", 13000, 3000)
+    g = np.random.default_rng(3)
+    for i in range(7):
+        arbre(f"pins-{i}", int(18000 + g.random() * 34000), int(80000 + g.random() * 12000), "conifere", int(11000 + g.random() * 4000), int(4500 + g.random() * 1500))
+    for i, (x, y) in enumerate([(76000, 84000), (86000, 88000), (70000, 90000), (90000, 80000), (80000, 95000)]):
+        arbre(f"butte-{i}", x, y, "feuillu", 11000 + i * 400, 8000)
+    return out
 
 
 def projet():
@@ -337,6 +383,7 @@ def projet():
             "points": points_terrain(),
             "type_terrain": "pelouse",
         }],
+        "arbres": arbres(),
         "murs": murs,
         "assemblages": [],
         "materiaux": MATERIAUX,
@@ -358,7 +405,7 @@ def projet():
 
 if __name__ == "__main__":
     os.makedirs(TEX, exist_ok=True)
-    for f in (briques, beton, enduit, bois, tuiles, zinc, pelouse, enrobe, paves):
+    for f in (briques, beton, enduit, bois, tuiles, zinc, feuillage, ecorce, pelouse, enrobe, paves):
         f()
     with open(os.path.join(SORTIE, "ilot_demo.modele.json"), "w", encoding="utf-8") as fichier:
         json.dump(projet(), fichier, ensure_ascii=False, indent=1)
