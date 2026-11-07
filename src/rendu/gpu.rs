@@ -337,7 +337,7 @@ fn fs_herbe(e: VarieHerbe) -> @location(0) vec4f {
     if g.ciel[1].w > 0.5 {
         let li = lumiere();
         // même éclairage que la surface (soleil, ciel au-dessus), un peu moins de ciel au pied
-        let soleil = li.soleil * ndl * mix(ombre, 1.0, 0.85 * g.ciel[1].y);
+        let soleil = li.soleil * ndl * mix(ombre, 1.0, 0.85 * part_couvert());
         c = vers_srgb(compresser(vers_lineaire(base) * (soleil + li.e_ciel * mix(0.75, 1.0, t)) * li.k));
     } else {
         c = base * (0.45 + 0.55 * ndl * ombre);
@@ -374,7 +374,7 @@ fn fs_ombre_decoupe(e: Varie) {
     let rang = i32(e.rendu.a * 255.0 + 0.5) - 128;
     if rang >= 0 && rang < MAX_APPARENCES {
         let k = rang * 22;
-        if a_carte(k, 7) && mix(1.0, carte(k, 7, uv, dx, dy).r, intensite(k, 7)) < 0.5 {
+        if a_carte(k, 7) && mix(1.0, carte(k, 7, uv, dx, dy).r, intensite(k, 7)) < seuil_decoupe(k, 7, dx, dy) {
             discard;
         }
     }
@@ -553,8 +553,10 @@ fn lumiere() -> Lumiere {
     // couvert CIE, L(h) = Lz (1 + 2 sin h) / 3, éclairement 7π/9 Lz
     let e_couvert = luminance(g.ciel[0].rgb * hauteur + e_clair) * 0.25;
     li.gris = vec3f(e_couvert * 9.0 / (7.0 * 3.14159265)) * vec3f(0.97, 0.99, 1.0);
-    li.e_ciel = mix(e_clair, li.gris * (7.0 * 3.14159265 / 9.0), nuages);
-    li.soleil = g.ciel[0].rgb * (1.0 - 0.92 * nuages);
+    // nuages épars : un peu plus de lumière diffuse ; couvert : ciel CIE
+    li.e_ciel = mix(e_clair * (1.0 + 0.6 * nuages * (1.0 - part_couvert())), li.gris * (7.0 * 3.14159265 / 9.0), part_couvert());
+    // soleil voilé seulement s'il passe derrière un nuage, éteint par le ciel couvert
+    li.soleil = g.ciel[0].rgb * (1.0 - 0.85 * densite_nuages(g.soleil.xyz)) * (1.0 - 0.92 * part_couvert());
     let e = luminance(li.soleil) * hauteur + luminance(li.e_ciel);
     // automatique : face horizontale ramenée à 0,9 ; plafonnée au crépuscule (le ciel
     // ne devient pas blanc quand la lumière baisse)
@@ -564,11 +566,46 @@ fn lumiere() -> Lumiere {
 }
 
 // luminance du ciel vu dans la direction d (nuages : vers le gris du ciel couvert)
+// Nuages : couche de cumulus à 1 500 m ; densité (0..1) dans la direction d, selon la
+// couverture du réglage « Nuages » (bruit fractal, estompé vers l'horizon).
+fn densite_nuages(d: vec3f) -> f32 {
+    let n = g.ciel[1].y;
+    if n < 0.01 || d.z < 0.015 {
+        return 0.0;
+    }
+    let p = d.xy * (1500.0 / d.z) / 2200.0;
+    var f = 0.0;
+    var a = 0.5;
+    var q = p;
+    for (var i = 0; i < 5; i++) {
+        f += a * bruit_valeur(q);
+        q = q * 2.03 + vec2f(17.3, 9.1);
+        a *= 0.5;
+    }
+    let seuil = mix(0.72, 0.3, n);
+    return smoothstep(seuil, seuil + 0.18, f) * smoothstep(0.015, 0.12, d.z);
+}
+
+// part du ciel couvert (couverture au-delà de 75 %)
+fn part_couvert() -> f32 {
+    return smoothstep(0.75, 1.0, g.ciel[1].y);
+}
+
 fn radiance_ciel(d: vec3f, li: Lumiere) -> vec3f {
     let horizon = normalize(vec3f(d.xy, 0.0) + vec3f(1e-6, 0.0, 0.0));
     let couvert = li.gris * (1.0 + 2.0 * max(d.z, 0.0)) / 3.0;
     if d.z >= 0.0 {
-        return mix(lut_ciel(d) * g.ciel[1].x, couvert, g.ciel[1].y);
+        var ciel = lut_ciel(d) * g.ciel[1].x;
+        let dn = densite_nuages(d);
+        if dn > 0.0 {
+            // nuage : albédo 0,8 sous le soleil (non voilé) et le ciel, plus clair à
+            // contre-jour (diffusion vers l'avant), plus sombre au cœur
+            let e_soleil = g.ciel[0].rgb * max(g.soleil.z, 0.0);
+            let avant = 1.0 + 2.5 * pow(max(dot(d, g.soleil.xyz), 0.0), 6.0);
+            let nuage = 0.8 * (e_soleil * avant * mix(1.0, 0.55, dn) + li.e_ciel) / 3.14159265;
+            ciel = mix(ciel, nuage, dn);
+        }
+        return mix(ciel, couvert, part_couvert());
     }
     // sol : albédo sous l'éclairement du soleil et du ciel, voilé vers l'horizon
     let sol = g.ciel[2].rgb * (li.soleil * max(g.soleil.z, 0.0) + li.e_ciel) / 3.14159265;
@@ -727,6 +764,14 @@ fn bruit_valeur(p: vec2f) -> f32 {
     return mix(mix(hachage(i), hachage(i + vec2f(1.0, 0.0)), w.x), mix(hachage(i + vec2f(0.0, 1.0)), hachage(i + vec2f(1.0, 1.0)), w.x), w.y);
 }
 
+// Seuil de découpe selon la réduction de la texture : au loin, le masque moyenné
+// baisse ; le seuil baisse avec lui (le feuillage garde sa couverture).
+fn seuil_decoupe(k: i32, j: i32, dx: vec2f, dy: vec2f) -> f32 {
+    let taille = max(apparences[k + 4 + 2 * j].xy, vec2f(1.0));
+    let lod = log2(max(max(length(dx / taille), length(dy / taille)) * 1024.0, 1.0));
+    return 0.5 * (1.0 - clamp(lod * 0.12, 0.0, 0.75));
+}
+
 fn a_carte(k: i32, j: i32) -> bool {
     return apparences[k + 3 + 2 * j].x >= 0.0;
 }
@@ -828,7 +873,7 @@ fn effet_apparence(r: i32, uvm: vec2f, dxm: vec2f, dym: vec2f, n0: vec3f, n: vec
         e.alpha *= mix(1.0, carte(k, 6, uv, dx, dy).r, intensite(k, 6));
     }
     if a_carte(k, 7) {
-        e.coupe = mix(1.0, carte(k, 7, uv, dx, dy).r, intensite(k, 7)) < 0.5;
+        e.coupe = mix(1.0, carte(k, 7, uv, dx, dy).r, intensite(k, 7)) < seuil_decoupe(k, 7, dx, dy);
     }
     // émission : luminance ramenée à 1 pour 1000 cd/m²
     let lum = clamp(p1.z / 1000.0, 0.0, 1.0);
@@ -940,7 +985,7 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
             // ciel au-dessus, sol (albédo) au-dessous ; ombres adoucies par les nuages
             let e_sol = g.ciel[2].rgb * (luminance(li.soleil) * max(g.soleil.z, 0.0) + luminance(li.e_ciel));
             let e_n = li.e_ciel * (0.5 + 0.5 * n.z) + e_sol * (0.5 - 0.5 * n.z);
-            let ombre_n = mix(ombre, 1.0, 0.85 * g.ciel[1].y);
+            let ombre_n = mix(ombre, 1.0, 0.85 * part_couvert());
             eclairement = (li.soleil * ndl * ombre_n * mix(1.0, ao, 0.35) + e_n * ao) * li.k;
             d = 1.0;
         }

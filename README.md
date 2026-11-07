@@ -263,3 +263,8 @@ d'[ambientCG](https://ambientcg.com), licence CC0.
 
 **Apparence avancée** : anti-répétition par texture, parallaxe sur la carte de relief
 (profondeur en mm), herbe en volume (hauteur des brins) dans le style Réaliste.
+
+**Raccourcis du soleil** : comme dans Enscape, **U** recule et **I** avance l'heure du soleil
+de 15 minutes (maintenir pour faire défiler). Masquer et Isoler passent aux raccourcis de
+Revit, **HH** et **HI**. **Nuages** : couche de cumulus procédurale réglée par le curseur
+« Nuages » de la fenêtre Ciel ; le soleil n'est voilé que derrière un nuage.

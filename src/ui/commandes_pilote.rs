@@ -653,7 +653,11 @@ impl ViewerApp {
             "soleil" => {
                 // soleil jour mois heure (heures décimales) : date et heure du soleil de la vue
                 let v: Vec<f64> = argument.split_whitespace().filter_map(|x| x.replace(',', ".").parse().ok()).collect();
-                let [jour, mois, heure] = v[..] else { return erreur("usage : soleil jour mois heure") };
+                if v.is_empty() {
+                    let (az, h) = self.position_soleil();
+                    return serde_json::json!({"ok": true, "soleil": {"jour": self.soleil_jour, "mois": self.soleil_mois, "heure": self.soleil_heure, "azimut": az, "hauteur": h}}).to_string();
+                }
+                let [jour, mois, heure] = v[..] else { return erreur("usage : soleil [jour mois heure]") };
                 if !(1.0..=12.0).contains(&mois) || !(0.0..24.0).contains(&heure) { return erreur("soleil : mois 1 à 12, heure 0 à 24"); }
                 self.soleil_mois = mois as u32;
                 self.soleil_jour = (jour as u32).clamp(1, crate::modele::soleil::jours_du_mois(self.soleil_mois));

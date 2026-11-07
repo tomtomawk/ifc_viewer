@@ -211,8 +211,9 @@ impl ViewerApp {
         let mut consommer = Vec::new();
         ctx.input(|i|{
             for (index,e) in i.events.iter().enumerate() {
-                if let egui::Event::Key{key,pressed:true,repeat:false,modifiers,..}=e {
-                    if let Some((c,_))=catalogue.iter().find(|(c,r)| matches!(r,Raccourci::Touche{key:k,modifiers:m} if key==k && modifiers.matches_exact(*m))&&(!focus||c.categorie=="Fichiers")) {
+                if let egui::Event::Key{key,pressed:true,repeat,modifiers,..}=e {
+                    // touche maintenue : seules les commandes du soleil se répètent (U, I)
+                    if let Some((c,_))=catalogue.iter().find(|(c,r)| matches!(r,Raccourci::Touche{key:k,modifiers:m} if key==k && modifiers.matches_exact(*m))&&(!focus||c.categorie=="Fichiers")&&(!*repeat||c.id.starts_with("soleil_"))) {
                         if c.categorie=="Fichiers"||(!focus&&!trace&&!self.vol.actif&&(self.scene.is_some()||c.id=="annuler"||c.id=="retablir")) {
                             actions.push(c.id);consommer.push(index);
                         }
@@ -356,6 +357,13 @@ impl ViewerApp {
                 }
             }
             "visibilite" => self.voir_visibilite = !self.voir_visibilite,
+            "soleil_moins" | "soleil_plus" => {
+                let pas = if action == "soleil_plus" { 0.25 } else { -0.25 };
+                self.soleil_heure = (self.soleil_heure + pas).rem_euclid(24.0).min(23.99);
+                let (az, h) = self.position_soleil();
+                self.status = format!("Soleil : {:02} h {:02} · azimut {az:.0}°, hauteur {h:.0}°", self.soleil_heure as u32, ((self.soleil_heure.fract()) * 60.0).round() as u32);
+                self.visibility_dirty = true;
+            }
             "nouveau" | "selection_tout" | "selection_suivante" | "supprimer" => {}
             outil => {
                 if let Err(e) = self.activer_outil_interface(outil) {

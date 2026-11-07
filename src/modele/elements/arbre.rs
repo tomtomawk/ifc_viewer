@@ -41,7 +41,7 @@ impl Essence {
     pub fn couleur(self) -> [u8; 3] {
         match self {
             Essence::Feuillu => [86, 120, 52],
-            Essence::Conifere => [52, 86, 50],
+            Essence::Conifere => [64, 100, 60],
             Essence::Fastigie => [96, 128, 56],
         }
     }
@@ -269,24 +269,23 @@ impl Arbre {
                 (corps, houppier)
             }
             Essence::Conifere => {
+                // trois cônes lisses (16 pans), du plus large au plus étroit, sans aspérité
                 let fut = h * 0.12;
                 let corps = tronc(pied, h * 0.6, rt, rt * 0.5, 8);
-                // trois étages de cônes bosselés, du plus large au plus étroit
                 let mut houppier = Vec::new();
-                for (z, r, hc) in [(0.0, 0.5, 0.5), (0.28, 0.4, 0.45), (0.52, 0.28, 0.48)] {
+                let n = 16;
+                for (z, r, hc) in [(0.0, 0.5, 0.5), (0.3, 0.38, 0.42), (0.55, 0.26, 0.45)] {
                     let base = pied + DVec3::Z * (fut + (h - fut) * z);
-                    let (rb, hh) = (d * r * alea.entre(0.92, 1.05), (h - fut) * hc);
-                    let n = 12;
+                    let (rb, hh) = (d * r, (h - fut) * hc);
+                    let sommet = base + DVec3::Z * hh;
                     for i in 0..n {
                         let (a, b) = (i as f64 / n as f64 * std::f64::consts::TAU, (i + 1) as f64 / n as f64 * std::f64::consts::TAU);
-                        let ra = rb * (1.0 + alea.entre(-0.08, 0.08));
-                        let p = |ang: f64, rr: f64| base + DVec3::new(ang.cos() * rr, ang.sin() * rr, 0.0);
-                        let sommet = base + DVec3::Z * hh + DVec3::new(alea.entre(-1.0, 1.0), alea.entre(-1.0, 1.0), 0.0) * d * 0.02;
-                        houppier.push([p(a, ra), p(b, ra), sommet]);
-                        // dessous
-                        houppier.push([p(b, ra), p(a, ra), base + DVec3::Z * hh * 0.15]);
+                        let p = |ang: f64| base + DVec3::new(ang.cos() * rb, ang.sin() * rb, 0.0);
+                        houppier.push([p(a), p(b), sommet]);
+                        houppier.push([p(b), p(a), base]);
                     }
                 }
+                let _ = &mut alea;
                 (corps, houppier)
             }
             Essence::Fastigie => {
