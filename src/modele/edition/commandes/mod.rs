@@ -213,6 +213,7 @@ impl Projet {
             .chain(self.barres.iter().map(|x| x.id.clone()))
             .chain(self.pieces.iter().map(|x| x.id.clone()))
             .chain(self.composants.iter().map(|x| x.id.clone()))
+            .chain(self.arbres.iter().map(|x| x.id.clone()))
             .chain(self.escaliers.iter().map(|x| x.id.clone()))
             .chain(self.garde_corps.iter().map(|x| x.id.clone()))
             .chain(self.ouvertures.iter().map(|x| x.id.clone()))

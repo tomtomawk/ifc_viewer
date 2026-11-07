@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Génère le projet de démonstration « Îlot de démonstration » (samples/ilot_demo) :
-terrain avec butte, voirie, parvis, logements collectifs R+3 en brique, bureaux R+2
-à façade vitrée, gymnase en bardage zinc, trois maisons enduit/bois à toiture tuiles,
-textures procédurales (raccordables) et réglages de rendu de la vue 3D.
+rue (chaussée, trottoirs, alignement d'arbres), logements R+3 en brique avec vitrine au
+rez-de-chaussée, bureaux R+4 à mur-rideau sur parvis, cour-jardin, trois maisons
+enduit/bois à toiture tuiles avec jardins ; textures (procédurales et pelouse CC0
+d'ambientCG), réglages de rendu et trois vues caméra (rue, cour, aérienne).
+
+Les arbres sont contrôlés : aucun houppier ne touche un bâtiment ni la chaussée.
 
 Usage : python3 tools/projet_demo_ilot.py [dossier de sortie]
 Nécessite numpy et Pillow (textures).
@@ -259,116 +262,135 @@ def dalle(id, nom, type_dalle, niveau, decalage, contour, sorte="dalle", pentes=
     dalles.append(d)
 
 
+# ---------------------------------------------------------------- plan masse
+# Repère : x vers l'est, y vers le nord (mm). Rue au sud, bâtiments en retrait, cour au
+# nord, maisons à l'est. Chaque emprise est déclarée ici et sert au contrôle des arbres.
+CHAUSSEE = (-60000, 2000, 180000, 9000)
+TROTTOIR_NORD = (-60000, 9000, 180000, 12000)
+TROTTOIR_SUD = (-60000, -1000, 180000, 2000)
+LOGEMENTS = (6000, 16000, 42000, 29000)
+BUREAUX = (54000, 18000, 84000, 34000)
+MAISONS = [(x, 48000, x + 8000, 57000) for x in (90000, 100000, 110000)]
+EMPRISES = [LOGEMENTS, BUREAUX] + MAISONS
+
+
 def points_terrain():
-    """Grille de points cotés tous les 10 m : terrain plat à 29,90 NGF, butte de 2,5 m
-    (profil en cloche, 18 m de rayon) au nord, entre le gymnase et les maisons."""
+    """Grille de points cotés : terrain plat à 29,90 NGF (10 cm sous les sols)."""
     pts = []
-    # au-delà de la parcelle : grille lâche
-    for x in range(-50000, 210000, 30000):
-        for y in range(-40000, 160000, 30000):
-            if not (-10000 <= x <= 155000 and -10000 <= y <= 105000):
-                pts.append([x, y, 29900])
-    for x in range(-5000, 150000, 10000):
-        for y in range(-5000, 100000, 10000):
-            d2 = ((x - 80000) ** 2 + (y - 85000) ** 2) / 18000.0 ** 2
-            pts.append([x, y, round(29900 + 2500 * np.exp(-2.0 * d2)) if d2 < 1.5 else 29900])
+    for x in range(-50000, 180000, 20000):
+        for y in range(-30000, 140000, 20000):
+            pts.append([x, y, 29900])
     return pts
 
 
-def hauteur_terrain(x, y):
-    d2 = ((x - 80000) ** 2 + (y - 85000) ** 2) / 18000.0 ** 2
-    return 2500 * np.exp(-2.0 * d2) if d2 < 1.5 else 0.0
-
-
 def arbres():
-    """Alignement le long de la voirie, fastigiés le long de l'allée, bosquet de
-    conifères derrière le gymnase, feuillus sur la butte."""
+    """Alignement sur le trottoir nord, feuillus dans la cour, fastigiés le long de
+    l'allée des maisons, petits arbres dans les jardins, bosquet de pins au nord-ouest.
+    Contrôle : aucun houppier ne touche un bâtiment ni la chaussée."""
     out = []
 
-    def arbre(id, x, y, essence, hauteur, diametre):
-        out.append({"id": id, "nom": {"feuillu": "Tilleul", "conifere": "Pin", "fastigie": "Charme fastigié"}[essence], "niveau": "n0", "position": [x, y],
-                    "decalage": round(hauteur_terrain(x, y) - 100), "essence": essence, "hauteur": hauteur, "diametre": diametre})
-    for i, x in enumerate(range(0, 150000, 12000)):
-        arbre(f"alignement-{i}", x + 3000, 1200, "feuillu", 9000 + (i % 3) * 1000, 6500)
-    for i, y in enumerate(range(16000, 62000, 7000)):
-        arbre(f"allee-{i}", 108000, y, "fastigie", 13000, 3000)
+    def arbre(id, x, y, essence, hauteur, diametre, nom):
+        r = diametre / 2 + 500
+        for (x0, y0, x1, y1) in EMPRISES:
+            # distance du centre au rectangle
+            dx, dy = max(x0 - x, 0, x - x1), max(y0 - y, 0, y - y1)
+            assert dx * dx + dy * dy > r * r, f"arbre {id} trop près d'un bâtiment"
+        assert not (CHAUSSEE[1] - 500 < y < CHAUSSEE[3] + 500), f"arbre {id} sur la chaussée"
+        out.append({"id": id, "nom": nom, "niveau": "n0", "position": [x, y], "decalage": -100,
+                    "essence": essence, "hauteur": hauteur, "diametre": diametre})
+    for i, x in enumerate(range(3000, 120000, 9000)):
+        arbre(f"rue-{i + 1}", x, 10500, "feuillu", 8000 + (i % 3) * 800, 5500, "Tilleul")
+    for i, (x, y) in enumerate([(14000, 44000), (30000, 50000), (62000, 46000), (76000, 52000), (40000, 62000)]):
+        arbre(f"cour-{i + 1}", x, y, "feuillu", 10000 + i * 500, 7000, "Érable")
+    for i, y in enumerate(range(40000, 62000, 6000)):
+        arbre(f"allee-{i + 1}", 85000, y, "fastigie", 12000, 2800, "Charme fastigié")
+    for i, (x0, _, x1, _) in enumerate(MAISONS):
+        arbre(f"jardin-{i + 1}", (x0 + x1) // 2, 66000, "feuillu", 6000, 4500, "Pommier")
     g = np.random.default_rng(3)
-    for i in range(7):
-        arbre(f"pins-{i}", int(18000 + g.random() * 34000), int(80000 + g.random() * 12000), "conifere", int(11000 + g.random() * 4000), int(4500 + g.random() * 1500))
-    for i, (x, y) in enumerate([(76000, 84000), (86000, 88000), (70000, 90000), (90000, 80000), (80000, 95000)]):
-        arbre(f"butte-{i}", x, y, "feuillu", 11000 + i * 400, 8000)
+    for i in range(6):
+        arbre(f"pin-{i + 1}", int(4000 + g.random() * 14000), int(64000 + g.random() * 12000), "conifere", int(11000 + g.random() * 3000), 4500, "Pin")
     return out
 
 
-def plancher_bureaux(id, nom, niveau, x0, y0, x1, y1):
-    """Plancher au nu intérieur des murs (vitrage 60 au sud, béton 200 ailleurs) et
-    débords filants en bandes extérieures (1,20 m au sud, 0,40 m ailleurs) : aucune
-    dalle ne traverse un mur."""
-    v, b = 30, 100
-    dalle(id, nom, "dalle300", niveau, 0, rectangle(x0 + b, y0 + v, x1 - b, y1 - b))
-    dalle(f"{id}-sud", f"{nom}, débord sud", "dalle300", niveau, 0, rectangle(x0 - 400, y0 - 1200, x1 + 400, y0 - v))
-    dalle(f"{id}-nord", f"{nom}, débord nord", "dalle300", niveau, 0, rectangle(x0 - 400, y1 + b, x1 + 400, y1 + 400))
-    dalle(f"{id}-ouest", f"{nom}, débord ouest", "dalle300", niveau, 0, rectangle(x0 - 400, y0 - v, x0 - b, y1 + b))
-    dalle(f"{id}-est", f"{nom}, débord est", "dalle300", niveau, 0, rectangle(x1 + b, y0 - v, x1 + 400, y1 + b))
+def plancher(id, nom, type_dalle, niveau, x0, y0, x1, y1, retrait, debords=None):
+    """Plancher au nu intérieur des murs (retrait : demi-épaisseurs par face, sud, est,
+    nord, ouest) et débords filants en bandes extérieures (mm par face)."""
+    s, e, n, o = retrait
+    dalle(id, nom, type_dalle, niveau, 0, rectangle(x0 + o, y0 + s, x1 - e, y1 - n))
+    if debords:
+        ds, de, dn, do = debords
+        if ds:
+            dalle(f"{id}-sud", f"{nom}, débord sud", type_dalle, niveau, 0, rectangle(x0 - do, y0 - ds, x1 + de, y0 - s))
+        if dn:
+            dalle(f"{id}-nord", f"{nom}, débord nord", type_dalle, niveau, 0, rectangle(x0 - do, y1 + n, x1 + de, y1 + dn))
+        if do:
+            dalle(f"{id}-ouest", f"{nom}, débord ouest", type_dalle, niveau, 0, rectangle(x0 - do, y0 - s, x0 - o, y1 + n))
+        if de:
+            dalle(f"{id}-est", f"{nom}, débord est", type_dalle, niveau, 0, rectangle(x1 + e, y0 - s, x1 + de, y1 + n))
+
+
+def camera(id, nom, oeil, cible, champ=55.0):
+    return {"id": id, "nom": nom, "type_vue": "Vue piéton" if oeil[2] < 3000 else "Vue caméra", "echelle": 100, "genre": "camera", "oeil": oeil, "cible": cible, "champ": champ}
+
+
+def rendu(projection, heure=16.0):
+    return {"style": "realiste", "projection": projection, "ombres_portees": True, "ombre_ambiante": True, "jour": 21, "mois": 6, "heure": heure,
+            "ciel": {"ambiance": "Clair", "brume": 0.15, "nuages": 0.0, "intensite_soleil": 1.0, "intensite_ciel": 1.0, "taille_soleil": 1.5, "sol": [110, 120, 90], "exposition_auto": True, "exposition": 0.0}}
 
 
 def projet():
-    # A : logements collectifs R+3 en brique, toiture terrasse et acrotère
-    ax0, ay0, ax1, ay1 = 10000, 22000, 40000, 34000
+    # logements R+3 : brique, vitrine vitrée au rez-de-chaussée sur rue, toiture terrasse
+    ax0, ay0, ax1, ay1 = LOGEMENTS
     for k in range(4):
-        sud, est, nord, ouest = boite("A", ax0, ay0, ax1, ay1, f"n{k}", 3000, "brique300", "Logements")
-        baies(sud, 30000, 3000, 1400, 1500 if k else 2200, 900 if k else 0, "fenetre" if k else "porte")
-        baies(nord, 30000, 3000, 1000, 1400, 1000)
-        baies(est, 12000, 4000, 1000, 1400, 1000)
-        baies(ouest, 12000, 4000, 1000, 1400, 1000)
-        # planchers arrêtés au nu intérieur des murs (brique 300 : 150 de l'axe)
-        dalle(f"A-p{k}", f"Plancher logements {k}", "dalle250", f"n{k}", 0, rectangle(ax0 + 150, ay0 + 150, ax1 - 150, ay1 - 150))
-    dalle("A-toit", "Toiture terrasse logements", "dalle250", "n4", 0, rectangle(ax0 + 150, ay0 + 150, ax1 - 150, ay1 - 150))
+        types = ["vitrage" if k == 0 else "brique300", "brique300", "brique300", "brique300"]
+        sud, est, nord, ouest = boite("A", ax0, ay0, ax1, ay1, f"n{k}", 3000, types, "Logements")
+        if k:
+            baies(sud, 36000, 3000, 1400, 1500, 900)
+        baies(nord, 36000, 3000, 1000, 1400, 1000)
+        baies(est, 13000, 4000, 1000, 1400, 1000)
+        baies(ouest, 13000, 4000, 1000, 1400, 1000)
+        # vitrage au sud (30 de l'axe), brique 300 ailleurs (150)
+        plancher(f"A-p{k}", f"Plancher logements {k}", "dalle250", f"n{k}", ax0, ay0, ax1, ay1, (30 if k == 0 else 150, 150, 150, 150))
+    plancher("A-toit", "Toiture terrasse logements", "dalle250", "n4", ax0, ay0, ax1, ay1, (150, 150, 150, 150))
     boite("A-acr", ax0, ay0, ax1, ay1, "n4", 900, "brique300", "Acrotère logements")
 
-    # B : bureaux R+2, façade sud vitrée, autres façades en béton banché
-    bx0, by0, bx1, by1 = 55000, 24000, 95000, 40000
-    for k in range(3):
-        sud, est, nord, ouest = boite("B", bx0, by0, bx1, by1, f"n{k}", 3000, ["vitrage", "beton200", "beton200", "beton200"], "Bureaux")
-        baies(nord, 40000, 4000, 2400, 1800, 900)
+    # bureaux R+4 : mur-rideau au sud et à l'ouest, béton banché au nord et à l'est,
+    # débords filants (brise-soleil) au sud
+    bx0, by0, bx1, by1 = BUREAUX
+    for k in range(5):
+        sud, est, nord, ouest = boite("B", bx0, by0, bx1, by1, f"n{k}", 3000, ["vitrage", "beton200", "beton200", "vitrage"], "Bureaux")
+        baies(nord, 30000, 3000, 1800, 1800, 900)
         baies(est, 16000, 4000, 1800, 1800, 900)
-        plancher_bureaux(f"B-p{k}", f"Plancher bureaux {k}", f"n{k}", bx0, by0, bx1, by1)
-    plancher_bureaux("B-toit", "Toiture bureaux", "n3", bx0, by0, bx1, by1)
-    boite("B-acr", bx0 - 400, by0 - 1200, bx1 + 400, by1 + 400, "n3", 1000, "beton200", "Acrotère bureaux")
+        plancher(f"B-p{k}", f"Plancher bureaux {k}", "dalle300", f"n{k}", bx0, by0, bx1, by1, (30, 100, 100, 30), (1000, 0, 0, 0) if k else None)
+    plancher("B-toit", "Toiture bureaux", "dalle300", "n5", bx0, by0, bx1, by1, (30, 100, 100, 30), (1000, 0, 0, 0))
+    boite("B-acr", bx0, by0, bx1, by1, "n5", 1000, "beton200", "Acrotère bureaux")
 
-    # D : gymnase, bardage zinc, bande vitrée haute, toiture zinc deux pans à 8°
-    dx0, dy0, dx1, dy1 = 15000, 50000, 55000, 75000
-    sud, est, nord, ouest = boite("D", dx0, dy0, dx1, dy1, "n0", 9000, "zinc200", "Gymnase")
-    for m in (sud, est, nord, ouest):
-        attaches[m] = "D-toit"
-    baies(sud, 40000, 5000, 4200, 1500, 6800, marge=2500)
-    baies(nord, 40000, 5000, 4200, 1500, 6800, marge=2500)
-    ouvertures.append({"id": "D-entree", "nom": "Entrée gymnase", "genre": "porte", "mur": sud, "type_ouverture": None, "abscisse": 20000, "largeur": 4000, "hauteur": 3000, "allege": 0, "representation": None, "origine": None})
-    dalle("D-sol", "Sol gymnase", "dalle250", "n0", 0, rectangle(dx0 + 100, dy0 + 100, dx1 - 100, dy1 - 100))
-    dalle("D-toit", "Toiture gymnase", "zinc150", "n3", 0, rectangle(dx0 - 600, dy0 - 600, dx1 + 600, dy1 + 600), sorte="toiture", pentes=[8, None, 8, None])
-
-    # C : trois maisons R+1, enduit au rez-de-chaussée, bois à l'étage, tuiles à 35°
-    for i, x0 in enumerate((105000, 117000, 129000)):
-        y0 = 52000
-        x1, y1 = x0 + 9000, y0 + 8000
+    # maisons R+1 : enduit au rez-de-chaussée, bois à l'étage, tuiles à 35°
+    attaches = {}
+    for i, (x0, y0, x1, y1) in enumerate(MAISONS):
         p = f"C{i + 1}"
         sud, est, nord, ouest = boite(p, x0, y0, x1, y1, "n0", 2800, "enduit200", f"Maison {i + 1}")
-        ouvertures.append({"id": f"{p}-porte", "nom": "Entrée", "genre": "porte", "mur": sud, "type_ouverture": None, "abscisse": 2200, "largeur": 1000, "hauteur": 2200, "allege": 0, "representation": None, "origine": None})
-        ouvertures.append({"id": f"{p}-baie", "nom": "Baie séjour", "genre": "fenetre", "mur": sud, "type_ouverture": None, "abscisse": 6200, "largeur": 3200, "hauteur": 2200, "allege": 0, "representation": None, "origine": None})
-        baies(nord, 9000, 3000, 1000, 1200, 1000)
+        ouvertures.append({"id": f"{p}-porte", "nom": "Entrée", "genre": "porte", "mur": sud, "type_ouverture": None, "abscisse": 2000, "largeur": 1000, "hauteur": 2200, "allege": 0, "representation": None, "origine": None})
+        ouvertures.append({"id": f"{p}-baie", "nom": "Baie séjour", "genre": "fenetre", "mur": sud, "type_ouverture": None, "abscisse": 5500, "largeur": 3000, "hauteur": 2200, "allege": 0, "representation": None, "origine": None})
+        baies(nord, 8000, 3000, 1200, 1200, 1000)
         sud1, est1, nord1, ouest1 = boite(p, x0, y0, x1, y1, "n1", 2800, "bois200", f"Maison {i + 1} étage")
+        baies(sud1, 8000, 3000, 1200, 1400, 900)
+        baies(nord1, 8000, 3000, 1000, 1200, 1000)
         for m in (sud1, est1, nord1, ouest1):
             attaches[m] = f"{p}-toit"
-        baies(sud1, 9000, 3000, 1200, 1400, 900)
-        baies(est1, 8000, 4000, 900, 1200, 1000, marge=2000)
-        dalle(f"{p}-p0", f"Plancher maison {i + 1}", "dalle250", "n0", 0, rectangle(x0 + 100, y0 + 100, x1 - 100, y1 - 100))
-        dalle(f"{p}-p1", f"Plancher étage maison {i + 1}", "dalle250", "n1", 0, rectangle(x0 + 100, y0 + 100, x1 - 100, y1 - 100))
+        plancher(f"{p}-p0", f"Plancher maison {i + 1}", "dalle250", "n0", x0, y0, x1, y1, (100, 100, 100, 100))
+        plancher(f"{p}-p1", f"Plancher étage maison {i + 1}", "dalle250", "n1", x0, y0, x1, y1, (100, 100, 100, 100))
         dalle(f"{p}-toit", f"Toiture maison {i + 1}", "tuiles200", "n1", 2800, rectangle(x0 - 500, y0 - 600, x1 + 500, y1 + 600), sorte="toiture", pentes=[35, None, 35, None])
 
-    # aménagements : voirie au sud, parvis entre logements et bureaux, allée des maisons
-    dalle("voirie", "Voirie", "enrobe120", "n0", 0, rectangle(-10000, 3000, 150000, 11000), sorte="sol")
-    dalle("parvis", "Parvis", "paves120", "n0", 0, rectangle(8000, 11000, 100000, 21000), sorte="sol")
-    dalle("allee", "Allée des maisons", "paves120", "n0", 0, rectangle(100000, 11000, 106000, 62000), sorte="sol")
+    # rue, trottoirs, parvis, allées
+    dalle("chaussee", "Chaussée", "enrobe120", "n0", -20, rectangle(*CHAUSSEE), sorte="sol")
+    dalle("trottoir-nord", "Trottoir nord", "paves120", "n0", 0, rectangle(*TROTTOIR_NORD), sorte="sol")
+    dalle("trottoir-sud", "Trottoir sud", "paves120", "n0", 0, rectangle(*TROTTOIR_SUD), sorte="sol")
+    dalle("parvis-bureaux", "Parvis des bureaux", "paves120", "n0", 0, rectangle(46000, 12000, 92000, 17000), sorte="sol")
+    dalle("seuil-logements", "Seuil des logements", "paves120", "n0", 0, rectangle(6000, 12000, 42000, 15950), sorte="sol")
+    dalle("allee-cour", "Allée de la cour", "paves120", "n0", 0, rectangle(46000, 17000, 50000, 60000), sorte="sol")
+    dalle("allee-maisons", "Allée des maisons", "paves120", "n0", 0, rectangle(87000, 17000, 89500, 60000), sorte="sol")
+    dalle("allee-jardins", "Desserte des maisons", "paves120", "n0", 0, rectangle(89500, 44000, 120000, 47500), sorte="sol")
 
     return {
         "format": "bimedit-modele",
@@ -377,19 +399,17 @@ def projet():
         "sources": [], "phases": [], "sous_projets": [], "variantes": [],
         "lieu": {"nom": "Rennes", "latitude": 48.1173, "longitude": -1.6778, "fuseau": 1.0, "heure_ete": True},
         "coordonnees_origine": [0, 0, 30000],
-        "niveaux": NIVEAUX,
+        "niveaux": [{"id": f"n{k}", "nom": "RDC" if k == 0 else f"R+{k}", "altitude": 3000 * k, "origine": None} for k in range(6)],
         "types_murs": [
             type_mur("brique300", "Brique 300", "Brique", 300),
             type_mur("beton200", "Béton banché 200", "Béton banché", 200),
             type_mur("vitrage", "Mur-rideau", "Verre", 60),
-            type_mur("zinc200", "Bardage zinc 200", "Zinc", 200),
             type_mur("enduit200", "Enduit 200", "Enduit blanc", 200),
             type_mur("bois200", "Bardage bois 200", "Bardage bois", 200),
         ],
         "types_dalles": [
             type_dalle("dalle250", "Dalle béton 250", "Béton banché", 250),
             type_dalle("dalle300", "Dalle béton 300", "Béton banché", 300),
-            type_dalle("zinc150", "Toiture zinc 150", "Zinc", 150),
             type_dalle("tuiles200", "Toiture tuiles 200", "Tuiles", 200),
             type_dalle("enrobe120", "Enrobé 120", "Enrobé", 120),
             type_dalle("paves120", "Pavés 120", "Pavés", 120),
@@ -398,25 +418,31 @@ def projet():
         "types_terrains": [{"id": "pelouse", "nom": "Pelouse", "epaisseur": 1000, "materiau": "Pelouse"}],
         "terrains": [{
             "id": "terrain", "nom": "Terrain",
-            # cote NGF : niveau 0 à 30,00 ; terrain 10 cm sous les sols (précision de profondeur de loin), butte au nord-est
-            "contour": [[-60000, -50000, 29900], [210000, -50000, 29900], [210000, 160000, 29900], [-60000, 160000, 29900]],
+            "contour": [[-60000, -40000, 29900], [180000, -40000, 29900], [180000, 140000, 29900], [-60000, 140000, 29900]],
             "points": points_terrain(),
             "type_terrain": "pelouse",
         }],
         "arbres": arbres(),
         "murs": murs,
         "assemblages": [],
-        "materiaux": MATERIAUX,
+        "materiaux": [m for m in MATERIAUX if m["nom"] != "Zinc"],
         "ouvertures": ouvertures,
         "dalles": dalles,
         "importes": [], "ignores": {},
         "vues": [
             {"id": "plan-rdc", "nom": "Plan RDC", "echelle": 200, "genre": "plan", "niveau": "n0", "coupe": 1200, "bas_niveau": "n0", "bas_decalage": 0},
             {"id": "plan-r1", "nom": "Plan R+1", "echelle": 200, "genre": "plan", "niveau": "n1", "coupe": 1200, "bas_niveau": "n1", "bas_decalage": 0},
-            {"id": "coupe-ns", "nom": "Coupe nord-sud", "echelle": 200, "genre": "coupe", "debut": [30000, -5000], "fin": [30000, 95000], "profondeur": 20000, "elevation": False},
+            {"id": "coupe-ns", "nom": "Coupe nord-sud", "echelle": 200, "genre": "coupe", "debut": [69000, -5000], "fin": [69000, 75000], "profondeur": 20000, "elevation": False},
+            camera("vue-rue", "Vue piéton depuis la rue", [22000, 500, 1500], [62000, 24000, 6000]),
+            camera("vue-cour", "Vue piéton dans la cour", [22000, 62000, 1500], [62000, 30000, 6000]),
+            camera("vue-aerienne", "Vue aérienne", [150000, -45000, 55000], [55000, 38000, 0], 45.0),
         ],
-        "rendus_vues": {"3d": {"style": "realiste", "ombres_portees": True, "ombre_ambiante": True, "jour": 21, "mois": 6, "heure": 17.0,
-                               "ciel": {"ambiance": "Clair", "brume": 0.15, "nuages": 0.0, "intensite_soleil": 1.0, "intensite_ciel": 1.0, "taille_soleil": 1.5, "sol": [110, 120, 90], "exposition_auto": True, "exposition": 0.0}}},
+        "rendus_vues": {
+            "3d": rendu("perspective"),
+            "vue-rue": rendu("deux_points", 11.0),
+            "vue-cour": rendu("deux_points", 17.0),
+            "vue-aerienne": rendu("perspective", 15.0),
+        },
         "quadrillages": [], "annotations": [], "feuilles": [], "nomenclatures": [],
         "attaches_toitures": attaches,
         "implantations": {},
@@ -425,8 +451,7 @@ def projet():
 
 if __name__ == "__main__":
     os.makedirs(TEX, exist_ok=True)
-    # pelouse.png : ancienne texture procédurale, gardée pour les anciens projets
-    for f in (briques, beton, enduit, bois, tuiles, zinc, feuillage, ecorce, pelouse, enrobe, paves):
+    for f in (briques, beton, enduit, bois, tuiles, feuillage, ecorce, enrobe, paves):
         f()
     with open(os.path.join(SORTIE, "ilot_demo.modele.json"), "w", encoding="utf-8") as fichier:
         json.dump(projet(), fichier, ensure_ascii=False, indent=1)

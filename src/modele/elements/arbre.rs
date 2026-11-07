@@ -239,4 +239,16 @@ mod tests {
         assert_ne!(a.solides(0.0).1[5][0], b.solides(0.0).1[5][0]);
         assert_eq!(a.solides(0.0).1[7], a.solides(0.0).1[7]);
     }
+
+    #[test]
+    fn creer_puis_supprimer_un_arbre() {
+        use crate::modele::edition::commandes::Commande;
+        let mut p = crate::modele::Projet::nouveau("Arbres");
+        p.niveaux.push(crate::modele::Niveau { id: "n0".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
+        let a = Arbre { id: String::new(), ..arbre(Essence::Conifere) };
+        let (p, ids) = p.executer(Commande::Arbre { arbre: a }).unwrap();
+        assert_eq!(p.arbres.len(), 1);
+        let (p, _) = p.executer(Commande::Supprimer { ids }).unwrap();
+        assert!(p.arbres.is_empty());
+    }
 }

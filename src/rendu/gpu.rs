@@ -85,6 +85,9 @@ const MAX_APPARENCES: i32 = 32;
 // ciel physique : vue du ciel depuis le sol (voir `rendu::ciel`)
 @group(1) @binding(7) var t_ciel: texture_2d<f32>;
 @group(1) @binding(8) var s_ciel: sampler;
+// reflets calculés à l'écran (verre) : image des surfaces opaques et leur profondeur
+@group(1) @binding(9) var t_copie: texture_2d<f32>;
+@group(1) @binding(10) var t_profondeur_lue: texture_2d<f32>;
 
 struct Sommet {
     @location(0) pos: vec3f,
@@ -589,6 +592,60 @@ fn fs_ciel(e: VarieCiel) -> @location(0) vec4f {
     return vec4f(vers_srgb(compresser(c)), 1.0);
 }
 
+// Reflet calculé à l'écran : le rayon réfléchi (p, direction r) avance dans la scène,
+// projeté à chaque pas sur l'image des surfaces opaques ; touché quand il passe derrière
+// la surface vue à cet endroit (épaisseur bornée). Rend la couleur (déjà exposée,
+// linéaire) et la confiance (0 : rien trouvé, bords de l'image estompés).
+fn reflet_ecran(p: vec3f, r: vec3f) -> vec4f {
+    let taille = vec2f(textureDimensions(t_profondeur_lue));
+    var pas = 0.15;
+    var q = p + r * 0.05;
+    var precedent = q;
+    for (var i = 0; i < 64; i++) {
+        precedent = q;
+        q += r * pas;
+        pas *= 1.09;
+        let c = passe.mvp * vec4f(q, 1.0);
+        if c.w <= 1e-4 {
+            break;
+        }
+        let ndc = c.xyz / c.w;
+        if abs(ndc.x) > 1.0 || abs(ndc.y) > 1.0 {
+            break;
+        }
+        let uv = vec2f(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+        let zs = textureLoad(t_profondeur_lue, clamp(vec2i(uv * taille), vec2i(0), vec2i(taille) - 1), 0).r;
+        if zs >= 0.99999 {
+            continue;
+        }
+        // surface vue à cet endroit, distance à l'œil comparée à celle du rayon
+        let s = point_ecran(ndc.xy, zs * 2.0 - 1.0);
+        let dq = length(q - g.eye.xyz);
+        let ds = length(s - g.eye.xyz);
+        if dq > ds && dq - ds < max(pas * 2.5, 0.25) {
+            // affinage par dichotomie entre le pas précédent et celui-ci
+            var a = precedent;
+            var b = q;
+            for (var j = 0; j < 6; j++) {
+                let m = (a + b) * 0.5;
+                let cm = passe.mvp * vec4f(m, 1.0);
+                let nm = cm.xyz / cm.w;
+                let um = vec2f(nm.x * 0.5 + 0.5, 0.5 - nm.y * 0.5);
+                let zm = textureLoad(t_profondeur_lue, clamp(vec2i(um * taille), vec2i(0), vec2i(taille) - 1), 0).r;
+                let sm = point_ecran(nm.xy, zm * 2.0 - 1.0);
+                if length(m - g.eye.xyz) > length(sm - g.eye.xyz) { b = m; } else { a = m; }
+            }
+            let cb = passe.mvp * vec4f(b, 1.0);
+            let nb = cb.xyz / cb.w;
+            let ub = vec2f(nb.x * 0.5 + 0.5, 0.5 - nb.y * 0.5);
+            let couleur = vers_lineaire(textureSampleLevel(t_copie, s_ciel, ub, 0.0).rgb);
+            let bord = 1.0 - smoothstep(0.8, 1.0, max(abs(nb.x), abs(nb.y)));
+            return vec4f(couleur, bord * (1.0 - f32(i) / 64.0 * 0.5));
+        }
+    }
+    return vec4f(0.0);
+}
+
 // carte j de l'apparence de rang r au point uv (mm, plan de la face), dérivées dx, dy
 fn carte(k: i32, j: i32, uv: vec2f, dx: vec2f, dy: vec2f) -> vec4f {
     let a = apparences[k + 3 + 2 * j];
@@ -874,11 +931,19 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
             // verre : réflexion d'un vitrage (deux faces, couche) plus forte que 4 %, Fresnel ;
             // le reste traverse (transmission teintée), corps du verre presque invisible.
             // Mélange : sortie = c·a + fond·(1 − a), avec a = 1 − transmission.
-            let f0v = 0.09;
+            let f0v = 0.12;
             let fv = (f0v + (1.0 - f0v) * pow(1.0 - max(dot(n, vd), 0.0), 5.0)) * poli;
-            let transmission = (1.0 - fx.alpha) * (1.0 - fv);
+            // l'intérieur vu à travers un vitrage paraît plus sombre que l'extérieur
+            let transmission = (1.0 - fx.alpha) * (1.0 - fv) * 0.8;
             a = clamp(1.0 - transmission, 0.02, 1.0);
-            let reflechi = ciel * fv * mix(1.0, ao, 0.5) + speculaire * 4.0;
+            // reflets des bâtiments, arbres et sol (calculés à l'écran), ciel ailleurs
+            var envir = ciel;
+            if physique && g.ciel[2].w > 0.5 {
+                let rr = reflect(-vd, n);
+                let ecran = reflet_ecran(e.pos, rr);
+                envir = mix(ciel, ecran.rgb, ecran.a);
+            }
+            let reflechi = envir * fv * mix(1.0, ao, 0.5) + speculaire * 4.0;
             c = (reflechi + c * fx.alpha * (1.0 - fv) + fx.emis) / a;
         } else {
             c = c * (1.0 - part) + ciel * part * mix(1.0, ao, 0.5) + speculaire + fx.emis;
@@ -1126,6 +1191,9 @@ pub struct ParamsPasse {
 /// Cibles d'une image : couleur multiéchantillonnée, profondeur, image résolue,
 /// occultation ambiante (profondeur, brute, lissée).
 struct Cibles {
+    /// Copie de l'image des surfaces opaques (reflets calculés à l'écran du verre).
+    copie: wgpu::Texture,
+    vue_copie: wgpu::TextureView,
     largeur: u32,
     hauteur: u32,
     couleur_ms: Option<wgpu::TextureView>,
@@ -1187,6 +1255,7 @@ pub struct Renderer {
     vue_ombres: wgpu::TextureView,
     echantillonneur_ombres: wgpu::Sampler,
     ao_vide: wgpu::TextureView,
+    copie_vide: wgpu::TextureView,
     passes: Vec<Passe>,
     /// Image de la vue et son identifiant egui.
     cibles: Option<Cibles>,
@@ -1379,6 +1448,13 @@ impl Renderer {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 9,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+                    count: None,
+                },
+                texture(10, flottant, wgpu::ShaderStages::FRAGMENT),
                 wgpu::BindGroupLayoutEntry {
                     binding: 7,
                     visibility: wgpu::ShaderStages::FRAGMENT,
@@ -1594,6 +1670,7 @@ impl Renderer {
             vue_ombres: ombres.create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() }),
             echantillonneur_ombres,
             ao_vide: ao_vide.create_view(&Default::default()),
+            copie_vide: Self::texture(&device, "copie vide", 1, 1, 1, COULEUR, wgpu::TextureUsages::TEXTURE_BINDING).create_view(&Default::default()),
             sommets: vide("sommets"),
             rendu: vide("couleurs de rendu"),
             motifs: vide("motifs"),
@@ -1701,7 +1778,10 @@ impl Renderer {
         // lit l'occultation brute
         let groupe_ao = groupe(&ao_lisse);
         let groupe_flou = groupe(&ao_brut);
+        let copie = Self::texture(d, "copie des surfaces opaques", largeur, hauteur, 1, COULEUR, wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST);
         Cibles {
+            vue_copie: copie.create_view(&Default::default()),
+            copie,
             largeur,
             hauteur,
             couleur_ms,
@@ -1936,7 +2016,8 @@ impl Renderer {
             let soleil = crate::rendu::ciel::couleur_soleil(p.direction_soleil, c.brume) * c.intensite_soleil;
             g.ciel[0] = [soleil.x, soleil.y, soleil.z, c.exposition.map_or(0.0, |ev| 2f32.powf(ev))];
             g.ciel[1] = [c.intensite_ciel, c.nuages.clamp(0.0, 1.0), c.taille_soleil.max(0.1), 1.0];
-            g.ciel[2] = [c.sol[0], c.sol[1], c.sol[2], 0.0];
+            let ssr = p.passes.is_empty() && self.n_transp > 0;
+            g.ciel[2] = [c.sol[0], c.sol[1], c.sol[2], if ssr { 1.0 } else { 0.0 }];
         }
         self.queue.write_buffer(&self.globales, 0, as_bytes(std::slice::from_ref(&g)));
 
@@ -2056,8 +2137,20 @@ impl Renderer {
                 passe.draw_indexed(0..self.n_opaque, 0, 0..1);
             }
         }
-        // occultation ambiante : profondeur (triangles opaques), occultation brute puis lissée
+        // occultation ambiante : profondeur (triangles opaques), occultation brute puis lissée ;
+        // la profondeur sert aussi aux reflets du verre
         let ao = self.ao_actif(p);
+        let ssr = p.ciel.is_some() && p.passes.is_empty() && self.n_transp > 0;
+        if ssr && !ao {
+            let mut passe = profondeur_seule(&mut enc, &c.ao_tampon, Some(&c.ao_profondeur));
+            if self.n_opaque > 0 {
+                passe.set_pipeline(&self.pipeline_ao_profondeur);
+                passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_AO));
+                passe.set_vertex_buffer(0, self.sommets.slice(..));
+                passe.set_index_buffer(self.ebo_opaque.slice(..), wgpu::IndexFormat::Uint32);
+                passe.draw_indexed(0..self.n_opaque, 0, 0..1);
+            }
+        }
         if ao {
             {
                 let mut passe = profondeur_seule(&mut enc, &c.ao_tampon, Some(&c.ao_profondeur));
@@ -2102,6 +2195,8 @@ impl Renderer {
                 wgpu::BindGroupEntry { binding: 6, resource: self.uniformes_apparences.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::TextureView(&self.ciel.vue_ciel) },
                 wgpu::BindGroupEntry { binding: 8, resource: wgpu::BindingResource::Sampler(&self.echantillonneur_ciel) },
+                wgpu::BindGroupEntry { binding: 9, resource: wgpu::BindingResource::TextureView(if ssr { &c.vue_copie } else { &self.copie_vide }) },
+                wgpu::BindGroupEntry { binding: 10, resource: wgpu::BindingResource::TextureView(if ssr { &c.ao_profondeur } else { &self.ao_vide }) },
             ],
         });
 
@@ -2122,7 +2217,7 @@ impl Renderer {
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &c.profondeur,
-                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Discard }),
+                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }),
                     stencil_ops: None,
                 }),
                 timestamp_writes: None,
@@ -2170,7 +2265,36 @@ impl Renderer {
                 passe.draw_indexed(0..self.n_herbe, 0, 0..20);
             }
             let graphique = p.style == StyleVisuel::Graphique;
-            self.dessiner(&mut passe, [&self.ebo_opaque, &self.ebo_transp, &self.segments_traits], [self.n_opaque, self.n_transp, self.n_lines], graphique);
+            // reflets du verre : surfaces opaques d'abord, vitrages dans une seconde passe
+            let n_transp = if ssr { 0 } else { self.n_transp };
+            self.dessiner(&mut passe, [&self.ebo_opaque, &self.ebo_transp, &self.segments_traits], [self.n_opaque, n_transp, self.n_lines], graphique);
+            if ssr {
+                drop(passe);
+                enc.copy_texture_to_texture(c.resultat.as_image_copy(), c.copie.as_image_copy(), c.resultat.size());
+                passe = enc
+                    .begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("vitrages"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: c.couleur_ms.as_ref().unwrap_or(&c.vue_resultat),
+                            depth_slice: None,
+                            resolve_target: c.couleur_ms.as_ref().map(|_| &c.vue_resultat),
+                            ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+                        })],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &c.profondeur,
+                            depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store }),
+                            stencil_ops: None,
+                        }),
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                        multiview_mask: None,
+                    })
+                    .forget_lifetime();
+                passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_MODELE));
+                passe.set_bind_group(1, &groupe_1, &[]);
+                self.sommets_scene(&mut passe);
+                self.dessiner(&mut passe, [&self.ebo_opaque, &self.ebo_transp, &self.segments_traits], [0, self.n_transp, 0], false);
+            }
             // tracé de la coupe (poché, contours, hachures) : non découpé par le plan de coupe
             if (p.coupe.is_some() || p.boite.is_some()) && self.n_coupe[0] + self.n_coupe[1] > 0 {
                 passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_COUPE));
