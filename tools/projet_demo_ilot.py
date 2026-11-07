@@ -293,6 +293,18 @@ def arbres():
     return out
 
 
+def plancher_bureaux(id, nom, niveau, x0, y0, x1, y1):
+    """Plancher au nu intérieur des murs (vitrage 60 au sud, béton 200 ailleurs) et
+    débords filants en bandes extérieures (1,20 m au sud, 0,40 m ailleurs) : aucune
+    dalle ne traverse un mur."""
+    v, b = 30, 100
+    dalle(id, nom, "dalle300", niveau, 0, rectangle(x0 + b, y0 + v, x1 - b, y1 - b))
+    dalle(f"{id}-sud", f"{nom}, débord sud", "dalle300", niveau, 0, rectangle(x0 - 400, y0 - 1200, x1 + 400, y0 - v))
+    dalle(f"{id}-nord", f"{nom}, débord nord", "dalle300", niveau, 0, rectangle(x0 - 400, y1 + b, x1 + 400, y1 + 400))
+    dalle(f"{id}-ouest", f"{nom}, débord ouest", "dalle300", niveau, 0, rectangle(x0 - 400, y0 - v, x0 - b, y1 + b))
+    dalle(f"{id}-est", f"{nom}, débord est", "dalle300", niveau, 0, rectangle(x1 + b, y0 - v, x1 + 400, y1 + b))
+
+
 def projet():
     # A : logements collectifs R+3 en brique, toiture terrasse et acrotère
     ax0, ay0, ax1, ay1 = 10000, 22000, 40000, 34000
@@ -302,8 +314,9 @@ def projet():
         baies(nord, 30000, 3000, 1000, 1400, 1000)
         baies(est, 12000, 4000, 1000, 1400, 1000)
         baies(ouest, 12000, 4000, 1000, 1400, 1000)
-        dalle(f"A-p{k}", f"Plancher logements {k}", "dalle250", f"n{k}", 0, rectangle(ax0 - 150, ay0 - 150, ax1 + 150, ay1 + 150))
-    dalle("A-toit", "Toiture terrasse logements", "dalle250", "n4", 0, rectangle(ax0 - 150, ay0 - 150, ax1 + 150, ay1 + 150))
+        # planchers arrêtés au nu intérieur des murs (brique 300 : 150 de l'axe)
+        dalle(f"A-p{k}", f"Plancher logements {k}", "dalle250", f"n{k}", 0, rectangle(ax0 + 150, ay0 + 150, ax1 - 150, ay1 - 150))
+    dalle("A-toit", "Toiture terrasse logements", "dalle250", "n4", 0, rectangle(ax0 + 150, ay0 + 150, ax1 - 150, ay1 - 150))
     boite("A-acr", ax0, ay0, ax1, ay1, "n4", 900, "brique300", "Acrotère logements")
 
     # B : bureaux R+2, façade sud vitrée, autres façades en béton banché
@@ -312,8 +325,8 @@ def projet():
         sud, est, nord, ouest = boite("B", bx0, by0, bx1, by1, f"n{k}", 3000, ["vitrage", "beton200", "beton200", "beton200"], "Bureaux")
         baies(nord, 40000, 4000, 2400, 1800, 900)
         baies(est, 16000, 4000, 1800, 1800, 900)
-        dalle(f"B-p{k}", f"Plancher bureaux {k}", "dalle300", f"n{k}", 0, rectangle(bx0 - 400, by0 - 1200, bx1 + 400, by1 + 400))
-    dalle("B-toit", "Toiture bureaux", "dalle300", "n3", 0, rectangle(bx0 - 400, by0 - 1200, bx1 + 400, by1 + 400))
+        plancher_bureaux(f"B-p{k}", f"Plancher bureaux {k}", f"n{k}", bx0, by0, bx1, by1)
+    plancher_bureaux("B-toit", "Toiture bureaux", "n3", bx0, by0, bx1, by1)
     boite("B-acr", bx0 - 400, by0 - 1200, bx1 + 400, by1 + 400, "n3", 1000, "beton200", "Acrotère bureaux")
 
     # D : gymnase, bardage zinc, bande vitrée haute, toiture zinc deux pans à 8°
@@ -324,7 +337,7 @@ def projet():
     baies(sud, 40000, 5000, 4200, 1500, 6800, marge=2500)
     baies(nord, 40000, 5000, 4200, 1500, 6800, marge=2500)
     ouvertures.append({"id": "D-entree", "nom": "Entrée gymnase", "genre": "porte", "mur": sud, "type_ouverture": None, "abscisse": 20000, "largeur": 4000, "hauteur": 3000, "allege": 0, "representation": None, "origine": None})
-    dalle("D-sol", "Sol gymnase", "dalle250", "n0", 0, rectangle(dx0 - 150, dy0 - 150, dx1 + 150, dy1 + 150))
+    dalle("D-sol", "Sol gymnase", "dalle250", "n0", 0, rectangle(dx0 + 100, dy0 + 100, dx1 - 100, dy1 - 100))
     dalle("D-toit", "Toiture gymnase", "zinc150", "n3", 0, rectangle(dx0 - 600, dy0 - 600, dx1 + 600, dy1 + 600), sorte="toiture", pentes=[8, None, 8, None])
 
     # C : trois maisons R+1, enduit au rez-de-chaussée, bois à l'étage, tuiles à 35°
@@ -341,8 +354,8 @@ def projet():
             attaches[m] = f"{p}-toit"
         baies(sud1, 9000, 3000, 1200, 1400, 900)
         baies(est1, 8000, 4000, 900, 1200, 1000, marge=2000)
-        dalle(f"{p}-p0", f"Plancher maison {i + 1}", "dalle250", "n0", 0, rectangle(x0 - 100, y0 - 100, x1 + 100, y1 + 100))
-        dalle(f"{p}-p1", f"Plancher étage maison {i + 1}", "dalle250", "n1", 0, rectangle(x0 - 100, y0 - 100, x1 + 100, y1 + 100))
+        dalle(f"{p}-p0", f"Plancher maison {i + 1}", "dalle250", "n0", 0, rectangle(x0 + 100, y0 + 100, x1 - 100, y1 - 100))
+        dalle(f"{p}-p1", f"Plancher étage maison {i + 1}", "dalle250", "n1", 0, rectangle(x0 + 100, y0 + 100, x1 - 100, y1 - 100))
         dalle(f"{p}-toit", f"Toiture maison {i + 1}", "tuiles200", "n1", 2800, rectangle(x0 - 500, y0 - 600, x1 + 500, y1 + 600), sorte="toiture", pentes=[35, None, 35, None])
 
     # aménagements : voirie au sud, parvis entre logements et bureaux, allée des maisons

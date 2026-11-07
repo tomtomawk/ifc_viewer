@@ -707,9 +707,21 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
         let fresnel = f0 + (1.0 - f0) * pow(1.0 - max(dot(n, vd), 0.0), 5.0);
         let poli = (1.0 - fx.rug) * (1.0 - fx.rug);
         let part = fresnel * poli;
-        c = c * (1.0 - part) + ciel * part * mix(1.0, ao, 0.5) + mix(vec3f(0.6), f0, fx.metal) * reflet * 2.0 * soleil_reflet + fx.emis;
-        // le verre reflète : plus opaque en vue rasante
-        a = max(fx.alpha, max(part.r, max(part.g, part.b)));
+        let speculaire = mix(vec3f(0.6), f0, fx.metal) * reflet * 2.0 * soleil_reflet;
+        if fx.alpha < 0.999 {
+            // verre : réflexion d'un vitrage (deux faces, couche) plus forte que 4 %, Fresnel ;
+            // le reste traverse (transmission teintée), corps du verre presque invisible.
+            // Mélange : sortie = c·a + fond·(1 − a), avec a = 1 − transmission.
+            let f0v = 0.09;
+            let fv = (f0v + (1.0 - f0v) * pow(1.0 - max(dot(n, vd), 0.0), 5.0)) * poli;
+            let transmission = (1.0 - fx.alpha) * (1.0 - fv);
+            a = clamp(1.0 - transmission, 0.02, 1.0);
+            let reflechi = ciel * fv * mix(1.0, ao, 0.5) + speculaire * 4.0;
+            c = (reflechi + c * fx.alpha * (1.0 - fv) + fx.emis) / a;
+        } else {
+            c = c * (1.0 - part) + ciel * part * mix(1.0, ao, 0.5) + speculaire + fx.emis;
+            a = max(fx.alpha, max(part.r, max(part.g, part.b)));
+        }
     }
     c = select(min(c, vec3f(1.0)), vers_srgb(compresser(c)), physique);
     if motifs && arriere != 0 {
