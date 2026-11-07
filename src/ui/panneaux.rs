@@ -111,56 +111,68 @@ impl ViewerApp {
         }
     }
 
-    /// Soleil du style Rendu : direction (depuis le sud-ouest, 45° de hauteur environ),
-    /// vue orthographique du soleil englobant la scène, décalage contre l'acné d'ombre
-    /// (un texel et demi de la carte d'ombres).
-    /// Ombres portées : direction du soleil, matrice de la carte d'ombres et décalage contre
-    /// l'acné. La carte couvre la partie de la scène vue par la caméra (et non la scène
-    /// entière) : plus on zoome, plus elle est fine ; ses bornes suivent la grille de ses
-    /// pixels pour que les ombres ne frémissent pas quand la caméra bouge.
-    pub(super) fn soleil(&self, aspect: f32) -> Option<(Vec3, Mat4, f32)> {
+    /// Ombres portées en cascades : la vue est découpée en tranches de profondeur (de
+    /// quelques dizaines de centimètres à la fin de la scène), chacune avec sa carte
+    /// d'ombres de 4096 px, petite près de l'œil (ombres fines) et grande au loin. Chaque
+    /// carte englobe sa tranche (sphère, taille fixe : pas de frémissement quand la caméra
+    /// tourne), calée sur sa grille de pixels, et toute la scène en profondeur (les objets
+    /// hors champ portent aussi leur ombre).
+    pub(super) fn soleil(&self, aspect: f32) -> Option<crate::rendu::gpu::Ombres> {
+        use crate::rendu::gpu::{Cascade, NB_CASCADES, TAILLE_OMBRES};
         let s = self.scene.as_ref()?;
         let dir = self.direction_soleil();
-        let (c, r) = ((s.min + s.max) * 0.5, ((s.max - s.min).length() * 0.5).max(0.1) * 1.02);
-        let vue = glam::camera::rh::view::look_at_mat4(c + dir * r * 2.0, c, Vec3::Z);
-        let coins_scene: Vec<Vec3> = (0..8).map(|k| Vec3::new(if k & 1 == 0 { s.min.x } else { s.max.x }, if k & 2 == 0 { s.min.y } else { s.max.y }, if k & 4 == 0 { s.min.z } else { s.max.z })).collect();
-        let bornes = |pts: &mut dyn Iterator<Item = Vec3>| pts.map(|p| vue.transform_point3(p)).fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(a, b), q| (a.min(q), b.max(q)));
-        let (smin, smax) = bornes(&mut coins_scene.iter().copied());
-        // volume de vue limité à la sphère de la scène : rayons des coins de l'écran
+        let c_scene = (s.min + s.max) * 0.5;
+        let r_scene = ((s.max - s.min).length() * 0.5).max(0.1) * 1.02;
         let inv = self.camera.view_proj(aspect).inverse();
-        let mut vus = Vec::new();
-        for (x, y) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0), (0.0, 0.0)] {
-            let (a, b) = (inv.project_point3(Vec3::new(x, y, -1.0)), inv.project_point3(Vec3::new(x, y, 1.0)));
-            let d = b - a;
-            let l = d.length();
-            if !(l > 1e-6) || !l.is_finite() { continue; }
-            let u = d / l;
-            // entrée et sortie de la sphère (c, r) le long de [a, b]
-            let m = (a - c).dot(u);
-            let disc = m * m - ((a - c).length_squared() - r * r);
-            if disc < 0.0 { continue; }
-            // en perspective, ombres jusqu'à quatre fois la distance de la cible : au-delà
-            // elles sont trop petites pour compter et la carte s'étalerait jusqu'à l'horizon
-            let portee = if self.camera.ortho { l } else { (self.camera.dist * 4.0).min(l) };
-            let (t0, t1) = ((-m - disc.sqrt()).max(0.0), (-m + disc.sqrt()).min(portee));
-            if t1 < t0 { continue; }
-            vus.extend([a + u * t0, a + u * t1]);
+        let proj = self.camera.proj(aspect);
+        let avant = self.camera.direction_vue();
+        let oeil = self.camera.eye();
+        // profondeurs de la vue (le long du regard) : de l'œil (ou du bord de la scène) à
+        // la fin de la scène
+        let d_scene = (c_scene - oeil).dot(avant);
+        let (n, f) = if self.camera.ortho {
+            ((d_scene - r_scene).max(0.0), d_scene + r_scene)
+        } else {
+            ((d_scene - r_scene).max(0.3), (d_scene + r_scene).clamp(5.0, 3000.0))
+        };
+        if f <= n {
+            return None;
         }
-        let (mut lo, mut hi) = (smin.truncate(), smax.truncate());
-        if !vus.is_empty() {
-            let (vmin, vmax) = bornes(&mut vus.iter().copied());
-            // le centre de l'écran peut ne rien viser : on garde au moins sa projection
-            lo = lo.max(vmin.truncate());
-            hi = hi.min(vmax.truncate());
-            if lo.cmpge(hi).any() { (lo, hi) = (smin.truncate(), smax.truncate()); }
+        // découpage « pratique » : logarithmique près de l'œil, uniforme au loin
+        let lambda = if self.camera.ortho { 0.0 } else { 0.85 };
+        let coupe = |k: usize| {
+            let t = k as f32 / NB_CASCADES as f32;
+            lambda * n * (f / n).powf(t) + (1.0 - lambda) * (n + (f - n) * t)
+        };
+        // NDC z d'une profondeur de vue
+        let ndc_z = |d: f32| {
+            let c = proj * glam::Vec4::new(0.0, 0.0, -d, 1.0);
+            c.z / c.w
+        };
+        let vue = glam::camera::rh::view::look_at_mat4(Vec3::ZERO, -dir, if dir.z.abs() > 0.99 { Vec3::Y } else { Vec3::Z });
+        let coins_scene: Vec<Vec3> = (0..8).map(|k| Vec3::new(if k & 1 == 0 { s.min.x } else { s.max.x }, if k & 2 == 0 { s.min.y } else { s.max.y }, if k & 4 == 0 { s.min.z } else { s.max.z })).collect();
+        let (zmin, zmax) = coins_scene.iter().map(|p| vue.transform_point3(*p).z).fold((f32::MAX, f32::MIN), |(a, b), z| (a.min(z), b.max(z)));
+        let mut cascades = Vec::with_capacity(NB_CASCADES);
+        for k in 0..NB_CASCADES {
+            let (d0, d1) = (coupe(k), coupe(k + 1));
+            let mut pts = Vec::with_capacity(8);
+            for d in [d0, d1] {
+                let z = ndc_z(d).clamp(-1.0, 1.0);
+                for (x, y) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+                    pts.push(inv.project_point3(Vec3::new(x, y, z)));
+                }
+            }
+            let centre = pts.iter().copied().sum::<Vec3>() / pts.len() as f32;
+            // rayon arrondi : taille de carte constante pour la tranche
+            let rayon = (pts.iter().map(|p| p.distance(centre)).fold(0.0f32, f32::max) * 16.0).ceil() / 16.0;
+            let rayon = rayon.min(r_scene).max(0.5);
+            let texel = 2.0 * rayon / TAILLE_OMBRES as f32;
+            let c = vue.transform_point3(centre);
+            let (cx, cy) = ((c.x / texel).floor() * texel, (c.y / texel).floor() * texel);
+            let ortho = glam::camera::rh::proj::opengl::orthographic(cx - rayon, cx + rayon, cy - rayon, cy + rayon, -zmax - 1.0, -zmin + 1.0);
+            cascades.push(Cascade { matrice: ortho * vue, distance: d1, biais: 1.5 * texel });
         }
-        // carré calé sur la grille des pixels de la carte
-        let cote = (hi - lo).max_element().max(0.01) * 1.05;
-        let texel = cote / crate::rendu::gpu::TAILLE_OMBRES as f32;
-        let centre = (((lo + hi) * 0.5) / texel).floor() * texel;
-        let (x0, y0) = (centre - glam::Vec2::splat(cote * 0.5)).into();
-        let proj = glam::camera::rh::proj::opengl::orthographic(x0, x0 + cote, y0, y0 + cote, -smax.z - 0.01, -smin.z + 0.01);
-        Some((dir, proj * vue, 1.5 * texel))
+        Some(crate::rendu::gpu::Ombres { direction: dir, cascades })
     }
 
     /// Style visuel : bouton à l'icône du style en cours, menu des styles.

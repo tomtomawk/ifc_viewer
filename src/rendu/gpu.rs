@@ -17,7 +17,11 @@ const COTE_TEXTURE: u32 = 512;
 /// Uniformes communes aux shaders (même disposition que `Globales` côté Rust).
 const COMMUN: &str = r#"
 struct Globales {
-    lumiere: mat4x4f,
+    // cartes d'ombres en cascades : matrices du soleil, profondeur de fin de chaque
+    // tranche (le long du regard), décalage contre l'acné
+    lumiere: array<mat4x4f, 4>,
+    cascades: vec4f,
+    biais: vec4f,
     proj: mat4x4f,
     proj_inv: mat4x4f,
     // xyz : œil, w : 1 si vue orthographique
@@ -66,7 +70,7 @@ fn vers_wgpu(p: vec4f) -> vec4f {
 
 const SCENE: &str = r#"
 @group(1) @binding(0) var t_selection: texture_2d<f32>;
-@group(1) @binding(1) var t_ombres: texture_depth_2d;
+@group(1) @binding(1) var t_ombres: texture_depth_2d_array;
 @group(1) @binding(2) var s_ombres: sampler_comparison;
 @group(1) @binding(3) var t_ao: texture_2d<f32>;
 // apparences des matériaux (style Réaliste) : images en couches, réglages par rang
@@ -316,31 +320,53 @@ fn traits_motif(code: i32, uv: vec2f, dx: vec2f, dy: vec2f) -> f32 {
     return max(famille(uv, dx, dy, t.x, t.y), famille(uv, dx, dy, t.z, t.w));
 }
 
-// part du soleil reçue en p (0 : à l'ombre) : 12 échantillons d'un disque de Poisson
-// tourné à chaque pixel, chacun filtré par le matériel (comparaison bilinéaire)
-fn ensoleillement(p: vec3f, n: vec3f, ndl: f32, pixel: vec2f) -> f32 {
-    var poisson = array<vec2f, 12>(
+// part du soleil reçue en p (0 : à l'ombre) dans la cascade k : 16 échantillons d'un
+// disque de Poisson tourné à chaque pixel, chacun filtré par le matériel
+fn ombre_cascade(k: i32, p: vec3f, n: vec3f, ndl: f32, pixel: vec2f) -> f32 {
+    var poisson = array<vec2f, 16>(
         vec2f(-0.326, -0.406), vec2f(-0.840, -0.074), vec2f(-0.696, 0.457), vec2f(-0.203, 0.621),
         vec2f(0.962, -0.195), vec2f(0.473, -0.480), vec2f(0.519, 0.767), vec2f(0.185, -0.893),
-        vec2f(0.507, 0.064), vec2f(0.896, 0.412), vec2f(-0.322, -0.933), vec2f(-0.792, -0.598));
+        vec2f(0.507, 0.064), vec2f(0.896, 0.412), vec2f(-0.322, -0.933), vec2f(-0.792, -0.598),
+        vec2f(0.035, 0.213), vec2f(-0.420, 0.120), vec2f(0.240, -0.170), vec2f(0.110, 0.470));
     // décalage le long de la normale, plus fort en lumière rasante (acné d'ombre)
-    let l = g.lumiere * vec4f(p + n * g.soleil.w * (1.0 + 2.0 * (1.0 - ndl)), 1.0);
+    let l = g.lumiere[k] * vec4f(p + n * g.biais[k] * (1.0 + 2.0 * (1.0 - ndl)), 1.0);
     let q0 = l.xyz / l.w * 0.5 + 0.5;
     if q0.x < 0.0 || q0.x > 1.0 || q0.y < 0.0 || q0.y > 1.0 || q0.z > 1.0 {
         return 1.0;
     }
     // ligne 0 de la texture en haut
     let q = vec3f(q0.x, 1.0 - q0.y, q0.z);
-    let pas = 1.6 * select(1.0, g.ciel[1].z, g.ciel[1].w > 0.5) / vec2f(textureDimensions(t_ombres));
+    let pas = 1.8 * select(1.0, g.ciel[1].z, g.ciel[1].w > 0.5) / vec2f(textureDimensions(t_ombres));
     let a = 6.2831853 * fract(52.9829189 * fract(dot(pixel, vec2f(0.06711056, 0.00583715))));
     let r = mat2x2f(cos(a), sin(a), -sin(a), cos(a));
     var s = 0.0;
-    for (var i = 0; i < 12; i++) {
-        s += textureSampleCompareLevel(t_ombres, s_ombres, q.xy + r * poisson[i] * pas, q.z - 0.0002);
+    for (var i = 0; i < 16; i++) {
+        s += textureSampleCompareLevel(t_ombres, s_ombres, q.xy + r * poisson[i] * pas, k, q.z - 0.00005);
     }
-    // fondu vers le bord de la carte (portée des ombres) : pas de limite franche
-    let bord = max(abs(q.x - 0.5), abs(q.y - 0.5)) * 2.0;
-    return mix(s / 12.0, 1.0, smoothstep(0.85, 1.0, bord));
+    return s / 16.0;
+}
+
+// part du soleil reçue en p : cascade de la profondeur du point, fondu vers la suivante
+// sur les derniers 10 % de la tranche, et vers le plein soleil au bout de la dernière
+fn ensoleillement(p: vec3f, n: vec3f, ndl: f32, pixel: vec2f) -> f32 {
+    let d = dot(p - g.eye.xyz, passe.view_dir.xyz);
+    var k = 0;
+    for (var i = 0; i < 4; i++) {
+        if d > g.cascades[i] {
+            k = i + 1;
+        }
+    }
+    if k >= 4 {
+        return 1.0;
+    }
+    var s = ombre_cascade(k, p, n, ndl, pixel);
+    let debut = select(0.0, g.cascades[max(k - 1, 0)], k > 0);
+    let fondu = smoothstep(0.9, 1.0, (d - debut) / max(g.cascades[k] - debut, 1e-4));
+    if fondu > 0.0 {
+        let suivante = select(1.0, ombre_cascade(min(k + 1, 3), p, n, ndl, pixel), k < 3);
+        s = mix(s, suivante, fondu);
+    }
+    return s;
 }
 
 // occultation ambiante lissée (passes à part), à la taille de la vue
@@ -876,7 +902,25 @@ fn fs_flou(e: Plein) -> @location(0) vec4f {
 "#;
 
 /// Côté de la carte d'ombres (pixels).
-pub const TAILLE_OMBRES: i32 = 2048;
+pub const TAILLE_OMBRES: i32 = 4096;
+/// Cascades de la carte d'ombres.
+pub const NB_CASCADES: usize = 4;
+
+/// Une cascade : matrice du soleil, profondeur de fin de tranche (le long du regard),
+/// décalage contre l'acné (unités de la scène).
+#[derive(Clone, Copy, Debug)]
+pub struct Cascade {
+    pub matrice: Mat4,
+    pub distance: f32,
+    pub biais: f32,
+}
+
+/// Ombres portées : direction du soleil (vers lui) et cascades.
+#[derive(Clone, Debug)]
+pub struct Ombres {
+    pub direction: Vec3,
+    pub cascades: Vec<Cascade>,
+}
 
 const COULEUR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const PROFONDEUR: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -891,13 +935,15 @@ const PAS_PASSE: u64 = 256;
 const PASSE_MODELE: u32 = 0;
 const PASSE_COUPE: u32 = 1;
 const PASSE_OMBRES: u32 = 2;
-const PASSE_AO: u32 = 3;
-const PREMIERE_FENETRE: u32 = 4;
+const PASSE_AO: u32 = PASSE_OMBRES + NB_CASCADES as u32;
+const PREMIERE_FENETRE: u32 = PASSE_AO + 1;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct Globales {
-    lumiere: [f32; 16],
+    lumiere: [[f32; 16]; 4],
+    cascades: [f32; 4],
+    biais: [f32; 4],
     proj: [f32; 16],
     proj_inv: [f32; 16],
     eye: [f32; 4],
@@ -1000,6 +1046,8 @@ pub struct Renderer {
     nul_coupe: wgpu::Buffer,
     n_coupe: [u32; 2],
     texture_selection: wgpu::Texture,
+    /// Carte d'ombres : couches (une vue par cascade pour l'écriture), vue en tableau.
+    vues_cascades: Vec<wgpu::TextureView>,
     vue_ombres: wgpu::TextureView,
     echantillonneur_ombres: wgpu::Sampler,
     ao_vide: wgpu::TextureView,
@@ -1093,7 +1141,7 @@ pub struct FrameParams {
     /// Ombres portées : direction du soleil (vers lui), matrice
     /// de la carte d'ombres et décalage des points le long de la normale contre l'acné
     /// d'ombre (unités de la scène).
-    pub soleil: Option<(Vec3, Mat4, f32)>,
+    pub soleil: Option<Ombres>,
     /// Direction vers le soleil (date, heure et lieu de la vue), aussi sans ombres portées.
     pub direction_soleil: Vec3,
     /// Ciel physique (style Réaliste) : fond, lumière du soleil et du ciel, reflets.
@@ -1162,7 +1210,12 @@ impl Renderer {
             label: Some("textures de la scène"),
             entries: &[
                 texture(0, flottant, wgpu::ShaderStages::VERTEX),
-                texture(1, wgpu::TextureSampleType::Depth, wgpu::ShaderStages::FRAGMENT),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2Array, multisampled: false },
+                    count: None,
+                },
                 wgpu::BindGroupLayoutEntry {
                     binding: 2,
                     visibility: wgpu::ShaderStages::FRAGMENT,
@@ -1334,7 +1387,7 @@ impl Renderer {
 
         let ombres = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("carte d'ombres"),
-            size: wgpu::Extent3d { width: TAILLE_OMBRES as u32, height: TAILLE_OMBRES as u32, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d { width: TAILLE_OMBRES as u32, height: TAILLE_OMBRES as u32, depth_or_array_layers: NB_CASCADES as u32 },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -1384,7 +1437,10 @@ impl Renderer {
             images_apparences: Default::default(),
             couches_apparences: Vec::new(),
             texture_selection: Self::texture(&device, "sélection", 1024, 1, 1, OCCULTATION, wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST),
-            vue_ombres: ombres.create_view(&Default::default()),
+            vues_cascades: (0..NB_CASCADES as u32)
+                .map(|k| ombres.create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2), base_array_layer: k, array_layer_count: Some(1), ..Default::default() }))
+                .collect(),
+            vue_ombres: ombres.create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() }),
             echantillonneur_ombres,
             ao_vide: ao_vide.create_view(&Default::default()),
             sommets: vide("sommets"),
@@ -1676,9 +1732,13 @@ impl Renderer {
         let mut g: Globales = unsafe { std::mem::zeroed() };
         g.eye = v4(p.eye, p.ortho as u32 as f32);
         g.soleil = v4(p.direction_soleil, 0.0);
-        if let Some((soleil, lumiere, decalage)) = p.soleil {
-            g.soleil = v4(soleil, decalage);
-            g.lumiere = lumiere.to_cols_array();
+        if let Some(o) = &p.soleil {
+            g.soleil = v4(o.direction, 0.0);
+            for (k, c) in o.cascades.iter().take(NB_CASCADES).enumerate() {
+                g.lumiere[k] = c.matrice.to_cols_array();
+                g.cascades[k] = c.distance;
+                g.biais[k] = c.biais;
+            }
         }
         if let Some((proj, rayon)) = p.ao {
             g.proj = proj.to_cols_array();
@@ -1726,7 +1786,10 @@ impl Renderer {
             drapeaux2: [ao as u32, p.boite.is_some() as u32, p.cadrage.len().min(4) as u32, p.contour_vue.len().min(128) as u32],
         };
         let mut uniformes = vec![modele, UniformesPasse { coupe: NEUTRE, drapeaux: [0; 4], ..modele }];
-        uniformes.push(UniformesPasse { mvp: p.soleil.map_or(Mat4::IDENTITY, |s| s.1).to_cols_array(), ..Default::default() });
+        for k in 0..NB_CASCADES {
+            let m = p.soleil.as_ref().and_then(|o| o.cascades.get(k)).map_or(Mat4::IDENTITY, |c| c.matrice);
+            uniformes.push(UniformesPasse { mvp: m.to_cols_array(), ..Default::default() });
+        }
         uniformes.push(UniformesPasse { mvp: p.mvp.to_cols_array(), ..Default::default() });
         for pp in &p.passes {
             let mut plans = [[0.0; 4]; 2];
@@ -1817,12 +1880,14 @@ impl Renderer {
         };
         // profondeur de la scène vue du soleil dans la carte d'ombres (triangles opaques)
         if p.soleil.is_some() && self.n_opaque > 0 {
-            let mut passe = profondeur_seule(&mut enc, &self.vue_ombres, None);
-            passe.set_pipeline(&self.pipeline_ombres);
-            passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_OMBRES));
-            passe.set_vertex_buffer(0, self.sommets.slice(..));
-            passe.set_index_buffer(self.ebo_opaque.slice(..), wgpu::IndexFormat::Uint32);
-            passe.draw_indexed(0..self.n_opaque, 0, 0..1);
+            for (k, vue) in self.vues_cascades.iter().enumerate() {
+                let mut passe = profondeur_seule(&mut enc, vue, None);
+                passe.set_pipeline(&self.pipeline_ombres);
+                passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_OMBRES + k as u32));
+                passe.set_vertex_buffer(0, self.sommets.slice(..));
+                passe.set_index_buffer(self.ebo_opaque.slice(..), wgpu::IndexFormat::Uint32);
+                passe.draw_indexed(0..self.n_opaque, 0, 0..1);
+            }
         }
         // occultation ambiante : profondeur (triangles opaques), occultation brute puis lissée
         let ao = self.ao_actif(p);
