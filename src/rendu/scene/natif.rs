@@ -314,7 +314,19 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     }
     scene.couches_coupe.extend(couches_coupe);
     scene.table_motifs = table_motifs.into_iter().map(|t| t.1).collect();
-    scene.apparences = table_apparences.into_iter().map(|t| t.1).collect();
+    // textures en chemin relatif : depuis le dossier du projet
+    let dossier = path.parent().map(|d| d.to_path_buf()).unwrap_or_default();
+    scene.apparences = table_apparences
+        .into_iter()
+        .map(|(_, mut a)| {
+            for t in a.textures.values_mut() {
+                if std::path::Path::new(&t.chemin).is_relative() {
+                    t.chemin = dossier.join(&t.chemin).to_string_lossy().into_owned();
+                }
+            }
+            a
+        })
+        .collect();
     // plans des bandes ramenés au repère de la scène (origine retirée)
     let o = scene.origin;
     for (id, mut bandes) in bandes_dalles {

@@ -1,0 +1,6357 @@
+{
+ "format": "bimedit-modele",
+ "version": 0,
+ "nom": "Îlot de démonstration",
+ "sources": [],
+ "phases": [],
+ "sous_projets": [],
+ "variantes": [],
+ "lieu": {
+  "nom": "Rennes",
+  "latitude": 48.1173,
+  "longitude": -1.6778,
+  "fuseau": 1.0,
+  "heure_ete": true
+ },
+ "coordonnees_origine": [
+  0,
+  0,
+  30000
+ ],
+ "niveaux": [
+  {
+   "id": "n0",
+   "nom": "RDC",
+   "altitude": 0,
+   "origine": null
+  },
+  {
+   "id": "n1",
+   "nom": "R+1",
+   "altitude": 3000,
+   "origine": null
+  },
+  {
+   "id": "n2",
+   "nom": "R+2",
+   "altitude": 6000,
+   "origine": null
+  },
+  {
+   "id": "n3",
+   "nom": "R+3",
+   "altitude": 9000,
+   "origine": null
+  },
+  {
+   "id": "n4",
+   "nom": "R+4",
+   "altitude": 12000,
+   "origine": null
+  }
+ ],
+ "types_murs": [
+  {
+   "id": "brique300",
+   "nom": "Brique 300",
+   "couches": [
+    {
+     "materiau": "Brique",
+     "epaisseur": 300,
+     "fonction": "structure"
+    }
+   ],
+   "couches_detaillees": true,
+   "origine": null
+  },
+  {
+   "id": "beton200",
+   "nom": "Béton banché 200",
+   "couches": [
+    {
+     "materiau": "Béton banché",
+     "epaisseur": 200,
+     "fonction": "structure"
+    }
+   ],
+   "couches_detaillees": true,
+   "origine": null
+  },
+  {
+   "id": "vitrage",
+   "nom": "Mur-rideau",
+   "couches": [
+    {
+     "materiau": "Verre",
+     "epaisseur": 60,
+     "fonction": "structure"
+    }
+   ],
+   "couches_detaillees": true,
+   "origine": null
+  },
+  {
+   "id": "zinc200",
+   "nom": "Bardage zinc 200",
+   "couches": [
+    {
+     "materiau": "Zinc",
+     "epaisseur": 200,
+     "fonction": "structure"
+    }
+   ],
+   "couches_detaillees": true,
+   "origine": null
+  },
+  {
+   "id": "enduit200",
+   "nom": "Enduit 200",
+   "couches": [
+    {
+     "materiau": "Enduit blanc",
+     "epaisseur": 200,
+     "fonction": "structure"
+    }
+   ],
+   "couches_detaillees": true,
+   "origine": null
+  },
+  {
+   "id": "bois200",
+   "nom": "Bardage bois 200",
+   "couches": [
+    {
+     "materiau": "Bardage bois",
+     "epaisseur": 200,
+     "fonction": "structure"
+    }
+   ],
+   "couches_detaillees": true,
+   "origine": null
+  }
+ ],
+ "types_dalles": [
+  {
+   "id": "dalle250",
+   "nom": "Dalle béton 250",
+   "couches": [
+    {
+     "materiau": "Béton banché",
+     "epaisseur": 250,
+     "fonction": "structure"
+    }
+   ],
+   "couches_detaillees": true,
+   "origine": null
+  },
+  {
+   "id": "dalle300",
+   "nom": "Dalle béton 300",
+   "couches": [
+    {
+     "materiau": "Béton banché",
+     "epaisseur": 300,
+     "fonction": "structure"
+    }
+   ],
+   "couches_detaillees": true,
+   "origine": null
+  },
+  {
+   "id": "zinc150",
+   "nom": "Toiture zinc 150",
+   "couches": [
+    {
+     "materiau": "Zinc",
+     "epaisseur": 150,
+     "fonction": "structure"
+    }
+   ],
+   "couches_detaillees": true,
+   "origine": null
+  },
+  {
+   "id": "tuiles200",
+   "nom": "Toiture tuiles 200",
+   "couches": [
+    {
+     "materiau": "Tuiles",
+     "epaisseur": 200,
+     "fonction": "structure"
+    }
+   ],
+   "couches_detaillees": true,
+   "origine": null
+  },
+  {
+   "id": "enrobe120",
+   "nom": "Enrobé 120",
+   "couches": [
+    {
+     "materiau": "Enrobé",
+     "epaisseur": 120,
+     "fonction": "structure"
+    }
+   ],
+   "couches_detaillees": true,
+   "origine": null
+  },
+  {
+   "id": "paves120",
+   "nom": "Pavés 120",
+   "couches": [
+    {
+     "materiau": "Pavés",
+     "epaisseur": 120,
+     "fonction": "structure"
+    }
+   ],
+   "couches_detaillees": true,
+   "origine": null
+  }
+ ],
+ "types_ouvertures": [],
+ "types_terrains": [
+  {
+   "id": "pelouse",
+   "nom": "Pelouse",
+   "epaisseur": 1000,
+   "materiau": "Pelouse"
+  }
+ ],
+ "terrains": [
+  {
+   "id": "terrain",
+   "nom": "Terrain",
+   "contour": [
+    [
+     -60000,
+     -50000,
+     29900
+    ],
+    [
+     210000,
+     -50000,
+     29900
+    ],
+    [
+     210000,
+     160000,
+     29900
+    ],
+    [
+     -60000,
+     160000,
+     29900
+    ]
+   ],
+   "points": [
+    [
+     -50000,
+     -40000,
+     29900
+    ],
+    [
+     -50000,
+     -10000,
+     29900
+    ],
+    [
+     -50000,
+     20000,
+     29900
+    ],
+    [
+     -50000,
+     50000,
+     29900
+    ],
+    [
+     -50000,
+     80000,
+     29900
+    ],
+    [
+     -50000,
+     110000,
+     29900
+    ],
+    [
+     -50000,
+     140000,
+     29900
+    ],
+    [
+     -20000,
+     -40000,
+     29900
+    ],
+    [
+     -20000,
+     -10000,
+     29900
+    ],
+    [
+     -20000,
+     20000,
+     29900
+    ],
+    [
+     -20000,
+     50000,
+     29900
+    ],
+    [
+     -20000,
+     80000,
+     29900
+    ],
+    [
+     -20000,
+     110000,
+     29900
+    ],
+    [
+     -20000,
+     140000,
+     29900
+    ],
+    [
+     10000,
+     -40000,
+     29900
+    ],
+    [
+     10000,
+     110000,
+     29900
+    ],
+    [
+     10000,
+     140000,
+     29900
+    ],
+    [
+     40000,
+     -40000,
+     29900
+    ],
+    [
+     40000,
+     110000,
+     29900
+    ],
+    [
+     40000,
+     140000,
+     29900
+    ],
+    [
+     70000,
+     -40000,
+     29900
+    ],
+    [
+     70000,
+     110000,
+     29900
+    ],
+    [
+     70000,
+     140000,
+     29900
+    ],
+    [
+     100000,
+     -40000,
+     29900
+    ],
+    [
+     100000,
+     110000,
+     29900
+    ],
+    [
+     100000,
+     140000,
+     29900
+    ],
+    [
+     130000,
+     -40000,
+     29900
+    ],
+    [
+     130000,
+     110000,
+     29900
+    ],
+    [
+     130000,
+     140000,
+     29900
+    ],
+    [
+     160000,
+     -40000,
+     29900
+    ],
+    [
+     160000,
+     -10000,
+     29900
+    ],
+    [
+     160000,
+     20000,
+     29900
+    ],
+    [
+     160000,
+     50000,
+     29900
+    ],
+    [
+     160000,
+     80000,
+     29900
+    ],
+    [
+     160000,
+     110000,
+     29900
+    ],
+    [
+     160000,
+     140000,
+     29900
+    ],
+    [
+     190000,
+     -40000,
+     29900
+    ],
+    [
+     190000,
+     -10000,
+     29900
+    ],
+    [
+     190000,
+     20000,
+     29900
+    ],
+    [
+     190000,
+     50000,
+     29900
+    ],
+    [
+     190000,
+     80000,
+     29900
+    ],
+    [
+     190000,
+     110000,
+     29900
+    ],
+    [
+     190000,
+     140000,
+     29900
+    ],
+    [
+     -5000,
+     -5000,
+     29900
+    ],
+    [
+     -5000,
+     5000,
+     29900
+    ],
+    [
+     -5000,
+     15000,
+     29900
+    ],
+    [
+     -5000,
+     25000,
+     29900
+    ],
+    [
+     -5000,
+     35000,
+     29900
+    ],
+    [
+     -5000,
+     45000,
+     29900
+    ],
+    [
+     -5000,
+     55000,
+     29900
+    ],
+    [
+     -5000,
+     65000,
+     29900
+    ],
+    [
+     -5000,
+     75000,
+     29900
+    ],
+    [
+     -5000,
+     85000,
+     29900
+    ],
+    [
+     -5000,
+     95000,
+     29900
+    ],
+    [
+     5000,
+     -5000,
+     29900
+    ],
+    [
+     5000,
+     5000,
+     29900
+    ],
+    [
+     5000,
+     15000,
+     29900
+    ],
+    [
+     5000,
+     25000,
+     29900
+    ],
+    [
+     5000,
+     35000,
+     29900
+    ],
+    [
+     5000,
+     45000,
+     29900
+    ],
+    [
+     5000,
+     55000,
+     29900
+    ],
+    [
+     5000,
+     65000,
+     29900
+    ],
+    [
+     5000,
+     75000,
+     29900
+    ],
+    [
+     5000,
+     85000,
+     29900
+    ],
+    [
+     5000,
+     95000,
+     29900
+    ],
+    [
+     15000,
+     -5000,
+     29900
+    ],
+    [
+     15000,
+     5000,
+     29900
+    ],
+    [
+     15000,
+     15000,
+     29900
+    ],
+    [
+     15000,
+     25000,
+     29900
+    ],
+    [
+     15000,
+     35000,
+     29900
+    ],
+    [
+     15000,
+     45000,
+     29900
+    ],
+    [
+     15000,
+     55000,
+     29900
+    ],
+    [
+     15000,
+     65000,
+     29900
+    ],
+    [
+     15000,
+     75000,
+     29900
+    ],
+    [
+     15000,
+     85000,
+     29900
+    ],
+    [
+     15000,
+     95000,
+     29900
+    ],
+    [
+     25000,
+     -5000,
+     29900
+    ],
+    [
+     25000,
+     5000,
+     29900
+    ],
+    [
+     25000,
+     15000,
+     29900
+    ],
+    [
+     25000,
+     25000,
+     29900
+    ],
+    [
+     25000,
+     35000,
+     29900
+    ],
+    [
+     25000,
+     45000,
+     29900
+    ],
+    [
+     25000,
+     55000,
+     29900
+    ],
+    [
+     25000,
+     65000,
+     29900
+    ],
+    [
+     25000,
+     75000,
+     29900
+    ],
+    [
+     25000,
+     85000,
+     29900
+    ],
+    [
+     25000,
+     95000,
+     29900
+    ],
+    [
+     35000,
+     -5000,
+     29900
+    ],
+    [
+     35000,
+     5000,
+     29900
+    ],
+    [
+     35000,
+     15000,
+     29900
+    ],
+    [
+     35000,
+     25000,
+     29900
+    ],
+    [
+     35000,
+     35000,
+     29900
+    ],
+    [
+     35000,
+     45000,
+     29900
+    ],
+    [
+     35000,
+     55000,
+     29900
+    ],
+    [
+     35000,
+     65000,
+     29900
+    ],
+    [
+     35000,
+     75000,
+     29900
+    ],
+    [
+     35000,
+     85000,
+     29900
+    ],
+    [
+     35000,
+     95000,
+     29900
+    ],
+    [
+     45000,
+     -5000,
+     29900
+    ],
+    [
+     45000,
+     5000,
+     29900
+    ],
+    [
+     45000,
+     15000,
+     29900
+    ],
+    [
+     45000,
+     25000,
+     29900
+    ],
+    [
+     45000,
+     35000,
+     29900
+    ],
+    [
+     45000,
+     45000,
+     29900
+    ],
+    [
+     45000,
+     55000,
+     29900
+    ],
+    [
+     45000,
+     65000,
+     29900
+    ],
+    [
+     45000,
+     75000,
+     29900
+    ],
+    [
+     45000,
+     85000,
+     29900
+    ],
+    [
+     45000,
+     95000,
+     29900
+    ],
+    [
+     55000,
+     -5000,
+     29900
+    ],
+    [
+     55000,
+     5000,
+     29900
+    ],
+    [
+     55000,
+     15000,
+     29900
+    ],
+    [
+     55000,
+     25000,
+     29900
+    ],
+    [
+     55000,
+     35000,
+     29900
+    ],
+    [
+     55000,
+     45000,
+     29900
+    ],
+    [
+     55000,
+     55000,
+     29900
+    ],
+    [
+     55000,
+     65000,
+     29900
+    ],
+    [
+     55000,
+     75000,
+     29900
+    ],
+    [
+     55000,
+     85000,
+     29900
+    ],
+    [
+     55000,
+     95000,
+     29900
+    ],
+    [
+     65000,
+     -5000,
+     29900
+    ],
+    [
+     65000,
+     5000,
+     29900
+    ],
+    [
+     65000,
+     15000,
+     29900
+    ],
+    [
+     65000,
+     25000,
+     29900
+    ],
+    [
+     65000,
+     35000,
+     29900
+    ],
+    [
+     65000,
+     45000,
+     29900
+    ],
+    [
+     65000,
+     55000,
+     29900
+    ],
+    [
+     65000,
+     65000,
+     29900
+    ],
+    [
+     65000,
+     75000,
+     30236
+    ],
+    [
+     65000,
+     85000,
+     30523
+    ],
+    [
+     65000,
+     95000,
+     30236
+    ],
+    [
+     75000,
+     -5000,
+     29900
+    ],
+    [
+     75000,
+     5000,
+     29900
+    ],
+    [
+     75000,
+     15000,
+     29900
+    ],
+    [
+     75000,
+     25000,
+     29900
+    ],
+    [
+     75000,
+     35000,
+     29900
+    ],
+    [
+     75000,
+     45000,
+     29900
+    ],
+    [
+     75000,
+     55000,
+     29900
+    ],
+    [
+     75000,
+     65000,
+     30081
+    ],
+    [
+     75000,
+     75000,
+     31056
+    ],
+    [
+     75000,
+     85000,
+     32042
+    ],
+    [
+     75000,
+     95000,
+     31056
+    ],
+    [
+     85000,
+     -5000,
+     29900
+    ],
+    [
+     85000,
+     5000,
+     29900
+    ],
+    [
+     85000,
+     15000,
+     29900
+    ],
+    [
+     85000,
+     25000,
+     29900
+    ],
+    [
+     85000,
+     35000,
+     29900
+    ],
+    [
+     85000,
+     45000,
+     29900
+    ],
+    [
+     85000,
+     55000,
+     29900
+    ],
+    [
+     85000,
+     65000,
+     30081
+    ],
+    [
+     85000,
+     75000,
+     31056
+    ],
+    [
+     85000,
+     85000,
+     32042
+    ],
+    [
+     85000,
+     95000,
+     31056
+    ],
+    [
+     95000,
+     -5000,
+     29900
+    ],
+    [
+     95000,
+     5000,
+     29900
+    ],
+    [
+     95000,
+     15000,
+     29900
+    ],
+    [
+     95000,
+     25000,
+     29900
+    ],
+    [
+     95000,
+     35000,
+     29900
+    ],
+    [
+     95000,
+     45000,
+     29900
+    ],
+    [
+     95000,
+     55000,
+     29900
+    ],
+    [
+     95000,
+     65000,
+     29900
+    ],
+    [
+     95000,
+     75000,
+     30236
+    ],
+    [
+     95000,
+     85000,
+     30523
+    ],
+    [
+     95000,
+     95000,
+     30236
+    ],
+    [
+     105000,
+     -5000,
+     29900
+    ],
+    [
+     105000,
+     5000,
+     29900
+    ],
+    [
+     105000,
+     15000,
+     29900
+    ],
+    [
+     105000,
+     25000,
+     29900
+    ],
+    [
+     105000,
+     35000,
+     29900
+    ],
+    [
+     105000,
+     45000,
+     29900
+    ],
+    [
+     105000,
+     55000,
+     29900
+    ],
+    [
+     105000,
+     65000,
+     29900
+    ],
+    [
+     105000,
+     75000,
+     29900
+    ],
+    [
+     105000,
+     85000,
+     29900
+    ],
+    [
+     105000,
+     95000,
+     29900
+    ],
+    [
+     115000,
+     -5000,
+     29900
+    ],
+    [
+     115000,
+     5000,
+     29900
+    ],
+    [
+     115000,
+     15000,
+     29900
+    ],
+    [
+     115000,
+     25000,
+     29900
+    ],
+    [
+     115000,
+     35000,
+     29900
+    ],
+    [
+     115000,
+     45000,
+     29900
+    ],
+    [
+     115000,
+     55000,
+     29900
+    ],
+    [
+     115000,
+     65000,
+     29900
+    ],
+    [
+     115000,
+     75000,
+     29900
+    ],
+    [
+     115000,
+     85000,
+     29900
+    ],
+    [
+     115000,
+     95000,
+     29900
+    ],
+    [
+     125000,
+     -5000,
+     29900
+    ],
+    [
+     125000,
+     5000,
+     29900
+    ],
+    [
+     125000,
+     15000,
+     29900
+    ],
+    [
+     125000,
+     25000,
+     29900
+    ],
+    [
+     125000,
+     35000,
+     29900
+    ],
+    [
+     125000,
+     45000,
+     29900
+    ],
+    [
+     125000,
+     55000,
+     29900
+    ],
+    [
+     125000,
+     65000,
+     29900
+    ],
+    [
+     125000,
+     75000,
+     29900
+    ],
+    [
+     125000,
+     85000,
+     29900
+    ],
+    [
+     125000,
+     95000,
+     29900
+    ],
+    [
+     135000,
+     -5000,
+     29900
+    ],
+    [
+     135000,
+     5000,
+     29900
+    ],
+    [
+     135000,
+     15000,
+     29900
+    ],
+    [
+     135000,
+     25000,
+     29900
+    ],
+    [
+     135000,
+     35000,
+     29900
+    ],
+    [
+     135000,
+     45000,
+     29900
+    ],
+    [
+     135000,
+     55000,
+     29900
+    ],
+    [
+     135000,
+     65000,
+     29900
+    ],
+    [
+     135000,
+     75000,
+     29900
+    ],
+    [
+     135000,
+     85000,
+     29900
+    ],
+    [
+     135000,
+     95000,
+     29900
+    ],
+    [
+     145000,
+     -5000,
+     29900
+    ],
+    [
+     145000,
+     5000,
+     29900
+    ],
+    [
+     145000,
+     15000,
+     29900
+    ],
+    [
+     145000,
+     25000,
+     29900
+    ],
+    [
+     145000,
+     35000,
+     29900
+    ],
+    [
+     145000,
+     45000,
+     29900
+    ],
+    [
+     145000,
+     55000,
+     29900
+    ],
+    [
+     145000,
+     65000,
+     29900
+    ],
+    [
+     145000,
+     75000,
+     29900
+    ],
+    [
+     145000,
+     85000,
+     29900
+    ],
+    [
+     145000,
+     95000,
+     29900
+    ]
+   ],
+   "type_terrain": "pelouse"
+  }
+ ],
+ "murs": [
+  {
+   "id": "A-n0-0",
+   "nom": "Logements sud",
+   "type_mur": "brique300",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     10000,
+     22000
+    ],
+    "fin": [
+     40000,
+     22000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-n0-1",
+   "nom": "Logements est",
+   "type_mur": "brique300",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     40000,
+     22000
+    ],
+    "fin": [
+     40000,
+     34000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-n0-2",
+   "nom": "Logements nord",
+   "type_mur": "brique300",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     40000,
+     34000
+    ],
+    "fin": [
+     10000,
+     34000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-n0-3",
+   "nom": "Logements ouest",
+   "type_mur": "brique300",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     10000,
+     34000
+    ],
+    "fin": [
+     10000,
+     22000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-n1-0",
+   "nom": "Logements sud",
+   "type_mur": "brique300",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     10000,
+     22000
+    ],
+    "fin": [
+     40000,
+     22000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-n1-1",
+   "nom": "Logements est",
+   "type_mur": "brique300",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     40000,
+     22000
+    ],
+    "fin": [
+     40000,
+     34000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-n1-2",
+   "nom": "Logements nord",
+   "type_mur": "brique300",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     40000,
+     34000
+    ],
+    "fin": [
+     10000,
+     34000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-n1-3",
+   "nom": "Logements ouest",
+   "type_mur": "brique300",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     10000,
+     34000
+    ],
+    "fin": [
+     10000,
+     22000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-n2-0",
+   "nom": "Logements sud",
+   "type_mur": "brique300",
+   "niveau": "n2",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     10000,
+     22000
+    ],
+    "fin": [
+     40000,
+     22000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-n2-1",
+   "nom": "Logements est",
+   "type_mur": "brique300",
+   "niveau": "n2",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     40000,
+     22000
+    ],
+    "fin": [
+     40000,
+     34000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-n2-2",
+   "nom": "Logements nord",
+   "type_mur": "brique300",
+   "niveau": "n2",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     40000,
+     34000
+    ],
+    "fin": [
+     10000,
+     34000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-n2-3",
+   "nom": "Logements ouest",
+   "type_mur": "brique300",
+   "niveau": "n2",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     10000,
+     34000
+    ],
+    "fin": [
+     10000,
+     22000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-n3-0",
+   "nom": "Logements sud",
+   "type_mur": "brique300",
+   "niveau": "n3",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     10000,
+     22000
+    ],
+    "fin": [
+     40000,
+     22000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-n3-1",
+   "nom": "Logements est",
+   "type_mur": "brique300",
+   "niveau": "n3",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     40000,
+     22000
+    ],
+    "fin": [
+     40000,
+     34000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-n3-2",
+   "nom": "Logements nord",
+   "type_mur": "brique300",
+   "niveau": "n3",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     40000,
+     34000
+    ],
+    "fin": [
+     10000,
+     34000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-n3-3",
+   "nom": "Logements ouest",
+   "type_mur": "brique300",
+   "niveau": "n3",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     10000,
+     34000
+    ],
+    "fin": [
+     10000,
+     22000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-acr-n4-0",
+   "nom": "Acrotère logements sud",
+   "type_mur": "brique300",
+   "niveau": "n4",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 900
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     10000,
+     22000
+    ],
+    "fin": [
+     40000,
+     22000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-acr-n4-1",
+   "nom": "Acrotère logements est",
+   "type_mur": "brique300",
+   "niveau": "n4",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 900
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     40000,
+     22000
+    ],
+    "fin": [
+     40000,
+     34000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-acr-n4-2",
+   "nom": "Acrotère logements nord",
+   "type_mur": "brique300",
+   "niveau": "n4",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 900
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     40000,
+     34000
+    ],
+    "fin": [
+     10000,
+     34000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "A-acr-n4-3",
+   "nom": "Acrotère logements ouest",
+   "type_mur": "brique300",
+   "niveau": "n4",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 900
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     10000,
+     34000
+    ],
+    "fin": [
+     10000,
+     22000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "B-n0-0",
+   "nom": "Bureaux sud",
+   "type_mur": "vitrage",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     55000,
+     24000
+    ],
+    "fin": [
+     95000,
+     24000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "B-n0-1",
+   "nom": "Bureaux est",
+   "type_mur": "beton200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     95000,
+     24000
+    ],
+    "fin": [
+     95000,
+     40000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "B-n0-2",
+   "nom": "Bureaux nord",
+   "type_mur": "beton200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     95000,
+     40000
+    ],
+    "fin": [
+     55000,
+     40000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "B-n0-3",
+   "nom": "Bureaux ouest",
+   "type_mur": "beton200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     55000,
+     40000
+    ],
+    "fin": [
+     55000,
+     24000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "B-n1-0",
+   "nom": "Bureaux sud",
+   "type_mur": "vitrage",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     55000,
+     24000
+    ],
+    "fin": [
+     95000,
+     24000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "B-n1-1",
+   "nom": "Bureaux est",
+   "type_mur": "beton200",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     95000,
+     24000
+    ],
+    "fin": [
+     95000,
+     40000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "B-n1-2",
+   "nom": "Bureaux nord",
+   "type_mur": "beton200",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     95000,
+     40000
+    ],
+    "fin": [
+     55000,
+     40000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "B-n1-3",
+   "nom": "Bureaux ouest",
+   "type_mur": "beton200",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     55000,
+     40000
+    ],
+    "fin": [
+     55000,
+     24000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "B-n2-0",
+   "nom": "Bureaux sud",
+   "type_mur": "vitrage",
+   "niveau": "n2",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     55000,
+     24000
+    ],
+    "fin": [
+     95000,
+     24000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "B-n2-1",
+   "nom": "Bureaux est",
+   "type_mur": "beton200",
+   "niveau": "n2",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     95000,
+     24000
+    ],
+    "fin": [
+     95000,
+     40000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "B-n2-2",
+   "nom": "Bureaux nord",
+   "type_mur": "beton200",
+   "niveau": "n2",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     95000,
+     40000
+    ],
+    "fin": [
+     55000,
+     40000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "B-n2-3",
+   "nom": "Bureaux ouest",
+   "type_mur": "beton200",
+   "niveau": "n2",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 3000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     55000,
+     40000
+    ],
+    "fin": [
+     55000,
+     24000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "B-acr-n3-0",
+   "nom": "Acrotère bureaux sud",
+   "type_mur": "beton200",
+   "niveau": "n3",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 1000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     54600,
+     22800
+    ],
+    "fin": [
+     95400,
+     22800
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "B-acr-n3-1",
+   "nom": "Acrotère bureaux est",
+   "type_mur": "beton200",
+   "niveau": "n3",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 1000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     95400,
+     22800
+    ],
+    "fin": [
+     95400,
+     40400
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "B-acr-n3-2",
+   "nom": "Acrotère bureaux nord",
+   "type_mur": "beton200",
+   "niveau": "n3",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 1000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     95400,
+     40400
+    ],
+    "fin": [
+     54600,
+     40400
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "B-acr-n3-3",
+   "nom": "Acrotère bureaux ouest",
+   "type_mur": "beton200",
+   "niveau": "n3",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 1000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     54600,
+     40400
+    ],
+    "fin": [
+     54600,
+     22800
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "D-n0-0",
+   "nom": "Gymnase sud",
+   "type_mur": "zinc200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 9000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     15000,
+     50000
+    ],
+    "fin": [
+     55000,
+     50000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "D-n0-1",
+   "nom": "Gymnase est",
+   "type_mur": "zinc200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 9000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     55000,
+     50000
+    ],
+    "fin": [
+     55000,
+     75000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "D-n0-2",
+   "nom": "Gymnase nord",
+   "type_mur": "zinc200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 9000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     55000,
+     75000
+    ],
+    "fin": [
+     15000,
+     75000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "D-n0-3",
+   "nom": "Gymnase ouest",
+   "type_mur": "zinc200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 9000
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     15000,
+     75000
+    ],
+    "fin": [
+     15000,
+     50000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C1-n0-0",
+   "nom": "Maison 1 sud",
+   "type_mur": "enduit200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     105000,
+     52000
+    ],
+    "fin": [
+     114000,
+     52000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C1-n0-1",
+   "nom": "Maison 1 est",
+   "type_mur": "enduit200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     114000,
+     52000
+    ],
+    "fin": [
+     114000,
+     60000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C1-n0-2",
+   "nom": "Maison 1 nord",
+   "type_mur": "enduit200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     114000,
+     60000
+    ],
+    "fin": [
+     105000,
+     60000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C1-n0-3",
+   "nom": "Maison 1 ouest",
+   "type_mur": "enduit200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     105000,
+     60000
+    ],
+    "fin": [
+     105000,
+     52000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C1-n1-0",
+   "nom": "Maison 1 étage sud",
+   "type_mur": "bois200",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     105000,
+     52000
+    ],
+    "fin": [
+     114000,
+     52000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C1-n1-1",
+   "nom": "Maison 1 étage est",
+   "type_mur": "bois200",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     114000,
+     52000
+    ],
+    "fin": [
+     114000,
+     60000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C1-n1-2",
+   "nom": "Maison 1 étage nord",
+   "type_mur": "bois200",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     114000,
+     60000
+    ],
+    "fin": [
+     105000,
+     60000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C1-n1-3",
+   "nom": "Maison 1 étage ouest",
+   "type_mur": "bois200",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     105000,
+     60000
+    ],
+    "fin": [
+     105000,
+     52000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C2-n0-0",
+   "nom": "Maison 2 sud",
+   "type_mur": "enduit200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     117000,
+     52000
+    ],
+    "fin": [
+     126000,
+     52000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C2-n0-1",
+   "nom": "Maison 2 est",
+   "type_mur": "enduit200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     126000,
+     52000
+    ],
+    "fin": [
+     126000,
+     60000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C2-n0-2",
+   "nom": "Maison 2 nord",
+   "type_mur": "enduit200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     126000,
+     60000
+    ],
+    "fin": [
+     117000,
+     60000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C2-n0-3",
+   "nom": "Maison 2 ouest",
+   "type_mur": "enduit200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     117000,
+     60000
+    ],
+    "fin": [
+     117000,
+     52000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C2-n1-0",
+   "nom": "Maison 2 étage sud",
+   "type_mur": "bois200",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     117000,
+     52000
+    ],
+    "fin": [
+     126000,
+     52000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C2-n1-1",
+   "nom": "Maison 2 étage est",
+   "type_mur": "bois200",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     126000,
+     52000
+    ],
+    "fin": [
+     126000,
+     60000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C2-n1-2",
+   "nom": "Maison 2 étage nord",
+   "type_mur": "bois200",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     126000,
+     60000
+    ],
+    "fin": [
+     117000,
+     60000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C2-n1-3",
+   "nom": "Maison 2 étage ouest",
+   "type_mur": "bois200",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     117000,
+     60000
+    ],
+    "fin": [
+     117000,
+     52000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C3-n0-0",
+   "nom": "Maison 3 sud",
+   "type_mur": "enduit200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     129000,
+     52000
+    ],
+    "fin": [
+     138000,
+     52000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C3-n0-1",
+   "nom": "Maison 3 est",
+   "type_mur": "enduit200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     138000,
+     52000
+    ],
+    "fin": [
+     138000,
+     60000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C3-n0-2",
+   "nom": "Maison 3 nord",
+   "type_mur": "enduit200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     138000,
+     60000
+    ],
+    "fin": [
+     129000,
+     60000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C3-n0-3",
+   "nom": "Maison 3 ouest",
+   "type_mur": "enduit200",
+   "niveau": "n0",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     129000,
+     60000
+    ],
+    "fin": [
+     129000,
+     52000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C3-n1-0",
+   "nom": "Maison 3 étage sud",
+   "type_mur": "bois200",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     129000,
+     52000
+    ],
+    "fin": [
+     138000,
+     52000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C3-n1-1",
+   "nom": "Maison 3 étage est",
+   "type_mur": "bois200",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     138000,
+     52000
+    ],
+    "fin": [
+     138000,
+     60000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C3-n1-2",
+   "nom": "Maison 3 étage nord",
+   "type_mur": "bois200",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     138000,
+     60000
+    ],
+    "fin": [
+     129000,
+     60000
+    ]
+   },
+   "origine": null
+  },
+  {
+   "id": "C3-n1-3",
+   "nom": "Maison 3 étage ouest",
+   "type_mur": "bois200",
+   "niveau": "n1",
+   "decalage_bas": 0,
+   "haut": {
+    "contrainte": "libre",
+    "hauteur": 2800
+   },
+   "axe": {
+    "forme": "droit",
+    "debut": [
+     129000,
+     60000
+    ],
+    "fin": [
+     129000,
+     52000
+    ]
+   },
+   "origine": null
+  }
+ ],
+ "assemblages": [],
+ "materiaux": [
+  {
+   "nom": "Brique",
+   "couleur": [
+    150,
+    70,
+    48
+   ],
+   "motif": "diagonales",
+   "apparence": {
+    "rugosite": 0.8,
+    "textures": {
+     "Couleur": {
+      "chemin": "textures/brique.png",
+      "largeur": 920,
+      "hauteur": 600
+     },
+     "Relief": {
+      "chemin": "textures/brique_relief.png",
+      "largeur": 920,
+      "hauteur": 600,
+      "intensite": 0.8
+     }
+    }
+   }
+  },
+  {
+   "nom": "Béton banché",
+   "couleur": [
+    190,
+    190,
+    184
+   ],
+   "motif": "diagonales",
+   "apparence": {
+    "rugosite": 0.75,
+    "textures": {
+     "Couleur": {
+      "chemin": "textures/beton.png",
+      "largeur": 2500,
+      "hauteur": 2500
+     },
+     "Relief": {
+      "chemin": "textures/beton_relief.png",
+      "largeur": 2500,
+      "hauteur": 2500,
+      "intensite": 0.3
+     }
+    }
+   }
+  },
+  {
+   "nom": "Enduit blanc",
+   "couleur": [
+    236,
+    233,
+    222
+   ],
+   "motif": "diagonales",
+   "apparence": {
+    "rugosite": 0.85,
+    "textures": {
+     "Couleur": {
+      "chemin": "textures/enduit.png",
+      "largeur": 1000,
+      "hauteur": 1000
+     },
+     "Relief": {
+      "chemin": "textures/enduit_relief.png",
+      "largeur": 1000,
+      "hauteur": 1000,
+      "intensite": 0.15
+     }
+    }
+   }
+  },
+  {
+   "nom": "Bardage bois",
+   "couleur": [
+    150,
+    104,
+    66
+   ],
+   "motif": "diagonales",
+   "apparence": {
+    "rugosite": 0.7,
+    "textures": {
+     "Couleur": {
+      "chemin": "textures/bois.png",
+      "largeur": 960,
+      "hauteur": 960
+     },
+     "Relief": {
+      "chemin": "textures/bois_relief.png",
+      "largeur": 960,
+      "hauteur": 960,
+      "intensite": 0.6
+     }
+    }
+   }
+  },
+  {
+   "nom": "Tuiles",
+   "couleur": [
+    158,
+    72,
+    46
+   ],
+   "motif": "diagonales",
+   "apparence": {
+    "rugosite": 0.6,
+    "textures": {
+     "Couleur": {
+      "chemin": "textures/tuiles.png",
+      "largeur": 800,
+      "hauteur": 800
+     },
+     "Relief": {
+      "chemin": "textures/tuiles_relief.png",
+      "largeur": 800,
+      "hauteur": 800,
+      "intensite": 1.0
+     }
+    }
+   }
+  },
+  {
+   "nom": "Zinc",
+   "couleur": [
+    150,
+    156,
+    162
+   ],
+   "motif": "diagonales",
+   "apparence": {
+    "rugosite": 0.35,
+    "metallique": 0.8,
+    "textures": {
+     "Couleur": {
+      "chemin": "textures/zinc.png",
+      "largeur": 1000,
+      "hauteur": 1000
+     },
+     "Relief": {
+      "chemin": "textures/zinc_relief.png",
+      "largeur": 1000,
+      "hauteur": 1000,
+      "intensite": 0.5
+     }
+    }
+   }
+  },
+  {
+   "nom": "Verre",
+   "couleur": [
+    160,
+    190,
+    200
+   ],
+   "motif": "uni",
+   "apparence": {
+    "teinte": [
+     150,
+     185,
+     195
+    ],
+    "rugosite": 0.03,
+    "transparence": 0.6
+   }
+  },
+  {
+   "nom": "Pelouse",
+   "couleur": [
+    84,
+    122,
+    52
+   ],
+   "motif": "diagonales",
+   "apparence": {
+    "rugosite": 0.95,
+    "textures": {
+     "Couleur": {
+      "chemin": "textures/pelouse.png",
+      "largeur": 2000,
+      "hauteur": 2000
+     }
+    }
+   }
+  },
+  {
+   "nom": "Enrobé",
+   "couleur": [
+    70,
+    70,
+    70
+   ],
+   "motif": "diagonales",
+   "apparence": {
+    "rugosite": 0.9,
+    "textures": {
+     "Couleur": {
+      "chemin": "textures/enrobe.png",
+      "largeur": 1000,
+      "hauteur": 1000
+     }
+    }
+   }
+  },
+  {
+   "nom": "Pavés",
+   "couleur": [
+    160,
+    155,
+    145
+   ],
+   "motif": "diagonales",
+   "apparence": {
+    "rugosite": 0.8,
+    "textures": {
+     "Couleur": {
+      "chemin": "textures/paves.png",
+      "largeur": 800,
+      "hauteur": 800
+     },
+     "Relief": {
+      "chemin": "textures/paves_relief.png",
+      "largeur": 800,
+      "hauteur": 800,
+      "intensite": 0.5
+     }
+    }
+   }
+  }
+ ],
+ "ouvertures": [
+  {
+   "id": "A-n0-0-b0",
+   "nom": "Baie",
+   "genre": "porte",
+   "mur": "A-n0-0",
+   "type_ouverture": null,
+   "abscisse": 1500.0,
+   "largeur": 1400,
+   "hauteur": 2200,
+   "allege": 0,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-0-b1",
+   "nom": "Baie",
+   "genre": "porte",
+   "mur": "A-n0-0",
+   "type_ouverture": null,
+   "abscisse": 4500.0,
+   "largeur": 1400,
+   "hauteur": 2200,
+   "allege": 0,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-0-b2",
+   "nom": "Baie",
+   "genre": "porte",
+   "mur": "A-n0-0",
+   "type_ouverture": null,
+   "abscisse": 7500.0,
+   "largeur": 1400,
+   "hauteur": 2200,
+   "allege": 0,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-0-b3",
+   "nom": "Baie",
+   "genre": "porte",
+   "mur": "A-n0-0",
+   "type_ouverture": null,
+   "abscisse": 10500.0,
+   "largeur": 1400,
+   "hauteur": 2200,
+   "allege": 0,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-0-b4",
+   "nom": "Baie",
+   "genre": "porte",
+   "mur": "A-n0-0",
+   "type_ouverture": null,
+   "abscisse": 13500.0,
+   "largeur": 1400,
+   "hauteur": 2200,
+   "allege": 0,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-0-b5",
+   "nom": "Baie",
+   "genre": "porte",
+   "mur": "A-n0-0",
+   "type_ouverture": null,
+   "abscisse": 16500.0,
+   "largeur": 1400,
+   "hauteur": 2200,
+   "allege": 0,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-0-b6",
+   "nom": "Baie",
+   "genre": "porte",
+   "mur": "A-n0-0",
+   "type_ouverture": null,
+   "abscisse": 19500.0,
+   "largeur": 1400,
+   "hauteur": 2200,
+   "allege": 0,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-0-b7",
+   "nom": "Baie",
+   "genre": "porte",
+   "mur": "A-n0-0",
+   "type_ouverture": null,
+   "abscisse": 22500.0,
+   "largeur": 1400,
+   "hauteur": 2200,
+   "allege": 0,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-0-b8",
+   "nom": "Baie",
+   "genre": "porte",
+   "mur": "A-n0-0",
+   "type_ouverture": null,
+   "abscisse": 25500.0,
+   "largeur": 1400,
+   "hauteur": 2200,
+   "allege": 0,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-0-b9",
+   "nom": "Baie",
+   "genre": "porte",
+   "mur": "A-n0-0",
+   "type_ouverture": null,
+   "abscisse": 28500.0,
+   "largeur": 1400,
+   "hauteur": 2200,
+   "allege": 0,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-2-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n0-2",
+   "type_ouverture": null,
+   "abscisse": 1500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-2-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n0-2",
+   "type_ouverture": null,
+   "abscisse": 4500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-2-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n0-2",
+   "type_ouverture": null,
+   "abscisse": 7500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-2-b3",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n0-2",
+   "type_ouverture": null,
+   "abscisse": 10500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-2-b4",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n0-2",
+   "type_ouverture": null,
+   "abscisse": 13500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-2-b5",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n0-2",
+   "type_ouverture": null,
+   "abscisse": 16500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-2-b6",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n0-2",
+   "type_ouverture": null,
+   "abscisse": 19500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-2-b7",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n0-2",
+   "type_ouverture": null,
+   "abscisse": 22500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-2-b8",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n0-2",
+   "type_ouverture": null,
+   "abscisse": 25500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-2-b9",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n0-2",
+   "type_ouverture": null,
+   "abscisse": 28500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-1-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n0-1",
+   "type_ouverture": null,
+   "abscisse": 2000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-1-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n0-1",
+   "type_ouverture": null,
+   "abscisse": 6000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-1-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n0-1",
+   "type_ouverture": null,
+   "abscisse": 10000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-3-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n0-3",
+   "type_ouverture": null,
+   "abscisse": 2000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-3-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n0-3",
+   "type_ouverture": null,
+   "abscisse": 6000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n0-3-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n0-3",
+   "type_ouverture": null,
+   "abscisse": 10000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-0-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-0",
+   "type_ouverture": null,
+   "abscisse": 1500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-0-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-0",
+   "type_ouverture": null,
+   "abscisse": 4500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-0-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-0",
+   "type_ouverture": null,
+   "abscisse": 7500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-0-b3",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-0",
+   "type_ouverture": null,
+   "abscisse": 10500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-0-b4",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-0",
+   "type_ouverture": null,
+   "abscisse": 13500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-0-b5",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-0",
+   "type_ouverture": null,
+   "abscisse": 16500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-0-b6",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-0",
+   "type_ouverture": null,
+   "abscisse": 19500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-0-b7",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-0",
+   "type_ouverture": null,
+   "abscisse": 22500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-0-b8",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-0",
+   "type_ouverture": null,
+   "abscisse": 25500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-0-b9",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-0",
+   "type_ouverture": null,
+   "abscisse": 28500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-2-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-2",
+   "type_ouverture": null,
+   "abscisse": 1500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-2-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-2",
+   "type_ouverture": null,
+   "abscisse": 4500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-2-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-2",
+   "type_ouverture": null,
+   "abscisse": 7500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-2-b3",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-2",
+   "type_ouverture": null,
+   "abscisse": 10500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-2-b4",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-2",
+   "type_ouverture": null,
+   "abscisse": 13500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-2-b5",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-2",
+   "type_ouverture": null,
+   "abscisse": 16500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-2-b6",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-2",
+   "type_ouverture": null,
+   "abscisse": 19500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-2-b7",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-2",
+   "type_ouverture": null,
+   "abscisse": 22500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-2-b8",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-2",
+   "type_ouverture": null,
+   "abscisse": 25500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-2-b9",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-2",
+   "type_ouverture": null,
+   "abscisse": 28500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-1-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-1",
+   "type_ouverture": null,
+   "abscisse": 2000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-1-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-1",
+   "type_ouverture": null,
+   "abscisse": 6000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-1-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-1",
+   "type_ouverture": null,
+   "abscisse": 10000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-3-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-3",
+   "type_ouverture": null,
+   "abscisse": 2000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-3-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-3",
+   "type_ouverture": null,
+   "abscisse": 6000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n1-3-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n1-3",
+   "type_ouverture": null,
+   "abscisse": 10000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-0-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-0",
+   "type_ouverture": null,
+   "abscisse": 1500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-0-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-0",
+   "type_ouverture": null,
+   "abscisse": 4500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-0-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-0",
+   "type_ouverture": null,
+   "abscisse": 7500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-0-b3",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-0",
+   "type_ouverture": null,
+   "abscisse": 10500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-0-b4",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-0",
+   "type_ouverture": null,
+   "abscisse": 13500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-0-b5",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-0",
+   "type_ouverture": null,
+   "abscisse": 16500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-0-b6",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-0",
+   "type_ouverture": null,
+   "abscisse": 19500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-0-b7",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-0",
+   "type_ouverture": null,
+   "abscisse": 22500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-0-b8",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-0",
+   "type_ouverture": null,
+   "abscisse": 25500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-0-b9",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-0",
+   "type_ouverture": null,
+   "abscisse": 28500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-2-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-2",
+   "type_ouverture": null,
+   "abscisse": 1500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-2-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-2",
+   "type_ouverture": null,
+   "abscisse": 4500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-2-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-2",
+   "type_ouverture": null,
+   "abscisse": 7500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-2-b3",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-2",
+   "type_ouverture": null,
+   "abscisse": 10500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-2-b4",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-2",
+   "type_ouverture": null,
+   "abscisse": 13500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-2-b5",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-2",
+   "type_ouverture": null,
+   "abscisse": 16500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-2-b6",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-2",
+   "type_ouverture": null,
+   "abscisse": 19500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-2-b7",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-2",
+   "type_ouverture": null,
+   "abscisse": 22500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-2-b8",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-2",
+   "type_ouverture": null,
+   "abscisse": 25500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-2-b9",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-2",
+   "type_ouverture": null,
+   "abscisse": 28500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-1-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-1",
+   "type_ouverture": null,
+   "abscisse": 2000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-1-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-1",
+   "type_ouverture": null,
+   "abscisse": 6000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-1-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-1",
+   "type_ouverture": null,
+   "abscisse": 10000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-3-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-3",
+   "type_ouverture": null,
+   "abscisse": 2000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-3-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-3",
+   "type_ouverture": null,
+   "abscisse": 6000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n2-3-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n2-3",
+   "type_ouverture": null,
+   "abscisse": 10000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-0-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-0",
+   "type_ouverture": null,
+   "abscisse": 1500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-0-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-0",
+   "type_ouverture": null,
+   "abscisse": 4500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-0-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-0",
+   "type_ouverture": null,
+   "abscisse": 7500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-0-b3",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-0",
+   "type_ouverture": null,
+   "abscisse": 10500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-0-b4",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-0",
+   "type_ouverture": null,
+   "abscisse": 13500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-0-b5",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-0",
+   "type_ouverture": null,
+   "abscisse": 16500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-0-b6",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-0",
+   "type_ouverture": null,
+   "abscisse": 19500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-0-b7",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-0",
+   "type_ouverture": null,
+   "abscisse": 22500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-0-b8",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-0",
+   "type_ouverture": null,
+   "abscisse": 25500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-0-b9",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-0",
+   "type_ouverture": null,
+   "abscisse": 28500.0,
+   "largeur": 1400,
+   "hauteur": 1500,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-2-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-2",
+   "type_ouverture": null,
+   "abscisse": 1500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-2-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-2",
+   "type_ouverture": null,
+   "abscisse": 4500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-2-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-2",
+   "type_ouverture": null,
+   "abscisse": 7500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-2-b3",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-2",
+   "type_ouverture": null,
+   "abscisse": 10500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-2-b4",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-2",
+   "type_ouverture": null,
+   "abscisse": 13500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-2-b5",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-2",
+   "type_ouverture": null,
+   "abscisse": 16500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-2-b6",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-2",
+   "type_ouverture": null,
+   "abscisse": 19500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-2-b7",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-2",
+   "type_ouverture": null,
+   "abscisse": 22500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-2-b8",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-2",
+   "type_ouverture": null,
+   "abscisse": 25500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-2-b9",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-2",
+   "type_ouverture": null,
+   "abscisse": 28500.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-1-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-1",
+   "type_ouverture": null,
+   "abscisse": 2000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-1-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-1",
+   "type_ouverture": null,
+   "abscisse": 6000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-1-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-1",
+   "type_ouverture": null,
+   "abscisse": 10000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-3-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-3",
+   "type_ouverture": null,
+   "abscisse": 2000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-3-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-3",
+   "type_ouverture": null,
+   "abscisse": 6000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "A-n3-3-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "A-n3-3",
+   "type_ouverture": null,
+   "abscisse": 10000.0,
+   "largeur": 1000,
+   "hauteur": 1400,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n0-2-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n0-2",
+   "type_ouverture": null,
+   "abscisse": 2000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n0-2-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n0-2",
+   "type_ouverture": null,
+   "abscisse": 6000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n0-2-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n0-2",
+   "type_ouverture": null,
+   "abscisse": 10000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n0-2-b3",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n0-2",
+   "type_ouverture": null,
+   "abscisse": 14000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n0-2-b4",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n0-2",
+   "type_ouverture": null,
+   "abscisse": 18000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n0-2-b5",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n0-2",
+   "type_ouverture": null,
+   "abscisse": 22000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n0-2-b6",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n0-2",
+   "type_ouverture": null,
+   "abscisse": 26000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n0-2-b7",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n0-2",
+   "type_ouverture": null,
+   "abscisse": 30000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n0-2-b8",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n0-2",
+   "type_ouverture": null,
+   "abscisse": 34000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n0-2-b9",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n0-2",
+   "type_ouverture": null,
+   "abscisse": 38000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n0-1-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n0-1",
+   "type_ouverture": null,
+   "abscisse": 2000.0,
+   "largeur": 1800,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n0-1-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n0-1",
+   "type_ouverture": null,
+   "abscisse": 6000.0,
+   "largeur": 1800,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n0-1-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n0-1",
+   "type_ouverture": null,
+   "abscisse": 10000.0,
+   "largeur": 1800,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n0-1-b3",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n0-1",
+   "type_ouverture": null,
+   "abscisse": 14000.0,
+   "largeur": 1800,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n1-2-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n1-2",
+   "type_ouverture": null,
+   "abscisse": 2000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n1-2-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n1-2",
+   "type_ouverture": null,
+   "abscisse": 6000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n1-2-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n1-2",
+   "type_ouverture": null,
+   "abscisse": 10000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n1-2-b3",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n1-2",
+   "type_ouverture": null,
+   "abscisse": 14000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n1-2-b4",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n1-2",
+   "type_ouverture": null,
+   "abscisse": 18000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n1-2-b5",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n1-2",
+   "type_ouverture": null,
+   "abscisse": 22000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n1-2-b6",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n1-2",
+   "type_ouverture": null,
+   "abscisse": 26000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n1-2-b7",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n1-2",
+   "type_ouverture": null,
+   "abscisse": 30000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n1-2-b8",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n1-2",
+   "type_ouverture": null,
+   "abscisse": 34000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n1-2-b9",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n1-2",
+   "type_ouverture": null,
+   "abscisse": 38000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n1-1-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n1-1",
+   "type_ouverture": null,
+   "abscisse": 2000.0,
+   "largeur": 1800,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n1-1-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n1-1",
+   "type_ouverture": null,
+   "abscisse": 6000.0,
+   "largeur": 1800,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n1-1-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n1-1",
+   "type_ouverture": null,
+   "abscisse": 10000.0,
+   "largeur": 1800,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n1-1-b3",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n1-1",
+   "type_ouverture": null,
+   "abscisse": 14000.0,
+   "largeur": 1800,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n2-2-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n2-2",
+   "type_ouverture": null,
+   "abscisse": 2000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n2-2-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n2-2",
+   "type_ouverture": null,
+   "abscisse": 6000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n2-2-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n2-2",
+   "type_ouverture": null,
+   "abscisse": 10000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n2-2-b3",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n2-2",
+   "type_ouverture": null,
+   "abscisse": 14000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n2-2-b4",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n2-2",
+   "type_ouverture": null,
+   "abscisse": 18000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n2-2-b5",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n2-2",
+   "type_ouverture": null,
+   "abscisse": 22000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n2-2-b6",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n2-2",
+   "type_ouverture": null,
+   "abscisse": 26000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n2-2-b7",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n2-2",
+   "type_ouverture": null,
+   "abscisse": 30000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n2-2-b8",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n2-2",
+   "type_ouverture": null,
+   "abscisse": 34000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n2-2-b9",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n2-2",
+   "type_ouverture": null,
+   "abscisse": 38000.0,
+   "largeur": 2400,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n2-1-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n2-1",
+   "type_ouverture": null,
+   "abscisse": 2000.0,
+   "largeur": 1800,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n2-1-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n2-1",
+   "type_ouverture": null,
+   "abscisse": 6000.0,
+   "largeur": 1800,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n2-1-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n2-1",
+   "type_ouverture": null,
+   "abscisse": 10000.0,
+   "largeur": 1800,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "B-n2-1-b3",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "B-n2-1",
+   "type_ouverture": null,
+   "abscisse": 14000.0,
+   "largeur": 1800,
+   "hauteur": 1800,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "D-n0-0-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "D-n0-0",
+   "type_ouverture": null,
+   "abscisse": 2500.0,
+   "largeur": 4200,
+   "hauteur": 1500,
+   "allege": 6800,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "D-n0-0-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "D-n0-0",
+   "type_ouverture": null,
+   "abscisse": 7500.0,
+   "largeur": 4200,
+   "hauteur": 1500,
+   "allege": 6800,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "D-n0-0-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "D-n0-0",
+   "type_ouverture": null,
+   "abscisse": 12500.0,
+   "largeur": 4200,
+   "hauteur": 1500,
+   "allege": 6800,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "D-n0-0-b3",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "D-n0-0",
+   "type_ouverture": null,
+   "abscisse": 17500.0,
+   "largeur": 4200,
+   "hauteur": 1500,
+   "allege": 6800,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "D-n0-0-b4",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "D-n0-0",
+   "type_ouverture": null,
+   "abscisse": 22500.0,
+   "largeur": 4200,
+   "hauteur": 1500,
+   "allege": 6800,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "D-n0-0-b5",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "D-n0-0",
+   "type_ouverture": null,
+   "abscisse": 27500.0,
+   "largeur": 4200,
+   "hauteur": 1500,
+   "allege": 6800,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "D-n0-0-b6",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "D-n0-0",
+   "type_ouverture": null,
+   "abscisse": 32500.0,
+   "largeur": 4200,
+   "hauteur": 1500,
+   "allege": 6800,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "D-n0-0-b7",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "D-n0-0",
+   "type_ouverture": null,
+   "abscisse": 37500.0,
+   "largeur": 4200,
+   "hauteur": 1500,
+   "allege": 6800,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "D-n0-2-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "D-n0-2",
+   "type_ouverture": null,
+   "abscisse": 2500.0,
+   "largeur": 4200,
+   "hauteur": 1500,
+   "allege": 6800,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "D-n0-2-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "D-n0-2",
+   "type_ouverture": null,
+   "abscisse": 7500.0,
+   "largeur": 4200,
+   "hauteur": 1500,
+   "allege": 6800,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "D-n0-2-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "D-n0-2",
+   "type_ouverture": null,
+   "abscisse": 12500.0,
+   "largeur": 4200,
+   "hauteur": 1500,
+   "allege": 6800,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "D-n0-2-b3",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "D-n0-2",
+   "type_ouverture": null,
+   "abscisse": 17500.0,
+   "largeur": 4200,
+   "hauteur": 1500,
+   "allege": 6800,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "D-n0-2-b4",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "D-n0-2",
+   "type_ouverture": null,
+   "abscisse": 22500.0,
+   "largeur": 4200,
+   "hauteur": 1500,
+   "allege": 6800,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "D-n0-2-b5",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "D-n0-2",
+   "type_ouverture": null,
+   "abscisse": 27500.0,
+   "largeur": 4200,
+   "hauteur": 1500,
+   "allege": 6800,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "D-n0-2-b6",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "D-n0-2",
+   "type_ouverture": null,
+   "abscisse": 32500.0,
+   "largeur": 4200,
+   "hauteur": 1500,
+   "allege": 6800,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "D-n0-2-b7",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "D-n0-2",
+   "type_ouverture": null,
+   "abscisse": 37500.0,
+   "largeur": 4200,
+   "hauteur": 1500,
+   "allege": 6800,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "D-entree",
+   "nom": "Entrée gymnase",
+   "genre": "porte",
+   "mur": "D-n0-0",
+   "type_ouverture": null,
+   "abscisse": 20000,
+   "largeur": 4000,
+   "hauteur": 3000,
+   "allege": 0,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C1-porte",
+   "nom": "Entrée",
+   "genre": "porte",
+   "mur": "C1-n0-0",
+   "type_ouverture": null,
+   "abscisse": 2200,
+   "largeur": 1000,
+   "hauteur": 2200,
+   "allege": 0,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C1-baie",
+   "nom": "Baie séjour",
+   "genre": "fenetre",
+   "mur": "C1-n0-0",
+   "type_ouverture": null,
+   "abscisse": 6200,
+   "largeur": 3200,
+   "hauteur": 2200,
+   "allege": 0,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C1-n0-2-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C1-n0-2",
+   "type_ouverture": null,
+   "abscisse": 1500.0,
+   "largeur": 1000,
+   "hauteur": 1200,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C1-n0-2-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C1-n0-2",
+   "type_ouverture": null,
+   "abscisse": 4500.0,
+   "largeur": 1000,
+   "hauteur": 1200,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C1-n0-2-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C1-n0-2",
+   "type_ouverture": null,
+   "abscisse": 7500.0,
+   "largeur": 1000,
+   "hauteur": 1200,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C1-n1-0-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C1-n1-0",
+   "type_ouverture": null,
+   "abscisse": 1500.0,
+   "largeur": 1200,
+   "hauteur": 1400,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C1-n1-0-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C1-n1-0",
+   "type_ouverture": null,
+   "abscisse": 4500.0,
+   "largeur": 1200,
+   "hauteur": 1400,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C1-n1-0-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C1-n1-0",
+   "type_ouverture": null,
+   "abscisse": 7500.0,
+   "largeur": 1200,
+   "hauteur": 1400,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C1-n1-1-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C1-n1-1",
+   "type_ouverture": null,
+   "abscisse": 2000.0,
+   "largeur": 900,
+   "hauteur": 1200,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C1-n1-1-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C1-n1-1",
+   "type_ouverture": null,
+   "abscisse": 6000.0,
+   "largeur": 900,
+   "hauteur": 1200,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C2-porte",
+   "nom": "Entrée",
+   "genre": "porte",
+   "mur": "C2-n0-0",
+   "type_ouverture": null,
+   "abscisse": 2200,
+   "largeur": 1000,
+   "hauteur": 2200,
+   "allege": 0,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C2-baie",
+   "nom": "Baie séjour",
+   "genre": "fenetre",
+   "mur": "C2-n0-0",
+   "type_ouverture": null,
+   "abscisse": 6200,
+   "largeur": 3200,
+   "hauteur": 2200,
+   "allege": 0,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C2-n0-2-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C2-n0-2",
+   "type_ouverture": null,
+   "abscisse": 1500.0,
+   "largeur": 1000,
+   "hauteur": 1200,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C2-n0-2-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C2-n0-2",
+   "type_ouverture": null,
+   "abscisse": 4500.0,
+   "largeur": 1000,
+   "hauteur": 1200,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C2-n0-2-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C2-n0-2",
+   "type_ouverture": null,
+   "abscisse": 7500.0,
+   "largeur": 1000,
+   "hauteur": 1200,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C2-n1-0-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C2-n1-0",
+   "type_ouverture": null,
+   "abscisse": 1500.0,
+   "largeur": 1200,
+   "hauteur": 1400,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C2-n1-0-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C2-n1-0",
+   "type_ouverture": null,
+   "abscisse": 4500.0,
+   "largeur": 1200,
+   "hauteur": 1400,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C2-n1-0-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C2-n1-0",
+   "type_ouverture": null,
+   "abscisse": 7500.0,
+   "largeur": 1200,
+   "hauteur": 1400,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C2-n1-1-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C2-n1-1",
+   "type_ouverture": null,
+   "abscisse": 2000.0,
+   "largeur": 900,
+   "hauteur": 1200,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C2-n1-1-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C2-n1-1",
+   "type_ouverture": null,
+   "abscisse": 6000.0,
+   "largeur": 900,
+   "hauteur": 1200,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C3-porte",
+   "nom": "Entrée",
+   "genre": "porte",
+   "mur": "C3-n0-0",
+   "type_ouverture": null,
+   "abscisse": 2200,
+   "largeur": 1000,
+   "hauteur": 2200,
+   "allege": 0,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C3-baie",
+   "nom": "Baie séjour",
+   "genre": "fenetre",
+   "mur": "C3-n0-0",
+   "type_ouverture": null,
+   "abscisse": 6200,
+   "largeur": 3200,
+   "hauteur": 2200,
+   "allege": 0,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C3-n0-2-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C3-n0-2",
+   "type_ouverture": null,
+   "abscisse": 1500.0,
+   "largeur": 1000,
+   "hauteur": 1200,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C3-n0-2-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C3-n0-2",
+   "type_ouverture": null,
+   "abscisse": 4500.0,
+   "largeur": 1000,
+   "hauteur": 1200,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C3-n0-2-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C3-n0-2",
+   "type_ouverture": null,
+   "abscisse": 7500.0,
+   "largeur": 1000,
+   "hauteur": 1200,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C3-n1-0-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C3-n1-0",
+   "type_ouverture": null,
+   "abscisse": 1500.0,
+   "largeur": 1200,
+   "hauteur": 1400,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C3-n1-0-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C3-n1-0",
+   "type_ouverture": null,
+   "abscisse": 4500.0,
+   "largeur": 1200,
+   "hauteur": 1400,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C3-n1-0-b2",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C3-n1-0",
+   "type_ouverture": null,
+   "abscisse": 7500.0,
+   "largeur": 1200,
+   "hauteur": 1400,
+   "allege": 900,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C3-n1-1-b0",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C3-n1-1",
+   "type_ouverture": null,
+   "abscisse": 2000.0,
+   "largeur": 900,
+   "hauteur": 1200,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  },
+  {
+   "id": "C3-n1-1-b1",
+   "nom": "Baie",
+   "genre": "fenetre",
+   "mur": "C3-n1-1",
+   "type_ouverture": null,
+   "abscisse": 6000.0,
+   "largeur": 900,
+   "hauteur": 1200,
+   "allege": 1000,
+   "representation": null,
+   "origine": null
+  }
+ ],
+ "dalles": [
+  {
+   "id": "A-p0",
+   "nom": "Plancher logements 0",
+   "sorte": "dalle",
+   "type_dalle": "dalle250",
+   "niveau": "n0",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      9850,
+      21850
+     ],
+     [
+      40150,
+      21850
+     ],
+     [
+      40150,
+      34150
+     ],
+     [
+      9850,
+      34150
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "A-p1",
+   "nom": "Plancher logements 1",
+   "sorte": "dalle",
+   "type_dalle": "dalle250",
+   "niveau": "n1",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      9850,
+      21850
+     ],
+     [
+      40150,
+      21850
+     ],
+     [
+      40150,
+      34150
+     ],
+     [
+      9850,
+      34150
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "A-p2",
+   "nom": "Plancher logements 2",
+   "sorte": "dalle",
+   "type_dalle": "dalle250",
+   "niveau": "n2",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      9850,
+      21850
+     ],
+     [
+      40150,
+      21850
+     ],
+     [
+      40150,
+      34150
+     ],
+     [
+      9850,
+      34150
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "A-p3",
+   "nom": "Plancher logements 3",
+   "sorte": "dalle",
+   "type_dalle": "dalle250",
+   "niveau": "n3",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      9850,
+      21850
+     ],
+     [
+      40150,
+      21850
+     ],
+     [
+      40150,
+      34150
+     ],
+     [
+      9850,
+      34150
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "A-toit",
+   "nom": "Toiture terrasse logements",
+   "sorte": "dalle",
+   "type_dalle": "dalle250",
+   "niveau": "n4",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      9850,
+      21850
+     ],
+     [
+      40150,
+      21850
+     ],
+     [
+      40150,
+      34150
+     ],
+     [
+      9850,
+      34150
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "B-p0",
+   "nom": "Plancher bureaux 0",
+   "sorte": "dalle",
+   "type_dalle": "dalle300",
+   "niveau": "n0",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      54600,
+      22800
+     ],
+     [
+      95400,
+      22800
+     ],
+     [
+      95400,
+      40400
+     ],
+     [
+      54600,
+      40400
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "B-p1",
+   "nom": "Plancher bureaux 1",
+   "sorte": "dalle",
+   "type_dalle": "dalle300",
+   "niveau": "n1",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      54600,
+      22800
+     ],
+     [
+      95400,
+      22800
+     ],
+     [
+      95400,
+      40400
+     ],
+     [
+      54600,
+      40400
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "B-p2",
+   "nom": "Plancher bureaux 2",
+   "sorte": "dalle",
+   "type_dalle": "dalle300",
+   "niveau": "n2",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      54600,
+      22800
+     ],
+     [
+      95400,
+      22800
+     ],
+     [
+      95400,
+      40400
+     ],
+     [
+      54600,
+      40400
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "B-toit",
+   "nom": "Toiture bureaux",
+   "sorte": "dalle",
+   "type_dalle": "dalle300",
+   "niveau": "n3",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      54600,
+      22800
+     ],
+     [
+      95400,
+      22800
+     ],
+     [
+      95400,
+      40400
+     ],
+     [
+      54600,
+      40400
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "D-sol",
+   "nom": "Sol gymnase",
+   "sorte": "dalle",
+   "type_dalle": "dalle250",
+   "niveau": "n0",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      14850,
+      49850
+     ],
+     [
+      55150,
+      49850
+     ],
+     [
+      55150,
+      75150
+     ],
+     [
+      14850,
+      75150
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "D-toit",
+   "nom": "Toiture gymnase",
+   "sorte": "toiture",
+   "type_dalle": "zinc150",
+   "niveau": "n3",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      14400,
+      49400
+     ],
+     [
+      55600,
+      49400
+     ],
+     [
+      55600,
+      75600
+     ],
+     [
+      14400,
+      75600
+     ]
+    ]
+   ],
+   "origine": null,
+   "pentes": [
+    [
+     8,
+     null,
+     8,
+     null
+    ]
+   ]
+  },
+  {
+   "id": "C1-p0",
+   "nom": "Plancher maison 1",
+   "sorte": "dalle",
+   "type_dalle": "dalle250",
+   "niveau": "n0",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      104900,
+      51900
+     ],
+     [
+      114100,
+      51900
+     ],
+     [
+      114100,
+      60100
+     ],
+     [
+      104900,
+      60100
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "C1-p1",
+   "nom": "Plancher étage maison 1",
+   "sorte": "dalle",
+   "type_dalle": "dalle250",
+   "niveau": "n1",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      104900,
+      51900
+     ],
+     [
+      114100,
+      51900
+     ],
+     [
+      114100,
+      60100
+     ],
+     [
+      104900,
+      60100
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "C1-toit",
+   "nom": "Toiture maison 1",
+   "sorte": "toiture",
+   "type_dalle": "tuiles200",
+   "niveau": "n1",
+   "decalage": 2800,
+   "contours": [
+    [
+     [
+      104500,
+      51400
+     ],
+     [
+      114500,
+      51400
+     ],
+     [
+      114500,
+      60600
+     ],
+     [
+      104500,
+      60600
+     ]
+    ]
+   ],
+   "origine": null,
+   "pentes": [
+    [
+     35,
+     null,
+     35,
+     null
+    ]
+   ]
+  },
+  {
+   "id": "C2-p0",
+   "nom": "Plancher maison 2",
+   "sorte": "dalle",
+   "type_dalle": "dalle250",
+   "niveau": "n0",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      116900,
+      51900
+     ],
+     [
+      126100,
+      51900
+     ],
+     [
+      126100,
+      60100
+     ],
+     [
+      116900,
+      60100
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "C2-p1",
+   "nom": "Plancher étage maison 2",
+   "sorte": "dalle",
+   "type_dalle": "dalle250",
+   "niveau": "n1",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      116900,
+      51900
+     ],
+     [
+      126100,
+      51900
+     ],
+     [
+      126100,
+      60100
+     ],
+     [
+      116900,
+      60100
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "C2-toit",
+   "nom": "Toiture maison 2",
+   "sorte": "toiture",
+   "type_dalle": "tuiles200",
+   "niveau": "n1",
+   "decalage": 2800,
+   "contours": [
+    [
+     [
+      116500,
+      51400
+     ],
+     [
+      126500,
+      51400
+     ],
+     [
+      126500,
+      60600
+     ],
+     [
+      116500,
+      60600
+     ]
+    ]
+   ],
+   "origine": null,
+   "pentes": [
+    [
+     35,
+     null,
+     35,
+     null
+    ]
+   ]
+  },
+  {
+   "id": "C3-p0",
+   "nom": "Plancher maison 3",
+   "sorte": "dalle",
+   "type_dalle": "dalle250",
+   "niveau": "n0",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      128900,
+      51900
+     ],
+     [
+      138100,
+      51900
+     ],
+     [
+      138100,
+      60100
+     ],
+     [
+      128900,
+      60100
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "C3-p1",
+   "nom": "Plancher étage maison 3",
+   "sorte": "dalle",
+   "type_dalle": "dalle250",
+   "niveau": "n1",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      128900,
+      51900
+     ],
+     [
+      138100,
+      51900
+     ],
+     [
+      138100,
+      60100
+     ],
+     [
+      128900,
+      60100
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "C3-toit",
+   "nom": "Toiture maison 3",
+   "sorte": "toiture",
+   "type_dalle": "tuiles200",
+   "niveau": "n1",
+   "decalage": 2800,
+   "contours": [
+    [
+     [
+      128500,
+      51400
+     ],
+     [
+      138500,
+      51400
+     ],
+     [
+      138500,
+      60600
+     ],
+     [
+      128500,
+      60600
+     ]
+    ]
+   ],
+   "origine": null,
+   "pentes": [
+    [
+     35,
+     null,
+     35,
+     null
+    ]
+   ]
+  },
+  {
+   "id": "voirie",
+   "nom": "Voirie",
+   "sorte": "sol",
+   "type_dalle": "enrobe120",
+   "niveau": "n0",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      -10000,
+      3000
+     ],
+     [
+      150000,
+      3000
+     ],
+     [
+      150000,
+      11000
+     ],
+     [
+      -10000,
+      11000
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "parvis",
+   "nom": "Parvis",
+   "sorte": "sol",
+   "type_dalle": "paves120",
+   "niveau": "n0",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      8000,
+      11000
+     ],
+     [
+      100000,
+      11000
+     ],
+     [
+      100000,
+      21000
+     ],
+     [
+      8000,
+      21000
+     ]
+    ]
+   ],
+   "origine": null
+  },
+  {
+   "id": "allee",
+   "nom": "Allée des maisons",
+   "sorte": "sol",
+   "type_dalle": "paves120",
+   "niveau": "n0",
+   "decalage": 0,
+   "contours": [
+    [
+     [
+      100000,
+      11000
+     ],
+     [
+      106000,
+      11000
+     ],
+     [
+      106000,
+      62000
+     ],
+     [
+      100000,
+      62000
+     ]
+    ]
+   ],
+   "origine": null
+  }
+ ],
+ "importes": [],
+ "ignores": {},
+ "vues": [
+  {
+   "id": "plan-rdc",
+   "nom": "Plan RDC",
+   "echelle": 200,
+   "genre": "plan",
+   "niveau": "n0",
+   "coupe": 1200,
+   "bas_niveau": "n0",
+   "bas_decalage": 0
+  },
+  {
+   "id": "plan-r1",
+   "nom": "Plan R+1",
+   "echelle": 200,
+   "genre": "plan",
+   "niveau": "n1",
+   "coupe": 1200,
+   "bas_niveau": "n1",
+   "bas_decalage": 0
+  },
+  {
+   "id": "coupe-ns",
+   "nom": "Coupe nord-sud",
+   "echelle": 200,
+   "genre": "coupe",
+   "debut": [
+    30000,
+    -5000
+   ],
+   "fin": [
+    30000,
+    95000
+   ],
+   "profondeur": 20000,
+   "elevation": false
+  }
+ ],
+ "rendus_vues": {
+  "3d": {
+   "style": "realiste",
+   "ombres_portees": true,
+   "ombre_ambiante": true,
+   "jour": 21,
+   "mois": 6,
+   "heure": 17.0,
+   "ciel": {
+    "ambiance": "Clair",
+    "brume": 0.15,
+    "nuages": 0.0,
+    "intensite_soleil": 1.0,
+    "intensite_ciel": 1.0,
+    "taille_soleil": 1.5,
+    "sol": [
+     110,
+     120,
+     90
+    ],
+    "exposition_auto": true,
+    "exposition": 0.0
+   }
+  }
+ },
+ "quadrillages": [],
+ "annotations": [],
+ "feuilles": [],
+ "nomenclatures": [],
+ "attaches_toitures": {
+  "D-n0-0": "D-toit",
+  "D-n0-1": "D-toit",
+  "D-n0-2": "D-toit",
+  "D-n0-3": "D-toit",
+  "C1-n1-0": "C1-toit",
+  "C1-n1-1": "C1-toit",
+  "C1-n1-2": "C1-toit",
+  "C1-n1-3": "C1-toit",
+  "C2-n1-0": "C2-toit",
+  "C2-n1-1": "C2-toit",
+  "C2-n1-2": "C2-toit",
+  "C2-n1-3": "C2-toit",
+  "C3-n1-0": "C3-toit",
+  "C3-n1-1": "C3-toit",
+  "C3-n1-2": "C3-toit",
+  "C3-n1-3": "C3-toit"
+ },
+ "implantations": {}
+}

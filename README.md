@@ -246,3 +246,8 @@ Le ciel (`src/rendu/ciel.rs`) suit la méthode de Hillaire (EGSR 2020) et repren
 la réadaptant l'implémentation du module `atmosphere` de
 [Bevy](https://github.com/bevyengine/bevy) 0.20, distribué sous licence MIT ou
 Apache 2.0 (Copyright © Bevy Contributors).
+
+Projet de démonstration : `samples/ilot_demo/ilot_demo.modele.json` (îlot à Rennes :
+logements R+3 en brique, bureaux R+2 à façade vitrée, gymnase en zinc, trois maisons,
+voirie, parvis, terrain avec butte ; textures dans `textures/`, en chemins relatifs).
+Il est produit par `tools/projet_demo_ilot.py` (numpy, Pillow).

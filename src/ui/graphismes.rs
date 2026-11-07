@@ -8,7 +8,8 @@ impl ViewerApp {
     pub(super) fn fenetre_materiau(&mut self, ctx: &egui::Context) {
         use crate::modele::MotifCoupe;
         let Some(nom) = self.materiau_edite.clone() else { return };
-        let Some((projet, _)) = &self.natif else { self.materiau_edite = None; return };
+        let Some((projet, chemin_projet)) = &self.natif else { self.materiau_edite = None; return };
+        let dossier = chemin_projet.parent().map(|d| d.to_path_buf());
         let Some(mut m) = projet.materiau(&nom).cloned() else { self.materiau_edite = None; return };
         let avant = m.clone();
         let hachures: Vec<MotifCoupe> = projet.noms_motifs().iter().map(|n| MotifCoupe::hachures(n)).collect();
@@ -36,7 +37,7 @@ impl ViewerApp {
             });
             ui.separator();
             if onglet_apparence {
-                apparence_materiau(ui, &mut m);
+                apparence_materiau(ui, &mut m, dossier.clone());
                 return;
             }
             egui::Grid::new("graphismes_materiau").num_columns(3).spacing([10.0, 6.0]).show(ui, |ui| {
@@ -338,7 +339,7 @@ impl ViewerApp {
 
 /// Onglet Apparence de la fenêtre Matériau : réglages physiques et cartes de texture
 /// (image, taille réelle, décalage, rotation, intensité).
-fn apparence_materiau(ui: &mut egui::Ui, m: &mut crate::modele::Materiau) {
+fn apparence_materiau(ui: &mut egui::Ui, m: &mut crate::modele::Materiau, dossier: Option<std::path::PathBuf>) {
     use crate::modele::{CarteTexture, Texture};
     let a = &mut m.apparence;
     egui::Grid::new("apparence_materiau").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
@@ -384,7 +385,11 @@ fn apparence_materiau(ui: &mut egui::Ui, m: &mut crate::modele::Materiau) {
                 if r.clicked()
                     && let Some(f) = rfd::FileDialog::new().set_title(carte.libelle()).add_filter("Images", &["png", "jpg", "jpeg", "bmp", "tga", "tif", "tiff", "exr", "hdr", "webp"]).pick_file()
                 {
-                    let chemin = f.to_string_lossy().into_owned();
+                    // dans le dossier du projet : chemin relatif (le projet reste déplaçable)
+                    let chemin = match dossier.as_deref().and_then(|d| f.strip_prefix(d).ok()) {
+                        Some(r) => r.to_string_lossy().replace('\\', "/"),
+                        None => f.to_string_lossy().into_owned(),
+                    };
                     match a.textures.get_mut(&carte) {
                         Some(t) => t.chemin = chemin,
                         None => { a.textures.insert(carte, Texture::nouvelle(chemin)); }
