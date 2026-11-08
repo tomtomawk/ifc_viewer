@@ -1,6 +1,42 @@
 //! Saisie des points, clavier, annulation et fin de commande.
 use super::*;
 
+/// Directions des éléments passant par un point de référence, pour leurs guides.
+fn directions_au_point(p: DVec2, geoms: &[Geom]) -> Vec<DVec2> {
+    geoms.iter().filter_map(|g| match g {
+        Geom::Segment([a, b]) => {
+            let d = *b - *a;
+            let l2 = d.length_squared();
+            if l2 < 1e-12 { return None; }
+            let t = (p - *a).dot(d) / l2;
+            ((-1e-8..=1.0 + 1e-8).contains(&t) && (*a + d * t).distance(p) < 1e-5).then(|| d.normalize())
+        }
+        Geom::Cercle { centre, rayon } | Geom::Arc { centre, rayon, .. } => {
+            let rayon_point = p - *centre;
+            (rayon_point.length() > 1e-9 && (rayon_point.length() - rayon).abs() < 1e-5)
+                .then(|| rayon_point.normalize().perp())
+        }
+        Geom::Courbe(_) => None,
+    }).collect()
+}
+
+#[cfg(test)]
+mod tests_guides_perpendiculaires {
+    use super::*;
+
+    #[test]
+    fn reference_sur_segment_incline_et_cercle() {
+        let segment = Geom::Segment([DVec2::ZERO, DVec2::new(100.0, 100.0)]);
+        let p = DVec2::new(30.0, 30.0);
+        let directions = directions_au_point(p, &[segment]);
+        assert_eq!(directions.len(), 1);
+        assert!((directions[0].perp().dot(DVec2::ONE)).abs() < 1e-9);
+        let cercle = Geom::Cercle { centre: DVec2::ZERO, rayon: 100.0 };
+        let directions = directions_au_point(DVec2::new(100.0, 0.0), &[cercle]);
+        assert_eq!(directions, vec![DVec2::Y]);
+    }
+}
+
 impl ViewerApp {
     /// Point retenu pour le curseur `c` : accrochage, sinon ortho (Maj) ou repérage
     /// polaire (tous les 15°) depuis le point précédent, sinon le point libre.
@@ -10,6 +46,17 @@ impl ViewerApp {
     }
 
     pub(in crate::ui) fn point_dessin_depuis(&mut self, rect:egui::Rect,c:DVec2,maj:bool,temps:f64,precedent:Option<DVec2>)->(DVec2,Accroche) {
+        // Une valeur d'angle en cours de saisie verrouille le guide dès qu'elle est lisible.
+        if let Some((_, angle)) = self.dessin2d.saisie.split_once(['<', '>'])
+            && let Ok(angle) = angle.trim_end_matches('>').replace(',', ".").parse::<f64>()
+            && angle.is_finite()
+            && let Some(p) = precedent
+        {
+            let direction = DVec2::from_angle(angle.to_radians());
+            self.dessin2d.survol_accroche = None;
+            self.dessin2d.guides = vec![(p, direction)];
+            return (p + direction * (c - p).dot(direction).max(0.0), Accroche::Polaire(angle));
+        }
         // tolérance : 12 pixels en mm du plan de la vue
         let tol = self.vers_ecran(rect, c).zip(self.vers_ecran(rect, c + DVec2::X * 1000.0)).map_or(200.0, |(a, b)| 12.0 * 1000.0 / (a.distance(b) as f64).max(1e-6));
         let mut geoms = self.geoms_dessin();
@@ -29,15 +76,21 @@ impl ViewerApp {
         }
         self.dessin2d.guides.clear();
         let accroche = (!maj).then(|| d2::accrocher(c, tol, &geoms, precedent)).flatten();
-        let fixe = accroche.filter(|(_, a)| !matches!(a, Accroche::Proche | Accroche::Perpendiculaire));
-        if let Some((p, _)) = fixe {
+        if let Some((p, genre)) = accroche {
             match self.dessin2d.survol_accroche {
                 Some((ancien, debut)) if ancien.distance(p) < tol * 0.1 => {
-                    if temps - debut >= self.options.delai_accrochage { self.dessin2d.reference = Some(p); }
+                    if temps - debut >= self.options.delai_accrochage && self.dessin2d.reference != Some(p) {
+                        self.dessin2d.reference = Some(p);
+                        self.dessin2d.directions_reference = directions_au_point(p, &geoms);
+                    }
                 }
                 _ => self.dessin2d.survol_accroche = Some((p, temps)),
             }
-            return (p, accroche.unwrap().1);
+            if genre == Accroche::Perpendiculaire && let Some(depart) = precedent {
+                let d = p - depart;
+                if d.length_squared() > 1e-12 { self.dessin2d.guides.push((p, d.normalize())); }
+            }
+            return (p, genre);
         }
         self.dessin2d.survol_accroche = None;
         if maj {
@@ -59,7 +112,21 @@ impl ViewerApp {
                 }
                 if let Some(p) = precedent { lignes.extend([(p, u), (p, v)]); }
             }
-            if let Some(p) = self.dessin2d.reference { lignes.extend([(p, u), (p, v)]); }
+            if let Some(p) = self.dessin2d.reference {
+                lignes.extend([(p, u), (p, v)]);
+                for &d in &self.dessin2d.directions_reference { lignes.extend([(p, d), (p, d.perp())]); }
+            }
+            // Prolonger l'alignement du segment survolé, sans accroche « proche ».
+            if let Some((a, d)) = geoms.iter().filter_map(|g| {
+                let Geom::Segment([a, b]) = g else { return None };
+                let d = *b - *a;
+                if d.length_squared() < 1e-12 { return None; }
+                let d = d.normalize();
+                let distance = (c - *a).perp_dot(d).abs();
+                (distance < tol * 0.6).then_some((distance, *a, d))
+            }).min_by(|a, b| a.0.total_cmp(&b.0)).map(|(_, a, d)| (a, d)) {
+                lignes.push((a, d));
+            }
             // Une intersection de deux guides est prioritaire sur une projection simple.
             let mut meilleur: Option<(f64, DVec2, Vec<(DVec2, DVec2)>)> = None;
             for i in 0..lignes.len() {
@@ -92,7 +159,6 @@ impl ViewerApp {
                 return (p, Accroche::Ortho);
             }
         }
-        if let Some(a) = accroche { return a; }
         // repère du plan tourné : ortho et angles ronds suivent l'écran ; longueurs et
         // coordonnées libres au pas de 10 mm pour un mur, 1 mm pour un dessin
         let th = self.angle_axes_plan();
@@ -159,7 +225,7 @@ impl ViewerApp {
                         }
                         self.dessin2d.dalle.push(c);
                         if let Some(e) = &mut self.dessin2d.edition_contour { e.fermees.push(true); }
-                        self.dessin2d.message = None;
+                        { self.dessin2d.message = None; self.dessin2d.information = None; };
                     }
                 }
             }
@@ -231,6 +297,7 @@ impl ViewerApp {
             self.dessin2d.dernier_usage = None;
             self.dessin2d.trace = None;
             self.dessin2d.reference = None;
+            self.dessin2d.directions_reference.clear();
             self.dessin2d.survol_accroche = None;
             self.dessin2d.guides.clear();
             self.dessin2d.saisie.clear();
@@ -246,6 +313,7 @@ impl ViewerApp {
         self.dessin2d.dernier_usage = Some(usage);
         if self.dessin2d.trace.as_ref().is_none_or(|t| t.outil != outil) {
             self.dessin2d.reference = None;
+            self.dessin2d.directions_reference.clear();
             self.dessin2d.survol_accroche = None;
             if self.dessin2d.trace.is_none() && usage == Usage::Annotation {
                 self.select(None, false);
@@ -271,9 +339,9 @@ impl ViewerApp {
                 egui::Event::Text(t) => {
                     let mut lu = false;
                     for ch in t.chars() {
-                        if ch.is_ascii_digit() || "@<,;.-".contains(ch) || (en_cours && ch.eq_ignore_ascii_case(&'f')) {
+                        if ch.is_ascii_digit() || "@#<>,;.-".contains(ch) || (en_cours && ch.eq_ignore_ascii_case(&'f')) {
                             self.dessin2d.saisie.push(ch);
-                            self.dessin2d.message = None;
+                            { self.dessin2d.message = None; self.dessin2d.information = None; };
                             lu = true;
                         } else if ch == ' ' {
                             // Espace inverse le sens d'un mur ; ailleurs, il valide comme Entrée
@@ -308,7 +376,7 @@ impl ViewerApp {
             self.dessin2d.saisie.pop();
         }
         if echap {
-            self.dessin2d.message = None;
+            { self.dessin2d.message = None; self.dessin2d.information = None; };
             if !self.dessin2d.saisie.is_empty() {
                 self.dessin2d.saisie.clear();
             } else if self.dessin2d.trace.as_ref().is_some_and(|t| !t.points.is_empty()) {
@@ -386,7 +454,8 @@ impl ViewerApp {
             // le contour reste ouvert, au stade où il en était
             if let Some(t) = self.dessin2d.trace.as_ref().filter(|t| t.outil == OutilDessin::Polyligne && t.points.len() >= 2) {
                 self.dessin2d.ouverts.push(t.points.clone());
-                self.dessin2d.message = Some("Contour laissé ouvert : cliquer une de ses extrémités pour le reprendre.".into());
+                { self.dessin2d.message = None; self.dessin2d.information = None; };
+                self.dessin2d.information = Some("Contour laissé ouvert : cliquer une de ses extrémités pour le reprendre.".into());
             }
         } else {
             self.valider_saisie_dessin();
@@ -524,7 +593,7 @@ impl ViewerApp {
         self.coupe_dirty = true;
         self.dessin2d.geoms = None;
         self.dessin2d.saisie.clear();
-        self.dessin2d.message = None;
+        { self.dessin2d.message = None; self.dessin2d.information = None; };
         self.dessin2d.trace = None;
         self.dessin2d.historique_depart = None;
         self.dessin2d.commande_cle = None;
@@ -608,10 +677,10 @@ impl ViewerApp {
                         }
                         if actif {
                             if edition || options_dessin || options_modifier { ui.separator(); }
-                            if bouton_commande(ui, true, "Valider").on_hover_text("Terminer et quitter la commande (Entrée)").clicked() {
+                            if bouton_commande(ui, true, "Valider").on_hover_text("Terminer et quitter la commande").clicked() {
                                 action = Some(true);
                             }
-                            if bouton_commande(ui, false, "Annuler").on_hover_text("Abandonner et quitter la commande (Échap)").clicked() {
+                            if bouton_commande(ui, false, "Annuler").on_hover_text("Abandonner et quitter la commande").clicked() {
                                 action = Some(false);
                             }
                         }
@@ -631,13 +700,13 @@ impl ViewerApp {
             let precedent = self.dessin2d.trace.as_ref().and_then(Trace::precedent);
             let direction = self.dessin2d.point.zip(precedent).map(|((c, _), p)| c - p);
             match d2::lire_saisie(&saisie, precedent, direction, crate::config::options::unite().facteur()) {
-                Ok(p) => { self.ajouter_point_raccord(p); self.dessin2d.message = None; }
+                Ok(p) => { self.ajouter_point_raccord(p); { self.dessin2d.message = None; self.dessin2d.information = None; }; }
                 Err(e) => self.dessin2d.message = Some(e),
             }
             return;
         }
         let Some(trace) = self.dessin2d.trace.as_mut() else { return };
-        self.dessin2d.message = None;
+        { self.dessin2d.message = None; self.dessin2d.information = None; };
         let formes = if saisie.is_empty() {
             trace.terminer()
         } else if saisie.eq_ignore_ascii_case("f") {

@@ -1,6 +1,6 @@
 //! Dessin 2D à la manière des logiciels de DAO (CADCraft, AutoCAD) : outils ligne,
 //! polyligne, spline, cercle et arc pilotés par clics et par saisie au clavier
-//! (coordonnées absolues `x,y`, relatives `@dx,dy`, polaires `@d<a`, distance directe
+//! (coordonnées absolues `@x;y`, relatives `#dx;dy`, polaires `d<a`, distance directe
 //! dans la direction du curseur), accrochages aux objets (extrémité, milieu, centre,
 //! quadrant, intersection, perpendiculaire, proche), repérage polaire et mode ortho.
 //!
@@ -29,7 +29,6 @@ pub enum Accroche {
     Quadrant,
     Intersection,
     Perpendiculaire,
-    Proche,
     /// Repérage polaire : angle (degrés) depuis le point précédent.
     Polaire(f64),
     Ortho,
@@ -45,7 +44,6 @@ impl Accroche {
             Self::Quadrant => "Quadrant".into(),
             Self::Intersection => "Intersection".into(),
             Self::Perpendiculaire => "Perpendiculaire".into(),
-            Self::Proche => "Proche".into(),
             Self::Polaire(a) => format!("Polaire {a:.0}°"),
             Self::Ortho => "Ortho".into(),
             Self::Libre => String::new(),
@@ -255,7 +253,7 @@ fn intersections(g: &Geom, h: &Geom) -> Vec<DVec2> {
 
 /// Point accroché près du curseur `c` (à `tol` mm près) : points remarquables d'abord
 /// (extrémité, centre, quadrant, intersection, puis milieu), puis perpendiculaire depuis
-/// `depuis`, puis le point le plus proche sur une géométrie.
+/// `depuis`.
 pub fn accrocher(c: DVec2, tol: f64, geoms: &[Geom], depuis: Option<DVec2>) -> Option<(DVec2, Accroche)> {
     let mut candidats: Vec<(DVec2, Accroche)> = Vec::new();
     for g in geoms {
@@ -308,14 +306,19 @@ pub fn accrocher(c: DVec2, tol: f64, geoms: &[Geom], depuis: Option<DVec2>) -> O
                 let t = (d - *a).dot(ab) / ab.length_squared().max(1e-12);
                 ((0.0..=1.0).contains(&t)).then(|| *a + ab * t)
             }
-            Geom::Cercle { centre, rayon } | Geom::Arc { centre, rayon, .. } => (d.distance(*centre) > 1e-9).then(|| *centre + (d - *centre).normalize() * *rayon),
+            Geom::Cercle { centre, rayon } => (d.distance(*centre) > 1e-9).then(|| *centre + (d - *centre).normalize() * *rayon),
+            Geom::Arc { centre, rayon, depart, balayage } => {
+                let direction = d - *centre;
+                (direction.length() > 1e-9 && dans_arc(direction.y.atan2(direction.x), *depart, *balayage))
+                    .then(|| *centre + direction.normalize() * *rayon)
+            }
             Geom::Courbe(_) => None,
         });
         if let Some(p) = perp.filter(|p| p.distance(c) <= tol && p.distance(d) > 1e-6).min_by(|a, b| a.distance(c).total_cmp(&b.distance(c))) {
             return Some((p, Accroche::Perpendiculaire));
         }
     }
-    geoms.iter().filter_map(|g| proche(c, g)).filter(|p| p.distance(c) <= tol * 0.6).min_by(|a, b| a.distance(c).total_cmp(&b.distance(c))).map(|p| (p, Accroche::Proche))
+    None
 }
 
 /// Point de la géométrie le plus proche de `c`.
@@ -362,30 +365,29 @@ pub fn ortho(depuis: DVec2, c: DVec2) -> DVec2 {
 }
 
 /// Point saisi au clavier (valeurs en unités de l'utilisateur, `facteur` mm par unité) :
-/// `x,y` (absolu), `@dx,dy` (relatif au point précédent), `@d<a` (polaire, degrés), ou
+/// `@x;y` (absolu), `#dx;dy` (relatif au point précédent), `d<a` (polaire, degrés), ou
 /// une distance seule, portée dans la direction `direction` depuis le point précédent.
 pub fn lire_saisie(texte: &str, precedent: Option<DVec2>, direction: Option<DVec2>, facteur: f64) -> Result<DVec2, String> {
     let t = texte.trim().replace(' ', "");
     let nombre = |s: &str| s.replace(',', ".").parse::<f64>().map_err(|_| format!("Nombre illisible : « {s} »"));
-    // coordonnées séparées par « , » (décimales avec « . ») ou par « ; » (décimales avec
-    // « , » ou « . »)
     let couple = |s: &str| -> Result<DVec2, String> {
-        let (x, y) = s.split_once(';').or_else(|| s.split_once(',')).ok_or("Attendu : x,y")?;
+        let (x, y) = s.split_once(';').ok_or("Séparez les coordonnées par un point-virgule : x;y")?;
         Ok(DVec2::new(nombre(x)?, nombre(y)?) * facteur)
     };
-    if let Some(rel) = t.strip_prefix('@') {
-        let p = precedent.ok_or("Pas de point précédent pour une saisie relative (@).")?;
-        if let Some((d, a)) = rel.split_once('<') {
-            return Ok(p + DVec2::from_angle(nombre(a)?.to_radians()) * nombre(d)? * facteur);
-        }
+    if let Some(absolu) = t.strip_prefix('@') {
+        return couple(absolu);
+    }
+    if let Some(rel) = t.strip_prefix('#') {
+        let p = precedent.ok_or("Pas de point précédent pour une saisie relative (#).")?;
         return Ok(p + couple(rel)?);
     }
-    // distance<angle sans @ : depuis le point précédent aussi (saisie dynamique)
-    if let (Some((d, a)), Some(p)) = (t.split_once('<'), precedent) {
-        return Ok(p + DVec2::from_angle(nombre(a)?.to_radians()) * nombre(d)? * facteur);
-    }
-    if t.contains(';') || t.contains(',') {
-        return couple(&t);
+    if let Some((d, a)) = t.split_once(['<', '>']) {
+        let p = precedent.ok_or("Angle : il faut un point précédent.")?;
+        let angle = nombre(a.strip_suffix('>').unwrap_or(a))?;
+        let distance = if d.is_empty() {
+            direction.filter(|u| u.length() > 1e-9).ok_or("Angle seul : orienter d'abord le curseur.")?.length()
+        } else { nombre(d)? * facteur };
+        return Ok(p + DVec2::from_angle(angle.to_radians()) * distance);
     }
     let d = nombre(&t)?;
     let p = precedent.ok_or("Distance seule : il faut un point précédent.")?;
@@ -438,17 +440,17 @@ impl Trace {
         }
         match (self.outil, self.points.len()) {
             (Ligne | Polyligne | Spline, 0) => "Premier point",
-            (Ligne, 1) | (Polyligne, 1) => "Point suivant (Entrée : terminer)",
-            (Ligne, _) | (Polyligne, _) => "Point suivant · F : fermer · Entrée : terminer",
+            (Ligne, 1) | (Polyligne, 1) => "Point suivant",
+            (Ligne, _) | (Polyligne, _) => "Point suivant · F : fermer",
             (Spline, 1 | 2) => "Point de passage suivant",
-            (Spline, _) => "Point suivant · F : fermer · Entrée : terminer",
+            (Spline, _) => "Point suivant · F : fermer",
             (Cercle, 0) => "Centre du cercle",
             (Cercle, _) => "Rayon (point ou distance)",
             (Arc, 0) => "Début de l'arc",
             (Arc, 1) => "Fin de l'arc",
             (Arc, _) => "Courbure : point de passage de l'arc",
             (Rectangle, 0) => "Premier coin",
-            (Rectangle, _) => "Coin opposé (point ou @dx,dy)",
+            (Rectangle, _) => "Coin opposé (point ou #dx;dy)",
         }
     }
 
@@ -597,7 +599,7 @@ mod tests {
         assert!(proche_de(p, DVec2::new(500.0, 0.0)) && a == Accroche::Intersection, "{p} {a:?}");
         assert_eq!(accrocher(DVec2::new(2005.0, 5.0), 20.0, &geoms, None).unwrap().1, Accroche::Centre);
         assert_eq!(accrocher(DVec2::new(2300.0, 10.0), 20.0, &geoms, None).unwrap().1, Accroche::Quadrant);
-        assert_eq!(accrocher(DVec2::new(250.0, 5.0), 20.0, &geoms, None).unwrap().1, Accroche::Proche);
+        assert!(accrocher(DVec2::new(250.0, 5.0), 20.0, &geoms, None).is_none());
         // perpendiculaire depuis un point
         let (p, a) = accrocher(DVec2::new(300.0, 10.0), 20.0, &geoms[..1], Some(DVec2::new(300.0, 800.0))).unwrap();
         assert!(proche_de(p, DVec2::new(300.0, 0.0)) && a == Accroche::Perpendiculaire);
@@ -613,12 +615,13 @@ mod tests {
         assert!(polaire(o, DVec2::new(1000.0, 140.0), 15.0, 3.0).is_none());
         assert_eq!(ortho(o, DVec2::new(100.0, 30.0)), DVec2::new(100.0, 0.0));
         let prec = Some(DVec2::new(100.0, 100.0));
-        assert!(proche_de(lire_saisie("2000;3000", prec, None, 1.0).unwrap(), DVec2::new(2000.0, 3000.0)));
-        assert!(proche_de(lire_saisie("2,5;3", prec, None, 1.0).unwrap(), DVec2::new(2.5, 3.0)));
-        assert!(proche_de(lire_saisie("20.5,30", prec, None, 1.0).unwrap(), DVec2::new(20.5, 30.0)));
-        assert!(proche_de(lire_saisie("@50,0", prec, None, 1.0).unwrap(), DVec2::new(150.0, 100.0)));
-        assert!(proche_de(lire_saisie("@100<90", prec, None, 1.0).unwrap(), DVec2::new(100.0, 200.0)));
+        assert!(proche_de(lire_saisie("@2,5;3.5", None, None, 1.0).unwrap(), DVec2::new(2.5, 3.5)));
+        assert!(proche_de(lire_saisie("#50,5;0", prec, None, 1.0).unwrap(), DVec2::new(150.5, 100.0)));
         assert!(proche_de(lire_saisie("100<90", prec, None, 1.0).unwrap(), DVec2::new(100.0, 200.0)));
+        assert!(proche_de(lire_saisie("100>90", prec, None, 1.0).unwrap(), DVec2::new(100.0, 200.0)));
+        assert!(proche_de(lire_saisie("<90>", prec, Some(DVec2::new(100.0, 0.0)), 1.0).unwrap(), DVec2::new(100.0, 200.0)));
+        assert!(proche_de(lire_saisie("2,5", prec, Some(DVec2::X), 1.0).unwrap(), DVec2::new(102.5, 100.0)));
+        assert!(proche_de(lire_saisie("2.5", prec, Some(DVec2::X), 1.0).unwrap(), DVec2::new(102.5, 100.0)));
         // distance directe dans la direction du curseur, en cm (facteur 10)
         assert!(proche_de(lire_saisie("25", prec, Some(DVec2::new(0.0, -3.0)), 10.0).unwrap(), DVec2::new(100.0, -150.0)));
         assert!(lire_saisie("abc", prec, None, 1.0).is_err());
@@ -641,7 +644,7 @@ mod tests {
             formes = t.ajouter(p);
         }
         assert!(matches!(formes.as_slice(), [Forme2D::Polyligne { fermee: true, points }] if points.len() == 3));
-        assert!(lire_saisie("@1,2", None, None, 1.0).is_err());
+        assert!(lire_saisie("#1;2", None, None, 1.0).is_err());
     }
 
     #[test]

@@ -55,36 +55,42 @@ impl ViewerApp {
                     pile.last().map(|t|format!("Transaction {} — {}",t.id,if c.copie.base.acceptes.contains_key(&t.id){"partagée"}else{"locale"})).into_iter().collect()
                 } else {self.historique.libelles(retablir)};
                 let actif = disponible && !libelles.is_empty();
-                let reponse = ui.add_enabled(actif, egui::Button::new("").min_size(egui::vec2(22.0, 20.0)));
-                let centre = reponse.rect.center();
-                let sens = if retablir { -1.0 } else { 1.0 };
-                let couleur = if actif { ui.visuals().text_color() } else { ui.visuals().weak_text_color() };
-                let points: Vec<_> = [(-5.0, -2.0), (1.0, -2.0), (4.0, -1.0), (5.0, 2.0), (4.0, 5.0), (1.0, 6.0)].into_iter().map(|(x,y)| centre + egui::vec2(x * sens, y)).collect();
-                ui.painter().add(egui::Shape::line(points, egui::Stroke::new(1.5, couleur)));
-                let pointe = centre + egui::vec2(-5.0 * sens, -2.0);
-                ui.painter().add(egui::Shape::convex_polygon(vec![pointe + egui::vec2(-2.0*sens,0.0), pointe + egui::vec2(2.0*sens,-3.5), pointe + egui::vec2(2.0*sens,3.5)], couleur, egui::Stroke::NONE));
-                reponse.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, actif, titre));
-                if reponse.on_hover_text(if retablir { "Rétablir (Ctrl+Maj+Z)" } else { "Annuler (Ctrl+Z)" }).clicked() { historique_choisi = Some((retablir, 1)); }
-                ui.add_enabled_ui(actif, |ui| {
-                    ui.scope(|ui| {
-                        ui.spacing_mut().button_padding = egui::Vec2::ZERO;
-                        let bouton = egui::Button::new("").min_size(egui::vec2(16.0, 20.0));
-                        let (reponse, _) = egui::containers::menu::MenuButton::from_button(bouton).ui(ui, |ui| {
-                            ui.label(if retablir { "Rétablir jusqu'à :" } else { "Annuler jusqu'à :" });
-                            egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
-                                for (i, nom) in libelles.iter().enumerate() {
-                                    if ui.button(format!("{}  {}", i + 1, nom)).clicked() {
-                                        historique_choisi = Some((retablir, i + 1));
-                                        ui.close();
-                                    }
-                                }
+                let style = ui.visuals().widgets.inactive;
+                egui::Frame::new().fill(style.bg_fill).stroke(style.bg_stroke).corner_radius(style.corner_radius).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        let reponse = ui.add_enabled(actif, egui::Button::new("").min_size(egui::vec2(22.0, 20.0)).frame(false));
+                        let centre = reponse.rect.center();
+                        let sens = if retablir { -1.0 } else { 1.0 };
+                        let couleur = if actif { ui.visuals().text_color() } else { ui.visuals().weak_text_color() };
+                        let points: Vec<_> = [(-5.0, -2.0), (1.0, -2.0), (4.0, -1.0), (5.0, 2.0), (4.0, 5.0), (1.0, 6.0)].into_iter().map(|(x,y)| centre + egui::vec2(x * sens, y)).collect();
+                        ui.painter().add(egui::Shape::line(points, egui::Stroke::new(1.5, couleur)));
+                        let pointe = centre + egui::vec2(-5.0 * sens, -2.0);
+                        ui.painter().add(egui::Shape::convex_polygon(vec![pointe + egui::vec2(-2.0*sens,0.0), pointe + egui::vec2(2.0*sens,-3.5), pointe + egui::vec2(2.0*sens,3.5)], couleur, egui::Stroke::NONE));
+                        reponse.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, actif, titre));
+                        if reponse.on_hover_text(if retablir { "Rétablir (Ctrl+Maj+Z)" } else { "Annuler (Ctrl+Z)" }).clicked() { historique_choisi = Some((retablir, 1)); }
+                        ui.add_enabled_ui(actif, |ui| {
+                            ui.scope(|ui| {
+                                ui.spacing_mut().button_padding = egui::Vec2::ZERO;
+                                let bouton = egui::Button::new("").min_size(egui::vec2(16.0, 20.0)).frame(false);
+                                let (reponse, _) = egui::containers::menu::MenuButton::from_button(bouton).ui(ui, |ui| {
+                                    ui.label(if retablir { "Rétablir jusqu'à :" } else { "Annuler jusqu'à :" });
+                                    egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                                        for (i, nom) in libelles.iter().enumerate() {
+                                            if ui.button(format!("{}  {}", i + 1, nom)).clicked() {
+                                                historique_choisi = Some((retablir, i + 1));
+                                                ui.close();
+                                            }
+                                        }
+                                    });
+                                });
+                                let centre = reponse.rect.center();
+                                let c = if actif { ui.visuals().text_color() } else { ui.visuals().weak_text_color() };
+                                ui.painter().add(egui::Shape::convex_polygon(vec![centre + egui::vec2(-3.5,-2.0), centre + egui::vec2(3.5,-2.0), centre + egui::vec2(0.0,2.0)], c, egui::Stroke::NONE));
+                                reponse.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, actif, if retablir { "Historique des rétablissements" } else { "Historique des annulations" }));
+                                reponse.on_hover_text(if retablir { "Rétablir plusieurs modifications" } else { "Annuler plusieurs modifications" });
                             });
                         });
-                        let centre = reponse.rect.center();
-                        let c = if actif { ui.visuals().text_color() } else { ui.visuals().weak_text_color() };
-                        ui.painter().add(egui::Shape::convex_polygon(vec![centre + egui::vec2(-3.5,-2.0), centre + egui::vec2(3.5,-2.0), centre + egui::vec2(0.0,2.0)], c, egui::Stroke::NONE));
-                        reponse.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, actif, if retablir { "Historique des rétablissements" } else { "Historique des annulations" }));
-                        reponse.on_hover_text(if retablir { "Rétablir plusieurs modifications" } else { "Annuler plusieurs modifications" });
                     });
                 });
             }

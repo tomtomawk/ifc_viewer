@@ -674,16 +674,24 @@ impl RubanEdition {
             Color32::from_rgb(236, 248, 252),
             bord,
         ));
-        // rappels : de l'arête du mur à la ligne de sa limite
+        // Le mur de référence reste visible en pointillé quand ses limites sont décalées.
         let rappel = Stroke::new(0.8, bleu.gamma_multiply(0.8));
-        for (depuis, y) in [(h + profondeur, centres[0]), (b + profondeur, centres[1])] {
+        if (yh - (centres[0] + 3.0)).abs() > 0.01 || (yb - (centres[1] + 3.0)).abs() > 0.01 {
+            let rh = centres[0] + 3.0;
+            let rb = centres[1] + 3.0;
+            for (de, a) in [(pos2(x0, rh), pos2(x1, rh)), (pos2(x0, rb), pos2(x1, rb)), (pos2(x0, rh), pos2(x0, rb)), (pos2(x1, rh), pos2(x1, rb))] {
+                p.add(egui::Shape::dashed_line(&[de, a], rappel, 2.5, 2.5));
+            }
+        }
+        // Les rappels des niveaux restent horizontaux, quel que soit le décalage.
+        for y in centres {
             let fin = gauche_champs - 3.0;
-            let mut x = depuis.x + 3.0;
+            let depuis = pos2(x1 + profondeur.x, y);
+            let mut x = depuis.x;
             while x < fin {
                 p.line_segment([pos2(x, y), pos2((x + 2.5).min(fin), y)], rappel);
                 x += 5.0;
             }
-            p.line_segment([depuis, pos2(depuis.x + 2.0, y)], rappel);
             p.circle_filled(depuis, 1.5, bleu);
         }
         // hauteur résultante, le long du mur

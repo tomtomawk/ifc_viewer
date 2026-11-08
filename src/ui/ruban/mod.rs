@@ -277,21 +277,11 @@ fn pile_couches(ui: &mut egui::Ui, r: egui::Rect, couches: &[crate::modele::Couc
 }
 
 /// Projection indicative des limites du mur, bornée à la place disponible dans la palette.
-fn limites_croquis_mur(parametres: &crate::modele::edition::ParametresMur, projet: &crate::modele::Projet, haut_reference: f32, bas_reference: f32) -> (f32, f32) {
-    let base = parametres.niveau.as_ref().and_then(|id| projet.niveau(id))
-        .or_else(|| projet.niveaux.first()).map_or(0.0, |n| n.altitude);
-    let bas = base + parametres.decalage;
-    let haut = parametres.niveau_haut.as_ref().and_then(|id| projet.niveau(id))
-        .map_or(bas + parametres.hauteur, |n| n.altitude + parametres.decalage_haut);
-    let echelle = (bas_reference - haut_reference) as f64 / 2800.0;
-    let projeter = |z: f64, repli: f32| {
-        let y = (bas_reference as f64 - (z - base) * echelle) as f32;
-        if y.is_finite() { y } else { repli }
-    };
-    let marge = (bas_reference - haut_reference) * 0.38;
-    let yh = projeter(haut, haut_reference).clamp(haut_reference - marge, haut_reference + marge);
-    let yb = projeter(bas, bas_reference).clamp(bas_reference - marge, bas_reference + marge);
-    (yh, yb)
+fn limites_croquis_mur(parametres: &crate::modele::edition::ParametresMur, _projet: &crate::modele::Projet, haut_reference: f32, bas_reference: f32) -> (f32, f32) {
+    let deplacement = |v: f64| if v > 0.0 { -10.0 } else if v < 0.0 { 10.0 } else { 0.0 };
+    let bas = deplacement(parametres.decalage);
+    let haut = if parametres.niveau_haut.is_some() { deplacement(parametres.decalage_haut) } else { bas };
+    (haut_reference + haut, bas_reference + bas)
 }
 
 fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {

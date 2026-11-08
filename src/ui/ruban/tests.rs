@@ -2,31 +2,20 @@ use super::*;
 
 #[test]
 fn croquis_mur_suit_hauteur_niveaux_et_decalages() {
-    let mut projet = crate::modele::Projet::nouveau("Croquis");
-    projet.niveaux = vec![crate::modele::Niveau {
-        id: "bas".into(), nom: "Rez-de-chaussée".into(), altitude: 0.0, origine: None,
-    }];
-    projet.niveaux.push(crate::modele::Niveau {
-        id: "haut".into(), nom: "Étage".into(), altitude: 2800.0, origine: None,
-    });
+    let projet = crate::modele::Projet::nouveau("Croquis");
     let mut params = crate::modele::edition::ParametresMur::default();
-    let (haut, bas) = limites_croquis_mur(&params, &projet, 10.0, 46.0);
-    params.decalage = -200.0;
-    let (haut_decale, bas_decale) = limites_croquis_mur(&params, &projet, 10.0, 46.0);
-    assert!(haut_decale > haut && bas_decale > bas); // hauteur libre conservée
-    params.decalage = 0.0;
     params.niveau_haut = Some("haut".into());
-    params.decalage_haut = -200.0;
-    let (haut_decale, bas_inchange) = limites_croquis_mur(&params, &projet, 10.0, 46.0);
-    assert!(haut_decale > haut && (bas_inchange - bas).abs() < 0.01);
-    params.decalage_haut = 200.0;
-    assert!(limites_croquis_mur(&params, &projet, 10.0, 46.0).0 < haut);
+    assert_eq!(limites_croquis_mur(&params, &projet, 10.0, 46.0), (10.0, 46.0));
+    for valeur in [1.0, 20_000.0] {
+        params.decalage_haut = valeur;
+        params.decalage = -valeur;
+        assert_eq!(limites_croquis_mur(&params, &projet, 10.0, 46.0), (0.0, 56.0));
+        params.decalage_haut = -valeur;
+        params.decalage = valeur;
+        assert_eq!(limites_croquis_mur(&params, &projet, 10.0, 46.0), (20.0, 36.0));
+    }
     params.niveau_haut = None;
-    params.hauteur = 2400.0;
-    assert!(limites_croquis_mur(&params, &projet, 10.0, 46.0).0 > haut);
-    params.decalage = -100_000.0;
-    let (haut, bas) = limites_croquis_mur(&params, &projet, 10.0, 46.0);
-    assert!(haut < bas && bas < 60.0);
+    assert_eq!(limites_croquis_mur(&params, &projet, 10.0, 46.0), (0.0, 36.0));
 }
 
 #[test]

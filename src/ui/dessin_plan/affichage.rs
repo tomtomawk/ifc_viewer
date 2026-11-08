@@ -109,7 +109,7 @@ impl ViewerApp {
                     (d.dalle[0], d.terrain_cotes, d.terrain_points) = (contour, cotes, points);
                     d.message = Some(e);
                 }
-                _ => self.dessin2d.message = None,
+                _ => { self.dessin2d.message = None; self.dessin2d.information = None; },
             }
         }
         // clic droit sur une poignée : retirer le point ou le sommet (trois au moins)
@@ -137,7 +137,7 @@ impl ViewerApp {
             self.dessin2d.terrain_points.push([p.x, p.y, self.dessin2d.terrain_altitude]);
             match self.terrain_courant().map(|t| t.triangles()) {
                 Some(Err(e)) => { self.dessin2d.terrain_points.pop(); self.dessin2d.message = Some(e); }
-                _ => self.dessin2d.message = None,
+                _ => { self.dessin2d.message = None; self.dessin2d.information = None; },
             }
         }
         if self.dessin2d.terrain_survol.is_some() {
@@ -159,7 +159,7 @@ impl ViewerApp {
                         let mut t=Trace::new(OutilDessin::Cercle);t.perimetre=true;t.points=vec![centre,centre+DVec2::X*rayon];
                         self.dessin2d.trace=Some(t);
                     } else {self.enregistrer_formes(vec![f]);}
-                } else {self.dessin2d.message=Some("Sélectionnez un trait du dessin dans la vue.".into());}
+                } else {{ self.dessin2d.message = None; self.dessin2d.information = None; }; self.dessin2d.information = Some("Sélectionnez un trait du dessin dans la vue.".into());}
             }
             return;
         }
@@ -253,7 +253,7 @@ impl ViewerApp {
                         e.raccord = Some((c, i == 0));
                         e.dessin = true;
                         self.dessin2d.trace.as_mut().unwrap().points = vec![p];
-                        self.dessin2d.message = None;
+                        { self.dessin2d.message = None; self.dessin2d.information = None; };
                         return;
                     }
                 }
@@ -290,7 +290,7 @@ impl ViewerApp {
             if self.reprendre_contour_ouvert(rect, resp.interact_pointer_pos()) { return; }
             if let (Some((p, _)), Some(t)) = (self.dessin2d.point, self.dessin2d.trace.as_mut()) {
                 self.dessin2d.saisie.clear();
-                self.dessin2d.message = None;
+                { self.dessin2d.message = None; self.dessin2d.information = None; };
                 let formes = t.ajouter(p);
                 self.enregistrer_formes(formes);
             }
@@ -393,9 +393,6 @@ impl ViewerApp {
                     Accroche::Perpendiculaire => {
                         painter.add(egui::Shape::line(vec![e + egui::vec2(-m, -m), e + egui::vec2(-m, m), e + egui::vec2(m, m)], trait_));
                         painter.line_segment([e + egui::vec2(-m, 0.0), e + egui::vec2(0.0, 0.0)], trait_);
-                    }
-                    Accroche::Proche => {
-                        painter.add(egui::Shape::closed_line(vec![e + egui::vec2(-m, -m), e + egui::vec2(m, -m), e + egui::vec2(-m, m), e + egui::vec2(m, m)], trait_));
                     }
                     _ => {}
                 }
@@ -505,27 +502,31 @@ impl ViewerApp {
             if e.segment.is_some() { "Trait sélectionné : Suppr pour le retirer ; glisser un sommet pour le déplacer" }
             else { "Sélectionner un trait ou glisser un sommet ; cliquer un sommet ouvert pour prolonger" }
         } else if usage.is_some_and(|(u, _)| u == Usage::Terrain) && !self.dessin2d.dalle.is_empty() {
-            if self.dessin2d.terrain_ajouter_point { "Cliquer dans le terrain pour placer un point coté · glisser un point pour le déplacer · clic droit : retirer · Entrée : valider" }
-            else { "Glisser un sommet ou un point · glisser un milieu de côté pour ajouter un sommet · clic droit : retirer · cotes NGF à côté de chaque point · Entrée : valider" }
+            if self.dessin2d.terrain_ajouter_point { "Cliquer dans le terrain pour placer un point coté · glisser un point pour le déplacer · clic droit : retirer" }
+            else { "Glisser un sommet ou un point · glisser un milieu de côté pour ajouter un sommet · clic droit : retirer · cotes NGF à côté de chaque point" }
         } else if let Some(m) = modification { m }
-        else if self.ruban_edition.selection_mur && usage.is_some_and(|(u,_)|u==Usage::Mur) {"Sélectionner un trait existant dans la vue · Échap : terminer"} else { self.dessin2d.trace.as_ref().map_or("", |t| t.invite()) };
-        let ligne = match &self.dessin2d.message {
-            Some(m) => format!("{nom} — {invite} : {m}"),
-            None => format!("{nom} — {invite}"),
-        };
+        else if self.ruban_edition.selection_mur && usage.is_some_and(|(u,_)|u==Usage::Mur) {"Sélectionner un trait existant dans la vue"} else { self.dessin2d.trace.as_ref().map_or("", |t| t.invite()) };
         let contexte = match usage.map(|(u, _)| u) {
             Some(Usage::Mur) => "Espace : inverser le sens · ",
-            Some(Usage::Escalier) => "Espace : justification de la ligne · Longueur magnétisée au giron · Départ, un sommet par palier, arrivée · Marches calculées selon le niveau supérieur · Entrée ou clic droit : finir · ",
-            Some(Usage::GardeCorps) => "Cliquer les sommets · Entrée ou clic droit : finir · Sur un escalier, sélectionner Garde-corps dans les options · ",
+            Some(Usage::Escalier) => "Espace : justification de la ligne · Longueur magnétisée au giron · Départ, un sommet par palier, arrivée · Marches calculées selon le niveau supérieur · ",
+            Some(Usage::GardeCorps) => "Cliquer les sommets · Sur un escalier, sélectionner Garde-corps dans les options · ",
             Some(Usage::Cadrage) => "Tracer un contour fermé, puis valider · ",
             Some(Usage::Terrain) if self.dessin2d.dalle.is_empty() => "Tracer le périmètre fermé du terrain · ",
             _ => "",
         };
-        let aide = if usage.is_some() { format!("{contexte}Clavier : x,y · @dx,dy · d<angle · distance seule ({}) · Maj : ortho · Entrée : valider · Échap : annuler", u.suffixe().trim()) } else { "Entrée : valider · Échap : annuler".into() };
+        let aide = if usage.is_some() { format!("{contexte}@x;y · #dx;dy · distance<angle ou distance>angle · distance seule ({}) · Maj : ortho", u.suffixe().trim()) } else { String::new() };
         let police = egui::FontId::monospace(13.0);
         let largeur = (rect.width() - 20.0).max(1.0);
         let bleu = Color32::from_rgb(55, 130, 200);
-        let g1 = painter.layout(ligne, police, if self.dessin2d.message.is_some() { Color32::from_rgb(200, 50, 45) } else { bleu }, largeur);
+        let mut ligne = egui::text::LayoutJob::default();
+        ligne.wrap.max_width = largeur;
+        let format = |color| egui::TextFormat { font_id: police.clone(), color, ..Default::default() };
+        ligne.append(&format!("{nom} — {invite}"), 0.0, format(bleu));
+        if let Some(message) = self.dessin2d.message.as_ref().or(self.dessin2d.information.as_ref()) {
+            let couleur = if self.dessin2d.message.is_some() { Color32::from_rgb(200, 50, 45) } else { bleu };
+            ligne.append(&format!(" : {message}"), 0.0, format(couleur));
+        }
+        let g1 = painter.layout_job(ligne);
         let g2 = painter.layout(aide, egui::FontId::proportional(11.0), bleu.gamma_multiply(0.85), largeur);
         let h1 = g1.size().y;
         let haut = rect.top() + self.dessin2d.bas_barre.max(4.0) + 8.0;

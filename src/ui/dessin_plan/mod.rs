@@ -60,8 +60,10 @@ pub(super) struct EtatDessin2D {
     geoms: Option<(u64, String, Vec<Geom>)>,
     survol_accroche: Option<(DVec2, f64)>,
     reference: Option<DVec2>,
+    directions_reference: Vec<DVec2>,
     guides: Vec<(DVec2, DVec2)>,
     pub message: Option<String>,
+    information: Option<String>,
     /// Contours fermés de l'élément horizontal en cours : parties et trémies, créés à la
     /// validation.
     pub dalle: Vec<Vec<[f64; 2]>>,
@@ -244,7 +246,8 @@ impl ViewerApp {
         }
         e.selection = None;
         e.segment = None;
-        self.dessin2d.message = Some("Cliquez une extrémité ouverte pour reprendre le tracé.".into());
+        { self.dessin2d.message = None; self.dessin2d.information = None; };
+        self.dessin2d.information = Some("Cliquez une extrémité ouverte pour reprendre le tracé.".into());
     }
 
     fn ajouter_point_raccord(&mut self, p: DVec2) -> bool {
@@ -272,7 +275,7 @@ impl ViewerApp {
             e.selection = Some(if autre < c { c - 1 } else { c });
             e.raccord = None;
             e.dessin = false;
-            self.dessin2d.message = None;
+            { self.dessin2d.message = None; self.dessin2d.information = None; };
             return true;
         }
         let contour = &mut self.dessin2d.dalle[c];
@@ -285,7 +288,7 @@ impl ViewerApp {
             e.fermees[c] = true;
             e.raccord = None;
             e.dessin = false;
-            self.dessin2d.message = None;
+            { self.dessin2d.message = None; self.dessin2d.information = None; };
         } else if trace.points.last().is_none_or(|q| q.distance(p) > 1e-6) { trace.points.push(p); }
         true
     }
@@ -304,7 +307,7 @@ impl ViewerApp {
         if debut { points.reverse(); }
         if let Some(t) = self.dessin2d.trace.as_mut() { t.points = points; }
         self.dessin2d.saisie.clear();
-        self.dessin2d.message = None;
+        { self.dessin2d.message = None; self.dessin2d.information = None; };
         true
     }
 
@@ -742,6 +745,7 @@ impl ViewerApp {
         self.dessin2d.geoms=None;
         self.dessin2d.guides.clear();
         self.dessin2d.reference=None;
+        self.dessin2d.directions_reference.clear();
         self.dessin2d.survol_accroche=None;
     }
     pub(super) fn etat_accrochage(&self)->serde_json::Value {
