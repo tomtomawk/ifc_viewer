@@ -175,7 +175,7 @@ impl ViewerApp {
             let temps = ui.input(|i| i.time);
             let maj = ui.input(|i| i.modifiers.shift);
             self.dessin2d.point = self.dessin2d.curseur.map(|c| self.point_dessin(rect, c, maj, temps));
-            if self.dessin2d.survol_accroche.is_some() { ui.ctx().request_repaint_after(std::time::Duration::from_millis(100)); }
+            if self.dessin2d.survol_accroche.is_some() || self.dessin2d.survol_segment.is_some() { ui.ctx().request_repaint_after(std::time::Duration::from_millis(100)); }
             let q = if resp.drag_started_by(PointerButton::Primary) { ui.input(|i| i.pointer.press_origin()).or(resp.interact_pointer_pos()) } else { resp.interact_pointer_pos().or(resp.hover_pos()) };
             let mut sommet: Option<(f32, usize, usize)> = None;
             let mut arete: Option<(f32, usize, usize, egui::Pos2)> = None;
@@ -268,7 +268,7 @@ impl ViewerApp {
         self.dessin2d.curseur = survol.and_then(|q| self.depuis_ecran(rect, q));
         let temps = ui.input(|i| i.time);
         self.dessin2d.point = self.dessin2d.curseur.map(|c| self.point_dessin(rect, c, maj, temps));
-        if self.dessin2d.survol_accroche.is_some() { ui.ctx().request_repaint_after(std::time::Duration::from_millis(100)); }
+        if self.dessin2d.survol_accroche.is_some() || self.dessin2d.survol_segment.is_some() { ui.ctx().request_repaint_after(std::time::Duration::from_millis(100)); }
         // escalier : la longueur de la volée est magnétisée au pas de marche (giron)
         if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier) && self.dessin2d.saisie.is_empty() {
             let giron = self.giron_vise();
@@ -290,6 +290,7 @@ impl ViewerApp {
             if self.reprendre_contour_ouvert(rect, resp.interact_pointer_pos()) { return; }
             if let (Some((p, _)), Some(t)) = (self.dessin2d.point, self.dessin2d.trace.as_mut()) {
                 self.dessin2d.saisie.clear();
+                self.dessin2d.champ_angle = false;
                 { self.dessin2d.message = None; self.dessin2d.information = None; };
                 let formes = t.ajouter(p);
                 self.enregistrer_formes(formes);
@@ -322,6 +323,15 @@ impl ViewerApp {
         let painter = ui.painter().with_clip_rect(rect);
         let bleu = Color32::from_rgb(0, 120, 215);
         let vert = Color32::from_rgb(20, 160, 60);
+        if let Some(centre) = trace.precedent()
+            && let Some(rayon) = super::saisie::distance_saisie(&self.dessin2d.saisie, crate::config::options::unite().facteur())
+        {
+            let points: Vec<_> = (0..=128).filter_map(|i| {
+                let angle = std::f64::consts::TAU * i as f64 / 128.0;
+                self.vers_ecran(rect, centre + DVec2::from_angle(angle) * rayon)
+            }).collect();
+            if points.len() == 129 { painter.add(egui::Shape::dashed_line(&points, egui::Stroke::new(1.0, vert), 6.0, 4.0)); }
+        }
         for c in &self.dessin2d.ouverts {
             let pts: Vec<egui::Pos2> = c.iter().filter_map(|q| self.vers_ecran(rect, *q)).collect();
             painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, bleu)));
@@ -398,7 +408,9 @@ impl ViewerApp {
                 }
                 // étiquettes : accrochage, longueur et angle depuis le point précédent
                 let mut infos = Vec::new();
-                if !self.dessin2d.saisie.is_empty() { infos.push(format!("{}▏", self.dessin2d.saisie)); }
+                let saisie = &self.dessin2d.saisie;
+                let coordonnees = saisie.starts_with(['@', '#']) || saisie.eq_ignore_ascii_case("f");
+                if coordonnees { infos.push(format!("{saisie}▏")); }
                 if accroche != Accroche::Libre {
                     infos.push(accroche.libelle());
                 }
@@ -406,7 +418,12 @@ impl ViewerApp {
                     let v = p - prec;
                     let u = crate::config::options::unite();
                     let decimales = u.facteur().log10().round().max(0.0) as usize;
-                    infos.push(format!("{:.*}{} · {:.1}°", decimales, v.length() / u.facteur(), u.suffixe(), v.y.atan2(v.x).to_degrees().rem_euclid(360.0)));
+                    let (distance, angle) = saisie.split_once(['<', '>']).map_or((saisie.as_str(), None), |(d, a)| (d, Some(a.trim_end_matches('>'))));
+                    let distance = if !coordonnees && !distance.is_empty() { format!("{distance}{}", if !self.dessin2d.champ_angle { "▏" } else { "" }) } else { format!("{:.*}", decimales, v.length() / u.facteur()) };
+                    let angle = if !coordonnees && angle.is_some() { format!("{}{}", angle.unwrap(), if self.dessin2d.champ_angle { "▏" } else { "" }) } else { format!("{:.1}", v.y.atan2(v.x).to_degrees().rem_euclid(360.0)) };
+                    infos.push(format!("{distance}{} · {angle}°", u.suffixe()));
+                } else if !saisie.is_empty() && !coordonnees {
+                    infos.push(format!("{saisie}▏"));
                 }
                 if !infos.is_empty() {
                     let texte = painter.layout_no_wrap(infos.join("   "), egui::FontId::proportional(12.0), Color32::WHITE);
@@ -507,14 +524,14 @@ impl ViewerApp {
         } else if let Some(m) = modification { m }
         else if self.ruban_edition.selection_mur && usage.is_some_and(|(u,_)|u==Usage::Mur) {"Sélectionner un trait existant dans la vue"} else { self.dessin2d.trace.as_ref().map_or("", |t| t.invite()) };
         let contexte = match usage.map(|(u, _)| u) {
-            Some(Usage::Mur) => "Espace : inverser le sens · ",
-            Some(Usage::Escalier) => "Espace : justification de la ligne · Longueur magnétisée au giron · Départ, un sommet par palier, arrivée · Marches calculées selon le niveau supérieur · ",
+            Some(Usage::Mur) => "Ctrl : justification · Espace : inverser le sens · ",
+            Some(Usage::Escalier) => "Ctrl ou Espace : justification de la ligne · Longueur magnétisée au giron · Départ, un sommet par palier, arrivée · Marches calculées selon le niveau supérieur · ",
             Some(Usage::GardeCorps) => "Cliquer les sommets · Sur un escalier, sélectionner Garde-corps dans les options · ",
             Some(Usage::Cadrage) => "Tracer un contour fermé, puis valider · ",
             Some(Usage::Terrain) if self.dessin2d.dalle.is_empty() => "Tracer le périmètre fermé du terrain · ",
             _ => "",
         };
-        let aide = if usage.is_some() { format!("{contexte}@x;y · #dx;dy · distance<angle ou distance>angle · distance seule ({}) · Maj : ortho", u.suffixe().trim()) } else { String::new() };
+        let aide = if usage.is_some() { format!("{contexte}@x;y · #dx;dy · distance<angle ou distance>angle · Tab : changer de champ · distance ({}) · Maj : ortho", u.suffixe().trim()) } else { String::new() };
         let police = egui::FontId::monospace(13.0);
         let largeur = (rect.width() - 20.0).max(1.0);
         let bleu = Color32::from_rgb(55, 130, 200);

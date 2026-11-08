@@ -64,6 +64,8 @@ impl RubanEdition {
         let Some(mut surface) = self.selection.filter(|o| o.commande() == Outil::Surfaces) else {
             return false;
         };
+        let projet_vide = crate::modele::Projet::default();
+        let projet_apercu = projet.unwrap_or(&projet_vide);
         ui.add_space(6.0);
         egui::Frame::group(ui.style())
             .inner_margin(8.0)
@@ -126,7 +128,7 @@ impl RubanEdition {
                                         ui.painter().rect_filled(r, 3.0, if i == k { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
                                     }
                                     let e: f64 = couches.iter().map(|c| c.epaisseur).sum();
-                                    pile_couches(ui, egui::Rect::from_min_size(r.min + egui::vec2(8.0, 4.0), egui::vec2(26.0, 16.0)), couches);
+                                    pile_couches(ui, egui::Rect::from_min_size(r.min + egui::vec2(8.0, 4.0), egui::vec2(26.0, 16.0)), projet_apercu, couches);
                                     ui.painter().text(r.min + egui::vec2(42.0, 12.0), egui::Align2::LEFT_CENTER, nom, egui::FontId::proportional(12.0), ui.visuals().text_color());
                                     ui.painter().text(r.right_center() - egui::vec2(8.0, 0.0), egui::Align2::RIGHT_CENTER, crate::config::options::unite().afficher(e), egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
                                     if reponse.clicked() {
@@ -154,7 +156,7 @@ impl RubanEdition {
                     for c in couches {
                         ui.horizontal(|ui| {
                             let (r, _) = ui.allocate_exact_size(egui::vec2(16.0, 12.0), Sense::hover());
-                            pile_couches(ui, r, std::slice::from_ref(c));
+                            pile_couches(ui, r, projet_apercu, std::slice::from_ref(c));
                             ui.label(RichText::new(format!("{} · {}", c.materiau.as_deref().unwrap_or("Couche"), crate::config::options::unite().afficher(c.epaisseur))).small());
                             ui.label(RichText::new(c.fonction.libelle()).small().weak());
                         });

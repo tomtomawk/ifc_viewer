@@ -93,7 +93,7 @@ fn centre_courbure(tris: &[[[f64; 2]; 3]]) -> Option<[f64; 2]> {
 
 /// Ligne d'isolant d'une couche courbe : motif tracé en coordonnées polaires (abscisse le
 /// long du rayon moyen, ordonnée radiale) puis ramené dans le plan.
-fn ligne_isolation_courbe(tris: &[[[f64; 2]; 3]], o: [f64; 2]) -> Vec<[[f64; 2]; 2]> {
+pub(super) fn ligne_isolation_courbe(tris: &[[[f64; 2]; 3]], o: [f64; 2]) -> Vec<[[f64; 2]; 2]> {
     use glam::DVec2;
     let o = DVec2::from_array(o);
     let pts: Vec<DVec2> = tris.iter().flatten().map(|p| DVec2::from_array(*p)).collect();

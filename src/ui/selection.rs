@@ -3,6 +3,8 @@ use super::*;
 
 impl ViewerApp {
     pub(super) fn select(&mut self, id: Option<Id>, reveal: bool) {
+        self.cote_axe = None;
+        self.cote_arc = None;
         self.bim.selection.clear();
         self.bim.origine = false;
         self.selection_multiple.clear();

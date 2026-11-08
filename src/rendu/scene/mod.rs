@@ -287,6 +287,8 @@ pub struct CoucheCoupe {
     pub motif_fond: Option<Arc<crate::formats::rvt::vues::Motif>>,
     /// Ligne d'isolant en boucles au milieu de la couche (premier plan).
     pub isolation: bool,
+    /// Centre du mur courbe dans le repère du modèle, en mètres.
+    pub centre_isolation: Option<[f64; 2]>,
     /// Épaisseur du contour de coupe (mm du papier, plume de la couche).
     pub trait_mm: f64,
     pub motif: Option<Arc<crate::formats::rvt::vues::Motif>>,

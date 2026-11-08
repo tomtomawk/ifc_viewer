@@ -227,13 +227,17 @@ mod tests {
             assert!(!g.surfaces(s).is_empty(), "{s:?}");
         }
         assert!(!g.types_murs.is_empty());
+        // Au 1:100, 13 mm de placo donnent 0,13 mm sur papier : les contours
+        // de finition et de structure doivent laisser un espace entre eux.
+        assert!((g.plumes[1] + g.plumes[4]) / 2.0 < 13.0 / 100.0);
         // types de trait du gabarit : ceux du code, valides
         assert_eq!(g.types_traits, crate::modele::documentation::types_traits_standard());
         g.types_traits.iter().try_for_each(|t| t.valider()).unwrap();
         assert!(!g.niveaux.is_empty());
         assert_eq!(g.materiau("Laine minérale").motif, MotifCoupe::Isolation);
         assert!(g.motifs.iter().any(|m| m.nom == "Béton"));
-        assert_eq!(g.materiau("Béton armé").couleur, [176, 176, 170]);
+        assert_eq!(g.materiau("Béton armé").couleur, [176, 176, 176]);
+        assert_eq!(g.materiau("Béton armé").motif, MotifCoupe::Uni);
     }
 
     #[test]

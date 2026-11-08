@@ -145,43 +145,14 @@ impl ViewerApp {
                     }
 
                 }
+                Some(Outil::AttacherToiture) => {
+                    let murs = &self.bim.murs_a_attacher;
+                    ui.label(if murs.is_empty() { "Cliquer un mur, puis la toiture dans la vue.".to_string() } else { format!("{} mur(s) : cliquer la toiture dans la vue.", murs.len()) });
+                    if ui.add_enabled(!murs.is_empty(), egui::Button::new("Détacher de la toiture")).clicked() {
+                        commande = Some(Commande::Attacher { ids: murs.clone(), toiture: None });
+                    }
+                }
                 _ => {}
-            }
-            if selection_seule && assemblage_seul {
-                ui.menu_button("Mise à jour depuis le type", |ui| {
-                if ui
-                    .button("Préparer la mise à jour depuis le type")
-                    .clicked()
-                {
-                    match self
-                        .natif
-                        .as_ref()
-                        .unwrap()
-                        .0
-                        .executer(Commande::ActualiserType {
-                            assemblage: ids[0].clone(),
-                        }) {
-                        Ok((p, _)) => self.bim.preview_type = Some(p),
-                        Err(e) => self.error = Some(e),
-                    }
-                }
-                if let Some(p) = &self.bim.preview_type {
-                    for m in p.couches_assemblage(&ids[0]) {
-                        ui.label(format!(
-                            "{} · {}",
-                            m.nom,
-                            crate::config::options::unite()
-                                .afficher(p.type_mur(&m.type_mur).map_or(0.0, |t| t.epaisseur()))
-                        ));
-                    }
-                    if ui.button("Appliquer cette composition").clicked() {
-                        commande = Some(Commande::ActualiserType {
-                            assemblage: ids[0].clone(),
-                        });
-                        self.bim.preview_type = None;
-                    }
-                }
-                });
             }
         });
         if let Some(c) = commande {
@@ -212,27 +183,11 @@ impl ViewerApp {
         }
     }
 
-    /// Jonctions et haut des murs, ouvert depuis le bouton Jonctions du ruban (Modifier).
+    /// Priorité de jonction, ouverte depuis le bouton Jonctions du ruban (Modifier).
     pub(in crate::ui) fn menu_jonctions(&mut self, ui: &mut egui::Ui) {
         use crate::modele::edition::commandes::Commande;
         let ids = self.selection_bim();
-        let toitures: Vec<(String, String)> = self.natif.as_ref().map(|(p, _)| {
-            p.dalles.iter().filter(|d| d.sorte == crate::modele::SorteDalle::Toiture).map(|d| (d.id.clone(), d.nom.clone())).collect()
-        }).unwrap_or_default();
         let mut commande = None;
-        egui::ComboBox::from_id_salt("toit_attache")
-            .selected_text(if self.bim.toiture.is_empty() { "Toiture" } else { &self.bim.toiture })
-            .show_ui(ui, |ui| {
-                for (id, nom) in &toitures {
-                    ui.selectable_value(&mut self.bim.toiture, id.clone(), nom);
-                }
-            });
-        if ui.add_enabled(!self.bim.toiture.is_empty(), egui::Button::new("Attacher à la sous-face")).clicked() {
-            commande = Some(Commande::Attacher { ids: ids.clone(), toiture: Some(self.bim.toiture.clone()) });
-        }
-        if ui.button("Détacher").clicked() {
-            commande = Some(Commande::Attacher { ids: ids.clone(), toiture: None });
-        }
         ui.horizontal(|ui| {
             ui.label("Priorité de jonction");
             ui.add(egui::DragValue::new(&mut self.bim.priorite));
@@ -259,7 +214,7 @@ impl ViewerApp {
         }
         // la barre n'apparaît que pendant un outil ; les commandes de la sélection sont
         // dans le ruban (Jonctions, Copier sur niveaux) et dans Propriétés
-        matches!(self.ruban_edition.outil(), Some(Outil::Deplacer | Outil::Copier | Outil::Tourner | Outil::Symetrie | Outil::Reseau | Outil::Echelle | Outil::Aligner | Outil::Decaler | Outil::Scinder | Outil::Demolir | Outil::Reproduire | Outil::ChangerHote | Outil::Inverser | Outil::Ajuster))
+        matches!(self.ruban_edition.outil(), Some(Outil::Deplacer | Outil::Copier | Outil::Tourner | Outil::Symetrie | Outil::Reseau | Outil::Echelle | Outil::Aligner | Outil::Decaler | Outil::Scinder | Outil::Demolir | Outil::Reproduire | Outil::ChangerHote | Outil::Inverser | Outil::Ajuster | Outil::AttacherToiture))
     }
 
     pub(in crate::ui) fn vue_native_id(&self) -> Option<String> {

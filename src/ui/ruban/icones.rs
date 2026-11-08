@@ -59,7 +59,8 @@ pub(super) fn bouton_outil(
     resp.on_hover_text(match outil {
         Outil::ModifierContour => "Modifier le tracé d'un contour, d'une polyligne ou d'un terrain (MT)",
         Outil::CopierNiveau => "Copier la sélection sur un niveau en conservant la position en plan",
-        Outil::Jonctions => "Jonctions et haut des murs : attacher à une toiture, priorité de jonction",
+        Outil::Jonctions => "Priorité des jonctions entre murs",
+        Outil::AttacherToiture => "Attacher un ou plusieurs murs à la sous-face d'une toiture : sélectionner les murs puis cliquer la toiture",
         Outil::CreerIdentique => "Créer à l'identique (CS)",
         Outil::Deplacer => "Déplacer (MV) : point de base, puis destination ou distance tapée",
         Outil::Copier => "Copier (CO) : point de base, puis destination ; Multiple pour enchaîner",
@@ -90,16 +91,16 @@ pub(super) fn bouton_outil(
 
 /// Composition d'un type en bande horizontale : une case par couche, largeur
 /// proportionnelle à l'épaisseur, couleur du matériau ; extérieur à gauche.
-pub(super) fn bande_couches_brouillon(ui: &mut egui::Ui, materiaux: &[crate::modele::Materiau], couches: &[crate::modele::Couche], hauteur: f32) {
+pub(super) fn bande_couches_brouillon(ui: &mut egui::Ui, projet: &crate::modele::Projet, materiaux: &[crate::modele::Materiau], couches: &[crate::modele::Couche], hauteur: f32) {
     let (r, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), hauteur), Sense::hover());
-    if let Some(c) = peindre_bande_couches(ui.painter(), r, materiaux, couches, resp.hover_pos()) {
+    if let Some(c) = peindre_bande_couches(ui.painter(), r, projet, materiaux, couches, resp.hover_pos()) {
         resp.on_hover_text(texte_couche(c));
     }
 }
 
 /// Plan des couches dans `r`, de l'extérieur (à gauche) vers l'intérieur, chaque couche
 /// à la largeur de son épaisseur et à la couleur de son matériau. Rend la couche survolée.
-pub(super) fn peindre_bande_couches<'a>(p: &egui::Painter, r: egui::Rect, materiaux: &[crate::modele::Materiau], couches: &'a [crate::modele::Couche], survol: Option<egui::Pos2>) -> Option<&'a crate::modele::Couche> {
+pub(super) fn peindre_bande_couches<'a>(p: &egui::Painter, r: egui::Rect, projet: &crate::modele::Projet, materiaux: &[crate::modele::Materiau], couches: &'a [crate::modele::Couche], survol: Option<egui::Pos2>) -> Option<&'a crate::modele::Couche> {
     let total: f64 = couches.iter().map(|c| c.epaisseur.max(0.0)).sum();
     if total <= 0.0 {
         return None;
@@ -110,9 +111,8 @@ pub(super) fn peindre_bande_couches<'a>(p: &egui::Painter, r: egui::Rect, materi
         let l = (c.epaisseur.max(0.0) / total) as f32 * r.width();
         let case = egui::Rect::from_min_size(egui::pos2(x, r.top()), egui::vec2(l, r.height()));
         let m = c.materiau.as_ref().and_then(|n| materiaux.iter().find(|m| &m.nom == n)).cloned()
-            .unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(c.materiau.as_deref().unwrap_or("")));
-        let [cr, cg, cb] = m.couleur;
-        p.rect_filled(case, 0.0, Color32::from_rgb(cr, cg, cb));
+            .unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(c.materiau.as_deref().unwrap_or("Mur générique")));
+        peindre_materiau_coupe(p, case, projet, &m, true);
         p.rect_stroke(case, 0.0, egui::Stroke::new(0.6, Color32::from_gray(90)), egui::StrokeKind::Inside);
         if survol.is_some_and(|q| case.contains(q)) {
             vise = Some(c);
@@ -120,6 +120,37 @@ pub(super) fn peindre_bande_couches<'a>(p: &egui::Painter, r: egui::Rect, materi
         x += l;
     }
     vise
+}
+
+/// Motifs de coupe du matériau, limités à la vignette de la couche.
+pub(super) fn peindre_materiau_coupe(p: &egui::Painter, r: egui::Rect, projet: &crate::modele::Projet, m: &crate::modele::Materiau, vertical: bool) {
+    use crate::modele::MotifCoupe;
+    if !r.is_positive() { return; }
+    let (fond, couleur) = m.fond_coupe();
+    let [r0, g0, b0] = m.couleur;
+    p.rect_filled(r, 0.0, Color32::from_rgb(r0, g0, b0));
+    let dessiner = |motif: &MotifCoupe, couleur: [u8; 3]| {
+        if let Some(definition) = projet.definition_motif(motif) {
+            super::super::aides::apercu_motif_colore(p, r, &definition, 3.0, Color32::from_rgb(couleur[0], couleur[1], couleur[2]));
+        }
+    };
+    if fond != MotifCoupe::Uni { dessiner(&fond, couleur); }
+    let encre = m.encre_coupe();
+    match &m.motif {
+        MotifCoupe::Uni => { p.rect_filled(r, 0.0, Color32::from_rgb(encre[0], encre[1], encre[2])); }
+        MotifCoupe::Vide => {}
+        MotifCoupe::Isolation => {
+            let longueur = if vertical { r.height() } else { r.width() };
+            let amplitude = (if vertical { r.width() } else { r.height() } * 0.38).min(5.0);
+            let points: Vec<_> = (0..=((longueur / 2.0).ceil() as usize).min(512)).map(|i| {
+                let v = (i as f32 * 2.0).min(longueur);
+                let oscillation = (v * std::f32::consts::PI / 6.0).sin() * amplitude;
+                if vertical { egui::pos2(r.center().x + oscillation, r.top() + v) } else { egui::pos2(r.left() + v, r.center().y + oscillation) }
+            }).collect();
+            if points.len() >= 2 { p.with_clip_rect(r).add(egui::Shape::line(points, egui::Stroke::new(1.0, Color32::from_rgb(encre[0], encre[1], encre[2])))); }
+        }
+        motif => dessiner(motif, encre),
+    }
 }
 
 /// Infobulle d'une couche : matériau, fonction, épaisseur.
@@ -445,6 +476,16 @@ pub(super) fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             seg((0.38, 0.9), (0.38, 0.38));
             seg((0.38, 0.38), (0.9, 0.38));
             seg((0.1, 0.1), (0.38, 0.38));
+        }
+        AttacherToiture => {
+            seg((0.1, 0.42), (0.5, 0.12));
+            seg((0.5, 0.12), (0.9, 0.42));
+            seg((0.24, 0.42), (0.24, 0.88));
+            seg((0.76, 0.42), (0.76, 0.88));
+            seg((0.24, 0.88), (0.76, 0.88));
+            seg((0.5, 0.8), (0.5, 0.42));
+            seg((0.36, 0.56), (0.5, 0.42));
+            seg((0.64, 0.56), (0.5, 0.42));
         }
         ModifierContour => {
             seg((0.12, 0.24), (0.70, 0.12));

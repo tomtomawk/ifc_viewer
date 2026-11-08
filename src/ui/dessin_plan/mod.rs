@@ -55,10 +55,13 @@ pub(super) struct EtatDessin2D {
     ligne_selection: Option<d2::Forme2D>,
     pub arc_glisse: Option<(String,usize,[DVec2;3])>,
     pub saisie: String,
+    champ_angle: bool,
+    controle_seul: bool,
     curseur: Option<DVec2>,
     point: Option<(DVec2, Accroche)>,
     geoms: Option<(u64, String, Vec<Geom>)>,
     survol_accroche: Option<(DVec2, f64)>,
+    survol_segment: Option<(DVec2, DVec2, f64, bool)>,
     reference: Option<DVec2>,
     directions_reference: Vec<DVec2>,
     guides: Vec<(DVec2, DVec2)>,
@@ -720,17 +723,12 @@ impl ViewerApp {
         g
     }
 
-    /// Extrémité de mur glissée : accrochages du tracé, plus le prolongement de la ligne
-    /// d'origine du mur (`fixe` → `origine`) et sa perpendiculaire.
-    pub(super) fn point_edition_axe(&mut self,ui:&egui::Ui,rect:egui::Rect,q:egui::Pos2,maj:bool,fixe:[f64;2],origine:[f64;2])->Option<[f64;2]> {
+    /// Extrémité de mur glissée : accrochages et cote depuis l'extrémité fixe.
+    pub(super) fn point_edition_axe(&mut self,ui:&egui::Ui,rect:egui::Rect,q:egui::Pos2,maj:bool,fixe:[f64;2],_origine:[f64;2])->Option<[f64;2]> {
         let c=self.depuis_ecran(rect,q)?;
         let fixe=DVec2::from_array(fixe);
         let mut trace=Trace::new(OutilDessin::Ligne);
         trace.points.push(fixe);
-        // ancienne extrémité : la ligne du mur devient un trait de construction (magnétisme
-        // sur son prolongement)
-        let origine=DVec2::from_array(origine);
-        if origine.distance(fixe)>1e-6 {trace.points.push(origine);}
         self.dessin2d.trace=Some(trace);
         let point=self.point_dessin_depuis(rect,c,maj,ui.input(|i|i.time),Some(fixe));
         self.dessin2d.curseur=Some(c);
@@ -747,6 +745,7 @@ impl ViewerApp {
         self.dessin2d.reference=None;
         self.dessin2d.directions_reference.clear();
         self.dessin2d.survol_accroche=None;
+        self.dessin2d.saisie.clear();
     }
     pub(super) fn etat_accrochage(&self)->serde_json::Value {
         serde_json::json!({"trace":self.dessin2d.trace.as_ref().map(|t|t.points.iter().map(|p|p.to_array()).collect::<Vec<_>>()),"reference":self.dessin2d.reference.map(|p|p.to_array()),"point":self.dessin2d.point.map(|(p,a)|serde_json::json!({"position":p.to_array(),"accroche":a.libelle()}))})

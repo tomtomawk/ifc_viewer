@@ -16,6 +16,20 @@ impl ViewerApp {
         }
         let aspect = rect.width() / rect.height().max(1.0);
         let mode_ajuster=self.preparer_outil_ajuster();
+        let mode_attache = self.onglet_ruban == OngletRuban::Modifier && self.ruban_edition.outil() == Some(crate::ui::ruban::Outil::AttacherToiture) && self.natif.is_some() && self.loading.is_none();
+        if mode_attache && !self.bim.attache_toiture_active {
+            let selection = self.selection_bim();
+            let projet = &self.natif.as_ref().unwrap().0;
+            self.bim.murs_a_attacher = selection.into_iter().filter_map(|id| {
+                if projet.assemblage(&id).is_some() { Some(id) }
+                else { projet.murs.iter().find(|m| m.id == id).map(|m| m.assemblage.clone().unwrap_or(id)) }
+            }).collect();
+            self.bim.murs_a_attacher.sort();
+            self.bim.murs_a_attacher.dedup();
+        } else if !mode_attache && self.bim.attache_toiture_active {
+            self.bim.murs_a_attacher.clear();
+        }
+        self.bim.attache_toiture_active = mode_attache;
         let mode_mur = self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.mur_actif() && self.natif.is_some() && self.loading.is_none();
         // dalle (ou sol) : contour cliqué sur le plan de son dessus
         let dalle = if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() { self.ruban_edition.dalle_active() } else { None };
@@ -55,7 +69,7 @@ impl ViewerApp {
         // Déplacer, Copier, Tourner, Aligner : socle commun (transformer.rs)
         self.suivre_transformation();
         let deplacement = self.transfo.outil;
-        let mode_trace = mode_ajuster || mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || placement.is_some() || deplacement.is_some() || self.outil_dessin().is_some() || self.dessin2d.edition_contour.is_some() || self.alignement_plan || self.orientation_nord_en_cours;
+        let mode_trace = mode_attache || mode_ajuster || mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || placement.is_some() || deplacement.is_some() || self.outil_dessin().is_some() || self.dessin2d.edition_contour.is_some() || self.alignement_plan || self.orientation_nord_en_cours;
         // axe du mur sélectionné : une extrémité saisie se déplace (accrochages du tracé)
         let edition_arc=self.souris_arc_mur(ui,rect,&resp,mode_trace);
         let axe = if mode_trace || edition_arc { None } else { self.axe_selection() };
@@ -66,8 +80,12 @@ impl ViewerApp {
             {
                 let proche = |e: Option<egui::Pos2>| e.is_some_and(|e| e.distance(q) <= 9.0);
                 if proche(eb) {
+                    self.cote_axe = None;
+                    self.dessin2d.saisie.clear();
                     self.poignee_axe = Some((id.clone(), true, *b));
                 } else if proche(ea) {
+                    self.cote_axe = None;
+                    self.dessin2d.saisie.clear();
                     self.poignee_axe = Some((id.clone(), false, *a));
                 }
             }
@@ -89,8 +107,11 @@ impl ViewerApp {
             self.terminer_edition_axe();
         }
         if resp.drag_stopped() && let Some((id, fin, p)) = self.poignee_axe.take() {
+            let saisie_valide = self.dessin2d.saisie.is_empty() || self.dessin2d.saisie.replace(',', ".").parse::<f64>().is_ok_and(|v| v.is_finite() && v > 0.0);
             self.terminer_edition_axe();
-            if let Some((projet, _)) = &self.natif {
+            let fixe = axe.as_ref().map(|(_, a, b, _, _)| if fin { *a } else { *b });
+            if !saisie_valide { self.error = Some("Saisissez une longueur positive et finie.".into()); }
+            else if let Some((projet, _)) = &self.natif {
                 let resultat=(|| {
                     let mut copie=projet.clone();
                     copie.deplacer_extremite_justification(&id,fin,p)?;
@@ -99,7 +120,13 @@ impl ViewerApp {
                     Ok::<_,String>(copie)
                 })();
                 match resultat.and_then(|p|self.appliquer_projet(p)) {
-                    Ok(())=>self.status="Mur modifié — Ctrl+S pour enregistrer.".into(),
+                    Ok(())=>{
+                        if let Some(fixe) = fixe {
+                            let longueur = (p[0] - fixe[0]).hypot(p[1] - fixe[1]) / crate::config::options::unite().facteur();
+                            self.cote_axe = Some((id, fin, crate::formats::ifc::step::format_real(longueur)));
+                        }
+                        self.status="Mur modifié — cliquer la cote pour saisir une longueur.".into();
+                    },
                     Err(e)=>self.error=Some(e),
                 }
             }
@@ -190,6 +217,29 @@ impl ViewerApp {
                 if annuler { self.fenetre_selection = None; }
                 else if resp.drag_stopped_by(PointerButton::Primary) {
                     if let Some(f) = self.fenetre_selection.take() { self.selectionner_rectangle(rect, f); }
+                }
+            } else if mode_attache {
+                if resp.clicked_by(PointerButton::Secondary) { self.ruban_edition.annuler(); }
+                if resp.clicked() && let Some(q) = resp.interact_pointer_pos() {
+                    let cible = pick(self, q).and_then(|(objet, _)| self.scene.as_ref()?.objects.get(objet as usize).map(|o| o.id))
+                        .and_then(|id| self.cle_native(self.cible_clic(id)));
+                    if let Some(id) = cible {
+                        let projet = &self.natif.as_ref().unwrap().0;
+                        if projet.dalles.iter().any(|d| d.id == id && d.sorte == crate::modele::SorteDalle::Toiture) {
+                            if self.bim.murs_a_attacher.is_empty() {
+                                self.status = "Attacher au toit : choisissez d'abord un ou plusieurs murs.".into();
+                            } else {
+                                let ids = self.bim.murs_a_attacher.clone();
+                                match self.executer_bim(crate::modele::edition::commandes::Commande::Attacher { ids, toiture: Some(id) }) {
+                                    Ok(_) => { self.status = "Murs attachés à la sous-face de la toiture.".into(); self.ruban_edition.annuler(); }
+                                    Err(e) => self.error = Some(e),
+                                }
+                            }
+                        } else if let Some(mur) = projet.assemblage(&id).map(|a| a.id.clone()).or_else(|| projet.murs.iter().find(|m| m.id == id).map(|m| m.assemblage.clone().unwrap_or(id))) {
+                            if !self.bim.murs_a_attacher.contains(&mur) { self.bim.murs_a_attacher.push(mur); }
+                            self.status = "Mur ajouté : cliquez la toiture, ou ajoutez d'autres murs.".into();
+                        } else { self.status = "Attacher au toit : cliquez un mur ou une toiture.".into(); }
+                    }
                 }
             } else if mode_ajuster {
                 let hit=resp.hover_pos().or(resp.interact_pointer_pos()).and_then(|q|pick(self,q).map(|(obj,_)|obj));
@@ -444,6 +494,25 @@ impl ViewerApp {
                         if let (Some(x), Some(y)) = (self.ecran_plan(rect, a, alt), self.ecran_plan(rect, p, alt)) {
                             painter.line_segment([x, y], egui::Stroke::new(2.0, couleur));
                             painter.text(x.lerp(y, 0.5) + egui::vec2(0.0, -16.0), egui::Align2::CENTER_CENTER, crate::config::options::unite().afficher((p[0]-a[0]).hypot(p[1]-a[1])), egui::FontId::proportional(13.0), couleur);
+                        }
+                    }
+                }
+            }
+        }
+        if mode_attache {
+            let texte = if self.bim.murs_a_attacher.is_empty() {
+                "Attacher au toit : cliquer un mur, puis une toiture".to_string()
+            } else {
+                format!("Attacher au toit : {} mur(s) choisi(s) · cliquer une toiture ou ajouter un mur", self.bim.murs_a_attacher.len())
+            };
+            let painter = ui.painter().with_clip_rect(rect);
+            painter.text(rect.left_top() + egui::vec2(12.0, self.dessin2d.bas_barre.max(4.0) + 8.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), Color32::from_rgb(55, 130, 200));
+            if let Some((projet, _)) = &self.natif {
+                for id in &self.bim.murs_a_attacher {
+                    if let Some((a, b, _)) = projet.axe_element(id) {
+                        let z = projet.trajectoire_justification(id).map_or(0.0, |(_, z)| z);
+                        if let (Some(a), Some(b)) = (self.ecran_plan(rect, a, z), self.ecran_plan(rect, b, z)) {
+                            painter.line_segment([a, b], egui::Stroke::new(3.0, Color32::from_rgb(230, 120, 20)));
                         }
                     }
                 }

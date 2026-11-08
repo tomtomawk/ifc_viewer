@@ -1414,8 +1414,8 @@ mod tests {
     fn plume_par_couche() {
         let mut p = Projet::nouveau("P");
         let mut c = Couche { materiau: None, epaisseur: 200.0, fonction: FonctionCouche::Structure, plume: None, retour: false };
-        // structure : plume 5 (0,18 mm) par défaut
-        assert_eq!(p.trait_couche(&c), 0.18);
+        // structure : plume 5 du gabarit embarqué (0,10 mm)
+        assert_eq!(p.trait_couche(&c), 0.10);
         c.plume = Some(8);
         assert_eq!(p.trait_couche(&c), 0.50);
         // table du projet prioritaire, complétée à 12 plumes

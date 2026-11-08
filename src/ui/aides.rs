@@ -267,6 +267,10 @@ pub(super) fn load_state_fr(s: &str) -> &str {
 
 /// Aperçu d'un motif de hachures dans `r` : traits du motif, `px_mm` pixels par mm du papier.
 pub(super) fn apercu_motif(p: &egui::Painter, r: egui::Rect, d: &crate::modele::DefinitionMotif, px_mm: f32) {
+    apercu_motif_colore(p, r, d, px_mm, Color32::from_gray(40));
+}
+
+pub(super) fn apercu_motif_colore(p: &egui::Painter, r: egui::Rect, d: &crate::modele::DefinitionMotif, px_mm: f32, couleur: Color32) {
     use crate::formats::rvt::vues::{hachures_plan, GrilleMotif, Motif};
     let m = Motif {
         nom: d.nom.clone(),
@@ -278,7 +282,7 @@ pub(super) fn apercu_motif(p: &egui::Painter, r: egui::Rect, d: &crate::modele::
     let p = p.with_clip_rect(r);
     for [a, b] in hachures_plan(&tris, &m, 1.0, 4_000) {
         let q = |x: [f64; 2]| egui::pos2(r.left() + x[0] as f32 * px_mm, r.bottom() - x[1] as f32 * px_mm);
-        p.line_segment([q(a), q(b)], egui::Stroke::new(1.0, Color32::from_gray(40)));
+        p.line_segment([q(a), q(b)], egui::Stroke::new(1.0, couleur));
     }
 }
 

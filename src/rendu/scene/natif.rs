@@ -129,7 +129,11 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         let couleur = opacite(materiau.as_ref(), couleur);
         let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
         if let Some(x) = &materiau {
-            couches_coupe.push((id, coupe_materiau(projet, x, vec![neutre, neutre], type_mur.couches.first().map_or(crate::dessin::TRAIT_FORT_MM, |c| projet.trait_couche(c)))));
+            let mut bandes = coupe_materiau(projet, x, vec![neutre, neutre], type_mur.couches.first().map_or(crate::dessin::TRAIT_FORT_MM, |c| projet.trait_couche(c)));
+            if let crate::modele::Axe::Arc { centre, .. } = m.axe {
+                for bande in &mut bandes { bande.centre_isolation = Some([centre[0] * 0.001, centre[1] * 0.001]); }
+            }
+            couches_coupe.push((id, bandes));
         } else if type_mur.couches.len() == 1 {
             // mur sans matériau : poché et hachures par défaut, mais en bande de coupe, pour
             // que les jonctions entre murs identiques se lisent sans trait
@@ -142,6 +146,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
                 couleur_motif: [70, 70, 70, 255],
                 hachure_defaut: true,
                 isolation: false,
+                centre_isolation: None,
                 trait_mm: crate::dessin::TRAIT_FORT_MM,
             }]));
         }
@@ -650,6 +655,7 @@ fn coupe_materiau(projet: &Projet, m: &crate::modele::Materiau, plans: Vec<Vec4>
         couleur_motif: [er, eg, eb, 255],
         hachure_defaut: false,
         isolation: m.motif == MotifCoupe::Isolation,
+        centre_isolation: None,
         trait_mm,
     }]
 }

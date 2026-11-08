@@ -257,6 +257,11 @@ impl Projet {
         let epaisseur = |p: &Projet, m: &Mur| p.type_mur(&m.type_mur).map(|t| t.epaisseur());
         let mut detachees = Vec::new();
         for asm in self.assemblages.clone() {
+            // Une recomposition du type déplace les couches ensemble : elle ne doit
+            // jamais être interprétée comme la modification isolée d'une couche.
+            if let Some(ancien) = avant.assemblage(&asm.id)
+                && (ancien.type_mur != asm.type_mur || avant.type_mur(&ancien.type_mur).zip(self.type_mur(&asm.type_mur)).is_some_and(|(a, b)| a.couches != b.couches))
+            { continue; }
             if asm.couches.len() < 2 { continue; }
             let murs: Vec<&Mur> = asm.couches.iter().filter_map(|c| self.murs.iter().find(|m| &m.id == c)).collect();
             let editee = |m: &Mur| avant.murs.iter().find(|x| x.id == m.id).is_some_and(|x| x.axe != m.axe);
@@ -328,6 +333,40 @@ mod tests {
             categorie: None, couches_detaillees: true,
             origine: None,
         }
+    }
+
+    #[test]
+    fn modification_type_actualise_tous_les_murs_sans_detacher_les_couches() {
+        let mut p = Projet::nouveau("A");
+        p.types_murs.push(type_trois_couches());
+        let mut ids = Vec::new();
+        for y in [0.0, 1000.0] {
+            let id = p.ajouter_mur([0.0, y], [5000.0, y], &ParametresMur::default()).unwrap();
+            p.murs.iter_mut().find(|m| m.id == id).unwrap().type_mur = "t".into();
+            p.eclater_mur(&id).unwrap();
+            p.implantations.insert(id.clone(), Reference::FaceExterieure);
+            ids.push(id);
+        }
+        let ancienne_couche = p.assemblage(&ids[0]).unwrap().couches[2].clone();
+        let nouvel_hote = p.assemblage(&ids[0]).unwrap().couches[1].clone();
+        p.ouvertures.push(Ouverture { id: "ouverture-test".into(), nom: "Ouverture".into(), genre: GenreOuverture::Libre, mur: ancienne_couche, type_ouverture: None, abscisse: 2500.0, largeur: 600.0, hauteur: 1000.0, allege: 500.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
+        let avant = p.clone();
+        let axes: Vec<_> = ids.iter().map(|id| p.trajectoire_justification(id).unwrap().0).collect();
+        let t = p.types_murs.iter_mut().find(|t| t.id == "t").unwrap();
+        t.couches[0].epaisseur = 45.0;
+        t.couches.pop();
+        p.actualiser_types_murs_modifies(&avant).unwrap();
+        assert!(p.detacher_couches_disjointes(&avant).is_empty());
+        assert_eq!(p.ouvertures[0].mur, nouvel_hote);
+        p.recaler_menuiseries(&avant).unwrap();
+        for (id, axe) in ids.iter().zip(axes) {
+            let assemblage = p.assemblage(id).unwrap();
+            assert_eq!(assemblage.type_mur, "t");
+            assert_eq!(assemblage.couches.len(), 2);
+            assert_eq!(p.trajectoire_justification(id).unwrap().0, axe);
+            assert_eq!(p.couches_assemblage(id).iter().map(|m| p.type_mur(&m.type_mur).unwrap().epaisseur()).collect::<Vec<_>>(), [45.0, 200.0]);
+        }
+        p.verifier().unwrap();
     }
 
     #[test]

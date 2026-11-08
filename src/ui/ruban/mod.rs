@@ -60,6 +60,7 @@ pub(crate) enum Outil {
     ModifierContour,
     CopierNiveau,
     Jonctions,
+    AttacherToiture,
     CreerIdentique,
     Supprimer,
     Cadrer,
@@ -125,6 +126,7 @@ impl Outil {
             Self::ModifierContour => "Modifier",
             Self::CopierNiveau => "Sur niveaux",
             Self::Jonctions => "Jonctions",
+            Self::AttacherToiture => "Attacher toit",
             Self::CreerIdentique => "Identique",
             Self::Supprimer => "Supprimer",
             Self::Cadrer => "Cadre",
@@ -256,7 +258,7 @@ fn icone_categorie_mur(ui: &egui::Ui, r: egui::Rect, c: crate::modele::Categorie
 
 /// Composition d'un élément horizontal en coupe : couches empilées du haut vers le bas,
 /// hauteur proportionnelle à l'épaisseur (2 px au moins), couleur du matériau.
-fn pile_couches(ui: &mut egui::Ui, r: egui::Rect, couches: &[crate::modele::Couche]) {
+fn pile_couches(ui: &mut egui::Ui, r: egui::Rect, projet: &crate::modele::Projet, couches: &[crate::modele::Couche]) {
     let total: f64 = couches.iter().map(|c| c.epaisseur).sum();
     if total <= 0.0 {
         return;
@@ -267,10 +269,9 @@ fn pile_couches(ui: &mut egui::Ui, r: egui::Rect, couches: &[crate::modele::Couc
     let mut y = r.top();
     for c in couches {
         let h = 2.0 + reste * (c.epaisseur / total) as f32;
-        let m = crate::modele::murs::assemblage::materiau_par_defaut(c.materiau.as_deref().unwrap_or(""));
-        let [cr, cg, cb] = m.couleur;
+        let m = c.materiau.as_ref().and_then(|n| projet.materiau(n)).cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(c.materiau.as_deref().unwrap_or("Mur générique")));
         let bande = egui::Rect::from_min_size(egui::pos2(r.left(), y), egui::vec2(r.width(), h));
-        p.rect_filled(bande, 0.0, Color32::from_rgb(cr, cg, cb));
+        peindre_materiau_coupe(p, bande, projet, &m, false);
         p.rect_stroke(bande, 0.0, egui::Stroke::new(0.5, Color32::from_gray(90)), egui::StrokeKind::Inside);
         y += h;
     }
@@ -297,7 +298,7 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
         Menu::Modifier => &[
             ("Transformer", &[Deplacer, Copier, Tourner, Symetrie, Reseau, Echelle]),
             ("Ajuster", &[Aligner, Decaler, Ajuster, Scinder, CreerIdentique, Supprimer]),
-            ("Éléments", &[ModifierContour, CopierNiveau, Jonctions, Demolir, Reproduire, ChangerHote]),
+            ("Éléments", &[ModifierContour, CopierNiveau, Jonctions, AttacherToiture, Demolir, Reproduire, ChangerHote]),
             // verrou (bascule) et visibilité ; Déverrouiller : DC, clic sur le cadenas, menu
             ("Verrou et visibilité", &[Inverser, Verrouiller, Isoler, Masquer, MasquerVue, Afficher]),
         ],
@@ -477,7 +478,7 @@ fn champs(o: Outil) -> Vec<Champ> {
     use Champ::*;
     use Outil::*;
     match o {
-        Surfaces | Niveau | Terrain | LimitePropriete | ModifierContour | CopierNiveau | Jonctions | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | MasquerVue | Afficher | Verrouiller | Deverrouiller | Feuilles | Nomenclatures => vec![],
+        Surfaces | Niveau | Terrain | LimitePropriete | ModifierContour | CopierNiveau | Jonctions | AttacherToiture | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | MasquerVue | Afficher | Verrouiller | Deverrouiller | Feuilles | Nomenclatures => vec![],
         Quadrillage => vec![Saisie("Repère", "A"), Choix("Tracé", &["Droit", "Arc"])],
         Mur => vec![
             Choix(

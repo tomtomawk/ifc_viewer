@@ -2,6 +2,15 @@
 use super::*;
 
 impl RubanEdition {
+    pub(in crate::ui) fn implantation_suivante(&mut self) {
+        let choix = ["Face extérieure", "Axe", "Face intérieure", "Axe du porteur"];
+        let valeur = self.valeurs.entry((Outil::Mur, 0)).or_insert_with(|| Valeur::Texte(choix[0].into()));
+        if let Valeur::Texte(nom) = valeur {
+            let suivant = choix.iter().position(|c| *c == nom).map_or(0, |i| (i + 1) % choix.len());
+            *nom = choix[suivant].into();
+        }
+    }
+
     /// Palette de création du mur : croquis des deux limites (haut, bas) avec leur
     /// réglage sur la même ligne, puis les propriétés du type en grille.
     pub fn proprietes_mur(
@@ -118,7 +127,15 @@ impl RubanEdition {
         // largeur, le plan des couches (de l'extérieur vers l'intérieur).
         let couches_actuelles = actuel.map(|t| t.couches.clone()).unwrap_or_default();
         let hauteur = if couches_actuelles.is_empty() { 30.0 } else { 56.0 };
-        let (r, bouton) = ui.allocate_exact_size(egui::vec2(largeur, hauteur), Sense::click());
+        let (r, _) = ui.allocate_exact_size(egui::vec2(largeur, hauteur), Sense::hover());
+        let zone_crayon = actuel.map(|_| egui::Rect::from_min_max(egui::pos2(r.right() - 27.0, r.top() + 29.0), egui::pos2(r.right() - 4.0, r.bottom() - 3.0)));
+        // Le crayon possède sa propre zone cliquable, distincte du sélecteur de type.
+        let bouton = if let Some(zone) = zone_crayon {
+            let haut = egui::Rect::from_min_max(r.min, egui::pos2(r.right(), zone.top()));
+            let bas = egui::Rect::from_min_max(egui::pos2(r.left(), zone.top()), egui::pos2(zone.left(), r.bottom()));
+            ui.interact(haut, ui.scope_id().with("type_mur_selecteur_haut"), Sense::click())
+                .union(ui.interact(bas, ui.scope_id().with("type_mur_selecteur_bas"), Sense::click()))
+        } else { ui.interact(r, ui.scope_id().with("type_mur_selecteur"), Sense::click()) };
         let visuel = ui.style().interact(&bouton).clone();
         ui.painter().rect(r, 3.0, visuel.bg_fill, visuel.bg_stroke, egui::StrokeKind::Inside);
         let ligne = egui::Rect::from_min_size(r.min, egui::vec2(r.width(), 28.0));
@@ -136,9 +153,19 @@ impl RubanEdition {
         let mut bulle = format!("{titre}\nType des prochains murs. Un type à plusieurs couches crée un mur par couche, regroupés en assemblage.");
         if !couches_actuelles.is_empty() {
             let plan = egui::Rect::from_min_max(egui::pos2(r.left() + 8.0, ligne.bottom()), egui::pos2(r.right() - 8.0, r.bottom() - 7.0));
-            if let Some(c) = peindre_bande_couches(ui.painter(), plan, &projet.materiaux, &couches_actuelles, bouton.hover_pos()) {
+            if let Some(c) = peindre_bande_couches(ui.painter(), plan, projet, &projet.materiaux, &couches_actuelles, bouton.hover_pos()) {
                 bulle = texte_couche(c);
             }
+        }
+        if let (Some(zone), Some(type_mur)) = (zone_crayon, actuel) {
+            let survol = ui.rect_contains_pointer(r);
+            let crayon = ui.interact(zone, ui.scope_id().with("type_mur_modifier_courant"), Sense::click())
+                .on_hover_text("Modifier le type de mur");
+            if survol || crayon.hovered() {
+                ui.painter().rect_filled(zone, 3.0, if crayon.hovered() { ui.visuals().widgets.hovered.bg_fill } else { visuel.bg_fill });
+                icone_action_type(ui.painter(), zone.shrink(5.0), true, ui.visuals().text_color());
+            }
+            if crayon.clicked() { editer = Some(type_mur.id.clone()); }
         }
         let bouton = bouton.on_hover_text(bulle);
         // Liste : assez large pour le dessin en plan, le nom le plus long et l'épaisseur.
@@ -181,7 +208,7 @@ impl RubanEdition {
                         ui.painter().rect_filled(r, 3.0, if courant { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
                     }
                     if !ligne.3.is_empty() {
-                        peindre_bande_couches(ui.painter(), egui::Rect::from_min_size(r.min + egui::vec2(8.0, 6.0), egui::vec2(40.0, 14.0)), &projet.materiaux, &ligne.3, None);
+                        peindre_bande_couches(ui.painter(), egui::Rect::from_min_size(r.min + egui::vec2(8.0, 6.0), egui::vec2(40.0, 14.0)), projet, &projet.materiaux, &ligne.3, None);
                     }
                     ui.painter().text(r.min + egui::vec2(58.0, 13.0), egui::Align2::LEFT_CENTER, &ligne.2, police.clone(), ui.visuals().text_color());
                     if ligne.1.is_some() {
@@ -353,7 +380,7 @@ impl RubanEdition {
                     }).response.on_hover_text("Catégorie du type : mur, mur composé ou cloison");
                 });
                 ui.add_space(4.0);
-                bande_couches_brouillon(ui, &ed.materiaux, &ed.couches, 18.0);
+                bande_couches_brouillon(ui, projet, &ed.materiaux, &ed.couches, 18.0);
                 ui.label(RichText::new("Extérieur").small().weak());
                 let mut action: Option<(usize, i32)> = None; // (couche, 0 supprimer)
                 // glisser-déposer : lignes (hauteur) et relâchement de la poignée

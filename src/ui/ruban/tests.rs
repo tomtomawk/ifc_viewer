@@ -51,6 +51,94 @@ fn boutons_modifier_declenchent_les_actions_sans_changer_outil() {
     }
 }
 
+#[test]
+fn bouton_attacher_toiture_active_la_selection_graphique() {
+    let ctx = egui::Context::default();
+    let mut ruban = RubanEdition::default();
+    let mut frame = |events| { let mut output = ctx.run_ui(egui::RawInput {
+        screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1800.0, 200.0))),
+        events, ..Default::default()
+    }, |ui| { egui::Panel::top("attacher_test").show(ui, |ui| {
+        ruban.afficher(ui, Menu::Modifier, Some(&crate::modele::Projet::default()));
+    }); }); output.textures_delta.clear(); output };
+    frame(vec![]);
+    let output = frame(vec![]);
+    let position = output.shapes.iter().find_map(|s| match &s.shape {
+        egui::Shape::Text(t) if t.galley.text() == Outil::AttacherToiture.nom() => Some(t.pos + t.galley.size() / 2.0),
+        _ => None,
+    }).expect("bouton Attacher toit absent");
+    for pressed in [true, false] {
+        frame(vec![egui::Event::PointerMoved(position), egui::Event::PointerButton {
+            pos: position, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE,
+        }]);
+    }
+    drop(frame);
+    assert_eq!(ruban.outil(), Some(Outil::AttacherToiture));
+}
+
+#[test]
+fn apercu_des_couches_dessine_le_motif_de_coupe() {
+    use crate::modele::{Materiau, MotifCoupe, Projet};
+    let ctx = egui::Context::default();
+    let projet = Projet::nouveau("Aperçu");
+    let dessin = |motif| {
+        let materiau = Materiau { motif, ..Default::default() };
+        let mut sortie = ctx.run_ui(egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 200.0))),
+            ..Default::default()
+        }, |ui| {
+            egui::Panel::top("motif_test").show(ui, |ui| {
+                let r = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(80.0, 40.0));
+                peindre_materiau_coupe(ui.painter(), r, &projet, &materiau, true);
+            });
+        });
+        sortie.textures_delta.clear();
+        sortie.shapes.iter().filter(|s| matches!(s.shape, egui::Shape::LineSegment { .. })).count()
+    };
+    let sans_motif = dessin(MotifCoupe::Vide);
+    assert!(dessin(MotifCoupe::Diagonales) > sans_motif);
+    assert!(dessin(MotifCoupe::Perso("Béton".into())) > sans_motif);
+}
+
+#[test]
+fn crayon_du_type_courant_ouvre_son_editeur() {
+    let ctx = egui::Context::default();
+    let mut projet = crate::modele::Projet::nouveau("Test");
+    projet.types_murs.push(crate::modele::TypeCompose {
+        id: "mur-test".into(), nom: "Mur test".into(),
+        couches: vec![crate::modele::Couche { epaisseur: 200.0, ..Default::default() }],
+        categorie: None, couches_detaillees: true, origine: None,
+    });
+    let mut ruban = RubanEdition::default();
+    ruban.type_mur = Some("mur-test".into());
+    let mut frame = |events| {
+        let mut position = egui::Pos2::ZERO;
+        let mut sortie = ctx.run_ui(egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(500.0, 300.0))),
+            events, ..Default::default()
+        }, |ui| {
+            egui::Panel::top("selecteur_test").show(ui, |ui| {
+                ui.set_max_width(300.0);
+                let origine = ui.cursor().min;
+                position = egui::pos2(origine.x + ui.available_width() - 15.0, origine.y + 42.0);
+                ruban.selecteur_type_mur(ui, &projet, false);
+            });
+        });
+        sortie.textures_delta.clear();
+        position
+    };
+    let position = frame(vec![]);
+    frame(vec![egui::Event::PointerMoved(position)]);
+    for pressed in [true, false] {
+        frame(vec![egui::Event::PointerMoved(position), egui::Event::PointerButton {
+            pos: position, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE,
+        }]);
+    }
+    drop(frame);
+    assert!(ruban.editeur_type_ouvert());
+    assert_eq!(ruban.editeur_type.as_ref().and_then(|e| e.id.as_deref()), Some("mur-test"));
+}
+
 fn afficher(
     ctx: &egui::Context,
     ruban: &mut RubanEdition,

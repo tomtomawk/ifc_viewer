@@ -1,6 +1,46 @@
 //! Saisie des points, clavier, annulation et fin de commande.
 use super::*;
 
+fn ajouter_caractere_saisie(saisie: &mut String, angle: &mut bool, ch: char) {
+    if matches!(ch, '@' | '#') && (saisie.is_empty() || saisie == "<") {
+        saisie.clear();
+        saisie.push(ch);
+        *angle = false;
+    } else if matches!(ch, '<' | '>') && !saisie.starts_with(['@', '#']) {
+        if let Some(i) = saisie.find(['<', '>']) { saisie.replace_range(i..=i, &ch.to_string()); }
+        else { saisie.push(ch); }
+        *angle = true;
+    } else if *angle && !saisie.starts_with(['@', '#']) {
+        if !saisie.contains(['<', '>']) { saisie.push('<'); }
+        saisie.push(ch);
+    } else if let Some(i) = saisie.find(['<', '>']) {
+        saisie.insert(i, ch);
+    } else {
+        saisie.push(ch);
+    }
+}
+
+fn effacer_caractere_saisie(saisie: &mut String, angle: bool) {
+    if angle || !saisie.contains(['<', '>']) { saisie.pop(); }
+    else if let Some(i) = saisie.find(['<', '>']) && i > 0 { saisie.remove(i - 1); }
+}
+
+fn intersections_cercle_guide(centre: DVec2, rayon: f64, origine: DVec2, direction: DVec2) -> Vec<DVec2> {
+    let d = direction.normalize_or_zero();
+    if d == DVec2::ZERO { return Vec::new(); }
+    let pied = origine + d * (centre - origine).dot(d);
+    let h2 = rayon * rayon - pied.distance_squared(centre);
+    if h2 < 0.0 { return Vec::new(); }
+    let h = h2.sqrt();
+    vec![pied + d * h, pied - d * h]
+}
+
+pub(super) fn distance_saisie(saisie: &str, facteur: f64) -> Option<f64> {
+    if saisie.starts_with(['@', '#']) { return None; }
+    let distance = saisie.split(['<', '>']).next()?.replace(',', ".").parse::<f64>().ok()? * facteur;
+    (distance.is_finite() && distance > 0.0).then_some(distance)
+}
+
 /// Directions des éléments passant par un point de référence, pour leurs guides.
 fn directions_au_point(p: DVec2, geoms: &[Geom]) -> Vec<DVec2> {
     geoms.iter().filter_map(|g| match g {
@@ -25,6 +65,30 @@ mod tests_guides_perpendiculaires {
     use super::*;
 
     #[test]
+    fn distance_et_intersections_du_cercle_de_construction() {
+        assert_eq!(distance_saisie("2,5>45", 1000.0), Some(2500.0));
+        assert_eq!(distance_saisie("@2;3", 1000.0), None);
+        assert_eq!(distance_saisie("-2", 1.0), None);
+        let points = intersections_cercle_guide(DVec2::ZERO, 5.0, DVec2::new(3.0, 0.0), DVec2::Y);
+        assert_eq!(points, vec![DVec2::new(3.0, 4.0), DVec2::new(3.0, -4.0)]);
+        assert!(intersections_cercle_guide(DVec2::ZERO, 5.0, DVec2::new(6.0, 0.0), DVec2::Y).is_empty());
+    }
+
+    #[test]
+    fn saisie_alterne_les_champs_sans_perdre_les_valeurs() {
+        let mut texte = String::new();
+        let mut angle = false;
+        for ch in "2,5>45".chars() { ajouter_caractere_saisie(&mut texte, &mut angle, ch); }
+        assert_eq!(texte, "2,5>45");
+        angle = false;
+        ajouter_caractere_saisie(&mut texte, &mut angle, '0');
+        assert_eq!(texte, "2,50>45");
+        effacer_caractere_saisie(&mut texte, false);
+        effacer_caractere_saisie(&mut texte, true);
+        assert_eq!(texte, "2,5>4");
+    }
+
+    #[test]
     fn reference_sur_segment_incline_et_cercle() {
         let segment = Geom::Segment([DVec2::ZERO, DVec2::new(100.0, 100.0)]);
         let p = DVec2::new(30.0, 30.0);
@@ -46,6 +110,28 @@ impl ViewerApp {
     }
 
     pub(in crate::ui) fn point_dessin_depuis(&mut self, rect:egui::Rect,c:DVec2,maj:bool,temps:f64,precedent:Option<DVec2>)->(DVec2,Accroche) {
+        let (point, accroche) = self.point_dessin_libre(rect, c, maj, temps, precedent);
+        if let Some(depart) = precedent
+            && let Some(distance) = distance_saisie(&self.dessin2d.saisie, crate::config::options::unite().facteur())
+        {
+            let tolerance = self.vers_ecran(rect, c).zip(self.vers_ecran(rect, c + DVec2::X * 1000.0)).map_or(200.0, |(a, b)| 12.0 * 1000.0 / (a.distance(b) as f64).max(1e-6));
+            if !matches!(accroche, Accroche::Polaire(_)) && let Some(cible) = self.dessin2d.guides.iter()
+                .flat_map(|&(origine, direction)| intersections_cercle_guide(depart, distance, origine, direction))
+                .filter(|p| p.distance(c) <= tolerance)
+                .min_by(|a, b| a.distance(c).total_cmp(&b.distance(c)))
+            { return (cible, Accroche::Intersection); }
+            let direction = point - depart;
+            if direction.length_squared() > 1e-12 {
+                let cible = depart + direction.normalize() * distance;
+                let deplace = cible.distance(point) > 1e-6;
+                self.dessin2d.guides.retain(|(a, d)| (cible - *a).perp_dot(*d).abs() < 1e-5);
+                return (cible, if deplace && !matches!(accroche, Accroche::Polaire(_) | Accroche::Ortho) { Accroche::Libre } else { accroche });
+            }
+        }
+        (point, accroche)
+    }
+
+    fn point_dessin_libre(&mut self, rect:egui::Rect,c:DVec2,maj:bool,temps:f64,precedent:Option<DVec2>)->(DVec2,Accroche) {
         // Une valeur d'angle en cours de saisie verrouille le guide dès qu'elle est lisible.
         if let Some((_, angle)) = self.dessin2d.saisie.split_once(['<', '>'])
             && let Ok(angle) = angle.trim_end_matches('>').replace(',', ".").parse::<f64>()
@@ -54,8 +140,11 @@ impl ViewerApp {
         {
             let direction = DVec2::from_angle(angle.to_radians());
             self.dessin2d.survol_accroche = None;
+            self.dessin2d.survol_segment = None;
             self.dessin2d.guides = vec![(p, direction)];
-            return (p + direction * (c - p).dot(direction).max(0.0), Accroche::Polaire(angle));
+            let longueur = distance_saisie(&self.dessin2d.saisie, crate::config::options::unite().facteur())
+                .unwrap_or_else(|| (c - p).dot(direction).max(0.0));
+            return (p + direction * longueur, Accroche::Polaire(angle));
         }
         // tolérance : 12 pixels en mm du plan de la vue
         let tol = self.vers_ecran(rect, c).zip(self.vers_ecran(rect, c + DVec2::X * 1000.0)).map_or(200.0, |(a, b)| 12.0 * 1000.0 / (a.distance(b) as f64).max(1e-6));
@@ -77,6 +166,7 @@ impl ViewerApp {
         self.dessin2d.guides.clear();
         let accroche = (!maj).then(|| d2::accrocher(c, tol, &geoms, precedent)).flatten();
         if let Some((p, genre)) = accroche {
+            self.dessin2d.survol_segment = None;
             match self.dessin2d.survol_accroche {
                 Some((ancien, debut)) if ancien.distance(p) < tol * 0.1 => {
                     if temps - debut >= self.options.delai_accrochage && self.dessin2d.reference != Some(p) {
@@ -93,6 +183,29 @@ impl ViewerApp {
             return (p, genre);
         }
         self.dessin2d.survol_accroche = None;
+        // Un segment ne fournit des guides qu'après un survol volontaire de son tracé.
+        let segment = geoms.iter().filter_map(|g| {
+            let Geom::Segment([a, b]) = g else { return None };
+            let d = *b - *a;
+            let l2 = d.length_squared();
+            if l2 < 1e-12 { return None; }
+            let t = ((c - *a).dot(d) / l2).clamp(0.0, 1.0);
+            let p = *a + d * t;
+            let distance = p.distance(c);
+            (distance < tol * 0.6).then_some((distance, *a, *b, p))
+        }).min_by(|a, b| a.0.total_cmp(&b.0));
+        if !maj && let Some((_, a, b, p)) = segment {
+            match self.dessin2d.survol_segment {
+                Some((ancien_a, ancien_b, debut, verrouille)) if ancien_a == a && ancien_b == b => {
+                    if !verrouille && temps - debut >= self.options.delai_accrochage {
+                        self.dessin2d.reference = Some(p);
+                        self.dessin2d.directions_reference = vec![(b - a).normalize()];
+                        self.dessin2d.survol_segment = Some((a, b, debut, true));
+                    }
+                }
+                _ => self.dessin2d.survol_segment = Some((a, b, temps, false)),
+            }
+        } else { self.dessin2d.survol_segment = None; }
         if maj {
             self.dessin2d.guides.clear();
         } else {
@@ -100,32 +213,12 @@ impl ViewerApp {
             let u = DVec2::from_angle(th);
             let v = DVec2::new(-u.y, u.x);
             let mut lignes = Vec::new();
-            if let Some(t) = &self.dessin2d.trace {
-                if let [.., a, b] = t.points.as_slice() {
-                    let d = *b - *a;
-                    if d.length_squared() > 1e-12 {
-                        // prolongement du dernier trait et sa perpendiculaire au dernier point
-                        let d = d.normalize();
-                        lignes.push((*b, d));
-                        lignes.push((*b, d.perp()));
-                    }
-                }
+            if self.dessin2d.trace.is_some() {
                 if let Some(p) = precedent { lignes.extend([(p, u), (p, v)]); }
             }
             if let Some(p) = self.dessin2d.reference {
                 lignes.extend([(p, u), (p, v)]);
                 for &d in &self.dessin2d.directions_reference { lignes.extend([(p, d), (p, d.perp())]); }
-            }
-            // Prolonger l'alignement du segment survolé, sans accroche « proche ».
-            if let Some((a, d)) = geoms.iter().filter_map(|g| {
-                let Geom::Segment([a, b]) = g else { return None };
-                let d = *b - *a;
-                if d.length_squared() < 1e-12 { return None; }
-                let d = d.normalize();
-                let distance = (c - *a).perp_dot(d).abs();
-                (distance < tol * 0.6).then_some((distance, *a, d))
-            }).min_by(|a, b| a.0.total_cmp(&b.0)).map(|(_, a, d)| (a, d)) {
-                lignes.push((a, d));
             }
             // Une intersection de deux guides est prioritaire sur une projection simple.
             let mut meilleur: Option<(f64, DVec2, Vec<(DVec2, DVec2)>)> = None;
@@ -292,13 +385,26 @@ impl ViewerApp {
             self.dessin2d.dernier_usage=Some(Usage::Mur);
             return;
         }
-        if self.poignee_axe.is_some() || self.dessin2d.arc_glisse.is_some() {return;}
+        if self.poignee_axe.is_some() || self.dessin2d.arc_glisse.is_some() {
+            if !ctx.egui_wants_keyboard_input() {
+                ctx.input_mut(|i| i.events.retain(|e| match e {
+                    egui::Event::Text(texte) if texte.chars().all(|c| c.is_ascii_digit() || matches!(c, ',' | '.')) => {
+                        self.dessin2d.saisie.push_str(texte);
+                        false
+                    }
+                    egui::Event::Key { key: egui::Key::Backspace, pressed: true, .. } => { self.dessin2d.saisie.pop(); false }
+                    _ => true,
+                }));
+            }
+            return;
+        }
         let Some((usage, outil)) = self.usage_dessin() else {
             self.dessin2d.dernier_usage = None;
             self.dessin2d.trace = None;
             self.dessin2d.reference = None;
             self.dessin2d.directions_reference.clear();
             self.dessin2d.survol_accroche = None;
+            self.dessin2d.survol_segment = None;
             self.dessin2d.guides.clear();
             self.dessin2d.saisie.clear();
             self.dessin2d.dalle.clear();self.dessin2d.ouverts.clear();
@@ -315,6 +421,7 @@ impl ViewerApp {
             self.dessin2d.reference = None;
             self.dessin2d.directions_reference.clear();
             self.dessin2d.survol_accroche = None;
+            self.dessin2d.survol_segment = None;
             if self.dessin2d.trace.is_none() && usage == Usage::Annotation {
                 self.select(None, false);
             }
@@ -336,11 +443,26 @@ impl ViewerApp {
         let en_cours = self.trace_en_cours();
         ctx.input_mut(|i| {
             i.events.retain(|e| match e {
+                egui::Event::Key { key: egui::Key::ControlLeft | egui::Key::ControlRight, pressed: true, repeat: false, .. } => {
+                    self.dessin2d.controle_seul = true;
+                    true
+                }
+                egui::Event::Key { key: egui::Key::ControlLeft | egui::Key::ControlRight, pressed: false, .. } => {
+                    if self.dessin2d.controle_seul { justifier = true; }
+                    self.dessin2d.controle_seul = false;
+                    true
+                }
+                egui::Event::Key { pressed: true, modifiers, .. } if modifiers.ctrl => { self.dessin2d.controle_seul = false; true }
+                egui::Event::Key { key: egui::Key::Tab, pressed: true, .. } if !self.dessin2d.saisie.starts_with(['@', '#']) => {
+                    self.dessin2d.champ_angle = !self.dessin2d.champ_angle;
+                    if self.dessin2d.champ_angle && !self.dessin2d.saisie.contains(['<', '>']) { self.dessin2d.saisie.push('<'); }
+                    false
+                }
                 egui::Event::Text(t) => {
                     let mut lu = false;
                     for ch in t.chars() {
                         if ch.is_ascii_digit() || "@#<>,;.-".contains(ch) || (en_cours && ch.eq_ignore_ascii_case(&'f')) {
-                            self.dessin2d.saisie.push(ch);
+                            ajouter_caractere_saisie(&mut self.dessin2d.saisie, &mut self.dessin2d.champ_angle, ch);
                             { self.dessin2d.message = None; self.dessin2d.information = None; };
                             lu = true;
                         } else if ch == ' ' {
@@ -373,12 +495,13 @@ impl ViewerApp {
         });
         if supprimer_trait { self.supprimer_trait_edition(); }
         if effacer {
-            self.dessin2d.saisie.pop();
+            effacer_caractere_saisie(&mut self.dessin2d.saisie, self.dessin2d.champ_angle);
         }
         if echap {
             { self.dessin2d.message = None; self.dessin2d.information = None; };
             if !self.dessin2d.saisie.is_empty() {
                 self.dessin2d.saisie.clear();
+                self.dessin2d.champ_angle = false;
             } else if self.dessin2d.trace.as_ref().is_some_and(|t| !t.points.is_empty()) {
                 // Échap interrompt le tracé en cours ; ce qui est déjà dessiné reste
                 if usage != Usage::Mur && self.dessin2d.edition_contour.is_none() {
@@ -408,7 +531,8 @@ impl ViewerApp {
             }
         }
         if justifier {
-            self.dessin2d.justification_escalier = (self.dessin2d.justification_escalier + 1) % 3;
+            if usage == Usage::Mur { self.ruban_edition.implantation_suivante(); }
+            else if usage == Usage::Escalier { self.dessin2d.justification_escalier = (self.dessin2d.justification_escalier + 1) % 3; }
         }
         if inverser {
             self.ruban_edition.sens_inverse = !self.ruban_edition.sens_inverse;
@@ -695,7 +819,9 @@ impl ViewerApp {
 
     /// Entrée : point saisi (coordonnées, distance), mot-clé F (fermer), ou fin du tracé.
     pub(in crate::ui) fn valider_saisie_dessin(&mut self) {
-        let saisie = std::mem::take(&mut self.dessin2d.saisie);
+        let mut saisie = std::mem::take(&mut self.dessin2d.saisie);
+        self.dessin2d.champ_angle = false;
+        if saisie.find(['<', '>']).is_some_and(|i| i > 0 && i + 1 == saisie.len()) { saisie.pop(); }
         if !saisie.is_empty() && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.raccord.is_some()) {
             let precedent = self.dessin2d.trace.as_ref().and_then(Trace::precedent);
             let direction = self.dessin2d.point.zip(precedent).map(|((c, _), p)| c - p);

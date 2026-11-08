@@ -182,7 +182,7 @@ impl ViewerApp {
 
     /// Axe du mur sélectionné en tireté et ses extrémités ; pendant un déplacement, le
     /// nouvel axe et sa longueur.
-    pub(super) fn dessiner_axe(&self, ui: &egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>) {
+    pub(super) fn dessiner_axe(&mut self, ui: &mut egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>) {
         self.dessiner_axes_courbes(ui,rect,survol);
         // sélection multiple : ligne d'implantation de chaque mur, sans poignées
         if self.bim.selection.len() > 1 && let Some((projet, _)) = &self.natif {
@@ -195,7 +195,7 @@ impl ViewerApp {
                 }
             }
         }
-        let Some((_, mut a, mut b, z, _)) = self.axe_selection() else { return };
+        let Some((id, mut a, mut b, z, _)) = self.axe_selection() else { return };
         if let Some((_, fin, p)) = &self.poignee_axe {
             if *fin { b = *p } else { a = *p }
         }
@@ -212,10 +212,41 @@ impl ViewerApp {
         }
         if self.poignee_axe.is_some() {
             let l = (b[0] - a[0]).hypot(b[1] - a[1]);
-            let g = painter.layout_no_wrap(crate::config::options::unite().afficher(l), egui::FontId::proportional(13.0), Color32::from_gray(30));
+            let libelle = if self.dessin2d.saisie.is_empty() { crate::config::options::unite().afficher(l) } else { format!("{}▏{}", self.dessin2d.saisie, crate::config::options::unite().suffixe()) };
+            let g = painter.layout_no_wrap(libelle, egui::FontId::proportional(13.0), Color32::from_gray(30));
             let cadre = egui::Rect::from_center_size(ea + (eb - ea) * 0.5 - egui::vec2(0.0, 16.0), g.size() + egui::vec2(10.0, 4.0));
             painter.rect(cadre, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 235), egui::Stroke::new(1.0, bleu), egui::StrokeKind::Inside);
             painter.galley(cadre.min + egui::vec2(5.0, 2.0), g, Color32::from_gray(30));
+        } else if self.cote_axe.as_ref().is_some_and(|(mur, _, _)| mur == &id) {
+            let position = ea + (eb - ea) * 0.5 - egui::vec2(0.0, 18.0);
+            let cadre = egui::Rect::from_center_size(position, egui::vec2(90.0, 22.0));
+            let (_, fin, texte) = self.cote_axe.as_mut().unwrap();
+            let fin = *fin;
+            let reponse = ui.put(cadre, egui::TextEdit::singleline(texte).id_salt(("cote_poignee_mur", &id)).desired_width(90.0))
+                .on_hover_text(format!("Longueur de la ligne d'implantation ({}) : saisir une valeur puis valider", crate::config::options::unite().suffixe().trim()));
+            if reponse.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                let longueur = texte.trim().replace(',', ".").parse::<f64>().ok()
+                    .filter(|v| v.is_finite() && *v > 0.0)
+                    .map(|v| v * crate::config::options::unite().facteur());
+                let (fixe, mobile) = if fin { (a, b) } else { (b, a) };
+                let direction = glam::DVec2::from_array(mobile) - glam::DVec2::from_array(fixe);
+                if let (Some(longueur), Some(direction)) = (longueur, direction.try_normalize()) {
+                    let point = (glam::DVec2::from_array(fixe) + direction * longueur).to_array();
+                    if let Some((projet, _)) = &self.natif {
+                        let mut copie = projet.clone();
+                        let resultat = copie.deplacer_extremite_justification(&id, fin, point)
+                            .and_then(|_| copie.recaler_menuiseries(projet))
+                            .and_then(|_| copie.verifier())
+                            .and_then(|_| self.appliquer_projet(copie));
+                        match resultat {
+                            Ok(()) => self.status = "Longueur du mur modifiée.".into(),
+                            Err(e) => self.error = Some(e),
+                        }
+                    }
+                } else {
+                    self.error = Some("Saisissez une longueur positive et finie.".into());
+                }
+            }
         }
     }
 
@@ -536,6 +567,9 @@ impl ViewerApp {
         self.appliquer_projet_interne(projet, false)
     }
     pub(super) fn appliquer_projet_interne(&mut self, mut projet: crate::modele::Projet, distant: bool) -> Result<(), String> {
+        if !distant {
+            projet.actualiser_types_murs_modifies(&self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.0)?;
+        }
         // saisie en cours : le projet suit la frappe, la scène et l'historique attendent
         // la validation (voir valider_saisie)
         if self.saisie_active {

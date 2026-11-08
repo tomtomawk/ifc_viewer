@@ -201,6 +201,39 @@ fn identite(_p: &Projet, prefixe: &str) -> String {
 }
 
 impl Projet {
+    /// Répercute une modification de composition sur tous les murs du type, en gardant
+    /// leur ligne d'implantation et l'identité de chaque assemblage. L'opération entière
+    /// est annulée si une des reconstructions échoue.
+    pub fn actualiser_types_murs_modifies(&mut self, avant: &Projet) -> Result<(), String> {
+        let types: std::collections::HashSet<String> = self.types_murs.iter().filter(|t| {
+            avant.type_mur(&t.id).is_some_and(|ancien| ancien.couches != t.couches)
+        }).map(|t| t.id.clone()).collect();
+        if types.is_empty() { return Ok(()); }
+        let mut travail = self.clone();
+        let assemblages: Vec<String> = travail.assemblages.iter().filter(|a| types.contains(&a.type_mur) && avant.assemblage(&a.id).is_some_and(|ancien| ancien.type_mur == a.type_mur)).map(|a| a.id.clone()).collect();
+        for id in assemblages {
+            let (axe, _) = avant.trajectoire_justification(&id).ok_or("Ligne d'implantation du mur introuvable.")?;
+            let assemblage = travail.assemblage(&id).ok_or("Assemblage absent.")?;
+            let type_mur = travail.type_mur(&assemblage.type_mur).ok_or("Type absent.")?;
+            let reference = travail.implantations.get(&id).copied().unwrap_or(crate::modele::murs::assemblage::Reference::Axe);
+            let decalage = type_mur.decalages_couches().first().copied().unwrap_or(0.0) - type_mur.decalage_reference(reference);
+            let premiere = assemblage.couches.first().cloned().ok_or("Assemblage vide.")?;
+            travail.murs.iter_mut().find(|m| m.id == premiere).ok_or("Couche introuvable.")?.axe = assemblage::decaler_axe(&axe, decalage);
+            travail.executer_interne(Commande::ActualiserType { assemblage: id })?;
+        }
+        let murs: Vec<String> = travail.murs.iter().filter(|m| m.assemblage.is_none() && types.contains(&m.type_mur) && avant.murs.iter().any(|a| a.id == m.id && a.type_mur == m.type_mur)).map(|m| m.id.clone()).collect();
+        for id in murs {
+            let (axe, _) = avant.trajectoire_justification(&id).ok_or("Ligne d'implantation du mur introuvable.")?;
+            let mur = travail.murs.iter().find(|m| m.id == id).ok_or("Mur introuvable.")?;
+            let type_mur = travail.type_mur(&mur.type_mur).ok_or("Type absent.")?;
+            let reference = travail.implantations.get(&id).copied().unwrap_or(crate::modele::murs::assemblage::Reference::Axe);
+            let axe = assemblage::decaler_axe(&axe, -type_mur.decalage_reference(reference));
+            travail.murs.iter_mut().find(|m| m.id == id).unwrap().axe = axe;
+            travail.eclater_mur(&id)?;
+        }
+        *self = travail;
+        Ok(())
+    }
     pub fn identifiants(&self) -> HashSet<String> {
         self.niveaux
             .iter()
@@ -625,12 +658,13 @@ impl Projet {
                     .collect();
                 let premier = anciens.first().ok_or("Assemblage vide.")?;
                 let (axe, _, _) = crate::modele::volumes::solides::hote(self, &a.id)?;
-                if anciens
-                    .iter()
-                    .skip(t.couches.len())
-                    .any(|m| self.ouvertures.iter().any(|o| o.mur == m.id))
-                {
-                    return Err("Une couche supprimée porte une ouverture ; réhébergez-la avant de changer le type.".into());
+                if t.couches.is_empty() { return Err("Le type de mur doit contenir au moins une couche.".into()); }
+                // Une ouverture hébergée par une couche retirée est rattachée à la
+                // dernière couche conservée, sans l'étendre à tout l'assemblage.
+                let supprimees: std::collections::HashSet<&str> = anciens.iter().skip(t.couches.len()).map(|m| m.id.as_str()).collect();
+                let nouvel_hote = &anciens[t.couches.len().min(anciens.len()) - 1].id;
+                for ouverture in &mut self.ouvertures {
+                    if supprimees.contains(ouverture.mur.as_str()) { ouverture.mur = nouvel_hote.clone(); }
                 }
                 let mut nouveaux = Vec::new();
                 for (k, (c, d)) in t.couches.iter().zip(t.decalages_couches()).enumerate() {

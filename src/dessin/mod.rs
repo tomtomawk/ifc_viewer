@@ -302,8 +302,14 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
                             detail.push(primitive(Forme::Segments(h),couche.fond,0.0,Role::Hachure));
                         }
                         if poche == Poche::Hachure && couche.isolation {
-                            let t2: Vec<_> = tris.iter().map(|t| t.map(|p| [(p-o).dot(e1),(p-o).dot(e2)])).collect();
-                            let h = ligne_isolation(&t2).into_iter().map(|s| s.map(en_3d)).collect();
+                            // Le dessin de l'isolant calcule ses tolérances en millimètres ;
+                            // les coordonnées de la scène sont en mètres.
+                            let t2: Vec<_> = tris.iter().map(|t| t.map(|p| [(p-o).dot(e1) * 1000.0,(p-o).dot(e2) * 1000.0])).collect();
+                            let segments = if let Some([x, y]) = couche.centre_isolation.filter(|_| n.z.abs() > 0.999) {
+                                let centre = DVec3::new(x - scene.origin.x, y - scene.origin.y, o.z);
+                                motifs::ligne_isolation_courbe(&t2, [(centre-o).dot(e1)*1000.0,(centre-o).dot(e2)*1000.0])
+                            } else { ligne_isolation(&t2) };
+                            let h = segments.into_iter().map(|s| s.map(|p| en_3d([p[0] / 1000.0, p[1] / 1000.0]))).collect();
                             detail.push(primitive(Forme::Segments(h),couche.couleur_motif,0.0,Role::Hachure));
                         }
                         if poche == Poche::Hachure && !uni && !couche.isolation {
@@ -861,7 +867,43 @@ mod tests {
             assert!(r > 4999.0 && r < 5101.0, "hors couche {r}");
         }
         let angles: Vec<f64> = s.iter().flatten().map(|p| p[1].atan2(p[0])).collect();
-        assert!(angles.iter().any(|a| *a < 0.1) && angles.iter().any(|a| *a > 1.47), "motif incomplet");
+        assert!(angles.iter().any(|a| *a < 0.1) && angles.iter().any(|a| *a > 1.47), "motif incomplet : {:?}", angles.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a,b), &x| (a.min(x), b.max(x))));
+    }
+
+    #[test]
+    fn isolant_courbe_aux_unites_de_la_scene() {
+        let p = |r: f64, a: f64| [r * a.cos(), r * a.sin()];
+        let mut triangles = Vec::new();
+        for k in 0..48 {
+            let a = k as f64 / 48.0 * std::f64::consts::FRAC_PI_2;
+            let b = (k + 1) as f64 / 48.0 * std::f64::consts::FRAC_PI_2;
+            triangles.push([p(5.0, a), p(5.1, a), p(5.1, b)]);
+            triangles.push([p(5.0, a), p(5.1, b), p(5.0, b)]);
+        }
+        let s = super::ligne_isolation(&triangles);
+        assert!(s.len() > 100, "{} segments", s.len());
+        assert!(s.iter().flatten().all(|p| (4.999..5.101).contains(&p[0].hypot(p[1]))));
+        assert!(s.iter().flatten().any(|p| p[1].atan2(p[0]) > 1.47));
+    }
+
+    #[test]
+    fn isolant_suit_le_mur_courbe_dans_la_coupe_native() {
+        use crate::modele::{Axe, Couche, FonctionCouche, Projet, TypeCompose};
+        use crate::modele::edition::ParametresMur;
+        let mut projet = Projet::nouveau("Mur courbe");
+        projet.types_murs.push(TypeCompose { id: "isolant".into(), nom: "Isolant".into(), couches: vec![Couche { materiau: Some("Laine minérale".into()), epaisseur: 100.0, fonction: FonctionCouche::Isolation, ..Default::default() }], categorie: None, couches_detaillees: true, origine: None });
+        let options = ParametresMur { type_mur: Some("isolant".into()), ..Default::default() };
+        projet.ajouter_mur_axe(Axe::Arc { debut: [17000.0, -8000.0], fin: [12000.0, -3000.0], centre: [12000.0, -8000.0], direct: true }, &options).unwrap();
+        projet.completer_materiaux();
+        let scene = crate::rendu::scene::depuis_natif(&projet, std::path::Path::new("test.modele.json")).unwrap();
+        let plan = Vec3::NEG_Z.extend((1.0 - scene.origin.z) as f32);
+        let primitives = super::coupe(&scene, &vec![true; scene.objects.len()], plan, 100.0, Poche::Hachure);
+        let segments: Vec<_> = primitives.iter().filter(|p| p.role == Role::Hachure).flat_map(|p| match &p.forme { Forme::Segments(s) => s.clone(), _ => Vec::new() }).collect();
+        assert!(segments.len() > 100, "{} segments", segments.len());
+        let rayon = |p: DVec3| (p.x + scene.origin.x - 12.0).hypot(p.y + scene.origin.y + 8.0);
+        assert!(segments.iter().flatten().all(|&p| (4.94..5.06).contains(&rayon(p))), "le motif sort de la couche");
+        let angles: Vec<_> = segments.iter().flatten().map(|p| (p.y + scene.origin.y + 8.0).atan2(p.x + scene.origin.x - 12.0)).collect();
+        assert!(angles.iter().any(|a| *a < 0.1) && angles.iter().any(|a| *a > 1.47), "motif incomplet : {:?}", angles.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a,b), &x| (a.min(x), b.max(x))));
     }
 
     #[test]
@@ -948,7 +990,7 @@ mod tests {
         tris.extend(cube().into_iter().map(|t| t.map(|p| p * 0.5 + DVec3::splat(0.25))));
         let mut s = scene_section(tris);
         let bande = |a: f32, b: f32, couleur| crate::rendu::scene::CoucheCoupe {
-            plans: vec![Vec3::X.extend(-a),Vec3::NEG_X.extend(b)], couleur, fond: [255,255,255,255], motif_fond: None, motif: None, couleur_motif: [70,70,70,255], hachure_defaut: true, isolation: false, trait_mm: TRAIT_FORT_MM,
+            plans: vec![Vec3::X.extend(-a),Vec3::NEG_X.extend(b)], couleur, fond: [255,255,255,255], motif_fond: None, motif: None, couleur_motif: [70,70,70,255], hachure_defaut: true, isolation: false, centre_isolation: None, trait_mm: TRAIT_FORT_MM,
         };
         s.couches_coupe.insert(1,vec![bande(0.0,0.2,[190,120,120,255]),bande(0.2,1.0,[120,190,120,255])]);
         let p = coupe(&s,&[true],Vec3::NEG_Z.extend(0.5),100.0,Poche::Hachure);

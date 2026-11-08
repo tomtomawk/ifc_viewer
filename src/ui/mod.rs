@@ -648,6 +648,10 @@ pub struct ViewerApp {
     /// Poignée d'extrémité de l'axe du mur sélectionné en cours de déplacement : élément,
     /// extrémité (true : fin) et position courante (mm).
     poignee_axe: Option<(String, bool, [f64; 2])>,
+    /// Dernière poignée déplacée et cote modifiable de sa ligne d'implantation.
+    cote_axe: Option<(String, bool, String)>,
+    /// Dernier mur courbe modifié : poignée, rayon et longueur d'arc éditables.
+    cote_arc: Option<(String, usize, String, String)>,
     /// Matériau du projet natif dont les graphismes sont ouverts.
     materiau_edite: Option<String>,
     /// Onglet de la fenêtre Matériau : Graphique (faux) ou Apparence (vrai).
@@ -853,6 +857,8 @@ impl ViewerApp {
             nom_motif_saisi: String::new(),
             tirets_saisis: (String::new(), Vec::new()),
             poignee_axe: None,
+            cote_axe: None,
+            cote_arc: None,
             categories: Vec::new(),
             categorie_objet: Vec::new(),
             cle_objet: Vec::new(),
