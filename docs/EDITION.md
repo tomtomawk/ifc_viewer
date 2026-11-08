@@ -6,6 +6,18 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
 
 ## Parcours disponible
 
+- **Début → Phases et variantes**, ou le lien sous les champs de contexte dans
+  Propriétés, ouvre le gestionnaire des phases, sous-projets et variantes. Il permet
+  d'ajouter et renommer les entrées, de réordonner les phases et de renommer un jeu
+  de variantes. Une suppression réaffecte les éléments au choix indiqué ; une
+  variante peut être réaffectée au modèle principal. L'ordre ne peut pas placer une
+  démolition avant la création de l'élément. Les filtres de la rubrique **Affichage
+  temporaire** permettent d'inspecter une phase, un sous-projet ou une variante ; ils
+  s'appliquent aux vues pendant la session et ne modifient pas les affectations.
+  Sans élément sélectionné, les propriétés de chaque vue proposent aussi **Phase
+  affichée** et **Variante affichée** : ces choix sont enregistrés avec la vue et
+  repris sur les feuilles. Les filtres temporaires du gestionnaire s'y ajoutent.
+
 - Dans un **plan natif**, sélectionner des éléments puis **Modifier → Masquer**
   (ou H) les masque uniquement dans cette vue ; **Tout afficher** les rétablit.
   Les masquages sont enregistrés avec la vue et repris sur les feuilles.

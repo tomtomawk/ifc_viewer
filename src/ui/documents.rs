@@ -2,6 +2,16 @@
 use super::*;
 
 impl ViewerApp {
+    /// Identifiants de scène masqués par les filtres temporaires de contexte.
+    pub(super) fn ids_masques_contextes(&self) -> HashSet<Id> {
+        self.natif.as_ref().map(|(projet, _)| {
+            let mut masques = if self.filtres_contextes == Default::default() { HashSet::new() } else { projet.elements_masques_contextes(&self.filtres_contextes) };
+            if let Some(filtre) = self.id_vue_contexte().and_then(|id| projet.contextes_vues.get(&id)) {
+                if *filtre != Default::default() { masques.extend(projet.elements_masques_contextes(filtre)); }
+            }
+            super::bim::elements_natifs(projet).filter(|(_, id)| masques.contains(*id)).map(|(genre, id)| scene::id_natif(genre, id)).collect()
+        }).unwrap_or_default()
+    }
     pub(super) fn open(&mut self, path: PathBuf, ctx: &egui::Context) {
         let recuperation=crate::modele::echanges::enregistrement::chemin_recuperation(&path);
         let restaurer=if path.extension().is_some_and(|e|e.eq_ignore_ascii_case("json")) && recuperation.exists() {
@@ -222,6 +232,11 @@ impl ViewerApp {
             return;
         }
         self.visibility_dirty = false;
+        if let Some((projet, _)) = &self.natif {
+            if self.filtres_contextes.phase.as_ref().is_some_and(|p| !projet.phases.contains(p)) { self.filtres_contextes.phase = None; }
+            if self.filtres_contextes.sous_projet.as_ref().is_some_and(|p| !projet.sous_projets.contains(p)) { self.filtres_contextes.sous_projet = None; }
+            if self.filtres_contextes.variante.as_ref().is_some_and(|id| !projet.variantes.iter().any(|v| &v.id == id)) { self.filtres_contextes.variante = None; }
+        }
         let Some(scene) = &self.scene else { return };
         // coupe du mode dessin : objets du modèle entièrement du côté retiré écartés (au-dessus
         // d'un plan, devant la ligne d'une coupe)
@@ -247,6 +262,7 @@ impl ViewerApp {
         let mut lines = Vec::new();
         let mut aretes = Vec::new();
         let mut objets_masques = HashSet::new();
+        let exclus_contextes = self.ids_masques_contextes();
         for (i, o) in scene.objects.iter().enumerate() {
             let en_edition = self.objet_en_edition().is_some_and(|(id, annotation)| !annotation && o.id == scene::id_natif("dalle", id))
                 || self.terrain_en_edition().is_some_and(|id| o.id == scene::id_natif("terrain", id));
@@ -257,7 +273,7 @@ impl ViewerApp {
             if revele {
                 objets_masques.insert(i as u32);
             }
-            let vis = !en_edition && (revele || !masques_vue.contains(&o.id)) && !self.hidden_classes.contains(&*o.class)
+            let vis = !en_edition && !exclus_contextes.contains(&o.id) && (revele || !masques_vue.contains(&o.id)) && !self.hidden_classes.contains(&*o.class)
                 && !self.hidden_classes.contains(&*self.cle_objet[i])
                 && (revele || !self.hidden_objects.contains(&(i as u32)))
                 && o.storey.is_none_or(|s| !self.hidden_storeys.contains(&s))
@@ -491,6 +507,8 @@ impl ViewerApp {
     }
 
     pub(super) fn nouveau_document(&mut self) {
+        self.gestion_contextes = None;
+        self.filtres_contextes = Default::default();
         self.ajustement=None;
         self.stocker_document();
         self.bim = Default::default();
@@ -505,6 +523,8 @@ impl ViewerApp {
     }
 
     pub(super) fn changer_document(&mut self, id: usize) {
+        self.gestion_contextes = None;
+        self.filtres_contextes = Default::default();
         self.ajustement=None;
         self.orientation_nord_en_cours = false;
         self.arete_alignement = None;

@@ -1,4 +1,22 @@
 use super::*;
+
+#[test]
+fn dessin_vue_applique_le_contexte_propre_a_la_vue() {
+    use crate::modele::edition::contextes::FiltresContextes;
+    let (mut p, _) = depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();
+    p.phases = vec!["Existant".into(), "Projet".into()];
+    for mur in &mut p.murs { mur.phase = Some("Projet".into()); }
+    let vue = p.ajouter_vue_plan(&p.niveaux[0].id.clone(), 1200.0).unwrap();
+    let dessin = dessin_vue(&p, &vue).unwrap();
+    let ids: std::collections::HashSet<_> = p.murs.iter().map(|m| crate::rendu::scene::id_natif("mur", &m.id)).collect();
+    assert!(dessin.primitives.iter().any(|p| p.element.is_some_and(|id| ids.contains(&id))));
+    p.contextes_vues.insert(vue.clone(), FiltresContextes { phase: Some("Existant".into()), ..Default::default() });
+    let filtre = dessin_vue(&p, &vue).unwrap();
+    assert!(!filtre.primitives.iter().any(|p| p.element.is_some_and(|id| ids.contains(&id))));
+    let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
+    assert_eq!(relu.contextes_vues[&vue].phase.as_deref(), Some("Existant"));
+    assert!(!dessin_vue(&relu, &vue).unwrap().primitives.iter().any(|p| p.element.is_some_and(|id| ids.contains(&id))));
+}
 #[test]
 fn vue_placee_respecte_rotation_et_limite_basse() {
     let (mut p, _) = depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();

@@ -1,0 +1,209 @@
+//! Gestion des phases, sous-projets et variantes et de leurs affectations.
+use super::ListeCreation;
+use crate::modele::{Projet, PHASE_EXISTANT};
+
+/// Filtres temporaires de la vue, indépendants des affectations enregistrées.
+#[derive(Debug, Default, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct FiltresContextes {
+    pub phase: Option<String>,
+    pub sous_projet: Option<String>,
+    pub variante: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::modele::{ContexteElement, edition::ParametresMur};
+
+    #[test]
+    fn renommage_et_suppression_reaffectent_toutes_les_references() {
+        let mut p = Projet::nouveau("Gestion");
+        p.phases.push("Finition".into());
+        p.sous_projets.push("Structure".into());
+        let mur = p.ajouter_mur([0.,0.], [4000.,0.], &ParametresMur::default()).unwrap();
+        p.murs[0].phase = Some("Projet".into());
+        p.murs[0].sous_projet = Some("A".into());
+        p.contextes.insert("autre".into(), ContexteElement { phase: Some("Projet".into()), sous_projet: Some("A".into()), variante: None });
+        p.contextes_vues.insert("vue".into(), FiltresContextes { phase: Some("Projet".into()), ..Default::default() });
+        p.demolitions.insert(mur.clone(), "Finition".into());
+        p.renommer_contexte(ListeCreation::Phase, "Projet", "Travaux", "").unwrap();
+        assert_eq!(p.murs[0].phase.as_deref(), Some("Travaux"));
+        assert_eq!(p.contextes["autre"].phase.as_deref(), Some("Travaux"));
+        assert_eq!(p.contextes_vues["vue"].phase.as_deref(), Some("Travaux"));
+        p.renommer_contexte(ListeCreation::Phase, "Finition", "Démolition", "").unwrap();
+        assert_eq!(p.demolitions[&mur], "Démolition");
+        let avant = p.json().unwrap();
+        assert!(p.deplacer_phase("Démolition", -1).is_err());
+        assert_eq!(p.json().unwrap(), avant);
+        p.supprimer_contexte(ListeCreation::SousProjet, "A", Some("Structure")).unwrap();
+        assert_eq!(p.murs[0].sous_projet.as_deref(), Some("Structure"));
+        assert_eq!(p.contextes["autre"].sous_projet.as_deref(), Some("Structure"));
+        assert!(p.renommer_contexte(ListeCreation::Phase, PHASE_EXISTANT, "Ancien", "").is_err());
+    }
+
+    #[test]
+    fn variantes_et_filtres_preservent_les_elements_communs() {
+        let mut p = Projet::nouveau("Variantes");
+        p.phases.push("Démolition".into());
+        let a = p.ajouter_choix_creation(ListeCreation::Variante, "A", "Façade").unwrap();
+        let b = p.ajouter_choix_creation(ListeCreation::Variante, "B", "Façade").unwrap();
+        let c = p.ajouter_choix_creation(ListeCreation::Variante, "C", "Toiture").unwrap();
+        let mur = p.ajouter_mur([0.,0.], [4000.,0.], &ParametresMur::default()).unwrap();
+        p.murs[0].variante = Some(b.clone());
+        p.contextes_vues.insert("vue".into(), FiltresContextes { variante: Some(b.clone()), ..Default::default() });
+        p.murs[0].phase = Some("Projet".into());
+        p.ouvertures.push(crate::modele::Ouverture { id: "porte".into(), nom: "Porte".into(), genre: crate::modele::GenreOuverture::Libre, mur: mur.clone(), type_ouverture: None, abscisse: 1000.0, largeur: 600.0, hauteur: 2000.0, allege: 0.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
+        p.demolitions.insert(mur.clone(), "Démolition".into());
+        let mut filtre = FiltresContextes { phase: Some("Projet".into()), sous_projet: None, variante: Some(a.clone()) };
+        assert!(p.elements_masques_contextes(&filtre).contains(&mur));
+        assert!(p.elements_masques_contextes(&filtre).contains("porte"));
+        filtre.variante = Some(c.clone());
+        assert!(!p.elements_masques_contextes(&filtre).contains(&mur));
+        filtre.phase = Some("Démolition".into());
+        assert!(p.elements_masques_contextes(&filtre).contains(&mur));
+        assert!(p.supprimer_contexte(ListeCreation::Variante, &b, Some(&c)).is_err());
+        p.supprimer_contexte(ListeCreation::Variante, &b, Some(&a)).unwrap();
+        assert_eq!(p.murs[0].variante.as_deref(), Some(a.as_str()));
+        assert_eq!(p.contextes_vues["vue"].variante.as_deref(), Some(a.as_str()));
+        p.renommer_jeu_variantes("Façade", "Enveloppe").unwrap();
+        assert_eq!(p.variantes.iter().find(|v| v.id == a).unwrap().jeu, "Enveloppe");
+        assert!(p.renommer_jeu_variantes("Enveloppe", "Toiture").is_err());
+    }
+}
+
+impl Projet {
+    /// Calcule les éléments masqués en une passe, sans recherche linéaire par objet.
+    pub fn elements_masques_contextes(&self, filtre: &FiltresContextes) -> std::collections::HashSet<String> {
+        use std::collections::{HashMap, HashSet};
+        type Champs<'a> = (Option<&'a str>, Option<&'a str>, Option<&'a str>);
+        let mut champs: HashMap<&str, Champs<'_>> = self.contextes.iter().map(|(id, c)| (id.as_str(), (c.phase.as_deref(), c.sous_projet.as_deref(), c.variante.as_deref()))).collect();
+        for m in &self.murs {
+            let ancien = champs.get(m.id.as_str()).copied().unwrap_or((None,None,None));
+            champs.insert(&m.id, (m.phase.as_deref().or(ancien.0), m.sous_projet.as_deref().or(ancien.1), m.variante.as_deref().or(ancien.2)));
+        }
+        for d in &self.dalles {
+            let ancien = champs.get(d.id.as_str()).copied().unwrap_or((None,None,None));
+            champs.insert(&d.id, (d.phase.as_deref().or(ancien.0), d.sous_projet.as_deref().or(ancien.1), d.variante.as_deref().or(ancien.2)));
+        }
+        for a in &self.assemblages {
+            if let Some(c) = a.couches.first().and_then(|id| champs.get(id.as_str())).copied() { champs.insert(&a.id, c); }
+        }
+        for o in &self.ouvertures {
+            if let Some(c) = champs.get(o.mur.as_str()).copied() { champs.insert(&o.id, c); }
+        }
+        let parents: HashMap<&str, &str> = self.murs.iter().filter_map(|m| m.assemblage.as_deref().map(|a| (m.id.as_str(), a)))
+            .chain(self.ouvertures.iter().map(|o| (o.id.as_str(), o.mur.as_str()))).collect();
+        let rangs: HashMap<&str, usize> = self.phases.iter().enumerate().map(|(i, p)| (p.as_str(), i)).collect();
+        let active = filtre.phase.as_deref().and_then(|p| rangs.get(p)).copied();
+        let jeux: HashMap<&str, &str> = self.variantes.iter().map(|v| (v.id.as_str(), v.jeu.as_str())).collect();
+        let variante = filtre.variante.as_deref().and_then(|id| jeux.get(id).map(|jeu| (id, *jeu)));
+        let mut masques = HashSet::new();
+        for (id, (phase, sous_projet, option)) in champs {
+            let demolition = self.demolitions.get(id).or_else(|| parents.get(id).and_then(|p| self.demolitions.get(*p)))
+                .or_else(|| parents.get(id).and_then(|p| parents.get(p)).and_then(|p| self.demolitions.get(*p)));
+            let hors_phase = active.is_some_and(|a| phase.and_then(|p| rangs.get(p)).is_some_and(|&c| c > a) || demolition.and_then(|d| rangs.get(d.as_str())).is_some_and(|&d| d <= a));
+            let hors_sous_projet = filtre.sous_projet.as_deref().zip(sous_projet).is_some_and(|(a,b)| a != b);
+            let hors_variante = variante.zip(option).is_some_and(|((a, jeu), b)| jeux.get(b).is_some_and(|j| *j == jeu) && a != b);
+            if hors_phase || hors_sous_projet || hors_variante { masques.insert(id.to_string()); }
+        }
+        masques
+    }
+
+    /// Nombre d'affectations directes et de démolitions utilisant une entrée.
+    pub fn utilisations_contexte(&self, liste: ListeCreation, cle: &str) -> usize {
+        let choix = |phase: &Option<String>, sous_projet: &Option<String>, variante: &Option<String>| match liste {
+            ListeCreation::Phase => phase.as_deref() == Some(cle),
+            ListeCreation::SousProjet => sous_projet.as_deref() == Some(cle),
+            ListeCreation::Variante => variante.as_deref() == Some(cle),
+        };
+        self.murs.iter().filter(|m| choix(&m.phase, &m.sous_projet, &m.variante)).count()
+            + self.dalles.iter().filter(|d| choix(&d.phase, &d.sous_projet, &d.variante)).count()
+            + self.contextes.values().filter(|c| choix(&c.phase, &c.sous_projet, &c.variante)).count()
+            + self.contextes_vues.values().filter(|c| choix(&c.phase, &c.sous_projet, &c.variante)).count()
+            + if liste == ListeCreation::Phase { self.demolitions.values().filter(|v| v.as_str() == cle).count() } else { 0 }
+    }
+
+    fn remplacer_contexte(&mut self, liste: ListeCreation, ancien: &str, nouveau: Option<&str>) {
+        let remplacer = |v: &mut Option<String>| { if v.as_deref() == Some(ancien) { *v = nouveau.map(str::to_string); } };
+        for m in &mut self.murs { match liste { ListeCreation::Phase => remplacer(&mut m.phase), ListeCreation::SousProjet => remplacer(&mut m.sous_projet), ListeCreation::Variante => remplacer(&mut m.variante) } }
+        for d in &mut self.dalles { match liste { ListeCreation::Phase => remplacer(&mut d.phase), ListeCreation::SousProjet => remplacer(&mut d.sous_projet), ListeCreation::Variante => remplacer(&mut d.variante) } }
+        for c in self.contextes.values_mut() { match liste { ListeCreation::Phase => remplacer(&mut c.phase), ListeCreation::SousProjet => remplacer(&mut c.sous_projet), ListeCreation::Variante => remplacer(&mut c.variante) } }
+        for c in self.contextes_vues.values_mut() { match liste { ListeCreation::Phase => remplacer(&mut c.phase), ListeCreation::SousProjet => remplacer(&mut c.sous_projet), ListeCreation::Variante => remplacer(&mut c.variante) } }
+        if liste == ListeCreation::Phase {
+            if let Some(nouveau) = nouveau { for phase in self.demolitions.values_mut().filter(|p| p.as_str() == ancien) { *phase = nouveau.into(); } }
+            else { self.demolitions.retain(|_, p| p != ancien); }
+        }
+    }
+
+    /// Les démolitions ne peuvent précéder la création, même après réorganisation.
+    fn verifier_chronologie_contextes(&self) -> Result<(), String> {
+        for (id, demolition) in &self.demolitions {
+            let d = self.phases.iter().position(|p| p == demolition).ok_or("Phase de démolition introuvable.")?;
+            if let Some(creation) = self.phase_element(id) && let Some(c) = self.phases.iter().position(|p| p == &creation) && c > d {
+                return Err(format!("La phase de démolition « {demolition} » précéderait la création « {creation} »."));
+            }
+        }
+        Ok(())
+    }
+
+    pub fn renommer_contexte(&mut self, liste: ListeCreation, cle: &str, nom: &str, jeu: &str) -> Result<(), String> {
+        let nom = nom.trim(); let jeu = jeu.trim();
+        if nom.is_empty() { return Err("Saisissez un nom.".into()); }
+        let mut copie = self.clone();
+        match liste {
+            ListeCreation::Variante => {
+                if jeu.is_empty() { return Err("Saisissez le jeu de variantes.".into()); }
+                if copie.variantes.iter().any(|v| v.id != cle && v.jeu.eq_ignore_ascii_case(jeu) && v.nom.eq_ignore_ascii_case(nom)) { return Err("Cette variante existe déjà dans ce jeu.".into()); }
+                let v = copie.variantes.iter_mut().find(|v| v.id == cle).ok_or("Variante introuvable.")?;
+                v.nom = nom.into(); v.jeu = jeu.into();
+            }
+            _ => {
+                if liste == ListeCreation::Phase && cle == PHASE_EXISTANT && nom != cle { return Err("La phase Existant est réservée aux éléments existants.".into()); }
+                let choix = if liste == ListeCreation::Phase { &mut copie.phases } else { &mut copie.sous_projets };
+                if choix.iter().any(|v| v != cle && v.eq_ignore_ascii_case(nom)) { return Err("Ce nom existe déjà.".into()); }
+                let entree = choix.iter_mut().find(|v| v.as_str() == cle).ok_or("Entrée introuvable.")?;
+                *entree = nom.into();
+                copie.remplacer_contexte(liste, cle, Some(nom));
+            }
+        }
+        copie.verifier_chronologie_contextes()?;
+        *self = copie; Ok(())
+    }
+
+    pub fn renommer_jeu_variantes(&mut self, ancien: &str, nouveau: &str) -> Result<(), String> {
+        let nouveau = nouveau.trim();
+        if nouveau.is_empty() { return Err("Saisissez un nom de jeu.".into()); }
+        if !self.variantes.iter().any(|v| v.jeu == ancien) { return Err("Jeu introuvable.".into()); }
+        if self.variantes.iter().any(|v| v.jeu != ancien && v.jeu.eq_ignore_ascii_case(nouveau)) {
+            return Err("Un jeu porte déjà ce nom.".into());
+        }
+        for v in self.variantes.iter_mut().filter(|v| v.jeu == ancien) { v.jeu = nouveau.into(); }
+        Ok(())
+    }
+
+    pub fn supprimer_contexte(&mut self, liste: ListeCreation, cle: &str, remplacement: Option<&str>) -> Result<(), String> {
+        if liste == ListeCreation::Phase && cle == PHASE_EXISTANT { return Err("La phase Existant ne peut pas être supprimée.".into()); }
+        let mut copie = self.clone();
+        let valide = match liste {
+            ListeCreation::Phase => copie.phases.iter().any(|v| v == cle) && copie.phases.len() > 1 && remplacement.is_some_and(|r| r != cle && copie.phases.iter().any(|v| v == r)),
+            ListeCreation::SousProjet => copie.sous_projets.iter().any(|v| v == cle) && copie.sous_projets.len() > 1 && remplacement.is_some_and(|r| r != cle && copie.sous_projets.iter().any(|v| v == r)),
+            ListeCreation::Variante => copie.variantes.iter().find(|v| v.id == cle).is_some_and(|source| remplacement.is_none_or(|r| r != cle && copie.variantes.iter().any(|v| v.id == r && v.jeu == source.jeu))),
+        };
+        if !valide { return Err("Choisissez une entrée de remplacement valide ; au moins une phase et un sous-projet sont nécessaires.".into()); }
+        copie.remplacer_contexte(liste, cle, remplacement);
+        match liste { ListeCreation::Phase => copie.phases.retain(|v| v != cle), ListeCreation::SousProjet => copie.sous_projets.retain(|v| v != cle), ListeCreation::Variante => copie.variantes.retain(|v| v.id != cle) }
+        copie.verifier_chronologie_contextes()?;
+        *self = copie; Ok(())
+    }
+
+    pub fn deplacer_phase(&mut self, phase: &str, delta: isize) -> Result<(), String> {
+        let mut copie = self.clone();
+        let i = copie.phases.iter().position(|p| p == phase).ok_or("Phase introuvable.")?;
+        let j = i.checked_add_signed(delta).filter(|&j| j < copie.phases.len()).ok_or("La phase est déjà en bout de liste.")?;
+        if copie.phases[i] == PHASE_EXISTANT || copie.phases[j] == PHASE_EXISTANT { return Err("La phase Existant reste en première position.".into()); }
+        copie.phases.swap(i, j);
+        copie.verifier_chronologie_contextes()?;
+        *self = copie; Ok(())
+    }
+}

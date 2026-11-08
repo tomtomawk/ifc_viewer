@@ -1,6 +1,34 @@
 //! Options de tracé et niveau de tracé.
 use super::*;
 
+/// Une arête courbe reste un arc ; une courbe libre est découpée en segments.
+fn formes_selection(geometrie: Geom) -> Vec<d2::Forme2D> {
+    match geometrie {
+        Geom::Segment([a,b]) if a.distance_squared(b) > 1e-12 => vec![d2::Forme2D::Ligne([a,b])],
+        Geom::Arc { centre, rayon, depart, balayage } => {
+            let point = |angle| centre + DVec2::from_angle(angle) * rayon;
+            vec![d2::Forme2D::Arc([point(depart), point(depart + balayage * 0.5), point(depart + balayage)])]
+        }
+        Geom::Cercle { centre, rayon } => vec![d2::Forme2D::Cercle { centre, rayon }],
+        Geom::Courbe(points) => points.windows(2).map(|w| d2::Forme2D::Ligne([w[0],w[1]])).collect(),
+        _ => Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests_selection {
+    use super::*;
+
+    #[test]
+    fn selection_conserve_les_arcs_et_ignore_les_points_isoles() {
+        assert!(formes_selection(Geom::Segment([DVec2::ZERO, DVec2::ZERO])).is_empty());
+        let formes = formes_selection(Geom::Arc { centre: DVec2::new(2.0, 3.0), rayon: 5.0, depart: 0.0, balayage: std::f64::consts::FRAC_PI_2 });
+        let [d2::Forme2D::Arc(points)] = formes.as_slice() else { panic!("arc attendu") };
+        let (centre, rayon, _, angle) = d2::arc_3_points(points[0], points[1], points[2]).unwrap();
+        assert!(centre.distance(DVec2::new(2.0, 3.0)) < 1e-9 && (rayon - 5.0).abs() < 1e-9 && (angle - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
+    }
+}
+
 impl ViewerApp {
     /// Barre d'options du tracé, en haut de la vue : forme du mur (et chaînage) ou de
     /// l'élément horizontal.
@@ -64,13 +92,10 @@ impl ViewerApp {
     }
 
     /// Le trait le plus proche : conserve les arcs/cercle et choisit un segment d'une polyligne.
-    pub(in crate::ui) fn trait_mur_vise(&self,rect:egui::Rect,q:egui::Pos2)->Option<d2::Forme2D> {
+    pub(in crate::ui) fn trait_mur_vise(&mut self,rect:egui::Rect,q:egui::Pos2)->Option<d2::Forme2D> {
         if !self.vue_en_plan() || !self.point_dans_cadrage(rect,q) {return None;}
+        let geometries = self.geoms_dessin_avec_mode(true);
         let (p,_)=self.natif.as_ref()?;
-        let vue=self.vue_native_id()?;
-        let v=p.vues.iter().find(|v|v.id==vue)?;
-        let (o,u,h)=crate::modele::documentation::repere(p,v);
-        let point=|a:DVec2| (o+u*a.x+h*a.y).truncate();
         let mut choix:Option<(f32,d2::Forme2D)>=None;
         let mut essayer=|forme:d2::Forme2D| {
             for ligne in forme.polylignes() {
@@ -82,14 +107,21 @@ impl ViewerApp {
                 }
             }
         };
-        for a in p.annotations.iter().filter(|a|a.vue==vue && !v.elements_masques.contains(&a.id)) {
-            let Some(f)=a.forme.forme_2d() else {continue};
-            match f {
-                d2::Forme2D::Ligne([a,b])=>essayer(d2::Forme2D::Ligne([point(a),point(b)])),
-                d2::Forme2D::Arc(pts)=>essayer(d2::Forme2D::Arc(pts.map(point))),
-                d2::Forme2D::Cercle{centre,rayon}=>essayer(d2::Forme2D::Cercle{centre:point(centre),rayon}),
-                _=>for l in f.polylignes() {for w in l.windows(2){essayer(d2::Forme2D::Ligne([point(w[0]),point(w[1])]))}},
+        if let Some(v) = self.vue_native_id().and_then(|id| p.vues.iter().find(|v| v.id == id)) {
+            let (o,u,h)=crate::modele::documentation::repere(p,v);
+            let point=|a:DVec2| (o+u*a.x+h*a.y).truncate();
+            for a in p.annotations.iter().filter(|a|a.vue==v.id && !v.elements_masques.contains(&a.id)) {
+                let Some(f)=a.forme.forme_2d() else {continue};
+                match f {
+                    d2::Forme2D::Ligne([a,b])=>essayer(d2::Forme2D::Ligne([point(a),point(b)])),
+                    d2::Forme2D::Arc(pts)=>essayer(d2::Forme2D::Arc(pts.map(point))),
+                    d2::Forme2D::Cercle{centre,rayon}=>essayer(d2::Forme2D::Cercle{centre:point(centre),rayon}),
+                    _=>for l in f.polylignes() {for w in l.windows(2){essayer(d2::Forme2D::Ligne([point(w[0]),point(w[1])]))}},
+                }
             }
+        }
+        for geometrie in geometries {
+            for forme in formes_selection(geometrie) { essayer(forme); }
         }
         choix.map(|c|c.1).or_else(||self.trait_annotation_vise(q,rect).map(|[a,b]| {
             let origine=self.scene.as_ref().map_or(DVec3::ZERO,|s|s.origin);

@@ -37,7 +37,8 @@ impl ViewerApp {
         let z=(n.altitude+coupe)*0.001-s.origin.z;
         let cible=plan_courant.w as f64;
         let niveau_id=scene::id_natif("niveau",niveau);
-        let vis:Vec<bool>=s.objects.iter().map(|o|o.storey==Some(niveau_id) && !source.elements_masques.iter().any(|id|self.cle_native(o.id).as_deref()==Some(id.as_str()))).collect();
+        let exclus = self.ids_masques_contextes();
+        let vis:Vec<bool>=s.objects.iter().map(|o|o.storey==Some(niveau_id) && !exclus.contains(&o.id) && !source.elements_masques.iter().any(|id|self.cle_native(o.id).as_deref()==Some(id.as_str()))).collect();
         let mut prims=dessin::coupe(s,&vis,Vec4::new(0.,0.,-1.,z as f32),self.echelle,Poche::Vide);
         prims.retain(|p|matches!(p.role,crate::noyau::trace2d::Role::Coupe | crate::noyau::trace2d::Role::Vu));
         prims.extend(crate::modele::documentation::annotations(projet,source).into_iter().filter(|p|p.role==crate::noyau::trace2d::Role::Annotation).map(|p|p.translater(-s.origin)));
@@ -126,10 +127,11 @@ impl ViewerApp {
         let coupe=plan.w;
         if limite<=coupe {return None;}
         let niveau_id=scene::id_natif("niveau",niveau);
+        let exclus = self.ids_masques_contextes();
         let visible=s.objects.iter().enumerate().map(|(i,o)| {
             let masque_vue=self.cle_native(o.id).is_some_and(|id|v.elements_masques.contains(&id))
                 || s.model.parent.get(&o.id).and_then(|id|self.cle_native(*id)).is_some_and(|id|v.elements_masques.contains(&id));
-            o.storey==Some(niveau_id) && o.min.z>coupe+1e-5 && o.min.z<limite
+            o.storey==Some(niveau_id) && !exclus.contains(&o.id) && o.min.z>coupe+1e-5 && o.min.z<limite
                 && !masque_vue && !self.hidden_classes.contains(&*o.class)
                 && !self.hidden_classes.contains(&*self.cle_objet[i])
                 && !self.hidden_objects.contains(&(i as u32))

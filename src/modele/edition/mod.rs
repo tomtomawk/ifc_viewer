@@ -1,5 +1,6 @@
 //! Création paramétrique d'éléments natifs. Les coordonnées sont en millimètres.
 pub mod commandes;
+pub mod contextes;
 pub mod historique;
 pub mod verrous;
 pub(crate) mod validation;
@@ -306,6 +307,7 @@ impl Projet {
         let avant = self.vues.len();
         self.vues.retain(|v| v.id != id);
         if self.vues.len() == avant { Err("Vue introuvable.".into()) } else {
+            self.contextes_vues.remove(id);
             self.annotations.retain(|a| a.vue!=id);
             for f in &mut self.feuilles {f.vues.retain(|v|v.vue!=id);}
             Ok(())

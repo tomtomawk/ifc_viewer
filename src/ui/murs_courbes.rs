@@ -119,6 +119,17 @@ impl ViewerApp {
                         if hover {ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);}
                     }
                 }
+                if self.dessin2d.arc_glisse.is_none() {
+                    let facteur = crate::config::options::unite().facteur();
+                    let rayon_actuel = crate::formats::ifc::step::format_real(r / facteur);
+                    let longueur_actuelle = crate::formats::ifc::step::format_real(r * s.abs() / facteur);
+                    if self.cote_arc.as_ref().is_none_or(|(mur, _, _, _)| mur != id) {
+                        self.cote_arc = Some((id.clone(), 2, rayon_actuel, longueur_actuelle));
+                    } else if let Some((_, _, rayon, longueur)) = &mut self.cote_arc {
+                        if !ui.memory(|m| m.has_focus(ui.make_persistent_id(("cote_arc", id, 0)))) { *rayon = rayon_actuel; }
+                        if !ui.memory(|m| m.has_focus(ui.make_persistent_id(("cote_arc", id, 1)))) { *longueur = longueur_actuelle; }
+                    }
+                }
                 if let Some((gid, poignee, _)) = &self.dessin2d.arc_glisse && gid == id {
                     if let Some(e) = self.ecran_plan(rect, points[*poignee].to_array(), z) {
                         let unite = crate::config::options::unite();
@@ -136,12 +147,12 @@ impl ViewerApp {
                     let poignee = *poignee;
                     for (k, (nom, texte)) in [("Rayon", rayon), ("Longueur", longueur)].into_iter().enumerate() {
                         let zone = egui::Rect::from_min_size(e + egui::vec2(14.0, -48.0 + k as f32 * 24.0), egui::vec2(95.0, 22.0));
-                        let reponse = ui.put(zone, egui::TextEdit::singleline(texte).id_salt(("cote_arc", id, k)).desired_width(95.0))
+                        let reponse = ui.put(zone, egui::TextEdit::singleline(texte).id(ui.make_persistent_id(("cote_arc", id, k))).desired_width(95.0))
                             .on_hover_text(format!("{nom} ({}) : saisir une valeur puis valider", crate::config::options::unite().suffixe().trim()));
                         if reponse.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                             modifier = Some((id.clone(), axe, if k == 0 { 1 } else if poignee == 0 { 0 } else { 2 }, texte.clone()));
                         }
-                        painter.text(zone.right_center() + egui::vec2(4.0, 0.0), egui::Align2::LEFT_CENTER, nom, egui::FontId::proportional(11.0), bleu);
+                        painter.text(zone.right_center() + egui::vec2(4.0, 0.0), egui::Align2::LEFT_CENTER, format!("{nom} ({})", crate::config::options::unite().suffixe().trim()), egui::FontId::proportional(11.0), bleu);
                     }
                 }
             }

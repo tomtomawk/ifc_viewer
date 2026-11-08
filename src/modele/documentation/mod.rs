@@ -914,7 +914,11 @@ pub fn hachures_45(poly: &[DVec2], pas: f64) -> Vec<[DVec2; 2]> {
 }
 
 pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
-    let v = p.vues.iter().find(|v| v.id == id).ok_or("Vue absente.")?;
+    let mut vue = p.vues.iter().find(|v| v.id == id).ok_or("Vue absente.")?.clone();
+    if let Some(filtre) = p.contextes_vues.get(id) {
+        vue.elements_masques.extend(p.elements_masques_contextes(filtre));
+    }
+    let v = &vue;
     let s = crate::rendu::scene::depuis_natif(p, std::path::Path::new("projet.modele.json"))?;
     let (o, mut u, mut h) = repere(p, v);
     if matches!(v.genre, GenreVue::Plan { .. }) {

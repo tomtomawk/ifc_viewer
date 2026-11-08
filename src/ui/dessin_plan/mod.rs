@@ -623,11 +623,23 @@ impl ViewerApp {
     /// traversent le plan de tracé, éléments horizontaux, quadrillages et dessins de la
     /// vue en plan ouverte (calque de tracé).
     fn geoms_dessin(&mut self) -> Vec<Geom> {
+        self.geoms_dessin_avec_mode(false)
+    }
+
+    fn geoms_dessin_avec_mode(&mut self, selection: bool) -> Vec<Geom> {
         let Some((usage, _)) = self.usage_dessin().or_else(||(self.poignee_axe.is_some() || self.dessin2d.arc_glisse.is_some()).then_some((Usage::Mur,OutilDessin::Ligne))) else { return Vec::new() };
         let vue = self.vue_native_id();
         let altitude = if let Some((id,_,_))=&self.dessin2d.arc_glisse {self.natif.as_ref().and_then(|(p,_)|p.trajectoire_justification(id)).map_or(0.0,|a|a.1)} else if self.poignee_axe.is_some() {self.axe_selection().map_or(0.0,|a|a.3)} else {self.altitude_trace()};
         let exclu=self.poignee_axe.as_ref().map(|a|a.0.as_str()).or_else(||self.dessin2d.arc_glisse.as_ref().map(|a|a.0.as_str()));
-        let cle = format!("{usage:?}|{}|{altitude}|{exclu:?}", vue.as_deref().unwrap_or(""));
+        let visibilite = if selection {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            self.visible.hash(&mut h);
+            h.finish()
+        } else { 0 };
+        let plan_coupe = if selection { self.plan_coupe().map(|p| p.to_array().map(f32::to_bits)) } else { None };
+        let orientation = if selection { Some((self.camera.forward().to_array().map(f32::to_bits), self.camera.up().to_array().map(f32::to_bits))) } else { None };
+        let cle = format!("{usage:?}|{}|{altitude}|{exclu:?}|{selection}|{visibilite}|{plan_coupe:?}|{orientation:?}", vue.as_deref().unwrap_or(""));
         if let Some((r, k, g)) = &self.dessin2d.geoms {
             if *r == self.bim.revision && *k == cle {
                 return g.clone();
@@ -639,9 +651,9 @@ impl ViewerApp {
             _ => None,
         });
         // origine du projet : point accrochable (segment de longueur nulle)
-        let mut g = vec![Geom::Segment([DVec2::ZERO, DVec2::ZERO])];
+        let mut g = if selection { Vec::new() } else { vec![Geom::Segment([DVec2::ZERO, DVec2::ZERO])] };
         // dessins de la vue : toujours pour une annotation, en plan pour un mur
-        if let Some(vue) = vue.as_ref().filter(|_| usage == Usage::Annotation || plan.is_some()) {
+        if !selection && let Some(vue) = vue.as_ref().filter(|_| usage == Usage::Annotation || plan.is_some()) {
             for a in p.annotations.iter().filter(|a| &a.vue == vue && self.dessin2d.edition_contour.as_ref().is_none_or(|e| e.id != a.id)) {
                 if let Some(f) = a.forme.forme_2d() {
                     g.extend(f.geoms());
@@ -651,6 +663,7 @@ impl ViewerApp {
         let modele = usage != Usage::Annotation || plan.is_some();
         if modele {
             let seg = |a: [f64; 2], b: [f64; 2]| Geom::Segment([DVec2::from_array(a), DVec2::from_array(b)]);
+            let visible = |genre: &str, id: &str| !selection || self.scene.as_ref().and_then(|s| s.object_of.get(&scene::id_natif(genre, id))).and_then(|i| self.visible.get(*i as usize)).copied().unwrap_or(false);
             let coupes = crate::modele::murs::jonctions::coupes(p);
             let retenu = |m: &crate::modele::Mur| match usage {
                 Usage::Annotation => plan.as_ref() == Some(&m.niveau),
@@ -659,14 +672,14 @@ impl ViewerApp {
             // `exclu` : mur dont on déplace la poignée (et ses couches) ; sans poignée, aucun
             // mur n'est exclu (comparer deux `None` excluait tous les murs simples)
             let exclu_mur = |m: &crate::modele::Mur| exclu.is_some_and(|e| e == m.id || m.assemblage.as_deref() == Some(e));
-            for m in p.murs.iter().filter(|m| retenu(m) && !exclu_mur(m)) {
+            for m in p.murs.iter().filter(|m| (selection || retenu(m)) && !exclu_mur(m) && visible("mur", &m.id)) {
                 if let Some(c) = crate::modele::murs::jonctions::contour(p, m, &coupes) {
                     for k in 0..4 {
                         g.push(seg(c[k], c[(k + 1) % 4]));
                     }
                 }
                 match m.axe {
-                    crate::modele::Axe::Droit { debut, fin } => g.push(seg(debut, fin)),
+                    crate::modele::Axe::Droit { debut, fin } => if !selection { g.push(seg(debut, fin)); },
                     crate::modele::Axe::Arc { debut, fin, centre, .. } => {
                         let o = DVec2::from_array(centre);
                         let (a, b) = (DVec2::from_array(debut), DVec2::from_array(fin));
@@ -675,28 +688,56 @@ impl ViewerApp {
                         let direct = matches!(m.axe, crate::modele::Axe::Arc { direct: true, .. });
                         let mut balayage = (b - o).to_angle() - a0;
                         balayage = if direct { balayage.rem_euclid(std::f64::consts::TAU) } else { -(-balayage).rem_euclid(std::f64::consts::TAU) };
-                        g.push(Geom::Arc { centre: o, rayon: r, depart: a0, balayage });
+                        if selection {
+                            let e = p.type_mur(&m.type_mur).map_or(0.0, |t| t.epaisseur()) * 0.5;
+                            if r > e && e > 0.0 {
+                                for rayon in [r - e, r + e] { g.push(Geom::Arc { centre: o, rayon, depart: a0, balayage }); }
+                                for angle in [a0, a0 + balayage] {
+                                    let d = DVec2::from_angle(angle);
+                                    g.push(Geom::Segment([o + d * (r - e), o + d * (r + e)]));
+                                }
+                            }
+                        } else { g.push(Geom::Arc { centre: o, rayon: r, depart: a0, balayage }); }
                     }
                 }
             }
-            for d in p.dalles.iter().filter(|d| (usage != Usage::Annotation || plan.as_ref() == Some(&d.niveau)) && self.dessin2d.edition_contour.as_ref().is_none_or(|e| e.id != d.id)) {
+            for d in p.dalles.iter().filter(|d| (usage != Usage::Annotation || plan.as_ref() == Some(&d.niveau)) && self.dessin2d.edition_contour.as_ref().is_none_or(|e| e.id != d.id) && visible("dalle", &d.id)) {
                 for c in &d.contours {
                     for k in 0..c.len() {
                         g.push(seg(c[k], c[(k + 1) % c.len()]));
                     }
                 }
             }
-            for t in &p.terrains {
+            for t in p.terrains.iter().filter(|t| visible("terrain", &t.id)) {
                 for i in 0..t.contour.len() {
                     let a = t.contour[i]; let b = t.contour[(i + 1) % t.contour.len()];
                     g.push(seg([a[0], a[1]], [b[0], b[1]]));
                 }
             }
-            for l in &p.limites_propriete {
+            for l in p.limites_propriete.iter().filter(|l| visible("limite_propriete", &l.id)) {
                 for i in 0..l.contour.len() { g.push(seg(l.contour[i], l.contour[(i + 1) % l.contour.len()])); }
             }
             for q in &p.quadrillages {
                 g.push(seg(q.debut, q.fin));
+            }
+        }
+        if selection && let Some(scene) = &self.scene && let Some(plan) = self.plan_coupe() {
+            // Les contours réellement coupés comprennent notamment les ouvertures et
+            // les éléments qui ne disposent pas d'un contour natif en plan.
+            let arcs: std::collections::HashSet<_> = p.murs.iter().filter(|m| matches!(m.axe, crate::modele::Axe::Arc { .. })).map(|m| scene::id_natif("mur", &m.id)).collect();
+            let mut traits = crate::dessin::coupe(scene, &self.visible, plan, self.echelle, crate::dessin::Poche::Vide);
+            traits.extend(self.aretes_au_dessus_plan());
+            let point = |v: DVec3| (v + scene.origin).truncate() * 1000.0;
+            for prim in traits {
+                if !matches!(prim.role, crate::noyau::trace2d::Role::Coupe | crate::noyau::trace2d::Role::Vu) || prim.element.is_some_and(|id| arcs.contains(&id)) { continue; }
+                match prim.forme {
+                    crate::noyau::trace2d::Forme::Segments(segments) => for [a,b] in segments { g.push(Geom::Segment([point(a),point(b)])); },
+                    crate::noyau::trace2d::Forme::Polyligne { points, fermee } => {
+                        for w in points.windows(2) { g.push(Geom::Segment([point(w[0]),point(w[1])])); }
+                        if fermee && points.len() > 2 { g.push(Geom::Segment([point(*points.last().unwrap()),point(points[0])])); }
+                    }
+                    _ => {}
+                }
             }
         }
         // Le fond de plan est visible : ses contours projetés participent aussi aux

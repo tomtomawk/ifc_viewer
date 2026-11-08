@@ -410,6 +410,7 @@ pub fn sensible(k: &str) -> bool {
             | "@/priorites_jonction"
             | "@/implantations"
             | "@/contextes"
+            | "@/contextes_vues"
             | "@/materiaux"
             | "@/motifs"
             | "@/plumes"

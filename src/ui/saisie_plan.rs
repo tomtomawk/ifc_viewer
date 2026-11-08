@@ -210,6 +210,16 @@ impl ViewerApp {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
             }
         }
+        if self.poignee_axe.is_none() {
+            let id_champ = ui.make_persistent_id(("cote_poignee_mur", &id));
+            let longueur = (b[0] - a[0]).hypot(b[1] - a[1]) / crate::config::options::unite().facteur();
+            let valeur = crate::formats::ifc::step::format_real(longueur);
+            if self.cote_axe.as_ref().is_none_or(|(mur, _, _)| mur != &id) {
+                self.cote_axe = Some((id.clone(), true, valeur));
+            } else if !ui.memory(|m| m.has_focus(id_champ)) && let Some((_, _, texte)) = &mut self.cote_axe {
+                *texte = valeur;
+            }
+        }
         if self.poignee_axe.is_some() {
             let l = (b[0] - a[0]).hypot(b[1] - a[1]);
             let libelle = if self.dessin2d.saisie.is_empty() { crate::config::options::unite().afficher(l) } else { format!("{}▏{}", self.dessin2d.saisie, crate::config::options::unite().suffixe()) };
@@ -222,8 +232,9 @@ impl ViewerApp {
             let cadre = egui::Rect::from_center_size(position, egui::vec2(90.0, 22.0));
             let (_, fin, texte) = self.cote_axe.as_mut().unwrap();
             let fin = *fin;
-            let reponse = ui.put(cadre, egui::TextEdit::singleline(texte).id_salt(("cote_poignee_mur", &id)).desired_width(90.0))
+            let reponse = ui.put(cadre, egui::TextEdit::singleline(texte).id(ui.make_persistent_id(("cote_poignee_mur", &id))).desired_width(90.0))
                 .on_hover_text(format!("Longueur de la ligne d'implantation ({}) : saisir une valeur puis valider", crate::config::options::unite().suffixe().trim()));
+            painter.text(cadre.right_center() + egui::vec2(4.0, 0.0), egui::Align2::LEFT_CENTER, crate::config::options::unite().suffixe().trim(), egui::FontId::proportional(11.0), bleu);
             if reponse.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 let longueur = texte.trim().replace(',', ".").parse::<f64>().ok()
                     .filter(|v| v.is_finite() && *v > 0.0)

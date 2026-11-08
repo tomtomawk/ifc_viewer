@@ -11,6 +11,7 @@ mod feuilles;
 mod dessin_plan;
 mod editeur_famille;
 mod accrochage;
+mod gestion_contextes;
 pub mod ruban;
 use accrochage::{AccrocheMur, marqueur};
 mod collaboration;
@@ -652,6 +653,8 @@ pub struct ViewerApp {
     cote_axe: Option<(String, bool, String)>,
     /// Dernier mur courbe modifié : poignée, rayon et longueur d'arc éditables.
     cote_arc: Option<(String, usize, String, String)>,
+    gestion_contextes: Option<gestion_contextes::GestionContextes>,
+    filtres_contextes: crate::modele::edition::contextes::FiltresContextes,
     /// Matériau du projet natif dont les graphismes sont ouverts.
     materiau_edite: Option<String>,
     /// Onglet de la fenêtre Matériau : Graphique (faux) ou Apparence (vrai).
@@ -859,6 +862,8 @@ impl ViewerApp {
             poignee_axe: None,
             cote_axe: None,
             cote_arc: None,
+            gestion_contextes: None,
+            filtres_contextes: Default::default(),
             categories: Vec::new(),
             categorie_objet: Vec::new(),
             cle_objet: Vec::new(),
@@ -977,6 +982,7 @@ impl eframe::App for ViewerApp {
         self.clavier_raccourcis(&ctx);
 
         egui::Panel::top("top").show(ui, |ui| self.top_bar(ui));
+        self.fenetre_gestion_contextes(&ctx);
         self.fenetre_parametres(&ctx);
         self.fenetre_coller_niveau(&ctx);
         self.fenetres_collaboration(&ctx);

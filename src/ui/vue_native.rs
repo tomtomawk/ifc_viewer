@@ -2,6 +2,49 @@
 use super::*;
 
 impl ViewerApp {
+    /// Identifiant stable des propriétés de contexte de la vue courante.
+    pub(super) fn id_vue_contexte(&self) -> Option<String> {
+        self.id_vue_rendu()
+    }
+
+    /// Phase et variante enregistrées avec la vue, indépendamment des filtres temporaires.
+    pub(super) fn proprietes_contexte_vue(&mut self, ui: &mut egui::Ui) {
+        let Some(id) = self.id_vue_contexte() else { return };
+        let Some((projet, _)) = &self.natif else { return };
+        let mut filtre = projet.contextes_vues.get(&id).cloned().unwrap_or_default();
+        let avant = filtre.clone();
+        egui::CollapsingHeader::new(RichText::new("Paramètres de la vue").strong()).id_salt("contexte_vue_native").default_open(true).show(ui, |ui| {
+            egui::Grid::new("grille_contexte_vue").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
+                ui.label("Gabarit de vue");
+                ui.label(RichText::new("Non pris en charge").weak())
+                    .on_hover_text("Les gabarits de vue ne sont pas encore gérés dans les projets natifs.");
+                ui.end_row();
+                ui.label("Phase affichée").on_hover_text("Affiche les éléments créés au plus tard dans cette phase et pas encore démolis.");
+                egui::ComboBox::from_id_salt("phase_vue_native").width(150.0).truncate().selected_text(filtre.phase.as_deref().unwrap_or("Toutes"))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut filtre.phase, None, "Toutes");
+                        for phase in &projet.phases { ui.selectable_value(&mut filtre.phase, Some(phase.clone()), phase); }
+                    });
+                ui.end_row();
+                ui.label("Variante affichée").on_hover_text("Les autres variantes du même jeu sont masquées ; le modèle principal et les autres jeux restent visibles.");
+                let nom = filtre.variante.as_ref().and_then(|id| projet.variantes.iter().find(|v| &v.id == id)).map_or("Toutes".into(), |v| v.libelle());
+                egui::ComboBox::from_id_salt("variante_vue_native").width(150.0).truncate().selected_text(nom).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut filtre.variante, None, "Toutes");
+                    for variante in &projet.variantes { ui.selectable_value(&mut filtre.variante, Some(variante.id.clone()), variante.libelle()); }
+                });
+                ui.end_row();
+            });
+            if self.filtres_contextes != Default::default() {
+                ui.label(RichText::new("Les filtres temporaires du gestionnaire s'ajoutent à ceux de la vue.").small().weak());
+            }
+        });
+        if filtre != avant {
+            let mut copie = projet.clone();
+            if filtre == Default::default() { copie.contextes_vues.remove(&id); } else { copie.contextes_vues.insert(id, filtre); }
+            if let Err(e) = self.appliquer_projet(copie) { self.error = Some(e); }
+        }
+    }
+
     /// Propriétés de la vue native ouverte : nom, type, échelle, hauteur du plan de
     /// coupe (plan) ou profondeur (coupe, élévation), Retourner, Supprimer.
     pub(super) fn proprietes_vue_native(&mut self, ui: &mut egui::Ui) {

@@ -108,6 +108,9 @@ pub struct Projet {
     /// Vues du projet (arborescence) : plans d'étage et coupes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub vues: Vec<Vue>,
+    /// Filtres de contexte enregistrés par vue ; « 3d » désigne la vue 3D par défaut.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub contextes_vues: BTreeMap<String, edition::contextes::FiltresContextes>,
     /// Orientations enregistrées des plans (repère du plan).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub positions_plan: Vec<PositionPlan>,

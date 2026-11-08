@@ -255,6 +255,7 @@ impl ViewerApp {
                     C { enfonce: self.orientation_nord_en_cours, ..C::new("nord", "Orienter le nord", I::Nord, "Définir le nord du projet en sélectionnant un trait dans une vue de plan", self.natif.is_some() && self.vue_en_plan() && self.dessin2d.edition_contour.is_none()) },
                     C::new("lieu", "Lieu", I::Lieu, "Lieu géographique du projet : ville ou coordonnées (soleil des ombres et du ciel)", self.natif.is_some()),
                     C::new("coordonnees", "Coordonnées", I::Coordonnees, "Coordonnées de l'origine du projet et cote NGF du niveau 0 : la modifier remonte ou descend le projet par rapport au terrain (aussi : cliquer l'origine dans une vue)", self.natif.is_some()),
+                    C::new("contextes", "Phases et variantes", I::Options, "Gérer les phases, sous-projets et variantes du projet", self.natif.is_some()),
                 ];
                 for (cle, r) in crate::ui::ruban::bandeau(ui, &[("Fichier", fichier), ("Réglages", reglages), ("Projet", orientation)]) {
                     match cle {
@@ -281,6 +282,7 @@ impl ViewerApp {
                         "ouvrir" => self.open_dialog(&ctx),
                         "fermer" => self.fermer(),
                         "importer" => self.importer_dialogue(&ctx),
+                        "contextes" => self.ouvrir_gestion_contextes(),
                         "fiche" => self.rvt_sheet = !self.rvt_sheet,
                         "nord" => {
                             self.orientation_nord_en_cours = !self.orientation_nord_en_cours;

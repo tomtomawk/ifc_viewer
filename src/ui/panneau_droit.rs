@@ -33,6 +33,18 @@ impl ViewerApp {
             } else if let Some(projet) = self.contexte_selection(ui, &ids) {
                 if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
             }
+            if ui.link("Gérer phases, sous-projets et variantes…").clicked() {
+                self.ouvrir_gestion_contextes();
+            }
+            if self.filtres_contextes != Default::default() {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new("Filtres de contexte actifs").small());
+                    if ui.small_button("Tout afficher").on_hover_text("Désactiver les filtres temporaires de phases, sous-projets et variantes").clicked() {
+                        self.filtres_contextes = Default::default();
+                        self.visibility_dirty = true;
+                    }
+                });
+            }
             if !ids.is_empty() && self.onglet_ruban == OngletRuban::Modifier {
                 self.options_modifier(ui, true);
             }
@@ -116,6 +128,7 @@ impl ViewerApp {
         }
         if self.natif.is_some() && !element_selectionne {
             self.proprietes_vue_native(ui);
+            self.proprietes_contexte_vue(ui);
         }
         if !element_selectionne && self.natif.is_none() && self.scene.is_some() && (self.coupe || !self.vue_3d()) {
             self.plage_de_vue(ui);

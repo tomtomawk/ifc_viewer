@@ -352,7 +352,7 @@ impl ViewerApp {
     }
 }
 
-fn elements_natifs(p: &crate::modele::Projet) -> impl Iterator<Item = (&'static str, &String)> {
+pub(super) fn elements_natifs(p: &crate::modele::Projet) -> impl Iterator<Item = (&'static str, &String)> {
         p.murs
             .iter()
             .map(|x| ("mur", &x.id))
