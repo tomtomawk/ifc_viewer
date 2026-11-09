@@ -279,6 +279,26 @@ impl Projet {
         Ok(id)
     }
 
+    /// Copie les réglages d'une vue sans copier ses annotations ni son placement sur feuille.
+    pub fn dupliquer_vue(&mut self, source: &str) -> Result<String, String> {
+        let mut vue = self.vues.iter().find(|v| v.id == source).cloned().ok_or("Vue introuvable.")?;
+        let (id, _) = self.nouvelle_vue("copie");
+        let base = format!("{} - Copie", vue.nom);
+        let mut nom = base.clone();
+        let mut numero = 2;
+        while self.vues.iter().any(|v| v.nom == nom) {
+            nom = format!("{base} ({numero})");
+            numero += 1;
+        }
+        vue.id = id.clone();
+        vue.nom = nom;
+        self.vues.push(vue);
+        if let Some(v) = self.contextes_vues.get(source).cloned() { self.contextes_vues.insert(id.clone(), v); }
+        if let Some(v) = self.gabarits_vue_affectes.get(source).cloned() { self.gabarits_vue_affectes.insert(id.clone(), v); }
+        if let Some(v) = self.rendus_vues.get(source).cloned() { self.rendus_vues.insert(id.clone(), v); }
+        Ok(id)
+    }
+
     /// Renomme une vue ; le nom doit être unique et non vide.
     pub fn renommer_vue(&mut self, id: &str, nom: &str) -> Result<(), String> {
         let nom = nom.trim();
@@ -580,6 +600,28 @@ impl Projet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dupliquer_vue_conserve_reglages_et_noms_uniques() {
+        let mut p = Projet::nouveau("Test");
+        p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &ParametresMur::default()).unwrap();
+        let niveau = p.niveaux[0].id.clone();
+        let source = p.ajouter_vue_plan(&niveau, 1200.0).unwrap();
+        let originale = p.vues.iter_mut().find(|v| v.id == source).unwrap();
+        originale.echelle = 50.0;
+        originale.elements_masques.push("mur".into());
+        let copie = p.dupliquer_vue(&source).unwrap();
+        let autre = p.dupliquer_vue(&source).unwrap();
+        let a = p.vues.iter().find(|v| v.id == source).unwrap();
+        let b = p.vues.iter().find(|v| v.id == copie).unwrap();
+        let c = p.vues.iter().find(|v| v.id == autre).unwrap();
+        assert_eq!(b.genre, a.genre);
+        assert_eq!(b.echelle, 50.0);
+        assert_eq!(b.elements_masques, a.elements_masques);
+        assert_ne!(a.nom, b.nom);
+        assert_ne!(b.nom, c.nom);
+        assert!(p.dupliquer_vue("absente").is_err());
+    }
+
     #[test]
     fn poignee_garde_fixe_autre_extremite_sur_la_justification() {
         for implantation in [Implantation::Axe,Implantation::Exterieure,Implantation::Interieure,Implantation::AxePorteur] {

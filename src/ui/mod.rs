@@ -238,6 +238,7 @@ enum ActionNav {
     Activer(usize),
     IsolerType(Id),
     SupprimerVue(usize),
+    DupliquerVue(String),
 }
 
 /// Rubrique du navigateur de projet d'un genre de vue (ordre de Revit) ; None pour les

@@ -91,7 +91,21 @@ impl ViewerApp {
             if glissable.is_some() {
                 bouton = bouton.sense(Sense::click_and_drag());
             }
-            let r = ui.add(bouton);
+            let native = vue.and_then(|i| nav.vues.get(i)).and_then(|v| glissables.get(&v.revit_id));
+            let r = ui.horizontal(|ui| {
+                let r = ui.add(bouton);
+                if let Some(id) = native {
+                    let (rect, copie) = ui.allocate_exact_size(egui::vec2(18.0, 18.0), Sense::click());
+                    if ui.rect_contains_pointer(r.rect.union(rect)) || copie.has_focus() {
+                        let c = ui.visuals().text_color();
+                        let p = ui.painter();
+                        p.rect_stroke(egui::Rect::from_min_size(rect.min + egui::vec2(4.0, 2.0), egui::vec2(9.0, 11.0)), 1.0, egui::Stroke::new(1.0, c), egui::StrokeKind::Inside);
+                        p.rect_stroke(egui::Rect::from_min_size(rect.min + egui::vec2(7.0, 5.0), egui::vec2(9.0, 11.0)), 1.0, egui::Stroke::new(1.0, c), egui::StrokeKind::Inside);
+                    }
+                    if copie.on_hover_text("Dupliquer la vue").clicked() { *action = Some(ActionNav::DupliquerVue(id.clone())); }
+                }
+                r
+            }).inner;
             if let Some(id) = glissable {
                 r.dnd_set_drag_payload(feuilles::VueGlissee(id.clone()));
             }
@@ -439,6 +453,7 @@ impl ViewerApp {
             Some(ActionNav::Selection(e)) => self.select(Some(e), false),
             Some(ActionNav::Activer(i)) => self.activer_vue(i),
             Some(ActionNav::SupprimerVue(i)) => self.supprimer_vue_native(i),
+            Some(ActionNav::DupliquerVue(id)) => self.creer_vue(|p| p.dupliquer_vue(&id), false),
             Some(ActionNav::IsolerType(t)) => {
                 if let Some(s) = &self.scene {
                     let objs: Vec<u32> = s.objects.iter().enumerate().filter(|(_, o)| s.model.type_of.get(&o.id) == Some(&t)).map(|(i, _)| i as u32).collect();
