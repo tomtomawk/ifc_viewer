@@ -278,7 +278,7 @@ impl RubanEdition {
                 while projet.types_murs.iter().any(|t| t.nom == format!("Mur composé {n}")) {
                     n += 1;
                 }
-                let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None, retour: false };
+                let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None, retour: false, ossature: None };
                 (format!("Mur composé {n}"), vec![c("Enduit", 15.0, FonctionCouche::Finition), c("Béton", 200.0, FonctionCouche::Structure), c("Laine minérale", 120.0, FonctionCouche::Isolation), c("Plâtre", 13.0, FonctionCouche::Finition)])
             }
         };
@@ -330,8 +330,8 @@ impl RubanEdition {
                 // glisser-déposer : lignes (hauteur) et relâchement de la poignée
                 let mut lignes: Vec<egui::Rangef> = Vec::new();
                 let mut lacher = false;
-                egui::Grid::new("couches_type_mur").num_columns(9).spacing([6.0, 4.0]).striped(true).show(ui, |ui| {
-                    for t in ["", "Fonction", "Matériau", "", "Motif", "Épaisseur", "Plume", "Retour", ""] {
+                egui::Grid::new("couches_type_mur").num_columns(10).spacing([6.0, 4.0]).striped(true).show(ui, |ui| {
+                    for t in ["", "Fonction", "Matériau", "", "Motif", "Épaisseur", "Plume", "Retour", "Ossature", ""] {
                         ui.label(RichText::new(t).small().weak());
                     }
                     ui.end_row();
@@ -416,6 +416,35 @@ impl RubanEdition {
                         ui.add_enabled(c.fonction != FonctionCouche::Structure, egui::Checkbox::without_text(&mut c.retour))
                             .on_hover_text("Retour aux insertions : la couche tourne dans les tableaux et le linteau des ouvertures, jusqu'au plan « Retour extérieur » ou « Retour intérieur » de leur famille")
                             .on_disabled_hover_text("Une couche de structure ne se retourne pas");
+                        // ossature : montants dans l'épaisseur de la couche, réglés dans un menu
+                        let resume = c.ossature.as_ref().map_or("—".to_string(), |o| format!("{:.0} / {:.0}", o.largeur, o.entraxe));
+                        let bouton = ui.button(resume).on_hover_text("Ossature : montants à entraxe régulier dans la couche (largeur / entraxe, mm). Le matériau de la couche remplit les travées.");
+                        egui::Popup::menu(&bouton).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+                            let mut active = c.ossature.is_some();
+                            if ui.checkbox(&mut active, "Couche à ossature").changed() {
+                                c.ossature = active.then(Default::default);
+                            }
+                            if let Some(o) = &mut c.ossature {
+                                egui::Grid::new("ossature_couche").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
+                                    ui.label("Largeur des montants");
+                                    ui.add(egui::DragValue::new(&mut o.largeur).speed(1.0).range(5.0..=500.0).max_decimals(1).dimensions());
+                                    ui.end_row();
+                                    ui.label("Entraxe");
+                                    ui.add(egui::DragValue::new(&mut o.entraxe).speed(5.0).range(50.0..=5000.0).max_decimals(1).dimensions());
+                                    ui.end_row();
+                                    ui.label("Matériau des montants");
+                                    let mut nom = o.materiau.clone().unwrap_or_default();
+                                    ui.add(egui::TextEdit::singleline(&mut nom).desired_width(130.0).hint_text(crate::modele::murs::ossature::MATERIAU_OSSATURE));
+                                    let nom = nom.trim().to_string();
+                                    o.materiau = (!nom.is_empty()).then_some(nom);
+                                    ui.end_row();
+                                });
+                                ui.checkbox(&mut o.lisses, "Lisses, linteaux et appuis").on_hover_text("Lisses basse et haute ; linteau et appui autour des ouvertures. Les montants de part et d'autre des ouvertures sont toujours ajoutés.");
+                                if o.entraxe <= o.largeur {
+                                    ui.colored_label(ui.visuals().error_fg_color, "L'entraxe doit dépasser la largeur.");
+                                }
+                            }
+                        });
                         if petit_bouton(ui, n > 1, Glyphe::Croix).on_hover_text("Supprimer la couche").clicked() { action = Some((k, 0)); }
                         ui.end_row();
                     }
@@ -445,7 +474,7 @@ impl RubanEdition {
                 }
                 ui.horizontal(|ui| {
                     if ui.button("+ Couche").clicked() {
-                        ed.couches.push(Couche { materiau: None, epaisseur: 50.0, fonction: FonctionCouche::Autre, plume: None, retour: false });
+                        ed.couches.push(Couche { materiau: None, epaisseur: 50.0, fonction: FonctionCouche::Autre, plume: None, retour: false, ossature: None });
                     }
                     let total: f64 = ed.couches.iter().map(|c| c.epaisseur).sum();
                     ui.label(format!("Épaisseur totale : {}", crate::config::options::unite().afficher(total)));
@@ -480,6 +509,10 @@ impl RubanEdition {
             ed.erreur = Some("Chaque couche doit avoir une épaisseur positive.".into());
             return false;
         }
+        if ed.couches.iter().any(|c| c.ossature.as_ref().is_some_and(|o| !o.valide())) {
+            ed.erreur = Some("Ossature : l'entraxe doit dépasser la largeur des montants.".into());
+            return false;
+        }
         if projet.types_murs.iter().any(|t| t.nom == nom && Some(&t.id) != ed.id.as_ref()) {
             ed.erreur = Some("Un autre type porte déjà ce nom.".into());
             return false;
@@ -505,6 +538,7 @@ impl RubanEdition {
                 projet.materiaux.push(m.clone());
             }
         }
+        projet.completer_materiaux();
         self.type_mur = Some(id);
         self.editeur_type = None;
         true

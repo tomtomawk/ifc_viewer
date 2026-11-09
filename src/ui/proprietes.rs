@@ -24,6 +24,8 @@ impl ViewerApp {
                 if let Some((axe,_))=projet.trajectoire_justification(&a.id) {ui.label("Longueur");ui.label(crate::config::options::unite().afficher(axe.longueur()));ui.end_row();}
                 let volume:f64=couches.iter().filter_map(|m|projet.volume_mur(m)).sum();
                 ui.label("Volume");ui.label(format!("{:.3} m³",volume/1e9));ui.end_row();
+                let ossature:f64=couches.iter().map(|m|crate::modele::murs::ossature::lineaire_mur(projet,m)).sum();
+                if ossature>0.0 {ui.label("Ossature").on_hover_text("Longueur cumulée des montants, lisses, linteaux et appuis");ui.label(format!("{:.1} m",ossature/1000.0));ui.end_row();}
             });
             // le plan des couches est dans le sélecteur de type, juste au-dessus
             ui.label(RichText::new("Couches, de l'extérieur vers l'intérieur (clic : sélectionner ; Tab parcourt)").small().weak());

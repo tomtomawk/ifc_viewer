@@ -967,6 +967,38 @@ mod tests {
     }
 
     #[test]
+    fn ossature_coupee_en_plan_montants_et_travees() {
+        use crate::modele::{Axe, Couche, FonctionCouche, Materiau, Projet, TypeCompose};
+        use crate::modele::edition::ParametresMur;
+        use crate::modele::murs::ossature::Ossature;
+        let mut projet = Projet::nouveau("Ossature");
+        let couche = Couche { materiau: Some("Laine".into()), epaisseur: 145.0, fonction: FonctionCouche::Structure, ossature: Some(Ossature { materiau: Some("Sapin".into()), ..Default::default() }), ..Default::default() };
+        projet.types_murs.push(TypeCompose { id: "mob".into(), nom: "MOB".into(), couches: vec![couche], categorie: None, couches_detaillees: true, origine: None });
+        projet.materiaux.push(Materiau { nom: "Sapin".into(), couleur: [200, 150, 90], ..Default::default() });
+        projet.materiaux.push(Materiau { nom: "Laine".into(), couleur: [250, 230, 120], ..Default::default() });
+        let options = ParametresMur { type_mur: Some("mob".into()), ..Default::default() };
+        projet.ajouter_mur([0.0, 0.0], [3000.0, 0.0], &options).unwrap();
+        projet.ajouter_mur_axe(Axe::Arc { debut: [17000.0, -8000.0], fin: [12000.0, -3000.0], centre: [12000.0, -8000.0], direct: true }, &options).unwrap();
+        let scene = crate::rendu::scene::depuis_natif(&projet, std::path::Path::new("test.modele.json")).unwrap();
+        let plan = Vec3::NEG_Z.extend((1.0 - scene.origin.z) as f32);
+        let primitives = super::coupe(&scene, &vec![true; scene.objects.len()], plan, 100.0, Poche::Materiau);
+        let aire = |couleur: [u8; 4], droit: bool| -> f64 {
+            primitives.iter().filter(|p| p.role == Role::Poche && p.style.couleur == couleur).flat_map(|p| match &p.forme { Forme::Triangles(t) => t.clone(), _ => Vec::new() })
+                .filter(|t| ((t[0].y + scene.origin.y).abs() < 0.5) == droit)
+                .map(|t| (t[1] - t[0]).cross(t[2] - t[0]).length() / 2.0).sum()
+        };
+        // mur droit de 3 m : 6 montants de 45 × 145, le reste en remplissage
+        let (bois, laine) = (aire([200, 150, 90, 255], true), aire([250, 230, 120, 255], true));
+        assert!((bois - 6.0 * 0.045 * 0.145).abs() < 1e-6, "{bois}");
+        assert!((bois + laine - 3.0 * 0.145).abs() < 1e-6, "{laine}");
+        // mur courbe (quart de cercle de 5 m de rayon) : 14 montants, sans doublon en face
+        let (bois, laine) = (aire([200, 150, 90, 255], false), aire([250, 230, 120, 255], false));
+        let total = std::f64::consts::FRAC_PI_2 * 5.0 * 0.145;
+        assert!((bois + laine - total).abs() < 1e-3, "{bois} + {laine} / {total}");
+        assert!((bois - 14.0 * 0.045 * 0.145).abs() < 2e-3, "{bois}");
+    }
+
+    #[test]
     fn isolant_tres_mince_et_long_n_explose_pas() {
         let s = super::ligne_isolation(&rect(0.0, 0.0, 30000.0, 1.0));
         assert!(s.is_empty());
@@ -1224,7 +1256,7 @@ mod test_isolant_arc {
     #[test]
     fn isolant_d_un_mur_courbe_reel() {
         let mut p = Projet::nouveau("Arc");
-        let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None, retour: false };
+        let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None, retour: false, ossature: None };
         p.types_murs.push(TypeCompose { id: "t".into(), nom: "Mur".into(), couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Isolant", 100.0, FonctionCouche::Isolation), c("Béton", 200.0, FonctionCouche::Structure)], categorie: None, couches_detaillees: true, origine: None });
         let o = ParametresMur { type_mur: Some("t".into()), ..Default::default() };
         p.ajouter_mur_axe(Axe::Arc { debut: [5000.0, 0.0], fin: [0.0, 5000.0], centre: [0.0, 0.0], direct: true }, &o).unwrap();

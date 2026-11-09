@@ -90,6 +90,8 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         model.type_of.insert(id, id_natif("type-mur", &a.type_mur));
     }
     let mut couches_coupe = Vec::new();
+    // bandes en mètres dans le repère du fichier (dalles, ossatures), ramenées à la scène
+    let mut bandes_dalles: Vec<(u64, Vec<CoucheCoupe>)> = Vec::new();
     let mut geoms = Vec::new();
     // matériau de chaque partie des éléments (jonctions sans arête entre mêmes matériaux)
     let mut materiaux_parts: Vec<Vec<Option<String>>> = Vec::new();
@@ -133,7 +135,19 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
             if let crate::modele::Axe::Arc { centre, .. } = m.axe {
                 for bande in &mut bandes { bande.centre_isolation = Some([centre[0] * 0.001, centre[1] * 0.001]); }
             }
-            couches_coupe.push((id, bandes));
+            // ossature : la couche découpée en membrures et travées de remplissage
+            let cases = crate::modele::murs::ossature::bandes_mur(projet, m);
+            if let (Some(o), false) = (crate::modele::murs::ossature::ossature_mur(projet, m), cases.is_empty()) {
+                let membrure = projet.materiau(o.materiau()).cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(o.materiau()));
+                let trait_mm = bandes[0].trait_mm;
+                let decoupees = cases.into_iter().flat_map(|case| {
+                    let plans: Vec<Vec4> = case.plans.iter().map(|q| Vec4::new(q[0] as f32, q[1] as f32, q[2] as f32, (q[3] * 0.001) as f32)).collect();
+                    if case.membrure { coupe_materiau(projet, &membrure, plans, trait_mm) } else { bandes.iter().cloned().map(|mut b| { b.plans = plans.clone(); b }).collect() }
+                }).collect();
+                bandes_dalles.push((id, decoupees));
+            } else {
+                couches_coupe.push((id, bandes));
+            }
         } else if type_mur.couches.len() == 1 {
             // mur sans matériau : poché et hachures par défaut, mais en bande de coupe, pour
             // que les jonctions entre murs identiques se lisent sans trait
@@ -154,7 +168,6 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.as_ref().map(|m| rendu_materiau(m, couleur, &mut table_apparences))], motifs: vec![materiau.as_ref().and_then(|m| motif_surface(projet, m, &mut table_motifs))] });
     }
     // dalles : un prisme par couche, du dessus (niveau + décalage) vers le bas
-    let mut bandes_dalles: Vec<(u64, Vec<CoucheCoupe>)> = Vec::new();
     for d in &projet.dalles {
         let t = projet.type_dalle(&d.type_dalle).ok_or_else(|| format!("{} : type de dalle introuvable.", d.nom))?;
         let alt = projet.niveau(&d.niveau).ok_or_else(|| format!("{} : niveau introuvable.", d.nom))?.altitude;
@@ -182,8 +195,19 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
             let couleur = opacite(m.as_ref(), couleur);
             if let Some(m) = &m {
                 // bandes de coupe entre le dessous et le dessus de la couche (m, repère du fichier)
+                let solives = c.ossature.as_ref().filter(|o| o.valide()).map(|o| {
+                    let membrure = projet.materiau(o.materiau()).cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(o.materiau()));
+                    (membrure, crate::modele::murs::ossature::bandes_dalle(o, &d.contours))
+                }).filter(|(_, cases)| !cases.is_empty());
                 for jeu in crate::modele::elements::pente::bandes_contours(&d.contours, &plans, z0, bas, haut) {
-                    bandes.extend(coupe_materiau(projet, m, jeu, projet.trait_couche(c)));
+                    match &solives {
+                        Some((membrure, cases)) => for case in cases {
+                            let mut jeu = jeu.clone();
+                            jeu.extend(case.plans.iter().map(|q| Vec4::new(q[0] as f32, q[1] as f32, q[2] as f32, (q[3] * 0.001) as f32)));
+                            bandes.extend(coupe_materiau(projet, if case.membrure { membrure } else { m }, jeu, projet.trait_couche(c)));
+                        },
+                        None => bandes.extend(coupe_materiau(projet, m, jeu, projet.trait_couche(c))),
+                    }
                 }
             }
             rendu.push(m.as_ref().map(|m| rendu_materiau(m, couleur, &mut table_apparences)));

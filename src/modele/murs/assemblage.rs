@@ -184,7 +184,7 @@ impl Projet {
 
     /// Matériaux des couches ajoutés à la liste s'ils manquent (couleur par défaut).
     pub fn completer_materiaux(&mut self) {
-        let noms: Vec<String> = self.types_murs.iter().chain(&self.types_dalles).flat_map(|t| t.couches.iter().filter_map(|c| c.materiau.clone())).collect();
+        let noms: Vec<String> = self.types_murs.iter().chain(&self.types_dalles).flat_map(|t| t.couches.iter().flat_map(|c| c.materiau.clone().into_iter().chain(c.ossature.as_ref().map(|o| o.materiau().to_string())))).collect();
         for n in noms {
             if self.materiau(&n).is_none() {
                 self.materiaux.push(materiau_par_defaut(&n));
@@ -325,7 +325,7 @@ mod tests {
     use crate::modele::edition::ParametresMur;
 
     fn type_trois_couches() -> TypeCompose {
-        let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None, retour: false };
+        let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None, retour: false, ossature: None };
         TypeCompose {
             id: "t".into(),
             nom: "Mur isolé".into(),

@@ -643,7 +643,7 @@ mod tests {
     #[test]
     fn poignee_mur_compose_garde_les_couches_et_la_ligne() {
         use crate::modele::{Couche,FonctionCouche,TypeCompose};
-        let c=|m:&str,e:f64,f|Couche{materiau:Some(m.into()),epaisseur:e,fonction:f,plume:None, retour: false};
+        let c=|m:&str,e:f64,f|Couche{materiau:Some(m.into()),epaisseur:e,fonction:f,plume:None, retour: false, ossature: None };
         for implantation in [Implantation::Axe,Implantation::Exterieure,Implantation::Interieure] {
             for fin in [false,true] {
                 let mut p=Projet::nouveau("Poignée composée");

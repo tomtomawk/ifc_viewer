@@ -384,7 +384,7 @@ impl ViewerApp {
                         Some("finition") => FonctionCouche::Finition,
                         _ => FonctionCouche::Autre,
                     };
-                    Some(Couche { materiau: Some(materiau), epaisseur, fonction, plume: None, retour: false })
+                    Some(Couche { materiau: Some(materiau), epaisseur, fonction, plume: None, retour: false, ossature: None })
                 }).collect();
                 let (Some(couches), false) = (couches, nom.is_empty()) else { return erreur("usage : type_mur <nom>|<matériau>:<épaisseur>[:fonction]|…") };
                 let Some((projet, _)) = &self.natif else { return erreur("pas de projet natif ouvert") };

@@ -276,6 +276,7 @@ pub struct Scene {
     pub couches_coupe: IdMap<Vec<CoucheCoupe>>,
 }
 
+#[derive(Clone)]
 pub struct CoucheCoupe {
     /// Région de la couche : demi-espaces `n · x + w >= 0`.
     pub plans: Vec<Vec4>,

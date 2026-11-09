@@ -274,6 +274,10 @@ pub struct Couche {
     /// « Retour intérieur » de la famille (selon le côté de la couche).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub retour: bool,
+    /// Ossature : montants (murs) ou solives (dalles) dans l'épaisseur de la couche,
+    /// dont le matériau de la couche remplit les travées.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ossature: Option<murs::ossature::Ossature>,
 }
 
 /// Épaisseurs des plumes 1 à 12 (mm du papier) par défaut, comme les épaisseurs de
@@ -1443,7 +1447,7 @@ mod tests {
     #[test]
     fn plume_par_couche() {
         let mut p = Projet::nouveau("P");
-        let mut c = Couche { materiau: None, epaisseur: 200.0, fonction: FonctionCouche::Structure, plume: None, retour: false };
+        let mut c = Couche { materiau: None, epaisseur: 200.0, fonction: FonctionCouche::Structure, plume: None, retour: false, ossature: None };
         // structure : plume 5 du gabarit embarqué (0,10 mm)
         assert_eq!(p.trait_couche(&c), 0.10);
         c.plume = Some(8);
