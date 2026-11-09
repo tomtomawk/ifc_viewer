@@ -673,6 +673,16 @@ fn propagation_famille_valide_instances_et_transporte_tout_le_resultat() {
     let mut e = Etat::initial(&p).unwrap();
     accepter(&mut e, t);
     assert_eq!(e.projection().unwrap().ouvertures[0].largeur, 1000.0);
+    // partagés : seules les valeurs transmises changent, les autres restent
+    let mut p2 = p.clone();
+    p2.parametres_partages = BTreeMap::from([("A".to_string(), 1.0), ("B".to_string(), 2.0)]);
+    let (q2, _) = p2
+        .avec_famille(Some(&type_id), None, &f, 200.0, BTreeMap::from([("B".to_string(), 5.0)]))
+        .unwrap();
+    assert_eq!(q2.parametres_partages, BTreeMap::from([("A".to_string(), 1.0), ("B".to_string(), 5.0)]));
+    // nom déjà pris par un autre type : refusé à la mise à jour
+    let (p3, _) = p.avec_famille(None, None, &FichierFamille { nom: "Autre".into(), ..f.clone() }, 200.0, BTreeMap::new()).unwrap();
+    assert!(p3.avec_famille(Some(&type_id), None, &FichierFamille { nom: "Autre".into(), ..f.clone() }, 200.0, BTreeMap::new()).is_err());
     f.largeur = -1.0;
     assert!(
         p.avec_famille(Some(&type_id), None, &f, 200.0, BTreeMap::new())

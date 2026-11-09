@@ -41,30 +41,37 @@ impl Profil {
             if !x.is_finite() || !y.is_finite() { return Err("Coordonnée non finie.".into()); }
             Ok([x, y])
         }).collect::<Result<_, String>>()?;
-        if points.len() < 3 { return Err("Le contour doit compter au moins trois sommets.".into()); }
-        let n = points.len();
-        let croix = |a: [f64;2], b: [f64;2], c: [f64;2]| (b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
-        let mut aire = 0.0;
-        for i in 0..n {
-            let a = points[i]; let b = points[(i+1)%n];
-            if (a[0]-b[0]).hypot(a[1]-b[1]) < 1e-7 { return Err("Deux sommets consécutifs sont confondus.".into()); }
-            aire += a[0]*b[1]-b[0]*a[1];
-            for j in i+1..n {
-                if j == i+1 || (i == 0 && j == n-1) { continue; }
-                let c = points[j]; let d = points[(j+1)%n];
-                let (ab_c, ab_d, cd_a, cd_b) = (croix(a,b,c), croix(a,b,d), croix(c,d,a), croix(c,d,b));
-                let sur_segment = |a: [f64;2], b: [f64;2], p: [f64;2]| p[0] >= a[0].min(b[0])-1e-7 && p[0] <= a[0].max(b[0])+1e-7 && p[1] >= a[1].min(b[1])-1e-7 && p[1] <= a[1].max(b[1])+1e-7;
-                if (ab_c * ab_d < 0.0 && cd_a * cd_b < 0.0)
-                    || (ab_c.abs() < 1e-7 && sur_segment(a,b,c)) || (ab_d.abs() < 1e-7 && sur_segment(a,b,d))
-                    || (cd_a.abs() < 1e-7 && sur_segment(c,d,a)) || (cd_b.abs() < 1e-7 && sur_segment(c,d,b)) {
-                    return Err("Le contour se croise ou se touche.".into());
-                }
-            }
-        }
-        if aire.abs() < 1e-7 { return Err("Le contour doit avoir une surface non nulle.".into()); }
+        contour_simple(&points)?;
         Ok(points)
     }
     pub fn valider(&self) -> Result<(), String> { self.points().map(|_| ()) }
+}
+
+/// Contrôle d'un contour fermé : au moins trois sommets distincts, sans croisement ni
+/// contact entre côtés non voisins, d'aire non nulle.
+pub fn contour_simple(points: &[[f64; 2]]) -> Result<(), String> {
+    if points.len() < 3 { return Err("Le contour doit compter au moins trois sommets.".into()); }
+    let n = points.len();
+    let croix = |a: [f64;2], b: [f64;2], c: [f64;2]| (b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+    let mut aire = 0.0;
+    for i in 0..n {
+        let a = points[i]; let b = points[(i+1)%n];
+        if (a[0]-b[0]).hypot(a[1]-b[1]) < 1e-7 { return Err("Deux sommets consécutifs sont confondus.".into()); }
+        aire += a[0]*b[1]-b[0]*a[1];
+        for j in i+1..n {
+            if j == i+1 || (i == 0 && j == n-1) { continue; }
+            let c = points[j]; let d = points[(j+1)%n];
+            let (ab_c, ab_d, cd_a, cd_b) = (croix(a,b,c), croix(a,b,d), croix(c,d,a), croix(c,d,b));
+            let sur_segment = |a: [f64;2], b: [f64;2], p: [f64;2]| p[0] >= a[0].min(b[0])-1e-7 && p[0] <= a[0].max(b[0])+1e-7 && p[1] >= a[1].min(b[1])-1e-7 && p[1] <= a[1].max(b[1])+1e-7;
+            if (ab_c * ab_d < 0.0 && cd_a * cd_b < 0.0)
+                || (ab_c.abs() < 1e-7 && sur_segment(a,b,c)) || (ab_d.abs() < 1e-7 && sur_segment(a,b,d))
+                || (cd_a.abs() < 1e-7 && sur_segment(c,d,a)) || (cd_b.abs() < 1e-7 && sur_segment(c,d,b)) {
+                return Err("Le contour se croise ou se touche.".into());
+            }
+        }
+    }
+    if aire.abs() < 1e-7 { return Err("Le contour doit avoir une surface non nulle.".into()); }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

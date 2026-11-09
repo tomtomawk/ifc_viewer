@@ -138,8 +138,13 @@ pub(super) struct EditeurFamille {
     deplace: Option<String>,
     /// Sommets de l'esquisse en cours (verrouillés et résolus).
     esquisse: Vec<(PointEsquisse, (f64, f64))>,
-    /// Paramètres partagés du projet (copie modifiable, réécrite à l'enregistrement).
+    /// Document projet d'où l'éditeur a été ouvert : seul destinataire du type.
+    pub(super) document: usize,
+    /// Paramètres partagés du projet (copie modifiable ; seules les valeurs changées
+    /// sont reportées à l'enregistrement).
     partages: BTreeMap<String, f64>,
+    /// Paramètres partagés tels que lus à l'ouverture.
+    partages_origine: BTreeMap<String, f64>,
     /// Matériaux du projet (nom, couleur) : valeurs des paramètres matériau.
     materiaux_projet: Vec<(String, [u8; 3])>,
     poignee: Option<Poignee>,
@@ -444,10 +449,11 @@ impl EditeurFamille {
                 Contrainte::Egalite { a, m, b, .. } => [a, m, b].into_iter().filter(|x| *x == ancien).for_each(|x| *x = nouveau.into()),
             }
         }
-        for v in &mut f.volumes {
-            for face in v.min.iter_mut().chain(v.max.iter_mut()).filter(|x| x.plan == ancien) {
-                face.plan = nouveau.into();
-            }
+        let faces = f.volumes.iter_mut().flat_map(|v| v.min.iter_mut().chain(v.max.iter_mut()))
+            .chain(f.extrusions.iter_mut().flat_map(|e| e.profil.iter_mut().flat_map(|p| [&mut p.h, &mut p.v]).chain(e.profondeur.iter_mut())))
+            .chain(f.symboles.iter_mut().flat_map(|s| s.points.iter_mut().flat_map(|p| [&mut p.h, &mut p.v])));
+        for face in faces.filter(|x| x.plan == ancien) {
+            face.plan = nouveau.into();
         }
         if self.selection == SelectionFamille::Plan(ancien.into()) {
             self.selection = SelectionFamille::Plan(nouveau.into());
