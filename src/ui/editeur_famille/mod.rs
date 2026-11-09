@@ -18,8 +18,9 @@ mod canevas;
 use canevas::*;
 use super::*;
 use super::accrochage;
-use crate::modele::famille::modelee::{AxePlan, Contrainte, CoteMesure, Extrusion, Face, FamilleModelee, GenreCoteMesure, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Remplissage, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
+use crate::modele::famille::modelee::{AxePlan, Contrainte, CoteMesure, Extrusion, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Remplissage, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
 use crate::modele::famille::modelee::FichierFamille;
+use crate::modele::documentation::GenreCote;
 use crate::modele::GenreOuverture;
 use std::collections::BTreeMap;
 
@@ -93,11 +94,11 @@ enum OutilFamille {
 
 impl OutilFamille {
     /// Genre de cote de mesure saisi par l'outil.
-    fn cote_mesure(self) -> Option<GenreCoteMesure> {
+    fn cote_mesure(self) -> Option<GenreCote> {
         match self {
-            Self::CoteAngle => Some(GenreCoteMesure::Angle),
-            Self::CoteDiametre => Some(GenreCoteMesure::Diametre),
-            Self::Altimetrie => Some(GenreCoteMesure::Altimetrie),
+            Self::CoteAngle => Some(GenreCote::Angulaire),
+            Self::CoteDiametre => Some(GenreCote::Diametre),
+            Self::Altimetrie => Some(GenreCote::Altimetrie),
             _ => None,
         }
     }

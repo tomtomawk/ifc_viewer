@@ -76,11 +76,16 @@ pub fn texte_cartouche(t: &TexteCartouche, contenu: &str) -> Primitive {
 
 pub fn forme_cartouche(p: &Projet, forme: &AnnotationForme) -> Vec<Primitive> {
     let pt = |v: DVec2| pt_papier(v.x, v.y);
-    if let AnnotationForme::Cote { debut: PointCote::Fixe { point: a }, fin: PointCote::Fixe { point: b }, decalage } = forme {
-        let g = geometrie_cote(&[DVec2::from_array(*a), DVec2::from_array(*b)], *decalage, 1.5);
-        let mut out: Vec<_> = g.traits.iter().map(|[x, y]| ligne(pt(*x), pt(*y))).collect();
-        out.extend(g.textes.into_iter().map(|(pos, valeur)| {
-            texte(&format!("{valeur:.1} mm"), pt(pos), DVec3::X, DVec3::Y, 0.0025, [20, 20, 20, 255])
+    // cotes : même géométrie que dans les vues, en mm du papier (texte de 2,5 mm)
+    let longueur = |x: f64| format!("{x:.1} mm");
+    let altitude = |q: [f64; 2], _| q[1];
+    let style = StyleCote { oblique: 1.5, taille: 2.5, longueur: &longueur, altitude: &altitude };
+    if let Some((traits, textes)) = GenreCote::de_forme(forme).and_then(|_| geometrie(forme, None, &style)) {
+        let mut out: Vec<_> = traits.iter().map(|[x, y]| ligne(pt(*x), pt(*y))).collect();
+        out.extend(textes.into_iter().map(|(pos, dir, s)| {
+            let (du, dv) = (DVec3::new(dir.x, dir.y, 0.0), DVec3::new(-dir.y, dir.x, 0.0));
+            let l = crate::noyau::texte::largeur(&s, "Arial", 0.0025, false);
+            texte(&s, pt(pos) - du * (l / 2.0), du, dv, 0.0025, [20, 20, 20, 255])
         }));
         out
     } else {

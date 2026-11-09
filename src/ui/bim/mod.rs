@@ -1306,10 +1306,10 @@ impl ViewerApp {
         } else if self.onglet_ruban == OngletRuban::Annoter
             && matches!(
                 outil,
-                Some(Outil::Texte | Outil::Cote | Outil::Zone | Outil::Etiquette)
+                Some(Outil::Texte | Outil::Zone | Outil::Etiquette)
             )
         {
-            use crate::modele::documentation::{Annotation, AnnotationForme as F, PointCote};
+            use crate::modele::documentation::{Annotation, AnnotationForme as F};
             let Some(vue) = self.vue_native_id() else {
                 ui.label("Ouvrez un plan ou une coupe native pour annoter.");
                 return true;
@@ -1334,24 +1334,6 @@ impl ViewerApp {
                         point: a,
                         texte: self.bim.texte.clone(),
                     },
-                    Outil::Cote => {
-                        let lie = ids
-                            .first()
-                            .filter(|id| self.natif.as_ref().unwrap().0.axe_element(id).is_some());
-                        let debut = lie.map_or(PointCote::Fixe { point: a }, |id| PointCote::Mur {
-                            id: id.clone(),
-                            fin: false,
-                        });
-                        let fin = lie.map_or(PointCote::Fixe { point: b }, |id| PointCote::Mur {
-                            id: id.clone(),
-                            fin: true,
-                        });
-                        F::Cote {
-                            debut,
-                            fin,
-                            decalage: 800.0,
-                        }
-                    }
                     Outil::Etiquette => F::Etiquette {
                         element: ids.first().cloned().unwrap_or_default(),
                         point: a,
@@ -1371,25 +1353,6 @@ impl ViewerApp {
                                 element: element.clone(),
                                 point: a,
                             }
-                        }
-                        F::Cote {
-                            debut,
-                            fin,
-                            decalage,
-                        } => {
-                            forme = F::Cote {
-                                debut: if matches!(debut, PointCote::Fixe { .. }) {
-                                    PointCote::Fixe { point: a }
-                                } else {
-                                    debut.clone()
-                                },
-                                fin: if matches!(fin, PointCote::Fixe { .. }) {
-                                    PointCote::Fixe { point: b }
-                                } else {
-                                    fin.clone()
-                                },
-                                decalage: *decalage,
-                            };
                         }
                         F::Zone { contour } if !contour.is_empty() => {
                             let origine = contour[0];

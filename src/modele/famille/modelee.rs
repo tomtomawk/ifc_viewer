@@ -199,33 +199,12 @@ pub struct Symbole {
     pub remplissage: Option<Remplissage>,
 }
 
-/// Genre d'une cote de mesure de famille.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum GenreCoteMesure {
-    /// Points : sommet, un point sur chaque branche, position de l'arc.
-    Angle,
-    /// Points : centre, point du cercle.
-    Diametre,
-    /// Points : point coté, position du texte ; altitude depuis le bas de la baie.
-    Altimetrie,
-}
-
-impl GenreCoteMesure {
-    pub fn nom(self) -> &'static str {
-        match self { Self::Angle => "Angle", Self::Diametre => "Diamètre", Self::Altimetrie => "Altimétrie" }
-    }
-    /// Nombre de points à cliquer.
-    pub fn points(self) -> usize {
-        match self { Self::Angle => 4, Self::Diametre | Self::Altimetrie => 2 }
-    }
-}
-
 /// Cote de mesure d'une vue de l'éditeur de familles.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct CoteMesure {
     pub vue: VueEsquisse,
-    pub genre: GenreCoteMesure,
+    /// Méthode de cotation commune (angle, diamètre, altimétrie).
+    pub genre: crate::modele::documentation::GenreCote,
     pub points: Vec<PointEsquisse>,
 }
 

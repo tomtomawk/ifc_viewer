@@ -680,6 +680,9 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                             ed.message = Some("Ajouter d'abord des plans de référence dans cette vue.".into());
                         } else {
                             ed.esquisse.push(p);
+                            if let Some(g) = ed.outil.cote_mesure().filter(|g| ed.esquisse.len() < g.points()) {
+                                ed.message = Some(g.invite(ed.esquisse.len()).into());
+                            }
                         }
                     }
                 }
@@ -723,7 +726,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                             ed.selection = SelectionFamille::CoteMesure(ed.famille.cotes_mesure.len() - 1);
                             ed.message = Some(format!("Cote ({}) créée : ses points suivent les plans de référence.", genre.nom().to_lowercase()));
                         } else {
-                            ed.message = Some(if genre == GenreCoteMesure::Altimetrie && vue == VueEsquisse::Plan { "Altimétrie : ouvrir une élévation ou une coupe." } else { "Cote impossible : points confondus ou alignés." }.into());
+                            ed.message = Some(if genre == GenreCote::Altimetrie && vue == VueEsquisse::Plan { "Altimétrie : ouvrir une élévation ou une coupe." } else { "Cote impossible : points confondus ou alignés." }.into());
                         }
                     }
                     _ => ed.message = Some("Esquisse abandonnée : pas assez de points.".into()),
@@ -756,7 +759,31 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                     }
                 }
             }
-            if resp.clicked() {
+            // cote : après les deux plans, le troisième clic place la ligne de cote
+            // (méthode commune : deux références, puis position)
+            let position = ed.outil == OutilFamille::Cote && ed.clics.len() == 2;
+            let horizontale = ed.clics.first().and_then(|p| ed.famille.plan(p)).is_some_and(|p| p.axe == ah);
+            let ligne_cote = |q: egui::Pos2| { let (h, v) = cadre.modele(q); if horizontale { v } else { h } };
+            if position && let Some(q) = curseur.filter(|_| resp.hovered()) {
+                let ligne = ligne_cote(q);
+                let mut xs: Vec<f64> = ed.clics.iter().map(|n| pos(n)).collect();
+                xs.sort_by(f64::total_cmp);
+                let attache = 10.0 / echelle;
+                let points: Vec<glam::DVec2> = xs.iter().map(|&x| if horizontale { glam::DVec2::new(x, ligne - attache) } else { glam::DVec2::new(ligne + attache, x) }).collect();
+                for [a, b] in crate::modele::documentation::geometrie_cote(&points, attache, 8.0 / echelle).traits {
+                    painter.line_segment([cadre.ecran(a.x, a.y), cadre.ecran(b.x, b.y)], egui::Stroke::new(1.5, orange));
+                }
+            }
+            if resp.clicked() && position {
+                if let Some(q) = resp.interact_pointer_pos() {
+                    let p = std::mem::take(&mut ed.clics);
+                    let (a, b) = if pos(&p[0]) <= pos(&p[1]) { (p[0].clone(), p[1].clone()) } else { (p[1].clone(), p[0].clone()) };
+                    let v = (pos(&b) - pos(&a)).round();
+                    ed.famille.contraintes.push(Contrainte::Distance { a, b, valeur: format!("{v}"), priorite: 5, ligne: Some(ligne_cote(q)) });
+                    ed.selection = SelectionFamille::Contrainte(ed.famille.contraintes.len() - 1);
+                    ed.message = Some("Cote créée : la libeller par un paramètre dans Contraintes.".into());
+                }
+            } else if resp.clicked() {
                 if let Some(nom) = resp.interact_pointer_pos().and_then(plan_vise) {
                     let axe = ed.famille.plan(&nom).map(|p| p.axe);
                     if ed.clics.first().and_then(|p| ed.famille.plan(p)).is_some_and(|p| Some(p.axe) != axe) {
@@ -765,19 +792,13 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                         ed.clics.push(nom);
                     }
                 }
-                if ed.clics.len() == n {
+                if ed.clics.len() == n && n == 3 {
                     let p = std::mem::take(&mut ed.clics);
-                    let c = if n == 2 {
-                        // sens croissant : la valeur est positive
-                        let (a, b) = if pos(&p[0]) <= pos(&p[1]) { (p[0].clone(), p[1].clone()) } else { (p[1].clone(), p[0].clone()) };
-                        let v = (pos(&b) - pos(&a)).round();
-                        Contrainte::Distance { a, b, valeur: format!("{v}"), priorite: 5, ligne: None }
-                    } else {
-                        Contrainte::Egalite { a: p[0].clone(), m: p[1].clone(), b: p[2].clone(), priorite: 5, ligne: None }
-                    };
-                    ed.famille.contraintes.push(c);
+                    ed.famille.contraintes.push(Contrainte::Egalite { a: p[0].clone(), m: p[1].clone(), b: p[2].clone(), priorite: 5, ligne: None });
                     ed.selection = SelectionFamille::Contrainte(ed.famille.contraintes.len() - 1);
-                    ed.message = Some(if n == 2 { "Cote créée : la libeller par un paramètre dans Contraintes." } else { "Égalité créée." }.into());
+                    ed.message = Some("Égalité créée.".into());
+                } else if n == 2 {
+                    ed.message = Some(GenreCote::Lineaire.invite(ed.clics.len()).replace("point à coter", "plan à coter").into());
                 } else {
                     ed.message = Some(format!("{} plan(s) sur {n}.", ed.clics.len()));
                 }
@@ -792,16 +813,18 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
     }
 }
 
-/// Géométrie d'une cote de mesure de famille (repère de la vue, mm) ; `echelle` : px par
-/// mm, pour des traits et un écart de texte constants à l'écran. Altimétrie : altitude
-/// depuis le bas de la baie, seulement en élévation et en coupe.
-fn geometrie_mesure(genre: GenreCoteMesure, vue: VueEsquisse, pts: &[glam::DVec2], echelle: f64) -> Option<crate::modele::documentation::GeometrieMesure> {
+/// Géométrie d'une cote de mesure de famille (repère de la vue, mm), par la méthode
+/// commune (`GenreCote`) ; `echelle` : px par mm, pour des traits et un écart de texte
+/// constants à l'écran. Altimétrie : altitude depuis le bas de la baie, seulement en
+/// élévation et en coupe.
+fn geometrie_mesure(genre: GenreCote, vue: VueEsquisse, pts: &[glam::DVec2], echelle: f64) -> Option<crate::modele::documentation::GeometrieMesure> {
     use crate::modele::documentation as doc;
-    let (oblique, marge) = (8.0 / echelle, 12.0 / echelle);
-    match (genre, pts) {
-        (GenreCoteMesure::Angle, [s, a, b, pos]) => doc::geometrie_angle(*s, *a, *b, pos.distance(*s).max(1.0), oblique, marge),
-        (GenreCoteMesure::Diametre, [c, p]) => doc::geometrie_diametre(*c, *p, oblique, marge),
-        (GenreCoteMesure::Altimetrie, [p, repere]) if vue != VueEsquisse::Plan => Some(doc::geometrie_altimetrie(*p, *repere, p.y, 2, 11.0 / echelle)),
-        _ => None,
-    }
+    if genre == GenreCote::Altimetrie && vue == VueEsquisse::Plan { return None; }
+    let forme = genre.forme(pts, false, 2)?;
+    let unite = crate::config::options::unite();
+    let longueur = |x: f64| unite.afficher(x);
+    let altitude = |q: [f64; 2], _| q[1];
+    let style = doc::StyleCote { oblique: 8.0 / echelle, taille: 11.0 / echelle, longueur: &longueur, altitude: &altitude };
+    let (traits, mut textes) = doc::geometrie(&forme, None, &style)?;
+    Some(doc::GeometrieMesure { traits, texte: textes.pop()? })
 }

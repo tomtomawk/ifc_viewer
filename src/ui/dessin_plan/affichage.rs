@@ -522,7 +522,7 @@ impl ViewerApp {
                 self.ruban_edition.dalle_active().map_or("SURFACE".into(), |d| d.sorte.nom().to_uppercase()),
                 if o == OutilDessin::Polyligne { "POLYGONE" } else { nom_outil(o) }
             ),
-            _ if self.outil_cotation().is_some() => format!("COTATION · {}", self.ruban_edition.outil().map_or("", |o| o.nom()).to_uppercase()),
+            _ if self.outil_cotation().is_some() => format!("COTATION · {}", self.outil_cotation().map_or("", |g| g.nom()).to_uppercase()),
             _ => self.dessin2d.trace.as_ref().map_or("MODIFICATION".into(), |t| nom_outil(t.outil).into()),
         }};
         let invite = if let Some(e) = edition.filter(|_| self.selection_traces_active()) {

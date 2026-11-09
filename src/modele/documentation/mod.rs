@@ -2,6 +2,8 @@
 
 mod feuilles;
 pub use feuilles::*;
+mod cotation;
+pub use cotation::*;
 mod nomenclatures;
 pub use nomenclatures::*;
 mod plans;
@@ -669,43 +671,29 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
                 taille,
                 [30, 30, 30, 255],
             )),
-            AnnotationForme::Cote {
-                debut,
-                fin,
-                decalage,
-            } => match (point_cote(p, v, debut), point_cote(p, v, fin)) {
-                (Some(a), Some(b)) => {
-                    let g = geometrie_cote(&[a, b], *decalage, oblique);
-                    out.extend(g.traits.iter().map(|[x, y]| ligne(pt(*x), pt(*y))));
-                    for (position, valeur) in g.textes {
-                        out.push(texte(&crate::config::options::unite().afficher(valeur), pt(position), u, h, taille, [30, 30, 30, 255]));
-                    }
-                }
-                _ => out.push(texte(
-                    "Cote : référence perdue",
-                    o * 0.001,
-                    u,
-                    h,
-                    taille,
-                    [190, 35, 35, 255],
-                )),
-            },
-            AnnotationForme::CoteAngulaire { .. } | AnnotationForme::CoteDiametre { .. } | AnnotationForme::Altimetrie { .. } => {
-                let x = |q: &[f64; 2]| DVec2::from_array(*q);
-                let g = match &a.forme {
-                    AnnotationForme::CoteAngulaire { sommet, debut, fin, rayon } => geometrie_angle(x(sommet), x(debut), x(fin), *rayon, oblique, taille * 1000.0),
-                    AnnotationForme::CoteDiametre { centre, point } => geometrie_diametre(x(centre), x(point), oblique, taille * 1000.0),
-                    AnnotationForme::Altimetrie { point, repere, relative_niveau, decimales } => {
-                        Some(geometrie_altimetrie(x(point), x(repere), altitude_vue(p, v, *point, *relative_niveau), *decimales, taille * 1000.0))
-                    }
+            forme @ (AnnotationForme::Cote { .. } | AnnotationForme::CoteAngulaire { .. } | AnnotationForme::CoteDiametre { .. } | AnnotationForme::Altimetrie { .. }) => {
+                let extremites = match forme {
+                    AnnotationForme::Cote { debut, fin, .. } => match (point_cote(p, v, debut), point_cote(p, v, fin)) {
+                        (Some(a), Some(b)) => Some((a, b)),
+                        _ => None,
+                    },
                     _ => None,
                 };
-                if let Some(g) = g {
-                    out.extend(g.traits.iter().map(|[x, y]| ligne(pt(*x), pt(*y))));
-                    let (centre, dir, s) = g.texte;
-                    let (du, dv) = (u * dir.x + h * dir.y, u * -dir.y + h * dir.x);
-                    let l = crate::noyau::texte::largeur(&s, "Arial", taille, false);
-                    out.push(texte(&s, pt(centre) - du * (l / 2.0), du, dv, taille, [30, 30, 30, 255]));
+                let unite = crate::config::options::unite();
+                let longueur = |x: f64| unite.afficher(x);
+                let altitude = |q: [f64; 2], relatif: bool| altitude_vue(p, v, q, relatif);
+                let style = StyleCote { oblique, taille: taille * 1000.0, longueur: &longueur, altitude: &altitude };
+                let lie = matches!(forme, AnnotationForme::Cote { .. });
+                match geometrie(forme, extremites, &style).filter(|_| !lie || extremites.is_some()) {
+                    Some((traits, textes)) => {
+                        out.extend(traits.iter().map(|[x, y]| ligne(pt(*x), pt(*y))));
+                        for (centre, dir, s) in textes {
+                            let (du, dv) = (u * dir.x + h * dir.y, u * -dir.y + h * dir.x);
+                            let l = crate::noyau::texte::largeur(&s, "Arial", taille, false);
+                            out.push(texte(&s, pt(centre) - du * (l / 2.0), du, dv, taille, [30, 30, 30, 255]));
+                        }
+                    }
+                    None => out.push(texte("Cote : référence perdue", o * 0.001, u, h, taille, [190, 35, 35, 255])),
                 }
             }
             AnnotationForme::Etiquette { element, point } => {

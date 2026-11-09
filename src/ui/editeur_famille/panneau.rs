@@ -42,7 +42,7 @@ impl ViewerApp {
         };
         let references = outils(&[
             (OutilFamille::PlanReference, "plan_ref", "Plan de référence", "Cliquer deux points : le plan suit la direction dominante du tracé (vertical ou horizontal)"),
-            (OutilFamille::Cote, "cote", "Cote", "Cliquer deux plans parallèles (le plan visé se colore) ; libeller ensuite la cote par un paramètre"),
+            (OutilFamille::Cote, "cote", "Cote", "Cliquer deux plans parallèles (le plan visé se colore), puis la position de la ligne de cote ; libeller ensuite la cote par un paramètre"),
             (OutilFamille::Egalite, "egalite", "Égalité", "Cliquer trois plans parallèles : le second reste au milieu des deux autres"),
         ]);
         let mesures = outils(&[

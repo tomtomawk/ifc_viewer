@@ -149,7 +149,7 @@ impl EditionCartouche {
         let outil_actif = self.ruban.outil();
         let invite = match outil_actif {
             Some(Outil::Zone) => "Cliquer les sommets · Entrée pour fermer la zone",
-            Some(Outil::Cote) => ["Premier point de la cote", "Second point de la cote", "Position de la ligne de cote"][self.points_cote.len().min(2)],
+            Some(o) if o.genre_cote().is_some() => o.genre_cote().unwrap().invite(self.points_cote.len()),
             Some(Outil::Texte) => "Cliquer pour placer le texte",
             Some(Outil::Etiquette) => "Cliquer pour placer le libellé · choisir son champ dans Propriétés",
             _ => self.trace.as_ref().map_or(
@@ -215,14 +215,20 @@ impl EditionCartouche {
                         _ => f.formes.push(F::depuis_forme_2d(&forme)),
                     }
                 }
+            } else if terminer && outil.genre_cote().is_some() {
+                // clic droit ou Entrée : abandonne la cote en cours, comme dans les vues
+                self.points_cote.clear();
             } else if r.clicked() && let Some(q) = curseur {
                 match outil {
-                    Outil::Cote => {
-                        if let [a, b] = self.points_cote.as_slice() {
-                            f.formes.push(cote(*a, *b, q));
-                            self.points_cote.clear();
-                        } else if self.points_cote.last().is_none_or(|p| p.distance(q) > 1e-6) {
+                    // méthode de cotation commune : points successifs, la cote se crée au dernier
+                    o if o.genre_cote().is_some() => {
+                        let genre = o.genre_cote().unwrap();
+                        if self.points_cote.last().is_none_or(|p| p.distance(q) > 1e-6) {
                             self.points_cote.push(q);
+                        }
+                        if self.points_cote.len() == genre.points() {
+                            let pts = std::mem::take(&mut self.points_cote);
+                            if let Some(forme) = genre.forme(&pts, false, 2) { f.formes.push(forme); }
                         }
                     }
                     Outil::Texte | Outil::Etiquette => {
@@ -275,23 +281,20 @@ impl EditionCartouche {
                 for ligne in trace.apercu(q) {
                     painter.add(egui::Shape::line(ligne.into_iter().map(ecran).collect(), egui::Stroke::new(1.0, bleu)));
                 }
-            } else if let [a, b] = self.points_cote.as_slice() {
-                let r = feuilles::rendu(&doc::forme_cartouche(p, &cote(*a, *b, q)), [0.0; 4]);
-                peindre(&painter, &cadre, r, Some(bleu));
-            } else if let [a] = self.points_cote.as_slice() {
-                painter.line_segment([ecran(*a), ecran(q)], egui::Stroke::new(1.0, bleu));
+            } else if let Some(genre) = outil_actif.and_then(Outil::genre_cote) {
+                match genre.points_apercu(&self.points_cote, q).and_then(|pts| genre.forme(&pts, false, 2)) {
+                    Some(forme) => peindre(&painter, &cadre, feuilles::rendu(&doc::forme_cartouche(p, &forme), [0.0; 4]), Some(bleu)),
+                    None => {
+                        let mut pts: Vec<egui::Pos2> = self.points_cote.iter().map(|a| ecran(*a)).collect();
+                        if !pts.is_empty() { pts.push(ecran(q)); }
+                        painter.add(egui::Shape::line(pts, egui::Stroke::new(1.0, bleu)));
+                    }
+                }
             }
         }
         aides::repere_origine_famille(&painter, cadre.ecran(0.0, 0.0));
         aides::annotation_vue(ui, rect, 0.0, invite, false);
         rect
-    }
-}
-
-fn cote(a: DVec2, b: DVec2, q: DVec2) -> F {
-    F::Cote {
-        debut: PointCote::Fixe { point: a.to_array() }, fin: PointCote::Fixe { point: b.to_array() },
-        decalage: (q - a).dot((b - a).normalize_or_zero().perp()),
     }
 }
 
@@ -354,6 +357,7 @@ fn points_modifiables(f: &mut FamilleCartouche, id: Element) -> Vec<&mut [f64; 2
             Some(F::Arc { points }) => points.iter_mut().collect(),
             Some(F::Cercle { centre, .. }) => vec![centre],
             Some(F::Cote { debut: PointCote::Fixe { point: a }, fin: PointCote::Fixe { point: b }, .. }) => vec![a, b],
+            Some(forme @ (F::CoteAngulaire { .. } | F::CoteDiametre { .. } | F::Altimetrie { .. })) => forme.points_mesure_mut(),
             _ => Vec::new(),
         },
     }

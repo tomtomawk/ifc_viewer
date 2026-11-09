@@ -474,3 +474,22 @@ fn altimetrie_en_coupe_relative_au_niveau() {
     assert!((altitude_vue(&p, &v, [500.0, 3500.0], true) - 500.0).abs() < 1e-9);
     assert!((altitude_vue(&p, &v, [500.0, -200.0], true) + 200.0).abs() < 1e-9);
 }
+
+#[test]
+fn methode_de_cotation_commune() {
+    use glam::DVec2;
+    // nombre de points et construction identiques pour tous les éditeurs
+    let c = GenreCote::Lineaire.forme(&[DVec2::ZERO, DVec2::new(1000.0, 0.0), DVec2::new(500.0, 300.0)], false, 2).unwrap();
+    assert!(matches!(c, AnnotationForme::Cote { decalage, .. } if (decalage - 300.0).abs() < 1e-9));
+    assert!(GenreCote::Lineaire.forme(&[DVec2::ZERO, DVec2::ZERO, DVec2::X], false, 2).is_none());
+    assert!(GenreCote::Angulaire.points_apercu(&[DVec2::ZERO, DVec2::X * 100.0], DVec2::Y * 100.0).is_some_and(|p| p.len() == 4));
+    for g in [GenreCote::Lineaire, GenreCote::Angulaire, GenreCote::Diametre, GenreCote::Altimetrie] {
+        assert!(!g.invite(0).is_empty());
+    }
+    // cartouche : cote angulaire rendue sur le papier
+    let p = Projet::nouveau("Cartouche");
+    let f = GenreCote::Angulaire.forme(&[DVec2::ZERO, DVec2::new(20.0, 0.0), DVec2::new(0.0, 20.0), DVec2::new(10.0, 0.0)], false, 2).unwrap();
+    assert!(!forme_cartouche(&p, &f).is_empty());
+    // ancien nom sérialisé de l'éditeur de familles
+    assert_eq!(serde_json::from_str::<GenreCote>("\"angle\"").unwrap(), GenreCote::Angulaire);
+}

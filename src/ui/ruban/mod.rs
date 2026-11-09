@@ -182,6 +182,18 @@ impl Outil {
         }
     }
 
+    /// Genre de cote de l'outil (méthode de cotation commune).
+    pub(in crate::ui) fn genre_cote(self) -> Option<crate::modele::documentation::GenreCote> {
+        use crate::modele::documentation::GenreCote as G;
+        Some(match self {
+            Self::Cote => G::Lineaire,
+            Self::CoteAngulaire => G::Angulaire,
+            Self::CoteDiametre => G::Diametre,
+            Self::Altimetrie => G::Altimetrie,
+            _ => return None,
+        })
+    }
+
     pub(in crate::ui) fn forme_dessin(self) -> Option<crate::dessin::dao::OutilDessin> {
         use crate::dessin::dao::OutilDessin as D;
         Some(match self {
@@ -331,7 +343,8 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
             ("Documents", &[Feuilles, Nomenclatures]),
         ],
         Menu::Cartouche => &[
-            ("Cotes et textes", &[Cote, Texte, Etiquette]),
+            // même méthode de cote que les vues ; pas d'altimétrie sur le papier
+            ("Cotes et textes", &[Cote, CoteAngulaire, CoteDiametre, Texte, Etiquette]),
             DESSIN_2D,
             ("Papier", &[Rectangle, Zone]),
         ],
