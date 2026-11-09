@@ -37,6 +37,22 @@ impl FamilleCatalogue {
         familles
     }
 
+    /// Types de la famille affichés dans l'arborescence : dimensions et nombre d'occurrences.
+    pub(super) fn types(&self, p: &Projet) -> Vec<String> {
+        let occurrences = |n: usize| match n { 0 => "non utilisé".to_string(), 1 => "1 occurrence".to_string(), n => format!("{n} occurrences") };
+        match self {
+            Self::Ouverture(id, _) => p.types_ouvertures.iter().find(|t| &t.id == id).map(|t| {
+                let n = p.ouvertures.iter().filter(|o| o.type_ouverture.as_deref() == Some(id.as_str())).count();
+                vec![format!("{:.0} × {:.0} — {}", t.largeur, t.hauteur, occurrences(n))]
+            }).unwrap_or_default(),
+            Self::Composant(id) => p.types_composants.iter().find(|t| &t.id == id).map(|t| vec![t.nom.clone()]).unwrap_or_default(),
+            Self::Profil(id) => p.profils.iter().find(|t| &t.id == id).map(|t| vec![t.nom.clone()]).unwrap_or_default(),
+            Self::Etiquette(id) => vec![p.familles_etiquettes.iter().find(|t| &t.id == id).map_or("Standard".into(), |t| t.nom.clone())],
+            Self::Cartouche(id) => vec![p.familles_cartouches.iter().find(|t| &t.id == id).map_or("Standard".into(), |t| t.nom.clone())],
+            Self::GardeCorps(id) => p.types_garde_corps.iter().find(|t| &t.id == id).map(|t| vec![t.nom.clone()]).unwrap_or_default(),
+        }
+    }
+
     pub(super) fn categorie(&self) -> &'static str {
         match self {
             Self::Ouverture(_, GenreOuverture::Porte) => "Portes",

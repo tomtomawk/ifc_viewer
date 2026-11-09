@@ -331,11 +331,24 @@ impl ViewerApp {
                     let liste: Vec<_> = familles.iter().filter(|(f, nom)| f.categorie() == titre && (garde(nom) || garde(titre))).collect();
                     egui::CollapsingHeader::new(format!("{titre} ({})", liste.len())).id_salt(("nav-famille-native", titre)).open(ouvert.then_some(true)).show(ui, |ui| {
                         for (famille, nom) in liste {
-                            let r = ui.selectable_label(self.famille_selectionnee.as_ref() == Some(famille), *nom)
-                                .on_hover_text("Sélectionner la famille · utiliser Modifier la famille dans le ruban");
-                            if r.clicked() {
-                                famille_choisie = Some(famille.clone());
-                            }
+                            let choisie = self.famille_selectionnee.as_ref() == Some(famille);
+                            let types = self.natif.as_ref().map(|(p, _)| famille.types(p)).unwrap_or_default();
+                            let id = ui.make_persistent_id(("nav-famille-types", titre, *nom));
+                            egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, ouvert)
+                                .show_header(ui, |ui| {
+                                    let r = ui.selectable_label(choisie, *nom)
+                                        .on_hover_text("Sélectionner la famille · utiliser Modifier la famille dans le ruban");
+                                    if r.clicked() {
+                                        famille_choisie = Some(famille.clone());
+                                    }
+                                })
+                                .body(|ui| {
+                                    for t in &types {
+                                        if ui.selectable_label(choisie, t).on_hover_text("Type de la famille").clicked() {
+                                            famille_choisie = Some(famille.clone());
+                                        }
+                                    }
+                                });
                         }
                         if titre == "Profils" {
                             if ui.small_button("Nouveau profil…").clicked() { nouveau_profil = true; }
