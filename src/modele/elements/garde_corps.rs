@@ -6,22 +6,35 @@ use glam::{DVec2, DVec3};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Matériaux des types prédéfinis (créés à la volée s'ils manquent au projet).
+pub const MATERIAU_ACIER: &str = "Acier laqué";
+pub const MATERIAU_VERRE: &str = "Verre feuilleté";
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Lisse {
     pub altitude: f64,
     pub profil: Option<String>,
+    /// Matériau propre à l'élément ; None : matériau global du type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub materiau: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BarreauMotif {
     pub pas: f64,
     pub profil: Option<String>,
+    /// Matériau propre à l'élément ; None : matériau global du type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub materiau: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BarreauExtremite {
     pub retrait: f64,
     pub profil: Option<String>,
+    /// Matériau propre à l'élément ; None : matériau global du type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub materiau: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -37,7 +50,20 @@ pub struct TypeGardeCorps {
     pub depart: Option<BarreauExtremite>,
     pub arrivee: Option<BarreauExtremite>,
     pub motif: Vec<BarreauMotif>,
+    /// Matériau global : montants, lisses et barreaux sans matériau propre.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub materiau: Option<String>,
+    /// Matériau de la main courante ; None : matériau global.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub materiau_main_courante: Option<String>,
+    /// Matériau du panneau ou du vitrage (remplissage plein ou vitré).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub materiau_remplissage: Option<String>,
 }
+
+/// Solide d'un garde-corps : matériau du projet (None : couleur par défaut), vitrage,
+/// triangles.
+pub type SolideGardeCorps = (Option<String>, bool, Vec<Tri>);
 
 pub struct Section {
     contour: Vec<[f64; 2]>,
@@ -48,6 +74,7 @@ pub struct Section {
 pub struct Barreau<'a> {
     pub x: f64,
     pub profil: Option<&'a str>,
+    pub materiau: Option<&'a str>,
     pub extremite: bool,
 }
 
@@ -97,6 +124,7 @@ impl TypeGardeCorps {
         let bord = Some(BarreauExtremite {
             retrait: 0.0,
             profil: None,
+            materiau: None,
         });
         Self {
             id: String::new(),
@@ -107,6 +135,7 @@ impl TypeGardeCorps {
             lisses: vec![Lisse {
                 altitude: 120.0,
                 profil: None,
+                materiau: None,
             }],
             bas: 140.0,
             jeu_haut: 50.0,
@@ -115,8 +144,54 @@ impl TypeGardeCorps {
             motif: vec![BarreauMotif {
                 pas: 110.0,
                 profil: None,
+                materiau: None,
             }],
+            materiau: None,
+            materiau_main_courante: None,
+            materiau_remplissage: None,
         }
+    }
+
+    /// Types prédéfinis, proposés dans le sélecteur et copiés dans le projet au choix.
+    pub fn predefinis() -> Vec<TypeGardeCorps> {
+        let base = |nom: &str, remplissage| TypeGardeCorps { nom: nom.into(), ..Self::standard(1000.0, remplissage) };
+        let acier = Some(MATERIAU_ACIER.to_string());
+        let verre = Some(MATERIAU_VERRE.to_string());
+        let lisse = |altitude: f64| Lisse { altitude, profil: None, materiau: None };
+        vec![
+            TypeGardeCorps { materiau: acier.clone(), ..base("Barreaudage vertical", Remplissage::Barreaudage) },
+            TypeGardeCorps {
+                materiau: acier.clone(),
+                lisses: [150.0, 300.0, 450.0, 600.0, 750.0].map(lisse).to_vec(),
+                motif: Vec::new(),
+                bas: 0.0,
+                ..base("Lisses horizontales", Remplissage::Barreaudage)
+            },
+            TypeGardeCorps {
+                materiau: acier.clone(),
+                materiau_remplissage: verre.clone(),
+                lisses: Vec::new(),
+                bas: 100.0,
+                jeu_haut: 100.0,
+                ..base("Vitré sur montants", Remplissage::Vitre)
+            },
+            TypeGardeCorps {
+                materiau: acier.clone(),
+                materiau_remplissage: verre,
+                lisses: Vec::new(),
+                depart: None,
+                arrivee: None,
+                bas: 0.0,
+                jeu_haut: 50.0,
+                ..base("Tout verre, main courante", Remplissage::Vitre)
+            },
+            TypeGardeCorps { materiau: acier, lisses: Vec::new(), ..base("Panneau plein", Remplissage::Plein) },
+        ]
+    }
+
+    /// Matériau effectif d'un élément : le sien, sinon le matériau global.
+    pub fn materiau_de<'a>(&'a self, propre: &'a Option<String>) -> Option<&'a str> {
+        propre.as_deref().or(self.materiau.as_deref())
     }
 
     pub fn valider(&self, p: &Projet) -> Result<(), String> {
@@ -176,6 +251,7 @@ impl TypeGardeCorps {
             barreaux.push(Barreau {
                 x: debut,
                 profil: b.profil.as_deref(),
+                materiau: b.materiau.as_deref(),
                 extremite: true,
             });
         }
@@ -195,6 +271,7 @@ impl TypeGardeCorps {
                 barreaux.push(Barreau {
                     x,
                     profil: b.profil.as_deref(),
+                    materiau: b.materiau.as_deref(),
                     extremite: false,
                 });
             }
@@ -203,22 +280,34 @@ impl TypeGardeCorps {
             barreaux.push(Barreau {
                 x: fin,
                 profil: b.profil.as_deref(),
+                materiau: b.materiau.as_deref(),
                 extremite: true,
             });
         }
         Ok(barreaux)
     }
 
-    pub fn solides(&self, p: &Projet, g: &GardeCorps) -> Result<Vec<(bool, Vec<Tri>)>, String> {
+    pub fn solides(&self, p: &Projet, g: &GardeCorps) -> Result<Vec<SolideGardeCorps>, String> {
         self.valider(p)?;
-        let mut metal = Vec::new();
-        let mut verre = Vec::new();
+        // triangles regroupés par (matériau, vitrage), dans l'ordre d'apparition
+        let mut groupes: Vec<SolideGardeCorps> = Vec::new();
+        let mut ajouter = |materiau: Option<&str>, vitre: bool, tris: &mut dyn Iterator<Item = Tri>| {
+            let k = match groupes.iter().position(|(m, v, _)| m.as_deref() == materiau && *v == vitre) {
+                Some(k) => k,
+                None => {
+                    groupes.push((materiau.map(str::to_owned), vitre, Vec::new()));
+                    groupes.len() - 1
+                }
+            };
+            groupes[k].2.extend(tris);
+        };
         let main = Section::lire(p, self.main_courante.as_deref(), 50.0)?;
-        let mut rails = vec![(self.hauteur - main.hauteur / 2.0, main)];
+        let mut rails = vec![(self.hauteur - main.hauteur / 2.0, main, self.materiau_de(&self.materiau_main_courante))];
         for lisse in &self.lisses {
             rails.push((
                 lisse.altitude,
                 Section::lire(p, lisse.profil.as_deref(), 40.0)?,
+                self.materiau_de(&lisse.materiau),
             ));
         }
         let haut = self.hauteur - self.jeu_haut;
@@ -249,8 +338,8 @@ impl TypeGardeCorps {
             let mut origine = position(a)?;
             for i in 1..=divisions {
                 let destination = position(a.lerp(b, i as f64 / divisions as f64))?;
-                for (z, section) in &rails {
-                    metal.extend(section.extruder(
+                for (z, section, materiau) in &rails {
+                    ajouter(*materiau, false, &mut section.extruder(
                         origine + DVec3::Z * *z,
                         destination + DVec3::Z * *z,
                         n,
@@ -268,12 +357,8 @@ impl TypeGardeCorps {
                         largeur: 20.0,
                         hauteur: haut - self.bas,
                     };
-                    let triangles = section.extruder(origine, destination, n, DVec3::Z);
-                    if self.remplissage == Remplissage::Vitre {
-                        verre.extend(triangles);
-                    } else {
-                        metal.extend(triangles);
-                    }
+                    let vitre = self.remplissage == Remplissage::Vitre;
+                    ajouter(self.materiau_remplissage.as_deref(), vitre, &mut section.extruder(origine, destination, n, DVec3::Z));
                 }
                 origine = destination;
             }
@@ -295,7 +380,7 @@ impl TypeGardeCorps {
                         e.insert(Section::lire(p, barreau.profil, f64::from(carre))?)
                     }
                 };
-                metal.extend(section.extruder(
+                ajouter(barreau.materiau.or(self.materiau.as_deref()), false, &mut section.extruder(
                     q + DVec3::Z * bas,
                     q + DVec3::Z * haut,
                     axe.extend(0.0),
@@ -304,13 +389,11 @@ impl TypeGardeCorps {
             }
             precedent_termine_au_sommet = barreaux.last().is_some_and(|b| b.x == longueur);
         }
-        if metal.is_empty() {
+        groupes.retain(|(_, _, t)| !t.is_empty());
+        if groupes.is_empty() {
             return Err("Le tracé du garde-corps doit avoir une longueur positive.".into());
         }
-        Ok([(false, metal), (true, verre)]
-            .into_iter()
-            .filter(|(_, t)| !t.is_empty())
-            .collect())
+        Ok(groupes)
     }
 }
 
@@ -326,6 +409,7 @@ mod tests {
         t.motif.push(BarreauMotif {
             pas: 160.0,
             profil: Some("rond".into()),
+            materiau: None,
         });
         let obtenu = t
             .barreaux(700.0)
@@ -389,11 +473,38 @@ mod tests {
         });
         let p = Projet::lire_json(&p.json().unwrap()).unwrap();
         let solides = p.garde_corps[0].solides(&p).unwrap();
-        let triangles = &solides[0].1;
+        let triangles = &solides[0].2;
         assert_eq!(triangles.len(), 8);
         assert!(triangles.iter().flatten().any(|q| q.z == 1000.0));
         assert!(triangles.iter().flatten().any(|q| q.z == 970.0));
         let volume = crate::modele::volumes::geometrie::volume(triangles);
         assert!((volume - 1500.0 * 60.0 * 30.0 / 2.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn predefinis_valides_et_materiaux_par_element() {
+        let mut p = Projet::nouveau("Garde-corps");
+        p.niveaux.push(crate::modele::Niveau { id: "niv".into(), nom: "Sol".into(), altitude: 0.0, origine: None });
+        for (k, t) in TypeGardeCorps::predefinis().into_iter().enumerate() {
+            t.valider(&p).unwrap();
+            let mut t = TypeGardeCorps { id: format!("t{k}"), ..t };
+            if let Some(l) = t.lisses.first_mut() {
+                l.materiau = Some("Bois".into());
+            }
+            p.types_garde_corps.push(t.clone());
+            let g = GardeCorps { id: format!("g{k}"), nom: "G".into(), niveau: "niv".into(), decalage: 0.0, trace: vec![[0.0, 0.0], [2000.0, 0.0]], hauteur: t.hauteur, remplissage: t.remplissage, type_garde_corps: Some(t.id.clone()), escalier: None };
+            let solides = t.solides(&p, &g).unwrap();
+            assert!(solides.iter().any(|(m, _, _)| m.as_deref() == Some(MATERIAU_ACIER)), "{}", t.nom);
+            if !t.lisses.is_empty() {
+                assert!(solides.iter().any(|(m, _, _)| m.as_deref() == Some("Bois")));
+            }
+            if t.remplissage == Remplissage::Vitre {
+                assert!(solides.iter().any(|(m, v, _)| *v && m.as_deref() == Some(MATERIAU_VERRE)));
+            }
+        }
+        // type enregistré avant les matériaux : relu sans erreur
+        let ancien = r#"{"id":"x","nom":"A","hauteur":1000.0,"remplissage":"barreaudage","main_courante":null,"lisses":[{"altitude":120.0,"profil":null}],"bas":140.0,"jeu_haut":50.0,"depart":null,"arrivee":null,"motif":[]}"#;
+        let t: TypeGardeCorps = serde_json::from_str(ancien).unwrap();
+        assert!(t.materiau.is_none() && t.lisses[0].materiau.is_none());
     }
 }

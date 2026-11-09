@@ -150,8 +150,7 @@ pub fn retours(p: &Projet, o: &Ouverture, id: &str) -> Result<Retours, String> {
     };
     let h = hote_elargi(p, o)?;
     let Some(moi) = h.membres.iter().find(|m| m.id == id).cloned() else { return Ok(vide) };
-    let mut surcharges = p.parametres_partages.clone();
-    surcharges.extend(o.valeurs.iter().map(|(k, v)| (k.clone(), *v)));
+    let surcharges = p.surcharges(o);
     let r = f.resoudre_occurrence(o.largeur, o.hauteur, h.epaisseur, &surcharges, &o.materiaux);
     // côté famille → côté mur : une ouverture retournée échange extérieur et intérieur
     let signe = if o.retournee { -1.0 } else { 1.0 };

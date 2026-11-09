@@ -164,8 +164,7 @@ impl ViewerApp {
                 let occurrences: Vec<&crate::modele::famille::modelee::Parametre> = f.parametres.iter().filter(|p| p.portee == Portee::Occurrence).collect();
                 if !occurrences.is_empty() {
                     let e = crate::modele::volumes::solides::hote(projet, &o.mur).map_or(200.0, |h| h.1);
-                    let mut surcharges = projet.parametres_partages.clone();
-                    surcharges.extend(o.valeurs.iter().map(|(k, v)| (k.clone(), *v)));
+                    let surcharges = projet.surcharges(&o);
                     let r = f.resoudre_occurrence(o.largeur, o.hauteur, e, &surcharges, &o.materiaux);
                     ui.label(RichText::new("Paramètres d'occurrence").strong());
                     for p in occurrences {

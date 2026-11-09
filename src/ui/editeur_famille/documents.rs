@@ -53,6 +53,9 @@ impl ViewerApp {
                     let ed=self.famille.as_mut().ok_or("Éditeur fermé")?;
                     f.famille.valider(f.largeur,f.hauteur,ed.epaisseur)?;
                     ed.nom=f.nom;ed.largeur=f.largeur;ed.hauteur=f.hauteur;ed.famille=f.famille;
+                    // indices de sélection et de saisie : plus valables sur la nouvelle famille
+                    ed.abandonner_saisie();
+                    ed.selectionner(Vec::new());
                 }
                 "famille_charger_projet" => {
                     if !argument.is_empty() && argument!="nouveau" {return Err("usage : famille_charger_projet [nouveau]".into());}
@@ -201,6 +204,8 @@ impl ViewerApp {
             epaisseur,
             famille,
             esquisse: Vec::new(),
+            document: self.document_actif,
+            partages_origine: partages.clone(),
             partages,
             materiaux_projet,
             poignee: None,
@@ -260,6 +265,9 @@ impl ViewerApp {
         if ed.nom.trim().is_empty() {
             return Err("Nommer le type.".into());
         }
+        if ed.document != self.document_actif {
+            return Err("Cette famille a été ouverte depuis un autre projet : revenir à ce projet pour la charger.".into());
+        }
         ed.famille.valider(ed.largeur, ed.hauteur, ed.epaisseur)?;
         if ed.famille.genre == GenreOuverture::Libre {
             // famille de composant : son type (créé ou mis à jour), donc tous ses composants
@@ -277,13 +285,22 @@ impl ViewerApp {
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
         let cible=ed.type_id.as_deref().filter(|_|!nouveau);
         let fichier=crate::modele::famille::modelee::FichierFamille{format:crate::modele::famille::modelee::FORMAT_FAMILLE.into(),nom:ed.nom.clone(),largeur:ed.largeur,hauteur:ed.hauteur,famille:ed.famille.clone()};
-        let (q,id)=p.avec_famille(cible,ed.ouverture.as_deref(),&fichier,ed.epaisseur,ed.partages.clone())?;
+        let modifies: BTreeMap<String, f64> = ed.partages.iter().filter(|(k, v)| ed.partages_origine.get(*k) != Some(*v)).map(|(k, v)| (k.clone(), *v)).collect();
+        let conflits = ed.famille.resoudre(ed.largeur, ed.hauteur, ed.epaisseur).conflits.len();
+        let (q,id)=p.avec_famille(cible,ed.ouverture.as_deref(),&fichier,ed.epaisseur,modifies)?;
         self.appliquer_projet(q)?;
+        let partages = self.natif.as_ref().map(|(p, _)| p.parametres_partages.clone()).unwrap_or_default();
         if let Some(ed) = self.famille.as_mut() {
             ed.type_id = Some(id.clone());
+            ed.partages = partages.clone();
+            ed.partages_origine = partages;
             ed.marquer_enregistree();
         }
-        self.status = "Famille chargée dans le projet — Ctrl+S (hors de la famille) pour enregistrer le projet.".into();
+        self.status = if conflits > 0 {
+            format!("Famille chargée dans le projet, {conflits} contrainte(s) écartée(s) par conflit.")
+        } else {
+            "Famille chargée dans le projet — Ctrl+S (hors de la famille) pour enregistrer le projet.".into()
+        };
         Ok(id)
     }
 
@@ -325,6 +342,11 @@ impl ViewerApp {
             return;
         }
         self.famille_plane_active = None;
+        // une famille modélisée revient avec le projet d'où elle a été ouverte
+        if let Some(document) = self.famille.iter().chain(&self.familles_inactives).find(|e| e.ordre == ordre).map(|e| e.document)
+            && document != self.document_actif && self.documents.contains_key(&document) {
+            self.changer_document(document);
+        }
         if self.famille.as_ref().map(|e| e.ordre) != Some(ordre) {
             if let Some(k) = self.familles_inactives.iter().position(|e| e.ordre == ordre) {
                 let ed = self.familles_inactives.remove(k);

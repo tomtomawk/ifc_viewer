@@ -97,7 +97,7 @@ impl ViewerApp {
         // famille d'un type de porte ou de fenêtre : regroupement dans l'arborescence
         if let (Some(FamilleCatalogue::Ouverture(id, _)), Some((p, _))) = (&self.famille_selectionnee, &self.natif) {
             let actuel = p.types_ouvertures.iter().find(|t| &t.id == id).map(|t| t.nom_famille().to_string()).unwrap_or_default();
-            let cle = egui::Id::new(("famille_nom_type", id.as_str()));
+            let cle = ui.make_persistent_id(("famille_nom_type", id.as_str()));
             let mut saisie = ui.data(|d| d.get_temp::<String>(cle)).unwrap_or_else(|| actuel.clone());
             let r = ui.horizontal(|ui| { ui.label("Famille"); ui.text_edit_singleline(&mut saisie) }).inner;
             if r.lost_focus() && saisie.trim() != actuel {

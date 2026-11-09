@@ -456,8 +456,7 @@ fn solides_famille(p: &Projet, o: &Ouverture, f: &crate::modele::famille::modele
     let z = p.niveau(&niveau).ok_or("Niveau introuvable.")?.altitude + o.allege;
     let (c, u) = repere(&axe, o.abscisse);
     let n = u.perp();
-    let mut surcharges = p.parametres_partages.clone();
-    surcharges.extend(o.valeurs.iter().map(|(k, v)| (k.clone(), *v)));
+    let surcharges = p.surcharges(o);
     let r = f.resoudre_occurrence(o.largeur, o.hauteur, e, &surcharges, &o.materiaux);
     let monde = |q: DVec3| placer(o, c, u, n, z, q);
     // un seul miroir retourne l'orientation des faces
@@ -487,8 +486,7 @@ pub fn symboles_ouverture(p: &Projet, o: &Ouverture, vue: crate::modele::famille
     let z = n0.altitude + o.allege;
     let (c, u) = repere(&axe, o.abscisse);
     let n = u.perp();
-    let mut surcharges = p.parametres_partages.clone();
-    surcharges.extend(o.valeurs.iter().map(|(k, v)| (k.clone(), *v)));
+    let surcharges = p.surcharges(o);
     let r = f.resoudre_avec(o.largeur, o.hauteur, e, &surcharges);
     f.symboles_resolus(&r, vue)
         .into_iter()
@@ -505,8 +503,7 @@ pub fn regions_ouverture(p: &Projet, o: &Ouverture, vue: crate::modele::famille:
     let z = n0.altitude + o.allege;
     let (c, u) = repere(&axe, o.abscisse);
     let n = u.perp();
-    let mut surcharges = p.parametres_partages.clone();
-    surcharges.extend(o.valeurs.iter().map(|(k, v)| (k.clone(), *v)));
+    let surcharges = p.surcharges(o);
     let r = f.resoudre_avec(o.largeur, o.hauteur, e, &surcharges);
     f.regions_resolues(&r, vue)
         .into_iter()
@@ -520,8 +517,7 @@ pub fn parametres_ouverture(p: &Projet, o: &Ouverture) -> BTreeMap<String, Strin
     use crate::modele::famille::modelee::GenreParametre;
     let Some(f) = famille_modelee(p, o) else { return BTreeMap::new() };
     let e = hote_ouverture(p, o).map_or(200.0, |h| h.1);
-    let mut surcharges = p.parametres_partages.clone();
-    surcharges.extend(o.valeurs.iter().map(|(k, v)| (k.clone(), *v)));
+    let surcharges = p.surcharges(o);
     let r = f.resoudre_occurrence(o.largeur, o.hauteur, e, &surcharges, &o.materiaux);
     f.parametres
         .iter()

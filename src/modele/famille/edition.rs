@@ -11,13 +11,7 @@ impl Projet {
         t.id = collaboration::uuid();
         t.famille_nom = Some(source.nom_famille().to_string());
         t.origine = None;
-        let mut nom = base.to_string();
-        let mut n = 2;
-        while q.types_ouvertures.iter().any(|x| x.nom == nom) {
-            nom = format!("{base} ({n})");
-            n += 1;
-        }
-        t.nom = nom;
+        t.nom = q.nom_type_libre(base, None);
         // la source rejoint explicitement la famille, même si son nom de type change ensuite
         if let Some(s) = q.types_ouvertures.iter_mut().find(|x| x.id == id) {
             s.famille_nom = t.famille_nom.clone();
@@ -28,6 +22,28 @@ impl Projet {
         Ok((q, nouvel))
     }
 
+    /// Valeurs qui surchargent les formules d'une ouverture : paramètres partagés du
+    /// projet, puis valeurs d'occurrence propres à l'ouverture.
+    pub fn surcharges(&self, o: &Ouverture) -> BTreeMap<String, f64> {
+        let mut s = self.parametres_partages.clone();
+        s.extend(o.valeurs.iter().map(|(k, v)| (k.clone(), *v)));
+        s
+    }
+
+    /// Nom libre pour un type d'ouverture (`base`, puis « base (2) »…), hors `sauf`.
+    fn nom_type_libre(&self, base: &str, sauf: Option<&str>) -> String {
+        let pris = |n: &str| self.types_ouvertures.iter().any(|t| t.nom == n && Some(t.id.as_str()) != sauf);
+        let mut nom = base.to_string();
+        let mut n = 2;
+        while pris(&nom) {
+            nom = format!("{base} ({n})");
+            n += 1;
+        }
+        nom
+    }
+
+    /// `partages` : paramètres partagés modifiés dans l'éditeur, fusionnés dans la table
+    /// du projet (les autres valeurs du projet restent).
     pub fn avec_famille(
         &self,
         cible: Option<&str>,
@@ -43,9 +59,13 @@ impl Projet {
         let mut q = self.clone();
         let id = if let Some(id) = cible.filter(|id| q.types_ouvertures.iter().any(|t| t.id == *id))
         {
+            let nom = f.nom.trim().to_string();
+            if q.nom_type_libre(&nom, Some(id)) != nom {
+                return Err(format!("Le nom « {nom} » est déjà pris par un autre type."));
+            }
             let t = q.types_ouvertures.iter_mut().find(|t| t.id == id).unwrap();
             (t.nom, t.largeur, t.hauteur, t.modele, t.genre) = (
-                f.nom.trim().into(),
+                nom,
                 f.largeur,
                 f.hauteur,
                 Some(f.famille.clone()),
@@ -55,13 +75,7 @@ impl Projet {
             id.to_string()
         } else {
             let id = collaboration::uuid();
-            let base = f.nom.trim().to_string();
-            let mut nom = base.clone();
-            let mut n = 2;
-            while q.types_ouvertures.iter().any(|t| t.nom == nom) {
-                nom = format!("{base} ({n})");
-                n += 1;
-            }
+            let nom = q.nom_type_libre(f.nom.trim(), None);
             q.types_ouvertures.push(TypeOuverture {
                 id: id.clone(),
                 nom,
@@ -99,7 +113,17 @@ impl Projet {
                 });
             }
         }
-        q.parametres_partages = partages;
+        q.parametres_partages.extend(partages);
+        // la famille doit tenir dans chaque mur qui porte une ouverture du type
+        let mut epaisseurs: Vec<f64> = q.ouvertures.iter()
+            .filter(|o| o.type_ouverture.as_ref() == Some(&id))
+            .filter_map(|o| crate::modele::volumes::solides::hote(&q, &o.mur).ok().map(|h| h.1))
+            .collect();
+        epaisseurs.sort_by(f64::total_cmp);
+        epaisseurs.dedup_by(|a, b| (*a - *b).abs() < 0.5);
+        for e in epaisseurs.into_iter().filter(|e| (e - epaisseur).abs() >= 0.5) {
+            f.famille.valider(f.largeur, f.hauteur, e).map_err(|x| format!("Mur de {e:.0} mm : {x}"))?;
+        }
         q.recaler_menuiseries(self)?;
         q.verifier()?;
         Ok((q, id))

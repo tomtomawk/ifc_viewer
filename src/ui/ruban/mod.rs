@@ -8,6 +8,7 @@ mod ouvertures;
 pub(crate) use ouvertures::nom_genre;
 mod icones;
 use icones::*;
+pub(crate) mod selecteur;
 mod barre_commandes;
 pub use barre_commandes::*;
 #[cfg(test)]
@@ -246,10 +247,8 @@ fn types_surface(o: Outil) -> Vec<(String, Vec<crate::modele::Couche>)> {
 
 /// Pictogramme d'une catégorie de mur, vu en plan : un trait épais (mur), plusieurs
 /// bandes (mur composé), un trait fin (cloison).
-fn icone_categorie_mur(ui: &egui::Ui, r: egui::Rect, c: crate::modele::CategorieMur) {
+fn icone_categorie_mur(p: &egui::Painter, r: egui::Rect, c: crate::modele::CategorieMur, encre: Color32) {
     use crate::modele::CategorieMur;
-    let p = ui.painter();
-    let encre = ui.visuals().text_color();
     let contour = egui::Stroke::new(1.2, encre);
     let (l, h) = (r.width(), r.height());
     let bande = |haut: f32, bas: f32| egui::Rect::from_min_max(egui::pos2(r.left(), r.top() + h * haut), egui::pos2(r.right(), r.top() + h * bas));
@@ -274,7 +273,7 @@ fn icone_categorie_mur(ui: &egui::Ui, r: egui::Rect, c: crate::modele::Categorie
 
 /// Composition d'un élément horizontal en coupe : couches empilées du haut vers le bas,
 /// hauteur proportionnelle à l'épaisseur (2 px au moins), couleur du matériau.
-fn pile_couches(ui: &mut egui::Ui, r: egui::Rect, projet: &crate::modele::Projet, couches: &[crate::modele::Couche]) {
+pub(crate) fn pile_couches(ui: &mut egui::Ui, r: egui::Rect, projet: &crate::modele::Projet, couches: &[crate::modele::Couche]) {
     let total: f64 = couches.iter().map(|c| c.epaisseur).sum();
     if total <= 0.0 {
         return;
@@ -636,58 +635,28 @@ impl RubanEdition {
         let courant = &types[k];
         let sorte = |e: bool| if e { "Élévation" } else { "Coupe" };
         let mut choix: Option<usize> = None;
-        egui::Frame::group(ui.style()).inner_margin(8.0).show(ui, |ui| {
-            ui.set_min_width(ui.available_width());
-            ui.horizontal_top(|ui| {
-                let (vignette, _) = ui.allocate_exact_size(egui::vec2(52.0, 52.0), Sense::hover());
-                ui.painter().rect_filled(vignette, 3.0, ui.visuals().faint_bg_color);
-                let elevation_affichee = self.coupe_identique.as_ref().map_or(courant.elevation, |c| c.2);
-                let nom_affiche = self.coupe_identique.as_ref().map_or(courant.nom.as_str(), |c| c.0.as_str());
-                icone_vue(ui.painter(), egui::Rect::from_center_size(vignette.center(), egui::vec2(34.0, 34.0)), elevation_affichee, ui.visuals().text_color());
-                ui.vertical(|ui| {
-                    ui.label(RichText::new("Coupe ou élévation").small().weak());
-                    egui::ComboBox::from_id_salt("type_coupe")
-                        .width(ui.available_width())
-                        .height(400.0)
-                        .truncate()
-                        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-                        .selected_text(RichText::new(format!("{} · {}", sorte(elevation_affichee), nom_affiche)).strong())
-                        .show_ui(ui, |ui| {
-                            ui.set_min_width(280.0);
-                            ui.horizontal(|ui| {
-                                for e in [false, true] {
-                                    let (r, rep) = ui.allocate_exact_size(egui::vec2(120.0, 46.0), Sense::click());
-                                    let actif = courant.elevation == e;
-                                    if actif || rep.hovered() {
-                                        ui.painter().rect_filled(r, 4.0, if actif { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
-                                    }
-                                    icone_vue(ui.painter(), egui::Rect::from_center_size(r.center_top() + egui::vec2(0.0, 15.0), egui::vec2(24.0, 24.0)), e, ui.visuals().text_color());
-                                    ui.painter().text(r.center_bottom() - egui::vec2(0.0, 9.0), egui::Align2::CENTER_CENTER, sorte(e), egui::FontId::proportional(12.0), ui.visuals().text_color());
-                                    if rep.clicked() && !actif {
-                                        choix = types.iter().position(|t| t.elevation == e);
-                                        ui.ctx().request_repaint();
-                                    }
-                                }
-                            });
-                            ui.separator();
-                            for (i, t) in types.iter().enumerate().filter(|(_, t)| t.elevation == courant.elevation) {
-                                let (r, rep) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 36.0), Sense::click());
-                                if i == k || rep.hovered() {
-                                    ui.painter().rect_filled(r, 3.0, if i == k { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
-                                }
-                                ui.painter().text(r.min + egui::vec2(8.0, 11.0), egui::Align2::LEFT_CENTER, &t.nom, egui::FontId::proportional(12.0), ui.visuals().text_color());
-                                ui.painter().text(r.min + egui::vec2(8.0, 26.0), egui::Align2::LEFT_CENTER, &t.aide, egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
-                                ui.painter().text(r.right_center() - egui::vec2(8.0, 0.0), egui::Align2::RIGHT_CENTER, format!("1:{} · {} m", t.echelle, crate::formats::ifc::step::format_real(t.profondeur / 1000.0)), egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
-                                if rep.clicked() {
-                                    choix = Some(i);
-                                    ui.close();
-                                }
-                            }
-                        });
-                    ui.label(RichText::new(&courant.aide).small().weak());
-                });
-            });
+        let elevation_affichee = self.coupe_identique.as_ref().map_or(courant.elevation, |c| c.2);
+        let nom_affiche = self.coupe_identique.as_ref().map_or(courant.nom.as_str(), |c| c.0.as_str());
+        let echelle = |e: f64, profondeur: f64| format!("1:{e} · {} m", crate::formats::ifc::step::format_real(profondeur / 1000.0));
+        let titre = format!("{} · {}", sorte(elevation_affichee), nom_affiche);
+        let vignette = |p: &egui::Painter, r: egui::Rect, c: Color32| icone_vue(p, r, elevation_affichee, c);
+        let bouton = selecteur::entete(ui, &titre, Some(&format!("1:{}", self.coupe_identique.as_ref().map_or(courant.echelle, |c| c.1))), &format!("{titre}
+{}", courant.aide), Some(&vignette));
+        let rangs = [false, true].iter().map(|e| types.iter().filter(|t| t.elevation == *e).count()).max().unwrap_or(1);
+        let largeur_liste = selecteur::largeur_liste(ui, types.iter().map(|t| t.aide.as_str()), 90.0, 2, 120.0);
+        selecteur::liste(&bouton, largeur_liste, selecteur::HAUTEUR_CADRE + rangs as f32 * selecteur::HAUTEUR_LIGNE_DOUBLE, |ui| {
+            if let Some(e) = selecteur::onglets(ui, &[false, true], courant.elevation, 120.0, |e| sorte(e).into(), "", |p, r, e, c| icone_vue(p, r, e, c)) {
+                choix = types.iter().position(|t| t.elevation == e);
+            }
+            for (i, t) in types.iter().enumerate().filter(|(_, t)| t.elevation == courant.elevation) {
+                let l = selecteur::Ligne { nom: &t.nom, courant: i == k, etiquette: None, sous_titre: Some(&t.aide), detail: Some(echelle(t.echelle, t.profondeur)), actions: &[] };
+                let mut v = |ui: &mut egui::Ui, r: egui::Rect| icone_vue(ui.painter(), egui::Rect::from_center_size(r.center(), egui::vec2(20.0, 20.0)), t.elevation, ui.visuals().weak_text_color());
+                if selecteur::ligne(ui, &l, Some(&mut v)).choisi {
+                    choix = Some(i);
+                }
+            }
         });
+        ui.label(RichText::new(&courant.aide).small().weak());
         if let Some(i) = choix {
             self.type_coupe = i;
             self.coupe_identique = None;

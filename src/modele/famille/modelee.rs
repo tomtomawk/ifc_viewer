@@ -774,11 +774,15 @@ impl FamilleModelee {
         }
         let mut params = std::collections::HashSet::from([LARGEUR, HAUTEUR, EPAISSEUR]);
         for p in &self.parametres {
-            if p.nom.is_empty() || !p.nom.chars().all(|c| c.is_alphanumeric() || c == '_') || p.nom.starts_with(|c: char| c.is_ascii_digit()) {
+            // même règle que l'évaluateur : lettre ou _ en tête, puis lettres, chiffres, _
+            if !p.nom.starts_with(|c: char| c.is_alphabetic() || c == '_') || !p.nom.chars().all(|c| c.is_alphanumeric() || c == '_') {
                 return Err(format!("Nom de paramètre non valide : « {} » (lettres, chiffres, _).", p.nom));
             }
             if !params.insert(p.nom.as_str()) {
                 return Err(format!("Paramètre en double : {}.", p.nom));
+            }
+            if p.genre == GenreParametre::Materiau && p.portee == Portee::Partage {
+                return Err(format!("{} : un paramètre matériau ne peut pas être partagé (type ou occurrence).", p.nom));
             }
         }
         for v in &self.volumes {
@@ -823,6 +827,14 @@ impl FamilleModelee {
         for b in self.boites(&r) {
             if (b.max - b.min).min_element() < 0.1 {
                 return Err(format!("{} : volume plat.", self.volumes[b.indice].nom));
+            }
+        }
+        for e in &self.extrusions {
+            let contour: Vec<[f64; 2]> = e.profil.iter().map(|p| { let (h, v) = self.point_esquisse(&r, p); [h, v] }).collect();
+            super::profil::contour_simple(&contour).map_err(|x| format!("{} : {x}", e.nom))?;
+            let pos = |f: &Face| r.positions.get(&f.plan).copied().unwrap_or(0.0) + f.decalage;
+            if (pos(&e.profondeur[0]) - pos(&e.profondeur[1])).abs() < 0.1 {
+                return Err(format!("{} : extrusion plate.", e.nom));
             }
         }
         Ok(())
@@ -1147,5 +1159,18 @@ mod tests {
         let r = f.resoudre(1400.0, 1600.0, 300.0);
         assert_eq!(r.positions["Repère"], 123.0);
         assert!(r.libres.contains(&"Repère".to_string()));
+    }
+
+    #[test]
+    fn valider_refuse_materiau_partage_contour_croise_et_nom_numerique() {
+        let mut f = FamilleModelee::gabarit_fenetre();
+        f.parametres.iter_mut().find(|p| p.nom == "MateriauAppui").unwrap().portee = Portee::Partage;
+        assert!(f.valider(1400.0, 1600.0, 300.0).is_err());
+        let mut f = FamilleModelee::gabarit_fenetre();
+        f.extrusions[0].profil.swap(1, 2); // nœud papillon
+        assert!(f.valider(1400.0, 1600.0, 300.0).is_err());
+        let mut f = FamilleModelee::gabarit_fenetre();
+        f.parametres.push(Parametre::nouveau("²x", "1"));
+        assert!(f.valider(1400.0, 1600.0, 300.0).is_err());
     }
 }
