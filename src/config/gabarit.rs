@@ -41,6 +41,9 @@ pub struct Gabarit {
     /// Types d'ouvertures chargés dans un nouveau projet, avec leur famille modélisée.
     #[serde(default)]
     pub types_ouvertures: Vec<TypeOuvertureGabarit>,
+    /// Profils paramétriques chargés dans les nouveaux projets.
+    #[serde(default)]
+    pub profils: Vec<crate::modele::famille::profil::Profil>,
 }
 
 /// Type d'ouverture du gabarit : nom, cotes et famille.
@@ -139,6 +142,7 @@ impl Gabarit {
         if !g.types_vues.iter().any(|t| !t.elevation) || !g.types_vues.iter().any(|t| t.elevation) {
             return Err("Gabarit : il faut au moins un type de coupe et un type d'élévation.".into());
         }
+        for profil in &g.profils { profil.valider()?; }
         Ok(g)
     }
 

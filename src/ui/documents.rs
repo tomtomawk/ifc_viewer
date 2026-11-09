@@ -508,6 +508,8 @@ impl ViewerApp {
 
     pub(super) fn nouveau_document(&mut self) {
         self.gestion_contextes = None;
+        self.editeur_gabarit_vue = None;
+        self.editeur_profil = None;
         self.filtres_contextes = Default::default();
         self.ajustement=None;
         self.stocker_document();
@@ -524,6 +526,8 @@ impl ViewerApp {
 
     pub(super) fn changer_document(&mut self, id: usize) {
         self.gestion_contextes = None;
+        self.editeur_gabarit_vue = None;
+        self.editeur_profil = None;
         self.filtres_contextes = Default::default();
         self.ajustement=None;
         self.orientation_nord_en_cours = false;

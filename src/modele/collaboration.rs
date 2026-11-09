@@ -74,6 +74,7 @@ pub fn objets(p: &Projet) -> Resultat<Objets> {
                         | "positions_plan"
                         | "types_terrains"
                         | "types_ouvertures"
+                        | "profils"
                         | "types_murs"
                         | "types_dalles"
                         | "annotations"
@@ -92,6 +93,7 @@ fn collection_identifiee(c: &str) -> bool {
     matches!(
         c,
         "sources"
+            | "gabarits_vues"
             | "variantes"
             | "niveaux"
             | "types_murs"
@@ -109,6 +111,7 @@ fn collection_identifiee(c: &str) -> bool {
             | "pieces"
             | "composants"
             | "types_composants"
+            | "profils"
             | "escaliers"
             | "garde_corps"
             | "vues"
@@ -400,6 +403,8 @@ pub fn sensible(k: &str) -> bool {
             | "familles_cartouches"
             | "familles_etiquettes"
             | "types_traits"
+            | "gabarits_vues"
+            | "profils"
     ) || matches!(
         k,
         "@/coordonnees_origine"
@@ -411,6 +416,7 @@ pub fn sensible(k: &str) -> bool {
             | "@/implantations"
             | "@/contextes"
             | "@/contextes_vues"
+            | "@/gabarits_vue_affectes"
             | "@/materiaux"
             | "@/motifs"
             | "@/plumes"

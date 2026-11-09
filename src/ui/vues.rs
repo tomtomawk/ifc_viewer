@@ -9,6 +9,7 @@ impl ViewerApp {
         }
         // Les réglages qui définissent le dessin doivent aussi suivre la vue sur feuille
         // et survivre à la fermeture du document.
+        let gabaritee = self.vue_gabaritee();
         let numero = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).map(|v| v.revit_id);
         let altitude_coupe = self.plan_coupe().and_then(|p| self.scene.as_ref().map(|s| (p.w as f64 + s.origin.z) * 1000.0));
         let orientation = crate::rendu::orientation_plan::angle(&self.camera) as f64;
@@ -21,7 +22,7 @@ impl ViewerApp {
                 }
                 if self.coupe != vue.coupe_active.unwrap_or(true) { vue.coupe_active = Some(self.coupe); }
                 let poche = self.poche.nom();
-                if poche != vue.poche_vue.as_deref().unwrap_or("hachure") { vue.poche_vue = Some(poche.into()); }
+                if !gabaritee && poche != vue.poche_vue.as_deref().unwrap_or("hachure") { vue.poche_vue = Some(poche.into()); }
                 if vue != projet.vues[index] {
                     let avant = projet.clone();
                     projet.vues[index] = vue;
@@ -30,6 +31,15 @@ impl ViewerApp {
                     self.natif_modifie = true;
                     self.bim.revision = self.bim.revision.wrapping_add(1);
                 }
+            }
+            if numero == scene::numero_vue("3d") && !gabaritee && projet.echelle_vue_3d.is_some()
+                && (projet.echelle_vue_3d != Some(self.echelle) || projet.poche_vue_3d.as_deref() != Some(self.poche.nom()))
+            {
+                let avant = projet.clone();
+                projet.echelle_vue_3d = Some(self.echelle);
+                projet.poche_vue_3d = Some(self.poche.nom().into());
+                let resultat = if let Some(c) = &mut self.collaboration { c.editer(&avant, projet) } else { self.historique.pousser(&avant, projet) };
+                if let Err(e) = resultat { *projet = avant; self.error = Some(e); } else { self.natif_modifie = true; }
             }
         }
         self.enregistrer_rendu_vue();
@@ -87,6 +97,7 @@ impl ViewerApp {
         self.detail = e.detail;
         self.boite = e.boite;
         self.boite_active = e.boite_active;
+        self.actualiser_gabarit_vue_actif();
         self.vol = Vol::default();
         self.point_clique = None;
         self.visibility_dirty = true;
@@ -426,6 +437,7 @@ impl ViewerApp {
         // vue 3D : projection enregistrée, point de vue d'une vue caméra
         self.pieton = false;
         self.appliquer_camera_vue();
+        self.actualiser_gabarit_vue_actif();
         if let Some(e) = entite {
             self.select(Some(e), false);
         }

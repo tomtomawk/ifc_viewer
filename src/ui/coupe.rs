@@ -405,7 +405,7 @@ impl ViewerApp {
                 ui.end_row();
                 }
                 ui.add_enabled_ui(self.coupe, |ui| ui.label("Poché"));
-                ui.add_enabled_ui(self.coupe, |ui| {
+                ui.add_enabled_ui(self.coupe && !self.vue_gabaritee(), |ui| {
                     egui::ComboBox::from_id_salt("poche").selected_text(self.poche.libelle()).show_ui(ui, |ui| {
                         for p in [Poche::Hachure, Poche::Plein, Poche::Vide] {
                             change |= ui.selectable_value(&mut self.poche, p, p.libelle()).changed();

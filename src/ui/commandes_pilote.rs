@@ -750,12 +750,14 @@ impl ViewerApp {
                 succes(&[("niveaux", liste(n))])
             }
             "poche" => {
-                let Some(p) = Poche::depuis(argument) else { return erreur("usage : poche hachure|plein|vide") };
+                if self.vue_gabaritee() { return erreur("Le poché est piloté par le gabarit de vue."); }
+                let Some(p) = Poche::depuis(argument) else { return erreur("usage : poche hachure|plein|vide|materiau") };
                 self.poche = p;
                 self.visibility_dirty = true;
                 self.etat()
             }
             "echelle" => {
+                if self.vue_gabaritee() { return erreur("L'échelle est pilotée par le gabarit de vue."); }
                 let Some(e) = argument.trim_start_matches("1:").parse::<f64>().ok().filter(|e| *e > 0.0) else { return erreur("usage : echelle <dénominateur> (100 pour 1:100)") };
                 self.echelle = e;
                 self.visibility_dirty = true;

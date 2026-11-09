@@ -317,8 +317,21 @@ impl ViewerApp {
         }).collect::<Vec<_>>()).unwrap_or_default();
         let mut ouvrir_famille: Option<(Option<String>, crate::modele::GenreOuverture)> = None;
         let mut charger_famille = false;
+        let mut ouvrir_profil = None;
+        let mut nouveau_profil = false;
+        let mut charger_profil = false;
         rubrique_nav(ui, LeftTab::Familles, "Familles".into(), false, &mut |ui| {
             if let Some(familles) = &familles_natives {
+                let profils = self.natif.as_ref().map(|(p, _)| &p.profils);
+                egui::CollapsingHeader::new("Profils").id_salt("nav-profils").open(ouvert.then_some(true)).show(ui, |ui| {
+                    if let Some(profils) = profils {
+                        for profil in profils.iter().filter(|p| garde(&p.nom)) {
+                            if ui.selectable_label(false, &profil.nom).on_hover_text("Ouvrir et modifier la famille de profil").clicked() { ouvrir_profil = Some(profil.id.clone()); }
+                        }
+                    }
+                    if ui.small_button("Nouveau profil…").clicked() { nouveau_profil = true; }
+                    if ui.small_button("Charger un profil…").clicked() { charger_profil = true; }
+                });
                 egui::CollapsingHeader::new("Cartouches").id_salt("nav-familles-cartouches").show(ui, |ui| {
                     ui.label("Cartouche standard");
                     for (famille, feuille) in &cartouches_natifs {
@@ -406,6 +419,9 @@ impl ViewerApp {
         if let Some((t, genre)) = ouvrir_famille {
             self.ouvrir_editeur_famille_type(t, genre);
         }
+        if let Some(id) = ouvrir_profil { self.ouvrir_profil(Some(&id)); }
+        if nouveau_profil { self.ouvrir_profil(None); }
+        if charger_profil { self.charger_profil_fichier(); }
         if charger_famille {
             if let Some(c) = rfd::FileDialog::new().add_filter("Famille", &["json"]).pick_file() {
                 if let Err(e) = self.charger_famille_fichier(&c) {

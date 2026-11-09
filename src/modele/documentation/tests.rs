@@ -18,6 +18,25 @@ fn dessin_vue_applique_le_contexte_propre_a_la_vue() {
     assert!(!dessin_vue(&relu, &vue).unwrap().primitives.iter().any(|p| p.element.is_some_and(|id| ids.contains(&id))));
 }
 #[test]
+fn dessin_vue_suit_le_gabarit_partage() {
+    use crate::modele::edition::gabarits_vues::GabaritVue;
+    let (mut p, _) = depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();
+    p.phases = vec!["Existant".into(), "Projet".into()];
+    for mur in &mut p.murs { mur.phase = Some("Projet".into()); }
+    let vue = p.ajouter_vue_plan(&p.niveaux[0].id.clone(), 1200.0).unwrap();
+    let ids: std::collections::HashSet<_> = p.murs.iter().map(|m| crate::rendu::scene::id_natif("mur", &m.id)).collect();
+    let id = p.enregistrer_gabarit_vue(GabaritVue { id: String::new(), nom: "Plan".into(), echelle: 50.0, poche: "plein".into(), phase: Some("Existant".into()), variante: None }).unwrap();
+    p.affecter_gabarit_vue(&vue, Some(&id)).unwrap();
+    let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
+    assert!(!dessin_vue(&relu, &vue).unwrap().primitives.iter().any(|p| p.element.is_some_and(|id| ids.contains(&id))));
+    let mut g = p.gabarit_vue(&vue).unwrap().clone();
+    g.phase = Some("Projet".into());
+    p.enregistrer_gabarit_vue(g).unwrap();
+    assert!(dessin_vue(&p, &vue).unwrap().primitives.iter().any(|p| p.element.is_some_and(|id| ids.contains(&id))));
+    assert_eq!(p.vues.iter().find(|v| v.id == vue).unwrap().echelle, 50.0);
+}
+
+#[test]
 fn vue_placee_respecte_rotation_et_limite_basse() {
     let (mut p, _) = depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();
     let niveau = p.niveaux[0].id.clone();

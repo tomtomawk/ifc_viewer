@@ -6,6 +6,7 @@
 //! types qui la portent encore.
 pub mod edition;
 pub mod modelee;
+pub mod profil;
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
 

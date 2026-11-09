@@ -473,10 +473,11 @@ impl ViewerApp {
     /// Barre de la vue, sous la vue comme celle de Revit : échelle (celle de la vue
     /// ouverte, qui règle aussi le dessin 2D), cadrage, projection en vue 3D.
     pub(super) fn barre_vue(&mut self, ui: &mut egui::Ui) {
+        let gabaritee = self.vue_gabaritee();
         ui.horizontal_wrapped(|ui| {
             ui.add_enabled_ui(self.scene.is_some(), |ui| {
-                let r = ui.add(egui::DragValue::new(&mut self.echelle).speed(1.0).range(1.0..=10000.0).prefix("1 : "));
-                if r.on_hover_text("Échelle de la vue : épaisseur des traits coupés et pas des hachures du dessin 2D, export SVG").changed() {
+                let r = ui.add_enabled(!gabaritee, egui::DragValue::new(&mut self.echelle).speed(1.0).range(1.0..=10000.0).prefix("1 : "));
+                if r.on_disabled_hover_text("Échelle contrôlée par le gabarit de vue.").on_hover_text("Échelle de la vue : épaisseur des traits coupés et pas des hachures du dessin 2D, export SVG").changed() {
                     self.visibility_dirty = true;
                 }
                 ui.separator();

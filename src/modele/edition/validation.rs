@@ -2,7 +2,22 @@
 use crate::modele::*;
 impl Projet {
     pub fn verifier(&self) -> Result<(), String> {
+        let mut gabarits = std::collections::HashSet::new();
+        for g in &self.gabarits_vues {
+            if g.id.is_empty() || !gabarits.insert(g.id.as_str()) { return Err("Identifiant de gabarit de vue vide ou dupliqué.".into()); }
+            self.valider_gabarit_vue(g)?;
+        }
+        for (vue, gabarit) in &self.gabarits_vue_affectes {
+            if (vue != "3d" && !self.vues.iter().any(|v| &v.id == vue)) || !gabarits.contains(gabarit.as_str()) {
+                return Err("Affectation de gabarit de vue invalide.".into());
+            }
+        }
         if self.format!=FORMAT || self.version>VERSION || self.identite.is_empty(){return Err("Format, version ou identité projet non valide".into());}
+        let mut profils = std::collections::HashSet::new();
+        for profil in &self.profils {
+            if profil.id.is_empty() || !profils.insert(&profil.id) { return Err("Identifiant de profil vide ou dupliqué.".into()); }
+            profil.valider()?;
+        }
         if !self.orientation_nord.is_finite() { return Err("Orientation du nord non finie.".into()); }
         if let Some(l) = &self.lieu && !(l.latitude.abs() <= 90.0 && l.longitude.abs() <= 180.0 && l.fuseau.abs() <= 14.0) { return Err("Lieu du projet : coordonnées non valides.".into()); }
         let mut ids = std::collections::HashSet::new();

@@ -6,6 +6,14 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
 
 ## Parcours disponible
 
+- **Familles → Profils** : ouvrir un profil du projet, en créer un ou charger un
+  fichier de profil. L'éditeur permet de modifier les paramètres et les formules
+  des coordonnées des sommets, avec un aperçu du contour fermé. Enregistrer dans
+  le projet, créer une copie ou exporter un fichier `.profil.json`. Le gabarit
+  embarqué fournit un rectangle, une cornière, un profilé T et un profilé I.
+  Ces familles de profils sont éditables indépendamment ; leur utilisation pour
+  créer des éléments par balayage ou définir une section de poutre reste à ajouter.
+
 - **Début → Phases et variantes**, ou le lien sous les champs de contexte dans
   Propriétés, ouvre le gestionnaire des phases, sous-projets et variantes. Il permet
   d'ajouter et renommer les entrées, de réordonner les phases et de renommer un jeu
@@ -17,6 +25,17 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   Sans élément sélectionné, les propriétés de chaque vue proposent aussi **Phase
   affichée** et **Variante affichée** : ces choix sont enregistrés avec la vue et
   repris sur les feuilles. Les filtres temporaires du gestionnaire s'y ajoutent.
+
+- **Gabarit de vue** : dans les propriétés de la vue, le sélecteur attribue un
+  gabarit existant et **+** en crée un à partir de la vue. Le menu **…** permet
+  de modifier ou supprimer les gabarits du projet, même sans affectation. Un
+  gabarit partagé pilote l'échelle, le poché de coupe, la phase et la variante ;
+  ses modifications se répercutent immédiatement sur toutes les vues liées ;
+  leurs dessins sur les feuilles reprennent notamment le poché et les filtres.
+  L'échelle d'une vue placée sur une feuille reste réglable sur la feuille.
+  Le cadrage, l'orientation et les masquages
+  restent propres à chaque vue. Retirer ou supprimer le gabarit laisse aux vues
+  leurs derniers réglages ; ceux-ci redeviennent modifiables individuellement.
 
 - Dans un **plan natif**, sélectionner des éléments puis **Modifier → Masquer**
   (ou H) les masque uniquement dans cette vue ; **Tout afficher** les rétablit.

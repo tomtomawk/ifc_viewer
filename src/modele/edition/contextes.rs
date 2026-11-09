@@ -121,6 +121,7 @@ impl Projet {
             + self.dalles.iter().filter(|d| choix(&d.phase, &d.sous_projet, &d.variante)).count()
             + self.contextes.values().filter(|c| choix(&c.phase, &c.sous_projet, &c.variante)).count()
             + self.contextes_vues.values().filter(|c| choix(&c.phase, &c.sous_projet, &c.variante)).count()
+            + self.gabarits_vues.iter().filter(|g| choix(&g.phase, &None, &g.variante)).count()
             + if liste == ListeCreation::Phase { self.demolitions.values().filter(|v| v.as_str() == cle).count() } else { 0 }
     }
 
@@ -130,6 +131,7 @@ impl Projet {
         for d in &mut self.dalles { match liste { ListeCreation::Phase => remplacer(&mut d.phase), ListeCreation::SousProjet => remplacer(&mut d.sous_projet), ListeCreation::Variante => remplacer(&mut d.variante) } }
         for c in self.contextes.values_mut() { match liste { ListeCreation::Phase => remplacer(&mut c.phase), ListeCreation::SousProjet => remplacer(&mut c.sous_projet), ListeCreation::Variante => remplacer(&mut c.variante) } }
         for c in self.contextes_vues.values_mut() { match liste { ListeCreation::Phase => remplacer(&mut c.phase), ListeCreation::SousProjet => remplacer(&mut c.sous_projet), ListeCreation::Variante => remplacer(&mut c.variante) } }
+        for g in &mut self.gabarits_vues { match liste { ListeCreation::Phase => remplacer(&mut g.phase), ListeCreation::Variante => remplacer(&mut g.variante), ListeCreation::SousProjet => {} } }
         if liste == ListeCreation::Phase {
             if let Some(nouveau) = nouveau { for phase in self.demolitions.values_mut().filter(|p| p.as_str() == ancien) { *phase = nouveau.into(); } }
             else { self.demolitions.retain(|_, p| p != ancien); }

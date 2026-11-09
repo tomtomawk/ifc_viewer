@@ -57,6 +57,9 @@ pub struct Projet {
     pub types_murs: Vec<TypeCompose>,
     pub types_dalles: Vec<TypeCompose>,
     pub types_ouvertures: Vec<TypeOuverture>,
+    /// Familles de profils 2D paramétriques du projet.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub profils: Vec<famille::profil::Profil>,
     pub murs: Vec<Mur>,
     /// Murs composés : chaque couche y est un mur à part entière (voir [`Assemblage`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -111,6 +114,16 @@ pub struct Projet {
     /// Filtres de contexte enregistrés par vue ; « 3d » désigne la vue 3D par défaut.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub contextes_vues: BTreeMap<String, edition::contextes::FiltresContextes>,
+    /// Gabarits partagés et affectations par vue (« 3d » : vue 3D par défaut).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gabarits_vues: Vec<edition::gabarits_vues::GabaritVue>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub gabarits_vue_affectes: BTreeMap<String, String>,
+    /// Derniers réglages du gabarit appliqué à la vue 3D par défaut.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub echelle_vue_3d: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub poche_vue_3d: Option<String>,
     /// Orientations enregistrées des plans (repère du plan).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub positions_plan: Vec<PositionPlan>,
@@ -1076,6 +1089,7 @@ impl Projet {
             p.types_murs.push(TypeCompose { id: identifiant("type-mur", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), couches: t.couches.clone(), categorie: t.categorie, couches_detaillees: true, origine: None });
         }
         p.types_traits = g.types_traits.clone();
+        p.profils = g.profils.iter().cloned().map(|mut p| { p.id = identifiant("profil", &format!("gabarit:{}", p.nom)); p }).collect();
         for t in &g.types_ouvertures {
             p.types_ouvertures.push(TypeOuverture { id: identifiant("type-ouverture", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), genre: t.famille.genre, largeur: t.largeur, hauteur: t.hauteur, famille: None, modele: Some(t.famille.clone()), origine: None });
         }

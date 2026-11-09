@@ -591,6 +591,8 @@ impl ViewerApp {
             *actuel = projet;
             return Ok(());
         }
+        let id_vue = self.id_vue_contexte();
+        let gabarit_avant = id_vue.as_ref().and_then(|id| self.natif.as_ref()?.0.gabarit_vue(id)).cloned();
         let chemin = self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.1.clone();
         if !distant {
             crate::modele::edition::verrous::verifier(&self.natif.as_ref().unwrap().0, &projet)?;
@@ -676,6 +678,8 @@ impl ViewerApp {
         self.bim.revision=self.bim.revision.wrapping_add(1);
         self.natif_modifie = self.historique.modifie(&projet);
         self.natif = Some((projet, chemin));
+        let gabarit_apres = id_vue.as_ref().and_then(|id| self.natif.as_ref()?.0.gabarit_vue(id)).cloned();
+        if gabarit_avant != gabarit_apres { self.actualiser_gabarit_vue_actif(); }
         self.visibility_dirty = true;
         self.coupe_dirty = true;
         self.error = None;

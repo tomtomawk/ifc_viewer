@@ -198,7 +198,7 @@ impl Poche {
     }
 
     pub fn depuis(nom: &str) -> Option<Poche> {
-        [Poche::Hachure, Poche::Plein, Poche::Vide].into_iter().find(|p| p.nom() == nom)
+        [Poche::Hachure, Poche::Plein, Poche::Vide, Poche::Materiau].into_iter().find(|p| p.nom() == nom)
     }
 }
 
