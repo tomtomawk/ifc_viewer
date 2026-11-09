@@ -11,13 +11,15 @@ pub(super) struct GestionContextes {
     renommage_jeu: Option<(String, String)>,
     /// Suppression à confirmer : (clé, entrée de remplacement).
     suppression: Option<(String, Option<String>)>,
+    /// Adoption à confirmer : variante à verser dans le modèle principal.
+    adoption: Option<String>,
     nouveau: String,
     erreur: Option<String>,
 }
 
 impl Default for GestionContextes {
     fn default() -> Self {
-        Self { liste: ListeCreation::Phase, renommage: None, renommage_jeu: None, suppression: None, nouveau: String::new(), erreur: None }
+        Self { liste: ListeCreation::Phase, renommage: None, renommage_jeu: None, suppression: None, adoption: None, nouveau: String::new(), erreur: None }
     }
 }
 
@@ -28,6 +30,7 @@ enum Action {
     Deplacer(String, isize),
     RenommerJeu(String, String),
     Retenir(String),
+    Adopter(String),
 }
 
 /// Ligne d'une entrée, préparée avant le dessin.
@@ -115,11 +118,25 @@ impl ViewerApp {
                                 } else {
                                     ui.strong(jeu);
                                     if ui.small_button("Renommer").clicked() { etat.renommage_jeu = Some((jeu.clone(), jeu.clone())); }
+                                    if let Some(retenue) = entrees.iter().find(|e| &e.jeu == jeu && e.retenue) {
+                                        if ui.small_button("Adopter ★…").on_hover_text("Fin de l'étude : la variante retenue rejoint le modèle principal, les autres variantes du jeu et leurs éléments sont supprimés").clicked() {
+                                            etat.adoption = Some(retenue.cle.clone());
+                                        }
+                                    }
                                     if ui.small_button("＋ variante").on_hover_text("Ajouter une variante à ce jeu").clicked() {
                                         let n = entrees.iter().filter(|e| &e.jeu == jeu).count() + 1;
                                         action = Some(Action::Ajouter(format!("Variante {n}"), jeu.clone()));
                                     }
                                 }
+                            });
+                        }
+                        if let Some(e) = etat.adoption.as_ref().and_then(|a| entrees.iter().find(|e| &e.cle == a && &e.jeu == jeu)) {
+                            let ecartes = projet.elements_variantes_ecartees(&e.cle).len();
+                            let cle = e.cle.clone();
+                            ui.horizontal_wrapped(|ui| {
+                                ui.colored_label(ui.visuals().warn_fg_color, format!("Adopter « {} » : ses éléments passent au modèle principal, {ecartes} élément(s) des autres variantes sont supprimés et le jeu disparaît.", e.nom));
+                                if ui.small_button("Adopter").clicked() { action = Some(Action::Adopter(cle)); }
+                                if ui.small_button("Annuler").clicked() { etat.adoption = None; }
                             });
                         }
                         egui::Grid::new(("grille_contextes", jeu)).num_columns(5).spacing([8.0, 4.0]).show(ui, |ui| {
@@ -228,6 +245,13 @@ impl ViewerApp {
                 Action::Deplacer(cle, delta) => copie.deplacer_phase(cle, *delta),
                 Action::RenommerJeu(ancien, nouveau) => copie.renommer_jeu_variantes(ancien, nouveau),
                 Action::Retenir(cle) => copie.retenir_variante(cle),
+                Action::Adopter(cle) => {
+                    let du_jeu: Vec<String> = entrees.iter().filter(|e| entrees.iter().any(|x| &x.cle == cle && x.jeu == e.jeu)).map(|e| e.cle.clone()).collect();
+                    copie.adopter_variante(cle).map(|_| {
+                        if self.ruban_edition.variante_creation.as_ref().is_some_and(|v| du_jeu.contains(v)) { self.ruban_edition.variante_creation = None; }
+                        if self.filtres_contextes.variante.as_ref().is_some_and(|v| du_jeu.contains(v)) { self.filtres_contextes.variante = None; }
+                    })
+                }
             };
             match resultat.and_then(|()| self.appliquer_projet(copie)) {
                 Ok(()) => {
@@ -241,7 +265,7 @@ impl ViewerApp {
                         if filtre.as_deref() == Some(&ancien) { *filtre = nouveau; }
                     }
                     if matches!(action, Action::Ajouter(..)) { etat.nouveau.clear(); }
-                    etat.renommage = None; etat.renommage_jeu = None; etat.suppression = None; etat.erreur = None;
+                    etat.renommage = None; etat.renommage_jeu = None; etat.suppression = None; etat.adoption = None; etat.erreur = None;
                     self.visibility_dirty = true;
                     self.status = "Organisation du projet mise à jour.".into();
                 }

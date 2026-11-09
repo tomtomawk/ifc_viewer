@@ -204,6 +204,8 @@ impl Poche {
 
 /// Contour des parties coupées, mm du papier.
 pub const TRAIT_FORT_MM: f64 = 0.18;
+/// Trait fin des pièces translucides coupées (vitrages), mm du papier.
+pub const TRAIT_FIN_MM: f64 = 0.05;
 /// Pas des hachures du poché, mm du papier.
 pub const PAS_HACHURE_MM: f64 = 1.5;
 
@@ -254,6 +256,11 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
             }
             if smin > 0.0 || smax < 0.0 {
                 return prims;
+            }
+            // sans bandes de matériau : chaque solide de l'élément (pièces d'une menuiserie)
+            // est sectionné à part, sinon leurs contours jointifs se chaînent mal
+            if !scene.couches_coupe.contains_key(&ob.id) {
+                return coupe_par_solides(scene, ob, n, d, o, e1, e2, poche, fond, hachure, &motif, echelle);
             }
             let mut segs = Vec::new();
             for r in [ob.opaque, ob.transparent] {
@@ -356,6 +363,114 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
     fusionner_materiaux(scene, prims)
 }
 
+
+/// Coupe d'un élément sans bandes de matériau, solide par solide : les triangles sont
+/// regroupés par arêtes communes (une arête partagée par deux triangles exactement),
+/// chaque groupe donne ses propres contours, son poché et ses hachures. Un solide
+/// translucide (vitrage) reste blanc, sans hachure, au trait fin.
+#[allow(clippy::too_many_arguments)]
+fn coupe_par_solides(scene: &Scene, ob: &crate::rendu::scene::SceneObject, n: DVec3, d: f64, o: DVec3, e1: DVec3, e2: DVec3, poche: Poche, fond: [u8; 4], hachure: Option<[u8; 4]>, motif: &Motif, echelle: f64) -> Vec<Primitive> {
+    let cle = |p: [f32; 3]| p.map(|x| (x as f64 * 1e4).round() as i64);
+    let mut tris: Vec<(usize, bool)> = Vec::new();
+    for (r, translucide) in [(ob.opaque, false), (ob.transparent, true)] {
+        tris.extend((0..r.count as usize / 3).map(|k| (r.start as usize + 3 * k, translucide)));
+    }
+    // union des triangles voisins par une arête
+    let mut parent: Vec<usize> = (0..tris.len()).collect();
+    fn racine(parent: &mut [usize], mut i: usize) -> usize {
+        while parent[i] != i { parent[i] = parent[parent[i]]; i = parent[i]; }
+        i
+    }
+    let mut aretes: HashMap<([i64; 3], [i64; 3]), Vec<usize>> = HashMap::new();
+    for (i, (k, _)) in tris.iter().enumerate() {
+        let c = [0, 1, 2].map(|j| cle(scene.vertices[k + j].pos));
+        for j in 0..3 {
+            let (a, b) = (c[j], c[(j + 1) % 3]);
+            if a != b { aretes.entry(if a < b { (a, b) } else { (b, a) }).or_default().push(i); }
+        }
+    }
+    // pièces accolées par une face (arête commune à plus de deux triangles) : réunies
+    // si elles ont la même couleur, donc le même matériau
+    let couleur = |i: usize| scene.vertices[tris[i].0].color;
+    for v in aretes.values() {
+        for w in 1..v.len() {
+            if let Some(&u) = v[..w].iter().find(|&&u| couleur(u) == couleur(v[w])) {
+                let (a, b) = (racine(&mut parent, u), racine(&mut parent, v[w]));
+                if a != b { parent[a] = b; }
+            }
+        }
+    }
+    let mut lots: HashMap<usize, (Vec<[[f64; 2]; 2]>, usize, bool)> = HashMap::new();
+    for i in 0..tris.len() {
+        let (k, translucide) = tris[i];
+        let p = [0, 1, 2].map(|j| Vec3::from(scene.vertices[k + j].pos).as_dvec3());
+        if let Some(s) = section(p, n, d) {
+            let r = racine(&mut parent, i);
+            lots.entry(r).or_insert_with(|| (Vec::new(), k, translucide)).0.push(s.map(|q| [(q - o).dot(e1), (q - o).dot(e2)]));
+        }
+    }
+    let mut lots: Vec<_> = lots.into_values().collect();
+    lots.sort_by_key(|l| l.1);
+    // solide contenu dans un autre (paroi intérieure d'un élément creux) : sectionnés
+    // ensemble, le contour intérieur fait un vide
+    let dedans = |q: [f64; 2], boucles: &[Polyligne]| {
+        boucles.iter().map(|b| (0..b.len()).filter(|&k| {
+            let (a, c) = (b[k], b[(k + 1) % b.len()]);
+            (a[1] > q[1]) != (c[1] > q[1]) && q[0] < a[0] + (q[1] - a[1]) / (c[1] - a[1]) * (c[0] - a[0])
+        }).count()).sum::<usize>() % 2 == 1
+    };
+    let contours: Vec<Vec<Polyligne>> = lots.iter().map(|l| chainer(&l.0).0).collect();
+    let mut cible: Vec<usize> = (0..lots.len()).collect();
+    for i in 0..lots.len() {
+        let Some(b) = contours[i].first() else { continue };
+        let centre = [b.iter().map(|q| q[0]).sum::<f64>() / b.len() as f64, b.iter().map(|q| q[1]).sum::<f64>() / b.len() as f64];
+        if let Some(j) = (0..lots.len()).find(|&j| j != i && cible[j] != i && dedans(centre, &contours[j])) { cible[i] = j; }
+    }
+    for i in 0..lots.len() {
+        let mut j = cible[i];
+        for _ in 0..lots.len() { if cible[j] == j { break; } j = cible[j]; }
+        if j != i && cible[j] == j {
+            let segs = std::mem::take(&mut lots[i].0);
+            lots[j].0.extend(segs);
+        }
+    }
+    lots.retain(|l| !l.0.is_empty());
+    let en_3d = |p: [f64; 2]| o + e1 * p[0] + e2 * p[1];
+    let primitive = |forme, couleur, epaisseur, role| Primitive { forme, style: Style { couleur, epaisseur }, role, element: Some(ob.id) };
+    let mut prims = Vec::new();
+    for (segs, k, translucide) in lots {
+        // faces communes de deux pièces réunies : sections en double, retirées
+        let cle2 = |q: [f64; 2]| ((q[0] / PAS).round() as i64, (q[1] / PAS).round() as i64);
+        let cle_seg = |s: &[[f64; 2]; 2]| { let (a, b) = (cle2(s[0]), cle2(s[1])); if a < b { (a, b) } else { (b, a) } };
+        let mut nombre: HashMap<_, usize> = HashMap::new();
+        for s in &segs { *nombre.entry(cle_seg(s)).or_default() += 1; }
+        let segs: Vec<_> = segs.into_iter().filter(|s| nombre[&cle_seg(s)] == 1).collect();
+        let (boucles, ouvertes) = chainer(&segs);
+        if !boucles.is_empty() {
+            let fond = match poche {
+                // style Réaliste : couleur du solide (rendu, sinon affichage)
+                Poche::Materiau => scene.couleurs_rendu.get(k).filter(|c| c[3] > 0).copied().or_else(|| scene.vertices.get(k).map(|v| v.color)).map_or(fond, |c| [c[0], c[1], c[2], 255]),
+                _ if translucide => [255, 255, 255, 255],
+                _ => fond,
+            };
+            let surface = primitive(Forme::Surface(boucles.iter().map(|b| b.iter().map(|p| en_3d(*p)).collect()).collect()), fond, 0.0, Role::Poche);
+            // hachures sur le maillage du poché (indépendant du sens des contours)
+            if let Some(c) = hachure.filter(|_| !translucide) {
+                let t2: Vec<[[f64; 2]; 3]> = surface.mailler(n, echelle).triangles.iter().map(|t| t.map(|p| [(p - o).dot(e1), (p - o).dot(e2)])).collect();
+                let s: Vec<[DVec3; 2]> = hachures_plan(&t2, motif, 1.0, 20_000).into_iter().map(|s| s.map(en_3d)).collect();
+                prims.push(surface);
+                if !s.is_empty() { prims.push(primitive(Forme::Segments(s), c, 0.0, Role::Hachure)); }
+            } else {
+                prims.push(surface);
+            }
+        }
+        let trait_mm = if translucide { TRAIT_FIN_MM } else { TRAIT_FORT_MM };
+        for (pts, fermee) in boucles.iter().map(|b| (b, true)).chain(ouvertes.iter().map(|b| (b, false))) {
+            prims.push(primitive(Forme::Polyligne { points: pts.iter().map(|p| en_3d(*p)).collect(), fermee }, NOIR, trait_mm, Role::Coupe));
+        }
+    }
+    prims
+}
 
 /// Nettoyage des jonctions comme Revit : un trait de coupe commun à deux éléments du
 /// même matériau (deux couches identiques raccordées en onglet) est retiré, les deux
@@ -996,6 +1111,34 @@ mod tests {
         let total = std::f64::consts::FRAC_PI_2 * 5.0 * 0.145;
         assert!((bois + laine - total).abs() < 1e-3, "{bois} + {laine} / {total}");
         assert!((bois - 14.0 * 0.045 * 0.145).abs() < 2e-3, "{bois}");
+    }
+
+    #[test]
+    fn fenetre_coupee_piece_par_piece() {
+        use crate::modele::{Ouverture, Projet};
+        let g = crate::config::gabarit::Gabarit::defaut();
+        let mut p = Projet::depuis_gabarit("OF", &g);
+        let tm = p.types_murs.iter().find(|t| t.nom.starts_with("Mur BA 200 + doublage")).unwrap().id.clone();
+        let mur = p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &crate::modele::edition::ParametresMur { type_mur: Some(tm), ..Default::default() }).unwrap();
+        for (k, t) in p.types_ouvertures.clone().iter().filter(|t| t.genre == crate::modele::GenreOuverture::Fenetre).enumerate() {
+            p.ouvertures = vec![Ouverture { id: format!("o{k}"), nom: "F".into(), genre: t.genre, mur: mur.clone(), type_ouverture: Some(t.id.clone()), abscisse: 2500.0, largeur: t.largeur, hauteur: t.hauteur, allege: 100.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None }];
+            p.verifier().unwrap();
+            let scene = crate::rendu::scene::depuis_natif(&p, std::path::Path::new("test.modele.json")).unwrap();
+            let id = crate::rendu::scene::id_natif("ouverture", &format!("o{k}"));
+            // coupe verticale dans un vantail, coupe horizontale à mi-hauteur
+            for plan in [Vec3::NEG_X.extend((2.3 - scene.origin.x) as f32), Vec3::NEG_Z.extend((0.8 - scene.origin.z) as f32)] {
+                let prims: Vec<_> = super::coupe(&scene, &vec![true; scene.objects.len()], plan, 20.0, Poche::Hachure).into_iter().filter(|p| p.element == Some(id)).collect();
+                // chaque pièce a son contour fermé
+                assert!(prims.iter().all(|p| !matches!(p.forme, Forme::Polyligne { fermee: false, .. })), "{} : contour ouvert", t.nom);
+                let pieces = prims.iter().filter(|p| p.role == Role::Poche).count();
+                assert!(pieces >= 4, "{} : {pieces} pièces", t.nom);
+                // vitrage : blanc, trait fin, sans hachure ; menuiserie hachurée
+                let vitrages = prims.iter().filter(|p| p.role == Role::Poche && p.style.couleur == [255, 255, 255, 255]).count();
+                assert!(vitrages >= 1 && vitrages < pieces, "{} : {vitrages} vitrages", t.nom);
+                assert_eq!(prims.iter().filter(|p| p.role == Role::Coupe && p.style.epaisseur == TRAIT_FIN_MM).count(), vitrages);
+                assert_eq!(prims.iter().filter(|p| p.role == Role::Hachure).count(), pieces - vitrages, "{}", t.nom);
+            }
+        }
     }
 
     #[test]

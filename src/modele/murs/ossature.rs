@@ -1,6 +1,7 @@
 //! Couches à ossature : montants, lisses et chevêtres d'une couche de mur, solives
 //! d'une couche de dalle. Le matériau de la couche remplit les travées ; l'ossature
-//! découpe la couche en bandes de coupe (membrure ou remplissage) sans géométrie 3D.
+//! découpe la couche en bandes (membrure ou remplissage) : poché des coupes et
+//! surfaces du solide en 3D.
 use crate::modele::volumes::solides::{hote, repere};
 use crate::modele::{Axe, Couche, Mur, Projet};
 use glam::DVec2;
@@ -26,7 +27,19 @@ pub struct Ossature {
     /// Dalles : direction des solives en plan (degrés depuis l'axe X).
     #[serde(default)]
     pub angle: f64,
+    /// Murs : membrures horizontales (lisses à l'entraxe sur la hauteur) au lieu de
+    /// montants.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub horizontale: bool,
+    /// Plume du contour du remplissage en coupe ; None : [`PLUME_REMPLISSAGE`]. Les
+    /// membrures gardent la plume de la couche.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plume_remplissage: Option<u8>,
 }
+
+/// Plume du remplissage d'une couche à ossature : plus fine que celle d'un isolant
+/// seul (3), pour que l'ossature se lise en premier.
+pub const PLUME_REMPLISSAGE: u8 = 2;
 
 fn vrai() -> bool {
     true
@@ -34,13 +47,17 @@ fn vrai() -> bool {
 
 impl Default for Ossature {
     fn default() -> Self {
-        Self { largeur: 45.0, entraxe: 600.0, materiau: None, lisses: true, angle: 0.0 }
+        Self { largeur: 45.0, entraxe: 600.0, materiau: None, lisses: true, angle: 0.0, horizontale: false, plume_remplissage: None }
     }
 }
 
 impl Ossature {
     pub fn materiau(&self) -> &str {
         self.materiau.as_deref().unwrap_or(MATERIAU_OSSATURE)
+    }
+
+    pub fn plume_remplissage(&self) -> u8 {
+        self.plume_remplissage.unwrap_or(PLUME_REMPLISSAGE).clamp(1, 12)
     }
 
     pub fn valide(&self) -> bool {
@@ -92,14 +109,21 @@ pub fn membrures_mur(p: &Projet, m: &Mur) -> Vec<[f64; 4]> {
         return Vec::new();
     }
     let mut r = Vec::new();
-    let (za, zc) = if o.lisses {
-        r.push([0.0, l, zb, zb + w]);
-        r.push([0.0, l, zh - w, zh]);
-        (zb + w, zh - w)
-    } else {
+    let (za, zc) = if o.horizontale {
+        // lisses à l'entraxe sur la hauteur, une en pied et une en tête
+        r.extend(o.travees(zh - zb).into_iter().map(|(a, b)| [0.0, l, zb + a, zb + b]));
         (zb, zh)
+    } else {
+        let bornes = if o.lisses {
+            r.push([0.0, l, zb, zb + w]);
+            r.push([0.0, l, zh - w, zh]);
+            (zb + w, zh - w)
+        } else {
+            (zb, zh)
+        };
+        r.extend(o.travees(l).into_iter().map(|(a, b)| [a, b, bornes.0, bornes.1]));
+        bornes
     };
-    r.extend(o.travees(l).into_iter().map(|(a, b)| [a, b, za, zc]));
     for ouv in p.ouvertures.iter().filter(|x| x.mur == m.id || Some(&x.mur) == m.assemblage.as_ref()) {
         let Ok((axe, _, niveau)) = hote(p, &ouv.mur) else { continue };
         let Some(zo) = p.niveau(&niveau).map(|n| n.altitude + ouv.allege) else { continue };
@@ -192,6 +216,48 @@ pub fn bandes_mur(p: &Projet, m: &Mur) -> Vec<Bande> {
     bandes
 }
 
+/// Répartit les triangles d'un solide (mm) entre remplissage et membrures : chaque
+/// triangle est découpé par les bandes, qui se partagent l'espace sans recouvrement.
+/// Les surfaces du solide montrent ainsi l'ossature en 3D sans solide supplémentaire.
+pub fn repartir(tris: &[[glam::DVec3; 3]], bandes: &[Bande]) -> (Vec<[glam::DVec3; 3]>, Vec<[glam::DVec3; 3]>) {
+    use glam::DVec3;
+    let (mut remplissage, mut membrures) = (Vec::new(), Vec::new());
+    let mut polygone: Vec<DVec3> = Vec::new();
+    let mut suivant: Vec<DVec3> = Vec::new();
+    for b in bandes {
+        let sortie = if b.membrure { &mut membrures } else { &mut remplissage };
+        for t in tris {
+            polygone.clear();
+            polygone.extend_from_slice(t);
+            for q in &b.plans {
+                let (n, d) = (DVec3::new(q[0], q[1], q[2]), q[3]);
+                suivant.clear();
+                for k in 0..polygone.len() {
+                    let (a, c) = (polygone[k], polygone[(k + 1) % polygone.len()]);
+                    let (sa, sc) = (n.dot(a) + d, n.dot(c) + d);
+                    if sa >= 0.0 {
+                        suivant.push(a);
+                    }
+                    if (sa >= 0.0) != (sc >= 0.0) {
+                        suivant.push(a + (c - a) * (sa / (sa - sc)));
+                    }
+                }
+                std::mem::swap(&mut polygone, &mut suivant);
+                if polygone.len() < 3 {
+                    break;
+                }
+            }
+            for k in 1..polygone.len().saturating_sub(1) {
+                let t = [polygone[0], polygone[k], polygone[k + 1]];
+                if (t[1] - t[0]).cross(t[2] - t[0]).length_squared() > 1e-6 {
+                    sortie.push(t);
+                }
+            }
+        }
+    }
+    (remplissage, membrures)
+}
+
 /// Bandes d'une couche de dalle à solives : colonnes perpendiculaires à la direction
 /// des solives sur l'emprise des contours (plans à ajouter à ceux de la couche).
 pub fn bandes_dalle(o: &Ossature, contours: &[Vec<[f64; 2]>]) -> Vec<Bande> {
@@ -279,6 +345,25 @@ mod tests {
         assert!(r.iter().any(|x| x[0] == 1900.0 && x[1] == 1945.0));
         assert!(r.iter().any(|x| x[2] == 1900.0 && x[3] == 1945.0 && x[0] == 1055.0));
         assert!(r.iter().any(|x| x[2] == 855.0 && x[3] == 900.0));
+    }
+
+    #[test]
+    fn ossature_horizontale_et_surfaces_reparties() {
+        let (mut p, id) = projet();
+        p.types_murs[0].couches[0].ossature = Some(Ossature { horizontale: true, ..Default::default() });
+        let m = p.murs.iter().find(|m| m.id == id).unwrap();
+        let (zb, zh) = p.bas_haut(m).unwrap();
+        let r = membrures_mur(&p, m);
+        // lisses sur toute la longueur, à l'entraxe sur la hauteur
+        assert!(r.iter().all(|x| x[0] == 0.0 && x[1] == 3000.0 && (x[3] - x[2] - 45.0).abs() < 1e-9));
+        assert_eq!(r.len(), Ossature::default().travees(zh - zb).len());
+        // surfaces du solide : aire conservée, part des membrures sur une grande face
+        let tris = crate::modele::volumes::solides::mur(&p, m, &Default::default()).unwrap();
+        let aire = |t: &[[glam::DVec3; 3]]| t.iter().map(|t| (t[1] - t[0]).cross(t[2] - t[0]).length() / 2.0).sum::<f64>();
+        let (remplissage, membrures) = repartir(&tris, &bandes_mur(&p, m));
+        assert!((aire(&remplissage) + aire(&membrures) - aire(&tris)).abs() < 1.0);
+        let face = |t: &[[glam::DVec3; 3]]| aire(&t.iter().filter(|t| t.iter().all(|q| (q.y - 72.5).abs() < 1e-6)).cloned().collect::<Vec<_>>());
+        assert!((face(&membrures) - r.len() as f64 * 45.0 * 3000.0).abs() < 1.0, "{}", face(&membrures));
     }
 
     #[test]

@@ -109,8 +109,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     ordre.extend(projet.murs.iter().filter(|m| m.assemblage.as_ref().is_some_and(|a| projet.assemblage(a).is_none_or(|x| !x.couches.contains(&m.id)))));
     for m in ordre {
         let type_mur = projet.type_mur(&m.type_mur).ok_or("Type de mur introuvable.")?;
-        let tris = crate::modele::volumes::solides::mur(projet, m, &jonctions)?
-            .into_iter().map(|t| t.map(|v| v * 0.001)).collect();
+        let solide = crate::modele::volumes::solides::mur(projet, m, &jonctions)?;
         let id = id_natif("mur", &m.id);
         let parent = match m.assemblage.as_ref().filter(|a| projet.assemblage(a).is_some()) {
             Some(a) => id_natif("assemblage", a),
@@ -139,12 +138,30 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
             let cases = crate::modele::murs::ossature::bandes_mur(projet, m);
             if let (Some(o), false) = (crate::modele::murs::ossature::ossature_mur(projet, m), cases.is_empty()) {
                 let membrure = projet.materiau(o.materiau()).cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(o.materiau()));
+                // membrures à la plume de la couche, remplissage à une plume plus fine
                 let trait_mm = bandes[0].trait_mm;
-                let decoupees = cases.into_iter().flat_map(|case| {
+                let trait_remplissage = projet.epaisseurs_plumes()[(o.plume_remplissage() - 1) as usize];
+                let decoupees = cases.iter().flat_map(|case| {
                     let plans: Vec<Vec4> = case.plans.iter().map(|q| Vec4::new(q[0] as f32, q[1] as f32, q[2] as f32, (q[3] * 0.001) as f32)).collect();
-                    if case.membrure { coupe_materiau(projet, &membrure, plans, trait_mm) } else { bandes.iter().cloned().map(|mut b| { b.plans = plans.clone(); b }).collect() }
+                    if case.membrure { coupe_materiau(projet, &membrure, plans, trait_mm) } else { bandes.iter().cloned().map(|mut b| { b.plans = plans.clone(); b.trait_mm = trait_remplissage; b }).collect() }
                 }).collect();
                 bandes_dalles.push((id, decoupees));
+                // 3D : les surfaces du solide réparties entre remplissage et membrures
+                let (remplissage, membrures) = crate::modele::murs::ossature::repartir(&solide, &cases);
+                if !membrures.is_empty() && !remplissage.is_empty() {
+                    let [r, g, b] = membrure.couleur.map(|c| c as f32 / 255.0);
+                    let couleur_membrure = opacite(Some(&membrure), [r, g, b, 1.0]);
+                    let en_m = |t: Vec<[glam::DVec3; 3]>| t.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
+                    materiaux_parts.push(vec![Some(x.nom.clone()), Some(membrure.nom.clone())]);
+                    geoms.push(ProductGeom {
+                        id,
+                        parts: vec![Part { color: couleur, tris: en_m(remplissage) }, Part { color: couleur_membrure, tris: en_m(membrures) }],
+                        lignes: Vec::new(),
+                        rendu: vec![Some(rendu_materiau(x, couleur, &mut table_apparences)), Some(rendu_materiau(&membrure, couleur_membrure, &mut table_apparences))],
+                        motifs: vec![motif_surface(projet, x, &mut table_motifs), motif_surface(projet, &membrure, &mut table_motifs)],
+                    });
+                    continue;
+                }
             } else {
                 couches_coupe.push((id, bandes));
             }
@@ -164,6 +181,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
                 trait_mm: crate::dessin::TRAIT_FORT_MM,
             }]));
         }
+        let tris = solide.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
         materiaux_parts.push(vec![materiau.as_ref().map(|m| m.nom.clone())]);
         geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.as_ref().map(|m| rendu_materiau(m, couleur, &mut table_apparences))], motifs: vec![materiau.as_ref().and_then(|m| motif_surface(projet, m, &mut table_motifs))] });
     }
@@ -204,15 +222,34 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
                         Some((membrure, cases)) => for case in cases {
                             let mut jeu = jeu.clone();
                             jeu.extend(case.plans.iter().map(|q| Vec4::new(q[0] as f32, q[1] as f32, q[2] as f32, (q[3] * 0.001) as f32)));
-                            bandes.extend(coupe_materiau(projet, if case.membrure { membrure } else { m }, jeu, projet.trait_couche(c)));
+                            let trait_mm = if case.membrure { projet.trait_couche(c) } else { projet.epaisseurs_plumes()[(c.ossature.as_ref().map_or(2, |o| o.plume_remplissage()) - 1) as usize] };
+                            bandes.extend(coupe_materiau(projet, if case.membrure { membrure } else { m }, jeu, trait_mm));
                         },
                         None => bandes.extend(coupe_materiau(projet, m, jeu, projet.trait_couche(c))),
                     }
                 }
             }
+            // solives : les surfaces de la couche réparties entre remplissage et membrures
+            let solives = m.as_ref().zip(c.ossature.as_ref().filter(|o| o.valide())).and_then(|(_, o)| {
+                let cases = crate::modele::murs::ossature::bandes_dalle(o, &d.contours);
+                let en_mm: Vec<[glam::DVec3; 3]> = tris.iter().map(|t| t.map(|v| v * 1000.0)).collect();
+                let (remplissage, membrures) = crate::modele::murs::ossature::repartir(&en_mm, &cases);
+                (!membrures.is_empty() && !remplissage.is_empty()).then(|| (projet.materiau(o.materiau()).cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(o.materiau())), remplissage, membrures))
+            });
             rendu.push(m.as_ref().map(|m| rendu_materiau(m, couleur, &mut table_apparences)));
             noms.push(m.as_ref().map(|m| m.nom.clone()));
             motifs.push(m.as_ref().and_then(|m| motif_surface(projet, m, &mut table_motifs)));
+            if let Some((membrure, remplissage, membrures)) = solives {
+                let en_m = |t: Vec<[glam::DVec3; 3]>| t.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
+                parts.push(Part { color: couleur, tris: en_m(remplissage) });
+                let [r, g, b] = membrure.couleur.map(|c| c as f32 / 255.0);
+                let couleur_membrure = opacite(Some(&membrure), [r, g, b, 1.0]);
+                rendu.push(Some(rendu_materiau(&membrure, couleur_membrure, &mut table_apparences)));
+                noms.push(Some(membrure.nom.clone()));
+                motifs.push(motif_surface(projet, &membrure, &mut table_motifs));
+                parts.push(Part { color: couleur_membrure, tris: en_m(membrures) });
+                continue;
+            }
             parts.push(Part { color: couleur, tris });
         }
         if parts.is_empty() {

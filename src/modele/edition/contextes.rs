@@ -86,6 +86,17 @@ mod tests {
         assert!(!p.elements_masques_contextes(&FiltresContextes { variante: Some(b.clone()), ..Default::default() }.sur(&vue)).contains(&mur));
         filtre.phase = Some("Démolition".into());
         assert!(p.elements_masques_contextes(&filtre).contains(&mur));
+        // adopter A : le mur de la variante B est supprimé, celui de A rejoint le modèle principal
+        let mut q = p.clone();
+        q.demolitions.clear();
+        let garde = q.ajouter_mur([0.,3000.], [4000.,3000.], &ParametresMur::default()).unwrap();
+        q.murs.iter_mut().find(|m| m.id == garde).unwrap().variante = Some(a.clone());
+        assert_eq!(q.elements_variantes_ecartees(&a), vec![mur.clone()]);
+        assert_eq!(q.adopter_variante(&a).unwrap(), 1);
+        assert!(q.murs.iter().all(|m| m.id != mur) && q.ouvertures.is_empty());
+        assert_eq!(q.murs.iter().find(|m| m.id == garde).unwrap().variante, None);
+        assert!(q.variantes.iter().all(|v| v.jeu != "Façade") && q.variantes.iter().any(|v| v.id == c));
+        assert_eq!(q.contextes_vues["vue"].variante, None);
         assert!(p.supprimer_contexte(ListeCreation::Variante, &b, Some(&c)).is_err());
         p.supprimer_contexte(ListeCreation::Variante, &b, Some(&a)).unwrap();
         assert_eq!(p.murs[0].variante.as_deref(), Some(a.as_str()));
@@ -152,6 +163,44 @@ impl Projet {
         let jeu = self.variantes.iter().find(|v| v.id == id).ok_or("Variante introuvable.")?.jeu.clone();
         for v in self.variantes.iter_mut().filter(|v| v.jeu == jeu) { v.retenue = v.id == id; }
         Ok(())
+    }
+
+    /// Éléments des variantes du même jeu que `id`, autres qu'elle : ceux qu'adopter
+    /// `id` supprimerait (un assemblage compte pour ses couches).
+    pub fn elements_variantes_ecartees(&self, id: &str) -> Vec<String> {
+        let Some(jeu) = self.variantes.iter().find(|v| v.id == id).map(|v| v.jeu.as_str()) else { return Vec::new() };
+        let autres: std::collections::HashSet<&str> = self.variantes.iter().filter(|v| v.jeu == jeu && v.id != id).map(|v| v.id.as_str()).collect();
+        let ecartee = |v: &Option<String>| v.as_deref().is_some_and(|v| autres.contains(v));
+        let connus = self.identifiants();
+        let mut ids: Vec<String> = Vec::new();
+        for m in self.murs.iter().filter(|m| ecartee(&m.variante)) {
+            let cle = m.assemblage.as_ref().filter(|a| self.assemblage(a).is_some()).unwrap_or(&m.id);
+            if !ids.contains(cle) { ids.push(cle.clone()); }
+        }
+        ids.extend(self.dalles.iter().filter(|d| ecartee(&d.variante)).map(|d| d.id.clone()));
+        for (cle, c) in &self.contextes {
+            if ecartee(&c.variante) && connus.contains(cle) && !ids.contains(cle) && !self.murs.iter().any(|m| &m.id == cle) { ids.push(cle.clone()); }
+        }
+        ids
+    }
+
+    /// Adopte une variante : ses éléments rejoignent le modèle principal, ceux des autres
+    /// variantes du jeu sont supprimés, et le jeu disparaît. Renvoie le nombre d'éléments
+    /// supprimés.
+    pub fn adopter_variante(&mut self, id: &str) -> Result<usize, String> {
+        let jeu = self.variantes.iter().find(|v| v.id == id).ok_or("Variante introuvable.")?.jeu.clone();
+        let ids = self.elements_variantes_ecartees(id);
+        let nombre = ids.len();
+        let mut copie = self.clone();
+        if !ids.is_empty() {
+            copie = copie.executer(crate::modele::edition::commandes::Commande::Supprimer { ids })?.0;
+        }
+        for v in self.variantes.iter().filter(|v| v.jeu == jeu) {
+            copie.remplacer_contexte(ListeCreation::Variante, &v.id, None);
+        }
+        copie.variantes.retain(|v| v.jeu != jeu);
+        *self = copie;
+        Ok(nombre)
     }
 
     /// Nombre d'affectations directes et de démolitions utilisant une entrée.

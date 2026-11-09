@@ -212,6 +212,7 @@ pub fn familles_livrees() -> Vec<TypeOuvertureGabarit> {
     vec![
         TypeOuvertureGabarit { nom: "Fenêtre OF 2 vantaux".into(), largeur: 1200.0, hauteur: 1350.0, famille: FamilleModelee::fenetre_of_2_vantaux() },
         TypeOuvertureGabarit { nom: "Porte intérieure 1 vantail".into(), largeur: 900.0, hauteur: 2150.0, famille: FamilleModelee::porte_1_vantail() },
+        TypeOuvertureGabarit { nom: "Porte-fenêtre 2 vantaux, tableaux et seuil".into(), largeur: 1400.0, hauteur: 2150.0, famille: FamilleModelee::porte_fenetre_tableaux_seuil() },
     ]
 }
 

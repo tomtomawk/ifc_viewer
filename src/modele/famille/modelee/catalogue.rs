@@ -1,5 +1,6 @@
 //! Familles livrées dans le gabarit de projet : fenêtre ouvrant à la française à deux
-//! vantaux et porte intérieure à un vantail. Le gabarit (`gabarits/defaut.gabarit.json`)
+//! vantaux, porte-fenêtre à tableaux et seuil,
+//! porte intérieure à un vantail. Le gabarit (`gabarits/defaut.gabarit.json`)
 //! en est la copie sérialisée, contrôlée par test.
 #![cfg_attr(not(test), allow(dead_code))] // source du gabarit, lue par les tests
 use super::*;
@@ -145,6 +146,9 @@ impl FamilleModelee {
                         volume(&format!("Vitrage {cote}"), V, [(x0, 0.0), (x1, 0.0)], verre, [("Ouvrant bas", 0.0), ("Ouvrant haut", 0.0)]),
                     ]);
                 }
+                // l'appui s'encastre sous la baie : sa réservation creuse le mur, sinon les
+                // deux se superposent en coupe
+                v.push(Volume { vide: true, visible: Some("AvecAppui".into()), ..volume("Réservation appui", M, [("Gauche", -20.0), ("Droite", 20.0)], [("Cadre ext", -10.0), ("Extérieur", 5.0)], [("Bas", -45.0), ("Bas", 0.0)]) });
                 // poignée (crémone) côté intérieur, sur la battue du vantail de gauche
                 v.extend([
                     volume("Poignée · platine", M, [("Centre", -52.0), ("Centre", -24.0)], [("Cadre int", -20.0), ("Cadre int", -8.0)], [("Mi-hauteur", -40.0), ("Mi-hauteur", 40.0)]),
@@ -183,6 +187,56 @@ impl FamilleModelee {
             couleur: couleur_defaut(),
             genre: crate::modele::GenreOuverture::Fenetre,
         }
+    }
+
+    /// Porte-fenêtre à deux vantaux dérivée de la fenêtre OF : tableaux et linteau
+    /// habillés (panneaux du dormant au nu extérieur, à la place du retour d'enduit) et
+    /// seuil en pente devant la traverse basse. Matériaux des tableaux et du seuil au
+    /// choix par paramètre.
+    pub fn porte_fenetre_tableaux_seuil() -> FamilleModelee {
+        use AxePlan::*;
+        let mut f = FamilleModelee::fenetre_of_2_vantaux();
+        f.parametres.retain(|p| p.nom != "AvecAppui" && p.nom != "MateriauAppui");
+        f.parametres.extend([
+            param("Tableau", "20"),
+            param("Seuil", "40"),
+            Parametre { nom: "MateriauTableau".into(), formule: String::new(), portee: Portee::Type, genre: GenreParametre::Materiau },
+            Parametre { nom: "MateriauSeuil".into(), formule: String::new(), portee: Portee::Type, genre: GenreParametre::Materiau },
+        ]);
+        f.plans.extend([plan("Tableau gauche", X, -680.0), plan("Tableau droit", X, 680.0), plan("Tableau haut", Z, 2130.0), plan("Seuil haut", Z, 40.0)]);
+        // les panneaux de tableau remplacent le retour d'enduit
+        for c in &mut f.contraintes {
+            if let Contrainte::Distance { a, valeur, .. } = c && a == "Retour extérieur" { *valeur = "0".into(); }
+        }
+        f.contraintes.extend([
+            dist("Gauche", "Tableau gauche", "Tableau", 5),
+            dist("Tableau droit", "Droite", "Tableau", 5),
+            dist("Tableau haut", "Haut", "Tableau", 5),
+            dist("Bas", "Seuil haut", "Seuil", 5),
+        ]);
+        f.volumes.retain(|v| v.nom != "Réservation appui");
+        let tableau = [("Cadre ext", 0.0), ("Extérieur", 0.0)];
+        let panneau = |nom: &str, x: Bornes, z: Bornes| Volume { materiau_parametre: Some("MateriauTableau".into()), ..volume(nom, Materiau::Panneau, x, tableau, z) };
+        f.volumes.extend([
+            panneau("Tableau gauche", [("Gauche", 0.0), ("Tableau gauche", 0.0)], [("Bas", 0.0), ("Haut", 0.0)]),
+            panneau("Tableau droit", [("Tableau droit", 0.0), ("Droite", 0.0)], [("Bas", 0.0), ("Haut", 0.0)]),
+            panneau("Tableau haut", [("Tableau gauche", 0.0), ("Tableau droit", 0.0)], [("Tableau haut", 0.0), ("Haut", 0.0)]),
+        ]);
+        f.extrusions = vec![Extrusion {
+            nom: "Seuil".into(),
+            vide: false,
+            materiau: Materiau::Appui,
+            vue: VueEsquisse::Coupe,
+            profil: vec![point("Cadre ext", 0.0, "Seuil haut", 0.0), point("Nu appui", 0.0, "Bas", 15.0), point("Nu appui", 0.0, "Bas", 0.0), point("Cadre ext", 0.0, "Bas", 0.0)],
+            profondeur: [face("Tableau gauche", 0.0), face("Tableau droit", 0.0)],
+            visible: None,
+            materiau_parametre: Some("MateriauSeuil".into()),
+        }];
+        // plan : seuil hachuré entre les tableaux
+        for s in f.symboles.iter_mut().filter(|s| s.remplissage.is_some()) {
+            s.points = vec![point("Tableau gauche", 0.0, "Cadre ext", 0.0), point("Tableau droit", 0.0, "Cadre ext", 0.0), point("Tableau droit", 0.0, "Nu appui", 0.0), point("Tableau gauche", 0.0, "Nu appui", 0.0)];
+        }
+        f
     }
 
     /// Porte intérieure à un vantail : huisserie centrée dans l'épaisseur du mur, vantail
@@ -280,7 +334,7 @@ mod tests {
 
     #[test]
     fn familles_du_catalogue_valides() {
-        for (f, l, h) in [(FamilleModelee::fenetre_of_2_vantaux(), 1200.0, 1350.0), (FamilleModelee::porte_1_vantail(), 900.0, 2150.0)] {
+        for (f, l, h) in [(FamilleModelee::fenetre_of_2_vantaux(), 1200.0, 1350.0), (FamilleModelee::porte_1_vantail(), 900.0, 2150.0), (FamilleModelee::porte_fenetre_tableaux_seuil(), 1400.0, 2150.0)] {
             for e in [160.0, 200.0, 300.0, 450.0] {
                 f.valider(l, h, e).unwrap();
             }

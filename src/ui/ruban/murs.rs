@@ -439,6 +439,15 @@ impl RubanEdition {
                                     o.materiau = (!nom.is_empty()).then_some(nom);
                                     ui.end_row();
                                 });
+                                egui::Grid::new("ossature_plume").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
+                                    ui.label("Plume du remplissage").on_hover_text("Contour de l'isolant entre les membrures, en coupe. Les membrures gardent la plume de la couche.");
+                                    let mut plume = o.plume_remplissage();
+                                    if ui.add(egui::DragValue::new(&mut plume).range(1..=12)).changed() {
+                                        o.plume_remplissage = (plume != crate::modele::murs::ossature::PLUME_REMPLISSAGE).then_some(plume);
+                                    }
+                                    ui.end_row();
+                                });
+                                ui.checkbox(&mut o.horizontale, "Ossature horizontale").on_hover_text("Lisses horizontales à l'entraxe sur la hauteur du mur, au lieu de montants (contre-ossature, bardage vertical).");
                                 ui.checkbox(&mut o.lisses, "Lisses, linteaux et appuis").on_hover_text("Lisses basse et haute ; linteau et appui autour des ouvertures. Les montants de part et d'autre des ouvertures sont toujours ajoutés.");
                                 if o.entraxe <= o.largeur {
                                     ui.colored_label(ui.visuals().error_fg_color, "L'entraxe doit dépasser la largeur.");
