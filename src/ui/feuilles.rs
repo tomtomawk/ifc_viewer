@@ -957,15 +957,21 @@ impl ViewerApp {
 fn selecteur_cartouche(ui: &mut egui::Ui, p: &crate::modele::Projet, f: &doc::Feuille) -> Option<crate::modele::Projet> {
     let actuel = doc::famille_cartouche(p, &f.id).map(|f| f.nom.as_str());
     let mut choix = actuel;
-    egui::ComboBox::from_id_salt("famille_cartouche_feuille")
-        .truncate()
-        .selected_text(actuel.unwrap_or("Cartouche standard"))
-        .show_ui(ui, |ui| {
-            ui.selectable_value(&mut choix, None, "Cartouche standard");
+    {
+        use super::ruban::selecteur;
+        let titre = format!("Cartouche · {}", actuel.unwrap_or("Standard"));
+        let bouton = selecteur::entete(ui, &titre, None, &format!("{titre}
+Famille de cartouche de la feuille."), None);
+        let largeur = selecteur::largeur_liste(ui, p.familles_cartouches.iter().map(|f| f.nom.as_str()).chain(["Cartouche standard"]), 0.0, 0, 0.0);
+        selecteur::liste(&bouton, largeur, 0.0, |ui| {
+            let l = selecteur::Ligne { nom: "Cartouche standard", courant: actuel.is_none(), etiquette: None, sous_titre: None, detail: None, actions: &[] };
+            if selecteur::ligne(ui, &l, None).choisi { choix = None; }
             for famille in &p.familles_cartouches {
-                ui.selectable_value(&mut choix, Some(famille.nom.as_str()), &famille.nom);
+                let l = selecteur::Ligne { nom: &famille.nom, courant: actuel == Some(famille.nom.as_str()), etiquette: None, sous_titre: None, detail: None, actions: &[] };
+                if selecteur::ligne(ui, &l, None).choisi { choix = Some(famille.nom.as_str()); }
             }
         });
+    }
     if choix == actuel { return None; }
     let mut projet = p.clone();
     if let Some(nom) = choix {

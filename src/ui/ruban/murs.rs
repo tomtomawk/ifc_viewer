@@ -121,7 +121,7 @@ impl RubanEdition {
         let mut nouveau = false;
         let unite = crate::config::options::unite();
         let epaisseur = |c: &[crate::modele::Couche]| c.iter().map(|c| c.epaisseur).sum::<f64>();
-        let police = egui::FontId::proportional(12.0);
+
         let largeur_texte = |ui: &egui::Ui, t: &str, f: &egui::FontId| ui.fonts_mut(|x| x.layout_no_wrap(t.to_string(), f.clone(), Color32::WHITE).size().x);
         // Sélecteur fermé : catégorie, nom et épaisseur en haut ; dessous, sur toute la
         // largeur, le plan des couches (de l'extérieur vers l'intérieur).
@@ -168,99 +168,43 @@ impl RubanEdition {
             if crayon.clicked() { editer = Some(type_mur.id.clone()); }
         }
         let bouton = bouton.on_hover_text(bulle);
-        // Liste : assez large pour le dessin en plan, le nom le plus long et l'épaisseur.
-        let plus_long = lignes.iter().map(|l| largeur_texte(ui, &l.2, &police)).fold(0.0f32, f32::max);
-        let largeur_liste = (8.0 + 40.0 + 10.0 + plus_long + 16.0 + 64.0 + 50.0 + 8.0).max(largeur).max(CategorieMur::TOUTES.len() as f32 * 98.0 + 12.0);
-        egui::Popup::from_toggle_button_response(&bouton)
-            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-            .width(largeur_liste)
-            .show(|ui| {
-                ui.set_min_width(largeur_liste);
-                // hauteur fixe (catégorie la plus fournie) : la liste ne saute pas d'un onglet à l'autre
-                ui.set_min_height(116.0 + rangs as f32 * 27.0);
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 2.0;
-                    for c in CategorieMur::TOUTES {
-                        let (r, reponse) = ui.allocate_exact_size(egui::vec2(96.0, 50.0), Sense::click());
-                        let actif = onglet == c;
-                        if actif || reponse.hovered() {
-                            ui.painter().rect_filled(r, 4.0, if actif { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
-                        }
-                        icone_categorie_mur(ui, egui::Rect::from_center_size(r.center_top() + egui::vec2(0.0, 17.0), egui::vec2(26.0, 26.0)), c);
-                        ui.painter().text(r.center_bottom() - egui::vec2(0.0, 9.0), egui::Align2::CENTER_CENTER, c.nom(), egui::FontId::proportional(12.0), ui.visuals().text_color());
-                        if reponse.clicked() && !actif {
-                            choix_onglet = Some(c);
-                            ui.ctx().request_repaint();
-                        }
-                    }
-                });
-                ui.label(RichText::new(onglet.aide()).small().weak());
-                ui.separator();
-                for ligne in &lignes {
-                    let courant = match (&ligne.0, &self.type_mur) {
-                        (None, None) => ligne.1.is_none(),
-                        (Some(a), Some(b)) => a == b,
-                        _ => false,
-                    };
-                    let (r, reponse) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 26.0), Sense::click());
-                    let survol = ui.rect_contains_pointer(r);
-                    if courant || survol {
-                        ui.painter().rect_filled(r, 3.0, if courant { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
-                    }
+        let largeur_liste = selecteur::largeur_liste(ui, lignes.iter().map(|l| &l.2), 64.0 + 50.0, CategorieMur::TOUTES.len(), 96.0);
+        selecteur::liste(&bouton, largeur_liste, selecteur::HAUTEUR_CADRE + rangs as f32 * selecteur::HAUTEUR_LIGNE, |ui| {
+            choix_onglet = selecteur::onglets(ui, &CategorieMur::TOUTES, onglet, 96.0, |c| c.nom().into(), onglet.aide(), icone_categorie_mur);
+            for ligne in &lignes {
+                let courant = match (&ligne.0, &self.type_mur) {
+                    (None, None) => ligne.1.is_none(),
+                    (Some(a), Some(b)) => a == b,
+                    _ => false,
+                };
+                let actions: &[(selecteur::ActionType, &str)] = match (ligne.3.is_empty(), ligne.0.is_some()) {
+                    (true, _) => &[],
+                    (false, true) => &[(selecteur::ActionType::Dupliquer, "Dupliquer : nouveau type d'après celui-ci"), (selecteur::ActionType::Modifier, "Modifier le type")],
+                    (false, false) => &[(selecteur::ActionType::Dupliquer, "Dupliquer : nouveau type d'après celui-ci")],
+                };
+                let l = selecteur::Ligne {
+                    nom: &ligne.2,
+                    courant,
+                    etiquette: ligne.1.as_ref().map(|_| "gabarit"),
+                    sous_titre: None,
+                    detail: (!ligne.3.is_empty()).then(|| unite.afficher(epaisseur(&ligne.3))),
+                    actions,
+                };
+                let mut bande = |ui: &mut egui::Ui, r: egui::Rect| {
                     if !ligne.3.is_empty() {
-                        peindre_bande_couches(ui.painter(), egui::Rect::from_min_size(r.min + egui::vec2(8.0, 6.0), egui::vec2(40.0, 14.0)), projet, &projet.materiaux, &ligne.3, None);
+                        peindre_bande_couches(ui.painter(), r.shrink2(egui::vec2(0.0, 3.0)), projet, &projet.materiaux, &ligne.3, None);
                     }
-                    ui.painter().text(r.min + egui::vec2(58.0, 13.0), egui::Align2::LEFT_CENTER, &ligne.2, police.clone(), ui.visuals().text_color());
-                    if ligne.1.is_some() {
-                        ui.painter().text(r.min + egui::vec2(66.0 + largeur_texte(ui, &ligne.2, &police), 13.0), egui::Align2::LEFT_CENTER, "gabarit", egui::FontId::proportional(10.0), ui.visuals().weak_text_color());
-                    }
-                    // au survol : crayon (modifier) et duplication (nouveau type d'après celui-ci)
-                    let mut icone_cliquee = false;
-                    if survol && !ligne.3.is_empty() {
-                        let mut x = r.right() - 8.0;
-                        for (n, (forme, bulle)) in [("dupliquer", "Dupliquer : nouveau type d'après celui-ci"), ("crayon", "Modifier le type")].into_iter().enumerate() {
-                            if forme == "crayon" && ligne.0.is_none() {
-                                continue;
-                            }
-                            let zone = egui::Rect::from_min_max(egui::pos2(x - 22.0, r.top() + 2.0), egui::pos2(x, r.bottom() - 2.0));
-                            x -= 24.0;
-                            let rep = ui.interact(zone, ui.scope_id().with(("icone_type", &ligne.2, n)), Sense::click()).on_hover_text(bulle);
-                            if rep.hovered() {
-                                ui.painter().rect_filled(zone, 3.0, ui.visuals().widgets.active.bg_fill);
-                            }
-                            let c = if rep.hovered() { ui.visuals().strong_text_color() } else { ui.visuals().text_color() };
-                            icone_action_type(ui.painter(), zone.shrink(4.0), forme == "crayon", c);
-                            if rep.clicked() {
-                                icone_cliquee = true;
-                                if forme == "crayon" {
-                                    editer = ligne.0.clone();
-                                } else {
-                                    dupliquer = Some((ligne.2.clone(), ligne.3.clone()));
-                                }
-                                ui.close();
-                            }
-                        }
-                    } else if !ligne.3.is_empty() {
-                        ui.painter().text(r.right_center() - egui::vec2(8.0, 0.0), egui::Align2::RIGHT_CENTER, unite.afficher(epaisseur(&ligne.3)), egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
-                    }
-                    if reponse.clicked() && !icone_cliquee {
-                        choisi = Some(ligne.clone());
-                        ui.close();
-                    }
+                };
+                let clic = selecteur::ligne(ui, &l, Some(&mut bande));
+                match clic.action {
+                    Some(selecteur::ActionType::Modifier) => editer = ligne.0.clone(),
+                    Some(selecteur::ActionType::Dupliquer) => dupliquer = Some((ligne.2.clone(), ligne.3.clone())),
+                    None if clic.choisi => choisi = Some(ligne.clone()),
+                    None => {}
                 }
-                // en fin de liste : création d'un nouveau type
-                ui.separator();
-                let (r, reponse) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 26.0), Sense::click());
-                if reponse.hovered() {
-                    ui.painter().rect_filled(r, 3.0, ui.visuals().widgets.hovered.bg_fill);
-                }
-                ui.painter().text(r.min + egui::vec2(28.0, 13.0), egui::Align2::CENTER_CENTER, "+", egui::FontId::proportional(16.0), ui.visuals().strong_text_color());
-                ui.painter().text(r.min + egui::vec2(58.0, 13.0), egui::Align2::LEFT_CENTER, "Nouveau type de mur…", police.clone(), ui.visuals().text_color());
-                if reponse.clicked() {
-                    nouveau = true;
-                    ui.close();
-                }
-            });
+            }
+            nouveau = selecteur::ligne_ajout(ui, "Nouveau type de mur…");
+        });
         if let Some(id) = editer {
             self.ouvrir_editeur_type(projet, Some(id));
         }

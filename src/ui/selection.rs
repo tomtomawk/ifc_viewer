@@ -121,20 +121,30 @@ impl ViewerApp {
         }
         let nom_actuel = types.iter().find(|t| t.0 == actuel).map_or_else(|| p.type_mur(&actuel).or_else(|| p.type_dalle(&actuel)).map_or("Type".to_string(), |t| t.nom.clone()), |t| t.1.clone());
         let mut choisi = actuel.clone();
-        egui::ComboBox::from_id_salt("selecteur_type_selection")
-            .width(ui.available_width() - 8.0)
-            .truncate()
-            .selected_text(RichText::new(&nom_actuel).strong())
-            .show_ui(ui, |ui| {
-                for (tid, nom, detail) in &types {
-                    ui.selectable_value(&mut choisi, tid.clone(), format!("{nom} — {detail}"));
-                }
-            })
-            .response
-            .on_hover_text(match cible {
+        {
+            use super::ruban::{pile_couches, selecteur};
+            let couches = |id: &str| p.type_mur(id).or_else(|| p.type_dalle(id)).map(|t| t.couches.clone()).unwrap_or_default();
+            let detail_actuel = types.iter().find(|t| t.0 == actuel).map(|t| t.2.clone());
+            let categorie = if matches!(cible, Cible::Dalle(_)) { "Élément horizontal" } else { "Mur" };
+            let titre = format!("{categorie} · {nom_actuel}");
+            let bulle = match cible {
                 Cible::Assemblage(_) => "Type du mur composé : ses couches sont reconstruites d'après le type choisi",
                 _ => "Type de l'élément sélectionné",
+            };
+            let bouton = selecteur::entete(ui, &titre, detail_actuel.as_deref(), &format!("{titre}
+{bulle}"), None);
+            let largeur = selecteur::largeur_liste(ui, types.iter().map(|t| t.1.as_str()), 110.0, 0, 0.0);
+            selecteur::liste(&bouton, largeur, 0.0, |ui| {
+                for (tid, nom, detail) in &types {
+                    let l = selecteur::Ligne { nom, courant: *tid == actuel, etiquette: None, sous_titre: None, detail: Some(detail.clone()), actions: &[] };
+                    let c = couches(tid);
+                    let mut v = |ui: &mut egui::Ui, r: egui::Rect| if !c.is_empty() { pile_couches(ui, egui::Rect::from_center_size(r.center(), egui::vec2(26.0, 16.0)), p, &c) };
+                    if selecteur::ligne(ui, &l, Some(&mut v)).choisi {
+                        choisi = tid.clone();
+                    }
+                }
             });
+        }
         ui.separator();
         if choisi == actuel {
             return None;

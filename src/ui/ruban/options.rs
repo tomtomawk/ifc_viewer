@@ -67,102 +67,57 @@ impl RubanEdition {
         let projet_vide = crate::modele::Projet::default();
         let projet_apercu = projet.unwrap_or(&projet_vide);
         ui.add_space(6.0);
-        egui::Frame::group(ui.style())
-            .inner_margin(8.0)
-            .show(ui, |ui| {
-                ui.set_min_width(ui.available_width());
-                ui.horizontal_top(|ui| {
-                    let (vignette, _) =
-                        ui.allocate_exact_size(egui::vec2(52.0, 58.0), Sense::hover());
-                    ui.painter()
-                        .rect_filled(vignette, 3.0, ui.visuals().faint_bg_color);
-                    icone(
-                        ui.painter(),
-                        egui::Rect::from_center_size(vignette.center(), egui::vec2(36.0, 36.0)),
-                        surface,
-                        ui.visuals().text_color(),
-                    );
-                    ui.vertical(|ui| {
-                        ui.label(RichText::new("Éléments horizontaux").small().weak());
-                        let types = types_surface(surface);
-                        let k = self.type_surface.get(&surface).copied().unwrap_or(0).min(types.len().saturating_sub(1));
-                        let nom_type = self.surface_identique.as_ref().filter(|(o,_)| *o == surface).map(|(_, t)| t.nom.as_str()).unwrap_or_else(|| types.get(k).map_or("", |t| t.0.as_str()));
-                        let mut choix_type: Option<(Outil, usize)> = None;
-                        egui::ComboBox::from_id_salt("surface_proprietes")
-                            .width(ui.available_width())
-                            .height(400.0)
-                            // les onglets de sorte gardent la liste ouverte ; un type la ferme
-                            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-                            .truncate()
-                            .selected_text(RichText::new(format!("{} · {nom_type}", surface.nom())).strong())
-                            .show_ui(ui, |ui| {
-                                ui.set_min_width(300.0);
-                                // hauteur fixe (sorte la plus fournie) : la liste ne saute pas d'un onglet à l'autre
-                                let rangs = SURFACES.iter().map(|(o, _)| types_surface(*o).len()).max().unwrap_or(0);
-                                ui.set_min_height(86.0 + rangs as f32 * 27.0);
-                                // onglets des sortes : choisir une sorte garde la liste ouverte
-                                ui.horizontal(|ui| {
-                                    ui.spacing_mut().item_spacing.x = 2.0;
-                                    for &(choix, _) in SURFACES {
-                                        let (r, reponse) = ui.allocate_exact_size(egui::vec2(74.0, 50.0), Sense::click());
-                                        let actif = surface == choix;
-                                        if actif || reponse.hovered() {
-                                            ui.painter().rect_filled(r, 4.0, if actif { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
-                                        }
-                                        icone(ui.painter(), egui::Rect::from_center_size(r.center_top() + egui::vec2(0.0, 17.0), egui::vec2(26.0, 26.0)), choix, ui.visuals().text_color());
-                                        ui.painter().text(r.center_bottom() - egui::vec2(0.0, 9.0), egui::Align2::CENTER_CENTER, choix.nom(), egui::FontId::proportional(12.0), ui.visuals().text_color());
-                                        if reponse.clicked() && !actif {
-                                            choix_type = Some((choix, self.type_surface.get(&choix).copied().unwrap_or(0)));
-                                            // liste redimensionnée à l'image suivante
-                                            ui.ctx().request_repaint();
-                                        }
-                                    }
-                                });
-                                let aide = SURFACES.iter().find(|(o, _)| *o == surface).map_or("", |(_, a)| *a);
-                                ui.label(RichText::new(aide).small().weak());
-                                ui.separator();
-                                // types de la sorte : composition, nom, épaisseur
-                                for (i, (nom, couches)) in types.iter().enumerate() {
-                                    let (r, reponse) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 24.0), Sense::click());
-                                    if i == k || reponse.hovered() {
-                                        ui.painter().rect_filled(r, 3.0, if i == k { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
-                                    }
-                                    let e: f64 = couches.iter().map(|c| c.epaisseur).sum();
-                                    pile_couches(ui, egui::Rect::from_min_size(r.min + egui::vec2(8.0, 4.0), egui::vec2(26.0, 16.0)), projet_apercu, couches);
-                                    ui.painter().text(r.min + egui::vec2(42.0, 12.0), egui::Align2::LEFT_CENTER, nom, egui::FontId::proportional(12.0), ui.visuals().text_color());
-                                    ui.painter().text(r.right_center() - egui::vec2(8.0, 0.0), egui::Align2::RIGHT_CENTER, crate::config::options::unite().afficher(e), egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
-                                    if reponse.clicked() {
-                                        choix_type = Some((surface, i));
-                                        ui.close();
-                                    }
-                                }
-                            });
-                        if let Some((sorte, i)) = choix_type {
-                            surface = sorte;
-                            self.type_surface.insert(sorte, i);
-                            self.surface_identique = None;
-                        }
-                        let aide = SURFACES
-                            .iter()
-                            .find(|(o, _)| *o == surface)
-                            .map_or("", |(_, aide)| *aide);
-                        ui.add(egui::Label::new(RichText::new(aide).small().weak()).wrap());
-                    });
-                });
-                // composition du type choisi, du haut vers le bas
-                let types = types_surface(surface);
-                if let Some((_, couches)) = types.get(self.type_surface.get(&surface).copied().unwrap_or(0)) {
-                    ui.add_space(4.0);
-                    for c in couches {
-                        ui.horizontal(|ui| {
-                            let (r, _) = ui.allocate_exact_size(egui::vec2(16.0, 12.0), Sense::hover());
-                            pile_couches(ui, r, projet_apercu, std::slice::from_ref(c));
-                            ui.label(RichText::new(format!("{} · {}", c.materiau.as_deref().unwrap_or("Couche"), crate::config::options::unite().afficher(c.epaisseur))).small());
-                            ui.label(RichText::new(c.fonction.libelle()).small().weak());
-                        });
+        {
+            let types = types_surface(surface);
+            let k = self.type_surface.get(&surface).copied().unwrap_or(0).min(types.len().saturating_sub(1));
+            let identique = self.surface_identique.as_ref().filter(|(o, _)| *o == surface).map(|(_, t)| t);
+            let (nom_type, couches_type) = identique.map(|t| (t.nom.clone(), t.couches.clone())).or_else(|| types.get(k).cloned()).unwrap_or_default();
+            let unite = crate::config::options::unite();
+            let epaisseur = |c: &[crate::modele::Couche]| c.iter().map(|c| c.epaisseur).sum::<f64>();
+            let titre = format!("{} · {nom_type}", surface.nom());
+            let vignette = |p: &egui::Painter, r: egui::Rect, c: Color32| icone(p, r, surface, c);
+            let detail = (!couches_type.is_empty()).then(|| unite.afficher(epaisseur(&couches_type)));
+            let bouton = selecteur::entete(ui, &titre, detail.as_deref(), &format!("{titre}
+Type des prochains éléments horizontaux."), Some(&vignette));
+            let sortes: Vec<Outil> = SURFACES.iter().map(|(o, _)| *o).collect();
+            let rangs = sortes.iter().map(|o| types_surface(*o).len()).max().unwrap_or(0);
+            let noms: Vec<String> = sortes.iter().flat_map(|o| types_surface(*o)).map(|t| t.0).collect();
+            let largeur_liste = selecteur::largeur_liste(ui, noms.iter(), 64.0, sortes.len(), 74.0);
+            let aide = SURFACES.iter().find(|(o, _)| *o == surface).map_or("", |(_, a)| *a);
+            let mut choix_type: Option<(Outil, usize)> = None;
+            selecteur::liste(&bouton, largeur_liste, selecteur::HAUTEUR_CADRE + rangs as f32 * selecteur::HAUTEUR_LIGNE, |ui| {
+                if let Some(o) = selecteur::onglets(ui, &sortes, surface, 74.0, |o| o.nom().into(), aide, |p, r, o, c| icone(p, r, o, c)) {
+                    choix_type = Some((o, self.type_surface.get(&o).copied().unwrap_or(0)));
+                }
+                for (i, (nom, couches)) in types.iter().enumerate() {
+                    let l = selecteur::Ligne { nom, courant: identique.is_none() && i == k, etiquette: None, sous_titre: None, detail: Some(unite.afficher(epaisseur(couches))), actions: &[] };
+                    let mut pile = |ui: &mut egui::Ui, r: egui::Rect| pile_couches(ui, egui::Rect::from_center_size(r.center(), egui::vec2(26.0, 16.0)), projet_apercu, couches);
+                    if selecteur::ligne(ui, &l, Some(&mut pile)).choisi {
+                        choix_type = Some((surface, i));
                     }
                 }
             });
+            if let Some((sorte, i)) = choix_type {
+                surface = sorte;
+                self.type_surface.insert(sorte, i);
+                self.surface_identique = None;
+            }
+            let aide = SURFACES.iter().find(|(o, _)| *o == surface).map_or("", |(_, aide)| *aide);
+            ui.add(egui::Label::new(RichText::new(aide).small().weak()).wrap());
+            // composition du type choisi, du haut vers le bas
+            let types = types_surface(surface);
+            if let Some((_, couches)) = types.get(self.type_surface.get(&surface).copied().unwrap_or(0)) {
+                ui.add_space(4.0);
+                for c in couches {
+                    ui.horizontal(|ui| {
+                        let (r, _) = ui.allocate_exact_size(egui::vec2(16.0, 12.0), Sense::hover());
+                        pile_couches(ui, r, projet_apercu, std::slice::from_ref(c));
+                        ui.label(RichText::new(format!("{} · {}", c.materiau.as_deref().unwrap_or("Couche"), unite.afficher(c.epaisseur))).small());
+                        ui.label(RichText::new(c.fonction.libelle()).small().weak());
+                    });
+                }
+            }
+        }
         self.selection = Some(surface);
         self.derniere_surface = Some(surface);
         ui.add_space(8.0);

@@ -67,7 +67,6 @@ impl RubanEdition {
         let type_actuel = actuel.and_then(|id| projet.types_ouvertures.iter().find(|t| t.id == id));
         let genre_actuel = type_actuel.map_or(genre, |t| t.genre);
         let onglet = self.categorie_ouverture.filter(|c| categories.contains(c)).unwrap_or(genre_actuel);
-        let largeur = ui.available_width();
         // (id, nom, largeur, hauteur)
         type Ligne = (Option<String>, String, f64, f64);
         let lignes_de = |g: GenreOuverture| -> Vec<Ligne> {
@@ -82,107 +81,51 @@ impl RubanEdition {
         };
         let lignes = lignes_de(onglet);
         let rangs = categories.iter().map(|g| lignes_de(*g).len()).max().unwrap_or(1);
-        let police = egui::FontId::proportional(12.0);
-        let largeur_texte = |ui: &egui::Ui, t: &str, f: &egui::FontId| ui.fonts_mut(|x| x.layout_no_wrap(t.to_string(), f.clone(), Color32::WHITE).size().x);
         // Sélecteur fermé : vignette, catégorie · nom, cotes.
-        let (r, bouton) = ui.allocate_exact_size(egui::vec2(largeur, 34.0), Sense::click());
-        let visuel = ui.style().interact(&bouton).clone();
-        ui.painter().rect(r, 3.0, visuel.bg_fill, visuel.bg_stroke, egui::StrokeKind::Inside);
-        let fleche = egui::Rect::from_center_size(egui::pos2(r.right() - 12.0, r.center().y), egui::vec2(8.0, 8.0));
-        triangle_bas(ui.painter(), fleche.center(), visuel.fg_stroke.color);
         let (nom, cotes) = match type_actuel {
             Some(t) => (t.nom.clone(), Some(format!("{} × {}", unite.afficher(t.largeur), unite.afficher(t.hauteur)))),
             None if genre_actuel == GenreOuverture::Libre => ("Générique (cotes du ruban)".into(), None),
             None => ("Aucun type : charger une famille".into(), None),
         };
-        let mut droite = fleche.left() - 6.0;
-        if let Some(c) = &cotes {
-            ui.painter().text(egui::pos2(droite, r.center().y), egui::Align2::RIGHT_CENTER, c, egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
-            droite -= largeur_texte(ui, c, &egui::FontId::proportional(11.0)) + 8.0;
-        }
         let (l, h) = type_actuel.map_or(if genre_actuel == GenreOuverture::Porte { (900.0, 2150.0) } else { (1200.0, 1350.0) }, |t| (t.largeur, t.hauteur));
-        vignette_ouverture(ui.painter(), egui::Rect::from_min_size(r.min + egui::vec2(8.0, 5.0), egui::vec2(28.0, 24.0)), genre_actuel, l, h, visuel.text_color());
         let titre = format!("{} · {nom}", nom_genre(genre_actuel));
-        let zone = egui::Rect::from_min_max(egui::pos2(r.left() + 44.0, r.top()), egui::pos2(droite, r.bottom()));
-        ui.painter().with_clip_rect(zone).text(egui::pos2(zone.left(), r.center().y), egui::Align2::LEFT_CENTER, &titre, egui::FontId::proportional(13.0), visuel.text_color());
-        let bouton = bouton.on_hover_text(format!("{titre}\nType de l'ouverture : il impose ses cotes et sa famille."));
-        let plus_long = categories.iter().flat_map(|g| lignes_de(*g)).map(|l| largeur_texte(ui, &l.1, &police)).fold(0.0f32, f32::max);
-        let largeur_liste = (8.0 + 30.0 + 12.0 + plus_long + 16.0 + 110.0 + 8.0).max(largeur).max(categories.len() as f32 * 98.0 + 12.0);
+        let vignette = |p: &egui::Painter, r: egui::Rect, c: Color32| vignette_ouverture(p, r, genre_actuel, l, h, c);
+        let bouton = selecteur::entete(ui, &titre, cotes.as_deref(), &format!("{titre}
+Type de l'ouverture : il impose ses cotes et sa famille."), Some(&vignette));
+        let noms: Vec<String> = categories.iter().flat_map(|g| lignes_de(*g)).map(|l| l.1).collect();
+        let largeur_liste = selecteur::largeur_liste(ui, noms.iter(), 110.0, categories.len(), 96.0);
         let mut choix_onglet = None;
-        egui::Popup::from_toggle_button_response(&bouton)
-            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-            .width(largeur_liste)
-            .show(|ui| {
-                ui.set_min_width(largeur_liste);
-                // hauteur fixe (catégorie la plus fournie) : la liste ne saute pas d'un onglet à l'autre
-                ui.set_min_height(116.0 + rangs as f32 * 31.0);
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 2.0;
-                    for &c in categories {
-                        let (r, reponse) = ui.allocate_exact_size(egui::vec2(96.0, 50.0), Sense::click());
-                        let actif = onglet == c;
-                        if actif || reponse.hovered() {
-                            ui.painter().rect_filled(r, 4.0, if actif { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
-                        }
-                        let (l, h) = if c == GenreOuverture::Porte { (900.0, 2150.0) } else { (1200.0, 1100.0) };
-                        vignette_ouverture(ui.painter(), egui::Rect::from_center_size(r.center_top() + egui::vec2(0.0, 17.0), egui::vec2(26.0, 26.0)), c, l, h, ui.visuals().text_color());
-                        ui.painter().text(r.center_bottom() - egui::vec2(0.0, 9.0), egui::Align2::CENTER_CENTER, nom_genre(c), egui::FontId::proportional(12.0), ui.visuals().text_color());
-                        if reponse.clicked() && !actif {
-                            choix_onglet = Some(c);
-                            ui.ctx().request_repaint();
-                        }
-                    }
-                });
-                ui.label(RichText::new(aide_genre(onglet)).small().weak());
-                ui.separator();
-                for ligne in &lignes {
-                    let courant = ligne.0.as_deref() == actuel && (ligne.0.is_some() || onglet == genre_actuel);
-                    let (r, reponse) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 30.0), Sense::click());
-                    let survol = ui.rect_contains_pointer(r);
-                    if courant || survol {
-                        ui.painter().rect_filled(r, 3.0, if courant { ui.visuals().selection.bg_fill } else { ui.visuals().widgets.hovered.bg_fill });
-                    }
-                    if ligne.0.is_some() {
-                        vignette_ouverture(ui.painter(), egui::Rect::from_min_size(r.min + egui::vec2(8.0, 3.0), egui::vec2(30.0, 24.0)), onglet, ligne.2, ligne.3, ui.visuals().text_color());
-                    }
-                    ui.painter().text(r.min + egui::vec2(50.0, 15.0), egui::Align2::LEFT_CENTER, &ligne.1, police.clone(), ui.visuals().text_color());
-                    let mut icone_cliquee = false;
-                    // au survol : crayon (modifier la famille) ; sinon les cotes
-                    if generique && survol && onglet != GenreOuverture::Libre && let Some(id) = &ligne.0 {
-                        let zone = egui::Rect::from_min_max(egui::pos2(r.right() - 30.0, r.top() + 4.0), egui::pos2(r.right() - 8.0, r.bottom() - 4.0));
-                        let rep = ui.interact(zone, ui.scope_id().with(("crayon_ouverture", id)), Sense::click()).on_hover_text("Modifier la famille du type");
-                        if rep.hovered() {
-                            ui.painter().rect_filled(zone, 3.0, ui.visuals().widgets.active.bg_fill);
-                        }
-                        let c = if rep.hovered() { ui.visuals().strong_text_color() } else { ui.visuals().text_color() };
-                        icone_action_type(ui.painter(), zone.shrink(4.0), true, c);
-                        if rep.clicked() {
-                            icone_cliquee = true;
-                            sortie.editer = Some((id.clone(), onglet));
-                            ui.close();
-                        }
-                    } else if ligne.0.is_some() {
-                        ui.painter().text(r.right_center() - egui::vec2(8.0, 0.0), egui::Align2::RIGHT_CENTER, format!("{} × {}", unite.afficher(ligne.2), unite.afficher(ligne.3)), egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
-                    }
-                    if reponse.clicked() && !icone_cliquee {
-                        sortie.type_choisi = Some((ligne.0.clone(), onglet));
-                        ui.close();
-                    }
-                }
-                if onglet != GenreOuverture::Libre {
-                    ui.separator();
-                    let (r, reponse) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 26.0), Sense::click());
-                    if reponse.hovered() {
-                        ui.painter().rect_filled(r, 3.0, ui.visuals().widgets.hovered.bg_fill);
-                    }
-                    ui.painter().text(r.min + egui::vec2(23.0, 13.0), egui::Align2::CENTER_CENTER, "+", egui::FontId::proportional(16.0), ui.visuals().strong_text_color());
-                    ui.painter().text(r.min + egui::vec2(50.0, 13.0), egui::Align2::LEFT_CENTER, "Charger une famille…", police.clone(), ui.visuals().text_color());
-                    if reponse.clicked() {
-                        sortie.charger = true;
-                        ui.close();
-                    }
-                }
+        selecteur::liste(&bouton, largeur_liste, selecteur::HAUTEUR_CADRE + rangs as f32 * selecteur::HAUTEUR_LIGNE, |ui| {
+            choix_onglet = selecteur::onglets(ui, categories, onglet, 96.0, |c| nom_genre(c).into(), aide_genre(onglet), |p, r, c, encre| {
+                let (l, h) = if c == GenreOuverture::Porte { (900.0, 2150.0) } else { (1200.0, 1100.0) };
+                vignette_ouverture(p, r, c, l, h, encre);
             });
+            let modifier: &[(selecteur::ActionType, &str)] = &[(selecteur::ActionType::Modifier, "Modifier la famille du type")];
+            for ligne in &lignes {
+                let l = selecteur::Ligne {
+                    nom: &ligne.1,
+                    courant: ligne.0.as_deref() == actuel && (ligne.0.is_some() || onglet == genre_actuel),
+                    etiquette: None,
+                    sous_titre: None,
+                    detail: ligne.0.as_ref().map(|_| format!("{} × {}", unite.afficher(ligne.2), unite.afficher(ligne.3))),
+                    actions: if generique && onglet != GenreOuverture::Libre && ligne.0.is_some() { modifier } else { &[] },
+                };
+                let mut v = |ui: &mut egui::Ui, r: egui::Rect| {
+                    if ligne.0.is_some() {
+                        vignette_ouverture(ui.painter(), r.expand2(egui::vec2(-5.0, 2.0)), onglet, ligne.2, ligne.3, ui.visuals().text_color());
+                    }
+                };
+                let clic = selecteur::ligne(ui, &l, Some(&mut v));
+                if clic.action == Some(selecteur::ActionType::Modifier) && let Some(id) = &ligne.0 {
+                    sortie.editer = Some((id.clone(), onglet));
+                } else if clic.choisi {
+                    sortie.type_choisi = Some((ligne.0.clone(), onglet));
+                }
+            }
+            if onglet != GenreOuverture::Libre {
+                sortie.charger = selecteur::ligne_ajout(ui, "Charger une famille…");
+            }
+        });
         if let Some(c) = choix_onglet {
             self.categorie_ouverture = Some(c);
         }
