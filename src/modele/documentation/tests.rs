@@ -439,3 +439,38 @@ fn polyligne_types_de_trait_par_segment() {
     }
     assert!(p.verifier().is_err());
 }
+
+#[test]
+fn cotes_de_mesure_angle_diametre_altimetrie() {
+    use glam::DVec2;
+    // angle saillant, quel que soit l'ordre des branches
+    let (a, ..) = angle_branches(DVec2::ZERO, DVec2::new(1000.0, 0.0), DVec2::new(0.0, 500.0)).unwrap();
+    assert!((a.to_degrees() - 90.0).abs() < 1e-9);
+    let (b, ..) = angle_branches(DVec2::ZERO, DVec2::new(0.0, 500.0), DVec2::new(1000.0, 0.0)).unwrap();
+    assert!((b - a).abs() < 1e-12);
+    assert!(angle_branches(DVec2::ZERO, DVec2::ZERO, DVec2::X).is_none());
+    let g = geometrie_angle(DVec2::ZERO, DVec2::new(1000.0, 0.0), DVec2::new(1000.0, 1000.0), 600.0, 50.0, 100.0).unwrap();
+    assert_eq!(g.texte.2, "45°");
+    // diamètre : ligne d'un bord à l'autre par le centre
+    let g = geometrie_diametre(DVec2::new(100.0, 100.0), DVec2::new(400.0, 100.0), 50.0, 100.0).unwrap();
+    assert_eq!(g.traits[0], [DVec2::new(-200.0, 100.0), DVec2::new(400.0, 100.0)]);
+    assert!(g.texte.2.starts_with("Ø "));
+    // altimétrie : signe et zéro
+    assert_eq!(texte_altitude(2500.0, 2), "+2.50");
+    assert_eq!(texte_altitude(-200.0, 3), "-0.200");
+    assert_eq!(texte_altitude(0.4, 2), "±0.00");
+}
+
+#[test]
+fn altimetrie_en_coupe_relative_au_niveau() {
+    let mut p = Projet::nouveau("Altimétrie");
+    p.niveaux = vec![
+        crate::modele::Niveau { id: "n0".into(), nom: "RDC".into(), altitude: 0.0, origine: None },
+        crate::modele::Niveau { id: "n1".into(), nom: "R+1".into(), altitude: 3000.0, origine: None },
+    ];
+    let id = p.ajouter_vue_coupe([0.0, 0.0], [4000.0, 0.0], 1000.0, false, "", 100.0).unwrap();
+    let v = p.vues.iter().find(|v| v.id == id).unwrap().clone();
+    assert!((altitude_vue(&p, &v, [500.0, 3500.0], false) - 3500.0).abs() < 1e-9);
+    assert!((altitude_vue(&p, &v, [500.0, 3500.0], true) - 500.0).abs() < 1e-9);
+    assert!((altitude_vue(&p, &v, [500.0, -200.0], true) + 200.0).abs() < 1e-9);
+}

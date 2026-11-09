@@ -275,6 +275,12 @@ impl ViewerApp {
     /// Enregistre les formes achevées : annotations de la vue, ou murs (une étape
     /// d'annulation par forme ; le dernier mur créé est sélectionné).
     pub(in crate::ui) fn enregistrer_formes(&mut self, formes: Vec<d2::Forme2D>) {
+        // cotation : le tracé ne sert qu'à recueillir les points ; Entrée ou clic droit
+        // avant le dernier point abandonne la cote en cours
+        if self.outil_cotation().is_some() {
+            if !formes.is_empty() { if let Some(t) = self.dessin2d.trace.as_mut() { t.points.clear(); } }
+            return;
+        }
         if formes.is_empty() {
             return;
         }

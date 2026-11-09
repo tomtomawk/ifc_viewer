@@ -199,6 +199,36 @@ pub struct Symbole {
     pub remplissage: Option<Remplissage>,
 }
 
+/// Genre d'une cote de mesure de famille.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GenreCoteMesure {
+    /// Points : sommet, un point sur chaque branche, position de l'arc.
+    Angle,
+    /// Points : centre, point du cercle.
+    Diametre,
+    /// Points : point coté, position du texte ; altitude depuis le bas de la baie.
+    Altimetrie,
+}
+
+impl GenreCoteMesure {
+    pub fn nom(self) -> &'static str {
+        match self { Self::Angle => "Angle", Self::Diametre => "Diamètre", Self::Altimetrie => "Altimétrie" }
+    }
+    /// Nombre de points à cliquer.
+    pub fn points(self) -> usize {
+        match self { Self::Angle => 4, Self::Diametre | Self::Altimetrie => 2 }
+    }
+}
+
+/// Cote de mesure d'une vue de l'éditeur de familles.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct CoteMesure {
+    pub vue: VueEsquisse,
+    pub genre: GenreCoteMesure,
+    pub points: Vec<PointEsquisse>,
+}
+
 /// Remplissage d'une région 2D de famille.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -347,6 +377,10 @@ pub struct FamilleModelee {
     pub extrusions: Vec<Extrusion>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub symboles: Vec<Symbole>,
+    /// Cotes de mesure (angle, diamètre, altimétrie) : annotations de l'éditeur, non
+    /// pilotantes, dont les points suivent les plans de référence.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cotes_mesure: Vec<CoteMesure>,
     #[serde(default = "couleur_defaut")]
     pub couleur: [u8; 3],
     /// Catégorie : range le type parmi les portes ou les fenêtres.
@@ -922,6 +956,7 @@ impl FamilleModelee {
                 points: vec![point("Dormant droit", 0.0, "Dormant bas", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)],
                 arc: false, remplissage: None
             }],
+            cotes_mesure: Vec::new(),
             couleur: couleur_defaut(),
             genre: crate::modele::GenreOuverture::Fenetre,
         }
@@ -1009,6 +1044,7 @@ impl FamilleModelee {
                 Symbole { vue: VueEsquisse::Plan, points: vec![point("Dormant droit", 0.0, "Cadre int", 0.0), point("Arc x", 0.0, "Arc y", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], arc: true, remplissage: None },
                 Symbole { vue: VueEsquisse::Elevation, points: vec![point("Dormant droit", 0.0, "Bas", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)], arc: false, remplissage: None },
             ],
+            cotes_mesure: Vec::new(),
             couleur: [190, 160, 120],
             genre: crate::modele::GenreOuverture::Porte,
         }

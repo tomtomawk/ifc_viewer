@@ -211,6 +211,20 @@ pub(super) fn icone_commande(p: &egui::Painter, r: egui::Rect, i: Icone, c: Colo
                     p.add(egui::Shape::convex_polygon(vec![pt(0.14, 0.5), pt(0.26, 0.42), pt(0.26, 0.58)], c, egui::Stroke::NONE));
                     p.add(egui::Shape::convex_polygon(vec![pt(0.86, 0.5), pt(0.74, 0.42), pt(0.74, 0.58)], c, egui::Stroke::NONE));
                 }
+                "cote_angle" => {
+                    seg((0.12, 0.86), (0.9, 0.86));
+                    seg((0.12, 0.86), (0.68, 0.14));
+                    p.add(egui::Shape::line((0..=8).map(|i| { let a = 0.91 * i as f32 / 8.0; pt(0.12 + 0.52 * a.cos(), 0.86 - 0.52 * a.sin()) }).collect(), t));
+                }
+                "cote_diametre" => {
+                    p.circle_stroke(pt(0.5, 0.5), r.width() * 0.36, t);
+                    seg((0.22, 0.78), (0.78, 0.22));
+                }
+                "altimetrie" => {
+                    seg((0.06, 0.66), (0.94, 0.66));
+                    p.add(egui::Shape::closed_line(vec![pt(0.32, 0.66), pt(0.18, 0.44), pt(0.46, 0.44)], t));
+                    seg((0.46, 0.44), (0.9, 0.44));
+                }
                 "egalite" => {
                     for x in [0.12, 0.5, 0.88] {
                         seg((x, 0.14), (x, 0.5));

@@ -164,6 +164,20 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
         }
     }
 
+    // cotes de mesure de la vue (angle, diamètre, altimétrie), points résolus
+    let mut lignes_mesures: Vec<(usize, Vec<[egui::Pos2; 2]>)> = Vec::new();
+    for (k, c) in ed.famille.cotes_mesure.iter().enumerate() {
+        if c.vue != ed.vue.esquisse() { continue; }
+        let pts: Vec<glam::DVec2> = c.points.iter().map(|p| { let (h, v) = ed.famille.point_esquisse(&r, p); glam::DVec2::new(h, v) }).collect();
+        let Some(g) = geometrie_mesure(c.genre, c.vue, &pts, echelle) else { continue };
+        let choisi = ed.choisi(&SelectionFamille::CoteMesure(k));
+        let couleur = if choisi { orange } else { marine };
+        let segs: Vec<[egui::Pos2; 2]> = g.traits.iter().map(|[a, b]| [cadre.ecran(a.x, a.y), cadre.ecran(b.x, b.y)]).collect();
+        for s in &segs { painter.line_segment(*s, egui::Stroke::new(if choisi { 2.0 } else { 1.0 }, couleur)); }
+        painter.text(cadre.ecran(g.texte.0.x, g.texte.0.y), egui::Align2::CENTER_BOTTOM, &g.texte.2, egui::FontId::proportional(11.0), couleur);
+        lignes_mesures.push((k, segs));
+    }
+
     // plans de référence
     let vert = Color32::from_rgb(40, 150, 90);
     let bleu = Color32::from_rgb(30, 90, 200);
@@ -446,6 +460,8 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                     let (h, v) = cadre.modele(q);
                     let cible = if let Some((k, _)) = etiquettes.iter().find(|(_, r)| r.contains(q)) {
                         SelectionFamille::Contrainte(*k)
+                    } else if let Some((k, _)) = lignes_mesures.iter().find(|(_, l)| l.iter().any(|w| distance_segment(q, w[0], w[1]) < 6.0)) {
+                        SelectionFamille::CoteMesure(*k)
                     } else if let Some((k, _)) = lignes_symboles.iter().find(|(_, l)| l.windows(2).any(|w| distance_segment(q, w[0], w[1]) < 6.0)) {
                         SelectionFamille::Symbole(*k)
                     } else if let Some((k, _)) = contours_ext.iter().rev().find(|(_, p)| dans_polygone(q, p)) {
@@ -502,6 +518,9 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                     for (n, vertical, c) in &lignes {
                         let seg = if *vertical { [egui::pos2(*c, rect.top()), egui::pos2(*c, rect.bottom())] } else { [egui::pos2(rect.left(), *c), egui::pos2(rect.right(), *c)] };
                         elements.push((SelectionFamille::Plan(n.clone()), vec![seg]));
+                    }
+                    for (k, segs) in &lignes_mesures {
+                        elements.push((SelectionFamille::CoteMesure(*k), segs.clone()));
                     }
                     for (k, seg) in &lignes_cotes {
                         elements.push((SelectionFamille::Contrainte(*k), vec![*seg]));
@@ -613,7 +632,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                 }
             }
         }
-        OutilFamille::Extrusion | OutilFamille::ExtrusionVide | OutilFamille::Ligne | OutilFamille::Arc | OutilFamille::Region => {
+        OutilFamille::Extrusion | OutilFamille::ExtrusionVide | OutilFamille::Ligne | OutilFamille::Arc | OutilFamille::Region | OutilFamille::CoteAngle | OutilFamille::CoteDiametre | OutilFamille::Altimetrie => {
             // sommet accroché : sur chaque axe, le plan le plus proche (décalage au-delà
             // de 7 px)
             let accroche = |axe: AxePlan, x: f64| match ed.plan_proche(&r, axe, x) {
@@ -632,10 +651,20 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             // élastique et repère d'accrochage
             if let Some(q) = curseur.filter(|_| resp.hovered()) {
                 let (_, c) = point(q);
+                let mesure = ed.outil.cote_mesure();
+                // cote de mesure complète sous le curseur
+                let mut modele: Vec<glam::DVec2> = ed.esquisse.iter().map(|(_, p)| glam::DVec2::new(p.0, p.1)).collect();
+                modele.push(glam::DVec2::new(c.0, c.1));
+                if let Some(g) = mesure.filter(|g| modele.len() == g.points()).and_then(|g| geometrie_mesure(g, ed.vue.esquisse(), &modele, echelle)) {
+                    for [a, b] in &g.traits { painter.line_segment([cadre.ecran(a.x, a.y), cadre.ecran(b.x, b.y)], egui::Stroke::new(1.5, orange)); }
+                    painter.text(cadre.ecran(g.texte.0.x, g.texte.0.y), egui::Align2::CENTER_BOTTOM, &g.texte.2, egui::FontId::proportional(11.0), orange);
+                }
                 let c = cadre.ecran(c.0, c.1);
                 let mut pts: Vec<egui::Pos2> = ed.esquisse.iter().map(|(_, p)| cadre.ecran(p.0, p.1)).collect();
                 pts.push(c);
-                painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, orange)));
+                if mesure.is_none_or(|g| pts.len() < g.points()) {
+                    painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, orange)));
+                }
                 if let Some(p0) = premier.filter(|p| profil && ed.esquisse.len() >= 3 && p.distance(q) < 9.0) {
                     painter.circle_stroke(p0, 7.0, egui::Stroke::new(2.0, Color32::from_rgb(30, 140, 60)));
                 }
@@ -655,6 +684,9 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                     }
                 }
                 if ed.outil == OutilFamille::Arc && ed.esquisse.len() == 3 {
+                    finir = true;
+                }
+                if ed.outil.cote_mesure().is_some_and(|g| ed.esquisse.len() >= g.points()) {
                     finir = true;
                 }
             }
@@ -682,6 +714,17 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                     OutilFamille::Arc if points.len() == 3 => {
                         ed.famille.symboles.push(Symbole { vue, points, arc: true, remplissage: None });
                         ed.selection = SelectionFamille::Symbole(ed.famille.symboles.len() - 1);
+                    }
+                    o if o.cote_mesure().is_some_and(|g| points.len() == g.points()) => {
+                        let genre = o.cote_mesure().unwrap();
+                        let modele: Vec<glam::DVec2> = points.iter().map(|p| { let (h, v) = ed.famille.point_esquisse(&r, p); glam::DVec2::new(h, v) }).collect();
+                        if geometrie_mesure(genre, vue, &modele, echelle).is_some() {
+                            ed.famille.cotes_mesure.push(CoteMesure { vue, genre, points });
+                            ed.selection = SelectionFamille::CoteMesure(ed.famille.cotes_mesure.len() - 1);
+                            ed.message = Some(format!("Cote ({}) créée : ses points suivent les plans de référence.", genre.nom().to_lowercase()));
+                        } else {
+                            ed.message = Some(if genre == GenreCoteMesure::Altimetrie && vue == VueEsquisse::Plan { "Altimétrie : ouvrir une élévation ou une coupe." } else { "Cote impossible : points confondus ou alignés." }.into());
+                        }
                     }
                     _ => ed.message = Some("Esquisse abandonnée : pas assez de points.".into()),
                 }
@@ -746,5 +789,19 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
     }
     if !garder_multiple && ed.selection != selection_avant {
         ed.multiple.clear();
+    }
+}
+
+/// Géométrie d'une cote de mesure de famille (repère de la vue, mm) ; `echelle` : px par
+/// mm, pour des traits et un écart de texte constants à l'écran. Altimétrie : altitude
+/// depuis le bas de la baie, seulement en élévation et en coupe.
+fn geometrie_mesure(genre: GenreCoteMesure, vue: VueEsquisse, pts: &[glam::DVec2], echelle: f64) -> Option<crate::modele::documentation::GeometrieMesure> {
+    use crate::modele::documentation as doc;
+    let (oblique, marge) = (8.0 / echelle, 12.0 / echelle);
+    match (genre, pts) {
+        (GenreCoteMesure::Angle, [s, a, b, pos]) => doc::geometrie_angle(*s, *a, *b, pos.distance(*s).max(1.0), oblique, marge),
+        (GenreCoteMesure::Diametre, [c, p]) => doc::geometrie_diametre(*c, *p, oblique, marge),
+        (GenreCoteMesure::Altimetrie, [p, repere]) if vue != VueEsquisse::Plan => Some(doc::geometrie_altimetrie(*p, *repere, p.y, 2, 11.0 / echelle)),
+        _ => None,
     }
 }

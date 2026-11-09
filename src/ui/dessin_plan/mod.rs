@@ -8,6 +8,7 @@ mod saisie;
 mod affichage;
 mod options;
 mod escalier;
+mod cotation;
 use super::*;
 use crate::dessin::dao::{self as d2, Accroche, Geom, OutilDessin, Trace};
 use crate::modele::edition::commandes::Commande;
@@ -525,6 +526,8 @@ impl ViewerApp {
         if self.onglet_ruban != OngletRuban::Annoter || self.vue_native_id().is_none() {
             return None;
         }
+        // cotation : points successifs recueillis par un tracé polyligne
+        if self.outil_cotation().is_some() { return Some((Usage::Annotation, OutilDessin::Polyligne)); }
         Some((Usage::Annotation, self.ruban_edition.outil()?.forme_dessin()?))
     }
 

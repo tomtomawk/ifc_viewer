@@ -84,6 +84,7 @@ pub fn famille_table() -> FamilleModelee {
         ],
         extrusions: Vec::new(),
         symboles: vec![Symbole { vue: VueEsquisse::Plan, points: vec![pt(g, 0.0, i, 0.0), pt(d, 0.0, i, 0.0), pt(d, 0.0, e, 0.0), pt(g, 0.0, e, 0.0), pt(g, 0.0, i, 0.0)], arc: false, remplissage: None }],
+        cotes_mesure: Vec::new(),
         couleur: [196, 160, 112],
         genre: crate::modele::GenreOuverture::Libre,
     }

@@ -179,6 +179,7 @@ impl FamilleModelee {
                 trait_(VueEsquisse::Elevation, vec![point("Centre", 0.0, "Dormant bas", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Centre", 0.0, "Dormant haut", 0.0)], false),
                 trait_(VueEsquisse::Elevation, vec![point("Centre", 0.0, "Dormant bas", 0.0), point("Dormant droit", 0.0, "Mi-hauteur", 0.0), point("Centre", 0.0, "Dormant haut", 0.0)], false),
             ],
+            cotes_mesure: Vec::new(),
             couleur: couleur_defaut(),
             genre: crate::modele::GenreOuverture::Fenetre,
         }
@@ -266,6 +267,7 @@ impl FamilleModelee {
                 trait_(VueEsquisse::Plan, vec![point("Dormant droit", 0.0, "Cadre int", 0.0), point("Arc x", 0.0, "Arc y", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], true),
                 trait_(VueEsquisse::Elevation, vec![point("Dormant droit", 0.0, "Pied vantail", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)], false),
             ],
+            cotes_mesure: Vec::new(),
             couleur: [196, 170, 132],
             genre: crate::modele::GenreOuverture::Porte,
         }

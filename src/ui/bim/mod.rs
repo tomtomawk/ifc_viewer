@@ -651,6 +651,9 @@ impl ViewerApp {
                     self.bim.points[0] = *point;
                     Outil::Etiquette
                 }
+                F::CoteAngulaire { .. } => Outil::CoteAngulaire,
+                F::CoteDiametre { .. } => Outil::CoteDiametre,
+                F::Altimetrie { .. } => Outil::Altimetrie,
             };
             self.bim.annotation_identique = Some(annotation.clone());
             self.ruban_edition.activer_outil(outil);
@@ -780,6 +783,9 @@ impl ViewerApp {
                 F::Zone { .. } => Outil::Zone,
                 F::Cote { .. } => Outil::Cote,
                 F::Etiquette { .. } => Outil::Etiquette,
+                F::CoteAngulaire { .. } => Outil::CoteAngulaire,
+                F::CoteDiametre { .. } => Outil::CoteDiametre,
+                F::Altimetrie { .. } => Outil::Altimetrie,
             };
             if self.onglet_ruban != OngletRuban::Annoter || outil != Some(attendu) {
                 self.bim.annotation_identique = None;
@@ -901,6 +907,34 @@ impl ViewerApp {
                             }
                             F::Arc { .. } => {
                                 ui.label("Arc par trois points");
+                            }
+                            F::CoteAngulaire { sommet, debut, fin, rayon } => {
+                                if let Some((a, ..)) = crate::modele::documentation::angle_branches((*sommet).into(), (*debut).into(), (*fin).into()) {
+                                    ui.label(format!("Angle : {:.2}°", a.to_degrees()));
+                                }
+                                ui.horizontal(|ui| {
+                                    ui.label("Rayon de l'arc");
+                                    change |= ui.add(egui::DragValue::new(rayon).speed(10.0).range(1.0..=f64::MAX).dimensions()).changed();
+                                });
+                            }
+                            F::CoteDiametre { centre, point } => {
+                                ui.label(format!("Diamètre : {}", crate::config::options::unite().afficher(2.0 * glam::DVec2::from(*centre).distance((*point).into()))));
+                                ui.horizontal(|ui| {
+                                    ui.label("Centre");
+                                    for x in centre.iter_mut() {
+                                        change |= ui.add(egui::DragValue::new(x).speed(10.0).dimensions()).changed();
+                                    }
+                                });
+                            }
+                            F::Altimetrie { relative_niveau, decimales, .. } => {
+                                egui::ComboBox::from_label("Référence").selected_text(if *relative_niveau { "Niveau sous le point" } else { "Projet" }).show_ui(ui, |ui| {
+                                    change |= ui.selectable_value(relative_niveau, false, "Projet").changed();
+                                    change |= ui.selectable_value(relative_niveau, true, "Niveau sous le point").changed();
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.label("Décimales (m)");
+                                    change |= ui.add(egui::DragValue::new(decimales).range(0..=4)).changed();
+                                });
                             }
                             F::Texte { point, texte } => {
                                 change |= ui.text_edit_singleline(texte).changed();

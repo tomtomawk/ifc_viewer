@@ -605,6 +605,17 @@ pub(super) fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             seg((0.06, 0.7), (0.24, 0.5));
             seg((0.76, 0.7), (0.94, 0.5));
         }
+        CoteAngulaire => {
+            seg((0.12, 0.88), (0.92, 0.88));
+            seg((0.12, 0.88), (0.7, 0.12));
+            p.add(egui::Shape::line((0..=8).map(|i| { let a = 0.916 * i as f32 / 8.0; pt(0.12 + 0.55 * a.cos(), 0.88 - 0.55 * a.sin()) }).collect(), t));
+        }
+        CoteDiametre => {
+            p.circle_stroke(pt(0.5, 0.5), 0.4 * r.width().min(r.height()), t);
+            seg((0.2, 0.8), (0.8, 0.2));
+            seg((0.1, 0.8), (0.3, 0.8));
+            seg((0.7, 0.2), (0.9, 0.2));
+        }
         Texte => {
             seg((0.12, 0.16), (0.88, 0.16));
             seg((0.5, 0.16), (0.5, 0.88));

@@ -152,12 +152,50 @@ pub enum AnnotationForme {
         fin: PointCote,
         decalage: f64,
     },
+    /// Cote angulaire : sommet, un point sur chaque branche ; l'arc de cote passe à
+    /// `rayon` du sommet et mesure l'angle saillant (≤ 180°).
+    CoteAngulaire {
+        sommet: [f64; 2],
+        debut: [f64; 2],
+        fin: [f64; 2],
+        rayon: f64,
+    },
+    /// Cote de diamètre : centre et un point du cercle ; la ligne de cote traverse le
+    /// cercle par le centre.
+    CoteDiametre {
+        centre: [f64; 2],
+        point: [f64; 2],
+    },
+    /// Cote altimétrique : point visé et position du texte (ligne de rappel entre les
+    /// deux). Altitude du projet (0 du projet) ou relative au niveau sous le point.
+    Altimetrie {
+        point: [f64; 2],
+        repere: [f64; 2],
+        #[serde(default)]
+        relative_niveau: bool,
+        #[serde(default = "deux_decimales")]
+        decimales: u8,
+    },
     Etiquette {
         element: String,
         point: [f64; 2],
     },
 }
+fn deux_decimales() -> u8 {
+    2
+}
+
 impl AnnotationForme {
+    /// Points de la forme (repère de la vue, mm) : déplacements et transformations.
+    pub fn points_mesure_mut(&mut self) -> Vec<&mut [f64; 2]> {
+        match self {
+            Self::CoteAngulaire { sommet, debut, fin, .. } => vec![sommet, debut, fin],
+            Self::CoteDiametre { centre, point } => vec![centre, point],
+            Self::Altimetrie { point, repere, .. } => vec![point, repere],
+            _ => Vec::new(),
+        }
+    }
+
     /// Forme du dessin 2D (ligne, polyligne, spline, cercle, arc), None pour les autres.
     pub fn forme_2d(&self) -> Option<crate::dessin::dao::Forme2D> {
         use crate::dessin::dao::Forme2D as F;
@@ -652,6 +690,24 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
                     [190, 35, 35, 255],
                 )),
             },
+            AnnotationForme::CoteAngulaire { .. } | AnnotationForme::CoteDiametre { .. } | AnnotationForme::Altimetrie { .. } => {
+                let x = |q: &[f64; 2]| DVec2::from_array(*q);
+                let g = match &a.forme {
+                    AnnotationForme::CoteAngulaire { sommet, debut, fin, rayon } => geometrie_angle(x(sommet), x(debut), x(fin), *rayon, oblique, taille * 1000.0),
+                    AnnotationForme::CoteDiametre { centre, point } => geometrie_diametre(x(centre), x(point), oblique, taille * 1000.0),
+                    AnnotationForme::Altimetrie { point, repere, relative_niveau, decimales } => {
+                        Some(geometrie_altimetrie(x(point), x(repere), altitude_vue(p, v, *point, *relative_niveau), *decimales, taille * 1000.0))
+                    }
+                    _ => None,
+                };
+                if let Some(g) = g {
+                    out.extend(g.traits.iter().map(|[x, y]| ligne(pt(*x), pt(*y))));
+                    let (centre, dir, s) = g.texte;
+                    let (du, dv) = (u * dir.x + h * dir.y, u * -dir.y + h * dir.x);
+                    let l = crate::noyau::texte::largeur(&s, "Arial", taille, false);
+                    out.push(texte(&s, pt(centre) - du * (l / 2.0), du, dv, taille, [30, 30, 30, 255]));
+                }
+            }
             AnnotationForme::Etiquette { element, point } => {
                 let nom = p
                     .murs
@@ -892,6 +948,101 @@ pub fn geometrie_cote(points: &[DVec2], decalage: f64, oblique: f64) -> Geometri
         g.textes.push(((w[0] + w[1]) / 2.0 + n, (w[1] - w[0]).dot(d).abs()));
     }
     g
+}
+
+/// Géométrie d'une cote de mesure (angle, diamètre, altimétrie), commune aux vues du
+/// projet et à l'éditeur de familles : traits, et texte (position du milieu de sa ligne
+/// de base, direction de la ligne de base, contenu).
+pub struct GeometrieMesure {
+    pub traits: Vec<[DVec2; 2]>,
+    pub texte: (DVec2, DVec2, String),
+}
+
+/// Angle saillant (radians, 0..=π) entre les branches sommet → debut et sommet → fin,
+/// et angle de départ et balayage (sens trigonométrique) de son arc.
+pub fn angle_branches(sommet: DVec2, debut: DVec2, fin: DVec2) -> Option<(f64, f64, f64)> {
+    let (a, b) = ((debut - sommet).try_normalize()?, (fin - sommet).try_normalize()?);
+    let (ta, tb) = (a.to_angle(), b.to_angle());
+    let balayage = (tb - ta).rem_euclid(std::f64::consts::TAU);
+    Some(if balayage <= std::f64::consts::PI { (balayage, ta, balayage) } else { (std::f64::consts::TAU - balayage, tb, std::f64::consts::TAU - balayage) })
+}
+
+/// Cote angulaire : arc à `rayon` du sommet, prolongement des branches jusqu'à l'arc,
+/// traits obliques aux extrémités ; texte en degrés au milieu de l'arc. `marge` : écart
+/// du texte (≈ hauteur du texte), `oblique` : longueur des traits obliques.
+pub fn geometrie_angle(sommet: DVec2, debut: DVec2, fin: DVec2, rayon: f64, oblique: f64, marge: f64) -> Option<GeometrieMesure> {
+    let (angle, depart, balayage) = angle_branches(sommet, debut, fin)?;
+    let r = rayon.abs().max(1e-6);
+    let n = ((balayage.to_degrees() / 5.0).ceil() as usize).max(2);
+    let arc: Vec<DVec2> = (0..=n).map(|i| sommet + DVec2::from_angle(depart + balayage * i as f64 / n as f64) * r).collect();
+    let mut traits: Vec<[DVec2; 2]> = arc.windows(2).map(|w| [w[0], w[1]]).collect();
+    for (p, t) in [(debut, depart), (fin, depart + balayage)].into_iter().map(|(p, t)| (p, t)) {
+        let d = DVec2::from_angle(t);
+        let l = (p - sommet).length();
+        if l < r { traits.push([sommet + d * l, sommet + d * (r + marge * 0.4)]); }
+        let q = sommet + d * r;
+        let o = (d + d.perp()).normalize_or_zero() * oblique * 0.5;
+        traits.push([q - o, q + o]);
+    }
+    let milieu = DVec2::from_angle(depart + balayage / 2.0);
+    let degres = angle.to_degrees();
+    let texte = if (degres - degres.round()).abs() < 0.05 { format!("{:.0}°", degres.round()) } else { format!("{degres:.1}°") };
+    // texte tangent à l'arc, lisible (jamais tête en bas)
+    let mut dir = milieu.perp();
+    if dir.x < -1e-9 || (dir.x.abs() < 1e-9 && dir.y < 0.0) { dir = -dir; }
+    Some(GeometrieMesure { traits, texte: (sommet + milieu * (r + marge * 0.4), dir, texte) })
+}
+
+/// Cote de diamètre : ligne passant par le centre, d'un bord à l'autre du cercle,
+/// traits obliques aux bords, croix de centre ; texte « Ø … » sur la ligne.
+pub fn geometrie_diametre(centre: DVec2, point: DVec2, oblique: f64, marge: f64) -> Option<GeometrieMesure> {
+    let r = (point - centre).length();
+    let d = (point - centre).try_normalize()?;
+    let (a, b) = (centre - d * r, centre + d * r);
+    let o = (d + d.perp()).normalize_or_zero() * oblique * 0.5;
+    let c = oblique * 0.6;
+    let traits = vec![[a, b], [a - o, a + o], [b - o, b + o], [centre - DVec2::X * c, centre + DVec2::X * c], [centre - DVec2::Y * c, centre + DVec2::Y * c]];
+    let mut dir = d;
+    if dir.x < -1e-9 || (dir.x.abs() < 1e-9 && dir.y < 0.0) { dir = -dir; }
+    let texte = format!("Ø {}", crate::config::options::unite().afficher(2.0 * r));
+    Some(GeometrieMesure { traits, texte: (centre + d * r * 0.5 + dir.perp() * marge * 0.4, dir, texte) })
+}
+
+/// Cote altimétrique : triangle pointe sur le point visé, ligne de rappel jusqu'au
+/// repère, trait horizontal sous le texte. `taille` : hauteur du texte (mm du modèle).
+pub fn geometrie_altimetrie(point: DVec2, repere: DVec2, altitude_mm: f64, decimales: u8, taille: f64) -> GeometrieMesure {
+    let t = taille * 0.8;
+    let (g, dr, h) = (point + DVec2::new(-t * 0.6, t), point + DVec2::new(t * 0.6, t), point);
+    let mut traits = vec![[g, dr], [dr, h], [h, g]];
+    let texte = texte_altitude(altitude_mm, decimales);
+    let largeur = crate::noyau::texte::largeur(&texte, "Arial", taille, false);
+    let sens = if repere.x >= point.x { 1.0 } else { -1.0 };
+    if repere.distance(point) > 1e-6 { traits.push([point, repere]); }
+    traits.push([repere, repere + DVec2::X * sens * largeur]);
+    GeometrieMesure { traits, texte: (repere + DVec2::new(sens * largeur / 2.0, taille * 0.3), DVec2::X, texte) }
+}
+
+/// Altitude en mètres signée (« +2.50 », « -0.20 », « ±0.00 »).
+pub fn texte_altitude(altitude_mm: f64, decimales: u8) -> String {
+    let d = decimales.min(4) as usize;
+    let m = altitude_mm / 1000.0;
+    if format!("{:.*}", d, m.abs()).trim_start_matches(['0', '.']).is_empty() { format!("±{:.*}", d, 0.0) } else { format!("{:+.*}", d, m) }
+}
+
+/// Altitude (mm, par rapport au 0 du projet) d'un point d'une vue : niveau du plan, ou
+/// hauteur du point en coupe ; `relative_niveau` : par rapport au niveau le plus haut
+/// sous ce point.
+pub fn altitude_vue(p: &Projet, v: &Vue, point: [f64; 2], relative_niveau: bool) -> f64 {
+    let z = match &v.genre {
+        GenreVue::Plan { niveau, .. } => p.niveau(niveau).map_or(0.0, |n| n.altitude),
+        _ => {
+            let (o, u, h) = repere(p, v);
+            (o + u * point[0] + h * point[1]).z
+        }
+    };
+    if !relative_niveau { return z; }
+    let base = p.niveaux.iter().map(|n| n.altitude).filter(|a| *a <= z + 1e-6).fold(f64::NEG_INFINITY, f64::max);
+    if base.is_finite() { z - base } else { z }
 }
 
 /// Hachures à 45° d'un contour fermé, au pas `pas` (vues, feuilles, éditeur de familles).

@@ -18,7 +18,7 @@ mod canevas;
 use canevas::*;
 use super::*;
 use super::accrochage;
-use crate::modele::famille::modelee::{AxePlan, Contrainte, Extrusion, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Remplissage, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
+use crate::modele::famille::modelee::{AxePlan, Contrainte, CoteMesure, Extrusion, Face, FamilleModelee, GenreCoteMesure, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Remplissage, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
 use crate::modele::famille::modelee::FichierFamille;
 use crate::modele::GenreOuverture;
 use std::collections::BTreeMap;
@@ -85,6 +85,22 @@ enum OutilFamille {
     Arc,
     /// Région 2D : contour fermé rempli (plein ou hachuré).
     Region,
+    /// Cotes de mesure (non pilotantes) : angle, diamètre, altimétrie.
+    CoteAngle,
+    CoteDiametre,
+    Altimetrie,
+}
+
+impl OutilFamille {
+    /// Genre de cote de mesure saisi par l'outil.
+    fn cote_mesure(self) -> Option<GenreCoteMesure> {
+        match self {
+            Self::CoteAngle => Some(GenreCoteMesure::Angle),
+            Self::CoteDiametre => Some(GenreCoteMesure::Diametre),
+            Self::Altimetrie => Some(GenreCoteMesure::Altimetrie),
+            _ => None,
+        }
+    }
 }
 
 /// Poignée déplacée dans la vue : sommet d'un profil ou d'un symbole, face d'un volume.
@@ -102,6 +118,7 @@ enum SelectionFamille {
     Contrainte(usize),
     Extrusion(usize),
     Symbole(usize),
+    CoteMesure(usize),
 }
 
 /// Action demandée depuis les panneaux de l'éditeur, traitée après leur tracé.
@@ -314,6 +331,7 @@ impl EditeurFamille {
             SelectionFamille::Contrainte(k) => *k < self.famille.contraintes.len(),
             SelectionFamille::Extrusion(k) => *k < self.famille.extrusions.len(),
             SelectionFamille::Symbole(k) => *k < self.famille.symboles.len(),
+            SelectionFamille::CoteMesure(k) => *k < self.famille.cotes_mesure.len(),
         };
         if !existe {
             self.selection = SelectionFamille::Aucune;
@@ -337,7 +355,8 @@ impl EditeurFamille {
                 let utilise = f.contraintes.iter().any(|c| c.plans().contains(&nom.as_str()))
                     || f.volumes.iter().any(|v| v.min.iter().chain(&v.max).any(|x| &x.plan == nom))
                     || f.extrusions.iter().any(|e| e.profil.iter().any(point) || e.profondeur.iter().any(|x| &x.plan == nom))
-                    || f.symboles.iter().any(|s| s.points.iter().any(point));
+                    || f.symboles.iter().any(|s| s.points.iter().any(point))
+                    || f.cotes_mesure.iter().any(|c| c.points.iter().any(point));
                 if utilise {
                     return Err(format!("« {nom} » est utilisé par une contrainte, un volume, une extrusion ou un symbole."));
                 }
@@ -347,6 +366,7 @@ impl EditeurFamille {
             SelectionFamille::Contrainte(k) if *k < f.contraintes.len() => drop(f.contraintes.remove(*k)),
             SelectionFamille::Extrusion(k) if *k < f.extrusions.len() => drop(f.extrusions.remove(*k)),
             SelectionFamille::Symbole(k) if *k < f.symboles.len() => drop(f.symboles.remove(*k)),
+            SelectionFamille::CoteMesure(k) if *k < f.cotes_mesure.len() => drop(f.cotes_mesure.remove(*k)),
             _ => return Err("Élément introuvable.".into()),
         }
         if self.selection == *element {
@@ -368,6 +388,7 @@ impl EditeurFamille {
             SelectionFamille::Volume(k) => (1, usize::MAX - k),
             SelectionFamille::Extrusion(k) => (2, usize::MAX - k),
             SelectionFamille::Symbole(k) => (3, usize::MAX - k),
+            SelectionFamille::CoteMesure(k) => (3, usize::MAX - k),
             _ => (4, 0),
         };
         liste.sort_by_key(rang);

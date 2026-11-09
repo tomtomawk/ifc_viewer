@@ -45,6 +45,11 @@ impl ViewerApp {
             (OutilFamille::Cote, "cote", "Cote", "Cliquer deux plans parallèles (le plan visé se colore) ; libeller ensuite la cote par un paramètre"),
             (OutilFamille::Egalite, "egalite", "Égalité", "Cliquer trois plans parallèles : le second reste au milieu des deux autres"),
         ]);
+        let mesures = outils(&[
+            (OutilFamille::CoteAngle, "cote_angle", "Angle", "Cote angulaire : sommet, un point sur chaque branche, puis position de l'arc (points accrochés aux plans)"),
+            (OutilFamille::CoteDiametre, "cote_diametre", "Diamètre", "Cote de diamètre : centre, puis point du cercle"),
+            (OutilFamille::Altimetrie, "altimetrie", "Altimétrie", "Altitude depuis le bas de la baie (élévation ou coupe) : point coté, puis position du texte"),
+        ]);
         let formes = outils(&[
             (OutilFamille::Volume, "volume", "Volume", "Extrusion pleine : glisser un rectangle ; ses faces se verrouillent sur les plans les plus proches"),
             (OutilFamille::Vide, "vide", "Vide", "Extrusion vide : perce le mur hôte une fois la famille chargée"),
@@ -56,7 +61,7 @@ impl ViewerApp {
             (OutilFamille::Arc, "arc", "Arc 2D", "Symbole 2D en arc : départ, point de passage, fin"),
             (OutilFamille::Region, "region", "Région 2D", "Contour fermé rempli (plein ou hachuré) : cliquer les sommets, recliquer le premier ou clic droit pour fermer"),
         ]);
-        let reponses = bandeau(ui, &[("Références", references), ("Formes", formes), ("Symboles 2D", symboles)]);
+        let reponses = bandeau(ui, &[("Références", references), ("Cotes", mesures), ("Formes", formes), ("Symboles 2D", symboles)]);
         let Some(ed) = self.famille.as_mut() else { return };
         for (cle, r) in reponses {
             if !r.clicked() {
@@ -73,6 +78,9 @@ impl ViewerApp {
                 "ligne" => OutilFamille::Ligne,
                 "arc" => OutilFamille::Arc,
                 "region" => OutilFamille::Region,
+                "cote_angle" => OutilFamille::CoteAngle,
+                "cote_diametre" => OutilFamille::CoteDiametre,
+                "altimetrie" => OutilFamille::Altimetrie,
                 _ => continue,
             };
             // recliquer l'outil actif revient à la sélection
@@ -398,6 +406,21 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             ed.erreur = ed.supprimer(&SelectionFamille::Symbole(k)).err();
         }
         ui.label(RichText::new("Les symboles de plan et d'élévation s'affichent dans les vues du projet et sur les feuilles.").small().weak());
+        let mut supprimer_cote = None;
+        for (k, c) in ed.famille.cotes_mesure.iter().enumerate() {
+            ui.horizontal(|ui| {
+                let texte = format!("{} {} · {}", c.genre.nom(), k + 1, match c.vue { VueEsquisse::Plan => "plan", VueEsquisse::Elevation => "élévation", VueEsquisse::Coupe => "coupe" });
+                if ui.selectable_label(ed.selection == SelectionFamille::CoteMesure(k), texte).clicked() {
+                    ed.selection = SelectionFamille::CoteMesure(k);
+                }
+                if ui.small_button("−").on_hover_text("Supprimer la cote").clicked() {
+                    supprimer_cote = Some(k);
+                }
+            });
+        }
+        if let Some(k) = supprimer_cote {
+            ed.erreur = ed.supprimer(&SelectionFamille::CoteMesure(k)).err();
+        }
     });
 }
 

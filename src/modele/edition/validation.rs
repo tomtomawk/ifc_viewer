@@ -291,6 +291,10 @@ impl Projet {
                     fin,
                     decalage,
                 } => cote(debut) && cote(fin) && decalage.is_finite(),
+                F::CoteAngulaire { sommet, debut, fin, rayon } => [sommet, debut, fin].into_iter().all(point) && rayon.is_finite() && *rayon > 0.0
+                    && documentation::angle_branches((*sommet).into(), (*debut).into(), (*fin).into()).is_some(),
+                F::CoteDiametre { centre, point: q } => point(centre) && point(q) && centre != q,
+                F::Altimetrie { point: q, repere, decimales, .. } => point(q) && point(repere) && *decimales <= 4,
             };
             if !valide {
                 return Err("Coordonnées d'annotation non valides.".into());

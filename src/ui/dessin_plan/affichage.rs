@@ -288,7 +288,13 @@ impl ViewerApp {
         if resp.clicked() {
             if let Some((p, _)) = self.dessin2d.point && self.ajouter_point_raccord(p) { return; }
             if self.reprendre_contour_ouvert(rect, resp.interact_pointer_pos()) { return; }
-            if let (Some((p, _)), Some(t)) = (self.dessin2d.point, self.dessin2d.trace.as_mut()) {
+            if let (Some((p, _)), true, Some(t)) = (self.dessin2d.point, self.outil_cotation().is_some(), self.dessin2d.trace.as_mut()) {
+                // cotation : le point s'ajoute tel quel, la cote se crée au dernier
+                self.dessin2d.saisie.clear();
+                self.dessin2d.champ_angle = false;
+                { self.dessin2d.message = None; self.dessin2d.information = None; };
+                t.points.push(p);
+            } else if let (Some((p, _)), Some(t)) = (self.dessin2d.point, self.dessin2d.trace.as_mut()) {
                 self.dessin2d.saisie.clear();
                 self.dessin2d.champ_angle = false;
                 { self.dessin2d.message = None; self.dessin2d.information = None; };
@@ -299,6 +305,7 @@ impl ViewerApp {
         if resp.clicked_by(PointerButton::Secondary) {
             self.valider_saisie_dessin();
         }
+        self.verifier_cotation();
         if resp.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
         }
@@ -369,7 +376,8 @@ impl ViewerApp {
                         painter.add(egui::Shape::dashed_line(&[c,e],egui::Stroke::new(1.0,bleu.gamma_multiply(0.6)),5.0,4.0));
                     }
                 }
-                for l in apercu {
+                if self.outil_cotation().is_some() { self.apercu_cotation(&painter, rect, p); }
+                for l in apercu.into_iter().filter(|_| self.outil_cotation().is_none()) {
                     let pts: Vec<egui::Pos2> = l.iter().filter_map(|q| self.vers_ecran(rect, *q)).collect();
                     painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, bleu)));
                 }
@@ -514,6 +522,7 @@ impl ViewerApp {
                 self.ruban_edition.dalle_active().map_or("SURFACE".into(), |d| d.sorte.nom().to_uppercase()),
                 if o == OutilDessin::Polyligne { "POLYGONE" } else { nom_outil(o) }
             ),
+            _ if self.outil_cotation().is_some() => format!("COTATION · {}", self.ruban_edition.outil().map_or("", |o| o.nom()).to_uppercase()),
             _ => self.dessin2d.trace.as_ref().map_or("MODIFICATION".into(), |t| nom_outil(t.outil).into()),
         }};
         let invite = if let Some(e) = edition.filter(|_| self.selection_traces_active()) {
@@ -523,7 +532,7 @@ impl ViewerApp {
             if self.dessin2d.terrain_ajouter_point { "Cliquer dans le terrain pour placer un point coté · glisser un point pour le déplacer · clic droit : retirer" }
             else { "Glisser un sommet ou un point · glisser un milieu de côté pour ajouter un sommet · clic droit : retirer · cotes NGF à côté de chaque point" }
         } else if let Some(m) = modification { m }
-        else if self.ruban_edition.selection_mur && usage.is_some_and(|(u,_)|u==Usage::Mur) {"Sélectionner un trait existant dans la vue"} else { self.dessin2d.trace.as_ref().map_or("", |t| t.invite()) };
+        else if self.ruban_edition.selection_mur && usage.is_some_and(|(u,_)|u==Usage::Mur) {"Sélectionner un trait existant dans la vue"} else if let Some(i) = self.invite_cotation() { i } else { self.dessin2d.trace.as_ref().map_or("", |t| t.invite()) };
         let contexte = match usage.map(|(u, _)| u) {
             Some(Usage::Mur) => "Ctrl : justification · Espace : inverser le sens · ",
             Some(Usage::Escalier) => "Ctrl ou Espace : justification de la ligne · Longueur magnétisée au giron · Départ, un sommet par palier, arrivée · Marches calculées selon le niveau supérieur · ",

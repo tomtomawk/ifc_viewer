@@ -181,6 +181,12 @@ impl Projet {
                         *p = point_annotation(*p);
                     }
                 }
+                F::CoteAngulaire { .. } | F::CoteDiametre { .. } | F::Altimetrie { .. } => {
+                    if let F::CoteAngulaire { rayon, .. } = &mut a.forme { *rayon *= f.rapport(); }
+                    for p in a.forme.points_mesure_mut() {
+                        *p = point_annotation(*p);
+                    }
+                }
                 F::Cote { debut, fin, decalage } => {
                     *decalage *= if miroir { -f.rapport() } else { f.rapport() };
                     for p in [debut, fin] {

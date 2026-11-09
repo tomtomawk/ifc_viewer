@@ -73,6 +73,8 @@ pub(crate) enum Outil {
     Verrouiller,
     Deverrouiller,
     Cote,
+    CoteAngulaire,
+    CoteDiametre,
     Altimetrie,
     Texte,
     Etiquette,
@@ -140,6 +142,8 @@ impl Outil {
             Self::Verrouiller => "Verrou",
             Self::Deverrouiller => "Déverrouiller",
             Self::Cote => "Cote",
+            Self::CoteAngulaire => "Angle",
+            Self::CoteDiametre => "Diamètre",
             Self::Altimetrie => "Altimétrie",
             Self::Texte => "Texte",
             Self::Etiquette => "Étiquette",
@@ -320,7 +324,7 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
         ],
         Menu::Annoter => &[
             ("Vues", &[VuePlan, VueCoupe]),
-            ("Cotes et textes", &[Cote, Texte, Etiquette, Altimetrie]),
+            ("Cotes et textes", &[Cote, CoteAngulaire, CoteDiametre, Altimetrie, Texte, Etiquette]),
             // les régions remplies sont des polylignes fermées (Remplissage dans Propriétés)
             DESSIN_2D,
             ("Bibliothèque", &[Symbole, Legende]),
@@ -562,8 +566,9 @@ fn champs(o: Outil) -> Vec<Champ> {
             Choix("Mode", &["Alignée", "Orthogonale"]),
             Nombre("Décalage papier", 8.0, " mm"),
         ],
+        CoteAngulaire | CoteDiametre => vec![],
         Altimetrie => vec![
-            Choix("Référence", &["Projet", "Niveau courant"]),
+            Choix("Référence", &["Projet", "Niveau sous le point"]),
             Choix("Précision", &["0.00 m", "0.000 m"]),
         ],
         Texte => vec![
