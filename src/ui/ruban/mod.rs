@@ -427,6 +427,8 @@ enum Champ {
     Choix(&'static str, &'static [&'static str]),
     Nombre(&'static str, f64, &'static str),
     Saisie(&'static str, &'static str),
+    /// Case à cocher, décochée par défaut.
+    Case(&'static str),
 }
 enum Valeur {
     Texte(String),
@@ -441,8 +443,6 @@ pub struct RubanEdition {
     pub selection_murs: bool,
     /// Bouton Jonctions de cette image : le menu s'ancre dessus.
     pub bouton_jonctions: Option<egui::Response>,
-    pub modifier_famille: bool,
-    pub ouvrir_famille: bool,
     pub type_garde_corps: Option<String>,
     pub prolonger_angle: bool,
     pub selection_mur: bool,
@@ -512,7 +512,7 @@ struct EditeurType {
 
 fn nom_champ(c: &Champ) -> &'static str {
     match c {
-        Champ::Nombre(n, _, _) | Champ::Saisie(n, _) | Champ::Choix(n, _) => n,
+        Champ::Nombre(n, _, _) | Champ::Saisie(n, _) | Champ::Choix(n, _) | Champ::Case(n) => n,
     }
 }
 
@@ -578,8 +578,10 @@ fn champs(o: Outil) -> Vec<Champ> {
         Cote => vec![
             Choix("Mode", &["Alignée", "Orthogonale"]),
             Nombre("Décalage papier", 8.0, " mm"),
+            Case("Sélectionner des points"),
         ],
-        CoteAngulaire | CoteDiametre => vec![],
+        CoteAngulaire => vec![Case("Sélectionner des points")],
+        CoteDiametre => vec![],
         Altimetrie => vec![
             Choix("Référence", &["Projet", "Niveau sous le point"]),
             Choix("Précision", &["0.00 m", "0.000 m"]),
@@ -778,6 +780,11 @@ impl RubanEdition {
     }
     pub fn definir_texte_option(&mut self, outil: Outil, index: usize, valeur: &str) {
         self.valeurs.insert((outil, index), Valeur::Texte(valeur.into()));
+    }
+    /// Case à cocher de l'outil (la première) : cochée ?
+    pub fn case_option(&self, outil: Outil) -> bool {
+        champs(outil).iter().position(|c| matches!(c, Champ::Case(_)))
+            .is_some_and(|k| matches!(self.valeurs.get(&(outil, k)), Some(Valeur::Texte(v)) if v == "oui"))
     }
     pub fn texte_option(&self, outil: Outil, index: usize) -> String {
         match self.valeurs.get(&(outil,index)) {

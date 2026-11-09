@@ -277,6 +277,8 @@ impl Projet {
             let cote = |p: &PointCote| match p {
                 PointCote::Fixe { point: p } => point(p),
                 PointCote::Mur { id, .. } => self.murs.iter().any(|m|&m.id==id) || self.assemblages.iter().any(|m|&m.id==id),
+                // élément supprimé : la cote reste, affichée « référence perdue »
+                PointCote::Arete { t, .. } => t.is_finite(),
             };
             let valide = match &a.forme {
                 F::Texte { point: p, .. } => point(p),
@@ -291,7 +293,7 @@ impl Projet {
                     fin,
                     decalage,
                 } => cote(debut) && cote(fin) && decalage.is_finite(),
-                F::CoteAngulaire { sommet, debut, fin, rayon } => [sommet, debut, fin].into_iter().all(point) && rayon.is_finite() && *rayon > 0.0
+                F::CoteAngulaire { sommet, debut, fin, rayon, .. } => [sommet, debut, fin].into_iter().all(point) && rayon.is_finite() && *rayon > 0.0
                     && documentation::angle_branches((*sommet).into(), (*debut).into(), (*fin).into()).is_some(),
                 F::CoteDiametre { centre, point: q } => point(centre) && point(q) && centre != q,
                 F::Altimetrie { point: q, repere, decimales, .. } => point(q) && point(repere) && *decimales <= 4,

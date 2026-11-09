@@ -246,6 +246,13 @@ Type des prochains éléments horizontaux."), Some(&vignette));
                                     ui.add(if *suffixe == " mm" && !nom.contains("papier") { champ.dimensions() } else { champ.max_decimals(2).suffix(*suffixe) });
                                 }
                             }
+                            Champ::Case(nom) => {
+                                let v = self.valeurs.entry((outil, *k)).or_insert_with(|| Valeur::Texte("non".into()));
+                                if let Valeur::Texte(v) = v {
+                                    let mut coche = v == "oui";
+                                    if ui.checkbox(&mut coche, *nom).changed() { *v = if coche { "oui" } else { "non" }.into(); }
+                                }
+                            }
                             Champ::Saisie(nom, defaut) => {
                                 ui.label(*nom);
                                 let v = self

@@ -252,10 +252,10 @@ impl ViewerApp {
                 return (p, Accroche::Ortho);
             }
         }
-        // repère du plan tourné : ortho et angles ronds suivent l'écran ; longueurs et
-        // coordonnées libres au pas de 10 mm pour un mur, 1 mm pour un dessin
+        // repère du plan tourné : ortho et angles ronds suivent l'écran ; sans accrochage,
+        // les longueurs tracées tombent au centimètre (premier point : coordonnées)
         let th = self.angle_axes_plan();
-        let pas = if self.usage_dessin().is_some_and(|(u, _)| u != Usage::Annotation) { 10.0 } else { 1.0 };
+        let pas = 10.0;
         let tourner = |v: DVec2, a: f64| DVec2::from_angle(a).rotate(v);
         let arrondi = |v: DVec2| {
             let l = v.length();
@@ -266,7 +266,7 @@ impl ViewerApp {
             // suivi polaire : multiples de 45° seulement (15° proposait trop de directions)
             Some(p) => match d2::polaire(DVec2::ZERO, tourner(c - p, -th), 45.0, 2.5) {
                 Some((q, a)) => (p + arrondi(tourner(q, th)), Accroche::Polaire(a)),
-                None => ((c / pas).round() * pas, Accroche::Libre),
+                None => (p + arrondi(c - p), Accroche::Libre),
             },
             None => ((c / pas).round() * pas, Accroche::Libre),
         }
@@ -607,7 +607,7 @@ impl ViewerApp {
             self.dessin2d.message = Some("Terminez le raccord ou annulez son tracé avec Échap.".into());
             return;
         }
-        if valider && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.annotation.is_none() && e.fermees.iter().any(|f| !f)) {
+        if valider && self.dessin2d.edition_contour.as_ref().is_some_and(|e| !e.ligne() && e.fermees.iter().any(|f| !f)) {
             self.dessin2d.message = Some("Refermez tous les contours avant de valider.".into());
             return;
         }
@@ -674,6 +674,22 @@ impl ViewerApp {
                 }
                 Err(e) => { self.dessin2d.message = Some(e); return; }
             }
+        } else if let (true, Some(element)) = (valider, self.dessin2d.edition_contour.as_ref().and_then(|e| e.element)) {
+            // garde-corps ou limite de propriété : un seul tracé, repris tel quel
+            let id = self.dessin2d.edition_contour.as_ref().unwrap().id.clone();
+            let [trace] = self.dessin2d.dalle.as_slice() else { self.dessin2d.message = Some("Un seul tracé est attendu.".into()); return; };
+            let trace = trace.clone();
+            if trace.len() < 2 || trace.windows(2).any(|w| DVec2::from_array(w[0]).distance(DVec2::from_array(w[1])) < 1e-6) {
+                self.dessin2d.message = Some("Le tracé doit comporter des segments de longueur non nulle.".into()); return;
+            }
+            let Some((projet, _)) = &self.natif else { return };
+            let commande = match element {
+                ElementTrace::GardeCorps => projet.garde_corps.iter().find(|g| g.id == id).cloned().map(|mut garde_corps| { garde_corps.trace = trace; Commande::GardeCorps { garde_corps } }),
+                ElementTrace::Limite => projet.limites_propriete.iter().find(|l| l.id == id).cloned().map(|mut limite| { limite.contour = trace; Commande::LimitePropriete { limite } }),
+            };
+            let Some(commande) = commande else { self.dessin2d.message = Some("Élément introuvable.".into()); return; };
+            if let Err(e) = self.executer_bim(commande) { self.dessin2d.message = Some(e); return; }
+            self.status = "Tracé modifié — Ctrl+S pour enregistrer.".into();
         } else if valider && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.annotation.is_some()) {
             let edit = self.dessin2d.edition_contour.as_ref().unwrap();
             let modele = edit.annotation.clone().unwrap();

@@ -193,6 +193,8 @@ impl Projet {
                         match p {
                             PointCote::Fixe { point: p } => *p = point_annotation(*p),
                             PointCote::Mur { id, .. } if set.contains(id) => {},
+                            // arête de référence : la cote suit son élément
+                            PointCote::Arete { .. } => {},
                             PointCote::Mur { .. } => return Err("Sélectionnez le mur lié avec sa cote, ou modifiez le décalage dans les propriétés.".into()),
                         }
                     }

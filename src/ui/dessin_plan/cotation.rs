@@ -17,6 +17,7 @@ impl ViewerApp {
 
     /// Consigne de l'étape en cours.
     pub(in crate::ui) fn invite_cotation(&self) -> Option<&'static str> {
+        if let Some(invite) = self.invite_aretes() { return Some(invite); }
         Some(self.outil_cotation()?.invite(self.dessin2d.trace.as_ref().map_or(0, |t| t.points.len())))
     }
 
@@ -41,8 +42,11 @@ impl ViewerApp {
         let Some(vue) = self.vue_native_id() else { return };
         let Some(forme) = self.forme_cotation(genre, &pts) else {
             self.dessin2d.message = Some("Cote impossible : points confondus ou alignés.".into());
+            self.dessin2d.aretes_cote.clear();
             return;
         };
+        // sélection d'arêtes : la cote s'appuie sur les éléments et les suit
+        let forme = self.lier_aretes(forme);
         match self.executer_bim(Commande::Annoter { annotation: Annotation { id: String::new(), vue, hauteur: HAUTEUR_TEXTE, forme } }) {
             Ok(_) => self.confirmer("Cote créée".into()),
             Err(e) => self.error = Some(e),

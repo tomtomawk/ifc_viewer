@@ -65,7 +65,7 @@ pub(super) fn bouton_outil(
         egui::WidgetInfo::selected(egui::Role::Button, ui.is_enabled(), actif, outil.nom())
     });
     resp.on_hover_text(match outil {
-        Outil::ModifierContour => "Modifier le tracé d'un contour, d'une polyligne ou d'un terrain (MT)",
+        Outil::ModifierContour => "Modifier l'élément sélectionné : tracé d'un contour, d'une polyligne, d'un terrain, d'un garde-corps ou d'une limite de propriété ; famille d'une ouverture, d'un composant ou d'une étiquette (MT)",
         Outil::CopierNiveau => "Copier la sélection sur un niveau en conservant la position en plan",
         Outil::Jonctions => "Priorité des jonctions entre murs",
         Outil::AttacherToiture => "Attacher un ou plusieurs murs à la sous-face d'une toiture : sélectionner les murs puis cliquer la toiture",

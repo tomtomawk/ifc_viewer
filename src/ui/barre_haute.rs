@@ -212,13 +212,7 @@ impl ViewerApp {
             self.ruban_edition.selection_elements = !ids.is_empty();
             self.ruban_edition.selection_murs = self.natif.as_ref().is_some_and(|(p, _)| ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some()));
             self.ruban_edition.bouton_jonctions = None;
-            self.ruban_edition.modifier_famille = menu == crate::ui::ruban::Menu::Modifier
-                && self.cible_famille().is_some();
             let action = self.ruban_edition.afficher(ui, menu, self.natif.as_ref().map(|n| &n.0));
-            if std::mem::take(&mut self.ruban_edition.ouvrir_famille) {
-                self.modifier_famille_selectionnee();
-                return;
-            }
             if let Some(r) = self.ruban_edition.bouton_jonctions.take() {
                 egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| self.menu_jonctions(ui));
             }

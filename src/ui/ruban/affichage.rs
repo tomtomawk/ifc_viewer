@@ -9,10 +9,7 @@ impl RubanEdition {
         projet: Option<&crate::modele::Projet>,
     ) -> Option<Outil> {
         let mut action = None;
-        const LARGEUR_FAMILLE: f32 = 132.0;
-        let largeur = ui.available_width() - if self.modifier_famille {
-            LARGEUR_FAMILLE + espace_groupes(false)
-        } else { 0.0 };
+        let largeur = ui.available_width();
         let outil_options = self.selection.filter(|o| {
             groupes(menu)
                 .iter()
@@ -60,12 +57,6 @@ impl RubanEdition {
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing.x = espace_groupes(serre);
                 ui.horizontal_top(|ui| {
-                    if self.modifier_famille {
-                        let texte = "Modifier la famille";
-                        let rect = ui.allocate_exact_size(egui::vec2(LARGEUR_FAMILLE, HAUTEUR_GROUPE), Sense::hover()).0;
-                        let bouton = egui::Rect::from_min_size(rect.min, egui::vec2(rect.width(), HAUTEUR_OUTILS));
-                        self.ouvrir_famille = ui.put(bouton, egui::Button::new(texte)).clicked();
-                    }
                     for (indice, (nom, outils)) in groupes(menu).iter().enumerate() {
                         let colonnes = colonnes(ui, outils, &grands, serre);
                         let contient_selection =
@@ -80,7 +71,7 @@ impl RubanEdition {
                             egui::vec2(largeur_groupe, HAUTEUR_GROUPE),
                             Sense::hover(),
                         );
-                        if indice > 0 || self.modifier_famille {
+                        if indice > 0 {
                             let x = rect.left() - espace_groupes(serre) / 2.0;
                             ui.painter().line_segment(
                                 [

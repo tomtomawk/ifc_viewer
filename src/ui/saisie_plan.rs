@@ -980,7 +980,8 @@ impl ViewerApp {
         let Some(a) = depart else { return Some((point, accroche)) };
         // axes du plan tourné (repère du plan) : Maj et angles ronds suivent l'écran
         if let Some(c) = accrochage::contraindre(a, point, self.angle_axes_plan(), orthogonal, 10.0) { return Some(c); }
-        Some((point, accroche))
+        // direction libre : la longueur depuis le départ tombe au centimètre
+        Some((accrochage::longueur_ronde(a, [p.x, p.y], 10.0), accroche))
     }
 
 }

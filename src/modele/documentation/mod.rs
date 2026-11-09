@@ -108,6 +108,16 @@ pub fn types_traits_standard() -> Vec<TypeTrait> {
 pub enum PointCote {
     Fixe { point: [f64; 2] },
     Mur { id: String, fin: bool },
+    /// Arête de référence d'un élément (`cotation::aretes_reference`), à l'abscisse
+    /// relative `t` : la cote suit l'élément.
+    Arete { id: String, arete: usize, t: f64 },
+}
+
+/// Arête de référence d'une branche de cote angulaire.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct RefArete {
+    pub id: String,
+    pub arete: usize,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "forme", rename_all = "snake_case")]
@@ -161,6 +171,9 @@ pub enum AnnotationForme {
         debut: [f64; 2],
         fin: [f64; 2],
         rayon: f64,
+        /// Arêtes cotées (première et seconde branche) : l'angle suit les éléments.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        aretes: Option<[RefArete; 2]>,
     },
     /// Cote de diamètre : centre et un point du cercle ; la ligne de cote traverse le
     /// cercle par le centre.
@@ -590,6 +603,10 @@ fn point_cote(p: &Projet, v: &Vue, point: &PointCote) -> Option<DVec2> {
             let d = pt - o;
             Some(DVec2::new(d.dot(u), d.dot(h)))
         }
+        PointCote::Arete { id, arete, t } => {
+            let [a, b] = cotation::arete_vue(p, v, id, *arete)?;
+            Some(a + (b - a) * *t)
+        }
     }
 }
 /// Traits d'une polyligne : segments consécutifs de même type regroupés (raccords
@@ -673,18 +690,19 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
             )),
             forme @ (AnnotationForme::Cote { .. } | AnnotationForme::CoteAngulaire { .. } | AnnotationForme::CoteDiametre { .. } | AnnotationForme::Altimetrie { .. }) => {
                 let extremites = match forme {
-                    AnnotationForme::Cote { debut, fin, .. } => match (point_cote(p, v, debut), point_cote(p, v, fin)) {
-                        (Some(a), Some(b)) => Some((a, b)),
-                        _ => None,
-                    },
+                    AnnotationForme::Cote { debut, fin, .. } => cotation::extremites_cote(p, v, debut, fin),
                     _ => None,
                 };
+                // angle entre arêtes : sommet et branches recalculés depuis les éléments
+                let resolue = cotation::angle_resolu(p, v, forme);
+                let perdue = matches!(forme, AnnotationForme::CoteAngulaire { aretes: Some(_), .. }) && resolue.is_none();
+                let forme = resolue.as_ref().unwrap_or(forme);
                 let unite = crate::config::options::unite();
                 let longueur = |x: f64| unite.afficher(x);
                 let altitude = |q: [f64; 2], relatif: bool| altitude_vue(p, v, q, relatif);
                 let style = StyleCote { oblique, taille: taille * 1000.0, longueur: &longueur, altitude: &altitude };
                 let lie = matches!(forme, AnnotationForme::Cote { .. });
-                match geometrie(forme, extremites, &style).filter(|_| !lie || extremites.is_some()) {
+                match geometrie(forme, extremites, &style).filter(|_| (!lie || extremites.is_some()) && !perdue) {
                     Some((traits, textes)) => {
                         out.extend(traits.iter().map(|[x, y]| ligne(pt(*x), pt(*y))));
                         for (centre, dir, s) in textes {

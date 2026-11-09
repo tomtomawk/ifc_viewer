@@ -268,6 +268,7 @@ impl ViewerApp {
         self.dessin2d.curseur = survol.and_then(|q| self.depuis_ecran(rect, q));
         let temps = ui.input(|i| i.time);
         self.dessin2d.point = self.dessin2d.curseur.map(|c| self.point_dessin(rect, c, maj, temps));
+        self.survol_aretes_cote(ui, rect);
         if self.dessin2d.survol_accroche.is_some() || self.dessin2d.survol_segment.is_some() { ui.ctx().request_repaint_after(std::time::Duration::from_millis(100)); }
         // escalier : la longueur de la volée est magnétisée au pas de marche (giron)
         if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier) && self.dessin2d.saisie.is_empty() {
@@ -288,7 +289,9 @@ impl ViewerApp {
         if resp.clicked() {
             if let Some((p, _)) = self.dessin2d.point && self.ajouter_point_raccord(p) { return; }
             if self.reprendre_contour_ouvert(rect, resp.interact_pointer_pos()) { return; }
-            if let (Some((p, _)), true, Some(t)) = (self.dessin2d.point, self.outil_cotation().is_some(), self.dessin2d.trace.as_mut()) {
+            if self.clic_arete_cote() {
+                // cotation par arêtes : la référence est retenue, rien d'autre à poser
+            } else if let (Some((p, _)), true, Some(t)) = (self.dessin2d.point, self.outil_cotation().is_some(), self.dessin2d.trace.as_mut()) {
                 // cotation : le point s'ajoute tel quel, la cote se crée au dernier
                 self.dessin2d.saisie.clear();
                 self.dessin2d.champ_angle = false;

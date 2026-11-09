@@ -360,7 +360,7 @@ impl ViewerApp {
                                         let libelle = if ouverture { format!("{nom} — {detail}") } else { detail };
                                         let ligne = ui.horizontal(|ui| {
                                             let r = ui.selectable_label(self.famille_selectionnee.as_ref() == Some(*famille), libelle)
-                                                .on_hover_text("Sélectionner le type · utiliser Modifier la famille dans le ruban");
+                                                .on_hover_text("Sélectionner le type · utiliser Modifier dans le ruban");
                                             if r.clicked() {
                                                 famille_choisie = Some((*famille).clone());
                                             }

@@ -67,6 +67,18 @@ pub(super) fn contraindre(a: [f64; 2], point: [f64; 2], theta: f64, orthogonal: 
     None
 }
 
+/// Point libre depuis le départ `a` : direction gardée, longueur arrondie à `pas`, pour
+/// que la cote du segment tracé tombe ronde même si le départ ne l'est pas.
+pub(super) fn longueur_ronde(a: [f64; 2], point: [f64; 2], pas: f64) -> [f64; 2] {
+    let (dx, dy) = (point[0] - a[0], point[1] - a[1]);
+    let l = dx.hypot(dy);
+    if l < 1e-9 {
+        return a;
+    }
+    let k = (l / pas).round() * pas / l;
+    [a[0] + dx * k, a[1] + dy * k]
+}
+
 /// Repère d'accrochage : carré (extrémité), triangle (milieu), croix (intersection),
 /// losange (angle d'un mur), cercle sinon.
 pub(super) fn marqueur(painter: &egui::Painter, q: egui::Pos2, acc: AccrocheMur, couleur: Color32, accent: Color32) {
@@ -105,5 +117,8 @@ mod tests {
         let (p, a) = contraindre([0.0, 0.0], [1000.0, 1010.0], 0.0, false, 10.0).unwrap();
         assert_eq!(a, AccrocheMur::Angle(45.0));
         assert!((p[0] - p[1]).abs() < 1e-9);
+        // point libre : longueur ronde depuis un départ quelconque
+        let q = longueur_ronde([3.7, 12.2], [1203.0, 912.0], 10.0);
+        assert!(((q[0] - 3.7).hypot(q[1] - 12.2) - 1500.0).abs() < 1e-9);
     }
 }

@@ -9,6 +9,7 @@ mod affichage;
 mod options;
 mod escalier;
 mod cotation;
+mod cotes_aretes;
 use super::*;
 use crate::dessin::dao::{self as d2, Accroche, Geom, OutilDessin, Trace};
 use crate::modele::edition::commandes::Commande;
@@ -88,6 +89,12 @@ pub(super) struct EtatDessin2D {
     pub edition_contour: Option<EditionContour>,
     /// Type de trait des polylignes créées (id ; vide : continu fin).
     pub trait_creation: String,
+    /// Cotation par arêtes : références déjà cliquées (élément, arête, abscisse relative),
+    /// première arête, arête sous le curseur et arêtes de la vue (révision, vue).
+    aretes_cote: Vec<(String, usize, f64)>,
+    arete_premiere: Option<cotes_aretes::AreteVisee>,
+    arete_survol: Option<cotes_aretes::AreteVisee>,
+    aretes_cache: Option<(u64, String, Vec<(String, usize, [DVec2; 2])>)>,
 }
 
 pub(super) struct EditionContour {
@@ -100,6 +107,17 @@ pub(super) struct EditionContour {
     annotation: Option<Annotation>,
     fermees: Vec<bool>,
     raccord: Option<(usize, bool)>,
+    /// Élément dont le tracé est repris, autre qu'une dalle ou une polyligne.
+    element: Option<ElementTrace>,
+}
+
+/// Élément à tracé unique repris par Modifier.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum ElementTrace {
+    /// Tracé ouvert d'un garde-corps.
+    GardeCorps,
+    /// Contour fermé d'une limite de propriété.
+    Limite,
 }
 
 /// Poignée du terrain en cours : sommet du contour, point coté, milieu d'un côté (le
@@ -148,6 +166,8 @@ mod tests_raccord {
 
 impl EditionContour {
     fn fermee(&self, i: usize) -> bool { self.fermees.get(i).copied().unwrap_or(true) }
+    /// Tracé unique et éventuellement ouvert (polyligne, garde-corps) : pas d'autre contour.
+    fn ligne(&self) -> bool { self.annotation.is_some() || self.element == Some(ElementTrace::GardeCorps) }
 }
 
 /// Ce que produit le tracé.
@@ -377,19 +397,35 @@ impl ViewerApp {
             self.commencer_edition_terrain(&id);
             return;
         }
-        if ids.len() != 1 { self.status = "Sélectionnez un élément horizontal ou une polyligne.".into(); return; }
+        // garde-corps et limite de propriété : leur tracé ; autre élément à famille : sa famille
+        let trace = ids.len() == 1 && (p.garde_corps.iter().any(|g| g.id == ids[0]) || p.limites_propriete.iter().any(|l| l.id == ids[0]));
+        if !trace && self.cible_famille().is_some() {
+            self.modifier_famille_selectionnee();
+            return;
+        }
+        let Some((p, _)) = &self.natif else { return };
+        if ids.len() != 1 { self.status = "Sélectionnez un élément à modifier.".into(); return; }
+        let mut element = None;
         let (altitude, contours, annotation) = if let Some(d) = p.dalles.iter().find(|d| d.id == ids[0]) {
             (p.niveau(&d.niveau).map_or(0.0, |n| n.altitude) + d.decalage, d.contours.clone(), None)
+        } else if let Some(g) = p.garde_corps.iter().find(|g| g.id == ids[0]) {
+            if g.escalier.is_some() { self.status = "Ce garde-corps suit son escalier : modifiez l'escalier.".into(); return; }
+            element = Some(ElementTrace::GardeCorps);
+            (p.niveau(&g.niveau).map_or(0.0, |n| n.altitude) + g.decalage, vec![g.trace.clone()], None)
+        } else if let Some(l) = p.limites_propriete.iter().find(|l| l.id == ids[0]) {
+            element = Some(ElementTrace::Limite);
+            (l.altitude, vec![l.contour.clone()], None)
         } else if let Some(a) = p.annotations.iter().find(|a| a.id == ids[0]) {
             let AnnotationForme::Polyligne { points, .. } = &a.forme else { self.status = "Sélectionnez un élément horizontal ou une polyligne.".into(); return; };
             if self.vue_native_id().as_deref() != Some(a.vue.as_str()) { self.status = "Ouvrez la vue de la polyligne pour la modifier.".into(); return; }
             (0.0, vec![points.clone()], Some(a.clone()))
         } else { self.status = "Sélectionnez un élément horizontal ou une polyligne.".into(); return; };
-        self.dessin2d.dernier_usage = Some(if annotation.is_some() { Usage::Annotation } else { Usage::Surface });
-        let fermees = vec![annotation.as_ref().is_none_or(|a| matches!(&a.forme, AnnotationForme::Polyligne { fermee: true, .. })); contours.len()];
+        let ouvert = element == Some(ElementTrace::GardeCorps);
+        self.dessin2d.dernier_usage = Some(if annotation.is_some() || ouvert { Usage::Annotation } else { Usage::Surface });
+        let fermees = vec![!ouvert && annotation.as_ref().is_none_or(|a| matches!(&a.forme, AnnotationForme::Polyligne { fermee: true, .. })); contours.len()];
         self.dessin2d.dalle = contours;
         self.dessin2d.geoms = None;
-        self.dessin2d.edition_contour = Some(EditionContour { id: ids[0].clone(), altitude, dessin: false, selection: None, segment: None, glisse: None, annotation, fermees, raccord: None });
+        self.dessin2d.edition_contour = Some(EditionContour { id: ids[0].clone(), altitude, dessin: false, selection: None, segment: None, glisse: None, annotation, fermees, raccord: None, element });
         self.dessin2d.trace = Some(Trace::new(OutilDessin::Polyligne));
         self.ruban_edition.forme_dalle = OutilDessin::Polyligne;
         self.ruban_edition.annuler();
@@ -462,7 +498,7 @@ impl ViewerApp {
 
     pub(super) fn options_edition_contour(&mut self, ui: &mut egui::Ui) {
         let trace_en_cours = self.trace_en_cours();
-        let poly = self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.annotation.is_some());
+        let poly = self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.annotation.is_some() || e.element.is_some());
         let mut supprimer_trait = false;
         ui.horizontal(|ui| {
             let edition = self.dessin2d.edition_contour.as_mut().unwrap();
@@ -491,7 +527,7 @@ impl ViewerApp {
             return Some((Usage::Cadrage, self.dessin2d.forme_cadrage.unwrap_or(OutilDessin::Rectangle)));
         }
         if self.dessin2d.edition_contour.is_some() {
-            if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.annotation.is_some()) { return Some((Usage::Annotation, OutilDessin::Polyligne)); }
+            if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.ligne()) { return Some((Usage::Annotation, OutilDessin::Polyligne)); }
             let o = match self.ruban_edition.forme_dalle {
                 o @ (OutilDessin::Rectangle | OutilDessin::Cercle) => o,
                 _ => OutilDessin::Polyligne,

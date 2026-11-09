@@ -908,7 +908,7 @@ impl ViewerApp {
                             F::Arc { .. } => {
                                 ui.label("Arc par trois points");
                             }
-                            F::CoteAngulaire { sommet, debut, fin, rayon } => {
+                            F::CoteAngulaire { sommet, debut, fin, rayon, .. } => {
                                 if let Some((a, ..)) = crate::modele::documentation::angle_branches((*sommet).into(), (*debut).into(), (*fin).into()) {
                                     ui.label(format!("Angle : {:.2}°", a.to_degrees()));
                                 }

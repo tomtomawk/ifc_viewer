@@ -594,6 +594,7 @@ impl ViewerApp {
         }
         self.dessiner_instructions(ui, rect);
         self.cotes_terrain(ui, rect);
+        self.cotes_pilotables(ui, rect);
         if self.scene.is_some() {
             self.poignees_boite(ui, rect);
         }
