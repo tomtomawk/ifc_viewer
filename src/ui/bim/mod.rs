@@ -801,14 +801,14 @@ impl ViewerApp {
                 if let Some(original) = p.terrains.iter().find(|t| t.id == ids[0]) {
                     let mut terrain = original.clone();
                     ui.label(RichText::new("Terrain").strong());
-                    let mut change = ui.text_edit_singleline(&mut terrain.nom).changed();
-                    ui.label("Altitudes du contour");
-                    for (i, point) in terrain.contour.iter_mut().enumerate() {
-                        ui.horizontal(|ui| { ui.label(format!("Sommet {}", i + 1)); change |= ui.add(egui::DragValue::new(&mut point[2]).speed(10.0).suffix(" mm")).changed(); });
-                    }
-                    for (i, point) in terrain.points.iter_mut().enumerate() {
-                        ui.horizontal(|ui| { ui.label(format!("Point {}", i + 1)); change |= ui.add(egui::DragValue::new(&mut point[2]).speed(10.0).suffix(" mm")).changed(); });
-                    }
+                    let change = ui.text_edit_singleline(&mut terrain.nom).changed();
+                    // volume du solide (épaisseur du type sous la surface) ; les cotes des
+                    // sommets et points se modifient dans la vue (outil Modifier)
+                    let e = p.type_terrain(&terrain).epaisseur;
+                    match crate::modele::elements::terre_plein::solide_terrain(p, &terrain, e) {
+                        Ok(tris) => ui.label(format!("Volume : {:.2} m³", crate::modele::volumes::geometrie::volume(&tris) / 1e9)),
+                        Err(e) => ui.label(RichText::new(e).weak()),
+                    };
                     if change { commande = Some(Commande::Terrain { terrain }); }
                 }
                 if let Some(original) = p.limites_propriete.iter().find(|l| l.id == ids[0]) {

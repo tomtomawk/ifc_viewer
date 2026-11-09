@@ -44,6 +44,9 @@ pub struct Gabarit {
     /// Profils paramétriques chargés dans les nouveaux projets.
     #[serde(default)]
     pub profils: Vec<crate::modele::famille::profil::Profil>,
+    /// Types de terrain (épaisseur, matériau) proposés au sélecteur des terrains.
+    #[serde(default)]
+    pub types_terrains: Vec<crate::modele::elements::site::TypeTerrain>,
 }
 
 /// Type d'ouverture du gabarit : nom, cotes et famille.

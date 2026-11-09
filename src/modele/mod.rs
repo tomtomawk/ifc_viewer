@@ -864,10 +864,13 @@ pub enum SorteDalle {
     Sol,
     Plafond,
     Toiture,
+    /// Plate-forme remblayée : ses arêtes portent un talus, le remblai descend jusqu'au
+    /// terrain naturel (voir `elements::terre_plein`).
+    TerrePlein,
 }
 
 impl SorteDalle {
-    pub const TOUTES: [SorteDalle; 4] = [Self::Dalle, Self::Sol, Self::Plafond, Self::Toiture];
+    pub const TOUTES: [SorteDalle; 5] = [Self::Dalle, Self::Sol, Self::Plafond, Self::Toiture, Self::TerrePlein];
 
     pub fn est_dalle(&self) -> bool {
         *self == Self::Dalle
@@ -879,13 +882,14 @@ impl SorteDalle {
             Self::Sol => "Sol",
             Self::Plafond => "Plafond",
             Self::Toiture => "Toiture",
+            Self::TerrePlein => "Terre-plein",
         }
     }
 
     /// Catégorie de l'arborescence (familles), comme dans Revit.
     pub fn categorie(self) -> &'static str {
         match self {
-            Self::Dalle | Self::Sol => "Sols",
+            Self::Dalle | Self::Sol | Self::TerrePlein => "Sols",
             Self::Plafond => "Plafonds",
             Self::Toiture => "Toits",
         }
@@ -899,6 +903,16 @@ impl SorteDalle {
     /// Les arêtes peuvent définir une pente (toiture, plafond rampant).
     pub fn pente_possible(self) -> bool {
         matches!(self, Self::Plafond | Self::Toiture)
+    }
+
+    /// Les arêtes peuvent porter un talus (terre-plein) : angle rangé dans `pentes`.
+    pub fn talus(self) -> bool {
+        self == Self::TerrePlein
+    }
+
+    /// Les arêtes portent une pente ou un talus, réglé arête par arête.
+    pub fn aretes_reglables(self) -> bool {
+        self.pente_possible() || self.talus()
     }
 }
 
@@ -1077,12 +1091,18 @@ impl Projet {
 
     /// Type d'un terrain : le sien, sinon le premier du projet, sinon le type par défaut.
     pub fn type_terrain(&self, t: &site::Terrain) -> site::TypeTerrain {
-        t.type_terrain.as_ref().and_then(|id| self.types_terrains.iter().find(|x| &x.id == id)).or(self.types_terrains.first()).cloned().unwrap_or_else(site::TypeTerrain::defaut)
+        let types = self.types_terrains_disponibles();
+        t.type_terrain.as_ref().and_then(|id| types.iter().find(|x| &x.id == id)).or(types.first()).cloned().unwrap_or_else(site::TypeTerrain::defaut)
     }
 
-    /// Types de terrain proposés : ceux du projet, sinon le type par défaut.
+    /// Types de terrain proposés : ceux du projet, sinon ceux du gabarit, sinon le type
+    /// par défaut.
     pub fn types_terrains_disponibles(&self) -> Vec<site::TypeTerrain> {
-        if self.types_terrains.is_empty() { vec![site::TypeTerrain::defaut()] } else { self.types_terrains.clone() }
+        if !self.types_terrains.is_empty() {
+            return self.types_terrains.clone();
+        }
+        let g = crate::config::gabarit::actif();
+        if g.types_terrains.is_empty() { vec![site::TypeTerrain::defaut()] } else { g.types_terrains.clone() }
     }
 
     /// Range un élément du site nouvellement créé dans la phase Existant (créée au
@@ -1113,6 +1133,7 @@ impl Projet {
         for t in &g.types_ouvertures {
             p.types_ouvertures.push(TypeOuverture { id: identifiant("type-ouverture", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), genre: t.famille.genre, largeur: t.largeur, hauteur: t.hauteur, famille: None, modele: Some(t.famille.clone()), origine: None, famille_nom: None });
         }
+        p.types_terrains = g.types_terrains.clone();
         p.completer_materiaux();
         p
     }
@@ -1194,7 +1215,7 @@ impl Projet {
     /// du type, épaisseur normale aux versants si des arêtes définissent une pente.
     pub fn volume_dalle(&self, d: &Dalle) -> Option<f64> {
         let e = self.type_dalle(&d.type_dalle)?.epaisseur();
-        if d.pentes.is_empty() {
+        if d.pentes.is_empty() || d.sorte.talus() {
             return Some(geometrie::aire_pair_impair(&d.contours) * e);
         }
         let (e0, e1) = d.decalages_couches(e);

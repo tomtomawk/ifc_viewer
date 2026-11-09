@@ -542,6 +542,7 @@ impl ViewerApp {
             "sol" => (O::Sol, OngletRuban::Modeliser),
             "plafond" => (O::Plafond, OngletRuban::Modeliser),
             "toiture" => (O::Toiture, OngletRuban::Modeliser),
+            "terre_plein" => (O::TerrePlein, OngletRuban::Modeliser),
             "poteau" => (O::Poteau, OngletRuban::Modeliser),
             "poutre" => (O::Poutre, OngletRuban::Modeliser),
             "escalier" => (O::Escalier, OngletRuban::Modeliser),
@@ -602,11 +603,12 @@ impl ViewerApp {
         match o {
             O::Mur => self.ruban_edition.activer_mur(),
             O::Poteau | O::Poutre => self.ruban_edition.activer_structure(o == O::Poutre),
-            O::Dalle | O::Sol | O::Plafond | O::Toiture => {
+            O::Dalle | O::Sol | O::Plafond | O::Toiture | O::TerrePlein => {
                 self.ruban_edition.activer_surface(match o {
                     O::Sol => crate::modele::SorteDalle::Sol,
                     O::Plafond => crate::modele::SorteDalle::Plafond,
                     O::Toiture => crate::modele::SorteDalle::Toiture,
+                    O::TerrePlein => crate::modele::SorteDalle::TerrePlein,
                     _ => crate::modele::SorteDalle::Dalle,
                 })
             }

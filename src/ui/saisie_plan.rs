@@ -103,7 +103,7 @@ impl ViewerApp {
     pub(super) fn aretes_pente(&self, rect: egui::Rect) -> Vec<(usize, usize, egui::Pos2, egui::Vec2, Option<f64>)> {
         use crate::modele::elements::pente;
         let (Some((projet, _)), Some(sel)) = (&self.natif, self.selected) else { return Vec::new() };
-        let Some(d) = projet.dalles.iter().find(|d| scene::id_natif("dalle", &d.id) == sel && d.sorte.pente_possible()) else { return Vec::new() };
+        let Some(d) = projet.dalles.iter().find(|d| scene::id_natif("dalle", &d.id) == sel && d.sorte.aretes_reglables()) else { return Vec::new() };
         let z0 = projet.niveau(&d.niveau).map_or(0.0, |n| n.altitude) + d.decalage;
         let plans = pente::plans(d);
         let mut v = Vec::new();
@@ -130,7 +130,10 @@ impl ViewerApp {
         let painter = ui.painter().with_clip_rect(rect);
         let accent = Color32::from_rgb(230, 120, 20);
         let gris = Color32::from_gray(90);
+        // terre-plein : talus descendant vers l'extérieur, libellé hauteur / base
+        let talus = matches!((&self.natif, self.selected), (Some((p, _)), Some(sel)) if p.dalles.iter().any(|d| scene::id_natif("dalle", &d.id) == sel && d.sorte.talus()));
         for (_, _, q, dir, pente) in aretes {
+            let dir = if talus { -dir } else { dir };
             let survole = survol.is_some_and(|s| s.distance(q) <= 9.0);
             match pente {
                 Some(a) => {
@@ -138,7 +141,9 @@ impl ViewerApp {
                     let (n, t) = (dir, egui::vec2(-dir.y, dir.x));
                     let pts = vec![q + n * 9.0, q - n * 4.0 + t * 6.0, q - n * 4.0 - t * 6.0];
                     painter.add(egui::Shape::convex_polygon(pts, accent, egui::Stroke::new(if survole { 2.0 } else { 1.0 }, Color32::WHITE)));
-                    let texte = format!("{}°", crate::formats::ifc::step::format_real((a * 10.0).round() / 10.0));
+                    // terre-plein : liste éditable à côté du repère (editer_talus)
+                    if talus { continue; }
+                    let texte = if talus { crate::modele::elements::terre_plein::libelle(a) } else { format!("{}°", crate::formats::ifc::step::format_real((a * 10.0).round() / 10.0)) };
                     let g = painter.layout_no_wrap(texte, egui::FontId::proportional(12.0), Color32::from_gray(30));
                     let cadre = egui::Rect::from_center_size(q - n * 18.0, g.size() + egui::vec2(8.0, 4.0));
                     painter.rect(cadre, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 230), egui::Stroke::new(1.0, accent), egui::StrokeKind::Inside);
@@ -149,9 +154,52 @@ impl ViewerApp {
                 }
             }
             if survole {
-                let aide = if pente.is_some() { "Clic : arête sans pente" } else { "Clic : l'arête définit la pente" };
+                let aide = match (talus, pente.is_some()) {
+                    (true, true) => "Clic : arête sans talus",
+                    (true, false) => "Clic : talus 1/1 sur l'arête",
+                    (false, true) => "Clic : arête sans pente",
+                    (false, false) => "Clic : l'arête définit la pente",
+                };
                 painter.text(q + egui::vec2(12.0, -12.0), egui::Align2::LEFT_BOTTOM, aide, egui::FontId::proportional(12.0), Color32::from_gray(30));
             }
+        }
+    }
+
+    /// Terre-plein sélectionné : liste du talus de chaque arête, à côté de son repère
+    /// dans la vue (1/1, 2/3… ou sans talus).
+    pub(super) fn editer_talus(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
+        use crate::modele::elements::terre_plein as tp;
+        let (Some((projet, _)), Some(sel)) = (&self.natif, self.selected) else { return };
+        let Some(d) = projet.dalles.iter().find(|d| scene::id_natif("dalle", &d.id) == sel && d.sorte.talus()) else { return };
+        let id = d.id.clone();
+        let mut choix = None;
+        for (c, k, q, dir, pente) in self.aretes_pente(rect) {
+            // côté intérieur du repère (le triangle pointe vers l'extérieur)
+            let cadre = egui::Rect::from_center_size(q + dir * 20.0, egui::vec2(98.0, 20.0));
+            if !rect.contains_rect(cadre) {
+                continue;
+            }
+            let texte = pente.map_or("Sans talus".to_string(), tp::libelle_court);
+            ui.scope_builder(egui::UiBuilder::new().max_rect(cadre), |ui| {
+                egui::ComboBox::from_id_salt(("talus_vue", &id, c, k)).width(92.0).truncate().selected_text(texte).show_ui(ui, |ui| {
+                    if ui.selectable_label(pente.is_none(), "Sans talus").clicked() {
+                        choix = Some((c, k, None));
+                    }
+                    for (nom, r) in tp::TALUS {
+                        let deg = tp::angle(r);
+                        if ui.selectable_label(pente.is_some_and(|x| (x - deg).abs() < 1e-3), format!("{nom} ({:.0} %)", r * 100.0)).clicked() {
+                            choix = Some((c, k, Some(deg)));
+                        }
+                    }
+                }).response.on_hover_text("Talus de l'arête (hauteur / base) ; pourcentage libre dans Propriétés");
+            });
+        }
+        if let Some((c, k, talus)) = choix {
+            let mut p = projet.clone();
+            if let Some(d) = p.dalles.iter_mut().find(|d| d.id == id) {
+                d.definir_pente(c, k, talus);
+            }
+            if let Err(e) = self.appliquer_projet(p) { self.error = Some(e); }
         }
     }
 
@@ -266,7 +314,8 @@ impl ViewerApp {
         let (Some((projet, _)), Some(sel)) = (&self.natif, self.selected) else { return };
         let mut p = projet.clone();
         let Some(d) = p.dalles.iter_mut().find(|d| scene::id_natif("dalle", &d.id) == sel) else { return };
-        let pente = if d.pente(c, k).is_some() { None } else { Some(self.pente_defaut) };
+        let defaut = if d.sorte.talus() { crate::modele::elements::terre_plein::angle(1.0) } else { self.pente_defaut };
+        let pente = if d.pente(c, k).is_some() { None } else { Some(defaut) };
         d.definir_pente(c, k, pente);
         if let Err(e) = self.appliquer_projet(p) { self.error = Some(e); }
     }

@@ -212,6 +212,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             SorteDalle::Sol => ("IFCCOVERING", "FLOORING"),
             SorteDalle::Plafond => ("IFCCOVERING", "CEILING"),
             SorteDalle::Toiture => ("IFCROOF", "NOTDEFINED"),
+            SorteDalle::TerrePlein => ("IFCSLAB", "BASESLAB"),
         };
         let id = w.add(format!(
             "{classe}('{}',$,{},$,$,#{placement},{},$,.{genre}.)",

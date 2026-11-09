@@ -25,6 +25,11 @@
   {"mots": ["pvc", "résine", "resine", "colle", "ragréage", "ragreage"], "couleur": [215, 205, 225], "motif": "vide"},
   {"mots": ["chape", "mortier"], "couleur": [196, 192, 182], "motif": "diagonales"},
   {"mots": ["brique", "terre cuite", "tuile"], "couleur": [196, 120, 92], "motif": "diagonales"},
+  {"mots": ["terre naturelle", "terrain"], "couleur": [122, 158, 97], "motif": "diagonales"},
+  {"mots": ["grave", "tout-venant"], "couleur": [200, 192, 172], "motif": "diagonales"},
+  {"mots": ["remblai", "terre", "sable"], "couleur": [168, 138, 100], "motif": "diagonales"},
+  {"mots": ["roche", "rocher"], "couleur": [140, 136, 128], "motif": "diagonales"},
+  {"mots": ["enrobé", "enrobe", "bitume"], "couleur": [80, 80, 82], "motif": "uni"},
   {"mots": ["bois", "ossature", "osb", "clt", "parquet", "chêne", "liteau"], "couleur": [196, 160, 110], "motif": "diagonales"},
   {"mots": ["béton", "beton"], "couleur": [176, 176, 176], "motif": "uni"},
   {"mots": ["parpaing", "bloc", "agglo", "maçon", "macon"], "couleur": [176, 176, 170], "motif": "diagonales"},
@@ -52,7 +57,17 @@
   {"sorte": "toiture", "nom": "Toiture tuiles isolée", "couches": [{"materiau": "Tuile terre cuite", "epaisseur": 30.0, "fonction": "finition"}, {"materiau": "Liteaux bois", "epaisseur": 27.0}, {"materiau": "Écran sous-toiture", "epaisseur": 1.0}, {"materiau": "Laine minérale", "epaisseur": 200.0, "fonction": "structure", "ossature": {"largeur": 63.0, "entraxe": 600.0, "materiau": "Bois d'ossature"}}, {"materiau": "Plaque de plâtre", "epaisseur": 13.0, "fonction": "finition"}]},
   {"sorte": "toiture", "nom": "Toiture terrasse inaccessible", "couches": [{"materiau": "Gravillons", "epaisseur": 50.0, "fonction": "finition"}, {"materiau": "Étanchéité bitumineuse", "epaisseur": 10.0}, {"materiau": "Isolant polyuréthane", "epaisseur": 120.0, "fonction": "isolation"}, {"materiau": "Béton armé", "epaisseur": 200.0, "fonction": "structure"}]},
   {"sorte": "toiture", "nom": "Toiture bac acier", "couches": [{"materiau": "Bac acier", "epaisseur": 40.0, "fonction": "structure"}, {"materiau": "Laine minérale", "epaisseur": 160.0, "fonction": "isolation"}]},
-  {"sorte": "toiture", "nom": "Toiture végétalisée", "couches": [{"materiau": "Substrat végétal", "epaisseur": 80.0, "fonction": "finition"}, {"materiau": "Étanchéité bitumineuse", "epaisseur": 10.0}, {"materiau": "Isolant polyuréthane", "epaisseur": 140.0, "fonction": "isolation"}, {"materiau": "Béton armé", "epaisseur": 200.0, "fonction": "structure"}]}
+  {"sorte": "toiture", "nom": "Toiture végétalisée", "couches": [{"materiau": "Substrat végétal", "epaisseur": 80.0, "fonction": "finition"}, {"materiau": "Étanchéité bitumineuse", "epaisseur": 10.0}, {"materiau": "Isolant polyuréthane", "epaisseur": 140.0, "fonction": "isolation"}, {"materiau": "Béton armé", "epaisseur": 200.0, "fonction": "structure"}]},
+  {"sorte": "terre_plein", "nom": "Terre-plein grave compactée", "couches": [{"materiau": "Grave non traitée", "epaisseur": 300.0, "fonction": "structure"}]},
+  {"sorte": "terre_plein", "nom": "Terre-plein enrobé sur grave", "couches": [{"materiau": "Enrobé", "epaisseur": 60.0, "fonction": "finition"}, {"materiau": "Grave non traitée", "epaisseur": 300.0, "fonction": "structure"}]},
+  {"sorte": "terre_plein", "nom": "Terre-plein terre végétale", "couches": [{"materiau": "Terre végétale", "epaisseur": 300.0, "fonction": "finition"}]}
+ ],
+ "types_terrains": [
+  {"id": "terrain-naturel", "nom": "Terrain naturel", "epaisseur": 1000.0, "materiau": "Terre naturelle"},
+  {"id": "terre-vegetale", "nom": "Terre végétale", "epaisseur": 300.0, "materiau": "Terre végétale"},
+  {"id": "remblai", "nom": "Remblai compacté", "epaisseur": 1000.0, "materiau": "Remblai"},
+  {"id": "roche", "nom": "Roche", "epaisseur": 2000.0, "materiau": "Roche"},
+  {"id": "voirie", "nom": "Voirie enrobée", "epaisseur": 400.0, "materiau": "Enrobé"}
  ],
  "types_vues": [
   {"elevation": false, "nom": "Coupe de bâtiment", "aide": "Coupe générale du bâtiment", "echelle": 100.0, "profondeur": 15000.0},

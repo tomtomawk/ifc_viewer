@@ -30,7 +30,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     for t in &projet.types_dalles { entite(id_natif("type-dalle", &t.id), "IFCSLABTYPE", &t.id, &t.nom, 10)?; }
     for d in &projet.dalles {
         let classe = match d.sorte {
-            SorteDalle::Dalle => "IFCSLAB",
+            SorteDalle::Dalle | SorteDalle::TerrePlein => "IFCSLAB",
             SorteDalle::Sol | SorteDalle::Plafond => "IFCCOVERING",
             SorteDalle::Toiture => "IFCROOF",
         };
@@ -255,6 +255,17 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         if parts.is_empty() {
             return Err(format!("{} : contour non valide.", d.nom));
         }
+        // terre-plein : remblai sous la plate-forme et ses talus, jusqu'au terrain naturel
+        // (partie du même élément : même phase, même sélection)
+        if let Some(r) = crate::modele::elements::terre_plein::remblai(projet, d).filter(|r| !r.tris.is_empty()) {
+            let m = projet.materiau("Remblai").cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut("Remblai"));
+            let [cr, cg, cb] = m.couleur.map(|c| c as f32 / 255.0);
+            let couleur = opacite(Some(&m), [cr, cg, cb, 1.0]);
+            rendu.push(Some(rendu_materiau(&m, couleur, &mut table_apparences)));
+            noms.push(Some(m.nom.clone()));
+            motifs.push(motif_surface(projet, &m, &mut table_motifs));
+            parts.push(Part { color: couleur, tris: r.tris.iter().map(|t| t.map(|v| v * 0.001)).collect() });
+        }
         if !bandes.is_empty() { bandes_dalles.push((id, bandes)); }
         materiaux_parts.push(noms);
         geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu, motifs });
@@ -368,8 +379,9 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         model.parent.insert(id, racine);
         model.children.entry(racine).or_default().push(id);
         let type_terrain = projet.type_terrain(t);
-        let tris = t.solide(projet.ngf(), type_terrain.epaisseur)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
-        let materiau = type_terrain.materiau.as_ref().and_then(|n| projet.materiau(n));
+        let tris = crate::modele::elements::terre_plein::solide_terrain(projet, t, type_terrain.epaisseur)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
+        let du_gabarit = type_terrain.materiau.as_ref().filter(|n| projet.materiau(n).is_none()).map(|n| crate::modele::murs::assemblage::materiau_par_defaut(n));
+        let materiau = type_terrain.materiau.as_ref().and_then(|n| projet.materiau(n)).or(du_gabarit.as_ref());
         let couleur = materiau.map_or([0.48, 0.62, 0.38, 1.0], |m| { let [r, g, b] = m.couleur.map(|c| c as f32 / 255.0); [r, g, b, 1.0] });
         let couleur = opacite(materiau, couleur);
         if let Some(m) = materiau {
@@ -403,7 +415,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     let mut aretes = aretes_jointes(&geoms, &materiaux_parts);
     // terrains : apparence lissée, sans arête
     for t in &projet.terrains {
-        aretes.insert(id_natif("terrain", &t.id), aretes_terrain(t, projet.ngf()));
+        aretes.insert(id_natif("terrain", &t.id), aretes_terrain(projet, t));
     }
     // arbres : surfaces courbes, arêtes sur la silhouette seulement
     for a in &projet.arbres {
@@ -750,12 +762,19 @@ fn aretes_silhouette(tris: &[[glam::DVec3; 3]]) -> crate::dessin::Aretes {
     out
 }
 
-fn aretes_terrain(t: &crate::modele::elements::site::Terrain, ngf: f64) -> crate::dessin::Aretes {
+fn aretes_terrain(projet: &Projet, t: &crate::modele::elements::site::Terrain) -> crate::dessin::Aretes {
     use glam::DVec3;
-    let decalage = DVec3::new(0.0, 0.0, -ngf);
-    let m = |p: DVec3| (p + decalage) * 0.001;
-    let mut vives: Vec<[DVec3; 2]> = (0..t.contour.len()).map(|i| [t.contour[i], t.contour[(i + 1) % t.contour.len()]].map(|p| m(DVec3::from_array(p)))).collect();
-    if let Ok(tris) = t.triangles() {
+    let decalage = DVec3::new(0.0, 0.0, -projet.ngf());
+    let m = |p: DVec3| p * 0.001;
+    let mut vives: Vec<[DVec3; 2]> = (0..t.contour.len()).map(|i| [t.contour[i], t.contour[(i + 1) % t.contour.len()]].map(|p| m(DVec3::from_array(p) + decalage))).collect();
+    // dessus du terrain, creusé par les terre-pleins : faces tournées vers le haut du solide
+    let dessus = if projet.dalles.iter().any(|d| d.sorte == SorteDalle::TerrePlein) {
+        crate::modele::elements::terre_plein::solide_terrain(projet, t, projet.type_terrain(t).epaisseur)
+            .map(|v| v.into_iter().filter(|t| (t[1] - t[0]).cross(t[2] - t[0]).normalize_or_zero().z > 0.05).collect::<Vec<_>>())
+    } else {
+        t.triangles().map(|v| v.into_iter().map(|t| t.map(|p| p + decalage)).collect())
+    };
+    if let Ok(tris) = dessus {
         let z = tris.iter().flatten().map(|p| p.z);
         let (bas, haut) = z.fold((f64::MAX, f64::MIN), |(a, b), z| (a.min(z), b.max(z)));
         if haut - bas > 1.0 {

@@ -59,6 +59,7 @@ pub const COMMANDES: &[Commande] = &[
     commande!("plafond", "Plafond", "Modéliser", "PL"),
     commande!("toiture", "Toiture", "Modéliser", "TT"),
     commande!("terrain", "Terrain", "Modéliser", "TE"),
+    commande!("terre_plein", "Terre-plein", "Modéliser", "TP"),
     commande!("deplacer", "Déplacer", "Modifier", "MV"),
     commande!("copier", "Copier", "Modifier", "CO"),
     commande!("tourner", "Tourner", "Modifier", "RO"),

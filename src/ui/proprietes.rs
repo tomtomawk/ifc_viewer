@@ -352,6 +352,17 @@ impl ViewerApp {
                 });
                 change |= ui.add(egui::DragValue::new(&mut d.decalage).speed(10.0).dimensions()).changed();
                 ui.end_row();
+                if d.sorte.talus() {
+                    // altitude NGF du dessus : niveau + décalage + cote NGF de l'origine
+                    let alt = projet.niveau(&d.niveau).map_or(0.0, |n| n.altitude);
+                    let mut ngf = projet.ngf() + alt + d.decalage;
+                    ui.label("Altitude NGF (dessus)").on_hover_text("Cote NGF du dessus du terre-plein ; modifie le décalage par rapport au niveau");
+                    if ui.add(egui::DragValue::new(&mut ngf).speed(10.0).dimensions()).changed() {
+                        d.decalage = ngf - projet.ngf() - alt;
+                        change = true;
+                    }
+                    ui.end_row();
+                }
                 let aire = crate::modele::volumes::geometrie::aire_pair_impair(&d.contours);
                 for (nom, valeur) in [
                     ("Aire", format!("{:.2} m²", aire / 1e6)),
@@ -362,7 +373,59 @@ impl ViewerApp {
                     ui.label(valeur);
                     ui.end_row();
                 }
+                if dalle.sorte.talus() {
+                    ui.label("Remblai").on_hover_text("Volume entre le terrain naturel et la sous-face du terre-plein prolongée par ses talus");
+                    match crate::modele::elements::terre_plein::remblai(projet, dalle) {
+                        Some(r) => {
+                            ui.label(format!("{:.2} m³", r.volume / 1e9));
+                            ui.end_row();
+                            ui.label("Déblai").on_hover_text("Volume du terrain naturel au-dessus du fond de forme (sous-face du terre-plein) et de ses talus");
+                            ui.label(format!("{:.2} m³", r.deblai / 1e9))
+                        }
+                        None => ui.label(RichText::new("Aucun terrain sous le terre-plein").weak()),
+                    };
+                    ui.end_row();
+                }
             });
+            if d.sorte.talus() {
+                use crate::modele::elements::terre_plein as tp;
+                ui.add_space(4.0);
+                ui.label(RichText::new("Talus des arêtes").strong())
+                    .on_hover_text("Pente hauteur / base du talus de chaque arête (1/1 : 45°), ou sans talus (paroi verticale). Aussi en cliquant ses repères dans la vue.");
+                egui::Grid::new("terre_plein_talus").num_columns(3).striped(true).spacing([8.0, 3.0]).show(ui, |ui| {
+                    for c in 0..d.contours.len() {
+                        let n = d.contours[c].len();
+                        for k in 0..n {
+                            let (a, b) = (d.contours[c][k], d.contours[c][(k + 1) % n]);
+                            let nom = if d.contours.len() > 1 { format!("{}.{}", c + 1, k + 1) } else { format!("{}", k + 1) };
+                            ui.label(format!("Arête {nom} · {}", crate::config::options::unite().afficher((b[0] - a[0]).hypot(b[1] - a[1]))));
+                            let mut talus = d.pente(c, k);
+                            let texte = talus.map_or("Sans talus".to_string(), tp::libelle);
+                            egui::ComboBox::from_id_salt(("talus", c, k)).width(110.0).selected_text(texte).show_ui(ui, |ui| {
+                                if ui.selectable_label(talus.is_none(), "Sans talus").clicked() { talus = None; }
+                                for (nom, r) in tp::TALUS {
+                                    let deg = tp::angle(r);
+                                    if ui.selectable_label(talus.is_some_and(|x| (x - deg).abs() < 1e-3), format!("{nom} ({:.0} %)", r * 100.0)).clicked() { talus = Some(deg); }
+                                }
+                            });
+                            match talus {
+                                Some(deg) => {
+                                    let mut pourcent = tp::rapport(deg) * 100.0;
+                                    if ui.add(egui::DragValue::new(&mut pourcent).speed(1.0).range(1.0..=5000.0).max_decimals(1).suffix(" %")).on_hover_text("Pente du talus en pourcentage (hauteur / base)").changed() {
+                                        talus = Some(tp::angle(pourcent / 100.0));
+                                    }
+                                }
+                                None => { ui.label(""); }
+                            }
+                            ui.end_row();
+                            if talus != d.pente(c, k) {
+                                d.definir_pente(c, k, talus);
+                                change = true;
+                            }
+                        }
+                    }
+                });
+            }
             if d.sorte.pente_possible() {
                 ui.add_space(4.0);
                 ui.label(RichText::new("Arêtes").strong())

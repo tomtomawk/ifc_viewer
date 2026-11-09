@@ -582,6 +582,7 @@ impl ViewerApp {
         }
         if !mode_ajuster && dalle.is_none() && !mode_mur && outil_coupe.is_none() && structure.is_none() && self.dessin2d.edition_contour.is_none() {
             self.dessiner_aretes_pente(ui, rect, resp.hover_pos());
+            self.editer_talus(ui, rect);
             self.dessiner_axe(ui, rect, resp.hover_pos());
             if self.poignee_axe.is_some() {self.dessiner_dessin2d(ui,rect);}
         }

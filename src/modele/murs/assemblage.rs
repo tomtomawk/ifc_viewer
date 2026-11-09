@@ -184,7 +184,7 @@ impl Projet {
 
     /// Matériaux des couches ajoutés à la liste s'ils manquent (couleur par défaut).
     pub fn completer_materiaux(&mut self) {
-        let noms: Vec<String> = self.types_murs.iter().chain(&self.types_dalles).flat_map(|t| t.couches.iter().flat_map(|c| c.materiau.clone().into_iter().chain(c.ossature.as_ref().map(|o| o.materiau().to_string())))).collect();
+        let noms: Vec<String> = self.types_murs.iter().chain(&self.types_dalles).flat_map(|t| t.couches.iter().flat_map(|c| c.materiau.clone().into_iter().chain(c.ossature.as_ref().map(|o| o.materiau().to_string())))).chain(self.types_terrains.iter().filter_map(|t| t.materiau.clone())).collect();
         for n in noms {
             if self.materiau(&n).is_none() {
                 self.materiaux.push(materiau_par_defaut(&n));

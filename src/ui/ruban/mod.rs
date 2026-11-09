@@ -37,6 +37,7 @@ pub(crate) enum Outil {
     Sol,
     Toiture,
     Plafond,
+    TerrePlein,
     Poteau,
     Poutre,
     Escalier,
@@ -106,6 +107,7 @@ impl Outil {
             Self::Sol => "Sol",
             Self::Toiture => "Toiture",
             Self::Plafond => "Plafond",
+            Self::TerrePlein => "Terre-plein",
             Self::Poteau => "Poteau",
             Self::Poutre => "Poutre",
             Self::Escalier => "Escalier",
@@ -177,7 +179,7 @@ impl Outil {
 
     fn commande(self) -> Self {
         match self {
-            Self::Dalle | Self::Sol | Self::Plafond | Self::Toiture => Self::Surfaces,
+            Self::Dalle | Self::Sol | Self::Plafond | Self::Toiture | Self::TerrePlein => Self::Surfaces,
             _ => self,
         }
     }
@@ -213,6 +215,7 @@ const SURFACES: &[(Outil, &str)] = &[
     (Outil::Sol, "Revêtement et finition de sol"),
     (Outil::Plafond, "Plafond ou faux plafond"),
     (Outil::Toiture, "Couverture et toiture"),
+    (Outil::TerrePlein, "Plate-forme remblayée : talus par arête, remblai jusqu'au terrain naturel"),
 ];
 
 /// Paramètres d'une coupe ou d'une élévation à tracer.
@@ -251,6 +254,7 @@ fn sorte_surface(o: Outil) -> Option<crate::modele::SorteDalle> {
         Outil::Sol => Some(SorteDalle::Sol),
         Outil::Plafond => Some(SorteDalle::Plafond),
         Outil::Toiture => Some(SorteDalle::Toiture),
+        Outil::TerrePlein => Some(SorteDalle::TerrePlein),
         _ => None,
     }
 }
@@ -322,7 +326,7 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
     match menu {
         Menu::Modeliser => &[
             ("Construire", &[Mur, Surfaces]),
-            ("Site", &[Terrain, LimitePropriete, Arbre]),
+            ("Site", &[Terrain, TerrePlein, LimitePropriete, Arbre]),
             ("Structure et accès", &[Poteau, Poutre, Escalier, GardeCorps]),
             ("Placer", &[Ouverture, Composant, Piece]),
             ("Références", &[Niveau, Quadrillage]),
@@ -548,6 +552,11 @@ fn champs(o: Outil) -> Vec<Champ> {
             Nombre("Épaisseur", 25.0, " mm"),
             Nombre("Hauteur sous plafond", 2500.0, " mm"),
         ],
+        TerrePlein => vec![
+            Nombre("Épaisseur", 300.0, " mm"),
+            Nombre("Décalage (dessus)", 0.0, " mm"),
+            Choix("Talus", &["1/1", "2/3", "1/2", "1/3", "3/2", "Sans talus"]),
+        ],
         Poteau | Poutre => vec![],
         Escalier => vec![
             Nombre("Largeur", 1000.0, " mm"),
@@ -752,7 +761,12 @@ impl RubanEdition {
             (_, Some(Champ::Nombre(_, d, _))) => *d,
             _ => 0.0,
         };
-        let pente = (outil == Outil::Toiture && !self.toiture_plate).then(|| nombre(2));
+        let pente = match outil {
+            Outil::Toiture => (!self.toiture_plate).then(|| nombre(2)),
+            // talus de toutes les arêtes tracées (hauteur / base)
+            Outil::TerrePlein => crate::modele::elements::terre_plein::TALUS.iter().find(|(nom, _)| *nom == self.texte_option(outil, 2)).map(|(_, r)| crate::modele::elements::terre_plein::angle(*r)),
+            _ => None,
+        };
         Some(crate::modele::edition::ParametresDalle {
             sorte,
             type_dalle: self.surface_identique.as_ref().filter(|(o,_)| *o == outil).map(|(_,t)| t.clone()).unwrap_or_else(|| crate::modele::TypeCompose { id: String::new(), nom, couches, categorie: None, couches_detaillees: true, origine: None }),
@@ -804,6 +818,7 @@ impl RubanEdition {
             SorteDalle::Sol => Outil::Sol,
             SorteDalle::Plafond => Outil::Plafond,
             SorteDalle::Toiture => Outil::Toiture,
+            SorteDalle::TerrePlein => Outil::TerrePlein,
         };
         self.selection = Some(o);
         self.derniere_surface = Some(o);
@@ -814,13 +829,17 @@ impl RubanEdition {
         let pentes: Vec<_> = d.pentes.iter().flatten().copied().collect();
         if !pentes.is_empty() && pentes.iter().any(|x| *x != pentes[0]) { return Err("Créer à l'identique ne prend pas encore en charge les pentes différentes par arête.".into()); }
         let pente = pentes.first().copied().flatten();
-        if pente.is_some() && d.sorte != crate::modele::SorteDalle::Toiture { return Err("Créer à l'identique ne prend pas encore en charge cette pente.".into()); }
+        if pente.is_some() && !matches!(d.sorte, crate::modele::SorteDalle::Toiture | crate::modele::SorteDalle::TerrePlein) { return Err("Créer à l'identique ne prend pas encore en charge cette pente.".into()); }
         self.activer_surface(d.sorte);
         let outil = self.selection.unwrap();
         self.surface_identique = Some((outil, type_dalle));
         self.niveau_dalle = Some(d.niveau.clone());
         self.valeurs.insert((outil, 1), Valeur::Nombre(d.decalage));
-        if let Some(pente) = pente { self.valeurs.insert((outil, 2), Valeur::Nombre(pente)); }
+        if outil == Outil::TerrePlein {
+            let r = pente.map(crate::modele::elements::terre_plein::rapport);
+            let nom = crate::modele::elements::terre_plein::TALUS.iter().find(|(_, x)| r.is_some_and(|r| (r - x).abs() < 1e-3)).map_or("Sans talus", |(n, _)| *n);
+            self.valeurs.insert((outil, 2), Valeur::Texte(nom.into()));
+        } else if let Some(pente) = pente { self.valeurs.insert((outil, 2), Valeur::Nombre(pente)); }
         self.toiture_plate = pente.is_none();
         self.phase_creation = d.phase.clone(); self.sous_projet_creation = d.sous_projet.clone(); self.variante_creation = d.variante.clone();
         Ok(())

@@ -350,6 +350,11 @@ impl ViewerApp {
             ui.label(if terrains.len() > 1 { "Surface en plan (total)" } else { "Surface en plan" });
             ui.label(format!("{:.2} m²", surface / 1e6));
             ui.end_row();
+            // volume du solide : surface du terrain, épaisseur du type dessous
+            let volume: f64 = terrains.iter().filter_map(|t| crate::modele::elements::terre_plein::solide_terrain(projet, t, projet.type_terrain(t).epaisseur).ok()).map(|tris| crate::modele::volumes::geometrie::volume(&tris)).sum();
+            ui.label(if terrains.len() > 1 { "Volume (total)" } else { "Volume" }).on_hover_text("Solide du terrain : sa surface et l'épaisseur du type dessous");
+            ui.label(format!("{:.2} m³", volume / 1e9));
+            ui.end_row();
         });
         ui.separator();
         modifie.then_some(p)

@@ -185,6 +185,17 @@ Type des prochains éléments horizontaux."), Some(&vignette));
                             );
                         }
                         ui.end_row();
+                    } else if let Champ::Choix(nom, options) = champ {
+                        // terre-plein : talus appliqué à toutes les arêtes tracées
+                        ui.label(nom);
+                        let mut v = self.texte_option(surface, indice);
+                        egui::ComboBox::from_id_salt(("choix_surface", surface, indice)).width(90.0).selected_text(v.clone()).show_ui(ui, |ui| {
+                            for o in options {
+                                ui.selectable_value(&mut v, o.to_string(), *o);
+                            }
+                        }).response.on_hover_text("Talus (hauteur / base) de toutes les arêtes tracées ; chaque arête se règle ensuite dans les propriétés");
+                        self.valeurs.insert((surface, indice), Valeur::Texte(v));
+                        ui.end_row();
                     }
                 }
             });

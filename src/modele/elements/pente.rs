@@ -64,6 +64,10 @@ pub fn vers_interieur(contours: &[Vec<[f64; 2]>], c: usize, k: usize) -> Option<
 /// arête en pente.
 pub fn plans(d: &Dalle) -> Vec<Plan> {
     let mut v: Vec<Plan> = Vec::new();
+    // terre-plein : `pentes` porte les talus, le dessus reste plan
+    if d.sorte.talus() {
+        return vec![PLAT];
+    }
     for (a, b, c, k) in aretes(&d.contours) {
         let Some(deg) = d.pente(c, k).filter(|x| *x > 0.0 && *x < 89.0) else { continue };
         let t = (b - a).normalize();
