@@ -257,7 +257,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         contenus.entry(niveaux[&e.niveau]).or_default().push(id);
     }
     for g in &p.garde_corps {
-        let tris: Vec<_> = g.solides(p)?.into_iter().flat_map(|(_, t)| t).collect();
+        let tris: Vec<_> = g.solides(p)?.into_iter().flat_map(|(_, _, t)| t).collect();
         let rep = w.mesh(&tris, contexte);
         let id = w.add(format!("IFCRAILING('{}',$,{},$,$,#{placement},{},$,.GUARDRAIL.)", guid(&g.id, None), texte(&g.nom), ref_(rep)));
         contenus.entry(niveaux[&g.niveau]).or_default().push(id);

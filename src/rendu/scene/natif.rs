@@ -291,10 +291,11 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         let parent = id_natif("niveau", &g.niveau);
         model.parent.insert(id, parent);
         model.children.entry(parent).or_default().push(id);
-        // métal sombre, vitrage translucide
-        let parts: Vec<Part> = g.solides(projet)?.into_iter().map(|(vitre, t)| Part {
-            color: if vitre { [0.62, 0.78, 0.86, 0.35] } else { [0.30, 0.31, 0.33, 1.0] },
-            tris: t.into_iter().map(|t| t.map(|v| v * 0.001)).collect(),
+        // couleur du matériau de chaque élément (métal sombre à défaut), vitrage translucide
+        let parts: Vec<Part> = g.solides(projet)?.into_iter().map(|(materiau, vitre, t)| {
+            let m = materiau.map(|n| projet.materiau(&n).cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(&n)));
+            let [r, v, b] = m.as_ref().map_or(if vitre { [158, 199, 219] } else { [77, 79, 84] }, |m| m.couleur).map(|c| c as f32 / 255.0);
+            Part { color: [r, v, b, if vitre { 0.35 } else { 1.0 }], tris: t.into_iter().map(|t| t.map(|v| v * 0.001)).collect() }
         }).collect();
         materiaux_parts.push(vec![None; parts.len()]);
         geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });

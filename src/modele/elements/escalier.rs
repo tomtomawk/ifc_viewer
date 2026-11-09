@@ -332,7 +332,7 @@ impl GardeCorps {
 
     /// Solides : (vitrage, triangles) ; main courante, lisse basse, montants,
     /// remplissage.
-    pub fn solides(&self, p: &Projet) -> Result<Vec<(bool, Vec<Tri>)>, String> {
+    pub fn solides(&self, p: &Projet) -> Result<Vec<super::garde_corps::SolideGardeCorps>, String> {
         if self.trace.len() < 2 || !self.trace.iter().flatten().all(|x| x.is_finite()) {
             return Err("Garde-corps : au moins deux points.".into());
         }
@@ -401,7 +401,7 @@ impl GardeCorps {
                 }
             }
         }
-        Ok([(false, metal), (true, verre)].into_iter().filter(|(_, t)| !t.is_empty()).collect())
+        Ok([(None, false, metal), (None, true, verre)].into_iter().filter(|(_, _, t)| !t.is_empty()).collect())
     }
 
     pub fn longueur(&self) -> f64 {
@@ -485,15 +485,15 @@ mod tests {
         p.escaliers.push(e);
         let gc = GardeCorps { id: "g".into(), nom: "GC".into(), niveau: "rdc".into(), decalage: 0.0, trace: g, hauteur: 1000.0, remplissage: Remplissage::Barreaudage, escalier: Some("e".into()), type_garde_corps: None };
         let s = gc.solides(&p).unwrap();
-        let zmax = s.iter().flat_map(|(_, t)| t.iter().flatten()).map(|v| v.z).fold(f64::MIN, f64::max);
+        let zmax = s.iter().flat_map(|(_, _, t)| t.iter().flatten()).map(|v| v.z).fold(f64::MIN, f64::max);
         // la main courante monte avec l'escalier
         assert!(zmax > 2800.0 && zmax < 3900.0, "{zmax}");
         let vitre = GardeCorps { escalier: None, remplissage: Remplissage::Vitre, ..gc.clone() };
         let s = vitre.solides(&p).unwrap();
-        assert!(s.iter().any(|(v, t)| *v && !t.is_empty()));
+        assert!(s.iter().any(|(_, v, t)| *v && !t.is_empty()));
         assert!((vitre.longueur() - 4050.0).abs() < 1e-9);
         // tous les hexaèdres sont fermés et bien orientés : volume positif
-        let t: Vec<Tri> = s.into_iter().flat_map(|(_, t)| t).collect();
+        let t: Vec<Tri> = s.into_iter().flat_map(|(_, _, t)| t).collect();
         assert!(crate::modele::volumes::geometrie::volume(&t) > 0.0);
     }
 }
