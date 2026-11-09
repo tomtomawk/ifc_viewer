@@ -1090,7 +1090,7 @@ mod tests {
         let couche = Couche { materiau: Some("Laine".into()), epaisseur: 145.0, fonction: FonctionCouche::Structure, ossature: Some(Ossature { materiau: Some("Sapin".into()), ..Default::default() }), ..Default::default() };
         projet.types_murs.push(TypeCompose { id: "mob".into(), nom: "MOB".into(), couches: vec![couche], categorie: None, couches_detaillees: true, origine: None });
         projet.materiaux.push(Materiau { nom: "Sapin".into(), couleur: [200, 150, 90], ..Default::default() });
-        projet.materiaux.push(Materiau { nom: "Laine".into(), couleur: [250, 230, 120], ..Default::default() });
+        projet.materiaux.push(Materiau { nom: "Laine".into(), couleur: [250, 230, 120], motif: crate::modele::MotifCoupe::Isolation, ..Default::default() });
         let options = ParametresMur { type_mur: Some("mob".into()), ..Default::default() };
         projet.ajouter_mur([0.0, 0.0], [3000.0, 0.0], &options).unwrap();
         projet.ajouter_mur_axe(Axe::Arc { debut: [17000.0, -8000.0], fin: [12000.0, -3000.0], centre: [12000.0, -8000.0], direct: true }, &options).unwrap();
@@ -1106,6 +1106,12 @@ mod tests {
         let (bois, laine) = (aire([200, 150, 90, 255], true), aire([250, 230, 120, 255], true));
         assert!((bois - 6.0 * 0.045 * 0.145).abs() < 1e-6, "{bois}");
         assert!((bois + laine - 3.0 * 0.145).abs() < 1e-6, "{laine}");
+        // la ligne d'isolant de chaque travée reste dans l'épaisseur du mur droit
+        let hachures = super::coupe(&scene, &vec![true; scene.objects.len()], plan, 100.0, Poche::Hachure);
+        let isolant: Vec<_> = hachures.iter().filter(|p| p.role == Role::Hachure).flat_map(|p| match &p.forme { Forme::Segments(s) => s.clone(), _ => Vec::new() })
+            .filter(|s| (s[0].y + scene.origin.y).abs() < 0.5).collect();
+        assert!(isolant.len() > 100);
+        assert!(isolant.iter().flatten().all(|q| (q.y + scene.origin.y).abs() < 0.08 && (-0.001..3.001).contains(&(q.x + scene.origin.x))), "ligne d'isolant hors du mur : {:?}", isolant.iter().flatten().filter(|q| !((q.y + scene.origin.y).abs() < 0.08 && (-0.001..3.001).contains(&(q.x + scene.origin.x)))).map(|q| (((q.x + scene.origin.x) * 1e4).round() / 1e4, ((q.y + scene.origin.y) * 1e4).round() / 1e4)).take(12).collect::<Vec<_>>());
         // mur courbe (quart de cercle de 5 m de rayon) : 14 montants, sans doublon en face
         let (bois, laine) = (aire([200, 150, 90, 255], false), aire([250, 230, 120, 255], false));
         let total = std::f64::consts::FRAC_PI_2 * 5.0 * 0.145;

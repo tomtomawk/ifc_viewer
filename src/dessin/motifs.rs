@@ -27,7 +27,38 @@ fn contour_morceau(tris: &[[[f64; 2]; 3]]) -> Vec<(glam::DVec2, glam::DVec2)> {
             aretes.entry(k).or_insert((0, a, b)).0 += 1;
         }
     }
-    aretes.values().filter(|(n, _, _)| *n == 1).map(|(_, a, b)| (*a, *b)).collect()
+    let libres: Vec<(DVec2, DVec2)> = aretes.values().filter(|(n, _, _)| *n == 1).map(|(_, a, b)| (*a, *b)).collect();
+    // Sommets en T : une arête interne recoupée d'un seul côté (triangle plat écarté du
+    // maillage) n'est pas appariée et passerait pour du contour. Une diagonale prise
+    // pour une face incline le motif ou simule une couche courbe. Les arêtes libres
+    // sont donc recoupées aux sommets qu'elles portent, puis appariées de nouveau.
+    let sommets: std::collections::BTreeMap<(i64, i64), DVec2> = libres.iter().flat_map(|(a, b)| [(cle(*a), *a), (cle(*b), *b)]).collect();
+    if libres.len() * sommets.len() > 4_000_000 {
+        return libres;
+    }
+    let mut morceaux: std::collections::BTreeMap<((i64, i64), (i64, i64)), (usize, DVec2, DVec2)> = std::collections::BTreeMap::new();
+    for (a, b) in &libres {
+        let d = *b - *a;
+        let l = d.length();
+        if l < 1e-9 {
+            continue;
+        }
+        let u = d / l;
+        let mut coupes: Vec<(f64, DVec2)> = sommets.values().filter_map(|p| {
+            let t = (*p - *a).dot(u);
+            (t > 0.02 && t < l - 0.02 && (*p - *a).perp_dot(u).abs() < 0.02).then_some((t, *p))
+        }).collect();
+        coupes.sort_by(|x, y| x.0.total_cmp(&y.0));
+        let mut debut = *a;
+        for fin in coupes.into_iter().map(|c| c.1).chain([*b]) {
+            let (ka, kb) = (cle(debut), cle(fin));
+            if ka != kb {
+                morceaux.entry(if ka <= kb { (ka, kb) } else { (kb, ka) }).or_insert((0, debut, fin)).0 += 1;
+            }
+            debut = fin;
+        }
+    }
+    morceaux.values().filter(|(n, _, _)| *n == 1).map(|(_, a, b)| (*a, *b)).collect()
 }
 
 fn aire_morceau(tris: &[[[f64; 2]; 3]]) -> f64 {
@@ -102,7 +133,15 @@ fn centre_courbure(tris: &[[[f64; 2]; 3]]) -> Option<[f64; 2]> {
         return None;
     }
     let sur_cercle = r.iter().filter(|x| (*x - r0).abs() < 0.02 * e || (*x - r1).abs() < 0.02 * e).count();
-    (sur_cercle * 10 >= r.len() * 8).then_some(o.to_array())
+    // Un arc porte au moins trois sommets distincts ; les coins d'un rectangle, deux par
+    // cercle autour d'un point de son axe, ne font pas une couronne.
+    let distincts = |rayon: f64| {
+        let mut v: Vec<(i64, i64)> = contour.iter().flat_map(|(a, b)| [*a, *b]).filter(|p| (p.distance(o) - rayon).abs() < 0.02 * e).map(|p| ((p.x * 100.0).round() as i64, (p.y * 100.0).round() as i64)).collect();
+        v.sort();
+        v.dedup();
+        v.len()
+    };
+    (sur_cercle * 10 >= r.len() * 8 && distincts(r0) >= 3 && distincts(r1) >= 3).then_some(o.to_array())
 }
 
 /// Ligne d'isolant d'une couche courbe : motif tracé en coordonnées polaires (abscisse le
@@ -271,4 +310,23 @@ pub(super) fn ligne_isolation_morceau(tris: &[[[f64; 2]; 3]], direction: Option<
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests_travee {
+    /// Travée rectangulaire d'une couche à ossature dont le maillage laisse des arêtes
+    /// internes non appariées (sommets en T sur une diagonale) : ses quatre coins sont
+    /// sur deux cercles centrés sur son axe, sans être une couche courbe.
+    #[test]
+    fn travee_rectangulaire_reste_droite() {
+        let (a, b, c, d) = ([0.0, 0.0], [555.0, 0.0], [555.0, 145.0], [0.0, 145.0]);
+        let sur_diagonale = |t: f64| [555.0 * t, 145.0 * t];
+        let (x, y) = (sur_diagonale(0.02), sur_diagonale(0.5));
+        let tris = vec![[a, b, y], [y, b, c], [a, x, d], [x, c, d]];
+        assert_eq!(super::contour_morceau(&tris).len(), 4);
+        assert_eq!(super::centre_courbure(&tris), None);
+        let segs = super::ligne_isolation(&tris);
+        assert!(!segs.is_empty());
+        assert!(segs.iter().flatten().all(|q| (-10.0..565.0).contains(&q[0]) && (-10.0..155.0).contains(&q[1])), "ligne d'isolant hors de la travée");
+    }
 }

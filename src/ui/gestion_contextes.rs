@@ -36,6 +36,56 @@ enum Action {
 /// Ligne d'une entrée, préparée avant le dessin.
 struct Entree { cle: String, nom: String, jeu: String, retenue: bool, usages: usize }
 
+#[derive(Clone, Copy, PartialEq)]
+enum Picto { Etoile, Oeil, Monter, Descendre }
+
+/// Bouton à pictogramme dessiné (sans caractère spécial, absent de certaines polices) ;
+/// `actif` : état coché, `permis` : cliquable.
+fn pictogramme(ui: &mut egui::Ui, genre: Picto, actif: bool, permis: bool) -> egui::Response {
+    use egui::{Pos2, Stroke};
+    let (r, resp) = ui.allocate_exact_size(egui::vec2(20.0, 18.0), if permis { egui::Sense::click() } else { egui::Sense::hover() });
+    let v = ui.visuals();
+    if actif {
+        ui.painter().rect_filled(r, 3.0, v.selection.bg_fill);
+    } else if permis && resp.hovered() {
+        ui.painter().rect_filled(r, 3.0, v.widgets.hovered.bg_fill);
+    }
+    let c = if !permis { v.weak_text_color().gamma_multiply(0.5) } else if actif { v.selection.stroke.color } else { v.text_color() };
+    let (m, trait_) = (r.center(), Stroke::new(1.3, c));
+    let p = ui.painter();
+    match genre {
+        Picto::Etoile => {
+            let points: Vec<Pos2> = (0..10).map(|k| {
+                let a = -std::f32::consts::FRAC_PI_2 + k as f32 * std::f32::consts::PI / 5.0;
+                m + egui::vec2(a.cos(), a.sin()) * if k % 2 == 0 { 7.0 } else { 3.0 }
+            }).collect();
+            if actif {
+                // étoile pleine : cinq branches autour du pentagone central (formes convexes)
+                let centre: Vec<Pos2> = points.iter().skip(1).step_by(2).copied().collect();
+                p.add(egui::Shape::convex_polygon(centre, c, Stroke::NONE));
+                for k in (0..10).step_by(2) {
+                    p.add(egui::Shape::convex_polygon(vec![points[(k + 9) % 10], points[k], points[k + 1]], c, Stroke::NONE));
+                }
+            } else {
+                p.add(egui::Shape::closed_line(points, Stroke::new(1.0, c)));
+            }
+        }
+        Picto::Oeil => {
+            let arc = |sens: f32| -> Vec<Pos2> { (0..=8).map(|k| { let t = k as f32 / 8.0; m + egui::vec2(-7.0 + 14.0 * t, sens * 4.5 * (std::f32::consts::PI * t).sin()) }).collect() };
+            p.add(egui::Shape::line(arc(-1.0), trait_));
+            p.add(egui::Shape::line(arc(1.0), trait_));
+            p.circle_filled(m, 2.0, c);
+        }
+        Picto::Monter | Picto::Descendre => {
+            let s = if genre == Picto::Monter { -1.0 } else { 1.0 };
+            p.line_segment([m - egui::vec2(0.0, 5.0 * s), m + egui::vec2(0.0, 5.0 * s)], trait_);
+            p.line_segment([m + egui::vec2(-4.0, 1.0 * s), m + egui::vec2(0.0, 5.0 * s)], trait_);
+            p.line_segment([m + egui::vec2(4.0, 1.0 * s), m + egui::vec2(0.0, 5.0 * s)], trait_);
+        }
+    }
+    resp
+}
+
 impl ViewerApp {
     pub(super) fn ouvrir_gestion_contextes(&mut self) {
         if self.natif.is_some() { self.gestion_contextes = Some(GestionContextes::default()); }
@@ -94,9 +144,9 @@ impl ViewerApp {
                 });
                 ui.separator();
                 ui.label(RichText::new(match liste {
-                    ListeCreation::Phase => "Dans l'ordre chronologique. ● : phase des prochaines créations. 👁 : afficher le projet à cette phase.",
-                    ListeCreation::SousProjet => "● : sous-projet des prochaines créations. 👁 : n'afficher que ce sous-projet.",
-                    ListeCreation::Variante => "Une seule variante visible par jeu. ★ : variante retenue, affichée par défaut. 👁 : afficher une autre variante. ● : y dessiner.",
+                    ListeCreation::Phase => "Dans l'ordre chronologique. Rond : phase des prochaines créations. Œil : afficher le projet à cette phase.",
+                    ListeCreation::SousProjet => "Rond : sous-projet des prochaines créations. Œil : n'afficher que ce sous-projet.",
+                    ListeCreation::Variante => "Une seule variante visible par jeu. Étoile : variante retenue, affichée par défaut. Œil : afficher une autre variante. Rond : y dessiner.",
                 }).small().weak());
                 ui.add_space(4.0);
                 egui::ScrollArea::vertical().id_salt("liste_contextes").max_height(300.0).auto_shrink([false, true]).show(ui, |ui| {
@@ -119,11 +169,11 @@ impl ViewerApp {
                                     ui.strong(jeu);
                                     if ui.small_button("Renommer").clicked() { etat.renommage_jeu = Some((jeu.clone(), jeu.clone())); }
                                     if let Some(retenue) = entrees.iter().find(|e| &e.jeu == jeu && e.retenue) {
-                                        if ui.small_button("Adopter ★…").on_hover_text("Fin de l'étude : la variante retenue rejoint le modèle principal, les autres variantes du jeu et leurs éléments sont supprimés").clicked() {
+                                        if ui.small_button("Adopter la retenue…").on_hover_text("Fin de l'étude : la variante retenue rejoint le modèle principal, les autres variantes du jeu et leurs éléments sont supprimés").clicked() {
                                             etat.adoption = Some(retenue.cle.clone());
                                         }
                                     }
-                                    if ui.small_button("＋ variante").on_hover_text("Ajouter une variante à ce jeu").clicked() {
+                                    if ui.small_button("+ variante").on_hover_text("Ajouter une variante à ce jeu").clicked() {
                                         let n = entrees.iter().filter(|e| &e.jeu == jeu).count() + 1;
                                         action = Some(Action::Ajouter(format!("Variante {n}"), jeu.clone()));
                                     }
@@ -143,7 +193,7 @@ impl ViewerApp {
                             for (rang, e) in entrees.iter().filter(|e| &e.jeu == jeu).enumerate() {
                                 ui.horizontal(|ui| {
                                     if liste == ListeCreation::Variante {
-                                        if ui.selectable_label(e.retenue, if e.retenue { "★" } else { "☆" }).on_hover_text("Variante retenue : affichée dans toutes les vues qui n'en choisissent pas une autre").clicked() && !e.retenue {
+                                        if pictogramme(ui, Picto::Etoile, e.retenue, true).on_hover_text("Variante retenue : affichée dans toutes les vues qui n'en choisissent pas une autre").clicked() && !e.retenue {
                                             action = Some(Action::Retenir(e.cle.clone()));
                                         }
                                     }
@@ -153,7 +203,7 @@ impl ViewerApp {
                                         ListeCreation::SousProjet => (filtres.sous_projet.as_ref() == Some(&e.cle), &mut filtres.sous_projet),
                                         ListeCreation::Variante => (filtres.variante.as_ref() == Some(&e.cle), &mut filtres.variante),
                                     };
-                                    if ui.selectable_label(affiche, "👁").on_hover_text("Affichage temporaire dans toutes les vues ; recliquer pour revenir aux réglages des vues").clicked() {
+                                    if pictogramme(ui, Picto::Oeil, affiche, true).on_hover_text("Affichage temporaire dans toutes les vues ; recliquer pour revenir aux réglages des vues").clicked() {
                                         *filtre = if affiche { None } else { Some(e.cle.clone()) };
                                     }
                                 });
@@ -174,8 +224,8 @@ impl ViewerApp {
                                 ui.horizontal(|ui| {
                                     if liste == ListeCreation::Phase {
                                         let n = entrees.len();
-                                        if ui.add_enabled(rang > 1, egui::Button::new("↑").small()).clicked() { action = Some(Action::Deplacer(e.cle.clone(), -1)); }
-                                        if ui.add_enabled(rang > 0 && rang + 1 < n, egui::Button::new("↓").small()).clicked() { action = Some(Action::Deplacer(e.cle.clone(), 1)); }
+                                        if pictogramme(ui, Picto::Monter, false, rang > 1).on_hover_text("Avancer la phase dans la chronologie").clicked() { action = Some(Action::Deplacer(e.cle.clone(), -1)); }
+                                        if pictogramme(ui, Picto::Descendre, false, rang > 0 && rang + 1 < n).on_hover_text("Reculer la phase dans la chronologie").clicked() { action = Some(Action::Deplacer(e.cle.clone(), 1)); }
                                     }
                                     if ui.small_button("Renommer").clicked() { etat.renommage = Some((e.cle.clone(), e.nom.clone())); }
                                     let fixe = liste == ListeCreation::Phase && e.cle == crate::modele::PHASE_EXISTANT || (liste != ListeCreation::Variante && entrees.len() < 2);
@@ -208,16 +258,16 @@ impl ViewerApp {
                 ui.separator();
                 ui.horizontal(|ui| {
                     let (indice, bouton) = match liste {
-                        ListeCreation::Phase => ("Nouvelle phase", "＋ Ajouter la phase"),
-                        ListeCreation::SousProjet => ("Nouveau sous-projet", "＋ Ajouter le sous-projet"),
-                        ListeCreation::Variante => ("Nouveau jeu (ex. Façade)", "＋ Créer le jeu"),
+                        ListeCreation::Phase => ("Nouvelle phase", "+ Ajouter la phase"),
+                        ListeCreation::SousProjet => ("Nouveau sous-projet", "+ Ajouter le sous-projet"),
+                        ListeCreation::Variante => ("Nouveau jeu (ex. Façade)", "+ Créer le jeu"),
                     };
                     let r = ui.add(egui::TextEdit::singleline(&mut etat.nouveau).desired_width(190.0).hint_text(indice));
                     let valide = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                     if (ui.button(bouton).clicked() || valide) && !etat.nouveau.trim().is_empty() {
                         action = Some(if liste == ListeCreation::Variante { Action::Ajouter("Variante 1".into(), etat.nouveau.clone()) } else { Action::Ajouter(etat.nouveau.clone(), String::new()) });
                     }
-                    if filtres != Default::default() && ui.button("Tout afficher").on_hover_text("Annuler l'affichage temporaire (👁) et revenir aux réglages des vues").clicked() { filtres = Default::default(); }
+                    if filtres != Default::default() && ui.button("Tout afficher").on_hover_text("Annuler l'affichage temporaire (œil) et revenir aux réglages des vues").clicked() { filtres = Default::default(); }
                 });
                 if let Some(erreur) = &etat.erreur { ui.colored_label(ui.visuals().error_fg_color, erreur); }
             });
