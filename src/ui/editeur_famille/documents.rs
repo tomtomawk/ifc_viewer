@@ -507,7 +507,7 @@ impl ViewerApp {
             k += 1;
         }
         let id = crate::modele::collaboration::uuid();
-        q.types_ouvertures.push(crate::modele::TypeOuverture { id: id.clone(), nom: nom.clone(), genre: f.famille.genre, largeur: f.largeur, hauteur: f.hauteur, famille: None, modele: Some(f.famille), origine: None });
+        q.types_ouvertures.push(crate::modele::TypeOuverture { id: id.clone(), nom: nom.clone(), genre: f.famille.genre, largeur: f.largeur, hauteur: f.hauteur, famille: None, modele: Some(f.famille), origine: None, famille_nom: None });
         self.appliquer_projet(q)?;
         self.status = format!("Famille « {nom} » chargée dans le projet.");
         Ok(id)

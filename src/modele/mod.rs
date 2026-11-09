@@ -776,6 +776,16 @@ pub struct TypeOuverture {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub modele: Option<famille::modelee::FamilleModelee>,
     pub origine: Option<Origine>,
+    /// Famille qui regroupe ce type dans l'arborescence ; absente : le nom du type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub famille_nom: Option<String>,
+}
+
+impl TypeOuverture {
+    /// Nom de la famille du type (le nom du type à défaut).
+    pub fn nom_famille(&self) -> &str {
+        self.famille_nom.as_deref().filter(|n| !n.trim().is_empty()).unwrap_or(&self.nom)
+    }
 }
 
 /// Ouverture hébergée par un mur : baie rectangulaire à travers toute son épaisseur.
@@ -1094,7 +1104,7 @@ impl Projet {
         p.types_traits = g.types_traits.clone();
         p.profils = g.profils.iter().cloned().map(|mut p| { p.id = identifiant("profil", &format!("gabarit:{}", p.nom)); p }).collect();
         for t in &g.types_ouvertures {
-            p.types_ouvertures.push(TypeOuverture { id: identifiant("type-ouverture", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), genre: t.famille.genre, largeur: t.largeur, hauteur: t.hauteur, famille: None, modele: Some(t.famille.clone()), origine: None });
+            p.types_ouvertures.push(TypeOuverture { id: identifiant("type-ouverture", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), genre: t.famille.genre, largeur: t.largeur, hauteur: t.hauteur, famille: None, modele: Some(t.famille.clone()), origine: None, famille_nom: None });
         }
         p.completer_materiaux();
         p

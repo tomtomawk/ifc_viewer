@@ -3,6 +3,31 @@ use crate::modele::*;
 use super::modelee::{FichierFamille, GenreParametre, Portee};
 
 impl Projet {
+    /// Copie d'un type d'ouverture dans la même famille, sous un nom libre dérivé de `base`.
+    pub fn avec_copie_type_ouverture(&self, id: &str, base: &str) -> Result<(Projet, String), String> {
+        let mut q = self.clone();
+        let source = q.types_ouvertures.iter().find(|t| t.id == id).cloned().ok_or("Type d'ouverture absent.")?;
+        let mut t = source.clone();
+        t.id = collaboration::uuid();
+        t.famille_nom = Some(source.nom_famille().to_string());
+        t.origine = None;
+        let mut nom = base.to_string();
+        let mut n = 2;
+        while q.types_ouvertures.iter().any(|x| x.nom == nom) {
+            nom = format!("{base} ({n})");
+            n += 1;
+        }
+        t.nom = nom;
+        // la source rejoint explicitement la famille, même si son nom de type change ensuite
+        if let Some(s) = q.types_ouvertures.iter_mut().find(|x| x.id == id) {
+            s.famille_nom = t.famille_nom.clone();
+        }
+        let nouvel = t.id.clone();
+        q.types_ouvertures.push(t);
+        q.verifier()?;
+        Ok((q, nouvel))
+    }
+
     pub fn avec_famille(
         &self,
         cible: Option<&str>,
@@ -46,6 +71,7 @@ impl Projet {
                 famille: None,
                 modele: Some(f.famille.clone()),
                 origine: None,
+                famille_nom: None,
             });
             id
         };

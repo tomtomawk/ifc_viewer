@@ -43,7 +43,7 @@ impl FamilleCatalogue {
         match self {
             Self::Ouverture(id, _) => p.types_ouvertures.iter().find(|t| &t.id == id).map(|t| {
                 let n = p.ouvertures.iter().filter(|o| o.type_ouverture.as_deref() == Some(id.as_str())).count();
-                vec![format!("{:.0} × {:.0} — {}", t.largeur, t.hauteur, occurrences(n))]
+                vec![format!("{:.0} × {:.0} · {}", t.largeur, t.hauteur, occurrences(n))]
             }).unwrap_or_default(),
             Self::Composant(id) => p.types_composants.iter().find(|t| &t.id == id).map(|t| vec![t.nom.clone()]).unwrap_or_default(),
             Self::Profil(id) => p.profils.iter().find(|t| &t.id == id).map(|t| vec![t.nom.clone()]).unwrap_or_default(),
@@ -94,6 +94,25 @@ impl ViewerApp {
                 }
             });
         self.famille_selectionnee = Some(choix);
+        // famille d'un type de porte ou de fenêtre : regroupement dans l'arborescence
+        if let (Some(FamilleCatalogue::Ouverture(id, _)), Some((p, _))) = (&self.famille_selectionnee, &self.natif) {
+            let actuel = p.types_ouvertures.iter().find(|t| &t.id == id).map(|t| t.nom_famille().to_string()).unwrap_or_default();
+            let cle = egui::Id::new(("famille_nom_type", id.as_str()));
+            let mut saisie = ui.data(|d| d.get_temp::<String>(cle)).unwrap_or_else(|| actuel.clone());
+            let r = ui.horizontal(|ui| { ui.label("Famille"); ui.text_edit_singleline(&mut saisie) }).inner;
+            if r.lost_focus() && saisie.trim() != actuel {
+                let mut q = p.clone();
+                if let Some(t) = q.types_ouvertures.iter_mut().find(|t| &t.id == id) {
+                    t.famille_nom = Some(saisie.trim().to_string()).filter(|n| !n.is_empty());
+                }
+                if let Err(e) = self.appliquer_projet(q) { self.error = Some(e); }
+                ui.data_mut(|d| d.remove::<String>(cle));
+            } else if r.has_focus() {
+                ui.data_mut(|d| d.insert_temp(cle, saisie));
+            } else {
+                ui.data_mut(|d| d.remove::<String>(cle));
+            }
+        }
         true
     }
 

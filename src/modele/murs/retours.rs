@@ -252,7 +252,7 @@ mod tests {
         let mut f = FamilleModelee::gabarit_fenetre();
         f.plans.push(PlanRef { nom: "Retour extérieur".into(), axe: AxePlan::Y, position: 20.0, fixe: true, hote: None });
         f.plans.push(PlanRef { nom: "Retour intérieur".into(), axe: AxePlan::Y, position: -120.0, fixe: true, hote: None });
-        p.types_ouvertures.push(TypeOuverture { id: "f".into(), nom: "OF".into(), genre: GenreOuverture::Fenetre, largeur: 1200.0, hauteur: 1350.0, famille: None, modele: Some(f), origine: None });
+        p.types_ouvertures.push(TypeOuverture { id: "f".into(), nom: "OF".into(), genre: GenreOuverture::Fenetre, largeur: 1200.0, hauteur: 1350.0, famille: None, modele: Some(f), origine: None, famille_nom: None });
         p.ouvertures.push(Ouverture { id: "o".into(), nom: "F".into(), genre: GenreOuverture::Fenetre, mur: "b".into(), type_ouverture: Some("f".into()), abscisse: 3000.0, largeur: 1200.0, hauteur: 1350.0, allege: 900.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
         p.verifier().unwrap();
         p

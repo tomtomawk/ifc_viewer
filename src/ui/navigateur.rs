@@ -323,6 +323,7 @@ impl ViewerApp {
         let mut famille_choisie = None;
         let mut nouvelle_ouverture = None;
         let mut charger_famille = false;
+        let mut copier_type: Option<(String, String)> = None;
         let mut nouveau_profil = false;
         let mut charger_profil = false;
         rubrique_nav(ui, LeftTab::Familles, "Familles".into(), false, &mut |ui| {
@@ -330,22 +331,54 @@ impl ViewerApp {
                 for titre in ["Profils", "Cartouches", "Étiquettes de pièce", "Portes", "Fenêtres", "Composants", "Garde-corps"] {
                     let liste: Vec<_> = familles.iter().filter(|(f, nom)| f.categorie() == titre && (garde(nom) || garde(titre))).collect();
                     egui::CollapsingHeader::new(format!("{titre} ({})", liste.len())).id_salt(("nav-famille-native", titre)).open(ouvert.then_some(true)).show(ui, |ui| {
-                        for (famille, nom) in liste {
-                            let choisie = self.famille_selectionnee.as_ref() == Some(famille);
-                            let types = self.natif.as_ref().map(|(p, _)| famille.types(p)).unwrap_or_default();
-                            let id = ui.make_persistent_id(("nav-famille-types", titre, *nom));
+                        // portes et fenêtres : types regroupés par famille ; autres : un type par famille
+                        let mut groupes: Vec<(String, Vec<(&FamilleCatalogue, &str)>)> = Vec::new();
+                        for (famille, nom) in &liste {
+                            let cle = match (famille, &self.natif) {
+                                (FamilleCatalogue::Ouverture(id, _), Some((p, _))) => p.types_ouvertures.iter().find(|t| &t.id == id).map_or(nom.to_string(), |t| t.nom_famille().to_string()),
+                                _ => nom.to_string(),
+                            };
+                            match groupes.iter_mut().find(|(c, _)| *c == cle) {
+                                Some((_, v)) => v.push((famille, *nom)),
+                                None => groupes.push((cle, vec![(famille, *nom)])),
+                            }
+                        }
+                        groupes.sort_by(|x, y| x.0.cmp(&y.0));
+                        for (nom_famille, types) in groupes {
+                            let ouverture = matches!(types[0].0, FamilleCatalogue::Ouverture(..));
+                            let id = ui.make_persistent_id(("nav-famille-types", titre, &nom_famille));
                             egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, ouvert)
                                 .show_header(ui, |ui| {
-                                    let r = ui.selectable_label(choisie, *nom)
-                                        .on_hover_text("Sélectionner la famille · utiliser Modifier la famille dans le ruban");
-                                    if r.clicked() {
-                                        famille_choisie = Some(famille.clone());
+                                    let choisie = types.iter().any(|(f, _)| self.famille_selectionnee.as_ref() == Some(*f));
+                                    if ui.selectable_label(choisie && !ouverture, &nom_famille).on_hover_text("Famille").clicked() {
+                                        famille_choisie = Some(types[0].0.clone());
                                     }
                                 })
                                 .body(|ui| {
-                                    for t in &types {
-                                        if ui.selectable_label(choisie, t).on_hover_text("Type de la famille").clicked() {
-                                            famille_choisie = Some(famille.clone());
+                                    for (famille, nom) in &types {
+                                        let detail = self.natif.as_ref().map(|(p, _)| famille.types(p).join(" · ")).unwrap_or_default();
+                                        let libelle = if ouverture { format!("{nom} — {detail}") } else { detail };
+                                        let ligne = ui.horizontal(|ui| {
+                                            let r = ui.selectable_label(self.famille_selectionnee.as_ref() == Some(*famille), libelle)
+                                                .on_hover_text("Sélectionner le type · utiliser Modifier la famille dans le ruban");
+                                            if r.clicked() {
+                                                famille_choisie = Some((*famille).clone());
+                                            }
+                                            r
+                                        });
+                                        if let FamilleCatalogue::Ouverture(tid, _) = famille {
+                                            let survol = ui.rect_contains_pointer(ligne.response.rect);
+                                            if survol {
+                                                let bouton = egui::Rect::from_min_size(egui::pos2(ui.max_rect().right() - 22.0, ligne.response.rect.top()), egui::vec2(20.0, ligne.response.rect.height()));
+                                                if ui.put(bouton, egui::Button::new("⧉").small().frame(false)).on_hover_text("Copier le type").clicked() {
+                                                    copier_type = Some((tid.clone(), format!("{nom} - copie")));
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if let (true, FamilleCatalogue::Ouverture(tid, _)) = (ouverture, types[0].0) {
+                                        if ui.selectable_label(false, RichText::new("＋ Nouveau type").weak()).on_hover_text("Nouveau type dans cette famille").clicked() {
+                                            copier_type = Some((tid.clone(), "Nouveau type".into()));
                                         }
                                     }
                                 });
@@ -423,6 +456,18 @@ impl ViewerApp {
             self.selectionner_famille(famille);
         }
         if let Some(genre) = nouvelle_ouverture { self.ouvrir_editeur_famille_type(None, genre); }
+        if let Some((id, nom)) = copier_type {
+            if let Some((p, _)) = &self.natif {
+                match p.avec_copie_type_ouverture(&id, &nom).and_then(|(q, nouvel)| self.appliquer_projet(q).map(|_| nouvel)) {
+                    Ok(nouvel) => {
+                        let genre = self.natif.as_ref().and_then(|(p, _)| p.types_ouvertures.iter().find(|t| t.id == nouvel).map(|t| t.genre));
+                        if let Some(g) = genre { self.selectionner_famille(FamilleCatalogue::Ouverture(nouvel, g)); }
+                        self.status = "Type ajouté à la famille.".into();
+                    }
+                    Err(e) => self.error = Some(e),
+                }
+            }
+        }
         if nouveau_profil { self.ouvrir_profil(None); }
         if charger_profil { self.charger_profil_fichier(); }
         if charger_famille {

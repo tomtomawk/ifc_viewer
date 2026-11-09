@@ -297,7 +297,7 @@ fn nomenclature_parametres_de_famille() {
     p.murs.push(Mur { id: "m".into(), nom: "Mur".into(), type_mur: "t".into(), niveau: "n".into(), decalage_bas: 0.0, haut: Haut::Libre { hauteur: 3000.0 }, axe: Axe::Droit { debut: [0.0, 0.0], fin: [8000.0, 0.0] }, assemblage: None, phase: None, sous_projet: None, variante: None, origine: None });
     let mut famille = FamilleModelee::gabarit_fenetre();
     famille.parametres.iter_mut().find(|x| x.nom == "MateriauAppui").unwrap().formule = "Pierre".into();
-    p.types_ouvertures.push(TypeOuverture { id: "f".into(), nom: "F1".into(), genre: GenreOuverture::Fenetre, largeur: 1200.0, hauteur: 1350.0, famille: None, modele: Some(famille), origine: None });
+    p.types_ouvertures.push(TypeOuverture { id: "f".into(), nom: "F1".into(), genre: GenreOuverture::Fenetre, largeur: 1200.0, hauteur: 1350.0, famille: None, modele: Some(famille), origine: None, famille_nom: None });
     for (k, avec) in [(0, true), (1, false), (2, true)] {
         p.ouvertures.push(Ouverture {
             id: format!("o{k}"), nom: format!("F{k}"), genre: GenreOuverture::Fenetre, mur: "m".into(), type_ouverture: Some("f".into()),
