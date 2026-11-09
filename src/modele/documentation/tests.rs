@@ -37,6 +37,94 @@ fn dessin_vue_suit_le_gabarit_partage() {
 }
 
 #[test]
+fn dessin_sur_feuille_suit_le_fond_la_plage_haute_et_le_style() {
+    use crate::modele::edition::ParametresMur;
+    let mut p = Projet::nouveau("Réglages du plan");
+    let bas = p.ajouter_mur([0.0, 0.0], [4000.0, 0.0], &ParametresMur::default()).unwrap();
+    let niveau = p.niveaux[0].id.clone();
+    let haut = p.ajouter_mur([0.0, 1500.0], [4000.0, 1500.0], &ParametresMur { decalage: 1700.0, hauteur: 600.0, ..Default::default() }).unwrap();
+    let id = p.ajouter_vue_plan(&niveau, 1200.0).unwrap();
+    let fond = p.dupliquer_vue(&id).unwrap();
+    let i = p.vues.iter().position(|v| v.id == id).unwrap();
+    p.vues[i].fond_plan = Some(fond);
+    let placee = VuePlacee { vue: id.clone(), position: [50.0, 80.0], echelle: 100.0 };
+    let haut = crate::rendu::scene::id_natif("mur", &haut);
+    let bas = crate::rendu::scene::id_natif("mur", &bas);
+    let (dessin, _) = vue_placee(&p, &placee).unwrap();
+    let couleur = |dessin: &[Primitive]| dessin.iter().find(|pr| pr.element == Some(bas) && pr.role == Role::Poche && pr.style.couleur != [165, 165, 165, 255]).unwrap().style.couleur;
+    let poche_graphique = couleur(&dessin);
+    assert!(dessin.iter().any(|pr| pr.style.couleur == [165, 165, 165, 255]));
+    assert!(dessin.iter().any(|pr| pr.element == Some(haut) && pr.role == Role::Vu));
+
+    p.vues[i].fond_plan = None;
+    p.vues[i].limite_haute_decalage = 1500.0;
+    p.rendus_vues.insert(id, crate::modele::soleil::RenduVue { style: Some("realiste".into()), ..Default::default() });
+    let (dessin, _) = vue_placee(&p, &placee).unwrap();
+    assert!(!dessin.iter().any(|pr| pr.style.couleur == [165, 165, 165, 255] || pr.element == Some(haut)));
+    assert_ne!(couleur(&dessin), poche_graphique);
+}
+
+#[test]
+fn coupe_sur_feuille_reste_dans_les_limites_de_la_vue() {
+    use crate::modele::edition::ParametresMur;
+    let mut p = Projet::nouveau("Coupe cadrée");
+    let mur = p.ajouter_mur([-2000.0, 0.0], [6000.0, 0.0], &ParametresMur::default()).unwrap();
+    let id = p.ajouter_vue_coupe([0.0, 0.0], [4000.0, 0.0], 1000.0, false, "", 100.0).unwrap();
+    let placee = VuePlacee { vue: id, position: [25.0, 50.0], echelle: 100.0 };
+    let (primitives, _) = vue_placee(&p, &placee).unwrap();
+    let mut points = Vec::new();
+    for pr in primitives.into_iter().filter(|pr| pr.element == Some(crate::rendu::scene::id_natif("mur", &mur))) {
+        match pr.forme {
+            Forme::Segments(s) => points.extend(s.into_iter().flatten()),
+            Forme::Triangles(t) => points.extend(t.into_iter().flatten()),
+            _ => {}
+        }
+    }
+    let (gauche, droite) = points.iter().map(|p| p.x * 1000.0).fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| (a.min(x), b.max(x)));
+    assert!((gauche - 25.0).abs() < 0.01 && (droite - 65.0).abs() < 0.01, "{gauche}..{droite}");
+}
+
+#[test]
+fn formes_du_cartouche_persistent_et_sont_dessinees_sur_feuille() {
+    let mut p = Projet::nouveau("Agence");
+    let f = Feuille { id: "f".into(), numero: "A01".into(), nom: "Plan".into(), jeu: JEU_DEFAUT.into(),
+        largeur: 420.0, hauteur: 297.0, cartouche: String::new(), vues: Vec::new(), nomenclatures: Vec::new() };
+    let mut famille = FamilleCartouche::default();
+    famille.nom = "Cartouche test".into();
+    famille.formes = vec![
+        AnnotationForme::Cercle { centre: [10.0, 10.0], rayon: 4.0 },
+        AnnotationForme::Zone { contour: vec![[20.0, 10.0], [25.0, 10.0], [25.0, 15.0]] },
+        AnnotationForme::Cote { debut: PointCote::Fixe { point: [20.0, 10.0] }, fin: PointCote::Fixe { point: [25.0, 10.0] }, decalage: 10.0 },
+    ];
+    p.feuilles.push(f.clone());
+    p.cartouches_feuilles.insert(f.id.clone(), famille.nom.clone());
+    p.familles_cartouches.push(famille.clone());
+    let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
+    assert_eq!(relu.familles_cartouches[0].formes, famille.formes);
+    let dessin = cadre_feuille(&relu, &f);
+    assert!(dessin.iter().any(|pr| matches!(&pr.forme, Forme::Polyligne { points, .. } if points.len() > 40)));
+    assert!(dessin.iter().any(|pr| matches!(pr.forme, Forme::Surface(_))));
+    assert!(svg_feuille(&relu, &f).unwrap().contains("#d7d7d2"));
+}
+
+#[test]
+fn vue_placee_suit_echelle_vue_meme_avec_ancienne_valeur() {
+    let (mut projet, _) = depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();
+    let id = projet.ajouter_vue_plan(&projet.niveaux[0].id.clone(), 1200.0).unwrap();
+    let placee = VuePlacee { vue: id.clone(), position: [30.0, 80.0], echelle: 100.0 };
+    let (_, avant) = vue_placee(&projet, &placee).unwrap();
+    projet.vues.iter_mut().find(|vue| vue.id == id).unwrap().echelle = 200.0;
+    let projet = Projet::lire_json(&projet.json().unwrap()).unwrap();
+    let placee: VuePlacee = serde_json::from_str(&serde_json::to_string(&placee).unwrap()).unwrap();
+    let (_, apres) = vue_placee(&projet, &placee).unwrap();
+    assert_eq!(placee.echelle_sur_feuille(&projet), 200.0);
+    assert!(avant[2] - avant[0] > 10.0);
+    for (i, origine) in [30.0, 80.0, 30.0, 80.0].into_iter().enumerate() {
+        assert!((apres[i] - (origine + (avant[i] - origine) / 2.0)).abs() < 1e-6);
+    }
+}
+
+#[test]
 fn vue_placee_respecte_rotation_et_limite_basse() {
     let (mut p, _) = depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();
     let niveau = p.niveaux[0].id.clone();
@@ -188,7 +276,7 @@ fn famille_cartouche_partagee_est_enregistree_et_utilisee() {
     let mut g = f.clone();
     g.id = "g".into();
     p.feuilles = vec![f.clone(), g.clone()];
-    let famille = FamilleCartouche { id: super::collaboration::uuid(), nom: "Agence".into(), largeur: 80.0, hauteur: 25.0, traits: vec![[[0.0, 0.0], [80.0, 25.0]]], textes: vec![TexteCartouche { contenu: "{projet} - {numero}".into(), position: [2.0, 2.0], hauteur: 3.0 }] };
+    let famille = FamilleCartouche { id: super::collaboration::uuid(), nom: "Agence".into(), largeur: 80.0, hauteur: 25.0, traits: vec![[[0.0, 0.0], [80.0, 25.0]]], textes: vec![TexteCartouche { contenu: "{projet} - {numero}".into(), position: [2.0, 2.0], hauteur: 3.0 }], formes: Vec::new() };
     p.familles_cartouches.push(famille);
     p.cartouches_feuilles.insert(f.id.clone(), "Agence".into());
     p.cartouches_feuilles.insert(g.id.clone(), "Agence".into());

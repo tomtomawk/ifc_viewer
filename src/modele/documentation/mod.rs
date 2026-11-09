@@ -4,6 +4,8 @@ mod feuilles;
 pub use feuilles::*;
 mod nomenclatures;
 pub use nomenclatures::*;
+mod plans;
+pub(crate) use plans::{fond_plan, limite_haute_plan, pointilles_plage_haute};
 #[cfg(test)]
 mod tests;
 pub use super::*;
@@ -99,13 +101,13 @@ pub fn types_traits_standard() -> Vec<TypeTrait> {
     ]
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "ancrage", rename_all = "snake_case")]
 pub enum PointCote {
     Fixe { point: [f64; 2] },
     Mur { id: String, fin: bool },
 }
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "forme", rename_all = "snake_case")]
 pub enum AnnotationForme {
     Texte {
@@ -263,7 +265,14 @@ pub struct Annotation {
 pub struct VuePlacee {
     pub vue: String,
     pub position: [f64; 2],
+    /// Valeur historique conservée dans les fichiers de projet.
     pub echelle: f64,
+}
+
+impl VuePlacee {
+    pub fn echelle_sur_feuille(&self, projet: &Projet) -> f64 {
+        projet.vues.iter().find(|vue| vue.id == self.vue).map_or(self.echelle, |vue| vue.echelle)
+    }
 }
 /// Jeu des feuilles enregistrées sans jeu.
 pub const JEU_DEFAUT: &str = "Plans";
@@ -578,6 +587,32 @@ fn primitives_polyligne(p: &Projet, points: &[[f64; 2]], fermee: bool, traits: &
     out
 }
 
+fn primitives_forme_dessin(p: &Projet, forme: &AnnotationForme, echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
+    match forme {
+        AnnotationForme::Ligne { debut, fin } => vec![ligne(pt(DVec2::from_array(*debut)), pt(DVec2::from_array(*fin)))],
+        AnnotationForme::Polyligne { points, fermee, remplissage, traits } => {
+            let mut out = Vec::new();
+            if let Some(r) = remplissage.as_ref().filter(|_| *fermee && points.len() >= 3) {
+                out.extend(primitives_remplissage(p, r, points, echelle, pt));
+            }
+            out.extend(primitives_polyligne(p, points, *fermee, traits, echelle, pt));
+            out
+        }
+        AnnotationForme::Zone { contour } => vec![Primitive {
+            forme: Forme::Surface(vec![contour.iter().map(|p| pt(DVec2::from_array(*p))).collect()]),
+            style: Style { couleur: [215, 215, 210, 255], epaisseur: 0.0 },
+            role: Role::Annotation,
+            element: None,
+        }],
+        _ => forme.forme_2d().into_iter().flat_map(|f| f.polylignes()).map(|l| Primitive {
+            forme: Forme::Polyligne { points: l.into_iter().map(pt).collect(), fermee: false },
+            style: Style { couleur: [30, 30, 30, 255], epaisseur: 0.18 },
+            role: Role::Annotation,
+            element: None,
+        }).collect(),
+    }
+}
+
 pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
     let (o, u, h) = repere(p, v);
     let mut out = Vec::new();
@@ -596,40 +631,6 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
                 taille,
                 [30, 30, 30, 255],
             )),
-            AnnotationForme::Ligne { debut, fin } => out.push(ligne(
-                pt(DVec2::from_array(*debut)),
-                pt(DVec2::from_array(*fin)),
-            )),
-            AnnotationForme::Polyligne { .. } | AnnotationForme::Spline { .. } | AnnotationForme::Cercle { .. } | AnnotationForme::Arc { .. } => {
-                // remplissage sous le contour
-                if let AnnotationForme::Polyligne { points, fermee: true, remplissage: Some(r), .. } = &a.forme && points.len() >= 3 {
-                    out.extend(primitives_remplissage(p, r, points, v.echelle, &pt));
-                }
-                // polyligne : un type de trait par segment (épaisseur, tirets)
-                if let AnnotationForme::Polyligne { points, fermee, traits, .. } = &a.forme {
-                    out.extend(primitives_polyligne(p, points, *fermee, traits, v.echelle, &pt));
-                }
-                let autres = if matches!(a.forme, AnnotationForme::Polyligne { .. }) { Vec::new() } else { a.forme.forme_2d().map(|f| f.polylignes()).unwrap_or_default() };
-                for l in autres {
-                    out.push(Primitive {
-                        forme: Forme::Polyligne { points: l.into_iter().map(pt).collect(), fermee: false },
-                        style: Style { couleur: [30, 30, 30, 255], epaisseur: 0.18 },
-                        role: Role::Annotation,
-                        element: None,
-                    });
-                }
-            }
-            AnnotationForme::Zone { contour } => out.push(Primitive {
-                forme: Forme::Surface(vec![
-                    contour.iter().map(|p| pt(DVec2::from_array(*p))).collect(),
-                ]),
-                style: Style {
-                    couleur: [215, 215, 210, 255],
-                    epaisseur: 0.0,
-                },
-                role: Role::Annotation,
-                element: None,
-            }),
             AnnotationForme::Cote {
                 debut,
                 fin,
@@ -688,6 +689,7 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
                     },
                 ));
             }
+            forme => out.extend(primitives_forme_dessin(p, forme, v.echelle, &pt)),
         }
         for primitive in &mut out[debut..] {
             primitive.element = Some(crate::rendu::scene::id_natif("annotation", &a.id));
@@ -913,6 +915,21 @@ pub fn hachures_45(poly: &[DVec2], pas: f64) -> Vec<[DVec2; 2]> {
     out
 }
 
+fn ids_masques_vue(p: &Projet, v: &Vue) -> std::collections::HashSet<crate::formats::ifc::step::Id> {
+    p.murs.iter().map(|x| ("mur", &x.id))
+        .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
+        .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
+        .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id))).chain(p.arbres.iter().map(|x| ("arbre", &x.id)))
+        .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
+        .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
+        .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
+        .chain(p.importes.iter().map(|x| ("importe", &x.id)))
+        .chain(p.terrains.iter().map(|x| ("terrain", &x.id)))
+        .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
+        .filter(|(_, id)| v.elements_masques.contains(id))
+        .map(|(genre, id)| crate::rendu::scene::id_natif(genre, id)).collect::<std::collections::HashSet<_>>()
+}
+
 pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
     let mut vue = p.vues.iter().find(|v| v.id == id).ok_or("Vue absente.")?.clone();
     if let Some(filtre) = p.contextes_vues.get(id) {
@@ -937,18 +954,7 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
         }
     );
     let mut visible = vec![true; s.objects.len()];
-    let masques = p.murs.iter().map(|x| ("mur", &x.id))
-        .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
-        .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
-        .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id))).chain(p.arbres.iter().map(|x| ("arbre", &x.id)))
-        .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
-        .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
-        .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
-        .chain(p.importes.iter().map(|x| ("importe", &x.id)))
-        .chain(p.terrains.iter().map(|x| ("terrain", &x.id)))
-        .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
-        .filter(|(_, id)| v.elements_masques.contains(id))
-        .map(|(genre, id)| crate::rendu::scene::id_natif(genre, id)).collect::<std::collections::HashSet<_>>();
+    let masques = ids_masques_vue(p, v);
     for (i, objet) in s.objects.iter().enumerate() {
         visible[i] = !masques.contains(&objet.id) && !s.model.parent.get(&objet.id).is_some_and(|id| masques.contains(id));
     }
@@ -997,17 +1003,29 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
         }
     }
     let actif = v.coupe_active.unwrap_or(true);
-    let poche = match v.poche_vue.as_deref() {
+    let poche = if p.rendus_vues.get(id).is_some_and(|r| r.style.as_deref() == Some("realiste")) {
+        crate::dessin::Poche::Materiau
+    } else { match v.poche_vue.as_deref() {
         Some("plein") => crate::dessin::Poche::Plein,
         Some("vide") => crate::dessin::Poche::Vide,
         Some("materiau") => crate::dessin::Poche::Materiau,
         _ => crate::dessin::Poche::Hachure,
-    };
-    let mut primitives = if elevation || !actif {
-        Vec::new()
-    } else {
-        crate::dessin::coupe(&s, &visible, plan, v.echelle, poche)
-    };
+    }};
+    let mut primitives = Vec::new();
+    if actif && !elevation {
+        primitives.extend(fond_plan(p, &s, v, plan, v.echelle));
+        primitives.extend(crate::dessin::coupe(&s, &visible, plan, v.echelle, poche));
+        if let Some(limite) = limite_haute_plan(p, &s, v, plan.w)
+            && let GenreVue::Plan { niveau, .. } = &v.genre
+        {
+            let niveau = crate::rendu::scene::id_natif("niveau", niveau);
+            let au_dessus: Vec<_> = s.objects.iter().zip(&visible).map(|(obj, visible)| {
+                *visible && obj.storey == Some(niveau) && obj.min.z > plan.w + 1e-5 && obj.min.z < limite
+            }).collect();
+            let aretes = crate::dessin::vu(&s, &au_dessus, u, h, oeil, Some(glam::Vec3::NEG_Z.extend(limite)), 1024);
+            primitives.extend(pointilles_plage_haute(aretes, v.echelle, plan.w as f64));
+        }
+    }
     primitives.extend(crate::dessin::vu(
         &s,
         &visible,
@@ -1017,6 +1035,13 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
         actif.then_some(plan),
         4096,
     ));
+    if let Some(nav) = s.navigateur.as_ref().and_then(|n| n.vues.iter().find(|nv| nv.revit_id == crate::rendu::scene::numero_vue(id))) {
+        let plans: Vec<_> = nav.cadrage.iter().map(|plan| {
+            let n = plan.truncate();
+            n.extend(plan.w + n.dot(s.origin)).as_vec4()
+        }).collect();
+        primitives = crate::dessin::cadrer_primitives(primitives, &plans, oeil);
+    }
     // Revenir au repère absolu, comme les annotations.
     let mut primitives: Vec<_> = primitives
         .into_iter()
@@ -1039,7 +1064,7 @@ pub const FORMATS: [(&str, f64, f64); 5] = [("A0", 1189.0, 841.0), ("A1", 841.0,
 pub const MARGE: f64 = 10.0;
 
 /// Géométrie réutilisable d'un cartouche, en millimètres depuis son coin inférieur gauche.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct FamilleCartouche {
     #[serde(default)]
     pub id: String,
@@ -1048,6 +1073,9 @@ pub struct FamilleCartouche {
     pub hauteur: f64,
     pub traits: Vec<[[f64; 2]; 2]>,
     pub textes: Vec<TexteCartouche>,
+    /// Formes tracées dans le repère du papier, en millimètres.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub formes: Vec<AnnotationForme>,
 }
 
 /// Famille d'étiquette de pièce : traits et textes à champs, en mm du papier autour du

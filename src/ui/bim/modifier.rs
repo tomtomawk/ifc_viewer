@@ -12,8 +12,6 @@ impl ViewerApp {
         let outil = self.ruban_edition.outil();
         let ids = self.selection_bim();
         let Some((p, _)) = &self.natif else { return };
-        let fenetre = (ids.len() == 1).then(|| p.ouvertures.iter().find(|o| o.id == ids[0] && o.genre != crate::modele::GenreOuverture::Libre)).flatten().map(|o| o.id.clone());
-        let mut editer_famille = false;
         let escalier = (ids.len() == 1).then(|| p.escaliers.iter().find(|e| e.id == ids[0])).flatten().map(|e| e.id.clone());
         let mut garde_corps: Option<Vec<usize>> = None;
         // couche d'assemblage : la sortir ou prendre l'assemblage ; mur indépendant : le
@@ -27,7 +25,7 @@ impl ViewerApp {
         let mut selection = None;
         let mut commande = None;
         let assemblage_seul = ids.len() == 1 && p.assemblage(&ids[0]).is_some();
-        if selection_seule && escalier.is_none() && fenetre.is_none() && mur.is_none() && !assemblage_seul {
+        if selection_seule && escalier.is_none() && mur.is_none() && !assemblage_seul {
             return;
         }
         // dans Propriétés (sélection seule), aligné en haut : un alignement centré prenait
@@ -40,9 +38,6 @@ impl ViewerApp {
                         garde_corps = Some(cotes);
                     }
                 }
-            }
-            if selection_seule && fenetre.is_some() && ui.button("Éditer la famille…").on_hover_text("Éditeur de familles : plans, contraintes, volumes, vides et symboles ; enregistré dans le type").clicked() {
-                editer_famille = true;
             }
             if let Some(m) = mur.as_ref().filter(|_| selection_seule) {
                 if let Some(a) = &m.assemblage {
@@ -177,9 +172,6 @@ impl ViewerApp {
             if let Err(e) = self.garde_corps_escalier(&id, &cotes) {
                 self.error = Some(e);
             }
-        }
-        if let Some(id) = fenetre.filter(|_| editer_famille) {
-            self.ouvrir_editeur_famille(&id);
         }
     }
 

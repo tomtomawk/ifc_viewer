@@ -30,6 +30,10 @@ mod documents;
 mod coupe;
 mod vue_native;
 mod selection;
+mod selection_famille;
+mod garde_corps;
+mod familles_planes;
+mod cartouche;
 mod proprietes;
 mod saisie_plan;
 mod barre_haute;
@@ -501,6 +505,8 @@ pub struct ViewerApp {
     famille_active: bool,
     /// Autres familles ouvertes (onglets à l'arrière-plan).
     familles_inactives: Vec<editeur_famille::EditeurFamille>,
+    familles_planes: BTreeMap<usize, familles_planes::EditeurPlan>,
+    famille_plane_active: Option<usize>,
     prochain_ordre_famille: usize,
     /// Action des panneaux de l'éditeur de familles, traitée après leur tracé.
     action_famille: Option<editeur_famille::ActionFamille>,
@@ -557,6 +563,7 @@ pub struct ViewerApp {
     camera: Camera,
     selected: Option<Id>,
     selection_multiple: Vec<Id>,
+    famille_selectionnee: Option<selection_famille::FamilleCatalogue>,
     fenetre_selection: Option<FenetreSelection>,
     reveal: Option<Id>,
     hidden_classes: HashSet<String>,
@@ -639,6 +646,7 @@ pub struct ViewerApp {
     /// Niveau du plan ouvert à la dernière image : les outils de création en héritent.
     niveau_plan_precedent: Option<String>,
     ruban_edition: crate::ui::ruban::RubanEdition,
+    editeur_garde_corps: Option<garde_corps::EditeurGardeCorps>,
     /// Zone de coupe 3D (min, max), repère de la scène ; appliquée aux vues 3D quand
     /// elle est active, modifiable par ses poignées dans toutes les vues.
     boite: Option<(Vec3, Vec3)>,
@@ -658,7 +666,6 @@ pub struct ViewerApp {
     cote_arc: Option<(String, usize, String, String)>,
     gestion_contextes: Option<gestion_contextes::GestionContextes>,
     editeur_gabarit_vue: Option<gabarits_vues::EditeurGabaritVue>,
-    editeur_profil: Option<profils::EditeurProfil>,
     filtres_contextes: crate::modele::edition::contextes::FiltresContextes,
     /// Matériau du projet natif dont les graphismes sont ouverts.
     materiau_edite: Option<String>,
@@ -752,6 +759,8 @@ impl ViewerApp {
             famille: None,
             famille_active: false,
             familles_inactives: Vec::new(),
+            familles_planes: BTreeMap::new(),
+            famille_plane_active: None,
             prochain_ordre_famille: 0,
             action_famille: None,
             confirmer_famille: false,
@@ -781,6 +790,7 @@ impl ViewerApp {
             camera: Camera::default(),
             selected: None,
             selection_multiple: Vec::new(),
+            famille_selectionnee: None,
             fenetre_selection: None,
             reveal: None,
             hidden_classes: HashSet::new(),
@@ -848,6 +858,7 @@ impl ViewerApp {
             selection_precedente: Vec::new(),
             niveau_plan_precedent: None,
             ruban_edition: Default::default(),
+            editeur_garde_corps: None,
             boite: None,
             boite_active: false,
             coupe_dirty: true,
@@ -869,7 +880,6 @@ impl ViewerApp {
             cote_arc: None,
             gestion_contextes: None,
             editeur_gabarit_vue: None,
-            editeur_profil: None,
             filtres_contextes: Default::default(),
             categories: Vec::new(),
             categorie_objet: Vec::new(),
@@ -944,26 +954,33 @@ impl eframe::App for ViewerApp {
         if ctx.input(|i| i.viewport().close_requested()) && self.sauvegarde.is_some() {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.error = Some("Un enregistrement est en cours ; attendez sa fin avant de quitter.".into());
+        } else if ctx.input(|i| i.viewport().close_requested()) && let Some(ordre) = self.edition_plane_modifiee(None) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.activer_famille(ordre);
+            self.demander_fermeture_famille();
         } else if ctx.input(|i| i.viewport().close_requested()) && (self.natif_modifie || self.documents.values().any(|d| d.modifie)) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.confirmer_fermeture = Some((true, self.document_actif));
         }
-        self.clavier_dessin(&ctx);
-        self.clavier_transformation(&ctx);
-        self.repeter_commande(&ctx);
-        if self.alignement_plan && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        let projet_actif = self.famille_plane_active.is_none();
+        if projet_actif {
+            self.clavier_dessin(&ctx);
+            self.clavier_transformation(&ctx);
+            self.repeter_commande(&ctx);
+        }
+        if projet_actif && self.alignement_plan && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             self.alignement_plan = false;
             self.arete_alignement = None;
         }
-        if self.orientation_nord_en_cours && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        if projet_actif && self.orientation_nord_en_cours && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             self.orientation_nord_en_cours = false;
             self.arete_alignement = None;
             self.status = "Orientation du nord annulée.".into();
         }
-        if self.afficher_masques && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        if projet_actif && self.afficher_masques && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             self.basculer_afficher_masques();
         }
-        if self.ruban_edition.a_un_outil() && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        if projet_actif && self.ruban_edition.a_un_outil() && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             // Échap : la saisie, puis le mur ou la dalle en cours, puis l'outil
             if self.ruban_edition.outil()==Some(crate::ui::ruban::Outil::Ajuster) && self.ajustement.as_ref().is_some_and(|a|a.reference.is_some()) {
                 self.ajustement=Some(Default::default());
@@ -989,25 +1006,28 @@ impl eframe::App for ViewerApp {
         self.clavier_raccourcis(&ctx);
 
         egui::Panel::top("top").show(ui, |ui| self.top_bar(ui));
+        self.fenetre_garde_corps(&ctx);
         self.fenetre_gestion_contextes(&ctx);
         self.fenetre_gabarit_vue(&ctx);
-        self.fenetre_profil(&ctx);
         self.fenetre_parametres(&ctx);
         self.fenetre_coller_niveau(&ctx);
         self.fenetres_collaboration(&ctx);
-        self.fenetre_erreur_document(&ctx);
         self.zone_panneaux = ui.available_rect_before_wrap();
         self.deplacer_panneau(&ctx);
-        if self.rvt.is_some() && self.rvt_sheet {
+        if self.rvt.is_some() && self.rvt_sheet && !self.mode_famille() {
             egui::Panel::top("onglets_vues").show(ui, |ui| self.onglets_vues(ui));
-            egui::CentralPanel::default().show(ui, |ui| self.revit_view(ui));
+            egui::CentralPanel::default().show(ui, |ui| {
+                let rect = ui.available_rect_before_wrap();
+                self.revit_view(ui);
+                self.annotation_erreur(ui, rect, 0.0);
+            });
         } else {
             // disposition de Revit par défaut : propriétés à gauche, arborescence du projet
             // à droite ; chacun s'ancre d'un côté ou flotte (ancrages relevés en début
             // d'image, changés pour la suivante)
             let ancrages = self.ancrages;
             // onglet Famille : l'éditeur a ses propres panneaux, ceux du projet se retirent
-            let famille = self.famille_active && self.famille.is_some();
+            let famille = self.mode_famille();
             for p in Panneau::TOUS {
                 let id = egui::IdSalt::new((p.nom(), ancrages[p as usize].nom()));
                 let panneau = match ancrages[p as usize] {
@@ -1024,9 +1044,15 @@ impl eframe::App for ViewerApp {
             }
             if !famille {
                 egui::Panel::bottom("barre_vue").show(ui, |ui| self.barre_vue(ui));
+            } else if let Some(cartouche) = self.cartouche_actif() {
+                egui::Panel::bottom("barre_vue_cartouche").show(ui, |ui| cartouche.barre_vue(ui));
             }
             egui::CentralPanel::no_frame().show(ui, |ui| {
-                if self.famille_active && self.famille.is_some() {
+                let rect = ui.available_rect_before_wrap();
+                let mut bas_barre = 0.0;
+                if self.famille_plane_active.is_some() {
+                    self.vue_famille_plane(ui);
+                } else if self.famille_active && self.famille.is_some() {
                     self.vue_famille(ui);
                 } else if self.scene.is_some() && self.vues_ouvertes.is_empty() {
                     ui.centered_and_justified(|ui| ui.label("Ouvrir une vue depuis l’arborescence du projet."));
@@ -1036,7 +1062,9 @@ impl eframe::App for ViewerApp {
                     self.vue_jeu(ui);
                 } else {
                     self.viewport(ui);
+                    if self.scene.is_some() { bas_barre = self.dessin2d.bas_barre; }
                 }
+                self.annotation_erreur(ui, rect, bas_barre);
             });
             for p in Panneau::TOUS.into_iter().filter(|p| ancrages[*p as usize] == Ancrage::Flottant) {
                 let i = p as usize;

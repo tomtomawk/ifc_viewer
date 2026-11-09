@@ -21,6 +21,7 @@ pub enum Menu {
     Modeliser,
     Modifier,
     Annoter,
+    Cartouche,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -77,6 +78,7 @@ pub(crate) enum Outil {
     Ligne,
     Arc,
     Polyligne,
+    Rectangle,
     Spline,
     Cercle,
     Zone,
@@ -143,6 +145,7 @@ impl Outil {
             Self::Ligne => "Ligne",
             Self::Arc => "Arc",
             Self::Polyligne => "Polyligne",
+            Self::Rectangle => "Rectangle",
             Self::Spline => "Spline",
             Self::Cercle => "Cercle",
             Self::Zone => "Zone remplie",
@@ -172,6 +175,19 @@ impl Outil {
             Self::Dalle | Self::Sol | Self::Plafond | Self::Toiture => Self::Surfaces,
             _ => self,
         }
+    }
+
+    pub(in crate::ui) fn forme_dessin(self) -> Option<crate::dessin::dao::OutilDessin> {
+        use crate::dessin::dao::OutilDessin as D;
+        Some(match self {
+            Self::Ligne => D::Ligne,
+            Self::Polyligne => D::Polyligne,
+            Self::Rectangle => D::Rectangle,
+            Self::Spline => D::Spline,
+            Self::Cercle => D::Cercle,
+            Self::Arc => D::Arc,
+            _ => return None,
+        })
     }
 }
 
@@ -287,6 +303,7 @@ fn limites_croquis_mur(parametres: &crate::modele::edition::ParametresMur, _proj
 
 fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
     use Outil::*;
+    const DESSIN_2D: (&str, &[Outil]) = ("Dessin 2D", &[Ligne, Polyligne, Spline, Cercle, Arc]);
     match menu {
         Menu::Modeliser => &[
             ("Construire", &[Mur, Surfaces]),
@@ -306,9 +323,14 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
             ("Vues", &[VuePlan, VueCoupe]),
             ("Cotes et textes", &[Cote, Texte, Etiquette, Altimetrie]),
             // les régions remplies sont des polylignes fermées (Remplissage dans Propriétés)
-            ("Dessin 2D", &[Ligne, Polyligne, Spline, Cercle, Arc]),
+            DESSIN_2D,
             ("Bibliothèque", &[Symbole, Legende]),
             ("Documents", &[Feuilles, Nomenclatures]),
+        ],
+        Menu::Cartouche => &[
+            ("Cotes et textes", &[Cote, Texte, Etiquette]),
+            DESSIN_2D,
+            ("Papier", &[Rectangle, Zone]),
         ],
     }
 }
@@ -337,21 +359,18 @@ fn largeur_texte(ui: &egui::Ui, texte: &str, taille: f32) -> f32 {
         .x
 }
 
-fn largeur_libelle(ui: &egui::Ui, outil: Outil) -> f32 {
-    largeur_texte(ui, outil.nom(), 12.0)
-}
-
-fn colonnes(ui: &egui::Ui, outils: &[Outil], grands: &[Outil]) -> Vec<Colonne> {
+fn colonnes(ui: &egui::Ui, outils: &[Outil], grands: &[Outil], serre: bool) -> Vec<Colonne> {
     let mut resultat: Vec<Colonne> = Vec::new();
     for &outil in outils {
         if grands.contains(&outil) {
             resultat.push(Colonne {
                 outils: vec![outil],
                 grande: true,
-                largeur: (largeur_libelle(ui, outil) + 20.0).max(62.0),
+                largeur: (largeur_texte(ui, outil.nom(), 12.0) + 20.0).max(62.0),
             });
         } else {
-            let largeur = largeur_libelle(ui, outil) + 34.0;
+            let (police, marge) = if serre { (11.0, 24.0) } else { (12.0, 34.0) };
+            let largeur = largeur_texte(ui, outil.nom(), police) + marge;
             if let Some(colonne) = resultat
                 .last_mut()
                 .filter(|c| !c.grande && c.outils.len() < 3)
@@ -376,12 +395,16 @@ fn largeur_groupe(ui: &egui::Ui, nom: &str, colonnes: &[Colonne]) -> f32 {
         .max(largeur_texte(ui, nom, 11.0) + 8.0)
 }
 
-fn largeur_commandes(ui: &egui::Ui, menu: Menu, grands: &[Outil]) -> f32 {
+fn largeur_commandes(ui: &egui::Ui, menu: Menu, grands: &[Outil], serre: bool) -> f32 {
     groupes(menu)
         .iter()
-        .map(|(nom, outils)| largeur_groupe(ui, nom, &colonnes(ui, outils, grands)))
+        .map(|(nom, outils)| largeur_groupe(ui, nom, &colonnes(ui, outils, grands, serre)))
         .sum::<f32>()
-        + ESPACE_GROUPES * groupes(menu).len().saturating_sub(1) as f32
+        + espace_groupes(serre) * groupes(menu).len().saturating_sub(1) as f32
+}
+
+fn espace_groupes(serre: bool) -> f32 {
+    if serre { 8.0 } else { ESPACE_GROUPES }
 }
 
 enum Champ {
@@ -402,6 +425,9 @@ pub struct RubanEdition {
     pub selection_murs: bool,
     /// Bouton Jonctions de cette image : le menu s'ancre dessus.
     pub bouton_jonctions: Option<egui::Response>,
+    pub modifier_famille: bool,
+    pub ouvrir_famille: bool,
+    pub type_garde_corps: Option<String>,
     pub prolonger_angle: bool,
     pub selection_mur: bool,
     selection: Option<Outil>,
@@ -550,7 +576,7 @@ fn champs(o: Outil) -> Vec<Champ> {
             Choix("Contenu", &["Type", "Repère", "Matériau"]),
             Nombre("Hauteur papier", 2.5, " mm"),
         ],
-        Ligne | Arc | Polyligne | Spline | Cercle => vec![],
+        Ligne | Arc | Polyligne | Rectangle | Spline | Cercle => vec![],
         Zone => vec![
             Choix("Motif", &["Diagonales 45°", "Béton", "Isolant", "Plein"]),
             Nombre("Pas papier", 2.0, " mm"),
@@ -923,6 +949,7 @@ pub enum Icone {
     Exporter(&'static str),
     /// Charger la famille dans le projet : document et flèche qui y entre.
     Charger,
+    /// Pictogramme d'un outil de Documenter.
     /// Outils et vues de l'éditeur de familles, par leur clé.
     Famille(&'static str),
 }

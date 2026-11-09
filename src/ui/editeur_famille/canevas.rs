@@ -30,17 +30,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
     let base_cadre = Cadre { centre: rect.center(), milieu: ((h0 + h1) / 2.0, (v0 + v1) / 2.0), echelle };
     ed.rect_navigation=rect;
     let nav=&mut ed.navigation[ed.vue as usize];
-    let survole=resp.hovered();
-    let panoramique=resp.dragged_by(PointerButton::Middle);
-    if survole || panoramique {
-        let (molette,pan,q)=ui.input_mut(|i| {
-            let molette=if survole {let d=i.smooth_scroll_delta.y;i.smooth_scroll_delta=egui::Vec2::ZERO;d}else{0.0};
-            (molette,if panoramique {i.pointer.delta()}else{egui::Vec2::ZERO},i.pointer.hover_pos().unwrap_or(rect.center()))
-        });
-        nav.naviguer(&base_cadre,q,molette,pan);
-        if resp.dragged_by(PointerButton::Middle){ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);}
-        if resp.double_clicked_by(PointerButton::Middle){*nav=Default::default();}
-    }
+    nav.souris(ui, &resp, &base_cadre, false, false);
     let cadre=nav.cadre(&base_cadre);
     let echelle=cadre.echelle;
     let boite = |a: (f64, f64), b: (f64, f64)| egui::Rect::from_two_pos(cadre.ecran(a.0, a.1), cadre.ecran(b.0, b.1));
@@ -247,6 +237,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
         }
     }
 
+    aides::repere_origine_famille(&painter, cadre.ecran(0.0, 0.0));
     // interactions
     let curseur = resp.hover_pos().or(resp.interact_pointer_pos());
     // Échap, comme dans le projet : abandonne la saisie en cours, sinon revient à la

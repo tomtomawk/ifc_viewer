@@ -9,10 +9,9 @@ impl ViewerApp {
         self.fenetre_motifs(ui.ctx());
         self.fenetre_position_plan(ui.ctx());
         self.fenetre_plumes(ui.ctx());
-        self.fenetre_famille_cartouche(ui.ctx());
-        self.fenetre_famille_etiquette(ui.ctx());
         self.fenetre_types_traits(ui.ctx());
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
+        if self.proprietes_famille_selectionnee(ui) { return; }
         if let Some(jeu) = self.jeu_actif() {
             egui::ScrollArea::vertical().show(ui, |ui| self.proprietes_jeu(ui, &jeu));
             return;
@@ -48,6 +47,7 @@ impl ViewerApp {
             if !ids.is_empty() && self.onglet_ruban == OngletRuban::Modifier {
                 self.options_modifier(ui, true);
             }
+            if self.selecteur_garde_corps(ui, &ids) { return; }
             // Le type vient immédiatement après Phase / Sous-projet / Variante,
             // au même emplacement que pendant la création d'un mur.
             if self.jeu_actif().is_none() && !self.ruban_edition.mur_actif() {

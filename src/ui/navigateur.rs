@@ -53,7 +53,7 @@ impl ViewerApp {
             Some((p, _)) => (
                 crate::modele::documentation::jeux(p).into_iter().map(|j| {
                     let fs = p.feuilles.iter().filter(|f| f.jeu == j).map(|f| {
-                        let vues = f.vues.iter().map(|v| (crate::rendu::scene::numero_vue(&v.vue), p.vues.iter().find(|x| x.id == v.vue).map_or("Vue absente".to_string(), |x| x.nom.clone()), v.echelle)).collect();
+                        let vues = f.vues.iter().map(|v| (crate::rendu::scene::numero_vue(&v.vue), p.vues.iter().find(|x| x.id == v.vue).map_or("Vue absente".to_string(), |x| x.nom.clone()), v.echelle_sur_feuille(p))).collect();
                         let tables = f.nomenclatures.iter().map(|n| (n.nomenclature.clone(), p.nomenclatures.iter().find(|x| x.id == n.nomenclature).map_or("Nomenclature absente".to_string(), |x| x.nom.clone()))).collect();
                         (f.id.clone(), format!("{} - {}", f.numero, f.nom), vues, tables)
                     }).collect();
@@ -70,7 +70,6 @@ impl ViewerApp {
         let mut ajouter_feuille_jeu: Option<String> = None;
         let mut exporter_jeu_nav: Option<String> = None;
         let mut exporter_feuille_nav: Option<(&str, String)> = None;
-        let mut editer_cartouche_nav: Option<String> = None;
         let mut regler_jeu: Option<(String, Option<String>)> = None;
         // feuille glissée dans l'arborescence : (feuille, jeu, feuille devant laquelle)
         let mut deplacer: Option<(String, String, Option<String>)> = None;
@@ -265,10 +264,6 @@ impl ViewerApp {
                                     regler_jeu = Some((jeu.clone(), Some(fid.clone())));
                                     ui.close();
                                 }
-                                if ui.button("Modifier la famille de cartouche…").clicked() {
-                                    editer_cartouche_nav = Some(fid.clone());
-                                    ui.close();
-                                }
                                 if ui.button("Exporter en PDF…").clicked() {
                                     exporter_feuille_nav = Some(("pdf", fid.clone()));
                                     ui.close();
@@ -323,56 +318,38 @@ impl ViewerApp {
                 par_cat.entry(f.categorie.as_str()).or_default().push(f);
             }
         }
-        // projet natif : portes et fenêtres (familles modélisées), à ouvrir dans l'éditeur
-        let familles_natives = if self.natif.is_some() { Some(self.familles_projet()) } else { None };
-        let cartouches_natifs = self.natif.as_ref().map(|(p, _)| p.familles_cartouches.iter().map(|f| {
-            let feuille = p.cartouches_feuilles.iter().find(|(_, nom)| *nom == &f.nom).map(|(id, _)| id.clone()).or_else(|| p.feuilles.first().map(|f| f.id.clone()));
-            (f.clone(), feuille)
-        }).collect::<Vec<_>>()).unwrap_or_default();
-        let mut ouvrir_famille: Option<(Option<String>, crate::modele::GenreOuverture)> = None;
+        use super::selection_famille::FamilleCatalogue;
+        let familles_natives = self.natif.as_ref().map(|(p, _)| FamilleCatalogue::liste(p));
+        let mut famille_choisie = None;
+        let mut nouvelle_ouverture = None;
         let mut charger_famille = false;
-        let mut ouvrir_profil = None;
         let mut nouveau_profil = false;
         let mut charger_profil = false;
         rubrique_nav(ui, LeftTab::Familles, "Familles".into(), false, &mut |ui| {
             if let Some(familles) = &familles_natives {
-                let profils = self.natif.as_ref().map(|(p, _)| &p.profils);
-                egui::CollapsingHeader::new("Profils").id_salt("nav-profils").open(ouvert.then_some(true)).show(ui, |ui| {
-                    if let Some(profils) = profils {
-                        for profil in profils.iter().filter(|p| garde(&p.nom)) {
-                            if ui.selectable_label(false, &profil.nom).on_hover_text("Ouvrir et modifier la famille de profil").clicked() { ouvrir_profil = Some(profil.id.clone()); }
-                        }
-                    }
-                    if ui.small_button("Nouveau profil…").clicked() { nouveau_profil = true; }
-                    if ui.small_button("Charger un profil…").clicked() { charger_profil = true; }
-                });
-                egui::CollapsingHeader::new("Cartouches").id_salt("nav-familles-cartouches").show(ui, |ui| {
-                    ui.label("Cartouche standard");
-                    for (famille, feuille) in &cartouches_natifs {
-                        if ui.selectable_label(false, &famille.nom).on_hover_text("Modifier la famille de cartouche").clicked() {
-                            if let Some(feuille) = feuille {
-                                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("editeur_cartouche"), (famille.clone(), feuille.clone(), None::<[f64; 2]>, famille.nom.clone())));
+                for titre in ["Profils", "Cartouches", "Étiquettes de pièce", "Portes", "Fenêtres", "Composants", "Garde-corps"] {
+                    let liste: Vec<_> = familles.iter().filter(|(f, nom)| f.categorie() == titre && (garde(nom) || garde(titre))).collect();
+                    egui::CollapsingHeader::new(format!("{titre} ({})", liste.len())).id_salt(("nav-famille-native", titre)).open(ouvert.then_some(true)).show(ui, |ui| {
+                        for (famille, nom) in liste {
+                            let r = ui.selectable_label(self.famille_selectionnee.as_ref() == Some(famille), *nom)
+                                .on_hover_text("Sélectionner la famille · utiliser Modifier la famille dans le ruban");
+                            if r.clicked() {
+                                famille_choisie = Some(famille.clone());
                             }
                         }
-                    }
-                });
-                use crate::modele::GenreOuverture as G;
-                for (genre, titre) in [(G::Porte, "Portes"), (G::Fenetre, "Fenêtres")] {
-                    let liste: Vec<_> = familles.iter().filter(|f| f.2 == genre && garde(&f.1)).collect();
-                    egui::CollapsingHeader::new(format!("{titre} ({})", liste.len())).id_salt(("nav-ouvertures", titre)).open(ouvert.then_some(true)).show(ui, |ui| {
-                        for (id, nom, g) in liste {
-                            if ui.selectable_label(false, nom).on_hover_text("Clic : ouvrir la famille dans l'éditeur").clicked() {
-                                ouvrir_famille = Some((Some(id.clone()), *g));
-                            }
+                        if titre == "Profils" {
+                            if ui.small_button("Nouveau profil…").clicked() { nouveau_profil = true; }
+                            if ui.small_button("Charger un profil…").clicked() { charger_profil = true; }
                         }
                     });
                 }
+                use crate::modele::GenreOuverture as G;
                 ui.horizontal_wrapped(|ui| {
                     if ui.small_button("Nouvelle porte…").clicked() {
-                        ouvrir_famille = Some((None, G::Porte));
+                        nouvelle_ouverture = Some(G::Porte);
                     }
                     if ui.small_button("Nouvelle fenêtre…").clicked() {
-                        ouvrir_famille = Some((None, G::Fenetre));
+                        nouvelle_ouverture = Some(G::Fenetre);
                     }
                     if ui.small_button("Charger une famille…").on_hover_text("Fichier .famille.json : un nouveau type dans le projet").clicked() {
                         charger_famille = true;
@@ -426,14 +403,13 @@ impl ViewerApp {
         }
         if let Some(jeu) = exporter_jeu_nav { self.exporter_jeu_dialogue(&jeu); }
         if let Some((extension, id)) = exporter_feuille_nav { self.exporter_feuille(extension, &id); }
-        if let Some(id) = editer_cartouche_nav { self.editer_cartouche_feuille(ui.ctx(), &id); }
         if let Some((jeu, feuille)) = regler_jeu {
             self.ouvrir_jeu(&jeu, feuille);
         }
-        if let Some((t, genre)) = ouvrir_famille {
-            self.ouvrir_editeur_famille_type(t, genre);
+        if let Some(famille) = famille_choisie {
+            self.selectionner_famille(famille);
         }
-        if let Some(id) = ouvrir_profil { self.ouvrir_profil(Some(&id)); }
+        if let Some(genre) = nouvelle_ouverture { self.ouvrir_editeur_famille_type(None, genre); }
         if nouveau_profil { self.ouvrir_profil(None); }
         if charger_profil { self.charger_profil_fichier(); }
         if charger_famille {

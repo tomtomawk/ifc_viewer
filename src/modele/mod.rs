@@ -17,6 +17,7 @@ pub mod murs;
 pub mod soleil;
 pub mod volumes;
 pub use elements::escalier::{Escalier, GardeCorps, Remplissage};
+pub use elements::garde_corps::TypeGardeCorps;
 pub use elements::composant::{Composant, TypeComposant};
 pub use elements::piece::Piece;
 // Noms courts des sous-modules, visibles dans tout `modele` (par `use crate::modele::*`).
@@ -99,6 +100,8 @@ pub struct Projet {
     pub composants: Vec<Composant>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub garde_corps: Vec<GardeCorps>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub types_garde_corps: Vec<TypeGardeCorps>,
     /// Contexte des éléments dont le format ne porte pas ces propriétés directement.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub contextes: BTreeMap<String, ContexteElement>,

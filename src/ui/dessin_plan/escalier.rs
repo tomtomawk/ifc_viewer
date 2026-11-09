@@ -48,26 +48,25 @@ impl ViewerApp {
 
     /// Crée un garde-corps (réglages du ruban), hébergé ou non par un escalier.
     pub(in crate::ui) fn creer_garde_corps(&mut self, trace: Vec<[f64; 2]>, escalier: Option<String>) -> Result<String, String> {
-        use crate::modele::Remplissage;
         use crate::ui::ruban::Outil;
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
         let niveau = match escalier.as_ref().and_then(|id| p.escaliers.iter().find(|e| &e.id == id)) {
             Some(e) => e.niveau.clone(),
             None => self.niveau_trace().ok_or("Créez d'abord un niveau.")?,
         };
-        let remplissage = match self.ruban_edition.texte_option(Outil::GardeCorps, 2).as_str() {
-            "Panneau plein" => Remplissage::Plein,
-            "Vitrage" => Remplissage::Vitre,
-            _ => Remplissage::Barreaudage,
-        };
+        let standard = self.standard_garde_corps();
+        let type_actif = self.ruban_edition.type_garde_corps.as_ref()
+            .and_then(|id| p.types_garde_corps.iter().find(|t| &t.id == id));
+        let t = type_actif.unwrap_or(&standard);
         let garde_corps = crate::modele::GardeCorps {
             id: String::new(),
             nom: format!("Garde-corps {}", p.garde_corps.len() + 1),
             niveau,
             decalage: if escalier.is_some() { 0.0 } else { self.ruban_edition.nombre_option(Outil::GardeCorps, 1) },
             trace,
-            hauteur: self.ruban_edition.nombre_option(Outil::GardeCorps, 0),
-            remplissage,
+            hauteur: t.hauteur,
+            remplissage: t.remplissage,
+            type_garde_corps: type_actif.map(|t| t.id.clone()),
             escalier,
         };
         self.executer_bim(Commande::GardeCorps { garde_corps })?.into_iter().next().ok_or_else(|| "Garde-corps non créé.".to_string())

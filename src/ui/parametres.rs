@@ -173,8 +173,9 @@ impl ViewerApp {
             return;
         }
         let focus = ctx.egui_wants_keyboard_input();
+        let tab_vue = self.tab_dans_vue(ctx) && !self.mode_famille() && self.couche_suivante().is_some();
         if !focus && self.parametres.is_none() && self.ruban_edition.outil().is_none()
-            && !self.famille_active && !self.vol.actif && self.dessin2d.edition_contour.is_none()
+            && !self.mode_famille() && !self.vol.actif && self.dessin2d.edition_contour.is_none()
             && self.poignee_axe.is_none() && self.dessin2d.arc_glisse.is_none()
             && self.fenetre_selection.is_none() && self.loading.is_none()
             && ctx.input_mut(|i|i.consume_key(egui::Modifiers::NONE,egui::Key::Space)) {
@@ -187,14 +188,18 @@ impl ViewerApp {
             }
         }
 
-        let trace = self.trace_en_cours()
-            || self.dessin2d.edition_contour.is_some()
-            || self.poignee_axe.is_some()
-            || self.coupe_depart.is_some()
-            || self.bim.depart_structure.is_some()
-            || !self.transfo.points.is_empty();
+        let trace = if self.mode_famille() {
+            self.cartouche_actif().is_some_and(|c| c.trace_en_cours())
+        } else {
+            self.trace_en_cours()
+                || self.dessin2d.edition_contour.is_some()
+                || self.poignee_axe.is_some()
+                || self.coupe_depart.is_some()
+                || self.bim.depart_structure.is_some()
+                || !self.transfo.points.is_empty()
+        };
         let modeliser = self.natif.is_some()
-            && !(self.famille_active && self.famille.is_some())
+            && !self.mode_famille()
             && !trace
             && !self.vol.actif
             && self.loading.is_none();
@@ -214,7 +219,8 @@ impl ViewerApp {
                 if let egui::Event::Key{key,pressed:true,repeat,modifiers,..}=e {
                     // touche maintenue : seules les commandes du soleil se répètent (U, I)
                     if let Some((c,_))=catalogue.iter().find(|(c,r)| matches!(r,Raccourci::Touche{key:k,modifiers:m} if key==k && modifiers.matches_exact(*m))&&(!focus||c.categorie=="Fichiers")&&(!*repeat||c.id.starts_with("soleil_"))) {
-                        if c.categorie=="Fichiers"||(!focus&&!trace&&!self.vol.actif&&(self.scene.is_some()||c.id=="annuler"||c.id=="retablir")) {
+                        if (c.id != "selection_suivante" || tab_vue)
+                            && (c.categorie=="Fichiers"||(!focus&&!trace&&!self.vol.actif&&(self.scene.is_some()||c.id=="annuler"||c.id=="retablir"))) {
                             actions.push(c.id);consommer.push(index);
                         }
                     }
@@ -293,8 +299,18 @@ impl ViewerApp {
         // onglet Famille : les raccourcis du projet (masquer, isoler, copier…) agiraient
         // sur la maquette masquée
         let famille = ["nouveau", "ouvrir", "fermer", "parametres", "theme_suivant", "enregistrer", "annuler", "retablir", "supprimer", "cadrer"];
-        if self.famille_active && self.famille.is_some() && !famille.contains(&action) {
+        if self.mode_famille() && !famille.contains(&action) {
             return;
+        }
+        if self.famille_plane_active.is_some() {
+            match action {
+                "enregistrer" => { self.error = self.enregistrer_famille_plane(false).err(); return; }
+                "fermer" => { self.demander_fermeture_famille(); return; }
+                "supprimer" => { self.supprimer_selection_famille_plane(); return; }
+                "cadrer" => { let _ = self.navigation_cartouche("cadrer"); return; }
+                "annuler" | "retablir" => return,
+                _ => {}
+            }
         }
         match action {
             "copier_presse" => self.memoriser_copie_niveau(self.selection_bim()),
@@ -323,14 +339,11 @@ impl ViewerApp {
                     ajouter: false,
                 },
             ),
-            "selection_suivante" if self.selected.is_some() => {
-                self.tab_selection();
-                ctx.memory_mut(|m| {
-                    m.move_focus(egui::FocusDirection::None);
-                    if let Some(id) = m.focused() {
-                        m.surrender_focus(id);
-                    }
-                });
+            "selection_suivante" => {
+                if let Some(id) = self.couche_suivante() {
+                    self.select(Some(id), true);
+                    ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+                }
             }
             // onglet Famille : Suppr agit sur la famille, jamais sur le projet masqué
             "supprimer" if self.famille_active && self.famille.is_some() => {
@@ -364,7 +377,7 @@ impl ViewerApp {
                 self.status = format!("Soleil : {:02} h {:02} · azimut {az:.0}°, hauteur {h:.0}°", self.soleil_heure as u32, ((self.soleil_heure.fract()) * 60.0).round() as u32);
                 self.visibility_dirty = true;
             }
-            "nouveau" | "selection_tout" | "selection_suivante" | "supprimer" => {}
+            "nouveau" | "selection_tout" | "supprimer" => {}
             outil => {
                 if let Err(e) = self.activer_outil_interface(outil) {
                     self.error = Some(e);

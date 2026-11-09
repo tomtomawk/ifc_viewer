@@ -1,11 +1,13 @@
 //! Feuilles : jeux, cartouches, vues et nomenclatures placées, export SVG et PDF.
 use super::*;
 
+const TAILLE_CARTOUCHE_STANDARD: [f64; 2] = [180.0, 40.0];
+
 impl Default for FamilleCartouche {
     fn default() -> Self {
         Self {
             id: crate::modele::collaboration::uuid(),
-            nom: "Cartouche standard".into(), largeur: 180.0, hauteur: 40.0,
+            nom: "Cartouche standard".into(), largeur: TAILLE_CARTOUCHE_STANDARD[0], hauteur: TAILLE_CARTOUCHE_STANDARD[1],
             traits: vec![[[0.0,0.0],[180.0,0.0]], [[180.0,0.0],[180.0,40.0]], [[180.0,40.0],[0.0,40.0]], [[0.0,40.0],[0.0,0.0]], [[140.0,0.0],[140.0,40.0]], [[0.0,14.0],[140.0,14.0]], [[0.0,30.0],[140.0,30.0]]],
             textes: vec![
                 TexteCartouche { contenu: "{projet}".into(), position: [3.0,33.0], hauteur: 3.5 },
@@ -14,6 +16,7 @@ impl Default for FamilleCartouche {
                 TexteCartouche { contenu: "{echelles}".into(), position: [3.0,3.5], hauteur: 2.5 },
                 TexteCartouche { contenu: "{numero}".into(), position: [144.0,15.0], hauteur: 9.0 },
             ],
+            formes: Vec::new(),
         }
     }
 }
@@ -52,6 +55,39 @@ pub(super) fn trait_papier(points: Vec<DVec3>, fermee: bool, epaisseur: f64) -> 
     Primitive { forme: Forme::Polyligne { points, fermee }, style: Style { couleur: [20, 20, 20, 255], epaisseur }, role: Role::Annotation, element: None }
 }
 
+pub fn famille_cartouche<'a>(p: &'a Projet, feuille: &str) -> Option<&'a FamilleCartouche> {
+    let nom = p.cartouches_feuilles.get(feuille)?;
+    p.familles_cartouches.iter().find(|f| &f.nom == nom)
+}
+
+pub fn cadre_cartouche(p: &Projet, f: &Feuille) -> Option<[f64; 4]> {
+    let [l, h] = famille_cartouche(p, &f.id).map_or(TAILLE_CARTOUCHE_STANDARD, |c| [c.largeur, c.hauteur]);
+    let [x, y] = [f.largeur - MARGE - l, MARGE + h];
+    (x > MARGE && y < f.hauteur - MARGE).then_some([x, MARGE, f.largeur - MARGE, y])
+}
+
+pub fn trait_cartouche(t: [[f64; 2]; 2]) -> Primitive {
+    trait_papier(t.map(|[x, y]| pt_papier(x, y)).to_vec(), false, 0.25)
+}
+
+pub fn texte_cartouche(t: &TexteCartouche, contenu: &str) -> Primitive {
+    texte(contenu, pt_papier(t.position[0], t.position[1]), DVec3::X, DVec3::Y, t.hauteur / 1000.0, [20, 20, 20, 255])
+}
+
+pub fn forme_cartouche(p: &Projet, forme: &AnnotationForme) -> Vec<Primitive> {
+    let pt = |v: DVec2| pt_papier(v.x, v.y);
+    if let AnnotationForme::Cote { debut: PointCote::Fixe { point: a }, fin: PointCote::Fixe { point: b }, decalage } = forme {
+        let g = geometrie_cote(&[DVec2::from_array(*a), DVec2::from_array(*b)], *decalage, 1.5);
+        let mut out: Vec<_> = g.traits.iter().map(|[x, y]| ligne(pt(*x), pt(*y))).collect();
+        out.extend(g.textes.into_iter().map(|(pos, valeur)| {
+            texte(&format!("{valeur:.1} mm"), pt(pos), DVec3::X, DVec3::Y, 0.0025, [20, 20, 20, 255])
+        }));
+        out
+    } else {
+        primitives_forme_dessin(p, forme, 1.0, &pt)
+    }
+}
+
 /// Cadre et cartouche d'une feuille, en mètres du papier (origine en bas à gauche) :
 /// bord, cadre intérieur, cartouche en bas à droite (projet, cartouche libre, titre,
 /// numéro, échelles des vues placées).
@@ -59,42 +95,41 @@ pub fn cadre_feuille(p: &Projet, f: &Feuille) -> Vec<Primitive> {
     let (l, h, m) = (f.largeur, f.hauteur, MARGE);
     let rect = |x0: f64, y0: f64, x1: f64, y1: f64, e: f64| trait_papier(vec![pt_papier(x0, y0), pt_papier(x1, y0), pt_papier(x1, y1), pt_papier(x0, y1)], true, e);
     let mut v = vec![rect(0.0, 0.0, l, h, 0.0), rect(m, m, l - m, h - m, 0.5)];
-    let standard = FamilleCartouche::default();
-    let famille = p.cartouches_feuilles.get(&f.id).and_then(|nom| p.familles_cartouches.iter().find(|x| &x.nom == nom)).unwrap_or(&standard);
-    let [cl, ch] = [famille.largeur, famille.hauteur];
-    let (x0, y0, y1) = (l - m - cl, m, m + ch);
-    if x0 > m && y1 < h - m {
-        for t in &famille.traits {
-            v.push(trait_papier(vec![pt_papier(x0 + t[0][0], y0 + t[0][1]), pt_papier(x0 + t[1][0], y0 + t[1][1])], false, 0.25));
-        }
-        let noir = [20, 20, 20, 255];
-        let mut echelles: Vec<String> = f.vues.iter().map(|x| format!("1:{}", x.echelle)).collect();
+    if let Some([x0, y0, _, _]) = cadre_cartouche(p, f) {
+        let standard;
+        let famille = if let Some(famille) = famille_cartouche(p, &f.id) {
+            famille
+        } else {
+            standard = FamilleCartouche::default();
+            &standard
+        };
+        let origine = pt_papier(x0, y0);
+        v.extend(famille.formes.iter().flat_map(|forme| forme_cartouche(p, forme)).map(|pr| pr.translater(origine)));
+        v.extend(famille.traits.iter().map(|t| trait_cartouche(*t).translater(origine)));
+        let mut echelles: Vec<String> = f.vues.iter().map(|x| format!("1:{}", x.echelle_sur_feuille(p))).collect();
         echelles.dedup();
         let ech = if echelles.is_empty() { String::new() } else { format!("Échelle {}", echelles.join(", ")) };
         for t in &famille.textes {
             let contenu = t.contenu.replace("{projet}", &p.nom).replace("{feuille}", &f.nom).replace("{numero}", &f.numero).replace("{cartouche}", &f.cartouche).replace("{echelles}", &ech);
             if !contenu.is_empty() {
-                v.push(texte(&contenu, pt_papier(x0 + t.position[0], y0 + t.position[1]), DVec3::X, DVec3::Y, t.hauteur / 1000.0, noir));
+                v.push(texte_cartouche(t, &contenu).translater(origine));
             }
         }
     }
     v
 }
 
-/// Vue placée sur une feuille : dessin de la vue à l'échelle de la feuille, en mètres du
+/// Vue placée sur une feuille : dessin à l'échelle de sa vue source, en mètres du
 /// papier (origine en bas à gauche), suivi de son titre (nom, échelle) souligné ; et
 /// l'étendue du dessin seul, en mm du papier [x0, y0, x1, y1].
 pub fn vue_placee(p: &Projet, v: &VuePlacee) -> Result<(Vec<Primitive>, [f64; 4]), String> {
-    let mut projet = p.clone();
-    if let Some(vue) = projet.vues.iter_mut().find(|x| x.id == v.vue) {
-        vue.echelle = v.echelle;
-    }
-    let dessin = dessin_vue(&projet, &v.vue)?;
     let vue = p.vues.iter().find(|x| x.id == v.vue).ok_or("Vue absente.")?;
+    let dessin = dessin_vue(p, &v.vue)?;
+    let echelle = dessin.echelle;
     let (origine, _, _) = repere(p, vue);
     let proj = |q: DVec3| {
         let q = q - origine * 0.001;
-        pt_papier(v.position[0] + q.dot(dessin.droite) * 1000.0 / v.echelle, v.position[1] + q.dot(dessin.haut) * 1000.0 / v.echelle)
+        pt_papier(v.position[0] + q.dot(dessin.droite) * 1000.0 / echelle, v.position[1] + q.dot(dessin.haut) * 1000.0 / echelle)
     };
     let mut primitives = Vec::new();
     let mut e = [f64::MAX, f64::MAX, f64::MIN, f64::MIN];
@@ -123,7 +158,7 @@ pub fn vue_placee(p: &Projet, v: &VuePlacee) -> Result<(Vec<Primitive>, [f64; 4]
     let y = e[1] - 8.0;
     let noir = [20, 20, 20, 255];
     primitives.push(texte(&vue.nom, pt_papier(e[0], y), DVec3::X, DVec3::Y, 0.004, noir));
-    primitives.push(texte(&format!("1:{}", v.echelle), pt_papier(e[0], y - 5.0), DVec3::X, DVec3::Y, 0.0025, noir));
+    primitives.push(texte(&format!("1:{echelle}"), pt_papier(e[0], y - 5.0), DVec3::X, DVec3::Y, 0.0025, noir));
     primitives.push(trait_papier(vec![pt_papier(e[0], y - 1.2), pt_papier(e[0] + 60.0_f64.min(e[2] - e[0]).max(30.0), y - 1.2)], false, 0.35));
     Ok((primitives, e))
 }

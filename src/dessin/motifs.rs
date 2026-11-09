@@ -16,7 +16,8 @@ pub fn ligne_isolation(tris: &[[[f64; 2]; 3]]) -> Vec<[[f64; 2]; 2]> {
 fn contour_morceau(tris: &[[[f64; 2]; 3]]) -> Vec<(glam::DVec2, glam::DVec2)> {
     use glam::DVec2;
     let cle = |p: DVec2| ((p.x * 100.0).round() as i64, (p.y * 100.0).round() as i64);
-    let mut aretes: std::collections::HashMap<((i64, i64), (i64, i64)), (usize, DVec2, DVec2)> = std::collections::HashMap::new();
+    // L'estimation de la courbure échantillonne les arêtes dans cet ordre.
+    let mut aretes: std::collections::BTreeMap<((i64, i64), (i64, i64)), (usize, DVec2, DVec2)> = std::collections::BTreeMap::new();
     for t in tris {
         let t = t.map(DVec2::from_array);
         for k in 0..3 {
@@ -27,6 +28,13 @@ fn contour_morceau(tris: &[[[f64; 2]; 3]]) -> Vec<(glam::DVec2, glam::DVec2)> {
         }
     }
     aretes.values().filter(|(n, _, _)| *n == 1).map(|(_, a, b)| (*a, *b)).collect()
+}
+
+fn aire_morceau(tris: &[[[f64; 2]; 3]]) -> f64 {
+    tris.iter().map(|t| {
+        let [a, b, c] = t.map(glam::DVec2::from_array);
+        0.5 * (b - a).perp_dot(c - a).abs()
+    }).sum()
 }
 
 /// Centre d'une couche courbe (secteur de couronne) : point commun des médiatrices des
@@ -72,9 +80,9 @@ fn centre_courbure(tris: &[[[f64; 2]; 3]]) -> Option<[f64; 2]> {
     xs.sort_by(f64::total_cmp);
     ys.sort_by(f64::total_cmp);
     let mut o = DVec2::new(xs[xs.len() / 2], ys[ys.len() / 2]);
-    let taille = contour.iter().map(|(a, b)| a.distance(*b)).sum::<f64>();
+    let perimetre = contour.iter().map(|(a, b)| a.distance(*b)).sum::<f64>();
     for _ in 0..3 {
-        let tol = 1e-3 * taille.max(1.0);
+        let tol = 1e-3 * perimetre.max(1.0);
         o = resoudre(&|d| (d.0.dot(o) - d.1).abs() < tol.max(1e-6))?;
     }
     // faces sur deux cercles : presque tous les sommets à l'un des deux rayons. Les
@@ -84,7 +92,13 @@ fn centre_courbure(tris: &[[[f64; 2]; 3]]) -> Option<[f64; 2]> {
     r.sort_by(f64::total_cmp);
     let (r0, r1) = (r[r.len() / 10], r[r.len() - 1 - r.len() / 10]);
     let e = r1 - r0;
-    if !(e > 1e-6) || r0 < e || r0 > 1e3 * taille {
+    if !(e > 1e-6) || r0 < e || r0 > 1e3 * perimetre {
+        return None;
+    }
+    // Sur une bande de longueur L et d'épaisseur e, A ≈ L·e et P ≈ 2(L + e).
+    // Des sommets de mur droit peuvent tomber sur deux cercles, dont l'écart
+    // dépasse largement l'épaisseur réelle de la bande.
+    if e * perimetre > 4.0 * aire_morceau(tris) {
         return None;
     }
     let sur_cercle = r.iter().filter(|x| (*x - r0).abs() < 0.02 * e || (*x - r1).abs() < 0.02 * e).count();
@@ -162,10 +176,7 @@ pub(super) fn ligne_isolation_morceau(tris: &[[[f64; 2]; 3]], direction: Option<
     let v = u.perp();
     // Épaisseur de la couche (pas de l'enveloppe) : une bande d'aire A et de périmètre P
     // vérifie e² − (P/2)·e + A = 0, y compris pour un retour en L en tableau.
-    let aire: f64 = tris.iter().map(|t| {
-        let [a, b, c] = t.map(DVec2::from_array);
-        0.5 * (b - a).perp_dot(c - a).abs()
-    }).sum();
+    let aire = aire_morceau(tris);
     let perimetre: f64 = contour.iter().map(|(a, b)| a.distance(*b)).sum();
     let delta = perimetre * perimetre / 4.0 - 4.0 * aire;
     let e = if delta >= 0.0 { 0.5 * (perimetre / 2.0 - delta.sqrt()) } else { perimetre / 4.0 };
@@ -238,7 +249,7 @@ pub(super) fn ligne_isolation_morceau(tris: &[[[f64; 2]; 3]], direction: Option<
             let (t0, t1) = ((e0 - ca).to_angle(), (sortie - ca).to_angle());
             let balayage = if sa > 0.0 { (t1 - t0).rem_euclid(std::f64::consts::TAU) } else { -(t0 - t1).rem_euclid(std::f64::consts::TAU) };
             let pas_arc = ((balayage.abs() / 0.15).ceil() as usize).max(2);
-            for i in 0..=pas_arc {
+            for i in 1..=pas_arc {
                 trace.push(ca + DVec2::from_angle(t0 + balayage * i as f64 / pas_arc as f64) * r);
             }
         } else {

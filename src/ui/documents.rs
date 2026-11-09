@@ -507,9 +507,11 @@ impl ViewerApp {
     }
 
     pub(super) fn nouveau_document(&mut self) {
+        self.famille_plane_active = None;
+        self.famille_selectionnee = None;
+        self.feuilles.selection = Default::default();
         self.gestion_contextes = None;
         self.editeur_gabarit_vue = None;
-        self.editeur_profil = None;
         self.filtres_contextes = Default::default();
         self.ajustement=None;
         self.stocker_document();
@@ -520,6 +522,8 @@ impl ViewerApp {
         self.ruban_edition.niveau_mur = None;
         self.ruban_edition.niveau_haut_mur = None;
         self.ruban_edition.reinitialiser_contexte_creation();
+        self.ruban_edition.type_garde_corps = None;
+        self.editeur_garde_corps = None;
         self.document_actif = self.prochain_document;
         self.prochain_document += 1;
     }
@@ -527,7 +531,6 @@ impl ViewerApp {
     pub(super) fn changer_document(&mut self, id: usize) {
         self.gestion_contextes = None;
         self.editeur_gabarit_vue = None;
-        self.editeur_profil = None;
         self.filtres_contextes = Default::default();
         self.ajustement=None;
         self.orientation_nord_en_cours = false;
@@ -536,6 +539,11 @@ impl ViewerApp {
             return;
         }
         let Some(d) = self.documents.remove(&id) else { return };
+        self.ruban_edition.type_garde_corps = None;
+        self.editeur_garde_corps = None;
+        self.famille_plane_active = None;
+        self.famille_selectionnee = None;
+        self.feuilles.selection = Default::default();
         self.stocker_document();
         self.document_actif = id;
         self.bim = Default::default();
@@ -593,6 +601,11 @@ impl ViewerApp {
     }
 
     pub(super) fn fermer(&mut self) {
+        if let Some(ordre) = self.edition_plane_modifiee(Some(self.document_actif)) {
+            self.activer_famille(ordre);
+            self.demander_fermeture_famille();
+            return;
+        }
         self.orientation_nord_en_cours = false;
         self.arete_alignement = None;
         if self.natif_modifie {
@@ -603,6 +616,10 @@ impl ViewerApp {
     }
 
     pub(super) fn fermer_document(&mut self) {
+        self.famille_plane_active = None;
+        self.familles_planes.retain(|_, ed| ed.document != self.document_actif);
+        self.famille_selectionnee = None;
+        self.feuilles.selection = Default::default();
         self.ajustement=None;
         self.ruban_edition.annuler();
         self.dessin2d=Default::default();

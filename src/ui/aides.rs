@@ -1,6 +1,63 @@
 //! Fonctions d'aide de l'interface : icônes vectorielles, libellés, catégories IFC.
 use super::*;
 
+pub(super) fn origine_consigne(rect: egui::Rect, bas_barre: f32) -> egui::Pos2 {
+    rect.left_top() + egui::vec2(8.0, bas_barre.max(4.0) + 8.0)
+}
+
+pub(super) fn repere_origine_famille(painter: &egui::Painter, origine: egui::Pos2) {
+    if !painter.clip_rect().contains(origine) {
+        return;
+    }
+    let couleur = Color32::from_rgb(0, 105, 180);
+    let trait_ = egui::Stroke::new(1.5, couleur);
+    painter.circle(origine, 6.0, Color32::WHITE, trait_);
+    for axe in [egui::vec2(8.0, 0.0), egui::vec2(0.0, 8.0)] {
+        painter.line_segment([origine - axe, origine + axe], trait_);
+    }
+    painter.text(
+        origine + egui::vec2(10.0, 8.0), egui::Align2::LEFT_TOP,
+        "Origine", egui::FontId::proportional(11.0), couleur,
+    );
+}
+
+pub(super) fn annotation_vue(ui: &egui::Ui, rect: egui::Rect, bas_barre: f32, texte: &str, erreur: bool) -> bool {
+    let painter = ui.painter().with_clip_rect(rect);
+    let couleur = if erreur { Color32::from_rgb(185, 35, 35) } else { Color32::from_rgb(40, 100, 160) };
+    let marge_bouton = if erreur { 22.0 } else { 0.0 };
+    let galley = painter.layout(texte.into(), egui::FontId::proportional(13.0), couleur, (rect.width() - 24.0 - marge_bouton).max(1.0));
+    let origine = origine_consigne(rect, bas_barre);
+    let taille = galley.size() + egui::vec2(8.0 + marge_bouton, 6.0);
+    let peindre = |painter: &egui::Painter, cadre: egui::Rect| {
+        painter.rect_filled(cadre, 3.0, Color32::from_gray(250));
+        painter.galley(cadre.min + egui::vec2(4.0, 3.0), galley, couleur);
+    };
+    if !erreur {
+        peindre(&painter, egui::Rect::from_min_size(origine, taille));
+        return false;
+    }
+    // Une erreur reste visible lorsqu'un éditeur flottant recouvre la vue.
+    egui::Area::new(ui.scope_id().with("annotation_erreur"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(origine)
+        .constrain_to(rect)
+        .show(ui.ctx(), |ui| {
+            let (cadre, _) = ui.allocate_exact_size(egui::vec2(taille.x, taille.y.max(22.0)), Sense::hover());
+            peindre(ui.painter(), cadre);
+            let fermer = egui::Rect::from_min_size(cadre.right_top() - egui::vec2(22.0, 0.0), egui::vec2(22.0, 22.0));
+            ui.put(fermer, egui::Button::new(RichText::new("×").size(16.0).color(couleur)).frame(false))
+                .on_hover_text("Effacer le message").clicked()
+        }).inner
+}
+
+impl ViewerApp {
+    pub(super) fn annotation_erreur(&mut self, ui: &egui::Ui, rect: egui::Rect, bas_barre: f32) {
+        if self.error.as_deref().is_some_and(|texte| annotation_vue(ui, rect, bas_barre, texte, true)) {
+            self.error = None;
+        }
+    }
+}
+
 /// Icône d'un style visuel : petit cube en perspective, tracé dans `r`.
 /// Icône du niveau de détail : un, deux ou trois traits, comme dans Revit.
 /// Icônes vectorielles : indépendantes des caractères disponibles dans la police.

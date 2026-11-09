@@ -232,20 +232,6 @@ impl ViewerApp {
             ui.close();
         }
     }
-    pub(super) fn fenetre_erreur_document(&mut self, ctx: &egui::Context) {
-        if let Some(e) = &self.error {
-            let mut ouverte = true;
-            egui::Window::new("Erreur du document")
-                .open(&mut ouverte)
-                .collapsible(false)
-                .show(ctx, |ui| {
-                    ui.label(e);
-                });
-            if !ouverte {
-                self.error = None;
-            }
-        }
-    }
     pub(super) fn fenetres_collaboration(&mut self, ctx: &egui::Context) {
         if self.collaboration.is_none() {
             return;

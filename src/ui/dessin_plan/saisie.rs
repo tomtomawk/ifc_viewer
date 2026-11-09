@@ -441,6 +441,8 @@ impl ViewerApp {
         let mut supprimer_trait = false;
         // F (fermer) seulement pendant un tracé : sinon F cadre la vue
         let en_cours = self.trace_en_cours();
+        let tab_vue = en_cours && self.tab_dans_vue(ctx);
+        let mut tab_utilise = false;
         ctx.input_mut(|i| {
             i.events.retain(|e| match e {
                 egui::Event::Key { key: egui::Key::ControlLeft | egui::Key::ControlRight, pressed: true, repeat: false, .. } => {
@@ -453,7 +455,9 @@ impl ViewerApp {
                     true
                 }
                 egui::Event::Key { pressed: true, modifiers, .. } if modifiers.ctrl => { self.dessin2d.controle_seul = false; true }
-                egui::Event::Key { key: egui::Key::Tab, pressed: true, .. } if !self.dessin2d.saisie.starts_with(['@', '#']) => {
+                egui::Event::Key { key: egui::Key::Tab, pressed: true, modifiers, .. }
+                    if tab_vue && modifiers.is_none() && !self.dessin2d.saisie.starts_with(['@', '#']) => {
+                    tab_utilise = true;
                     self.dessin2d.champ_angle = !self.dessin2d.champ_angle;
                     if self.dessin2d.champ_angle && !self.dessin2d.saisie.contains(['<', '>']) { self.dessin2d.saisie.push('<'); }
                     false
@@ -493,6 +497,9 @@ impl ViewerApp {
                 _ => true,
             });
         });
+        if tab_utilise {
+            ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+        }
         if supprimer_trait { self.supprimer_trait_edition(); }
         if effacer {
             effacer_caractere_saisie(&mut self.dessin2d.saisie, self.dessin2d.champ_angle);

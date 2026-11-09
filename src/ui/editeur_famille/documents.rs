@@ -4,6 +4,23 @@ use super::*;
 impl ViewerApp {
     /// Contrat sans dialogue de l'éditeur ; même validation et chargement que le ruban.
     pub(in crate::ui) fn piloter_famille(&mut self, commande: &str, argument: &str) -> Option<Result<serde_json::Value, String>> {
+        if let Some(ordre) = self.famille_plane_active {
+            match commande {
+                "famille_navigation" => return Some(self.navigation_cartouche(argument)),
+                "famille_charger_projet" => return Some(self.enregistrer_famille_plane(argument == "nouveau").map(|_| {
+                    serde_json::json!({"id": self.familles_planes[&ordre].contenu.id()})
+                })),
+                "famille_fermer" => {
+                    if self.familles_planes[&ordre].modifie() && argument != "abandonner" {
+                        return Some(Err("Famille modifiée : chargez-la dans le projet avant de fermer.".into()));
+                    }
+                    self.fermer_famille_plane();
+                    return Some(Ok(serde_json::json!({})));
+                }
+                "famille_modifier" | "famille_document" => return Some(Err("Cette commande est réservée à l'éditeur des familles modélisées.".into())),
+                _ => {}
+            }
+        }
         if commande=="famille_navigation" {
             return Some((|| {
                 let ed=self.famille.as_mut().ok_or("Éditeur fermé")?;
@@ -57,6 +74,10 @@ impl ViewerApp {
     /// Document au premier plan, tel que le pilote le voit : une famille (`famille:<rang>`)
     /// ou un projet (`<id>`).
     pub(in crate::ui) fn document_actif_pilote(&self) -> serde_json::Value {
+        if let Some(ordre) = self.famille_plane_active
+            && let Some(ed) = self.familles_planes.get(&ordre) {
+            return serde_json::json!({"id": format!("famille:{ordre}"), "genre": "famille", "nom": ed.titre(), "type": ed.contenu.id(), "modifie": ed.modifie()});
+        }
         match self.famille.as_ref().filter(|_| self.famille_active) {
             Some(ed) => serde_json::json!({"id": format!("famille:{}", ed.ordre), "genre": "famille", "nom": titre_editeur(ed), "type": ed.type_id, "modifie": ed.modifiee()}),
             None => serde_json::json!({"id": self.document_actif.to_string(), "genre": "projet", "nom": self.scene.as_ref().map(|s| s.file_name.clone()), "modifie": self.natif_modifie}),
@@ -89,7 +110,7 @@ impl ViewerApp {
 
     /// Documents ouverts pour le pilote : projets puis familles, et le registre.
     pub(in crate::ui) fn documents_pilote(&self) -> serde_json::Value {
-        let famille_active = self.famille_active && self.famille.is_some();
+        let famille_active = self.mode_famille();
         let mut d: Vec<serde_json::Value> = self.documents.iter().map(|(id, d)| serde_json::json!({"id": id.to_string(), "genre": "projet", "actif": false, "nom": d.scene.as_ref().map(|s| &s.file_name), "modifie": d.modifie})).collect();
         if self.scene.is_some() || self.rvt.is_some() {
             d.push(serde_json::json!({"id": self.document_actif.to_string(), "genre": "projet", "actif": !famille_active, "nom": self.scene.as_ref().map(|s| &s.file_name), "modifie": self.natif_modifie}));
@@ -97,8 +118,11 @@ impl ViewerApp {
         let mut familles: Vec<&EditeurFamille> = self.famille.iter().chain(&self.familles_inactives).collect();
         familles.sort_by_key(|e| e.ordre);
         for e in familles {
-            let actif = famille_active && self.famille.as_ref().is_some_and(|f| f.ordre == e.ordre);
+            let actif = self.famille_active && self.famille.as_ref().is_some_and(|f| f.ordre == e.ordre);
             d.push(serde_json::json!({"id": format!("famille:{}", e.ordre), "genre": "famille", "actif": actif, "nom": titre_editeur(e), "type": e.type_id, "modifie": e.modifiee()}));
+        }
+        for (&ordre, ed) in &self.familles_planes {
+            d.push(serde_json::json!({"id": format!("famille:{ordre}"), "genre": "famille", "actif": self.famille_plane_active == Some(ordre), "nom": ed.titre(), "type": ed.contenu.id(), "modifie": ed.modifie()}));
         }
         serde_json::json!({"documents": d, "actif": self.document_actif_pilote(), "registre": self.journal_documents})
     }
@@ -118,6 +142,7 @@ impl ViewerApp {
             return Err("Document absent".into());
         }
         self.famille_active = false;
+        self.famille_plane_active = None;
         self.changer_document(id);
         Ok(())
     }
@@ -142,7 +167,7 @@ impl ViewerApp {
 
     pub(in crate::ui) fn editeur_famille(&mut self, t: Option<String>, ouverture: Option<String>, largeur: f64, hauteur: f64, epaisseur: f64, genre: GenreOuverture) {
         // type déjà ouvert : son onglet passe au premier plan
-        if let Some(ordre) = t.as_ref().and_then(|id| self.onglets_familles().into_iter().find(|o| o.2.as_ref() == Some(id)).map(|o| o.0)) {
+        if let Some(ordre) = t.as_ref().and_then(|id| self.famille.iter().chain(&self.familles_inactives).find(|e| e.type_id.as_ref() == Some(id)).map(|e| e.ordre)) {
             self.activer_famille(ordre);
             return;
         }
@@ -165,6 +190,7 @@ impl ViewerApp {
         let partages = p.parametres_partages.clone();
         let materiaux_projet = p.materiaux.iter().map(|m| (m.nom.clone(), m.couleur)).collect();
         self.famille_active = true;
+        self.famille_plane_active = None;
         self.famille = Some(EditeurFamille {
             ordre,
             ouverture,
@@ -204,7 +230,7 @@ impl ViewerApp {
     /// Éditeur sur un type de composant (None : nouvelle famille, sur la base de la table).
     /// Une famille de composant a la catégorie « libre » ; l'épaisseur y est la profondeur.
     pub(in crate::ui) fn ouvrir_editeur_composant(&mut self, t: Option<String>) {
-        if let Some(ordre) = t.as_ref().and_then(|id| self.onglets_familles().into_iter().find(|o| o.2.as_ref() == Some(id)).map(|o| o.0)) {
+        if let Some(ordre) = t.as_ref().and_then(|id| self.famille.iter().chain(&self.familles_inactives).find(|e| e.type_id.as_ref() == Some(id)).map(|e| e.ordre)) {
             self.activer_famille(ordre);
             return;
         }
@@ -264,6 +290,9 @@ impl ViewerApp {
     /// Fenêtre de l'éditeur de familles.
     /// Titre de l'onglet de l'éditeur au premier plan : catégorie et type.
     pub(in crate::ui) fn titre_famille(&self) -> Option<String> {
+        if let Some(ed) = self.famille_plane_active.and_then(|ordre| self.familles_planes.get(&ordre)) {
+            return Some(ed.titre());
+        }
         self.famille.as_ref().map(titre_editeur)
     }
 
@@ -277,18 +306,26 @@ impl ViewerApp {
     /// Onglets de familles : (rang, titre, type), dans l'ordre d'ouverture.
     pub(in crate::ui) fn onglets_familles(&self) -> Vec<(usize, String, Option<String>)> {
         let mut v: Vec<(usize, String, Option<String>)> = self.famille.iter().chain(&self.familles_inactives).map(|e| (e.ordre, titre_editeur(e), e.type_id.clone())).collect();
+        v.extend(self.familles_planes.iter().map(|(&ordre, ed)| (ordre, ed.titre(), ed.contenu.id())));
         v.sort_by_key(|o| o.0);
         v
     }
 
     /// Rang de la famille au premier plan.
     pub(in crate::ui) fn ordre_famille(&self) -> Option<usize> {
-        self.famille.as_ref().map(|e| e.ordre)
+        self.famille_plane_active.or_else(|| self.famille.as_ref().map(|e| e.ordre))
     }
 
     /// Met la famille de rang `ordre` au premier plan (onglet actif).
     pub(in crate::ui) fn activer_famille(&mut self, ordre: usize) {
-        if self.ordre_famille() != Some(ordre) {
+        if let Some(document) = self.familles_planes.get(&ordre).map(|ed| ed.document) {
+            if document != self.document_actif { self.changer_document(document); }
+            self.famille_active = false;
+            self.famille_plane_active = Some(ordre);
+            return;
+        }
+        self.famille_plane_active = None;
+        if self.famille.as_ref().map(|e| e.ordre) != Some(ordre) {
             if let Some(k) = self.familles_inactives.iter().position(|e| e.ordre == ordre) {
                 let ed = self.familles_inactives.remove(k);
                 if let Some(courante) = self.famille.replace(ed) {
@@ -360,13 +397,7 @@ impl ViewerApp {
         let familles_projet = self.familles_projet();
         let Some(ed) = self.famille.as_mut() else { return };
         egui::ScrollArea::vertical().id_salt("famille_arborescence").auto_shrink([false, false]).show(ui, |ui| {
-            egui::CollapsingHeader::new(RichText::new("Vues").strong()).default_open(true).show(ui, |ui| {
-                for v in [VueFamille::Elevation, VueFamille::Plan, VueFamille::Coupe] {
-                    if ui.selectable_label(ed.vue == v, v.nom()).clicked() {
-                        ed.ouvrir_vue(v);
-                    }
-                }
-            });
+            if let Some(vue) = choisir_vue_famille(ui, ed.vue, VueFamille::nom) { ed.ouvrir_vue(vue); }
             egui::CollapsingHeader::new(RichText::new(format!("Paramètres ({})", ed.famille.parametres.len() + 3)).strong()).default_open(false).show(ui, |ui| {
                 for n in [LARGEUR, HAUTEUR, EPAISSEUR] {
                     ui.label(RichText::new(format!("{n} (type / hôte)")).weak());
@@ -528,6 +559,11 @@ impl ViewerApp {
     /// Fermeture de l'onglet : confirmation si la famille n'est pas chargée dans le
     /// projet.
     pub(in crate::ui) fn demander_fermeture_famille(&mut self) {
+        if let Some(ordre) = self.famille_plane_active {
+            if self.familles_planes[&ordre].modifie() { self.confirmer_famille = true; }
+            else { self.fermer_famille_plane(); }
+            return;
+        }
         if self.famille.as_ref().is_some_and(|e| e.modifiee()) {
             self.confirmer_famille = true;
         } else {
@@ -539,7 +575,8 @@ impl ViewerApp {
         if !self.confirmer_famille {
             return;
         }
-        let nouveau = self.famille.as_ref().is_some_and(|e| e.type_id.is_none());
+        let plane = self.famille_plane_active.is_some();
+        let nouveau = !plane && self.famille.as_ref().is_some_and(|e| e.type_id.is_none());
         let mut choix = None;
         egui::Modal::new(egui::Id::unique("fermer_famille")).show(ctx, |ui| {
             ui.set_width(380.0);
@@ -558,6 +595,18 @@ impl ViewerApp {
                 }
             });
         });
+        if plane && let Some(choix) = choix {
+            self.confirmer_famille = false;
+            match choix {
+                0 => match self.enregistrer_famille_plane(false) {
+                    Ok(()) => self.fermer_famille_plane(),
+                    Err(e) => self.error = Some(e),
+                },
+                1 => self.fermer_famille_plane(),
+                _ => {}
+            }
+            return;
+        }
         match choix {
             Some(0) => {
                 self.confirmer_famille = false;

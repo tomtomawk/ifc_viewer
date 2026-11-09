@@ -717,6 +717,46 @@ pub fn vu(scene: &Scene, visible: &[bool], droite: DVec3, haut: DVec3, vers_oeil
         .collect()
 }
 
+/// Cadrage vectoriel des arêtes et poches d'une coupe ou d'une élévation.
+pub fn cadrer_primitives(primitives: Vec<Primitive>, plans: &[Vec4], normale: DVec3) -> Vec<Primitive> {
+    if plans.is_empty() { return primitives; }
+    let distance = |p: DVec3, plan: &Vec4| plan.truncate().as_dvec3().dot(p) + plan.w as f64;
+    let segment = |mut s: [DVec3; 2]| {
+        for plan in plans {
+            let [a, b] = s.map(|p| distance(p, plan));
+            if a < 0.0 && b < 0.0 { return None; }
+            if (a < 0.0) != (b < 0.0) {
+                let q = s[0].lerp(s[1], a / (a - b));
+                s[usize::from(a >= 0.0)] = q;
+            }
+        }
+        (s[0].distance_squared(s[1]) > 1e-20).then_some(s)
+    };
+    let faces = |tris: Vec<[DVec3; 3]>| {
+        tris.into_iter().flat_map(|t| {
+            let poly = plans.iter().fold(t.to_vec(), |poly, plan| decouper(&poly, plan.truncate().as_dvec3(), plan.w as f64));
+            (1..poly.len().saturating_sub(1)).map(move |i| [poly[0], poly[i], poly[i + 1]])
+        }).collect::<Vec<_>>()
+    };
+    primitives.into_iter().filter_map(|mut pr| {
+        pr.forme = match pr.forme {
+            Forme::Segments(s) => Forme::Segments(s.into_iter().filter_map(segment).collect()),
+            Forme::Polyligne { points, fermee } => {
+                let mut s: Vec<_> = points.windows(2).filter_map(|p| segment([p[0], p[1]])).collect();
+                if fermee && points.len() > 2 && let Some(t) = segment([*points.last().unwrap(), points[0]]) { s.push(t); }
+                Forme::Segments(s)
+            }
+            Forme::Triangles(t) => Forme::Triangles(faces(t)),
+            Forme::Surface(c) => Forme::Triangles(faces(crate::noyau::trace2d::trianguler(&c, normale))),
+        };
+        match &pr.forme {
+            Forme::Segments(s) if s.is_empty() => None,
+            Forme::Triangles(t) if t.is_empty() => None,
+            _ => Some(pr),
+        }
+    }).collect()
+}
+
 /// Partie d'un triangle du côté gardé du plan (n·p + d ≥ 0) : polygone convexe.
 fn decouper(t: &[DVec3], n: DVec3, d: f64) -> Vec<DVec3> {
     let mut out = Vec::with_capacity(4);
@@ -827,6 +867,26 @@ mod tests {
         }
         let (xmin, xmax) = s.iter().flatten().fold((f64::MAX, f64::MIN), |(m, n), p| (m.min(p[0]), n.max(p[0])));
         assert!(xmin < 100.0 && xmax > 5900.0, "motif incomplet {xmin} {xmax}");
+    }
+
+    #[test]
+    fn isolant_mur_droit_avec_onglets_reste_dans_la_couche() {
+        // Coupe d'une couche droite de 145 mm, avec deux onglets et des
+        // sommets intermédiaires sur les faces issus du maillage.
+        let a = [62.1, 8321.7];
+        let b = [0.0, 8259.6];
+        let c = [0.0, 3051.3];
+        let d = [0.0, -855.0];
+        let e = [82.8, -937.9];
+        let f = [145.0, -1000.0];
+        let g = [145.0, 4374.1];
+        let h = [145.0, 8404.6];
+        let t = [[a, b, c], [c, d, e], [e, f, g], [g, h, a], [a, c, e], [e, g, a]];
+        let s = super::ligne_isolation(&t);
+        assert!(!s.is_empty());
+        assert!(s.iter().flatten().all(|p| (-1e-6..=145.0 + 1e-6).contains(&p[0])));
+        assert!(s.iter().flatten().any(|p| p[1] < -850.0));
+        assert!(s.iter().flatten().any(|p| p[1] > 8250.0));
     }
 
     #[test]

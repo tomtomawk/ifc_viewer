@@ -473,6 +473,7 @@ impl ViewerApp {
             self.traits_invisibles(ui, rect);
             self.saisie_origine(ui, rect);
         }
+        self.barre_commande(ui, rect);
         if let Some(prm) = &outil_coupe {
             let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.coupe_depart, altitude_coupe));
             self.apercu_coupe(ui, rect, point, altitude_coupe, prm);
@@ -485,7 +486,7 @@ impl ViewerApp {
                 (_, None) => "Poutre : cliquer le départ · molette : zoom",
                 (_, Some(_)) => "Poutre : cliquer l'arrivée · Maj : orthogonal · Échap ou clic droit : annuler",
             };
-            painter.text(rect.left_top()+egui::vec2(12.0,self.dessin2d.bas_barre.max(4.0)+8.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
+            if self.error.is_none() { super::aides::annotation_vue(ui, rect, self.dessin2d.bas_barre, texte, false); }
             if let Some(alt) = altitude_structure {
                 let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.bim.depart_structure, alt));
                 if let Some((p, accroche)) = point {
@@ -506,7 +507,7 @@ impl ViewerApp {
                 format!("Attacher au toit : {} mur(s) choisi(s) · cliquer une toiture ou ajouter un mur", self.bim.murs_a_attacher.len())
             };
             let painter = ui.painter().with_clip_rect(rect);
-            painter.text(rect.left_top() + egui::vec2(12.0, self.dessin2d.bas_barre.max(4.0) + 8.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), Color32::from_rgb(55, 130, 200));
+            if self.error.is_none() { super::aides::annotation_vue(ui, rect, self.dessin2d.bas_barre, &texte, false); }
             if let Some((projet, _)) = &self.natif {
                 for id in &self.bim.murs_a_attacher {
                     if let Some((a, b, _)) = projet.axe_element(id) {
@@ -522,7 +523,7 @@ impl ViewerApp {
             let painter = ui.painter().with_clip_rect(rect);
             let couleur = Color32::from_rgb(55, 130, 200);
             let texte = if composant { "Composant : cliquer pour placer · Espace : rotation de 90° · molette : zoom" } else if arbre { "Arbre : cliquer pour planter" } else { "Pièce : cliquer dans un espace fermé par des murs" };
-            painter.text(rect.left_top()+egui::vec2(12.0,self.dessin2d.bas_barre.max(4.0)+8.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
+            if self.error.is_none() { super::aides::annotation_vue(ui, rect, self.dessin2d.bas_barre, texte, false); }
             if let Some((p, accroche)) = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, false, None, altitude_placement)) {
                 if let Some(q) = self.ecran_plan(rect, p, altitude_placement) { marqueur(&painter, q, accroche, couleur, Color32::from_rgb(230, 120, 20)); }
                 if arbre {
@@ -593,7 +594,6 @@ impl ViewerApp {
         }
         self.dessiner_instructions(ui, rect);
         self.cotes_terrain(ui, rect);
-        self.barre_commande(ui, rect);
         if self.scene.is_some() {
             self.poignees_boite(ui, rect);
         }

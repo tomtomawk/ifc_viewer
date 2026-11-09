@@ -243,10 +243,13 @@ impl RubanEdition {
         projet: Option<&crate::modele::Projet>,
     ) {
         let fenetre = matches!(self.valeurs.get(&(Outil::Ouverture, 0)), Some(Valeur::Texte(t)) if t == "Fenêtre" || t == "Libre");
+        let garde_corps_type = outil == Outil::GardeCorps && self.type_garde_corps.as_ref()
+            .is_some_and(|id| projet.is_some_and(|p| p.types_garde_corps.iter().any(|t| &t.id == id)));
         let champs: Vec<_> = champs(outil)
             .into_iter()
             .enumerate()
             .filter(|(k, _)| outil != Outil::Ouverture || (*k != 0 && (*k != 3 || fenetre)))
+            .filter(|(k, _)| !garde_corps_type || *k == 1)
             // mur : décalage bas dans Propriétés ; hauteur seulement si le haut est libre
             // et l'épaisseur seulement pour un mur générique (sans type)
             .filter(|(k, _)| outil != Outil::Mur || (*k != 3 && (*k != 1 || self.niveau_haut_mur.is_none()) && (*k != 2 || self.type_mur.is_none())))

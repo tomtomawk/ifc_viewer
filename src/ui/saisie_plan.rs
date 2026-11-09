@@ -499,7 +499,7 @@ impl ViewerApp {
         }
         let sorte = if prm.elevation { "Élévation" } else { "Coupe" };
         let texte = if self.coupe_depart.is_some() { format!("{sorte} : cliquer la fin de la ligne · la vue regarde vers sa gauche · Échap : annuler") } else { format!("{sorte} ({}) : cliquer le début de la ligne", prm.type_vue) };
-        painter.text(rect.left_top() + egui::vec2(12.0, 34.0), egui::Align2::LEFT_TOP, texte, egui::FontId::proportional(13.0), couleur);
+        if self.error.is_none() { super::aides::annotation_vue(ui, rect, self.dessin2d.bas_barre, &texte, false); }
     }
 
     /// Comme dans Revit : sélectionner un élément du projet natif (sans outil en cours)
@@ -562,11 +562,13 @@ impl ViewerApp {
         let Some((actuel, _)) = self.natif.as_mut() else { return };
         let projet = std::mem::replace(actuel, avant);
         if annulee {
+            self.actualiser_gabarit_vue_actif();
             self.status = "Saisie annulée : ancienne valeur rétablie.".into();
             self.bim.revision = self.bim.revision.wrapping_add(1);
             return;
         }
         if let Err(e) = self.appliquer_projet(projet) {
+            self.actualiser_gabarit_vue_actif();
             self.error = Some(e);
         }
     }
@@ -593,6 +595,11 @@ impl ViewerApp {
         }
         let id_vue = self.id_vue_contexte();
         let gabarit_avant = id_vue.as_ref().and_then(|id| self.natif.as_ref()?.0.gabarit_vue(id)).cloned();
+        let echelle_vue = |p: &crate::modele::Projet| {
+            let id = id_vue.as_ref()?;
+            p.vues.iter().find(|v| &v.id == id).map(|v| v.echelle)
+        };
+        let echelle_modifiee = echelle_vue(&projet) != self.natif.as_ref().and_then(|(p, _)| echelle_vue(p));
         let chemin = self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.1.clone();
         if !distant {
             crate::modele::edition::verrous::verifier(&self.natif.as_ref().unwrap().0, &projet)?;
@@ -679,7 +686,7 @@ impl ViewerApp {
         self.natif_modifie = self.historique.modifie(&projet);
         self.natif = Some((projet, chemin));
         let gabarit_apres = id_vue.as_ref().and_then(|id| self.natif.as_ref()?.0.gabarit_vue(id)).cloned();
-        if gabarit_avant != gabarit_apres { self.actualiser_gabarit_vue_actif(); }
+        if gabarit_avant != gabarit_apres || echelle_modifiee { self.actualiser_gabarit_vue_actif(); }
         self.visibility_dirty = true;
         self.coupe_dirty = true;
         self.error = None;

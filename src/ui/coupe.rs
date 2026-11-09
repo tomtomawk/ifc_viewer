@@ -30,61 +30,16 @@ impl ViewerApp {
 
     /// Trait atténué d'un autre plan, projeté derrière la coupe courante.
     pub(super) fn primitives_fond_plan(&self)->Vec<crate::noyau::trace2d::Primitive> {
-        let (Some(s),Some((projet,_)),Some(courant),Some(plan_courant))=(&self.scene,&self.natif,self.vue_native_id(),self.plan_coupe()) else{return Vec::new()};
-        let Some(source)=projet.vues.iter().find(|v|v.id==courant && matches!(v.genre,crate::modele::GenreVue::Plan{..})).and_then(|v|v.fond_plan.as_ref()).and_then(|id|projet.vues.iter().find(|v|&v.id==id)) else{return Vec::new()};
-        let crate::modele::GenreVue::Plan{niveau,coupe,..}=&source.genre else{return Vec::new()};
-        let Some(n)=projet.niveau(niveau) else{return Vec::new()};
-        let z=(n.altitude+coupe)*0.001-s.origin.z;
-        let cible=plan_courant.w as f64;
-        let niveau_id=scene::id_natif("niveau",niveau);
-        let exclus = self.ids_masques_contextes();
-        let vis:Vec<bool>=s.objects.iter().map(|o|o.storey==Some(niveau_id) && !exclus.contains(&o.id) && !source.elements_masques.iter().any(|id|self.cle_native(o.id).as_deref()==Some(id.as_str()))).collect();
-        let mut prims=dessin::coupe(s,&vis,Vec4::new(0.,0.,-1.,z as f32),self.echelle,Poche::Vide);
-        prims.retain(|p|matches!(p.role,crate::noyau::trace2d::Role::Coupe | crate::noyau::trace2d::Role::Vu));
-        prims.extend(crate::modele::documentation::annotations(projet,source).into_iter().filter(|p|p.role==crate::noyau::trace2d::Role::Annotation).map(|p|p.translater(-s.origin)));
-        for p in &mut prims {*p=p.translater(glam::DVec3::new(0.,0.,cible-z-0.001));p.style.couleur=[165,165,165,255];p.style.epaisseur=0.;}
-        prims
+        let (Some(s), Some((projet, _)), Some(id), Some(plan)) = (&self.scene, &self.natif, self.vue_native_id(), self.plan_coupe()) else { return Vec::new() };
+        let Some(vue) = projet.vues.iter().find(|v| v.id == id) else { return Vec::new() };
+        crate::modele::documentation::fond_plan(projet, s, vue, plan, self.echelle)
     }
 
     /// Éléments du niveau courant entièrement au-dessus de la coupe et sous la limite haute,
     /// en pointillés.
     pub(super) fn primitives_au_dessus_plan(&self)->Vec<crate::noyau::trace2d::Primitive> {
-        let (Some(plan),mut prims)=(self.plan_coupe(),self.aretes_au_dessus_plan()) else{return Vec::new()};
-        let coupe=plan.w;
-        // Pointillés calés sur une phase commune à chaque droite du plan : les arêtes
-        // superposées en projection (dessus et dessous d'un élément, éléments voisins,
-        // tronçons découpés par les parties cachées) tracent les mêmes tirets au lieu
-        // de tirets décalés qui se chevauchent. Doublons retirés.
-        let longueur=(self.echelle*0.003).max(0.01);let pas=longueur*2.5;
-        let z=coupe as f64-0.0005;
-        let mut vus=std::collections::HashSet::new();
-        for p in &mut prims {
-            let crate::noyau::trace2d::Forme::Segments(segments)=&p.forme else{continue};
-            let mut pointilles=Vec::new();
-            for segment in segments {
-                let (mut a,mut b)=(glam::DVec2::new(segment[0].x,segment[0].y),glam::DVec2::new(segment[1].x,segment[1].y));
-                let l=a.distance(b);
-                if l<=1e-6 {continue;}
-                let mut u=(b-a)/l;
-                if u.x< -1e-9 || (u.x.abs()<=1e-9 && u.y<0.0) {std::mem::swap(&mut a,&mut b);u=-u;}
-                let cle=|x:f64|(x*1e4).round() as i64;
-                let decalage=u.perp_dot(a);
-                if !vus.insert((cle(u.x),cle(u.y),cle(decalage),cle(a.dot(u)),cle(b.dot(u)))) {continue;}
-                let (s0,s1)=(a.dot(u),b.dot(u));
-                if (s1-s0)/pas>20000.0 {continue;}
-                let mut k=(s0/pas).floor();
-                while k*pas<s1 {
-                    let (t0,t1)=((k*pas).max(s0),(k*pas+longueur).min(s1));
-                    if t1>t0+1e-9 {
-                        let q=|t:f64|{let v=a+u*(t-s0);glam::DVec3::new(v.x,v.y,z)};
-                        pointilles.push([q(t0),q(t1)]);
-                    }
-                    k+=1.0;
-                }
-            }
-            p.forme=crate::noyau::trace2d::Forme::Segments(pointilles);
-        }
-        prims
+        let Some(plan) = self.plan_coupe() else { return Vec::new(); };
+        crate::modele::documentation::pointilles_plage_haute(self.aretes_au_dessus_plan(), self.echelle, plan.w as f64)
     }
 
     /// Objet de la plage haute dont une arête passe à moins de 6 px du clic (vue en plan).
@@ -122,10 +77,8 @@ impl ViewerApp {
         let (Some(s),Some((p,_)),Some(id),Some(plan))=(&self.scene,&self.natif,self.vue_native_id(),self.plan_coupe()) else{return None};
         let v=p.vues.iter().find(|v|v.id==id)?;
         let crate::modele::GenreVue::Plan{niveau,..}=&v.genre else{return None};
-        let haut=p.niveau(v.limite_haute_niveau.as_deref().unwrap_or(niveau))?;
-        let limite=((haut.altitude+v.limite_haute_decalage)*0.001-s.origin.z) as f32;
-        let coupe=plan.w;
-        if limite<=coupe {return None;}
+        let coupe = plan.w;
+        let limite = crate::modele::documentation::limite_haute_plan(p, s, v, coupe)?;
         let niveau_id=scene::id_natif("niveau",niveau);
         let exclus = self.ids_masques_contextes();
         let visible=s.objects.iter().enumerate().map(|(i,o)| {
@@ -199,6 +152,7 @@ impl ViewerApp {
             primitives.extend(dessin::coupe(s, &self.visible, p, self.echelle, self.poche_style()));
         }
         primitives.extend(dessin::vu(s, &self.visible, droite, haut, -f, coupe, 4096));
+        primitives = dessin::cadrer_primitives(primitives, &self.cadrage_vue(), -f);
         // éléments 2D de la vue Revit ouverte, s'ils sont affichés (repère du fichier →
         // repère de la scène)
         if let Some(v) = vue {

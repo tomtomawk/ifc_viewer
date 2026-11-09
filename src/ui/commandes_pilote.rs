@@ -502,8 +502,16 @@ impl ViewerApp {
                         Some(f) => serde_json::json!({"type":"feuille", "feuille":f, "famille_cartouche": p.cartouches_feuilles.get(id).map_or("Cartouche standard", String::as_str)}),
                         None => return erreur("feuille sélectionnée introuvable"),
                     },
+                    feuilles::SelectionFeuille::Cartouche(id) => match p.feuilles.iter().find(|f| &f.id == id && f.jeu == jeu) {
+                        Some(_) => serde_json::json!({"type":"cartouche", "feuille":id, "famille_cartouche": crate::modele::documentation::famille_cartouche(p, id).map_or("Cartouche standard", |f| f.nom.as_str())}),
+                        None => return erreur("feuille du cartouche introuvable"),
+                    },
                     feuilles::SelectionFeuille::Vue(id, i) => match p.feuilles.iter().find(|f| &f.id == id && f.jeu == jeu) {
-                        Some(f) if *i < f.vues.len() => serde_json::json!({"type":"vue", "feuille":id, "indice":i, "proprietes":f.vues[*i]}),
+                        Some(f) if *i < f.vues.len() => {
+                            let mut vue = f.vues[*i].clone();
+                            vue.echelle = vue.echelle_sur_feuille(p);
+                            serde_json::json!({"type":"vue", "feuille":id, "indice":i, "proprietes":vue})
+                        }
                         Some(f) if *i < f.vues.len() + f.nomenclatures.len() => serde_json::json!({"type":"nomenclature", "feuille":id, "indice":i, "proprietes":f.nomenclatures[*i - f.vues.len()]}),
                         _ => return erreur("élément sélectionné introuvable"),
                     },
@@ -757,11 +765,11 @@ impl ViewerApp {
                 self.etat()
             }
             "echelle" => {
-                if self.vue_gabaritee() { return erreur("L'échelle est pilotée par le gabarit de vue."); }
-                let Some(e) = argument.trim_start_matches("1:").parse::<f64>().ok().filter(|e| *e > 0.0) else { return erreur("usage : echelle <dénominateur> (100 pour 1:100)") };
-                self.echelle = e;
-                self.visibility_dirty = true;
-                self.etat()
+                let Ok(e) = argument.trim_start_matches("1:").parse::<f64>() else { return erreur("usage : echelle <dénominateur> (100 pour 1:100)") };
+                match self.regler_echelle_vue(e) {
+                    Ok(()) => self.etat(),
+                    Err(e) => erreur(&e),
+                }
             }
             "panneau" => {
                 // panneau proprietes|arborescence gauche|droite|flottant|externe

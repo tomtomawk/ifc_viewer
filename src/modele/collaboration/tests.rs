@@ -1172,6 +1172,7 @@ fn creations_independantes_barres_escaliers_gardes_terrains_importes_et_types() 
                     trace: vec![[20000.0, y], [25000.0, y]],
                     hauteur: 1000.0,
                     remplissage: Remplissage::Plein,
+                    type_garde_corps: None,
                     escalier: None,
                 }),
                 "terrain" => q.terrains.push(site::Terrain {

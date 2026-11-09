@@ -24,13 +24,14 @@ use crate::modele::GenreOuverture;
 use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum VueFamille {
+pub(super) enum VueFamille {
     Elevation,
     Plan,
     Coupe,
 }
 
 impl VueFamille {
+    pub(super) const TOUTES: [Self; 3] = [Self::Elevation, Self::Plan, Self::Coupe];
     /// Axes horizontal et vertical de la vue.
     fn axes(self) -> (AxePlan, AxePlan) {
         match self {
@@ -46,13 +47,23 @@ impl VueFamille {
             Self::Coupe => VueEsquisse::Coupe,
         }
     }
-    fn nom(self) -> &'static str {
+    pub(super) fn nom(self) -> &'static str {
         match self {
             Self::Elevation => "Élévation intérieure",
             Self::Plan => "Plan",
             Self::Coupe => "Coupe",
         }
     }
+}
+
+pub(super) fn choisir_vue_famille(ui: &mut egui::Ui, actuelle: VueFamille, nom: impl Fn(VueFamille) -> &'static str) -> Option<VueFamille> {
+    let mut choix = None;
+    egui::CollapsingHeader::new(RichText::new("Vues").strong()).default_open(true).show(ui, |ui| {
+        for vue in VueFamille::TOUTES {
+            if ui.selectable_label(actuelle == vue, nom(vue)).clicked() { choix = Some(vue); }
+        }
+    });
+    choix
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -151,15 +162,15 @@ pub(super) struct EditeurFamille {
 }
 
 #[derive(Clone,Copy)]
-struct NavigationFamille { zoom:f64, decalage:(f64,f64) }
+pub(super) struct NavigationFamille { zoom:f64, decalage:(f64,f64) }
 impl Default for NavigationFamille {
     fn default()->Self {Self{zoom:1.0,decalage:(0.0,0.0)}}
 }
 impl NavigationFamille {
-    fn cadre(&self,base:&Cadre)->Cadre {
+    pub(super) fn cadre(&self,base:&Cadre)->Cadre {
         Cadre{centre:base.centre,milieu:(base.milieu.0+self.decalage.0,base.milieu.1+self.decalage.1),echelle:base.echelle*self.zoom}
     }
-    fn naviguer(&mut self,base:&Cadre,curseur:egui::Pos2,molette:f32,pan:egui::Vec2) {
+    pub(super) fn naviguer(&mut self,base:&Cadre,curseur:egui::Pos2,molette:f32,pan:egui::Vec2) {
         let avant=self.cadre(base);
         if molette!=0.0 {
             let point=avant.modele(curseur);
@@ -172,20 +183,41 @@ impl NavigationFamille {
         self.decalage.0-=pan.x as f64/echelle;
         self.decalage.1+=pan.y as f64/echelle;
     }
+
+    pub(super) fn souris(&mut self, ui: &egui::Ui, vue: &egui::Response, base: &Cadre, vue_plane: bool, outil_actif: bool) {
+        if vue.double_clicked_by(PointerButton::Middle) {
+            *self = Self::default();
+            return;
+        }
+        // Les réponses de glissement lisent elles-mêmes le contexte egui.
+        let panoramique = vue.dragged_by(PointerButton::Middle)
+            || (vue_plane && !outil_actif && vue.dragged_by(PointerButton::Secondary));
+        let pan = if panoramique { vue.drag_delta() } else { egui::Vec2::ZERO };
+        let survole = vue.hovered();
+        let (molette, curseur) = ui.input_mut(|i| {
+            let molette = if survole { std::mem::take(&mut i.smooth_scroll_delta.y) } else { 0.0 };
+            let ancre = if vue_plane { base.centre } else { i.pointer.hover_pos().unwrap_or(base.centre) };
+            (molette, ancre)
+        });
+        self.naviguer(base, curseur, molette, pan);
+        if panoramique {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+        }
+    }
 }
 
 /// Transformation de la vue : repère de la famille (h, v) ↔ écran.
-struct Cadre {
-    centre: egui::Pos2,
-    milieu: (f64, f64),
-    echelle: f64,
+pub(super) struct Cadre {
+    pub centre: egui::Pos2,
+    pub milieu: (f64, f64),
+    pub echelle: f64,
 }
 
 impl Cadre {
-    fn ecran(&self, h: f64, v: f64) -> egui::Pos2 {
+    pub(super) fn ecran(&self, h: f64, v: f64) -> egui::Pos2 {
         self.centre + egui::vec2(((h - self.milieu.0) * self.echelle) as f32, (-(v - self.milieu.1) * self.echelle) as f32)
     }
-    fn modele(&self, p: egui::Pos2) -> (f64, f64) {
+    pub(super) fn modele(&self, p: egui::Pos2) -> (f64, f64) {
         let d = p - self.centre;
         (self.milieu.0 + d.x as f64 / self.echelle, self.milieu.1 - d.y as f64 / self.echelle)
     }

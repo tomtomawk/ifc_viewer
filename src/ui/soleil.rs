@@ -57,6 +57,7 @@ impl ViewerApp {
             return;
         }
         self.natif_modifie = true;
+        self.bim.revision = self.bim.revision.wrapping_add(1);
     }
 
     /// À l'ouverture d'une vue 3D : projection enregistrée et, pour une vue caméra, point

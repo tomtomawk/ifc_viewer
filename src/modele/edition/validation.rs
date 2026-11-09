@@ -192,6 +192,13 @@ impl Projet {
         for e in &self.escaliers {
             e.calcul(self).map_err(|x| format!("{} : {x}", e.nom))?;
         }
+        let mut types_garde_corps = std::collections::HashSet::new();
+        for t in &self.types_garde_corps {
+            if t.id.is_empty() || !types_garde_corps.insert(&t.id) {
+                return Err("Identifiant de type de garde-corps vide ou dupliqué.".into());
+            }
+            t.valider(self).map_err(|x| format!("{} : {x}", t.nom))?;
+        }
         for g in &self.garde_corps {
             if self.niveau(&g.niveau).is_none() || g.escalier.as_ref().is_some_and(|e| !self.escaliers.iter().any(|x| &x.id == e)) {
                 return Err(format!("{} : niveau ou escalier hôte absent.", g.nom));

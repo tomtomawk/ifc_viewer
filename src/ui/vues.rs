@@ -2,6 +2,23 @@
 use super::*;
 
 impl ViewerApp {
+    pub(super) fn regler_echelle_vue(&mut self, echelle: f64) -> Result<(), String> {
+        if self.vue_gabaritee() { return Err("L’échelle est pilotée par le gabarit de vue.".into()); }
+        if !(echelle.is_finite() && echelle > 0.0) { return Err("L’échelle doit être positive et finie.".into()); }
+        if let Some(id) = self.vue_native_id()
+            && let Some((projet, _)) = &self.natif
+            && let Some(i) = projet.vues.iter().position(|v| v.id == id && v.echelle != echelle)
+        {
+            let mut projet = projet.clone();
+            projet.vues[i].echelle = echelle;
+            self.appliquer_projet(projet)?;
+        }
+        self.echelle = echelle;
+        self.visibility_dirty = true;
+        self.coupe_dirty = true;
+        Ok(())
+    }
+
     pub(super) fn memoriser_vue(&mut self) {
         if self.saisie_active || self.partage_en_cours { return; }
         if !self.vues_ouvertes.contains(&self.vue_active) {
@@ -152,7 +169,7 @@ impl ViewerApp {
             titres.insert(ONGLET_FAMILLE, "Éditeur de familles".into());
             onglets.push((ONGLET_FAMILLE, Some(ordre), format!("Famille {t}"), format!("Éditeur de familles — {t}")));
         }
-        let famille_active = self.famille_active && self.famille.is_some();
+        let famille_active = self.mode_famille();
         let ordre_actif = self.ordre_famille();
         let est_actif = |id: usize, vue: Option<usize>, doc: usize, active: Option<usize>| if id == ONGLET_FAMILLE { famille_active && vue == ordre_actif } else { !famille_active && id == doc && vue == active };
         let mut activer = None;
@@ -245,12 +262,13 @@ impl ViewerApp {
             self.garder_derniere_vue_par_document();
         }
         if let Some((id, vue)) = activer {
-            self.famille_active = id == ONGLET_FAMILLE;
             if let (ONGLET_FAMILLE, Some(ordre)) = (id, vue) {
                 self.activer_famille(ordre);
             }
         }
         if let Some((id, vue)) = activer.filter(|o| o.0 != ONGLET_FAMILLE) {
+            self.famille_active = false;
+            self.famille_plane_active = None;
             self.changer_document(id);
             if let Some(i) = vue {
                 self.activer_vue(i);
@@ -307,6 +325,7 @@ impl ViewerApp {
         if self.vue_active == Some(i) && self.vues_ouvertes.contains(&Some(i)) {
             return;
         }
+        self.famille_selectionnee = None;
         self.orientation_nord_en_cours = false;
         self.arete_alignement = None;
         self.memoriser_vue();

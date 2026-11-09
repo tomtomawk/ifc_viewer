@@ -7,7 +7,7 @@ impl ViewerApp {
         let ctx = ui.ctx().clone();
         let maximise = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
         // famille ouverte : son propre ruban, comme un document indépendant
-        let mode_famille = self.famille_active && self.famille.is_some() && !(self.rvt.is_some() && self.rvt_sheet);
+        let mode_famille = self.mode_famille();
         let onglet_famille = matches!(self.onglet_ruban, OngletRuban::FamilleCreer | OngletRuban::FamilleSortie);
         if mode_famille && !onglet_famille {
             self.onglet_ruban = OngletRuban::FamilleCreer;
@@ -32,7 +32,9 @@ impl ViewerApp {
         let mut zones_deplacement = vec![titre];
         let menus = egui::Rect::from_min_max(egui::pos2(titre.right() + 8.0, barre.top()), egui::pos2(barre.right() - if natif { 40.0 } else { 180.0 }, barre.bottom()));
         ui.scope_builder(egui::UiBuilder::new().id_salt("menu_fenetre").max_rect(menus).layout(egui::Layout::left_to_right(Align::Center)), |ui| {
-            let onglets: &[(OngletRuban, &str)] = if mode_famille {
+            let onglets: &[(OngletRuban, &str)] = if self.cartouche_actif().is_some() {
+                &[(OngletRuban::FamilleCreer, "Documenter"), (OngletRuban::FamilleSortie, "Sortie")]
+            } else if mode_famille {
                 &[(OngletRuban::FamilleCreer, "Créer"), (OngletRuban::FamilleSortie, "Sortie")]
             } else {
                 &[(OngletRuban::Debut, "Début"), (OngletRuban::Modeliser, "Modéliser"), (OngletRuban::Modifier, "Modifier"), (OngletRuban::Annoter, "Documenter"), (OngletRuban::Sortie, "Sortie")]
@@ -41,16 +43,19 @@ impl ViewerApp {
             let creation = self.ruban_edition.a_un_outil() && self.dessin2d.edition_contour.is_none();
             for &(o, nom) in onglets {
                 let actif = !(creation && o == OngletRuban::Modifier) || self.onglet_ruban == o;
-                ui.add_enabled_ui(actif, |ui| ui.selectable_value(&mut self.onglet_ruban, o, RichText::new(nom).strong()))
-                    .response.on_disabled_hover_text("Terminez ou quittez la création en cours (Échap) pour modifier.");
+                let reponse = ui.add_enabled_ui(actif, |ui| ui.selectable_label(self.onglet_ruban == o, RichText::new(nom).strong()))
+                    .inner.on_disabled_hover_text("Terminez ou quittez la création en cours (Échap) pour modifier.");
+                if reponse.clicked() {
+                    self.onglet_ruban = o;
+                }
             }
             let disponible = self.natif.is_some() && self.loading.is_none() && self.sauvegarde.is_none();
             if let Some(c)=&self.collaboration{let largeur=(ui.available_width()-90.0).clamp(0.0,220.0);ui.add_sized([largeur,20.0],egui::Label::new(RichText::new(format!("Partagé · {}",c.etat)).small()).truncate()).on_hover_text(&c.etat);}
             else if self.loading.is_some(){ui.label(RichText::new(&self.status).small());}
             let mut historique_choisi = None;
             for (retablir, titre) in [(false, "Annuler"), (true, "Rétablir")] {
-                let famille = self.famille.as_ref().filter(|_| mode_famille);
-                let libelles = if let Some(ed)=famille {ed.libelles_historique(retablir)} else if let Some(c)=&self.collaboration {
+                let famille = self.famille.as_ref().filter(|_| self.famille_active);
+                let libelles = if self.famille_plane_active.is_some() { Vec::new() } else if let Some(ed)=famille {ed.libelles_historique(retablir)} else if let Some(c)=&self.collaboration {
                     let pile=if retablir{&c.copie.retablissements}else{&c.copie.annulations};
                     pile.last().map(|t|format!("Transaction {} — {}",t.id,if c.copie.base.acceptes.contains_key(&t.id){"partagée"}else{"locale"})).into_iter().collect()
                 } else {self.historique.libelles(retablir)};
@@ -170,7 +175,7 @@ impl ViewerApp {
                     self.error = Some("Un enregistrement est en cours ; attendez sa fin avant de quitter.".into());
                     continue;
                 }
-                if k == 2 && (self.natif_modifie || self.documents.values().any(|d| d.modifie)) {
+                if k == 2 && self.edition_plane_modifiee(None).is_none() && (self.natif_modifie || self.documents.values().any(|d| d.modifie)) {
                     self.confirmer_fermeture = Some((true, self.document_actif));
                     continue;
                 }
@@ -184,7 +189,9 @@ impl ViewerApp {
         ui.separator();
         ui.set_min_height(28.0);
         if mode_famille {
-            self.ruban_famille(ui, self.onglet_ruban == OngletRuban::FamilleSortie);
+            let sortie = self.onglet_ruban == OngletRuban::FamilleSortie;
+            if self.famille_plane_active.is_some() { self.ruban_famille_plane(ui, sortie); }
+            else { self.ruban_famille(ui, sortie); }
             return;
         }
         let edition = match self.onglet_ruban {
@@ -205,7 +212,13 @@ impl ViewerApp {
             self.ruban_edition.selection_elements = !ids.is_empty();
             self.ruban_edition.selection_murs = self.natif.as_ref().is_some_and(|(p, _)| ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some()));
             self.ruban_edition.bouton_jonctions = None;
+            self.ruban_edition.modifier_famille = menu == crate::ui::ruban::Menu::Modifier
+                && self.cible_famille().is_some();
             let action = self.ruban_edition.afficher(ui, menu, self.natif.as_ref().map(|n| &n.0));
+            if std::mem::take(&mut self.ruban_edition.ouvrir_famille) {
+                self.modifier_famille_selectionnee();
+                return;
+            }
             if let Some(r) = self.ruban_edition.bouton_jonctions.take() {
                 egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| self.menu_jonctions(ui));
             }
@@ -476,9 +489,13 @@ impl ViewerApp {
         let gabaritee = self.vue_gabaritee();
         ui.horizontal_wrapped(|ui| {
             ui.add_enabled_ui(self.scene.is_some(), |ui| {
-                let r = ui.add_enabled(!gabaritee, egui::DragValue::new(&mut self.echelle).speed(1.0).range(1.0..=10000.0).prefix("1 : "));
-                if r.on_disabled_hover_text("Échelle contrôlée par le gabarit de vue.").on_hover_text("Échelle de la vue : épaisseur des traits coupés et pas des hachures du dessin 2D, export SVG").changed() {
-                    self.visibility_dirty = true;
+                let feuille = self.jeu_actif().is_some();
+                let mut echelle = if feuille { 1.0 } else { self.echelle };
+                let r = ui.add_enabled(!gabaritee && !feuille, egui::DragValue::new(&mut echelle).speed(1.0).range(1.0..=10000.0).prefix("1 : "));
+                if r.on_disabled_hover_text(if feuille { "Sélectionner la vue placée pour régler son échelle dans Propriétés." } else { "Échelle contrôlée par le gabarit de vue." })
+                    .on_hover_text("Échelle de la vue, y compris sur les feuilles et dans les exports.")
+                    .changed() && let Err(e) = self.regler_echelle_vue(echelle) {
+                    self.error = Some(e);
                 }
                 ui.separator();
                 self.choix_detail(ui);

@@ -3,6 +3,7 @@ use super::*;
 
 impl ViewerApp {
     pub(super) fn select(&mut self, id: Option<Id>, reveal: bool) {
+        self.famille_selectionnee = None;
         self.cote_axe = None;
         self.cote_arc = None;
         self.bim.selection.clear();
@@ -65,9 +66,6 @@ impl ViewerApp {
             let actuel = ouverture.type_ouverture.clone();
             let choix = self.ruban_edition.selecteur_type_ouverture(ui, &projet, ouverture.genre, actuel.as_deref(), categories, false);
             ui.separator();
-            if let Some((id, g)) = choix.editer {
-                self.ouvrir_editeur_famille_type(Some(id), g);
-            }
             if choix.charger {
                 // famille chargée dans le projet, puis proposée dans la liste
                 if let Err(e) = self.charger_famille_dialogue(false) {
@@ -183,23 +181,30 @@ impl ViewerApp {
 
     /// Tab : de l'assemblage sélectionné à sa première couche, puis couche suivante,
     /// puis retour à l'assemblage.
-    pub(super) fn tab_selection(&mut self) {
-        let Some(s) = &self.scene else { return };
-        let Some(sel) = self.selected else { return };
+    pub(super) fn couche_suivante(&self) -> Option<Id> {
+        let s = self.scene.as_ref()?;
+        let sel = self.selected?;
         let (assemblage, courant) = if s.model.ty(sel) == "IFCELEMENTASSEMBLY" {
             (sel, None)
         } else {
             match s.model.parent.get(&sel) {
                 Some(&p) if s.model.ty(p) == "IFCELEMENTASSEMBLY" => (p, Some(sel)),
-                _ => return,
+                _ => return None,
             }
         };
-        let couches = s.model.children.get(&assemblage).cloned().unwrap_or_default();
+        let couches = s.model.children.get(&assemblage)?;
         let suivant = match courant {
             None => couches.first().copied(),
             Some(c) => couches.iter().position(|&x| x == c).and_then(|k| couches.get(k + 1).copied()),
         };
-        self.select(Some(suivant.unwrap_or(assemblage)), true);
+        let suivant = suivant.unwrap_or(assemblage);
+        (suivant != sel).then_some(suivant)
+    }
+
+    pub(super) fn tab_dans_vue(&self, ctx: &egui::Context) -> bool {
+        self.editeur_garde_corps.is_none()
+            && !egui::Popup::is_any_open(ctx)
+            && ctx.pointer_hover_pos().is_some_and(|pos| self.rect_vue.contains(pos))
     }
 
     /// Sélectionne les objets de la scène, y compris les couches des assemblages.

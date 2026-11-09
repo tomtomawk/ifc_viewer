@@ -6,6 +6,7 @@ pub(super) fn bouton_outil(
     r: egui::Rect,
     outil: Outil,
     grand: bool,
+    serre: bool,
     actif: bool,
 ) -> egui::Response {
     let resp = ui.interact(r, ui.scope_id().with(("outil", outil)), Sense::click());
@@ -32,6 +33,13 @@ pub(super) fn bouton_outil(
             egui::pos2(r.center().x, r.bottom() - 12.0),
             egui::Align2::CENTER_CENTER,
         )
+    } else if serre {
+        (
+            egui::pos2(r.left() + 9.0, r.center().y),
+            14.0,
+            egui::pos2(r.left() + 19.0, r.center().y),
+            egui::Align2::LEFT_CENTER,
+        )
     } else {
         (
             egui::pos2(r.left() + 12.0, r.center().y),
@@ -50,7 +58,7 @@ pub(super) fn bouton_outil(
         texte,
         ancrage,
         outil.nom(),
-        egui::FontId::proportional(12.0),
+        egui::FontId::proportional(if serre && !grand { 11.0 } else { 12.0 }),
         couleur,
     );
     resp.widget_info(|| {
@@ -620,6 +628,7 @@ pub(super) fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             p.circle_filled(pt(0.15, 0.85), r.width() * 0.06, c);
             p.circle_filled(pt(0.85, 0.15), r.width() * 0.06, c);
         }
+        Rectangle => cadre(0.08, 0.18, 0.84, 0.64),
         Polyligne => {
             // petite hachure sous le premier creux : une polyligne fermée peut être remplie
             for (a, b) in [((0.194, 0.644), (0.32, 0.77)), ((0.241, 0.541), (0.43, 0.73)), ((0.287, 0.437), (0.54, 0.69))] {

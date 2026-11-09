@@ -22,6 +22,10 @@ impl ViewerApp {
     }
 
     pub(super) fn contenu_panneau(&mut self, ui: &mut egui::Ui, p: Panneau) {
+        if self.famille_plane_active.is_some() {
+            self.panneau_famille_plane(ui, p);
+            return;
+        }
         // onglet Famille : les panneaux montrent la famille
         if self.famille_active && self.famille.is_some() {
             match p {

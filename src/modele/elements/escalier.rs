@@ -73,6 +73,8 @@ pub struct GardeCorps {
     pub trace: Vec<[f64; 2]>,
     pub hauteur: f64,
     pub remplissage: Remplissage,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub type_garde_corps: Option<String>,
     /// Escalier hôte : la base suit ses marches.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub escalier: Option<String>,
@@ -321,7 +323,7 @@ pub fn decaler_polyligne(points: &[[f64; 2]], d: f64) -> Vec<[f64; 2]> {
 
 impl GardeCorps {
     /// Altitude de la base au droit d'un point (escalier hôte, sinon niveau et décalage).
-    fn base(&self, p: &Projet, q: DVec2) -> Result<f64, String> {
+    pub(super) fn base(&self, p: &Projet, q: DVec2) -> Result<f64, String> {
         match self.escalier.as_ref().and_then(|id| p.escaliers.iter().find(|e| &e.id == id)) {
             Some(e) => e.altitude_en(p, q),
             None => Ok(p.niveau(&self.niveau).ok_or("Niveau du garde-corps absent.")?.altitude + self.decalage),
@@ -333,6 +335,10 @@ impl GardeCorps {
     pub fn solides(&self, p: &Projet) -> Result<Vec<(bool, Vec<Tri>)>, String> {
         if self.trace.len() < 2 || !self.trace.iter().flatten().all(|x| x.is_finite()) {
             return Err("Garde-corps : au moins deux points.".into());
+        }
+        if let Some(id) = &self.type_garde_corps {
+            return p.types_garde_corps.iter().find(|t| &t.id == id)
+                .ok_or("Type de garde-corps absent.")?.solides(p, self);
         }
         if !(self.hauteur > 200.0 && self.hauteur.is_finite()) {
             return Err("Garde-corps : hauteur non valide.".into());
@@ -454,7 +460,7 @@ mod tests {
         let (p, ids) = p.executer(Commande::Escalier { escalier: e.clone() }).unwrap();
         let id = ids[0].clone();
         let [g, _] = p.escaliers[0].traces_garde_corps(50.0);
-        let gc = GardeCorps { id: String::new(), nom: "GC".into(), niveau: "rdc".into(), decalage: 0.0, trace: g, hauteur: 1000.0, remplissage: Remplissage::Barreaudage, escalier: Some(id.clone()) };
+        let gc = GardeCorps { id: String::new(), nom: "GC".into(), niveau: "rdc".into(), decalage: 0.0, trace: g, hauteur: 1000.0, remplissage: Remplissage::Barreaudage, escalier: Some(id.clone()), type_garde_corps: None };
         let (p, _) = p.executer(Commande::GardeCorps { garde_corps: gc }).unwrap();
         // copie : le garde-corps suit l'escalier copié
         let (q, copies) = p.executer(Commande::Copier { ids: vec![id.clone()], delta: [0.0, 3000.0, 0.0] }).unwrap();
@@ -477,7 +483,7 @@ mod tests {
         let [g, d] = e.traces_garde_corps(50.0);
         assert!((g[0][1] - 450.0).abs() < 1e-9 && (d[0][1] + 450.0).abs() < 1e-9);
         p.escaliers.push(e);
-        let gc = GardeCorps { id: "g".into(), nom: "GC".into(), niveau: "rdc".into(), decalage: 0.0, trace: g, hauteur: 1000.0, remplissage: Remplissage::Barreaudage, escalier: Some("e".into()) };
+        let gc = GardeCorps { id: "g".into(), nom: "GC".into(), niveau: "rdc".into(), decalage: 0.0, trace: g, hauteur: 1000.0, remplissage: Remplissage::Barreaudage, escalier: Some("e".into()), type_garde_corps: None };
         let s = gc.solides(&p).unwrap();
         let zmax = s.iter().flat_map(|(_, t)| t.iter().flatten()).map(|v| v.z).fold(f64::MIN, f64::max);
         // la main courante monte avec l'escalier

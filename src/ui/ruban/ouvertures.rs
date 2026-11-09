@@ -148,7 +148,7 @@ impl RubanEdition {
                     ui.painter().text(r.min + egui::vec2(50.0, 15.0), egui::Align2::LEFT_CENTER, &ligne.1, police.clone(), ui.visuals().text_color());
                     let mut icone_cliquee = false;
                     // au survol : crayon (modifier la famille) ; sinon les cotes
-                    if survol && onglet != GenreOuverture::Libre && let Some(id) = &ligne.0 {
+                    if generique && survol && onglet != GenreOuverture::Libre && let Some(id) = &ligne.0 {
                         let zone = egui::Rect::from_min_max(egui::pos2(r.right() - 30.0, r.top() + 4.0), egui::pos2(r.right() - 8.0, r.bottom() - 4.0));
                         let rep = ui.interact(zone, ui.scope_id().with(("crayon_ouverture", id)), Sense::click()).on_hover_text("Modifier la famille du type");
                         if rep.hovered() {

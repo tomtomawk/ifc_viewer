@@ -9,7 +9,10 @@ impl RubanEdition {
         projet: Option<&crate::modele::Projet>,
     ) -> Option<Outil> {
         let mut action = None;
-        let largeur = ui.available_width();
+        const LARGEUR_FAMILLE: f32 = 132.0;
+        let largeur = ui.available_width() - if self.modifier_famille {
+            LARGEUR_FAMILLE + espace_groupes(false)
+        } else { 0.0 };
         let outil_options = self.selection.filter(|o| {
             groupes(menu)
                 .iter()
@@ -17,9 +20,12 @@ impl RubanEdition {
         });
         // Les surfaces se règlent dans l'encart en tête de Propriétés.
         // Sans réglage (dessin 2D, actions), pas d'encart.
-        let outil_options = outil_options.filter(|o| o.commande() != Outil::Surfaces && !champs(*o).is_empty());
+        let outil_options = outil_options.filter(|o| menu != Menu::Cartouche && o.commande() != Outil::Surfaces && !champs(*o).is_empty());
         let selection_options = outil_options.map(Outil::commande);
-        let compact = largeur_commandes(ui, menu, &[]);
+        let compact = largeur_commandes(ui, menu, &[], false);
+        let reserve = if selection_options.is_some() { LARGEUR_REGLAGES + ESPACE_COLONNES } else { 0.0 };
+        let serre = compact + reserve > largeur;
+        let compact = if serre { largeur_commandes(ui, menu, &[], true) } else { compact };
         let options_inline =
             selection_options.is_some() && compact + LARGEUR_OPTIONS + ESPACE_COLONNES <= largeur;
         let largeur_options = if selection_options.is_none() {
@@ -42,7 +48,7 @@ impl RubanEdition {
         for outil in candidats {
             let mut essai = grands.clone();
             essai.push(outil);
-            if largeur_commandes(ui, menu, &essai) <= budget {
+            if largeur_commandes(ui, menu, &essai, serre) <= budget {
                 grands = essai;
             }
         }
@@ -52,10 +58,16 @@ impl RubanEdition {
             .id_salt("ruban_commandes")
             .auto_shrink([false, true])
             .show(ui, |ui| {
-                ui.spacing_mut().item_spacing.x = ESPACE_GROUPES;
+                ui.spacing_mut().item_spacing.x = espace_groupes(serre);
                 ui.horizontal_top(|ui| {
+                    if self.modifier_famille {
+                        let texte = "Modifier la famille";
+                        let rect = ui.allocate_exact_size(egui::vec2(LARGEUR_FAMILLE, HAUTEUR_GROUPE), Sense::hover()).0;
+                        let bouton = egui::Rect::from_min_size(rect.min, egui::vec2(rect.width(), HAUTEUR_OUTILS));
+                        self.ouvrir_famille = ui.put(bouton, egui::Button::new(texte)).clicked();
+                    }
                     for (indice, (nom, outils)) in groupes(menu).iter().enumerate() {
-                        let colonnes = colonnes(ui, outils, &grands);
+                        let colonnes = colonnes(ui, outils, &grands, serre);
                         let contient_selection =
                             selection_options.is_some_and(|o| outils.contains(&o));
                         let largeur_groupe = largeur_groupe(ui, nom, &colonnes)
@@ -68,8 +80,8 @@ impl RubanEdition {
                             egui::vec2(largeur_groupe, HAUTEUR_GROUPE),
                             Sense::hover(),
                         );
-                        if indice > 0 {
-                            let x = rect.left() - ESPACE_GROUPES / 2.0;
+                        if indice > 0 || self.modifier_famille {
+                            let x = rect.left() - espace_groupes(serre) / 2.0;
                             ui.painter().line_segment(
                                 [
                                     egui::pos2(x, rect.top() + 4.0),
@@ -95,7 +107,7 @@ impl RubanEdition {
                                 // sélecteur de type de Propriétés
                                 let disponible = matches!(outil, Outil::Terrain|Outil::LimitePropriete|Outil::Mur|Outil::Surfaces|Outil::Poteau|Outil::Poutre|Outil::Escalier|Outil::GardeCorps|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Composant|Outil::Piece|Outil::Arbre|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Symetrie|Outil::Reseau|Outil::Echelle|Outil::Decaler|Outil::Scinder|Outil::Demolir|Outil::Reproduire|Outil::ChangerHote|Outil::Inverser|Outil::Aligner|Outil::Ajuster|Outil::ModifierContour|Outil::CopierNiveau|Outil::Jonctions|Outil::AttacherToiture|Outil::CreerIdentique|Outil::Supprimer|Outil::Cadrer|Outil::Isoler|Outil::Masquer|Outil::MasquerVue|Outil::Afficher|Outil::Verrouiller|Outil::Deverrouiller|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::Ligne|Outil::Polyligne|Outil::Spline|Outil::Cercle|Outil::Arc|Outil::Zone|Outil::Etiquette|Outil::Feuilles|Outil::Nomenclatures);
                                 let mut bouton_ui=ui.new_child(egui::UiBuilder::new().max_rect(bouton));
-                                let raison = if !disponible {
+                                let raison = if !disponible && outil.forme_dessin().is_none() {
                                     Some("Outil prévu, pas encore disponible")
                                 } else if projet.is_none() {
                                     Some("Ouvrir ou créer un projet pour utiliser cet outil")
@@ -107,7 +119,7 @@ impl RubanEdition {
                                     None
                                 };
                                 if raison.is_some() {bouton_ui.disable();}
-                                let reponse=bouton_outil(&mut bouton_ui,bouton,outil,colonne.grande,actif);
+                                let reponse=bouton_outil(&mut bouton_ui,bouton,outil,colonne.grande,serre,actif);
                                 if outil == Outil::Jonctions { self.bouton_jonctions = Some(reponse.clone()); }
                                 if reponse.on_disabled_hover_text(raison.unwrap_or("")).clicked() {
                                     if outil == Outil::Jonctions { continue; }

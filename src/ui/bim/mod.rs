@@ -9,6 +9,7 @@ impl ViewerApp {
     }
 
     pub(super) fn parcourir_historique_n(&mut self, retablir: bool, nombre: usize) {
+        if self.famille_plane_active.is_some() { return; }
         // onglet Famille : un document à part, avec sa propre pile
         if self.famille_active {
             if let Some(ed) = self.famille.as_mut() {
@@ -1016,9 +1017,6 @@ impl ViewerApp {
                         ui.end_row();
                     });
                     ui.horizontal(|ui| {
-                        if ui.button("Modifier la famille").on_hover_text("Éditer la famille de cette étiquette : textes à champs et traits ; toutes les pièces qui l'utilisent suivent").clicked() {
-                            ouvrir_etiquette = Some((Some(x.etiquette.clone()), Some(x.id.clone())));
-                        }
                         if ui.button("Nouvelle famille").on_hover_text("Nouvelle famille d'étiquette, sur la base de celle-ci, affectée à cette pièce").clicked() {
                             ouvrir_etiquette = Some((None, Some(x.id.clone())));
                         }
@@ -1052,9 +1050,6 @@ impl ViewerApp {
                         change |= ui.add(egui::DragValue::new(&mut x.rotation).speed(1.0).suffix(" °")).changed();
                         ui.end_row();
                     });
-                    if ui.button("Modifier la famille").on_hover_text("Ouvre la famille de son type dans l'éditeur ; « Charger dans le projet » met à jour tous les composants du type").clicked() {
-                        ouvrir_composant = Some(Some(original.type_composant.clone()));
-                    }
                     if change {
                         commande = Some(Commande::Composant { composant: x });
                     }
@@ -1388,7 +1383,7 @@ impl ViewerApp {
             return false;
         }
         if let Some((famille, piece)) = ouvrir_etiquette {
-            self.editer_famille_etiquette(ui.ctx(), famille, piece);
+            self.editer_famille_etiquette(famille, piece);
         }
         if let Some(t) = ouvrir_composant {
             self.ouvrir_editeur_composant(t);

@@ -525,14 +525,7 @@ impl ViewerApp {
         if self.onglet_ruban != OngletRuban::Annoter || self.vue_native_id().is_none() {
             return None;
         }
-        Some((Usage::Annotation, match self.ruban_edition.outil()? {
-            Outil::Ligne => OutilDessin::Ligne,
-            Outil::Polyligne => OutilDessin::Polyligne,
-            Outil::Spline => OutilDessin::Spline,
-            Outil::Cercle => OutilDessin::Cercle,
-            Outil::Arc => OutilDessin::Arc,
-            _ => return None,
-        }))
+        Some((Usage::Annotation, self.ruban_edition.outil()?.forme_dessin()?))
     }
 
     /// Un tracé a des points en cours (les raccourcis et Suppr attendent).
