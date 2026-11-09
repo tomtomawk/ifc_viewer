@@ -11,6 +11,17 @@ pub struct FiltresContextes {
     pub variante: Option<String>,
 }
 
+impl FiltresContextes {
+    /// Filtre résultant : les choix de `self` priment, `base` complète le reste.
+    pub fn sur(&self, base: &FiltresContextes) -> FiltresContextes {
+        FiltresContextes {
+            phase: self.phase.clone().or_else(|| base.phase.clone()),
+            sous_projet: self.sous_projet.clone().or_else(|| base.sous_projet.clone()),
+            variante: self.variante.clone().or_else(|| base.variante.clone()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -58,8 +69,21 @@ mod tests {
         let mut filtre = FiltresContextes { phase: Some("Projet".into()), sous_projet: None, variante: Some(a.clone()) };
         assert!(p.elements_masques_contextes(&filtre).contains(&mur));
         assert!(p.elements_masques_contextes(&filtre).contains("porte"));
+        // sans choix dans le jeu Façade, seule la variante retenue (A, la première) est visible
         filtre.variante = Some(c.clone());
+        assert!(p.elements_masques_contextes(&filtre).contains(&mur));
+        assert!(p.elements_masques_contextes(&Default::default()).contains(&mur));
+        assert_eq!(p.variante_retenue("Façade").unwrap().id, a);
+        p.retenir_variante(&b).unwrap();
+        assert_eq!(p.variante_retenue("Façade").unwrap().id, b);
         assert!(!p.elements_masques_contextes(&filtre).contains(&mur));
+        assert!(!p.elements_masques_contextes(&Default::default()).contains("porte"));
+        let relu: Projet = serde_json::from_str(&p.json().unwrap()).unwrap();
+        assert_eq!(relu.variante_retenue("Façade").unwrap().id, b);
+        // le choix de la vue prime sur la variante retenue
+        let vue = FiltresContextes { variante: Some(a.clone()), ..Default::default() };
+        assert!(p.elements_masques_contextes(&FiltresContextes::default().sur(&vue)).contains(&mur));
+        assert!(!p.elements_masques_contextes(&FiltresContextes { variante: Some(b.clone()), ..Default::default() }.sur(&vue)).contains(&mur));
         filtre.phase = Some("Démolition".into());
         assert!(p.elements_masques_contextes(&filtre).contains(&mur));
         assert!(p.supprimer_contexte(ListeCreation::Variante, &b, Some(&c)).is_err());
@@ -97,17 +121,37 @@ impl Projet {
         let rangs: HashMap<&str, usize> = self.phases.iter().enumerate().map(|(i, p)| (p.as_str(), i)).collect();
         let active = filtre.phase.as_deref().and_then(|p| rangs.get(p)).copied();
         let jeux: HashMap<&str, &str> = self.variantes.iter().map(|v| (v.id.as_str(), v.jeu.as_str())).collect();
-        let variante = filtre.variante.as_deref().and_then(|id| jeux.get(id).map(|jeu| (id, *jeu)));
+        // une seule variante visible par jeu : celle du filtre, sinon la retenue
+        let mut affichees: HashMap<&str, &str> = HashMap::new();
+        for v in &self.variantes {
+            let courante = affichees.entry(v.jeu.as_str()).or_insert(v.id.as_str());
+            if v.retenue && !self.variantes.iter().any(|x| x.id == *courante && x.retenue) { *courante = v.id.as_str(); }
+        }
+        if let Some((id, jeu)) = filtre.variante.as_deref().and_then(|id| jeux.get_key_value(id)) { affichees.insert(*jeu, *id); }
         let mut masques = HashSet::new();
         for (id, (phase, sous_projet, option)) in champs {
             let demolition = self.demolitions.get(id).or_else(|| parents.get(id).and_then(|p| self.demolitions.get(*p)))
                 .or_else(|| parents.get(id).and_then(|p| parents.get(p)).and_then(|p| self.demolitions.get(*p)));
             let hors_phase = active.is_some_and(|a| phase.and_then(|p| rangs.get(p)).is_some_and(|&c| c > a) || demolition.and_then(|d| rangs.get(d.as_str())).is_some_and(|&d| d <= a));
             let hors_sous_projet = filtre.sous_projet.as_deref().zip(sous_projet).is_some_and(|(a,b)| a != b);
-            let hors_variante = variante.zip(option).is_some_and(|((a, jeu), b)| jeux.get(b).is_some_and(|j| *j == jeu) && a != b);
+            let hors_variante = option.is_some_and(|b| jeux.get(b).and_then(|jeu| affichees.get(jeu)).is_some_and(|a| *a != b));
             if hors_phase || hors_sous_projet || hors_variante { masques.insert(id.to_string()); }
         }
         masques
+    }
+
+    /// Variante affichée par défaut dans le jeu `jeu`.
+    pub fn variante_retenue(&self, jeu: &str) -> Option<&crate::modele::Variante> {
+        let mut du_jeu = self.variantes.iter().filter(|v| v.jeu == jeu);
+        let premiere = du_jeu.next()?;
+        if premiere.retenue { Some(premiere) } else { du_jeu.find(|v| v.retenue).or(Some(premiere)) }
+    }
+
+    /// Retient une variante : elle remplace les autres de son jeu dans les vues sans choix.
+    pub fn retenir_variante(&mut self, id: &str) -> Result<(), String> {
+        let jeu = self.variantes.iter().find(|v| v.id == id).ok_or("Variante introuvable.")?.jeu.clone();
+        for v in self.variantes.iter_mut().filter(|v| v.jeu == jeu) { v.retenue = v.id == id; }
+        Ok(())
     }
 
     /// Nombre d'affectations directes et de démolitions utilisant une entrée.

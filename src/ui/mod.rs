@@ -667,6 +667,8 @@ pub struct ViewerApp {
     gestion_contextes: Option<gestion_contextes::GestionContextes>,
     editeur_gabarit_vue: Option<gabarits_vues::EditeurGabaritVue>,
     filtres_contextes: crate::modele::edition::contextes::FiltresContextes,
+    /// Dernière variante de création dont l'affichage a été synchronisé.
+    variante_creation_suivie: Option<String>,
     /// Matériau du projet natif dont les graphismes sont ouverts.
     materiau_edite: Option<String>,
     /// Onglet de la fenêtre Matériau : Graphique (faux) ou Apparence (vrai).
@@ -881,6 +883,7 @@ impl ViewerApp {
             gestion_contextes: None,
             editeur_gabarit_vue: None,
             filtres_contextes: Default::default(),
+            variante_creation_suivie: None,
             categories: Vec::new(),
             categorie_objet: Vec::new(),
             cle_objet: Vec::new(),

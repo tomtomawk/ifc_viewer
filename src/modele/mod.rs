@@ -214,6 +214,9 @@ pub struct Variante {
     pub id: String,
     pub nom: String,
     pub jeu: String,
+    /// Variante affichée par défaut dans son jeu ; à défaut, la première du jeu.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub retenue: bool,
 }
 
 impl Variante {

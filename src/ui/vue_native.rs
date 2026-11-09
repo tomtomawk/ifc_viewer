@@ -43,16 +43,16 @@ impl ViewerApp {
                         for phase in &projet.phases { ui.selectable_value(&mut filtre.phase, Some(phase.clone()), phase); }
                     }));
                 ui.end_row();
-                ui.label("Variante affichée").on_hover_text("Les autres variantes du même jeu sont masquées ; le modèle principal et les autres jeux restent visibles.");
-                let nom = filtre.variante.as_ref().and_then(|id| projet.variantes.iter().find(|v| &v.id == id)).map_or("Toutes".into(), |v| v.libelle());
+                ui.label("Variante affichée").on_hover_text("Une seule variante est visible par jeu : celle choisie ici pour son jeu, la variante retenue (★) pour les autres.");
+                let nom = filtre.variante.as_ref().and_then(|id| projet.variantes.iter().find(|v| &v.id == id)).map_or("Retenues ★".into(), |v| v.libelle());
                 ui.add_enabled_ui(gabarit.is_none(), |ui| egui::ComboBox::from_id_salt("variante_vue_native").width(150.0).truncate().selected_text(nom).show_ui(ui, |ui| {
-                    ui.selectable_value(&mut filtre.variante, None, "Toutes");
+                    ui.selectable_value(&mut filtre.variante, None, "Retenues ★");
                     for variante in &projet.variantes { ui.selectable_value(&mut filtre.variante, Some(variante.id.clone()), variante.libelle()); }
                 }));
                 ui.end_row();
             });
             if self.filtres_contextes != Default::default() {
-                ui.label(RichText::new("Les filtres temporaires du gestionnaire s'ajoutent à ceux de la vue.").small().weak());
+                ui.label(RichText::new("L'affichage temporaire du gestionnaire prime sur les réglages de la vue.").small().weak());
             }
         });
         if gabarit != gabarit_avant {

@@ -500,7 +500,7 @@ impl Projet {
             }
             let id = identifiant_natif("variante", &format!("{}:{jeu}:{nom}", jeu.len()));
             if self.variantes.iter().any(|v| v.id == id) { return Err("Identifiant de variante déjà utilisé.".into()); }
-            self.variantes.push(Variante { id: id.clone(), nom: nom.into(), jeu: jeu.into() });
+            self.variantes.push(Variante { id: id.clone(), nom: nom.into(), jeu: jeu.into(), retenue: false });
             return Ok(id);
         }
         let (choix, defaut) = match liste { ListeCreation::Phase => (&mut self.phases, "Projet"), _ => (&mut self.sous_projets, "A") };
@@ -797,8 +797,8 @@ mod tests {
     fn variante_mur_persiste_et_validee_sans_mutation() {
         let mut projet = Projet::nouveau("Variantes");
         projet.variantes = vec![
-            Variante { id: "a".into(), nom: "Option 1".into(), jeu: "Façade".into() },
-            Variante { id: "b".into(), nom: "Option 1".into(), jeu: "Structure".into() },
+            Variante { id: "a".into(), nom: "Option 1".into(), jeu: "Façade".into(), retenue: false },
+            Variante { id: "b".into(), nom: "Option 1".into(), jeu: "Structure".into(), retenue: false },
         ];
         let mut options = ParametresMur { variante: Some("b".into()), ..Default::default() };
         projet.ajouter_mur([0.,0.], [1000.,0.], &options).unwrap();

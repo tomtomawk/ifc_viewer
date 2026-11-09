@@ -5,10 +5,9 @@ impl ViewerApp {
     /// Identifiants de scène masqués par les filtres temporaires de contexte.
     pub(super) fn ids_masques_contextes(&self) -> HashSet<Id> {
         self.natif.as_ref().map(|(projet, _)| {
-            let mut masques = if self.filtres_contextes == Default::default() { HashSet::new() } else { projet.elements_masques_contextes(&self.filtres_contextes) };
-            if let Some(filtre) = self.id_vue_contexte().and_then(|id| projet.contextes_vues.get(&id)) {
-                if *filtre != Default::default() { masques.extend(projet.elements_masques_contextes(filtre)); }
-            }
+            // l'affichage temporaire prime sur les réglages enregistrés de la vue
+            let vue = self.id_vue_contexte().and_then(|id| projet.contextes_vues.get(&id)).cloned().unwrap_or_default();
+            let masques = projet.elements_masques_contextes(&self.filtres_contextes.sur(&vue));
             super::bim::elements_natifs(projet).filter(|(_, id)| masques.contains(*id)).map(|(genre, id)| scene::id_natif(genre, id)).collect()
         }).unwrap_or_default()
     }

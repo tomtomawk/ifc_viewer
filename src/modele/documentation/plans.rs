@@ -17,11 +17,8 @@ pub(crate) fn fond_plan(p: &Projet, s: &Scene, v: &Vue, plan: glam::Vec4, echell
     let z = (n.altitude + coupe) * 0.001 - s.origin.z;
     let niveau = id_natif("niveau", niveau);
     let mut source = source.clone();
-    for id in [&source.id, &v.id] {
-        if let Some(filtre) = p.contextes_vues.get(id) {
-            source.elements_masques.extend(p.elements_masques_contextes(filtre));
-        }
-    }
+    let filtre = p.contextes_vues.get(&v.id).cloned().unwrap_or_default().sur(&p.contextes_vues.get(&source.id).cloned().unwrap_or_default());
+    source.elements_masques.extend(p.elements_masques_contextes(&filtre));
     let exclus = ids_masques_vue(p, &source);
     let visible: Vec<_> = s.objects.iter().map(|o| o.storey == Some(niveau)
         && !exclus.contains(&o.id) && !s.model.parent.get(&o.id).is_some_and(|id| exclus.contains(id))).collect();

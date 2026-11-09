@@ -69,6 +69,7 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
     c.projet.variantes = m.variantes.values().filter(|v| !v.jeu).map(|v| crate::modele::Variante {
         id: ident("variante", v.id), nom: v.nom.clone(),
         jeu: m.variantes.get(&v.lien).map_or_else(String::new, |j| j.nom.clone()),
+        retenue: m.variantes.get(&v.lien).is_some_and(|j| j.lien == v.id),
     }).collect();
     c.projet.variantes.sort_by(|a,b| a.jeu.cmp(&b.jeu).then(a.nom.cmp(&b.nom)).then(a.id.cmp(&b.id)));
 
