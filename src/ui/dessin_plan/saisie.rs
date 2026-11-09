@@ -377,7 +377,7 @@ impl ViewerApp {
     /// Retour arrière, Échap (saisie, puis tracé en cours, puis outil).
     pub(in crate::ui) fn clavier_dessin(&mut self, ctx: &egui::Context) {
         let cle = self.ruban_edition.outil();
-        let segments = if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier) { self.dessin2d.trace.as_ref().map_or(0, |t| t.points.len().saturating_sub(1)) } else { 0 };
+        let segments = if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier) { self.dessin2d.trace.as_ref().map_or(0, |t| t.points.len().saturating_sub(1)).max(self.dessin2d.edition_contour.as_ref().filter(|e| e.creation == Some(Usage::Escalier)).map_or(0, |_| self.dessin2d.dalle.first().map_or(0, |c| c.len().saturating_sub(1)))) } else { 0 };
         let courante = self.dessin2d.justification_escalier;
         self.dessin2d.just_segments.truncate(segments);
         while self.dessin2d.just_segments.len() < segments { self.dessin2d.just_segments.push(courante); }
@@ -512,32 +512,44 @@ impl ViewerApp {
         }
         if echap {
             { self.dessin2d.message = None; self.dessin2d.information = None; };
-            if !self.dessin2d.saisie.is_empty() {
+            if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.commande.is_some()) {
+                let e = self.dessin2d.edition_contour.as_mut().unwrap();
+                e.commande = None; e.depart = None;
+            } else if !self.dessin2d.saisie.is_empty() {
                 self.dessin2d.saisie.clear();
                 self.dessin2d.champ_angle = false;
             } else if self.dessin2d.trace.as_ref().is_some_and(|t| !t.points.is_empty()) {
                 // Échap interrompt le tracé en cours ; ce qui est déjà dessiné reste
-                if usage != Usage::Mur && self.dessin2d.edition_contour.is_none() {
+                if usage != Usage::Mur && self.dessin2d.edition_contour.is_none() && !matches!(usage, Usage::Escalier | Usage::GardeCorps | Usage::Annotation) {
                     self.interrompre_trace(usage);
+                } else if self.dessin2d.edition_contour.is_none() && matches!(usage, Usage::Escalier | Usage::GardeCorps | Usage::Annotation)
+                    && outil == OutilDessin::Polyligne && let Some(t) = self.dessin2d.trace.as_ref().filter(|t| t.points.len() >= 2) {
+                    self.dessin2d.ouverts.push(t.points.clone());
+                } else if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation.is_some() && e.raccord.is_none())
+                    && let Some(t) = self.dessin2d.trace.as_ref().filter(|t| t.outil == OutilDessin::Polyligne && t.points.len() >= 2) {
+                    self.dessin2d.dalle.push(t.points.iter().map(|p| p.to_array()).collect());
+                    self.dessin2d.edition_contour.as_mut().unwrap().fermees.push(false);
                 }
                 if let Some(t) = self.dessin2d.trace.as_mut() { t.points.clear(); }
                 // dessin 2D : ce qui est tracé reste et l'outil se ferme, la sélection
                 // est de nouveau possible
-                if usage == Usage::Annotation && self.dessin2d.edition_contour.is_none() {
+                if usage == Usage::Annotation && outil != OutilDessin::Polyligne && self.dessin2d.edition_contour.is_none() {
                     self.ruban_edition.annuler();
                     self.dessin2d.trace = None;
                 }
-                if let Some(e) = &mut self.dessin2d.edition_contour && e.raccord.take().is_some() { e.dessin = false; }
+                if let Some(e) = &mut self.dessin2d.edition_contour { e.raccord = None; e.dessin = false; }
+                if self.dessin2d.edition_contour.is_none() && (matches!(usage, Usage::Surface | Usage::LimitePropriete | Usage::Terrain | Usage::Cadrage) || (matches!(usage, Usage::Escalier | Usage::GardeCorps | Usage::Annotation) && outil == OutilDessin::Polyligne && self.outil_cotation().is_none())) {
+                    self.editer_contours_en_creation(usage);
+                }
             } else if let Some(e) = self.dessin2d.edition_contour.as_mut()
-                && (e.segment.is_some() || e.selection.is_some() || e.dessin)
+                && (e.segment.is_some() || e.sommet.is_some() || e.selection.is_some() || e.dessin)
             {
                 // premier Échap : retour à la sélection des segments et des sommets
-                (e.segment, e.selection, e.dessin) = (None, None, false);
+                (e.segment, e.sommet, e.selection, e.dessin) = (None, None, None, false);
             } else if self.dessin2d.edition_contour.is_some() {
                 self.quitter_commande(false);
-            } else if matches!(usage, Usage::Surface | Usage::LimitePropriete) && !(self.dessin2d.dalle.is_empty() && self.dessin2d.ouverts.is_empty()) {
-                // sortir de l'outil garde les contours tracés (comme les murs déjà créés)
-                self.quitter_commande(true);
+            } else if matches!(usage, Usage::Surface | Usage::LimitePropriete | Usage::Terrain | Usage::Cadrage) && !(self.dessin2d.dalle.is_empty() && self.dessin2d.ouverts.is_empty()) {
+                self.editer_contours_en_creation(usage);
             } else {
                 self.ruban_edition.annuler();
                 self.dessin2d.trace = None;
@@ -557,6 +569,31 @@ impl ViewerApp {
             } else {
                 self.valider_saisie_dessin();
             }
+        }
+    }
+
+    pub(super) fn editer_contours_en_creation(&mut self, usage: Usage) {
+        let altitude = self.altitude_trace();
+        let mut fermees = vec![true; self.dessin2d.dalle.len()];
+        for contour in std::mem::take(&mut self.dessin2d.ouverts) {
+            self.dessin2d.dalle.push(contour.into_iter().map(|p| p.to_array()).collect());
+            fermees.push(false);
+        }
+        if usage == Usage::Terrain && let Some(contour) = self.dessin2d.dalle.first() {
+            let ngf = self.natif.as_ref().map_or(0.0, |(p, _)| p.ngf()) + altitude;
+            self.dessin2d.terrain_cotes.resize(contour.len(), ngf);
+        }
+        self.dessin2d.edition_contour = Some(EditionContour { id: String::new(), creation: Some(usage), altitude, dessin: false, selection: None, segment: None, sommet: None, commande: None, depart: None, glisse: None, annotation: None, fermees, raccord: None, element: None });
+    }
+
+    pub(in crate::ui) fn selectionner_trace_en_creation(&mut self) {
+        if let Some((usage @ (Usage::Surface | Usage::LimitePropriete | Usage::Terrain | Usage::Cadrage | Usage::Escalier | Usage::GardeCorps | Usage::Annotation), outil)) = self.usage_dessin() {
+            if matches!(usage, Usage::Escalier | Usage::GardeCorps | Usage::Annotation) {
+                if outil != OutilDessin::Polyligne || self.outil_cotation().is_some() { return; }
+                if let Some(t) = self.dessin2d.trace.as_ref().filter(|t| t.points.len() >= 2) { self.dessin2d.ouverts.push(t.points.clone()); }
+            } else { self.interrompre_trace(usage); }
+            if let Some(t) = &mut self.dessin2d.trace { t.points.clear(); }
+            self.editer_contours_en_creation(usage);
         }
     }
 
@@ -592,7 +629,7 @@ impl ViewerApp {
             if let Some(t) = self.dessin2d.trace.as_ref().filter(|t| t.outil == OutilDessin::Polyligne && t.points.len() >= 2) {
                 self.dessin2d.ouverts.push(t.points.clone());
                 { self.dessin2d.message = None; self.dessin2d.information = None; };
-                self.dessin2d.information = Some("Contour laissé ouvert : cliquer une de ses extrémités pour le reprendre.".into());
+                self.dessin2d.information = Some("Contour laissé ouvert : double-cliquer une extrémité pour le reprendre.".into());
             }
         } else {
             self.valider_saisie_dessin();
@@ -607,7 +644,7 @@ impl ViewerApp {
             self.dessin2d.message = Some("Terminez le raccord ou annulez son tracé avec Échap.".into());
             return;
         }
-        if valider && self.dessin2d.edition_contour.as_ref().is_some_and(|e| !e.ligne() && e.fermees.iter().any(|f| !f)) {
+        if valider && self.dessin2d.edition_contour.as_ref().is_some_and(|e| !e.ligne() && !matches!(e.creation, Some(Usage::Escalier | Usage::GardeCorps | Usage::Annotation)) && e.fermees.iter().any(|f| !f)) {
             self.dessin2d.message = Some("Refermez tous les contours avant de valider.".into());
             return;
         }
@@ -633,7 +670,7 @@ impl ViewerApp {
             }
         }
         if valider && surface && !self.dessin2d.ouverts.is_empty() {
-            self.dessin2d.message = Some("Contour non fermé : reprendre son tracé (clic sur une extrémité) et le fermer, ou annuler avec la croix.".into());
+            self.dessin2d.message = Some("Contour non fermé : reprendre son tracé et le fermer, ou annuler avec la croix.".into());
             return;
         }
         if valider && usage == Some(Usage::Cadrage) {
@@ -725,7 +762,11 @@ impl ViewerApp {
             self.bim.selection = ids;
             self.status = "Polyligne modifiée — Ctrl+S pour enregistrer.".into();
             self.confirmer("Polyligne modifiée".into());
-        } else if surface && valider && self.dessin2d.edition_contour.is_some() {
+        } else if valider && matches!(usage, Some(Usage::Escalier | Usage::GardeCorps | Usage::Annotation)) && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation.is_some()) {
+            let formes = self.dessin2d.dalle.iter().enumerate().map(|(i, c)| d2::Forme2D::Polyligne { points: c.iter().copied().map(DVec2::from_array).collect(), fermee: self.dessin2d.edition_contour.as_ref().unwrap().fermee(i) }).collect();
+            self.enregistrer_formes(formes);
+            if self.dessin2d.message.is_some() { return; }
+        } else if surface && valider && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation.is_none()) {
             let id = self.dessin2d.edition_contour.as_ref().unwrap().id.clone();
             let contours = self.dessin2d.dalle.clone();
             if let Err(e) = self.executer_bim(Commande::Contour { id, contours }) {
@@ -805,7 +846,7 @@ impl ViewerApp {
     pub(in crate::ui) fn barre_commande(&mut self, ui: &egui::Ui, rect: egui::Rect) {
         let edition = self.dessin2d.edition_contour.is_some();
         let actif = self.ruban_edition.outil().is_some() || edition;
-        let options_dessin = !edition && self.usage_dessin().is_some_and(|(u, _)| u != Usage::Annotation);
+        let options_dessin = !edition && self.usage_dessin().is_some_and(|(u, o)| u != Usage::Annotation || (o == OutilDessin::Polyligne && self.outil_cotation().is_none()));
         let options_modifier = !edition && self.a_options_modifier();
         if self.natif.is_none() || (!actif && !options_modifier) {
             self.dessin2d.bas_barre = 0.0;

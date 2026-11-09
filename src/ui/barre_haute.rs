@@ -39,13 +39,12 @@ impl ViewerApp {
             } else {
                 &[(OngletRuban::Debut, "Début"), (OngletRuban::Modeliser, "Modéliser"), (OngletRuban::Modifier, "Modifier"), (OngletRuban::Annoter, "Documenter"), (OngletRuban::Sortie, "Sortie")]
             };
-            // pendant une création (outil actif), Modifier est grisé
-            let creation = self.ruban_edition.a_un_outil() && self.dessin2d.edition_contour.is_none();
             for &(o, nom) in onglets {
-                let actif = !(creation && o == OngletRuban::Modifier) || self.onglet_ruban == o;
-                let reponse = ui.add_enabled_ui(actif, |ui| ui.selectable_label(self.onglet_ruban == o, RichText::new(nom).strong()))
-                    .inner.on_disabled_hover_text("Terminez ou quittez la création en cours (Échap) pour modifier.");
+                let reponse = ui.selectable_label(self.onglet_ruban == o, RichText::new(nom).strong());
                 if reponse.clicked() {
+                    if o == OngletRuban::Modifier && self.dessin2d.edition_contour.is_none() {
+                        self.selectionner_trace_en_creation();
+                    }
                     self.onglet_ruban = o;
                 }
             }
@@ -201,10 +200,7 @@ impl ViewerApp {
             _ => None,
         };
         if self.dessin2d.edition_contour.is_some() {
-            ui.label(RichText::new("Modification du tracé").strong());
-            ui.label("Sélectionner un trait puis Suppr · cliquer une extrémité ouverte pour reprendre · glisser un trait ou un sommet");
-            ui.label("Double-clic sur un trait : ajouter un sommet · clic droit sur un sommet : supprimer");
-            ui.label("Les pentes restent sur les arêtes inchangées ; elles sont retirées des arêtes modifiées.");
+            self.ruban_contour(ui);
             return;
         }
         if let Some(menu) = edition {

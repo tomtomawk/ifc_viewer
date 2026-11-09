@@ -111,6 +111,17 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   clic droit ; Entrée ne le ferme plus, elle valide la commande. Un nouveau tracé
   continue le même élément : un contour extérieur ajoute une partie, un contour
   intérieur à un autre est une trémie. L'élément est créé à la validation.
+  Pour les éléments horizontaux et les limites de propriété, **Sélectionner** dans le
+  bandeau, l'onglet **Modifier** ou Échap interrompt le tracé et permet de choisir un
+  sommet ou un segment. **Déplacer** utilise un point de départ et un point d'arrivée ;
+  **Décaler** déplace le segment sélectionné perpendiculairement, jusqu'au clic, en
+  gardant ses extrémités reliées aux segments voisins. Un contour ouvert se reprend en
+  double-cliquant une extrémité ; tous les contours doivent être fermés pour valider.
+  La sélection et les commandes Déplacer / Décaler sont également disponibles pour le
+  terrain, le cadrage de vue, la ligne d'escalier, le garde-corps et la polyligne
+  d'annotation en cours de tracé. Pour le terrain, les altitudes restent associées aux
+  sommets déplacés. Pour les lignes d'escalier et de garde-corps, le nombre de sommets
+  est conservé pendant cette modification.
 - **Ouverture** place une porte, une fenêtre ou une ouverture libre par clic sur un mur ou par
   abscisse depuis son départ. Une ouverture d'assemblage perce toutes ses couches. Une
   menuiserie importée conserve son maillage et suit son hôte ; ses dimensions sont

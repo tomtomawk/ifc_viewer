@@ -39,6 +39,9 @@ impl ViewerApp {
     }
 
     pub(in crate::ui) fn options_trace(&mut self, ui: &mut egui::Ui) {
+        if self.dessin2d.edition_contour.is_none() && self.usage_dessin().is_some_and(|(u, o)| matches!(u, Usage::Surface | Usage::LimitePropriete | Usage::Terrain | Usage::Cadrage) || (matches!(u, Usage::Escalier | Usage::GardeCorps | Usage::Annotation) && o == OutilDessin::Polyligne && self.outil_cotation().is_none())) {
+            if ui.button("Sélectionner").on_hover_text("Interrompre le tracé et sélectionner ses segments et sommets").clicked() { self.selectionner_trace_en_creation(); }
+        }
         match self.usage_dessin().map(|(u, _)| u) {
             Some(Usage::Mur) => self.options_trace_mur(ui),
             Some(Usage::Escalier | Usage::GardeCorps) => {}

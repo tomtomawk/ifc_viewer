@@ -99,10 +99,14 @@ pub(super) struct EtatDessin2D {
 
 pub(super) struct EditionContour {
     id: String,
+    creation: Option<Usage>,
     altitude: f64,
     dessin: bool,
     selection: Option<usize>,
     segment: Option<(usize, usize)>,
+    sommet: Option<(usize, usize)>,
+    commande: Option<CommandeContour>,
+    depart: Option<DVec2>,
     glisse: Option<GlisseContour>,
     annotation: Option<Annotation>,
     fermees: Vec<bool>,
@@ -119,6 +123,9 @@ pub(super) enum ElementTrace {
     /// Contour fermé d'une limite de propriété.
     Limite,
 }
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CommandeContour { Deplacer, Decaler }
 
 /// Poignée du terrain en cours : sommet du contour, point coté, milieu d'un côté (le
 /// glisser insère un sommet).
@@ -242,6 +249,20 @@ fn nom_outil(o: OutilDessin) -> &'static str {
 }
 
 impl ViewerApp {
+    pub(super) fn ruban_contour(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            let e = self.dessin2d.edition_contour.as_mut().unwrap();
+            if ui.selectable_label(e.commande.is_none(), "Sélectionner").clicked() { e.commande = None; e.depart = None; e.dessin = false; }
+            if ui.add_enabled(e.segment.is_some() || e.sommet.is_some(), egui::Button::selectable(e.commande == Some(CommandeContour::Deplacer), "Déplacer")).on_disabled_hover_text("Sélectionnez d'abord un segment ou un sommet.").clicked() { e.commande = Some(CommandeContour::Deplacer); e.depart = None; e.dessin = false; }
+            if ui.add_enabled(e.segment.is_some(), egui::Button::selectable(e.commande == Some(CommandeContour::Decaler), "Décaler")).on_disabled_hover_text("Sélectionnez d'abord un segment.").clicked() { e.commande = Some(CommandeContour::Decaler); e.depart = None; e.dessin = false; }
+            ui.label(match (e.commande, e.depart) {
+                (Some(CommandeContour::Deplacer), None) => "Cliquer le point de départ",
+                (Some(CommandeContour::Deplacer), Some(_)) => "Cliquer le point d'arrivée",
+                (Some(CommandeContour::Decaler), _) => "Cliquer la nouvelle position du segment",
+                _ => "Cliquer ou glisser un segment ou un sommet · Échap : sélection",
+            });
+        });
+    }
     pub(super) fn selection_traces_active(&self) -> bool {
         self.dessin2d.edition_contour.as_ref().is_some_and(|e| !e.dessin)
     }
@@ -249,6 +270,7 @@ impl ViewerApp {
         self.dessin2d.edition_contour.as_ref().map(|e| (e.id.as_str(), e.annotation.is_some()))
     }
     fn supprimer_trait_edition(&mut self) {
+        if self.dessin2d.edition_contour.as_ref().is_some_and(|e| matches!(e.creation, Some(Usage::Terrain | Usage::Escalier | Usage::GardeCorps | Usage::Annotation))) { return; }
         let Some((c, i)) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.segment) else { return };
         let e = self.dessin2d.edition_contour.as_mut().unwrap();
         if e.fermee(c) {
@@ -306,6 +328,12 @@ impl ViewerApp {
         let cible = DVec2::from_array(if premier { *contour.last().unwrap() } else { contour[0] });
         let trace = self.dessin2d.trace.as_mut().unwrap();
         if p.distance(cible) < 1e-6 {
+            if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation == Some(Usage::Terrain)) {
+                let n = trace.points.len().saturating_sub(1);
+                let z = if premier { self.dessin2d.terrain_cotes.first().copied() } else { self.dessin2d.terrain_cotes.last().copied() }.unwrap_or(self.dessin2d.terrain_altitude);
+                if premier { self.dessin2d.terrain_cotes.splice(0..0, std::iter::repeat_n(z, n)); }
+                else { self.dessin2d.terrain_cotes.extend(std::iter::repeat_n(z, n)); }
+            }
             raccorder_contour(contour, premier, &trace.points);
             trace.points.clear();
             let e = self.dessin2d.edition_contour.as_mut().unwrap();
@@ -353,6 +381,7 @@ impl ViewerApp {
     /// Terrain du tracé en cours (contour fermé, cotes, points, type).
     fn terrain_courant(&self) -> Option<crate::modele::elements::site::Terrain> {
         let contour = self.dessin2d.dalle.first()?;
+        if contour.len() != self.dessin2d.terrain_cotes.len() { return None; }
         let (id, nom) = self.dessin2d.terrain_modifie.clone().unwrap_or_else(|| (String::new(), "Terrain".into()));
         Some(crate::modele::elements::site::Terrain {
             id,
@@ -425,7 +454,7 @@ impl ViewerApp {
         let fermees = vec![!ouvert && annotation.as_ref().is_none_or(|a| matches!(&a.forme, AnnotationForme::Polyligne { fermee: true, .. })); contours.len()];
         self.dessin2d.dalle = contours;
         self.dessin2d.geoms = None;
-        self.dessin2d.edition_contour = Some(EditionContour { id: ids[0].clone(), altitude, dessin: false, selection: None, segment: None, glisse: None, annotation, fermees, raccord: None, element });
+        self.dessin2d.edition_contour = Some(EditionContour { id: ids[0].clone(), creation: None, altitude, dessin: false, selection: None, segment: None, sommet: None, commande: None, depart: None, glisse: None, annotation, fermees, raccord: None, element });
         self.dessin2d.trace = Some(Trace::new(OutilDessin::Polyligne));
         self.ruban_edition.forme_dalle = OutilDessin::Polyligne;
         self.ruban_edition.annuler();
@@ -499,16 +528,17 @@ impl ViewerApp {
     pub(super) fn options_edition_contour(&mut self, ui: &mut egui::Ui) {
         let trace_en_cours = self.trace_en_cours();
         let poly = self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.annotation.is_some() || e.element.is_some());
+        let topologie_fixe = self.dessin2d.edition_contour.as_ref().is_some_and(|e| matches!(e.creation, Some(Usage::Terrain | Usage::Cadrage | Usage::Escalier | Usage::GardeCorps | Usage::Annotation)));
         let mut supprimer_trait = false;
         ui.horizontal(|ui| {
             let edition = self.dessin2d.edition_contour.as_mut().unwrap();
-            if ui.add_enabled(!trace_en_cours, egui::Button::selectable(!edition.dessin, "Modifier les sommets")).on_disabled_hover_text("Terminez ou annulez le tracé en cours.").clicked() { edition.dessin = false; }
-            if !poly && ui.selectable_label(edition.dessin, "Ajouter un contour").clicked() { edition.dessin = true; }
-            supprimer_trait = ui.add_enabled(edition.segment.is_some() && !trace_en_cours, egui::Button::new("Supprimer le trait")).clicked();
+            if ui.add_enabled(!trace_en_cours, egui::Button::selectable(!edition.dessin && edition.commande.is_none(), "Sélectionner")).on_disabled_hover_text("Terminez ou annulez le tracé en cours.").clicked() { edition.dessin = false; edition.commande = None; edition.depart = None; }
+            if !poly && !topologie_fixe && ui.selectable_label(edition.dessin, "Ajouter un contour").clicked() { edition.dessin = true; }
+            supprimer_trait = ui.add_enabled(!topologie_fixe && edition.segment.is_some() && !trace_en_cours, egui::Button::new("Supprimer le trait")).clicked();
             ui.separator();
             if !poly && ui.add_enabled(edition.selection.is_some() && self.dessin2d.dalle.len() > 1, egui::Button::new("Supprimer le contour sélectionné")).clicked() {
                 if let Some(i) = edition.selection.take() { self.dessin2d.dalle.remove(i); edition.fermees.remove(i); }
-                edition.segment = None;
+                edition.segment = None; edition.sommet = None;
             }
         });
         if supprimer_trait { self.supprimer_trait_edition(); }
@@ -523,20 +553,22 @@ impl ViewerApp {
     /// (Modéliser, projet natif chargé).
     pub(super) fn usage_dessin(&self) -> Option<(Usage, OutilDessin)> {
         use crate::ui::ruban::Outil;
-        if self.ruban_edition.outil() == Some(Outil::Cadrer) && self.vue_en_plan() && self.vue_native_id().is_some() {
-            return Some((Usage::Cadrage, self.dessin2d.forme_cadrage.unwrap_or(OutilDessin::Rectangle)));
-        }
         if self.dessin2d.edition_contour.is_some() {
             if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.ligne()) { return Some((Usage::Annotation, OutilDessin::Polyligne)); }
+            if let Some(usage @ (Usage::Escalier | Usage::GardeCorps | Usage::Annotation | Usage::Terrain)) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.creation) { return Some((usage, OutilDessin::Polyligne)); }
             let o = match self.ruban_edition.forme_dalle {
                 o @ (OutilDessin::Rectangle | OutilDessin::Cercle) => o,
                 _ => OutilDessin::Polyligne,
             };
-            return Some((Usage::Surface, o));
+            return Some((self.dessin2d.edition_contour.as_ref().and_then(|e| e.creation).unwrap_or(Usage::Surface), o));
         }
-        let modeliser = self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.scene.is_some() && self.loading.is_none();
+        if self.ruban_edition.outil() == Some(Outil::Cadrer) && self.vue_en_plan() && self.vue_native_id().is_some() {
+            return Some((Usage::Cadrage, self.dessin2d.forme_cadrage.unwrap_or(OutilDessin::Rectangle)));
+        }
+        let modele_disponible = self.natif.is_some() && self.scene.is_some() && self.loading.is_none();
+        let modeliser = self.onglet_ruban == OngletRuban::Modeliser && modele_disponible;
         if modeliser && self.ruban_edition.outil() == Some(Outil::Terrain) { return Some((Usage::Terrain, OutilDessin::Polyligne)); }
-        if modeliser && self.ruban_edition.outil() == Some(Outil::LimitePropriete) {
+        if modele_disponible && self.ruban_edition.outil() == Some(Outil::LimitePropriete) {
             let forme = match self.ruban_edition.forme_dalle {
                 f @ (OutilDessin::Rectangle | OutilDessin::Cercle) => f,
                 _ => OutilDessin::Polyligne,
@@ -546,7 +578,7 @@ impl ViewerApp {
         if modeliser && self.ruban_edition.mur_actif() {
             return Some((Usage::Mur, self.ruban_edition.forme_mur));
         }
-        if modeliser && self.ruban_edition.dalle_active().is_some() {
+        if modele_disponible && self.ruban_edition.dalle_active().is_some() {
             let forme = match self.ruban_edition.forme_dalle {
                 f @ (OutilDessin::Rectangle | OutilDessin::Cercle) => f,
                 _ => OutilDessin::Polyligne,
