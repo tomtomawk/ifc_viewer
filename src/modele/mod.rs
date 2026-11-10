@@ -114,6 +114,11 @@ pub struct Projet {
     /// Vues du projet (arborescence) : plans d'étage et coupes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub vues: Vec<Vue>,
+    /// Rangement libre des vues, nomenclatures et feuilles, par identifiant.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub rangements_arborescence: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub organisations_arborescence: BTreeMap<String, OrganisationArborescence>,
     /// Filtres de contexte enregistrés par vue ; « 3d » désigne la vue 3D par défaut.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub contextes_vues: BTreeMap<String, edition::contextes::FiltresContextes>,
@@ -179,6 +184,14 @@ pub struct Projet {
     /// Éléments de la source qui n'ont rien donné (sans géométrie, hors du périmètre v0),
     /// comptés par catégorie.
     pub ignores: BTreeMap<String, usize>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq)]
+pub struct OrganisationArborescence {
+    #[serde(default)]
+    pub filtre: String,
+    #[serde(default)]
+    pub trier_rangement: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -852,6 +865,17 @@ pub struct Dalle {
     /// `pentes[c][k]` pour l'arête du sommet k au suivant. Vide : élément plan.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pentes: Vec<Vec<Option<f64>>>,
+    /// Terre-plein : les talus partent de l'arête du dessus (le remblai couvre la
+    /// tranche) ; sinon de la sous-face.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub talus_dessus: bool,
+    /// Terre-plein en déblai : arêtes dont la fouille talutée est remblayée jusqu'à
+    /// l'arête (`remblais[c][k]`, en regard de `pentes`). Vide : aucune.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remblais: Vec<Vec<bool>>,
+    /// Terre-plein : type de terrain de son remblai (None : type « remblai » par défaut).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub type_remblai: Option<String>,
     pub origine: Option<Origine>,
 }
 
@@ -889,7 +913,8 @@ impl SorteDalle {
     /// Catégorie de l'arborescence (familles), comme dans Revit.
     pub fn categorie(self) -> &'static str {
         match self {
-            Self::Dalle | Self::Sol | Self::TerrePlein => "Sols",
+            Self::Dalle | Self::Sol => "Sols",
+            Self::TerrePlein => "Terre-pleins",
             Self::Plafond => "Plafonds",
             Self::Toiture => "Toits",
         }
@@ -942,6 +967,27 @@ impl Dalle {
         self.pentes[c][k] = pente;
         if self.pentes.iter().flatten().all(|p| p.is_none()) {
             self.pentes.clear();
+        }
+    }
+
+    /// La fouille de l'arête `k` du contour `c` est remblayée jusqu'à l'arête.
+    pub fn remblaye(&self, c: usize, k: usize) -> bool {
+        self.remblais.get(c).and_then(|r| r.get(k)).copied().unwrap_or(false)
+    }
+
+    /// Remblaie (ou non) la fouille d'une arête ; vide `remblais` si plus aucune ne l'est.
+    pub fn definir_remblai(&mut self, c: usize, k: usize, oui: bool) {
+        if self.remblais.len() < self.contours.len() {
+            self.remblais.resize(self.contours.len(), Vec::new());
+        }
+        let n = self.contours.get(c).map_or(0, |x| x.len());
+        if k >= n {
+            return;
+        }
+        self.remblais[c].resize(n, false);
+        self.remblais[c][k] = oui;
+        if !self.remblais.iter().flatten().any(|r| *r) {
+            self.remblais.clear();
         }
     }
 }
@@ -1093,6 +1139,14 @@ impl Projet {
     pub fn type_terrain(&self, t: &site::Terrain) -> site::TypeTerrain {
         let types = self.types_terrains_disponibles();
         t.type_terrain.as_ref().and_then(|id| types.iter().find(|x| &x.id == id)).or(types.first()).cloned().unwrap_or_else(site::TypeTerrain::defaut)
+    }
+
+    /// Type de terrain du remblai d'un terre-plein : le sien, sinon le type « remblai »
+    /// des types proposés, sinon un type Remblai par défaut.
+    pub fn type_remblai(&self, d: &Dalle) -> site::TypeTerrain {
+        let types = self.types_terrains_disponibles();
+        let voulu = d.type_remblai.as_deref().unwrap_or("remblai");
+        types.into_iter().find(|t| t.id == voulu).unwrap_or_else(|| site::TypeTerrain { id: "remblai".into(), nom: "Remblai".into(), epaisseur: 1000.0, materiau: Some("Remblai".into()) })
     }
 
     /// Types de terrain proposés : ceux du projet, sinon ceux du gabarit, sinon le type

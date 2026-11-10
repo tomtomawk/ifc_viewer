@@ -471,7 +471,7 @@ impl ViewerApp {
                 egui::Event::Text(t) => {
                     let mut lu = false;
                     for ch in t.chars() {
-                        if ch.is_ascii_digit() || "@#<>,;.-".contains(ch) || (en_cours && ch.eq_ignore_ascii_case(&'f')) {
+                        if ch.is_ascii_digit() || "@#,;.-".contains(ch) || (en_cours && ch.eq_ignore_ascii_case(&'f')) {
                             ajouter_caractere_saisie(&mut self.dessin2d.saisie, &mut self.dessin2d.champ_angle, ch);
                             { self.dessin2d.message = None; self.dessin2d.information = None; };
                             lu = true;
@@ -514,11 +514,13 @@ impl ViewerApp {
             { self.dessin2d.message = None; self.dessin2d.information = None; };
             if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.commande.is_some()) {
                 let e = self.dessin2d.edition_contour.as_mut().unwrap();
-                e.commande = None; e.depart = None;
+                e.commande = None; e.depart = None; e.repere = None;
             } else if !self.dessin2d.saisie.is_empty() {
                 self.dessin2d.saisie.clear();
                 self.dessin2d.champ_angle = false;
             } else if self.dessin2d.trace.as_ref().is_some_and(|t| !t.points.is_empty()) {
+                // Un raccord reste dans le contour commencé, même après un nouvel Échap.
+                self.terminer_raccord_ouvert();
                 // Échap interrompt le tracé en cours ; ce qui est déjà dessiné reste
                 if usage != Usage::Mur && self.dessin2d.edition_contour.is_none() && !matches!(usage, Usage::Escalier | Usage::GardeCorps | Usage::Annotation) {
                     self.interrompre_trace(usage);
@@ -563,8 +565,14 @@ impl ViewerApp {
             self.ruban_edition.sens_inverse = !self.ruban_edition.sens_inverse;
         }
         if valider {
+            // commande de Modifier sur le tracé : Entrée applique la valeur tapée
+            let commande = self.dessin2d.edition_contour.as_ref().filter(|e| !e.dessin).and_then(|e| e.commande);
+            if let (Some(commande), false) = (commande, self.dessin2d.saisie.is_empty()) {
+                if let Some((p, _)) = self.dessin2d.point {
+                    self.clic_commande_contour(egui::Rect::NOTHING, commande, p, None);
+                }
             // une valeur tapée donne un point ; sinon Entrée valide la commande
-            if self.dessin2d.saisie.is_empty() {
+            } else if self.dessin2d.saisie.is_empty() {
                 self.quitter_commande(true);
             } else {
                 self.valider_saisie_dessin();
@@ -583,7 +591,7 @@ impl ViewerApp {
             let ngf = self.natif.as_ref().map_or(0.0, |(p, _)| p.ngf()) + altitude;
             self.dessin2d.terrain_cotes.resize(contour.len(), ngf);
         }
-        self.dessin2d.edition_contour = Some(EditionContour { id: String::new(), creation: Some(usage), altitude, dessin: false, selection: None, segment: None, sommet: None, commande: None, depart: None, glisse: None, annotation: None, fermees, raccord: None, element: None });
+        self.dessin2d.edition_contour = Some(EditionContour { id: String::new(), creation: Some(usage), altitude, dessin: false, selection: None, segment: None, sommet: None, commande: None, depart: None, repere: None, glisse: None, annotation: None, fermees, raccord: None, element: None });
     }
 
     pub(in crate::ui) fn selectionner_trace_en_creation(&mut self) {
@@ -640,10 +648,11 @@ impl ViewerApp {
     /// puis l'outil se ferme ; Annuler : tout ce qui est en cours est abandonné, puis
     /// l'outil se ferme.
     pub(in crate::ui) fn quitter_commande(&mut self, valider: bool) {
-        if valider && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.raccord.is_some()) {
-            self.dessin2d.message = Some("Terminez le raccord ou annulez son tracé avec Échap.".into());
-            return;
+        if valider && !self.dessin2d.saisie.is_empty() && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.raccord.is_some()) {
+            self.valider_saisie_dessin();
+            if self.dessin2d.message.is_some() { return; }
         }
+        if valider { self.terminer_raccord_ouvert(); }
         if valider && self.dessin2d.edition_contour.as_ref().is_some_and(|e| !e.ligne() && !matches!(e.creation, Some(Usage::Escalier | Usage::GardeCorps | Usage::Annotation)) && e.fermees.iter().any(|f| !f)) {
             self.dessin2d.message = Some("Refermez tous les contours avant de valider.".into());
             return;
@@ -845,6 +854,8 @@ impl ViewerApp {
     /// Options et actions de la commande active, regroupées en haut à gauche de la vue.
     pub(in crate::ui) fn barre_commande(&mut self, ui: &egui::Ui, rect: egui::Rect) {
         let edition = self.dessin2d.edition_contour.is_some();
+        // Création ou modification, tracé ou sélection : la même barre d'options, au
+        // même endroit.
         let actif = self.ruban_edition.outil().is_some() || edition;
         let options_dessin = !edition && self.usage_dessin().is_some_and(|(u, o)| u != Usage::Annotation || (o == OutilDessin::Polyligne && self.outil_cotation().is_none()));
         let options_modifier = !edition && self.a_options_modifier();
@@ -864,8 +875,7 @@ impl ViewerApp {
                                 .max_width((rect.width() - if actif { 120.0 } else { 30.0 }).max(80.0))
                                 .max_height(75.0)
                                 .auto_shrink([true, true]).show(ui, |ui| {
-                                    if edition { self.options_edition_contour(ui); }
-                                    else if options_dessin { self.options_trace(ui); }
+                                    if edition || options_dessin { self.options_trace(ui); }
                                     else { self.options_modifier(ui, false); }
                                 });
                         }
@@ -891,7 +901,17 @@ impl ViewerApp {
     pub(in crate::ui) fn valider_saisie_dessin(&mut self) {
         let mut saisie = std::mem::take(&mut self.dessin2d.saisie);
         self.dessin2d.champ_angle = false;
+        if saisie.is_empty() && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.raccord.is_some()) {
+            self.terminer_raccord_ouvert();
+            return;
+        }
         if saisie.find(['<', '>']).is_some_and(|i| i > 0 && i + 1 == saisie.len()) { saisie.pop(); }
+        if saisie.eq_ignore_ascii_case("f") && let Some((c, premier)) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.raccord) {
+            let contour = &self.dessin2d.dalle[c];
+            let cible = if premier { *contour.last().unwrap() } else { contour[0] };
+            self.ajouter_point_raccord(DVec2::from_array(cible));
+            return;
+        }
         if !saisie.is_empty() && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.raccord.is_some()) {
             let precedent = self.dessin2d.trace.as_ref().and_then(Trace::precedent);
             let direction = self.dessin2d.point.zip(precedent).map(|((c, _), p)| c - p);

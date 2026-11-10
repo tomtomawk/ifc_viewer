@@ -277,7 +277,7 @@ pub fn convertir_modele(m: &IfcModel, geometries: &HashMap<Id, Vec<[DVec3; 3]>>,
             .clone();
         let did = ident("dalle", id);
         c.lire(&did, t, "Dalles");
-        c.projet.dalles.push(Dalle { variante: None, phase: None, sous_projet: None, id: did, nom, type_dalle, niveau: niv, sorte: SorteDalle::Dalle, decalage: p.haut - alt, contours: p.contours, pentes: Vec::new(), origine: origine(id) });
+        c.projet.dalles.push(Dalle { variante: None, phase: None, sous_projet: None, id: did, nom, type_dalle, niveau: niv, sorte: SorteDalle::Dalle, decalage: p.haut - alt, contours: p.contours, pentes: Vec::new(), talus_dessus: false, remblais: Vec::new(), type_remblai: None, origine: origine(id) });
     }
 
     // le reste

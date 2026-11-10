@@ -68,12 +68,32 @@ impl ViewerApp {
 
     /// Terrain en cours : survol des poignées, glissé d'un sommet ou d'un point (un milieu
     /// insère un sommet à la cote moyenne), clic droit : retirer, clic : point coté si
-    /// « Placer des points cotés ». Un glissé qui rend le terrain impossible est repris.
+    /// un clic à l'intérieur ajoute un point coté. Un glissé invalide est repris.
     pub(in crate::ui) fn souris_terrain(&mut self, ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response) {
         let poignees = self.poignees_terrain(rect);
         let proche = |q: egui::Pos2| poignees.iter().filter(|(_, e)| e.distance(q) < 10.0).min_by(|a, b| a.1.distance(q).total_cmp(&b.1.distance(q))).map(|(p, _)| *p);
         if self.dessin2d.terrain_glisse.is_none() {
             self.dessin2d.terrain_survol = resp.hover_pos().and_then(proche);
+        }
+        let segment_vise = if resp.clicked() && self.dessin2d.terrain_survol.is_none() && self.dessin2d.edition_contour.is_some() {
+            resp.interact_pointer_pos().and_then(|q| self.dessin2d.dalle.first().and_then(|contour| {
+                (0..contour.len()).filter_map(|i| {
+                    let a = self.vers_ecran(rect, DVec2::from_array(contour[i]))?;
+                    let b = self.vers_ecran(rect, DVec2::from_array(contour[(i + 1) % contour.len()]))?;
+                    let v = b - a;
+                    let t = if v.length_sq() > 0.0 { ((q - a).dot(v) / v.length_sq()).clamp(0.0, 1.0) } else { 0.0 };
+                    let distance = q.distance(a + v * t);
+                    (distance < 8.0).then_some((distance, i))
+                }).min_by(|a, b| a.0.total_cmp(&b.0)).map(|(_, i)| i)
+            }))
+        } else { None };
+        if resp.clicked() && let Some(e) = self.dessin2d.edition_contour.as_mut() {
+            match self.dessin2d.terrain_survol {
+                Some(PoigneeTerrain::Sommet(i)) => { e.selection = Some(0); e.sommet = Some((0, i)); e.segment = None; }
+                Some(PoigneeTerrain::Milieu(i)) => { e.selection = Some(0); e.segment = Some((0, i)); e.sommet = None; }
+                _ if segment_vise.is_some() => { e.selection = Some(0); e.segment = segment_vise.map(|i| (0, i)); e.sommet = None; }
+                _ => { e.selection = None; e.segment = None; e.sommet = None; }
+            }
         }
         let d = &mut self.dessin2d;
         if resp.drag_started_by(PointerButton::Primary) && let Some(p) = ui.input(|i| i.pointer.press_origin()).and_then(proche) {
@@ -131,7 +151,7 @@ impl ViewerApp {
             }
             self.dessin2d.terrain_survol = None;
         }
-        if self.dessin2d.terrain_ajouter_point && resp.clicked() && self.dessin2d.terrain_survol.is_none()
+        if resp.clicked() && self.dessin2d.terrain_survol.is_none() && segment_vise.is_none()
             && let Some(p) = resp.interact_pointer_pos().and_then(|q| self.depuis_ecran(rect, q))
         {
             self.dessin2d.terrain_points.push([p.x, p.y, self.dessin2d.terrain_altitude]);
@@ -164,7 +184,8 @@ impl ViewerApp {
             return;
         }
         self.dessin2d.ligne_selection=None;
-        if self.dessin2d.edition_contour.is_none() && !self.dessin2d.dalle.is_empty() && self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain) {
+        if !self.dessin2d.dalle.is_empty() && self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain)
+            && self.dessin2d.edition_contour.as_ref().is_none_or(|e| !e.dessin && e.commande.is_none() && e.fermee(0)) {
             self.souris_terrain(ui, rect, resp);
             self.dessin2d.point = None;
             return;
@@ -174,41 +195,17 @@ impl ViewerApp {
             self.dessin2d.curseur = curseur.and_then(|q| self.depuis_ecran(rect, q));
             let temps = ui.input(|i| i.time);
             let maj = ui.input(|i| i.modifiers.shift);
-            self.dessin2d.point = self.dessin2d.curseur.map(|c| self.point_dessin(rect, c, maj, temps));
+            // commande de Modifier : repérage et distance tapée depuis son point de départ
+            let base = self.dessin2d.edition_contour.as_ref().and_then(|e| e.commande.and(e.depart));
+            self.dessin2d.point = self.dessin2d.curseur.map(|c| if base.is_some() { self.point_dessin_depuis(rect, c, maj, temps, base) } else { self.point_dessin(rect, c, maj, temps) });
             if self.dessin2d.survol_accroche.is_some() || self.dessin2d.survol_segment.is_some() { ui.ctx().request_repaint_after(std::time::Duration::from_millis(100)); }
             if let Some(commande) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.commande) {
                 if resp.clicked_by(PointerButton::Secondary) {
                     let e = self.dessin2d.edition_contour.as_mut().unwrap();
-                    e.commande = None; e.depart = None;
+                    (e.commande, e.depart, e.repere) = (None, None, None);
+                    self.dessin2d.saisie.clear();
                 } else if resp.clicked() && let Some(p) = self.dessin2d.point.map(|p| p.0).or(self.dessin2d.curseur) {
-                    let e = self.dessin2d.edition_contour.as_mut().unwrap();
-                    match commande {
-                        CommandeContour::Deplacer if e.depart.is_none() => e.depart = Some(p),
-                        CommandeContour::Deplacer => {
-                            let delta = p - e.depart.unwrap();
-                            if let Some((c, i)) = e.sommet { self.dessin2d.dalle[c][i] = (DVec2::from_array(self.dessin2d.dalle[c][i]) + delta).to_array(); }
-                            else if let Some((c, i)) = e.segment {
-                                let j = (i + 1) % self.dessin2d.dalle[c].len();
-                                for k in [i, j] { self.dessin2d.dalle[c][k] = (DVec2::from_array(self.dessin2d.dalle[c][k]) + delta).to_array(); }
-                            }
-                            e.commande = None; e.depart = None;
-                        }
-                        CommandeContour::Decaler => {
-                            if let Some((c, i)) = e.segment {
-                                let j = (i + 1) % self.dessin2d.dalle[c].len();
-                                let a = DVec2::from_array(self.dessin2d.dalle[c][i]);
-                                let b = DVec2::from_array(self.dessin2d.dalle[c][j]);
-                                let direction = b - a;
-                                if direction.length_squared() > 1e-12 {
-                                    let normale = DVec2::new(-direction.y, direction.x).normalize();
-                                    let delta = normale * (p - a).dot(normale);
-                                    self.dessin2d.dalle[c][i] = (a + delta).to_array();
-                                    self.dessin2d.dalle[c][j] = (b + delta).to_array();
-                                }
-                            }
-                            e.commande = None;
-                        }
-                    }
+                    self.clic_commande_contour(rect, commande, p, curseur);
                 }
                 return;
             }
@@ -258,8 +255,8 @@ impl ViewerApp {
                 if let Some(p) = self.depuis_ecran(rect, q) {
                     match glisse {
                         GlisseContour::Sommet(c, i) => {
-                            let actuel = DVec2::from_array(self.dessin2d.dalle[c][i]);
-                            let p = self.dessin2d.point.map(|x| x.0).filter(|q| q.distance(actuel) > 1e-6).unwrap_or(p);
+                            // La poignée suit le curseur librement : elle ne s'accroche
+                            // pas à sa propre position ni aux guides pendant le déplacement.
                             self.dessin2d.dalle[c][i] = [(p.x * 10.0).round() / 10.0, (p.y * 10.0).round() / 10.0];
                         }
                         GlisseContour::Segment { contour, segment, origine, a, b } => {
@@ -271,7 +268,25 @@ impl ViewerApp {
                     }
                 }
             }
-            if resp.drag_stopped() { self.dessin2d.edition_contour.as_mut().unwrap().glisse = None; }
+            if resp.drag_stopped() {
+                // Les deux extrémités d'un tracé ouvert réunies ferment le contour,
+                // sans conserver deux sommets identiques ni créer de segment nul.
+                if let (Some(GlisseContour::Sommet(c, i)), Some(q)) = (glisse, curseur) {
+                    let n = self.dessin2d.dalle[c].len();
+                    let ouvert = !self.dessin2d.edition_contour.as_ref().unwrap().fermee(c);
+                    if ouvert && n >= 4 && (i == 0 || i + 1 == n) {
+                        let autre = if i == 0 { n - 1 } else { 0 };
+                        if self.vers_ecran(rect, DVec2::from_array(self.dessin2d.dalle[c][autre])).is_some_and(|p| p.distance(q) <= 10.0) {
+                            fermer_par_extremite(&mut self.dessin2d.dalle[c], i);
+                            let e = self.dessin2d.edition_contour.as_mut().unwrap();
+                            if i == 0 && c == 0 && let Some(AnnotationForme::Polyligne { traits, .. }) = e.annotation.as_mut().map(|a| &mut a.forme) && !traits.is_empty() { traits.rotate_left(1); }
+                            e.fermees[c] = true;
+                            e.sommet = None;
+                        }
+                    }
+                }
+                self.dessin2d.edition_contour.as_mut().unwrap().glisse = None;
+            }
             let topologie_fixe = self.dessin2d.edition_contour.as_ref().is_some_and(|e| matches!(e.creation, Some(Usage::Terrain | Usage::Escalier | Usage::GardeCorps | Usage::Annotation)));
             if resp.clicked_by(PointerButton::Secondary) && !topologie_fixe {
                 if let Some((_, c, i)) = sommet {
@@ -280,7 +295,7 @@ impl ViewerApp {
                     else { self.dessin2d.message = Some("Le tracé ne peut pas comporter moins de sommets.".into()); }
                 }
             } else if resp.double_clicked() {
-                if let Some((_, c, i)) = sommet.filter(|(_, c, i)| !matches!(self.dessin2d.edition_contour.as_ref().unwrap().creation, Some(Usage::Escalier | Usage::GardeCorps | Usage::Annotation)) && !self.dessin2d.edition_contour.as_ref().unwrap().fermee(*c) && (*i == 0 || *i + 1 == self.dessin2d.dalle[*c].len())) {
+                if let Some((_, c, i)) = sommet.filter(|(_, c, i)| self.dessin2d.edition_contour.as_ref().unwrap().creation.is_none() && !self.dessin2d.edition_contour.as_ref().unwrap().fermee(*c) && (*i == 0 || *i + 1 == self.dessin2d.dalle[*c].len())) {
                     let p = DVec2::from_array(self.dessin2d.dalle[c][i]);
                     let e = self.dessin2d.edition_contour.as_mut().unwrap();
                     e.raccord = Some((c, i == 0)); e.dessin = true;
@@ -291,6 +306,8 @@ impl ViewerApp {
                     if let Some(p) = self.depuis_ecran(rect, q) { self.dessin2d.dalle[c].insert(i + 1, p.to_array()); }
                 }
             } else if resp.clicked() {
+                // Propriétés et ruban suivent la sélection dès l'image suivante
+                ui.ctx().request_repaint();
                 let e = self.dessin2d.edition_contour.as_mut().unwrap();
                 e.selection = sommet.map(|s| s.1).or(arete.map(|a| a.1));
                 e.segment = if sommet.is_none() { arete.map(|a| (a.1, a.2)) } else { None };
@@ -324,6 +341,11 @@ impl ViewerApp {
         if resp.clicked() {
             if let Some((p, _)) = self.dessin2d.point && self.ajouter_point_raccord(p) { return; }
             if self.reprendre_contour_ouvert(rect, resp.interact_pointer_pos()) { return; }
+            if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation.is_some() && e.dessin && e.raccord.is_none() && e.fermees.iter().any(|f| !f))
+                && self.dessin2d.trace.as_ref().is_some_and(|t| t.outil == OutilDessin::Polyligne && t.points.is_empty()) {
+                self.dessin2d.information = Some("Cliquez une extrémité du tracé ouvert pour le reprendre.".into());
+                return;
+            }
             if self.clic_arete_cote() {
                 // cotation par arêtes : la référence est retenue, rien d'autre à poser
             } else if let (Some((p, _)), true, Some(t)) = (self.dessin2d.point, self.outil_cotation().is_some(), self.dessin2d.trace.as_mut()) {
@@ -500,6 +522,7 @@ impl ViewerApp {
                 }
             }
         }
+        self.apercu_commande_contour(&painter, rect);
         // terrain en cours : surface colorée selon la cote, contour fin, poignées ; les
         // cotes sont à côté de chaque point (cotes_terrain)
         if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain) {
@@ -564,11 +587,21 @@ impl ViewerApp {
             _ => self.dessin2d.trace.as_ref().map_or("MODIFICATION".into(), |t| nom_outil(t.outil).into()),
         }};
         let invite = if let Some(e) = edition.filter(|_| self.selection_traces_active()) {
-            if e.segment.is_some() { "Trait sélectionné : Suppr pour le retirer ; glisser un sommet pour le déplacer" }
-            else { "Sélectionner un trait ou glisser un sommet ; double-cliquer une extrémité pour prolonger un contour" }
+            match (e.commande, e.depart, e.repere) {
+                (Some(CommandeContour::Decaler), _, _) => "Cliquer la nouvelle position du segment, ou taper la distance puis Entrée",
+                (Some(CommandeContour::Scinder), _, _) => "Cliquer le point de séparation du segment",
+                (Some(CommandeContour::Aligner | CommandeContour::Ajuster), _, _) => "Cliquer le segment de référence",
+                (Some(CommandeContour::Tourner | CommandeContour::Echelle), None, _) => "Cliquer le centre de la transformation",
+                (Some(CommandeContour::Tourner | CommandeContour::Echelle), Some(_), None) => "Cliquer le point de référence",
+                (Some(CommandeContour::Tourner | CommandeContour::Echelle), Some(_), Some(_)) => "Cliquer le point d'arrivée",
+                (Some(_), None, _) => "Cliquer le premier point",
+                (Some(_), Some(_), _) => "Cliquer le second point, ou taper la distance puis Entrée",
+                _ if e.segment.is_some() => "Trait sélectionné : ses propriétés et les commandes de Modifier s'y appliquent · Suppr : le retirer · Échap : revenir à l'objet",
+                _ if e.sommet.is_some() => "Sommet sélectionné : le glisser, ou Déplacer, Tourner, Symétrie, Échelle · Échap : revenir à l'objet",
+                _ => "Objet sélectionné : cliquer un trait ou un sommet ; double-cliquer une extrémité pour prolonger un contour",
+            }
         } else if usage.is_some_and(|(u, _)| u == Usage::Terrain) && !self.dessin2d.dalle.is_empty() {
-            if self.dessin2d.terrain_ajouter_point { "Cliquer dans le terrain pour placer un point coté · glisser un point pour le déplacer · clic droit : retirer" }
-            else { "Glisser un sommet ou un point · glisser un milieu de côté pour ajouter un sommet · clic droit : retirer · cotes NGF à côté de chaque point" }
+            "Cliquer dans le terrain pour placer un point coté · glisser un point ou un sommet · clic droit : retirer"
         } else if let Some(m) = modification { m }
         else if self.ruban_edition.selection_mur && usage.is_some_and(|(u,_)|u==Usage::Mur) {"Sélectionner un trait existant dans la vue"} else if let Some(i) = self.invite_cotation() { i } else { self.dessin2d.trace.as_ref().map_or("", |t| t.invite()) };
         let contexte = match usage.map(|(u, _)| u) {
@@ -579,7 +612,7 @@ impl ViewerApp {
             Some(Usage::Terrain) if self.dessin2d.dalle.is_empty() => "Tracer le périmètre fermé du terrain · ",
             _ => "",
         };
-        let aide = if usage.is_some() { format!("{contexte}@x;y · #dx;dy · distance<angle ou distance>angle · Tab : changer de champ · distance ({}) · Maj : ortho", u.suffixe().trim()) } else { String::new() };
+        let aide = if usage.is_some() { format!("{contexte}@x;y · #dx;dy · Tab : distance / angle · distance ({}) · Maj : ortho", u.suffixe().trim()) } else { String::new() };
         let police = egui::FontId::monospace(13.0);
         let largeur = (rect.width() - 20.0).max(1.0);
         let bleu = Color32::from_rgb(55, 130, 200);

@@ -124,7 +124,7 @@ impl LeftTab {
             LeftTab::Familles => "Familles",
             LeftTab::Materiaux => "Matériaux",
             LeftTab::Groupes => "Groupes",
-            LeftTab::Liens => "Liens Revit",
+            LeftTab::Liens => "Liens",
             LeftTab::Tree => "Modèle (arborescence spatiale)",
             LeftTab::Classes => "Classes",
         }

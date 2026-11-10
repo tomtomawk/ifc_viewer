@@ -1108,8 +1108,26 @@ impl Projet {
                             })
                         }).collect()
                     }).collect();
+                    // remblai des fouilles : suit les arêtes conservées, comme les pentes
+                    let mut remblais: Vec<Vec<bool>> = contours.iter().map(|c| {
+                        (0..c.len()).map(|i| {
+                            let (a, b) = (c[i], c[(i + 1) % c.len()]);
+                            d.contours.iter().enumerate().any(|(ci, ancien)| {
+                                (0..ancien.len()).any(|k| ancien[k] == a && ancien[(k + 1) % ancien.len()] == b && d.remblaye(ci, k))
+                            })
+                        }).collect()
+                    }).collect();
+                    if !remblais.iter().flatten().any(|r| *r) {
+                        remblais.clear();
+                    }
+                    // terre-plein dont les contours gardent leurs sommets (trait déplacé,
+                    // décalé) : talus et remblais restent sur leurs arêtes
+                    let memes_aretes = d.sorte.talus() && contours.len() == d.contours.len() && contours.iter().zip(&d.contours).all(|(x, y)| x.len() == y.len());
                     d.contours = contours;
-                    d.pentes = pentes;
+                    if !memes_aretes {
+                        d.pentes = pentes;
+                        d.remblais = remblais;
+                    }
                 }
                 Ok(vec![id])
             }

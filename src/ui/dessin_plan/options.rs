@@ -29,68 +29,134 @@ mod tests_selection {
     }
 }
 
+/// Formes de tracé proposées pour un usage, dans l'ordre de la barre d'options (forme,
+/// nom, aide). Le mur garde sa propre liste (`options_trace_mur`).
+fn formes_usage(usage: Usage) -> &'static [(OutilDessin, &'static str, &'static str)] {
+    const POLYGONE: (OutilDessin, &str, &str) = (OutilDessin::Polyligne, "Polygone", "Cliquer les sommets ; recliquer le premier, F ou clic droit pour fermer. Entrée valide les contours tracés.");
+    const RECTANGLE: (OutilDessin, &str, &str) = (OutilDessin::Rectangle, "Rectangle", "Deux coins opposés, dans les axes du plan");
+    const CERCLE: (OutilDessin, &str, &str) = (OutilDessin::Cercle, "Cercle", "Centre puis rayon (contour à 48 côtés)");
+    const POLYLIGNE: (OutilDessin, &str, &str) = (OutilDessin::Polyligne, "Polyligne", "Cliquer les sommets ; Entrée ou clic droit pour terminer. Un seul segment fait une ligne.");
+    match usage {
+        Usage::Surface | Usage::LimitePropriete | Usage::Terrain => &[POLYGONE, RECTANGLE, CERCLE],
+        Usage::Cadrage => &[POLYGONE, RECTANGLE],
+        Usage::Escalier | Usage::GardeCorps | Usage::Annotation => &[POLYLIGNE],
+        Usage::Mur => &[],
+    }
+}
+
 impl ViewerApp {
-    /// Barre d'options du tracé, en haut de la vue : forme du mur (et chaînage) ou de
-    /// l'élément horizontal.
     pub(in crate::ui) fn reinitialiser_forme_cadrage(&mut self) {
         self.dessin2d.forme_cadrage=Some(OutilDessin::Rectangle);
         self.dessin2d.trace=None;
         self.dessin2d.dalle.clear();self.dessin2d.ouverts.clear();
     }
 
+    /// Barre d'options du tracé, en haut de la vue, identique à la création et à la
+    /// modification : Sélectionner, puis les formes de l'usage, puis les suppressions.
+    /// Une action sans objet est grisée avec sa raison, jamais déplacée.
     pub(in crate::ui) fn options_trace(&mut self, ui: &mut egui::Ui) {
-        if self.dessin2d.edition_contour.is_none() && self.usage_dessin().is_some_and(|(u, o)| matches!(u, Usage::Surface | Usage::LimitePropriete | Usage::Terrain | Usage::Cadrage) || (matches!(u, Usage::Escalier | Usage::GardeCorps | Usage::Annotation) && o == OutilDessin::Polyligne && self.outil_cotation().is_none())) {
-            if ui.button("Sélectionner").on_hover_text("Interrompre le tracé et sélectionner ses segments et sommets").clicked() { self.selectionner_trace_en_creation(); }
+        let Some((usage, outil)) = self.usage_dessin() else { return };
+        if usage == Usage::Mur {
+            self.options_trace_mur(ui);
+            return;
         }
-        match self.usage_dessin().map(|(u, _)| u) {
-            Some(Usage::Mur) => self.options_trace_mur(ui),
-            Some(Usage::Escalier | Usage::GardeCorps) => {}
-            Some(Usage::Cadrage) => { ui.horizontal(|ui| {
-                let forme=self.dessin2d.forme_cadrage.unwrap_or(OutilDessin::Rectangle);
-                for (valeur,nom) in [(OutilDessin::Rectangle,"Rectangle"),(OutilDessin::Polyligne,"Ligne")] {
-                    if ui.selectable_label(forme==valeur,nom).clicked() {self.dessin2d.forme_cadrage=Some(valeur);self.dessin2d.trace=None;self.dessin2d.dalle.clear();self.dessin2d.ouverts.clear();}
+        if usage == Usage::Annotation && (outil != OutilDessin::Polyligne || self.outil_cotation().is_some()) {
+            return;
+        }
+        let edition = self.dessin2d.edition_contour.as_ref();
+        let en_edition = edition.is_some();
+        let selection = edition.is_some_and(|e| !e.dessin);
+        let commande = edition.is_some_and(|e| e.commande.is_some());
+        let ligne = edition.is_some_and(|e| e.ligne());
+        let fixe = edition.is_some_and(|e| matches!(e.creation, Some(Usage::Terrain | Usage::Cadrage | Usage::Escalier | Usage::GardeCorps | Usage::Annotation)));
+        let trait_choisi = edition.is_some_and(|e| e.segment.is_some());
+        let contour_choisi = edition.is_some_and(|e| e.selection.is_some());
+        let trace_en_cours = self.trace_en_cours();
+        let contours = self.dessin2d.dalle.len();
+        // contour unique : tracé repris d'une polyligne ou d'un garde-corps, terrain déjà tracé
+        let raison_forme = if ligne {
+            Some("Double-cliquer une extrémité du tracé pour le prolonger")
+        } else if usage == Usage::Terrain && contours > 0 {
+            Some("Un seul contour est attendu : glisser ses sommets")
+        } else {
+            None
+        };
+        let (mut choisir_selection, mut forme_choisie, mut supprimer_trait, mut supprimer_contour) = (false, None, false, false);
+        ui.horizontal(|ui| {
+            choisir_selection = ui.add(egui::Button::selectable(selection && !commande, "Sélectionner"))
+                .on_hover_text("Interrompre le tracé et sélectionner ses traits et ses sommets (Échap). Sans trait sélectionné, Propriétés montre l'objet ; avec un trait, ce trait.")
+                .clicked();
+            ui.separator();
+            for &(forme, nom, aide) in formes_usage(usage) {
+                if ui.add_enabled(raison_forme.is_none(), egui::Button::selectable(!selection && outil == forme, nom)).on_hover_text(aide).on_disabled_hover_text(raison_forme.unwrap_or("")).clicked() {
+                    forme_choisie = Some(forme);
                 }
-            }); }
-            Some(Usage::Terrain) => {
-                // type (épaisseur) ; cotes NGF des sommets et des points : à côté de chacun
-                // dans la vue
-                let types = self.natif.as_ref().map(|(p, _)| p.types_terrains_disponibles()).unwrap_or_default();
-                ui.horizontal(|ui| {
-                    ui.label("Type");
-                    let actuel = self.dessin2d.terrain_type.as_ref().and_then(|id| types.iter().find(|t| &t.id == id)).or(types.first());
-                    let libelle = |t: &crate::modele::elements::site::TypeTerrain| format!("{} · {}", t.nom, crate::config::options::unite().afficher(t.epaisseur));
-                    egui::ComboBox::from_id_salt("type_terrain_trace").selected_text(actuel.map(libelle).unwrap_or_default()).show_ui(ui, |ui| {
-                        for t in &types {
-                            if ui.selectable_label(actuel.is_some_and(|a| a.id == t.id), libelle(t)).clicked() {
-                                // le type par défaut n'est pas enregistré tant que le projet n'en a aucun
-                                self.dessin2d.terrain_type = self.natif.as_ref().is_some_and(|(p, _)| !p.types_terrains.is_empty()).then(|| t.id.clone());
-                            }
-                        }
-                    });
-                    if !self.dessin2d.dalle.is_empty() {
-                        ui.separator();
-                        ui.checkbox(&mut self.dessin2d.terrain_ajouter_point, "Placer des points cotés");
-                        ui.label("Cote NGF");
-                        ui.add(egui::DragValue::new(&mut self.dessin2d.terrain_altitude).speed(10.0).dimensions()).on_hover_text("Cote NGF des prochains points cotés");
-                    }
-                });
             }
-            Some(Usage::Surface | Usage::LimitePropriete) => {
-                ui.horizontal(|ui| {
-                    ui.label("Forme");
-                    let actuelle = self.usage_dessin().map(|(_, o)| o);
-                    for (forme, nom, aide) in [
-                        (OutilDessin::Polyligne, "Polygone", "Cliquer les sommets ; recliquer le premier, F ou clic droit pour fermer. Entrée valide les contours tracés."),
-                        (OutilDessin::Rectangle, "Rectangle", "Deux coins opposés, dans les axes du plan"),
-                        (OutilDessin::Cercle, "Cercle", "Centre puis rayon (contour à 48 côtés)"),
-                    ] {
-                        if ui.selectable_label(actuelle == Some(forme), nom).on_hover_text(aide).clicked() {
-                            self.ruban_edition.forme_dalle = forme;
-                        }
-                    }
-                });
+            ui.separator();
+            supprimer_trait = ui.add_enabled(selection && trait_choisi && !fixe && !trace_en_cours, egui::Button::new("Supprimer le trait"))
+                .on_hover_text("Retirer le trait sélectionné (Suppr) : le contour s'ouvre")
+                .on_disabled_hover_text(if fixe { "Ce tracé garde tous ses traits : glisser ses sommets" } else { "Sélectionner d'abord un trait" })
+                .clicked();
+            supprimer_contour = ui.add_enabled(en_edition && selection && contour_choisi && contours > 1 && !ligne && !fixe, egui::Button::new("Supprimer le contour"))
+                .on_hover_text("Retirer le contour du trait ou du sommet sélectionné")
+                .on_disabled_hover_text(if ligne || fixe { "Ce tracé n'a qu'un contour" } else { "Sélectionner d'abord un contour ; le dernier ne se supprime pas" })
+                .clicked();
+        });
+        if choisir_selection {
+            self.passer_en_selection();
+        }
+        if let Some(forme) = forme_choisie {
+            self.choisir_forme_trace(usage, outil, forme);
+        }
+        if supprimer_trait {
+            self.supprimer_trait_edition();
+        }
+        if supprimer_contour && let Some(e) = self.dessin2d.edition_contour.as_mut() && let Some(i) = e.selection.take() {
+            self.dessin2d.dalle.remove(i);
+            e.fermees.remove(i);
+            (e.segment, e.sommet) = (None, None);
+        }
+    }
+
+    /// Bouton Sélectionner : le tracé en cours s'arrête où il en est, ses traits et ses
+    /// sommets se sélectionnent.
+    pub(in crate::ui) fn passer_en_selection(&mut self) {
+        if self.dessin2d.edition_contour.is_none() {
+            self.selectionner_trace_en_creation();
+            return;
+        }
+        self.terminer_raccord_ouvert();
+        if let Some(t) = self.dessin2d.trace.as_mut() {
+            if t.outil == OutilDessin::Polyligne && t.points.len() >= 2 {
+                self.dessin2d.dalle.push(t.points.iter().map(|p| p.to_array()).collect());
+                self.dessin2d.edition_contour.as_mut().unwrap().fermees.push(false);
             }
-            _ => {}
+            t.points.clear();
+        }
+        if let Some(e) = &mut self.dessin2d.edition_contour {
+            (e.dessin, e.commande, e.depart, e.repere) = (false, None, None, None);
+        }
+    }
+
+    /// Bouton d'une forme : le tracé reprend avec elle (nouveau contour).
+    fn choisir_forme_trace(&mut self, usage: Usage, actuelle: OutilDessin, forme: OutilDessin) {
+        if actuelle != forme {
+            self.terminer_raccord_ouvert();
+        }
+        if usage == Usage::Cadrage {
+            // un seul contour de cadrage : le choix d'une forme le recommence
+            self.dessin2d.forme_cadrage = Some(forme);
+            self.dessin2d.trace = None;
+            self.dessin2d.dalle.clear();
+            self.dessin2d.ouverts.clear();
+            self.dessin2d.edition_contour = None;
+            return;
+        }
+        self.ruban_edition.forme_dalle = forme;
+        if let Some(e) = &mut self.dessin2d.edition_contour {
+            (e.dessin, e.commande, e.depart, e.repere) = (true, None, None, None);
+            // le premier clic choisit l'extrémité à reprendre
+            e.raccord = None;
         }
     }
 

@@ -10,6 +10,7 @@ mod options;
 mod escalier;
 mod cotation;
 mod cotes_aretes;
+mod commandes_contour;
 use super::*;
 use crate::dessin::dao::{self as d2, Accroche, Geom, OutilDessin, Trace};
 use crate::modele::edition::commandes::Commande;
@@ -77,7 +78,6 @@ pub(super) struct EtatDessin2D {
     terrain_cotes: Vec<f64>,
     terrain_points: Vec<[f64; 3]>,
     terrain_altitude: f64,
-    terrain_ajouter_point: bool,
     /// Terrain existant repris par Modifier tracé (identifiant, nom), type choisi.
     terrain_modifie: Option<(String, String)>,
     terrain_type: Option<String>,
@@ -107,6 +107,7 @@ pub(super) struct EditionContour {
     sommet: Option<(usize, usize)>,
     commande: Option<CommandeContour>,
     depart: Option<DVec2>,
+    repere: Option<DVec2>,
     glisse: Option<GlisseContour>,
     annotation: Option<Annotation>,
     fermees: Vec<bool>,
@@ -124,8 +125,8 @@ pub(super) enum ElementTrace {
     Limite,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum CommandeContour { Deplacer, Decaler }
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum CommandeContour { Deplacer, Copier, Reseau, Tourner, Symetrie, Echelle, Decaler, Scinder, Aligner, Ajuster }
 
 /// Poignée du terrain en cours : sommet du contour, point coté, milieu d'un côté (le
 /// glisser insère un sommet).
@@ -142,6 +143,12 @@ enum GlisseContour {
     Segment { contour: usize, segment: usize, origine: DVec2, a: DVec2, b: DVec2 },
 }
 
+fn fermer_par_extremite(contour: &mut Vec<[f64; 2]>, sommet: usize) -> bool {
+    if contour.len() < 4 || (sommet != 0 && sommet + 1 != contour.len()) { return false; }
+    contour.remove(sommet);
+    true
+}
+
 fn ouvrir_contour(contour: &mut Vec<[f64; 2]>, segment: usize) {
     let debut = (segment + 1) % contour.len();
     contour.rotate_left(debut);
@@ -156,6 +163,18 @@ fn raccorder_contour(contour: &mut Vec<[f64; 2]>, premier: bool, trace: &[DVec2]
 #[cfg(test)]
 mod tests_raccord {
     use super::*;
+    #[test]
+    fn fermeture_par_extremite_ne_garde_pas_de_sommet_double() {
+        let trace = vec![[0., 0.], [4., 0.], [4., 4.], [0., 0.]];
+        let mut fin = trace.clone();
+        assert!(fermer_par_extremite(&mut fin, 3));
+        assert_eq!(fin, vec![[0., 0.], [4., 0.], [4., 4.]]);
+        let mut debut = trace;
+        assert!(fermer_par_extremite(&mut debut, 0));
+        assert_eq!(debut, vec![[4., 0.], [4., 4.], [0., 0.]]);
+        assert!(!fermer_par_extremite(&mut debut, 0));
+    }
+
     #[test]
     fn suppression_et_raccord_depuis_les_deux_extremites() {
         let original = vec![[0.,0.], [4.,0.], [4.,4.], [0.,4.]];
@@ -249,19 +268,26 @@ fn nom_outil(o: OutilDessin) -> &'static str {
 }
 
 impl ViewerApp {
-    pub(super) fn ruban_contour(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            let e = self.dessin2d.edition_contour.as_mut().unwrap();
-            if ui.selectable_label(e.commande.is_none(), "Sélectionner").clicked() { e.commande = None; e.depart = None; e.dessin = false; }
-            if ui.add_enabled(e.segment.is_some() || e.sommet.is_some(), egui::Button::selectable(e.commande == Some(CommandeContour::Deplacer), "Déplacer")).on_disabled_hover_text("Sélectionnez d'abord un segment ou un sommet.").clicked() { e.commande = Some(CommandeContour::Deplacer); e.depart = None; e.dessin = false; }
-            if ui.add_enabled(e.segment.is_some(), egui::Button::selectable(e.commande == Some(CommandeContour::Decaler), "Décaler")).on_disabled_hover_text("Sélectionnez d'abord un segment.").clicked() { e.commande = Some(CommandeContour::Decaler); e.depart = None; e.dessin = false; }
-            ui.label(match (e.commande, e.depart) {
-                (Some(CommandeContour::Deplacer), None) => "Cliquer le point de départ",
-                (Some(CommandeContour::Deplacer), Some(_)) => "Cliquer le point d'arrivée",
-                (Some(CommandeContour::Decaler), _) => "Cliquer la nouvelle position du segment",
-                _ => "Cliquer ou glisser un segment ou un sommet · Échap : sélection",
-            });
-        });
+    pub(super) fn commande_ruban_contour(&mut self, outil: crate::ui::ruban::Outil) {
+        use crate::ui::ruban::Outil;
+        if outil == Outil::Supprimer { self.supprimer_trait_edition(); return; }
+        let Some(e) = self.dessin2d.edition_contour.as_mut() else { return };
+        if e.dessin { self.dessin2d.message = Some("Appuyez sur Échap pour sélectionner un segment ou un sommet.".into()); return; }
+        e.commande = match outil {
+            Outil::Deplacer if e.segment.is_some() || e.sommet.is_some() => Some(CommandeContour::Deplacer),
+            Outil::Copier | Outil::CreerIdentique if e.segment.is_some() => Some(CommandeContour::Copier),
+            Outil::Reseau if e.segment.is_some() => Some(CommandeContour::Reseau),
+            Outil::Scinder if e.segment.is_some() => Some(CommandeContour::Scinder),
+            Outil::Aligner if e.segment.is_some() => Some(CommandeContour::Aligner),
+            Outil::Ajuster if e.segment.is_some() => Some(CommandeContour::Ajuster),
+            Outil::Tourner if e.segment.is_some() || e.sommet.is_some() => Some(CommandeContour::Tourner),
+            Outil::Symetrie if e.segment.is_some() || e.sommet.is_some() => Some(CommandeContour::Symetrie),
+            Outil::Echelle if e.segment.is_some() || e.sommet.is_some() => Some(CommandeContour::Echelle),
+            Outil::Decaler if e.segment.is_some() => Some(CommandeContour::Decaler),
+            _ => { self.dessin2d.message = Some("Sélectionnez un segment ou un sommet ; cette commande ne s'applique pas encore au tracé.".into()); None }
+        };
+        e.depart = None;
+        e.repere = None;
     }
     pub(super) fn selection_traces_active(&self) -> bool {
         self.dessin2d.edition_contour.as_ref().is_some_and(|e| !e.dessin)
@@ -270,7 +296,7 @@ impl ViewerApp {
         self.dessin2d.edition_contour.as_ref().map(|e| (e.id.as_str(), e.annotation.is_some()))
     }
     fn supprimer_trait_edition(&mut self) {
-        if self.dessin2d.edition_contour.as_ref().is_some_and(|e| matches!(e.creation, Some(Usage::Terrain | Usage::Escalier | Usage::GardeCorps | Usage::Annotation))) { return; }
+        if self.dessin2d.edition_contour.as_ref().is_some_and(|e| matches!(e.creation, Some(Usage::Terrain | Usage::Escalier | Usage::GardeCorps))) { return; }
         let Some((c, i)) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.segment) else { return };
         let e = self.dessin2d.edition_contour.as_mut().unwrap();
         if e.fermee(c) {
@@ -294,6 +320,23 @@ impl ViewerApp {
         e.segment = None;
         { self.dessin2d.message = None; self.dessin2d.information = None; };
         self.dessin2d.information = Some("Cliquez une extrémité ouverte pour reprendre le tracé.".into());
+    }
+
+    /// Conserve les points déjà ajoutés lorsqu'on interrompt ou termine un raccord.
+    fn terminer_raccord_ouvert(&mut self) {
+        let Some((c, premier)) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.raccord) else { return };
+        let Some(trace) = self.dessin2d.trace.as_mut() else { return };
+        let nombre = trace.points.len().saturating_sub(1);
+        if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation == Some(Usage::Terrain)) {
+            let z = if premier { self.dessin2d.terrain_cotes.first().copied() } else { self.dessin2d.terrain_cotes.last().copied() }.unwrap_or(self.dessin2d.terrain_altitude);
+            if premier { self.dessin2d.terrain_cotes.splice(0..0, std::iter::repeat_n(z, nombre)); }
+            else { self.dessin2d.terrain_cotes.extend(std::iter::repeat_n(z, nombre)); }
+        }
+        raccorder_contour(&mut self.dessin2d.dalle[c], premier, &trace.points);
+        trace.points.clear();
+        let e = self.dessin2d.edition_contour.as_mut().unwrap();
+        e.raccord = None;
+        e.dessin = false;
     }
 
     fn ajouter_point_raccord(&mut self, p: DVec2) -> bool {
@@ -347,7 +390,24 @@ impl ViewerApp {
     /// Clic sur une extrémité d'un contour laissé ouvert : le tracé reprend de là.
     fn reprendre_contour_ouvert(&mut self, rect: egui::Rect, clic: Option<egui::Pos2>) -> bool {
         let Some(clic) = clic else { return false };
-        if self.dessin2d.ouverts.is_empty() || self.dessin2d.trace.as_ref().is_none_or(|t| !t.points.is_empty() || t.outil != OutilDessin::Polyligne) {
+        if self.dessin2d.trace.as_ref().is_none_or(|t| !t.points.is_empty() || t.outil != OutilDessin::Polyligne) { return false; }
+        if let Some(e) = self.dessin2d.edition_contour.as_ref() && e.dessin && e.raccord.is_none() {
+            let proche = |p: &[f64; 2]| self.vers_ecran(rect, DVec2::from_array(*p)).is_some_and(|q| q.distance(clic) <= 10.0);
+            let trouve = self.dessin2d.dalle.iter().enumerate().filter(|(c, _)| !e.fermee(*c)).find_map(|(c, points)| {
+                if points.last().is_some_and(&proche) { Some((c, false)) }
+                else if points.first().is_some_and(&proche) { Some((c, true)) } else { None }
+            });
+            if let Some((c, premier)) = trouve {
+                let points = &self.dessin2d.dalle[c];
+                let point = if premier { points[0] } else { *points.last().unwrap() };
+                self.dessin2d.trace.as_mut().unwrap().points.push(DVec2::from_array(point));
+                self.dessin2d.edition_contour.as_mut().unwrap().raccord = Some((c, premier));
+                self.dessin2d.saisie.clear();
+                self.dessin2d.message = None; self.dessin2d.information = None;
+                return true;
+            }
+        }
+        if self.dessin2d.ouverts.is_empty() {
             return false;
         }
         let proche = |q: &DVec2| self.vers_ecran(rect, *q).is_some_and(|e| e.distance(clic) <= 10.0);
@@ -372,7 +432,6 @@ impl ViewerApp {
         let d = &mut self.dessin2d;
         d.terrain_cotes.clear();
         d.terrain_points.clear();
-        d.terrain_ajouter_point = false;
         d.terrain_modifie = None;
         d.terrain_survol = None;
         d.terrain_glisse = None;
@@ -392,6 +451,26 @@ impl ViewerApp {
         })
     }
 
+    /// Sélecteur du type et cote des points pendant la création ou l'édition du terrain.
+    pub(in crate::ui) fn proprietes_terrain_creation(&mut self, ui: &mut egui::Ui) -> bool {
+        if !self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain) { return false; }
+        let Some((p, _)) = &self.natif else { return false };
+        let types = p.types_terrains_disponibles();
+        let actuel = self.dessin2d.terrain_type.as_ref().and_then(|id| types.iter().find(|t| &t.id == id)).or(types.first());
+        ui.add_space(8.0);
+        ui.label(RichText::new("Terrain").small().weak());
+        egui::ComboBox::from_id_salt("type_terrain_creation_proprietes").width((ui.available_width() - 8.0).max(1.0)).selected_text(actuel.map_or("Terrain", |t| t.nom.as_str())).show_ui(ui, |ui| {
+            for t in &types {
+                if ui.selectable_label(actuel.is_some_and(|a| a.id == t.id), &t.nom).clicked() {
+                    self.dessin2d.terrain_type = (!p.types_terrains.is_empty()).then(|| t.id.clone());
+                }
+            }
+        });
+        ui.horizontal(|ui| { ui.label("Cote NGF des points"); ui.add(egui::DragValue::new(&mut self.dessin2d.terrain_altitude).speed(10.0).dimensions()); });
+        ui.separator();
+        true
+    }
+
     /// Modifier tracé d'un terrain : l'outil Terrain reprend son contour, ses cotes, ses
     /// points et son type ; la validation remplace le terrain.
     fn commencer_edition_terrain(&mut self, id: &str) {
@@ -403,7 +482,6 @@ impl ViewerApp {
         self.dessin2d.terrain_cotes = t.contour.iter().map(|p| p[2]).collect();
         self.dessin2d.terrain_points = t.points.clone();
         self.dessin2d.terrain_altitude = t.contour.first().map_or(0.0, |p| p[2]);
-        self.dessin2d.terrain_ajouter_point = false;
         self.dessin2d.terrain_type = t.type_terrain.clone();
         self.dessin2d.terrain_modifie = Some((t.id.clone(), t.nom.clone()));
         self.dessin2d.dernier_usage = Some(Usage::Terrain);
@@ -445,16 +523,21 @@ impl ViewerApp {
             element = Some(ElementTrace::Limite);
             (l.altitude, vec![l.contour.clone()], None)
         } else if let Some(a) = p.annotations.iter().find(|a| a.id == ids[0]) {
+            // une ligne est une polyligne d'un seul segment : elle le devient à la validation
+            let mut a = a.clone();
+            if let AnnotationForme::Ligne { debut, fin } = &a.forme {
+                a.forme = AnnotationForme::Polyligne { points: vec![*debut, *fin], fermee: false, remplissage: None, traits: Vec::new() };
+            }
             let AnnotationForme::Polyligne { points, .. } = &a.forme else { self.status = "Sélectionnez un élément horizontal ou une polyligne.".into(); return; };
             if self.vue_native_id().as_deref() != Some(a.vue.as_str()) { self.status = "Ouvrez la vue de la polyligne pour la modifier.".into(); return; }
-            (0.0, vec![points.clone()], Some(a.clone()))
+            (0.0, vec![points.clone()], Some(a))
         } else { self.status = "Sélectionnez un élément horizontal ou une polyligne.".into(); return; };
         let ouvert = element == Some(ElementTrace::GardeCorps);
         self.dessin2d.dernier_usage = Some(if annotation.is_some() || ouvert { Usage::Annotation } else { Usage::Surface });
         let fermees = vec![!ouvert && annotation.as_ref().is_none_or(|a| matches!(&a.forme, AnnotationForme::Polyligne { fermee: true, .. })); contours.len()];
         self.dessin2d.dalle = contours;
         self.dessin2d.geoms = None;
-        self.dessin2d.edition_contour = Some(EditionContour { id: ids[0].clone(), creation: None, altitude, dessin: false, selection: None, segment: None, sommet: None, commande: None, depart: None, glisse: None, annotation, fermees, raccord: None, element });
+        self.dessin2d.edition_contour = Some(EditionContour { id: ids[0].clone(), creation: None, altitude, dessin: false, selection: None, segment: None, sommet: None, commande: None, depart: None, repere: None, glisse: None, annotation, fermees, raccord: None, element });
         self.dessin2d.trace = Some(Trace::new(OutilDessin::Polyligne));
         self.ruban_edition.forme_dalle = OutilDessin::Polyligne;
         self.ruban_edition.annuler();
@@ -482,36 +565,82 @@ impl ViewerApp {
         ui.separator();
     }
 
-    /// Modifier une polyligne, segment sélectionné : son type de trait dans Propriétés
-    /// (porté par la polyligne en cours d'édition, enregistré à la validation).
+    /// Tracé en cours, trait sélectionné : Propriétés montre ce trait à la place de
+    /// l'objet (longueur ; type de trait d'une polyligne ; pente ou talus de l'arête d'un
+    /// élément horizontal). Sans trait sélectionné, Propriétés reste à l'objet.
     /// Retourne vrai si la section est affichée.
     pub(in crate::ui) fn proprietes_segment_edition(&mut self, ui: &mut egui::Ui) -> bool {
         let Some(e) = self.dessin2d.edition_contour.as_ref() else { return false };
-        let Some(a) = e.annotation.as_ref() else { return false };
-        let types = self.natif.as_ref().map(|(p, _)| p.types_traits.clone()).unwrap_or_default();
-        ui.label(RichText::new("Polyligne en modification").strong());
-        let Some((c, i)) = e.segment.filter(|(c, _)| *c == 0) else {
-            ui.label(RichText::new("Cliquez un segment pour voir et changer son type de trait ; Échap : désélectionner, puis quitter.").small().weak());
-            ui.separator();
-            return true;
+        let Some((c, i)) = e.segment else { return false };
+        let Some(points) = self.dessin2d.dalle.get(c).filter(|p| i < p.len()) else { return false };
+        let (a, b) = (points[i], points[(i + 1) % points.len()]);
+        let longueur = DVec2::from_array(a).distance(DVec2::from_array(b));
+        let projet = self.natif.as_ref().map(|(p, _)| p);
+        let dalle = projet.filter(|_| e.creation.is_none() && e.annotation.is_none() && e.element.is_none()).and_then(|p| p.dalles.iter().find(|d| d.id == e.id)).cloned();
+        let objet: String = if e.annotation.is_some() { "Polyligne".into() } else {
+            match (e.element, e.creation) {
+                (Some(ElementTrace::GardeCorps), _) | (_, Some(Usage::GardeCorps)) => "Garde-corps".into(),
+                (Some(ElementTrace::Limite), _) | (_, Some(Usage::LimitePropriete)) => "Limite de propriété".into(),
+                (_, Some(Usage::Terrain)) => "Terrain".into(),
+                (_, Some(Usage::Escalier)) => "Escalier".into(),
+                (_, Some(Usage::Cadrage)) => "Cadrage de la vue".into(),
+                (_, Some(Usage::Annotation)) => "Polyligne".into(),
+                _ => dalle.as_ref().map(|d| d.sorte.nom().to_string()).or_else(|| self.ruban_edition.dalle_active().map(|d| d.sorte.nom().to_string())).unwrap_or_else(|| "Élément horizontal".into()),
+            }
         };
-        let actuel = match &a.forme {
-            AnnotationForme::Polyligne { traits, .. } => traits.get(i).cloned().unwrap_or_default(),
-            _ => String::new(),
+        let types = projet.map(|p| p.types_traits.clone()).unwrap_or_default();
+        let trait_actuel = match e.annotation.as_ref().map(|a| &a.forme) {
+            Some(AnnotationForme::Polyligne { traits, .. }) if c == 0 => Some(traits.get(i).cloned().unwrap_or_default()),
+            _ => None,
         };
-        let points = &self.dessin2d.dalle[c];
-        let longueur = DVec2::from_array(points[i]).distance(DVec2::from_array(points[(i + 1) % points.len()]));
-        let mut choix = None;
+        // arête d'origine de l'élément : mêmes extrémités, comme à la validation du contour
+        let reglable = dalle.as_ref().is_some_and(|d| d.sorte.aretes_reglables());
+        // (terre-plein dont les contours gardent leurs sommets : l'arête de même rang)
+        let memes_aretes = dalle.as_ref().is_some_and(|d| d.sorte.talus() && d.contours.len() == self.dessin2d.dalle.len() && d.contours.iter().zip(&self.dessin2d.dalle).all(|(x, y)| x.len() == y.len()));
+        let arete = if memes_aretes { Some((c, i)) } else {
+            dalle.as_ref().filter(|_| reglable).and_then(|d| d.contours.iter().enumerate().find_map(|(cs, x)| (0..x.len()).find(|&k| x[k] == a && x[(k + 1) % x.len()] == b).map(|k| (cs, k))))
+        };
+        let mut pente_defaut = self.pente_defaut;
+        let mut choix_trait = None;
+        let mut dalle_modifiee = None;
+        ui.label(RichText::new(format!("{objet} · trait {}", i + 1)).strong());
         egui::Grid::new("segment_edition").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
-            ui.label(format!("Segment {}", i + 1));
+            ui.label("Longueur");
             ui.label(crate::config::options::unite().afficher(longueur.round()));
             ui.end_row();
-            ui.label("Type de trait");
-            choix = crate::ui::types_traits::choix_type_trait(ui, "trait_segment_edition", Some(&actuel), &types);
-            ui.end_row();
+            if let Some(actuel) = &trait_actuel {
+                ui.label("Type de trait");
+                choix_trait = crate::ui::types_traits::choix_type_trait(ui, "trait_segment_edition", Some(actuel), &types);
+                ui.end_row();
+            }
+            if let (Some(d), Some((cs, k))) = (&dalle, arete) {
+                let mut d = d.clone();
+                if d.sorte.talus() {
+                    ui.label("Talus");
+                    if ui.horizontal(|ui| crate::ui::proprietes::champs_talus(ui, &mut d, cs, k)).inner { dalle_modifiee = Some(d); }
+                } else {
+                    ui.label("Pente");
+                    let mut pente = d.pente(cs, k);
+                    let mut oui = pente.is_some();
+                    ui.horizontal(|ui| {
+                        if ui.checkbox(&mut oui, "Définit la pente").on_hover_text("Le versant monte depuis cette arête vers l'intérieur").changed() { pente = oui.then_some(pente_defaut); }
+                        if let Some(angle) = pente.as_mut() && ui.add(egui::DragValue::new(angle).speed(0.5).range(0.5..=85.0).max_decimals(1).suffix(" °")).changed() { pente_defaut = *angle; }
+                    });
+                    if pente != d.pente(cs, k) {
+                        d.definir_pente(cs, k, pente);
+                        dalle_modifiee = Some(d);
+                    }
+                }
+                ui.end_row();
+            }
         });
+        if reglable && arete.is_none() {
+            ui.label(RichText::new("Arête déplacée ou nouvelle : valider le tracé pour régler sa pente ou son talus.").small().weak());
+        }
+        ui.label(RichText::new("Échap : désélectionner le trait et revenir aux propriétés de l'objet.").small().weak());
         ui.separator();
-        if let Some(id) = choix
+        self.pente_defaut = pente_defaut;
+        if let Some(id) = choix_trait
             && let Some(AnnotationForme::Polyligne { traits, .. }) = self.dessin2d.edition_contour.as_mut().and_then(|e| e.annotation.as_mut()).map(|a| &mut a.forme)
         {
             if traits.len() <= i {
@@ -522,28 +651,15 @@ impl ViewerApp {
                 traits.clear();
             }
         }
+        // pente ou talus : appliqué tout de suite à l'élément, le tracé reste en cours
+        if let Some(d) = dalle_modifiee && let Some((projet, _)) = &self.natif {
+            let mut p = projet.clone();
+            if let Some(x) = p.dalles.iter_mut().find(|x| x.id == d.id) { *x = d; }
+            if let Err(e) = self.appliquer_projet(p) { self.error = Some(e); }
+        }
         true
     }
 
-    pub(super) fn options_edition_contour(&mut self, ui: &mut egui::Ui) {
-        let trace_en_cours = self.trace_en_cours();
-        let poly = self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.annotation.is_some() || e.element.is_some());
-        let topologie_fixe = self.dessin2d.edition_contour.as_ref().is_some_and(|e| matches!(e.creation, Some(Usage::Terrain | Usage::Cadrage | Usage::Escalier | Usage::GardeCorps | Usage::Annotation)));
-        let mut supprimer_trait = false;
-        ui.horizontal(|ui| {
-            let edition = self.dessin2d.edition_contour.as_mut().unwrap();
-            if ui.add_enabled(!trace_en_cours, egui::Button::selectable(!edition.dessin && edition.commande.is_none(), "Sélectionner")).on_disabled_hover_text("Terminez ou annulez le tracé en cours.").clicked() { edition.dessin = false; edition.commande = None; edition.depart = None; }
-            if !poly && !topologie_fixe && ui.selectable_label(edition.dessin, "Ajouter un contour").clicked() { edition.dessin = true; }
-            supprimer_trait = ui.add_enabled(!topologie_fixe && edition.segment.is_some() && !trace_en_cours, egui::Button::new("Supprimer le trait")).clicked();
-            ui.separator();
-            if !poly && ui.add_enabled(edition.selection.is_some() && self.dessin2d.dalle.len() > 1, egui::Button::new("Supprimer le contour sélectionné")).clicked() {
-                if let Some(i) = edition.selection.take() { self.dessin2d.dalle.remove(i); edition.fermees.remove(i); }
-                edition.segment = None; edition.sommet = None;
-            }
-        });
-        if supprimer_trait { self.supprimer_trait_edition(); }
-        if !poly && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.dessin && e.raccord.is_none()) { self.options_trace(ui); }
-    }
     /// Outil de dessin actif : annotation ou mur.
     pub(super) fn outil_dessin(&self) -> Option<OutilDessin> {
         self.usage_dessin().map(|(_, o)| o)
@@ -555,7 +671,7 @@ impl ViewerApp {
         use crate::ui::ruban::Outil;
         if self.dessin2d.edition_contour.is_some() {
             if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.ligne()) { return Some((Usage::Annotation, OutilDessin::Polyligne)); }
-            if let Some(usage @ (Usage::Escalier | Usage::GardeCorps | Usage::Annotation | Usage::Terrain)) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.creation) { return Some((usage, OutilDessin::Polyligne)); }
+            if let Some(usage @ (Usage::Escalier | Usage::GardeCorps | Usage::Annotation)) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.creation) { return Some((usage, OutilDessin::Polyligne)); }
             let o = match self.ruban_edition.forme_dalle {
                 o @ (OutilDessin::Rectangle | OutilDessin::Cercle) => o,
                 _ => OutilDessin::Polyligne,
@@ -566,8 +682,8 @@ impl ViewerApp {
             return Some((Usage::Cadrage, self.dessin2d.forme_cadrage.unwrap_or(OutilDessin::Rectangle)));
         }
         let modele_disponible = self.natif.is_some() && self.scene.is_some() && self.loading.is_none();
-        let modeliser = self.onglet_ruban == OngletRuban::Modeliser && modele_disponible;
-        if modeliser && self.ruban_edition.outil() == Some(Outil::Terrain) { return Some((Usage::Terrain, OutilDessin::Polyligne)); }
+        let modeliser = matches!(self.onglet_ruban, OngletRuban::Modeliser | OngletRuban::Modifier) && modele_disponible;
+        if modeliser && self.ruban_edition.outil() == Some(Outil::Terrain) { return Some((Usage::Terrain, self.ruban_edition.forme_dalle)); }
         if modele_disponible && self.ruban_edition.outil() == Some(Outil::LimitePropriete) {
             let forme = match self.ruban_edition.forme_dalle {
                 f @ (OutilDessin::Rectangle | OutilDessin::Cercle) => f,
@@ -591,7 +707,7 @@ impl ViewerApp {
         if modeliser && self.ruban_edition.outil() == Some(Outil::GardeCorps) {
             return Some((Usage::GardeCorps, OutilDessin::Polyligne));
         }
-        if self.onglet_ruban != OngletRuban::Annoter || self.vue_native_id().is_none() {
+        if !matches!(self.onglet_ruban, OngletRuban::Annoter | OngletRuban::Modifier) || self.vue_native_id().is_none() {
             return None;
         }
         // cotation : points successifs recueillis par un tracé polyligne

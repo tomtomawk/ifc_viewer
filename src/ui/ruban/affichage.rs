@@ -93,15 +93,18 @@ impl RubanEdition {
                                     egui::pos2(x, rect.top() + ligne as f32 * hauteur),
                                     egui::vec2(colonne.largeur, hauteur),
                                 );
-                                let actif = self.selection.map(Outil::commande) == Some(outil);
+                                // terre-plein : son propre bouton (Site), pas celui des éléments horizontaux
+                                let actif = if self.edition_traces && menu == Menu::Modifier { self.commande_trace == Some(outil) } else { self.selection == Some(outil) || (self.selection != Some(Outil::TerrePlein) && self.selection.map(Outil::commande) == Some(outil)) };
                                 // éléments horizontaux : un bouton ; la sorte se choisit dans le
                                 // sélecteur de type de Propriétés
-                                let disponible = matches!(outil, Outil::Terrain|Outil::TerrePlein|Outil::LimitePropriete|Outil::Mur|Outil::Surfaces|Outil::Poteau|Outil::Poutre|Outil::Escalier|Outil::GardeCorps|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Composant|Outil::Piece|Outil::Arbre|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Symetrie|Outil::Reseau|Outil::Echelle|Outil::Decaler|Outil::Scinder|Outil::Demolir|Outil::Reproduire|Outil::ChangerHote|Outil::Inverser|Outil::Aligner|Outil::Ajuster|Outil::ModifierContour|Outil::CopierNiveau|Outil::Jonctions|Outil::AttacherToiture|Outil::CreerIdentique|Outil::Supprimer|Outil::Cadrer|Outil::Isoler|Outil::Masquer|Outil::MasquerVue|Outil::Afficher|Outil::Verrouiller|Outil::Deverrouiller|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::CoteAngulaire|Outil::CoteDiametre|Outil::Altimetrie|Outil::Ligne|Outil::Polyligne|Outil::Spline|Outil::Cercle|Outil::Arc|Outil::Zone|Outil::Etiquette|Outil::Feuilles|Outil::Nomenclatures);
+                                let disponible = matches!(outil, Outil::Terrain|Outil::TerrePlein|Outil::LimitePropriete|Outil::Mur|Outil::Surfaces|Outil::Poteau|Outil::Poutre|Outil::Escalier|Outil::GardeCorps|Outil::Niveau|Outil::Quadrillage|Outil::Ouverture|Outil::Composant|Outil::Piece|Outil::Arbre|Outil::Deplacer|Outil::Copier|Outil::Tourner|Outil::Symetrie|Outil::Reseau|Outil::Echelle|Outil::Decaler|Outil::Scinder|Outil::Demolir|Outil::Reproduire|Outil::ChangerHote|Outil::Inverser|Outil::Aligner|Outil::Ajuster|Outil::ModifierContour|Outil::CopierNiveau|Outil::Jonctions|Outil::AttacherToiture|Outil::CreerIdentique|Outil::Supprimer|Outil::Cadrer|Outil::Isoler|Outil::Masquer|Outil::MasquerVue|Outil::Afficher|Outil::Verrouiller|Outil::Deverrouiller|Outil::VuePlan|Outil::VueCoupe|Outil::Texte|Outil::Cote|Outil::CoteAngulaire|Outil::CoteDiametre|Outil::Altimetrie|Outil::Polyligne|Outil::Spline|Outil::Cercle|Outil::Arc|Outil::Zone|Outil::Etiquette|Outil::Feuilles|Outil::Nomenclatures);
                                 let mut bouton_ui=ui.new_child(egui::UiBuilder::new().max_rect(bouton));
                                 let raison = if !disponible && outil.forme_dessin().is_none() {
                                     Some("Outil prévu, pas encore disponible")
                                 } else if projet.is_none() {
                                     Some("Ouvrir ou créer un projet pour utiliser cet outil")
+                                } else if self.edition_traces && menu == Menu::Modifier {
+                                    raison_trace(outil, self.cible_trace, self.trace_fixe, self.trace_unique)
                                 } else if outil == Outil::CopierNiveau && !self.selection_elements {
                                     Some("Sélectionner d'abord un ou plusieurs éléments")
                                 } else if outil == Outil::Jonctions && !self.selection_murs {
@@ -114,6 +117,10 @@ impl RubanEdition {
                                 if outil == Outil::Jonctions { self.bouton_jonctions = Some(reponse.clone()); }
                                 if reponse.on_disabled_hover_text(raison.unwrap_or("")).clicked() {
                                     if outil == Outil::Jonctions { continue; }
+                                    if self.edition_traces && menu == Menu::Modifier {
+                                        action = Some(outil);
+                                        continue;
+                                    }
                                     if matches!(outil, Outil::ModifierContour | Outil::CopierNiveau | Outil::CreerIdentique | Outil::Supprimer | Outil::Cadrer | Outil::Isoler | Outil::Masquer | Outil::MasquerVue | Outil::Afficher | Outil::Verrouiller | Outil::Deverrouiller | Outil::Feuilles | Outil::Nomenclatures) {
                                         action = Some(outil);
                                         continue;

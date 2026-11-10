@@ -9,7 +9,9 @@ pub fn carte(cle: &str) -> Option<(&str, &str)> {
 pub fn carte_objet(nom: &str) -> bool {
     matches!(
         nom,
-        "implantations"
+        "organisations_arborescence"
+            | "rangements_arborescence"
+            | "implantations"
             | "contextes"
             | "contextes_vues"
             | "gabarits_vue_affectes"

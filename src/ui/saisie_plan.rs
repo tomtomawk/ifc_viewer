@@ -166,13 +166,14 @@ impl ViewerApp {
     }
 
     /// Terre-plein sélectionné : liste du talus de chaque arête, à côté de son repère
-    /// dans la vue (1/1, 2/3… ou sans talus).
+    /// dans la vue (pente en %, ou sans talus ; remblai de sa fouille).
     pub(super) fn editer_talus(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
         use crate::modele::elements::terre_plein as tp;
         let (Some((projet, _)), Some(sel)) = (&self.natif, self.selected) else { return };
         let Some(d) = projet.dalles.iter().find(|d| scene::id_natif("dalle", &d.id) == sel && d.sorte.talus()) else { return };
         let id = d.id.clone();
         let mut choix = None;
+        let mut remblayer = None;
         for (c, k, q, dir, pente) in self.aretes_pente(rect) {
             // côté intérieur du repère (le triangle pointe vers l'extérieur)
             let cadre = egui::Rect::from_center_size(q + dir * 20.0, egui::vec2(98.0, 20.0));
@@ -187,17 +188,30 @@ impl ViewerApp {
                     }
                     for (nom, r) in tp::TALUS {
                         let deg = tp::angle(r);
-                        if ui.selectable_label(pente.is_some_and(|x| (x - deg).abs() < 1e-3), format!("{nom} ({:.0} %)", r * 100.0)).clicked() {
+                        if ui.selectable_label(pente.is_some_and(|x| (x - deg).abs() < 1e-3), format!("{:.0} % ({nom})", r * 100.0)).clicked() {
                             choix = Some((c, k, Some(deg)));
                         }
                     }
-                }).response.on_hover_text("Talus de l'arête (hauteur / base) ; pourcentage libre dans Propriétés");
+                    if pente.is_some() {
+                        ui.separator();
+                        let mut oui = d.remblaye(c, k);
+                        if ui.checkbox(&mut oui, "Remblayer").on_hover_text("En déblai : reboucher la fouille talutée jusqu'à l'arête du terre-plein").changed() {
+                            remblayer = Some((c, k, oui));
+                        }
+                    }
+                }).response.on_hover_text("Pente du talus de l'arête en % (hauteur / base) ; valeur libre dans Propriétés");
             });
         }
-        if let Some((c, k, talus)) = choix {
+        if choix.is_some() || remblayer.is_some() {
             let mut p = projet.clone();
             if let Some(d) = p.dalles.iter_mut().find(|d| d.id == id) {
-                d.definir_pente(c, k, talus);
+                if let Some((c, k, talus)) = choix {
+                    d.definir_pente(c, k, talus);
+                    if talus.is_none() { d.definir_remblai(c, k, false); }
+                }
+                if let Some((c, k, oui)) = remblayer {
+                    d.definir_remblai(c, k, oui);
+                }
             }
             if let Err(e) = self.appliquer_projet(p) { self.error = Some(e); }
         }
@@ -687,6 +701,8 @@ impl ViewerApp {
         let avait_vues = !self.vues_ouvertes.is_empty();
         self.vue_active=ancienne_vue(self.vue_active).flatten();
         self.vues_ouvertes=self.vues_ouvertes.iter().filter_map(|i|ancienne_vue(*i)).collect();
+        let mut vues_vues = std::collections::HashSet::new();
+        self.vues_ouvertes.retain(|vue| vues_vues.insert(*vue));
         self.etats_vues=std::mem::take(&mut self.etats_vues).into_iter().filter_map(|(i,e)|ancienne_vue(i).map(|i|(i,e))).collect();
         if avait_vues && self.vues_ouvertes.is_empty(){self.vues_ouvertes.push(None);}
         let nouvel_objet=|i:u32|anciens.and_then(|s|s.objects.get(i as usize)).and_then(|o|scene.object_of.get(&o.id)).copied();

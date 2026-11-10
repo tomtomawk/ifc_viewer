@@ -330,10 +330,13 @@ impl ViewerApp {
         self.arete_alignement = None;
         self.memoriser_vue();
         if self.etats_vues.contains_key(&Some(i)) {
+            if !self.vues_ouvertes.contains(&Some(i)) { self.vues_ouvertes.push(Some(i)); }
             self.restaurer_vue(Some(i));
             return;
         }
-        self.vues_ouvertes.push(Some(i));
+        if !self.vues_ouvertes.contains(&Some(i)) {
+            self.vues_ouvertes.push(Some(i));
+        }
         self.nomenclature_ouverte = None;
         self.boite = None;
         self.boite_active = false;

@@ -624,10 +624,8 @@ impl ViewerApp {
                     self.bim.texte = texte.clone();
                     Outil::Texte
                 }
-                F::Ligne { debut, fin } => {
-                    self.bim.points = [*debut, *fin];
-                    Outil::Ligne
-                }
+                // une ligne se recrée comme une polyligne d'un segment
+                F::Ligne { .. } => Outil::Polyligne,
                 F::Polyligne { .. } => Outil::Polyligne,
                 F::Spline { .. } => Outil::Spline,
                 F::Cercle { .. } => Outil::Cercle,
@@ -775,8 +773,7 @@ impl ViewerApp {
             use crate::modele::documentation::AnnotationForme as F;
             let attendu = match annotation.forme {
                 F::Texte { .. } => Outil::Texte,
-                F::Ligne { .. } => Outil::Ligne,
-                F::Polyligne { .. } => Outil::Polyligne,
+                F::Ligne { .. } | F::Polyligne { .. } => Outil::Polyligne,
                 F::Spline { .. } => Outil::Spline,
                 F::Cercle { .. } => Outil::Cercle,
                 F::Arc { .. } => Outil::Arc,

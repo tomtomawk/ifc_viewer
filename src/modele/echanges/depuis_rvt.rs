@@ -240,7 +240,7 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
             .clone();
         let id = ident("dalle", d.id);
         c.lire(&id, &tris, categorie);
-        c.projet.dalles.push(Dalle { variante: None, phase: None, sous_projet: None, id, nom, type_dalle, niveau: base.0.clone(), sorte, decalage: if sorte.sous_face() { p.bas - base.1 } else { p.haut - base.1 }, contours: p.contours, pentes: Vec::new(), origine: origine(d.id, &d.classe) });
+        c.projet.dalles.push(Dalle { variante: None, phase: None, sous_projet: None, id, nom, type_dalle, niveau: base.0.clone(), sorte, decalage: if sorte.sous_face() { p.bas - base.1 } else { p.haut - base.1 }, contours: p.contours, pentes: Vec::new(), talus_dessus: false, remblais: Vec::new(), type_remblai: None, origine: origine(d.id, &d.classe) });
     }
 
     // le reste : éléments importés

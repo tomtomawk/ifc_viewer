@@ -267,7 +267,7 @@ mod tests {
         Dalle {
             variante: None, phase: None, sous_projet: None,
             id: "t".into(), nom: "T".into(), type_dalle: "x".into(), niveau: "n".into(),
-            sorte: SorteDalle::Toiture, decalage: 0.0,
+            sorte: SorteDalle::Toiture, decalage: 0.0, talus_dessus: false, remblais: Vec::new(), type_remblai: None,
             contours: vec![vec![[0.0, 0.0], [10_000.0, 0.0], [10_000.0, 6_000.0], [0.0, 6_000.0]]],
             pentes: vec![pentes], origine: None,
         }

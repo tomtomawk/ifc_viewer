@@ -35,6 +35,10 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
             SorteDalle::Toiture => "IFCROOF",
         };
         entite(id_natif("dalle", &d.id), classe, &d.id, &d.nom, 9)?;
+        // remblai d'un terre-plein : élément du site à part, sélectionnable
+        if crate::modele::elements::terre_plein::remblai(projet, d).is_some_and(|r| !r.tris.is_empty()) {
+            entite(id_natif("remblai", &d.id), "IFCGEOGRAPHICELEMENT", &format!("remblai-{}", d.id), &format!("Remblai · {}", d.nom), 9)?;
+        }
     }
     for t in &projet.terrains { entite(id_natif("terrain", &t.id), "IFCGEOGRAPHICELEMENT", &t.id, &t.nom, 9)?; }
     for l in &projet.limites_propriete { entite(id_natif("limite_propriete", &l.id), "IFCGEOGRAPHICELEMENT", &l.id, &l.nom, 9)?; }
@@ -258,20 +262,25 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         if parts.is_empty() {
             return Err(format!("{} : contour non valide.", d.nom));
         }
-        // terre-plein : remblai sous la plate-forme et ses talus, jusqu'au terrain naturel
-        // (partie du même élément : même phase, même sélection)
-        if let Some(r) = crate::modele::elements::terre_plein::remblai(projet, d).filter(|r| !r.tris.is_empty()) {
-            let m = projet.materiau("Remblai").cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut("Remblai"));
-            let [cr, cg, cb] = m.couleur.map(|c| c as f32 / 255.0);
-            let couleur = opacite(Some(&m), [cr, cg, cb, 1.0]);
-            rendu.push(Some(rendu_materiau(&m, couleur, &mut table_apparences)));
-            noms.push(Some(m.nom.clone()));
-            motifs.push(motif_surface(projet, &m, &mut table_motifs));
-            parts.push(Part { color: couleur, tris: r.tris.iter().map(|t| t.map(|v| v * 0.001)).collect() });
-        }
         if !bandes.is_empty() { bandes_dalles.push((id, bandes)); }
         materiaux_parts.push(noms);
         geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu, motifs });
+        // terre-plein : remblai sous la plate-forme et ses talus jusqu'au terrain naturel,
+        // et fouilles rebouchées ; élément du site à part (sélection, volume, type de
+        // terrain), couleur et poché du matériau de son type
+        if let Some(r) = crate::modele::elements::terre_plein::remblai(projet, d).filter(|r| !r.tris.is_empty()) {
+            let id = id_natif("remblai", &d.id);
+            model.parent.insert(id, racine);
+            model.children.entry(racine).or_default().push(id);
+            let nom = projet.type_remblai(d).materiau.unwrap_or_else(|| "Remblai".into());
+            let m = projet.materiau(&nom).cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(&nom));
+            let [cr, cg, cb] = m.couleur.map(|c| c as f32 / 255.0);
+            let couleur = opacite(Some(&m), [cr, cg, cb, 1.0]);
+            let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
+            couches_coupe.push((id, coupe_materiau(projet, &m, vec![neutre, neutre], crate::dessin::TRAIT_FORT_MM)));
+            materiaux_parts.push(vec![Some(m.nom.clone())]);
+            geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris: r.tris.iter().map(|t| t.map(|v| v * 0.001)).collect() }], lignes: Vec::new(), rendu: vec![Some(rendu_materiau(&m, couleur, &mut table_apparences))], motifs: vec![motif_surface(projet, &m, &mut table_motifs)] });
+        }
     }
     for o in &projet.ouvertures {
         let id = id_natif("ouverture", &o.id);
@@ -670,7 +679,7 @@ fn navigateur(projet: &Projet) -> Navigateur {
         familles.push(types("Murs", "Mur de base", &projet.types_murs, "type-mur"));
     }
     // types d'éléments horizontaux rangés par catégorie de leurs éléments (sols par défaut)
-    for (categorie, famille) in [("Sols", "Sol"), ("Plafonds", "Plafond composé"), ("Toits", "Toit de base")] {
+    for (categorie, famille) in [("Sols", "Sol"), ("Plafonds", "Plafond composé"), ("Toits", "Toit de base"), ("Terre-pleins", "Terre-plein")] {
         let ts: Vec<crate::modele::TypeCompose> = projet
             .types_dalles
             .iter()

@@ -32,7 +32,7 @@ impl ViewerApp {
         self.bim.attache_toiture_active = mode_attache;
         let mode_mur = self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.mur_actif() && self.natif.is_some() && self.loading.is_none();
         // dalle (ou sol) : contour cliqué sur le plan de son dessus
-        let dalle = if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() { self.ruban_edition.dalle_active() } else { None };
+        let dalle = if matches!(self.onglet_ruban, OngletRuban::Modeliser | OngletRuban::Modifier) && self.natif.is_some() && self.loading.is_none() { self.ruban_edition.dalle_active() } else { None };
         // coupe : ligne à deux clics, sur le plan du niveau de la vue ouverte
         let outil_coupe = if self.onglet_ruban == OngletRuban::Annoter && self.natif.is_some() && self.loading.is_none() { self.ruban_edition.coupe_active() } else { None };
         // une coupe se trace dans une vue en plan (ou une vue de dessus)

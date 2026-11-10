@@ -199,16 +199,25 @@ impl ViewerApp {
             OngletRuban::Annoter => Some(crate::ui::ruban::Menu::Annoter),
             _ => None,
         };
-        if self.dessin2d.edition_contour.is_some() {
-            self.ruban_contour(ui);
-            return;
-        }
         if let Some(menu) = edition {
             let ids = self.selection_bim();
-            self.ruban_edition.selection_elements = !ids.is_empty();
+            self.ruban_edition.edition_traces = self.dessin2d.edition_contour.is_some() || (self.onglet_ruban == OngletRuban::Modifier && self.usage_dessin().is_some_and(|(u, o)| o == crate::dessin::dao::OutilDessin::Polyligne && matches!(u, dessin_plan::Usage::Annotation | dessin_plan::Usage::Surface | dessin_plan::Usage::LimitePropriete | dessin_plan::Usage::Terrain | dessin_plan::Usage::Escalier | dessin_plan::Usage::GardeCorps)));
+            (self.ruban_edition.cible_trace, self.ruban_edition.trace_fixe, self.ruban_edition.trace_unique) = self.cible_trace();
+            self.ruban_edition.commande_trace = self.outil_commande_trace();
+            self.ruban_edition.selection_elements = !ids.is_empty() || self.selection_traces_active();
             self.ruban_edition.selection_murs = self.natif.as_ref().is_some_and(|(p, _)| ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some()));
             self.ruban_edition.bouton_jonctions = None;
+            let outil_avant = self.ruban_edition.outil();
             let action = self.ruban_edition.afficher(ui, menu, self.natif.as_ref().map(|n| &n.0));
+            if self.ruban_edition.edition_traces && let Some(o) = action {
+                if self.dessin2d.edition_contour.is_none() { self.selectionner_trace_en_creation(); }
+                self.commande_ruban_contour(o);
+                return;
+            }
+            if self.dessin2d.edition_contour.is_some() { return; }
+            if self.ruban_edition.outil() != outil_avant && self.usage_dessin().is_some_and(|(u, o)| o == crate::dessin::dao::OutilDessin::Polyligne && matches!(u, dessin_plan::Usage::Annotation | dessin_plan::Usage::Surface | dessin_plan::Usage::LimitePropriete | dessin_plan::Usage::Terrain | dessin_plan::Usage::Escalier | dessin_plan::Usage::GardeCorps) && self.outil_cotation().is_none()) {
+                self.onglet_ruban = OngletRuban::Modifier;
+            }
             if let Some(r) = self.ruban_edition.bouton_jonctions.take() {
                 egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| self.menu_jonctions(ui));
             }

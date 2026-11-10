@@ -22,6 +22,16 @@ impl ViewerApp {
             self.editeur_coordonnees(ui);
             return;
         }
+        if self.natif.is_none() && let (Some(scene), Some(id)) = (&self.scene, self.selected) {
+            let categorie = pretty_type(scene.model.ty(id));
+            let nom = scene.model.type_of.get(&id).map(|t| scene.model.name(*t)).filter(|n| !n.is_empty()).unwrap_or_else(|| scene.model.name(id));
+            let titre = if nom.is_empty() { categorie } else { format!("{categorie} : {nom}") };
+            ui.add_space(8.0);
+            ui.add_enabled(false, egui::Button::new(titre).min_size(egui::vec2(ui.available_width(), 24.0)))
+                .on_hover_text("Le fichier ouvert est en lecture seule : convertir le modèle pour modifier ses types.");
+            ui.separator();
+        }
+        let terrain_creation = self.proprietes_terrain_creation(ui);
         if self.natif.is_some() {
             let ids = self.selection_bim();
             if ids.is_empty() {
@@ -47,17 +57,18 @@ impl ViewerApp {
             if !ids.is_empty() && self.onglet_ruban == OngletRuban::Modifier {
                 self.options_modifier(ui, true);
             }
+            if !ids.is_empty() { ui.add_space(8.0); ui.separator(); ui.add_space(4.0); }
             if self.selecteur_garde_corps(ui, &ids) { return; }
             // Le type vient immédiatement après Phase / Sous-projet / Variante,
             // au même emplacement que pendant la création d'un mur.
-            if self.jeu_actif().is_none() && !self.ruban_edition.mur_actif() {
+            // tracé en cours, trait sélectionné : Propriétés montre ce trait, pas l'objet
+            if self.proprietes_segment_edition(ui) { return; }
+            if !terrain_creation && self.jeu_actif().is_none() && (!ids.is_empty() || !self.ruban_edition.mur_actif()) {
                 if let Some(projet)=self.selecteur_type_selection(ui) {
                     if let Err(e)=self.appliquer_projet(projet) {self.error=Some(e);}
                 }
             }
-            if self.proprietes_segment_edition(ui) {
-                // polyligne en modification : le segment sélectionné et son type de trait
-            } else if let Some(projet) = self.proprietes_formes_2d(ui, &ids).or_else(|| self.proprietes_terrains(ui, &ids)) {
+            if let Some(projet) = self.proprietes_formes_2d(ui, &ids).or_else(|| self.proprietes_terrains(ui, &ids)) {
                 if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
             }
             if ids.len() > 1 {
@@ -87,14 +98,16 @@ impl ViewerApp {
             }
         }
         // création d'un escalier : comme le mur, ses réglages remplacent les propriétés de la vue
-        if self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.outil() == Some(crate::ui::ruban::Outil::Escalier) && self.selection_bim().is_empty() {
+        // (l'onglet Modifier reste ouvert pendant un tracé : le sélecteur de type y reste aussi)
+        let creation = matches!(self.onglet_ruban, OngletRuban::Modeliser | OngletRuban::Modifier);
+        if creation && self.ruban_edition.outil() == Some(crate::ui::ruban::Outil::Escalier) && self.selection_bim().is_empty() {
             self.schema_escalier(ui);
             return;
         }
-        if self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.proprietes_mur(ui, self.natif.as_ref().map(|(p, _)| p)) {
+        if creation && self.ruban_edition.proprietes_mur(ui, self.natif.as_ref().map(|(p, _)| p)) {
             return;
         }
-        if self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.proprietes_surfaces(ui, self.natif.as_ref().map(|(p, _)| p)) {
+        if creation && self.ruban_edition.proprietes_surfaces(ui, self.natif.as_ref().map(|(p, _)| p)) {
             return;
         }
         if self.onglet_ruban == OngletRuban::Annoter
@@ -153,7 +166,7 @@ impl ViewerApp {
             }
         }
         // élément natif : tout est dans le panneau ci-dessus, pas d'attributs génériques
-        if self.natif.is_some() && self.cle_native(id).is_some() {
+        if self.natif.is_some() && (self.cle_native(id).is_some() || self.natif.as_ref().is_some_and(|(p, _)| p.dalles.iter().any(|d| scene::id_natif("remblai", &d.id) == id))) {
             return;
         }
         let Some(s) = &self.scene else { return };

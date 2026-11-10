@@ -469,6 +469,7 @@ impl ViewerApp {
         let nom = self.scene.as_ref().map(|s| s.file_name.clone()).unwrap_or_default();
         let titre = if nom.is_empty() { "Arborescence du projet".to_string() } else { format!("Arborescence du projet - {nom}") };
         self.entete_panneau(ui, Panneau::Arborescence, &titre);
+        if self.scene.is_none() { return; }
         let a_nav = self.scene.as_ref().is_some_and(|s| s.navigateur.is_some());
         let onglets: &[LeftTab] = match (a_nav, self.options.navigation_ifc) {
             (false, _) => &LeftTab::IFC,

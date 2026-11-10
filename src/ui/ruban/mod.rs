@@ -79,7 +79,6 @@ pub(crate) enum Outil {
     Altimetrie,
     Texte,
     Etiquette,
-    Ligne,
     Arc,
     Polyligne,
     Rectangle,
@@ -149,7 +148,6 @@ impl Outil {
             Self::Altimetrie => "Altimétrie",
             Self::Texte => "Texte",
             Self::Etiquette => "Étiquette",
-            Self::Ligne => "Ligne",
             Self::Arc => "Arc",
             Self::Polyligne => "Polyligne",
             Self::Rectangle => "Rectangle",
@@ -199,7 +197,6 @@ impl Outil {
     pub(in crate::ui) fn forme_dessin(self) -> Option<crate::dessin::dao::OutilDessin> {
         use crate::dessin::dao::OutilDessin as D;
         Some(match self {
-            Self::Ligne => D::Ligne,
             Self::Polyligne => D::Polyligne,
             Self::Rectangle => D::Rectangle,
             Self::Spline => D::Spline,
@@ -215,8 +212,33 @@ const SURFACES: &[(Outil, &str)] = &[
     (Outil::Sol, "Revêtement et finition de sol"),
     (Outil::Plafond, "Plafond ou faux plafond"),
     (Outil::Toiture, "Couverture et toiture"),
-    (Outil::TerrePlein, "Plate-forme remblayée : talus par arête, remblai jusqu'au terrain naturel"),
 ];
+
+/// Cible des commandes de Modifier dans un tracé en cours.
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+pub enum CibleTrace {
+    /// Aucun trait ni sommet sélectionné (ou tracé en cours de dessin).
+    #[default]
+    Aucune,
+    Sommet,
+    Segment,
+}
+
+/// Raison pour laquelle un outil de Modifier ne s'applique pas au tracé en cours
+/// (None : il s'applique). `fixe` : le tracé garde ses traits ; `unique` : un seul contour.
+pub(crate) fn raison_trace(outil: Outil, cible: CibleTrace, fixe: bool, unique: bool) -> Option<&'static str> {
+    use Outil::*;
+    match outil {
+        Deplacer | Tourner | Symetrie | Echelle => (cible == CibleTrace::Aucune).then_some("Sélectionner d'abord un trait ou un sommet du tracé (bouton Sélectionner ou Échap)"),
+        Copier | Reseau | CreerIdentique if unique => Some("Ce tracé n'accepte qu'un seul contour"),
+        Scinder | Supprimer if fixe => Some("Ce tracé garde ses traits : glisser ses sommets"),
+        Copier | Reseau | CreerIdentique | Scinder | Aligner | Ajuster | Decaler | Supprimer => (cible != CibleTrace::Segment).then_some("Sélectionner d'abord un trait du tracé (bouton Sélectionner ou Échap)"),
+        _ => Some("Ne s'applique pas à un tracé en cours : le valider ou l'annuler d'abord"),
+    }
+}
+
+/// Terre-plein : élément du site, à part des éléments horizontaux (même tracé).
+const TERRE_PLEIN: &[(Outil, &str)] = &[(Outil::TerrePlein, "Plate-forme : talus par arête, remblai et déblai jusqu'au terrain naturel")];
 
 /// Paramètres d'une coupe ou d'une élévation à tracer.
 pub struct ParametresCoupe {
@@ -322,7 +344,7 @@ fn limites_croquis_mur(parametres: &crate::modele::edition::ParametresMur, _proj
 
 fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
     use Outil::*;
-    const DESSIN_2D: (&str, &[Outil]) = ("Dessin 2D", &[Ligne, Polyligne, Spline, Cercle, Arc]);
+    const DESSIN_2D: (&str, &[Outil]) = ("Dessin 2D", &[Polyligne, Spline, Cercle, Arc]);
     match menu {
         Menu::Modeliser => &[
             ("Construire", &[Mur, Surfaces]),
@@ -445,6 +467,14 @@ pub struct RubanEdition {
     /// Copier sur niveaux (éléments) et Jonctions (murs).
     pub selection_elements: bool,
     pub selection_murs: bool,
+    pub edition_traces: bool,
+    /// Tracé en cours : ce que visent les commandes de Modifier, topologie figée,
+    /// contour unique. Les commandes inapplicables sont grisées.
+    pub cible_trace: CibleTrace,
+    pub trace_fixe: bool,
+    pub trace_unique: bool,
+    /// Commande de Modifier en cours sur le tracé : son bouton reste enfoncé.
+    pub commande_trace: Option<Outil>,
     /// Bouton Jonctions de cette image : le menu s'ancre dessus.
     pub bouton_jonctions: Option<egui::Response>,
     pub type_garde_corps: Option<String>,
@@ -555,7 +585,7 @@ fn champs(o: Outil) -> Vec<Champ> {
         TerrePlein => vec![
             Nombre("Épaisseur", 300.0, " mm"),
             Nombre("Décalage (dessus)", 0.0, " mm"),
-            Choix("Talus", &["1/1", "2/3", "1/2", "1/3", "3/2", "Sans talus"]),
+            Choix("Talus", &["100 %", "67 %", "50 %", "33 %", "150 %", "Sans talus"]),
         ],
         Poteau | Poutre => vec![],
         Escalier => vec![
@@ -604,7 +634,7 @@ fn champs(o: Outil) -> Vec<Champ> {
             Choix("Contenu", &["Type", "Repère", "Matériau"]),
             Nombre("Hauteur papier", 2.5, " mm"),
         ],
-        Ligne | Arc | Polyligne | Rectangle | Spline | Cercle => vec![],
+        Arc | Polyligne | Rectangle | Spline | Cercle => vec![],
         Zone => vec![
             Choix("Motif", &["Diagonales 45°", "Béton", "Isolant", "Plein"]),
             Nombre("Pas papier", 2.0, " mm"),
@@ -764,7 +794,7 @@ impl RubanEdition {
         let pente = match outil {
             Outil::Toiture => (!self.toiture_plate).then(|| nombre(2)),
             // talus de toutes les arêtes tracées (hauteur / base)
-            Outil::TerrePlein => crate::modele::elements::terre_plein::TALUS.iter().find(|(nom, _)| *nom == self.texte_option(outil, 2)).map(|(_, r)| crate::modele::elements::terre_plein::angle(*r)),
+            Outil::TerrePlein => crate::modele::elements::terre_plein::depuis_pourcentage(&self.texte_option(outil, 2)),
             _ => None,
         };
         Some(crate::modele::edition::ParametresDalle {
@@ -821,7 +851,7 @@ impl RubanEdition {
             SorteDalle::TerrePlein => Outil::TerrePlein,
         };
         self.selection = Some(o);
-        self.derniere_surface = Some(o);
+        if o != Outil::TerrePlein { self.derniere_surface = Some(o); }
     }
 
     pub(crate) fn surface_identique(&mut self, p: &crate::modele::Projet, d: &crate::modele::Dalle) -> Result<(), String> {
@@ -836,9 +866,8 @@ impl RubanEdition {
         self.niveau_dalle = Some(d.niveau.clone());
         self.valeurs.insert((outil, 1), Valeur::Nombre(d.decalage));
         if outil == Outil::TerrePlein {
-            let r = pente.map(crate::modele::elements::terre_plein::rapport);
-            let nom = crate::modele::elements::terre_plein::TALUS.iter().find(|(_, x)| r.is_some_and(|r| (r - x).abs() < 1e-3)).map_or("Sans talus", |(n, _)| *n);
-            self.valeurs.insert((outil, 2), Valeur::Texte(nom.into()));
+            let nom = pente.map_or("Sans talus".to_string(), crate::modele::elements::terre_plein::libelle_court);
+            self.valeurs.insert((outil, 2), Valeur::Texte(nom));
         } else if let Some(pente) = pente { self.valeurs.insert((outil, 2), Valeur::Nombre(pente)); }
         self.toiture_plate = pente.is_none();
         self.phase_creation = d.phase.clone(); self.sous_projet_creation = d.sous_projet.clone(); self.variante_creation = d.variante.clone();

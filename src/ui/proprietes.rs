@@ -1,6 +1,35 @@
 //! Panneau des propriétés de la sélection native.
 use super::*;
 
+/// Talus d'une arête de terre-plein : pente en % (0 : sans talus) puis case Remblayer
+/// (deux cellules). Retourne vrai si l'arête a changé.
+pub(super) fn champs_talus(ui: &mut egui::Ui, d: &mut crate::modele::Dalle, c: usize, k: usize) -> bool {
+    use crate::modele::elements::terre_plein as tp;
+    let mut change = false;
+    let mut talus = d.pente(c, k);
+    let mut pourcent = talus.map_or(0.0, |deg| tp::rapport(deg) * 100.0);
+    let champ = egui::DragValue::new(&mut pourcent).speed(1.0).range(0.0..=5000.0)
+        .custom_formatter(|v, _| if v < 0.5 { "Sans talus".into() } else { format!("{} %", (v * 10.0).round() / 10.0) })
+        .custom_parser(|s| if s.trim().to_lowercase().starts_with("sans") { Some(0.0) } else { s.trim().trim_end_matches('%').trim().replace(',', ".").parse().ok() });
+    if ui.add_sized([86.0, 20.0], champ).on_hover_text("Pente du talus en % (hauteur / base : 100 % = 1/1, 67 % = 2/3, 50 % = 1/2). 0 : sans talus, paroi verticale.").changed() {
+        talus = (pourcent >= 0.5).then(|| tp::angle(pourcent / 100.0));
+    }
+    let mut oui = talus.is_some() && d.remblaye(c, k);
+    if ui.add_enabled(talus.is_some(), egui::Checkbox::new(&mut oui, "Remblayer"))
+        .on_hover_text("En déblai : la fouille talutée de cette arête est rebouchée jusqu'à l'arête du terre-plein, du fond de fouille au terrain naturel")
+        .changed()
+    {
+        d.definir_remblai(c, k, oui);
+        change = true;
+    }
+    if talus != d.pente(c, k) {
+        d.definir_pente(c, k, talus);
+        if talus.is_none() { d.definir_remblai(c, k, false); }
+        change = true;
+    }
+    change
+}
+
 impl ViewerApp {
     pub(super) fn proprietes_natif(&mut self, ui: &mut egui::Ui, id: Id) -> Option<crate::modele::Projet> {
         use crate::modele::Haut;
@@ -8,6 +37,56 @@ impl ViewerApp {
         let (projet, _) = self.natif.as_ref()?;
         let mut nouveau: Option<crate::modele::Projet> = None;
         let mut selection: Option<Id> = None;
+        // remblai d'un terre-plein : volume, et type de terrain (matériau, poché)
+        if let Some(d) = projet.dalles.iter().find(|d| scene::id_natif("remblai", &d.id) == id) {
+            let actuel = projet.type_remblai(d);
+            let types = projet.types_terrains_disponibles();
+            let mut choisi = actuel.id.clone();
+            ui.label(RichText::new("Remblai").strong());
+            egui::Grid::new("remblai_terre_plein").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
+                ui.label("Terre-plein");
+                if ui.link(&d.nom).on_hover_text("Sélectionner le terre-plein : talus et remblai de ses arêtes").clicked() {
+                    selection = Some(scene::id_natif("dalle", &d.id));
+                }
+                ui.end_row();
+                ui.label("Type").on_hover_text("Type de terrain du remblai : son matériau donne la couleur et le poché");
+                egui::ComboBox::from_id_salt("type_remblai").width(150.0).truncate().selected_text(&actuel.nom).show_ui(ui, |ui| {
+                    if types.iter().all(|t| t.id != actuel.id) { ui.selectable_value(&mut choisi, actuel.id.clone(), &actuel.nom); }
+                    for t in &types { ui.selectable_value(&mut choisi, t.id.clone(), &t.nom); }
+                });
+                ui.end_row();
+                ui.label("Matériau");
+                ui.label(actuel.materiau.as_deref().unwrap_or("Remblai"));
+                ui.end_row();
+                if let Some(r) = crate::modele::elements::terre_plein::remblai(projet, d) {
+                    ui.label("Volume").on_hover_text("Remblai entre le terrain naturel et le terre-plein prolongé par ses talus, et fouilles rebouchées");
+                    ui.label(format!("{:.2} m³", r.volume / 1e9));
+                    ui.end_row();
+                    if r.rebouchage > 0.0 {
+                        ui.label("  dont fouilles rebouchées").on_hover_text("Arêtes cochées Remblayer : du fond de fouille au terrain naturel");
+                        ui.label(format!("{:.2} m³", r.rebouchage / 1e9));
+                        ui.end_row();
+                        ui.label("  dont sous la plate-forme");
+                        ui.label(format!("{:.2} m³", (r.volume - r.rebouchage) / 1e9));
+                        ui.end_row();
+                    }
+                    ui.label("Déblai").on_hover_text("Volume du terrain naturel au-dessus du fond de forme et des talus");
+                    ui.label(format!("{:.2} m³", r.deblai / 1e9));
+                    ui.end_row();
+                }
+            });
+            ui.separator();
+            if choisi != actuel.id {
+                let mut p = projet.clone();
+                if p.types_terrains.is_empty() { p.types_terrains = types; }
+                if let Some(x) = p.dalles.iter_mut().find(|x| x.id == d.id) { x.type_remblai = Some(choisi); }
+                nouveau = Some(p);
+            }
+            if let Some(sel) = selection {
+                self.select(Some(sel), true);
+            }
+            return nouveau;
+        }
         if let Some(a) = projet.assemblages.iter().find(|a| scene::id_natif("assemblage", &a.id) == id) {
             ui.label(RichText::new(format!("Mur composé · {}", a.nom)).strong());
             if let Some(t) = projet.type_mur(&a.type_mur) {
@@ -336,15 +415,18 @@ impl ViewerApp {
                     }
                 });
                 ui.end_row();
-                ui.label("Sorte");
-                egui::ComboBox::from_id_salt("dalle_sorte").width(150.0).selected_text(d.sorte.nom()).show_ui(ui, |ui| {
-                    for s in crate::modele::SorteDalle::TOUTES {
-                        change |= ui.selectable_value(&mut d.sorte, s, s.nom()).changed();
-                    }
-                })
-                .response
-                .on_hover_text("Même élément, nom et référence d'altitude différents (dessus ou sous-face)");
-                ui.end_row();
+                // le terre-plein est un élément à part : pas de changement de sorte
+                if !d.sorte.talus() {
+                    ui.label("Sorte");
+                    egui::ComboBox::from_id_salt("dalle_sorte").width(150.0).selected_text(d.sorte.nom()).show_ui(ui, |ui| {
+                        for s in crate::modele::SorteDalle::TOUTES.into_iter().filter(|s| !s.talus()) {
+                            change |= ui.selectable_value(&mut d.sorte, s, s.nom()).changed();
+                        }
+                    })
+                    .response
+                    .on_hover_text("Même élément, nom et référence d'altitude différents (dessus ou sous-face)");
+                    ui.end_row();
+                }
                 ui.label(match d.sorte {
                     crate::modele::SorteDalle::Plafond => "Hauteur sous plafond",
                     crate::modele::SorteDalle::Toiture => "Décalage (sous-face)",
@@ -362,6 +444,22 @@ impl ViewerApp {
                         change = true;
                     }
                     ui.end_row();
+                    ui.label("Départ des talus");
+                    change |= ui.checkbox(&mut d.talus_dessus, "Arête du dessus")
+                        .on_hover_text("Coché : les talus partent de l'arête du dessus, le remblai (ou le terrain en déblai) couvre la tranche du terre-plein. Décoché : ils partent de la sous-face.")
+                        .changed();
+                    ui.end_row();
+                    let aretes: Vec<(usize, usize)> = (0..d.contours.len()).flat_map(|c| (0..d.contours[c].len()).map(move |k| (c, k))).filter(|&(c, k)| d.pente(c, k).is_some()).collect();
+                    let mut tout = !aretes.is_empty() && aretes.iter().all(|&(c, k)| d.remblaye(c, k));
+                    ui.label("Remblayer");
+                    if ui.add_enabled(!aretes.is_empty(), egui::Checkbox::new(&mut tout, "Toutes les arêtes"))
+                        .on_hover_text("En déblai : les fouilles talutées sont rebouchées jusqu'à l'arête du terre-plein, du fond de fouille au terrain naturel. Se règle aussi arête par arête ci-dessous.")
+                        .changed()
+                    {
+                        for (c, k) in aretes { d.definir_remblai(c, k, tout); }
+                        change = true;
+                    }
+                    ui.end_row();
                 }
                 let aire = crate::modele::volumes::geometrie::aire_pair_impair(&d.contours);
                 for (nom, valeur) in [
@@ -374,11 +472,16 @@ impl ViewerApp {
                     ui.end_row();
                 }
                 if dalle.sorte.talus() {
-                    ui.label("Remblai").on_hover_text("Volume entre le terrain naturel et la sous-face du terre-plein prolongée par ses talus");
+                    ui.label("Remblai").on_hover_text("Volume entre le terrain naturel et la sous-face du terre-plein prolongée par ses talus, et fouilles rebouchées. Le remblai se sélectionne dans la vue pour changer son type.");
                     match crate::modele::elements::terre_plein::remblai(projet, dalle) {
                         Some(r) => {
                             ui.label(format!("{:.2} m³", r.volume / 1e9));
                             ui.end_row();
+                            if r.rebouchage > 0.0 {
+                                ui.label("  dont fouilles rebouchées");
+                                ui.label(format!("{:.2} m³", r.rebouchage / 1e9));
+                                ui.end_row();
+                            }
                             ui.label("Déblai").on_hover_text("Volume du terrain naturel au-dessus du fond de forme (sous-face du terre-plein) et de ses talus");
                             ui.label(format!("{:.2} m³", r.deblai / 1e9))
                         }
@@ -388,40 +491,18 @@ impl ViewerApp {
                 }
             });
             if d.sorte.talus() {
-                use crate::modele::elements::terre_plein as tp;
                 ui.add_space(4.0);
                 ui.label(RichText::new("Talus des arêtes").strong())
-                    .on_hover_text("Pente hauteur / base du talus de chaque arête (1/1 : 45°), ou sans talus (paroi verticale). Aussi en cliquant ses repères dans la vue.");
+                    .on_hover_text("Pente du talus de chaque arête en % (hauteur / base : 100 % = 1/1, 67 % = 2/3, 50 % = 1/2) ; 0 : sans talus (paroi verticale). Remblayer : la fouille de l'arête est rebouchée jusqu'à l'arête. Aussi par ses repères dans la vue.");
                 egui::Grid::new("terre_plein_talus").num_columns(3).striped(true).spacing([8.0, 3.0]).show(ui, |ui| {
                     for c in 0..d.contours.len() {
                         let n = d.contours[c].len();
                         for k in 0..n {
                             let (a, b) = (d.contours[c][k], d.contours[c][(k + 1) % n]);
                             let nom = if d.contours.len() > 1 { format!("{}.{}", c + 1, k + 1) } else { format!("{}", k + 1) };
-                            ui.label(format!("Arête {nom} · {}", crate::config::options::unite().afficher((b[0] - a[0]).hypot(b[1] - a[1]))));
-                            let mut talus = d.pente(c, k);
-                            let texte = talus.map_or("Sans talus".to_string(), tp::libelle);
-                            egui::ComboBox::from_id_salt(("talus", c, k)).width(110.0).selected_text(texte).show_ui(ui, |ui| {
-                                if ui.selectable_label(talus.is_none(), "Sans talus").clicked() { talus = None; }
-                                for (nom, r) in tp::TALUS {
-                                    let deg = tp::angle(r);
-                                    if ui.selectable_label(talus.is_some_and(|x| (x - deg).abs() < 1e-3), format!("{nom} ({:.0} %)", r * 100.0)).clicked() { talus = Some(deg); }
-                                }
-                            });
-                            match talus {
-                                Some(deg) => {
-                                    let mut pourcent = tp::rapport(deg) * 100.0;
-                                    if ui.add(egui::DragValue::new(&mut pourcent).speed(1.0).range(1.0..=5000.0).max_decimals(1).suffix(" %")).on_hover_text("Pente du talus en pourcentage (hauteur / base)").changed() {
-                                        talus = Some(tp::angle(pourcent / 100.0));
-                                    }
-                                }
-                                None => { ui.label(""); }
-                            }
+                            ui.label(format!("Arête {nom} · {}", crate::config::options::unite().afficher((b[0] - a[0]).hypot(b[1] - a[1]).round())));
+                            change |= champs_talus(ui, &mut d, c, k);
                             ui.end_row();
-                            if talus != d.pente(c, k) {
-                                d.definir_pente(c, k, talus);
-                                change = true;
-                            }
                         }
                     }
                 });
@@ -436,7 +517,7 @@ impl ViewerApp {
                         for k in 0..n {
                             let (a, b) = (d.contours[c][k], d.contours[c][(k + 1) % n]);
                             let nom = if d.contours.len() > 1 { format!("{}.{}", c + 1, k + 1) } else { format!("{}", k + 1) };
-                            ui.label(format!("Arête {nom} · {}", crate::config::options::unite().afficher((b[0] - a[0]).hypot(b[1] - a[1]))));
+                            ui.label(format!("Arête {nom} · {}", crate::config::options::unite().afficher((b[0] - a[0]).hypot(b[1] - a[1]).round())));
                             let mut pente = d.pente(c, k);
                             let mut oui = pente.is_some();
                             if ui.checkbox(&mut oui, "Pente").changed() {

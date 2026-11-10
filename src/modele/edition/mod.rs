@@ -293,6 +293,7 @@ impl Projet {
         vue.id = id.clone();
         vue.nom = nom;
         self.vues.push(vue);
+        if let Some(v) = self.rangements_arborescence.get(source).cloned() { self.rangements_arborescence.insert(id.clone(), v); }
         if let Some(v) = self.contextes_vues.get(source).cloned() { self.contextes_vues.insert(id.clone(), v); }
         if let Some(v) = self.gabarits_vue_affectes.get(source).cloned() { self.gabarits_vue_affectes.insert(id.clone(), v); }
         if let Some(v) = self.rendus_vues.get(source).cloned() { self.rendus_vues.insert(id.clone(), v); }
@@ -328,6 +329,7 @@ impl Projet {
         let avant = self.vues.len();
         self.vues.retain(|v| v.id != id);
         if self.vues.len() == avant { Err("Vue introuvable.".into()) } else {
+            self.rangements_arborescence.remove(id);
             self.contextes_vues.remove(id);
             self.gabarits_vue_affectes.remove(id);
             self.annotations.retain(|a| a.vue!=id);
@@ -480,6 +482,7 @@ impl Projet {
             sorte: p.sorte,
             decalage: p.decalage,
             pentes: p.pente.map(|a| contours.iter().map(|c| vec![Some(a); c.len()]).collect()).unwrap_or_default(),
+            talus_dessus: false, remblais: Vec::new(), type_remblai: None,
             contours,
             origine: None,
         });
@@ -609,11 +612,18 @@ mod tests {
         let originale = p.vues.iter_mut().find(|v| v.id == source).unwrap();
         originale.echelle = 50.0;
         originale.elements_masques.push("mur".into());
+        p.rangements_arborescence.insert(source.clone(), "Dossier A".into());
+        p.organisations_arborescence.insert("vues".into(), crate::modele::OrganisationArborescence { filtre: "Dossier".into(), trier_rangement: true });
         let copie = p.dupliquer_vue(&source).unwrap();
         let autre = p.dupliquer_vue(&source).unwrap();
         let a = p.vues.iter().find(|v| v.id == source).unwrap();
         let b = p.vues.iter().find(|v| v.id == copie).unwrap();
         let c = p.vues.iter().find(|v| v.id == autre).unwrap();
+        assert_eq!(p.rangements_arborescence.get(&copie).map(String::as_str), Some("Dossier A"));
+        let recharge: Projet = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!(recharge.rangements_arborescence.get(&copie).map(String::as_str), Some("Dossier A"));
+        assert_eq!(recharge.organisations_arborescence["vues"].filtre, "Dossier");
+        assert!(recharge.organisations_arborescence["vues"].trier_rangement);
         assert_eq!(b.genre, a.genre);
         assert_eq!(b.echelle, 50.0);
         assert_eq!(b.elements_masques, a.elements_masques);

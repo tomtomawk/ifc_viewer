@@ -79,11 +79,12 @@ impl RubanEdition {
             let detail = (!couches_type.is_empty()).then(|| unite.afficher(epaisseur(&couches_type)));
             let bouton = selecteur::entete(ui, &titre, detail.as_deref(), &format!("{titre}
 Type des prochains éléments horizontaux."), Some(&vignette));
-            let sortes: Vec<Outil> = SURFACES.iter().map(|(o, _)| *o).collect();
+            let liste = if surface == Outil::TerrePlein { TERRE_PLEIN } else { SURFACES };
+            let sortes: Vec<Outil> = liste.iter().map(|(o, _)| *o).collect();
             let rangs = sortes.iter().map(|o| types_surface(*o).len()).max().unwrap_or(0);
             let noms: Vec<String> = sortes.iter().flat_map(|o| types_surface(*o)).map(|t| t.0).collect();
             let largeur_liste = selecteur::largeur_liste(ui, noms.iter(), 64.0, sortes.len(), 74.0);
-            let aide = SURFACES.iter().find(|(o, _)| *o == surface).map_or("", |(_, a)| *a);
+            let aide = SURFACES.iter().chain(TERRE_PLEIN).find(|(o, _)| *o == surface).map_or("", |(_, a)| *a);
             let mut choix_type: Option<(Outil, usize)> = None;
             selecteur::liste(&bouton, largeur_liste, selecteur::HAUTEUR_CADRE + rangs as f32 * selecteur::HAUTEUR_LIGNE, |ui| {
                 if let Some(o) = selecteur::onglets(ui, &sortes, surface, 74.0, |o| o.nom().into(), aide, |p, r, o, c| icone(p, r, o, c)) {
@@ -102,7 +103,7 @@ Type des prochains éléments horizontaux."), Some(&vignette));
                 self.type_surface.insert(sorte, i);
                 self.surface_identique = None;
             }
-            let aide = SURFACES.iter().find(|(o, _)| *o == surface).map_or("", |(_, aide)| *aide);
+            let aide = SURFACES.iter().chain(TERRE_PLEIN).find(|(o, _)| *o == surface).map_or("", |(_, aide)| *aide);
             ui.add(egui::Label::new(RichText::new(aide).small().weak()).wrap());
             // composition du type choisi, du haut vers le bas
             let types = types_surface(surface);
@@ -119,7 +120,7 @@ Type des prochains éléments horizontaux."), Some(&vignette));
             }
         }
         self.selection = Some(surface);
-        self.derniere_surface = Some(surface);
+        if surface != Outil::TerrePlein { self.derniere_surface = Some(surface); }
         ui.add_space(8.0);
         ui.label(RichText::new("Paramètres").strong());
         ui.separator();
@@ -193,7 +194,7 @@ Type des prochains éléments horizontaux."), Some(&vignette));
                             for o in options {
                                 ui.selectable_value(&mut v, o.to_string(), *o);
                             }
-                        }).response.on_hover_text("Talus (hauteur / base) de toutes les arêtes tracées ; chaque arête se règle ensuite dans les propriétés");
+                        }).response.on_hover_text("Pente du talus en % (hauteur / base : 100 % = 1/1) de toutes les arêtes tracées ; chaque arête se règle ensuite dans les propriétés");
                         self.valeurs.insert((surface, indice), Valeur::Texte(v));
                         ui.end_row();
                     }

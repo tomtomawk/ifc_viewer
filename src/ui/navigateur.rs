@@ -1,6 +1,43 @@
 //! Navigateur de projet, matériaux, arborescence IFC.
 use super::*;
 
+type OrganisationNav = crate::modele::OrganisationArborescence;
+
+fn organisation_nav(ui: &mut egui::Ui, cle: &str, lignes: &[(String, String)], rangements: &BTreeMap<String, String>, options: &OrganisationNav, survol_titre: bool, changement: &mut Option<(String, String)>, organisation_modifiee: &mut Option<(String, OrganisationNav)>) {
+    let mut options = options.clone();
+    let avant = options.clone();
+    let (bouton, _) = egui::containers::menu::MenuButton::from_button(egui::Button::new("").frame(false).min_size(egui::vec2(20.0, 20.0))).ui(ui, |ui| {
+        ui.label(RichText::new("Organiser l’arborescence").strong());
+        ui.horizontal(|ui| { ui.label("Filtrer par rangement"); ui.text_edit_singleline(&mut options.filtre); });
+        ui.checkbox(&mut options.trier_rangement, "Trier par rangement");
+        ui.separator();
+        ui.label("Rangement des éléments");
+        egui::ScrollArea::vertical().max_height(260.0).id_salt(("rangement", cle)).show(ui, |ui| {
+            for (id_element, nom) in lignes {
+                let courant = rangements.get(id_element).cloned().unwrap_or_default();
+                let champ = egui::Id::unique(("saisie_rangement", cle, id_element));
+                let mut valeur = ui.ctx().data(|d| d.get_temp::<String>(champ)).unwrap_or_else(|| courant.clone());
+                ui.horizontal(|ui| {
+                    ui.label(nom);
+                    let r = ui.add(egui::TextEdit::singleline(&mut valeur).desired_width(110.0).hint_text("Rangement"));
+                    if r.lost_focus() && valeur != courant { *changement = Some((id_element.clone(), valeur.trim().to_owned())); }
+                    if r.has_focus() { ui.ctx().data_mut(|d| d.insert_temp(champ, valeur.clone())); }
+                    else { ui.ctx().data_mut(|d| d.remove::<String>(champ)); }
+                });
+            }
+        });
+    });
+    let r = bouton.rect.shrink(4.0);
+    let pt = |x: f32, y: f32| egui::pos2(r.left() + x * r.width(), r.top() + y * r.height());
+    let trait_crayon = egui::Stroke::new(1.3, ui.visuals().text_color());
+    if survol_titre || bouton.hovered() || bouton.has_focus() {
+        ui.painter().add(egui::Shape::closed_line(vec![pt(0.15, 0.85), pt(0.2, 0.62), pt(0.68, 0.14), pt(0.86, 0.32), pt(0.38, 0.8)], trait_crayon));
+        ui.painter().line_segment([pt(0.58, 0.24), pt(0.76, 0.42)], trait_crayon);
+    }
+    bouton.on_hover_text("Organiser : filtre, tri et rangement");
+    if options != avant { *organisation_modifiee = Some((cle.to_string(), options)); }
+}
+
 impl ViewerApp {
     /// Matériaux : pastille de couleur, nom, nombre d'éléments ; clic : isoler et cadrer
     /// les éléments qui portent le matériau.
@@ -60,7 +97,7 @@ impl ViewerApp {
                     (j, fs)
                 }).collect(),
                 p.nomenclatures.iter().map(|n| (n.id.clone(), n.nom.clone())).collect(),
-                p.vues.iter().map(|v| (crate::rendu::scene::numero_vue(&v.id), v.id.clone())).collect(),
+                p.vues.iter().map(|v| (crate::rendu::scene::numero_vue(&v.id), v.id.clone())).chain(std::iter::once((crate::rendu::scene::numero_vue("3d"), "3d".to_string()))).collect(),
             ),
             None => (Vec::new(), Vec::new(), std::collections::HashMap::new()),
         };
@@ -74,6 +111,20 @@ impl ViewerApp {
         // feuille glissée dans l'arborescence : (feuille, jeu, feuille devant laquelle)
         let mut deplacer: Option<(String, String, Option<String>)> = None;
         let mut ouvrir_nomenclature: Option<String> = None;
+        let (rangements, lignes_vues, lignes_tables, lignes_feuilles) = self.natif.as_ref().map(|(p, _)| {
+            let mut vues: Vec<_> = p.vues.iter().map(|v| (v.id.clone(), v.nom.clone())).collect();
+            vues.insert(0, ("3d".to_string(), "Vue 3D".to_string()));
+            (p.rangements_arborescence.clone(), vues,
+             p.nomenclatures.iter().map(|n| (n.id.clone(), n.nom.clone())).collect::<Vec<_>>(),
+             p.feuilles.iter().map(|f| (f.id.clone(), format!("{} - {}", f.numero, f.nom))).collect::<Vec<_>>())
+        }).unwrap_or_default();
+        let mut rangement_modifie = None;
+        let mut organisation_modifiee = None;
+        let options = |cle: &str| self.natif.as_ref().and_then(|(p, _)| p.organisations_arborescence.get(cle).cloned()).unwrap_or_default();
+        let opt_vues = options("vues");
+        let opt_tables = options("nomenclatures");
+        let opt_feuilles = options("feuilles");
+        let correspond = |id: &str, opt: &OrganisationNav| opt.filtre.is_empty() || rangements.get(id).is_some_and(|r| r.to_lowercase().contains(&opt.filtre.to_lowercase()));
         let Some(s) = self.scene.as_ref() else { return };
         let Some(nav) = s.navigateur.as_ref() else { return };
         let q = self.filter.trim().to_lowercase();
@@ -127,10 +178,23 @@ impl ViewerApp {
         };
         let titre_vue = |v: &crate::rendu::scene::NavVue| if v.nom.is_empty() { format!("{} [{}]", v.genre, v.revit_id) } else { v.nom.clone() };
         // section : repliable sous « Tout », seule et dépliée sous son onglet
-        let rubrique_nav = |ui: &mut egui::Ui, onglet: LeftTab, titre: String, ouverte: bool, contenu: &mut dyn FnMut(&mut egui::Ui)| {
+        let natif_present = self.natif.is_some();
+        let mut rubrique_nav = |ui: &mut egui::Ui, onglet: LeftTab, titre: String, ouverte: bool, contenu: &mut dyn FnMut(&mut egui::Ui)| {
+            let mut crayon = |ui: &mut egui::Ui, survol_titre: bool| {
+                if natif_present { match onglet {
+                    LeftTab::Vues => organisation_nav(ui, "vues", &lignes_vues, &rangements, &opt_vues, survol_titre, &mut rangement_modifie, &mut organisation_modifiee),
+                    LeftTab::Nomenclatures => organisation_nav(ui, "nomenclatures", &lignes_tables, &rangements, &opt_tables, survol_titre, &mut rangement_modifie, &mut organisation_modifiee),
+                    LeftTab::Feuilles => organisation_nav(ui, "feuilles", &lignes_feuilles, &rangements, &opt_feuilles, survol_titre, &mut rangement_modifie, &mut organisation_modifiee),
+                    _ => {}
+                }}
+            };
             if section == LeftTab::Tout {
-                egui::CollapsingHeader::new(RichText::new(titre).strong()).id_salt(("nav", onglet.nom())).default_open(ouverte).open(ouvert.then_some(true)).show(ui, |ui| contenu(ui));
+                let id = ui.make_persistent_id(("nav", onglet.nom()));
+                let mut etat = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, ouverte);
+                if ouvert { etat.set_open(true); }
+                etat.show_header(ui, |ui| { let titre = ui.label(RichText::new(titre).strong()); crayon(ui, titre.hovered()); }).body(|ui| contenu(ui));
             } else if section == onglet {
+                ui.horizontal(|ui| { let titre = ui.label(RichText::new(titre).strong()); crayon(ui, titre.hovered()); });
                 contenu(ui);
             }
         };
@@ -138,15 +202,15 @@ impl ViewerApp {
         let mut rubriques: BTreeMap<(u8, &str, String), Vec<usize>> = BTreeMap::new();
         for (i, v) in nav.vues.iter().enumerate() {
             if let Some((ordre, nom)) = rubrique(&v.genre) {
-                if garde(&titre_vue(v)) {
+                if garde(&titre_vue(v)) && glissables.get(&v.revit_id).is_none_or(|id| correspond(id, &opt_vues)) {
                     rubriques.entry((ordre, nom, v.type_vue.clone())).or_default().push(i);
                 }
             }
         }
-        rubrique_nav(ui, LeftTab::Vues, "Vues (tout)".into(), true, &mut |ui| {
+        rubrique_nav(ui, LeftTab::Vues, "Vues".into(), true, &mut |ui| {
             for ((_, nom, type_vue), vues) in &rubriques {
                 let mut vues = vues.clone();
-                vues.sort_by_key(|&i| titre_vue(&nav.vues[i]).to_lowercase());
+                vues.sort_by_key(|&i| { let v = &nav.vues[i]; (if opt_vues.trier_rangement { glissables.get(&v.revit_id).and_then(|id| rangements.get(id)).cloned().unwrap_or_default().to_lowercase() } else { String::new() }, titre_vue(v).to_lowercase()) });
                 // « Élévations (Élévation 1) » : type entre parenthèses s'il diffère du genre
                 let genre = &nav.vues[vues[0]].genre;
                 let titre = if type_vue.is_empty() || type_vue.eq_ignore_ascii_case(genre) { nom.to_string() } else { format!("{nom} ({type_vue})") };
@@ -159,12 +223,14 @@ impl ViewerApp {
         });
         let mut nomenclatures: Vec<usize> = (0..nav.vues.len()).filter(|&i| nav.vues[i].genre == "Nomenclature" && garde(&nav.vues[i].nom)).collect();
         nomenclatures.sort_by_key(|&i| nav.vues[i].nom.to_lowercase());
-        rubrique_nav(ui, LeftTab::Nomenclatures, format!("Nomenclatures/Quantités (tout) ({})", nomenclatures.len() + nomenclatures_natives.len()), false, &mut |ui| {
+        rubrique_nav(ui, LeftTab::Nomenclatures, format!("Nomenclatures ({})", nomenclatures.len() + nomenclatures_natives.len()), false, &mut |ui| {
             if nomenclatures.is_empty() && nomenclatures_natives.is_empty() {
                 ui.label(RichText::new("Aucune nomenclature").weak());
             }
-            for (id, nom) in &nomenclatures_natives {
-                if !garde(nom) {
+            let mut tables: Vec<_> = nomenclatures_natives.iter().collect();
+            tables.sort_by_key(|(id, nom)| (if opt_tables.trier_rangement { rangements.get(id).cloned().unwrap_or_default().to_lowercase() } else { String::new() }, nom.to_lowercase()));
+            for (id, nom) in tables {
+                if !garde(nom) || !correspond(id, &opt_tables) {
                     continue;
                 }
                 let r = ui.add(egui::Button::selectable(false, nom.as_str()).sense(Sense::click_and_drag())).on_hover_text("Clic : ouvrir la nomenclature · glisser sur une feuille d'un jeu pour y poser le tableau");
@@ -182,7 +248,7 @@ impl ViewerApp {
         let indice: std::collections::HashMap<i64, usize> = nav.vues.iter().enumerate().map(|(i, v)| (v.revit_id, i)).collect();
         let jeu_ouvert = active.and_then(|i| nav.vues.get(i)).filter(|v| v.genre == "Jeu de feuilles").map(|v| v.nom.clone());
         let n_natives: usize = jeux_natifs.iter().map(|(_, fs)| fs.len()).sum();
-        rubrique_nav(ui, LeftTab::Feuilles, format!("Feuilles (tout) ({})", feuilles.len() + n_natives), false, &mut |ui| {
+        rubrique_nav(ui, LeftTab::Feuilles, format!("Feuilles ({})", feuilles.len() + n_natives), false, &mut |ui| {
             if self.natif.is_some() && ui.small_button("+ Nouveau jeu").on_hover_text("Créer un jeu de feuilles").clicked() {
                 creer_jeu = true;
             }
@@ -233,7 +299,10 @@ impl ViewerApp {
                         // recherche : un jeu trouvé montre toutes ses feuilles ; une feuille,
                         // si son titre ou une de ses vues placées correspond
                         let jeu_trouve = garde(jeu);
-                        for (k, (fid, titre, vues, tables)) in fs.iter().enumerate() {
+                        let mut ordre: Vec<_> = fs.iter().enumerate().collect();
+                        if opt_feuilles.trier_rangement { ordre.sort_by_key(|(_, (fid, titre, _, _))| (rangements.get(fid).cloned().unwrap_or_default().to_lowercase(), titre.to_lowercase())); }
+                        for (k, (fid, titre, vues, tables)) in ordre {
+                            if !correspond(fid, &opt_feuilles) { continue; }
                             if !jeu_trouve && !garde(titre) && !vues.iter().any(|v| garde(&v.1)) {
                                 continue;
                             }
@@ -425,7 +494,7 @@ impl ViewerApp {
             }
         });
         let liens: Vec<String> = self.rvt.iter().flat_map(|r| r.external_refs.iter()).filter(|e| e.kind.contains("Revit")).map(|e| e.path.clone()).collect();
-        rubrique_nav(ui, LeftTab::Liens, format!("Liens Revit ({})", liens.len()), false, &mut |ui| {
+        rubrique_nav(ui, LeftTab::Liens, format!("Liens ({})", liens.len()), false, &mut |ui| {
             for l in &liens {
                 ui.label(l.as_str());
             }
@@ -435,6 +504,16 @@ impl ViewerApp {
         });
         if section == LeftTab::Tout && !self.liste_materiaux.is_empty() {
             egui::CollapsingHeader::new(RichText::new(format!("Matériaux ({})", self.liste_materiaux.len())).strong()).id_salt(("nav", "materiaux")).open(ouvert.then_some(true)).show(ui, |ui| self.materiaux_ui(ui));
+        }
+        if (rangement_modifie.is_some() || organisation_modifiee.is_some()) && let Some((p, _)) = &self.natif {
+            let mut projet = p.clone();
+            if let Some((id, valeur)) = rangement_modifie {
+                if valeur.is_empty() { projet.rangements_arborescence.remove(&id); } else { projet.rangements_arborescence.insert(id, valeur); }
+            }
+            if let Some((cle, options)) = organisation_modifiee {
+                if options == OrganisationNav::default() { projet.organisations_arborescence.remove(&cle); } else { projet.organisations_arborescence.insert(cle, options); }
+            }
+            if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
         }
         if let Some((jeu, f)) = ouvrir_jeu {
             self.ouvrir_jeu(&jeu, f);
@@ -487,6 +566,28 @@ impl ViewerApp {
             Some(ActionNav::Selection(e)) => self.select(Some(e), false),
             Some(ActionNav::Activer(i)) => self.activer_vue(i),
             Some(ActionNav::SupprimerVue(i)) => self.supprimer_vue_native(i),
+            Some(ActionNav::DupliquerVue(id)) if id == "3d" => {
+                let indice = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|n| n.vues.iter().position(|v| v.revit_id == scene::numero_vue("3d")));
+                if let Some(i) = indice {
+                    self.activer_vue(i);
+                    let nom = self.natif.as_ref().map(|(p, _)| (1..).map(|k| if k == 1 { "Vue 3D - Copie".to_owned() } else { format!("Vue 3D - Copie ({k})") }).find(|n| !p.vues.iter().any(|v| &v.nom == n)).unwrap_or_default());
+                    match self.enregistrer_vue_camera(nom) {
+                        Ok(nom) => if let Some((p, _)) = &self.natif && let Some(id_copie) = p.vues.iter().find(|v| v.nom == nom).map(|v| v.id.clone()) {
+                            let mut projet = p.clone();
+                            if let Some(v) = projet.vues.iter_mut().find(|v| v.id == id_copie) {
+                                v.echelle = self.echelle;
+                                v.coupe_active = Some(self.coupe);
+                                v.poche_vue = Some(self.poche.nom().to_string());
+                            }
+                            if let Some(v) = projet.contextes_vues.get("3d").cloned() { projet.contextes_vues.insert(id_copie.clone(), v); }
+                            if let Some(v) = projet.gabarits_vue_affectes.get("3d").cloned() { projet.gabarits_vue_affectes.insert(id_copie.clone(), v); }
+                            if let Some(v) = projet.rangements_arborescence.get("3d").cloned() { projet.rangements_arborescence.insert(id_copie, v); }
+                            if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
+                        },
+                        Err(e) => self.error = Some(e),
+                    }
+                }
+            }
             Some(ActionNav::DupliquerVue(id)) => self.creer_vue(|p| p.dupliquer_vue(&id), false),
             Some(ActionNav::IsolerType(t)) => {
                 if let Some(s) = &self.scene {

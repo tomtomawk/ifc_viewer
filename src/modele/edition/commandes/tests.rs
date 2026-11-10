@@ -350,5 +350,19 @@ fn tremie_interieure_et_exterieure() {
     assert_eq!(modifie.dalles[0].pente(0, 0), None);
     assert_eq!(modifie.dalles[0].pente(0, 1), Some(20.0));
     modifies[1] = vec![[5500.0, 1000.0], [6500.0, 1000.0], [6500.0, 2000.0], [5500.0, 2000.0]];
-    assert!(avec_pentes.executer(Commande::Contour { id, contours: modifies }).is_err());
+    assert!(avec_pentes.executer(Commande::Contour { id: id.clone(), contours: modifies }).is_err());
+    // terre-plein : un sommet déplacé garde les talus et les remblais de ses arêtes ;
+    // un sommet ajouté ne garde que ceux des arêtes inchangées
+    let mut plein = q.clone();
+    plein.dalles[0].sorte = crate::modele::SorteDalle::TerrePlein;
+    plein.dalles[0].pentes = vec![vec![Some(45.0), Some(30.0), None, None]];
+    plein.dalles[0].remblais = vec![vec![true, false, false, false]];
+    let mut deplaces = plein.dalles[0].contours.clone();
+    deplaces[0][0] = [-500.0, 0.0];
+    let (r, _) = plein.executer(Commande::Contour { id: id.clone(), contours: deplaces.clone() }).unwrap();
+    assert_eq!((r.dalles[0].pente(0, 0), r.dalles[0].pente(0, 1), r.dalles[0].remblaye(0, 0)), (Some(45.0), Some(30.0), true));
+    let milieu = [(deplaces[0][0][0] + deplaces[0][1][0]) / 2.0, (deplaces[0][0][1] + deplaces[0][1][1]) / 2.0];
+    deplaces[0].insert(1, milieu);
+    let (r, _) = plein.executer(Commande::Contour { id, contours: deplaces }).unwrap();
+    assert_eq!((r.dalles[0].pente(0, 0), r.dalles[0].pente(0, 2), r.dalles[0].remblaye(0, 0)), (None, Some(30.0), false));
 }

@@ -83,7 +83,6 @@ pub const COMMANDES: &[Commande] = &[
     commande!("cote_angulaire", "Cote angulaire", "Documenter", "DA"),
     commande!("cote_diametre", "Cote de diamètre", "Documenter", "DD"),
     commande!("altimetrie", "Altimétrie", "Documenter", "NG"),
-    commande!("ligne", "Ligne", "Documenter", "LI"),
 ];
 
 #[derive(Clone, Debug, PartialEq)]

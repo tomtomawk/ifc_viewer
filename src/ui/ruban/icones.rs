@@ -649,11 +649,6 @@ pub(super) fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             ));
             p.circle_stroke(pt(0.3, 0.3), 2.0, t);
         }
-        Ligne => {
-            seg((0.15, 0.85), (0.85, 0.15));
-            p.circle_filled(pt(0.15, 0.85), r.width() * 0.06, c);
-            p.circle_filled(pt(0.85, 0.15), r.width() * 0.06, c);
-        }
         Rectangle => cadre(0.08, 0.18, 0.84, 0.64),
         Polyligne => {
             // petite hachure sous le premier creux : une polyligne fermée peut être remplie

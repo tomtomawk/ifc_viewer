@@ -581,8 +581,8 @@ impl ViewerApp {
             "cote_diametre" => (O::CoteDiametre, OngletRuban::Annoter),
             "altimetrie" => (O::Altimetrie, OngletRuban::Annoter),
             "etiquette" => (O::Etiquette, OngletRuban::Annoter),
-            "ligne" => (O::Ligne, OngletRuban::Annoter),
-            "polyligne" => (O::Polyligne, OngletRuban::Annoter),
+            // « ligne » : ancien outil, une polyligne d'un segment
+            "ligne" | "polyligne" => (O::Polyligne, OngletRuban::Annoter),
             "spline" => (O::Spline, OngletRuban::Annoter),
             "cercle" => (O::Cercle, OngletRuban::Annoter),
             "arc" => (O::Arc, OngletRuban::Annoter),
