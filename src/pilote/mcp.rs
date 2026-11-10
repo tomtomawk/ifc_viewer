@@ -1,8 +1,8 @@
-//! Serveur MCP du viewer IFC/Revit (stdio, JSON-RPC 2.0).
+//! Serveur MCP du viewer IFC/Revit (stdio, JSON-RPC 2.0), lancé par `bimedit --mcp`.
 //!
 //! Il pilote le viewer par son canal local (127.0.0.1:47811, voir `src/pilote/mod.rs`) : une
 //! ligne « commande argument » envoyée, une ligne JSON reçue. Si aucun viewer n'écoute, il
-//! en lance un (`BIMEDIT_EXE`, sinon l'exécutable voisin, sinon `target/release`).
+//! en lance un (`BIMEDIT_EXE`, sinon ce même exécutable sans argument).
 //!
 //! Outils : ouvrir un fichier, capturer la vue ou la fenêtre (image PNG rendue au client),
 //! lister et ouvrir les vues Revit, régler la caméra, lire les propriétés, désigner
@@ -33,13 +33,13 @@ fn dossier_captures() -> PathBuf {
 }
 
 fn executable() -> Result<PathBuf, String> {
-    // variable explicite d'abord, puis l'exécutable voisin, puis la compilation du projet
+    // variable explicite d'abord, puis ce même exécutable (pont et viewer de la même version)
     let mut candidats = Vec::new();
     if let Some(e) = std::env::var_os("BIMEDIT_EXE").filter(|e| !e.is_empty()) {
         candidats.push(PathBuf::from(e));
     }
-    if let Some(dossier) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
-        candidats.push(dossier.join(NOM_EXE));
+    if let Ok(e) = std::env::current_exe() {
+        candidats.push(e);
     }
     candidats.push(Path::new(RACINE).join("target").join("release").join(NOM_EXE));
     candidats
@@ -292,7 +292,7 @@ fn capture_brute(ligne: &str) -> Result<Sortie, String> {
 fn appeler(nom: &str, a: &Map<String, Value>) -> Result<Sortie, String> {
     if nom == "viewer_aide" {
         let texte=match a.get("sujet").and_then(Value::as_str).unwrap_or("pilote") {
-            "pilote"=>AIDE,"edition"=>include_str!("../../docs/EDITION.md"),"modele"=>include_str!("../../docs/MODELE.md"),"commandes"=>include_str!("../../src/modele/edition/commandes/mod.rs"),
+            "pilote"=>AIDE,"edition"=>include_str!("../../docs/EDITION.md"),"modele"=>include_str!("../../docs/MODELE.md"),"commandes"=>include_str!("../modele/edition/commandes/mod.rs"),
             _=>return Err("Sujet : pilote|edition|modele|commandes".into()),
         };
         return Ok((vec![json!({"type":"text","text":texte})],false));
@@ -406,7 +406,8 @@ fn traiter(msg: &Value) {
     }
 }
 
-fn main() {
+/// Point d'entrée : `bimedit --mcp`.
+pub fn servir() {
     let entree = std::io::stdin();
     let mut brut = Vec::new();
     loop {

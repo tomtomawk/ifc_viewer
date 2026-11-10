@@ -1,6 +1,6 @@
 # Pilote BIMedit
 
-Le serveur MCP `bimedit-mcp` et le canal TCP local (`BIMEDIT_PORT`, défaut 47811)
+Le serveur MCP (`bimedit --mcp`) et le canal TCP local (`BIMEDIT_PORT`, défaut 47811)
 utilisent les mêmes commandes. Une requête est une ligne UTF-8 `commande argument`,
 sa réponse est un objet JSON avec `ok`. Les chemins simples occupent tout l'argument
 (espaces acceptés) ; les commandes structurées reçoivent du JSON sur une seule ligne.

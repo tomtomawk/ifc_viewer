@@ -175,7 +175,7 @@ Le code est rangé par domaine ; le sens des dépendances va de `noyau` vers `ui
 | `src/ui/` | Interface egui : état et boucle (`mod.rs`), un fichier par zone (barre haute, panneaux, navigateur, vues, viewport, propriétés, sélection…), `ruban/`, `dessin_plan/` (saisie en plan), `editeur_famille/`, `bim/` |
 | `src/pilote/` | Canal de commande local (TCP 127.0.0.1:47811) du serveur MCP et commandes en ligne (`cli.rs`) |
 | `src/config/` | Options utilisateur, raccourcis, gabarits de projet |
-| `tools/viewer-mcp/serveur.rs` | Serveur MCP (stdio, binaire `bimedit-mcp`) qui pilote le viewer : ouverture, vues, caméra, propriétés, captures |
+| `src/pilote/mcp.rs` | Serveur MCP (stdio, `bimedit --mcp`) qui pilote le viewer : ouverture, vues, caméra, propriétés, captures |
 
 ## Pilotage par MCP
 
@@ -187,8 +187,8 @@ réservations/conflits collaboratifs et la saisie graphique des outils du ruban.
 sur une instance, un port, un cache collaboratif et des documents temporaires isolés.
 
 Le viewer écoute sur `127.0.0.1:47811` (variable `BIMEDIT_PORT`) des commandes d'une
-ligne. `tools/viewer-mcp/serveur.rs` (binaire Rust `bimedit-mcp`, sans dépendance supplémentaire) les expose en serveur MCP,
-déclaré dans `.mcp.json` sous le nom `bimedit` (lancé par `cargo run --release --bin bimedit-mcp`) : un agent ouvre un fichier, choisit une
+ligne. `src/pilote/mcp.rs` (mode `bimedit --mcp` du même exécutable) les expose en serveur MCP,
+déclaré dans `.mcp.json` sous le nom `bimedit` (lancé par `target/release/bimedit.exe --mcp`, après `cargo build --release`) : un agent ouvre un fichier, choisit une
 vue Revit, règle la caméra, lit les propriétés, désigne l'objet sous un point et reçoit des
 captures PNG. La vue 3D est rendue hors écran (tampon de trame), à la taille demandée, même
 fenêtre réduite ; la capture de la fenêtre entière exige qu'elle ne soit pas réduite. Si

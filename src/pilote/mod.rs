@@ -5,6 +5,7 @@
 //! Les commandes sont traitées par l'application entre deux images (`ViewerApp::piloter`).
 
 pub mod cli;
+pub mod mcp;
 pub mod edition;
 pub mod saisie;
 pub const AIDE: &str = include_str!("../../docs/PILOTE.md");

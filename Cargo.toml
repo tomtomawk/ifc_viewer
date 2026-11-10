@@ -8,11 +8,6 @@ default-run = "bimedit"
 name = "bimedit"
 path = "src/main.rs"
 
-# serveur MCP (stdio) qui pilote le viewer par son canal local
-[[bin]]
-name = "bimedit-mcp"
-path = "tools/viewer-mcp/serveur.rs"
-
 [dependencies]
 earcutr = "0.5.0"
 epaint_default_fonts = "0.37.0"

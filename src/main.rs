@@ -12,6 +12,11 @@ mod ui;
 use std::path::PathBuf;
 
 fn main() {
+    // Pont MCP (stdio) : rien d'autre ne doit écrire sur la sortie standard avant lui
+    if std::env::args().nth(1).as_deref() == Some("--mcp") {
+        pilote::mcp::servir();
+        return;
+    }
     config::options::definir_unite(config::options::Options::charger().unite);
     let args: Vec<String> = std::env::args().skip(1).collect();
     if let Some(resultat)=modele::collaboration::cli::executer(&args){match resultat{Ok(())=>std::process::exit(0),Err(e)=>{eprintln!("{e}");std::process::exit(2);}}}
