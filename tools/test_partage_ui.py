@@ -48,7 +48,7 @@ def attendre(port,critere):
 def lancer(port,path):
     with socket.socket() as s:s.bind(('127.0.0.1',port))
     log=open(root/f'{port}-{len(processus)}.log','w',encoding='utf-8');journaux.append(log)
-    env=dict(os.environ,BIMEDIT_PORT=str(port),BIMEDIT_CACHE_COLLABORATION=str(cache))
+    env=dict(os.environ,BIMEDIT_PORT=str(port), BIMEDIT_ARRIERE_PLAN=os.environ.get("BIMEDIT_ARRIERE_PLAN", "1"),BIMEDIT_CACHE_COLLABORATION=str(cache))
     p=subprocess.Popen([str(exe),str(path)],env=env,stdout=log,stderr=log,creationflags=0x08000000 if os.name=='nt' else 0)
     processus.append(p)
     r=attendre(port,lambda r:not r.get('chargement',True) and 'selection_native' in r)

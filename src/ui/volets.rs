@@ -58,9 +58,11 @@ impl ViewerApp {
             let mut builder=egui::ViewportBuilder::default().with_title(titre)
                 .with_inner_size(self.volets[i].taille.unwrap_or(egui::vec2(self.largeurs_panneaux[i].max(280.0),600.0)))
                 .with_decorations(false)
-                .with_min_inner_size([160.0,160.0]).with_taskbar(true)
+                .with_min_inner_size([160.0,160.0]).with_taskbar(!crate::arriere_plan())
                 .with_active(false).with_mouse_passthrough(glissement);
             if let Some(position)=self.volets[i].position {builder=builder.with_position(position);}
+            // mode arrière-plan : sans position mémorisée, hors de l'écran comme la fenêtre principale
+            else if crate::arriere_plan() {builder=builder.with_position([-20000.0+400.0*i as f32,-20000.0]);}
             ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(("volet_externe",p.nom())),builder,|ui,classe| {
                 let ctx=ui.ctx().clone();
                 // Une fenêtre native n'hérite pas du fond peint par le panneau ancré.

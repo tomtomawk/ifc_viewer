@@ -18,7 +18,7 @@ def run(exe):
         with socket.socket() as s:
             s.bind(("127.0.0.1", 0))
             port = s.getsockname()[1]
-        env = dict(os.environ, BIMEDIT_PORT=str(port), BIMEDIT_CACHE_COLLABORATION=str(root / "cache"))
+        env = dict(os.environ, BIMEDIT_PORT=str(port), BIMEDIT_ARRIERE_PLAN=os.environ.get("BIMEDIT_ARRIERE_PLAN", "1"), BIMEDIT_CACHE_COLLABORATION=str(root / "cache"))
         # Ne lit ni n'écrit les préférences de l'utilisateur.
         env["APPDATA"] = str(root / "configuration")
         log = (root / "instance.log").open("w", encoding="utf-8")

@@ -20,6 +20,11 @@ JSON avec `ok`.
   dans l'une, `ouvrir` du `.bimpartage` dans l'autre). Chacune garde sa copie locale et
   `collaboration_sync` échange les transactions.
 - `etat` rend `instance` (`pid`, `port`).
+- Mode arrière-plan : `BIMEDIT_ARRIERE_PLAN=1` crée la fenêtre sans l'activer, hors de
+  l'écran et hors de la barre des tâches. Elle reste rendue et pilotable (saisies egui,
+  captures). Les scripts `tools/test*.py` l'activent par défaut ; `BIMEDIT_ARRIERE_PLAN=0`
+  pour voir la fenêtre. Passé au pont MCP (bloc `env` de sa configuration), il s'applique
+  aux viewers que le pont lance.
 - Mode isolé (tests, CI) : `BIMEDIT_PORT` fixe le port, sans inscription ; le jeton n'est
   exigé que si `BIMEDIT_JETON` est défini (le pont lancé avec les mêmes variables le
   transmet). Les chemins simples occupent tout l'argument

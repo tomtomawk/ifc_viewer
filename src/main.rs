@@ -79,15 +79,22 @@ fn main() {
 
     let path = args.first().map(PathBuf::from);
     // l'anticrénelage de la vue 3D est celui du rendu (BIMEDIT_MSAA), pas de la fenêtre
+    let mut viewport = eframe::egui::ViewportBuilder::default()
+        .with_title("BIMedit")
+        .with_icon(eframe::icon_data::from_png_bytes(include_bytes!("../assets/icone.png")).expect("Icône intégrée invalide"))
+        .with_decorations(cadre_natif())
+        .with_min_inner_size([800.0, 520.0])
+        .with_inner_size([1500.0, 920.0])
+        .with_drag_and_drop(true);
+    // Mode arrière-plan (tests, pilotage) : fenêtre créée sans activation, hors de l'écran et
+    // hors de la barre des tâches ; elle reste rendue et pilotable (saisies egui simulées).
+    let arriere_plan = arriere_plan();
+    if arriere_plan {
+        viewport = viewport.with_active(false).with_position([-20000.0, -20000.0]).with_taskbar(false);
+    }
     let options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("BIMedit")
-            .with_icon(eframe::icon_data::from_png_bytes(include_bytes!("../assets/icone.png")).expect("Icône intégrée invalide"))
-            .with_decorations(cadre_natif())
-            .with_min_inner_size([800.0, 520.0])
-            .with_inner_size([1500.0, 920.0])
-            .with_drag_and_drop(true),
-        centered: true,
+        viewport,
+        centered: !arriere_plan,
         renderer: eframe::Renderer::Wgpu,
         wgpu_options: limites_gpu(),
         ..Default::default()
@@ -99,6 +106,11 @@ fn main() {
         eprintln!("Erreur : {e}");
         std::process::exit(1);
     }
+}
+
+/// `BIMEDIT_ARRIERE_PLAN=1` : la fenêtre ne passe pas devant celles de l'utilisateur.
+pub fn arriere_plan() -> bool {
+    std::env::var("BIMEDIT_ARRIERE_PLAN").is_ok_and(|v| !v.is_empty() && v != "0")
 }
 
 /// Périphérique GPU aux limites de tampon de la carte (souvent plusieurs Go) au lieu des

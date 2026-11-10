@@ -65,7 +65,7 @@ try:
         shutil.copyfile(racine / "samples/maison_native.modele.json", copie)
         journal = open(essai / f"poste-{n}.log", "w", encoding="utf-8")
         journaux.append(journal)
-        env = dict(os.environ, BIMEDIT_PORT=str(port))
+        env = dict(os.environ, BIMEDIT_PORT=str(port), BIMEDIT_ARRIERE_PLAN=os.environ.get("BIMEDIT_ARRIERE_PLAN", "1"))
         processus.append(subprocess.Popen([str(exe), str(copie)], env=env, stdout=journal, stderr=journal, creationflags=0x08000000 if os.name == "nt" else 0))
         attendre(port, lambda r: not r.get("chargement", True) and "selection_native" in r)
         rpc(port, "collaboration_associer " + str(essai / "central"))

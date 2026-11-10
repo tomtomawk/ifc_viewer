@@ -19,7 +19,7 @@ def run(exe, captures):
         root=Path(dossier)
         with socket.socket() as s:
             s.bind(("127.0.0.1",0));port=s.getsockname()[1]
-        env=dict(os.environ,BIMEDIT_PORT=str(port),APPDATA=str(root/"configuration"),BIMEDIT_CACHE_COLLABORATION=str(root/"cache"))
+        env=dict(os.environ,BIMEDIT_PORT=str(port), BIMEDIT_ARRIERE_PLAN=os.environ.get("BIMEDIT_ARRIERE_PLAN", "1"),APPDATA=str(root/"configuration"),BIMEDIT_CACHE_COLLABORATION=str(root/"cache"))
         log=(root/"instance.log").open("w",encoding="utf-8")
         p=None
         nombre=0
