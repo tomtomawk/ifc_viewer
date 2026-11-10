@@ -52,7 +52,8 @@ impl ViewerApp {
     }
 
     /// Barre d'options du tracé, en haut de la vue, identique à la création et à la
-    /// modification : Sélectionner, puis les formes de l'usage, puis les suppressions.
+    /// modification : Sélectionner, puis les formes de l'usage (Suppr retire le trait
+    /// sélectionné).
     /// Une action sans objet est grisée avec sa raison, jamais déplacée.
     pub(in crate::ui) fn options_trace(&mut self, ui: &mut egui::Ui) {
         let Some((usage, outil)) = self.usage_dessin() else { return };
@@ -64,14 +65,9 @@ impl ViewerApp {
             return;
         }
         let edition = self.dessin2d.edition_contour.as_ref();
-        let en_edition = edition.is_some();
         let selection = edition.is_some_and(|e| !e.dessin);
         let commande = edition.is_some_and(|e| e.commande.is_some());
         let ligne = edition.is_some_and(|e| e.ligne());
-        let fixe = edition.is_some_and(|e| matches!(e.creation, Some(Usage::Terrain | Usage::Cadrage | Usage::Escalier | Usage::GardeCorps | Usage::Annotation)));
-        let trait_choisi = edition.is_some_and(|e| e.segment.is_some());
-        let contour_choisi = edition.is_some_and(|e| e.selection.is_some());
-        let trace_en_cours = self.trace_en_cours();
         let contours = self.dessin2d.dalle.len();
         // contour unique : tracé repris d'une polyligne ou d'un garde-corps, terrain déjà tracé
         let raison_forme = if ligne {
@@ -81,7 +77,7 @@ impl ViewerApp {
         } else {
             None
         };
-        let (mut choisir_selection, mut forme_choisie, mut supprimer_trait, mut supprimer_contour) = (false, None, false, false);
+        let (mut choisir_selection, mut forme_choisie) = (false, None);
         ui.horizontal(|ui| {
             choisir_selection = ui.add(egui::Button::selectable(selection && !commande, "Sélectionner"))
                 .on_hover_text("Interrompre le tracé et sélectionner ses traits et ses sommets (Échap). Sans trait sélectionné, Propriétés montre l'objet ; avec un trait, ce trait.")
@@ -92,29 +88,12 @@ impl ViewerApp {
                     forme_choisie = Some(forme);
                 }
             }
-            ui.separator();
-            supprimer_trait = ui.add_enabled(selection && trait_choisi && !fixe && !trace_en_cours, egui::Button::new("Supprimer le trait"))
-                .on_hover_text("Retirer le trait sélectionné (Suppr) : le contour s'ouvre")
-                .on_disabled_hover_text(if fixe { "Ce tracé garde tous ses traits : glisser ses sommets" } else { "Sélectionner d'abord un trait" })
-                .clicked();
-            supprimer_contour = ui.add_enabled(en_edition && selection && contour_choisi && contours > 1 && !ligne && !fixe, egui::Button::new("Supprimer le contour"))
-                .on_hover_text("Retirer le contour du trait ou du sommet sélectionné")
-                .on_disabled_hover_text(if ligne || fixe { "Ce tracé n'a qu'un contour" } else { "Sélectionner d'abord un contour ; le dernier ne se supprime pas" })
-                .clicked();
         });
         if choisir_selection {
             self.passer_en_selection();
         }
         if let Some(forme) = forme_choisie {
             self.choisir_forme_trace(usage, outil, forme);
-        }
-        if supprimer_trait {
-            self.supprimer_trait_edition();
-        }
-        if supprimer_contour && let Some(e) = self.dessin2d.edition_contour.as_mut() && let Some(i) = e.selection.take() {
-            self.dessin2d.dalle.remove(i);
-            e.fermees.remove(i);
-            (e.segment, e.sommet) = (None, None);
         }
     }
 

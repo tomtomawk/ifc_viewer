@@ -596,7 +596,7 @@ impl ViewerApp {
                 (Some(CommandeContour::Tourner | CommandeContour::Echelle), Some(_), Some(_)) => "Cliquer le point d'arrivée",
                 (Some(_), None, _) => "Cliquer le premier point",
                 (Some(_), Some(_), _) => "Cliquer le second point, ou taper la distance puis Entrée",
-                _ if e.segment.is_some() => "Trait sélectionné : ses propriétés et les commandes de Modifier s'y appliquent · Suppr : le retirer · Échap : revenir à l'objet",
+                _ if e.segment.is_some() => "Trait sélectionné : ses propriétés et les commandes de Modifier s'y appliquent · Suppr : le retirer · Maj+Suppr : son contour · Échap : revenir à l'objet",
                 _ if e.sommet.is_some() => "Sommet sélectionné : le glisser, ou Déplacer, Tourner, Symétrie, Échelle · Échap : revenir à l'objet",
                 _ => "Objet sélectionné : cliquer un trait ou un sommet ; double-cliquer une extrémité pour prolonger un contour",
             }

@@ -322,6 +322,20 @@ impl ViewerApp {
         self.dessin2d.information = Some("Cliquez une extrémité ouverte pour reprendre le tracé.".into());
     }
 
+    /// Maj+Suppr : retire le contour du trait ou du sommet sélectionné (pas le dernier,
+    /// ni celui d'un tracé à contour unique).
+    fn supprimer_contour_edition(&mut self) {
+        let Some(e) = self.dessin2d.edition_contour.as_mut() else { return };
+        if e.ligne() || matches!(e.creation, Some(Usage::Terrain | Usage::Cadrage | Usage::Escalier | Usage::GardeCorps | Usage::Annotation)) || self.dessin2d.dalle.len() < 2 {
+            self.dessin2d.message = Some("Ce contour ne peut pas être supprimé.".into());
+            return;
+        }
+        let Some(i) = e.selection.take().filter(|i| *i < self.dessin2d.dalle.len()) else { return };
+        self.dessin2d.dalle.remove(i);
+        e.fermees.remove(i);
+        (e.segment, e.sommet) = (None, None);
+    }
+
     /// Conserve les points déjà ajoutés lorsqu'on interrompt ou termine un raccord.
     fn terminer_raccord_ouvert(&mut self) {
         let Some((c, premier)) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.raccord) else { return };

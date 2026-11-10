@@ -445,6 +445,7 @@ impl ViewerApp {
         let mut echap = false;
         let mut effacer = false;
         let mut supprimer_trait = false;
+        let mut supprimer_contour = false;
         // F (fermer) seulement pendant un tracé : sinon F cadre la vue
         let en_cours = self.trace_en_cours();
         let tab_vue = en_cours && self.tab_dans_vue(ctx);
@@ -497,7 +498,8 @@ impl ViewerApp {
                     false
                 }
                 egui::Event::Key { key: egui::Key::Space, .. } => false,
-                egui::Event::Key { key: egui::Key::Delete, pressed: true, .. } if self.dessin2d.edition_contour.is_some() => { supprimer_trait = true; false },
+                // Suppr : le trait sélectionné ; Maj+Suppr : son contour entier
+                egui::Event::Key { key: egui::Key::Delete, pressed: true, modifiers, .. } if self.dessin2d.edition_contour.is_some() => { if modifiers.shift { supprimer_contour = true } else { supprimer_trait = true }; false },
                 egui::Event::Key { key: egui::Key::Delete, .. } => !en_cours,
                 egui::Event::Key { key: egui::Key::F, .. } => !en_cours,
                 _ => true,
@@ -507,6 +509,7 @@ impl ViewerApp {
             ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
         }
         if supprimer_trait { self.supprimer_trait_edition(); }
+        if supprimer_contour { self.supprimer_contour_edition(); }
         if effacer {
             effacer_caractere_saisie(&mut self.dessin2d.saisie, self.dessin2d.champ_angle);
         }
