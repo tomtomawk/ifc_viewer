@@ -951,6 +951,12 @@ impl eframe::App for ViewerApp {
             }
             if self.pilote.is_none() { ctx.request_repaint_after(std::time::Duration::from_secs(2)); }
         }
+        // registre des instances : fichier ouvert et partage, pour que le pont MCP choisisse
+        pilote::instances::publier(
+            self.natif.as_ref().map(|(_, p)| p.to_string_lossy().into_owned()).or_else(|| self.scene.as_ref().map(|s| s.file_name.clone())),
+            // le .bimpartage commun, pas la copie locale propre à chaque instance
+            self.collaboration.as_ref().and_then(|c| c.copie.partage.as_ref()).map(|p| p.to_string_lossy().into_owned()),
+        );
         self.valider_saisie(&ctx);
         self.recevoir_collaboration();
         self.niveau_creation_courant();

@@ -155,6 +155,10 @@ impl ViewerApp {
             ("fiche_revit", (self.rvt.is_some() && self.rvt_sheet).to_string()),
         ];
         p.push(("document_actif", self.document_actif_pilote().to_string()));
+        p.push(("instance", match pilote::instances::courante() {
+            Some((pid, port)) => objet(&[("pid", pid.to_string()), ("port", port.to_string())]),
+            None => objet(&[("pid", std::process::id().to_string()), ("isolee", "true".into())]),
+        }));
         p.push(("saisies_en_attente", (self.saisies_pilote.len()+usize::from(self.saisie_pilote_image)).to_string()));
         p.push(("selection_native", serde_json::to_string(&self.selection_bim()).unwrap()));
         p.push(("afficher_masques", self.afficher_masques.to_string()));

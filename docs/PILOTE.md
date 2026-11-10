@@ -1,8 +1,28 @@
 # Pilote BIMedit
 
-Le serveur MCP (`bimedit --mcp`) et le canal TCP local (`BIMEDIT_PORT`, défaut 47811)
-utilisent les mêmes commandes. Une requête est une ligne UTF-8 `commande argument`,
-sa réponse est un objet JSON avec `ok`. Les chemins simples occupent tout l'argument
+Le serveur MCP (`bimedit --mcp`) et le canal TCP local utilisent les mêmes commandes.
+Une requête est une ligne UTF-8 `@jeton commande argument`, sa réponse est un objet
+JSON avec `ok`.
+
+## Instances et jeton
+
+- Chaque viewer écoute sur `127.0.0.1`, port 47811 s'il est libre, sinon un port choisi
+  par le système, et s'inscrit dans `%LOCALAPPDATA%\BIMedit\instances\<pid>.json`
+  (`pid`, `port`, `jeton`, `fichier` ouvert, `partage` collaboratif). L'inscription
+  disparaît à la fermeture ; le pont efface celles des viewers qui ne répondent plus.
+- Le jeton (32 caractères aléatoires, nouveau à chaque lancement) est exigé : une ligne
+  sans `@jeton` ou avec un autre jeton est refusée.
+- `viewer_instances` (MCP) : `lister` les viewers ouverts, lancés par l'utilisateur ou
+  par le pont ; `choisir` (`pid`) celui que les autres outils pilotent ; `nouvelle` en
+  lance un et le choisit. Une seule instance ouverte est pilotée sans choix ; aucune :
+  le pont en lance une ; plusieurs sans choix : les outils sont refusés.
+- Plusieurs instances sur un même projet : l'associer au même `.bimpartage` (`collaborer`
+  dans l'une, `ouvrir` du `.bimpartage` dans l'autre). Chacune garde sa copie locale et
+  `collaboration_sync` échange les transactions.
+- `etat` rend `instance` (`pid`, `port`).
+- Mode isolé (tests, CI) : `BIMEDIT_PORT` fixe le port, sans inscription ; le jeton n'est
+  exigé que si `BIMEDIT_JETON` est défini (le pont lancé avec les mêmes variables le
+  transmet). Les chemins simples occupent tout l'argument
 (espaces acceptés) ; les commandes structurées reçoivent du JSON sur une seule ligne.
 Les coordonnées BIM sont en mm, indépendamment de l'unité d'affichage ; caméra et
 zone de coupe sont en m. Les angles de caméra et de pente sont en degrés.

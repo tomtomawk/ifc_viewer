@@ -173,7 +173,7 @@ Le code est rangé par domaine ; le sens des dépendances va de `noyau` vers `ui
 | `src/dessin/` | Dessin 2D : arêtes, coupe par un plan (poché, hachures, contours), motifs (`motifs.rs` : isolant), outils de DAO (`dao.rs`) |
 | `src/rendu/` | Vue 3D : scène et picking (`scene/`), rendu wgpu (`gpu.rs`), caméra, repère des plans, sélection à l'écran |
 | `src/ui/` | Interface egui : état et boucle (`mod.rs`), un fichier par zone (barre haute, panneaux, navigateur, vues, viewport, propriétés, sélection…), `ruban/`, `dessin_plan/` (saisie en plan), `editeur_famille/`, `bim/` |
-| `src/pilote/` | Canal de commande local (TCP 127.0.0.1:47811) du serveur MCP et commandes en ligne (`cli.rs`) |
+| `src/pilote/` | Canal de commande local (TCP 127.0.0.1, jeton) du serveur MCP, registre des instances (`instances.rs`) et commandes en ligne (`cli.rs`) |
 | `src/config/` | Options utilisateur, raccourcis, gabarits de projet |
 | `src/pilote/mcp.rs` | Serveur MCP (stdio, `bimedit --mcp`) qui pilote le viewer : ouverture, vues, caméra, propriétés, captures |
 
@@ -186,8 +186,10 @@ réservations/conflits collaboratifs et la saisie graphique des outils du ruban.
 `python tools/test-pilote.py --exe target/release/bimedit.exe` vérifie le parcours
 sur une instance, un port, un cache collaboratif et des documents temporaires isolés.
 
-Le viewer écoute sur `127.0.0.1:47811` (variable `BIMEDIT_PORT`) des commandes d'une
-ligne. `src/pilote/mcp.rs` (mode `bimedit --mcp` du même exécutable) les expose en serveur MCP,
+Chaque viewer écoute sur `127.0.0.1` (47811, sinon un port libre) des commandes d'une
+ligne précédées de son jeton, et s'inscrit dans le registre des instances : le pont
+pilote aussi un viewer ouvert à la main, et `viewer_instances` choisit entre plusieurs
+(voir [docs/PILOTE.md](docs/PILOTE.md)). `src/pilote/mcp.rs` (mode `bimedit --mcp` du même exécutable) les expose en serveur MCP,
 déclaré dans `.mcp.json` sous le nom `bimedit` (lancé par `target/release/bimedit.exe --mcp`, après `cargo build --release`) : un agent ouvre un fichier, choisit une
 vue Revit, règle la caméra, lit les propriétés, désigne l'objet sous un point et reçoit des
 captures PNG. La vue 3D est rendue hors écran (tampon de trame), à la taille demandée, même

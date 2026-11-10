@@ -1,10 +1,14 @@
-//! Pilotage du viewer par un autre programme (serveur MCP `tools/viewer-mcp/serveur.rs`).
+//! Pilotage du viewer par un autre programme (serveur MCP `bimedit --mcp`, voir `mcp.rs`).
 //!
-//! Le viewer écoute sur 127.0.0.1 (port 47811, ou la variable `BIMEDIT_PORT`). Une
-//! connexion envoie une ligne « commande argument » en UTF-8 et reçoit une ligne JSON.
-//! Les commandes sont traitées par l'application entre deux images (`ViewerApp::piloter`).
+//! Chaque viewer écoute sur 127.0.0.1 : le port 47811 s'il est libre, sinon un port choisi
+//! par le système, et s'inscrit avec un jeton aléatoire dans le registre des instances
+//! (`instances.rs`). Une connexion envoie une ligne « @jeton commande argument » en UTF-8
+//! et reçoit une ligne JSON. Mode isolé (`BIMEDIT_PORT`) : port fixe, sans inscription,
+//! jeton seulement si `BIMEDIT_JETON` est défini. Les commandes sont traitées par
+//! l'application entre deux images (`ViewerApp::piloter`).
 
 pub mod cli;
+pub mod instances;
 pub mod mcp;
 pub mod edition;
 pub mod saisie;
@@ -34,28 +38,33 @@ pub struct Requete {
     pub reponse: Sender<String>,
 }
 
-/// Port d'écoute : `BIMEDIT_PORT` ou [`PORT`].
-pub fn port() -> u16 {
-    std::env::var("BIMEDIT_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(PORT)
-}
-
-/// Démarre l'écoute ; None si le port est déjà pris (autre viewer ouvert).
+/// Démarre l'écoute. Mode isolé : None si le port fixe est déjà pris (nouvel essai plus
+/// tard). Mode normal : 47811, sinon un port libre, puis inscription au registre.
 pub fn demarrer(ctx: egui::Context) -> Option<Receiver<Requete>> {
-    let ecoute = TcpListener::bind(("127.0.0.1", port())).ok()?;
+    let (ecoute, jeton) = match instances::port_isole() {
+        Some(port) => (TcpListener::bind(("127.0.0.1", port)).ok()?, instances::jeton_impose()),
+        None => {
+            let ecoute = TcpListener::bind(("127.0.0.1", PORT)).or_else(|_| TcpListener::bind(("127.0.0.1", 0))).ok()?;
+            let jeton = instances::nouveau_jeton();
+            instances::inscrire(ecoute.local_addr().ok()?.port(), &jeton);
+            (ecoute, Some(jeton))
+        }
+    };
+    let jeton = std::sync::Arc::new(jeton);
     let (tx, rx) = channel();
     std::thread::Builder::new()
         .name("pilote".into())
         .spawn(move || {
             for flux in ecoute.incoming().flatten() {
-                let (tx, ctx) = (tx.clone(), ctx.clone());
-                std::thread::spawn(move || servir(flux, tx, ctx));
+                let (tx, ctx, jeton) = (tx.clone(), ctx.clone(), jeton.clone());
+                std::thread::spawn(move || servir(flux, tx, ctx, jeton.as_deref()));
             }
         })
         .ok()?;
     Some(rx)
 }
 
-fn servir(flux: TcpStream, tx: Sender<Requete>, ctx: egui::Context) {
+fn servir(flux: TcpStream, tx: Sender<Requete>, ctx: egui::Context, jeton: Option<&str>) {
     let _ = flux.set_read_timeout(Some(Duration::from_secs(30)));
     let mut ligne = String::new();
     let Ok(copie) = flux.try_clone() else { return };
@@ -63,6 +72,14 @@ fn servir(flux: TcpStream, tx: Sender<Requete>, ctx: egui::Context) {
         return;
     }
     let ligne = ligne.trim_end_matches(['\r', '\n']);
+    let ligne = match instances::authentifier(ligne, jeton) {
+        Ok(l) => l,
+        Err(e) => {
+            let mut flux = flux;
+            let _ = writeln!(flux, "{}", erreur(e));
+            return;
+        }
+    };
     let (commande, argument) = ligne.split_once(' ').unwrap_or((ligne, ""));
     let (rtx, rrx) = channel();
     if tx.send(Requete { commande: commande.to_string(), argument: argument.trim().to_string(), reponse: rtx }).is_err() {

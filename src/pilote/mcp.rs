@@ -1,8 +1,10 @@
 //! Serveur MCP du viewer IFC/Revit (stdio, JSON-RPC 2.0), lancé par `bimedit --mcp`.
 //!
-//! Il pilote le viewer par son canal local (127.0.0.1:47811, voir `src/pilote/mod.rs`) : une
-//! ligne « commande argument » envoyée, une ligne JSON reçue. Si aucun viewer n'écoute, il
-//! en lance un (`BIMEDIT_EXE`, sinon ce même exécutable sans argument).
+//! Il pilote un viewer par son canal local (voir `src/pilote/mod.rs`) : une ligne
+//! « @jeton commande argument » envoyée, une ligne JSON reçue. Les viewers ouverts, lancés
+//! par l'utilisateur ou par le pont, sont lus dans le registre des instances
+//! (`instances.rs`) ; `viewer_instances` les liste et en choisit un. Sans viewer, il en
+//! lance un (`BIMEDIT_EXE`, sinon ce même exécutable sans argument).
 //!
 //! Outils : ouvrir un fichier, capturer la vue ou la fenêtre (image PNG rendue au client),
 //! lister et ouvrir les vues Revit, régler la caméra, lire les propriétés, désigner
@@ -24,10 +26,6 @@ const COMMANDES: &str = "Commandes BIMedit : aide ; etat ; nouveau <JSON> ; ouvr
 /// Résultat d'un outil : contenu MCP et indicateur d'erreur.
 type Sortie = (Vec<Value>, bool);
 
-fn port() -> u16 {
-    std::env::var("BIMEDIT_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(47811)
-}
-
 fn dossier_captures() -> PathBuf {
     std::env::temp_dir().join("bimedit-mcp")
 }
@@ -48,14 +46,36 @@ fn executable() -> Result<PathBuf, String> {
         .ok_or_else(|| "viewer introuvable : construire avec cargo build --release ou fixer BIMEDIT_EXE".to_string())
 }
 
+use super::instances::{self, Instance};
+
+/// Viewer joint : port et jeton (absent en mode isolé sans `BIMEDIT_JETON`).
+#[derive(Clone)]
+struct Cible {
+    pid: Option<u32>,
+    port: u16,
+    jeton: Option<String>,
+}
+
+/// Instance choisie par `viewer_instances` ou jointe en dernier.
+static CHOISIE: std::sync::Mutex<Option<Cible>> = std::sync::Mutex::new(None);
+
+fn cible_isolee() -> Option<Cible> {
+    instances::port_isole().map(|port| Cible { pid: None, port, jeton: instances::jeton_impose() })
+}
+
+fn cible_de(i: &Instance) -> Cible {
+    Cible { pid: Some(i.pid), port: i.port, jeton: Some(i.jeton.clone()) }
+}
+
 /// Envoie une ligne au viewer et lit la ligne JSON de réponse.
-fn envoyer(ligne: &str, delai: Duration) -> std::io::Result<Value> {
+fn envoyer(c: &Cible, ligne: &str, delai: Duration) -> std::io::Result<Value> {
     if ligne.contains(['\n','\r']) { return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput,"Une seule ligne de commande est autorisée")); }
-    let adresse = SocketAddr::from((Ipv4Addr::LOCALHOST, port()));
-    let mut flux = TcpStream::connect_timeout(&adresse, delai)?;
+    let adresse = SocketAddr::from((Ipv4Addr::LOCALHOST, c.port));
+    let mut flux = TcpStream::connect_timeout(&adresse, delai.min(Duration::from_secs(5)))?;
     flux.set_read_timeout(Some(delai))?;
     flux.set_write_timeout(Some(delai))?;
-    flux.write_all(format!("{ligne}\n").as_bytes())?;
+    let ligne = match &c.jeton { Some(j) => format!("@{j} {ligne}\n"), None => format!("{ligne}\n") };
+    flux.write_all(ligne.as_bytes())?;
     let mut tampon = Vec::new();
     let mut bloc = [0u8; 65536];
     while !tampon.ends_with(b"\n") {
@@ -68,7 +88,23 @@ fn envoyer(ligne: &str, delai: Duration) -> std::io::Result<Value> {
     serde_json::from_slice(&tampon).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
 }
 
-fn lancer() -> Result<(), String> {
+/// Instances inscrites qui répondent avec leur jeton ; les inscriptions mortes sont
+/// effacées (viewer arrêté brutalement, ou pid réutilisé par un autre programme).
+fn vivantes() -> Vec<(Instance, Value)> {
+    instances::lire()
+        .into_iter()
+        .filter_map(|i| match envoyer(&cible_de(&i), "etat", Duration::from_secs(3)) {
+            Ok(e) if est_ok(&e) => Some((i, e)),
+            _ => {
+                instances::oublier(i.pid);
+                None
+            }
+        })
+        .collect()
+}
+
+/// Lance un nouveau viewer et attend qu'il soit inscrit et réponde.
+fn lancer() -> Result<Cible, String> {
     let exe = executable()?;
     let mut cmd = Command::new(&exe);
     cmd.current_dir(RACINE).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
@@ -87,22 +123,72 @@ fn lancer() -> Result<(), String> {
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
     }
-    cmd.spawn().map_err(|e| format!("lancement de {} impossible : {e}", exe.display()))?;
+    let pid = cmd.spawn().map_err(|e| format!("lancement de {} impossible : {e}", exe.display()))?.id();
     let fin = Instant::now() + Duration::from_secs(30);
     while Instant::now() < fin {
-        if envoyer("etat", Duration::from_secs(5)).is_ok() {
-            return Ok(());
+        let c = match cible_isolee() {
+            Some(c) => Some(c),
+            None => instances::lire().iter().find(|i| i.pid == pid).map(cible_de),
+        };
+        if let Some(c) = c
+            && envoyer(&c, "etat", Duration::from_secs(5)).is_ok()
+        {
+            return Ok(c);
         }
         std::thread::sleep(Duration::from_millis(300));
     }
-    Err(format!("le viewer lancé ({}) ne répond pas sur le port {}", exe.display(), port()))
+    Err(format!("le viewer lancé ({}, pid {pid}) ne répond pas", exe.display()))
+}
+
+fn liste_instances(vivantes: &[(Instance, Value)]) -> Value {
+    let choisie = CHOISIE.lock().unwrap().as_ref().and_then(|c| c.pid);
+    Value::Array(vivantes.iter().map(|(i, e)| json!({
+        "pid": i.pid,
+        "port": i.port,
+        "fichier": i.fichier,
+        "partage": i.partage,
+        "modifie": e["document_actif"]["modifie"],
+        "debut": i.debut,
+        "choisie": choisie == Some(i.pid),
+    })).collect())
+}
+
+/// Viewer à joindre : l'instance choisie si elle répond, sinon la seule vivante, sinon un
+/// nouveau viewer. Plusieurs instances sans choix : refus, pour ne pas modifier la
+/// mauvaise fenêtre.
+fn cible() -> Result<Cible, String> {
+    if let Some(c) = cible_isolee() {
+        return Ok(c);
+    }
+    let choisie = CHOISIE.lock().unwrap().clone();
+    if let Some(c) = choisie
+        && envoyer(&c, "etat", Duration::from_secs(3)).is_ok()
+    {
+        return Ok(c);
+    }
+    *CHOISIE.lock().unwrap() = None;
+    let v = vivantes();
+    let c = match v.as_slice() {
+        [] => lancer()?,
+        [(i, _)] => cible_de(i),
+        _ => return Err(format!(
+            "Plusieurs viewers BIMedit sont ouverts : choisir avec viewer_instances (action choisir, pid). Instances : {}",
+            liste_instances(&v)
+        )),
+    };
+    *CHOISIE.lock().unwrap() = Some(c.clone());
+    Ok(c)
 }
 
 fn commande_delai(ligne: &str, delai: Duration) -> Result<Value, String> {
-    match envoyer(ligne, delai) {
+    let c = cible()?;
+    match envoyer(&c, ligne, delai) {
+        // viewer fermé entre la vérification et l'envoi : nouvelle résolution (relance
+        // seulement s'il n'en reste aucun, sinon le choix revient à l'agent)
         Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
-            lancer()?;
-            envoyer(ligne, delai).map_err(|e| e.to_string())
+            *CHOISIE.lock().unwrap() = None;
+            let c = cible()?;
+            envoyer(&c, ligne, delai).map_err(|e| e.to_string())
         }
         autre => autre.map_err(|e| e.to_string()),
     }
@@ -110,6 +196,33 @@ fn commande_delai(ligne: &str, delai: Duration) -> Result<Value, String> {
 
 fn commande(ligne: &str) -> Result<Value, String> {
     commande_delai(ligne, Duration::from_secs(600))
+}
+
+/// Outil `viewer_instances` : lister, choisir ou lancer un viewer.
+fn instances_outil(a: &Map<String, Value>) -> Result<Sortie, String> {
+    if cible_isolee().is_some() {
+        return Err("Mode isolé (BIMEDIT_PORT) : une seule instance, sur ce port.".into());
+    }
+    match a.get("action").and_then(Value::as_str).unwrap_or("lister") {
+        "lister" => {
+            let v = vivantes();
+            Ok(reponse(json!({"ok": true, "instances": liste_instances(&v)})))
+        }
+        "choisir" => {
+            let pid = a.get("pid").and_then(Value::as_u64).ok_or("pid requis (voir action lister)")? as u32;
+            let v = vivantes();
+            let (i, _) = v.iter().find(|(i, _)| i.pid == pid).ok_or_else(|| format!("Aucun viewer joignable avec le pid {pid}"))?;
+            *CHOISIE.lock().unwrap() = Some(cible_de(i));
+            Ok(reponse(json!({"ok": true, "instances": liste_instances(&v)})))
+        }
+        "nouvelle" => {
+            let c = lancer()?;
+            *CHOISIE.lock().unwrap() = Some(c);
+            let v = vivantes();
+            Ok(reponse(json!({"ok": true, "instances": liste_instances(&v)})))
+        }
+        _ => Err("action : lister|choisir|nouvelle".into()),
+    }
 }
 
 fn est_ok(r: &Value) -> bool {
@@ -224,6 +337,7 @@ fn outils_complets() -> Vec<(&'static str, String, Value)> {
         ("viewer_collaboration", "État complet, création/association, synchro, instantané, réservation/libération/reprise explicite ou résolution d'un conflit. Les opérations de synchronisation sont asynchrones ; vérifier l'état ensuite.".into(),obj(json!({"action":{"type":"string","enum":["etat","creer","associer","sync","instantane","reserver","liberer","reprendre","resoudre"]},"chemin":texte,"ids":ids,"transaction":texte,"choix":{"type":"string","enum":["locale","acceptee"]}}),&["action"])),
         ("viewer_options", "Lit les options, ou modifie et mémorise les options fournies (unités de l'interface et navigation IFC). Les commandes restent en mm.".into(),obj(json!({"navigation_ifc":{"type":"boolean"},"unite":{"type":"string","enum":["millimetre","centimetre","metre"]},"delai_accrochage":{"type":"number","minimum":0.1,"maximum":5},"raccourcis":{"type":"object","additionalProperties":{"type":"string"}}}),&[])),
         ("viewer_famille", "Éditeur de familles sans dialogue : nouvelle, lire, modifier le fichier complet, charger dans le projet, fermer, ouvrir/enregistrer un fichier, importer un type dans le projet. Lire avant de modifier ; charger propage les occurrences via l'historique et la collaboration.".into(),obj(json!({"action":{"type":"string","enum":["nouvelle","lire","modifier","charger","fermer","ouvrir","enregistrer","importer"]},"genre":{"type":"string","enum":["porte","fenetre"]},"fichier":{"type":"object"},"chemin":texte,"nouveau":{"type":"boolean"},"abandonner":{"type":"boolean"}}),&["action"])),
+        ("viewer_instances", "Viewers BIMedit ouverts (lancés par l'utilisateur ou par le pont) : lister (pid, port, fichier, partage, modifie, choisie), choisir celui que les autres outils pilotent, ou lancer une nouvelle instance. Avec plusieurs viewers ouverts, choisir avant toute autre commande. Deux instances associées au même .bimpartage travaillent sur le même projet en collaboration.".into(),obj(json!({"action":{"type":"string","enum":["lister","choisir","nouvelle"]},"pid":{"type":"integer"}}),&[])),
         ("viewer_historique", "Lit l'historique, ou annule/rétablit un nombre d'étapes (une transaction à la fois en collaboration).".into(),obj(json!({"action":{"type":"string","enum":["annuler","retablir"]},"nombre":{"type":"integer","minimum":1}}),&[])),
     ]
 }
@@ -297,6 +411,7 @@ fn appeler(nom: &str, a: &Map<String, Value>) -> Result<Sortie, String> {
         };
         return Ok((vec![json!({"type":"text","text":texte})],false));
     }
+    if nom == "viewer_instances" { return instances_outil(a); }
     if let Some(ligne) = ligne_complete(nom,a)? { return Ok(reponse(commande(&ligne)?)); }
     match nom {
         "viewer_etat" => Ok(reponse(commande("etat")?)),
@@ -460,7 +575,7 @@ mod tests {
     #[test]
     fn outils_avec_schema_et_noms_uniques() {
         let o = outils();
-        assert_eq!(o.len(), 27);
+        assert_eq!(o.len(), 28);
         assert!(o.iter().all(|(_, _, s)| s["type"] == "object"));
         let noms: std::collections::HashSet<_> = o.iter().map(|(n,_,_)|n).collect();
         assert_eq!(noms.len(),o.len());
@@ -486,6 +601,6 @@ mod tests {
         let ligne=ligne_complete("viewer_historique",&a).unwrap().unwrap();
         let (_,j)=ligne.split_once(' ').unwrap();
         assert_eq!(serde_json::from_str::<Value>(j).unwrap()["nombre"],1);
-        assert!(envoyer("etat\nquitter",Duration::from_millis(1)).is_err());
+        assert!(envoyer(&Cible { pid: None, port: 9, jeton: None },"etat\nquitter",Duration::from_millis(1)).is_err());
     }
 }

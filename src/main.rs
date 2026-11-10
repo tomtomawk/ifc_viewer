@@ -92,7 +92,10 @@ fn main() {
         wgpu_options: limites_gpu(),
         ..Default::default()
     };
-    if let Err(e) = eframe::run_native("BIMedit", options, Box::new(move |cc| Ok(Box::new(ui::ViewerApp::new(cc, path))))) {
+    let resultat = eframe::run_native("BIMedit", options, Box::new(move |cc| Ok(Box::new(ui::ViewerApp::new(cc, path)))));
+    // plus joignable : le pont MCP ne doit plus la proposer
+    pilote::instances::retirer();
+    if let Err(e) = resultat {
         eprintln!("Erreur : {e}");
         std::process::exit(1);
     }

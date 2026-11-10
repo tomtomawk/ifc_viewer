@@ -189,8 +189,8 @@ def run(exe):
             commande2("quitter","abandonner")
             second.wait(timeout=15)
             # Vérifier aussi le vrai protocole MCP, sur la même instance isolée.
-            mcp = exe.resolve().with_name("bimedit-mcp.exe" if os.name == "nt" else "bimedit-mcp")
-            if mcp.is_file():
+            # Le serveur MCP est le même exécutable lancé avec --mcp.
+            if True:
                 requetes = [
                     {"jsonrpc":"2.0","id":1,"method":"tools/list"},
                     {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"viewer_projet_natif","arguments":{}}},
@@ -198,9 +198,9 @@ def run(exe):
                     {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"viewer_editer","arguments":{"transaction":{"action":"niveau","nom":"Étage MCP","altitude":10000}}}},
                     {"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"viewer_exporter","arguments":{"format":"ifc","chemin":str(root / "Export MCP.ifc")}}},
                 ]
-                r = subprocess.run([str(mcp)], input="\n".join(json.dumps(q) for q in requetes)+"\n",capture_output=True,text=True,encoding="utf-8",env=env,check=True,timeout=60)
+                r = subprocess.run([str(exe.resolve()), "--mcp"], input="\n".join(json.dumps(q) for q in requetes)+"\n",capture_output=True,text=True,encoding="utf-8",env=env,check=True,timeout=60)
                 reponses = [json.loads(l) for l in r.stdout.splitlines()]
-                assert len(reponses[0]["result"]["tools"]) == 27
+                assert len(reponses[0]["result"]["tools"]) == 28
                 assert all(not r["result"]["isError"] for r in reponses[1:]), reponses
                 nombre += len(reponses)
             commande("quitter", "abandonner")
