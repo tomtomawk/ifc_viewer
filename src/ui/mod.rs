@@ -935,6 +935,10 @@ impl eframe::App for ViewerApp {
     }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        // tampon refusé par le GPU (modèle trop lourd pour la carte) : dit plutôt que planter
+        if let Some(alerte) = self.renderer.as_mut().and_then(|r| r.alerte_memoire()) {
+            self.error = Some(alerte);
+        }
         // une capture de fenêtre arrive à une image ultérieure : sans souris ni clavier,
         // egui ne redessinerait plus et la capture n'aboutirait jamais
         if self.captures_en_attente.load(std::sync::atomic::Ordering::Acquire) > 0 {

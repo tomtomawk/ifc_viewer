@@ -1331,6 +1331,7 @@ pub struct Renderer {
     segments_aretes: wgpu::Buffer,
     /// Copie des sommets : segments rassemblés à l'envoi des indices.
     sommets_cpu: Vec<Vertex>,
+    alerte_memoire: Option<String>,
     n_opaque: u32,
     n_transp: u32,
     n_lines: u32,
@@ -1819,6 +1820,7 @@ impl Renderer {
             segments_traits: vide("traits"),
             segments_aretes: vide("arêtes"),
             sommets_cpu: Vec::new(),
+            alerte_memoire: None,
             n_opaque: 0,
             n_transp: 0,
             n_lines: 0,
@@ -2031,7 +2033,24 @@ impl Renderer {
     }
 
     /// Sommets et leurs couleurs de rendu (même nombre, alpha 0 : aucune).
+    /// Message à afficher quand un tampon dépassait la limite du GPU (géométrie non affichée).
+    pub fn alerte_memoire(&mut self) -> Option<String> {
+        self.alerte_memoire.take()
+    }
+
+    /// Vrai si `octets` tiennent dans un tampon de ce GPU ; sinon l'alerte est notée.
+    fn tient(&mut self, quoi: &str, octets: usize) -> bool {
+        let max = self.device.limits().max_buffer_size;
+        if octets as u64 <= max { return true; }
+        self.alerte_memoire = Some(format!(
+            "{quoi} non affichés : {} Mo pour une limite de {} Mo de la carte graphique.",
+            octets >> 20, max >> 20
+        ));
+        false
+    }
+
     pub fn upload_vertices(&mut self, v: &[Vertex], rendu: &[[u8; 4]], motifs: &[[u8; 4]]) {
+        let (v, rendu, motifs) = if self.tient("Volumes 3D", size_of_val(v)) { (v, rendu, motifs) } else { (&[][..], &[][..], &[][..]) };
         self.rangs_sommets = rendu.iter().map(|c| if (128..255).contains(&c[3]) { c[3] - 128 } else { 255 }).collect();
         self.style_sommets = motifs.iter().map(|m| if m[0] == 0 { m[3] } else { 0 }).collect();
         let usage = wgpu::BufferUsages::VERTEX;
@@ -2047,7 +2066,8 @@ impl Renderer {
 
     /// Sommets des segments (paires d'indices), à la suite ; une paire hors des sommets
     /// est ignorée.
-    fn segments(&self, label: &str, indices: &[u32]) -> (wgpu::Buffer, u32) {
+    fn segments(&mut self, label: &str, indices: &[u32]) -> (wgpu::Buffer, u32) {
+        let indices = if self.tient("Traits et arêtes", indices.len() / 2 * 2 * size_of::<Vertex>()) { indices } else { &[] };
         let v = &self.sommets_cpu;
         let paires: Vec<Vertex> = indices
             .chunks_exact(2)
@@ -2126,14 +2146,13 @@ impl Renderer {
     /// Indices (triangles opaques, transparents, traits) de chaque passe ; une liste vide
     /// retire les passes.
     pub fn upload_passes(&mut self, passes: &[[Vec<u32>; 3]]) {
-        self.passes = passes
-            .iter()
-            .map(|p| {
-                let index = |j: usize| Self::tampon(&self.device, "fenêtre de vue", as_bytes(&p[j]), wgpu::BufferUsages::INDEX);
-                let (traits, n_traits) = self.segments("traits de la fenêtre de vue", &p[2]);
-                Passe { ebo: [index(0), index(1), traits], n: [p[0].len() as u32, p[1].len() as u32, n_traits] }
-            })
-            .collect();
+        let mut liste = Vec::with_capacity(passes.len());
+        for p in passes {
+            let (traits, n_traits) = self.segments("traits de la fenêtre de vue", &p[2]);
+            let index = |j: usize| Self::tampon(&self.device, "fenêtre de vue", as_bytes(&p[j]), wgpu::BufferUsages::INDEX);
+            liste.push(Passe { ebo: [index(0), index(1), traits], n: [p[0].len() as u32, p[1].len() as u32, n_traits] });
+        }
+        self.passes = liste;
     }
 
     /// Uniformes et sélection d'une image de `largeur` × `hauteur` pixels.

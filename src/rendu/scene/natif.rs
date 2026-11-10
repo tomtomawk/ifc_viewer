@@ -107,9 +107,12 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         ordre.extend(projet.couches_assemblage(&a.id));
     }
     ordre.extend(projet.murs.iter().filter(|m| m.assemblage.as_ref().is_some_and(|a| projet.assemblage(a).is_none_or(|x| !x.couches.contains(&m.id)))));
+    // solides calculés ensemble (volumes bruts partagés, en parallèle), consommés dans l'ordre
+    let mut solides: std::collections::HashMap<&str, Result<Vec<crate::modele::volumes::solides::Tri>, String>> =
+        projet.murs.iter().map(|m| m.id.as_str()).zip(crate::modele::volumes::solides::murs(projet, &jonctions)).collect();
     for m in ordre {
         let type_mur = projet.type_mur(&m.type_mur).ok_or("Type de mur introuvable.")?;
-        let solide = crate::modele::volumes::solides::mur(projet, m, &jonctions)?;
+        let solide = solides.remove(m.id.as_str()).ok_or("Mur en double.")??;
         let id = id_natif("mur", &m.id);
         let parent = match m.assemblage.as_ref().filter(|a| projet.assemblage(a).is_some()) {
             Some(a) => id_natif("assemblage", a),
@@ -845,3 +848,4 @@ mod tests {
         assert!(topo.aretes.count > 8, "{}", topo.aretes.count);
     }
 }
+

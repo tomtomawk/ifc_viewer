@@ -89,12 +89,30 @@ fn main() {
             .with_drag_and_drop(true),
         centered: true,
         renderer: eframe::Renderer::Wgpu,
+        wgpu_options: limites_gpu(),
         ..Default::default()
     };
     if let Err(e) = eframe::run_native("BIMedit", options, Box::new(move |cc| Ok(Box::new(ui::ViewerApp::new(cc, path))))) {
         eprintln!("Erreur : {e}");
         std::process::exit(1);
     }
+}
+
+/// Périphérique GPU aux limites de tampon de la carte (souvent plusieurs Go) au lieu des
+/// 256 Mo par défaut de wgpu : sommets et traits d'un gros modèle Revit tiennent en un
+/// tampon. Le reste des réglages d'egui est conservé.
+fn limites_gpu() -> eframe::egui_wgpu::WgpuConfiguration {
+    let mut config = eframe::egui_wgpu::WgpuConfiguration::default();
+    if let eframe::egui_wgpu::WgpuSetup::CreateNew(creation) = &mut config.wgpu_setup {
+        let defaut = creation.device_descriptor.clone();
+        creation.device_descriptor = std::sync::Arc::new(move |adaptateur| {
+            let mut d = defaut(adaptateur);
+            let carte = adaptateur.limits();
+            d.required_limits.max_buffer_size = d.required_limits.max_buffer_size.max(carte.max_buffer_size);
+            d
+        });
+    }
+    config
 }
 
 /// Cadre de fenêtre du système (barre de titre, bords) plutôt que la barre dessinée par

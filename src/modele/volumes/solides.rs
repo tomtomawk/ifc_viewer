@@ -375,7 +375,32 @@ pub fn mur(
     m: &Mur,
     jonctions: &crate::modele::murs::jonctions::Coupes,
 ) -> Result<Vec<Tri>, String> {
-    let mut tris = mur_brut(p, m, jonctions)?;
+    mur_avec(p, m, &|autre| mur_brut(p, autre, jonctions).map(std::borrow::Cow::Owned))
+}
+
+/// Solides de tous les murs du projet, dans l'ordre de `p.murs`, identiques à `mur` appelé
+/// mur par mur : chaque volume brut est calculé une seule fois (en parallèle) puis
+/// réutilisé par les jonctions de ses voisins, et les murs sont découpés en parallèle.
+pub fn murs(p: &Projet, jonctions: &crate::modele::murs::jonctions::Coupes) -> Vec<Result<Vec<Tri>, String>> {
+    use rayon::prelude::*;
+    let bruts: Vec<Result<Vec<Tri>, String>> = p.murs.par_iter().map(|m| mur_brut(p, m, jonctions)).collect();
+    let indice: std::collections::HashMap<&str, usize> = p.murs.iter().enumerate().map(|(i, m)| (m.id.as_str(), i)).collect();
+    let brut = |autre: &Mur| -> Result<std::borrow::Cow<'_, [Tri]>, String> {
+        match indice.get(autre.id.as_str()).map(|&i| &bruts[i]) {
+            Some(Ok(t)) => Ok(std::borrow::Cow::Borrowed(t.as_slice())),
+            Some(Err(e)) => Err(e.clone()),
+            None => mur_brut(p, autre, jonctions).map(std::borrow::Cow::Owned),
+        }
+    };
+    p.murs.par_iter().map(|m| mur_avec(p, m, &brut)).collect()
+}
+
+fn mur_avec<'a>(
+    p: &Projet,
+    m: &Mur,
+    brut: &(dyn Fn(&Mur) -> Result<std::borrow::Cow<'a, [Tri]>, String> + Sync),
+) -> Result<Vec<Tri>, String> {
+    let mut tris = brut(m)?.into_owned();
     let priorite = |m: &Mur| {
         let defaut = p
             .type_mur(&m.type_mur)
@@ -423,7 +448,7 @@ pub fn mur(
         if lo.x >= mx.x || hi.x <= mn.x || lo.y >= mx.y || hi.y <= mn.y {
             continue;
         }
-        let coupe = mur_brut(p, autre, jonctions)?;
+        let coupe = brut(autre)?;
         let (a, b) = bbox(&coupe);
         if a.cmpge(mx - DVec3::splat(1e-5)).any() || b.cmple(mn + DVec3::splat(1e-5)).any() {
             continue;
@@ -779,6 +804,19 @@ impl Projet {
 #[cfg(test)]
 mod tests_jonctions {
     use super::*;
+    /// Le calcul groupé (volumes bruts partagés, parallèle) rend exactement les solides du
+    /// calcul mur par mur, erreurs comprises.
+    #[test]
+    fn calcul_groupe_identique_au_calcul_unitaire() {
+        for f in ["samples/ilot_demo/ilot_demo.modele.json", "samples/maison_native.modele.json"] {
+            let p = Projet::lire_json(&std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(f)).unwrap()).unwrap();
+            let j = crate::modele::murs::jonctions::coupes(&p);
+            assert!(!p.murs.is_empty(), "{f}");
+            for (m, g) in p.murs.iter().zip(murs(&p, &j)) {
+                assert!(g == mur(&p, m, &j), "{f} : {}", m.id);
+            }
+        }
+    }
     #[test]
     fn croisement_x_sans_double_volume_et_priorite() {
         let mut p = super::tests::exemple();
