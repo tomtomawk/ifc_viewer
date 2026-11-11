@@ -202,7 +202,7 @@ impl ViewerApp {
         if let Some(menu) = edition {
             let ids = self.selection_bim();
             self.ruban_edition.edition_traces = self.dessin2d.edition_contour.is_some() || (self.onglet_ruban == OngletRuban::Modifier && self.usage_dessin().is_some_and(|(u, o)| o == crate::dessin::dao::OutilDessin::Polyligne && matches!(u, dessin_plan::Usage::Annotation | dessin_plan::Usage::Surface | dessin_plan::Usage::LimitePropriete | dessin_plan::Usage::Terrain | dessin_plan::Usage::Escalier | dessin_plan::Usage::GardeCorps)));
-            (self.ruban_edition.cible_trace, self.ruban_edition.trace_fixe, self.ruban_edition.trace_unique) = self.cible_trace();
+            (self.ruban_edition.cible_trace, self.ruban_edition.trace_fixe, self.ruban_edition.trace_sans_copie) = self.cible_trace();
             self.ruban_edition.commande_trace = self.outil_commande_trace();
             self.ruban_edition.selection_elements = !ids.is_empty() || self.selection_traces_active();
             self.ruban_edition.selection_murs = self.natif.as_ref().is_some_and(|(p, _)| ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some()));

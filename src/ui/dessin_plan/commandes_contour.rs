@@ -37,11 +37,11 @@ pub(super) fn transformer_contours(
             let Some(d) = depart else { return Ok(None) };
             deplacer(&|q| q + (p - d));
         }
-        C::Copier | C::Reseau => {
+        C::Copier | C::Reseau(_) => {
             let Some(d) = depart else { return Ok(None) };
             let (a, b) = trait_()?;
-            let nombre = if commande == C::Reseau { 4 } else { 2 };
-            for pas in 1..nombre {
+            let copies = if let C::Reseau(n) = commande { n.max(1) } else { 1 };
+            for pas in 1..=copies {
                 let delta = (p - d) * pas as f64;
                 r.push(vec![(a + delta).to_array(), (b + delta).to_array()]);
             }
@@ -65,10 +65,11 @@ pub(super) fn transformer_contours(
             let (direction, v) = (rb - ra, b - a);
             if direction.length_squared() <= 1e-12 || v.length_squared() <= 1e-12 { return Err("Segment de longueur nulle.".into()); }
             if commande == C::Aligner {
-                if direction.perp_dot(v).abs() > 1e-6 * direction.length() * v.length() { return Err("Pour aligner, choisissez deux segments parallèles.".into()); }
-                let normale = direction.perp().normalize();
-                let delta = normale * (ra - a).dot(normale);
-                deplacer(&|q| q + delta);
+                // le trait vient sur la droite de la référence : ses deux extrémités y sont
+                // projetées (simple translation si les segments sont parallèles)
+                let u = direction.normalize();
+                if v.dot(u).abs() <= 1e-6 * v.length() { return Err("Le trait est perpendiculaire à la référence : il n'aurait plus de longueur.".into()); }
+                deplacer(&|q| ra + u * (q - ra).dot(u));
             } else {
                 let denominateur = v.perp_dot(direction);
                 if denominateur.abs() <= 1e-9 { return Err("Les segments sont parallèles.".into()); }
@@ -96,13 +97,21 @@ pub(super) fn transformer_contours(
 
 impl ViewerApp {
     /// Cible des commandes du ruban Modifier dans le tracé en cours, topologie figée
-    /// (pas d'ajout ni de retrait de sommet) et contour unique.
-    pub(in crate::ui) fn cible_trace(&self) -> (CibleTrace, bool, bool) {
-        let Some(e) = self.dessin2d.edition_contour.as_ref() else { return (CibleTrace::Aucune, false, false) };
+    /// (pas d'ajout ni de retrait de sommet) et raison pour laquelle un trait ne s'y
+    /// copie pas.
+    pub(in crate::ui) fn cible_trace(&self) -> (CibleTrace, bool, Option<&'static str>) {
+        let Some(e) = self.dessin2d.edition_contour.as_ref() else { return (CibleTrace::Aucune, false, None) };
         let cible = if e.dessin { CibleTrace::Aucune } else if e.sommet.is_some() { CibleTrace::Sommet } else if e.segment.is_some() { CibleTrace::Segment } else { CibleTrace::Aucune };
         let fixe = matches!(e.creation, Some(Usage::Terrain | Usage::Cadrage | Usage::Escalier | Usage::GardeCorps | Usage::Annotation));
-        let unique = e.ligne() || matches!(e.creation, Some(Usage::Terrain | Usage::Cadrage | Usage::Escalier | Usage::GardeCorps));
-        (cible, fixe, unique)
+        let sans_copie = if e.ligne() || matches!(e.creation, Some(Usage::Terrain | Usage::Cadrage | Usage::Escalier | Usage::GardeCorps)) {
+            Some("Ce tracé n'accepte qu'un seul contour")
+        } else if e.creation != Some(Usage::Annotation) {
+            // dalle, toiture, terre-plein, limite : un trait copié resterait ouvert
+            Some("Une surface n'a que des contours fermés : tracer un nouveau contour avec Polygone ou Rectangle")
+        } else {
+            None
+        };
+        (cible, fixe, sans_copie)
     }
 
     /// Outil du ruban Modifier dont la commande est en cours sur le tracé.
@@ -112,7 +121,7 @@ impl ViewerApp {
         Some(match self.dessin2d.edition_contour.as_ref().filter(|e| !e.dessin)?.commande? {
             C::Deplacer => Outil::Deplacer,
             C::Copier => Outil::Copier,
-            C::Reseau => Outil::Reseau,
+            C::Reseau(_) => Outil::Reseau,
             C::Tourner => Outil::Tourner,
             C::Symetrie => Outil::Symetrie,
             C::Echelle => Outil::Echelle,
@@ -142,6 +151,22 @@ impl ViewerApp {
         choix.map(|x| x.1)
     }
 
+    /// Repère et point retenus pour la commande. Tourner et Échelle prennent l'angle (en
+    /// degrés) ou le facteur tapé dès que le centre est donné, sans point de référence.
+    fn points_commande(&self, commande: CommandeContour, p: DVec2) -> (Option<DVec2>, DVec2) {
+        use CommandeContour as C;
+        let e = self.dessin2d.edition_contour.as_ref();
+        let repere = e.and_then(|e| e.repere);
+        if !matches!(commande, C::Tourner | C::Echelle) { return (repere, self.point_commande(commande, p)); }
+        let valeur = self.dessin2d.saisie.trim_start_matches(['<', '>']).replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite());
+        if let (Some(centre), Some(valeur)) = (e.and_then(|e| e.depart), valeur) {
+            let r = repere.unwrap_or(centre + DVec2::X * 1000.0);
+            if commande == C::Tourner { return (Some(r), centre + DVec2::from_angle(valeur.to_radians()).rotate(r - centre)); }
+            if valeur > 0.0 { return (Some(r), centre + (r - centre) * valeur); }
+        }
+        (repere, p)
+    }
+
     /// Point retenu pour la commande : Décaler prend la distance tapée, du côté du curseur.
     fn point_commande(&self, commande: CommandeContour, p: DVec2) -> DVec2 {
         if commande != CommandeContour::Decaler { return p; }
@@ -157,19 +182,23 @@ impl ViewerApp {
     /// repère, puis application.
     pub(super) fn clic_commande_contour(&mut self, rect: egui::Rect, commande: CommandeContour, p: DVec2, curseur: Option<egui::Pos2>) {
         use CommandeContour as C;
-        let p = self.point_commande(commande, p);
+        let (repere, p) = self.points_commande(commande, p);
         let reference = if matches!(commande, C::Aligner | C::Ajuster) { curseur.and_then(|q| self.segment_reference(rect, q)) } else { None };
         let e = self.dessin2d.edition_contour.as_mut().unwrap();
         // points préalables : départ (ou centre), puis repère d'une rotation ou d'une échelle
-        if matches!(commande, C::Deplacer | C::Copier | C::Reseau | C::Symetrie | C::Tourner | C::Echelle) && e.depart.is_none() {
+        if matches!(commande, C::Deplacer | C::Copier | C::Reseau(_) | C::Symetrie | C::Tourner | C::Echelle) && e.depart.is_none() {
             e.depart = Some(p);
             self.dessin2d.saisie.clear();
             return;
         }
         if matches!(commande, C::Tourner | C::Echelle) && e.repere.is_none() {
-            e.repere = Some(p);
-            self.dessin2d.saisie.clear();
-            return;
+            // une valeur tapée s'applique sans point de référence
+            let Some(r) = repere else {
+                e.repere = Some(p);
+                self.dessin2d.saisie.clear();
+                return;
+            };
+            e.repere = Some(r);
         }
         match transformer_contours(&self.dessin2d.dalle, commande, e.segment, e.sommet, e.depart, e.repere, p, reference) {
             Ok(Some(nouveaux)) => {
@@ -202,7 +231,7 @@ impl ViewerApp {
         let Some(commande) = e.commande else { return };
         let Some(p) = self.dessin2d.point.map(|p| p.0).or(self.dessin2d.curseur) else { return };
         let Some(ep) = self.vers_ecran(rect, p) else { return };
-        let p = self.point_commande(commande, p);
+        let (repere, p) = self.points_commande(commande, p);
         let orange = Color32::from_rgb(230, 110, 20);
         let vert = Color32::from_rgb(20, 160, 60);
         let tirets = |pts: &[egui::Pos2], couleur: Color32| { painter.add(egui::Shape::dashed_line(pts, egui::Stroke::new(1.5, couleur), 6.0, 4.0)); };
@@ -218,9 +247,9 @@ impl ViewerApp {
                     if (ep - ed).length_sq() > 1.0 { let dir = (ep - ed).normalized(); tirets(&[ed - dir * 4000.0, ed + dir * 4000.0], vert); }
                 }
                 C::Tourner | C::Echelle => {
-                    if let Some(er) = e.repere.and_then(|r| self.vers_ecran(rect, r)) { painter.line_segment([ed, er], egui::Stroke::new(1.0, vert)); }
+                    if let Some(er) = repere.and_then(|r| self.vers_ecran(rect, r)) { painter.line_segment([ed, er], egui::Stroke::new(1.0, vert)); }
                     tirets(&[ed, ep], vert);
-                    if let Some(r) = e.repere {
+                    if let Some(r) = repere {
                         let (i, f) = (r - d, p - d);
                         if i.length_squared() > 1e-12 && f.length_squared() > 1e-12 {
                             valeur = Some(if commande == C::Tourner { format!("{:.1}°", i.perp_dot(f).atan2(i.dot(f)).to_degrees()) } else { format!("× {:.3}", f.length() / i.length()) });
@@ -242,7 +271,7 @@ impl ViewerApp {
             if let Some(n) = (b - a).try_normalize().map(|d| d.perp()) { valeur = Some(longueur((p - a).dot(n).abs())); }
         }
         // résultat : les contours modifiés ou ajoutés
-        if let Ok(Some(nouveaux)) = transformer_contours(&self.dessin2d.dalle, commande, e.segment, e.sommet, e.depart, e.repere, p, reference) {
+        if let Ok(Some(nouveaux)) = transformer_contours(&self.dessin2d.dalle, commande, e.segment, e.sommet, e.depart, repere, p, reference) {
             for (i, contour) in nouveaux.iter().enumerate() {
                 if self.dessin2d.dalle.get(i) == Some(contour) { continue; }
                 let mut pts: Vec<egui::Pos2> = contour.iter().filter_map(|q| self.vers_ecran(rect, DVec2::from_array(*q))).collect();
@@ -305,7 +334,31 @@ mod tests {
         let reference = Some([DVec2::new(15.0, -5.0), DVec2::new(15.0, 5.0)]);
         let r = transformer_contours(&c, C::Ajuster, Some((0, 0)), None, None, None, DVec2::ZERO, reference).unwrap().unwrap();
         assert_eq!(r[0][1], [15.0, 0.0]);
+        // Aligner : une référence perpendiculaire au trait ou absente est refusée
         assert!(transformer_contours(&c, C::Aligner, Some((0, 0)), None, None, None, DVec2::ZERO, reference).is_err());
         assert!(transformer_contours(&c, C::Aligner, Some((0, 0)), None, None, None, DVec2::ZERO, None).is_err());
+    }
+
+    #[test]
+    fn aligner_sur_une_reference_parallele_ou_oblique() {
+        let c = carre();
+        // parallèle : le trait du bas descend sur la droite y = -3
+        let parallele = Some([DVec2::new(20.0, -3.0), DVec2::new(30.0, -3.0)]);
+        let r = transformer_contours(&c, C::Aligner, Some((0, 0)), None, None, None, DVec2::ZERO, parallele).unwrap().unwrap();
+        assert_eq!(r[0], vec![[0.0, -3.0], [10.0, -3.0], [10.0, 10.0], [0.0, 10.0]]);
+        // oblique : ses deux extrémités viennent sur la droite y = x - 20
+        let oblique = Some([DVec2::new(20.0, 0.0), DVec2::new(30.0, 10.0)]);
+        let r = transformer_contours(&c, C::Aligner, Some((0, 0)), None, None, None, DVec2::ZERO, oblique).unwrap().unwrap();
+        for k in 0..2 { assert!((r[0][k][1] - (r[0][k][0] - 20.0)).abs() < 1e-9); }
+        assert!((DVec2::from_array(r[0][0]) - DVec2::new(10.0, -10.0)).length() < 1e-9);
+        assert_eq!(r[0][2..], [[10.0, 10.0], [0.0, 10.0]]);
+    }
+
+    #[test]
+    fn reseau_ajoute_le_nombre_de_copies_demande() {
+        let c = carre();
+        let r = transformer_contours(&c, C::Reseau(5), Some((0, 0)), None, Some(DVec2::ZERO), None, DVec2::new(0.0, -2.0), None).unwrap().unwrap();
+        assert_eq!(r.len(), 6);
+        assert_eq!(r[5], vec![[0.0, -10.0], [10.0, -10.0]]);
     }
 }

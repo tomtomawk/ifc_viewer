@@ -551,8 +551,17 @@ impl ViewerApp {
             {
                 // premier Échap : retour à la sélection des segments et des sommets
                 (e.segment, e.sommet, e.selection, e.dessin) = (None, None, None, false);
-            } else if self.dessin2d.edition_contour.is_some() {
-                self.quitter_commande(false);
+            } else if let Some(e) = self.dessin2d.edition_contour.as_ref() {
+                // tracé modifié : un premier Échap prévient, un second (dans les 4 s) abandonne
+                let temps = ctx.input(|i| i.time);
+                let modifie = e.initial != self.dessin2d.dalle;
+                if !modifie || self.dessin2d.echap_abandon.is_some_and(|t| temps - t <= 4.0) {
+                    self.dessin2d.echap_abandon = None;
+                    self.quitter_commande(false);
+                } else {
+                    self.dessin2d.echap_abandon = Some(temps);
+                    self.dessin2d.message = Some("Tracé modifié : Entrée pour valider, Échap à nouveau pour l'abandonner.".into());
+                }
             } else if matches!(usage, Usage::Surface | Usage::LimitePropriete | Usage::Terrain | Usage::Cadrage) && !(self.dessin2d.dalle.is_empty() && self.dessin2d.ouverts.is_empty()) {
                 self.editer_contours_en_creation(usage);
             } else {
@@ -594,7 +603,7 @@ impl ViewerApp {
             let ngf = self.natif.as_ref().map_or(0.0, |(p, _)| p.ngf()) + altitude;
             self.dessin2d.terrain_cotes.resize(contour.len(), ngf);
         }
-        self.dessin2d.edition_contour = Some(EditionContour { id: String::new(), creation: Some(usage), altitude, dessin: false, selection: None, segment: None, sommet: None, commande: None, depart: None, repere: None, glisse: None, annotation: None, fermees, raccord: None, element: None });
+        self.dessin2d.edition_contour = Some(EditionContour { id: String::new(), creation: Some(usage), altitude, dessin: false, selection: None, segment: None, sommet: None, commande: None, depart: None, repere: None, glisse: None, annotation: None, fermees, raccord: None, element: None, initial: Vec::new() });
     }
 
     pub(in crate::ui) fn selectionner_trace_en_creation(&mut self) {

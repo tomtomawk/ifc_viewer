@@ -288,13 +288,8 @@ impl ViewerApp {
                 self.dessin2d.edition_contour.as_mut().unwrap().glisse = None;
             }
             let topologie_fixe = self.dessin2d.edition_contour.as_ref().is_some_and(|e| matches!(e.creation, Some(Usage::Terrain | Usage::Escalier | Usage::GardeCorps | Usage::Annotation)));
-            if resp.clicked_by(PointerButton::Secondary) && !topologie_fixe {
-                if let Some((_, c, i)) = sommet {
-                    let fermee = self.dessin2d.edition_contour.as_ref().unwrap().fermee(c);
-                    if self.dessin2d.dalle[c].len() > if fermee { 3 } else { 2 } { self.dessin2d.dalle[c].remove(i); let e = self.dessin2d.edition_contour.as_mut().unwrap(); e.segment = None; e.sommet = None; }
-                    else { self.dessin2d.message = Some("Le tracé ne peut pas comporter moins de sommets.".into()); }
-                }
-            } else if resp.double_clicked() {
+            // (le clic droit ne supprime rien : Suppr retire le trait ou le sommet sélectionné)
+            if resp.double_clicked() {
                 if let Some((_, c, i)) = sommet.filter(|(_, c, i)| self.dessin2d.edition_contour.as_ref().unwrap().creation.is_none() && !self.dessin2d.edition_contour.as_ref().unwrap().fermee(*c) && (*i == 0 || *i + 1 == self.dessin2d.dalle[*c].len())) {
                     let p = DVec2::from_array(self.dessin2d.dalle[c][i]);
                     let e = self.dessin2d.edition_contour.as_mut().unwrap();
@@ -590,20 +585,24 @@ impl ViewerApp {
             match (e.commande, e.depart, e.repere) {
                 (Some(CommandeContour::Decaler), _, _) => "Cliquer la nouvelle position du segment, ou taper la distance puis Entrée",
                 (Some(CommandeContour::Scinder), _, _) => "Cliquer le point de séparation du segment",
-                (Some(CommandeContour::Aligner | CommandeContour::Ajuster), _, _) => "Cliquer le segment de référence",
+                (Some(CommandeContour::Aligner), _, _) => "Cliquer le segment de référence : le trait vient sur sa droite, quelle que soit son orientation",
+                (Some(CommandeContour::Ajuster), _, _) => "Cliquer le segment de référence",
                 (Some(CommandeContour::Tourner | CommandeContour::Echelle), None, _) => "Cliquer le centre de la transformation",
-                (Some(CommandeContour::Tourner | CommandeContour::Echelle), Some(_), None) => "Cliquer le point de référence",
-                (Some(CommandeContour::Tourner | CommandeContour::Echelle), Some(_), Some(_)) => "Cliquer le point d'arrivée",
+                (Some(CommandeContour::Tourner), Some(_), None) => "Cliquer le point de référence, ou taper l'angle en degrés puis Entrée",
+                (Some(CommandeContour::Echelle), Some(_), None) => "Cliquer le point de référence, ou taper le facteur puis Entrée",
+                (Some(CommandeContour::Tourner), Some(_), Some(_)) => "Cliquer le point d'arrivée, ou taper l'angle en degrés puis Entrée",
+                (Some(CommandeContour::Echelle), Some(_), Some(_)) => "Cliquer le point d'arrivée, ou taper le facteur puis Entrée",
+                (Some(CommandeContour::Reseau(_)), Some(_), _) => "Cliquer la position de la première copie, ou taper l'écart puis Entrée ; nombre de copies dans la barre d'options",
                 (Some(_), None, _) => "Cliquer le premier point",
                 (Some(_), Some(_), _) => "Cliquer le second point, ou taper la distance puis Entrée",
                 _ if e.segment.is_some() => "Trait sélectionné : ses propriétés et les commandes de Modifier s'y appliquent · Suppr : le retirer · Maj+Suppr : son contour · Échap : revenir à l'objet",
-                _ if e.sommet.is_some() => "Sommet sélectionné : le glisser, ou Déplacer, Tourner, Symétrie, Échelle · Échap : revenir à l'objet",
+                _ if e.sommet.is_some() => "Sommet sélectionné : le glisser, ou Déplacer, Tourner, Symétrie, Échelle · Suppr : le retirer · Échap : revenir à l'objet",
                 _ => "Objet sélectionné : cliquer un trait ou un sommet ; double-cliquer une extrémité pour prolonger un contour",
             }
         } else if usage.is_some_and(|(u, _)| u == Usage::Terrain) && !self.dessin2d.dalle.is_empty() {
             "Cliquer dans le terrain pour placer un point coté · glisser un point ou un sommet · clic droit : retirer"
         } else if let Some(m) = modification { m }
-        else if self.ruban_edition.selection_mur && usage.is_some_and(|(u,_)|u==Usage::Mur) {"Sélectionner un trait existant dans la vue"} else if let Some(i) = self.invite_cotation() { i } else { self.dessin2d.trace.as_ref().map_or("", |t| t.invite()) };
+        else if self.ruban_edition.selection_mur && usage.is_some_and(|(u,_)|u==Usage::Mur) {"Cliquer le trait que le mur doit suivre"} else if let Some(i) = self.invite_cotation() { i } else { self.dessin2d.trace.as_ref().map_or("", |t| t.invite()) };
         let contexte = match usage.map(|(u, _)| u) {
             Some(Usage::Mur) => "Ctrl : justification · Espace : inverser le sens · ",
             Some(Usage::Escalier) => "Ctrl ou Espace : justification de la ligne · Longueur magnétisée au giron · Départ, un sommet par palier, arrivée · Marches calculées selon le niveau supérieur · ",

@@ -69,6 +69,7 @@ impl ViewerApp {
         let commande = edition.is_some_and(|e| e.commande.is_some());
         let ligne = edition.is_some_and(|e| e.ligne());
         let contours = self.dessin2d.dalle.len();
+        let mut copies = edition.and_then(|e| match e.commande { Some(CommandeContour::Reseau(n)) => Some(n), _ => None });
         // contour unique : tracé repris d'une polyligne ou d'un garde-corps, terrain déjà tracé
         let raison_forme = if ligne {
             Some("Double-cliquer une extrémité du tracé pour le prolonger")
@@ -88,7 +89,15 @@ impl ViewerApp {
                     forme_choisie = Some(forme);
                 }
             }
+            if let Some(n) = copies.as_mut() {
+                ui.separator();
+                ui.label("Copies");
+                ui.add(egui::DragValue::new(n).range(1..=50)).on_hover_text("Nombre de copies du réseau, espacées de l'écart donné");
+            }
         });
+        if let (Some(n), Some(e)) = (copies, self.dessin2d.edition_contour.as_mut()) && matches!(e.commande, Some(CommandeContour::Reseau(_))) {
+            e.commande = Some(CommandeContour::Reseau(n));
+        }
         if choisir_selection {
             self.passer_en_selection();
         }
@@ -180,7 +189,7 @@ impl ViewerApp {
     /// Barre d'options de l'outil Mur, en haut de la vue : forme tracée et chaînage.
     pub(in crate::ui) fn options_trace_mur(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui.selectable_label(self.ruban_edition.selection_mur,"Sélection").on_hover_text("Sélectionner une ligne existante dans la vue pour tracer le mur").clicked() {
+            if ui.selectable_label(self.ruban_edition.selection_mur,"Suivre un trait").on_hover_text("Cliquer un trait existant dans la vue : le mur suit ce trait").clicked() {
                 self.ruban_edition.selection_mur=true;
                 self.terminer_edition_axe();
             }

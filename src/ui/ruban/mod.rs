@@ -225,14 +225,16 @@ pub enum CibleTrace {
 }
 
 /// Raison pour laquelle un outil de Modifier ne s'applique pas au tracé en cours
-/// (None : il s'applique). `fixe` : le tracé garde ses traits ; `unique` : un seul contour.
-pub(crate) fn raison_trace(outil: Outil, cible: CibleTrace, fixe: bool, unique: bool) -> Option<&'static str> {
+/// (None : il s'applique). `fixe` : le tracé garde ses traits ; `sans_copie` : raison pour
+/// laquelle un trait ne s'y copie pas (contour unique, surface à contours fermés).
+pub(crate) fn raison_trace(outil: Outil, cible: CibleTrace, fixe: bool, sans_copie: Option<&'static str>) -> Option<&'static str> {
     use Outil::*;
     match outil {
         Deplacer | Tourner | Symetrie | Echelle => (cible == CibleTrace::Aucune).then_some("Sélectionner d'abord un trait ou un sommet du tracé (bouton Sélectionner ou Échap)"),
-        Copier | Reseau | CreerIdentique if unique => Some("Ce tracé n'accepte qu'un seul contour"),
+        Copier | Reseau | CreerIdentique if sans_copie.is_some() => sans_copie,
         Scinder | Supprimer if fixe => Some("Ce tracé garde ses traits : glisser ses sommets"),
-        Copier | Reseau | CreerIdentique | Scinder | Aligner | Ajuster | Decaler | Supprimer => (cible != CibleTrace::Segment).then_some("Sélectionner d'abord un trait du tracé (bouton Sélectionner ou Échap)"),
+        Supprimer => (cible == CibleTrace::Aucune).then_some("Sélectionner d'abord un trait ou un sommet du tracé (bouton Sélectionner ou Échap)"),
+        Copier | Reseau | CreerIdentique | Scinder | Aligner | Ajuster | Decaler => (cible != CibleTrace::Segment).then_some("Sélectionner d'abord un trait du tracé (bouton Sélectionner ou Échap)"),
         _ => Some("Ne s'applique pas à un tracé en cours : le valider ou l'annuler d'abord"),
     }
 }
@@ -472,7 +474,7 @@ pub struct RubanEdition {
     /// contour unique. Les commandes inapplicables sont grisées.
     pub cible_trace: CibleTrace,
     pub trace_fixe: bool,
-    pub trace_unique: bool,
+    pub trace_sans_copie: Option<&'static str>,
     /// Commande de Modifier en cours sur le tracé : son bouton reste enfoncé.
     pub commande_trace: Option<Outil>,
     /// Bouton Jonctions de cette image : le menu s'ancre dessus.

@@ -87,6 +87,8 @@ pub(super) struct EtatDessin2D {
     terrain_glisse: Option<(PoigneeTerrain, Vec<[f64; 2]>, Vec<f64>, Vec<[f64; 3]>)>,
     dernier_usage: Option<Usage>,
     pub edition_contour: Option<EditionContour>,
+    /// Heure du premier Échap sur un tracé modifié : un second, dans les 4 s, l'abandonne.
+    echap_abandon: Option<f64>,
     /// Type de trait des polylignes créées (id ; vide : continu fin).
     pub trait_creation: String,
     /// Cotation par arêtes : références déjà cliquées (élément, arête, abscisse relative),
@@ -114,6 +116,9 @@ pub(super) struct EditionContour {
     raccord: Option<(usize, bool)>,
     /// Élément dont le tracé est repris, autre qu'une dalle ou une polyligne.
     element: Option<ElementTrace>,
+    /// Contours à l'ouverture du tracé (vide en création) : Échap ne l'abandonne sans
+    /// confirmation que s'ils n'ont pas changé.
+    initial: Vec<Vec<[f64; 2]>>,
 }
 
 /// Élément à tracé unique repris par Modifier.
@@ -126,7 +131,7 @@ pub(super) enum ElementTrace {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum CommandeContour { Deplacer, Copier, Reseau, Tourner, Symetrie, Echelle, Decaler, Scinder, Aligner, Ajuster }
+enum CommandeContour { Deplacer, Copier, /** Nombre de copies. */ Reseau(usize), Tourner, Symetrie, Echelle, Decaler, Scinder, Aligner, Ajuster }
 
 /// Poignée du terrain en cours : sommet du contour, point coté, milieu d'un côté (le
 /// glisser insère un sommet).
@@ -276,7 +281,7 @@ impl ViewerApp {
         e.commande = match outil {
             Outil::Deplacer if e.segment.is_some() || e.sommet.is_some() => Some(CommandeContour::Deplacer),
             Outil::Copier | Outil::CreerIdentique if e.segment.is_some() => Some(CommandeContour::Copier),
-            Outil::Reseau if e.segment.is_some() => Some(CommandeContour::Reseau),
+            Outil::Reseau if e.segment.is_some() => Some(CommandeContour::Reseau(3)),
             Outil::Scinder if e.segment.is_some() => Some(CommandeContour::Scinder),
             Outil::Aligner if e.segment.is_some() => Some(CommandeContour::Aligner),
             Outil::Ajuster if e.segment.is_some() => Some(CommandeContour::Ajuster),
@@ -296,6 +301,17 @@ impl ViewerApp {
         self.dessin2d.edition_contour.as_ref().map(|e| (e.id.as_str(), e.annotation.is_some()))
     }
     fn supprimer_trait_edition(&mut self) {
+        // sommet sélectionné : retiré, tant que le tracé garde assez de sommets
+        if let Some(e) = self.dessin2d.edition_contour.as_mut() && let (None, Some((c, i))) = (e.segment, e.sommet) {
+            if matches!(e.creation, Some(Usage::Terrain | Usage::Escalier | Usage::GardeCorps | Usage::Annotation)) { return; }
+            if self.dessin2d.dalle.get(c).is_some_and(|x| i < x.len() && x.len() > if e.fermee(c) { 3 } else { 2 }) {
+                self.dessin2d.dalle[c].remove(i);
+                e.sommet = None;
+            } else {
+                self.dessin2d.message = Some("Le tracé ne peut pas comporter moins de sommets.".into());
+            }
+            return;
+        }
         if self.dessin2d.edition_contour.as_ref().is_some_and(|e| matches!(e.creation, Some(Usage::Terrain | Usage::Escalier | Usage::GardeCorps))) { return; }
         let Some((c, i)) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.segment) else { return };
         let e = self.dessin2d.edition_contour.as_mut().unwrap();
@@ -549,9 +565,10 @@ impl ViewerApp {
         let ouvert = element == Some(ElementTrace::GardeCorps);
         self.dessin2d.dernier_usage = Some(if annotation.is_some() || ouvert { Usage::Annotation } else { Usage::Surface });
         let fermees = vec![!ouvert && annotation.as_ref().is_none_or(|a| matches!(&a.forme, AnnotationForme::Polyligne { fermee: true, .. })); contours.len()];
+        let initial = contours.clone();
         self.dessin2d.dalle = contours;
         self.dessin2d.geoms = None;
-        self.dessin2d.edition_contour = Some(EditionContour { id: ids[0].clone(), creation: None, altitude, dessin: false, selection: None, segment: None, sommet: None, commande: None, depart: None, repere: None, glisse: None, annotation, fermees, raccord: None, element });
+        self.dessin2d.edition_contour = Some(EditionContour { id: ids[0].clone(), creation: None, altitude, dessin: false, selection: None, segment: None, sommet: None, commande: None, depart: None, repere: None, glisse: None, annotation, fermees, raccord: None, element, initial });
         self.dessin2d.trace = Some(Trace::new(OutilDessin::Polyligne));
         self.ruban_edition.forme_dalle = OutilDessin::Polyligne;
         self.ruban_edition.annuler();

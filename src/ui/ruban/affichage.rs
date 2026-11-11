@@ -104,7 +104,7 @@ impl RubanEdition {
                                 } else if projet.is_none() {
                                     Some("Ouvrir ou créer un projet pour utiliser cet outil")
                                 } else if self.edition_traces && menu == Menu::Modifier {
-                                    raison_trace(outil, self.cible_trace, self.trace_fixe, self.trace_unique)
+                                    raison_trace(outil, self.cible_trace, self.trace_fixe, self.trace_sans_copie)
                                 } else if outil == Outil::CopierNiveau && !self.selection_elements {
                                     Some("Sélectionner d'abord un ou plusieurs éléments")
                                 } else if outil == Outil::Jonctions && !self.selection_murs {
