@@ -151,8 +151,10 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
     let mut contenus: HashMap<usize, Vec<usize>> = HashMap::new();
     let mut produits = HashMap::new();
     let jonctions = jonctions::coupes(p);
+    // solides de tous les murs calculés ensemble, consommés dans l'ordre de `p.murs`
+    let mut solides_murs = solides::murs(p, &jonctions).into_iter();
     for m in &p.murs {
-        let rep = w.mesh(&solides::mur(p, m, &jonctions)?, contexte);
+        let rep = w.mesh(&solides_murs.next().ok_or("Mur absent.")??, contexte);
         let id = w.add(format!(
             "IFCWALL('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)",
             guid(&m.id, m.origine.as_ref()),

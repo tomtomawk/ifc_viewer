@@ -8,6 +8,8 @@ pub fn tableau(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, String>
     }
     let mut groupes: BTreeMap<(String, String), (usize, f64)> = BTreeMap::new();
     let jonctions = jonctions::coupes(p);
+    // solides de tous les murs calculés ensemble, consommés dans l'ordre de `p.murs`
+    let mut solides_murs = solides::murs(p, &jonctions).into_iter();
     let mut ajouter = |cat: &str, nom: String, v: f64| {
         if !n.categorie.is_empty() && !cat.to_lowercase().contains(&n.categorie.to_lowercase()) {
             return;
@@ -24,7 +26,7 @@ pub fn tableau(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, String>
             } else {
                 format!("{} ({})", m.nom, m.id)
             },
-            geometrie::volume(&solides::mur(p, m, &jonctions)?) / 1e9,
+            geometrie::volume(&solides_murs.next().ok_or("Mur absent.")??) / 1e9,
         );
     }
     for d in &p.dalles {
@@ -97,6 +99,8 @@ pub fn tableau(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, String>
 /// groupe (valeurs des colonnes non totalisées) si elle regroupe.
 pub(super) fn tableau_colonnes(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, String> {
     let jonctions = jonctions::coupes(p);
+    // solides de tous les murs calculés ensemble, consommés dans l'ordre de `p.murs`
+    let mut solides_murs = solides::murs(p, &jonctions).into_iter();
     let nom_niveau = |id: &str| p.niveau(id).map_or(String::new(), |x| x.nom.clone());
     let mut lignes: Vec<LigneQuantite> = Vec::new();
     for m in &p.murs {
@@ -113,7 +117,7 @@ pub(super) fn tableau_colonnes(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<S
             largeur: None,
             epaisseur: t.map(|t| t.epaisseur()),
             surface: h.map(|h| l * h / 1e6),
-            volume: Some(geometrie::volume(&solides::mur(p, m, &jonctions)?) / 1e9),
+            volume: Some(geometrie::volume(&solides_murs.next().ok_or("Mur absent.")??) / 1e9),
             parametres: BTreeMap::new(),
         });
     }

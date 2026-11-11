@@ -673,10 +673,11 @@ impl ViewerApp {
             projet.recaler_menuiseries(&self.natif.as_ref().unwrap().0)?;
         }
         projet.verifier()?;
-        let texte_seul = crate::modele::collaboration::objets(&projet)? == crate::modele::collaboration::objets(&self.natif.as_ref().unwrap().0)?;
+        // comparaison des objets : utile seulement en collaboration
+        let texte_seul = self.collaboration.is_some() && crate::modele::collaboration::objets(&projet)? == crate::modele::collaboration::objets(&self.natif.as_ref().unwrap().0)?;
         scene::chrono("application : vérifications", &mut t_etape);
         let debut_geometrie=std::time::Instant::now();
-        let scene_preparee = if texte_seul && self.collaboration.is_some() { None } else { Some(scene::depuis_natif(&projet, &chemin)?) };
+        let scene_preparee = if texte_seul && self.collaboration.is_some() { None } else { Some(scene::depuis_natif_verifie(&projet, &chemin)?) };
         if let Some(c)=&mut self.collaboration{c.mesure_geometrie_ms=debut_geometrie.elapsed().as_secs_f64()*1000.0;}
         // Le commit local durable précède toute installation dans la scène.
         // Une réception utilise déjà un état accepté et ne crée pas de transaction.
@@ -690,7 +691,8 @@ impl ViewerApp {
         }
         let scene = scene_preparee.ok_or("Scène préparée absente")?;
         scene::chrono("application : scène", &mut t_etape);
-        if !distant && self.collaboration.is_none() { self.historique.pousser(&self.natif.as_ref().unwrap().0, &projet)?; }
+        // l'instantané pris pour l'historique dit aussi si le projet diffère du fichier
+        let modifie = if !distant && self.collaboration.is_none() { Some(self.historique.pousser_modifie(&self.natif.as_ref().unwrap().0, &projet)?) } else { None };
         scene::chrono("application : historique", &mut t_etape);
         // Les indices de vues et d'objets peuvent changer après suppression ou annulation.
         // Retrouver leurs identifiants stables avant de remplacer la scène.
@@ -754,7 +756,7 @@ impl ViewerApp {
         }
         self.scene = Some(scene);
         self.bim.revision=self.bim.revision.wrapping_add(1);
-        self.natif_modifie = self.historique.modifie(&projet);
+        self.natif_modifie = modifie.unwrap_or_else(|| self.historique.modifie(&projet));
         self.natif = Some((projet, chemin));
         let gabarit_apres = id_vue.as_ref().and_then(|id| self.natif.as_ref()?.0.gabarit_vue(id)).cloned();
         if gabarit_avant != gabarit_apres || echelle_modifiee { self.actualiser_gabarit_vue_actif(); }

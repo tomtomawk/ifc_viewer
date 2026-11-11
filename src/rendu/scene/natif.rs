@@ -25,6 +25,11 @@ pub fn id_natif(genre: &str, id: &str) -> u64 {
 
 pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     projet.verifier()?;
+    depuis_natif_verifie(projet, path)
+}
+
+/// `depuis_natif` pour un projet que l'appelant vient de vérifier (`Projet::verifier`).
+pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, String> {
     let mut file = StepFile { schema: "Modèle natif v0".into(), entities: Default::default() };
     let mut entite = |id: u64, classe: &str, guid: &str, nom: &str, n: usize| -> Result<(), String> {
         let mut args = vec![Value::Null; n.max(3)];

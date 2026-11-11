@@ -133,5 +133,56 @@ pub fn enregistrer_natif(p: &Projet, chemin: &Path) -> Result<(), String> {
     ecrire_atomique(chemin,json.as_bytes())
 }
 pub fn chemin_recuperation(chemin: &Path) -> PathBuf { chemin.with_extension("recuperation.json") }
-pub fn recuperer_plus_tard(p: &Projet, chemin: &Path) -> Result<(),String> { enregistrer_natif(p,&chemin_recuperation(chemin)) }
-pub fn effacer_recuperation(chemin: &Path) { let _=std::fs::remove_file(chemin_recuperation(chemin)); }
+/// Copies de récupération en attente : rang de la dernière demande par fichier (une
+/// demande plus ancienne, ou suivie d'un effacement, n'est pas écrite) et verrou tenu
+/// pendant chaque écriture ou effacement.
+struct Recuperations {
+    rangs: std::sync::Mutex<std::collections::HashMap<PathBuf, u64>>,
+    fichier: std::sync::Mutex<()>,
+    envoi: std::sync::Mutex<std::sync::mpsc::Sender<(u64, Projet, PathBuf)>>,
+}
+
+fn recuperations() -> &'static Recuperations {
+    static R: std::sync::OnceLock<Recuperations> = std::sync::OnceLock::new();
+    R.get_or_init(|| {
+        let (envoi, reception) = std::sync::mpsc::channel::<(u64, Projet, PathBuf)>();
+        std::thread::spawn(move || {
+            while let Ok(premiere) = reception.recv() {
+                // plusieurs demandes en attente : seule la dernière de chaque fichier compte
+                let mut demandes = vec![premiere];
+                demandes.extend(reception.try_iter());
+                for (rang, projet, chemin) in demandes {
+                    let r = recuperations();
+                    let _verrou = r.fichier.lock().unwrap_or_else(|e| e.into_inner());
+                    if r.rangs.lock().unwrap_or_else(|e| e.into_inner()).get(&chemin) != Some(&rang) { continue; }
+                    if let Err(e) = enregistrer_natif(&projet, &chemin_recuperation(&chemin)) {
+                        eprintln!("Copie de récupération non écrite : {e}");
+                    }
+                }
+            }
+        });
+        Recuperations { rangs: Default::default(), fichier: Default::default(), envoi: std::sync::Mutex::new(envoi) }
+    })
+}
+
+fn rang_suivant(chemin: &Path) -> u64 {
+    let mut rangs = recuperations().rangs.lock().unwrap_or_else(|e| e.into_inner());
+    let rang = rangs.entry(chemin.to_path_buf()).or_insert(0);
+    *rang += 1;
+    *rang
+}
+
+/// Demande l'écriture de la copie de récupération, faite en arrière-plan : la
+/// modification en cours ne l'attend pas.
+pub fn recuperer_plus_tard(p: &Projet, chemin: &Path) -> Result<(),String> {
+    let rang = rang_suivant(chemin);
+    recuperations().envoi.lock().unwrap_or_else(|e| e.into_inner()).send((rang, p.clone(), chemin.to_path_buf())).map_err(|e| e.to_string())
+}
+
+/// Efface la copie de récupération ; une écriture encore en attente est abandonnée,
+/// une écriture en cours est attendue.
+pub fn effacer_recuperation(chemin: &Path) {
+    rang_suivant(chemin);
+    let _verrou = recuperations().fichier.lock().unwrap_or_else(|e| e.into_inner());
+    let _=std::fs::remove_file(chemin_recuperation(chemin));
+}

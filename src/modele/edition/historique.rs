@@ -198,10 +198,15 @@ impl<T: Instantane> Historique<T> {
         }
     }
     pub fn pousser(&mut self, avant: &T, apres: &T) -> Result<(), String> {
+        self.pousser_modifie(avant, apres).map(|_| ())
+    }
+    /// `pousser`, puis `modifie(apres)` sans refaire l'instantané.
+    pub fn pousser_modifie(&mut self, avant: &T, apres: &T) -> Result<bool, String> {
         let a = avant.instantane()?;
         let b = apres.instantane()?;
+        let modifie = Some(&b) != self.sauvegarde.as_ref();
         if a == b {
-            return Ok(());
+            return Ok(modifie);
         }
         if !self.geste || self.debut_geste.is_none() {
             let entree = Entree {
@@ -216,7 +221,7 @@ impl<T: Instantane> Historique<T> {
         }
         self.apres.clear();
         self.borner();
-        Ok(())
+        Ok(modifie)
     }
     /// Le contrôleur valide et reconstruit la cible avant de déplacer les piles.
     pub fn cible_n(&self, retablir: bool, nombre: usize) -> Result<T, String> {
