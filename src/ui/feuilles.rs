@@ -112,14 +112,14 @@ pub(super) struct EtatFeuilles {
 }
 
 /// Écart entre deux feuilles (mm du papier).
-const ECART: f32 = 40.0;
+const ECART: f32 = 24.0;
 const HAUT_FEUILLES: f32 = 64.0;
 
 impl ViewerApp {
     pub(super) fn editer_cartouche_feuille(&mut self, id: &str) {
         let Some((p, _)) = &self.natif else { return };
         if !p.feuilles.iter().any(|f| f.id == id) { return; }
-        let source = doc::famille_cartouche(p, id).cloned();
+        let source = Some(doc::famille_cartouche(p, id).cloned().unwrap_or_default());
         self.editer_cartouche(source, Some(id.to_string()));
     }
 
@@ -130,7 +130,8 @@ impl ViewerApp {
     }
 
     pub(super) fn editer_cartouche(&mut self, source: Option<doc::FamilleCartouche>, feuille: Option<String>) {
-        let Some((p, _)) = &self.natif else { return };
+        let projet_vide = crate::modele::Projet::nouveau("Famille");
+        let p = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
         let original = source.as_ref().map_or_else(String::new, |f| f.nom.clone());
         let mut famille = source.unwrap_or_default();
         if original.is_empty() {
@@ -142,7 +143,8 @@ impl ViewerApp {
     /// Ouvre l'éditeur d'une famille d'étiquette de pièce : `famille` (Some("") : la
     /// standard ; None : nouvelle, copie de celle de la pièce), affectée à `piece`.
     pub(super) fn editer_famille_etiquette(&mut self, famille: Option<String>, piece: Option<String>) {
-        let Some((p, _)) = &self.natif else { return };
+        let projet_vide = crate::modele::Projet::nouveau("Famille");
+        let p = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
         let actuelle = piece.as_ref().and_then(|id| p.pieces.iter().find(|x| &x.id == id)).map(|x| p.famille_etiquette(x));
         let mut f = match &famille {
             Some(id) => p.familles_etiquettes.iter().find(|f| &f.id == id).cloned().unwrap_or_else(doc::FamilleEtiquette::standard),
@@ -188,11 +190,13 @@ impl ViewerApp {
     pub(super) fn enregistrer_cartouche(&mut self, famille: &doc::FamilleCartouche, feuille: Option<&str>, original: &str) -> Result<(), String> {
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
         let nom = &famille.nom;
-        if nom.is_empty() || nom == "Cartouche standard" || p.familles_cartouches.iter().any(|f| &f.nom == nom && f.id != famille.id) {
+        if nom.is_empty() || (nom == doc::NOM_CARTOUCHE_STANDARD && original != doc::NOM_CARTOUCHE_STANDARD)
+            || (original == doc::NOM_CARTOUCHE_STANDARD && nom != doc::NOM_CARTOUCHE_STANDARD)
+            || p.familles_cartouches.iter().any(|f| &f.nom == nom && f.id != famille.id) {
             return Err("Choisir un nom de famille non vide et distinct des familles existantes.".into());
         }
         let mut q = p.clone();
-        if original.is_empty() {
+        if original.is_empty() || (original == doc::NOM_CARTOUCHE_STANDARD && !q.familles_cartouches.iter().any(|f| f.nom == original)) {
             q.familles_cartouches.push(famille.clone());
         } else {
             let f = q.familles_cartouches.iter_mut().find(|f| f.id == famille.id).ok_or("Famille de cartouche absente.")?;
@@ -202,7 +206,8 @@ impl ViewerApp {
             }
         }
         if let Some(id) = feuille.filter(|id| q.feuilles.iter().any(|f| f.id == *id)) {
-            q.cartouches_feuilles.insert(id.into(), nom.clone());
+            if nom == doc::NOM_CARTOUCHE_STANDARD { q.cartouches_feuilles.remove(id); }
+            else { q.cartouches_feuilles.insert(id.into(), nom.clone()); }
         }
         self.appliquer_projet(q)
     }
@@ -563,7 +568,6 @@ impl ViewerApp {
                 if !r.intersects(rect) {
                     continue;
                 }
-                painter.rect_filled(r.translate(egui::vec2(4.0, 4.0)), 0.0, Color32::from_black_alpha(60));
                 painter.rect_filled(r, 0.0, Color32::WHITE);
                 if survol_depot == Some(k) {
                     painter.rect_stroke(r, 0.0, egui::Stroke::new(3.0, bleu), egui::StrokeKind::Outside);
@@ -826,12 +830,6 @@ impl ViewerApp {
                         ui.add(egui::DragValue::new(&mut g.hauteur).speed(1.0).range(50.0..=5000.0).suffix(" mm"));
                     });
                     ui.end_row();
-                    ui.label("Texte du cartouche");
-                    ui.text_edit_singleline(&mut g.cartouche);
-                    ui.end_row();
-                    ui.label("Famille de cartouche");
-                    projet_modifie = selecteur_cartouche(ui, p, f);
-                    ui.end_row();
                 });
                 ui.label(RichText::new(format!("{} vue(s) placée(s), {} nomenclature(s) · glisser une vue ou une nomenclature de l'arborescence sur la feuille", f.vues.len(), f.nomenclatures.len())).small().weak());
                 if commande.is_none() && serde_json::to_string(&g).ok() != serde_json::to_string(f).ok() {
@@ -955,7 +953,7 @@ impl ViewerApp {
 }
 
 fn selecteur_cartouche(ui: &mut egui::Ui, p: &crate::modele::Projet, f: &doc::Feuille) -> Option<crate::modele::Projet> {
-    let actuel = doc::famille_cartouche(p, &f.id).map(|f| f.nom.as_str());
+    let actuel = doc::famille_cartouche(p, &f.id).map(|f| f.nom.as_str()).filter(|nom| *nom != doc::NOM_CARTOUCHE_STANDARD);
     let mut choix = actuel;
     {
         use super::ruban::selecteur;
@@ -966,7 +964,7 @@ Famille de cartouche de la feuille."), None);
         selecteur::liste(&bouton, largeur, 0.0, |ui| {
             let l = selecteur::Ligne { nom: "Cartouche standard", courant: actuel.is_none(), etiquette: None, sous_titre: None, detail: None, actions: &[] };
             if selecteur::ligne(ui, &l, None).choisi { choix = None; }
-            for famille in &p.familles_cartouches {
+            for famille in p.familles_cartouches.iter().filter(|famille| famille.nom != doc::NOM_CARTOUCHE_STANDARD) {
                 let l = selecteur::Ligne { nom: &famille.nom, courant: actuel == Some(famille.nom.as_str()), etiquette: None, sous_titre: None, detail: None, actions: &[] };
                 if selecteur::ligne(ui, &l, None).choisi { choix = Some(famille.nom.as_str()); }
             }

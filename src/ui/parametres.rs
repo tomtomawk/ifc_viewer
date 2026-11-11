@@ -304,7 +304,7 @@ impl ViewerApp {
         }
         if self.famille_plane_active.is_some() {
             match action {
-                "enregistrer" => { self.error = self.enregistrer_famille_plane(false).err(); return; }
+                "enregistrer" => { self.error = if self.famille_plane_active.and_then(|i| self.familles_planes.get(&i)).is_some_and(|e| e.autonome) { self.enregistrer_famille_plane_dialogue(false).err() } else { self.enregistrer_famille_plane(false).err() }; return; }
                 "fermer" => { self.demander_fermeture_famille(); return; }
                 "supprimer" => { self.supprimer_selection_famille_plane(); return; }
                 "cadrer" => { let _ = self.navigation_cartouche("cadrer"); return; }
@@ -322,9 +322,9 @@ impl ViewerApp {
             "theme_suivant" => self.changer_theme(ctx, self.options.theme_interface.suivant()),
             "enregistrer" => {
                 if self.famille_active && self.famille.is_some() {
-                    self.action_famille = Some(editeur_famille::ActionFamille::Charger(
-                        self.famille.as_ref().is_some_and(|e| e.nouvelle()),
-                    ));
+                    self.action_famille = Some(if self.famille.as_ref().is_some_and(|e| e.autonome) {
+                        editeur_famille::ActionFamille::Enregistrer
+                    } else { editeur_famille::ActionFamille::Charger(self.famille.as_ref().is_some_and(|e| e.nouvelle())) });
                 } else {
                     self.enregistrer_projet(ctx);
                 }

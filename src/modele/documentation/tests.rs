@@ -270,6 +270,22 @@ fn feuilles_par_jeu_et_anciens_fichiers() {
 }
 
 #[test]
+fn cartouche_standard_enregistre_est_partage_par_les_feuilles_sans_affectation() {
+    let mut p = Projet::nouveau("Projet");
+    let mut standard = FamilleCartouche::default();
+    standard.largeur = 125.0;
+    let mut autre = FamilleCartouche::default();
+    autre.nom = "Agence".into();
+    autre.largeur = 80.0;
+    p.familles_cartouches.extend([standard, autre]);
+    p.cartouches_feuilles.insert("personnalisee".into(), "Agence".into());
+    let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
+    assert_eq!(famille_cartouche(&relu, "premiere").unwrap().largeur, 125.0);
+    assert_eq!(famille_cartouche(&relu, "seconde").unwrap().largeur, 125.0);
+    assert_eq!(famille_cartouche(&relu, "personnalisee").unwrap().largeur, 80.0);
+}
+
+#[test]
 fn famille_cartouche_partagee_est_enregistree_et_utilisee() {
     let f: Feuille = serde_json::from_str(r#"{"id":"f","numero":"A01","nom":"Plan","largeur":420,"hauteur":297,"cartouche":"Agence","vues":[]}"#).unwrap();
     let mut p = Projet::nouveau("Projet");
@@ -283,7 +299,7 @@ fn famille_cartouche_partagee_est_enregistree_et_utilisee() {
     let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
     assert_eq!(relu.familles_cartouches.len(), 1);
     assert_eq!(relu.cartouches_feuilles.len(), 2);
-    assert_eq!(cadre_feuille(&relu, &f).len(), 4); // deux cadres, un trait et un texte
+    assert_eq!(cadre_feuille(&relu, &f).len(), 2); // uniquement le trait et le texte du cartouche
     assert!(svg_feuille(&relu, &f).unwrap().contains("420mm"));
     assert!(pdf_jeu(&relu, JEU_DEFAUT).unwrap().starts_with(b"%PDF-"));
 }

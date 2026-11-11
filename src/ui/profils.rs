@@ -6,7 +6,8 @@ use super::familles_planes::FamillePlane;
 
 impl ViewerApp {
     pub(super) fn ouvrir_profil(&mut self, id: Option<&str>) {
-        let Some((projet, _)) = &self.natif else { return };
+        let projet_vide = crate::modele::Projet::nouveau("Famille");
+        let projet = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
         let profil = if let Some(id) = id {
             let Some(p) = projet.profils.iter().find(|p| p.id == id) else { return };
             p.clone()

@@ -10,6 +10,49 @@ pub(super) enum FamillePlane {
 }
 
 impl FamillePlane {
+    fn json_fichier(&self) -> Result<String, String> {
+        let valeur = match self {
+            Self::Profil { profil, .. } => {
+                profil.valider()?;
+                serde_json::json!({"format":"bimedit.profil", "profil":profil})
+            }
+            Self::Cartouche { famille, .. } => {
+                if famille.nom.trim().is_empty() || !famille.largeur.is_finite() || !famille.hauteur.is_finite() || famille.largeur <= 0.0 || famille.hauteur <= 0.0 { return Err("Nom et dimensions valides requis pour le cartouche.".into()); }
+                serde_json::json!({"format":"bimedit.cartouche", "famille":famille})
+            }
+            Self::Etiquette { famille, .. } => {
+                if famille.nom.trim().is_empty() { return Err("Nommer la famille d'étiquette.".into()); }
+                serde_json::json!({"format":"bimedit.etiquette", "famille":famille})
+            }
+        };
+        serde_json::to_string_pretty(&valeur).map_err(|e| e.to_string())
+    }
+
+    fn lire_fichier(texte: &str) -> Result<Self, String> {
+        let v: serde_json::Value = serde_json::from_str(texte).map_err(|e| format!("Fichier de famille illisible : {e}"))?;
+        match v.get("format").and_then(|x| x.as_str()) {
+            Some("bimedit.profil") => Ok(Self::Profil { profil: crate::modele::famille::profil::FichierProfil::lire(texte)?, original: None }),
+            Some("bimedit.cartouche") => {
+                let mut famille: doc::FamilleCartouche = serde_json::from_value(v.get("famille").cloned().ok_or("Cartouche absent")?).map_err(|e| e.to_string())?;
+                famille.id = crate::modele::collaboration::uuid();
+                let contenu = Self::Cartouche { famille, feuille: None, original: String::new() };
+                contenu.json_fichier()?;
+                Ok(contenu)
+            }
+            Some("bimedit.etiquette") => {
+                let mut famille: doc::FamilleEtiquette = serde_json::from_value(v.get("famille").cloned().ok_or("Étiquette absente")?).map_err(|e| e.to_string())?;
+                famille.id.clear();
+                let contenu = Self::Etiquette { famille, piece: None, original: String::new() };
+                contenu.json_fichier()?;
+                Ok(contenu)
+            }
+            _ => Err("Format de famille plane inconnu.".into()),
+        }
+    }
+
+    fn extension_fichier(&self) -> &'static str {
+        match self { Self::Profil { .. } => "profil", Self::Cartouche { .. } => "cartouche", Self::Etiquette { .. } => "etiquette" }
+    }
     fn nom(&self) -> &str {
         match self {
             Self::Cartouche { famille, .. } => &famille.nom,
@@ -38,6 +81,8 @@ impl FamillePlane {
 
 pub(super) struct EditeurPlan {
     pub document: usize,
+    pub(super) autonome: bool,
+    chemin_fichier: Option<std::path::PathBuf>,
     pub contenu: FamillePlane,
     reference: FamillePlane,
     tracer: bool,
@@ -49,7 +94,8 @@ impl EditeurPlan {
     pub(super) fn element_selectionne(&self) -> bool {
         matches!(self.contenu, FamillePlane::Cartouche { .. }) && self.cartouche.element_selectionne()
     }
-    pub(super) fn modifie(&self) -> bool { self.contenu != self.reference }
+    pub(super) fn modifie(&self) -> bool { (self.autonome && self.chemin_fichier.is_none()) || self.contenu_modifie() }
+    pub(super) fn contenu_modifie(&self) -> bool { self.contenu != self.reference }
 
     pub(super) fn titre(&self) -> String {
         format!("{} · {}{}", self.contenu.categorie(), self.contenu.nom(), if self.modifie() { " *" } else { "" })
@@ -57,6 +103,36 @@ impl EditeurPlan {
 }
 
 impl ViewerApp {
+    pub(super) fn ouvrir_famille_plane_fichier(&mut self, chemin: &std::path::Path) -> Result<(), String> {
+        let texte = std::fs::read_to_string(chemin).map_err(|e| format!("{} : {e}", chemin.display()))?;
+        let contenu = FamillePlane::lire_fichier(&texte)?;
+        self.ouvrir_famille_plane(contenu);
+        if let Some(ed) = self.famille_plane_active.and_then(|i| self.familles_planes.get_mut(&i)) {
+            ed.autonome = true;
+            ed.chemin_fichier = Some(chemin.to_path_buf());
+            ed.reference = ed.contenu.clone();
+        }
+        Ok(())
+    }
+
+    /// Renvoie faux si le dialogue a été annulé ; aucun état n'est alors modifié.
+    pub(super) fn enregistrer_famille_plane_dialogue(&mut self, sous: bool) -> Result<bool, String> {
+        let ordre = self.famille_plane_active.ok_or("Éditeur fermé")?;
+        let ed = self.familles_planes.get(&ordre).ok_or("Famille absente")?;
+        let texte = ed.contenu.json_fichier()?;
+        let chemin = if sous { None } else { ed.chemin_fichier.clone() }.or_else(|| {
+            rfd::FileDialog::new().add_filter("Famille BIMedit", &["json"])
+                .set_file_name(format!("{}.{}.json", ed.contenu.nom(), ed.contenu.extension_fichier())).save_file()
+        });
+        let Some(chemin) = chemin else { return Ok(false) };
+        crate::modele::echanges::enregistrement::ecrire_atomique(&chemin, texte.as_bytes())?;
+        let ed = self.familles_planes.get_mut(&ordre).unwrap();
+        ed.chemin_fichier = Some(chemin.clone());
+        ed.reference = ed.contenu.clone();
+        self.status = format!("Famille enregistrée : {}", chemin.display());
+        Ok(true)
+    }
+
     pub(super) fn mode_famille(&self) -> bool {
         self.famille_plane_active.is_some() || (self.famille_active && self.famille.is_some())
     }
@@ -68,13 +144,15 @@ impl ViewerApp {
                 || (id.is_some() && ed.contenu.categorie() == contenu.categorie() && ed.contenu.id() == id)
                 || matches!((&ed.reference, &contenu),
                     (FamillePlane::Cartouche { feuille: a, original: x, .. }, FamillePlane::Cartouche { feuille: b, original: y, .. })
-                    if a == b && x.is_empty() && y.is_empty()))
+                    if (a == b && x.is_empty() && y.is_empty()) || (x == doc::NOM_CARTOUCHE_STANDARD && y == x)))
         }).map(|(&ordre, _)| ordre);
         let ordre = existant.unwrap_or_else(|| {
             self.prochain_ordre_famille += 1;
             let ordre = self.prochain_ordre_famille;
             self.familles_planes.insert(ordre, EditeurPlan {
                 document: self.document_actif,
+                autonome: self.natif.is_none(),
+                chemin_fichier: None,
                 reference: contenu.clone(),
                 contenu,
                 tracer: false,
@@ -107,10 +185,10 @@ impl ViewerApp {
         let rect = ui.available_rect_before_wrap();
         if rect.is_positive() { self.rect_vue = rect; }
         if let FamillePlane::Cartouche { famille, .. } = &mut ed.contenu {
-            if let Some((p, _)) = &self.natif {
-                let rect = ed.cartouche.canevas(ui, p, famille);
-                if rect.is_positive() { self.rect_vue = rect; }
-            }
+            let projet_vide = crate::modele::Projet::nouveau("Famille");
+            let p = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
+            let rect = ed.cartouche.canevas(ui, p, famille);
+            if rect.is_positive() { self.rect_vue = rect; }
             return;
         }
         egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(12.0).show(ui, |ui| {
@@ -147,13 +225,14 @@ impl ViewerApp {
             }
             return;
         }
+        let standard = matches!(&ed.contenu, FamillePlane::Cartouche { original, .. } if original == doc::NOM_CARTOUCHE_STANDARD);
         let nom = match &mut ed.contenu {
             FamillePlane::Cartouche { famille, .. } => &mut famille.nom,
             FamillePlane::Etiquette { famille, .. } => &mut famille.nom,
             FamillePlane::Profil { profil, .. } => &mut profil.nom,
         };
         ui.label("Nom de la famille");
-        ui.text_edit_singleline(nom);
+        ui.add_enabled(!standard, egui::TextEdit::singleline(nom));
         if let FamillePlane::Profil { profil, .. } = &mut ed.contenu { profils::proprietes_profil(ui, profil); }
         if let FamillePlane::Cartouche { famille, .. } = &mut ed.contenu {
             ui.horizontal(|ui| {
@@ -173,13 +252,18 @@ impl ViewerApp {
         let Some(ordre) = self.famille_plane_active else { return };
         let Some(ed) = self.familles_planes.get_mut(&ordre) else { return };
         if !sortie && matches!(ed.contenu, FamillePlane::Cartouche { .. }) {
-            ed.cartouche.ruban(ui, self.natif.as_ref().map(|(p, _)| p));
+            let projet_vide = crate::modele::Projet::nouveau("Famille");
+            ed.cartouche.ruban(ui, Some(self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide)));
             return;
         }
         let profil = matches!(ed.contenu, FamillePlane::Profil { .. });
         let existant = ed.contenu.id().is_some();
         let commandes = if sortie {
-            let mut commandes = vec![C::new("charger", "Charger dans le projet", I::Charger, "Enregistrer la famille dans son projet (Ctrl+S)", true)];
+            let mut commandes = vec![
+                C::new("charger", "Charger dans le projet", I::Charger, "Enregistrer la famille dans le projet ouvert", self.natif.is_some()),
+                C::new("fichier", "Enregistrer sous", I::EnregistrerSous, "Enregistrer la famille dans un fichier", true),
+                C::new("ouvrir", "Ouvrir", I::Ouvrir, "Ouvrir un fichier de famille", true),
+            ];
             if profil {
                 commandes.extend([
                     C::new("copier", "Créer une copie", I::Nouveau, "Enregistrer un autre profil sous un nom distinct", existant),
@@ -204,6 +288,11 @@ impl ViewerApp {
             .into_iter().find_map(|(cle, r)| r.clicked().then_some(cle));
         let resultat = match action {
             Some("charger") => self.enregistrer_famille_plane(false),
+            Some("fichier") => self.enregistrer_famille_plane_dialogue(true).map(|_| ()),
+            Some("ouvrir") => {
+                if let Some(chemin) = rfd::FileDialog::new().add_filter("Famille BIMedit", &["json"]).pick_file() { self.open(chemin, ui.ctx()); }
+                return;
+            }
             Some("copier") => self.enregistrer_famille_plane(true),
             Some("exporter") => match &ed.contenu { FamillePlane::Profil { profil, .. } => profils::exporter_profil(profil), _ => Ok(()) },
             Some("supprimer") => self.supprimer_profil_actif(),
@@ -248,16 +337,27 @@ impl ViewerApp {
     pub(super) fn enregistrer_famille_plane(&mut self, copie: bool) -> Result<(), String> {
         let ordre = self.famille_plane_active.ok_or("Éditeur de famille fermé.")?;
         let ed = self.familles_planes.get(&ordre).ok_or("Famille absente.")?;
-        if ed.document != self.document_actif { return Err("Le projet de la famille doit être actif.".into()); }
+        if self.natif.is_none() { return Err("Ouvrir un projet pour y charger la famille.".into()); }
+        if !ed.autonome && ed.document != self.document_actif { return Err("Le projet de la famille doit être actif.".into()); }
         let mut contenu = ed.contenu.clone();
         match &mut contenu {
             FamillePlane::Cartouche { famille, feuille, original } => {
                 famille.nom = famille.nom.trim().to_string();
+                if original.is_empty() && famille.nom == doc::NOM_CARTOUCHE_STANDARD {
+                    let p = &self.natif.as_ref().unwrap().0;
+                    famille.nom = (1..).map(|n| if n == 1 { "Cartouche standard (copie)".into() } else { format!("Cartouche standard (copie {n})") })
+                        .find(|nom| p.familles_cartouches.iter().all(|f| &f.nom != nom)).unwrap();
+                }
                 self.enregistrer_cartouche(famille, feuille.as_deref(), original)?;
                 *original = famille.nom.clone();
             }
             FamillePlane::Etiquette { famille, piece, original } => {
                 famille.nom = famille.nom.trim().to_string();
+                if original.is_empty() && famille.nom == "Étiquette standard" {
+                    let p = &self.natif.as_ref().unwrap().0;
+                    famille.nom = (1..).map(|n| if n == 1 { "Étiquette standard (copie)".into() } else { format!("Étiquette standard (copie {n})") })
+                        .find(|nom| p.familles_etiquettes.iter().all(|f| &f.nom != nom)).unwrap();
+                }
                 famille.id = self.enregistrer_famille_etiquette(famille.clone(), piece.clone(), original)?;
                 *original = famille.id.clone();
             }
@@ -267,6 +367,8 @@ impl ViewerApp {
             }
         }
         let ed = self.familles_planes.get_mut(&ordre).unwrap();
+        ed.document = self.document_actif;
+        ed.autonome = false;
         ed.reference = contenu.clone();
         ed.contenu = contenu;
         self.status = "Famille enregistrée dans le projet.".into();
@@ -282,5 +384,39 @@ impl ViewerApp {
         self.appliquer_projet(projet)?;
         self.fermer_famille_plane();
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fichiers_de_familles_planes_se_rouvrent_sans_projet() {
+        let profil = crate::config::gabarit::Gabarit::defaut().profils[0].clone();
+        let familles = [
+            FamillePlane::Profil { profil, original: None },
+            FamillePlane::Cartouche { famille: doc::FamilleCartouche::default(), feuille: None, original: String::new() },
+            FamillePlane::Etiquette { famille: doc::FamilleEtiquette::standard(), piece: None, original: String::new() },
+        ];
+        for famille in familles {
+            let texte = famille.json_fichier().unwrap();
+            let relue = FamillePlane::lire_fichier(&texte).unwrap();
+            assert_eq!(famille.nom(), relue.nom());
+            assert_eq!(famille.categorie(), relue.categorie());
+            match (&famille, &relue) {
+                (FamillePlane::Cartouche { famille: avant, .. }, FamillePlane::Cartouche { famille: apres, .. }) => {
+                    assert_eq!(avant.formes, apres.formes);
+                    assert_eq!(avant.traits, apres.traits);
+                    assert_eq!(avant.textes, apres.textes);
+                }
+                (FamillePlane::Profil { profil: avant, .. }, FamillePlane::Profil { profil: apres, .. }) => assert_eq!(avant, apres),
+                (FamillePlane::Etiquette { famille: avant, .. }, FamillePlane::Etiquette { famille: apres, .. }) => {
+                    assert_eq!(avant.traits, apres.traits);
+                    assert_eq!(avant.textes, apres.textes);
+                }
+                _ => panic!("Catégorie de famille différente après réouverture"),
+            }
+        }
     }
 }

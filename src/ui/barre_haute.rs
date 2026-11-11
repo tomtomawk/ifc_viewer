@@ -253,7 +253,7 @@ impl ViewerApp {
                 use crate::ui::ruban::{Commande as C, Icone as I};
                 let fichier = vec![
                     C::new("nouveau", "Nouveau", I::Nouveau, "Créer un projet natif v0 (Ctrl+N)", self.loading.is_none()),
-                    C::new("nouvelle_famille", "Nouvelle famille", I::Nouveau, "Créer une famille dans le projet", self.natif.is_some() && self.loading.is_none()),
+                    C::new("nouvelle_famille", "Nouvelle famille", I::Nouveau, "Créer une famille", self.loading.is_none()),
                     C::new("ouvrir", "Ouvrir", I::Ouvrir, "Ouvrir un projet natif, un IFC, un RVT ou un RFA (Ctrl+O)", true),
                     C::new("fermer", "Fermer", I::Fermer, "Fermer le document actif", self.scene.is_some() || self.rvt.is_some() || self.loading.is_some()),
                     C::new("collaborer", "Collaborer", I::Collaborer, "Enregistrer un projet partagé sur le serveur et créer sa copie locale", self.natif.is_some() && self.collaboration.is_none() && self.loading.is_none() && self.sauvegarde.is_none() && !self.saisie_active),

@@ -58,11 +58,11 @@ impl VueFamille {
     }
 }
 
-pub(super) fn choisir_vue_famille(ui: &mut egui::Ui, actuelle: VueFamille, nom: impl Fn(VueFamille) -> &'static str) -> Option<VueFamille> {
+pub(super) fn choisir_vue_famille(ui: &mut egui::Ui, actuelle: Option<VueFamille>, nom: impl Fn(VueFamille) -> &'static str) -> Option<VueFamille> {
     let mut choix = None;
     egui::CollapsingHeader::new(RichText::new("Vues").strong()).default_open(true).show(ui, |ui| {
         for vue in VueFamille::TOUTES {
-            if ui.selectable_label(actuelle == vue, nom(vue)).clicked() { choix = Some(vue); }
+            if ui.selectable_label(actuelle == Some(vue), nom(vue)).clicked() { choix = Some(vue); }
         }
     });
     choix
@@ -135,6 +135,7 @@ enum SelectionFamille {
 pub(super) enum ActionFamille {
     /// Charger dans le projet : le type édité (false) ou un nouveau type (true).
     Charger(bool),
+    Enregistrer,
     EnregistrerSous,
     Ouvrir,
 }
@@ -153,6 +154,9 @@ pub(super) struct EditeurFamille {
     famille: FamilleModelee,
     vue: VueFamille,
     construction: Option<usize>,
+    vue_3d: bool,
+    camera_3d: crate::rendu::camera::Camera,
+    cadrage_3d_initial: bool,
     navigation: [NavigationFamille;3],
     rect_navigation: egui::Rect,
     outil: OutilFamille,
@@ -168,6 +172,8 @@ pub(super) struct EditeurFamille {
     axe_revolution: Option<[[f64; 2]; 2]>,
     /// Document projet d'où l'éditeur a été ouvert : seul destinataire du type.
     pub(super) document: usize,
+    pub(super) autonome: bool,
+    chemin_fichier: Option<std::path::PathBuf>,
     /// Paramètres partagés du projet (copie modifiable ; seules les valeurs changées
     /// sont reportées à l'enregistrement).
     partages: BTreeMap<String, f64>,
@@ -280,7 +286,11 @@ impl EditeurFamille {
     }
 
     pub(super) fn modifiee(&self) -> bool {
-        self.type_id.is_none() || self.reference != (self.nom.clone(), self.largeur, self.hauteur, self.famille.clone())
+        (self.type_id.is_none() && self.chemin_fichier.is_none()) || self.contenu_modifie()
+    }
+
+    pub(super) fn contenu_modifie(&self) -> bool {
+        self.reference != (self.nom.clone(), self.largeur, self.hauteur, self.famille.clone())
     }
 
     fn marquer_enregistree(&mut self) {
@@ -479,6 +489,7 @@ impl EditeurFamille {
     /// Ouvre une vue de la famille.
     fn ouvrir_vue(&mut self, v: VueFamille) {
         self.construction = None;
+        self.vue_3d = false;
         self.vue = v;
         self.choisir_outil(self.outil);
     }

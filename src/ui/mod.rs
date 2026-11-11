@@ -543,6 +543,7 @@ pub struct ViewerApp {
     journal_documents: Vec<serde_json::Value>,
     prochain_document: usize,
     renderer: Option<Renderer>,
+    renderer_famille: Option<Renderer>,
     scene: Option<Scene>,
     /// Métadonnées du fichier Revit ouvert.
     rvt: Option<RvtInfo>,
@@ -732,6 +733,7 @@ pub struct ViewerApp {
 impl ViewerApp {
     pub fn new(cc: &eframe::CreationContext<'_>, path: Option<PathBuf>) -> Self {
         let mut error = None;
+        let renderer_famille = cc.wgpu_render_state.as_ref().and_then(|rs| Renderer::new(rs).ok());
         let renderer = match cc.wgpu_render_state.as_ref().map(Renderer::new) {
             Some(Ok(r)) => Some(r),
             Some(Err(e)) => {
@@ -776,6 +778,7 @@ impl ViewerApp {
             journal_documents: Vec::new(),
             prochain_document: 1,
             renderer,
+            renderer_famille,
             scene: None,
             rvt: None,
             rvt_source: None,
@@ -971,6 +974,10 @@ impl eframe::App for ViewerApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.activer_famille(ordre);
             self.demander_fermeture_famille();
+        } else if ctx.input(|i| i.viewport().close_requested()) && let Some(ordre) = self.famille.iter().chain(&self.familles_inactives).find(|ed| ed.modifiee()).map(|ed| ed.ordre) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.activer_famille(ordre);
+            self.demander_fermeture_famille();
         } else if ctx.input(|i| i.viewport().close_requested()) && (self.natif_modifie || self.documents.values().any(|d| d.modifie)) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.confirmer_fermeture = Some((true, self.document_actif));
@@ -1055,7 +1062,7 @@ impl eframe::App for ViewerApp {
                 self.largeurs_panneaux[p as usize] = reponse.response.rect.width();
             }
             // sous la vue seulement, entre les panneaux ancrés
-            if self.scene.is_some() {
+            if self.scene.is_some() || !self.onglets_familles().is_empty() {
                 egui::Panel::top("onglets_vues").show(ui, |ui| self.onglets_vues(ui));
             }
             if !famille {

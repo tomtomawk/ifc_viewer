@@ -12,6 +12,14 @@ impl ViewerApp {
         }).unwrap_or_default()
     }
     pub(super) fn open(&mut self, path: PathBuf, ctx: &egui::Context) {
+        if path.file_name().is_some_and(|n| { let nom = n.to_string_lossy().to_lowercase(); [".profil.json", ".cartouche.json", ".etiquette.json"].iter().any(|suffixe| nom.ends_with(suffixe)) }) {
+            if let Err(e) = self.ouvrir_famille_plane_fichier(&path) { self.error = Some(e); }
+            return;
+        }
+        if path.file_name().is_some_and(|n| n.to_string_lossy().to_lowercase().ends_with(".famille.json")) {
+            if let Err(e) = self.ouvrir_famille_fichier(&path) { self.error = Some(e); }
+            return;
+        }
         let recuperation=crate::modele::echanges::enregistrement::chemin_recuperation(&path);
         let restaurer=if path.extension().is_some_and(|e|e.eq_ignore_ascii_case("json")) && recuperation.exists() {
             match rfd::MessageDialog::new().set_title("Récupération du projet").set_description("Une copie de récupération existe. Restaurer les modifications non enregistrées ?").set_buttons(rfd::MessageButtons::YesNoCancel).show() {

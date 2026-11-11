@@ -11,8 +11,8 @@ impl ViewerApp {
             let placement = ed.ouverture.is_none();
             let nouveau = ed.type_id.is_none();
             let charger = vec![
-                C::new("charger", "Charger dans le projet", I::Charger, if nouveau { "Crée le type avec cette famille dans le projet (Ctrl+S)" } else { "Met à jour le type et toutes ses ouvertures (Ctrl+S)" }, true),
-                C::new("nouveau_type", "Nouveau type", I::Nouveau, if placement { "Crée un type avec cette famille ; il sert au prochain placement" } else { "Crée un type avec cette famille et l'affecte à l'ouverture" }, true),
+                C::new("charger", "Charger dans le projet", I::Charger, if nouveau { "Crée le type avec cette famille dans le projet (Ctrl+S)" } else { "Met à jour le type et toutes ses ouvertures (Ctrl+S)" }, self.natif.is_some()),
+                C::new("nouveau_type", "Nouveau type", I::Nouveau, if placement { "Crée un type avec cette famille ; il sert au prochain placement" } else { "Crée un type avec cette famille et l'affecte à l'ouverture" }, self.natif.is_some()),
             ];
             let fichier = vec![
                 C::new("enregistrer_sous", "Enregistrer sous", I::EnregistrerSous, "Fichier de famille .famille.json, à charger dans un autre projet", true),
@@ -39,8 +39,8 @@ impl ViewerApp {
         let outil = ed.outil;
         let outils = |liste: &[(OutilFamille, &'static str, &'static str, &'static str)]| -> Vec<C> {
             liste.iter().map(|&(o, cle, nom, aide)| {
-                let actif = ed.outil_disponible(o);
-                let aide = if actif { aide } else { "Cet outil n'est pas disponible sur le plan de construction actif. Revenir au plan de la vue pour l'utiliser." };
+                let actif = !ed.vue_3d && ed.outil_disponible(o);
+                let aide = if actif { aide } else if ed.vue_3d { "Ouvrir une vue plane pour dessiner." } else { "Cet outil n'est pas disponible sur le plan de construction actif. Revenir au plan de la vue pour l'utiliser." };
                 C { enfonce: actif && outil == o, ..C::new(cle, nom, I::Famille(cle), aide, actif) }
             }).collect()
         };

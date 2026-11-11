@@ -2,12 +2,13 @@
 use super::*;
 
 const TAILLE_CARTOUCHE_STANDARD: [f64; 2] = [180.0, 40.0];
+pub const NOM_CARTOUCHE_STANDARD: &str = "Cartouche standard";
 
 impl Default for FamilleCartouche {
     fn default() -> Self {
         Self {
             id: crate::modele::collaboration::uuid(),
-            nom: "Cartouche standard".into(), largeur: TAILLE_CARTOUCHE_STANDARD[0], hauteur: TAILLE_CARTOUCHE_STANDARD[1],
+            nom: NOM_CARTOUCHE_STANDARD.into(), largeur: TAILLE_CARTOUCHE_STANDARD[0], hauteur: TAILLE_CARTOUCHE_STANDARD[1],
             traits: vec![[[0.0,0.0],[180.0,0.0]], [[180.0,0.0],[180.0,40.0]], [[180.0,40.0],[0.0,40.0]], [[0.0,40.0],[0.0,0.0]], [[140.0,0.0],[140.0,40.0]], [[0.0,14.0],[140.0,14.0]], [[0.0,30.0],[140.0,30.0]]],
             textes: vec![
                 TexteCartouche { contenu: "{projet}".into(), position: [3.0,33.0], hauteur: 3.5 },
@@ -56,8 +57,8 @@ pub(super) fn trait_papier(points: Vec<DVec3>, fermee: bool, epaisseur: f64) -> 
 }
 
 pub fn famille_cartouche<'a>(p: &'a Projet, feuille: &str) -> Option<&'a FamilleCartouche> {
-    let nom = p.cartouches_feuilles.get(feuille)?;
-    p.familles_cartouches.iter().find(|f| &f.nom == nom)
+    let nom = p.cartouches_feuilles.get(feuille).map(String::as_str).unwrap_or(NOM_CARTOUCHE_STANDARD);
+    p.familles_cartouches.iter().find(|f| f.nom == nom)
 }
 
 pub fn cadre_cartouche(p: &Projet, f: &Feuille) -> Option<[f64; 4]> {
@@ -93,13 +94,10 @@ pub fn forme_cartouche(p: &Projet, forme: &AnnotationForme) -> Vec<Primitive> {
     }
 }
 
-/// Cadre et cartouche d'une feuille, en mètres du papier (origine en bas à gauche) :
-/// bord, cadre intérieur, cartouche en bas à droite (projet, cartouche libre, titre,
-/// numéro, échelles des vues placées).
+/// Cartouche d'une feuille, en mètres du papier (origine en bas à gauche).
+/// Le format de papier ne produit aucun cadre imprimé automatique.
 pub fn cadre_feuille(p: &Projet, f: &Feuille) -> Vec<Primitive> {
-    let (l, h, m) = (f.largeur, f.hauteur, MARGE);
-    let rect = |x0: f64, y0: f64, x1: f64, y1: f64, e: f64| trait_papier(vec![pt_papier(x0, y0), pt_papier(x1, y0), pt_papier(x1, y1), pt_papier(x0, y1)], true, e);
-    let mut v = vec![rect(0.0, 0.0, l, h, 0.0), rect(m, m, l - m, h - m, 0.5)];
+    let mut v = Vec::new();
     if let Some([x0, y0, _, _]) = cadre_cartouche(p, f) {
         let standard;
         let famille = if let Some(famille) = famille_cartouche(p, &f.id) {

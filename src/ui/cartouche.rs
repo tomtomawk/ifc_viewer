@@ -62,7 +62,7 @@ impl EditionCartouche {
     }
 
     pub(super) fn arborescence(&mut self, ui: &mut egui::Ui) {
-        if let Some(vue) = editeur_famille::choisir_vue_famille(ui, self.vue, Self::nom_vue) {
+        if let Some(vue) = editeur_famille::choisir_vue_famille(ui, Some(self.vue), Self::nom_vue) {
             self.ouvrir_vue(vue);
         }
     }
