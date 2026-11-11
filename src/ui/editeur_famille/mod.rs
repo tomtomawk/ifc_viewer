@@ -16,9 +16,10 @@ mod panneau;
 use panneau::*;
 mod canevas;
 use canevas::*;
+mod formes;
 use super::*;
 use super::accrochage;
-use crate::modele::famille::modelee::{AxePlan, Contrainte, CoteMesure, Extrusion, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Remplissage, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
+use crate::modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, Extrusion, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Remplissage, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
 use crate::modele::famille::modelee::FichierFamille;
 use crate::modele::documentation::GenreCote;
 use crate::modele::GenreOuverture;
@@ -74,6 +75,7 @@ enum OutilFamille {
     /// Plan de référence tracé par deux points ; vertical ou horizontal selon le
     /// tracé.
     PlanReference,
+    PlanConstruction,
     Volume,
     Vide,
     Cote,
@@ -81,6 +83,11 @@ enum OutilFamille {
     /// Profil quelconque cliqué sommet par sommet, extrudé (plein ou vide).
     Extrusion,
     ExtrusionVide,
+    Revolution,
+    RevolutionVide,
+    ExtrusionChemin,
+    Raccordement,
+    RaccordementChemin,
     /// Symbole 2D : ligne brisée, ou arc par trois points.
     Ligne,
     Arc,
@@ -93,6 +100,7 @@ enum OutilFamille {
 }
 
 impl OutilFamille {
+    fn est_revolution(self) -> bool { matches!(self, Self::Revolution | Self::RevolutionVide) }
     /// Genre de cote de mesure saisi par l'outil.
     fn cote_mesure(self) -> Option<GenreCote> {
         match self {
@@ -144,6 +152,7 @@ pub(super) struct EditeurFamille {
     epaisseur: f64,
     famille: FamilleModelee,
     vue: VueFamille,
+    construction: Option<usize>,
     navigation: [NavigationFamille;3],
     rect_navigation: egui::Rect,
     outil: OutilFamille,
@@ -156,6 +165,7 @@ pub(super) struct EditeurFamille {
     deplace: Option<String>,
     /// Sommets de l'esquisse en cours (verrouillés et résolus).
     esquisse: Vec<(PointEsquisse, (f64, f64))>,
+    axe_revolution: Option<[[f64; 2]; 2]>,
     /// Document projet d'où l'éditeur a été ouvert : seul destinataire du type.
     pub(super) document: usize,
     /// Paramètres partagés du projet (copie modifiable ; seules les valeurs changées
@@ -407,6 +417,7 @@ impl EditeurFamille {
 
     /// Abandonne la saisie en cours (esquisse, cote, rectangle, glissement).
     fn abandonner_saisie(&mut self) {
+        self.axe_revolution = None;
         self.esquisse.clear();
         self.clics.clear();
         self.debut = None;
@@ -436,15 +447,40 @@ impl EditeurFamille {
 
     /// Change d'outil ; la sélection reste l'outil par défaut.
     fn choisir_outil(&mut self, o: OutilFamille) {
-        self.outil = o;
+        self.outil = if self.outil_disponible(o) { o } else { OutilFamille::Selection };
         self.abandonner_saisie();
+        if self.outil.est_revolution() { self.message = Some("Révolution : cliquer les deux points de l'axe, puis dessiner le profil fermé d'un seul côté de l'axe.".into()); }
+        else if self.outil.est_forme() { self.message = Some("Dessiner le profil fermé. Clic droit ou retour au premier sommet pour terminer ; régler ensuite la forme dans Propriétés.".into()); }
+    }
+
+    fn outil_disponible(&self, outil: OutilFamille) -> bool {
+        self.construction.is_none() || matches!(outil,
+            OutilFamille::Selection | OutilFamille::Extrusion | OutilFamille::ExtrusionVide | OutilFamille::Revolution | OutilFamille::RevolutionVide | OutilFamille::ExtrusionChemin | OutilFamille::Raccordement | OutilFamille::RaccordementChemin | OutilFamille::PlanConstruction)
+    }
+
+    /// Les deux premiers points de l'outil révolution définissent son axe.
+    fn capter_axe_revolution(&mut self) -> bool {
+        if !self.outil.est_revolution() || self.axe_revolution.is_some() { return false; }
+        if self.esquisse.len() == 2 {
+            let (a,b) = (self.esquisse[0].1,self.esquisse[1].1);
+            if (b.0-a.0).hypot(b.1-a.1) < 0.1 {
+                self.esquisse.pop();
+                self.erreur = Some("Choisir deux points distincts pour l'axe.".into());
+            } else {
+                self.axe_revolution = Some([[a.0,a.1],[b.0,b.1]]);
+                self.esquisse.clear();
+                self.erreur = None;
+                self.message = Some("Axe défini : tracer le profil fermé d'un seul côté, puis clic droit ou retour au premier sommet. L'angle se règle dans Propriétés.".into());
+            }
+        }
+        true
     }
 
     /// Ouvre une vue de la famille.
     fn ouvrir_vue(&mut self, v: VueFamille) {
+        self.construction = None;
         self.vue = v;
-        self.debut = None;
-        self.esquisse.clear();
+        self.choisir_outil(self.outil);
     }
 
     fn resoudre(&self) -> Resolution {

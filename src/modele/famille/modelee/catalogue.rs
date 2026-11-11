@@ -55,6 +55,7 @@ impl FamilleModelee {
     pub fn fenetre_of_2_vantaux() -> FamilleModelee {
         use AxePlan::*;
         FamilleModelee {
+            plans_construction: Vec::new(),
             parametres: vec![
                 param("Dormant", "55"),
                 param("Ouvrant", "65"),
@@ -158,6 +159,9 @@ impl FamilleModelee {
             },
             // appui en pente : profil esquissé en coupe, extrudé sur la largeur
             extrusions: vec![Extrusion {
+                guidage: None,
+                revolution: None,
+                construction: None,
                 nom: "Appui".into(),
                 vide: false,
                 materiau: Materiau::Appui,
@@ -223,6 +227,9 @@ impl FamilleModelee {
             panneau("Tableau haut", [("Tableau gauche", 0.0), ("Tableau droit", 0.0)], [("Tableau haut", 0.0), ("Haut", 0.0)]),
         ]);
         f.extrusions = vec![Extrusion {
+                guidage: None,
+                revolution: None,
+                construction: None,
             nom: "Seuil".into(),
             vide: false,
             materiau: Materiau::Appui,
@@ -247,6 +254,7 @@ impl FamilleModelee {
         use Materiau::{Menuiserie as M, Panneau as P};
         let huisserie = [("Cadre int", 0.0), ("Cadre ext", 0.0)];
         FamilleModelee {
+            plans_construction: Vec::new(),
             parametres: vec![
                 param("Dormant", "45"),
                 param("Profondeur", "72"),

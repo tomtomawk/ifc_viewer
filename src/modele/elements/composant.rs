@@ -60,6 +60,7 @@ pub fn famille_table() -> FamilleModelee {
     };
     let pt = |h: &str, dh, v: &str, dv| PointEsquisse { h: face(h, dh), v: face(v, dv) };
     FamilleModelee {
+        plans_construction: Vec::new(),
         parametres: Vec::new(),
         plans: vec![
             plan("Centre", X, 0.0, true),

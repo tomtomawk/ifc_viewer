@@ -129,7 +129,7 @@ impl ViewerApp {
         self.editer_cartouche(source, None);
     }
 
-    fn editer_cartouche(&mut self, source: Option<doc::FamilleCartouche>, feuille: Option<String>) {
+    pub(super) fn editer_cartouche(&mut self, source: Option<doc::FamilleCartouche>, feuille: Option<String>) {
         let Some((p, _)) = &self.natif else { return };
         let original = source.as_ref().map_or_else(String::new, |f| f.nom.clone());
         let mut famille = source.unwrap_or_default();

@@ -2,6 +2,56 @@
 use super::*;
 
 impl ViewerApp {
+    pub(in crate::ui) fn nouvelle_famille(&mut self) {
+        self.ouvrir_editeur_composant(None);
+        if let Some(ed) = self.famille.as_mut() {
+            ed.nom = "Nouvelle famille".into();
+            ed.famille.volumes.clear();
+            ed.famille.extrusions.clear();
+            ed.famille.symboles.clear();
+            ed.famille.cotes_mesure.clear();
+            ed.marquer_enregistree();
+            ed.historique_neuf();
+        }
+        self.onglet_ruban = OngletRuban::FamilleCreer;
+    }
+
+    /// Point d'entrée commun aux catégories ; les moteurs spécialisés restent des adaptateurs.
+    pub(in crate::ui) fn categorie_famille_ui(&mut self, ui: &mut egui::Ui) {
+        use super::super::familles_planes::FamillePlane;
+        let plane = self.famille_plane_active;
+        let (actuelle, modifiable) = if let Some(ed) = plane.and_then(|i| self.familles_planes.get(&i)) {
+            if ed.element_selectionne() { return; }
+            let c = match ed.contenu { FamillePlane::Profil {..} => 3, FamillePlane::Cartouche {..} => 4, FamillePlane::Etiquette {..} => 5 };
+            (c, !ed.modifie() && ed.contenu.id().is_none())
+        } else if let Some(ed) = self.famille.as_ref().filter(|_| self.famille_active) {
+            if ed.selection != SelectionFamille::Aucune || !ed.multiple.is_empty() { return; }
+            (match ed.famille.genre { GenreOuverture::Porte => 1, GenreOuverture::Fenetre => 2, _ => 0 }, !ed.modifiee() && ed.type_id.is_none())
+        } else { return; };
+        let categories = ["Composant", "Porte", "Fenêtre", "Profil", "Cartouche", "Étiquette de pièce"];
+        let mut choix = actuelle;
+        ui.label("Catégorie de famille");
+        ui.add_enabled_ui(modifiable, |ui| {
+            egui::ComboBox::from_id_salt("categorie_famille_commune").selected_text(categories[actuelle]).show_ui(ui, |ui| {
+                for (k, nom) in categories.iter().enumerate() { ui.selectable_value(&mut choix, k, *nom); }
+            });
+        }).response.on_hover_text("Choisir la catégorie avant de dessiner. Une famille modifiée ou déjà chargée conserve sa catégorie pour protéger ses données et ses occurrences.");
+        if choix == actuelle { return; }
+        if plane.is_some() { self.fermer_famille_plane(); } else { self.fermer_famille(); }
+        match choix {
+            0 => self.nouvelle_famille(),
+            1 | 2 => {
+                self.ouvrir_editeur_famille_type(None, if choix == 1 { GenreOuverture::Porte } else { GenreOuverture::Fenetre });
+                if let Some(ed) = self.famille.as_mut() {
+                    ed.famille.volumes.clear(); ed.famille.extrusions.clear(); ed.famille.symboles.clear();
+                    ed.marquer_enregistree(); ed.historique_neuf();
+                }
+            }
+            3 => self.ouvrir_profil(None),
+            4 => self.editer_cartouche(None, None),
+            _ => self.editer_famille_etiquette(None, None),
+        }
+    }
     /// Contrat sans dialogue de l'éditeur ; même validation et chargement que le ruban.
     pub(in crate::ui) fn piloter_famille(&mut self, commande: &str, argument: &str) -> Option<Result<serde_json::Value, String>> {
         if let Some(ordre) = self.famille_plane_active {
@@ -204,6 +254,7 @@ impl ViewerApp {
             epaisseur,
             famille,
             esquisse: Vec::new(),
+            axe_revolution: None,
             document: self.document_actif,
             partages_origine: partages.clone(),
             partages,
@@ -211,6 +262,7 @@ impl ViewerApp {
             poignee: None,
             reference: (String::new(), 0.0, 0.0, FamilleModelee::gabarit_fenetre()),
             vue: VueFamille::Elevation,
+            construction: None,
             navigation: Default::default(),
             rect_navigation: egui::Rect::NOTHING,
             outil: OutilFamille::Selection,
@@ -445,12 +497,16 @@ impl ViewerApp {
                     }
                 }
             });
-            egui::CollapsingHeader::new(RichText::new(format!("Extrusions ({})", ed.famille.extrusions.len())).strong()).default_open(true).show(ui, |ui| {
+            egui::CollapsingHeader::new(RichText::new(format!("Formes à profil ({})", ed.famille.extrusions.len())).strong()).default_open(true).show(ui, |ui| {
                 for (k, e) in ed.famille.extrusions.iter().enumerate() {
                     let texte = if e.vide { format!("{} (vide)", e.nom) } else { e.nom.clone() };
                     if ui.selectable_label(ed.choisi(&SelectionFamille::Extrusion(k)), texte).clicked() {
                         ed.selection = SelectionFamille::Extrusion(k);
                         ed.multiple.clear();
+                        ed.esquisse.clear();
+                        ed.axe_revolution = None;
+                        ed.outil = OutilFamille::Selection;
+                        ed.construction = e.construction.as_ref().and_then(|plan| ed.famille.plans_construction.iter().position(|p| p == plan));
                         // la vue de son esquisse, pour ses poignées
                         ed.vue = match e.vue {
                             VueEsquisse::Elevation => VueFamille::Elevation,

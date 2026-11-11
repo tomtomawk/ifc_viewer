@@ -17,44 +17,58 @@ pub fn bandeau(ui: &mut egui::Ui, groupes: &[(&str, Vec<Commande>)]) -> Vec<(&'s
         .show(ui, |ui| {
             ui.spacing_mut().item_spacing.x = ESPACE_GROUPES;
             ui.horizontal_top(|ui| {
-                for (indice, (nom, commandes)) in groupes.iter().enumerate() {
-                    let largeurs: Vec<f32> = commandes.iter().map(|c| (largeur_texte(ui, c.nom, 12.0) + 20.0).max(62.0)).collect();
-                    let largeur = (largeurs.iter().sum::<f32>() + ESPACE_COLONNES * largeurs.len().saturating_sub(1) as f32).max(largeur_texte(ui, nom, 11.0) + 8.0);
-                    let (rect, _) = ui.allocate_exact_size(egui::vec2(largeur, HAUTEUR_GROUPE), Sense::hover());
-                    if indice > 0 {
-                        let x = rect.left() - ESPACE_GROUPES / 2.0;
-                        ui.painter().line_segment([egui::pos2(x, rect.top() + 4.0), egui::pos2(x, rect.bottom() - 4.0)], ui.visuals().widgets.noninteractive.bg_stroke);
-                    }
-                    let mut x = rect.left();
-                    for (c, l) in commandes.iter().zip(largeurs) {
-                        let r = egui::Rect::from_min_size(egui::pos2(x, rect.top()), egui::vec2(l, HAUTEUR_OUTILS));
-                        let mut sous = ui.new_child(egui::UiBuilder::new().max_rect(r));
-                        if !c.actif {
-                            sous.disable();
-                        }
-                        let resp = sous.interact(r, sous.scope_id().with(("commande", c.cle)), Sense::click());
-                        if c.enfonce || (c.actif && resp.hovered()) {
-                            sous.painter().rect_filled(r.shrink(1.0), 4.0, if c.enfonce { sous.visuals().selection.bg_fill } else { sous.visuals().widgets.hovered.weak_bg_fill });
-                        }
-                        let couleur = if !c.actif {
-                            sous.visuals().weak_text_color().gamma_multiply(0.6)
-                        } else if c.enfonce {
-                            sous.visuals().selection.stroke.color
-                        } else {
-                            sous.visuals().text_color()
-                        };
-                        icone_commande(sous.painter(), egui::Rect::from_center_size(egui::pos2(r.center().x, r.top() + 24.0), egui::vec2(32.0, 32.0)), c.icone, couleur);
-                        sous.painter().text(egui::pos2(r.center().x, r.bottom() - 12.0), egui::Align2::CENTER_CENTER, c.nom, egui::FontId::proportional(12.0), couleur);
-                        resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, c.actif, c.enfonce, c.nom));
-                        let resp = if c.aide.is_empty() { resp } else { resp.on_hover_text(c.aide) };
-                        reponses.push((c.cle, resp));
-                        x += l + ESPACE_COLONNES;
-                    }
-                    ui.painter().text(egui::pos2(rect.center().x, rect.bottom() - 8.0), egui::Align2::CENTER_CENTER, *nom, egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
-                }
+                reponses = bandeau_contenu(ui, groupes);
             });
         });
     reponses
+}
+
+/// Contenu insérable dans une ligne de ruban déjà défilante.
+pub(super) fn bandeau_contenu(ui: &mut egui::Ui, groupes: &[(&str, Vec<Commande>)]) -> Vec<(&'static str, egui::Response)> {
+    let mut reponses = Vec::new();
+    for (indice, (nom, commandes)) in groupes.iter().enumerate() {
+        let largeurs: Vec<f32> = commandes.iter().map(|c| (largeur_texte(ui, c.nom, 12.0) + 20.0).max(62.0)).collect();
+        let largeur = (largeurs.iter().sum::<f32>() + ESPACE_COLONNES * largeurs.len().saturating_sub(1) as f32).max(largeur_texte(ui, nom, 11.0) + 8.0);
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(largeur, HAUTEUR_GROUPE), Sense::hover());
+        if indice > 0 {
+            let x = rect.left() - ESPACE_GROUPES / 2.0;
+            ui.painter().line_segment([egui::pos2(x, rect.top() + 4.0), egui::pos2(x, rect.bottom() - 4.0)], ui.visuals().widgets.noninteractive.bg_stroke);
+        }
+        let mut x = rect.left();
+        for (c, l) in commandes.iter().zip(largeurs) {
+            let r = egui::Rect::from_min_size(egui::pos2(x, rect.top()), egui::vec2(l, HAUTEUR_OUTILS));
+            let mut sous = ui.new_child(egui::UiBuilder::new().max_rect(r));
+            if !c.actif {
+                sous.disable();
+            }
+            let resp = sous.interact(r, sous.scope_id().with(("commande", c.cle)), Sense::click());
+            if c.enfonce || (c.actif && resp.hovered()) {
+                sous.painter().rect_filled(r.shrink(1.0), 4.0, if c.enfonce { sous.visuals().selection.bg_fill } else { sous.visuals().widgets.hovered.weak_bg_fill });
+            }
+            let couleur = if !c.actif {
+                sous.visuals().weak_text_color().gamma_multiply(0.6)
+            } else if c.enfonce {
+                sous.visuals().selection.stroke.color
+            } else {
+                sous.visuals().text_color()
+            };
+            icone_commande(sous.painter(), egui::Rect::from_center_size(egui::pos2(r.center().x, r.top() + 24.0), egui::vec2(32.0, 32.0)), c.icone, couleur);
+            sous.painter().text(egui::pos2(r.center().x, r.bottom() - 12.0), egui::Align2::CENTER_CENTER, c.nom, egui::FontId::proportional(12.0), couleur);
+            resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, c.actif, c.enfonce, c.nom));
+            let resp = if c.aide.is_empty() { resp } else { resp.on_hover_text(c.aide).on_disabled_hover_text(c.aide) };
+            reponses.push((c.cle, resp));
+            x += l + ESPACE_COLONNES;
+        }
+        ui.painter().text(egui::pos2(rect.center().x, rect.bottom() - 8.0), egui::Align2::CENTER_CENTER, *nom, egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
+    }
+    reponses
+}
+
+/// Les familles planes gardent les commandes de volume visibles, sans les activer.
+pub(crate) fn formes_famille_planes() -> Vec<Commande> {
+    [("volume", "Volume"), ("vide", "Vide"), ("extrusion", "Extrusion"), ("extrusion_vide", "Extrusion vide"), ("revolution", "Révolution"), ("revolution_vide", "Révolution vide"), ("extrusion_chemin", "Extrusion par chemin"), ("raccordement", "Raccordement"), ("raccordement_chemin", "Raccordement par chemin")]
+        .into_iter().map(|(cle, nom)| Commande::new(cle, nom, Icone::Famille(cle),
+            "Cette famille est plane : les formes volumiques sont réservées aux portes, fenêtres et composants.", false)).collect()
 }
 
 /// Pictogrammes génériques des commandes de fichier.
@@ -244,6 +258,30 @@ pub(super) fn icone_commande(p: &egui::Painter, r: egui::Rect, i: Icone, c: Colo
                     tirets((0.38, 0.1), (0.84, 0.1));
                     tirets((0.84, 0.1), (0.84, 0.64));
                     tirets((0.6, 0.88), (0.84, 0.64));
+                }
+                "extrusion_chemin" | "raccordement" | "raccordement_chemin" => {
+                    let raccord = cle != "extrusion_chemin";
+                    let haut = if raccord { 0.18 } else { 0.3 };
+                    p.rect_stroke(egui::Rect::from_min_max(pt(0.08,0.62),pt(0.38,0.92)),0.0,t,egui::StrokeKind::Inside);
+                    p.rect_stroke(egui::Rect::from_min_max(pt(0.62,haut),pt(0.92,0.48)),0.0,t,egui::StrokeKind::Inside);
+                    if cle == "raccordement" {
+                        seg((0.08,0.62),(0.62,haut)); seg((0.38,0.92),(0.92,0.48));
+                    } else {
+                        p.add(egui::Shape::line(vec![pt(0.23,0.77),pt(0.46,0.77),pt(0.46,0.33),pt(0.77,0.33)],t));
+                    }
+                }
+                "revolution" | "revolution_vide" => {
+                    tirets((0.5,0.08),(0.5,0.94));
+                    let courbe: Vec<_> = (0..=24).map(|i| {
+                        let angle = i as f32 / 24.0 * std::f32::consts::TAU * 0.85;
+                        pt(0.5+0.36*angle.cos(),0.55+0.23*angle.sin())
+                    }).collect();
+                    if cle == "revolution_vide" { p.add(egui::Shape::dashed_line(&courbe,t,4.0,3.0)); }
+                    else { p.add(egui::Shape::line(courbe,t)); }
+                    seg((0.68,0.27),(0.71,0.39));
+                    seg((0.71,0.39),(0.83,0.36));
+                    seg((0.62,0.14),(0.8,0.14));
+                    seg((0.8,0.14),(0.8,0.3));
                 }
                 "extrusion" => {
                     p.add(egui::Shape::convex_polygon(vec![pt(0.12, 0.84), pt(0.12, 0.34), pt(0.44, 0.16), pt(0.76, 0.34), pt(0.76, 0.84)], c.gamma_multiply(0.3), t));

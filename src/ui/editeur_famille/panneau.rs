@@ -38,9 +38,14 @@ impl ViewerApp {
         }
         let outil = ed.outil;
         let outils = |liste: &[(OutilFamille, &'static str, &'static str, &'static str)]| -> Vec<C> {
-            liste.iter().map(|&(o, cle, nom, aide)| C { enfonce: outil == o, ..C::new(cle, nom, I::Famille(cle), aide, true) }).collect()
+            liste.iter().map(|&(o, cle, nom, aide)| {
+                let actif = ed.outil_disponible(o);
+                let aide = if actif { aide } else { "Cet outil n'est pas disponible sur le plan de construction actif. Revenir au plan de la vue pour l'utiliser." };
+                C { enfonce: actif && outil == o, ..C::new(cle, nom, I::Famille(cle), aide, actif) }
+            }).collect()
         };
         let references = outils(&[
+            (OutilFamille::PlanConstruction, "plan_construction", "Plan oblique", "Deux points dans la vue définissent un plan perpendiculaire à cette vue"),
             (OutilFamille::PlanReference, "plan_ref", "Plan de référence", "Cliquer deux points : le plan suit la direction dominante du tracé (vertical ou horizontal)"),
             (OutilFamille::Cote, "cote", "Cote", "Cliquer deux plans parallèles (le plan visé se colore), puis la position de la ligne de cote ; libeller ensuite la cote par un paramètre"),
             (OutilFamille::Egalite, "egalite", "Égalité", "Cliquer trois plans parallèles : le second reste au milieu des deux autres"),
@@ -51,6 +56,11 @@ impl ViewerApp {
             (OutilFamille::Altimetrie, "altimetrie", "Altimétrie", "Altitude depuis le bas de la baie (élévation ou coupe) : point coté, puis position du texte"),
         ]);
         let formes = outils(&[
+            (OutilFamille::ExtrusionChemin, "extrusion_chemin", "Extrusion par chemin", "Dessiner le profil fermé, puis définir les points du chemin dans Propriétés"),
+            (OutilFamille::Raccordement, "raccordement", "Raccordement", "Dessiner le profil initial, puis régler le profil d’arrivée et la distance dans Propriétés"),
+            (OutilFamille::RaccordementChemin, "raccordement_chemin", "Raccordement par chemin", "Dessiner le profil initial, puis définir le chemin et le profil d’arrivée dans Propriétés"),
+            (OutilFamille::Revolution, "revolution", "Révolution", "Deux points pour l’axe, puis un profil fermé ; angle réglable dans Propriétés"),
+            (OutilFamille::RevolutionVide, "revolution_vide", "Révolution vide", "Volume de découpe obtenu par rotation d’un profil autour de son axe"),
             (OutilFamille::Volume, "volume", "Volume", "Extrusion pleine : glisser un rectangle ; ses faces se verrouillent sur les plans les plus proches"),
             (OutilFamille::Vide, "vide", "Vide", "Extrusion vide : perce le mur hôte une fois la famille chargée"),
             (OutilFamille::Extrusion, "extrusion", "Extrusion", "Profil quelconque : cliquer les sommets (accrochés aux plans), recliquer le premier ou clic droit pour fermer"),
@@ -68,11 +78,17 @@ impl ViewerApp {
                 continue;
             }
             let o = match cle {
+                "plan_construction" => { ed.construction = None; OutilFamille::PlanConstruction },
                 "plan_ref" => OutilFamille::PlanReference,
                 "cote" => OutilFamille::Cote,
                 "egalite" => OutilFamille::Egalite,
                 "volume" => OutilFamille::Volume,
                 "vide" => OutilFamille::Vide,
+                "extrusion_chemin" => OutilFamille::ExtrusionChemin,
+                "raccordement" => OutilFamille::Raccordement,
+                "raccordement_chemin" => OutilFamille::RaccordementChemin,
+                "revolution" => OutilFamille::Revolution,
+                "revolution_vide" => OutilFamille::RevolutionVide,
                 "extrusion" => OutilFamille::Extrusion,
                 "extrusion_vide" => OutilFamille::ExtrusionVide,
                 "ligne" => OutilFamille::Ligne,
@@ -90,6 +106,62 @@ impl ViewerApp {
 }
 
 pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
+    match ed.selection {
+        SelectionFamille::Extrusion(k) if k < ed.famille.extrusions.len() => {
+            extrusion_ui(ui, &mut ed.famille.extrusions[k], &ed.famille.plans, &ed.famille.parametres, k);
+            let e = &ed.famille.extrusions[k];
+            if let Some(revolution) = &e.revolution {
+                let r = ed.resoudre();
+                let contour: Vec<_> = e.profil.iter().map(|p| { let (h,v)=ed.famille.point_esquisse(&r,p); [h,v] }).collect();
+                if let Err(erreur) = revolution.valider(&contour) { ui.colored_label(ui.visuals().error_fg_color, erreur); }
+            }
+            if let Some(guidage) = &e.guidage {
+                let r = ed.resoudre();
+                let contour: Vec<_> = e.profil.iter().map(|p| { let (h,v)=ed.famille.point_esquisse(&r,p); [h,v] }).collect();
+                let erreur = guidage.valider(&contour).err().or_else(|| guidage.triangles(&contour).is_empty().then(|| "Forme dégénérée : revoir le chemin ou les profils.".into()));
+                if let Some(erreur) = erreur { ui.colored_label(ui.visuals().error_fg_color, erreur); }
+                if guidage.profil_fin().is_some() && ui.button("Reprendre le profil initial à l'arrivée").clicked() {
+                    use crate::modele::famille::modelee::FormeGuidee;
+                    if let Some(FormeGuidee::Raccordement { profil_fin, .. } | FormeGuidee::RaccordementChemin { profil_fin, .. }) = &mut ed.famille.extrusions[k].guidage { *profil_fin=contour; }
+                }
+            }
+            return;
+        }
+        SelectionFamille::Volume(k) if k < ed.famille.volumes.len() => {
+            volume_ui(ui, &mut ed.famille.volumes[k], &ed.famille.plans, &ed.famille.parametres, k);
+            return;
+        }
+        _ => {}
+    }
+    egui::CollapsingHeader::new("Plan de construction").default_open(true).show(ui, |ui| {
+        let avant = ed.construction;
+        let mut reference = None;
+        egui::ComboBox::from_id_salt("plan_construction_actif").selected_text(ed.construction.and_then(|k| ed.famille.plans_construction.get(k)).map_or("Plan de la vue", |p| p.nom.as_str())).show_ui(ui, |ui| {
+            ui.selectable_value(&mut ed.construction, None, "Plan de la vue");
+            for (k, plan) in ed.famille.plans_construction.iter().enumerate() {
+                ui.selectable_value(&mut ed.construction, Some(k), &plan.nom);
+            }
+            ui.separator();
+            for plan in &ed.famille.plans {
+                if ui.button(format!("Référence : {}", plan.nom)).clicked() { reference = Some(plan.clone()); }
+            }
+        });
+        if let Some(p) = reference {
+            let vue = match p.axe { AxePlan::X => VueEsquisse::Coupe, AxePlan::Y => VueEsquisse::Elevation, AxePlan::Z => VueEsquisse::Plan };
+            let r = ed.resoudre();
+            let plan = PlanConstruction { nom: format!("Référence : {}", p.nom), origine: vue.point(0.0,0.0,r.positions.get(&p.nom).copied().unwrap_or(p.position)).to_array(), horizontal: vue.point(1.0,0.0,0.0).to_array(), vertical: vue.point(0.0,1.0,0.0).to_array() };
+            let k = ed.famille.plans_construction.iter().position(|p| p == &plan).unwrap_or_else(|| {
+                let mut plan = plan;
+                let base = plan.nom.clone();
+                plan.nom = (1..).map(|n| if n == 1 { base.clone() } else { format!("{base} {n}") }).find(|nom| ed.famille.plans_construction.iter().all(|p| &p.nom != nom)).unwrap();
+                ed.famille.plans_construction.push(plan);
+                ed.famille.plans_construction.len()-1
+            });
+            ed.construction = Some(k);
+        }
+        if avant != ed.construction { ed.choisir_outil(OutilFamille::Selection); ed.selectionner(Vec::new()); }
+        if ed.construction.is_some() { ui.label("Esquisse en coordonnées locales du plan ; profondeur suivant sa normale."); }
+    });
     let r = ed.resoudre();
     let u = crate::config::options::unite();
     egui::Grid::new("famille_type").num_columns(2).spacing([10.0, 5.0]).show(ui, |ui| {
@@ -97,16 +169,6 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
         ui.text_edit_singleline(&mut ed.nom);
         ui.end_row();
         let composant = ed.famille.genre == GenreOuverture::Libre;
-        ui.label("Catégorie").on_hover_text(if composant { "Composant posé librement (mobilier, équipement), sans hôte" } else { "Range le type parmi les portes ou les fenêtres du sélecteur" });
-        if composant {
-            ui.label("Composant");
-        } else {
-            ui.horizontal(|ui| {
-                ui.selectable_value(&mut ed.famille.genre, GenreOuverture::Porte, "Porte");
-                ui.selectable_value(&mut ed.famille.genre, GenreOuverture::Fenetre, "Fenêtre");
-            });
-        }
-        ui.end_row();
         ui.label(LARGEUR).on_hover_text(if composant { "Paramètre de type : largeur du composant (entre Gauche et Droite)" } else { "Paramètre de type : largeur de la baie" });
         ui.add(egui::DragValue::new(&mut ed.largeur).speed(10.0).range(10.0..=20_000.0).dimensions());
         ui.end_row();
@@ -348,7 +410,7 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
         }
     });
 
-    egui::CollapsingHeader::new(RichText::new("Extrusions").strong()).default_open(true).show(ui, |ui| {
+    egui::CollapsingHeader::new(RichText::new("Formes à profil").strong()).default_open(true).show(ui, |ui| {
         let mut supprimer = None;
         for (k, e) in ed.famille.extrusions.iter().enumerate() {
             ui.horizontal(|ui| {
@@ -501,13 +563,32 @@ pub(super) fn extrusion_ui(ui: &mut egui::Ui, e: &mut Extrusion, plans: &[PlanRe
             ui.end_row();
         }
         pilotage_ui(ui, &mut e.visible, &mut e.materiau_parametre, e.vide, parametres, ("extrusion", k));
+        if let Some(revolution) = &mut e.revolution {
+            ui.label("Angle de départ");
+            ui.add(egui::DragValue::new(&mut revolution.debut).speed(1.0).suffix("°"));
+            ui.end_row();
+            ui.label("Angle de révolution");
+            ui.add(egui::DragValue::new(&mut revolution.angle).range(0.1..=360.0).speed(1.0).suffix("°"));
+            ui.end_row();
+            for (i, point) in revolution.axe.iter_mut().enumerate() {
+                ui.label(format!("Axe · point {}", i+1));
+                ui.horizontal(|ui| {
+                    ui.label("H"); ui.add(egui::DragValue::new(&mut point[0]).speed(1.0).dimensions());
+                    ui.label("V"); ui.add(egui::DragValue::new(&mut point[1]).speed(1.0).dimensions());
+                });
+                ui.end_row();
+            }
+            return;
+        }
+        if e.guidage.is_some() { return; }
         let axe = e.vue.axes().2;
         let [d0, d1] = &mut e.profondeur;
         for (cote, face) in [("début", d0), ("fin", d1)] {
-            ui.label(format!("{} {cote}", axe.nom()));
+            ui.label(format!("{} {cote}", if e.construction.is_some() { "Profondeur" } else { axe.nom() }));
             ui.horizontal(|ui| {
                 egui::ComboBox::from_id_salt(("profondeur", k, cote)).width(120.0).selected_text(face.plan.as_str()).show_ui(ui, |ui| {
-                    for p in plans.iter().filter(|p| p.axe == axe) {
+                    if e.construction.is_some() { ui.selectable_value(&mut face.plan, String::new(), "Origine du plan"); }
+                    for p in plans.iter().filter(|p| e.construction.is_none() && p.axe == axe) {
                         ui.selectable_value(&mut face.plan, p.nom.clone(), &p.nom);
                     }
                 });
@@ -516,6 +597,7 @@ pub(super) fn extrusion_ui(ui: &mut egui::Ui, e: &mut Extrusion, plans: &[PlanRe
             ui.end_row();
         }
     });
+    if let Some(guidage) = &mut e.guidage { formes::guidage_ui(ui, guidage); }
     ui.label(RichText::new(format!("Profil esquissé en {} : sommets verrouillés sur les plans.", match e.vue { VueEsquisse::Elevation => "élévation", VueEsquisse::Plan => "plan", VueEsquisse::Coupe => "coupe" })).small().weak());
 }
 

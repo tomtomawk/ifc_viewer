@@ -22,6 +22,7 @@ impl ViewerApp {
     }
 
     pub(super) fn contenu_panneau(&mut self, ui: &mut egui::Ui, p: Panneau) {
+        if p == Panneau::Proprietes && self.mode_famille() { self.categorie_famille_ui(ui); }
         if self.famille_plane_active.is_some() {
             self.panneau_famille_plane(ui, p);
             return;

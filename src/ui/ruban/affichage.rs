@@ -199,6 +199,9 @@ impl RubanEdition {
                             ui.visuals().weak_text_color(),
                         );
                     }
+                    if menu == Menu::Cartouche {
+                        bandeau_contenu(ui, &[("Formes", formes_famille_planes())]);
+                    }
                 });
             });
         action

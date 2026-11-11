@@ -1,9 +1,85 @@
 //! Canevas de l'éditeur de famille : dessin et interaction.
 use super::*;
 
+fn dessiner_axe_revolution(painter: &egui::Painter, cadre: &Cadre, ed: &EditeurFamille) {
+    let axe = ed.axe_revolution.or_else(|| match ed.selection {
+        SelectionFamille::Extrusion(k) => ed.famille.extrusions.get(k).filter(|e| ed.construction.is_some() || (e.construction.is_none() && e.vue == ed.vue.esquisse())).and_then(|e| e.revolution.as_ref()).map(|r| r.axe),
+        _ => None,
+    });
+    if let Some([a,b]) = axe {
+        let ligne = [cadre.ecran(a[0],a[1]),cadre.ecran(b[0],b[1])];
+        painter.add(egui::Shape::dashed_line(&ligne,egui::Stroke::new(2.0,Color32::DARK_GREEN),8.0,4.0));
+        painter.text(ligne[1],egui::Align2::LEFT_BOTTOM,"Axe",egui::FontId::proportional(11.0),Color32::DARK_GREEN);
+    }
+}
+
+/// Dessin face au plan de construction : les points sont exprimés dans son repère.
+fn canevas_construction(ui: &mut egui::Ui, ed: &mut EditeurFamille, plan: &PlanConstruction) {
+    ui.label(format!("Plan de construction : {}", plan.nom));
+    let (rect, resp) = ui.allocate_exact_size(ui.available_size().max(egui::vec2(80.0,80.0)), Sense::click_and_drag());
+    ed.rect_navigation = rect;
+    let base = Cadre { centre: rect.center(), milieu: (0.0, 0.0), echelle: (rect.width().min(rect.height()) as f64 / 2000.0).max(0.001) };
+    let nav = &mut ed.navigation[ed.vue as usize];
+    nav.souris(ui, &resp, &base, false, false);
+    let cadre = nav.cadre(&base);
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, 0.0, Color32::WHITE);
+    let origine = cadre.ecran(0.0,0.0);
+    for ligne in [[egui::pos2(rect.left(),origine.y),egui::pos2(rect.right(),origine.y)], [egui::pos2(origine.x,rect.top()),egui::pos2(origine.x,rect.bottom())]] {
+        painter.line_segment(ligne, egui::Stroke::new(1.0,Color32::LIGHT_GRAY));
+    }
+    let r = ed.resoudre();
+    let mut selection = None;
+    let solides = ed.famille.solides(&r);
+    for (k,e) in ed.famille.extrusions.iter().enumerate().filter(|(_,e)| e.construction.as_ref() == Some(plan)) {
+        if let Some(solide) = solides.get(ed.famille.volumes.len()+k) {
+            let origine = glam::DVec3::from_array(plan.origine);
+            let h = glam::DVec3::from_array(plan.horizontal);
+            let v = glam::DVec3::from_array(plan.vertical);
+            for tri in &solide.tris {
+                let mut points: Vec<_> = tri.iter().map(|p| { let q=*p-origine; cadre.ecran(q.dot(h),q.dot(v)) }).collect();
+                points.push(points[0]);
+                painter.add(egui::Shape::line(points,egui::Stroke::new(0.5,Color32::GRAY)));
+            }
+        }
+        let mut pts: Vec<_> = e.profil.iter().map(|p| { let (h,v)=ed.famille.point_esquisse(&r,p); cadre.ecran(h,v) }).collect();
+        if pts.len() < 3 { continue; }
+        let choisi = ed.choisi(&SelectionFamille::Extrusion(k));
+        if ed.outil == OutilFamille::Selection && resp.clicked() && resp.interact_pointer_pos().is_some_and(|q| dans_polygone(q,&pts)) { selection=Some(k); }
+        pts.push(pts[0]);
+        painter.add(egui::Shape::line(pts, egui::Stroke::new(if choisi {2.5} else {1.0}, if e.vide {Color32::RED} else {Color32::DARK_GRAY})));
+    }
+    if ed.outil == OutilFamille::Selection && resp.clicked() {
+        ed.selectionner(selection.map(SelectionFamille::Extrusion).into_iter().collect());
+    }
+    dessiner_axe_revolution(&painter, &cadre, ed);
+    if !ed.outil.est_forme() { return; }
+    let mut finir = resp.clicked_by(PointerButton::Secondary);
+    if let Some(q) = resp.hover_pos() {
+        let mut pts: Vec<_> = ed.esquisse.iter().map(|(_,p)| cadre.ecran(p.0,p.1)).collect();
+        pts.push(q);
+        painter.add(egui::Shape::line(pts,egui::Stroke::new(1.5,Color32::DARK_GREEN)));
+    }
+    if resp.clicked() && let Some(q) = resp.interact_pointer_pos() {
+        if ed.esquisse.len() >= 3 && ed.esquisse.first().is_some_and(|(_,p)| cadre.ecran(p.0,p.1).distance(q)<9.0) { finir=true; }
+        else {
+            let p=cadre.modele(q);
+            ed.esquisse.push((PointEsquisse { h: Face {plan:String::new(),decalage:p.0}, v:Face {plan:String::new(),decalage:p.1}},p));
+            if ed.capter_axe_revolution() { return; }
+        }
+    }
+    if finir {
+        ed.erreur = ed.terminer_forme(Some(plan.clone())).err();
+    }
+}
+
 /// Vue de travail : mur générique, volumes, vides, plans, cotes ; interactions selon
 /// l'outil.
 pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
+    if let Some(plan) = ed.construction.and_then(|k| ed.famille.plans_construction.get(k)).cloned() {
+        canevas_construction(ui, ed, &plan);
+        return;
+    }
     let selection_avant = ed.selection.clone();
     let mut garder_multiple = false;
     let taille = ui.available_size().max(egui::vec2(80.0, 80.0));
@@ -36,6 +112,12 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
     let boite = |a: (f64, f64), b: (f64, f64)| egui::Rect::from_two_pos(cadre.ecran(a.0, a.1), cadre.ecran(b.0, b.1));
     let (ih, iv) = (ah as usize, av as usize);
     let boites = ed.famille.boites(&r);
+    for plan in &ed.famille.plans_construction {
+        let a = plan.point(0.0,0.0,0.0).to_array();
+        let b = plan.point(1000.0,0.0,0.0).to_array();
+        painter.line_segment([cadre.ecran(a[ih],a[iv]),cadre.ecran(b[ih],b[iv])],egui::Stroke::new(1.5,Color32::DARK_GREEN));
+        painter.text(cadre.ecran(a[ih],a[iv]),egui::Align2::LEFT_BOTTOM,&plan.nom,egui::FontId::proportional(11.0),Color32::DARK_GREEN);
+    }
 
     // mur générique : élévation pleine, plan et coupe en bande ; les vides le percent
     let gris = Color32::from_gray(222);
@@ -96,7 +178,14 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
     let decalage_ext = ed.famille.volumes.len();
     let mut contours_ext: Vec<(usize, Vec<egui::Pos2>)> = Vec::new();
     for (k, e) in ed.famille.extrusions.iter().enumerate() {
-        let pts: Vec<egui::Pos2> = if e.vue == ed.vue.esquisse() {
+        if (e.construction.is_some() || e.revolution.is_some() || e.guidage.is_some()) && let Some(s) = solides.get(decalage_ext + k) {
+            for t in &s.tris {
+                let mut pts: Vec<_> = t.iter().map(|p| {let p=p.to_array();cadre.ecran(p[ih],p[iv])}).collect();
+                pts.push(pts[0]);
+                painter.add(egui::Shape::line(pts,egui::Stroke::new(1.0,Color32::DARK_GRAY)));
+            }
+        }
+        let pts: Vec<egui::Pos2> = if e.construction.is_none() && e.vue == ed.vue.esquisse() {
             e.profil.iter().map(|p| { let (h, v) = ed.famille.point_esquisse(&r, p); cadre.ecran(h, v) }).collect()
         } else {
             let Some(s) = solides.get(decalage_ext + k) else { continue };
@@ -287,7 +376,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             }
         }
         let vue = ed.vue.esquisse();
-        let contours = ed.famille.extrusions.iter().filter(|e| e.vue == vue).map(|e| (&e.profil, true)).chain(ed.famille.symboles.iter().filter(|s| s.vue == vue).map(|s| (&s.points, s.remplissage.is_some())));
+        let contours = ed.famille.extrusions.iter().filter(|e| e.construction.is_none() && e.vue == vue).map(|e| (&e.profil, true)).chain(ed.famille.symboles.iter().filter(|s| s.vue == vue).map(|s| (&s.points, s.remplissage.is_some())));
         for (points, ferme) in contours {
             let pts: Vec<(f64, f64)> = points.iter().map(|p| ed.famille.point_esquisse(&r, p)).collect();
             for (i, &(h, v)) in pts.iter().enumerate() {
@@ -322,6 +411,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             }
         }
     }
+    dessiner_axe_revolution(&painter, &cadre, ed);
     match ed.outil {
         OutilFamille::Selection => {
             // poignées de l'élément choisi : sommets et milieux d'arêtes (insertion) d'un
@@ -330,7 +420,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             let mut poignees: Vec<(Poignee, egui::Pos2, bool)> = Vec::new(); // (poignée, position, milieu à insérer)
             let ecran_pt = |p: &PointEsquisse| { let (h, v) = ed.famille.point_esquisse(&r, p); cadre.ecran(h, v) };
             match ed.selection.clone() {
-                SelectionFamille::Extrusion(k) if ed.famille.extrusions.get(k).is_some_and(|e| e.vue == vue) => {
+                SelectionFamille::Extrusion(k) if ed.famille.extrusions.get(k).is_some_and(|e| e.construction.is_none() && e.vue == vue) => {
                     let pts: Vec<egui::Pos2> = ed.famille.extrusions[k].profil.iter().map(ecran_pt).collect();
                     for (i, &q) in pts.iter().enumerate() {
                         poignees.push((Poignee::Sommet { extrusion: true, k, i }, q, false));
@@ -538,10 +628,18 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                 }
             }
         }
-        OutilFamille::PlanReference => {
+        OutilFamille::PlanReference | OutilFamille::PlanConstruction => {
             // deux points : le plan passe par le premier et suit la direction dominante
             let vertical = |a: (f64, f64), b: (f64, f64)| (b.1 - a.1).abs() > (b.0 - a.0).abs();
             let poser = |ed: &mut EditeurFamille, a: (f64, f64), b: (f64, f64)| {
+                if ed.outil == OutilFamille::PlanConstruction {
+                    let nom = nom_libre(|n| ed.famille.plans_construction.iter().any(|p| p.nom == n), "Construction");
+                    match PlanConstruction::deux_points(nom, ed.vue.esquisse(), [a.0,a.1], [b.0,b.1]) {
+                        Ok(p) => { ed.famille.plans_construction.push(p); ed.selectionner(Vec::new()); }
+                        Err(e) => ed.erreur = Some(e),
+                    }
+                    return;
+                }
                 let v = vertical(a, b);
                 let nom = nom_libre(|n| ed.famille.plan(n).is_some(), "Plan");
                 ed.famille.plans.push(PlanRef { nom: nom.clone(), axe: if v { ah } else { av }, position: (if v { a.0 } else { a.1 }).round(), fixe: false, hote: None });
@@ -558,6 +656,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                     Some(a) => {
                         let c = viser(q, Some(a)).0;
                         let v = vertical(a, c);
+                        if ed.outil == OutilFamille::PlanConstruction { painter.line_segment([cadre.ecran(a.0,a.1), cadre.ecran(c.0,c.1)], egui::Stroke::new(2.0, vert)); }
                         let (ea, fin) = (cadre.ecran(a.0, a.1), if v { cadre.ecran(a.0, c.1) } else { cadre.ecran(c.0, a.1) });
                         let ligne = if v { [egui::pos2(ea.x, rect.top()), egui::pos2(ea.x, rect.bottom())] } else { [egui::pos2(rect.left(), ea.y), egui::pos2(rect.right(), ea.y)] };
                         painter.add(egui::Shape::dashed_line(&ligne, egui::Stroke::new(1.0, vert.gamma_multiply(0.6)), 8.0, 3.0));
@@ -632,7 +731,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                 }
             }
         }
-        OutilFamille::Extrusion | OutilFamille::ExtrusionVide | OutilFamille::Ligne | OutilFamille::Arc | OutilFamille::Region | OutilFamille::CoteAngle | OutilFamille::CoteDiametre | OutilFamille::Altimetrie => {
+        OutilFamille::Extrusion | OutilFamille::ExtrusionVide | OutilFamille::Revolution | OutilFamille::RevolutionVide | OutilFamille::ExtrusionChemin | OutilFamille::Raccordement | OutilFamille::RaccordementChemin | OutilFamille::Ligne | OutilFamille::Arc | OutilFamille::Region | OutilFamille::CoteAngle | OutilFamille::CoteDiametre | OutilFamille::Altimetrie => {
             // sommet accroché : sur chaque axe, le plan le plus proche (décalage au-delà
             // de 7 px)
             let accroche = |axe: AxePlan, x: f64| match ed.plan_proche(&r, axe, x) {
@@ -646,7 +745,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                 let ((fh, h), (fv, v)) = (accroche(ah, h), accroche(av, v));
                 (PointEsquisse { h: fh, v: fv }, (h, v))
             };
-            let profil = matches!(ed.outil, OutilFamille::Extrusion | OutilFamille::ExtrusionVide | OutilFamille::Region);
+            let profil = ed.outil.est_forme() || ed.outil == OutilFamille::Region;
             let premier = ed.esquisse.first().map(|(_, p)| cadre.ecran(p.0, p.1));
             // élastique et repère d'accrochage
             if let Some(q) = curseur.filter(|_| resp.hovered()) {
@@ -680,6 +779,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                             ed.message = Some("Ajouter d'abord des plans de référence dans cette vue.".into());
                         } else {
                             ed.esquisse.push(p);
+                            if ed.capter_axe_revolution() { return; }
                             if let Some(g) = ed.outil.cote_mesure().filter(|g| ed.esquisse.len() < g.points()) {
                                 ed.message = Some(g.invite(ed.esquisse.len()).into());
                             }
@@ -693,18 +793,14 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                     finir = true;
                 }
             }
+            if finir && ed.outil.est_forme() {
+                ed.erreur = ed.terminer_forme(None).err();
+                return;
+            }
             if finir {
                 let points: Vec<PointEsquisse> = std::mem::take(&mut ed.esquisse).into_iter().map(|(p, _)| p).collect();
                 let vue = ed.vue.esquisse();
                 match ed.outil {
-                    OutilFamille::Extrusion | OutilFamille::ExtrusionVide if points.len() >= 3 => {
-                        let vide = ed.outil == OutilFamille::ExtrusionVide;
-                        let profondeur = ed.faces_profondeur(&r, vue.axes().2, vide);
-                        let nom = nom_libre(|n| ed.famille.extrusions.iter().any(|e| e.nom == n), if vide { "Extrusion vide" } else { "Extrusion" });
-                        ed.famille.extrusions.push(Extrusion { nom, vide, materiau: Materiau::Menuiserie, vue, profil: points, profondeur, visible: None, materiau_parametre: None });
-                        ed.selection = SelectionFamille::Extrusion(ed.famille.extrusions.len() - 1);
-                        ed.message = Some("Extrusion créée : régler sa profondeur dans Extrusions.".into());
-                    }
                     OutilFamille::Ligne if points.len() >= 2 => {
                         ed.famille.symboles.push(Symbole { vue, points, arc: false, remplissage: None });
                         ed.selection = SelectionFamille::Symbole(ed.famille.symboles.len() - 1);

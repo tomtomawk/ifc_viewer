@@ -35,6 +35,7 @@ impl Default for EditionCartouche {
 }
 
 impl EditionCartouche {
+    pub(super) fn element_selectionne(&self) -> bool { self.selection.is_some() }
     fn nom_vue(vue: VueFamille) -> &'static str {
         if vue == VueFamille::Elevation { "Face imprimée" } else { vue.nom() }
     }

@@ -46,6 +46,9 @@ pub(super) struct EditeurPlan {
 }
 
 impl EditeurPlan {
+    pub(super) fn element_selectionne(&self) -> bool {
+        matches!(self.contenu, FamillePlane::Cartouche { .. }) && self.cartouche.element_selectionne()
+    }
     pub(super) fn modifie(&self) -> bool { self.contenu != self.reference }
 
     pub(super) fn titre(&self) -> String {
@@ -151,6 +154,7 @@ impl ViewerApp {
         };
         ui.label("Nom de la famille");
         ui.text_edit_singleline(nom);
+        if let FamillePlane::Profil { profil, .. } = &mut ed.contenu { profils::proprietes_profil(ui, profil); }
         if let FamillePlane::Cartouche { famille, .. } = &mut ed.contenu {
             ui.horizontal(|ui| {
                 ui.label("Largeur");
@@ -195,7 +199,8 @@ impl ViewerApp {
                 C::new("texte", "Texte", I::Nouveau, "Ajouter un texte à la famille", true),
             ]
         };
-        let action = bandeau(ui, &[(if sortie { "Sortie" } else { "Créer" }, commandes)])
+        let groupes = if sortie { vec![("Sortie", commandes)] } else { vec![("Formes", crate::ui::ruban::formes_famille_planes()), ("Créer", commandes)] };
+        let action = bandeau(ui, &groupes)
             .into_iter().find_map(|(cle, r)| r.clicked().then_some(cle));
         let resultat = match action {
             Some("charger") => self.enregistrer_famille_plane(false),

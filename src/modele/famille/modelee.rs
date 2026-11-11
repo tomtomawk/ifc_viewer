@@ -10,6 +10,12 @@
 //! de la baie (allège). Les plans hôtes « Extérieur » et « Intérieur » suivent les faces
 //! du mur ; l'épaisseur vient du mur hôte (paramètre `Epaisseur`).
 mod catalogue;
+mod revolution;
+pub use revolution::Revolution;
+mod guidage;
+pub use guidage::FormeGuidee;
+#[cfg(test)]
+mod tests_maillage;
 use crate::modele::famille::Role;
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
@@ -169,9 +175,51 @@ pub struct PointEsquisse {
     pub v: Face,
 }
 
+/// Repère orthonormé d'une esquisse, indépendant des axes du projet.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct PlanConstruction {
+    pub nom: String,
+    pub origine: [f64; 3],
+    pub horizontal: [f64; 3],
+    pub vertical: [f64; 3],
+}
+
+impl PlanConstruction {
+    /// Les deux points sont dans la vue ; le plan est perpendiculaire à celle-ci.
+    pub fn deux_points(nom: String, vue: VueEsquisse, a: [f64; 2], b: [f64; 2]) -> Result<Self, String> {
+        let origine = vue.point(a[0], a[1], 0.0);
+        let direction = vue.point(b[0], b[1], 0.0) - origine;
+        if !origine.is_finite() || !direction.is_finite() || direction.length() < 0.1 {
+            return Err("Choisir deux points distincts pour le plan de construction.".into());
+        }
+        Ok(Self { nom, origine: origine.to_array(), horizontal: direction.normalize().to_array(), vertical: vue.point(0.0, 0.0, 1.0).to_array() })
+    }
+
+    pub fn valider(&self) -> Result<(), String> {
+        let (o, h, v) = (DVec3::from_array(self.origine), DVec3::from_array(self.horizontal), DVec3::from_array(self.vertical));
+        if self.nom.trim().is_empty() || !o.is_finite() || !h.is_finite() || !v.is_finite()
+            || (h.length_squared() - 1.0).abs() > 1e-6 || (v.length_squared() - 1.0).abs() > 1e-6 || h.dot(v).abs() > 1e-6 {
+            return Err("Repère de construction non orthonormé ou sans nom.".into());
+        }
+        Ok(())
+    }
+
+    pub fn point(&self, h: f64, v: f64, d: f64) -> DVec3 {
+        let (u, w) = (DVec3::from_array(self.horizontal), DVec3::from_array(self.vertical));
+        DVec3::from_array(self.origine) + u * h + w * v + u.cross(w) * d
+    }
+}
+
 /// Extrusion d'un profil quelconque (polygone fermé) entre deux faces.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Extrusion {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guidage: Option<FormeGuidee>,
+    /// Même profil éditable ; une révolution remplace la translation en profondeur.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revolution: Option<Revolution>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub construction: Option<PlanConstruction>,
     pub nom: String,
     #[serde(default)]
     pub vide: bool,
@@ -348,6 +396,8 @@ fn menuiserie() -> Materiau {
 /// Famille modélisée d'ouverture.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct FamilleModelee {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plans_construction: Vec<PlanConstruction>,
     pub parametres: Vec<Parametre>,
     pub plans: Vec<PlanRef>,
     pub contraintes: Vec<Contrainte>,
@@ -725,11 +775,16 @@ impl FamilleModelee {
             let (d0, d1) = (pos(&e.profondeur[0]), pos(&e.profondeur[1]));
             // prisme local (h, v, d) ramené aux axes de la famille ; une permutation
             // impaire (élévation) retourne les faces
-            let impaire = e.vue == VueEsquisse::Elevation;
-            let tris = crate::modele::volumes::solides::prisme(&contour, d0.min(d1), d0.max(d1))
+            let impaire = e.construction.is_none() && e.vue == VueEsquisse::Elevation;
+            let local = if let Some(guidage) = &e.guidage {
+                guidage.triangles(&contour)
+            } else if let Some(revolution) = &e.revolution {
+                revolution.triangles(&contour)
+            } else { crate::modele::volumes::solides::prisme(&contour, d0.min(d1), d0.max(d1)) };
+            let tris = local
                 .into_iter()
                 .map(|t| {
-                    let m = t.map(|p| e.vue.point(p.x, p.y, p.z));
+                    let m = t.map(|p| e.construction.as_ref().map_or_else(|| e.vue.point(p.x, p.y, p.z), |c| c.point(p.x, p.y, p.z)));
                     if impaire { [m[0], m[2], m[1]] } else { m }
                 })
                 .collect();
@@ -779,6 +834,11 @@ impl FamilleModelee {
     /// Contrôle avant enregistrement : noms uniques, références existantes, formules
     /// calculables, volumes non plats.
     pub fn valider(&self, largeur: f64, hauteur: f64, epaisseur: f64) -> Result<(), String> {
+        let mut constructions = std::collections::HashSet::new();
+        for plan in &self.plans_construction {
+            plan.valider()?;
+            if !constructions.insert(&plan.nom) { return Err(format!("Plan de construction en double : {}", plan.nom)); }
+        }
         let mut noms = std::collections::HashSet::new();
         for p in &self.plans {
             if p.nom.trim().is_empty() || !noms.insert(p.nom.as_str()) {
@@ -815,8 +875,10 @@ impl FamilleModelee {
             }
         }
         for e in &self.extrusions {
+            if e.guidage.is_some() && e.revolution.is_some() { return Err("Une forme ne peut pas combiner révolution et guidage.".into()); }
+            if let Some(c) = &e.construction { c.valider()?; }
             let (ah, av, ad) = e.vue.axes();
-            let bon = |f: &Face, axe| self.plan(&f.plan).is_some_and(|p| p.axe == axe);
+            let bon = |f: &Face, axe| (e.construction.is_some() && f.plan.is_empty() && f.decalage.is_finite()) || self.plan(&f.plan).is_some_and(|p| p.axe == axe);
             if e.profil.len() < 3 || !e.profil.iter().all(|p| bon(&p.h, ah) && bon(&p.v, av)) || !e.profondeur.iter().all(|f| bon(f, ad)) {
                 return Err(format!("{} : profil d'au moins trois sommets sur des plans de la vue d'esquisse attendu.", e.nom));
             }
@@ -846,7 +908,12 @@ impl FamilleModelee {
             let contour: Vec<[f64; 2]> = e.profil.iter().map(|p| { let (h, v) = self.point_esquisse(&r, p); [h, v] }).collect();
             super::profil::contour_simple(&contour).map_err(|x| format!("{} : {x}", e.nom))?;
             let pos = |f: &Face| r.positions.get(&f.plan).copied().unwrap_or(0.0) + f.decalage;
-            if (pos(&e.profondeur[0]) - pos(&e.profondeur[1])).abs() < 0.1 {
+            if let Some(guidage) = &e.guidage {
+                guidage.valider(&contour)?;
+                if guidage.triangles(&contour).is_empty() { return Err(format!("{} : raccordement dégénéré.", e.nom)); }
+            }
+            else if let Some(revolution) = &e.revolution { revolution.valider(&contour)?; }
+            else if (pos(&e.profondeur[0]) - pos(&e.profondeur[1])).abs() < 0.1 {
                 return Err(format!("{} : extrusion plate.", e.nom));
             }
         }
@@ -871,6 +938,7 @@ impl FamilleModelee {
             materiau_parametre: None,
         };
         FamilleModelee {
+            plans_construction: Vec::new(),
             parametres: vec![
                 Parametre { nom: "Dormant".into(), formule: "60".into(), portee: Portee::Type, genre: GenreParametre::Longueur },
                 Parametre { nom: "Profondeur".into(), formule: "70".into(), portee: Portee::Type, genre: GenreParametre::Longueur },
@@ -920,6 +988,9 @@ impl FamilleModelee {
             ],
             // appui en pente : profil esquissé en coupe, extrudé sur la largeur
             extrusions: vec![Extrusion {
+                guidage: None,
+                revolution: None,
+                construction: None,
                 nom: "Appui".into(),
                 vide: false,
                 materiau: Materiau::Appui,
@@ -969,6 +1040,7 @@ impl FamilleModelee {
         };
         let param = |nom: &str, formule: &str| Parametre { nom: nom.into(), formule: formule.into(), portee: Portee::Type, genre: GenreParametre::Longueur };
         FamilleModelee {
+            plans_construction: Vec::new(),
             parametres: vec![
                 param("Dormant", "60"),
                 param("Profondeur", "70"),
@@ -1187,5 +1259,51 @@ mod tests {
         let mut f = FamilleModelee::gabarit_fenetre();
         f.parametres.push(Parametre::nouveau("²x", "1"));
         assert!(f.valider(1400.0, 1600.0, 300.0).is_err());
+    }
+}
+
+#[cfg(test)]
+mod tests_construction {
+    use super::*;
+    #[test]
+    fn plan_oblique_repere_et_serialisation() {
+        for vue in [VueEsquisse::Plan, VueEsquisse::Coupe, VueEsquisse::Elevation] {
+            let p=PlanConstruction::deux_points("Oblique".into(),vue,[10.0,20.0],[110.0,120.0]).unwrap();
+            p.valider().unwrap();
+            let o=p.point(0.0,0.0,0.0);
+            assert!((o-vue.point(10.0,20.0,0.0)).length()<1e-8);
+            let (u,v,n)=(p.point(1.0,0.0,0.0)-o,p.point(0.0,1.0,0.0)-o,p.point(0.0,0.0,1.0)-o);
+            assert!((u.cross(v)-n).length()<1e-8);
+            assert!(u.dot(v).abs()<1e-8);
+            assert_eq!(p,serde_json::from_str::<PlanConstruction>(&serde_json::to_string(&p).unwrap()).unwrap());
+        }
+        assert!(PlanConstruction::deux_points("X".into(),VueEsquisse::Plan,[0.0,0.0],[0.0,0.0]).is_err());
+    }
+    #[test]
+    fn extrusion_oblique_volume_et_compatibilite() {
+        let mut f=FamilleModelee::gabarit_fenetre();
+        let ancien=serde_json::to_value(&f).unwrap();
+        assert!(ancien.get("plans_construction").is_none());
+        let _:FamilleModelee=serde_json::from_value(ancien).unwrap();
+        f.volumes.clear(); f.extrusions.clear();
+        let p=PlanConstruction::deux_points("Oblique".into(),VueEsquisse::Plan,[0.0,0.0],[100.0,100.0]).unwrap();
+        let face=|x| Face {plan:String::new(),decalage:x};
+        f.extrusions.push(Extrusion {guidage: None, revolution: None, construction:Some(p.clone()),nom:"Essai".into(),vide:false,materiau:Materiau::Menuiserie,vue:VueEsquisse::Plan,profil:vec![[0.0,0.0],[100.0,0.0],[100.0,200.0],[0.0,200.0]].into_iter().map(|q| PointEsquisse {h:face(q[0]),v:face(q[1])}).collect(),profondeur:[face(0.0),face(50.0)],visible:None,materiau_parametre:None});
+        f.plans_construction.push(p);
+        f.valider(1200.0,1350.0,300.0).unwrap();
+        let solides=f.solides(&f.resoudre(1200.0,1350.0,300.0));
+        let volume:f64=solides[0].tris.iter().map(|t| t[0].dot(t[1].cross(t[2]))/6.0).sum();
+        assert!((volume.abs()-1_000_000.0).abs()<1e-5);
+        let relue:FamilleModelee=serde_json::from_str(&serde_json::to_string(&f).unwrap()).unwrap();
+        assert_eq!(f,relue);
+        f.extrusions[0].revolution = Some(Revolution::nouvelle([[0.0,0.0],[0.0,200.0]]));
+        f.extrusions[0].vide = true;
+        f.valider(1200.0,1350.0,300.0).unwrap();
+        let relue: FamilleModelee = serde_json::from_str(&serde_json::to_string(&f).unwrap()).unwrap();
+        let solides = relue.solides(&relue.resoudre(1200.0,1350.0,300.0));
+        assert!(solides[0].vide);
+        let volume: f64 = solides[0].tris.iter().map(|t| t[0].dot(t[1].cross(t[2]))/6.0).sum();
+        let attendu = std::f64::consts::PI * 100.0 * 100.0 * 200.0;
+        assert!((volume-attendu).abs()/attendu < 0.002);
     }
 }

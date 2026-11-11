@@ -57,11 +57,9 @@ pub(super) fn exporter_profil(profil: &Profil) -> Result<(), String> {
     Ok(())
 }
 
-pub(super) fn dessiner_profil(ui: &mut egui::Ui, profil: &mut Profil) {
-    ui.label(RichText::new("Les coordonnées et les paramètres sont exprimés en millimètres. Les formules peuvent référencer les paramètres.").small().weak());
-    ui.columns(2, |ui| {
-        ui[0].heading("Paramètres");
-        egui::ScrollArea::vertical().id_salt("profil_parametres").max_height(180.0).show(&mut ui[0], |ui| {
+pub(super) fn proprietes_profil(ui: &mut egui::Ui, profil: &mut Profil) {
+        ui.heading("Paramètres");
+        egui::ScrollArea::vertical().id_salt("profil_parametres").max_height(180.0).show(ui, |ui| {
             let mut retirer = None;
             for (i, p) in profil.parametres.iter_mut().enumerate() {
                 ui.horizontal(|ui| {
@@ -77,10 +75,10 @@ pub(super) fn dessiner_profil(ui: &mut egui::Ui, profil: &mut Profil) {
                 profil.parametres.push(ParametreProfil { nom, formule: "10".into() });
             }
         });
-        ui[0].separator();
-        ui[0].heading("Sommets du contour");
-        ui[0].label(RichText::new("X et Y, dans l'ordre du contour fermé").small().weak());
-        egui::ScrollArea::vertical().id_salt("profil_sommets").max_height(230.0).show(&mut ui[0], |ui| {
+        ui.separator();
+        ui.heading("Sommets du contour");
+        ui.label(RichText::new("X et Y, dans l'ordre du contour fermé").small().weak());
+        egui::ScrollArea::vertical().id_salt("profil_sommets").max_height(230.0).show(ui, |ui| {
             let mut retirer = None;
             for (i, p) in profil.contour.iter_mut().enumerate() {
                 ui.horizontal(|ui| {
@@ -93,10 +91,13 @@ pub(super) fn dessiner_profil(ui: &mut egui::Ui, profil: &mut Profil) {
             if let Some(i) = retirer { profil.contour.remove(i); }
             if ui.small_button("+ Sommet").clicked() { profil.contour.push(PointProfil { x: "0".into(), y: "0".into() }); }
         });
-        ui[1].heading("Aperçu");
-        let (r, _) = ui[1].allocate_exact_size(egui::vec2(ui[1].available_width().max(100.0), 300.0), egui::Sense::hover());
-        let painter = ui[1].painter();
-        painter.rect_filled(r, 2.0, ui[1].visuals().extreme_bg_color);
+}
+
+pub(super) fn dessiner_profil(ui: &mut egui::Ui, profil: &mut Profil) {
+        ui.heading("Aperçu");
+        let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width().max(100.0), 300.0), egui::Sense::hover());
+        let painter = ui.painter();
+        painter.rect_filled(r, 2.0, ui.visuals().extreme_bg_color);
         match profil.points() {
             Ok(points) => {
                 let minx = points.iter().map(|p| p[0]).fold(f64::INFINITY, f64::min);
@@ -108,7 +109,6 @@ pub(super) fn dessiner_profil(ui: &mut egui::Ui, profil: &mut Profil) {
                 painter.add(egui::Shape::closed_line(pts.clone(), egui::Stroke::new(2.0, Color32::from_rgb(40, 120, 200))));
                 for p in pts { painter.circle_filled(p, 3.0, Color32::from_rgb(40, 120, 200)); }
             }
-            Err(e) => { ui[1].colored_label(ui[1].visuals().error_fg_color, e); }
+            Err(e) => { ui.colored_label(ui.visuals().error_fg_color, e); }
         }
-    });
 }
