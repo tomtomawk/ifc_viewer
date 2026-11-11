@@ -251,9 +251,11 @@ impl ViewerApp {
         let dans_la_plage = |o: &scene::SceneObject| limite_basse.is_none_or(|bas| {
             if matches!(&*o.class, "IFCSLAB" | "IFCCOVERING" | "IFCROOF" | "IFCANNOTATION" | "IFCGEOGRAPHICELEMENT") { o.max.z >= bas - 0.002 } else { o.max.z > bas + 0.002 }
         });
-        let masques_vue: HashSet<Id> = self.vue_native_id().and_then(|id| self.natif.as_ref()?.0.vues.iter().find(|v| v.id == id)).map(|vue| {
-            scene.objects.iter().filter(|o| self.cle_native(o.id).is_some_and(|id| vue.elements_masques.contains(&id))
-                || scene.model.parent.get(&o.id).and_then(|id| self.cle_native(*id)).is_some_and(|id| vue.elements_masques.contains(&id)))
+        // éléments masqués dans la vue : leurs identifiants de scène calculés une fois, puis
+        // chaque objet (ou son parent) y est cherché
+        let masques_vue: HashSet<Id> = self.vue_native_id().and_then(|id| self.natif.as_ref()?.0.vues.iter().find(|v| v.id == id).map(|vue| (&self.natif.as_ref().unwrap().0, vue))).filter(|(_, vue)| !vue.elements_masques.is_empty()).map(|(projet, vue)| {
+            let masques: HashSet<Id> = super::bim::elements_natifs(projet).filter(|(_, cle)| vue.elements_masques.contains(*cle)).map(|(genre, cle)| scene::id_natif(genre, cle)).collect();
+            scene.objects.iter().filter(|o| masques.contains(&o.id) || scene.model.parent.get(&o.id).is_some_and(|id| masques.contains(id)))
                 .map(|o| o.id).collect()
         }).unwrap_or_default();
         let mut opaque = Vec::new();

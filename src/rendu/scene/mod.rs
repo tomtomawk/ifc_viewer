@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 mod natif;
-pub use natif::{depuis_natif, id_natif, numero_vue};
+pub use natif::{chrono, chrono_lent, depuis_natif, id_natif, numero_vue};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]

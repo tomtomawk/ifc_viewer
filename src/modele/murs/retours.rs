@@ -114,14 +114,52 @@ pub fn perce(p: &Projet, o: &Ouverture, m: &Mur) -> bool {
     if o.mur == m.id || m.assemblage.as_ref() == Some(&o.mur) {
         return true;
     }
-    // tri rapide : mur droit parallèle à l'hôte et proche de lui
+    proche(p, o, m) && hote_elargi(p, o).is_ok_and(|h| h.membres.iter().any(|x| x.id == m.id))
+}
+
+/// Tri rapide de `perce` : mur droit parallèle à l'hôte de l'ouverture et proche de lui.
+fn proche(p: &Projet, o: &Ouverture, m: &Mur) -> bool {
     let (Ok((Axe::Droit { debut, fin }, e, _)), Some((c, d))) = (crate::modele::volumes::solides::hote(p, &o.mur), droite(m)) else { return false };
     let (a, b) = (DVec2::from_array(debut), DVec2::from_array(fin));
     let (Some(u), Some(v)) = ((b - a).try_normalize(), (d - c).try_normalize()) else { return false };
-    if u.perp_dot(v).abs() > 1e-3 || (c - a).dot(u.perp()).abs() > e / 2.0 + 5000.0 {
-        return false;
+    u.perp_dot(v).abs() <= 1e-3 && (c - a).dot(u.perp()).abs() <= e / 2.0 + 5000.0
+}
+
+/// Hôtes élargis de toutes les ouvertures et, par mur, ses ouvertures (rangs dans
+/// `p.ouvertures`, croissants) : mêmes réponses que `perce` et `hote_elargi` appelés
+/// mur par mur, calculées une seule fois pour tout le projet.
+pub struct Percements {
+    pub hotes: Vec<Result<HoteElargi, String>>,
+    pub par_mur: std::collections::HashMap<String, Vec<usize>>,
+}
+
+impl Percements {
+    pub fn calculer(p: &Projet) -> Self {
+        use rayon::prelude::*;
+        use std::collections::HashMap;
+        let hotes: Vec<Result<HoteElargi, String>> = p.ouvertures.par_iter().map(|o| hote_elargi(p, o)).collect();
+        let par_id: HashMap<&str, &Mur> = p.murs.iter().map(|m| (m.id.as_str(), m)).collect();
+        let mut couches: HashMap<&str, Vec<&Mur>> = HashMap::new();
+        for m in &p.murs {
+            if let Some(a) = &m.assemblage { couches.entry(a.as_str()).or_default().push(m); }
+        }
+        let mut par_mur: HashMap<String, Vec<usize>> = HashMap::new();
+        for (k, o) in p.ouvertures.iter().enumerate() {
+            let mut perces: Vec<&str> = Vec::new();
+            if let Some(m) = par_id.get(o.mur.as_str()) { perces.push(m.id.as_str()); }
+            perces.extend(couches.get(o.mur.as_str()).into_iter().flatten().map(|m| m.id.as_str()));
+            if let Ok(h) = &hotes[k] {
+                for x in &h.membres {
+                    if !perces.contains(&x.id.as_str()) && par_id.get(x.id.as_str()).is_some_and(|m| proche(p, o, m)) { perces.push(x.id.as_str()); }
+                }
+            }
+            for id in perces {
+                let liste = par_mur.entry(id.to_string()).or_default();
+                if liste.last() != Some(&k) { liste.push(k); }
+            }
+        }
+        Self { hotes, par_mur }
     }
-    hote_elargi(p, o).is_ok_and(|h| h.membres.iter().any(|x| x.id == m.id))
 }
 
 fn sans_accent(s: &str) -> String {
@@ -144,11 +182,16 @@ pub struct Retours {
 }
 
 pub fn retours(p: &Projet, o: &Ouverture, id: &str) -> Result<Retours, String> {
+    retours_avec(p, o, id, None)
+}
+
+/// `retours` avec l'hôte élargi de l'ouverture déjà calculé (None : calculé ici).
+pub fn retours_avec(p: &Projet, o: &Ouverture, id: &str, hote: Option<&Result<HoteElargi, String>>) -> Result<Retours, String> {
     let vide = Retours { retirer: Vec::new(), ajouter: Vec::new() };
     let Some(f) = o.type_ouverture.as_ref().and_then(|t| p.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.modele.as_ref()).filter(|_| o.representation.is_none()) else {
         return Ok(vide);
     };
-    let h = hote_elargi(p, o)?;
+    let h = match hote { Some(h) => h.clone()?, None => hote_elargi(p, o)? };
     let Some(moi) = h.membres.iter().find(|m| m.id == id).cloned() else { return Ok(vide) };
     let surcharges = p.surcharges(o);
     let r = f.resoudre_occurrence(o.largeur, o.hauteur, h.epaisseur, &surcharges, &o.materiaux);

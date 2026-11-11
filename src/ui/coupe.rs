@@ -81,9 +81,12 @@ impl ViewerApp {
         let limite = crate::modele::documentation::limite_haute_plan(p, s, v, coupe)?;
         let niveau_id=scene::id_natif("niveau",niveau);
         let exclus = self.ids_masques_contextes();
+        // éléments masqués dans la vue : identifiants de scène calculés une fois
+        let masques: HashSet<Id> = if v.elements_masques.is_empty() { HashSet::new() } else {
+            super::bim::elements_natifs(p).filter(|(_, cle)| v.elements_masques.contains(*cle)).map(|(genre, cle)| scene::id_natif(genre, cle)).collect()
+        };
         let visible=s.objects.iter().enumerate().map(|(i,o)| {
-            let masque_vue=self.cle_native(o.id).is_some_and(|id|v.elements_masques.contains(&id))
-                || s.model.parent.get(&o.id).and_then(|id|self.cle_native(*id)).is_some_and(|id|v.elements_masques.contains(&id));
+            let masque_vue=masques.contains(&o.id) || s.model.parent.get(&o.id).is_some_and(|id|masques.contains(id));
             o.storey==Some(niveau_id) && !exclus.contains(&o.id) && o.min.z>coupe+1e-5 && o.min.z<limite
                 && !masque_vue && !self.hidden_classes.contains(&*o.class)
                 && !self.hidden_classes.contains(&*self.cle_objet[i])
@@ -100,6 +103,7 @@ impl ViewerApp {
             return;
         }
         self.coupe_dirty = false;
+        let mut t_etape = std::time::Instant::now();
         // élévation : vue depuis sa ligne, rien n'est coupé (pas de poché)
         let elevation = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).is_some_and(|v| v.genre == "Élévation" && v.plan_coupe.is_some());
         let (mut tris, mut traits) = match (&self.scene, self.plan_coupe().filter(|_| !elevation)) {
@@ -109,12 +113,14 @@ impl ViewerApp {
             }
             _ => Default::default(),
         };
+        scene::chrono_lent("coupe : poché et contours", &mut t_etape);
         if let Some(s)=&self.scene {
             let mut prims=self.primitives_fond_plan();
             prims.extend(self.primitives_au_dessus_plan());
             let (t,l)=dessin::sommets(s,&prims,glam::DVec3::Z,self.echelle,true);
             tris.extend(t);traits.extend(l);
         }
+        scene::chrono_lent("coupe : fond de plan et éléments au-dessus", &mut t_etape);
         if let (Some(s), Some((a, b))) = (&self.scene, self.boite_appliquee()) {
             let poche = (self.style == StyleVisuel::Graphique).then_some(self.poche);
             let (t, l) = dessin::sommets_boite(s, &self.visible, a, b, self.echelle, poche, self.style == StyleVisuel::Realiste, self.traits_fins);
@@ -126,9 +132,11 @@ impl ViewerApp {
             let (t,l)=dessin::sommets(s,&prims,-self.camera.forward().as_dvec3(),self.echelle,self.traits_fins);
             tris.extend(t); traits.extend(l);
         }
+        scene::chrono_lent("coupe : boîte et annotations", &mut t_etape);
         if let Some(r) = self.renderer.as_mut() {
             r.upload_coupe(&tris, &traits);
         }
+        scene::chrono_lent("coupe : envoi au GPU", &mut t_etape);
     }
 
     /// Dessin vectoriel de la vue (orthographique) : coupe, arêtes vues sans les parties

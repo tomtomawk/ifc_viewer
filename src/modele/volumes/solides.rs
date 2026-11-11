@@ -234,7 +234,10 @@ fn mur_brut(
     p: &Projet,
     m: &Mur,
     jonctions: &crate::modele::murs::jonctions::Coupes,
+    percements: Option<&crate::modele::murs::retours::Percements>,
 ) -> Result<Vec<Tri>, String> {
+    // calcul groupé : opérations reprises de la mémoire quand leurs opérandes n'ont pas changé
+    let booleen = if percements.is_some() { crate::noyau::csg_memoire::boolean_memoire } else { crate::noyau::csg::boolean };
     let e = p
         .type_mur(&m.type_mur)
         .ok_or("Type de mur introuvable.")?
@@ -300,18 +303,24 @@ fn mur_brut(
         .into_iter()
         .map(|t| t.map(|v| v * 1000.0))
         .collect::<Vec<_>>();
-        tris = crate::noyau::csg::boolean(&tris, &cap, crate::noyau::csg::Op::Intersection, 1e-5)
+        tris = booleen(&tris, &cap, crate::noyau::csg::Op::Intersection, 1e-5)
             .ok_or("Attachement à la toiture trop complexe.")?;
         if tris.is_empty() {
             return Err("La toiture se trouve sous le pied du mur.".into());
         }
     }
-    for o in p
-        .ouvertures
-        .iter()
-        .filter(|o| crate::modele::murs::retours::perce(p, o, m))
-    {
-        let (axe, ep, niveau) = hote_ouverture(p, o)?;
+    // ouvertures qui percent le mur, avec leur hôte élargi s'il est déjà calculé
+    type Hote = Result<crate::modele::murs::retours::HoteElargi, String>;
+    let ouvertures: Vec<(&Ouverture, Option<&Hote>)> = match percements {
+        Some(x) => x.par_mur.get(&m.id).into_iter().flatten().map(|&k| (&p.ouvertures[k], Some(&x.hotes[k]))).collect(),
+        None => p.ouvertures.iter().filter(|o| crate::modele::murs::retours::perce(p, o, m)).map(|o| (o, None)).collect(),
+    };
+    for (o, hote) in ouvertures {
+        let (axe, ep, niveau) = match hote {
+            Some(Ok(h)) => (h.axe.clone(), h.epaisseur, h.niveau.clone()),
+            Some(Err(e)) => return Err(e.clone()),
+            None => hote_ouverture(p, o)?,
+        };
         let z = p
             .niveau(&niveau)
             .ok_or("Niveau de l'ouverture introuvable.")?
@@ -327,10 +336,10 @@ fn mur_brut(
         }
         // retours aux insertions : place laissée aux couches qui se retournent, puis
         // retour de cette couche
-        let retours = crate::modele::murs::retours::retours(p, o, &m.id)?;
+        let retours = crate::modele::murs::retours::retours_avec(p, o, &m.id, hote)?;
         for r in &retours.retirer {
             if tris.is_empty() { break; }
-            tris = crate::noyau::csg::boolean(&tris, r, crate::noyau::csg::Op::Difference, 1e-5)
+            tris = booleen(&tris, r, crate::noyau::csg::Op::Difference, 1e-5)
                 .ok_or("Calcul du retour trop complexe ; projet conservé.")?;
         }
         // famille modélisée : ses vides percent le mur
@@ -339,11 +348,11 @@ fn mur_brut(
                 if tris.is_empty() {
                     break;
                 }
-                tris = crate::noyau::csg::boolean(&tris, &vide, crate::noyau::csg::Op::Difference, 1e-5)
+                tris = booleen(&tris, &vide, crate::noyau::csg::Op::Difference, 1e-5)
                     .ok_or("Calcul du percement trop complexe ; projet conservé.")?;
             }
             for a in &retours.ajouter {
-                tris = crate::noyau::csg::boolean(&tris, a, crate::noyau::csg::Op::Union, 1e-5)
+                tris = booleen(&tris, a, crate::noyau::csg::Op::Union, 1e-5)
                     .ok_or("Calcul du retour trop complexe ; projet conservé.")?;
             }
             continue;
@@ -362,7 +371,7 @@ fn mur_brut(
         if tris.is_empty() {
             break;
         }
-        tris = crate::noyau::csg::boolean(&tris, &vide, crate::noyau::csg::Op::Difference, 1e-5)
+        tris = booleen(&tris, &vide, crate::noyau::csg::Op::Difference, 1e-5)
             .ok_or("Calcul du percement trop complexe ; projet conservé.")?;
     }
     Ok(tris)
@@ -375,33 +384,21 @@ pub fn mur(
     m: &Mur,
     jonctions: &crate::modele::murs::jonctions::Coupes,
 ) -> Result<Vec<Tri>, String> {
-    mur_avec(p, m, &|autre| mur_brut(p, autre, jonctions).map(std::borrow::Cow::Owned))
+    mur_avec(p, usize::MAX, m, &|_, autre| mur_brut(p, autre, jonctions, None).map(std::borrow::Cow::Owned), &|_, autre| std::borrow::Cow::Owned(Voisin::calculer(p, autre)), false)
 }
 
-/// Solides de tous les murs du projet, dans l'ordre de `p.murs`, identiques à `mur` appelé
-/// mur par mur : chaque volume brut est calculé une seule fois (en parallèle) puis
-/// réutilisé par les jonctions de ses voisins, et les murs sont découpés en parallèle.
-pub fn murs(p: &Projet, jonctions: &crate::modele::murs::jonctions::Coupes) -> Vec<Result<Vec<Tri>, String>> {
-    use rayon::prelude::*;
-    let bruts: Vec<Result<Vec<Tri>, String>> = p.murs.par_iter().map(|m| mur_brut(p, m, jonctions)).collect();
-    let indice: std::collections::HashMap<&str, usize> = p.murs.iter().enumerate().map(|(i, m)| (m.id.as_str(), i)).collect();
-    let brut = |autre: &Mur| -> Result<std::borrow::Cow<'_, [Tri]>, String> {
-        match indice.get(autre.id.as_str()).map(|&i| &bruts[i]) {
-            Some(Ok(t)) => Ok(std::borrow::Cow::Borrowed(t.as_slice())),
-            Some(Err(e)) => Err(e.clone()),
-            None => mur_brut(p, autre, jonctions).map(std::borrow::Cow::Owned),
-        }
-    };
-    p.murs.par_iter().map(|m| mur_avec(p, m, &brut)).collect()
+/// Ce que la jonction d'un mur lit de chacun des autres : priorité, type et hauteurs
+/// connus ou non, emprise en plan élargie de 1 mm.
+#[derive(Clone)]
+struct Voisin {
+    priorite: (i32, String),
+    epaisseur: bool,
+    hauteurs: Option<(f64, f64)>,
+    emprise: Result<(DVec2, DVec2), String>,
 }
 
-fn mur_avec<'a>(
-    p: &Projet,
-    m: &Mur,
-    brut: &(dyn Fn(&Mur) -> Result<std::borrow::Cow<'a, [Tri]>, String> + Sync),
-) -> Result<Vec<Tri>, String> {
-    let mut tris = brut(m)?.into_owned();
-    let priorite = |m: &Mur| {
+impl Voisin {
+    fn priorite(p: &Projet, m: &Mur) -> (i32, String) {
         let defaut = p
             .type_mur(&m.type_mur)
             .and_then(|t| t.couches.first())
@@ -415,7 +412,63 @@ fn mur_avec<'a>(
             p.priorites_jonction.get(&m.id).copied().unwrap_or(defaut),
             m.id.clone(),
         )
+    }
+
+    fn calculer(p: &Projet, m: &Mur) -> Self {
+        let ep = p.type_mur(&m.type_mur).map(|t| t.epaisseur());
+        let emprise = match ep {
+            Some(ep) => bande(&m.axe, 0.0, m.axe.longueur(), ep + 2.0).map(|points| {
+                points.iter().map(|p| DVec2::from_array(*p)).fold(
+                    (DVec2::splat(f64::INFINITY), DVec2::splat(f64::NEG_INFINITY)),
+                    |(a, b), v| (a.min(v), b.max(v)),
+                )
+            }),
+            None => Err("Type absent".into()),
+        };
+        Self { priorite: Self::priorite(p, m), epaisseur: ep.is_some(), hauteurs: p.bas_haut(m), emprise }
+    }
+}
+
+/// Solides de tous les murs du projet, dans l'ordre de `p.murs`, identiques à `mur` appelé
+/// mur par mur : chaque volume brut est calculé une seule fois (en parallèle) puis
+/// réutilisé par les jonctions de ses voisins, et les murs sont découpés en parallèle.
+/// Les ouvertures et les voisins de chaque mur viennent de tables calculées une fois ;
+/// les découpes dont les opérandes n'ont pas changé depuis le calcul précédent sont
+/// reprises de la mémoire (`csg_memoire`) : seuls les murs réellement touchés par une
+/// modification sont recalculés.
+pub fn murs(p: &Projet, jonctions: &crate::modele::murs::jonctions::Coupes) -> Vec<Result<Vec<Tri>, String>> {
+    use rayon::prelude::*;
+    let mut t = std::time::Instant::now();
+    let percements = crate::modele::murs::retours::Percements::calculer(p);
+    crate::rendu::scene::chrono("murs : table des ouvertures", &mut t);
+    let voisins: Vec<Voisin> = p.murs.par_iter().map(|m| Voisin::calculer(p, m)).collect();
+    crate::rendu::scene::chrono("murs : table des voisins", &mut t);
+    let bruts: Vec<Result<Vec<Tri>, String>> = p.murs.par_iter().map(|m| mur_brut(p, m, jonctions, Some(&percements))).collect();
+    crate::rendu::scene::chrono("murs : volumes percés", &mut t);
+    // rangs dans `p.murs` : aucune recherche par identifiant dans la boucle des voisins
+    let brut = |i: usize, _: &Mur| -> Result<std::borrow::Cow<'_, [Tri]>, String> {
+        match &bruts[i] {
+            Ok(t) => Ok(std::borrow::Cow::Borrowed(t.as_slice())),
+            Err(e) => Err(e.clone()),
+        }
     };
+    let voisin = |i: usize, _: &Mur| -> std::borrow::Cow<'_, Voisin> { std::borrow::Cow::Borrowed(&voisins[i]) };
+    let solides = p.murs.par_iter().enumerate().map(|(i, m)| mur_avec(p, i, m, &brut, &voisin, true)).collect();
+    crate::rendu::scene::chrono("murs : jonctions entre couches", &mut t);
+    crate::noyau::csg_memoire::fin_de_calcul();
+    solides
+}
+
+fn mur_avec<'a>(
+    p: &Projet,
+    rang: usize,
+    m: &Mur,
+    brut: &(dyn Fn(usize, &Mur) -> Result<std::borrow::Cow<'a, [Tri]>, String> + Sync),
+    voisin: &(dyn Fn(usize, &Mur) -> std::borrow::Cow<'a, Voisin> + Sync),
+    memoire: bool,
+) -> Result<Vec<Tri>, String> {
+    let booleen = if memoire { crate::noyau::csg_memoire::boolean_memoire } else { crate::noyau::csg::boolean };
+    let mut tris = brut(rang, m)?.into_owned();
     let bbox = |tris: &[Tri]| {
         tris.iter().flatten().fold(
             (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY)),
@@ -423,37 +476,34 @@ fn mur_avec<'a>(
         )
     };
     let (mn, mx) = bbox(&tris);
-    let cle = priorite(m);
-    for autre in &p.murs {
-        if autre.id == m.id
-            || priorite(autre) <= cle
-            || (m.assemblage.is_some() && m.assemblage == autre.assemblage)
-        {
+    let cle = Voisin::priorite(p, m);
+    let sans_toiture = p.attaches_toitures.is_empty();
+    for (i, autre) in p.murs.iter().enumerate() {
+        if autre.id == m.id {
             continue;
         }
-        let ep = p
-            .type_mur(&autre.type_mur)
-            .ok_or("Type absent")?
-            .epaisseur();
-        let (z0, z1) = p.bas_haut(autre).ok_or("Niveau absent")?;
+        let v = voisin(i, autre);
+        if v.priorite <= cle || (m.assemblage.is_some() && m.assemblage == autre.assemblage) {
+            continue;
+        }
+        if !v.epaisseur {
+            return Err("Type absent".into());
+        }
+        let (z0, z1) = v.hauteurs.ok_or("Niveau absent")?;
         // Élargir le filtre vertical si le haut est piloté par une toiture.
-        if p.attaches_toitures.is_empty() && (z0 >= mx.z - 1e-5 || z1 <= mn.z + 1e-5) {
+        if sans_toiture && (z0 >= mx.z - 1e-5 || z1 <= mn.z + 1e-5) {
             continue;
         }
-        let points = bande(&autre.axe, 0.0, autre.axe.longueur(), ep + 2.0)?;
-        let (lo, hi) = points.iter().map(|p| DVec2::from_array(*p)).fold(
-            (DVec2::splat(f64::INFINITY), DVec2::splat(f64::NEG_INFINITY)),
-            |(a, b), v| (a.min(v), b.max(v)),
-        );
+        let (lo, hi) = v.emprise.clone()?;
         if lo.x >= mx.x || hi.x <= mn.x || lo.y >= mx.y || hi.y <= mn.y {
             continue;
         }
-        let coupe = brut(autre)?;
+        let coupe = brut(i, autre)?;
         let (a, b) = bbox(&coupe);
         if a.cmpge(mx - DVec3::splat(1e-5)).any() || b.cmple(mn + DVec3::splat(1e-5)).any() {
             continue;
         }
-        tris = crate::noyau::csg::boolean(&tris, &coupe, crate::noyau::csg::Op::Difference, 1e-5)
+        tris = booleen(&tris, &coupe, crate::noyau::csg::Op::Difference, 1e-5)
             .ok_or("Jonction trop complexe ; projet conservé.")?;
         if tris.is_empty() {
             break;
@@ -814,6 +864,25 @@ mod tests_jonctions {
             assert!(!p.murs.is_empty(), "{f}");
             for (m, g) in p.murs.iter().zip(murs(&p, &j)) {
                 assert!(g == mur(&p, m, &j), "{f} : {}", m.id);
+            }
+        }
+    }
+    /// Recalcul partiel : après le déplacement d'un mur, le calcul groupé (qui reprend de
+    /// la mémoire les découpes inchangées) rend encore exactement le calcul mur par mur.
+    #[test]
+    fn recalcul_partiel_identique_apres_modification() {
+        let f = "samples/maison_native.modele.json";
+        let mut p = Projet::lire_json(&std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(f)).unwrap()).unwrap();
+        let j = crate::modele::murs::jonctions::coupes(&p);
+        let avant = murs(&p, &j);
+        for k in 0..3 {
+            let id = p.murs[k * 3 % p.murs.len()].id.clone();
+            p = p.executer(crate::modele::edition::commandes::Commande::Deplacer { ids: vec![id], delta: [0.0, 137.0 + k as f64, 0.0] }).unwrap().0;
+            let j = crate::modele::murs::jonctions::coupes(&p);
+            let groupe = murs(&p, &j);
+            assert!(groupe != avant, "le déplacement doit changer des solides");
+            for (m, g) in p.murs.iter().zip(groupe) {
+                assert!(g == mur(&p, m, &j), "déplacement {k} : {}", m.id);
             }
         }
     }

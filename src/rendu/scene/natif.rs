@@ -4,6 +4,21 @@ use crate::formats::ifc::geom::{Part, ProductGeom};
 use crate::modele::{Projet, SorteDalle};
 use crate::formats::ifc::step::{Entity, Value};
 
+/// Chronométrage des étapes de calcul, écrit sur la sortie d'erreur quand la variable
+/// d'environnement `BIMEDIT_CHRONO` est définie ; remet le compteur à zéro.
+pub fn chrono(nom: &str, depuis: &mut std::time::Instant) {
+    static ACTIF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *ACTIF.get_or_init(|| std::env::var_os("BIMEDIT_CHRONO").is_some()) {
+        eprintln!("chrono {nom} : {:.1} ms", depuis.elapsed().as_secs_f64() * 1000.0);
+    }
+    *depuis = std::time::Instant::now();
+}
+
+/// `chrono` limité aux étapes de plus de 5 ms (étapes appelées à chaque image).
+pub fn chrono_lent(nom: &str, depuis: &mut std::time::Instant) {
+    if depuis.elapsed().as_millis() >= 5 { chrono(nom, depuis); } else { *depuis = std::time::Instant::now(); }
+}
+
 pub fn id_natif(genre: &str, id: &str) -> u64 {
     genre.bytes().chain([0]).chain(id.bytes()).fold(0xcbf29ce484222325, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3))
 }
@@ -93,6 +108,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         model.children.entry(niveau).or_default().push(id);
         model.type_of.insert(id, id_natif("type-mur", &a.type_mur));
     }
+    let mut t_etape = std::time::Instant::now();
     let mut couches_coupe = Vec::new();
     // bandes en mètres dans le repère du fichier (dalles, ossatures), ramenées à la scène
     let mut bandes_dalles: Vec<(u64, Vec<CoucheCoupe>)> = Vec::new();
@@ -105,6 +121,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     // jonctions (noyaux prolongés) ; les couches moins prioritaires s'arrêtent sur les
     // faces des autres (solides)
     let (jonctions, _) = crate::modele::murs::jonctions::jonctions(projet);
+    chrono("scène : jonctions", &mut t_etape);
     // couches d'un même assemblage consécutives (sélection d'un seul tenant)
     let mut ordre: Vec<&crate::modele::Mur> = projet.murs.iter().filter(|m| m.assemblage.is_none()).collect();
     for a in &projet.assemblages {
@@ -114,6 +131,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     // solides calculés ensemble (volumes bruts partagés, en parallèle), consommés dans l'ordre
     let mut solides: std::collections::HashMap<&str, Result<Vec<crate::modele::volumes::solides::Tri>, String>> =
         projet.murs.iter().map(|m| m.id.as_str()).zip(crate::modele::volumes::solides::murs(projet, &jonctions)).collect();
+    chrono("scène : solides des murs", &mut t_etape);
     for m in ordre {
         let type_mur = projet.type_mur(&m.type_mur).ok_or("Type de mur introuvable.")?;
         let solide = solides.remove(m.id.as_str()).ok_or("Mur en double.")??;
@@ -192,6 +210,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         materiaux_parts.push(vec![materiau.as_ref().map(|m| m.nom.clone())]);
         geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.as_ref().map(|m| rendu_materiau(m, couleur, &mut table_apparences))], motifs: vec![materiau.as_ref().and_then(|m| motif_surface(projet, m, &mut table_motifs))] });
     }
+    chrono("scène : mise en objets des murs", &mut t_etape);
     // dalles : un prisme par couche, du dessus (niveau + décalage) vers le bas
     for d in &projet.dalles {
         let t = projet.type_dalle(&d.type_dalle).ok_or_else(|| format!("{} : type de dalle introuvable.", d.nom))?;
@@ -282,6 +301,12 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
             geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris: r.tris.iter().map(|t| t.map(|v| v * 0.001)).collect() }], lignes: Vec::new(), rendu: vec![Some(rendu_materiau(&m, couleur, &mut table_apparences))], motifs: vec![motif_surface(projet, &m, &mut table_motifs)] });
         }
     }
+    chrono("scène : dalles", &mut t_etape);
+    // menuiseries calculées en parallèle, rangées dans l'ordre des ouvertures
+    let mut menuiseries = {
+        use rayon::prelude::*;
+        projet.ouvertures.par_iter().map(|o| crate::modele::volumes::solides::ouverture_parts(projet, o)).collect::<Vec<_>>().into_iter()
+    };
     for o in &projet.ouvertures {
         let id = id_natif("ouverture", &o.id);
         let (_, _, niveau) = crate::modele::volumes::solides::hote(projet, &o.mur)?;
@@ -292,7 +317,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         use crate::modele::famille::Role;
         let menuiserie = o.type_ouverture.as_ref().and_then(|t| projet.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.modele.as_ref().map(|m| m.couleur).or(t.famille.as_ref().map(|f| f.couleur)))
             .map_or([0.55, 0.40, 0.24, 1.0], |c| { let [r, g, b] = c.map(|c| c as f32 / 255.0); [r, g, b, 1.0] });
-        let parts: Vec<Part> = crate::modele::volumes::solides::ouverture_parts(projet, o)?.into_iter().map(|(role, materiau, tris)| Part {
+        let parts: Vec<Part> = menuiseries.next().ok_or("Menuiserie absente.")??.into_iter().map(|(role, materiau, tris)| Part {
             // paramètre matériau : couleur du matériau du projet (le vitrage reste translucide)
             color: match (materiau.as_ref().and_then(|m| projet.materiau(m)), role) {
                 (Some(m), r) => { let [cr, cg, cb] = m.couleur.map(|c| c as f32 / 255.0); [cr, cg, cb, if r == Role::Vitrage { 0.35 } else { 1.0 }] }
@@ -305,6 +330,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         materiaux_parts.push(vec![None; parts.len()]);
         geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
+    chrono("scène : ouvertures", &mut t_etape);
     for b in &projet.barres {
         let id = id_natif("barre", &b.id);
         let parent = id_natif("niveau", &b.niveau);
@@ -424,7 +450,9 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         materiaux_parts.push(vec![None]);
         geoms.push(ProductGeom { id, parts: vec![Part { color: [0.65,0.68,0.72,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
+    chrono("scène : autres éléments", &mut t_etape);
     let mut aretes = aretes_jointes(&geoms, &materiaux_parts);
+    chrono("scène : arêtes", &mut t_etape);
     // terrains : apparence lissée, sans arête
     for t in &projet.terrains {
         aretes.insert(id_natif("terrain", &t.id), aretes_terrain(projet, t));
@@ -437,6 +465,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
         aretes.insert(id_natif("arbre", &a.id), aretes_silhouette(&tris));
     }
     let mut scene = crate::rendu::scene::assemble_avec(model, geoms, path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| projet.nom.clone()), aretes);
+    chrono("scène : assemblage", &mut t_etape);
     for a in &projet.arbres {
         if let Some(&o) = scene.object_of.get(&id_natif("arbre", &a.id)) {
             let r = scene.objects[o as usize].opaque;
@@ -476,6 +505,7 @@ pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     }
     if scene.objects.is_empty() { scene.min = Vec3::splat(-5.0); scene.max = Vec3::splat(5.0); }
     scene.navigateur = Some(navigateur(projet));
+    chrono("scène : finitions", &mut t_etape);
     Ok(scene)
 }
 

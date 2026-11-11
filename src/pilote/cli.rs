@@ -5,7 +5,7 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
     let commande = args.first()?.as_str();
     if !matches!(
         commande,
-        "--editer" | "--export-ifc" | "--export-vue" | "--export-feuille" | "--quantites"
+        "--editer" | "--export-ifc" | "--export-vue" | "--export-feuille" | "--quantites" | "--mesurer-scene"
     ) {
         return None;
     }
@@ -13,6 +13,27 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
         let entree = args.get(1).ok_or("Fichier .modele.json requis.")?;
         let p = Projet::lire_json(&std::fs::read_to_string(entree).map_err(|e| e.to_string())?)?;
         p.verifier()?;
+        if commande == "--mesurer-scene" {
+            // construction complète, puis reconstruction après le déplacement d'un mur ;
+            // résultats sur la sortie d'erreur avec les étapes (BIMEDIT_CHRONO)
+            let chemin = Path::new(entree);
+            let debut = std::time::Instant::now();
+            crate::rendu::scene::depuis_natif(&p, chemin)?;
+            eprintln!("scène complète : {:.0} ms", debut.elapsed().as_secs_f64() * 1000.0);
+            let repetitions: usize = args.get(2).and_then(|n| n.parse().ok()).unwrap_or(1);
+            let mut courant = p;
+            for k in 0..repetitions {
+                let Some(id) = courant.murs.get(k * 7 % courant.murs.len().max(1)).map(|m| m.assemblage.clone().unwrap_or_else(|| m.id.clone())) else { break };
+                let debut = std::time::Instant::now();
+                let (suivant, _) = courant.executer(modele::edition::commandes::Commande::Deplacer { ids: vec![id], delta: [0.0, 50.0, 0.0] })?;
+                let t_commande = debut.elapsed().as_secs_f64() * 1000.0;
+                let debut = std::time::Instant::now();
+                crate::rendu::scene::depuis_natif(&suivant, chemin)?;
+                eprintln!("mur déplacé : commande {:.0} ms, scène {:.0} ms", t_commande, debut.elapsed().as_secs_f64() * 1000.0);
+                courant = suivant;
+            }
+            return Ok(());
+        }
         let arg = args.get(2).ok_or("Argument manquant.")?;
         match commande {
             "--editer" => {
