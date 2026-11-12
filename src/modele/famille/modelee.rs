@@ -178,6 +178,9 @@ pub struct PointEsquisse {
 /// Repère orthonormé d'une esquisse, indépendant des axes du projet.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct PlanConstruction {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<String>,
     pub nom: String,
     pub origine: [f64; 3],
     pub horizontal: [f64; 3],
@@ -192,12 +195,12 @@ impl PlanConstruction {
         if !origine.is_finite() || !direction.is_finite() || direction.length() < 0.1 {
             return Err("Choisir deux points distincts pour le plan de construction.".into());
         }
-        Ok(Self { nom, origine: origine.to_array(), horizontal: direction.normalize().to_array(), vertical: vue.point(0.0, 0.0, 1.0).to_array() })
+        Ok(Self { id: crate::modele::collaboration::uuid(), reference: None, nom, origine: origine.to_array(), horizontal: direction.normalize().to_array(), vertical: vue.point(0.0, 0.0, 1.0).to_array() })
     }
 
     pub fn valider(&self) -> Result<(), String> {
         let (o, h, v) = (DVec3::from_array(self.origine), DVec3::from_array(self.horizontal), DVec3::from_array(self.vertical));
-        if self.nom.trim().is_empty() || !o.is_finite() || !h.is_finite() || !v.is_finite()
+        if self.id.trim().is_empty() || self.nom.trim().is_empty() || !o.is_finite() || !h.is_finite() || !v.is_finite()
             || (h.length_squared() - 1.0).abs() > 1e-6 || (v.length_squared() - 1.0).abs() > 1e-6 || h.dot(v).abs() > 1e-6 {
             return Err("Repère de construction non orthonormé ou sans nom.".into());
         }
@@ -210,16 +213,22 @@ impl PlanConstruction {
     }
 }
 
-/// Extrusion d'un profil quelconque (polygone fermé) entre deux faces.
+/// Opération unique qui construit une forme à partir de son profil.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct Extrusion {
+#[serde(tag = "genre", rename_all = "snake_case")]
+pub enum OperationForme {
+    Extrusion,
+    Revolution { revolution: Revolution },
+    Guidage { guidage: FormeGuidee },
+}
+
+/// Forme construite à partir d'un profil polygonal fermé.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct FormeProfil {
+    pub operation: OperationForme,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub guidage: Option<FormeGuidee>,
-    /// Même profil éditable ; une révolution remplace la translation en profondeur.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revolution: Option<Revolution>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub construction: Option<PlanConstruction>,
+    pub construction: Option<String>,
     pub nom: String,
     #[serde(default)]
     pub vide: bool,
@@ -403,7 +412,7 @@ pub struct FamilleModelee {
     pub contraintes: Vec<Contrainte>,
     pub volumes: Vec<Volume>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub extrusions: Vec<Extrusion>,
+    pub extrusions: Vec<FormeProfil>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub symboles: Vec<Symbole>,
     /// Cotes de mesure (angle, diamètre, altimétrie) : annotations de l'éditeur, non
@@ -775,16 +784,17 @@ impl FamilleModelee {
             let (d0, d1) = (pos(&e.profondeur[0]), pos(&e.profondeur[1]));
             // prisme local (h, v, d) ramené aux axes de la famille ; une permutation
             // impaire (élévation) retourne les faces
-            let impaire = e.construction.is_none() && e.vue == VueEsquisse::Elevation;
-            let local = if let Some(guidage) = &e.guidage {
-                guidage.triangles(&contour)
-            } else if let Some(revolution) = &e.revolution {
-                revolution.triangles(&contour)
-            } else { crate::modele::volumes::solides::prisme(&contour, d0.min(d1), d0.max(d1)) };
+            let construction = e.construction.as_ref().and_then(|id| self.repere_construction(id, r));
+            let impaire = construction.is_none() && e.vue == VueEsquisse::Elevation;
+            let local = match &e.operation {
+                OperationForme::Guidage { guidage } => guidage.triangles(&contour),
+                OperationForme::Revolution { revolution } => revolution.triangles(&contour),
+                OperationForme::Extrusion => crate::modele::volumes::solides::prisme(&contour, d0.min(d1), d0.max(d1)),
+            };
             let tris = local
                 .into_iter()
                 .map(|t| {
-                    let m = t.map(|p| e.construction.as_ref().map_or_else(|| e.vue.point(p.x, p.y, p.z), |c| c.point(p.x, p.y, p.z)));
+                    let m = t.map(|p| construction.as_ref().map_or_else(|| e.vue.point(p.x, p.y, p.z), |c| c.point(p.x, p.y, p.z)));
                     if impaire { [m[0], m[2], m[1]] } else { m }
                 })
                 .collect();
@@ -831,12 +841,29 @@ impl FamilleModelee {
             .collect()
     }
 
+    /// Résout le repère d'un plan à partir de son identité et des contraintes courantes.
+    pub fn repere_construction(&self, id: &str, r: &Resolution) -> Option<PlanConstruction> {
+        let mut plan = self.plans_construction.iter().find(|p| p.id == id)?.clone();
+        if let Some(nom) = &plan.reference {
+            let source = self.plan(nom)?;
+            let vue = match source.axe { AxePlan::X => VueEsquisse::Coupe, AxePlan::Y => VueEsquisse::Elevation, AxePlan::Z => VueEsquisse::Plan };
+            let position = r.positions.get(nom).copied().unwrap_or(source.position);
+            plan.origine = vue.point(0.0, 0.0, position).to_array();
+            plan.horizontal = vue.point(1.0, 0.0, 0.0).to_array();
+            plan.vertical = vue.point(0.0, 1.0, 0.0).to_array();
+        }
+        Some(plan)
+    }
+
     /// Contrôle avant enregistrement : noms uniques, références existantes, formules
     /// calculables, volumes non plats.
     pub fn valider(&self, largeur: f64, hauteur: f64, epaisseur: f64) -> Result<(), String> {
         let mut constructions = std::collections::HashSet::new();
+        let mut identites_construction = std::collections::HashSet::new();
         for plan in &self.plans_construction {
             plan.valider()?;
+            if !identites_construction.insert(&plan.id) { return Err("Identité de plan de construction dupliquée.".into()); }
+            if plan.reference.as_ref().is_some_and(|nom| self.plan(nom).is_none()) { return Err(format!("{} : plan de référence absent.", plan.nom)); }
             if !constructions.insert(&plan.nom) { return Err(format!("Plan de construction en double : {}", plan.nom)); }
         }
         let mut noms = std::collections::HashSet::new();
@@ -875,8 +902,7 @@ impl FamilleModelee {
             }
         }
         for e in &self.extrusions {
-            if e.guidage.is_some() && e.revolution.is_some() { return Err("Une forme ne peut pas combiner révolution et guidage.".into()); }
-            if let Some(c) = &e.construction { c.valider()?; }
+            if let Some(id) = &e.construction { if !identites_construction.contains(id) { return Err(format!("{} : plan de construction absent.", e.nom)); } }
             let (ah, av, ad) = e.vue.axes();
             let bon = |f: &Face, axe| (e.construction.is_some() && f.plan.is_empty() && f.decalage.is_finite()) || self.plan(&f.plan).is_some_and(|p| p.axe == axe);
             if e.profil.len() < 3 || !e.profil.iter().all(|p| bon(&p.h, ah) && bon(&p.v, av)) || !e.profondeur.iter().all(|f| bon(f, ad)) {
@@ -908,13 +934,14 @@ impl FamilleModelee {
             let contour: Vec<[f64; 2]> = e.profil.iter().map(|p| { let (h, v) = self.point_esquisse(&r, p); [h, v] }).collect();
             super::profil::contour_simple(&contour).map_err(|x| format!("{} : {x}", e.nom))?;
             let pos = |f: &Face| r.positions.get(&f.plan).copied().unwrap_or(0.0) + f.decalage;
-            if let Some(guidage) = &e.guidage {
-                guidage.valider(&contour)?;
-                if guidage.triangles(&contour).is_empty() { return Err(format!("{} : raccordement dégénéré.", e.nom)); }
-            }
-            else if let Some(revolution) = &e.revolution { revolution.valider(&contour)?; }
-            else if (pos(&e.profondeur[0]) - pos(&e.profondeur[1])).abs() < 0.1 {
-                return Err(format!("{} : extrusion plate.", e.nom));
+            match &e.operation {
+                OperationForme::Guidage { guidage } => {
+                    guidage.valider(&contour)?;
+                    if guidage.triangles(&contour).is_empty() { return Err(format!("{} : raccordement dégénéré.", e.nom)); }
+                }
+                OperationForme::Revolution { revolution } => revolution.valider(&contour)?,
+                OperationForme::Extrusion if (pos(&e.profondeur[0]) - pos(&e.profondeur[1])).abs() < 0.1 => return Err(format!("{} : extrusion plate.", e.nom)),
+                OperationForme::Extrusion => {}
             }
         }
         Ok(())
@@ -987,9 +1014,8 @@ impl FamilleModelee {
                 volume("Vitrage", false, Materiau::Vitrage, [("Dormant gauche", 0.0), ("Dormant droit", 0.0)], [("Cadre int", 21.0), ("Cadre ext", -21.0)], [("Dormant bas", 0.0), ("Dormant haut", 0.0)]),
             ],
             // appui en pente : profil esquissé en coupe, extrudé sur la largeur
-            extrusions: vec![Extrusion {
-                guidage: None,
-                revolution: None,
+            extrusions: vec![FormeProfil {
+                operation: OperationForme::Extrusion,
                 construction: None,
                 nom: "Appui".into(),
                 vide: false,
@@ -1113,7 +1139,7 @@ pub struct FichierFamille {
     pub famille: FamilleModelee,
 }
 
-pub const FORMAT_FAMILLE: &str = "famille-ouverture 1";
+pub const FORMAT_FAMILLE: &str = "famille-ouverture 2";
 
 impl FichierFamille {
     pub fn json(&self) -> Result<String, String> {
@@ -1288,7 +1314,7 @@ mod tests_construction {
         f.volumes.clear(); f.extrusions.clear();
         let p=PlanConstruction::deux_points("Oblique".into(),VueEsquisse::Plan,[0.0,0.0],[100.0,100.0]).unwrap();
         let face=|x| Face {plan:String::new(),decalage:x};
-        f.extrusions.push(Extrusion {guidage: None, revolution: None, construction:Some(p.clone()),nom:"Essai".into(),vide:false,materiau:Materiau::Menuiserie,vue:VueEsquisse::Plan,profil:vec![[0.0,0.0],[100.0,0.0],[100.0,200.0],[0.0,200.0]].into_iter().map(|q| PointEsquisse {h:face(q[0]),v:face(q[1])}).collect(),profondeur:[face(0.0),face(50.0)],visible:None,materiau_parametre:None});
+        f.extrusions.push(FormeProfil {operation: OperationForme::Extrusion, construction:Some(p.id.clone()),nom:"Essai".into(),vide:false,materiau:Materiau::Menuiserie,vue:VueEsquisse::Plan,profil:vec![[0.0,0.0],[100.0,0.0],[100.0,200.0],[0.0,200.0]].into_iter().map(|q| PointEsquisse {h:face(q[0]),v:face(q[1])}).collect(),profondeur:[face(0.0),face(50.0)],visible:None,materiau_parametre:None});
         f.plans_construction.push(p);
         f.valider(1200.0,1350.0,300.0).unwrap();
         let solides=f.solides(&f.resoudre(1200.0,1350.0,300.0));
@@ -1296,7 +1322,7 @@ mod tests_construction {
         assert!((volume.abs()-1_000_000.0).abs()<1e-5);
         let relue:FamilleModelee=serde_json::from_str(&serde_json::to_string(&f).unwrap()).unwrap();
         assert_eq!(f,relue);
-        f.extrusions[0].revolution = Some(Revolution::nouvelle([[0.0,0.0],[0.0,200.0]]));
+        f.extrusions[0].operation = OperationForme::Revolution { revolution: Revolution::nouvelle([[0.0,0.0],[0.0,200.0]]) };
         f.extrusions[0].vide = true;
         f.valider(1200.0,1350.0,300.0).unwrap();
         let relue: FamilleModelee = serde_json::from_str(&serde_json::to_string(&f).unwrap()).unwrap();

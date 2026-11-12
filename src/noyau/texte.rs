@@ -171,55 +171,11 @@ impl OutlinePen for Stylo {
     fn close(&mut self) {}
 }
 
-fn aire(c: &[[f32; 2]]) -> f32 {
-    (0..c.len()).map(|i| {
-        let (a, b) = (c[i], c[(i + 1) % c.len()]);
-        a[0] * b[1] - b[0] * a[1]
-    }).sum::<f32>() / 2.0
-}
-
-fn dedans(p: [f32; 2], c: &[[f32; 2]]) -> bool {
-    let mut d = false;
-    for i in 0..c.len() {
-        let (a, b) = (c[i], c[(i + 1) % c.len()]);
-        if (a[1] > p[1]) != (b[1] > p[1]) && p[0] < a[0] + (p[1] - a[1]) / (b[1] - a[1]) * (b[0] - a[0]) {
-            d = !d;
-        }
-    }
-    d
-}
-
-/// Triangles d'un glyphe : chaque contour est extérieur ou trou selon la parité du
-/// nombre de contours qui le contiennent ; un trou est rattaché au plus petit contour
-/// extérieur qui le contient.
-pub(crate) fn trianguler(mut contours: Vec<Vec<[f32; 2]>>) -> Vec<[[f32; 2]; 3]> {
-    for c in &mut contours {
-        if c.len() > 1 && c.first() == c.last() {
-            c.pop();
-        }
-    }
-    contours.retain(|c| c.len() >= 3 && aire(c).abs() > 1e-6);
-    let n = contours.len();
-    let profondeur: Vec<usize> = (0..n).map(|i| (0..n).filter(|&j| j != i && aire(&contours[j]).abs() > aire(&contours[i]).abs() && dedans(contours[i][0], &contours[j])).count()).collect();
-    let mut out = Vec::new();
-    for i in (0..n).filter(|&i| profondeur[i] % 2 == 0) {
-        let trous: Vec<usize> = (0..n)
-            .filter(|&j| profondeur[j] == profondeur[i] + 1 && dedans(contours[j][0], &contours[i]))
-            .collect();
-        let mut coords: Vec<f64> = Vec::new();
-        let mut indices_trous = Vec::new();
-        for (k, &c) in std::iter::once(&i).chain(&trous).enumerate() {
-            if k > 0 {
-                indices_trous.push(coords.len() / 2);
-            }
-            coords.extend(contours[c].iter().flat_map(|p| [p[0] as f64, p[1] as f64]));
-        }
-        if let Ok(idx) = earcutr::earcut(&coords, &indices_trous, 2) {
-            let pt = |k: usize| [coords[2 * k] as f32, coords[2 * k + 1] as f32];
-            out.extend(idx.chunks_exact(3).map(|t| [pt(t[0]), pt(t[1]), pt(t[2])]));
-        }
-    }
-    out
+/// Adaptateur des contours de glyphes en simple précision.
+pub(crate) fn trianguler(contours: Vec<Vec<[f32; 2]>>) -> Vec<[[f32; 2]; 3]> {
+    let contours = contours.into_iter().map(|c| c.into_iter().map(|p| [p[0] as f64, p[1] as f64]).collect()).collect();
+    super::geometrie::trianguler_contours(contours, 1e-6).into_iter()
+        .map(|t| t.map(|p| [p[0] as f32, p[1] as f32])).collect()
 }
 
 impl Police {

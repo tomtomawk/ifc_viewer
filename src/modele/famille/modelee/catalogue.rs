@@ -158,9 +158,8 @@ impl FamilleModelee {
                 v
             },
             // appui en pente : profil esquissé en coupe, extrudé sur la largeur
-            extrusions: vec![Extrusion {
-                guidage: None,
-                revolution: None,
+            extrusions: vec![FormeProfil {
+                operation: OperationForme::Extrusion,
                 construction: None,
                 nom: "Appui".into(),
                 vide: false,
@@ -226,9 +225,8 @@ impl FamilleModelee {
             panneau("Tableau droit", [("Tableau droit", 0.0), ("Droite", 0.0)], [("Bas", 0.0), ("Haut", 0.0)]),
             panneau("Tableau haut", [("Tableau gauche", 0.0), ("Tableau droit", 0.0)], [("Tableau haut", 0.0), ("Haut", 0.0)]),
         ]);
-        f.extrusions = vec![Extrusion {
-                guidage: None,
-                revolution: None,
+        f.extrusions = vec![FormeProfil {
+                operation: OperationForme::Extrusion,
                 construction: None,
             nom: "Seuil".into(),
             vide: false,

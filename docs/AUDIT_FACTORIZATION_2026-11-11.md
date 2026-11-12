@@ -73,9 +73,9 @@ Les clés, noms, aides, icônes, règles d'activation et traitements sont répar
 
 Ce choix préserve la compatibilité immédiate, mais autorise structurellement des combinaisons incompatibles que `valider` doit refuser. Le nom du type ne représente plus ce qu'il contient.
 
-**Proposition :** une `FormeProfil` contenant les attributs communs — nom, profil, repère, matériau, visibilité, plein/vide — et une `OperationForme` exclusive : extrusion, révolution, extrusion par chemin, raccordement, raccordement par chemin. Prévoir un lecteur des anciennes structures JSON, puis écrire la nouvelle forme dans une version maîtrisée du format. Ne pas simplement renommer les champs sérialisés.
+**Proposition :** une `FormeProfil` contenant les attributs communs — nom, profil, repère, matériau, visibilité, plein/vide — et une `OperationForme` exclusive : extrusion, révolution, extrusion par chemin, raccordement, raccordement par chemin. Définir un schéma JSON explicite pour cette opération et ses données, puis documenter le changement de format. Conformément à la politique de développement, les anciennes familles seront refaites : aucun lecteur de migration n’est nécessaire.
 
-**Validation :** corpus d'anciennes familles et du gabarit ; aller-retour de chaque opération ; conservation des paramètres, couleurs et vides ; rejet des états incompatibles à la désérialisation ou à la migration.
+**Validation :** aller-retour de chaque opération avec le schéma courant ; conservation des paramètres, couleurs et vides ; rejet des états incompatibles à la désérialisation.
 
 ### P1 — Un moteur de saisie d'esquisse indépendant de la projection
 
@@ -153,13 +153,24 @@ Les commandes métier sérialisables sont une base solide pour aligner interface
 |---|---|---|
 | 1 | Catalogue des commandes et capacités | Un seul lieu décrit une forme et les catégories compatibles |
 | 2 | Document de famille et historique communs | Même activation, fermeture et annulation en 2D et 3D |
-| 3 | Enum exclusive des opérations + migration JSON | Anciennes familles relues ; états incompatibles impossibles |
+| 3 | Enum exclusive des opérations et JSON explicite | Chaque opération est décrite et relue ; états incompatibles impossibles |
 | 4 | Plans identifiés et résolus | Une forme suit son plan sans duplication de coordonnées |
 | 5 | Contrôleur d'esquisse partagé | Parité de sélection, accrochage et Échap dans les deux canevas |
 | 6 | Registre des documents de l'application | Fin des transferts manuels de champs du document actif |
 | 7 | Primitives de maillage, rendu et collections | Contrats explicites et tests de non-régression dédiés |
 
-Chaque lot doit rester relisible et testable séparément. Éviter de combiner migration JSON, refonte de l'historique et changement de moteur de rendu dans un même chantier.
+Chaque lot doit rester relisible et testable séparément. Éviter de combiner changement du format JSON, refonte de l’historique et changement de moteur de rendu dans un même chantier.
+
+## Avancement de la factorisation — 12 novembre 2026
+
+- Lot 1, partiel : le catalogue de l'éditeur de famille modélisée alimente son ruban et les formes grisées des familles planes. La disponibilité tient compte de la vue et du plan oblique. Les outils spécifiques des cartouches et le contrôle complet par pilote restent à unifier.
+- Lot 2, partiel : profils, cartouches et étiquettes utilisent la même pile générique d'instantanés que les familles modélisées ; les gestes sont regroupés et Annuler/Rétablir sont accessibles par la barre et les raccourcis. Le parcours commun crée ou ouvre désormais les familles de fichier en mode autonome, même si un projet est ouvert ; elles restent ouvertes à la fermeture du projet. Une famille issue d’un projet reste liée à ce projet et le chargement y associe une famille autonome. Les éditeurs 2D et 3D partagent `DocumentFamille` pour identité, rattachement, chemin et historique ; leurs contenus et états d’interaction restent spécialisés. Le registre et les accès aux éditeurs restent distincts. Le chargement d'une famille plane dans le projet réinitialise sa pile afin de ne pas restaurer une ancienne identité de destination.
+- Lot 7, partiel : les shaders WGSL sont extraits et validés ; la triangulation plane et l'adaptateur de texte partagent une primitive en double précision ; un registre conserve les politiques collaboratives existantes et un test vérifie la couverture des collections de `Projet`.
+- Lot 3, implémenté, validation reportée : `FormeProfil` porte une opération exclusive sérialisée ; le gabarit livré a été mis à jour. Les anciens fichiers ne sont pas migrés. La collection conserve le nom `extrusions` dans le JSON.
+- Lot 4, partiel : les formes désignent les plans de construction par identifiant. Les plans issus d'une référence sont résolus selon la position courante ; le renommage et la suppression de la référence sont pris en compte. La gestion complète de suppression et de détachement des plans de construction reste à concevoir et à vérifier.
+- Lot 5, partiel : Échap et la fermeture d’un profil sont communs aux deux canevas. Les profils sur plan oblique disposent de poignées de déplacement, d’insertion et de suppression, et s’accrochent à l’origine et aux sommets du plan. Le contrôleur, les règles d’accrochage et la sélection ne sont pas encore entièrement unifiés entre les deux canevas.
+- Lot 6, partiel : les sélections multiples et BIM sont conservées par document lors du changement. Le registre intégral et la suppression des transferts manuels restent à réaliser.
+- La campagne de tests et la recette visuelle des derniers changements sont reportées à la demande de l'utilisateur. Les primitives de maillage, les passes GPU et les dépendances collaboratives ne sont pas encore entièrement factorisées.
 
 ## État des fonctions ajoutées et limites concrètes
 

@@ -33,6 +33,7 @@ mod selection;
 mod selection_famille;
 mod garde_corps;
 mod familles_planes;
+mod document_famille;
 mod cartouche;
 mod proprietes;
 mod saisie_plan;
@@ -433,6 +434,8 @@ struct DocumentOuvert {
     etats: BTreeMap<Option<usize>, EtatVue>,
     active: Option<usize>,
     selected: Option<Id>,
+    selection_multiple: Vec<Id>,
+    selection_bim: Vec<String>,
     filtre: String,
     onglet: LeftTab,
     status: String,
@@ -974,7 +977,7 @@ impl eframe::App for ViewerApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.activer_famille(ordre);
             self.demander_fermeture_famille();
-        } else if ctx.input(|i| i.viewport().close_requested()) && let Some(ordre) = self.famille.iter().chain(&self.familles_inactives).find(|ed| ed.modifiee()).map(|ed| ed.ordre) {
+        } else if ctx.input(|i| i.viewport().close_requested()) && let Some(ordre) = self.famille.iter().chain(&self.familles_inactives).find(|ed| ed.modifiee()).map(|ed| ed.document_famille.ordre) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.activer_famille(ordre);
             self.demander_fermeture_famille();
@@ -1124,6 +1127,9 @@ impl eframe::App for ViewerApp {
         let geste = ctx.input(|i| i.pointer.any_down()) || ctx.egui_wants_keyboard_input();
         if let Some(ed) = self.famille.as_mut() {
             ed.suivre_historique(geste);
+        }
+        if let Some(ed) = self.famille_plane_active.and_then(|i| self.familles_planes.get_mut(&i)) {
+            if let Err(e) = ed.suivre_historique(geste) { self.error = Some(format!("Historique : {e}")); }
         }
         self.suivre_document_actif();
         self.unsupported_window(&ctx);

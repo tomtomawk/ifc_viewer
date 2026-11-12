@@ -66,9 +66,12 @@ pub(super) fn bandeau_contenu(ui: &mut egui::Ui, groupes: &[(&str, Vec<Commande>
 
 /// Les familles planes gardent les commandes de volume visibles, sans les activer.
 pub(crate) fn formes_famille_planes() -> Vec<Commande> {
-    [("volume", "Volume"), ("vide", "Vide"), ("extrusion", "Extrusion"), ("extrusion_vide", "Extrusion vide"), ("revolution", "Révolution"), ("revolution_vide", "Révolution vide"), ("extrusion_chemin", "Extrusion par chemin"), ("raccordement", "Raccordement"), ("raccordement_chemin", "Raccordement par chemin")]
-        .into_iter().map(|(cle, nom)| Commande::new(cle, nom, Icone::Famille(cle),
-            "Cette famille est plane : les formes volumiques sont réservées aux portes, fenêtres et composants.", false)).collect()
+    use super::super::editeur_famille::catalogue::{self, Contexte};
+    let contexte = Contexte { famille_plane: true, vue_3d: false, plan_oblique: false };
+    catalogue::OUTILS.iter()
+        .filter(|d| d.groupe == "Formes")
+        .map(|d| Commande::new(d.cle, d.nom, Icone::Famille(d.cle),
+            catalogue::indisponibilite(d, &contexte).unwrap_or(d.aide), catalogue::indisponibilite(d, &contexte).is_none())).collect()
 }
 
 /// Pictogrammes génériques des commandes de fichier.

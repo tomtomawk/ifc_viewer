@@ -181,11 +181,7 @@ pub struct Retours {
     pub ajouter: Vec<Vec<Tri>>,
 }
 
-pub fn retours(p: &Projet, o: &Ouverture, id: &str) -> Result<Retours, String> {
-    retours_avec(p, o, id, None)
-}
-
-/// `retours` avec l'hôte élargi de l'ouverture déjà calculé (None : calculé ici).
+/// Calcule les retours avec l'hôte élargi déjà calculé, ou le calcule si absent.
 pub fn retours_avec(p: &Projet, o: &Ouverture, id: &str, hote: Option<&Result<HoteElargi, String>>) -> Result<Retours, String> {
     let vide = Retours { retirer: Vec::new(), ajouter: Vec::new() };
     let Some(f) = o.type_ouverture.as_ref().and_then(|t| p.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.modele.as_ref()).filter(|_| o.representation.is_none()) else {

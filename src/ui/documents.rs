@@ -509,6 +509,8 @@ impl ViewerApp {
             etats: std::mem::take(&mut self.etats_vues),
             active: self.vue_active,
             selected: self.selected,
+            selection_multiple: std::mem::take(&mut self.selection_multiple),
+            selection_bim: std::mem::take(&mut self.bim.selection),
             filtre: std::mem::take(&mut self.filter),
             onglet: self.left_tab,
             status,
@@ -577,6 +579,8 @@ impl ViewerApp {
         self.etats_vues = d.etats;
         self.vue_active = d.active;
         self.selected = d.selected;
+        self.selection_multiple = d.selection_multiple;
+        self.bim.selection = d.selection_bim;
         self.reveal = None;
         self.filter = d.filtre;
         self.left_tab = d.onglet;
@@ -615,6 +619,12 @@ impl ViewerApp {
             self.demander_fermeture_famille();
             return;
         }
+        if let Some(ordre) = self.famille.iter().chain(&self.familles_inactives)
+            .find(|ed| !ed.document_famille.autonome && ed.document_famille.document == self.document_actif && ed.modifiee()).map(|ed| ed.document_famille.ordre) {
+            self.activer_famille(ordre);
+            self.demander_fermeture_famille();
+            return;
+        }
         self.orientation_nord_en_cours = false;
         self.arete_alignement = None;
         if self.natif_modifie {
@@ -626,7 +636,12 @@ impl ViewerApp {
 
     pub(super) fn fermer_document(&mut self) {
         self.famille_plane_active = None;
-        self.familles_planes.retain(|_, ed| ed.document != self.document_actif);
+        self.familles_planes.retain(|_, ed| ed.document_famille.autonome || ed.document_famille.document != self.document_actif);
+        self.familles_inactives.retain(|ed| ed.document_famille.autonome || ed.document_famille.document != self.document_actif);
+        if self.famille.as_ref().is_some_and(|ed| !ed.document_famille.autonome && ed.document_famille.document == self.document_actif) {
+            self.famille = self.familles_inactives.pop();
+            self.famille_active = false;
+        }
         self.famille_selectionnee = None;
         self.feuilles.selection = Default::default();
         self.ajustement=None;

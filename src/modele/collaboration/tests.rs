@@ -1365,3 +1365,17 @@ fn abandon_refuse_pendant_synchro_et_retire_de_l_annulation() {
     assert_eq!(r.vues[0].nom, "B");
     assert!(a.copie.annulations.iter().all(|t| t.id != id));
 }
+
+#[test]
+fn toutes_les_collections_du_projet_ont_une_politique() {
+    let source = include_str!("../mod.rs");
+    let projet = source.split("pub struct Projet {").nth(1).unwrap().split("\n}").next().unwrap();
+    let champs: std::collections::BTreeSet<_> = projet.lines().filter_map(|l| {
+        let l = l.trim().strip_prefix("pub ")?;
+        let (nom, ty) = l.split_once(':')?;
+        ty.trim().starts_with("Vec<").then_some(nom)
+    }).collect();
+    let registre: std::collections::BTreeSet<_> = super::COLLECTIONS.iter().map(|(nom, _)| *nom).collect();
+    assert_eq!(registre.len(), super::COLLECTIONS.len(), "collection déclarée deux fois");
+    assert_eq!(champs, registre, "toute collection de Projet doit avoir une politique collaborative");
+}

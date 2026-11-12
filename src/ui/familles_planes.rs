@@ -2,7 +2,7 @@
 use super::*;
 use crate::modele::{documentation as doc, famille::profil::{ParametreProfil, PointProfil, Profil}};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(super) enum FamillePlane {
     Cartouche { famille: doc::FamilleCartouche, feuille: Option<String>, original: String },
     Etiquette { famille: doc::FamilleEtiquette, piece: Option<String>, original: String },
@@ -79,10 +79,14 @@ impl FamillePlane {
     }
 }
 
+impl crate::modele::edition::historique::Instantane for FamillePlane {
+    fn instantane(&self) -> Result<String, String> { serde_json::to_string(self).map_err(|e| e.to_string()) }
+    fn restaurer(json: &str) -> Result<Self, String> { serde_json::from_str(json).map_err(|e| e.to_string()) }
+    fn libelle(_: &str, _: &str) -> String { "Modifier la famille".into() }
+}
+
 pub(super) struct EditeurPlan {
-    pub document: usize,
-    pub(super) autonome: bool,
-    chemin_fichier: Option<std::path::PathBuf>,
+    pub(super) document_famille: super::document_famille::DocumentFamille<FamillePlane>,
     pub contenu: FamillePlane,
     reference: FamillePlane,
     tracer: bool,
@@ -91,10 +95,24 @@ pub(super) struct EditeurPlan {
 }
 
 impl EditeurPlan {
+    pub(super) fn suivre_historique(&mut self, geste: bool) -> Result<(), String> {
+        self.document_famille.suivre(&self.contenu, geste)
+    }
+
+    pub(super) fn libelles_historique(&self, retablir: bool) -> Vec<String> { self.document_famille.historique.libelles(retablir) }
+
+    pub(super) fn parcourir_historique(&mut self, retablir: bool, nombre: usize) -> Result<(), String> {
+        self.contenu = self.document_famille.cible(&self.contenu, retablir, nombre)?;
+        self.tracer = false;
+        self.debut = None;
+        self.cartouche = Default::default();
+        Ok(())
+    }
+
     pub(super) fn element_selectionne(&self) -> bool {
         matches!(self.contenu, FamillePlane::Cartouche { .. }) && self.cartouche.element_selectionne()
     }
-    pub(super) fn modifie(&self) -> bool { (self.autonome && self.chemin_fichier.is_none()) || self.contenu_modifie() }
+    pub(super) fn modifie(&self) -> bool { (self.document_famille.autonome && self.document_famille.chemin_fichier.is_none()) || self.contenu_modifie() }
     pub(super) fn contenu_modifie(&self) -> bool { self.contenu != self.reference }
 
     pub(super) fn titre(&self) -> String {
@@ -104,14 +122,13 @@ impl EditeurPlan {
 
 impl ViewerApp {
     pub(super) fn ouvrir_famille_plane_fichier(&mut self, chemin: &std::path::Path) -> Result<(), String> {
+        if let Some(ordre) = self.familles_planes.iter().find(|(_, ed)| ed.document_famille.autonome && ed.document_famille.chemin_fichier.as_deref() == Some(chemin)).map(|(&ordre, _)| ordre) {
+            self.activer_famille(ordre);
+            return Ok(());
+        }
         let texte = std::fs::read_to_string(chemin).map_err(|e| format!("{} : {e}", chemin.display()))?;
         let contenu = FamillePlane::lire_fichier(&texte)?;
-        self.ouvrir_famille_plane(contenu);
-        if let Some(ed) = self.famille_plane_active.and_then(|i| self.familles_planes.get_mut(&i)) {
-            ed.autonome = true;
-            ed.chemin_fichier = Some(chemin.to_path_buf());
-            ed.reference = ed.contenu.clone();
-        }
+        self.creer_editeur_famille_plane(contenu, true, Some(chemin.to_path_buf()));
         Ok(())
     }
 
@@ -120,14 +137,14 @@ impl ViewerApp {
         let ordre = self.famille_plane_active.ok_or("Éditeur fermé")?;
         let ed = self.familles_planes.get(&ordre).ok_or("Famille absente")?;
         let texte = ed.contenu.json_fichier()?;
-        let chemin = if sous { None } else { ed.chemin_fichier.clone() }.or_else(|| {
+        let chemin = if sous { None } else { ed.document_famille.chemin_fichier.clone() }.or_else(|| {
             rfd::FileDialog::new().add_filter("Famille BIMedit", &["json"])
                 .set_file_name(format!("{}.{}.json", ed.contenu.nom(), ed.contenu.extension_fichier())).save_file()
         });
         let Some(chemin) = chemin else { return Ok(false) };
         crate::modele::echanges::enregistrement::ecrire_atomique(&chemin, texte.as_bytes())?;
         let ed = self.familles_planes.get_mut(&ordre).unwrap();
-        ed.chemin_fichier = Some(chemin.clone());
+        ed.document_famille.chemin_fichier = Some(chemin.clone());
         ed.reference = ed.contenu.clone();
         self.status = format!("Famille enregistrée : {}", chemin.display());
         Ok(true)
@@ -140,26 +157,27 @@ impl ViewerApp {
     pub(super) fn ouvrir_famille_plane(&mut self, contenu: FamillePlane) {
         let id = contenu.id();
         let existant = self.familles_planes.iter().find(|(_, ed)| {
-            ed.document == self.document_actif && (ed.reference == contenu
+            !ed.document_famille.autonome && ed.document_famille.document == self.document_actif && (ed.reference == contenu
                 || (id.is_some() && ed.contenu.categorie() == contenu.categorie() && ed.contenu.id() == id)
                 || matches!((&ed.reference, &contenu),
                     (FamillePlane::Cartouche { feuille: a, original: x, .. }, FamillePlane::Cartouche { feuille: b, original: y, .. })
                     if (a == b && x.is_empty() && y.is_empty()) || (x == doc::NOM_CARTOUCHE_STANDARD && y == x)))
         }).map(|(&ordre, _)| ordre);
-        let ordre = existant.unwrap_or_else(|| {
-            self.prochain_ordre_famille += 1;
-            let ordre = self.prochain_ordre_famille;
-            self.familles_planes.insert(ordre, EditeurPlan {
-                document: self.document_actif,
-                autonome: self.natif.is_none(),
-                chemin_fichier: None,
-                reference: contenu.clone(),
-                contenu,
-                tracer: false,
-                debut: None,
-                cartouche: Default::default(),
-            });
-            ordre
+        if let Some(ordre) = existant {
+            self.activer_famille(ordre);
+        } else {
+            self.creer_editeur_famille_plane(contenu, self.natif.is_none(), None);
+        }
+        self.onglet_ruban = OngletRuban::FamilleCreer;
+    }
+
+    fn creer_editeur_famille_plane(&mut self, contenu: FamillePlane, autonome: bool, chemin_fichier: Option<std::path::PathBuf>) {
+        self.prochain_ordre_famille += 1;
+        let ordre = self.prochain_ordre_famille;
+        self.familles_planes.insert(ordre, EditeurPlan {
+            document_famille: super::document_famille::DocumentFamille::nouveau(ordre, self.document_actif, autonome, chemin_fichier, contenu.clone()),
+            reference: contenu.clone(), contenu, tracer: false, debut: None,
+            cartouche: Default::default(),
         });
         self.activer_famille(ordre);
         self.onglet_ruban = OngletRuban::FamilleCreer;
@@ -172,7 +190,7 @@ impl ViewerApp {
     }
 
     pub(super) fn edition_plane_modifiee(&self, document: Option<usize>) -> Option<usize> {
-        self.familles_planes.iter().find(|(_, ed)| document.is_none_or(|id| ed.document == id) && ed.modifie())
+        self.familles_planes.iter().find(|(_, ed)| document.is_none_or(|id| !ed.document_famille.autonome && ed.document_famille.document == id) && ed.modifie())
             .map(|(&ordre, _)| ordre)
     }
 
@@ -338,7 +356,7 @@ impl ViewerApp {
         let ordre = self.famille_plane_active.ok_or("Éditeur de famille fermé.")?;
         let ed = self.familles_planes.get(&ordre).ok_or("Famille absente.")?;
         if self.natif.is_none() { return Err("Ouvrir un projet pour y charger la famille.".into()); }
-        if !ed.autonome && ed.document != self.document_actif { return Err("Le projet de la famille doit être actif.".into()); }
+        if !ed.document_famille.autonome && ed.document_famille.document != self.document_actif { return Err("Le projet de la famille doit être actif.".into()); }
         let mut contenu = ed.contenu.clone();
         match &mut contenu {
             FamillePlane::Cartouche { famille, feuille, original } => {
@@ -367,10 +385,12 @@ impl ViewerApp {
             }
         }
         let ed = self.familles_planes.get_mut(&ordre).unwrap();
-        ed.document = self.document_actif;
-        ed.autonome = false;
+        ed.document_famille.document = self.document_actif;
+        ed.document_famille.autonome = false;
         ed.reference = contenu.clone();
-        ed.contenu = contenu;
+        ed.contenu = contenu.clone();
+        ed.document_famille.instantane = contenu;
+        ed.document_famille.historique = Default::default();
         self.status = "Famille enregistrée dans le projet.".into();
         Ok(())
     }
@@ -390,6 +410,35 @@ impl ViewerApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn historique_des_trois_categories_annule_et_retablit_un_geste() {
+        let familles = [
+            FamillePlane::Profil { profil: crate::config::gabarit::Gabarit::defaut().profils[0].clone(), original: None },
+            FamillePlane::Cartouche { famille: doc::FamilleCartouche::default(), feuille: None, original: String::new() },
+            FamillePlane::Etiquette { famille: doc::FamilleEtiquette::standard(), piece: None, original: String::new() },
+        ];
+        for contenu in familles {
+            let nom = contenu.nom().to_owned();
+            let mut ed = EditeurPlan { document_famille: super::super::document_famille::DocumentFamille::nouveau(0, 0, false, None, contenu.clone()), reference: contenu.clone(), contenu, tracer: false, debut: None, cartouche: Default::default() };
+            for suffixe in ["a", "b"] {
+                match &mut ed.contenu {
+                    FamillePlane::Profil { profil, .. } => profil.nom = format!("{nom}{suffixe}"),
+                    FamillePlane::Cartouche { famille, .. } => famille.nom = format!("{nom}{suffixe}"),
+                    FamillePlane::Etiquette { famille, .. } => famille.nom = format!("{nom}{suffixe}"),
+                }
+                ed.suivre_historique(true).unwrap();
+            }
+            ed.suivre_historique(false).unwrap();
+            assert_eq!(ed.libelles_historique(false).len(), 1);
+            ed.parcourir_historique(false, 1).unwrap();
+            assert_eq!(ed.contenu.nom(), nom);
+            assert!(!ed.contenu_modifie());
+            ed.parcourir_historique(true, 1).unwrap();
+            assert_eq!(ed.contenu.nom(), format!("{nom}b"));
+            assert!(ed.contenu_modifie());
+        }
+    }
 
     #[test]
     fn fichiers_de_familles_planes_se_rouvrent_sans_projet() {

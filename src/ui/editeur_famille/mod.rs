@@ -12,6 +12,7 @@
 //! « Nouveau type ».
 
 mod documents;
+pub(super) mod catalogue;
 mod panneau;
 use panneau::*;
 mod canevas;
@@ -19,7 +20,7 @@ use canevas::*;
 mod formes;
 use super::*;
 use super::accrochage;
-use crate::modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, Extrusion, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Remplissage, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
+use crate::modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Remplissage, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
 use crate::modele::famille::modelee::FichierFamille;
 use crate::modele::documentation::GenreCote;
 use crate::modele::GenreOuverture;
@@ -69,7 +70,7 @@ pub(super) fn choisir_vue_famille(ui: &mut egui::Ui, actuelle: Option<VueFamille
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum OutilFamille {
+pub(super) enum OutilFamille {
     /// Outil par défaut, comme dans le projet : Échap y revient.
     Selection,
     /// Plan de référence tracé par deux points ; vertical ou horizontal selon le
@@ -141,8 +142,7 @@ pub(super) enum ActionFamille {
 }
 
 pub(super) struct EditeurFamille {
-    /// Rang d'ouverture : place stable de son onglet.
-    pub(super) ordre: usize,
+    pub(super) document_famille: super::document_famille::DocumentFamille<FichierFamille>,
     /// Fenêtre d'où l'éditeur a été ouvert : elle prend le type enregistré.
     ouverture: Option<String>,
     /// Type édité ; None : nouveau type.
@@ -170,10 +170,6 @@ pub(super) struct EditeurFamille {
     /// Sommets de l'esquisse en cours (verrouillés et résolus).
     esquisse: Vec<(PointEsquisse, (f64, f64))>,
     axe_revolution: Option<[[f64; 2]; 2]>,
-    /// Document projet d'où l'éditeur a été ouvert : seul destinataire du type.
-    pub(super) document: usize,
-    pub(super) autonome: bool,
-    chemin_fichier: Option<std::path::PathBuf>,
     /// Paramètres partagés du projet (copie modifiable ; seules les valeurs changées
     /// sont reportées à l'enregistrement).
     partages: BTreeMap<String, f64>,
@@ -187,10 +183,6 @@ pub(super) struct EditeurFamille {
     reference: (String, f64, f64, FamilleModelee),
     message: Option<String>,
     erreur: Option<String>,
-    /// Annuler / Rétablir propres à la famille : même pile que le projet.
-    historique: crate::modele::edition::historique::Historique<FichierFamille>,
-    /// Dernier état versé à l'historique.
-    instantane: FichierFamille,
     /// Cote dont la ligne est glissée.
     cote_deplacee: Option<usize>,
     /// Autres éléments sélectionnés (Ctrl+clic, fenêtre) ; `selection` reste
@@ -286,7 +278,7 @@ impl EditeurFamille {
     }
 
     pub(super) fn modifiee(&self) -> bool {
-        (self.type_id.is_none() && self.chemin_fichier.is_none()) || self.contenu_modifie()
+        (self.type_id.is_none() && self.document_famille.chemin_fichier.is_none()) || self.contenu_modifie()
     }
 
     pub(super) fn contenu_modifie(&self) -> bool {
@@ -315,35 +307,27 @@ impl EditeurFamille {
     /// Verse la modification de l'image dans l'historique ; un geste (souris enfoncée,
     /// saisie) reste une seule étape.
     pub(super) fn suivre_historique(&mut self, geste: bool) {
-        self.historique.geste(geste);
         let etat = self.etat();
-        if etat != self.instantane {
-            match self.historique.pousser(&self.instantane, &etat) {
-                Ok(_) => self.instantane = etat,
-                // L'instantané reste l'état précédent : l'étape sera reprise au prochain essai.
-                Err(e) => self.message = Some(format!("Historique : {e}")),
-            }
+        if let Err(e) = self.document_famille.suivre(&etat, geste) {
+            self.message = Some(format!("Historique : {e}"));
         }
     }
 
     /// Repart d'un état neuf : rien à annuler.
     fn historique_neuf(&mut self) {
-        self.historique = Default::default();
-        self.instantane = self.etat();
+        self.document_famille.historique = Default::default();
+        self.document_famille.instantane = self.etat();
     }
 
     pub(super) fn libelles_historique(&self, retablir: bool) -> Vec<String> {
-        self.historique.libelles(retablir)
+        self.document_famille.historique.libelles(retablir)
     }
 
     /// Annule ou rétablit `nombre` étapes de la famille.
     pub(super) fn parcourir_historique(&mut self, retablir: bool, nombre: usize) -> Result<(), String> {
-        self.suivre_historique(false);
-        let cible = self.historique.cible_n(retablir, nombre)?;
         let actuel = self.etat();
-        self.historique.confirmer_n(&actuel, retablir, nombre)?;
+        let cible = self.document_famille.cible(&actuel, retablir, nombre)?;
         (self.nom, self.largeur, self.hauteur, self.famille) = (cible.nom.clone(), cible.largeur, cible.hauteur, cible.famille.clone());
-        self.instantane = cible;
         self.abandonner_saisie();
         let existe = match &self.selection {
             SelectionFamille::Aucune => true,
@@ -373,7 +357,8 @@ impl EditeurFamille {
                     return Err(format!("« {nom} » est un plan fixe de la famille."));
                 }
                 let point = |p: &PointEsquisse| p.h.plan == *nom || p.v.plan == *nom;
-                let utilise = f.contraintes.iter().any(|c| c.plans().contains(&nom.as_str()))
+                let utilise = f.plans_construction.iter().any(|p| p.reference.as_ref() == Some(nom))
+                    || f.contraintes.iter().any(|c| c.plans().contains(&nom.as_str()))
                     || f.volumes.iter().any(|v| v.min.iter().chain(&v.max).any(|x| &x.plan == nom))
                     || f.extrusions.iter().any(|e| e.profil.iter().any(point) || e.profondeur.iter().any(|x| &x.plan == nom))
                     || f.symboles.iter().any(|s| s.points.iter().any(point))
@@ -442,6 +427,29 @@ impl EditeurFamille {
         self.selection == *e || self.multiple.contains(e)
     }
 
+    /// Garde la correspondance des sections des raccordements lors de l'édition du profil.
+    fn inserer_sommet_forme(&mut self, k: usize, i: usize) {
+        let Some(forme) = self.famille.extrusions.get_mut(k) else { return };
+        if i == 0 || i > forme.profil.len() { return; }
+        forme.profil.insert(i, forme.profil[i - 1].clone());
+        if let OperationForme::Guidage { guidage: crate::modele::famille::modelee::FormeGuidee::Raccordement { profil_fin, .. } | crate::modele::famille::modelee::FormeGuidee::RaccordementChemin { profil_fin, .. } } = &mut forme.operation {
+            if !profil_fin.is_empty() && i <= profil_fin.len() {
+                let (a, b) = (profil_fin[i - 1], profil_fin[i % profil_fin.len()]);
+                profil_fin.insert(i, [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5]);
+            }
+        }
+    }
+
+    fn supprimer_sommet_forme(&mut self, k: usize, i: usize) -> bool {
+        let Some(forme) = self.famille.extrusions.get_mut(k) else { return false };
+        if forme.profil.len() <= 3 || i >= forme.profil.len() { return false; }
+        forme.profil.remove(i);
+        if let OperationForme::Guidage { guidage: crate::modele::famille::modelee::FormeGuidee::Raccordement { profil_fin, .. } | crate::modele::famille::modelee::FormeGuidee::RaccordementChemin { profil_fin, .. } } = &mut forme.operation {
+            if i < profil_fin.len() { profil_fin.remove(i); }
+        }
+        true
+    }
+
     /// Tous les éléments sélectionnés, le principal d'abord.
     fn selectionnes(&self) -> Vec<SelectionFamille> {
         std::iter::once(self.selection.clone()).filter(|s| *s != SelectionFamille::Aucune).chain(self.multiple.iter().cloned()).collect()
@@ -464,8 +472,15 @@ impl EditeurFamille {
     }
 
     fn outil_disponible(&self, outil: OutilFamille) -> bool {
-        self.construction.is_none() || matches!(outil,
-            OutilFamille::Selection | OutilFamille::Extrusion | OutilFamille::ExtrusionVide | OutilFamille::Revolution | OutilFamille::RevolutionVide | OutilFamille::ExtrusionChemin | OutilFamille::Raccordement | OutilFamille::RaccordementChemin | OutilFamille::PlanConstruction)
+        self.indisponibilite_outil(outil).is_none()
+    }
+
+    fn indisponibilite_outil(&self, outil: OutilFamille) -> Option<&'static str> {
+        if outil == OutilFamille::Selection { return None; }
+        let Some(d) = catalogue::OUTILS.iter().find(|d| d.outil == outil) else {
+            return Some("Outil de famille inconnu.");
+        };
+        catalogue::indisponibilite(d, &catalogue::Contexte { famille_plane: false, vue_3d: self.vue_3d, plan_oblique: self.construction.is_some() })
     }
 
     /// Les deux premiers points de l'outil révolution définissent son axe.
@@ -512,6 +527,7 @@ impl EditeurFamille {
         for p in f.plans.iter_mut().filter(|p| p.nom == ancien) {
             p.nom = nouveau.into();
         }
+        for plan in &mut f.plans_construction { if plan.reference.as_deref() == Some(ancien) { plan.reference = Some(nouveau.into()); } }
         for c in &mut f.contraintes {
             match c {
                 Contrainte::Distance { a, b, .. } => [a, b].into_iter().filter(|x| *x == ancien).for_each(|x| *x = nouveau.into()),

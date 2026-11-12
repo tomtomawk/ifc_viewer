@@ -189,14 +189,13 @@ mod tests {
 
     #[test]
     fn guidage_famille_rechargee_et_repere_oblique() {
-        use super::super::{FamilleModelee,Extrusion,PlanConstruction,VueEsquisse,Face,PointEsquisse,Materiau};
+        use super::super::{FamilleModelee,FormeProfil,PlanConstruction,VueEsquisse,Face,PointEsquisse,Materiau};
         let mut famille=FamilleModelee::gabarit_fenetre();
         famille.volumes.clear(); famille.extrusions.clear();
         let plan=PlanConstruction::deux_points("Oblique".into(),VueEsquisse::Plan,[0.0,0.0],[100.0,100.0]).unwrap();
         let face=|v| Face {plan:String::new(),decalage:v};
-        famille.extrusions.push(Extrusion {
-            guidage:Some(FormeGuidee::RaccordementChemin {profil_fin:profil().iter().map(|p| [p[0]*0.5,p[1]*0.5]).collect(),chemin:vec![[0.0;3],[0.0,0.0,1000.0]]}),
-            revolution:None,construction:Some(plan.clone()),nom:"Guidage test".into(),vide:true,materiau:Materiau::Menuiserie,vue:VueEsquisse::Plan,
+        famille.extrusions.push(FormeProfil {
+            operation: super::super::OperationForme::Guidage { guidage: FormeGuidee::RaccordementChemin {profil_fin:profil().iter().map(|p| [p[0]*0.5,p[1]*0.5]).collect(),chemin:vec![[0.0;3],[0.0,0.0,1000.0]]} },construction:Some(plan.id.clone()),nom:"Guidage test".into(),vide:true,materiau:Materiau::Menuiserie,vue:VueEsquisse::Plan,
             profil:profil().iter().map(|p| PointEsquisse {h:face(p[0]),v:face(p[1])}).collect(),
             profondeur:[face(0.0),face(1000.0)],visible:None,materiau_parametre:None,
         });

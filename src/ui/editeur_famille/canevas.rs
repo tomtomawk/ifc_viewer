@@ -1,9 +1,54 @@
 //! Canevas de l'éditeur de famille : dessin et interaction.
 use super::*;
 
+/// Réticule visible sur les fonds clairs comme sur les aplats foncés.
+fn reticule_dessin(ui: &egui::Ui, resp: &egui::Response, actif: bool) {
+    if !actif || !resp.hovered() || ui.input(|i| i.pointer.middle_down()) { return; }
+    let Some(q) = resp.hover_pos() else { return };
+    ui.ctx().set_cursor_icon(egui::CursorIcon::None);
+    let p = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("reticule_famille"))).with_clip_rect(resp.rect);
+    for epaisseur in [3.0, 1.0] {
+        let couleur = if epaisseur > 1.0 { Color32::BLACK } else { Color32::WHITE };
+        let contour = egui::Stroke::new(epaisseur, couleur);
+        p.line_segment([q - egui::vec2(12.0, 0.0), q + egui::vec2(12.0, 0.0)], contour);
+        p.line_segment([q - egui::vec2(0.0, 12.0), q + egui::vec2(0.0, 12.0)], contour);
+    }
+}
+
+/// Saisie commune des deux projections : Échap abandonne d'abord le geste,
+/// puis l'outil et enfin la sélection.
+fn echap_esquisse(ui: &mut egui::Ui, resp: &egui::Response, ed: &mut EditeurFamille) {
+    let en_cours = !ed.esquisse.is_empty() || !ed.clics.is_empty() || ed.debut.is_some() || ed.fenetre.is_some();
+    if (resp.hovered() || en_cours) && !ui.ctx().egui_wants_keyboard_input() && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        if en_cours { ed.abandonner_saisie(); }
+        else if ed.outil != OutilFamille::Selection { ed.choisir_outil(OutilFamille::Selection); }
+        else { ed.selectionner(Vec::new()); }
+    }
+}
+
+fn ferme_profil(ed: &EditeurFamille, cadre: &Cadre, q: egui::Pos2) -> bool {
+    ed.esquisse.len() >= 3 && ed.esquisse.first().is_some_and(|(_, p)| cadre.ecran(p.0, p.1).distance(q) < 9.0)
+}
+
+/// Accrochage dans le repère local : origine et sommets du même plan.
+fn accrocher_plan_construction(ed: &EditeurFamille, plan: &PlanConstruction, r: &Resolution, cadre: &Cadre, q: egui::Pos2, exclu: Option<(usize, usize)>) -> (f64, f64) {
+    let mut candidats = vec![((0.0, 0.0), cadre.ecran(0.0, 0.0))];
+    for (j, e) in ed.famille.extrusions.iter().enumerate() {
+        if e.construction.as_deref() != Some(plan.id.as_str()) { continue; }
+        for (n, p) in e.profil.iter().enumerate() {
+            if exclu == Some((j, n)) { continue; }
+            let pt = ed.famille.point_esquisse(r, p);
+            candidats.push((pt, cadre.ecran(pt.0, pt.1)));
+        }
+    }
+    candidats.into_iter().filter(|(_, pos)| pos.distance(q) < 7.0)
+        .min_by(|a, b| a.1.distance(q).total_cmp(&b.1.distance(q)))
+        .map_or_else(|| cadre.modele(q), |(pt, _)| pt)
+}
+
 fn dessiner_axe_revolution(painter: &egui::Painter, cadre: &Cadre, ed: &EditeurFamille) {
     let axe = ed.axe_revolution.or_else(|| match ed.selection {
-        SelectionFamille::Extrusion(k) => ed.famille.extrusions.get(k).filter(|e| ed.construction.is_some() || (e.construction.is_none() && e.vue == ed.vue.esquisse())).and_then(|e| e.revolution.as_ref()).map(|r| r.axe),
+        SelectionFamille::Extrusion(k) => ed.famille.extrusions.get(k).filter(|e| ed.construction.is_some() || (e.construction.is_none() && e.vue == ed.vue.esquisse())).and_then(|e| match &e.operation { OperationForme::Revolution { revolution } => Some(revolution.axe), _ => None }),
         _ => None,
     });
     if let Some([a,b]) = axe {
@@ -17,11 +62,13 @@ fn dessiner_axe_revolution(painter: &egui::Painter, cadre: &Cadre, ed: &EditeurF
 fn canevas_construction(ui: &mut egui::Ui, ed: &mut EditeurFamille, plan: &PlanConstruction) {
     ui.label(format!("Plan de construction : {}", plan.nom));
     let (rect, resp) = ui.allocate_exact_size(ui.available_size().max(egui::vec2(80.0,80.0)), Sense::click_and_drag());
+    reticule_dessin(ui, &resp, ed.outil != OutilFamille::Selection);
     ed.rect_navigation = rect;
     let base = Cadre { centre: rect.center(), milieu: (0.0, 0.0), echelle: (rect.width().min(rect.height()) as f64 / 2000.0).max(0.001) };
     let nav = &mut ed.navigation[ed.vue as usize];
     nav.souris(ui, &resp, &base, false, false);
     let cadre = nav.cadre(&base);
+    echap_esquisse(ui, &resp, ed);
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 0.0, Color32::WHITE);
     let origine = cadre.ecran(0.0,0.0);
@@ -31,7 +78,7 @@ fn canevas_construction(ui: &mut egui::Ui, ed: &mut EditeurFamille, plan: &PlanC
     let r = ed.resoudre();
     let mut selection = None;
     let solides = ed.famille.solides(&r);
-    for (k,e) in ed.famille.extrusions.iter().enumerate().filter(|(_,e)| e.construction.as_ref() == Some(plan)) {
+    for (k,e) in ed.famille.extrusions.iter().enumerate().filter(|(_,e)| e.construction.as_deref() == Some(plan.id.as_str())) {
         if let Some(solide) = solides.get(ed.famille.volumes.len()+k) {
             let origine = glam::DVec3::from_array(plan.origine);
             let h = glam::DVec3::from_array(plan.horizontal);
@@ -49,8 +96,46 @@ fn canevas_construction(ui: &mut egui::Ui, ed: &mut EditeurFamille, plan: &PlanC
         pts.push(pts[0]);
         painter.add(egui::Shape::line(pts, egui::Stroke::new(if choisi {2.5} else {1.0}, if e.vide {Color32::RED} else {Color32::DARK_GRAY})));
     }
-    if ed.outil == OutilFamille::Selection && resp.clicked() {
-        ed.selectionner(selection.map(SelectionFamille::Extrusion).into_iter().collect());
+    if ed.outil == OutilFamille::Selection {
+        let mut sur_poignee = false;
+        if let SelectionFamille::Extrusion(k) = ed.selection {
+            if let Some(forme) = ed.famille.extrusions.get(k).filter(|e| e.construction.as_deref() == Some(plan.id.as_str())) {
+                let points: Vec<_> = forme.profil.iter().map(|p| { let (h, v) = ed.famille.point_esquisse(&r, p); cadre.ecran(h, v) }).collect();
+                let mut poignees = Vec::new();
+                for (i, &q) in points.iter().enumerate() {
+                    poignees.push((i, q, false));
+                    poignees.push((i + 1, q.lerp(points[(i + 1) % points.len()], 0.5), true));
+                }
+                for &(_, q, milieu) in &poignees {
+                    if milieu { painter.circle(q, 3.5, Color32::WHITE, egui::Stroke::new(1.2, Color32::from_rgb(0, 100, 210))); }
+                    else { painter.rect(egui::Rect::from_center_size(q, egui::vec2(8.0, 8.0)), 0.0, Color32::WHITE, egui::Stroke::new(1.5, Color32::from_rgb(0, 100, 210)), egui::StrokeKind::Middle); }
+                }
+                let visee = |q: egui::Pos2| poignees.iter().filter(|p| p.1.distance(q) < 7.0).min_by(|a, b| a.1.distance(q).total_cmp(&b.1.distance(q))).copied();
+                sur_poignee = resp.interact_pointer_pos().and_then(visee).is_some();
+                if resp.clicked_by(PointerButton::Secondary) {
+                    if let Some((i, _, false)) = resp.interact_pointer_pos().and_then(visee) {
+                        if !ed.supprimer_sommet_forme(k, i) { ed.message = Some("Sommet conservé : nombre minimal atteint.".into()); }
+                    }
+                }
+                if resp.drag_started_by(PointerButton::Primary) {
+                    let appui = ui.input(|i| i.pointer.press_origin()).or(resp.interact_pointer_pos());
+                    if let Some((i, _, milieu)) = appui.and_then(visee) {
+                        if milieu {
+                            ed.inserer_sommet_forme(k, i);
+                        }
+                        ed.poignee = Some(Poignee::Sommet { extrusion: true, k, i });
+                    }
+                }
+            }
+        }
+        if let (Some(Poignee::Sommet { extrusion: true, k, i }), Some(q)) = (ed.poignee, resp.interact_pointer_pos().filter(|_| resp.dragged_by(PointerButton::Primary))) {
+            let (h, v) = accrocher_plan_construction(ed, plan, &r, &cadre, q, Some((k, i)));
+            if let Some(pt) = ed.famille.extrusions.get_mut(k).and_then(|e| e.profil.get_mut(i)) {
+                *pt = PointEsquisse { h: Face { plan: String::new(), decalage: h }, v: Face { plan: String::new(), decalage: v } };
+            }
+        }
+        if resp.drag_stopped_by(PointerButton::Primary) { ed.poignee = None; }
+        if resp.clicked() && !sur_poignee { ed.selectionner(selection.map(SelectionFamille::Extrusion).into_iter().collect()); }
     }
     dessiner_axe_revolution(&painter, &cadre, ed);
     if !ed.outil.est_forme() { return; }
@@ -61,9 +146,9 @@ fn canevas_construction(ui: &mut egui::Ui, ed: &mut EditeurFamille, plan: &PlanC
         painter.add(egui::Shape::line(pts,egui::Stroke::new(1.5,Color32::DARK_GREEN)));
     }
     if resp.clicked() && let Some(q) = resp.interact_pointer_pos() {
-        if ed.esquisse.len() >= 3 && ed.esquisse.first().is_some_and(|(_,p)| cadre.ecran(p.0,p.1).distance(q)<9.0) { finir=true; }
+        if ferme_profil(ed, &cadre, q) { finir=true; }
         else {
-            let p=cadre.modele(q);
+            let p=accrocher_plan_construction(ed, plan, &r, &cadre, q, None);
             ed.esquisse.push((PointEsquisse { h: Face {plan:String::new(),decalage:p.0}, v:Face {plan:String::new(),decalage:p.1}},p));
             if ed.capter_axe_revolution() { return; }
         }
@@ -76,7 +161,7 @@ fn canevas_construction(ui: &mut egui::Ui, ed: &mut EditeurFamille, plan: &PlanC
 /// Vue de travail : mur générique, volumes, vides, plans, cotes ; interactions selon
 /// l'outil.
 pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
-    if let Some(plan) = ed.construction.and_then(|k| ed.famille.plans_construction.get(k)).cloned() {
+    if let Some(plan) = ed.construction.and_then(|k| ed.famille.plans_construction.get(k)).and_then(|p| ed.famille.repere_construction(&p.id, &ed.resoudre())) {
         canevas_construction(ui, ed, &plan);
         return;
     }
@@ -84,6 +169,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
     let mut garder_multiple = false;
     let taille = ui.available_size().max(egui::vec2(80.0, 80.0));
     let (rect, resp) = ui.allocate_exact_size(taille, Sense::click_and_drag());
+    reticule_dessin(ui, &resp, ed.outil != OutilFamille::Selection);
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 4.0, Color32::WHITE);
     let r = ed.resoudre();
@@ -112,7 +198,8 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
     let boite = |a: (f64, f64), b: (f64, f64)| egui::Rect::from_two_pos(cadre.ecran(a.0, a.1), cadre.ecran(b.0, b.1));
     let (ih, iv) = (ah as usize, av as usize);
     let boites = ed.famille.boites(&r);
-    for plan in &ed.famille.plans_construction {
+    for p in &ed.famille.plans_construction {
+        let Some(plan) = ed.famille.repere_construction(&p.id, &r) else { continue };
         let a = plan.point(0.0,0.0,0.0).to_array();
         let b = plan.point(1000.0,0.0,0.0).to_array();
         painter.line_segment([cadre.ecran(a[ih],a[iv]),cadre.ecran(b[ih],b[iv])],egui::Stroke::new(1.5,Color32::DARK_GREEN));
@@ -178,7 +265,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
     let decalage_ext = ed.famille.volumes.len();
     let mut contours_ext: Vec<(usize, Vec<egui::Pos2>)> = Vec::new();
     for (k, e) in ed.famille.extrusions.iter().enumerate() {
-        if (e.construction.is_some() || e.revolution.is_some() || e.guidage.is_some()) && let Some(s) = solides.get(decalage_ext + k) {
+        if (e.construction.is_some() || !matches!(e.operation, OperationForme::Extrusion)) && let Some(s) = solides.get(decalage_ext + k) {
             for t in &s.tris {
                 let mut pts: Vec<_> = t.iter().map(|p| {let p=p.to_array();cadre.ecran(p[ih],p[iv])}).collect();
                 pts.push(pts[0]);
@@ -343,18 +430,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
     aides::repere_origine_famille(&painter, cadre.ecran(0.0, 0.0));
     // interactions
     let curseur = resp.hover_pos().or(resp.interact_pointer_pos());
-    // Échap, comme dans le projet : abandonne la saisie en cours, sinon revient à la
-    // sélection, sinon vide la sélection
-    let en_cours = !ed.esquisse.is_empty() || !ed.clics.is_empty() || ed.debut.is_some() || ed.fenetre.is_some();
-    if (resp.hovered() || en_cours) && !ui.ctx().egui_wants_keyboard_input() && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
-        if en_cours {
-            ed.abandonner_saisie();
-        } else if ed.outil != OutilFamille::Selection {
-            ed.choisir_outil(OutilFamille::Selection);
-        } else {
-            ed.selection = SelectionFamille::Aucune;
-        }
-    }
+    echap_esquisse(ui, &resp, ed);
     let plan_vise = |q: egui::Pos2| {
         lignes
             .iter()
@@ -460,8 +536,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             // pour une ligne, l'arc garde ses 3 points)
             if resp.clicked_by(PointerButton::Secondary) {
                 if let Some((Poignee::Sommet { extrusion, k, i }, _, false)) = resp.interact_pointer_pos().and_then(visee) {
-                    if extrusion && ed.famille.extrusions[k].profil.len() > 3 {
-                        ed.famille.extrusions[k].profil.remove(i);
+                    if extrusion && ed.supprimer_sommet_forme(k, i) {
                     } else if !extrusion && !ed.famille.symboles[k].arc && ed.famille.symboles[k].points.len() > 2 {
                         ed.famille.symboles[k].points.remove(i);
                     } else {
@@ -494,9 +569,11 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                 if let Some((p, _, milieu)) = appui.and_then(visee) {
                     // milieu d'arête : un nouveau sommet est inséré puis déplacé
                     if let (true, Poignee::Sommet { extrusion, k, i }) = (milieu, p) {
-                        let points = if extrusion { &mut ed.famille.extrusions[k].profil } else { &mut ed.famille.symboles[k].points };
-                        let copie = points[i - 1].clone();
-                        points.insert(i, copie);
+                        if extrusion { ed.inserer_sommet_forme(k, i); }
+                        else {
+                            let points = &mut ed.famille.symboles[k].points;
+                            points.insert(i, points[i - 1].clone());
+                        }
                     }
                     ed.poignee = Some(p);
                 }
@@ -771,7 +848,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             let mut finir = resp.clicked_by(PointerButton::Secondary);
             if resp.clicked() {
                 if let Some(q) = resp.interact_pointer_pos() {
-                    if profil && ed.esquisse.len() >= 3 && premier.is_some_and(|p| p.distance(q) < 9.0) {
+                    if profil && ferme_profil(ed, &cadre, q) {
                         finir = true;
                     } else {
                         let p = point(q);
@@ -900,9 +977,6 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                 }
             }
         }
-    }
-    if resp.hovered() && ed.outil != OutilFamille::Selection {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
     }
     if !garder_multiple && ed.selection != selection_avant {
         ed.multiple.clear();

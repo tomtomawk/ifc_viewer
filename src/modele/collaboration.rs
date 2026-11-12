@@ -66,19 +66,7 @@ pub fn objets(p: &Projet) -> Resultat<Objets> {
                     ordre.push(Value::String(id.into()));
                 }
                 out.insert(format!("@/{collection}"), Value::Array(Vec::new()));
-                if matches!(
-                    collection.as_str(),
-                    "feuilles"
-                        | "vues"
-                        | "niveaux"
-                        | "positions_plan"
-                        | "types_terrains"
-                        | "types_ouvertures"
-                        | "profils"
-                        | "types_murs"
-                        | "types_dalles"
-                        | "annotations"
-                ) {
+                if politique_collection(&collection) == Some(PolitiqueCollection::IdentifieeOrdonnee) {
                     out.insert(format!("@ordre/{collection}"), Value::Array(ordre));
                 }
                 continue;
@@ -89,45 +77,60 @@ pub fn objets(p: &Projet) -> Resultat<Objets> {
     }
     Ok(out)
 }
-fn collection_identifiee(c: &str) -> bool {
-    matches!(
-        c,
-        "sources"
-            | "gabarits_vues"
-            | "variantes"
-            | "niveaux"
-            | "types_murs"
-            | "types_dalles"
-            | "types_ouvertures"
-            | "murs"
-            | "assemblages"
-            | "materiaux"
-            | "ouvertures"
-            | "dalles"
-            | "terrains"
-            | "types_terrains"
-            | "limites_propriete"
-            | "barres"
-            | "pieces"
-            | "composants"
-            | "types_composants"
-            | "profils"
-            | "escaliers"
-            | "garde_corps"
-            | "types_garde_corps"
-            | "vues"
-            | "importes"
-            | "quadrillages"
-            | "annotations"
-            | "feuilles"
-            | "nomenclatures"
-            | "motifs"
-            | "familles_cartouches"
-            | "familles_etiquettes"
-            | "types_traits"
-            | "positions_plan"
-    )
+/// Politique de comparaison collaborative des collections sérialisées du projet.
+/// Les collections atomiques sont comparées comme une seule valeur ; les collections
+/// identifiées utilisent la clé `id`, et certaines conservent leur ordre métier.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PolitiqueCollection { Atomique, Identifiee, IdentifieeOrdonnee }
+
+const COLLECTIONS: &[(&str, PolitiqueCollection)] = &[
+    ("sources", PolitiqueCollection::Identifiee),
+    ("gabarits_vues", PolitiqueCollection::Identifiee),
+    ("variantes", PolitiqueCollection::Identifiee),
+    ("niveaux", PolitiqueCollection::IdentifieeOrdonnee),
+    ("types_murs", PolitiqueCollection::IdentifieeOrdonnee),
+    ("types_dalles", PolitiqueCollection::IdentifieeOrdonnee),
+    ("types_ouvertures", PolitiqueCollection::IdentifieeOrdonnee),
+    ("murs", PolitiqueCollection::Identifiee),
+    ("assemblages", PolitiqueCollection::Identifiee),
+    ("materiaux", PolitiqueCollection::Identifiee),
+    ("ouvertures", PolitiqueCollection::Identifiee),
+    ("dalles", PolitiqueCollection::Identifiee),
+    ("terrains", PolitiqueCollection::Identifiee),
+    ("types_terrains", PolitiqueCollection::IdentifieeOrdonnee),
+    ("limites_propriete", PolitiqueCollection::Identifiee),
+    ("barres", PolitiqueCollection::Identifiee),
+    ("pieces", PolitiqueCollection::Identifiee),
+    ("composants", PolitiqueCollection::Identifiee),
+    ("types_composants", PolitiqueCollection::Identifiee),
+    ("profils", PolitiqueCollection::IdentifieeOrdonnee),
+    ("escaliers", PolitiqueCollection::Identifiee),
+    ("garde_corps", PolitiqueCollection::Identifiee),
+    ("types_garde_corps", PolitiqueCollection::Identifiee),
+    ("vues", PolitiqueCollection::IdentifieeOrdonnee),
+    ("importes", PolitiqueCollection::Identifiee),
+    ("quadrillages", PolitiqueCollection::Identifiee),
+    ("annotations", PolitiqueCollection::IdentifieeOrdonnee),
+    ("feuilles", PolitiqueCollection::IdentifieeOrdonnee),
+    ("nomenclatures", PolitiqueCollection::Identifiee),
+    ("motifs", PolitiqueCollection::Identifiee),
+    ("familles_cartouches", PolitiqueCollection::Identifiee),
+    ("familles_etiquettes", PolitiqueCollection::Identifiee),
+    ("types_traits", PolitiqueCollection::Identifiee),
+    ("positions_plan", PolitiqueCollection::IdentifieeOrdonnee),
+    ("phases", PolitiqueCollection::Atomique),
+    ("sous_projets", PolitiqueCollection::Atomique),
+    ("plumes", PolitiqueCollection::Atomique),
+    ("arbres", PolitiqueCollection::Atomique),
+];
+
+fn politique_collection(c: &str) -> Option<PolitiqueCollection> {
+    COLLECTIONS.iter().find_map(|(nom, politique)| (*nom == c).then_some(*politique))
 }
+fn collection_identifiee(c: &str) -> bool {
+    matches!(politique_collection(c), Some(PolitiqueCollection::Identifiee | PolitiqueCollection::IdentifieeOrdonnee))
+}
+
 pub fn projet(objets: &Objets) -> Resultat<Projet> {
     let mut root = serde_json::Map::new();
     let mut collections: BTreeMap<String, Vec<Value>> = BTreeMap::new();

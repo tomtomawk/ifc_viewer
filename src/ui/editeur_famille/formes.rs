@@ -39,7 +39,13 @@ impl EditeurFamille {
             [Face {plan:String::new(),decalage:0.0},Face {plan:String::new(),decalage:100.0}]
         } else { self.faces_profondeur(&resolution,vue.axes().2,vide) };
         let profil = std::mem::take(&mut self.esquisse).into_iter().map(|(p,_)| p).collect();
-        self.famille.extrusions.push(Extrusion {guidage,revolution,construction,nom,vide,materiau:Materiau::Menuiserie,vue,profil,profondeur,visible:None,materiau_parametre:None});
+        let operation = match (guidage, revolution) {
+            (Some(guidage), None) => OperationForme::Guidage { guidage },
+            (None, Some(revolution)) => OperationForme::Revolution { revolution },
+            (None, None) => OperationForme::Extrusion,
+            (Some(_), Some(_)) => return Err("Opérations de construction incompatibles.".into()),
+        };
+        self.famille.extrusions.push(FormeProfil {operation,construction: construction.map(|p| p.id),nom,vide,materiau:Materiau::Menuiserie,vue,profil,profondeur,visible:None,materiau_parametre:None});
         self.choisir_outil(OutilFamille::Selection);
         self.selectionner(vec![SelectionFamille::Extrusion(self.famille.extrusions.len()-1)]);
         self.message=Some("Forme créée : régler le chemin, le second profil ou les dimensions dans Propriétés. Plein/Vide est disponible pour toutes les formes.".into());

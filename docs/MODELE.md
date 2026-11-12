@@ -83,7 +83,7 @@ garde le RVT et ses vues ouverts, sans changer automatiquement de document (Déb
 | `motifs[]` | `nom`, `lignes[]` (`angle` °, `pas`, `glissement`, `origine` [x, y], `tirets` : trait, blanc, trait… ; mm du papier) | Motifs de hachures du projet, comme les motifs de remplissage de Revit ; un motif du gabarit ou de base modifié y est copié. Motifs de base : Diagonales, Croisées |
 | `plumes[]` | épaisseurs des plumes 1 à 12 (mm du papier) | Facultatif ; à défaut celles du gabarit (`plumes`), sinon 0,10 · 0,13 · 0,18 · 0,25 · 0,35 · 0,50 · 0,70 · 1,00 · 1,40 · 2,00 · 0,05 · 0,08. Le contour de coupe d'une couche prend l'épaisseur de sa plume ; sans plume : 5 (0,35) pour une structure, 3 (0,18) pour une isolation, 2 (0,13) sinon. Plume réglable par couche dans l'éditeur de type de mur ; table éditable dans Début > Options > « Épaisseurs de traits… » (une table identique à celle du gabarit n'est pas enregistrée : le projet suit le gabarit) |
 | `assemblages[]` | `id`, `nom`, `type_mur`, `couches[]` (ids de murs), `origine` | Mur composé : **chaque couche est un mur** à part entière (type monocouche, niveaux, hauteur, phase, sous-projet propres), listées de l'extérieur vers l'intérieur. Une ouverture dont `mur` vaut l'id de l'assemblage traverse toutes ses couches |
-| Fichier `.famille.json` | `format` (« famille-ouverture 1 »), `nom`, `largeur`, `hauteur`, `famille` (comme `modele`) | Famille d'ouverture échangée entre projets (éditeur : « Enregistrer sous… », arborescence : « Charger une famille… ») |
+| Fichier `.famille.json` | `format` (« famille-ouverture 2 »), `nom`, `largeur`, `hauteur`, `famille` (comme `modele`) | Famille d'ouverture échangée entre projets (éditeur : « Enregistrer sous… », arborescence : « Charger une famille… ») |
 | `escaliers[]` | `id`, `nom`, `niveau`, `niveau_haut` (facultatif), `decalage_bas`, `hauteur` (sans niveau d'arrivée), `trace` (ligne de foulée [x, y]), `largeur`, `hauteur_marche` (visée), `paillasse` | Volées et paliers (un par sommet intermédiaire) ; contremarches = hauteur / hauteur visée arrondie |
 | `garde_corps[]` | `id`, `nom`, `niveau`, `decalage`, `trace`, `hauteur`, `remplissage` (barreaudage, plein, vitre), `escalier` (hôte, facultatif) | Main courante, lisse, montants, remplissage ; sur un escalier, la base suit les marches |
 | `parametres_partages` | nom → valeur (mm) | Paramètres partagés du projet, repris par les familles qui les déclarent « partage » |
@@ -308,3 +308,9 @@ fichiers antérieurs) ; les feuilles d'un jeu se suivent dans l'ordre de `feuill
 Les collections et tables facultatives de l'éditeur (annotations, quadrillages,
 feuilles, nomenclatures, attaches de toiture et priorités de jonction) sont détaillées
 avec leurs commandes et leurs limites dans [EDITION.md](EDITION.md).
+
+### Opérations des formes de famille
+
+Chaque élément de `famille.extrusions` porte un objet `operation` obligatoire. `{"genre":"extrusion"}` décrit une extrusion, `{"genre":"revolution","revolution":{...}}` une révolution, et `{"genre":"guidage","guidage":{"genre":..., ...}}` une extrusion par chemin, un raccordement ou un raccordement par chemin. Le profil, le repère, le matériau et le caractère plein ou vide restent communs à la forme. Le format `famille-ouverture 2` est incompatible avec les anciens fichiers de famille ; ceux-ci sont à refaire. Les projets contenant des familles dans l'ancien schéma doivent également être refaits ou leurs familles recréées.
+
+Les plans de construction possèdent un `id` stable. Le champ `construction` d'une forme est cet identifiant, et non une copie du repère. Un plan associé à un plan de référence porte son nom dans `reference` : sa position est résolue à partir des contraintes courantes de la famille.

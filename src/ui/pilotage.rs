@@ -457,7 +457,9 @@ impl ViewerApp {
                     }
                     Ok(vide)
                 }
-                "historique" => Ok(if let Some(ed) = self.famille.as_ref().filter(|_| self.famille_active) {
+                "historique" => Ok(if let Some(ed) = self.famille_plane_active.and_then(|i| self.familles_planes.get(&i)) {
+                    json!({"modifie":ed.modifie(),"annuler":ed.libelles_historique(false),"retablir":ed.libelles_historique(true),"collaboratif":false,"famille":true})
+                } else if let Some(ed) = self.famille.as_ref().filter(|_| self.famille_active) {
                     json!({"modifie":ed.modifiee(),"annuler":ed.libelles_historique(false),"retablir":ed.libelles_historique(true),"collaboratif":false,"famille":true})
                 } else if let Some(c) = &self.collaboration {
                     json!({"modifie":self.natif_modifie,"annuler":c.copie.annulations,"retablir":c.copie.retablissements,"collaboratif":true})

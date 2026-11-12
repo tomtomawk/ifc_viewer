@@ -9,7 +9,13 @@ impl ViewerApp {
     }
 
     pub(super) fn parcourir_historique_n(&mut self, retablir: bool, nombre: usize) {
-        if self.famille_plane_active.is_some() { return; }
+        if let Some(ed) = self.famille_plane_active.and_then(|i| self.familles_planes.get_mut(&i)) {
+            match ed.parcourir_historique(retablir, nombre) {
+                Ok(()) => self.status = format!("Famille : {nombre} modification(s) {}.", if retablir { "rétablie(s)" } else { "annulée(s)" }),
+                Err(e) => self.error = Some(e),
+            }
+            return;
+        }
         // onglet Famille : un document à part, avec sa propre pile
         if self.famille_active {
             if let Some(ed) = self.famille.as_mut() {

@@ -54,11 +54,11 @@ impl ViewerApp {
             let mut historique_choisi = None;
             for (retablir, titre) in [(false, "Annuler"), (true, "Rétablir")] {
                 let famille = self.famille.as_ref().filter(|_| self.famille_active);
-                let libelles = if self.famille_plane_active.is_some() { Vec::new() } else if let Some(ed)=famille {ed.libelles_historique(retablir)} else if let Some(c)=&self.collaboration {
+                let libelles = if let Some(ed) = self.famille_plane_active.and_then(|i| self.familles_planes.get(&i)) { ed.libelles_historique(retablir) } else if let Some(ed)=famille {ed.libelles_historique(retablir)} else if let Some(c)=&self.collaboration {
                     let pile=if retablir{&c.copie.retablissements}else{&c.copie.annulations};
                     pile.last().map(|t|format!("Transaction {} — {}",t.id,if c.copie.base.acceptes.contains_key(&t.id){"partagée"}else{"locale"})).into_iter().collect()
                 } else {self.historique.libelles(retablir)};
-                let actif = disponible && !libelles.is_empty();
+                let actif = (disponible || mode_famille) && !libelles.is_empty();
                 let style = ui.visuals().widgets.inactive;
                 egui::Frame::new().fill(style.bg_fill).stroke(style.bg_stroke).corner_radius(style.corner_radius).show(ui, |ui| {
                     ui.horizontal(|ui| {
