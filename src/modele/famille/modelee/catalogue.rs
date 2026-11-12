@@ -43,7 +43,7 @@ fn baie() -> Volume {
     Volume { vide: true, ..volume("Baie", Materiau::Menuiserie, [("Gauche", 0.0), ("Droite", 0.0)], [("Intérieur", -5.0), ("Extérieur", 5.0)], [("Bas", 0.0), ("Haut", 0.0)]) }
 }
 fn trait_(vue: VueEsquisse, points: Vec<PointEsquisse>, arc: bool) -> Symbole {
-    Symbole { vue, points, arc, remplissage: None }
+    Symbole { vue, points, arc, fermee: false, remplissage: None }
 }
 
 impl FamilleModelee {
@@ -55,6 +55,9 @@ impl FamilleModelee {
     pub fn fenetre_of_2_vantaux() -> FamilleModelee {
         use AxePlan::*;
         FamilleModelee {
+            categorie: CategorieFamille::Fenetre,
+            section_profil: None,
+            elements_2d: Vec::new(),
             plans_construction: Vec::new(),
             parametres: vec![
                 param("Dormant", "55"),
@@ -180,7 +183,8 @@ impl FamilleModelee {
                     vue: VueEsquisse::Plan,
                     points: vec![point("Gauche", -20.0, "Cadre ext", -10.0), point("Droite", 20.0, "Cadre ext", -10.0), point("Droite", 20.0, "Nu appui", 0.0), point("Gauche", -20.0, "Nu appui", 0.0)],
                     arc: false,
-                    remplissage: Some(Remplissage::Hachure),
+                    fermee: true,
+                    remplissage: Some(crate::modele::documentation::RemplissageContour::Motif { motif: crate::modele::MotifCoupe::Diagonales }),
                 },
                 // élévation : pointe du triangle côté paumelles
                 trait_(VueEsquisse::Elevation, vec![point("Centre", 0.0, "Dormant bas", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Centre", 0.0, "Dormant haut", 0.0)], false),
@@ -252,6 +256,9 @@ impl FamilleModelee {
         use Materiau::{Menuiserie as M, Panneau as P};
         let huisserie = [("Cadre int", 0.0), ("Cadre ext", 0.0)];
         FamilleModelee {
+            categorie: CategorieFamille::Porte,
+            section_profil: None,
+            elements_2d: Vec::new(),
             plans_construction: Vec::new(),
             parametres: vec![
                 param("Dormant", "45"),
@@ -322,7 +329,8 @@ impl FamilleModelee {
                     vue: VueEsquisse::Plan,
                     points: vec![point("Dormant gauche", 0.0, "Cadre int", 0.0), point("Dormant gauche", 40.0, "Cadre int", 0.0), point("Dormant gauche", 40.0, "Ouvert", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)],
                     arc: false,
-                    remplissage: Some(Remplissage::Plein),
+                    fermee: true,
+                    remplissage: Some(crate::modele::documentation::RemplissageContour::Motif { motif: crate::modele::MotifCoupe::Uni }),
                 },
                 trait_(VueEsquisse::Plan, vec![point("Dormant droit", 0.0, "Cadre int", 0.0), point("Arc x", 0.0, "Arc y", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], true),
                 trait_(VueEsquisse::Elevation, vec![point("Dormant droit", 0.0, "Pied vantail", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)], false),

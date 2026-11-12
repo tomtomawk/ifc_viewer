@@ -128,7 +128,19 @@ impl ViewerApp {
         }
         let texte = std::fs::read_to_string(chemin).map_err(|e| format!("{} : {e}", chemin.display()))?;
         let contenu = FamillePlane::lire_fichier(&texte)?;
-        self.creer_editeur_famille_plane(contenu, true, Some(chemin.to_path_buf()));
+        // Un fichier spécialisé peut déjà contenir le document commun. L'ouvrir dans
+        // son éditeur, sans remplacer le fichier spécialisé lors de l'enregistrement.
+        let document = match &contenu {
+            FamillePlane::Profil { profil, .. } => profil.document_famille.as_deref(),
+            FamillePlane::Cartouche { famille, .. } => famille.document_famille.as_deref(),
+            FamillePlane::Etiquette { famille, .. } => famille.document_famille.as_deref(),
+        }.cloned();
+        if let Some(mut document) = document {
+            document.nom = contenu.nom().to_owned();
+            self.ouvrir_famille_document_projet(document, None);
+        } else {
+            self.creer_editeur_famille_plane(contenu, true, Some(chemin.to_path_buf()));
+        }
         Ok(())
     }
 
@@ -205,7 +217,7 @@ impl ViewerApp {
         if let FamillePlane::Cartouche { famille, .. } = &mut ed.contenu {
             let projet_vide = crate::modele::Projet::nouveau("Famille");
             let p = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
-            let rect = ed.cartouche.canevas(ui, p, famille);
+            let rect = ed.cartouche.canevas(ui, p, famille, self.options.delai_accrochage);
             if rect.is_positive() { self.rect_vue = rect; }
             return;
         }
@@ -232,6 +244,8 @@ impl ViewerApp {
 
     pub(super) fn panneau_famille_plane(&mut self, ui: &mut egui::Ui, panneau: Panneau) {
         self.entete_panneau(ui, panneau, if panneau == Panneau::Proprietes { "Propriétés de la famille" } else { "Arborescence de la famille" });
+        let projet_vide = crate::modele::Projet::nouveau("Famille");
+        let projet = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
         let Some(ed) = self.famille_plane_active.and_then(|i| self.familles_planes.get_mut(&i)) else { return };
         if panneau == Panneau::Arborescence {
             ui.label(RichText::new(ed.contenu.categorie()).strong());
@@ -261,7 +275,7 @@ impl ViewerApp {
                 ui.label("Hauteur");
                 ui.add(egui::DragValue::new(&mut famille.hauteur).range(10.0..=2000.0).suffix(" mm"));
             });
-            ed.cartouche.proprietes(ui, famille);
+            ed.cartouche.proprietes(ui, projet, famille);
         }
     }
 

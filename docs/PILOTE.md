@@ -72,6 +72,7 @@ zone de coupe sont en m. Les angles de caméra et de pente sont en degrés.
 - `exporter_csv {"id":"…","chemin":"C:/quantites.csv"}` : export de ce tableau.
 - `familles` ; `famille_editer <id de type>` ; `famille_ouvrir <chemin>` ;
   `famille_charger <chemin>` ; `famille_enregistrer <chemin>` : éditeur/fichiers de familles.
+- `famille_outil <clé>` : choisir un outil de l’éditeur de famille modélisée (`selection`, `ligne`, `arc`, `cercle`, `spline`, `rectangle`, etc.).
 - `famille_nouvelle porte|fenetre` ; `famille_document` : ouvrir un gabarit et lire
   le fichier de l'éditeur (`fichier`, `type`, `modifie`).
 - `famille_modifier <objet fichier complet>` : modifier et valider la famille dans
@@ -232,7 +233,7 @@ par des murs (refus si le contour n'est pas fermé).
 `ajuster_angle` reçoit `id`, `reference`, `fin` et `fin_reference` et modifie les deux
 murs atomiquement. `volets_etat` décrit les fenêtres natives et leurs rectangles ;
 `volets_retablir` réancre les deux volets. Fermer un volet externe conserve le projet.
-`famille_navigation etat|elevation|plan|coupe|cadrer` décrit ou choisit la vue de
+`famille_navigation etat|elevation|plan|coupe|3d|cadrer` décrit ou choisit la vue de
 travail et son cadrage. La molette (`saisie defiler`) et le glissement au bouton
 `milieu` utilisent la navigation réelle de l'éditeur, sans toucher au modèle.
 

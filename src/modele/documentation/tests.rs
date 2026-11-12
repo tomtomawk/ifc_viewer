@@ -96,11 +96,15 @@ fn formes_du_cartouche_persistent_et_sont_dessinees_sur_feuille() {
         AnnotationForme::Zone { contour: vec![[20.0, 10.0], [25.0, 10.0], [25.0, 15.0]] },
         AnnotationForme::Cote { debut: PointCote::Fixe { point: [20.0, 10.0] }, fin: PointCote::Fixe { point: [25.0, 10.0] }, decalage: 10.0 },
     ];
+    // Le document commun est la source du rendu ; les formes historiques ne le remplacent pas.
+    use crate::modele::famille::modelee::{Element2DFamille, VueEsquisse};
+    let document = famille.document_famille.as_mut().unwrap();
+    document.famille.elements_2d.extend(famille.formes.iter().cloned().map(|forme| Element2DFamille { vue: VueEsquisse::Plan, forme, hauteur: 2.5 }));
     p.feuilles.push(f.clone());
     p.cartouches_feuilles.insert(f.id.clone(), famille.nom.clone());
     p.familles_cartouches.push(famille.clone());
     let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
-    assert_eq!(relu.familles_cartouches[0].formes, famille.formes);
+    assert_eq!(relu.familles_cartouches[0].document_famille, famille.document_famille);
     let dessin = cadre_feuille(&relu, &f);
     assert!(dessin.iter().any(|pr| matches!(&pr.forme, Forme::Polyligne { points, .. } if points.len() > 40)));
     assert!(dessin.iter().any(|pr| matches!(pr.forme, Forme::Surface(_))));
@@ -292,7 +296,7 @@ fn famille_cartouche_partagee_est_enregistree_et_utilisee() {
     let mut g = f.clone();
     g.id = "g".into();
     p.feuilles = vec![f.clone(), g.clone()];
-    let famille = FamilleCartouche { id: super::collaboration::uuid(), nom: "Agence".into(), largeur: 80.0, hauteur: 25.0, traits: vec![[[0.0, 0.0], [80.0, 25.0]]], textes: vec![TexteCartouche { contenu: "{projet} - {numero}".into(), position: [2.0, 2.0], hauteur: 3.0 }], formes: Vec::new() };
+    let famille = FamilleCartouche { document_famille: None, id: super::collaboration::uuid(), nom: "Agence".into(), largeur: 80.0, hauteur: 25.0, traits: vec![[[0.0, 0.0], [80.0, 25.0]]], textes: vec![TexteCartouche { contenu: "{projet} - {numero}".into(), position: [2.0, 2.0], hauteur: 3.0 }], formes: Vec::new() };
     p.familles_cartouches.push(famille);
     p.cartouches_feuilles.insert(f.id.clone(), "Agence".into());
     p.cartouches_feuilles.insert(g.id.clone(), "Agence".into());

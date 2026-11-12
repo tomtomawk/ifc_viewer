@@ -7,6 +7,7 @@ impl ViewerApp {
         let rect = ui.available_rect_before_wrap();
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
         let Some(ed) = self.famille.as_mut() else { return };
+        ed.rect_navigation = rect;
         let solides = ed.famille.solides(&ed.resoudre());
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
@@ -29,6 +30,10 @@ impl ViewerApp {
             ed.camera_3d.fit(min, max);
             ed.cadrage_3d_initial = false;
         }
+        if response.double_clicked_by(PointerButton::Middle) && !vertices.is_empty() {
+            ed.camera_3d.fit(min, max);
+            ed.cadrage_3d_initial = false;
+        }
         if response.dragged_by(PointerButton::Middle) {
             let d = response.drag_delta();
             if ui.input(|i| i.modifiers.shift) { ed.camera_3d.orbit(d.x, d.y); }
@@ -36,11 +41,19 @@ impl ViewerApp {
         }
         if response.dragged_by(PointerButton::Secondary) {
             let d = response.drag_delta();
+            ed.camera_3d.ortho = false;
             ed.camera_3d.regarder(d.x, d.y);
         }
-        if response.hovered() {
+        if let Some(pos) = response.hover_pos() {
             let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-            if scroll != 0.0 { ed.camera_3d.zoom(1.0 / accrochage::facteur_molette(scroll) as f32, None); }
+            if scroll != 0.0 {
+                let n = egui::vec2((pos.x - rect.left()) / rect.width().max(1.0) * 2.0 - 1.0, 1.0 - (pos.y - rect.top()) / rect.height().max(1.0) * 2.0);
+                let (origine, direction) = ed.camera_3d.ray(n.x, n.y, rect.width() / rect.height().max(1.0));
+                let avant = ed.camera_3d.forward();
+                let t = (ed.camera_3d.target - origine).dot(avant) / direction.dot(avant).max(1e-6);
+                let cible = (!ed.camera_3d.ortho).then_some(origine + direction * t);
+                ed.camera_3d.zoom(1.0 / accrochage::facteur_molette(scroll) as f32, cible);
+            }
         }
         if response.clicked_by(PointerButton::Primary) && let Some(pos) = response.interact_pointer_pos() {
             let n = egui::vec2((pos.x-rect.left()) / rect.width()*2.0-1.0, 1.0-(pos.y-rect.top()) / rect.height()*2.0);
@@ -108,7 +121,8 @@ impl ViewerApp {
             (c, !ed.contenu_modifie() && ed.contenu.id().is_none())
         } else if let Some(ed) = self.famille.as_ref().filter(|_| self.famille_active) {
             if ed.selection != SelectionFamille::Aucune || !ed.multiple.is_empty() { return; }
-            (match ed.famille.genre { GenreOuverture::Porte => 1, GenreOuverture::Fenetre => 2, _ => 0 }, !ed.contenu_modifie() && ed.type_id.is_none())
+            use crate::modele::famille::modelee::CategorieFamille as C;
+            (match ed.famille.categorie { C::Composant => 0, C::Porte => 1, C::Fenetre => 2, C::Profil => 3, C::Cartouche => 4, C::EtiquettePiece => 5 }, ed.type_id.is_none())
         } else { return; };
         let categories = ["Composant", "Porte", "Fenêtre", "Profil", "Cartouche", "Étiquette de pièce"];
         let mut choix = actuelle;
@@ -117,8 +131,18 @@ impl ViewerApp {
             egui::ComboBox::from_id_salt("categorie_famille_commune").selected_text(categories[actuelle]).show_ui(ui, |ui| {
                 for (k, nom) in categories.iter().enumerate() { ui.selectable_value(&mut choix, k, *nom); }
             });
-        }).response.on_hover_text("Choisir la catégorie avant de dessiner. Une famille modifiée ou déjà chargée conserve sa catégorie pour protéger ses données et ses occurrences.");
+        }).response.on_hover_text("La catégorie détermine l'utilisation de la famille. Le contenu de ses vues est conservé ; une famille déjà chargée conserve sa catégorie.");
         if choix == actuelle { return; }
+        if plane.is_none() {
+            use crate::modele::famille::modelee::CategorieFamille as C;
+            if let Some(ed) = self.famille.as_mut().filter(|_| self.famille_active) {
+                ed.famille.categorie = [C::Composant, C::Porte, C::Fenetre, C::Profil, C::Cartouche, C::EtiquettePiece][choix];
+                ed.famille.genre = match ed.famille.categorie { C::Porte => GenreOuverture::Porte, C::Fenetre => GenreOuverture::Fenetre, _ => GenreOuverture::Libre };
+                if matches!(ed.famille.categorie, C::Profil | C::Cartouche | C::EtiquettePiece) { ed.ouvrir_vue(VueFamille::Plan); }
+                ed.message = Some("Catégorie modifiée : le contenu de la famille est conservé.".into());
+            }
+            return;
+        }
         let autonome = if let Some(ordre) = plane { self.familles_planes.get(&ordre).is_some_and(|ed| ed.document_famille.autonome) } else { self.famille.as_ref().is_some_and(|ed| ed.document_famille.autonome) };
         if plane.is_some() { self.fermer_famille_plane(); } else { self.fermer_famille(); }
         match choix {
@@ -158,16 +182,28 @@ impl ViewerApp {
                 _ => {}
             }
         }
+        if commande == "famille_outil" {
+            return Some((|| {
+                let ed = self.famille.as_mut().ok_or("Éditeur fermé")?;
+                let outil = if argument == "selection" { OutilFamille::Selection } else {
+                    catalogue::OUTILS.iter().find(|d| d.cle == argument).map(|d| d.outil).ok_or("Outil de famille inconnu")?
+                };
+                if let Some(raison) = ed.indisponibilite_outil(outil) { return Err(raison.into()); }
+                ed.choisir_outil(outil);
+                Ok(serde_json::json!({"outil": argument}))
+            })());
+        }
         if commande=="famille_navigation" {
             return Some((|| {
                 let ed=self.famille.as_mut().ok_or("Éditeur fermé")?;
                 match argument {
                     "plan"=>ed.ouvrir_vue(VueFamille::Plan),"coupe"=>ed.ouvrir_vue(VueFamille::Coupe),"elevation"=>ed.ouvrir_vue(VueFamille::Elevation),
-                    "cadrer"=>ed.navigation[ed.vue as usize]=Default::default(),
-                    ""|"etat"=>{},_=>return Err("famille_navigation etat|plan|coupe|elevation|cadrer".into())
+                    "3d"=>ed.ouvrir_vue_3d(),
+                    "cadrer"=>if ed.vue_3d { ed.cadrage_3d_initial=true; } else { ed.navigation[ed.vue as usize]=Default::default(); },
+                    ""|"etat"=>{},_=>return Err("famille_navigation etat|plan|coupe|elevation|3d|cadrer".into())
                 }
                 let n=ed.navigation[ed.vue as usize];
-                Ok(serde_json::json!({"vue":ed.vue.nom(),"zoom":n.zoom,"decalage":[n.decalage.0,n.decalage.1],"rectangle":[ed.rect_navigation.min.x,ed.rect_navigation.min.y,ed.rect_navigation.max.x,ed.rect_navigation.max.y]}))
+                Ok(serde_json::json!({"vue":if ed.vue_3d { "Vue 3D" } else { ed.vue.nom() },"zoom":n.zoom,"decalage":[n.decalage.0,n.decalage.1],"rectangle":[ed.rect_navigation.min.x,ed.rect_navigation.min.y,ed.rect_navigation.max.x,ed.rect_navigation.max.y],"reference":ed.reperage.reference.map(|p| p.to_array()),"guides":ed.reperage.guides.len()}))
             })());
         }
         if !["famille_nouvelle","famille_document","famille_modifier","famille_charger_projet","famille_fermer"].contains(&commande) { return None; }
@@ -187,8 +223,8 @@ impl ViewerApp {
                     let f=crate::modele::famille::modelee::FichierFamille::lire(argument)?;
                     if f.nom.trim().is_empty() {return Err("Nom de famille vide".into());}
                     let ed=self.famille.as_mut().ok_or("Éditeur fermé")?;
-                    f.famille.valider(f.largeur,f.hauteur,ed.epaisseur)?;
-                    ed.nom=f.nom;ed.largeur=f.largeur;ed.hauteur=f.hauteur;ed.famille=f.famille;
+                    f.famille.valider(f.largeur,f.hauteur,f.profondeur)?;
+                    ed.nom=f.nom;ed.largeur=f.largeur;ed.hauteur=f.hauteur;ed.epaisseur=f.profondeur;ed.famille=f.famille;
                     // indices de sélection et de saisie : plus valables sur la nouvelle famille
                     ed.abandonner_saisie();
                     ed.selectionner(Vec::new());
@@ -328,8 +364,10 @@ impl ViewerApp {
         self.famille_active = true;
         self.famille_plane_active = None;
         self.famille = Some(EditeurFamille {
-            document_famille: crate::ui::document_famille::DocumentFamille::nouveau(ordre, self.document_actif, self.natif.is_none(), None, FichierFamille { format: String::new(), nom: String::new(), largeur: 0.0, hauteur: 0.0, famille: FamilleModelee::gabarit_fenetre() }),
+            document_famille: crate::ui::document_famille::DocumentFamille::nouveau(ordre, self.document_actif, self.natif.is_none(), None, FichierFamille { format: String::new(), nom: String::new(), largeur: 0.0, hauteur: 0.0, profondeur: 300.0, famille: FamilleModelee::gabarit_fenetre() }),
             ouverture,
+            cible_feuille: None,
+            cible_piece: None,
             type_id: t.map(|t| t.id.clone()),
             nom: t.map_or_else(|| format!("{prefixe} {} × {}", u.afficher(largeur), u.afficher(hauteur)), |t| t.nom.clone()),
             largeur,
@@ -337,15 +375,19 @@ impl ViewerApp {
             epaisseur,
             famille,
             esquisse: Vec::new(),
+            trace_polyligne: None,
+            saisie_trace: Default::default(),
+            reperage: Default::default(),
             axe_revolution: None,
             partages_origine: partages.clone(),
             partages,
             materiaux_projet,
             poignee: None,
-            reference: (String::new(), 0.0, 0.0, FamilleModelee::gabarit_fenetre()),
+            reference: (String::new(), 0.0, 0.0, 0.0, FamilleModelee::gabarit_fenetre()),
             vue: VueFamille::Elevation,
             construction: None,
             vue_3d: false,
+            vues_ouvertes: vec![VueFamille::Elevation as usize],
             camera_3d: Default::default(),
             cadrage_3d_initial: true,
             navigation: Default::default(),
@@ -358,6 +400,7 @@ impl ViewerApp {
             message: None,
             erreur: None,
             cote_deplacee: None,
+            deplacement_2d: None,
             multiple: Vec::new(),
             fenetre: None,
         });
@@ -387,6 +430,7 @@ impl ViewerApp {
             ed.nom = tc.nom;
             ed.famille = tc.modele;
             ed.famille.genre = GenreOuverture::Libre;
+            ed.famille.categorie = crate::modele::famille::modelee::CategorieFamille::Composant;
             if dans_projet { ed.marquer_enregistree(); } else { ed.reference.0 = String::new(); }
             ed.historique_neuf();
         }
@@ -404,6 +448,56 @@ impl ViewerApp {
             return Err("Cette famille a été ouverte depuis un autre projet : revenir à ce projet pour la charger.".into());
         }
         ed.famille.valider(ed.largeur, ed.hauteur, ed.epaisseur)?;
+        if ed.famille.categorie == crate::modele::famille::modelee::CategorieFamille::Cartouche {
+            use crate::modele::documentation::FamilleCartouche;
+            let p = &self.natif.as_ref().ok_or("Aucun projet natif.")?.0;
+            let id = if nouveau { None } else { ed.type_id.clone() };
+            let original = id.as_ref().and_then(|id| p.familles_cartouches.iter().find(|c| &c.id == id)).map_or_else(|| if id.is_some() && ed.nom == crate::modele::documentation::NOM_CARTOUCHE_STANDARD { ed.nom.clone() } else { String::new() }, |c| c.nom.clone());
+            let id = id.unwrap_or_else(crate::modele::collaboration::uuid);
+            let fichier = ed.fichier();
+            let cartouche = FamilleCartouche { id: id.clone(), nom: ed.nom.trim().into(), largeur: ed.largeur, hauteur: ed.hauteur, traits: Vec::new(), textes: Vec::new(), formes: Vec::new(), document_famille: Some(Box::new(fichier)) };
+            let feuille = ed.cible_feuille.clone();
+            self.enregistrer_cartouche(&cartouche, feuille.as_deref(), &original)?;
+            if let Some(ed) = self.famille.as_mut() {
+                ed.type_id = Some(id.clone());
+                ed.document_famille.document = self.document_actif;
+                ed.document_famille.autonome = false;
+                ed.marquer_enregistree();
+            }
+            self.status = "Famille de cartouche chargée dans le projet.".into();
+            return Ok(id);
+        }
+        if ed.famille.categorie == crate::modele::famille::modelee::CategorieFamille::EtiquettePiece {
+            use crate::modele::documentation::FamilleEtiquette;
+            let id = if nouveau { String::new() } else { ed.type_id.clone().unwrap_or_default() };
+            let fichier = ed.fichier();
+            let famille = FamilleEtiquette { id: id.clone(), nom: ed.nom.trim().into(), traits: Vec::new(), textes: Vec::new(), formes: Vec::new(), document_famille: Some(Box::new(fichier)) };
+            let piece = ed.cible_piece.clone();
+            let id = self.enregistrer_famille_etiquette(famille, piece, &id)?;
+            if let Some(ed) = self.famille.as_mut() {
+                ed.type_id = Some(id.clone());
+                ed.document_famille.document = self.document_actif;
+                ed.document_famille.autonome = false;
+                ed.marquer_enregistree();
+            }
+            return Ok(id);
+        }
+        if ed.famille.categorie == crate::modele::famille::modelee::CategorieFamille::Profil {
+            use crate::modele::famille::profil::Profil;
+            let id = if nouveau { None } else { ed.type_id.clone() };
+            let fichier = ed.fichier();
+            let mut profil = Profil { id: id.clone().unwrap_or_default(), nom: ed.nom.trim().into(), parametres: Vec::new(), contour: Vec::new(), document_famille: Some(Box::new(fichier)) };
+            self.enregistrer_profil(&mut profil, id.as_deref(), nouveau)?;
+            let id = profil.id;
+            if let Some(ed) = self.famille.as_mut() {
+                ed.type_id = Some(id.clone());
+                ed.document_famille.document = self.document_actif;
+                ed.document_famille.autonome = false;
+                ed.marquer_enregistree();
+            }
+            self.status = "Famille de profil chargée dans le projet.".into();
+            return Ok(id);
+        }
         if ed.famille.genre == GenreOuverture::Libre {
             // famille de composant : son type (créé ou mis à jour), donc tous ses composants
             let id = if nouveau { String::new() } else { ed.type_id.clone().unwrap_or_default() };
@@ -420,7 +514,7 @@ impl ViewerApp {
         }
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
         let cible=ed.type_id.as_deref().filter(|_|!nouveau);
-        let fichier=crate::modele::famille::modelee::FichierFamille{format:crate::modele::famille::modelee::FORMAT_FAMILLE.into(),nom:ed.nom.clone(),largeur:ed.largeur,hauteur:ed.hauteur,famille:ed.famille.clone()};
+        let fichier=crate::modele::famille::modelee::FichierFamille{format:crate::modele::famille::modelee::FORMAT_FAMILLE.into(),nom:ed.nom.clone(),largeur:ed.largeur,hauteur:ed.hauteur,profondeur:ed.epaisseur,famille:ed.famille.clone()};
         let modifies: BTreeMap<String, f64> = ed.partages.iter().filter(|(k, v)| ed.partages_origine.get(*k) != Some(*v)).map(|(k, v)| (k.clone(), *v)).collect();
         let conflits = ed.famille.resoudre(ed.largeur, ed.hauteur, ed.epaisseur).conflits.len();
         let (q,id)=p.avec_famille(cible,ed.ouverture.as_deref(),&fichier,ed.epaisseur,modifies)?;
@@ -463,6 +557,52 @@ impl ViewerApp {
         v.extend(self.familles_planes.iter().map(|(&ordre, ed)| (ordre, ed.titre(), ed.contenu.id())));
         v.sort_by_key(|o| o.0);
         v
+    }
+
+    /// Les onglets des vues restent associés au même document de famille.
+    pub(in crate::ui) fn vues_onglet_famille(&self, ordre: usize) -> Option<Vec<(usize, &'static str, bool)>> {
+        let ed = self.famille.iter().chain(&self.familles_inactives)
+            .find(|ed| ed.document_famille.ordre == ordre)?;
+        let active = if ed.vue_3d { 3 } else { ed.vue as usize };
+        Some(ed.vues_ouvertes.iter().copied().map(|i| (i, match i {
+            0 => VueFamille::Elevation.nom(), 1 => VueFamille::Plan.nom(),
+            2 => VueFamille::Coupe.nom(), _ => "Vue 3D",
+        }, i == active)).collect())
+    }
+
+    pub(in crate::ui) fn plusieurs_vues_famille(&self) -> bool {
+        self.famille.iter().chain(&self.familles_inactives).any(|ed| ed.vues_ouvertes.len() > 1)
+    }
+
+    pub(in crate::ui) fn garder_derniere_vue_familles(&mut self) {
+        for ed in self.famille.iter_mut().chain(&mut self.familles_inactives) {
+            if let Some(&vue) = ed.vues_ouvertes.last() {
+                ed.vues_ouvertes.retain(|&i| i == vue);
+                match vue { 0 => ed.ouvrir_vue(VueFamille::Elevation), 1 => ed.ouvrir_vue(VueFamille::Plan),
+                    2 => ed.ouvrir_vue(VueFamille::Coupe), 3 => ed.ouvrir_vue_3d(), _ => {} }
+            }
+        }
+    }
+
+    pub(in crate::ui) fn activer_vue_onglet_famille(&mut self, ordre: usize, vue: usize) {
+        self.activer_famille(ordre);
+        if let Some(ed) = self.famille.as_mut().filter(|ed| ed.document_famille.ordre == ordre) {
+            match vue { 0 => ed.ouvrir_vue(VueFamille::Elevation), 1 => ed.ouvrir_vue(VueFamille::Plan),
+                2 => ed.ouvrir_vue(VueFamille::Coupe), 3 => ed.ouvrir_vue_3d(), _ => {} }
+        }
+    }
+
+    pub(in crate::ui) fn fermer_vue_onglet_famille(&mut self, ordre: usize, vue: usize) {
+        let Some(ed) = self.famille.iter_mut().chain(&mut self.familles_inactives)
+            .find(|ed| ed.document_famille.ordre == ordre) else { return };
+        if ed.vues_ouvertes.len() <= 1 { self.fermer_onglet_famille(ordre); return; }
+        ed.vues_ouvertes.retain(|&i| i != vue);
+        let active = if ed.vue_3d { 3 } else { ed.vue as usize };
+        if vue == active {
+            let prochaine = *ed.vues_ouvertes.last().expect("une vue reste ouverte");
+            match prochaine { 0 => ed.ouvrir_vue(VueFamille::Elevation), 1 => ed.ouvrir_vue(VueFamille::Plan),
+                2 => ed.ouvrir_vue(VueFamille::Coupe), 3 => ed.ouvrir_vue_3d(), _ => {} }
+        }
     }
 
     /// Rang de la famille au premier plan.
@@ -508,16 +648,13 @@ impl ViewerApp {
 
     pub(in crate::ui) fn vue_famille(&mut self, ui: &mut egui::Ui) {
         if self.famille.as_ref().is_some_and(|ed| ed.vue_3d) { self.vue_3d_famille(ui); return; }
+        let projet_vide = crate::modele::Projet::default();
+        let delai_accrochage = self.options.delai_accrochage;
+        let projet = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
         let Some(ed) = self.famille.as_mut() else { return };
         egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(6.0).show(ui, |ui| {
             ui.set_min_size(ui.available_size());
-            // les vues s'ouvrent depuis l'arborescence, comme dans le projet
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(if ed.vue_3d { "Vue 3D" } else { ed.vue.nom() }).strong());
-                if ui.button("Cadrer").clicked(){ed.navigation[ed.vue as usize]=Default::default();}
-                ui.label(RichText::new(if ed.vue_3d { "Glisser : faire tourner · dessin dans les vues planes" } else { "Molette : zoom · bouton central : déplacer · Échap : sélection" }).small().weak());
-            });
-            canevas(ui, ed);
+            canevas(ui, ed, projet, delai_accrochage);
             let rect = ed.rect_navigation;
             let mut bas = 0.0;
             if ed.outil != OutilFamille::Selection && rect.is_positive() {
@@ -526,8 +663,15 @@ impl ViewerApp {
                 let zone = egui::Area::new(egui::Id::unique("barre_commande_famille"))
                     .fixed_pos(rect.left_top() + egui::vec2(8.0, 8.0)).constrain_to(rect)
                     .show(ui.ctx(), |ui| egui::Frame::popup(ui.style()).show(ui, |ui| ui.horizontal(|ui| {
-                        if ed.outil.est_forme() { valider = ui.button("✓ Valider").clicked(); }
-                        annuler = ui.button("✕ Annuler").clicked();
+                        if ed.outil == OutilFamille::Ligne {
+                            use crate::dessin::dao::OutilDessin;
+                            let formes = [(OutilDessin::Polyligne, "Polyligne", "Cliquer les sommets ; Entrée ou clic droit pour terminer, F pour fermer.")];
+                            let (selectionner, _) = crate::ui::dessin_plan::boutons_trace(ui, false, false, OutilDessin::Polyligne, &formes, None);
+                            if selectionner { ed.terminer_polyligne(); annuler = true; }
+                        } else {
+                            if ed.outil.est_forme() { valider = ui.button("✓ Valider").clicked(); }
+                            annuler = ui.button("✕ Annuler").clicked();
+                        }
                     })));
                 bas = zone.response.rect.bottom() - rect.top();
                 if valider {
@@ -545,9 +689,11 @@ impl ViewerApp {
     /// projet et fichier.
     pub(in crate::ui) fn proprietes_famille(&mut self, ui: &mut egui::Ui) {
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés de la famille");
+        let projet_vide = crate::modele::Projet::default();
+        let projet = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
         let Some(ed) = self.famille.as_mut() else { return };
         let bas = 40.0;
-        egui::ScrollArea::vertical().id_salt("famille_panneau").max_height((ui.available_height() - bas).max(160.0)).show(ui, |ui| panneau(ui, ed));
+        egui::ScrollArea::vertical().id_salt("famille_panneau").max_height((ui.available_height() - bas).max(160.0)).show(ui, |ui| panneau(ui, ed, projet));
         ui.separator();
         let r = ed.resoudre();
         match (&ed.erreur, r.erreurs.first(), r.conflits.len()) {
@@ -573,9 +719,7 @@ impl ViewerApp {
         egui::ScrollArea::vertical().id_salt("famille_arborescence").auto_shrink([false, false]).show(ui, |ui| {
             if let Some(vue) = choisir_vue_famille(ui, (!ed.vue_3d).then_some(ed.vue), VueFamille::nom) { ed.ouvrir_vue(vue); }
             if ui.selectable_label(ed.vue_3d, "Vue 3D").clicked() {
-                ed.vue_3d = true;
-                ed.construction = None;
-                ed.choisir_outil(OutilFamille::Selection);
+                ed.ouvrir_vue_3d();
             }
             egui::CollapsingHeader::new(RichText::new(format!("Paramètres ({})", ed.famille.parametres.len() + 3)).strong()).default_open(false).show(ui, |ui| {
                 for n in [LARGEUR, HAUTEUR, EPAISSEUR] {
@@ -618,6 +762,8 @@ impl ViewerApp {
                             VueEsquisse::Plan => VueFamille::Plan,
                             VueEsquisse::Coupe => VueFamille::Coupe,
                         };
+                        ed.vue_3d = false;
+                        if !ed.vues_ouvertes.contains(&(ed.vue as usize)) { ed.vues_ouvertes.push(ed.vue as usize); }
                     }
                 }
             });
@@ -654,6 +800,22 @@ impl ViewerApp {
         Ok(())
     }
 
+    /// Ouvre dans le même éditeur le document complet d'une famille du projet.
+    pub(in crate::ui) fn ouvrir_famille_document_projet(&mut self, fichier: FichierFamille, id: Option<String>) {
+        if let Some(ordre) = id.as_ref().and_then(|id| self.famille.iter().chain(&self.familles_inactives).find(|e| !e.document_famille.autonome && e.document_famille.document == self.document_actif && e.type_id.as_ref() == Some(id)).map(|e| e.document_famille.ordre)) {
+            self.activer_famille(ordre);
+            return;
+        }
+        self.editeur_famille(None, None, fichier.largeur, fichier.hauteur, fichier.profondeur, fichier.famille.genre);
+        if let Some(ed) = self.famille.as_mut() {
+            ed.nom = fichier.nom; ed.famille = fichier.famille;
+            if matches!(ed.famille.categorie, crate::modele::famille::modelee::CategorieFamille::Profil | crate::modele::famille::modelee::CategorieFamille::Cartouche | crate::modele::famille::modelee::CategorieFamille::EtiquettePiece) { ed.ouvrir_vue(VueFamille::Plan); }
+            ed.document_famille.autonome = id.is_none(); ed.type_id = id;
+            ed.marquer_enregistree(); ed.historique_neuf();
+        }
+        self.onglet_ruban = OngletRuban::FamilleCreer;
+    }
+
     /// Ouvre un fichier de famille dans l'éditeur (nouveau type, à charger ensuite).
     pub(in crate::ui) fn ouvrir_famille_fichier(&mut self, chemin: &std::path::Path) -> Result<(), String> {
         if let Some(ordre) = self.famille.iter().chain(&self.familles_inactives).find(|e| e.document_famille.autonome && e.document_famille.chemin_fichier.as_deref() == Some(chemin)).map(|e| e.document_famille.ordre) {
@@ -662,9 +824,10 @@ impl ViewerApp {
         }
         let texte = std::fs::read_to_string(chemin).map_err(|e| format!("{} : {e}", chemin.display()))?;
         let f = crate::modele::famille::modelee::FichierFamille::lire(&texte)?;
-        self.editeur_famille(None, None, f.largeur, f.hauteur, 300.0, f.famille.genre);
+        self.editeur_famille(None, None, f.largeur, f.hauteur, f.profondeur, f.famille.genre);
         let ed = self.famille.as_mut().ok_or("Aucun projet natif.")?;
         (ed.nom, ed.famille) = (f.nom, f.famille);
+        if matches!(ed.famille.categorie, crate::modele::famille::modelee::CategorieFamille::Profil | crate::modele::famille::modelee::CategorieFamille::Cartouche | crate::modele::famille::modelee::CategorieFamille::EtiquettePiece) { ed.ouvrir_vue(VueFamille::Plan); }
         ed.document_famille.autonome = true;
         ed.document_famille.chemin_fichier = Some(chemin.to_path_buf());
         ed.marquer_enregistree();
@@ -674,20 +837,49 @@ impl ViewerApp {
 
     /// Charge un fichier de famille dans le projet : un nouveau type (nom rendu unique).
     pub(in crate::ui) fn charger_famille_fichier(&mut self, chemin: &std::path::Path) -> Result<String, String> {
+        use crate::modele::famille::modelee::CategorieFamille as C;
         let texte = std::fs::read_to_string(chemin).map_err(|e| format!("{} : {e}", chemin.display()))?;
-        let f = crate::modele::famille::modelee::FichierFamille::lire(&texte)?;
-        let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
-        let mut q = p.clone();
-        let mut nom = f.nom.clone();
-        let mut k = 2;
-        while q.types_ouvertures.iter().any(|t| t.nom == nom) {
-            nom = format!("{} ({k})", f.nom);
-            k += 1;
-        }
-        let id = crate::modele::collaboration::uuid();
-        q.types_ouvertures.push(crate::modele::TypeOuverture { id: id.clone(), nom: nom.clone(), genre: f.famille.genre, largeur: f.largeur, hauteur: f.hauteur, famille: None, modele: Some(f.famille), origine: None, famille_nom: None });
-        self.appliquer_projet(q)?;
-        self.status = format!("Famille « {nom} » chargée dans le projet.");
+        let mut f = FichierFamille::lire(&texte)?;
+        if f.nom.trim().is_empty() { return Err("Nom de famille vide.".into()); }
+        let p = &self.natif.as_ref().ok_or("Aucun projet natif.")?.0;
+        let existe = |nom: &str| match f.famille.categorie {
+            C::Porte | C::Fenetre => p.types_ouvertures.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
+            C::Composant => p.types_composants.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
+            C::Profil => p.profils.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
+            C::Cartouche => nom.eq_ignore_ascii_case(crate::modele::documentation::NOM_CARTOUCHE_STANDARD) || p.familles_cartouches.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
+            C::EtiquettePiece => nom.eq_ignore_ascii_case("Étiquette standard") || p.familles_etiquettes.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
+        };
+        let base = f.nom.trim().to_string();
+        f.nom = (1..).map(|k| if k == 1 { base.clone() } else { format!("{base} ({k})") }).find(|n| !existe(n)).unwrap();
+        let id = match f.famille.categorie {
+            C::Profil => {
+                let mut profil = crate::modele::famille::profil::Profil { id: String::new(), nom: f.nom.clone(), parametres: Vec::new(), contour: Vec::new(), document_famille: Some(Box::new(f.clone())) };
+                self.enregistrer_profil(&mut profil, None, true)?;
+                profil.id
+            }
+            C::Cartouche => {
+                let id = crate::modele::collaboration::uuid();
+                let cartouche = crate::modele::documentation::FamilleCartouche { id: id.clone(), nom: f.nom.clone(), largeur: f.largeur, hauteur: f.hauteur, traits: Vec::new(), textes: Vec::new(), formes: Vec::new(), document_famille: Some(Box::new(f.clone())) };
+                self.enregistrer_cartouche(&cartouche, None, "")?;
+                id
+            }
+            C::EtiquettePiece => {
+                let famille = crate::modele::documentation::FamilleEtiquette { id: String::new(), nom: f.nom.clone(), traits: Vec::new(), textes: Vec::new(), formes: Vec::new(), document_famille: Some(Box::new(f.clone())) };
+                self.enregistrer_famille_etiquette(famille, None, "")?
+            }
+            C::Composant => {
+                let type_composant = crate::modele::TypeComposant { id: String::new(), nom: f.nom.clone(), largeur: f.largeur, profondeur: f.profondeur, hauteur: f.hauteur, modele: f.famille.clone() };
+                self.executer_bim(crate::modele::edition::commandes::Commande::TypeComposant { type_composant })?.into_iter().next().ok_or("Composant non créé.")?
+            }
+            C::Porte | C::Fenetre => {
+                let mut projet = self.natif.as_ref().unwrap().0.clone();
+                let id = crate::modele::collaboration::uuid();
+                projet.types_ouvertures.push(crate::modele::TypeOuverture { id: id.clone(), nom: f.nom.clone(), genre: f.famille.genre, largeur: f.largeur, hauteur: f.hauteur, famille: None, modele: Some(f.famille.clone()), origine: None, famille_nom: None });
+                self.appliquer_projet(projet)?;
+                id
+            }
+        };
+        self.status = format!("Famille « {} » chargée dans le projet.", f.nom);
         Ok(id)
     }
 
@@ -832,6 +1024,7 @@ impl ViewerApp {
 
 /// Titre d'onglet d'un éditeur : catégorie, type, « * » si non chargé.
 pub(super) fn titre_editeur(ed: &EditeurFamille) -> String {
-    let genre = match ed.famille.genre { GenreOuverture::Porte => "Porte", GenreOuverture::Libre => "Composant", GenreOuverture::Fenetre => "Fenêtre" };
+    use crate::modele::famille::modelee::CategorieFamille as C;
+    let genre = match ed.famille.categorie { C::Porte => "Porte", C::Fenetre => "Fenêtre", C::Composant => "Composant", C::Profil => "Profil", C::Cartouche => "Cartouche", C::EtiquettePiece => "Étiquette de pièce" };
     format!("{genre} : {}{}", ed.nom, if ed.modifiee() { " *" } else { "" })
 }

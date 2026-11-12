@@ -364,7 +364,6 @@ impl ViewerApp {
     /// périmètre et surface, cumulés sur la sélection ; remplissage des polylignes fermées.
     /// Retourne le projet modifié.
     pub(super) fn proprietes_formes_2d(&self, ui: &mut egui::Ui, ids: &[String]) -> Option<Projet> {
-        use crate::modele::MotifCoupe;
         use crate::modele::documentation::{AnnotationForme, RemplissageContour};
         let (projet, _) = self.natif.as_ref()?;
         let formes: Vec<_> = projet.annotations.iter().filter(|a| ids.contains(&a.id)).filter_map(|a| Some((a, a.forme.forme_2d()?))).collect();
@@ -397,27 +396,7 @@ impl ViewerApp {
                 let (actuel, mixte) = melange(remplissages.iter().cloned());
                 let texte = if mixte { "Varié".to_string() } else { actuel.flatten().map_or("Aucun".into(), |r| r.libelle()) };
                 ui.label("Remplissage").on_hover_text("Polylignes fermées : motif de coupe d'un matériau, ou motif choisi");
-                egui::ComboBox::from_id_salt("remplissage_formes_2d").width(150.0).truncate().selected_text(texte).show_ui(ui, |ui| {
-                    if ui.selectable_label(false, "Aucun").clicked() {
-                        choix = Some(None);
-                    }
-                    if !projet.materiaux.is_empty() {
-                        ui.separator();
-                        ui.label(RichText::new("Matériaux").small().weak());
-                        for m in &projet.materiaux {
-                            if ui.selectable_label(false, &m.nom).clicked() {
-                                choix = Some(Some(RemplissageContour::Materiau { materiau: m.nom.clone() }));
-                            }
-                        }
-                    }
-                    ui.separator();
-                    ui.label(RichText::new("Motifs").small().weak());
-                    for motif in std::iter::once(MotifCoupe::Uni).chain(projet.noms_motifs().iter().map(|n| MotifCoupe::hachures(n))) {
-                        if ui.selectable_label(false, motif.libelle()).clicked() {
-                            choix = Some(Some(RemplissageContour::Motif { motif }));
-                        }
-                    }
-                });
+                choix = choisir_remplissage_2d(ui, projet, &texte);
                 ui.end_row();
             }
         });
@@ -436,4 +415,24 @@ impl ViewerApp {
         }
         Some(p)
     }
+}
+
+/// Choix commun du remplissage d'une polyligne fermée.
+pub(super) fn choisir_remplissage_2d(ui: &mut egui::Ui, projet: &crate::modele::Projet, texte: &str) -> Option<Option<crate::modele::documentation::RemplissageContour>> {
+    use crate::modele::{MotifCoupe, documentation::RemplissageContour};
+    let mut choix = None;
+    egui::ComboBox::from_id_salt("remplissage_formes_2d").width(150.0).truncate().selected_text(texte).show_ui(ui, |ui| {
+        if ui.selectable_label(false, "Aucun").clicked() { choix = Some(None); }
+        if !projet.materiaux.is_empty() {
+            ui.separator(); ui.label(RichText::new("Matériaux").small().weak());
+            for m in &projet.materiaux {
+                if ui.selectable_label(false, &m.nom).clicked() { choix = Some(Some(RemplissageContour::Materiau { materiau: m.nom.clone() })); }
+            }
+        }
+        ui.separator(); ui.label(RichText::new("Motifs").small().weak());
+        for motif in std::iter::once(MotifCoupe::Uni).chain(projet.noms_motifs().iter().map(|n| MotifCoupe::hachures(n))) {
+            if ui.selectable_label(false, motif.libelle()).clicked() { choix = Some(Some(RemplissageContour::Motif { motif })); }
+        }
+    });
+    choix
 }

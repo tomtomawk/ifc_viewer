@@ -130,6 +130,11 @@ impl ViewerApp {
     }
 
     pub(super) fn editer_cartouche(&mut self, source: Option<doc::FamilleCartouche>, feuille: Option<String>) {
+        if let Some((fichier, id)) = source.as_ref().and_then(|c| c.document_famille.as_ref().map(|f| ((**f).clone(), c.id.clone()))) {
+            self.ouvrir_famille_document_projet(fichier, Some(id));
+            if let Some(ed) = self.famille.as_mut() { ed.cible_feuille = feuille.clone(); }
+            return;
+        }
         let projet_vide = crate::modele::Projet::nouveau("Famille");
         let p = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
         let original = source.as_ref().map_or_else(String::new, |f| f.nom.clone());
@@ -138,11 +143,22 @@ impl ViewerApp {
             famille.nom = (1..).map(|n| if n == 1 { "Cartouche personnalisé".into() } else { format!("Cartouche personnalisé {n}") })
                 .find(|nom| p.familles_cartouches.iter().all(|f| &f.nom != nom)).unwrap();
         }
+        if original.is_empty() && let Some(mut document) = famille.document_famille.take() {
+            document.nom = famille.nom.clone();
+            self.ouvrir_famille_document_projet(*document, None);
+            if let Some(ed) = self.famille.as_mut() { ed.cible_feuille = feuille.clone(); }
+            return;
+        }
         self.ouvrir_famille_plane(super::familles_planes::FamillePlane::Cartouche { famille, feuille, original });
     }
     /// Ouvre l'éditeur d'une famille d'étiquette de pièce : `famille` (Some("") : la
     /// standard ; None : nouvelle, copie de celle de la pièce), affectée à `piece`.
     pub(super) fn editer_famille_etiquette(&mut self, famille: Option<String>, piece: Option<String>) {
+        if let Some((fichier, id)) = famille.as_ref().and_then(|id| self.natif.as_ref()?.0.familles_etiquettes.iter().find(|f| &f.id == id)).and_then(|f| f.document_famille.as_ref().map(|document| ((**document).clone(), f.id.clone()))) {
+            self.ouvrir_famille_document_projet(fichier, Some(id));
+            if let Some(ed) = self.famille.as_mut() { ed.cible_piece = piece.clone(); }
+            return;
+        }
         let projet_vide = crate::modele::Projet::nouveau("Famille");
         let p = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
         let actuelle = piece.as_ref().and_then(|id| p.pieces.iter().find(|x| &x.id == id)).map(|x| p.famille_etiquette(x));
@@ -159,6 +175,12 @@ impl ViewerApp {
         } else if famille.is_none() {
             f.id = String::new();
             f.nom = format!("{} (copie)", f.nom);
+        }
+        if original.is_empty() && let Some(mut document) = f.document_famille.take() {
+            document.nom = f.nom.clone();
+            self.ouvrir_famille_document_projet(*document, None);
+            if let Some(ed) = self.famille.as_mut() { ed.cible_piece = piece.clone(); }
+            return;
         }
         self.ouvrir_famille_plane(super::familles_planes::FamillePlane::Etiquette { famille: f, piece, original });
     }
@@ -1014,10 +1036,9 @@ pub(super) fn dessiner_etiquette(ui: &mut egui::Ui, famille: &mut doc::FamilleEt
         ui.label(format!("Champs : {}", doc::CHAMPS_ETIQUETTE));
         let mut supprimer = None;
         for (i, t) in famille.textes.iter_mut().enumerate() {
-            ui.horizontal(|ui| {
-                ui.add(egui::TextEdit::singleline(&mut t.contenu).desired_width(140.0));
-                for coord in &mut t.position { ui.add(egui::DragValue::new(coord).speed(0.25).suffix(" mm")); }
-                ui.add(egui::DragValue::new(&mut t.hauteur).range(0.5..=20.0).speed(0.1).suffix(" mm"));
+            ui.push_id(("texte_etiquette", i), |ui| {
+                super::outils_texte::proprietes_texte(ui, &mut t.contenu, &mut t.position, true, super::outils_texte::CHAMPS_PIECE);
+                super::outils_texte::hauteur_texte(ui, &mut t.hauteur);
                 if ui.small_button("✕").clicked() { supprimer = Some(i); }
             });
         }

@@ -541,11 +541,12 @@ pub fn primitives_pieces(p: &Projet, v: &Vue) -> Vec<Primitive> {
         }
         // étiquette : famille de la pièce, en mm du papier autour de son point
         let famille = p.famille_etiquette(x);
+        let (formes, textes) = famille.document_famille.as_ref().map_or_else(|| (famille.formes.clone(), famille.textes.clone()), |f| contenu_plan_famille(f, p));
         // mm du papier → m du modèle
         let papier = v.echelle * 0.001;
         let centre = (o + DVec3::new(x.point[0], x.point[1], 0.0)) * 0.001;
         let couleur = if x.fermee() { [30, 30, 30, 255] } else { [190, 35, 35, 255] };
-        for t in &famille.textes {
+        for t in &textes {
             let l = FamilleEtiquette::remplir(&t.contenu, p, x);
             if l.trim().is_empty() { continue; }
             let taille = t.hauteur * papier;
@@ -555,7 +556,20 @@ pub fn primitives_pieces(p: &Projet, v: &Vue) -> Vec<Primitive> {
             prim.element = element;
             out.push(prim);
         }
-        for t in &famille.traits {
+        for forme in &formes {
+            for mut prim in forme_cartouche(p, forme) {
+                let transformer = |q: DVec3| centre + (u * q.x + h * q.y) * v.echelle;
+                prim.forme = match prim.forme {
+                    Forme::Polyligne { points, fermee } => Forme::Polyligne { points: points.into_iter().map(transformer).collect(), fermee },
+                    Forme::Segments(segments) => Forme::Segments(segments.into_iter().map(|s| s.map(transformer)).collect()),
+                    Forme::Triangles(triangles) => Forme::Triangles(triangles.into_iter().map(|t| t.map(transformer)).collect()),
+                    Forme::Surface(contours) => Forme::Surface(contours.into_iter().map(|c| c.into_iter().map(transformer).collect()).collect()),
+                };
+                prim.element = element;
+                out.push(prim);
+            }
+        }
+        for t in famille.traits.iter().filter(|_| famille.document_famille.is_none()) {
             let [a, b] = t.map(|q| centre + (u * q[0] + h * q[1]) * papier);
             let mut prim = ligne(a, b);
             prim.style.couleur = couleur;
@@ -681,7 +695,7 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
         let oblique = a.hauteur * v.echelle * 0.6;
         match &a.forme {
             AnnotationForme::Texte { point, texte: s } => out.push(texte(
-                s,
+                &remplir_champs(s, &[("{projet}", &p.nom), ("{vue}", &v.nom)]),
                 pt(DVec2::from_array(*point)),
                 u,
                 h,
@@ -851,25 +865,9 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
         role: Role::Annotation,
         element: None,
     };
-    // région 2D d'une famille, dans le plan de la vue : aplat gris ou hachures à 45°
-    // (pas de 2 mm du papier)
-    let pas = 2.0 * v.echelle;
-    let region = |points: Vec<DVec3>, m: super::famille::modelee::Remplissage| -> Vec<Primitive> {
-        use super::famille::modelee::Remplissage;
-        if points.len() < 3 { return Vec::new(); }
-        match m {
-            Remplissage::Plein => vec![Primitive {
-                forme: Forme::Surface(vec![points.iter().map(|q| *q * 0.001).collect()]),
-                style: Style { couleur: [185, 185, 185, 255], epaisseur: 0.0 },
-                role: Role::Annotation,
-                element: None,
-            }],
-            Remplissage::Hachure => {
-                let plan: Vec<DVec2> = points.iter().map(|q| DVec2::new((*q - o).dot(u), (*q - o).dot(h))).collect();
-                let segments = hachures_45(&plan, pas).into_iter().map(|[a, b]| [(o + u * a.x + h * a.y) * 0.001, (o + u * b.x + h * b.y) * 0.001]).collect();
-                vec![Primitive { forme: Forme::Segments(segments), style: Style { couleur: [60, 60, 60, 255], epaisseur: 0.0 }, role: Role::Annotation, element: None }]
-            }
-        }
+    let remplissage_commun = |points: Vec<DVec3>, r: RemplissageContour| -> Vec<Primitive> {
+        let contour: Vec<[f64; 2]> = points.iter().map(|q| [(*q-o).dot(u), (*q-o).dot(h)]).collect();
+        primitives_remplissage(p, &r, &contour, v.echelle, &|q| (o + u*q.x + h*q.y) * 0.001)
     };
     let mut out = Vec::new();
     // escaliers : ligne de foulée, rond au départ, flèche à l'arrivée
@@ -887,8 +885,12 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
     }
     if let GenreVue::Plan { niveau, .. } = &v.genre {
         for c in p.composants.iter().filter(|c| &c.niveau == niveau && !v.elements_masques.contains(&c.id)) {
+            for (points, r) in c.remplissages_plan(p) { out.extend(remplissage_commun(points, r)); }
             for l in c.symboles_plan(p) {
                 out.push(polyligne(l.into_iter().map(|q| q.with_z(o.z)).collect()));
+            }
+            for (point, contenu, hauteur) in c.textes_plan(p) {
+                out.push(texte(&remplir_champs(&contenu, &[("{projet}", &p.nom), ("{vue}", &v.nom)]), point.with_z(o.z) * 0.001, u, h, hauteur * v.echelle * 0.001, [30,30,30,255]));
             }
         }
     }
@@ -897,11 +899,15 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
         let Ok((axe, _, niveau)) = super::volumes::solides::hote(p, &ouv.mur) else { continue };
         match &v.genre {
             GenreVue::Plan { niveau: n, .. } if *n == niveau => {
+                for (points, r) in super::volumes::solides::remplissages_ouverture(p, ouv, VueEsquisse::Plan) { out.extend(remplissage_commun(points, r)); }
                 for (l, m) in super::volumes::solides::regions_ouverture(p, ouv, VueEsquisse::Plan) {
-                    out.extend(region(l.into_iter().map(|q| q.with_z(o.z)).collect(), m));
+                    out.extend(remplissage_commun(l.into_iter().map(|q| q.with_z(o.z)).collect(), m));
                 }
                 for l in super::volumes::solides::symboles_ouverture(p, ouv, VueEsquisse::Plan) {
                     out.push(polyligne(l.into_iter().map(|q| q.with_z(o.z)).collect()));
+                }
+                for (point, contenu, hauteur) in super::volumes::solides::textes_ouverture(p, ouv, VueEsquisse::Plan) {
+                    out.push(texte(&remplir_champs(&contenu, &[("{projet}", &p.nom), ("{vue}", &v.nom)]), point.with_z(o.z) * 0.001, u, h, hauteur * v.echelle * 0.001, [30,30,30,255]));
                 }
             }
             GenreVue::Coupe { debut, fin, profondeur, .. } => {
@@ -914,11 +920,15 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
                 if uw.dot(DVec2::new(u.x, u.y)).abs() < 0.98 || !(-1.0..=*profondeur).contains(&profondeur_c) || !(0.0..=longueur).contains(&lateral) {
                     continue;
                 }
+                for (points, r) in super::volumes::solides::remplissages_ouverture(p, ouv, VueEsquisse::Elevation) { out.extend(remplissage_commun(points, r)); }
                 for (l, m) in super::volumes::solides::regions_ouverture(p, ouv, VueEsquisse::Elevation) {
-                    out.extend(region(l.into_iter().map(|q| o + u * (q - o).dot(u) + h * (q - o).dot(h)).collect(), m));
+                    out.extend(remplissage_commun(l.into_iter().map(|q| o + u * (q - o).dot(u) + h * (q - o).dot(h)).collect(), m));
                 }
                 for l in super::volumes::solides::symboles_ouverture(p, ouv, VueEsquisse::Elevation) {
                     out.push(polyligne(l.into_iter().map(|q| o + u * (q - o).dot(u) + h * (q - o).dot(h)).collect()));
+                }
+                for (point, contenu, hauteur) in super::volumes::solides::textes_ouverture(p, ouv, VueEsquisse::Elevation) {
+                    out.push(texte(&remplir_champs(&contenu, &[("{projet}", &p.nom), ("{vue}", &v.nom)]), point * 0.001, u, h, hauteur * v.echelle * 0.001, [30,30,30,255]));
                 }
             }
             _ => {}
@@ -1049,27 +1059,6 @@ pub fn altitude_vue(p: &Projet, v: &Vue, point: [f64; 2], relative_niveau: bool)
     if !relative_niveau { return z; }
     let base = p.niveaux.iter().map(|n| n.altitude).filter(|a| *a <= z + 1e-6).fold(f64::NEG_INFINITY, f64::max);
     if base.is_finite() { z - base } else { z }
-}
-
-/// Hachures à 45° d'un contour fermé, au pas `pas` (vues, feuilles, éditeur de familles).
-pub fn hachures_45(poly: &[DVec2], pas: f64) -> Vec<[DVec2; 2]> {
-    let (r, rinv) = (|p: DVec2| DVec2::new(p.x - p.y, p.x + p.y) / std::f64::consts::SQRT_2, |q: DVec2| DVec2::new(q.x + q.y, q.y - q.x) / std::f64::consts::SQRT_2);
-    let q: Vec<DVec2> = poly.iter().map(|p| r(*p)).collect();
-    if q.len() < 3 || !(pas > 0.0) { return Vec::new(); }
-    let (t0, t1) = q.iter().fold((f64::MAX, f64::MIN), |(a, b), p| (a.min(p.y), b.max(p.y)));
-    if (t1 - t0) / pas > 5000.0 { return Vec::new(); }
-    let mut out = Vec::new();
-    let mut t = (t0 / pas).floor() * pas + pas * 0.5;
-    while t < t1 {
-        let mut xs: Vec<f64> = (0..q.len()).filter_map(|i| {
-            let (a, b) = (q[i], q[(i + 1) % q.len()]);
-            ((a.y <= t) != (b.y <= t)).then(|| a.x + (t - a.y) / (b.y - a.y) * (b.x - a.x))
-        }).collect();
-        xs.sort_by(f64::total_cmp);
-        for w in xs.chunks_exact(2) { out.push([rinv(DVec2::new(w[0], t)), rinv(DVec2::new(w[1], t))]); }
-        t += pas;
-    }
-    out
 }
 
 fn ids_masques_vue(p: &Projet, v: &Vue) -> std::collections::HashSet<crate::formats::ifc::step::Id> {
@@ -1221,6 +1210,9 @@ pub const MARGE: f64 = 10.0;
 /// Géométrie réutilisable d'un cartouche, en millimètres depuis son coin inférieur gauche.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct FamilleCartouche {
+    /// Document complet de la famille ; les champs graphiques sont son rendu en plan.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document_famille: Option<Box<crate::modele::famille::modelee::FichierFamille>>,
     #[serde(default)]
     pub id: String,
     pub nom: String,
@@ -1237,11 +1229,36 @@ pub struct FamilleCartouche {
 /// point de la pièce (textes centrés sur leur position).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct FamilleEtiquette {
+    /// Document complet de la famille ; seules les annotations de plan sont rendues.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document_famille: Option<Box<crate::modele::famille::modelee::FichierFamille>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub formes: Vec<AnnotationForme>,
     pub id: String,
     pub nom: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub traits: Vec<[[f64; 2]; 2]>,
     pub textes: Vec<TexteCartouche>,
+}
+
+/// Prépare le rendu de la seule vue en plan d'une famille documentaire.
+pub(super) fn contenu_plan_famille(document: &crate::modele::famille::modelee::FichierFamille, p: &Projet) -> (Vec<AnnotationForme>, Vec<TexteCartouche>) {
+    use crate::modele::famille::modelee::VueEsquisse;
+    let r = document.famille.resoudre_occurrence(document.largeur, document.hauteur, document.profondeur, &p.parametres_partages, &Default::default());
+    let mut formes = Vec::new();
+    let mut textes = Vec::new();
+    for e in document.famille.elements_2d_resolus(&r, VueEsquisse::Plan) {
+        match e.forme {
+            AnnotationForme::Texte { point, texte } => textes.push(TexteCartouche { contenu: texte, position: point, hauteur: e.hauteur }),
+            forme => formes.push(forme),
+        }
+    }
+    (formes, textes)
+}
+
+/// Résout les champs fournis par le contexte de rendu du texte.
+pub(crate) fn remplir_champs(contenu: &str, champs: &[(&str, &str)]) -> String {
+    champs.iter().fold(contenu.to_owned(), |texte, (cle, valeur)| texte.replace(cle, valeur))
 }
 
 /// Champs d'une étiquette de pièce.
@@ -1250,7 +1267,9 @@ pub const CHAMPS_ETIQUETTE: &str = "{nom}, {numero}, {surface}, {perimetre}, {ni
 impl FamilleEtiquette {
     /// Étiquette standard : nom et numéro, surface dessous.
     pub fn standard() -> FamilleEtiquette {
-        FamilleEtiquette {
+        let mut etiquette = FamilleEtiquette {
+            document_famille: None,
+            formes: Vec::new(),
             id: String::new(),
             nom: "Étiquette standard".into(),
             traits: Vec::new(),
@@ -1258,7 +1277,12 @@ impl FamilleEtiquette {
                 TexteCartouche { contenu: "{nom} {numero}".into(), position: [0.0, 0.75], hauteur: 2.5 },
                 TexteCartouche { contenu: "{surface}".into(), position: [0.0, -3.0], hauteur: 2.5 },
             ],
-        }
+        };
+        use crate::modele::famille::modelee::{CategorieFamille, Element2DFamille, FamilleModelee, FichierFamille, VueEsquisse, FORMAT_FAMILLE};
+        let mut famille = FamilleModelee::vide(CategorieFamille::EtiquettePiece);
+        famille.elements_2d.extend(etiquette.textes.iter().map(|t| Element2DFamille { vue: VueEsquisse::Plan, forme: AnnotationForme::Texte { point: t.position, texte: t.contenu.clone() }, hauteur: t.hauteur }));
+        etiquette.document_famille = Some(Box::new(FichierFamille { format: FORMAT_FAMILLE.into(), nom: etiquette.nom.clone(), largeur: 60.0, hauteur: 30.0, profondeur: 300.0, famille }));
+        etiquette
     }
 
     /// Texte `contenu` avec les champs de la pièce `x`.
@@ -1266,7 +1290,7 @@ impl FamilleEtiquette {
         let surface = if x.fermee() { format!("{:.2} m²", x.aire() / 1e6) } else { "Non fermée".into() };
         let perimetre = if x.fermee() { format!("{:.2} m", x.perimetre() / 1e3) } else { String::new() };
         let niveau = p.niveau(&x.niveau).map_or(String::new(), |n| n.nom.clone());
-        contenu.replace("{nom}", &x.nom).replace("{numero}", &x.numero).replace("{surface}", &surface).replace("{perimetre}", &perimetre).replace("{niveau}", &niveau)
+        remplir_champs(contenu, &[("{nom}", &x.nom), ("{numero}", &x.numero), ("{surface}", &surface), ("{perimetre}", &perimetre), ("{niveau}", &niveau)])
     }
 }
 

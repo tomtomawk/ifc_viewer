@@ -28,9 +28,13 @@ pub(in crate::ui) const OUTILS: &[Descripteur] = &[
     Descripteur { outil: OutilFamille::Vide, cle: "vide", nom: "Vide", aide: "Extrusion vide : perce le mur hôte une fois la famille chargée", groupe: "Formes", plan_oblique: false, famille_plane: false },
     Descripteur { outil: OutilFamille::Extrusion, cle: "extrusion", nom: "Extrusion", aide: "Profil quelconque : cliquer les sommets (accrochés aux plans), recliquer le premier ou clic droit pour fermer", groupe: "Formes", plan_oblique: true, famille_plane: false },
     Descripteur { outil: OutilFamille::ExtrusionVide, cle: "extrusion_vide", nom: "Extrusion vide", aide: "Profil quelconque qui perce le mur hôte", groupe: "Formes", plan_oblique: true, famille_plane: false },
-    Descripteur { outil: OutilFamille::Ligne, cle: "ligne", nom: "Ligne 2D", aide: "Symbole 2D (plan ou élévation) affiché dans les vues du projet : clic droit pour finir", groupe: "Symboles 2D", plan_oblique: false, famille_plane: false },
-    Descripteur { outil: OutilFamille::Arc, cle: "arc", nom: "Arc 2D", aide: "Symbole 2D en arc : départ, point de passage, fin", groupe: "Symboles 2D", plan_oblique: false, famille_plane: false },
-    Descripteur { outil: OutilFamille::Region, cle: "region", nom: "Région 2D", aide: "Contour fermé rempli (plein ou hachuré) : cliquer les sommets, recliquer le premier ou clic droit pour fermer", groupe: "Symboles 2D", plan_oblique: false, famille_plane: false },
+    Descripteur { outil: OutilFamille::Ligne, cle: "ligne", nom: "Polyligne 2D", aide: "Cliquer les sommets ; clic droit ou Entrée pour terminer, F ou premier sommet pour fermer", groupe: "Symboles 2D", plan_oblique: false, famille_plane: false },
+    Descripteur { outil: OutilFamille::Texte, cle: "texte", nom: "Texte", aide: "Cliquer pour placer un texte dans la vue", groupe: "Symboles 2D", plan_oblique: false, famille_plane: false },
+    Descripteur { outil: OutilFamille::Libelle, cle: "etiquette", nom: "Libellé", aide: "Cliquer pour placer un libellé et choisir ses champs", groupe: "Symboles 2D", plan_oblique: false, famille_plane: false },
+    Descripteur { outil: OutilFamille::Spline, cle: "spline", nom: "Spline", aide: "Cliquer les points de passage ; Entrée pour terminer, F pour fermer", groupe: "Symboles 2D", plan_oblique: false, famille_plane: false },
+    Descripteur { outil: OutilFamille::Cercle, cle: "cercle", nom: "Cercle", aide: "Cliquer le centre puis le rayon", groupe: "Symboles 2D", plan_oblique: false, famille_plane: false },
+    Descripteur { outil: OutilFamille::Rectangle, cle: "rectangle", nom: "Rectangle", aide: "Cliquer deux coins opposés", groupe: "Symboles 2D", plan_oblique: false, famille_plane: false },
+    Descripteur { outil: OutilFamille::Arc, cle: "arc", nom: "Arc 2D", aide: "Arc 2D : départ, fin, puis point de passage", groupe: "Symboles 2D", plan_oblique: false, famille_plane: false },
 ];
 
 /// Contexte de présentation et de contrôle : la même décision sert au ruban

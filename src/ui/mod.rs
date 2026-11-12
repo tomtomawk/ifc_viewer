@@ -6,6 +6,10 @@
 
 mod bim;
 mod communes;
+mod outils_texte;
+mod saisie_trace;
+mod poignees_annotation;
+mod reperage;
 mod types_traits;
 mod feuilles;
 mod dessin_plan;
@@ -664,6 +668,7 @@ pub struct ViewerApp {
     /// Poignée d'extrémité de l'axe du mur sélectionné en cours de déplacement : élément,
     /// extrémité (true : fin) et position courante (mm).
     poignee_axe: Option<(String, bool, [f64; 2])>,
+    poignee_annotation: Option<poignees_annotation::GlissementAnnotation>,
     /// Dernière poignée déplacée et cote modifiable de sa ligne d'implantation.
     cote_axe: Option<(String, bool, String)>,
     /// Dernier mur courbe modifié : poignée, rayon et longueur d'arc éditables.
@@ -884,6 +889,7 @@ impl ViewerApp {
             nom_motif_saisi: String::new(),
             tirets_saisis: (String::new(), Vec::new()),
             poignee_axe: None,
+            poignee_annotation: None,
             cote_axe: None,
             cote_arc: None,
             gestion_contextes: None,
@@ -985,7 +991,7 @@ impl eframe::App for ViewerApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.confirmer_fermeture = Some((true, self.document_actif));
         }
-        let projet_actif = self.famille_plane_active.is_none();
+        let projet_actif = !self.mode_famille();
         if projet_actif {
             self.clavier_dessin(&ctx);
             self.clavier_transformation(&ctx);

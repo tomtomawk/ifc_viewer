@@ -198,7 +198,7 @@ impl ViewerApp {
             // commande de Modifier : repérage et distance tapée depuis son point de départ
             let base = self.dessin2d.edition_contour.as_ref().and_then(|e| e.commande.and(e.depart));
             self.dessin2d.point = self.dessin2d.curseur.map(|c| if base.is_some() { self.point_dessin_depuis(rect, c, maj, temps, base) } else { self.point_dessin(rect, c, maj, temps) });
-            if self.dessin2d.survol_accroche.is_some() || self.dessin2d.survol_segment.is_some() { ui.ctx().request_repaint_after(std::time::Duration::from_millis(100)); }
+            if self.dessin2d.reperage.survol_accroche.is_some() || self.dessin2d.reperage.survol_segment.is_some() { ui.ctx().request_repaint_after(std::time::Duration::from_millis(100)); }
             if let Some(commande) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.commande) {
                 if resp.clicked_by(PointerButton::Secondary) {
                     let e = self.dessin2d.edition_contour.as_mut().unwrap();
@@ -316,7 +316,7 @@ impl ViewerApp {
         let temps = ui.input(|i| i.time);
         self.dessin2d.point = self.dessin2d.curseur.map(|c| self.point_dessin(rect, c, maj, temps));
         self.survol_aretes_cote(ui, rect);
-        if self.dessin2d.survol_accroche.is_some() || self.dessin2d.survol_segment.is_some() { ui.ctx().request_repaint_after(std::time::Duration::from_millis(100)); }
+        if self.dessin2d.reperage.survol_accroche.is_some() || self.dessin2d.reperage.survol_segment.is_some() { ui.ctx().request_repaint_after(std::time::Duration::from_millis(100)); }
         // escalier : la longueur de la volée est magnétisée au pas de marche (giron)
         if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier) && self.dessin2d.saisie.is_empty() {
             let giron = self.giron_vise();
@@ -353,7 +353,7 @@ impl ViewerApp {
                 self.dessin2d.saisie.clear();
                 self.dessin2d.champ_angle = false;
                 { self.dessin2d.message = None; self.dessin2d.information = None; };
-                let formes = t.ajouter(p);
+                let formes = t.appliquer(crate::dessin::dao::EvenementTrace::Point(p));
                 self.enregistrer_formes(formes);
             }
         }
@@ -401,22 +401,20 @@ impl ViewerApp {
                 painter.rect_stroke(egui::Rect::from_center_size(q, egui::vec2(10.0, 10.0)), 0.0, egui::Stroke::new(2.0, Color32::from_rgb(200, 50, 45)), egui::StrokeKind::Middle);
             }
         }
-        for &(origine, direction) in &self.dessin2d.guides {
+        for &(origine, direction) in &self.dessin2d.reperage.guides {
             if let (Some(a), Some(b)) = (self.vers_ecran(rect, origine), self.vers_ecran(rect, origine + direction * 1000.0)) {
                 let d = (b - a).normalized();
                 painter.add(egui::Shape::dashed_line(&[a - d * 4000.0, a + d * 4000.0], egui::Stroke::new(1.0, vert), 6.0, 4.0));
             }
         }
-        if let Some(p) = self.dessin2d.reference.and_then(|p| self.vers_ecran(rect, p)) {
+        if let Some(p) = self.dessin2d.reperage.reference.and_then(|p| self.vers_ecran(rect, p)) {
             painter.circle_stroke(p, 5.0, egui::Stroke::new(1.5, vert));
         }
         if let Some((p, accroche)) = self.dessin2d.point {
             if let Some(e) = self.vers_ecran(rect, p) {
                 // réticule
                 if !self.selection_traces_active() {
-                    let gris = Color32::from_rgba_unmultiplied(60, 60, 60, 160);
-                    painter.line_segment([e - egui::vec2(28.0, 0.0), e + egui::vec2(28.0, 0.0)], egui::Stroke::new(1.0, gris));
-                    painter.line_segment([e - egui::vec2(0.0, 28.0), e + egui::vec2(0.0, 28.0)], egui::Stroke::new(1.0, gris));
+                    aides::reticule(&painter, e, 28.0);
                 }
                 // aperçu : ligne tracée, et volume pour un mur
                 let apercu = trace.apercu(p);
@@ -437,7 +435,7 @@ impl ViewerApp {
                     painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, bleu)));
                 }
                 // repérage polaire / ortho : ligne de construction en pointillés
-                if self.dessin2d.guides.is_empty() && let (Some(prec), Accroche::Polaire(_) | Accroche::Ortho) = (trace.precedent(), accroche) {
+                if self.dessin2d.reperage.guides.is_empty() && let (Some(prec), Accroche::Polaire(_) | Accroche::Ortho) = (trace.precedent(), accroche) {
                     if let Some(a) = self.vers_ecran(rect, prec) {
                         let dir = (e - a).normalized();
                         painter.add(egui::Shape::dashed_line(&[a - dir * 4000.0, a + dir * 4000.0], egui::Stroke::new(1.0, vert), 6.0, 4.0));

@@ -940,15 +940,8 @@ impl ViewerApp {
                                 });
                             }
                             F::Texte { point, texte } => {
-                                change |= ui.text_edit_singleline(texte).changed();
-                                ui.horizontal(|ui| {
-                                    ui.label("Position");
-                                    for x in point {
-                                        change |= ui
-                                            .add(egui::DragValue::new(x).speed(10.0).dimensions())
-                                            .changed();
-                                    }
-                                });
+                                change |= crate::ui::outils_texte::proprietes_texte(ui, texte, point, false, crate::ui::outils_texte::CHAMPS_PROJET);
+                                change |= crate::ui::outils_texte::hauteur_texte(ui, &mut annotation.hauteur);
                             }
                             F::Etiquette { point, .. } => {
                                 ui.horizontal(|ui| {

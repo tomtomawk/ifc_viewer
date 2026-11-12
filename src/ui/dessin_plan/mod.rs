@@ -7,6 +7,7 @@
 mod saisie;
 mod affichage;
 mod options;
+pub(super) use options::boutons_trace;
 mod escalier;
 mod cotation;
 mod cotes_aretes;
@@ -16,6 +17,56 @@ use crate::dessin::dao::{self as d2, Accroche, Geom, OutilDessin, Trace};
 use crate::modele::edition::commandes::Commande;
 use crate::modele::documentation::{Annotation, AnnotationForme};
 use glam::{DVec2, DVec3};
+
+/// Points manipulables d'une annotation, communs aux éditeurs graphiques.
+pub(super) fn points_forme_mut(forme: &mut AnnotationForme) -> Vec<&mut [f64; 2]> {
+    use crate::modele::documentation::PointCote;
+    match forme {
+        AnnotationForme::Texte { point, .. } | AnnotationForme::Etiquette { point, .. } => vec![point],
+        AnnotationForme::Ligne { debut, fin } => vec![debut, fin],
+        AnnotationForme::Polyligne { points, .. } | AnnotationForme::Spline { points, .. } | AnnotationForme::Zone { contour: points } => points.iter_mut().collect(),
+        AnnotationForme::Arc { points } => points.iter_mut().collect(),
+        AnnotationForme::Cercle { centre, .. } => vec![centre],
+        AnnotationForme::Cote { debut: PointCote::Fixe { point: a }, fin: PointCote::Fixe { point: b }, .. } => vec![a, b],
+        forme @ (AnnotationForme::CoteAngulaire { .. } | AnnotationForme::CoteDiametre { .. } | AnnotationForme::Altimetrie { .. }) => forme.points_mesure_mut(),
+        _ => Vec::new(),
+    }
+}
+
+/// Positions des poignées d'une annotation, y compris les points calculés.
+pub(super) fn poignees_forme(forme: &AnnotationForme) -> Vec<[f64; 2]> {
+    if let AnnotationForme::Cercle { centre, rayon } = forme {
+        return vec![*centre, [centre[0] + rayon, centre[1]]];
+    }
+    let mut copie = forme.clone();
+    points_forme_mut(&mut copie).into_iter().map(|p| *p).collect()
+}
+
+/// Déplace une poignée ; le point de rayon ne déplace pas le centre du cercle.
+pub(super) fn deplacer_poignee_forme(forme: &mut AnnotationForme, indice: usize, position: [f64; 2]) {
+    if let AnnotationForme::Cercle { centre, rayon } = forme && indice == 1 {
+        let r = DVec2::from_array(*centre).distance(DVec2::from_array(position));
+        if r.is_finite() && r > 1e-6 { *rayon = r; }
+    } else if let Some(point) = points_forme_mut(forme).into_iter().nth(indice) {
+        *point = position;
+    }
+}
+
+#[cfg(test)]
+mod tests_poignees_formes {
+    use super::*;
+    #[test]
+    fn cercle_deplace_centre_et_rayon_independamment() {
+        let mut forme = AnnotationForme::Cercle { centre: [10.0, 20.0], rayon: 5.0 };
+        assert_eq!(poignees_forme(&forme), vec![[10.0, 20.0], [15.0, 20.0]]);
+        deplacer_poignee_forme(&mut forme, 1, [10.0, 32.0]);
+        assert_eq!(forme, AnnotationForme::Cercle { centre: [10.0, 20.0], rayon: 12.0 });
+        deplacer_poignee_forme(&mut forme, 1, [10.0, 20.0]);
+        assert_eq!(forme, AnnotationForme::Cercle { centre: [10.0, 20.0], rayon: 12.0 });
+        deplacer_poignee_forme(&mut forme, 0, [30.0, 40.0]);
+        assert_eq!(forme, AnnotationForme::Cercle { centre: [30.0, 40.0], rayon: 12.0 });
+    }
+}
 
 /// État du dessin 2D : tracé en cours, saisie au clavier, point sous le curseur (brut
 /// et accroché), géométries d'accrochage de la vue (révision, vue).
@@ -63,11 +114,7 @@ pub(super) struct EtatDessin2D {
     curseur: Option<DVec2>,
     point: Option<(DVec2, Accroche)>,
     geoms: Option<(u64, String, Vec<Geom>)>,
-    survol_accroche: Option<(DVec2, f64)>,
-    survol_segment: Option<(DVec2, DVec2, f64, bool)>,
-    reference: Option<DVec2>,
-    directions_reference: Vec<DVec2>,
-    guides: Vec<(DVec2, DVec2)>,
+    reperage: super::reperage::Reperage,
     pub message: Option<String>,
     information: Option<String>,
     /// Contours fermés de l'élément horizontal en cours : parties et trémies, créés à la
@@ -985,7 +1032,7 @@ impl ViewerApp {
         let point=self.point_dessin_depuis(rect,c,maj,ui.input(|i|i.time),Some(fixe));
         self.dessin2d.curseur=Some(c);
         self.dessin2d.point=Some(point);
-        if self.dessin2d.survol_accroche.is_some() {ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));}
+        if self.dessin2d.reperage.survol_accroche.is_some() {ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));}
         Some(point.0.to_array())
     }
 
@@ -993,14 +1040,14 @@ impl ViewerApp {
         self.dessin2d.trace=None;
         self.dessin2d.point=None;
         self.dessin2d.geoms=None;
-        self.dessin2d.guides.clear();
-        self.dessin2d.reference=None;
-        self.dessin2d.directions_reference.clear();
-        self.dessin2d.survol_accroche=None;
+        self.dessin2d.reperage.guides.clear();
+        self.dessin2d.reperage.reference=None;
+        self.dessin2d.reperage.directions_reference.clear();
+        self.dessin2d.reperage.survol_accroche=None;
         self.dessin2d.saisie.clear();
     }
     pub(super) fn etat_accrochage(&self)->serde_json::Value {
-        serde_json::json!({"trace":self.dessin2d.trace.as_ref().map(|t|t.points.iter().map(|p|p.to_array()).collect::<Vec<_>>()),"reference":self.dessin2d.reference.map(|p|p.to_array()),"point":self.dessin2d.point.map(|(p,a)|serde_json::json!({"position":p.to_array(),"accroche":a.libelle()}))})
+        serde_json::json!({"trace":self.dessin2d.trace.as_ref().map(|t|t.points.iter().map(|p|p.to_array()).collect::<Vec<_>>()),"reference":self.dessin2d.reperage.reference.map(|p|p.to_array()),"point":self.dessin2d.point.map(|(p,a)|serde_json::json!({"position":p.to_array(),"accroche":a.libelle()}))})
     }
 
 }

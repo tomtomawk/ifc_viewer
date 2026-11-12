@@ -181,6 +181,13 @@ pub(super) fn icone_commande(p: &egui::Painter, r: egui::Rect, i: Icone, c: Colo
             p.add(egui::Shape::line(vec![pt(0.32, 0.42), pt(0.5, 0.58), pt(0.32, 0.74)], t));
         }
         Icone::Famille(cle) => {
+            let outil = match cle {
+                "ligne" => Some(Outil::Polyligne), "arc" => Some(Outil::Arc),
+                "spline" => Some(Outil::Spline), "cercle" => Some(Outil::Cercle),
+                "rectangle" => Some(Outil::Rectangle), "texte" => Some(Outil::Texte),
+                "etiquette" => Some(Outil::Etiquette), _ => None,
+            };
+            if let Some(outil) = outil { super::icones::icone(p, r, outil, c); return; }
             let cadre = |x: f32, y: f32, w: f32, h: f32| {
                 p.rect_stroke(egui::Rect::from_min_max(pt(x, y), pt(x + w, y + h)), 0.0, t, egui::StrokeKind::Inside);
             };

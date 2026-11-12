@@ -53,7 +53,7 @@ Le choix de catégorie est commun visuellement, mais les documents 2D et 3D cons
 
 **Proposition :** un `DocumentFamille` avec identité, catégorie, état modifié, historique, sélection, vues et document destinataire communs ; le contenu spécialisé reste un enum. Le rendu d'un profil et celui d'une porte peuvent rester différents. Partager ouverture, activation, fermeture, sauvegarde, chargement et historique avant de fusionner les outils de dessin.
 
-**Attention :** le sélecteur actuel est désactivé dès qu'une famille a été modifiée ou déjà chargée. La conversion de catégorie avec conservation du contenu reste un chantier distinct, à définir par couples de catégories. Ne pas réinitialiser silencieusement la famille pour simuler une conversion.
+**Évolution :** le sélecteur du document de famille commun conserve le contenu lorsqu’une famille non encore chargée change de catégorie ; une famille déjà chargée garde sa catégorie. Les anciens éditeurs spécialisés n’ont pas encore le même parcours. Ne pas réinitialiser silencieusement la famille.
 
 **Validation :** mêmes scénarios de fermeture avec modifications et d'annulation pour porte, composant, profil, cartouche et étiquette ; absence de doublons d'onglets ; projet destinataire inchangé.
 

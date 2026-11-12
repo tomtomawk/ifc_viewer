@@ -289,7 +289,7 @@ mod tests {
     #[test]
     fn famille_a_sa_propre_pile_et_ses_libelles() {
         use crate::modele::famille::modelee::{FamilleModelee, PlanRef, AxePlan, FORMAT_FAMILLE};
-        let a = FichierFamille { format: FORMAT_FAMILLE.into(), nom: "OF".into(), largeur: 1200.0, hauteur: 1350.0, famille: FamilleModelee::gabarit_fenetre() };
+        let a = FichierFamille { format: FORMAT_FAMILLE.into(), nom: "OF".into(), largeur: 1200.0, hauteur: 1350.0, profondeur: 300.0, famille: FamilleModelee::gabarit_fenetre() };
         let mut b = a.clone();
         b.famille.plans.push(PlanRef { nom: "Plan 9".into(), axe: AxePlan::X, position: 100.0, fixe: false, hote: None });
         let mut h: Historique<FichierFamille> = Historique::default();
@@ -299,6 +299,13 @@ mod tests {
         assert_eq!(retour, a);
         h.confirmer(&b, false).unwrap();
         assert_eq!(h.cible(true).unwrap(), b);
+        let mut plus_profond = b.clone();
+        plus_profond.profondeur = 750.0;
+        let mut profondeur: Historique<FichierFamille> = Historique::default();
+        profondeur.pousser(&b, &plus_profond).unwrap();
+        assert_eq!(profondeur.cible(false).unwrap().profondeur, 300.0);
+        profondeur.confirmer(&plus_profond, false).unwrap();
+        assert_eq!(profondeur.cible(true).unwrap().profondeur, 750.0);
     }
     #[test]
     fn sauvegarde_annulation_branche_et_documents_isoles() {

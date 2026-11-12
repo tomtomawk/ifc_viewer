@@ -44,6 +44,19 @@ fn formes_usage(usage: Usage) -> &'static [(OutilDessin, &'static str, &'static 
     }
 }
 
+/// Boutons de la barre de tracé, partagés par les vues de projet et de famille.
+pub(in crate::ui) fn boutons_trace(ui: &mut egui::Ui, selection: bool, commande: bool, outil: OutilDessin, formes: &[(OutilDessin, &'static str, &'static str)], raison: Option<&str>) -> (bool, Option<OutilDessin>) {
+    let selectionner = ui.add(egui::Button::selectable(selection && !commande, "Sélectionner"))
+        .on_hover_text("Interrompre le tracé et sélectionner ses traits et sommets (Échap).")
+        .clicked();
+    ui.separator();
+    let mut choix = None;
+    for &(forme, nom, aide) in formes {
+        if ui.add_enabled(raison.is_none(), egui::Button::selectable(!selection && outil == forme, nom)).on_hover_text(aide).on_disabled_hover_text(raison.unwrap_or("")).clicked() { choix = Some(forme); }
+    }
+    (selectionner, choix)
+}
+
 impl ViewerApp {
     pub(in crate::ui) fn reinitialiser_forme_cadrage(&mut self) {
         self.dessin2d.forme_cadrage=Some(OutilDessin::Rectangle);
@@ -80,15 +93,7 @@ impl ViewerApp {
         };
         let (mut choisir_selection, mut forme_choisie) = (false, None);
         ui.horizontal(|ui| {
-            choisir_selection = ui.add(egui::Button::selectable(selection && !commande, "Sélectionner"))
-                .on_hover_text("Interrompre le tracé et sélectionner ses traits et ses sommets (Échap). Sans trait sélectionné, Propriétés montre l'objet ; avec un trait, ce trait.")
-                .clicked();
-            ui.separator();
-            for &(forme, nom, aide) in formes_usage(usage) {
-                if ui.add_enabled(raison_forme.is_none(), egui::Button::selectable(!selection && outil == forme, nom)).on_hover_text(aide).on_disabled_hover_text(raison_forme.unwrap_or("")).clicked() {
-                    forme_choisie = Some(forme);
-                }
-            }
+            (choisir_selection, forme_choisie) = boutons_trace(ui, selection, commande, outil, formes_usage(usage), raison_forme);
             if let Some(n) = copies.as_mut() {
                 ui.separator();
                 ui.label("Copies");

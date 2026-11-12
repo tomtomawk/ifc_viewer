@@ -427,7 +427,24 @@ pub struct Trace {
     pub perimetre: bool,
 }
 
+/// Événements communs de saisie d'un tracé, indépendants de la vue et du document.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum EvenementTrace {
+    Point(DVec2),
+    Terminer,
+    Fermer,
+}
+
 impl Trace {
+    /// Applique un geste graphique et produit les formes terminées.
+    pub fn appliquer(&mut self, evenement: EvenementTrace) -> Vec<Forme2D> {
+        match evenement {
+            EvenementTrace::Point(p) => self.ajouter(p),
+            EvenementTrace::Terminer => self.terminer(),
+            EvenementTrace::Fermer => self.fermer(),
+        }
+    }
+
     pub fn new(outil: OutilDessin) -> Trace {
         Trace { outil, points: Vec::new(), angle: 0.0, perimetre:false }
     }

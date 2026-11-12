@@ -190,6 +190,7 @@ impl ViewerApp {
 
         let trace = if self.mode_famille() {
             self.cartouche_actif().is_some_and(|c| c.trace_en_cours())
+                || (self.famille_active && self.famille.as_ref().is_some_and(|ed| ed.trace_en_cours()))
         } else {
             self.trace_en_cours()
                 || self.dessin2d.edition_contour.is_some()
@@ -220,7 +221,7 @@ impl ViewerApp {
                     // touche maintenue : seules les commandes du soleil se répètent (U, I)
                     if let Some((c,_))=catalogue.iter().find(|(c,r)| matches!(r,Raccourci::Touche{key:k,modifiers:m} if key==k && modifiers.matches_exact(*m))&&(!focus||c.categorie=="Fichiers")&&(!*repeat||c.id.starts_with("soleil_"))) {
                         if (c.id != "selection_suivante" || tab_vue)
-                            && (c.categorie=="Fichiers"||(!focus&&!trace&&!self.vol.actif&&(self.scene.is_some()||c.id=="annuler"||c.id=="retablir"))) {
+                            && (c.categorie=="Fichiers"||(!focus&&!trace&&!self.vol.actif&&(self.scene.is_some()||self.mode_famille()||c.id=="annuler"||c.id=="retablir"))) {
                             actions.push(c.id);consommer.push(index);
                         }
                     }

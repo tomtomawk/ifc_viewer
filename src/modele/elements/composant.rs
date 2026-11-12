@@ -60,6 +60,9 @@ pub fn famille_table() -> FamilleModelee {
     };
     let pt = |h: &str, dh, v: &str, dv| PointEsquisse { h: face(h, dh), v: face(v, dv) };
     FamilleModelee {
+        categorie: crate::modele::famille::modelee::CategorieFamille::Composant,
+        section_profil: None,
+        elements_2d: Vec::new(),
         plans_construction: Vec::new(),
         parametres: Vec::new(),
         plans: vec![
@@ -84,7 +87,7 @@ pub fn famille_table() -> FamilleModelee {
             pied("Pied 4", (d, 0.0), (e, 0.0)),
         ],
         extrusions: Vec::new(),
-        symboles: vec![Symbole { vue: VueEsquisse::Plan, points: vec![pt(g, 0.0, i, 0.0), pt(d, 0.0, i, 0.0), pt(d, 0.0, e, 0.0), pt(g, 0.0, e, 0.0), pt(g, 0.0, i, 0.0)], arc: false, remplissage: None }],
+        symboles: vec![Symbole { vue: VueEsquisse::Plan, points: vec![pt(g, 0.0, i, 0.0), pt(d, 0.0, i, 0.0), pt(d, 0.0, e, 0.0), pt(g, 0.0, e, 0.0), pt(g, 0.0, i, 0.0)], arc: false, fermee: false, remplissage: None }],
         cotes_mesure: Vec::new(),
         couleur: [196, 160, 112],
         genre: crate::modele::GenreOuverture::Libre,
@@ -125,6 +128,26 @@ impl Composant {
             .map(|s| (s.materiau_nom, s.tris.into_iter().map(|tr| tr.map(|q| Self::placer(o, u, n, q))).collect()))
             .collect())
     }
+    /// Remplissages des annotations en plan, placés dans le projet.
+    pub fn remplissages_plan(&self, p: &Projet) -> Vec<(Vec<DVec3>, crate::modele::documentation::RemplissageContour)> {
+        use crate::modele::documentation::AnnotationForme;
+        let (Ok(t), Some((o, u, n))) = (self.type_(p), self.repere(p)) else { return Vec::new() };
+        t.modele.elements_2d.iter().filter(|e| e.vue == VueEsquisse::Plan).filter_map(|e| {
+            let AnnotationForme::Polyligne { points, fermee: true, remplissage: Some(remplissage), .. } = &e.forme else { return None };
+            Some((points.iter().map(|p| Self::placer(o, u, n, VueEsquisse::Plan.point(p[0], p[1], 0.0))).collect(), remplissage.clone()))
+        }).collect()
+    }
+
+    /// Textes du plan de la famille placés dans le projet (mm).
+    pub fn textes_plan(&self, p: &Projet) -> Vec<(DVec3, String, f64)> {
+        use crate::modele::documentation::AnnotationForme;
+        let (Ok(t), Some((o, u, n))) = (self.type_(p), self.repere(p)) else { return Vec::new() };
+        t.modele.elements_2d.iter().filter(|e| e.vue == VueEsquisse::Plan).filter_map(|e| {
+            let AnnotationForme::Texte { point, texte } = &e.forme else { return None };
+            Some((Self::placer(o, u, n, VueEsquisse::Plan.point(point[0], point[1], 0.0)), texte.clone(), e.hauteur))
+        }).collect()
+    }
+
     /// Symboles en plan de la famille, placés (mm, à l'altitude du niveau).
     pub fn symboles_plan(&self, p: &Projet) -> Vec<Vec<DVec3>> {
         let (Ok(t), Some((o, u, n))) = (self.type_(p), self.repere(p)) else { return Vec::new() };

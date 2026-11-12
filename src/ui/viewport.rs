@@ -133,7 +133,8 @@ impl ViewerApp {
         }
         // poignée du milieu (déplacer) et flèches d'inversion du mur sélectionné
         let poignee_milieu = self.poignee_axe.is_none() && !mode_trace && !edition_arc && self.poignee_milieu(ui, rect, &resp, &axe);
-        let mode_trace = mode_trace || self.poignee_axe.is_some() || edition_arc || poignee_milieu || self.glisse_milieu.is_some();
+        let poignee_annotation = self.suivre_poignee_annotation(ui, rect, &resp, mode_trace || edition_arc || poignee_milieu || self.poignee_axe.is_some());
+        let mode_trace = mode_trace || self.poignee_axe.is_some() || edition_arc || poignee_milieu || self.glisse_milieu.is_some() || poignee_annotation;
         // clic droit hors commande : répéter, annuler, sélection, visibilité, verrou, démolir
         if !mode_trace && self.ruban_edition.outil().is_none() && !self.afficher_masques {
             self.menu_contextuel(&resp);
@@ -450,6 +451,7 @@ impl ViewerApp {
         if largeur > 0 && hauteur > 0 && let Some(id) = self.renderer.as_mut().and_then(|r| r.paint(&params, largeur, hauteur)) {
             ui.painter().image(id, rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
         }
+        self.dessiner_poignees_annotation(ui, rect, mode_trace && !poignee_annotation);
         // confirmation d'enregistrement : 2,5 s en bas de la vue
         if let Some((texte, debut)) = &self.confirmation {
             let age = debut.elapsed().as_secs_f32();

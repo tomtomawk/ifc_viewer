@@ -1,6 +1,24 @@
 //! Fonctions d'aide de l'interface : icônes vectorielles, libellés, catégories IFC.
 use super::*;
 
+/// Réticule contrasté commun aux canevas de dessin.
+pub(super) fn reticule(p: &egui::Painter, q: egui::Pos2, rayon: f32) {
+    for (epaisseur, couleur) in [(3.0, Color32::BLACK), (1.0, Color32::WHITE)] {
+        let contour = egui::Stroke::new(epaisseur, couleur);
+        p.line_segment([q - egui::vec2(rayon, 0.0), q + egui::vec2(rayon, 0.0)], contour);
+        p.line_segment([q - egui::vec2(0.0, rayon), q + egui::vec2(0.0, rayon)], contour);
+    }
+}
+
+/// Remplace le curseur système par le même réticule contrasté dans les canevas 2D.
+pub(super) fn curseur_dessin(ui: &egui::Ui, resp: &egui::Response, actif: bool) {
+    if !actif || !resp.hovered() || ui.input(|i| i.pointer.middle_down()) { return; }
+    let Some(q) = resp.hover_pos() else { return };
+    ui.ctx().set_cursor_icon(egui::CursorIcon::None);
+    let p = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("reticule_canevas"))).with_clip_rect(resp.rect);
+    reticule(&p, q, 12.0);
+}
+
 pub(super) fn origine_consigne(rect: egui::Rect, bas_barre: f32) -> egui::Pos2 {
     rect.left_top() + egui::vec2(8.0, bas_barre.max(4.0) + 8.0)
 }

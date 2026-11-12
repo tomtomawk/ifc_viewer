@@ -62,8 +62,59 @@ impl ViewerApp {
     }
 }
 
-pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
+pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate::modele::Projet) {
+    if ed.famille.categorie == crate::modele::famille::modelee::CategorieFamille::Profil {
+        use crate::modele::famille::modelee::SectionProfil;
+        use crate::modele::documentation::AnnotationForme;
+        let section = match ed.selection {
+            SelectionFamille::Element2D(k) if ed.famille.elements_2d.get(k).is_some_and(|e| e.vue == VueEsquisse::Plan && matches!(&e.forme, AnnotationForme::Polyligne { fermee: true, .. })) => Some(SectionProfil::Element2d(k)),
+            SelectionFamille::Symbole(k) if ed.famille.symboles.get(k).is_some_and(|s| s.vue == VueEsquisse::Plan && !s.arc && s.fermee) => Some(SectionProfil::Symbole(k)),
+            _ => None,
+        };
+        if let Some(section) = section {
+            let choisie = ed.famille.section_profil == Some(section);
+            if ui.selectable_label(choisie, if choisie { "✓ Section du profil" } else { "Utiliser comme section du profil" }).clicked() {
+                ed.famille.section_profil = Some(section);
+            }
+            ui.separator();
+        }
+    }
     match ed.selection {
+        SelectionFamille::Element2D(k) if k < ed.famille.elements_2d.len() => {
+            use crate::modele::documentation::AnnotationForme;
+            use crate::modele::famille::modelee::CategorieFamille;
+            let champs = match ed.famille.categorie {
+                CategorieFamille::Cartouche => super::super::outils_texte::CHAMPS_FEUILLE,
+                CategorieFamille::EtiquettePiece => super::super::outils_texte::CHAMPS_PIECE,
+                _ => super::super::outils_texte::CHAMPS_PROJET,
+            };
+            let papier = matches!(ed.famille.categorie, CategorieFamille::Cartouche | CategorieFamille::EtiquettePiece);
+            let element = &mut ed.famille.elements_2d[k];
+            match &mut element.forme {
+                AnnotationForme::Texte { point, texte } => {
+                    super::super::outils_texte::proprietes_texte(ui, texte, point, papier, champs);
+                    super::super::outils_texte::hauteur_texte(ui, &mut element.hauteur);
+                }
+                AnnotationForme::Polyligne { fermee, remplissage, .. } => {
+                    if ui.checkbox(fermee, "Fermée").changed() && !*fermee { *remplissage = None; }
+                    if *fermee {
+                        ui.label("Remplissage");
+                        let texte = remplissage.as_ref().map_or("Aucun".to_string(), |r| r.libelle());
+                        if let Some(choix) = super::super::communes::choisir_remplissage_2d(ui, projet, &texte) { *remplissage = choix; }
+                    }
+                }
+                AnnotationForme::Cercle { rayon, .. } => {
+                    ui.horizontal(|ui| {
+                        ui.label("Rayon");
+                        let valeur = egui::DragValue::new(rayon).range(0.1..=f64::MAX);
+                        if papier { ui.add(valeur.speed(0.25).suffix(" mm")); }
+                        else { ui.add(valeur.speed(10.0).dimensions()); }
+                    });
+                }
+                _ => {}
+            }
+            return;
+        }
         SelectionFamille::Extrusion(k) if k < ed.famille.extrusions.len() => {
             extrusion_ui(ui, &mut ed.famille.extrusions[k], &ed.famille.plans, &ed.famille.parametres, k);
             let e = &ed.famille.extrusions[k];
@@ -401,17 +452,16 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
                     VueEsquisse::Elevation => "élévation",
                     VueEsquisse::Coupe => "coupe (éditeur seulement)",
                 };
-                let genre = if s.remplissage.is_some() { "Région" } else if s.arc { "Arc" } else { "Ligne" };
+                let genre = if s.arc { "Arc" } else if s.fermee { "Polyligne fermée" } else { "Polyligne" };
                 let texte = format!("{genre} {} · {vue}", k + 1);
                 if ui.selectable_label(ed.selection == SelectionFamille::Symbole(k), texte).clicked() {
                     ed.selection = SelectionFamille::Symbole(k);
                 }
-                if let Some(m) = s.remplissage {
-                    let mut choix = m;
-                    egui::ComboBox::from_id_salt(("remplissage", k)).width(80.0).selected_text(choix.nom()).show_ui(ui, |ui| {
-                        for x in [Remplissage::Plein, Remplissage::Hachure] { ui.selectable_value(&mut choix, x, x.nom()); }
+                if s.fermee {
+                    let texte = s.remplissage.as_ref().map_or("Aucun".to_string(), |r| r.libelle());
+                    ui.push_id(("remplissage_symbole", k), |ui| {
+                        if let Some(choix) = super::super::communes::choisir_remplissage_2d(ui, projet, &texte) { changer_remplissage = Some((k, choix)); }
                     });
-                    if choix != m { changer_remplissage = Some((k, choix)); }
                 }
                 if ui.small_button("−").on_hover_text("Supprimer le symbole").clicked() {
                     supprimer = Some(k);
@@ -419,7 +469,7 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille) {
             });
         }
         if let Some((k, m)) = changer_remplissage {
-            ed.famille.symboles[k].remplissage = Some(m);
+            ed.famille.symboles[k].remplissage = m;
         }
         if let Some(k) = supprimer {
             ed.erreur = ed.supprimer(&SelectionFamille::Symbole(k)).err();

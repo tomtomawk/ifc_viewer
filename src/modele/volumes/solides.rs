@@ -569,9 +569,38 @@ pub fn symboles_ouverture(p: &Projet, o: &Ouverture, vue: crate::modele::famille
         .collect()
 }
 
+/// Textes de la vue de famille, placés dans le repère du projet (mm).
+pub fn textes_ouverture(p: &Projet, o: &Ouverture, vue: crate::modele::famille::modelee::VueEsquisse) -> Vec<(DVec3, String, f64)> {
+    use crate::modele::documentation::AnnotationForme;
+    let Some(f) = famille_modelee(p, o) else { return Vec::new() };
+    let Ok((axe, _, niveau)) = hote_ouverture(p, o) else { return Vec::new() };
+    let Some(niveau) = p.niveau(&niveau) else { return Vec::new() };
+    let z = niveau.altitude + o.allege;
+    let (centre, u) = repere(&axe, o.abscisse);
+    let n = u.perp();
+    f.elements_2d.iter().filter(|e| e.vue == vue).filter_map(|e| {
+        let AnnotationForme::Texte { point, texte } = &e.forme else { return None };
+        Some((placer(o, centre, u, n, z, vue.point(point[0], point[1], 0.0)), texte.clone(), e.hauteur))
+    }).collect()
+}
+
+/// Remplissages des annotations de famille, transformés dans le projet.
+pub fn remplissages_ouverture(p: &Projet, o: &Ouverture, vue: crate::modele::famille::modelee::VueEsquisse) -> Vec<(Vec<DVec3>, crate::modele::documentation::RemplissageContour)> {
+    use crate::modele::documentation::AnnotationForme;
+    let Some(f) = famille_modelee(p, o) else { return Vec::new() };
+    let Ok((axe, _, niveau)) = hote_ouverture(p, o) else { return Vec::new() };
+    let Some(niveau) = p.niveau(&niveau) else { return Vec::new() };
+    let (centre, u) = repere(&axe, o.abscisse);
+    let n = u.perp(); let z = niveau.altitude + o.allege;
+    f.elements_2d.iter().filter(|e| e.vue == vue).filter_map(|e| {
+        let AnnotationForme::Polyligne { points, fermee: true, remplissage: Some(remplissage), .. } = &e.forme else { return None };
+        Some((points.iter().map(|p| placer(o, centre, u, n, z, vue.point(p[0], p[1], 0.0))).collect(), remplissage.clone()))
+    }).collect()
+}
+
 /// Régions 2D remplies de la famille de l'ouverture dans le projet (mm), placées comme
 /// ses symboles.
-pub fn regions_ouverture(p: &Projet, o: &Ouverture, vue: crate::modele::famille::modelee::VueEsquisse) -> Vec<(Vec<DVec3>, crate::modele::famille::modelee::Remplissage)> {
+pub fn regions_ouverture(p: &Projet, o: &Ouverture, vue: crate::modele::famille::modelee::VueEsquisse) -> Vec<(Vec<DVec3>, crate::modele::documentation::RemplissageContour)> {
     let Some(f) = famille_modelee(p, o) else { return Vec::new() };
     let Ok((axe, e, niveau)) = hote_ouverture(p, o) else { return Vec::new() };
     let Some(n0) = p.niveau(&niveau) else { return Vec::new() };

@@ -1,7 +1,7 @@
 //! Édition graphique du cartouche dans les vues de sa famille.
 use super::*;
-use crate::dessin::dao::{self, Forme2D, Geom, OutilDessin, Trace};
-use crate::modele::{Projet, documentation::{self as doc, AnnotationForme as F, FamilleCartouche, PointCote, TexteCartouche}};
+use crate::dessin::dao::{EvenementTrace, Forme2D, Geom, OutilDessin, Trace};
+use crate::modele::{Projet, documentation::{self as doc, AnnotationForme as F, FamilleCartouche, TexteCartouche}};
 use super::editeur_famille::{Cadre, NavigationFamille, VueFamille};
 use super::ruban::{Menu, Outil, RubanEdition};
 use glam::DVec2;
@@ -18,6 +18,9 @@ pub(super) struct EditionCartouche {
     navigation: [NavigationFamille; 3],
     ruban: RubanEdition,
     trace: Option<Trace>,
+    saisie_trace: super::saisie_trace::SaisieTrace,
+    reperage: super::reperage::Reperage,
+    erreur_saisie: Option<String>,
     points_cote: Vec<DVec2>,
     selection: Option<Element>,
     deplacement: Option<egui::Pos2>,
@@ -28,8 +31,8 @@ pub(super) struct EditionCartouche {
 impl Default for EditionCartouche {
     fn default() -> Self {
         Self {
-            vue: VueFamille::Elevation, navigation: Default::default(), ruban: Default::default(), trace: None,
-            points_cote: Vec::new(), selection: None, deplacement: None, poignee: None, rect: egui::Rect::NOTHING,
+            vue: VueFamille::Plan, navigation: Default::default(), ruban: Default::default(), trace: None,
+            saisie_trace: Default::default(), reperage: Default::default(), erreur_saisie: None, points_cote: Vec::new(), selection: None, deplacement: None, poignee: None, rect: egui::Rect::NOTHING,
         }
     }
 }
@@ -37,7 +40,7 @@ impl Default for EditionCartouche {
 impl EditionCartouche {
     pub(super) fn element_selectionne(&self) -> bool { self.selection.is_some() }
     fn nom_vue(vue: VueFamille) -> &'static str {
-        if vue == VueFamille::Elevation { "Face imprimée" } else { vue.nom() }
+        if vue == VueFamille::Plan { "Plan · face imprimée" } else { vue.nom() }
     }
 
     fn ouvrir_vue(&mut self, vue: VueFamille) {
@@ -55,6 +58,9 @@ impl EditionCartouche {
             Some(Outil::Zone) => Some(Trace::new(OutilDessin::Polyligne)),
             _ => outil.and_then(Outil::forme_dessin).map(Trace::new),
         };
+        self.saisie_trace.vider();
+        self.reperage = Default::default();
+        self.erreur_saisie = None;
         self.points_cote.clear();
         self.selection = None;
         self.deplacement = None;
@@ -69,8 +75,8 @@ impl EditionCartouche {
 
     pub(super) fn navigation_pilote(&mut self, commande: &str) -> Result<serde_json::Value, String> {
         match commande {
-            "elevation" | "face" => self.ouvrir_vue(VueFamille::Elevation),
-            "plan" => self.ouvrir_vue(VueFamille::Plan),
+            "elevation" => self.ouvrir_vue(VueFamille::Elevation),
+            "plan" | "face" => self.ouvrir_vue(VueFamille::Plan),
             "coupe" => self.ouvrir_vue(VueFamille::Coupe),
             "cadrer" => self.cadrer(),
             "" | "etat" => {},
@@ -110,28 +116,25 @@ impl EditionCartouche {
         self.ruban.afficher(ui, Menu::Cartouche, projet);
         let outil = self.ruban.outil();
         if outil != avant {
-            self.vue = VueFamille::Elevation;
+            self.vue = VueFamille::Plan;
             self.choisir_outil(outil);
         }
     }
 
-    pub(super) fn proprietes(&self, ui: &mut egui::Ui, f: &mut FamilleCartouche) {
+    pub(super) fn proprietes(&self, ui: &mut egui::Ui, p: &Projet, f: &mut FamilleCartouche) {
+        if let Some(Element::Forme(i)) = self.selection {
+            if let Some(F::Polyligne { fermee: true, remplissage, .. }) = f.formes.get_mut(i) {
+                ui.label("Remplissage");
+                let texte = remplissage.as_ref().map_or("Aucun".to_string(), |r| r.libelle());
+                if let Some(choix) = super::communes::choisir_remplissage_2d(ui, p, &texte) { *remplissage = choix; }
+            }
+            return;
+        }
         let Some(Element::Texte(i)) = self.selection else { return };
         let Some(texte) = f.textes.get_mut(i) else { return };
         ui.separator();
-        ui.label("Contenu");
-        ui.text_edit_singleline(&mut texte.contenu);
-        ui.horizontal(|ui| {
-            ui.label("Hauteur du texte");
-            ui.add(egui::DragValue::new(&mut texte.hauteur).range(0.5..=100.0).suffix(" mm"));
-        });
-        egui::ComboBox::from_id_salt("champ_cartouche").selected_text("Champ de la feuille").show_ui(ui, |ui| {
-            for (champ, nom) in [("{projet}", "Projet"), ("{feuille}", "Nom de la feuille"), ("{numero}", "Numéro"), ("{cartouche}", "Texte du cartouche"), ("{echelles}", "Échelles")] {
-                if ui.selectable_label(texte.contenu == champ, nom).clicked() {
-                    texte.contenu = champ.into();
-                }
-            }
-        });
+        super::outils_texte::proprietes_texte(ui, &mut texte.contenu, &mut texte.position, true, super::outils_texte::CHAMPS_FEUILLE);
+        super::outils_texte::hauteur_texte(ui, &mut texte.hauteur);
     }
 
     pub(super) fn supprimer(&mut self, f: &mut FamilleCartouche) {
@@ -145,35 +148,49 @@ impl EditionCartouche {
         self.poignee = None;
     }
 
-    pub(super) fn canevas(&mut self, ui: &mut egui::Ui, p: &Projet, f: &mut FamilleCartouche) -> egui::Rect {
-        let face = self.vue == VueFamille::Elevation;
-        let outil_actif = self.ruban.outil();
+    pub(super) fn canevas(&mut self, ui: &mut egui::Ui, p: &Projet, f: &mut FamilleCartouche, delai_accrochage: f64) -> egui::Rect {
+        let face = self.vue == VueFamille::Plan;
+        let mut outil_actif = self.ruban.outil();
         let invite = match outil_actif {
             Some(Outil::Zone) => "Cliquer les sommets · Entrée pour fermer la zone",
             Some(o) if o.genre_cote().is_some() => o.genre_cote().unwrap().invite(self.points_cote.len()),
             Some(Outil::Texte) => "Cliquer pour placer le texte",
             Some(Outil::Etiquette) => "Cliquer pour placer le libellé · choisir son champ dans Propriétés",
             _ => self.trace.as_ref().map_or(
-                if face { "Cliquer pour sélectionner · glisser pour déplacer · Suppr pour retirer" } else { "Vue de chant · ouvrir Face imprimée pour dessiner" },
+                if face { "Cliquer pour sélectionner · glisser pour déplacer · Suppr pour retirer" } else { "Vue de chant · ouvrir le plan pour dessiner" },
                 Trace::invite,
             ),
         };
         let (rect, r) = ui.allocate_exact_size(ui.available_size().max(egui::vec2(1.0, 1.0)), Sense::click_and_drag());
         self.rect = rect;
+        if face && outil_actif == Some(Outil::Polyligne) {
+            let mut selectionner = false;
+            egui::Area::new(egui::Id::unique("barre_polyligne_cartouche"))
+                .fixed_pos(rect.left_top() + egui::vec2(8.0, 8.0)).constrain_to(rect)
+                .show(ui.ctx(), |ui| egui::Frame::popup(ui.style()).show(ui, |ui| ui.horizontal(|ui| {
+                    let formes = [(OutilDessin::Polyligne, "Polyligne", "Cliquer les sommets ; Entrée ou clic droit pour terminer, F pour fermer.")];
+                    (selectionner, _) = super::dessin_plan::boutons_trace(ui, false, false, OutilDessin::Polyligne, &formes, None);
+                })));
+            if selectionner {
+                if let Some(trace) = &mut self.trace {
+                    f.formes.extend(trace.appliquer(EvenementTrace::Terminer).iter().map(F::depuis_forme_2d));
+                }
+                self.choisir_outil(None);
+                outil_actif = None;
+            }
+        }
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 0.0, ui.visuals().panel_fill);
         let (largeur, hauteur) = (f.largeur.max(1.0), f.hauteur.max(1.0));
         let (l, h) = match self.vue {
-            VueFamille::Elevation => (largeur, hauteur),
-            VueFamille::Plan => (largeur, 0.0),
+            VueFamille::Elevation => (largeur, 0.0),
+            VueFamille::Plan => (largeur, hauteur),
             VueFamille::Coupe => (0.0, hauteur),
         };
         let base = Cadre { centre: rect.center(), milieu: (l / 2.0, h / 2.0),
             echelle: 0.8 * (rect.width() as f64 / l.max(1.0)).min(rect.height() as f64 / h.max(1.0)) };
         let nav = &mut self.navigation[self.vue as usize];
-        if face && outil_actif.is_some() && r.hovered() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
-        }
+        aides::curseur_dessin(ui, &r, face && outil_actif.is_some());
         nav.souris(ui, &r, &base, true, outil_actif.is_some());
         let cadre = nav.cadre(&base);
         if !face {
@@ -193,21 +210,44 @@ impl EditionCartouche {
             let (x, y) = cadre.modele(q);
             let pt = DVec2::new(x, y);
             if outil_actif.is_none() { return pt; }
-            if pt.length() * cadre.echelle <= 6.0 { return DVec2::ZERO; }
-            let geoms = geoms(f);
-            dao::accrocher(pt, 7.0 / cadre.echelle, &geoms, self.trace.as_ref().and_then(Trace::precedent)).map_or(pt, |(p, _)| p)
+            let mut geometries = geoms(f);
+            if let Some(trace) = &self.trace {
+                geometries.extend(trace.points.windows(2).map(|w| Geom::Segment([w[0], w[1]])));
+                if let [p] = trace.points.as_slice() { geometries.push(Geom::Segment([*p, *p])); }
+            }
+            geometries.push(Geom::Segment([DVec2::ZERO, DVec2::ZERO]));
+            self.reperage.calculer(pt, 7.0 / cadre.echelle, &geometries, self.trace.as_ref().and_then(Trace::precedent),
+                ui.input(|i| i.modifiers.shift), ui.input(|i| i.time), delai_accrochage, 0.0, self.trace.is_some()).map_or(pt, |(p, _)| p)
         });
+        if outil_actif.is_some() && r.hovered() {
+            self.reperage.peindre(&painter, |p| cadre.ecran(p.x, p.y));
+            if self.reperage.survol_accroche.is_some() || self.reperage.survol_segment.is_some() {
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
+            }
+        }
         let clavier = !ui.ctx().egui_wants_keyboard_input();
         if clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
-            self.choisir_outil(None);
+            if self.saisie_trace.texte.is_empty() { self.choisir_outil(None); } else { self.saisie_trace.vider(); self.erreur_saisie = None; }
         } else if let Some(outil) = outil_actif {
+            let valider_saisie = self.trace.is_some() && self.saisie_trace.clavier(ui.ctx(), self.trace.as_ref().and_then(Trace::precedent).is_some());
+            if let Some(erreur) = &self.erreur_saisie { aides::annotation_vue(ui, rect, 58.0, erreur, true); }
+            if !self.saisie_trace.texte.is_empty() {
+                aides::annotation_vue(ui, rect, 32.0, &format!("Point : {} · Entrée pour valider · Tab pour l'angle", self.saisie_trace.texte), false);
+            }
             let fermer = clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F));
-            let terminer = r.secondary_clicked() || (clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)));
+            let terminer = r.secondary_clicked() || (clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter) || i.consume_key(egui::Modifiers::NONE, egui::Key::Space)));
             if let Some(trace) = &mut self.trace {
-                let formes = if fermer || (terminer && outil == Outil::Zone) { trace.fermer() }
-                    else if terminer { trace.terminer() }
-                    else if r.clicked() { curseur.map_or_else(Vec::new, |q| trace.ajouter(q)) }
-                    else { Vec::new() };
+                let evenement = if valider_saisie || (r.clicked() && !self.saisie_trace.texte.is_empty()) {
+                    let vise = curseur.map(|q| super::saisie_trace::apercu_point(&self.saisie_trace.texte, trace.precedent(), q, 1.0).map_or(q, |(p, _)| p));
+                    match self.saisie_trace.point(trace.precedent(), vise, 1.0) {
+                        Ok(p) => { self.erreur_saisie = None; Some(EvenementTrace::Point(p)) },
+                        Err(e) => { self.erreur_saisie = Some(e); None }
+                    }
+                } else if fermer || (terminer && outil == Outil::Zone) { Some(EvenementTrace::Fermer) }
+                    else if terminer { Some(EvenementTrace::Terminer) }
+                    else if r.clicked() { curseur.map(EvenementTrace::Point) }
+                    else { None };
+                let formes = evenement.map_or_else(Vec::new, |e| trace.appliquer(e));
                 for forme in formes {
                     match (outil, &forme) {
                         (Outil::Zone, Forme2D::Polyligne { points, fermee: true }) =>
@@ -245,7 +285,7 @@ impl EditionCartouche {
             let origine = ui.input(|i| i.pointer.press_origin());
             self.poignee = self.selection.and_then(|id| {
                 let q = origine?;
-                points_modifiables(f, id).iter().position(|p| cadre.ecran(p[0], p[1]).distance(q) < 7.0)
+                positions_poignees(f, id).iter().position(|p| cadre.ecran(p[0], p[1]).distance(q) < 7.0)
             });
             if self.poignee.is_none() { self.selection = origine.and_then(hit); }
             self.deplacement = self.selection.and(origine);
@@ -257,7 +297,12 @@ impl EditionCartouche {
             let d = b - a;
             let d = DVec2::new(d.x as f64, -d.y as f64) / cadre.echelle;
             if let Some(i) = self.poignee {
-                if let Some(p) = points_modifiables(f, id).into_iter().nth(i) { *p = (DVec2::from_array(*p) + d).to_array(); }
+                if let Some(p) = positions_poignees(f, id).get(i).copied() {
+                    let cible = (DVec2::from_array(p) + d).to_array();
+                    if let Element::Forme(k) = id {
+                        if let Some(forme) = f.formes.get_mut(k) { super::dessin_plan::deplacer_poignee_forme(forme, i, cible); }
+                    } else if let Some(point) = points_modifiables(f, id).into_iter().nth(i) { *point = cible; }
+                }
             } else {
                 for p in points_modifiables(f, id) { *p = (DVec2::from_array(*p) + d).to_array(); }
             }
@@ -270,7 +315,7 @@ impl EditionCartouche {
             peindre(&painter, &cadre, dessin, (self.selection == Some(id)).then_some(bleu));
         }
         if let Some(id) = self.selection {
-            for p in points_modifiables(f, id) {
+            for p in positions_poignees(f, id) {
                 let poignee = egui::Rect::from_center_size(cadre.ecran(p[0], p[1]), egui::Vec2::splat(7.0));
                 painter.rect_filled(poignee, 1.0, Color32::WHITE);
                 painter.rect_stroke(poignee, 1.0, egui::Stroke::new(1.2, bleu), egui::StrokeKind::Inside);
@@ -279,7 +324,12 @@ impl EditionCartouche {
         if let Some(q) = curseur {
             let ecran = |p: DVec2| cadre.ecran(p.x, p.y);
             if let Some(trace) = &self.trace {
-                for ligne in trace.apercu(q) {
+                let (point, angle) = super::saisie_trace::apercu_point(&self.saisie_trace.texte, trace.precedent(), q, 1.0).unwrap_or((q, None));
+                if angle.is_some() && let Some(debut) = trace.precedent() {
+                    painter.add(egui::Shape::dashed_line(&[ecran(debut), ecran(point)], egui::Stroke::new(1.0, bleu), 6.0, 4.0));
+                }
+                if point != q { painter.circle_stroke(ecran(point), 5.0, egui::Stroke::new(1.2, bleu)); }
+                for ligne in trace.apercu(point) {
                     painter.add(egui::Shape::line(ligne.into_iter().map(ecran).collect(), egui::Stroke::new(1.0, bleu)));
                 }
             } else if let Some(genre) = outil_actif.and_then(Outil::genre_cote) {
@@ -319,7 +369,7 @@ fn rendus(p: &Projet, f: &FamilleCartouche) -> Vec<(Element, feuilles::Rendu)> {
     v
 }
 
-fn peindre(painter: &egui::Painter, cadre: &Cadre, dessin: feuilles::Rendu, selection: Option<Color32>) {
+pub(super) fn peindre(painter: &egui::Painter, cadre: &Cadre, dessin: feuilles::Rendu, selection: Option<Color32>) {
     let ecran = |q: egui::Pos2| cadre.ecran(q.x as f64, q.y as f64);
     let mut mesh = egui::Mesh::default();
     for (t, c) in dessin.tris {
@@ -348,25 +398,52 @@ fn touche(dessin: &feuilles::Rendu, cadre: &Cadre, q: egui::Pos2) -> bool {
     })
 }
 
+fn positions_poignees(f: &mut FamilleCartouche, id: Element) -> Vec<[f64; 2]> {
+    if let Element::Forme(i) = id {
+        return f.formes.get(i).map(super::dessin_plan::poignees_forme).unwrap_or_default();
+    }
+    points_modifiables(f, id).into_iter().map(|p| *p).collect()
+}
+
 fn points_modifiables(f: &mut FamilleCartouche, id: Element) -> Vec<&mut [f64; 2]> {
     match id {
         Element::Trait(i) => f.traits.get_mut(i).into_iter().flatten().collect(),
         Element::Texte(i) => f.textes.get_mut(i).map(|t| &mut t.position).into_iter().collect(),
-        Element::Forme(i) => match f.formes.get_mut(i) {
-            Some(F::Ligne { debut, fin }) => vec![debut, fin],
-            Some(F::Polyligne { points, .. } | F::Spline { points, .. } | F::Zone { contour: points }) => points.iter_mut().collect(),
-            Some(F::Arc { points }) => points.iter_mut().collect(),
-            Some(F::Cercle { centre, .. }) => vec![centre],
-            Some(F::Cote { debut: PointCote::Fixe { point: a }, fin: PointCote::Fixe { point: b }, .. }) => vec![a, b],
-            Some(forme @ (F::CoteAngulaire { .. } | F::CoteDiametre { .. } | F::Altimetrie { .. })) => forme.points_mesure_mut(),
-            _ => Vec::new(),
-        },
+        Element::Forme(i) => f.formes.get_mut(i).map(super::dessin_plan::points_forme_mut).unwrap_or_default(),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn glisser_la_poignee_du_cercle_modifie_son_rayon() {
+        let ctx = egui::Context::default();
+        let projet = Projet::default();
+        let mut edition = EditionCartouche::default();
+        edition.selection = Some(Element::Forme(0));
+        let mut famille = FamilleCartouche { formes: vec![F::Cercle { centre: [90.0, 20.0], rayon: 10.0 }], ..Default::default() };
+        let surface = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(600.0, 400.0));
+        let mut trame = |events| {
+            let mut sortie = ctx.run_ui(egui::RawInput { screen_rect: Some(surface), events, ..Default::default() }, |ui| {
+                edition.canevas(ui, &projet, &mut famille, 0.8);
+            });
+            sortie.textures_delta.clear();
+        };
+        trame(Vec::new());
+        let echelle = 0.8 * 600.0 / 180.0;
+        let depart = egui::pos2(300.0 + 10.0 * echelle, 200.0);
+        let arrivee = egui::pos2(300.0 + 20.0 * echelle, 200.0);
+        let clic = |pos, pressed| egui::Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
+        trame(vec![egui::Event::PointerMoved(depart), clic(depart, true)]);
+        trame(vec![egui::Event::PointerMoved(arrivee)]);
+        trame(vec![clic(arrivee, false)]);
+        drop(trame);
+        let F::Cercle { centre, rayon } = famille.formes[0] else { panic!("cercle attendu") };
+        assert_eq!(centre, [90.0, 20.0]);
+        assert!((rayon - 20.0).abs() < 0.01, "rayon : {rayon}");
+    }
 
     #[test]
     fn glisser_un_trait_puis_la_vue_garde_le_canevas_actif() {
@@ -384,7 +461,7 @@ mod tests {
         {
             let mut trame = |events| {
                 let mut sortie = ctx.run_ui(egui::RawInput { screen_rect: Some(surface), events, ..Default::default() }, |ui| {
-                    rect = edition.canevas(ui, &projet, &mut famille);
+                    rect = edition.canevas(ui, &projet, &mut famille, 0.8);
                 });
                 sortie.textures_delta.clear();
                 rect
@@ -408,7 +485,7 @@ mod tests {
         assert!(ax > 20.0 && ay > 20.0);
         assert!((bx - ax - 140.0).abs() < 1e-9 && (by - ay).abs() < 1e-9);
         let base = Cadre { centre: rect.center(), milieu: (90.0, 20.0), echelle: 0.8 * rect.width() as f64 / 180.0 };
-        let decalage = edition.navigation[0].cadre(&base).ecran(90.0, 20.0) - base.centre;
+        let decalage = edition.navigation[edition.vue as usize].cadre(&base).ecran(90.0, 20.0) - base.centre;
         assert!((decalage - egui::vec2(40.0, 30.0)).length() < 0.01, "{decalage:?}");
     }
 }

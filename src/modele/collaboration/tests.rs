@@ -648,6 +648,7 @@ fn propagation_famille_valide_instances_et_transporte_tout_le_resultat() {
         nom: "Porte partagée".into(),
         largeur: 900.0,
         hauteur: 2150.0,
+        profondeur: 200.0,
         famille: FamilleModelee::gabarit_porte(),
     };
     let (p, type_id) = p

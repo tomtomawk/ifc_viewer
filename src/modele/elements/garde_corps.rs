@@ -442,6 +442,7 @@ mod tests {
             origine: None,
         });
         p.profils.push(Profil {
+            document_famille: None,
             id: "section".into(),
             nom: "Triangle".into(),
             parametres: vec![],

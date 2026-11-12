@@ -251,9 +251,12 @@ pub struct Symbole {
     pub points: Vec<PointEsquisse>,
     #[serde(default)]
     pub arc: bool,
+    /// Polyligne fermée ; son remplissage reste facultatif.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fermee: bool,
     /// Région 2D : contour fermé rempli (plein ou hachuré) ; None : simple trait.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub remplissage: Option<Remplissage>,
+    pub remplissage: Option<crate::modele::documentation::RemplissageContour>,
 }
 
 /// Cote de mesure d'une vue de l'éditeur de familles.
@@ -263,22 +266,6 @@ pub struct CoteMesure {
     /// Méthode de cotation commune (angle, diamètre, altimétrie).
     pub genre: crate::modele::documentation::GenreCote,
     pub points: Vec<PointEsquisse>,
-}
-
-/// Remplissage d'une région 2D de famille.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum Remplissage {
-    /// Aplat gris.
-    Plein,
-    /// Hachures à 45°.
-    Hachure,
-}
-
-impl Remplissage {
-    pub fn nom(self) -> &'static str {
-        match self { Self::Plein => "Plein", Self::Hachure => "Hachuré" }
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -402,9 +389,35 @@ fn menuiserie() -> Materiau {
     Materiau::Menuiserie
 }
 
-/// Famille modélisée d'ouverture.
+/// Catégorie d'utilisation d'un document de famille unique.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CategorieFamille { Composant, Porte, Fenetre, Profil, Cartouche, EtiquettePiece }
+
+/// Élément graphique associé à une vue de la famille ; les textes et leurs
+/// dimensions utilisent les mêmes formes que les annotations du projet.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct Element2DFamille {
+    pub vue: VueEsquisse,
+    pub forme: crate::modele::documentation::AnnotationForme,
+    /// Hauteur de texte sur le papier en millimètres.
+    pub hauteur: f64,
+}
+
+/// Contour de la vue en plan utilisé comme section d'un profil.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(tag = "source", content = "indice", rename_all = "snake_case")]
+pub enum SectionProfil { Element2d(usize), Symbole(usize) }
+
+/// Famille commune aux catégories modélisées et documentaires.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct FamilleModelee {
+    pub categorie: CategorieFamille,
+    /// Section explicitement choisie ; sans choix, un contour fermé unique est utilisé.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section_profil: Option<SectionProfil>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub elements_2d: Vec<Element2DFamille>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plans_construction: Vec<PlanConstruction>,
     pub parametres: Vec<Parametre>,
@@ -610,6 +623,15 @@ impl Systeme {
 }
 
 impl FamilleModelee {
+    /// Famille vide avec des plans d'origine utilisables dans toutes les vues.
+    pub fn vide(categorie: CategorieFamille) -> Self {
+        let genre = match categorie { CategorieFamille::Porte => crate::modele::GenreOuverture::Porte, CategorieFamille::Fenetre => crate::modele::GenreOuverture::Fenetre, _ => crate::modele::GenreOuverture::Libre };
+        let plan = |nom: &str, axe| PlanRef { nom: nom.into(), axe, position: 0.0, fixe: true, hote: None };
+        Self { categorie, section_profil: None, elements_2d: Vec::new(), plans_construction: Vec::new(), parametres: Vec::new(),
+            plans: vec![plan("Origine X", AxePlan::X), plan("Origine Y", AxePlan::Y), plan("Origine Z", AxePlan::Z)],
+            contraintes: Vec::new(), volumes: Vec::new(), extrusions: Vec::new(), symboles: Vec::new(), cotes_mesure: Vec::new(), couleur: couleur_defaut(), genre }
+    }
+
     pub fn plan(&self, nom: &str) -> Option<&PlanRef> {
         self.plans.iter().find(|p| p.nom == nom)
     }
@@ -809,35 +831,60 @@ impl FamilleModelee {
         out
     }
 
+    /// Résout le contour explicitement désigné pour la section du profil.
+    pub fn section_resolue(&self, r: &Resolution, section: SectionProfil) -> Result<Vec<[f64; 2]>, String> {
+        use crate::modele::documentation::AnnotationForme;
+        let points = match section {
+            SectionProfil::Element2d(i) => {
+                let e = self.elements_2d.get(i).ok_or("Section de profil introuvable.")?;
+                match &e.forme {
+                    AnnotationForme::Polyligne { points, fermee: true, .. } if e.vue == VueEsquisse::Plan => points.clone(),
+                    _ => return Err("La section doit être une polyligne fermée en plan.".into()),
+                }
+            }
+            SectionProfil::Symbole(i) => {
+                let symbole = self.symboles.get(i).ok_or("Section de profil introuvable.")?;
+                if symbole.vue != VueEsquisse::Plan || symbole.arc || !symbole.fermee { return Err("La section doit être une polyligne fermée en plan.".into()); }
+                symbole.points.iter().map(|p| { let (x, y) = self.point_esquisse(r, p); [x, y] }).collect()
+            }
+        };
+        super::profil::contour_simple(&points)?;
+        Ok(points)
+    }
+
+    /// Contenu graphique d'une vue, dans son repère local. Les symboles
+    /// paramétriques sont résolus avant d'être présentés comme annotations.
+    pub fn elements_2d_resolus(&self, r: &Resolution, vue: VueEsquisse) -> Vec<Element2DFamille> {
+        use crate::modele::documentation::AnnotationForme;
+        let mut elements: Vec<_> = self.elements_2d.iter().filter(|e| e.vue == vue).cloned().collect();
+        for symbole in self.symboles.iter().filter(|s| s.vue == vue) {
+            let points: Vec<[f64; 2]> = symbole.points.iter().map(|p| { let (h,v) = self.point_esquisse(r,p); [h,v] }).collect();
+            let forme = if symbole.arc && points.len() == 3 {
+                AnnotationForme::Arc { points: [points[0], points[1], points[2]] }
+            } else {
+                let remplissage = symbole.remplissage.clone();
+                AnnotationForme::Polyligne { points, fermee: symbole.fermee, remplissage, traits: Vec::new() }
+            };
+            elements.push(Element2DFamille { vue, forme, hauteur: 2.5 });
+        }
+        elements
+    }
+
     /// Symboles de la vue `vue` résolus en polylignes (h, v) ; un arc est discrétisé.
     pub fn symboles_resolus(&self, r: &Resolution, vue: VueEsquisse) -> Vec<Vec<(f64, f64)>> {
-        self.symboles
-            .iter()
-            .filter(|s| s.vue == vue)
-            .map(|s| {
-                let pts: Vec<(f64, f64)> = s.points.iter().map(|p| self.point_esquisse(r, p)).collect();
-                if s.arc && pts.len() == 3 {
-                    let v = |p: (f64, f64)| glam::DVec2::new(p.0, p.1);
-                    if let Some((o, rayon, depart, balayage)) = crate::dessin::dao::arc_3_points(v(pts[0]), v(pts[1]), v(pts[2])) {
-                        return crate::dessin::dao::points_arc(o, rayon, depart, balayage).into_iter().map(|p| (p.x, p.y)).collect();
-                    }
-                }
-                // région : contour fermé
-                let mut pts = pts;
-                if s.remplissage.is_some() && pts.len() >= 3 {
-                    pts.push(pts[0]);
-                }
-                pts
-            })
+        self.elements_2d_resolus(r, vue).into_iter()
+            .filter_map(|e| e.forme.forme_2d())
+            .flat_map(|f| f.polylignes())
+            .map(|ligne| ligne.into_iter().map(|p| (p.x, p.y)).collect())
             .collect()
     }
 
     /// Régions 2D remplies de la vue `vue` : contour fermé (h, v) et remplissage.
-    pub fn regions_resolues(&self, r: &Resolution, vue: VueEsquisse) -> Vec<(Vec<(f64, f64)>, Remplissage)> {
+    pub fn regions_resolues(&self, r: &Resolution, vue: VueEsquisse) -> Vec<(Vec<(f64, f64)>, crate::modele::documentation::RemplissageContour)> {
         self.symboles
             .iter()
             .filter(|s| s.vue == vue && s.points.len() >= 3)
-            .filter_map(|s| Some((s.points.iter().map(|p| self.point_esquisse(r, p)).collect(), s.remplissage?)))
+            .filter_map(|s| Some((s.points.iter().map(|p| self.point_esquisse(r, p)).collect(), s.remplissage.clone()?)))
             .collect()
     }
 
@@ -858,6 +905,17 @@ impl FamilleModelee {
     /// Contrôle avant enregistrement : noms uniques, références existantes, formules
     /// calculables, volumes non plats.
     pub fn valider(&self, largeur: f64, hauteur: f64, epaisseur: f64) -> Result<(), String> {
+        if let Some(section) = self.section_profil {
+            use crate::modele::documentation::AnnotationForme;
+            let valide = match section {
+                SectionProfil::Element2d(i) => self.elements_2d.get(i).is_some_and(|e| e.vue == VueEsquisse::Plan && matches!(&e.forme, AnnotationForme::Polyligne { fermee: true, .. })),
+                SectionProfil::Symbole(i) => self.symboles.get(i).is_some_and(|s| s.vue == VueEsquisse::Plan && !s.arc && s.fermee),
+            };
+            if !valide { return Err("Section de profil absente ou non fermée en plan.".into()); }
+        }
+        for element in &self.elements_2d {
+            if !element.hauteur.is_finite() || element.hauteur <= 0.0 { return Err("Hauteur d'élément 2D invalide.".into()); }
+        }
         let mut constructions = std::collections::HashSet::new();
         let mut identites_construction = std::collections::HashSet::new();
         for plan in &self.plans_construction {
@@ -911,7 +969,7 @@ impl FamilleModelee {
         }
         for (i, s) in self.symboles.iter().enumerate() {
             let (ah, av, _) = s.vue.axes();
-            if s.points.len() < 2 || (s.arc && s.points.len() != 3) || !s.points.iter().all(|p| self.plan(&p.h.plan).is_some_and(|x| x.axe == ah) && self.plan(&p.v.plan).is_some_and(|x| x.axe == av)) {
+            if s.points.len() < 2 || (s.fermee && s.points.len() < 3) || (s.remplissage.is_some() && !s.fermee) || (s.arc && (s.points.len() != 3 || s.fermee)) || !s.points.iter().all(|p| self.plan(&p.h.plan).is_some_and(|x| x.axe == ah) && self.plan(&p.v.plan).is_some_and(|x| x.axe == av)) {
                 return Err(format!("Symbole {} : points sur des plans absents.", i + 1));
             }
         }
@@ -925,6 +983,7 @@ impl FamilleModelee {
         if let Some(e) = r.erreurs.first() {
             return Err(e.clone());
         }
+        if let Some(section) = self.section_profil { self.section_resolue(&r, section)?; }
         for b in self.boites(&r) {
             if (b.max - b.min).min_element() < 0.1 {
                 return Err(format!("{} : volume plat.", self.volumes[b.indice].nom));
@@ -965,6 +1024,9 @@ impl FamilleModelee {
             materiau_parametre: None,
         };
         FamilleModelee {
+            categorie: CategorieFamille::Fenetre,
+            section_profil: None,
+            elements_2d: Vec::new(),
             plans_construction: Vec::new(),
             parametres: vec![
                 Parametre { nom: "Dormant".into(), formule: "60".into(), portee: Portee::Type, genre: GenreParametre::Longueur },
@@ -1030,7 +1092,7 @@ impl FamilleModelee {
             symboles: vec![Symbole {
                 vue: VueEsquisse::Elevation,
                 points: vec![point("Dormant droit", 0.0, "Dormant bas", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)],
-                arc: false, remplissage: None
+                arc: false, fermee: false, remplissage: None
             }],
             cotes_mesure: Vec::new(),
             couleur: couleur_defaut(),
@@ -1042,7 +1104,13 @@ impl FamilleModelee {
     pub fn gabarit(genre: crate::modele::GenreOuverture) -> FamilleModelee {
         match genre {
             crate::modele::GenreOuverture::Porte => Self::gabarit_porte(),
-            _ => Self::gabarit_fenetre(),
+            crate::modele::GenreOuverture::Fenetre => Self::gabarit_fenetre(),
+            crate::modele::GenreOuverture::Libre => {
+                let mut famille = Self::gabarit_fenetre();
+                famille.genre = genre;
+                famille.categorie = CategorieFamille::Composant;
+                famille
+            },
         }
     }
 
@@ -1066,6 +1134,9 @@ impl FamilleModelee {
         };
         let param = |nom: &str, formule: &str| Parametre { nom: nom.into(), formule: formule.into(), portee: Portee::Type, genre: GenreParametre::Longueur };
         FamilleModelee {
+            categorie: CategorieFamille::Porte,
+            section_profil: None,
+            elements_2d: Vec::new(),
             plans_construction: Vec::new(),
             parametres: vec![
                 param("Dormant", "60"),
@@ -1117,9 +1188,9 @@ impl FamilleModelee {
             extrusions: Vec::new(),
             symboles: vec![
                 // vantail ouvert à 90° vers l'intérieur et arc de débattement
-                Symbole { vue: VueEsquisse::Plan, points: vec![point("Dormant gauche", 0.0, "Cadre int", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], arc: false, remplissage: None },
-                Symbole { vue: VueEsquisse::Plan, points: vec![point("Dormant droit", 0.0, "Cadre int", 0.0), point("Arc x", 0.0, "Arc y", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], arc: true, remplissage: None },
-                Symbole { vue: VueEsquisse::Elevation, points: vec![point("Dormant droit", 0.0, "Bas", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)], arc: false, remplissage: None },
+                Symbole { vue: VueEsquisse::Plan, points: vec![point("Dormant gauche", 0.0, "Cadre int", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], arc: false, fermee: false, remplissage: None },
+                Symbole { vue: VueEsquisse::Plan, points: vec![point("Dormant droit", 0.0, "Cadre int", 0.0), point("Arc x", 0.0, "Arc y", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], arc: true, fermee: false, remplissage: None },
+                Symbole { vue: VueEsquisse::Elevation, points: vec![point("Dormant droit", 0.0, "Bas", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)], arc: false, fermee: false, remplissage: None },
             ],
             cotes_mesure: Vec::new(),
             couleur: [190, 160, 120],
@@ -1136,10 +1207,12 @@ pub struct FichierFamille {
     pub nom: String,
     pub largeur: f64,
     pub hauteur: f64,
+    /// Profondeur du composant ou épaisseur d'essai de l'hôte, en mm.
+    pub profondeur: f64,
     pub famille: FamilleModelee,
 }
 
-pub const FORMAT_FAMILLE: &str = "famille-ouverture 2";
+pub const FORMAT_FAMILLE: &str = "famille-ouverture 3";
 
 impl FichierFamille {
     pub fn json(&self) -> Result<String, String> {
@@ -1152,10 +1225,10 @@ impl FichierFamille {
         if f.format != FORMAT_FAMILLE {
             return Err(format!("Format de famille inconnu : « {} ».", f.format));
         }
-        if !(f.largeur > 0.0 && f.hauteur > 0.0 && f.largeur.is_finite() && f.hauteur.is_finite()) {
+        if !(f.largeur > 0.0 && f.hauteur > 0.0 && f.profondeur > 0.0 && f.largeur.is_finite() && f.hauteur.is_finite() && f.profondeur.is_finite()) {
             return Err("Cotes du type non valides.".into());
         }
-        f.famille.valider(f.largeur, f.hauteur, 300.0)?;
+        f.famille.valider(f.largeur, f.hauteur, f.profondeur)?;
         Ok(f)
     }
 }
@@ -1166,9 +1239,15 @@ mod tests {
 
     #[test]
     fn fichier_famille_aller_retour() {
-        let f = FichierFamille { format: FORMAT_FAMILLE.into(), nom: "Porte 90".into(), largeur: 900.0, hauteur: 2150.0, famille: FamilleModelee::gabarit_porte() };
+        let f = FichierFamille { format: FORMAT_FAMILLE.into(), nom: "Porte 90".into(), largeur: 900.0, hauteur: 2150.0, profondeur: 200.0, famille: FamilleModelee::gabarit_porte() };
         let relu = FichierFamille::lire(&f.json().unwrap()).unwrap();
         assert_eq!(relu, f);
+        let mut invalide = serde_json::to_value(&f).unwrap();
+        invalide["profondeur"] = serde_json::json!(-1.0);
+        assert!(FichierFamille::lire(&invalide.to_string()).is_err());
+        invalide.as_object_mut().unwrap().remove("profondeur");
+        assert!(FichierFamille::lire(&invalide.to_string()).is_err());
+        assert!(FichierFamille::lire(&f.json().unwrap().replace(FORMAT_FAMILLE, "famille-ouverture 2")).is_err());
         assert!(FichierFamille::lire(&f.json().unwrap().replace(FORMAT_FAMILLE, "autre")).is_err());
         assert!(FichierFamille::lire("{}").is_err());
     }

@@ -6,7 +6,8 @@ pub const NOM_CARTOUCHE_STANDARD: &str = "Cartouche standard";
 
 impl Default for FamilleCartouche {
     fn default() -> Self {
-        Self {
+        let mut cartouche = Self {
+            document_famille: None,
             id: crate::modele::collaboration::uuid(),
             nom: NOM_CARTOUCHE_STANDARD.into(), largeur: TAILLE_CARTOUCHE_STANDARD[0], hauteur: TAILLE_CARTOUCHE_STANDARD[1],
             traits: vec![[[0.0,0.0],[180.0,0.0]], [[180.0,0.0],[180.0,40.0]], [[180.0,40.0],[0.0,40.0]], [[0.0,40.0],[0.0,0.0]], [[140.0,0.0],[140.0,40.0]], [[0.0,14.0],[140.0,14.0]], [[0.0,30.0],[140.0,30.0]]],
@@ -18,7 +19,13 @@ impl Default for FamilleCartouche {
                 TexteCartouche { contenu: "{numero}".into(), position: [144.0,15.0], hauteur: 9.0 },
             ],
             formes: Vec::new(),
-        }
+        };
+        use crate::modele::famille::modelee::{CategorieFamille, Element2DFamille, FamilleModelee, FichierFamille, VueEsquisse, FORMAT_FAMILLE};
+        let mut famille = FamilleModelee::vide(CategorieFamille::Cartouche);
+        famille.elements_2d.extend(cartouche.traits.iter().map(|t| Element2DFamille { vue: VueEsquisse::Plan, forme: AnnotationForme::Ligne { debut: t[0], fin: t[1] }, hauteur: 2.5 }));
+        famille.elements_2d.extend(cartouche.textes.iter().map(|t| Element2DFamille { vue: VueEsquisse::Plan, forme: AnnotationForme::Texte { point: t.position, texte: t.contenu.clone() }, hauteur: t.hauteur }));
+        cartouche.document_famille = Some(Box::new(FichierFamille { format: FORMAT_FAMILLE.into(), nom: cartouche.nom.clone(), largeur: cartouche.largeur, hauteur: cartouche.hauteur, profondeur: 300.0, famille }));
+        cartouche
     }
 }
 
@@ -107,13 +114,14 @@ pub fn cadre_feuille(p: &Projet, f: &Feuille) -> Vec<Primitive> {
             &standard
         };
         let origine = pt_papier(x0, y0);
-        v.extend(famille.formes.iter().flat_map(|forme| forme_cartouche(p, forme)).map(|pr| pr.translater(origine)));
-        v.extend(famille.traits.iter().map(|t| trait_cartouche(*t).translater(origine)));
+        let (formes, textes) = famille.document_famille.as_ref().map_or_else(|| (famille.formes.clone(), famille.textes.clone()), |f| super::contenu_plan_famille(f, p));
+        v.extend(formes.iter().flat_map(|forme| forme_cartouche(p, forme)).map(|pr| pr.translater(origine)));
+        if famille.document_famille.is_none() { v.extend(famille.traits.iter().map(|t| trait_cartouche(*t).translater(origine))); }
         let mut echelles: Vec<String> = f.vues.iter().map(|x| format!("1:{}", x.echelle_sur_feuille(p))).collect();
         echelles.dedup();
         let ech = if echelles.is_empty() { String::new() } else { format!("Échelle {}", echelles.join(", ")) };
-        for t in &famille.textes {
-            let contenu = t.contenu.replace("{projet}", &p.nom).replace("{feuille}", &f.nom).replace("{numero}", &f.numero).replace("{cartouche}", &f.cartouche).replace("{echelles}", &ech);
+        for t in &textes {
+            let contenu = super::remplir_champs(&t.contenu, &[("{projet}", &p.nom), ("{feuille}", &f.nom), ("{numero}", &f.numero), ("{cartouche}", &f.cartouche), ("{echelles}", &ech)]);
             if !contenu.is_empty() {
                 v.push(texte_cartouche(t, &contenu).translater(origine));
             }

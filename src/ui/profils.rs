@@ -6,6 +6,10 @@ use super::familles_planes::FamillePlane;
 
 impl ViewerApp {
     pub(super) fn ouvrir_profil(&mut self, id: Option<&str>) {
+        if let Some((fichier, id)) = id.and_then(|id| self.natif.as_ref()?.0.profils.iter().find(|p| p.id == id)).and_then(|p| p.document_famille.as_ref().map(|f| ((**f).clone(), p.id.clone()))) {
+            self.ouvrir_famille_document_projet(fichier, Some(id));
+            return;
+        }
         let projet_vide = crate::modele::Projet::nouveau("Famille");
         let projet = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
         let profil = if let Some(id) = id {
@@ -17,6 +21,11 @@ impl ViewerApp {
             p.nom = (1..).map(|n| format!("Profil {n}")).find(|nom| !projet.profils.iter().any(|x| x.nom.eq_ignore_ascii_case(nom))).unwrap();
             p
         };
+        if let Some(mut document) = profil.document_famille.clone() {
+            document.nom = profil.nom.clone();
+            self.ouvrir_famille_document_projet(*document, id.map(str::to_string));
+            return;
+        }
         self.ouvrir_famille_plane(FamillePlane::Profil { profil, original: id.map(str::to_string) });
     }
 
@@ -24,7 +33,15 @@ impl ViewerApp {
         let Some(chemin) = rfd::FileDialog::new().add_filter("Profil BIMedit", &["json"]).pick_file() else { return };
         let resultat = std::fs::read_to_string(&chemin).map_err(|e| e.to_string()).and_then(|s| FichierProfil::lire(&s));
         match resultat {
-            Ok(mut profil) => { profil.id.clear(); self.ouvrir_famille_plane(FamillePlane::Profil { profil, original: None }); }
+            Ok(mut profil) => {
+                profil.id.clear();
+                if let Some(mut document) = profil.document_famille.take() {
+                    document.nom = profil.nom;
+                    self.ouvrir_famille_document_projet(*document, None);
+                } else {
+                    self.ouvrir_famille_plane(FamillePlane::Profil { profil, original: None });
+                }
+            }
             Err(e) => self.error = Some(e),
         }
     }

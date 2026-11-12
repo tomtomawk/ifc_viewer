@@ -374,7 +374,7 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
             // même méthode de cote que les vues ; pas d'altimétrie sur le papier
             ("Cotes et textes", &[Cote, CoteAngulaire, CoteDiametre, Texte, Etiquette]),
             DESSIN_2D,
-            ("Papier", &[Rectangle, Zone]),
+            ("Papier", &[Rectangle]),
         ],
     }
 }

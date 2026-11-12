@@ -124,6 +124,7 @@ impl ViewerApp {
 
     /// Ferme les autres vues sans fermer les documents ni perdre leurs modifications.
     pub(super) fn garder_derniere_vue_par_document(&mut self) {
+        self.garder_derniere_vue_familles();
         for d in self.documents.values_mut() {
             if let Some(&derniere) = d.vues.last() {
                 d.vues.retain(|&vue| vue == derniere);
@@ -144,6 +145,8 @@ impl ViewerApp {
     pub(super) fn onglets_vues(&mut self, ui: &mut egui::Ui) {
         /// Identifiant de l'onglet de l'éditeur de familles (hors des documents).
         const ONGLET_FAMILLE: usize = usize::MAX;
+        const ONGLET_FAMILLE_PLANE: usize = usize::MAX - 4;
+        let est_famille = |id: usize| id >= ONGLET_FAMILLE_PLANE;
         let mut onglets = Vec::new();
         let mut titres = BTreeMap::new();
         let mut ajouter = |id: usize, scene: Option<&Scene>, rvt: Option<&RvtInfo>, vues: &[Option<usize>], modifie: bool| {
@@ -163,15 +166,30 @@ impl ViewerApp {
         }
         ajouter(self.document_actif, self.scene.as_ref(), self.rvt.as_ref(), &self.vues_ouvertes, self.natif_modifie);
         onglets.sort_by_key(|o| o.0);
-        // éditeur de familles : un onglet à part, après les vues
-        // éditeur de familles : un onglet par famille ouverte (rang dans `vue`)
+        // Une famille modélisée possède un onglet pour chaque vue ouverte.
         for (ordre, t, _) in self.onglets_familles() {
-            titres.insert(ONGLET_FAMILLE, "Éditeur de familles".into());
-            onglets.push((ONGLET_FAMILLE, Some(ordre), format!("Famille {t}"), format!("Éditeur de familles — {t}")));
+            if let Some(vues) = self.vues_onglet_famille(ordre) {
+                for (vue, nom, _) in vues {
+                    let id = ONGLET_FAMILLE - vue;
+                    titres.insert(id, format!("Famille — {t}"));
+                    onglets.push((id, Some(ordre), nom.to_owned(), format!("{t} — {nom}")));
+                }
+            } else {
+                titres.insert(ONGLET_FAMILLE_PLANE, "Éditeur de familles".into());
+                onglets.push((ONGLET_FAMILLE_PLANE, Some(ordre), format!("Famille {t}"), format!("Éditeur de familles — {t}")));
+            }
         }
         let famille_active = self.mode_famille();
         let ordre_actif = self.ordre_famille();
-        let est_actif = |id: usize, vue: Option<usize>, doc: usize, active: Option<usize>| if id == ONGLET_FAMILLE { famille_active && vue == ordre_actif } else { !famille_active && id == doc && vue == active };
+        let vue_famille_active = ordre_actif.and_then(|ordre| self.vues_onglet_famille(ordre))
+            .and_then(|vues| vues.into_iter().find(|v| v.2).map(|v| v.0));
+        let est_actif = |id: usize, vue: Option<usize>, doc: usize, active: Option<usize>| {
+            if est_famille(id) {
+                famille_active && vue == ordre_actif && (id == ONGLET_FAMILLE_PLANE || vue_famille_active == Some(ONGLET_FAMILLE - id))
+            } else { !famille_active && id == doc && vue == active }
+        };
+        let groupe = |id: usize, vue: Option<usize>| if est_famille(id) { (true, vue.unwrap_or(0)) } else { (false, id) };
+        let teinte = |id: usize, vue: Option<usize>| couleur_document(if est_famille(id) { vue.unwrap_or(0) } else { id });
         let mut activer = None;
         let mut fermer = None;
         // Les sélecteurs disposent de leurs propres emplacements, indépendants des onglets.
@@ -184,7 +202,7 @@ impl ViewerApp {
             egui::pos2(barre.right() - marge - fleche - bouton_fermeture, barre.top() + 2.0),
             egui::vec2(24.0, 22.0),
         );
-        let plusieurs_vues = self.vues_ouvertes.len() > 1 || self.documents.values().any(|d| d.vues.len() > 1);
+        let plusieurs_vues = self.vues_ouvertes.len() > 1 || self.documents.values().any(|d| d.vues.len() > 1) || self.plusieurs_vues_famille();
         let fermeture = ui.put(rect_fermeture, egui::Button::new("").min_size(rect_fermeture.size()).sense(
             if plusieurs_vues { Sense::click() } else { Sense::hover() },
         )).on_hover_text("Fermer les autres onglets : garder la dernière vue ouverte de chaque document");
@@ -204,14 +222,14 @@ impl ViewerApp {
                 let (reponse, _) = egui::containers::menu::MenuButton::from_button(bouton).ui(ui, |ui| {
                 let mut precedent = None;
                 for (id, vue, nom, infobulle) in &onglets {
-                    if precedent != Some(*id) {
+                    if precedent != Some(groupe(*id, *vue)) {
                         if precedent.is_some() {
                             ui.separator();
                         }
-                        ui.label(RichText::new(&titres[id]).strong().color(couleur_document(*id)));
-                        precedent = Some(*id);
+                        ui.label(RichText::new(&titres[id]).strong().color(teinte(*id, *vue)));
+                        precedent = Some(groupe(*id, *vue));
                     }
-                    if ui.selectable_label(est_actif(*id, *vue, self.document_actif, self.vue_active), RichText::new(nom).color(couleur_document(*id))).on_hover_text(infobulle).clicked() {
+                    if ui.selectable_label(est_actif(*id, *vue, self.document_actif, self.vue_active), RichText::new(nom).color(teinte(*id, *vue))).on_hover_text(infobulle).clicked() {
                         activer = Some((*id, *vue));
                         ui.close();
                     }
@@ -228,7 +246,7 @@ impl ViewerApp {
         for (k, (id, vue, nom, infobulle)) in onglets.iter().skip(debut).take(nombre).enumerate() {
                         let x = barre.left() + marge + fleche + 6.0 + k as f32 * largeur;
                         let rect = egui::Rect::from_min_size(egui::pos2(x, barre.top() + 2.0), egui::vec2((largeur - 6.0).max(1.0), 22.0));
-                        let couleur = couleur_document(*id);
+                        let couleur = teinte(*id, *vue);
                         let actif = est_actif(*id, *vue, self.document_actif, self.vue_active);
                         let diluer = |c: u8| ((c as u16 + 255 * if actif { 3 } else { 5 }) / if actif { 4 } else { 6 }) as u8;
                         let fond = Color32::from_rgb(diluer(couleur.r()), diluer(couleur.g()), diluer(couleur.b()));
@@ -253,7 +271,7 @@ impl ViewerApp {
                         if reponse.clicked_by(PointerButton::Middle) || fermer_clic {
                             fermer = Some((*id, *vue));
                         }
-                        if k + 1 < nombre && onglets.get(debut + k + 1).is_some_and(|suivant| suivant.0 != *id) {
+                        if k + 1 < nombre && onglets.get(debut + k + 1).is_some_and(|suivant| groupe(suivant.0, suivant.1) != groupe(*id, *vue)) {
                             let x = rect.right() + 3.0;
                             ui.painter().line_segment([egui::pos2(x, rect.top() + 4.0), egui::pos2(x, rect.bottom() - 4.0)], egui::Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color));
                         }
@@ -262,11 +280,12 @@ impl ViewerApp {
             self.garder_derniere_vue_par_document();
         }
         if let Some((id, vue)) = activer {
-            if let (ONGLET_FAMILLE, Some(ordre)) = (id, vue) {
-                self.activer_famille(ordre);
+            if est_famille(id) && let Some(ordre) = vue {
+                if id == ONGLET_FAMILLE_PLANE { self.activer_famille(ordre); }
+                else { self.activer_vue_onglet_famille(ordre, ONGLET_FAMILLE - id); }
             }
         }
-        if let Some((id, vue)) = activer.filter(|o| o.0 != ONGLET_FAMILLE) {
+        if let Some((id, vue)) = activer.filter(|o| !est_famille(o.0)) {
             self.famille_active = false;
             self.famille_plane_active = None;
             self.changer_document(id);
@@ -277,10 +296,11 @@ impl ViewerApp {
                 self.restaurer_vue(None);
             }
         }
-        if let Some((ONGLET_FAMILLE, Some(ordre))) = fermer {
-            self.fermer_onglet_famille(ordre);
+        if let Some((id, Some(ordre))) = fermer.filter(|o| est_famille(o.0)) {
+            if id == ONGLET_FAMILLE_PLANE { self.fermer_onglet_famille(ordre); }
+            else { self.fermer_vue_onglet_famille(ordre, ONGLET_FAMILLE - id); }
         }
-        if let Some((id, cible)) = fermer.filter(|o| o.0 != ONGLET_FAMILLE) {
+        if let Some((id, cible)) = fermer.filter(|o| !est_famille(o.0)) {
             self.fermer_onglet_projet(id,cible);
         }
 

@@ -326,7 +326,7 @@ mod tests {
         // standard : aplat et deux lignes
         assert_eq!(primitives_pieces(&q, &vue).len(), 3);
         let t = |c: &str, y| TexteCartouche { contenu: c.into(), position: [0.0, y], hauteur: 2.0 };
-        q.familles_etiquettes.push(FamilleEtiquette { id: "e1".into(), nom: "Cadre".into(), traits: vec![[[-10.0, -5.0], [10.0, -5.0]], [[-10.0, 5.0], [10.0, 5.0]]], textes: vec![t("{nom}", 2.0), t("N° {numero}", -1.0), t("{perimetre} · {niveau}", -4.0)] });
+        q.familles_etiquettes.push(FamilleEtiquette { document_famille: None, formes: Vec::new(), id: "e1".into(), nom: "Cadre".into(), traits: vec![[[-10.0, -5.0], [10.0, -5.0]], [[-10.0, 5.0], [10.0, 5.0]]], textes: vec![t("{nom}", 2.0), t("N° {numero}", -1.0), t("{perimetre} · {niveau}", -4.0)] });
         q.pieces[0].etiquette = "e1".into();
         assert_eq!(primitives_pieces(&q, &vue).len(), 1 + 3 + 2);
         assert_eq!(FamilleEtiquette::remplir("N° {numero} — {surface}", &q, &q.pieces[0]), "N° 1 — 18.24 m²");

@@ -20,7 +20,7 @@ use canevas::*;
 mod formes;
 use super::*;
 use super::accrochage;
-use crate::modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Remplissage, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
+use crate::modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
 use crate::modele::famille::modelee::FichierFamille;
 use crate::modele::documentation::GenreCote;
 use crate::modele::GenreOuverture;
@@ -92,8 +92,11 @@ pub(super) enum OutilFamille {
     /// Symbole 2D : ligne brisée, ou arc par trois points.
     Ligne,
     Arc,
-    /// Région 2D : contour fermé rempli (plein ou hachuré).
-    Region,
+    Spline,
+    Cercle,
+    Rectangle,
+    Texte,
+    Libelle,
     /// Cotes de mesure (non pilotantes) : angle, diamètre, altimétrie.
     CoteAngle,
     CoteDiametre,
@@ -102,6 +105,10 @@ pub(super) enum OutilFamille {
 
 impl OutilFamille {
     fn est_revolution(self) -> bool { matches!(self, Self::Revolution | Self::RevolutionVide) }
+    fn outil_dessin(self) -> Option<crate::dessin::dao::OutilDessin> {
+        use crate::dessin::dao::OutilDessin as D;
+        match self { Self::Ligne => Some(D::Polyligne), Self::Arc => Some(D::Arc), Self::Spline => Some(D::Spline), Self::Cercle => Some(D::Cercle), Self::Rectangle => Some(D::Rectangle), _ => None }
+    }
     /// Genre de cote de mesure saisi par l'outil.
     fn cote_mesure(self) -> Option<GenreCote> {
         match self {
@@ -118,6 +125,7 @@ impl OutilFamille {
 enum Poignee {
     Sommet { extrusion: bool, k: usize, i: usize },
     Face { k: usize, axe: usize, max: bool },
+    Element2D { k: usize, i: usize },
 }
 
 #[derive(Clone, PartialEq)]
@@ -128,6 +136,7 @@ enum SelectionFamille {
     Contrainte(usize),
     Extrusion(usize),
     Symbole(usize),
+    Element2D(usize),
     CoteMesure(usize),
 }
 
@@ -141,10 +150,18 @@ pub(super) enum ActionFamille {
     Ouvrir,
 }
 
+struct DeplacementFamille {
+    selection: Vec<SelectionFamille>,
+    precedent: egui::Pos2,
+    avant: FamilleModelee,
+}
+
 pub(super) struct EditeurFamille {
     pub(super) document_famille: super::document_famille::DocumentFamille<FichierFamille>,
     /// Fenêtre d'où l'éditeur a été ouvert : elle prend le type enregistré.
     ouverture: Option<String>,
+    pub(super) cible_feuille: Option<String>,
+    pub(super) cible_piece: Option<String>,
     /// Type édité ; None : nouveau type.
     type_id: Option<String>,
     nom: String,
@@ -155,6 +172,8 @@ pub(super) struct EditeurFamille {
     vue: VueFamille,
     construction: Option<usize>,
     vue_3d: bool,
+    /// Vues ouvertes dans ce document : 0 élévation, 1 plan, 2 coupe, 3 trois dimensions.
+    vues_ouvertes: Vec<usize>,
     camera_3d: crate::rendu::camera::Camera,
     cadrage_3d_initial: bool,
     navigation: [NavigationFamille;3],
@@ -169,6 +188,9 @@ pub(super) struct EditeurFamille {
     deplace: Option<String>,
     /// Sommets de l'esquisse en cours (verrouillés et résolus).
     esquisse: Vec<(PointEsquisse, (f64, f64))>,
+    trace_polyligne: Option<crate::dessin::dao::Trace>,
+    saisie_trace: super::saisie_trace::SaisieTrace,
+    reperage: super::reperage::Reperage,
     axe_revolution: Option<[[f64; 2]; 2]>,
     /// Paramètres partagés du projet (copie modifiable ; seules les valeurs changées
     /// sont reportées à l'enregistrement).
@@ -180,11 +202,13 @@ pub(super) struct EditeurFamille {
     poignee: Option<Poignee>,
     /// État chargé dans le projet ou enregistré (nom, cotes, famille) : modifiée s'il
     /// diffère.
-    reference: (String, f64, f64, FamilleModelee),
+    reference: (String, f64, f64, f64, FamilleModelee),
     message: Option<String>,
     erreur: Option<String>,
     /// Cote dont la ligne est glissée.
     cote_deplacee: Option<usize>,
+    /// Annotations déplacées ensemble, avec le dernier point écran du geste.
+    deplacement_2d: Option<DeplacementFamille>,
     /// Autres éléments sélectionnés (Ctrl+clic, fenêtre) ; `selection` reste
     /// l'élément principal (panneau, poignées).
     multiple: Vec<SelectionFamille>,
@@ -282,11 +306,11 @@ impl EditeurFamille {
     }
 
     pub(super) fn contenu_modifie(&self) -> bool {
-        self.reference != (self.nom.clone(), self.largeur, self.hauteur, self.famille.clone())
+        self.reference != (self.nom.clone(), self.largeur, self.hauteur, self.epaisseur, self.famille.clone())
     }
 
     fn marquer_enregistree(&mut self) {
-        self.reference = (self.nom.clone(), self.largeur, self.hauteur, self.famille.clone());
+        self.reference = (self.nom.clone(), self.largeur, self.hauteur, self.epaisseur, self.famille.clone());
     }
 
     fn fichier(&self) -> FichierFamille {
@@ -300,6 +324,7 @@ impl EditeurFamille {
             nom: self.nom.clone(),
             largeur: self.largeur,
             hauteur: self.hauteur,
+            profondeur: self.epaisseur,
             famille: self.famille.clone(),
         }
     }
@@ -325,10 +350,10 @@ impl EditeurFamille {
 
     /// Annule ou rétablit `nombre` étapes de la famille.
     pub(super) fn parcourir_historique(&mut self, retablir: bool, nombre: usize) -> Result<(), String> {
+        self.abandonner_saisie();
         let actuel = self.etat();
         let cible = self.document_famille.cible(&actuel, retablir, nombre)?;
-        (self.nom, self.largeur, self.hauteur, self.famille) = (cible.nom.clone(), cible.largeur, cible.hauteur, cible.famille.clone());
-        self.abandonner_saisie();
+        (self.nom, self.largeur, self.hauteur, self.epaisseur, self.famille) = (cible.nom.clone(), cible.largeur, cible.hauteur, cible.profondeur, cible.famille.clone());
         let existe = match &self.selection {
             SelectionFamille::Aucune => true,
             SelectionFamille::Plan(n) => self.famille.plan(n).is_some(),
@@ -336,6 +361,7 @@ impl EditeurFamille {
             SelectionFamille::Contrainte(k) => *k < self.famille.contraintes.len(),
             SelectionFamille::Extrusion(k) => *k < self.famille.extrusions.len(),
             SelectionFamille::Symbole(k) => *k < self.famille.symboles.len(),
+            SelectionFamille::Element2D(k) => *k < self.famille.elements_2d.len(),
             SelectionFamille::CoteMesure(k) => *k < self.famille.cotes_mesure.len(),
         };
         if !existe {
@@ -371,7 +397,20 @@ impl EditeurFamille {
             SelectionFamille::Volume(k) if *k < f.volumes.len() => drop(f.volumes.remove(*k)),
             SelectionFamille::Contrainte(k) if *k < f.contraintes.len() => drop(f.contraintes.remove(*k)),
             SelectionFamille::Extrusion(k) if *k < f.extrusions.len() => drop(f.extrusions.remove(*k)),
-            SelectionFamille::Symbole(k) if *k < f.symboles.len() => drop(f.symboles.remove(*k)),
+            SelectionFamille::Symbole(k) if *k < f.symboles.len() => {
+                use crate::modele::famille::modelee::SectionProfil;
+                if let Some(SectionProfil::Symbole(i)) = f.section_profil {
+                    f.section_profil = if i == *k { None } else { Some(SectionProfil::Symbole(i - usize::from(i > *k))) };
+                }
+                f.symboles.remove(*k);
+            }
+            SelectionFamille::Element2D(k) if *k < f.elements_2d.len() => {
+                use crate::modele::famille::modelee::SectionProfil;
+                if let Some(SectionProfil::Element2d(i)) = f.section_profil {
+                    f.section_profil = if i == *k { None } else { Some(SectionProfil::Element2d(i - usize::from(i > *k))) };
+                }
+                f.elements_2d.remove(*k);
+            }
             SelectionFamille::CoteMesure(k) if *k < f.cotes_mesure.len() => drop(f.cotes_mesure.remove(*k)),
             _ => return Err("Élément introuvable.".into()),
         }
@@ -394,7 +433,7 @@ impl EditeurFamille {
             SelectionFamille::Volume(k) => (1, usize::MAX - k),
             SelectionFamille::Extrusion(k) => (2, usize::MAX - k),
             SelectionFamille::Symbole(k) => (3, usize::MAX - k),
-            SelectionFamille::CoteMesure(k) => (3, usize::MAX - k),
+            SelectionFamille::CoteMesure(k) | SelectionFamille::Element2D(k) => (3, usize::MAX - k),
             _ => (4, 0),
         };
         liste.sort_by_key(rang);
@@ -414,11 +453,15 @@ impl EditeurFamille {
     fn abandonner_saisie(&mut self) {
         self.axe_revolution = None;
         self.esquisse.clear();
+        self.trace_polyligne = None;
+        self.saisie_trace.vider();
+        self.reperage = Default::default();
         self.clics.clear();
         self.debut = None;
         self.deplace = None;
         self.poignee = None;
         self.cote_deplacee = None;
+        if let Some(geste) = self.deplacement_2d.take() { self.famille = geste.avant; }
         self.fenetre = None;
     }
 
@@ -463,10 +506,56 @@ impl EditeurFamille {
         self.multiple = liste;
     }
 
+    pub(super) fn trace_en_cours(&self) -> bool {
+        !self.esquisse.is_empty() || !self.clics.is_empty() || self.debut.is_some()
+            || !self.saisie_trace.texte.is_empty()
+    }
+
+    /// Translate des éléments de la vue sans déplacer leurs plans de référence.
+    /// La sélection est entièrement vérifiée avant toute modification.
+    fn translater_selection(&mut self, selection: &[SelectionFamille], dh: f64, dv: f64) -> Result<(), String> {
+        if !dh.is_finite() || !dv.is_finite() { return Err("Déplacement non fini.".into()); }
+        let vue = self.vue.esquisse();
+        let admissible = selection.iter().all(|s| match s {
+            SelectionFamille::Element2D(k) => self.famille.elements_2d.get(*k).is_some_and(|e| e.vue == vue && !crate::ui::dessin_plan::poignees_forme(&e.forme).is_empty()),
+            SelectionFamille::Symbole(k) => self.famille.symboles.get(*k).is_some_and(|s| s.vue == vue),
+            SelectionFamille::Extrusion(k) => self.famille.extrusions.get(*k).is_some_and(|e| e.vue == vue && e.construction.is_none() && matches!(e.operation, OperationForme::Extrusion)),
+            SelectionFamille::Volume(k) => *k < self.famille.volumes.len(),
+            _ => false,
+        });
+        if !admissible { return Err("Déplacement groupé impossible : retirer les plans, contraintes, formes guidées ou éléments d’une autre vue de la sélection.".into()); }
+        let (ah, av) = self.vue.axes();
+        for s in selection {
+            match *s {
+                SelectionFamille::Element2D(k) => for p in crate::ui::dessin_plan::points_forme_mut(&mut self.famille.elements_2d[k].forme) { p[0] += dh; p[1] += dv; },
+                SelectionFamille::Symbole(k) => for p in &mut self.famille.symboles[k].points { p.h.decalage += dh; p.v.decalage += dv; },
+                SelectionFamille::Extrusion(k) => for p in &mut self.famille.extrusions[k].profil { p.h.decalage += dh; p.v.decalage += dv; },
+                SelectionFamille::Volume(k) => {
+                    let volume = &mut self.famille.volumes[k];
+                    for faces in [&mut volume.min, &mut volume.max] { faces[ah as usize].decalage += dh; faces[av as usize].decalage += dv; }
+                }
+                _ => unreachable!(),
+            }
+        }
+        Ok(())
+    }
+
+    /// Termine le tracé 2D avec le moteur commun, puis conserve les références de plans.
+    fn terminer_polyligne(&mut self) {
+        use crate::dessin::dao::{EvenementTrace, Forme2D, OutilDessin, Trace};
+        let mut trace = self.trace_polyligne.take().unwrap_or_else(|| Trace::new(OutilDessin::Polyligne));
+        if let Some(Forme2D::Polyligne { fermee, .. }) = trace.appliquer(EvenementTrace::Terminer).into_iter().next() {
+            let points = std::mem::take(&mut self.esquisse).into_iter().map(|(p, _)| p).collect();
+            self.famille.symboles.push(Symbole { vue: self.vue.esquisse(), points, arc: false, fermee, remplissage: None });
+            self.selectionner(vec![SelectionFamille::Symbole(self.famille.symboles.len() - 1)]);
+        }
+    }
+
     /// Change d'outil ; la sélection reste l'outil par défaut.
     fn choisir_outil(&mut self, o: OutilFamille) {
         self.outil = if self.outil_disponible(o) { o } else { OutilFamille::Selection };
         self.abandonner_saisie();
+        if let Some(outil) = self.outil.outil_dessin() { self.trace_polyligne = Some(crate::dessin::dao::Trace::new(outil)); }
         if self.outil.est_revolution() { self.message = Some("Révolution : cliquer les deux points de l'axe, puis dessiner le profil fermé d'un seul côté de l'axe.".into()); }
         else if self.outil.est_forme() { self.message = Some("Dessiner le profil fermé. Clic droit ou retour au premier sommet pour terminer ; régler ensuite la forme dans Propriétés.".into()); }
     }
@@ -506,7 +595,16 @@ impl EditeurFamille {
         self.construction = None;
         self.vue_3d = false;
         self.vue = v;
+        let indice = v as usize;
+        if !self.vues_ouvertes.contains(&indice) { self.vues_ouvertes.push(indice); }
         self.choisir_outil(self.outil);
+    }
+
+    fn ouvrir_vue_3d(&mut self) {
+        self.vue_3d = true;
+        self.construction = None;
+        if !self.vues_ouvertes.contains(&3) { self.vues_ouvertes.push(3); }
+        self.choisir_outil(OutilFamille::Selection);
     }
 
     fn resoudre(&self) -> Resolution {
