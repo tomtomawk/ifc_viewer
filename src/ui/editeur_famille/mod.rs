@@ -107,11 +107,12 @@ pub(super) enum OutilFamille {
     Copier,
     Tourner,
     Symetrie,
+    Echelle,
 }
 
 impl OutilFamille {
     fn est_revolution(self) -> bool { matches!(self, Self::Revolution | Self::RevolutionVide) }
-    pub(super) fn est_transformation(self) -> bool { matches!(self, Self::Deplacer | Self::Copier | Self::Tourner | Self::Symetrie) }
+    pub(super) fn est_transformation(self) -> bool { matches!(self, Self::Deplacer | Self::Copier | Self::Tourner | Self::Symetrie | Self::Echelle) }
     fn outil_dessin(self) -> Option<crate::dessin::dao::OutilDessin> {
         use crate::dessin::dao::OutilDessin as D;
         match self { Self::Ligne => Some(D::Polyligne), Self::Arc => Some(D::Arc), Self::Spline => Some(D::Spline), Self::Cercle => Some(D::Cercle), Self::Rectangle => Some(D::Rectangle), _ => None }

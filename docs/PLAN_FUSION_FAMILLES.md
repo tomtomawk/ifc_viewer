@@ -81,17 +81,37 @@ Navigation des vues de famille : onglets par vue, double-clic molette et retrait
 ### Ajouts du 12/11/2026
 
 - **Ruban de famille compact.** L'onglet Créer affiche les outils en petites icônes, trois par colonne (`bandeau_compact`), comme les outils secondaires du ruban de projet. Les formes volumiques grisées du ruban des cartouches spécialisés utilisent la même présentation.
-- **Onglet Modifier des familles.** L'éditeur commun reçoit un onglet Modifier : Déplacer, Copier, Tourner, Symétrie (points cliqués avec l'accrochage de la vue, clic droit pour revenir d'un point) et Supprimer. Les outils sont inscrits au catalogue (`deplacer`, `copier`, `tourner`, `symetrie`), donc pilotables par `famille_outil` ; l'onglet par `ruban famille_modifier`. Déplacer et Copier acceptent éléments 2D, symboles, extrusions simples et volumes ; Tourner et Symétrie refusent les volumes rectangulaires (alignés sur leurs plans), les formes guidées et les éléments d'une autre vue, et raccrochent les sommets liés au plan le plus proche. Les éditeurs plans spécialisés n'ont pas cet onglet.
+- **Onglet Modifier des familles.** L'éditeur commun reçoit un onglet Modifier : Déplacer, Copier, Tourner, Symétrie (points cliqués avec l'accrochage de la vue, clic droit pour revenir d'un point) et Supprimer. Les outils sont inscrits au catalogue (`deplacer`, `copier`, `tourner`, `symetrie`), donc pilotables par `famille_outil` ; l'onglet par `ruban famille_modifier`. Déplacer et Copier acceptent éléments 2D, symboles, extrusions simples et volumes ; Tourner et Symétrie raccrochent les sommets liés au plan le plus proche ; leurs limites ont été réduites le 13/11/2026 (voir ci-dessous). Les éditeurs plans spécialisés n'ont pas cet onglet.
 - **Texte du projet.** L'outil Texte de Documenter reprend le parcours de la famille : un clic place le texte dans la vue native, il reste sélectionné et se règle dans Propriétés (contenu, champs, position, hauteur). L'ancien encart « points + Ajouter à la vue » ne sert plus qu'aux étiquettes et zones.
 - Aucun changement de format.
 
+### Ajouts du 13/11/2026
+
+- **Tourner, Symétrie et Échelle étendus.** Les révolutions suivent avec leur axe (une symétrie inverse le sens de balayage), les raccordements avec leur profil d'arrivée, les formes sur chemin avec la partie linéaire de la transformation appliquée au chemin ; la forme est revalidée avant d'être modifiée. Un volume rectangulaire accepte les quarts de tour et les axes de symétrie horizontaux ou verticaux, recalés à un demi-degré près ; ce recalage s'applique alors à toute la sélection.
+- **Limites conservées, liées au modèle.** Un volume rectangulaire est défini par six faces verrouillées chacune sur un plan de référence parallèle aux axes : il ne peut pas devenir oblique (utiliser une extrusion). Une forme esquissée dans une autre vue ou sur un plan oblique sortirait de son plan d'esquisse : la transformer depuis sa vue.
+- **Outil Échelle** (base, longueur de référence, nouvelle longueur), **aperçu en pointillés** de la sélection transformée avant le dernier clic, et **raccourcis du projet** MV, CO, RO, SY, EC dans l'éditeur commun (outil de sélection, hors saisie).
+- **Texte des cartouches et étiquettes à l'échelle** dans l'éditeur commun : la hauteur en millimètres de papier suit le zoom. Les autres catégories n'ont pas d'échelle de vue dans l'éditeur ; leur taille reste approchée.
+- Aucun changement de format.
+
+### `Symbole` et élément 2D : deux représentations à réunir
+
+| | `Symbole` (`symboles`) | Élément 2D (`elements_2d`) |
+| --- | --- | --- |
+| Formes | Polyligne (ouverte, fermée, remplie) ou arc par trois points | Toutes les formes d'annotation du projet : polyligne, arc, cercle, spline, texte, libellé |
+| Sommets | Liés aux plans de référence (plan + décalage) : la forme suit les paramètres de la famille | Coordonnées fixes dans la vue : la forme ne bouge pas quand la famille fléchit |
+| Créé par | Outil Polyligne 2D | Arc, cercle, spline, rectangle, texte, libellé |
+| Usage | Symbole d'ouvrant, tracés qui doivent suivre largeur et hauteur | Dessin libre, cartouches, étiquettes |
+
+Conséquence : une polyligne suit les paramètres, mais pas un rectangle ni un cercle tracés à côté d'elle. La décision à prendre est un changement de format : donner aux éléments 2D un ancrage facultatif aux plans (une seule liste, paramétrique au besoin), puis retirer `symboles`.
+
 ### Reste à faire, par ordre proposé
 
-1. Stocker la polyligne de famille comme élément 2D (ou donner aux éléments 2D l'ancrage aux plans) pour supprimer la double représentation `Symbole` / `elements_2d`, puis unifier leurs propriétés et poignées.
-2. Rendre le texte de famille à l'échelle de la vue (taille écran actuellement approchée) et partager l'accrochage du placement de texte avec le projet.
-3. Étendre l'onglet Modifier : aperçu de la sélection transformée, Réseau, Échelle, Aligner, raccourcis clavier du projet (MV, CO, RO, SY).
-4. Remplacer le canevas de famille par celui des vues de projet (navigation, fond, bandeau de dessin).
-5. Lot 6 : basculer cartouches, étiquettes et profils sur l'éditeur commun pour tous les parcours, puis retirer `familles_planes.rs`, l'éditeur de `cartouche.rs`, `profils.rs` et les formats spécialisés.
-6. Lot 7 : suite de tests complète, 38 tests Revit et recette visuelle.
+1. Réunir `Symbole` et éléments 2D (voir ci-dessus) : changement de format à valider avant de l'engager.
+2. Onglet Modifier : Réseau et Aligner ; accrochage du placement du texte dans le projet.
+3. Remplacer le canevas de famille par celui des vues de projet (navigation, fond, bandeau de dessin) ; il donnera aussi une échelle de vue au texte des familles modélisées.
+4. Lot 6 : basculer cartouches, étiquettes et profils sur l'éditeur commun pour tous les parcours, puis retirer `familles_planes.rs`, l'éditeur de `cartouche.rs`, `profils.rs` et les formats spécialisés.
+5. Lot 7 : suite de tests complète, 38 tests Revit et recette visuelle.
 
 Vérification du 12/11/2026 : `cargo check` sans avertissement ; tests ciblés `editeur_famille`, `ui::ruban`, `outils_texte` et `poignees` réussis (16 tests) ; ruban compact, onglet Modifier (symétrie d'un symbole) et placement du texte contrôlés dans une instance de test.
+
+Vérification du 13/11/2026 : `cargo check` sans avertissement ; tests ciblés `editeur_famille`, `ui::ruban` et `raccourcis` réussis ; raccourci RO, aperçu, rotation d'un symbole et quart de tour d'un volume contrôlés dans une instance de test. Symétrie et échelle des révolutions et des formes guidées non essayées à l'écran.

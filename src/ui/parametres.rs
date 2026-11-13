@@ -228,7 +228,10 @@ impl ViewerApp {
                 }
             }
         });
-        if modeliser && !focus {
+        // éditeur commun de famille : mêmes séquences pour les outils de l'onglet Modifier
+        let famille_commune = self.famille_active && self.famille_plane_active.is_none() && self.loading.is_none()
+            && self.famille.as_ref().is_some_and(|ed| ed.raccourcis_admis());
+        if (modeliser || famille_commune) && !focus {
             let (temps, textes) = ctx.input(|i| {
                 (
                     i.time,
@@ -300,6 +303,11 @@ impl ViewerApp {
         // onglet Famille : les raccourcis du projet (masquer, isoler, copier…) agiraient
         // sur la maquette masquée
         let famille = ["nouveau", "ouvrir", "fermer", "parametres", "theme_suivant", "enregistrer", "annuler", "retablir", "supprimer", "cadrer"];
+        if self.famille_active && self.famille_plane_active.is_none()
+            && self.famille.as_mut().is_some_and(|ed| ed.raccourci_transformation(action)) {
+            self.onglet_ruban = OngletRuban::FamilleModifier;
+            return;
+        }
         if self.mode_famille() && !famille.contains(&action) {
             return;
         }

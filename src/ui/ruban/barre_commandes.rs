@@ -238,6 +238,7 @@ pub(super) fn icone_commande(p: &egui::Painter, r: egui::Rect, i: Icone, c: Colo
                 "etiquette" => Some(Outil::Etiquette),
                 "deplacer" => Some(Outil::Deplacer), "copier" => Some(Outil::Copier),
                 "tourner" => Some(Outil::Tourner), "symetrie" => Some(Outil::Symetrie),
+                "echelle" => Some(Outil::Echelle),
                 "supprimer" => Some(Outil::Supprimer), _ => None,
             };
             if let Some(outil) = outil { super::icones::icone(p, r, outil, c); return; }

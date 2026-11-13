@@ -315,7 +315,10 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
     for (indice, element) in ed.famille.elements_2d.iter().enumerate().filter(|(_, e)| e.vue == ed.vue.esquisse()) {
         use crate::modele::documentation::AnnotationForme;
         if let AnnotationForme::Texte { point, texte } = &element.forme {
-            let taille = egui::FontId::proportional((element.hauteur * 4.0).clamp(8.0, 48.0) as f32);
+            // cartouches et étiquettes : repère en mm de papier, le texte est à l'échelle de la
+            // vue ; les autres catégories n'ont pas d'échelle de vue dans l'éditeur
+            let papier = matches!(ed.famille.categorie, crate::modele::famille::modelee::CategorieFamille::Cartouche | crate::modele::famille::modelee::CategorieFamille::EtiquettePiece);
+            let taille = egui::FontId::proportional(if papier { (element.hauteur * cadre.echelle).clamp(3.0, 400.0) } else { (element.hauteur * 4.0).clamp(8.0, 48.0) } as f32);
             let couleur = if ed.choisi(&SelectionFamille::Element2D(indice)) { Color32::from_rgb(0, 100, 210) } else { Color32::from_gray(30) };
             let apercu = super::super::outils_texte::apercu_famille(texte, projet, ed.vue.nom(), ed.famille.categorie, ed.cible_feuille.as_deref(), ed.cible_piece.as_deref());
             let rect_texte = painter.text(cadre.ecran(point[0], point[1]), egui::Align2::LEFT_BOTTOM, apercu, taille, couleur);
@@ -919,12 +922,17 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
                 ed.selectionner(vec![SelectionFamille::Element2D(indice)]);
             }
         }
-        OutilFamille::Deplacer | OutilFamille::Copier | OutilFamille::Tourner | OutilFamille::Symetrie => {
-            // points cliqués, puis élastique jusqu'au curseur accroché ; tourner : les
-            // deux directions partent du centre
-            let depuis_centre = ed.outil == OutilFamille::Tourner;
+        OutilFamille::Deplacer | OutilFamille::Copier | OutilFamille::Tourner | OutilFamille::Symetrie | OutilFamille::Echelle => {
+            // points cliqués, puis élastique jusqu'au curseur accroché ; tourner et
+            // échelle : les deux mesures partent du premier point
+            let depuis_centre = ed.transformation_depuis_premier_point();
             if let Some(q) = curseur.filter(|_| resp.hovered()) {
                 let c = viser(q, depart_courant).0;
+                // sélection telle qu'elle sera après le clic
+                for ligne in ed.apercu_transformation(&r, c) {
+                    let points: Vec<egui::Pos2> = ligne.into_iter().map(|p| cadre.ecran(p.0, p.1)).collect();
+                    if points.len() >= 2 { painter.add(egui::Shape::dashed_line(&points, egui::Stroke::new(1.5, bleu), 6.0, 4.0)); }
+                }
                 let trait_ = egui::Stroke::new(1.5, orange);
                 let points: Vec<egui::Pos2> = ed.points_transfo.iter().map(|p| cadre.ecran(p.0, p.1)).collect();
                 let cible = cadre.ecran(c.0, c.1);
