@@ -200,10 +200,36 @@ impl ViewerApp {
             };
             e.repere = Some(r);
         }
+        let courbe = e.segment.map(|(c, i)| (c, i, self.dessin2d.courbures.get(c).and_then(|k| k.get(i)).copied().unwrap_or(0.0))).filter(|x| x.2 != 0.0);
         match transformer_contours(&self.dessin2d.dalle, commande, e.segment, e.sommet, e.depart, e.repere, p, reference) {
-            Ok(Some(nouveaux)) => {
+            Ok(Some(mut nouveaux)) => {
                 let ajoutes = nouveaux.len().saturating_sub(self.dessin2d.dalle.len());
                 e.fermees.extend(std::iter::repeat_n(false, ajoutes));
+                // segment d'arc : ses copies restent des arcs, son symétrique s'inverse, et
+                // il se scinde en deux arcs du même cercle
+                if let Some((c, i, k)) = courbe {
+                    let courbures = &mut self.dessin2d.courbures;
+                    courbures.resize(nouveaux.len(), Vec::new());
+                    match commande {
+                        C::Copier | C::Reseau(_) => for copie in courbures.iter_mut().skip(nouveaux.len() - ajoutes) { *copie = vec![k, 0.0]; },
+                        C::Symetrie => courbures[c][i] = -k,
+                        C::Scinder => {
+                            let n = self.dessin2d.dalle[c].len();
+                            let (a, b) = (DVec2::from_array(self.dessin2d.dalle[c][i]), DVec2::from_array(self.dessin2d.dalle[c][(i + 1) % n]));
+                            let Some((coupe, k1, k2)) = d2::scinder_segment(a, b, k, p) else {
+                                self.dessin2d.message = Some("Cliquez à l'intérieur du segment.".into());
+                                return;
+                            };
+                            nouveaux[c][i + 1] = coupe.to_array();
+                            courbures[c].resize(n, 0.0);
+                            courbures[c][i] = k1;
+                            courbures[c].insert(i + 1, k2);
+                        }
+                        _ => {}
+                    }
+                } else if commande == C::Scinder && let Some((c, i)) = e.segment && let Some(k) = self.dessin2d.courbures.get_mut(c).filter(|k| i < k.len()) {
+                    k.insert(i + 1, 0.0);
+                }
                 if commande == C::Scinder && let Some((c, i)) = e.segment {
                     // le nouveau trait garde le type de trait de celui qu'il prolonge
                     if c == 0 && let Some(AnnotationForme::Polyligne { traits, .. }) = e.annotation.as_mut().map(|a| &mut a.forme) && !traits.is_empty() {

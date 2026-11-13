@@ -167,7 +167,14 @@ impl Projet {
                     }
                     if miroir { contour.reverse(); }
                 }
-                F::Polyligne { points, .. } | F::Spline { points, .. } => {
+                F::Polyligne { points, courbures, .. } => {
+                    for p in points {
+                        *p = point_annotation(*p);
+                    }
+                    // une symétrie inverse le sens de chaque arc
+                    if miroir { courbures.iter_mut().for_each(|k| *k = -*k); }
+                }
+                F::Spline { points, .. } => {
                     for p in points {
                         *p = point_annotation(*p);
                     }

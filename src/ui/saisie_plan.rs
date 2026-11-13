@@ -1013,6 +1013,7 @@ impl ViewerApp {
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
         // origine du projet : toujours accrochable
         let mut candidats: Vec<([f64; 2], AccrocheMur)> = vec![([0.0, 0.0], AccrocheMur::Extremite)];
+        let mut aretes: Vec<[[f64; 2]; 2]> = Vec::new();
         let jonctions = crate::modele::murs::jonctions::coupes(projet);
         // Destination d'un déplacement ou d'une copie : la sélection (et toutes les couches
         // d'un mur composé) reste à sa place d'origine pendant le choix, elle n'attire pas le point.
@@ -1037,21 +1038,79 @@ impl ViewerApp {
                 candidats.push(([(debut[0] + fin[0]) * 0.5, (debut[1] + fin[1]) * 0.5], AccrocheMur::Milieu));
             }
             if let Some(c) = crate::modele::murs::jonctions::contour(projet, m, &jonctions) {
+                // milieu des faces et des abouts, arêtes pour l'accrochage « sur l'arête »
+                for i in 0..4 {
+                    let (a, b) = (c[i], c[(i + 1) % 4]);
+                    candidats.push(([(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5], AccrocheMur::Milieu));
+                    aretes.push([a, b]);
+                }
                 candidats.extend(c.into_iter().map(|p| (p, AccrocheMur::Angle(f64::NAN))));
             }
         }
         for d in projet.dalles.iter().filter(|d| !deplaces.contains(&d.id)) {
             candidats.extend(d.contours.iter().flatten().map(|&p| (p, AccrocheMur::Extremite)));
+            for c in &d.contours {
+                for i in 0..c.len() {
+                    let (a, b) = (c[i], c[(i + 1) % c.len()]);
+                    candidats.push(([(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5], AccrocheMur::Milieu));
+                    aretes.push([a, b]);
+                }
+            }
         }
-        let ecrans = candidats.into_iter().filter_map(|(v, genre)| {
+        // poteaux et poutres : axe, extrémités, milieu, angles de la section en plan
+        for b in projet.barres.iter().filter(|b| !deplaces.contains(&b.id)) {
+            let (a, f) = ([b.debut[0], b.debut[1]], [b.fin[0], b.fin[1]]);
+            candidats.push((a, AccrocheMur::Extremite));
+            if (a[0] - f[0]).hypot(a[1] - f[1]) > 1.0 {
+                candidats.push((f, AccrocheMur::Extremite));
+                candidats.push(([(a[0] + f[0]) * 0.5, (a[1] + f[1]) * 0.5], AccrocheMur::Milieu));
+                for e in projet.aretes_plan(&b.id) {
+                    candidats.push((e[0], AccrocheMur::Angle(f64::NAN)));
+                    aretes.push(e);
+                }
+            }
+        }
+        // quadrillage : extrémités, croisements des files, et les files elles-mêmes
+        for (i, g) in projet.quadrillages.iter().enumerate() {
+            candidats.push((g.debut, AccrocheMur::Extremite));
+            candidats.push((g.fin, AccrocheMur::Extremite));
+            aretes.push([g.debut, g.fin]);
+            for h in &projet.quadrillages[i + 1..] {
+                let (a, u) = (glam::DVec2::from_array(g.debut), glam::DVec2::from_array(g.fin) - glam::DVec2::from_array(g.debut));
+                let (c, v) = (glam::DVec2::from_array(h.debut), glam::DVec2::from_array(h.fin) - glam::DVec2::from_array(h.debut));
+                let den = u.perp_dot(v);
+                if den.abs() > 1e-9 {
+                    candidats.push(((a + u * ((c - a).perp_dot(v) / den)).to_array(), AccrocheMur::Intersection));
+                }
+            }
+        }
+        let ecran = |v: [f64; 2]| {
             let p = (glam::DVec3::new(v[0], v[1], altitude) * 0.001 - scene.origin).as_vec3();
             let clip = vp * p.extend(1.0);
             if clip.w <= 0.0 { return None; }
             let n = clip.truncate() / clip.w;
-            Some((v, egui::pos2(rect.left() + (n.x + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - n.y) * 0.5 * rect.height()), genre))
-        });
+            Some(egui::pos2(rect.left() + (n.x + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - n.y) * 0.5 * rect.height()))
+        };
+        let ecrans = candidats.into_iter().filter_map(|(v, genre)| Some((v, ecran(v)?, genre)));
         if let Some(c) = accrochage::meilleur(q, ecrans) { return Some(c); }
-        let Some(a) = depart else { return Some((point, accroche)) };
+        // sur l'arête : le point glisse le long de la face, de l'axe ou de la file visée
+        let sur_arete = |cible: [f64; 2]| -> Option<[f64; 2]> {
+            let c = glam::DVec2::from_array(cible);
+            aretes.iter().filter_map(|e| {
+                let (a, b) = (glam::DVec2::from_array(e[0]), glam::DVec2::from_array(e[1]));
+                let l2 = (b - a).length_squared();
+                if l2 < 1e-9 { return None; }
+                let proche = (a + (b - a) * ((c - a).dot(b - a) / l2).clamp(0.0, 1.0)).to_array();
+                let d = ecran(proche)?.distance(q);
+                (d <= accrochage::RAYON * 0.8).then_some((d, proche))
+            }).min_by(|x, y| x.0.total_cmp(&y.0)).map(|(_, p)| p)
+        };
+        let Some(a) = depart else {
+            return Some(sur_arete([p.x, p.y]).map_or((point, accroche), |p| (p, AccrocheMur::Proche)));
+        };
+        // Maj : l'axe imposé l'emporte sur les arêtes
+        if orthogonal && let Some(c) = accrochage::contraindre(a, point, self.angle_axes_plan(), true, 10.0) { return Some(c); }
+        if let Some(p) = sur_arete([p.x, p.y]) { return Some((p, AccrocheMur::Proche)); }
         // axes du plan tourné (repère du plan) : Maj et angles ronds suivent l'écran
         if let Some(c) = accrochage::contraindre(a, point, self.angle_axes_plan(), orthogonal, 10.0) { return Some(c); }
         // direction libre : la longueur depuis le départ tombe au centimètre

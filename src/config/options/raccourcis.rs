@@ -74,6 +74,7 @@ pub const COMMANDES: &[Commande] = &[
     commande!("inverser", "Inverser", "Modifier", "NV"),
     commande!("aligner", "Aligner", "Modifier", "AL"),
     commande!("ajuster", "Ajuster", "Modifier", "AJ"),
+    commande!("ajuster_angle", "Ajuster en angle", "Modifier", "TR"),
     commande!("creer_identique", "Créer à l'identique", "Modifier", "CS"),
     commande!("modifier_trace", "Modifier le tracé", "Modifier", "MT"),
     commande!("verrouiller", "Verrouiller", "Modifier", "CD"),

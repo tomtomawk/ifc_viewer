@@ -126,7 +126,7 @@ niveau, quadrillage, mur, terrain, limite_propriete, dalle, sol, plafond, toitur
 poteau, poutre, escalier, garde_corps, ouverture, composant, piece, arbre, deplacer, copier,
 tourner, aligner,
 ajuster, modifier_trace, creer_identique, supprimer, cadrer, isoler, masquer, texte,
-cote, etiquette, ligne, polyligne, spline, cercle, arc, zone, vue_plan, coupe,
+cote, etiquette, ligne, polyligne, spline, cercle, zone, vue_plan, coupe,
 vue_coupe, feuilles, nomenclatures. `outil aucun` annule l'outil.
 Les outils encore désactivés dans l'interface restent indisponibles.
 
@@ -140,10 +140,13 @@ Les outils encore désactivés dans l'interface restent indisponibles.
 ]
 ```
 
-Actions : `clic` (bouton optionnel gauche/droit/milieu, maj/ctrl optionnels),
-`pointer` (x,y), `bouton` (x,y,bouton,appuye,maj/ctrl optionnels) pour les glissements,
+Actions : `clic` (bouton optionnel gauche/droit/milieu, maj/ctrl/alt optionnels),
+`pointer` (x,y), `bouton` (x,y,bouton,appuye,maj/ctrl/alt optionnels) pour les glissements,
 `defiler` (x,y,dx,dy), `texte` (texte), `touche` (touche,maj/ctrl/alt optionnels).
 Touches : Enter, Escape, Delete, Backspace, Tab, ArrowLeft/Right/Up/Down, A…Z, etc.
+Arc d'une polyligne (l'outil `arc` n'existe plus) : `clic` avec `"alt":true` sur la fin
+de l'arc, puis un `clic` sur son point de passage, ou un `texte` (rayon, unité
+d'affichage) suivi de la touche Enter, le pointeur placé du côté où l'arc bombe.
 Les positions sont des points logiques absolus dans la fenêtre, pas des pixels PNG
 physiques ni des coordonnées BIM. `etat.rectangle_vue` permet de situer la vue.
 Chaque entrée est traitée sur une image distincte. Attendre

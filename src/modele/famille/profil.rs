@@ -134,7 +134,7 @@ mod tests {
         let attendu = profil.points().unwrap();
         let famille = &mut profil.document_famille.as_mut().unwrap().famille;
         let autre = vec![[0.0, 0.0], [20.0, 0.0], [20.0, 10.0], [0.0, 10.0]];
-        famille.elements_2d.push(Element2DFamille { vue: VueEsquisse::Plan, forme: AnnotationForme::Polyligne { points: autre.clone(), fermee: true, remplissage: None, traits: vec![] }, hauteur: 2.5 });
+        famille.elements_2d.push(Element2DFamille { vue: VueEsquisse::Plan, forme: AnnotationForme::Polyligne { points: autre.clone(), fermee: true, courbures: vec![], remplissage: None, traits: vec![] }, hauteur: 2.5 });
         assert!(profil.points().is_err());
         profil.document_famille.as_mut().unwrap().famille.section_profil = Some(SectionProfil::Symbole(0));
         assert_eq!(profil.points().unwrap(), attendu);

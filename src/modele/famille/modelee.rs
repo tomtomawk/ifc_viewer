@@ -863,7 +863,7 @@ impl FamilleModelee {
                 AnnotationForme::Arc { points: [points[0], points[1], points[2]] }
             } else {
                 let remplissage = symbole.remplissage.clone();
-                AnnotationForme::Polyligne { points, fermee: symbole.fermee, remplissage, traits: Vec::new() }
+                AnnotationForme::Polyligne { points, fermee: symbole.fermee, courbures: Vec::new(), remplissage, traits: Vec::new() }
             };
             elements.push(Element2DFamille { vue, forme, hauteur: 2.5 });
         }

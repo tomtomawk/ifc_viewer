@@ -587,7 +587,6 @@ impl ViewerApp {
             "ligne" | "polyligne" => (O::Polyligne, OngletRuban::Annoter),
             "spline" => (O::Spline, OngletRuban::Annoter),
             "cercle" => (O::Cercle, OngletRuban::Annoter),
-            "arc" => (O::Arc, OngletRuban::Annoter),
             "zone" => (O::Zone, OngletRuban::Annoter),
             "vue_plan" => (O::VuePlan, OngletRuban::Annoter),
             "coupe" | "vue_coupe" => (O::VueCoupe, OngletRuban::Annoter),

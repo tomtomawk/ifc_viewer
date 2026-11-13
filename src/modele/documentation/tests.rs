@@ -354,7 +354,7 @@ fn polyligne_fermee_remplie() {
     let niveau = p.niveaux[0].id.clone();
     let vue = p.ajouter_vue_plan(&niveau, 1200.0).unwrap();
     let contour = vec![[0.0, 0.0], [2000.0, 0.0], [2000.0, 1000.0], [0.0, 1000.0]];
-    let annotation = |remplissage, fermee| Annotation { id: "zone".into(), vue: vue.clone(), hauteur: 2.5, forme: AnnotationForme::Polyligne { points: contour.clone(), fermee, remplissage, traits: Vec::new() } };
+    let annotation = |remplissage, fermee| Annotation { id: "zone".into(), vue: vue.clone(), hauteur: 2.5, forme: AnnotationForme::Polyligne { points: contour.clone(), fermee, courbures: Vec::new(), remplissage, traits: Vec::new() } };
     let hachures = |p: &Projet| annotations(p, p.vues.iter().find(|v| v.id == vue).unwrap()).into_iter().filter(|x| x.role == Role::Hachure).collect::<Vec<_>>();
     // motif choisi : hachures de la définition, encre gris foncé
     p.annotations = vec![annotation(Some(RemplissageContour::Motif { motif: MotifCoupe::Croisees }), true)];
@@ -438,7 +438,7 @@ fn polyligne_types_de_trait_par_segment() {
     // trois segments de 10 m : fort, tirets, sans type
     let points = vec![[0.0, 0.0], [10_000.0, 0.0], [10_000.0, 10_000.0], [0.0, 10_000.0]];
     let traits = vec!["trait-continu-fort".to_string(), "trait-tirets".into()];
-    p.annotations.push(Annotation { id: "pl".into(), vue: vue.clone(), hauteur: 2.5, forme: AnnotationForme::Polyligne { points, fermee: false, remplissage: None, traits } });
+    p.annotations.push(Annotation { id: "pl".into(), vue: vue.clone(), hauteur: 2.5, forme: AnnotationForme::Polyligne { points, fermee: false, courbures: Vec::new(), remplissage: None, traits } });
     p.verifier().unwrap();
     let v = p.vues.iter().find(|v| v.id == vue).unwrap();
     let prims = annotations(&p, v);
@@ -458,6 +458,57 @@ fn polyligne_types_de_trait_par_segment() {
         traits[1] = "inconnu".into();
     }
     assert!(p.verifier().is_err());
+}
+
+/// Polyligne à segments d'arc : courbures écrites et relues, arcs développés au rendu
+/// (trait et remplissage), sens inversé par une symétrie, données invalides refusées.
+#[test]
+fn polyligne_segments_d_arc() {
+    use glam::DVec2;
+    let mut p = Projet::depuis_gabarit("Arcs", &crate::config::gabarit::Gabarit::defaut());
+    let vue = p.ajouter_vue_plan(&p.niveaux[0].id.clone(), 100.0).unwrap();
+    // demi-disque : diamètre de 2 m, puis demi-cercle de retour (segment de fermeture)
+    let points = vec![[-1000.0, 0.0], [1000.0, 0.0]];
+    let forme = |points: Vec<[f64; 2]>, fermee, courbures| AnnotationForme::Polyligne { points, fermee, courbures, remplissage: None, traits: Vec::new() };
+    p.annotations.push(Annotation { id: "arc".into(), vue: vue.clone(), hauteur: 2.5, forme: forme(points.clone(), false, vec![1.0]) });
+    p.verifier().unwrap();
+    // écriture : le champ n'apparaît que s'il y a un arc ; relecture à l'identique
+    let json = p.json().unwrap();
+    assert!(json.contains("\"courbures\""));
+    let relu = Projet::lire_json(&json).unwrap();
+    assert_eq!(relu.annotations[0].forme, p.annotations[0].forme);
+    let droite = forme(points.clone(), false, Vec::new());
+    assert!(!serde_json::to_string(&droite).unwrap().contains("courbures"));
+    // rendu : l'arc passe par le bas (sens trigonométrique), à 1 m du centre
+    let v = p.vues.iter().find(|v| v.id == vue).unwrap();
+    let prims = annotations(&p, v);
+    let [Primitive { forme: Forme::Polyligne { points: trace, fermee: false }, .. }] = prims.as_slice() else { panic!("un seul trait attendu") };
+    let (o, u, h) = repere(&p, v);
+    let plan: Vec<DVec2> = trace.iter().map(|q| { let d = *q * 1000.0 - o; DVec2::new(d.dot(u), d.dot(h)) }).collect();
+    assert!(plan.len() > 30 && plan.iter().all(|q| (q.length() - 1000.0).abs() < 1e-6 && q.y < 1e-6));
+    assert!(plan.iter().any(|q| q.distance(DVec2::new(0.0, -1000.0)) < 1e-6));
+    // contour développé : celui du remplissage et de la forme 2D
+    let contour = p.annotations[0].forme.contour_developpe().unwrap();
+    assert_eq!(contour.len(), plan.len());
+    let forme_2d = p.annotations[0].forme.forme_2d().unwrap();
+    assert!((forme_2d.longueur() - std::f64::consts::PI * 1000.0).abs() < 1e-6);
+    assert_eq!(AnnotationForme::depuis_forme_2d(&forme_2d), p.annotations[0].forme);
+    // symétrie d'axe x : l'arc passe par le haut, sa courbure change de signe
+    let (q, _) = p.executer(crate::modele::edition::commandes::Commande::Symetrie { ids: vec!["arc".into()], a: [0.0, 0.0], b: [1.0, 0.0] }).unwrap();
+    assert!(matches!(&q.annotations[0].forme, AnnotationForme::Polyligne { courbures, .. } if courbures == &vec![-1.0]));
+    // refus : nombre de courbures, valeur non finie, arc entre deux sommets confondus
+    for (points, fermee, courbures) in [
+        (points.clone(), false, vec![1.0, 0.5]),
+        (points.clone(), false, vec![f64::NAN]),
+        (vec![[0.0, 0.0], [0.0, 0.0], [5.0, 0.0]], false, vec![1.0, 0.0]),
+        (vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]], true, vec![0.0, 1.0]),
+    ] {
+        p.annotations[0].forme = forme(points, fermee, courbures);
+        assert!(p.verifier().is_err());
+    }
+    // refus à la lecture d'un fichier : une courbure de trop
+    let invalide = json.replacen("\"courbures\":[", "\"courbures\":[0.5,", 1);
+    assert!(invalide != json && Projet::lire_json(&invalide).and_then(|q| q.verifier()).is_err());
 }
 
 #[test]

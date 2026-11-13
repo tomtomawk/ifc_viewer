@@ -67,7 +67,9 @@ impl ViewerApp {
     /// Point retenu pour le curseur `c` : accrochage, sinon ortho (Maj) ou repérage
     /// polaire (tous les 15°) depuis le point précédent, sinon le point libre.
     pub(in crate::ui) fn point_dessin(&mut self, rect: egui::Rect, c: DVec2, maj: bool, temps: f64) -> (DVec2, Accroche) {
-        let precedent=self.dessin2d.trace.as_ref().and_then(Trace::precedent);
+        // arc en attente de sa courbure : le curseur reste libre (point de passage, ou
+        // côté du rayon tapé), sans repérage depuis le dernier point
+        let precedent=self.dessin2d.trace.as_ref().filter(|t| !t.attend_courbure()).and_then(Trace::precedent);
         self.point_dessin_depuis(rect,c,maj,temps,precedent)
     }
 
@@ -108,17 +110,16 @@ impl ViewerApp {
         let tol = self.vers_ecran(rect, c).zip(self.vers_ecran(rect, c + DVec2::X * 1000.0)).map_or(200.0, |(a, b)| 12.0 * 1000.0 / (a.distance(b) as f64).max(1e-6));
         let mut geoms = self.geoms_dessin();
         if let Some(t) = &self.dessin2d.trace {
-            geoms.extend(t.points.windows(2).map(|w| Geom::Segment([w[0], w[1]])));
+            let k = t.courbures();
+            geoms.extend(t.points.windows(2).enumerate().map(|(i, w)| d2::geom_segment(w[0], w[1], k.get(i).copied().unwrap_or(0.0))));
             if let [p] = t.points.as_slice() {
                 geoms.push(Geom::Segment([*p, *p]));
             }
         }
         if self.dessin2d.edition_contour.is_some() {
-            for (ci, contour) in self.dessin2d.dalle.iter().enumerate() {
+            for ci in 0..self.dessin2d.dalle.len() {
                 let fermee = self.dessin2d.edition_contour.as_ref().unwrap().fermee(ci);
-                for i in 0..contour.len().saturating_sub(usize::from(!fermee)) {
-                    geoms.push(Geom::Segment([DVec2::from_array(contour[i]), DVec2::from_array(contour[(i + 1) % contour.len()])]));
-                }
+                geoms.extend(self.dessin2d.segments_contour(ci, fermee).into_iter().map(|(a, b, k)| d2::geom_segment(a, b, k)));
             }
         }
         if let Some(point) = self.dessin2d.reperage.calculer(c, tol, &geoms, precedent, maj, temps, self.options.delai_accrochage, self.angle_axes_plan(), self.dessin2d.trace.is_some()) {
@@ -254,12 +255,29 @@ impl ViewerApp {
         self.dessin2d.just_segments.truncate(segments);
         while self.dessin2d.just_segments.len() < segments { self.dessin2d.just_segments.push(courante); }
         if cle != self.dessin2d.commande_cle || (cle.is_none() && self.dessin2d.historique_depart.is_some()) {
+            // nouvelle commande : la précédente s'arrête, son tracé en cours est abandonné
+            if cle.is_some() && self.dessin2d.commande_cle.is_some()
+                && (self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation.is_some()) || self.dessin2d.trace.as_ref().is_some_and(|t| !t.points.is_empty()))
+            {
+                self.dessin2d.vider_contours();
+                self.reinitialiser_terrain();
+                self.dessin2d.edition_contour = None;
+                self.dessin2d.geoms = None;
+                self.dessin2d.saisie.clear();
+                { self.dessin2d.message = None; self.dessin2d.information = None; };
+                self.dessin2d.trace = None;
+                self.bim.depart_structure = None;
+                self.coupe_depart = None;
+                self.visibility_dirty = true;
+                self.coupe_dirty = true;
+                self.status = "Commande précédente arrêtée.".into();
+            }
             self.dessin2d.commande_cle = cle;
             if cle != Some(crate::ui::ruban::Outil::Escalier) { self.dessin2d.giron_impose = None; }
             self.dessin2d.historique_depart = cle.map(|_| self.profondeur_historique());
         }
         if self.ruban_edition.selection_mur && self.usage_dessin().is_some_and(|(u,_)|u==Usage::Mur) {
-            if self.dessin2d.dernier_usage!=Some(Usage::Mur) {self.dessin2d.dalle.clear();self.dessin2d.ouverts.clear();}
+            if self.dessin2d.dernier_usage!=Some(Usage::Mur) {self.dessin2d.vider_contours();}
             self.dessin2d.dernier_usage=Some(Usage::Mur);
             return;
         }
@@ -285,12 +303,12 @@ impl ViewerApp {
             self.dessin2d.reperage.survol_segment = None;
             self.dessin2d.reperage.guides.clear();
             self.dessin2d.saisie.clear();
-            self.dessin2d.dalle.clear();self.dessin2d.ouverts.clear();
+            self.dessin2d.vider_contours();
             self.reinitialiser_terrain();
             return;
         };
         if self.dessin2d.dernier_usage.is_some_and(|u| u != usage) {
-            self.dessin2d.dalle.clear();self.dessin2d.ouverts.clear();
+            self.dessin2d.vider_contours();
             self.reinitialiser_terrain();
             self.dessin2d.trace = None;
         }
@@ -400,11 +418,11 @@ impl ViewerApp {
                 if usage != Usage::Mur && self.dessin2d.edition_contour.is_none() && !matches!(usage, Usage::Escalier | Usage::GardeCorps | Usage::Annotation) {
                     self.interrompre_trace(usage);
                 } else if self.dessin2d.edition_contour.is_none() && matches!(usage, Usage::Escalier | Usage::GardeCorps | Usage::Annotation)
-                    && outil == OutilDessin::Polyligne && let Some(t) = self.dessin2d.trace.as_ref().filter(|t| t.points.len() >= 2) {
-                    self.dessin2d.ouverts.push(t.points.clone());
+                    && outil == OutilDessin::Polyligne && let Some((points, k)) = self.dessin2d.trace.as_ref().filter(|t| t.points.len() >= 2).map(|t| (t.points.clone(), t.courbures())) {
+                    self.dessin2d.pousser_ouvert(points, k);
                 } else if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation.is_some() && e.raccord.is_none())
-                    && let Some(t) = self.dessin2d.trace.as_ref().filter(|t| t.outil == OutilDessin::Polyligne && t.points.len() >= 2) {
-                    self.dessin2d.dalle.push(t.points.iter().map(|p| p.to_array()).collect());
+                    && let Some((points, k)) = self.dessin2d.trace.as_ref().filter(|t| t.outil == OutilDessin::Polyligne && t.points.len() >= 2).map(|t| (t.points.iter().map(|p| p.to_array()).collect(), t.courbures())) {
+                    self.dessin2d.pousser_contour(points, k);
                     self.dessin2d.edition_contour.as_mut().unwrap().fermees.push(false);
                 }
                 if let Some(t) = self.dessin2d.trace.as_mut() { t.points.clear(); }
@@ -467,8 +485,9 @@ impl ViewerApp {
     pub(super) fn editer_contours_en_creation(&mut self, usage: Usage) {
         let altitude = self.altitude_trace();
         let mut fermees = vec![true; self.dessin2d.dalle.len()];
-        for contour in std::mem::take(&mut self.dessin2d.ouverts) {
-            self.dessin2d.dalle.push(contour.into_iter().map(|p| p.to_array()).collect());
+        let courbures = std::mem::take(&mut self.dessin2d.ouverts_courbures);
+        for (i, contour) in std::mem::take(&mut self.dessin2d.ouverts).into_iter().enumerate() {
+            self.dessin2d.pousser_contour(contour.into_iter().map(|p| p.to_array()).collect(), courbures.get(i).cloned().unwrap_or_default());
             fermees.push(false);
         }
         if usage == Usage::Terrain && let Some(contour) = self.dessin2d.dalle.first() {
@@ -482,7 +501,7 @@ impl ViewerApp {
         if let Some((usage @ (Usage::Surface | Usage::LimitePropriete | Usage::Terrain | Usage::Cadrage | Usage::Escalier | Usage::GardeCorps | Usage::Annotation), outil)) = self.usage_dessin() {
             if matches!(usage, Usage::Escalier | Usage::GardeCorps | Usage::Annotation) {
                 if outil != OutilDessin::Polyligne || self.outil_cotation().is_some() { return; }
-                if let Some(t) = self.dessin2d.trace.as_ref().filter(|t| t.points.len() >= 2) { self.dessin2d.ouverts.push(t.points.clone()); }
+                if let Some((points, k)) = self.dessin2d.trace.as_ref().filter(|t| t.points.len() >= 2).map(|t| (t.points.clone(), t.courbures())) { self.dessin2d.pousser_ouvert(points, k); }
             } else { self.interrompre_trace(usage); }
             if let Some(t) = &mut self.dessin2d.trace { t.points.clear(); }
             self.editer_contours_en_creation(usage);
@@ -518,8 +537,8 @@ impl ViewerApp {
     pub(in crate::ui) fn interrompre_trace(&mut self, usage: Usage) {
         if matches!(usage, Usage::Surface | Usage::Terrain | Usage::LimitePropriete | Usage::Cadrage) {
             // le contour reste ouvert, au stade où il en était
-            if let Some(t) = self.dessin2d.trace.as_ref().filter(|t| t.outil == OutilDessin::Polyligne && t.points.len() >= 2) {
-                self.dessin2d.ouverts.push(t.points.clone());
+            if let Some(points) = self.dessin2d.trace.as_ref().filter(|t| t.outil == OutilDessin::Polyligne && t.points.len() >= 2).map(|t| t.points.clone()) {
+                self.dessin2d.pousser_ouvert(points, Vec::new());
                 { self.dessin2d.message = None; self.dessin2d.information = None; };
                 self.dessin2d.information = Some("Contour laissé ouvert : double-cliquer une extrémité pour le reprendre.".into());
             }
@@ -645,7 +664,8 @@ impl ViewerApp {
                     _ => Vec::new(),
                 };
                 traits.truncate(points.len() - 1 + usize::from(fermee));
-                annotation.forme = AnnotationForme::Polyligne { points: points.clone(), fermee, remplissage, traits };
+                let courbures = self.dessin2d.courbures_enregistrees(i, fermee);
+                annotation.forme = AnnotationForme::Polyligne { points: points.clone(), fermee, courbures, remplissage, traits };
                 match projet.executer(Commande::Annoter { annotation }) {
                     Ok((p, nouveaux)) => { projet = p; ids.extend(nouveaux); }
                     Err(e) => { self.dessin2d.message = Some(e); return; }
@@ -656,7 +676,10 @@ impl ViewerApp {
             self.status = "Polyligne modifiée — Ctrl+S pour enregistrer.".into();
             self.confirmer("Polyligne modifiée".into());
         } else if valider && matches!(usage, Some(Usage::Escalier | Usage::GardeCorps | Usage::Annotation)) && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation.is_some()) {
-            let formes = self.dessin2d.dalle.iter().enumerate().map(|(i, c)| d2::Forme2D::Polyligne { points: c.iter().copied().map(DVec2::from_array).collect(), fermee: self.dessin2d.edition_contour.as_ref().unwrap().fermee(i) }).collect();
+            let formes = self.dessin2d.dalle.iter().enumerate().map(|(i, c)| {
+                let fermee = self.dessin2d.edition_contour.as_ref().unwrap().fermee(i);
+                d2::Forme2D::Polyligne { points: c.iter().copied().map(DVec2::from_array).collect(), fermee, courbures: self.dessin2d.courbures_enregistrees(i, fermee) }
+            }).collect();
             self.enregistrer_formes(formes);
             if self.dessin2d.message.is_some() { return; }
         } else if surface && valider && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation.is_none()) {
@@ -673,7 +696,7 @@ impl ViewerApp {
                 self.creer_dalle_contours(&contours, &parametres);
             }
         }
-        self.dessin2d.dalle.clear();self.dessin2d.ouverts.clear();
+        self.dessin2d.vider_contours();
         self.reinitialiser_terrain();
         self.dessin2d.edition_contour = None;
         self.visibility_dirty = true;
@@ -790,6 +813,28 @@ impl ViewerApp {
             return;
         }
         if saisie.find(['<', '>']).is_some_and(|i| i > 0 && i + 1 == saisie.len()) { saisie.pop(); }
+        // arc en attente : la valeur tapée est son rayon, du côté du curseur
+        if !saisie.is_empty() && !saisie.starts_with(['@', '#']) && !saisie.eq_ignore_ascii_case("f")
+            && let Some(trace) = self.dessin2d.trace.as_ref().filter(|t| t.attend_courbure())
+        {
+            let curseur = self.dessin2d.curseur.or(self.dessin2d.point.map(|p| p.0));
+            let passage = match (distance_saisie(&saisie, crate::config::options::unite().facteur()), curseur) {
+                (Some(rayon), Some(curseur)) => trace.point_de_rayon(rayon, curseur),
+                (Some(_), None) => Err("Rayon : placer le curseur du côté où l'arc doit bomber.".into()),
+                (None, _) => Err("Rayon : valeur positive attendue.".into()),
+            };
+            match passage {
+                Ok(p) => {
+                    { self.dessin2d.message = None; self.dessin2d.information = None; };
+                    if !self.ajouter_point_raccord(p) {
+                        let formes = self.dessin2d.trace.as_mut().map(|t| t.appliquer(d2::EvenementTrace::Point(p))).unwrap_or_default();
+                        self.enregistrer_formes(formes);
+                    }
+                }
+                Err(e) => { self.dessin2d.saisie = saisie; self.dessin2d.message = Some(e); }
+            }
+            return;
+        }
         if saisie.eq_ignore_ascii_case("f") && let Some((c, premier)) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.raccord) {
             let contour = &self.dessin2d.dalle[c];
             let cible = if premier { *contour.last().unwrap() } else { contour[0] };

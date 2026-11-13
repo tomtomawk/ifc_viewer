@@ -339,7 +339,8 @@ impl ViewerApp {
             } else if let Some(outil) = deplacement {
                 // élément sous le curseur : surligné avant le clic, cible d'Aligner
                 let cible = |app: &Self, q: egui::Pos2| pick(app, q).and_then(|(obj, _)| app.scene.as_ref()?.objects.get(obj as usize).map(|o| o.id)).and_then(|id| app.cle_native(app.cible_clic(id)));
-                self.transfo.cible = resp.hover_pos().and_then(|q| cible(self, q));
+                // même cible qu'au clic : à défaut de face touchée (plan au trait), le mur sous le curseur
+                self.transfo.cible = resp.hover_pos().and_then(|q| cible(self, q)).or_else(|| self.transfo.curseur.filter(|_| resp.hovered()).and_then(|p| self.mur_proche(p)));
                 if resp.clicked_by(PointerButton::Secondary) && !self.transfo.reculer() { self.ruban_edition.annuler(); }
                 if resp.clicked() && let Some(q) = resp.interact_pointer_pos() {
                     use crate::ui::ruban::Outil as O;

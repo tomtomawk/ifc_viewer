@@ -250,7 +250,7 @@ impl EditionCartouche {
                 let formes = evenement.map_or_else(Vec::new, |e| trace.appliquer(e));
                 for forme in formes {
                     match (outil, &forme) {
-                        (Outil::Zone, Forme2D::Polyligne { points, fermee: true }) =>
+                        (Outil::Zone, Forme2D::Polyligne { points, fermee: true, .. }) =>
                             f.formes.push(F::Zone { contour: points.iter().map(|p| p.to_array()).collect() }),
                         (Outil::Zone, _) => {},
                         _ => f.formes.push(F::depuis_forme_2d(&forme)),

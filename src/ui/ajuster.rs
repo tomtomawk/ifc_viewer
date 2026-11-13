@@ -10,6 +10,8 @@ pub(super) struct EtatAjustement {
     /// Arête limite choisie (plan, mm).
     ligne: Option<[[f64; 2]; 2]>,
     fin_reference: bool,
+    /// Angle : abscisse (0 début, 1 fin) du clic sur la ligne de la référence.
+    t_reference: f64,
     survol: Option<(String, bool)>,
     /// Arête sous le curseur avant le choix de la limite.
     survol_arete: Option<(String, [[f64; 2]; 2])>,
@@ -103,6 +105,18 @@ fn preparer(
     })
 }
 
+/// Angle : extrémités à déplacer d'après les clics. La partie cliquée de chaque élément
+/// est conservée : c'est l'extrémité située de l'autre côté du croisement qui rejoint
+/// l'angle (prolongée si elle ne l'atteint pas, coupée si elle le dépasse).
+fn fins_angle(p: &Projet, id: &str, t: f64, reference: &str, t_reference: f64) -> Option<(bool, bool)> {
+    use glam::DVec2;
+    let ((a, b), (c, d)) = (p.ligne_ajustable(id)?, p.ligne_ajustable(reference)?);
+    let (a, u, c, v) = (DVec2::from_array(a), DVec2::from_array(b) - DVec2::from_array(a), DVec2::from_array(c), DVec2::from_array(d) - DVec2::from_array(c));
+    let den = u.perp_dot(v);
+    if den.abs() < 1e-9 { return None; }
+    Some((t < (c - a).perp_dot(v) / den, t_reference < (c - a).perp_dot(u) / den))
+}
+
 fn commande_ajuster(id: &str, reference: &str, fin: bool, angle: Option<bool>, ligne: Option<[[f64; 2]; 2]>) -> Commande {
     match angle {
         Some(fin_reference) => Commande::AjusterAngle { id: id.into(), reference: reference.into(), fin, fin_reference },
@@ -179,6 +193,15 @@ impl ViewerApp {
             .map(|(_, id, e)| (id, e))
     }
 
+    /// Abscisse du curseur le long de la ligne ajustable de `id` (0 début, 1 fin).
+    fn abscisse_ecran(&self, rect: egui::Rect, q: egui::Pos2, id: &str) -> Option<f64> {
+        let p = &self.natif.as_ref()?.0;
+        let ((a, b), z) = (p.ligne_ajustable(id)?, p.altitude_ajustable(id)?);
+        let (a, b) = (self.ecran_plan(rect, a, z)?, self.ecran_plan(rect, b, z)?);
+        let d = b - a;
+        (d.length_sq() > 0.0).then(|| ((q - a).dot(d) / d.length_sq()) as f64)
+    }
+
     /// Mur ou poutre visé et extrémité la plus proche du curseur.
     fn mur_ajuster_vise(
         &self,
@@ -237,7 +260,8 @@ impl ViewerApp {
         let curseur = resp.hover_pos().or(resp.interact_pointer_pos());
         let choix_arete = !angle && self.ajustement.as_ref().is_some_and(|e| e.reference.is_none());
         let survol_arete = if choix_arete { curseur.and_then(|q| self.arete_ajuster_visee(rect, q)) } else { None };
-        let survol = curseur.and_then(|q| self.mur_ajuster_vise(rect, q, hit));
+        let mut survol = curseur.and_then(|q| self.mur_ajuster_vise(rect, q, hit));
+        let t_survol = curseur.zip(survol.as_ref()).and_then(|(q, (id, _))| self.abscisse_ecran(rect, q, id));
         let prolonger = self
             .ruban_edition
             .texte_option(crate::ui::ruban::Outil::Ajuster, 0)
@@ -245,6 +269,13 @@ impl ViewerApp {
         let Some(etat) = self.ajustement.as_mut() else {
             return;
         };
+        // angle : le côté du clic décide de l'extrémité déplacée, pas l'extrémité la plus proche
+        if angle && let (Some(r), Some((id, fin)), Some(t)) = (etat.reference.as_deref(), survol.as_mut(), t_survol)
+            && let Some((f, fr)) = fins_angle(&self.natif.as_ref().unwrap().0, id, t, r, etat.t_reference)
+        {
+            *fin = f;
+            etat.fin_reference = fr;
+        }
         etat.survol = survol.clone();
         etat.survol_arete = survol_arete.clone();
         if let (Some(reference), Some((id, fin))) = (&etat.reference, &survol) {
@@ -283,9 +314,10 @@ impl ViewerApp {
             if angle {
                 if let Some((id, fin)) = survol {
                     etat.fin_reference = fin;
+                    etat.t_reference = t_survol.unwrap_or(if fin { 1.0 } else { 0.0 });
                     etat.reference = Some(id);
                     etat.cache = None;
-                    self.status = "Première extrémité choisie : cliquez près de la seconde pour raccorder.".into();
+                    self.status = "Premier élément choisi : cliquez la partie à conserver du second.".into();
                 }
             } else if let Some((id, ligne)) = survol_arete {
                 etat.reference = Some(id);
@@ -340,12 +372,19 @@ impl ViewerApp {
                 segment(a, b, z, couleur, infini);
             }
         };
-        if self.ruban_edition.prolonger_angle {
-            if let (Some((a, b)), Some(z)) = (e.reference.as_deref().and_then(|id| p.ligne_ajustable(id)), e.reference.as_deref().and_then(|id| p.altitude_ajustable(id))) {
-                if let Some(q) = self.ecran_plan(rect, if e.fin_reference { b } else { a }, z) {
-                    painter.circle_stroke(q, 7.0, egui::Stroke::new(2.5, orange));
-                }
-            }
+        let angle = self.ruban_edition.prolonger_angle;
+        // consigne de l'étape au curseur
+        if let Some(q) = ui.input(|i| i.pointer.hover_pos()).filter(|q| rect.contains(*q)) {
+            let consigne = match (angle, e.reference.is_some()) {
+                (true, false) => "Angle : cliquer la partie à conserver du 1ᵉʳ élément",
+                (true, true) => "Angle : cliquer la partie à conserver du 2ᵉ élément",
+                (false, false) => "Cliquer l'arête limite",
+                (false, true) => "Cliquer près de l'extrémité à ajuster · clic droit : autre limite",
+            };
+            painter.text(q + egui::vec2(16.0, -8.0), egui::Align2::LEFT_BOTTOM, consigne, egui::FontId::proportional(12.0), bleu);
+        }
+        if angle && e.reference.is_none() && let Some((id, _)) = &e.survol {
+            ligne(id, orange, true);
         }
         // arête limite (choisie, ou survolée avant le choix), prolongée en pointillés
         match (&e.reference, e.ligne, &e.survol_arete) {
@@ -409,6 +448,21 @@ mod tests {
         assert_eq!(apercu.point[0], ja[0]);
         assert!(preparer(&p, &id, &reference, None, true, false, Some(false)).is_err());
         assert_eq!(p.axe_element(&id).unwrap().1, [2000., 0.]);
+    }
+    #[test]
+    fn angle_garde_le_cote_du_clic() {
+        let mut p = Projet::depuis_gabarit("Angle", &crate::config::gabarit::Gabarit::defaut());
+        let a = p.ajouter_mur([0., 0.], [10000., 0.], &Default::default()).unwrap();
+        let b = p.ajouter_mur([2000., -3000.], [2000., 3000.], &Default::default()).unwrap();
+        // croisement vers x = 2000 (abscisse 0,2 de a) et y = 0 (abscisse 0,5 de b)
+        assert_eq!(fins_angle(&p, &a, 0.9, &b, 0.9), Some((false, false)));
+        assert_eq!(fins_angle(&p, &a, 0.05, &b, 0.1), Some((true, true)));
+        // mur qui n'atteint pas le croisement : son extrémité proche est prolongée, où que soit le clic
+        let c = p.ajouter_mur([6000., 5000.], [9000., 5000.], &Default::default()).unwrap();
+        assert_eq!(fins_angle(&p, &c, 0.9, &b, 0.9).map(|f| f.0), Some(false));
+        assert_eq!(fins_angle(&p, &c, 0.1, &b, 0.9).map(|f| f.0), Some(false));
+        let parallele = p.ajouter_mur([0., 8000.], [3000., 8000.], &Default::default()).unwrap();
+        assert_eq!(fins_angle(&p, &a, 0.5, &parallele, 0.5), None);
     }
     #[test]
     fn prolonge_la_justification_jusqu_a_une_arete_quelconque() {

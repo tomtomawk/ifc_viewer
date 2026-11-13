@@ -301,8 +301,18 @@ impl Projet {
             if !valide {
                 return Err("Coordonnées d'annotation non valides.".into());
             }
-            if let F::Polyligne { points, fermee, traits, .. } = &a.forme {
+            if let F::Polyligne { points, fermee, traits, courbures, .. } = &a.forme {
                 let n = points.len() - 1 + usize::from(*fermee && points.len() > 2);
+                // courbures : aucune, ou une par segment ; un tour complet n'est pas un arc
+                if !courbures.is_empty() && courbures.len() != n {
+                    return Err("Polyligne : une courbure par segment est attendue.".into());
+                }
+                if courbures.iter().any(|k| !k.is_finite() || k.abs() > 1e3) {
+                    return Err("Polyligne : courbure de segment non valide.".into());
+                }
+                if courbures.iter().enumerate().any(|(i, k)| *k != 0.0 && points[i] == points[(i + 1) % points.len()]) {
+                    return Err("Polyligne : un segment d'arc relie deux sommets distincts.".into());
+                }
                 if traits.len() > n {
                     return Err("Polyligne : plus de types de trait que de segments.".into());
                 }

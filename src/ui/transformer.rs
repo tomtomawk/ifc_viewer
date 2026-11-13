@@ -656,6 +656,16 @@ impl ViewerApp {
         let fantome = |app: &Self, f: &dyn Fn([f64; 2]) -> [f64; 2]| {
             let Some((projet, _)) = &app.natif else { return };
             let ids = app.selection_bim();
+            if ids.len() <= 12 {
+                for id in &ids {
+                    let z = projet.altitude_ajustable(id).unwrap_or(altitude);
+                    for e in projet.aretes_plan(id) {
+                        if let (Some(x), Some(y)) = (app.ecran_plan(rect, f(e[0]), z), app.ecran_plan(rect, f(e[1]), z)) {
+                            painter.line_segment([x, y], egui::Stroke::new(1.2, bleu.gamma_multiply(0.7)));
+                        }
+                    }
+                }
+            }
             for id in &ids {
                 let (Some((_, _, z)), Some((s, e, _))) = (projet.axe_element(id), projet.ligne_justification(id)) else { continue };
                 if let (Some(x), Some(y)) = (app.ecran_plan(rect, f(s), z), app.ecran_plan(rect, f(e), z)) {
@@ -678,6 +688,15 @@ impl ViewerApp {
             }
         };
         let trait_axe = |id: &str, couleur: Color32, epaisseur: f32| {
+            // contour de l'élément : la cible se lit d'un coup d'œil, pas seulement son axe
+            if let Some((projet, _)) = &self.natif {
+                let z = projet.altitude_ajustable(id).unwrap_or(altitude);
+                for e in projet.aretes_plan(id) {
+                    if let (Some(x), Some(y)) = (self.ecran_plan(rect, e[0], z), self.ecran_plan(rect, e[1], z)) {
+                        painter.line_segment([x, y], egui::Stroke::new(epaisseur.min(2.0), couleur));
+                    }
+                }
+            }
             if let Some((a, b, z)) = self.axe_mur(id) {
                 if let (Some(x), Some(y)) = (self.ecran_plan(rect, a, z), self.ecran_plan(rect, b, z)) {
                     painter.add(egui::Shape::dashed_line(&[x, y], egui::Stroke::new(epaisseur, couleur), 8.0, 4.0));

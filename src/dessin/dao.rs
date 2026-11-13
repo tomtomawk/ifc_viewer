@@ -55,7 +55,10 @@ impl Accroche {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Forme2D {
     Ligne([DVec2; 2]),
-    Polyligne { points: Vec<DVec2>, fermee: bool },
+    /// `courbures` : courbure de chaque segment (segment k : du sommet k au suivant ; le
+    /// dernier d'une polyligne fermée revient au premier). Tangente du quart de l'angle
+    /// au centre de l'arc, positive dans le sens trigonométrique ; 0 ou absent : droit.
+    Polyligne { points: Vec<DVec2>, fermee: bool, courbures: Vec<f64> },
     Spline { points: Vec<DVec2>, fermee: bool },
     Cercle { centre: DVec2, rayon: f64 },
     /// Arc par trois points : départ, point de passage, fin.
@@ -95,6 +98,72 @@ pub fn arc_3_points(a: DVec2, b: DVec2, c: DVec2) -> Option<(DVec2, f64, f64, f6
     let direct = angle_norm(ab - aa) <= angle_norm(ac - aa);
     let balayage = if direct { angle_norm(ac - aa) } else { -angle_norm(aa - ac) };
     Some((centre, rayon, aa, balayage))
+}
+
+/// Point de passage (milieu) de l'arc de courbure `k` allant de `a` à `b`.
+pub fn milieu_arc(a: DVec2, b: DVec2, k: f64) -> DVec2 {
+    (a + b) * 0.5 - (b - a).perp() * (k * 0.5)
+}
+
+/// Courbure du segment d'arc de `a` à `b` passant par `p` ; None si les points sont alignés.
+pub fn courbure_3_points(a: DVec2, p: DVec2, b: DVec2) -> Option<f64> {
+    arc_3_points(a, p, b).map(|(_, _, _, balayage)| (balayage / 4.0).tan())
+}
+
+/// Centre, rayon, départ et balayage signé du segment de courbure `k` de `a` à `b` ;
+/// None s'il est droit.
+pub fn arc_courbure(a: DVec2, b: DVec2, k: f64) -> Option<(DVec2, f64, f64, f64)> {
+    let d = b - a;
+    if !k.is_finite() || k.abs() < 1e-9 || d.length_squared() < 1e-18 {
+        return None;
+    }
+    let centre = (a + b) * 0.5 + d.perp() * ((1.0 - k * k) / (4.0 * k));
+    Some((centre, d.length() * (1.0 + k * k) / (4.0 * k.abs()), (a - centre).to_angle(), 4.0 * k.atan()))
+}
+
+/// Segments d'une polyligne : extrémités et courbure de chacun.
+pub fn segments_polyligne(points: &[DVec2], fermee: bool, courbures: &[f64]) -> Vec<(DVec2, DVec2, f64)> {
+    let n = points.len();
+    let nombre = n.saturating_sub(1) + usize::from(fermee && n > 2);
+    (0..nombre).map(|k| (points[k], points[(k + 1) % n], courbures.get(k).copied().unwrap_or(0.0))).collect()
+}
+
+/// Points d'un segment de polyligne, extrémités comprises : ses deux sommets, ou son arc
+/// développé.
+pub fn points_segment(a: DVec2, b: DVec2, k: f64) -> Vec<DVec2> {
+    match arc_courbure(a, b, k) {
+        Some((o, r, d, s)) => {
+            let mut l = points_arc(o, r, d, s);
+            // extrémités exactes : les sommets de la polyligne
+            l[0] = a;
+            *l.last_mut().unwrap() = b;
+            l
+        }
+        None => vec![a, b],
+    }
+}
+
+/// Polyligne développée, arcs compris ; fermée, elle revient à son premier point.
+pub fn developper(points: &[DVec2], fermee: bool, courbures: &[f64]) -> Vec<DVec2> {
+    let mut l: Vec<DVec2> = points.first().copied().into_iter().collect();
+    for (a, b, k) in segments_polyligne(points, fermee, courbures) {
+        l.extend(points_segment(a, b, k).into_iter().skip(1));
+    }
+    l
+}
+
+/// Coupe le segment de courbure `k` de `a` à `b` au plus près de `p` : point de coupe et
+/// courbures des deux moitiés ; None si `p` tombe hors du segment.
+pub fn scinder_segment(a: DVec2, b: DVec2, k: f64, p: DVec2) -> Option<(DVec2, f64, f64)> {
+    let Some((o, r, depart, balayage)) = arc_courbure(a, b, k) else {
+        let d = b - a;
+        let t = if d.length_squared() > 1e-12 { (p - a).dot(d) / d.length_squared() } else { 0.0 };
+        return (t > 1e-6 && t < 1.0 - 1e-6).then(|| (a + d * t, 0.0, 0.0));
+    };
+    let angle = (p - o).to_angle();
+    let part = if balayage >= 0.0 { angle_norm(angle - depart) } else { -angle_norm(depart - angle) };
+    let t = part / balayage;
+    (t > 1e-6 && t < 1.0 - 1e-6).then(|| (o + DVec2::from_angle(depart + part) * r, (part / 4.0).tan(), ((balayage - part) / 4.0).tan()))
 }
 
 /// Points d'un arc (centre, rayon, départ, balayage), un tous les 5° au plus.
@@ -148,13 +217,7 @@ impl Forme2D {
     pub fn polylignes(&self) -> Vec<Vec<DVec2>> {
         match self {
             Self::Ligne([a, b]) => vec![vec![*a, *b]],
-            Self::Polyligne { points, fermee } => {
-                let mut v = points.clone();
-                if *fermee && points.len() > 2 {
-                    v.push(points[0]);
-                }
-                vec![v]
-            }
+            Self::Polyligne { points, fermee, courbures } => vec![developper(points, *fermee, courbures)],
             Self::Spline { points, fermee } => vec![points_spline(points, *fermee)],
             Self::Cercle { centre, rayon } => vec![points_arc(*centre, *rayon, 0.0, std::f64::consts::TAU)],
             Self::Arc([a, b, c]) => match arc_3_points(*a, *b, *c) {
@@ -168,6 +231,10 @@ impl Forme2D {
     pub fn longueur(&self) -> f64 {
         match self {
             Self::Cercle { rayon, .. } => std::f64::consts::TAU * rayon,
+            Self::Polyligne { points, fermee, courbures } => segments_polyligne(points, *fermee, courbures)
+                .into_iter()
+                .map(|(a, b, k)| arc_courbure(a, b, k).map_or(a.distance(b), |(_, r, _, s)| r * s.abs()))
+                .sum(),
             _ => self.polylignes().iter().map(|l| l.windows(2).map(|w| w[0].distance(w[1])).sum::<f64>()).sum(),
         }
     }
@@ -176,7 +243,14 @@ impl Forme2D {
     pub fn surface(&self) -> Option<f64> {
         match self {
             Self::Cercle { rayon, .. } => Some(std::f64::consts::PI * rayon * rayon),
-            Self::Polyligne { fermee: true, .. } | Self::Spline { fermee: true, .. } => {
+            Self::Polyligne { points, fermee: true, courbures } => {
+                // polygone des sommets, plus le segment circulaire (signé) de chaque arc
+                let segments = segments_polyligne(points, true, courbures);
+                let polygone: f64 = segments.iter().map(|(a, b, _)| a.perp_dot(*b)).sum::<f64>() * 0.5;
+                let arcs: f64 = segments.iter().filter_map(|(a, b, k)| arc_courbure(*a, *b, *k)).map(|(_, r, _, s)| r * r * 0.5 * (s - s.sin())).sum();
+                Some((polygone + arcs).abs())
+            }
+            Self::Spline { fermee: true, .. } => {
                 let l = self.polylignes().remove(0);
                 Some((l.windows(2).map(|w| w[0].perp_dot(w[1])).sum::<f64>() + l.last().zip(l.first()).map_or(0.0, |(a, b)| a.perp_dot(*b))).abs() * 0.5)
             }
@@ -188,7 +262,7 @@ impl Forme2D {
     pub fn geoms(&self) -> Vec<Geom> {
         match self {
             Self::Ligne(s) => vec![Geom::Segment(*s)],
-            Self::Polyligne { .. } => self.polylignes()[0].windows(2).map(|w| Geom::Segment([w[0], w[1]])).collect(),
+            Self::Polyligne { points, fermee, courbures } => segments_polyligne(points, *fermee, courbures).into_iter().map(|(a, b, k)| geom_segment(a, b, k)).collect(),
             Self::Spline { .. } => vec![Geom::Courbe(self.polylignes().remove(0))],
             Self::Cercle { centre, rayon } => vec![Geom::Cercle { centre: *centre, rayon: *rayon }],
             Self::Arc([a, b, c]) => match arc_3_points(*a, *b, *c) {
@@ -196,6 +270,14 @@ impl Forme2D {
                 None => vec![Geom::Segment([*a, *c])],
             },
         }
+    }
+}
+
+/// Géométrie d'accrochage d'un segment de polyligne : segment droit ou arc.
+pub fn geom_segment(a: DVec2, b: DVec2, k: f64) -> Geom {
+    match arc_courbure(a, b, k) {
+        Some((centre, rayon, depart, balayage)) => Geom::Arc { centre, rayon, depart, balayage },
+        None => Geom::Segment([a, b]),
     }
 }
 
@@ -425,12 +507,21 @@ pub struct Trace {
     pub angle: f64,
     /// Cercle de mur : centre, rayon, début et fin du périmètre.
     pub perimetre: bool,
+    /// Polyligne : les segments d'arc sont acceptés (Alt+clic, puis rayon).
+    pub arcs_permis: bool,
+    /// Segments d'arc de la polyligne en cours : extrémités et courbure. Repérés par leurs
+    /// extrémités, ils restent justes quand `points` est repris ou vidé d'ailleurs.
+    arcs: Vec<([DVec2; 2], f64)>,
+    /// Le dernier point termine un segment d'arc dont la courbure reste à donner.
+    arc_attendu: bool,
 }
 
 /// Événements communs de saisie d'un tracé, indépendants de la vue et du document.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum EvenementTrace {
     Point(DVec2),
+    /// Fin d'un segment d'arc de polyligne : le point suivant donne sa courbure.
+    PointArc(DVec2),
     Terminer,
     Fermer,
 }
@@ -440,13 +531,14 @@ impl Trace {
     pub fn appliquer(&mut self, evenement: EvenementTrace) -> Vec<Forme2D> {
         match evenement {
             EvenementTrace::Point(p) => self.ajouter(p),
+            EvenementTrace::PointArc(p) => self.ajouter_arc(p),
             EvenementTrace::Terminer => self.terminer(),
             EvenementTrace::Fermer => self.fermer(),
         }
     }
 
     pub fn new(outil: OutilDessin) -> Trace {
-        Trace { outil, points: Vec::new(), angle: 0.0, perimetre:false }
+        Trace { outil, points: Vec::new(), angle: 0.0, perimetre:false, arcs_permis: false, arcs: Vec::new(), arc_attendu: false }
     }
 
     /// Invite de la ligne de commande, avec ses mots-clés.
@@ -455,8 +547,13 @@ impl Trace {
         if self.outil==Cercle && self.perimetre {
             return match self.points.len() {0=>"Centre du cercle",1=>"Rayon (point ou distance)",2=>"Début du périmètre",_=>"Fin du périmètre (même point : cercle complet)"};
         }
+        if self.attend_courbure() {
+            return "Rayon de l'arc : point de passage, ou valeur puis Entrée";
+        }
         match (self.outil, self.points.len()) {
             (Ligne | Polyligne | Spline, 0) => "Premier point",
+            (Polyligne, 1) if self.arcs_permis => "Point suivant · Alt+clic : fin d'un arc",
+            (Polyligne, _) if self.arcs_permis => "Point suivant · Alt+clic : fin d'un arc · F : fermer",
             (Ligne, 1) | (Polyligne, 1) => "Point suivant",
             (Ligne, _) | (Polyligne, _) => "Point suivant · F : fermer",
             (Spline, 1 | 2) => "Point de passage suivant",
@@ -476,9 +573,89 @@ impl Trace {
         if self.perimetre && self.outil==OutilDessin::Cercle && self.points.len()>=2 {self.points.first().copied()} else {self.points.last().copied()}
     }
 
+    /// Vrai si le dernier segment de la polyligne attend sa courbure (point de passage ou
+    /// rayon).
+    pub fn attend_courbure(&self) -> bool {
+        self.arc_attendu && self.outil == OutilDessin::Polyligne && self.points.len() >= 2
+    }
+
+    /// Courbure du segment de `a` à `b` du tracé en cours (0 : droit).
+    fn courbure(&self, a: DVec2, b: DVec2) -> f64 {
+        self.arcs.iter().rev().find(|([c, d], _)| c.distance(a) < 1e-6 && d.distance(b) < 1e-6).map_or(0.0, |x| x.1)
+    }
+
+    /// Courbures des segments de `points` ; vide si tous sont droits.
+    fn courbures_de(&self, points: &[DVec2], fermee: bool) -> Vec<f64> {
+        let k: Vec<f64> = segments_polyligne(points, fermee, &[]).into_iter().map(|(a, b, _)| self.courbure(a, b)).collect();
+        if k.iter().all(|x| *x == 0.0) { Vec::new() } else { k }
+    }
+
+    /// Courbures des segments déjà tracés (un par couple de points consécutifs) ; vide si
+    /// tous sont droits.
+    pub fn courbures(&self) -> Vec<f64> {
+        self.courbures_de(&self.points, false)
+    }
+
+    /// Reprend un tracé laissé en attente : ses points et les courbures de ses segments.
+    pub fn reprendre(&mut self, points: Vec<DVec2>, courbures: &[f64]) {
+        self.arcs = segments_polyligne(&points, false, courbures).into_iter().filter(|s| s.2 != 0.0).map(|(a, b, k)| ([a, b], k)).collect();
+        self.arc_attendu = false;
+        self.points = points;
+    }
+
+    /// Fin d'un segment d'arc (Alt+clic) : le point s'ajoute, puis le suivant donne la
+    /// courbure (point de passage, ou rayon tapé). Hors polyligne à arcs : point ordinaire.
+    pub fn ajouter_arc(&mut self, p: DVec2) -> Vec<Forme2D> {
+        if self.outil != OutilDessin::Polyligne || !self.arcs_permis || self.points.is_empty() || self.attend_courbure() {
+            return self.ajouter(p);
+        }
+        if self.points.last().is_some_and(|q| q.distance(p) < 1e-6) {
+            return Vec::new();
+        }
+        self.points.push(p);
+        self.arc_attendu = true;
+        Vec::new()
+    }
+
+    /// Point de passage de l'arc en attente pour un rayon donné : le petit arc, bombé du
+    /// côté du curseur.
+    pub fn point_de_rayon(&self, rayon: f64, curseur: DVec2) -> Result<DVec2, String> {
+        if !self.attend_courbure() {
+            return Err("Aucun arc en attente de rayon.".into());
+        }
+        let (a, b) = (self.points[self.points.len() - 2], self.points[self.points.len() - 1]);
+        let corde = a.distance(b);
+        if !rayon.is_finite() || rayon < corde * 0.5 - 1e-9 {
+            return Err("Rayon trop petit : il vaut au moins la moitié de la distance entre les deux points.".into());
+        }
+        let fleche = rayon - (rayon * rayon - corde * corde * 0.25).max(0.0).sqrt();
+        // courbure positive : arc bombé à droite du sens de tracé
+        let k = (2.0 * fleche / corde).copysign(-(b - a).perp_dot(curseur - a));
+        Ok(milieu_arc(a, b, k))
+    }
+
     /// Ajoute un point ; rend les formes achevées par ce point (la ligne est une suite
     /// de segments, comme LIGNE dans AutoCAD).
     pub fn ajouter(&mut self, p: DVec2) -> Vec<Forme2D> {
+        if self.attend_courbure() {
+            // courbure du dernier segment : arc passant par `p` (aligné : il reste droit)
+            self.arc_attendu = false;
+            let n = self.points.len();
+            let (a, b) = (self.points[n - 2], self.points[n - 1]);
+            if let Some(k) = courbure_3_points(a, p, b) {
+                self.arcs.push(([a, b], k));
+            }
+            // arc revenu sur le premier sommet : le contour se ferme
+            if n >= 4 && self.points[0].distance(b) < 1e-6 {
+                self.points.pop();
+                return self.clore(true);
+            }
+            return Vec::new();
+        }
+        self.arc_attendu = false;
+        if self.points.is_empty() {
+            self.arcs.clear();
+        }
         if !(self.perimetre && self.outil==OutilDessin::Cercle && self.points.len()>=2) && self.points.last().is_some_and(|q| q.distance(p) < 1e-6) {
             return Vec::new();
         }
@@ -500,7 +677,7 @@ impl Trace {
             (Rectangle, 2) => {
                 let coins = self.rectangle(self.points[0], self.points[1]);
                 self.points.clear();
-                coins.map(|points| Forme2D::Polyligne { points: points.to_vec(), fermee: true }).into_iter().collect()
+                coins.map(|points| Forme2D::Polyligne { points: points.to_vec(), fermee: true, courbures: Vec::new() }).into_iter().collect()
             }
             (Cercle,4) if self.perimetre => {
                 let forme=perimetre_cercle(self.points[0],self.points[0].distance(self.points[1]),self.points[2],self.points[3]);
@@ -533,11 +710,17 @@ impl Trace {
     }
 
     fn clore(&mut self, fermee: bool) -> Vec<Forme2D> {
+        self.arc_attendu = false;
         let points = std::mem::take(&mut self.points);
         use OutilDessin::*;
         match self.outil {
             Ligne if fermee && points.len() >= 3 => vec![Forme2D::Ligne([points[points.len() - 1], points[0]])],
-            Polyligne if points.len() >= 2 => vec![Forme2D::Polyligne { fermee: fermee && points.len() >= 3, points }],
+            Polyligne if points.len() >= 2 => {
+                let fermee = fermee && points.len() >= 3;
+                let courbures = self.courbures_de(&points, fermee);
+                self.arcs.clear();
+                vec![Forme2D::Polyligne { fermee, points, courbures }]
+            }
             Spline if points.len() >= 2 => vec![Forme2D::Spline { points, fermee }],
             _ => Vec::new(),
         }
@@ -564,7 +747,15 @@ impl Trace {
                 Some(c) => vec![vec![c[0], c[1], c[2], c[3], c[0]]],
                 None => vec![pts],
             },
-            Polyligne => vec![pts],
+            Polyligne if self.attend_courbure() => {
+                // arc en attente : il passe par le curseur
+                let n = self.points.len();
+                let mut k = self.courbures();
+                k.resize(n - 1, 0.0);
+                k[n - 2] = courbure_3_points(self.points[n - 2], curseur, self.points[n - 1]).unwrap_or(0.0);
+                vec![developper(&self.points, false, &k)]
+            }
+            Polyligne => vec![developper(&pts, false, &self.courbures())],
             Spline => vec![points_spline(&pts, false)],
             Cercle if self.perimetre && self.points.len()==1 => vec![points_arc(self.points[0],self.points[0].distance(curseur),0.0,std::f64::consts::TAU)],
             Cercle if self.perimetre && self.points.len()>=2 => {
@@ -594,11 +785,11 @@ mod tests {
     #[test]
     fn longueur_et_surface() {
         let carre = vec![DVec2::ZERO, DVec2::new(2000.0, 0.0), DVec2::new(2000.0, 1000.0), DVec2::new(0.0, 1000.0)];
-        let ferme = Forme2D::Polyligne { points: carre.clone(), fermee: true };
+        let ferme = Forme2D::Polyligne { points: carre.clone(), fermee: true, courbures: Vec::new() };
         assert!((ferme.longueur() - 6000.0).abs() < 1e-9);
         assert!((ferme.surface().unwrap() - 2e6).abs() < 1e-6);
         // ouverte : sans le côté de fermeture, sans surface
-        let ouverte = Forme2D::Polyligne { points: carre, fermee: false };
+        let ouverte = Forme2D::Polyligne { points: carre, fermee: false, courbures: Vec::new() };
         assert!((ouverte.longueur() - 5000.0).abs() < 1e-9);
         assert_eq!(ouverte.surface(), None);
         let cercle = Forme2D::Cercle { centre: DVec2::ZERO, rayon: 1000.0 };
@@ -646,7 +837,7 @@ mod tests {
         let mut t = Trace::new(OutilDessin::Rectangle);
         t.angle = std::f64::consts::FRAC_PI_2;
         t.ajouter(DVec2::ZERO);
-        let Some(Forme2D::Polyligne { points, fermee: true }) = t.ajouter(DVec2::new(300.0, 200.0)).pop() else { panic!() };
+        let Some(Forme2D::Polyligne { points, fermee: true, .. }) = t.ajouter(DVec2::new(300.0, 200.0)).pop() else { panic!() };
         assert!(proche_de(points[1], DVec2::new(0.0, 200.0)) && proche_de(points[3], DVec2::new(300.0, 0.0)));
         // ligne refermée sur son premier point
         let mut t = Trace::new(OutilDessin::Ligne);
@@ -660,7 +851,7 @@ mod tests {
         for p in [DVec2::ZERO, DVec2::X, DVec2::ONE, DVec2::ZERO] {
             formes = t.ajouter(p);
         }
-        assert!(matches!(formes.as_slice(), [Forme2D::Polyligne { fermee: true, points }] if points.len() == 3));
+        assert!(matches!(formes.as_slice(), [Forme2D::Polyligne { fermee: true, points, .. }] if points.len() == 3));
         assert!(lire_saisie("#1;2", None, None, 1.0).is_err());
     }
 
@@ -677,7 +868,7 @@ mod tests {
         for p in [DVec2::ZERO, DVec2::new(100.0, 0.0), DVec2::new(100.0, 50.0)] {
             assert!(t.ajouter(p).is_empty());
         }
-        assert!(matches!(&t.terminer()[..], [Forme2D::Polyligne { points, fermee: false }] if points.len() == 3));
+        assert!(matches!(&t.terminer()[..], [Forme2D::Polyligne { points, fermee: false, courbures }] if points.len() == 3 && courbures.is_empty()));
         // cercle : centre puis rayon
         let mut t = Trace::new(OutilDessin::Cercle);
         t.ajouter(DVec2::new(10.0, 10.0));
@@ -713,5 +904,96 @@ mod tests_perimetre_mur {
         assert!(t.points.is_empty());
         for p in [DVec2::ZERO,DVec2::new(3000.,0.),DVec2::new(0.,3000.)] {assert!(t.ajouter(p).is_empty());}
         assert!(matches!(t.ajouter(DVec2::new(0.,3000.)).as_slice(),[Forme2D::Cercle{..}]));
+    }
+}
+
+#[cfg(test)]
+mod tests_arcs_polyligne {
+    use super::*;
+    use std::f64::consts::PI;
+
+    fn polyligne_a_arcs() -> Trace {
+        let mut t = Trace::new(OutilDessin::Polyligne);
+        t.arcs_permis = true;
+        t
+    }
+
+    #[test]
+    fn courbure_demi_cercle_et_arc_retrouve() {
+        let (a, b) = (DVec2::new(-1000.0, 0.0), DVec2::new(1000.0, 0.0));
+        // sens trigonométrique de a vers b : l'arc passe par le bas
+        let k = courbure_3_points(a, DVec2::new(0.0, -1000.0), b).unwrap();
+        assert!((k - 1.0).abs() < 1e-9);
+        assert!(milieu_arc(a, b, k).distance(DVec2::new(0.0, -1000.0)) < 1e-6);
+        let (centre, rayon, _, balayage) = arc_courbure(a, b, k).unwrap();
+        assert!(centre.length() < 1e-6 && (rayon - 1000.0).abs() < 1e-6 && (balayage - PI).abs() < 1e-9);
+        assert!((courbure_3_points(a, DVec2::new(0.0, 1000.0), b).unwrap() + 1.0).abs() < 1e-9);
+        assert!(arc_courbure(a, b, 0.0).is_none());
+        assert!(courbure_3_points(a, DVec2::ZERO, b).is_none());
+    }
+
+    #[test]
+    fn alt_puis_point_de_passage_ou_rayon() {
+        let mut t = polyligne_a_arcs();
+        assert!(t.ajouter(DVec2::ZERO).is_empty());
+        assert!(t.ajouter(DVec2::new(1000.0, 0.0)).is_empty());
+        assert!(t.ajouter_arc(DVec2::new(3000.0, 0.0)).is_empty());
+        assert!(t.attend_courbure());
+        assert_eq!(t.invite(), "Rayon de l'arc : point de passage, ou valeur puis Entrée");
+        // l'aperçu passe par le curseur
+        let apercu = t.apercu(DVec2::new(2000.0, 1000.0));
+        assert!(apercu[0].iter().any(|p| p.distance(DVec2::new(2000.0, 1000.0)) < 1e-6));
+        // rayon tapé : petit arc du côté du curseur
+        assert!(t.point_de_rayon(500.0, DVec2::new(2000.0, 1.0)).is_err());
+        let passage = t.point_de_rayon(1000.0, DVec2::new(2000.0, 300.0)).unwrap();
+        assert!(passage.distance(DVec2::new(2000.0, 1000.0)) < 1e-6);
+        assert!(t.ajouter(passage).is_empty());
+        assert!(!t.attend_courbure());
+        assert_eq!(t.points.len(), 3);
+        assert!(t.ajouter(DVec2::new(3000.0, -500.0)).is_empty());
+        let formes = t.terminer();
+        let [Forme2D::Polyligne { points, fermee: false, courbures }] = &formes[..] else { panic!("polyligne attendue") };
+        assert_eq!(points.len(), 4);
+        assert_eq!(courbures.len(), 3);
+        assert!(courbures[0] == 0.0 && (courbures[1] + 1.0).abs() < 1e-9 && courbures[2] == 0.0);
+        // un nouveau tracé repart sans arc
+        for p in [DVec2::new(1000.0, 0.0), DVec2::new(3000.0, 0.0)] { t.ajouter(p); }
+        assert!(matches!(&t.terminer()[..], [Forme2D::Polyligne { courbures, .. }] if courbures.is_empty()));
+    }
+
+    #[test]
+    fn arcs_refuses_hors_polyligne_a_arcs_et_fermeture_par_un_arc() {
+        let mut t = Trace::new(OutilDessin::Polyligne);
+        t.ajouter(DVec2::ZERO);
+        t.ajouter_arc(DVec2::new(1000.0, 0.0));
+        assert!(!t.attend_courbure());
+        let mut t = polyligne_a_arcs();
+        for p in [DVec2::ZERO, DVec2::new(2000.0, 0.0), DVec2::new(2000.0, 2000.0)] { t.ajouter(p); }
+        t.ajouter_arc(DVec2::ZERO);
+        let formes = t.ajouter(DVec2::new(0.0, 2000.0));
+        let [Forme2D::Polyligne { points, fermee: true, courbures }] = &formes[..] else { panic!("contour fermé attendu") };
+        assert_eq!(points.len(), 3);
+        assert_eq!(courbures.len(), 3);
+        assert!(courbures[2] != 0.0 && t.points.is_empty());
+    }
+
+    #[test]
+    fn longueur_surface_accroches_et_coupe() {
+        // demi-disque : diamètre puis demi-cercle de retour
+        let (a, b) = (DVec2::new(-1000.0, 0.0), DVec2::new(1000.0, 0.0));
+        let demi = Forme2D::Polyligne { points: vec![a, b], fermee: false, courbures: vec![1.0] };
+        assert!((demi.longueur() - PI * 1000.0).abs() < 1e-6);
+        assert!(matches!(demi.geoms().as_slice(), [Geom::Arc { .. }]));
+        let l = demi.polylignes().remove(0);
+        assert!(l.len() > 30 && l[0] == a && *l.last().unwrap() == b);
+        let disque = Forme2D::Polyligne { points: vec![a, b, DVec2::new(0.0, 1.0)], fermee: true, courbures: vec![1.0] };
+        // demi-disque du bas, plus le triangle plat du haut
+        assert!((disque.surface().unwrap() - (PI * 1e6 / 2.0 + 1000.0)).abs() < 1e-3);
+        let (p, k1, k2) = scinder_segment(a, b, 1.0, DVec2::new(0.0, -5000.0)).unwrap();
+        assert!(p.distance(DVec2::new(0.0, -1000.0)) < 1e-6);
+        let quart = (PI / 8.0).tan();
+        assert!((k1 - quart).abs() < 1e-9 && (k2 - quart).abs() < 1e-9);
+        assert!(scinder_segment(a, b, 1.0, DVec2::new(0.0, 5000.0)).is_none());
+        assert_eq!(scinder_segment(a, b, 0.0, DVec2::new(500.0, 300.0)), Some((DVec2::new(500.0, 0.0), 0.0, 0.0)));
     }
 }

@@ -79,6 +79,8 @@ pub(crate) enum Outil {
     Altimetrie,
     Texte,
     Etiquette,
+    /// Icône de l'outil Arc 2D de l'éditeur de familles. Dans un projet, l'arc est un
+    /// segment de la polyligne (Alt+clic) : ce n'est plus un outil du ruban.
     Arc,
     Polyligne,
     Rectangle,
@@ -201,7 +203,6 @@ impl Outil {
             Self::Rectangle => D::Rectangle,
             Self::Spline => D::Spline,
             Self::Cercle => D::Cercle,
-            Self::Arc => D::Arc,
             _ => return None,
         })
     }
@@ -346,7 +347,7 @@ fn limites_croquis_mur(parametres: &crate::modele::edition::ParametresMur, _proj
 
 fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
     use Outil::*;
-    const DESSIN_2D: (&str, &[Outil]) = ("Dessin 2D", &[Polyligne, Spline, Cercle, Arc]);
+    const DESSIN_2D: (&str, &[Outil]) = ("Dessin 2D", &[Polyligne, Spline, Cercle]);
     match menu {
         Menu::Modeliser => &[
             ("Construire", &[Mur, Surfaces]),

@@ -188,6 +188,60 @@ impl ViewerApp {
         self.dessin2d.giron_impose.unwrap_or((630.0 - 2.0 * h).max(150.0))
     }
 
+    /// Marches à poser (hors paliers et arrivée) pour un tracé de `sommets` points.
+    pub(in crate::ui) fn marches_a_poser(&self, sommets: usize) -> i64 {
+        use crate::ui::ruban::Outil;
+        let Some((_, _, hauteur, _)) = self.base_escalier() else { return 0 };
+        let vise = self.ruban_edition.nombre_option(Outil::Escalier, 1).max(50.0);
+        let contremarches = ((hauteur.max(1.0) / vise).round() as i64).max(2);
+        contremarches - 1 - (sommets as i64 - 2).max(0)
+    }
+
+    /// Volées de la ligne tracée (départ, direction, longueur) : la foulée justifiée,
+    /// raccourcie de la demi-largeur à chaque palier, comme dans le modèle.
+    pub(in crate::ui) fn volees_trace(&self, brut: &[[f64; 2]]) -> Vec<(DVec2, DVec2, f64)> {
+        let w = self.ruban_edition.nombre_option(crate::ui::ruban::Outil::Escalier, 0) / 2.0;
+        let t = self.trace_justifie(brut);
+        let n = t.len();
+        (0..n.saturating_sub(1)).map(|i| {
+            let (a, b) = (DVec2::from_array(t[i]), DVec2::from_array(t[i + 1]));
+            let d = (b - a).normalize_or_zero();
+            let (debut, fin) = (if i > 0 { w } else { 0.0 }, if i + 2 < n { w } else { 0.0 });
+            (a + d * debut, d, (a.distance(b) - debut - fin).max(0.0))
+        }).collect()
+    }
+
+    /// Vrai quand le tracé porte toutes ses marches : rien ne peut plus s'y ajouter.
+    pub(in crate::ui) fn escalier_complet(&self, points: &[DVec2]) -> bool {
+        if points.len() < 2 { return false; }
+        let brut: Vec<[f64; 2]> = points.iter().map(|p| p.to_array()).collect();
+        let total: f64 = self.volees_trace(&brut).iter().map(|v| v.2).sum();
+        total >= self.marches_a_poser(brut.len()) as f64 * self.giron_vise() - 1.0
+    }
+
+    /// Point d'une volée d'escalier : jamais plus loin que la dernière marche à poser ;
+    /// `magnetiser` : la longueur tombe sur un nombre entier de marches.
+    pub(in crate::ui) fn point_escalier(&self, poses: &[DVec2], p: DVec2, magnetiser: bool) -> DVec2 {
+        let Some(&prec) = poses.last() else { return p };
+        let (l, giron) = ((p - prec).length(), self.giron_vise());
+        if l < 1e-6 || giron <= 1.0 { return p; }
+        let u = (p - prec) / l;
+        let brut: Vec<[f64; 2]> = poses.iter().chain([&p]).map(|q| q.to_array()).collect();
+        let longueurs: Vec<f64> = self.volees_trace(&brut).iter().map(|v| v.2).collect();
+        let Some((&derniere, avant)) = longueurs.split_last() else { return p };
+        // la volée en cours vaut la longueur tracée plus `c` (justification, palier)
+        let c = derniere - l;
+        let reste = self.marches_a_poser(brut.len()) as f64 * giron - avant.iter().sum::<f64>();
+        if reste < giron * 0.5 { return p; }
+        let mut volee = derniere.min(reste);
+        if magnetiser && volee < reste {
+            volee = reste - ((reste - volee) / giron).round() * giron;
+            if volee < giron * 0.5 { volee += giron; }
+            volee = volee.min(reste);
+        }
+        prec + u * (volee - c).max(1.0)
+    }
+
     /// Ligne de foulée centrée à partir de la ligne tracée : chaque volée a sa
     /// justification (axe, bord gauche, bord droit), figée quand elle est posée ; Espace
     /// ne change que celle de la volée en cours.
@@ -307,25 +361,31 @@ impl ViewerApp {
             let brut: Vec<[f64; 2]> = l.iter().map(|p| p.to_array()).collect();
             // justification : la ligne tracée est l'axe ou un bord ; la foulée est au centre
             let trace = self.trace_justifie(&brut);
-            // marches en pointillé : un trait toutes les `giron` le long de chaque volée
-            let n = trace.len();
-            for i in 0..n - 1 {
-                let (a, b) = (DVec2::from_array(trace[i]), DVec2::from_array(trace[i + 1]));
-                let d = (b - a).normalize_or_zero();
-                if d == DVec2::ZERO { continue; }
-                let debut = if i > 0 { w } else { 0.0 };
-                let fin = a.distance(b) - if i + 2 < n { w } else { 0.0 };
-                let mut t = debut + giron;
-                let mut k = 0;
-                while t <= fin + 1e-6 && k < 300 {
-                    let c = a + d * t;
+            // marches en pointillé : un trait par giron, cumulé d'une volée à l'autre,
+            // jusqu'au nombre de marches à poser — pas au-delà
+            let total = self.marches_a_poser(trace.len()).max(0);
+            let (mut s, mut k) = (0.0, 0_i64);
+            for (a, d, longueur) in self.volees_trace(&brut) {
+                while k < total {
+                    let t = (k + 1) as f64 * giron - s;
+                    if t > longueur + 1.0 { break; }
+                    let c = a + d * t.min(longueur);
                     let nrm = d.perp() * w;
                     if let (Some(p), Some(q)) = (self.vers_ecran(rect, c - nrm), self.vers_ecran(rect, c + nrm)) {
                         painter.add(egui::Shape::dashed_line(&[p, q], egui::Stroke::new(1.0, couleur), 4.0, 3.0));
                     }
-                    t += giron;
                     k += 1;
                 }
+                s += longueur;
+            }
+            // compteur à l'arrivée : marches posées sur marches à poser
+            if let Some(q) = self.vers_ecran(rect, l[l.len() - 1]) {
+                let (texte, teinte) = if k >= total && total > 0 {
+                    (format!("{k} / {total} marches — complet"), Color32::from_rgb(40, 150, 70))
+                } else {
+                    (format!("{k} / {total} marches · reste {}", (total - k).max(0)), couleur)
+                };
+                painter.text(q + egui::vec2(16.0, -22.0), egui::Align2::LEFT_BOTTOM, texte, egui::FontId::proportional(13.0), teinte);
             }
             for d in [w, -w] {
                 let bord: Vec<egui::Pos2> = crate::modele::elements::escalier::decaler_polyligne(&trace, d).iter().filter_map(|q| self.vers_ecran(rect, DVec2::from_array(*q))).collect();

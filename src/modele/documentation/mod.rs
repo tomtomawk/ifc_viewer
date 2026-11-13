@@ -133,12 +133,18 @@ pub enum AnnotationForme {
     Zone {
         contour: Vec<[f64; 2]>,
     },
-    /// Dessin 2D : polyligne, spline (passant par ses points), cercle, arc par trois
-    /// points (début, passage, fin) ; mm dans le plan de la vue.
+    /// Dessin 2D : polyligne (segments droits ou arcs), spline (passant par ses points),
+    /// cercle, arc par trois points (début, passage, fin) ; mm dans le plan de la vue.
     Polyligne {
         points: Vec<[f64; 2]>,
         #[serde(default)]
         fermee: bool,
+        /// Courbure de chaque segment (segment k : du sommet k au suivant ; le dernier
+        /// d'une polyligne fermée revient au premier) : tangente du quart de l'angle au
+        /// centre de l'arc, positive dans le sens trigonométrique, 1 pour un demi-cercle ;
+        /// 0 : segment droit. Absent ou vide : tous les segments sont droits.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        courbures: Vec<f64>,
         /// Polyligne fermée : remplissage (motif d'un matériau ou choisi).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         remplissage: Option<RemplissageContour>,
@@ -217,7 +223,7 @@ impl AnnotationForme {
         let v = |p: &[f64; 2]| DVec2::from_array(*p);
         Some(match self {
             Self::Ligne { debut, fin } => F::Ligne([v(debut), v(fin)]),
-            Self::Polyligne { points, fermee, .. } => F::Polyligne { points: points.iter().map(v).collect(), fermee: *fermee },
+            Self::Polyligne { points, fermee, courbures, .. } => F::Polyligne { points: points.iter().map(v).collect(), fermee: *fermee, courbures: courbures.clone() },
             Self::Spline { points, fermee } => F::Spline { points: points.iter().map(v).collect(), fermee: *fermee },
             Self::Cercle { centre, rayon } => F::Cercle { centre: v(centre), rayon: *rayon },
             Self::Arc { points } => F::Arc(points.map(|p| v(&p))),
@@ -231,13 +237,32 @@ impl AnnotationForme {
         let a = |p: &DVec2| p.to_array();
         match f {
             F::Ligne([d, e]) => Self::Ligne { debut: a(d), fin: a(e) },
-            F::Polyligne { points, fermee } => Self::Polyligne { points: points.iter().map(a).collect(), fermee: *fermee, remplissage: None, traits: Vec::new() },
+            F::Polyligne { points, fermee, courbures } => Self::Polyligne { points: points.iter().map(a).collect(), fermee: *fermee, courbures: courbures.clone(), remplissage: None, traits: Vec::new() },
             F::Spline { points, fermee } => Self::Spline { points: points.iter().map(a).collect(), fermee: *fermee },
             F::Cercle { centre, rayon } => Self::Cercle { centre: a(centre), rayon: *rayon },
             F::Arc(p) => Self::Arc { points: p.map(|q| q.to_array()) },
         }
     }
 
+    /// Contour développé d'une polyligne (arcs remplacés par leurs points, sans retour au
+    /// premier sommet) : tracé du remplissage et des régions. None pour une autre forme.
+    pub fn contour_developpe(&self) -> Option<Vec<[f64; 2]>> {
+        let Self::Polyligne { points, fermee, courbures, .. } = self else { return None };
+        if courbures.iter().all(|k| *k == 0.0) {
+            return Some(points.clone());
+        }
+        let sommets: Vec<DVec2> = points.iter().map(|p| DVec2::from_array(*p)).collect();
+        let mut l = crate::dessin::dao::developper(&sommets, *fermee, courbures);
+        if *fermee && l.len() > 1 {
+            l.pop();
+        }
+        Some(l.into_iter().map(|p| p.to_array()).collect())
+    }
+
+    /// Nombre de segments d'une polyligne de `points` sommets.
+    pub fn segments_polyligne(points: usize, fermee: bool) -> usize {
+        points.saturating_sub(1) + usize::from(fermee && points > 2)
+    }
 }
 
 /// Remplissage d'une polyligne fermée : motif de coupe d'un matériau (premier plan, encre
@@ -625,12 +650,10 @@ fn point_cote(p: &Projet, v: &Vue, point: &PointCote) -> Option<DVec2> {
 }
 /// Traits d'une polyligne : segments consécutifs de même type regroupés (raccords
 /// continus), tirets reportés d'un segment à l'autre.
-fn primitives_polyligne(p: &Projet, points: &[[f64; 2]], fermee: bool, traits: &[String], echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
+fn primitives_polyligne(p: &Projet, points: &[[f64; 2]], fermee: bool, courbures: &[f64], traits: &[String], echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
     let pts: Vec<DVec2> = points.iter().map(|q| DVec2::from_array(*q)).collect();
-    let mut segments: Vec<[DVec2; 2]> = pts.windows(2).map(|w| [w[0], w[1]]).collect();
-    if fermee && pts.len() > 2 {
-        segments.push([pts[pts.len() - 1], pts[0]]);
-    }
+    // chaque segment : ses deux sommets, ou les points de son arc
+    let segments: Vec<Vec<DVec2>> = crate::dessin::dao::segments_polyligne(&pts, fermee, courbures).into_iter().map(|(a, b, k)| crate::dessin::dao::points_segment(a, b, k)).collect();
     let mut out = Vec::new();
     let mut k = 0;
     while k < segments.len() {
@@ -642,15 +665,18 @@ fn primitives_polyligne(p: &Projet, points: &[[f64; 2]], fermee: bool, traits: &
         let t = p.type_trait(id);
         let style = Style { couleur: [30, 30, 30, 255], epaisseur: t.epaisseur };
         if t.tirets.is_empty() {
-            let mut l: Vec<DVec3> = segments[k..fin].iter().map(|s| pt(s[0])).collect();
+            let mut l: Vec<DVec3> = segments[k..fin].iter().flat_map(|s| &s[..s.len() - 1]).map(|q| pt(*q)).collect();
             let ferme = k == 0 && fin == segments.len() && fermee && pts.len() > 2;
             if !ferme {
-                l.push(pt(segments[fin - 1][1]));
+                l.push(pt(*segments[fin - 1].last().unwrap()));
             }
             out.push(Primitive { forme: Forme::Polyligne { points: l, fermee: ferme }, style, role: Role::Annotation, element: None });
         } else {
             let mut phase = 0.0;
-            let s: Vec<[DVec3; 2]> = segments[k..fin].iter().flat_map(|s| t.decouper(s[0], s[1], echelle, &mut phase)).map(|[a, b]| [pt(a), pt(b)]).collect();
+            let mut s: Vec<[DVec3; 2]> = Vec::new();
+            for w in segments[k..fin].iter().flat_map(|s| s.windows(2)) {
+                s.extend(t.decouper(w[0], w[1], echelle, &mut phase).into_iter().map(|[a, b]| [pt(a), pt(b)]));
+            }
             out.push(Primitive { forme: Forme::Segments(s), style, role: Role::Annotation, element: None });
         }
         k = fin;
@@ -661,12 +687,12 @@ fn primitives_polyligne(p: &Projet, points: &[[f64; 2]], fermee: bool, traits: &
 fn primitives_forme_dessin(p: &Projet, forme: &AnnotationForme, echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
     match forme {
         AnnotationForme::Ligne { debut, fin } => vec![ligne(pt(DVec2::from_array(*debut)), pt(DVec2::from_array(*fin)))],
-        AnnotationForme::Polyligne { points, fermee, remplissage, traits } => {
+        AnnotationForme::Polyligne { points, fermee, courbures, remplissage, traits } => {
             let mut out = Vec::new();
             if let Some(r) = remplissage.as_ref().filter(|_| *fermee && points.len() >= 3) {
-                out.extend(primitives_remplissage(p, r, points, echelle, pt));
+                out.extend(primitives_remplissage(p, r, &forme.contour_developpe().unwrap_or_default(), echelle, pt));
             }
-            out.extend(primitives_polyligne(p, points, *fermee, traits, echelle, pt));
+            out.extend(primitives_polyligne(p, points, *fermee, courbures, traits, echelle, pt));
             out
         }
         AnnotationForme::Zone { contour } => vec![Primitive {

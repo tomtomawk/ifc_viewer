@@ -347,7 +347,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
         seul.symboles = vec![sy.clone()];
         seul.elements_2d.clear();
         for (l, m) in seul.regions_resolues(&r, sy.vue) {
-            let forme = crate::modele::documentation::AnnotationForme::Polyligne { points: l.iter().map(|&(h,v)| [h,v]).collect(), fermee: true, remplissage: Some(m), traits: Vec::new() };
+            let forme = crate::modele::documentation::AnnotationForme::Polyligne { points: l.iter().map(|&(h,v)| [h,v]).collect(), fermee: true, courbures: Vec::new(), remplissage: Some(m), traits: Vec::new() };
             let primitives = crate::modele::documentation::forme_cartouche(projet, &forme);
             let dessin = super::super::feuilles::rendu(&primitives, [0.0; 4]);
             super::super::cartouche::peindre(&painter, &cadre, dessin, None);

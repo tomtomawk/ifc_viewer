@@ -79,7 +79,7 @@ def run(exe):
             assert commande("projet_natif")["projet"]["nom"] == "Essai pilote"
             commande("retablir")
             assert commande("projet_natif")["projet"]["nom"] == "Renommé"
-            for outil in ["mur", "poteau", "poutre", "dalle", "sol", "plafond", "toiture", "terrain", "limite_propriete", "escalier", "garde_corps", "ouverture", "texte", "cote", "etiquette", "ligne", "polyligne", "spline", "cercle", "arc", "zone", "coupe", "aucun"]:
+            for outil in ["mur", "poteau", "poutre", "dalle", "sol", "plafond", "toiture", "terrain", "limite_propriete", "escalier", "garde_corps", "ouverture", "texte", "cote", "etiquette", "ligne", "polyligne", "spline", "cercle", "zone", "coupe", "aucun"]:
                 commande("outil", outil)
             commande("outil", "outil_inexistant", ok=False)
             commande("saisie", [{"action": "touche", "touche": "Escape"}])

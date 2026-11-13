@@ -327,12 +327,20 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   atomiquement. Chaque modification appliquée écrit une copie `.recuperation.json`.
   À la réouverture, l'application propose de la restaurer. Enregistrer ou fermer
   explicitement sans enregistrer supprime cette copie de récupération.
-- **Dessin 2D** (Documenter) : ligne, polyligne, spline, cercle et arc se tracent
+- **Dessin 2D** (Documenter) : polyligne, spline et cercle se tracent
   directement dans la vue native ouverte, à la manière de CADCraft ou d'AutoCAD.
+  Il n'y a plus d'outil Arc : un arc est un segment de la polyligne. Alt+clic donne
+  la fin de l'arc (son début est le dernier sommet), puis un clic donne son point de
+  passage, ou une valeur tapée suivie d'Entrée son rayon (petit arc, bombé du côté
+  du curseur ; au moins la moitié de la distance entre les deux points). La
+  polyligne reste un seul objet : contour fermé, remplissage, types de trait,
+  accrochage au centre et aux extrémités de l'arc. Dans Modifier le tracé, un arc
+  suit ses sommets, se scinde en deux arcs du même cercle, s'inverse par symétrie,
+  et Propriétés donne son rayon et permet de le rendre droit.
   Clic : point suivant ; clic droit, Entrée ou Espace : terminer ; F puis Entrée :
   fermer la polyligne ou la spline ; Échap : effacer la saisie, puis abandonner le
   tracé en cours, puis quitter l'outil. La ligne enchaîne les segments ; le cercle
-  se donne par centre et rayon, l'arc par départ, point de passage et fin ; la spline
+  se donne par centre et rayon ; la spline
   passe par ses points (Catmull-Rom centripète). Accrochages : extrémité, milieu,
   centre, quadrant, intersection, perpendiculaire et point proche, sur les dessins
   de la vue et, en plan, sur les contours et axes des murs, les contours des éléments
@@ -484,10 +492,19 @@ si la destination est omise. Les commandes renvoient un code non nul en cas d'er
 Collections v0 ajoutées : `quadrillages`, `annotations`, `feuilles`, `nomenclatures`.
 Tables facultatives : `attaches_toitures` (id du mur/assemblage → id de toiture),
 `priorites_jonction` (id du mur/couche → entier). Les annotations appartiennent à une
-vue ; leurs formes : `texte`, `ligne`, `polyligne` (`points`, `fermee`), `spline`
+vue ; leurs formes : `texte`, `ligne`, `polyligne` (`points`, `fermee`, `courbures`), `spline`
 (`points` de passage, `fermee`), `cercle` (`centre`, `rayon`), `arc` (`points` :
 départ, passage, fin), `zone`, `cote`, `etiquette`, en mm dans le repère 2D de la vue ; les positions et tailles des feuilles sont en mm papier. Aucun historique
 Undo/Redo n'est sérialisé dans le projet.
+
+`courbures` d'une polyligne (changement de format : champ nouveau, absent des fichiers
+antérieurs, qui restent lisibles) : une valeur par segment, le segment `k` allant du
+sommet `k` au suivant et le dernier d'une polyligne fermée revenant au premier. La
+valeur est la tangente du quart de l'angle au centre de l'arc, positive dans le sens
+trigonométrique (1 : demi-cercle, 0 : segment droit). Champ absent ou vide : tous les
+segments sont droits. Sont refusés : un nombre de courbures différent du nombre de
+segments, une valeur non finie, un arc entre deux sommets confondus. La forme `arc`
+(trois points) reste lue et dessinée ; l'interface du projet ne la crée plus.
 
 ## Vérifications
 

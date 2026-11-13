@@ -386,6 +386,13 @@ impl ViewerApp {
                 self.visibility_dirty = true;
             }
             "nouveau" | "selection_tout" | "supprimer" => {}
+            "ajuster_angle" => match self.activer_outil_interface("ajuster") {
+                Ok(_) => {
+                    self.ruban_edition.prolonger_angle = true;
+                    self.status = "Ajuster en angle : cliquez la partie à conserver de chaque élément.".into();
+                }
+                Err(e) => self.error = Some(e),
+            },
             outil => {
                 if let Err(e) = self.activer_outil_interface(outil) {
                     self.error = Some(e);

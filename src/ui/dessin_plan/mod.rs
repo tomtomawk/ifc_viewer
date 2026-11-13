@@ -12,6 +12,7 @@ mod escalier;
 mod cotation;
 mod cotes_aretes;
 mod commandes_contour;
+mod courbures;
 use super::*;
 use crate::dessin::dao::{self as d2, Accroche, Geom, OutilDessin, Trace};
 use crate::modele::edition::commandes::Commande;
@@ -92,6 +93,10 @@ pub(super) struct EtatDessin2D {
     /// Contours laissés ouverts par Échap, au stade où le tracé s'est arrêté : un clic
     /// sur une extrémité reprend le tracé. Ils bloquent la validation.
     pub ouverts: Vec<Vec<DVec2>>,
+    /// Courbures des segments des contours laissés ouverts (polyligne à arcs).
+    ouverts_courbures: Vec<Vec<f64>>,
+    /// Alt enfoncé : le prochain point d'une polyligne termine un segment d'arc.
+    arc_demande: bool,
     /// Giron imposé à l'escalier en création (mm) ; None : celui du tracé.
     pub giron_impose: Option<f64>,
     /// Limites de l'escalier en création : niveau bas (None : niveau du plan) et son
@@ -120,6 +125,9 @@ pub(super) struct EtatDessin2D {
     /// Contours fermés de l'élément horizontal en cours : parties et trémies, créés à la
     /// validation.
     pub dalle: Vec<Vec<[f64; 2]>>,
+    /// Courbure des segments des contours de `dalle` (polyligne à arcs) : voir
+    /// `courbures.rs`.
+    courbures: Vec<Vec<f64>>,
     /// Terrain en cours : cote NGF de chaque sommet du contour (`dalle[0]`), points cotés
     /// (cote NGF), cote des prochains points, placement de points.
     terrain_cotes: Vec<f64>,
@@ -289,7 +297,15 @@ pub(super) fn axes_murs(f: &d2::Forme2D) -> Vec<crate::modele::Axe> {
     let droit = |a: DVec2, b: DVec2| Axe::Droit { debut: a.to_array(), fin: b.to_array() };
     match f {
         d2::Forme2D::Ligne([a, b]) => vec![droit(*a, *b)],
-        d2::Forme2D::Polyligne { points, fermee } | d2::Forme2D::Spline { points, fermee } => {
+        // segment d'arc d'une polyligne : mur courbe
+        d2::Forme2D::Polyligne { points, fermee, courbures } => d2::segments_polyligne(points, *fermee, courbures)
+            .into_iter()
+            .map(|(a, b, k)| match d2::arc_courbure(a, b, k) {
+                Some((o, _, _, balayage)) => Axe::Arc { debut: a.to_array(), fin: b.to_array(), centre: o.to_array(), direct: balayage > 0.0 },
+                None => droit(a, b),
+            })
+            .collect(),
+        d2::Forme2D::Spline { points, fermee } => {
             let mut v: Vec<Axe> = points.windows(2).map(|w| droit(w[0], w[1])).collect();
             if *fermee && points.len() >= 3 {
                 v.push(droit(points[points.len() - 1], points[0]));
@@ -352,6 +368,12 @@ impl ViewerApp {
         if let Some(e) = self.dessin2d.edition_contour.as_mut() && let (None, Some((c, i))) = (e.segment, e.sommet) {
             if matches!(e.creation, Some(Usage::Terrain | Usage::Escalier | Usage::GardeCorps | Usage::Annotation)) { return; }
             if self.dessin2d.dalle.get(c).is_some_and(|x| i < x.len() && x.len() > if e.fermee(c) { 3 } else { 2 }) {
+                // les deux segments du sommet retiré laissent un segment droit
+                let mut k = courbures::du_contour(&self.dessin2d.dalle, &self.dessin2d.courbures, c);
+                let n = k.len();
+                k[(i + n - 1) % n] = 0.0;
+                k.remove(i);
+                courbures::definir(&mut self.dessin2d.courbures, c, k);
                 self.dessin2d.dalle[c].remove(i);
                 e.sommet = None;
             } else {
@@ -362,7 +384,13 @@ impl ViewerApp {
         if self.dessin2d.edition_contour.as_ref().is_some_and(|e| matches!(e.creation, Some(Usage::Terrain | Usage::Escalier | Usage::GardeCorps))) { return; }
         let Some((c, i)) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.segment) else { return };
         let e = self.dessin2d.edition_contour.as_mut().unwrap();
+        let mut k = courbures::du_contour(&self.dessin2d.dalle, &self.dessin2d.courbures, c);
         if e.fermee(c) {
+            // le contour s'ouvre au trait retiré : il commence au sommet suivant
+            k[i] = 0.0;
+            let debut = (i + 1) % k.len();
+            k.rotate_left(debut);
+            courbures::definir(&mut self.dessin2d.courbures, c, k);
             ouvrir_contour(&mut self.dessin2d.dalle[c], i);
             e.fermees[c] = false;
         } else {
@@ -370,12 +398,16 @@ impl ViewerApp {
                 self.dessin2d.message = Some("Le dernier trait ne peut pas être supprimé.".into());
                 return;
             }
+            k[i] = 0.0;
+            let k_suite = k.split_off(i + 1);
+            courbures::definir(&mut self.dessin2d.courbures, c, k);
             let suite = self.dessin2d.dalle[c].split_off(i + 1);
             let gauche = self.dessin2d.dalle[c].len();
-            if gauche < 2 { self.dessin2d.dalle.remove(c); e.fermees.remove(c); }
+            if gauche < 2 { self.dessin2d.dalle.remove(c); courbures::retirer(&mut self.dessin2d.courbures, c); e.fermees.remove(c); }
             if suite.len() >= 2 {
                 let insertion = if gauche < 2 { c } else { c + 1 };
                 self.dessin2d.dalle.insert(insertion, suite);
+                courbures::inserer(&mut self.dessin2d.courbures, insertion, k_suite);
                 e.fermees.insert(insertion, false);
             }
         }
@@ -395,6 +427,7 @@ impl ViewerApp {
         }
         let Some(i) = e.selection.take().filter(|i| *i < self.dessin2d.dalle.len()) else { return };
         self.dessin2d.dalle.remove(i);
+        courbures::retirer(&mut self.dessin2d.courbures, i);
         e.fermees.remove(i);
         (e.segment, e.sommet) = (None, None);
     }
@@ -409,8 +442,12 @@ impl ViewerApp {
             if premier { self.dessin2d.terrain_cotes.splice(0..0, std::iter::repeat_n(z, nombre)); }
             else { self.dessin2d.terrain_cotes.extend(std::iter::repeat_n(z, nombre)); }
         }
+        let mut k_trace = trace.courbures();
+        k_trace.resize(nombre, 0.0);
+        let k = courbures::raccorder_courbures(&courbures::du_contour(&self.dessin2d.dalle, &self.dessin2d.courbures, c), self.dessin2d.dalle[c].len(), premier, &k_trace);
         raccorder_contour(&mut self.dessin2d.dalle[c], premier, &trace.points);
         trace.points.clear();
+        courbures::definir(&mut self.dessin2d.courbures, c, k);
         let e = self.dessin2d.edition_contour.as_mut().unwrap();
         e.raccord = None;
         e.dessin = false;
@@ -421,6 +458,12 @@ impl ViewerApp {
         if self.dessin2d.trace.is_none() {
             return false;
         }
+        // arc en attente : ce point donne sa courbure
+        if let Some(trace) = self.dessin2d.trace.as_mut().filter(|t| t.attend_courbure()) {
+            trace.ajouter(p);
+            return true;
+        }
+        let mut k_trace = self.dessin2d.trace.as_ref().map(|t| { let mut k = t.courbures(); k.resize(t.points.len().saturating_sub(1), 0.0); k }).unwrap_or_default();
         let autre = self.dessin2d.dalle.iter().enumerate().filter(|(i, _)| *i != c && !self.dessin2d.edition_contour.as_ref().unwrap().fermee(*i)).find_map(|(i, t)| {
             if DVec2::from_array(t[0]).distance(p) < 1e-6 { Some((i, true)) }
             else if DVec2::from_array(*t.last().unwrap()).distance(p) < 1e-6 { Some((i, false)) }
@@ -429,12 +472,20 @@ impl ViewerApp {
         if let Some((autre, debut)) = autre {
             let mut a = self.dessin2d.dalle[c].clone();
             let mut b = self.dessin2d.dalle[autre].clone();
-            if premier { a.reverse(); }
-            if !debut { b.reverse(); }
+            let (mut ka, mut kb) = (self.dessin2d.courbures_contour(c), self.dessin2d.courbures_contour(autre));
+            if premier { a.reverse(); ka = courbures::inverser_courbures(&ka, a.len()); }
+            if !debut { b.reverse(); kb = courbures::inverser_courbures(&kb, b.len()); }
+            // le tracé part du dernier sommet de `a` ; son dernier point rejoint `b` en ligne droite
+            ka.truncate(a.len() - 1);
+            ka.append(&mut k_trace);
+            ka.push(0.0);
+            ka.extend(kb);
             a.extend(self.dessin2d.trace.as_ref().unwrap().points.iter().skip(1).map(|p| p.to_array()));
             a.extend(b);
             self.dessin2d.dalle[c] = a;
+            self.dessin2d.definir_courbures(c, ka);
             self.dessin2d.dalle.remove(autre);
+            self.dessin2d.retirer_courbures(autre);
             self.dessin2d.trace.as_mut().unwrap().points.clear();
             let e = self.dessin2d.edition_contour.as_mut().unwrap();
             e.fermees.remove(autre);
@@ -444,6 +495,8 @@ impl ViewerApp {
             { self.dessin2d.message = None; self.dessin2d.information = None; };
             return true;
         }
+        let k_contour = self.dessin2d.courbures_contour(c);
+        let arc = self.dessin2d.arc_demande;
         let contour = &mut self.dessin2d.dalle[c];
         let cible = DVec2::from_array(if premier { *contour.last().unwrap() } else { contour[0] });
         let trace = self.dessin2d.trace.as_mut().unwrap();
@@ -454,14 +507,19 @@ impl ViewerApp {
                 if premier { self.dessin2d.terrain_cotes.splice(0..0, std::iter::repeat_n(z, n)); }
                 else { self.dessin2d.terrain_cotes.extend(std::iter::repeat_n(z, n)); }
             }
+            let k = courbures::raccorder_courbures(&k_contour, contour.len(), premier, &k_trace);
             raccorder_contour(contour, premier, &trace.points);
             trace.points.clear();
+            courbures::definir(&mut self.dessin2d.courbures, c, k);
             let e = self.dessin2d.edition_contour.as_mut().unwrap();
             e.fermees[c] = true;
             e.raccord = None;
             e.dessin = false;
             { self.dessin2d.message = None; self.dessin2d.information = None; };
-        } else if trace.points.last().is_none_or(|q| q.distance(p) > 1e-6) { trace.points.push(p); }
+        } else if trace.points.last().is_none_or(|q| q.distance(p) > 1e-6) {
+            // Alt : ce point termine un segment d'arc, le suivant donne sa courbure
+            if arc && trace.arcs_permis { trace.ajouter_arc(p); } else { trace.points.push(p); }
+        }
         true
     }
     /// Clic sur une extrémité d'un contour laissé ouvert : le tracé reprend de là.
@@ -492,9 +550,9 @@ impl ViewerApp {
             if c.last().is_some_and(&proche) { Some((i, false)) } else if c.first().is_some_and(&proche) { Some((i, true)) } else { None }
         });
         let Some((i, debut)) = trouve else { return false };
-        let mut points = self.dessin2d.ouverts.remove(i);
-        if debut { points.reverse(); }
-        if let Some(t) = self.dessin2d.trace.as_mut() { t.points = points; }
+        let (mut points, mut k) = self.dessin2d.retirer_ouvert(i);
+        if debut { points.reverse(); k = courbures::inverser_courbures(&k, points.len()); }
+        if let Some(t) = self.dessin2d.trace.as_mut() { t.reprendre(points, &k); }
         self.dessin2d.saisie.clear();
         { self.dessin2d.message = None; self.dessin2d.information = None; };
         true
@@ -556,6 +614,7 @@ impl ViewerApp {
         self.onglet_ruban = OngletRuban::Modeliser;
         self.dessin2d.edition_contour = None;
         self.dessin2d.dalle = vec![t.contour.iter().map(|p| [p[0], p[1]]).collect()];
+        self.dessin2d.courbures.clear();
         self.dessin2d.terrain_cotes = t.contour.iter().map(|p| p[2]).collect();
         self.dessin2d.terrain_points = t.points.clone();
         self.dessin2d.terrain_altitude = t.contour.first().map_or(0.0, |p| p[2]);
@@ -603,7 +662,7 @@ impl ViewerApp {
             // une ligne est une polyligne d'un seul segment : elle le devient à la validation
             let mut a = a.clone();
             if let AnnotationForme::Ligne { debut, fin } = &a.forme {
-                a.forme = AnnotationForme::Polyligne { points: vec![*debut, *fin], fermee: false, remplissage: None, traits: Vec::new() };
+                a.forme = AnnotationForme::Polyligne { points: vec![*debut, *fin], fermee: false, courbures: Vec::new(), remplissage: None, traits: Vec::new() };
             }
             let AnnotationForme::Polyligne { points, .. } = &a.forme else { self.status = "Sélectionnez un élément horizontal ou une polyligne.".into(); return; };
             if self.vue_native_id().as_deref() != Some(a.vue.as_str()) { self.status = "Ouvrez la vue de la polyligne pour la modifier.".into(); return; }
@@ -613,6 +672,10 @@ impl ViewerApp {
         self.dessin2d.dernier_usage = Some(if annotation.is_some() || ouvert { Usage::Annotation } else { Usage::Surface });
         let fermees = vec![!ouvert && annotation.as_ref().is_none_or(|a| matches!(&a.forme, AnnotationForme::Polyligne { fermee: true, .. })); contours.len()];
         let initial = contours.clone();
+        self.dessin2d.courbures = match annotation.as_ref().map(|a| &a.forme) {
+            Some(AnnotationForme::Polyligne { courbures, .. }) => vec![courbures.clone()],
+            _ => Vec::new(),
+        };
         self.dessin2d.dalle = contours;
         self.dessin2d.geoms = None;
         self.dessin2d.edition_contour = Some(EditionContour { id: ids[0].clone(), creation: None, altitude, dessin: false, selection: None, segment: None, sommet: None, commande: None, depart: None, repere: None, glisse: None, annotation, fermees, raccord: None, element, initial });
@@ -652,7 +715,9 @@ impl ViewerApp {
         let Some((c, i)) = e.segment else { return false };
         let Some(points) = self.dessin2d.dalle.get(c).filter(|p| i < p.len()) else { return false };
         let (a, b) = (points[i], points[(i + 1) % points.len()]);
-        let longueur = DVec2::from_array(a).distance(DVec2::from_array(b));
+        // segment d'arc : longueur développée et rayon
+        let arc = d2::arc_courbure(DVec2::from_array(a), DVec2::from_array(b), self.dessin2d.courbure(c, i));
+        let longueur = arc.map_or(DVec2::from_array(a).distance(DVec2::from_array(b)), |(_, r, _, s)| r * s.abs());
         let projet = self.natif.as_ref().map(|(p, _)| p);
         let dalle = projet.filter(|_| e.creation.is_none() && e.annotation.is_none() && e.element.is_none()).and_then(|p| p.dalles.iter().find(|d| d.id == e.id)).cloned();
         let objet: String = if e.annotation.is_some() { "Polyligne".into() } else {
@@ -681,11 +746,20 @@ impl ViewerApp {
         let mut pente_defaut = self.pente_defaut;
         let mut choix_trait = None;
         let mut dalle_modifiee = None;
+        let mut redresser = false;
         ui.label(RichText::new(format!("{objet} · trait {}", i + 1)).strong());
         egui::Grid::new("segment_edition").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
             ui.label("Longueur");
             ui.label(crate::config::options::unite().afficher(longueur.round()));
             ui.end_row();
+            if let Some((_, rayon, _, _)) = arc {
+                ui.label("Rayon");
+                ui.horizontal(|ui| {
+                    ui.label(crate::config::options::unite().afficher(rayon.round()));
+                    redresser = ui.small_button("Rendre droit").on_hover_text("Remplacer cet arc par un segment droit").clicked();
+                });
+                ui.end_row();
+            }
             if let Some(actuel) = &trait_actuel {
                 ui.label("Type de trait");
                 choix_trait = crate::ui::types_traits::choix_type_trait(ui, "trait_segment_edition", Some(actuel), &types);
@@ -718,6 +792,11 @@ impl ViewerApp {
         ui.label(RichText::new("Échap : désélectionner le trait et revenir aux propriétés de l'objet.").small().weak());
         ui.separator();
         self.pente_defaut = pente_defaut;
+        if redresser {
+            let mut k = self.dessin2d.courbures_contour(c);
+            k[i] = 0.0;
+            self.dessin2d.definir_courbures(c, k);
+        }
         if let Some(id) = choix_trait
             && let Some(AnnotationForme::Polyligne { traits, .. }) = self.dessin2d.edition_contour.as_mut().and_then(|e| e.annotation.as_mut()).map(|a| &mut a.forme)
         {

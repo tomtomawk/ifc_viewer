@@ -68,12 +68,12 @@ impl ViewerApp {
     /// Types de trait des polylignes sélectionnées : un choix pour tous leurs segments,
     /// puis, pour une seule polyligne, un choix par segment. Retourne le projet modifié.
     pub(super) fn traits_polylignes(&self, ui: &mut egui::Ui, projet: &Projet, ids: &[String]) -> Option<Projet> {
-        let polylignes: Vec<(&str, Vec<[f64; 2]>, bool, Vec<String>)> = projet
+        let polylignes: Vec<(&str, Vec<[f64; 2]>, bool, Vec<String>, Vec<f64>)> = projet
             .annotations
             .iter()
             .filter(|a| ids.contains(&a.id))
             .filter_map(|a| match &a.forme {
-                AnnotationForme::Polyligne { points, fermee, traits, .. } => Some((a.id.as_str(), points.clone(), *fermee, traits.clone())),
+                AnnotationForme::Polyligne { points, fermee, traits, courbures, .. } => Some((a.id.as_str(), points.clone(), *fermee, traits.clone(), courbures.clone())),
                 _ => None,
             })
             .collect();
@@ -81,7 +81,7 @@ impl ViewerApp {
             return None;
         }
         // type de chaque segment (vide : continu fin)
-        let tous: Vec<String> = polylignes.iter().flat_map(|(_, pts, f, t)| (0..segments_polyligne(pts, *f)).map(move |k| t.get(k).cloned().unwrap_or_default())).collect();
+        let tous: Vec<String> = polylignes.iter().flat_map(|(_, pts, f, t, _)| (0..segments_polyligne(pts, *f)).map(move |k| t.get(k).cloned().unwrap_or_default())).collect();
         let (premier, mixte) = melange(tous.iter().cloned());
         let mut changement: Option<(Option<usize>, String)> = None;
         egui::Grid::new("traits_polylignes").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
@@ -91,13 +91,16 @@ impl ViewerApp {
             }
             ui.end_row();
         });
-        if let [(_, pts, fermee, traits)] = polylignes.as_slice() {
+        if let [(_, pts, fermee, traits, courbures)] = polylignes.as_slice() {
             let n = segments_polyligne(pts, *fermee);
             egui::CollapsingHeader::new(format!("Segments ({n})")).id_salt("segments_polyligne").default_open(n <= 12).show(ui, |ui| {
                 egui::Grid::new("traits_segments").num_columns(2).striped(true).spacing([10.0, 3.0]).show(ui, |ui| {
                     for k in 0..n {
                         let (a, b) = (DVec2::from_array(pts[k]), DVec2::from_array(pts[(k + 1) % pts.len()]));
-                        ui.label(format!("{} · {}", k + 1, crate::config::options::unite().afficher(a.distance(b).round())))
+                        // segment d'arc : longueur développée
+                        let arc = crate::dessin::dao::arc_courbure(a, b, courbures.get(k).copied().unwrap_or(0.0));
+                        let longueur = arc.map_or(a.distance(b), |(_, r, _, s)| r * s.abs());
+                        ui.label(format!("{} · {}{}", k + 1, crate::config::options::unite().afficher(longueur.round()), if arc.is_some() { " · arc" } else { "" }))
                             .on_hover_text("Segment, depuis le premier point de la polyligne ; longueur");
                         if let Some(id) = choix_type_trait(ui, ("trait_segment", k), Some(traits.get(k).map_or("", |s| s.as_str())), &projet.types_traits) {
                             changement = Some((Some(k), id));

@@ -14,6 +14,8 @@ pub enum Saisie {
         maj: bool,
         #[serde(default)]
         ctrl: bool,
+        #[serde(default)]
+        alt: bool,
     },
     Pointer {
         x: f32,
@@ -28,6 +30,8 @@ pub enum Saisie {
         maj: bool,
         #[serde(default)]
         ctrl: bool,
+        #[serde(default)]
+        alt: bool,
     },
     Defiler {
         x: f32,
@@ -93,6 +97,7 @@ pub fn evenements(saisies: Vec<Saisie>) -> Result<Vec<Event>, String> {
                 bouton,
                 maj,
                 ctrl,
+                alt,
             } => {
                 let pos = position(x, y)?;
                 let button = bouton.egui();
@@ -102,7 +107,7 @@ pub fn evenements(saisies: Vec<Saisie>) -> Result<Vec<Event>, String> {
                         pos,
                         button,
                         pressed,
-                        modifiers: modifiers(maj, ctrl, false),
+                        modifiers: modifiers(maj, ctrl, alt),
                     });
                 }
             }
@@ -113,6 +118,7 @@ pub fn evenements(saisies: Vec<Saisie>) -> Result<Vec<Event>, String> {
                 appuye,
                 maj,
                 ctrl,
+                alt,
             } => {
                 let pos = position(x, y)?;
                 out.push(Event::PointerMoved(pos));
@@ -120,7 +126,7 @@ pub fn evenements(saisies: Vec<Saisie>) -> Result<Vec<Event>, String> {
                     pos,
                     button: bouton.egui(),
                     pressed: appuye,
-                    modifiers: modifiers(maj, ctrl, false),
+                    modifiers: modifiers(maj, ctrl, alt),
                 });
             }
             Saisie::Defiler { x, y, dx, dy } => {
@@ -183,6 +189,9 @@ mod tests {
             }
         ));
         assert!(matches!(e[2], Event::PointerButton { pressed: false, .. }));
+        // Alt+clic : fin d'un segment d'arc de polyligne
+        let s = serde_json::from_str(r#"[{"action":"clic","x":10,"y":20,"alt":true}]"#).unwrap();
+        assert!(matches!(evenements(s).unwrap()[1], Event::PointerButton { modifiers: Modifiers { alt: true, shift: false, .. }, .. }));
         assert!(
             evenements(vec![Saisie::Touche {
                 touche: "inconnue".into(),

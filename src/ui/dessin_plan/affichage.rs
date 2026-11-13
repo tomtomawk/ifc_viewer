@@ -220,12 +220,16 @@ impl ViewerApp {
                             let distance = q.distance(a);
                             if distance < 10.0 && sommet.is_none_or(|s| distance < s.0) { sommet = Some((distance, ci, i)); }
                             if !fermee && i + 1 == c.len() { continue; }
-                            let Some(b) = self.vers_ecran(rect, DVec2::from_array(c[(i + 1) % c.len()])) else { continue };
-                            let v = b - a;
-                            let t = if v.length_sq() > 0.0 { ((q - a).dot(v) / v.length_sq()).clamp(0.0, 1.0) } else { 0.0 };
-                            let p = a + v * t;
-                            let distance = q.distance(p);
-                            if distance < 8.0 && arete.is_none_or(|s| distance < s.0) { arete = Some((distance, ci, i, p)); }
+                            // un segment d'arc se vise le long de son arc
+                            let trace = d2::points_segment(DVec2::from_array(c[i]), DVec2::from_array(c[(i + 1) % c.len()]), self.dessin2d.courbure(ci, i));
+                            let Some(ecran) = trace.iter().map(|p| self.vers_ecran(rect, *p)).collect::<Option<Vec<_>>>() else { continue };
+                            for w in ecran.windows(2) {
+                                let v = w[1] - w[0];
+                                let t = if v.length_sq() > 0.0 { ((q - w[0]).dot(v) / v.length_sq()).clamp(0.0, 1.0) } else { 0.0 };
+                                let p = w[0] + v * t;
+                                let distance = q.distance(p);
+                                if distance < 8.0 && arete.is_none_or(|s| distance < s.0) { arete = Some((distance, ci, i, p)); }
+                            }
                         }
                     }
                 }
@@ -277,6 +281,8 @@ impl ViewerApp {
                     if ouvert && n >= 4 && (i == 0 || i + 1 == n) {
                         let autre = if i == 0 { n - 1 } else { 0 };
                         if self.vers_ecran(rect, DVec2::from_array(self.dessin2d.dalle[c][autre])).is_some_and(|p| p.distance(q) <= 10.0) {
+                            let k = courbures::fermer_courbures(&self.dessin2d.courbures_contour(c), n, i);
+                            self.dessin2d.definir_courbures(c, k);
                             fermer_par_extremite(&mut self.dessin2d.dalle[c], i);
                             let e = self.dessin2d.edition_contour.as_mut().unwrap();
                             if i == 0 && c == 0 && let Some(AnnotationForme::Polyligne { traits, .. }) = e.annotation.as_mut().map(|a| &mut a.forme) && !traits.is_empty() { traits.rotate_left(1); }
@@ -298,7 +304,17 @@ impl ViewerApp {
                     self.dessin2d.message = None; self.dessin2d.information = None;
                     return;
                 } else if let Some((_, c, i, q)) = arete.filter(|_| sommet.is_none() && !topologie_fixe) {
-                    if let Some(p) = self.depuis_ecran(rect, q) { self.dessin2d.dalle[c].insert(i + 1, p.to_array()); }
+                    if let Some(p) = self.depuis_ecran(rect, q) {
+                        // sommet inséré : un arc est coupé en deux arcs du même cercle
+                        let n = self.dessin2d.dalle[c].len();
+                        let (a, b) = (DVec2::from_array(self.dessin2d.dalle[c][i]), DVec2::from_array(self.dessin2d.dalle[c][(i + 1) % n]));
+                        let mut k = self.dessin2d.courbures_contour(c);
+                        let (p, k1, k2) = d2::scinder_segment(a, b, k[i], p).unwrap_or((p, 0.0, 0.0));
+                        k[i] = k1;
+                        k.insert(i + 1, k2);
+                        self.dessin2d.definir_courbures(c, k);
+                        self.dessin2d.dalle[c].insert(i + 1, p.to_array());
+                    }
                 }
             } else if resp.clicked() {
                 // Propriétés et ruban suivent la sélection dès l'image suivante
@@ -319,19 +335,20 @@ impl ViewerApp {
         if self.dessin2d.reperage.survol_accroche.is_some() || self.dessin2d.reperage.survol_segment.is_some() { ui.ctx().request_repaint_after(std::time::Duration::from_millis(100)); }
         // escalier : la longueur de la volée est magnétisée au pas de marche (giron)
         if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier) && self.dessin2d.saisie.is_empty() {
-            let giron = self.giron_vise();
-            let precedent = self.dessin2d.trace.as_ref().and_then(Trace::precedent);
-            if let (Some((p, a)), Some(prec)) = (self.dessin2d.point, precedent) && matches!(a, Accroche::Libre | Accroche::Polaire(_) | Accroche::Ortho) {
-                let v = p - prec;
-                if v.length() > 1e-6 && giron > 1.0 {
-                    let k = (v.length() / giron).round().max(1.0);
-                    self.dessin2d.point = Some((prec + v.normalize() * k * giron, a));
-                }
+            // et la volée s'arrête à la dernière marche à poser, même sur un accrochage
+            if let (Some((p, a)), Some(t)) = (self.dessin2d.point, self.dessin2d.trace.as_ref()) && !t.points.is_empty() {
+                let q = self.point_escalier(&t.points, p, matches!(a, Accroche::Libre | Accroche::Polaire(_) | Accroche::Ortho));
+                self.dessin2d.point = Some((q, a));
             }
         }
         let angle = self.angle_axes_plan();
+        // segments d'arc : polyligne du dessin 2D seulement (Alt+clic, puis rayon)
+        let arcs_permis = self.usage_dessin() == Some((Usage::Annotation, OutilDessin::Polyligne)) && self.outil_cotation().is_none()
+            && self.dessin2d.edition_contour.as_ref().is_none_or(|e| e.element.is_none() && (e.annotation.is_some() || e.creation == Some(Usage::Annotation)));
+        self.dessin2d.arc_demande = arcs_permis && ui.input(|i| i.modifiers.alt);
         if let Some(t) = self.dessin2d.trace.as_mut() {
             t.angle = angle;
+            t.arcs_permis = arcs_permis;
         }
         if resp.clicked() {
             if let Some((p, _)) = self.dessin2d.point && self.ajouter_point_raccord(p) { return; }
@@ -353,8 +370,15 @@ impl ViewerApp {
                 self.dessin2d.saisie.clear();
                 self.dessin2d.champ_angle = false;
                 { self.dessin2d.message = None; self.dessin2d.information = None; };
-                let formes = t.appliquer(crate::dessin::dao::EvenementTrace::Point(p));
+                let formes = t.appliquer(if self.dessin2d.arc_demande { d2::EvenementTrace::PointArc(p) } else { d2::EvenementTrace::Point(p) });
                 self.enregistrer_formes(formes);
+                // escalier : toutes les marches sont posées, le tracé se termine seul
+                if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier) && self.dessin2d.edition_contour.is_none()
+                    && self.dessin2d.trace.as_ref().is_some_and(|t| self.escalier_complet(&t.points))
+                {
+                    let formes = self.dessin2d.trace.as_mut().map(|t| t.appliquer(d2::EvenementTrace::Terminer)).unwrap_or_default();
+                    self.enregistrer_formes(formes);
+                }
             }
         }
         if resp.clicked_by(PointerButton::Secondary) {
@@ -385,7 +409,7 @@ impl ViewerApp {
         let painter = ui.painter().with_clip_rect(rect);
         let bleu = Color32::from_rgb(0, 120, 215);
         let vert = Color32::from_rgb(20, 160, 60);
-        if let Some(centre) = trace.precedent()
+        if let Some(centre) = trace.precedent().filter(|_| !trace.attend_courbure())
             && let Some(rayon) = super::saisie::distance_saisie(&self.dessin2d.saisie, crate::config::options::unite().facteur())
         {
             let points: Vec<_> = (0..=128).filter_map(|i| {
@@ -394,8 +418,9 @@ impl ViewerApp {
             }).collect();
             if points.len() == 129 { painter.add(egui::Shape::dashed_line(&points, egui::Stroke::new(1.0, vert), 6.0, 4.0)); }
         }
-        for c in &self.dessin2d.ouverts {
-            let pts: Vec<egui::Pos2> = c.iter().filter_map(|q| self.vers_ecran(rect, *q)).collect();
+        for (i, c) in self.dessin2d.ouverts.iter().enumerate() {
+            let k = self.dessin2d.ouverts_courbures.get(i).map_or(&[][..], |k| k.as_slice());
+            let pts: Vec<egui::Pos2> = d2::developper(c, false, k).iter().filter_map(|q| self.vers_ecran(rect, *q)).collect();
             painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, bleu)));
             for q in [c.first(), c.last()].into_iter().flatten().filter_map(|q| self.vers_ecran(rect, *q)) {
                 painter.rect_stroke(egui::Rect::from_center_size(q, egui::vec2(10.0, 10.0)), 0.0, egui::Stroke::new(2.0, Color32::from_rgb(200, 50, 45)), egui::StrokeKind::Middle);
@@ -416,8 +441,12 @@ impl ViewerApp {
                 if !self.selection_traces_active() {
                     aides::reticule(&painter, e, 28.0);
                 }
-                // aperçu : ligne tracée, et volume pour un mur
-                let apercu = trace.apercu(p);
+                // aperçu : ligne tracée, et volume pour un mur ; arc en attente : rayon
+                // tapé (du côté du curseur), sinon passage par le curseur
+                let passage = super::saisie::distance_saisie(&self.dessin2d.saisie, crate::config::options::unite().facteur())
+                    .filter(|_| trace.attend_courbure())
+                    .and_then(|rayon| trace.point_de_rayon(rayon, self.dessin2d.curseur.unwrap_or(p)).ok());
+                let apercu = trace.apercu(passage.unwrap_or(p));
                 match self.usage_dessin().map(|(u, _)| u) {
                     Some(Usage::Mur) if trace.outil!=OutilDessin::Arc || trace.points.len()>=2 => self.apercu_volume_murs(&painter, rect, &apercu),
                     Some(Usage::Surface | Usage::LimitePropriete | Usage::Cadrage) => self.apercu_surface(&painter, rect, &apercu),
@@ -475,7 +504,14 @@ impl ViewerApp {
                 if accroche != Accroche::Libre {
                     infos.push(accroche.libelle());
                 }
-                if let Some(prec) = trace.precedent() {
+                if trace.attend_courbure() {
+                    // arc en attente : rayon tapé, sinon rayon de l'arc passant par le curseur
+                    let n = trace.points.len();
+                    let rayon = d2::arc_3_points(trace.points[n - 2], p, trace.points[n - 1]).map(|x| x.1);
+                    let u = crate::config::options::unite();
+                    let decimales = u.facteur().log10().round().max(0.0) as usize;
+                    infos.push(if saisie.is_empty() || coordonnees { rayon.map_or("R —".to_string(), |r| format!("R {:.*}{}", decimales, r / u.facteur(), u.suffixe())) } else { format!("R {saisie}▏{}", u.suffixe()) });
+                } else if let Some(prec) = trace.precedent() {
                     let v = p - prec;
                     let u = crate::config::options::unite();
                     let decimales = u.facteur().log10().round().max(0.0) as usize;
@@ -500,11 +536,15 @@ impl ViewerApp {
                 let pts: Vec<DVec2> = c.iter().map(|p| DVec2::from_array(*p)).collect();
                 if let Some(edit) = &self.dessin2d.edition_contour {
                     let couleur = if edit.selection == Some(i) { Color32::from_rgb(65, 135, 190) } else { bleu };
-                    let mut ecran: Vec<_> = pts.iter().filter_map(|p| self.vers_ecran(rect, *p)).collect();
-                    if edit.fermee(i) && let Some(p) = ecran.first().copied() { ecran.push(p); }
-                    painter.add(egui::Shape::line(ecran.clone(), egui::Stroke::new(2.0, couleur)));
-                    if let Some((c, k)) = edit.segment && c == i && k + 1 < ecran.len() {
-                        painter.line_segment([ecran[k], ecran[k + 1]], egui::Stroke::new(4.0, Color32::from_rgb(230, 110, 20)));
+                    let ecran: Vec<_> = pts.iter().filter_map(|p| self.vers_ecran(rect, *p)).collect();
+                    // tracé développé : les segments d'arc suivent leur arc
+                    let segments = self.dessin2d.segments_contour(i, edit.fermee(i));
+                    let ligne = |a: DVec2, b: DVec2, k: f64| -> Vec<egui::Pos2> { d2::points_segment(a, b, k).iter().filter_map(|p| self.vers_ecran(rect, *p)).collect() };
+                    for (a, b, k) in &segments {
+                        painter.add(egui::Shape::line(ligne(*a, *b, *k), egui::Stroke::new(2.0, couleur)));
+                    }
+                    if let Some((c, k)) = edit.segment && c == i && let Some((a, b, courbure)) = segments.get(k) {
+                        painter.add(egui::Shape::line(ligne(*a, *b, *courbure), egui::Stroke::new(4.0, Color32::from_rgb(230, 110, 20))));
                     }
                     if !edit.dessin { for (k, p) in ecran.iter().take(c.len()).enumerate() { painter.circle_filled(*p, if edit.sommet == Some((i, k)) { 6.0 } else { 4.0 }, if edit.sommet == Some((i, k)) { Color32::from_rgb(230, 110, 20) } else { couleur }); } }
                 } else {
@@ -603,7 +643,7 @@ impl ViewerApp {
         else if self.ruban_edition.selection_mur && usage.is_some_and(|(u,_)|u==Usage::Mur) {"Cliquer le trait que le mur doit suivre"} else if let Some(i) = self.invite_cotation() { i } else { self.dessin2d.trace.as_ref().map_or("", |t| t.invite()) };
         let contexte = match usage.map(|(u, _)| u) {
             Some(Usage::Mur) => "Ctrl : justification · Espace : inverser le sens · ",
-            Some(Usage::Escalier) => "Ctrl ou Espace : justification de la ligne · Longueur magnétisée au giron · Départ, un sommet par palier, arrivée · Marches calculées selon le niveau supérieur · ",
+            Some(Usage::Escalier) => "Ctrl ou Espace : justification de la ligne · Longueur magnétisée au giron · Départ, un sommet par palier · Le tracé s'arrête et se termine à la dernière marche · ",
             Some(Usage::GardeCorps) => "Cliquer les sommets · Sur un escalier, sélectionner Garde-corps dans les options · ",
             Some(Usage::Cadrage) => "Tracer un contour fermé, puis valider · ",
             Some(Usage::Terrain) if self.dessin2d.dalle.is_empty() => "Tracer le périmètre fermé du terrain · ",

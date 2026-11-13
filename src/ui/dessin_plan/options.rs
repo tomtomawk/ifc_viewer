@@ -61,7 +61,7 @@ impl ViewerApp {
     pub(in crate::ui) fn reinitialiser_forme_cadrage(&mut self) {
         self.dessin2d.forme_cadrage=Some(OutilDessin::Rectangle);
         self.dessin2d.trace=None;
-        self.dessin2d.dalle.clear();self.dessin2d.ouverts.clear();
+        self.dessin2d.vider_contours();
     }
 
     /// Barre d'options du tracé, en haut de la vue, identique à la création et à la
@@ -119,11 +119,11 @@ impl ViewerApp {
             return;
         }
         self.terminer_raccord_ouvert();
+        if let Some((points, k)) = self.dessin2d.trace.as_ref().filter(|t| t.outil == OutilDessin::Polyligne && t.points.len() >= 2).map(|t| (t.points.iter().map(|p| p.to_array()).collect(), t.courbures())) {
+            self.dessin2d.pousser_contour(points, k);
+            self.dessin2d.edition_contour.as_mut().unwrap().fermees.push(false);
+        }
         if let Some(t) = self.dessin2d.trace.as_mut() {
-            if t.outil == OutilDessin::Polyligne && t.points.len() >= 2 {
-                self.dessin2d.dalle.push(t.points.iter().map(|p| p.to_array()).collect());
-                self.dessin2d.edition_contour.as_mut().unwrap().fermees.push(false);
-            }
             t.points.clear();
         }
         if let Some(e) = &mut self.dessin2d.edition_contour {
@@ -140,8 +140,7 @@ impl ViewerApp {
             // un seul contour de cadrage : le choix d'une forme le recommence
             self.dessin2d.forme_cadrage = Some(forme);
             self.dessin2d.trace = None;
-            self.dessin2d.dalle.clear();
-            self.dessin2d.ouverts.clear();
+            self.dessin2d.vider_contours();
             self.dessin2d.edition_contour = None;
             return;
         }

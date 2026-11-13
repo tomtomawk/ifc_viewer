@@ -635,7 +635,8 @@ impl ViewerApp {
                 F::Polyligne { .. } => Outil::Polyligne,
                 F::Spline { .. } => Outil::Spline,
                 F::Cercle { .. } => Outil::Cercle,
-                F::Arc { .. } => Outil::Arc,
+                // un arc se retrace comme un segment d'arc de polyligne (Alt+clic)
+                F::Arc { .. } => Outil::Polyligne,
                 F::Zone { contour } => {
                     if let (Some(a), Some(b)) = (contour.first(), contour.get(2)) {
                         self.bim.points = [*a, *b];
@@ -779,10 +780,9 @@ impl ViewerApp {
             use crate::modele::documentation::AnnotationForme as F;
             let attendu = match annotation.forme {
                 F::Texte { .. } => Outil::Texte,
-                F::Ligne { .. } | F::Polyligne { .. } => Outil::Polyligne,
+                F::Ligne { .. } | F::Polyligne { .. } | F::Arc { .. } => Outil::Polyligne,
                 F::Spline { .. } => Outil::Spline,
                 F::Cercle { .. } => Outil::Cercle,
-                F::Arc { .. } => Outil::Arc,
                 F::Zone { .. } => Outil::Zone,
                 F::Cote { .. } => Outil::Cote,
                 F::Etiquette { .. } => Outil::Etiquette,
@@ -892,7 +892,17 @@ impl ViewerApp {
                         use crate::modele::documentation::{AnnotationForme as F, PointCote};
                         let mut change = false;
                         match &mut annotation.forme {
-                            F::Polyligne { points, fermee, .. } | F::Spline { points, fermee } => {
+                            F::Polyligne { points, fermee, courbures, .. } => {
+                                let arcs = courbures.iter().filter(|k| **k != 0.0).count();
+                                ui.label(if arcs == 0 { format!("{} points", points.len()) } else { format!("{} points · {arcs} arc(s)", points.len()) });
+                                let avant = *fermee;
+                                change |= ui.checkbox(fermee, "Fermée").changed();
+                                // une courbure par segment : le segment de fermeture, ajouté ou retiré, est droit
+                                if *fermee != avant && !courbures.is_empty() {
+                                    courbures.resize(F::segments_polyligne(points.len(), *fermee), 0.0);
+                                }
+                            }
+                            F::Spline { points, fermee } => {
                                 ui.label(format!("{} points", points.len()));
                                 change |= ui.checkbox(fermee, "Fermée").changed();
                             }

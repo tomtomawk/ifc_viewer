@@ -17,6 +17,8 @@ pub(super) enum AccrocheMur {
     Angle(f64),
     /// Angle d'un mur (contour raccordé).
     Coin,
+    /// Point le plus proche sur une arête (face, axe, file).
+    Proche,
 }
 
 /// Rayon d'accrochage à l'écran (px).
@@ -97,6 +99,10 @@ pub(super) fn marqueur(painter: &egui::Painter, q: egui::Pos2, acc: AccrocheMur,
         }
         AccrocheMur::Coin => {
             painter.add(egui::Shape::closed_line(vec![q + egui::vec2(0.0, -h), q + egui::vec2(h, 0.0), q + egui::vec2(0.0, h), q + egui::vec2(-h, 0.0)], t));
+        }
+        AccrocheMur::Proche => {
+            // sablier : le point glisse sur l'arête
+            painter.add(egui::Shape::closed_line(vec![q + egui::vec2(-h, -h), q + egui::vec2(h, -h), q + egui::vec2(-h, h), q + egui::vec2(h, h)], t));
         }
         _ => {
             painter.circle_stroke(q, 4.0, egui::Stroke::new(1.5, couleur));
