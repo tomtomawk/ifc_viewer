@@ -379,6 +379,7 @@ impl ViewerApp {
             saisie_trace: Default::default(),
             reperage: Default::default(),
             axe_revolution: None,
+            points_transfo: Vec::new(),
             partages_origine: partages.clone(),
             partages,
             materiaux_projet,

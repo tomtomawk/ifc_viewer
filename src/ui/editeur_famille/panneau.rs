@@ -2,12 +2,13 @@
 use super::*;
 
 impl ViewerApp {
-    /// Ruban de l'éditeur de familles : outils de création (onglet Créer), chargement dans
-    /// le projet et fichiers (onglet Sortie).
-    pub(in crate::ui) fn ruban_famille(&mut self, ui: &mut egui::Ui, sortie: bool) {
-        use crate::ui::ruban::{bandeau, Commande as C, Icone as I};
+    /// Ruban de l'éditeur de familles : outils de création en petites icônes (onglet
+    /// Créer), transformations de la sélection (onglet Modifier), chargement dans le
+    /// projet et fichiers (onglet Sortie).
+    pub(in crate::ui) fn ruban_famille(&mut self, ui: &mut egui::Ui, onglet: OngletRuban) {
+        use crate::ui::ruban::{bandeau, bandeau_compact, Commande as C, Icone as I};
         let Some(ed) = self.famille.as_ref() else { return };
-        if sortie {
+        if onglet == OngletRuban::FamilleSortie {
             let placement = ed.ouverture.is_none();
             let nouveau = ed.type_id.is_none();
             let charger = vec![
@@ -43,14 +44,21 @@ impl ViewerApp {
                 C { enfonce: raison.is_none() && outil == d.outil, ..C::new(d.cle, d.nom, I::Famille(d.cle), raison.unwrap_or(d.aide), raison.is_none()) }
             }).collect()
         };
-        let references = outils("Références");
-        let mesures = outils("Cotes");
-        let formes = outils("Formes");
-        let symboles = outils("Symboles 2D");
-        let reponses = bandeau(ui, &[("Références", references), ("Cotes", mesures), ("Formes", formes), ("Symboles 2D", symboles)]);
+        let reponses = if onglet == OngletRuban::FamilleModifier {
+            let selection = ed.selection != SelectionFamille::Aucune || !ed.multiple.is_empty();
+            let aide = if selection { "Supprimer la sélection (Suppr)" } else { "Sélectionner d'abord un ou plusieurs éléments de la famille." };
+            let edition = vec![C::new("supprimer", "Supprimer", I::Famille("supprimer"), aide, selection)];
+            bandeau(ui, &[(catalogue::GROUPE_TRANSFORMER, outils(catalogue::GROUPE_TRANSFORMER)), ("Édition", edition)])
+        } else {
+            bandeau_compact(ui, &[("Références", outils("Références")), ("Cotes", outils("Cotes")), ("Formes", outils("Formes")), ("Symboles 2D", outils("Symboles 2D"))])
+        };
         let Some(ed) = self.famille.as_mut() else { return };
         for (cle, r) in reponses {
             if !r.clicked() {
+                continue;
+            }
+            if cle == "supprimer" {
+                ed.supprimer_selection();
                 continue;
             }
             let Some(d) = catalogue::OUTILS.iter().find(|d| d.cle == cle) else { continue };

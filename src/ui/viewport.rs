@@ -66,10 +66,13 @@ impl ViewerApp {
             let p = &self.natif.as_ref()?.0;
             Some(p.niveau(&self.bim.barre.niveau)?.altitude + self.bim.barre.debut[2])
         });
+        // Texte : un clic le place dans la vue native, comme dans l'éditeur de famille
+        let texte_annotation = self.onglet_ruban == OngletRuban::Annoter && self.natif.is_some() && self.loading.is_none()
+            && self.ruban_edition.outil() == Some(crate::ui::ruban::Outil::Texte) && self.vue_native_id().is_some();
         // Déplacer, Copier, Tourner, Aligner : socle commun (transformer.rs)
         self.suivre_transformation();
         let deplacement = self.transfo.outil;
-        let mode_trace = mode_attache || mode_ajuster || mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || placement.is_some() || deplacement.is_some() || self.outil_dessin().is_some() || self.dessin2d.edition_contour.is_some() || self.alignement_plan || self.orientation_nord_en_cours;
+        let mode_trace = mode_attache || mode_ajuster || mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || placement.is_some() || texte_annotation || deplacement.is_some() || self.outil_dessin().is_some() || self.dessin2d.edition_contour.is_some() || self.alignement_plan || self.orientation_nord_en_cours;
         // axe du mur sélectionné : une extrémité saisie se déplace (accrochages du tracé)
         let edition_arc=self.souris_arc_mur(ui,rect,&resp,mode_trace);
         let axe = if mode_trace || edition_arc { None } else { self.axe_selection() };
@@ -313,6 +316,13 @@ impl ViewerApp {
                         self.error = Some(if altitude_structure.is_none() { "Choisissez un niveau pour la structure." } else { "Le plan de placement est parallèle à la vue. Utilisez une vue de dessus ou une vue 3D inclinée." }.into());
                     }
                 }
+            } else if texte_annotation {
+                if resp.clicked_by(PointerButton::Secondary) { self.ruban_edition.annuler(); }
+                if resp.clicked() && let Some(q) = resp.interact_pointer_pos()
+                    && let Err(e) = self.placer_texte_vue(rect, q)
+                {
+                    self.error = Some(e);
+                }
             } else if let Some(composant) = placement {
                 if composant && ui.memory(|m| m.focused().is_none()) && ui.input(|i| i.key_pressed(egui::Key::Space)) {
                     self.bim.composant.rotation = (self.bim.composant.rotation + 90.0).rem_euclid(360.0);
@@ -523,6 +533,11 @@ impl ViewerApp {
                     }
                 }
             }
+        }
+        if texte_annotation && let Some(q) = resp.hover_pos() {
+            // aperçu du texte sous le curseur, ancré comme le texte créé
+            let contenu = if self.bim.texte.trim().is_empty() { "Texte" } else { self.bim.texte.as_str() };
+            ui.painter().with_clip_rect(rect).text(q, egui::Align2::LEFT_BOTTOM, contenu, egui::FontId::proportional(12.0), Color32::from_rgb(55, 130, 200));
         }
         if let Some(composant) = placement {
             let painter = ui.painter().with_clip_rect(rect);

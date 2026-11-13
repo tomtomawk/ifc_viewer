@@ -4,7 +4,7 @@ use super::*;
 /// Saisie commune des deux projections : Échap abandonne d'abord le geste,
 /// puis l'outil et enfin la sélection.
 fn echap_esquisse(ui: &mut egui::Ui, resp: &egui::Response, ed: &mut EditeurFamille) {
-    let en_cours = !ed.esquisse.is_empty() || !ed.clics.is_empty() || ed.debut.is_some() || ed.fenetre.is_some() || ed.deplacement_2d.is_some();
+    let en_cours = !ed.esquisse.is_empty() || !ed.clics.is_empty() || ed.debut.is_some() || ed.fenetre.is_some() || ed.deplacement_2d.is_some() || !ed.points_transfo.is_empty();
     if (resp.hovered() || en_cours) && !ui.ctx().egui_wants_keyboard_input() && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
         if let Some(geste) = ed.deplacement_2d.take() { ed.famille = geste.avant; }
         else if !ed.saisie_trace.texte.is_empty() { ed.saisie_trace.vider(); }
@@ -490,7 +490,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
         geoms
     };
     let maj = ui.input(|i| i.modifiers.shift);
-    let depart_courant = ed.esquisse.last().map(|(_, p)| *p).or(ed.debut);
+    let depart_courant = ed.esquisse.last().map(|(_, p)| *p).or(ed.debut).or(ed.points_transfo.last().copied());
     let curseur_guide = curseur.filter(|_| resp.hovered() && ed.outil != OutilFamille::Selection);
     let point_guide = curseur_guide.and_then(|q| {
         let (h, v) = cadre.modele(q);
@@ -528,8 +528,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
     // repère d'accrochage sous la souris (hors sélection)
     if ed.outil != OutilFamille::Selection || ed.poignee.is_some() {
         if let Some(q) = curseur.filter(|_| resp.hovered() || ed.poignee.is_some()) {
-            let depart = ed.esquisse.last().map(|(_, p)| *p).or(ed.debut);
-            let (p, a) = viser(q, depart);
+            let (p, a) = viser(q, depart_courant);
             if a != AccrocheMur::Grille {
                 marqueur(&painter, cadre.ecran(p.0, p.1), a, orange, orange);
             }
@@ -919,6 +918,33 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
                 ed.choisir_outil(OutilFamille::Selection);
                 ed.selectionner(vec![SelectionFamille::Element2D(indice)]);
             }
+        }
+        OutilFamille::Deplacer | OutilFamille::Copier | OutilFamille::Tourner | OutilFamille::Symetrie => {
+            // points cliqués, puis élastique jusqu'au curseur accroché ; tourner : les
+            // deux directions partent du centre
+            let depuis_centre = ed.outil == OutilFamille::Tourner;
+            if let Some(q) = curseur.filter(|_| resp.hovered()) {
+                let c = viser(q, depart_courant).0;
+                let trait_ = egui::Stroke::new(1.5, orange);
+                let points: Vec<egui::Pos2> = ed.points_transfo.iter().map(|p| cadre.ecran(p.0, p.1)).collect();
+                let cible = cadre.ecran(c.0, c.1);
+                if depuis_centre {
+                    for p in points.iter().skip(1).chain(std::iter::once(&cible)) {
+                        if let Some(centre) = points.first() { painter.line_segment([*centre, *p], trait_); }
+                    }
+                } else if let Some(base) = points.last() {
+                    painter.add(egui::Shape::dashed_line(&[*base, cible], trait_, 6.0, 4.0));
+                }
+                for p in &points { painter.circle_filled(*p, 3.5, orange); }
+            }
+            if resp.clicked_by(PointerButton::Secondary) {
+                // clic droit : revenir d'un point, puis quitter l'outil
+                if ed.points_transfo.pop().is_none() { ed.choisir_outil(OutilFamille::Selection); }
+                else { ed.message = Some(ed.invite_transformation().into()); }
+            } else if resp.clicked() && let Some(q) = resp.interact_pointer_pos() {
+                ed.clic_transformation(viser(q, depart_courant).0);
+            }
+            garder_multiple = true;
         }
         OutilFamille::Ligne | OutilFamille::Arc | OutilFamille::Spline | OutilFamille::Cercle | OutilFamille::Rectangle => {
             use crate::dessin::dao::{EvenementTrace, Forme2D, Trace};

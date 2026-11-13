@@ -18,6 +18,7 @@ use panneau::*;
 mod canevas;
 use canevas::*;
 mod formes;
+mod transformer;
 use super::*;
 use super::accrochage;
 use crate::modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
@@ -101,10 +102,16 @@ pub(super) enum OutilFamille {
     CoteAngle,
     CoteDiametre,
     Altimetrie,
+    /// Onglet Modifier : transformations de la sélection par points cliqués.
+    Deplacer,
+    Copier,
+    Tourner,
+    Symetrie,
 }
 
 impl OutilFamille {
     fn est_revolution(self) -> bool { matches!(self, Self::Revolution | Self::RevolutionVide) }
+    pub(super) fn est_transformation(self) -> bool { matches!(self, Self::Deplacer | Self::Copier | Self::Tourner | Self::Symetrie) }
     fn outil_dessin(self) -> Option<crate::dessin::dao::OutilDessin> {
         use crate::dessin::dao::OutilDessin as D;
         match self { Self::Ligne => Some(D::Polyligne), Self::Arc => Some(D::Arc), Self::Spline => Some(D::Spline), Self::Cercle => Some(D::Cercle), Self::Rectangle => Some(D::Rectangle), _ => None }
@@ -192,6 +199,8 @@ pub(super) struct EditeurFamille {
     saisie_trace: super::saisie_trace::SaisieTrace,
     reperage: super::reperage::Reperage,
     axe_revolution: Option<[[f64; 2]; 2]>,
+    /// Points déjà cliqués par l'outil de transformation actif (repère de la vue).
+    points_transfo: Vec<(f64, f64)>,
     /// Paramètres partagés du projet (copie modifiable ; seules les valeurs changées
     /// sont reportées à l'enregistrement).
     partages: BTreeMap<String, f64>,
@@ -452,6 +461,7 @@ impl EditeurFamille {
     /// Abandonne la saisie en cours (esquisse, cote, rectangle, glissement).
     fn abandonner_saisie(&mut self) {
         self.axe_revolution = None;
+        self.points_transfo.clear();
         self.esquisse.clear();
         self.trace_polyligne = None;
         self.saisie_trace.vider();
@@ -507,7 +517,7 @@ impl EditeurFamille {
     }
 
     pub(super) fn trace_en_cours(&self) -> bool {
-        !self.esquisse.is_empty() || !self.clics.is_empty() || self.debut.is_some()
+        !self.esquisse.is_empty() || !self.clics.is_empty() || self.debut.is_some() || !self.points_transfo.is_empty()
             || !self.saisie_trace.texte.is_empty()
     }
 
@@ -556,7 +566,8 @@ impl EditeurFamille {
         self.outil = if self.outil_disponible(o) { o } else { OutilFamille::Selection };
         self.abandonner_saisie();
         if let Some(outil) = self.outil.outil_dessin() { self.trace_polyligne = Some(crate::dessin::dao::Trace::new(outil)); }
-        if self.outil.est_revolution() { self.message = Some("Révolution : cliquer les deux points de l'axe, puis dessiner le profil fermé d'un seul côté de l'axe.".into()); }
+        if self.outil.est_transformation() { self.message = Some(self.invite_transformation().into()); }
+        else if self.outil.est_revolution() { self.message = Some("Révolution : cliquer les deux points de l'axe, puis dessiner le profil fermé d'un seul côté de l'axe.".into()); }
         else if self.outil.est_forme() { self.message = Some("Dessiner le profil fermé. Clic droit ou retour au premier sommet pour terminer ; régler ensuite la forme dans Propriétés.".into()); }
     }
 
@@ -569,6 +580,9 @@ impl EditeurFamille {
         let Some(d) = catalogue::OUTILS.iter().find(|d| d.outil == outil) else {
             return Some("Outil de famille inconnu.");
         };
+        if outil.est_transformation() && self.selection == SelectionFamille::Aucune && self.multiple.is_empty() {
+            return Some("Sélectionner d'abord un ou plusieurs éléments de la famille.");
+        }
         catalogue::indisponibilite(d, &catalogue::Contexte { famille_plane: false, vue_3d: self.vue_3d, plan_oblique: self.construction.is_some() })
     }
 

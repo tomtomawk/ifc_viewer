@@ -37,26 +37,76 @@ pub(super) fn bandeau_contenu(ui: &mut egui::Ui, groupes: &[(&str, Vec<Commande>
         let mut x = rect.left();
         for (c, l) in commandes.iter().zip(largeurs) {
             let r = egui::Rect::from_min_size(egui::pos2(x, rect.top()), egui::vec2(l, HAUTEUR_OUTILS));
-            let mut sous = ui.new_child(egui::UiBuilder::new().max_rect(r));
-            if !c.actif {
-                sous.disable();
+            reponses.push((c.cle, bouton_commande(ui, r, c, true)));
+            x += l + ESPACE_COLONNES;
+        }
+        ui.painter().text(egui::pos2(rect.center().x, rect.bottom() - 8.0), egui::Align2::CENTER_CENTER, *nom, egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
+    }
+    reponses
+}
+
+/// Bouton d'une commande : grande icône au-dessus du nom, ou petite icône à gauche du nom.
+fn bouton_commande(ui: &mut egui::Ui, r: egui::Rect, c: &Commande, grand: bool) -> egui::Response {
+    let mut sous = ui.new_child(egui::UiBuilder::new().max_rect(r));
+    if !c.actif {
+        sous.disable();
+    }
+    let resp = sous.interact(r, sous.scope_id().with(("commande", c.cle)), Sense::click());
+    if c.enfonce || (c.actif && resp.hovered()) {
+        sous.painter().rect_filled(r.shrink(1.0), 4.0, if c.enfonce { sous.visuals().selection.bg_fill } else { sous.visuals().widgets.hovered.weak_bg_fill });
+    }
+    let couleur = if !c.actif {
+        sous.visuals().weak_text_color().gamma_multiply(0.6)
+    } else if c.enfonce {
+        sous.visuals().selection.stroke.color
+    } else {
+        sous.visuals().text_color()
+    };
+    if grand {
+        icone_commande(sous.painter(), egui::Rect::from_center_size(egui::pos2(r.center().x, r.top() + 24.0), egui::vec2(32.0, 32.0)), c.icone, couleur);
+        sous.painter().text(egui::pos2(r.center().x, r.bottom() - 12.0), egui::Align2::CENTER_CENTER, c.nom, egui::FontId::proportional(12.0), couleur);
+    } else {
+        icone_commande(sous.painter(), egui::Rect::from_center_size(egui::pos2(r.left() + 12.0, r.center().y), egui::vec2(17.0, 17.0)), c.icone, couleur);
+        sous.painter().text(egui::pos2(r.left() + 27.0, r.center().y), egui::Align2::LEFT_CENTER, c.nom, egui::FontId::proportional(12.0), couleur);
+    }
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, c.actif, c.enfonce, c.nom));
+    if c.aide.is_empty() { resp } else { resp.on_hover_text(c.aide).on_disabled_hover_text(c.aide) }
+}
+
+/// Bandeau à petites icônes : trois commandes empilées par colonne, comme les outils
+/// secondaires du ruban de projet. Même hauteur et mêmes réponses que `bandeau`.
+pub fn bandeau_compact(ui: &mut egui::Ui, groupes: &[(&str, Vec<Commande>)]) -> Vec<(&'static str, egui::Response)> {
+    let mut reponses = Vec::new();
+    egui::ScrollArea::horizontal()
+        .id_salt("ruban_commandes_compactes")
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
+            ui.spacing_mut().item_spacing.x = ESPACE_GROUPES;
+            ui.horizontal_top(|ui| {
+                reponses = bandeau_contenu_compact(ui, groupes);
+            });
+        });
+    reponses
+}
+
+/// Contenu compact insérable dans une ligne de ruban déjà défilante.
+pub(super) fn bandeau_contenu_compact(ui: &mut egui::Ui, groupes: &[(&str, Vec<Commande>)]) -> Vec<(&'static str, egui::Response)> {
+    let mut reponses = Vec::new();
+    let hauteur = HAUTEUR_OUTILS / 3.0;
+    for (indice, (nom, commandes)) in groupes.iter().enumerate() {
+        let largeurs: Vec<f32> = commandes.chunks(3).map(|colonne| colonne.iter().map(|c| largeur_texte(ui, c.nom, 12.0) + 34.0).fold(0.0, f32::max)).collect();
+        let largeur = (largeurs.iter().sum::<f32>() + ESPACE_COLONNES * largeurs.len().saturating_sub(1) as f32).max(largeur_texte(ui, nom, 11.0) + 8.0);
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(largeur, HAUTEUR_GROUPE), Sense::hover());
+        if indice > 0 {
+            let x = rect.left() - ESPACE_GROUPES / 2.0;
+            ui.painter().line_segment([egui::pos2(x, rect.top() + 4.0), egui::pos2(x, rect.bottom() - 4.0)], ui.visuals().widgets.noninteractive.bg_stroke);
+        }
+        let mut x = rect.left();
+        for (colonne, l) in commandes.chunks(3).zip(largeurs) {
+            for (ligne, c) in colonne.iter().enumerate() {
+                let r = egui::Rect::from_min_size(egui::pos2(x, rect.top() + ligne as f32 * hauteur), egui::vec2(l, hauteur));
+                reponses.push((c.cle, bouton_commande(ui, r, c, false)));
             }
-            let resp = sous.interact(r, sous.scope_id().with(("commande", c.cle)), Sense::click());
-            if c.enfonce || (c.actif && resp.hovered()) {
-                sous.painter().rect_filled(r.shrink(1.0), 4.0, if c.enfonce { sous.visuals().selection.bg_fill } else { sous.visuals().widgets.hovered.weak_bg_fill });
-            }
-            let couleur = if !c.actif {
-                sous.visuals().weak_text_color().gamma_multiply(0.6)
-            } else if c.enfonce {
-                sous.visuals().selection.stroke.color
-            } else {
-                sous.visuals().text_color()
-            };
-            icone_commande(sous.painter(), egui::Rect::from_center_size(egui::pos2(r.center().x, r.top() + 24.0), egui::vec2(32.0, 32.0)), c.icone, couleur);
-            sous.painter().text(egui::pos2(r.center().x, r.bottom() - 12.0), egui::Align2::CENTER_CENTER, c.nom, egui::FontId::proportional(12.0), couleur);
-            resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, c.actif, c.enfonce, c.nom));
-            let resp = if c.aide.is_empty() { resp } else { resp.on_hover_text(c.aide).on_disabled_hover_text(c.aide) };
-            reponses.push((c.cle, resp));
             x += l + ESPACE_COLONNES;
         }
         ui.painter().text(egui::pos2(rect.center().x, rect.bottom() - 8.0), egui::Align2::CENTER_CENTER, *nom, egui::FontId::proportional(11.0), ui.visuals().weak_text_color());
@@ -185,7 +235,10 @@ pub(super) fn icone_commande(p: &egui::Painter, r: egui::Rect, i: Icone, c: Colo
                 "ligne" => Some(Outil::Polyligne), "arc" => Some(Outil::Arc),
                 "spline" => Some(Outil::Spline), "cercle" => Some(Outil::Cercle),
                 "rectangle" => Some(Outil::Rectangle), "texte" => Some(Outil::Texte),
-                "etiquette" => Some(Outil::Etiquette), _ => None,
+                "etiquette" => Some(Outil::Etiquette),
+                "deplacer" => Some(Outil::Deplacer), "copier" => Some(Outil::Copier),
+                "tourner" => Some(Outil::Tourner), "symetrie" => Some(Outil::Symetrie),
+                "supprimer" => Some(Outil::Supprimer), _ => None,
             };
             if let Some(outil) = outil { super::icones::icone(p, r, outil, c); return; }
             let cadre = |x: f32, y: f32, w: f32, h: f32| {

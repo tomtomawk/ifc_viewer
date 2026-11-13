@@ -35,7 +35,14 @@ pub(in crate::ui) const OUTILS: &[Descripteur] = &[
     Descripteur { outil: OutilFamille::Cercle, cle: "cercle", nom: "Cercle", aide: "Cliquer le centre puis le rayon", groupe: "Symboles 2D", plan_oblique: false, famille_plane: false },
     Descripteur { outil: OutilFamille::Rectangle, cle: "rectangle", nom: "Rectangle", aide: "Cliquer deux coins opposés", groupe: "Symboles 2D", plan_oblique: false, famille_plane: false },
     Descripteur { outil: OutilFamille::Arc, cle: "arc", nom: "Arc 2D", aide: "Arc 2D : départ, fin, puis point de passage", groupe: "Symboles 2D", plan_oblique: false, famille_plane: false },
+    Descripteur { outil: OutilFamille::Deplacer, cle: "deplacer", nom: "Déplacer", aide: "Déplacer la sélection : point de base, puis destination", groupe: GROUPE_TRANSFORMER, plan_oblique: false, famille_plane: false },
+    Descripteur { outil: OutilFamille::Copier, cle: "copier", nom: "Copier", aide: "Copier la sélection : point de base, puis destination de la copie", groupe: GROUPE_TRANSFORMER, plan_oblique: false, famille_plane: false },
+    Descripteur { outil: OutilFamille::Tourner, cle: "tourner", nom: "Tourner", aide: "Tourner la sélection : centre, direction de départ, puis direction d'arrivée", groupe: GROUPE_TRANSFORMER, plan_oblique: false, famille_plane: false },
+    Descripteur { outil: OutilFamille::Symetrie, cle: "symetrie", nom: "Symétrie", aide: "Symétrie de la sélection : deux points de l'axe", groupe: GROUPE_TRANSFORMER, plan_oblique: false, famille_plane: false },
 ];
+
+/// Groupe de l'onglet Modifier : ces outils agissent sur la sélection.
+pub(in crate::ui) const GROUPE_TRANSFORMER: &str = "Transformer";
 
 /// Contexte de présentation et de contrôle : la même décision sert au ruban
 /// et au contrôleur, avec la raison affichable à l'utilisateur.

@@ -346,6 +346,8 @@ enum OngletRuban {
     Sortie,
     /// Ruban de l'éditeur de familles : outils de création.
     FamilleCreer,
+    /// Ruban de l'éditeur de familles : transformations de la sélection.
+    FamilleModifier,
     /// Ruban de l'éditeur de familles : chargement dans le projet et fichiers.
     FamilleSortie,
 }

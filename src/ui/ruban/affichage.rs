@@ -200,7 +200,7 @@ impl RubanEdition {
                         );
                     }
                     if menu == Menu::Cartouche {
-                        bandeau_contenu(ui, &[("Formes", formes_famille_planes())]);
+                        bandeau_contenu_compact(ui, &[("Formes", formes_famille_planes())]);
                     }
                 });
             });

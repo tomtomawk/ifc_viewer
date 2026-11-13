@@ -174,7 +174,7 @@ Raccourcis existants :
 
 ## Vue et interface
 
-- `ruban debut|modeliser|modifier|documenter|sortie|famille_creer|famille_sortie`.
+- `ruban debut|modeliser|modifier|documenter|sortie|famille_creer|famille_modifier|famille_sortie`.
 - `options` lit ; `options {"navigation_ifc":true,"unite":"centimetre"}` modifie
   et mémorise (unités : millimetre, centimetre, metre).
 - `gabarit` lit ; `gabarit <chemin.gabarit.json>` charge ; `gabarit defaut` rétablit.

@@ -60,6 +60,26 @@ impl ViewerApp {
         q.is_finite().then_some(q.to_array())
     }
 
+    /// Outil Texte du projet, même parcours que dans l'éditeur de famille : un clic place
+    /// le texte dans la vue, puis il reste sélectionné pour régler son contenu, ses
+    /// champs, sa position et sa hauteur dans Propriétés.
+    pub(super) fn placer_texte_vue(&mut self, rect: egui::Rect, q: egui::Pos2) -> Result<(), String> {
+        use crate::modele::documentation::AnnotationForme;
+        let vue = self.vue_native_id().ok_or("Ouvrez un plan ou une coupe native pour annoter.")?;
+        let point = self.point_annotation(rect, q).ok_or("Le plan de la vue est vu par la tranche : ouvrir un plan, une coupe ou une élévation.")?;
+        let texte = if self.bim.texte.trim().is_empty() { "Texte".to_owned() } else { self.bim.texte.clone() };
+        let hauteur = self.bim.annotation_identique.as_ref()
+            .filter(|a| matches!(a.forme, AnnotationForme::Texte { .. }))
+            .map_or_else(|| self.ruban_edition.nombre_option(crate::ui::ruban::Outil::Texte, 1), |a| a.hauteur);
+        self.executer_bim(crate::modele::edition::commandes::Commande::Annoter {
+            annotation: Annotation { id: String::new(), vue, hauteur, forme: AnnotationForme::Texte { point, texte } },
+        })?;
+        // retour à la sélection : Propriétés montre le texte créé
+        self.ruban_edition.annuler();
+        self.status = "Texte placé — contenu, champs et hauteur dans Propriétés ; Ctrl+Z pour annuler.".into();
+        Ok(())
+    }
+
     /// Accroche seulement les traits de la sélection et les rectangles de texte.
     fn annotation_visee(&self, rect: egui::Rect, q: egui::Pos2, annotations: &[Annotation]) -> bool {
         let rectangles = self.rectangles_annotations(rect);

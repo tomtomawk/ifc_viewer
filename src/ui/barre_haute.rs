@@ -8,8 +8,9 @@ impl ViewerApp {
         let maximise = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
         // famille ouverte : son propre ruban, comme un document indépendant
         let mode_famille = self.mode_famille();
-        let onglet_famille = matches!(self.onglet_ruban, OngletRuban::FamilleCreer | OngletRuban::FamilleSortie);
-        if mode_famille && !onglet_famille {
+        let onglet_famille = matches!(self.onglet_ruban, OngletRuban::FamilleCreer | OngletRuban::FamilleModifier | OngletRuban::FamilleSortie);
+        // l'onglet Modifier appartient à l'éditeur commun : les éditeurs plans n'en ont pas
+        if mode_famille && (!onglet_famille || (self.onglet_ruban == OngletRuban::FamilleModifier && self.famille_plane_active.is_some())) {
             self.onglet_ruban = OngletRuban::FamilleCreer;
         } else if !mode_famille && onglet_famille {
             self.onglet_ruban = OngletRuban::Debut;
@@ -34,8 +35,10 @@ impl ViewerApp {
         ui.scope_builder(egui::UiBuilder::new().id_salt("menu_fenetre").max_rect(menus).layout(egui::Layout::left_to_right(Align::Center)), |ui| {
             let onglets: &[(OngletRuban, &str)] = if self.cartouche_actif().is_some() {
                 &[(OngletRuban::FamilleCreer, "Documenter"), (OngletRuban::FamilleSortie, "Sortie")]
-            } else if mode_famille {
+            } else if mode_famille && self.famille_plane_active.is_some() {
                 &[(OngletRuban::FamilleCreer, "Créer"), (OngletRuban::FamilleSortie, "Sortie")]
+            } else if mode_famille {
+                &[(OngletRuban::FamilleCreer, "Créer"), (OngletRuban::FamilleModifier, "Modifier"), (OngletRuban::FamilleSortie, "Sortie")]
             } else {
                 &[(OngletRuban::Debut, "Début"), (OngletRuban::Modeliser, "Modéliser"), (OngletRuban::Modifier, "Modifier"), (OngletRuban::Annoter, "Documenter"), (OngletRuban::Sortie, "Sortie")]
             };
@@ -190,7 +193,7 @@ impl ViewerApp {
         if mode_famille {
             let sortie = self.onglet_ruban == OngletRuban::FamilleSortie;
             if self.famille_plane_active.is_some() { self.ruban_famille_plane(ui, sortie); }
-            else { self.ruban_famille(ui, sortie); }
+            else { self.ruban_famille(ui, self.onglet_ruban); }
             return;
         }
         let edition = match self.onglet_ruban {
@@ -309,7 +312,7 @@ impl ViewerApp {
                     }
                 }
             }
-            OngletRuban::Modeliser | OngletRuban::Modifier | OngletRuban::Annoter | OngletRuban::FamilleCreer | OngletRuban::FamilleSortie => {}
+            OngletRuban::Modeliser | OngletRuban::Modifier | OngletRuban::Annoter | OngletRuban::FamilleCreer | OngletRuban::FamilleModifier | OngletRuban::FamilleSortie => {}
             OngletRuban::Sortie => {
                 use crate::ui::ruban::{Commande as C, Icone as I};
                 let disponible = (self.natif.is_some() || self.rvt_source.is_some()) && self.loading.is_none() && self.sauvegarde.is_none();

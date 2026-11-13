@@ -218,7 +218,7 @@ pub(super) struct EtatBim {
     /// Famille d'étiquette des pièces créées ; vide : standard.
     pub(super) etiquette_piece: String,
     barre_editee: Option<crate::modele::Barre>,
-    annotation_identique: Option<crate::modele::documentation::Annotation>,
+    pub(in crate::ui) annotation_identique: Option<crate::modele::documentation::Annotation>,
     /// Suppression demandée depuis le panneau : exécutée à l'image suivante.
     pub(super) supprimer: bool,
     pub documentation: bool,
@@ -1310,10 +1310,17 @@ impl ViewerApp {
                 ui.label("Ouvrez un plan ou une coupe native pour annoter.");
                 return true;
             };
-            points_ui(ui, &mut self.bim.points);
             if outil == Some(Outil::Texte) {
-                ui.text_edit_singleline(&mut self.bim.texte);
+                // même parcours que dans l'éditeur de famille : le clic dans la vue place le texte
+                ui.label(RichText::new("Texte").strong());
+                ui.horizontal(|ui| {
+                    ui.label("Contenu");
+                    ui.text_edit_singleline(&mut self.bim.texte);
+                });
+                ui.label("Cliquez dans la vue pour placer le texte. Il reste sélectionné : contenu, champs, position et hauteur se règlent dans Propriétés.");
+                return true;
             }
+            points_ui(ui, &mut self.bim.points);
             if ui.button("Utiliser le dernier point cliqué").clicked() {
                 if let Some(pt) = self.point_clique {
                     let p = &self.natif.as_ref().unwrap().0;

@@ -44,7 +44,7 @@ Chaque lot doit rester relisible. Le passage d'un lot au suivant ne doit pas mas
 - Les événements de tracé et les principaux boutons du bandeau de polyligne sont partagés par les vues de projet, le cartouche et la famille. La famille utilise également le moteur commun pour les arcs, cercles, splines et rectangles. L’accrochage utilise le moteur DAO commun et tient compte des formes 2D de la vue de famille. Les tracés de famille et de cartouche partagent l’interprétation des coordonnées absolues, relatives, polaires et des distances avec le projet ; l’aperçu des valeurs et le guide d’angle utilisent le même calcul que dans le projet. Les guides par survol et leurs intersections utilisent désormais le même repérage dans le projet, les familles modélisées et les cartouches spécialisés.
 - Le texte possède des propriétés communes et peut être placé et manipulé dans l'éditeur de famille. Les formes 2D utilisent le tracé DAO commun et les icônes du projet. Les textes et remplissages des éléments 2D sont rendus dans les vues de projet ; les champs sont résolus pour les feuilles et pièces. Les parcours complets de placement et d'édition restent à unifier.
 - Les anciens états, registres et formats d'éditeurs plans restent présents pour les parcours encore spécialisés. Leur suppression et la fusion complète des sélections, poignées, propriétés et du canevas restent à réaliser.
-- `cargo check` et 342 tests automatisés passent (deux ignorés) ; 38 tests de lecture de maquettes Revit, trop longs lors de cette campagne, restent à exécuter. Les parcours pilotés couvrent aussi les familles, les composants, les pièces et les exports. Une recette visuelle complète reste à réaliser.
+- Campagne du 11/11/2026 : `cargo check` et 342 tests automatisés passaient (deux ignorés) ; 38 tests de lecture de maquettes Revit, trop longs lors de cette campagne, restent à exécuter. Les parcours pilotés couvrent aussi les familles, les composants, les pièces et les exports. Une recette visuelle complète reste à réaliser. La suite complète n'a pas été relancée depuis (voir l'état au 12/11/2026).
 
 - Le mur hôte générique des vues planes est limité aux portes et fenêtres.
 
@@ -61,3 +61,37 @@ Chaque lot doit rester relisible. Le passage d'un lot au suivant ne doit pas mas
 - Dans le projet, les annotations 2D d’une même vue peuvent être déplacées ensemble par glissement ; l’aperçu suit le geste et une seule commande permet l’annulation. Le chargement direct d’un fichier de famille alimente le registre correspondant à sa catégorie. Les fichiers spécialisés contenant un document commun s’ouvrent dans l’éditeur commun sans être écrasés.
 
 - Le fichier de famille courant (`famille-ouverture 3`) conserve la profondeur du composant ou l’épaisseur d’essai de l’hôte ; cette valeur participe à l’historique et au chargement. Le format précédent est incompatible et aucune migration n’est ajoutée.
+
+## État au 12/11/2026
+
+Le plan n'est pas terminé : les lots 1 à 5 sont en place pour l'éditeur commun, le lot 6 (nettoyage) n'est pas commencé et la fusion des parcours graphiques (lot 2) reste partielle.
+
+| Lot | État | Constat dans le code |
+| --- | --- | --- |
+| 1. Modèle unique | Fait, anciens modèles encore présents | `FamilleModelee` porte catégorie, vues, volumes et `elements_2d` ; un seul format `famille-ouverture 3`. Les structures `FamillePlane`, `FamilleCartouche`, `FamilleEtiquette` et leurs formats subsistent. |
+| 2. Dessin et annotations 2D | Partiel | Tracé, accrochage, repérage, saisie clavier et poignées partagés. La polyligne de famille reste un `Symbole` lié aux plans alors que les autres formes sont des `elements_2d` : deux représentations pour un même geste. Le canevas de famille (`Cadre`, `NavigationFamille`) n'est pas celui des vues de projet. Pas de cote linéaire graphique en famille (la cote y est une contrainte). |
+| 3. Éditeur commun et catégories | Fait pour l'éditeur commun | Changement de catégorie sans perte ; outils par catalogue. Les éditeurs plans (`familles_planes.rs`, `cartouche.rs`, `profils.rs`) restent ouverts par les parcours spécialisés. |
+| 4. Cartouches et étiquettes | Fait | Rendu depuis les éléments 2D du plan ; champs résolus pour feuilles et pièces. |
+| 5. Profils | Fait | Section désignée parmi les contours fermés du plan, contrôlée au chargement. |
+| 6. Chargement et nettoyage | À faire | Aucun éditeur, registre ni format redondant n'a été retiré. |
+| 7. Validation | À faire | Recette visuelle multi-projets et suite complète à relancer sur demande. |
+
+Navigation des vues de famille : onglets par vue, double-clic molette et retrait du bandeau faits ; l'alignement complet des gestes sur le projet reste ouvert.
+
+### Ajouts du 12/11/2026
+
+- **Ruban de famille compact.** L'onglet Créer affiche les outils en petites icônes, trois par colonne (`bandeau_compact`), comme les outils secondaires du ruban de projet. Les formes volumiques grisées du ruban des cartouches spécialisés utilisent la même présentation.
+- **Onglet Modifier des familles.** L'éditeur commun reçoit un onglet Modifier : Déplacer, Copier, Tourner, Symétrie (points cliqués avec l'accrochage de la vue, clic droit pour revenir d'un point) et Supprimer. Les outils sont inscrits au catalogue (`deplacer`, `copier`, `tourner`, `symetrie`), donc pilotables par `famille_outil` ; l'onglet par `ruban famille_modifier`. Déplacer et Copier acceptent éléments 2D, symboles, extrusions simples et volumes ; Tourner et Symétrie refusent les volumes rectangulaires (alignés sur leurs plans), les formes guidées et les éléments d'une autre vue, et raccrochent les sommets liés au plan le plus proche. Les éditeurs plans spécialisés n'ont pas cet onglet.
+- **Texte du projet.** L'outil Texte de Documenter reprend le parcours de la famille : un clic place le texte dans la vue native, il reste sélectionné et se règle dans Propriétés (contenu, champs, position, hauteur). L'ancien encart « points + Ajouter à la vue » ne sert plus qu'aux étiquettes et zones.
+- Aucun changement de format.
+
+### Reste à faire, par ordre proposé
+
+1. Stocker la polyligne de famille comme élément 2D (ou donner aux éléments 2D l'ancrage aux plans) pour supprimer la double représentation `Symbole` / `elements_2d`, puis unifier leurs propriétés et poignées.
+2. Rendre le texte de famille à l'échelle de la vue (taille écran actuellement approchée) et partager l'accrochage du placement de texte avec le projet.
+3. Étendre l'onglet Modifier : aperçu de la sélection transformée, Réseau, Échelle, Aligner, raccourcis clavier du projet (MV, CO, RO, SY).
+4. Remplacer le canevas de famille par celui des vues de projet (navigation, fond, bandeau de dessin).
+5. Lot 6 : basculer cartouches, étiquettes et profils sur l'éditeur commun pour tous les parcours, puis retirer `familles_planes.rs`, l'éditeur de `cartouche.rs`, `profils.rs` et les formats spécialisés.
+6. Lot 7 : suite de tests complète, 38 tests Revit et recette visuelle.
+
+Vérification du 12/11/2026 : `cargo check` sans avertissement ; tests ciblés `editeur_famille`, `ui::ruban`, `outils_texte` et `poignees` réussis (16 tests) ; ruban compact, onglet Modifier (symétrie d'un symbole) et placement du texte contrôlés dans une instance de test.
