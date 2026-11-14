@@ -177,7 +177,7 @@ impl Projet {
             return t.id.clone();
         }
         let id = noyau::uuid::uuid();
-        let nom = format!("{} · {} mm", c.materiau.as_deref().unwrap_or("Couche"), crate::formats::ifc::step::format_real(c.epaisseur));
+        let nom = format!("{} · {} mm", c.materiau.as_deref().unwrap_or("Couche"), noyau::nombres::format_real(c.epaisseur));
         self.types_murs.push(TypeCompose { id: id.clone(), nom, couches: vec![c.clone()], categorie: None, couches_detaillees: true, origine: None });
         id
     }

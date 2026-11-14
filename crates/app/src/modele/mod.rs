@@ -19,6 +19,7 @@ pub mod gabarit;
 pub mod gabarits_vues;
 pub mod murs;
 pub mod soleil;
+pub mod unite;
 pub(crate) mod validation;
 pub mod volumes;
 pub use elements::escalier::{Escalier, GardeCorps, Remplissage};

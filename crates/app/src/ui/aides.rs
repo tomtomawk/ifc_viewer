@@ -346,7 +346,7 @@ pub(super) fn apercu_motif(p: &egui::Painter, r: egui::Rect, d: &crate::modele::
 }
 
 pub(super) fn apercu_motif_colore(p: &egui::Painter, r: egui::Rect, d: &crate::modele::DefinitionMotif, px_mm: f32, couleur: Color32) {
-    use crate::formats::rvt::vues::{hachures_plan, GrilleMotif, Motif};
+    use noyau::motif::{hachures_plan, GrilleMotif, Motif};
     let m = Motif {
         nom: d.nom.clone(),
         modele: false,

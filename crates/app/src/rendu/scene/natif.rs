@@ -738,7 +738,7 @@ fn navigateur(projet: &Projet) -> Navigateur {
 /// hachures), en mm du papier.
 fn coupe_materiau(projet: &Projet, m: &crate::modele::Materiau, plans: Vec<Vec4>, trait_mm: f64) -> Vec<CoucheCoupe> {
     use crate::modele::MotifCoupe;
-    use crate::formats::rvt::vues::{GrilleMotif, Motif};
+    use noyau::motif::{GrilleMotif, Motif};
     let [r, g, b] = m.couleur;
     // hachures d'une définition ; aplat : sans grille ; rien : None
     let grilles = |x: &MotifCoupe| -> Option<Vec<GrilleMotif>> {

@@ -290,7 +290,7 @@ impl RemplissageContour {
 /// Primitives du remplissage d'un contour (mm du plan de la vue) : arrière-plan (aplat
 /// s'il n'est pas blanc, ou hachures) puis premier plan, hachures à l'échelle de la vue.
 fn primitives_remplissage(p: &Projet, r: &RemplissageContour, contour: &[[f64; 2]], echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
-    use crate::formats::rvt::vues::{GrilleMotif, Motif, hachures_plan};
+    use noyau::motif::{GrilleMotif, Motif, hachures_plan};
     let (motif, encre, fond) = match r {
         RemplissageContour::Materiau { materiau } => match p.materiau(materiau) {
             Some(m) => (m.motif.clone(), m.encre_coupe(), Some(m.fond_coupe())),
@@ -737,7 +737,7 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
                 let resolue = cotation::angle_resolu(p, v, forme);
                 let perdue = matches!(forme, AnnotationForme::CoteAngulaire { aretes: Some(_), .. }) && resolue.is_none();
                 let forme = resolue.as_ref().unwrap_or(forme);
-                let unite = crate::config::options::unite();
+                let unite = crate::modele::unite::unite();
                 let longueur = |x: f64| unite.afficher(x);
                 let altitude = |q: [f64; 2], relatif: bool| altitude_vue(p, v, q, relatif);
                 let style = StyleCote { oblique, taille: taille * 1000.0, longueur: &longueur, altitude: &altitude };
@@ -1046,7 +1046,7 @@ pub fn geometrie_diametre(centre: DVec2, point: DVec2, oblique: f64, marge: f64)
     let traits = vec![[a, b], [a - o, a + o], [b - o, b + o], [centre - DVec2::X * c, centre + DVec2::X * c], [centre - DVec2::Y * c, centre + DVec2::Y * c]];
     let mut dir = d;
     if dir.x < -1e-9 || (dir.x.abs() < 1e-9 && dir.y < 0.0) { dir = -dir; }
-    let texte = format!("Ø {}", crate::config::options::unite().afficher(2.0 * r));
+    let texte = format!("Ø {}", crate::modele::unite::unite().afficher(2.0 * r));
     Some(GeometrieMesure { traits, texte: (centre + d * r * 0.5 + dir.perp() * marge * 0.4, dir, texte) })
 }
 

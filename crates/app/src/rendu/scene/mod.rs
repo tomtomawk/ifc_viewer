@@ -285,14 +285,14 @@ pub struct CoucheCoupe {
     /// Arrière-plan du poché (style Graphique) : couleur et motif (None : aucun, blanc ;
     /// grilles vides : uni).
     pub fond: [u8; 4],
-    pub motif_fond: Option<Arc<crate::formats::rvt::vues::Motif>>,
+    pub motif_fond: Option<Arc<noyau::motif::Motif>>,
     /// Ligne d'isolant en boucles au milieu de la couche (premier plan).
     pub isolation: bool,
     /// Centre du mur courbe dans le repère du modèle, en mètres.
     pub centre_isolation: Option<[f64; 2]>,
     /// Épaisseur du contour de coupe (mm du papier, plume de la couche).
     pub trait_mm: f64,
-    pub motif: Option<Arc<crate::formats::rvt::vues::Motif>>,
+    pub motif: Option<Arc<noyau::motif::Motif>>,
     pub couleur_motif: [u8; 4],
     pub hachure_defaut: bool,
 }

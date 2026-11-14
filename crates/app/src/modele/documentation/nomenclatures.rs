@@ -228,7 +228,7 @@ pub(super) fn tableau_colonnes(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<S
     }
     for g in &p.garde_corps {
         let type_nom = g.type_garde_corps.as_ref().and_then(|id| p.types_garde_corps.iter().find(|t| &t.id == id))
-            .map_or_else(|| format!("Garde-corps {} · {}", g.remplissage.nom(), crate::config::options::unite().afficher(g.hauteur)),
+            .map_or_else(|| format!("Garde-corps {} · {}", g.remplissage.nom(), crate::modele::unite::unite().afficher(g.hauteur)),
                 |t| t.nom.clone());
         lignes.push(LigneQuantite {
             categorie: "Garde-corps".into(),

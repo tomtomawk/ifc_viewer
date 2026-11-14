@@ -8,7 +8,7 @@ mod motifs;
 pub use motifs::*;
 
 pub mod dao;
-use crate::formats::rvt::vues::{GrilleMotif, Motif, hachures_plan};
+use noyau::motif::{GrilleMotif, Motif, hachures_plan};
 use crate::rendu::scene::{Scene, Vertex};
 use noyau::trace2d::{Forme, Primitive, Role, Style};
 use glam::{DVec3, Vec3, Vec4};
