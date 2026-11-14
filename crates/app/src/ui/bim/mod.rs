@@ -185,7 +185,7 @@ impl ViewerApp {
                     } else {
                         crate::echanges::depuis_ifc::convertir(&source, &progress)?
                     };
-                    let scene = scene::depuis_natif(&p, &sortie)?;
+                    let scene = crate::rendu::natif::depuis_natif(&p, &sortie)?;
                     crate::echanges::enregistrement::enregistrer_natif(&p, &sortie)?;
                     let rapport = crate::echanges::rapport::markdown(
                         &p,
@@ -276,7 +276,7 @@ impl ViewerApp {
     pub(super) fn cle_native(&self, id: Id) -> Option<String> {
         let p = &self.natif.as_ref()?.0;
         elements_natifs(p)
-            .find(|(genre, cle)| scene::id_natif(genre, cle) == id)
+            .find(|(genre, cle)| crate::rendu::natif::id_natif(genre, cle) == id)
             .map(|(_, cle)| cle.clone())
     }
     /// Objets de la scène dont l'élément natif est verrouillé.
@@ -285,7 +285,7 @@ impl ViewerApp {
         if p.verrous.is_empty() {
             return Vec::new();
         }
-        elements_natifs(p).filter(|(_, cle)| p.verrous.contains_key(*cle)).map(|(genre, cle)| scene::id_natif(genre, cle)).collect()
+        elements_natifs(p).filter(|(_, cle)| p.verrous.contains_key(*cle)).map(|(genre, cle)| crate::rendu::natif::id_natif(genre, cle)).collect()
     }
     /// Bouton Verrou du ruban : verrouille la sélection, ou la déverrouille si elle l'est
     /// déjà entièrement.

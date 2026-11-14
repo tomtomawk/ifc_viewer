@@ -8,7 +8,7 @@ impl ViewerApp {
             // l'affichage temporaire prime sur les réglages enregistrés de la vue
             let vue = self.id_vue_contexte().and_then(|id| projet.contextes_vues.get(&id)).cloned().unwrap_or_default();
             let masques = projet.elements_masques_contextes(&self.filtres_contextes.sur(&vue));
-            super::bim::elements_natifs(projet).filter(|(_, id)| masques.contains(*id)).map(|(genre, id)| scene::id_natif(genre, id)).collect()
+            super::bim::elements_natifs(projet).filter(|(_, id)| masques.contains(*id)).map(|(genre, id)| crate::rendu::natif::id_natif(genre, id)).collect()
         }).unwrap_or_default()
     }
     pub(super) fn open(&mut self, path: PathBuf, ctx: &egui::Context) {
@@ -49,7 +49,7 @@ impl ViewerApp {
                         Ok(json) if crate::collaboration::partage::contenu_partage(&json)=>{let _=tx.send(LoadMsg::Partage(Self::charger_partage(&path,&progress),None));},
                         texte=>{
                             let res=texte.and_then(|json|modele::Projet::lire_json(&json))
-                                .and_then(|projet|scene::depuis_natif(&projet,&path).map(|scene|(Box::new(scene),projet,path)));
+                                .and_then(|projet|crate::rendu::natif::depuis_natif(&projet,&path).map(|scene|(Box::new(scene),projet,path)));
                             let _=tx.send(LoadMsg::Natif(res));
                         }
                     }
@@ -262,7 +262,7 @@ impl ViewerApp {
         // éléments masqués dans la vue : leurs identifiants de scène calculés une fois, puis
         // chaque objet (ou son parent) y est cherché
         let masques_vue: HashSet<Id> = self.vue_native_id().and_then(|id| self.natif.as_ref()?.0.vues.iter().find(|v| v.id == id).map(|vue| (&self.natif.as_ref().unwrap().0, vue))).filter(|(_, vue)| !vue.elements_masques.is_empty()).map(|(projet, vue)| {
-            let masques: HashSet<Id> = super::bim::elements_natifs(projet).filter(|(_, cle)| vue.elements_masques.contains(*cle)).map(|(genre, cle)| scene::id_natif(genre, cle)).collect();
+            let masques: HashSet<Id> = super::bim::elements_natifs(projet).filter(|(_, cle)| vue.elements_masques.contains(*cle)).map(|(genre, cle)| crate::rendu::natif::id_natif(genre, cle)).collect();
             scene.objects.iter().filter(|o| masques.contains(&o.id) || scene.model.parent.get(&o.id).is_some_and(|id| masques.contains(id)))
                 .map(|o| o.id).collect()
         }).unwrap_or_default();
@@ -273,8 +273,8 @@ impl ViewerApp {
         let mut objets_masques = HashSet::new();
         let exclus_contextes = self.ids_masques_contextes();
         for (i, o) in scene.objects.iter().enumerate() {
-            let en_edition = self.objet_en_edition().is_some_and(|(id, annotation)| !annotation && o.id == scene::id_natif("dalle", id))
-                || self.terrain_en_edition().is_some_and(|id| o.id == scene::id_natif("terrain", id));
+            let en_edition = self.objet_en_edition().is_some_and(|(id, annotation)| !annotation && o.id == crate::rendu::natif::id_natif("dalle", id))
+                || self.terrain_en_edition().is_some_and(|id| o.id == crate::rendu::natif::id_natif("terrain", id));
             // masqué par l'utilisateur (temporaire ou dans la vue) : montré en magenta dans le
             // mode « Afficher les éléments masqués »
             let masque_utilisateur = masques_vue.contains(&o.id) || (self.masques_utilisateur.contains(&(i as u32)) && self.hidden_objects.contains(&(i as u32)));
@@ -313,7 +313,7 @@ impl ViewerApp {
         }
         let nom = chemin.file_stem().map(|n| n.to_string_lossy().trim_end_matches(".modele").to_string()).unwrap_or_else(|| "Nouveau projet".into());
         let projet = modele::Projet::depuis_gabarit(&nom, &modele::gabarit::actif());
-        let resultat = scene::depuis_natif(&projet, &chemin).and_then(|scene| {
+        let resultat = crate::rendu::natif::depuis_natif(&projet, &chemin).and_then(|scene| {
             crate::echanges::enregistrement::enregistrer_natif(&projet, &chemin)?;
             Ok(scene)
         });
@@ -333,7 +333,7 @@ impl ViewerApp {
 
     /// Le plan initial est ouvert seul ; la vue 3D nommée reste dans l'arborescence.
     pub(super) fn ouvrir_plan_initial_natif(&mut self) {
-        let plan = self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|v| matches!(v.genre, modele::GenreVue::Plan { .. })).map(|v| scene::numero_vue(&v.id)));
+        let plan = self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|v| matches!(v.genre, modele::GenreVue::Plan { .. })).map(|v| crate::rendu::natif::numero_vue(&v.id)));
         let indice = plan.and_then(|n| self.scene.as_ref()?.navigateur.as_ref()?.vues.iter().position(|v| v.revit_id == n));
         self.vues_ouvertes.clear();
         self.etats_vues.clear();

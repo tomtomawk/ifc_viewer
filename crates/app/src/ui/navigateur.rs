@@ -90,14 +90,14 @@ impl ViewerApp {
             Some((p, _)) => (
                 modele::documentation::jeux(p).into_iter().map(|j| {
                     let fs = p.feuilles.iter().filter(|f| f.jeu == j).map(|f| {
-                        let vues = f.vues.iter().map(|v| (crate::rendu::scene::numero_vue(&v.vue), p.vues.iter().find(|x| x.id == v.vue).map_or("Vue absente".to_string(), |x| x.nom.clone()), v.echelle_sur_feuille(p))).collect();
+                        let vues = f.vues.iter().map(|v| (crate::rendu::natif::numero_vue(&v.vue), p.vues.iter().find(|x| x.id == v.vue).map_or("Vue absente".to_string(), |x| x.nom.clone()), v.echelle_sur_feuille(p))).collect();
                         let tables = f.nomenclatures.iter().map(|n| (n.nomenclature.clone(), p.nomenclatures.iter().find(|x| x.id == n.nomenclature).map_or("Nomenclature absente".to_string(), |x| x.nom.clone()))).collect();
                         (f.id.clone(), format!("{} - {}", f.numero, f.nom), vues, tables)
                     }).collect();
                     (j, fs)
                 }).collect(),
                 p.nomenclatures.iter().map(|n| (n.id.clone(), n.nom.clone())).collect(),
-                p.vues.iter().map(|v| (crate::rendu::scene::numero_vue(&v.id), v.id.clone())).chain(std::iter::once((crate::rendu::scene::numero_vue("3d"), "3d".to_string()))).collect(),
+                p.vues.iter().map(|v| (crate::rendu::natif::numero_vue(&v.id), v.id.clone())).chain(std::iter::once((crate::rendu::natif::numero_vue("3d"), "3d".to_string()))).collect(),
             ),
             None => (Vec::new(), Vec::new(), std::collections::HashMap::new()),
         };
@@ -176,7 +176,7 @@ impl ViewerApp {
                 }
             }
         };
-        let titre_vue = |v: &crate::rendu::scene::NavVue| if v.nom.is_empty() { format!("{} [{}]", v.genre, v.revit_id) } else { v.nom.clone() };
+        let titre_vue = |v: &scene::NavVue| if v.nom.is_empty() { format!("{} [{}]", v.genre, v.revit_id) } else { v.nom.clone() };
         // section : repliable sous « Tout », seule et dépliée sous son onglet
         let natif_present = self.natif.is_some();
         let mut rubrique_nav = |ui: &mut egui::Ui, onglet: LeftTab, titre: String, ouverte: bool, contenu: &mut dyn FnMut(&mut egui::Ui)| {
@@ -381,7 +381,7 @@ impl ViewerApp {
             }
         });
         // Familles : catégorie, famille, types
-        let mut par_cat: BTreeMap<&str, Vec<&crate::rendu::scene::NavFamille>> = BTreeMap::new();
+        let mut par_cat: BTreeMap<&str, Vec<&scene::NavFamille>> = BTreeMap::new();
         for f in &nav.familles {
             if garde(&f.nom) || garde(&f.categorie) || f.types.iter().any(|t| garde(&t.0)) {
                 par_cat.entry(f.categorie.as_str()).or_default().push(f);
@@ -567,7 +567,7 @@ impl ViewerApp {
             Some(ActionNav::Activer(i)) => self.activer_vue(i),
             Some(ActionNav::SupprimerVue(i)) => self.supprimer_vue_native(i),
             Some(ActionNav::DupliquerVue(id)) if id == "3d" => {
-                let indice = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|n| n.vues.iter().position(|v| v.revit_id == scene::numero_vue("3d")));
+                let indice = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|n| n.vues.iter().position(|v| v.revit_id == crate::rendu::natif::numero_vue("3d")));
                 if let Some(i) = indice {
                     self.activer_vue(i);
                     let nom = self.natif.as_ref().map(|(p, _)| (1..).map(|k| if k == 1 { "Vue 3D - Copie".to_owned() } else { format!("Vue 3D - Copie ({k})") }).find(|n| !p.vues.iter().any(|v| &v.nom == n)).unwrap_or_default());

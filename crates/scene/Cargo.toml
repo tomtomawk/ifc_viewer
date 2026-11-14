@@ -1,0 +1,13 @@
+[package]
+name = "scene"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+noyau = { path = "../noyau" }
+modele = { path = "../modele" }
+ifc_base = { path = "../ifc_base" }
+glam.workspace = true

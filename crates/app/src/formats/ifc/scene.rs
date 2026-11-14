@@ -3,7 +3,7 @@
 use crate::formats::ifc::geom::{self, GeomStats, ProductGeom};
 use crate::formats::ifc::semantique::IfcModel;
 use crate::formats::ifc::step::{Id, IdMap, StepFile};
-use crate::rendu::scene::{Range, Scene, SceneObject, Vertex};
+use scene::{Range, Scene, SceneObject, Vertex};
 use glam::{DVec3, Vec3};
 use rayon::prelude::*;
 use std::path::Path;

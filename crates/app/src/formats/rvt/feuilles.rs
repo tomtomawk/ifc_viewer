@@ -16,7 +16,7 @@ use super::maquette::{InstanceVue, Maquette};
 use super::parametres::{self, Brut};
 use super::vues::{self, Alignement, Contenu, Element2D, ParamEtiquette, Vertical, Vue};
 use crate::formats::ifc::geom::{Part, Rgba};
-use crate::rendu::scene::NavFenetre;
+use scene::NavFenetre;
 use noyau::texte;
 use glam::{DMat3, DMat4, DVec3, DVec4};
 use std::collections::HashMap;

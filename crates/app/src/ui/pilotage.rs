@@ -234,7 +234,7 @@ impl ViewerApp {
                         .and_then(Value::as_str)
                         .unwrap_or("Nouveau projet");
                     let p = modele::Projet::depuis_gabarit(nom, &modele::gabarit::actif());
-                    let s = scene::depuis_natif(&p, &path)?;
+                    let s = crate::rendu::natif::depuis_natif(&p, &path)?;
                     crate::echanges::enregistrement::enregistrer_natif(&p, &path)?;
                     self.install_scene(s);
                     let _ = self.historique.enregistrer(&p);

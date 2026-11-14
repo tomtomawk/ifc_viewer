@@ -1,7 +1,7 @@
 //! Rendu wgpu de la vue 3D : la scène est dessinée hors écran (multiéchantillonnée),
 //! puis affichée par egui comme une image.
 
-use crate::rendu::scene::Vertex;
+use scene::Vertex;
 use eframe::egui;
 use eframe::egui_wgpu;
 use eframe::wgpu::{self, util::DeviceExt};

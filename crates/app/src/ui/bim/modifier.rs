@@ -45,7 +45,7 @@ impl ViewerApp {
                         dissocier = true;
                     }
                     if ui.button("Assemblage").on_hover_text("Sélectionner l'assemblage entier").clicked() {
-                        selection = Some(crate::rendu::scene::id_natif("assemblage", a));
+                        selection = Some(crate::rendu::natif::id_natif("assemblage", a));
                     }
                 } else if !assemblages.is_empty() {
                     egui::ComboBox::from_id_salt("associer_mur").width(170.0).selected_text("Associer à un assemblage…").show_ui(ui, |ui| {
@@ -221,7 +221,7 @@ impl ViewerApp {
             .revit_id;
         p.vues
             .iter()
-            .find(|v| scene::numero_vue(&v.id) == num)
+            .find(|v| crate::rendu::natif::numero_vue(&v.id) == num)
             .map(|v| v.id.clone())
     }
     pub(in crate::ui) fn annotations_natives(&self) -> Vec<noyau::trace2d::Primitive> {
@@ -237,12 +237,12 @@ impl ViewerApp {
             .bim
             .selection
             .iter()
-            .map(|id| scene::id_natif("annotation", id))
+            .map(|id| crate::rendu::natif::id_natif("annotation", id))
             .collect();
         modele::documentation::annotations(p, v)
             .into_iter()
-            .filter(|a| !a.element.is_some_and(|id| v.elements_masques.iter().any(|cle| scene::id_natif("annotation", cle) == id)))
-            .filter(|a| !self.objet_en_edition().is_some_and(|(id, annotation)| annotation && a.element == Some(scene::id_natif("annotation", id))))
+            .filter(|a| !a.element.is_some_and(|id| v.elements_masques.iter().any(|cle| crate::rendu::natif::id_natif("annotation", cle) == id)))
+            .filter(|a| !self.objet_en_edition().is_some_and(|(id, annotation)| annotation && a.element == Some(crate::rendu::natif::id_natif("annotation", id))))
             .map(|mut a| {
                 if a.element.is_some_and(|id| selection.contains(&id)) {
                     a.style.couleur = [230, 120, 20, 255];

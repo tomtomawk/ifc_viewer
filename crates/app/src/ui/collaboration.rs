@@ -9,7 +9,7 @@ impl ViewerApp {
     ) -> Result<(Box<Scene>, modele::Projet, PathBuf, Session), String> {
         progress("Préparation de la copie locale du projet partagé…".into());
         let (p, local, s) = partage::ouvrir(path, &partage::racine_cache())?;
-        let mut scene = scene::depuis_natif(&p, &local)?;
+        let mut scene = crate::rendu::natif::depuis_natif(&p, &local)?;
         scene.file_name = format!("{} · partagé", p.nom);
         Ok((Box::new(scene), p, local, s))
     }

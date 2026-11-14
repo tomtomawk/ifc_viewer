@@ -29,7 +29,7 @@ use super::vues::{self, Cadre, Contenu, Element2D, Motif, TypeFenetre, TypeRegio
 use super::Cfb;
 use crate::formats::ifc::geom::{Ligne, Part, ProductGeom, Rgba, class_color};
 use crate::formats::ifc::semantique::IfcModel;
-use crate::rendu::scene::{self, NavFamille, NavVue, Navigateur, Scene};
+use scene::{NavFamille, NavVue, Navigateur, Scene};
 use crate::formats::ifc::step::{Entity, Id, IdMap, StepFile, Value, format_real};
 use noyau::trace2d::{self, Primitive, Role, Style};
 use glam::{DMat3, DVec2, DVec3};

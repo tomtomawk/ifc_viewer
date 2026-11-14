@@ -1001,7 +1001,7 @@ impl ViewerApp {
         let modele = usage != Usage::Annotation || plan.is_some();
         if modele {
             let seg = |a: [f64; 2], b: [f64; 2]| Geom::Segment([DVec2::from_array(a), DVec2::from_array(b)]);
-            let visible = |genre: &str, id: &str| !selection || self.scene.as_ref().and_then(|s| s.object_of.get(&scene::id_natif(genre, id))).and_then(|i| self.visible.get(*i as usize)).copied().unwrap_or(false);
+            let visible = |genre: &str, id: &str| !selection || self.scene.as_ref().and_then(|s| s.object_of.get(&crate::rendu::natif::id_natif(genre, id))).and_then(|i| self.visible.get(*i as usize)).copied().unwrap_or(false);
             let coupes = modele::murs::jonctions::coupes(p);
             let retenu = |m: &modele::Mur| match usage {
                 Usage::Annotation => plan.as_ref() == Some(&m.niveau),
@@ -1062,7 +1062,7 @@ impl ViewerApp {
         if selection && let Some(scene) = &self.scene && let Some(plan) = self.plan_coupe() {
             // Les contours réellement coupés comprennent notamment les ouvertures et
             // les éléments qui ne disposent pas d'un contour natif en plan.
-            let arcs: std::collections::HashSet<_> = p.murs.iter().filter(|m| matches!(m.axe, modele::Axe::Arc { .. })).map(|m| scene::id_natif("mur", &m.id)).collect();
+            let arcs: std::collections::HashSet<_> = p.murs.iter().filter(|m| matches!(m.axe, modele::Axe::Arc { .. })).map(|m| crate::rendu::natif::id_natif("mur", &m.id)).collect();
             let mut traits = crate::dessin::coupe(scene, &self.visible, plan, self.echelle, crate::dessin::Poche::Vide);
             traits.extend(self.aretes_au_dessus_plan());
             let point = |v: DVec3| (v + scene.origin).truncate() * 1000.0;

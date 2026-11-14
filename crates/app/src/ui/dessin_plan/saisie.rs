@@ -214,7 +214,7 @@ impl ViewerApp {
                     Ok(ids) => {
                         if let Some(id) = ids.last() {
                             let genre = if self.natif.as_ref().is_some_and(|(p, _)| p.assemblage(id).is_some()) { "assemblage" } else { "mur" };
-                            self.selected = Some(scene::id_natif(genre, id));
+                            self.selected = Some(crate::rendu::natif::id_natif(genre, id));
                             self.reveal = self.selected;
                         }
                         self.status = format!("{} mur(s) créé(s) — Ctrl+S pour enregistrer.", ids.len());
@@ -610,7 +610,7 @@ impl ViewerApp {
             }
             if let Err(e) = self.appliquer_projet(projet) { self.dessin2d.message = Some(e); return; }
             self.bim.selection = ids.clone();
-            self.selected = ids.last().map(|id| scene::id_natif("limite_propriete", id));
+            self.selected = ids.last().map(|id| crate::rendu::natif::id_natif("limite_propriete", id));
             self.reveal = self.selected;
         } else if valider && usage == Some(Usage::Terrain) {
             // création, ou terrain repris par Modifier tracé (même identifiant)
@@ -618,7 +618,7 @@ impl ViewerApp {
             match self.executer_bim(Commande::Terrain { terrain }) {
                 Ok(ids) => {
                     if let Some(id) = ids.first() {
-                        self.selected = Some(scene::id_natif("terrain", id));
+                        self.selected = Some(crate::rendu::natif::id_natif("terrain", id));
                         self.reveal = self.selected;
                     }
                 }

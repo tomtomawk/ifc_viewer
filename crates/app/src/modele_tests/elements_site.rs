@@ -19,9 +19,9 @@ fn creation_site_sauvegarde_export_et_suppression() {
     let ifc_modele = crate::formats::ifc::semantique::IfcModel::new(fichier);
     let terrain_ifc = ifc_modele.products.iter().copied().find(|&id| ifc_modele.ty(id) == "IFCGEOGRAPHICELEMENT").unwrap();
     assert!(crate::formats::ifc::geom::product_geometry(&ifc_modele, &crate::formats::ifc::geom::GeomStats::default(), terrain_ifc).is_some());
-    let scene = crate::rendu::scene::depuis_natif(&p, std::path::Path::new("site.json")).unwrap();
-    assert!(scene.objects.iter().any(|o| o.id == crate::rendu::scene::id_natif("terrain", &t[0])));
-    assert!(scene.objects.iter().any(|o| o.id == crate::rendu::scene::id_natif("limite_propriete", &l[0])));
+    let scene = crate::rendu::natif::depuis_natif(&p, std::path::Path::new("site.json")).unwrap();
+    assert!(scene.objects.iter().any(|o| o.id == crate::rendu::natif::id_natif("terrain", &t[0])));
+    assert!(scene.objects.iter().any(|o| o.id == crate::rendu::natif::id_natif("limite_propriete", &l[0])));
     let (copie, ids) = p.executer(Commande::Copier { ids: vec![t[0].clone(), l[0].clone()], delta: [3000., 0., 0.] }).unwrap();
     assert_eq!(copie.terrains.len(), 2);
     assert_eq!(copie.limites_propriete.len(), 2);
@@ -46,8 +46,8 @@ fn site_en_phase_existant_cotes_ngf_et_epaisseur_du_type() {
     }
     let (p, _) = p.executer(Commande::CoordonneesOrigine { coordonnees: [0., 0., 45_000.] }).unwrap();
     let hauteur = |p: &Projet| {
-        let s = crate::rendu::scene::depuis_natif(p, std::path::Path::new("site.json")).unwrap();
-        let o = &s.objects[s.object_of[&crate::rendu::scene::id_natif("terrain", &t[0])] as usize];
+        let s = crate::rendu::natif::depuis_natif(p, std::path::Path::new("site.json")).unwrap();
+        let o = &s.objects[s.object_of[&crate::rendu::natif::id_natif("terrain", &t[0])] as usize];
         ((o.min.z as f64 + s.origin.z) * 1000.0, (o.max.z as f64 + s.origin.z) * 1000.0)
     };
     // dessus à 1,2 m au plus au-dessus du niveau 0, épaisseur du type par défaut dessous

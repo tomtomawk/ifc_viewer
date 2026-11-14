@@ -1,13 +1,10 @@
 //! Scène triangulée : tampons de rendu, objets, navigateur de projet, picking.
 
-use crate::formats::ifc::semantique::IfcModel;
-use crate::formats::ifc::step::IdMap;
+use ifc_base::semantique::IfcModel;
+use ifc_base::step::IdMap;
 use glam::{DMat4, DVec3, DVec4, Vec3, Vec4};
 use noyau::Id;
 use std::sync::Arc;
-mod natif;
-pub use natif::{depuis_natif, depuis_natif_verifie};
-pub use modele::identifiants::{id_natif, numero_vue};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -293,12 +290,6 @@ pub struct CoucheCoupe {
     pub motif: Option<Arc<noyau::motif::Motif>>,
     pub couleur_motif: [u8; 4],
     pub hachure_defaut: bool,
-}
-
-/// Vue de départ d'un projet natif vide, sans inventer de géométrie ni de source IFC.
-#[cfg(test)]
-pub fn projet_vide(projet: &modele::Projet, path: &std::path::Path) -> Result<Scene, String> {
-    depuis_natif(projet, path)
 }
 
 impl Scene {

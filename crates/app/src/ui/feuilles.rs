@@ -711,7 +711,7 @@ impl ViewerApp {
         if let Some(id) = ouvrir_vue.as_deref().and_then(|x| x.strip_prefix("nomenclature:")) {
             self.ouvrir_nomenclature(id);
         } else if let Some(id) = ouvrir_vue {
-            let n = crate::rendu::scene::numero_vue(&id);
+            let n = crate::rendu::natif::numero_vue(&id);
             if let Some(i) = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|nav| nav.vues.iter().position(|v| v.revit_id == n)) {
                 self.activer_vue(i);
             }
@@ -878,7 +878,7 @@ impl ViewerApp {
         } else if let Some(o) = ouvrir {
             match o.strip_prefix("vue:") {
                 Some(id) => {
-                    let n = crate::rendu::scene::numero_vue(id);
+                    let n = crate::rendu::natif::numero_vue(id);
                     if let Some(i) = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|nav| nav.vues.iter().position(|v| v.revit_id == n)) {
                         self.activer_vue(i);
                     }

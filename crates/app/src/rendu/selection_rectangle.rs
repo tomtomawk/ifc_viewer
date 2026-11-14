@@ -1,5 +1,5 @@
 //! Sélection à l'écran des triangles et traits visibles, après découpe de la vue.
-use crate::rendu::scene::Scene;
+use scene::Scene;
 use eframe::egui::{Pos2, Rect};
 use glam::{Mat4, Vec3, Vec4};
 use std::collections::HashMap;
@@ -223,7 +223,7 @@ mod tests {
                 rotation: 0.0,
             });
         }
-        let s = crate::rendu::scene::depuis_natif(&p, std::path::Path::new("test.json")).unwrap();
+        let s = crate::rendu::natif::depuis_natif(&p, std::path::Path::new("test.json")).unwrap();
         let camera = Mat4::from_cols(
             Vec4::new(0.2, 0., 0., 0.),
             Vec4::new(0., 0.2, 0., 0.),

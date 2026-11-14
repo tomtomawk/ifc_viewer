@@ -58,7 +58,7 @@ use crate::formats::ifc::semantique::pretty_type;
 use crate::pilote::{self, Requete};
 use crate::rendu::gpu::{FrameParams, ParamsPasse, Renderer, StyleVisuel};
 use crate::formats::rvt::{self, RvtInfo};
-use crate::rendu::scene::{self, Scene};
+use scene::Scene;
 use noyau::trace2d;
 use crate::formats::ifc::step::Id;
 use eframe::egui::{self, Align, Color32, PointerButton, RichText, Sense};
