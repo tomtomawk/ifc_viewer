@@ -223,7 +223,7 @@ fn modele(entree: PathBuf, sortie: PathBuf) -> i32 {
 fn stats(path: PathBuf) -> i32 {
     let handle = std::thread::Builder::new()
         .stack_size(64 << 20)
-        .spawn(move || rendu::scene::load(&path, &|s| eprintln!("{s}")))
+        .spawn(move || formats::ifc::scene::load(&path, &|s| eprintln!("{s}")))
         .unwrap();
     match handle.join().unwrap() {
         Ok(s) => {
