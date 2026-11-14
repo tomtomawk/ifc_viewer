@@ -16,7 +16,7 @@ mod courbures;
 use super::*;
 use crate::dessin::dao::{self as d2, Accroche, OutilDessin, Trace};
 use noyau::forme2d::{Geom};
-use crate::modele::edition::commandes::Commande;
+use crate::edition::commandes::Commande;
 use crate::modele::documentation::{Annotation, AnnotationForme};
 use glam::{DVec2, DVec3};
 

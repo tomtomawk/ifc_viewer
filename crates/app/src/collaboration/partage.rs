@@ -247,7 +247,7 @@ pub fn ouvrir(entree: &Path, cache: &Path) -> Resultat<(Projet, PathBuf, Session
             Ok(mut s) => {
                 s.copie.partage = Some(entree.clone());
                 let p = actualiser(&mut s)?;
-                super::super::echanges::enregistrement::enregistrer_natif(&p, &local)?;
+                crate::echanges::enregistrement::enregistrer_natif(&p, &local)?;
                 return Ok((p, local, s));
             }
             Err(e) if e.starts_with("Copie locale déjà ouverte") => continue,
@@ -267,7 +267,7 @@ pub fn ouvrir(entree: &Path, cache: &Path) -> Resultat<(Projet, PathBuf, Session
     s.copie.partage = Some(entree.clone());
     s.etat = "Synchronisé".into();
     s.persister()?;
-    super::super::echanges::enregistrement::enregistrer_natif(&p, &local)?;
+    crate::echanges::enregistrement::enregistrer_natif(&p, &local)?;
     Ok((p, local, s))
 }
 
@@ -280,7 +280,7 @@ mod tests {
         p
     }
     fn projet_test() -> Projet {
-        Projet::lire_json(include_str!("../../../../../samples/maison_native.modele.json")).unwrap()
+        Projet::lire_json(include_str!("../../../../samples/maison_native.modele.json")).unwrap()
     }
     #[test]
     fn partager_ouvrir_deux_copies_et_reutiliser_sans_ecraser() {

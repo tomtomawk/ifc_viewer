@@ -8,6 +8,8 @@ mod transformations;
 #[cfg(test)]
 mod tests;
 use crate::modele::*;
+use crate::modele::{elements::site, murs::assemblage, volumes::{geometrie, solides}};
+use serde::Deserialize;
 use crate::modele::creation::croisement;
 use glam::DVec2;
 use std::collections::{HashMap, HashSet};

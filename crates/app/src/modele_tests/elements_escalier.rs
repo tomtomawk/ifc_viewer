@@ -16,7 +16,7 @@ fn escalier(trace: Vec<[f64; 2]>) -> Escalier {
 
 #[test]
 fn commandes_escalier_et_garde_corps() {
-    use crate::modele::edition::commandes::Commande;
+    use crate::edition::commandes::Commande;
     let p = projet();
     let e = Escalier { id: String::new(), ..escalier(vec![[0.0, 0.0], [4050.0, 0.0]]) };
     let (p, ids) = p.executer(Commande::Escalier { escalier: e.clone() }).unwrap();
@@ -34,6 +34,6 @@ fn commandes_escalier_et_garde_corps() {
     // escalier impossible refusé
     assert!(p.executer(Commande::Escalier { escalier: Escalier { trace: vec![[0.0, 0.0]], ..e } }).is_err());
     // export IFC : classes d'escalier et de garde-corps
-    let ifc = crate::modele::echanges::export_ifc::exporter(&p).unwrap();
+    let ifc = crate::echanges::export_ifc::exporter(&p).unwrap();
     assert!(ifc.contains("IFCSTAIR(") && ifc.contains("IFCRAILING("));
 }

@@ -1,5 +1,6 @@
 //! Export IFC4 en millimètres : classes, niveaux, matériaux et géométrie tessellée.
 use crate::modele::*;
+use crate::modele::{elements::pente, murs::jonctions, volumes::solides};
 use std::collections::HashMap;
 use std::fmt::Write;
 struct Step {
@@ -373,6 +374,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::echanges::depuis_ifc;
     #[test]
     fn export_ifc4_relecture_geometrie_et_identifiants() {
         let (p, _) =

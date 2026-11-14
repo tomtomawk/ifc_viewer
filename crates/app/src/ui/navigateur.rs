@@ -523,7 +523,7 @@ impl ViewerApp {
         if let Some(jeu) = ajouter_feuille_jeu {
             if let Some((p, _)) = &self.natif {
                 let f = Self::nouvelle_feuille(p, &jeu);
-                if let Err(e) = self.executer_bim(crate::modele::edition::commandes::Commande::Feuille { feuille: f }) { self.error = Some(e); }
+                if let Err(e) = self.executer_bim(crate::edition::commandes::Commande::Feuille { feuille: f }) { self.error = Some(e); }
             }
         }
         if let Some(jeu) = exporter_jeu_nav { self.exporter_jeu_dialogue(&jeu); }

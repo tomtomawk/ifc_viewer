@@ -7,12 +7,9 @@
 //! Unités : millimètres ; coordonnées du fichier source (Revit : origine interne ; IFC :
 //! repère du projet).
 
-pub mod collaboration;
 pub mod contextes;
 pub mod creation;
 pub mod documentation;
-pub mod echanges;
-pub mod edition;
 pub mod elements;
 pub mod famille;
 pub mod gabarit;
@@ -30,8 +27,6 @@ pub use elements::piece::Piece;
 // Noms courts des sous-modules, visibles dans tout `modele` (par `use crate::modele::*`).
 #[allow(unused_imports)]
 use {
-    echanges::{depuis_ifc, depuis_rvt, enregistrement, export_ifc, rapport},
-    edition::{commandes, historique},
     elements::{cadrage, escalier, pente, site},
     murs::{assemblage, jonctions, retours},
     volumes::{geometrie, solides},

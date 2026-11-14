@@ -114,7 +114,7 @@ impl ViewerApp {
                 }
                 let g = crate::modele::gabarit::actif();
                 let json = serde_json::to_vec_pretty(&*g).map_err(|e| e.to_string())?;
-                crate::modele::echanges::enregistrement::ecrire_atomique(
+                crate::echanges::enregistrement::ecrire_atomique(
                     std::path::Path::new(argument.trim().trim_matches('"')),
                     &json,
                 )?;
@@ -171,7 +171,7 @@ impl ViewerApp {
                     } else {
                         svg.into_bytes()
                     };
-                    crate::modele::echanges::enregistrement::ecrire_atomique(
+                    crate::echanges::enregistrement::ecrire_atomique(
                         std::path::Path::new(path),
                         &bytes,
                     )?;
@@ -234,7 +234,7 @@ impl ViewerApp {
                         .unwrap_or("Nouveau projet");
                     let p = crate::modele::Projet::depuis_gabarit(nom, &crate::modele::gabarit::actif());
                     let s = scene::depuis_natif(&p, &path)?;
-                    crate::modele::echanges::enregistrement::enregistrer_natif(&p, &path)?;
+                    crate::echanges::enregistrement::enregistrer_natif(&p, &path)?;
                     self.install_scene(s);
                     let _ = self.historique.enregistrer(&p);
                     self.natif = Some((p, path));
@@ -349,14 +349,14 @@ impl ViewerApp {
                         return Err("Chemin de sortie requis".into());
                     }
                     let bytes = if nom == "exporter_ifc" {
-                        crate::modele::echanges::export_ifc::exporter(
+                        crate::echanges::export_ifc::exporter(
                             &self.natif.as_ref().ok_or("Projet natif requis")?.0,
                         )?
                         .into_bytes()
                     } else {
                         crate::dessin::pdf(&self.dessin_vue()?.svg("Dessin"))?
                     };
-                    crate::modele::echanges::enregistrement::ecrire_atomique(&path, &bytes)?;
+                    crate::echanges::enregistrement::ecrire_atomique(&path, &bytes)?;
                     Ok(json!({"chemin":path,"octets":bytes.len()}))
                 }
                 "nomenclature" | "exporter_csv" => {
@@ -371,7 +371,7 @@ impl ViewerApp {
                     let lignes = crate::modele::documentation::tableau(p, n)?;
                     if nom == "exporter_csv" {
                         let path = PathBuf::from(champ(&v, "chemin")?);
-                        crate::modele::echanges::enregistrement::ecrire_atomique(
+                        crate::echanges::enregistrement::ecrire_atomique(
                             &path,
                             crate::modele::documentation::csv(&lignes).as_bytes(),
                         )?;
@@ -392,7 +392,7 @@ impl ViewerApp {
                     } else {
                         let ids: Vec<String> = lire(argument)?;
                         let p = &self.natif.as_ref().ok_or("Projet natif requis")?.0;
-                        let objets = crate::modele::collaboration::objets(p)?;
+                        let objets = crate::collaboration::objets(p)?;
                         let mut cles = Vec::new();
                         for id in ids {
                             let cle = objets

@@ -136,7 +136,7 @@ impl ViewerApp {
                                 if ui.button("Enregistrer une copie du gabarit…").clicked(){
                                     if let Some(c)=rfd::FileDialog::new().set_title("Copie du gabarit").add_filter("Gabarit",&["json"]).set_file_name("agence.gabarit.json").save_file(){
                                         let contenu=match &p.brouillon.gabarit {Some(src)=>std::fs::read(src).map_err(|e|e.to_string()),None=>Ok(crate::modele::gabarit::texte_defaut().as_bytes().to_vec())};
-                                        if let Err(e)=contenu.and_then(|t|crate::modele::echanges::enregistrement::ecrire_atomique(&c,&t)){p.erreur=Some(e);}
+                                        if let Err(e)=contenu.and_then(|t|crate::echanges::enregistrement::ecrire_atomique(&c,&t)){p.erreur=Some(e);}
                                     }
                                 }
                             }
@@ -181,7 +181,7 @@ impl ViewerApp {
             && ctx.input_mut(|i|i.consume_key(egui::Modifiers::NONE,egui::Key::Space)) {
             let ids=self.selection_bim();
             if ids.len()==1 && self.natif.as_ref().is_some_and(|(p,_)|p.trajectoire_justification(&ids[0]).is_some()) {
-                match self.executer_bim(crate::modele::edition::commandes::Commande::InverserMur{id:ids[0].clone()}) {
+                match self.executer_bim(crate::edition::commandes::Commande::InverserMur{id:ids[0].clone()}) {
                     Ok(_)=>self.status="Mur inversé — Ctrl+Z pour annuler.".into(),
                     Err(e)=>self.error=Some(e),
                 }

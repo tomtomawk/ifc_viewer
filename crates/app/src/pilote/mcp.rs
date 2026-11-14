@@ -407,7 +407,7 @@ fn capture_brute(ligne: &str) -> Result<Sortie, String> {
 fn appeler(nom: &str, a: &Map<String, Value>) -> Result<Sortie, String> {
     if nom == "viewer_aide" {
         let texte=match a.get("sujet").and_then(Value::as_str).unwrap_or("pilote") {
-            "pilote"=>AIDE,"edition"=>include_str!("../../../../docs/EDITION.md"),"modele"=>include_str!("../../../../docs/MODELE.md"),"commandes"=>include_str!("../modele/edition/commandes/mod.rs"),
+            "pilote"=>AIDE,"edition"=>include_str!("../../../../docs/EDITION.md"),"modele"=>include_str!("../../../../docs/MODELE.md"),"commandes"=>include_str!("../edition/commandes/mod.rs"),
             _=>return Err("Sujet : pilote|edition|modele|commandes".into()),
         };
         return Ok((vec![json!({"type":"text","text":texte})],false));

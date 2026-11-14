@@ -85,7 +85,7 @@ impl ViewerApp {
                 let valide = if self.dessin2d.saisie.is_empty() { true } else if let (Some(valeur), Some((axe,_))) = (valeur, self.natif.as_ref().and_then(|(p,_)|p.trajectoire_justification(&id))) { ajuster_arc(axe,i,pts[i],Some(valeur)).is_ok() } else { false };
                 self.terminer_edition_axe();
                 if !valide {self.error=Some("Saisissez une valeur positive et finie.".into());return actif;}
-                match self.executer_bim(crate::modele::edition::commandes::Commande::ModifierTrajectoireMur{id:id.clone(),points:pts.map(|p|p.to_array())}) {
+                match self.executer_bim(crate::edition::commandes::Commande::ModifierTrajectoireMur{id:id.clone(),points:pts.map(|p|p.to_array())}) {
                     Ok(_)=>{
                         if let Some((_,r,_,s))=noyau::forme2d::arc_3_points(pts[0],pts[1],pts[2]) {
                             let facteur=crate::config::options::unite().facteur();
@@ -161,7 +161,7 @@ impl ViewerApp {
             let valeur = texte.trim().replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0).map(|v| v * crate::config::options::unite().facteur());
             let resultat = valeur.ok_or_else(|| "Saisissez une valeur positive et finie.".to_string())
                 .and_then(|valeur| ajuster_arc(axe, poignee, DVec2::ZERO, Some(valeur)))
-                .and_then(|points| self.executer_bim(crate::modele::edition::commandes::Commande::ModifierTrajectoireMur { id: id.clone(), points: points.map(|p|p.to_array()) }));
+                .and_then(|points| self.executer_bim(crate::edition::commandes::Commande::ModifierTrajectoireMur { id: id.clone(), points: points.map(|p|p.to_array()) }));
             match resultat {
                 Ok(_) => {
                     if let Some((axe, _)) = self.natif.as_ref().and_then(|(p,_)|p.trajectoire_justification(&id))
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn modification_arc_conserve_implantation_couches_et_transaction_atomique() {
-        use crate::modele::{Projet,creation::{ParametresMur,Implantation},edition::commandes::Commande};
+        use crate::{edition::commandes::Commande,modele::{Projet,creation::{ParametresMur,Implantation}}};
         let mut p=Projet::depuis_gabarit("Arc",&crate::modele::gabarit::Gabarit::defaut());
         let type_mur=p.types_murs.iter().find(|t|t.couches.len()>1).unwrap().id.clone();
         let options=ParametresMur{type_mur:Some(type_mur),implantation:Implantation::Exterieure,..Default::default()};

@@ -69,17 +69,17 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::Arc;
 
 enum LoadMsg {
-    Partage(Result<(Box<Scene>, crate::modele::Projet, PathBuf, crate::modele::collaboration::session::Session), String>, Option<usize>),
+    Partage(Result<(Box<Scene>, crate::modele::Projet, PathBuf, crate::collaboration::session::Session), String>, Option<usize>),
     Natif(Result<(Box<Scene>, crate::modele::Projet, PathBuf), String>),
     Progress(String),
     Done(Result<Box<Scene>, String>),
     /// Métadonnées, puis scène des murs (ou raison de son absence).
-    Revit(Result<(Box<RvtInfo>, Result<Box<Scene>, String>, crate::modele::echanges::enregistrement::SourceRvt), String>),
+    Revit(Result<(Box<RvtInfo>, Result<Box<Scene>, String>, crate::echanges::enregistrement::SourceRvt), String>),
 }
 
 enum SaveMsg {
     Progress(String),
-    Done(Result<crate::modele::echanges::enregistrement::Bilan, String>),
+    Done(Result<crate::echanges::enregistrement::Bilan, String>),
 }
 
 struct Sauvegarde {
@@ -427,12 +427,12 @@ impl FenetreSelection {
 /// Fichier conservé en mémoire quand un autre document devient actif.
 struct DocumentOuvert {
     natif: Option<(crate::modele::Projet, PathBuf)>,
-    historique: crate::modele::edition::historique::Historique,
-    collaboration: Option<crate::modele::collaboration::session::Session>,
+    historique: crate::edition::historique::Historique,
+    collaboration: Option<crate::collaboration::session::Session>,
     modifie: bool,
     scene: Option<Scene>,
     rvt: Option<RvtInfo>,
-    rvt_source: Option<crate::modele::echanges::enregistrement::SourceRvt>,
+    rvt_source: Option<crate::echanges::enregistrement::SourceRvt>,
     rvt_sortie: Option<PathBuf>,
     rvt_geom: Result<String, String>,
     rvt_sheet: bool,
@@ -522,8 +522,8 @@ pub struct ViewerApp {
     /// Fermeture de l'onglet Famille à confirmer (modifications non chargées).
     confirmer_famille: bool,
     natif: Option<(crate::modele::Projet, PathBuf)>,
-    historique: crate::modele::edition::historique::Historique,
-    collaboration: Option<crate::modele::collaboration::session::Session>,
+    historique: crate::edition::historique::Historique,
+    collaboration: Option<crate::collaboration::session::Session>,
     natif_modifie: bool,
     /// Repère du plan : le prochain clic choisit l'arête à mettre à l'horizontale.
     alignement_plan: bool,
@@ -556,7 +556,7 @@ pub struct ViewerApp {
     scene: Option<Scene>,
     /// Métadonnées du fichier Revit ouvert.
     rvt: Option<RvtInfo>,
-    rvt_source: Option<crate::modele::echanges::enregistrement::SourceRvt>,
+    rvt_source: Option<crate::echanges::enregistrement::SourceRvt>,
     rvt_sortie: Option<PathBuf>,
     sauvegarde: Option<Sauvegarde>,
     /// Fiche Revit affichée à la place de la vue 3D.

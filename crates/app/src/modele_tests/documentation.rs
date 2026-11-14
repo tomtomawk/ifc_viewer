@@ -2,7 +2,7 @@
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
 use crate::dessin::{dessin_vue, pdf, pdf_jeu, svg_feuille, vue_placee};
 use crate::modele::documentation::*;
-use crate::modele::echanges::depuis_ifc;
+use crate::echanges::depuis_ifc;
 use glam::DVec3;
 use noyau::trace2d::{Forme, Primitive, Role};
 
@@ -339,7 +339,7 @@ fn nomenclature_csv_et_quantites_sans_double_compte() {
     q.verifier().unwrap();
     assert!(svg_feuille(&q, &f).unwrap().len() > svg_feuille(&q, &Feuille { nomenclatures: Vec::new(), ..f.clone() }).unwrap().len());
     // nomenclature supprimée : retirée de la feuille
-    let (q, _) = q.executer(crate::modele::edition::commandes::Commande::Supprimer { ids: vec![choisie.id.clone()] }).unwrap();
+    let (q, _) = q.executer(crate::edition::commandes::Commande::Supprimer { ids: vec![choisie.id.clone()] }).unwrap();
     assert!(q.feuilles[0].nomenclatures.is_empty());
     let t = tableau(&p, &n).unwrap();
     let count: usize = t
@@ -421,7 +421,7 @@ fn polyligne_segments_d_arc() {
     assert!((forme_2d.longueur() - std::f64::consts::PI * 1000.0).abs() < 1e-6);
     assert_eq!(AnnotationForme::depuis_forme_2d(&forme_2d), p.annotations[0].forme);
     // symétrie d'axe x : l'arc passe par le haut, sa courbure change de signe
-    let (q, _) = p.executer(crate::modele::edition::commandes::Commande::Symetrie { ids: vec!["arc".into()], a: [0.0, 0.0], b: [1.0, 0.0] }).unwrap();
+    let (q, _) = p.executer(crate::edition::commandes::Commande::Symetrie { ids: vec!["arc".into()], a: [0.0, 0.0], b: [1.0, 0.0] }).unwrap();
     assert!(matches!(&q.annotations[0].forme, AnnotationForme::Polyligne { courbures, .. } if courbures == &vec![-1.0]));
     // refus : nombre de courbures, valeur non finie, arc entre deux sommets confondus
     for (points, fermee, courbures) in [

@@ -1,6 +1,6 @@
 //! Parcours Collaborer / Ouvrir un projet partagé et commandes du ruban Sortie.
 use super::*;
-use crate::modele::collaboration::{self as collab, partage, session::Session};
+use crate::collaboration::{self as collab, partage, session::Session};
 
 impl ViewerApp {
     pub(super) fn charger_partage(

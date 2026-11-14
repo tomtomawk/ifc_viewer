@@ -17,6 +17,6 @@ fn profils_du_gabarit_varient_et_survivent_au_rechargement() {
     assert_eq!(p.profils, relu.profils);
     let fichier = FichierProfil { format: "bimedit.profil".into(), profil: p.profils[0].clone() };
     assert_eq!(FichierProfil::lire(&serde_json::to_string(&fichier).unwrap()).unwrap(), p.profils[0]);
-    let partage = crate::modele::collaboration::projet(&crate::modele::collaboration::objets(&p).unwrap()).unwrap();
+    let partage = crate::collaboration::projet(&crate::collaboration::objets(&p).unwrap()).unwrap();
     assert_eq!(p.profils, partage.profils);
 }

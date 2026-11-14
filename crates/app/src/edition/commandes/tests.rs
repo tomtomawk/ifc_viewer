@@ -1,4 +1,6 @@
 use super::*;
+use crate::echanges::{depuis_ifc, export_ifc};
+use crate::edition::historique;
 fn projet() -> Projet {
     depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {})
         .unwrap()

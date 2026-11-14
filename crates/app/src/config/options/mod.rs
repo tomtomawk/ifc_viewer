@@ -107,7 +107,7 @@ impl Options {
             std::fs::create_dir_all(d).map_err(|e|e.to_string())?;
         }
         let t=serde_json::to_vec_pretty(self).map_err(|e|e.to_string())?;
-        crate::modele::echanges::enregistrement::ecrire_atomique(&c,&t)
+        crate::echanges::enregistrement::ecrire_atomique(&c,&t)
     }
 }
 

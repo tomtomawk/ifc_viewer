@@ -532,7 +532,7 @@ mod tests {
     fn convertir_et_rapporter(p: &Path) -> Projet {
         let t0 = std::time::Instant::now();
         let (projet, mesures) = convertir(p, &|_| {}).unwrap();
-        let rapport = crate::modele::echanges::rapport::markdown(&projet, &mesures, t0.elapsed().as_secs_f64());
+        let rapport = crate::echanges::rapport::markdown(&projet, &mesures, t0.elapsed().as_secs_f64());
         let nom = p.file_stem().unwrap().to_string_lossy();
         let _ = std::fs::create_dir_all("exports");
         let _ = std::fs::write(format!("exports/{nom}.rapport.md"), &rapport);

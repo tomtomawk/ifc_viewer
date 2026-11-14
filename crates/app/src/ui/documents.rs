@@ -20,7 +20,7 @@ impl ViewerApp {
             if let Err(e) = self.ouvrir_famille_fichier(&path) { self.error = Some(e); }
             return;
         }
-        let recuperation=crate::modele::echanges::enregistrement::chemin_recuperation(&path);
+        let recuperation=crate::echanges::enregistrement::chemin_recuperation(&path);
         let restaurer=if path.extension().is_some_and(|e|e.eq_ignore_ascii_case("json")) && recuperation.exists() {
             match rfd::MessageDialog::new().set_title("Récupération du projet").set_description("Une copie de récupération existe. Restaurer les modifications non enregistrées ?").set_buttons(rfd::MessageButtons::YesNoCancel).show() {
                 rfd::MessageDialogResult::Yes=>true,
@@ -41,12 +41,12 @@ impl ViewerApp {
                     let _ = tx.send(LoadMsg::Progress(s));
                     ctx.request_repaint();
                 };
-                if crate::modele::collaboration::partage::extension_partage(&path) {
+                if crate::collaboration::partage::extension_partage(&path) {
                     let res=Self::charger_partage(&path,&progress);
                     let _=tx.send(LoadMsg::Partage(res,None));
                 } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")) {
                     match std::fs::read_to_string(if restaurer{&recuperation}else{&path}).map_err(|e|format!("Lecture impossible : {e}")) {
-                        Ok(json) if crate::modele::collaboration::partage::contenu_partage(&json)=>{let _=tx.send(LoadMsg::Partage(Self::charger_partage(&path,&progress),None));},
+                        Ok(json) if crate::collaboration::partage::contenu_partage(&json)=>{let _=tx.send(LoadMsg::Partage(Self::charger_partage(&path,&progress),None));},
                         texte=>{
                             let res=texte.and_then(|json|crate::modele::Projet::lire_json(&json))
                                 .and_then(|projet|scene::depuis_natif(&projet,&path).map(|scene|(Box::new(scene),projet,path)));
@@ -55,7 +55,7 @@ impl ViewerApp {
                     }
                 } else if is_revit_file(&path) {
                     progress(format!("Lecture des métadonnées Revit de {}…", path.display()));
-                    let res = crate::modele::echanges::enregistrement::SourceRvt::ouvrir(&path).and_then(|source| rvt::load(&path).map(|info| {
+                    let res = crate::echanges::enregistrement::SourceRvt::ouvrir(&path).and_then(|source| rvt::load(&path).map(|info| {
                         let titre = info.title.clone().unwrap_or_else(|| info.file_name.clone());
                         let format = info.format().unwrap_or("?").to_string();
                         let scene = rvt::maquette::load_scene(&path, &titre, &format, &progress).map(Box::new);
@@ -314,7 +314,7 @@ impl ViewerApp {
         let nom = chemin.file_stem().map(|n| n.to_string_lossy().trim_end_matches(".modele").to_string()).unwrap_or_else(|| "Nouveau projet".into());
         let projet = crate::modele::Projet::depuis_gabarit(&nom, &crate::modele::gabarit::actif());
         let resultat = scene::depuis_natif(&projet, &chemin).and_then(|scene| {
-            crate::modele::echanges::enregistrement::enregistrer_natif(&projet, &chemin)?;
+            crate::echanges::enregistrement::enregistrer_natif(&projet, &chemin)?;
             Ok(scene)
         });
         match resultat {
@@ -349,11 +349,11 @@ impl ViewerApp {
         }
         self.enregistrer_rendu_vue();
         let Some((projet, chemin)) = &self.natif else { return };
-        match crate::modele::echanges::enregistrement::enregistrer_natif(projet, chemin) {
+        match crate::echanges::enregistrement::enregistrer_natif(projet, chemin) {
             Ok(()) => {
                 self.natif_modifie = false;
                 let _ = self.historique.enregistrer(projet);
-                crate::modele::echanges::enregistrement::effacer_recuperation(chemin);
+                crate::echanges::enregistrement::effacer_recuperation(chemin);
                 self.status = format!("{} — enregistré", chemin.display());
                 self.error = None;
             }
@@ -386,20 +386,20 @@ impl ViewerApp {
             if application {
                 for d in self.documents.values_mut().filter(|d| d.modifie) {
                     if let Some((p, chemin)) = &d.natif {
-                        if let Err(e) = crate::modele::echanges::enregistrement::enregistrer_natif(p, chemin) {
+                        if let Err(e) = crate::echanges::enregistrement::enregistrer_natif(p, chemin) {
                             self.error = Some(format!("Enregistrement impossible de {} : {e}", chemin.display()));
                             return;
                         }
                     }
-                    if let Some((p, chemin)) = &d.natif { let _ = d.historique.enregistrer(p); crate::modele::echanges::enregistrement::effacer_recuperation(chemin); }
+                    if let Some((p, chemin)) = &d.natif { let _ = d.historique.enregistrer(p); crate::echanges::enregistrement::effacer_recuperation(chemin); }
                     d.modifie = false;
                 }
             }
         }
         self.confirmer_fermeture = None;
         if action==1 {
-            if let Some((_,p))=&self.natif {crate::modele::echanges::enregistrement::effacer_recuperation(p);}
-            if application {for d in self.documents.values() {if let Some((_,p))=&d.natif {crate::modele::echanges::enregistrement::effacer_recuperation(p);}}}
+            if let Some((_,p))=&self.natif {crate::echanges::enregistrement::effacer_recuperation(p);}
+            if application {for d in self.documents.values() {if let Some((_,p))=&d.natif {crate::echanges::enregistrement::effacer_recuperation(p);}}}
         }
         if application {
             self.natif_modifie = false;
@@ -432,7 +432,7 @@ impl ViewerApp {
         let contexte = ctx.clone();
         std::thread::Builder::new().name("enregistrer-v0".into()).stack_size(64 << 20).spawn(move || {
             let progress = |p| { let _ = tx.send(SaveMsg::Progress(p)); contexte.request_repaint(); };
-            let resultat = crate::modele::echanges::enregistrement::enregistrer_rvt(&source,&sortie,&progress);
+            let resultat = crate::echanges::enregistrement::enregistrer_rvt(&source,&sortie,&progress);
             let _ = tx.send(SaveMsg::Done(resultat));
             contexte.request_repaint();
         }).map_err(|e| format!("Démarrage de l’enregistrement impossible : {e}"))?;

@@ -18,7 +18,7 @@ pub fn documentation(sujet: &str) -> Result<&'static str, String> {
         "" | "pilote" => Ok(AIDE),
         "edition" => Ok(include_str!("../../../../docs/EDITION.md")),
         "modele" => Ok(include_str!("../../../../docs/MODELE.md")),
-        "commandes" => Ok(include_str!("../modele/edition/commandes/mod.rs")),
+        "commandes" => Ok(include_str!("../edition/commandes/mod.rs")),
         _ => Err("Sujet : pilote|edition|modele|commandes".into()),
     }
 }

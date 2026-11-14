@@ -1,5 +1,5 @@
 //! État de document commun aux familles planes et modélisées.
-use crate::modele::edition::historique::{Historique, Instantane};
+use crate::edition::historique::{Historique, Instantane};
 use std::path::PathBuf;
 
 pub(super) struct DocumentFamille<T: Instantane> {

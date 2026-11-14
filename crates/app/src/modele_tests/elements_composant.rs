@@ -1,7 +1,7 @@
 //! Tests déplacés de `modele/elements/composant.rs` (`mod tests`) : ils appellent du code situé au-dessus
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
 use crate::modele::*;
-use crate::modele::edition::commandes::Commande;
+use crate::edition::commandes::Commande;
 use crate::modele::elements::composant::*;
 use glam::DVec3;
 

@@ -503,7 +503,7 @@ impl ViewerApp {
             // famille de composant : son type (créé ou mis à jour), donc tous ses composants
             let id = if nouveau { String::new() } else { ed.type_id.clone().unwrap_or_default() };
             let t = crate::modele::TypeComposant { id, nom: ed.nom.trim().into(), largeur: ed.largeur, profondeur: ed.epaisseur, hauteur: ed.hauteur, modele: ed.famille.clone() };
-            let id = self.executer_bim(crate::modele::edition::commandes::Commande::TypeComposant { type_composant: t })?.into_iter().next().unwrap_or_default();
+            let id = self.executer_bim(crate::edition::commandes::Commande::TypeComposant { type_composant: t })?.into_iter().next().unwrap_or_default();
             if let Some(ed) = self.famille.as_mut() {
                 ed.type_id = Some(id.clone());
                 ed.document_famille.document = self.document_actif; ed.document_famille.autonome = false;
@@ -794,7 +794,7 @@ impl ViewerApp {
     pub(in crate::ui) fn enregistrer_famille_fichier(&mut self, chemin: &std::path::Path) -> Result<(), String> {
         let ed = self.famille.as_mut().ok_or("Éditeur fermé.")?;
         ed.famille.valider(ed.largeur, ed.hauteur, ed.epaisseur)?;
-        crate::modele::echanges::enregistrement::ecrire_atomique(chemin, ed.fichier().json()?.as_bytes())?;
+        crate::echanges::enregistrement::ecrire_atomique(chemin, ed.fichier().json()?.as_bytes())?;
         ed.document_famille.chemin_fichier = Some(chemin.to_path_buf());
         ed.marquer_enregistree();
         self.status = format!("Famille enregistrée : {}", chemin.display());
@@ -870,7 +870,7 @@ impl ViewerApp {
             }
             C::Composant => {
                 let type_composant = crate::modele::TypeComposant { id: String::new(), nom: f.nom.clone(), largeur: f.largeur, profondeur: f.profondeur, hauteur: f.hauteur, modele: f.famille.clone() };
-                self.executer_bim(crate::modele::edition::commandes::Commande::TypeComposant { type_composant })?.into_iter().next().ok_or("Composant non créé.")?
+                self.executer_bim(crate::edition::commandes::Commande::TypeComposant { type_composant })?.into_iter().next().ok_or("Composant non créé.")?
             }
             C::Porte | C::Fenetre => {
                 let mut projet = self.natif.as_ref().unwrap().0.clone();

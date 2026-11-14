@@ -1,7 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod collaboration;
 mod config;
 mod dessin;
+mod echanges;
+mod edition;
 mod formats;
 mod modele;
 #[cfg(test)]
@@ -20,7 +23,7 @@ fn main() {
     }
     config::options::definir_unite(config::options::Options::charger().unite);
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if let Some(resultat)=modele::collaboration::cli::executer(&args){match resultat{Ok(())=>std::process::exit(0),Err(e)=>{eprintln!("{e}");std::process::exit(2);}}}
+    if let Some(resultat)=crate::collaboration::cli::executer(&args){match resultat{Ok(())=>std::process::exit(0),Err(e)=>{eprintln!("{e}");std::process::exit(2);}}}
     if let Some(resultat) = pilote::cli::executer(&args) {
         match resultat { Ok(())=>std::process::exit(0),Err(e)=>{eprintln!("{e}");std::process::exit(2);} }
     }
@@ -180,7 +183,7 @@ fn modele(entree: PathBuf, sortie: PathBuf) -> i32 {
         .stack_size(64 << 20)
         .spawn(move || {
             let progress = |s: String| eprintln!("{s}");
-            if formats::rvt::is_revit_path(&e) { modele::echanges::depuis_rvt::convertir(&e, &progress) } else { modele::echanges::depuis_ifc::convertir(&e, &progress) }
+            if formats::rvt::is_revit_path(&e) { crate::echanges::depuis_rvt::convertir(&e, &progress) } else { crate::echanges::depuis_ifc::convertir(&e, &progress) }
         })
         .unwrap();
     let (projet, mesures) = match handle.join() {
@@ -194,7 +197,7 @@ fn modele(entree: PathBuf, sortie: PathBuf) -> i32 {
             return 1;
         }
     };
-    let rapport = modele::echanges::rapport::markdown(&projet, &mesures, t0.elapsed().as_secs_f64());
+    let rapport = crate::echanges::rapport::markdown(&projet, &mesures, t0.elapsed().as_secs_f64());
     let json = match projet.json() {
         Ok(j) => j,
         Err(e) => {

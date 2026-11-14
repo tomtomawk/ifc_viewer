@@ -234,7 +234,7 @@ impl ViewerApp {
                                 self.status = "Attacher au toit : choisissez d'abord un ou plusieurs murs.".into();
                             } else {
                                 let ids = self.bim.murs_a_attacher.clone();
-                                match self.executer_bim(crate::modele::edition::commandes::Commande::Attacher { ids, toiture: Some(id) }) {
+                                match self.executer_bim(crate::edition::commandes::Commande::Attacher { ids, toiture: Some(id) }) {
                                     Ok(_) => { self.status = "Murs attachés à la sous-face de la toiture.".into(); self.ruban_edition.annuler(); }
                                     Err(e) => self.error = Some(e),
                                 }

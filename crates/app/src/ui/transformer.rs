@@ -5,7 +5,7 @@
 //! tapée facultative (Entrée), une seule transaction à la validation, Échap ou clic
 //! droit pour revenir d'une étape.
 use super::*;
-use crate::modele::edition::commandes::Commande;
+use crate::edition::commandes::Commande;
 use crate::modele::Axe;
 use crate::ui::ruban::Outil;
 
@@ -823,7 +823,7 @@ impl ViewerApp {
                     if let Some((projet, _)) = &self.natif {
                         if let Some(dalle) = projet.dalles.iter().find(|x| x.id == id) {
                             let z = projet.niveau(&dalle.niveau).map_or(0.0, |n| n.altitude) + dalle.decalage;
-                            if let Some(g) = dalle.contours.first().and_then(|c| crate::modele::edition::commandes::decaler_polygone(c, d)) {
+                            if let Some(g) = dalle.contours.first().and_then(|c| crate::edition::commandes::decaler_polygone(c, d)) {
                                 let pts: Vec<egui::Pos2> = g.iter().chain(g.first()).filter_map(|v| self.ecran_plan(rect, *v, z)).collect();
                                 painter.add(egui::Shape::line(pts, egui::Stroke::new(2.0, bleu.gamma_multiply(0.8))));
                             }

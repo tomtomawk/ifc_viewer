@@ -2,7 +2,8 @@
 //! d'une poutre), puis les extrémités visées. La ligne prolongée est la ligne de
 //! justification du mur (l'axe d'une poutre) : les raccords se font sur les faces.
 use super::*;
-use crate::modele::{Projet, edition::commandes::Commande};
+use crate::edition::commandes::Commande;
+use crate::modele::Projet;
 
 #[derive(Default)]
 pub(super) struct EtatAjustement {

@@ -255,7 +255,7 @@ impl ViewerApp {
             valider=ui.add_enabled(!niveau.is_empty(),egui::Button::new("Coller")).clicked();
         });
         if valider {
-            match self.executer_bim(crate::modele::edition::commandes::Commande::CopierSurNiveau{ids,niveau}) {
+            match self.executer_bim(crate::edition::commandes::Commande::CopierSurNiveau{ids,niveau}) {
                 Ok(copies)=>self.status=format!("{} élément(s) collé(s) sur le niveau — Ctrl+Z pour annuler.",copies.len()),
                 Err(e)=>self.error=Some(e),
             }

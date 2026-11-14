@@ -220,7 +220,7 @@ impl ViewerApp {
         if let Some((id, valeur)) = saisie {
             let Some((p, v)) = self.plan_natif() else { return };
             let commande = p.annotations.iter().find(|a| a.id == id).ok_or_else(|| "Cote introuvable.".to_string())
-                .and_then(|a| crate::modele::edition::commandes::piloter_cote(p, v, &a.forme, &element, valeur));
+                .and_then(|a| crate::edition::commandes::piloter_cote(p, v, &a.forme, &element, valeur));
             match commande.and_then(|c| self.executer_bim(c)) {
                 Ok(_) => {
                     // l'élément reste sélectionné pour enchaîner les saisies

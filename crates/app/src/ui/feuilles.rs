@@ -2,7 +2,7 @@
 //! Les vues se glissent depuis l'arborescence sur une feuille, se déplacent à la souris ;
 //! feuilles et vues placées se règlent dans Propriétés, sans boîte de dialogue.
 use super::*;
-use crate::modele::edition::commandes::Commande;
+use crate::edition::commandes::Commande;
 use crate::modele::documentation as doc;
 use std::collections::HashMap;
 
@@ -906,7 +906,7 @@ impl ViewerApp {
             return Err(format!("Le jeu « {jeu} » n'a aucune feuille."));
         }
         let pdf = crate::dessin::pdf_jeu(p, jeu)?;
-        crate::modele::echanges::enregistrement::ecrire_atomique(chemin, &pdf)?;
+        crate::echanges::enregistrement::ecrire_atomique(chemin, &pdf)?;
         Ok(n)
     }
 
@@ -917,7 +917,7 @@ impl ViewerApp {
             return;
         };
         let contenu = crate::dessin::svg_feuille(p, f).and_then(|s| if extension == "pdf" { crate::dessin::pdf(&s) } else { Ok(s.into_bytes()) });
-        match contenu.and_then(|b| crate::modele::echanges::enregistrement::ecrire_atomique(&path, &b)) {
+        match contenu.and_then(|b| crate::echanges::enregistrement::ecrire_atomique(&path, &b)) {
             Ok(()) => self.status = format!("Export : {}", path.display()),
             Err(e) => self.error = Some(e),
         }

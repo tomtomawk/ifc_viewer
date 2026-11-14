@@ -1,6 +1,8 @@
 use super::stockage::*;
 use super::texte::*;
 use super::*;
+use crate::edition::commandes;
+use crate::modele::elements::site;
 use std::path::PathBuf;
 
 fn dossier() -> PathBuf {
@@ -10,7 +12,7 @@ fn dossier() -> PathBuf {
 }
 fn exemple() -> Projet {
     let mut p =
-        Projet::lire_json(include_str!("../../../../../samples/maison_native.modele.json")).unwrap();
+        Projet::lire_json(include_str!("../../../../samples/maison_native.modele.json")).unwrap();
     // La fixture n'est jamais modifiée sur disque.
     p.identite = uuid();
     p.verifier().unwrap();
@@ -37,11 +39,11 @@ fn transaction(a: &Projet, b: &Projet) -> Transaction {
     Transaction::entre(a, b, "poste-a", 0).unwrap()
 }
 fn texte_annotation(p: &mut Projet, id: &str, s: &str) {
-    p.annotations.push(super::super::documentation::Annotation {
+    p.annotations.push(crate::modele::documentation::Annotation {
         id: id.into(),
         vue: p.vues[0].id.clone(),
         hauteur: 2.5,
-        forme: super::super::documentation::AnnotationForme::Texte {
+        forme: crate::modele::documentation::AnnotationForme::Texte {
             point: [0.0, 0.0],
             texte: s.into(),
         },
@@ -50,7 +52,7 @@ fn texte_annotation(p: &mut Projet, id: &str, s: &str) {
 
 #[test]
 fn identites_distribuees_et_migration_preserve_les_objets() {
-    use super::super::edition::commandes::Commande;
+    use crate::edition::commandes::Commande;
     let p = exemple();
     let a = p
         .executer(Commande::Niveau {
@@ -65,7 +67,7 @@ fn identites_distribuees_et_migration_preserve_les_objets() {
         })
         .unwrap();
     assert_ne!(a.1, b.1);
-    let ancien = include_str!("../../../../../samples/maison_native.modele.json");
+    let ancien = include_str!("../../../../samples/maison_native.modele.json");
     let a = Projet::lire_json(ancien).unwrap();
     let b = Projet::lire_json(ancien).unwrap();
     assert_eq!(a.identite, b.identite);
@@ -92,7 +94,7 @@ fn objets_independants_et_fusion_explicite_deux_champs() {
     assert_eq!(r.vues[0].type_vue, "Coordination");
     let mut c = p.clone();
     c.quadrillages
-        .push(super::super::documentation::Quadrillage {
+        .push(crate::modele::documentation::Quadrillage {
             id: uuid(),
             nom: "Axe".into(),
             debut: [0.0, 0.0],
@@ -126,7 +128,7 @@ fn suppression_hote_observe_ajout_ouverture_et_collection() {
     p.ajouter_mur(
         [0.0, 0.0],
         [5000.0, 0.0],
-        &super::super::creation::ParametresMur::default(),
+        &crate::modele::creation::ParametresMur::default(),
     )
     .unwrap();
     let mut sup = p.clone();
@@ -135,9 +137,9 @@ fn suppression_hote_observe_ajout_ouverture_et_collection() {
     sup.ouvertures.retain(|o| o.mur != hote);
     sup.contextes.remove(&hote);
     let t = Transaction::entre(&p, &sup, "a", 0).unwrap();
-    let cmd = super::super::edition::commandes::Commande::Ouverture {
+    let cmd = crate::edition::commandes::Commande::Ouverture {
         mur: hote,
-        genre: super::super::GenreOuverture::Porte,
+        genre: crate::modele::GenreOuverture::Porte,
         type_ouverture: None,
         abscisse: 1000.0,
         largeur: 600.0,
@@ -381,7 +383,7 @@ fn course_entre_deux_processus_et_controle_non_remplacable() {
             std::process::Command::new(&exe)
                 .args([
                     "--exact",
-                    "modele::collaboration::tests::enfant_reservation",
+                    "collaboration::tests::enfant_reservation",
                     "--nocapture",
                 ])
                 .env("BIMEDIT_TEST_DEPOT", &root)
@@ -454,7 +456,7 @@ fn crash_processus_aux_frontieres_et_resultat_incertain() {
         let statut = std::process::Command::new(&exe)
             .args([
                 "--exact",
-                "modele::collaboration::tests::enfant_publication",
+                "collaboration::tests::enfant_publication",
             ])
             .env("BIMEDIT_TEST_DEPOT", &root)
             .env("BIMEDIT_TEST_CRASH", point)
@@ -487,7 +489,7 @@ fn instantane_et_publication_dans_deux_processus() {
     let mut publication = std::process::Command::new(&exe)
         .args([
             "--exact",
-            "modele::collaboration::tests::enfant_publication",
+            "collaboration::tests::enfant_publication",
         ])
         .env("BIMEDIT_TEST_DEPOT", &root)
         .spawn()
@@ -495,7 +497,7 @@ fn instantane_et_publication_dans_deux_processus() {
     let mut instantane = std::process::Command::new(&exe)
         .args([
             "--exact",
-            "modele::collaboration::tests::enfant_publication",
+            "collaboration::tests::enfant_publication",
         ])
         .env("BIMEDIT_TEST_DEPOT", &root)
         .env("BIMEDIT_TEST_SNAPSHOT", "1")
@@ -583,15 +585,15 @@ fn actualisation_assemblage_transporte_couches_et_effets_atomiques() {
     p.ajouter_mur(
         [0.0, 0.0],
         [5000.0, 0.0],
-        &super::super::creation::ParametresMur::default(),
+        &crate::modele::creation::ParametresMur::default(),
     )
     .unwrap();
     p.types_murs[0].couches = vec![
-        super::super::Couche {
+        crate::modele::Couche {
             epaisseur: 100.0,
             ..Default::default()
         },
-        super::super::Couche {
+        crate::modele::Couche {
             epaisseur: 200.0,
             ..Default::default()
         },
@@ -604,12 +606,12 @@ fn actualisation_assemblage_transporte_couches_et_effets_atomiques() {
         .find(|t| t.id == type_id)
         .unwrap()
         .couches
-        .push(super::super::Couche {
+        .push(crate::modele::Couche {
             epaisseur: 50.0,
             ..Default::default()
         });
     let (q, _) = p
-        .executer(super::super::edition::commandes::Commande::ActualiserType {
+        .executer(crate::edition::commandes::Commande::ActualiserType {
             assemblage: id.clone(),
         })
         .unwrap();
@@ -623,19 +625,19 @@ fn actualisation_assemblage_transporte_couches_et_effets_atomiques() {
 
 #[test]
 fn propagation_famille_valide_instances_et_transporte_tout_le_resultat() {
-    use super::super::famille::modelee::*;
+    use crate::modele::famille::modelee::*;
     let mut p = Projet::nouveau("Famille");
     p.ajouter_mur(
         [0.0, 0.0],
         [6000.0, 0.0],
-        &super::super::creation::ParametresMur::default(),
+        &crate::modele::creation::ParametresMur::default(),
     )
     .unwrap();
     let mur = p.murs[0].id.clone();
     let (p, ids) = p
-        .executer(super::super::edition::commandes::Commande::Ouverture {
+        .executer(crate::edition::commandes::Commande::Ouverture {
             mur,
-            genre: super::super::GenreOuverture::Porte,
+            genre: crate::modele::GenreOuverture::Porte,
             type_ouverture: None,
             abscisse: 1500.0,
             largeur: 900.0,
@@ -783,7 +785,7 @@ fn annulation_textuelle_locale_restauree_apres_redemarrage() {
     a.synchroniser(None, false).unwrap();
     let pa = attendre(&mut a);
     let mut q = pa.clone();
-    if let super::super::documentation::AnnotationForme::Texte { texte, .. } = &mut q
+    if let crate::modele::documentation::AnnotationForme::Texte { texte, .. } = &mut q
         .annotations
         .iter_mut()
         .find(|a| a.id == "texte-durable")
@@ -799,7 +801,7 @@ fn annulation_textuelle_locale_restauree_apres_redemarrage() {
     b.synchroniser(None, false).unwrap();
     let pb = attendre(&mut b);
     let mut q = pb.clone();
-    if let super::super::documentation::AnnotationForme::Texte { texte, .. } = &mut q
+    if let crate::modele::documentation::AnnotationForme::Texte { texte, .. } = &mut q
         .annotations
         .iter_mut()
         .find(|a| a.id == "texte-durable")
@@ -823,13 +825,13 @@ fn annulation_textuelle_locale_restauree_apres_redemarrage() {
         .unwrap()
         .forme
     {
-        super::super::documentation::AnnotationForme::Texte { texte, .. } => texte,
+        crate::modele::documentation::AnnotationForme::Texte { texte, .. } => texte,
         _ => panic!(),
     };
     assert_eq!(contenu, "B Initial");
     let q = a.annuler(true).unwrap();
     assert!(
-        matches!(&q.annotations.iter().find(|a|a.id=="texte-durable").unwrap().forme,super::super::documentation::AnnotationForme::Texte{texte,..} if texte=="B Initial A")
+        matches!(&q.annotations.iter().find(|a|a.id=="texte-durable").unwrap().forme,crate::modele::documentation::AnnotationForme::Texte{texte,..} if texte=="B Initial A")
     );
 }
 
@@ -858,9 +860,9 @@ fn murs_distincts_crees_et_deplaces_hors_connexion_fusionnent_sans_verrou_global
     let mut p = exemple();
     p.figer_references();
     let n = p.niveaux[0].id.clone();
-    let options = super::super::creation::ParametresMur {
+    let options = crate::modele::creation::ParametresMur {
         niveau: Some(n),
-        implantation: super::super::creation::Implantation::Exterieure,
+        implantation: crate::modele::creation::Implantation::Exterieure,
         ..Default::default()
     };
     let mut a = p.clone();
@@ -973,7 +975,7 @@ fn premiere_synchro_de_plusieurs_murs_preserve_les_deux_copies_distinctes() {
     partage::creer(&p, &entree).unwrap();
     let (mut a, _, mut sa) = partage::ouvrir(&entree, &root.join("a")).unwrap();
     let (mut b, _, mut sb) = partage::ouvrir(&entree, &root.join("b")).unwrap();
-    let options = super::super::creation::ParametresMur {epaisseur:300.0,..Default::default()};
+    let options = crate::modele::creation::ParametresMur {epaisseur:300.0,..Default::default()};
     // Le rectangle englobant du mur diagonal atteint celui du mur vertical,
     // alors que leurs bandes de jonction sont séparées de plus de deux mètres.
     for (debut,fin) in [([-4000.0,-500.0],[0.0,-2500.0]),([-6000.0,-5000.0],[-2000.0,-5000.0]),([2000.0,-5000.0],[6000.0,-5000.0])] {
@@ -984,7 +986,7 @@ fn premiere_synchro_de_plusieurs_murs_preserve_les_deux_copies_distinctes() {
     }
     let id=b.murs.last().unwrap().id.clone();
     for dx in [50.0,100.0] {
-        let (q,_)=b.executer(super::super::edition::commandes::Commande::Deplacer {ids:vec![id.clone()],delta:[dx,0.0,0.0]}).unwrap();
+        let (q,_)=b.executer(crate::edition::commandes::Commande::Deplacer {ids:vec![id.clone()],delta:[dx,0.0,0.0]}).unwrap();
         sb.editer(&b,&q).unwrap();b=q;
     }
     sa.synchroniser(None,false).unwrap();attendre(&mut sa);
@@ -1017,7 +1019,7 @@ fn conflit_reel_preserve_les_murs_locaux_a_lecran_et_apres_reouverture() {
         assert!(!sb.travail().unwrap().murs.iter().any(|m|&m.id==id));
     }
     assert!(sb.editer(&suite,&suite).is_err());
-    super::super::echanges::enregistrement::enregistrer_natif(&sb.affichage().unwrap(),&local).unwrap();
+    crate::echanges::enregistrement::enregistrer_natif(&sb.affichage().unwrap(),&local).unwrap();
     drop(sb);
     let (visible,_,s)=partage::ouvrir(&entree,&root.join("b")).unwrap();
     assert!(s.copie.apercu_conflit.is_some());
@@ -1055,7 +1057,7 @@ fn historique_spatial_protocole_deux_reste_verifiable_apres_mise_a_jour() {
 
 #[test]
 fn creations_independantes_barres_escaliers_gardes_terrains_importes_et_types() {
-    use super::super::*;
+    use crate::modele::*;
     let mut p = exemple();
     p.figer_references();
     let niveau = p.niveaux[0].id.clone();
@@ -1242,7 +1244,7 @@ fn creations_independantes_barres_escaliers_gardes_terrains_importes_et_types() 
 
 #[test]
 fn ouverture_sur_deux_hotes_distincts_et_dalles_independantes() {
-    use super::super::*;
+    use crate::modele::*;
     let mut p = exemple();
     let h1 = p
         .ajouter_mur([20000.0, 0.0], [25000.0, 0.0], &Default::default())
@@ -1369,7 +1371,7 @@ fn abandon_refuse_pendant_synchro_et_retire_de_l_annulation() {
 
 #[test]
 fn toutes_les_collections_du_projet_ont_une_politique() {
-    let source = include_str!("../mod.rs");
+    let source = include_str!("../modele/mod.rs");
     let projet = source.split("pub struct Projet {").nth(1).unwrap().split("\n}").next().unwrap();
     let champs: std::collections::BTreeSet<_> = projet.lines().filter_map(|l| {
         let l = l.trim().strip_prefix("pub ")?;

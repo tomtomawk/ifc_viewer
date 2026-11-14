@@ -66,7 +66,7 @@ pub fn enregistrer_rvt(source: &SourceRvt, sortie: &Path, progress: &dyn Fn(Stri
     source.verifier()?;
     let debut = Instant::now();
     progress("Conversion du projet Revit vers le modèle natif v0…".into());
-    let (projet, mesures) = crate::modele::echanges::depuis_rvt::convertir(&source.chemin,progress)?;
+    let (projet, mesures) = crate::echanges::depuis_rvt::convertir(&source.chemin,progress)?;
     source.verifier()?;
     progress("Préparation du fichier natif v0…".into());
     let json = projet.json()?;
@@ -74,7 +74,7 @@ pub fn enregistrer_rvt(source: &SourceRvt, sortie: &Path, progress: &dyn Fn(Stri
     if relu.murs.len() != projet.murs.len() || relu.importes.len() != projet.importes.len() {
         return Err("Le contrôle du fichier natif a échoué ; la destination est conservée.".into());
     }
-    let rapport = crate::modele::echanges::rapport::markdown(&projet,&mesures,debut.elapsed().as_secs_f64());
+    let rapport = crate::echanges::rapport::markdown(&projet,&mesures,debut.elapsed().as_secs_f64());
     progress(format!("Enregistrement de {}…",sortie.display()));
     ecrire_atomique(sortie,json.as_bytes())?;
     let chemin_rapport = sortie.with_extension("rapport.md");

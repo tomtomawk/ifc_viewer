@@ -65,7 +65,7 @@ impl Etat {
             acceptes: BTreeMap::new(),
         };
         for a in &p.annotations {
-            if let super::super::documentation::AnnotationForme::Texte { texte, .. } = &a.forme {
+            if let crate::modele::documentation::AnnotationForme::Texte { texte, .. } = &a.forme {
                 etat.textes
                     .insert(a.id.clone(), EtatTexte::initial(&p.identite, &a.id, texte)?);
             }
@@ -622,5 +622,5 @@ pub fn sauver_local(path: &Path, bytes: &[u8]) -> Resultat<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    super::super::echanges::enregistrement::ecrire_atomique(path, bytes)
+    crate::echanges::enregistrement::ecrire_atomique(path, bytes)
 }

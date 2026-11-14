@@ -65,7 +65,7 @@ impl ViewerApp {
             if !self.natif_modifie
                 && let Some((_, path)) = &self.natif
             {
-                crate::modele::echanges::enregistrement::effacer_recuperation(path);
+                crate::echanges::enregistrement::effacer_recuperation(path);
             }
             resultat
         })();
@@ -104,9 +104,9 @@ impl ViewerApp {
         if chemin.extension().is_none() {
             chemin.set_extension("modele.json");
         }
-        match crate::modele::echanges::enregistrement::enregistrer_natif(p, &chemin) {
+        match crate::echanges::enregistrement::enregistrer_natif(p, &chemin) {
             Ok(()) => {
-                crate::modele::echanges::enregistrement::effacer_recuperation(ancien);
+                crate::echanges::enregistrement::effacer_recuperation(ancien);
                 let _ = self.historique.enregistrer(p);
                 self.finaliser_enregistrement_sous(chemin);
             }
@@ -115,7 +115,7 @@ impl ViewerApp {
     }
 
     pub(super) fn finaliser_enregistrement_sous(&mut self, chemin: PathBuf) {
-        crate::modele::echanges::enregistrement::effacer_recuperation(&chemin);
+        crate::echanges::enregistrement::effacer_recuperation(&chemin);
         if let Some(scene) = &mut self.scene {
             scene.file_name = chemin
                 .file_name()
@@ -180,18 +180,18 @@ impl ViewerApp {
                         return Err("Choisissez une destination .json.".into());
                     }
                     let (p, mesures) = if is_revit_file(&source) {
-                        crate::modele::echanges::depuis_rvt::convertir(&source, &progress)?
+                        crate::echanges::depuis_rvt::convertir(&source, &progress)?
                     } else {
-                        crate::modele::echanges::depuis_ifc::convertir(&source, &progress)?
+                        crate::echanges::depuis_ifc::convertir(&source, &progress)?
                     };
                     let scene = scene::depuis_natif(&p, &sortie)?;
-                    crate::modele::echanges::enregistrement::enregistrer_natif(&p, &sortie)?;
-                    let rapport = crate::modele::echanges::rapport::markdown(
+                    crate::echanges::enregistrement::enregistrer_natif(&p, &sortie)?;
+                    let rapport = crate::echanges::rapport::markdown(
                         &p,
                         &mesures,
                         debut.elapsed().as_secs_f64(),
                     );
-                    crate::modele::echanges::enregistrement::ecrire_atomique(
+                    crate::echanges::enregistrement::ecrire_atomique(
                         &sortie.with_extension("rapport.md"),
                         rapport.as_bytes(),
                     )?;
@@ -301,7 +301,7 @@ impl ViewerApp {
             return;
         }
         let n = ids.len();
-        match self.executer_bim(crate::modele::edition::commandes::Commande::Verrouiller { ids, verrou }) {
+        match self.executer_bim(crate::edition::commandes::Commande::Verrouiller { ids, verrou }) {
             Ok(_) => self.status = format!("{n} élément(s) {} — Ctrl+Z pour annuler.", if verrou { "verrouillé(s)" } else { "déverrouillé(s)" }),
             Err(e) => self.error = Some(e),
         }
@@ -349,7 +349,7 @@ impl ViewerApp {
             }
         }
         if let Some(id) = cible {
-            match self.executer_bim(crate::modele::edition::commandes::Commande::Verrouiller { ids: vec![id], verrou: false }) {
+            match self.executer_bim(crate::edition::commandes::Commande::Verrouiller { ids: vec![id], verrou: false }) {
                 Ok(_) => self.status = "Élément déverrouillé — Ctrl+Z pour annuler.".into(),
                 Err(e) => self.error = Some(e),
             }
@@ -379,8 +379,8 @@ impl ViewerApp {
     /// première), appliquées en une seule transaction : un seul Ctrl+Z.
     pub(super) fn executer_bim_suite(
         &mut self,
-        premiere: crate::modele::edition::commandes::Commande,
-        suite: impl FnOnce(Vec<String>) -> crate::modele::edition::commandes::Commande,
+        premiere: crate::edition::commandes::Commande,
+        suite: impl FnOnce(Vec<String>) -> crate::edition::commandes::Commande,
     ) -> Result<(), String> {
         let original = &self.natif.as_ref().ok_or("Aucun projet natif.")?.0;
         let (p, ids) = original.executer(premiere)?;
@@ -394,7 +394,7 @@ impl ViewerApp {
     }
     pub(super) fn executer_bim(
         &mut self,
-        c: crate::modele::edition::commandes::Commande,
+        c: crate::edition::commandes::Commande,
     ) -> Result<Vec<String>, String> {
         let original = &self.natif.as_ref().ok_or("Aucun projet natif.")?.0;
         let connus = original.identifiants();
@@ -457,10 +457,10 @@ impl ViewerApp {
         }
     }
 
-    fn commande_ouverture(&self, mur: String, abscisse: f64) -> crate::modele::edition::commandes::Commande {
+    fn commande_ouverture(&self, mur: String, abscisse: f64) -> crate::edition::commandes::Commande {
         use crate::ui::ruban::Outil;
         let fenetre = self.ruban_edition.texte_option(Outil::Ouverture, 0) == "Fenêtre";
-        crate::modele::edition::commandes::Commande::Ouverture {
+        crate::edition::commandes::Commande::Ouverture {
             mur,
             abscisse,
             type_ouverture: self.ruban_edition.ouverture_type_identique.clone(),
@@ -508,7 +508,7 @@ impl ViewerApp {
         a.nom.clear();
         a.position = position;
         a.niveau = self.niveau_vue_native().ok_or("Arbre : aucun niveau.")?;
-        self.executer_bim(crate::modele::edition::commandes::Commande::Arbre { arbre: a })?;
+        self.executer_bim(crate::edition::commandes::Commande::Arbre { arbre: a })?;
         Ok(())
     }
 
@@ -526,7 +526,7 @@ impl ViewerApp {
             }
             c.type_composant.clear();
         }
-        self.executer_bim(crate::modele::edition::commandes::Commande::Composant { composant: c })?;
+        self.executer_bim(crate::edition::commandes::Commande::Composant { composant: c })?;
         Ok(())
     }
 
@@ -534,7 +534,7 @@ impl ViewerApp {
     pub(super) fn placer_piece(&mut self, point: [f64; 2]) -> Result<(), String> {
         let niveau = self.niveau_vue_native().ok_or("Pièce : aucun niveau.")?;
         let piece = crate::modele::Piece { id: String::new(), nom: self.bim.nom_piece.clone(), numero: String::new(), niveau, point, contour: Vec::new(), etiquette: self.bim.etiquette_piece.clone() };
-        self.executer_bim(crate::modele::edition::commandes::Commande::Piece { piece })?;
+        self.executer_bim(crate::edition::commandes::Commande::Piece { piece })?;
         Ok(())
     }
 
@@ -560,7 +560,7 @@ impl ViewerApp {
                 b.fin[2] = b.debut[2];
             }
         }
-        self.executer_bim(crate::modele::edition::commandes::Commande::Barre { barre: b })?;
+        self.executer_bim(crate::edition::commandes::Commande::Barre { barre: b })?;
         Ok(())
     }
 
@@ -576,7 +576,7 @@ impl ViewerApp {
             return;
         }
         let n = self.natif.as_ref().and_then(|(p, _)| p.dependances(&ids).ok()).map_or(ids.len(), |s| s.len());
-        match self.executer_bim(crate::modele::edition::commandes::Commande::Supprimer { ids }) {
+        match self.executer_bim(crate::edition::commandes::Commande::Supprimer { ids }) {
             Ok(_) => {
                 self.bim.selection.clear();
                 self.status = format!("{n} élément(s) supprimé(s) — Ctrl+Z pour annuler.");
@@ -770,7 +770,7 @@ impl ViewerApp {
     }
 
     pub(super) fn panneau_bim(&mut self, ui: &mut egui::Ui) -> bool {
-        use crate::modele::edition::commandes::Commande;
+        use crate::edition::commandes::Commande;
         use crate::ui::ruban::Outil;
         if self.natif.is_none() {
             return false;

@@ -453,7 +453,7 @@ impl ViewerApp {
         });
         if fini && c != actuel {
             ui.data_mut(|d| d.remove::<[f64; 3]>(id));
-            match self.executer_bim(crate::modele::edition::commandes::Commande::CoordonneesOrigine { coordonnees: c }) {
+            match self.executer_bim(crate::edition::commandes::Commande::CoordonneesOrigine { coordonnees: c }) {
                 Ok(_) => self.status = "Coordonnées de l'origine modifiées — Ctrl+Z pour annuler.".into(),
                 Err(e) => self.error = Some(e),
             }
@@ -666,7 +666,7 @@ impl ViewerApp {
         let echelle_modifiee = echelle_vue(&projet) != self.natif.as_ref().and_then(|(p, _)| echelle_vue(p));
         let chemin = self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.1.clone();
         if !distant {
-            crate::modele::edition::verrous::verifier(&self.natif.as_ref().unwrap().0, &projet)?;
+            crate::edition::verrous::verifier(&self.natif.as_ref().unwrap().0, &projet)?;
             let avant=&self.natif.as_ref().unwrap().0;
             let detachees=projet.detacher_couches_disjointes(avant);
             if !detachees.is_empty() {self.status=format!("{} couche(s) détachée(s) du mur composé : plus alignée(s) ou plus en contact.",detachees.len());}
@@ -674,7 +674,7 @@ impl ViewerApp {
         }
         projet.verifier()?;
         // comparaison des objets : utile seulement en collaboration
-        let texte_seul = self.collaboration.is_some() && crate::modele::collaboration::objets(&projet)? == crate::modele::collaboration::objets(&self.natif.as_ref().unwrap().0)?;
+        let texte_seul = self.collaboration.is_some() && crate::collaboration::objets(&projet)? == crate::collaboration::objets(&self.natif.as_ref().unwrap().0)?;
         noyau::chrono::chrono("application : vérifications", &mut t_etape);
         let debut_geometrie=std::time::Instant::now();
         let scene_preparee = if texte_seul && self.collaboration.is_some() { None } else { Some(scene::depuis_natif_verifie(&projet, &chemin)?) };
@@ -764,7 +764,7 @@ impl ViewerApp {
         self.coupe_dirty = true;
         self.error = None;
         if let Some((p, chemin)) = &self.natif {
-            if let Err(e) = crate::modele::echanges::enregistrement::recuperer_plus_tard(p, chemin) { self.error = Some(e); }
+            if let Err(e) = crate::echanges::enregistrement::recuperer_plus_tard(p, chemin) { self.error = Some(e); }
         }
         noyau::chrono::chrono("application : listes et récupération", &mut t_etape);
         Ok(())

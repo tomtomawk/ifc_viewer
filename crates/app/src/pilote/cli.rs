@@ -26,7 +26,7 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
             for k in 0..repetitions {
                 let Some(id) = courant.murs.get(k * 7 % courant.murs.len().max(1)).map(|m| m.assemblage.clone().unwrap_or_else(|| m.id.clone())) else { break };
                 let debut = std::time::Instant::now();
-                let (suivant, _) = courant.executer(modele::edition::commandes::Commande::Deplacer { ids: vec![id], delta: [0.0, 50.0, 0.0] })?;
+                let (suivant, _) = courant.executer(crate::edition::commandes::Commande::Deplacer { ids: vec![id], delta: [0.0, 50.0, 0.0] })?;
                 let t_commande = debut.elapsed().as_secs_f64() * 1000.0;
                 let debut = std::time::Instant::now();
                 crate::rendu::scene::depuis_natif(&suivant, chemin)?;
@@ -40,19 +40,19 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
             "--editer" => {
                 if Path::new(entree).with_extension("collaboration.json").exists() {
                     if args.get(3).is_some_and(|s| s != entree) { return Err("En collaboration, utilisez une copie locale distincte pour Enregistrer sous".into()); }
-                    return modele::collaboration::cli::executer(&["--collaboration".into(),"editer".into(),entree.clone(),arg.clone()]).ok_or("Routage collaboratif absent")?;
+                    return crate::collaboration::cli::executer(&["--collaboration".into(),"editer".into(),entree.clone(),arg.clone()]).ok_or("Routage collaboratif absent")?;
                 }
                 let json = std::fs::read_to_string(arg).map_err(|e| e.to_string())?;
                 let c = serde_json::from_str(&json).map_err(|e| e.to_string())?;
                 let (p, ids) = p.executer(c)?;
                 crate::rendu::scene::depuis_natif(&p, Path::new(entree))?;
                 let sortie = args.get(3).map_or(entree, |s| s);
-                modele::echanges::enregistrement::enregistrer_natif(&p, Path::new(sortie))?;
+                crate::echanges::enregistrement::enregistrer_natif(&p, Path::new(sortie))?;
                 println!("{}", serde_json::to_string(&ids).unwrap());
             }
-            "--export-ifc" => modele::echanges::enregistrement::ecrire_atomique(
+            "--export-ifc" => crate::echanges::enregistrement::ecrire_atomique(
                 Path::new(arg),
-                modele::echanges::export_ifc::exporter(&p)?.as_bytes(),
+                crate::echanges::export_ifc::exporter(&p)?.as_bytes(),
             )?,
             "--quantites" => {
                 let n = modele::documentation::Nomenclature {
@@ -64,7 +64,7 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
                     parametres: Vec::new(),
                 };
                 let lignes = modele::documentation::tableau(&p, &n)?;
-                modele::echanges::enregistrement::ecrire_atomique(
+                crate::echanges::enregistrement::ecrire_atomique(
                     Path::new(arg),
                     modele::documentation::csv(&lignes).as_bytes(),
                 )?;
@@ -86,7 +86,7 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
                     Some("svg") => svg.into_bytes(),
                     _ => return Err("Extension attendue : .svg ou .pdf".into()),
                 };
-                modele::echanges::enregistrement::ecrire_atomique(sortie, &b)?;
+                crate::echanges::enregistrement::ecrire_atomique(sortie, &b)?;
             }
         };
         Ok(())

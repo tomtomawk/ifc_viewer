@@ -1,7 +1,7 @@
 # Fonctions de modification : modèle de fonctionnement
 
 Onglet **Modifier** du ruban. Ce document fixe le comportement attendu de chaque
-fonction. L'état de l'existant est relevé dans `crates/app/src/modele/edition/commandes/mod.rs`
+fonction. L'état de l'existant est relevé dans `crates/app/src/edition/commandes/mod.rs`
 (enum `Commande`) et dans `crates/app/src/ui/ruban/mod.rs` (`groupes(Menu::Modifier)`).
 
 ## 1. Règles communes

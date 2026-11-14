@@ -18,7 +18,7 @@ fn couches_projet1_lecture_et_conversion() {
     let mut c = crate::modele::Conversion::default();
     c.projet = crate::modele::Projet::nouveau("Test couches");
     c.projet.sources.push(crate::modele::source("s1", &p, "RVT"));
-    crate::modele::echanges::depuis_rvt::convertir_maquette(&m, &mut c);
+    crate::echanges::depuis_rvt::convertir_maquette(&m, &mut c);
     let detaillees: Vec<_> = c.projet.types_murs.iter().filter(|t| t.couches_detaillees && t.couches.len() > 1).collect();
     assert!(!detaillees.is_empty(), "couches perdues pendant la conversion");
     let relu = crate::modele::Projet::lire_json(&c.projet.json().unwrap()).unwrap();

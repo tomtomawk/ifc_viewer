@@ -9,7 +9,7 @@ fn arbre(essence: Essence) -> Arbre {
 
 #[test]
 fn creer_puis_supprimer_un_arbre() {
-    use crate::modele::edition::commandes::Commande;
+    use crate::edition::commandes::Commande;
     let mut p = crate::modele::Projet::nouveau("Arbres");
     p.niveaux.push(crate::modele::Niveau { id: "n0".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
     let a = Arbre { id: String::new(), ..arbre(Essence::Conifere) };

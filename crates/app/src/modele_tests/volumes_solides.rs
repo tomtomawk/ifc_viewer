@@ -1,7 +1,7 @@
 //! Tests déplacés de `modele/volumes/solides.rs` (`mod tests`) : ils appellent du code situé au-dessus
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
 use crate::modele::*;
-use crate::modele::echanges::depuis_ifc;
+use crate::echanges::depuis_ifc;
 use crate::modele::volumes::solides::*;
 
 #[test]
@@ -29,7 +29,7 @@ fn recalcul_partiel_identique_apres_modification() {
     let avant = murs(&p, &j);
     for k in 0..3 {
         let id = p.murs[k * 3 % p.murs.len()].id.clone();
-        p = p.executer(crate::modele::edition::commandes::Commande::Deplacer { ids: vec![id], delta: [0.0, 137.0 + k as f64, 0.0] }).unwrap().0;
+        p = p.executer(crate::edition::commandes::Commande::Deplacer { ids: vec![id], delta: [0.0, 137.0 + k as f64, 0.0] }).unwrap().0;
         let j = crate::modele::murs::jonctions::coupes(&p);
         let groupe = murs(&p, &j);
         assert!(groupe != avant, "le déplacement doit changer des solides");

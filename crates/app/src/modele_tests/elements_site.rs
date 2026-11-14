@@ -4,7 +4,7 @@ use crate::modele::elements::site::*;
 
 #[test]
 fn creation_site_sauvegarde_export_et_suppression() {
-    use crate::modele::{edition::commandes::Commande, Projet};
+    use crate::{edition::commandes::Commande, modele::Projet};
     let p = Projet::nouveau("Site");
     let terrain = Terrain { id: String::new(), nom: "Terrain".into(), contour: vec![[0.,0.,0.], [1000.,0.,100.], [1000.,1000.,200.], [0.,1000.,0.]], points: vec![[500.,500.,450.]], type_terrain: None };
     let (p, t) = p.executer(Commande::Terrain { terrain }).unwrap();
@@ -12,7 +12,7 @@ fn creation_site_sauvegarde_export_et_suppression() {
     let (p, l) = p.executer(Commande::LimitePropriete { limite }).unwrap();
     let json = p.json().unwrap();
     assert!(json.contains("limites_propriete") && json.contains("terrains"));
-    let ifc = crate::modele::echanges::export_ifc::exporter(&p).unwrap();
+    let ifc = crate::echanges::export_ifc::exporter(&p).unwrap();
     assert!(ifc.contains("IFCGEOGRAPHICELEMENT(") && ifc.contains("IFCPOLYLINE("));
     let fichier = crate::formats::ifc::step::StepFile::parse(ifc.as_bytes()).unwrap();
     let ifc_modele = crate::formats::ifc::semantique::IfcModel::new(fichier);
@@ -32,7 +32,7 @@ fn creation_site_sauvegarde_export_et_suppression() {
 
 #[test]
 fn site_en_phase_existant_cotes_ngf_et_epaisseur_du_type() {
-    use crate::modele::{edition::commandes::Commande, Projet, PHASE_EXISTANT};
+    use crate::{edition::commandes::Commande, modele::{Projet, PHASE_EXISTANT}};
     let p = Projet::nouveau("Site");
     assert_eq!(p.phases, [PHASE_EXISTANT, "Projet"]);
     // cotes NGF autour de 45 m ; origine du projet à 45,00 m NGF

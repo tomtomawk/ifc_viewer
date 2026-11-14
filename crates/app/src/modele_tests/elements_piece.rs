@@ -2,7 +2,7 @@
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
 use crate::modele::*;
 use crate::modele::creation::ParametresMur;
-use crate::modele::edition::commandes::Commande;
+use crate::edition::commandes::Commande;
 use crate::modele::elements::piece::*;
 
 fn rectangle(p: &mut Projet, o: &ParametresMur) {

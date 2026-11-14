@@ -79,7 +79,7 @@ impl FamillePlane {
     }
 }
 
-impl crate::modele::edition::historique::Instantane for FamillePlane {
+impl crate::edition::historique::Instantane for FamillePlane {
     fn instantane(&self) -> Result<String, String> { serde_json::to_string(self).map_err(|e| e.to_string()) }
     fn restaurer(json: &str) -> Result<Self, String> { serde_json::from_str(json).map_err(|e| e.to_string()) }
     fn libelle(_: &str, _: &str) -> String { "Modifier la famille".into() }
@@ -154,7 +154,7 @@ impl ViewerApp {
                 .set_file_name(format!("{}.{}.json", ed.contenu.nom(), ed.contenu.extension_fichier())).save_file()
         });
         let Some(chemin) = chemin else { return Ok(false) };
-        crate::modele::echanges::enregistrement::ecrire_atomique(&chemin, texte.as_bytes())?;
+        crate::echanges::enregistrement::ecrire_atomique(&chemin, texte.as_bytes())?;
         let ed = self.familles_planes.get_mut(&ordre).unwrap();
         ed.document_famille.chemin_fichier = Some(chemin.clone());
         ed.reference = ed.contenu.clone();

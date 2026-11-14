@@ -60,7 +60,7 @@ pub fn verifier(avant: &Projet, apres: &Projet) -> Result<(), String> {
     if ids.is_empty() {
         return Ok(());
     }
-    use crate::modele::collaboration::{concurrence, objets};
+    use crate::collaboration::{concurrence, objets};
     let (a, b) = (objets(avant)?, objets(apres)?);
     let mut touches = BTreeSet::new();
     for (cle, v) in &a {
@@ -90,7 +90,7 @@ pub fn verifier(avant: &Projet, apres: &Projet) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::modele::edition::commandes::Commande;
+    use crate::edition::commandes::Commande;
     use crate::modele::creation::ParametresMur;
     use crate::modele::Projet;
 

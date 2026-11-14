@@ -7,7 +7,7 @@ impl ViewerApp {
     /// (jonctions, mise à jour depuis le type, trémie). Propriétés ne garde que les
     /// informations de la sélection.
     pub(in crate::ui) fn options_modifier(&mut self, ui: &mut egui::Ui, selection_seule: bool) {
-        use crate::modele::edition::commandes::Commande;
+        use crate::edition::commandes::Commande;
         use crate::ui::ruban::Outil;
         let outil = self.ruban_edition.outil();
         let ids = self.selection_bim();
@@ -177,7 +177,7 @@ impl ViewerApp {
 
     /// Priorité de jonction, ouverte depuis le bouton Jonctions du ruban (Modifier).
     pub(in crate::ui) fn menu_jonctions(&mut self, ui: &mut egui::Ui) {
-        use crate::modele::edition::commandes::Commande;
+        use crate::edition::commandes::Commande;
         let ids = self.selection_bim();
         let mut commande = None;
         ui.horizontal(|ui| {
@@ -260,8 +260,8 @@ impl ViewerApp {
         else {
             return;
         };
-        match crate::modele::echanges::export_ifc::exporter(p)
-            .and_then(|s| crate::modele::echanges::enregistrement::ecrire_atomique(&path, s.as_bytes()))
+        match crate::echanges::export_ifc::exporter(p)
+            .and_then(|s| crate::echanges::enregistrement::ecrire_atomique(&path, s.as_bytes()))
         {
             Ok(()) => self.status = format!("IFC4 exporté : {}", path.display()),
             Err(e) => self.error = Some(e),
@@ -278,7 +278,7 @@ impl ViewerApp {
         match self
             .dessin_vue()
             .and_then(|d| crate::dessin::pdf(&d.svg("Dessin")))
-            .and_then(|s| crate::modele::echanges::enregistrement::ecrire_atomique(&path, &s))
+            .and_then(|s| crate::echanges::enregistrement::ecrire_atomique(&path, &s))
         {
             Ok(()) => self.status = format!("PDF exporté : {}", path.display()),
             Err(e) => self.error = Some(e),
@@ -287,7 +287,7 @@ impl ViewerApp {
     /// Fenêtre des nomenclatures du projet : créer, régler (nom, catégorie, regrouper),
     /// tableau des quantités, export CSV.
     pub(in crate::ui) fn fenetre_documentation(&mut self, ctx: &egui::Context) {
-        use crate::modele::{edition::commandes::Commande, documentation as d};
+        use crate::{edition::commandes::Commande, modele::documentation as d};
         if !self.bim.documentation {
             return;
         }
@@ -356,7 +356,7 @@ impl ViewerApp {
             };
             let p = &self.natif.as_ref().unwrap().0;
             let contenu = d::tableau(p, &p.nomenclatures[k]).map(|l| d::csv(&l).into_bytes());
-            match contenu.and_then(|b| crate::modele::echanges::enregistrement::ecrire_atomique(&path, &b)) {
+            match contenu.and_then(|b| crate::echanges::enregistrement::ecrire_atomique(&path, &b)) {
                 Ok(()) => self.status = format!("Export : {}", path.display()),
                 Err(e) => self.error = Some(e),
             }

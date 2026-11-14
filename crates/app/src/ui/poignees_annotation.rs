@@ -71,7 +71,7 @@ impl ViewerApp {
         let hauteur = self.bim.annotation_identique.as_ref()
             .filter(|a| matches!(a.forme, AnnotationForme::Texte { .. }))
             .map_or_else(|| self.ruban_edition.nombre_option(crate::ui::ruban::Outil::Texte, 1), |a| a.hauteur);
-        self.executer_bim(crate::modele::edition::commandes::Commande::Annoter {
+        self.executer_bim(crate::edition::commandes::Commande::Annoter {
             annotation: Annotation { id: String::new(), vue, hauteur, forme: AnnotationForme::Texte { point, texte } },
         })?;
         // retour à la sélection : Propriétés montre le texte créé
@@ -147,9 +147,9 @@ impl ViewerApp {
         }
         if response.drag_stopped_by(PointerButton::Primary) && let Some(glisse) = self.poignee_annotation.take() {
             let commande = match glisse.mouvement {
-                MouvementAnnotation::Poignee { annotation, .. } => Some(crate::modele::edition::commandes::Commande::Annoter { annotation }),
+                MouvementAnnotation::Poignee { annotation, .. } => Some(crate::edition::commandes::Commande::Annoter { annotation }),
                 MouvementAnnotation::Groupe { ids, delta, .. } if delta.length_squared() > 1e-12 => {
-                    self.repere_annotation().map(|(_, u, h)| crate::modele::edition::commandes::Commande::Deplacer {
+                    self.repere_annotation().map(|(_, u, h)| crate::edition::commandes::Commande::Deplacer {
                         ids, delta: (u * delta.x + h * delta.y).to_array(),
                     })
                 }

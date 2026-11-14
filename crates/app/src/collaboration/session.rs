@@ -204,13 +204,13 @@ impl Session {
             }
         }
         for a in &apres.annotations {
-            if let super::super::documentation::AnnotationForme::Texte { texte, .. } = &a.forme {
+            if let crate::modele::documentation::AnnotationForme::Texte { texte, .. } = &a.forme {
                 let precedent = avant
                     .annotations
                     .iter()
                     .find(|b| b.id == a.id)
                     .and_then(|b| {
-                        if let super::super::documentation::AnnotationForme::Texte {
+                        if let crate::modele::documentation::AnnotationForme::Texte {
                             texte, ..
                         } = &b.forme
                         {
