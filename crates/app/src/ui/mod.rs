@@ -677,7 +677,7 @@ pub struct ViewerApp {
     cote_arc: Option<(String, usize, String, String)>,
     gestion_contextes: Option<gestion_contextes::GestionContextes>,
     editeur_gabarit_vue: Option<gabarits_vues::EditeurGabaritVue>,
-    filtres_contextes: crate::modele::edition::contextes::FiltresContextes,
+    filtres_contextes: crate::modele::contextes::FiltresContextes,
     /// Dernière variante de création dont l'affichage a été synchronisé.
     variante_creation_suivie: Option<String>,
     /// Matériau du projet natif dont les graphismes sont ouverts.

@@ -84,7 +84,7 @@ impl Projet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::modele::edition::ListeCreation;
+    use crate::modele::creation::ListeCreation;
 
     #[test]
     fn gabarit_partage_actualise_detache_et_se_recharge() {

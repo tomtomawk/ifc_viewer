@@ -398,7 +398,7 @@ pub fn decaler_polygone(pts: &[[f64; 2]], d: f64) -> Option<Vec<[f64; 2]>> {
 #[cfg(test)]
 mod tests {
     use crate::modele::edition::commandes::Commande;
-    use crate::modele::edition::ParametresMur;
+    use crate::modele::creation::ParametresMur;
     use crate::modele::{Axe, Projet};
 
     fn mur(p: &mut Projet, a: [f64; 2], b: [f64; 2]) -> String {

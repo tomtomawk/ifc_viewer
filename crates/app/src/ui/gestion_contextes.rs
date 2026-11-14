@@ -1,6 +1,6 @@
 //! Gestion directe des phases, sous-projets et variantes : chaque ligne porte ses actions.
 use super::*;
-use crate::modele::edition::ListeCreation;
+use crate::modele::creation::ListeCreation;
 
 #[derive(Clone)]
 pub(super) struct GestionContextes {

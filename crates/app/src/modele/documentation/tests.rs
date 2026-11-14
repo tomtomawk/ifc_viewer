@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn dessin_vue_applique_le_contexte_propre_a_la_vue() {
-    use crate::modele::edition::contextes::FiltresContextes;
+    use crate::modele::contextes::FiltresContextes;
     let (mut p, _) = depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {}).unwrap();
     p.phases = vec!["Existant".into(), "Projet".into()];
     for mur in &mut p.murs { mur.phase = Some("Projet".into()); }
@@ -19,7 +19,7 @@ fn dessin_vue_applique_le_contexte_propre_a_la_vue() {
 }
 #[test]
 fn dessin_vue_suit_le_gabarit_partage() {
-    use crate::modele::edition::gabarits_vues::GabaritVue;
+    use crate::modele::gabarits_vues::GabaritVue;
     let (mut p, _) = depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {}).unwrap();
     p.phases = vec!["Existant".into(), "Projet".into()];
     for mur in &mut p.murs { mur.phase = Some("Projet".into()); }
@@ -38,7 +38,7 @@ fn dessin_vue_suit_le_gabarit_partage() {
 
 #[test]
 fn dessin_sur_feuille_suit_le_fond_la_plage_haute_et_le_style() {
-    use crate::modele::edition::ParametresMur;
+    use crate::modele::creation::ParametresMur;
     let mut p = Projet::nouveau("Réglages du plan");
     let bas = p.ajouter_mur([0.0, 0.0], [4000.0, 0.0], &ParametresMur::default()).unwrap();
     let niveau = p.niveaux[0].id.clone();
@@ -66,7 +66,7 @@ fn dessin_sur_feuille_suit_le_fond_la_plage_haute_et_le_style() {
 
 #[test]
 fn coupe_sur_feuille_reste_dans_les_limites_de_la_vue() {
-    use crate::modele::edition::ParametresMur;
+    use crate::modele::creation::ParametresMur;
     let mut p = Projet::nouveau("Coupe cadrée");
     let mur = p.ajouter_mur([-2000.0, 0.0], [6000.0, 0.0], &ParametresMur::default()).unwrap();
     let id = p.ajouter_vue_coupe([0.0, 0.0], [4000.0, 0.0], 1000.0, false, "", 100.0).unwrap();

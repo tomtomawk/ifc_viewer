@@ -855,7 +855,7 @@ mod tests {
     #[test]
     fn isolant_suit_le_mur_courbe_dans_la_coupe_native() {
         use crate::modele::{Axe, Couche, FonctionCouche, Projet, TypeCompose};
-        use crate::modele::edition::ParametresMur;
+        use crate::modele::creation::ParametresMur;
         let mut projet = Projet::nouveau("Mur courbe");
         projet.types_murs.push(TypeCompose { id: "isolant".into(), nom: "Isolant".into(), couches: vec![Couche { materiau: Some("Laine minérale".into()), epaisseur: 100.0, fonction: FonctionCouche::Isolation, ..Default::default() }], categorie: None, couches_detaillees: true, origine: None });
         let options = ParametresMur { type_mur: Some("isolant".into()), ..Default::default() };
@@ -875,7 +875,7 @@ mod tests {
     #[test]
     fn ossature_coupee_en_plan_montants_et_travees() {
         use crate::modele::{Axe, Couche, FonctionCouche, Materiau, Projet, TypeCompose};
-        use crate::modele::edition::ParametresMur;
+        use crate::modele::creation::ParametresMur;
         use crate::modele::murs::ossature::Ossature;
         let mut projet = Projet::nouveau("Ossature");
         let couche = Couche { materiau: Some("Laine".into()), epaisseur: 145.0, fonction: FonctionCouche::Structure, ossature: Some(Ossature { materiau: Some("Sapin".into()), ..Default::default() }), ..Default::default() };
@@ -916,7 +916,7 @@ mod tests {
         let g = crate::modele::gabarit::Gabarit::defaut();
         let mut p = Projet::depuis_gabarit("OF", &g);
         let tm = p.types_murs.iter().find(|t| t.nom.starts_with("Mur BA 200 + doublage")).unwrap().id.clone();
-        let mur = p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &crate::modele::edition::ParametresMur { type_mur: Some(tm), ..Default::default() }).unwrap();
+        let mur = p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &crate::modele::creation::ParametresMur { type_mur: Some(tm), ..Default::default() }).unwrap();
         for (k, t) in p.types_ouvertures.clone().iter().filter(|t| t.genre == crate::modele::GenreOuverture::Fenetre).enumerate() {
             p.ouvertures = vec![Ouverture { id: format!("o{k}"), nom: "F".into(), genre: t.genre, mur: mur.clone(), type_ouverture: Some(t.id.clone()), abscisse: 2500.0, largeur: t.largeur, hauteur: t.hauteur, allege: 100.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None }];
             p.verifier().unwrap();
@@ -1164,7 +1164,7 @@ mod mesure {
     /// contour extérieur, aucun reste du trait d'onglet.
     #[test]
     fn angle_quelconque_sans_reste_d_onglet() {
-        use crate::modele::{edition::ParametresMur, Projet};
+        use crate::modele::{creation::ParametresMur, Projet};
         for deg in [90.0_f64, 70.0, 55.0, 35.0, 123.0] {
             let mut p = Projet::nouveau("A");
             let o = ParametresMur { epaisseur: 200.0, ..Default::default() };
@@ -1190,7 +1190,7 @@ mod mesure {
 #[cfg(test)]
 mod test_isolant_arc {
     use crate::modele::*;
-    use crate::modele::edition::ParametresMur;
+    use crate::modele::creation::ParametresMur;
 
     /// Mur courbe isolé passé par toute la chaîne (projet, scène, coupe) : extrémités non
     /// radiales comprises, le motif d'isolant couvre tout l'arc.

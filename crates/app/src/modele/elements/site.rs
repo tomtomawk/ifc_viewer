@@ -48,7 +48,7 @@ pub struct LimitePropriete {
 impl LimitePropriete {
     pub fn verifier(&self) -> Result<(), String> {
         if !self.altitude.is_finite() { return Err("Altitude de limite non valide.".into()); }
-        crate::modele::edition::contour_valide(&self.contour)?;
+        crate::modele::creation::contour_valide(&self.contour)?;
         Ok(())
     }
 }
@@ -60,7 +60,7 @@ impl Terrain {
             return Err("Les coordonnées du terrain doivent être finies.".into());
         }
         let contour: Vec<[f64; 2]> = self.contour.iter().map(|p| [p[0], p[1]]).collect();
-        let valide = crate::modele::edition::contour_valide(&contour)?;
+        let valide = crate::modele::creation::contour_valide(&contour)?;
         if valide.len() != contour.len() { return Err("Le contour du terrain comporte des points répétés.".into()); }
         let coords: Vec<f64> = contour.iter().flatten().copied().collect();
         let indices = earcutr::earcut(&coords, &[], 2).map_err(|_| "Triangulation du terrain impossible.")?;

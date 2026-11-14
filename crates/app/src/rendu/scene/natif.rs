@@ -859,7 +859,7 @@ mod tests {
     /// courbes de niveau).
     #[test]
     fn terrain_sous_le_mur_et_ses_traits() {
-        use crate::modele::{edition::ParametresMur, elements::site::Terrain};
+        use crate::modele::{creation::ParametresMur, elements::site::Terrain};
         let mut p = Projet::nouveau("T");
         p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &ParametresMur { epaisseur: 200.0, ..Default::default() }).unwrap();
         let z = |x: f64| 200.0 + x / 10.0;

@@ -8,14 +8,18 @@
 //! repère du projet).
 
 pub mod collaboration;
+pub mod contextes;
+pub mod creation;
 pub mod documentation;
 pub mod echanges;
 pub mod edition;
 pub mod elements;
 pub mod famille;
 pub mod gabarit;
+pub mod gabarits_vues;
 pub mod murs;
 pub mod soleil;
+pub(crate) mod validation;
 pub mod volumes;
 pub use elements::escalier::{Escalier, GardeCorps, Remplissage};
 pub use elements::garde_corps::TypeGardeCorps;
@@ -25,7 +29,7 @@ pub use elements::piece::Piece;
 #[allow(unused_imports)]
 use {
     echanges::{depuis_ifc, depuis_rvt, enregistrement, export_ifc, rapport},
-    edition::{commandes, historique, validation},
+    edition::{commandes, historique},
     elements::{cadrage, escalier, pente, site},
     murs::{assemblage, jonctions, retours},
     volumes::{geometrie, solides},
@@ -122,10 +126,10 @@ pub struct Projet {
     pub organisations_arborescence: BTreeMap<String, OrganisationArborescence>,
     /// Filtres de contexte enregistrés par vue ; « 3d » désigne la vue 3D par défaut.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub contextes_vues: BTreeMap<String, edition::contextes::FiltresContextes>,
+    pub contextes_vues: BTreeMap<String, contextes::FiltresContextes>,
     /// Gabarits partagés et affectations par vue (« 3d » : vue 3D par défaut).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub gabarits_vues: Vec<edition::gabarits_vues::GabaritVue>,
+    pub gabarits_vues: Vec<gabarits_vues::GabaritVue>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub gabarits_vue_affectes: BTreeMap<String, String>,
     /// Derniers réglages du gabarit appliqué à la vue 3D par défaut.

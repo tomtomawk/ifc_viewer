@@ -346,7 +346,7 @@ mod tests {
         let mut p = Projet::depuis_gabarit("OF", &g);
         let t = p.types_ouvertures.iter().find(|t| t.nom == "Fenêtre OF 2 vantaux").unwrap().clone();
         let tm = p.types_murs.iter().find(|t| t.nom.starts_with("Mur BA 200 + doublage")).unwrap().id.clone();
-        let mur = p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &crate::modele::edition::ParametresMur { type_mur: Some(tm), ..Default::default() }).unwrap();
+        let mur = p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &crate::modele::creation::ParametresMur { type_mur: Some(tm), ..Default::default() }).unwrap();
         let sans = volumes(&p);
         p.ouvertures.push(Ouverture { id: "o".into(), nom: "F".into(), genre: GenreOuverture::Fenetre, mur: mur.clone(), type_ouverture: Some(t.id.clone()), abscisse: 2500.0, largeur: t.largeur, hauteur: t.hauteur, allege: 900.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
         p.verifier().unwrap();

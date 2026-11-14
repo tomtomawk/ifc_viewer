@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn croquis_mur_suit_hauteur_niveaux_et_decalages() {
     let projet = crate::modele::Projet::nouveau("Croquis");
-    let mut params = crate::modele::edition::ParametresMur::default();
+    let mut params = crate::modele::creation::ParametresMur::default();
     params.niveau_haut = Some("haut".into());
     assert_eq!(limites_croquis_mur(&params, &projet, 10.0, 46.0), (10.0, 46.0));
     for valeur in [1.0, 20_000.0] {

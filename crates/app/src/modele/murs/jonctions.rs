@@ -390,7 +390,7 @@ pub fn contour(p: &Projet, m: &Mur, coupes: &Coupes) -> Option<[[f64; 2]; 4]> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::modele::edition::ParametresMur;
+    use crate::modele::creation::ParametresMur;
 
     fn aire(c: &[[f64; 2]; 4]) -> f64 {
         (0..4).map(|k| c[k][0] * c[(k + 1) % 4][1] - c[(k + 1) % 4][0] * c[k][1]).sum::<f64>().abs() / 2.0
@@ -398,7 +398,7 @@ mod tests {
 
     #[test]
     fn angle_aigu_raccorde_des_que_les_points_de_controle_se_touchent() {
-        use crate::modele::edition::Implantation;
+        use crate::modele::creation::Implantation;
         let mut p=Projet::nouveau("Angle aigu");
         let o=ParametresMur{epaisseur:300.,implantation:Implantation::Exterieure,..Default::default()};
         let a=p.ajouter_mur([5410.,4650.],[8519.865,4650.],&o).unwrap();

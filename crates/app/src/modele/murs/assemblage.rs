@@ -322,7 +322,7 @@ impl Projet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::modele::edition::ParametresMur;
+    use crate::modele::creation::ParametresMur;
 
     fn type_trois_couches() -> TypeCompose {
         let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None, retour: false, ossature: None };

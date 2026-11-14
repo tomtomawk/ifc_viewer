@@ -210,7 +210,7 @@ impl RubanEdition {
     pub(super) fn proposer_ajout_creation(
         &mut self,
         ui: &mut egui::Ui,
-        liste: crate::modele::edition::ListeCreation,
+        liste: crate::modele::creation::ListeCreation,
     ) {
         ui.separator();
         if ui
@@ -240,7 +240,7 @@ impl RubanEdition {
         ui: &mut egui::Ui,
         projet: &mut crate::modele::Projet,
     ) -> bool {
-        use crate::modele::edition::ListeCreation;
+        use crate::modele::creation::ListeCreation;
         let phases = if projet.phases.is_empty() {
             vec!["Projet".into()]
         } else {

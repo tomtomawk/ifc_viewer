@@ -39,7 +39,7 @@ fn segment_dans_triangle(segment: [DVec3; 2], triangle: &[DVec2; 3]) -> Option<[
 
 pub fn decouper(primitives: Vec<Primitive>, contour: &[[f64; 2]]) -> Result<Vec<Primitive>, String> {
     if contour.is_empty() { return Ok(primitives); }
-    let contour = crate::modele::edition::contour_valide(contour)?;
+    let contour = crate::modele::creation::contour_valide(contour)?;
     let coords: Vec<f64> = contour.iter().flat_map(|p| [p[0] * 0.001, p[1] * 0.001]).collect();
     let indices = earcutr::earcut(&coords, &[], 2).map_err(|_| "Triangulation du cadrage impossible.")?;
     if indices.is_empty() || indices.len() % 3 != 0 { return Err("Triangulation du cadrage impossible.".into()); }

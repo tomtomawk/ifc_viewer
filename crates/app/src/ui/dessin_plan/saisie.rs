@@ -179,9 +179,9 @@ impl ViewerApp {
                     self.dessin2d.message = Some("Contour fermé attendu : au moins trois sommets.".into());
                     continue;
                 };
-                match crate::modele::edition::contour_valide(&c) {
+                match crate::modele::creation::contour_valide(&c) {
                     Err(e) => self.dessin2d.message = Some(e),
-                    Ok(c) if self.dessin2d.dalle.iter().any(|x| crate::modele::edition::commandes::croisement(x, &c)) => {
+                    Ok(c) if self.dessin2d.dalle.iter().any(|x| crate::modele::creation::croisement(x, &c)) => {
                         self.dessin2d.message = Some("Le contour croise un contour déjà tracé.".into());
                     }
                     Ok(c) => {

@@ -2,7 +2,7 @@
 use super::*;
 
 impl ViewerApp {
-    pub(super) fn ajouter_mur_natif(&mut self, debut: [f64; 2], fin: [f64; 2], options: &crate::modele::edition::ParametresMur) -> Result<String, String> {
+    pub(super) fn ajouter_mur_natif(&mut self, debut: [f64; 2], fin: [f64; 2], options: &crate::modele::creation::ParametresMur) -> Result<String, String> {
         let (projet, _) = self.natif.as_ref().ok_or("Créez ou ouvrez un projet natif pour dessiner un mur.")?;
         let mut projet = projet.clone();
         let id = projet.ajouter_mur(debut, fin, options)?;
@@ -50,12 +50,12 @@ impl ViewerApp {
     }
 
     /// Crée une dalle de contour `pts` (mm) dans le projet natif et la sélectionne.
-    pub(super) fn creer_dalle(&mut self, pts: &[[f64; 2]], parametres: &crate::modele::edition::ParametresDalle) {
+    pub(super) fn creer_dalle(&mut self, pts: &[[f64; 2]], parametres: &crate::modele::creation::ParametresDalle) {
         self.creer_dalle_contours(&[pts.to_vec()], parametres);
     }
 
     /// Crée une dalle de plusieurs contours (parties et trémies) et la sélectionne.
-    pub(super) fn creer_dalle_contours(&mut self, contours: &[Vec<[f64; 2]>], parametres: &crate::modele::edition::ParametresDalle) {
+    pub(super) fn creer_dalle_contours(&mut self, contours: &[Vec<[f64; 2]>], parametres: &crate::modele::creation::ParametresDalle) {
         let Some((projet, _)) = &self.natif else { return };
         let mut projet = projet.clone();
         match projet.ajouter_dalle_contours(contours, parametres).and_then(|id| self.appliquer_projet(projet).map(|_| id)) {

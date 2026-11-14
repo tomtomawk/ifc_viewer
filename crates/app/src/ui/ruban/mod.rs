@@ -338,7 +338,7 @@ pub(crate) fn pile_couches(ui: &mut egui::Ui, r: egui::Rect, projet: &crate::mod
 }
 
 /// Projection indicative des limites du mur, bornée à la place disponible dans la palette.
-fn limites_croquis_mur(parametres: &crate::modele::edition::ParametresMur, _projet: &crate::modele::Projet, haut_reference: f32, bas_reference: f32) -> (f32, f32) {
+fn limites_croquis_mur(parametres: &crate::modele::creation::ParametresMur, _projet: &crate::modele::Projet, haut_reference: f32, bas_reference: f32) -> (f32, f32) {
     let deplacement = |v: f64| if v > 0.0 { -10.0 } else if v < 0.0 { 10.0 } else { 0.0 };
     let bas = deplacement(parametres.decalage);
     let haut = if parametres.niveau_haut.is_some() { deplacement(parametres.decalage_haut) } else { bas };
@@ -496,7 +496,7 @@ pub struct RubanEdition {
     pub sens_inverse: bool,
     /// Forme tracée par l'outil Mur (moteur du dessin 2D) : ligne, rectangle, arc, cercle.
     pub forme_mur: crate::dessin::dao::OutilDessin,
-    ajout_creation: Option<crate::modele::edition::ListeCreation>,
+    ajout_creation: Option<crate::modele::creation::ListeCreation>,
     nom_creation: String,
     jeu_creation: String,
     erreur_creation: Option<String>,
@@ -784,7 +784,7 @@ impl RubanEdition {
 
     /// Paramètres de l'élément horizontal à tracer (dalle, sol, plafond, toiture), si
     /// cet outil est actif.
-    pub fn dalle_active(&self) -> Option<crate::modele::edition::ParametresDalle> {
+    pub fn dalle_active(&self) -> Option<crate::modele::creation::ParametresDalle> {
         let outil = self.selection?;
         let sorte = sorte_surface(outil)?;
         let types = types_surface(outil);
@@ -800,7 +800,7 @@ impl RubanEdition {
             Outil::TerrePlein => crate::modele::elements::terre_plein::depuis_pourcentage(&self.texte_option(outil, 2)),
             _ => None,
         };
-        Some(crate::modele::edition::ParametresDalle {
+        Some(crate::modele::creation::ParametresDalle {
             sorte,
             type_dalle: self.surface_identique.as_ref().filter(|(o,_)| *o == outil).map(|(_,t)| t.clone()).unwrap_or_else(|| crate::modele::TypeCompose { id: String::new(), nom, couches, categorie: None, couches_detaillees: true, origine: None }),
             pente,
@@ -937,8 +937,8 @@ impl RubanEdition {
         self.ouverture_type_identique = None;
         self.selection = None;
     }
-    pub fn parametres_mur(&self) -> crate::modele::edition::ParametresMur {
-        use crate::modele::edition::{Implantation, ParametresMur};
+    pub fn parametres_mur(&self) -> crate::modele::creation::ParametresMur {
+        use crate::modele::creation::{Implantation, ParametresMur};
         let nombre = |k, defaut| match self.valeurs.get(&(Outil::Mur, k)) {
             Some(Valeur::Nombre(v)) => *v,
             _ => defaut,

@@ -945,7 +945,7 @@ mod tests_jonctions {
             categorie: None, couches_detaillees: true,
             origine: None,
         };
-        let prm = edition::ParametresDalle {
+        let prm = creation::ParametresDalle {
             sorte: SorteDalle::Toiture,
             type_dalle: t,
             pente: Some(35.0),

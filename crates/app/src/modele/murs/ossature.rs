@@ -288,7 +288,7 @@ pub fn bandes_dalle(o: &Ossature, contours: &[Vec<[f64; 2]>]) -> Vec<Bande> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::modele::edition::ParametresMur;
+    use crate::modele::creation::ParametresMur;
     use crate::modele::{FonctionCouche, GenreOuverture, Niveau, Ouverture, TypeCompose};
 
     fn projet() -> (Projet, String) {

@@ -278,7 +278,7 @@ impl Projet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::modele::edition::ParametresMur;
+    use crate::modele::creation::ParametresMur;
     use crate::modele::edition::commandes::Commande;
 
     fn rectangle(p: &mut Projet, o: &ParametresMur) {

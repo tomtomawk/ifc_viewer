@@ -1,11 +1,14 @@
 //! Commandes d'édition sérialisables pour l'interface et le pilote MCP.
 
+mod cotes;
+pub use cotes::piloter_cote;
 mod modifier;
 pub use modifier::decaler_polygone;
 mod transformations;
 #[cfg(test)]
 mod tests;
 use crate::modele::*;
+use crate::modele::creation::croisement;
 use glam::DVec2;
 use std::collections::{HashMap, HashSet};
 #[derive(Deserialize, Debug)]
@@ -1082,7 +1085,7 @@ impl Projet {
                 }
                 let contours = contours
                     .iter()
-                    .map(|c| edition::contour_valide(c))
+                    .map(|c| creation::contour_valide(c))
                     .collect::<Result<Vec<_>, _>>()?;
                 for i in 0..contours.len() {
                     for j in 0..i {
@@ -1132,7 +1135,7 @@ impl Projet {
                 Ok(vec![id])
             }
             Commande::Tremie { id, contour } => {
-                let c = edition::contour_valide(&contour)?;
+                let c = creation::contour_valide(&contour)?;
                 let d = self
                     .dalles
                     .iter_mut()
@@ -1189,25 +1192,3 @@ fn remapper_annotation(annotation: &mut documentation::Annotation, ids: &HashMap
         _ => {}
     }
 }
-pub fn croisement(a: &[[f64; 2]], b: &[[f64; 2]]) -> bool {
-    for i in 0..a.len() {
-        for j in 0..b.len() {
-            let (p, q, r, s) = (
-                DVec2::from_array(a[i]),
-                DVec2::from_array(a[(i + 1) % a.len()]),
-                DVec2::from_array(b[j]),
-                DVec2::from_array(b[(j + 1) % b.len()]),
-            );
-            let orient = |p: DVec2, q: DVec2, r: DVec2| (q - p).perp_dot(r - p);
-            let overlap = p.min(q).cmple(r.max(s)).all() && r.min(s).cmple(p.max(q)).all();
-            if overlap
-                && orient(p, q, r) * orient(p, q, s) <= 0.0
-                && orient(r, s, p) * orient(r, s, q) <= 0.0
-            {
-                return true;
-            }
-        }
-    }
-    false
-}
-

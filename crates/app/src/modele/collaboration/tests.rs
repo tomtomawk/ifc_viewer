@@ -126,7 +126,7 @@ fn suppression_hote_observe_ajout_ouverture_et_collection() {
     p.ajouter_mur(
         [0.0, 0.0],
         [5000.0, 0.0],
-        &super::super::edition::ParametresMur::default(),
+        &super::super::creation::ParametresMur::default(),
     )
     .unwrap();
     let mut sup = p.clone();
@@ -583,7 +583,7 @@ fn actualisation_assemblage_transporte_couches_et_effets_atomiques() {
     p.ajouter_mur(
         [0.0, 0.0],
         [5000.0, 0.0],
-        &super::super::edition::ParametresMur::default(),
+        &super::super::creation::ParametresMur::default(),
     )
     .unwrap();
     p.types_murs[0].couches = vec![
@@ -628,7 +628,7 @@ fn propagation_famille_valide_instances_et_transporte_tout_le_resultat() {
     p.ajouter_mur(
         [0.0, 0.0],
         [6000.0, 0.0],
-        &super::super::edition::ParametresMur::default(),
+        &super::super::creation::ParametresMur::default(),
     )
     .unwrap();
     let mur = p.murs[0].id.clone();
@@ -858,9 +858,9 @@ fn murs_distincts_crees_et_deplaces_hors_connexion_fusionnent_sans_verrou_global
     let mut p = exemple();
     p.figer_references();
     let n = p.niveaux[0].id.clone();
-    let options = super::super::edition::ParametresMur {
+    let options = super::super::creation::ParametresMur {
         niveau: Some(n),
-        implantation: super::super::edition::Implantation::Exterieure,
+        implantation: super::super::creation::Implantation::Exterieure,
         ..Default::default()
     };
     let mut a = p.clone();
@@ -973,7 +973,7 @@ fn premiere_synchro_de_plusieurs_murs_preserve_les_deux_copies_distinctes() {
     partage::creer(&p, &entree).unwrap();
     let (mut a, _, mut sa) = partage::ouvrir(&entree, &root.join("a")).unwrap();
     let (mut b, _, mut sb) = partage::ouvrir(&entree, &root.join("b")).unwrap();
-    let options = super::super::edition::ParametresMur {epaisseur:300.0,..Default::default()};
+    let options = super::super::creation::ParametresMur {epaisseur:300.0,..Default::default()};
     // Le rectangle englobant du mur diagonal atteint celui du mur vertical,
     // alors que leurs bandes de jonction sont séparées de plus de deux mètres.
     for (debut,fin) in [([-4000.0,-500.0],[0.0,-2500.0]),([-6000.0,-5000.0],[-2000.0,-5000.0]),([2000.0,-5000.0],[6000.0,-5000.0])] {
@@ -1098,9 +1098,9 @@ fn creations_independantes_barres_escaliers_gardes_terrains_importes_et_types() 
                     q.ajouter_mur(
                         [20000.0, y],
                         [25000.0, y],
-                        &edition::ParametresMur {
+                        &creation::ParametresMur {
                             type_mur: Some("multi-essai".into()),
-                            implantation: edition::Implantation::Exterieure,
+                            implantation: creation::Implantation::Exterieure,
                             ..Default::default()
                         },
                     )
@@ -1271,7 +1271,7 @@ fn ouverture_sur_deux_hotes_distincts_et_dalles_independantes() {
         let mut q = p.clone();
         let mut ty = p.types_dalles[0].clone();
         ty.id = String::new();
-        let opt = edition::ParametresDalle {
+        let opt = creation::ParametresDalle {
             sorte: SorteDalle::Dalle,
             type_dalle: ty,
             pente: None,

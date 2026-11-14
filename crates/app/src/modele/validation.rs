@@ -160,7 +160,7 @@ impl Projet {
                 return Err("Dalle : niveau, type ou contour absent.".into());
             }
             for c in &d.contours {
-                edition::contour_valide(c)?;
+                creation::contour_valide(c)?;
             }
             pente::verifier_forme(d)?;
             if d.pentes
@@ -215,7 +215,7 @@ impl Projet {
             if !v.limite_haute_decalage.is_finite() || v.limite_haute_niveau.as_ref().is_some_and(|id|self.niveau(id).is_none()) {return Err("Limite haute de la vue invalide.".into());}
             if !v.contour_cadrage.is_empty() {
                 if !matches!(v.genre, GenreVue::Plan { .. }) || v.contour_cadrage.len() > 128 { return Err("Contour de cadrage non valide.".into()); }
-                edition::contour_valide(&v.contour_cadrage)?;
+                creation::contour_valide(&v.contour_cadrage)?;
             }
             if !v.orientation_plan.is_finite() { return Err("Orientation de vue non finie.".into()); }
             if !v.echelle.is_finite() || v.echelle <= 0.0 {
@@ -284,7 +284,7 @@ impl Projet {
                 F::Texte { point: p, .. } => point(p),
                 F::Etiquette { point:p,element } => point(p) && ids.iter().any(|id|id.as_str()==element),
                 F::Ligne { debut, fin } => point(debut) && point(fin) && debut != fin,
-                F::Zone { contour } => edition::contour_valide(contour).is_ok(),
+                F::Zone { contour } => creation::contour_valide(contour).is_ok(),
                 F::Polyligne { points, .. } | F::Spline { points, .. } => points.len() >= 2 && points.iter().all(point),
                 F::Cercle { centre, rayon } => point(centre) && rayon.is_finite() && *rayon > 0.0,
                 F::Arc { points } => points.iter().all(point) && noyau::forme2d::arc_3_points(points[0].into(), points[1].into(), points[2].into()).is_some(),

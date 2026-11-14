@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn modification_arc_conserve_implantation_couches_et_transaction_atomique() {
-        use crate::modele::{Projet,edition::{ParametresMur,Implantation,commandes::Commande}};
+        use crate::modele::{Projet,creation::{ParametresMur,Implantation},edition::commandes::Commande};
         let mut p=Projet::depuis_gabarit("Arc",&crate::modele::gabarit::Gabarit::defaut());
         let type_mur=p.types_murs.iter().find(|t|t.couches.len()>1).unwrap().id.clone();
         let options=ParametresMur{type_mur:Some(type_mur),implantation:Implantation::Exterieure,..Default::default()};

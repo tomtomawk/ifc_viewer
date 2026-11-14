@@ -302,7 +302,7 @@ fn deplacement_rotation_menuiseries_et_annulation() {
 #[test]
 fn tremie_interieure_et_exterieure() {
     let mut p = Projet::nouveau("Trémie");
-    let params = edition::ParametresDalle {
+    let params = creation::ParametresDalle {
         sorte: SorteDalle::Dalle,
         type_dalle: TypeCompose {
             id: "t".into(),
