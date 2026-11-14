@@ -1,5 +1,5 @@
 //! Gestion des phases, sous-projets et variantes et de leurs affectations.
-use super::commandes::{Execution, Modification};
+use crate::{Execution, Modification};
 use modele::creation::ListeCreation;
 use modele::{Projet, PHASE_EXISTANT};
 
@@ -151,7 +151,7 @@ impl Contextes for Projet {
         let nombre = ids.len();
         let mut copie = self.clone();
         if !ids.is_empty() {
-            copie = copie.executer(crate::commandes::Commande::Supprimer { ids })?.0;
+            copie = copie.executer(crate::Commande::Supprimer { ids })?.0;
         }
         for v in self.variantes.iter().filter(|v| v.jeu == jeu) {
             copie.remplacer_contexte(ListeCreation::Variante, &v.id, None);

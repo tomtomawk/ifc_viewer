@@ -302,7 +302,7 @@ impl ViewerApp {
             return;
         }
         let n = ids.len();
-        match self.executer_bim(commandes::commandes::Commande::Verrouiller { ids, verrou }) {
+        match self.executer_bim(commandes::Commande::Verrouiller { ids, verrou }) {
             Ok(_) => self.status = format!("{n} élément(s) {} — Ctrl+Z pour annuler.", if verrou { "verrouillé(s)" } else { "déverrouillé(s)" }),
             Err(e) => self.error = Some(e),
         }
@@ -350,7 +350,7 @@ impl ViewerApp {
             }
         }
         if let Some(id) = cible {
-            match self.executer_bim(commandes::commandes::Commande::Verrouiller { ids: vec![id], verrou: false }) {
+            match self.executer_bim(commandes::Commande::Verrouiller { ids: vec![id], verrou: false }) {
                 Ok(_) => self.status = "Élément déverrouillé — Ctrl+Z pour annuler.".into(),
                 Err(e) => self.error = Some(e),
             }
@@ -380,8 +380,8 @@ impl ViewerApp {
     /// première), appliquées en une seule transaction : un seul Ctrl+Z.
     pub(super) fn executer_bim_suite(
         &mut self,
-        premiere: commandes::commandes::Commande,
-        suite: impl FnOnce(Vec<String>) -> commandes::commandes::Commande,
+        premiere: commandes::Commande,
+        suite: impl FnOnce(Vec<String>) -> commandes::Commande,
     ) -> Result<(), String> {
         let original = &self.natif.as_ref().ok_or("Aucun projet natif.")?.0;
         let (p, ids) = original.executer(premiere)?;
@@ -395,7 +395,7 @@ impl ViewerApp {
     }
     pub(super) fn executer_bim(
         &mut self,
-        c: commandes::commandes::Commande,
+        c: commandes::Commande,
     ) -> Result<Vec<String>, String> {
         let original = &self.natif.as_ref().ok_or("Aucun projet natif.")?.0;
         let connus = original.identifiants();
@@ -458,10 +458,10 @@ impl ViewerApp {
         }
     }
 
-    fn commande_ouverture(&self, mur: String, abscisse: f64) -> commandes::commandes::Commande {
+    fn commande_ouverture(&self, mur: String, abscisse: f64) -> commandes::Commande {
         use crate::ui::ruban::Outil;
         let fenetre = self.ruban_edition.texte_option(Outil::Ouverture, 0) == "Fenêtre";
-        commandes::commandes::Commande::Ouverture {
+        commandes::Commande::Ouverture {
             mur,
             abscisse,
             type_ouverture: self.ruban_edition.ouverture_type_identique.clone(),
@@ -509,7 +509,7 @@ impl ViewerApp {
         a.nom.clear();
         a.position = position;
         a.niveau = self.niveau_vue_native().ok_or("Arbre : aucun niveau.")?;
-        self.executer_bim(commandes::commandes::Commande::Arbre { arbre: a })?;
+        self.executer_bim(commandes::Commande::Arbre { arbre: a })?;
         Ok(())
     }
 
@@ -527,7 +527,7 @@ impl ViewerApp {
             }
             c.type_composant.clear();
         }
-        self.executer_bim(commandes::commandes::Commande::Composant { composant: c })?;
+        self.executer_bim(commandes::Commande::Composant { composant: c })?;
         Ok(())
     }
 
@@ -535,7 +535,7 @@ impl ViewerApp {
     pub(super) fn placer_piece(&mut self, point: [f64; 2]) -> Result<(), String> {
         let niveau = self.niveau_vue_native().ok_or("Pièce : aucun niveau.")?;
         let piece = modele::Piece { id: String::new(), nom: self.bim.nom_piece.clone(), numero: String::new(), niveau, point, contour: Vec::new(), etiquette: self.bim.etiquette_piece.clone() };
-        self.executer_bim(commandes::commandes::Commande::Piece { piece })?;
+        self.executer_bim(commandes::Commande::Piece { piece })?;
         Ok(())
     }
 
@@ -561,7 +561,7 @@ impl ViewerApp {
                 b.fin[2] = b.debut[2];
             }
         }
-        self.executer_bim(commandes::commandes::Commande::Barre { barre: b })?;
+        self.executer_bim(commandes::Commande::Barre { barre: b })?;
         Ok(())
     }
 
@@ -577,7 +577,7 @@ impl ViewerApp {
             return;
         }
         let n = self.natif.as_ref().and_then(|(p, _)| p.dependances(&ids).ok()).map_or(ids.len(), |s| s.len());
-        match self.executer_bim(commandes::commandes::Commande::Supprimer { ids }) {
+        match self.executer_bim(commandes::Commande::Supprimer { ids }) {
             Ok(_) => {
                 self.bim.selection.clear();
                 self.status = format!("{n} élément(s) supprimé(s) — Ctrl+Z pour annuler.");
@@ -771,7 +771,7 @@ impl ViewerApp {
     }
 
     pub(super) fn panneau_bim(&mut self, ui: &mut egui::Ui) -> bool {
-        use commandes::commandes::Commande;
+        use commandes::Commande;
         use crate::ui::ruban::Outil;
         if self.natif.is_none() {
             return false;

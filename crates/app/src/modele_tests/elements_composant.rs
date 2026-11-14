@@ -2,7 +2,7 @@
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
 use commandes::Execution;
 use modele::*;
-use commandes::commandes::Commande;
+use commandes::Commande;
 use glam::DVec3;
 
 fn projet() -> (Projet, String) {

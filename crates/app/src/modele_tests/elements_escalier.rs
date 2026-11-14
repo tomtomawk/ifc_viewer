@@ -16,7 +16,7 @@ fn escalier(trace: Vec<[f64; 2]>) -> Escalier {
 
 #[test]
 fn commandes_escalier_et_garde_corps() {
-    use commandes::commandes::Commande;
+    use commandes::Commande;
     let p = projet();
     let e = Escalier { id: String::new(), ..escalier(vec![[0.0, 0.0], [4050.0, 0.0]]) };
     let (p, ids) = p.executer(Commande::Escalier { escalier: e.clone() }).unwrap();

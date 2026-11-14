@@ -1,5 +1,5 @@
 //! Cotes pilotantes : commande qui donne à une cote la valeur saisie.
-use super::Commande;
+use crate::Commande;
 use modele::documentation::{angle_resolu, cotes_de, extremites_cote, AnnotationForme, Vue};
 use modele::Projet;
 use glam::DVec2;

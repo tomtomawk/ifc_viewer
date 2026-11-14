@@ -2,7 +2,6 @@ use commandes::Execution;
 use super::stockage::*;
 use super::texte::*;
 use super::*;
-use commandes::commandes;
 use modele::elements::site;
 use std::path::PathBuf;
 

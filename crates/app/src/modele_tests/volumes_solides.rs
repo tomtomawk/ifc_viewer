@@ -30,7 +30,7 @@ fn recalcul_partiel_identique_apres_modification() {
     let avant = murs(&p, &j);
     for k in 0..3 {
         let id = p.murs[k * 3 % p.murs.len()].id.clone();
-        p = p.executer(commandes::commandes::Commande::Deplacer { ids: vec![id], delta: [0.0, 137.0 + k as f64, 0.0] }).unwrap().0;
+        p = p.executer(commandes::Commande::Deplacer { ids: vec![id], delta: [0.0, 137.0 + k as f64, 0.0] }).unwrap().0;
         let j = modele::murs::jonctions::coupes(&p);
         let groupe = murs(&p, &j);
         assert!(groupe != avant, "le déplacement doit changer des solides");

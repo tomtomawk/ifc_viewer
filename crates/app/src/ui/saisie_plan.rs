@@ -454,7 +454,7 @@ impl ViewerApp {
         });
         if fini && c != actuel {
             ui.data_mut(|d| d.remove::<[f64; 3]>(id));
-            match self.executer_bim(commandes::commandes::Commande::CoordonneesOrigine { coordonnees: c }) {
+            match self.executer_bim(commandes::Commande::CoordonneesOrigine { coordonnees: c }) {
                 Ok(_) => self.status = "Coordonnées de l'origine modifiées — Ctrl+Z pour annuler.".into(),
                 Err(e) => self.error = Some(e),
             }

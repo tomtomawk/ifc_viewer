@@ -2,7 +2,7 @@
 //! verrou, démolir) et poignée de déplacement au milieu du mur sélectionné.
 use commandes::{Modification, Verrous};
 use super::*;
-use commandes::commandes::Commande;
+use commandes::Commande;
 use crate::ui::ruban::Outil;
 
 /// Action choisie dans le menu du clic droit.

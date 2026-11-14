@@ -10,7 +10,7 @@ pub trait Modification {
 }
 
 /// Commandes de modification, appelées par l'exécution.
-pub(super) trait ModificationInterne {
+pub(crate) trait ModificationInterne {
     fn symetrie(&mut self, ids: Vec<String>, a: [f64; 2], b: [f64; 2]) -> Result<Vec<String>, String>;
     fn echelle(&mut self, ids: Vec<String>, centre: [f64; 2], facteur: f64) -> Result<Vec<String>, String>;
     fn reseau(&mut self, ids: Vec<String>, nombre: usize, delta: [f64; 3], centre: [f64; 2], angle: f64) -> Result<Vec<String>, String>;
@@ -421,7 +421,7 @@ pub fn decaler_polygone(pts: &[[f64; 2]], d: f64) -> Option<Vec<[f64; 2]>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::commandes::{Commande, Execution, Modification};
+    use crate::{Commande, Execution, Modification};
     use modele::creation::ParametresMur;
     use modele::{Axe, Projet};
 

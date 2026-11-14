@@ -27,7 +27,7 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
             for k in 0..repetitions {
                 let Some(id) = courant.murs.get(k * 7 % courant.murs.len().max(1)).map(|m| m.assemblage.clone().unwrap_or_else(|| m.id.clone())) else { break };
                 let debut = std::time::Instant::now();
-                let (suivant, _) = courant.executer(commandes::commandes::Commande::Deplacer { ids: vec![id], delta: [0.0, 50.0, 0.0] })?;
+                let (suivant, _) = courant.executer(commandes::Commande::Deplacer { ids: vec![id], delta: [0.0, 50.0, 0.0] })?;
                 let t_commande = debut.elapsed().as_secs_f64() * 1000.0;
                 let debut = std::time::Instant::now();
                 maillage::depuis_natif(&suivant, chemin)?;

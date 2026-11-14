@@ -3,7 +3,7 @@
 //! feuilles et vues placées se règlent dans Propriétés, sans boîte de dialogue.
 use commandes::Execution;
 use super::*;
-use commandes::commandes::Commande;
+use commandes::Commande;
 use modele::documentation as doc;
 use std::collections::HashMap;
 

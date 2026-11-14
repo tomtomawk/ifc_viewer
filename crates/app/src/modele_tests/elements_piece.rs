@@ -3,7 +3,7 @@
 use commandes::Execution;
 use modele::*;
 use modele::creation::ParametresMur;
-use commandes::commandes::Commande;
+use commandes::Commande;
 
 fn rectangle(p: &mut Projet, o: &ParametresMur) {
     let pts = [[0.0, 0.0], [5000.0, 0.0], [5000.0, 4000.0], [0.0, 4000.0]];

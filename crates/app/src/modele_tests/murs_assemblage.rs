@@ -52,7 +52,7 @@ fn modification_type_actualise_tous_les_murs_sans_detacher_les_couches() {
 
 #[test]
 fn couche_editee_hors_du_mur_compose_se_detache() {
-    use commandes::commandes::Commande;
+    use commandes::Commande;
     let mut p = Projet::nouveau("A");
     p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &ParametresMur::default()).unwrap();
     p.types_murs.push(type_trois_couches());

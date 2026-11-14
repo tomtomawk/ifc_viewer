@@ -3,7 +3,7 @@
 //! justification du mur (l'axe d'une poutre) : les raccords se font sur les faces.
 use commandes::Execution;
 use super::*;
-use commandes::commandes::Commande;
+use commandes::Commande;
 use modele::Projet;
 
 #[derive(Default)]
