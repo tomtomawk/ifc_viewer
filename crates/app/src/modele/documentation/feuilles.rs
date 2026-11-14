@@ -8,7 +8,7 @@ impl Default for FamilleCartouche {
     fn default() -> Self {
         let mut cartouche = Self {
             document_famille: None,
-            id: crate::modele::collaboration::uuid(),
+            id: crate::noyau::uuid::uuid(),
             nom: NOM_CARTOUCHE_STANDARD.into(), largeur: TAILLE_CARTOUCHE_STANDARD[0], hauteur: TAILLE_CARTOUCHE_STANDARD[1],
             traits: vec![[[0.0,0.0],[180.0,0.0]], [[180.0,0.0],[180.0,40.0]], [[180.0,40.0],[0.0,40.0]], [[0.0,40.0],[0.0,0.0]], [[140.0,0.0],[140.0,40.0]], [[0.0,14.0],[140.0,14.0]], [[0.0,30.0],[140.0,30.0]]],
             textes: vec![

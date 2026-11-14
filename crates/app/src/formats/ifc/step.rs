@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 use std::sync::Arc;
 
-pub type Id = u64;
+pub use crate::noyau::Id;
 
 /// Hasher trivial pour des identifiants entiers (#123).
 #[derive(Default)]

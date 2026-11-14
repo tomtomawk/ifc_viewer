@@ -176,7 +176,7 @@ impl Projet {
         if let Some(t) = self.types_murs.iter().find(|t| t.couches.len() == 1 && t.couches[0] == *c) {
             return t.id.clone();
         }
-        let id = collaboration::uuid();
+        let id = crate::noyau::uuid::uuid();
         let nom = format!("{} · {} mm", c.materiau.as_deref().unwrap_or("Couche"), crate::formats::ifc::step::format_real(c.epaisseur));
         self.types_murs.push(TypeCompose { id: id.clone(), nom, couches: vec![c.clone()], categorie: None, couches_detaillees: true, origine: None });
         id
@@ -210,7 +210,7 @@ impl Projet {
         let mut nouveaux = Vec::new();
         for (k, (c, d)) in t.couches.iter().zip(t.decalages_couches()).enumerate() {
             let type_mur = self.type_couche(c);
-            let cid = collaboration::uuid();
+            let cid = crate::noyau::uuid::uuid();
             couches.push(cid.clone());
             nouveaux.push(Mur {
                 id: cid,

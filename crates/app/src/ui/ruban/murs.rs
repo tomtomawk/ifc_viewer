@@ -536,7 +536,7 @@ impl RubanEdition {
                 id.clone()
             }
             None => {
-                let id = crate::modele::collaboration::uuid();
+                let id = crate::noyau::uuid::uuid();
                 projet.types_murs.push(crate::modele::TypeCompose { id: id.clone(), nom, couches: ed.couches.clone(), categorie: Some(ed.categorie), couches_detaillees: true, origine: None });
                 id
             }
@@ -565,7 +565,7 @@ impl RubanEdition {
                 t.id.clone()
             }
             None => {
-                let id = crate::modele::collaboration::uuid();
+                let id = crate::noyau::uuid::uuid();
                 projet.types_murs.push(crate::modele::TypeCompose { id: id.clone(), nom: nom.into(), couches, categorie, couches_detaillees: true, origine: None });
                 id
             }

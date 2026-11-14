@@ -180,7 +180,7 @@ impl ViewerApp {
         if projet.vues.iter().any(|v| v.nom == nom) {
             return Err(format!("Une vue s'appelle déjà « {nom} »."));
         }
-        let id = crate::modele::collaboration::uuid();
+        let id = crate::noyau::uuid::uuid();
         let mut p = projet.clone();
         p.vues.push(crate::modele::Vue {
             id: id.clone(),

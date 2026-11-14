@@ -165,7 +165,7 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
         if let Some(p) = reference {
             let vue = match p.axe { AxePlan::X => VueEsquisse::Coupe, AxePlan::Y => VueEsquisse::Elevation, AxePlan::Z => VueEsquisse::Plan };
             let r = ed.resoudre();
-            let plan = PlanConstruction { id: crate::modele::collaboration::uuid(), reference: Some(p.nom.clone()), nom: format!("Référence : {}", p.nom), origine: vue.point(0.0,0.0,r.positions.get(&p.nom).copied().unwrap_or(p.position)).to_array(), horizontal: vue.point(1.0,0.0,0.0).to_array(), vertical: vue.point(0.0,1.0,0.0).to_array() };
+            let plan = PlanConstruction { id: crate::noyau::uuid::uuid(), reference: Some(p.nom.clone()), nom: format!("Référence : {}", p.nom), origine: vue.point(0.0,0.0,r.positions.get(&p.nom).copied().unwrap_or(p.position)).to_array(), horizontal: vue.point(1.0,0.0,0.0).to_array(), vertical: vue.point(0.0,1.0,0.0).to_array() };
             let k = ed.famille.plans_construction.iter().position(|existant| existant.reference.as_ref() == plan.reference.as_ref()).unwrap_or_else(|| {
                 let mut plan = plan;
                 let base = plan.nom.clone();

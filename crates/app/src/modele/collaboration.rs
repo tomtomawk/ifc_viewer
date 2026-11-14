@@ -9,9 +9,10 @@ mod tests;
 pub mod texte;
 
 use super::Projet;
+use crate::noyau::hash::{empreinte, encoder, hash};
+use crate::noyau::uuid::uuid;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const PROTOCOLE: u32 = 3;
@@ -20,24 +21,6 @@ pub fn protocole_lisible(v: u32) -> bool {
 }
 pub type Objets = BTreeMap<String, Value>;
 pub type Resultat<T> = Result<T, String>;
-pub fn uuid() -> String {
-    uuid::Uuid::new_v4().to_string()
-}
-pub fn empreinte(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
-}
-pub fn encoder<T: Serialize>(v: &T) -> Resultat<Vec<u8>> {
-    // Value utilise des dictionnaires triés (serde_json sans preserve_order).
-    serde_json::to_vec(&serde_json::to_value(v).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())
-}
-pub fn hash<T: Serialize>(v: &T) -> String {
-    empreinte(&encoder(v).expect("valeur sérialisable"))
-}
-
 /// Listes d'objets identifiés : ordre canonique, sauf ordre métier des feuilles.
 pub fn objets(p: &Projet) -> Resultat<Objets> {
     let Value::Object(root) = serde_json::to_value(p).map_err(|e| e.to_string())? else {

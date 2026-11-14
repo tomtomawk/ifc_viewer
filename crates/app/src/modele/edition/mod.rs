@@ -148,7 +148,7 @@ impl ListeCreation {
     }
 }
 
-fn identifiant_natif(espace: &str, _cle: &str) -> String { format!("{espace}-{}", crate::modele::collaboration::uuid()) }
+fn identifiant_natif(espace: &str, _cle: &str) -> String { format!("{espace}-{}", crate::noyau::uuid::uuid()) }
 
 impl Projet {
     /// Intersection pour Ajuster/Prolonger ; l'extrémité opposée reste fixe.

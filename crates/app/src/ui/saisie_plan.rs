@@ -962,7 +962,7 @@ impl ViewerApp {
         match &self.natif {
             Some((p, _)) => {
                 let mut p = p.clone();
-                p.positions_plan.push(crate::modele::PositionPlan { id: crate::modele::collaboration::uuid(), nom: nom.clone(), angle: (angle.to_degrees() as f64 * 10.0).round() / 10.0 });
+                p.positions_plan.push(crate::modele::PositionPlan { id: crate::noyau::uuid::uuid(), nom: nom.clone(), angle: (angle.to_degrees() as f64 * 10.0).round() / 10.0 });
                 let camera = self.camera.clone();
                 if let Err(e) = self.appliquer_projet(p) {
                     self.error = Some(e);

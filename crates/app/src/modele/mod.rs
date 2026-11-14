@@ -439,8 +439,8 @@ impl DefinitionMotif {
     pub fn base() -> Vec<DefinitionMotif> {
         let l = |angle: f64, pas: f64| LigneMotif { angle, pas, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() };
         vec![
-            DefinitionMotif { id: collaboration::uuid(), nom: "Diagonales".into(), lignes: vec![l(45.0, 2.0)] },
-            DefinitionMotif { id: collaboration::uuid(), nom: "Croisées".into(), lignes: vec![l(45.0, 1.5), l(-45.0, 1.5)] },
+            DefinitionMotif { id: crate::noyau::uuid::uuid(), nom: "Diagonales".into(), lignes: vec![l(45.0, 2.0)] },
+            DefinitionMotif { id: crate::noyau::uuid::uuid(), nom: "Croisées".into(), lignes: vec![l(45.0, 1.5), l(-45.0, 1.5)] },
         ]
     }
 }
@@ -1127,7 +1127,7 @@ impl Projet {
     /// Projet vide : phases Existant et Projet (les nouveaux éléments vont dans la
     /// dernière), sous-projet A.
     pub fn nouveau(nom: &str) -> Projet {
-        Projet { identite: collaboration::uuid(), format: FORMAT.into(), version: VERSION, nom: nom.into(), phases: vec![PHASE_EXISTANT.into(), "Projet".into()], sous_projets: vec!["A".into()], ..Default::default() }
+        Projet { identite: crate::noyau::uuid::uuid(), format: FORMAT.into(), version: VERSION, nom: nom.into(), phases: vec![PHASE_EXISTANT.into(), "Projet".into()], sous_projets: vec!["A".into()], ..Default::default() }
     }
 
     /// Cote NGF de l'origine du projet (mm).
@@ -1335,7 +1335,7 @@ impl Projet {
         if p.version > VERSION {
             return Err(format!("version {} plus récente que celle prise en charge ({VERSION})", p.version));
         }
-        if p.identite.is_empty() { p.identite = identifiant("projet-migration-v1", &collaboration::hash(&serde_json::from_str::<serde_json::Value>(texte).map_err(|e|e.to_string())?)); }
+        if p.identite.is_empty() { p.identite = identifiant("projet-migration-v1", &crate::noyau::hash::hash(&serde_json::from_str::<serde_json::Value>(texte).map_err(|e|e.to_string())?)); }
         p.version = VERSION;
         for m in &mut p.materiaux { if m.id.is_empty() { m.id = identifiant("materiau-migration-v1", &m.nom); } }
         for m in &mut p.motifs { if m.id.is_empty() { m.id = identifiant("motif-migration-v1", &m.nom); } }

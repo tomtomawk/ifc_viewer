@@ -7,7 +7,7 @@
 //! Les points sont en 3D (mètres), dans le plan du dessin ; l'export les projette sur ses
 //! axes `droite` et `haut`.
 
-use crate::formats::ifc::step::Id;
+use super::Id;
 use glam::DVec3;
 use std::collections::HashMap;
 use std::fmt::Write;

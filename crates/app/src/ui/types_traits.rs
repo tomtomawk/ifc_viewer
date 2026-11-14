@@ -208,7 +208,7 @@ impl ViewerApp {
                 return Err(format!("Deux types s'appellent « {} ».", t.nom));
             }
             if t.id.is_empty() {
-                t.id = format!("trait-{}", crate::modele::collaboration::uuid());
+                t.id = format!("trait-{}", crate::noyau::uuid::uuid());
             }
         }
         let mut q = p.clone();

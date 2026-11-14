@@ -288,13 +288,13 @@ impl ViewerApp {
         match action {
             Some("nouveau") => {
                 let n = libre(&p, "Motif");
-                p.motifs.push(DefinitionMotif { id: crate::modele::collaboration::uuid(), nom: n.clone(), lignes: vec![LigneMotif { angle: 45.0, pas: 2.0, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() }] });
+                p.motifs.push(DefinitionMotif { id: crate::noyau::uuid::uuid(), nom: n.clone(), lignes: vec![LigneMotif { angle: 45.0, pas: 2.0, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() }] });
                 self.motif_choisi = Some(n);
                 change = true;
             }
             Some("dupliquer") => {
                 let n = libre(&p, &format!("{} (copie)", d.nom));
-                p.motifs.push(DefinitionMotif { id: crate::modele::collaboration::uuid(), nom: n.clone(), ..d.clone() });
+                p.motifs.push(DefinitionMotif { id: crate::noyau::uuid::uuid(), nom: n.clone(), ..d.clone() });
                 self.motif_choisi = Some(n);
                 change = true;
             }
@@ -310,7 +310,7 @@ impl ViewerApp {
                 } else {
                     // copie renommée ; les matériaux qui se servaient de l'ancien suivent
                     p.motifs.retain(|x| x.nom != choisi);
-                    p.motifs.push(DefinitionMotif { id: if d.id.is_empty() { crate::modele::collaboration::uuid() } else { d.id.clone() }, nom: n.clone(), ..d.clone() });
+                    p.motifs.push(DefinitionMotif { id: if d.id.is_empty() { crate::noyau::uuid::uuid() } else { d.id.clone() }, nom: n.clone(), ..d.clone() });
                     let (ancien, neuf) = (MotifCoupe::hachures(&choisi), MotifCoupe::hachures(&n));
                     for m in &mut p.materiaux {
                         for x in [&mut m.motif].into_iter().chain([&mut m.surface_motif, &mut m.surface_fond_motif, &mut m.coupe_fond_motif].into_iter().flatten()) {
