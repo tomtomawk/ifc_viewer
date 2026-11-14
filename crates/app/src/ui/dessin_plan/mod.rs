@@ -1161,7 +1161,7 @@ fn champ_valeur(ui: &mut egui::Ui, nom: &str, valeur: f64, facteur: f64, decimal
     let tampon = ui.data(|d| d.get_temp::<String>(id));
     let mut texte = tampon.unwrap_or_else(|| match decimales {
         Some(n) => format!("{:.*}", n, valeur / facteur),
-        None => crate::formats::ifc::step::format_real(valeur / facteur),
+        None => noyau::nombres::format_real(valeur / facteur),
     });
     let reponse = ui.add(egui::TextEdit::singleline(&mut texte).desired_width(largeur));
     let mut resultat = None;

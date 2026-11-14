@@ -244,7 +244,7 @@ fn stats(path: PathBuf) -> i32 {
             }
             println!("Par classe   :");
             for (c, n) in by_class {
-                println!("  {:<32} {n}", formats::ifc::semantique::pretty_type(&c));
+                println!("  {:<32} {n}", ifc_base::semantique::pretty_type(&c));
             }
             if s.objects.len() <= 50 {
                 println!("Volumes (m3) :");
@@ -264,7 +264,7 @@ fn stats(path: PathBuf) -> i32 {
             if !s.unsupported.is_empty() {
                 println!("Non pris en charge :");
                 for (t, n) in &s.unsupported {
-                    println!("  {:<32} {n}", formats::ifc::semantique::pretty_type(t));
+                    println!("  {:<32} {n}", ifc_base::semantique::pretty_type(t));
                 }
             }
             0
@@ -456,7 +456,7 @@ fn rvt_stats(path: &std::path::Path) -> i32 {
     };
     println!("Niveaux      : {}", m.niveaux.len());
     for n in &m.niveaux {
-        println!("  {:<34} {} mm", n.nom, formats::ifc::step::format_real((n.altitude * 10.0).round() / 10.0));
+        println!("  {:<34} {} mm", n.nom, noyau::nombres::format_real((n.altitude * 10.0).round() / 10.0));
     }
     let mut genres = std::collections::BTreeMap::<&str, usize>::new();
     for d in m.definitions.values() {

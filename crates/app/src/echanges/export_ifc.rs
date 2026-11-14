@@ -382,7 +382,7 @@ mod tests {
                 .unwrap();
         let s = exporter(&p).unwrap();
         assert_eq!(s, exporter(&p).unwrap());
-        let m = crate::formats::ifc::semantique::IfcModel::new(crate::formats::ifc::step::StepFile::parse(s.as_bytes()).unwrap());
+        let m = ifc_base::semantique::IfcModel::new(ifc_base::step::StepFile::parse(s.as_bytes()).unwrap());
         assert_eq!(m.file.schema, "IFC4");
         assert!(!m.products.is_empty());
         let stats = crate::formats::ifc::geom::GeomStats::default();

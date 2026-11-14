@@ -430,7 +430,7 @@ fn unite(spec: &str, enumeration: &str) -> &'static str {
 /// Nombre sans zéros inutiles, arrondi à `decimales`.
 fn nombre(v: f64, decimales: i32) -> String {
     let p = 10f64.powi(decimales);
-    crate::formats::ifc::step::format_real((v * p).round() / p)
+    noyau::nombres::format_real((v * p).round() / p)
 }
 
 /// Format d'affichage d'une unité (`FormatOptions` de l'API).

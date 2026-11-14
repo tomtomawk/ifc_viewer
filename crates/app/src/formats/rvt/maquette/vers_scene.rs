@@ -667,7 +667,7 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
                     if let Some(couches) = couches {
                         let props: Vec<(String, Value)> = couches.iter().enumerate().map(|(k, c)| {
                             let materiau = if c.materiau == -1 { "Par catégorie".into() } else { m.materiaux.get(&c.materiau).map(|m| m.nom.clone()).unwrap_or_else(|| format!("Matériau {}", c.materiau)) };
-                            (format!("Couche {}", k+1), Value::Str(format!("{} mm — {materiau}", crate::formats::ifc::step::format_real(c.epaisseur))))
+                            (format!("Couche {}", k+1), Value::Str(format!("{} mm — {materiau}", noyau::nombres::format_real(c.epaisseur))))
                         }).collect();
                         let ps = b.pset("RVTCOUCHES", p.type_id, "Composition", props.iter().map(|(k,v)| (k.as_str(),v.clone())).collect());
                         psets.push(Value::Ref(ps));

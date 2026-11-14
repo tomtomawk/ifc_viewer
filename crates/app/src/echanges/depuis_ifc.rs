@@ -16,8 +16,8 @@
 use modele::volumes::geometrie::{cercle, direction_principale, etendue, etendue_arc, prisme_vertical};
 use modele::{Axe, Conversion, Couche, Dalle, GenreOuverture, Haut, Mur, Niveau, Origine, Ouverture, Projet, SorteDalle, TypeCompose, identifiant, source};
 use crate::formats::ifc::geom::{self, GeomStats};
-use crate::formats::ifc::semantique::{IfcModel, pretty_type};
-use crate::formats::ifc::step::{Id, StepFile};
+use ifc_base::semantique::{IfcModel, pretty_type};
+use ifc_base::step::{Id, StepFile};
 use glam::{DVec2, DVec3};
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -86,7 +86,7 @@ fn sens_positif(m: &IfcModel, id: Id) -> Option<bool> {
     }
 }
 
-fn couches_du_jeu(m: &IfcModel, jeu: Id, e: &crate::formats::ifc::step::Entity) -> Option<(Id, String, Vec<Couche>)> {
+fn couches_du_jeu(m: &IfcModel, jeu: Id, e: &ifc_base::step::Entity) -> Option<(Id, String, Vec<Couche>)> {
     if !e.is("IFCMATERIALLAYERSET") {
         return None;
     }

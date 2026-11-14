@@ -405,9 +405,9 @@ impl RubanEdition {
                         // plume du contour de coupe : numéro et épaisseur de la table
                         let plumes = projet.epaisseurs_plumes();
                         let mut n_plume = c.plume();
-                        egui::ComboBox::from_id_salt(("plume", k)).width(70.0).selected_text(format!("{n_plume} · {}", crate::formats::ifc::step::format_real(plumes[(n_plume - 1) as usize]))).show_ui(ui, |ui| {
+                        egui::ComboBox::from_id_salt(("plume", k)).width(70.0).selected_text(format!("{n_plume} · {}", noyau::nombres::format_real(plumes[(n_plume - 1) as usize]))).show_ui(ui, |ui| {
                             for (i, e) in plumes.iter().enumerate() {
-                                ui.selectable_value(&mut n_plume, i as u8 + 1, format!("{} · {} mm", i + 1, crate::formats::ifc::step::format_real(*e)));
+                                ui.selectable_value(&mut n_plume, i as u8 + 1, format!("{} · {} mm", i + 1, noyau::nombres::format_real(*e)));
                             }
                         }).response.on_hover_text("Plume du contour de coupe de la couche");
                         if n_plume != c.plume() {

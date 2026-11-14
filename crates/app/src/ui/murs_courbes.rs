@@ -89,7 +89,7 @@ impl ViewerApp {
                     Ok(_)=>{
                         if let Some((_,r,_,s))=noyau::forme2d::arc_3_points(pts[0],pts[1],pts[2]) {
                             let facteur=crate::config::options::unite().facteur();
-                            let formater=|v|crate::formats::ifc::step::format_real(v / facteur);
+                            let formater=|v|noyau::nombres::format_real(v / facteur);
                             self.cote_arc=Some((id,i,formater(r),formater(r*s.abs())));
                         }
                         self.status="Mur courbe modifié : cliquer une cote pour la saisir.".into();
@@ -121,8 +121,8 @@ impl ViewerApp {
                 }
                 if self.dessin2d.arc_glisse.is_none() {
                     let facteur = crate::config::options::unite().facteur();
-                    let rayon_actuel = crate::formats::ifc::step::format_real(r / facteur);
-                    let longueur_actuelle = crate::formats::ifc::step::format_real(r * s.abs() / facteur);
+                    let rayon_actuel = noyau::nombres::format_real(r / facteur);
+                    let longueur_actuelle = noyau::nombres::format_real(r * s.abs() / facteur);
                     if self.cote_arc.as_ref().is_none_or(|(mur, _, _, _)| mur != id) {
                         self.cote_arc = Some((id.clone(), 2, rayon_actuel, longueur_actuelle));
                     } else if let Some((_, _, rayon, longueur)) = &mut self.cote_arc {
@@ -169,7 +169,7 @@ impl ViewerApp {
                         && let Some((_,r,_,s)) = noyau::forme2d::arc_3_points(points[0],points[1],points[2]) {
                         let facteur = crate::config::options::unite().facteur();
                         let derniere_extremite = self.cote_arc.as_ref().map_or(poignee, |(_, ancienne, _, _)| *ancienne);
-                        self.cote_arc = Some((id, derniere_extremite, crate::formats::ifc::step::format_real(r/facteur), crate::formats::ifc::step::format_real(r*s.abs()/facteur)));
+                        self.cote_arc = Some((id, derniere_extremite, noyau::nombres::format_real(r/facteur), noyau::nombres::format_real(r*s.abs()/facteur)));
                     }
                     self.status="Mur courbe modifié.".into();
                 }

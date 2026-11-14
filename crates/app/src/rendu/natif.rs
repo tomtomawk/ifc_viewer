@@ -7,7 +7,7 @@ pub use modele::identifiants::{id_natif, numero_vue};
 use crate::formats::ifc::geom::{Part, ProductGeom};
 use modele::{Projet, SorteDalle};
 use noyau::chrono::chrono;
-use crate::formats::ifc::step::{Entity, StepFile, Value};
+use ifc_base::step::{Entity, StepFile, Value};
 use rayon::prelude::*;
 use std::path::Path;
 

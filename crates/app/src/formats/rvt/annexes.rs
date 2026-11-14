@@ -189,7 +189,7 @@ fn entier(o: &Obj, k: &str) -> i64 {
 }
 
 fn nombre(v: f64) -> String {
-    crate::formats::ifc::step::format_real((v * 1e6).round() / 1e6)
+    noyau::nombres::format_real((v * 1e6).round() / 1e6)
 }
 
 /// Cellules de `Element.m_cellList`.

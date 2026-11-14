@@ -559,7 +559,7 @@ impl ViewerApp {
                 // objets du modèle, sauf ceux masqués dans la vue placée (id Revit : 8ᵉ
                 // argument, l'étiquette, des produits de la scène)
                 let masque = |k: &u32| match s.model.get(s.objects[*k as usize].id).and_then(|e| e.args.get(7)) {
-                    Some(crate::formats::ifc::step::Value::Str(t)) => t.parse::<i64>().is_ok_and(|id| f.masques.contains(&id)),
+                    Some(ifc_base::step::Value::Str(t)) => t.parse::<i64>().is_ok_and(|id| f.masques.contains(&id)),
                     _ => false,
                 };
                 let objets: Vec<u32> = if dessin { Vec::new() } else { modele.iter().filter(|k| !masque(k)).copied().collect() };
@@ -567,7 +567,7 @@ impl ViewerApp {
                 // cadrage comme le modèle ; annotations (textes, cotes, symboles) non
                 // découpées, sauf cadrage d'annotation
                 let genre = |k: u32| match s.model.get(s.objects[k as usize].id).and_then(|e| e.args.get(4)) {
-                    Some(crate::formats::ifc::step::Value::Str(g)) => g.clone(),
+                    Some(ifc_base::step::Value::Str(g)) => g.clone(),
                     _ => String::new(),
                 };
                 let (detail, annot): (Vec<u32>, Vec<u32>) = pv.entite.map(|e| self.objects_under(e)).unwrap_or_default().into_iter().partition(|&k| DETAIL.contains(&genre(k).as_str()));

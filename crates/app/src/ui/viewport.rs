@@ -126,7 +126,7 @@ impl ViewerApp {
                     Ok(())=>{
                         if let Some(fixe) = fixe {
                             let longueur = (p[0] - fixe[0]).hypot(p[1] - fixe[1]) / crate::config::options::unite().facteur();
-                            self.cote_axe = Some((id, fin, crate::formats::ifc::step::format_real(longueur)));
+                            self.cote_axe = Some((id, fin, noyau::nombres::format_real(longueur)));
                         }
                         self.status="Mur modifié — cliquer la cote pour saisir une longueur.".into();
                     },

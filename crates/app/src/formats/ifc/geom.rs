@@ -1,8 +1,8 @@
 //! Conversion des représentations IFC en triangles (coordonnées monde, mètres).
 
 use noyau::csg::{self, Op, Tri};
-use crate::formats::ifc::semantique::IfcModel;
-use crate::formats::ifc::step::{Entity, Id, Value};
+use ifc_base::semantique::IfcModel;
+use ifc_base::step::{Entity, Id, Value};
 use glam::{DMat4, DVec2, DVec3, DVec4};
 use std::collections::HashMap;
 use std::f64::consts::{PI, TAU};

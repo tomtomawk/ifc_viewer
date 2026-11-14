@@ -327,7 +327,7 @@ fn coupe_par_solides(scene: &Scene, ob: &scene::SceneObject, n: DVec3, d: f64, o
 fn fusionner_materiaux(scene: &Scene, mut prims: Vec<Primitive>) -> Vec<Primitive> {
     use std::collections::HashMap;
     // matériau d'un élément : sa bande de coupe unique (couches des murs natifs)
-    let materiau = |id: Option<crate::formats::ifc::step::Id>| -> Option<([u8; 4], String)> {
+    let materiau = |id: Option<noyau::Id>| -> Option<([u8; 4], String)> {
         let c = scene.couches_coupe.get(&id?)?;
         let [b] = c.as_slice() else { return None };
         Some((b.couleur, b.motif.as_ref().map_or_else(String::new, |m| m.nom.clone())))
@@ -336,7 +336,7 @@ fn fusionner_materiaux(scene: &Scene, mut prims: Vec<Primitive>) -> Vec<Primitiv
     // Une droite regroupe les traits dont les deux extrémités sont à moins de 0,1 mm d'elle,
     // quel que soit leur sens : une clé arrondie sépare à tort un trait court (direction
     // bruitée) ou un onglet à 45° (signe de la direction canonique instable) de sa droite.
-    type Trait = (usize, usize, f64, f64, Option<crate::formats::ifc::step::Id>);
+    type Trait = (usize, usize, f64, f64, Option<noyau::Id>);
     const TOLERANCE: f64 = 1e-4;
     let case = |u: DVec3| [(u.x * 20.0).floor() as i64, (u.y * 20.0).floor() as i64, (u.z * 20.0).floor() as i64];
     let mut droites: Vec<(DVec3, DVec3, Vec<Trait>)> = Vec::new();

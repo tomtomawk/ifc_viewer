@@ -517,7 +517,7 @@ pub fn calculer(m: &Maquette, d: &Definition) -> Tableau {
         if let Some((Brut::Reel(_), st)) = groupe.first().and_then(|&e| brut(m, e, c)) {
             return Some(texte(m, c, &Brut::Reel(s), st));
         }
-        Some(crate::formats::ifc::step::format_real(s))
+        Some(noyau::nombres::format_real(s))
     };
     // lignes du bas d'un regroupement : une par élément (détail), sinon une pour le
     // groupe (colonne totalisée sommée, valeur commune ou « <multiples> »)

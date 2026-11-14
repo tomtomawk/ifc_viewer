@@ -25,13 +25,14 @@ use super::objets::{document_de, elem_table, episodes, inflate, records, section
 use super::parametres::{self, Brut, Definition};
 use super::schema::Schema;
 use super::feuilles;
-use super::vues::{self, Cadre, Contenu, Element2D, Motif, TypeFenetre, TypeRegion, Vue};
+use super::vues::{self, Cadre, Contenu, Element2D, TypeFenetre, TypeRegion, Vue};
 use super::Cfb;
 use crate::formats::ifc::geom::{Ligne, Part, ProductGeom, Rgba, class_color};
-use crate::formats::ifc::semantique::IfcModel;
+use ifc_base::semantique::IfcModel;
 use scene::{NavFamille, NavVue, Navigateur, Scene};
-use crate::formats::ifc::step::{Entity, Id, IdMap, StepFile, Value, format_real};
+use ifc_base::step::{Entity, Id, IdMap, StepFile, Value, format_real};
 use noyau::trace2d::{self, Primitive, Role, Style};
+use noyau::motif::Motif;
 use glam::{DMat3, DVec2, DVec3};
 use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet, HashMap};

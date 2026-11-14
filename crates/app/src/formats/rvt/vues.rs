@@ -13,7 +13,7 @@ use super::champs::{Obj, Record, Val};
 use super::geometrie::{FT, MotifFace};
 use super::maquette::Geometrie;
 use glam::DVec3;
-pub use noyau::motif::{GrilleMotif, Motif, hachures_plan};
+use noyau::motif::{GrilleMotif, Motif, hachures_plan};
 
 pub struct Vue {
     pub id: i64,
@@ -578,7 +578,7 @@ pub fn quad(p: [DVec3; 4], out: &mut Vec<[DVec3; 3]>) {
 /// Primitives d'un élément 2D (hors régions, tracées à part), pour une vue de normale
 /// `n` à l'échelle `echelle` : traits de 0,25 mm sur le papier, cadre du texte, ligne et
 /// repères de cote ; mètres.
-pub fn primitives(e: &Element2D, n: DVec3, echelle: f64, couleur: [u8; 4], element: Option<crate::formats::ifc::step::Id>) -> Vec<Primitive> {
+pub fn primitives(e: &Element2D, n: DVec3, echelle: f64, couleur: [u8; 4], element: Option<noyau::Id>) -> Vec<Primitive> {
     let trait_ = |points: Vec<DVec3>| Primitive {
         forme: Forme::Polyligne { points: points.into_iter().map(|p| p / 1000.0).collect(), fermee: false },
         style: Style { couleur, epaisseur: 0.25 },

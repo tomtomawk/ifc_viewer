@@ -144,7 +144,7 @@ impl ViewerApp {
                     painter.add(egui::Shape::convex_polygon(pts, accent, egui::Stroke::new(if survole { 2.0 } else { 1.0 }, Color32::WHITE)));
                     // terre-plein : liste éditable à côté du repère (editer_talus)
                     if talus { continue; }
-                    let texte = if talus { modele::elements::terre_plein::libelle(a) } else { format!("{}°", crate::formats::ifc::step::format_real((a * 10.0).round() / 10.0)) };
+                    let texte = if talus { modele::elements::terre_plein::libelle(a) } else { format!("{}°", noyau::nombres::format_real((a * 10.0).round() / 10.0)) };
                     let g = painter.layout_no_wrap(texte, egui::FontId::proportional(12.0), Color32::from_gray(30));
                     let cadre = egui::Rect::from_center_size(q - n * 18.0, g.size() + egui::vec2(8.0, 4.0));
                     painter.rect(cadre, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 230), egui::Stroke::new(1.0, accent), egui::StrokeKind::Inside);
@@ -276,7 +276,7 @@ impl ViewerApp {
         if self.poignee_axe.is_none() {
             let id_champ = ui.make_persistent_id(("cote_poignee_mur", &id));
             let longueur = (b[0] - a[0]).hypot(b[1] - a[1]) / crate::config::options::unite().facteur();
-            let valeur = crate::formats::ifc::step::format_real(longueur);
+            let valeur = noyau::nombres::format_real(longueur);
             if self.cote_axe.as_ref().is_none_or(|(mur, _, _)| mur != &id) {
                 self.cote_axe = Some((id.clone(), true, valeur));
             } else if !ui.memory(|m| m.has_focus(id_champ)) && let Some((_, _, texte)) = &mut self.cote_axe {

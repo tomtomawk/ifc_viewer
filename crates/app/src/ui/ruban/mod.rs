@@ -699,7 +699,7 @@ impl RubanEdition {
         let mut choix: Option<usize> = None;
         let elevation_affichee = self.coupe_identique.as_ref().map_or(courant.elevation, |c| c.2);
         let nom_affiche = self.coupe_identique.as_ref().map_or(courant.nom.as_str(), |c| c.0.as_str());
-        let echelle = |e: f64, profondeur: f64| format!("1:{e} · {} m", crate::formats::ifc::step::format_real(profondeur / 1000.0));
+        let echelle = |e: f64, profondeur: f64| format!("1:{e} · {} m", noyau::nombres::format_real(profondeur / 1000.0));
         let titre = format!("{} · {}", sorte(elevation_affichee), nom_affiche);
         let vignette = |p: &egui::Painter, r: egui::Rect, c: Color32| icone_vue(p, r, elevation_affichee, c);
         let bouton = selecteur::entete(ui, &titre, Some(&format!("1:{}", self.coupe_identique.as_ref().map_or(courant.echelle, |c| c.1))), &format!("{titre}

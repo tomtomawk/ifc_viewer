@@ -16,7 +16,7 @@ impl<'a> Dimensions<'a> for eframe::egui::DragValue<'a> {
     fn dimensions(self) -> eframe::egui::DragValue<'a> {
         let u = unite();
         let facteur = u.facteur();
-        self.custom_formatter(move |v, _| crate::formats::ifc::step::format_real(v / facteur))
+        self.custom_formatter(move |v, _| noyau::nombres::format_real(v / facteur))
             .custom_parser(move |s| {
                 s.trim()
                     .replace(',', ".")
@@ -29,7 +29,7 @@ impl<'a> Dimensions<'a> for eframe::egui::DragValue<'a> {
     fn dimensions_metres(self) -> eframe::egui::DragValue<'a> {
         let u = unite();
         let facteur = u.facteur();
-        self.custom_formatter(move |v, _| crate::formats::ifc::step::format_real(v * 1000.0 / facteur))
+        self.custom_formatter(move |v, _| noyau::nombres::format_real(v * 1000.0 / facteur))
             .custom_parser(move |s| {
                 s.trim()
                     .replace(',', ".")
