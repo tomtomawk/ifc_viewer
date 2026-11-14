@@ -1,6 +1,6 @@
 # Architecture : découpage en workspace Cargo
 
-État après le lot 3 (§5.10) : le dépôt est un workspace (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`). `noyau` (lot 1), `modele` (lot 2), `ifc_base` et `scene` (lot 3) sont extraits en `crates/noyau`, `crates/modele`, `crates/ifc_base` et `crates/scene` ; le reste du code est encore dans une seule crate, `crates/app` (package et binaire `bimedit`). Les dépendances sont déclarées une fois dans `[workspace.dependencies]` (racine) et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine.
+État après le lot 5 (§5.12) : le dépôt est un workspace (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`). `noyau` (lot 1), `modele` (lot 2), `ifc_base` et `scene` (lot 3), `formats` (lot 4) et `maillage` (lot 5) sont extraits en `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats` et `crates/maillage` ; le reste du code est encore dans une seule crate, `crates/app` (package et binaire `bimedit`). Les dépendances sont déclarées une fois dans `[workspace.dependencies]` (racine) et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine.
 
 Restent à la racine : `docs/`, `samples/`, `gabarits/`, `tools/`, `.github/`, `.mcp.json`, `README.md`, `AGENTS.md`. Les ressources embarquées (`include_str!`) pointent vers ces dossiers par des chemins relatifs depuis `crates/<crate>/src/...` (le gabarit par défaut est embarqué par `crates/modele/src/gabarit.rs`) ; les tests lisent `samples/` via `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")` (le répertoire courant d'un test est celui de sa crate ; même profondeur pour `crates/app` et `crates/modele`).
 
@@ -13,7 +13,7 @@ crates/
   ifc_base/       parseur STEP (`step`) et couche sémantique IFC (`semantique`) ; dépend de noyau seul
   scene/          scène triangulée, navigateur, picking (contient Vec<modele::Apparence>, ifc_base::IfcModel, IdMap)
   formats/        ifc (geom, assemblage : load/assemble), rvt
-  maillage/       modèle -> scène : volumes, jonctions, depuis_natif
+  maillage/       modèle -> scène : depuis_natif, depuis_natif_verifie (volumes et jonctions restent dans modele)
   commandes/      transactions, historique, verrous ; modeliser/ modifier/ dessiner/ annoter/ documenter/
   moteur2d/       coupe, arêtes, poché, motifs, SVG/PDF
   moteur3d/       wgpu, shaders, caméra, ciel, sélection à l'écran
@@ -26,7 +26,7 @@ crates/
   app/            binaire `bimedit`
 ```
 
-Correspondance avec les dossiers actuels (après lot 4) : `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats` : extraits ; dans `crates/app/src/` : `rendu/natif.rs` -> maillage ; `edition/` -> commandes ; `dessin/` (dont `feuilles.rs` et `plans.rs`, rendu de vue et de feuille parqué au lot 2) -> moteur2d ; `rendu/` (hors `natif.rs`) -> moteur3d ; `echanges/` -> echanges ; `collaboration/` et `collaboration.rs` -> collaboration ; `pilote/`, `config/` ; `ui/` -> interface ; `main.rs` -> app ; `modele_tests/` et `formats_tests/` : tests parqués, à répartir (§5.8 d, §5.11 d).
+Correspondance avec les dossiers actuels (après lot 5) : `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage` : extraits ; dans `crates/app/src/` : `edition/` -> commandes ; `dessin/` (dont `feuilles.rs` et `plans.rs`, rendu de vue et de feuille parqué au lot 2) -> moteur2d ; `rendu/` -> moteur3d ; `echanges/` -> echanges ; `collaboration/` et `collaboration.rs` -> collaboration ; `pilote/`, `config/` ; `ui/` -> interface ; `main.rs` -> app ; `modele_tests/` et `formats_tests/` : tests parqués, à répartir (§5.8 d, §5.11 d, §5.12 d).
 
 ## 2. Graphe de dépendances autorisées
 
@@ -44,7 +44,7 @@ noyau <- modele <- ifc_base <- scene <- formats <- maillage <- commandes <- mote
 | ifc_base | noyau |
 | scene | noyau, modele, ifc_base |
 | formats | noyau, ifc_base, scene (réel : exactement ces trois ; `modele` n'est pas une dépendance directe, il n'arrive que par `scene`, §5.11) |
-| maillage | noyau, modele, ifc_base, scene, formats |
+| maillage | noyau, modele, ifc_base, scene, formats (réel : exactement ces cinq, toutes utilisées directement, §5.12) |
 | commandes | noyau, modele, scene, maillage |
 | moteur2d | noyau, modele, scene, maillage, commandes |
 | moteur3d | noyau, modele, scene, moteur2d |
@@ -57,7 +57,7 @@ noyau <- modele <- ifc_base <- scene <- formats <- maillage <- commandes <- mote
 
 `ifc_base` est autorisée pour toute crate située après elle qui manipule `StepFile`, `IfcModel`, `Value`, `Entity` ou `IdMap` (aujourd'hui : formats, maillage, echanges, interface, app ; relevé au §5.10 e) ; les lignes ci-dessus à partir de commandes seront complétées au lot de chaque crate.
 
-Règle générale : une crate n'importe que des crates situées avant elle dans l'ordre. Aucun cycle. Les dépendances externes (wgpu, egui, etc.) suivent : `wgpu` uniquement dans moteur3d ; `egui`/`eframe` seulement à partir de moteur3d (voir §5.4). L'ordre final est confirmé ; les coupes qu'il impose sont planifiées au §4 (écarts au §5.5). `volumes` reste dans `modele`, donc `maillage` ne contient que `rendu/natif.rs`.
+Règle générale : une crate n'importe que des crates situées avant elle dans l'ordre. Aucun cycle. Les dépendances externes (wgpu, egui, etc.) suivent : `wgpu` uniquement dans moteur3d ; `egui`/`eframe` seulement à partir de moteur3d (voir §5.4). L'ordre final est confirmé ; les coupes qu'il impose sont planifiées au §4 (écarts au §5.5). `volumes` reste dans `modele`, donc `maillage` ne contient que l'ancien `rendu/natif.rs`.
 
 ## 3. Règles
 
@@ -83,7 +83,7 @@ Code « parqué » : quand une coupe fait monter du code vers une crate qui n'ex
 | 2 | modele | `config::gabarit` sous `modele` ; descendre dans `modele` : `contextes`, `gabarits_vues`, `ParametresMur`, `Implantation`, `contour_valide` (et `Commande` si les références de production l'exigent : à trancher et documenter) ; `Motif`/`GrilleMotif`/`hachures_plan` ; `volumes` et `murs/jonctions` **restent** dans `modele` ; remplacer `scene::chrono` ; monter hors de `modele` le rendu de feuille de `documentation` (`coupe`, `vu`, `cadrer_primitives`, `Poche`, ~l. 1177-1213) et les tests appelant `depuis_natif`, `export_ifc`, `ifc::*`. §5.5 points 2, 3, 4, 6, 9 | **Fable** | **fait** (coupes `8c74f6e`, `ef292b4`, `fe4551a`, `32e14b4`, `f82b294`, `e64d176`, `5dd76f1` ; extraction `501e119` ; décisions au §5.8) |
 | 3 | ifc_base + scene | `load`, `assemble`, `assemble_avec` (constructeurs IFC) vont dans `formats` ; plus de `formats`/`dessin` dans `scene`. §5.5 point 1 | **Fable** | **fait** (coupe `a069497` ; extraction de `ifc_base` `b698a58` ; extraction de `scene` `a114732` ; option B du §5.9, détail au §5.10) |
 | 4 | formats | extraction de `ifc/` (`geom`, `assemblage`), `rvt/` ; tests croisés montés ; retrait du ré-export `formats::ifc::{step, semantique}` (§5.10 b) | Sonnet | **fait** (coupes `9e2ada7`, `7c1fa60`, `d8b818a` ; extraction `aff8d40` ; détail au §5.11) |
-| 5 | maillage | `rendu/natif.rs` seul (`depuis_natif`, `depuis_natif_verifie` ; `id_natif` et `numero_vue` sont dans `modele::identifiants` depuis le lot 2) ; les tests de `modele_tests`/`dessin` qui l'appellent y montent | **Fable** | à faire |
+| 5 | maillage | `rendu/natif.rs` seul (`depuis_natif`, `depuis_natif_verifie` ; `id_natif` et `numero_vue` sont dans `modele::identifiants` depuis le lot 2) ; les tests de `modele_tests`/`dessin` qui l'appellent restent parqués dans `app` (§5.12 d) | **Fable** | **fait** (coupe `f5c528d` ; extraction `525e9cb` ; détail au §5.12) |
 | 6 | commandes | `crates/app/src/edition` (commandes, historique, verrous, gestion des contextes ; traits d'extension de `Projet`, §5.8 b) ; décider où vont `concurrence` et `objets` (§5.5 point 5) ; rangement `modeliser/ modifier/ dessiner/ annoter/ documenter/` | **Fable** | à faire |
 | 7 | moteur2d | `dessin/` dont le rendu de vue et de feuille parqué (`dessin/feuilles.rs`, `dessin/plans.rs`) | **Fable** | à faire |
 | 8 | moteur3d | `rendu/` hors scène | Sonnet | à faire |
@@ -487,3 +487,63 @@ Les 52 autres tests de `formats` ont suivi le code (`cargo test -p formats --rel
 | `formats` | `modele` (transitif) | `scene` dépend de `modele` (`Vec<modele::Apparence>`) : `formats` en hérite sans l'utiliser directement | — |
 
 Points ouverts du §5.10 : (2) `formats` -> `modele` : tranché (tests montés, pas de dépendance) ; (3) nom du module : tranché (`assemblage`). Le point (1) (§2 : `ifc_base` pour maillage, echanges, interface, app) reste à valider.
+
+### 5.12 Après lot 5 (2026-11-14)
+
+#### (a) Contenu de `crates/maillage`
+
+Package `maillage` (lib, 900 lignes, 2 tests). Dépendances internes : `noyau`, `modele`, `ifc_base`, `scene`, `formats`. Dépendances externes : `glam`, `rayon`. `cargo tree -p maillage` ne contient ni `egui`, ni `wgpu`, ni `eframe`. `grep -rn "crate::" crates/maillage/src` : aucune occurrence. API publique : `depuis_natif`, `depuis_natif_verifie` (seuls symboles `pub`).
+
+| Chemin (`crates/maillage/src/`) | Contenu |
+|---|---|
+| `lib.rs` (536 lignes) | `depuis_natif`, `depuis_natif_verifie` (une fonction d'environ 490 lignes, non découpée), `lisser` ; suite de l'ancien `rendu/natif.rs` (`git mv`) |
+| `materiaux.rs` | `opacite`, `rendu_materiau`, `motif_surface`, `coupe_materiau` |
+| `aretes.rs` | `aretes_jointes`, `aretes_silhouette`, `aretes_terrain` |
+| `navigateur.rs` | `navigateur` (arborescence : vues, familles, matériaux) |
+| `tests.rs` | `topographie_revit_importee_est_geographique`, `terrain_sous_le_mur_et_ses_traits` |
+
+Usage des dépendances : `ifc_base::{step::{Entity, StepFile, Value}, semantique::IfcModel}` ; `formats::ifc::geom::{Part, ProductGeom, Ligne}`, `formats::ifc::assemblage::assemble_avec` ; `noyau::{Id, chrono, aretes, motif, constantes::MAX_APPARENCES}` ; `scene::*` ; `modele`.
+
+#### (b) Décisions
+
+| Sujet | Décision | Pourquoi |
+|---|---|---|
+| Coupes de production | aucune | `rendu/natif.rs` n'avait déjà plus aucune référence `crate::` (ni `dessin`, ni `edition`, ni `config`, ni `rendu::gpu`) après les lots 1 à 4 |
+| `projet_vide` (`#[cfg(test)]`, alias de `depuis_natif`) | supprimé ; son seul appelant (`dessin/mod.rs`, helper de test `scene_section`) appelle `maillage::depuis_natif` | un symbole `cfg(test)` d'une crate n'est pas visible d'une autre crate ; même corps, aucun changement de comportement |
+| Découpage du fichier (884 lignes) | 4 modules + `tests.rs`, déplacement de fonctions entières sans modification | plafond de 600 lignes (§3 règle 7) ; les 8 fonctions déplacées passent de privées à `pub(crate)` (exigé par la compilation) ; aucun `pub` ajouté |
+| Commentaire de documentation de `aretes_terrain` | resté au-dessus de `aretes_silhouette` (placement d'origine, erroné) | déplacement mécanique ; à corriger hors chantier |
+
+#### (c) Ré-exports retirés
+
+`pub use modele::identifiants::{id_natif, numero_vue};` de `rendu/natif.rs` : 75 lignes dans 21 fichiers d'`app` (`dessin` : 3, `modele_tests` : 2, `ui` : 16) pointent sur `modele::identifiants::{id_natif, numero_vue}`. `crate::rendu::natif::{depuis_natif, depuis_natif_verifie}` -> `maillage::…` (29 lignes, appel de l'ancien `projet_vide` compris). Aucun ré-export conservé.
+
+#### (d) Tests parqués dans `crates/app`
+
+Les 2 tests de `rendu/natif.rs` ont suivi le code (`cargo test -p maillage --release` : 2 ; `bimedit` : 225 -> 223). Tests d'`app` qui appellent `maillage::depuis_natif`, laissés en place :
+
+| Fichier (`crates/app/src/`) | Tests | Autres dépendances | Accueil |
+|---|---|---|---|
+| `modele_tests/creation.rs` | `mur_contraintes_phases_et_sous_projets_persistes`, `dalle_creation_contour_et_relecture`, `plafond_et_toiture_en_pente`, `vues_plan_et_coupe`, `mur_creation_enregistrement_relecture` | `modele` seul | maillage (déplaçables dès maintenant, à valider) |
+| `modele_tests/elements_terre_plein.rs` | `scene_terre_plein` | `modele` seul | maillage (idem) |
+| `modele_tests/elements_site.rs` | `creation_site_sauvegarde_export_et_suppression`, `site_en_phase_existant_cotes_ngf_et_epaisseur_du_type` | `edition::{Execution, commandes}`, `echanges::export_ifc`, `formats` | echanges (lot 9) |
+| `modele_tests/volumes_solides.rs` | `conversion_ifc_rouvre_et_indices_invalides_refuses` | `edition`, `echanges::depuis_ifc` | echanges (lot 9) |
+| `edition/commandes/tests.rs` | `structures_creation_copie_rotation_suppression_et_validation` | `edition`, `echanges::{depuis_ifc, export_ifc}` (fichier entier) | commandes (lot 6) ou echanges (lot 9) selon le test |
+| `dessin/mod.rs` | `isolant_suit_le_mur_courbe_dans_la_coupe_native`, `ossature_coupee_en_plan_montants_et_travees`, `fenetre_coupee_piece_par_piece`, `angle_quelconque_sans_reste_d_onglet`, `isolant_d_un_mur_courbe_reel`, et les tests passant par le helper `scene_section` | `dessin` | moteur2d (lot 7) |
+| `rendu/selection_rectangle.rs` | `fenetre_croisement_visibilite_et_coupe` | `rendu` | moteur3d (lot 8) |
+
+#### (e) Violations restantes (lots 6 à 9)
+
+Concernant `maillage` : **aucune**.
+
+| De | Vers | Détail | Lot |
+|---|---|---|---|
+| `edition` (commandes) | collaboration | `collaboration::{concurrence, objets}` dans `verrous.rs` (§5.5 point 5) | 6 |
+| `edition` (commandes) | echanges | tests : `depuis_ifc`, `export_ifc` (`commandes/tests.rs`) | 6 |
+| `dessin/feuilles.rs` (moteur2d) | maillage | `depuis_natif` (production, sens autorisé) | 7 |
+| `collaboration` | maillage, commandes, echanges | `depuis_natif` (`cli.rs`), `edition::commandes`, `echanges::enregistrement` (sens autorisé) | 9 |
+| `pilote` | maillage, commandes, echanges, collaboration | `depuis_natif` (`cli.rs`) ; sens autorisé | 10 |
+| `config` | echanges | `echanges::enregistrement` (1 référence ; sens autorisé) | 11 |
+| `ui` | maillage | `depuis_natif`, `depuis_natif_verifie` (`collaboration.rs`, `pilotage.rs`, `bim/mod.rs`, `documents.rs`, `saisie_plan.rs`) ; sens autorisé | 11 |
+| `modele_tests`, `formats_tests` | commandes, maillage, formats, echanges, collaboration, moteur2d | tests parqués, à répartir (§5.8 d, §5.11 d, tableau (d) ci-dessus) | 6 à 9 |
+
+Relevé par `grep` des chemins `crate::<module>` entre `edition`, `dessin`, `rendu`, `echanges`, `collaboration`, `pilote`, `config` ; les références de `ui` et de `main.rs` vers les autres modules ne sont pas relevées ici (lot 11). Point ouvert du §5.10 (1) (`ifc_base` au §2 pour echanges, interface, app) : inchangé ; pour `maillage`, la dépendance directe à `ifc_base` est confirmée par le code.
