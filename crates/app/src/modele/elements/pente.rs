@@ -117,7 +117,7 @@ pub fn morceaux(contours: &[Vec<[f64; 2]>], plans: &[Plan], e: f64) -> Vec<(Plan
     let locaux: Vec<Vec<[f32; 2]>> = contours.iter().map(|c| c.iter().map(|p| [(p[0] - o.x) as f32, (p[1] - o.y) as f32]).collect()).collect();
     let decales: Vec<Plan> = plans.iter().map(|q| q.decale(e)).collect();
     let mut v = Vec::new();
-    for t in crate::noyau::texte::trianguler(locaux) {
+    for t in noyau::texte::trianguler(locaux) {
         let mut t = t.map(|p| o + DVec2::new(p[0] as f64, p[1] as f64));
         if (t[1] - t[0]).perp_dot(t[2] - t[0]) < 0.0 {
             t.swap(1, 2);

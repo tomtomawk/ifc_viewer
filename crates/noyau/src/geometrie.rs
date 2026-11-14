@@ -21,7 +21,7 @@ fn dedans(p: [f64; 2], c: &[[f64; 2]]) -> bool {
 /// Triangule des contours plans par parité ; les îlots et trous sont permis.
 /// `aire_min` est exprimée dans les unités du plan au carré. Les contours
 /// dégénérés ou non finis sont ignorés. Les contours ne doivent pas se croiser.
-pub(crate) fn trianguler_contours(mut contours: Vec<Vec<[f64; 2]>>, aire_min: f64) -> Vec<[[f64; 2]; 3]> {
+pub fn trianguler_contours(mut contours: Vec<Vec<[f64; 2]>>, aire_min: f64) -> Vec<[[f64; 2]; 3]> {
     for c in &mut contours { if c.len() > 1 && c.first() == c.last() { c.pop(); } }
     contours.retain(|c| c.len() >= 3 && c.iter().flatten().all(|v| v.is_finite()) && aire(c).abs() > aire_min);
     let n = contours.len();

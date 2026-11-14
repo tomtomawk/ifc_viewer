@@ -113,7 +113,7 @@ pub struct NavVue {
     pub fenetres: Vec<NavFenetre>,
     /// Éléments 2D de la vue (traits, régions, textes, cotes, symboles) en primitives,
     /// repère du fichier (m), pour l'export.
-    pub primitives: Vec<crate::noyau::trace2d::Primitive>,
+    pub primitives: Vec<noyau::trace2d::Primitive>,
 }
 
 /// Fenêtre de vue d'une feuille : la vue placée et le passage du modèle à la feuille.
@@ -352,7 +352,7 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
 
 /// Comme [`assemble`], les arêtes de certains objets étant données (jonctions entre
 /// éléments d'un même matériau, calculées ensemble).
-pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String, mut imposees: std::collections::HashMap<Id, crate::noyau::aretes::Aretes>) -> Scene {
+pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String, mut imposees: std::collections::HashMap<Id, noyau::aretes::Aretes>) -> Scene {
     let mut gmin = DVec3::splat(f64::MAX);
     let mut gmax = DVec3::splat(f64::MIN);
     for g in &geoms {
@@ -376,7 +376,7 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
     let mut triangles = 0;
     let annotation = |g: &ProductGeom| model.get(g.id).is_some_and(|e| &*e.ty == "IFCANNOTATION");
     // arêtes vives des objets du modèle (pas des annotations : textes, cotes)
-    let vives: Vec<crate::noyau::aretes::Aretes> = geoms
+    let vives: Vec<noyau::aretes::Aretes> = geoms
         .iter()
         .map(|g| imposees.remove(&g.id))
         .collect::<Vec<_>>()
@@ -390,7 +390,7 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
                 return Default::default();
             }
             let tris: Vec<[DVec3; 3]> = g.parts.iter().flat_map(|p| p.tris.iter().copied()).collect();
-            crate::noyau::aretes::aretes(&tris)
+            noyau::aretes::aretes(&tris)
         })
         .collect();
 
@@ -398,7 +398,7 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
     // pixel ne disparaît plus d'une image à l'autre au zoom
     let liseres: Vec<Vec<Vec<[DVec3; 2]>>> = geoms
         .par_iter()
-        .map(|g| if annotation(g) { g.parts.iter().map(|p| crate::noyau::aretes::aretes(&p.tris).vives).collect() } else { Vec::new() })
+        .map(|g| if annotation(g) { g.parts.iter().map(|p| noyau::aretes::aretes(&p.tris).vives).collect() } else { Vec::new() })
         .collect();
 
     for ((g, vives), liseres) in geoms.iter().zip(&vives).zip(&liseres) {
@@ -454,7 +454,7 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
         }
         for v in vives.vives.iter().flatten() {
             let p = (*v - origin).as_vec3();
-            aretes.push(Vertex { pos: p.to_array(), normal: [0, 0, 0, 0], color: crate::noyau::aretes::NOIR, obj });
+            aretes.push(Vertex { pos: p.to_array(), normal: [0, 0, 0, 0], color: noyau::aretes::NOIR, obj });
         }
         // arêtes douces : normale de la 1ʳᵉ facette, celle de la 2ᵉ dans la couleur ;
         // 4ᵉ octet de la normale à −127 (silhouette, voir render.rs)

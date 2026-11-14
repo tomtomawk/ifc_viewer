@@ -496,12 +496,12 @@ impl ViewerApp {
         let pieces: std::collections::HashSet<u64> = p.pieces.iter().map(|x| scene::id_natif("annotation", &x.id)).collect();
         for prim in crate::modele::documentation::annotations(p, vue) {
             let Some(id) = prim.element else { continue };
-            if pieces.contains(&id) && matches!(prim.forme, crate::noyau::trace2d::Forme::Surface(_)) { continue; }
+            if pieces.contains(&id) && matches!(prim.forme, noyau::trace2d::Forme::Surface(_)) { continue; }
             let points: Vec<glam::DVec3> = match prim.forme {
-                crate::noyau::trace2d::Forme::Polyligne { points, .. } => points,
-                crate::noyau::trace2d::Forme::Segments(s) => s.into_iter().flatten().collect(),
-                crate::noyau::trace2d::Forme::Triangles(t) => t.into_iter().flatten().collect(),
-                crate::noyau::trace2d::Forme::Surface(c) => c.into_iter().flatten().collect(),
+                noyau::trace2d::Forme::Polyligne { points, .. } => points,
+                noyau::trace2d::Forme::Segments(s) => s.into_iter().flatten().collect(),
+                noyau::trace2d::Forme::Triangles(t) => t.into_iter().flatten().collect(),
+                noyau::trace2d::Forme::Surface(c) => c.into_iter().flatten().collect(),
             };
             for p in points {
                 let c = vp * (p - scene.origin).as_vec3().extend(1.0);
@@ -675,7 +675,7 @@ impl ViewerApp {
         projet.verifier()?;
         // comparaison des objets : utile seulement en collaboration
         let texte_seul = self.collaboration.is_some() && crate::modele::collaboration::objets(&projet)? == crate::modele::collaboration::objets(&self.natif.as_ref().unwrap().0)?;
-        crate::noyau::chrono::chrono("application : vérifications", &mut t_etape);
+        noyau::chrono::chrono("application : vérifications", &mut t_etape);
         let debut_geometrie=std::time::Instant::now();
         let scene_preparee = if texte_seul && self.collaboration.is_some() { None } else { Some(scene::depuis_natif_verifie(&projet, &chemin)?) };
         if let Some(c)=&mut self.collaboration{c.mesure_geometrie_ms=debut_geometrie.elapsed().as_secs_f64()*1000.0;}
@@ -690,10 +690,10 @@ impl ViewerApp {
             return Ok(());
         }
         let scene = scene_preparee.ok_or("Scène préparée absente")?;
-        crate::noyau::chrono::chrono("application : scène", &mut t_etape);
+        noyau::chrono::chrono("application : scène", &mut t_etape);
         // l'instantané pris pour l'historique dit aussi si le projet diffère du fichier
         let modifie = if !distant && self.collaboration.is_none() { Some(self.historique.pousser_modifie(&self.natif.as_ref().unwrap().0, &projet)?) } else { None };
-        crate::noyau::chrono::chrono("application : historique", &mut t_etape);
+        noyau::chrono::chrono("application : historique", &mut t_etape);
         // Les indices de vues et d'objets peuvent changer après suppression ou annulation.
         // Retrouver leurs identifiants stables avant de remplacer la scène.
         let anciens=self.scene.as_ref();
@@ -735,14 +735,14 @@ impl ViewerApp {
             etat.camera.scene_radius = self.camera.scene_radius;
             if let Some((a, b)) = &mut etat.boite { *a += delta.as_vec3(); *b += delta.as_vec3(); }
         }
-        crate::noyau::chrono::chrono("application : vues et visibilité", &mut t_etape);
+        noyau::chrono::chrono("application : vues et visibilité", &mut t_etape);
         let debut_gpu=std::time::Instant::now();
         if let Some(r) = self.renderer.as_mut() {
             r.upload_vertices(&scene.vertices, &scene.couleurs_rendu, &scene.motifs_surface);
             r.upload_apparences(&scene.apparences);
         }
         if let Some(c)=&mut self.collaboration{c.mesure_gpu_ms=debut_gpu.elapsed().as_secs_f64()*1000.0;}
-        crate::noyau::chrono::chrono("application : envoi au GPU", &mut t_etape);
+        noyau::chrono::chrono("application : envoi au GPU", &mut t_etape);
         self.liste_niveaux = niveaux(&scene);
         // matériaux de l'arborescence native (ceux du projet), à défaut ceux de la scène
         self.liste_materiaux = match &scene.navigateur {
@@ -766,7 +766,7 @@ impl ViewerApp {
         if let Some((p, chemin)) = &self.natif {
             if let Err(e) = crate::modele::echanges::enregistrement::recuperer_plus_tard(p, chemin) { self.error = Some(e); }
         }
-        crate::noyau::chrono::chrono("application : listes et récupération", &mut t_etape);
+        noyau::chrono::chrono("application : listes et récupération", &mut t_etape);
         Ok(())
     }
 
@@ -818,7 +818,7 @@ impl ViewerApp {
                 .flat_map(|r| s.vertices[r.start as usize..(r.start + r.count) as usize].chunks_exact(3))
                 .map(|t| [0, 1, 2].map(|k| Vec3::from(t[k].pos).as_dvec3()))
                 .collect();
-            let aretes = crate::noyau::aretes::aretes(&tris).vives.into_iter().filter(|[a, b]| (b.truncate() - a.truncate()).length() > 1e-4).map(|e| e.map(|q| q.as_vec3())).collect();
+            let aretes = noyau::aretes::aretes(&tris).vives.into_iter().filter(|[a, b]| (b.truncate() - a.truncate()).length() > 1e-4).map(|e| e.map(|q| q.as_vec3())).collect();
             self.aretes_objet = Some((obj, aretes));
         }
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
@@ -878,7 +878,7 @@ impl ViewerApp {
         };
         let mut meilleur: Option<(f32, [Vec3; 2])> = None;
         for primitive in self.annotations_natives() {
-            if let crate::noyau::trace2d::Forme::Polyligne { points, fermee } = primitive.forme {
+            if let noyau::trace2d::Forme::Polyligne { points, fermee } = primitive.forme {
                 if points.len() < 2 { continue; }
                 let n = if fermee { points.len() } else { points.len() - 1 };
                 for i in 0..n {
@@ -962,7 +962,7 @@ impl ViewerApp {
         match &self.natif {
             Some((p, _)) => {
                 let mut p = p.clone();
-                p.positions_plan.push(crate::modele::PositionPlan { id: crate::noyau::uuid::uuid(), nom: nom.clone(), angle: (angle.to_degrees() as f64 * 10.0).round() / 10.0 });
+                p.positions_plan.push(crate::modele::PositionPlan { id: noyau::uuid::uuid(), nom: nom.clone(), angle: (angle.to_degrees() as f64 * 10.0).round() / 10.0 });
                 let camera = self.camera.clone();
                 if let Err(e) = self.appliquer_projet(p) {
                     self.error = Some(e);

@@ -8,7 +8,7 @@
 //! ses coordonnées sont celles du modèle (plans, coupes) ou, pour une vue de dessin et
 //! une feuille, celles de la vue (mm du papier pour une feuille).
 
-use crate::noyau::trace2d::{Forme, Primitive, Role, Style};
+use noyau::trace2d::{Forme, Primitive, Role, Style};
 use super::champs::{Obj, Record, Val};
 use super::geometrie::{FT, MotifFace};
 use super::maquette::Geometrie;

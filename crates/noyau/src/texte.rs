@@ -172,7 +172,7 @@ impl OutlinePen for Stylo {
 }
 
 /// Adaptateur des contours de glyphes en simple précision.
-pub(crate) fn trianguler(contours: Vec<Vec<[f32; 2]>>) -> Vec<[[f32; 2]; 3]> {
+pub fn trianguler(contours: Vec<Vec<[f32; 2]>>) -> Vec<[[f32; 2]; 3]> {
     let contours = contours.into_iter().map(|c| c.into_iter().map(|p| [p[0] as f64, p[1] as f64]).collect()).collect();
     super::geometrie::trianguler_contours(contours, 1e-6).into_iter()
         .map(|t| t.map(|p| [p[0] as f32, p[1] as f32])).collect()

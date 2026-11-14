@@ -164,7 +164,7 @@ impl Gabarit {
         let n = nom.to_lowercase();
         match self.materiaux.iter().find(|f| f.mots.iter().any(|m| n.contains(&m.to_lowercase()))) {
             Some(f) => Materiau {
-                id: crate::noyau::uuid::uuid(),
+                id: noyau::uuid::uuid(),
                 nom: nom.into(),
                 couleur: f.couleur,
                 motif: f.motif.clone(),
@@ -181,7 +181,7 @@ impl Gabarit {
                 let h = crate::modele::identifiant("materiau", nom);
                 let v = u32::from_str_radix(&h[..6], 16).unwrap_or(0);
                 let couleur = [150 + (v & 0x5f) as u8, 150 + ((v >> 8) & 0x5f) as u8, 150 + ((v >> 16) & 0x5f) as u8];
-                Materiau { id: crate::noyau::uuid::uuid(), nom: nom.into(), couleur, motif: MotifCoupe::Diagonales, ..Default::default() }
+                Materiau { id: noyau::uuid::uuid(), nom: nom.into(), couleur, motif: MotifCoupe::Diagonales, ..Default::default() }
             }
         }
     }

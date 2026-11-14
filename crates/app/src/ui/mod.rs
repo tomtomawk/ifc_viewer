@@ -59,7 +59,7 @@ use crate::pilote::{self, Requete};
 use crate::rendu::gpu::{FrameParams, ParamsPasse, Renderer, StyleVisuel};
 use crate::formats::rvt::{self, RvtInfo};
 use crate::rendu::scene::{self, Scene};
-use crate::noyau::trace2d;
+use noyau::trace2d;
 use crate::formats::ifc::step::Id;
 use eframe::egui::{self, Align, Color32, PointerButton, RichText, Sense};
 use glam::{DMat4, Mat4, Vec2, Vec3, Vec4};
@@ -1029,7 +1029,7 @@ impl eframe::App for ViewerApp {
         self.poll_loading();
         let mut t_image = std::time::Instant::now();
         self.piloter(&ctx);
-        crate::noyau::chrono::chrono_lent("image : commandes du pilote", &mut t_image);
+        noyau::chrono::chrono_lent("image : commandes du pilote", &mut t_image);
 
         let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
         if let Some(p) = dropped.into_iter().next() {
@@ -1039,7 +1039,7 @@ impl eframe::App for ViewerApp {
         self.clavier_raccourcis(&ctx);
 
         egui::Panel::top("top").show(ui, |ui| self.top_bar(ui));
-        crate::noyau::chrono::chrono_lent("image : ruban", &mut t_image);
+        noyau::chrono::chrono_lent("image : ruban", &mut t_image);
         self.fenetre_garde_corps(&ctx);
         self.fenetre_gestion_contextes(&ctx);
         self.fenetre_gabarit_vue(&ctx);
@@ -1117,7 +1117,7 @@ impl eframe::App for ViewerApp {
             self.fenetres_volets(&ctx);
             self.fenetre_visibilite(&ctx);
         }
-        crate::noyau::chrono::chrono_lent("image : panneaux et vue", &mut t_image);
+        noyau::chrono::chrono_lent("image : panneaux et vue", &mut t_image);
         // vue ou feuille glissée dans l'arborescence : son nom suit le curseur
         let glissee = egui::DragAndDrop::payload::<feuilles::VueGlissee>(&ctx)
             .and_then(|g| self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|v| v.id == g.0)).map(|v| format!("Placer : {}", v.nom)))
@@ -1144,7 +1144,7 @@ impl eframe::App for ViewerApp {
         self.confirmation_modifications(&ctx);
         self.apercu_ancrage(&ctx);
         self.bords_fenetre(&ctx);
-        crate::noyau::chrono::chrono_lent("image : fin", &mut t_image);
+        noyau::chrono::chrono_lent("image : fin", &mut t_image);
     }
 
     /// Appelé même fenêtre réduite : relève les commandes du pilote et demande alors le

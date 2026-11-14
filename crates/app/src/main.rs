@@ -4,7 +4,6 @@ mod config;
 mod dessin;
 mod formats;
 mod modele;
-mod noyau;
 mod pilote;
 mod rendu;
 mod ui;

@@ -9,8 +9,8 @@ mod tests;
 pub mod texte;
 
 use super::Projet;
-use crate::noyau::hash::{empreinte, encoder, hash};
-use crate::noyau::uuid::uuid;
+use noyau::hash::{empreinte, encoder, hash};
+use noyau::uuid::uuid;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};

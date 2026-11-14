@@ -296,7 +296,7 @@ fn famille_cartouche_partagee_est_enregistree_et_utilisee() {
     let mut g = f.clone();
     g.id = "g".into();
     p.feuilles = vec![f.clone(), g.clone()];
-    let famille = FamilleCartouche { document_famille: None, id: crate::noyau::uuid::uuid(), nom: "Agence".into(), largeur: 80.0, hauteur: 25.0, traits: vec![[[0.0, 0.0], [80.0, 25.0]]], textes: vec![TexteCartouche { contenu: "{projet} - {numero}".into(), position: [2.0, 2.0], hauteur: 3.0 }], formes: Vec::new() };
+    let famille = FamilleCartouche { document_famille: None, id: noyau::uuid::uuid(), nom: "Agence".into(), largeur: 80.0, hauteur: 25.0, traits: vec![[[0.0, 0.0], [80.0, 25.0]]], textes: vec![TexteCartouche { contenu: "{projet} - {numero}".into(), position: [2.0, 2.0], hauteur: 3.0 }], formes: Vec::new() };
     p.familles_cartouches.push(famille);
     p.cartouches_feuilles.insert(f.id.clone(), "Agence".into());
     p.cartouches_feuilles.insert(g.id.clone(), "Agence".into());

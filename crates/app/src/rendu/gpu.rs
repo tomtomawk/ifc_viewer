@@ -6,7 +6,7 @@ use eframe::egui;
 use eframe::egui_wgpu;
 use eframe::wgpu::{self, util::DeviceExt};
 use glam::{Mat4, Vec3, Vec4};
-use crate::noyau::constantes::MAX_APPARENCES;
+use noyau::constantes::MAX_APPARENCES;
 use std::sync::Arc;
 
 /// Couches d'images des apparences et leur côté (pixels, mipmaps jusqu'à 1).

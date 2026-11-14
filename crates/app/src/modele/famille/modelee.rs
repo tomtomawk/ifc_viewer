@@ -195,7 +195,7 @@ impl PlanConstruction {
         if !origine.is_finite() || !direction.is_finite() || direction.length() < 0.1 {
             return Err("Choisir deux points distincts pour le plan de construction.".into());
         }
-        Ok(Self { id: crate::noyau::uuid::uuid(), reference: None, nom, origine: origine.to_array(), horizontal: direction.normalize().to_array(), vertical: vue.point(0.0, 0.0, 1.0).to_array() })
+        Ok(Self { id: noyau::uuid::uuid(), reference: None, nom, origine: origine.to_array(), horizontal: direction.normalize().to_array(), vertical: vue.point(0.0, 0.0, 1.0).to_array() })
     }
 
     pub fn valider(&self) -> Result<(), String> {

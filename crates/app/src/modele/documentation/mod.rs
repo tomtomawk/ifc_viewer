@@ -11,7 +11,7 @@ pub(crate) use plans::{fond_plan, limite_haute_plan, pointilles_plage_haute};
 #[cfg(test)]
 mod tests;
 pub use super::*;
-use crate::noyau::trace2d::{Dessin, Forme, Primitive, Role, Style};
+use noyau::trace2d::{Dessin, Forme, Primitive, Role, Style};
 use glam::{DVec2, DVec3};
 use std::collections::BTreeMap;
 
@@ -218,8 +218,8 @@ impl AnnotationForme {
     }
 
     /// Forme du dessin 2D (ligne, polyligne, spline, cercle, arc), None pour les autres.
-    pub fn forme_2d(&self) -> Option<crate::noyau::forme2d::Forme2D> {
-        use crate::noyau::forme2d::Forme2D as F;
+    pub fn forme_2d(&self) -> Option<noyau::forme2d::Forme2D> {
+        use noyau::forme2d::Forme2D as F;
         let v = |p: &[f64; 2]| DVec2::from_array(*p);
         Some(match self {
             Self::Ligne { debut, fin } => F::Ligne([v(debut), v(fin)]),
@@ -232,8 +232,8 @@ impl AnnotationForme {
     }
 
     /// Annotation d'une forme du dessin 2D.
-    pub fn depuis_forme_2d(f: &crate::noyau::forme2d::Forme2D) -> AnnotationForme {
-        use crate::noyau::forme2d::Forme2D as F;
+    pub fn depuis_forme_2d(f: &noyau::forme2d::Forme2D) -> AnnotationForme {
+        use noyau::forme2d::Forme2D as F;
         let a = |p: &DVec2| p.to_array();
         match f {
             F::Ligne([d, e]) => Self::Ligne { debut: a(d), fin: a(e) },
@@ -252,7 +252,7 @@ impl AnnotationForme {
             return Some(points.clone());
         }
         let sommets: Vec<DVec2> = points.iter().map(|p| DVec2::from_array(*p)).collect();
-        let mut l = crate::noyau::forme2d::developper(&sommets, *fermee, courbures);
+        let mut l = noyau::forme2d::developper(&sommets, *fermee, courbures);
         if *fermee && l.len() > 1 {
             l.pop();
         }
@@ -299,7 +299,7 @@ fn primitives_remplissage(p: &Projet, r: &RemplissageContour, contour: &[[f64; 2
         RemplissageContour::Motif { motif } => (motif.clone(), RemplissageContour::ENCRE, None),
     };
     let contours = vec![contour.iter().map(|q| [q[0] as f32, q[1] as f32]).collect()];
-    let tris: Vec<[[f64; 2]; 3]> = crate::noyau::texte::trianguler(contours).iter().map(|t| t.map(|q| [q[0] as f64, q[1] as f64])).collect();
+    let tris: Vec<[[f64; 2]; 3]> = noyau::texte::trianguler(contours).iter().map(|t| t.map(|q| [q[0] as f64, q[1] as f64])).collect();
     let couleur = |c: [u8; 3]| [c[0], c[1], c[2], 255];
     let aplat = |c: [u8; 3]| Primitive {
         forme: Forme::Triangles(tris.iter().map(|t| t.map(|q| pt(DVec2::from_array(q)))).collect()),
@@ -575,7 +575,7 @@ pub fn primitives_pieces(p: &Projet, v: &Vue) -> Vec<Primitive> {
             let l = FamilleEtiquette::remplir(&t.contenu, p, x);
             if l.trim().is_empty() { continue; }
             let taille = t.hauteur * papier;
-            let largeur = crate::noyau::texte::ligne(&l, "Arial", taille, false).largeur;
+            let largeur = noyau::texte::ligne(&l, "Arial", taille, false).largeur;
             let pos = centre + (u * t.position[0] + h * t.position[1]) * papier - u * largeur / 2.0;
             let mut prim = texte(&l, pos, u, h, taille, couleur);
             prim.element = element;
@@ -605,7 +605,7 @@ pub fn primitives_pieces(p: &Projet, v: &Vue) -> Vec<Primitive> {
     out
 }
 fn texte(s: &str, pos: DVec3, u: DVec3, v: DVec3, hauteur: f64, couleur: [u8; 4]) -> Primitive {
-    let t = crate::noyau::texte::ligne(s, "Arial", hauteur, false);
+    let t = noyau::texte::ligne(s, "Arial", hauteur, false);
     Primitive {
         forme: Forme::Triangles(
             t.triangles
@@ -653,7 +653,7 @@ fn point_cote(p: &Projet, v: &Vue, point: &PointCote) -> Option<DVec2> {
 fn primitives_polyligne(p: &Projet, points: &[[f64; 2]], fermee: bool, courbures: &[f64], traits: &[String], echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
     let pts: Vec<DVec2> = points.iter().map(|q| DVec2::from_array(*q)).collect();
     // chaque segment : ses deux sommets, ou les points de son arc
-    let segments: Vec<Vec<DVec2>> = crate::noyau::forme2d::segments_polyligne(&pts, fermee, courbures).into_iter().map(|(a, b, k)| crate::noyau::forme2d::points_segment(a, b, k)).collect();
+    let segments: Vec<Vec<DVec2>> = noyau::forme2d::segments_polyligne(&pts, fermee, courbures).into_iter().map(|(a, b, k)| noyau::forme2d::points_segment(a, b, k)).collect();
     let mut out = Vec::new();
     let mut k = 0;
     while k < segments.len() {
@@ -747,7 +747,7 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
                         out.extend(traits.iter().map(|[x, y]| ligne(pt(*x), pt(*y))));
                         for (centre, dir, s) in textes {
                             let (du, dv) = (u * dir.x + h * dir.y, u * -dir.y + h * dir.x);
-                            let l = crate::noyau::texte::largeur(&s, "Arial", taille, false);
+                            let l = noyau::texte::largeur(&s, "Arial", taille, false);
                             out.push(texte(&s, pt(centre) - du * (l / 2.0), du, dv, taille, [30, 30, 30, 255]));
                         }
                     }
@@ -1057,7 +1057,7 @@ pub fn geometrie_altimetrie(point: DVec2, repere: DVec2, altitude_mm: f64, decim
     let (g, dr, h) = (point + DVec2::new(-t * 0.6, t), point + DVec2::new(t * 0.6, t), point);
     let mut traits = vec![[g, dr], [dr, h], [h, g]];
     let texte = texte_altitude(altitude_mm, decimales);
-    let largeur = crate::noyau::texte::largeur(&texte, "Arial", taille, false);
+    let largeur = noyau::texte::largeur(&texte, "Arial", taille, false);
     let sens = if repere.x >= point.x { 1.0 } else { -1.0 };
     if repere.distance(point) > 1e-6 { traits.push([point, repere]); }
     traits.push([repere, repere + DVec2::X * sens * largeur]);

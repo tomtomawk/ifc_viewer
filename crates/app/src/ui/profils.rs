@@ -55,7 +55,7 @@ impl ViewerApp {
             return Err("Un profil porte déjà ce nom. Choisissez un nom distinct.".into());
         }
         if copie || original.is_none() {
-            profil.id = crate::noyau::uuid::uuid();
+            profil.id = noyau::uuid::uuid();
             projet.profils.push(profil.clone());
         } else {
             let p = projet.profils.iter_mut().find(|p| Some(p.id.as_str()) == original).ok_or("Profil introuvable dans le projet.")?;

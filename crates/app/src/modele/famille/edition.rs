@@ -8,7 +8,7 @@ impl Projet {
         let mut q = self.clone();
         let source = q.types_ouvertures.iter().find(|t| t.id == id).cloned().ok_or("Type d'ouverture absent.")?;
         let mut t = source.clone();
-        t.id = crate::noyau::uuid::uuid();
+        t.id = noyau::uuid::uuid();
         t.famille_nom = Some(source.nom_famille().to_string());
         t.origine = None;
         t.nom = q.nom_type_libre(base, None);
@@ -74,7 +74,7 @@ impl Projet {
             t.famille = None;
             id.to_string()
         } else {
-            let id = crate::noyau::uuid::uuid();
+            let id = noyau::uuid::uuid();
             let nom = q.nom_type_libre(f.nom.trim(), None);
             q.types_ouvertures.push(TypeOuverture {
                 id: id.clone(),

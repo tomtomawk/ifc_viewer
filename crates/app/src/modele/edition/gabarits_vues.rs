@@ -48,7 +48,7 @@ impl Projet {
     /// Crée ou modifie un gabarit et actualise toutes ses vues en une opération.
     pub fn enregistrer_gabarit_vue(&mut self, mut g: GabaritVue) -> Result<String, String> {
         g.nom = g.nom.trim().into();
-        if g.id.is_empty() { g.id = crate::noyau::uuid::uuid(); }
+        if g.id.is_empty() { g.id = noyau::uuid::uuid(); }
         self.valider_gabarit_vue(&g)?;
         let mut copie = self.clone();
         if let Some(existant) = copie.gabarits_vues.iter_mut().find(|x| x.id == g.id) { *existant = g.clone(); }

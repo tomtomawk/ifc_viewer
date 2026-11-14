@@ -8,7 +8,7 @@ impl Default for FamilleCartouche {
     fn default() -> Self {
         let mut cartouche = Self {
             document_famille: None,
-            id: crate::noyau::uuid::uuid(),
+            id: noyau::uuid::uuid(),
             nom: NOM_CARTOUCHE_STANDARD.into(), largeur: TAILLE_CARTOUCHE_STANDARD[0], hauteur: TAILLE_CARTOUCHE_STANDARD[1],
             traits: vec![[[0.0,0.0],[180.0,0.0]], [[180.0,0.0],[180.0,40.0]], [[180.0,40.0],[0.0,40.0]], [[0.0,40.0],[0.0,0.0]], [[140.0,0.0],[140.0,40.0]], [[0.0,14.0],[140.0,14.0]], [[0.0,30.0],[140.0,30.0]]],
             textes: vec![
@@ -92,7 +92,7 @@ pub fn forme_cartouche(p: &Projet, forme: &AnnotationForme) -> Vec<Primitive> {
         let mut out: Vec<_> = traits.iter().map(|[x, y]| ligne(pt(*x), pt(*y))).collect();
         out.extend(textes.into_iter().map(|(pos, dir, s)| {
             let (du, dv) = (DVec3::new(dir.x, dir.y, 0.0), DVec3::new(-dir.y, dir.x, 0.0));
-            let l = crate::noyau::texte::largeur(&s, "Arial", 0.0025, false);
+            let l = noyau::texte::largeur(&s, "Arial", 0.0025, false);
             texte(&s, pt(pos) - du * (l / 2.0), du, dv, 0.0025, [20, 20, 20, 255])
         }));
         out
@@ -182,7 +182,7 @@ pub fn nomenclature_placee(p: &Projet, n: &NomenclaturePlacee) -> Result<(Vec<Pr
     let lignes = tableau(p, nom)?;
     // mm du papier : texte 2,5, en-tête et titre plus grands
     let (texte_h, ligne_h, marge, titre_h) = (2.5, 6.0, 2.0, 3.5);
-    let largeur = |s: &str, h: f64| crate::noyau::texte::ligne(s, "Arial", h, false).largeur;
+    let largeur = |s: &str, h: f64| noyau::texte::ligne(s, "Arial", h, false).largeur;
     let ncol = lignes.iter().map(Vec::len).max().unwrap_or(0);
     let mut colonnes = vec![12.0_f64; ncol];
     for l in &lignes {

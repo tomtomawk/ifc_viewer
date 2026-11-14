@@ -43,7 +43,7 @@ pub(crate) fn pointilles_plage_haute(mut prims: Vec<Primitive>, echelle: f64, co
     let z = coupe - 0.0005;
     let mut vus=std::collections::HashSet::new();
     for p in &mut prims {
-        let crate::noyau::trace2d::Forme::Segments(segments)=&p.forme else{continue};
+        let noyau::trace2d::Forme::Segments(segments)=&p.forme else{continue};
         let mut pointilles=Vec::new();
         for segment in segments {
             let (mut a,mut b)=(glam::DVec2::new(segment[0].x,segment[0].y),glam::DVec2::new(segment[1].x,segment[1].y));
@@ -66,7 +66,7 @@ pub(crate) fn pointilles_plage_haute(mut prims: Vec<Primitive>, echelle: f64, co
                 k+=1.0;
             }
         }
-        p.forme=crate::noyau::trace2d::Forme::Segments(pointilles);
+        p.forme=noyau::trace2d::Forme::Segments(pointilles);
     }
     prims
 }

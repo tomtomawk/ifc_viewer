@@ -41,7 +41,7 @@ pub struct Bilan {
 pub fn ecrire_atomique(chemin: &Path, contenu: &[u8]) -> Result<(), String> {
     use std::io::Write;
     let nom = chemin.file_name().ok_or("Nom du fichier de destination invalide.")?.to_string_lossy();
-    let temporaire = chemin.with_file_name(format!(".{nom}.{}.tmp", crate::noyau::uuid::uuid()));
+    let temporaire = chemin.with_file_name(format!(".{nom}.{}.tmp", noyau::uuid::uuid()));
     let mut fichier = std::fs::OpenOptions::new().write(true).create_new(true).open(&temporaire).map_err(|e| format!("Création impossible de {} : {e}", temporaire.display()))?;
     let resultat = fichier.write_all(contenu).and_then(|_| fichier.sync_all());
     drop(fichier);

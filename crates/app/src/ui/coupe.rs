@@ -29,7 +29,7 @@ impl ViewerApp {
     }
 
     /// Trait atténué d'un autre plan, projeté derrière la coupe courante.
-    pub(super) fn primitives_fond_plan(&self)->Vec<crate::noyau::trace2d::Primitive> {
+    pub(super) fn primitives_fond_plan(&self)->Vec<noyau::trace2d::Primitive> {
         let (Some(s), Some((projet, _)), Some(id), Some(plan)) = (&self.scene, &self.natif, self.vue_native_id(), self.plan_coupe()) else { return Vec::new() };
         let Some(vue) = projet.vues.iter().find(|v| v.id == id) else { return Vec::new() };
         crate::modele::documentation::fond_plan(projet, s, vue, plan, self.echelle)
@@ -37,7 +37,7 @@ impl ViewerApp {
 
     /// Éléments du niveau courant entièrement au-dessus de la coupe et sous la limite haute,
     /// en pointillés.
-    pub(super) fn primitives_au_dessus_plan(&self)->Vec<crate::noyau::trace2d::Primitive> {
+    pub(super) fn primitives_au_dessus_plan(&self)->Vec<noyau::trace2d::Primitive> {
         let Some(plan) = self.plan_coupe() else { return Vec::new(); };
         crate::modele::documentation::pointilles_plage_haute(self.aretes_au_dessus_plan(), self.echelle, plan.w as f64)
     }
@@ -50,7 +50,7 @@ impl ViewerApp {
         let ecran=|p:glam::DVec3|{let c=vp*p.as_vec3().extend(1.0);(c.w>0.0).then(||egui::pos2(rect.left()+(c.x/c.w+1.0)*0.5*rect.width(),rect.top()+(1.0-c.y/c.w)*0.5*rect.height()))};
         let mut meilleur:Option<(f32,u32)>=None;
         for p in self.aretes_au_dessus_plan() {
-            let (Some(e),crate::noyau::trace2d::Forme::Segments(segments))=(p.element,&p.forme) else{continue};
+            let (Some(e),noyau::trace2d::Forme::Segments(segments))=(p.element,&p.forme) else{continue};
             let Some(&obj)=s.object_of.get(&e) else{continue};
             for seg in segments {
                 let (Some(a),Some(b))=(ecran(seg[0]),ecran(seg[1])) else{continue};
@@ -63,7 +63,7 @@ impl ViewerApp {
     }
 
     /// Arêtes vues des éléments de la plage haute, sans pointillés.
-    pub(super) fn aretes_au_dessus_plan(&self)->Vec<crate::noyau::trace2d::Primitive> {
+    pub(super) fn aretes_au_dessus_plan(&self)->Vec<noyau::trace2d::Primitive> {
         let (Some(s),Some((visible,limite)))=(&self.scene,self.masque_plage_haute()) else{return Vec::new()};
         let f=self.camera.forward().as_dvec3().normalize();
         let droite=f.cross(self.camera.up().as_dvec3()).normalize();
@@ -113,14 +113,14 @@ impl ViewerApp {
             }
             _ => Default::default(),
         };
-        crate::noyau::chrono::chrono_lent("coupe : poché et contours", &mut t_etape);
+        noyau::chrono::chrono_lent("coupe : poché et contours", &mut t_etape);
         if let Some(s)=&self.scene {
             let mut prims=self.primitives_fond_plan();
             prims.extend(self.primitives_au_dessus_plan());
             let (t,l)=dessin::sommets(s,&prims,glam::DVec3::Z,self.echelle,true);
             tris.extend(t);traits.extend(l);
         }
-        crate::noyau::chrono::chrono_lent("coupe : fond de plan et éléments au-dessus", &mut t_etape);
+        noyau::chrono::chrono_lent("coupe : fond de plan et éléments au-dessus", &mut t_etape);
         if let (Some(s), Some((a, b))) = (&self.scene, self.boite_appliquee()) {
             let poche = (self.style == StyleVisuel::Graphique).then_some(self.poche);
             let (t, l) = dessin::sommets_boite(s, &self.visible, a, b, self.echelle, poche, self.style == StyleVisuel::Realiste, self.traits_fins);
@@ -132,11 +132,11 @@ impl ViewerApp {
             let (t,l)=dessin::sommets(s,&prims,-self.camera.forward().as_dvec3(),self.echelle,self.traits_fins);
             tris.extend(t); traits.extend(l);
         }
-        crate::noyau::chrono::chrono_lent("coupe : boîte et annotations", &mut t_etape);
+        noyau::chrono::chrono_lent("coupe : boîte et annotations", &mut t_etape);
         if let Some(r) = self.renderer.as_mut() {
             r.upload_coupe(&tris, &traits);
         }
-        crate::noyau::chrono::chrono_lent("coupe : envoi au GPU", &mut t_etape);
+        noyau::chrono::chrono_lent("coupe : envoi au GPU", &mut t_etape);
     }
 
     /// Dessin vectoriel de la vue (orthographique) : coupe, arêtes vues sans les parties

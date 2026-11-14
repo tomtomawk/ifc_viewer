@@ -224,7 +224,7 @@ impl ViewerApp {
             .find(|v| scene::numero_vue(&v.id) == num)
             .map(|v| v.id.clone())
     }
-    pub(in crate::ui) fn annotations_natives(&self) -> Vec<crate::noyau::trace2d::Primitive> {
+    pub(in crate::ui) fn annotations_natives(&self) -> Vec<noyau::trace2d::Primitive> {
         let Some(id) = self.vue_native_id() else {
             return Vec::new();
         };

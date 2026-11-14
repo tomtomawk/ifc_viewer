@@ -10,11 +10,11 @@ pub use motifs::*;
 pub mod dao;
 use crate::formats::rvt::vues::{GrilleMotif, Motif, hachures_plan};
 use crate::rendu::scene::{Scene, Vertex};
-use crate::noyau::trace2d::{Forme, Primitive, Role, Style};
+use noyau::trace2d::{Forme, Primitive, Role, Style};
 use glam::{DVec3, Vec3, Vec4};
 use rayon::prelude::*;
 use std::collections::HashMap;
-use crate::noyau::aretes::{NOIR, PAS, Polyligne, TRAIT_FORT_MM, aretes, chainer};
+use noyau::aretes::{NOIR, PAS, Polyligne, TRAIT_FORT_MM, aretes, chainer};
 
 /// Remplissage des parties coupées.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -194,7 +194,7 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
             }
             if let Some(c) = hachure {
                 let contours: Vec<Vec<[f32; 2]>> = boucles.iter().map(|b| b.iter().map(|p| [p[0] as f32, p[1] as f32]).collect()).collect();
-                let t2: Vec<[[f64; 2]; 3]> = crate::noyau::texte::trianguler(contours).iter().map(|t| t.map(|p| [p[0] as f64, p[1] as f64])).collect();
+                let t2: Vec<[[f64; 2]; 3]> = noyau::texte::trianguler(contours).iter().map(|t| t.map(|p| [p[0] as f64, p[1] as f64])).collect();
                 let s: Vec<[DVec3; 2]> = hachures_plan(&t2, &motif, 1.0, 20_000).into_iter().map(|s| s.map(en_3d)).collect();
                 if !s.is_empty() {
                     prims.push(primitive(Forme::Segments(s), c, 0.0, Role::Hachure));
@@ -435,10 +435,10 @@ fn fusionner_materiaux(scene: &Scene, mut prims: Vec<Primitive>) -> Vec<Primitiv
 pub fn sommets(scene: &Scene, prims: &[Primitive], normale: DVec3, echelle: f64, fins: bool) -> (Vec<Vertex>, Vec<Vertex>) {
     let largeur = TRAIT_FORT_MM * echelle / 1000.0;
     let (mut tris, mut traits) = (Vec::new(), Vec::new());
-    let raccords = (!fins).then(|| crate::noyau::trace2d::Raccords::new(prims, echelle));
+    let raccords = (!fins).then(|| noyau::trace2d::Raccords::new(prims, echelle));
     for p in prims {
         let obj = p.element.and_then(|e| scene.object_of.get(&e).copied()).unwrap_or(u32::MAX);
-        let decal = -normale * if p.role == crate::noyau::trace2d::Role::Coupe { (0.4 * largeur).min(0.004) } else { (0.2 * largeur).min(0.002) };
+        let decal = -normale * if p.role == noyau::trace2d::Role::Coupe { (0.4 * largeur).min(0.004) } else { (0.2 * largeur).min(0.002) };
         let sommet = |q: DVec3| Vertex { pos: (q + decal).as_vec3().to_array(), normal: [0, 0, 0, 127], color: p.style.couleur, obj };
         let m = maillage(p, normale, echelle, fins, raccords.as_ref());
         tris.extend(m.triangles.iter().flatten().map(|q| sommet(*q)));
@@ -454,7 +454,7 @@ pub fn sommets(scene: &Scene, prims: &[Primitive], normale: DVec3, echelle: f64,
 
 /// Maillage d'une primitive ; traits fins : ses traits épais ramenés à un pixel ; sinon
 /// bouts raccordés aux traits rejoints.
-fn maillage(p: &Primitive, normale: DVec3, echelle: f64, fins: bool, raccords: Option<&crate::noyau::trace2d::Raccords>) -> crate::noyau::trace2d::Maillage {
+fn maillage(p: &Primitive, normale: DVec3, echelle: f64, fins: bool, raccords: Option<&noyau::trace2d::Raccords>) -> noyau::trace2d::Maillage {
     if fins && p.style.epaisseur > 0.0 {
         let mut fin = p.clone();
         fin.style.epaisseur = 0.0;
@@ -475,7 +475,7 @@ pub fn sommets_boite(scene: &Scene, visible: &[bool], a: Vec3, b: Vec3, echelle:
     for plan in plans {
         let normale = plan.truncate().as_dvec3();
         let prims = coupe(scene, visible, plan, echelle, poche.unwrap_or(Poche::Vide));
-        let raccords = (!fins).then(|| crate::noyau::trace2d::Raccords::new(&prims, echelle));
+        let raccords = (!fins).then(|| noyau::trace2d::Raccords::new(&prims, echelle));
         for mut p in prims {
             let objet = p.element.and_then(|id| scene.object_of.get(&id).copied()).unwrap_or(u32::MAX);
             if poche.is_none() && p.role == Role::Poche {
@@ -707,7 +707,7 @@ pub fn cadrer_primitives(primitives: Vec<Primitive>, plans: &[Vec4], normale: DV
                 Forme::Segments(s)
             }
             Forme::Triangles(t) => Forme::Triangles(faces(t)),
-            Forme::Surface(c) => Forme::Triangles(faces(crate::noyau::trace2d::trianguler(&c, normale))),
+            Forme::Surface(c) => Forme::Triangles(faces(noyau::trace2d::trianguler(&c, normale))),
         };
         match &pr.forme {
             Forme::Segments(s) if s.is_empty() => None,
@@ -799,7 +799,7 @@ mod tests {
     fn isolant_en_l_garde_l_epaisseur_de_la_couche() {
         // couche de 100 retournée en tableau sur 400 : le motif reste à l'échelle de 100.
         let l: Vec<[f32; 2]> = vec![[0.0, 0.0], [3000.0, 0.0], [3000.0, 100.0], [100.0, 100.0], [100.0, 500.0], [0.0, 500.0]];
-        let t: Vec<[[f64; 2]; 3]> = crate::noyau::texte::trianguler(vec![l]).iter().map(|t| t.map(|p| [p[0] as f64, p[1] as f64])).collect();
+        let t: Vec<[[f64; 2]; 3]> = noyau::texte::trianguler(vec![l]).iter().map(|t| t.map(|p| [p[0] as f64, p[1] as f64])).collect();
         assert_eq!(super::composantes(&t).len(), 1);
         let s = super::ligne_isolation(&t);
         assert!(!s.is_empty());
@@ -944,7 +944,7 @@ mod tests {
         assert!(s.is_empty());
     }
     use super::*;
-    use crate::noyau::aretes::aretes_jointes;
+    use noyau::aretes::aretes_jointes;
 
     /// Deux pavés du même matériau bout à bout : la jonction ne trace aucune arête ; en
     /// équerre, l'angle extérieur reste.
@@ -1176,8 +1176,8 @@ mod mesure {
             let visible = vec![true; s.objects.len()];
             let prims = crate::dessin::coupe(&s, &visible, glam::Vec4::new(0.0, 0.0, 1.0, -1.0), 100.0, crate::dessin::Poche::Hachure);
             let mut segs: Vec<[glam::DVec3; 2]> = Vec::new();
-            for pr in prims.iter().filter(|p| p.role == crate::noyau::trace2d::Role::Coupe) {
-                if let crate::noyau::trace2d::Forme::Segments(v) = &pr.forme { segs.extend(v.iter().copied()); }
+            for pr in prims.iter().filter(|p| p.role == noyau::trace2d::Role::Coupe) {
+                if let noyau::trace2d::Forme::Segments(v) = &pr.forme { segs.extend(v.iter().copied()); }
             }
             // contour d'un angle plein : 6 côtés (18,4 m), sans reste du trait d'onglet
             let total: f64 = segs.iter().map(|s| s[0].distance(s[1])).sum();

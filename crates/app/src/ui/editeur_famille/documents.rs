@@ -454,7 +454,7 @@ impl ViewerApp {
             let p = &self.natif.as_ref().ok_or("Aucun projet natif.")?.0;
             let id = if nouveau { None } else { ed.type_id.clone() };
             let original = id.as_ref().and_then(|id| p.familles_cartouches.iter().find(|c| &c.id == id)).map_or_else(|| if id.is_some() && ed.nom == crate::modele::documentation::NOM_CARTOUCHE_STANDARD { ed.nom.clone() } else { String::new() }, |c| c.nom.clone());
-            let id = id.unwrap_or_else(crate::noyau::uuid::uuid);
+            let id = id.unwrap_or_else(noyau::uuid::uuid);
             let fichier = ed.fichier();
             let cartouche = FamilleCartouche { id: id.clone(), nom: ed.nom.trim().into(), largeur: ed.largeur, hauteur: ed.hauteur, traits: Vec::new(), textes: Vec::new(), formes: Vec::new(), document_famille: Some(Box::new(fichier)) };
             let feuille = ed.cible_feuille.clone();
@@ -859,7 +859,7 @@ impl ViewerApp {
                 profil.id
             }
             C::Cartouche => {
-                let id = crate::noyau::uuid::uuid();
+                let id = noyau::uuid::uuid();
                 let cartouche = crate::modele::documentation::FamilleCartouche { id: id.clone(), nom: f.nom.clone(), largeur: f.largeur, hauteur: f.hauteur, traits: Vec::new(), textes: Vec::new(), formes: Vec::new(), document_famille: Some(Box::new(f.clone())) };
                 self.enregistrer_cartouche(&cartouche, None, "")?;
                 id
@@ -874,7 +874,7 @@ impl ViewerApp {
             }
             C::Porte | C::Fenetre => {
                 let mut projet = self.natif.as_ref().unwrap().0.clone();
-                let id = crate::noyau::uuid::uuid();
+                let id = noyau::uuid::uuid();
                 projet.types_ouvertures.push(crate::modele::TypeOuverture { id: id.clone(), nom: f.nom.clone(), genre: f.famille.genre, largeur: f.largeur, hauteur: f.hauteur, famille: None, modele: Some(f.famille.clone()), origine: None, famille_nom: None });
                 self.appliquer_projet(projet)?;
                 id

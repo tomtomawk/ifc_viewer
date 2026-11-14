@@ -197,7 +197,7 @@ pub enum Commande {
     },
 }
 fn identite(_p: &Projet, prefixe: &str) -> String {
-    format!("{prefixe}-{}", crate::noyau::uuid::uuid())
+    format!("{prefixe}-{}", noyau::uuid::uuid())
 }
 
 impl Projet {
@@ -671,7 +671,7 @@ impl Projet {
                     let mut m = anciens.get(k).unwrap_or(premier).clone();
                     m.id = anciens
                         .get(k)
-                        .map_or_else(crate::noyau::uuid::uuid, |m| m.id.clone());
+                        .map_or_else(noyau::uuid::uuid, |m| m.id.clone());
                     if k >= anciens.len() && self.identifiants().contains(&m.id) {
                         return Err("Identifiant de couche déjà utilisé.".into());
                     }

@@ -252,12 +252,12 @@ fn axes(n: DVec3) -> (DVec3, DVec3) {
 }
 
 /// Triangulation de contours plans (pair-impair) dans le plan de normale `n`.
-pub(crate) fn trianguler(contours: &[Vec<DVec3>], n: DVec3) -> Vec<[DVec3; 3]> {
+pub fn trianguler(contours: &[Vec<DVec3>], n: DVec3) -> Vec<[DVec3; 3]> {
     let Some(&p0) = contours.iter().flatten().next() else { return Vec::new() };
     let (x, y) = axes(n);
     let plans: Vec<Vec<[f64; 2]>> = contours.iter().map(|c| c.iter().map(|p| [(*p - p0).dot(x), (*p - p0).dot(y)]).collect()).collect();
     let profondeur = |p: [f64; 2]| p0 + x * p[0] + y * p[1];
-    crate::noyau::geometrie::trianguler_contours(plans, 0.0).into_iter().map(|t| t.map(profondeur)).collect()
+    crate::geometrie::trianguler_contours(plans, 0.0).into_iter().map(|t| t.map(profondeur)).collect()
 }
 
 /// Dessin : primitives d'un plan de vue, orienté par `droite` et `haut` (vecteurs

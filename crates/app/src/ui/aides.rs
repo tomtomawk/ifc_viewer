@@ -162,9 +162,9 @@ pub(super) fn icone_style(p: &egui::Painter, r: egui::Rect, style: StyleVisuel) 
 /// maillage egui des glyphes projetés par `ecran`.
 pub(super) fn texte_sur_face(texte: &str, n: Vec3, u: Vec3, v: Vec3, ecran: &dyn Fn(Vec3) -> egui::Pos2, couleur: Color32, capitales: f64) -> egui::Shape {
     const POLICE: &str = "Arial";
-    let largeur = crate::noyau::texte::largeur(texte, POLICE, 1.0, true).max(1e-6);
+    let largeur = noyau::texte::largeur(texte, POLICE, 1.0, true).max(1e-6);
     let taille = capitales.min(1.7 / largeur);
-    let l = crate::noyau::texte::ligne(texte, POLICE, taille, true);
+    let l = noyau::texte::ligne(texte, POLICE, taille, true);
     let (dx, dy) = (-l.largeur / 2.0, -taille / 2.0);
     let mut m = egui::Mesh::default();
     for t in &l.triangles {

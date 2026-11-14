@@ -93,7 +93,7 @@ pub fn modifier(
     m: Modification,
 ) -> Result<crate::modele::Projet, String> {
     let mut v = serde_json::to_value(actuel).map_err(|e| e.to_string())?;
-    if crate::noyau::hash::hash(&v) != m.empreinte {
+    if noyau::hash::hash(&v) != m.empreinte {
         return Err("Le projet a changé : relire projet_natif avant de modifier".into());
     }
     if m.operations.is_empty() {
@@ -149,7 +149,7 @@ mod tests {
         crate::modele::Projet::depuis_gabarit("Test", &crate::config::gabarit::Gabarit::defaut())
     }
     fn modification(p: &crate::modele::Projet, operations: Value) -> Modification {
-        serde_json::from_value(json!({"empreinte":crate::noyau::hash::hash(&serde_json::to_value(p).unwrap()),"operations":operations})).unwrap()
+        serde_json::from_value(json!({"empreinte":noyau::hash::hash(&serde_json::to_value(p).unwrap()),"operations":operations})).unwrap()
     }
     #[test]
     fn transaction_atomique_et_concurrence() {

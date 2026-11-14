@@ -37,25 +37,25 @@ pub(super) struct Rendu {
     erreur: Option<String>,
 }
 
-pub(super) fn rendu(prims: &[crate::noyau::trace2d::Primitive], etendue: [f64; 4]) -> Rendu {
+pub(super) fn rendu(prims: &[noyau::trace2d::Primitive], etendue: [f64; 4]) -> Rendu {
     let mm = |q: glam::DVec3| egui::pos2((q.x * 1000.0) as f32, (q.y * 1000.0) as f32);
     let couleur = |c: [u8; 4]| Color32::from_rgba_unmultiplied(c[0], c[1], c[2], c[3]);
     let mut r = Rendu { etendue, ..Default::default() };
     // traits épais en segments à bouts francs, prolongés selon les traits rejoints
     // (comme l'export SVG) : jamais plus fins qu'un pixel à l'écran
-    let raccords = crate::noyau::trace2d::Raccords::new(prims, 1.0);
+    let raccords = noyau::trace2d::Raccords::new(prims, 1.0);
     for p in prims {
         let c = couleur(p.style.couleur);
         let segments: Option<Vec<[glam::DVec3; 2]>> = match &p.forme {
             _ if p.style.epaisseur <= 0.0 => None,
-            crate::noyau::trace2d::Forme::Polyligne { points, fermee } => {
+            noyau::trace2d::Forme::Polyligne { points, fermee } => {
                 let mut v: Vec<[glam::DVec3; 2]> = points.windows(2).map(|w| [w[0], w[1]]).collect();
                 if *fermee && points.len() > 2 {
                     v.push([points[points.len() - 1], points[0]]);
                 }
                 Some(v)
             }
-            crate::noyau::trace2d::Forme::Segments(s) => Some(s.clone()),
+            noyau::trace2d::Forme::Segments(s) => Some(s.clone()),
             _ => None,
         };
         match segments {

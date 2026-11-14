@@ -34,7 +34,7 @@ impl FamillePlane {
             Some("bimedit.profil") => Ok(Self::Profil { profil: crate::modele::famille::profil::FichierProfil::lire(texte)?, original: None }),
             Some("bimedit.cartouche") => {
                 let mut famille: doc::FamilleCartouche = serde_json::from_value(v.get("famille").cloned().ok_or("Cartouche absent")?).map_err(|e| e.to_string())?;
-                famille.id = crate::noyau::uuid::uuid();
+                famille.id = noyau::uuid::uuid();
                 let contenu = Self::Cartouche { famille, feuille: None, original: String::new() };
                 contenu.json_fichier()?;
                 Ok(contenu)

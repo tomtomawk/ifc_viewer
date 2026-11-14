@@ -98,7 +98,7 @@ impl ViewerApp {
                     for k in 0..n {
                         let (a, b) = (DVec2::from_array(pts[k]), DVec2::from_array(pts[(k + 1) % pts.len()]));
                         // segment d'arc : longueur développée
-                        let arc = crate::noyau::forme2d::arc_courbure(a, b, courbures.get(k).copied().unwrap_or(0.0));
+                        let arc = noyau::forme2d::arc_courbure(a, b, courbures.get(k).copied().unwrap_or(0.0));
                         let longueur = arc.map_or(a.distance(b), |(_, r, _, s)| r * s.abs());
                         ui.label(format!("{} · {}{}", k + 1, crate::config::options::unite().afficher(longueur.round()), if arc.is_some() { " · arc" } else { "" }))
                             .on_hover_text("Segment, depuis le premier point de la polyligne ; longueur");
@@ -208,7 +208,7 @@ impl ViewerApp {
                 return Err(format!("Deux types s'appellent « {} ».", t.nom));
             }
             if t.id.is_empty() {
-                t.id = format!("trait-{}", crate::noyau::uuid::uuid());
+                t.id = format!("trait-{}", noyau::uuid::uuid());
             }
         }
         let mut q = p.clone();

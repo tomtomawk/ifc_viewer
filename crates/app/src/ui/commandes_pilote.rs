@@ -306,7 +306,7 @@ impl ViewerApp {
                 self.error=None; self.parcourir_historique(commande=="retablir");
                 match &self.error { Some(e)=>erreur(e),None=>self.etat() }
             }
-            "projet_natif" => match &self.natif {Some((p,_))=>match p.json() {Ok(s)=>succes(&[("empreinte",texte(&crate::noyau::hash::hash(&serde_json::to_value(p).unwrap()))),("projet",s)]),Err(e)=>erreur(&e)},None=>erreur("Aucun projet natif.")},
+            "projet_natif" => match &self.natif {Some((p,_))=>match p.json() {Ok(s)=>succes(&[("empreinte",texte(&noyau::hash::hash(&serde_json::to_value(p).unwrap()))),("projet",s)]),Err(e)=>erreur(&e)},None=>erreur("Aucun projet natif.")},
             "vue_plan" => {
                 // vue_plan <nom ou id du niveau> [hauteur de coupe mm]
                 let (nom, h) = argument.rsplit_once(' ').and_then(|(n, h)| Some((n, h.parse::<f64>().ok()?))).unwrap_or((argument, 1200.0));

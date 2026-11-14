@@ -101,7 +101,7 @@ impl Projet {
         let Axe::Arc{debut,centre,direct,..}=ancien else {return Err("Mur courbe requis".into())};
         if !points.iter().flatten().all(|x|x.is_finite()) {return Err("Coordonnées non finies".into());}
         let [a,b,c]=points.map(glam::DVec2::from_array);
-        let (o,r,_,balayage)=crate::noyau::forme2d::arc_3_points(a,b,c).ok_or("Les trois points de contrôle doivent définir un arc.".to_string())?;
+        let (o,r,_,balayage)=noyau::forme2d::arc_3_points(a,b,c).ok_or("Les trois points de contrôle doivent définir un arc.".to_string())?;
         let nouvel=Axe::Arc{debut:a.to_array(),fin:c.to_array(),centre:o.to_array(),direct:balayage>0.};
         let rayon0=(debut[0]-centre[0]).hypot(debut[1]-centre[1]);
         let couches=self.assemblage(id).map(|a|a.couches.clone()).unwrap_or_else(||vec![id.into()]);
@@ -176,7 +176,7 @@ impl Projet {
         if let Some(t) = self.types_murs.iter().find(|t| t.couches.len() == 1 && t.couches[0] == *c) {
             return t.id.clone();
         }
-        let id = crate::noyau::uuid::uuid();
+        let id = noyau::uuid::uuid();
         let nom = format!("{} · {} mm", c.materiau.as_deref().unwrap_or("Couche"), crate::formats::ifc::step::format_real(c.epaisseur));
         self.types_murs.push(TypeCompose { id: id.clone(), nom, couches: vec![c.clone()], categorie: None, couches_detaillees: true, origine: None });
         id
@@ -210,7 +210,7 @@ impl Projet {
         let mut nouveaux = Vec::new();
         for (k, (c, d)) in t.couches.iter().zip(t.decalages_couches()).enumerate() {
             let type_mur = self.type_couche(c);
-            let cid = crate::noyau::uuid::uuid();
+            let cid = noyau::uuid::uuid();
             couches.push(cid.clone());
             nouveaux.push(Mur {
                 id: cid,

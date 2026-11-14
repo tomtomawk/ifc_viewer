@@ -237,7 +237,7 @@ fn mur_brut(
     percements: Option<&crate::modele::murs::retours::Percements>,
 ) -> Result<Vec<Tri>, String> {
     // calcul groupé : opérations reprises de la mémoire quand leurs opérandes n'ont pas changé
-    let booleen = if percements.is_some() { crate::noyau::csg_memoire::boolean_memoire } else { crate::noyau::csg::boolean };
+    let booleen = if percements.is_some() { noyau::csg_memoire::boolean_memoire } else { noyau::csg::boolean };
     let e = p
         .type_mur(&m.type_mur)
         .ok_or("Type de mur introuvable.")?
@@ -303,7 +303,7 @@ fn mur_brut(
         .into_iter()
         .map(|t| t.map(|v| v * 1000.0))
         .collect::<Vec<_>>();
-        tris = booleen(&tris, &cap, crate::noyau::csg::Op::Intersection, 1e-5)
+        tris = booleen(&tris, &cap, noyau::csg::Op::Intersection, 1e-5)
             .ok_or("Attachement à la toiture trop complexe.")?;
         if tris.is_empty() {
             return Err("La toiture se trouve sous le pied du mur.".into());
@@ -339,7 +339,7 @@ fn mur_brut(
         let retours = crate::modele::murs::retours::retours_avec(p, o, &m.id, hote)?;
         for r in &retours.retirer {
             if tris.is_empty() { break; }
-            tris = booleen(&tris, r, crate::noyau::csg::Op::Difference, 1e-5)
+            tris = booleen(&tris, r, noyau::csg::Op::Difference, 1e-5)
                 .ok_or("Calcul du retour trop complexe ; projet conservé.")?;
         }
         // famille modélisée : ses vides percent le mur
@@ -348,11 +348,11 @@ fn mur_brut(
                 if tris.is_empty() {
                     break;
                 }
-                tris = booleen(&tris, &vide, crate::noyau::csg::Op::Difference, 1e-5)
+                tris = booleen(&tris, &vide, noyau::csg::Op::Difference, 1e-5)
                     .ok_or("Calcul du percement trop complexe ; projet conservé.")?;
             }
             for a in &retours.ajouter {
-                tris = booleen(&tris, a, crate::noyau::csg::Op::Union, 1e-5)
+                tris = booleen(&tris, a, noyau::csg::Op::Union, 1e-5)
                     .ok_or("Calcul du retour trop complexe ; projet conservé.")?;
             }
             continue;
@@ -371,7 +371,7 @@ fn mur_brut(
         if tris.is_empty() {
             break;
         }
-        tris = booleen(&tris, &vide, crate::noyau::csg::Op::Difference, 1e-5)
+        tris = booleen(&tris, &vide, noyau::csg::Op::Difference, 1e-5)
             .ok_or("Calcul du percement trop complexe ; projet conservé.")?;
     }
     Ok(tris)
@@ -440,11 +440,11 @@ pub fn murs(p: &Projet, jonctions: &crate::modele::murs::jonctions::Coupes) -> V
     use rayon::prelude::*;
     let mut t = std::time::Instant::now();
     let percements = crate::modele::murs::retours::Percements::calculer(p);
-    crate::noyau::chrono::chrono("murs : table des ouvertures", &mut t);
+    noyau::chrono::chrono("murs : table des ouvertures", &mut t);
     let voisins: Vec<Voisin> = p.murs.par_iter().map(|m| Voisin::calculer(p, m)).collect();
-    crate::noyau::chrono::chrono("murs : table des voisins", &mut t);
+    noyau::chrono::chrono("murs : table des voisins", &mut t);
     let bruts: Vec<Result<Vec<Tri>, String>> = p.murs.par_iter().map(|m| mur_brut(p, m, jonctions, Some(&percements))).collect();
-    crate::noyau::chrono::chrono("murs : volumes percés", &mut t);
+    noyau::chrono::chrono("murs : volumes percés", &mut t);
     // rangs dans `p.murs` : aucune recherche par identifiant dans la boucle des voisins
     let brut = |i: usize, _: &Mur| -> Result<std::borrow::Cow<'_, [Tri]>, String> {
         match &bruts[i] {
@@ -454,8 +454,8 @@ pub fn murs(p: &Projet, jonctions: &crate::modele::murs::jonctions::Coupes) -> V
     };
     let voisin = |i: usize, _: &Mur| -> std::borrow::Cow<'_, Voisin> { std::borrow::Cow::Borrowed(&voisins[i]) };
     let solides = p.murs.par_iter().enumerate().map(|(i, m)| mur_avec(p, i, m, &brut, &voisin, true)).collect();
-    crate::noyau::chrono::chrono("murs : jonctions entre couches", &mut t);
-    crate::noyau::csg_memoire::fin_de_calcul();
+    noyau::chrono::chrono("murs : jonctions entre couches", &mut t);
+    noyau::csg_memoire::fin_de_calcul();
     solides
 }
 
@@ -467,7 +467,7 @@ fn mur_avec<'a>(
     voisin: &(dyn Fn(usize, &Mur) -> std::borrow::Cow<'a, Voisin> + Sync),
     memoire: bool,
 ) -> Result<Vec<Tri>, String> {
-    let booleen = if memoire { crate::noyau::csg_memoire::boolean_memoire } else { crate::noyau::csg::boolean };
+    let booleen = if memoire { noyau::csg_memoire::boolean_memoire } else { noyau::csg::boolean };
     let mut tris = brut(rang, m)?.into_owned();
     let bbox = |tris: &[Tri]| {
         tris.iter().flatten().fold(
@@ -503,7 +503,7 @@ fn mur_avec<'a>(
         if a.cmpge(mx - DVec3::splat(1e-5)).any() || b.cmple(mn + DVec3::splat(1e-5)).any() {
             continue;
         }
-        tris = booleen(&tris, &coupe, crate::noyau::csg::Op::Difference, 1e-5)
+        tris = booleen(&tris, &coupe, noyau::csg::Op::Difference, 1e-5)
             .ok_or("Jonction trop complexe ; projet conservé.")?;
         if tris.is_empty() {
             break;

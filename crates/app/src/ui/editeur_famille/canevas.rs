@@ -20,7 +20,7 @@ fn ferme_profil(ed: &EditeurFamille, cadre: &Cadre, q: egui::Pos2) -> bool {
 
 /// Adapte les contours du plan local au moteur d'accrochage du projet.
 fn accrocher_plan_construction(ed: &EditeurFamille, plan: &PlanConstruction, r: &Resolution, cadre: &Cadre, q: egui::Pos2, exclu: Option<(usize, usize)>, maj: bool) -> (f64, f64) {
-    use crate::noyau::forme2d::Geom;
+    use noyau::forme2d::Geom;
     use glam::DVec2;
     let mut geoms = vec![Geom::Segment([DVec2::ZERO, DVec2::ZERO])];
     for (j, e) in ed.famille.extrusions.iter().enumerate() {
@@ -463,7 +463,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
     // Les plans et les contours sont des géométries du même moteur d'accrochage
     // que le projet. Leur repère est celui de la vue de famille.
     let geoms = {
-        use crate::noyau::forme2d::Geom;
+        use noyau::forme2d::Geom;
         use glam::DVec2;
         let mut geoms = Vec::new();
         let (h_min, v_max) = cadre.modele(rect.left_top());
@@ -481,7 +481,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
         }
         for sy in ed.famille.symboles.iter().filter(|s| s.vue == vue && s.arc && s.points.len() == 3) {
             let pts: Vec<_> = sy.points.iter().map(|p| { let (h,v) = ed.famille.point_esquisse(&r,p); DVec2::new(h,v) }).collect();
-            if let Some((centre, rayon, depart, balayage)) = crate::noyau::forme2d::arc_3_points(pts[0], pts[1], pts[2]) {
+            if let Some((centre, rayon, depart, balayage)) = noyau::forme2d::arc_3_points(pts[0], pts[1], pts[2]) {
                 geoms.push(Geom::Arc { centre, rayon, depart, balayage });
             }
         }
@@ -956,7 +956,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
         }
         OutilFamille::Ligne | OutilFamille::Arc | OutilFamille::Spline | OutilFamille::Cercle | OutilFamille::Rectangle => {
             use crate::dessin::dao::{EvenementTrace, Trace};
-            use crate::noyau::forme2d::{Forme2D};
+            use noyau::forme2d::{Forme2D};
             let outil = ed.outil.outil_dessin().expect("outil de dessin");
             let mut trace = ed.trace_polyligne.take().unwrap_or_else(|| Trace::new(outil));
             let depart = ed.esquisse.last().map(|(_, p)| *p);

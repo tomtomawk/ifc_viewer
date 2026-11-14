@@ -452,9 +452,9 @@ impl ViewerApp {
 
         let mut t_vue = std::time::Instant::now();
         self.update_visibility();
-        crate::noyau::chrono::chrono_lent("vue : visibilité", &mut t_vue);
+        noyau::chrono::chrono_lent("vue : visibilité", &mut t_vue);
         self.update_coupe();
-        crate::noyau::chrono::chrono_lent("vue : coupe et dessin 2D", &mut t_vue);
+        noyau::chrono::chrono_lent("vue : coupe et dessin 2D", &mut t_vue);
 
         let params = self.frame_params(aspect);
         let ppp = ui.ctx().pixels_per_point();

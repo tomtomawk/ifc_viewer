@@ -7,7 +7,7 @@
 //! Indépendant de l'interface : coordonnées en mm dans le plan de la vue. Le même
 //! moteur servira au tracé d'éléments 3D (contours d'éléments horizontaux, murs).
 
-use crate::noyau::forme2d::{Forme2D, Geom, angle_norm, arc_3_points, arc_courbure, developper, points_arc, points_spline, segments_polyligne};
+use noyau::forme2d::{Forme2D, Geom, angle_norm, arc_3_points, arc_courbure, developper, points_arc, points_spline, segments_polyligne};
 use glam::DVec2;
 
 /// Nature du point retenu sous le curseur.

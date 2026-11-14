@@ -1,5 +1,5 @@
 //! Découpe des primitives d'un plan par un contour simple, y compris concave.
-use crate::noyau::trace2d::{Forme, Primitive};
+use noyau::trace2d::{Forme, Primitive};
 use glam::{DVec2, DVec3};
 
 fn cote(a: DVec2, b: DVec2, p: DVec3) -> f64 { (b - a).perp_dot(p.truncate() - a) }
@@ -58,7 +58,7 @@ pub fn decouper(primitives: Vec<Primitive>, contour: &[[f64; 2]]) -> Result<Vec<
                 (s, Vec::new())
             }
             Forme::Triangles(t) => (Vec::new(), t),
-            Forme::Surface(c) => (Vec::new(), crate::noyau::trace2d::trianguler(&c, DVec3::Z)),
+            Forme::Surface(c) => (Vec::new(), noyau::trace2d::trianguler(&c, DVec3::Z)),
         };
         if !segments.is_empty() {
             let morceaux: Vec<_> = segments.into_iter().flat_map(|s| triangles.iter().filter_map(move |t| segment_dans_triangle(s, t))).collect();
@@ -81,7 +81,7 @@ pub fn decouper(primitives: Vec<Primitive>, contour: &[[f64; 2]]) -> Result<Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::noyau::trace2d::{Role, Style};
+    use noyau::trace2d::{Role, Style};
     #[test]
     fn contour_concave_decoupe_traits_et_faces() {
         let contour = [[0.,0.],[4000.,0.],[4000.,1000.],[1000.,1000.],[1000.,4000.],[0.,4000.]];

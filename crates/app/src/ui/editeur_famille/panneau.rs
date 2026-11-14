@@ -165,7 +165,7 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
         if let Some(p) = reference {
             let vue = match p.axe { AxePlan::X => VueEsquisse::Coupe, AxePlan::Y => VueEsquisse::Elevation, AxePlan::Z => VueEsquisse::Plan };
             let r = ed.resoudre();
-            let plan = PlanConstruction { id: crate::noyau::uuid::uuid(), reference: Some(p.nom.clone()), nom: format!("Référence : {}", p.nom), origine: vue.point(0.0,0.0,r.positions.get(&p.nom).copied().unwrap_or(p.position)).to_array(), horizontal: vue.point(1.0,0.0,0.0).to_array(), vertical: vue.point(0.0,1.0,0.0).to_array() };
+            let plan = PlanConstruction { id: noyau::uuid::uuid(), reference: Some(p.nom.clone()), nom: format!("Référence : {}", p.nom), origine: vue.point(0.0,0.0,r.positions.get(&p.nom).copied().unwrap_or(p.position)).to_array(), horizontal: vue.point(1.0,0.0,0.0).to_array(), vertical: vue.point(0.0,1.0,0.0).to_array() };
             let k = ed.famille.plans_construction.iter().position(|existant| existant.reference.as_ref() == plan.reference.as_ref()).unwrap_or_else(|| {
                 let mut plan = plan;
                 let base = plan.nom.clone();
@@ -509,7 +509,7 @@ pub(super) fn evaluer_oui(formule: &str) -> bool {
 /// Remplit un polygone quelconque (triangulé).
 pub(super) fn remplir(painter: &egui::Painter, pts: &[egui::Pos2], couleur: Color32) {
     let mut m = egui::Mesh::default();
-    for t in crate::noyau::texte::trianguler(vec![pts.iter().map(|p| [p.x, p.y]).collect()]) {
+    for t in noyau::texte::trianguler(vec![pts.iter().map(|p| [p.x, p.y]).collect()]) {
         for p in t {
             m.colored_vertex(egui::pos2(p[0], p[1]), couleur);
         }
