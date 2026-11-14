@@ -8,8 +8,6 @@ use modifier::ModificationInterne;
 mod transformations;
 use transformations::Transformation;
 use super::verrous::VerrousInterne;
-#[cfg(test)]
-mod tests;
 use modele::*;
 use modele::{elements::site, murs::assemblage, volumes::{geometrie, solides}};
 use serde::Deserialize;

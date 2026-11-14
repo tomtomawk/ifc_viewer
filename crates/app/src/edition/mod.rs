@@ -3,6 +3,7 @@
 pub mod commandes;
 pub mod contextes;
 pub mod historique;
+pub mod objets;
 pub mod verrous;
 pub use commandes::{Execution, Modification};
 pub use contextes::Contextes;

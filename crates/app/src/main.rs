@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod collaboration;
+#[cfg(test)]
+mod commandes_tests;
 mod config;
 mod dessin;
 mod echanges;

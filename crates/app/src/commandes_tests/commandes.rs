@@ -1,6 +1,10 @@
-use super::*;
+//! Tests déplacés de `edition/commandes/tests.rs` : leur projet de départ vient de
+//! `echanges::depuis_ifc` (et l'un d'eux appelle `echanges::export_ifc`).
 use crate::echanges::{depuis_ifc, export_ifc};
+use crate::edition::commandes::*;
 use crate::edition::historique;
+use modele::*;
+use modele::volumes::{geometrie, solides};
 fn projet() -> Projet {
     depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {})
         .unwrap()

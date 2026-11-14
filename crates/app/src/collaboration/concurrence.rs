@@ -1,26 +1,11 @@
 //! Granularité des relations, réservations et lectures spatiales du protocole 2.
 use super::*;
+pub use crate::edition::objets::carte_objet;
 
 pub fn carte(cle: &str) -> Option<(&str, &str)> {
     let reste = cle.strip_prefix("@/")?;
     let (nom, id) = reste.split_once('/')?;
     carte_objet(nom).then_some((nom, id))
-}
-pub fn carte_objet(nom: &str) -> bool {
-    matches!(
-        nom,
-        "organisations_arborescence"
-            | "rangements_arborescence"
-            | "implantations"
-            | "contextes"
-            | "contextes_vues"
-            | "gabarits_vue_affectes"
-            | "verrous"
-            | "demolitions"
-            | "priorites_jonction"
-            | "attaches_toitures"
-            | "cartouches_feuilles"
-    )
 }
 pub fn valeur<'a>(o: &'a Objets, cle: &str) -> Option<&'a Value> {
     if let Some((nom, id)) = carte(cle) {
