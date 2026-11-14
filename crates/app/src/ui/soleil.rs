@@ -18,10 +18,10 @@ impl ViewerApp {
     pub(super) fn id_vue_rendu(&self) -> Option<String> {
         let numero = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).map(|v| v.revit_id)?;
         let projet = &self.natif.as_ref()?.0;
-        if crate::rendu::natif::numero_vue("3d") == numero {
+        if modele::identifiants::numero_vue("3d") == numero {
             return Some("3d".into());
         }
-        projet.vues.iter().find(|v| crate::rendu::natif::numero_vue(&v.id) == numero).map(|v| v.id.clone())
+        projet.vues.iter().find(|v| modele::identifiants::numero_vue(&v.id) == numero).map(|v| v.id.clone())
     }
 
     /// Réglages de rendu en cours de la vue.

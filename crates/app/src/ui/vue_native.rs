@@ -79,7 +79,7 @@ impl ViewerApp {
         let Some((projet, _)) = &self.natif else { return };
         let Some(i) = self.vue_active else { return };
         let Some(numero) = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()?.vues.get(i)).map(|v| v.revit_id) else { return };
-        let Some(vue) = projet.vues.iter().find(|v| crate::rendu::natif::numero_vue(&v.id) == numero).cloned() else { return };
+        let Some(vue) = projet.vues.iter().find(|v| modele::identifiants::numero_vue(&v.id) == numero).cloned() else { return };
         // nom en cours de saisie, propre à la vue
         if self.nom_vue.as_ref().is_none_or(|(id, _)| id != &vue.id) {
             self.nom_vue = Some((vue.id.clone(), vue.nom.clone()));
@@ -203,7 +203,7 @@ impl ViewerApp {
                 self.memoriser_vue();
             }
         } else if let GenreVue::Plan { coupe, ref niveau, .. } = nouvelle.genre {
-            self.coupe_niveau = Some(crate::rendu::natif::id_natif("niveau", niveau));
+            self.coupe_niveau = Some(modele::identifiants::id_natif("niveau", niveau));
             self.echelle = nouvelle.echelle;
             self.coupe_hauteur = (coupe / 1000.0) as f32;
             self.coupe_dirty = true;
@@ -217,7 +217,7 @@ impl ViewerApp {
     pub(super) fn supprimer_vue_native(&mut self, i: usize) {
         let Some((projet, _)) = &self.natif else { return };
         let Some(numero) = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()?.vues.get(i)).map(|v| v.revit_id) else { return };
-        let Some(id) = projet.vues.iter().find(|v| crate::rendu::natif::numero_vue(&v.id) == numero).map(|v| v.id.clone()) else { return };
+        let Some(id) = projet.vues.iter().find(|v| modele::identifiants::numero_vue(&v.id) == numero).map(|v| v.id.clone()) else { return };
         let mut p = projet.clone();
         let ouverte = self.vue_active == Some(i);
         if let Err(e) = p.supprimer_vue(&id).and_then(|_| self.appliquer_projet(p)) {

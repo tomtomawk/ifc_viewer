@@ -166,7 +166,7 @@ impl ViewerApp {
             }
         }
         // élément natif : tout est dans le panneau ci-dessus, pas d'attributs génériques
-        if self.natif.is_some() && (self.cle_native(id).is_some() || self.natif.as_ref().is_some_and(|(p, _)| p.dalles.iter().any(|d| crate::rendu::natif::id_natif("remblai", &d.id) == id))) {
+        if self.natif.is_some() && (self.cle_native(id).is_some() || self.natif.as_ref().is_some_and(|(p, _)| p.dalles.iter().any(|d| modele::identifiants::id_natif("remblai", &d.id) == id))) {
             return;
         }
         let Some(s) = &self.scene else { return };

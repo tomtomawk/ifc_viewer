@@ -15,7 +15,7 @@ fn dessin_vue_applique_le_contexte_propre_a_la_vue() {
     for mur in &mut p.murs { mur.phase = Some("Projet".into()); }
     let vue = p.ajouter_vue_plan(&p.niveaux[0].id.clone(), 1200.0).unwrap();
     let dessin = dessin_vue(&p, &vue).unwrap();
-    let ids: std::collections::HashSet<_> = p.murs.iter().map(|m| crate::rendu::natif::id_natif("mur", &m.id)).collect();
+    let ids: std::collections::HashSet<_> = p.murs.iter().map(|m| modele::identifiants::id_natif("mur", &m.id)).collect();
     assert!(dessin.primitives.iter().any(|p| p.element.is_some_and(|id| ids.contains(&id))));
     p.contextes_vues.insert(vue.clone(), FiltresContextes { phase: Some("Existant".into()), ..Default::default() });
     let filtre = dessin_vue(&p, &vue).unwrap();
@@ -32,7 +32,7 @@ fn dessin_vue_suit_le_gabarit_partage() {
     p.phases = vec!["Existant".into(), "Projet".into()];
     for mur in &mut p.murs { mur.phase = Some("Projet".into()); }
     let vue = p.ajouter_vue_plan(&p.niveaux[0].id.clone(), 1200.0).unwrap();
-    let ids: std::collections::HashSet<_> = p.murs.iter().map(|m| crate::rendu::natif::id_natif("mur", &m.id)).collect();
+    let ids: std::collections::HashSet<_> = p.murs.iter().map(|m| modele::identifiants::id_natif("mur", &m.id)).collect();
     let id = p.enregistrer_gabarit_vue(GabaritVue { id: String::new(), nom: "Plan".into(), echelle: 50.0, poche: "plein".into(), phase: Some("Existant".into()), variante: None }).unwrap();
     p.affecter_gabarit_vue(&vue, Some(&id)).unwrap();
     let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
@@ -56,8 +56,8 @@ fn dessin_sur_feuille_suit_le_fond_la_plage_haute_et_le_style() {
     let i = p.vues.iter().position(|v| v.id == id).unwrap();
     p.vues[i].fond_plan = Some(fond);
     let placee = VuePlacee { vue: id.clone(), position: [50.0, 80.0], echelle: 100.0 };
-    let haut = crate::rendu::natif::id_natif("mur", &haut);
-    let bas = crate::rendu::natif::id_natif("mur", &bas);
+    let haut = modele::identifiants::id_natif("mur", &haut);
+    let bas = modele::identifiants::id_natif("mur", &bas);
     let (dessin, _) = vue_placee(&p, &placee).unwrap();
     let couleur = |dessin: &[Primitive]| dessin.iter().find(|pr| pr.element == Some(bas) && pr.role == Role::Poche && pr.style.couleur != [165, 165, 165, 255]).unwrap().style.couleur;
     let poche_graphique = couleur(&dessin);
@@ -81,7 +81,7 @@ fn coupe_sur_feuille_reste_dans_les_limites_de_la_vue() {
     let placee = VuePlacee { vue: id, position: [25.0, 50.0], echelle: 100.0 };
     let (primitives, _) = vue_placee(&p, &placee).unwrap();
     let mut points = Vec::new();
-    for pr in primitives.into_iter().filter(|pr| pr.element == Some(crate::rendu::natif::id_natif("mur", &mur))) {
+    for pr in primitives.into_iter().filter(|pr| pr.element == Some(modele::identifiants::id_natif("mur", &mur))) {
         match pr.forme {
             Forme::Segments(s) => points.extend(s.into_iter().flatten()),
             Forme::Triangles(t) => points.extend(t.into_iter().flatten()),
@@ -372,7 +372,7 @@ fn polyligne_types_de_trait_par_segment() {
     let prims = annotations(&p, v);
     assert_eq!(prims.len(), 3, "un trait par type");
     // traits rattachés à la polyligne : elle se sélectionne au clic
-    assert!(prims.iter().all(|x| x.element == Some(crate::rendu::natif::id_natif("annotation", "pl"))));
+    assert!(prims.iter().all(|x| x.element == Some(modele::identifiants::id_natif("annotation", "pl"))));
     assert!((prims[0].style.epaisseur - 0.50).abs() < 1e-9);
     let Forme::Segments(s) = &prims[1].forme else { panic!("tirets en segments") };
     // tirets de 3 mm papier, blancs de 1,5 : période 4,5 × échelle sur 10 m

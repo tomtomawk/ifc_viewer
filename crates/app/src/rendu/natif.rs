@@ -3,19 +3,13 @@ use glam::{DVec3, Vec3, Vec4};
 use noyau::Id;
 use ifc_base::semantique::IfcModel;
 use scene::*;
-pub use modele::identifiants::{id_natif, numero_vue};
+use modele::identifiants::{id_natif, numero_vue};
 use formats::ifc::geom::{Part, ProductGeom};
 use modele::{Projet, SorteDalle};
 use noyau::chrono::chrono;
 use ifc_base::step::{Entity, StepFile, Value};
 use rayon::prelude::*;
 use std::path::Path;
-
-/// Vue de départ d'un projet natif vide, sans inventer de géométrie ni de source IFC.
-#[cfg(test)]
-pub fn projet_vide(projet: &modele::Projet, path: &std::path::Path) -> Result<Scene, String> {
-    depuis_natif(projet, path)
-}
 
 pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     projet.verifier()?;

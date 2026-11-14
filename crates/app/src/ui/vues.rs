@@ -31,7 +31,7 @@ impl ViewerApp {
         let altitude_coupe = self.plan_coupe().and_then(|p| self.scene.as_ref().map(|s| (p.w as f64 + s.origin.z) * 1000.0));
         let orientation = crate::rendu::orientation_plan::angle(&self.camera) as f64;
         if let (Some(numero), Some((projet, _))) = (numero, &mut self.natif) {
-            if let Some(index) = projet.vues.iter().position(|v| crate::rendu::natif::numero_vue(&v.id) == numero) {
+            if let Some(index) = projet.vues.iter().position(|v| modele::identifiants::numero_vue(&v.id) == numero) {
                 let mut vue = projet.vues[index].clone();
                 if let modele::GenreVue::Plan { niveau, coupe, .. } = &mut vue.genre {
                     if let Some(z) = altitude_coupe && let Some(n) = projet.niveau(niveau) { *coupe = (z - n.altitude).round(); }
@@ -49,7 +49,7 @@ impl ViewerApp {
                     self.bim.revision = self.bim.revision.wrapping_add(1);
                 }
             }
-            if numero == crate::rendu::natif::numero_vue("3d") && !gabaritee && projet.echelle_vue_3d.is_some()
+            if numero == modele::identifiants::numero_vue("3d") && !gabaritee && projet.echelle_vue_3d.is_some()
                 && (projet.echelle_vue_3d != Some(self.echelle) || projet.poche_vue_3d.as_deref() != Some(self.poche.nom()))
             {
                 let avant = projet.clone();
@@ -306,7 +306,7 @@ impl ViewerApp {
 
         if self.scene.is_some() && self.vues_ouvertes.is_empty() && ui.button("Ouvrir la vue 3D du modèle").clicked() {
             if self.natif.is_some() {
-                let indice = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|n| n.vues.iter().position(|v| v.revit_id == crate::rendu::natif::numero_vue("3d")));
+                let indice = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|n| n.vues.iter().position(|v| v.revit_id == modele::identifiants::numero_vue("3d")));
                 if let Some(i) = indice { self.activer_vue(i); return; }
             }
             self.vues_ouvertes.push(None);
@@ -420,7 +420,7 @@ impl ViewerApp {
             "Vue 3D" | "Feuille" => self.faces_blanches = false,
             _ => {}
         }
-        if let Some(vue) = self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|vue| crate::rendu::natif::numero_vue(&vue.id) == v.revit_id)) {
+        if let Some(vue) = self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|vue| modele::identifiants::numero_vue(&vue.id) == v.revit_id)) {
             if let Some(active) = vue.coupe_active { self.coupe = active; }
             self.poche = match vue.poche_vue.as_deref() {
                 Some("plein") => Poche::Plein,
@@ -430,7 +430,7 @@ impl ViewerApp {
             };
         }
         // réglages de rendu enregistrés (style, ombres, soleil, ciel)
-        let id_rendu = if crate::rendu::natif::numero_vue("3d") == v.revit_id { Some("3d".to_string()) } else { self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|vue| crate::rendu::natif::numero_vue(&vue.id) == v.revit_id)).map(|vue| vue.id.clone()) };
+        let id_rendu = if modele::identifiants::numero_vue("3d") == v.revit_id { Some("3d".to_string()) } else { self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|vue| modele::identifiants::numero_vue(&vue.id) == v.revit_id)).map(|vue| vue.id.clone()) };
         if let Some(id) = id_rendu {
             self.appliquer_rendu_vue(&id);
         }

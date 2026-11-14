@@ -162,7 +162,7 @@ impl ViewerApp {
             .map(|m| (&m.id, "mur"))
             .chain(p.assemblages.iter().map(|a| (&a.id, "assemblage")))
             .chain(p.barres.iter().filter(|b| b.genre == modele::GenreBarre::Poutre).map(|b| (&b.id, "barre")))
-            .filter(|(id, genre)| self.objects_under(crate::rendu::natif::id_natif(genre, id)).iter().any(|i| self.visible.get(*i as usize).copied().unwrap_or(false)))
+            .filter(|(id, genre)| self.objects_under(modele::identifiants::id_natif(genre, id)).iter().any(|i| self.visible.get(*i as usize).copied().unwrap_or(false)))
             .map(|(id, _)| id.clone())
             .collect()
     }

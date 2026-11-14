@@ -79,11 +79,11 @@ impl ViewerApp {
         let modele::GenreVue::Plan{niveau,..}=&v.genre else{return None};
         let coupe = plan.w;
         let limite = crate::dessin::limite_haute_plan(p, s, v, coupe)?;
-        let niveau_id=crate::rendu::natif::id_natif("niveau",niveau);
+        let niveau_id=modele::identifiants::id_natif("niveau",niveau);
         let exclus = self.ids_masques_contextes();
         // éléments masqués dans la vue : identifiants de scène calculés une fois
         let masques: HashSet<Id> = if v.elements_masques.is_empty() { HashSet::new() } else {
-            super::bim::elements_natifs(p).filter(|(_, cle)| v.elements_masques.contains(*cle)).map(|(genre, cle)| crate::rendu::natif::id_natif(genre, cle)).collect()
+            super::bim::elements_natifs(p).filter(|(_, cle)| v.elements_masques.contains(*cle)).map(|(genre, cle)| modele::identifiants::id_natif(genre, cle)).collect()
         };
         let visible=s.objects.iter().enumerate().map(|(i,o)| {
             let masque_vue=masques.contains(&o.id) || s.model.parent.get(&o.id).is_some_and(|id|masques.contains(id));

@@ -38,7 +38,7 @@ impl ViewerApp {
         let mut nouveau: Option<modele::Projet> = None;
         let mut selection: Option<Id> = None;
         // remblai d'un terre-plein : volume, et type de terrain (matériau, poché)
-        if let Some(d) = projet.dalles.iter().find(|d| crate::rendu::natif::id_natif("remblai", &d.id) == id) {
+        if let Some(d) = projet.dalles.iter().find(|d| modele::identifiants::id_natif("remblai", &d.id) == id) {
             let actuel = projet.type_remblai(d);
             let types = projet.types_terrains_disponibles();
             let mut choisi = actuel.id.clone();
@@ -46,7 +46,7 @@ impl ViewerApp {
             egui::Grid::new("remblai_terre_plein").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
                 ui.label("Terre-plein");
                 if ui.link(&d.nom).on_hover_text("Sélectionner le terre-plein : talus et remblai de ses arêtes").clicked() {
-                    selection = Some(crate::rendu::natif::id_natif("dalle", &d.id));
+                    selection = Some(modele::identifiants::id_natif("dalle", &d.id));
                 }
                 ui.end_row();
                 ui.label("Type").on_hover_text("Type de terrain du remblai : son matériau donne la couleur et le poché");
@@ -87,7 +87,7 @@ impl ViewerApp {
             }
             return nouveau;
         }
-        if let Some(a) = projet.assemblages.iter().find(|a| crate::rendu::natif::id_natif("assemblage", &a.id) == id) {
+        if let Some(a) = projet.assemblages.iter().find(|a| modele::identifiants::id_natif("assemblage", &a.id) == id) {
             ui.label(RichText::new(format!("Mur composé · {}", a.nom)).strong());
             if let Some(t) = projet.type_mur(&a.type_mur) {
                 ui.label(RichText::new(&t.nom).weak());
@@ -113,7 +113,7 @@ impl ViewerApp {
                     let c = projet.type_mur(&m.type_mur).and_then(|t| t.couches.first());
                     let nom = c.and_then(|c| c.materiau.clone()).unwrap_or_else(|| m.nom.clone());
                     if ui.link(nom).clicked() {
-                        selection = Some(crate::rendu::natif::id_natif("mur", &m.id));
+                        selection = Some(modele::identifiants::id_natif("mur", &m.id));
                     }
                     ui.label(crate::config::options::unite().afficher(c.map_or(0.0, |c| c.epaisseur)));
                     ui.label(projet.bas_haut(m).map_or(String::new(), |(b, h)| format!("h {:.0}", h - b)));
@@ -122,7 +122,7 @@ impl ViewerApp {
                 }
             });
             ui.separator();
-        } else if let Some(mur) = projet.murs.iter().find(|m| crate::rendu::natif::id_natif("mur", &m.id) == id) {
+        } else if let Some(mur) = projet.murs.iter().find(|m| modele::identifiants::id_natif("mur", &m.id) == id) {
             let mut m = mur.clone();
             let epaisseur = projet.type_mur(&m.type_mur).map_or(0.0, |t| t.epaisseur());
             let materiau = projet.type_mur(&m.type_mur).and_then(|t| (t.couches.len() == 1).then(|| t.couches[0].materiau.clone()).flatten());
@@ -198,7 +198,7 @@ impl ViewerApp {
                 }
             }
             ui.separator();
-        } else if let Some(arbre) = projet.arbres.iter().find(|a| crate::rendu::natif::id_natif("arbre", &a.id) == id) {
+        } else if let Some(arbre) = projet.arbres.iter().find(|a| modele::identifiants::id_natif("arbre", &a.id) == id) {
             use modele::elements::arbre::Essence;
             let mut a = arbre.clone();
             ui.label(RichText::new(format!("Arbre · {}", a.nom)).strong());
@@ -229,11 +229,11 @@ impl ViewerApp {
                 nouveau = Some(p);
             }
             ui.separator();
-        } else if let Some(e) = projet.importes.iter().find(|e| crate::rendu::natif::id_natif("importe", &e.id)==id) {
+        } else if let Some(e) = projet.importes.iter().find(|e| modele::identifiants::id_natif("importe", &e.id)==id) {
             ui.heading(&e.nom); ui.label(&e.categorie); ui.label("Géométrie importée"); ui.label(&e.raison);
             if let Some(n)=e.niveau.as_ref().and_then(|n|projet.niveau(n)) { ui.label(format!("Niveau : {}",n.nom)); }
             if let Some(o)=&e.origine { ui.label(format!("Source : {} · {}",o.source,o.id)); if let Some(g)=&o.guid {ui.label(g);} }
-        } else if let Some(o) = projet.ouvertures.iter().find(|o| crate::rendu::natif::id_natif("ouverture", &o.id)==id) {
+        } else if let Some(o) = projet.ouvertures.iter().find(|o| modele::identifiants::id_natif("ouverture", &o.id)==id) {
             let mut o=o.clone(); let mut change=false;
             ui.heading(&o.nom);
             for (nom,v) in [("Abscisse",&mut o.abscisse),("Largeur",&mut o.largeur),("Hauteur",&mut o.hauteur),("Allège",&mut o.allege)] {
@@ -302,7 +302,7 @@ impl ViewerApp {
                 if o.representation.is_some() { ui.label("La menuiserie importée est conservée ; sa forme n'est pas paramétrique."); }
                 let mut p=projet.clone(); *p.ouvertures.iter_mut().find(|x|x.id==o.id).unwrap()=o.clone(); nouveau=Some(p);
             }
-        } else if let Some(e) = projet.escaliers.iter().find(|e| crate::rendu::natif::id_natif("escalier", &e.id) == id) {
+        } else if let Some(e) = projet.escaliers.iter().find(|e| modele::identifiants::id_natif("escalier", &e.id) == id) {
             let mut e = e.clone();
             let mut change = false;
             ui.label(RichText::new(format!("Escalier · {}", e.nom)).strong());
@@ -358,7 +358,7 @@ impl ViewerApp {
                 *p.escaliers.iter_mut().find(|x| x.id == id).unwrap() = e;
                 nouveau = Some(p);
             }
-        } else if let Some(g) = projet.garde_corps.iter().find(|g| crate::rendu::natif::id_natif("garde_corps", &g.id) == id) {
+        } else if let Some(g) = projet.garde_corps.iter().find(|g| modele::identifiants::id_natif("garde_corps", &g.id) == id) {
             let mut g = g.clone();
             let mut change = false;
             ui.label(RichText::new(format!("Garde-corps · {}", g.nom)).strong());
@@ -391,7 +391,7 @@ impl ViewerApp {
                 nouveau = Some(p);
             }
         } else {
-            let dalle = projet.dalles.iter().find(|d| crate::rendu::natif::id_natif("dalle", &d.id) == id)?;
+            let dalle = projet.dalles.iter().find(|d| modele::identifiants::id_natif("dalle", &d.id) == id)?;
             let mut d = dalle.clone();
             let t = projet.type_dalle(&d.type_dalle);
             ui.label(RichText::new(format!("{} · {}", d.sorte.nom(), t.map_or("", |t| t.nom.as_str()))).strong());

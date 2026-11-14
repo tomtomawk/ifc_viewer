@@ -925,7 +925,7 @@ mod tests {
             p.ouvertures = vec![Ouverture { id: format!("o{k}"), nom: "F".into(), genre: t.genre, mur: mur.clone(), type_ouverture: Some(t.id.clone()), abscisse: 2500.0, largeur: t.largeur, hauteur: t.hauteur, allege: 100.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None }];
             p.verifier().unwrap();
             let scene = crate::rendu::natif::depuis_natif(&p, std::path::Path::new("test.modele.json")).unwrap();
-            let id = crate::rendu::natif::id_natif("ouverture", &format!("o{k}"));
+            let id = modele::identifiants::id_natif("ouverture", &format!("o{k}"));
             // coupe verticale dans un vantail, coupe horizontale à mi-hauteur
             for plan in [Vec3::NEG_X.extend((2.3 - scene.origin.x) as f32), Vec3::NEG_Z.extend((0.8 - scene.origin.z) as f32)] {
                 let prims: Vec<_> = super::coupe(&scene, &vec![true; scene.objects.len()], plan, 20.0, Poche::Hachure).into_iter().filter(|p| p.element == Some(id)).collect();
@@ -993,7 +993,7 @@ mod tests {
 
     fn scene_section(tris: Vec<[DVec3; 3]>) -> Scene {
         use scene::{Range, SceneObject};
-        let mut s = crate::rendu::natif::projet_vide(&modele::Projet::nouveau("Test"), std::path::Path::new("test.modele.json")).unwrap();
+        let mut s = crate::rendu::natif::depuis_natif(&modele::Projet::nouveau("Test"), std::path::Path::new("test.modele.json")).unwrap();
         s.vertices = tris.into_iter().flatten().map(|p| Vertex { pos: p.as_vec3().to_array(), normal: [0, 0, 127, 0], color: [140, 160, 180, 255], obj: 0 }).collect();
         s.couleurs_rendu = vec![[110, 130, 150, 255]; s.vertices.len()];
         s.objects.push(SceneObject { id: 1, class: "IFCWALL".into(), storey: None, opaque: Range { start: 0, count: s.vertices.len() as u32 }, transparent: Range { start: 0, count: 0 }, lines: Range { start: 0, count: 0 }, aretes: Range { start: 0, count: 0 }, min: Vec3::ZERO, max: Vec3::ONE });

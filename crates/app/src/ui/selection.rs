@@ -339,7 +339,7 @@ impl ViewerApp {
                     .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
                     .chain(p.importes.iter().map(|x| ("importe", &x.id))) {
                     if selection.contains(cle.as_str()) {
-                        entites.push(crate::rendu::natif::id_natif(genre, cle));
+                        entites.push(modele::identifiants::id_natif(genre, cle));
                     }
                 }
             }
@@ -405,7 +405,7 @@ impl ViewerApp {
                 .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
                             .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
                             .chain(p.importes.iter().map(|x| ("importe", &x.id)))
-                            .filter(|(_, id)| cles.contains(id.as_str())).map(|(genre, id)| crate::rendu::natif::id_natif(genre, id)));
+                            .filter(|(_, id)| cles.contains(id.as_str())).map(|(genre, id)| modele::identifiants::id_natif(genre, id)));
                     }
                 } else if let Some(id) = self.selected { ancienne.push(id); }
             }
@@ -452,7 +452,7 @@ impl ViewerApp {
                 .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
                 .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
                 .chain(p.importes.iter().map(|x| ("importe", &x.id)))
-                .filter(|(genre, id)| recherches.contains(&crate::rendu::natif::id_natif(genre, id)))
+                .filter(|(genre, id)| recherches.contains(&modele::identifiants::id_natif(genre, id)))
                 .map(|(_, id)| id.clone()).collect()
         }).unwrap_or_default();
         self.bim.selection.extend(vues);

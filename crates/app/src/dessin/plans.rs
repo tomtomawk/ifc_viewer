@@ -2,7 +2,7 @@
 use super::feuilles::ids_masques_vue;
 use super::Poche;
 use modele::documentation::*;
-use crate::rendu::natif::id_natif;
+use modele::identifiants::id_natif;
 use scene::Scene;
 use glam::DVec3;
 use noyau::trace2d::{Primitive, Role};

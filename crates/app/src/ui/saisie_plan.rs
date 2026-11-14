@@ -10,7 +10,7 @@ impl ViewerApp {
         self.appliquer_projet(projet)?;
         // assemblage (type composé) ou mur seul
         let genre = if self.natif.as_ref().is_some_and(|(p, _)| p.assemblage(&id).is_some()) { "assemblage" } else { "mur" };
-        self.selected = Some(crate::rendu::natif::id_natif(genre, &id));
+        self.selected = Some(modele::identifiants::id_natif(genre, &id));
         self.reveal = self.selected;
         self.status = "Mur créé — Ctrl+S pour enregistrer.".into();
         Ok(id)
@@ -34,7 +34,7 @@ impl ViewerApp {
             return;
         }
         self.status = format!("Vue « {nom} » créée — Ctrl+S pour enregistrer.");
-        let numero = crate::rendu::natif::numero_vue(&id);
+        let numero = modele::identifiants::numero_vue(&id);
         let indice = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()?.vues.iter().position(|v| v.revit_id == numero));
         if ouvrir && let Some(i) = indice {
             self.activer_vue(i);
@@ -43,7 +43,7 @@ impl ViewerApp {
 
     /// Ouvre la vue native `id` (coupe, élévation, plan) dans le navigateur de vues.
     pub(super) fn ouvrir_vue_native(&mut self, id: &str) {
-        let numero = crate::rendu::natif::numero_vue(id);
+        let numero = modele::identifiants::numero_vue(id);
         let indice = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()?.vues.iter().position(|v| v.revit_id == numero));
         if let Some(i) = indice {
             self.activer_vue(i);
@@ -61,7 +61,7 @@ impl ViewerApp {
         let mut projet = projet.clone();
         match projet.ajouter_dalle_contours(contours, parametres).and_then(|id| self.appliquer_projet(projet).map(|_| id)) {
             Ok(id) => {
-                self.selected = Some(crate::rendu::natif::id_natif("dalle", &id));
+                self.selected = Some(modele::identifiants::id_natif("dalle", &id));
                 self.reveal = self.selected;
                 self.status = "Dalle créée — Ctrl+S pour enregistrer.".into();
             }
@@ -76,7 +76,7 @@ impl ViewerApp {
         let (projet, _) = self.natif.as_ref()?;
         let etage = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)?.etage);
         etage
-            .and_then(|e| projet.niveaux.iter().find(|n| crate::rendu::natif::id_natif("niveau", &n.id) == e))
+            .and_then(|e| projet.niveaux.iter().find(|n| modele::identifiants::id_natif("niveau", &n.id) == e))
             .or(projet.niveaux.first())
             .map(|n| n.id.clone())
     }
@@ -85,7 +85,7 @@ impl ViewerApp {
         let Some((projet, _)) = &self.natif else { return 0.0 };
         let etage = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)?.etage);
         etage
-            .and_then(|e| projet.niveaux.iter().find(|n| crate::rendu::natif::id_natif("niveau", &n.id) == e))
+            .and_then(|e| projet.niveaux.iter().find(|n| modele::identifiants::id_natif("niveau", &n.id) == e))
             .or(projet.niveaux.first())
             .map_or(0.0, |n| n.altitude)
     }
@@ -104,7 +104,7 @@ impl ViewerApp {
     pub(super) fn aretes_pente(&self, rect: egui::Rect) -> Vec<(usize, usize, egui::Pos2, egui::Vec2, Option<f64>)> {
         use modele::elements::pente;
         let (Some((projet, _)), Some(sel)) = (&self.natif, self.selected) else { return Vec::new() };
-        let Some(d) = projet.dalles.iter().find(|d| crate::rendu::natif::id_natif("dalle", &d.id) == sel && d.sorte.aretes_reglables()) else { return Vec::new() };
+        let Some(d) = projet.dalles.iter().find(|d| modele::identifiants::id_natif("dalle", &d.id) == sel && d.sorte.aretes_reglables()) else { return Vec::new() };
         let z0 = projet.niveau(&d.niveau).map_or(0.0, |n| n.altitude) + d.decalage;
         let plans = pente::plans(d);
         let mut v = Vec::new();
@@ -132,7 +132,7 @@ impl ViewerApp {
         let accent = Color32::from_rgb(230, 120, 20);
         let gris = Color32::from_gray(90);
         // terre-plein : talus descendant vers l'extérieur, libellé hauteur / base
-        let talus = matches!((&self.natif, self.selected), (Some((p, _)), Some(sel)) if p.dalles.iter().any(|d| crate::rendu::natif::id_natif("dalle", &d.id) == sel && d.sorte.talus()));
+        let talus = matches!((&self.natif, self.selected), (Some((p, _)), Some(sel)) if p.dalles.iter().any(|d| modele::identifiants::id_natif("dalle", &d.id) == sel && d.sorte.talus()));
         for (_, _, q, dir, pente) in aretes {
             let dir = if talus { -dir } else { dir };
             let survole = survol.is_some_and(|s| s.distance(q) <= 9.0);
@@ -171,7 +171,7 @@ impl ViewerApp {
     pub(super) fn editer_talus(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
         use modele::elements::terre_plein as tp;
         let (Some((projet, _)), Some(sel)) = (&self.natif, self.selected) else { return };
-        let Some(d) = projet.dalles.iter().find(|d| crate::rendu::natif::id_natif("dalle", &d.id) == sel && d.sorte.talus()) else { return };
+        let Some(d) = projet.dalles.iter().find(|d| modele::identifiants::id_natif("dalle", &d.id) == sel && d.sorte.talus()) else { return };
         let id = d.id.clone();
         let mut choix = None;
         let mut remblayer = None;
@@ -328,7 +328,7 @@ impl ViewerApp {
     pub(super) fn basculer_pente(&mut self, c: usize, k: usize) {
         let (Some((projet, _)), Some(sel)) = (&self.natif, self.selected) else { return };
         let mut p = projet.clone();
-        let Some(d) = p.dalles.iter_mut().find(|d| crate::rendu::natif::id_natif("dalle", &d.id) == sel) else { return };
+        let Some(d) = p.dalles.iter_mut().find(|d| modele::identifiants::id_natif("dalle", &d.id) == sel) else { return };
         let defaut = if d.sorte.talus() { modele::elements::terre_plein::angle(1.0) } else { self.pente_defaut };
         let pente = if d.pente(c, k).is_some() { None } else { Some(defaut) };
         d.definir_pente(c, k, pente);
@@ -494,7 +494,7 @@ impl ViewerApp {
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
         let mut rectangles: std::collections::HashMap<u64, egui::Rect> = std::collections::HashMap::new();
         // pièces : seule l'étiquette se vise (l'aplat laisse sélectionner les murs)
-        let pieces: std::collections::HashSet<u64> = p.pieces.iter().map(|x| crate::rendu::natif::id_natif("annotation", &x.id)).collect();
+        let pieces: std::collections::HashSet<u64> = p.pieces.iter().map(|x| modele::identifiants::id_natif("annotation", &x.id)).collect();
         for prim in modele::documentation::annotations(p, vue) {
             let Some(id) = prim.element else { continue };
             if pieces.contains(&id) && matches!(prim.forme, noyau::trace2d::Forme::Surface(_)) { continue; }
@@ -511,7 +511,7 @@ impl ViewerApp {
                 rectangles.entry(id).and_modify(|r| r.extend_with(q)).or_insert(egui::Rect::from_min_max(q,q));
             }
         }
-        p.annotations.iter().map(|a| &a.id).chain(p.pieces.iter().map(|x| &x.id)).filter_map(|id| rectangles.remove(&crate::rendu::natif::id_natif("annotation", id)).map(|r| (id.clone(),r.expand(2.0)))).collect()
+        p.annotations.iter().map(|a| &a.id).chain(p.pieces.iter().map(|x| &x.id)).filter_map(|id| rectangles.remove(&modele::identifiants::id_natif("annotation", id)).map(|r| (id.clone(),r.expand(2.0)))).collect()
     }
 
     pub(super) fn repere_coupe_proche(&self, rect: egui::Rect, q: egui::Pos2, z: f64) -> Option<String> {
@@ -533,7 +533,7 @@ impl ViewerApp {
         let p = &self.natif.as_ref()?.0;
         p.limites_propriete.iter().filter_map(|l| {
             let scene = self.scene.as_ref()?;
-            let index = *scene.object_of.get(&crate::rendu::natif::id_natif("limite_propriete", &l.id))? as usize;
+            let index = *scene.object_of.get(&modele::identifiants::id_natif("limite_propriete", &l.id))? as usize;
             if !self.visible.get(index).copied().unwrap_or(false) { return None; }
             let distance = (0..l.contour.len()).filter_map(|i| {
                 let a = self.ecran_plan(rect, l.contour[i], l.altitude)?;
