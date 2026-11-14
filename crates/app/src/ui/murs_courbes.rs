@@ -87,7 +87,7 @@ impl ViewerApp {
                 if !valide {self.error=Some("Saisissez une valeur positive et finie.".into());return actif;}
                 match self.executer_bim(crate::modele::edition::commandes::Commande::ModifierTrajectoireMur{id:id.clone(),points:pts.map(|p|p.to_array())}) {
                     Ok(_)=>{
-                        if let Some((_,r,_,s))=crate::dessin::dao::arc_3_points(pts[0],pts[1],pts[2]) {
+                        if let Some((_,r,_,s))=crate::noyau::forme2d::arc_3_points(pts[0],pts[1],pts[2]) {
                             let facteur=crate::config::options::unite().facteur();
                             let formater=|v|crate::formats::ifc::step::format_real(v / facteur);
                             self.cote_arc=Some((id,i,formater(r),formater(r*s.abs())));
@@ -108,8 +108,8 @@ impl ViewerApp {
             let Some((axe,z))=p.trajectoire_justification(id) else {continue};
             let Some(mut points)=points_controle(axe) else {continue};
             if let Some((gid,_,pts))=&self.dessin2d.arc_glisse {if gid==id {points=*pts;}}
-            let Some((o,r,d,s))=crate::dessin::dao::arc_3_points(points[0],points[1],points[2]) else {continue};
-            let ligne:Vec<_>=crate::dessin::dao::points_arc(o,r,d,s).into_iter().filter_map(|p|self.ecran_plan(rect,p.to_array(),z)).collect();
+            let Some((o,r,d,s))=crate::noyau::forme2d::arc_3_points(points[0],points[1],points[2]) else {continue};
+            let ligne:Vec<_>=crate::noyau::forme2d::points_arc(o,r,d,s).into_iter().filter_map(|p|self.ecran_plan(rect,p.to_array(),z)).collect();
             painter.add(egui::Shape::dashed_line(&ligne,egui::Stroke::new(1.5,bleu),8.,4.));
             if ids.len()==1 {
                 for p in points {
@@ -166,7 +166,7 @@ impl ViewerApp {
                 Ok(_) => {
                     if let Some((axe, _)) = self.natif.as_ref().and_then(|(p,_)|p.trajectoire_justification(&id))
                         && let Some(points) = points_controle(axe)
-                        && let Some((_,r,_,s)) = crate::dessin::dao::arc_3_points(points[0],points[1],points[2]) {
+                        && let Some((_,r,_,s)) = crate::noyau::forme2d::arc_3_points(points[0],points[1],points[2]) {
                         let facteur = crate::config::options::unite().facteur();
                         let derniere_extremite = self.cote_arc.as_ref().map_or(poignee, |(_, ancienne, _, _)| *ancienne);
                         self.cote_arc = Some((id, derniere_extremite, crate::formats::ifc::step::format_real(r/facteur), crate::formats::ifc::step::format_real(r*s.abs()/facteur)));
@@ -189,14 +189,14 @@ mod tests {
             let centre=DVec2::new(1000.,-2000.);
             let rayon=5000.0;
             let points=ajuster_arc(axe,2,DVec2::new(10000.,10000.),None).unwrap();
-            let (o,r,_,_)=crate::dessin::dao::arc_3_points(points[0],points[1],points[2]).unwrap();
+            let (o,r,_,_)=crate::noyau::forme2d::arc_3_points(points[0],points[1],points[2]).unwrap();
             assert!(o.distance(centre)<1e-6 && (r-rayon).abs()<1e-6);
             let points=ajuster_arc(axe,1,DVec2::ZERO,Some(7000.)).unwrap();
-            let (o,r,_,_)=crate::dessin::dao::arc_3_points(points[0],points[1],points[2]).unwrap();
+            let (o,r,_,_)=crate::noyau::forme2d::arc_3_points(points[0],points[1],points[2]).unwrap();
             assert!(o.distance(centre)<1e-6 && (r-7000.).abs()<1e-6);
             for poignee in [0,2] {
                 let points=ajuster_arc(axe,poignee,DVec2::ZERO,Some(6000.)).unwrap();
-                let (o,r,_,s)=crate::dessin::dao::arc_3_points(points[0],points[1],points[2]).unwrap();
+                let (o,r,_,s)=crate::noyau::forme2d::arc_3_points(points[0],points[1],points[2]).unwrap();
                 assert!(o.distance(centre)<1e-6 && (r*s.abs()-6000.).abs()<1e-6);
                 let fixe=if poignee==0 {points[2]}else{points[0]};
                 let ancien=if poignee==0 {DVec2::from_array([1000.,3000.])}else{DVec2::from_array([6000.,-2000.])};

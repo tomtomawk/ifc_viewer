@@ -1,6 +1,7 @@
 //! Accrochage et guides temporaires communs aux canevas de dessin.
 use glam::DVec2;
-use crate::dessin::dao::{self as d2, Accroche, Geom};
+use crate::dessin::dao::{self as d2, Accroche};
+use crate::noyau::forme2d::{Geom};
 
 /// Directions des éléments passant par un point de référence, pour leurs guides.
 pub(super) fn directions_au_point(p: DVec2, geoms: &[Geom]) -> Vec<DVec2> {

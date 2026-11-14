@@ -218,8 +218,8 @@ impl AnnotationForme {
     }
 
     /// Forme du dessin 2D (ligne, polyligne, spline, cercle, arc), None pour les autres.
-    pub fn forme_2d(&self) -> Option<crate::dessin::dao::Forme2D> {
-        use crate::dessin::dao::Forme2D as F;
+    pub fn forme_2d(&self) -> Option<crate::noyau::forme2d::Forme2D> {
+        use crate::noyau::forme2d::Forme2D as F;
         let v = |p: &[f64; 2]| DVec2::from_array(*p);
         Some(match self {
             Self::Ligne { debut, fin } => F::Ligne([v(debut), v(fin)]),
@@ -232,8 +232,8 @@ impl AnnotationForme {
     }
 
     /// Annotation d'une forme du dessin 2D.
-    pub fn depuis_forme_2d(f: &crate::dessin::dao::Forme2D) -> AnnotationForme {
-        use crate::dessin::dao::Forme2D as F;
+    pub fn depuis_forme_2d(f: &crate::noyau::forme2d::Forme2D) -> AnnotationForme {
+        use crate::noyau::forme2d::Forme2D as F;
         let a = |p: &DVec2| p.to_array();
         match f {
             F::Ligne([d, e]) => Self::Ligne { debut: a(d), fin: a(e) },
@@ -252,7 +252,7 @@ impl AnnotationForme {
             return Some(points.clone());
         }
         let sommets: Vec<DVec2> = points.iter().map(|p| DVec2::from_array(*p)).collect();
-        let mut l = crate::dessin::dao::developper(&sommets, *fermee, courbures);
+        let mut l = crate::noyau::forme2d::developper(&sommets, *fermee, courbures);
         if *fermee && l.len() > 1 {
             l.pop();
         }
@@ -653,7 +653,7 @@ fn point_cote(p: &Projet, v: &Vue, point: &PointCote) -> Option<DVec2> {
 fn primitives_polyligne(p: &Projet, points: &[[f64; 2]], fermee: bool, courbures: &[f64], traits: &[String], echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
     let pts: Vec<DVec2> = points.iter().map(|q| DVec2::from_array(*q)).collect();
     // chaque segment : ses deux sommets, ou les points de son arc
-    let segments: Vec<Vec<DVec2>> = crate::dessin::dao::segments_polyligne(&pts, fermee, courbures).into_iter().map(|(a, b, k)| crate::dessin::dao::points_segment(a, b, k)).collect();
+    let segments: Vec<Vec<DVec2>> = crate::noyau::forme2d::segments_polyligne(&pts, fermee, courbures).into_iter().map(|(a, b, k)| crate::noyau::forme2d::points_segment(a, b, k)).collect();
     let mut out = Vec::new();
     let mut k = 0;
     while k < segments.len() {

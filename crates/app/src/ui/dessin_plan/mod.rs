@@ -14,7 +14,8 @@ mod cotes_aretes;
 mod commandes_contour;
 mod courbures;
 use super::*;
-use crate::dessin::dao::{self as d2, Accroche, Geom, OutilDessin, Trace};
+use crate::dessin::dao::{self as d2, Accroche, OutilDessin, Trace};
+use crate::noyau::forme2d::{Geom};
 use crate::modele::edition::commandes::Commande;
 use crate::modele::documentation::{Annotation, AnnotationForme};
 use glam::{DVec2, DVec3};
@@ -111,7 +112,7 @@ pub(super) struct EtatDessin2D {
     /// Justification figée de chaque volée déjà posée du tracé d'escalier en cours.
     pub just_segments: Vec<u8>,
     forme_cadrage: Option<OutilDessin>,
-    ligne_selection: Option<d2::Forme2D>,
+    ligne_selection: Option<crate::noyau::forme2d::Forme2D>,
     pub arc_glisse: Option<(String,usize,[DVec2;3])>,
     pub saisie: String,
     champ_angle: bool,
@@ -275,11 +276,11 @@ pub(super) enum Usage {
 }
 
 /// Contour d'élément horizontal d'une forme fermée (cercle : 48 côtés).
-pub(super) fn contour_surface(f: &d2::Forme2D) -> Option<Vec<[f64; 2]>> {
+pub(super) fn contour_surface(f: &crate::noyau::forme2d::Forme2D) -> Option<Vec<[f64; 2]>> {
     let pts: Vec<DVec2> = match f {
-        d2::Forme2D::Polyligne { points, .. } | d2::Forme2D::Spline { points, .. } if points.len() >= 3 => points.clone(),
-        d2::Forme2D::Cercle { centre, rayon } => {
-            let mut p = d2::points_arc(*centre, *rayon, 0.0, std::f64::consts::TAU);
+        crate::noyau::forme2d::Forme2D::Polyligne { points, .. } | crate::noyau::forme2d::Forme2D::Spline { points, .. } if points.len() >= 3 => points.clone(),
+        crate::noyau::forme2d::Forme2D::Cercle { centre, rayon } => {
+            let mut p = crate::noyau::forme2d::points_arc(*centre, *rayon, 0.0, std::f64::consts::TAU);
             p.pop();
             // 48 côtés au plus, quelle que soit la finesse de l'aperçu
             let pas = (p.len() / 48).max(1);
@@ -292,31 +293,31 @@ pub(super) fn contour_surface(f: &d2::Forme2D) -> Option<Vec<[f64; 2]>> {
 
 /// Lignes tracées des murs d'une forme : un mur par segment, un mur courbe par arc, deux
 /// demi-cercles pour un cercle.
-pub(super) fn axes_murs(f: &d2::Forme2D) -> Vec<crate::modele::Axe> {
+pub(super) fn axes_murs(f: &crate::noyau::forme2d::Forme2D) -> Vec<crate::modele::Axe> {
     use crate::modele::Axe;
     let droit = |a: DVec2, b: DVec2| Axe::Droit { debut: a.to_array(), fin: b.to_array() };
     match f {
-        d2::Forme2D::Ligne([a, b]) => vec![droit(*a, *b)],
+        crate::noyau::forme2d::Forme2D::Ligne([a, b]) => vec![droit(*a, *b)],
         // segment d'arc d'une polyligne : mur courbe
-        d2::Forme2D::Polyligne { points, fermee, courbures } => d2::segments_polyligne(points, *fermee, courbures)
+        crate::noyau::forme2d::Forme2D::Polyligne { points, fermee, courbures } => crate::noyau::forme2d::segments_polyligne(points, *fermee, courbures)
             .into_iter()
-            .map(|(a, b, k)| match d2::arc_courbure(a, b, k) {
+            .map(|(a, b, k)| match crate::noyau::forme2d::arc_courbure(a, b, k) {
                 Some((o, _, _, balayage)) => Axe::Arc { debut: a.to_array(), fin: b.to_array(), centre: o.to_array(), direct: balayage > 0.0 },
                 None => droit(a, b),
             })
             .collect(),
-        d2::Forme2D::Spline { points, fermee } => {
+        crate::noyau::forme2d::Forme2D::Spline { points, fermee } => {
             let mut v: Vec<Axe> = points.windows(2).map(|w| droit(w[0], w[1])).collect();
             if *fermee && points.len() >= 3 {
                 v.push(droit(points[points.len() - 1], points[0]));
             }
             v
         }
-        d2::Forme2D::Arc([a, b, c]) => d2::arc_3_points(*a, *b, *c)
+        crate::noyau::forme2d::Forme2D::Arc([a, b, c]) => crate::noyau::forme2d::arc_3_points(*a, *b, *c)
             .map(|(o, _, _, balayage)| Axe::Arc { debut: a.to_array(), fin: c.to_array(), centre: o.to_array(), direct: balayage > 0.0 })
             .into_iter()
             .collect(),
-        d2::Forme2D::Cercle { centre, rayon } => {
+        crate::noyau::forme2d::Forme2D::Cercle { centre, rayon } => {
             let (a, b) = (*centre + DVec2::X * *rayon, *centre - DVec2::X * *rayon);
             let arc = |d: DVec2, f: DVec2| Axe::Arc { debut: d.to_array(), fin: f.to_array(), centre: centre.to_array(), direct: true };
             vec![arc(a, b), arc(b, a)]
@@ -716,7 +717,7 @@ impl ViewerApp {
         let Some(points) = self.dessin2d.dalle.get(c).filter(|p| i < p.len()) else { return false };
         let (a, b) = (points[i], points[(i + 1) % points.len()]);
         // segment d'arc : longueur développée et rayon
-        let arc = d2::arc_courbure(DVec2::from_array(a), DVec2::from_array(b), self.dessin2d.courbure(c, i));
+        let arc = crate::noyau::forme2d::arc_courbure(DVec2::from_array(a), DVec2::from_array(b), self.dessin2d.courbure(c, i));
         let longueur = arc.map_or(DVec2::from_array(a).distance(DVec2::from_array(b)), |(_, r, _, s)| r * s.abs());
         let projet = self.natif.as_ref().map(|(p, _)| p);
         let dalle = projet.filter(|_| e.creation.is_none() && e.annotation.is_none() && e.element.is_none()).and_then(|p| p.dalles.iter().find(|d| d.id == e.id)).cloned();

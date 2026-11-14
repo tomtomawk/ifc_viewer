@@ -1,6 +1,7 @@
 //! Édition graphique du cartouche dans les vues de sa famille.
 use super::*;
-use crate::dessin::dao::{EvenementTrace, Forme2D, Geom, OutilDessin, Trace};
+use crate::dessin::dao::{EvenementTrace, OutilDessin, Trace};
+use crate::noyau::forme2d::{Forme2D, Geom};
 use crate::modele::{Projet, documentation::{self as doc, AnnotationForme as F, FamilleCartouche, TexteCartouche}};
 use super::editeur_famille::{Cadre, NavigationFamille, VueFamille};
 use super::ruban::{Menu, Outil, RubanEdition};

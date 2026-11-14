@@ -127,7 +127,7 @@ impl EtatDessin2D {
     /// Segments du contour `c` : extrémités et courbure.
     pub(super) fn segments_contour(&self, c: usize, fermee: bool) -> Vec<(DVec2, DVec2, f64)> {
         let points: Vec<DVec2> = self.dalle.get(c).map(|x| x.iter().map(|p| DVec2::from_array(*p)).collect()).unwrap_or_default();
-        d2::segments_polyligne(&points, fermee, &self.courbures_contour(c))
+        crate::noyau::forme2d::segments_polyligne(&points, fermee, &self.courbures_contour(c))
     }
 
     /// Courbures du contour `c` à enregistrer : une par segment, vide si tous sont droits.

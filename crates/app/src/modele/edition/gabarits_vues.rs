@@ -1,5 +1,5 @@
 //! Gabarits de vue partagés par les vues natives.
-use crate::modele::{Projet, collaboration};
+use crate::modele::Projet;
 use serde::{Deserialize, Serialize};
 
 /// Paramètres pilotés par un gabarit. Le cadrage, l'orientation et les objets masqués
@@ -123,6 +123,7 @@ mod tests {
         let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
         assert_eq!(relu.gabarit_vue(&b).unwrap().echelle, 75.0);
         assert!(relu.gabarit_vue(&a).is_none());
+        use crate::modele::collaboration;
         let objets = collaboration::objets(&p).unwrap();
         let partage = collaboration::projet(&objets).unwrap();
         assert_eq!(partage.gabarit_vue(&b).unwrap(), p.gabarit_vue(&b).unwrap());

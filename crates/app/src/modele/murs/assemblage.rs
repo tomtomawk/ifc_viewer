@@ -101,7 +101,7 @@ impl Projet {
         let Axe::Arc{debut,centre,direct,..}=ancien else {return Err("Mur courbe requis".into())};
         if !points.iter().flatten().all(|x|x.is_finite()) {return Err("Coordonnées non finies".into());}
         let [a,b,c]=points.map(glam::DVec2::from_array);
-        let (o,r,_,balayage)=crate::dessin::dao::arc_3_points(a,b,c).ok_or("Les trois points de contrôle doivent définir un arc.".to_string())?;
+        let (o,r,_,balayage)=crate::noyau::forme2d::arc_3_points(a,b,c).ok_or("Les trois points de contrôle doivent définir un arc.".to_string())?;
         let nouvel=Axe::Arc{debut:a.to_array(),fin:c.to_array(),centre:o.to_array(),direct:balayage>0.};
         let rayon0=(debut[0]-centre[0]).hypot(debut[1]-centre[1]);
         let couches=self.assemblage(id).map(|a|a.couches.clone()).unwrap_or_else(||vec![id.into()]);

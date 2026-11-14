@@ -553,7 +553,8 @@ impl EditeurFamille {
 
     /// Termine le tracé 2D avec le moteur commun, puis conserve les références de plans.
     fn terminer_polyligne(&mut self) {
-        use crate::dessin::dao::{EvenementTrace, Forme2D, OutilDessin, Trace};
+        use crate::dessin::dao::{EvenementTrace, OutilDessin, Trace};
+        use crate::noyau::forme2d::{Forme2D};
         let mut trace = self.trace_polyligne.take().unwrap_or_else(|| Trace::new(OutilDessin::Polyligne));
         if let Some(Forme2D::Polyligne { fermee, .. }) = trace.appliquer(EvenementTrace::Terminer).into_iter().next() {
             let points = std::mem::take(&mut self.esquisse).into_iter().map(|(p, _)| p).collect();

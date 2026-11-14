@@ -173,7 +173,7 @@ impl ViewerApp {
             self.dessin2d.ligne_selection=resp.hover_pos().and_then(|q|self.trait_mur_vise(rect,q));
             if resp.clicked() {
                 if let Some(f)=self.dessin2d.ligne_selection.clone() {
-                    if let d2::Forme2D::Cercle{centre,rayon}=f {
+                    if let crate::noyau::forme2d::Forme2D::Cercle{centre,rayon}=f {
                         self.ruban_edition.selection_mur=false;
                         self.ruban_edition.forme_mur=OutilDessin::Cercle;
                         let mut t=Trace::new(OutilDessin::Cercle);t.perimetre=true;t.points=vec![centre,centre+DVec2::X*rayon];
@@ -221,7 +221,7 @@ impl ViewerApp {
                             if distance < 10.0 && sommet.is_none_or(|s| distance < s.0) { sommet = Some((distance, ci, i)); }
                             if !fermee && i + 1 == c.len() { continue; }
                             // un segment d'arc se vise le long de son arc
-                            let trace = d2::points_segment(DVec2::from_array(c[i]), DVec2::from_array(c[(i + 1) % c.len()]), self.dessin2d.courbure(ci, i));
+                            let trace = crate::noyau::forme2d::points_segment(DVec2::from_array(c[i]), DVec2::from_array(c[(i + 1) % c.len()]), self.dessin2d.courbure(ci, i));
                             let Some(ecran) = trace.iter().map(|p| self.vers_ecran(rect, *p)).collect::<Option<Vec<_>>>() else { continue };
                             for w in ecran.windows(2) {
                                 let v = w[1] - w[0];
@@ -420,7 +420,7 @@ impl ViewerApp {
         }
         for (i, c) in self.dessin2d.ouverts.iter().enumerate() {
             let k = self.dessin2d.ouverts_courbures.get(i).map_or(&[][..], |k| k.as_slice());
-            let pts: Vec<egui::Pos2> = d2::developper(c, false, k).iter().filter_map(|q| self.vers_ecran(rect, *q)).collect();
+            let pts: Vec<egui::Pos2> = crate::noyau::forme2d::developper(c, false, k).iter().filter_map(|q| self.vers_ecran(rect, *q)).collect();
             painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, bleu)));
             for q in [c.first(), c.last()].into_iter().flatten().filter_map(|q| self.vers_ecran(rect, *q)) {
                 painter.rect_stroke(egui::Rect::from_center_size(q, egui::vec2(10.0, 10.0)), 0.0, egui::Stroke::new(2.0, Color32::from_rgb(200, 50, 45)), egui::StrokeKind::Middle);
@@ -507,7 +507,7 @@ impl ViewerApp {
                 if trace.attend_courbure() {
                     // arc en attente : rayon tapé, sinon rayon de l'arc passant par le curseur
                     let n = trace.points.len();
-                    let rayon = d2::arc_3_points(trace.points[n - 2], p, trace.points[n - 1]).map(|x| x.1);
+                    let rayon = crate::noyau::forme2d::arc_3_points(trace.points[n - 2], p, trace.points[n - 1]).map(|x| x.1);
                     let u = crate::config::options::unite();
                     let decimales = u.facteur().log10().round().max(0.0) as usize;
                     infos.push(if saisie.is_empty() || coordonnees { rayon.map_or("R —".to_string(), |r| format!("R {:.*}{}", decimales, r / u.facteur(), u.suffixe())) } else { format!("R {saisie}▏{}", u.suffixe()) });
@@ -539,7 +539,7 @@ impl ViewerApp {
                     let ecran: Vec<_> = pts.iter().filter_map(|p| self.vers_ecran(rect, *p)).collect();
                     // tracé développé : les segments d'arc suivent leur arc
                     let segments = self.dessin2d.segments_contour(i, edit.fermee(i));
-                    let ligne = |a: DVec2, b: DVec2, k: f64| -> Vec<egui::Pos2> { d2::points_segment(a, b, k).iter().filter_map(|p| self.vers_ecran(rect, *p)).collect() };
+                    let ligne = |a: DVec2, b: DVec2, k: f64| -> Vec<egui::Pos2> { crate::noyau::forme2d::points_segment(a, b, k).iter().filter_map(|p| self.vers_ecran(rect, *p)).collect() };
                     for (a, b, k) in &segments {
                         painter.add(egui::Shape::line(ligne(*a, *b, *k), egui::Stroke::new(2.0, couleur)));
                     }

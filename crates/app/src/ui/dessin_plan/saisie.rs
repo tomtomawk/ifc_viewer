@@ -111,7 +111,7 @@ impl ViewerApp {
         let mut geoms = self.geoms_dessin();
         if let Some(t) = &self.dessin2d.trace {
             let k = t.courbures();
-            geoms.extend(t.points.windows(2).enumerate().map(|(i, w)| d2::geom_segment(w[0], w[1], k.get(i).copied().unwrap_or(0.0))));
+            geoms.extend(t.points.windows(2).enumerate().map(|(i, w)| crate::noyau::forme2d::geom_segment(w[0], w[1], k.get(i).copied().unwrap_or(0.0))));
             if let [p] = t.points.as_slice() {
                 geoms.push(Geom::Segment([*p, *p]));
             }
@@ -119,7 +119,7 @@ impl ViewerApp {
         if self.dessin2d.edition_contour.is_some() {
             for ci in 0..self.dessin2d.dalle.len() {
                 let fermee = self.dessin2d.edition_contour.as_ref().unwrap().fermee(ci);
-                geoms.extend(self.dessin2d.segments_contour(ci, fermee).into_iter().map(|(a, b, k)| d2::geom_segment(a, b, k)));
+                geoms.extend(self.dessin2d.segments_contour(ci, fermee).into_iter().map(|(a, b, k)| crate::noyau::forme2d::geom_segment(a, b, k)));
             }
         }
         if let Some(point) = self.dessin2d.reperage.calculer(c, tol, &geoms, precedent, maj, temps, self.options.delai_accrochage, self.angle_axes_plan(), self.dessin2d.trace.is_some()) {
@@ -147,7 +147,7 @@ impl ViewerApp {
 
     /// Enregistre les formes achevées : annotations de la vue, ou murs (une étape
     /// d'annulation par forme ; le dernier mur créé est sélectionné).
-    pub(in crate::ui) fn enregistrer_formes(&mut self, formes: Vec<d2::Forme2D>) {
+    pub(in crate::ui) fn enregistrer_formes(&mut self, formes: Vec<crate::noyau::forme2d::Forme2D>) {
         // cotation : le tracé ne sert qu'à recueillir les points ; Entrée ou clic droit
         // avant le dernier point abandonne la cote en cours
         if self.outil_cotation().is_some() {
@@ -160,7 +160,7 @@ impl ViewerApp {
         if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier || u == Usage::GardeCorps) {
             let escalier = self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier);
             for f in &formes {
-                let d2::Forme2D::Polyligne { points, .. } = f else { continue };
+                let crate::noyau::forme2d::Forme2D::Polyligne { points, .. } = f else { continue };
                 if points.len() < 2 {
                     continue;
                 }
@@ -678,7 +678,7 @@ impl ViewerApp {
         } else if valider && matches!(usage, Some(Usage::Escalier | Usage::GardeCorps | Usage::Annotation)) && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation.is_some()) {
             let formes = self.dessin2d.dalle.iter().enumerate().map(|(i, c)| {
                 let fermee = self.dessin2d.edition_contour.as_ref().unwrap().fermee(i);
-                d2::Forme2D::Polyligne { points: c.iter().copied().map(DVec2::from_array).collect(), fermee, courbures: self.dessin2d.courbures_enregistrees(i, fermee) }
+                crate::noyau::forme2d::Forme2D::Polyligne { points: c.iter().copied().map(DVec2::from_array).collect(), fermee, courbures: self.dessin2d.courbures_enregistrees(i, fermee) }
             }).collect();
             self.enregistrer_formes(formes);
             if self.dessin2d.message.is_some() { return; }

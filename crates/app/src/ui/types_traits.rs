@@ -98,7 +98,7 @@ impl ViewerApp {
                     for k in 0..n {
                         let (a, b) = (DVec2::from_array(pts[k]), DVec2::from_array(pts[(k + 1) % pts.len()]));
                         // segment d'arc : longueur développée
-                        let arc = crate::dessin::dao::arc_courbure(a, b, courbures.get(k).copied().unwrap_or(0.0));
+                        let arc = crate::noyau::forme2d::arc_courbure(a, b, courbures.get(k).copied().unwrap_or(0.0));
                         let longueur = arc.map_or(a.distance(b), |(_, r, _, s)| r * s.abs());
                         ui.label(format!("{} · {}{}", k + 1, crate::config::options::unite().afficher(longueur.round()), if arc.is_some() { " · arc" } else { "" }))
                             .on_hover_text("Segment, depuis le premier point de la polyligne ; longueur");
