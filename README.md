@@ -161,21 +161,21 @@ vue 3D (pilotes sans multiéchantillonnage).
 
 ## Architecture
 
-Le code est rangé par domaine ; le sens des dépendances va de `noyau` vers `ui`
+Le dépôt est un workspace Cargo : l'application (crate `bimedit`) est dans `crates/app/` (`crates/app/src/...`) ; l'arborescence cible, les règles de découpage en crates et l'état d'avancement sont dans [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Pour l'instant, le code est rangé par domaine ; le sens des dépendances va de `noyau` vers `ui`
 (`noyau` ← `formats` ← `modele` ← `dessin` / `rendu` ← `ui`). Le dossier `modele/` n'importe jamais egui.
 
 | Dossier | Rôle |
 |---|---|
-| `src/noyau/` | Briques sans dépendance au modèle : booléens par arbre BSP (`csg.rs`, portage de csg.js), textes en triangles (`texte.rs`), primitives 2D vectorielles et export SVG (`trace2d.rs`) |
-| `src/formats/ifc/` | IFC : parseur ISO 10303-21 (`step.rs`), couche sémantique (`semantique.rs` : unités, relations, matériaux, styles), placements, profils et solides → triangles (`geom.rs`) |
-| `src/formats/rvt/` | Revit : conteneur OLE et métadonnées (`mod.rs`), objets, schéma, champs, géométrie B-rep, vues, paramètres (tables dans `donnees/`), maquette (`maquette/` : lecture, conversion en scène, tests) |
-| `src/modele/` | Modèle natif (format d'édition) : types dans `mod.rs` ; `murs/` (assemblages, jonctions, retours), `elements/` (escaliers, terrain, cadrage, pentes), `volumes/` (géométrie, solides), `famille/`, `edition/` (commandes, historique, validation), `documentation/` (annotations, feuilles, nomenclatures), `echanges/` (import IFC/Revit, export IFC, enregistrement, rapport), `collaboration/` ; voir [docs/MODELE.md](docs/MODELE.md) |
-| `src/dessin/` | Dessin 2D : arêtes, coupe par un plan (poché, hachures, contours), motifs (`motifs.rs` : isolant), outils de DAO (`dao.rs`) |
-| `src/rendu/` | Vue 3D : scène et picking (`scene/`), rendu wgpu (`gpu.rs`), caméra, repère des plans, sélection à l'écran |
-| `src/ui/` | Interface egui : état et boucle (`mod.rs`), un fichier par zone (barre haute, panneaux, navigateur, vues, viewport, propriétés, sélection…), `ruban/`, `dessin_plan/` (saisie en plan), `editeur_famille/`, `bim/` |
-| `src/pilote/` | Canal de commande local (TCP 127.0.0.1, jeton) du serveur MCP, registre des instances (`instances.rs`) et commandes en ligne (`cli.rs`) |
-| `src/config/` | Options utilisateur, raccourcis, gabarits de projet |
-| `src/pilote/mcp.rs` | Serveur MCP (stdio, `bimedit --mcp`) qui pilote le viewer : ouverture, vues, caméra, propriétés, captures |
+| `crates/app/src/noyau/` | Briques sans dépendance au modèle : booléens par arbre BSP (`csg.rs`, portage de csg.js), textes en triangles (`texte.rs`), primitives 2D vectorielles et export SVG (`trace2d.rs`) |
+| `crates/app/src/formats/ifc/` | IFC : parseur ISO 10303-21 (`step.rs`), couche sémantique (`semantique.rs` : unités, relations, matériaux, styles), placements, profils et solides → triangles (`geom.rs`) |
+| `crates/app/src/formats/rvt/` | Revit : conteneur OLE et métadonnées (`mod.rs`), objets, schéma, champs, géométrie B-rep, vues, paramètres (tables dans `donnees/`), maquette (`maquette/` : lecture, conversion en scène, tests) |
+| `crates/app/src/modele/` | Modèle natif (format d'édition) : types dans `mod.rs` ; `murs/` (assemblages, jonctions, retours), `elements/` (escaliers, terrain, cadrage, pentes), `volumes/` (géométrie, solides), `famille/`, `edition/` (commandes, historique, validation), `documentation/` (annotations, feuilles, nomenclatures), `echanges/` (import IFC/Revit, export IFC, enregistrement, rapport), `collaboration/` ; voir [docs/MODELE.md](docs/MODELE.md) |
+| `crates/app/src/dessin/` | Dessin 2D : arêtes, coupe par un plan (poché, hachures, contours), motifs (`motifs.rs` : isolant), outils de DAO (`dao.rs`) |
+| `crates/app/src/rendu/` | Vue 3D : scène et picking (`scene/`), rendu wgpu (`gpu.rs`), caméra, repère des plans, sélection à l'écran |
+| `crates/app/src/ui/` | Interface egui : état et boucle (`mod.rs`), un fichier par zone (barre haute, panneaux, navigateur, vues, viewport, propriétés, sélection…), `ruban/`, `dessin_plan/` (saisie en plan), `editeur_famille/`, `bim/` |
+| `crates/app/src/pilote/` | Canal de commande local (TCP 127.0.0.1, jeton) du serveur MCP, registre des instances (`instances.rs`) et commandes en ligne (`cli.rs`) |
+| `crates/app/src/config/` | Options utilisateur, raccourcis, gabarits de projet |
+| `crates/app/src/pilote/mcp.rs` | Serveur MCP (stdio, `bimedit --mcp`) qui pilote le viewer : ouverture, vues, caméra, propriétés, captures |
 
 ## Pilotage par MCP
 
@@ -189,7 +189,7 @@ sur une instance, un port, un cache collaboratif et des documents temporaires is
 Chaque viewer écoute sur `127.0.0.1` (47811, sinon un port libre) des commandes d'une
 ligne précédées de son jeton, et s'inscrit dans le registre des instances : le pont
 pilote aussi un viewer ouvert à la main, et `viewer_instances` choisit entre plusieurs
-(voir [docs/PILOTE.md](docs/PILOTE.md)). `src/pilote/mcp.rs` (mode `bimedit --mcp` du même exécutable) les expose en serveur MCP,
+(voir [docs/PILOTE.md](docs/PILOTE.md)). `crates/app/src/pilote/mcp.rs` (mode `bimedit --mcp` du même exécutable) les expose en serveur MCP,
 déclaré dans `.mcp.json` sous le nom `bimedit` (lancé par `target/release/bimedit.exe --mcp`, après `cargo build --release`) : un agent ouvre un fichier, choisit une
 vue Revit, règle la caméra, lit les propriétés, désigne l'objet sous un point et reçoit des
 captures PNG. La vue 3D est rendue hors écran (tampon de trame), à la taille demandée, même
@@ -216,7 +216,7 @@ cargo run --release -- --stats samples/test_ifc4.ifc
 
 `samples/test_ifc4.ifc` couvre mur percé, dalle à profil avec arc indexé, item mappé coloré, faces triangulées et découpe par demi-espace ; les volumes attendus sont en commentaire dans le fichier.
 
-Les tests Revit (`src/formats/rvt/maquette/tests.rs`) lisent des fichiers hors dépôt, avec des valeurs relevées dans Revit 2026 : `essais\2026\E04_mur.rvt` (6,711 562 m³, boîte 12 345,6 × 200 × 2 718,2 mm), `essais\2026\E12_grilles.rvt` (3 grilles), `fichiers\Projet1.rvt` (59 murs, matériaux, sols, escaliers, garde-corps, pièces, instances et géométrie des familles, cotes d'une porte) et `fichiers\Kerreut 2025.rvt`, copie d'un projet du corpus d'agence (10 toits, escalier assemblé, familles). Ces fichiers sont dans le dossier du décodage `C:\Users\theba\Projets code\Decodage RVT` (essais, fichiers de référence, sorties de l'API de Revit, scripts RiveTT ; provenance de chaque fichier dans son `SOURCES.md`), remplaçable par la variable `RVT_ESSAIS` ; fichier absent : test sauté avec un message.
+Les tests Revit (`crates/app/src/formats/rvt/maquette/tests.rs`) lisent des fichiers hors dépôt, avec des valeurs relevées dans Revit 2026 : `essais\2026\E04_mur.rvt` (6,711 562 m³, boîte 12 345,6 × 200 × 2 718,2 mm), `essais\2026\E12_grilles.rvt` (3 grilles), `fichiers\Projet1.rvt` (59 murs, matériaux, sols, escaliers, garde-corps, pièces, instances et géométrie des familles, cotes d'une porte) et `fichiers\Kerreut 2025.rvt`, copie d'un projet du corpus d'agence (10 toits, escalier assemblé, familles). Ces fichiers sont dans le dossier du décodage `C:\Users\theba\Projets code\Decodage RVT` (essais, fichiers de référence, sorties de l'API de Revit, scripts RiveTT ; provenance de chaque fichier dans son `SOURCES.md`), remplaçable par la variable `RVT_ESSAIS` ; fichier absent : test sauté avec un message.
 
 Le décodage RVT est fait dans ce dépôt ; [rvt-rs](https://github.com/DrunkOnJava/rvt-rs) (Apache-2.0) n'a été consulté que partiellement, comme référence de comparaison, sans reprise de code (détail : `LISEZMOI-RVT.md` § 10, dossier de décodage hors dépôt).
 
@@ -244,7 +244,7 @@ physique du style Réaliste (ambiance, nuages, brume, intensités, taille du sol
 sol, exposition). Style, ombres, soleil et ciel sont enregistrés avec chaque vue
 (`rendus_vues` du projet, « 3d » pour la vue 3D).
 
-Le ciel (`src/rendu/ciel.rs`) suit la méthode de Hillaire (EGSR 2020) et reprend en
+Le ciel (`crates/app/src/rendu/ciel.rs`) suit la méthode de Hillaire (EGSR 2020) et reprend en
 la réadaptant l'implémentation du module `atmosphere` de
 [Bevy](https://github.com/bevyengine/bevy) 0.20, distribué sous licence MIT ou
 Apache 2.0 (Copyright © Bevy Contributors).

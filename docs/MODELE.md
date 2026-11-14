@@ -4,7 +4,7 @@ Format d'édition du projet, source de vérité de l’éditeur. Un fichier Revi
 **converti** vers ce modèle : ce qui est reconnu devient paramétrique, le reste devient un
 **élément importé** (géométrie figée). Rien n'est jeté sans être compté.
 
-Code : `src/modele/` (types : `mod.rs` ; conversions : `depuis_rvt.rs`, `depuis_ifc.rs` ;
+Code : `crates/app/src/modele/` (types : `mod.rs` ; conversions : `depuis_rvt.rs`, `depuis_ifc.rs` ;
 lecture de paramètres dans une géométrie : `geometrie.rs` ; rapport : `rapport.rs`).
 
 ```

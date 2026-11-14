@@ -89,7 +89,7 @@ modifier_vue, modifier_quadrillage, niveau, quadrillage, annoter, feuille,
 nomenclature, modifier_niveau, ouverture, deplacer, copier, tourner, aligner,
 ajuster, actualiser_type, attacher, priorite_jonction, supprimer, contour, tremie,
 piece, composant, type_composant.
-Les champs et types sont ceux de `src/modele/edition/commandes/mod.rs`.
+Les champs et types sont ceux de `crates/app/src/modele/edition/commandes/mod.rs`.
 
 Pour les autres propriétés (types, matériaux, plumes, motifs, phases, variantes,
 sous-projets, contextes, murs, dalles, familles paramétriques, cartouches, vues,

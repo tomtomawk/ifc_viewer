@@ -10,7 +10,7 @@ La séparation en fichiers est déjà importante, mais beaucoup de modules UI re
 
 ## Périmètre et méthode
 
-- Inventaire de tous les fichiers Rust sous `src`, puis lectures ciblées des documents, familles, outils, commandes, géométrie, rendu et collaboration.
+- Inventaire de tous les fichiers Rust sous `crates/app/src`, puis lectures ciblées des documents, familles, outils, commandes, géométrie, rendu et collaboration.
 - Vérification des appels et types par recherche textuelle ; pas de mesure de performance à l'exécution ni de calcul automatisé d'un taux de duplication.
 - Les numéros de lignes ci-dessous sont des repères de cette version ; les noms de fonctions constituent les références durables.
 - Les conclusions sont une revue structurelle, pas une certification de chaque module. Les différences nécessaires entre IFC, Revit, projet natif et familles ne sont pas assimilées à de la duplication inutile.
@@ -35,7 +35,7 @@ Les gros fichiers de tests ne sont pas prioritaires uniquement à cause de leur 
 
 ### P1 — Une seule gestion des documents et de leur état actif
 
-**Preuves :** `src/ui/mod.rs`, `DocumentOuvert` vers la ligne 421 et `ViewerApp` vers 496 ; `src/ui/documents.rs`, `stocker_document` vers 482 et `changer_document` vers 532.
+**Preuves :** `crates/app/src/ui/mod.rs`, `DocumentOuvert` vers la ligne 421 et `ViewerApp` vers 496 ; `crates/app/src/ui/documents.rs`, `stocker_document` vers 482 et `changer_document` vers 532.
 
 `DocumentOuvert` contient projet, historique, collaboration, scène et vues. Une partie de ces mêmes données est portée séparément dans `ViewerApp` pour le document actif. Le changement de document les transfère à la main avec de nombreux `take` et réinitialisations.
 
@@ -47,7 +47,7 @@ Les gros fichiers de tests ne sont pas prioritaires uniquement à cause de leur 
 
 ### P1 — Achever l'unification du cycle de vie des familles
 
-**Preuves :** `src/ui/editeur_famille/mod.rs`, `EditeurFamille` ; `src/ui/familles_planes.rs:39`, `EditeurPlan` ; les champs `famille`, `familles_inactives`, `familles_planes`, `famille_active` et `famille_plane_active` dans `ViewerApp`.
+**Preuves :** `crates/app/src/ui/editeur_famille/mod.rs`, `EditeurFamille` ; `crates/app/src/ui/familles_planes.rs:39`, `EditeurPlan` ; les champs `famille`, `familles_inactives`, `familles_planes`, `famille_active` et `famille_plane_active` dans `ViewerApp`.
 
 Le choix de catégorie est commun visuellement, mais les documents 2D et 3D conservent des états et des parcours différents. L'historique des familles modélisées utilise `Historique<FichierFamille>` ; `EditeurPlan` compare son contenu à une référence et ne porte pas cette même pile.
 
@@ -59,7 +59,7 @@ Le choix de catégorie est commun visuellement, mais les documents 2D et 3D cons
 
 ### P1 — Un catalogue unique des outils et de leurs capacités
 
-**Preuves :** `OutilFamille` et `outil_disponible` dans `src/ui/editeur_famille/mod.rs` ; listes de boutons et dispatch dans `panneau.rs` ; `formes_famille_planes` dans `src/ui/ruban/barre_commandes.rs:68` ; ruban spécifique du cartouche dans `src/ui/cartouche.rs`.
+**Preuves :** `OutilFamille` et `outil_disponible` dans `crates/app/src/ui/editeur_famille/mod.rs` ; listes de boutons et dispatch dans `panneau.rs` ; `formes_famille_planes` dans `crates/app/src/ui/ruban/barre_commandes.rs:68` ; ruban spécifique du cartouche dans `crates/app/src/ui/cartouche.rs`.
 
 Les clés, noms, aides, icônes, règles d'activation et traitements sont répartis entre plusieurs listes. L'ajout d'une forme nécessite de modifier ces listes séparément, ce que les nouvelles révolutions et formes guidées rendent particulièrement visible.
 
@@ -69,7 +69,7 @@ Les clés, noms, aides, icônes, règles d'activation et traitements sont répar
 
 ### P1 — Nommer et typer les opérations de génération de solides
 
-**Preuves :** `src/modele/famille/modelee.rs:215`, `Extrusion`, avec `revolution: Option<Revolution>` et `guidage: Option<FormeGuidee>` ; la collection reste nommée `extrusions`, y compris pour les raccordements.
+**Preuves :** `crates/app/src/modele/famille/modelee.rs:215`, `Extrusion`, avec `revolution: Option<Revolution>` et `guidage: Option<FormeGuidee>` ; la collection reste nommée `extrusions`, y compris pour les raccordements.
 
 Ce choix préserve la compatibilité immédiate, mais autorise structurellement des combinaisons incompatibles que `valider` doit refuser. Le nom du type ne représente plus ce qu'il contient.
 
@@ -79,11 +79,11 @@ Ce choix préserve la compatibilité immédiate, mais autorise structurellement 
 
 ### P1 — Un moteur de saisie d'esquisse indépendant de la projection
 
-**Preuves :** `src/ui/editeur_famille/canevas.rs`, `canevas_construction` et `canevas` ; `src/ui/cartouche.rs` ; `src/ui/dessin_plan` ; `src/dessin/dao.rs` ; `src/ui/accrochage.rs`.
+**Preuves :** `crates/app/src/ui/editeur_famille/canevas.rs`, `canevas_construction` et `canevas` ; `crates/app/src/ui/cartouche.rs` ; `crates/app/src/ui/dessin_plan` ; `crates/app/src/dessin/dao.rs` ; `crates/app/src/ui/accrochage.rs`.
 
 Le canevas oblique et le canevas orthogonal gèrent encore séparément clics, fermeture du profil, sélection et dessin temporaire. Le canevas oblique dispose de moins d'accrochages et de poignées que le canevas principal. Les cartouches exploitent déjà `Trace` du module DAO.
 
-**Amélioration effectuée dans cette session :** `src/ui/editeur_famille/formes.rs::terminer_forme` centralise la validation et la création des formes pour les deux canevas. Une erreur de validation conserve désormais le tracé à corriger.
+**Amélioration effectuée dans cette session :** `crates/app/src/ui/editeur_famille/formes.rs::terminer_forme` centralise la validation et la création des formes pour les deux canevas. Une erreur de validation conserve désormais le tracé à corriger.
 
 **Suite proposée :** un état d'esquisse et des événements communs (point, terminer, annuler, sélectionner) ; des adaptateurs fournissent projection, points d'accrochage et résultat métier. Conserver un contrôleur de cartouche spécialisé pour textes et libellés, mais réutiliser le tracé et la sélection de géométrie.
 
@@ -101,7 +101,7 @@ Les coordonnées sont conservées correctement, mais une copie de repère n'expr
 
 ### P2 — Factoriser les primitives géométriques avec un contrat explicite
 
-**Preuves :** `src/modele/volumes/solides.rs:85` (`prisme`), `src/noyau/trace2d.rs:255` (`trianguler`), `src/noyau/texte.rs:195`, `src/modele/elements/terre_plein.rs`, et les modules `modelee/revolution.rs` et `modelee/guidage.rs`.
+**Preuves :** `crates/app/src/modele/volumes/solides.rs:85` (`prisme`), `crates/app/src/noyau/trace2d.rs:255` (`trianguler`), `crates/app/src/noyau/texte.rs:195`, `crates/app/src/modele/elements/terre_plein.rs`, et les modules `modelee/revolution.rs` et `modelee/guidage.rs`.
 
 Plusieurs adaptateurs préparent des coordonnées pour Earcut, orientent les triangles et traitent les erreurs. Le chemin `trace2d` passe par la triangulation de texte en `f32`, alors que d'autres calculs utilisent `f64`. Les besoins ne sont pas tous identiques : contours avec trous, texte, terrain et solides fermés demandent des contrats distincts.
 
@@ -113,7 +113,7 @@ Plusieurs adaptateurs préparent des coordonnées pour Earcut, orientent les tri
 
 ### P2 — Étendre le point d'entrée métier commun aux familles
 
-**Preuves :** `src/modele/edition/commandes/mod.rs:13`, enum `Commande` ; `src/ui/pilotage.rs`, `src/ui/commandes_pilote.rs`, `src/ui/transformer.rs` ; mutations directes de la famille dans `panneau.rs` et `canevas.rs`.
+**Preuves :** `crates/app/src/modele/edition/commandes/mod.rs:13`, enum `Commande` ; `crates/app/src/ui/pilotage.rs`, `crates/app/src/ui/commandes_pilote.rs`, `crates/app/src/ui/transformer.rs` ; mutations directes de la famille dans `panneau.rs` et `canevas.rs`.
 
 Les commandes métier sérialisables sont une base solide pour aligner interface et pilote. Les familles gardent beaucoup de modifications directes de vecteurs, pendant que le pilote possède son propre dispatch textuel. Il serait excessif d'affirmer que toute la logique métier est dupliquée ; le problème est l'absence d'un parcours commun complet pour les nouvelles opérations de famille.
 
@@ -133,7 +133,7 @@ Les commandes métier sérialisables sont une base solide pour aligner interface
 
 ### P2 — Distinguer ressources GPU, passes et shaders
 
-**Preuve :** `src/rendu/gpu.rs` mêle chaînes WGSL, uniformes, ressources et orchestration ; `COMMUN` débute vers la ligne 18. Le schéma d'uniformes doit rester cohérent entre Rust et WGSL.
+**Preuve :** `crates/app/src/rendu/gpu.rs` mêle chaînes WGSL, uniformes, ressources et orchestration ; `COMMUN` débute vers la ligne 18. Le schéma d'uniformes doit rester cohérent entre Rust et WGSL.
 
 **Proposition :** extraire d'abord les shaders dans des fichiers WGSL inclus à la compilation ; séparer ensuite ressources partagées, passes et orchestration. Préserver un propriétaire clair des ressources wgpu et des mises à jour. La division en fichiers n'apporte pas, à elle seule, de gain de performance.
 
@@ -141,7 +141,7 @@ Les commandes métier sérialisables sont une base solide pour aligner interface
 
 ### P2 — Formaliser les métadonnées des collections du projet
 
-**Preuves :** `src/modele/mod.rs`, `Projet` ; `src/modele/collaboration.rs:42`, `objets`, et vers 92, `collection_identifiee`. La collaboration reconstruit des collections et dépendances à partir du modèle et des identifiants.
+**Preuves :** `crates/app/src/modele/mod.rs`, `Projet` ; `crates/app/src/modele/collaboration.rs:42`, `objets`, et vers 92, `collection_identifiee`. La collaboration reconstruit des collections et dépendances à partir du modèle et des identifiants.
 
 **Proposition :** documenter dans un registre les collections, leur identité, leurs références et leur stratégie de comparaison. Commencer par tester l'exhaustivité du registre vis-à-vis du projet sérialisé. Ne pas remplacer les règles spécifiques de concurrence par une simple réflexion JSON générique.
 

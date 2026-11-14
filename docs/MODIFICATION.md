@@ -1,8 +1,8 @@
 # Fonctions de modification : modèle de fonctionnement
 
 Onglet **Modifier** du ruban. Ce document fixe le comportement attendu de chaque
-fonction. L'état de l'existant est relevé dans `src/modele/edition/commandes/mod.rs`
-(enum `Commande`) et dans `src/ui/ruban/mod.rs` (`groupes(Menu::Modifier)`).
+fonction. L'état de l'existant est relevé dans `crates/app/src/modele/edition/commandes/mod.rs`
+(enum `Commande`) et dans `crates/app/src/ui/ruban/mod.rs` (`groupes(Menu::Modifier)`).
 
 ## 1. Règles communes
 
@@ -122,7 +122,7 @@ Règle : le verrouillage s'applique au **modèle** (partagé en collaboration). 
 
 ## 6. Ordre de mise en œuvre conseillé
 
-1. **Socle commun** : fait pour Déplacer, Copier, Tourner, Aligner (`src/ui/transformer.rs`, test `tools/test-transformer.py`) : consigne au curseur, survol, aperçu, cotes temporaires, valeur tapée, Échap d'une étape, clic droit, une transaction. Reste : menu du clic droit, répétition de la dernière commande, poignées hors commande.
+1. **Socle commun** : fait pour Déplacer, Copier, Tourner, Aligner (`crates/app/src/ui/transformer.rs`, test `tools/test-transformer.py`) : consigne au curseur, survol, aperçu, cotes temporaires, valeur tapée, Échap d'une étape, clic droit, une transaction. Reste : menu du clic droit, répétition de la dernière commande, poignées hors commande.
 2. **Verrouiller / Déverrouiller** : fait. Une sélection mixte ignore les éléments verrouillés ; une sélection entièrement verrouillée est refusée.
 3. **Symétrie et Réseau** : faits (`Commande::Symetrie`, `Commande::Reseau`, transformation affine dans `transformations.rs`).
 4. **Décaler et Scinder** : faits pour les murs droits et composés (`commandes/modifier.rs`).
@@ -130,7 +130,7 @@ Règle : le verrouillage s'applique au **modèle** (partagé en collaboration). 
 
 Test graphique de l'ensemble : `tools/test-transformer.py` (clics et frappes simulés, annulation).
 
-Fait ensuite (`src/ui/menu_vue.rs`, `tools/test-visibilite.py`, `tools/test-elements.py`) :
+Fait ensuite (`crates/app/src/ui/menu_vue.rs`, `tools/test-visibilite.py`, `tools/test-elements.py`) :
 - Visibilité dans le ruban Modifier (groupe « Verrou et visibilité » : Verrou en bascule, Isoler, Masquer, Masquer vue, Afficher) ; Cadre dans la barre de vue. Croix en haut du cadre temporaire pour tout réafficher.
 - Accrochages du tracé : murs existants, origine du projet, prolongement et perpendiculaire du dernier trait, prolongement du mur dont on glisse une extrémité ; suivi polaire tous les 45°.
 - Clic droit dans la vue hors commande : répéter la dernière commande, annuler, rétablir, identiques, filtre, verrou, masquer, isoler, démolir, inverser, supprimer.
