@@ -1,5 +1,5 @@
 //! Gestion directe des phases, sous-projets et variantes : chaque ligne porte ses actions.
-use crate::edition::Contextes;
+use commandes::Contextes;
 use super::*;
 use modele::creation::ListeCreation;
 

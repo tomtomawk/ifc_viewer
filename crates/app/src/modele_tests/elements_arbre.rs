@@ -1,6 +1,6 @@
 //! Tests déplacés de `modele/elements/arbre.rs` (`mod tests`) : ils appellent du code situé au-dessus
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
-use crate::edition::Execution;
+use commandes::Execution;
 use modele::elements::arbre::*;
 
 fn arbre(essence: Essence) -> Arbre {
@@ -10,7 +10,7 @@ fn arbre(essence: Essence) -> Arbre {
 
 #[test]
 fn creer_puis_supprimer_un_arbre() {
-    use crate::edition::commandes::Commande;
+    use commandes::commandes::Commande;
     let mut p = modele::Projet::nouveau("Arbres");
     p.niveaux.push(modele::Niveau { id: "n0".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
     let a = Arbre { id: String::new(), ..arbre(Essence::Conifere) };

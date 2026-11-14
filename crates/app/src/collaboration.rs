@@ -19,9 +19,9 @@ pub const PROTOCOLE: u32 = 3;
 pub fn protocole_lisible(v: u32) -> bool {
     matches!(v, 1 | 2 | 3)
 }
-pub use crate::edition::objets::{Objets, objets};
+pub use commandes::objets::{Objets, objets};
 #[cfg(test)]
-use crate::edition::objets::COLLECTIONS;
+use commandes::objets::COLLECTIONS;
 pub type Resultat<T> = Result<T, String>;
 pub fn projet(objets: &Objets) -> Resultat<Projet> {
     let mut root = serde_json::Map::new();

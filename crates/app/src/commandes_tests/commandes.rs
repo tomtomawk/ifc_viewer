@@ -1,8 +1,8 @@
 //! Tests déplacés de `edition/commandes/tests.rs` : leur projet de départ vient de
 //! `echanges::depuis_ifc` (et l'un d'eux appelle `echanges::export_ifc`).
 use crate::echanges::{depuis_ifc, export_ifc};
-use crate::edition::commandes::*;
-use crate::edition::historique;
+use commandes::commandes::*;
+use commandes::historique;
 use modele::*;
 use modele::volumes::{geometrie, solides};
 fn projet() -> Projet {

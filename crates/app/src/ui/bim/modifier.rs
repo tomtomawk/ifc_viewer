@@ -7,7 +7,7 @@ impl ViewerApp {
     /// (jonctions, mise à jour depuis le type, trémie). Propriétés ne garde que les
     /// informations de la sélection.
     pub(in crate::ui) fn options_modifier(&mut self, ui: &mut egui::Ui, selection_seule: bool) {
-        use crate::edition::commandes::Commande;
+        use commandes::commandes::Commande;
         use crate::ui::ruban::Outil;
         let outil = self.ruban_edition.outil();
         let ids = self.selection_bim();
@@ -177,7 +177,7 @@ impl ViewerApp {
 
     /// Priorité de jonction, ouverte depuis le bouton Jonctions du ruban (Modifier).
     pub(in crate::ui) fn menu_jonctions(&mut self, ui: &mut egui::Ui) {
-        use crate::edition::commandes::Commande;
+        use commandes::commandes::Commande;
         let ids = self.selection_bim();
         let mut commande = None;
         ui.horizontal(|ui| {
@@ -287,7 +287,7 @@ impl ViewerApp {
     /// Fenêtre des nomenclatures du projet : créer, régler (nom, catégorie, regrouper),
     /// tableau des quantités, export CSV.
     pub(in crate::ui) fn fenetre_documentation(&mut self, ctx: &egui::Context) {
-        use {crate::edition::commandes::Commande, modele::documentation as d};
+        use {commandes::commandes::Commande, modele::documentation as d};
         if !self.bim.documentation {
             return;
         }

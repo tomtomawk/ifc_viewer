@@ -1,6 +1,6 @@
 //! Granularité des relations, réservations et lectures spatiales du protocole 2.
 use super::*;
-pub use crate::edition::objets::carte_objet;
+pub use commandes::objets::carte_objet;
 
 pub fn carte(cle: &str) -> Option<(&str, &str)> {
     let reste = cle.strip_prefix("@/")?;

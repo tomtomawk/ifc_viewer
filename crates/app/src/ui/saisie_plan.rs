@@ -1,5 +1,5 @@
 //! Saisie en plan : création, aperçus, axes, repères, accrochage aux arêtes.
-use crate::edition::Execution;
+use commandes::Execution;
 use super::*;
 
 impl ViewerApp {
@@ -454,7 +454,7 @@ impl ViewerApp {
         });
         if fini && c != actuel {
             ui.data_mut(|d| d.remove::<[f64; 3]>(id));
-            match self.executer_bim(crate::edition::commandes::Commande::CoordonneesOrigine { coordonnees: c }) {
+            match self.executer_bim(commandes::commandes::Commande::CoordonneesOrigine { coordonnees: c }) {
                 Ok(_) => self.status = "Coordonnées de l'origine modifiées — Ctrl+Z pour annuler.".into(),
                 Err(e) => self.error = Some(e),
             }
@@ -667,7 +667,7 @@ impl ViewerApp {
         let echelle_modifiee = echelle_vue(&projet) != self.natif.as_ref().and_then(|(p, _)| echelle_vue(p));
         let chemin = self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.1.clone();
         if !distant {
-            crate::edition::verrous::verifier(&self.natif.as_ref().unwrap().0, &projet)?;
+            commandes::verrous::verifier(&self.natif.as_ref().unwrap().0, &projet)?;
             let avant=&self.natif.as_ref().unwrap().0;
             let detachees=projet.detacher_couches_disjointes(avant);
             if !detachees.is_empty() {self.status=format!("{} couche(s) détachée(s) du mur composé : plus alignée(s) ou plus en contact.",detachees.len());}

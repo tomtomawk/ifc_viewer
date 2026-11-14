@@ -1,6 +1,6 @@
 //! Tests déplacés de `modele/elements/escalier.rs` (`mod tests`) : ils appellent du code situé au-dessus
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
-use crate::edition::Execution;
+use commandes::Execution;
 use modele::*;
 
 fn projet() -> Projet {
@@ -16,7 +16,7 @@ fn escalier(trace: Vec<[f64; 2]>) -> Escalier {
 
 #[test]
 fn commandes_escalier_et_garde_corps() {
-    use crate::edition::commandes::Commande;
+    use commandes::commandes::Commande;
     let p = projet();
     let e = Escalier { id: String::new(), ..escalier(vec![[0.0, 0.0], [4050.0, 0.0]]) };
     let (p, ids) = p.executer(Commande::Escalier { escalier: e.clone() }).unwrap();

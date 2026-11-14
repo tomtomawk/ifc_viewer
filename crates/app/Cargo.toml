@@ -15,6 +15,7 @@ ifc_base = { path = "../ifc_base" }
 scene = { path = "../scene" }
 formats = { path = "../formats" }
 maillage = { path = "../maillage" }
+commandes = { path = "../commandes" }
 earcutr.workspace = true
 eframe.workspace = true
 glam.workspace = true

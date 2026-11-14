@@ -181,7 +181,7 @@ impl ViewerApp {
             && ctx.input_mut(|i|i.consume_key(egui::Modifiers::NONE,egui::Key::Space)) {
             let ids=self.selection_bim();
             if ids.len()==1 && self.natif.as_ref().is_some_and(|(p,_)|p.trajectoire_justification(&ids[0]).is_some()) {
-                match self.executer_bim(crate::edition::commandes::Commande::InverserMur{id:ids[0].clone()}) {
+                match self.executer_bim(commandes::commandes::Commande::InverserMur{id:ids[0].clone()}) {
                     Ok(_)=>self.status="Mur inversé — Ctrl+Z pour annuler.".into(),
                     Err(e)=>self.error=Some(e),
                 }

@@ -1,6 +1,6 @@
 //! Tests déplacés de `modele/gabarits_vues.rs` (`mod tests`) : ils appellent du code situé au-dessus
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
-use crate::edition::Contextes;
+use commandes::Contextes;
 use modele::*;
 use modele::creation::ListeCreation;
 use modele::gabarits_vues::*;

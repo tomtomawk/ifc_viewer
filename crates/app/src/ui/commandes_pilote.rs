@@ -1,5 +1,5 @@
 //! Commandes du pilote (MCP) : capture, état, exécution.
-use crate::edition::Execution;
+use commandes::Execution;
 use super::*;
 
 impl ViewerApp {
@@ -300,7 +300,7 @@ impl ViewerApp {
                 Err(e) => erreur(&e),
             },
             "editer" => {
-                let resultat=serde_json::from_str::<crate::edition::commandes::Commande>(argument).map_err(|e|e.to_string()).and_then(|c|self.executer_bim(c));
+                let resultat=serde_json::from_str::<commandes::commandes::Commande>(argument).map_err(|e|e.to_string()).and_then(|c|self.executer_bim(c));
                 match resultat { Ok(ids)=>succes(&[("ids",serde_json::to_string(&ids).unwrap())]), Err(e)=>erreur(&e) }
             }
             "annuler" | "retablir" => {

@@ -1,9 +1,9 @@
 //! Tests déplacés de `modele/elements/piece.rs` (`mod tests`) : ils appellent du code situé au-dessus
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
-use crate::edition::Execution;
+use commandes::Execution;
 use modele::*;
 use modele::creation::ParametresMur;
-use crate::edition::commandes::Commande;
+use commandes::commandes::Commande;
 
 fn rectangle(p: &mut Projet, o: &ParametresMur) {
     let pts = [[0.0, 0.0], [5000.0, 0.0], [5000.0, 4000.0], [0.0, 4000.0]];

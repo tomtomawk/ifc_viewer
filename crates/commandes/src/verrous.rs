@@ -104,8 +104,8 @@ pub fn verifier(avant: &Projet, apres: &Projet) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::edition::commandes::{Commande, Execution};
-    use crate::edition::Verrous;
+    use crate::commandes::{Commande, Execution};
+    use crate::Verrous;
     use modele::creation::ParametresMur;
     use modele::Projet;
 

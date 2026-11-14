@@ -1,5 +1,5 @@
 //! Sélection : clic, rectangle, cadrage sur les objets.
-use crate::edition::Execution;
+use commandes::Execution;
 use super::*;
 
 impl ViewerApp {
@@ -28,7 +28,7 @@ impl ViewerApp {
     /// composé (type du mur composé), élément horizontal, porte ou fenêtre. Projet
     /// modifié si un autre type est choisi.
     pub(super) fn selecteur_type_selection(&mut self, ui: &mut egui::Ui) -> Option<modele::Projet> {
-        use crate::edition::commandes::Commande;
+        use commandes::commandes::Commande;
         let ids = self.selection_bim();
         let (p, _) = self.natif.as_ref()?;
         if ids.len() > 1 {

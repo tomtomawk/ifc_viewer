@@ -6,7 +6,6 @@ mod commandes_tests;
 mod config;
 mod dessin;
 mod echanges;
-mod edition;
 #[cfg(test)]
 mod formats_tests;
 #[cfg(test)]

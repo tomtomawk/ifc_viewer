@@ -1,8 +1,8 @@
-use crate::edition::Execution;
+use commandes::Execution;
 use super::stockage::*;
 use super::texte::*;
 use super::*;
-use crate::edition::commandes;
+use commandes::commandes;
 use modele::elements::site;
 use std::path::PathBuf;
 
@@ -53,7 +53,7 @@ fn texte_annotation(p: &mut Projet, id: &str, s: &str) {
 
 #[test]
 fn identites_distribuees_et_migration_preserve_les_objets() {
-    use crate::edition::commandes::Commande;
+    use commandes::Commande;
     let p = exemple();
     let a = p
         .executer(Commande::Niveau {
@@ -138,7 +138,7 @@ fn suppression_hote_observe_ajout_ouverture_et_collection() {
     sup.ouvertures.retain(|o| o.mur != hote);
     sup.contextes.remove(&hote);
     let t = Transaction::entre(&p, &sup, "a", 0).unwrap();
-    let cmd = crate::edition::commandes::Commande::Ouverture {
+    let cmd = commandes::Commande::Ouverture {
         mur: hote,
         genre: modele::GenreOuverture::Porte,
         type_ouverture: None,
@@ -612,7 +612,7 @@ fn actualisation_assemblage_transporte_couches_et_effets_atomiques() {
             ..Default::default()
         });
     let (q, _) = p
-        .executer(crate::edition::commandes::Commande::ActualiserType {
+        .executer(commandes::Commande::ActualiserType {
             assemblage: id.clone(),
         })
         .unwrap();
@@ -636,7 +636,7 @@ fn propagation_famille_valide_instances_et_transporte_tout_le_resultat() {
     .unwrap();
     let mur = p.murs[0].id.clone();
     let (p, ids) = p
-        .executer(crate::edition::commandes::Commande::Ouverture {
+        .executer(commandes::Commande::Ouverture {
             mur,
             genre: modele::GenreOuverture::Porte,
             type_ouverture: None,
@@ -987,7 +987,7 @@ fn premiere_synchro_de_plusieurs_murs_preserve_les_deux_copies_distinctes() {
     }
     let id=b.murs.last().unwrap().id.clone();
     for dx in [50.0,100.0] {
-        let (q,_)=b.executer(crate::edition::commandes::Commande::Deplacer {ids:vec![id.clone()],delta:[dx,0.0,0.0]}).unwrap();
+        let (q,_)=b.executer(commandes::Commande::Deplacer {ids:vec![id.clone()],delta:[dx,0.0,0.0]}).unwrap();
         sb.editer(&b,&q).unwrap();b=q;
     }
     sa.synchroniser(None,false).unwrap();attendre(&mut sa);

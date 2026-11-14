@@ -1,8 +1,8 @@
 //! Clic droit dans la vue hors commande (répéter, annuler, sélection, visibilité,
 //! verrou, démolir) et poignée de déplacement au milieu du mur sélectionné.
-use crate::edition::{Modification, Verrous};
+use commandes::{Modification, Verrous};
 use super::*;
-use crate::edition::commandes::Commande;
+use commandes::commandes::Commande;
 use crate::ui::ruban::Outil;
 
 /// Action choisie dans le menu du clic droit.

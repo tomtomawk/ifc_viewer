@@ -79,7 +79,7 @@ impl FamillePlane {
     }
 }
 
-impl crate::edition::historique::Instantane for FamillePlane {
+impl commandes::historique::Instantane for FamillePlane {
     fn instantane(&self) -> Result<String, String> { serde_json::to_string(self).map_err(|e| e.to_string()) }
     fn restaurer(json: &str) -> Result<Self, String> { serde_json::from_str(json).map_err(|e| e.to_string()) }
     fn libelle(_: &str, _: &str) -> String { "Modifier la famille".into() }

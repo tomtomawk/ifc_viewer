@@ -41,7 +41,7 @@ pub fn piloter_cote(p: &Projet, v: &Vue, forme: &AnnotationForme, element: &str,
 #[cfg(test)]
 mod tests_aretes {
     use super::*;
-    use crate::edition::Execution;
+    use crate::Execution;
     use modele::creation::ParametresMur;
     use modele::documentation::{aretes_reference, valeur_pilotable, PointCote, RefArete};
 

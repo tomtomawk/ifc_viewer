@@ -427,7 +427,7 @@ impl FenetreSelection {
 /// Fichier conservé en mémoire quand un autre document devient actif.
 struct DocumentOuvert {
     natif: Option<(modele::Projet, PathBuf)>,
-    historique: crate::edition::historique::Historique,
+    historique: commandes::historique::Historique,
     collaboration: Option<crate::collaboration::session::Session>,
     modifie: bool,
     scene: Option<Scene>,
@@ -522,7 +522,7 @@ pub struct ViewerApp {
     /// Fermeture de l'onglet Famille à confirmer (modifications non chargées).
     confirmer_famille: bool,
     natif: Option<(modele::Projet, PathBuf)>,
-    historique: crate::edition::historique::Historique,
+    historique: commandes::historique::Historique,
     collaboration: Option<crate::collaboration::session::Session>,
     natif_modifie: bool,
     /// Repère du plan : le prochain clic choisit l'arête à mettre à l'horizontale.

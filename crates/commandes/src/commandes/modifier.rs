@@ -421,7 +421,7 @@ pub fn decaler_polygone(pts: &[[f64; 2]], d: f64) -> Option<Vec<[f64; 2]>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::edition::commandes::{Commande, Execution, Modification};
+    use crate::commandes::{Commande, Execution, Modification};
     use modele::creation::ParametresMur;
     use modele::{Axe, Projet};
 

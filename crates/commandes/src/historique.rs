@@ -273,11 +273,9 @@ impl<T: Instantane> Historique<T> {
         self.borner();
         Ok(())
     }
-    #[cfg(test)]
     pub fn cible(&self, retablir: bool) -> Result<T, String> {
         self.cible_n(retablir, 1)
     }
-    #[cfg(test)]
     pub fn confirmer(&mut self, actuel: &T, retablir: bool) -> Result<(), String> {
         self.confirmer_n(actuel, retablir, 1)
     }
