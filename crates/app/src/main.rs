@@ -4,6 +4,8 @@ mod config;
 mod dessin;
 mod formats;
 mod modele;
+#[cfg(test)]
+mod modele_tests;
 mod pilote;
 mod rendu;
 mod ui;

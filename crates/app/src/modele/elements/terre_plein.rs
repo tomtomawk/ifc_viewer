@@ -769,21 +769,6 @@ mod tests {
 }
 
 #[cfg(test)]
-fn tests_projet() -> (Projet, Dalle) { tests::projet(Some(45.0)) }
-
-#[cfg(test)]
-mod tests_scene {
-    #[test]
-    fn scene_terre_plein() {
-        let (mut p, _) = super::tests_projet();
-        p.types_dalles[0].couches[0].materiau = Some("Grave non traitée".into());
-        p.completer_materiaux();
-        let s = crate::rendu::scene::depuis_natif(&p, std::path::Path::new("tp.json"));
-        assert!(s.is_ok(), "{:?}", s.err());
-    }
-}
-
-#[cfg(test)]
 mod tests_deblai {
     use super::*;
 

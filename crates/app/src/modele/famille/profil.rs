@@ -109,24 +109,6 @@ impl FichierProfil {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn profils_du_gabarit_varient_et_survivent_au_rechargement() {
-        let g = crate::modele::gabarit::Gabarit::defaut();
-        assert_eq!(g.profils.len(), 4);
-        let mut p = crate::modele::Projet::depuis_gabarit("Profils", &g);
-        p.verifier().unwrap();
-        for profil in &mut p.profils {
-            let avant = profil.points().unwrap();
-            profil.document_famille.as_mut().unwrap().famille.parametres[0].formule = "250".into();
-            assert_ne!(avant, profil.points().unwrap());
-        }
-        let relu = crate::modele::Projet::lire_json(&p.json().unwrap()).unwrap();
-        assert_eq!(p.profils, relu.profils);
-        let fichier = super::FichierProfil { format: "bimedit.profil".into(), profil: p.profils[0].clone() };
-        assert_eq!(super::FichierProfil::lire(&serde_json::to_string(&fichier).unwrap()).unwrap(), p.profils[0]);
-        let partage = crate::modele::collaboration::projet(&crate::modele::collaboration::objets(&p).unwrap()).unwrap();
-        assert_eq!(p.profils, partage.profils);
-    }
-    #[test]
     fn section_explicite_permet_plusieurs_contours_et_refuse_les_references_invalides() {
         use crate::modele::documentation::AnnotationForme;
         use crate::modele::famille::modelee::{Element2DFamille, SectionProfil, VueEsquisse, FichierFamille};
