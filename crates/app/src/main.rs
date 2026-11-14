@@ -7,6 +7,8 @@ mod echanges;
 mod edition;
 mod formats;
 #[cfg(test)]
+mod formats_tests;
+#[cfg(test)]
 mod modele_tests;
 mod pilote;
 mod rendu;
