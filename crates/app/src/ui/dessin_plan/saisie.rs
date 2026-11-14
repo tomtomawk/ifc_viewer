@@ -1,4 +1,5 @@
 //! Saisie des points, clavier, annulation et fin de commande.
+use crate::edition::Execution;
 use super::*;
 
 use super::super::saisie_trace::{ajouter_caractere_saisie, effacer_caractere_saisie};

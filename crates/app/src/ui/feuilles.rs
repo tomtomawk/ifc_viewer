@@ -1,6 +1,7 @@
 //! Jeux de feuilles : toutes les feuilles d'un jeu à la suite, à la manière d'InDesign.
 //! Les vues se glissent depuis l'arborescence sur une feuille, se déplacent à la souris ;
 //! feuilles et vues placées se règlent dans Propriétés, sans boîte de dialogue.
+use crate::edition::Execution;
 use super::*;
 use crate::edition::commandes::Commande;
 use crate::modele::documentation as doc;

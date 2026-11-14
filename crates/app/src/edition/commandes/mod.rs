@@ -3,8 +3,11 @@
 mod cotes;
 pub use cotes::piloter_cote;
 mod modifier;
-pub use modifier::decaler_polygone;
+pub use modifier::{Modification, decaler_polygone};
+use modifier::ModificationInterne;
 mod transformations;
+use transformations::Transformation;
+use super::verrous::VerrousInterne;
 #[cfg(test)]
 mod tests;
 use crate::modele::*;
@@ -205,11 +208,25 @@ fn identite(_p: &Projet, prefixe: &str) -> String {
     format!("{prefixe}-{}", noyau::uuid::uuid())
 }
 
-impl Projet {
+/// Exécution des commandes d'édition sur un projet.
+pub trait Execution {
+    fn actualiser_types_murs_modifies(&mut self, avant: &Projet) -> Result<(), String>;
+    fn identifiants(&self) -> HashSet<String>;
+    fn executer(&self, c: Commande) -> Result<(Projet, Vec<String>), String>;
+    fn dependances(&self, ids: &[String]) -> Result<HashSet<String>, String>;
+}
+
+/// Étapes internes de l'exécution d'une commande.
+trait ExecutionInterne {
+    fn dependances_avec(&self, ids: &[String], couche_seule: bool) -> Result<HashSet<String>, String>;
+    fn executer_interne(&mut self, c: Commande) -> Result<Vec<String>, String>;
+}
+
+impl Execution for Projet {
     /// Répercute une modification de composition sur tous les murs du type, en gardant
     /// leur ligne d'implantation et l'identité de chaque assemblage. L'opération entière
     /// est annulée si une des reconstructions échoue.
-    pub fn actualiser_types_murs_modifies(&mut self, avant: &Projet) -> Result<(), String> {
+    fn actualiser_types_murs_modifies(&mut self, avant: &Projet) -> Result<(), String> {
         let types: std::collections::HashSet<String> = self.types_murs.iter().filter(|t| {
             avant.type_mur(&t.id).is_some_and(|ancien| ancien.couches != t.couches)
         }).map(|t| t.id.clone()).collect();
@@ -239,7 +256,7 @@ impl Projet {
         *self = travail;
         Ok(())
     }
-    pub fn identifiants(&self) -> HashSet<String> {
+    fn identifiants(&self) -> HashSet<String> {
         self.niveaux
             .iter()
             .map(|x| x.id.clone())
@@ -264,7 +281,7 @@ impl Projet {
             .collect()
     }
     /// Copie de travail : une erreur ne laisse jamais de modification partielle.
-    pub fn executer(&self, c: Commande) -> Result<(Projet, Vec<String>), String> {
+    fn executer(&self, c: Commande) -> Result<(Projet, Vec<String>), String> {
         let mut p = self.clone();
         let c = self.filtrer_verrouilles(c)?;
         let ids = p.executer_interne(c)?;
@@ -275,9 +292,12 @@ impl Projet {
         p.verifier()?;
         Ok((p, ids))
     }
-    pub fn dependances(&self, ids: &[String]) -> Result<HashSet<String>, String> {
+    fn dependances(&self, ids: &[String]) -> Result<HashSet<String>, String> {
         self.dependances_avec(ids, false)
     }
+}
+
+impl ExecutionInterne for Projet {
     /// `couche_seule` : une couche d'assemblage peut être transformée seule (déplacer,
     /// tourner) ; elle se détache ensuite si elle quitte le mur composé.
     fn dependances_avec(&self, ids: &[String], couche_seule: bool) -> Result<HashSet<String>, String> {

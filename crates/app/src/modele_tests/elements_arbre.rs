@@ -1,5 +1,6 @@
 //! Tests déplacés de `modele/elements/arbre.rs` (`mod tests`) : ils appellent du code situé au-dessus
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
+use crate::edition::Execution;
 use crate::modele::elements::arbre::*;
 
 fn arbre(essence: Essence) -> Arbre {

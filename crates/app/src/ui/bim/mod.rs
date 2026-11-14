@@ -2,6 +2,7 @@
 
 mod modifier;
 pub use super::*;
+use crate::edition::Execution;
 use crate::config::options::Dimensions;
 impl ViewerApp {
     pub(super) fn parcourir_historique(&mut self, retablir: bool) {

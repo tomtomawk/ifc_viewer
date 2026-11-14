@@ -1,4 +1,5 @@
 //! Commandes du pilote (MCP) : capture, état, exécution.
+use crate::edition::Execution;
 use super::*;
 
 impl ViewerApp {

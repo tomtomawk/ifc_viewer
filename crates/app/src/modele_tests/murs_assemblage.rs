@@ -1,5 +1,6 @@
 //! Tests déplacés de `modele/murs/assemblage.rs` (`mod tests`) : ils appellent du code situé au-dessus
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
+use crate::edition::Execution;
 use crate::modele::*;
 use crate::modele::creation::ParametresMur;
 use crate::modele::murs::assemblage::*;

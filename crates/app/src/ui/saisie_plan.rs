@@ -1,4 +1,5 @@
 //! Saisie en plan : création, aperçus, axes, repères, accrochage aux arêtes.
+use crate::edition::Execution;
 use super::*;
 
 impl ViewerApp {

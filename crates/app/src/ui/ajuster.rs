@@ -1,6 +1,7 @@
 //! Ajuster/prolonger graphique : une arête limite (n'importe quelle arête d'un mur ou
 //! d'une poutre), puis les extrémités visées. La ligne prolongée est la ligne de
 //! justification du mur (l'axe d'une poutre) : les raccords se font sur les faces.
+use crate::edition::Execution;
 use super::*;
 use crate::edition::commandes::Commande;
 use crate::modele::Projet;

@@ -3,15 +3,75 @@
 use super::transformations::Affine;
 use super::*;
 
-impl Projet {
-    pub(super) fn symetrie(&mut self, ids: Vec<String>, a: [f64; 2], b: [f64; 2]) -> Result<Vec<String>, String> {
+/// Requêtes des commandes de modification.
+pub trait Modification {
+    fn phase_element(&self, id: &str) -> Option<String>;
+    fn identiques(&self, id: &str) -> Vec<String>;
+}
+
+/// Commandes de modification, appelées par l'exécution.
+pub(super) trait ModificationInterne {
+    fn symetrie(&mut self, ids: Vec<String>, a: [f64; 2], b: [f64; 2]) -> Result<Vec<String>, String>;
+    fn echelle(&mut self, ids: Vec<String>, centre: [f64; 2], facteur: f64) -> Result<Vec<String>, String>;
+    fn reseau(&mut self, ids: Vec<String>, nombre: usize, delta: [f64; 3], centre: [f64; 2], angle: f64) -> Result<Vec<String>, String>;
+    fn couches_de(&self, id: &str) -> Vec<String>;
+    fn decaler(&mut self, id: String, distance: f64, copie: bool) -> Result<Vec<String>, String>;
+    fn scinder(&mut self, id: String, point: [f64; 2], ecart: f64) -> Result<Vec<String>, String>;
+    fn decaler_arc(&mut self, id: String, distance: f64, copie: bool) -> Result<Vec<String>, String>;
+    fn decaler_contour(&mut self, id: String, distance: f64, copie: bool) -> Result<Vec<String>, String>;
+    fn scinder_poutre(&mut self, id: String, point: [f64; 2], ecart: f64) -> Result<Vec<String>, String>;
+    fn scinder_ligne(&mut self, id: String, point: [f64; 2], ecart: f64) -> Result<Vec<String>, String>;
+    fn demolir(&mut self, ids: Vec<String>, phase: Option<String>) -> Result<Vec<String>, String>;
+    fn reproduire(&mut self, source: String, cibles: Vec<String>) -> Result<Vec<String>, String>;
+    fn changer_hote(&mut self, id: String, mur: String, point: [f64; 2]) -> Result<Vec<String>, String>;
+    fn inverser_ouverture(&mut self, id: String, paumelles: bool) -> Result<Vec<String>, String>;
+}
+
+impl Modification for Projet {
+    /// Phase de création d'un élément (champ propre ou contexte).
+    fn phase_element(&self, id: &str) -> Option<String> {
+        self.murs.iter().find(|m| m.id == id).and_then(|m| m.phase.clone())
+            .or_else(|| self.dalles.iter().find(|d| d.id == id).and_then(|d| d.phase.clone()))
+            .or_else(|| self.assemblage(id).and_then(|a| self.couches_assemblage(&a.id).first().and_then(|m| m.phase.clone())))
+            .or_else(|| self.contextes.get(id).and_then(|c| c.phase.clone()))
+    }
+
+    /// Éléments du même type que `id` (même catégorie), `id` compris.
+    fn identiques(&self, id: &str) -> Vec<String> {
+        if let Some(a) = self.assemblage(id) {
+            return self.assemblages.iter().filter(|x| x.type_mur == a.type_mur).map(|x| x.id.clone()).collect();
+        }
+        if let Some(m) = self.murs.iter().find(|m| m.id == id) {
+            return self.murs.iter().filter(|x| x.assemblage.is_none() && x.type_mur == m.type_mur).map(|x| x.id.clone()).collect();
+        }
+        if let Some(d) = self.dalles.iter().find(|d| d.id == id) {
+            return self.dalles.iter().filter(|x| x.type_dalle == d.type_dalle && x.sorte == d.sorte).map(|x| x.id.clone()).collect();
+        }
+        if let Some(o) = self.ouvertures.iter().find(|o| o.id == id) {
+            return self.ouvertures.iter().filter(|x| x.genre == o.genre && x.type_ouverture == o.type_ouverture && (o.type_ouverture.is_some() || (x.largeur == o.largeur && x.hauteur == o.hauteur))).map(|x| x.id.clone()).collect();
+        }
+        if let Some(b) = self.barres.iter().find(|b| b.id == id) {
+            return self.barres.iter().filter(|x| x.genre == b.genre && x.largeur == b.largeur && x.hauteur == b.hauteur).map(|x| x.id.clone()).collect();
+        }
+        for (liste, nom) in [(self.escaliers.iter().map(|x| x.id.clone()).collect::<Vec<_>>(), "escalier"), (self.garde_corps.iter().map(|x| x.id.clone()).collect(), "garde-corps")] {
+            let _ = nom;
+            if liste.iter().any(|x| x == id) {
+                return liste;
+            }
+        }
+        vec![id.to_string()]
+    }
+}
+
+impl ModificationInterne for Projet {
+    fn symetrie(&mut self, ids: Vec<String>, a: [f64; 2], b: [f64; 2]) -> Result<Vec<String>, String> {
         let f = Affine::symetrie(a, b).ok_or("Symétrie : l'axe doit avoir deux points distincts.")?;
         let set = self.dependances_avec(&ids, true)?;
         self.transformer_affine(&set, f, 0.0)?;
         Ok(ids)
     }
 
-    pub(super) fn echelle(&mut self, ids: Vec<String>, centre: [f64; 2], facteur: f64) -> Result<Vec<String>, String> {
+    fn echelle(&mut self, ids: Vec<String>, centre: [f64; 2], facteur: f64) -> Result<Vec<String>, String> {
         if !(facteur.is_finite() && facteur > 1e-6) {
             return Err("Échelle : le facteur doit être positif.".into());
         }
@@ -22,7 +82,7 @@ impl Projet {
 
     /// Réseau : `nombre` éléments au total (original compris) ; la copie k est tournée de
     /// k·`angle` degrés autour de `centre` puis déplacée de k·`delta`.
-    pub(super) fn reseau(&mut self, ids: Vec<String>, nombre: usize, delta: [f64; 3], centre: [f64; 2], angle: f64) -> Result<Vec<String>, String> {
+    fn reseau(&mut self, ids: Vec<String>, nombre: usize, delta: [f64; 3], centre: [f64; 2], angle: f64) -> Result<Vec<String>, String> {
         if !(2..=500).contains(&nombre) {
             return Err("Réseau : de 2 à 500 éléments.".into());
         }
@@ -50,7 +110,7 @@ impl Projet {
 
     /// Décaler : mur droit (ou composé) ou ligne d'annotation, de `distance` mm vers la
     /// gauche de son sens (négatif : vers la droite) ; `copie` garde l'original.
-    pub(super) fn decaler(&mut self, id: String, distance: f64, copie: bool) -> Result<Vec<String>, String> {
+    fn decaler(&mut self, id: String, distance: f64, copie: bool) -> Result<Vec<String>, String> {
         if !distance.is_finite() || distance.abs() < 1e-6 {
             return Err("Décaler : distance nulle.".into());
         }
@@ -84,7 +144,7 @@ impl Projet {
 
     /// Scinder un mur droit (ou composé) au point projeté de `point` ; `ecart` (mm)
     /// laisse un vide entre les deux parties. Les ouvertures suivent leur partie.
-    pub(super) fn scinder(&mut self, id: String, point: [f64; 2], ecart: f64) -> Result<Vec<String>, String> {
+    fn scinder(&mut self, id: String, point: [f64; 2], ecart: f64) -> Result<Vec<String>, String> {
         if !(ecart.is_finite() && ecart >= 0.0) {
             return Err("Scinder : écart négatif.".into());
         }
@@ -147,9 +207,7 @@ impl Projet {
         }
         Ok(vec![id, copie])
     }
-}
 
-impl Projet {
     /// Décaler un mur courbe (ou composé courbe) : arc concentrique, de `distance` vers la
     /// gauche du sens de l'arc ; les ouvertures gardent leur position angulaire.
     fn decaler_arc(&mut self, id: String, distance: f64, copie: bool) -> Result<Vec<String>, String> {
@@ -229,16 +287,8 @@ impl Projet {
         Ok(vec![id, copie])
     }
 
-    /// Phase de création d'un élément (champ propre ou contexte).
-    pub fn phase_element(&self, id: &str) -> Option<String> {
-        self.murs.iter().find(|m| m.id == id).and_then(|m| m.phase.clone())
-            .or_else(|| self.dalles.iter().find(|d| d.id == id).and_then(|d| d.phase.clone()))
-            .or_else(|| self.assemblage(id).and_then(|a| self.couches_assemblage(&a.id).first().and_then(|m| m.phase.clone())))
-            .or_else(|| self.contextes.get(id).and_then(|c| c.phase.clone()))
-    }
-
     /// Démolir (ou annuler la démolition si `phase` est absente) : phase de démolition.
-    pub(super) fn demolir(&mut self, ids: Vec<String>, phase: Option<String>) -> Result<Vec<String>, String> {
+    fn demolir(&mut self, ids: Vec<String>, phase: Option<String>) -> Result<Vec<String>, String> {
         let connus = self.identifiants();
         if let Some(ph) = &phase {
             let rang = self.phases.iter().position(|p| p == ph).ok_or_else(|| format!("Phase inconnue : {ph}"))?;
@@ -264,7 +314,7 @@ impl Projet {
 
     /// Reproduire les propriétés de `source` (type et paramètres, sans la géométrie) sur
     /// des éléments de la même catégorie.
-    pub(super) fn reproduire(&mut self, source: String, cibles: Vec<String>) -> Result<Vec<String>, String> {
+    fn reproduire(&mut self, source: String, cibles: Vec<String>) -> Result<Vec<String>, String> {
         if let Some(m) = self.murs.iter().find(|m| m.id == source && m.assemblage.is_none()).cloned() {
             for c in &cibles {
                 let x = self.murs.iter_mut().find(|x| &x.id == c && x.assemblage.is_none()).ok_or("Reproduire : la cible doit être un mur simple, comme la source.")?;
@@ -312,7 +362,7 @@ impl Projet {
     }
 
     /// Changer d'hôte : l'ouverture passe sur le mur `mur`, centrée à la projection de `point`.
-    pub(super) fn changer_hote(&mut self, id: String, mur: String, point: [f64; 2]) -> Result<Vec<String>, String> {
+    fn changer_hote(&mut self, id: String, mur: String, point: [f64; 2]) -> Result<Vec<String>, String> {
         let (axe, _, _) = solides::hote(self, &mur)?;
         let o = self.ouvertures.iter().find(|o| o.id == id).ok_or("Ouverture introuvable.")?;
         if o.mur == mur {
@@ -330,36 +380,10 @@ impl Projet {
     }
 
     /// Inverser une ouverture : côté d'ouverture (`retournee`) ou sens des paumelles.
-    pub(super) fn inverser_ouverture(&mut self, id: String, paumelles: bool) -> Result<Vec<String>, String> {
+    fn inverser_ouverture(&mut self, id: String, paumelles: bool) -> Result<Vec<String>, String> {
         let o = self.ouvertures.iter_mut().find(|o| o.id == id).ok_or("Ouverture introuvable.")?;
         if paumelles { o.inversee = !o.inversee; } else { o.retournee = !o.retournee; }
         Ok(vec![id])
-    }
-
-    /// Éléments du même type que `id` (même catégorie), `id` compris.
-    pub fn identiques(&self, id: &str) -> Vec<String> {
-        if let Some(a) = self.assemblage(id) {
-            return self.assemblages.iter().filter(|x| x.type_mur == a.type_mur).map(|x| x.id.clone()).collect();
-        }
-        if let Some(m) = self.murs.iter().find(|m| m.id == id) {
-            return self.murs.iter().filter(|x| x.assemblage.is_none() && x.type_mur == m.type_mur).map(|x| x.id.clone()).collect();
-        }
-        if let Some(d) = self.dalles.iter().find(|d| d.id == id) {
-            return self.dalles.iter().filter(|x| x.type_dalle == d.type_dalle && x.sorte == d.sorte).map(|x| x.id.clone()).collect();
-        }
-        if let Some(o) = self.ouvertures.iter().find(|o| o.id == id) {
-            return self.ouvertures.iter().filter(|x| x.genre == o.genre && x.type_ouverture == o.type_ouverture && (o.type_ouverture.is_some() || (x.largeur == o.largeur && x.hauteur == o.hauteur))).map(|x| x.id.clone()).collect();
-        }
-        if let Some(b) = self.barres.iter().find(|b| b.id == id) {
-            return self.barres.iter().filter(|x| x.genre == b.genre && x.largeur == b.largeur && x.hauteur == b.hauteur).map(|x| x.id.clone()).collect();
-        }
-        for (liste, nom) in [(self.escaliers.iter().map(|x| x.id.clone()).collect::<Vec<_>>(), "escalier"), (self.garde_corps.iter().map(|x| x.id.clone()).collect(), "garde-corps")] {
-            let _ = nom;
-            if liste.iter().any(|x| x == id) {
-                return liste;
-            }
-        }
-        vec![id.to_string()]
     }
 }
 
@@ -397,7 +421,7 @@ pub fn decaler_polygone(pts: &[[f64; 2]], d: f64) -> Option<Vec<[f64; 2]>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::edition::commandes::Commande;
+    use crate::edition::commandes::{Commande, Execution, Modification};
     use crate::modele::creation::ParametresMur;
     use crate::modele::{Axe, Projet};
 

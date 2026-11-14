@@ -1,5 +1,6 @@
 //! Tests déplacés de `modele/elements/escalier.rs` (`mod tests`) : ils appellent du code situé au-dessus
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
+use crate::edition::Execution;
 use crate::modele::*;
 use crate::modele::elements::escalier::*;
 

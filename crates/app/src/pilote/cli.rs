@@ -1,4 +1,5 @@
 //! Commandes non graphiques du modèle natif (utilisables aussi en CI).
+use crate::edition::Execution;
 use crate::dessin;
 use crate::modele::{self, Projet};
 use std::path::Path;

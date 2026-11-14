@@ -1,5 +1,6 @@
 //! Tests déplacés de `modele/elements/site.rs` (`mod tests`) : ils appellent du code situé au-dessus
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
+use crate::edition::Execution;
 use crate::modele::elements::site::*;
 
 #[test]

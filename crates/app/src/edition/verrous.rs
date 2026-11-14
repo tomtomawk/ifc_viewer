@@ -4,14 +4,25 @@ use super::commandes::Commande;
 use crate::modele::Projet;
 use std::collections::BTreeSet;
 
-impl Projet {
+/// Verrouillage des éléments d'un projet.
+pub trait Verrous {
+    fn verrouille(&self, id: &str) -> bool;
+    fn ids_verrouilles(&self) -> BTreeSet<String>;
+}
+
+/// Filtrage des commandes par les verrous.
+pub(crate) trait VerrousInterne {
+    fn filtrer_verrouilles(&self, c: Commande) -> Result<Commande, String>;
+}
+
+impl Verrous for Projet {
     /// Vrai si l'élément, ou le mur composé qui le contient, est verrouillé.
-    pub fn verrouille(&self, id: &str) -> bool {
+    fn verrouille(&self, id: &str) -> bool {
         self.verrous.contains_key(id)
             || self.assemblages.iter().any(|a| self.verrous.contains_key(&a.id) && a.couches.iter().any(|c| c == id))
     }
     /// Identifiants protégés : éléments verrouillés et couches des murs composés verrouillés.
-    pub fn ids_verrouilles(&self) -> BTreeSet<String> {
+    fn ids_verrouilles(&self) -> BTreeSet<String> {
         let mut ids: BTreeSet<String> = self.verrous.keys().cloned().collect();
         for a in &self.assemblages {
             if self.verrous.contains_key(&a.id) {
@@ -20,9 +31,12 @@ impl Projet {
         }
         ids
     }
+}
+
+impl VerrousInterne for Projet {
     /// Retire les éléments verrouillés d'une commande qui transforme une sélection.
     /// Une sélection entièrement verrouillée est refusée.
-    pub(crate) fn filtrer_verrouilles(&self, mut c: Commande) -> Result<Commande, String> {
+    fn filtrer_verrouilles(&self, mut c: Commande) -> Result<Commande, String> {
         if self.verrous.is_empty() {
             return Ok(c);
         }
@@ -90,7 +104,8 @@ pub fn verifier(avant: &Projet, apres: &Projet) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::edition::commandes::Commande;
+    use crate::edition::commandes::{Commande, Execution};
+    use crate::edition::Verrous;
     use crate::modele::creation::ParametresMur;
     use crate::modele::Projet;
 

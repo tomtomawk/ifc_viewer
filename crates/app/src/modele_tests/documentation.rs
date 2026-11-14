@@ -1,5 +1,6 @@
 //! Tests déplacés de `modele/documentation/tests.rs` : ils appellent du code situé au-dessus
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
+use crate::edition::Execution;
 use crate::dessin::{dessin_vue, pdf, pdf_jeu, svg_feuille, vue_placee};
 use crate::modele::documentation::*;
 use crate::echanges::depuis_ifc;

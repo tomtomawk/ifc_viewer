@@ -58,9 +58,21 @@ impl Affine {
     }
 }
 
-impl Projet {
+/// Transformations affines des éléments d'un projet.
+pub(crate) trait Transformation {
+    fn transformer(
+        &mut self,
+        set: &HashSet<String>,
+        delta: [f64; 3],
+        centre: [f64; 2],
+        angle: f64,
+    ) -> Result<(), String>;
+    fn transformer_affine(&mut self, set: &HashSet<String>, f: Affine, dz: f64) -> Result<(), String>;
+}
+
+impl Transformation for Projet {
     /// Rotation de `angle` degrés autour de `centre` puis translation `delta` (Z compris).
-    pub(super) fn transformer(
+    fn transformer(
         &mut self,
         set: &HashSet<String>,
         delta: [f64; 3],
@@ -76,7 +88,7 @@ impl Projet {
     /// Applique `f` aux éléments de `set`, et `dz` en hauteur. Une symétrie garde les
     /// faces extérieures dehors (sens des murs inversé) ; un changement d'échelle est
     /// réservé aux éléments sans épaisseur de type (contours, terrains, annotations).
-    pub(crate) fn transformer_affine(&mut self, set: &HashSet<String>, f: Affine, dz: f64) -> Result<(), String> {
+    fn transformer_affine(&mut self, set: &HashSet<String>, f: Affine, dz: f64) -> Result<(), String> {
         if !f.finie() || !dz.is_finite() {
             return Err("Transformation non finie.".into());
         }

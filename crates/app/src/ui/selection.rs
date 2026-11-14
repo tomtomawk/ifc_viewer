@@ -1,4 +1,5 @@
 //! Sélection : clic, rectangle, cadrage sur les objets.
+use crate::edition::Execution;
 use super::*;
 
 impl ViewerApp {
