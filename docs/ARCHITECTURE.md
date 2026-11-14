@@ -1,8 +1,8 @@
 # Architecture : découpage en workspace Cargo
 
-État au lot 1 : le dépôt est un workspace (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`). `noyau` est extrait en `crates/noyau` (lot 1) ; le reste du code est encore dans une seule crate, `crates/app` (package et binaire `bimedit`). Les dépendances sont déclarées une fois dans `[workspace.dependencies]` (racine) et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine.
+État au lot 2 : le dépôt est un workspace (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`). `noyau` (lot 1) et `modele` (lot 2) sont extraits en `crates/noyau` et `crates/modele` ; le reste du code est encore dans une seule crate, `crates/app` (package et binaire `bimedit`). Les dépendances sont déclarées une fois dans `[workspace.dependencies]` (racine) et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine.
 
-Restent à la racine : `docs/`, `samples/`, `gabarits/`, `tools/`, `.github/`, `.mcp.json`, `README.md`, `AGENTS.md`. Les ressources embarquées (`include_str!`) pointent vers ces dossiers par des chemins relatifs depuis `crates/app/src/...` ; les tests lisent `samples/` via `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")` (le répertoire courant d'un test est celui de la crate, `crates/app`).
+Restent à la racine : `docs/`, `samples/`, `gabarits/`, `tools/`, `.github/`, `.mcp.json`, `README.md`, `AGENTS.md`. Les ressources embarquées (`include_str!`) pointent vers ces dossiers par des chemins relatifs depuis `crates/<crate>/src/...` (le gabarit par défaut est embarqué par `crates/modele/src/gabarit.rs`) ; les tests lisent `samples/` via `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")` (le répertoire courant d'un test est celui de sa crate ; même profondeur pour `crates/app` et `crates/modele`).
 
 ## 1. Arborescence cible
 
@@ -25,7 +25,7 @@ crates/
   app/            binaire `bimedit`
 ```
 
-Correspondance avec les dossiers actuels de `crates/app/src/` : `noyau/` -> noyau ; `modele/{murs,elements,famille,documentation}` et racine de `modele/` -> modele ; `rendu/scene/mod.rs` -> scene ; `formats/` -> formats ; `rendu/scene/natif.rs` (+ `modele/volumes`, voir §5.3) -> maillage ; `modele/edition/` -> commandes ; `dessin/` -> moteur2d ; `rendu/` (hors `scene/`) -> moteur3d ; `modele/echanges/` -> echanges ; `modele/collaboration*` -> collaboration ; `pilote/`, `config/` ; `ui/` -> interface ; `main.rs` -> app.
+Correspondance avec les dossiers actuels (après lot 2) : `crates/noyau`, `crates/modele` : extraits ; dans `crates/app/src/` : `rendu/scene/mod.rs` -> scene ; `formats/` -> formats ; `rendu/scene/natif.rs` -> maillage ; `edition/` -> commandes ; `dessin/` (dont `feuilles.rs` et `plans.rs`, rendu de vue et de feuille parqué au lot 2) -> moteur2d ; `rendu/` (hors `scene/`) -> moteur3d ; `echanges/` -> echanges ; `collaboration/` et `collaboration.rs` -> collaboration ; `pilote/`, `config/` ; `ui/` -> interface ; `main.rs` -> app ; `modele_tests/` : tests parqués, à répartir (§5.8 d).
 
 ## 2. Graphe de dépendances autorisées
 
@@ -76,14 +76,14 @@ Code « parqué » : quand une coupe fait monter du code vers une crate qui n'ex
 |---|---|---|---|---|
 | 0 | workspace | chemins, CI, inventaire | Sonnet | **fait** (`242681c`) |
 | 1 | noyau | Descendre dans `noyau` : `Id` (= `u64`, neutre), `uuid`, `hash` (+ `empreinte`, `encoder`, dont `hash` dépend ; de `collaboration`), `Forme2D` + `Geom`, `geom_segment`, `arc_3_points`, `arc_courbure`, `angle_norm`, `segments_polyligne`, `points_segment`, `points_arc`, `points_spline`, `developper` (de `dessin/dao.rs` ; `Geom` et les `points_*` descendent avec `Forme2D` qui en dépend ; les outils de tracé et d'accrochage restent dans `dessin`), `Aretes`/`aretes`/`aretes_jointes`/`chainer`/`Polyligne`/`PAS`/`TRAIT_FORT_MM`/`NOIR` (de `dessin`), `MAX_APPARENCES` (de `rendu::gpu`), `chrono` (de `rendu::scene`). Si un symbole dépend de plus que `noyau`, s'arrêter et le signaler. §5.5 points 5, 6, 7, 8 (partie `Id`) | Sonnet | **fait** (coupes `dee72ad`, `a8bb20b`, `7746a1e`, `9b18b34` ; extraction `06f1578`) |
-| 2 | modele | `config::gabarit` sous `modele` ; descendre dans `modele` : `contextes`, `gabarits_vues`, `ParametresMur`, `Implantation`, `contour_valide` (et `Commande` si les références de production l'exigent : à trancher et documenter) ; `Motif`/`GrilleMotif`/`hachures_plan` ; `volumes` et `murs/jonctions` **restent** dans `modele` ; remplacer `scene::chrono` ; monter hors de `modele` le rendu de feuille de `documentation` (`coupe`, `vu`, `cadrer_primitives`, `Poche`, ~l. 1177-1213) et les tests appelant `depuis_natif`, `export_ifc`, `ifc::*`. §5.5 points 2, 3, 4, 6, 9 | **Fable** | à faire |
+| 2 | modele | `config::gabarit` sous `modele` ; descendre dans `modele` : `contextes`, `gabarits_vues`, `ParametresMur`, `Implantation`, `contour_valide` (et `Commande` si les références de production l'exigent : à trancher et documenter) ; `Motif`/`GrilleMotif`/`hachures_plan` ; `volumes` et `murs/jonctions` **restent** dans `modele` ; remplacer `scene::chrono` ; monter hors de `modele` le rendu de feuille de `documentation` (`coupe`, `vu`, `cadrer_primitives`, `Poche`, ~l. 1177-1213) et les tests appelant `depuis_natif`, `export_ifc`, `ifc::*`. §5.5 points 2, 3, 4, 6, 9 | **Fable** | **fait** (coupes `8c74f6e`, `ef292b4`, `fe4551a`, `32e14b4`, `f82b294`, `e64d176`, `5dd76f1` ; extraction `501e119` ; décisions au §5.8) |
 | 3 | scene | `load`, `assemble`, `assemble_avec` (constructeurs IFC) vont dans `formats` ; plus de `formats`/`dessin` dans `scene`. §5.5 point 1 | **Fable** | à faire |
 | 4 | formats | extraction de `ifc/`, `rvt/` + `load`/`assemble` ; tests croisés montés | Sonnet | à faire |
-| 5 | maillage | `scene/natif.rs` seul (`depuis_natif`, `id_natif`, `numero_vue`) ; les tests de `modele`/`dessin` qui l'appellent y montent | **Fable** | à faire |
-| 6 | commandes | `modele/edition` restant ; décider où vont `concurrence` et `objets` (§5.5 point 5) ; rangement `modeliser/ modifier/ dessiner/ annoter/ documenter/` | **Fable** | à faire |
-| 7 | moteur2d | `dessin/` + rendu de feuille parqué | **Fable** | à faire |
+| 5 | maillage | `scene/natif.rs` seul (`depuis_natif`, `depuis_natif_verifie` ; `id_natif` et `numero_vue` sont dans `modele::identifiants` depuis le lot 2) ; les tests de `modele_tests`/`dessin` qui l'appellent y montent | **Fable** | à faire |
+| 6 | commandes | `crates/app/src/edition` (commandes, historique, verrous, gestion des contextes ; traits d'extension de `Projet`, §5.8 b) ; décider où vont `concurrence` et `objets` (§5.5 point 5) ; rangement `modeliser/ modifier/ dessiner/ annoter/ documenter/` | **Fable** | à faire |
+| 7 | moteur2d | `dessin/` dont le rendu de vue et de feuille parqué (`dessin/feuilles.rs`, `dessin/plans.rs`) | **Fable** | à faire |
 | 8 | moteur3d | `rendu/` hors scène | Sonnet | à faire |
-| 9 | echanges + collaboration | `modele/echanges`, `modele/collaboration` | Sonnet | à faire |
+| 9 | echanges + collaboration | `crates/app/src/echanges`, `crates/app/src/collaboration*` | Sonnet | à faire |
 | 10 | pilote | `pilote/` | Sonnet | à faire |
 | 11 | config + interface | rangement interne `socle/ zones/ saisie/ outils/... ` ; `cadre_natif` et `arriere_plan` de `main.rs` | **Fable** | à faire |
 | 12 | app + docs | binaire, `AGENTS.md` par crate, README | Sonnet | à faire |
@@ -208,3 +208,105 @@ Comptes d'occurrences du symbole (recherche par mot, commentaires exclus) ; p = 
 Violations restantes concernant `noyau` : **aucune**. `crates/noyau` n'a aucune dépendance interne (`grep -rn "crate::\(modele\|formats\|rendu\|dessin\|ui\|pilote\|config\)" crates/noyau` est vide) ; ses dépendances externes sont `earcutr`, `epaint_default_fonts`, `glam`, `serde`, `serde_json`, `sha2`, `skrifa`, `uuid`. Les points §5.5 5 (`uuid`/`hash`), 6 (`Forme2D`, `arc_3_points`, `developper`, `segments_polyligne`) et 7 (`Aretes`, `TRAIT_FORT_MM`, `aretes_jointes`, `MAX_APPARENCES`) sont levés pour la partie `noyau` ; il reste dans `dessin` `TRAIT_FIN_MM`, `PAS_HACHURE_MM`, `Poche`, `coupe`, `vu`, `cadrer_primitives`, `sommets*`.
 
 Emplacements : `noyau::{Id, uuid::uuid, hash::{hash, empreinte, encoder}, forme2d::*, aretes::*, constantes::MAX_APPARENCES, chrono::{chrono, chrono_lent}}`. `formats::ifc::step` ré-exporte `noyau::Id` (`pub use`). `MAX_APPARENCES` existe aussi en dur dans `rendu/scene.wgsl` (`const MAX_APPARENCES: i32 = 32`) : les deux valeurs doivent rester égales. Trois fonctions de triangulation (`texte::trianguler`, `trace2d::trianguler`, `geometrie::trianguler_contours`) sont passées de `pub(crate)` à `pub`, exigé par la compilation. Les dépendances `epaint_default_fonts`, `skrifa` et `sha2` ne sont plus déclarées dans `crates/app`.
+
+### 5.8 Après lot 2 (2026-11-14)
+
+Tests : 390 réussis, 2 ignorés, comme avant le lot ; répartition `bimedit` 279 (+ 1 ignoré), `modele` 101 (+ 1 ignoré), `noyau` 10. `cargo test -p modele --release` passe seul. `cargo tree -p modele` ne contient ni `egui`, ni `eframe`, ni `wgpu`. Aucun changement fonctionnel ni de schéma JSON : l'export IFC de `samples/maison_native.modele.json` est identique octet pour octet avant et après le lot.
+
+#### (a) Contenu de `crates/modele`
+
+Dépendances : `noyau` ; externes `earcutr`, `geo-straight-skeleton`, `glam`, `rayon`, `serde`, `serde_json`. 40 fichiers, 14 541 lignes. Aucun `crate::` ne sort de la crate.
+
+| Chemin | Contenu | Origine |
+|---|---|---|
+| `lib.rs` | `Projet` et types du modèle, lecture/écriture JSON | `modele/mod.rs` |
+| `soleil.rs` | position du soleil | inchangé |
+| `murs/` | `assemblage`, `jonctions`, `ossature`, `retours` | inchangé |
+| `elements/` | `arbre`, `cadrage`, `composant`, `escalier`, `garde_corps`, `pente`, `piece`, `site`, `terre_plein` | inchangé |
+| `volumes/` | `geometrie`, `solides` | inchangé (reste dans `modele`, §5.5 point 2) |
+| `famille/` | `modelee` (+ `catalogue`, `guidage`, `revolution`, `tests_maillage`), `profil`, `edition` | inchangé |
+| `documentation/` | données des vues, feuilles, annotations, cotation, nomenclatures ; primitives des annotations | sans le rendu de vue et de feuille |
+| `gabarit.rs` | `Gabarit`, `actif`, `definir`, `familles_livrees`, `texte_defaut` | `config/gabarit.rs` |
+| `creation.rs` | `Implantation`, `ParametresMur`, `ParametresDalle`, `contour_valide`, `croisement`, `ListeCreation` ; méthodes de `Projet` : `ajouter_mur*`, `ajouter_dalle*`, `ajouter_choix_creation`, vues (`ajouter_vue_plan`, `ajouter_vue_coupe`, `dupliquer_vue`, `renommer_vue`, `retourner_vue`, `supprimer_vue`), `axe_element`, extrémités et lignes ajustables | `modele/edition/mod.rs` |
+| `contextes.rs` | `FiltresContextes`, `Projet::elements_masques_contextes` | partie de `modele/edition/contextes.rs` |
+| `gabarits_vues.rs` | `GabaritVue` et ses méthodes de `Projet` | `modele/edition/gabarits_vues.rs` |
+| `validation.rs` | `Projet::verifier` | `modele/edition/validation.rs` |
+| `identifiants.rs` | `id_natif`, `numero_vue` | `rendu/scene/natif.rs` |
+| `unite.rs` | `Unite`, `unite()`, `definir_unite()` | `config/options/mod.rs` |
+
+Descendus dans `noyau` au passage : `noyau::motif::{Motif, GrilleMotif, hachures_plan}` (de `formats::rvt::vues`) et `noyau::nombres::format_real` (de `formats::ifc::step`).
+
+#### (b) Décisions de frontière
+
+| # | Symbole | Ancien -> nouveau | Pourquoi | Alternative écartée |
+|---|---|---|---|---|
+| 1 | Gabarit de projet | `config::gabarit` -> `modele::gabarit` | données pures du modèle (aucune dépendance à `config::options` ni à egui) ; `modele` le lit en production | injection du gabarit en paramètre : signatures de `Projet` à modifier partout |
+| 2 | Création paramétrique | `modele::edition` (racine) -> `modele::creation` | `ParametresMur`, `Implantation`, `contour_valide` devaient descendre ; leurs seuls consommateurs sont `ajouter_mur*`, `ajouter_dalle*` et les vues, qui ne dépendent que du modèle (`Projet::depuis_gabarit` appelle `ajouter_vue_plan`, `documentation` appelle `axe_element`) ; les tests de `murs`, `elements`, `documentation` qui posent un mur restent dans `modele` | descendre seulement les types et laisser les méthodes dans `commandes` : types sans usage de production dans `modele`, traits d'extension en plus, et 28 tests de plus à monter |
+| 3 | `FiltresContextes` | `edition::contextes` -> `modele::contextes` | champ de `Projet` ; `elements_masques_contextes` appelé par `documentation` | descendre tout `contextes.rs` : la gestion des contextes appelle `executer`, `identifiants`, `phase_element` (commandes) |
+| 4 | `GabaritVue` | `edition::gabarits_vues` -> `modele::gabarits_vues` | champ de `Projet` ; le fichier ne dépend que du modèle | aucune |
+| 5 | `Projet::verifier` | `edition::validation` -> `modele::validation` | appelé en production par `famille/edition.rs` ; ne dépend que du modèle ; conforme au §1 (« validation » dans `modele`) | monter `famille/edition.rs` : ses autres méthodes servent au modèle |
+| 6 | `Commande` | reste dans `edition::commandes` | une seule référence de production dans `modele` : `documentation::piloter_cote` | descendre `Commande` (1 200 lignes, tout `edition` en dépend) |
+| 7 | `piloter_cote` | `modele::documentation` -> `edition::commandes::piloter_cote` (`edition/commandes/cotes.rs`) | renvoie une `Commande` ; signature inchangée | type de données intermédiaire dans `modele` : aurait modifié les deux tests |
+| 8 | `croisement` | `edition::commandes` -> `modele::creation` | fonction géométrique pure appelée par `ajouter_dalle_contours` | aucune |
+| 9 | Méthodes de `Projet` restées dans `edition` | `impl Projet` -> traits d'extension `edition::{Execution, Modification, Verrous, Contextes}` + traits internes (`ExecutionInterne`, `ModificationInterne`, `Transformation`, `VerrousInterne`, `ContextesInterne`) | Rust interdit les méthodes inhérentes sur un type d'une autre crate ; corps inchangés, 38 méthodes, 5 fichiers ; 23 fichiers appelants hors `edition` reçoivent une ligne `use` | fonctions libres : 92 appels à réécrire dans 23 fichiers ; fusion d'`edition` dans `modele` : contraire au plan (`Commande`, `collaboration`) |
+| 10 | `Motif`, `GrilleMotif`, `hachures_plan` | `formats::rvt::vues` -> `noyau::motif` | géométrie pure sans dépendance ; utilisés par `documentation`, `dessin`, `scene` | `modele::motif` : `scene` et `formats` en auraient dépendu |
+| 11 | `format_real` | `formats::ifc::step` -> `noyau::nombres` | fonction pure, utilisée par `murs/assemblage.rs` et `Unite::afficher` | copie dans `modele` |
+| 12 | `Unite`, `unite()`, `definir_unite()` | `config::options` -> `modele::unite` | **non prévu au plan** : `documentation` lit l'unité d'affichage pour le texte des cotes et des nomenclatures (3 références de production) | passer l'unité en paramètre des fonctions de `documentation` : signatures publiques modifiées |
+| 13 | `id_natif`, `numero_vue` | `rendu::scene::natif` -> `modele::identifiants` | fonctions de nommage pures, 8 références de production dans `documentation` | monter les primitives d'annotation qui les appellent |
+| 14 | Rendu de vue et de feuille | `modele::documentation` -> `crate::dessin` | appelle `depuis_natif`, `coupe`, `vu`, `cadrer_primitives`, `Poche`, `svg2pdf`, `pdf-writer` | voir (c) |
+| 15 | `edition`, `echanges`, `collaboration` | `crates/app/src/modele/…` -> `crates/app/src/{edition,echanges,collaboration}` | un module `modele` résiduel dans `app` aurait porté le même nom que la crate | `mod modele` résiduel : chemins ambigus |
+
+Ré-exports conservés (chemin d'origine encore valide) : `config::options::{Unite, unite, definir_unite}` (84 références dans `ui`), `rendu::scene::{id_natif, numero_vue}` (une centaine de références), `formats::ifc::step::format_real` (43 références), `formats::rvt::vues::{Motif, GrilleMotif, hachures_plan}` (utilisés par `formats`). Aucun ré-export `modele::…` à un ancien chemin.
+
+Visibilités élargies, exigées par la compilation : `documentation::{cotes_de, texte}` (privé -> `pub`), `documentation::{pt_papier, trait_papier}` (`pub(super)` -> `pub`), `documentation::remplir_champs` (`pub(crate)` -> `pub`) ; `Projet::ajouter_dalle` n'est plus sous `#[cfg(test)]` (appelé par des tests d'`app`).
+
+#### (c) Code parqué dans `crates/app`
+
+| Fichier | Contenu | Crate d'accueil |
+|---|---|---|
+| `dessin/feuilles.rs` | `dessin_vue`, `ids_masques_vue`, `vue_placee`, `feuille`, `svg_feuille`, `pdf`, `pdf_pages`, `pdf_jeu` (de `documentation/mod.rs` et `documentation/feuilles.rs`) | moteur2d (lot 7) |
+| `dessin/plans.rs` | `fond_plan`, `limite_haute_plan`, `pointilles_plage_haute` (fichier `documentation/plans.rs` déplacé) | moteur2d (lot 7) |
+| `edition/commandes/cotes.rs` | `piloter_cote` et ses deux tests | commandes (lot 6) |
+| `modele_tests/` | 36 tests, voir (d) | maillage, commandes, moteur2d, echanges, collaboration selon ce qu'ils appellent (lots 5 à 9) |
+
+Signatures inchangées ; les appelants (`ui`, `pilote`) importent `crate::dessin::…`.
+
+#### (d) Tests déplacés
+
+38 tests sortis des modules de `modele`, noms et assertions inchangés (imports adaptés ; `super::FichierProfil` devient `FichierProfil` dans `famille_profil.rs`). Les aides de test nécessaires sont déplacées ou recopiées (`projet`, `rectangle`, `piece`, `boite`, `escalier`, `arbre`, `type_trois_couches`, `projet` de `terre_plein`).
+
+| Origine (`crates/modele/src/…`) | Destination (`crates/app/src/…`) | Tests |
+|---|---|---|
+| `murs/assemblage.rs` | `modele_tests/murs_assemblage.rs` | `modification_type_actualise_tous_les_murs_sans_detacher_les_couches`, `couche_editee_hors_du_mur_compose_se_detache` |
+| `elements/arbre.rs` | `modele_tests/elements_arbre.rs` | `creer_puis_supprimer_un_arbre` |
+| `elements/composant.rs` | `modele_tests/elements_composant.rs` | `composant_place_transforme_copie_supprime` |
+| `elements/escalier.rs` | `modele_tests/elements_escalier.rs` | `commandes_escalier_et_garde_corps` |
+| `elements/piece.rs` | `modele_tests/elements_piece.rs` | `piece_dans_quatre_murs`, `etiquette_famille_de_la_piece`, `piece_ouverte_refusee_et_recalcul`, `piece_mur_compose` |
+| `elements/site.rs` | `modele_tests/elements_site.rs` | `creation_site_sauvegarde_export_et_suppression`, `site_en_phase_existant_cotes_ngf_et_epaisseur_du_type` |
+| `elements/terre_plein.rs` (`tests_scene`) | `modele_tests/elements_terre_plein.rs` | `scene_terre_plein` |
+| `volumes/solides.rs` | `modele_tests/volumes_solides.rs` | `conversion_ifc_rouvre_et_indices_invalides_refuses`, `recalcul_partiel_identique_apres_modification` |
+| `famille/profil.rs` | `modele_tests/famille_profil.rs` | `profils_du_gabarit_varient_et_survivent_au_rechargement` |
+| `documentation/tests.rs` | `modele_tests/documentation.rs` | `dessin_vue_applique_le_contexte_propre_a_la_vue`, `dessin_vue_suit_le_gabarit_partage`, `dessin_sur_feuille_suit_le_fond_la_plage_haute_et_le_style`, `coupe_sur_feuille_reste_dans_les_limites_de_la_vue`, `formes_du_cartouche_persistent_et_sont_dessinees_sur_feuille`, `vue_placee_suit_echelle_vue_meme_avec_ancienne_valeur`, `vue_placee_respecte_rotation_et_limite_basse`, `vue_placee_respecte_masquage_et_cadrage`, `documents_compatibles_v0_references_et_pdf`, `famille_cartouche_partagee_est_enregistree_et_utilisee`, `polyligne_fermee_remplie`, `nomenclature_csv_et_quantites_sans_double_compte`, `polyligne_types_de_trait_par_segment`, `polyligne_segments_d_arc` |
+| `creation.rs` (ancien `edition/mod.rs`) | `modele_tests/creation.rs` | `mur_contraintes_phases_et_sous_projets_persistes`, `dalle_creation_contour_et_relecture`, `plafond_et_toiture_en_pente`, `vues_plan_et_coupe`, `mur_creation_enregistrement_relecture` |
+| `gabarits_vues.rs` | `modele_tests/gabarits_vues.rs` | `gabarit_partage_actualise_detache_et_se_recharge`, `invalides_et_modifications_de_phases_restent_coherentes` |
+| `documentation/cotation.rs` (`tests_aretes`) | `edition/commandes/cotes.rs` | `cote_entre_axes_suit_et_pilote_le_mur`, `angle_entre_aretes_pilote_la_rotation` |
+
+Le test `dessin::…::jonction_sans_arete_meme_materiau` utilisait l'aide `modele::volumes::geometrie::tests::boite` (module `#[cfg(test)]`, invisible d'une autre crate) : l'aide est recopiée dans le test. `collaboration::tests::toutes_les_collections_du_projet_ont_une_politique` lit maintenant `crates/modele/src/lib.rs`.
+
+#### (e) Violations restantes (lots 3 à 9)
+
+Concernant `modele` : **aucune** (§5.5 points 2, 3, 4, 6 et 9 pour la partie `modele` levés ; point 5 levé pour `modele`, reste `edition`).
+
+| Source (crate cible) | Importe | Références | Lot |
+|---|---|---|---|
+| `rendu/scene/mod.rs` (scene) | formats | `ifc::{geom, semantique, step}` : constructeurs `load`, `assemble`, `assemble_avec` (§5.5 point 1) | 3 |
+| `formats` | scene | `NavFenetre`, `Scene`, `Navigateur`, `NavVue`, `NavFamille` (sens autorisé, cycle tant que le point précédent n'est pas levé) | 3 |
+| `formats` | modele, echanges | tests de `rvt/maquette/tests.rs` (`modele::Projet`, `convertir_maquette`) : `formats` n'a pas `modele` dans ses dépendances autorisées | 4 |
+| `edition` (commandes) | collaboration | `collaboration::{concurrence, objets}` dans `verrous.rs` (§5.5 point 5) | 6 |
+| `edition` (commandes) | echanges | tests : `depuis_ifc`, `export_ifc` (`commandes/tests.rs`) | 6 |
+| `dessin` (moteur2d) | formats | `formats::ifc::step::Id` (= `noyau::Id`, 2 références) | 7 |
+| `dessin/feuilles.rs` (moteur2d) | maillage | `depuis_natif` : `maillage` n'est pas dans les dépendances autorisées de moteur2d au §2 (il est avant lui dans l'ordre) | 5 ou 7, à valider |
+| `collaboration` | maillage | `depuis_natif` (`cli.rs`, 2 références) : non listé au §2 pour collaboration | 9, à valider |
+| `modele_tests` | commandes, scene/maillage, formats, echanges, collaboration, moteur2d | tests parqués, à répartir | 5 à 9 |
+
+Points ouverts pour la validation des frontières : (1) décision 2 (création paramétrique dans `modele` plutôt que dans `commandes/modeliser`) ; (2) décision 9 (traits d'extension de `Projet` dans `commandes`) ; (3) décision 12 (unité d'affichage, état global, dans `modele`) ; (4) décision 5 (validation dans `modele`) ; (5) `maillage` à ajouter aux dépendances autorisées de moteur2d et de collaboration au §2 ; (6) emplacement final des tests de `modele_tests`.
