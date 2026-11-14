@@ -44,10 +44,10 @@ noyau <- modele <- scene <- formats <- maillage <- commandes <- moteur2d <- mote
 | formats | noyau, scene |
 | maillage | noyau, modele, scene, formats |
 | commandes | noyau, modele, scene, maillage |
-| moteur2d | noyau, modele, scene, commandes |
+| moteur2d | noyau, modele, scene, maillage, commandes |
 | moteur3d | noyau, modele, scene, moteur2d |
 | echanges | noyau, modele, scene, formats, maillage |
-| collaboration | modele, commandes, echanges |
+| collaboration | noyau, modele, scene, maillage, commandes, echanges |
 | pilote | collaboration et en dessous |
 | config | tout ce qui précède, hors interface |
 | interface | tout ce qui précède |
