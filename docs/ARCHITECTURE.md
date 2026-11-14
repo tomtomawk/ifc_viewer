@@ -1,6 +1,6 @@
 # Architecture : découpage en workspace Cargo
 
-État au lot 3 (coupe faite, extraction en attente de décision, §5.9) : le dépôt est un workspace (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`). `noyau` (lot 1) et `modele` (lot 2) sont extraits en `crates/noyau` et `crates/modele` ; le reste du code est encore dans une seule crate, `crates/app` (package et binaire `bimedit`). Les dépendances sont déclarées une fois dans `[workspace.dependencies]` (racine) et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine.
+État après le lot 3 (§5.10) : le dépôt est un workspace (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`). `noyau` (lot 1), `modele` (lot 2), `ifc_base` et `scene` (lot 3) sont extraits en `crates/noyau`, `crates/modele`, `crates/ifc_base` et `crates/scene` ; le reste du code est encore dans une seule crate, `crates/app` (package et binaire `bimedit`). Les dépendances sont déclarées une fois dans `[workspace.dependencies]` (racine) et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine.
 
 Restent à la racine : `docs/`, `samples/`, `gabarits/`, `tools/`, `.github/`, `.mcp.json`, `README.md`, `AGENTS.md`. Les ressources embarquées (`include_str!`) pointent vers ces dossiers par des chemins relatifs depuis `crates/<crate>/src/...` (le gabarit par défaut est embarqué par `crates/modele/src/gabarit.rs`) ; les tests lisent `samples/` via `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")` (le répertoire courant d'un test est celui de sa crate ; même profondeur pour `crates/app` et `crates/modele`).
 
@@ -10,8 +10,9 @@ Restent à la racine : `docs/`, `samples/`, `gabarits/`, `tools/`, `.github/`, `
 crates/
   noyau/          géométrie, CSG, texte, primitives 2D ; aucune dépendance interne
   modele/         données, schéma JSON, validation : murs, elements, famille, documentation
-  scene/          scène triangulée neutre, identifiants, picking (contient Vec<modele::Apparence>)
-  formats/        ifc, rvt
+  ifc_base/       parseur STEP (`step`) et couche sémantique IFC (`semantique`) ; dépend de noyau seul
+  scene/          scène triangulée, navigateur, picking (contient Vec<modele::Apparence>, ifc_base::IfcModel, IdMap)
+  formats/        ifc (geom, scene : load/assemble), rvt
   maillage/       modèle -> scène : volumes, jonctions, depuis_natif
   commandes/      transactions, historique, verrous ; modeliser/ modifier/ dessiner/ annoter/ documenter/
   moteur2d/       coupe, arêtes, poché, motifs, SVG/PDF
@@ -25,14 +26,14 @@ crates/
   app/            binaire `bimedit`
 ```
 
-Correspondance avec les dossiers actuels (après lot 2) : `crates/noyau`, `crates/modele` : extraits ; dans `crates/app/src/` : `rendu/scene/mod.rs` -> scene ; `formats/` -> formats ; `rendu/scene/natif.rs` -> maillage ; `edition/` -> commandes ; `dessin/` (dont `feuilles.rs` et `plans.rs`, rendu de vue et de feuille parqué au lot 2) -> moteur2d ; `rendu/` (hors `scene/`) -> moteur3d ; `echanges/` -> echanges ; `collaboration/` et `collaboration.rs` -> collaboration ; `pilote/`, `config/` ; `ui/` -> interface ; `main.rs` -> app ; `modele_tests/` : tests parqués, à répartir (§5.8 d).
+Correspondance avec les dossiers actuels (après lot 3) : `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene` : extraits ; dans `crates/app/src/` : `formats/` -> formats ; `rendu/natif.rs` -> maillage ; `edition/` -> commandes ; `dessin/` (dont `feuilles.rs` et `plans.rs`, rendu de vue et de feuille parqué au lot 2) -> moteur2d ; `rendu/` (hors `natif.rs`) -> moteur3d ; `echanges/` -> echanges ; `collaboration/` et `collaboration.rs` -> collaboration ; `pilote/`, `config/` ; `ui/` -> interface ; `main.rs` -> app ; `modele_tests/` : tests parqués, à répartir (§5.8 d).
 
 ## 2. Graphe de dépendances autorisées
 
-Ordre cible, hypothèse de départ (flèche = « dépend de ») :
+Ordre cible (flèche = « dépend de ») ; `ifc_base` ajoutée au lot 3 (option B du §5.9) :
 
 ```
-noyau <- modele <- scene <- formats <- maillage <- commandes <- moteur2d <- moteur3d
+noyau <- modele <- ifc_base <- scene <- formats <- maillage <- commandes <- moteur2d <- moteur3d
       <- echanges <- collaboration <- pilote <- config <- interface <- app
 ```
 
@@ -40,9 +41,10 @@ noyau <- modele <- scene <- formats <- maillage <- commandes <- moteur2d <- mote
 |---|---|
 | noyau | aucune |
 | modele | noyau |
-| scene | noyau, modele |
-| formats | noyau, scene |
-| maillage | noyau, modele, scene, formats |
+| ifc_base | noyau |
+| scene | noyau, modele, ifc_base |
+| formats | noyau, ifc_base, scene (`modele` : à trancher au lot 4, seuls des tests de `rvt/maquette` l'utilisent, §5.10 e) |
+| maillage | noyau, modele, ifc_base, scene, formats |
 | commandes | noyau, modele, scene, maillage |
 | moteur2d | noyau, modele, scene, maillage, commandes |
 | moteur3d | noyau, modele, scene, moteur2d |
@@ -53,7 +55,9 @@ noyau <- modele <- scene <- formats <- maillage <- commandes <- moteur2d <- mote
 | interface | tout ce qui précède |
 | app | interface (et config, pilote pour le démarrage) |
 
-Règle générale : une crate n'importe que des crates situées avant elle dans l'ordre. Aucun cycle. Les dépendances externes (wgpu, egui, etc.) suivent : `wgpu` uniquement dans moteur3d ; `egui`/`eframe` seulement à partir de moteur3d (voir §5.4). L'ordre final est confirmé ; les coupes qu'il impose sont planifiées au §4 (écarts au §5.5). `volumes` reste dans `modele`, donc `maillage` ne contient que `scene/natif.rs`.
+`ifc_base` est autorisée pour toute crate située après elle qui manipule `StepFile`, `IfcModel`, `Value`, `Entity` ou `IdMap` (aujourd'hui : formats, maillage, echanges, interface, app ; relevé au §5.10 e) ; les lignes ci-dessus à partir de commandes seront complétées au lot de chaque crate.
+
+Règle générale : une crate n'importe que des crates situées avant elle dans l'ordre. Aucun cycle. Les dépendances externes (wgpu, egui, etc.) suivent : `wgpu` uniquement dans moteur3d ; `egui`/`eframe` seulement à partir de moteur3d (voir §5.4). L'ordre final est confirmé ; les coupes qu'il impose sont planifiées au §4 (écarts au §5.5). `volumes` reste dans `modele`, donc `maillage` ne contient que `rendu/natif.rs`.
 
 ## 3. Règles
 
@@ -77,9 +81,9 @@ Code « parqué » : quand une coupe fait monter du code vers une crate qui n'ex
 | 0 | workspace | chemins, CI, inventaire | Sonnet | **fait** (`242681c`) |
 | 1 | noyau | Descendre dans `noyau` : `Id` (= `u64`, neutre), `uuid`, `hash` (+ `empreinte`, `encoder`, dont `hash` dépend ; de `collaboration`), `Forme2D` + `Geom`, `geom_segment`, `arc_3_points`, `arc_courbure`, `angle_norm`, `segments_polyligne`, `points_segment`, `points_arc`, `points_spline`, `developper` (de `dessin/dao.rs` ; `Geom` et les `points_*` descendent avec `Forme2D` qui en dépend ; les outils de tracé et d'accrochage restent dans `dessin`), `Aretes`/`aretes`/`aretes_jointes`/`chainer`/`Polyligne`/`PAS`/`TRAIT_FORT_MM`/`NOIR` (de `dessin`), `MAX_APPARENCES` (de `rendu::gpu`), `chrono` (de `rendu::scene`). Si un symbole dépend de plus que `noyau`, s'arrêter et le signaler. §5.5 points 5, 6, 7, 8 (partie `Id`) | Sonnet | **fait** (coupes `dee72ad`, `a8bb20b`, `7746a1e`, `9b18b34` ; extraction `06f1578`) |
 | 2 | modele | `config::gabarit` sous `modele` ; descendre dans `modele` : `contextes`, `gabarits_vues`, `ParametresMur`, `Implantation`, `contour_valide` (et `Commande` si les références de production l'exigent : à trancher et documenter) ; `Motif`/`GrilleMotif`/`hachures_plan` ; `volumes` et `murs/jonctions` **restent** dans `modele` ; remplacer `scene::chrono` ; monter hors de `modele` le rendu de feuille de `documentation` (`coupe`, `vu`, `cadrer_primitives`, `Poche`, ~l. 1177-1213) et les tests appelant `depuis_natif`, `export_ifc`, `ifc::*`. §5.5 points 2, 3, 4, 6, 9 | **Fable** | **fait** (coupes `8c74f6e`, `ef292b4`, `fe4551a`, `32e14b4`, `f82b294`, `e64d176`, `5dd76f1` ; extraction `501e119` ; décisions au §5.8) |
-| 3 | scene | `load`, `assemble`, `assemble_avec` (constructeurs IFC) vont dans `formats` ; plus de `formats`/`dessin` dans `scene`. §5.5 point 1 | **Fable** | **partiel** : coupe `a069497` faite ; extraction **arrêtée**, décision à prendre (`Scene.model: IfcModel`, §5.9) |
-| 4 | formats | extraction de `ifc/`, `rvt/` + `load`/`assemble` ; tests croisés montés | Sonnet | à faire |
-| 5 | maillage | `scene/natif.rs` seul (`depuis_natif`, `depuis_natif_verifie` ; `id_natif` et `numero_vue` sont dans `modele::identifiants` depuis le lot 2) ; les tests de `modele_tests`/`dessin` qui l'appellent y montent | **Fable** | à faire |
+| 3 | ifc_base + scene | `load`, `assemble`, `assemble_avec` (constructeurs IFC) vont dans `formats` ; plus de `formats`/`dessin` dans `scene`. §5.5 point 1 | **Fable** | **fait** (coupe `a069497` ; extraction de `ifc_base` `b698a58` ; extraction de `scene` `a114732` ; option B du §5.9, détail au §5.10) |
+| 4 | formats | extraction de `ifc/` (`geom`, `scene`), `rvt/` ; tests croisés montés ; retrait du ré-export `formats::ifc::{step, semantique}` (§5.10 b) | Sonnet | à faire |
+| 5 | maillage | `rendu/natif.rs` seul (`depuis_natif`, `depuis_natif_verifie` ; `id_natif` et `numero_vue` sont dans `modele::identifiants` depuis le lot 2) ; les tests de `modele_tests`/`dessin` qui l'appellent y montent | **Fable** | à faire |
 | 6 | commandes | `crates/app/src/edition` (commandes, historique, verrous, gestion des contextes ; traits d'extension de `Projet`, §5.8 b) ; décider où vont `concurrence` et `objets` (§5.5 point 5) ; rangement `modeliser/ modifier/ dessiner/ annoter/ documenter/` | **Fable** | à faire |
 | 7 | moteur2d | `dessin/` dont le rendu de vue et de feuille parqué (`dessin/feuilles.rs`, `dessin/plans.rs`) | **Fable** | à faire |
 | 8 | moteur3d | `rendu/` hors scène | Sonnet | à faire |
@@ -313,6 +317,8 @@ Points ouverts pour la validation des frontières : (1) décision 2 (création p
 
 ### 5.9 Lot 3, état intermédiaire (2026-11-14) : coupe faite, extraction arrêtée
 
+**Obstacle résolu** : l'utilisateur a retenu l'option B du (b), avec le nom `ifc_base` (et non `ifc`, pour ne pas entrer en collision avec le module `formats::ifc`). Le lot est terminé ; état final au §5.10. Le texte ci-dessous est conservé comme trace de la décision.
+
 Tests : 390 réussis, 2 ignorés, répartition inchangée (`bimedit` 279 + 1 ignoré, `modele` 101 + 1 ignoré, `noyau` 10). `crates/scene` n'existe pas. Sorties comparées à `d997e6c` : `--export-ifc` et `--quantites` de `samples/maison_native.modele.json` identiques octet pour octet ; `--stats` de `samples/test_ifc4.ifc`, `samples/test_ifc4_murs.ifc` et de l'IFC exporté identiques hors ligne « Durée » ; `--export-vue` (`plan-rdc`, `coupe`) identiques après tri des lignes et des segments (l'ordre des segments du SVG varie d'une exécution à l'autre avec le même binaire, avant comme après le lot).
 
 #### (a) Coupe faite (`a069497`)
@@ -349,3 +355,84 @@ Extraction de `crates/scene` (types `Vertex`, `Range`, `SceneObject`, `Scene`, `
 #### (d) Violations restantes
 
 Celles du §5.8 (e), sauf la première ligne, remplacée par : `rendu/scene/mod.rs` (scene) -> formats : `ifc::semantique::IfcModel`, `ifc::step::IdMap` (champs de `Scene`, voir (b)). Ajout : `rendu/scene/natif.rs` (maillage) -> `formats::ifc::scene::assemble_avec` (sens autorisé).
+
+### 5.10 Après lot 3 (2026-11-14)
+
+Tests : 390 réussis, 2 ignorés, comme avant le lot ; répartition `bimedit` 277 (+ 1 ignoré), `modele` 101 (+ 1 ignoré), `noyau` 10, `ifc_base` 2, `scene` 0. `cargo test -p ifc_base -p scene --release` passe seul. `cargo tree -p ifc_base` et `cargo tree -p scene` ne contiennent ni `egui`, ni `eframe`, ni `wgpu`. Aucun `crate::` ne sort de `crates/ifc_base/src` ni de `crates/scene/src`. Sorties comparées à `f332780` : `--export-ifc` et `--quantites` de `samples/maison_native.modele.json` identiques octet pour octet ; `--stats` de `samples/test_ifc4.ifc`, `samples/test_ifc4_murs.ifc` et de l'IFC exporté identiques hors ligne « Durée » (et nom du fichier exporté). `--export-vue` n'a pas été comparé à ce lot.
+
+#### (a) Contenu de `crates/ifc_base` et de `crates/scene`
+
+`ifc_base` (`b698a58`) : dépendances `noyau` ; externe `rayon`. Elle ne dépend pas de `modele`. 3 fichiers, 1 136 lignes.
+
+| Chemin | Contenu | Origine |
+|---|---|---|
+| `lib.rs` | `pub mod semantique; pub mod step;` | nouveau |
+| `step.rs` (552 l.) | parseur ISO 10303-21 : `IdHasher`, `IdMap`, `Value`, `Entity`, `StepFile` (dont `StepFile::parse`), décodage des chaînes ; ré-exporte `noyau::Id` et `noyau::nombres::format_real` | `crates/app/src/formats/ifc/step.rs`, inchangé |
+| `semantique.rs` (581 l.) | `IfcModel` (arborescence spatiale, types, propriétés, matériaux, unités), `pretty_type` | `crates/app/src/formats/ifc/semantique.rs` ; seul changement : `crate::formats::ifc::step::` -> `crate::step::` |
+
+`scene` (`a114732`) : dépendances `noyau`, `modele`, `ifc_base` ; externe `glam`. 1 fichier, 384 lignes.
+
+| Chemin | Contenu | Origine |
+|---|---|---|
+| `lib.rs` | `Vertex`, `Range`, `SceneObject`, `Navigateur`, `NavMateriau`, `NavVue`, `NavFenetre`, `NavFamille`, `ReperePartage`, `Scene`, `CoucheCoupe`, `Scene::{sol_sous, obstacle, pick}`, `etat_de_phase` (privés : `ray_aabb`, `ray_tri`) | `crates/app/src/rendu/scene/mod.rs`, sans `mod natif`, sans les ré-exports `depuis_natif`/`depuis_natif_verifie`/`id_natif`/`numero_vue`, sans `projet_vide` |
+
+`scene` prend dans `modele` : `Apparence` (`Scene::apparences`) ; dans `ifc_base` : `IfcModel` (`Scene::model`), `IdMap` (`Scene::object_of`, `Scene::couches_coupe`) ; dans `noyau` : `Id`, `trace2d::Primitive`, `motif::Motif`.
+
+#### (b) Décisions et ré-exports conservés
+
+| # | Décision | Pourquoi | Alternative écartée |
+|---|---|---|---|
+| 1 | Option B : crate `ifc_base` entre `modele` et `scene` | décision de l'utilisateur ; `scene` ne porte pas le parseur STEP | options A, C, D du §5.9 |
+| 2 | `ifc_base` ne dépend que de `noyau` | la compilation ne demande rien d'autre ; l'ordre `modele <- ifc_base` est un rang, pas une dépendance | aucune |
+| 3 | `rendu/scene/natif.rs` -> `rendu/natif.rs` (module `crate::rendu::natif`) ; le module `rendu::scene` disparaît | `rendu/scene/` ne contenait plus que lui ; un module `rendu::scene` résiduel aurait porté le nom de la crate `scene` | garder `rendu/scene/mod.rs` réduit aux ré-exports : 0 remplacement pour `depuis_natif`/`id_natif`, mais chemin `rendu::scene` ambigu avec la crate |
+| 4 | `projet_vide` (`#[cfg(test)]`) -> `rendu/natif.rs` | appelle `depuis_natif` ; un seul appelant (test de `dessin/mod.rs`) | aucune |
+| 5 | `scene` en une seule `lib.rs` | 384 lignes, sous le plafond de 600 | découpe en fichiers : sans nécessité |
+
+Ré-exports conservés (dette) :
+
+| Ré-export | Où | Références | À retirer |
+|---|---|---|---|
+| `pub use ifc_base::{semantique, step};` | `crates/app/src/formats/ifc/mod.rs` | 41 références dans 24 fichiers d'`app` passent encore par `formats::ifc::{step, semantique}` | lot 4 |
+| `pub use modele::identifiants::{id_natif, numero_vue};` | `crates/app/src/rendu/natif.rs` (remplace celui de `rendu::scene`) | 75 références `rendu::natif::{id_natif, numero_vue}` | lot 5 (maillage) |
+| `step::{Id, format_real}` (ré-exports de `noyau`) | `crates/ifc_base/src/step.rs` | déjà présents avant le lot (§5.7, §5.8) | lot 4 ou plus tard |
+
+Remplacements dans `app` (`a114732`) : `crate::rendu::scene::X` et `scene::X` (via `use crate::rendu::scene::{self, …}`) deviennent `scene::X` pour les types déplacés, `crate::rendu::natif::X` pour `depuis_natif`, `depuis_natif_verifie`, `id_natif`, `numero_vue`, `projet_vide` (103 références `rendu::natif::` dans 30 fichiers). `rendu/natif.rs` importe explicitement `glam::{DVec3, Vec3, Vec4}`, `noyau::Id`, `ifc_base::semantique::IfcModel` et `scene::*` à la place de `use super::*`. Aucune visibilité élargie. Aucun changement de format ni de comportement.
+
+#### (c) Code parqué dans `crates/app`
+
+Liste du §5.8 (c) inchangée, plus :
+
+| Fichier | Contenu | Crate d'accueil |
+|---|---|---|
+| `rendu/natif.rs` (884 l.) | `depuis_natif`, `depuis_natif_verifie`, `projet_vide` (test), ré-export `id_natif`/`numero_vue`, module `tests` | maillage (lot 5) |
+| `formats/ifc/scene.rs` | `load`, `assemble`, `assemble_avec` (§5.9 a) | formats (lot 4) |
+
+#### (d) Tests déplacés
+
+| Origine | Destination | Tests |
+|---|---|---|
+| `crates/app/src/formats/ifc/step.rs` | `crates/ifc_base/src/step.rs` | `parse_basic`, parti avec le fichier, inchangé |
+| `crates/app/src/formats/ifc/semantique.rs` | `crates/ifc_base/src/semantique.rs` | 1 test (`pretty_type`), parti avec le fichier, inchangé |
+
+Aucun test n'a dû remonter dans `app`. `rendu/scene/mod.rs` ne contenait aucun test : `scene` a 0 test.
+
+#### (e) Violations restantes (lots 4 à 9)
+
+Concernant `ifc_base` et `scene` : **aucune**.
+
+| Source (crate cible) | Importe | Références | Lot |
+|---|---|---|---|
+| `formats` | modele, echanges | tests de `rvt/maquette/tests.rs` (`modele::Projet`, `convertir_maquette`) : `modele` n'est pas dans les dépendances autorisées de formats | 4 |
+| `formats/ifc/mod.rs` | — | le module `formats::ifc::scene` porte le nom de la crate `scene` : dans la future crate `formats`, un chemin `scene::X` écrit dans `ifc/mod.rs` désignerait le module (aujourd'hui aucun) | 4, à surveiller |
+| `rendu/natif.rs` (maillage) | formats | `formats::ifc::geom::{Part, ProductGeom}`, `formats::ifc::scene::assemble_avec` (sens autorisé) | 5 |
+| `edition` (commandes) | collaboration | `collaboration::{concurrence, objets}` dans `verrous.rs` (§5.5 point 5) | 6 |
+| `edition` (commandes) | echanges | tests : `depuis_ifc`, `export_ifc` (`commandes/tests.rs`) | 6 |
+| `dessin` (moteur2d) | formats | `formats::ifc::step::Id` (= `noyau::Id`, 2 références, via le ré-export) | 4 (retrait du ré-export) ou 7 |
+| `config` | formats | `formats::ifc::step::format_real` (= `noyau::nombres::format_real`, 2 références, via le ré-export) | 4 |
+| `dessin/feuilles.rs` (moteur2d) | maillage | `depuis_natif` (autorisé au §2 depuis `d997e6c`) | 7 |
+| `collaboration` | maillage | `depuis_natif` (`cli.rs`, autorisé au §2 depuis `d997e6c`) | 9 |
+| `modele_tests` | commandes, maillage, formats, echanges, collaboration, moteur2d | tests parqués, à répartir | 5 à 9 |
+
+Usage d'`ifc_base` hors `formats` relevé dans `app` (via `formats::ifc::{step, semantique}`) : `rendu/natif.rs` (`Entity`, `StepFile`, `Value`, `IfcModel`), `echanges` (`IfcModel`, `pretty_type`, `Entity`, `Id`, `StepFile`), `ui` (`pretty_type`, `Id`, `Value`, `format_real`), `main.rs` (`pretty_type`, `format_real`), `modele_tests` (`IfcModel`, `StepFile`), `dessin` (`Id`), `config` (`format_real`). `Id` et `format_real` sont dans `noyau` : `dessin` et `config` n'ont pas besoin d'`ifc_base`.
+
+Points ouverts : (1) dépendances `ifc_base` à inscrire au §2 pour maillage, echanges, interface et app (proposé ci-dessus, à valider) ; (2) `formats` -> `modele` pour les tests de `rvt/maquette` (monter les tests ou autoriser la dépendance) ; (3) nom du module `formats::ifc::scene` face à la crate `scene`.
