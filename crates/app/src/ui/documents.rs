@@ -63,7 +63,7 @@ impl ViewerApp {
                     }));
                     let _ = tx.send(LoadMsg::Revit(res));
                 } else {
-                    let res = crate::formats::ifc::scene::load(&path, &progress).map(Box::new);
+                    let res = crate::formats::ifc::assemblage::load(&path, &progress).map(Box::new);
                     let _ = tx.send(LoadMsg::Done(res));
                 }
                 ctx.request_repaint();

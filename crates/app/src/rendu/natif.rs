@@ -463,7 +463,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         let tris: Vec<[glam::DVec3; 3]> = t.into_iter().chain(h).map(|t| t.map(|v| v * 0.001)).collect();
         aretes.insert(id_natif("arbre", &a.id), aretes_silhouette(&tris));
     }
-    let mut scene = crate::formats::ifc::scene::assemble_avec(model, geoms, path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| projet.nom.clone()), aretes);
+    let mut scene = crate::formats::ifc::assemblage::assemble_avec(model, geoms, path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| projet.nom.clone()), aretes);
     chrono("scène : assemblage", &mut t_etape);
     for a in &projet.arbres {
         if let Some(&o) = scene.object_of.get(&id_natif("arbre", &a.id)) {

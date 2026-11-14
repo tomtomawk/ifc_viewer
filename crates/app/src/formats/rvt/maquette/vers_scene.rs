@@ -991,7 +991,7 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
         v.primitives = primitives_vues.remove(&v.revit_id).unwrap_or_default();
     }
     let model = IfcModel::new(StepFile { schema: format!("REVIT {format}"), entities: b.entities });
-    let mut s = crate::formats::ifc::scene::assemble(model, geoms, file_name);
+    let mut s = crate::formats::ifc::assemblage::assemble(model, geoms, file_name);
     for (&ent, &el) in &element_de {
         if let Some(mur) = m.murs.iter().find(|w| w.id == el) {
             if let Some(bandes) = bandes_couches_mur(m, mur, s.origin) { s.couches_coupe.insert(ent, bandes); }
