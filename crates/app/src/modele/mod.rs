@@ -17,6 +17,7 @@ pub mod elements;
 pub mod famille;
 pub mod gabarit;
 pub mod gabarits_vues;
+pub mod identifiants;
 pub mod murs;
 pub mod soleil;
 pub mod unite;

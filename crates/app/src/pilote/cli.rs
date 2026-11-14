@@ -1,4 +1,5 @@
 //! Commandes non graphiques du modèle natif (utilisables aussi en CI).
+use crate::dessin;
 use crate::modele::{self, Projet};
 use std::path::Path;
 pub fn executer(args: &[String]) -> Option<Result<(), String>> {
@@ -76,12 +77,12 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
                         .iter()
                         .find(|f| f.id == *arg || f.numero == *arg)
                         .ok_or("Feuille absente.")?;
-                    modele::documentation::svg_feuille(&p, f)?
+                    dessin::svg_feuille(&p, f)?
                 } else {
-                    modele::documentation::dessin_vue(&p, arg)?.svg(arg)
+                    dessin::dessin_vue(&p, arg)?.svg(arg)
                 };
                 let b = match sortie.extension().and_then(|s| s.to_str()) {
-                    Some("pdf") => modele::documentation::pdf(&svg)?,
+                    Some("pdf") => dessin::pdf(&svg)?,
                     Some("svg") => svg.into_bytes(),
                     _ => return Err("Extension attendue : .svg ou .pdf".into()),
                 };

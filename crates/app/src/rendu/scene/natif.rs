@@ -5,10 +5,6 @@ use crate::modele::{Projet, SorteDalle};
 use noyau::chrono::chrono;
 use crate::formats::ifc::step::{Entity, Value};
 
-pub fn id_natif(genre: &str, id: &str) -> u64 {
-    genre.bytes().chain([0]).chain(id.bytes()).fold(0xcbf29ce484222325, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3))
-}
-
 pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
     projet.verifier()?;
     depuis_natif_verifie(projet, path)
@@ -615,11 +611,6 @@ fn aretes_jointes(geoms: &[ProductGeom], materiaux: &[Vec<Option<String>>]) -> s
         }
     }
     par_objet
-}
-
-/// Identifiant numérique stable d'une vue native dans l'arborescence (« 3d » : la vue 3D).
-pub fn numero_vue(id: &str) -> i64 {
-    (id_natif("vue", id) >> 1) as i64
 }
 
 /// Arborescence du projet natif : vue 3D, vues enregistrées (plans d'étage, coupes),

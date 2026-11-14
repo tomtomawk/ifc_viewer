@@ -277,7 +277,7 @@ impl ViewerApp {
         };
         match self
             .dessin_vue()
-            .and_then(|d| crate::modele::documentation::pdf(&d.svg("Dessin")))
+            .and_then(|d| crate::dessin::pdf(&d.svg("Dessin")))
             .and_then(|s| crate::modele::echanges::enregistrement::ecrire_atomique(&path, &s))
         {
             Ok(()) => self.status = format!("PDF exporté : {}", path.display()),

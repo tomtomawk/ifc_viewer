@@ -1,15 +1,19 @@
 //! Éléments complémentaires du plan, partagés par la vue et le dessin sur feuille.
-use super::*;
+use super::feuilles::ids_masques_vue;
+use super::Poche;
+use crate::modele::documentation::*;
 use crate::rendu::scene::{Scene, id_natif};
+use glam::DVec3;
+use noyau::trace2d::{Primitive, Role};
 
-pub(crate) fn limite_haute_plan(p: &Projet, s: &Scene, v: &Vue, coupe: f32) -> Option<f32> {
+pub fn limite_haute_plan(p: &Projet, s: &Scene, v: &Vue, coupe: f32) -> Option<f32> {
     let GenreVue::Plan { niveau, .. } = &v.genre else { return None };
     let haut = p.niveau(v.limite_haute_niveau.as_deref().unwrap_or(niveau))?;
     let limite = ((haut.altitude + v.limite_haute_decalage) * 0.001 - s.origin.z) as f32;
     (limite > coupe).then_some(limite)
 }
 
-pub(crate) fn fond_plan(p: &Projet, s: &Scene, v: &Vue, plan: glam::Vec4, echelle: f64) -> Vec<Primitive> {
+pub fn fond_plan(p: &Projet, s: &Scene, v: &Vue, plan: glam::Vec4, echelle: f64) -> Vec<Primitive> {
     if !matches!(v.genre, GenreVue::Plan { .. }) { return Vec::new(); }
     let Some(source) = v.fond_plan.as_ref().and_then(|id| p.vues.iter().find(|x| &x.id == id)) else { return Vec::new(); };
     let GenreVue::Plan { niveau, coupe, .. } = &source.genre else { return Vec::new(); };
@@ -22,7 +26,7 @@ pub(crate) fn fond_plan(p: &Projet, s: &Scene, v: &Vue, plan: glam::Vec4, echell
     let exclus = ids_masques_vue(p, &source);
     let visible: Vec<_> = s.objects.iter().map(|o| o.storey == Some(niveau)
         && !exclus.contains(&o.id) && !s.model.parent.get(&o.id).is_some_and(|id| exclus.contains(id))).collect();
-    let mut prims = crate::dessin::coupe(s, &visible, glam::Vec3::NEG_Z.extend(z as f32), echelle, crate::dessin::Poche::Vide);
+    let mut prims = super::coupe(s, &visible, glam::Vec3::NEG_Z.extend(z as f32), echelle, Poche::Vide);
     prims.retain(|p| matches!(p.role, Role::Coupe | Role::Vu));
     prims.extend(annotations(p, &source).into_iter().filter(|p| p.role == Role::Annotation).map(|p| p.translater(-s.origin)));
     for pr in &mut prims {
@@ -34,7 +38,7 @@ pub(crate) fn fond_plan(p: &Projet, s: &Scene, v: &Vue, plan: glam::Vec4, echell
     prims
 }
 
-pub(crate) fn pointilles_plage_haute(mut prims: Vec<Primitive>, echelle: f64, coupe: f64) -> Vec<Primitive> {
+pub fn pointilles_plage_haute(mut prims: Vec<Primitive>, echelle: f64, coupe: f64) -> Vec<Primitive> {
     // Pointillés calés sur une phase commune à chaque droite du plan : les arêtes
     // superposées en projection (dessus et dessous d'un élément, éléments voisins,
     // tronçons découpés par les parties cachées) tracent les mêmes tirets au lieu

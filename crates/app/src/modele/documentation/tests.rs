@@ -1,4 +1,5 @@
 use super::*;
+use crate::dessin::{dessin_vue, pdf, pdf_jeu, svg_feuille, vue_placee};
 
 #[test]
 fn dessin_vue_applique_le_contexte_propre_a_la_vue() {

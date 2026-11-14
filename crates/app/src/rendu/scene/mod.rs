@@ -9,7 +9,8 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 mod natif;
-pub use natif::{depuis_natif, depuis_natif_verifie, id_natif, numero_vue};
+pub use natif::{depuis_natif, depuis_natif_verifie};
+pub use crate::modele::identifiants::{id_natif, numero_vue};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]

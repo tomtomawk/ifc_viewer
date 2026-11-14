@@ -165,9 +165,9 @@ impl ViewerApp {
                         .iter()
                         .find(|f| f.id == id)
                         .ok_or("Feuille absente")?;
-                    let svg = crate::modele::documentation::svg_feuille(p, f)?;
+                    let svg = crate::dessin::svg_feuille(p, f)?;
                     let bytes = if format == "feuille_pdf" {
-                        crate::modele::documentation::pdf(&svg)?
+                        crate::dessin::pdf(&svg)?
                     } else {
                         svg.into_bytes()
                     };
@@ -354,7 +354,7 @@ impl ViewerApp {
                         )?
                         .into_bytes()
                     } else {
-                        crate::modele::documentation::pdf(&self.dessin_vue()?.svg("Dessin"))?
+                        crate::dessin::pdf(&self.dessin_vue()?.svg("Dessin"))?
                     };
                     crate::modele::echanges::enregistrement::ecrire_atomique(&path, &bytes)?;
                     Ok(json!({"chemin":path,"octets":bytes.len()}))

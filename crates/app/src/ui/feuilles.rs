@@ -401,7 +401,7 @@ impl ViewerApp {
                 for v in &f.vues {
                     etat.vues.entry(cle_vue(v)).or_insert_with(|| {
                         let zero = doc::VuePlacee { position: [0.0, 0.0], ..v.clone() };
-                        match doc::vue_placee(p, &zero) {
+                        match crate::dessin::vue_placee(p, &zero) {
                             Ok((prims, e)) => rendu(&prims, e),
                             Err(e) => Rendu { erreur: Some(e), ..Default::default() },
                         }
@@ -540,7 +540,7 @@ impl ViewerApp {
                     Some((k, pt)) => {
                         let echelle = p.vues.iter().find(|v| v.id == g.0).map_or(100.0, |v| v.echelle);
                         let zero = doc::VuePlacee { vue: g.0.clone(), position: [0.0, 0.0], echelle };
-                        let r = etat.vues.entry((g.0.clone(), echelle.to_bits())).or_insert_with(|| match doc::vue_placee(p, &zero) {
+                        let r = etat.vues.entry((g.0.clone(), echelle.to_bits())).or_insert_with(|| match crate::dessin::vue_placee(p, &zero) {
                             Ok((prims, e)) => rendu(&prims, e),
                             Err(e) => Rendu { erreur: Some(e), ..Default::default() },
                         });
@@ -905,7 +905,7 @@ impl ViewerApp {
         if n == 0 {
             return Err(format!("Le jeu « {jeu} » n'a aucune feuille."));
         }
-        let pdf = doc::pdf_jeu(p, jeu)?;
+        let pdf = crate::dessin::pdf_jeu(p, jeu)?;
         crate::modele::echanges::enregistrement::ecrire_atomique(chemin, &pdf)?;
         Ok(n)
     }
@@ -916,7 +916,7 @@ impl ViewerApp {
         let Some(path) = rfd::FileDialog::new().set_file_name(format!("{} {}.{extension}", f.numero, f.nom)).add_filter(extension, &[extension]).save_file() else {
             return;
         };
-        let contenu = doc::svg_feuille(p, f).and_then(|s| if extension == "pdf" { doc::pdf(&s) } else { Ok(s.into_bytes()) });
+        let contenu = crate::dessin::svg_feuille(p, f).and_then(|s| if extension == "pdf" { crate::dessin::pdf(&s) } else { Ok(s.into_bytes()) });
         match contenu.and_then(|b| crate::modele::echanges::enregistrement::ecrire_atomique(&path, &b)) {
             Ok(()) => self.status = format!("Export : {}", path.display()),
             Err(e) => self.error = Some(e),

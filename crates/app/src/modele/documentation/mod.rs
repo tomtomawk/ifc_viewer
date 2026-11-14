@@ -6,12 +6,10 @@ mod cotation;
 pub use cotation::*;
 mod nomenclatures;
 pub use nomenclatures::*;
-mod plans;
-pub(crate) use plans::{fond_plan, limite_haute_plan, pointilles_plage_haute};
 #[cfg(test)]
 mod tests;
 pub use super::*;
-use noyau::trace2d::{Dessin, Forme, Primitive, Role, Style};
+use noyau::trace2d::{Forme, Primitive, Role, Style};
 use glam::{DVec2, DVec3};
 use std::collections::BTreeMap;
 
@@ -540,7 +538,7 @@ pub fn primitives_arbres(p: &Projet, v: &Vue) -> Vec<Primitive> {
             forme: Forme::Segments(segs),
             style: Style { couleur: [60, 110, 50, 255], epaisseur: 0.18 },
             role: Role::Annotation,
-            element: Some(crate::rendu::scene::id_natif("arbre", &a.id)),
+            element: Some(crate::modele::identifiants::id_natif("arbre", &a.id)),
         });
     }
     out
@@ -555,7 +553,7 @@ pub fn primitives_pieces(p: &Projet, v: &Vue) -> Vec<Primitive> {
     let sol = p.niveau(niveau).map_or(0.0, |n| n.altitude) + 2.0;
     let mut out = Vec::new();
     for x in p.pieces.iter().filter(|x| &x.niveau == niveau && !v.elements_masques.contains(&x.id)) {
-        let element = Some(crate::rendu::scene::id_natif("annotation", &x.id));
+        let element = Some(crate::modele::identifiants::id_natif("annotation", &x.id));
         if x.fermee() {
             out.push(Primitive {
                 forme: Forme::Surface(vec![x.contour.iter().map(|q| DVec3::new(q[0], q[1], sol) * 0.001).collect()]),
@@ -604,7 +602,7 @@ pub fn primitives_pieces(p: &Projet, v: &Vue) -> Vec<Primitive> {
     }
     out
 }
-fn texte(s: &str, pos: DVec3, u: DVec3, v: DVec3, hauteur: f64, couleur: [u8; 4]) -> Primitive {
+pub fn texte(s: &str, pos: DVec3, u: DVec3, v: DVec3, hauteur: f64, couleur: [u8; 4]) -> Primitive {
     let t = noyau::texte::ligne(s, "Arial", hauteur, false);
     Primitive {
         forme: Forme::Triangles(
@@ -794,7 +792,7 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
             forme => out.extend(primitives_forme_dessin(p, forme, v.echelle, &pt)),
         }
         for primitive in &mut out[debut..] {
-            primitive.element = Some(crate::rendu::scene::id_natif("annotation", &a.id));
+            primitive.element = Some(crate::modele::identifiants::id_natif("annotation", &a.id));
         }
     }
     out.extend(primitives_pieces(p, v));
@@ -1085,146 +1083,6 @@ pub fn altitude_vue(p: &Projet, v: &Vue, point: [f64; 2], relative_niveau: bool)
     if !relative_niveau { return z; }
     let base = p.niveaux.iter().map(|n| n.altitude).filter(|a| *a <= z + 1e-6).fold(f64::NEG_INFINITY, f64::max);
     if base.is_finite() { z - base } else { z }
-}
-
-fn ids_masques_vue(p: &Projet, v: &Vue) -> std::collections::HashSet<crate::formats::ifc::step::Id> {
-    p.murs.iter().map(|x| ("mur", &x.id))
-        .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
-        .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
-        .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id))).chain(p.arbres.iter().map(|x| ("arbre", &x.id)))
-        .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
-        .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
-        .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
-        .chain(p.importes.iter().map(|x| ("importe", &x.id)))
-        .chain(p.terrains.iter().map(|x| ("terrain", &x.id)))
-        .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
-        .filter(|(_, id)| v.elements_masques.contains(id))
-        .map(|(genre, id)| crate::rendu::scene::id_natif(genre, id)).collect::<std::collections::HashSet<_>>()
-}
-
-pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
-    let mut vue = p.vues.iter().find(|v| v.id == id).ok_or("Vue absente.")?.clone();
-    vue.elements_masques.extend(p.elements_masques_contextes(&p.contextes_vues.get(id).cloned().unwrap_or_default()));
-    let v = &vue;
-    let s = crate::rendu::scene::depuis_natif(p, std::path::Path::new("projet.modele.json"))?;
-    let (o, mut u, mut h) = repere(p, v);
-    if matches!(v.genre, GenreVue::Plan { .. }) {
-        let (sin, cos) = v.orientation_plan.sin_cos();
-        u = DVec3::new(cos, sin, 0.0);
-        h = DVec3::new(-sin, cos, 0.0);
-    }
-    let oeil = u.cross(h);
-    let normale = -oeil;
-    let plan = normale.extend(-normale.dot(o * 0.001 - s.origin)).as_vec4();
-    let elevation = matches!(
-        v.genre,
-        GenreVue::Coupe {
-            elevation: true,
-            ..
-        }
-    );
-    let mut visible = vec![true; s.objects.len()];
-    let masques = ids_masques_vue(p, v);
-    for (i, objet) in s.objects.iter().enumerate() {
-        visible[i] = !masques.contains(&objet.id) && !s.model.parent.get(&objet.id).is_some_and(|id| masques.contains(id));
-    }
-    if let GenreVue::Plan { niveau, bas_niveau, bas_decalage, .. } = &v.genre {
-        let etage = crate::rendu::scene::id_natif("niveau", niveau);
-        let contient_etage = s.objects.iter().any(|o| o.storey == Some(etage) || &*o.class == "IFCGEOGRAPHICELEMENT");
-        if contient_etage {
-            for (i, obj) in s.objects.iter().enumerate() {
-                visible[i] &= obj.storey == Some(etage) || &*obj.class == "IFCGEOGRAPHICELEMENT";
-            }
-        }
-        if v.coupe_active.unwrap_or(true) && let Some(niveau) = p.niveau(bas_niveau) {
-            let bas = (niveau.altitude + bas_decalage) * 0.001;
-            for (i, obj) in s.objects.iter().enumerate() {
-                let haut = obj.max.z as f64 + s.origin.z;
-                visible[i] &= if matches!(&*obj.class, "IFCSLAB" | "IFCCOVERING" | "IFCROOF" | "IFCANNOTATION" | "IFCGEOGRAPHICELEMENT") { haut >= bas - 0.002 } else { haut > bas + 0.002 };
-            }
-        }
-    }
-    if let GenreVue::Coupe {
-        debut,
-        fin,
-        profondeur,
-        ..
-    } = &v.genre
-    {
-        let a = DVec2::from_array(*debut);
-        let d = DVec2::from_array(*fin) - a;
-        let u = d.normalize();
-        let n = u.perp();
-        for (i, obj) in s.objects.iter().enumerate() {
-            let corners = (0..8).map(|k| {
-                DVec3::new(
-                    if k & 1 == 0 { obj.min.x } else { obj.max.x } as f64,
-                    if k & 2 == 0 { obj.min.y } else { obj.max.y } as f64,
-                    if k & 4 == 0 { obj.min.z } else { obj.max.z } as f64,
-                )
-            });
-            let points: Vec<_> = corners
-                .map(|q| (q + s.origin).truncate() * 1000.0 - a)
-                .collect();
-            visible[i] &= points.iter().any(|q| q.dot(u) >= 0.0)
-                && points.iter().any(|q| q.dot(u) <= d.length())
-                && points.iter().any(|q| q.dot(n) >= 0.0)
-                && points.iter().any(|q| q.dot(n) <= *profondeur);
-        }
-    }
-    let actif = v.coupe_active.unwrap_or(true);
-    let poche = if p.rendus_vues.get(id).is_some_and(|r| r.style.as_deref() == Some("realiste")) {
-        crate::dessin::Poche::Materiau
-    } else { match v.poche_vue.as_deref() {
-        Some("plein") => crate::dessin::Poche::Plein,
-        Some("vide") => crate::dessin::Poche::Vide,
-        Some("materiau") => crate::dessin::Poche::Materiau,
-        _ => crate::dessin::Poche::Hachure,
-    }};
-    let mut primitives = Vec::new();
-    if actif && !elevation {
-        primitives.extend(fond_plan(p, &s, v, plan, v.echelle));
-        primitives.extend(crate::dessin::coupe(&s, &visible, plan, v.echelle, poche));
-        if let Some(limite) = limite_haute_plan(p, &s, v, plan.w)
-            && let GenreVue::Plan { niveau, .. } = &v.genre
-        {
-            let niveau = crate::rendu::scene::id_natif("niveau", niveau);
-            let au_dessus: Vec<_> = s.objects.iter().zip(&visible).map(|(obj, visible)| {
-                *visible && obj.storey == Some(niveau) && obj.min.z > plan.w + 1e-5 && obj.min.z < limite
-            }).collect();
-            let aretes = crate::dessin::vu(&s, &au_dessus, u, h, oeil, Some(glam::Vec3::NEG_Z.extend(limite)), 1024);
-            primitives.extend(pointilles_plage_haute(aretes, v.echelle, plan.w as f64));
-        }
-    }
-    primitives.extend(crate::dessin::vu(
-        &s,
-        &visible,
-        u,
-        h,
-        oeil,
-        actif.then_some(plan),
-        4096,
-    ));
-    if let Some(nav) = s.navigateur.as_ref().and_then(|n| n.vues.iter().find(|nv| nv.revit_id == crate::rendu::scene::numero_vue(id))) {
-        let plans: Vec<_> = nav.cadrage.iter().map(|plan| {
-            let n = plan.truncate();
-            n.extend(plan.w + n.dot(s.origin)).as_vec4()
-        }).collect();
-        primitives = crate::dessin::cadrer_primitives(primitives, &plans, oeil);
-    }
-    // Revenir au repère absolu, comme les annotations.
-    let mut primitives: Vec<_> = primitives
-        .into_iter()
-        .map(|pr| pr.translater(s.origin))
-        .collect();
-    primitives.extend(annotations(p, v));
-    let primitives = super::elements::cadrage::decouper(primitives, &v.contour_cadrage)?;
-    Ok(Dessin {
-        droite: u,
-        haut: h,
-        echelle: v.echelle,
-        primitives,
-    })
 }
 
 /// Formats papier courants (paysage), mm.

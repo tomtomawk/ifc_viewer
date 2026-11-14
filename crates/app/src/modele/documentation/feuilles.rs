@@ -55,11 +55,11 @@ pub fn deplacer_feuille(p: &mut Projet, id: &str, jeu: &str, avant: Option<&str>
     Ok(())
 }
 
-pub(super) fn pt_papier(x: f64, y: f64) -> DVec3 {
+pub fn pt_papier(x: f64, y: f64) -> DVec3 {
     DVec3::new(x / 1000.0, y / 1000.0, 0.0)
 }
 
-pub(super) fn trait_papier(points: Vec<DVec3>, fermee: bool, epaisseur: f64) -> Primitive {
+pub fn trait_papier(points: Vec<DVec3>, fermee: bool, epaisseur: f64) -> Primitive {
     Primitive { forme: Forme::Polyligne { points, fermee }, style: Style { couleur: [20, 20, 20, 255], epaisseur }, role: Role::Annotation, element: None }
 }
 
@@ -130,50 +130,6 @@ pub fn cadre_feuille(p: &Projet, f: &Feuille) -> Vec<Primitive> {
     v
 }
 
-/// Vue placée sur une feuille : dessin à l'échelle de sa vue source, en mètres du
-/// papier (origine en bas à gauche), suivi de son titre (nom, échelle) souligné ; et
-/// l'étendue du dessin seul, en mm du papier [x0, y0, x1, y1].
-pub fn vue_placee(p: &Projet, v: &VuePlacee) -> Result<(Vec<Primitive>, [f64; 4]), String> {
-    let vue = p.vues.iter().find(|x| x.id == v.vue).ok_or("Vue absente.")?;
-    let dessin = dessin_vue(p, &v.vue)?;
-    let echelle = dessin.echelle;
-    let (origine, _, _) = repere(p, vue);
-    let proj = |q: DVec3| {
-        let q = q - origine * 0.001;
-        pt_papier(v.position[0] + q.dot(dessin.droite) * 1000.0 / echelle, v.position[1] + q.dot(dessin.haut) * 1000.0 / echelle)
-    };
-    let mut primitives = Vec::new();
-    let mut e = [f64::MAX, f64::MAX, f64::MIN, f64::MIN];
-    for mut pr in dessin.primitives {
-        pr.forme = match pr.forme {
-            Forme::Polyligne { points, fermee } => Forme::Polyligne { points: points.into_iter().map(proj).collect(), fermee },
-            Forme::Segments(s) => Forme::Segments(s.into_iter().map(|s| s.map(proj)).collect()),
-            Forme::Triangles(t) => Forme::Triangles(t.into_iter().map(|t| t.map(proj)).collect()),
-            Forme::Surface(c) => Forme::Surface(c.into_iter().map(|c| c.into_iter().map(proj).collect()).collect()),
-        };
-        let points: Box<dyn Iterator<Item = &DVec3> + '_> = match &pr.forme {
-            Forme::Polyligne { points, .. } => Box::new(points.iter()),
-            Forme::Segments(s) => Box::new(s.iter().flatten()),
-            Forme::Triangles(t) => Box::new(t.iter().flatten()),
-            Forme::Surface(c) => Box::new(c.iter().flatten()),
-        };
-        for q in points {
-            e = [e[0].min(q.x * 1000.0), e[1].min(q.y * 1000.0), e[2].max(q.x * 1000.0), e[3].max(q.y * 1000.0)];
-        }
-        primitives.push(pr);
-    }
-    if e[0] > e[2] {
-        e = [v.position[0], v.position[1], v.position[0] + 10.0, v.position[1] + 10.0];
-    }
-    // titre sous le dessin : nom, échelle, trait
-    let y = e[1] - 8.0;
-    let noir = [20, 20, 20, 255];
-    primitives.push(texte(&vue.nom, pt_papier(e[0], y), DVec3::X, DVec3::Y, 0.004, noir));
-    primitives.push(texte(&format!("1:{echelle}"), pt_papier(e[0], y - 5.0), DVec3::X, DVec3::Y, 0.0025, noir));
-    primitives.push(trait_papier(vec![pt_papier(e[0], y - 1.2), pt_papier(e[0] + 60.0_f64.min(e[2] - e[0]).max(30.0), y - 1.2)], false, 0.35));
-    Ok((primitives, e))
-}
-
 /// Tableau d'une nomenclature posée sur une feuille, en mètres du papier : titre
 /// (nom), ligne d'en-tête, lignes ; colonnes à la largeur de leur plus long texte. Et
 /// son étendue en mm du papier [x0, y0, x1, y1].
@@ -221,17 +177,6 @@ pub fn nomenclature_placee(p: &Projet, n: &NomenclaturePlacee) -> Result<(Vec<Pr
     Ok((prims, [x0, bas, x0 + total, y0]))
 }
 
-pub fn feuille(p: &Projet, f: &Feuille) -> Result<Dessin, String> {
-    let mut primitives = cadre_feuille(p, f);
-    for v in &f.vues {
-        primitives.extend(vue_placee(p, v)?.0);
-    }
-    for n in &f.nomenclatures {
-        primitives.extend(nomenclature_placee(p, n)?.0);
-    }
-    Ok(Dessin { droite: DVec3::X, haut: DVec3::Y, echelle: 1.0, primitives })
-}
-
 pub fn csv(lignes: &[Vec<String>]) -> String {
     lignes
         .iter()
@@ -244,74 +189,4 @@ pub fn csv(lignes: &[Vec<String>]) -> String {
         .collect::<Vec<_>>()
         .join("\r\n")
         + "\r\n"
-}
-
-/// Feuille au format papier exact, sans la marge automatique des exports de vues.
-pub fn svg_feuille(p: &Projet, f: &Feuille) -> Result<String, String> {
-    let mut svg = feuille(p, f)?.svg(&format!("{} — {}", f.numero, f.nom));
-    let a = svg.find("<svg ").ok_or("SVG absent")?;
-    let b = a + svg[a..].find('>').ok_or("SVG invalide")? + 1;
-    svg.replace_range(a..b,&format!("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}mm\" height=\"{}mm\" viewBox=\"0 -{} {} {}\">",f.largeur,f.hauteur,f.hauteur,f.largeur,f.hauteur));
-    Ok(svg)
-}
-
-pub fn pdf(svg: &str) -> Result<Vec<u8>, String> {
-    let tree = svg2pdf::usvg::Tree::from_str(svg, &svg2pdf::usvg::Options::default())
-        .map_err(|e| format!("SVG : {e}"))?;
-    // usvg interprète les mm avec 96 px/pouce ; conserver la taille physique du papier.
-    svg2pdf::to_pdf(
-        &tree,
-        svg2pdf::ConversionOptions::default(),
-        svg2pdf::PageOptions { dpi: 96.0 },
-    )
-    .map_err(|e| format!("PDF : {e}"))
-}
-
-/// PDF de plusieurs pages, une par SVG (chacune à son format, comme `pdf`).
-pub fn pdf_pages(svgs: &[String]) -> Result<Vec<u8>, String> {
-    use pdf_writer::{Content, Finish, Name, Pdf, Rect, Ref};
-    if svgs.is_empty() {
-        return Err("Aucune page à exporter.".into());
-    }
-    let mut alloc = Ref::new(1);
-    let (catalogue, arbre) = (alloc.bump(), alloc.bump());
-    let mut pages = Vec::new();
-    let mut morceaux = Vec::new();
-    for svg in svgs {
-        let tree = svg2pdf::usvg::Tree::from_str(svg, &svg2pdf::usvg::Options::default()).map_err(|e| format!("SVG : {e}"))?;
-        let (morceau, x) = svg2pdf::to_chunk(&tree, svg2pdf::ConversionOptions::default()).map_err(|e| format!("PDF : {e}"))?;
-        let mut renum = std::collections::HashMap::new();
-        let morceau = morceau.renumber(|ancien| *renum.entry(ancien).or_insert_with(|| alloc.bump()));
-        let x = *renum.get(&x).ok_or("PDF : objet de page absent")?;
-        // usvg lit les mm à 96 px/pouce ; points PDF à 72 par pouce
-        let (l, h) = (tree.size().width() * 0.75, tree.size().height() * 0.75);
-        pages.push((alloc.bump(), alloc.bump(), x, l, h));
-        morceaux.push(morceau);
-    }
-    let mut pdf = Pdf::new();
-    pdf.catalog(catalogue).pages(arbre);
-    pdf.pages(arbre).kids(pages.iter().map(|p| p.0)).count(pages.len() as i32);
-    for &(page, contenu, x, l, h) in &pages {
-        let mut pg = pdf.page(page);
-        pg.media_box(Rect::new(0.0, 0.0, l, h));
-        pg.parent(arbre);
-        pg.contents(contenu);
-        let mut ressources = pg.resources();
-        ressources.x_objects().pair(Name(b"F"), x);
-        ressources.finish();
-        pg.finish();
-        let mut c = Content::new();
-        c.transform([l, 0.0, 0.0, h, 0.0, 0.0]).x_object(Name(b"F"));
-        pdf.stream(contenu, &c.finish());
-    }
-    for m in &morceaux {
-        pdf.extend(m);
-    }
-    Ok(pdf.finish())
-}
-
-/// PDF d'un jeu de feuilles : ses feuilles dans l'ordre, une page chacune.
-pub fn pdf_jeu(p: &Projet, jeu: &str) -> Result<Vec<u8>, String> {
-    let svgs = p.feuilles.iter().filter(|f| f.jeu == jeu).map(|f| svg_feuille(p, f)).collect::<Result<Vec<_>, _>>()?;
-    pdf_pages(&svgs)
 }

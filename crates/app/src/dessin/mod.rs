@@ -6,6 +6,10 @@
 
 mod motifs;
 pub use motifs::*;
+mod feuilles;
+pub use feuilles::{dessin_vue, pdf, pdf_jeu, svg_feuille, vue_placee};
+mod plans;
+pub use plans::{fond_plan, limite_haute_plan, pointilles_plage_haute};
 
 pub mod dao;
 use noyau::motif::{GrilleMotif, Motif, hachures_plan};

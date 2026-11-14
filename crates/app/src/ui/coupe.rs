@@ -32,14 +32,14 @@ impl ViewerApp {
     pub(super) fn primitives_fond_plan(&self)->Vec<noyau::trace2d::Primitive> {
         let (Some(s), Some((projet, _)), Some(id), Some(plan)) = (&self.scene, &self.natif, self.vue_native_id(), self.plan_coupe()) else { return Vec::new() };
         let Some(vue) = projet.vues.iter().find(|v| v.id == id) else { return Vec::new() };
-        crate::modele::documentation::fond_plan(projet, s, vue, plan, self.echelle)
+        crate::dessin::fond_plan(projet, s, vue, plan, self.echelle)
     }
 
     /// Éléments du niveau courant entièrement au-dessus de la coupe et sous la limite haute,
     /// en pointillés.
     pub(super) fn primitives_au_dessus_plan(&self)->Vec<noyau::trace2d::Primitive> {
         let Some(plan) = self.plan_coupe() else { return Vec::new(); };
-        crate::modele::documentation::pointilles_plage_haute(self.aretes_au_dessus_plan(), self.echelle, plan.w as f64)
+        crate::dessin::pointilles_plage_haute(self.aretes_au_dessus_plan(), self.echelle, plan.w as f64)
     }
 
     /// Objet de la plage haute dont une arête passe à moins de 6 px du clic (vue en plan).
@@ -78,7 +78,7 @@ impl ViewerApp {
         let v=p.vues.iter().find(|v|v.id==id)?;
         let crate::modele::GenreVue::Plan{niveau,..}=&v.genre else{return None};
         let coupe = plan.w;
-        let limite = crate::modele::documentation::limite_haute_plan(p, s, v, coupe)?;
+        let limite = crate::dessin::limite_haute_plan(p, s, v, coupe)?;
         let niveau_id=scene::id_natif("niveau",niveau);
         let exclus = self.ids_masques_contextes();
         // éléments masqués dans la vue : identifiants de scène calculés une fois
