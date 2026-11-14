@@ -12,7 +12,7 @@ crates/
   modele/         données, schéma JSON, validation : murs, elements, famille, documentation
   ifc_base/       parseur STEP (`step`) et couche sémantique IFC (`semantique`) ; dépend de noyau seul
   scene/          scène triangulée, navigateur, picking (contient Vec<modele::Apparence>, ifc_base::IfcModel, IdMap)
-  formats/        ifc (geom, scene : load/assemble), rvt
+  formats/        ifc (geom, assemblage : load/assemble), rvt
   maillage/       modèle -> scène : volumes, jonctions, depuis_natif
   commandes/      transactions, historique, verrous ; modeliser/ modifier/ dessiner/ annoter/ documenter/
   moteur2d/       coupe, arêtes, poché, motifs, SVG/PDF
@@ -26,7 +26,7 @@ crates/
   app/            binaire `bimedit`
 ```
 
-Correspondance avec les dossiers actuels (après lot 3) : `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene` : extraits ; dans `crates/app/src/` : `formats/` -> formats ; `rendu/natif.rs` -> maillage ; `edition/` -> commandes ; `dessin/` (dont `feuilles.rs` et `plans.rs`, rendu de vue et de feuille parqué au lot 2) -> moteur2d ; `rendu/` (hors `natif.rs`) -> moteur3d ; `echanges/` -> echanges ; `collaboration/` et `collaboration.rs` -> collaboration ; `pilote/`, `config/` ; `ui/` -> interface ; `main.rs` -> app ; `modele_tests/` : tests parqués, à répartir (§5.8 d).
+Correspondance avec les dossiers actuels (après lot 4) : `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats` : extraits ; dans `crates/app/src/` : `rendu/natif.rs` -> maillage ; `edition/` -> commandes ; `dessin/` (dont `feuilles.rs` et `plans.rs`, rendu de vue et de feuille parqué au lot 2) -> moteur2d ; `rendu/` (hors `natif.rs`) -> moteur3d ; `echanges/` -> echanges ; `collaboration/` et `collaboration.rs` -> collaboration ; `pilote/`, `config/` ; `ui/` -> interface ; `main.rs` -> app ; `modele_tests/` et `formats_tests/` : tests parqués, à répartir (§5.8 d, §5.11 d).
 
 ## 2. Graphe de dépendances autorisées
 
@@ -43,7 +43,7 @@ noyau <- modele <- ifc_base <- scene <- formats <- maillage <- commandes <- mote
 | modele | noyau |
 | ifc_base | noyau |
 | scene | noyau, modele, ifc_base |
-| formats | noyau, ifc_base, scene (`modele` : à trancher au lot 4, seuls des tests de `rvt/maquette` l'utilisent, §5.10 e) |
+| formats | noyau, ifc_base, scene (réel : exactement ces trois ; `modele` n'est pas une dépendance directe, il n'arrive que par `scene`, §5.11) |
 | maillage | noyau, modele, ifc_base, scene, formats |
 | commandes | noyau, modele, scene, maillage |
 | moteur2d | noyau, modele, scene, maillage, commandes |
@@ -82,7 +82,7 @@ Code « parqué » : quand une coupe fait monter du code vers une crate qui n'ex
 | 1 | noyau | Descendre dans `noyau` : `Id` (= `u64`, neutre), `uuid`, `hash` (+ `empreinte`, `encoder`, dont `hash` dépend ; de `collaboration`), `Forme2D` + `Geom`, `geom_segment`, `arc_3_points`, `arc_courbure`, `angle_norm`, `segments_polyligne`, `points_segment`, `points_arc`, `points_spline`, `developper` (de `dessin/dao.rs` ; `Geom` et les `points_*` descendent avec `Forme2D` qui en dépend ; les outils de tracé et d'accrochage restent dans `dessin`), `Aretes`/`aretes`/`aretes_jointes`/`chainer`/`Polyligne`/`PAS`/`TRAIT_FORT_MM`/`NOIR` (de `dessin`), `MAX_APPARENCES` (de `rendu::gpu`), `chrono` (de `rendu::scene`). Si un symbole dépend de plus que `noyau`, s'arrêter et le signaler. §5.5 points 5, 6, 7, 8 (partie `Id`) | Sonnet | **fait** (coupes `dee72ad`, `a8bb20b`, `7746a1e`, `9b18b34` ; extraction `06f1578`) |
 | 2 | modele | `config::gabarit` sous `modele` ; descendre dans `modele` : `contextes`, `gabarits_vues`, `ParametresMur`, `Implantation`, `contour_valide` (et `Commande` si les références de production l'exigent : à trancher et documenter) ; `Motif`/`GrilleMotif`/`hachures_plan` ; `volumes` et `murs/jonctions` **restent** dans `modele` ; remplacer `scene::chrono` ; monter hors de `modele` le rendu de feuille de `documentation` (`coupe`, `vu`, `cadrer_primitives`, `Poche`, ~l. 1177-1213) et les tests appelant `depuis_natif`, `export_ifc`, `ifc::*`. §5.5 points 2, 3, 4, 6, 9 | **Fable** | **fait** (coupes `8c74f6e`, `ef292b4`, `fe4551a`, `32e14b4`, `f82b294`, `e64d176`, `5dd76f1` ; extraction `501e119` ; décisions au §5.8) |
 | 3 | ifc_base + scene | `load`, `assemble`, `assemble_avec` (constructeurs IFC) vont dans `formats` ; plus de `formats`/`dessin` dans `scene`. §5.5 point 1 | **Fable** | **fait** (coupe `a069497` ; extraction de `ifc_base` `b698a58` ; extraction de `scene` `a114732` ; option B du §5.9, détail au §5.10) |
-| 4 | formats | extraction de `ifc/` (`geom`, `scene`), `rvt/` ; tests croisés montés ; retrait du ré-export `formats::ifc::{step, semantique}` (§5.10 b) | Sonnet | à faire |
+| 4 | formats | extraction de `ifc/` (`geom`, `assemblage`), `rvt/` ; tests croisés montés ; retrait du ré-export `formats::ifc::{step, semantique}` (§5.10 b) | Sonnet | **fait** (coupes `9e2ada7`, `7c1fa60`, `d8b818a` ; extraction `aff8d40` ; détail au §5.11) |
 | 5 | maillage | `rendu/natif.rs` seul (`depuis_natif`, `depuis_natif_verifie` ; `id_natif` et `numero_vue` sont dans `modele::identifiants` depuis le lot 2) ; les tests de `modele_tests`/`dessin` qui l'appellent y montent | **Fable** | à faire |
 | 6 | commandes | `crates/app/src/edition` (commandes, historique, verrous, gestion des contextes ; traits d'extension de `Projet`, §5.8 b) ; décider où vont `concurrence` et `objets` (§5.5 point 5) ; rangement `modeliser/ modifier/ dessiner/ annoter/ documenter/` | **Fable** | à faire |
 | 7 | moteur2d | `dessin/` dont le rendu de vue et de feuille parqué (`dessin/feuilles.rs`, `dessin/plans.rs`) | **Fable** | à faire |
@@ -436,3 +436,54 @@ Concernant `ifc_base` et `scene` : **aucune**.
 Usage d'`ifc_base` hors `formats` relevé dans `app` (via `formats::ifc::{step, semantique}`) : `rendu/natif.rs` (`Entity`, `StepFile`, `Value`, `IfcModel`), `echanges` (`IfcModel`, `pretty_type`, `Entity`, `Id`, `StepFile`), `ui` (`pretty_type`, `Id`, `Value`, `format_real`), `main.rs` (`pretty_type`, `format_real`), `modele_tests` (`IfcModel`, `StepFile`), `dessin` (`Id`), `config` (`format_real`). `Id` et `format_real` sont dans `noyau` : `dessin` et `config` n'ont pas besoin d'`ifc_base`.
 
 Points ouverts : (1) dépendances `ifc_base` à inscrire au §2 pour maillage, echanges, interface et app (proposé ci-dessus, à valider) ; (2) `formats` -> `modele` pour les tests de `rvt/maquette` (monter les tests ou autoriser la dépendance) ; (3) nom du module `formats::ifc::scene` face à la crate `scene`.
+
+### 5.11 Après lot 4 (2026-11-14)
+
+#### (a) Contenu de `crates/formats`
+
+Package `formats` (lib, 12 537 lignes, 52 tests). Dépendances internes : `noyau`, `ifc_base`, `scene` (`modele` n'est pas déclarée ; elle est transitive via `scene`). Dépendances externes : `earcutr`, `glam`, `miniz_oxide`, `png`, `rayon`, `serde_json`. `cargo tree -p formats` ne contient ni `egui`, ni `wgpu`, ni `eframe`. `grep -rn "crate::" crates/formats/src` : uniquement des chemins internes à `formats`.
+
+| Chemin (`crates/formats/src/`) | Contenu |
+|---|---|
+| `lib.rs` | `pub mod ifc; pub mod rvt;` (ancien `formats/mod.rs`) |
+| `ifc/geom.rs` | conversion STEP -> géométrie (`ProductGeom`, `Part`, `GeomStats`, `Ligne`, `product_geometry`, `class_color`) |
+| `ifc/assemblage.rs` | `load`, `assemble`, `assemble_avec` (ancien `ifc/scene.rs`) |
+| `rvt/` | lecture Revit : conteneur OLE, `objets`, `schema`, `champs`, `geometrie`, `vues`, `parametres` (+ `donnees/*.tsv`, 4 fichiers, `include_str!` relatifs, déplacés avec les sources), `formules`, `nomenclatures`, `feuilles`, `medias`, `annexes`, `plans`, `zones`, `coordonnees`, `maquette/` (`lecture`, `vers_scene` : `Maquette` -> `Scene`, `tests`) |
+
+Aucun `include_str!` vers `docs/` ou `samples/`. Aucune visibilité élargie (`pub(crate)`/`pub(super)` inchangés, 44 occurrences).
+
+#### (b) Décisions
+
+| Symbole | Ancien -> nouveau | Pourquoi |
+|---|---|---|
+| `formats::ifc::scene` (module) | -> `formats::ifc::assemblage` | éviter l'ambiguïté avec la crate `scene` (`scene::X`) ; 4 appelants (`main.rs`, `ui/documents.rs`, `rendu/natif.rs`, `rvt/maquette/vers_scene.rs`) |
+| `couches_projet1_lecture_et_conversion` | `formats::rvt::maquette::tests` -> `app` (`formats_tests`) | seul code de `formats` appelant `echanges::depuis_rvt::convertir_maquette` et `modele::{Conversion, Projet}` ; `modele` n'est donc pas dépendance de `formats`, même pas en `dev-dependencies` |
+| `Motif` dans `rvt/maquette/mod.rs` | importé par `super::vues` -> `noyau::motif::Motif` | le ré-export `pub use` de `vues.rs` est retiré ; `vues.rs` importe `noyau::motif` en privé |
+
+Aucune dépendance de production de `formats` vers `app` n'existait au départ (la seule référence était le test ci-dessus) : aucune conversion vers le modèle natif n'a été montée dans `app`.
+
+#### (c) Ré-exports
+
+Retirés : `pub use ifc_base::{semantique, step};` (`formats/ifc/mod.rs` ; 24 fichiers d'`app` : `formats::ifc::step::X` -> `ifc_base::step::X`, `formats::ifc::semantique::X` -> `ifc_base::semantique::X`) ; `formats::ifc::step::{Id, format_real}` -> `noyau::Id`, `noyau::nombres::format_real` (y compris `dessin`, `config`, `ui`, `main.rs`) ; `pub use noyau::motif::{GrilleMotif, Motif, hachures_plan}` de `rvt/vues.rs` (-> `noyau::motif`).
+Conservés : `ifc_base::step::{Id, format_real}` (ré-exports de `noyau`, déjà là aux lots 1 et 2)  ; `pub use vers_scene::*` dans `rvt/maquette/mod.rs` (interne à `formats`).
+
+#### (d) Tests déplacés
+
+| Test | De | Vers |
+|---|---|---|
+| `couches_projet1_lecture_et_conversion` (nom et assertions inchangés ; le helper `essai` y est recopié) | `crates/app/src/formats/rvt/maquette/tests.rs` | `crates/app/src/formats_tests/mod.rs` (monte dans `echanges` au lot 9) |
+
+Les 52 autres tests de `formats` ont suivi le code (`cargo test -p formats --release` : 52). Les tests de `rvt/maquette/tests.rs` lisent des fichiers hors dépôt (`RVT_ESSAIS`) et se sautent s'ils sont absents : aucun `.rvt` n'est versionné, la lecture Revit n'est donc couverte ici que par les tests unitaires.
+
+#### (e) Violations restantes (lots 5 à 9)
+
+| De | Vers | Détail | Lot |
+|---|---|---|---|
+| `rendu/natif.rs` (maillage) | formats | `formats::ifc::geom::Ligne`, `formats::ifc::assemblage::assemble_avec` (sens autorisé) | 5 |
+| `echanges` | formats | `rvt::{maquette, vues::{Cadre, Contenu, Vue}, feuilles::etendue_cartouche}`, `ifc::geom::{GeomStats, product_geometry}` (sens autorisé) | 9 |
+| `formats_tests` | echanges, modele | test ci-dessus : `formats` -> `echanges` dans l'ordre inverse | 9 |
+| `modele_tests/elements_site.rs` | formats, echanges | `ifc::geom::{GeomStats, product_geometry}`, `export_ifc` (tests parqués) | 5 à 9 |
+| `main.rs`, `ui` | formats | `rvt::{maquette, is_revit_path, vues, …}`, `ifc::assemblage::load` (sens autorisé) | 11 |
+| `formats` | `modele` (transitif) | `scene` dépend de `modele` (`Vec<modele::Apparence>`) : `formats` en hérite sans l'utiliser directement | — |
+
+Points ouverts du §5.10 : (2) `formats` -> `modele` : tranché (tests montés, pas de dépendance) ; (3) nom du module : tranché (`assemblage`). Le point (1) (§2 : `ifc_base` pour maillage, echanges, interface, app) reste à valider.
