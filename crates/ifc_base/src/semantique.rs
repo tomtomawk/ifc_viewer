@@ -1,6 +1,6 @@
 //! Couche sémantique IFC : unités, arborescence spatiale, propriétés, matériaux, styles.
 
-use crate::formats::ifc::step::{Entity, Id, IdMap, StepFile, Value};
+use crate::step::{Entity, Id, IdMap, StepFile, Value};
 
 pub struct IfcModel {
     pub file: StepFile,
@@ -309,7 +309,7 @@ impl IfcModel {
         }
         if e.is("IFCBUILDINGSTOREY") {
             if let Some(z) = e.arg(9).as_f64() {
-                out.push(("Élévation".into(), format!("{} m", crate::formats::ifc::step::format_real(z * self.length_scale))));
+                out.push(("Élévation".into(), format!("{} m", crate::step::format_real(z * self.length_scale))));
             }
         }
         out
@@ -369,7 +369,7 @@ impl IfcModel {
                 let name = e.arg(0).as_ref().map(|m| self.material_names(m).join(", ")).unwrap_or_default();
                 let th = e.arg(1).as_f64().map(|t| t * self.length_scale * 1000.0);
                 match th {
-                    Some(t) => out.push(format!("{name} ({} mm)", crate::formats::ifc::step::format_real(t))),
+                    Some(t) => out.push(format!("{name} ({} mm)", crate::step::format_real(t))),
                     None => out.push(name),
                 }
             }
@@ -495,14 +495,14 @@ impl IfcModel {
         let name = e.arg(0).as_str().unwrap_or("?").to_string();
         let raw = e.arg(3).as_f64();
         let val = match (&*e.ty, raw) {
-            ("IFCQUANTITYLENGTH", Some(v)) => format!("{} m", crate::formats::ifc::step::format_real(v * self.length_scale)),
+            ("IFCQUANTITYLENGTH", Some(v)) => format!("{} m", crate::step::format_real(v * self.length_scale)),
             ("IFCQUANTITYAREA", Some(v)) => {
-                format!("{} m²", crate::formats::ifc::step::format_real(v * self.length_scale * self.length_scale))
+                format!("{} m²", crate::step::format_real(v * self.length_scale * self.length_scale))
             }
             ("IFCQUANTITYVOLUME", Some(v)) => {
-                format!("{} m³", crate::formats::ifc::step::format_real(v * self.length_scale.powi(3)))
+                format!("{} m³", crate::step::format_real(v * self.length_scale.powi(3)))
             }
-            ("IFCQUANTITYWEIGHT", Some(v)) => format!("{} kg", crate::formats::ifc::step::format_real(v)),
+            ("IFCQUANTITYWEIGHT", Some(v)) => format!("{} kg", crate::step::format_real(v)),
             ("IFCPHYSICALCOMPLEXQUANTITY", _) => {
                 for q in e.arg(2).refs() {
                     self.collect_quantity(q, out);
