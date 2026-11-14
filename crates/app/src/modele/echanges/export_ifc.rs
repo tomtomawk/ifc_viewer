@@ -376,7 +376,7 @@ mod tests {
     #[test]
     fn export_ifc4_relecture_geometrie_et_identifiants() {
         let (p, _) =
-            depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {})
+            depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {})
                 .unwrap();
         let s = exporter(&p).unwrap();
         assert_eq!(s, exporter(&p).unwrap());

@@ -27,15 +27,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev
-      - run: cargo test --release
-      - run: cargo build --release
+      - run: cargo test --workspace --release
+      - run: cargo build --release -p bimedit
       - name: Statistiques sur l'échantillon IFC
-        run: cargo run --release -- --stats samples/test_ifc4.ifc
+        run: cargo run --release -p bimedit -- --stats samples/test_ifc4.ifc
       - name: Livrables du projet natif autonome
         run: |
-          cargo run --release -- --export-ifc samples/maison_native.modele.json target/maison.ifc
-          cargo run --release -- --export-feuille samples/maison_native.modele.json A01 target/maison.pdf
-          cargo run --release -- --quantites samples/maison_native.modele.json target/quantites.csv
+          cargo run --release -p bimedit -- --export-ifc samples/maison_native.modele.json target/maison.ifc
+          cargo run --release -p bimedit -- --export-feuille samples/maison_native.modele.json A01 target/maison.pdf
+          cargo run --release -p bimedit -- --quantites samples/maison_native.modele.json target/quantites.csv
       - name: Validation IFC indépendante (Linux x64)
         if: matrix.nom == 'linux-x64'
         run: |

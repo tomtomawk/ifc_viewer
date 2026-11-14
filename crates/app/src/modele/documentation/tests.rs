@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn dessin_vue_applique_le_contexte_propre_a_la_vue() {
     use crate::modele::edition::contextes::FiltresContextes;
-    let (mut p, _) = depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();
+    let (mut p, _) = depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {}).unwrap();
     p.phases = vec!["Existant".into(), "Projet".into()];
     for mur in &mut p.murs { mur.phase = Some("Projet".into()); }
     let vue = p.ajouter_vue_plan(&p.niveaux[0].id.clone(), 1200.0).unwrap();
@@ -20,7 +20,7 @@ fn dessin_vue_applique_le_contexte_propre_a_la_vue() {
 #[test]
 fn dessin_vue_suit_le_gabarit_partage() {
     use crate::modele::edition::gabarits_vues::GabaritVue;
-    let (mut p, _) = depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();
+    let (mut p, _) = depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {}).unwrap();
     p.phases = vec!["Existant".into(), "Projet".into()];
     for mur in &mut p.murs { mur.phase = Some("Projet".into()); }
     let vue = p.ajouter_vue_plan(&p.niveaux[0].id.clone(), 1200.0).unwrap();
@@ -113,7 +113,7 @@ fn formes_du_cartouche_persistent_et_sont_dessinees_sur_feuille() {
 
 #[test]
 fn vue_placee_suit_echelle_vue_meme_avec_ancienne_valeur() {
-    let (mut projet, _) = depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();
+    let (mut projet, _) = depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {}).unwrap();
     let id = projet.ajouter_vue_plan(&projet.niveaux[0].id.clone(), 1200.0).unwrap();
     let placee = VuePlacee { vue: id.clone(), position: [30.0, 80.0], echelle: 100.0 };
     let (_, avant) = vue_placee(&projet, &placee).unwrap();
@@ -130,7 +130,7 @@ fn vue_placee_suit_echelle_vue_meme_avec_ancienne_valeur() {
 
 #[test]
 fn vue_placee_respecte_rotation_et_limite_basse() {
-    let (mut p, _) = depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();
+    let (mut p, _) = depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {}).unwrap();
     let niveau = p.niveaux[0].id.clone();
     let id = p.ajouter_vue_plan(&niveau, 1200.0).unwrap();
     let placee = VuePlacee { vue: id.clone(), position: [0.0, 0.0], echelle: 100.0 };
@@ -155,7 +155,7 @@ fn vue_placee_respecte_rotation_et_limite_basse() {
 }
 #[test]
 fn vue_placee_respecte_masquage_et_cadrage() {
-    let (mut p, _) = depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();
+    let (mut p, _) = depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {}).unwrap();
     let niveau = p.niveaux[0].id.clone();
     let id = p.ajouter_vue_plan(&niveau, 1200.0).unwrap();
     let tous = dessin_vue(&p, &id).unwrap();
@@ -185,7 +185,7 @@ fn vue_placee_respecte_masquage_et_cadrage() {
 #[test]
 fn documents_compatibles_v0_references_et_pdf() {
     let (mut p, _) =
-        depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {})
+        depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {})
             .unwrap();
     let vue = p
         .ajouter_vue_plan(&p.niveaux[0].id.clone(), 1200.0)
@@ -350,7 +350,7 @@ fn geometrie_cote_commune_et_chaine() {
 }
 #[test]
 fn polyligne_fermee_remplie() {
-    let (mut p, _) = depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();
+    let (mut p, _) = depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {}).unwrap();
     let niveau = p.niveaux[0].id.clone();
     let vue = p.ajouter_vue_plan(&niveau, 1200.0).unwrap();
     let contour = vec![[0.0, 0.0], [2000.0, 0.0], [2000.0, 1000.0], [0.0, 1000.0]];
@@ -380,7 +380,7 @@ fn polyligne_fermee_remplie() {
 #[test]
 fn nomenclature_csv_et_quantites_sans_double_compte() {
     let (p, _) =
-        depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {})
+        depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {})
             .unwrap();
     let n = Nomenclature {
         id: "n".into(),

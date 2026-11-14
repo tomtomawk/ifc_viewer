@@ -500,7 +500,7 @@ fn commandes_et_options_tiennent_aux_largeurs_du_viewer() {
 }
 #[test]
 fn creation_identique_reutilise_types_niveaux_et_vue() {
-    let p = crate::modele::Projet::lire_json(&std::fs::read_to_string("samples/maison_native.modele.json").unwrap()).unwrap();
+    let p = crate::modele::Projet::lire_json(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json")).unwrap()).unwrap();
     let d = &p.dalles[0];
     let mut ruban = RubanEdition::default();
     ruban.surface_identique(&p, d).unwrap();

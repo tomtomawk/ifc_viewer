@@ -302,7 +302,7 @@ mod tests {
     /// Mur droit à axe et couches avec une porte, mur courbe, dalle à couches, poteau.
     #[test]
     fn echantillon_murs() {
-        let (p, mesures) = convertir(Path::new("samples/test_ifc4_murs.ifc"), &|_| {}).unwrap();
+        let (p, mesures) = convertir(Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {}).unwrap();
         assert_eq!(p.niveaux.len(), 2);
         // mur droit à couches POSITIVE : assemblage de deux murs (béton, isolant) ; mur courbe seul
         assert_eq!(p.murs.len(), 3, "{:?}", p.importes.iter().map(|i| &i.raison).collect::<Vec<_>>());
@@ -347,7 +347,7 @@ mod tests {
     /// percé d'une baie ; dalle au contour courbe.
     #[test]
     fn echantillon_historique() {
-        let (p, mesures) = convertir(Path::new("samples/test_ifc4.ifc"), &|_| {}).unwrap();
+        let (p, mesures) = convertir(Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4.ifc")), &|_| {}).unwrap();
         assert_eq!(p.murs.len(), 1);
         assert_eq!(p.ouvertures.len(), 1);
         assert_eq!(p.ouvertures[0].genre, GenreOuverture::Libre);

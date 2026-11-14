@@ -1,6 +1,6 @@
 //! Serveur MCP du viewer IFC/Revit (stdio, JSON-RPC 2.0), lancé par `bimedit --mcp`.
 //!
-//! Il pilote un viewer par son canal local (voir `src/pilote/mod.rs`) : une ligne
+//! Il pilote un viewer par son canal local (voir `crates/app/src/pilote/mod.rs`) : une ligne
 //! « @jeton commande argument » envoyée, une ligne JSON reçue. Les viewers ouverts, lancés
 //! par l'utilisateur ou par le pont, sont lus dans le registre des instances
 //! (`instances.rs`) ; `viewer_instances` les liste et en choisit un. Sans viewer, il en
@@ -17,10 +17,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const RACINE: &str = env!("CARGO_MANIFEST_DIR");
+/// Racine du workspace (le crate est dans `crates/app`) : `target/` et les exemples y sont.
+const RACINE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 const NOM_EXE: &str = if cfg!(windows) { "bimedit.exe" } else { "bimedit" };
 
-const AIDE: &str = include_str!("../../docs/PILOTE.md");
+const AIDE: &str = include_str!("../../../../docs/PILOTE.md");
 const COMMANDES: &str = "Commandes BIMedit : aide ; etat ; nouveau <JSON> ; ouvrir <chemin> ; fermer [abandonner] ; importer <JSON> ; enregistrer [chemin] ; projet_natif ; editer <JSON> ; modifier_projet <JSON Patch avec empreinte> ; selection_native <JSON> ; outil <nom> ; saisie <JSON> ; annuler ; retablir ; historique ; historique_parcourir <JSON> ; exporter <chemin.svg> ; export <JSON> ; exporter_pdf <chemin> ; exporter_ifc <chemin> ; exporter_csv <JSON> ; exporter_jeu <chemin> [jeu] ; nomenclature <JSON> ; documents ; document <id|famille:rang> ; fermer_vue [autres] ; familles ; famille_editer <id> ; famille_ouvrir|famille_charger|famille_enregistrer <chemin> ; collaborer <chemin> ; collaboration_associer <chemin> ; collaboration_sync ; collaboration_instantane ; collaboration_etat ; collaboration_reserver|collaboration_liberer|collaboration_reprendre <ids JSON> ; collaboration_resoudre <JSON> ; options [JSON] ; gabarit [chemin|defaut] ; ruban <onglet> ; vues ; vue <nom|indice> ; feuilles ; selection_feuille <JSON> ; proprietes_feuille ; camera <mode|angles> ; zoom <facteur> ; zone <bornes|on|off|ajuster> ; glisser <dx dy bouton> ; capture vue|fenetre ; taille <L H> ; reduire ; restaurer ; quitter. La commande aide ou viewer_aide détaille TOUTES les syntaxes, les unités et les outils de modélisation, annotation et visibilité.";
 
 /// Résultat d'un outil : contenu MCP et indicateur d'erreur.
@@ -406,7 +407,7 @@ fn capture_brute(ligne: &str) -> Result<Sortie, String> {
 fn appeler(nom: &str, a: &Map<String, Value>) -> Result<Sortie, String> {
     if nom == "viewer_aide" {
         let texte=match a.get("sujet").and_then(Value::as_str).unwrap_or("pilote") {
-            "pilote"=>AIDE,"edition"=>include_str!("../../docs/EDITION.md"),"modele"=>include_str!("../../docs/MODELE.md"),"commandes"=>include_str!("../modele/edition/commandes/mod.rs"),
+            "pilote"=>AIDE,"edition"=>include_str!("../../../../docs/EDITION.md"),"modele"=>include_str!("../../../../docs/MODELE.md"),"commandes"=>include_str!("../modele/edition/commandes/mod.rs"),
             _=>return Err("Sujet : pilote|edition|modele|commandes".into()),
         };
         return Ok((vec![json!({"type":"text","text":texte})],false));

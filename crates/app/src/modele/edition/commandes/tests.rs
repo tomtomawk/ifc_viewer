@@ -1,6 +1,6 @@
 use super::*;
 fn projet() -> Projet {
-    depuis_ifc::convertir(std::path::Path::new("samples/test_ifc4_murs.ifc"), &|_| {})
+    depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {})
         .unwrap()
         .0
 }
@@ -110,7 +110,7 @@ fn modifier_deplacer_copier_et_supprimer_une_coupe() {
 #[test]
 fn annotations_et_quadrillages_se_copient_et_se_deplacent() {
     let p = Projet::lire_json(
-        &std::fs::read_to_string("samples/maison_native.modele.json").unwrap(),
+        &std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json")).unwrap(),
     )
     .unwrap();
     let texte = p

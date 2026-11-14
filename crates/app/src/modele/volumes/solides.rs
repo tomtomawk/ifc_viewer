@@ -830,7 +830,7 @@ mod tests {
     }
     #[test]
     fn conversion_ifc_rouvre_et_indices_invalides_refuses() {
-        for fichier in ["samples/test_ifc4.ifc", "samples/test_ifc4_murs.ifc"] {
+        for fichier in [concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4.ifc"), concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")] {
             let (p, _) = depuis_ifc::convertir(std::path::Path::new(fichier), &|_| {}).unwrap();
             let p = Projet::lire_json(&p.json().unwrap()).unwrap();
             let scene = crate::rendu::scene::depuis_natif(&p, std::path::Path::new("test.json")).unwrap();
@@ -887,8 +887,8 @@ mod tests_jonctions {
     /// calcul mur par mur, erreurs comprises.
     #[test]
     fn calcul_groupe_identique_au_calcul_unitaire() {
-        for f in ["samples/ilot_demo/ilot_demo.modele.json", "samples/maison_native.modele.json"] {
-            let p = Projet::lire_json(&std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(f)).unwrap()).unwrap();
+        for f in [concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/ilot_demo/ilot_demo.modele.json"), concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json")] {
+            let p = Projet::lire_json(&std::fs::read_to_string(f).unwrap()).unwrap();
             let j = crate::modele::murs::jonctions::coupes(&p);
             assert!(!p.murs.is_empty(), "{f}");
             for (m, g) in p.murs.iter().zip(murs(&p, &j)) {
@@ -900,8 +900,8 @@ mod tests_jonctions {
     /// la mémoire les découpes inchangées) rend encore exactement le calcul mur par mur.
     #[test]
     fn recalcul_partiel_identique_apres_modification() {
-        let f = "samples/maison_native.modele.json";
-        let mut p = Projet::lire_json(&std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(f)).unwrap()).unwrap();
+        let f = concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json");
+        let mut p = Projet::lire_json(&std::fs::read_to_string(f).unwrap()).unwrap();
         let j = crate::modele::murs::jonctions::coupes(&p);
         let avant = murs(&p, &j);
         for k in 0..3 {

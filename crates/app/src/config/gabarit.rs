@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::{Arc, RwLock};
 
 pub const FORMAT: &str = "bimedit.gabarit";
-const DEFAUT: &str = include_str!("../../gabarits/defaut.gabarit.json");
+const DEFAUT: &str = include_str!("../../../../gabarits/defaut.gabarit.json");
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Gabarit {

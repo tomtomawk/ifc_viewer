@@ -280,7 +280,7 @@ mod tests {
         p
     }
     fn projet_test() -> Projet {
-        Projet::lire_json(include_str!("../../../samples/maison_native.modele.json")).unwrap()
+        Projet::lire_json(include_str!("../../../../../samples/maison_native.modele.json")).unwrap()
     }
     #[test]
     fn partager_ouvrir_deux_copies_et_reutiliser_sans_ecraser() {

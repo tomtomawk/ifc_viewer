@@ -362,6 +362,6 @@ mod tests {
     #[ignore]
     fn ecrire_familles_du_gabarit() {
         let lignes: Vec<String> = crate::config::gabarit::familles_livrees().iter().map(|t| serde_json::to_string(t).unwrap()).collect();
-        std::fs::write(concat!(env!("CARGO_MANIFEST_DIR"), "/target/familles-gabarit.json"), lignes.join("\n")).unwrap();
+        std::fs::write(concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/familles-gabarit.json"), lignes.join("\n")).unwrap();
     }
 }

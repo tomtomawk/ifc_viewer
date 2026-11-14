@@ -32,7 +32,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev
-      - run: cargo build --release
+      - run: cargo build --release -p bimedit
       # Windows : l'exe seul ; Linux et macOS : archive, qui garde le droit d'exécution
       - name: Paquet
         shell: bash

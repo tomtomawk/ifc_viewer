@@ -10,7 +10,7 @@ fn dossier() -> PathBuf {
 }
 fn exemple() -> Projet {
     let mut p =
-        Projet::lire_json(include_str!("../../../samples/maison_native.modele.json")).unwrap();
+        Projet::lire_json(include_str!("../../../../../samples/maison_native.modele.json")).unwrap();
     // La fixture n'est jamais modifiée sur disque.
     p.identite = uuid();
     p.verifier().unwrap();
@@ -65,7 +65,7 @@ fn identites_distribuees_et_migration_preserve_les_objets() {
         })
         .unwrap();
     assert_ne!(a.1, b.1);
-    let ancien = include_str!("../../../samples/maison_native.modele.json");
+    let ancien = include_str!("../../../../../samples/maison_native.modele.json");
     let a = Projet::lire_json(ancien).unwrap();
     let b = Projet::lire_json(ancien).unwrap();
     assert_eq!(a.identite, b.identite);
