@@ -312,7 +312,7 @@ impl ViewerApp {
             chemin.set_extension("modele.json");
         }
         let nom = chemin.file_stem().map(|n| n.to_string_lossy().trim_end_matches(".modele").to_string()).unwrap_or_else(|| "Nouveau projet".into());
-        let projet = crate::modele::Projet::depuis_gabarit(&nom, &crate::config::gabarit::actif());
+        let projet = crate::modele::Projet::depuis_gabarit(&nom, &crate::modele::gabarit::actif());
         let resultat = scene::depuis_natif(&projet, &chemin).and_then(|scene| {
             crate::modele::echanges::enregistrement::enregistrer_natif(&projet, &chemin)?;
             Ok(scene)

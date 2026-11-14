@@ -102,7 +102,7 @@ impl RubanEdition {
         // largeur du panneau mesurée hors de la ligne, qui grandirait avec la liste
         let largeur = ui.available_width();
         // types de la catégorie : (type du projet, type du gabarit à ajouter, nom, couches)
-        type Ligne = (Option<String>, Option<crate::config::gabarit::TypeGabarit>, String, Vec<crate::modele::Couche>);
+        type Ligne = (Option<String>, Option<crate::modele::gabarit::TypeGabarit>, String, Vec<crate::modele::Couche>);
         let mut lignes: Vec<Ligne> = Vec::new();
         if generique && onglet == CategorieMur::Mur {
             lignes.push((None, None, "Générique (épaisseur libre)".into(), Vec::new()));
@@ -111,7 +111,7 @@ impl RubanEdition {
         types.sort_by(|a, b| a.nom.cmp(&b.nom));
         lignes.extend(types.into_iter().map(|t| (Some(t.id.clone()), None, t.nom.clone(), t.couches.clone())));
         // types du gabarit absents du projet : copiés dans le projet au choix
-        let gabarit = crate::config::gabarit::actif();
+        let gabarit = crate::modele::gabarit::actif();
         lignes.extend(gabarit.types_murs.iter().filter(|t| t.categorie_mur() == onglet && !projet.types_murs.iter().any(|p| p.nom == t.nom)).map(|t| (None, Some(t.clone()), t.nom.clone(), t.couches.clone())));
         let rangs = CategorieMur::TOUTES.iter().map(|c| projet.types_murs.iter().filter(|t| t.categorie_mur() == *c).count() + gabarit.types_murs.iter().filter(|t| t.categorie_mur() == *c).count() + 1).max().unwrap_or(1);
         let mut choix_onglet = None;
@@ -227,7 +227,7 @@ impl RubanEdition {
     }
 
     /// Type de mur du gabarit choisi dans le sélecteur, à ajouter au projet.
-    pub fn prendre_type_gabarit(&mut self) -> Option<crate::config::gabarit::TypeGabarit> {
+    pub fn prendre_type_gabarit(&mut self) -> Option<crate::modele::gabarit::TypeGabarit> {
         self.type_mur_gabarit.take()
     }
 

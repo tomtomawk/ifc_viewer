@@ -6,7 +6,7 @@ use crate::modele::*;
 
 /// Matériaux reconnus par leur nom (familles du gabarit) : couleur et motif de coupe.
 pub fn materiau_par_defaut(nom: &str) -> Materiau {
-    crate::config::gabarit::actif().materiau(nom)
+    crate::modele::gabarit::actif().materiau(nom)
 }
 
 /// Implantation d'un mur composé : ligne tracée par rapport à ses couches.

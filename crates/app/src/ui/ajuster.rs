@@ -435,7 +435,7 @@ mod tests {
     use super::*;
     #[test]
     fn angle_raccorde_deux_lignes_de_justification_en_une_transaction() {
-        let mut p = Projet::depuis_gabarit("Angle", &crate::config::gabarit::Gabarit::defaut());
+        let mut p = Projet::depuis_gabarit("Angle", &crate::modele::gabarit::Gabarit::defaut());
         let id = p.ajouter_mur([0., 0.], [2000., 0.], &Default::default()).unwrap();
         let reference = p.ajouter_mur([4000., -3000.], [4000., -1000.], &Default::default()).unwrap();
         let (ja, _) = p.ligne_ajustable(&reference).unwrap();
@@ -451,7 +451,7 @@ mod tests {
     }
     #[test]
     fn angle_garde_le_cote_du_clic() {
-        let mut p = Projet::depuis_gabarit("Angle", &crate::config::gabarit::Gabarit::defaut());
+        let mut p = Projet::depuis_gabarit("Angle", &crate::modele::gabarit::Gabarit::defaut());
         let a = p.ajouter_mur([0., 0.], [10000., 0.], &Default::default()).unwrap();
         let b = p.ajouter_mur([2000., -3000.], [2000., 3000.], &Default::default()).unwrap();
         // croisement vers x = 2000 (abscisse 0,2 de a) et y = 0 (abscisse 0,5 de b)
@@ -466,7 +466,7 @@ mod tests {
     }
     #[test]
     fn prolonge_la_justification_jusqu_a_une_arete_quelconque() {
-        let mut p = Projet::depuis_gabarit("Ajuster", &crate::config::gabarit::Gabarit::defaut());
+        let mut p = Projet::depuis_gabarit("Ajuster", &crate::modele::gabarit::Gabarit::defaut());
         let cible = p.ajouter_mur([0.0, 0.0], [2000.0, 0.0], &Default::default()).unwrap();
         let limite = p.ajouter_mur([4000.0, -2000.0], [4000.0, 2000.0], &Default::default()).unwrap();
         // chaque arête du mur limite donne un point différent ; la justification y arrive
@@ -487,7 +487,7 @@ mod tests {
     }
     #[test]
     fn poutre_prolongee_jusqu_a_l_arete_d_un_mur() {
-        let mut p = Projet::depuis_gabarit("Poutre", &crate::config::gabarit::Gabarit::defaut());
+        let mut p = Projet::depuis_gabarit("Poutre", &crate::modele::gabarit::Gabarit::defaut());
         let mur = p.ajouter_mur([4000.0, -2000.0], [4000.0, 2000.0], &Default::default()).unwrap();
         let niveau = p.niveaux[0].id.clone();
         let b: crate::modele::Barre = serde_json::from_value(serde_json::json!({

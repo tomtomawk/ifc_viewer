@@ -177,7 +177,7 @@ impl ViewerApp {
         let Some(mut d) = projet.definition_motif(&MotifCoupe::hachures(&choisi)) else { return };
         let avant = d.clone();
         let du_projet = projet.motifs.iter().any(|x| x.nom == choisi);
-        let de_base = DefinitionMotif::base().iter().any(|x| x.nom == choisi) || crate::config::gabarit::actif().motifs.iter().any(|x| x.nom == choisi);
+        let de_base = DefinitionMotif::base().iter().any(|x| x.nom == choisi) || crate::modele::gabarit::actif().motifs.iter().any(|x| x.nom == choisi);
         let utilise = projet.materiaux.iter().any(|m| [Some(&m.motif), m.surface_motif.as_ref(), m.surface_fond_motif.as_ref(), m.coupe_fond_motif.as_ref()].into_iter().flatten().any(|x| x.nom_hachures() == Some(choisi.as_str())));
         if self.tirets_saisis.0 != choisi {
             self.tirets_saisis = (choisi.clone(), d.lignes.iter().map(|l| l.tirets.iter().map(|t| crate::formats::ifc::step::format_real(*t)).collect::<Vec<_>>().join(" ")).collect());

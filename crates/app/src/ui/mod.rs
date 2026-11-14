@@ -837,8 +837,8 @@ impl ViewerApp {
                 o.theme_interface.appliquer(&cc.egui_ctx);
                 // gabarit choisi : lu au démarrage, défaut s'il est illisible
                 if let Some(c) = &o.gabarit {
-                    match crate::config::gabarit::Gabarit::charger(c) {
-                        Ok(g) => crate::config::gabarit::definir(g),
+                    match crate::modele::gabarit::Gabarit::charger(c) {
+                        Ok(g) => crate::modele::gabarit::definir(g),
                         Err(e) => eprintln!("{e} : gabarit par défaut utilisé"),
                     }
                 }

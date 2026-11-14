@@ -428,7 +428,7 @@ mod tests {
     #[test]
     fn historique_des_trois_categories_annule_et_retablit_un_geste() {
         let familles = [
-            FamillePlane::Profil { profil: crate::config::gabarit::Gabarit::defaut().profils[0].clone(), original: None },
+            FamillePlane::Profil { profil: crate::modele::gabarit::Gabarit::defaut().profils[0].clone(), original: None },
             FamillePlane::Cartouche { famille: doc::FamilleCartouche::default(), feuille: None, original: String::new() },
             FamillePlane::Etiquette { famille: doc::FamilleEtiquette::standard(), piece: None, original: String::new() },
         ];
@@ -456,7 +456,7 @@ mod tests {
 
     #[test]
     fn fichiers_de_familles_planes_se_rouvrent_sans_projet() {
-        let profil = crate::config::gabarit::Gabarit::defaut().profils[0].clone();
+        let profil = crate::modele::gabarit::Gabarit::defaut().profils[0].clone();
         let familles = [
             FamillePlane::Profil { profil, original: None },
             FamillePlane::Cartouche { famille: doc::FamilleCartouche::default(), feuille: None, original: String::new() },

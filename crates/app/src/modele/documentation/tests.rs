@@ -431,7 +431,7 @@ fn nomenclature_csv_et_quantites_sans_double_compte() {
 /// vue, segment sans type en continu fin ; type absent refusé.
 #[test]
 fn polyligne_types_de_trait_par_segment() {
-    let mut p = Projet::depuis_gabarit("Traits", &crate::config::gabarit::Gabarit::defaut());
+    let mut p = Projet::depuis_gabarit("Traits", &crate::modele::gabarit::Gabarit::defaut());
     assert_eq!(p.types_traits, types_traits_standard());
     let vue = p.ajouter_vue_plan(&p.niveaux[0].id.clone(), 100.0).unwrap();
     let echelle = p.vues.iter().find(|v| v.id == vue).unwrap().echelle;
@@ -465,7 +465,7 @@ fn polyligne_types_de_trait_par_segment() {
 #[test]
 fn polyligne_segments_d_arc() {
     use glam::DVec2;
-    let mut p = Projet::depuis_gabarit("Arcs", &crate::config::gabarit::Gabarit::defaut());
+    let mut p = Projet::depuis_gabarit("Arcs", &crate::modele::gabarit::Gabarit::defaut());
     let vue = p.ajouter_vue_plan(&p.niveaux[0].id.clone(), 100.0).unwrap();
     // demi-disque : diamètre de 2 m, puis demi-cercle de retour (segment de fermeture)
     let points = vec![[-1000.0, 0.0], [1000.0, 0.0]];

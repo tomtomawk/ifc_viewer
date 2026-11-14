@@ -966,7 +966,7 @@ fn voisinage_geometrique_et_meme_objet_restent_conflictuels() {
 
 #[test]
 fn premiere_synchro_de_plusieurs_murs_preserve_les_deux_copies_distinctes() {
-    let mut p = Projet::depuis_gabarit("Première synchronisation", &crate::config::gabarit::Gabarit::defaut());
+    let mut p = Projet::depuis_gabarit("Première synchronisation", &crate::modele::gabarit::Gabarit::defaut());
     p.ajouter_mur([30000.0, 30000.0], [34000.0, 30000.0], &Default::default()).unwrap();
     let root = dossier();
     let entree = root.join("projet.bimpartage");
@@ -999,7 +999,7 @@ fn premiere_synchro_de_plusieurs_murs_preserve_les_deux_copies_distinctes() {
 
 #[test]
 fn conflit_reel_preserve_les_murs_locaux_a_lecran_et_apres_reouverture() {
-    let p=Projet::depuis_gabarit("Conflit local",&crate::config::gabarit::Gabarit::defaut());
+    let p=Projet::depuis_gabarit("Conflit local",&crate::modele::gabarit::Gabarit::defaut());
     let root=dossier();let entree=root.join("projet.bimpartage");
     partage::creer(&p,&entree).unwrap();
     let (a,_,mut sa)=partage::ouvrir(&entree,&root.join("a")).unwrap();

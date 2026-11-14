@@ -112,7 +112,7 @@ impl ViewerApp {
                 if argument.trim().is_empty() {
                     return Err("Chemin de gabarit requis".into());
                 }
-                let g = crate::config::gabarit::actif();
+                let g = crate::modele::gabarit::actif();
                 let json = serde_json::to_vec_pretty(&*g).map_err(|e| e.to_string())?;
                 crate::modele::echanges::enregistrement::ecrire_atomique(
                     std::path::Path::new(argument.trim().trim_matches('"')),
@@ -232,7 +232,7 @@ impl ViewerApp {
                         .get("nom")
                         .and_then(Value::as_str)
                         .unwrap_or("Nouveau projet");
-                    let p = crate::modele::Projet::depuis_gabarit(nom, &crate::config::gabarit::actif());
+                    let p = crate::modele::Projet::depuis_gabarit(nom, &crate::modele::gabarit::actif());
                     let s = scene::depuis_natif(&p, &path)?;
                     crate::modele::echanges::enregistrement::enregistrer_natif(&p, &path)?;
                     self.install_scene(s);
@@ -332,16 +332,16 @@ impl ViewerApp {
                 }
                 "gabarit" => {
                     if argument == "defaut" {
-                        crate::config::gabarit::definir(crate::config::gabarit::Gabarit::defaut());
+                        crate::modele::gabarit::definir(crate::modele::gabarit::Gabarit::defaut());
                         self.options.gabarit = None;
                         self.options.enregistrer();
                     } else if !argument.trim().is_empty() {
                         let path = PathBuf::from(argument.trim().trim_matches('"'));
-                        crate::config::gabarit::definir(crate::config::gabarit::Gabarit::charger(&path)?);
+                        crate::modele::gabarit::definir(crate::modele::gabarit::Gabarit::charger(&path)?);
                         self.options.gabarit = Some(path);
                         self.options.enregistrer();
                     }
-                    Ok(json!({"gabarit":&*crate::config::gabarit::actif()}))
+                    Ok(json!({"gabarit":&*crate::modele::gabarit::actif()}))
                 }
                 "exporter_pdf" | "exporter_ifc" => {
                     let path = PathBuf::from(argument.trim().trim_matches('"'));

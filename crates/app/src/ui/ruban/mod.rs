@@ -252,8 +252,8 @@ pub struct ParametresCoupe {
 }
 
 /// Types de coupe et d'élévation du gabarit (échelle, profondeur par défaut).
-fn types_coupe() -> Vec<crate::config::gabarit::TypeVue> {
-    crate::config::gabarit::actif().types_vues.clone()
+fn types_coupe() -> Vec<crate::modele::gabarit::TypeVue> {
+    crate::modele::gabarit::actif().types_vues.clone()
 }
 
 /// Pictogramme d'une coupe (trait, têtes et flèches) ou d'une élévation (cercle et
@@ -287,7 +287,7 @@ fn sorte_surface(o: Outil) -> Option<crate::modele::SorteDalle> {
 /// Types d'éléments horizontaux du gabarit, couches du haut vers le bas.
 fn types_surface(o: Outil) -> Vec<(String, Vec<crate::modele::Couche>)> {
     let Some(sorte) = sorte_surface(o) else { return Vec::new() };
-    crate::config::gabarit::actif().surfaces(sorte).into_iter().map(|t| (t.nom.clone(), t.couches.clone())).collect()
+    crate::modele::gabarit::actif().surfaces(sorte).into_iter().map(|t| (t.nom.clone(), t.couches.clone())).collect()
 }
 
 /// Pictogramme d'une catégorie de mur, vu en plan : un trait épais (mur), plusieurs
@@ -517,7 +517,7 @@ pub struct RubanEdition {
     /// Onglet du sélecteur de type d'ouverture (None : celui du type courant).
     categorie_ouverture: Option<crate::modele::GenreOuverture>,
     /// Type de mur du gabarit choisi, à copier dans le projet.
-    type_mur_gabarit: Option<crate::config::gabarit::TypeGabarit>,
+    type_mur_gabarit: Option<crate::modele::gabarit::TypeGabarit>,
     /// Toiture : arêtes tracées sans pente (toiture plate).
     toiture_plate: bool,
     /// Tracé des dalles par deux coins (sinon polygone).

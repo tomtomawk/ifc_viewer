@@ -146,7 +146,7 @@ mod tests {
     use super::*;
     use serde_json::json;
     fn projet() -> crate::modele::Projet {
-        crate::modele::Projet::depuis_gabarit("Test", &crate::config::gabarit::Gabarit::defaut())
+        crate::modele::Projet::depuis_gabarit("Test", &crate::modele::gabarit::Gabarit::defaut())
     }
     fn modification(p: &crate::modele::Projet, operations: Value) -> Modification {
         serde_json::from_value(json!({"empreinte":noyau::hash::hash(&serde_json::to_value(p).unwrap()),"operations":operations})).unwrap()

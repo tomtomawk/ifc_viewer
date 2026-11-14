@@ -110,7 +110,7 @@ impl FichierProfil {
 mod tests {
     #[test]
     fn profils_du_gabarit_varient_et_survivent_au_rechargement() {
-        let g = crate::config::gabarit::Gabarit::defaut();
+        let g = crate::modele::gabarit::Gabarit::defaut();
         assert_eq!(g.profils.len(), 4);
         let mut p = crate::modele::Projet::depuis_gabarit("Profils", &g);
         p.verifier().unwrap();
@@ -130,7 +130,7 @@ mod tests {
     fn section_explicite_permet_plusieurs_contours_et_refuse_les_references_invalides() {
         use crate::modele::documentation::AnnotationForme;
         use crate::modele::famille::modelee::{Element2DFamille, SectionProfil, VueEsquisse, FichierFamille};
-        let mut profil = crate::config::gabarit::Gabarit::defaut().profils[0].clone();
+        let mut profil = crate::modele::gabarit::Gabarit::defaut().profils[0].clone();
         let attendu = profil.points().unwrap();
         let famille = &mut profil.document_famille.as_mut().unwrap().famille;
         let autre = vec![[0.0, 0.0], [20.0, 0.0], [20.0, 10.0], [0.0, 10.0]];
@@ -157,7 +157,7 @@ mod tests {
 
     #[test]
     fn refuse_formule_cyclique_et_contour_invalide() {
-        let mut p = crate::config::gabarit::Gabarit::defaut().profils[0].clone();
+        let mut p = crate::modele::gabarit::Gabarit::defaut().profils[0].clone();
         let famille = &mut p.document_famille.as_mut().unwrap().famille;
         famille.parametres[0].formule = famille.parametres[0].nom.clone();
         assert!(p.valider().is_err());

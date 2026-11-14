@@ -337,8 +337,8 @@ mod tests {
 
     #[test]
     fn gabarit_charge_l_of_et_retourne_le_mur_double() {
-        let g = crate::config::gabarit::Gabarit::defaut();
-        let livrees = crate::config::gabarit::familles_livrees();
+        let g = crate::modele::gabarit::Gabarit::defaut();
+        let livrees = crate::modele::gabarit::familles_livrees();
         assert_eq!(g.types_ouvertures.len(), livrees.len());
         for (a, b) in g.types_ouvertures.iter().zip(&livrees) {
             assert_eq!((&a.nom, a.largeur, a.hauteur, &a.famille), (&b.nom, b.largeur, b.hauteur, &b.famille), "gabarit à régénérer : cargo test --bin bimedit -- --ignored ecrire_familles_du_gabarit");

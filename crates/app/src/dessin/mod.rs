@@ -913,7 +913,7 @@ mod tests {
     #[test]
     fn fenetre_coupee_piece_par_piece() {
         use crate::modele::{Ouverture, Projet};
-        let g = crate::config::gabarit::Gabarit::defaut();
+        let g = crate::modele::gabarit::Gabarit::defaut();
         let mut p = Projet::depuis_gabarit("OF", &g);
         let tm = p.types_murs.iter().find(|t| t.nom.starts_with("Mur BA 200 + doublage")).unwrap().id.clone();
         let mur = p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &crate::modele::edition::ParametresMur { type_mur: Some(tm), ..Default::default() }).unwrap();

@@ -13,6 +13,7 @@ pub mod echanges;
 pub mod edition;
 pub mod elements;
 pub mod famille;
+pub mod gabarit;
 pub mod murs;
 pub mod soleil;
 pub mod volumes;
@@ -1117,7 +1118,7 @@ impl Projet {
     pub fn figer_references(&mut self) {
         if self.references_figees{return;}
         self.plumes=self.epaisseurs_plumes();
-        for mut motif in crate::config::gabarit::actif().motifs.iter().cloned().chain(DefinitionMotif::base()) {
+        for mut motif in crate::modele::gabarit::actif().motifs.iter().cloned().chain(DefinitionMotif::base()) {
             if !self.motifs.iter().any(|m|m.nom==motif.nom){
                 motif.id=identifiant("motif-fige",&format!("{}:{}",self.identite,motif.nom));self.motifs.push(motif);
             }
@@ -1155,7 +1156,7 @@ impl Projet {
         if !self.types_terrains.is_empty() {
             return self.types_terrains.clone();
         }
-        let g = crate::config::gabarit::actif();
+        let g = crate::modele::gabarit::actif();
         if g.types_terrains.is_empty() { vec![site::TypeTerrain::defaut()] } else { g.types_terrains.clone() }
     }
 
@@ -1170,7 +1171,7 @@ impl Projet {
     }
 
     /// Projet vide portant les niveaux et les types de murs du gabarit, et leurs matériaux.
-    pub fn depuis_gabarit(nom: &str, g: &crate::config::gabarit::Gabarit) -> Projet {
+    pub fn depuis_gabarit(nom: &str, g: &crate::modele::gabarit::Gabarit) -> Projet {
         let mut p = Projet::nouveau(nom);
         for n in &g.niveaux {
             p.niveaux.push(Niveau { id: identifiant("niveau", &format!("gabarit:{}", n.nom)), nom: n.nom.clone(), altitude: n.altitude, origine: None });
@@ -1211,7 +1212,7 @@ impl Projet {
     /// Épaisseurs des plumes 1 à 12 (mm du papier) : du projet, sinon du gabarit, sinon
     /// par défaut.
     pub fn epaisseurs_plumes(&self) -> Vec<f64> {
-        let g = crate::config::gabarit::actif();
+        let g = crate::modele::gabarit::actif();
         let mut v = if !self.plumes.is_empty() { self.plumes.clone() } else if !g.plumes.is_empty() { g.plumes.clone() } else { PLUMES.to_vec() };
         v.resize(12, 0.25);
         v
@@ -1229,14 +1230,14 @@ impl Projet {
             .iter()
             .find(|d| d.nom == nom)
             .cloned()
-            .or_else(|| (!self.references_figees).then(||crate::config::gabarit::actif().motifs.iter().find(|d| d.nom == nom).cloned()).flatten())
+            .or_else(|| (!self.references_figees).then(||crate::modele::gabarit::actif().motifs.iter().find(|d| d.nom == nom).cloned()).flatten())
             .or_else(|| (!self.references_figees).then(||DefinitionMotif::base().into_iter().find(|d| d.nom == nom)).flatten())
     }
 
     /// Noms des motifs de hachures disponibles : projet, gabarit, base, sans doublon.
     pub fn noms_motifs(&self) -> Vec<String> {
         let mut noms: Vec<String> = Vec::new();
-        let g = crate::config::gabarit::actif();
+        let g = crate::modele::gabarit::actif();
         for d in DefinitionMotif::base().iter().chain(g.motifs.iter()).chain(self.motifs.iter()) {
             if !noms.contains(&d.nom) {
                 noms.push(d.nom.clone());

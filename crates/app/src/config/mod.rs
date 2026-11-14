@@ -1,3 +1,2 @@
-//! Configuration : options utilisateur, raccourcis, gabarits de projet.
-pub mod gabarit;
+//! Configuration : options utilisateur, raccourcis.
 pub mod options;

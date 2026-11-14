@@ -16,7 +16,7 @@ impl ViewerApp {
             let Some(p) = projet.profils.iter().find(|p| p.id == id) else { return };
             p.clone()
         } else {
-            let Some(mut p) = crate::config::gabarit::actif().profils.first().cloned().or_else(|| crate::config::gabarit::Gabarit::defaut().profils.first().cloned()) else { return };
+            let Some(mut p) = crate::modele::gabarit::actif().profils.first().cloned().or_else(|| crate::modele::gabarit::Gabarit::defaut().profils.first().cloned()) else { return };
             p.id.clear();
             p.nom = (1..).map(|n| format!("Profil {n}")).find(|nom| !projet.profils.iter().any(|x| x.nom.eq_ignore_ascii_case(nom))).unwrap();
             p
