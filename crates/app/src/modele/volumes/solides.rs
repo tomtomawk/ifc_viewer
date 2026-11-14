@@ -440,11 +440,11 @@ pub fn murs(p: &Projet, jonctions: &crate::modele::murs::jonctions::Coupes) -> V
     use rayon::prelude::*;
     let mut t = std::time::Instant::now();
     let percements = crate::modele::murs::retours::Percements::calculer(p);
-    crate::rendu::scene::chrono("murs : table des ouvertures", &mut t);
+    crate::noyau::chrono::chrono("murs : table des ouvertures", &mut t);
     let voisins: Vec<Voisin> = p.murs.par_iter().map(|m| Voisin::calculer(p, m)).collect();
-    crate::rendu::scene::chrono("murs : table des voisins", &mut t);
+    crate::noyau::chrono::chrono("murs : table des voisins", &mut t);
     let bruts: Vec<Result<Vec<Tri>, String>> = p.murs.par_iter().map(|m| mur_brut(p, m, jonctions, Some(&percements))).collect();
-    crate::rendu::scene::chrono("murs : volumes percés", &mut t);
+    crate::noyau::chrono::chrono("murs : volumes percés", &mut t);
     // rangs dans `p.murs` : aucune recherche par identifiant dans la boucle des voisins
     let brut = |i: usize, _: &Mur| -> Result<std::borrow::Cow<'_, [Tri]>, String> {
         match &bruts[i] {
@@ -454,7 +454,7 @@ pub fn murs(p: &Projet, jonctions: &crate::modele::murs::jonctions::Coupes) -> V
     };
     let voisin = |i: usize, _: &Mur| -> std::borrow::Cow<'_, Voisin> { std::borrow::Cow::Borrowed(&voisins[i]) };
     let solides = p.murs.par_iter().enumerate().map(|(i, m)| mur_avec(p, i, m, &brut, &voisin, true)).collect();
-    crate::rendu::scene::chrono("murs : jonctions entre couches", &mut t);
+    crate::noyau::chrono::chrono("murs : jonctions entre couches", &mut t);
     crate::noyau::csg_memoire::fin_de_calcul();
     solides
 }

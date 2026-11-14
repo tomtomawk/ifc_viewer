@@ -8,6 +8,8 @@ pub mod uuid;
 pub mod hash;
 pub mod forme2d;
 pub mod aretes;
+pub mod chrono;
+pub mod constantes;
 
 /// Identifiant d'entité neutre (numéro d'instance STEP, identifiant d'objet de scène).
 pub type Id = u64;

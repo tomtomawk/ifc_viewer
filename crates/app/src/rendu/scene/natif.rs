@@ -2,22 +2,8 @@
 use super::*;
 use crate::formats::ifc::geom::{Part, ProductGeom};
 use crate::modele::{Projet, SorteDalle};
+use crate::noyau::chrono::chrono;
 use crate::formats::ifc::step::{Entity, Value};
-
-/// Chronométrage des étapes de calcul, écrit sur la sortie d'erreur quand la variable
-/// d'environnement `BIMEDIT_CHRONO` est définie ; remet le compteur à zéro.
-pub fn chrono(nom: &str, depuis: &mut std::time::Instant) {
-    static ACTIF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if *ACTIF.get_or_init(|| std::env::var_os("BIMEDIT_CHRONO").is_some()) {
-        eprintln!("chrono {nom} : {:.1} ms", depuis.elapsed().as_secs_f64() * 1000.0);
-    }
-    *depuis = std::time::Instant::now();
-}
-
-/// `chrono` limité aux étapes de plus de 5 ms (étapes appelées à chaque image).
-pub fn chrono_lent(nom: &str, depuis: &mut std::time::Instant) {
-    if depuis.elapsed().as_millis() >= 5 { chrono(nom, depuis); } else { *depuis = std::time::Instant::now(); }
-}
 
 pub fn id_natif(genre: &str, id: &str) -> u64 {
     genre.bytes().chain([0]).chain(id.bytes()).fold(0xcbf29ce484222325, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3))
@@ -565,7 +551,7 @@ fn rendu_materiau(m: &crate::modele::Materiau, couleur: [f32; 4], table: &mut Ve
             table.len() - 1
         }
     };
-    if rang >= crate::rendu::gpu::MAX_APPARENCES {
+    if rang >= crate::noyau::constantes::MAX_APPARENCES {
         return couleur;
     }
     let [r, g, b] = m.apparence.teinte.unwrap_or(m.couleur).map(|c| c as f32 / 255.0);

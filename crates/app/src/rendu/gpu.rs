@@ -6,10 +6,9 @@ use eframe::egui;
 use eframe::egui_wgpu;
 use eframe::wgpu::{self, util::DeviceExt};
 use glam::{Mat4, Vec3, Vec4};
+use crate::noyau::constantes::MAX_APPARENCES;
 use std::sync::Arc;
 
-/// Apparences de matériaux transmises au rendu (rang codé dans les couleurs de rendu).
-pub const MAX_APPARENCES: usize = 32;
 /// Couches d'images des apparences et leur côté (pixels, mipmaps jusqu'à 1).
 const MAX_COUCHES: usize = 64;
 const COTE_TEXTURE: u32 = 1024;

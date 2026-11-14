@@ -675,7 +675,7 @@ impl ViewerApp {
         projet.verifier()?;
         // comparaison des objets : utile seulement en collaboration
         let texte_seul = self.collaboration.is_some() && crate::modele::collaboration::objets(&projet)? == crate::modele::collaboration::objets(&self.natif.as_ref().unwrap().0)?;
-        scene::chrono("application : vérifications", &mut t_etape);
+        crate::noyau::chrono::chrono("application : vérifications", &mut t_etape);
         let debut_geometrie=std::time::Instant::now();
         let scene_preparee = if texte_seul && self.collaboration.is_some() { None } else { Some(scene::depuis_natif_verifie(&projet, &chemin)?) };
         if let Some(c)=&mut self.collaboration{c.mesure_geometrie_ms=debut_geometrie.elapsed().as_secs_f64()*1000.0;}
@@ -690,10 +690,10 @@ impl ViewerApp {
             return Ok(());
         }
         let scene = scene_preparee.ok_or("Scène préparée absente")?;
-        scene::chrono("application : scène", &mut t_etape);
+        crate::noyau::chrono::chrono("application : scène", &mut t_etape);
         // l'instantané pris pour l'historique dit aussi si le projet diffère du fichier
         let modifie = if !distant && self.collaboration.is_none() { Some(self.historique.pousser_modifie(&self.natif.as_ref().unwrap().0, &projet)?) } else { None };
-        scene::chrono("application : historique", &mut t_etape);
+        crate::noyau::chrono::chrono("application : historique", &mut t_etape);
         // Les indices de vues et d'objets peuvent changer après suppression ou annulation.
         // Retrouver leurs identifiants stables avant de remplacer la scène.
         let anciens=self.scene.as_ref();
@@ -735,14 +735,14 @@ impl ViewerApp {
             etat.camera.scene_radius = self.camera.scene_radius;
             if let Some((a, b)) = &mut etat.boite { *a += delta.as_vec3(); *b += delta.as_vec3(); }
         }
-        scene::chrono("application : vues et visibilité", &mut t_etape);
+        crate::noyau::chrono::chrono("application : vues et visibilité", &mut t_etape);
         let debut_gpu=std::time::Instant::now();
         if let Some(r) = self.renderer.as_mut() {
             r.upload_vertices(&scene.vertices, &scene.couleurs_rendu, &scene.motifs_surface);
             r.upload_apparences(&scene.apparences);
         }
         if let Some(c)=&mut self.collaboration{c.mesure_gpu_ms=debut_gpu.elapsed().as_secs_f64()*1000.0;}
-        scene::chrono("application : envoi au GPU", &mut t_etape);
+        crate::noyau::chrono::chrono("application : envoi au GPU", &mut t_etape);
         self.liste_niveaux = niveaux(&scene);
         // matériaux de l'arborescence native (ceux du projet), à défaut ceux de la scène
         self.liste_materiaux = match &scene.navigateur {
@@ -766,7 +766,7 @@ impl ViewerApp {
         if let Some((p, chemin)) = &self.natif {
             if let Err(e) = crate::modele::echanges::enregistrement::recuperer_plus_tard(p, chemin) { self.error = Some(e); }
         }
-        scene::chrono("application : listes et récupération", &mut t_etape);
+        crate::noyau::chrono::chrono("application : listes et récupération", &mut t_etape);
         Ok(())
     }
 
