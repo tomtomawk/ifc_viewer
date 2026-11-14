@@ -49,7 +49,7 @@ impl ViewerApp {
                         Ok(json) if crate::collaboration::partage::contenu_partage(&json)=>{let _=tx.send(LoadMsg::Partage(Self::charger_partage(&path,&progress),None));},
                         texte=>{
                             let res=texte.and_then(|json|modele::Projet::lire_json(&json))
-                                .and_then(|projet|crate::rendu::natif::depuis_natif(&projet,&path).map(|scene|(Box::new(scene),projet,path)));
+                                .and_then(|projet|maillage::depuis_natif(&projet,&path).map(|scene|(Box::new(scene),projet,path)));
                             let _=tx.send(LoadMsg::Natif(res));
                         }
                     }
@@ -313,7 +313,7 @@ impl ViewerApp {
         }
         let nom = chemin.file_stem().map(|n| n.to_string_lossy().trim_end_matches(".modele").to_string()).unwrap_or_else(|| "Nouveau projet".into());
         let projet = modele::Projet::depuis_gabarit(&nom, &modele::gabarit::actif());
-        let resultat = crate::rendu::natif::depuis_natif(&projet, &chemin).and_then(|scene| {
+        let resultat = maillage::depuis_natif(&projet, &chemin).and_then(|scene| {
             crate::echanges::enregistrement::enregistrer_natif(&projet, &chemin)?;
             Ok(scene)
         });

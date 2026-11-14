@@ -865,7 +865,7 @@ mod tests {
         let options = ParametresMur { type_mur: Some("isolant".into()), ..Default::default() };
         projet.ajouter_mur_axe(Axe::Arc { debut: [17000.0, -8000.0], fin: [12000.0, -3000.0], centre: [12000.0, -8000.0], direct: true }, &options).unwrap();
         projet.completer_materiaux();
-        let scene = crate::rendu::natif::depuis_natif(&projet, std::path::Path::new("test.modele.json")).unwrap();
+        let scene = maillage::depuis_natif(&projet, std::path::Path::new("test.modele.json")).unwrap();
         let plan = Vec3::NEG_Z.extend((1.0 - scene.origin.z) as f32);
         let primitives = super::coupe(&scene, &vec![true; scene.objects.len()], plan, 100.0, Poche::Hachure);
         let segments: Vec<_> = primitives.iter().filter(|p| p.role == Role::Hachure).flat_map(|p| match &p.forme { Forme::Segments(s) => s.clone(), _ => Vec::new() }).collect();
@@ -889,7 +889,7 @@ mod tests {
         let options = ParametresMur { type_mur: Some("mob".into()), ..Default::default() };
         projet.ajouter_mur([0.0, 0.0], [3000.0, 0.0], &options).unwrap();
         projet.ajouter_mur_axe(Axe::Arc { debut: [17000.0, -8000.0], fin: [12000.0, -3000.0], centre: [12000.0, -8000.0], direct: true }, &options).unwrap();
-        let scene = crate::rendu::natif::depuis_natif(&projet, std::path::Path::new("test.modele.json")).unwrap();
+        let scene = maillage::depuis_natif(&projet, std::path::Path::new("test.modele.json")).unwrap();
         let plan = Vec3::NEG_Z.extend((1.0 - scene.origin.z) as f32);
         let primitives = super::coupe(&scene, &vec![true; scene.objects.len()], plan, 100.0, Poche::Materiau);
         let aire = |couleur: [u8; 4], droit: bool| -> f64 {
@@ -924,7 +924,7 @@ mod tests {
         for (k, t) in p.types_ouvertures.clone().iter().filter(|t| t.genre == modele::GenreOuverture::Fenetre).enumerate() {
             p.ouvertures = vec![Ouverture { id: format!("o{k}"), nom: "F".into(), genre: t.genre, mur: mur.clone(), type_ouverture: Some(t.id.clone()), abscisse: 2500.0, largeur: t.largeur, hauteur: t.hauteur, allege: 100.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None }];
             p.verifier().unwrap();
-            let scene = crate::rendu::natif::depuis_natif(&p, std::path::Path::new("test.modele.json")).unwrap();
+            let scene = maillage::depuis_natif(&p, std::path::Path::new("test.modele.json")).unwrap();
             let id = modele::identifiants::id_natif("ouverture", &format!("o{k}"));
             // coupe verticale dans un vantail, coupe horizontale à mi-hauteur
             for plan in [Vec3::NEG_X.extend((2.3 - scene.origin.x) as f32), Vec3::NEG_Z.extend((0.8 - scene.origin.z) as f32)] {
@@ -993,7 +993,7 @@ mod tests {
 
     fn scene_section(tris: Vec<[DVec3; 3]>) -> Scene {
         use scene::{Range, SceneObject};
-        let mut s = crate::rendu::natif::depuis_natif(&modele::Projet::nouveau("Test"), std::path::Path::new("test.modele.json")).unwrap();
+        let mut s = maillage::depuis_natif(&modele::Projet::nouveau("Test"), std::path::Path::new("test.modele.json")).unwrap();
         s.vertices = tris.into_iter().flatten().map(|p| Vertex { pos: p.as_vec3().to_array(), normal: [0, 0, 127, 0], color: [140, 160, 180, 255], obj: 0 }).collect();
         s.couleurs_rendu = vec![[110, 130, 150, 255]; s.vertices.len()];
         s.objects.push(SceneObject { id: 1, class: "IFCWALL".into(), storey: None, opaque: Range { start: 0, count: s.vertices.len() as u32 }, transparent: Range { start: 0, count: 0 }, lines: Range { start: 0, count: 0 }, aretes: Range { start: 0, count: 0 }, min: Vec3::ZERO, max: Vec3::ONE });
@@ -1182,7 +1182,7 @@ mod mesure {
             let c = [5000.0 + 4000.0 * r.cos(), 4000.0 * r.sin()];
             p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &o).unwrap();
             p.ajouter_mur([5000.0, 0.0], c, &o).unwrap();
-            let s = crate::rendu::natif::depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
+            let s = maillage::depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
             let visible = vec![true; s.objects.len()];
             let prims = crate::dessin::coupe(&s, &visible, glam::Vec4::new(0.0, 0.0, 1.0, -1.0), 100.0, crate::dessin::Poche::Hachure);
             let mut segs: Vec<[glam::DVec3; 2]> = Vec::new();
@@ -1211,7 +1211,7 @@ mod test_isolant_arc {
         p.types_murs.push(TypeCompose { id: "t".into(), nom: "Mur".into(), couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Isolant", 100.0, FonctionCouche::Isolation), c("Béton", 200.0, FonctionCouche::Structure)], categorie: None, couches_detaillees: true, origine: None });
         let o = ParametresMur { type_mur: Some("t".into()), ..Default::default() };
         p.ajouter_mur_axe(Axe::Arc { debut: [5000.0, 0.0], fin: [0.0, 5000.0], centre: [0.0, 0.0], direct: true }, &o).unwrap();
-        let s = crate::rendu::natif::depuis_natif(&p, std::path::Path::new("t.json")).unwrap();
+        let s = maillage::depuis_natif(&p, std::path::Path::new("t.json")).unwrap();
         let prims = super::coupe(&s, &vec![true; s.objects.len()], glam::Vec3::NEG_Z.extend(1.0), 100.0, super::Poche::Hachure);
         // la ligne d'isolant (série de boucles : la plus fournie des hachures) : elle doit couvrir l'arc
         // (corde de 5 m × √2 ≈ 6,9 m), pas un morceau droit

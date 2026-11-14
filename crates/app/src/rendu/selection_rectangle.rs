@@ -223,7 +223,7 @@ mod tests {
                 rotation: 0.0,
             });
         }
-        let s = crate::rendu::natif::depuis_natif(&p, std::path::Path::new("test.json")).unwrap();
+        let s = maillage::depuis_natif(&p, std::path::Path::new("test.json")).unwrap();
         let camera = Mat4::from_cols(
             Vec4::new(0.2, 0., 0., 0.),
             Vec4::new(0., 0.2, 0., 0.),

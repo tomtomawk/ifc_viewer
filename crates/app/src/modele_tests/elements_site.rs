@@ -19,7 +19,7 @@ fn creation_site_sauvegarde_export_et_suppression() {
     let ifc_modele = ifc_base::semantique::IfcModel::new(fichier);
     let terrain_ifc = ifc_modele.products.iter().copied().find(|&id| ifc_modele.ty(id) == "IFCGEOGRAPHICELEMENT").unwrap();
     assert!(formats::ifc::geom::product_geometry(&ifc_modele, &formats::ifc::geom::GeomStats::default(), terrain_ifc).is_some());
-    let scene = crate::rendu::natif::depuis_natif(&p, std::path::Path::new("site.json")).unwrap();
+    let scene = maillage::depuis_natif(&p, std::path::Path::new("site.json")).unwrap();
     assert!(scene.objects.iter().any(|o| o.id == modele::identifiants::id_natif("terrain", &t[0])));
     assert!(scene.objects.iter().any(|o| o.id == modele::identifiants::id_natif("limite_propriete", &l[0])));
     let (copie, ids) = p.executer(Commande::Copier { ids: vec![t[0].clone(), l[0].clone()], delta: [3000., 0., 0.] }).unwrap();
@@ -46,7 +46,7 @@ fn site_en_phase_existant_cotes_ngf_et_epaisseur_du_type() {
     }
     let (p, _) = p.executer(Commande::CoordonneesOrigine { coordonnees: [0., 0., 45_000.] }).unwrap();
     let hauteur = |p: &Projet| {
-        let s = crate::rendu::natif::depuis_natif(p, std::path::Path::new("site.json")).unwrap();
+        let s = maillage::depuis_natif(p, std::path::Path::new("site.json")).unwrap();
         let o = &s.objects[s.object_of[&modele::identifiants::id_natif("terrain", &t[0])] as usize];
         ((o.min.z as f64 + s.origin.z) * 1000.0, (o.max.z as f64 + s.origin.z) * 1000.0)
     };

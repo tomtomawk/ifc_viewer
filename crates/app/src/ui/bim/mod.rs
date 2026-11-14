@@ -185,7 +185,7 @@ impl ViewerApp {
                     } else {
                         crate::echanges::depuis_ifc::convertir(&source, &progress)?
                     };
-                    let scene = crate::rendu::natif::depuis_natif(&p, &sortie)?;
+                    let scene = maillage::depuis_natif(&p, &sortie)?;
                     crate::echanges::enregistrement::enregistrer_natif(&p, &sortie)?;
                     let rapport = crate::echanges::rapport::markdown(
                         &p,

@@ -86,7 +86,7 @@ pub fn executer(args: &[String]) -> Option<Resultat<()>> {
                 let avant = s.travail()?;
                 let (apres, ids) =
                     avant.executer(serde_json::from_str(&commande).map_err(|e| e.to_string())?)?;
-                crate::rendu::natif::depuis_natif(&apres, &chemin)?;
+                maillage::depuis_natif(&apres, &chemin)?;
                 s.editer(&avant, &apres)?;
                 crate::echanges::enregistrement::enregistrer_natif(&apres, &chemin)?;
                 println!("Enregistré localement — en attente : {ids:?}");
@@ -180,7 +180,7 @@ fn mesurer(p: &Projet, chemin: &Path, sortie: &Path) -> Resultat<()> {
     c.editer(p, &apres)?;
     let validation_commit_local_ms = debut.elapsed().as_secs_f64() * 1000.0;
     let debut = Instant::now();
-    let scene = crate::rendu::natif::depuis_natif(&apres, chemin)?;
+    let scene = maillage::depuis_natif(&apres, chemin)?;
     let geometrie_ms = debut.elapsed().as_secs_f64() * 1000.0;
     stockage::reinitialiser_mesures();
     {

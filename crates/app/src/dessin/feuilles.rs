@@ -3,7 +3,7 @@
 use super::plans::{fond_plan, limite_haute_plan, pointilles_plage_haute};
 use super::{Poche, cadrer_primitives, coupe, vu};
 use modele::documentation::*;
-use crate::rendu::natif::depuis_natif;
+use maillage::depuis_natif;
 use modele::identifiants::{id_natif, numero_vue};
 use glam::{DVec2, DVec3};
 use noyau::trace2d::{Dessin, Forme, Primitive};

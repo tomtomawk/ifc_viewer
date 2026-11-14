@@ -1,0 +1,16 @@
+[package]
+name = "maillage"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+noyau = { path = "../noyau" }
+modele = { path = "../modele" }
+ifc_base = { path = "../ifc_base" }
+scene = { path = "../scene" }
+formats = { path = "../formats" }
+glam.workspace = true
+rayon.workspace = true

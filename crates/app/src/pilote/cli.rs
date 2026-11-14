@@ -20,7 +20,7 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
             // résultats sur la sortie d'erreur avec les étapes (BIMEDIT_CHRONO)
             let chemin = Path::new(entree);
             let debut = std::time::Instant::now();
-            crate::rendu::natif::depuis_natif(&p, chemin)?;
+            maillage::depuis_natif(&p, chemin)?;
             eprintln!("scène complète : {:.0} ms", debut.elapsed().as_secs_f64() * 1000.0);
             let repetitions: usize = args.get(2).and_then(|n| n.parse().ok()).unwrap_or(1);
             let mut courant = p;
@@ -30,7 +30,7 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
                 let (suivant, _) = courant.executer(crate::edition::commandes::Commande::Deplacer { ids: vec![id], delta: [0.0, 50.0, 0.0] })?;
                 let t_commande = debut.elapsed().as_secs_f64() * 1000.0;
                 let debut = std::time::Instant::now();
-                crate::rendu::natif::depuis_natif(&suivant, chemin)?;
+                maillage::depuis_natif(&suivant, chemin)?;
                 eprintln!("mur déplacé : commande {:.0} ms, scène {:.0} ms", t_commande, debut.elapsed().as_secs_f64() * 1000.0);
                 courant = suivant;
             }
@@ -46,7 +46,7 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
                 let json = std::fs::read_to_string(arg).map_err(|e| e.to_string())?;
                 let c = serde_json::from_str(&json).map_err(|e| e.to_string())?;
                 let (p, ids) = p.executer(c)?;
-                crate::rendu::natif::depuis_natif(&p, Path::new(entree))?;
+                maillage::depuis_natif(&p, Path::new(entree))?;
                 let sortie = args.get(3).map_or(entree, |s| s);
                 crate::echanges::enregistrement::enregistrer_natif(&p, Path::new(sortie))?;
                 println!("{}", serde_json::to_string(&ids).unwrap());

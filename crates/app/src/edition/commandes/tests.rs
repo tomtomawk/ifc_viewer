@@ -71,7 +71,7 @@ fn structures_creation_copie_rotation_suppression_et_validation() {
     invalide.fin[2] += 1.0;
     assert!(p.executer(Commande::Barre { barre: invalide }).is_err());
     let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
-    crate::rendu::natif::depuis_natif(&relu, std::path::Path::new("test.modele.json")).unwrap();
+    maillage::depuis_natif(&relu, std::path::Path::new("test.modele.json")).unwrap();
     let ifc = export_ifc::exporter(&relu).unwrap();
     assert!(ifc.contains("IFCCOLUMN(") && ifc.contains("IFCBEAM("));
 }

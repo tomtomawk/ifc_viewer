@@ -678,7 +678,7 @@ impl ViewerApp {
         let texte_seul = self.collaboration.is_some() && crate::collaboration::objets(&projet)? == crate::collaboration::objets(&self.natif.as_ref().unwrap().0)?;
         noyau::chrono::chrono("application : vérifications", &mut t_etape);
         let debut_geometrie=std::time::Instant::now();
-        let scene_preparee = if texte_seul && self.collaboration.is_some() { None } else { Some(crate::rendu::natif::depuis_natif_verifie(&projet, &chemin)?) };
+        let scene_preparee = if texte_seul && self.collaboration.is_some() { None } else { Some(maillage::depuis_natif_verifie(&projet, &chemin)?) };
         if let Some(c)=&mut self.collaboration{c.mesure_geometrie_ms=debut_geometrie.elapsed().as_secs_f64()*1000.0;}
         // Le commit local durable précède toute installation dans la scène.
         // Une réception utilise déjà un état accepté et ne crée pas de transaction.

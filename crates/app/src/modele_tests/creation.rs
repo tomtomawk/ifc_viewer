@@ -23,7 +23,7 @@ fn mur_contraintes_phases_et_sous_projets_persistes() {
     assert_eq!(mur.phase.as_deref(), Some("Projet"));
     assert_eq!(mur.sous_projet.as_deref(), Some("Enveloppe"));
     assert_eq!(relu.sous_projets, p.sous_projets);
-    let scene = crate::rendu::natif::depuis_natif(&relu, std::path::Path::new("test.json")).unwrap();
+    let scene = maillage::depuis_natif(&relu, std::path::Path::new("test.json")).unwrap();
     assert!(((scene.max.z-scene.min.z) as f64 - 2.85).abs() < 1e-5);
     let avant = p.json().unwrap();
     for (niveau, decalage) in [("absent", 0.), ("bas", 0.), ("haut", -4000.), ("haut", f64::INFINITY)] {
@@ -59,7 +59,7 @@ fn dalle_creation_contour_et_relecture() {
     }
     let relu = Projet::lire_json(&avant).unwrap();
     assert_eq!(relu.dalles.len(), 2);
-    let s = crate::rendu::natif::depuis_natif(&relu, std::path::Path::new("dalle.modele.json")).unwrap();
+    let s = maillage::depuis_natif(&relu, std::path::Path::new("dalle.modele.json")).unwrap();
     assert_eq!(s.objects.len(), 2);
     let volume: f64 = s.objects.iter().map(|o| s.vertices[o.opaque.start as usize..(o.opaque.start + o.opaque.count) as usize].chunks_exact(3).map(|t| {
         let p = [0, 1, 2].map(|k| glam::Vec3::from(t[k].pos).as_dvec3());
@@ -92,7 +92,7 @@ fn plafond_et_toiture_en_pente() {
     let v = p.volume_dalle(&d).unwrap();
     assert!((v - 60e6 * e / 35f64.to_radians().cos()).abs() / v < 1e-9, "{v}");
     let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
-    let s = crate::rendu::natif::depuis_natif(&relu, std::path::Path::new("toit.modele.json")).unwrap();
+    let s = maillage::depuis_natif(&relu, std::path::Path::new("toit.modele.json")).unwrap();
     assert_eq!(s.objects.len(), 2);
     let nav = s.navigateur.unwrap();
     assert!(nav.familles.iter().any(|f| f.categorie == "Plafonds") && nav.familles.iter().any(|f| f.categorie == "Toits"));
@@ -124,7 +124,7 @@ fn vues_plan_et_coupe() {
     p.retourner_vue(&e).unwrap();
     let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
     assert_eq!(relu.vues, p.vues);
-    let s = crate::rendu::natif::depuis_natif(&relu, std::path::Path::new("vues.modele.json")).unwrap();
+    let s = maillage::depuis_natif(&relu, std::path::Path::new("vues.modele.json")).unwrap();
     let nav = s.navigateur.as_ref().unwrap();
     let genres: Vec<&str> = nav.vues.iter().map(|v| v.genre.as_str()).collect();
     assert_eq!(genres, ["Vue 3D", "Plan d'étage", "Plan d'étage", "Coupe", "Élévation"]);
@@ -156,7 +156,7 @@ fn mur_creation_enregistrement_relecture() {
     assert_eq!(relu.types_murs.len(), 1);
     assert_eq!(relu.murs.len(), 2);
     assert!((relu.volume_mur(&relu.murs[0]).unwrap() - 4_200_000_000.0).abs() < 1.0);
-    let s = crate::rendu::natif::depuis_natif(&relu, std::path::Path::new("essai.modele.json")).unwrap();
+    let s = maillage::depuis_natif(&relu, std::path::Path::new("essai.modele.json")).unwrap();
     assert_eq!(s.objects.len(), 2);
     // Le nombre de triangles dépend de la tessellation ; le volume fermé
     // ci-dessous est l’invariant géométrique utile après changement des identités.
