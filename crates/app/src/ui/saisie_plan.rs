@@ -818,7 +818,7 @@ impl ViewerApp {
                 .flat_map(|r| s.vertices[r.start as usize..(r.start + r.count) as usize].chunks_exact(3))
                 .map(|t| [0, 1, 2].map(|k| Vec3::from(t[k].pos).as_dvec3()))
                 .collect();
-            let aretes = dessin::aretes(&tris).vives.into_iter().filter(|[a, b]| (b.truncate() - a.truncate()).length() > 1e-4).map(|e| e.map(|q| q.as_vec3())).collect();
+            let aretes = crate::noyau::aretes::aretes(&tris).vives.into_iter().filter(|[a, b]| (b.truncate() - a.truncate()).length() > 1e-4).map(|e| e.map(|q| q.as_vec3())).collect();
             self.aretes_objet = Some((obj, aretes));
         }
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));

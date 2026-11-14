@@ -88,13 +88,13 @@ pub fn prisme_vertical(tris: &[[DVec3; 3]]) -> Option<Prisme> {
     // contours : bords du dessus (arêtes vives du maillage à l'altitude du dessus), en m
     // pour le pas de fusion du module dessin
     let en_m: Vec<[DVec3; 3]> = tris.iter().map(|t| t.map(|p| p / 1000.0)).collect();
-    let segs: Vec<[[f64; 2]; 2]> = crate::dessin::aretes(&en_m)
+    let segs: Vec<[[f64; 2]; 2]> = crate::noyau::aretes::aretes(&en_m)
         .vives
         .into_iter()
         .filter(|s| s.iter().all(|p| (p.z * 1000.0 - haut).abs() < 0.5))
         .map(|s| s.map(|p| [p.x, p.y]))
         .collect();
-    let (boucles, ouvertes) = crate::dessin::chainer(&segs);
+    let (boucles, ouvertes) = crate::noyau::aretes::chainer(&segs);
     if !ouvertes.is_empty() || boucles.is_empty() {
         return None;
     }
@@ -107,7 +107,7 @@ pub fn prisme_vertical(tris: &[[DVec3; 3]]) -> Option<Prisme> {
 pub fn direction_principale(tris: &[[DVec3; 3]]) -> Option<DVec2> {
     let en_m: Vec<[DVec3; 3]> = tris.iter().map(|t| t.map(|p| p / 1000.0)).collect();
     let mut meilleure: Option<(f64, DVec2)> = None;
-    for [a, b] in crate::dessin::aretes(&en_m).vives {
+    for [a, b] in crate::noyau::aretes::aretes(&en_m).vives {
         let d = b - a;
         if d.z.abs() > 1e-6 * d.length().max(1e-9) {
             continue;
