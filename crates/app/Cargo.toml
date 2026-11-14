@@ -13,6 +13,7 @@ noyau = { path = "../noyau" }
 modele = { path = "../modele" }
 ifc_base = { path = "../ifc_base" }
 scene = { path = "../scene" }
+formats = { path = "../formats" }
 earcutr.workspace = true
 eframe.workspace = true
 glam.workspace = true

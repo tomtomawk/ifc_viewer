@@ -4,7 +4,7 @@ use noyau::Id;
 use ifc_base::semantique::IfcModel;
 use scene::*;
 pub use modele::identifiants::{id_natif, numero_vue};
-use crate::formats::ifc::geom::{Part, ProductGeom};
+use formats::ifc::geom::{Part, ProductGeom};
 use modele::{Projet, SorteDalle};
 use noyau::chrono::chrono;
 use ifc_base::step::{Entity, StepFile, Value};
@@ -434,7 +434,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         model.children.entry(racine).or_default().push(id);
         let segs = (0..l.contour.len()).map(|i| [l.contour[i], l.contour[(i + 1) % l.contour.len()]].map(|p| glam::DVec3::new(p[0], p[1], l.altitude) * 0.001)).collect();
         materiaux_parts.push(Vec::new());
-        geoms.push(ProductGeom { id, parts: Vec::new(), lignes: vec![crate::formats::ifc::geom::Ligne { color: [0.75, 0.16, 0.16, 1.0], segs }], rendu: Vec::new(), motifs: Vec::new() });
+        geoms.push(ProductGeom { id, parts: Vec::new(), lignes: vec![formats::ifc::geom::Ligne { color: [0.75, 0.16, 0.16, 1.0], segs }], rendu: Vec::new(), motifs: Vec::new() });
     }
     for o in &projet.importes {
         let id = id_natif("importe", &o.id);
@@ -463,7 +463,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         let tris: Vec<[glam::DVec3; 3]> = t.into_iter().chain(h).map(|t| t.map(|v| v * 0.001)).collect();
         aretes.insert(id_natif("arbre", &a.id), aretes_silhouette(&tris));
     }
-    let mut scene = crate::formats::ifc::assemblage::assemble_avec(model, geoms, path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| projet.nom.clone()), aretes);
+    let mut scene = formats::ifc::assemblage::assemble_avec(model, geoms, path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| projet.nom.clone()), aretes);
     chrono("scène : assemblage", &mut t_etape);
     for a in &projet.arbres {
         if let Some(&o) = scene.object_of.get(&id_natif("arbre", &a.id)) {

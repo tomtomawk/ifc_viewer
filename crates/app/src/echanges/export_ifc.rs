@@ -385,11 +385,11 @@ mod tests {
         let m = ifc_base::semantique::IfcModel::new(ifc_base::step::StepFile::parse(s.as_bytes()).unwrap());
         assert_eq!(m.file.schema, "IFC4");
         assert!(!m.products.is_empty());
-        let stats = crate::formats::ifc::geom::GeomStats::default();
+        let stats = formats::ifc::geom::GeomStats::default();
         let count = m
             .products
             .iter()
-            .filter(|&&id| crate::formats::ifc::geom::product_geometry(&m, &stats, id).is_some())
+            .filter(|&&id| formats::ifc::geom::product_geometry(&m, &stats, id).is_some())
             .count();
         assert!(count >= p.murs.len() + p.dalles.len() + p.importes.len());
     }

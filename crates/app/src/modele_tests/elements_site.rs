@@ -18,7 +18,7 @@ fn creation_site_sauvegarde_export_et_suppression() {
     let fichier = ifc_base::step::StepFile::parse(ifc.as_bytes()).unwrap();
     let ifc_modele = ifc_base::semantique::IfcModel::new(fichier);
     let terrain_ifc = ifc_modele.products.iter().copied().find(|&id| ifc_modele.ty(id) == "IFCGEOGRAPHICELEMENT").unwrap();
-    assert!(crate::formats::ifc::geom::product_geometry(&ifc_modele, &crate::formats::ifc::geom::GeomStats::default(), terrain_ifc).is_some());
+    assert!(formats::ifc::geom::product_geometry(&ifc_modele, &formats::ifc::geom::GeomStats::default(), terrain_ifc).is_some());
     let scene = crate::rendu::natif::depuis_natif(&p, std::path::Path::new("site.json")).unwrap();
     assert!(scene.objects.iter().any(|o| o.id == crate::rendu::natif::id_natif("terrain", &t[0])));
     assert!(scene.objects.iter().any(|o| o.id == crate::rendu::natif::id_natif("limite_propriete", &l[0])));

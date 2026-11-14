@@ -5,7 +5,6 @@ mod config;
 mod dessin;
 mod echanges;
 mod edition;
-mod formats;
 #[cfg(test)]
 mod formats_tests;
 #[cfg(test)]

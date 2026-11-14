@@ -1,6 +1,6 @@
 //! Chargement complet d'un fichier IFC et assemblage des tampons de rendu.
 
-use crate::formats::ifc::geom::{self, GeomStats, ProductGeom};
+use crate::ifc::geom::{self, GeomStats, ProductGeom};
 use ifc_base::semantique::IfcModel;
 use ifc_base::step::{Id, IdMap, StepFile};
 use scene::{Range, Scene, SceneObject, Vertex};

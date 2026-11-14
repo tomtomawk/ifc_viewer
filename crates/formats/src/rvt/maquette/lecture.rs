@@ -137,7 +137,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     let extraits: Vec<Result<(i64, Extrait, Vec<(i64, Brut)>, (Option<i64>, Option<i64>)), (i64, String)>> = ids
         .par_iter()
         .filter(|e| objets[e].0 != Sorte::Niveau)
-        .filter_map(|eid| Some(lire_objet(eid)?.map(|(s, r)| (*eid, extraire(*eid, s, &r, &altitude, &herite), parametres::valeurs(&r), (crate::formats::rvt::annexes::groupe_de(&r), crate::formats::rvt::annexes::variante_de(&r))))))
+        .filter_map(|eid| Some(lire_objet(eid)?.map(|(s, r)| (*eid, extraire(*eid, s, &r, &altitude, &herite), parametres::valeurs(&r), (crate::rvt::annexes::groupe_de(&r), crate::rvt::annexes::variante_de(&r))))))
         .collect();
     drop(objets);
 
@@ -153,13 +153,13 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     let (mut ordre_phases, mut filtres_phase) = (Vec::new(), HashMap::new());
     let mut unites = parametres::Unites::default();
     let mut lignes_zones: HashMap<(i64, i64), Vec<(DVec2, DVec2)>> = HashMap::new();
-    let mut topologies: Vec<crate::formats::rvt::zones::Topologie> = Vec::new();
+    let mut topologies: Vec<crate::rvt::zones::Topologie> = Vec::new();
     let (mut plans_reference, mut plans_construction, mut apparences) = (Vec::new(), Vec::new(), HashMap::new());
     let (mut rasters, mut types_images, mut images) = (HashMap::new(), Vec::new(), Vec::new());
     let (mut types_imports, mut imports, mut types_liens, mut liens) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     let (mut groupes, mut legendes, mut contraintes, mut motifs_ligne) = (Vec::new(), Vec::new(), Vec::new(), HashMap::new());
     let (mut epaisseurs, mut tables_cles, mut objets_nommes) = (Vec::new(), Vec::new(), Vec::new());
-    let mut variantes: HashMap<i64, crate::formats::rvt::annexes::Variante> = HashMap::new();
+    let mut variantes: HashMap<i64, crate::rvt::annexes::Variante> = HashMap::new();
     let mut liaisons: HashMap<i64, (Vec<i64>, bool)> = HashMap::new();
     let (mut instances_vue, mut polices, mut types_fenetres, mut revisions, mut info_projet) = (Vec::new(), HashMap::new(), HashMap::new(), HashMap::new(), -1);
     let (mut types_cotes, mut format_longueurs) = (HashMap::new(), None);
@@ -205,7 +205,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
             Ok(Extrait::PlanConstruction(p)) => plans_construction.push(p),
             Ok(Extrait::Apparence(id, a)) => drop(apparences.insert(id, a)),
             Ok(Extrait::Annexe(x)) => {
-                use crate::formats::rvt::annexes::Annexe;
+                use crate::rvt::annexes::Annexe;
                 match x {
                     Annexe::Variante(v) => drop(variantes.insert(v.id, v)),
                     Annexe::Liaison(l) => {
@@ -222,7 +222,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
                 }
             }
             Ok(Extrait::Media(x)) => {
-                use crate::formats::rvt::medias::Media;
+                use crate::rvt::medias::Media;
                 // les types gardent aussi leur nom parmi les types (nom des éléments)
                 let mut type_nomme = |id: i64, nom: &str, classe: &str| {
                     types.insert(id, TypeElem { nom: nom.to_string(), classe: classe.into(), epaisseur: None, couches: None, couches_variables: false, famille: -1, largeur: None, hauteur: None, categorie_texte: -1, origine_insertion: None });
@@ -490,13 +490,13 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     // lignes de zone de leur schéma et de leur niveau qui contient leur point
     // (circuit de la topologie du niveau, sinon arrangement des lignes) ; pièce : surface
     // de son circuit, périmètre de son maillage (celui du circuit en diffère)
-    let topologie_de: HashMap<i64, &crate::formats::rvt::zones::Topologie> = topologies.iter().flat_map(|t| t.pieces.iter().map(move |&p| (p, t))).collect();
+    let topologie_de: HashMap<i64, &crate::rvt::zones::Topologie> = topologies.iter().flat_map(|t| t.pieces.iter().map(move |&p| (p, t))).collect();
     for x in m.pieces.iter().filter(|x| x.genre != "zone") {
         let mesure = topologie_de.get(&x.id).and_then(|t| t.mesure(x.circuit)).map(|(a, p)| (a, p * FT));
         let mesure = match (mesure, x.genre) {
             (Some(m), _) => Some(m),
             (None, "surface") => (|| {
-                let (a, p) = crate::formats::rvt::zones::surface(lignes_zones.get(&(x.schema, x.niveau))?, x.point?.truncate())?;
+                let (a, p) = crate::rvt::zones::surface(lignes_zones.get(&(x.schema, x.niveau))?, x.point?.truncate())?;
                 Some((a / (FT * FT), p))
             })(),
             _ => None,
@@ -743,7 +743,7 @@ pub(super) fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f
                         .filter_map(Val::obj)
                         .filter_map(|x| {
                             let ex = x.get("m_oExpression")?;
-                            Some((x.get("m_paramId").and_then(Val::element_id)?, crate::formats::rvt::formules::lire(r, r.deref(ex).map(|b| &b.obj).or(ex.obj())?)?))
+                            Some((x.get("m_paramId").and_then(Val::element_id)?, crate::rvt::formules::lire(r, r.deref(ex).map(|b| &b.obj).or(ex.obj())?)?))
                         })
                         .collect()
                 })
@@ -866,12 +866,12 @@ pub(super) fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f
         }
         Sorte::InfoProjet => Extrait::InfoProjet(eid),
         Sorte::TypeCote => ou_rien(vues::type_cote(r).map(|t| Extrait::TypeCote(eid, t))),
-        Sorte::Topologie => ou_rien(crate::formats::rvt::zones::Topologie::lire(r).map(Extrait::Topologie)),
-        Sorte::PlanReference => ou_rien(crate::formats::rvt::plans::plan_reference(eid, r).map(Extrait::PlanReference)),
-        Sorte::PlanConstruction => ou_rien(crate::formats::rvt::plans::plan_construction(eid, r).map(Extrait::PlanConstruction)),
-        Sorte::Apparence => ou_rien(crate::formats::rvt::plans::apparence(r).map(|a| Extrait::Apparence(eid, a))),
-        Sorte::Media => ou_rien(crate::formats::rvt::medias::lire(eid, r).map(Extrait::Media)),
-        Sorte::Annexe => ou_rien(crate::formats::rvt::annexes::lire(eid, r).map(Extrait::Annexe)),
+        Sorte::Topologie => ou_rien(crate::rvt::zones::Topologie::lire(r).map(Extrait::Topologie)),
+        Sorte::PlanReference => ou_rien(crate::rvt::plans::plan_reference(eid, r).map(Extrait::PlanReference)),
+        Sorte::PlanConstruction => ou_rien(crate::rvt::plans::plan_construction(eid, r).map(Extrait::PlanConstruction)),
+        Sorte::Apparence => ou_rien(crate::rvt::plans::apparence(r).map(|a| Extrait::Apparence(eid, a))),
+        Sorte::Media => ou_rien(crate::rvt::medias::lire(eid, r).map(Extrait::Media)),
+        Sorte::Annexe => ou_rien(crate::rvt::annexes::lire(eid, r).map(Extrait::Annexe)),
         Sorte::Profile => {
             let info = r.field_body(o, "m_wallSweepInfo").or(o.get("m_wallSweepInfo").and_then(Val::obj));
             Extrait::Forme(Forme {

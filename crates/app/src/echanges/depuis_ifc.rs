@@ -15,7 +15,7 @@
 
 use modele::volumes::geometrie::{cercle, direction_principale, etendue, etendue_arc, prisme_vertical};
 use modele::{Axe, Conversion, Couche, Dalle, GenreOuverture, Haut, Mur, Niveau, Origine, Ouverture, Projet, SorteDalle, TypeCompose, identifiant, source};
-use crate::formats::ifc::geom::{self, GeomStats};
+use formats::ifc::geom::{self, GeomStats};
 use ifc_base::semantique::{IfcModel, pretty_type};
 use ifc_base::step::{Id, StepFile};
 use glam::{DVec2, DVec3};

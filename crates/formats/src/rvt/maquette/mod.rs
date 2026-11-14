@@ -27,7 +27,7 @@ use super::schema::Schema;
 use super::feuilles;
 use super::vues::{self, Cadre, Contenu, Element2D, TypeFenetre, TypeRegion, Vue};
 use super::Cfb;
-use crate::formats::ifc::geom::{Ligne, Part, ProductGeom, Rgba, class_color};
+use crate::ifc::geom::{Ligne, Part, ProductGeom, Rgba, class_color};
 use ifc_base::semantique::IfcModel;
 use scene::{NavFamille, NavVue, Navigateur, Scene};
 use ifc_base::step::{Entity, Id, IdMap, StepFile, Value, format_real};

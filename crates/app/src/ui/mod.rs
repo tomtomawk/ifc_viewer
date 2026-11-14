@@ -57,7 +57,7 @@ use crate::dessin::{self, Poche};
 use ifc_base::semantique::pretty_type;
 use crate::pilote::{self, Requete};
 use crate::rendu::gpu::{FrameParams, ParamsPasse, Renderer, StyleVisuel};
-use crate::formats::rvt::{self, RvtInfo};
+use formats::rvt::{self, RvtInfo};
 use scene::Scene;
 use noyau::trace2d;
 use noyau::Id;

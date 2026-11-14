@@ -17,7 +17,7 @@
 
 use modele::volumes::geometrie::{etendue, etendue_arc, prisme_vertical};
 use modele::{Axe, Conversion, Couche, Dalle, GenreOuverture, Haut, Mur, Niveau, Origine, Ouverture, Projet, SorteDalle, TypeCompose, TypeOuverture, identifiant, source};
-use crate::formats::rvt::maquette::{self, Geometrie, Maquette, Trace};
+use formats::rvt::maquette::{self, Geometrie, Maquette, Trace};
 use glam::{DVec2, DVec3};
 use std::collections::HashMap;
 use std::path::Path;
@@ -333,7 +333,7 @@ fn nomenclatures(m: &Maquette, c: &mut Conversion, id_nomenclature: &dyn Fn(i64)
 /// (plan de coupe), sur la largeur du cadrage ; elle suit la droite de la vue, retournée
 /// s'il le faut pour regarder du même côté (une coupe native regarde à gauche de sa
 /// ligne). None si le cadrage est trop étroit.
-fn ligne_de_coupe(cadre: &crate::formats::rvt::vues::Cadre, droite: DVec3, direction: DVec3) -> Option<(DVec3, DVec3, f64, DVec3)> {
+fn ligne_de_coupe(cadre: &formats::rvt::vues::Cadre, droite: DVec3, direction: DVec3) -> Option<(DVec3, DVec3, f64, DVec3)> {
     // profondeur : axe du cadrage qui s'éloigne de l'observateur
     let mut a = cadre.axes[2].normalize_or_zero();
     let (mut pres, mut loin) = (cadre.min[2], cadre.max[2]);
@@ -438,15 +438,15 @@ fn vues_et_feuilles(m: &Maquette, c: &mut Conversion, id_vue: &dyn Fn(i64) -> St
         *ignorees.entry("Orientation des plans pivotés (plans repris au nord du modèle)".into()).or_default() += pivotes;
     }
     // feuilles : repère du cartouche (coin bas gauche), vues placées converties
-    let par_id: HashMap<i64, &crate::formats::rvt::vues::Vue> = m.vues.iter().map(|v| (v.id, v)).collect();
-    let mut feuilles: Vec<&crate::formats::rvt::vues::Vue> = m.vues.iter().filter(|v| !v.gabarit && v.genre == "Feuille").collect();
+    let par_id: HashMap<i64, &formats::rvt::vues::Vue> = m.vues.iter().map(|v| (v.id, v)).collect();
+    let mut feuilles: Vec<&formats::rvt::vues::Vue> = m.vues.iter().filter(|v| !v.gabarit && v.genre == "Feuille").collect();
     feuilles.sort_by(|a, b| a.numero.cmp(&b.numero).then(a.nom.cmp(&b.nom)));
     for f in feuilles {
-        let e = crate::formats::rvt::feuilles::etendue_cartouche(m, f).unwrap_or([0.0, 0.0, 841.0, 594.0]);
+        let e = formats::rvt::feuilles::etendue_cartouche(m, f).unwrap_or([0.0, 0.0, 841.0, 594.0]);
         let arrondi = |x: f64| (x * 10.0).round() / 10.0;
         let mut vues = Vec::new();
         for el in m.elements_2d.iter().filter(|el| el.vue == f.id) {
-            let crate::formats::rvt::vues::Contenu::FenetreDeVue { vue, decalage, echelle, .. } = &el.contenu else { continue };
+            let formats::rvt::vues::Contenu::FenetreDeVue { vue, decalage, echelle, .. } = &el.contenu else { continue };
             let (Some((id, o_n, u_n)), Some(pv)) = (converties.get(vue), par_id.get(vue)) else {
                 *ignorees.entry("Vues placées sur des feuilles, non converties".into()).or_default() += 1;
                 continue;
@@ -478,7 +478,7 @@ fn vues_et_feuilles(m: &Maquette, c: &mut Conversion, id_vue: &dyn Fn(i64) -> St
 #[cfg(test)]
 mod tests_vues {
     use super::*;
-    use crate::formats::rvt::vues::Cadre;
+    use formats::rvt::vues::Cadre;
 
     /// Coupe Revit regardant vers +Y (observateur au sud, droite = +X) : la ligne
     /// native va d'ouest en est sur le plan proche ; un point du modèle tombe au même

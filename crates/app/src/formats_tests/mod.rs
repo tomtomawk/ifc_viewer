@@ -1,6 +1,6 @@
 //! Tests de `formats` qui appellent du code d'`app` (`echanges`) et de `modele` : ils
 //! restent dans `app` tant que `echanges` n'est pas extraite (lots 5 à 9).
-use crate::formats::rvt::maquette::{lire, scene};
+use formats::rvt::maquette::{lire, scene};
 use std::path::PathBuf;
 
 /// Fichier d'essai hors dépôt (même convention que `formats::rvt::maquette::tests`).
