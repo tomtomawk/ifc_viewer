@@ -69,8 +69,8 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::Arc;
 
 enum LoadMsg {
-    Partage(Result<(Box<Scene>, crate::modele::Projet, PathBuf, crate::collaboration::session::Session), String>, Option<usize>),
-    Natif(Result<(Box<Scene>, crate::modele::Projet, PathBuf), String>),
+    Partage(Result<(Box<Scene>, modele::Projet, PathBuf, crate::collaboration::session::Session), String>, Option<usize>),
+    Natif(Result<(Box<Scene>, modele::Projet, PathBuf), String>),
     Progress(String),
     Done(Result<Box<Scene>, String>),
     /// Métadonnées, puis scène des murs (ou raison de son absence).
@@ -386,7 +386,7 @@ struct EtatVue {
     soleil_jour: u32,
     soleil_mois: u32,
     soleil_heure: f32,
-    ciel: crate::modele::soleil::ReglagesCiel,
+    ciel: modele::soleil::ReglagesCiel,
     coupe: bool,
     coupe_niveau: Option<Id>,
     coupe_hauteur: f32,
@@ -426,7 +426,7 @@ impl FenetreSelection {
 
 /// Fichier conservé en mémoire quand un autre document devient actif.
 struct DocumentOuvert {
-    natif: Option<(crate::modele::Projet, PathBuf)>,
+    natif: Option<(modele::Projet, PathBuf)>,
     historique: crate::edition::historique::Historique,
     collaboration: Option<crate::collaboration::session::Session>,
     modifie: bool,
@@ -521,7 +521,7 @@ pub struct ViewerApp {
     action_famille: Option<editeur_famille::ActionFamille>,
     /// Fermeture de l'onglet Famille à confirmer (modifications non chargées).
     confirmer_famille: bool,
-    natif: Option<(crate::modele::Projet, PathBuf)>,
+    natif: Option<(modele::Projet, PathBuf)>,
     historique: crate::edition::historique::Historique,
     collaboration: Option<crate::collaboration::session::Session>,
     natif_modifie: bool,
@@ -596,7 +596,7 @@ pub struct ViewerApp {
     soleil_mois: u32,
     soleil_heure: f32,
     /// Ciel physique de la vue (réglages) et fenêtre Ciel ouverte.
-    ciel: crate::modele::soleil::ReglagesCiel,
+    ciel: modele::soleil::ReglagesCiel,
     ciel_ouvert: bool,
     /// Vue piéton : œil à hauteur d'homme, la marche suit le sol ; caméra d'avant.
     pieton: bool,
@@ -677,7 +677,7 @@ pub struct ViewerApp {
     cote_arc: Option<(String, usize, String, String)>,
     gestion_contextes: Option<gestion_contextes::GestionContextes>,
     editeur_gabarit_vue: Option<gabarits_vues::EditeurGabaritVue>,
-    filtres_contextes: crate::modele::contextes::FiltresContextes,
+    filtres_contextes: modele::contextes::FiltresContextes,
     /// Dernière variante de création dont l'affichage a été synchronisé.
     variante_creation_suivie: Option<String>,
     /// Matériau du projet natif dont les graphismes sont ouverts.
@@ -694,7 +694,7 @@ pub struct ViewerApp {
     /// glisser) pour être appliquées, en une seule étape d'historique.
     saisie_active: bool,
     /// Projet tel qu'avant la saisie en cours, si elle a modifié le projet.
-    avant_saisie: Option<crate::modele::Projet>,
+    avant_saisie: Option<modele::Projet>,
     /// Échap pendant la saisie : elle est abandonnée, l'ancienne valeur rétablie.
     saisie_annulee: bool,
     /// Échap a abandonné une saisie à cette image (champs à tampon propre).
@@ -837,8 +837,8 @@ impl ViewerApp {
                 o.theme_interface.appliquer(&cc.egui_ctx);
                 // gabarit choisi : lu au démarrage, défaut s'il est illisible
                 if let Some(c) = &o.gabarit {
-                    match crate::modele::gabarit::Gabarit::charger(c) {
-                        Ok(g) => crate::modele::gabarit::definir(g),
+                    match modele::gabarit::Gabarit::charger(c) {
+                        Ok(g) => modele::gabarit::definir(g),
                         Err(e) => eprintln!("{e} : gabarit par défaut utilisé"),
                     }
                 }

@@ -1,0 +1,16 @@
+[package]
+name = "modele"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+noyau = { path = "../noyau" }
+earcutr.workspace = true
+geo-straight-skeleton.workspace = true
+glam.workspace = true
+rayon.workspace = true
+serde.workspace = true
+serde_json.workspace = true

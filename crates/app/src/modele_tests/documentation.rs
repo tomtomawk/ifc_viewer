@@ -2,14 +2,14 @@
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
 use crate::edition::Execution;
 use crate::dessin::{dessin_vue, pdf, pdf_jeu, svg_feuille, vue_placee};
-use crate::modele::documentation::*;
+use modele::documentation::*;
 use crate::echanges::depuis_ifc;
 use glam::DVec3;
 use noyau::trace2d::{Forme, Primitive, Role};
 
 #[test]
 fn dessin_vue_applique_le_contexte_propre_a_la_vue() {
-    use crate::modele::contextes::FiltresContextes;
+    use modele::contextes::FiltresContextes;
     let (mut p, _) = depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {}).unwrap();
     p.phases = vec!["Existant".into(), "Projet".into()];
     for mur in &mut p.murs { mur.phase = Some("Projet".into()); }
@@ -27,7 +27,7 @@ fn dessin_vue_applique_le_contexte_propre_a_la_vue() {
 
 #[test]
 fn dessin_vue_suit_le_gabarit_partage() {
-    use crate::modele::gabarits_vues::GabaritVue;
+    use modele::gabarits_vues::GabaritVue;
     let (mut p, _) = depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {}).unwrap();
     p.phases = vec!["Existant".into(), "Projet".into()];
     for mur in &mut p.murs { mur.phase = Some("Projet".into()); }
@@ -46,7 +46,7 @@ fn dessin_vue_suit_le_gabarit_partage() {
 
 #[test]
 fn dessin_sur_feuille_suit_le_fond_la_plage_haute_et_le_style() {
-    use crate::modele::creation::ParametresMur;
+    use modele::creation::ParametresMur;
     let mut p = Projet::nouveau("Réglages du plan");
     let bas = p.ajouter_mur([0.0, 0.0], [4000.0, 0.0], &ParametresMur::default()).unwrap();
     let niveau = p.niveaux[0].id.clone();
@@ -66,7 +66,7 @@ fn dessin_sur_feuille_suit_le_fond_la_plage_haute_et_le_style() {
 
     p.vues[i].fond_plan = None;
     p.vues[i].limite_haute_decalage = 1500.0;
-    p.rendus_vues.insert(id, crate::modele::soleil::RenduVue { style: Some("realiste".into()), ..Default::default() });
+    p.rendus_vues.insert(id, modele::soleil::RenduVue { style: Some("realiste".into()), ..Default::default() });
     let (dessin, _) = vue_placee(&p, &placee).unwrap();
     assert!(!dessin.iter().any(|pr| pr.style.couleur == [165, 165, 165, 255] || pr.element == Some(haut)));
     assert_ne!(couleur(&dessin), poche_graphique);
@@ -74,7 +74,7 @@ fn dessin_sur_feuille_suit_le_fond_la_plage_haute_et_le_style() {
 
 #[test]
 fn coupe_sur_feuille_reste_dans_les_limites_de_la_vue() {
-    use crate::modele::creation::ParametresMur;
+    use modele::creation::ParametresMur;
     let mut p = Projet::nouveau("Coupe cadrée");
     let mur = p.ajouter_mur([-2000.0, 0.0], [6000.0, 0.0], &ParametresMur::default()).unwrap();
     let id = p.ajouter_vue_coupe([0.0, 0.0], [4000.0, 0.0], 1000.0, false, "", 100.0).unwrap();
@@ -105,7 +105,7 @@ fn formes_du_cartouche_persistent_et_sont_dessinees_sur_feuille() {
         AnnotationForme::Cote { debut: PointCote::Fixe { point: [20.0, 10.0] }, fin: PointCote::Fixe { point: [25.0, 10.0] }, decalage: 10.0 },
     ];
     // Le document commun est la source du rendu ; les formes historiques ne le remplacent pas.
-    use crate::modele::famille::modelee::{Element2DFamille, VueEsquisse};
+    use modele::famille::modelee::{Element2DFamille, VueEsquisse};
     let document = famille.document_famille.as_mut().unwrap();
     document.famille.elements_2d.extend(famille.formes.iter().cloned().map(|forme| Element2DFamille { vue: VueEsquisse::Plan, forme, hauteur: 2.5 }));
     p.feuilles.push(f.clone());
@@ -359,7 +359,7 @@ fn nomenclature_csv_et_quantites_sans_double_compte() {
 /// vue, segment sans type en continu fin ; type absent refusé.
 #[test]
 fn polyligne_types_de_trait_par_segment() {
-    let mut p = Projet::depuis_gabarit("Traits", &crate::modele::gabarit::Gabarit::defaut());
+    let mut p = Projet::depuis_gabarit("Traits", &modele::gabarit::Gabarit::defaut());
     assert_eq!(p.types_traits, types_traits_standard());
     let vue = p.ajouter_vue_plan(&p.niveaux[0].id.clone(), 100.0).unwrap();
     let echelle = p.vues.iter().find(|v| v.id == vue).unwrap().echelle;
@@ -393,7 +393,7 @@ fn polyligne_types_de_trait_par_segment() {
 #[test]
 fn polyligne_segments_d_arc() {
     use glam::DVec2;
-    let mut p = Projet::depuis_gabarit("Arcs", &crate::modele::gabarit::Gabarit::defaut());
+    let mut p = Projet::depuis_gabarit("Arcs", &modele::gabarit::Gabarit::defaut());
     let vue = p.ajouter_vue_plan(&p.niveaux[0].id.clone(), 100.0).unwrap();
     // demi-disque : diamètre de 2 m, puis demi-cercle de retour (segment de fermeture)
     let points = vec![[-1000.0, 0.0], [1000.0, 0.0]];

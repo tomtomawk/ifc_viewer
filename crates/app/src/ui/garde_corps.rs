@@ -4,8 +4,8 @@
 //! glissent à la souris.
 use super::*;
 use crate::config::options::{Dimensions, unite};
-use crate::modele::elements::garde_corps::{BarreauExtremite, BarreauMotif, Lisse, Section};
-use crate::modele::{Projet, Remplissage, TypeGardeCorps, identifiant};
+use modele::elements::garde_corps::{BarreauExtremite, BarreauMotif, Lisse, Section};
+use modele::{Projet, Remplissage, TypeGardeCorps, identifiant};
 use crate::ui::ruban::Outil;
 use glam::DVec2;
 
@@ -59,7 +59,7 @@ fn materiaux_du_type(t: &TypeGardeCorps) -> Vec<String> {
 fn completer_materiaux(q: &mut Projet, t: &TypeGardeCorps) {
     for nom in materiaux_du_type(t) {
         if q.materiau(&nom).is_none() {
-            q.materiaux.push(crate::modele::murs::assemblage::materiau_par_defaut(&nom));
+            q.materiaux.push(modele::murs::assemblage::materiau_par_defaut(&nom));
         }
     }
 }
@@ -280,7 +280,7 @@ impl ViewerApp {
             return;
         };
         let (mut ouvert, mut enregistrer, mut annuler) = (true, false, false);
-        let mut materiaux: Vec<String> = p.materiaux.iter().map(|m| m.nom.clone()).chain(materiaux_du_type(&ed.brouillon)).chain([crate::modele::elements::garde_corps::MATERIAU_ACIER.to_string(), crate::modele::elements::garde_corps::MATERIAU_VERRE.to_string()]).collect();
+        let mut materiaux: Vec<String> = p.materiaux.iter().map(|m| m.nom.clone()).chain(materiaux_du_type(&ed.brouillon)).chain([modele::elements::garde_corps::MATERIAU_ACIER.to_string(), modele::elements::garde_corps::MATERIAU_VERRE.to_string()]).collect();
         materiaux.sort();
         materiaux.dedup();
         egui::Window::new(if ed.brouillon.id.is_empty() {

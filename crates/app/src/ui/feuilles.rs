@@ -4,7 +4,7 @@
 use crate::edition::Execution;
 use super::*;
 use crate::edition::commandes::Commande;
-use crate::modele::documentation as doc;
+use modele::documentation as doc;
 use std::collections::HashMap;
 
 /// Vue glissée depuis l'arborescence : identifiant de la vue du projet.
@@ -79,7 +79,7 @@ pub(super) fn rendu(prims: &[noyau::trace2d::Primitive], etendue: [f64; 4]) -> R
 }
 
 /// Tableau d'une nomenclature posé en position nulle (coin haut gauche à l'origine).
-fn table_zero(p: &crate::modele::Projet, id: &str) -> Rendu {
+fn table_zero(p: &modele::Projet, id: &str) -> Rendu {
     match doc::nomenclature_placee(p, &doc::NomenclaturePlacee { nomenclature: id.into(), position: [0.0, 0.0] }) {
         Ok((prims, e)) => rendu(&prims, e),
         Err(e) => Rendu { erreur: Some(e), ..Default::default() },
@@ -136,7 +136,7 @@ impl ViewerApp {
             if let Some(ed) = self.famille.as_mut() { ed.cible_feuille = feuille.clone(); }
             return;
         }
-        let projet_vide = crate::modele::Projet::nouveau("Famille");
+        let projet_vide = modele::Projet::nouveau("Famille");
         let p = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
         let original = source.as_ref().map_or_else(String::new, |f| f.nom.clone());
         let mut famille = source.unwrap_or_default();
@@ -160,7 +160,7 @@ impl ViewerApp {
             if let Some(ed) = self.famille.as_mut() { ed.cible_piece = piece.clone(); }
             return;
         }
-        let projet_vide = crate::modele::Projet::nouveau("Famille");
+        let projet_vide = modele::Projet::nouveau("Famille");
         let p = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
         let actuelle = piece.as_ref().and_then(|id| p.pieces.iter().find(|x| &x.id == id)).map(|x| p.famille_etiquette(x));
         let mut f = match &famille {
@@ -294,7 +294,7 @@ impl ViewerApp {
 
     /// Nouvelle feuille à la suite du jeu : format de sa dernière feuille (A3 sinon),
     /// numéro suivant.
-    pub(super) fn nouvelle_feuille(p: &crate::modele::Projet, jeu: &str) -> doc::Feuille {
+    pub(super) fn nouvelle_feuille(p: &modele::Projet, jeu: &str) -> doc::Feuille {
         let derniere = p.feuilles.iter().rev().find(|f| f.jeu == jeu);
         let (largeur, hauteur) = derniere.map_or((420.0, 297.0), |f| (f.largeur, f.hauteur));
         let numero = (p.feuilles.len() + 1..).map(|n| format!("A{n:02}")).find(|n| !p.feuilles.iter().any(|f| &f.numero == n)).unwrap_or_default();
@@ -722,7 +722,7 @@ impl ViewerApp {
     pub(super) fn proprietes_jeu(&mut self, ui: &mut egui::Ui, jeu: &str) {
         let Some((p, _)) = &self.natif else { return };
         let mut commande: Option<Commande> = None;
-        let mut projet_modifie: Option<crate::modele::Projet> = None;
+        let mut projet_modifie: Option<modele::Projet> = None;
         let mut ouvrir: Option<String> = None;
         let selection = self.feuilles.selection.clone();
         if matches!(selection, SelectionFeuille::Aucune) {
@@ -975,7 +975,7 @@ impl ViewerApp {
     }
 }
 
-fn selecteur_cartouche(ui: &mut egui::Ui, p: &crate::modele::Projet, f: &doc::Feuille) -> Option<crate::modele::Projet> {
+fn selecteur_cartouche(ui: &mut egui::Ui, p: &modele::Projet, f: &doc::Feuille) -> Option<modele::Projet> {
     let actuel = doc::famille_cartouche(p, &f.id).map(|f| f.nom.as_str()).filter(|nom| *nom != doc::NOM_CARTOUCHE_STANDARD);
     let mut choix = actuel;
     {
@@ -1008,7 +1008,7 @@ fn piece_outil_suit(outil: &str, original: &str) -> bool {
     !original.is_empty() && outil == original
 }
 
-pub(super) fn dessiner_etiquette(ui: &mut egui::Ui, famille: &mut doc::FamilleEtiquette, exemple: Option<(&crate::modele::Projet, &crate::modele::Piece)>, tracer: bool, debut: &mut Option<[f64; 2]>) {
+pub(super) fn dessiner_etiquette(ui: &mut egui::Ui, famille: &mut doc::FamilleEtiquette, exemple: Option<(&modele::Projet, &modele::Piece)>, tracer: bool, debut: &mut Option<[f64; 2]>) {
     ui.label(if tracer { "Cliquer les deux extrémités du trait · Échap pour quitter" } else { "La croix rouge indique le point de la pièce" });
     // zone de 60 × 30 mm du papier centrée sur le point
     let (demi_l, demi_h) = (30.0f32, 15.0f32);

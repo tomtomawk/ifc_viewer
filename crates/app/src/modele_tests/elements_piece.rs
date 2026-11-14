@@ -1,10 +1,9 @@
 //! Tests déplacés de `modele/elements/piece.rs` (`mod tests`) : ils appellent du code situé au-dessus
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
 use crate::edition::Execution;
-use crate::modele::*;
-use crate::modele::creation::ParametresMur;
+use modele::*;
+use modele::creation::ParametresMur;
 use crate::edition::commandes::Commande;
-use crate::modele::elements::piece::*;
 
 fn rectangle(p: &mut Projet, o: &ParametresMur) {
     let pts = [[0.0, 0.0], [5000.0, 0.0], [5000.0, 4000.0], [0.0, 4000.0]];
@@ -41,7 +40,7 @@ fn piece_dans_quatre_murs() {
 
 #[test]
 fn etiquette_famille_de_la_piece() {
-    use crate::modele::documentation::{primitives_pieces, FamilleEtiquette, TexteCartouche};
+    use modele::documentation::{primitives_pieces, FamilleEtiquette, TexteCartouche};
     let mut p = projet();
     rectangle(&mut p, &ParametresMur { epaisseur: 200.0, ..Default::default() });
     let (mut q, ids) = p.executer(Commande::Piece { piece: piece(&p, [2500.0, 2000.0]) }).unwrap();
@@ -86,7 +85,7 @@ fn piece_ouverte_refusee_et_recalcul() {
 
 #[test]
 fn piece_mur_compose() {
-    use crate::modele::{Couche, TypeCompose};
+    use modele::{Couche, TypeCompose};
     let mut p = projet();
     p.types_murs.push(TypeCompose {
         id: "compose".into(),

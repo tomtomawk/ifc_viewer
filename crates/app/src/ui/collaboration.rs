@@ -6,7 +6,7 @@ impl ViewerApp {
     pub(super) fn charger_partage(
         path: &std::path::Path,
         progress: &dyn Fn(String),
-    ) -> Result<(Box<Scene>, crate::modele::Projet, PathBuf, Session), String> {
+    ) -> Result<(Box<Scene>, modele::Projet, PathBuf, Session), String> {
         progress("Préparation de la copie locale du projet partagé…".into());
         let (p, local, s) = partage::ouvrir(path, &partage::racine_cache())?;
         let mut scene = scene::depuis_natif(&p, &local)?;

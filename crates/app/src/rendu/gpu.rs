@@ -820,8 +820,8 @@ impl Renderer {
 
     /// Apparences de la scène : réglages par rang et images (couches renvoyées seulement
     /// si leur liste ou un fichier a changé).
-    pub fn upload_apparences(&mut self, apparences: &[crate::modele::Apparence]) {
-        use crate::modele::CarteTexture;
+    pub fn upload_apparences(&mut self, apparences: &[modele::Apparence]) {
+        use modele::CarteTexture;
         let mut u = vec![[0.0f32; 4]; MAX_APPARENCES * 22];
         let mut couches: Vec<(String, Option<std::time::SystemTime>)> = Vec::new();
         let mut images: Vec<Arc<Vec<Vec<u8>>>> = Vec::new();

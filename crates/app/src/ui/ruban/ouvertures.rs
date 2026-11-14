@@ -2,7 +2,7 @@
 //! de catégorie (porte, fenêtre, libre), types en liste avec vignette et cotes, crayon
 //! (modifier la famille) au survol, nouvelle famille en fin de liste.
 use super::*;
-use crate::modele::GenreOuverture;
+use modele::GenreOuverture;
 
 /// Ce que l'utilisateur a demandé dans le sélecteur.
 #[derive(Default)]
@@ -61,7 +61,7 @@ impl RubanEdition {
     /// `categories` : onglets proposés ; `generique` : ligne « Générique » proposée
     /// dans l'onglet Libre (portes et fenêtres ont toujours une famille). En fin de
     /// liste : charger une famille depuis un fichier.
-    pub fn selecteur_type_ouverture(&mut self, ui: &mut egui::Ui, projet: &crate::modele::Projet, genre: GenreOuverture, actuel: Option<&str>, categories: &[GenreOuverture], generique: bool) -> ChoixOuverture {
+    pub fn selecteur_type_ouverture(&mut self, ui: &mut egui::Ui, projet: &modele::Projet, genre: GenreOuverture, actuel: Option<&str>, categories: &[GenreOuverture], generique: bool) -> ChoixOuverture {
         let mut sortie = ChoixOuverture::default();
         let unite = crate::config::options::unite();
         let type_actuel = actuel.and_then(|id| projet.types_ouvertures.iter().find(|t| t.id == id));

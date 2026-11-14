@@ -2,7 +2,7 @@
 //! champ par propriété partagée ; « Varié » quand les valeurs diffèrent, et toute
 //! modification s'applique à l'ensemble de la sélection.
 use super::*;
-use crate::modele::{Haut, Projet};
+use modele::{Haut, Projet};
 
 /// Valeur commune (la première) et indication que les valeurs diffèrent.
 pub(super) fn melange<T: PartialEq + Clone>(valeurs: impl IntoIterator<Item = T>) -> (Option<T>, bool) {
@@ -60,10 +60,10 @@ impl ViewerApp {
         }
         murs.sort();
         murs.dedup();
-        let selection_murs: Vec<&crate::modele::Mur> = projet.murs.iter().filter(|m| murs.contains(&m.id)).collect();
+        let selection_murs: Vec<&modele::Mur> = projet.murs.iter().filter(|m| murs.contains(&m.id)).collect();
         if !selection_murs.is_empty() {
             ui.label(RichText::new(format!("Murs ({})", selection_murs.len())).strong());
-            let mut modif: Option<Box<dyn Fn(&mut crate::modele::Mur)>> = None;
+            let mut modif: Option<Box<dyn Fn(&mut modele::Mur)>> = None;
             egui::Grid::new("communes_murs").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
                 let (niveau, m) = melange(selection_murs.iter().map(|m| m.niveau.clone()));
                 let (decalage, mixte_decalage) = melange(selection_murs.iter().map(|m| m.decalage_bas.to_bits()));
@@ -77,7 +77,7 @@ impl ViewerApp {
                     }
                 });
                 ui.end_row();
-                let haut_niveau = |m: &&crate::modele::Mur| match &m.haut { Haut::Libre { .. } => None, Haut::Niveau { niveau, .. } => Some(niveau.clone()) };
+                let haut_niveau = |m: &&modele::Mur| match &m.haut { Haut::Libre { .. } => None, Haut::Niveau { niveau, .. } => Some(niveau.clone()) };
                 let (haut, m) = melange(selection_murs.iter().map(haut_niveau));
                 ui.label("Contrainte haute");
                 let mut choix = vec![(None, "Libre (hauteur)".to_string())];
@@ -128,10 +128,10 @@ impl ViewerApp {
         }
 
         // dalles, sols, plafonds, toitures
-        let dalles: Vec<&crate::modele::Dalle> = projet.dalles.iter().filter(|d| ids.contains(&d.id)).collect();
+        let dalles: Vec<&modele::Dalle> = projet.dalles.iter().filter(|d| ids.contains(&d.id)).collect();
         if !dalles.is_empty() && nouveau.is_none() {
             ui.label(RichText::new(format!("Éléments horizontaux ({})", dalles.len())).strong());
-            let mut modif: Option<Box<dyn Fn(&mut crate::modele::Dalle)>> = None;
+            let mut modif: Option<Box<dyn Fn(&mut modele::Dalle)>> = None;
             egui::Grid::new("communes_dalles").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
                 let (niveau, m) = melange(dalles.iter().map(|d| d.niveau.clone()));
                 ui.label("Niveau");
@@ -155,10 +155,10 @@ impl ViewerApp {
         }
 
         // poteaux et poutres
-        let barres: Vec<&crate::modele::Barre> = projet.barres.iter().filter(|b| ids.contains(&b.id)).collect();
+        let barres: Vec<&modele::Barre> = projet.barres.iter().filter(|b| ids.contains(&b.id)).collect();
         if !barres.is_empty() && nouveau.is_none() {
             ui.label(RichText::new(format!("Poteaux et poutres ({})", barres.len())).strong());
-            let mut modif: Option<Box<dyn Fn(&mut crate::modele::Barre)>> = None;
+            let mut modif: Option<Box<dyn Fn(&mut modele::Barre)>> = None;
             egui::Grid::new("communes_barres").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
                 let (niveau, m) = melange(barres.iter().map(|b| b.niveau.clone()));
                 ui.label("Niveau");
@@ -188,10 +188,10 @@ impl ViewerApp {
         }
 
         // ouvertures
-        let ouvertures: Vec<&crate::modele::Ouverture> = projet.ouvertures.iter().filter(|o| ids.contains(&o.id)).collect();
+        let ouvertures: Vec<&modele::Ouverture> = projet.ouvertures.iter().filter(|o| ids.contains(&o.id)).collect();
         if !ouvertures.is_empty() && nouveau.is_none() {
             ui.label(RichText::new(format!("Ouvertures ({})", ouvertures.len())).strong());
-            let mut modif: Option<Box<dyn Fn(&mut crate::modele::Ouverture)>> = None;
+            let mut modif: Option<Box<dyn Fn(&mut modele::Ouverture)>> = None;
             egui::Grid::new("communes_ouvertures").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
                 let libres = ouvertures.iter().all(|o| o.representation.is_none());
                 let (allege, m) = melange(ouvertures.iter().map(|o| o.allege.to_bits()));
@@ -224,10 +224,10 @@ impl ViewerApp {
         }
 
         // escaliers et garde-corps
-        let escaliers: Vec<&crate::modele::Escalier> = projet.escaliers.iter().filter(|e| ids.contains(&e.id)).collect();
+        let escaliers: Vec<&modele::Escalier> = projet.escaliers.iter().filter(|e| ids.contains(&e.id)).collect();
         if !escaliers.is_empty() && nouveau.is_none() {
             ui.label(RichText::new(format!("Escaliers ({})", escaliers.len())).strong());
-            let mut modif: Option<Box<dyn Fn(&mut crate::modele::Escalier)>> = None;
+            let mut modif: Option<Box<dyn Fn(&mut modele::Escalier)>> = None;
             egui::Grid::new("communes_escaliers").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
                 let (niveau, m) = melange(escaliers.iter().map(|e| e.niveau.clone()));
                 ui.label("Niveau de base");
@@ -249,10 +249,10 @@ impl ViewerApp {
             }
             ui.separator();
         }
-        let garde_corps: Vec<&crate::modele::GardeCorps> = projet.garde_corps.iter().filter(|g| ids.contains(&g.id)).collect();
+        let garde_corps: Vec<&modele::GardeCorps> = projet.garde_corps.iter().filter(|g| ids.contains(&g.id)).collect();
         if !garde_corps.is_empty() && nouveau.is_none() {
             ui.label(RichText::new(format!("Garde-corps ({})", garde_corps.len())).strong());
-            let mut modif: Option<Box<dyn Fn(&mut crate::modele::GardeCorps)>> = None;
+            let mut modif: Option<Box<dyn Fn(&mut modele::GardeCorps)>> = None;
             egui::Grid::new("communes_garde_corps").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
                 let (hauteur, m) = melange(garde_corps.iter().map(|g| g.hauteur.to_bits()));
                 ui.label("Hauteur");
@@ -280,7 +280,7 @@ impl ViewerApp {
     /// projet modifié.
     pub(super) fn proprietes_terrains(&self, ui: &mut egui::Ui, ids: &[String]) -> Option<Projet> {
         let (projet, _) = self.natif.as_ref()?;
-        let terrains: Vec<&crate::modele::elements::site::Terrain> = projet.terrains.iter().filter(|t| ids.contains(&t.id)).collect();
+        let terrains: Vec<&modele::elements::site::Terrain> = projet.terrains.iter().filter(|t| ids.contains(&t.id)).collect();
         if terrains.is_empty() {
             return None;
         }
@@ -313,7 +313,7 @@ impl ViewerApp {
                         if p.types_terrains.iter().all(|t| t.id != id && t.nom != nom) { break (id, nom); }
                         k += 1;
                     };
-                    p.types_terrains.push(crate::modele::elements::site::TypeTerrain { id: id.clone(), nom, ..type_actuel.clone() });
+                    p.types_terrains.push(modele::elements::site::TypeTerrain { id: id.clone(), nom, ..type_actuel.clone() });
                     p.terrains.iter_mut().filter(|x| ids.contains(&x.id)).for_each(|x| x.type_terrain = Some(id.clone()));
                     modifie = true;
                 }
@@ -346,12 +346,12 @@ impl ViewerApp {
             ui.label("Cotes NGF");
             ui.label(format!("{} à {}", crate::config::options::unite().afficher(bas.round()), crate::config::options::unite().afficher(haut.round())));
             ui.end_row();
-            let surface: f64 = terrains.iter().map(|t| crate::modele::volumes::geometrie::aire_pair_impair(&[t.contour.iter().map(|p| [p[0], p[1]]).collect()])).sum();
+            let surface: f64 = terrains.iter().map(|t| modele::volumes::geometrie::aire_pair_impair(&[t.contour.iter().map(|p| [p[0], p[1]]).collect()])).sum();
             ui.label(if terrains.len() > 1 { "Surface en plan (total)" } else { "Surface en plan" });
             ui.label(format!("{:.2} m²", surface / 1e6));
             ui.end_row();
             // volume du solide : surface du terrain, épaisseur du type dessous
-            let volume: f64 = terrains.iter().filter_map(|t| crate::modele::elements::terre_plein::solide_terrain(projet, t, projet.type_terrain(t).epaisseur).ok()).map(|tris| crate::modele::volumes::geometrie::volume(&tris)).sum();
+            let volume: f64 = terrains.iter().filter_map(|t| modele::elements::terre_plein::solide_terrain(projet, t, projet.type_terrain(t).epaisseur).ok()).map(|tris| modele::volumes::geometrie::volume(&tris)).sum();
             ui.label(if terrains.len() > 1 { "Volume (total)" } else { "Volume" }).on_hover_text("Solide du terrain : sa surface et l'épaisseur du type dessous");
             ui.label(format!("{:.2} m³", volume / 1e9));
             ui.end_row();
@@ -364,7 +364,7 @@ impl ViewerApp {
     /// périmètre et surface, cumulés sur la sélection ; remplissage des polylignes fermées.
     /// Retourne le projet modifié.
     pub(super) fn proprietes_formes_2d(&self, ui: &mut egui::Ui, ids: &[String]) -> Option<Projet> {
-        use crate::modele::documentation::{AnnotationForme, RemplissageContour};
+        use modele::documentation::{AnnotationForme, RemplissageContour};
         let (projet, _) = self.natif.as_ref()?;
         let formes: Vec<_> = projet.annotations.iter().filter(|a| ids.contains(&a.id)).filter_map(|a| Some((a, a.forme.forme_2d()?))).collect();
         if formes.is_empty() {
@@ -418,8 +418,8 @@ impl ViewerApp {
 }
 
 /// Choix commun du remplissage d'une polyligne fermée.
-pub(super) fn choisir_remplissage_2d(ui: &mut egui::Ui, projet: &crate::modele::Projet, texte: &str) -> Option<Option<crate::modele::documentation::RemplissageContour>> {
-    use crate::modele::{MotifCoupe, documentation::RemplissageContour};
+pub(super) fn choisir_remplissage_2d(ui: &mut egui::Ui, projet: &modele::Projet, texte: &str) -> Option<Option<modele::documentation::RemplissageContour>> {
+    use modele::{MotifCoupe, documentation::RemplissageContour};
     let mut choix = None;
     egui::ComboBox::from_id_salt("remplissage_formes_2d").width(150.0).truncate().selected_text(texte).show_ui(ui, |ui| {
         if ui.selectable_label(false, "Aucun").clicked() { choix = Some(None); }

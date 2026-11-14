@@ -1,6 +1,6 @@
 //! Sélection des familles du projet et accès aux éditeurs.
 use super::*;
-use crate::modele::{GenreOuverture, Projet};
+use modele::{GenreOuverture, Projet};
 
 #[derive(Clone, PartialEq, Eq)]
 pub(super) enum FamilleCatalogue {

@@ -185,8 +185,8 @@ impl Outil {
     }
 
     /// Genre de cote de l'outil (méthode de cotation commune).
-    pub(in crate::ui) fn genre_cote(self) -> Option<crate::modele::documentation::GenreCote> {
-        use crate::modele::documentation::GenreCote as G;
+    pub(in crate::ui) fn genre_cote(self) -> Option<modele::documentation::GenreCote> {
+        use modele::documentation::GenreCote as G;
         Some(match self {
             Self::Cote => G::Lineaire,
             Self::CoteAngulaire => G::Angulaire,
@@ -252,8 +252,8 @@ pub struct ParametresCoupe {
 }
 
 /// Types de coupe et d'élévation du gabarit (échelle, profondeur par défaut).
-fn types_coupe() -> Vec<crate::modele::gabarit::TypeVue> {
-    crate::modele::gabarit::actif().types_vues.clone()
+fn types_coupe() -> Vec<modele::gabarit::TypeVue> {
+    modele::gabarit::actif().types_vues.clone()
 }
 
 /// Pictogramme d'une coupe (trait, têtes et flèches) ou d'une élévation (cercle et
@@ -272,8 +272,8 @@ fn icone_vue(p: &egui::Painter, r: egui::Rect, elevation: bool, c: Color32) {
 }
 
 /// Sorte d'élément horizontal d'un outil.
-fn sorte_surface(o: Outil) -> Option<crate::modele::SorteDalle> {
-    use crate::modele::SorteDalle;
+fn sorte_surface(o: Outil) -> Option<modele::SorteDalle> {
+    use modele::SorteDalle;
     match o {
         Outil::Dalle => Some(SorteDalle::Dalle),
         Outil::Sol => Some(SorteDalle::Sol),
@@ -285,15 +285,15 @@ fn sorte_surface(o: Outil) -> Option<crate::modele::SorteDalle> {
 }
 
 /// Types d'éléments horizontaux du gabarit, couches du haut vers le bas.
-fn types_surface(o: Outil) -> Vec<(String, Vec<crate::modele::Couche>)> {
+fn types_surface(o: Outil) -> Vec<(String, Vec<modele::Couche>)> {
     let Some(sorte) = sorte_surface(o) else { return Vec::new() };
-    crate::modele::gabarit::actif().surfaces(sorte).into_iter().map(|t| (t.nom.clone(), t.couches.clone())).collect()
+    modele::gabarit::actif().surfaces(sorte).into_iter().map(|t| (t.nom.clone(), t.couches.clone())).collect()
 }
 
 /// Pictogramme d'une catégorie de mur, vu en plan : un trait épais (mur), plusieurs
 /// bandes (mur composé), un trait fin (cloison).
-fn icone_categorie_mur(p: &egui::Painter, r: egui::Rect, c: crate::modele::CategorieMur, encre: Color32) {
-    use crate::modele::CategorieMur;
+fn icone_categorie_mur(p: &egui::Painter, r: egui::Rect, c: modele::CategorieMur, encre: Color32) {
+    use modele::CategorieMur;
     let contour = egui::Stroke::new(1.2, encre);
     let (l, h) = (r.width(), r.height());
     let bande = |haut: f32, bas: f32| egui::Rect::from_min_max(egui::pos2(r.left(), r.top() + h * haut), egui::pos2(r.right(), r.top() + h * bas));
@@ -318,7 +318,7 @@ fn icone_categorie_mur(p: &egui::Painter, r: egui::Rect, c: crate::modele::Categ
 
 /// Composition d'un élément horizontal en coupe : couches empilées du haut vers le bas,
 /// hauteur proportionnelle à l'épaisseur (2 px au moins), couleur du matériau.
-pub(crate) fn pile_couches(ui: &mut egui::Ui, r: egui::Rect, projet: &crate::modele::Projet, couches: &[crate::modele::Couche]) {
+pub(crate) fn pile_couches(ui: &mut egui::Ui, r: egui::Rect, projet: &modele::Projet, couches: &[modele::Couche]) {
     let total: f64 = couches.iter().map(|c| c.epaisseur).sum();
     if total <= 0.0 {
         return;
@@ -329,7 +329,7 @@ pub(crate) fn pile_couches(ui: &mut egui::Ui, r: egui::Rect, projet: &crate::mod
     let mut y = r.top();
     for c in couches {
         let h = 2.0 + reste * (c.epaisseur / total) as f32;
-        let m = c.materiau.as_ref().and_then(|n| projet.materiau(n)).cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(c.materiau.as_deref().unwrap_or("Mur générique")));
+        let m = c.materiau.as_ref().and_then(|n| projet.materiau(n)).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(c.materiau.as_deref().unwrap_or("Mur générique")));
         let bande = egui::Rect::from_min_size(egui::pos2(r.left(), y), egui::vec2(r.width(), h));
         peindre_materiau_coupe(p, bande, projet, &m, false);
         p.rect_stroke(bande, 0.0, egui::Stroke::new(0.5, Color32::from_gray(90)), egui::StrokeKind::Inside);
@@ -338,7 +338,7 @@ pub(crate) fn pile_couches(ui: &mut egui::Ui, r: egui::Rect, projet: &crate::mod
 }
 
 /// Projection indicative des limites du mur, bornée à la place disponible dans la palette.
-fn limites_croquis_mur(parametres: &crate::modele::creation::ParametresMur, _projet: &crate::modele::Projet, haut_reference: f32, bas_reference: f32) -> (f32, f32) {
+fn limites_croquis_mur(parametres: &modele::creation::ParametresMur, _projet: &modele::Projet, haut_reference: f32, bas_reference: f32) -> (f32, f32) {
     let deplacement = |v: f64| if v > 0.0 { -10.0 } else if v < 0.0 { 10.0 } else { 0.0 };
     let bas = deplacement(parametres.decalage);
     let haut = if parametres.niveau_haut.is_some() { deplacement(parametres.decalage_haut) } else { bas };
@@ -496,7 +496,7 @@ pub struct RubanEdition {
     pub sens_inverse: bool,
     /// Forme tracée par l'outil Mur (moteur du dessin 2D) : ligne, rectangle, arc, cercle.
     pub forme_mur: crate::dessin::dao::OutilDessin,
-    ajout_creation: Option<crate::modele::creation::ListeCreation>,
+    ajout_creation: Option<modele::creation::ListeCreation>,
     nom_creation: String,
     jeu_creation: String,
     erreur_creation: Option<String>,
@@ -513,11 +513,11 @@ pub struct RubanEdition {
     /// Niveau des prochaines dalles (None : le premier).
     pub niveau_dalle: Option<String>,
     /// Onglet de catégorie ouvert dans le sélecteur de type de mur.
-    categorie_mur: Option<crate::modele::CategorieMur>,
+    categorie_mur: Option<modele::CategorieMur>,
     /// Onglet du sélecteur de type d'ouverture (None : celui du type courant).
-    categorie_ouverture: Option<crate::modele::GenreOuverture>,
+    categorie_ouverture: Option<modele::GenreOuverture>,
     /// Type de mur du gabarit choisi, à copier dans le projet.
-    type_mur_gabarit: Option<crate::modele::gabarit::TypeGabarit>,
+    type_mur_gabarit: Option<modele::gabarit::TypeGabarit>,
     /// Toiture : arêtes tracées sans pente (toiture plate).
     toiture_plate: bool,
     /// Tracé des dalles par deux coins (sinon polygone).
@@ -525,7 +525,7 @@ pub struct RubanEdition {
     pub forme_dalle: crate::dessin::dao::OutilDessin,
     /// Type prédéfini choisi pour chaque sorte d'élément horizontal (indice).
     type_surface: BTreeMap<Outil, usize>,
-    surface_identique: Option<(Outil, crate::modele::TypeCompose)>,
+    surface_identique: Option<(Outil, modele::TypeCompose)>,
     /// Type composé en cours d'édition (fenêtre « Type de mur »).
     editeur_type: Option<EditeurType>,
     /// Matériau dont la fenêtre doit s'ouvrir (double-clic dans l'éditeur de type).
@@ -538,10 +538,10 @@ struct EditeurType {
     /// None : nouveau type.
     id: Option<String>,
     nom: String,
-    categorie: crate::modele::CategorieMur,
-    couches: Vec<crate::modele::Couche>,
+    categorie: modele::CategorieMur,
+    couches: Vec<modele::Couche>,
     /// Matériaux du projet et ceux ajoutés dans l'éditeur (couleur, motif).
-    materiaux: Vec<crate::modele::Materiau>,
+    materiaux: Vec<modele::Materiau>,
     erreur: Option<String>,
     /// Couche en cours de glisser-déposer.
     glisse: Option<usize>,
@@ -675,8 +675,8 @@ impl RubanEdition {
         self.selection = Some(Outil::VueCoupe);
         self.coupe_identique = None;
     }
-    pub(crate) fn coupe_identique(&mut self, vue: &crate::modele::Vue) -> Result<(), String> {
-        let crate::modele::GenreVue::Coupe { profondeur, elevation, .. } = vue.genre else { return Err("Sélectionnez une coupe ou une élévation.".into()) };
+    pub(crate) fn coupe_identique(&mut self, vue: &modele::Vue) -> Result<(), String> {
+        let modele::GenreVue::Coupe { profondeur, elevation, .. } = vue.genre else { return Err("Sélectionnez une coupe ou une élévation.".into()) };
         let types = types_coupe();
         self.type_coupe = types.iter().position(|t| t.nom == vue.type_vue && t.elevation == elevation).or_else(|| types.iter().position(|t| t.elevation == elevation)).unwrap_or(0);
         self.selection = Some(Outil::VueCoupe);
@@ -743,7 +743,7 @@ impl RubanEdition {
 
     /// Palette de l'outil Vue en plan : un bouton par niveau (plans existants
     /// indiqués). Retourne le niveau et la hauteur de coupe (mm) du plan à créer.
-    pub fn proprietes_vues(&mut self, ui: &mut egui::Ui, projet: Option<&crate::modele::Projet>) -> Option<Option<(String, f64)>> {
+    pub fn proprietes_vues(&mut self, ui: &mut egui::Ui, projet: Option<&modele::Projet>) -> Option<Option<(String, f64)>> {
         match self.selection {
             Some(Outil::VuePlan) => {}
             Some(Outil::VueCoupe) => {
@@ -767,7 +767,7 @@ impl RubanEdition {
         let mut choix = None;
         egui::Grid::new("niveaux_vues_plan").num_columns(3).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
             for n in &projet.niveaux {
-                let plans = projet.vues.iter().filter(|v| matches!(&v.genre, crate::modele::GenreVue::Plan { niveau, .. } if niveau == &n.id)).count();
+                let plans = projet.vues.iter().filter(|v| matches!(&v.genre, modele::GenreVue::Plan { niveau, .. } if niveau == &n.id)).count();
                 ui.label(&n.nom);
                 ui.label(RichText::new(match plans { 0 => "aucun plan".to_string(), 1 => "1 plan".to_string(), k => format!("{k} plans") }).small().weak());
                 if ui.button("Créer").on_hover_text("Créer le plan d'étage de ce niveau et l'ouvrir").clicked() {
@@ -784,7 +784,7 @@ impl RubanEdition {
 
     /// Paramètres de l'élément horizontal à tracer (dalle, sol, plafond, toiture), si
     /// cet outil est actif.
-    pub fn dalle_active(&self) -> Option<crate::modele::creation::ParametresDalle> {
+    pub fn dalle_active(&self) -> Option<modele::creation::ParametresDalle> {
         let outil = self.selection?;
         let sorte = sorte_surface(outil)?;
         let types = types_surface(outil);
@@ -797,12 +797,12 @@ impl RubanEdition {
         let pente = match outil {
             Outil::Toiture => (!self.toiture_plate).then(|| nombre(2)),
             // talus de toutes les arêtes tracées (hauteur / base)
-            Outil::TerrePlein => crate::modele::elements::terre_plein::depuis_pourcentage(&self.texte_option(outil, 2)),
+            Outil::TerrePlein => modele::elements::terre_plein::depuis_pourcentage(&self.texte_option(outil, 2)),
             _ => None,
         };
-        Some(crate::modele::creation::ParametresDalle {
+        Some(modele::creation::ParametresDalle {
             sorte,
-            type_dalle: self.surface_identique.as_ref().filter(|(o,_)| *o == outil).map(|(_,t)| t.clone()).unwrap_or_else(|| crate::modele::TypeCompose { id: String::new(), nom, couches, categorie: None, couches_detaillees: true, origine: None }),
+            type_dalle: self.surface_identique.as_ref().filter(|(o,_)| *o == outil).map(|(_,t)| t.clone()).unwrap_or_else(|| modele::TypeCompose { id: String::new(), nom, couches, categorie: None, couches_detaillees: true, origine: None }),
             pente,
             niveau: self.niveau_dalle.clone(),
             decalage: nombre(1),
@@ -843,8 +843,8 @@ impl RubanEdition {
         self.selection.is_some()
     }
     /// Outil d'élément horizontal de la sorte, type courant de la sorte.
-    pub fn activer_surface(&mut self, sorte: crate::modele::SorteDalle) {
-        use crate::modele::SorteDalle;
+    pub fn activer_surface(&mut self, sorte: modele::SorteDalle) {
+        use modele::SorteDalle;
         self.surface_identique = None;
         let o = match sorte {
             SorteDalle::Dalle => Outil::Dalle,
@@ -857,19 +857,19 @@ impl RubanEdition {
         if o != Outil::TerrePlein { self.derniere_surface = Some(o); }
     }
 
-    pub(crate) fn surface_identique(&mut self, p: &crate::modele::Projet, d: &crate::modele::Dalle) -> Result<(), String> {
+    pub(crate) fn surface_identique(&mut self, p: &modele::Projet, d: &modele::Dalle) -> Result<(), String> {
         let type_dalle = p.type_dalle(&d.type_dalle).ok_or("Type de l'élément introuvable.")?.clone();
         let pentes: Vec<_> = d.pentes.iter().flatten().copied().collect();
         if !pentes.is_empty() && pentes.iter().any(|x| *x != pentes[0]) { return Err("Créer à l'identique ne prend pas encore en charge les pentes différentes par arête.".into()); }
         let pente = pentes.first().copied().flatten();
-        if pente.is_some() && !matches!(d.sorte, crate::modele::SorteDalle::Toiture | crate::modele::SorteDalle::TerrePlein) { return Err("Créer à l'identique ne prend pas encore en charge cette pente.".into()); }
+        if pente.is_some() && !matches!(d.sorte, modele::SorteDalle::Toiture | modele::SorteDalle::TerrePlein) { return Err("Créer à l'identique ne prend pas encore en charge cette pente.".into()); }
         self.activer_surface(d.sorte);
         let outil = self.selection.unwrap();
         self.surface_identique = Some((outil, type_dalle));
         self.niveau_dalle = Some(d.niveau.clone());
         self.valeurs.insert((outil, 1), Valeur::Nombre(d.decalage));
         if outil == Outil::TerrePlein {
-            let nom = pente.map_or("Sans talus".to_string(), crate::modele::elements::terre_plein::libelle_court);
+            let nom = pente.map_or("Sans talus".to_string(), modele::elements::terre_plein::libelle_court);
             self.valeurs.insert((outil, 2), Valeur::Texte(nom));
         } else if let Some(pente) = pente { self.valeurs.insert((outil, 2), Valeur::Nombre(pente)); }
         self.toiture_plate = pente.is_none();
@@ -878,7 +878,7 @@ impl RubanEdition {
     }
 
     pub fn activer_dalle(&mut self) {
-        self.activer_surface(crate::modele::SorteDalle::Dalle);
+        self.activer_surface(modele::SorteDalle::Dalle);
     }
 
     /// Choisit le type de la sorte active par son nom (gabarit).
@@ -904,22 +904,22 @@ impl RubanEdition {
     }
 
     pub(crate) fn activer_outil(&mut self, outil: Outil) { self.selection = Some(outil); }
-    pub(crate) fn mur_identique(&mut self, projet: &crate::modele::Projet, mur: &crate::modele::Mur) -> Result<(), String> {
+    pub(crate) fn mur_identique(&mut self, projet: &modele::Projet, mur: &modele::Mur) -> Result<(), String> {
         let (bas, haut) = projet.bas_haut(mur).ok_or("Contraintes du mur invalides.")?;
         self.selection = Some(Outil::Mur);
         self.type_mur = Some(mur.assemblage.as_ref().and_then(|id| projet.assemblage(id)).map_or_else(|| mur.type_mur.clone(), |a| a.type_mur.clone()));
         self.niveau_mur = Some(mur.niveau.clone());
         self.valeurs.insert((Outil::Mur, 1), Valeur::Nombre(haut-bas));
         self.valeurs.insert((Outil::Mur, 3), Valeur::Nombre(mur.decalage_bas));
-        match &mur.haut { crate::modele::Haut::Niveau { niveau, decalage } => { self.niveau_haut_mur = Some(niveau.clone()); self.decalage_haut_mur = *decalage; }, crate::modele::Haut::Libre { .. } => { self.niveau_haut_mur = None; self.decalage_haut_mur = 0.0; } }
+        match &mur.haut { modele::Haut::Niveau { niveau, decalage } => { self.niveau_haut_mur = Some(niveau.clone()); self.decalage_haut_mur = *decalage; }, modele::Haut::Libre { .. } => { self.niveau_haut_mur = None; self.decalage_haut_mur = 0.0; } }
         self.phase_creation = mur.phase.clone(); self.sous_projet_creation = mur.sous_projet.clone(); self.variante_creation = mur.variante.clone();
         Ok(())
     }
-    pub(crate) fn ouverture_identique(&mut self, o: &crate::modele::Ouverture) -> Result<(), String> {
+    pub(crate) fn ouverture_identique(&mut self, o: &modele::Ouverture) -> Result<(), String> {
         if o.representation.is_some() { return Err("Cette menuiserie importée ne peut pas encore être créée à l'identique.".into()); }
         self.ouverture_type_identique = o.type_ouverture.clone();
         self.selection = Some(Outil::Ouverture);
-        self.valeurs.insert((Outil::Ouverture, 0), Valeur::Texte(match o.genre { crate::modele::GenreOuverture::Porte => "Porte", crate::modele::GenreOuverture::Fenetre => "Fenêtre", crate::modele::GenreOuverture::Libre => "Libre" }.into()));
+        self.valeurs.insert((Outil::Ouverture, 0), Valeur::Texte(match o.genre { modele::GenreOuverture::Porte => "Porte", modele::GenreOuverture::Fenetre => "Fenêtre", modele::GenreOuverture::Libre => "Libre" }.into()));
         for (i,v) in [(1,o.largeur), (2,o.hauteur), (3,o.allege)] { self.valeurs.insert((Outil::Ouverture,i), Valeur::Nombre(v)); }
         Ok(())
     }
@@ -937,8 +937,8 @@ impl RubanEdition {
         self.ouverture_type_identique = None;
         self.selection = None;
     }
-    pub fn parametres_mur(&self) -> crate::modele::creation::ParametresMur {
-        use crate::modele::creation::{Implantation, ParametresMur};
+    pub fn parametres_mur(&self) -> modele::creation::ParametresMur {
+        use modele::creation::{Implantation, ParametresMur};
         let nombre = |k, defaut| match self.valeurs.get(&(Outil::Mur, k)) {
             Some(Valeur::Nombre(v)) => *v,
             _ => defaut,

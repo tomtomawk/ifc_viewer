@@ -376,7 +376,7 @@ impl ViewerApp {
             }
             "type_mur" => {
                 // type_mur <nom>|<matériau>:<épaisseur mm>[:structure|isolation|finition]|… (extérieur → intérieur)
-                use crate::modele::{Couche, FonctionCouche};
+                use modele::{Couche, FonctionCouche};
                 let mut parties = argument.split('|');
                 let nom = parties.next().unwrap_or("").trim().to_string();
                 let couches: Option<Vec<Couche>> = parties.map(|c| {
@@ -473,7 +473,7 @@ impl ViewerApp {
             }
             "feuilles" => {
                 let Some((p, _)) = &self.natif else { return erreur("aucun projet natif") };
-                let jeux: Vec<_> = crate::modele::documentation::jeux(p).into_iter().map(|nom| {
+                let jeux: Vec<_> = modele::documentation::jeux(p).into_iter().map(|nom| {
                     let feuilles: Vec<_> = p.feuilles.iter().filter(|f| f.jeu == nom).collect();
                     serde_json::json!({"nom": nom, "feuilles": feuilles})
                 }).collect();
@@ -484,7 +484,7 @@ impl ViewerApp {
                 let Some((p, _)) = &self.natif else { return erreur("aucun projet natif") };
                 let jeu = a.get("jeu").and_then(|v| v.as_str()).map(str::to_string).or_else(|| self.jeu_actif());
                 let Some(jeu) = jeu else { return erreur("indiquer le nom du jeu") };
-                if !crate::modele::documentation::jeux(p).contains(&jeu) { return erreur("jeu introuvable") }
+                if !modele::documentation::jeux(p).contains(&jeu) { return erreur("jeu introuvable") }
                 let fid = a.get("feuille").and_then(|v| v.as_str()).map(str::to_string);
                 let vue = if let Some(v) = a.get("vue") {
                     let Some(i) = v.as_u64().and_then(|n| usize::try_from(n).ok()) else { return erreur("vue doit être un indice entier positif") };
@@ -508,7 +508,7 @@ impl ViewerApp {
                         None => return erreur("feuille sélectionnée introuvable"),
                     },
                     feuilles::SelectionFeuille::Cartouche(id) => match p.feuilles.iter().find(|f| &f.id == id && f.jeu == jeu) {
-                        Some(_) => serde_json::json!({"type":"cartouche", "feuille":id, "famille_cartouche": crate::modele::documentation::famille_cartouche(p, id).map_or("Cartouche standard", |f| f.nom.as_str())}),
+                        Some(_) => serde_json::json!({"type":"cartouche", "feuille":id, "famille_cartouche": modele::documentation::famille_cartouche(p, id).map_or("Cartouche standard", |f| f.nom.as_str())}),
                         None => return erreur("feuille du cartouche introuvable"),
                     },
                     feuilles::SelectionFeuille::Vue(id, i) => match p.feuilles.iter().find(|f| &f.id == id && f.jeu == jeu) {
@@ -649,7 +649,7 @@ impl ViewerApp {
                 let mut v = serde_json::to_value(&self.ciel).unwrap_or_default();
                 if !argument.trim().is_empty() {
                     let Ok(serde_json::Value::Object(m)) = serde_json::from_str::<serde_json::Value>(argument) else { return erreur("usage : ciel {objet JSON des réglages}") };
-                    if let Some(a) = m.get("ambiance").and_then(|a| serde_json::from_value::<crate::modele::soleil::AmbianceCiel>(a.clone()).ok()) {
+                    if let Some(a) = m.get("ambiance").and_then(|a| serde_json::from_value::<modele::soleil::AmbianceCiel>(a.clone()).ok()) {
                         let mut c = self.ciel.clone();
                         a.appliquer(&mut c);
                         v = serde_json::to_value(&c).unwrap_or_default();
@@ -673,7 +673,7 @@ impl ViewerApp {
                 let [jour, mois, heure] = v[..] else { return erreur("usage : soleil [jour mois heure]") };
                 if !(1.0..=12.0).contains(&mois) || !(0.0..24.0).contains(&heure) { return erreur("soleil : mois 1 à 12, heure 0 à 24"); }
                 self.soleil_mois = mois as u32;
-                self.soleil_jour = (jour as u32).clamp(1, crate::modele::soleil::jours_du_mois(self.soleil_mois));
+                self.soleil_jour = (jour as u32).clamp(1, modele::soleil::jours_du_mois(self.soleil_mois));
                 self.soleil_heure = heure as f32;
                 self.enregistrer_rendu_vue();
                 let (az, h) = self.position_soleil();
@@ -748,7 +748,7 @@ impl ViewerApp {
             "exporter_jeu" => {
                 // exporter_jeu <chemin.pdf> [jeu] : jeu ouvert, sinon le premier
                 let (chemin, jeu) = argument.trim().split_once(' ').map_or((argument.trim(), None), |(c, j)| (c, Some(j.trim().to_string())));
-                let jeu = jeu.or_else(|| self.jeu_actif()).or_else(|| self.natif.as_ref().and_then(|(p, _)| crate::modele::documentation::jeux(p).into_iter().next()));
+                let jeu = jeu.or_else(|| self.jeu_actif()).or_else(|| self.natif.as_ref().and_then(|(p, _)| modele::documentation::jeux(p).into_iter().next()));
                 let Some(jeu) = jeu else { return erreur("aucun jeu de feuilles") };
                 if !chemin.to_lowercase().ends_with(".pdf") {
                     return erreur("usage : exporter_jeu <chemin.pdf> [jeu]");

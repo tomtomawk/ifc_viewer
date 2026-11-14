@@ -121,7 +121,7 @@ impl ViewerApp {
             (c, !ed.contenu_modifie() && ed.contenu.id().is_none())
         } else if let Some(ed) = self.famille.as_ref().filter(|_| self.famille_active) {
             if ed.selection != SelectionFamille::Aucune || !ed.multiple.is_empty() { return; }
-            use crate::modele::famille::modelee::CategorieFamille as C;
+            use modele::famille::modelee::CategorieFamille as C;
             (match ed.famille.categorie { C::Composant => 0, C::Porte => 1, C::Fenetre => 2, C::Profil => 3, C::Cartouche => 4, C::EtiquettePiece => 5 }, ed.type_id.is_none())
         } else { return; };
         let categories = ["Composant", "Porte", "Fenêtre", "Profil", "Cartouche", "Étiquette de pièce"];
@@ -134,7 +134,7 @@ impl ViewerApp {
         }).response.on_hover_text("La catégorie détermine l'utilisation de la famille. Le contenu de ses vues est conservé ; une famille déjà chargée conserve sa catégorie.");
         if choix == actuelle { return; }
         if plane.is_none() {
-            use crate::modele::famille::modelee::CategorieFamille as C;
+            use modele::famille::modelee::CategorieFamille as C;
             if let Some(ed) = self.famille.as_mut().filter(|_| self.famille_active) {
                 ed.famille.categorie = [C::Composant, C::Porte, C::Fenetre, C::Profil, C::Cartouche, C::EtiquettePiece][choix];
                 ed.famille.genre = match ed.famille.categorie { C::Porte => GenreOuverture::Porte, C::Fenetre => GenreOuverture::Fenetre, _ => GenreOuverture::Libre };
@@ -220,7 +220,7 @@ impl ViewerApp {
                     }
                 }
                 "famille_modifier" => {
-                    let f=crate::modele::famille::modelee::FichierFamille::lire(argument)?;
+                    let f=modele::famille::modelee::FichierFamille::lire(argument)?;
                     if f.nom.trim().is_empty() {return Err("Nom de famille vide".into());}
                     let ed=self.famille.as_mut().ok_or("Éditeur fermé")?;
                     f.famille.valider(f.largeur,f.hauteur,f.profondeur)?;
@@ -327,7 +327,7 @@ impl ViewerApp {
     pub(in crate::ui) fn ouvrir_editeur_famille(&mut self, id: &str) {
         let Some((p, _)) = &self.natif else { return };
         let Some(o) = p.ouvertures.iter().find(|o| o.id == id) else { return };
-        let e = crate::modele::volumes::solides::hote(p, &o.mur).map_or(200.0, |h| h.1);
+        let e = modele::volumes::solides::hote(p, &o.mur).map_or(200.0, |h| h.1);
         let t = o.type_ouverture.clone();
         let (l, h, id, g) = (o.largeur, o.hauteur, o.id.clone(), o.genre);
         self.editeur_famille(t, Some(id), l, h, e, g);
@@ -418,12 +418,12 @@ impl ViewerApp {
             self.activer_famille(ordre);
             return;
         }
-        let defaut = crate::modele::elements::composant::type_table();
+        let defaut = modele::elements::composant::type_table();
         let (dans_projet, tc) = match t.as_ref().and_then(|id| self.natif.as_ref().and_then(|(p, _)| p.types_composants.iter().find(|x| &x.id == id))) {
             Some(x) => (true, x.clone()),
             // le type par défaut n'entre dans le projet qu'à son premier placement ou enregistrement
             None if t.as_deref() == Some(defaut.id.as_str()) => (false, defaut),
-            None => (false, crate::modele::TypeComposant { id: String::new(), nom: "Nouveau composant".into(), ..defaut }),
+            None => (false, modele::TypeComposant { id: String::new(), nom: "Nouveau composant".into(), ..defaut }),
         };
         self.editeur_famille(None, None, tc.largeur, tc.hauteur, tc.profondeur, GenreOuverture::Fenetre);
         if let Some(ed) = self.famille.as_mut() {
@@ -431,7 +431,7 @@ impl ViewerApp {
             ed.nom = tc.nom;
             ed.famille = tc.modele;
             ed.famille.genre = GenreOuverture::Libre;
-            ed.famille.categorie = crate::modele::famille::modelee::CategorieFamille::Composant;
+            ed.famille.categorie = modele::famille::modelee::CategorieFamille::Composant;
             if dans_projet { ed.marquer_enregistree(); } else { ed.reference.0 = String::new(); }
             ed.historique_neuf();
         }
@@ -449,11 +449,11 @@ impl ViewerApp {
             return Err("Cette famille a été ouverte depuis un autre projet : revenir à ce projet pour la charger.".into());
         }
         ed.famille.valider(ed.largeur, ed.hauteur, ed.epaisseur)?;
-        if ed.famille.categorie == crate::modele::famille::modelee::CategorieFamille::Cartouche {
-            use crate::modele::documentation::FamilleCartouche;
+        if ed.famille.categorie == modele::famille::modelee::CategorieFamille::Cartouche {
+            use modele::documentation::FamilleCartouche;
             let p = &self.natif.as_ref().ok_or("Aucun projet natif.")?.0;
             let id = if nouveau { None } else { ed.type_id.clone() };
-            let original = id.as_ref().and_then(|id| p.familles_cartouches.iter().find(|c| &c.id == id)).map_or_else(|| if id.is_some() && ed.nom == crate::modele::documentation::NOM_CARTOUCHE_STANDARD { ed.nom.clone() } else { String::new() }, |c| c.nom.clone());
+            let original = id.as_ref().and_then(|id| p.familles_cartouches.iter().find(|c| &c.id == id)).map_or_else(|| if id.is_some() && ed.nom == modele::documentation::NOM_CARTOUCHE_STANDARD { ed.nom.clone() } else { String::new() }, |c| c.nom.clone());
             let id = id.unwrap_or_else(noyau::uuid::uuid);
             let fichier = ed.fichier();
             let cartouche = FamilleCartouche { id: id.clone(), nom: ed.nom.trim().into(), largeur: ed.largeur, hauteur: ed.hauteur, traits: Vec::new(), textes: Vec::new(), formes: Vec::new(), document_famille: Some(Box::new(fichier)) };
@@ -468,8 +468,8 @@ impl ViewerApp {
             self.status = "Famille de cartouche chargée dans le projet.".into();
             return Ok(id);
         }
-        if ed.famille.categorie == crate::modele::famille::modelee::CategorieFamille::EtiquettePiece {
-            use crate::modele::documentation::FamilleEtiquette;
+        if ed.famille.categorie == modele::famille::modelee::CategorieFamille::EtiquettePiece {
+            use modele::documentation::FamilleEtiquette;
             let id = if nouveau { String::new() } else { ed.type_id.clone().unwrap_or_default() };
             let fichier = ed.fichier();
             let famille = FamilleEtiquette { id: id.clone(), nom: ed.nom.trim().into(), traits: Vec::new(), textes: Vec::new(), formes: Vec::new(), document_famille: Some(Box::new(fichier)) };
@@ -483,8 +483,8 @@ impl ViewerApp {
             }
             return Ok(id);
         }
-        if ed.famille.categorie == crate::modele::famille::modelee::CategorieFamille::Profil {
-            use crate::modele::famille::profil::Profil;
+        if ed.famille.categorie == modele::famille::modelee::CategorieFamille::Profil {
+            use modele::famille::profil::Profil;
             let id = if nouveau { None } else { ed.type_id.clone() };
             let fichier = ed.fichier();
             let mut profil = Profil { id: id.clone().unwrap_or_default(), nom: ed.nom.trim().into(), parametres: Vec::new(), contour: Vec::new(), document_famille: Some(Box::new(fichier)) };
@@ -502,7 +502,7 @@ impl ViewerApp {
         if ed.famille.genre == GenreOuverture::Libre {
             // famille de composant : son type (créé ou mis à jour), donc tous ses composants
             let id = if nouveau { String::new() } else { ed.type_id.clone().unwrap_or_default() };
-            let t = crate::modele::TypeComposant { id, nom: ed.nom.trim().into(), largeur: ed.largeur, profondeur: ed.epaisseur, hauteur: ed.hauteur, modele: ed.famille.clone() };
+            let t = modele::TypeComposant { id, nom: ed.nom.trim().into(), largeur: ed.largeur, profondeur: ed.epaisseur, hauteur: ed.hauteur, modele: ed.famille.clone() };
             let id = self.executer_bim(crate::edition::commandes::Commande::TypeComposant { type_composant: t })?.into_iter().next().unwrap_or_default();
             if let Some(ed) = self.famille.as_mut() {
                 ed.type_id = Some(id.clone());
@@ -515,7 +515,7 @@ impl ViewerApp {
         }
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
         let cible=ed.type_id.as_deref().filter(|_|!nouveau);
-        let fichier=crate::modele::famille::modelee::FichierFamille{format:crate::modele::famille::modelee::FORMAT_FAMILLE.into(),nom:ed.nom.clone(),largeur:ed.largeur,hauteur:ed.hauteur,profondeur:ed.epaisseur,famille:ed.famille.clone()};
+        let fichier=modele::famille::modelee::FichierFamille{format:modele::famille::modelee::FORMAT_FAMILLE.into(),nom:ed.nom.clone(),largeur:ed.largeur,hauteur:ed.hauteur,profondeur:ed.epaisseur,famille:ed.famille.clone()};
         let modifies: BTreeMap<String, f64> = ed.partages.iter().filter(|(k, v)| ed.partages_origine.get(*k) != Some(*v)).map(|(k, v)| (k.clone(), *v)).collect();
         let conflits = ed.famille.resoudre(ed.largeur, ed.hauteur, ed.epaisseur).conflits.len();
         let (q,id)=p.avec_famille(cible,ed.ouverture.as_deref(),&fichier,ed.epaisseur,modifies)?;
@@ -649,7 +649,7 @@ impl ViewerApp {
 
     pub(in crate::ui) fn vue_famille(&mut self, ui: &mut egui::Ui) {
         if self.famille.as_ref().is_some_and(|ed| ed.vue_3d) { self.vue_3d_famille(ui); return; }
-        let projet_vide = crate::modele::Projet::default();
+        let projet_vide = modele::Projet::default();
         let delai_accrochage = self.options.delai_accrochage;
         let projet = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
         let Some(ed) = self.famille.as_mut() else { return };
@@ -690,7 +690,7 @@ impl ViewerApp {
     /// projet et fichier.
     pub(in crate::ui) fn proprietes_famille(&mut self, ui: &mut egui::Ui) {
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés de la famille");
-        let projet_vide = crate::modele::Projet::default();
+        let projet_vide = modele::Projet::default();
         let projet = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
         let Some(ed) = self.famille.as_mut() else { return };
         let bas = 40.0;
@@ -810,7 +810,7 @@ impl ViewerApp {
         self.editeur_famille(None, None, fichier.largeur, fichier.hauteur, fichier.profondeur, fichier.famille.genre);
         if let Some(ed) = self.famille.as_mut() {
             ed.nom = fichier.nom; ed.famille = fichier.famille;
-            if matches!(ed.famille.categorie, crate::modele::famille::modelee::CategorieFamille::Profil | crate::modele::famille::modelee::CategorieFamille::Cartouche | crate::modele::famille::modelee::CategorieFamille::EtiquettePiece) { ed.ouvrir_vue(VueFamille::Plan); }
+            if matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Profil | modele::famille::modelee::CategorieFamille::Cartouche | modele::famille::modelee::CategorieFamille::EtiquettePiece) { ed.ouvrir_vue(VueFamille::Plan); }
             ed.document_famille.autonome = id.is_none(); ed.type_id = id;
             ed.marquer_enregistree(); ed.historique_neuf();
         }
@@ -824,11 +824,11 @@ impl ViewerApp {
             return Ok(());
         }
         let texte = std::fs::read_to_string(chemin).map_err(|e| format!("{} : {e}", chemin.display()))?;
-        let f = crate::modele::famille::modelee::FichierFamille::lire(&texte)?;
+        let f = modele::famille::modelee::FichierFamille::lire(&texte)?;
         self.editeur_famille(None, None, f.largeur, f.hauteur, f.profondeur, f.famille.genre);
         let ed = self.famille.as_mut().ok_or("Aucun projet natif.")?;
         (ed.nom, ed.famille) = (f.nom, f.famille);
-        if matches!(ed.famille.categorie, crate::modele::famille::modelee::CategorieFamille::Profil | crate::modele::famille::modelee::CategorieFamille::Cartouche | crate::modele::famille::modelee::CategorieFamille::EtiquettePiece) { ed.ouvrir_vue(VueFamille::Plan); }
+        if matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Profil | modele::famille::modelee::CategorieFamille::Cartouche | modele::famille::modelee::CategorieFamille::EtiquettePiece) { ed.ouvrir_vue(VueFamille::Plan); }
         ed.document_famille.autonome = true;
         ed.document_famille.chemin_fichier = Some(chemin.to_path_buf());
         ed.marquer_enregistree();
@@ -838,7 +838,7 @@ impl ViewerApp {
 
     /// Charge un fichier de famille dans le projet : un nouveau type (nom rendu unique).
     pub(in crate::ui) fn charger_famille_fichier(&mut self, chemin: &std::path::Path) -> Result<String, String> {
-        use crate::modele::famille::modelee::CategorieFamille as C;
+        use modele::famille::modelee::CategorieFamille as C;
         let texte = std::fs::read_to_string(chemin).map_err(|e| format!("{} : {e}", chemin.display()))?;
         let mut f = FichierFamille::lire(&texte)?;
         if f.nom.trim().is_empty() { return Err("Nom de famille vide.".into()); }
@@ -847,35 +847,35 @@ impl ViewerApp {
             C::Porte | C::Fenetre => p.types_ouvertures.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
             C::Composant => p.types_composants.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
             C::Profil => p.profils.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
-            C::Cartouche => nom.eq_ignore_ascii_case(crate::modele::documentation::NOM_CARTOUCHE_STANDARD) || p.familles_cartouches.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
+            C::Cartouche => nom.eq_ignore_ascii_case(modele::documentation::NOM_CARTOUCHE_STANDARD) || p.familles_cartouches.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
             C::EtiquettePiece => nom.eq_ignore_ascii_case("Étiquette standard") || p.familles_etiquettes.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
         };
         let base = f.nom.trim().to_string();
         f.nom = (1..).map(|k| if k == 1 { base.clone() } else { format!("{base} ({k})") }).find(|n| !existe(n)).unwrap();
         let id = match f.famille.categorie {
             C::Profil => {
-                let mut profil = crate::modele::famille::profil::Profil { id: String::new(), nom: f.nom.clone(), parametres: Vec::new(), contour: Vec::new(), document_famille: Some(Box::new(f.clone())) };
+                let mut profil = modele::famille::profil::Profil { id: String::new(), nom: f.nom.clone(), parametres: Vec::new(), contour: Vec::new(), document_famille: Some(Box::new(f.clone())) };
                 self.enregistrer_profil(&mut profil, None, true)?;
                 profil.id
             }
             C::Cartouche => {
                 let id = noyau::uuid::uuid();
-                let cartouche = crate::modele::documentation::FamilleCartouche { id: id.clone(), nom: f.nom.clone(), largeur: f.largeur, hauteur: f.hauteur, traits: Vec::new(), textes: Vec::new(), formes: Vec::new(), document_famille: Some(Box::new(f.clone())) };
+                let cartouche = modele::documentation::FamilleCartouche { id: id.clone(), nom: f.nom.clone(), largeur: f.largeur, hauteur: f.hauteur, traits: Vec::new(), textes: Vec::new(), formes: Vec::new(), document_famille: Some(Box::new(f.clone())) };
                 self.enregistrer_cartouche(&cartouche, None, "")?;
                 id
             }
             C::EtiquettePiece => {
-                let famille = crate::modele::documentation::FamilleEtiquette { id: String::new(), nom: f.nom.clone(), traits: Vec::new(), textes: Vec::new(), formes: Vec::new(), document_famille: Some(Box::new(f.clone())) };
+                let famille = modele::documentation::FamilleEtiquette { id: String::new(), nom: f.nom.clone(), traits: Vec::new(), textes: Vec::new(), formes: Vec::new(), document_famille: Some(Box::new(f.clone())) };
                 self.enregistrer_famille_etiquette(famille, None, "")?
             }
             C::Composant => {
-                let type_composant = crate::modele::TypeComposant { id: String::new(), nom: f.nom.clone(), largeur: f.largeur, profondeur: f.profondeur, hauteur: f.hauteur, modele: f.famille.clone() };
+                let type_composant = modele::TypeComposant { id: String::new(), nom: f.nom.clone(), largeur: f.largeur, profondeur: f.profondeur, hauteur: f.hauteur, modele: f.famille.clone() };
                 self.executer_bim(crate::edition::commandes::Commande::TypeComposant { type_composant })?.into_iter().next().ok_or("Composant non créé.")?
             }
             C::Porte | C::Fenetre => {
                 let mut projet = self.natif.as_ref().unwrap().0.clone();
                 let id = noyau::uuid::uuid();
-                projet.types_ouvertures.push(crate::modele::TypeOuverture { id: id.clone(), nom: f.nom.clone(), genre: f.famille.genre, largeur: f.largeur, hauteur: f.hauteur, famille: None, modele: Some(f.famille.clone()), origine: None, famille_nom: None });
+                projet.types_ouvertures.push(modele::TypeOuverture { id: id.clone(), nom: f.nom.clone(), genre: f.famille.genre, largeur: f.largeur, hauteur: f.hauteur, famille: None, modele: Some(f.famille.clone()), origine: None, famille_nom: None });
                 self.appliquer_projet(projet)?;
                 id
             }
@@ -1025,7 +1025,7 @@ impl ViewerApp {
 
 /// Titre d'onglet d'un éditeur : catégorie, type, « * » si non chargé.
 pub(super) fn titre_editeur(ed: &EditeurFamille) -> String {
-    use crate::modele::famille::modelee::CategorieFamille as C;
+    use modele::famille::modelee::CategorieFamille as C;
     let genre = match ed.famille.categorie { C::Porte => "Porte", C::Fenetre => "Fenêtre", C::Composant => "Composant", C::Profil => "Profil", C::Cartouche => "Cartouche", C::EtiquettePiece => "Étiquette de pièce" };
     format!("{genre} : {}{}", ed.nom, if ed.modifiee() { " *" } else { "" })
 }

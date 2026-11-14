@@ -3,7 +3,7 @@ use super::stockage::*;
 use super::texte::*;
 use super::*;
 use crate::edition::commandes;
-use crate::modele::elements::site;
+use modele::elements::site;
 use std::path::PathBuf;
 
 fn dossier() -> PathBuf {
@@ -40,11 +40,11 @@ fn transaction(a: &Projet, b: &Projet) -> Transaction {
     Transaction::entre(a, b, "poste-a", 0).unwrap()
 }
 fn texte_annotation(p: &mut Projet, id: &str, s: &str) {
-    p.annotations.push(crate::modele::documentation::Annotation {
+    p.annotations.push(modele::documentation::Annotation {
         id: id.into(),
         vue: p.vues[0].id.clone(),
         hauteur: 2.5,
-        forme: crate::modele::documentation::AnnotationForme::Texte {
+        forme: modele::documentation::AnnotationForme::Texte {
             point: [0.0, 0.0],
             texte: s.into(),
         },
@@ -95,7 +95,7 @@ fn objets_independants_et_fusion_explicite_deux_champs() {
     assert_eq!(r.vues[0].type_vue, "Coordination");
     let mut c = p.clone();
     c.quadrillages
-        .push(crate::modele::documentation::Quadrillage {
+        .push(modele::documentation::Quadrillage {
             id: uuid(),
             nom: "Axe".into(),
             debut: [0.0, 0.0],
@@ -129,7 +129,7 @@ fn suppression_hote_observe_ajout_ouverture_et_collection() {
     p.ajouter_mur(
         [0.0, 0.0],
         [5000.0, 0.0],
-        &crate::modele::creation::ParametresMur::default(),
+        &modele::creation::ParametresMur::default(),
     )
     .unwrap();
     let mut sup = p.clone();
@@ -140,7 +140,7 @@ fn suppression_hote_observe_ajout_ouverture_et_collection() {
     let t = Transaction::entre(&p, &sup, "a", 0).unwrap();
     let cmd = crate::edition::commandes::Commande::Ouverture {
         mur: hote,
-        genre: crate::modele::GenreOuverture::Porte,
+        genre: modele::GenreOuverture::Porte,
         type_ouverture: None,
         abscisse: 1000.0,
         largeur: 600.0,
@@ -586,15 +586,15 @@ fn actualisation_assemblage_transporte_couches_et_effets_atomiques() {
     p.ajouter_mur(
         [0.0, 0.0],
         [5000.0, 0.0],
-        &crate::modele::creation::ParametresMur::default(),
+        &modele::creation::ParametresMur::default(),
     )
     .unwrap();
     p.types_murs[0].couches = vec![
-        crate::modele::Couche {
+        modele::Couche {
             epaisseur: 100.0,
             ..Default::default()
         },
-        crate::modele::Couche {
+        modele::Couche {
             epaisseur: 200.0,
             ..Default::default()
         },
@@ -607,7 +607,7 @@ fn actualisation_assemblage_transporte_couches_et_effets_atomiques() {
         .find(|t| t.id == type_id)
         .unwrap()
         .couches
-        .push(crate::modele::Couche {
+        .push(modele::Couche {
             epaisseur: 50.0,
             ..Default::default()
         });
@@ -626,19 +626,19 @@ fn actualisation_assemblage_transporte_couches_et_effets_atomiques() {
 
 #[test]
 fn propagation_famille_valide_instances_et_transporte_tout_le_resultat() {
-    use crate::modele::famille::modelee::*;
+    use modele::famille::modelee::*;
     let mut p = Projet::nouveau("Famille");
     p.ajouter_mur(
         [0.0, 0.0],
         [6000.0, 0.0],
-        &crate::modele::creation::ParametresMur::default(),
+        &modele::creation::ParametresMur::default(),
     )
     .unwrap();
     let mur = p.murs[0].id.clone();
     let (p, ids) = p
         .executer(crate::edition::commandes::Commande::Ouverture {
             mur,
-            genre: crate::modele::GenreOuverture::Porte,
+            genre: modele::GenreOuverture::Porte,
             type_ouverture: None,
             abscisse: 1500.0,
             largeur: 900.0,
@@ -786,7 +786,7 @@ fn annulation_textuelle_locale_restauree_apres_redemarrage() {
     a.synchroniser(None, false).unwrap();
     let pa = attendre(&mut a);
     let mut q = pa.clone();
-    if let crate::modele::documentation::AnnotationForme::Texte { texte, .. } = &mut q
+    if let modele::documentation::AnnotationForme::Texte { texte, .. } = &mut q
         .annotations
         .iter_mut()
         .find(|a| a.id == "texte-durable")
@@ -802,7 +802,7 @@ fn annulation_textuelle_locale_restauree_apres_redemarrage() {
     b.synchroniser(None, false).unwrap();
     let pb = attendre(&mut b);
     let mut q = pb.clone();
-    if let crate::modele::documentation::AnnotationForme::Texte { texte, .. } = &mut q
+    if let modele::documentation::AnnotationForme::Texte { texte, .. } = &mut q
         .annotations
         .iter_mut()
         .find(|a| a.id == "texte-durable")
@@ -826,13 +826,13 @@ fn annulation_textuelle_locale_restauree_apres_redemarrage() {
         .unwrap()
         .forme
     {
-        crate::modele::documentation::AnnotationForme::Texte { texte, .. } => texte,
+        modele::documentation::AnnotationForme::Texte { texte, .. } => texte,
         _ => panic!(),
     };
     assert_eq!(contenu, "B Initial");
     let q = a.annuler(true).unwrap();
     assert!(
-        matches!(&q.annotations.iter().find(|a|a.id=="texte-durable").unwrap().forme,crate::modele::documentation::AnnotationForme::Texte{texte,..} if texte=="B Initial A")
+        matches!(&q.annotations.iter().find(|a|a.id=="texte-durable").unwrap().forme,modele::documentation::AnnotationForme::Texte{texte,..} if texte=="B Initial A")
     );
 }
 
@@ -861,9 +861,9 @@ fn murs_distincts_crees_et_deplaces_hors_connexion_fusionnent_sans_verrou_global
     let mut p = exemple();
     p.figer_references();
     let n = p.niveaux[0].id.clone();
-    let options = crate::modele::creation::ParametresMur {
+    let options = modele::creation::ParametresMur {
         niveau: Some(n),
-        implantation: crate::modele::creation::Implantation::Exterieure,
+        implantation: modele::creation::Implantation::Exterieure,
         ..Default::default()
     };
     let mut a = p.clone();
@@ -969,14 +969,14 @@ fn voisinage_geometrique_et_meme_objet_restent_conflictuels() {
 
 #[test]
 fn premiere_synchro_de_plusieurs_murs_preserve_les_deux_copies_distinctes() {
-    let mut p = Projet::depuis_gabarit("Première synchronisation", &crate::modele::gabarit::Gabarit::defaut());
+    let mut p = Projet::depuis_gabarit("Première synchronisation", &modele::gabarit::Gabarit::defaut());
     p.ajouter_mur([30000.0, 30000.0], [34000.0, 30000.0], &Default::default()).unwrap();
     let root = dossier();
     let entree = root.join("projet.bimpartage");
     partage::creer(&p, &entree).unwrap();
     let (mut a, _, mut sa) = partage::ouvrir(&entree, &root.join("a")).unwrap();
     let (mut b, _, mut sb) = partage::ouvrir(&entree, &root.join("b")).unwrap();
-    let options = crate::modele::creation::ParametresMur {epaisseur:300.0,..Default::default()};
+    let options = modele::creation::ParametresMur {epaisseur:300.0,..Default::default()};
     // Le rectangle englobant du mur diagonal atteint celui du mur vertical,
     // alors que leurs bandes de jonction sont séparées de plus de deux mètres.
     for (debut,fin) in [([-4000.0,-500.0],[0.0,-2500.0]),([-6000.0,-5000.0],[-2000.0,-5000.0]),([2000.0,-5000.0],[6000.0,-5000.0])] {
@@ -1002,7 +1002,7 @@ fn premiere_synchro_de_plusieurs_murs_preserve_les_deux_copies_distinctes() {
 
 #[test]
 fn conflit_reel_preserve_les_murs_locaux_a_lecran_et_apres_reouverture() {
-    let p=Projet::depuis_gabarit("Conflit local",&crate::modele::gabarit::Gabarit::defaut());
+    let p=Projet::depuis_gabarit("Conflit local",&modele::gabarit::Gabarit::defaut());
     let root=dossier();let entree=root.join("projet.bimpartage");
     partage::creer(&p,&entree).unwrap();
     let (a,_,mut sa)=partage::ouvrir(&entree,&root.join("a")).unwrap();
@@ -1058,7 +1058,7 @@ fn historique_spatial_protocole_deux_reste_verifiable_apres_mise_a_jour() {
 
 #[test]
 fn creations_independantes_barres_escaliers_gardes_terrains_importes_et_types() {
-    use crate::modele::*;
+    use modele::*;
     let mut p = exemple();
     p.figer_references();
     let niveau = p.niveaux[0].id.clone();
@@ -1245,7 +1245,7 @@ fn creations_independantes_barres_escaliers_gardes_terrains_importes_et_types() 
 
 #[test]
 fn ouverture_sur_deux_hotes_distincts_et_dalles_independantes() {
-    use crate::modele::*;
+    use modele::*;
     let mut p = exemple();
     let h1 = p
         .ajouter_mur([20000.0, 0.0], [25000.0, 0.0], &Default::default())
@@ -1372,7 +1372,7 @@ fn abandon_refuse_pendant_synchro_et_retire_de_l_annulation() {
 
 #[test]
 fn toutes_les_collections_du_projet_ont_une_politique() {
-    let source = include_str!("../modele/mod.rs");
+    let source = include_str!("../../../modele/src/lib.rs");
     let projet = source.split("pub struct Projet {").nth(1).unwrap().split("\n}").next().unwrap();
     let champs: std::collections::BTreeSet<_> = projet.lines().filter_map(|l| {
         let l = l.trim().strip_prefix("pub ")?;

@@ -202,7 +202,7 @@ mod tests {
     }
     #[test]
     fn fenetre_croisement_visibilite_et_coupe() {
-        use crate::modele::{Barre, GenreBarre, Niveau, Projet};
+        use modele::{Barre, GenreBarre, Niveau, Projet};
         let mut p = Projet::nouveau("test");
         p.niveaux.push(Niveau {
             id: "n".into(),

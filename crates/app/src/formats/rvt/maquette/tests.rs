@@ -15,13 +15,13 @@ fn couches_projet1_lecture_et_conversion() {
         let total: f64 = t.couches.as_ref().unwrap().iter().map(|c| c.epaisseur).sum();
         assert!((total-t.epaisseur.unwrap()).abs() < 1e-6);
     }
-    let mut c = crate::modele::Conversion::default();
-    c.projet = crate::modele::Projet::nouveau("Test couches");
-    c.projet.sources.push(crate::modele::source("s1", &p, "RVT"));
+    let mut c = modele::Conversion::default();
+    c.projet = modele::Projet::nouveau("Test couches");
+    c.projet.sources.push(modele::source("s1", &p, "RVT"));
     crate::echanges::depuis_rvt::convertir_maquette(&m, &mut c);
     let detaillees: Vec<_> = c.projet.types_murs.iter().filter(|t| t.couches_detaillees && t.couches.len() > 1).collect();
     assert!(!detaillees.is_empty(), "couches perdues pendant la conversion");
-    let relu = crate::modele::Projet::lire_json(&c.projet.json().unwrap()).unwrap();
+    let relu = modele::Projet::lire_json(&c.projet.json().unwrap()).unwrap();
     for t in detaillees {
         let q = relu.type_mur(&t.id).unwrap();
         assert_eq!(q.couches.len(),t.couches.len());

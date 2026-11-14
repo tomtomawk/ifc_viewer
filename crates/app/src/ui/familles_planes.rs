@@ -1,6 +1,6 @@
 //! Onglets d'édition des familles 2D du projet.
 use super::*;
-use crate::modele::{documentation as doc, famille::profil::{ParametreProfil, PointProfil, Profil}};
+use modele::{documentation as doc, famille::profil::{ParametreProfil, PointProfil, Profil}};
 
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(super) enum FamillePlane {
@@ -31,7 +31,7 @@ impl FamillePlane {
     fn lire_fichier(texte: &str) -> Result<Self, String> {
         let v: serde_json::Value = serde_json::from_str(texte).map_err(|e| format!("Fichier de famille illisible : {e}"))?;
         match v.get("format").and_then(|x| x.as_str()) {
-            Some("bimedit.profil") => Ok(Self::Profil { profil: crate::modele::famille::profil::FichierProfil::lire(texte)?, original: None }),
+            Some("bimedit.profil") => Ok(Self::Profil { profil: modele::famille::profil::FichierProfil::lire(texte)?, original: None }),
             Some("bimedit.cartouche") => {
                 let mut famille: doc::FamilleCartouche = serde_json::from_value(v.get("famille").cloned().ok_or("Cartouche absent")?).map_err(|e| e.to_string())?;
                 famille.id = noyau::uuid::uuid();
@@ -215,7 +215,7 @@ impl ViewerApp {
         let rect = ui.available_rect_before_wrap();
         if rect.is_positive() { self.rect_vue = rect; }
         if let FamillePlane::Cartouche { famille, .. } = &mut ed.contenu {
-            let projet_vide = crate::modele::Projet::nouveau("Famille");
+            let projet_vide = modele::Projet::nouveau("Famille");
             let p = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
             let rect = ed.cartouche.canevas(ui, p, famille, self.options.delai_accrochage);
             if rect.is_positive() { self.rect_vue = rect; }
@@ -244,7 +244,7 @@ impl ViewerApp {
 
     pub(super) fn panneau_famille_plane(&mut self, ui: &mut egui::Ui, panneau: Panneau) {
         self.entete_panneau(ui, panneau, if panneau == Panneau::Proprietes { "Propriétés de la famille" } else { "Arborescence de la famille" });
-        let projet_vide = crate::modele::Projet::nouveau("Famille");
+        let projet_vide = modele::Projet::nouveau("Famille");
         let projet = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
         let Some(ed) = self.famille_plane_active.and_then(|i| self.familles_planes.get_mut(&i)) else { return };
         if panneau == Panneau::Arborescence {
@@ -284,7 +284,7 @@ impl ViewerApp {
         let Some(ordre) = self.famille_plane_active else { return };
         let Some(ed) = self.familles_planes.get_mut(&ordre) else { return };
         if !sortie && matches!(ed.contenu, FamillePlane::Cartouche { .. }) {
-            let projet_vide = crate::modele::Projet::nouveau("Famille");
+            let projet_vide = modele::Projet::nouveau("Famille");
             ed.cartouche.ruban(ui, Some(self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide)));
             return;
         }
@@ -428,7 +428,7 @@ mod tests {
     #[test]
     fn historique_des_trois_categories_annule_et_retablit_un_geste() {
         let familles = [
-            FamillePlane::Profil { profil: crate::modele::gabarit::Gabarit::defaut().profils[0].clone(), original: None },
+            FamillePlane::Profil { profil: modele::gabarit::Gabarit::defaut().profils[0].clone(), original: None },
             FamillePlane::Cartouche { famille: doc::FamilleCartouche::default(), feuille: None, original: String::new() },
             FamillePlane::Etiquette { famille: doc::FamilleEtiquette::standard(), piece: None, original: String::new() },
         ];
@@ -456,7 +456,7 @@ mod tests {
 
     #[test]
     fn fichiers_de_familles_planes_se_rouvrent_sans_projet() {
-        let profil = crate::modele::gabarit::Gabarit::defaut().profils[0].clone();
+        let profil = modele::gabarit::Gabarit::defaut().profils[0].clone();
         let familles = [
             FamillePlane::Profil { profil, original: None },
             FamillePlane::Cartouche { famille: doc::FamilleCartouche::default(), feuille: None, original: String::new() },

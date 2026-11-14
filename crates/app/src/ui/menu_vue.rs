@@ -24,7 +24,7 @@ pub(super) enum ActionMenu {
 }
 
 /// Catégorie d'un élément natif, pour le filtre de sélection.
-pub(super) fn categorie(p: &crate::modele::Projet, id: &str) -> &'static str {
+pub(super) fn categorie(p: &modele::Projet, id: &str) -> &'static str {
     if p.murs.iter().any(|x| x.id == id) || p.assemblage(id).is_some() { "Murs" }
     else if p.dalles.iter().any(|x| x.id == id) { "Dalles" }
     else if p.ouvertures.iter().any(|x| x.id == id) { "Ouvertures" }

@@ -1,7 +1,7 @@
 //! Tests déplacés de `modele/creation.rs` (`mod tests`) : ils appellent du code situé au-dessus
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
-use crate::modele::*;
-use crate::modele::creation::*;
+use modele::*;
+use modele::creation::*;
 
 #[test]
 fn mur_contraintes_phases_et_sous_projets_persistes() {
@@ -70,7 +70,7 @@ fn dalle_creation_contour_et_relecture() {
 
 #[test]
 fn plafond_et_toiture_en_pente() {
-    let g = crate::modele::gabarit::Gabarit::defaut();
+    let g = modele::gabarit::Gabarit::defaut();
     let mut p = Projet::depuis_gabarit("Toit", &g);
     assert_eq!(p.types_murs.len(), g.types_murs.len());
     assert_eq!(p.niveaux.len(), 1);

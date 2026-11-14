@@ -169,7 +169,7 @@ impl ViewerApp {
             }
         };
         if let Some(v) = self.vue_native_id().and_then(|id| p.vues.iter().find(|v| v.id == id)) {
-            let (o,u,h)=crate::modele::documentation::repere(p,v);
+            let (o,u,h)=modele::documentation::repere(p,v);
             let point=|a:DVec2| (o+u*a.x+h*a.y).truncate();
             for a in p.annotations.iter().filter(|a|a.vue==v.id && !v.elements_masques.contains(&a.id)) {
                 let Some(f)=a.forme.forme_2d() else {continue};
@@ -216,7 +216,7 @@ impl ViewerApp {
     pub(in crate::ui) fn niveau_trace(&self) -> Option<String> {
         let (p, _) = self.natif.as_ref()?;
         let vue = self.vue_native_id().and_then(|id| p.vues.iter().find(|v| v.id == id));
-        if let Some(crate::modele::GenreVue::Plan { niveau, .. }) = vue.map(|v| &v.genre) {
+        if let Some(modele::GenreVue::Plan { niveau, .. }) = vue.map(|v| &v.genre) {
             return Some(niveau.clone());
         }
         p.niveaux.iter().min_by(|a, b| a.altitude.total_cmp(&b.altitude)).map(|n| n.id.clone())

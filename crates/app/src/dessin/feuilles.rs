@@ -2,7 +2,7 @@
 //! mise en page sur feuille, export SVG et PDF.
 use super::plans::{fond_plan, limite_haute_plan, pointilles_plage_haute};
 use super::{Poche, cadrer_primitives, coupe, vu};
-use crate::modele::documentation::*;
+use modele::documentation::*;
 use crate::rendu::scene::{depuis_natif, id_natif, numero_vue};
 use glam::{DVec2, DVec3};
 use noyau::trace2d::{Dessin, Forme, Primitive};
@@ -138,7 +138,7 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
         .map(|pr| pr.translater(s.origin))
         .collect();
     primitives.extend(annotations(p, v));
-    let primitives = crate::modele::elements::cadrage::decouper(primitives, &v.contour_cadrage)?;
+    let primitives = modele::elements::cadrage::decouper(primitives, &v.contour_cadrage)?;
     Ok(Dessin {
         droite: u,
         haut: h,

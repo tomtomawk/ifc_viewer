@@ -53,7 +53,7 @@ impl ViewerApp {
                     if let Some(d) = v.get("decalage").and_then(Value::as_f64) { c.decalage = d; }
                 }
                 let mut types: Vec<Value> = self.natif.as_ref().map(|(p, _)| p.types_composants.iter().map(|t| json!({"id": t.id, "nom": t.nom})).collect()).unwrap_or_default();
-                let defaut = crate::modele::elements::composant::type_table();
+                let defaut = modele::elements::composant::type_table();
                 if !types.iter().any(|t| t["id"] == defaut.id.as_str()) { types.insert(0, json!({"id": defaut.id, "nom": defaut.nom})); }
                 Ok(json!({"composant": self.bim.composant, "types": types}))
             })());
@@ -113,7 +113,7 @@ impl ViewerApp {
                 if argument.trim().is_empty() {
                     return Err("Chemin de gabarit requis".into());
                 }
-                let g = crate::modele::gabarit::actif();
+                let g = modele::gabarit::actif();
                 let json = serde_json::to_vec_pretty(&*g).map_err(|e| e.to_string())?;
                 crate::echanges::enregistrement::ecrire_atomique(
                     std::path::Path::new(argument.trim().trim_matches('"')),
@@ -186,7 +186,7 @@ impl ViewerApp {
                         .or_else(|| self.jeu_actif())
                         .or_else(|| {
                             self.natif.as_ref().and_then(|(p, _)| {
-                                crate::modele::documentation::jeux(p).into_iter().next()
+                                modele::documentation::jeux(p).into_iter().next()
                             })
                         })
                         .ok_or("Aucun jeu de feuilles")?;
@@ -233,7 +233,7 @@ impl ViewerApp {
                         .get("nom")
                         .and_then(Value::as_str)
                         .unwrap_or("Nouveau projet");
-                    let p = crate::modele::Projet::depuis_gabarit(nom, &crate::modele::gabarit::actif());
+                    let p = modele::Projet::depuis_gabarit(nom, &modele::gabarit::actif());
                     let s = scene::depuis_natif(&p, &path)?;
                     crate::echanges::enregistrement::enregistrer_natif(&p, &path)?;
                     self.install_scene(s);
@@ -333,16 +333,16 @@ impl ViewerApp {
                 }
                 "gabarit" => {
                     if argument == "defaut" {
-                        crate::modele::gabarit::definir(crate::modele::gabarit::Gabarit::defaut());
+                        modele::gabarit::definir(modele::gabarit::Gabarit::defaut());
                         self.options.gabarit = None;
                         self.options.enregistrer();
                     } else if !argument.trim().is_empty() {
                         let path = PathBuf::from(argument.trim().trim_matches('"'));
-                        crate::modele::gabarit::definir(crate::modele::gabarit::Gabarit::charger(&path)?);
+                        modele::gabarit::definir(modele::gabarit::Gabarit::charger(&path)?);
                         self.options.gabarit = Some(path);
                         self.options.enregistrer();
                     }
-                    Ok(json!({"gabarit":&*crate::modele::gabarit::actif()}))
+                    Ok(json!({"gabarit":&*modele::gabarit::actif()}))
                 }
                 "exporter_pdf" | "exporter_ifc" => {
                     let path = PathBuf::from(argument.trim().trim_matches('"'));
@@ -369,12 +369,12 @@ impl ViewerApp {
                         .iter()
                         .find(|n| n.id == id)
                         .ok_or("Nomenclature absente")?;
-                    let lignes = crate::modele::documentation::tableau(p, n)?;
+                    let lignes = modele::documentation::tableau(p, n)?;
                     if nom == "exporter_csv" {
                         let path = PathBuf::from(champ(&v, "chemin")?);
                         crate::echanges::enregistrement::ecrire_atomique(
                             &path,
-                            crate::modele::documentation::csv(&lignes).as_bytes(),
+                            modele::documentation::csv(&lignes).as_bytes(),
                         )?;
                         Ok(json!({"chemin":path,"lignes":lignes.len()}))
                     } else {
@@ -607,11 +607,11 @@ impl ViewerApp {
             O::Poteau | O::Poutre => self.ruban_edition.activer_structure(o == O::Poutre),
             O::Dalle | O::Sol | O::Plafond | O::Toiture | O::TerrePlein => {
                 self.ruban_edition.activer_surface(match o {
-                    O::Sol => crate::modele::SorteDalle::Sol,
-                    O::Plafond => crate::modele::SorteDalle::Plafond,
-                    O::Toiture => crate::modele::SorteDalle::Toiture,
-                    O::TerrePlein => crate::modele::SorteDalle::TerrePlein,
-                    _ => crate::modele::SorteDalle::Dalle,
+                    O::Sol => modele::SorteDalle::Sol,
+                    O::Plafond => modele::SorteDalle::Plafond,
+                    O::Toiture => modele::SorteDalle::Toiture,
+                    O::TerrePlein => modele::SorteDalle::TerrePlein,
+                    _ => modele::SorteDalle::Dalle,
                 })
             }
             O::VueCoupe => self.ruban_edition.activer_coupe(),

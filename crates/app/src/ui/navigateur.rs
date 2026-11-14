@@ -1,7 +1,7 @@
 //! Navigateur de projet, matériaux, arborescence IFC.
 use super::*;
 
-type OrganisationNav = crate::modele::OrganisationArborescence;
+type OrganisationNav = modele::OrganisationArborescence;
 
 fn organisation_nav(ui: &mut egui::Ui, cle: &str, lignes: &[(String, String)], rangements: &BTreeMap<String, String>, options: &OrganisationNav, survol_titre: bool, changement: &mut Option<(String, String)>, organisation_modifiee: &mut Option<(String, OrganisationNav)>) {
     let mut options = options.clone();
@@ -88,7 +88,7 @@ impl ViewerApp {
         type FeuilleNav = (String, String, Vec<(i64, String, f64)>, Vec<(String, String)>);
         let (jeux_natifs, nomenclatures_natives, glissables): (Vec<(String, Vec<FeuilleNav>)>, Vec<(String, String)>, std::collections::HashMap<i64, String>) = match &self.natif {
             Some((p, _)) => (
-                crate::modele::documentation::jeux(p).into_iter().map(|j| {
+                modele::documentation::jeux(p).into_iter().map(|j| {
                     let fs = p.feuilles.iter().filter(|f| f.jeu == j).map(|f| {
                         let vues = f.vues.iter().map(|v| (crate::rendu::scene::numero_vue(&v.vue), p.vues.iter().find(|x| x.id == v.vue).map_or("Vue absente".to_string(), |x| x.nom.clone()), v.echelle_sur_feuille(p))).collect();
                         let tables = f.nomenclatures.iter().map(|n| (n.nomenclature.clone(), p.nomenclatures.iter().find(|x| x.id == n.nomenclature).map_or("Nomenclature absente".to_string(), |x| x.nom.clone()))).collect();
@@ -458,7 +458,7 @@ impl ViewerApp {
                         }
                     });
                 }
-                use crate::modele::GenreOuverture as G;
+                use modele::GenreOuverture as G;
                 ui.horizontal_wrapped(|ui| {
                     if ui.small_button("Nouvelle porte…").clicked() {
                         nouvelle_ouverture = Some(G::Porte);

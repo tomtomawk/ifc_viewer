@@ -15,8 +15,8 @@
 //! - Tout le reste (toits, escaliers, garde-corps, terrain, autres familles, formes d'un
 //!   document de famille, murs-rideaux, sols en pente) : éléments importés.
 
-use crate::modele::volumes::geometrie::{etendue, etendue_arc, prisme_vertical};
-use crate::modele::{Axe, Conversion, Couche, Dalle, GenreOuverture, Haut, Mur, Niveau, Origine, Ouverture, Projet, SorteDalle, TypeCompose, TypeOuverture, identifiant, source};
+use modele::volumes::geometrie::{etendue, etendue_arc, prisme_vertical};
+use modele::{Axe, Conversion, Couche, Dalle, GenreOuverture, Haut, Mur, Niveau, Origine, Ouverture, Projet, SorteDalle, TypeCompose, TypeOuverture, identifiant, source};
 use crate::formats::rvt::maquette::{self, Geometrie, Maquette, Trace};
 use glam::{DVec2, DVec3};
 use std::collections::HashMap;
@@ -44,7 +44,7 @@ fn couches_type(m: &Maquette, type_id: i64, epaisseur: f64) -> (Vec<Couche>, boo
     (vec![Couche { materiau: None, epaisseur, ..Default::default() }], false)
 }
 
-pub fn convertir(chemin: &Path, progress: &dyn Fn(String)) -> Result<(Projet, Vec<crate::modele::Mesure>), String> {
+pub fn convertir(chemin: &Path, progress: &dyn Fn(String)) -> Result<(Projet, Vec<modele::Mesure>), String> {
     let m = maquette::lire(chemin, progress)?;
     let nom = chemin.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let mut c = Conversion { projet: Projet::nouveau(&nom), ..Default::default() };
@@ -66,7 +66,7 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
 
     c.projet.phases = m.ordre_phases.iter().filter_map(|id| m.phases.get(id).cloned()).collect();
 
-    c.projet.variantes = m.variantes.values().filter(|v| !v.jeu).map(|v| crate::modele::Variante {
+    c.projet.variantes = m.variantes.values().filter(|v| !v.jeu).map(|v| modele::Variante {
         id: ident("variante", v.id), nom: v.nom.clone(),
         jeu: m.variantes.get(&v.lien).map_or_else(String::new, |j| j.nom.clone()),
         retenue: m.variantes.get(&v.lien).is_some_and(|j| j.lien == v.id),
@@ -195,7 +195,7 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
                 })
                 .clone()
         });
-        let representation = (!tris.is_empty()).then(|| crate::modele::Maillage::depuis_triangles(&tris));
+        let representation = (!tris.is_empty()).then(|| modele::Maillage::depuis_triangles(&tris));
         c.projet.ouvertures.push(Ouverture {
             id: ident("ouverture", i.id),
             nom,
@@ -293,7 +293,7 @@ fn categorie_native(revit: &str) -> String {
 /// volume). Les autres champs, filtres et tris sont comptés non repris ; les
 /// nomenclatures de clés sont ignorées.
 fn nomenclatures(m: &Maquette, c: &mut Conversion, id_nomenclature: &dyn Fn(i64) -> String) {
-    use crate::modele::documentation::{Colonne, Nomenclature};
+    use modele::documentation::{Colonne, Nomenclature};
     let mut ignorees: std::collections::BTreeMap<String, usize> = Default::default();
     for v in m.vues.iter().filter(|v| !v.gabarit) {
         let Some(d) = &v.nomenclature else { continue };
@@ -377,7 +377,7 @@ fn position_placee(decalage: DVec3, echelle: f64, origine: DVec3, haut: DVec3, o
 /// placées converties à la même position et la même échelle (repère du cartouche). Les
 /// autres vues (3D, plafonds, dessin, légendes, nomenclatures) sont comptées ignorées.
 fn vues_et_feuilles(m: &Maquette, c: &mut Conversion, id_vue: &dyn Fn(i64) -> String, id_feuille: &dyn Fn(i64) -> String, niveau: &dyn Fn(i64) -> Option<String>) {
-    use crate::modele::{GenreVue, Vue as VueNative, documentation::{Feuille, VuePlacee, JEU_DEFAUT}};
+    use modele::{GenreVue, Vue as VueNative, documentation::{Feuille, VuePlacee, JEU_DEFAUT}};
     let altitude = |n: i64| m.niveaux.iter().find(|x| x.id == n).map(|x| x.altitude);
     let nom_type = |t: i64| m.types.get(&t).map(|x| x.nom.clone()).unwrap_or_default();
     // vue Revit → (vue native, origine native (mm), axe horizontal natif)

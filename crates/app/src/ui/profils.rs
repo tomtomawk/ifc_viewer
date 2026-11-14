@@ -1,6 +1,6 @@
 //! Édition des familles de profils plans.
 use super::*;
-use crate::modele::famille::profil::{FichierProfil, ParametreProfil, PointProfil, Profil};
+use modele::famille::profil::{FichierProfil, ParametreProfil, PointProfil, Profil};
 
 use super::familles_planes::FamillePlane;
 
@@ -10,13 +10,13 @@ impl ViewerApp {
             self.ouvrir_famille_document_projet(fichier, Some(id));
             return;
         }
-        let projet_vide = crate::modele::Projet::nouveau("Famille");
+        let projet_vide = modele::Projet::nouveau("Famille");
         let projet = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
         let profil = if let Some(id) = id {
             let Some(p) = projet.profils.iter().find(|p| p.id == id) else { return };
             p.clone()
         } else {
-            let Some(mut p) = crate::modele::gabarit::actif().profils.first().cloned().or_else(|| crate::modele::gabarit::Gabarit::defaut().profils.first().cloned()) else { return };
+            let Some(mut p) = modele::gabarit::actif().profils.first().cloned().or_else(|| modele::gabarit::Gabarit::defaut().profils.first().cloned()) else { return };
             p.id.clear();
             p.nom = (1..).map(|n| format!("Profil {n}")).find(|nom| !projet.profils.iter().any(|x| x.nom.eq_ignore_ascii_case(nom))).unwrap();
             p

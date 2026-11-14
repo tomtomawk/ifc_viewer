@@ -6,7 +6,7 @@ impl ViewerApp {
     /// de surface et de coupe, chacun en premier plan et en arrière-plan (motif, couleur).
     /// L'arrière-plan est uni ou hachuré ; « Motifs… » ouvre l'éditeur de hachures.
     pub(super) fn fenetre_materiau(&mut self, ctx: &egui::Context) {
-        use crate::modele::MotifCoupe;
+        use modele::MotifCoupe;
         let Some(nom) = self.materiau_edite.clone() else { return };
         let Some((projet, chemin_projet)) = &self.natif else { self.materiau_edite = None; return };
         let dossier = chemin_projet.parent().map(|d| d.to_path_buf());
@@ -102,7 +102,7 @@ impl ViewerApp {
     pub(super) fn fenetre_plumes(&mut self, ctx: &egui::Context) {
         let Some(mut table) = self.editeur_plumes.take() else { return };
         let Some((projet, _)) = &self.natif else { return };
-        let gabarit = crate::modele::Projet::default().epaisseurs_plumes();
+        let gabarit = modele::Projet::default().epaisseurs_plumes();
         let actuelle = projet.epaisseurs_plumes();
         // couches (types de murs et de dalles) par plume
         let mut usages = [0usize; 12];
@@ -166,7 +166,7 @@ impl ViewerApp {
     }
 
     pub(super) fn fenetre_motifs(&mut self, ctx: &egui::Context) {
-        use crate::modele::{DefinitionMotif, LigneMotif, MotifCoupe};
+        use modele::{DefinitionMotif, LigneMotif, MotifCoupe};
         if !self.editeur_motifs {
             return;
         }
@@ -177,7 +177,7 @@ impl ViewerApp {
         let Some(mut d) = projet.definition_motif(&MotifCoupe::hachures(&choisi)) else { return };
         let avant = d.clone();
         let du_projet = projet.motifs.iter().any(|x| x.nom == choisi);
-        let de_base = DefinitionMotif::base().iter().any(|x| x.nom == choisi) || crate::modele::gabarit::actif().motifs.iter().any(|x| x.nom == choisi);
+        let de_base = DefinitionMotif::base().iter().any(|x| x.nom == choisi) || modele::gabarit::actif().motifs.iter().any(|x| x.nom == choisi);
         let utilise = projet.materiaux.iter().any(|m| [Some(&m.motif), m.surface_motif.as_ref(), m.surface_fond_motif.as_ref(), m.coupe_fond_motif.as_ref()].into_iter().flatten().any(|x| x.nom_hachures() == Some(choisi.as_str())));
         if self.tirets_saisis.0 != choisi {
             self.tirets_saisis = (choisi.clone(), d.lignes.iter().map(|l| l.tirets.iter().map(|t| crate::formats::ifc::step::format_real(*t)).collect::<Vec<_>>().join(" ")).collect());
@@ -277,7 +277,7 @@ impl ViewerApp {
         }
         let mut p = projet.clone();
         let mut change = false;
-        let libre = |p: &crate::modele::Projet, base: &str| {
+        let libre = |p: &modele::Projet, base: &str| {
             let mut k = 1;
             loop {
                 let n = if k == 1 { base.to_string() } else { format!("{base} {k}") };
@@ -339,8 +339,8 @@ impl ViewerApp {
 
 /// Onglet Apparence de la fenêtre Matériau : réglages physiques et cartes de texture
 /// (image, taille réelle, décalage, rotation, intensité).
-fn apparence_materiau(ui: &mut egui::Ui, m: &mut crate::modele::Materiau, dossier: Option<std::path::PathBuf>) {
-    use crate::modele::{CarteTexture, Texture};
+fn apparence_materiau(ui: &mut egui::Ui, m: &mut modele::Materiau, dossier: Option<std::path::PathBuf>) {
+    use modele::{CarteTexture, Texture};
     let a = &mut m.apparence;
     egui::Grid::new("apparence_materiau").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
         ui.label(RichText::new("Réglages").strong());

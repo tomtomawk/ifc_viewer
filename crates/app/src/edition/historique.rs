@@ -1,7 +1,7 @@
 //! Transactions atomiques par document. Les instantanés sont bornés en mémoire.
 //! La même pile sert au projet et à chaque famille ouverte dans l'éditeur.
-use crate::modele::famille::modelee::FichierFamille;
-use crate::modele::Projet;
+use modele::famille::modelee::FichierFamille;
+use modele::Projet;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 
@@ -288,7 +288,7 @@ mod tests {
     use super::*;
     #[test]
     fn famille_a_sa_propre_pile_et_ses_libelles() {
-        use crate::modele::famille::modelee::{FamilleModelee, PlanRef, AxePlan, FORMAT_FAMILLE};
+        use modele::famille::modelee::{FamilleModelee, PlanRef, AxePlan, FORMAT_FAMILLE};
         let a = FichierFamille { format: FORMAT_FAMILLE.into(), nom: "OF".into(), largeur: 1200.0, hauteur: 1350.0, profondeur: 300.0, famille: FamilleModelee::gabarit_fenetre() };
         let mut b = a.clone();
         b.famille.plans.push(PlanRef { nom: "Plan 9".into(), axe: AxePlan::X, position: 100.0, fixe: false, hote: None });
@@ -352,7 +352,7 @@ mod tests {
     fn les_libelles_identifient_les_elements_et_suivent_le_retablissement() {
         let a = Projet::nouveau("test");
         let mut b = a.clone();
-        b.niveaux.push(crate::modele::Niveau {
+        b.niveaux.push(modele::Niveau {
             id: "n1".into(),
             nom: "Étage".into(),
             altitude: 3000.0,

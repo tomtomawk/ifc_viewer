@@ -1,7 +1,7 @@
 //! Lieu du projet (Début), date et heure du soleil de la vue (menu Ombres) et réglages
 //! du ciel physique (fenêtre Ciel, pas encore reliée au rendu).
 use super::*;
-use crate::modele::soleil::{self, AmbianceCiel, Lieu, ReglagesCiel};
+use modele::soleil::{self, AmbianceCiel, Lieu, ReglagesCiel};
 
 /// Hauteur de l'œil en vue piéton (m).
 const HAUTEUR_OEIL: f32 = 1.6;
@@ -66,7 +66,7 @@ impl ViewerApp {
         let Some(id) = self.id_vue_rendu() else { return };
         let Some((projet, _)) = &self.natif else { return };
         let camera = projet.vues.iter().find(|v| v.id == id).and_then(|v| match &v.genre {
-            crate::modele::GenreVue::Camera { oeil, cible, champ } => Some((*oeil, *cible, *champ)),
+            modele::GenreVue::Camera { oeil, cible, champ } => Some((*oeil, *cible, *champ)),
             _ => None,
         });
         let projection = projet.rendus_vues.get(&id).and_then(|r| r.projection.as_deref()).and_then(crate::rendu::camera::Projection::depuis_nom);
@@ -151,7 +151,7 @@ impl ViewerApp {
         let (o, c, f) = (mm(self.camera.eye()), mm(self.camera.target), (self.camera.fov_y.to_degrees() as f64 * 10.0).round() / 10.0);
         let mut p = self.natif.as_ref().ok_or("Projet natif seulement.")?.0.clone();
         let vue = p.vues.iter_mut().find(|v| v.id == id).ok_or("Vue introuvable.")?;
-        let crate::modele::GenreVue::Camera { oeil, cible, champ } = &mut vue.genre else { return Err("La vue active n'est pas une vue caméra.".into()) };
+        let modele::GenreVue::Camera { oeil, cible, champ } = &mut vue.genre else { return Err("La vue active n'est pas une vue caméra.".into()) };
         (*oeil, *cible, *champ) = (o, c, f);
         let nom = vue.nom.clone();
         let mut rendu = self.rendu_vue_courant();
@@ -182,7 +182,7 @@ impl ViewerApp {
         }
         let id = noyau::uuid::uuid();
         let mut p = projet.clone();
-        p.vues.push(crate::modele::Vue {
+        p.vues.push(modele::Vue {
             id: id.clone(),
             nom: nom.clone(),
             type_vue: base.into(),
@@ -195,7 +195,7 @@ impl ViewerApp {
             fond_plan: None,
             limite_haute_niveau: None,
             limite_haute_decalage: 2800.0,
-            genre: crate::modele::GenreVue::Camera { oeil: mm(self.camera.eye()), cible: mm(self.camera.target), champ: (self.camera.fov_y.to_degrees() as f64 * 10.0).round() / 10.0 },
+            genre: modele::GenreVue::Camera { oeil: mm(self.camera.eye()), cible: mm(self.camera.target), champ: (self.camera.fov_y.to_degrees() as f64 * 10.0).round() / 10.0 },
         });
         let mut rendu = self.rendu_vue_courant();
         rendu.projection = Some(self.camera.projection().nom().into());

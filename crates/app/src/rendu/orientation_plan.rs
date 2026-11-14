@@ -355,9 +355,9 @@ mod tests {
             assert!((nord.truncate() - d.normalize()).length() < 1e-5);
         }
         assert!(angle_nord(glam::Vec2::ZERO).is_none());
-        let mut projet = crate::modele::Projet::nouveau("Nord");
+        let mut projet = modele::Projet::nouveau("Nord");
         projet.orientation_nord = angle_nord(glam::Vec2::X).unwrap() as f64;
-        let relu = crate::modele::Projet::lire_json(&projet.json().unwrap()).unwrap();
+        let relu = modele::Projet::lire_json(&projet.json().unwrap()).unwrap();
         assert!((relu.orientation_nord - projet.orientation_nord).abs() < 1e-8);
     }
 

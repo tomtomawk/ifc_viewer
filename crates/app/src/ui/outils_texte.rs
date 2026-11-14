@@ -41,9 +41,9 @@ pub(super) fn hauteur_texte(ui: &mut egui::Ui, hauteur: &mut f64) -> bool {
 
 /// Aperçu fondé sur le contexte réellement associé à la famille ; les champs sans
 /// contexte restent visibles pour être identifiables pendant l'édition autonome.
-pub(super) fn apercu_famille(contenu: &str, projet: &crate::modele::Projet, vue: &str, categorie: crate::modele::famille::modelee::CategorieFamille, feuille: Option<&str>, piece: Option<&str>) -> String {
-    use crate::modele::famille::modelee::CategorieFamille as C;
-    use crate::modele::documentation::{remplir_champs, FamilleEtiquette};
+pub(super) fn apercu_famille(contenu: &str, projet: &modele::Projet, vue: &str, categorie: modele::famille::modelee::CategorieFamille, feuille: Option<&str>, piece: Option<&str>) -> String {
+    use modele::famille::modelee::CategorieFamille as C;
+    use modele::documentation::{remplir_champs, FamilleEtiquette};
     match categorie {
         C::EtiquettePiece => piece.and_then(|id| projet.pieces.iter().find(|p| p.id == id))
             .map_or_else(|| contenu.to_owned(), |p| FamilleEtiquette::remplir(contenu, projet, p)),
@@ -62,17 +62,17 @@ pub(super) fn apercu_famille(contenu: &str, projet: &crate::modele::Projet, vue:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::modele::famille::modelee::CategorieFamille as C;
+    use modele::famille::modelee::CategorieFamille as C;
     #[test]
     fn apercu_emploie_le_contexte_associe_et_conserve_les_champs_inconnus() {
-        let mut projet = crate::modele::Projet::nouveau("Agence");
-        projet.feuilles.push(crate::modele::documentation::Feuille { id: "f".into(), numero: "A01".into(), nom: "Plan".into(), jeu: "Plans".into(), largeur: 420.0, hauteur: 297.0, cartouche: "Titre".into(), vues: vec![], nomenclatures: vec![] });
+        let mut projet = modele::Projet::nouveau("Agence");
+        projet.feuilles.push(modele::documentation::Feuille { id: "f".into(), numero: "A01".into(), nom: "Plan".into(), jeu: "Plans".into(), largeur: 420.0, hauteur: 297.0, cartouche: "Titre".into(), vues: vec![], nomenclatures: vec![] });
         let texte = "{projet} - {numero} - {feuille}";
         assert_eq!(apercu_famille(texte, &projet, "Plan", C::Cartouche, Some("f"), None), "Agence - A01 - Plan");
         assert_eq!(apercu_famille(texte, &projet, "Plan", C::Cartouche, None, None), texte);
         assert_eq!(apercu_famille("{projet} / {vue}", &projet, "Coupe", C::Composant, None, None), "Agence / Coupe");
         assert_eq!(apercu_famille("{projet} / {vue}", &Default::default(), "Coupe", C::Composant, None, None), "{projet} / Coupe");
-        projet.pieces.push(crate::modele::Piece { id: "p".into(), nom: "Bureau".into(), numero: "101".into(), niveau: String::new(), point: [0.0, 0.0], contour: vec![], etiquette: String::new() });
+        projet.pieces.push(modele::Piece { id: "p".into(), nom: "Bureau".into(), numero: "101".into(), niveau: String::new(), point: [0.0, 0.0], contour: vec![], etiquette: String::new() });
         assert_eq!(apercu_famille("{nom} {numero}", &projet, "Plan", C::EtiquettePiece, None, Some("p")), "Bureau 101");
     }
 }

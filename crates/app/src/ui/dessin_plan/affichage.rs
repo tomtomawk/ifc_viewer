@@ -741,7 +741,7 @@ impl ViewerApp {
             }
             let Some(ecr) = pts.iter().map(|&q| self.vers_ecran(rect, q)).collect::<Option<Vec<_>>>() else { continue };
             let contour: Vec<[f64; 2]> = pts.iter().map(|p| p.to_array()).collect();
-            let aire = crate::modele::volumes::geometrie::aire_pair_impair(std::slice::from_ref(&contour));
+            let aire = modele::volumes::geometrie::aire_pair_impair(std::slice::from_ref(&contour));
             let mut m = egui::Mesh::default();
             for t in noyau::texte::trianguler(vec![ecr.iter().map(|p| [p.x, p.y]).collect()]) {
                 for p in t {

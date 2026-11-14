@@ -1,5 +1,5 @@
 //! Enregistrement v0 d'une source RVT ouverte, sans modifier le fichier Revit.
-use crate::modele::Projet;
+use modele::Projet;
 use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -116,7 +116,7 @@ mod tests {
         let bilan = enregistrer_rvt(&source,&sortie,&|_|{}).unwrap();
         assert_eq!(bilan.murs,1);
         let relu = Projet::lire_json(&std::fs::read_to_string(&sortie).unwrap()).unwrap();
-        assert_eq!(relu.version,crate::modele::VERSION); assert_eq!(relu.murs.len(),1);
+        assert_eq!(relu.version,modele::VERSION); assert_eq!(relu.murs.len(),1);
         assert_eq!(relu.sources[0].format,"RVT");
         let rapport = bilan.rapport.unwrap(); assert!(std::fs::read_to_string(&rapport).unwrap().contains("Conversion"));
         source.verifier().unwrap();

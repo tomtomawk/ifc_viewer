@@ -3,8 +3,8 @@
 use super::*;
 use super::communes::melange;
 use glam::DVec2;
-use crate::modele::Projet;
-use crate::modele::documentation::{AnnotationForme, TypeTrait};
+use modele::Projet;
+use modele::documentation::{AnnotationForme, TypeTrait};
 
 /// Aperçu d'un type de trait dans `r` : épaisseur et tirets à l'échelle de l'écran
 /// (1 mm du papier ≈ 4 points).

@@ -1,6 +1,6 @@
 //! Export IFC4 en millimètres : classes, niveaux, matériaux et géométrie tessellée.
-use crate::modele::*;
-use crate::modele::{elements::pente, murs::jonctions, volumes::solides};
+use modele::*;
+use modele::{elements::pente, murs::jonctions, volumes::solides};
 use std::collections::HashMap;
 use std::fmt::Write;
 struct Step {

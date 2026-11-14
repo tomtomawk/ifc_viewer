@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::Instant;
 mod natif;
 pub use natif::{depuis_natif, depuis_natif_verifie};
-pub use crate::modele::identifiants::{id_natif, numero_vue};
+pub use modele::identifiants::{id_natif, numero_vue};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -258,7 +258,7 @@ pub struct Scene {
     pub table_motifs: Vec<[f32; 4]>,
     /// Apparences de rendu des matériaux, indexées par l'alpha des couleurs de rendu
     /// (128 + rang).
-    pub apparences: Vec<crate::modele::Apparence>,
+    pub apparences: Vec<modele::Apparence>,
     pub objects: Vec<SceneObject>,
     pub object_of: IdMap<u32>,
     /// Origine (mètres, repère du fichier) soustraite aux coordonnées f32.
@@ -300,7 +300,7 @@ pub struct CoucheCoupe {
 
 /// Vue de départ d'un projet natif vide, sans inventer de géométrie ni de source IFC.
 #[cfg(test)]
-pub fn projet_vide(projet: &crate::modele::Projet, path: &Path) -> Result<Scene, String> {
+pub fn projet_vide(projet: &modele::Projet, path: &Path) -> Result<Scene, String> {
     depuis_natif(projet, path)
 }
 

@@ -1,6 +1,6 @@
 //! Finalisation et propriétés communes des formes à profil, quel que soit le canevas.
 use super::*;
-use crate::modele::famille::modelee::{FormeGuidee, Revolution};
+use modele::famille::modelee::{FormeGuidee, Revolution};
 
 impl OutilFamille {
     pub(super) fn est_forme(self) -> bool {
@@ -15,7 +15,7 @@ impl EditeurFamille {
         let contour: Vec<_> = self.esquisse.iter().map(|(p,_)| {
             let (h,v) = self.famille.point_esquisse(&resolution,p); [h,v]
         }).collect();
-        crate::modele::famille::profil::contour_simple(&contour)?;
+        modele::famille::profil::contour_simple(&contour)?;
         let revolution = if self.outil.est_revolution() {
             let r = Revolution::nouvelle(self.axe_revolution.ok_or("Définir l'axe avant le profil.")?);
             r.valider(&contour)?;

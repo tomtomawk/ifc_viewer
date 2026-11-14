@@ -27,7 +27,7 @@ impl ViewerApp {
     /// reconstruites d'après le type), mur seul (types à une couche), couche d'un mur
     /// composé (type du mur composé), élément horizontal, porte ou fenêtre. Projet
     /// modifié si un autre type est choisi.
-    pub(super) fn selecteur_type_selection(&mut self, ui: &mut egui::Ui) -> Option<crate::modele::Projet> {
+    pub(super) fn selecteur_type_selection(&mut self, ui: &mut egui::Ui) -> Option<modele::Projet> {
         use crate::edition::commandes::Commande;
         let ids = self.selection_bim();
         let (p, _) = self.natif.as_ref()?;
@@ -38,11 +38,11 @@ impl ViewerApp {
             } else if ids.iter().all(|id| p.dalles.iter().any(|d| &d.id == id)) {
                 ("Éléments horizontaux", ids.iter().filter_map(|id| p.dalles.iter().find(|d| &d.id == id).map(|d| d.type_dalle.clone())).collect(), p.types_dalles.iter().map(|t| (t.id.clone(), t.nom.clone())).collect())
             } else if ids.iter().all(|id| p.ouvertures.iter().any(|o| &o.id == id)) && {
-                let libre = p.ouvertures.iter().find(|o| o.id == ids[0]).is_some_and(|o| o.genre == crate::modele::GenreOuverture::Libre);
-                ids.iter().all(|id| p.ouvertures.iter().find(|o| &o.id == id).is_some_and(|o| (o.genre == crate::modele::GenreOuverture::Libre) == libre))
+                let libre = p.ouvertures.iter().find(|o| o.id == ids[0]).is_some_and(|o| o.genre == modele::GenreOuverture::Libre);
+                ids.iter().all(|id| p.ouvertures.iter().find(|o| &o.id == id).is_some_and(|o| (o.genre == modele::GenreOuverture::Libre) == libre))
             } {
-                let libre = p.ouvertures.iter().find(|o| o.id == ids[0]).is_some_and(|o| o.genre == crate::modele::GenreOuverture::Libre);
-                ("Ouvertures", ids.iter().filter_map(|id| p.ouvertures.iter().find(|o| &o.id == id).map(|o| o.type_ouverture.clone().unwrap_or_default())).collect(), p.types_ouvertures.iter().filter(|t| (t.genre == crate::modele::GenreOuverture::Libre) == libre).map(|t| (t.id.clone(), t.nom.clone())).collect())
+                let libre = p.ouvertures.iter().find(|o| o.id == ids[0]).is_some_and(|o| o.genre == modele::GenreOuverture::Libre);
+                ("Ouvertures", ids.iter().filter_map(|id| p.ouvertures.iter().find(|o| &o.id == id).map(|o| o.type_ouverture.clone().unwrap_or_default())).collect(), p.types_ouvertures.iter().filter(|t| (t.genre == modele::GenreOuverture::Libre) == libre).map(|t| (t.id.clone(), t.nom.clone())).collect())
             } else if ids.iter().all(|id| p.terrains.iter().any(|t| &t.id == id)) {
                 ("Terrains", ids.iter().filter_map(|id| p.terrains.iter().find(|t| &t.id == id).map(|t| p.type_terrain(t).id)).collect(), p.types_terrains_disponibles().into_iter().map(|t| (t.id, t.nom)).collect())
             } else {
@@ -77,7 +77,7 @@ impl ViewerApp {
         }
         let [id] = ids.as_slice() else { return None };
         if let Some(arbre) = p.arbres.iter().find(|a| &a.id == id) {
-            use crate::modele::elements::arbre::Essence;
+            use modele::elements::arbre::Essence;
             let mut choisi = arbre.essence;
             ui.label(RichText::new("Arbre").small().weak());
             egui::ComboBox::from_id_salt("essence_arbre_selection").width((ui.available_width() - 8.0).max(1.0)).selected_text(choisi.nom()).show_ui(ui, |ui| {
@@ -137,7 +137,7 @@ impl ViewerApp {
             (Cible::Dalle(d.id.clone()), d.type_dalle.clone(), types)
         } else if let Some(o) = p.ouvertures.iter().find(|o| &o.id == id) {
             // portes et fenêtres : même objet, rangé par catégorie (libre à part)
-            use crate::modele::GenreOuverture as G;
+            use modele::GenreOuverture as G;
             let libre = o.genre == G::Libre;
             let mut types: Vec<_> = p.types_ouvertures.iter().filter(|t| (t.genre == G::Libre) == libre).collect();
             types.sort_by_key(|t| t.genre != G::Porte);
@@ -161,7 +161,7 @@ impl ViewerApp {
         };
         if let Cible::Ouverture(o) = &cible {
             // même sélecteur qu'à la création ; portes et fenêtres s'échangent, libre à part
-            use crate::modele::GenreOuverture as G;
+            use modele::GenreOuverture as G;
             let projet = p.clone();
             let ouverture = projet.ouvertures.iter().find(|x| &x.id == o)?;
             let categories: &[G] = if ouverture.genre == G::Libre { &[G::Libre] } else { &[G::Porte, G::Fenetre] };
@@ -202,11 +202,11 @@ impl ViewerApp {
             let Some(choisi)=choisi.filter(|id|id!=&actuel) else{return None};
             match cible {
                 Cible::Assemblage(a)=>{
-                    let axe=match crate::modele::volumes::solides::hote(&q,&a) {Ok((axe,_,_))=>axe,Err(e)=>{self.error=Some(e);return None}};
+                    let axe=match modele::volumes::solides::hote(&q,&a) {Ok((axe,_,_))=>axe,Err(e)=>{self.error=Some(e);return None}};
                     let decalage=q.type_mur(&choisi).and_then(|t|t.decalages_couches().first().copied()).unwrap_or(0.0);
                     let premiere=q.assemblage(&a).and_then(|x|x.couches.first()).cloned();
                     if let Some(x)=q.assemblages.iter_mut().find(|x|x.id==a) {x.type_mur=choisi;}
-                    if let Some(m)=q.murs.iter_mut().find(|m|Some(&m.id)==premiere.as_ref()) {m.axe=crate::modele::murs::assemblage::decaler_axe(&axe,decalage);}
+                    if let Some(m)=q.murs.iter_mut().find(|m|Some(&m.id)==premiere.as_ref()) {m.axe=modele::murs::assemblage::decaler_axe(&axe,decalage);}
                     match q.executer(Commande::ActualiserType{assemblage:a}) {
                         Ok((r,_))=>q=r,Err(e)=>{self.error=Some(e);return None}
                     }
@@ -418,7 +418,7 @@ impl ViewerApp {
                 let masques = self.vue_native_id().and_then(|id| p.vues.iter().find(|v| v.id == id)).map(|v| v.elements_masques.as_slice()).unwrap_or(&[]);
                 for v in &p.vues {
                     if masques.contains(&v.id) { continue; }
-                    if let crate::modele::GenreVue::Coupe { debut, fin, .. } = &v.genre {
+                    if let modele::GenreVue::Coupe { debut, fin, .. } = &v.genre {
                         if let (Some(a), Some(b)) = (self.ecran_plan(vue, *debut, z), self.ecran_plan(vue, *fin, z)) {
                             if crate::rendu::selection_rectangle::segment(rectangle, a, b, croisement) { vues.push(v.id.clone()); }
                         }

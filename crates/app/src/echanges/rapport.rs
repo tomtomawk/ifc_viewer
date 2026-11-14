@@ -1,7 +1,7 @@
 //! Rapport d'une conversion : part des éléments devenus paramétriques, raisons des
 //! imports, écart de volume entre la géométrie lue et celle que donnent les paramètres.
 
-use crate::modele::{GenreOuverture, Mesure, Projet, ECART_MAX};
+use modele::{GenreOuverture, Mesure, Projet, ECART_MAX};
 use std::collections::BTreeMap;
 use std::fmt::Write;
 

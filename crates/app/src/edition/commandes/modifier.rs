@@ -422,8 +422,8 @@ pub fn decaler_polygone(pts: &[[f64; 2]], d: f64) -> Option<Vec<[f64; 2]>> {
 #[cfg(test)]
 mod tests {
     use crate::edition::commandes::{Commande, Execution, Modification};
-    use crate::modele::creation::ParametresMur;
-    use crate::modele::{Axe, Projet};
+    use modele::creation::ParametresMur;
+    use modele::{Axe, Projet};
 
     fn mur(p: &mut Projet, a: [f64; 2], b: [f64; 2]) -> String {
         p.ajouter_mur(a, b, &ParametresMur::default()).unwrap();
@@ -458,7 +458,7 @@ mod tests {
 
     #[test]
     fn echelle_d_une_ligne_d_annotation() {
-        use crate::modele::documentation::{Annotation, AnnotationForme};
+        use modele::documentation::{Annotation, AnnotationForme};
         let mut p = Projet::nouveau("E");
         mur(&mut p, [0.0, 0.0], [1000.0, 0.0]);
         let niveau = p.niveaux[0].id.clone();
@@ -528,7 +528,7 @@ mod tests {
         q.murs[0].decalage_bas = 250.0;
         let (q, _) = q.executer(Commande::Reproduire { source: a.clone(), cibles: vec![b.clone()] }).unwrap();
         assert_eq!(q.murs[1].decalage_bas, 250.0);
-        let p = p.executer(Commande::Ouverture { mur: a.clone(), genre: crate::modele::GenreOuverture::Porte, type_ouverture: None, abscisse: 1000.0, largeur: 900.0, hauteur: 2100.0, allege: 0.0 }).unwrap().0;
+        let p = p.executer(Commande::Ouverture { mur: a.clone(), genre: modele::GenreOuverture::Porte, type_ouverture: None, abscisse: 1000.0, largeur: 900.0, hauteur: 2100.0, allege: 0.0 }).unwrap().0;
         let o = p.ouvertures[0].id.clone();
         let (p, _) = p.executer(Commande::ChangerHote { id: o.clone(), mur: b.clone(), point: [2500.0, 3000.0] }).unwrap();
         assert_eq!(p.ouvertures[0].mur, b);
@@ -541,7 +541,7 @@ mod tests {
         let mut p = Projet::nouveau("C");
         let id = mur(&mut p, [0.0, 0.0], [6000.0, 0.0]);
         for abscisse in [1000.0, 5000.0] {
-            p = p.executer(Commande::Ouverture { mur: id.clone(), genre: crate::modele::GenreOuverture::Porte, type_ouverture: None, abscisse, largeur: 600.0, hauteur: 2000.0, allege: 0.0 }).unwrap().0;
+            p = p.executer(Commande::Ouverture { mur: id.clone(), genre: modele::GenreOuverture::Porte, type_ouverture: None, abscisse, largeur: 600.0, hauteur: 2000.0, allege: 0.0 }).unwrap().0;
         }
         let (q, ids) = p.executer(Commande::Scinder { id: id.clone(), point: [3000.0, 0.0], ecart: 200.0 }).unwrap();
         assert_eq!(ids.len(), 2);

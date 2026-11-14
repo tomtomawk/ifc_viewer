@@ -65,7 +65,7 @@ impl Etat {
             acceptes: BTreeMap::new(),
         };
         for a in &p.annotations {
-            if let crate::modele::documentation::AnnotationForme::Texte { texte, .. } = &a.forme {
+            if let modele::documentation::AnnotationForme::Texte { texte, .. } = &a.forme {
                 etat.textes
                     .insert(a.id.clone(), EtatTexte::initial(&p.identite, &a.id, texte)?);
             }

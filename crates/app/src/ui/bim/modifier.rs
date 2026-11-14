@@ -239,7 +239,7 @@ impl ViewerApp {
             .iter()
             .map(|id| scene::id_natif("annotation", id))
             .collect();
-        crate::modele::documentation::annotations(p, v)
+        modele::documentation::annotations(p, v)
             .into_iter()
             .filter(|a| !a.element.is_some_and(|id| v.elements_masques.iter().any(|cle| scene::id_natif("annotation", cle) == id)))
             .filter(|a| !self.objet_en_edition().is_some_and(|(id, annotation)| annotation && a.element == Some(scene::id_natif("annotation", id))))
@@ -287,7 +287,7 @@ impl ViewerApp {
     /// Fenêtre des nomenclatures du projet : créer, régler (nom, catégorie, regrouper),
     /// tableau des quantités, export CSV.
     pub(in crate::ui) fn fenetre_documentation(&mut self, ctx: &egui::Context) {
-        use crate::{edition::commandes::Commande, modele::documentation as d};
+        use {crate::edition::commandes::Commande, modele::documentation as d};
         if !self.bim.documentation {
             return;
         }

@@ -1,11 +1,11 @@
 //! Tests déplacés de `modele/elements/site.rs` (`mod tests`) : ils appellent du code situé au-dessus
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
 use crate::edition::Execution;
-use crate::modele::elements::site::*;
+use modele::elements::site::*;
 
 #[test]
 fn creation_site_sauvegarde_export_et_suppression() {
-    use crate::{edition::commandes::Commande, modele::Projet};
+    use {crate::edition::commandes::Commande, modele::Projet};
     let p = Projet::nouveau("Site");
     let terrain = Terrain { id: String::new(), nom: "Terrain".into(), contour: vec![[0.,0.,0.], [1000.,0.,100.], [1000.,1000.,200.], [0.,1000.,0.]], points: vec![[500.,500.,450.]], type_terrain: None };
     let (p, t) = p.executer(Commande::Terrain { terrain }).unwrap();
@@ -33,7 +33,7 @@ fn creation_site_sauvegarde_export_et_suppression() {
 
 #[test]
 fn site_en_phase_existant_cotes_ngf_et_epaisseur_du_type() {
-    use crate::{edition::commandes::Commande, modele::{Projet, PHASE_EXISTANT}};
+    use {crate::edition::commandes::Commande, modele::{Projet, PHASE_EXISTANT}};
     let p = Projet::nouveau("Site");
     assert_eq!(p.phases, [PHASE_EXISTANT, "Projet"]);
     // cotes NGF autour de 45 m ; origine du projet à 45,00 m NGF

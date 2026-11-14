@@ -83,7 +83,7 @@ impl ViewerApp {
         if self.natif.is_some() {
             let projet = &self.natif.as_ref().unwrap().0;
             // éditeur de type de mur : un type déjà porté par des murs les met à jour
-            let mut copie = if self.ruban_edition.editeur_type_ouvert() { projet.clone() } else { crate::modele::Projet::default() };
+            let mut copie = if self.ruban_edition.editeur_type_ouvert() { projet.clone() } else { modele::Projet::default() };
             if self.ruban_edition.editeur_type_ouvert() && self.ruban_edition.editeur_type_mur(ui.ctx(), &mut copie) {
                 if let Err(e) = self.appliquer_projet(copie) { self.error = Some(e); }
             } else if let Some(nom) = self.ruban_edition.prendre_materiau_a_editer() {

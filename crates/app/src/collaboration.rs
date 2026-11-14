@@ -8,7 +8,7 @@ pub mod stockage;
 mod tests;
 pub mod texte;
 
-use crate::modele::Projet;
+use modele::Projet;
 use noyau::hash::{empreinte, encoder, hash};
 use noyau::uuid::uuid;
 use serde::{Deserialize, Serialize};

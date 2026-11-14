@@ -21,10 +21,10 @@ mod formes;
 mod transformer;
 use super::*;
 use super::accrochage;
-use crate::modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
-use crate::modele::famille::modelee::FichierFamille;
-use crate::modele::documentation::GenreCote;
-use crate::modele::GenreOuverture;
+use modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
+use modele::famille::modelee::FichierFamille;
+use modele::documentation::GenreCote;
+use modele::GenreOuverture;
 use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -330,7 +330,7 @@ impl EditeurFamille {
     /// État édité, tel que l'historique le garde.
     fn etat(&self) -> FichierFamille {
         FichierFamille {
-            format: crate::modele::famille::modelee::FORMAT_FAMILLE.into(),
+            format: modele::famille::modelee::FORMAT_FAMILLE.into(),
             nom: self.nom.clone(),
             largeur: self.largeur,
             hauteur: self.hauteur,
@@ -408,14 +408,14 @@ impl EditeurFamille {
             SelectionFamille::Contrainte(k) if *k < f.contraintes.len() => drop(f.contraintes.remove(*k)),
             SelectionFamille::Extrusion(k) if *k < f.extrusions.len() => drop(f.extrusions.remove(*k)),
             SelectionFamille::Symbole(k) if *k < f.symboles.len() => {
-                use crate::modele::famille::modelee::SectionProfil;
+                use modele::famille::modelee::SectionProfil;
                 if let Some(SectionProfil::Symbole(i)) = f.section_profil {
                     f.section_profil = if i == *k { None } else { Some(SectionProfil::Symbole(i - usize::from(i > *k))) };
                 }
                 f.symboles.remove(*k);
             }
             SelectionFamille::Element2D(k) if *k < f.elements_2d.len() => {
-                use crate::modele::famille::modelee::SectionProfil;
+                use modele::famille::modelee::SectionProfil;
                 if let Some(SectionProfil::Element2d(i)) = f.section_profil {
                     f.section_profil = if i == *k { None } else { Some(SectionProfil::Element2d(i - usize::from(i > *k))) };
                 }
@@ -486,7 +486,7 @@ impl EditeurFamille {
         let Some(forme) = self.famille.extrusions.get_mut(k) else { return };
         if i == 0 || i > forme.profil.len() { return; }
         forme.profil.insert(i, forme.profil[i - 1].clone());
-        if let OperationForme::Guidage { guidage: crate::modele::famille::modelee::FormeGuidee::Raccordement { profil_fin, .. } | crate::modele::famille::modelee::FormeGuidee::RaccordementChemin { profil_fin, .. } } = &mut forme.operation {
+        if let OperationForme::Guidage { guidage: modele::famille::modelee::FormeGuidee::Raccordement { profil_fin, .. } | modele::famille::modelee::FormeGuidee::RaccordementChemin { profil_fin, .. } } = &mut forme.operation {
             if !profil_fin.is_empty() && i <= profil_fin.len() {
                 let (a, b) = (profil_fin[i - 1], profil_fin[i % profil_fin.len()]);
                 profil_fin.insert(i, [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5]);
@@ -498,7 +498,7 @@ impl EditeurFamille {
         let Some(forme) = self.famille.extrusions.get_mut(k) else { return false };
         if forme.profil.len() <= 3 || i >= forme.profil.len() { return false; }
         forme.profil.remove(i);
-        if let OperationForme::Guidage { guidage: crate::modele::famille::modelee::FormeGuidee::Raccordement { profil_fin, .. } | crate::modele::famille::modelee::FormeGuidee::RaccordementChemin { profil_fin, .. } } = &mut forme.operation {
+        if let OperationForme::Guidage { guidage: modele::famille::modelee::FormeGuidee::Raccordement { profil_fin, .. } | modele::famille::modelee::FormeGuidee::RaccordementChemin { profil_fin, .. } } = &mut forme.operation {
             if i < profil_fin.len() { profil_fin.remove(i); }
         }
         true

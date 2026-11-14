@@ -1,7 +1,7 @@
 //! Ligne de contrôle et poignées des murs courbes, sur leur implantation réelle.
 use super::*;
 use glam::DVec2;
-use crate::modele::Axe;
+use modele::Axe;
 
 fn points_controle(axe:Axe)->Option<[DVec2;3]> {
     let Axe::Arc{debut,fin,centre,direct}=axe else {return None};
@@ -208,8 +208,8 @@ mod tests {
 
     #[test]
     fn modification_arc_conserve_implantation_couches_et_transaction_atomique() {
-        use crate::{edition::{Execution,commandes::Commande},modele::{Projet,creation::{ParametresMur,Implantation}}};
-        let mut p=Projet::depuis_gabarit("Arc",&crate::modele::gabarit::Gabarit::defaut());
+        use {crate::edition::{Execution,commandes::Commande},modele::{Projet,creation::{ParametresMur,Implantation}}};
+        let mut p=Projet::depuis_gabarit("Arc",&modele::gabarit::Gabarit::defaut());
         let type_mur=p.types_murs.iter().find(|t|t.couches.len()>1).unwrap().id.clone();
         let options=ParametresMur{type_mur:Some(type_mur),implantation:Implantation::Exterieure,..Default::default()};
         let id=p.ajouter_mur_axe(Axe::Arc{debut:[5000.,0.],fin:[0.,5000.],centre:[0.,0.],direct:true},&options).unwrap();

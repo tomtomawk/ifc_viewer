@@ -1,6 +1,6 @@
 //! Éditeur des gabarits de vue du projet.
 use super::*;
-use crate::modele::gabarits_vues::GabaritVue;
+use modele::gabarits_vues::GabaritVue;
 
 pub(super) struct EditeurGabaritVue {
     vue: String,

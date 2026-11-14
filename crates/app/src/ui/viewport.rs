@@ -45,12 +45,12 @@ impl ViewerApp {
         let altitude_coupe = self.altitude_vue_native();
         let structure = if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() {
             match self.ruban_edition.outil() {
-                Some(crate::ui::ruban::Outil::Poteau) => Some(crate::modele::GenreBarre::Poteau),
-                Some(crate::ui::ruban::Outil::Poutre) => Some(crate::modele::GenreBarre::Poutre),
+                Some(crate::ui::ruban::Outil::Poteau) => Some(modele::GenreBarre::Poteau),
+                Some(crate::ui::ruban::Outil::Poutre) => Some(modele::GenreBarre::Poutre),
                 _ => None,
             }
         } else { None };
-        if structure != Some(crate::modele::GenreBarre::Poutre) { self.bim.depart_structure = None; }
+        if structure != Some(modele::GenreBarre::Poutre) { self.bim.depart_structure = None; }
         // Composant (vrai) ou Pièce (faux) : un clic place l'élément au niveau de la vue
         let placement = if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() {
             match self.ruban_edition.outil() {
@@ -229,7 +229,7 @@ impl ViewerApp {
                         .and_then(|id| self.cle_native(self.cible_clic(id)));
                     if let Some(id) = cible {
                         let projet = &self.natif.as_ref().unwrap().0;
-                        if projet.dalles.iter().any(|d| d.id == id && d.sorte == crate::modele::SorteDalle::Toiture) {
+                        if projet.dalles.iter().any(|d| d.id == id && d.sorte == modele::SorteDalle::Toiture) {
                             if self.bim.murs_a_attacher.is_empty() {
                                 self.status = "Attacher au toit : choisissez d'abord un ou plusieurs murs.".into();
                             } else {
@@ -300,10 +300,10 @@ impl ViewerApp {
                     let point = altitude_structure.and_then(|alt| resp.interact_pointer_pos().and_then(|q| self.point_tracage(q, rect, shift, self.bim.depart_structure, alt)));
                     if let Some((point, _)) = point {
                         match genre {
-                            crate::modele::GenreBarre::Poteau => {
+                            modele::GenreBarre::Poteau => {
                                 if let Err(e) = self.placer_structure(point, None) { self.error = Some(e); }
                             }
-                            crate::modele::GenreBarre::Poutre => {
+                            modele::GenreBarre::Poutre => {
                                 if let Some(debut) = self.bim.depart_structure {
                                     match self.placer_structure(debut, Some(point)) {
                                         Ok(()) => self.bim.depart_structure = None,
@@ -498,7 +498,7 @@ impl ViewerApp {
             let painter = ui.painter().with_clip_rect(rect);
             let couleur = Color32::from_rgb(55, 130, 200);
             let texte = match (genre, self.bim.depart_structure) {
-                (crate::modele::GenreBarre::Poteau, _) => "Poteau : cliquer pour placer · molette : zoom",
+                (modele::GenreBarre::Poteau, _) => "Poteau : cliquer pour placer · molette : zoom",
                 (_, None) => "Poutre : cliquer le départ · molette : zoom",
                 (_, Some(_)) => "Poutre : cliquer l'arrivée · Maj : orthogonal · Échap ou clic droit : annuler",
             };
@@ -560,7 +560,7 @@ impl ViewerApp {
                 }
                 if composant {
                     let c = &self.bim.composant;
-                    let defaut = crate::modele::elements::composant::type_table();
+                    let defaut = modele::elements::composant::type_table();
                     let t = self.natif.as_ref().and_then(|(x, _)| x.types_composants.iter().find(|t| t.id == c.type_composant)).unwrap_or(&defaut);
                     let (s, co) = c.rotation.to_radians().sin_cos();
                     let (u, n) = ([co, s], [-s, co]);

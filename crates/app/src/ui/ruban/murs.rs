@@ -16,7 +16,7 @@ impl RubanEdition {
     pub fn proprietes_mur(
         &mut self,
         ui: &mut egui::Ui,
-        projet: Option<&crate::modele::Projet>,
+        projet: Option<&modele::Projet>,
     ) -> bool {
         if !self.mur_actif() {
             return false;
@@ -93,8 +93,8 @@ impl RubanEdition {
     /// Sélecteur de type en tête de la palette, comme dans Revit : générique (épaisseur
     /// saisie) ou un type du projet ; composition en bande sous la liste ; Modifier /
     /// Nouveau ouvrent l'éditeur de type.
-    pub fn selecteur_type_mur(&mut self, ui: &mut egui::Ui, projet: &crate::modele::Projet, generique: bool) {
-        use crate::modele::CategorieMur;
+    pub fn selecteur_type_mur(&mut self, ui: &mut egui::Ui, projet: &modele::Projet, generique: bool) {
+        use modele::CategorieMur;
         let actuel = self.type_mur.as_ref().and_then(|id| projet.type_mur(id));
         let categorie_actuelle = actuel.map_or(CategorieMur::Mur, |t| t.categorie_mur());
         let nom = actuel.map_or("Générique (épaisseur libre)", |t| t.nom.as_str());
@@ -102,7 +102,7 @@ impl RubanEdition {
         // largeur du panneau mesurée hors de la ligne, qui grandirait avec la liste
         let largeur = ui.available_width();
         // types de la catégorie : (type du projet, type du gabarit à ajouter, nom, couches)
-        type Ligne = (Option<String>, Option<crate::modele::gabarit::TypeGabarit>, String, Vec<crate::modele::Couche>);
+        type Ligne = (Option<String>, Option<modele::gabarit::TypeGabarit>, String, Vec<modele::Couche>);
         let mut lignes: Vec<Ligne> = Vec::new();
         if generique && onglet == CategorieMur::Mur {
             lignes.push((None, None, "Générique (épaisseur libre)".into(), Vec::new()));
@@ -111,16 +111,16 @@ impl RubanEdition {
         types.sort_by(|a, b| a.nom.cmp(&b.nom));
         lignes.extend(types.into_iter().map(|t| (Some(t.id.clone()), None, t.nom.clone(), t.couches.clone())));
         // types du gabarit absents du projet : copiés dans le projet au choix
-        let gabarit = crate::modele::gabarit::actif();
+        let gabarit = modele::gabarit::actif();
         lignes.extend(gabarit.types_murs.iter().filter(|t| t.categorie_mur() == onglet && !projet.types_murs.iter().any(|p| p.nom == t.nom)).map(|t| (None, Some(t.clone()), t.nom.clone(), t.couches.clone())));
         let rangs = CategorieMur::TOUTES.iter().map(|c| projet.types_murs.iter().filter(|t| t.categorie_mur() == *c).count() + gabarit.types_murs.iter().filter(|t| t.categorie_mur() == *c).count() + 1).max().unwrap_or(1);
         let mut choix_onglet = None;
         let mut choisi: Option<Ligne> = None;
         let mut editer: Option<String> = None;
-        let mut dupliquer: Option<(String, Vec<crate::modele::Couche>)> = None;
+        let mut dupliquer: Option<(String, Vec<modele::Couche>)> = None;
         let mut nouveau = false;
         let unite = crate::config::options::unite();
-        let epaisseur = |c: &[crate::modele::Couche]| c.iter().map(|c| c.epaisseur).sum::<f64>();
+        let epaisseur = |c: &[modele::Couche]| c.iter().map(|c| c.epaisseur).sum::<f64>();
 
         let largeur_texte = |ui: &egui::Ui, t: &str, f: &egui::FontId| ui.fonts_mut(|x| x.layout_no_wrap(t.to_string(), f.clone(), Color32::WHITE).size().x);
         // Sélecteur fermé : catégorie, nom et épaisseur en haut ; dessous, sur toute la
@@ -227,7 +227,7 @@ impl RubanEdition {
     }
 
     /// Type de mur du gabarit choisi dans le sélecteur, à ajouter au projet.
-    pub fn prendre_type_gabarit(&mut self) -> Option<crate::modele::gabarit::TypeGabarit> {
+    pub fn prendre_type_gabarit(&mut self) -> Option<modele::gabarit::TypeGabarit> {
         self.type_mur_gabarit.take()
     }
 
@@ -242,7 +242,7 @@ impl RubanEdition {
 
     /// Dupliquer un type : l'éditeur s'ouvre sur ses couches, enregistrées sous un
     /// nouveau nom (le type d'origine ne change pas).
-    pub(super) fn dupliquer_type(&mut self, projet: &crate::modele::Projet, nom: &str, couches: Vec<crate::modele::Couche>) {
+    pub(super) fn dupliquer_type(&mut self, projet: &modele::Projet, nom: &str, couches: Vec<modele::Couche>) {
         let categorie = projet.types_murs.iter().find(|t| t.nom == nom).map(|t| t.categorie_mur());
         self.ouvrir_editeur_type(projet, None);
         if let Some(ed) = self.editeur_type.as_mut() {
@@ -257,7 +257,7 @@ impl RubanEdition {
                 if let Some(m) = &c.materiau
                     && !ed.materiaux.iter().any(|x| &x.nom == m)
                 {
-                    ed.materiaux.push(crate::modele::murs::assemblage::materiau_par_defaut(m));
+                    ed.materiaux.push(modele::murs::assemblage::materiau_par_defaut(m));
                 }
             }
             ed.couches = couches;
@@ -267,8 +267,8 @@ impl RubanEdition {
         }
     }
 
-    pub(super) fn ouvrir_editeur_type(&mut self, projet: &crate::modele::Projet, id: Option<String>) {
-        use crate::modele::{Couche, FonctionCouche};
+    pub(super) fn ouvrir_editeur_type(&mut self, projet: &modele::Projet, id: Option<String>) {
+        use modele::{Couche, FonctionCouche};
         let existant = id.as_ref().and_then(|id| projet.type_mur(id));
         let (nom, couches) = match existant {
             Some(t) => (t.nom.clone(), t.couches.clone()),
@@ -287,16 +287,16 @@ impl RubanEdition {
             if let Some(m) = &c.materiau
                 && !materiaux.iter().any(|x| &x.nom == m)
             {
-                materiaux.push(crate::modele::murs::assemblage::materiau_par_defaut(m));
+                materiaux.push(modele::murs::assemblage::materiau_par_defaut(m));
             }
         }
-        self.editeur_type = Some(EditeurType { id: existant.map(|t| t.id.clone()), nom, categorie: existant.map_or(crate::modele::CategorieMur::Compose, |t| t.categorie_mur()), couches, materiaux, erreur: None, glisse: None });
+        self.editeur_type = Some(EditeurType { id: existant.map(|t| t.id.clone()), nom, categorie: existant.map_or(modele::CategorieMur::Compose, |t| t.categorie_mur()), couches, materiaux, erreur: None, glisse: None });
     }
 
     /// Fenêtre d'édition d'un type de mur composé : une ligne par couche, de
     /// l'extérieur (en haut) vers l'intérieur. Retourne vrai si le projet a changé.
-    pub fn editeur_type_mur(&mut self, ctx: &egui::Context, projet: &mut crate::modele::Projet) -> bool {
-        use crate::modele::{Couche, FonctionCouche};
+    pub fn editeur_type_mur(&mut self, ctx: &egui::Context, projet: &mut modele::Projet) -> bool {
+        use modele::{Couche, FonctionCouche};
         let Some(ed) = &mut self.editeur_type else { return false };
         // matériaux existants : toujours ceux du projet (modifiés dans la fenêtre Matériau)
         for m in &mut ed.materiaux {
@@ -318,7 +318,7 @@ impl RubanEdition {
                     ui.label("Nom");
                     ui.add(egui::TextEdit::singleline(&mut ed.nom).desired_width(300.0));
                     egui::ComboBox::from_id_salt("categorie_type_mur").selected_text(ed.categorie.nom()).show_ui(ui, |ui| {
-                        for c in crate::modele::CategorieMur::TOUTES {
+                        for c in modele::CategorieMur::TOUTES {
                             ui.selectable_value(&mut ed.categorie, c, c.nom());
                         }
                     }).response.on_hover_text("Catégorie du type : mur, mur composé ou cloison");
@@ -377,7 +377,7 @@ impl RubanEdition {
                         let nom = nom.trim().to_string();
                         c.materiau = (!nom.is_empty()).then_some(nom.clone());
                         if !nom.is_empty() && !ed.materiaux.iter().any(|m| m.nom == nom) {
-                            ed.materiaux.push(crate::modele::murs::assemblage::materiau_par_defaut(&nom));
+                            ed.materiaux.push(modele::murs::assemblage::materiau_par_defaut(&nom));
                         }
                         // couleur et motif : hérités du matériau, affichés en lecture seule
                         match ed.materiaux.iter().find(|m| m.nom == nom) {
@@ -434,7 +434,7 @@ impl RubanEdition {
                                     ui.end_row();
                                     ui.label("Matériau des montants");
                                     let mut nom = o.materiau.clone().unwrap_or_default();
-                                    ui.add(egui::TextEdit::singleline(&mut nom).desired_width(130.0).hint_text(crate::modele::murs::ossature::MATERIAU_OSSATURE));
+                                    ui.add(egui::TextEdit::singleline(&mut nom).desired_width(130.0).hint_text(modele::murs::ossature::MATERIAU_OSSATURE));
                                     let nom = nom.trim().to_string();
                                     o.materiau = (!nom.is_empty()).then_some(nom);
                                     ui.end_row();
@@ -443,7 +443,7 @@ impl RubanEdition {
                                     ui.label("Plume du remplissage").on_hover_text("Contour de l'isolant entre les membrures, en coupe. Les membrures gardent la plume de la couche.");
                                     let mut plume = o.plume_remplissage();
                                     if ui.add(egui::DragValue::new(&mut plume).range(1..=12)).changed() {
-                                        o.plume_remplissage = (plume != crate::modele::murs::ossature::PLUME_REMPLISSAGE).then_some(plume);
+                                        o.plume_remplissage = (plume != modele::murs::ossature::PLUME_REMPLISSAGE).then_some(plume);
                                     }
                                     ui.end_row();
                                 });
@@ -537,7 +537,7 @@ impl RubanEdition {
             }
             None => {
                 let id = noyau::uuid::uuid();
-                projet.types_murs.push(crate::modele::TypeCompose { id: id.clone(), nom, couches: ed.couches.clone(), categorie: Some(ed.categorie), couches_detaillees: true, origine: None });
+                projet.types_murs.push(modele::TypeCompose { id: id.clone(), nom, couches: ed.couches.clone(), categorie: Some(ed.categorie), couches_detaillees: true, origine: None });
                 id
             }
         };
@@ -554,7 +554,7 @@ impl RubanEdition {
     }
 
     /// Crée (ou remplace) un type composé et le choisit pour les prochains murs (pilote).
-    pub fn definir_type_mur(&mut self, projet: &mut crate::modele::Projet, nom: &str, couches: Vec<crate::modele::Couche>, categorie: Option<crate::modele::CategorieMur>) -> Result<String, String> {
+    pub fn definir_type_mur(&mut self, projet: &mut modele::Projet, nom: &str, couches: Vec<modele::Couche>, categorie: Option<modele::CategorieMur>) -> Result<String, String> {
         if couches.is_empty() || couches.iter().any(|c| !(c.epaisseur > 0.0 && c.epaisseur.is_finite())) {
             return Err("Chaque couche doit avoir une épaisseur positive.".into());
         }
@@ -566,7 +566,7 @@ impl RubanEdition {
             }
             None => {
                 let id = noyau::uuid::uuid();
-                projet.types_murs.push(crate::modele::TypeCompose { id: id.clone(), nom: nom.into(), couches, categorie, couches_detaillees: true, origine: None });
+                projet.types_murs.push(modele::TypeCompose { id: id.clone(), nom: nom.into(), couches, categorie, couches_detaillees: true, origine: None });
                 id
             }
         };
@@ -578,7 +578,7 @@ impl RubanEdition {
     /// Croquis de saisie : mur en perspective à gauche, ses deux limites à droite, sur
     /// une ligne chacune (niveau, puis décalage, ou hauteur si le haut est libre),
     /// rappelées par un pointillé depuis l'arête correspondante du mur.
-    pub(super) fn croquis_mur_creation(&mut self, ui: &mut egui::Ui, projet: &crate::modele::Projet) {
+    pub(super) fn croquis_mur_creation(&mut self, ui: &mut egui::Ui, projet: &modele::Projet) {
         use egui::{Align2, FontId, Stroke, pos2, vec2};
         let bleu = Color32::from_rgb(18, 158, 205);
         let largeur_croquis = 64.0;

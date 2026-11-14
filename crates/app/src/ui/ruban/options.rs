@@ -7,11 +7,11 @@ impl RubanEdition {
     /// Retourne false pour laisser la palette afficher la sélection du modèle.
     /// Placement d'une ouverture : sélecteur de type en tête de Propriétés (générique :
     /// cotes du ruban), édition de la famille du type ou nouvelle famille.
-    pub fn proprietes_ouverture(&mut self, ui: &mut egui::Ui, projet: Option<&crate::modele::Projet>) -> bool {
+    pub fn proprietes_ouverture(&mut self, ui: &mut egui::Ui, projet: Option<&modele::Projet>) -> bool {
         if self.selection != Some(Outil::Ouverture) {
             return false;
         }
-        use crate::modele::GenreOuverture;
+        use modele::GenreOuverture;
         let genre = match self.texte_option(Outil::Ouverture, 0).as_str() {
             "Fenêtre" => GenreOuverture::Fenetre,
             "Libre" => GenreOuverture::Libre,
@@ -60,11 +60,11 @@ impl RubanEdition {
         true
     }
 
-    pub fn proprietes_surfaces(&mut self, ui: &mut egui::Ui, projet: Option<&crate::modele::Projet>) -> bool {
+    pub fn proprietes_surfaces(&mut self, ui: &mut egui::Ui, projet: Option<&modele::Projet>) -> bool {
         let Some(mut surface) = self.selection.filter(|o| o.commande() == Outil::Surfaces) else {
             return false;
         };
-        let projet_vide = crate::modele::Projet::default();
+        let projet_vide = modele::Projet::default();
         let projet_apercu = projet.unwrap_or(&projet_vide);
         ui.add_space(6.0);
         {
@@ -73,7 +73,7 @@ impl RubanEdition {
             let identique = self.surface_identique.as_ref().filter(|(o, _)| *o == surface).map(|(_, t)| t);
             let (nom_type, couches_type) = identique.map(|t| (t.nom.clone(), t.couches.clone())).or_else(|| types.get(k).cloned()).unwrap_or_default();
             let unite = crate::config::options::unite();
-            let epaisseur = |c: &[crate::modele::Couche]| c.iter().map(|c| c.epaisseur).sum::<f64>();
+            let epaisseur = |c: &[modele::Couche]| c.iter().map(|c| c.epaisseur).sum::<f64>();
             let titre = format!("{} · {nom_type}", surface.nom());
             let vignette = |p: &egui::Painter, r: egui::Rect, c: Color32| icone(p, r, surface, c);
             let detail = (!couches_type.is_empty()).then(|| unite.afficher(epaisseur(&couches_type)));
@@ -207,7 +207,7 @@ Type des prochains éléments horizontaux."), Some(&vignette));
         &mut self,
         ui: &mut egui::Ui,
         outil: Outil,
-        projet: Option<&crate::modele::Projet>,
+        projet: Option<&modele::Projet>,
     ) {
         let fenetre = matches!(self.valeurs.get(&(Outil::Ouverture, 0)), Some(Valeur::Texte(t)) if t == "Fenêtre" || t == "Libre");
         let garde_corps_type = outil == Outil::GardeCorps && self.type_garde_corps.as_ref()
@@ -286,7 +286,7 @@ Type des prochains éléments horizontaux."), Some(&vignette));
         }
     }
 
-    pub(super) fn options_mur(&mut self, ui: &mut egui::Ui, projet: Option<&crate::modele::Projet>) {
+    pub(super) fn options_mur(&mut self, ui: &mut egui::Ui, projet: Option<&modele::Projet>) {
         if !self.mur_actif() {
             return;
         }

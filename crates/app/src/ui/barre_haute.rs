@@ -346,7 +346,7 @@ impl ViewerApp {
                         "pdf" => self.export_pdf_dialogue(),
                         "ifc" => self.export_ifc_dialogue(),
                         "jeu_pdf" => {
-                            let jeu = self.jeu_actif().or_else(|| self.natif.as_ref().and_then(|(p, _)| crate::modele::documentation::jeux(p).into_iter().next()));
+                            let jeu = self.jeu_actif().or_else(|| self.natif.as_ref().and_then(|(p, _)| modele::documentation::jeux(p).into_iter().next()));
                             if let Some(jeu) = jeu {
                                 self.exporter_jeu_dialogue(&jeu);
                             }

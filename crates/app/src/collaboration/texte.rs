@@ -158,7 +158,7 @@ impl Editeur {
 
 pub fn projection(p: &mut Projet, textes: &BTreeMap<String, EtatTexte>) -> Resultat<()> {
     for a in &mut p.annotations {
-        if let crate::modele::documentation::AnnotationForme::Texte { texte, .. } = &mut a.forme {
+        if let modele::documentation::AnnotationForme::Texte { texte, .. } = &mut a.forme {
             if let Some(etat) = textes.get(&a.id) {
                 if !etat.supprime {
                     *texte = etat.contenu()?;

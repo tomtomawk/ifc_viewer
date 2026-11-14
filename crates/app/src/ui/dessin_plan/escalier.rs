@@ -9,7 +9,7 @@ impl ViewerApp {
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
         let (niveau, haut, hauteur, decalage_bas) = self.base_escalier().ok_or("Créez d'abord un niveau.")?;
         let trace = self.trace_justifie(&trace);
-        let escalier = crate::modele::Escalier {
+        let escalier = modele::Escalier {
             id: String::new(),
             nom: format!("Escalier {}", p.escaliers.len() + 1),
             niveau: niveau.clone(),
@@ -58,7 +58,7 @@ impl ViewerApp {
         let type_actif = self.ruban_edition.type_garde_corps.as_ref()
             .and_then(|id| p.types_garde_corps.iter().find(|t| &t.id == id));
         let t = type_actif.unwrap_or(&standard);
-        let garde_corps = crate::modele::GardeCorps {
+        let garde_corps = modele::GardeCorps {
             id: String::new(),
             nom: format!("Garde-corps {}", p.garde_corps.len() + 1),
             niveau,
@@ -254,7 +254,7 @@ impl ViewerApp {
             _ => 0.0,
         }).collect();
         if d.is_empty() || d.iter().all(|x| *x == d[0]) {
-            return crate::modele::elements::escalier::decaler_polyligne(trace, d.first().copied().unwrap_or(0.0));
+            return modele::elements::escalier::decaler_polyligne(trace, d.first().copied().unwrap_or(0.0));
         }
         let p: Vec<DVec2> = trace.iter().map(|q| DVec2::from_array(*q)).collect();
         let t: Vec<DVec2> = (0..segments).map(|i| (p[i + 1] - p[i]).normalize_or_zero()).collect();
@@ -388,7 +388,7 @@ impl ViewerApp {
                 painter.text(q + egui::vec2(16.0, -22.0), egui::Align2::LEFT_BOTTOM, texte, egui::FontId::proportional(13.0), teinte);
             }
             for d in [w, -w] {
-                let bord: Vec<egui::Pos2> = crate::modele::elements::escalier::decaler_polyligne(&trace, d).iter().filter_map(|q| self.vers_ecran(rect, DVec2::from_array(*q))).collect();
+                let bord: Vec<egui::Pos2> = modele::elements::escalier::decaler_polyligne(&trace, d).iter().filter_map(|q| self.vers_ecran(rect, DVec2::from_array(*q))).collect();
                 painter.add(egui::Shape::line(bord, egui::Stroke::new(1.5, couleur)));
             }
             // flèche à l'arrivée

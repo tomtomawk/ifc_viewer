@@ -341,11 +341,11 @@ pub(super) fn load_state_fr(s: &str) -> &str {
 }
 
 /// Aperçu d'un motif de hachures dans `r` : traits du motif, `px_mm` pixels par mm du papier.
-pub(super) fn apercu_motif(p: &egui::Painter, r: egui::Rect, d: &crate::modele::DefinitionMotif, px_mm: f32) {
+pub(super) fn apercu_motif(p: &egui::Painter, r: egui::Rect, d: &modele::DefinitionMotif, px_mm: f32) {
     apercu_motif_colore(p, r, d, px_mm, Color32::from_gray(40));
 }
 
-pub(super) fn apercu_motif_colore(p: &egui::Painter, r: egui::Rect, d: &crate::modele::DefinitionMotif, px_mm: f32, couleur: Color32) {
+pub(super) fn apercu_motif_colore(p: &egui::Painter, r: egui::Rect, d: &modele::DefinitionMotif, px_mm: f32, couleur: Color32) {
     use noyau::motif::{hachures_plan, GrilleMotif, Motif};
     let m = Motif {
         nom: d.nom.clone(),

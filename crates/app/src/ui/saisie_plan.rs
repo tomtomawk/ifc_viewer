@@ -3,7 +3,7 @@ use crate::edition::Execution;
 use super::*;
 
 impl ViewerApp {
-    pub(super) fn ajouter_mur_natif(&mut self, debut: [f64; 2], fin: [f64; 2], options: &crate::modele::creation::ParametresMur) -> Result<String, String> {
+    pub(super) fn ajouter_mur_natif(&mut self, debut: [f64; 2], fin: [f64; 2], options: &modele::creation::ParametresMur) -> Result<String, String> {
         let (projet, _) = self.natif.as_ref().ok_or("Créez ou ouvrez un projet natif pour dessiner un mur.")?;
         let mut projet = projet.clone();
         let id = projet.ajouter_mur(debut, fin, options)?;
@@ -18,7 +18,7 @@ impl ViewerApp {
 
     /// Ajoute une vue au projet natif (`ajout` rend son identifiant) et l'ouvre si
     /// `ouvrir` ; elle apparaît dans l'arborescence.
-    pub(super) fn creer_vue(&mut self, ajout: impl FnOnce(&mut crate::modele::Projet) -> Result<String, String>, ouvrir: bool) {
+    pub(super) fn creer_vue(&mut self, ajout: impl FnOnce(&mut modele::Projet) -> Result<String, String>, ouvrir: bool) {
         let Some((projet, _)) = &self.natif else { return };
         let mut projet = projet.clone();
         let id = match ajout(&mut projet) {
@@ -51,12 +51,12 @@ impl ViewerApp {
     }
 
     /// Crée une dalle de contour `pts` (mm) dans le projet natif et la sélectionne.
-    pub(super) fn creer_dalle(&mut self, pts: &[[f64; 2]], parametres: &crate::modele::creation::ParametresDalle) {
+    pub(super) fn creer_dalle(&mut self, pts: &[[f64; 2]], parametres: &modele::creation::ParametresDalle) {
         self.creer_dalle_contours(&[pts.to_vec()], parametres);
     }
 
     /// Crée une dalle de plusieurs contours (parties et trémies) et la sélectionne.
-    pub(super) fn creer_dalle_contours(&mut self, contours: &[Vec<[f64; 2]>], parametres: &crate::modele::creation::ParametresDalle) {
+    pub(super) fn creer_dalle_contours(&mut self, contours: &[Vec<[f64; 2]>], parametres: &modele::creation::ParametresDalle) {
         let Some((projet, _)) = &self.natif else { return };
         let mut projet = projet.clone();
         match projet.ajouter_dalle_contours(contours, parametres).and_then(|id| self.appliquer_projet(projet).map(|_| id)) {
@@ -102,7 +102,7 @@ impl ViewerApp {
     /// Arêtes de l'élément horizontal sélectionné qui peut porter une pente (plafond,
     /// toiture) : contour, rang, milieu et direction vers l'intérieur à l'écran, pente.
     pub(super) fn aretes_pente(&self, rect: egui::Rect) -> Vec<(usize, usize, egui::Pos2, egui::Vec2, Option<f64>)> {
-        use crate::modele::elements::pente;
+        use modele::elements::pente;
         let (Some((projet, _)), Some(sel)) = (&self.natif, self.selected) else { return Vec::new() };
         let Some(d) = projet.dalles.iter().find(|d| scene::id_natif("dalle", &d.id) == sel && d.sorte.aretes_reglables()) else { return Vec::new() };
         let z0 = projet.niveau(&d.niveau).map_or(0.0, |n| n.altitude) + d.decalage;
@@ -144,7 +144,7 @@ impl ViewerApp {
                     painter.add(egui::Shape::convex_polygon(pts, accent, egui::Stroke::new(if survole { 2.0 } else { 1.0 }, Color32::WHITE)));
                     // terre-plein : liste éditable à côté du repère (editer_talus)
                     if talus { continue; }
-                    let texte = if talus { crate::modele::elements::terre_plein::libelle(a) } else { format!("{}°", crate::formats::ifc::step::format_real((a * 10.0).round() / 10.0)) };
+                    let texte = if talus { modele::elements::terre_plein::libelle(a) } else { format!("{}°", crate::formats::ifc::step::format_real((a * 10.0).round() / 10.0)) };
                     let g = painter.layout_no_wrap(texte, egui::FontId::proportional(12.0), Color32::from_gray(30));
                     let cadre = egui::Rect::from_center_size(q - n * 18.0, g.size() + egui::vec2(8.0, 4.0));
                     painter.rect(cadre, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 230), egui::Stroke::new(1.0, accent), egui::StrokeKind::Inside);
@@ -169,7 +169,7 @@ impl ViewerApp {
     /// Terre-plein sélectionné : liste du talus de chaque arête, à côté de son repère
     /// dans la vue (pente en %, ou sans talus ; remblai de sa fouille).
     pub(super) fn editer_talus(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
-        use crate::modele::elements::terre_plein as tp;
+        use modele::elements::terre_plein as tp;
         let (Some((projet, _)), Some(sel)) = (&self.natif, self.selected) else { return };
         let Some(d) = projet.dalles.iter().find(|d| scene::id_natif("dalle", &d.id) == sel && d.sorte.talus()) else { return };
         let id = d.id.clone();
@@ -329,7 +329,7 @@ impl ViewerApp {
         let (Some((projet, _)), Some(sel)) = (&self.natif, self.selected) else { return };
         let mut p = projet.clone();
         let Some(d) = p.dalles.iter_mut().find(|d| scene::id_natif("dalle", &d.id) == sel) else { return };
-        let defaut = if d.sorte.talus() { crate::modele::elements::terre_plein::angle(1.0) } else { self.pente_defaut };
+        let defaut = if d.sorte.talus() { modele::elements::terre_plein::angle(1.0) } else { self.pente_defaut };
         let pente = if d.pente(c, k).is_some() { None } else { Some(defaut) };
         d.definir_pente(c, k, pente);
         if let Err(e) = self.appliquer_projet(p) { self.error = Some(e); }
@@ -382,7 +382,7 @@ impl ViewerApp {
         let Some(vue) = projet.vues.iter().find(|v| v.id == id) else { return };
         let painter = ui.painter().with_clip_rect(rect);
         let trait_ = egui::Stroke::new(1.0, Color32::from_gray(150));
-        let plan = matches!(vue.genre, crate::modele::GenreVue::Plan { .. });
+        let plan = matches!(vue.genre, modele::GenreVue::Plan { .. });
         let z = if plan { self.altitude_vue_native() } else { 0.0 };
         // le contour s'édite avec l'outil Cadrer, qui le dessine lui-même
         if self.ruban_edition.outil() != Some(crate::ui::ruban::Outil::Cadrer) && vue.contour_cadrage.len() > 2
@@ -432,7 +432,7 @@ impl ViewerApp {
     pub(super) fn origine_ecran(&self, rect: egui::Rect) -> Option<egui::Pos2> {
         let id = self.vue_native_id()?;
         let vue = self.natif.as_ref()?.0.vues.iter().find(|v| v.id == id)?;
-        let z = if matches!(vue.genre, crate::modele::GenreVue::Plan { .. }) { self.altitude_vue_native() } else { 0.0 };
+        let z = if matches!(vue.genre, modele::GenreVue::Plan { .. }) { self.altitude_vue_native() } else { 0.0 };
         self.ecran_plan(rect, [0.0, 0.0], z).filter(|o| rect.contains(*o))
     }
 
@@ -480,7 +480,7 @@ impl ViewerApp {
         }
         for v in &projet.vues {
             if masques.contains(&v.id) { continue; }
-            if let crate::modele::GenreVue::Coupe { debut, fin, profondeur, elevation } = &v.genre {
+            if let modele::GenreVue::Coupe { debut, fin, profondeur, elevation } = &v.genre {
                 let couleur = if self.bim.selection.contains(&v.id) { Color32::from_rgb(230, 120, 20) } else { Color32::from_rgb(40, 90, 170) };
                 self.dessiner_repere_coupe(&painter, rect, *debut, *fin, z, *profondeur, *elevation, &v.nom, couleur);
             }
@@ -495,7 +495,7 @@ impl ViewerApp {
         let mut rectangles: std::collections::HashMap<u64, egui::Rect> = std::collections::HashMap::new();
         // pièces : seule l'étiquette se vise (l'aplat laisse sélectionner les murs)
         let pieces: std::collections::HashSet<u64> = p.pieces.iter().map(|x| scene::id_natif("annotation", &x.id)).collect();
-        for prim in crate::modele::documentation::annotations(p, vue) {
+        for prim in modele::documentation::annotations(p, vue) {
             let Some(id) = prim.element else { continue };
             if pieces.contains(&id) && matches!(prim.forme, noyau::trace2d::Forme::Surface(_)) { continue; }
             let points: Vec<glam::DVec3> = match prim.forme {
@@ -518,7 +518,7 @@ impl ViewerApp {
         if !self.point_dans_cadrage(rect, q) { return None; }
         let (p, _) = self.natif.as_ref()?;
         let masques = self.vue_native_id().and_then(|id| p.vues.iter().find(|v| v.id == id)).map(|v| v.elements_masques.as_slice()).unwrap_or(&[]);
-        p.vues.iter().filter_map(|v| if let crate::modele::GenreVue::Coupe { debut, fin, .. } = &v.genre { Some((&v.id, debut, fin)) } else { None })
+        p.vues.iter().filter_map(|v| if let modele::GenreVue::Coupe { debut, fin, .. } = &v.genre { Some((&v.id, debut, fin)) } else { None })
         .chain(p.quadrillages.iter().map(|g| (&g.id, &g.debut, &g.fin))).filter_map(|(id, debut, fin)| {
             if masques.contains(id) { return None; }
             let (a, b) = (self.ecran_plan(rect, *debut, z)?, self.ecran_plan(rect, *fin, z)?);
@@ -639,11 +639,11 @@ impl ViewerApp {
 
     /// Remplace le projet natif ouvert par `projet` (modifié) et reconstruit la scène,
     /// cadrage, niveaux, catégories et visibilité compris. Rien ne change en cas d'erreur.
-    pub(super) fn appliquer_projet(&mut self, projet: crate::modele::Projet) -> Result<(), String> {
+    pub(super) fn appliquer_projet(&mut self, projet: modele::Projet) -> Result<(), String> {
         if self.partage_en_cours{return Err("Création du partage en cours ; attendre la fin de l'enregistrement".into());}
         self.appliquer_projet_interne(projet, false)
     }
-    pub(super) fn appliquer_projet_interne(&mut self, mut projet: crate::modele::Projet, distant: bool) -> Result<(), String> {
+    pub(super) fn appliquer_projet_interne(&mut self, mut projet: modele::Projet, distant: bool) -> Result<(), String> {
         let mut t_etape = std::time::Instant::now();
         if !distant {
             projet.actualiser_types_murs_modifies(&self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.0)?;
@@ -660,7 +660,7 @@ impl ViewerApp {
         }
         let id_vue = self.id_vue_contexte();
         let gabarit_avant = id_vue.as_ref().and_then(|id| self.natif.as_ref()?.0.gabarit_vue(id)).cloned();
-        let echelle_vue = |p: &crate::modele::Projet| {
+        let echelle_vue = |p: &modele::Projet| {
             let id = id_vue.as_ref()?;
             p.vues.iter().find(|v| &v.id == id).map(|v| v.echelle)
         };
@@ -963,7 +963,7 @@ impl ViewerApp {
         match &self.natif {
             Some((p, _)) => {
                 let mut p = p.clone();
-                p.positions_plan.push(crate::modele::PositionPlan { id: noyau::uuid::uuid(), nom: nom.clone(), angle: (angle.to_degrees() as f64 * 10.0).round() / 10.0 });
+                p.positions_plan.push(modele::PositionPlan { id: noyau::uuid::uuid(), nom: nom.clone(), angle: (angle.to_degrees() as f64 * 10.0).round() / 10.0 });
                 let camera = self.camera.clone();
                 if let Err(e) = self.appliquer_projet(p) {
                     self.error = Some(e);
@@ -1015,7 +1015,7 @@ impl ViewerApp {
         // origine du projet : toujours accrochable
         let mut candidats: Vec<([f64; 2], AccrocheMur)> = vec![([0.0, 0.0], AccrocheMur::Extremite)];
         let mut aretes: Vec<[[f64; 2]; 2]> = Vec::new();
-        let jonctions = crate::modele::murs::jonctions::coupes(projet);
+        let jonctions = modele::murs::jonctions::coupes(projet);
         // Destination d'un déplacement ou d'une copie : la sélection (et toutes les couches
         // d'un mur composé) reste à sa place d'origine pendant le choix, elle n'attire pas le point.
         let en_deplacement = depart.is_some()
@@ -1032,13 +1032,13 @@ impl ViewerApp {
             if deplaces.contains(&m.id) { continue; }
             // murs qui traversent ce plan (base au niveau, ou plus bas et plus haut)
             if projet.bas_haut(m).is_none_or(|(b, h)| altitude < b - 0.1 || altitude > h + 0.1) { continue; }
-            let (crate::modele::Axe::Droit { debut, fin } | crate::modele::Axe::Arc { debut, fin, .. }) = m.axe;
+            let (modele::Axe::Droit { debut, fin } | modele::Axe::Arc { debut, fin, .. }) = m.axe;
             if projet.bas_haut(m).is_some_and(|(b, _)| (b - altitude).abs() <= 0.1) {
                 candidats.push((debut, AccrocheMur::Extremite));
                 candidats.push((fin, AccrocheMur::Extremite));
                 candidats.push(([(debut[0] + fin[0]) * 0.5, (debut[1] + fin[1]) * 0.5], AccrocheMur::Milieu));
             }
-            if let Some(c) = crate::modele::murs::jonctions::contour(projet, m, &jonctions) {
+            if let Some(c) = modele::murs::jonctions::contour(projet, m, &jonctions) {
                 // milieu des faces et des abouts, arêtes pour l'accrochage « sur l'arête »
                 for i in 0..4 {
                     let (a, b) = (c[i], c[(i + 1) % 4]);

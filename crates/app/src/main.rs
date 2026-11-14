@@ -6,7 +6,6 @@ mod dessin;
 mod echanges;
 mod edition;
 mod formats;
-mod modele;
 #[cfg(test)]
 mod modele_tests;
 mod pilote;

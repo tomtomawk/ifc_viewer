@@ -33,7 +33,7 @@ impl ViewerApp {
         if let (Some(numero), Some((projet, _))) = (numero, &mut self.natif) {
             if let Some(index) = projet.vues.iter().position(|v| scene::numero_vue(&v.id) == numero) {
                 let mut vue = projet.vues[index].clone();
-                if let crate::modele::GenreVue::Plan { niveau, coupe, .. } = &mut vue.genre {
+                if let modele::GenreVue::Plan { niveau, coupe, .. } = &mut vue.genre {
                     if let Some(z) = altitude_coupe && let Some(n) = projet.niveau(niveau) { *coupe = (z - n.altitude).round(); }
                     if (vue.orientation_plan - orientation).abs() > 1e-5 { vue.orientation_plan = orientation; }
                 }

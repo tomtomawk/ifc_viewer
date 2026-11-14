@@ -1,7 +1,7 @@
 //! Gestion directe des phases, sous-projets et variantes : chaque ligne porte ses actions.
 use crate::edition::Contextes;
 use super::*;
-use crate::modele::creation::ListeCreation;
+use modele::creation::ListeCreation;
 
 #[derive(Clone)]
 pub(super) struct GestionContextes {
@@ -229,7 +229,7 @@ impl ViewerApp {
                                         if pictogramme(ui, Picto::Descendre, false, rang > 0 && rang + 1 < n).on_hover_text("Reculer la phase dans la chronologie").clicked() { action = Some(Action::Deplacer(e.cle.clone(), 1)); }
                                     }
                                     if ui.small_button("Renommer").clicked() { etat.renommage = Some((e.cle.clone(), e.nom.clone())); }
-                                    let fixe = liste == ListeCreation::Phase && e.cle == crate::modele::PHASE_EXISTANT || (liste != ListeCreation::Variante && entrees.len() < 2);
+                                    let fixe = liste == ListeCreation::Phase && e.cle == modele::PHASE_EXISTANT || (liste != ListeCreation::Variante && entrees.len() < 2);
                                     if ui.add_enabled(!fixe, egui::Button::new("Supprimer").small()).clicked() {
                                         let autre = entrees.iter().find(|x| x.cle != e.cle && x.jeu == e.jeu).map(|x| x.cle.clone());
                                         if e.usages == 0 { action = Some(Action::Supprimer(e.cle.clone(), autre)); }

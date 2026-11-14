@@ -3,7 +3,7 @@
 //! d'ouvertures…) et les suit. Élément sélectionné : la valeur des cotes qui s'appuient
 //! sur lui se saisit dans la vue et le déplace (longueur) ou le tourne (angle).
 use super::*;
-use crate::modele::documentation::{self as doc, GenreCote, PointCote, RefArete};
+use modele::documentation::{self as doc, GenreCote, PointCote, RefArete};
 use crate::ui::ruban::Outil;
 
 /// Arête de référence sous le curseur : élément, rang, segment (repère de la vue) et
@@ -12,11 +12,11 @@ pub(super) type AreteVisee = (String, usize, [DVec2; 2], f64);
 
 impl ViewerApp {
     /// Vue en plan native ouverte et son projet.
-    fn plan_natif(&self) -> Option<(&crate::modele::Projet, &crate::modele::Vue)> {
+    fn plan_natif(&self) -> Option<(&modele::Projet, &modele::Vue)> {
         let id = self.vue_native_id()?;
         let p = &self.natif.as_ref()?.0;
         let v = p.vues.iter().find(|v| v.id == id)?;
-        matches!(v.genre, crate::modele::GenreVue::Plan { .. }).then_some((p, v))
+        matches!(v.genre, modele::GenreVue::Plan { .. }).then_some((p, v))
     }
 
     /// Outil de cote en sélection d'arêtes : longueur ou angle, vue en plan, case
@@ -44,8 +44,8 @@ impl ViewerApp {
         if let Some((r, vue, a)) = &self.dessin2d.aretes_cache && *r == self.bim.revision && vue == &v.id {
             return a.clone();
         }
-        let crate::modele::GenreVue::Plan { niveau, .. } = &v.genre else { return Vec::new() };
-        let en_assemblage = |m: &crate::modele::Mur| m.assemblage.as_ref().is_some_and(|a| p.assemblage(a).is_some());
+        let modele::GenreVue::Plan { niveau, .. } = &v.genre else { return Vec::new() };
+        let en_assemblage = |m: &modele::Mur| m.assemblage.as_ref().is_some_and(|a| p.assemblage(a).is_some());
         let murs: Vec<&str> = p.murs.iter().filter(|m| &m.niveau == niveau).map(|m| if en_assemblage(m) { m.assemblage.as_deref().unwrap() } else { m.id.as_str() }).collect();
         let mut ids: Vec<&str> = Vec::new();
         for id in &murs { if !ids.contains(id) { ids.push(id); } }

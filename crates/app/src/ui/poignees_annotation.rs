@@ -1,7 +1,7 @@
 //! Poignées d'annotations du projet : même géométrie que les éditeurs de famille.
 use super::*;
 use glam::{DVec2, DVec3};
-use crate::modele::documentation::Annotation;
+use modele::documentation::Annotation;
 
 enum MouvementAnnotation {
     Poignee { annotation: Annotation, indice: usize },
@@ -33,7 +33,7 @@ impl ViewerApp {
     fn repere_annotation(&self) -> Option<(DVec3, DVec3, DVec3)> {
         let (p, _) = self.natif.as_ref()?;
         let id = self.vue_native_id()?;
-        Some(crate::modele::documentation::repere(p, p.vues.iter().find(|v| v.id == id)?))
+        Some(modele::documentation::repere(p, p.vues.iter().find(|v| v.id == id)?))
     }
 
     fn ecran_annotation(&self, rect: egui::Rect, q: [f64; 2]) -> Option<egui::Pos2> {
@@ -64,7 +64,7 @@ impl ViewerApp {
     /// le texte dans la vue, puis il reste sélectionné pour régler son contenu, ses
     /// champs, sa position et sa hauteur dans Propriétés.
     pub(super) fn placer_texte_vue(&mut self, rect: egui::Rect, q: egui::Pos2) -> Result<(), String> {
-        use crate::modele::documentation::AnnotationForme;
+        use modele::documentation::AnnotationForme;
         let vue = self.vue_native_id().ok_or("Ouvrez un plan ou une coupe native pour annoter.")?;
         let point = self.point_annotation(rect, q).ok_or("Le plan de la vue est vu par la tranche : ouvrir un plan, une coupe ou une élévation.")?;
         let texte = if self.bim.texte.trim().is_empty() { "Texte".to_owned() } else { self.bim.texte.clone() };
@@ -93,7 +93,7 @@ impl ViewerApp {
                     q.distance(a + d * t) <= 7.0
                 }));
             }
-            matches!(annotation.forme, crate::modele::documentation::AnnotationForme::Texte { .. })
+            matches!(annotation.forme, modele::documentation::AnnotationForme::Texte { .. })
                 && rectangles.iter().any(|(id, r)| id == &annotation.id && r.expand(4.0).contains(q))
         })
     }
@@ -124,7 +124,7 @@ impl ViewerApp {
                     .map(|indice| MouvementAnnotation::Poignee { annotation: annotation.clone(), indice })
             } else { None };
             let mouvement = poignee.or_else(|| {
-                let admissible = annotations.iter().all(|a| a.forme.forme_2d().is_some() || matches!(a.forme, crate::modele::documentation::AnnotationForme::Texte { .. }));
+                let admissible = annotations.iter().all(|a| a.forme.forme_2d().is_some() || matches!(a.forme, modele::documentation::AnnotationForme::Texte { .. }));
                 (admissible && (self.annotation_visee(rect, q, &annotations) || self.element_selectionne_vise(rect, q, &ids))).then(|| {
                     self.point_annotation(rect, q).map(|p| MouvementAnnotation::Groupe { ids, annotations, origine: DVec2::from_array(p), delta: DVec2::ZERO })
                 }).flatten()
@@ -197,7 +197,7 @@ impl ViewerApp {
                         let points: Vec<_> = ligne.into_iter().filter_map(|p| self.ecran_annotation(rect, p.to_array())).collect();
                         if points.len() >= 2 { painter.add(egui::Shape::dashed_line(&points, egui::Stroke::new(1.2, bleu), 5.0, 4.0)); }
                     }
-                } else if let crate::modele::documentation::AnnotationForme::Texte { point, texte } = &annotation.forme
+                } else if let modele::documentation::AnnotationForme::Texte { point, texte } = &annotation.forme
                     && let Some(q) = self.ecran_annotation(rect, *point) {
                     painter.text(q, egui::Align2::LEFT_BOTTOM, texte, egui::FontId::proportional(12.0), bleu);
                 }

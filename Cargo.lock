@@ -173,10 +173,10 @@ version = "0.1.0"
 dependencies = [
  "earcutr",
  "eframe",
- "geo-straight-skeleton",
  "glam",
  "image",
  "miniz_oxide 0.8.9",
+ "modele",
  "noyau",
  "pdf-writer",
  "png",
@@ -1511,6 +1511,19 @@ checksum = "b63fbc4a50860e98e7b2aa7804ded1db5cbc3aff9193adaff57a6931bf7c4b4c"
 dependencies = [
  "adler2",
  "simd-adler32",
+]
+
+[[package]]
+name = "modele"
+version = "0.1.0"
+dependencies = [
+ "earcutr",
+ "geo-straight-skeleton",
+ "glam",
+ "noyau",
+ "rayon",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

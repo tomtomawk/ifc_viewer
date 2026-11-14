@@ -13,8 +13,8 @@
 //! - Dalles (`IfcSlab`) prismatiques : contour du dessus, couches comme pour les murs.
 //! - Le reste, avec une géométrie : éléments importés.
 
-use crate::modele::volumes::geometrie::{cercle, direction_principale, etendue, etendue_arc, prisme_vertical};
-use crate::modele::{Axe, Conversion, Couche, Dalle, GenreOuverture, Haut, Mur, Niveau, Origine, Ouverture, Projet, SorteDalle, TypeCompose, identifiant, source};
+use modele::volumes::geometrie::{cercle, direction_principale, etendue, etendue_arc, prisme_vertical};
+use modele::{Axe, Conversion, Couche, Dalle, GenreOuverture, Haut, Mur, Niveau, Origine, Ouverture, Projet, SorteDalle, TypeCompose, identifiant, source};
 use crate::formats::ifc::geom::{self, GeomStats};
 use crate::formats::ifc::semantique::{IfcModel, pretty_type};
 use crate::formats::ifc::step::{Id, StepFile};
@@ -28,7 +28,7 @@ const DALLES: &[&str] = &["IFCSLAB", "IFCSLABSTANDARDCASE", "IFCSLABELEMENTEDCAS
 /// Produits sans équivalent physique à importer.
 const IGNORES: &[&str] = &["IFCOPENINGELEMENT", "IFCOPENINGSTANDARDCASE", "IFCSPACE", "IFCANNOTATION", "IFCVIRTUALELEMENT", "IFCGRID"];
 
-pub fn convertir(chemin: &Path, progress: &dyn Fn(String)) -> Result<(Projet, Vec<crate::modele::Mesure>), String> {
+pub fn convertir(chemin: &Path, progress: &dyn Fn(String)) -> Result<(Projet, Vec<modele::Mesure>), String> {
     progress(format!("Lecture de {}…", chemin.display()));
     let data = std::fs::read(chemin).map_err(|e| format!("Lecture impossible : {e}"))?;
     if data.starts_with(b"PK") {
@@ -228,7 +228,7 @@ pub fn convertir_modele(m: &IfcModel, geometries: &HashMap<Id, Vec<[DVec3; 3]>>,
             if let Some(f) = remplissage {
                 consommes.insert(f);
             }
-            let rep = remplissage.map(tris).filter(|x| !x.is_empty()).map(|x| crate::modele::Maillage::depuis_triangles(x));
+            let rep = remplissage.map(tris).filter(|x| !x.is_empty()).map(|x| modele::Maillage::depuis_triangles(x));
             c.projet.ouvertures.push(Ouverture {
                 id: ident("ouverture", source),
                 nom: m.name(source),

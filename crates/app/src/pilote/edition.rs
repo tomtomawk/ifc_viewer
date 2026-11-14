@@ -89,9 +89,9 @@ fn ajouter(v: &mut Value, path: &str, value: Value) -> Result<(), String> {
 }
 
 pub fn modifier(
-    actuel: &crate::modele::Projet,
+    actuel: &modele::Projet,
     m: Modification,
-) -> Result<crate::modele::Projet, String> {
+) -> Result<modele::Projet, String> {
     let mut v = serde_json::to_value(actuel).map_err(|e| e.to_string())?;
     if noyau::hash::hash(&v) != m.empreinte {
         return Err("Le projet a changé : relire projet_natif avant de modifier".into());
@@ -128,7 +128,7 @@ pub fn modifier(
         }
     }
     let mut ignores = Vec::new();
-    let p: crate::modele::Projet =
+    let p: modele::Projet =
         serde_ignored::deserialize(v, |path| ignores.push(path.to_string()))
             .map_err(|e| e.to_string())?;
     if !ignores.is_empty() {
@@ -145,10 +145,10 @@ pub fn modifier(
 mod tests {
     use super::*;
     use serde_json::json;
-    fn projet() -> crate::modele::Projet {
-        crate::modele::Projet::depuis_gabarit("Test", &crate::modele::gabarit::Gabarit::defaut())
+    fn projet() -> modele::Projet {
+        modele::Projet::depuis_gabarit("Test", &modele::gabarit::Gabarit::defaut())
     }
-    fn modification(p: &crate::modele::Projet, operations: Value) -> Modification {
+    fn modification(p: &modele::Projet, operations: Value) -> Modification {
         serde_json::from_value(json!({"empreinte":noyau::hash::hash(&serde_json::to_value(p).unwrap()),"operations":operations})).unwrap()
     }
     #[test]

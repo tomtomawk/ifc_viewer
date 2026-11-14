@@ -356,7 +356,7 @@ fn tremie_interieure_et_exterieure() {
     // terre-plein : un sommet déplacé garde les talus et les remblais de ses arêtes ;
     // un sommet ajouté ne garde que ceux des arêtes inchangées
     let mut plein = q.clone();
-    plein.dalles[0].sorte = crate::modele::SorteDalle::TerrePlein;
+    plein.dalles[0].sorte = modele::SorteDalle::TerrePlein;
     plein.dalles[0].pentes = vec![vec![Some(45.0), Some(30.0), None, None]];
     plein.dalles[0].remblais = vec![vec![true, false, false, false]];
     let mut deplaces = plein.dalles[0].contours.clone();

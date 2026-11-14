@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 noyau = { path = "../noyau" }
+modele = { path = "../modele" }
 earcutr.workspace = true
 eframe.workspace = true
 glam.workspace = true
@@ -23,7 +24,6 @@ serde_json.workspace = true
 serde_ignored.workspace = true
 svg2pdf.workspace = true
 pdf-writer.workspace = true
-geo-straight-skeleton.workspace = true
 uuid.workspace = true
 yrs.workspace = true
 

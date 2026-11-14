@@ -4,7 +4,7 @@
 use crate::edition::Execution;
 use super::*;
 use crate::edition::commandes::Commande;
-use crate::modele::Projet;
+use modele::Projet;
 
 #[derive(Default)]
 pub(super) struct EtatAjustement {
@@ -76,12 +76,12 @@ fn preparer(
     }
     let (q, _) = p.executer(commande)?;
     let (a, b) = q.ligne_ajustable(id).ok_or("Ligne ajustée absente")?;
-    let coupes = crate::modele::murs::jonctions::coupes(&q);
+    let coupes = modele::murs::jonctions::coupes(&q);
     let contours = q
         .murs
         .iter()
         .filter(|m| m.id == id || m.assemblage.as_deref() == Some(id) || (angle.is_some() && (m.id == reference || m.assemblage.as_deref() == Some(reference))))
-        .filter_map(|m| crate::modele::murs::jonctions::contour(&q, m, &coupes).map(|c| c.to_vec()))
+        .filter_map(|m| modele::murs::jonctions::contour(&q, m, &coupes).map(|c| c.to_vec()))
         .chain([id, reference].into_iter().filter(|x| *x == id || angle.is_some()).flat_map(|x| {
             // poutres : rectangle de la section en plan
             let a = q.aretes_plan(x);
@@ -161,7 +161,7 @@ impl ViewerApp {
             .filter(|m| m.assemblage.is_none())
             .map(|m| (&m.id, "mur"))
             .chain(p.assemblages.iter().map(|a| (&a.id, "assemblage")))
-            .chain(p.barres.iter().filter(|b| b.genre == crate::modele::GenreBarre::Poutre).map(|b| (&b.id, "barre")))
+            .chain(p.barres.iter().filter(|b| b.genre == modele::GenreBarre::Poutre).map(|b| (&b.id, "barre")))
             .filter(|(id, genre)| self.objects_under(scene::id_natif(genre, id)).iter().any(|i| self.visible.get(*i as usize).copied().unwrap_or(false)))
             .map(|(id, _)| id.clone())
             .collect()
@@ -437,7 +437,7 @@ mod tests {
     use super::*;
     #[test]
     fn angle_raccorde_deux_lignes_de_justification_en_une_transaction() {
-        let mut p = Projet::depuis_gabarit("Angle", &crate::modele::gabarit::Gabarit::defaut());
+        let mut p = Projet::depuis_gabarit("Angle", &modele::gabarit::Gabarit::defaut());
         let id = p.ajouter_mur([0., 0.], [2000., 0.], &Default::default()).unwrap();
         let reference = p.ajouter_mur([4000., -3000.], [4000., -1000.], &Default::default()).unwrap();
         let (ja, _) = p.ligne_ajustable(&reference).unwrap();
@@ -453,7 +453,7 @@ mod tests {
     }
     #[test]
     fn angle_garde_le_cote_du_clic() {
-        let mut p = Projet::depuis_gabarit("Angle", &crate::modele::gabarit::Gabarit::defaut());
+        let mut p = Projet::depuis_gabarit("Angle", &modele::gabarit::Gabarit::defaut());
         let a = p.ajouter_mur([0., 0.], [10000., 0.], &Default::default()).unwrap();
         let b = p.ajouter_mur([2000., -3000.], [2000., 3000.], &Default::default()).unwrap();
         // croisement vers x = 2000 (abscisse 0,2 de a) et y = 0 (abscisse 0,5 de b)
@@ -468,7 +468,7 @@ mod tests {
     }
     #[test]
     fn prolonge_la_justification_jusqu_a_une_arete_quelconque() {
-        let mut p = Projet::depuis_gabarit("Ajuster", &crate::modele::gabarit::Gabarit::defaut());
+        let mut p = Projet::depuis_gabarit("Ajuster", &modele::gabarit::Gabarit::defaut());
         let cible = p.ajouter_mur([0.0, 0.0], [2000.0, 0.0], &Default::default()).unwrap();
         let limite = p.ajouter_mur([4000.0, -2000.0], [4000.0, 2000.0], &Default::default()).unwrap();
         // chaque arête du mur limite donne un point différent ; la justification y arrive
@@ -489,10 +489,10 @@ mod tests {
     }
     #[test]
     fn poutre_prolongee_jusqu_a_l_arete_d_un_mur() {
-        let mut p = Projet::depuis_gabarit("Poutre", &crate::modele::gabarit::Gabarit::defaut());
+        let mut p = Projet::depuis_gabarit("Poutre", &modele::gabarit::Gabarit::defaut());
         let mur = p.ajouter_mur([4000.0, -2000.0], [4000.0, 2000.0], &Default::default()).unwrap();
         let niveau = p.niveaux[0].id.clone();
-        let b: crate::modele::Barre = serde_json::from_value(serde_json::json!({
+        let b: modele::Barre = serde_json::from_value(serde_json::json!({
             "id": "poutre-1", "nom": "Poutre", "genre": "poutre", "niveau": niveau,
             "debut": [0.0, 0.0, 2500.0], "fin": [2000.0, 0.0, 2500.0], "largeur": 200.0, "hauteur": 400.0
         })).unwrap();

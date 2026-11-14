@@ -1,7 +1,7 @@
 //! Adaptation du modèle natif vers la chaîne de rendu commune.
 use super::*;
 use crate::formats::ifc::geom::{Part, ProductGeom};
-use crate::modele::{Projet, SorteDalle};
+use modele::{Projet, SorteDalle};
 use noyau::chrono::chrono;
 use crate::formats::ifc::step::{Entity, Value};
 
@@ -38,7 +38,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         };
         entite(id_natif("dalle", &d.id), classe, &d.id, &d.nom, 9)?;
         // remblai d'un terre-plein : élément du site à part, sélectionnable
-        if crate::modele::elements::terre_plein::remblai(projet, d).is_some_and(|r| !r.tris.is_empty()) {
+        if modele::elements::terre_plein::remblai(projet, d).is_some_and(|r| !r.tris.is_empty()) {
             entite(id_natif("remblai", &d.id), "IFCGEOGRAPHICELEMENT", &format!("remblai-{}", d.id), &format!("Remblai · {}", d.nom), 9)?;
         }
     }
@@ -46,14 +46,14 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
     for l in &projet.limites_propriete { entite(id_natif("limite_propriete", &l.id), "IFCGEOGRAPHICELEMENT", &l.id, &l.nom, 9)?; }
     for o in &projet.ouvertures {
         let classe = match o.genre {
-            crate::modele::GenreOuverture::Porte => "IFCDOOR",
-            crate::modele::GenreOuverture::Fenetre => "IFCWINDOW",
-            crate::modele::GenreOuverture::Libre => "IFCOPENINGELEMENT",
+            modele::GenreOuverture::Porte => "IFCDOOR",
+            modele::GenreOuverture::Fenetre => "IFCWINDOW",
+            modele::GenreOuverture::Libre => "IFCOPENINGELEMENT",
         };
         entite(id_natif("ouverture", &o.id), classe, &o.id, &o.nom, 9)?;
     }
     for b in &projet.barres {
-        let classe = match b.genre { crate::modele::GenreBarre::Poteau => "IFCCOLUMN", crate::modele::GenreBarre::Poutre => "IFCBEAM" };
+        let classe = match b.genre { modele::GenreBarre::Poteau => "IFCCOLUMN", modele::GenreBarre::Poutre => "IFCBEAM" };
         entite(id_natif("barre", &b.id), classe, &b.id, &b.nom, 9)?;
     }
     for e in &projet.escaliers {
@@ -104,20 +104,20 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
     let mut materiaux_parts: Vec<Vec<Option<String>>> = Vec::new();
     let mut table_motifs: Vec<(String, [f32; 4])> = Vec::new();
     // apparences de rendu (onglet Apparence) indexées par les couleurs de rendu
-    let mut table_apparences: Vec<(String, crate::modele::Apparence)> = Vec::new();
+    let mut table_apparences: Vec<(String, modele::Apparence)> = Vec::new();
     // jonctions (noyaux prolongés) ; les couches moins prioritaires s'arrêtent sur les
     // faces des autres (solides)
-    let (jonctions, _) = crate::modele::murs::jonctions::jonctions(projet);
+    let (jonctions, _) = modele::murs::jonctions::jonctions(projet);
     chrono("scène : jonctions", &mut t_etape);
     // couches d'un même assemblage consécutives (sélection d'un seul tenant)
-    let mut ordre: Vec<&crate::modele::Mur> = projet.murs.iter().filter(|m| m.assemblage.is_none()).collect();
+    let mut ordre: Vec<&modele::Mur> = projet.murs.iter().filter(|m| m.assemblage.is_none()).collect();
     for a in &projet.assemblages {
         ordre.extend(projet.couches_assemblage(&a.id));
     }
     ordre.extend(projet.murs.iter().filter(|m| m.assemblage.as_ref().is_some_and(|a| projet.assemblage(a).is_none_or(|x| !x.couches.contains(&m.id)))));
     // solides calculés ensemble (volumes bruts partagés, en parallèle), consommés dans l'ordre
-    let mut solides: std::collections::HashMap<&str, Result<Vec<crate::modele::volumes::solides::Tri>, String>> =
-        projet.murs.iter().map(|m| m.id.as_str()).zip(crate::modele::volumes::solides::murs(projet, &jonctions)).collect();
+    let mut solides: std::collections::HashMap<&str, Result<Vec<modele::volumes::solides::Tri>, String>> =
+        projet.murs.iter().map(|m| m.id.as_str()).zip(modele::volumes::solides::murs(projet, &jonctions)).collect();
     chrono("scène : solides des murs", &mut t_etape);
     for m in ordre {
         let type_mur = projet.type_mur(&m.type_mur).ok_or("Type de mur introuvable.")?;
@@ -132,7 +132,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         model.type_of.insert(id, id_natif("type-mur", &m.type_mur));
         // matériau d'un mur monocouche (couche d'assemblage) : couleur et motif de coupe
         let materiau = match type_mur.couches.as_slice() {
-            [c] => c.materiau.as_ref().map(|n| projet.materiau(n).cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(n))),
+            [c] => c.materiau.as_ref().map(|n| projet.materiau(n).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(n))),
             _ => None,
         };
         let couleur = materiau.as_ref().map_or([0.72, 0.72, 0.69, 1.0], |x| {
@@ -143,13 +143,13 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
         if let Some(x) = &materiau {
             let mut bandes = coupe_materiau(projet, x, vec![neutre, neutre], type_mur.couches.first().map_or(noyau::aretes::TRAIT_FORT_MM, |c| projet.trait_couche(c)));
-            if let crate::modele::Axe::Arc { centre, .. } = m.axe {
+            if let modele::Axe::Arc { centre, .. } = m.axe {
                 for bande in &mut bandes { bande.centre_isolation = Some([centre[0] * 0.001, centre[1] * 0.001]); }
             }
             // ossature : la couche découpée en membrures et travées de remplissage
-            let cases = crate::modele::murs::ossature::bandes_mur(projet, m);
-            if let (Some(o), false) = (crate::modele::murs::ossature::ossature_mur(projet, m), cases.is_empty()) {
-                let membrure = projet.materiau(o.materiau()).cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(o.materiau()));
+            let cases = modele::murs::ossature::bandes_mur(projet, m);
+            if let (Some(o), false) = (modele::murs::ossature::ossature_mur(projet, m), cases.is_empty()) {
+                let membrure = projet.materiau(o.materiau()).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(o.materiau()));
                 // membrures à la plume de la couche, remplissage à une plume plus fine
                 let trait_mm = bandes[0].trait_mm;
                 let trait_remplissage = projet.epaisseurs_plumes()[(o.plume_remplissage() - 1) as usize];
@@ -159,7 +159,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
                 }).collect();
                 bandes_dalles.push((id, decoupees));
                 // 3D : les surfaces du solide réparties entre remplissage et membrures
-                let (remplissage, membrures) = crate::modele::murs::ossature::repartir(&solide, &cases);
+                let (remplissage, membrures) = modele::murs::ossature::repartir(&solide, &cases);
                 if !membrures.is_empty() && !remplissage.is_empty() {
                     let [r, g, b] = membrure.couleur.map(|c| c as f32 / 255.0);
                     let couleur_membrure = opacite(Some(&membrure), [r, g, b, 1.0]);
@@ -209,16 +209,16 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         model.type_of.insert(id, id_natif("type-dalle", &d.type_dalle));
         // couches du haut vers le bas, décalées de la surface de référence (sous-face ou
         // dessus, en pente si des arêtes en définissent une)
-        let plans = crate::modele::elements::pente::plans(d);
+        let plans = modele::elements::pente::plans(d);
         let z0 = alt + d.decalage;
         let (_, mut e) = d.decalages_couches(t.epaisseur());
         let (mut parts, mut rendu, mut bandes, mut noms, mut motifs) = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
         for c in &t.couches {
             let (haut, bas) = (e, e - c.epaisseur);
             e = bas;
-            let tris = crate::modele::elements::pente::couche(&d.contours, &plans, z0, bas, haut);
+            let tris = modele::elements::pente::couche(&d.contours, &plans, z0, bas, haut);
             if tris.is_empty() { continue; }
-            let m = c.materiau.as_ref().map(|n| projet.materiau(n).cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(n)));
+            let m = c.materiau.as_ref().map(|n| projet.materiau(n).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(n)));
             let couleur = m.as_ref().map_or([0.70, 0.70, 0.68, 1.0], |x| {
                 let [r, g, b] = x.couleur.map(|c| c as f32 / 255.0);
                 [r, g, b, 1.0]
@@ -227,10 +227,10 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             if let Some(m) = &m {
                 // bandes de coupe entre le dessous et le dessus de la couche (m, repère du fichier)
                 let solives = c.ossature.as_ref().filter(|o| o.valide()).map(|o| {
-                    let membrure = projet.materiau(o.materiau()).cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(o.materiau()));
-                    (membrure, crate::modele::murs::ossature::bandes_dalle(o, &d.contours))
+                    let membrure = projet.materiau(o.materiau()).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(o.materiau()));
+                    (membrure, modele::murs::ossature::bandes_dalle(o, &d.contours))
                 }).filter(|(_, cases)| !cases.is_empty());
-                for jeu in crate::modele::elements::pente::bandes_contours(&d.contours, &plans, z0, bas, haut) {
+                for jeu in modele::elements::pente::bandes_contours(&d.contours, &plans, z0, bas, haut) {
                     match &solives {
                         Some((membrure, cases)) => for case in cases {
                             let mut jeu = jeu.clone();
@@ -244,10 +244,10 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             }
             // solives : les surfaces de la couche réparties entre remplissage et membrures
             let solives = m.as_ref().zip(c.ossature.as_ref().filter(|o| o.valide())).and_then(|(_, o)| {
-                let cases = crate::modele::murs::ossature::bandes_dalle(o, &d.contours);
+                let cases = modele::murs::ossature::bandes_dalle(o, &d.contours);
                 let en_mm: Vec<[glam::DVec3; 3]> = tris.iter().map(|t| t.map(|v| v * 1000.0)).collect();
-                let (remplissage, membrures) = crate::modele::murs::ossature::repartir(&en_mm, &cases);
-                (!membrures.is_empty() && !remplissage.is_empty()).then(|| (projet.materiau(o.materiau()).cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(o.materiau())), remplissage, membrures))
+                let (remplissage, membrures) = modele::murs::ossature::repartir(&en_mm, &cases);
+                (!membrures.is_empty() && !remplissage.is_empty()).then(|| (projet.materiau(o.materiau()).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(o.materiau())), remplissage, membrures))
             });
             rendu.push(m.as_ref().map(|m| rendu_materiau(m, couleur, &mut table_apparences)));
             noms.push(m.as_ref().map(|m| m.nom.clone()));
@@ -274,12 +274,12 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         // terre-plein : remblai sous la plate-forme et ses talus jusqu'au terrain naturel,
         // et fouilles rebouchées ; élément du site à part (sélection, volume, type de
         // terrain), couleur et poché du matériau de son type
-        if let Some(r) = crate::modele::elements::terre_plein::remblai(projet, d).filter(|r| !r.tris.is_empty()) {
+        if let Some(r) = modele::elements::terre_plein::remblai(projet, d).filter(|r| !r.tris.is_empty()) {
             let id = id_natif("remblai", &d.id);
             model.parent.insert(id, racine);
             model.children.entry(racine).or_default().push(id);
             let nom = projet.type_remblai(d).materiau.unwrap_or_else(|| "Remblai".into());
-            let m = projet.materiau(&nom).cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(&nom));
+            let m = projet.materiau(&nom).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(&nom));
             let [cr, cg, cb] = m.couleur.map(|c| c as f32 / 255.0);
             let couleur = opacite(Some(&m), [cr, cg, cb, 1.0]);
             let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
@@ -292,16 +292,16 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
     // menuiseries calculées en parallèle, rangées dans l'ordre des ouvertures
     let mut menuiseries = {
         use rayon::prelude::*;
-        projet.ouvertures.par_iter().map(|o| crate::modele::volumes::solides::ouverture_parts(projet, o)).collect::<Vec<_>>().into_iter()
+        projet.ouvertures.par_iter().map(|o| modele::volumes::solides::ouverture_parts(projet, o)).collect::<Vec<_>>().into_iter()
     };
     for o in &projet.ouvertures {
         let id = id_natif("ouverture", &o.id);
-        let (_, _, niveau) = crate::modele::volumes::solides::hote(projet, &o.mur)?;
+        let (_, _, niveau) = modele::volumes::solides::hote(projet, &o.mur)?;
         let parent = id_natif("niveau", &niveau);
         model.parent.insert(id, parent);
         model.children.entry(parent).or_default().push(id);
         // famille : couleur de la menuiserie, vitrage transparent, appui minéral
-        use crate::modele::famille::Role;
+        use modele::famille::Role;
         let menuiserie = o.type_ouverture.as_ref().and_then(|t| projet.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.modele.as_ref().map(|m| m.couleur).or(t.famille.as_ref().map(|f| f.couleur)))
             .map_or([0.55, 0.40, 0.24, 1.0], |c| { let [r, g, b] = c.map(|c| c as f32 / 255.0); [r, g, b, 1.0] });
         let parts: Vec<Part> = menuiseries.next().ok_or("Menuiserie absente.")??.into_iter().map(|(role, materiau, tris)| Part {
@@ -323,14 +323,14 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         let parent = id_natif("niveau", &b.niveau);
         model.parent.insert(id, parent);
         model.children.entry(parent).or_default().push(id);
-        let tris = crate::modele::volumes::solides::barre(projet, b)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
+        let tris = modele::volumes::solides::barre(projet, b)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
         materiaux_parts.push(vec![None]);
         geoms.push(ProductGeom { id, parts: vec![Part { color: [0.65,0.68,0.72,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
     // arbres : tronc (matériau « Écorce ») et houppier (« Feuillage »), couleurs par
     // défaut sans ces matériaux
     for a in &projet.arbres {
-        use crate::modele::elements::arbre::{MATERIAU_ECORCE, MATERIAU_FEUILLAGE};
+        use modele::elements::arbre::{MATERIAU_ECORCE, MATERIAU_FEUILLAGE};
         let id = id_natif("arbre", &a.id);
         let parent = id_natif("niveau", &a.niveau);
         model.parent.insert(id, parent);
@@ -341,7 +341,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         // motif : 1 Graphique seulement, 2 Réaliste seulement)
         let (tronc, houppier) = a.solides(z0);
         let r = a.remplacement(z0);
-        let defaut = |nom: &str, couleur: [u8; 3]| crate::modele::Materiau { nom: nom.into(), couleur, ..Default::default() };
+        let defaut = |nom: &str, couleur: [u8; 3]| modele::Materiau { nom: nom.into(), couleur, ..Default::default() };
         let ecorce = projet.materiau(MATERIAU_ECORCE).cloned().unwrap_or_else(|| defaut(MATERIAU_ECORCE, [92, 76, 62]));
         let feuillage = projet.materiau(MATERIAU_FEUILLAGE).cloned().unwrap_or_else(|| defaut(MATERIAU_FEUILLAGE, a.essence.couleur()));
         let mut parts = Vec::new();
@@ -390,7 +390,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         model.children.entry(parent).or_default().push(id);
         // couleur du matériau de chaque élément (métal sombre à défaut), vitrage translucide
         let parts: Vec<Part> = g.solides(projet)?.into_iter().map(|(materiau, vitre, t)| {
-            let m = materiau.map(|n| projet.materiau(&n).cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(&n)));
+            let m = materiau.map(|n| projet.materiau(&n).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(&n)));
             let [r, v, b] = m.as_ref().map_or(if vitre { [158, 199, 219] } else { [77, 79, 84] }, |m| m.couleur).map(|c| c as f32 / 255.0);
             Part { color: [r, v, b, if vitre { 0.35 } else { 1.0 }], tris: t.into_iter().map(|t| t.map(|v| v * 0.001)).collect() }
         }).collect();
@@ -404,8 +404,8 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         model.parent.insert(id, racine);
         model.children.entry(racine).or_default().push(id);
         let type_terrain = projet.type_terrain(t);
-        let tris = crate::modele::elements::terre_plein::solide_terrain(projet, t, type_terrain.epaisseur)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
-        let du_gabarit = type_terrain.materiau.as_ref().filter(|n| projet.materiau(n).is_none()).map(|n| crate::modele::murs::assemblage::materiau_par_defaut(n));
+        let tris = modele::elements::terre_plein::solide_terrain(projet, t, type_terrain.epaisseur)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
+        let du_gabarit = type_terrain.materiau.as_ref().filter(|n| projet.materiau(n).is_none()).map(|n| modele::murs::assemblage::materiau_par_defaut(n));
         let materiau = type_terrain.materiau.as_ref().and_then(|n| projet.materiau(n)).or(du_gabarit.as_ref());
         let couleur = materiau.map_or([0.48, 0.62, 0.38, 1.0], |m| { let [r, g, b] = m.couleur.map(|c| c as f32 / 255.0); [r, g, b, 1.0] });
         let couleur = opacite(materiau, couleur);
@@ -433,7 +433,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         };
         model.parent.insert(id, parent);
         model.children.entry(parent).or_default().push(id);
-        let tris = crate::modele::volumes::solides::maillage(&o.maillage)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
+        let tris = modele::volumes::solides::maillage(&o.maillage)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
         materiaux_parts.push(vec![None]);
         geoms.push(ProductGeom { id, parts: vec![Part { color: [0.65,0.68,0.72,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
@@ -520,8 +520,8 @@ fn lisser(sommets: &mut [Vertex]) {
 
 /// Transparence de l'apparence (ou carte de transparence, de découpe) : la partie passe
 /// avec les faces transparentes.
-fn opacite(m: Option<&crate::modele::Materiau>, mut c: [f32; 4]) -> [f32; 4] {
-    use crate::modele::CarteTexture;
+fn opacite(m: Option<&modele::Materiau>, mut c: [f32; 4]) -> [f32; 4] {
+    use modele::CarteTexture;
     if let Some(a) = m.map(|m| &m.apparence) {
         c[3] = (1.0 - a.transparence).clamp(0.05, 1.0);
         // la découpe reste opaque (pixels retirés) : seule la transparence passe avec les
@@ -536,7 +536,7 @@ fn opacite(m: Option<&crate::modele::Materiau>, mut c: [f32; 4]) -> [f32; 4] {
 /// Couleur de rendu d'un matériau (style Réaliste). Un matériau dont l'apparence est
 /// réglée y porte son rang dans la table des apparences, codé dans l'alpha (128 + rang,
 /// au-delà de 1 : voir `assemble_avec`) ; sa couleur est alors la teinte de l'apparence.
-fn rendu_materiau(m: &crate::modele::Materiau, couleur: [f32; 4], table: &mut Vec<(String, crate::modele::Apparence)>) -> [f32; 4] {
+fn rendu_materiau(m: &modele::Materiau, couleur: [f32; 4], table: &mut Vec<(String, modele::Apparence)>) -> [f32; 4] {
     if m.apparence.est_defaut() {
         return couleur;
     }
@@ -557,8 +557,8 @@ fn rendu_materiau(m: &crate::modele::Materiau, couleur: [f32; 4], table: &mut Ve
 /// Motifs de surface d'un matériau pour le rendu : [premier plan | arrière-plan << 4,
 /// couleur du premier plan]. Premier plan : 0 aucun, 15 uni, sinon rang + 1 dans la
 /// table ; arrière-plan : 0 uni (couleur des faces), sinon rang + 1 dans la table.
-fn motif_surface(projet: &Projet, m: &crate::modele::Materiau, table: &mut Vec<(String, [f32; 4])>) -> Option<[u8; 4]> {
-    use crate::modele::MotifCoupe;
+fn motif_surface(projet: &Projet, m: &modele::Materiau, table: &mut Vec<(String, [f32; 4])>) -> Option<[u8; 4]> {
+    use modele::MotifCoupe;
     let mut rang = |x: &MotifCoupe| -> u8 {
         let Some(d) = projet.definition_motif(x) else { return 0 };
         if let Some(k) = table.iter().position(|t| t.0 == d.nom) {
@@ -616,7 +616,7 @@ fn aretes_jointes(geoms: &[ProductGeom], materiaux: &[Vec<Option<String>>]) -> s
 /// Arborescence du projet natif : vue 3D, vues enregistrées (plans d'étage, coupes),
 /// types de murs et de dalles, matériaux et éléments qui les portent.
 fn navigateur(projet: &Projet) -> Navigateur {
-    use crate::modele::GenreVue;
+    use modele::GenreVue;
     let num = numero_vue;
     let vue = |revit_id: i64, genre: &str, nom: &str, echelle: f64| NavVue {
         revit_id,
@@ -678,10 +678,10 @@ fn navigateur(projet: &Projet) -> Navigateur {
     }
     // jeux de feuilles : une vue par jeu (toutes ses feuilles à la suite) ; identifiant
     // tiré du rang du jeu, stable si on le renomme
-    for (k, jeu) in crate::modele::documentation::jeux(projet).iter().enumerate() {
+    for (k, jeu) in modele::documentation::jeux(projet).iter().enumerate() {
         vues.push(vue(num(&format!("jeu:{k}")), "Jeu de feuilles", jeu, 1.0));
     }
-    let types = |categorie: &str, nom: &str, ts: &[crate::modele::TypeCompose], genre: &str| NavFamille {
+    let types = |categorie: &str, nom: &str, ts: &[modele::TypeCompose], genre: &str| NavFamille {
         categorie: categorie.into(),
         nom: nom.into(),
         types: ts.iter().map(|t| (t.nom.clone(), Some(id_natif(genre, &t.id)))).collect(),
@@ -692,7 +692,7 @@ fn navigateur(projet: &Projet) -> Navigateur {
     }
     // types d'éléments horizontaux rangés par catégorie de leurs éléments (sols par défaut)
     for (categorie, famille) in [("Sols", "Sol"), ("Plafonds", "Plafond composé"), ("Toits", "Toit de base"), ("Terre-pleins", "Terre-plein")] {
-        let ts: Vec<crate::modele::TypeCompose> = projet
+        let ts: Vec<modele::TypeCompose> = projet
             .types_dalles
             .iter()
             .filter(|t| projet.dalles.iter().find(|d| d.type_dalle == t.id).map_or("Sols", |d| d.sorte.categorie()) == categorie)
@@ -706,7 +706,7 @@ fn navigateur(projet: &Projet) -> Navigateur {
         .materiaux
         .iter()
         .map(|m| {
-            let porte = |t: Option<&crate::modele::TypeCompose>| t.is_some_and(|t| t.couches.iter().any(|c| c.materiau.as_deref() == Some(m.nom.as_str())));
+            let porte = |t: Option<&modele::TypeCompose>| t.is_some_and(|t| t.couches.iter().any(|c| c.materiau.as_deref() == Some(m.nom.as_str())));
             let mut elements: Vec<Id> = projet.murs.iter().filter(|x| porte(projet.type_mur(&x.type_mur))).map(|x| id_natif("mur", &x.id)).collect();
             elements.extend(projet.dalles.iter().filter(|x| porte(projet.type_dalle(&x.type_dalle))).map(|x| id_natif("dalle", &x.id)));
             NavMateriau { nom: m.nom.clone(), couleur: m.couleur, transparence: 0.0, elements }
@@ -727,8 +727,8 @@ fn navigateur(projet: &Projet) -> Navigateur {
 /// Poché de coupe d'un matériau entre deux plans (neutres : tout l'élément) : premier
 /// plan (hachures du projet, aplat ou ligne d'isolant) et arrière-plan (aplat ou
 /// hachures), en mm du papier.
-fn coupe_materiau(projet: &Projet, m: &crate::modele::Materiau, plans: Vec<Vec4>, trait_mm: f64) -> Vec<CoucheCoupe> {
-    use crate::modele::MotifCoupe;
+fn coupe_materiau(projet: &Projet, m: &modele::Materiau, plans: Vec<Vec4>, trait_mm: f64) -> Vec<CoucheCoupe> {
+    use modele::MotifCoupe;
     use noyau::motif::{GrilleMotif, Motif};
     let [r, g, b] = m.couleur;
     // hachures d'une définition ; aplat : sans grille ; rien : None
@@ -786,14 +786,14 @@ fn aretes_silhouette(tris: &[[glam::DVec3; 3]]) -> noyau::aretes::Aretes {
     out
 }
 
-fn aretes_terrain(projet: &Projet, t: &crate::modele::elements::site::Terrain) -> noyau::aretes::Aretes {
+fn aretes_terrain(projet: &Projet, t: &modele::elements::site::Terrain) -> noyau::aretes::Aretes {
     use glam::DVec3;
     let decalage = DVec3::new(0.0, 0.0, -projet.ngf());
     let m = |p: DVec3| p * 0.001;
     let mut vives: Vec<[DVec3; 2]> = (0..t.contour.len()).map(|i| [t.contour[i], t.contour[(i + 1) % t.contour.len()]].map(|p| m(DVec3::from_array(p) + decalage))).collect();
     // dessus du terrain, creusé par les terre-pleins : faces tournées vers le haut du solide
     let dessus = if projet.dalles.iter().any(|d| d.sorte == SorteDalle::TerrePlein) {
-        crate::modele::elements::terre_plein::solide_terrain(projet, t, projet.type_terrain(t).epaisseur)
+        modele::elements::terre_plein::solide_terrain(projet, t, projet.type_terrain(t).epaisseur)
             .map(|v| v.into_iter().filter(|t| (t[1] - t[0]).cross(t[2] - t[0]).normalize_or_zero().z > 0.05).collect::<Vec<_>>())
     } else {
         t.triangles().map(|v| v.into_iter().map(|t| t.map(|p| p + decalage)).collect())
@@ -826,7 +826,7 @@ fn aretes_terrain(projet: &Projet, t: &crate::modele::elements::site::Terrain) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::modele::{ElementImporte, Maillage, Origine};
+    use modele::{ElementImporte, Maillage, Origine};
 
     /// Topographie importée de Revit : élément géographique, que les plans d'étage gardent
     /// (la plage de vue décide ensuite de ce qui est vu).
@@ -850,7 +850,7 @@ mod tests {
     /// courbes de niveau).
     #[test]
     fn terrain_sous_le_mur_et_ses_traits() {
-        use crate::modele::{creation::ParametresMur, elements::site::Terrain};
+        use modele::{creation::ParametresMur, elements::site::Terrain};
         let mut p = Projet::nouveau("T");
         p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &ParametresMur { epaisseur: 200.0, ..Default::default() }).unwrap();
         let z = |x: f64| 200.0 + x / 10.0;

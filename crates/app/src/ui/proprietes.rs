@@ -3,8 +3,8 @@ use super::*;
 
 /// Talus d'une arête de terre-plein : pente en % (0 : sans talus) puis case Remblayer
 /// (deux cellules). Retourne vrai si l'arête a changé.
-pub(super) fn champs_talus(ui: &mut egui::Ui, d: &mut crate::modele::Dalle, c: usize, k: usize) -> bool {
-    use crate::modele::elements::terre_plein as tp;
+pub(super) fn champs_talus(ui: &mut egui::Ui, d: &mut modele::Dalle, c: usize, k: usize) -> bool {
+    use modele::elements::terre_plein as tp;
     let mut change = false;
     let mut talus = d.pente(c, k);
     let mut pourcent = talus.map_or(0.0, |deg| tp::rapport(deg) * 100.0);
@@ -31,11 +31,11 @@ pub(super) fn champs_talus(ui: &mut egui::Ui, d: &mut crate::modele::Dalle, c: u
 }
 
 impl ViewerApp {
-    pub(super) fn proprietes_natif(&mut self, ui: &mut egui::Ui, id: Id) -> Option<crate::modele::Projet> {
-        use crate::modele::Haut;
+    pub(super) fn proprietes_natif(&mut self, ui: &mut egui::Ui, id: Id) -> Option<modele::Projet> {
+        use modele::Haut;
         let mut pente_defaut = self.pente_defaut;
         let (projet, _) = self.natif.as_ref()?;
-        let mut nouveau: Option<crate::modele::Projet> = None;
+        let mut nouveau: Option<modele::Projet> = None;
         let mut selection: Option<Id> = None;
         // remblai d'un terre-plein : volume, et type de terrain (matériau, poché)
         if let Some(d) = projet.dalles.iter().find(|d| scene::id_natif("remblai", &d.id) == id) {
@@ -58,7 +58,7 @@ impl ViewerApp {
                 ui.label("Matériau");
                 ui.label(actuel.materiau.as_deref().unwrap_or("Remblai"));
                 ui.end_row();
-                if let Some(r) = crate::modele::elements::terre_plein::remblai(projet, d) {
+                if let Some(r) = modele::elements::terre_plein::remblai(projet, d) {
                     ui.label("Volume").on_hover_text("Remblai entre le terrain naturel et le terre-plein prolongé par ses talus, et fouilles rebouchées");
                     ui.label(format!("{:.2} m³", r.volume / 1e9));
                     ui.end_row();
@@ -103,7 +103,7 @@ impl ViewerApp {
                 if let Some((axe,_))=projet.trajectoire_justification(&a.id) {ui.label("Longueur");ui.label(crate::config::options::unite().afficher(axe.longueur()));ui.end_row();}
                 let volume:f64=couches.iter().filter_map(|m|projet.volume_mur(m)).sum();
                 ui.label("Volume");ui.label(format!("{:.3} m³",volume/1e9));ui.end_row();
-                let ossature:f64=couches.iter().map(|m|crate::modele::murs::ossature::lineaire_mur(projet,m)).sum();
+                let ossature:f64=couches.iter().map(|m|modele::murs::ossature::lineaire_mur(projet,m)).sum();
                 if ossature>0.0 {ui.label("Ossature").on_hover_text("Longueur cumulée des montants, lisses, linteaux et appuis");ui.label(format!("{:.1} m",ossature/1000.0));ui.end_row();}
             });
             // le plan des couches est dans le sélecteur de type, juste au-dessus
@@ -199,7 +199,7 @@ impl ViewerApp {
             }
             ui.separator();
         } else if let Some(arbre) = projet.arbres.iter().find(|a| scene::id_natif("arbre", &a.id) == id) {
-            use crate::modele::elements::arbre::Essence;
+            use modele::elements::arbre::Essence;
             let mut a = arbre.clone();
             ui.label(RichText::new(format!("Arbre · {}", a.nom)).strong());
             let mut change = false;
@@ -241,10 +241,10 @@ impl ViewerApp {
             }
             // paramètres d'occurrence de la famille : propres à cette ouverture
             if let Some(f) = o.type_ouverture.as_ref().and_then(|t| projet.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.modele.as_ref()) {
-                use crate::modele::famille::modelee::{GenreParametre, Portee};
-                let occurrences: Vec<&crate::modele::famille::modelee::Parametre> = f.parametres.iter().filter(|p| p.portee == Portee::Occurrence).collect();
+                use modele::famille::modelee::{GenreParametre, Portee};
+                let occurrences: Vec<&modele::famille::modelee::Parametre> = f.parametres.iter().filter(|p| p.portee == Portee::Occurrence).collect();
                 if !occurrences.is_empty() {
-                    let e = crate::modele::volumes::solides::hote(projet, &o.mur).map_or(200.0, |h| h.1);
+                    let e = modele::volumes::solides::hote(projet, &o.mur).map_or(200.0, |h| h.1);
                     let surcharges = projet.surcharges(&o);
                     let r = f.resoudre_occurrence(o.largeur, o.hauteur, e, &surcharges, &o.materiaux);
                     ui.label(RichText::new("Paramètres d'occurrence").strong());
@@ -371,7 +371,7 @@ impl ViewerApp {
                 ui.end_row();
                 ui.label("Remplissage");
                 egui::ComboBox::from_id_salt("garde_corps_remplissage").selected_text(g.remplissage.nom()).show_ui(ui, |ui| {
-                    for r in crate::modele::Remplissage::TOUS {
+                    for r in modele::Remplissage::TOUS {
                         change |= ui.selectable_value(&mut g.remplissage, r, r.nom()).changed();
                     }
                 });
@@ -419,7 +419,7 @@ impl ViewerApp {
                 if !d.sorte.talus() {
                     ui.label("Sorte");
                     egui::ComboBox::from_id_salt("dalle_sorte").width(150.0).selected_text(d.sorte.nom()).show_ui(ui, |ui| {
-                        for s in crate::modele::SorteDalle::TOUTES.into_iter().filter(|s| !s.talus()) {
+                        for s in modele::SorteDalle::TOUTES.into_iter().filter(|s| !s.talus()) {
                             change |= ui.selectable_value(&mut d.sorte, s, s.nom()).changed();
                         }
                     })
@@ -428,8 +428,8 @@ impl ViewerApp {
                     ui.end_row();
                 }
                 ui.label(match d.sorte {
-                    crate::modele::SorteDalle::Plafond => "Hauteur sous plafond",
-                    crate::modele::SorteDalle::Toiture => "Décalage (sous-face)",
+                    modele::SorteDalle::Plafond => "Hauteur sous plafond",
+                    modele::SorteDalle::Toiture => "Décalage (sous-face)",
                     _ => "Décalage (dessus)",
                 });
                 change |= ui.add(egui::DragValue::new(&mut d.decalage).speed(10.0).dimensions()).changed();
@@ -461,7 +461,7 @@ impl ViewerApp {
                     }
                     ui.end_row();
                 }
-                let aire = crate::modele::volumes::geometrie::aire_pair_impair(&d.contours);
+                let aire = modele::volumes::geometrie::aire_pair_impair(&d.contours);
                 for (nom, valeur) in [
                     ("Aire", format!("{:.2} m²", aire / 1e6)),
                     ("Épaisseur", crate::config::options::unite().afficher(t.map_or(0.0, |t| t.epaisseur()))),
@@ -473,7 +473,7 @@ impl ViewerApp {
                 }
                 if dalle.sorte.talus() {
                     ui.label("Remblai").on_hover_text("Volume entre le terrain naturel et la sous-face du terre-plein prolongée par ses talus, et fouilles rebouchées. Le remblai se sélectionne dans la vue pour changer son type.");
-                    match crate::modele::elements::terre_plein::remblai(projet, dalle) {
+                    match modele::elements::terre_plein::remblai(projet, dalle) {
                         Some(r) => {
                             ui.label(format!("{:.2} m³", r.volume / 1e9));
                             ui.end_row();

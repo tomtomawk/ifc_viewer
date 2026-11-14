@@ -1,7 +1,7 @@
 //! Éléments complémentaires du plan, partagés par la vue et le dessin sur feuille.
 use super::feuilles::ids_masques_vue;
 use super::Poche;
-use crate::modele::documentation::*;
+use modele::documentation::*;
 use crate::rendu::scene::{Scene, id_natif};
 use glam::DVec3;
 use noyau::trace2d::{Primitive, Role};

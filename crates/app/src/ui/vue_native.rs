@@ -75,7 +75,7 @@ impl ViewerApp {
     /// Propriétés de la vue native ouverte : nom, type, échelle, hauteur du plan de
     /// coupe (plan) ou profondeur (coupe, élévation), Retourner, Supprimer.
     pub(super) fn proprietes_vue_native(&mut self, ui: &mut egui::Ui) {
-        use crate::modele::GenreVue;
+        use modele::GenreVue;
         let Some((projet, _)) = &self.natif else { return };
         let Some(i) = self.vue_active else { return };
         let Some(numero) = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()?.vues.get(i)).map(|v| v.revit_id) else { return };

@@ -10,10 +10,10 @@ use transformations::Transformation;
 use super::verrous::VerrousInterne;
 #[cfg(test)]
 mod tests;
-use crate::modele::*;
-use crate::modele::{elements::site, murs::assemblage, volumes::{geometrie, solides}};
+use modele::*;
+use modele::{elements::site, murs::assemblage, volumes::{geometrie, solides}};
 use serde::Deserialize;
-use crate::modele::creation::croisement;
+use modele::creation::croisement;
 use glam::DVec2;
 use std::collections::{HashMap, HashSet};
 #[derive(Deserialize, Debug)]
@@ -37,7 +37,7 @@ pub enum Commande {
     },
     /// Crée (identifiant vide) ou modifie un arbre.
     Arbre {
-        arbre: crate::modele::elements::arbre::Arbre,
+        arbre: modele::elements::arbre::Arbre,
     },
     /// Crée (identifiant vide) ou remplace un type de composant.
     TypeComposant {
@@ -237,7 +237,7 @@ impl Execution for Projet {
             let (axe, _) = avant.trajectoire_justification(&id).ok_or("Ligne d'implantation du mur introuvable.")?;
             let assemblage = travail.assemblage(&id).ok_or("Assemblage absent.")?;
             let type_mur = travail.type_mur(&assemblage.type_mur).ok_or("Type absent.")?;
-            let reference = travail.implantations.get(&id).copied().unwrap_or(crate::modele::murs::assemblage::Reference::Axe);
+            let reference = travail.implantations.get(&id).copied().unwrap_or(modele::murs::assemblage::Reference::Axe);
             let decalage = type_mur.decalages_couches().first().copied().unwrap_or(0.0) - type_mur.decalage_reference(reference);
             let premiere = assemblage.couches.first().cloned().ok_or("Assemblage vide.")?;
             travail.murs.iter_mut().find(|m| m.id == premiere).ok_or("Couche introuvable.")?.axe = assemblage::decaler_axe(&axe, decalage);
@@ -248,7 +248,7 @@ impl Execution for Projet {
             let (axe, _) = avant.trajectoire_justification(&id).ok_or("Ligne d'implantation du mur introuvable.")?;
             let mur = travail.murs.iter().find(|m| m.id == id).ok_or("Mur introuvable.")?;
             let type_mur = travail.type_mur(&mur.type_mur).ok_or("Type absent.")?;
-            let reference = travail.implantations.get(&id).copied().unwrap_or(crate::modele::murs::assemblage::Reference::Axe);
+            let reference = travail.implantations.get(&id).copied().unwrap_or(modele::murs::assemblage::Reference::Axe);
             let axe = assemblage::decaler_axe(&axe, -type_mur.decalage_reference(reference));
             travail.murs.iter_mut().find(|m| m.id == id).unwrap().axe = axe;
             travail.eclater_mur(&id)?;
@@ -420,7 +420,7 @@ impl ExecutionInterne for Projet {
                 }
                 if piece.id.is_empty() {
                     piece.id = identite(self, "piece");
-                    piece.contour = crate::modele::elements::piece::detecter(self, &piece.niveau, piece.point)?;
+                    piece.contour = modele::elements::piece::detecter(self, &piece.niveau, piece.point)?;
                 }
                 if piece.numero.trim().is_empty() {
                     piece.numero = self.numero_piece_suivant();
@@ -475,7 +475,7 @@ impl ExecutionInterne for Projet {
             }
             Commande::Composant { mut composant } => {
                 if composant.type_composant.is_empty() {
-                    let defaut = crate::modele::elements::composant::type_table();
+                    let defaut = modele::elements::composant::type_table();
                     if !self.types_composants.iter().any(|t| t.id == defaut.id) {
                         self.types_composants.push(defaut.clone());
                     }
@@ -682,7 +682,7 @@ impl ExecutionInterne for Projet {
                     .cloned()
                     .collect();
                 let premier = anciens.first().ok_or("Assemblage vide.")?;
-                let (axe, _, _) = crate::modele::volumes::solides::hote(self, &a.id)?;
+                let (axe, _, _) = modele::volumes::solides::hote(self, &a.id)?;
                 if t.couches.is_empty() { return Err("Le type de mur doit contenir au moins une couche.".into()); }
                 // Une ouverture hébergée par une couche retirée est rattachée à la
                 // dernière couche conservée, sans l'étendre à tout l'assemblage.

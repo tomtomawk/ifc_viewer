@@ -858,8 +858,8 @@ mod tests {
 
     #[test]
     fn isolant_suit_le_mur_courbe_dans_la_coupe_native() {
-        use crate::modele::{Axe, Couche, FonctionCouche, Projet, TypeCompose};
-        use crate::modele::creation::ParametresMur;
+        use modele::{Axe, Couche, FonctionCouche, Projet, TypeCompose};
+        use modele::creation::ParametresMur;
         let mut projet = Projet::nouveau("Mur courbe");
         projet.types_murs.push(TypeCompose { id: "isolant".into(), nom: "Isolant".into(), couches: vec![Couche { materiau: Some("Laine minérale".into()), epaisseur: 100.0, fonction: FonctionCouche::Isolation, ..Default::default() }], categorie: None, couches_detaillees: true, origine: None });
         let options = ParametresMur { type_mur: Some("isolant".into()), ..Default::default() };
@@ -878,14 +878,14 @@ mod tests {
 
     #[test]
     fn ossature_coupee_en_plan_montants_et_travees() {
-        use crate::modele::{Axe, Couche, FonctionCouche, Materiau, Projet, TypeCompose};
-        use crate::modele::creation::ParametresMur;
-        use crate::modele::murs::ossature::Ossature;
+        use modele::{Axe, Couche, FonctionCouche, Materiau, Projet, TypeCompose};
+        use modele::creation::ParametresMur;
+        use modele::murs::ossature::Ossature;
         let mut projet = Projet::nouveau("Ossature");
         let couche = Couche { materiau: Some("Laine".into()), epaisseur: 145.0, fonction: FonctionCouche::Structure, ossature: Some(Ossature { materiau: Some("Sapin".into()), ..Default::default() }), ..Default::default() };
         projet.types_murs.push(TypeCompose { id: "mob".into(), nom: "MOB".into(), couches: vec![couche], categorie: None, couches_detaillees: true, origine: None });
         projet.materiaux.push(Materiau { nom: "Sapin".into(), couleur: [200, 150, 90], ..Default::default() });
-        projet.materiaux.push(Materiau { nom: "Laine".into(), couleur: [250, 230, 120], motif: crate::modele::MotifCoupe::Isolation, ..Default::default() });
+        projet.materiaux.push(Materiau { nom: "Laine".into(), couleur: [250, 230, 120], motif: modele::MotifCoupe::Isolation, ..Default::default() });
         let options = ParametresMur { type_mur: Some("mob".into()), ..Default::default() };
         projet.ajouter_mur([0.0, 0.0], [3000.0, 0.0], &options).unwrap();
         projet.ajouter_mur_axe(Axe::Arc { debut: [17000.0, -8000.0], fin: [12000.0, -3000.0], centre: [12000.0, -8000.0], direct: true }, &options).unwrap();
@@ -916,12 +916,12 @@ mod tests {
 
     #[test]
     fn fenetre_coupee_piece_par_piece() {
-        use crate::modele::{Ouverture, Projet};
-        let g = crate::modele::gabarit::Gabarit::defaut();
+        use modele::{Ouverture, Projet};
+        let g = modele::gabarit::Gabarit::defaut();
         let mut p = Projet::depuis_gabarit("OF", &g);
         let tm = p.types_murs.iter().find(|t| t.nom.starts_with("Mur BA 200 + doublage")).unwrap().id.clone();
-        let mur = p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &crate::modele::creation::ParametresMur { type_mur: Some(tm), ..Default::default() }).unwrap();
-        for (k, t) in p.types_ouvertures.clone().iter().filter(|t| t.genre == crate::modele::GenreOuverture::Fenetre).enumerate() {
+        let mur = p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &modele::creation::ParametresMur { type_mur: Some(tm), ..Default::default() }).unwrap();
+        for (k, t) in p.types_ouvertures.clone().iter().filter(|t| t.genre == modele::GenreOuverture::Fenetre).enumerate() {
             p.ouvertures = vec![Ouverture { id: format!("o{k}"), nom: "F".into(), genre: t.genre, mur: mur.clone(), type_ouverture: Some(t.id.clone()), abscisse: 2500.0, largeur: t.largeur, hauteur: t.hauteur, allege: 100.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None }];
             p.verifier().unwrap();
             let scene = crate::rendu::scene::depuis_natif(&p, std::path::Path::new("test.modele.json")).unwrap();
@@ -954,7 +954,13 @@ mod tests {
     /// équerre, l'angle extérieur reste.
     #[test]
     fn jonction_sans_arete_meme_materiau() {
-        let pave = |a: DVec3, b: DVec3| crate::modele::volumes::geometrie::tests::boite(a, b);
+        // boîte en 12 triangles orientés vers l'extérieur (comme l'aide de test de
+        // `modele::volumes::geometrie`)
+        let pave = |mn: DVec3, mx: DVec3| -> Vec<[DVec3; 3]> {
+            let p = |i: usize| DVec3::new([mn.x, mx.x][i & 1], [mn.y, mx.y][(i >> 1) & 1], [mn.z, mx.z][i >> 2]);
+            let faces = [[0, 2, 3, 1], [4, 5, 7, 6], [0, 1, 5, 4], [2, 6, 7, 3], [0, 4, 6, 2], [1, 3, 7, 5]];
+            faces.iter().flat_map(|f| [[p(f[0]), p(f[1]), p(f[2])], [p(f[0]), p(f[2]), p(f[3])]]).collect()
+        };
         let mut tris: Vec<([DVec3; 3], usize)> = pave(DVec3::ZERO, DVec3::new(1.0, 0.2, 1.0)).into_iter().map(|t| (t, 0)).collect();
         tris.extend(pave(DVec3::new(1.0, 0.0, 0.0), DVec3::new(2.0, 0.2, 1.0)).into_iter().map(|t| (t, 1)));
         let (vives, _) = aretes_jointes(&tris);
@@ -987,7 +993,7 @@ mod tests {
 
     fn scene_section(tris: Vec<[DVec3; 3]>) -> Scene {
         use crate::rendu::scene::{Range, SceneObject};
-        let mut s = crate::rendu::scene::projet_vide(&crate::modele::Projet::nouveau("Test"), std::path::Path::new("test.modele.json")).unwrap();
+        let mut s = crate::rendu::scene::projet_vide(&modele::Projet::nouveau("Test"), std::path::Path::new("test.modele.json")).unwrap();
         s.vertices = tris.into_iter().flatten().map(|p| Vertex { pos: p.as_vec3().to_array(), normal: [0, 0, 127, 0], color: [140, 160, 180, 255], obj: 0 }).collect();
         s.couleurs_rendu = vec![[110, 130, 150, 255]; s.vertices.len()];
         s.objects.push(SceneObject { id: 1, class: "IFCWALL".into(), storey: None, opaque: Range { start: 0, count: s.vertices.len() as u32 }, transparent: Range { start: 0, count: 0 }, lines: Range { start: 0, count: 0 }, aretes: Range { start: 0, count: 0 }, min: Vec3::ZERO, max: Vec3::ONE });
@@ -1168,7 +1174,7 @@ mod mesure {
     /// contour extérieur, aucun reste du trait d'onglet.
     #[test]
     fn angle_quelconque_sans_reste_d_onglet() {
-        use crate::modele::{creation::ParametresMur, Projet};
+        use modele::{creation::ParametresMur, Projet};
         for deg in [90.0_f64, 70.0, 55.0, 35.0, 123.0] {
             let mut p = Projet::nouveau("A");
             let o = ParametresMur { epaisseur: 200.0, ..Default::default() };
@@ -1193,8 +1199,8 @@ mod mesure {
 
 #[cfg(test)]
 mod test_isolant_arc {
-    use crate::modele::*;
-    use crate::modele::creation::ParametresMur;
+    use modele::*;
+    use modele::creation::ParametresMur;
 
     /// Mur courbe isolé passé par toute la chaîne (projet, scène, coupe) : extrémités non
     /// radiales comprises, le motif d'isolant couvre tout l'arc.

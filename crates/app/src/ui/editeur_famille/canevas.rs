@@ -156,7 +156,7 @@ fn canevas_construction(ui: &mut egui::Ui, ed: &mut EditeurFamille, plan: &PlanC
 
 /// Vue de travail : mur générique, volumes, vides, plans, cotes ; interactions selon
 /// l'outil.
-pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate::modele::Projet, delai_accrochage: f64) {
+pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele::Projet, delai_accrochage: f64) {
     if let Some(plan) = ed.construction.and_then(|k| ed.famille.plans_construction.get(k)).and_then(|p| ed.famille.repere_construction(&p.id, &ed.resoudre())) {
         canevas_construction(ui, ed, &plan);
         return;
@@ -202,7 +202,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
         painter.text(cadre.ecran(a[ih],a[iv]),egui::Align2::LEFT_BOTTOM,&plan.nom,egui::FontId::proportional(11.0),Color32::DARK_GREEN);
     }
 
-    if matches!(ed.famille.categorie, crate::modele::famille::modelee::CategorieFamille::Porte | crate::modele::famille::modelee::CategorieFamille::Fenetre) {
+    if matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Porte | modele::famille::modelee::CategorieFamille::Fenetre) {
         // mur générique : élévation pleine, plan et coupe en bande ; les vides le percent
         let gris = Color32::from_gray(222);
         let (mh, mv) = match ed.vue {
@@ -313,18 +313,18 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
     let mut textes_2d = Vec::new();
     let mut lignes_2d: Vec<(usize, Vec<egui::Pos2>)> = Vec::new();
     for (indice, element) in ed.famille.elements_2d.iter().enumerate().filter(|(_, e)| e.vue == ed.vue.esquisse()) {
-        use crate::modele::documentation::AnnotationForme;
+        use modele::documentation::AnnotationForme;
         if let AnnotationForme::Texte { point, texte } = &element.forme {
             // cartouches et étiquettes : repère en mm de papier, le texte est à l'échelle de la
             // vue ; les autres catégories n'ont pas d'échelle de vue dans l'éditeur
-            let papier = matches!(ed.famille.categorie, crate::modele::famille::modelee::CategorieFamille::Cartouche | crate::modele::famille::modelee::CategorieFamille::EtiquettePiece);
+            let papier = matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Cartouche | modele::famille::modelee::CategorieFamille::EtiquettePiece);
             let taille = egui::FontId::proportional(if papier { (element.hauteur * cadre.echelle).clamp(3.0, 400.0) } else { (element.hauteur * 4.0).clamp(8.0, 48.0) } as f32);
             let couleur = if ed.choisi(&SelectionFamille::Element2D(indice)) { Color32::from_rgb(0, 100, 210) } else { Color32::from_gray(30) };
             let apercu = super::super::outils_texte::apercu_famille(texte, projet, ed.vue.nom(), ed.famille.categorie, ed.cible_feuille.as_deref(), ed.cible_piece.as_deref());
             let rect_texte = painter.text(cadre.ecran(point[0], point[1]), egui::Align2::LEFT_BOTTOM, apercu, taille, couleur);
             textes_2d.push((indice, rect_texte.expand(5.0)));
         } else {
-            let primitives = crate::modele::documentation::forme_cartouche(projet, &element.forme);
+            let primitives = modele::documentation::forme_cartouche(projet, &element.forme);
             let dessin = super::super::feuilles::rendu(&primitives, [0.0; 4]);
             let selection = ed.choisi(&SelectionFamille::Element2D(indice)).then_some(Color32::from_rgb(0, 100, 210));
             super::super::cartouche::peindre(&painter, &cadre, dessin, selection);
@@ -347,8 +347,8 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
         seul.symboles = vec![sy.clone()];
         seul.elements_2d.clear();
         for (l, m) in seul.regions_resolues(&r, sy.vue) {
-            let forme = crate::modele::documentation::AnnotationForme::Polyligne { points: l.iter().map(|&(h,v)| [h,v]).collect(), fermee: true, courbures: Vec::new(), remplissage: Some(m), traits: Vec::new() };
-            let primitives = crate::modele::documentation::forme_cartouche(projet, &forme);
+            let forme = modele::documentation::AnnotationForme::Polyligne { points: l.iter().map(|&(h,v)| [h,v]).collect(), fermee: true, courbures: Vec::new(), remplissage: Some(m), traits: Vec::new() };
+            let primitives = modele::documentation::forme_cartouche(projet, &forme);
             let dessin = super::super::feuilles::rendu(&primitives, [0.0; 4]);
             super::super::cartouche::peindre(&painter, &cadre, dessin, None);
         }
@@ -423,7 +423,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
         let mut xs: Vec<f64> = noms.iter().map(|n| pos(n)).collect();
         xs.sort_by(f64::total_cmp);
         let points: Vec<glam::DVec2> = xs.iter().map(|&x| if horizontale { glam::DVec2::new(x, ligne - attache) } else { glam::DVec2::new(ligne + attache, x) }).collect();
-        let g = crate::modele::documentation::geometrie_cote(&points, attache, oblique);
+        let g = modele::documentation::geometrie_cote(&points, attache, oblique);
         let ecran = |p: glam::DVec2| cadre.ecran(p.x, p.y);
         let trait_ = egui::Stroke::new(if choisie { 1.6 } else { 1.0 }, couleur);
         for [a, b] in &g.traits {
@@ -910,8 +910,8 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
         }
         OutilFamille::Texte | OutilFamille::Libelle => {
             if resp.clicked() && let Some(q) = resp.interact_pointer_pos() {
-                use crate::modele::documentation::AnnotationForme;
-                use crate::modele::famille::modelee::{CategorieFamille, Element2DFamille};
+                use modele::documentation::AnnotationForme;
+                use modele::famille::modelee::{CategorieFamille, Element2DFamille};
                 let (h, v) = viser(q, None).0;
                 let texte = if ed.outil == OutilFamille::Texte { "Texte" } else {
                     match ed.famille.categorie { CategorieFamille::Cartouche => "{numero}", CategorieFamille::EtiquettePiece => "{nom}", _ => "Libellé" }
@@ -960,7 +960,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
             let outil = ed.outil.outil_dessin().expect("outil de dessin");
             let mut trace = ed.trace_polyligne.take().unwrap_or_else(|| Trace::new(outil));
             let depart = ed.esquisse.last().map(|(_, p)| *p);
-            let papier = matches!(ed.famille.categorie, crate::modele::famille::modelee::CategorieFamille::Cartouche | crate::modele::famille::modelee::CategorieFamille::EtiquettePiece);
+            let papier = matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Cartouche | modele::famille::modelee::CategorieFamille::EtiquettePiece);
             let facteur = if papier { 1.0 } else { crate::config::options::unite().facteur() };
             if let Some(q) = curseur.filter(|_| resp.hovered()) {
                 let (h, v) = viser(q, depart).0;
@@ -1033,7 +1033,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
                         ed.selection = SelectionFamille::Symbole(ed.famille.symboles.len() - 1);
                     } else {
                         ed.esquisse.clear();
-                        ed.famille.elements_2d.push(crate::modele::famille::modelee::Element2DFamille { vue: ed.vue.esquisse(), forme: crate::modele::documentation::AnnotationForme::depuis_forme_2d(&forme), hauteur: 2.5 });
+                        ed.famille.elements_2d.push(modele::famille::modelee::Element2DFamille { vue: ed.vue.esquisse(), forme: modele::documentation::AnnotationForme::depuis_forme_2d(&forme), hauteur: 2.5 });
                         ed.selection = SelectionFamille::Element2D(ed.famille.elements_2d.len() - 1);
                     }
                 } else if matches!(evenement, EvenementTrace::Terminer | EvenementTrace::Fermer) && trace.points.is_empty() {
@@ -1162,7 +1162,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
                 xs.sort_by(f64::total_cmp);
                 let attache = 10.0 / echelle;
                 let points: Vec<glam::DVec2> = xs.iter().map(|&x| if horizontale { glam::DVec2::new(x, ligne - attache) } else { glam::DVec2::new(ligne + attache, x) }).collect();
-                for [a, b] in crate::modele::documentation::geometrie_cote(&points, attache, 8.0 / echelle).traits {
+                for [a, b] in modele::documentation::geometrie_cote(&points, attache, 8.0 / echelle).traits {
                     painter.line_segment([cadre.ecran(a.x, a.y), cadre.ecran(b.x, b.y)], egui::Stroke::new(1.5, orange));
                 }
             }
@@ -1206,8 +1206,8 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
 /// commune (`GenreCote`) ; `echelle` : px par mm, pour des traits et un écart de texte
 /// constants à l'écran. Altimétrie : altitude depuis le bas de la baie, seulement en
 /// élévation et en coupe.
-fn geometrie_mesure(genre: GenreCote, vue: VueEsquisse, pts: &[glam::DVec2], echelle: f64) -> Option<crate::modele::documentation::GeometrieMesure> {
-    use crate::modele::documentation as doc;
+fn geometrie_mesure(genre: GenreCote, vue: VueEsquisse, pts: &[glam::DVec2], echelle: f64) -> Option<modele::documentation::GeometrieMesure> {
+    use modele::documentation as doc;
     if genre == GenreCote::Altimetrie && vue == VueEsquisse::Plan { return None; }
     let forme = genre.forme(pts, false, 2)?;
     let unite = crate::config::options::unite();

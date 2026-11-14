@@ -7,8 +7,8 @@
 //! seulement), et une forme esquissée dans une autre vue ou sur un plan oblique
 //! quitterait son plan d'esquisse.
 use super::*;
-use crate::modele::documentation::AnnotationForme;
-use crate::modele::famille::modelee::FormeGuidee;
+use modele::documentation::AnnotationForme;
+use modele::famille::modelee::FormeGuidee;
 
 /// Transformation plane, exprimée dans le repère de la vue active.
 #[derive(Clone, Copy, Debug, PartialEq)]

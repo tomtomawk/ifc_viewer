@@ -2,8 +2,8 @@ use super::*;
 
 #[test]
 fn croquis_mur_suit_hauteur_niveaux_et_decalages() {
-    let projet = crate::modele::Projet::nouveau("Croquis");
-    let mut params = crate::modele::creation::ParametresMur::default();
+    let projet = modele::Projet::nouveau("Croquis");
+    let mut params = modele::creation::ParametresMur::default();
     params.niveau_haut = Some("haut".into());
     assert_eq!(limites_croquis_mur(&params, &projet, 10.0, 46.0), (10.0, 46.0));
     for valeur in [1.0, 20_000.0] {
@@ -31,7 +31,7 @@ fn boutons_modifier_declenchent_les_actions_sans_changer_outil() {
             ..Default::default()
         }, |ui| {
             egui::Panel::top("modifier_test").show(ui, |ui| {
-                if let Some(a) = ruban.afficher(ui, Menu::Modifier, Some(&crate::modele::Projet::default())) { action = Some(a); }
+                if let Some(a) = ruban.afficher(ui, Menu::Modifier, Some(&modele::Projet::default())) { action = Some(a); }
             });
         }); output.textures_delta.clear(); output };
         frame(vec![]);
@@ -59,7 +59,7 @@ fn bouton_attacher_toiture_active_la_selection_graphique() {
         screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1800.0, 200.0))),
         events, ..Default::default()
     }, |ui| { egui::Panel::top("attacher_test").show(ui, |ui| {
-        ruban.afficher(ui, Menu::Modifier, Some(&crate::modele::Projet::default()));
+        ruban.afficher(ui, Menu::Modifier, Some(&modele::Projet::default()));
     }); }); output.textures_delta.clear(); output };
     frame(vec![]);
     let output = frame(vec![]);
@@ -78,7 +78,7 @@ fn bouton_attacher_toiture_active_la_selection_graphique() {
 
 #[test]
 fn apercu_des_couches_dessine_le_motif_de_coupe() {
-    use crate::modele::{Materiau, MotifCoupe, Projet};
+    use modele::{Materiau, MotifCoupe, Projet};
     let ctx = egui::Context::default();
     let projet = Projet::nouveau("Aperçu");
     let dessin = |motif| {
@@ -103,10 +103,10 @@ fn apercu_des_couches_dessine_le_motif_de_coupe() {
 #[test]
 fn crayon_du_type_courant_ouvre_son_editeur() {
     let ctx = egui::Context::default();
-    let mut projet = crate::modele::Projet::nouveau("Test");
-    projet.types_murs.push(crate::modele::TypeCompose {
+    let mut projet = modele::Projet::nouveau("Test");
+    projet.types_murs.push(modele::TypeCompose {
         id: "mur-test".into(), nom: "Mur test".into(),
-        couches: vec![crate::modele::Couche { epaisseur: 200.0, ..Default::default() }],
+        couches: vec![modele::Couche { epaisseur: 200.0, ..Default::default() }],
         categorie: None, couches_detaillees: true, origine: None,
     });
     let mut ruban = RubanEdition::default();
@@ -156,7 +156,7 @@ fn afficher(
         },
         |ui| {
             egui::Panel::top("ruban_test")
-                .show(ui, |ui| ruban.afficher(ui, Menu::Modeliser, Some(&crate::modele::Projet::default())));
+                .show(ui, |ui| ruban.afficher(ui, Menu::Modeliser, Some(&modele::Projet::default())));
             egui::Panel::left("proprietes_test")
                 .exact_size(284.0)
                 .show(ui, |ui| {
@@ -222,7 +222,7 @@ fn palette_mur_affiche_contraintes_et_choix_du_document() {
     let ctx = egui::Context::default();
     let mut ruban = RubanEdition::default();
     ruban.activer_mur();
-    let mut projet = crate::modele::Projet::nouveau("Mur");
+    let mut projet = modele::Projet::nouveau("Mur");
     projet.phases = vec!["Existant".into(), "Construction".into()];
     projet.sous_projets = vec!["Enveloppe".into(), "Structure".into()];
     for largeur in [220.0, 260.0, 300.0, 420.0] {
@@ -366,7 +366,7 @@ fn reglages_accessibles_en_mode_compact() {
         };
         let mut sortie = ctx.run_ui(input, |ui| {
             egui::CentralPanel::default()
-                .show(ui, |ui| ruban.afficher(ui, Menu::Modeliser, Some(&crate::modele::Projet::default())));
+                .show(ui, |ui| ruban.afficher(ui, Menu::Modeliser, Some(&modele::Projet::default())));
         });
         sortie.textures_delta.clear();
         sortie
@@ -410,7 +410,7 @@ fn reglages_accessibles_en_mode_compact() {
 fn commandes_et_options_tiennent_aux_largeurs_du_viewer() {
     let ctx = egui::Context::default();
     ctx.set_visuals(egui::Visuals::light());
-    let projet = crate::modele::Projet::nouveau("Ruban");
+    let projet = modele::Projet::nouveau("Ruban");
     for largeur in [1000.0, 1280.0, 1500.0] {
         for menu in [Menu::Modeliser, Menu::Modifier, Menu::Annoter, Menu::Cartouche] {
             let outils: Vec<_> = groupes(menu)
@@ -500,7 +500,7 @@ fn commandes_et_options_tiennent_aux_largeurs_du_viewer() {
 }
 #[test]
 fn creation_identique_reutilise_types_niveaux_et_vue() {
-    let p = crate::modele::Projet::lire_json(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json")).unwrap()).unwrap();
+    let p = modele::Projet::lire_json(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json")).unwrap()).unwrap();
     let d = &p.dalles[0];
     let mut ruban = RubanEdition::default();
     ruban.surface_identique(&p, d).unwrap();

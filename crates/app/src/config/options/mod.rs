@@ -6,7 +6,7 @@ pub mod raccourcis;
 
 // Unité d'affichage : définie dans le modèle (les cotes et nomenclatures la lisent) ;
 // ré-exportée ici, où l'interface la règle et la lit (84 références).
-pub use crate::modele::unite::{Unite, definir_unite, unite};
+pub use modele::unite::{Unite, definir_unite, unite};
 
 pub trait Dimensions<'a> {
     fn dimensions(self) -> eframe::egui::DragValue<'a>;

@@ -17,12 +17,12 @@ use super::*;
 use crate::dessin::dao::{self as d2, Accroche, OutilDessin, Trace};
 use noyau::forme2d::{Geom};
 use crate::edition::commandes::Commande;
-use crate::modele::documentation::{Annotation, AnnotationForme};
+use modele::documentation::{Annotation, AnnotationForme};
 use glam::{DVec2, DVec3};
 
 /// Points manipulables d'une annotation, communs aux éditeurs graphiques.
 pub(super) fn points_forme_mut(forme: &mut AnnotationForme) -> Vec<&mut [f64; 2]> {
-    use crate::modele::documentation::PointCote;
+    use modele::documentation::PointCote;
     match forme {
         AnnotationForme::Texte { point, .. } | AnnotationForme::Etiquette { point, .. } => vec![point],
         AnnotationForme::Ligne { debut, fin } => vec![debut, fin],
@@ -293,8 +293,8 @@ pub(super) fn contour_surface(f: &noyau::forme2d::Forme2D) -> Option<Vec<[f64; 2
 
 /// Lignes tracées des murs d'une forme : un mur par segment, un mur courbe par arc, deux
 /// demi-cercles pour un cercle.
-pub(super) fn axes_murs(f: &noyau::forme2d::Forme2D) -> Vec<crate::modele::Axe> {
-    use crate::modele::Axe;
+pub(super) fn axes_murs(f: &noyau::forme2d::Forme2D) -> Vec<modele::Axe> {
+    use modele::Axe;
     let droit = |a: DVec2, b: DVec2| Axe::Droit { debut: a.to_array(), fin: b.to_array() };
     match f {
         noyau::forme2d::Forme2D::Ligne([a, b]) => vec![droit(*a, *b)],
@@ -574,11 +574,11 @@ impl ViewerApp {
     }
 
     /// Terrain du tracé en cours (contour fermé, cotes, points, type).
-    fn terrain_courant(&self) -> Option<crate::modele::elements::site::Terrain> {
+    fn terrain_courant(&self) -> Option<modele::elements::site::Terrain> {
         let contour = self.dessin2d.dalle.first()?;
         if contour.len() != self.dessin2d.terrain_cotes.len() { return None; }
         let (id, nom) = self.dessin2d.terrain_modifie.clone().unwrap_or_else(|| (String::new(), "Terrain".into()));
-        Some(crate::modele::elements::site::Terrain {
+        Some(modele::elements::site::Terrain {
             id,
             nom,
             contour: contour.iter().zip(&self.dessin2d.terrain_cotes).map(|(p, z)| [p[0], p[1], *z]).collect(),
@@ -921,7 +921,7 @@ impl ViewerApp {
                 let id = self.vue_native_id()?;
                 let p = &self.natif.as_ref()?.0;
                 let v = p.vues.iter().find(|v| v.id == id)?;
-                Some(crate::modele::documentation::repere(p, v))
+                Some(modele::documentation::repere(p, v))
             }
         }
     }
@@ -985,7 +985,7 @@ impl ViewerApp {
         }
         let Some((p, _)) = &self.natif else { return Vec::new() };
         let plan = vue.as_ref().and_then(|id| p.vues.iter().find(|v| &v.id == id)).and_then(|v| match &v.genre {
-            crate::modele::GenreVue::Plan { niveau, .. } => Some(niveau.clone()),
+            modele::GenreVue::Plan { niveau, .. } => Some(niveau.clone()),
             _ => None,
         });
         // origine du projet : point accrochable (segment de longueur nulle)
@@ -1002,28 +1002,28 @@ impl ViewerApp {
         if modele {
             let seg = |a: [f64; 2], b: [f64; 2]| Geom::Segment([DVec2::from_array(a), DVec2::from_array(b)]);
             let visible = |genre: &str, id: &str| !selection || self.scene.as_ref().and_then(|s| s.object_of.get(&scene::id_natif(genre, id))).and_then(|i| self.visible.get(*i as usize)).copied().unwrap_or(false);
-            let coupes = crate::modele::murs::jonctions::coupes(p);
-            let retenu = |m: &crate::modele::Mur| match usage {
+            let coupes = modele::murs::jonctions::coupes(p);
+            let retenu = |m: &modele::Mur| match usage {
                 Usage::Annotation => plan.as_ref() == Some(&m.niveau),
                 _ => p.bas_haut(m).is_some_and(|(b, h)| altitude >= b - 0.1 && altitude <= h + 0.1),
             };
             // `exclu` : mur dont on déplace la poignée (et ses couches) ; sans poignée, aucun
             // mur n'est exclu (comparer deux `None` excluait tous les murs simples)
-            let exclu_mur = |m: &crate::modele::Mur| exclu.is_some_and(|e| e == m.id || m.assemblage.as_deref() == Some(e));
+            let exclu_mur = |m: &modele::Mur| exclu.is_some_and(|e| e == m.id || m.assemblage.as_deref() == Some(e));
             for m in p.murs.iter().filter(|m| (selection || retenu(m)) && !exclu_mur(m) && visible("mur", &m.id)) {
-                if let Some(c) = crate::modele::murs::jonctions::contour(p, m, &coupes) {
+                if let Some(c) = modele::murs::jonctions::contour(p, m, &coupes) {
                     for k in 0..4 {
                         g.push(seg(c[k], c[(k + 1) % 4]));
                     }
                 }
                 match m.axe {
-                    crate::modele::Axe::Droit { debut, fin } => if !selection { g.push(seg(debut, fin)); },
-                    crate::modele::Axe::Arc { debut, fin, centre, .. } => {
+                    modele::Axe::Droit { debut, fin } => if !selection { g.push(seg(debut, fin)); },
+                    modele::Axe::Arc { debut, fin, centre, .. } => {
                         let o = DVec2::from_array(centre);
                         let (a, b) = (DVec2::from_array(debut), DVec2::from_array(fin));
                         let r = a.distance(o);
                         let a0 = (a - o).to_angle();
-                        let direct = matches!(m.axe, crate::modele::Axe::Arc { direct: true, .. });
+                        let direct = matches!(m.axe, modele::Axe::Arc { direct: true, .. });
                         let mut balayage = (b - o).to_angle() - a0;
                         balayage = if direct { balayage.rem_euclid(std::f64::consts::TAU) } else { -(-balayage).rem_euclid(std::f64::consts::TAU) };
                         if selection {
@@ -1062,7 +1062,7 @@ impl ViewerApp {
         if selection && let Some(scene) = &self.scene && let Some(plan) = self.plan_coupe() {
             // Les contours réellement coupés comprennent notamment les ouvertures et
             // les éléments qui ne disposent pas d'un contour natif en plan.
-            let arcs: std::collections::HashSet<_> = p.murs.iter().filter(|m| matches!(m.axe, crate::modele::Axe::Arc { .. })).map(|m| scene::id_natif("mur", &m.id)).collect();
+            let arcs: std::collections::HashSet<_> = p.murs.iter().filter(|m| matches!(m.axe, modele::Axe::Arc { .. })).map(|m| scene::id_natif("mur", &m.id)).collect();
             let mut traits = crate::dessin::coupe(scene, &self.visible, plan, self.echelle, crate::dessin::Poche::Vide);
             traits.extend(self.aretes_au_dessus_plan());
             let point = |v: DVec3| (v + scene.origin).truncate() * 1000.0;

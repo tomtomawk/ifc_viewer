@@ -180,9 +180,9 @@ impl ViewerApp {
                     self.dessin2d.message = Some("Contour fermé attendu : au moins trois sommets.".into());
                     continue;
                 };
-                match crate::modele::creation::contour_valide(&c) {
+                match modele::creation::contour_valide(&c) {
                     Err(e) => self.dessin2d.message = Some(e),
-                    Ok(c) if self.dessin2d.dalle.iter().any(|x| crate::modele::creation::croisement(x, &c)) => {
+                    Ok(c) if self.dessin2d.dalle.iter().any(|x| modele::creation::croisement(x, &c)) => {
                         self.dessin2d.message = Some("Le contour croise un contour déjà tracé.".into());
                     }
                     Ok(c) => {
@@ -602,7 +602,7 @@ impl ViewerApp {
             let altitude = self.altitude_trace();
             let mut ids = Vec::new();
             for contour in &self.dessin2d.dalle {
-                let limite = crate::modele::elements::site::LimitePropriete { id: String::new(), nom: "Limite de propriété".into(), altitude, contour: contour.clone() };
+                let limite = modele::elements::site::LimitePropriete { id: String::new(), nom: "Limite de propriété".into(), altitude, contour: contour.clone() };
                 match projet.executer(Commande::LimitePropriete { limite }) {
                     Ok((p, nouveaux)) => { projet = p; ids.extend(nouveaux); }
                     Err(e) => { self.dessin2d.message = Some(e); return; }

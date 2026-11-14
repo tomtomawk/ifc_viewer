@@ -1,5 +1,5 @@
 """Régénère la section types_ouvertures du gabarit par défaut depuis le code
-(crates/app/src/modele/famille/modelee/catalogue.rs), en gardant la mise en forme du fichier.
+(crates/modele/src/famille/modelee/catalogue.rs), en gardant la mise en forme du fichier.
 
 Usage : python tools/gabarit-familles.py   (CARGO_TARGET_DIR respecté)
 """

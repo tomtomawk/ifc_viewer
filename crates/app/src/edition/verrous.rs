@@ -1,7 +1,7 @@
 //! Verrouillage des éléments : un élément verrouillé n'est ni déplacé, ni modifié, ni
 //! supprimé. Il reste sélectionnable et peut être copié.
 use super::commandes::Commande;
-use crate::modele::Projet;
+use modele::Projet;
 use std::collections::BTreeSet;
 
 /// Verrouillage des éléments d'un projet.
@@ -106,8 +106,8 @@ pub fn verifier(avant: &Projet, apres: &Projet) -> Result<(), String> {
 mod tests {
     use crate::edition::commandes::{Commande, Execution};
     use crate::edition::Verrous;
-    use crate::modele::creation::ParametresMur;
-    use crate::modele::Projet;
+    use modele::creation::ParametresMur;
+    use modele::Projet;
 
     fn projet() -> (Projet, String, String) {
         let mut p = Projet::nouveau("Verrous");

@@ -1,7 +1,7 @@
 //! Cotes pilotantes : commande qui donne à une cote la valeur saisie.
 use super::Commande;
-use crate::modele::documentation::{angle_resolu, cotes_de, extremites_cote, AnnotationForme, Vue};
-use crate::modele::Projet;
+use modele::documentation::{angle_resolu, cotes_de, extremites_cote, AnnotationForme, Vue};
+use modele::Projet;
 use glam::DVec2;
 
 /// Commande qui donne à la cote la valeur saisie en déplaçant (longueur) ou en tournant
@@ -42,8 +42,8 @@ pub fn piloter_cote(p: &Projet, v: &Vue, forme: &AnnotationForme, element: &str,
 mod tests_aretes {
     use super::*;
     use crate::edition::Execution;
-    use crate::modele::creation::ParametresMur;
-    use crate::modele::documentation::{aretes_reference, valeur_pilotable, PointCote, RefArete};
+    use modele::creation::ParametresMur;
+    use modele::documentation::{aretes_reference, valeur_pilotable, PointCote, RefArete};
 
     fn projet() -> (Projet, Vue, String, String) {
         let mut p = Projet::nouveau("Cotes");

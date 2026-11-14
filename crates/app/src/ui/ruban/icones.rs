@@ -99,7 +99,7 @@ pub(super) fn bouton_outil(
 
 /// Composition d'un type en bande horizontale : une case par couche, largeur
 /// proportionnelle à l'épaisseur, couleur du matériau ; extérieur à gauche.
-pub(super) fn bande_couches_brouillon(ui: &mut egui::Ui, projet: &crate::modele::Projet, materiaux: &[crate::modele::Materiau], couches: &[crate::modele::Couche], hauteur: f32) {
+pub(super) fn bande_couches_brouillon(ui: &mut egui::Ui, projet: &modele::Projet, materiaux: &[modele::Materiau], couches: &[modele::Couche], hauteur: f32) {
     let (r, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), hauteur), Sense::hover());
     if let Some(c) = peindre_bande_couches(ui.painter(), r, projet, materiaux, couches, resp.hover_pos()) {
         resp.on_hover_text(texte_couche(c));
@@ -108,7 +108,7 @@ pub(super) fn bande_couches_brouillon(ui: &mut egui::Ui, projet: &crate::modele:
 
 /// Plan des couches dans `r`, de l'extérieur (à gauche) vers l'intérieur, chaque couche
 /// à la largeur de son épaisseur et à la couleur de son matériau. Rend la couche survolée.
-pub(super) fn peindre_bande_couches<'a>(p: &egui::Painter, r: egui::Rect, projet: &crate::modele::Projet, materiaux: &[crate::modele::Materiau], couches: &'a [crate::modele::Couche], survol: Option<egui::Pos2>) -> Option<&'a crate::modele::Couche> {
+pub(super) fn peindre_bande_couches<'a>(p: &egui::Painter, r: egui::Rect, projet: &modele::Projet, materiaux: &[modele::Materiau], couches: &'a [modele::Couche], survol: Option<egui::Pos2>) -> Option<&'a modele::Couche> {
     let total: f64 = couches.iter().map(|c| c.epaisseur.max(0.0)).sum();
     if total <= 0.0 {
         return None;
@@ -119,12 +119,12 @@ pub(super) fn peindre_bande_couches<'a>(p: &egui::Painter, r: egui::Rect, projet
         let l = (c.epaisseur.max(0.0) / total) as f32 * r.width();
         let case = egui::Rect::from_min_size(egui::pos2(x, r.top()), egui::vec2(l, r.height()));
         let m = c.materiau.as_ref().and_then(|n| materiaux.iter().find(|m| &m.nom == n)).cloned()
-            .unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(c.materiau.as_deref().unwrap_or("Mur générique")));
+            .unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(c.materiau.as_deref().unwrap_or("Mur générique")));
         peindre_materiau_coupe(p, case, projet, &m, true);
         // ossature : un montant en coupe au milieu de la couche
         if let Some(o) = c.ossature.as_ref().filter(|_| l > 3.0) {
             let montant = egui::Rect::from_center_size(case.center(), egui::vec2(l, (case.height() * 0.4).max(4.0)));
-            let bois = materiaux.iter().find(|m| m.nom == o.materiau()).cloned().unwrap_or_else(|| crate::modele::murs::assemblage::materiau_par_defaut(o.materiau()));
+            let bois = materiaux.iter().find(|m| m.nom == o.materiau()).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(o.materiau()));
             peindre_materiau_coupe(p, montant, projet, &bois, true);
             p.rect_stroke(montant, 0.0, egui::Stroke::new(0.6, Color32::from_gray(60)), egui::StrokeKind::Inside);
         }
@@ -138,8 +138,8 @@ pub(super) fn peindre_bande_couches<'a>(p: &egui::Painter, r: egui::Rect, projet
 }
 
 /// Motifs de coupe du matériau, limités à la vignette de la couche.
-pub(super) fn peindre_materiau_coupe(p: &egui::Painter, r: egui::Rect, projet: &crate::modele::Projet, m: &crate::modele::Materiau, vertical: bool) {
-    use crate::modele::MotifCoupe;
+pub(super) fn peindre_materiau_coupe(p: &egui::Painter, r: egui::Rect, projet: &modele::Projet, m: &modele::Materiau, vertical: bool) {
+    use modele::MotifCoupe;
     if !r.is_positive() { return; }
     let (fond, couleur) = m.fond_coupe();
     let [r0, g0, b0] = m.couleur;
@@ -169,7 +169,7 @@ pub(super) fn peindre_materiau_coupe(p: &egui::Painter, r: egui::Rect, projet: &
 }
 
 /// Infobulle d'une couche : matériau, fonction, épaisseur.
-pub(super) fn texte_couche(c: &crate::modele::Couche) -> String {
+pub(super) fn texte_couche(c: &modele::Couche) -> String {
     format!("{} · {} · {}", c.materiau.as_deref().unwrap_or("Sans matériau"), c.fonction.libelle(), crate::config::options::unite().afficher(c.epaisseur))
 }
 

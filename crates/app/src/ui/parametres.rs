@@ -37,11 +37,11 @@ impl ViewerApp {
     pub(super) fn appliquer_options(&mut self, o: Options) -> Result<(), String> {
         o.verifier()?;
         let g = match &o.gabarit {
-            Some(p) => crate::modele::gabarit::Gabarit::charger(p)?,
-            None => crate::modele::gabarit::Gabarit::defaut(),
+            Some(p) => modele::gabarit::Gabarit::charger(p)?,
+            None => modele::gabarit::Gabarit::defaut(),
         };
         o.sauver()?;
-        crate::modele::gabarit::definir(g);
+        modele::gabarit::definir(g);
         crate::config::options::definir_unite(o.unite);
         self.options = o;
         self.coupe_dirty = true;
@@ -129,13 +129,13 @@ impl ViewerApp {
                                 ui.label(p.brouillon.gabarit.as_ref().map_or("Gabarit embarqué".into(),|c|c.display().to_string()));
                                 if ui.button("Choisir un gabarit…").clicked(){
                                     if let Some(c)=rfd::FileDialog::new().set_title("Gabarit").add_filter("Gabarit",&["json"]).pick_file(){
-                                        match crate::modele::gabarit::Gabarit::charger(&c){Ok(_)=>{p.brouillon.gabarit=Some(c);p.erreur=None;},Err(e)=>p.erreur=Some(e)}
+                                        match modele::gabarit::Gabarit::charger(&c){Ok(_)=>{p.brouillon.gabarit=Some(c);p.erreur=None;},Err(e)=>p.erreur=Some(e)}
                                     }
                                 }
                                 if ui.button("Utiliser le gabarit par défaut").clicked(){p.brouillon.gabarit=None;}
                                 if ui.button("Enregistrer une copie du gabarit…").clicked(){
                                     if let Some(c)=rfd::FileDialog::new().set_title("Copie du gabarit").add_filter("Gabarit",&["json"]).set_file_name("agence.gabarit.json").save_file(){
-                                        let contenu=match &p.brouillon.gabarit {Some(src)=>std::fs::read(src).map_err(|e|e.to_string()),None=>Ok(crate::modele::gabarit::texte_defaut().as_bytes().to_vec())};
+                                        let contenu=match &p.brouillon.gabarit {Some(src)=>std::fs::read(src).map_err(|e|e.to_string()),None=>Ok(modele::gabarit::texte_defaut().as_bytes().to_vec())};
                                         if let Err(e)=contenu.and_then(|t|crate::echanges::enregistrement::ecrire_atomique(&c,&t)){p.erreur=Some(e);}
                                     }
                                 }

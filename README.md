@@ -166,15 +166,16 @@ Le dépôt est un workspace Cargo : l'application (crate `bimedit`) est dans `cr
 
 | Dossier | Rôle |
 |---|---|
-| `crates/app/src/noyau/` | Briques sans dépendance au modèle : booléens par arbre BSP (`csg.rs`, portage de csg.js), textes en triangles (`texte.rs`), primitives 2D vectorielles et export SVG (`trace2d.rs`) |
+| `crates/noyau/src/` | Briques sans dépendance au modèle : booléens par arbre BSP (`csg.rs`, portage de csg.js), textes en triangles (`texte.rs`), primitives 2D vectorielles et export SVG (`trace2d.rs`) |
 | `crates/app/src/formats/ifc/` | IFC : parseur ISO 10303-21 (`step.rs`), couche sémantique (`semantique.rs` : unités, relations, matériaux, styles), placements, profils et solides → triangles (`geom.rs`) |
 | `crates/app/src/formats/rvt/` | Revit : conteneur OLE et métadonnées (`mod.rs`), objets, schéma, champs, géométrie B-rep, vues, paramètres (tables dans `donnees/`), maquette (`maquette/` : lecture, conversion en scène, tests) |
-| `crates/app/src/modele/` | Modèle natif (format d'édition) : types dans `mod.rs` ; `murs/` (assemblages, jonctions, retours), `elements/` (escaliers, terrain, cadrage, pentes), `volumes/` (géométrie, solides), `famille/`, `edition/` (commandes, historique, validation), `documentation/` (annotations, feuilles, nomenclatures), `echanges/` (import IFC/Revit, export IFC, enregistrement, rapport), `collaboration/` ; voir [docs/MODELE.md](docs/MODELE.md) |
+| `crates/modele/src/` | Modèle natif (format d'édition), crate `modele` : types dans `lib.rs` ; `murs/` (assemblages, jonctions, retours), `elements/` (escaliers, terrain, cadrage, pentes), `volumes/` (géométrie, solides), `famille/`, `documentation/` (annotations, feuilles, nomenclatures), `creation.rs` (création paramétrique), `validation.rs`, `gabarit.rs` (gabarit de projet) ; voir [docs/MODELE.md](docs/MODELE.md) |
+| `crates/app/src/edition/`, `echanges/`, `collaboration/` | Commandes, historique et verrous ; import IFC/Revit, export IFC, enregistrement, rapport ; travail partagé |
 | `crates/app/src/dessin/` | Dessin 2D : arêtes, coupe par un plan (poché, hachures, contours), motifs (`motifs.rs` : isolant), outils de DAO (`dao.rs`) |
 | `crates/app/src/rendu/` | Vue 3D : scène et picking (`scene/`), rendu wgpu (`gpu.rs`), caméra, repère des plans, sélection à l'écran |
 | `crates/app/src/ui/` | Interface egui : état et boucle (`mod.rs`), un fichier par zone (barre haute, panneaux, navigateur, vues, viewport, propriétés, sélection…), `ruban/`, `dessin_plan/` (saisie en plan), `editeur_famille/`, `bim/` |
 | `crates/app/src/pilote/` | Canal de commande local (TCP 127.0.0.1, jeton) du serveur MCP, registre des instances (`instances.rs`) et commandes en ligne (`cli.rs`) |
-| `crates/app/src/config/` | Options utilisateur, raccourcis, gabarits de projet |
+| `crates/app/src/config/` | Options utilisateur, raccourcis |
 | `crates/app/src/pilote/mcp.rs` | Serveur MCP (stdio, `bimedit --mcp`) qui pilote le viewer : ouverture, vues, caméra, propriétés, captures |
 
 ## Pilotage par MCP

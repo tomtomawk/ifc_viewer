@@ -48,7 +48,7 @@ impl ViewerApp {
                     match std::fs::read_to_string(if restaurer{&recuperation}else{&path}).map_err(|e|format!("Lecture impossible : {e}")) {
                         Ok(json) if crate::collaboration::partage::contenu_partage(&json)=>{let _=tx.send(LoadMsg::Partage(Self::charger_partage(&path,&progress),None));},
                         texte=>{
-                            let res=texte.and_then(|json|crate::modele::Projet::lire_json(&json))
+                            let res=texte.and_then(|json|modele::Projet::lire_json(&json))
                                 .and_then(|projet|scene::depuis_natif(&projet,&path).map(|scene|(Box::new(scene),projet,path)));
                             let _=tx.send(LoadMsg::Natif(res));
                         }
@@ -97,7 +97,7 @@ impl ViewerApp {
                     self.install_scene(*scene);
                     self.status = format!("{} — projet natif v0", projet.nom);
                     let _ = self.historique.enregistrer(&projet);
-                    if let Ok(ancien)=std::fs::read_to_string(&chemin).map_err(|e|e.to_string()).and_then(|s|crate::modele::Projet::lire_json(&s)) {
+                    if let Ok(ancien)=std::fs::read_to_string(&chemin).map_err(|e|e.to_string()).and_then(|s|modele::Projet::lire_json(&s)) {
                         let _=self.historique.enregistrer(&ancien);
                         self.natif_modifie=self.historique.modifie(&projet);
                     }
@@ -312,7 +312,7 @@ impl ViewerApp {
             chemin.set_extension("modele.json");
         }
         let nom = chemin.file_stem().map(|n| n.to_string_lossy().trim_end_matches(".modele").to_string()).unwrap_or_else(|| "Nouveau projet".into());
-        let projet = crate::modele::Projet::depuis_gabarit(&nom, &crate::modele::gabarit::actif());
+        let projet = modele::Projet::depuis_gabarit(&nom, &modele::gabarit::actif());
         let resultat = scene::depuis_natif(&projet, &chemin).and_then(|scene| {
             crate::echanges::enregistrement::enregistrer_natif(&projet, &chemin)?;
             Ok(scene)
@@ -333,7 +333,7 @@ impl ViewerApp {
 
     /// Le plan initial est ouvert seul ; la vue 3D nommée reste dans l'arborescence.
     pub(super) fn ouvrir_plan_initial_natif(&mut self) {
-        let plan = self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|v| matches!(v.genre, crate::modele::GenreVue::Plan { .. })).map(|v| scene::numero_vue(&v.id)));
+        let plan = self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|v| matches!(v.genre, modele::GenreVue::Plan { .. })).map(|v| scene::numero_vue(&v.id)));
         let indice = plan.and_then(|n| self.scene.as_ref()?.navigateur.as_ref()?.vues.iter().position(|v| v.revit_id == n));
         self.vues_ouvertes.clear();
         self.etats_vues.clear();

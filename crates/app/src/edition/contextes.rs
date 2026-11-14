@@ -1,13 +1,13 @@
 //! Gestion des phases, sous-projets et variantes et de leurs affectations.
 use super::commandes::{Execution, Modification};
-use crate::modele::creation::ListeCreation;
-use crate::modele::{Projet, PHASE_EXISTANT};
+use modele::creation::ListeCreation;
+use modele::{Projet, PHASE_EXISTANT};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::modele::contextes::FiltresContextes;
-    use crate::modele::{ContexteElement, creation::ParametresMur};
+    use modele::contextes::FiltresContextes;
+    use modele::{ContexteElement, creation::ParametresMur};
 
     #[test]
     fn renommage_et_suppression_reaffectent_toutes_les_references() {
@@ -46,7 +46,7 @@ mod tests {
         p.murs[0].variante = Some(b.clone());
         p.contextes_vues.insert("vue".into(), FiltresContextes { variante: Some(b.clone()), ..Default::default() });
         p.murs[0].phase = Some("Projet".into());
-        p.ouvertures.push(crate::modele::Ouverture { id: "porte".into(), nom: "Porte".into(), genre: crate::modele::GenreOuverture::Libre, mur: mur.clone(), type_ouverture: None, abscisse: 1000.0, largeur: 600.0, hauteur: 2000.0, allege: 0.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
+        p.ouvertures.push(modele::Ouverture { id: "porte".into(), nom: "Porte".into(), genre: modele::GenreOuverture::Libre, mur: mur.clone(), type_ouverture: None, abscisse: 1000.0, largeur: 600.0, hauteur: 2000.0, allege: 0.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
         p.demolitions.insert(mur.clone(), "Démolition".into());
         let mut filtre = FiltresContextes { phase: Some("Projet".into()), sous_projet: None, variante: Some(a.clone()) };
         assert!(p.elements_masques_contextes(&filtre).contains(&mur));
@@ -91,7 +91,7 @@ mod tests {
 
 /// Gestion des phases, sous-projets et variantes d'un projet.
 pub trait Contextes {
-    fn variante_retenue(&self, jeu: &str) -> Option<&crate::modele::Variante>;
+    fn variante_retenue(&self, jeu: &str) -> Option<&modele::Variante>;
     fn retenir_variante(&mut self, id: &str) -> Result<(), String>;
     fn elements_variantes_ecartees(&self, id: &str) -> Vec<String>;
     fn adopter_variante(&mut self, id: &str) -> Result<usize, String>;
@@ -110,7 +110,7 @@ trait ContextesInterne {
 
 impl Contextes for Projet {
     /// Variante affichée par défaut dans le jeu `jeu`.
-    fn variante_retenue(&self, jeu: &str) -> Option<&crate::modele::Variante> {
+    fn variante_retenue(&self, jeu: &str) -> Option<&modele::Variante> {
         let mut du_jeu = self.variantes.iter().filter(|v| v.jeu == jeu);
         let premiere = du_jeu.next()?;
         if premiere.retenue { Some(premiere) } else { du_jeu.find(|v| v.retenue).or(Some(premiere)) }

@@ -6,7 +6,7 @@
 //! droit pour revenir d'une étape.
 use super::*;
 use crate::edition::commandes::Commande;
-use crate::modele::Axe;
+use modele::Axe;
 use crate::ui::ruban::Outil;
 
 /// Nombre d'éléments d'un réseau quand aucun n'est réglé.
@@ -309,9 +309,9 @@ impl ViewerApp {
         let (projet, _) = self.natif.as_ref()?;
         let ids = projet.murs.iter().filter(|m| m.assemblage.is_none()).map(|m| m.id.clone()).chain(projet.assemblages.iter().map(|a| a.id.clone()));
         ids.filter_map(|id| {
-            let (axe, epaisseur, _) = crate::modele::volumes::solides::hote(projet, &id).ok()?;
+            let (axe, epaisseur, _) = modele::volumes::solides::hote(projet, &id).ok()?;
             let s = axe.abscisse(p);
-            let (q, _) = crate::modele::volumes::solides::repere(&axe, s);
+            let (q, _) = modele::volumes::solides::repere(&axe, s);
             let d = (q.x - p[0]).hypot(q.y - p[1]);
             (d <= epaisseur / 2.0 + 20.0).then_some((d, id))
         }).min_by(|a, b| a.0.total_cmp(&b.0)).map(|(_, id)| id)
@@ -435,9 +435,9 @@ impl ViewerApp {
                 let cible = match (&self.transfo.element, cible) {
                     (None, c) if c.as_ref().is_none_or(|id| !ouverture(self, id)) => self.natif.as_ref().and_then(|(projet, _)| {
                         projet.ouvertures.iter().find(|o| {
-                            crate::modele::volumes::solides::hote(projet, &o.mur).is_ok_and(|(axe, epaisseur, _)| {
+                            modele::volumes::solides::hote(projet, &o.mur).is_ok_and(|(axe, epaisseur, _)| {
                                 let s = axe.abscisse(p);
-                                let (q, _) = crate::modele::volumes::solides::repere(&axe, s);
+                                let (q, _) = modele::volumes::solides::repere(&axe, s);
                                 (s - o.abscisse).abs() <= o.largeur / 2.0 && (q.x - p[0]).hypot(q.y - p[1]) <= epaisseur / 2.0 + 100.0
                             })
                         }).map(|o| o.id.clone())
@@ -466,7 +466,7 @@ impl ViewerApp {
                     Err(e) => self.error = Some(e),
                 }
             }
-            Outil::Scinder => match cible.filter(|id| self.axe_mur(id).is_some() || self.natif.as_ref().is_some_and(|(p, _)| p.barres.iter().any(|b| &b.id == id && b.genre == crate::modele::GenreBarre::Poutre))) {
+            Outil::Scinder => match cible.filter(|id| self.axe_mur(id).is_some() || self.natif.as_ref().is_some_and(|(p, _)| p.barres.iter().any(|b| &b.id == id && b.genre == modele::GenreBarre::Poutre))) {
                 Some(id) => {
                     let ecart = self.transfo.ecart.max(0.0);
                     match self.executer_bim(Commande::Scinder { id, point: p, ecart }) {

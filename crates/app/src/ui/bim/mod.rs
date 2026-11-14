@@ -209,17 +209,17 @@ pub(super) struct EtatBim {
     pub selection: Vec<String>,
     delta: [f64; 3],
     abscisse: f64,
-    pub(super) barre: crate::modele::Barre,
+    pub(super) barre: modele::Barre,
     pub(super) depart_structure: Option<[f64; 2]>,
     /// Composant à placer (type vide : type par défaut) et nom des pièces créées.
-    pub(super) composant: crate::modele::Composant,
+    pub(super) composant: modele::Composant,
     /// Arbre à placer (essence, hauteur, houppier, décalage).
-    pub(super) arbre: crate::modele::elements::arbre::Arbre,
+    pub(super) arbre: modele::elements::arbre::Arbre,
     pub(super) nom_piece: String,
     /// Famille d'étiquette des pièces créées ; vide : standard.
     pub(super) etiquette_piece: String,
-    barre_editee: Option<crate::modele::Barre>,
-    pub(in crate::ui) annotation_identique: Option<crate::modele::documentation::Annotation>,
+    barre_editee: Option<modele::Barre>,
+    pub(in crate::ui) annotation_identique: Option<modele::documentation::Annotation>,
     /// Suppression demandée depuis le panneau : exécutée à l'image suivante.
     pub(super) supprimer: bool,
     pub documentation: bool,
@@ -241,10 +241,10 @@ impl Default for EtatBim {
             selection: Vec::new(),
             delta: [1000.0, 0.0, 0.0],
             abscisse: 1500.0,
-            barre: crate::modele::Barre {
+            barre: modele::Barre {
                 id: String::new(),
                 nom: "Structure".into(),
-                genre: crate::modele::GenreBarre::Poteau,
+                genre: modele::GenreBarre::Poteau,
                 niveau: String::new(),
                 debut: [0.0, 0.0, 0.0],
                 fin: [0.0, 0.0, 2800.0],
@@ -253,8 +253,8 @@ impl Default for EtatBim {
                 rotation: 0.0,
             },
             depart_structure: None,
-            composant: crate::modele::Composant { id: String::new(), nom: String::new(), type_composant: String::new(), niveau: String::new(), position: [0.0; 2], decalage: 0.0, rotation: 0.0 },
-            arbre: crate::modele::elements::arbre::Arbre { id: String::new(), nom: String::new(), niveau: String::new(), position: [0.0; 2], decalage: 0.0, essence: Default::default(), hauteur: 10_000.0, diametre: 7_000.0, asset: None },
+            composant: modele::Composant { id: String::new(), nom: String::new(), type_composant: String::new(), niveau: String::new(), position: [0.0; 2], decalage: 0.0, rotation: 0.0 },
+            arbre: modele::elements::arbre::Arbre { id: String::new(), nom: String::new(), niveau: String::new(), position: [0.0; 2], decalage: 0.0, essence: Default::default(), hauteur: 10_000.0, diametre: 7_000.0, asset: None },
             nom_piece: "Pièce".into(),
             etiquette_piece: String::new(),
             barre_editee: None,
@@ -360,7 +360,7 @@ impl ViewerApp {
     }
 }
 
-pub(super) fn elements_natifs(p: &crate::modele::Projet) -> impl Iterator<Item = (&'static str, &String)> {
+pub(super) fn elements_natifs(p: &modele::Projet) -> impl Iterator<Item = (&'static str, &String)> {
         p.murs
             .iter()
             .map(|x| ("mur", &x.id))
@@ -411,7 +411,7 @@ impl ViewerApp {
             {
                 p.contextes.insert(
                     id.clone(),
-                    crate::modele::ContexteElement {
+                    modele::ContexteElement {
                         phase: self
                             .ruban_edition
                             .phase_creation
@@ -466,11 +466,11 @@ impl ViewerApp {
             abscisse,
             type_ouverture: self.ruban_edition.ouverture_type_identique.clone(),
             genre: if fenetre {
-                crate::modele::GenreOuverture::Fenetre
+                modele::GenreOuverture::Fenetre
             } else if self.ruban_edition.texte_option(Outil::Ouverture, 0) == "Libre" {
-                crate::modele::GenreOuverture::Libre
+                modele::GenreOuverture::Libre
             } else {
-                crate::modele::GenreOuverture::Porte
+                modele::GenreOuverture::Porte
             },
             largeur: self.ruban_edition.nombre_option(Outil::Ouverture, 1),
             hauteur: self.ruban_edition.nombre_option(Outil::Ouverture, 2),
@@ -493,7 +493,7 @@ impl ViewerApp {
             {
                 id = a;
             }
-            let (axe, _, _) = crate::modele::volumes::solides::hote(p, &id)?;
+            let (axe, _, _) = modele::volumes::solides::hote(p, &id)?;
             self.verifier_type_ouverture()?;
             self.executer_bim(self.commande_ouverture(id, axe.abscisse(point)))?;
             Ok(())
@@ -522,7 +522,7 @@ impl ViewerApp {
         let p = &self.natif.as_ref().ok_or("Aucun projet natif.")?.0;
         // type par défaut : chargé au premier placement
         if !p.types_composants.iter().any(|t| t.id == c.type_composant) {
-            if c.type_composant != crate::modele::elements::composant::type_table().id {
+            if c.type_composant != modele::elements::composant::type_table().id {
                 return Err("Type de composant introuvable.".into());
             }
             c.type_composant.clear();
@@ -534,7 +534,7 @@ impl ViewerApp {
     /// Crée une pièce au point `point` (contour détecté depuis les murs du niveau de la vue).
     pub(super) fn placer_piece(&mut self, point: [f64; 2]) -> Result<(), String> {
         let niveau = self.niveau_vue_native().ok_or("Pièce : aucun niveau.")?;
-        let piece = crate::modele::Piece { id: String::new(), nom: self.bim.nom_piece.clone(), numero: String::new(), niveau, point, contour: Vec::new(), etiquette: self.bim.etiquette_piece.clone() };
+        let piece = modele::Piece { id: String::new(), nom: self.bim.nom_piece.clone(), numero: String::new(), niveau, point, contour: Vec::new(), etiquette: self.bim.etiquette_piece.clone() };
         self.executer_bim(crate::edition::commandes::Commande::Piece { piece })?;
         Ok(())
     }
@@ -550,11 +550,11 @@ impl ViewerApp {
         b.debut[0] = debut[0];
         b.debut[1] = debut[1];
         match b.genre {
-            crate::modele::GenreBarre::Poteau => {
+            modele::GenreBarre::Poteau => {
                 b.fin[0] = debut[0];
                 b.fin[1] = debut[1];
             }
-            crate::modele::GenreBarre::Poutre => {
+            modele::GenreBarre::Poutre => {
                 let fin = fin.ok_or("Choisissez l'arrivée de la poutre.")?;
                 b.fin[0] = fin[0];
                 b.fin[1] = fin[1];
@@ -611,7 +611,7 @@ impl ViewerApp {
             self.bim.barre = b.clone();
             self.bim.barre.id.clear();
             self.ruban_edition
-                .activer_structure(b.genre == crate::modele::GenreBarre::Poutre);
+                .activer_structure(b.genre == modele::GenreBarre::Poutre);
         } else if let Some(o) = p.ouvertures.iter().find(|o| &o.id == id) {
             if let Some(c) = p.contextes.get(id) {
                 self.ruban_edition.phase_creation = c.phase.clone();
@@ -620,7 +620,7 @@ impl ViewerApp {
             }
             self.ruban_edition.ouverture_identique(o)?;
         } else if let Some(annotation) = p.annotations.iter().find(|a| &a.id == id) {
-            use crate::modele::documentation::{AnnotationForme as F, PointCote};
+            use modele::documentation::{AnnotationForme as F, PointCote};
             use crate::ui::ruban::Outil;
             if self.vue_native_id().as_ref() != Some(&annotation.vue) {
                 return Err("Ouvrez la vue de l'annotation pour la créer à l'identique.".into());
@@ -670,7 +670,7 @@ impl ViewerApp {
         } else if let Some(vue) = p
             .vues
             .iter()
-            .find(|v| &v.id == id && matches!(v.genre, crate::modele::GenreVue::Coupe { .. }))
+            .find(|v| &v.id == id && matches!(v.genre, modele::GenreVue::Coupe { .. }))
         {
             self.ruban_edition.coupe_identique(vue)?;
             self.onglet_ruban = OngletRuban::Annoter;
@@ -691,7 +691,7 @@ impl ViewerApp {
 
     /// Phase, sous-projet et variante de la sélection, modifiables d'ici : « Varié » quand
     /// les éléments diffèrent. Retourne le projet modifié.
-    pub(super) fn contexte_selection(&self, ui: &mut egui::Ui, ids: &[String]) -> Option<crate::modele::Projet> {
+    pub(super) fn contexte_selection(&self, ui: &mut egui::Ui, ids: &[String]) -> Option<modele::Projet> {
         let (p, _) = self.natif.as_ref()?;
         // éléments portant le contexte : couches des assemblages, murs, dalles, autres
         let mut cibles: Vec<String> = Vec::new();
@@ -778,7 +778,7 @@ impl ViewerApp {
         }
         let outil = self.ruban_edition.outil();
         if let Some(annotation) = &self.bim.annotation_identique {
-            use crate::modele::documentation::AnnotationForme as F;
+            use modele::documentation::AnnotationForme as F;
             let attendu = match annotation.forme {
                 F::Texte { .. } => Outil::Texte,
                 F::Ligne { .. } | F::Polyligne { .. } | F::Arc { .. } => Outil::Polyligne,
@@ -809,8 +809,8 @@ impl ViewerApp {
                     // volume du solide (épaisseur du type sous la surface) ; les cotes des
                     // sommets et points se modifient dans la vue (outil Modifier)
                     let e = p.type_terrain(&terrain).epaisseur;
-                    match crate::modele::elements::terre_plein::solide_terrain(p, &terrain, e) {
-                        Ok(tris) => ui.label(format!("Volume : {:.2} m³", crate::modele::volumes::geometrie::volume(&tris) / 1e9)),
+                    match modele::elements::terre_plein::solide_terrain(p, &terrain, e) {
+                        Ok(tris) => ui.label(format!("Volume : {:.2} m³", modele::volumes::geometrie::volume(&tris) / 1e9)),
                         Err(e) => ui.label(RichText::new(e).weak()),
                     };
                     if change { commande = Some(Commande::Terrain { terrain }); }
@@ -823,13 +823,13 @@ impl ViewerApp {
                     if change { commande = Some(Commande::LimitePropriete { limite }); }
                 }
                 if let Some(original) = p.vues.iter().find(|v| {
-                    v.id == ids[0] && matches!(v.genre, crate::modele::GenreVue::Coupe { .. })
+                    v.id == ids[0] && matches!(v.genre, modele::GenreVue::Coupe { .. })
                 }) {
                     let mut vue = original.clone();
                     ui.label(RichText::new("Propriétés de la coupe / élévation").strong());
                     ui.scope(|ui| {
                         let mut change = ui.text_edit_singleline(&mut vue.nom).changed();
-                        if let crate::modele::GenreVue::Coupe {
+                        if let modele::GenreVue::Coupe {
                             debut,
                             fin,
                             profondeur,
@@ -890,7 +890,7 @@ impl ViewerApp {
                     let mut annotation = original.clone();
                     ui.label(RichText::new("Propriétés de l'annotation").strong());
                     ui.scope(|ui| {
-                        use crate::modele::documentation::{AnnotationForme as F, PointCote};
+                        use modele::documentation::{AnnotationForme as F, PointCote};
                         let mut change = false;
                         match &mut annotation.forme {
                             F::Polyligne { points, fermee, courbures, .. } => {
@@ -923,7 +923,7 @@ impl ViewerApp {
                                 ui.label("Arc par trois points");
                             }
                             F::CoteAngulaire { sommet, debut, fin, rayon, .. } => {
-                                if let Some((a, ..)) = crate::modele::documentation::angle_branches((*sommet).into(), (*debut).into(), (*fin).into()) {
+                                if let Some((a, ..)) = modele::documentation::angle_branches((*sommet).into(), (*debut).into(), (*fin).into()) {
                                     ui.label(format!("Angle : {:.2}°", a.to_degrees()));
                                 }
                                 ui.horizontal(|ui| {
@@ -1161,7 +1161,7 @@ impl ViewerApp {
                     }
                 }
                 Some(Outil::Poteau | Outil::Poutre) => {
-                    use crate::modele::GenreBarre;
+                    use modele::GenreBarre;
                     let genre = if outil == Some(Outil::Poteau) {
                         GenreBarre::Poteau
                     } else {
@@ -1194,7 +1194,7 @@ impl ViewerApp {
                 Some(Outil::Composant) => {
                     let p = &self.natif.as_ref().unwrap().0;
                     let mut types = p.types_composants.clone();
-                    let defaut = crate::modele::elements::composant::type_table();
+                    let defaut = modele::elements::composant::type_table();
                     if !types.iter().any(|t| t.id == defaut.id) {
                         types.insert(0, defaut.clone());
                     }
@@ -1226,7 +1226,7 @@ impl ViewerApp {
                     });
                 }
                 Some(Outil::Arbre) => {
-                    use crate::modele::elements::arbre::Essence;
+                    use modele::elements::arbre::Essence;
                     let a = &mut self.bim.arbre;
                     ui.label(RichText::new("Arbre").strong());
                     egui::Grid::new("outil_arbre").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
@@ -1288,7 +1288,7 @@ impl ViewerApp {
                             self.error = Some(e);
                         }
                         if let Some(t) = self.ruban_edition.demande_famille.take() {
-                            let genre = if self.ruban_edition.texte_option(Outil::Ouverture, 0) == "Porte" { crate::modele::GenreOuverture::Porte } else { crate::modele::GenreOuverture::Fenetre };
+                            let genre = if self.ruban_edition.texte_option(Outil::Ouverture, 0) == "Porte" { modele::GenreOuverture::Porte } else { modele::GenreOuverture::Fenetre };
                             self.ouvrir_editeur_famille_type(t, genre);
                         }
                     }
@@ -1316,7 +1316,7 @@ impl ViewerApp {
                 Some(Outil::Texte | Outil::Zone | Outil::Etiquette)
             )
         {
-            use crate::modele::documentation::{Annotation, AnnotationForme as F};
+            use modele::documentation::{Annotation, AnnotationForme as F};
             let Some(vue) = self.vue_native_id() else {
                 ui.label("Ouvrez un plan ou une coupe native pour annoter.");
                 return true;
@@ -1336,7 +1336,7 @@ impl ViewerApp {
                 if let Some(pt) = self.point_clique {
                     let p = &self.natif.as_ref().unwrap().0;
                     let v = p.vues.iter().find(|v| v.id == vue).unwrap();
-                    let (o, u, h) = crate::modele::documentation::repere(p, v);
+                    let (o, u, h) = modele::documentation::repere(p, v);
                     let d = pt * 1000.0 - o;
                     self.bim.points[0] = [d.dot(u), d.dot(h)];
                 }
@@ -1412,7 +1412,7 @@ impl ViewerApp {
 }
 
 /// Liste des types de composants ; vrai si le choix a changé.
-fn choix_famille_etiquette(ui: &mut egui::Ui, salt: &str, choix: &mut String, familles: &[crate::modele::documentation::FamilleEtiquette]) -> bool {
+fn choix_famille_etiquette(ui: &mut egui::Ui, salt: &str, choix: &mut String, familles: &[modele::documentation::FamilleEtiquette]) -> bool {
     let avant = choix.clone();
     egui::ComboBox::from_id_salt(salt)
         .selected_text(familles.iter().find(|f| &f.id == choix).map_or("Étiquette standard", |f| f.nom.as_str()))
@@ -1425,7 +1425,7 @@ fn choix_famille_etiquette(ui: &mut egui::Ui, salt: &str, choix: &mut String, fa
     *choix != avant
 }
 
-fn choix_type_composant(ui: &mut egui::Ui, salt: &str, choix: &mut String, types: &[crate::modele::TypeComposant]) -> bool {
+fn choix_type_composant(ui: &mut egui::Ui, salt: &str, choix: &mut String, types: &[modele::TypeComposant]) -> bool {
     let avant = choix.clone();
     egui::ComboBox::from_id_salt(salt)
         .selected_text(types.iter().find(|t| &t.id == choix).map_or("Choisir un type", |t| t.nom.as_str()))
@@ -1437,8 +1437,8 @@ fn choix_type_composant(ui: &mut egui::Ui, salt: &str, choix: &mut String, types
     *choix != avant
 }
 
-fn barre_ui(ui: &mut egui::Ui, b: &mut crate::modele::Barre, niveaux: &[crate::modele::Niveau]) {
-    use crate::modele::GenreBarre;
+fn barre_ui(ui: &mut egui::Ui, b: &mut modele::Barre, niveaux: &[modele::Niveau]) {
+    use modele::GenreBarre;
     ui.horizontal(|ui| {
         ui.label("Nom");
         ui.text_edit_singleline(&mut b.nom);

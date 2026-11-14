@@ -226,9 +226,9 @@ impl ViewerApp {
     pub(super) fn choix_fond_plan(&mut self,ui:&mut egui::Ui) {
         let Some(id)=self.vue_native_id() else{return};
         let Some((p,_))=&self.natif else{return};
-        let Some(v)=p.vues.iter().find(|v|v.id==id && matches!(v.genre,crate::modele::GenreVue::Plan{..})) else{return};
+        let Some(v)=p.vues.iter().find(|v|v.id==id && matches!(v.genre,modele::GenreVue::Plan{..})) else{return};
         let mut choisi=v.fond_plan.clone();
-        let vues:Vec<_>=p.vues.iter().filter(|v|v.id!=id && matches!(v.genre,crate::modele::GenreVue::Plan{..})).map(|v|(v.id.clone(),v.nom.clone())).collect();
+        let vues:Vec<_>=p.vues.iter().filter(|v|v.id!=id && matches!(v.genre,modele::GenreVue::Plan{..})).map(|v|(v.id.clone(),v.nom.clone())).collect();
         let nom=choisi.as_ref().and_then(|id|vues.iter().find(|v|&v.0==id)).map_or("Aucun",|v|v.1.as_str());
         egui::ComboBox::from_id_salt("fond_plan_vue").selected_text(format!("Fond : {nom}")).show_ui(ui,|ui| {
             ui.selectable_value(&mut choisi,None,"Aucun");

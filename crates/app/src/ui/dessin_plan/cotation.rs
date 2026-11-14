@@ -2,7 +2,7 @@
 //! (`documentation::GenreCote`) : points recueillis par le tracé du dessin 2D
 //! (accrochages, repérage polaire, saisie au clavier), aperçu de la cote sous le curseur.
 use super::*;
-use crate::modele::documentation::{self as doc, GenreCote};
+use modele::documentation::{self as doc, GenreCote};
 use crate::ui::ruban::Outil;
 
 /// Hauteur papier des textes de cote (mm).
@@ -21,7 +21,7 @@ impl ViewerApp {
         Some(self.outil_cotation()?.invite(self.dessin2d.trace.as_ref().map_or(0, |t| t.points.len())))
     }
 
-    fn vue_cotation(&self) -> Option<(&crate::modele::Projet, &crate::modele::Vue)> {
+    fn vue_cotation(&self) -> Option<(&modele::Projet, &modele::Vue)> {
         let id = self.vue_native_id()?;
         let p = &self.natif.as_ref()?.0;
         Some((p, p.vues.iter().find(|v| v.id == id)?))

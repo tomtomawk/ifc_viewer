@@ -1,9 +1,8 @@
 //! Tests déplacés de `modele/elements/composant.rs` (`mod tests`) : ils appellent du code situé au-dessus
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
 use crate::edition::Execution;
-use crate::modele::*;
+use modele::*;
 use crate::edition::commandes::Commande;
-use crate::modele::elements::composant::*;
 use glam::DVec3;
 
 fn projet() -> (Projet, String) {

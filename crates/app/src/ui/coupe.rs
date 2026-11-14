@@ -76,7 +76,7 @@ impl ViewerApp {
     pub(super) fn masque_plage_haute(&self)->Option<(Vec<bool>,f32)> {
         let (Some(s),Some((p,_)),Some(id),Some(plan))=(&self.scene,&self.natif,self.vue_native_id(),self.plan_coupe()) else{return None};
         let v=p.vues.iter().find(|v|v.id==id)?;
-        let crate::modele::GenreVue::Plan{niveau,..}=&v.genre else{return None};
+        let modele::GenreVue::Plan{niveau,..}=&v.genre else{return None};
         let coupe = plan.w;
         let limite = crate::dessin::limite_haute_plan(p, s, v, coupe)?;
         let niveau_id=scene::id_natif("niveau",niveau);
@@ -170,7 +170,7 @@ impl ViewerApp {
         }
         primitives.extend(self.annotations_natives());
         if let Some(vue) = self.vue_native_id().and_then(|id| self.natif.as_ref()?.0.vues.iter().find(|v| v.id == id)) && !vue.contour_cadrage.is_empty() {
-            primitives = crate::modele::elements::cadrage::decouper(primitives.into_iter().map(|p| p.translater(s.origin)).collect(), &vue.contour_cadrage)?
+            primitives = modele::elements::cadrage::decouper(primitives.into_iter().map(|p| p.translater(s.origin)).collect(), &vue.contour_cadrage)?
                 .into_iter().map(|p| p.translater(-s.origin)).collect();
         }
         Ok(trace2d::Dessin { droite, haut, echelle: self.echelle, primitives })
@@ -211,7 +211,7 @@ impl ViewerApp {
         if vue.contour_cadrage.is_empty() || self.ruban_edition.outil() == Some(crate::ui::ruban::Outil::Cadrer) { return true; }
         let z = self.altitude_vue_native();
         let points: Option<Vec<[f64; 2]>> = vue.contour_cadrage.iter().map(|p| self.ecran_plan(rect, *p, z).map(|p| [p.x as f64, p.y as f64])).collect();
-        points.is_none_or(|points| crate::modele::volumes::geometrie::dedans([q.x as f64, q.y as f64], &points))
+        points.is_none_or(|points| modele::volumes::geometrie::dedans([q.x as f64, q.y as f64], &points))
     }
 
     /// Zone de coupe appliquée au rendu et à la sélection : active, vue 3D.

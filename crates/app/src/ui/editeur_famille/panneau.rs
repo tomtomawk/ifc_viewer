@@ -70,10 +70,10 @@ impl ViewerApp {
     }
 }
 
-pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate::modele::Projet) {
-    if ed.famille.categorie == crate::modele::famille::modelee::CategorieFamille::Profil {
-        use crate::modele::famille::modelee::SectionProfil;
-        use crate::modele::documentation::AnnotationForme;
+pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele::Projet) {
+    if ed.famille.categorie == modele::famille::modelee::CategorieFamille::Profil {
+        use modele::famille::modelee::SectionProfil;
+        use modele::documentation::AnnotationForme;
         let section = match ed.selection {
             SelectionFamille::Element2D(k) if ed.famille.elements_2d.get(k).is_some_and(|e| e.vue == VueEsquisse::Plan && matches!(&e.forme, AnnotationForme::Polyligne { fermee: true, .. })) => Some(SectionProfil::Element2d(k)),
             SelectionFamille::Symbole(k) if ed.famille.symboles.get(k).is_some_and(|s| s.vue == VueEsquisse::Plan && !s.arc && s.fermee) => Some(SectionProfil::Symbole(k)),
@@ -89,8 +89,8 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
     }
     match ed.selection {
         SelectionFamille::Element2D(k) if k < ed.famille.elements_2d.len() => {
-            use crate::modele::documentation::AnnotationForme;
-            use crate::modele::famille::modelee::CategorieFamille;
+            use modele::documentation::AnnotationForme;
+            use modele::famille::modelee::CategorieFamille;
             let champs = match ed.famille.categorie {
                 CategorieFamille::Cartouche => super::super::outils_texte::CHAMPS_FEUILLE,
                 CategorieFamille::EtiquettePiece => super::super::outils_texte::CHAMPS_PIECE,
@@ -137,7 +137,7 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
                 let erreur = guidage.valider(&contour).err().or_else(|| guidage.triangles(&contour).is_empty().then(|| "Forme dégénérée : revoir le chemin ou les profils.".into()));
                 if let Some(erreur) = erreur { ui.colored_label(ui.visuals().error_fg_color, erreur); }
                 if guidage.profil_fin().is_some() && ui.button("Reprendre le profil initial à l'arrivée").clicked() {
-                    use crate::modele::famille::modelee::FormeGuidee;
+                    use modele::famille::modelee::FormeGuidee;
                     if let OperationForme::Guidage { guidage: FormeGuidee::Raccordement { profil_fin, .. } | FormeGuidee::RaccordementChemin { profil_fin, .. } } = &mut ed.famille.extrusions[k].operation { *profil_fin=contour; }
                 }
             }
@@ -503,7 +503,7 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &crate
 
 /// Valeur oui/non d'une formule simple (« 0 » : non ; illisible : oui).
 pub(super) fn evaluer_oui(formule: &str) -> bool {
-    crate::modele::famille::modelee::evaluer(formule, &BTreeMap::new()).map_or(true, |v| v.abs() > 1e-9)
+    modele::famille::modelee::evaluer(formule, &BTreeMap::new()).map_or(true, |v| v.abs() > 1e-9)
 }
 
 /// Remplit un polygone quelconque (triangulé).

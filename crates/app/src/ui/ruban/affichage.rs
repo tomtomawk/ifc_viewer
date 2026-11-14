@@ -6,7 +6,7 @@ impl RubanEdition {
         &mut self,
         ui: &mut egui::Ui,
         menu: Menu,
-        projet: Option<&crate::modele::Projet>,
+        projet: Option<&modele::Projet>,
     ) -> Option<Outil> {
         let mut action = None;
         let largeur = ui.available_width();
@@ -210,7 +210,7 @@ impl RubanEdition {
     pub(super) fn proposer_ajout_creation(
         &mut self,
         ui: &mut egui::Ui,
-        liste: crate::modele::creation::ListeCreation,
+        liste: modele::creation::ListeCreation,
     ) {
         ui.separator();
         if ui
@@ -238,9 +238,9 @@ impl RubanEdition {
     pub fn contexte_creation(
         &mut self,
         ui: &mut egui::Ui,
-        projet: &mut crate::modele::Projet,
+        projet: &mut modele::Projet,
     ) -> bool {
-        use crate::modele::creation::ListeCreation;
+        use modele::creation::ListeCreation;
         let phases = if projet.phases.is_empty() {
             vec!["Projet".into()]
         } else {
