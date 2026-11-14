@@ -170,7 +170,8 @@ Le dépôt est un workspace Cargo : l'application (crate `bimedit`) est dans `cr
 | `crates/app/src/formats/ifc/` | IFC : parseur ISO 10303-21 (`step.rs`), couche sémantique (`semantique.rs` : unités, relations, matériaux, styles), placements, profils et solides → triangles (`geom.rs`) |
 | `crates/app/src/formats/rvt/` | Revit : conteneur OLE et métadonnées (`mod.rs`), objets, schéma, champs, géométrie B-rep, vues, paramètres (tables dans `donnees/`), maquette (`maquette/` : lecture, conversion en scène, tests) |
 | `crates/modele/src/` | Modèle natif (format d'édition), crate `modele` : types dans `lib.rs` ; `murs/` (assemblages, jonctions, retours), `elements/` (escaliers, terrain, cadrage, pentes), `volumes/` (géométrie, solides), `famille/`, `documentation/` (annotations, feuilles, nomenclatures), `creation.rs` (création paramétrique), `validation.rs`, `gabarit.rs` (gabarit de projet) ; voir [docs/MODELE.md](docs/MODELE.md) |
-| `crates/app/src/edition/`, `echanges/`, `collaboration/` | Commandes, historique et verrous ; import IFC/Revit, export IFC, enregistrement, rapport ; travail partagé |
+| `crates/commandes/src/` | Commandes d'édition, crate `commandes` : `socle/` (type `Commande`, exécution, historique, verrous, contextes), `modeliser/`, `modifier/`, `annoter/`, `documenter/` |
+| `crates/app/src/echanges/`, `collaboration/` | Import IFC/Revit, export IFC, enregistrement, rapport ; travail partagé |
 | `crates/app/src/dessin/` | Dessin 2D : arêtes, coupe par un plan (poché, hachures, contours), motifs (`motifs.rs` : isolant), outils de DAO (`dao.rs`) |
 | `crates/app/src/rendu/` | Vue 3D : scène et picking (`scene/`), rendu wgpu (`gpu.rs`), caméra, repère des plans, sélection à l'écran |
 | `crates/app/src/ui/` | Interface egui : état et boucle (`mod.rs`), un fichier par zone (barre haute, panneaux, navigateur, vues, viewport, propriétés, sélection…), `ruban/`, `dessin_plan/` (saisie en plan), `editeur_famille/`, `bim/` |

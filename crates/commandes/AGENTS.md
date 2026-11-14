@@ -1,0 +1,33 @@
+# Crate `commandes`
+
+Rôle : commandes d'édition sérialisables (`Commande`, JSON `{"action": "..."}`) et leur exécution sur un `modele::Projet` ; historique, verrous, contextes (phases, sous-projets, variantes).
+
+Dépendances internes autorisées : `noyau`, `modele` (`scene`, `maillage` tolérées si indispensables). Interdit : `egui`, `eframe`, `wgpu`, et toute crate située après (`moteur2d`, `echanges`, `collaboration`, `pilote`, `config`, `interface`).
+
+## Où travailler
+
+| Métier | Dossier (`src/`) | Contenu |
+|---|---|---|
+| Socle | `socle/` | `commande.rs` (`enum Commande`), `execution.rs` (`Execution::executer`, répartition par métier), `historique.rs`, `verrous.rs`, `contextes.rs`, `objets.rs` |
+| Modéliser | `modeliser/` | site, escaliers, garde-corps, pièces, composants, arbres, barres, ouvertures, contours et trémies de dalle |
+| Modifier | `modifier/` | `mod.rs` (déplacer, tourner, aligner, ajuster, supprimer), `copier.rs`, `composees.rs` (symétrie, échelle, réseau, décaler, scinder, démolir, reproduire), `transformations.rs` |
+| Annoter | `annoter/` | quadrillages, annotations (cotes, textes, étiquettes, tracés 2D), niveaux ; `cotes.rs` (cotes pilotantes) |
+| Documenter | `documenter/` | vues en coupe, feuilles, nomenclatures |
+
+Il n'y a pas de dossier `dessiner/` : un tracé 2D est une annotation (`Commande::Annoter`). La création des murs, dalles et vues est dans `modele::creation`.
+
+## Ajouter une commande
+
+1. Ajouter la variante à `enum Commande` (`socle/commande.rs`) et la documenter dans `docs/EDITION.md`.
+2. L'affecter à un métier dans le `match` de `executer_interne` (`socle/execution.rs`) : sans cela, la crate ne compile pas.
+3. Écrire le bras dans `executer_<métier>` du dossier du métier (fichier de 600 lignes au plus ; sinon nouveau fichier dans le dossier).
+4. Tester dans le même fichier (`#[cfg(test)]`). Un test qui a besoin d'`echanges`, de `maillage` ou du rendu va dans la crate concernée, pas ici.
+
+Chaque fichier d'exécution commence par `use crate::socle::interne::*;` (imports communs). Aucun changement de schéma JSON sans mise à jour de `docs/EDITION.md` (voir `docs/AGENTS.md`).
+
+## Vérifier
+
+```
+cargo test -p commandes --release
+cargo tree -p commandes | grep -Ei "egui|wgpu|eframe"   # doit rester vide
+```
