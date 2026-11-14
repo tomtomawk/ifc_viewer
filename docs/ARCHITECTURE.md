@@ -53,7 +53,7 @@ noyau <- modele <- scene <- formats <- maillage <- commandes <- moteur2d <- mote
 | interface | tout ce qui précède |
 | app | interface (et config, pilote pour le démarrage) |
 
-Règle générale : une crate n'importe que des crates situées avant elle dans l'ordre. Aucun cycle. Les dépendances externes (wgpu, egui, etc.) suivent : `wgpu` uniquement dans moteur3d ; `egui`/`eframe` seulement à partir de moteur3d (voir §5.4). **L'inventaire du §5 contredit plusieurs points de cet ordre ; les écarts sont listés au §5.5.**
+Règle générale : une crate n'importe que des crates situées avant elle dans l'ordre. Aucun cycle. Les dépendances externes (wgpu, egui, etc.) suivent : `wgpu` uniquement dans moteur3d ; `egui`/`eframe` seulement à partir de moteur3d (voir §5.4). L'ordre final est confirmé ; les coupes qu'il impose sont planifiées au §4 (écarts au §5.5). `volumes` reste dans `modele`, donc `maillage` ne contient que `scene/natif.rs`.
 
 ## 3. Règles
 
@@ -68,23 +68,25 @@ Règle générale : une crate n'importe que des crates situées avant elle dans 
 
 ## 4. Avancement
 
-Le numéro de lot suit l'ordre du §2. Seul le lot 0 est défini par la demande ; l'affectation des lots 1 à 12 aux crates est une proposition à confirmer, et elle dépend des écarts du §5.5.
+Plan révisé après l'inventaire du §5 (validé par l'utilisateur). L'ordre final des crates est inchangé ; ce qui change, c'est le contenu des lots 1 à 6 : les coupes de cycles se font **avant** chaque extraction, dans la crate courante (commit a), puis le déplacement (commit b). Orchestration : Sonnet 5.5 ; lots marqués « Fable » confiés à un agent Fable 5.2. **Arrêt obligatoire après le lot 2 pour validation des frontières par l'utilisateur.**
 
-| Lot | Périmètre proposé | État |
-|---|---|---|
-| 0 | Workspace, chemins, CI, inventaire des imports | **fait** |
-| 1 | noyau | à faire |
-| 2 | modele | à faire |
-| 3 | scene | à faire |
-| 4 | formats | à faire |
-| 5 | maillage | à faire |
-| 6 | commandes | à faire |
-| 7 | moteur2d | à faire |
-| 8 | moteur3d | à faire |
-| 9 | echanges + collaboration | à faire |
-| 10 | pilote | à faire |
-| 11 | config + interface | à faire |
-| 12 | app, `AGENTS.md` par crate | à faire |
+Code « parqué » : quand une coupe fait monter du code vers une crate qui n'existe pas encore (ex. rendu de feuille de `documentation` vers moteur2d), il reste dans `crates/app` jusqu'au lot de sa crate d'accueil.
+
+| Lot | Crate | Coupes préalables (commit a) | Modèle | État |
+|---|---|---|---|---|
+| 0 | workspace | chemins, CI, inventaire | Sonnet | **fait** (`242681c`) |
+| 1 | noyau | Descendre dans `noyau` : `Id` (= `u64`, neutre), `uuid` et `hash` (de `collaboration`), `Forme2D` + `arc_3_points`, `developper`, `segments_polyligne` (de `dessin/dao.rs`), `Aretes`/`aretes`/`aretes_jointes`/`chainer`/`TRAIT_FORT_MM`/`NOIR` (de `dessin`), `MAX_APPARENCES` (de `rendu::gpu`), `chrono` (de `rendu::scene`). Si un symbole dépend de plus que `noyau`, s'arrêter et le signaler. §5.5 points 5, 6, 7, 8 (partie `Id`) | Sonnet | à faire |
+| 2 | modele | `config::gabarit` sous `modele` ; descendre dans `modele` : `contextes`, `gabarits_vues`, `ParametresMur`, `Implantation`, `contour_valide` (et `Commande` si les références de production l'exigent : à trancher et documenter) ; `Motif`/`GrilleMotif`/`hachures_plan` ; `volumes` et `murs/jonctions` **restent** dans `modele` ; remplacer `scene::chrono` ; monter hors de `modele` le rendu de feuille de `documentation` (`coupe`, `vu`, `cadrer_primitives`, `Poche`, ~l. 1177-1213) et les tests appelant `depuis_natif`, `export_ifc`, `ifc::*`. §5.5 points 2, 3, 4, 6, 9 | **Fable** | à faire |
+| 3 | scene | `load`, `assemble`, `assemble_avec` (constructeurs IFC) vont dans `formats` ; plus de `formats`/`dessin` dans `scene`. §5.5 point 1 | **Fable** | à faire |
+| 4 | formats | extraction de `ifc/`, `rvt/` + `load`/`assemble` ; tests croisés montés | Sonnet | à faire |
+| 5 | maillage | `scene/natif.rs` seul (`depuis_natif`, `id_natif`, `numero_vue`) ; les tests de `modele`/`dessin` qui l'appellent y montent | **Fable** | à faire |
+| 6 | commandes | `modele/edition` restant ; décider où vont `concurrence` et `objets` (§5.5 point 5) ; rangement `modeliser/ modifier/ dessiner/ annoter/ documenter/` | **Fable** | à faire |
+| 7 | moteur2d | `dessin/` + rendu de feuille parqué | **Fable** | à faire |
+| 8 | moteur3d | `rendu/` hors scène | Sonnet | à faire |
+| 9 | echanges + collaboration | `modele/echanges`, `modele/collaboration` | Sonnet | à faire |
+| 10 | pilote | `pilote/` | Sonnet | à faire |
+| 11 | config + interface | rangement interne `socle/ zones/ saisie/ outils/... ` ; `cadre_natif` et `arriere_plan` de `main.rs` | **Fable** | à faire |
+| 12 | app + docs | binaire, `AGENTS.md` par crate, README | Sonnet | à faire |
 
 ## 5. Inventaire des imports (état du lot 0)
 
