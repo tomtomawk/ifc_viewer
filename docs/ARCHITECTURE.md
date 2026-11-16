@@ -1,8 +1,8 @@
 # Architecture : découpage en workspace Cargo
 
-État après le lot 9 (§5.16) : le dépôt est un workspace (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`). `noyau` (lot 1), `modele` (lot 2), `ifc_base` et `scene` (lot 3), `formats` (lot 4), `maillage` (lot 5), `commandes` (lot 6), `moteur2d` (lot 7), `moteur3d` (lot 8), `echanges` et `collaboration` (lot 9) sont extraits en `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage`, `crates/commandes`, `crates/moteur2d`, `crates/moteur3d`, `crates/echanges` et `crates/collaboration` ; le reste du code est encore dans une seule crate, `crates/app` (package et binaire `bimedit`). Les dépendances sont déclarées une fois dans `[workspace.dependencies]` (racine) et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine.
+État après le lot 11a (§5.18) : le dépôt est un workspace (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`). `noyau` (lot 1), `modele` (lot 2), `ifc_base` et `scene` (lot 3), `formats` (lot 4), `maillage` (lot 5), `commandes` (lot 6), `moteur2d` (lot 7), `moteur3d` (lot 8), `echanges` et `collaboration` (lot 9), `pilote` (lot 10), `config` et `interface` (lot 11a) sont extraits en `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage`, `crates/commandes`, `crates/moteur2d`, `crates/moteur3d`, `crates/echanges`, `crates/collaboration`, `crates/pilote`, `crates/config` et `crates/interface` ; `crates/app` ne garde que le binaire `bimedit` (package et binaire). Le rangement interne d'`interface` est la partie 11b (non faite). Les dépendances sont déclarées une fois dans `[workspace.dependencies]` (racine) et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine.
 
-Restent à la racine : `docs/`, `samples/`, `gabarits/`, `tools/`, `.github/`, `.mcp.json`, `README.md`, `AGENTS.md`. Les ressources embarquées (`include_str!`) pointent vers ces dossiers par des chemins relatifs depuis `crates/<crate>/src/...` (le gabarit par défaut est embarqué par `crates/modele/src/gabarit.rs`) ; les tests lisent `samples/` via `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")` (le répertoire courant d'un test est celui de sa crate ; même profondeur pour `crates/app` et `crates/modele`).
+Restent à la racine : `docs/`, `samples/`, `gabarits/`, `tools/`, `.github/`, `.mcp.json`, `README.md`, `AGENTS.md`. Les ressources embarquées (`include_str!`) pointent vers ces dossiers par des chemins relatifs depuis `crates/<crate>/src/...` (le gabarit par défaut est embarqué par `crates/modele/src/gabarit.rs`) ; les tests lisent `samples/` via `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")` (le répertoire courant d'un test est celui de sa crate ; même profondeur pour toutes les crates).
 
 ## 1. Arborescence cible
 
@@ -21,13 +21,13 @@ crates/
   echanges/       import IFC/RVT, export IFC, enregistrement, rapport
   collaboration/  transactions partagées : session, stockage, concurrence, partage, texte (yrs), cli
   pilote/         MCP, CLI, registre des instances, saisie (egui::Event) ; mcp.rs ~600 lignes
-  config/
-  interface/      egui ; UNE crate (`impl ViewerApp` réparti sur 48 fichiers) ;
-                  socle/ zones/ saisie/ outils/{modeliser,modifier,dessiner,annoter}/ documents/ familles/ projet/
-  app/            binaire `bimedit`
+  config/         options utilisateur, raccourcis (egui::Key, DragValue, ThemePreference) ; fait (lot 11a)
+  interface/      egui ; UNE crate (`impl ViewerApp` réparti sur 70 fichiers, à plat : lot 11a) ;
+                  cible 11b : socle/ zones/ saisie/ outils/{modeliser,modifier,dessiner,annoter}/ documents/ familles/ projet/
+  app/            binaire `bimedit` : main.rs, build.rs, assets/icone.ico
 ```
 
-Correspondance avec les dossiers actuels (après lot 10) : `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage`, `crates/commandes`, `crates/moteur2d`, `crates/moteur3d`, `crates/echanges`, `crates/collaboration`, `crates/pilote` : extraits ; dans `crates/app/src/` : `config/` ; `ui/` -> interface ; `main.rs` -> app ; `modele_tests/` : 17 tests parqués, accueil commandes ou moteur2d (§5.16 d) ; `formats_tests/` et `commandes_tests/` n'existent plus.
+Correspondance avec les dossiers actuels (après lot 11a) : toutes les crates ci-dessus sont extraites ; `crates/app/src/config/` -> `crates/config/src/` ; `crates/app/src/ui/` -> `crates/interface/src/` (même arborescence, `mod.rs` -> `lib.rs`) ; `crates/app/src/main.rs` : reste dans app (la fenêtre native est descendue dans `interface::fenetre`) ; `modele_tests/`, `formats_tests/` et `commandes_tests/` n'existent plus (tests déplacés : §5.18 d).
 
 ## 2. Graphe de dépendances autorisées
 
@@ -51,10 +51,10 @@ noyau <- modele <- ifc_base <- scene <- formats <- maillage <- commandes <- mote
 | moteur3d | noyau, modele, scene, moteur2d (réel : `noyau`, `modele`, `scene` ; `moteur2d` reste autorisée sans être utilisée ; `maillage` en dev-dependency pour un test ; externes : `eframe` (egui, egui_wgpu, wgpu), `glam`, `image`, `earcutr`, §5.15) |
 | echanges | noyau, modele, scene, formats, maillage (réel : `noyau`, `modele`, `ifc_base`, `formats` ; `scene` et `maillage` restent autorisées sans être utilisées ; dev : `commandes`, `maillage`, `moteur2d` pour les tests d'intégration ; externes : `glam`, `rayon`, §5.16) |
 | collaboration | noyau, modele, scene, maillage, commandes, echanges (réel : `noyau`, `modele`, `maillage`, `commandes`, `echanges` ; `scene` reste autorisée sans être utilisée ; externes : `yrs`, `serde`, `serde_json`, `glam`, §5.16) |
-| pilote | collaboration et en dessous, hors `config` et `ui` (réel : `noyau`, `modele`, `maillage`, `commandes`, `moteur2d`, `echanges`, `collaboration` ; `scene`, `formats`, `ifc_base`, `moteur3d` non utilisées ; externes : `eframe` (egui seul : `egui::Event` dans `saisie.rs`, `egui::Context` dans `lib.rs`), `png`, `serde`, `serde_json`, `serde_ignored`, `uuid`, §5.17) |
-| config | tout ce qui précède, hors interface |
-| interface | tout ce qui précède |
-| app | interface (et config, pilote pour le démarrage) |
+| pilote | collaboration et en dessous, hors `config` et `interface` (réel : `noyau`, `modele`, `maillage`, `commandes`, `moteur2d`, `echanges`, `collaboration` ; `scene`, `formats`, `ifc_base`, `moteur3d` non utilisées ; externes : `eframe` (egui seul : `egui::Event` dans `saisie.rs`, `egui::Context` dans `lib.rs`), `png`, `serde`, `serde_json`, `serde_ignored`, `uuid`, §5.17) |
+| config | tout ce qui précède, hors interface (réel : `noyau`, `modele`, `echanges` ; ni `commandes`, `collaboration`, `pilote` ; externes : `eframe` (egui : `DragValue`, `ThemePreference`, `Key`, `Modifiers`), `serde`, `serde_json`, §5.18) |
+| interface | tout ce qui précède (réel : les 13 crates précédentes : `noyau`, `modele`, `ifc_base`, `scene`, `formats`, `maillage`, `commandes`, `moteur2d`, `moteur3d`, `echanges`, `collaboration`, `pilote`, `config` ; externes : `eframe`, `glam`, `rfd`, `serde`, `serde_json`, `windows-sys` sous Windows, §5.18) |
+| app | interface (et config, pilote pour le démarrage) (réel : `noyau`, `modele`, `ifc_base`, `formats`, `echanges`, `collaboration`, `pilote`, `config`, `interface` ; externe : `glam` ; `winresource` sous Windows pour `build.rs` ; `main.rs` garde encore les modes console `--modele`, `--stats`, `--images`… : lot 12, §5.18 e) |
 
 `ifc_base` est autorisée pour toute crate située après elle qui manipule `StepFile`, `IfcModel`, `Value`, `Entity` ou `IdMap` (aujourd'hui : formats, maillage, echanges, interface, app ; relevé au §5.10 e) ; les lignes ci-dessus à partir de commandes seront complétées au lot de chaque crate.
 
@@ -90,8 +90,8 @@ Code « parqué » : quand une coupe fait monter du code vers une crate qui n'ex
 | 8 | moteur3d | `rendu/` hors scène | Sonnet | **fait** (aucune coupe nécessaire ; extraction `d2686d2` ; `gpu.rs` non découpé ; détail au §5.15) |
 | 9 | echanges + collaboration | `crates/app/src/echanges`, `crates/app/src/collaboration*` | Sonnet | **fait** (aucune coupe préalable nécessaire ; extraction de `echanges` `e72f601` ; extraction de `collaboration` `35fab15` ; détail au §5.16) |
 | 10 | pilote | `pilote/` | Sonnet | **fait** (aucune coupe préalable nécessaire ; extraction `5424089` ; détail au §5.17) |
-| 11 | config + interface | rangement interne `socle/ zones/ saisie/ outils/... ` ; `cadre_natif` et `arriere_plan` de `main.rs` | **Fable** | à faire |
-| 12 | app + docs | binaire, `AGENTS.md` par crate, README | Sonnet | à faire |
+| 11 | config + interface | 11a : extraction de `config` et d'`interface` sans réorganisation, `cadre_natif` et `arriere_plan` de `main.rs` descendus dans `interface::fenetre`, 17 tests de `modele_tests` déplacés ; 11b : rangement interne `socle/ zones/ saisie/ outils/... ` | **Fable** | 11a **fait** (config `aa7c8e3` ; interface `e453298` ; tests `aeec783` ; `Cargo.lock` `3b8b124` ; détail au §5.18) ; 11b à faire |
+| 12 | app + docs | binaire (alléger `main.rs`), `AGENTS.md` par crate (déjà posés pour config, interface, app au 11a), README | Sonnet | à faire |
 
 ## 5. Inventaire des imports (état du lot 0)
 
@@ -871,3 +871,71 @@ Concernant `pilote` : **aucune** (ni `config`, ni `ui`). Egui reste en dépendan
 | `modele_tests` | commandes, maillage, moteur2d | 17 tests parqués (§5.16 d) | 11 |
 
 Point ouvert : l'aide « commandes » du pilote embarque `commandes/src/socle/commande.rs` par chemin de fichier ; renommer ou déplacer ce fichier casse la compilation de `pilote`.
+
+### 5.18 Après lot 11a (2026-11-16)
+
+Tests : 390 réussis, 2 ignorés, comme avant le lot ; répartition `bimedit` 0 (avant : 70), `config` 4, `interface` 49, `pilote` 12, `collaboration` 43, `echanges` 28, `moteur3d` 12, `moteur2d` 40 (avant : 34 ; + 1 ignoré), `commandes` 29 (avant : 18), `formats` 52, `modele` 101 (+ 1 ignoré), `noyau` 10, `ifc_base` 2, `maillage` 8, `scene` 0 (la somme brute des lignes « test result » donne 394 : 4 lignes sont des sorties de sous-processus de `collaboration`). `cargo test -p config --release` : 4 réussis ; `cargo test -p interface --release` : 49 réussis. `grep -rn "crate::" crates/config/src` : aucune ligne. `grep -rn "crate::" crates/interface/src` : uniquement des modules internes (`ruban`, `dessin_plan`, `fenetre`, `types_traits`, `outils_texte`, `aides`, `transformer`, `proprietes`, `document_famille`, `accrochage`, `ViewerApp`). Sorties comparées à `3f49a51` (binaire de référence construit dans un worktree temporaire, supprimé ensuite) : `--export-ifc` et `--quantites` de `samples/maison_native.modele.json` identiques octet pour octet ; `--stats` des deux IFC de `samples/` identiques hors « Durée » ; échange MCP sans interface (`initialize` puis `tools/list` sur stdin de `bimedit --mcp`) identique ; lancement sans affichage : même erreur `winit EventLoopError … neither WAYLAND_DISPLAY nor WAYLAND_SOCKET nor DISPLAY is set`, même code de sortie 1. L'interface graphique elle-même n'a pas pu être lancée (pas d'affichage).
+
+#### (a) Contenu de `crates/config`, `crates/interface` et `crates/app`
+
+| Crate | Contenu | Dépendances internes | Externes |
+|---|---|---|---|
+| `config` | `options/mod.rs` (140 lignes : `Options`, chargement et enregistrement dans le dossier de configuration, `ThemeInterface`, trait `Dimensions` sur `egui::DragValue`), `options/raccourcis.rs` (201 : `COMMANDES`, `Raccourci`) ; 4 tests | `noyau`, `modele`, `echanges` | `eframe`, `serde`, `serde_json` |
+| `interface` | tout l'ancien `ui/` à plat (70 fichiers `.rs`, 34 308 lignes, 49 tests) + `fenetre.rs` (92 : `lancer`, `arriere_plan`, `cadre_natif`, `limites_gpu`, `windows_10`) + `assets/icone.png` | les 13 crates précédentes | `eframe`, `glam`, `rfd`, `serde`, `serde_json`, `windows-sys` (Windows) |
+| `app` | `main.rs` (579 lignes : arguments, `--mcp`, `collaboration::cli`, `pilote::cli`, modes console `--modele`, `--stats`, `--images`, `--decodage`, `--nomenclatures`, `--parametres`, lancement de `interface::fenetre::lancer`), `build.rs`, `assets/icone.ico` | `noyau`, `modele`, `ifc_base`, `formats`, `echanges`, `collaboration`, `pilote`, `config`, `interface` | `glam` ; `winresource` (build, Windows) |
+
+#### (b) Décisions de frontière
+
+| # | Sujet | Décision | Pourquoi |
+|---|---|---|---|
+| 1 | Ré-export `config::options::{Unite, unite, definir_unite}` | retiré : 84 références remplacées par `modele::unite::…` (commit `aa7c8e3`, avant le déplacement) ; `options/mod.rs` importe `modele::unite` pour ses propres besoins | ré-export posé au lot 2 (§5.8 b 12) ; `config` n'a plus à porter un type du modèle |
+| 2 | `config` -> `echanges` | conservée | `options/mod.rs` appelle `echanges::enregistrement::ecrire_atomique` (1 référence) ; sens autorisé ; ni `commandes`, `collaboration`, `pilote`, `moteur3d` |
+| 3 | `eframe` dans `config` | dépendance de production | `Dimensions` (`egui::DragValue`), `ThemeInterface::appliquer` (`egui::Context`, `ThemePreference`), `raccourcis` (`Key`, `Modifiers`) |
+| 4 | Fenêtre native de `main.rs` | descend dans `interface::fenetre` : `lancer(path)` (viewport, icône, mode arrière-plan, options wgpu), `arriere_plan`, `cadre_natif`, `limites_gpu`, `windows_10` ; `main.rs` appelle `interface::fenetre::lancer`, puis `pilote::instances::retirer()` et l'affichage de l'erreur | `ui` appelait `crate::cadre_natif` (2) et `crate::arriere_plan` (2) ; aucune autre fonction de `main.rs` n'était appelée par `ui` ; `windows-sys` passe dans `interface` |
+| 5 | `icone.png` | déplacée de `crates/app/assets/` à `crates/interface/assets/` ; `include_bytes!` dans `fenetre.rs` et `barre_haute.rs` | l'interface l'embarque deux fois (icône de fenêtre, barre perso) ; une dépendance de chemin vers `app` serait inversée. `icone.ico` reste dans `app` (`build.rs`) |
+| 6 | `crate::ui::X` | `crate::X` ; `pub(in crate::ui)` -> `pub(crate)` (même portée : toute la crate) ; `pub(super)` inchangé | les fichiers gardent leur place relative |
+| 7 | `pub mod ruban` | -> `mod ruban` | dans une lib, `pub mod` rendait publics des types `pub(crate)` (avertissements `private_interfaces`) ; il n'est utilisé que dans la crate |
+| 8 | Module local `collaboration` | nom conservé ; les chemins `::collaboration::…` visent la crate | demandé par le lot |
+| 9 | `include_str!` / `env!` | `CARGO_MANIFEST_DIR/../../samples/…` (`ruban/tests.rs`) valide sans changement (même profondeur) ; aucun `include_str!` vers `docs/` ou `gabarits/` dans l'ancien `ui` | |
+| 10 | Dépendances d'`app` | `eframe`, `rfd`, `serde`, `serde_json`, `uuid`, `miniz_oxide`, `scene`, `maillage`, `commandes`, `moteur2d`, `moteur3d`, `windows-sys` retirées | plus aucun appel dans `main.rs` |
+| 11 | `commandes` en dev-dependency de `moteur2d`, `maillage` en dev-dependency de `commandes` | ajoutées (+ `serde_json` en dev de `moteur2d`) | tests déplacés (d) |
+
+Aucune visibilité élargie hors `pub mod fenetre` et `fenetre::lancer`/`arriere_plan`/`cadre_natif`. Aucun changement fonctionnel ni de format.
+
+#### (c) Fichiers au-delà du plafond de 600 lignes (11b)
+
+Les 15 plus gros fichiers d'`interface` (tous au-dessus du plafond ; au total 70 fichiers, 34 308 lignes) :
+
+| Fichier (`crates/interface/src/`) | Lignes |
+|---|---|
+| `bim/mod.rs` | 1 527 |
+| `editeur_famille/canevas.rs` | 1 219 |
+| `lib.rs` | 1 182 |
+| `dessin_plan/mod.rs` | 1 177 |
+| `saisie_plan.rs` | 1 121 |
+| `feuilles.rs` | 1 060 |
+| `editeur_famille/documents.rs` | 1 031 |
+| `ruban/mod.rs` | 1 012 |
+| `transformer.rs` | 987 |
+| `commandes_pilote.rs` | 953 |
+| `dessin_plan/saisie.rs` | 874 |
+| `garde_corps.rs` | 816 |
+| `navigateur.rs` | 794 |
+| `ruban/icones.rs` | 788 |
+| `dessin_plan/affichage.rs` | 764 |
+
+`app/src/main.rs` (579) et `config` (140 et 201) sont sous le plafond.
+
+#### (d) Tests déplacés et parqués
+
+- 4 tests de `config/options` et 49 tests de l'ancien `ui` suivent le code (mêmes noms et assertions) ; `bimedit` n'a plus de test.
+- `modele_tests/` (17 tests) : 11 vers `crates/commandes/tests/` (`elements_arbre` 1, `elements_composant` 1, `elements_piece` 4, `murs_assemblage` 2, `elements_site` 1, `gabarits_vues` 1, `volumes_solides` 1), 6 vers `crates/moteur2d/tests/documentation.rs`. Écart avec la prévision : `elements_site.rs` appelle `maillage::depuis_natif`, d'où `maillage` en dev-dependency de `commandes` ; `documentation.rs` utilise `serde_json` (dev-dependency de `moteur2d`). `commandes` est en dev-dependency de `moteur2d`. Le dossier `modele_tests` n'existe plus. Aucun test restant dans `app`.
+
+#### (e) Violations restantes
+
+| De | Vers | Détail | Lot |
+|---|---|---|---|
+| `interface` | rangement | 70 fichiers à plat, `impl ViewerApp` réparti, 15 fichiers au-delà du plafond (c) | 11b |
+| `interface` | nom | module local `collaboration` qui masque la crate (chemins `::collaboration::`) | 11b |
+| `app/main.rs` | formats, ifc_base, echanges | modes console `--modele`, `--stats`, `--images`, `--decodage`, `--nomenclatures`, `--parametres` (~500 lignes) : pas des points d'entrée minimaux ; destination à décider (crate existante ou module dédié) | 12 |
+| `config` | egui | dépendance `eframe` (`Dimensions`, `ThemeInterface::appliquer`, `Key`) : adaptateurs d'interface dans une crate de configuration ; à garder tant que `interface` est la seule utilisatrice | 12, à valider |

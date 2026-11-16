@@ -161,22 +161,22 @@ vue 3D (pilotes sans multiéchantillonnage).
 
 ## Architecture
 
-Le dépôt est un workspace Cargo : l'application (crate `bimedit`) est dans `crates/app/` (`crates/app/src/...`) ; l'arborescence cible, les règles de découpage en crates et l'état d'avancement sont dans [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Pour l'instant, le code est rangé par domaine ; le sens des dépendances va de `noyau` vers `ui`
-(`noyau` ← `formats` ← `modele` ← `dessin` / `rendu` ← `ui`). Le dossier `modele/` n'importe jamais egui.
+Le dépôt est un workspace Cargo (`crates/*`) : le binaire `bimedit` est dans `crates/app/` (point d'entrée seul) ; l'arborescence cible, les règles de découpage en crates et l'état d'avancement sont dans [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Le sens des dépendances va de `noyau` vers `app` :
+`noyau` ← `modele` ← `ifc_base` ← `scene` ← `formats` ← `maillage` ← `commandes` ← `moteur2d` ← `moteur3d` ← `echanges` ← `collaboration` ← `pilote` ← `config` ← `interface` ← `app`. Les crates avant `moteur3d` n'importent jamais egui.
 
 | Dossier | Rôle |
 |---|---|
 | `crates/noyau/src/` | Briques sans dépendance au modèle : booléens par arbre BSP (`csg.rs`, portage de csg.js), textes en triangles (`texte.rs`), primitives 2D vectorielles et export SVG (`trace2d.rs`) |
-| `crates/app/src/formats/ifc/` | IFC : parseur ISO 10303-21 (`step.rs`), couche sémantique (`semantique.rs` : unités, relations, matériaux, styles), placements, profils et solides → triangles (`geom.rs`) |
-| `crates/app/src/formats/rvt/` | Revit : conteneur OLE et métadonnées (`mod.rs`), objets, schéma, champs, géométrie B-rep, vues, paramètres (tables dans `donnees/`), maquette (`maquette/` : lecture, conversion en scène, tests) |
+| `crates/formats/src/ifc/` | IFC : parseur ISO 10303-21 (`step.rs`), couche sémantique (`semantique.rs` : unités, relations, matériaux, styles), placements, profils et solides → triangles (`geom.rs`) |
+| `crates/formats/src/rvt/` | Revit : conteneur OLE et métadonnées (`mod.rs`), objets, schéma, champs, géométrie B-rep, vues, paramètres (tables dans `donnees/`), maquette (`maquette/` : lecture, conversion en scène, tests) |
 | `crates/modele/src/` | Modèle natif (format d'édition), crate `modele` : types dans `lib.rs` ; `murs/` (assemblages, jonctions, retours), `elements/` (escaliers, terrain, cadrage, pentes), `volumes/` (géométrie, solides), `famille/`, `documentation/` (annotations, feuilles, nomenclatures), `creation.rs` (création paramétrique), `validation.rs`, `gabarit.rs` (gabarit de projet) ; voir [docs/MODELE.md](docs/MODELE.md) |
 | `crates/commandes/src/` | Commandes d'édition, crate `commandes` : `socle/` (type `Commande`, exécution, historique, verrous, contextes), `modeliser/`, `modifier/`, `annoter/`, `documenter/` |
-| `crates/app/src/echanges/`, `collaboration/` | Import IFC/Revit, export IFC, enregistrement, rapport ; travail partagé |
+| `crates/echanges/src/`, `crates/collaboration/src/` | Import IFC/Revit, export IFC, enregistrement, rapport ; travail partagé |
 | `crates/moteur2d/src/` | Dessin 2D, crate `moteur2d` : coupe par un plan (`coupe.rs` : poché, hachures, contours), arêtes vues et cachées et sommets GPU (`vue.rs`), motifs (`motifs.rs` : isolant), outils de DAO (`dao.rs`), rendu de vue et de feuille SVG/PDF (`feuilles.rs`, `plans.rs`) |
 | `crates/moteur3d/src/` | Vue 3D : rendu wgpu (`gpu.rs`), ciel, caméra, repère des plans, sélection à l'écran, shaders `*.wgsl` |
-| `crates/app/src/ui/` | Interface egui : état et boucle (`mod.rs`), un fichier par zone (barre haute, panneaux, navigateur, vues, viewport, propriétés, sélection…), `ruban/`, `dessin_plan/` (saisie en plan), `editeur_famille/`, `bim/` |
+| `crates/interface/src/` | Interface egui : état et boucle (`lib.rs`), fenêtre native (`fenetre.rs`), un fichier par zone (barre haute, panneaux, navigateur, vues, viewport, propriétés, sélection…), `ruban/`, `dessin_plan/` (saisie en plan), `editeur_famille/`, `bim/` |
 | `crates/pilote/src/` | Canal de commande local (TCP 127.0.0.1, jeton) du serveur MCP, registre des instances (`instances.rs`) et commandes en ligne (`cli.rs`) |
-| `crates/app/src/config/` | Options utilisateur, raccourcis |
+| `crates/config/src/` | Options utilisateur, raccourcis |
 | `crates/pilote/src/mcp.rs` | Serveur MCP (stdio, `bimedit --mcp`) qui pilote le viewer : ouverture, vues, caméra, propriétés, captures |
 
 ## Pilotage par MCP
@@ -218,7 +218,7 @@ cargo run --release -- --stats samples/test_ifc4.ifc
 
 `samples/test_ifc4.ifc` couvre mur percé, dalle à profil avec arc indexé, item mappé coloré, faces triangulées et découpe par demi-espace ; les volumes attendus sont en commentaire dans le fichier.
 
-Les tests Revit (`crates/app/src/formats/rvt/maquette/tests.rs`) lisent des fichiers hors dépôt, avec des valeurs relevées dans Revit 2026 : `essais\2026\E04_mur.rvt` (6,711 562 m³, boîte 12 345,6 × 200 × 2 718,2 mm), `essais\2026\E12_grilles.rvt` (3 grilles), `fichiers\Projet1.rvt` (59 murs, matériaux, sols, escaliers, garde-corps, pièces, instances et géométrie des familles, cotes d'une porte) et `fichiers\Kerreut 2025.rvt`, copie d'un projet du corpus d'agence (10 toits, escalier assemblé, familles). Ces fichiers sont dans le dossier du décodage `C:\Users\theba\Projets code\Decodage RVT` (essais, fichiers de référence, sorties de l'API de Revit, scripts RiveTT ; provenance de chaque fichier dans son `SOURCES.md`), remplaçable par la variable `RVT_ESSAIS` ; fichier absent : test sauté avec un message.
+Les tests Revit (`crates/formats/src/rvt/maquette/tests.rs`) lisent des fichiers hors dépôt, avec des valeurs relevées dans Revit 2026 : `essais\2026\E04_mur.rvt` (6,711 562 m³, boîte 12 345,6 × 200 × 2 718,2 mm), `essais\2026\E12_grilles.rvt` (3 grilles), `fichiers\Projet1.rvt` (59 murs, matériaux, sols, escaliers, garde-corps, pièces, instances et géométrie des familles, cotes d'une porte) et `fichiers\Kerreut 2025.rvt`, copie d'un projet du corpus d'agence (10 toits, escalier assemblé, familles). Ces fichiers sont dans le dossier du décodage `C:\Users\theba\Projets code\Decodage RVT` (essais, fichiers de référence, sorties de l'API de Revit, scripts RiveTT ; provenance de chaque fichier dans son `SOURCES.md`), remplaçable par la variable `RVT_ESSAIS` ; fichier absent : test sauté avec un message.
 
 Le décodage RVT est fait dans ce dépôt ; [rvt-rs](https://github.com/DrunkOnJava/rvt-rs) (Apache-2.0) n'a été consulté que partiellement, comme référence de comparaison, sans reprise de code (détail : `LISEZMOI-RVT.md` § 10, dossier de décodage hors dépôt).
 
