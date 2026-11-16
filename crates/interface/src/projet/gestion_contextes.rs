@@ -1,10 +1,10 @@
 //! Gestion directe des phases, sous-projets et variantes : chaque ligne porte ses actions.
 use commandes::Contextes;
-use super::*;
+use crate::*;
 use modele::creation::ListeCreation;
 
 #[derive(Clone)]
-pub(super) struct GestionContextes {
+pub(crate) struct GestionContextes {
     liste: ListeCreation,
     /// Renommage en cours : (clé, texte saisi).
     renommage: Option<(String, String)>,
@@ -88,12 +88,12 @@ fn pictogramme(ui: &mut egui::Ui, genre: Picto, actif: bool, permis: bool) -> eg
 }
 
 impl ViewerApp {
-    pub(super) fn ouvrir_gestion_contextes(&mut self) {
+    pub(crate) fn ouvrir_gestion_contextes(&mut self) {
         if self.natif.is_some() { self.gestion_contextes = Some(GestionContextes::default()); }
     }
 
     /// Choisir une variante de création l'affiche aussitôt, sinon on dessinerait dans une variante masquée.
-    pub(super) fn suivre_variante_creation(&mut self) {
+    pub(crate) fn suivre_variante_creation(&mut self) {
         let creation = self.ruban_edition.variante_creation.clone();
         if creation == self.variante_creation_suivie { return; }
         self.variante_creation_suivie = creation.clone();
@@ -110,7 +110,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn fenetre_gestion_contextes(&mut self, ctx: &egui::Context) {
+    pub(crate) fn fenetre_gestion_contextes(&mut self, ctx: &egui::Context) {
         self.suivre_variante_creation();
         let Some(mut etat) = self.gestion_contextes.take() else { return };
         let Some((projet, _)) = &self.natif else { return };

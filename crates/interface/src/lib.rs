@@ -4,6 +4,7 @@
 //! panneaux s'ancrent d'un côté ou flottent ; sous la vue, la boîte de visibilité par
 //! catégorie de modèle et d'annotation.
 
+mod projet;
 mod documenter;
 mod familles;
 mod saisie;
@@ -13,10 +14,8 @@ mod communes;
 mod outils_texte;
 mod types_traits;
 mod dessin_plan;
-mod gestion_contextes;
 mod ruban;
 use crate::saisie::accrochage::{AccrocheMur, marqueur};
-mod collaboration;
 mod pilotage;
 mod parametres;
 mod ajuster;
@@ -664,7 +663,7 @@ pub struct ViewerApp {
     cote_axe: Option<(String, bool, String)>,
     /// Dernier mur courbe modifié : poignée, rayon et longueur d'arc éditables.
     cote_arc: Option<(String, usize, String, String)>,
-    gestion_contextes: Option<gestion_contextes::GestionContextes>,
+    gestion_contextes: Option<crate::projet::gestion_contextes::GestionContextes>,
     editeur_gabarit_vue: Option<crate::documenter::gabarits_vues::EditeurGabaritVue>,
     filtres_contextes: modele::contextes::FiltresContextes,
     /// Dernière variante de création dont l'affichage a été synchronisé.

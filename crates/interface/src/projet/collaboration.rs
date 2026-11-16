@@ -1,9 +1,9 @@
 //! Parcours Collaborer / Ouvrir un projet partagé et commandes du ruban Sortie.
-use super::*;
+use crate::*;
 use ::collaboration::{partage, session::Session};
 
 impl ViewerApp {
-    pub(super) fn charger_partage(
+    pub(crate) fn charger_partage(
         path: &std::path::Path,
         progress: &dyn Fn(String),
     ) -> Result<(Box<Scene>, modele::Projet, PathBuf, Session), String> {
@@ -13,7 +13,7 @@ impl ViewerApp {
         scene.file_name = format!("{} · partagé", p.nom);
         Ok((Box::new(scene), p, local, s))
     }
-    pub(super) fn collaborer_dialogue(&mut self, ctx: &egui::Context) {
+    pub(crate) fn collaborer_dialogue(&mut self, ctx: &egui::Context) {
         let Some((p, _)) = &self.natif else {
             return;
         };
@@ -31,7 +31,7 @@ impl ViewerApp {
             }
         }
     }
-    pub(super) fn creer_partage(
+    pub(crate) fn creer_partage(
         &mut self,
         path: PathBuf,
         ctx: &egui::Context,
@@ -73,7 +73,7 @@ impl ViewerApp {
         Ok(())
     }
     // Point d'entrée conservé pour le pilote et les outils d'administration.
-    pub(super) fn associer_collaboration(&mut self, central: PathBuf) -> Result<(), String> {
+    pub(crate) fn associer_collaboration(&mut self, central: PathBuf) -> Result<(), String> {
         let (p, path) = self.natif.as_ref().ok_or("Projet natif requis")?;
         let c = Session::ouvrir(p, path.clone(), central)?;
         let travail = c.affichage()?;
@@ -84,7 +84,7 @@ impl ViewerApp {
             .unwrap()
             .synchroniser(None, false)
     }
-    pub(super) fn rouvrir_collaboration(&mut self) {
+    pub(crate) fn rouvrir_collaboration(&mut self) {
         self.collaboration = None;
         let Some((p, path)) = &self.natif else {
             return;
@@ -108,7 +108,7 @@ impl ViewerApp {
             Err(e) => self.error = Some(e),
         }
     }
-    pub(super) fn recevoir_collaboration(&mut self) {
+    pub(crate) fn recevoir_collaboration(&mut self) {
         if self.saisie_active || self.avant_saisie.is_some() {
             return;
         }
@@ -125,7 +125,7 @@ impl ViewerApp {
             }
         }
     }
-    pub(super) fn cles_collaboration(&self) -> Vec<String> {
+    pub(crate) fn cles_collaboration(&self) -> Vec<String> {
         let ids = self.selection_bim();
         self.natif
             .as_ref()
@@ -142,14 +142,14 @@ impl ViewerApp {
             })
             .collect()
     }
-    pub(super) fn demander_synchro(&mut self) {
+    pub(crate) fn demander_synchro(&mut self) {
         if let Some(c) = &mut self.collaboration {
             if let Err(e) = c.synchroniser(None, false) {
                 self.error = Some(e);
             }
         }
     }
-    pub(super) fn menu_collaboration(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn menu_collaboration(&mut self, ui: &mut egui::Ui) {
         let cles = self.cles_collaboration();
         let Some(c) = &self.collaboration else {
             return;
@@ -232,7 +232,7 @@ impl ViewerApp {
             ui.close();
         }
     }
-    pub(super) fn fenetres_collaboration(&mut self, ctx: &egui::Context) {
+    pub(crate) fn fenetres_collaboration(&mut self, ctx: &egui::Context) {
         if self.collaboration.is_none() {
             return;
         }
