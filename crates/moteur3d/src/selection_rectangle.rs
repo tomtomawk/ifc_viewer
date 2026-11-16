@@ -221,6 +221,7 @@ mod tests {
                 largeur: 1000.0,
                 hauteur: 1000.0,
                 rotation: 0.0,
+                pose: Default::default(),
             });
         }
         let s = maillage::depuis_natif(&p, std::path::Path::new("test.json")).unwrap();

@@ -172,6 +172,12 @@ impl Projet {
                 return Err("Pente hors de l'intervalle ]0, 89[ degrés.".into());
             }
         }
+        let mut types_poutres = std::collections::HashSet::new();
+        for t in &self.types_poutres {
+            if t.id.is_empty() || !types_poutres.insert(&t.id) {
+                return Err(format!("Type de poutre : identifiant vide ou dupliqué : {}", t.id));
+            }
+        }
         for b in &self.barres {
             solides::barre(self, b)?;
         }

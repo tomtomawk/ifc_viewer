@@ -342,8 +342,23 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         model.parent.insert(id, parent);
         model.children.entry(parent).or_default().push(id);
         let tris = modele::volumes::solides::barre(projet, b)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
-        materiaux_parts.push(vec![None]);
-        geoms.push(ProductGeom { id, parts: vec![Part { color: [0.65,0.68,0.72,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+        // poutre typée : couleur et poché du matériau de son type
+        let materiau = b.pose.type_poutre.as_ref().and_then(|t| projet.type_poutre(t)).and_then(|t| t.materiau.as_ref())
+            .map(|n| projet.materiau(n).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(n)));
+        match materiau {
+            Some(m) => {
+                let [r, g, bl] = m.couleur.map(|c| c as f32 / 255.0);
+                let couleur = opacite(Some(&m), [r, g, bl, 1.0]);
+                let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
+                couches_coupe.push((id, coupe_materiau(projet, &m, vec![neutre, neutre], noyau::aretes::TRAIT_FORT_MM)));
+                materiaux_parts.push(vec![Some(m.nom.clone())]);
+                geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![Some(rendu_materiau(&m, couleur, &mut table_apparences))], motifs: vec![motif_surface(projet, &m, &mut table_motifs)] });
+            }
+            None => {
+                materiaux_parts.push(vec![None]);
+                geoms.push(ProductGeom { id, parts: vec![Part { color: [0.65,0.68,0.72,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+            }
+        }
     }
     // arbres : tronc (matériau « Écorce ») et houppier (« Feuillage »), couleurs par
     // défaut sans ces matériaux

@@ -87,6 +87,9 @@ pub struct Projet {
     pub limites_propriete: Vec<site::LimitePropriete>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub barres: Vec<Barre>,
+    /// Types de poutres : profil (ou section rectangulaire), dimensions, matériau.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub types_poutres: Vec<elements::poutre::TypePoutre>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub escaliers: Vec<Escalier>,
     /// Pièces : point placé et contour calculé depuis les murs.
@@ -218,6 +221,9 @@ pub struct Barre {
     /// Orientation en degrés de la section d'un poteau.
     #[serde(default)]
     pub rotation: f64,
+    /// Poutre : type, justification horizontale et arase (champs à plat).
+    #[serde(flatten)]
+    pub pose: elements::poutre::PosePoutre,
 }
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

@@ -5,6 +5,9 @@ pub type Tri = [DVec3; 3];
 
 /// Prisme rectangulaire vertical ou horizontal, dans le repère du projet.
 pub fn barre(p: &Projet, b: &Barre) -> Result<Vec<Tri>, String> {
+    if b.genre == GenreBarre::Poutre {
+        return crate::elements::poutre::solide(p, b);
+    }
     let z = p
         .niveau(&b.niveau)
         .ok_or("Niveau de la structure absent.")?
@@ -19,47 +22,17 @@ pub fn barre(p: &Projet, b: &Barre) -> Result<Vec<Tri>, String> {
     {
         return Err("Dimensions de structure non valides.".into());
     }
+    // poteau : vertical, section largeur × hauteur tournée de `rotation`
     let a = DVec2::new(b.debut[0], b.debut[1]);
     let f = DVec2::new(b.fin[0], b.fin[1]);
-    let (contour, bas, haut) = match b.genre {
-        GenreBarre::Poteau => {
-            if a.distance(f) > 1e-6 || b.fin[2] <= b.debut[2] {
-                return Err("Le poteau doit être vertical et avoir une hauteur positive.".into());
-            }
-            let r = b.rotation.to_radians();
-            let u = DVec2::new(r.cos(), r.sin()) * (b.largeur / 2.0);
-            let v = DVec2::new(-r.sin(), r.cos()) * (b.hauteur / 2.0);
-            (
-                vec![
-                    (a - u - v).to_array(),
-                    (a + u - v).to_array(),
-                    (a + u + v).to_array(),
-                    (a - u + v).to_array(),
-                ],
-                z + b.debut[2],
-                z + b.fin[2],
-            )
-        }
-        GenreBarre::Poutre => {
-            if (b.fin[2] - b.debut[2]).abs() > 1e-6 || a.distance(f) < 1e-6 {
-                return Err(
-                    "La poutre doit être horizontale et avoir une longueur positive.".into(),
-                );
-            }
-            let v = (f - a).normalize().perp() * (b.largeur / 2.0);
-            (
-                vec![
-                    (a - v).to_array(),
-                    (f - v).to_array(),
-                    (f + v).to_array(),
-                    (a + v).to_array(),
-                ],
-                z + b.debut[2] - b.hauteur / 2.0,
-                z + b.debut[2] + b.hauteur / 2.0,
-            )
-        }
-    };
-    Ok(prisme(&contour, bas, haut))
+    if a.distance(f) > 1e-6 || b.fin[2] <= b.debut[2] {
+        return Err("Le poteau doit être vertical et avoir une hauteur positive.".into());
+    }
+    let r = b.rotation.to_radians();
+    let u = DVec2::new(r.cos(), r.sin()) * (b.largeur / 2.0);
+    let v = DVec2::new(-r.sin(), r.cos()) * (b.hauteur / 2.0);
+    let contour = vec![(a - u - v).to_array(), (a + u - v).to_array(), (a + u + v).to_array(), (a - u + v).to_array()];
+    Ok(prisme(&contour, z + b.debut[2], z + b.fin[2]))
 }
 
 pub fn maillage(m: &Maillage) -> Result<Vec<Tri>, String> {

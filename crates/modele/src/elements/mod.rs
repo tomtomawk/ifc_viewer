@@ -6,5 +6,6 @@ pub mod piece;
 pub mod escalier;
 pub mod garde_corps;
 pub mod pente;
+pub mod poutre;
 pub mod site;
 pub mod terre_plein;

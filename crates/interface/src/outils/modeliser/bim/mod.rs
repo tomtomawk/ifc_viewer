@@ -56,6 +56,7 @@ impl Default for EtatBim {
                 largeur: 300.0,
                 hauteur: 300.0,
                 rotation: 0.0,
+                pose: Default::default(),
             },
             depart_structure: None,
             composant: modele::Composant { id: String::new(), nom: String::new(), type_composant: String::new(), niveau: String::new(), position: [0.0; 2], decalage: 0.0, rotation: 0.0 },

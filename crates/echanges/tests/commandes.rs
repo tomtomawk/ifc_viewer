@@ -23,6 +23,7 @@ fn structures_creation_copie_rotation_suppression_et_validation() {
         largeur: 300.0,
         hauteur: 400.0,
         rotation: 0.0,
+        pose: Default::default(),
     };
     let (p, ids) = p.executer(Commande::Barre { barre: poteau }).unwrap();
     let b = &p.barres[0];
@@ -60,6 +61,7 @@ fn structures_creation_copie_rotation_suppression_et_validation() {
         largeur: 200.0,
         hauteur: 400.0,
         rotation: 0.0,
+        pose: Default::default(),
     };
     let (p, _) = p
         .executer(Commande::Barre {
