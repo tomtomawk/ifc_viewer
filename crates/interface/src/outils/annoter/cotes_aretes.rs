@@ -2,13 +2,16 @@
 //! référence des éléments (faces et axes de murs, côtés de dalles, tableaux
 //! d'ouvertures…) et les suit. Élément sélectionné : la valeur des cotes qui s'appuient
 //! sur lui se saisit dans la vue et le déplace (longueur) ou le tourne (angle).
-use super::*;
+use crate::*;
+use moteur2d::dao::Accroche;
+use modele::documentation::AnnotationForme;
+use glam::DVec2;
 use modele::documentation::{self as doc, GenreCote, PointCote, RefArete};
 use crate::zones::ruban::Outil;
 
 /// Arête de référence sous le curseur : élément, rang, segment (repère de la vue) et
 /// abscisse relative du point visé.
-pub(super) type AreteVisee = (String, usize, [DVec2; 2], f64);
+pub(crate) type AreteVisee = (String, usize, [DVec2; 2], f64);
 
 impl ViewerApp {
     /// Vue en plan native ouverte et son projet.
@@ -82,7 +85,7 @@ impl ViewerApp {
 
     /// Survol en sélection d'arêtes : arête visée mise en évidence, point du tracé posé
     /// sur elle (aperçu de la cote). À appeler après le calcul du point accroché.
-    pub(super) fn survol_aretes_cote(&mut self, ui: &egui::Ui, rect: egui::Rect) {
+    pub(crate) fn survol_aretes_cote(&mut self, ui: &egui::Ui, rect: egui::Rect) {
         self.dessin2d.arete_survol = None;
         if self.cotation_par_aretes().is_none() {
             self.dessin2d.aretes_cote.clear();
@@ -119,7 +122,7 @@ impl ViewerApp {
 
     /// Clic en sélection d'arêtes. Vrai : le clic est traité ici (arête retenue ou clic
     /// dans le vide ignoré) ; faux : la position de la cote suit le chemin habituel.
-    pub(super) fn clic_arete_cote(&mut self) -> bool {
+    pub(crate) fn clic_arete_cote(&mut self) -> bool {
         let Some(genre) = self.cotation_par_aretes() else { return false };
         if self.dessin2d.aretes_cote.len() >= 2 { return false; }
         let (Some(visee), Some((point, _))) = (self.dessin2d.arete_survol.clone(), self.dessin2d.point) else {
@@ -156,7 +159,7 @@ impl ViewerApp {
 
     /// Références d'arêtes à porter par la cote qui vient d'être construite depuis les
     /// points ; None en sélection de points.
-    pub(super) fn lier_aretes(&mut self, forme: AnnotationForme) -> AnnotationForme {
+    pub(crate) fn lier_aretes(&mut self, forme: AnnotationForme) -> AnnotationForme {
         let refs = std::mem::take(&mut self.dessin2d.aretes_cote);
         self.dessin2d.arete_premiere = None;
         let [(id1, k1, t1), (id2, k2, t2)] = refs.as_slice() else { return forme };

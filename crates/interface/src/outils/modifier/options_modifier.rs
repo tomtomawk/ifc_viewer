@@ -1,5 +1,7 @@
 //! Options de modification, jonctions, annotations natives, export et documentation.
-use super::*;
+use crate::*;
+use crate::outils::modeliser::bim::*;
+use config::options::Dimensions;
 
 impl ViewerApp {
     /// Barre d'options de Modifier, en haut de la vue : réglages de l'outil actif

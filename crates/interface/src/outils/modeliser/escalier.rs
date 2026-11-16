@@ -1,5 +1,8 @@
 //! Escaliers et garde-corps : création, schéma, limites.
-use super::*;
+use crate::*;
+use crate::outils::dessiner::dessin_plan::{champ_valeur, HautEscalier};
+use commandes::Commande;
+use glam::DVec2;
 
 impl ViewerApp {
     /// Crée un escalier de ligne de foulée `trace` : du niveau de tracé au niveau

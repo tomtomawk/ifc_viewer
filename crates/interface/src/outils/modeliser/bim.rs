@@ -1,6 +1,5 @@
 //! Commandes du document BIM ; interface et pilote utilisent les mêmes transactions.
 
-mod modifier;
 pub use crate::*;
 use commandes::Execution;
 use config::options::Dimensions;
@@ -207,7 +206,7 @@ impl ViewerApp {
 
 pub(crate) struct EtatBim {
     pub selection: Vec<String>,
-    delta: [f64; 3],
+    pub(crate) delta: [f64; 3],
     abscisse: f64,
     pub(crate) barre: modele::Barre,
     pub(crate) depart_structure: Option<[f64; 2]>,
@@ -228,9 +227,9 @@ pub(crate) struct EtatBim {
     pub points: [[f64; 2]; 2],
     pub(crate) attache_toiture_active: bool,
     pub(crate) murs_a_attacher: Vec<String>,
-    priorite: i32,
+    pub(crate) priorite: i32,
     pub revision: u64,
-    tableau_cache: Option<(u64, String, Result<Vec<Vec<String>>, String>)>,
+    pub(crate) tableau_cache: Option<(u64, String, Result<Vec<Vec<String>>, String>)>,
     /// Origine du projet sélectionnée (trait invisible) : ses coordonnées dans Propriétés.
     pub(crate) origine: bool,
 }

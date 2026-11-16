@@ -8,9 +8,6 @@ mod saisie;
 mod affichage;
 mod options;
 pub(crate) use options::boutons_trace;
-mod escalier;
-mod cotation;
-mod cotes_aretes;
 mod commandes_contour;
 mod courbures;
 use crate::*;
@@ -117,8 +114,8 @@ pub(crate) struct EtatDessin2D {
     pub saisie: String,
     champ_angle: bool,
     controle_seul: bool,
-    curseur: Option<DVec2>,
-    point: Option<(DVec2, Accroche)>,
+    pub(crate) curseur: Option<DVec2>,
+    pub(crate) point: Option<(DVec2, Accroche)>,
     geoms: Option<(u64, String, Vec<Geom>)>,
     reperage: crate::saisie::reperage::Reperage,
     pub message: Option<String>,
@@ -149,10 +146,10 @@ pub(crate) struct EtatDessin2D {
     pub trait_creation: String,
     /// Cotation par arêtes : références déjà cliquées (élément, arête, abscisse relative),
     /// première arête, arête sous le curseur et arêtes de la vue (révision, vue).
-    aretes_cote: Vec<(String, usize, f64)>,
-    arete_premiere: Option<cotes_aretes::AreteVisee>,
-    arete_survol: Option<cotes_aretes::AreteVisee>,
-    aretes_cache: Option<(u64, String, Vec<(String, usize, [DVec2; 2])>)>,
+    pub(crate) aretes_cote: Vec<(String, usize, f64)>,
+    pub(crate) arete_premiere: Option<crate::outils::annoter::cotes_aretes::AreteVisee>,
+    pub(crate) arete_survol: Option<crate::outils::annoter::cotes_aretes::AreteVisee>,
+    pub(crate) aretes_cache: Option<(u64, String, Vec<(String, usize, [DVec2; 2])>)>,
 }
 
 pub(crate) struct EditionContour {
@@ -927,14 +924,14 @@ impl ViewerApp {
     }
 
     /// Point du modèle (mm) à l'écran.
-    fn ecran_3d(&self, rect: egui::Rect, p: DVec3) -> Option<egui::Pos2> {
+    pub(crate) fn ecran_3d(&self, rect: egui::Rect, p: DVec3) -> Option<egui::Pos2> {
         let s = self.scene.as_ref()?;
         let w = (p * 0.001 - s.origin).as_vec3();
         let c = self.camera.view_proj(rect.width() / rect.height().max(1.0)) * w.extend(1.0);
         (c.w > 0.0).then(|| egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height()))
     }
 
-    fn vers_ecran(&self, rect: egui::Rect, q: DVec2) -> Option<egui::Pos2> {
+    pub(crate) fn vers_ecran(&self, rect: egui::Rect, q: DVec2) -> Option<egui::Pos2> {
         let (o, u, h) = self.repere_dessin()?;
         self.ecran_3d(rect, o + u * q.x + h * q.y)
     }
@@ -1156,7 +1153,7 @@ fn bouton_commande(ui: &mut egui::Ui, valider: bool, libelle: &str) -> egui::Res
 
 /// Champ numérique dont la saisie n'est appliquée qu'à Entrée ou à la perte du focus :
 /// rien n'est recalculé pendant la frappe. `facteur` : unité affichée (mm → cm = 10).
-fn champ_valeur(ui: &mut egui::Ui, nom: &str, valeur: f64, facteur: f64, decimales: Option<usize>, largeur: f32) -> Option<f64> {
+pub(crate) fn champ_valeur(ui: &mut egui::Ui, nom: &str, valeur: f64, facteur: f64, decimales: Option<usize>, largeur: f32) -> Option<f64> {
     let id = ui.make_persistent_id(("champ_valeur", nom));
     let tampon = ui.data(|d| d.get_temp::<String>(id));
     let mut texte = tampon.unwrap_or_else(|| match decimales {

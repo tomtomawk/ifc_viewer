@@ -1,7 +1,10 @@
 //! Cotation graphique des vues natives (Annoter), selon la méthode commune
 //! (`documentation::GenreCote`) : points recueillis par le tracé du dessin 2D
 //! (accrochages, repérage polaire, saisie au clavier), aperçu de la cote sous le curseur.
-use super::*;
+use crate::*;
+use commandes::Commande;
+use modele::documentation::{Annotation, AnnotationForme};
+use glam::DVec2;
 use modele::documentation::{self as doc, GenreCote};
 use crate::zones::ruban::Outil;
 
