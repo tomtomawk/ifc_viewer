@@ -63,7 +63,9 @@ impl ViewerApp {
             // au même emplacement que pendant la création d'un mur.
             // tracé en cours, trait sélectionné : Propriétés montre ce trait, pas l'objet
             if self.proprietes_segment_edition(ui) { return; }
-            if !terrain_creation && self.jeu_actif().is_none() && (!ids.is_empty() || !self.ruban_edition.mur_actif()) {
+            // Un seul sélecteur pendant les créations successives : celui de l'outil.
+            let selecteur_creation = matches!(self.onglet_ruban, OngletRuban::Modeliser | OngletRuban::Modifier) && self.ruban_edition.selecteur_creation_actif();
+            if !terrain_creation && !selecteur_creation && self.jeu_actif().is_none() && (!ids.is_empty() || !self.ruban_edition.mur_actif()) {
                 if let Some(projet)=self.selecteur_type_selection(ui) {
                     if let Err(e)=self.appliquer_projet(projet) {self.error=Some(e);}
                 }

@@ -517,3 +517,17 @@ fn creation_identique_reutilise_types_niveaux_et_vue() {
     assert_eq!(c.profondeur, 6000.0);
 }
 
+
+/// N° 22 : pendant les créations successives, Propriétés ne montre que le sélecteur de
+/// l'outil, pas en plus celui de l'élément créé qui reste sélectionné.
+#[test]
+fn un_seul_selecteur_pendant_les_creations() {
+    let mut ruban = RubanEdition::default();
+    assert!(!ruban.selecteur_creation_actif());
+    ruban.activer_mur();
+    assert!(ruban.selecteur_creation_actif());
+    ruban.activer_dalle();
+    assert!(ruban.selecteur_creation_actif());
+    ruban.activer_structure(true);
+    assert!(!ruban.selecteur_creation_actif());
+}
