@@ -8,4 +8,5 @@ pub(crate) mod aides;
 pub(crate) mod commandes_pilote;
 pub(crate) mod pilotage;
 pub(crate) mod volets;
+pub(crate) mod document_bim;
 pub(crate) mod soleil;

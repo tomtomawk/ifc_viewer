@@ -14,7 +14,7 @@ Rangement par domaine (lot 11b, docs/historique/ARCHITECTURE_CHANTIER_2026-11.md
 | `socle/` | documents ouverts, vues, viewport, soleil et caméra, fenêtre native (`fenetre`, seul module public), paramètres, aides, pilotage MCP, volets |
 | `zones/` | `ruban/`, barre haute, panneaux, panneau droit, navigateur, propriétés, menu de la vue, vues natives et Revit, graphismes |
 | `saisie/` | accrochage, repérage, saisie clavier et en plan, sélection, poignées d'annotation |
-| `outils/` | `modeliser/` (`bim.rs`, murs courbes, garde-corps, escaliers), `modifier/` (transformer, ajuster, options de Modifier), `dessiner/dessin_plan/` (DAO 2D), `annoter/` (cotation, textes, types de trait) |
+| `outils/` | `modeliser/` (`bim/` : état, placements, panneau ; murs courbes, garde-corps, escaliers), `modifier/` (transformer, ajuster, options de Modifier), `dessiner/dessin_plan/` (DAO 2D), `annoter/` (cotation, textes, types de trait) |
 | `documenter/` | feuilles, cartouche, coupe, gabarits de vue |
 | `familles/` | `editeur_famille/`, familles planes, document de famille, profils, sélection des familles |
 | `projet/` | collaboration, gestion des contextes |

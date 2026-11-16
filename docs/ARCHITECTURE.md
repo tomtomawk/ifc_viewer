@@ -99,9 +99,9 @@ Externes : `eframe` (egui, wgpu) et `wgpu` seulement dans `moteur3d`, `pilote`, 
 
 ## 5. Dette technique connue
 
-- **44 fichiers `.rs` au-delà de 600 lignes** (`find crates -name '*.rs' | xargs wc -l | awk '$1>600'`) : `interface` 23 (dont `outils/modeliser/bim.rs` 1 526, `familles/editeur_famille/canevas.rs` 1 219, `outils/dessiner/dessin_plan/mod.rs` 1 174, `lib.rs` 1 143, `saisie/saisie_plan.rs` 1 121, `documenter/feuilles.rs` 1 060), `formats` 9, `modele` 6 (`lib.rs` 1 603, `famille/modelee.rs` 1 414, `documentation/mod.rs` 1 200), `collaboration` 3 (`tests.rs` 1 384, `stockage.rs` 626, `session.rs` 604), `moteur3d` 1 (`gpu.rs`), `moteur2d` 1 (`dao.rs` 795), `pilote` 1 (`mcp.rs` 607). Aucun n'a été découpé ; le découpage de ceux d'`interface` n'est pas planifié.
+- **43 fichiers `.rs` au-delà de 600 lignes** (`find crates -name '*.rs' | xargs wc -l | awk '$1>600'`) : `interface` 22 (dont `familles/editeur_famille/canevas.rs` 1 219, `outils/dessiner/dessin_plan/mod.rs` 1 174, `lib.rs` 1 143, `saisie/saisie_plan.rs` 1 121, `documenter/feuilles.rs` 1 060), `formats` 9, `modele` 6 (`lib.rs` 1 603, `famille/modelee.rs` 1 414, `documentation/mod.rs` 1 200), `collaboration` 3 (`tests.rs` 1 384, `stockage.rs` 626, `session.rs` 604), `moteur3d` 1 (`gpu.rs`), `moteur2d` 1 (`dao.rs` 795), `pilote` 1 (`mcp.rs` 607). Seul `bim.rs` a été découpé (voir ci-dessous ; reste `bim/panneau.rs` 646, une seule fonction `panneau_bim`) ; le découpage de ceux d'`interface` n'est pas planifié.
 - **`Renderer` / `moteur3d/src/gpu.rs`** (1 416 lignes) : un seul `impl Renderer` ; non découpé.
-- **`interface/src/outils/modeliser/bim.rs`** : mélange transactions du document (`executer_bim`, historique, enregistrer sous, import, verrous) et outils de création ; la partie transactions irait dans `socle/`.
+- **`interface/src/outils/modeliser/bim/`** : découpé en `mod.rs` (`EtatBim`, placements, Créer à l'identique), `panneau.rs` (`panneau_bim`, 646 lignes, à redécouper par outil si on y touche), `widgets.rs` ; les transactions du document (`executer_bim`, historique, enregistrer sous, import, verrous, `elements_natifs`) sont dans `socle/document_bim.rs`.
 - **`interface/src/saisie/saisie_plan.rs`** : contient aussi la création des murs, dalles et vues natives ; classement mixte.
 - **`collaboration/src/stockage.rs` et `session.rs`** : au plafond, ne pas agrandir.
 - **Dev-dependencies** (cycles de tests évités par des tests d'intégration en aval) : `echanges` -> `commandes`, `maillage`, `moteur2d` ; `commandes` -> `maillage` ; `moteur2d` -> `commandes` ; `moteur3d` -> `maillage`.
@@ -122,7 +122,7 @@ cargo test -p bimedit --release --test dependances   # sens des dépendances, eg
 cargo run --release -p bimedit -- --stats samples/test_ifc4.ifc
 ```
 
-Référence de tests (lot 12) : 394 réussis et 2 ignorés (somme des crates ; 390 avant le garde-fou, +4 dans `bimedit`). Répartition : `modele` 101 (+1 ignoré), `formats` 52, `interface` 49, `collaboration` 43, `moteur2d` 40 (+1 ignoré), `commandes` 29, `echanges` 28, `pilote` 12, `moteur3d` 12, `noyau` 10, `maillage` 8, `config` 4, `bimedit` 4, `ifc_base` 2, `scene` 0. La somme brute des lignes « test result » est supérieure de 4 : `collaboration` relance son binaire de test en sous-processus (lignes « 1 passed »). Sans affichage, le binaire échoue au lancement de la fenêtre (`winit … DISPLAY is set`, code 1) ; les modes console et `--mcp` fonctionnent sans affichage.
+Référence de tests (lot 12) : 395 réussis et 2 ignorés (somme des crates ; +1 depuis le lot 12 : test `MAX_APPARENCES` de `moteur3d`). Répartition : `modele` 101 (+1 ignoré), `formats` 52, `interface` 49, `collaboration` 43, `moteur2d` 40 (+1 ignoré), `commandes` 29, `echanges` 28, `pilote` 12, `moteur3d` 13, `noyau` 10, `maillage` 8, `config` 4, `bimedit` 4, `ifc_base` 2, `scene` 0. La somme brute des lignes « test result » est supérieure de 4 : `collaboration` relance son binaire de test en sous-processus (lignes « 1 passed »). Sans affichage, le binaire échoue au lancement de la fenêtre (`winit … DISPLAY is set`, code 1) ; les modes console et `--mcp` fonctionnent sans affichage.
 
 ## 7. Documents voisins
 

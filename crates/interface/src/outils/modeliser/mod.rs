@@ -1,4 +1,4 @@
-//! Modéliser : commandes du document BIM et options des outils de création (`bim/`), murs courbes, garde-corps, escaliers.
+//! Modéliser : outils de création BIM et leur panneau (`bim/` ; transactions du document dans `socle::document_bim`), murs courbes, garde-corps, escaliers.
 pub(crate) mod bim;
 pub(crate) mod murs_courbes;
 pub(crate) mod garde_corps;
