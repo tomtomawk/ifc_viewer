@@ -151,7 +151,7 @@ impl ViewerApp {
 
         let repere_plan = self.scene.is_some() && self.vue_en_plan();
         let sur_repere_plan = repere_plan && ui.input(|i| {
-            let zone = crate::rendu::orientation_plan::zone(rect);
+            let zone = moteur3d::orientation_plan::zone(rect);
             i.pointer.hover_pos().is_some_and(|p| zone.contains(p))
                 || (i.pointer.any_down() && i.pointer.press_origin().is_some_and(|p| zone.contains(p)))
         });
@@ -284,9 +284,9 @@ impl ViewerApp {
                         Some([a, b]) => Some(glam::Vec2::new(b.x - a.x, b.y - a.y)),
                         None => hit.and_then(|(_, obj)| self.direction_principale(obj)),
                     };
-                    match d.and_then(|d| crate::rendu::orientation_plan::angle_pour_horizontale(&self.camera, d)) {
+                    match d.and_then(|d| moteur3d::orientation_plan::angle_pour_horizontale(&self.camera, d)) {
                         Some(a) => {
-                            crate::rendu::orientation_plan::orienter(&mut self.camera, a);
+                            moteur3d::orientation_plan::orienter(&mut self.camera, a);
                             self.memoriser_vue();
                             self.alignement_plan = false;
                             self.arete_alignement = None;
@@ -633,7 +633,7 @@ impl ViewerApp {
             let origine = self.orientation_initiale_plan();
             let positions = self.positions_plan_liste();
             let nord = self.natif.as_ref().map_or(0.0, |(p, _)| p.orientation_nord as f32);
-            let r = crate::rendu::orientation_plan::afficher(ui, rect, &mut self.camera, origine, self.alignement_plan, &positions, nord);
+            let r = moteur3d::orientation_plan::afficher(ui, rect, &mut self.camera, origine, self.alignement_plan, &positions, nord);
             if r.aligner {
                 self.alignement_plan = !self.alignement_plan;
                 self.orientation_nord_en_cours = false;

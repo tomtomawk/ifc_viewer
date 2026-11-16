@@ -182,7 +182,7 @@ pub(super) struct EditeurFamille {
     vue_3d: bool,
     /// Vues ouvertes dans ce document : 0 élévation, 1 plan, 2 coupe, 3 trois dimensions.
     vues_ouvertes: Vec<usize>,
-    camera_3d: crate::rendu::camera::Camera,
+    camera_3d: moteur3d::camera::Camera,
     cadrage_3d_initial: bool,
     navigation: [NavigationFamille;3],
     rect_navigation: egui::Rect,

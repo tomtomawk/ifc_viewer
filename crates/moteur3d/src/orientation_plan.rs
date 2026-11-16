@@ -1,5 +1,5 @@
 //! Repère d'orientation plat des plans : la caméra tourne sans déplacer sa cible.
-use crate::rendu::camera::Camera;
+use crate::camera::Camera;
 use eframe::egui::{self, Align2, Color32, PointerButton, Sense, Stroke, pos2, vec2};
 use glam::Vec3;
 use std::f32::consts::{FRAC_PI_2, TAU};
@@ -324,7 +324,7 @@ pub fn angle_pour_horizontale(camera: &Camera, d: glam::Vec2) -> Option<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rendu::camera::MAX_PITCH;
+    use crate::camera::MAX_PITCH;
 
     fn image(ctx: &egui::Context, camera: &mut Camera, events: Vec<egui::Event>) {
         image_nord(ctx, camera, events, 0.0);

@@ -67,7 +67,7 @@ impl ViewerApp {
             direction_soleil: self.direction_soleil(),
             ciel: (self.style == StyleVisuel::Realiste).then(|| {
                 let c = &self.ciel;
-                crate::rendu::gpu::CielRendu {
+                moteur3d::gpu::CielRendu {
                     brume: c.brume,
                     nuages: c.nuages,
                     intensite_soleil: c.intensite_soleil,
@@ -583,9 +583,9 @@ impl ViewerApp {
                         c.pitch = 0.6;
                         c.yaw = -2.3;
                     }
-                    "ortho" => c.definir_projection(crate::rendu::camera::Projection::Orthographique),
-                    "perspective" => c.definir_projection(crate::rendu::camera::Projection::Perspective),
-                    "deux_points" | "verticales" => c.definir_projection(crate::rendu::camera::Projection::VerticalesDroites),
+                    "ortho" => c.definir_projection(moteur3d::camera::Projection::Orthographique),
+                    "perspective" => c.definir_projection(moteur3d::camera::Projection::Perspective),
+                    "deux_points" | "verticales" => c.definir_projection(moteur3d::camera::Projection::VerticalesDroites),
                     "cadrer" => self.fit_all(),
                     _ => {
                         let v: Vec<f32> = argument.split_whitespace().filter_map(|x| x.parse().ok()).collect();

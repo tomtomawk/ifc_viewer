@@ -10,7 +10,6 @@ mod formats_tests;
 #[cfg(test)]
 mod modele_tests;
 mod pilote;
-mod rendu;
 mod ui;
 
 use std::path::PathBuf;

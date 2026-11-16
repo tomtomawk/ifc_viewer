@@ -17,12 +17,11 @@ formats = { path = "../formats" }
 maillage = { path = "../maillage" }
 commandes = { path = "../commandes" }
 moteur2d = { path = "../moteur2d" }
-earcutr.workspace = true
+moteur3d = { path = "../moteur3d" }
 eframe.workspace = true
 glam.workspace = true
 miniz_oxide.workspace = true
 png.workspace = true
-image.workspace = true
 rayon.workspace = true
 rfd.workspace = true
 serde.workspace = true

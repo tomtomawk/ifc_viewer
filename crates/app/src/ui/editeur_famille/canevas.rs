@@ -793,8 +793,8 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                         elements.push((SelectionFamille::Contrainte(*k), vec![*seg]));
                     }
                     let (zone, croisement) = (f.rectangle(), f.croisement());
-                    let mut ids = crate::rendu::selection_rectangle::groupes(
-                        elements.iter().enumerate().flat_map(|(i, (_, segs))| segs.iter().map(move |&[a, b]| (i, (true, crate::rendu::selection_rectangle::segment(zone, a, b, false), crate::rendu::selection_rectangle::segment(zone, a, b, true))))),
+                    let mut ids = moteur3d::selection_rectangle::groupes(
+                        elements.iter().enumerate().flat_map(|(i, (_, segs))| segs.iter().map(move |&[a, b]| (i, (true, moteur3d::selection_rectangle::segment(zone, a, b, false), moteur3d::selection_rectangle::segment(zone, a, b, true))))),
                         croisement,
                     );
                     ids.sort_unstable();

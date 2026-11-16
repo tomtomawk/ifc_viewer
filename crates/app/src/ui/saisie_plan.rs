@@ -775,7 +775,7 @@ impl ViewerApp {
     /// Angle (rad) de l'horizontale de l'écran dans le repère du modèle en vue en plan
     /// (repère du plan tourné) ; 0 ailleurs (axes du modèle).
     pub(super) fn angle_axes_plan(&self) -> f64 {
-        if self.vue_en_plan() { crate::rendu::orientation_plan::angle(&self.camera) as f64 } else { 0.0 }
+        if self.vue_en_plan() { moteur3d::orientation_plan::angle(&self.camera) as f64 } else { 0.0 }
     }
 
     /// Direction principale d'un objet en plan (axe d'inertie de ses sommets en x, y) :
@@ -905,7 +905,7 @@ impl ViewerApp {
         };
         let (a, b) = (ecran(segment[0])?, ecran(segment[1])?);
         let d = if clic.distance(a) < clic.distance(b) { segment[0] - segment[1] } else { segment[1] - segment[0] };
-        crate::rendu::orientation_plan::angle_nord(glam::Vec2::new(d.x, d.y)).map(f64::from)
+        moteur3d::orientation_plan::angle_nord(glam::Vec2::new(d.x, d.y)).map(f64::from)
     }
 
     /// Orientations de plan enregistrées : celles du projet natif, sinon de la session.
@@ -926,7 +926,7 @@ impl ViewerApp {
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .open(&mut ouverte)
             .show(ctx, |ui| {
-                ui.label(format!("Orientation en cours : {:.1}°", crate::rendu::orientation_plan::angle(&self.camera).to_degrees()));
+                ui.label(format!("Orientation en cours : {:.1}°", moteur3d::orientation_plan::angle(&self.camera).to_degrees()));
                 let r = ui.add(egui::TextEdit::singleline(&mut nom).hint_text("Nom de la position").desired_width(220.0));
                 if !r.has_focus() && !r.lost_focus() {
                     r.request_focus();
@@ -959,7 +959,7 @@ impl ViewerApp {
     /// Enregistre l'orientation en cours du plan sous `nom` (dans le projet natif s'il y
     /// en a un).
     pub(super) fn enregistrer_position_plan(&mut self, nom: String) {
-        let angle = crate::rendu::orientation_plan::angle(&self.camera);
+        let angle = moteur3d::orientation_plan::angle(&self.camera);
         match &self.natif {
             Some((p, _)) => {
                 let mut p = p.clone();

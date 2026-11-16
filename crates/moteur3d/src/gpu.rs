@@ -186,7 +186,7 @@ pub struct Renderer {
     echantillonneur_apparences: wgpu::Sampler,
     uniformes_apparences: wgpu::Buffer,
     /// Ciel physique : tables, échantillonneur (azimut répété) et passe du fond.
-    ciel: crate::rendu::ciel::Ciel,
+    ciel: crate::ciel::Ciel,
     echantillonneur_ciel: wgpu::Sampler,
     pipeline_ciel: wgpu::RenderPipeline,
     /// Herbe en volume : pipeline, triangles des matériaux à herbe, rang d'apparence des
@@ -600,7 +600,7 @@ impl Renderer {
         });
         let uniformes_apparences = Self::tampon(&device, "apparences", &vec![0u8; MAX_APPARENCES * 22 * 16], wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST);
         let vue_apparences = Self::couches_images(&device, &rs.queue, &[]);
-        let ciel = crate::rendu::ciel::Ciel::nouveau(&device);
+        let ciel = crate::ciel::Ciel::nouveau(&device);
         let echantillonneur_ciel = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("ciel"),
             address_mode_u: wgpu::AddressMode::Repeat,
@@ -1037,7 +1037,7 @@ impl Renderer {
         g.ciel[1] = [1.0, 0.0, 1.0, 0.0];
         if let Some(c) = p.ciel {
             self.ciel.preparer(&self.device, &self.queue, p.direction_soleil, c.brume, c.sol);
-            let soleil = crate::rendu::ciel::couleur_soleil(p.direction_soleil, c.brume) * c.intensite_soleil;
+            let soleil = crate::ciel::couleur_soleil(p.direction_soleil, c.brume) * c.intensite_soleil;
             g.ciel[0] = [soleil.x, soleil.y, soleil.z, c.exposition.map_or(0.0, |ev| 2f32.powf(ev))];
             g.ciel[1] = [c.intensite_ciel, c.nuages.clamp(0.0, 1.0), c.taille_soleil.max(0.1), 1.0];
             let ssr = p.passes.is_empty() && self.n_transp > 0;

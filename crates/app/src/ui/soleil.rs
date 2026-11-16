@@ -69,14 +69,14 @@ impl ViewerApp {
             modele::GenreVue::Camera { oeil, cible, champ } => Some((*oeil, *cible, *champ)),
             _ => None,
         });
-        let projection = projet.rendus_vues.get(&id).and_then(|r| r.projection.as_deref()).and_then(crate::rendu::camera::Projection::depuis_nom);
+        let projection = projet.rendus_vues.get(&id).and_then(|r| r.projection.as_deref()).and_then(moteur3d::camera::Projection::depuis_nom);
         if id != "3d" && camera.is_none() {
             return;
         }
         if let Some(p) = projection {
             self.camera.definir_projection(p);
         } else {
-            self.camera.definir_projection(crate::rendu::camera::Projection::Perspective);
+            self.camera.definir_projection(moteur3d::camera::Projection::Perspective);
         }
         if let (Some((oeil, cible, champ)), Some(s)) = (camera, &self.scene) {
             let vers = |p: [f64; 3]| (glam::DVec3::from_array(p) / 1000.0 - s.origin).as_vec3();
@@ -211,7 +211,7 @@ impl ViewerApp {
         if let Some(s) = r.style.as_deref().and_then(|n| StyleVisuel::TOUS.into_iter().find(|s| s.nom() == n)) {
             self.style = s;
         }
-        if id == "3d" && let Some(p) = r.projection.as_deref().and_then(crate::rendu::camera::Projection::depuis_nom) {
+        if id == "3d" && let Some(p) = r.projection.as_deref().and_then(moteur3d::camera::Projection::depuis_nom) {
             self.camera.definir_projection(p);
         }
         self.ombres_portees = r.ombres_portees;

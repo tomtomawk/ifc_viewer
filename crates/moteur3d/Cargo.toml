@@ -1,0 +1,20 @@
+[package]
+name = "moteur3d"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+noyau = { path = "../noyau" }
+modele = { path = "../modele" }
+scene = { path = "../scene" }
+# egui, egui_wgpu et wgpu sont ceux d'eframe (mêmes versions que l'application)
+eframe.workspace = true
+glam.workspace = true
+image.workspace = true
+earcutr.workspace = true
+
+[dev-dependencies]
+maillage = { path = "../maillage" }

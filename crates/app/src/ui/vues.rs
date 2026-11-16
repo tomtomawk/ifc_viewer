@@ -29,7 +29,7 @@ impl ViewerApp {
         let gabaritee = self.vue_gabaritee();
         let numero = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).map(|v| v.revit_id);
         let altitude_coupe = self.plan_coupe().and_then(|p| self.scene.as_ref().map(|s| (p.w as f64 + s.origin.z) * 1000.0));
-        let orientation = crate::rendu::orientation_plan::angle(&self.camera) as f64;
+        let orientation = moteur3d::orientation_plan::angle(&self.camera) as f64;
         if let (Some(numero), Some((projet, _))) = (numero, &mut self.natif) {
             if let Some(index) = projet.vues.iter().position(|v| modele::identifiants::numero_vue(&v.id) == numero) {
                 let mut vue = projet.vues[index].clone();

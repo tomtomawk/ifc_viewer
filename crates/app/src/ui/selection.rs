@@ -378,13 +378,13 @@ impl ViewerApp {
         let Some(scene) = &self.scene else { return };
         let rectangle = fenetre.rectangle();
         let croisement = fenetre.croisement();
-        let mut resultats = crate::rendu::selection_rectangle::objets(scene, &self.visible, self.camera.view_proj(vue.width() / vue.height().max(1.0)), vue, rectangle, self.plan_coupe(), self.boite_appliquee(), &self.cadrage_vue(), &self.contour_cadrage_vue());
+        let mut resultats = moteur3d::selection_rectangle::objets(scene, &self.visible, self.camera.view_proj(vue.width() / vue.height().max(1.0)), vue, rectangle, self.plan_coupe(), self.boite_appliquee(), &self.cadrage_vue(), &self.contour_cadrage_vue());
         // plan : les éléments de la plage haute (au-dessus de la coupe) se sélectionnent aussi
         if self.vue_en_plan() && let Some((haut, limite)) = self.masque_plage_haute() {
-            let autres = crate::rendu::selection_rectangle::objets(scene, &haut, self.camera.view_proj(vue.width() / vue.height().max(1.0)), vue, rectangle, Some(Vec4::new(0., 0., -1., limite)), self.boite_appliquee(), &self.cadrage_vue(), &self.contour_cadrage_vue());
+            let autres = moteur3d::selection_rectangle::objets(scene, &haut, self.camera.view_proj(vue.width() / vue.height().max(1.0)), vue, rectangle, Some(Vec4::new(0., 0., -1., limite)), self.boite_appliquee(), &self.cadrage_vue(), &self.contour_cadrage_vue());
             for (r, a) in resultats.iter_mut().zip(autres) { if a.0 { *r = a; } }
         }
-        let mut ids = crate::rendu::selection_rectangle::groupes(scene.objects.iter().zip(resultats).map(|(o, r)| {
+        let mut ids = moteur3d::selection_rectangle::groupes(scene.objects.iter().zip(resultats).map(|(o, r)| {
             let id = scene.model.parent.get(&o.id).filter(|id| scene.model.ty(**id) == "IFCELEMENTASSEMBLY").copied().unwrap_or(o.id);
             (id, r)
         }), croisement);
@@ -420,14 +420,14 @@ impl ViewerApp {
                     if masques.contains(&v.id) { continue; }
                     if let modele::GenreVue::Coupe { debut, fin, .. } = &v.genre {
                         if let (Some(a), Some(b)) = (self.ecran_plan(vue, *debut, z), self.ecran_plan(vue, *fin, z)) {
-                            if crate::rendu::selection_rectangle::segment(rectangle, a, b, croisement) { vues.push(v.id.clone()); }
+                            if moteur3d::selection_rectangle::segment(rectangle, a, b, croisement) { vues.push(v.id.clone()); }
                         }
                     }
                 }
                 for g in &p.quadrillages {
                     if masques.contains(&g.id) { continue; }
                     if let (Some(a), Some(b)) = (self.ecran_plan(vue, g.debut, z), self.ecran_plan(vue, g.fin, z)) {
-                        if crate::rendu::selection_rectangle::segment(rectangle, a, b, croisement) { vues.push(g.id.clone()); }
+                        if moteur3d::selection_rectangle::segment(rectangle, a, b, croisement) { vues.push(g.id.clone()); }
                     }
                 }
             }

@@ -122,8 +122,8 @@ impl ViewerApp {
     /// carte englobe sa tranche (sphère, taille fixe : pas de frémissement quand la caméra
     /// tourne), calée sur sa grille de pixels, et toute la scène en profondeur (les objets
     /// hors champ portent aussi leur ombre).
-    pub(super) fn soleil(&self, aspect: f32) -> Option<crate::rendu::gpu::Ombres> {
-        use crate::rendu::gpu::{Cascade, NB_CASCADES, TAILLE_OMBRES};
+    pub(super) fn soleil(&self, aspect: f32) -> Option<moteur3d::gpu::Ombres> {
+        use moteur3d::gpu::{Cascade, NB_CASCADES, TAILLE_OMBRES};
         let s = self.scene.as_ref()?;
         let dir = self.direction_soleil();
         let c_scene = (s.min + s.max) * 0.5;
@@ -177,7 +177,7 @@ impl ViewerApp {
             let ortho = glam::camera::rh::proj::opengl::orthographic(cx - rayon, cx + rayon, cy - rayon, cy + rayon, -zmax - 1.0, -zmin + 1.0);
             cascades.push(Cascade { matrice: ortho * vue, distance: d1, biais: 1.5 * texel });
         }
-        Some(crate::rendu::gpu::Ombres { direction: dir, cascades })
+        Some(moteur3d::gpu::Ombres { direction: dir, cascades })
     }
 
     /// Style visuel : bouton à l'icône du style en cours, menu des styles.
@@ -249,7 +249,7 @@ impl ViewerApp {
     /// Choix de la projection sous le cube : perspective, verticales droites (deux
     /// points), orthographique.
     pub(super) fn choix_projection(&mut self, ui: &mut egui::Ui, vue: egui::Rect) {
-        use crate::rendu::camera::Projection;
+        use moteur3d::camera::Projection;
         let largeur = 132.0;
         let zone = egui::Rect::from_min_size(egui::pos2(vue.right() - largeur - 8.0, vue.top() + 8.0 + 132.0 + 4.0), egui::vec2(largeur, 22.0));
         let actuelle = self.camera.projection();

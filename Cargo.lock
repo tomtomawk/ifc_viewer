@@ -172,16 +172,15 @@ name = "bimedit"
 version = "0.1.0"
 dependencies = [
  "commandes",
- "earcutr",
  "eframe",
  "formats",
  "glam",
  "ifc_base",
- "image",
  "maillage",
  "miniz_oxide 0.8.9",
  "modele",
  "moteur2d",
+ "moteur3d",
  "noyau",
  "png",
  "rayon",
@@ -1589,6 +1588,20 @@ dependencies = [
  "rayon",
  "scene",
  "svg2pdf",
+]
+
+[[package]]
+name = "moteur3d"
+version = "0.1.0"
+dependencies = [
+ "earcutr",
+ "eframe",
+ "glam",
+ "image",
+ "maillage",
+ "modele",
+ "noyau",
+ "scene",
 ]
 
 [[package]]
