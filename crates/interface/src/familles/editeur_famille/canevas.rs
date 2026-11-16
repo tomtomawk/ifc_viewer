@@ -58,7 +58,7 @@ fn dessiner_axe_revolution(painter: &egui::Painter, cadre: &Cadre, ed: &EditeurF
 fn canevas_construction(ui: &mut egui::Ui, ed: &mut EditeurFamille, plan: &PlanConstruction) {
     ui.label(format!("Plan de construction : {}", plan.nom));
     let (rect, resp) = ui.allocate_exact_size(ui.available_size().max(egui::vec2(80.0,80.0)), Sense::click_and_drag());
-    aides::curseur_dessin(ui, &resp, ed.outil != OutilFamille::Selection);
+    crate::socle::aides::curseur_dessin(ui, &resp, ed.outil != OutilFamille::Selection);
     ed.rect_navigation = rect;
     let base = Cadre { centre: rect.center(), milieu: (0.0, 0.0), echelle: (rect.width().min(rect.height()) as f64 / 2000.0).max(0.001) };
     let nav = &mut ed.navigation[ed.vue as usize];
@@ -165,7 +165,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
     let mut garder_multiple = false;
     let taille = ui.available_size().max(egui::vec2(80.0, 80.0));
     let (rect, resp) = ui.allocate_exact_size(taille, Sense::click_and_drag());
-    aides::curseur_dessin(ui, &resp, ed.outil != OutilFamille::Selection);
+    crate::socle::aides::curseur_dessin(ui, &resp, ed.outil != OutilFamille::Selection);
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 4.0, Color32::WHITE);
     let r = ed.resoudre();
@@ -447,7 +447,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
         }
     }
 
-    aides::repere_origine_famille(&painter, cadre.ecran(0.0, 0.0));
+    crate::socle::aides::repere_origine_famille(&painter, cadre.ecran(0.0, 0.0));
     // interactions
     let curseur = resp.hover_pos().or(resp.interact_pointer_pos());
     echap_esquisse(ui, &resp, ed);
@@ -983,7 +983,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             let fermer = clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F));
             let terminer = resp.clicked_by(PointerButton::Secondary) || (clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter) || i.consume_key(egui::Modifiers::NONE, egui::Key::Space)));
             if !ed.saisie_trace.texte.is_empty() {
-                aides::annotation_vue(ui, rect, 32.0, &format!("Point : {} · Entrée pour valider · Tab pour l'angle", ed.saisie_trace.texte), false);
+                crate::socle::aides::annotation_vue(ui, rect, 32.0, &format!("Point : {} · Entrée pour valider · Tab pour l'angle", ed.saisie_trace.texte), false);
             }
             let mut point_verrouille = None;
             let evenement = if valider_saisie || (resp.clicked() && !ed.saisie_trace.texte.is_empty()) {

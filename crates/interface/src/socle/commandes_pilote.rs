@@ -1,10 +1,10 @@
 //! Commandes du pilote (MCP) : capture, état, exécution.
 use commandes::Execution;
-use super::*;
+use crate::*;
 
 impl ViewerApp {
     /// Traite les commandes du pilote ; répond aux ouvertures terminées.
-    pub(super) fn piloter(&mut self, ctx: &egui::Context) {
+    pub(crate) fn piloter(&mut self, ctx: &egui::Context) {
         if self.loading.is_none() && !self.attente_ouverture.is_empty() {
             let etat = match &self.error {
                 Some(e) => pilote::erreur(e),
@@ -35,7 +35,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn frame_params(&self, aspect: f32) -> FrameParams {
+    pub(crate) fn frame_params(&self, aspect: f32) -> FrameParams {
         let vp = self.camera.view_proj(aspect);
         let passes = self
             .passes_feuille
@@ -89,7 +89,7 @@ impl ViewerApp {
     /// Capture en PNG, argument « vue|fenetre [LxH] chemin ». La vue 3D est rendue hors
     /// écran, à la taille de la vue ou à celle demandée, même fenêtre réduite ; la
     /// fenêtre entière (interface comprise) est lue à l'image suivante.
-    pub(super) fn capture(&mut self, ctx: &egui::Context, argument: &str, reponse: Sender<String>) {
+    pub(crate) fn capture(&mut self, ctx: &egui::Context, argument: &str, reponse: Sender<String>) {
         let (zone, reste) = argument.trim().split_once(' ').unwrap_or((argument, ""));
         let mut reste = reste.trim();
         let mut taille = None;
@@ -145,7 +145,7 @@ impl ViewerApp {
     }
 
     /// État du viewer : fichier, vue, caméra, visibilité, sélection.
-    pub(super) fn etat(&self) -> String {
+    pub(crate) fn etat(&self) -> String {
         use pilote::{liste, objet, texte};
         let mut p = vec![
             ("fichier", self.scene.as_ref().map(|s| texte(&s.file_name)).unwrap_or_else(|| "null".into())),
@@ -232,13 +232,13 @@ impl ViewerApp {
         pilote::succes(&p)
     }
 
-    pub(super) fn decrire(&self, id: Id) -> String {
+    pub(crate) fn decrire(&self, id: Id) -> String {
         let Some(s) = &self.scene else { return "null".into() };
         pilote::objet(&[("id", id.to_string()), ("classe", pilote::texte(s.model.ty(id))), ("nom", pilote::texte(&s.model.name(id)))])
     }
 
     /// Entité désignée par « #123 », « 123 » ou, à défaut, la sélection.
-    pub(super) fn entite(&self, argument: &str) -> Result<Id, String> {
+    pub(crate) fn entite(&self, argument: &str) -> Result<Id, String> {
         let s = self.scene.as_ref().ok_or("aucun fichier ouvert")?;
         let a = argument.trim().trim_start_matches('#');
         let id = if a.is_empty() { self.selected.ok_or("aucune sélection")? } else { a.parse::<Id>().map_err(|_| format!("id invalide : {argument}"))? };
@@ -248,7 +248,7 @@ impl ViewerApp {
         Ok(id)
     }
 
-    pub(super) fn commande(&mut self, ctx: &egui::Context, commande: &str, argument: &str) -> String {
+    pub(crate) fn commande(&mut self, ctx: &egui::Context, commande: &str, argument: &str) -> String {
         use pilote::{erreur, liste, objet, succes, texte};
         if matches!(commande,"editer"|"annuler"|"retablir"|"mur"|"dalle"|"pente"|"type_mur"|"vue_plan"|"coupe_vue"|"enregistrer"|"modifier_trace"|"famille_ouvrir"|"famille_charger"|"famille_enregistrer"|"collaborer"|"collaboration_associer") {
             if let Err(e)=self.pilote_disponible() {return erreur(&e);}

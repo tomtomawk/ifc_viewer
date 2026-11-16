@@ -4,31 +4,22 @@
 //! panneaux s'ancrent d'un côté ou flottent ; sous la vue, la boîte de visibilité par
 //! catégorie de modèle et d'annotation.
 
+pub mod socle;
 mod zones;
 mod projet;
 mod documenter;
 mod familles;
 mod saisie;
-pub mod fenetre;
 mod bim;
 mod outils_texte;
 mod types_traits;
 mod dessin_plan;
 use crate::saisie::accrochage::{AccrocheMur, marqueur};
-mod pilotage;
-mod parametres;
 mod ajuster;
-mod volets;
 mod murs_courbes;
-mod aides;
 mod transformer;
-use aides::*;
-mod documents;
+use crate::socle::aides::*;
 mod garde_corps;
-mod vues;
-mod soleil;
-mod viewport;
-mod commandes_pilote;
 use config::options::Dimensions;
 use moteur3d::camera::{Camera, MAX_PITCH};
 use moteur2d::Poche;
@@ -583,9 +574,9 @@ pub struct ViewerApp {
     pente_defaut: f64,
     /// Options de l'application (menu Début > Options).
     options: config::options::Options,
-    parametres: Option<parametres::Parametres>,
+    parametres: Option<crate::socle::parametres::Parametres>,
     ajustement: Option<ajuster::EtatAjustement>,
-    volets: [volets::FenetreVolet;2],
+    volets: [crate::socle::volets::FenetreVolet;2],
     filter: String,
     show_unsupported: bool,
     /// Vue Revit ouverte (indice dans `Navigateur::vues`).

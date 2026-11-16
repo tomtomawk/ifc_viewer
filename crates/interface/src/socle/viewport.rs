@@ -1,8 +1,8 @@
 //! Zone de vue : interaction souris, rendu, superpositions.
-use super::*;
+use crate::*;
 
 impl ViewerApp {
-    pub(super) fn viewport(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn viewport(&mut self, ui: &mut egui::Ui) {
         let rect = ui.available_rect_before_wrap();
         // fenêtre réduite : on garde la dernière zone, taille des captures hors écran
         if rect.is_positive() {
@@ -502,7 +502,7 @@ impl ViewerApp {
                 (_, None) => "Poutre : cliquer le départ · molette : zoom",
                 (_, Some(_)) => "Poutre : cliquer l'arrivée · Maj : orthogonal · Échap ou clic droit : annuler",
             };
-            if self.error.is_none() { crate::aides::annotation_vue(ui, rect, self.dessin2d.bas_barre, texte, false); }
+            if self.error.is_none() { crate::socle::aides::annotation_vue(ui, rect, self.dessin2d.bas_barre, texte, false); }
             if let Some(alt) = altitude_structure {
                 let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.bim.depart_structure, alt));
                 if let Some((p, accroche)) = point {
@@ -523,7 +523,7 @@ impl ViewerApp {
                 format!("Attacher au toit : {} mur(s) choisi(s) · cliquer une toiture ou ajouter un mur", self.bim.murs_a_attacher.len())
             };
             let painter = ui.painter().with_clip_rect(rect);
-            if self.error.is_none() { crate::aides::annotation_vue(ui, rect, self.dessin2d.bas_barre, &texte, false); }
+            if self.error.is_none() { crate::socle::aides::annotation_vue(ui, rect, self.dessin2d.bas_barre, &texte, false); }
             if let Some((projet, _)) = &self.natif {
                 for id in &self.bim.murs_a_attacher {
                     if let Some((a, b, _)) = projet.axe_element(id) {
@@ -544,7 +544,7 @@ impl ViewerApp {
             let painter = ui.painter().with_clip_rect(rect);
             let couleur = Color32::from_rgb(55, 130, 200);
             let texte = if composant { "Composant : cliquer pour placer · Espace : rotation de 90° · molette : zoom" } else if arbre { "Arbre : cliquer pour planter" } else { "Pièce : cliquer dans un espace fermé par des murs" };
-            if self.error.is_none() { crate::aides::annotation_vue(ui, rect, self.dessin2d.bas_barre, texte, false); }
+            if self.error.is_none() { crate::socle::aides::annotation_vue(ui, rect, self.dessin2d.bas_barre, texte, false); }
             if let Some((p, accroche)) = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, false, None, altitude_placement)) {
                 if let Some(q) = self.ecran_plan(rect, p, altitude_placement) { marqueur(&painter, q, accroche, couleur, Color32::from_rgb(230, 120, 20)); }
                 if arbre {

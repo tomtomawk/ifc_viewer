@@ -1,8 +1,8 @@
 //! Fonctions d'aide de l'interface : icônes vectorielles, libellés, catégories IFC.
-use super::*;
+use crate::*;
 
 /// Réticule contrasté commun aux canevas de dessin.
-pub(super) fn reticule(p: &egui::Painter, q: egui::Pos2, rayon: f32) {
+pub(crate) fn reticule(p: &egui::Painter, q: egui::Pos2, rayon: f32) {
     for (epaisseur, couleur) in [(3.0, Color32::BLACK), (1.0, Color32::WHITE)] {
         let contour = egui::Stroke::new(epaisseur, couleur);
         p.line_segment([q - egui::vec2(rayon, 0.0), q + egui::vec2(rayon, 0.0)], contour);
@@ -11,7 +11,7 @@ pub(super) fn reticule(p: &egui::Painter, q: egui::Pos2, rayon: f32) {
 }
 
 /// Remplace le curseur système par le même réticule contrasté dans les canevas 2D.
-pub(super) fn curseur_dessin(ui: &egui::Ui, resp: &egui::Response, actif: bool) {
+pub(crate) fn curseur_dessin(ui: &egui::Ui, resp: &egui::Response, actif: bool) {
     if !actif || !resp.hovered() || ui.input(|i| i.pointer.middle_down()) { return; }
     let Some(q) = resp.hover_pos() else { return };
     ui.ctx().set_cursor_icon(egui::CursorIcon::None);
@@ -19,11 +19,11 @@ pub(super) fn curseur_dessin(ui: &egui::Ui, resp: &egui::Response, actif: bool) 
     reticule(&p, q, 12.0);
 }
 
-pub(super) fn origine_consigne(rect: egui::Rect, bas_barre: f32) -> egui::Pos2 {
+pub(crate) fn origine_consigne(rect: egui::Rect, bas_barre: f32) -> egui::Pos2 {
     rect.left_top() + egui::vec2(8.0, bas_barre.max(4.0) + 8.0)
 }
 
-pub(super) fn repere_origine_famille(painter: &egui::Painter, origine: egui::Pos2) {
+pub(crate) fn repere_origine_famille(painter: &egui::Painter, origine: egui::Pos2) {
     if !painter.clip_rect().contains(origine) {
         return;
     }
@@ -39,7 +39,7 @@ pub(super) fn repere_origine_famille(painter: &egui::Painter, origine: egui::Pos
     );
 }
 
-pub(super) fn annotation_vue(ui: &egui::Ui, rect: egui::Rect, bas_barre: f32, texte: &str, erreur: bool) -> bool {
+pub(crate) fn annotation_vue(ui: &egui::Ui, rect: egui::Rect, bas_barre: f32, texte: &str, erreur: bool) -> bool {
     let painter = ui.painter().with_clip_rect(rect);
     let couleur = if erreur { Color32::from_rgb(185, 35, 35) } else { Color32::from_rgb(40, 100, 160) };
     let marge_bouton = if erreur { 22.0 } else { 0.0 };
@@ -69,7 +69,7 @@ pub(super) fn annotation_vue(ui: &egui::Ui, rect: egui::Rect, bas_barre: f32, te
 }
 
 impl ViewerApp {
-    pub(super) fn annotation_erreur(&mut self, ui: &egui::Ui, rect: egui::Rect, bas_barre: f32) {
+    pub(crate) fn annotation_erreur(&mut self, ui: &egui::Ui, rect: egui::Rect, bas_barre: f32) {
         if self.error.as_deref().is_some_and(|texte| annotation_vue(ui, rect, bas_barre, texte, true)) {
             self.error = None;
         }
@@ -80,7 +80,7 @@ impl ViewerApp {
 /// Icône du niveau de détail : un, deux ou trois traits, comme dans Revit.
 /// Icônes vectorielles : indépendantes des caractères disponibles dans la police.
 /// Mode sombre : croissant de lune.
-pub(super) fn icone_lune(p:&egui::Painter,r:egui::Rect,c:Color32) {
+pub(crate) fn icone_lune(p:&egui::Painter,r:egui::Rect,c:Color32) {
     let centre=r.center();let rayon=r.width().min(r.height())*0.42;
     let decale=centre+egui::vec2(rayon*0.55,-rayon*0.35);
     let mut contour=Vec::new();
@@ -100,7 +100,7 @@ pub(super) fn icone_lune(p:&egui::Painter,r:egui::Rect,c:Color32) {
 }
 
 /// Mode système : écran sur pied.
-pub(super) fn icone_moniteur(p:&egui::Painter,r:egui::Rect,c:Color32) {
+pub(crate) fn icone_moniteur(p:&egui::Painter,r:egui::Rect,c:Color32) {
     let t=egui::Stroke::new(1.3,c);
     let ecran=egui::Rect::from_min_max(r.left_top()+egui::vec2(0.,r.height()*0.1),r.right_bottom()-egui::vec2(0.,r.height()*0.3));
     p.rect_stroke(ecran,1.5,t,egui::StrokeKind::Inside);
@@ -109,13 +109,13 @@ pub(super) fn icone_moniteur(p:&egui::Painter,r:egui::Rect,c:Color32) {
     p.line_segment([egui::pos2(x-r.width()*0.25,r.bottom()-1.),egui::pos2(x+r.width()*0.25,r.bottom()-1.)],t);
 }
 
-pub(super) fn icone_soleil(p:&egui::Painter,r:egui::Rect,c:Color32) {
+pub(crate) fn icone_soleil(p:&egui::Painter,r:egui::Rect,c:Color32) {
     let centre=r.center();let rayon=r.width().min(r.height())*0.22;
     p.circle_stroke(centre,rayon,egui::Stroke::new(1.3,c));
     for k in 0..8 {let a=k as f32*std::f32::consts::TAU/8.;let d=egui::vec2(a.cos(),a.sin());p.line_segment([centre+d*(rayon+2.),centre+d*(rayon+4.)],egui::Stroke::new(1.3,c));}
 }
 
-pub(super) fn icone_detail(p: &egui::Painter, r: egui::Rect, d: NiveauDetail) {
+pub(crate) fn icone_detail(p: &egui::Painter, r: egui::Rect, d: NiveauDetail) {
     let n = match d {
         NiveauDetail::Faible => 1,
         NiveauDetail::Moyen => 2,
@@ -129,7 +129,7 @@ pub(super) fn icone_detail(p: &egui::Painter, r: egui::Rect, d: NiveauDetail) {
     }
 }
 
-pub(super) fn icone_style(p: &egui::Painter, r: egui::Rect, style: StyleVisuel) {
+pub(crate) fn icone_style(p: &egui::Painter, r: egui::Rect, style: StyleVisuel) {
     use egui::{Stroke, pos2};
     let c = r.center();
     let k = r.width() / 4.2;
@@ -160,7 +160,7 @@ pub(super) fn icone_style(p: &egui::Painter, r: egui::Rect, style: StyleVisuel) 
 /// Texte gravé au milieu d'une face du cube d'orientation (normale `n`, axes `u`, `v`
 /// dans le plan, côté du cube = 2) : capitales de `capitales`, largeur au plus 1,7, centré ;
 /// maillage egui des glyphes projetés par `ecran`.
-pub(super) fn texte_sur_face(texte: &str, n: Vec3, u: Vec3, v: Vec3, ecran: &dyn Fn(Vec3) -> egui::Pos2, couleur: Color32, capitales: f64) -> egui::Shape {
+pub(crate) fn texte_sur_face(texte: &str, n: Vec3, u: Vec3, v: Vec3, ecran: &dyn Fn(Vec3) -> egui::Pos2, couleur: Color32, capitales: f64) -> egui::Shape {
     const POLICE: &str = "Arial";
     let largeur = noyau::texte::largeur(texte, POLICE, 1.0, true).max(1e-6);
     let taille = capitales.min(1.7 / largeur);
@@ -180,7 +180,7 @@ pub(super) fn texte_sur_face(texte: &str, n: Vec3, u: Vec3, v: Vec3, ecran: &dyn
 
 /// Matériaux d'un modèle IFC (`IfcMaterial`) et éléments qui les portent (association
 /// directe ou par le type, couches, profils, constituants).
-pub(super) fn materiaux_ifc(s: &Scene) -> Vec<scene::NavMateriau> {
+pub(crate) fn materiaux_ifc(s: &Scene) -> Vec<scene::NavMateriau> {
     let m = &s.model;
     let mut usages: BTreeMap<Id, Vec<Id>> = BTreeMap::new();
     for o in &s.objects {
@@ -209,7 +209,7 @@ pub(super) fn materiaux_ifc(s: &Scene) -> Vec<scene::NavMateriau> {
 
 /// Niveaux du modèle : entité, nom, altitude dans le repère de la scène (élévation de
 /// l'IfcBuildingStorey), du plus bas au plus haut.
-pub(super) fn niveaux(s: &Scene) -> Vec<(Id, String, f32)> {
+pub(crate) fn niveaux(s: &Scene) -> Vec<(Id, String, f32)> {
     let mut out: Vec<(Id, String, f32)> = s
         .model
         .file
@@ -224,7 +224,7 @@ pub(super) fn niveaux(s: &Scene) -> Vec<(Id, String, f32)> {
 
 /// Fichier Revit, reconnu à l'extension ou à la signature OLE.
 /// Classe IFC d'une clé de masquage (« classe » ou « classe:nom »).
-pub(super) fn classe_cle(cle: &str) -> &str {
+pub(crate) fn classe_cle(cle: &str) -> &str {
     cle.split_once(':').map_or(cle, |c| c.0)
 }
 
@@ -232,7 +232,7 @@ pub(super) fn classe_cle(cle: &str) -> &str {
 /// objet (voir [`Categorie`]) : genre (`ObjectType`) des annotations ; catégorie Revit
 /// (propriété « Catégorie ») des proxys d'un fichier Revit ; nom de la classe IFC
 /// sinon. Les quadrillages sont des annotations, comme dans Revit.
-pub(super) fn categories(s: &Scene) -> (Vec<Categorie>, Vec<usize>, Vec<Arc<str>>) {
+pub(crate) fn categories(s: &Scene) -> (Vec<Categorie>, Vec<usize>, Vec<Arc<str>>) {
     let revit = s.navigateur.is_some();
     let noms: Vec<(bool, String)> = s
         .objects
@@ -266,7 +266,7 @@ pub(super) fn categories(s: &Scene) -> (Vec<Categorie>, Vec<usize>, Vec<Arc<str>
 }
 
 /// Nom de catégorie (au pluriel, comme dans Revit) d'une classe IFC d'élément de modèle.
-pub(super) fn nom_classe(classe: &str) -> String {
+pub(crate) fn nom_classe(classe: &str) -> String {
     let nom = match classe {
         "IFCWALL" | "IFCWALLSTANDARDCASE" | "IFCWALLELEMENTEDCASE" => "Murs",
         "IFCWINDOW" | "IFCWINDOWSTANDARDCASE" => "Fenêtres",
@@ -299,7 +299,7 @@ pub(super) fn nom_classe(classe: &str) -> String {
 }
 
 /// Nom de catégorie d'un genre d'annotation (éléments 2D d'une vue Revit).
-pub(super) fn nom_genre(genre: &str) -> String {
+pub(crate) fn nom_genre(genre: &str) -> String {
     match genre {
         "" => "Annotations",
         "Trait" => "Lignes",
@@ -317,7 +317,7 @@ pub(super) fn nom_genre(genre: &str) -> String {
     .to_string()
 }
 
-pub(super) fn is_revit_file(path: &std::path::Path) -> bool {
+pub(crate) fn is_revit_file(path: &std::path::Path) -> bool {
     if rvt::is_revit_path(path) {
         return true;
     }
@@ -325,12 +325,12 @@ pub(super) fn is_revit_file(path: &std::path::Path) -> bool {
     std::fs::File::open(path).and_then(|mut f| std::io::Read::read_exact(&mut f, &mut head)).is_ok() && rvt::is_cfb(&head)
 }
 
-pub(super) fn decode_png(data: &[u8]) -> Option<egui::ColorImage> {
+pub(crate) fn decode_png(data: &[u8]) -> Option<egui::ColorImage> {
     let (w, h, rgba) = rvt::decode_png_rgba(data)?;
     Some(egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba))
 }
 
-pub(super) fn load_state_fr(s: &str) -> &str {
+pub(crate) fn load_state_fr(s: &str) -> &str {
     match s {
         "Loaded" => "Chargé",
         "Not Found" => "Introuvable",
@@ -341,11 +341,11 @@ pub(super) fn load_state_fr(s: &str) -> &str {
 }
 
 /// Aperçu d'un motif de hachures dans `r` : traits du motif, `px_mm` pixels par mm du papier.
-pub(super) fn apercu_motif(p: &egui::Painter, r: egui::Rect, d: &modele::DefinitionMotif, px_mm: f32) {
+pub(crate) fn apercu_motif(p: &egui::Painter, r: egui::Rect, d: &modele::DefinitionMotif, px_mm: f32) {
     apercu_motif_colore(p, r, d, px_mm, Color32::from_gray(40));
 }
 
-pub(super) fn apercu_motif_colore(p: &egui::Painter, r: egui::Rect, d: &modele::DefinitionMotif, px_mm: f32, couleur: Color32) {
+pub(crate) fn apercu_motif_colore(p: &egui::Painter, r: egui::Rect, d: &modele::DefinitionMotif, px_mm: f32, couleur: Color32) {
     use noyau::motif::{hachures_plan, GrilleMotif, Motif};
     let m = Motif {
         nom: d.nom.clone(),
@@ -362,7 +362,7 @@ pub(super) fn apercu_motif_colore(p: &egui::Painter, r: egui::Rect, d: &modele::
 }
 
 /// Cadenas fermé (verrouillé) ou ouvert, dans `r` ; `survol` : surligné (clic = déverrouiller).
-pub(super) fn icone_cadenas(p: &egui::Painter, r: egui::Rect, ferme: bool, survol: bool) {
+pub(crate) fn icone_cadenas(p: &egui::Painter, r: egui::Rect, ferme: bool, survol: bool) {
     let fond = if survol { Color32::from_rgb(255, 220, 120) } else { Color32::from_rgba_unmultiplied(255, 255, 255, 220) };
     let c = Color32::from_rgb(60, 60, 70);
     let t = egui::Stroke::new(1.6, c);

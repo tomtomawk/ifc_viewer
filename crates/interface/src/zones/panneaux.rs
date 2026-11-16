@@ -70,14 +70,14 @@ impl ViewerApp {
     }
 
     pub(crate) fn cible_ancrage(&self, q: egui::Pos2) -> Option<Ancrage> {
-        volets::cible_volet(self.zone_panneaux,q)
+        crate::socle::volets::cible_volet(self.zone_panneaux,q)
     }
 
     /// Le suivi reste actif pendant le passage d'un panneau ancré à une fenêtre flottante.
     pub(crate) fn deplacer_panneau(&mut self, ctx: &egui::Context) {
         let Some((p,decalage,source))=self.deplacement_panneau else{return};
         // Lire le viewport où le geste a commencé, aussi bien ancré que déjà flottant.
-        if let Some((position,local,enfonce))=volets::suivre_pointeur(ctx,source,decalage) {
+        if let Some((position,local,enfonce))=crate::socle::volets::suivre_pointeur(ctx,source,decalage) {
             self.volets[p as usize].position=Some(position);
             self.volets[p as usize].cible=self.cible_ancrage(local);
             if !enfonce {

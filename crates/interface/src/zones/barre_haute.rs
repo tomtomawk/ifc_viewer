@@ -16,7 +16,7 @@ impl ViewerApp {
             self.onglet_ruban = OngletRuban::Debut;
         }
         // cadre du système : ni boutons de fenêtre ni zones de déplacement dessinés ici
-        let natif = crate::fenetre::cadre_natif();
+        let natif = crate::socle::fenetre::cadre_natif();
         let (barre, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 32.0), Sense::hover());
         let titre = egui::Rect::from_min_size(barre.min, egui::vec2(108.0, barre.height()));
         let icone_id = egui::Id::unique("icone_application_texture");
@@ -361,7 +361,7 @@ impl ViewerApp {
     /// Redimensionnement natif sur les bords de la fenêtre sans décoration.
     pub(crate) fn bords_fenetre(&self, ctx: &egui::Context) {
         use egui::ResizeDirection::*;
-        if crate::fenetre::cadre_natif() {
+        if crate::socle::fenetre::cadre_natif() {
             return;
         }
         let (rect, position, maximise, presse) = ctx.input(|i| (i.viewport_rect(), i.pointer.hover_pos(), i.viewport().maximized.unwrap_or(false), i.pointer.primary_pressed()));

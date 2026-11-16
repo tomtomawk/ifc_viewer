@@ -1,6 +1,6 @@
 //! Compléments du pilote : les mutations passent par les transactions de l'interface.
 use commandes::Execution;
-use super::*;
+use crate::*;
 use serde_json::{Value, json};
 
 fn lire<T: serde::de::DeserializeOwned>(s: &str) -> Result<T, String> {
@@ -14,7 +14,7 @@ fn champ<'a>(v: &'a Value, cle: &str) -> Result<&'a str, String> {
 }
 
 impl ViewerApp {
-    pub(super) fn commande_complete(
+    pub(crate) fn commande_complete(
         &mut self,
         ctx: &egui::Context,
         nom: &str,
@@ -507,7 +507,7 @@ impl ViewerApp {
         })())
     }
 
-    pub(super) fn pilote_disponible(&self) -> Result<(), String> {
+    pub(crate) fn pilote_disponible(&self) -> Result<(), String> {
         if self.loading.is_some()
             || self.sauvegarde.is_some()
             || self.partage_en_cours
@@ -530,7 +530,7 @@ impl ViewerApp {
         self.activer_outil_interface(nom)
     }
 
-    pub(super) fn activer_outil_interface(&mut self, nom: &str) -> Result<Value, String> {
+    pub(crate) fn activer_outil_interface(&mut self, nom: &str) -> Result<Value, String> {
         use crate::zones::ruban::Outil as O;
         if self.natif.is_none() {
             return Err("Projet natif requis".into());

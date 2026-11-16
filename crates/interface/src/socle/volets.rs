@@ -1,8 +1,8 @@
 //! Palettes natives partageant le même état de projet que la fenêtre principale.
-use super::*;
+use crate::*;
 
 #[derive(Default)]
-pub(super) struct FenetreVolet {
+pub(crate) struct FenetreVolet {
     pub natif: bool,
     pub interaction: bool,
     pub rect: Option<egui::Rect>,
@@ -13,7 +13,7 @@ pub(super) struct FenetreVolet {
 }
 
 /// Coordonnées globales de fenêtre et coordonnées de dépôt dans la fenêtre principale.
-pub(super) fn suivre_pointeur(ctx:&egui::Context,source:egui::ViewportId,decalage:egui::Vec2)->Option<(egui::Pos2,egui::Pos2,bool)> {
+pub(crate) fn suivre_pointeur(ctx:&egui::Context,source:egui::ViewportId,decalage:egui::Vec2)->Option<(egui::Pos2,egui::Pos2,bool)> {
     let (q,enfonce,origine)=ctx.input_for(source,|i| (
         i.pointer.latest_pos(),i.pointer.primary_down(),
         i.viewport().inner_rect.map_or(egui::Pos2::ZERO,|r|r.min)));
@@ -23,7 +23,7 @@ pub(super) fn suivre_pointeur(ctx:&egui::Context,source:egui::ViewportId,decalag
     Some((global-decalage,egui::pos2(global.x-principale.x,global.y-principale.y),enfonce))
 }
 
-pub(super) fn cible_volet(zone:egui::Rect,q:egui::Pos2)->Option<Ancrage> {
+pub(crate) fn cible_volet(zone:egui::Rect,q:egui::Pos2)->Option<Ancrage> {
     if !zone.is_positive() || !zone.contains(q) {None}
     else if q.x<=zone.left()+64.0 {Some(Ancrage::Gauche)}
     else if q.x>=zone.right()-64.0 {Some(Ancrage::Droite)}
@@ -31,7 +31,7 @@ pub(super) fn cible_volet(zone:egui::Rect,q:egui::Pos2)->Option<Ancrage> {
 }
 
 impl ViewerApp {
-    pub(super) fn menu_volet(&mut self,resp:&egui::Response,p:Panneau) {
+    pub(crate) fn menu_volet(&mut self,resp:&egui::Response,p:Panneau) {
         resp.context_menu(|ui| {
             for (a,nom) in [(Ancrage::Externe,"Détacher dans une fenêtre"),(Ancrage::Gauche,"Ancrer à gauche"),(Ancrage::Droite,"Ancrer à droite"),(Ancrage::Flottant,"Flotter dans l'application")] {
                 if ui.selectable_label(self.ancrages[p as usize]==a,nom).clicked() {
@@ -43,13 +43,13 @@ impl ViewerApp {
         });
     }
 
-    pub(super) fn retablir_volets(&mut self) {
+    pub(crate) fn retablir_volets(&mut self) {
         self.ancrer(Panneau::Proprietes,Ancrage::Gauche);
         self.ancrer(Panneau::Arborescence,Ancrage::Droite);
         self.deplacement_panneau=None;
     }
 
-    pub(super) fn fenetres_volets(&mut self,ctx:&egui::Context) {
+    pub(crate) fn fenetres_volets(&mut self,ctx:&egui::Context) {
         for p in Panneau::TOUS {
             let i=p as usize;
             if self.ancrages[i]!=Ancrage::Externe {self.volets[i].natif=false;self.volets[i].interaction=false;continue;}
@@ -58,11 +58,11 @@ impl ViewerApp {
             let mut builder=egui::ViewportBuilder::default().with_title(titre)
                 .with_inner_size(self.volets[i].taille.unwrap_or(egui::vec2(self.largeurs_panneaux[i].max(280.0),600.0)))
                 .with_decorations(false)
-                .with_min_inner_size([160.0,160.0]).with_taskbar(!crate::fenetre::arriere_plan())
+                .with_min_inner_size([160.0,160.0]).with_taskbar(!crate::socle::fenetre::arriere_plan())
                 .with_active(false).with_mouse_passthrough(glissement);
             if let Some(position)=self.volets[i].position {builder=builder.with_position(position);}
             // mode arrière-plan : sans position mémorisée, hors de l'écran comme la fenêtre principale
-            else if crate::fenetre::arriere_plan() {builder=builder.with_position([-20000.0+400.0*i as f32,-20000.0]);}
+            else if crate::socle::fenetre::arriere_plan() {builder=builder.with_position([-20000.0+400.0*i as f32,-20000.0]);}
             ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(("volet_externe",p.nom())),builder,|ui,classe| {
                 let ctx=ui.ctx().clone();
                 // Une fenêtre native n'hérite pas du fond peint par le panneau ancré.
@@ -83,7 +83,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn etat_volets(&self)->serde_json::Value {
+    pub(crate) fn etat_volets(&self)->serde_json::Value {
         serde_json::json!({"volets":Panneau::TOUS.map(|p| {
             let v=&self.volets[p as usize];
             serde_json::json!({"nom":p.nom(),"ancrage":self.ancrages[p as usize].nom(),"fenetre_native":v.natif,"entete":v.entete.map(|r|[r.min.x,r.min.y,r.max.x,r.max.y]),"cible":v.cible.map(|c|c.nom()),"rectangle":v.rect.map(|r|[r.min.x,r.min.y,r.max.x,r.max.y])})

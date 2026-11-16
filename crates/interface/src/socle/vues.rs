@@ -1,8 +1,8 @@
 //! Mémorisation, onglets et activation des vues, préparation des feuilles.
-use super::*;
+use crate::*;
 
 impl ViewerApp {
-    pub(super) fn regler_echelle_vue(&mut self, echelle: f64) -> Result<(), String> {
+    pub(crate) fn regler_echelle_vue(&mut self, echelle: f64) -> Result<(), String> {
         if self.vue_gabaritee() { return Err("L’échelle est pilotée par le gabarit de vue.".into()); }
         if !(echelle.is_finite() && echelle > 0.0) { return Err("L’échelle doit être positive et finie.".into()); }
         if let Some(id) = self.vue_native_id()
@@ -19,7 +19,7 @@ impl ViewerApp {
         Ok(())
     }
 
-    pub(super) fn memoriser_vue(&mut self) {
+    pub(crate) fn memoriser_vue(&mut self) {
         if self.saisie_active || self.partage_en_cours { return; }
         if !self.vues_ouvertes.contains(&self.vue_active) {
             return;
@@ -87,7 +87,7 @@ impl ViewerApp {
         });
     }
 
-    pub(super) fn restaurer_vue(&mut self, vue: Option<usize>) {
+    pub(crate) fn restaurer_vue(&mut self, vue: Option<usize>) {
         let Some(e) = self.etats_vues.get(&vue).cloned() else { return };
         self.vue_active = vue;
         self.nomenclature_ouverte = vue.filter(|&i| self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|n| n.vues.get(i)).is_some_and(|v| v.genre == "Nomenclature"));
@@ -123,7 +123,7 @@ impl ViewerApp {
     }
 
     /// Ferme les autres vues sans fermer les documents ni perdre leurs modifications.
-    pub(super) fn garder_derniere_vue_par_document(&mut self) {
+    pub(crate) fn garder_derniere_vue_par_document(&mut self) {
         self.garder_derniere_vue_familles();
         for d in self.documents.values_mut() {
             if let Some(&derniere) = d.vues.last() {
@@ -142,7 +142,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn onglets_vues(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn onglets_vues(&mut self, ui: &mut egui::Ui) {
         /// Identifiant de l'onglet de l'éditeur de familles (hors des documents).
         const ONGLET_FAMILLE: usize = usize::MAX;
         const ONGLET_FAMILLE_PLANE: usize = usize::MAX - 4;
@@ -338,7 +338,7 @@ impl ViewerApp {
     /// vue ; plan : son niveau seul ; coupe, élévation : tout le modèle ; vue de dessin,
     /// feuille, légende : ses éléments 2D ; vue 3D : modèle entier. Les éléments 2D de la
     /// vue sont affichés.
-    pub(super) fn activer_vue(&mut self, i: usize) {
+    pub(crate) fn activer_vue(&mut self, i: usize) {
         if self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|n| n.vues.get(i)).is_none() {
             return;
         }
@@ -487,7 +487,7 @@ impl ViewerApp {
     }
 
     /// Objets des options de variante secondaires (masqués par défaut, comme dans Revit).
-    pub(super) fn masques_variantes(&self) -> Vec<u32> {
+    pub(crate) fn masques_variantes(&self) -> Vec<u32> {
         let Some(s) = &self.scene else { return Vec::new() };
         let Some(nav) = &s.navigateur else { return Vec::new() };
         if nav.variantes_secondaires.is_empty() {
@@ -498,7 +498,7 @@ impl ViewerApp {
 
     /// Objets qu'une vue Revit ne montre pas selon sa phase et son filtre de phase (état
     /// de l'objet dans la phase, présentation « masqué » du filtre).
-    pub(super) fn masques_de_phase(&self, i: usize) -> Vec<u32> {
+    pub(crate) fn masques_de_phase(&self, i: usize) -> Vec<u32> {
         let Some(s) = &self.scene else { return Vec::new() };
         let Some(nav) = &s.navigateur else { return Vec::new() };
         let (Some(v), Some(filtre)) = (nav.vues.get(i), nav.vues.get(i).and_then(|v| nav.filtres_phase.get(&v.filtre_phase))) else { return Vec::new() };
@@ -511,7 +511,7 @@ impl ViewerApp {
 
     /// Vue orthographique de dessus ajustée au rectangle des objets et des fenêtres de
     /// vue d'une feuille, selon les proportions de la vue.
-    pub(super) fn cadrer_rectangle(&mut self, objs: &[u32]) {
+    pub(crate) fn cadrer_rectangle(&mut self, objs: &[u32]) {
         let Some(s) = &self.scene else { return };
         let (mut mn, mut mx) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
         for &o in objs {
@@ -538,7 +538,7 @@ impl ViewerApp {
     /// Passes des fenêtres de vue de la feuille `i` (aucune pour une autre vue) : pour
     /// chaque vue placée, ses objets du modèle (cadrés et découpés en profondeur) puis ses
     /// annotations, tracés à leur place sur la feuille.
-    pub(super) fn preparer_feuille(&mut self, i: Option<usize>) {
+    pub(crate) fn preparer_feuille(&mut self, i: Option<usize>) {
         let mut passes = Vec::new();
         let mut indices: Vec<[Vec<u32>; 3]> = Vec::new();
         let mut objets_feuille = Vec::new();

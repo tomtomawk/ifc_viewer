@@ -70,7 +70,7 @@ fn main() {
     }
 
     let path = args.first().map(PathBuf::from);
-    let resultat = interface::fenetre::lancer(path);
+    let resultat = interface::socle::fenetre::lancer(path);
     // plus joignable : le pont MCP ne doit plus la proposer
     pilote::instances::retirer();
     if let Err(e) = resultat {

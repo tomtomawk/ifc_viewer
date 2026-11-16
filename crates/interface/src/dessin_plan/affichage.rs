@@ -439,7 +439,7 @@ impl ViewerApp {
             if let Some(e) = self.vers_ecran(rect, p) {
                 // réticule
                 if !self.selection_traces_active() {
-                    aides::reticule(&painter, e, 28.0);
+                    crate::socle::aides::reticule(&painter, e, 28.0);
                 }
                 // aperçu : ligne tracée, et volume pour un mur ; arc en attente : rayon
                 // tapé (du côté du curseur), sinon passage par le curseur
@@ -664,7 +664,7 @@ impl ViewerApp {
         let g1 = painter.layout_job(ligne);
         let g2 = painter.layout(aide, egui::FontId::proportional(11.0), bleu.gamma_multiply(0.85), largeur);
         let h1 = g1.size().y;
-        let zone = egui::Rect::from_min_size(crate::aides::origine_consigne(rect, self.dessin2d.bas_barre), egui::vec2(g1.size().x.max(g2.size().x) + 8.0, h1 + g2.size().y + 6.0));
+        let zone = egui::Rect::from_min_size(crate::socle::aides::origine_consigne(rect, self.dessin2d.bas_barre), egui::vec2(g1.size().x.max(g2.size().x) + 8.0, h1 + g2.size().y + 6.0));
         painter.rect_filled(zone, 3.0, Color32::from_white_alpha(185));
         painter.galley(zone.min + egui::vec2(4.0, 2.0), g1, bleu);
         painter.galley(zone.min + egui::vec2(4.0, 4.0 + h1), g2, bleu);

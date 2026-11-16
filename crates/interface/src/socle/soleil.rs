@@ -1,6 +1,6 @@
 //! Lieu du projet (Début), date et heure du soleil de la vue (menu Ombres) et réglages
 //! du ciel physique (fenêtre Ciel, pas encore reliée au rendu).
-use super::*;
+use crate::*;
 use modele::soleil::{self, AmbianceCiel, Lieu, ReglagesCiel};
 
 /// Hauteur de l'œil en vue piéton (m).
@@ -15,7 +15,7 @@ fn heure_texte(h: f32) -> String {
 
 impl ViewerApp {
     /// Identifiant de la vue active pour ses réglages de rendu : vue du projet, ou « 3d ».
-    pub(super) fn id_vue_rendu(&self) -> Option<String> {
+    pub(crate) fn id_vue_rendu(&self) -> Option<String> {
         let numero = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).map(|v| v.revit_id)?;
         let projet = &self.natif.as_ref()?.0;
         if modele::identifiants::numero_vue("3d") == numero {
@@ -25,7 +25,7 @@ impl ViewerApp {
     }
 
     /// Réglages de rendu en cours de la vue.
-    pub(super) fn rendu_vue_courant(&self) -> soleil::RenduVue {
+    pub(crate) fn rendu_vue_courant(&self) -> soleil::RenduVue {
         soleil::RenduVue {
             style: Some(self.style.nom().into()),
             projection: self.vue_3d().then(|| self.camera.projection().nom().into()),
@@ -40,7 +40,7 @@ impl ViewerApp {
 
     /// Enregistre les réglages de rendu de la vue active dans le projet s'ils ont changé
     /// (une étape d'annulation).
-    pub(super) fn enregistrer_rendu_vue(&mut self) {
+    pub(crate) fn enregistrer_rendu_vue(&mut self) {
         if self.saisie_active || self.partage_en_cours { return; }
         let Some(id) = self.id_vue_rendu() else { return };
         let rendu = self.rendu_vue_courant();
@@ -62,7 +62,7 @@ impl ViewerApp {
 
     /// À l'ouverture d'une vue 3D : projection enregistrée et, pour une vue caméra, point
     /// de vue et champ de vision.
-    pub(super) fn appliquer_camera_vue(&mut self) {
+    pub(crate) fn appliquer_camera_vue(&mut self) {
         let Some(id) = self.id_vue_rendu() else { return };
         let Some((projet, _)) = &self.natif else { return };
         let camera = projet.vues.iter().find(|v| v.id == id).and_then(|v| match &v.genre {
@@ -87,7 +87,7 @@ impl ViewerApp {
 
     /// Mode piéton : œil à 1,60 m au-dessus du sol sous le point visé, regard horizontal,
     /// champ de 60° ; en sortant, la caméra d'avant revient.
-    pub(super) fn basculer_pieton(&mut self) {
+    pub(crate) fn basculer_pieton(&mut self) {
         if self.pieton {
             self.pieton = false;
             if let Some(c) = self.camera_avant_pieton.take() {
@@ -112,7 +112,7 @@ impl ViewerApp {
 
     /// Pas de marche en vue piéton : déplacement horizontal `d` arrêté à 30 cm d'un
     /// obstacle (rayons à hauteur de genou et d'œil), puis l'œil suit le sol.
-    pub(super) fn marcher(&mut self, d: Vec3) {
+    pub(crate) fn marcher(&mut self, d: Vec3) {
         let l = d.length();
         if !(l > 1e-6) {
             return;
@@ -133,7 +133,7 @@ impl ViewerApp {
 
     /// Marche en vue piéton : l'œil suit le dessus le plus haut sous lui (sol, dalle,
     /// marche de 60 cm au plus), à 1,60 m.
-    pub(super) fn suivre_sol(&mut self) {
+    pub(crate) fn suivre_sol(&mut self) {
         let Some(s) = &self.scene else { return };
         let oeil = self.camera.eye();
         let pied = oeil.z - HAUTEUR_OEIL;
@@ -144,7 +144,7 @@ impl ViewerApp {
 
     /// Vue caméra active : son point de vue enregistré prend celui de la caméra
     /// (« Mettre à jour la vue ») ; une étape d'annulation.
-    pub(super) fn mettre_a_jour_vue_camera(&mut self) -> Result<(), String> {
+    pub(crate) fn mettre_a_jour_vue_camera(&mut self) -> Result<(), String> {
         let id = self.id_vue_rendu().ok_or("Aucune vue active.")?;
         let s = self.scene.as_ref().ok_or("Aucune scène.")?;
         let mm = |p: Vec3| ((p.as_dvec3() + s.origin) * 1000.0).round().to_array();
@@ -163,7 +163,7 @@ impl ViewerApp {
     }
 
     /// Vue caméra active : la caméra revient au point de vue enregistré.
-    pub(super) fn retablir_vue_camera(&mut self) {
+    pub(crate) fn retablir_vue_camera(&mut self) {
         self.pieton = false;
         self.appliquer_camera_vue();
         self.visibility_dirty = true;
@@ -171,7 +171,7 @@ impl ViewerApp {
 
     /// Enregistre le point de vue courant comme vue caméra du projet (avec les réglages
     /// de rendu de la vue) et l'ouvre dans l'arborescence.
-    pub(super) fn enregistrer_vue_camera(&mut self, nom: Option<String>) -> Result<String, String> {
+    pub(crate) fn enregistrer_vue_camera(&mut self, nom: Option<String>) -> Result<String, String> {
         let Some(s) = &self.scene else { return Err("Aucune scène.".into()) };
         let Some((projet, _)) = &self.natif else { return Err("Vue caméra : projet natif seulement.".into()) };
         let mm = |p: Vec3| ((p.as_dvec3() + s.origin) * 1000.0).round().to_array();
@@ -206,7 +206,7 @@ impl ViewerApp {
     }
 
     /// Applique les réglages de rendu enregistrés de la vue `id` (ouverture de la vue).
-    pub(super) fn appliquer_rendu_vue(&mut self, id: &str) {
+    pub(crate) fn appliquer_rendu_vue(&mut self, id: &str) {
         let Some(r) = self.natif.as_ref().and_then(|(p, _)| p.rendus_vues.get(id).cloned()) else { return };
         if let Some(s) = r.style.as_deref().and_then(|n| StyleVisuel::TOUS.into_iter().find(|s| s.nom() == n)) {
             self.style = s;
@@ -223,18 +223,18 @@ impl ViewerApp {
     }
 
     /// Lieu du projet (Rennes par défaut).
-    pub(super) fn lieu_projet(&self) -> Lieu {
+    pub(crate) fn lieu_projet(&self) -> Lieu {
         self.natif.as_ref().and_then(|(p, _)| p.lieu.clone()).unwrap_or_default()
     }
 
     /// Azimut et hauteur du soleil de la vue (degrés).
-    pub(super) fn position_soleil(&self) -> (f64, f64) {
+    pub(crate) fn position_soleil(&self) -> (f64, f64) {
         soleil::position(&self.lieu_projet(), self.soleil_jour, self.soleil_mois, self.soleil_heure as f64)
     }
 
     /// Direction vers le soleil dans la scène : date, heure et lieu du projet, nord du
     /// projet. Sous l'horizon, le soleil est gardé au ras de l'horizon (2°).
-    pub(super) fn direction_soleil(&self) -> Vec3 {
+    pub(crate) fn direction_soleil(&self) -> Vec3 {
         let (az, h) = self.position_soleil();
         let nord = self.natif.as_ref().map_or(0.0, |(p, _)| p.orientation_nord);
         let [x, y, z] = soleil::direction(az, h.max(2.0), nord);
@@ -243,7 +243,7 @@ impl ViewerApp {
 
     /// Choix du lieu du projet : ville, coordonnées collées (« 48.1173, -1.6778 »),
     /// latitude, longitude, fuseau et heure d'été. Appliqué en fin de saisie.
-    pub(super) fn editeur_lieu(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn editeur_lieu(&mut self, ui: &mut egui::Ui) {
         let Some(actuel) = self.natif.as_ref().map(|(p, _)| p.lieu.clone()) else { return };
         let id = egui::Id::unique("saisie_lieu_projet");
         let mut l = ui.data(|d| d.get_temp::<Lieu>(id)).unwrap_or_else(|| actuel.clone().unwrap_or_default());
@@ -319,7 +319,7 @@ impl ViewerApp {
     }
 
     /// Date (jour, mois) et heure du soleil de la vue, dans le menu Ombres. Vrai si changé.
-    pub(super) fn reglages_soleil_vue(&mut self, ui: &mut egui::Ui) -> bool {
+    pub(crate) fn reglages_soleil_vue(&mut self, ui: &mut egui::Ui) -> bool {
         let mut change = false;
         ui.label(RichText::new("Soleil de la vue").strong());
         ui.horizontal(|ui| {
@@ -357,7 +357,7 @@ impl ViewerApp {
     }
 
     /// Fenêtre Ciel : réglages simples du ciel physique de la vue.
-    pub(super) fn fenetre_ciel(&mut self, ctx: &egui::Context) {
+    pub(crate) fn fenetre_ciel(&mut self, ctx: &egui::Context) {
         if !self.ciel_ouvert {
             return;
         }

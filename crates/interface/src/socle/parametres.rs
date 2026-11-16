@@ -1,12 +1,12 @@
 //! Paramètres personnels : brouillon explicite, validation puis sauvegarde.
-use super::*;
+use crate::*;
 use modele::unite::Unite;
 use config::options::{
     Options,
     raccourcis::{self, COMMANDES, Raccourci},
 };
 
-pub(super) struct Parametres {
+pub(crate) struct Parametres {
     pub categorie: String,
     pub brouillon: Options,
     filtre: String,
@@ -14,7 +14,7 @@ pub(super) struct Parametres {
 }
 impl ViewerApp {
     /// Applique et enregistre le mode d'apparence (bouton de la barre haute, commande).
-    pub(super) fn changer_theme(&mut self, ctx: &egui::Context, theme: config::options::ThemeInterface) {
+    pub(crate) fn changer_theme(&mut self, ctx: &egui::Context, theme: config::options::ThemeInterface) {
         self.options.theme_interface = theme;
         if let Some(p) = &mut self.parametres {
             p.brouillon.theme_interface = theme;
@@ -24,7 +24,7 @@ impl ViewerApp {
             self.error = Some(e);
         }
     }
-    pub(super) fn ouvrir_parametres(&mut self) {
+    pub(crate) fn ouvrir_parametres(&mut self) {
         if self.parametres.is_none() {
             self.parametres = Some(Parametres {
                 categorie: "general".into(),
@@ -35,7 +35,7 @@ impl ViewerApp {
         }
         self.raccourci_en_attente = None;
     }
-    pub(super) fn appliquer_options(&mut self, o: Options) -> Result<(), String> {
+    pub(crate) fn appliquer_options(&mut self, o: Options) -> Result<(), String> {
         o.verifier()?;
         let g = match &o.gabarit {
             Some(p) => modele::gabarit::Gabarit::charger(p)?,
@@ -50,7 +50,7 @@ impl ViewerApp {
         self.raccourci_en_attente = None;
         Ok(())
     }
-    pub(super) fn fenetre_parametres(&mut self, ctx: &egui::Context) {
+    pub(crate) fn fenetre_parametres(&mut self, ctx: &egui::Context) {
         let Some(mut p) = self.parametres.take() else {
             return;
         };
@@ -168,7 +168,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn clavier_raccourcis(&mut self, ctx: &egui::Context) {
+    pub(crate) fn clavier_raccourcis(&mut self, ctx: &egui::Context) {
         if self.parametres.is_some() {
             self.raccourci_en_attente = None;
             return;

@@ -1,9 +1,9 @@
 //! Ouverture, chargement, enregistrement et onglets de documents.
-use super::*;
+use crate::*;
 
 impl ViewerApp {
     /// Identifiants de scène masqués par les filtres temporaires de contexte.
-    pub(super) fn ids_masques_contextes(&self) -> HashSet<Id> {
+    pub(crate) fn ids_masques_contextes(&self) -> HashSet<Id> {
         self.natif.as_ref().map(|(projet, _)| {
             // l'affichage temporaire prime sur les réglages enregistrés de la vue
             let vue = self.id_vue_contexte().and_then(|id| projet.contextes_vues.get(&id)).cloned().unwrap_or_default();
@@ -11,7 +11,7 @@ impl ViewerApp {
             crate::bim::elements_natifs(projet).filter(|(_, id)| masques.contains(*id)).map(|(genre, id)| modele::identifiants::id_natif(genre, id)).collect()
         }).unwrap_or_default()
     }
-    pub(super) fn open(&mut self, path: PathBuf, ctx: &egui::Context) {
+    pub(crate) fn open(&mut self, path: PathBuf, ctx: &egui::Context) {
         if path.file_name().is_some_and(|n| { let nom = n.to_string_lossy().to_lowercase(); [".profil.json", ".cartouche.json", ".etiquette.json"].iter().any(|suffixe| nom.ends_with(suffixe)) }) {
             if let Err(e) = self.ouvrir_famille_plane_fichier(&path) { self.error = Some(e); }
             return;
@@ -71,7 +71,7 @@ impl ViewerApp {
             .expect("thread de chargement");
     }
 
-    pub(super) fn poll_loading(&mut self) {
+    pub(crate) fn poll_loading(&mut self) {
         let Some(rx) = &self.loading else { return };
         loop {
             let msg=match rx.try_recv() {
@@ -156,11 +156,11 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn install_scene(&mut self, scene: Scene) {
+    pub(crate) fn install_scene(&mut self, scene: Scene) {
         self.nouveau_document();
         self.installer_scene_courante(scene);
     }
-    pub(super) fn installer_scene_courante(&mut self, scene: Scene) {
+    pub(crate) fn installer_scene_courante(&mut self, scene: Scene) {
         if let Some(r) = self.renderer.as_mut() {
             r.upload_vertices(&scene.vertices, &scene.couleurs_rendu, &scene.motifs_surface);
             r.upload_apparences(&scene.apparences);
@@ -234,7 +234,7 @@ impl ViewerApp {
         self.preparer_feuille(None);
     }
 
-    pub(super) fn update_visibility(&mut self) {
+    pub(crate) fn update_visibility(&mut self) {
         if !self.visibility_dirty {
             return;
         }
@@ -304,7 +304,7 @@ impl ViewerApp {
         self.coupe_dirty = true;
     }
 
-    pub(super) fn creer_projet(&mut self) {
+    pub(crate) fn creer_projet(&mut self) {
         if self.partage_en_cours {self.error=Some("Attendre la fin de la création du partage".into());return;}
         let Some(mut chemin) = rfd::FileDialog::new().set_title("Nouveau projet natif v0")
             .add_filter("Modèle natif v0", &["json"]).set_file_name("Nouveau projet.modele.json").save_file() else { return };
@@ -332,7 +332,7 @@ impl ViewerApp {
     }
 
     /// Le plan initial est ouvert seul ; la vue 3D nommée reste dans l'arborescence.
-    pub(super) fn ouvrir_plan_initial_natif(&mut self) {
+    pub(crate) fn ouvrir_plan_initial_natif(&mut self) {
         let plan = self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|v| matches!(v.genre, modele::GenreVue::Plan { .. })).map(|v| modele::identifiants::numero_vue(&v.id)));
         let indice = plan.and_then(|n| self.scene.as_ref()?.navigateur.as_ref()?.vues.iter().position(|v| v.revit_id == n));
         self.vues_ouvertes.clear();
@@ -341,7 +341,7 @@ impl ViewerApp {
         if let Some(i) = indice { self.activer_vue(i); }
     }
 
-    pub(super) fn enregistrer_projet(&mut self, ctx: &egui::Context) {
+    pub(crate) fn enregistrer_projet(&mut self, ctx: &egui::Context) {
         if self.loading.is_some() || self.sauvegarde.is_some() { return; }
         if self.natif.is_none() {
             self.enregistrer_rvt_dialogue(ctx);
@@ -361,7 +361,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn confirmation_modifications(&mut self, ctx: &egui::Context) {
+    pub(crate) fn confirmation_modifications(&mut self, ctx: &egui::Context) {
         let Some((application, document)) = self.confirmer_fermeture else { return };
         let mut action = None;
         egui::Modal::new(egui::Id::unique("modifications_non_enregistrees")).show(ctx, |ui| {
@@ -408,7 +408,7 @@ impl ViewerApp {
         } else { self.fermer_document(); }
     }
 
-    pub(super) fn enregistrer_rvt_dialogue(&mut self, ctx: &egui::Context) {
+    pub(crate) fn enregistrer_rvt_dialogue(&mut self, ctx: &egui::Context) {
         let Some(source) = &self.rvt_source else { return };
         let sortie = match &self.rvt_sortie {
             Some(p) => p.clone(),
@@ -424,7 +424,7 @@ impl ViewerApp {
         if let Err(e) = self.demarrer_enregistrement_rvt(ctx,sortie) { self.error = Some(e); }
     }
 
-    pub(super) fn demarrer_enregistrement_rvt(&mut self, ctx: &egui::Context, sortie: PathBuf) -> Result<(), String> {
+    pub(crate) fn demarrer_enregistrement_rvt(&mut self, ctx: &egui::Context, sortie: PathBuf) -> Result<(), String> {
         if self.sauvegarde.is_some() { return Err("Un enregistrement est déjà en cours.".into()); }
         if self.loading.is_some() { return Err("Attendre la fin du chargement avant d’enregistrer.".into()); }
         let source = self.rvt_source.clone().ok_or("Aucun fichier Revit ouvert.")?;
@@ -441,7 +441,7 @@ impl ViewerApp {
         Ok(())
     }
 
-    pub(super) fn poll_sauvegarde(&mut self) {
+    pub(crate) fn poll_sauvegarde(&mut self) {
         loop {
             let Some(tache) = &mut self.sauvegarde else { return };
             let message = match tache.messages.try_recv() {
@@ -472,7 +472,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn open_dialog(&mut self, ctx: &egui::Context) {
+    pub(crate) fn open_dialog(&mut self, ctx: &egui::Context) {
         if let Some(p) = rfd::FileDialog::new()
              .add_filter("Projet BIMedit, IFC et Revit", &["bimpartage", "json", "ifc", "IFC", "rvt", "rfa", "rte", "rft"])
             .add_filter("Projet partagé BIMedit", &["bimpartage"])
@@ -487,7 +487,7 @@ impl ViewerApp {
 
     // ------------------------------------------------------------------ UI
 
-    pub(super) fn stocker_document(&mut self) {
+    pub(crate) fn stocker_document(&mut self) {
         self.historique.geste(false);
         if self.scene.is_none() && self.rvt.is_none() {
             return;
@@ -517,7 +517,7 @@ impl ViewerApp {
         });
     }
 
-    pub(super) fn nouveau_document(&mut self) {
+    pub(crate) fn nouveau_document(&mut self) {
         self.famille_plane_active = None;
         self.famille_selectionnee = None;
         self.feuilles.selection = Default::default();
@@ -539,7 +539,7 @@ impl ViewerApp {
         self.prochain_document += 1;
     }
 
-    pub(super) fn changer_document(&mut self, id: usize) {
+    pub(crate) fn changer_document(&mut self, id: usize) {
         self.gestion_contextes = None;
         self.editeur_gabarit_vue = None;
         self.filtres_contextes = Default::default();
@@ -613,7 +613,7 @@ impl ViewerApp {
         self.coupe_dirty = true;
     }
 
-    pub(super) fn fermer(&mut self) {
+    pub(crate) fn fermer(&mut self) {
         if let Some(ordre) = self.edition_plane_modifiee(Some(self.document_actif)) {
             self.activer_famille(ordre);
             self.demander_fermeture_famille();
@@ -634,7 +634,7 @@ impl ViewerApp {
         self.fermer_document();
     }
 
-    pub(super) fn fermer_document(&mut self) {
+    pub(crate) fn fermer_document(&mut self) {
         self.famille_plane_active = None;
         self.familles_planes.retain(|_, ed| ed.document_famille.autonome || ed.document_famille.document != self.document_actif);
         self.familles_inactives.retain(|ed| ed.document_famille.autonome || ed.document_famille.document != self.document_actif);
@@ -714,7 +714,7 @@ impl ViewerApp {
 
     /// Le dernier onglet représente aussi le document : garder sa vue jusqu'à
     /// la décision d'enregistrement, puis fermer réellement le projet.
-    pub(super) fn fermer_onglet_projet(&mut self,id:usize,cible:Option<usize>) {
+    pub(crate) fn fermer_onglet_projet(&mut self,id:usize,cible:Option<usize>) {
         let precedent=self.document_actif;
         self.changer_document(id);
         if let Some(k)=self.vues_ouvertes.iter().position(|v|*v==cible) {
