@@ -41,7 +41,7 @@ pub(super) fn apercu_point(texte: &str, precedent: Option<DVec2>, curseur: DVec2
         return Some((depart + direction * longueur, Some(degres)));
     }
     let direction = precedent.map(|p| curseur - p);
-    let point = crate::dessin::dao::lire_saisie(texte, precedent, direction, facteur).ok()?;
+    let point = moteur2d::dao::lire_saisie(texte, precedent, direction, facteur).ok()?;
     point.is_finite().then_some((point, None))
 }
 
@@ -83,7 +83,7 @@ impl SaisieTrace {
 
     pub fn point(&mut self, precedent: Option<DVec2>, curseur: Option<DVec2>, facteur: f64) -> Result<DVec2, String> {
         let direction = precedent.zip(curseur).map(|(p, c)| c - p);
-        let point = crate::dessin::dao::lire_saisie(&self.texte, precedent, direction, facteur)?;
+        let point = moteur2d::dao::lire_saisie(&self.texte, precedent, direction, facteur)?;
         if !point.is_finite() { return Err("Les coordonnées doivent être finies.".into()); }
         self.vider();
         Ok(point)

@@ -196,8 +196,8 @@ impl Outil {
         })
     }
 
-    pub(in crate::ui) fn forme_dessin(self) -> Option<crate::dessin::dao::OutilDessin> {
-        use crate::dessin::dao::OutilDessin as D;
+    pub(in crate::ui) fn forme_dessin(self) -> Option<moteur2d::dao::OutilDessin> {
+        use moteur2d::dao::OutilDessin as D;
         Some(match self {
             Self::Polyligne => D::Polyligne,
             Self::Rectangle => D::Rectangle,
@@ -495,7 +495,7 @@ pub struct RubanEdition {
     /// Sens inversé des prochains murs (Espace pendant le tracé).
     pub sens_inverse: bool,
     /// Forme tracée par l'outil Mur (moteur du dessin 2D) : ligne, rectangle, arc, cercle.
-    pub forme_mur: crate::dessin::dao::OutilDessin,
+    pub forme_mur: moteur2d::dao::OutilDessin,
     ajout_creation: Option<modele::creation::ListeCreation>,
     nom_creation: String,
     jeu_creation: String,
@@ -522,7 +522,7 @@ pub struct RubanEdition {
     toiture_plate: bool,
     /// Tracé des dalles par deux coins (sinon polygone).
     /// Forme tracée par les éléments horizontaux : polygone (défaut), rectangle, cercle.
-    pub forme_dalle: crate::dessin::dao::OutilDessin,
+    pub forme_dalle: moteur2d::dao::OutilDessin,
     /// Type prédéfini choisi pour chaque sorte d'élément horizontal (indice).
     type_surface: BTreeMap<Outil, usize>,
     surface_identique: Option<(Outil, modele::TypeCompose)>,

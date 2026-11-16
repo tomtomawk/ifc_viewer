@@ -181,8 +181,8 @@ dependencies = [
  "maillage",
  "miniz_oxide 0.8.9",
  "modele",
+ "moteur2d",
  "noyau",
- "pdf-writer",
  "png",
  "rayon",
  "rfd",
@@ -190,7 +190,6 @@ dependencies = [
  "serde",
  "serde_ignored",
  "serde_json",
- "svg2pdf",
  "uuid",
  "windows-sys 0.59.0",
  "winresource",
@@ -1576,6 +1575,20 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "moteur2d"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "maillage",
+ "modele",
+ "noyau",
+ "pdf-writer",
+ "rayon",
+ "scene",
+ "svg2pdf",
 ]
 
 [[package]]

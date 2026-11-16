@@ -665,7 +665,7 @@ impl ViewerApp {
                     .fixed_pos(rect.left_top() + egui::vec2(8.0, 8.0)).constrain_to(rect)
                     .show(ui.ctx(), |ui| egui::Frame::popup(ui.style()).show(ui, |ui| ui.horizontal(|ui| {
                         if ed.outil == OutilFamille::Ligne {
-                            use crate::dessin::dao::OutilDessin;
+                            use moteur2d::dao::OutilDessin;
                             let formes = [(OutilDessin::Polyligne, "Polyligne", "Cliquer les sommets ; Entrée ou clic droit pour terminer, F pour fermer.")];
                             let (selectionner, _) = crate::ui::dessin_plan::boutons_trace(ui, false, false, OutilDessin::Polyligne, &formes, None);
                             if selectionner { ed.terminer_polyligne(); annuler = true; }

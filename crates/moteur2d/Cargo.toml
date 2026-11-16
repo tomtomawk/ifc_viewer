@@ -1,0 +1,17 @@
+[package]
+name = "moteur2d"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+noyau = { path = "../noyau" }
+modele = { path = "../modele" }
+scene = { path = "../scene" }
+maillage = { path = "../maillage" }
+glam.workspace = true
+rayon.workspace = true
+svg2pdf.workspace = true
+pdf-writer.workspace = true

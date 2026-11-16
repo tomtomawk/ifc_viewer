@@ -1,6 +1,6 @@
 //! Accrochage et guides temporaires communs aux canevas de dessin.
 use glam::DVec2;
-use crate::dessin::dao::{self as d2, Accroche};
+use moteur2d::dao::{self as d2, Accroche};
 use noyau::forme2d::{Geom};
 
 /// Directions des éléments passant par un point de référence, pour leurs guides.

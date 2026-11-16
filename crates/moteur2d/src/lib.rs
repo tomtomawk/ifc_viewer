@@ -1184,7 +1184,7 @@ mod mesure {
             p.ajouter_mur([5000.0, 0.0], c, &o).unwrap();
             let s = maillage::depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
             let visible = vec![true; s.objects.len()];
-            let prims = crate::dessin::coupe(&s, &visible, glam::Vec4::new(0.0, 0.0, 1.0, -1.0), 100.0, crate::dessin::Poche::Hachure);
+            let prims = crate::coupe(&s, &visible, glam::Vec4::new(0.0, 0.0, 1.0, -1.0), 100.0, crate::Poche::Hachure);
             let mut segs: Vec<[glam::DVec3; 2]> = Vec::new();
             for pr in prims.iter().filter(|p| p.role == noyau::trace2d::Role::Coupe) {
                 if let noyau::trace2d::Forme::Segments(v) = &pr.forme { segs.extend(v.iter().copied()); }

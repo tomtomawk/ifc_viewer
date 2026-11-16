@@ -53,7 +53,7 @@ mod viewport;
 mod commandes_pilote;
 use crate::config::options::Dimensions;
 use crate::rendu::camera::{Camera, MAX_PITCH};
-use crate::dessin::{self, Poche};
+use moteur2d::Poche;
 use ifc_base::semantique::pretty_type;
 use crate::pilote::{self, Requete};
 use crate::rendu::gpu::{FrameParams, ParamsPasse, Renderer, StyleVisuel};

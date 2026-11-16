@@ -37,7 +37,7 @@ fn accrocher_plan_construction(ed: &EditeurFamille, plan: &PlanConstruction, r: 
     if let [p] = points.as_slice() { geoms.push(Geom::Segment([*p, *p])); }
     let (h,v) = cadre.modele(q);
     let depart = points.last().copied();
-    if !maj && let Some((p, _)) = crate::dessin::dao::accrocher(DVec2::new(h,v), 7.0 / cadre.echelle, &geoms, depart) { return (p.x, p.y); }
+    if !maj && let Some((p, _)) = moteur2d::dao::accrocher(DVec2::new(h,v), 7.0 / cadre.echelle, &geoms, depart) { return (p.x, p.y); }
     if let Some(p) = depart && let Some((q, _)) = accrochage::contraindre(p.to_array(), [h,v], 0.0, maj, 1.0) { return (q[0], q[1]); }
     (h,v)
 }
@@ -507,11 +507,11 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
         }
     }
     let viser = |q: egui::Pos2, depart: Option<(f64, f64)>| -> ((f64, f64), AccrocheMur) {
-        use crate::dessin::dao::Accroche;
+        use moteur2d::dao::Accroche;
         let m = cadre.modele(q);
         let depuis = depart.map(|p| glam::DVec2::new(p.0, p.1));
         let guide = if curseur_guide == Some(q) && depart == depart_courant { point_guide } else { None };
-        if let Some((p, a)) = guide.or_else(|| (!maj).then(|| crate::dessin::dao::accrocher(glam::DVec2::new(m.0, m.1), tol, &geoms, depuis)).flatten()) {
+        if let Some((p, a)) = guide.or_else(|| (!maj).then(|| moteur2d::dao::accrocher(glam::DVec2::new(m.0, m.1), tol, &geoms, depuis)).flatten()) {
             let genre = match a {
                 Accroche::Extremite => AccrocheMur::Extremite,
                 Accroche::Milieu => AccrocheMur::Milieu,
@@ -955,7 +955,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             garder_multiple = true;
         }
         OutilFamille::Ligne | OutilFamille::Arc | OutilFamille::Spline | OutilFamille::Cercle | OutilFamille::Rectangle => {
-            use crate::dessin::dao::{EvenementTrace, Trace};
+            use moteur2d::dao::{EvenementTrace, Trace};
             use noyau::forme2d::{Forme2D};
             let outil = ed.outil.outil_dessin().expect("outil de dessin");
             let mut trace = ed.trace_polyligne.take().unwrap_or_else(|| Trace::new(outil));

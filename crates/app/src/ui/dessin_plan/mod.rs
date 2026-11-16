@@ -14,7 +14,7 @@ mod cotes_aretes;
 mod commandes_contour;
 mod courbures;
 use super::*;
-use crate::dessin::dao::{self as d2, Accroche, OutilDessin, Trace};
+use moteur2d::dao::{self as d2, Accroche, OutilDessin, Trace};
 use noyau::forme2d::{Geom};
 use commandes::Commande;
 use modele::documentation::{Annotation, AnnotationForme};
@@ -1063,7 +1063,7 @@ impl ViewerApp {
             // Les contours réellement coupés comprennent notamment les ouvertures et
             // les éléments qui ne disposent pas d'un contour natif en plan.
             let arcs: std::collections::HashSet<_> = p.murs.iter().filter(|m| matches!(m.axe, modele::Axe::Arc { .. })).map(|m| modele::identifiants::id_natif("mur", &m.id)).collect();
-            let mut traits = crate::dessin::coupe(scene, &self.visible, plan, self.echelle, crate::dessin::Poche::Vide);
+            let mut traits = moteur2d::coupe(scene, &self.visible, plan, self.echelle, moteur2d::Poche::Vide);
             traits.extend(self.aretes_au_dessus_plan());
             let point = |v: DVec3| (v + scene.origin).truncate() * 1000.0;
             for prim in traits {

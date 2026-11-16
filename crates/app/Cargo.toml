@@ -16,6 +16,7 @@ scene = { path = "../scene" }
 formats = { path = "../formats" }
 maillage = { path = "../maillage" }
 commandes = { path = "../commandes" }
+moteur2d = { path = "../moteur2d" }
 earcutr.workspace = true
 eframe.workspace = true
 glam.workspace = true
@@ -27,8 +28,6 @@ rfd.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_ignored.workspace = true
-svg2pdf.workspace = true
-pdf-writer.workspace = true
 uuid.workspace = true
 yrs.workspace = true
 

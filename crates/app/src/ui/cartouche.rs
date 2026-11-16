@@ -1,6 +1,6 @@
 //! Édition graphique du cartouche dans les vues de sa famille.
 use super::*;
-use crate::dessin::dao::{EvenementTrace, OutilDessin, Trace};
+use moteur2d::dao::{EvenementTrace, OutilDessin, Trace};
 use noyau::forme2d::{Forme2D, Geom};
 use modele::{Projet, documentation::{self as doc, AnnotationForme as F, FamilleCartouche, TexteCartouche}};
 use super::editeur_famille::{Cadre, NavigationFamille, VueFamille};

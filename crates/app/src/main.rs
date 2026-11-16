@@ -4,7 +4,6 @@ mod collaboration;
 #[cfg(test)]
 mod commandes_tests;
 mod config;
-mod dessin;
 mod echanges;
 #[cfg(test)]
 mod formats_tests;

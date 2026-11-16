@@ -113,8 +113,8 @@ pub(super) enum OutilFamille {
 impl OutilFamille {
     fn est_revolution(self) -> bool { matches!(self, Self::Revolution | Self::RevolutionVide) }
     pub(super) fn est_transformation(self) -> bool { matches!(self, Self::Deplacer | Self::Copier | Self::Tourner | Self::Symetrie | Self::Echelle) }
-    fn outil_dessin(self) -> Option<crate::dessin::dao::OutilDessin> {
-        use crate::dessin::dao::OutilDessin as D;
+    fn outil_dessin(self) -> Option<moteur2d::dao::OutilDessin> {
+        use moteur2d::dao::OutilDessin as D;
         match self { Self::Ligne => Some(D::Polyligne), Self::Arc => Some(D::Arc), Self::Spline => Some(D::Spline), Self::Cercle => Some(D::Cercle), Self::Rectangle => Some(D::Rectangle), _ => None }
     }
     /// Genre de cote de mesure saisi par l'outil.
@@ -196,7 +196,7 @@ pub(super) struct EditeurFamille {
     deplace: Option<String>,
     /// Sommets de l'esquisse en cours (verrouillés et résolus).
     esquisse: Vec<(PointEsquisse, (f64, f64))>,
-    trace_polyligne: Option<crate::dessin::dao::Trace>,
+    trace_polyligne: Option<moteur2d::dao::Trace>,
     saisie_trace: super::saisie_trace::SaisieTrace,
     reperage: super::reperage::Reperage,
     axe_revolution: Option<[[f64; 2]; 2]>,
@@ -553,7 +553,7 @@ impl EditeurFamille {
 
     /// Termine le tracé 2D avec le moteur commun, puis conserve les références de plans.
     fn terminer_polyligne(&mut self) {
-        use crate::dessin::dao::{EvenementTrace, OutilDessin, Trace};
+        use moteur2d::dao::{EvenementTrace, OutilDessin, Trace};
         use noyau::forme2d::{Forme2D};
         let mut trace = self.trace_polyligne.take().unwrap_or_else(|| Trace::new(OutilDessin::Polyligne));
         if let Some(Forme2D::Polyligne { fermee, .. }) = trace.appliquer(EvenementTrace::Terminer).into_iter().next() {
@@ -567,7 +567,7 @@ impl EditeurFamille {
     fn choisir_outil(&mut self, o: OutilFamille) {
         self.outil = if self.outil_disponible(o) { o } else { OutilFamille::Selection };
         self.abandonner_saisie();
-        if let Some(outil) = self.outil.outil_dessin() { self.trace_polyligne = Some(crate::dessin::dao::Trace::new(outil)); }
+        if let Some(outil) = self.outil.outil_dessin() { self.trace_polyligne = Some(moteur2d::dao::Trace::new(outil)); }
         if self.outil.est_transformation() { self.message = Some(self.invite_transformation().into()); }
         else if self.outil.est_revolution() { self.message = Some("Révolution : cliquer les deux points de l'axe, puis dessiner le profil fermé d'un seul côté de l'axe.".into()); }
         else if self.outil.est_forme() { self.message = Some("Dessiner le profil fermé. Clic droit ou retour au premier sommet pour terminer ; régler ensuite la forme dans Propriétés.".into()); }

@@ -23,7 +23,7 @@ impl ViewerApp {
         if nom=="mur_trace" {
             return Some((|| {
                 if !argument.is_empty() {
-                    use crate::dessin::dao::OutilDessin as D;
+                    use moteur2d::dao::OutilDessin as D;
                     let forme=match argument {"ligne"|"selection"=>D::Ligne,"rectangle"=>D::Rectangle,"arc"=>D::Arc,"cercle"=>D::Cercle,_=>return Err("mur_trace ligne|rectangle|arc|cercle|selection".into())};
                     self.activer_outil_pilote("mur")?;
                     self.ruban_edition.forme_mur=forme;
@@ -166,9 +166,9 @@ impl ViewerApp {
                         .iter()
                         .find(|f| f.id == id)
                         .ok_or("Feuille absente")?;
-                    let svg = crate::dessin::svg_feuille(p, f)?;
+                    let svg = moteur2d::svg_feuille(p, f)?;
                     let bytes = if format == "feuille_pdf" {
-                        crate::dessin::pdf(&svg)?
+                        moteur2d::pdf(&svg)?
                     } else {
                         svg.into_bytes()
                     };
@@ -355,7 +355,7 @@ impl ViewerApp {
                         )?
                         .into_bytes()
                     } else {
-                        crate::dessin::pdf(&self.dessin_vue()?.svg("Dessin"))?
+                        moteur2d::pdf(&self.dessin_vue()?.svg("Dessin"))?
                     };
                     crate::echanges::enregistrement::ecrire_atomique(&path, &bytes)?;
                     Ok(json!({"chemin":path,"octets":bytes.len()}))
