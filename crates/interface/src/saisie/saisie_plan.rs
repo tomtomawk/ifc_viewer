@@ -563,7 +563,7 @@ impl ViewerApp {
         }
         let sorte = if prm.elevation { "Élévation" } else { "Coupe" };
         let texte = if self.coupe_depart.is_some() { format!("{sorte} : cliquer la fin de la ligne · la vue regarde vers sa gauche · Échap : annuler") } else { format!("{sorte} ({}) : cliquer le début de la ligne", prm.type_vue) };
-        if self.error.is_none() { crate::socle::aides::annotation_vue(ui, rect, self.dessin2d.bas_barre, &texte, false); }
+        if !self.message_visible() { crate::socle::messages::consigne_vue(ui, rect, self.dessin2d.bas_barre, &texte); }
     }
 
     /// Comme dans Revit : sélectionner un élément du projet natif (sans outil en cours)

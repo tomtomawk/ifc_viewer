@@ -10,6 +10,7 @@ Rôle : état et services de l'application autour de `ViewerApp` (défini avec l
 | `soleil.rs` | lieu, date et heure du soleil, caméra de vue, mode piéton |
 | `fenetre.rs` | seul module public : `lancer` (appelé par `app`), `arriere_plan`, `cadre_natif` ; `include_bytes!("../../assets/icone.png")` |
 | `parametres.rs` | paramètres personnels, raccourcis clavier |
+| `messages.rs` | messages centralisés sous le bandeau de dessin : `informer`, `signaler` (information, avertissement, erreur), `afficher_messages`, `consigne_vue`, `origine_consigne` |
 | `aides.rs` | aides communes (icônes, libellés, réticule) ; importé en glob par `lib.rs` |
 | `commandes_pilote.rs`, `pilotage.rs` | exécution des requêtes du pilote MCP (`piloter`) |
 | `volets.rs` | palettes flottantes natives |

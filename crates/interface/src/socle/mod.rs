@@ -5,6 +5,7 @@ pub(crate) mod viewport;
 pub mod fenetre;
 pub(crate) mod parametres;
 pub(crate) mod aides;
+pub(crate) mod messages;
 pub(crate) mod commandes_pilote;
 pub(crate) mod pilotage;
 pub(crate) mod volets;

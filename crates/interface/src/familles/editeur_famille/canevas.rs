@@ -983,7 +983,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             let fermer = clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F));
             let terminer = resp.clicked_by(PointerButton::Secondary) || (clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter) || i.consume_key(egui::Modifiers::NONE, egui::Key::Space)));
             if !ed.saisie_trace.texte.is_empty() {
-                crate::socle::aides::annotation_vue(ui, rect, 32.0, &format!("Point : {} · Entrée pour valider · Tab pour l'angle", ed.saisie_trace.texte), false);
+                crate::socle::messages::consigne_vue(ui, rect, 32.0, &format!("Point : {} · Entrée pour valider · Tab pour l'angle", ed.saisie_trace.texte));
             }
             let mut point_verrouille = None;
             let evenement = if valider_saisie || (resp.clicked() && !ed.saisie_trace.texte.is_empty()) {

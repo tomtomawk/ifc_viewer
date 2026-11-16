@@ -241,7 +241,7 @@ impl ViewerApp {
             }
         }
         if crees > 0 {
-            self.confirmer(if crees == 1 { "Dessin enregistré".into() } else { format!("{crees} dessins enregistrés") });
+            self.informer(if crees == 1 { "Dessin enregistré".into() } else { format!("{crees} dessins enregistrés") });
         }
         self.bim.selection.clear();
     }
@@ -675,7 +675,7 @@ impl ViewerApp {
             if let Err(e) = self.appliquer_projet(projet) { self.dessin2d.message = Some(e); return; }
             self.bim.selection = ids;
             self.status = "Polyligne modifiée — Ctrl+S pour enregistrer.".into();
-            self.confirmer("Polyligne modifiée".into());
+            self.informer("Polyligne modifiée");
         } else if valider && matches!(usage, Some(Usage::Escalier | Usage::GardeCorps | Usage::Annotation)) && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation.is_some()) {
             let formes = self.dessin2d.dalle.iter().enumerate().map(|(i, c)| {
                 let fermee = self.dessin2d.edition_contour.as_ref().unwrap().fermee(i);

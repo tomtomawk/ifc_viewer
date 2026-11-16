@@ -197,7 +197,7 @@ impl EditionCartouche {
         if !face {
             painter.line_segment([cadre.ecran(0.0, 0.0), cadre.ecran(l, h)], egui::Stroke::new(1.5, ui.visuals().text_color()));
             crate::socle::aides::repere_origine_famille(&painter, cadre.ecran(0.0, 0.0));
-            crate::socle::aides::annotation_vue(ui, rect, 0.0, invite, false);
+            crate::socle::messages::consigne_vue(ui, rect, 0.0, invite);
             return rect;
         }
         let papier = egui::Rect::from_two_pos(cadre.ecran(0.0, 0.0), cadre.ecran(l, h));
@@ -231,9 +231,9 @@ impl EditionCartouche {
             if self.saisie_trace.texte.is_empty() { self.choisir_outil(None); } else { self.saisie_trace.vider(); self.erreur_saisie = None; }
         } else if let Some(outil) = outil_actif {
             let valider_saisie = self.trace.is_some() && self.saisie_trace.clavier(ui.ctx(), self.trace.as_ref().and_then(Trace::precedent).is_some());
-            if let Some(erreur) = &self.erreur_saisie { crate::socle::aides::annotation_vue(ui, rect, 58.0, erreur, true); }
+            if let Some(erreur) = &self.erreur_saisie { crate::socle::messages::erreur_vue(ui, rect, 58.0, erreur); }
             if !self.saisie_trace.texte.is_empty() {
-                crate::socle::aides::annotation_vue(ui, rect, 32.0, &format!("Point : {} · Entrée pour valider · Tab pour l'angle", self.saisie_trace.texte), false);
+                crate::socle::messages::consigne_vue(ui, rect, 32.0, &format!("Point : {} · Entrée pour valider · Tab pour l'angle", self.saisie_trace.texte));
             }
             let fermer = clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F));
             let terminer = r.secondary_clicked() || (clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter) || i.consume_key(egui::Modifiers::NONE, egui::Key::Space)));
@@ -345,7 +345,7 @@ impl EditionCartouche {
             }
         }
         crate::socle::aides::repere_origine_famille(&painter, cadre.ecran(0.0, 0.0));
-        crate::socle::aides::annotation_vue(ui, rect, 0.0, invite, false);
+        crate::socle::messages::consigne_vue(ui, rect, 0.0, invite);
         rect
     }
 }

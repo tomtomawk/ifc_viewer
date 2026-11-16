@@ -529,8 +529,8 @@ pub struct ViewerApp {
     loading: Option<Receiver<LoadMsg>>,
     partage_en_cours: bool,
     status: String,
-    /// Message de confirmation affiché quelques secondes en bas de la vue.
-    confirmation: Option<(String, std::time::Instant)>,
+    /// Information ou avertissement temporaire, affiché sous le bandeau de dessin.
+    message: crate::socle::messages::MessageTemporaire,
     error: Option<String>,
     camera: Camera,
     selected: Option<Id>,
@@ -762,7 +762,7 @@ impl ViewerApp {
             loading: None,
             partage_en_cours: false,
             status: "Ouvrir un fichier IFC ou Revit (Ctrl+O), ou le glisser dans la fenêtre.".into(),
-            confirmation: None,
+            message: None,
             error,
             camera: Camera::default(),
             selected: None,
@@ -1015,7 +1015,7 @@ impl eframe::App for ViewerApp {
             egui::CentralPanel::default().show(ui, |ui| {
                 let rect = ui.available_rect_before_wrap();
                 self.revit_view(ui);
-                self.annotation_erreur(ui, rect, 0.0);
+                self.afficher_messages(ui, rect, 0.0);
             });
         } else {
             // disposition de Revit par défaut : propriétés à gauche, arborescence du projet
@@ -1060,7 +1060,7 @@ impl eframe::App for ViewerApp {
                     self.viewport(ui);
                     if self.scene.is_some() { bas_barre = self.dessin2d.bas_barre; }
                 }
-                self.annotation_erreur(ui, rect, bas_barre);
+                self.afficher_messages(ui, rect, bas_barre);
             });
             for p in Panneau::TOUS.into_iter().filter(|p| ancrages[*p as usize] == Ancrage::Flottant) {
                 let i = p as usize;

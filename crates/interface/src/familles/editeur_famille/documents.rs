@@ -681,7 +681,7 @@ impl ViewerApp {
                 }
                 if annuler { ed.choisir_outil(OutilFamille::Selection); ed.message = None; }
             }
-            if let Some(m) = &ed.message { if rect.is_positive() { crate::socle::aides::annotation_vue(ui, rect, bas, m, false); } }
+            if let Some(m) = &ed.message { if rect.is_positive() { crate::socle::messages::consigne_vue(ui, rect, bas, m); } }
         });
     }
 

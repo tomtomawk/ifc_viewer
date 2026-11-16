@@ -51,7 +51,7 @@ impl ViewerApp {
         // sélection d'arêtes : la cote s'appuie sur les éléments et les suit
         let forme = self.lier_aretes(forme);
         match self.executer_bim(Commande::Annoter { annotation: Annotation { id: String::new(), vue, hauteur: HAUTEUR_TEXTE, forme } }) {
-            Ok(_) => self.confirmer("Cote créée".into()),
+            Ok(_) => self.informer("Cote créée"),
             Err(e) => self.error = Some(e),
         }
         self.bim.selection.clear();

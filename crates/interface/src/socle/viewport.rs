@@ -463,22 +463,6 @@ impl ViewerApp {
             ui.painter().image(id, rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
         }
         self.dessiner_poignees_annotation(ui, rect, mode_trace && !poignee_annotation);
-        // confirmation d'enregistrement : 2,5 s en bas de la vue
-        if let Some((texte, debut)) = &self.confirmation {
-            let age = debut.elapsed().as_secs_f32();
-            if age < 2.5 {
-                let alpha = ((2.5 - age) / 0.5).min(1.0);
-                let police = egui::FontId::proportional(13.0);
-                let galet = ui.fonts_mut(|f| f.layout_no_wrap(texte.clone(), police.clone(), Color32::WHITE));
-                let centre = egui::pos2(rect.center().x, rect.bottom() - 48.0);
-                let fond = egui::Rect::from_center_size(centre, galet.size() + egui::vec2(24.0, 12.0));
-                ui.painter().rect_filled(fond, 6.0, Color32::from_rgba_unmultiplied(40, 120, 60, (230.0 * alpha) as u8));
-                ui.painter().text(centre, egui::Align2::CENTER_CENTER, texte.as_str(), police, Color32::from_white_alpha((255.0 * alpha) as u8));
-                ui.ctx().request_repaint();
-            } else {
-                self.confirmation = None;
-            }
-        }
         if let Some(f) = self.fenetre_selection {
             f.dessiner(&ui.painter().with_clip_rect(rect));
         }
@@ -502,7 +486,7 @@ impl ViewerApp {
                 (_, None) => "Poutre : cliquer le départ · molette : zoom",
                 (_, Some(_)) => "Poutre : cliquer l'arrivée · Maj : orthogonal · Échap ou clic droit : annuler",
             };
-            if self.error.is_none() { crate::socle::aides::annotation_vue(ui, rect, self.dessin2d.bas_barre, texte, false); }
+            if !self.message_visible() { crate::socle::messages::consigne_vue(ui, rect, self.dessin2d.bas_barre, texte); }
             if let Some(alt) = altitude_structure {
                 let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.bim.depart_structure, alt));
                 if let Some((p, accroche)) = point {
@@ -523,7 +507,7 @@ impl ViewerApp {
                 format!("Attacher au toit : {} mur(s) choisi(s) · cliquer une toiture ou ajouter un mur", self.bim.murs_a_attacher.len())
             };
             let painter = ui.painter().with_clip_rect(rect);
-            if self.error.is_none() { crate::socle::aides::annotation_vue(ui, rect, self.dessin2d.bas_barre, &texte, false); }
+            if !self.message_visible() { crate::socle::messages::consigne_vue(ui, rect, self.dessin2d.bas_barre, &texte); }
             if let Some((projet, _)) = &self.natif {
                 for id in &self.bim.murs_a_attacher {
                     if let Some((a, b, _)) = projet.axe_element(id) {
@@ -544,7 +528,7 @@ impl ViewerApp {
             let painter = ui.painter().with_clip_rect(rect);
             let couleur = Color32::from_rgb(55, 130, 200);
             let texte = if composant { "Composant : cliquer pour placer · Espace : rotation de 90° · molette : zoom" } else if arbre { "Arbre : cliquer pour planter" } else { "Pièce : cliquer dans un espace fermé par des murs" };
-            if self.error.is_none() { crate::socle::aides::annotation_vue(ui, rect, self.dessin2d.bas_barre, texte, false); }
+            if !self.message_visible() { crate::socle::messages::consigne_vue(ui, rect, self.dessin2d.bas_barre, texte); }
             if let Some((p, accroche)) = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, false, None, altitude_placement)) {
                 if let Some(q) = self.ecran_plan(rect, p, altitude_placement) { marqueur(&painter, q, accroche, couleur, Color32::from_rgb(230, 120, 20)); }
                 if arbre {

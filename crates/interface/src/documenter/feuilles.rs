@@ -682,7 +682,7 @@ impl ViewerApp {
                 } else {
                     "Déposer une vue ou une nomenclature · Glisser le titre pour déplacer la feuille · Molette pour zoomer · Double-clic pour ouvrir une vue · Sélectionner un cartouche puis Modifier"
                 };
-                crate::socle::aides::annotation_vue(ui, rect, 0.0, aide, false);
+                crate::socle::messages::consigne_vue(ui, rect, 0.0, aide);
             }
             let curseur = if etat.glisse.is_some() || etat.glisse_feuille.is_some() {
                 Some(egui::CursorIcon::Grabbing)

@@ -60,11 +60,6 @@ pub(crate) fn segments_polyligne(points: &[[f64; 2]], fermee: bool) -> usize {
 const FENETRE: &str = "fenetre_types_traits";
 
 impl ViewerApp {
-    /// Message de confirmation en bas de la vue (quelques secondes).
-    pub(crate) fn confirmer(&mut self, texte: String) {
-        self.confirmation = Some((texte, std::time::Instant::now()));
-    }
-
     /// Types de trait des polylignes sélectionnées : un choix pour tous leurs segments,
     /// puis, pour une seule polyligne, un choix par segment. Retourne le projet modifié.
     pub(crate) fn traits_polylignes(&self, ui: &mut egui::Ui, projet: &Projet, ids: &[String]) -> Option<Projet> {
@@ -223,7 +218,7 @@ impl ViewerApp {
         q.types_traits = types;
         self.appliquer_projet(q)?;
         self.status = "Types de trait enregistrés.".into();
-        self.confirmer("Types de trait enregistrés".into());
+        self.informer("Types de trait enregistrés");
         Ok(())
     }
 }
