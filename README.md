@@ -173,7 +173,7 @@ Le dépôt est un workspace Cargo : l'application (crate `bimedit`) est dans `cr
 | `crates/commandes/src/` | Commandes d'édition, crate `commandes` : `socle/` (type `Commande`, exécution, historique, verrous, contextes), `modeliser/`, `modifier/`, `annoter/`, `documenter/` |
 | `crates/app/src/echanges/`, `collaboration/` | Import IFC/Revit, export IFC, enregistrement, rapport ; travail partagé |
 | `crates/moteur2d/src/` | Dessin 2D, crate `moteur2d` : coupe par un plan (`coupe.rs` : poché, hachures, contours), arêtes vues et cachées et sommets GPU (`vue.rs`), motifs (`motifs.rs` : isolant), outils de DAO (`dao.rs`), rendu de vue et de feuille SVG/PDF (`feuilles.rs`, `plans.rs`) |
-| `crates/app/src/rendu/` | Vue 3D : scène et picking (`scene/`), rendu wgpu (`gpu.rs`), caméra, repère des plans, sélection à l'écran |
+| `crates/moteur3d/src/` | Vue 3D : rendu wgpu (`gpu.rs`), ciel, caméra, repère des plans, sélection à l'écran, shaders `*.wgsl` |
 | `crates/app/src/ui/` | Interface egui : état et boucle (`mod.rs`), un fichier par zone (barre haute, panneaux, navigateur, vues, viewport, propriétés, sélection…), `ruban/`, `dessin_plan/` (saisie en plan), `editeur_famille/`, `bim/` |
 | `crates/app/src/pilote/` | Canal de commande local (TCP 127.0.0.1, jeton) du serveur MCP, registre des instances (`instances.rs`) et commandes en ligne (`cli.rs`) |
 | `crates/app/src/config/` | Options utilisateur, raccourcis |
@@ -246,7 +246,7 @@ physique du style Réaliste (ambiance, nuages, brume, intensités, taille du sol
 sol, exposition). Style, ombres, soleil et ciel sont enregistrés avec chaque vue
 (`rendus_vues` du projet, « 3d » pour la vue 3D).
 
-Le ciel (`crates/app/src/rendu/ciel.rs`) suit la méthode de Hillaire (EGSR 2020) et reprend en
+Le ciel (`crates/moteur3d/src/ciel.rs`) suit la méthode de Hillaire (EGSR 2020) et reprend en
 la réadaptant l'implémentation du module `atmosphere` de
 [Bevy](https://github.com/bevyengine/bevy) 0.20, distribué sous licence MIT ou
 Apache 2.0 (Copyright © Bevy Contributors).

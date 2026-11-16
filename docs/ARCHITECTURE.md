@@ -27,7 +27,7 @@ crates/
   app/            binaire `bimedit`
 ```
 
-Correspondance avec les dossiers actuels (après lot 7) : `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage`, `crates/commandes`, `crates/moteur2d` : extraits ; dans `crates/app/src/` : `rendu/` -> moteur3d ; `echanges/` -> echanges ; `collaboration/` et `collaboration.rs` -> collaboration ; `pilote/`, `config/` ; `ui/` -> interface ; `main.rs` -> app ; `modele_tests/`, `formats_tests/` et `commandes_tests/` : tests parqués, à répartir (§5.8 d, §5.11 d, §5.12 d, §5.13 d).
+Correspondance avec les dossiers actuels (après lot 8) : `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage`, `crates/commandes`, `crates/moteur2d`, `crates/moteur3d` : extraits ; dans `crates/app/src/` : `echanges/` -> echanges ; `collaboration/` et `collaboration.rs` -> collaboration ; `pilote/`, `config/` ; `ui/` -> interface ; `main.rs` -> app ; `modele_tests/`, `formats_tests/` et `commandes_tests/` : tests parqués, à répartir (§5.8 d, §5.11 d, §5.12 d, §5.13 d).
 
 ## 2. Graphe de dépendances autorisées
 
@@ -48,7 +48,7 @@ noyau <- modele <- ifc_base <- scene <- formats <- maillage <- commandes <- mote
 | maillage | noyau, modele, ifc_base, scene, formats (réel : exactement ces cinq, toutes utilisées directement, §5.12) |
 | commandes | noyau, modele, scene, maillage (réel : `noyau` et `modele` seuls ; `scene` et `maillage` restent autorisées mais ne sont pas des dépendances, §5.13) |
 | moteur2d | noyau, modele, scene, maillage, commandes (réel : `noyau`, `modele`, `scene`, `maillage` ; `commandes` reste autorisée sans être utilisée ; ni `formats` ni `ifc_base` ne sont nécessaires, §5.14) |
-| moteur3d | noyau, modele, scene, moteur2d |
+| moteur3d | noyau, modele, scene, moteur2d (réel : `noyau`, `modele`, `scene` ; `moteur2d` reste autorisée sans être utilisée ; `maillage` en dev-dependency pour un test ; externes : `eframe` (egui, egui_wgpu, wgpu), `glam`, `image`, `earcutr`, §5.15) |
 | echanges | noyau, modele, scene, formats, maillage |
 | collaboration | noyau, modele, scene, maillage, commandes, echanges |
 | pilote | collaboration et en dessous |
@@ -87,7 +87,7 @@ Code « parqué » : quand une coupe fait monter du code vers une crate qui n'ex
 | 5 | maillage | `rendu/natif.rs` seul (`depuis_natif`, `depuis_natif_verifie` ; `id_natif` et `numero_vue` sont dans `modele::identifiants` depuis le lot 2) ; les tests de `modele_tests`/`dessin` qui l'appellent restent parqués dans `app` (§5.12 d) | **Fable** | **fait** (coupe `f5c528d` ; extraction `525e9cb` ; détail au §5.12) |
 | 6 | commandes | `crates/app/src/edition` (commandes, historique, verrous, gestion des contextes ; traits d'extension de `Projet`, §5.8 b) ; décider où vont `concurrence` et `objets` (§5.5 point 5) ; rangement `modeliser/ modifier/ dessiner/ annoter/ documenter/` | **Fable** | **fait** (coupes `90be806` ; extraction `8f9e763` ; rangement par métier `0682940` ; détail au §5.13) |
 | 7 | moteur2d | `dessin/` dont le rendu de vue et de feuille parqué (`dessin/feuilles.rs`, `dessin/plans.rs`) | **Fable** | **fait** (aucune coupe nécessaire ; extraction `22e2c46` ; découpage de `lib.rs` `6405175` ; détail au §5.14) |
-| 8 | moteur3d | `rendu/` hors scène | Sonnet | à faire |
+| 8 | moteur3d | `rendu/` hors scène | Sonnet | **fait** (aucune coupe nécessaire ; extraction `d2686d2` ; `gpu.rs` non découpé ; détail au §5.15) |
 | 9 | echanges + collaboration | `crates/app/src/echanges`, `crates/app/src/collaboration*` | Sonnet | à faire |
 | 10 | pilote | `pilote/` | Sonnet | à faire |
 | 11 | config + interface | rangement interne `socle/ zones/ saisie/ outils/... ` ; `cadre_natif` et `arriere_plan` de `main.rs` | **Fable** | à faire |
@@ -530,7 +530,7 @@ Les 2 tests de `rendu/natif.rs` ont suivi le code (`cargo test -p maillage --rel
 | `modele_tests/volumes_solides.rs` | `conversion_ifc_rouvre_et_indices_invalides_refuses` | `edition`, `echanges::depuis_ifc` | echanges (lot 9) |
 | `edition/commandes/tests.rs` | `structures_creation_copie_rotation_suppression_et_validation` | `edition`, `echanges::{depuis_ifc, export_ifc}` (fichier entier) | commandes (lot 6) ou echanges (lot 9) selon le test |
 | `dessin/mod.rs` | `isolant_suit_le_mur_courbe_dans_la_coupe_native`, `ossature_coupee_en_plan_montants_et_travees`, `fenetre_coupee_piece_par_piece`, `angle_quelconque_sans_reste_d_onglet`, `isolant_d_un_mur_courbe_reel`, et les tests passant par le helper `scene_section` | `dessin` | moteur2d (lot 7) |
-| `rendu/selection_rectangle.rs` | `fenetre_croisement_visibilite_et_coupe` | `rendu` | moteur3d (lot 8) |
+| ~~`rendu/selection_rectangle.rs`~~ | `fenetre_croisement_visibilite_et_coupe` | `rendu` | moteur3d (lot 8) : a suivi le code, voir §5.15 d |
 
 #### (e) Violations restantes (lots 6 à 9)
 
@@ -680,3 +680,58 @@ Concernant `moteur2d` : **aucune**. Relevé par `grep` des chemins `crate::<modu
 | `commandes_tests`, `modele_tests`, `formats_tests` | commandes, maillage, formats, echanges, collaboration, moteur2d | tests parqués (§5.13 d, (d) ci-dessus) | 8 à 9 |
 
 Points ouverts : (1) déplacement des 6 tests de `modele_tests/documentation.rs` vers `crates/moteur2d/tests/` ; (2) `commandes` autorisée mais non utilisée par `moteur2d` au §2 (comme `scene`/`maillage` pour `commandes`, §5.13) ; (3) découpage des tests de `dao.rs`.
+
+### 5.15 Après lot 8 (2026-11-16)
+
+Tests : 390 réussis, 2 ignorés, comme avant le lot ; répartition `bimedit` 153 (avant : 165), `moteur3d` 12, `moteur2d` 34 (+ 1 ignoré), `commandes` 18, `formats` 52, `modele` 101 (+ 1 ignoré), `noyau` 10, `ifc_base` 2, `maillage` 8, `scene` 0. `cargo test -p moteur3d --release` passe seul (12). `grep -rn "crate::" crates/moteur3d/src` : 5 chemins, tous internes (`crate::ciel`, `crate::camera`). `cargo tree -p moteur3d` : aucune crate interne autre que `noyau`, `modele`, `scene` (+ `maillage` en dev). Le rendu GPU et l'interface n'ont pas pu être lancés (pas d'affichage) : `.wgsl` inchangés octet pour octet (`git diff -M` : 0 ligne), code GPU uniquement déplacé.
+
+#### (a) Contenu de `crates/moteur3d`
+
+Package `moteur3d` (lib, 4 068 lignes dont 1 171 de WGSL, 12 tests). Dépendances internes : `noyau` (`constantes::MAX_APPARENCES`), `modele` (`Apparence`, `CarteTexture`), `scene` (`Scene`, `Vertex`) ; dev : `maillage`, `modele`. Externes : `eframe` (egui, egui_wgpu, wgpu, naga des tests), `glam`, `image` (textures des apparences), `earcutr` (triangulation du rectangle de sélection) ; `image` et `earcutr` ne sont plus déclarées dans `app`.
+
+| Fichier (`crates/moteur3d/src/`) | Lignes | Contenu | Origine |
+|---|---|---|---|
+| `lib.rs` | 6 | déclaration des modules (tous `pub`) | `rendu/mod.rs` |
+| `gpu.rs` | 1 416 | `Renderer` (`new`, uploads, `paint`, `capture`), `FrameParams`, `StyleVisuel`, `CielRendu`, passes ; 2 tests de validation des shaders (naga) | `rendu/gpu.rs` |
+| `ciel.rs` | 453 | ciel physique (tables de transmittance et de diffusion, vue du ciel, `couleur_soleil`) ; 2 tests | `rendu/ciel.rs` |
+| `camera.rs` | 260 | `Camera`, `MAX_PITCH` ; 1 test | `rendu/camera.rs` |
+| `orientation_plan.rs` | 503 | repère des plans (egui) ; 5 tests | `rendu/orientation_plan.rs` |
+| `selection_rectangle.rs` | 259 | sélection par rectangle (egui) ; 2 tests | `rendu/selection_rectangle.rs` |
+| `scene.wgsl`, `commun.wgsl`, `ao.wgsl` | 1 008, 51, 112 | shaders, `include_str!` relatifs, inchangés | `rendu/*.wgsl` |
+
+Appelants dans `app` : 10 fichiers de `ui` (`crate::rendu::X` -> `moteur3d::X`, noms de modules inchangés : `gpu`, `camera`, `ciel`, `orientation_plan`, `selection_rectangle`). Aucun ré-export, aucune visibilité élargie.
+
+#### (b) Décisions de frontière
+
+| # | Sujet | Décision | Pourquoi |
+|---|---|---|---|
+| 1 | Coupes préalables (commit a) | aucune, pas de commit a | `rendu` n'avait aucune référence `crate::` hors de lui-même (ni `config`, `echanges`, `collaboration`, `ui`, `pilote`, `edition`) |
+| 2 | `egui`, `wgpu` | via `eframe.workspace = true` | `app` les obtient par `eframe` (`eframe::egui`, `eframe::wgpu`, `eframe::egui_wgpu`) ; aucun `egui`/`wgpu` au `[workspace.dependencies]` ; garder `eframe` évite de changer les versions et les features. Conséquence : moteur3d tire tout `eframe` ; la séparation fine (`egui`, `egui-wgpu`, `wgpu` directs) reste possible plus tard, à versions et features égales |
+| 3 | `moteur2d` | non déclarée (reste autorisée au §2) | aucun usage |
+| 4 | `maillage` | dev-dependency | seul le test `fenetre_croisement_visibilite_et_coupe` appelle `depuis_natif` |
+| 5 | `image`, `earcutr` | déclarées dans moteur3d, retirées d'`app` | seul `rendu` les appelait |
+| 6 | `COMMUN` du ciel et `COMMUN` de `gpu.rs` | inchangés | deux constantes homonymes de modules différents |
+
+Commentaire de `scene.wgsl` (« voir `rendu::ciel` ») laissé tel quel pour garder le shader identique ; le module s'appelle désormais `moteur3d::ciel`.
+
+#### (c) Fichiers au-delà du plafond
+
+`gpu.rs` (1 416 lignes) non découpé. `Renderer` est une structure de 66 champs privés avec un seul `impl` ; `new` fait environ 360 lignes (l. 320 à 682) et `rendre` environ 210. Un découpage par modules exigerait des `impl Renderer` répartis et des champs `pub(super)`, ou le découpage de `new` : changements de code, pas de simple déplacement. Seules les définitions de types et constantes (l. 13 à 317, ~300 lignes) se déplaceraient sans risque, ce qui ne ramène pas le fichier sous 600 lignes. `scene.wgsl` (1 008 lignes) : shader, non découpé (concaténation `COMMUN` + `SCENE` à préserver). Autres fichiers : sous 600 lignes (`orientation_plan.rs` 503, dont ~175 de tests).
+
+#### (d) Tests
+
+Les 12 tests de `rendu` ont suivi le code : `gpu.rs` 2, `ciel.rs` 2, `camera.rs` 1, `orientation_plan.rs` 5, `selection_rectangle.rs` 2 dont `fenetre_croisement_visibilite_et_coupe` (parqué depuis le lot 5 ; n'utilise que `modele`, `maillage`, `scene`, `glam`, `egui`). `bimedit` : 165 -> 153. Aucun test n'a dû rester dans `app` pour moteur3d. Les tests parqués des autres lots (`modele_tests`, `formats_tests`, `commandes_tests`, tableau du §5.12 d) sont inchangés.
+
+#### (e) Violations restantes (lots 9 à 11)
+
+Concernant `moteur3d` : **aucune**.
+
+| De | Vers | Détail | Lot |
+|---|---|---|---|
+| `collaboration` | echanges | 11 références ; sens autorisé | 9 |
+| `pilote` | echanges, collaboration | `cli.rs` ; sens autorisé | 10 |
+| `config` | echanges | 1 référence (`enregistrement`) ; sens autorisé | 11 |
+| `ui` | moteur3d, moteur2d, maillage, commandes, echanges, … | sens autorisé | 11 |
+| `modele_tests`, `formats_tests`, `commandes_tests` | commandes, maillage, formats, echanges, collaboration, moteur2d | tests parqués | 9 |
+
+Points ouverts : (1) décider si `egui`/`egui-wgpu`/`wgpu` deviennent des dépendances directes au lieu d'`eframe` (point 2 ci-dessus) ; (2) découpage de `gpu.rs` si le refactor de `Renderer::new` est accepté (changement de code) ; (3) le §5.4 prévoyait 14 tests pour `rendu` ; le décompte réel est 12.
