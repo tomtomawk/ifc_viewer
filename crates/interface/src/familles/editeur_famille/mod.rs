@@ -527,7 +527,7 @@ impl EditeurFamille {
         if !dh.is_finite() || !dv.is_finite() { return Err("Déplacement non fini.".into()); }
         let vue = self.vue.esquisse();
         let admissible = selection.iter().all(|s| match s {
-            SelectionFamille::Element2D(k) => self.famille.elements_2d.get(*k).is_some_and(|e| e.vue == vue && !crate::dessin_plan::poignees_forme(&e.forme).is_empty()),
+            SelectionFamille::Element2D(k) => self.famille.elements_2d.get(*k).is_some_and(|e| e.vue == vue && !crate::outils::dessiner::dessin_plan::poignees_forme(&e.forme).is_empty()),
             SelectionFamille::Symbole(k) => self.famille.symboles.get(*k).is_some_and(|s| s.vue == vue),
             SelectionFamille::Extrusion(k) => self.famille.extrusions.get(*k).is_some_and(|e| e.vue == vue && e.construction.is_none() && matches!(e.operation, OperationForme::Extrusion)),
             SelectionFamille::Volume(k) => *k < self.famille.volumes.len(),
@@ -537,7 +537,7 @@ impl EditeurFamille {
         let (ah, av) = self.vue.axes();
         for s in selection {
             match *s {
-                SelectionFamille::Element2D(k) => for p in crate::dessin_plan::points_forme_mut(&mut self.famille.elements_2d[k].forme) { p[0] += dh; p[1] += dv; },
+                SelectionFamille::Element2D(k) => for p in crate::outils::dessiner::dessin_plan::points_forme_mut(&mut self.famille.elements_2d[k].forme) { p[0] += dh; p[1] += dv; },
                 SelectionFamille::Symbole(k) => for p in &mut self.famille.symboles[k].points { p.h.decalage += dh; p.v.decalage += dv; },
                 SelectionFamille::Extrusion(k) => for p in &mut self.famille.extrusions[k].profil { p.h.decalage += dh; p.v.decalage += dv; },
                 SelectionFamille::Volume(k) => {

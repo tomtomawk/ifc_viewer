@@ -1,15 +1,15 @@
 //! Commandes du document BIM ; interface et pilote utilisent les mêmes transactions.
 
 mod modifier;
-pub use super::*;
+pub use crate::*;
 use commandes::Execution;
 use config::options::Dimensions;
 impl ViewerApp {
-    pub(super) fn parcourir_historique(&mut self, retablir: bool) {
+    pub(crate) fn parcourir_historique(&mut self, retablir: bool) {
         self.parcourir_historique_n(retablir, 1);
     }
 
-    pub(super) fn parcourir_historique_n(&mut self, retablir: bool, nombre: usize) {
+    pub(crate) fn parcourir_historique_n(&mut self, retablir: bool, nombre: usize) {
         if let Some(ed) = self.famille_plane_active.and_then(|i| self.familles_planes.get_mut(&i)) {
             match ed.parcourir_historique(retablir, nombre) {
                 Ok(()) => self.status = format!("Famille : {nombre} modification(s) {}.", if retablir { "rétablie(s)" } else { "annulée(s)" }),
@@ -89,7 +89,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn enregistrer_sous(&mut self) {
+    pub(crate) fn enregistrer_sous(&mut self) {
         if self.collaboration.is_some(){self.error=Some("La copie collaborative conserve son chemin local. Pour un export autonome, utilisez les commandes d'export ; pour un autre poste, associez une copie locale distincte.".into());return;}
         let Some((p, ancien)) = &self.natif else {
             return;
@@ -115,7 +115,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn finaliser_enregistrement_sous(&mut self, chemin: PathBuf) {
+    pub(crate) fn finaliser_enregistrement_sous(&mut self, chemin: PathBuf) {
         echanges::enregistrement::effacer_recuperation(&chemin);
         if let Some(scene) = &mut self.scene {
             scene.file_name = chemin
@@ -130,7 +130,7 @@ impl ViewerApp {
         self.error = None;
     }
 
-    pub(super) fn importer_dialogue(&mut self, ctx: &egui::Context) {
+    pub(crate) fn importer_dialogue(&mut self, ctx: &egui::Context) {
         let Some(source) = rfd::FileDialog::new()
             .set_title("Importer en nouveau projet natif")
             .add_filter("IFC / Revit", &["ifc", "rvt", "rfa", "rte"])
@@ -153,7 +153,7 @@ impl ViewerApp {
         self.importer_natif(source, sortie, ctx);
     }
 
-    pub(super) fn importer_natif(&mut self, source: PathBuf, sortie: PathBuf, ctx: &egui::Context) {
+    pub(crate) fn importer_natif(&mut self, source: PathBuf, sortie: PathBuf, ctx: &egui::Context) {
         if self.loading.is_some() {
             self.error = Some("Un chargement est déjà en cours.".into());
             return;
@@ -205,34 +205,34 @@ impl ViewerApp {
     }
 }
 
-pub(super) struct EtatBim {
+pub(crate) struct EtatBim {
     pub selection: Vec<String>,
     delta: [f64; 3],
     abscisse: f64,
-    pub(super) barre: modele::Barre,
-    pub(super) depart_structure: Option<[f64; 2]>,
+    pub(crate) barre: modele::Barre,
+    pub(crate) depart_structure: Option<[f64; 2]>,
     /// Composant à placer (type vide : type par défaut) et nom des pièces créées.
-    pub(super) composant: modele::Composant,
+    pub(crate) composant: modele::Composant,
     /// Arbre à placer (essence, hauteur, houppier, décalage).
-    pub(super) arbre: modele::elements::arbre::Arbre,
-    pub(super) nom_piece: String,
+    pub(crate) arbre: modele::elements::arbre::Arbre,
+    pub(crate) nom_piece: String,
     /// Famille d'étiquette des pièces créées ; vide : standard.
-    pub(super) etiquette_piece: String,
+    pub(crate) etiquette_piece: String,
     barre_editee: Option<modele::Barre>,
     pub(crate) annotation_identique: Option<modele::documentation::Annotation>,
     /// Suppression demandée depuis le panneau : exécutée à l'image suivante.
-    pub(super) supprimer: bool,
+    pub(crate) supprimer: bool,
     pub documentation: bool,
     pub nomenclature: usize,
     pub texte: String,
     pub points: [[f64; 2]; 2],
-    pub(super) attache_toiture_active: bool,
-    pub(super) murs_a_attacher: Vec<String>,
+    pub(crate) attache_toiture_active: bool,
+    pub(crate) murs_a_attacher: Vec<String>,
     priorite: i32,
     pub revision: u64,
     tableau_cache: Option<(u64, String, Result<Vec<Vec<String>>, String>)>,
     /// Origine du projet sélectionnée (trait invisible) : ses coordonnées dans Propriétés.
-    pub(super) origine: bool,
+    pub(crate) origine: bool,
 }
 impl Default for EtatBim {
     fn default() -> Self {
@@ -273,14 +273,14 @@ impl Default for EtatBim {
     }
 }
 impl ViewerApp {
-    pub(super) fn cle_native(&self, id: Id) -> Option<String> {
+    pub(crate) fn cle_native(&self, id: Id) -> Option<String> {
         let p = &self.natif.as_ref()?.0;
         elements_natifs(p)
             .find(|(genre, cle)| modele::identifiants::id_natif(genre, cle) == id)
             .map(|(_, cle)| cle.clone())
     }
     /// Objets de la scène dont l'élément natif est verrouillé.
-    pub(super) fn objets_verrouilles(&self) -> Vec<Id> {
+    pub(crate) fn objets_verrouilles(&self) -> Vec<Id> {
         let Some((p, _)) = &self.natif else { return Vec::new() };
         if p.verrous.is_empty() {
             return Vec::new();
@@ -289,13 +289,13 @@ impl ViewerApp {
     }
     /// Bouton Verrou du ruban : verrouille la sélection, ou la déverrouille si elle l'est
     /// déjà entièrement.
-    pub(super) fn basculer_verrou_selection(&mut self) {
+    pub(crate) fn basculer_verrou_selection(&mut self) {
         let ids = self.selection_bim();
         let tous = !ids.is_empty() && self.natif.as_ref().is_some_and(|(p, _)| ids.iter().all(|id| p.verrous.contains_key(id)));
         self.verrouiller_selection(!tous);
     }
     /// Verrouille ou déverrouille la sélection (ruban Modifier, CD / DC).
-    pub(super) fn verrouiller_selection(&mut self, verrou: bool) {
+    pub(crate) fn verrouiller_selection(&mut self, verrou: bool) {
         let ids = self.selection_bim();
         if ids.is_empty() {
             self.status = format!("{} : sélectionner d'abord un ou plusieurs éléments.", if verrou { "Verrouiller" } else { "Déverrouiller" });
@@ -309,7 +309,7 @@ impl ViewerApp {
     }
     /// Cadenas sur les éléments verrouillés ; un clic sur un cadenas déverrouille l'élément.
     /// Rend vrai si le clic a été consommé.
-    pub(super) fn dessiner_cadenas(&mut self, ui: &egui::Ui, rect: egui::Rect, clic: Option<egui::Pos2>) -> bool {
+    pub(crate) fn dessiner_cadenas(&mut self, ui: &egui::Ui, rect: egui::Rect, clic: Option<egui::Pos2>) -> bool {
         let objets = self.objets_verrouilles();
         if clic.is_none() {
             self.cadenas_ecran.clear();
@@ -360,7 +360,7 @@ impl ViewerApp {
     }
 }
 
-pub(super) fn elements_natifs(p: &modele::Projet) -> impl Iterator<Item = (&'static str, &String)> {
+pub(crate) fn elements_natifs(p: &modele::Projet) -> impl Iterator<Item = (&'static str, &String)> {
         p.murs
             .iter()
             .map(|x| ("mur", &x.id))
@@ -378,7 +378,7 @@ pub(super) fn elements_natifs(p: &modele::Projet) -> impl Iterator<Item = (&'sta
 impl ViewerApp {
     /// Deux commandes enchaînées (la seconde reçoit les identifiants rendus par la
     /// première), appliquées en une seule transaction : un seul Ctrl+Z.
-    pub(super) fn executer_bim_suite(
+    pub(crate) fn executer_bim_suite(
         &mut self,
         premiere: commandes::Commande,
         suite: impl FnOnce(Vec<String>) -> commandes::Commande,
@@ -393,7 +393,7 @@ impl ViewerApp {
         self.status = "Modification appliquée — Ctrl+Z pour annuler.".into();
         Ok(())
     }
-    pub(super) fn executer_bim(
+    pub(crate) fn executer_bim(
         &mut self,
         c: commandes::Commande,
     ) -> Result<Vec<String>, String> {
@@ -435,7 +435,7 @@ impl ViewerApp {
         self.status = "Modification appliquée — Ctrl+Z pour annuler.".into();
         Ok(ids)
     }
-    pub(super) fn selection_bim(&self) -> Vec<String> {
+    pub(crate) fn selection_bim(&self) -> Vec<String> {
         let mut ids = self.bim.selection.clone();
         if !ids.is_empty() {
             return ids;
@@ -481,7 +481,7 @@ impl ViewerApp {
             },
         }
     }
-    pub(super) fn placer_ouverture(&mut self, id: Id, point: [f64; 2]) {
+    pub(crate) fn placer_ouverture(&mut self, id: Id, point: [f64; 2]) {
         let resultat = (|| {
             let mut id = self.cle_native(id).ok_or("Sélectionnez un mur.")?;
             let p = &self.natif.as_ref().unwrap().0;
@@ -503,7 +503,7 @@ impl ViewerApp {
         }
     }
     /// Place le composant de l'outil au point `position`, au niveau de la vue.
-    pub(super) fn placer_arbre(&mut self, position: [f64; 2]) -> Result<(), String> {
+    pub(crate) fn placer_arbre(&mut self, position: [f64; 2]) -> Result<(), String> {
         let mut a = self.bim.arbre.clone();
         a.id.clear();
         a.nom.clear();
@@ -513,7 +513,7 @@ impl ViewerApp {
         Ok(())
     }
 
-    pub(super) fn placer_composant(&mut self, position: [f64; 2]) -> Result<(), String> {
+    pub(crate) fn placer_composant(&mut self, position: [f64; 2]) -> Result<(), String> {
         let mut c = self.bim.composant.clone();
         c.id.clear();
         c.nom.clear();
@@ -532,7 +532,7 @@ impl ViewerApp {
     }
 
     /// Crée une pièce au point `point` (contour détecté depuis les murs du niveau de la vue).
-    pub(super) fn placer_piece(&mut self, point: [f64; 2]) -> Result<(), String> {
+    pub(crate) fn placer_piece(&mut self, point: [f64; 2]) -> Result<(), String> {
         let niveau = self.niveau_vue_native().ok_or("Pièce : aucun niveau.")?;
         let piece = modele::Piece { id: String::new(), nom: self.bim.nom_piece.clone(), numero: String::new(), niveau, point, contour: Vec::new(), etiquette: self.bim.etiquette_piece.clone() };
         self.executer_bim(commandes::Commande::Piece { piece })?;
@@ -540,7 +540,7 @@ impl ViewerApp {
     }
 
     /// Réutilise les paramètres saisis, sans modifier le modèle tant que le placement n'est pas valide.
-    pub(super) fn placer_structure(
+    pub(crate) fn placer_structure(
         &mut self,
         debut: [f64; 2],
         fin: Option<[f64; 2]>,
@@ -567,7 +567,7 @@ impl ViewerApp {
 
     /// Supprime la sélection tout de suite (couches et ouvertures hébergées comprises),
     /// comme Revit ; Ctrl+Z la rétablit.
-    pub(super) fn demander_suppression(&mut self) {
+    pub(crate) fn demander_suppression(&mut self) {
         if self.supprimer_dans_jeu() {
             return;
         }
@@ -586,7 +586,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn creer_identique(&mut self) -> Result<(), String> {
+    pub(crate) fn creer_identique(&mut self) -> Result<(), String> {
         let ids = self.selection_bim();
         if ids.len() != 1 {
             return Err("Sélectionnez un seul élément pour créer à l'identique.".into());
@@ -691,7 +691,7 @@ impl ViewerApp {
 
     /// Phase, sous-projet et variante de la sélection, modifiables d'ici : « Varié » quand
     /// les éléments diffèrent. Retourne le projet modifié.
-    pub(super) fn contexte_selection(&self, ui: &mut egui::Ui, ids: &[String]) -> Option<modele::Projet> {
+    pub(crate) fn contexte_selection(&self, ui: &mut egui::Ui, ids: &[String]) -> Option<modele::Projet> {
         let (p, _) = self.natif.as_ref()?;
         // éléments portant le contexte : couches des assemblages, murs, dalles, autres
         let mut cibles: Vec<String> = Vec::new();
@@ -770,7 +770,7 @@ impl ViewerApp {
         Some(q)
     }
 
-    pub(super) fn panneau_bim(&mut self, ui: &mut egui::Ui) -> bool {
+    pub(crate) fn panneau_bim(&mut self, ui: &mut egui::Ui) -> bool {
         use commandes::Commande;
         use crate::zones::ruban::Outil;
         if self.natif.is_none() {
@@ -951,8 +951,8 @@ impl ViewerApp {
                                 });
                             }
                             F::Texte { point, texte } => {
-                                change |= crate::outils_texte::proprietes_texte(ui, texte, point, false, crate::outils_texte::CHAMPS_PROJET);
-                                change |= crate::outils_texte::hauteur_texte(ui, &mut annotation.hauteur);
+                                change |= crate::outils::annoter::outils_texte::proprietes_texte(ui, texte, point, false, crate::outils::annoter::outils_texte::CHAMPS_PROJET);
+                                change |= crate::outils::annoter::outils_texte::hauteur_texte(ui, &mut annotation.hauteur);
                             }
                             F::Etiquette { point, .. } => {
                                 ui.horizontal(|ui| {

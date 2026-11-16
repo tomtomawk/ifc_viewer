@@ -1038,8 +1038,8 @@ pub(crate) fn dessiner_etiquette(ui: &mut egui::Ui, famille: &mut doc::FamilleEt
         let mut supprimer = None;
         for (i, t) in famille.textes.iter_mut().enumerate() {
             ui.push_id(("texte_etiquette", i), |ui| {
-                crate::outils_texte::proprietes_texte(ui, &mut t.contenu, &mut t.position, true, crate::outils_texte::CHAMPS_PIECE);
-                crate::outils_texte::hauteur_texte(ui, &mut t.hauteur);
+                crate::outils::annoter::outils_texte::proprietes_texte(ui, &mut t.contenu, &mut t.position, true, crate::outils::annoter::outils_texte::CHAMPS_PIECE);
+                crate::outils::annoter::outils_texte::hauteur_texte(ui, &mut t.hauteur);
                 if ui.small_button("✕").clicked() { supprimer = Some(i); }
             });
         }

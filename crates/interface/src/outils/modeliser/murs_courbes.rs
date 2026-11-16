@@ -1,5 +1,5 @@
 //! Ligne de contrôle et poignées des murs courbes, sur leur implantation réelle.
-use super::*;
+use crate::*;
 use glam::DVec2;
 use modele::Axe;
 
@@ -44,12 +44,12 @@ fn ajuster_arc(axe: Axe, poignee: usize, curseur: DVec2, valeur: Option<f64>) ->
 }
 
 impl ViewerApp {
-    pub(super) fn arc_mur_selection(&self)->Option<(String,[DVec2;3],f64)> {
+    pub(crate) fn arc_mur_selection(&self)->Option<(String,[DVec2;3],f64)> {
         let ids=self.selection_bim();if ids.len()!=1 {return None;}
         let (axe,z)=self.natif.as_ref()?.0.trajectoire_justification(&ids[0])?;
         Some((ids[0].clone(),points_controle(axe)?,z))
     }
-    pub(super) fn souris_arc_mur(&mut self,ui:&egui::Ui,rect:egui::Rect,resp:&egui::Response,autre_outil:bool)->bool {
+    pub(crate) fn souris_arc_mur(&mut self,ui:&egui::Ui,rect:egui::Rect,resp:&egui::Response,autre_outil:bool)->bool {
         if autre_outil {self.dessin2d.arc_glisse=None;return false;}
         let Some((id,points,z))=self.arc_mur_selection() else {self.dessin2d.arc_glisse=None;return false};
         if resp.drag_started_by(PointerButton::Primary) {
@@ -99,7 +99,7 @@ impl ViewerApp {
         }
         actif
     }
-    pub(super) fn dessiner_axes_courbes(&mut self,ui:&mut egui::Ui,rect:egui::Rect,survol:Option<egui::Pos2>) {
+    pub(crate) fn dessiner_axes_courbes(&mut self,ui:&mut egui::Ui,rect:egui::Rect,survol:Option<egui::Pos2>) {
         let Some((p,_))=&self.natif else{return};
         let ids=self.selection_bim();
         let painter=ui.painter().with_clip_rect(rect);let bleu=Color32::from_rgb(40,120,210);

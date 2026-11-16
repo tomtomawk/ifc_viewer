@@ -667,7 +667,7 @@ impl ViewerApp {
                         if ed.outil == OutilFamille::Ligne {
                             use moteur2d::dao::OutilDessin;
                             let formes = [(OutilDessin::Polyligne, "Polyligne", "Cliquer les sommets ; Entrée ou clic droit pour terminer, F pour fermer.")];
-                            let (selectionner, _) = crate::dessin_plan::boutons_trace(ui, false, false, OutilDessin::Polyligne, &formes, None);
+                            let (selectionner, _) = crate::outils::dessiner::dessin_plan::boutons_trace(ui, false, false, OutilDessin::Polyligne, &formes, None);
                             if selectionner { ed.terminer_polyligne(); annuler = true; }
                         } else {
                             if ed.outil.est_forme() { valider = ui.button("✓ Valider").clicked(); }

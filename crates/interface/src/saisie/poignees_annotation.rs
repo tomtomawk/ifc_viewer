@@ -120,7 +120,7 @@ impl ViewerApp {
             && let Some(q) = ui.input(|i| i.pointer.press_origin())
         {
             let poignee = if ids.len() == 1 && let [annotation] = annotations.as_slice() {
-                crate::dessin_plan::poignees_forme(&annotation.forme).iter().position(|p| self.ecran_annotation(rect, *p).is_some_and(|e| e.distance(q) <= 8.0))
+                crate::outils::dessiner::dessin_plan::poignees_forme(&annotation.forme).iter().position(|p| self.ecran_annotation(rect, *p).is_some_and(|e| e.distance(q) <= 8.0))
                     .map(|indice| MouvementAnnotation::Poignee { annotation: annotation.clone(), indice })
             } else { None };
             let mouvement = poignee.or_else(|| {
@@ -141,7 +141,7 @@ impl ViewerApp {
         if active && let Some(point) = response.interact_pointer_pos().and_then(|q| self.point_annotation(rect, q))
             && let Some(glisse) = &mut self.poignee_annotation {
             match &mut glisse.mouvement {
-                MouvementAnnotation::Poignee { annotation, indice } => crate::dessin_plan::deplacer_poignee_forme(&mut annotation.forme, *indice, point),
+                MouvementAnnotation::Poignee { annotation, indice } => crate::outils::dessiner::dessin_plan::deplacer_poignee_forme(&mut annotation.forme, *indice, point),
                 MouvementAnnotation::Groupe { origine, delta, .. } => *delta = DVec2::from_array(point) - *origine,
             }
         }
@@ -165,7 +165,7 @@ impl ViewerApp {
         let annotations = match &self.poignee_annotation {
             Some(GlissementAnnotation { mouvement: MouvementAnnotation::Poignee { annotation, .. }, .. }) => vec![annotation.clone()],
             Some(GlissementAnnotation { mouvement: MouvementAnnotation::Groupe { annotations, delta, .. }, .. }) => annotations.iter().cloned().map(|mut a| {
-                for p in crate::dessin_plan::points_forme_mut(&mut a.forme) { p[0] += delta.x; p[1] += delta.y; }
+                for p in crate::outils::dessiner::dessin_plan::points_forme_mut(&mut a.forme) { p[0] += delta.x; p[1] += delta.y; }
                 a
             }).collect(),
             None => self.annotations_selectionnees().map(|(_, annotations)| annotations).unwrap_or_default(),
@@ -204,7 +204,7 @@ impl ViewerApp {
             }
         }
         if annotations.len() == 1 && self.selection_bim().len() == 1 {
-            for p in crate::dessin_plan::poignees_forme(&annotations[0].forme) {
+            for p in crate::outils::dessiner::dessin_plan::poignees_forme(&annotations[0].forme) {
                 if let Some(q) = self.ecran_annotation(rect, p) {
                     painter.rect(egui::Rect::from_center_size(q, egui::Vec2::splat(8.0)), 0.0, Color32::WHITE, egui::Stroke::new(1.5, bleu), egui::StrokeKind::Inside);
                 }

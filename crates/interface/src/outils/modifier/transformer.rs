@@ -4,17 +4,17 @@
 //! consigne au curseur, survol de la cible, aperçu fantôme, cotes temporaires, valeur
 //! tapée facultative (Entrée), une seule transaction à la validation, Échap ou clic
 //! droit pour revenir d'une étape.
-use super::*;
+use crate::*;
 use commandes::Commande;
 use modele::Axe;
 use crate::zones::ruban::Outil;
 
 /// Nombre d'éléments d'un réseau quand aucun n'est réglé.
-pub(super) const NOMBRE_RESEAU: usize = 4;
+pub(crate) const NOMBRE_RESEAU: usize = 4;
 
 /// État de la commande de modification en cours.
 #[derive(Default)]
-pub(super) struct Transformation {
+pub(crate) struct Transformation {
     /// Points cliqués (mm, plan du projet), dans l'ordre des étapes de la commande.
     pub points: Vec<[f64; 2]>,
     /// Tourner, réseau polaire : centre ; absent, celui de la sélection.
@@ -121,32 +121,32 @@ impl Transformation {
 }
 
 /// Angle signé (degrés, sens trigonométrique) de la direction centre→a à centre→b.
-pub(super) fn angle_deg(centre: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
+pub(crate) fn angle_deg(centre: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
     let (u, v) = ([a[0] - centre[0], a[1] - centre[1]], [b[0] - centre[0], b[1] - centre[1]]);
     (u[0] * v[1] - u[1] * v[0]).atan2(u[0] * v[0] + u[1] * v[1]).to_degrees()
 }
 
 /// Angle arrondi au multiple de `pas` (degrés) le plus proche.
-pub(super) fn accrocher_angle(angle: f64, pas: f64) -> f64 {
+pub(crate) fn accrocher_angle(angle: f64, pas: f64) -> f64 {
     (angle / pas).round() * pas
 }
 
 /// Point à `distance` de `base` dans la direction du curseur.
-pub(super) fn point_a_distance(base: [f64; 2], curseur: [f64; 2], distance: f64) -> Option<[f64; 2]> {
+pub(crate) fn point_a_distance(base: [f64; 2], curseur: [f64; 2], distance: f64) -> Option<[f64; 2]> {
     let (dx, dy) = (curseur[0] - base[0], curseur[1] - base[1]);
     let l = dx.hypot(dy);
     (l > 1e-9).then(|| [base[0] + dx / l * distance, base[1] + dy / l * distance])
 }
 
 /// Rotation d'un point autour de `centre` (degrés).
-pub(super) fn tourner_point(p: [f64; 2], centre: [f64; 2], angle: f64) -> [f64; 2] {
+pub(crate) fn tourner_point(p: [f64; 2], centre: [f64; 2], angle: f64) -> [f64; 2] {
     let (s, c) = angle.to_radians().sin_cos();
     let (x, y) = (p[0] - centre[0], p[1] - centre[1]);
     [centre[0] + x * c - y * s, centre[1] + x * s + y * c]
 }
 
 /// Image de `p` par la symétrie d'axe (a, b) ; `p` si l'axe est nul.
-pub(super) fn miroir_point(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> [f64; 2] {
+pub(crate) fn miroir_point(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> [f64; 2] {
     let (ux, uy) = (b[0] - a[0], b[1] - a[1]);
     let l2 = ux * ux + uy * uy;
     if l2 < 1e-18 {
@@ -158,7 +158,7 @@ pub(super) fn miroir_point(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> [f64; 2] {
 }
 
 /// Distance signée de `p` à la droite (a, b) : positive à gauche du sens a→b.
-pub(super) fn distance_signee(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
+pub(crate) fn distance_signee(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
     let (ux, uy) = (b[0] - a[0], b[1] - a[1]);
     let l = ux.hypot(uy).max(1e-12);
     (ux * (p[1] - a[1]) - uy * (p[0] - a[0])) / l
@@ -166,18 +166,18 @@ pub(super) fn distance_signee(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
 
 /// Angle tapé ou affiché (positif : sens horaire, négatif : antihoraire) ⇄ angle du
 /// modèle (sens trigonométrique). La conversion est sa propre inverse.
-pub(super) fn angle_tape(angle: f64) -> f64 {
+pub(crate) fn angle_tape(angle: f64) -> f64 {
     -angle
 }
 
 /// Valeur tapée : nombre décimal (virgule ou point).
-pub(super) fn lire_valeur(saisie: &str) -> Option<f64> {
+pub(crate) fn lire_valeur(saisie: &str) -> Option<f64> {
     saisie.replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
 impl ViewerApp {
     /// Outil de modification graphique actif dans l'onglet Modifier, s'il peut s'exécuter.
-    pub(super) fn outil_transformation(&self) -> Option<Outil> {
+    pub(crate) fn outil_transformation(&self) -> Option<Outil> {
         if self.onglet_ruban != OngletRuban::Modifier || self.natif.is_none() || self.loading.is_some() {
             return None;
         }
@@ -189,7 +189,7 @@ impl ViewerApp {
     }
 
     /// Synchronise l'état avec l'outil actif : un nouvel outil repart de zéro.
-    pub(super) fn suivre_transformation(&mut self) {
+    pub(crate) fn suivre_transformation(&mut self) {
         let outil = self.outil_transformation();
         if outil != self.transfo.outil {
             self.transfo.commencer(outil);
@@ -200,7 +200,7 @@ impl ViewerApp {
     }
 
     /// Centre de la sélection (milieu de l'emprise des axes et contours), en mm.
-    pub(super) fn centre_selection(&self) -> Option<[f64; 2]> {
+    pub(crate) fn centre_selection(&self) -> Option<[f64; 2]> {
         let (projet, _) = self.natif.as_ref()?;
         let ids = self.selection_bim();
         let mut pts: Vec<[f64; 2]> = Vec::new();
@@ -305,7 +305,7 @@ impl ViewerApp {
     /// Clic dans la vue pendant une commande. `cible` : élément natif sous le clic.
     /// Mur (ou mur composé) dont l'épaisseur contient `p` : cible d'un clic qui ne touche
     /// aucune face (bord du mur, vue en plan).
-    pub(super) fn mur_proche(&self, p: [f64; 2]) -> Option<String> {
+    pub(crate) fn mur_proche(&self, p: [f64; 2]) -> Option<String> {
         let (projet, _) = self.natif.as_ref()?;
         let ids = projet.murs.iter().filter(|m| m.assemblage.is_none()).map(|m| m.id.clone()).chain(projet.assemblages.iter().map(|a| a.id.clone()));
         ids.filter_map(|id| {
@@ -317,7 +317,7 @@ impl ViewerApp {
         }).min_by(|a, b| a.0.total_cmp(&b.0)).map(|(_, id)| id)
     }
 
-    pub(super) fn clic_transformation(&mut self, outil: Outil, p: [f64; 2], ecran: egui::Pos2, rect: egui::Rect, altitude: f64, maj: bool, cible: Option<String>) {
+    pub(crate) fn clic_transformation(&mut self, outil: Outil, p: [f64; 2], ecran: egui::Pos2, rect: egui::Rect, altitude: f64, maj: bool, cible: Option<String>) {
         let cible = cible.or_else(|| self.mur_proche(p));
         // centre déplaçable (Tourner, réseau polaire) : clic dessus, puis nouveau centre
         if self.transfo.polaire_avec_centre(outil) {
@@ -544,7 +544,7 @@ impl ViewerApp {
     }
 
     /// Entrée sans commande active : relance la dernière commande de modification.
-    pub(super) fn repeter_commande(&mut self, ctx: &egui::Context) {
+    pub(crate) fn repeter_commande(&mut self, ctx: &egui::Context) {
         if self.ruban_edition.outil().is_some() || self.saisie_active || ctx.egui_wants_keyboard_input() || self.parametres.is_some() {
             return;
         }
@@ -554,7 +554,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn relancer_commande(&mut self, o: Outil) {
+    pub(crate) fn relancer_commande(&mut self, o: Outil) {
         self.onglet_ruban = OngletRuban::Modifier;
         self.ruban_edition.activer_outil(o);
         self.status = format!("{} : commande relancée.", o.nom());
@@ -562,7 +562,7 @@ impl ViewerApp {
 
     /// Clavier : chiffres, virgule, signe moins, Retour arrière et Entrée pour une valeur
     /// tapée. Lu avant les raccourcis, uniquement quand l'étape attend une valeur.
-    pub(super) fn clavier_transformation(&mut self, ctx: &egui::Context) {
+    pub(crate) fn clavier_transformation(&mut self, ctx: &egui::Context) {
         self.suivre_transformation();
         let Some(outil) = self.transfo.outil else { return };
         if !self.transfo.attend_valeur(outil) || self.saisie_active {
@@ -629,7 +629,7 @@ impl ViewerApp {
 
     /// Aperçu de la commande : consigne au curseur, accrochage, cotes temporaires,
     /// fantôme de la sélection transformée, centre, axe, cible survolée.
-    pub(super) fn apercu_transformation(&mut self, ui: &egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>, altitude: f64) {
+    pub(crate) fn apercu_transformation(&mut self, ui: &egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>, altitude: f64) {
         let Some(outil) = self.transfo.outil else { return };
         let cible = self.transfo.cible.clone();
         let painter = ui.painter().with_clip_rect(rect);
@@ -890,7 +890,7 @@ impl ViewerApp {
     }
 
     /// État de la commande pour le pilote : étape, consigne, centre à l'écran.
-    pub(super) fn etat_transformation(&self) -> serde_json::Value {
+    pub(crate) fn etat_transformation(&self) -> serde_json::Value {
         let Some(outil) = self.transfo.outil else { return serde_json::Value::Null };
         let rect = self.rect_vue;
         let altitude = self.altitude_vue_native();
@@ -916,7 +916,7 @@ impl ViewerApp {
     }
 
     /// Réglage d'une option de la commande en cours par le pilote (comme la barre d'options).
-    pub(super) fn regler_transformation(&mut self, v: &serde_json::Value) -> Result<(), String> {
+    pub(crate) fn regler_transformation(&mut self, v: &serde_json::Value) -> Result<(), String> {
         self.suivre_transformation();
         let o = v.as_object().ok_or("options : objet JSON attendu")?;
         for (cle, val) in o {

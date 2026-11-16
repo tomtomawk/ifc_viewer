@@ -320,7 +320,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             let papier = matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Cartouche | modele::famille::modelee::CategorieFamille::EtiquettePiece);
             let taille = egui::FontId::proportional(if papier { (element.hauteur * cadre.echelle).clamp(3.0, 400.0) } else { (element.hauteur * 4.0).clamp(8.0, 48.0) } as f32);
             let couleur = if ed.choisi(&SelectionFamille::Element2D(indice)) { Color32::from_rgb(0, 100, 210) } else { Color32::from_gray(30) };
-            let apercu = crate::outils_texte::apercu_famille(texte, projet, ed.vue.nom(), ed.famille.categorie, ed.cible_feuille.as_deref(), ed.cible_piece.as_deref());
+            let apercu = crate::outils::annoter::outils_texte::apercu_famille(texte, projet, ed.vue.nom(), ed.famille.categorie, ed.cible_feuille.as_deref(), ed.cible_piece.as_deref());
             let rect_texte = painter.text(cadre.ecran(point[0], point[1]), egui::Align2::LEFT_BOTTOM, apercu, taille, couleur);
             textes_2d.push((indice, rect_texte.expand(5.0)));
         } else {
@@ -565,7 +565,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 }
                 SelectionFamille::Element2D(k) => {
                     if let Some(element) = ed.famille.elements_2d.get(k).filter(|e| e.vue == vue) {
-                        for (i, point) in crate::dessin_plan::poignees_forme(&element.forme).into_iter().enumerate() {
+                        for (i, point) in crate::outils::dessiner::dessin_plan::poignees_forme(&element.forme).into_iter().enumerate() {
                             poignees.push((Poignee::Element2D { k, i }, cadre.ecran(point[0], point[1]), false));
                         }
                     }
@@ -650,7 +650,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                     Poignee::Element2D { k, i } => {
                         let (h, v) = viser(q, None).0;
                         if let Some(forme) = ed.famille.elements_2d.get_mut(k).map(|e| &mut e.forme) {
-                            crate::dessin_plan::deplacer_poignee_forme(forme, i, [h, v]);
+                            crate::outils::dessiner::dessin_plan::deplacer_poignee_forme(forme, i, [h, v]);
                         }
                     }
                     Poignee::Face { k, axe, max } => {

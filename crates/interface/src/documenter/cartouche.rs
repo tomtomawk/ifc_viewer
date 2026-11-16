@@ -134,8 +134,8 @@ impl EditionCartouche {
         let Some(Element::Texte(i)) = self.selection else { return };
         let Some(texte) = f.textes.get_mut(i) else { return };
         ui.separator();
-        crate::outils_texte::proprietes_texte(ui, &mut texte.contenu, &mut texte.position, true, crate::outils_texte::CHAMPS_FEUILLE);
-        crate::outils_texte::hauteur_texte(ui, &mut texte.hauteur);
+        crate::outils::annoter::outils_texte::proprietes_texte(ui, &mut texte.contenu, &mut texte.position, true, crate::outils::annoter::outils_texte::CHAMPS_FEUILLE);
+        crate::outils::annoter::outils_texte::hauteur_texte(ui, &mut texte.hauteur);
     }
 
     pub(crate) fn supprimer(&mut self, f: &mut FamilleCartouche) {
@@ -170,7 +170,7 @@ impl EditionCartouche {
                 .fixed_pos(rect.left_top() + egui::vec2(8.0, 8.0)).constrain_to(rect)
                 .show(ui.ctx(), |ui| egui::Frame::popup(ui.style()).show(ui, |ui| ui.horizontal(|ui| {
                     let formes = [(OutilDessin::Polyligne, "Polyligne", "Cliquer les sommets ; Entrée ou clic droit pour terminer, F pour fermer.")];
-                    (selectionner, _) = crate::dessin_plan::boutons_trace(ui, false, false, OutilDessin::Polyligne, &formes, None);
+                    (selectionner, _) = crate::outils::dessiner::dessin_plan::boutons_trace(ui, false, false, OutilDessin::Polyligne, &formes, None);
                 })));
             if selectionner {
                 if let Some(trace) = &mut self.trace {
@@ -301,7 +301,7 @@ impl EditionCartouche {
                 if let Some(p) = positions_poignees(f, id).get(i).copied() {
                     let cible = (DVec2::from_array(p) + d).to_array();
                     if let Element::Forme(k) = id {
-                        if let Some(forme) = f.formes.get_mut(k) { crate::dessin_plan::deplacer_poignee_forme(forme, i, cible); }
+                        if let Some(forme) = f.formes.get_mut(k) { crate::outils::dessiner::dessin_plan::deplacer_poignee_forme(forme, i, cible); }
                     } else if let Some(point) = points_modifiables(f, id).into_iter().nth(i) { *point = cible; }
                 }
             } else {
@@ -401,7 +401,7 @@ fn touche(dessin: &crate::documenter::feuilles::Rendu, cadre: &Cadre, q: egui::P
 
 fn positions_poignees(f: &mut FamilleCartouche, id: Element) -> Vec<[f64; 2]> {
     if let Element::Forme(i) = id {
-        return f.formes.get(i).map(crate::dessin_plan::poignees_forme).unwrap_or_default();
+        return f.formes.get(i).map(crate::outils::dessiner::dessin_plan::poignees_forme).unwrap_or_default();
     }
     points_modifiables(f, id).into_iter().map(|p| *p).collect()
 }
@@ -410,7 +410,7 @@ fn points_modifiables(f: &mut FamilleCartouche, id: Element) -> Vec<&mut [f64; 2
     match id {
         Element::Trait(i) => f.traits.get_mut(i).into_iter().flatten().collect(),
         Element::Texte(i) => f.textes.get_mut(i).map(|t| &mut t.position).into_iter().collect(),
-        Element::Forme(i) => f.formes.get_mut(i).map(crate::dessin_plan::points_forme_mut).unwrap_or_default(),
+        Element::Forme(i) => f.formes.get_mut(i).map(crate::outils::dessiner::dessin_plan::points_forme_mut).unwrap_or_default(),
     }
 }
 

@@ -3,12 +3,12 @@ use config::options::Dimensions;
 use eframe::egui;
 
 /// Champs sélectionnables selon le document cible.
-pub(super) const CHAMPS_PROJET: &[(&str, &str)] = &[("{projet}", "Projet"), ("{vue}", "Nom de la vue")];
-pub(super) const CHAMPS_FEUILLE: &[(&str, &str)] = &[("{projet}", "Projet"), ("{feuille}", "Nom de la feuille"), ("{numero}", "Numéro"), ("{cartouche}", "Texte du cartouche"), ("{echelles}", "Échelles")];
-pub(super) const CHAMPS_PIECE: &[(&str, &str)] = &[("{nom}", "Nom"), ("{numero}", "Numéro"), ("{surface}", "Surface"), ("{perimetre}", "Périmètre"), ("{niveau}", "Niveau")];
+pub(crate) const CHAMPS_PROJET: &[(&str, &str)] = &[("{projet}", "Projet"), ("{vue}", "Nom de la vue")];
+pub(crate) const CHAMPS_FEUILLE: &[(&str, &str)] = &[("{projet}", "Projet"), ("{feuille}", "Nom de la feuille"), ("{numero}", "Numéro"), ("{cartouche}", "Texte du cartouche"), ("{echelles}", "Échelles")];
+pub(crate) const CHAMPS_PIECE: &[(&str, &str)] = &[("{nom}", "Nom"), ("{numero}", "Numéro"), ("{surface}", "Surface"), ("{perimetre}", "Périmètre"), ("{niveau}", "Niveau")];
 
 /// Les champs disponibles et l'unité du point dépendent du document.
-pub(super) fn proprietes_texte(ui: &mut egui::Ui, contenu: &mut String, position: &mut [f64; 2], papier: bool, champs: &[(&str, &str)]) -> bool {
+pub(crate) fn proprietes_texte(ui: &mut egui::Ui, contenu: &mut String, position: &mut [f64; 2], papier: bool, champs: &[(&str, &str)]) -> bool {
     let mut change = false;
     ui.label("Contenu");
     change |= ui.text_edit_singleline(contenu).changed();
@@ -30,7 +30,7 @@ pub(super) fn proprietes_texte(ui: &mut egui::Ui, contenu: &mut String, position
 }
 
 /// Hauteur imprimée d'un texte, en millimètres de papier.
-pub(super) fn hauteur_texte(ui: &mut egui::Ui, hauteur: &mut f64) -> bool {
+pub(crate) fn hauteur_texte(ui: &mut egui::Ui, hauteur: &mut f64) -> bool {
     let mut change = false;
     ui.horizontal(|ui| {
         ui.label("Hauteur du texte");
@@ -41,7 +41,7 @@ pub(super) fn hauteur_texte(ui: &mut egui::Ui, hauteur: &mut f64) -> bool {
 
 /// Aperçu fondé sur le contexte réellement associé à la famille ; les champs sans
 /// contexte restent visibles pour être identifiables pendant l'édition autonome.
-pub(super) fn apercu_famille(contenu: &str, projet: &modele::Projet, vue: &str, categorie: modele::famille::modelee::CategorieFamille, feuille: Option<&str>, piece: Option<&str>) -> String {
+pub(crate) fn apercu_famille(contenu: &str, projet: &modele::Projet, vue: &str, categorie: modele::famille::modelee::CategorieFamille, feuille: Option<&str>, piece: Option<&str>) -> String {
     use modele::famille::modelee::CategorieFamille as C;
     use modele::documentation::{remplir_champs, FamilleEtiquette};
     match categorie {

@@ -232,7 +232,7 @@ impl ViewerApp {
             if let AnnotationForme::Polyligne { points, fermee, traits, .. } = &mut forme
                 && !self.dessin2d.trait_creation.is_empty()
             {
-                *traits = vec![self.dessin2d.trait_creation.clone(); crate::types_traits::segments_polyligne(points, *fermee)];
+                *traits = vec![self.dessin2d.trait_creation.clone(); crate::outils::annoter::types_traits::segments_polyligne(points, *fermee)];
             }
             let annotation = Annotation { id: String::new(), vue: vue.clone(), hauteur: 2.5, forme };
             match self.executer_bim(Commande::Annoter { annotation }) {

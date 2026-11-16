@@ -4,22 +4,15 @@
 //! panneaux s'ancrent d'un côté ou flottent ; sous la vue, la boîte de visibilité par
 //! catégorie de modèle et d'annotation.
 
+mod outils;
 pub mod socle;
 mod zones;
 mod projet;
 mod documenter;
 mod familles;
 mod saisie;
-mod bim;
-mod outils_texte;
-mod types_traits;
-mod dessin_plan;
 use crate::saisie::accrochage::{AccrocheMur, marqueur};
-mod ajuster;
-mod murs_courbes;
-mod transformer;
 use crate::socle::aides::*;
-mod garde_corps;
 use config::options::Dimensions;
 use moteur3d::camera::{Camera, MAX_PITCH};
 use moteur2d::Poche;
@@ -472,11 +465,11 @@ impl Vol {
 }
 
 pub struct ViewerApp {
-    bim: bim::EtatBim,
+    bim: crate::outils::modeliser::bim::EtatBim,
     /// Jeu de feuilles ouvert : cadrage, sélection, dessins préparés.
     feuilles: crate::documenter::feuilles::EtatFeuilles,
     /// Dessin 2D (Documenter) : tracé, saisie, accrochage.
-    dessin2d: dessin_plan::EtatDessin2D,
+    dessin2d: crate::outils::dessiner::dessin_plan::EtatDessin2D,
     /// Éditeur de famille de fenêtre ouvert.
     famille: Option<crate::familles::editeur_famille::EditeurFamille>,
     /// Onglet de l'éditeur de familles au premier plan.
@@ -575,7 +568,7 @@ pub struct ViewerApp {
     /// Options de l'application (menu Début > Options).
     options: config::options::Options,
     parametres: Option<crate::socle::parametres::Parametres>,
-    ajustement: Option<ajuster::EtatAjustement>,
+    ajustement: Option<crate::outils::modifier::ajuster::EtatAjustement>,
     volets: [crate::socle::volets::FenetreVolet;2],
     filter: String,
     show_unsupported: bool,
@@ -625,7 +618,7 @@ pub struct ViewerApp {
     /// Niveau du plan ouvert à la dernière image : les outils de création en héritent.
     niveau_plan_precedent: Option<String>,
     ruban_edition: crate::zones::ruban::RubanEdition,
-    editeur_garde_corps: Option<garde_corps::EditeurGardeCorps>,
+    editeur_garde_corps: Option<crate::outils::modeliser::garde_corps::EditeurGardeCorps>,
     /// Zone de coupe 3D (min, max), repère de la scène ; appliquée aux vues 3D quand
     /// elle est active, modifiable par ses poignées dans toutes les vues.
     boite: Option<(Vec3, Vec3)>,
@@ -699,7 +692,7 @@ pub struct ViewerApp {
     /// Objets masqués rendus visibles par ce mode (dernier calcul de visibilité).
     objets_masques: HashSet<u32>,
     /// Commande de transformation en cours (Déplacer, Copier, Tourner, Aligner).
-    transfo: transformer::Transformation,
+    transfo: crate::outils::modifier::transformer::Transformation,
     /// Dernière commande de modification utilisée : Entrée ou clic droit la relance.
     derniere_commande: Option<crate::zones::ruban::Outil>,
     /// Poignée du milieu du mur en cours de glissement : mur, départ, position courante.

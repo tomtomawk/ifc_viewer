@@ -293,7 +293,7 @@ impl EditeurFamille {
             resultats.push(match s {
                 SelectionFamille::Element2D(k) => {
                     let mut forme = self.famille.elements_2d.get(*k).filter(|e| e.vue == vue).ok_or(AUTRE_VUE)?.forme.clone();
-                    let sommets = crate::dessin_plan::points_forme_mut(&mut forme);
+                    let sommets = crate::outils::dessiner::dessin_plan::points_forme_mut(&mut forme);
                     if sommets.is_empty() { return Err("Transformation impossible : un élément 2D sélectionné n'a pas de point modifiable.".into()); }
                     for p in sommets {
                         let q = transformation.point((p[0], p[1]));

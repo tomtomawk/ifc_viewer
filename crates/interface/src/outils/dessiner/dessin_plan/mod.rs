@@ -7,13 +7,13 @@
 mod saisie;
 mod affichage;
 mod options;
-pub(super) use options::boutons_trace;
+pub(crate) use options::boutons_trace;
 mod escalier;
 mod cotation;
 mod cotes_aretes;
 mod commandes_contour;
 mod courbures;
-use super::*;
+use crate::*;
 use moteur2d::dao::{self as d2, Accroche, OutilDessin, Trace};
 use noyau::forme2d::{Geom};
 use commandes::Commande;
@@ -21,7 +21,7 @@ use modele::documentation::{Annotation, AnnotationForme};
 use glam::{DVec2, DVec3};
 
 /// Points manipulables d'une annotation, communs aux éditeurs graphiques.
-pub(super) fn points_forme_mut(forme: &mut AnnotationForme) -> Vec<&mut [f64; 2]> {
+pub(crate) fn points_forme_mut(forme: &mut AnnotationForme) -> Vec<&mut [f64; 2]> {
     use modele::documentation::PointCote;
     match forme {
         AnnotationForme::Texte { point, .. } | AnnotationForme::Etiquette { point, .. } => vec![point],
@@ -36,7 +36,7 @@ pub(super) fn points_forme_mut(forme: &mut AnnotationForme) -> Vec<&mut [f64; 2]
 }
 
 /// Positions des poignées d'une annotation, y compris les points calculés.
-pub(super) fn poignees_forme(forme: &AnnotationForme) -> Vec<[f64; 2]> {
+pub(crate) fn poignees_forme(forme: &AnnotationForme) -> Vec<[f64; 2]> {
     if let AnnotationForme::Cercle { centre, rayon } = forme {
         return vec![*centre, [centre[0] + rayon, centre[1]]];
     }
@@ -45,7 +45,7 @@ pub(super) fn poignees_forme(forme: &AnnotationForme) -> Vec<[f64; 2]> {
 }
 
 /// Déplace une poignée ; le point de rayon ne déplace pas le centre du cercle.
-pub(super) fn deplacer_poignee_forme(forme: &mut AnnotationForme, indice: usize, position: [f64; 2]) {
+pub(crate) fn deplacer_poignee_forme(forme: &mut AnnotationForme, indice: usize, position: [f64; 2]) {
     if let AnnotationForme::Cercle { centre, rayon } = forme && indice == 1 {
         let r = DVec2::from_array(*centre).distance(DVec2::from_array(position));
         if r.is_finite() && r > 1e-6 { *rayon = r; }
@@ -74,7 +74,7 @@ mod tests_poignees_formes {
 /// et accroché), géométries d'accrochage de la vue (révision, vue).
 /// Limite haute d'un escalier en création.
 #[derive(Default, Clone, PartialEq)]
-pub(super) enum HautEscalier {
+pub(crate) enum HautEscalier {
     /// Premier niveau au-dessus de la base.
     #[default]
     Auto,
@@ -83,7 +83,7 @@ pub(super) enum HautEscalier {
 }
 
 #[derive(Default)]
-pub(super) struct EtatDessin2D {
+pub(crate) struct EtatDessin2D {
     /// Outil de la commande en cours et profondeur de l'historique à son démarrage :
     /// la croix Annuler défait tout ce que la commande a créé.
     commande_cle: Option<crate::zones::ruban::Outil>,
@@ -155,7 +155,7 @@ pub(super) struct EtatDessin2D {
     aretes_cache: Option<(u64, String, Vec<(String, usize, [DVec2; 2])>)>,
 }
 
-pub(super) struct EditionContour {
+pub(crate) struct EditionContour {
     id: String,
     creation: Option<Usage>,
     altitude: f64,
@@ -179,7 +179,7 @@ pub(super) struct EditionContour {
 
 /// Élément à tracé unique repris par Modifier.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum ElementTrace {
+pub(crate) enum ElementTrace {
     /// Tracé ouvert d'un garde-corps.
     GardeCorps,
     /// Contour fermé d'une limite de propriété.
@@ -259,7 +259,7 @@ impl EditionContour {
 
 /// Ce que produit le tracé.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum Usage {
+pub(crate) enum Usage {
     /// Annotations de la vue native ouverte.
     Annotation,
     /// Murs, suivant le type et les réglages de l'outil Mur.
@@ -276,7 +276,7 @@ pub(super) enum Usage {
 }
 
 /// Contour d'élément horizontal d'une forme fermée (cercle : 48 côtés).
-pub(super) fn contour_surface(f: &noyau::forme2d::Forme2D) -> Option<Vec<[f64; 2]>> {
+pub(crate) fn contour_surface(f: &noyau::forme2d::Forme2D) -> Option<Vec<[f64; 2]>> {
     let pts: Vec<DVec2> = match f {
         noyau::forme2d::Forme2D::Polyligne { points, .. } | noyau::forme2d::Forme2D::Spline { points, .. } if points.len() >= 3 => points.clone(),
         noyau::forme2d::Forme2D::Cercle { centre, rayon } => {
@@ -293,7 +293,7 @@ pub(super) fn contour_surface(f: &noyau::forme2d::Forme2D) -> Option<Vec<[f64; 2
 
 /// Lignes tracées des murs d'une forme : un mur par segment, un mur courbe par arc, deux
 /// demi-cercles pour un cercle.
-pub(super) fn axes_murs(f: &noyau::forme2d::Forme2D) -> Vec<modele::Axe> {
+pub(crate) fn axes_murs(f: &noyau::forme2d::Forme2D) -> Vec<modele::Axe> {
     use modele::Axe;
     let droit = |a: DVec2, b: DVec2| Axe::Droit { debut: a.to_array(), fin: b.to_array() };
     match f {
@@ -337,7 +337,7 @@ fn nom_outil(o: OutilDessin) -> &'static str {
 }
 
 impl ViewerApp {
-    pub(super) fn commande_ruban_contour(&mut self, outil: crate::zones::ruban::Outil) {
+    pub(crate) fn commande_ruban_contour(&mut self, outil: crate::zones::ruban::Outil) {
         use crate::zones::ruban::Outil;
         if outil == Outil::Supprimer { self.supprimer_trait_edition(); return; }
         let Some(e) = self.dessin2d.edition_contour.as_mut() else { return };
@@ -358,10 +358,10 @@ impl ViewerApp {
         e.depart = None;
         e.repere = None;
     }
-    pub(super) fn selection_traces_active(&self) -> bool {
+    pub(crate) fn selection_traces_active(&self) -> bool {
         self.dessin2d.edition_contour.as_ref().is_some_and(|e| !e.dessin)
     }
-    pub(super) fn objet_en_edition(&self) -> Option<(&str, bool)> {
+    pub(crate) fn objet_en_edition(&self) -> Option<(&str, bool)> {
         self.dessin2d.edition_contour.as_ref().map(|e| (e.id.as_str(), e.annotation.is_some()))
     }
     fn supprimer_trait_edition(&mut self) {
@@ -560,7 +560,7 @@ impl ViewerApp {
     }
 
     /// Terrain repris par Modifier tracé, pendant l'outil Terrain.
-    pub(super) fn terrain_en_edition(&self) -> Option<&str> {
+    pub(crate) fn terrain_en_edition(&self) -> Option<&str> {
         self.dessin2d.terrain_modifie.as_ref().filter(|_| self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain)).map(|(id, _)| id.as_str())
     }
 
@@ -627,7 +627,7 @@ impl ViewerApp {
         self.status = "Terrain : glisser les sommets et les points, cotes à côté de chacun · Entrée : valider · Échap : annuler".into();
     }
 
-    pub(super) fn commencer_edition_contour(&mut self) {
+    pub(crate) fn commencer_edition_contour(&mut self) {
         let ids = self.selection_bim();
         let Some((p, _)) = &self.natif else { return };
         if ids.len()==1 && (p.murs.iter().any(|m|m.id==ids[0])||p.assemblages.iter().any(|m|m.id==ids[0])) {
@@ -699,7 +699,7 @@ impl ViewerApp {
         ui.label(RichText::new("Polyligne").strong());
         egui::Grid::new("creation_polyligne").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
             ui.label("Type de trait").on_hover_text("Type de trait des segments de la polyligne créée ; chaque segment se change ensuite dans Modifier");
-            if let Some(id) = crate::types_traits::choix_type_trait(ui, "trait_creation", Some(&self.dessin2d.trait_creation), &types) {
+            if let Some(id) = crate::outils::annoter::types_traits::choix_type_trait(ui, "trait_creation", Some(&self.dessin2d.trait_creation), &types) {
                 self.dessin2d.trait_creation = id;
             }
             ui.end_row();
@@ -763,7 +763,7 @@ impl ViewerApp {
             }
             if let Some(actuel) = &trait_actuel {
                 ui.label("Type de trait");
-                choix_trait = crate::types_traits::choix_type_trait(ui, "trait_segment_edition", Some(actuel), &types);
+                choix_trait = crate::outils::annoter::types_traits::choix_type_trait(ui, "trait_segment_edition", Some(actuel), &types);
                 ui.end_row();
             }
             if let (Some(d), Some((cs, k))) = (&dalle, arete) {
@@ -819,13 +819,13 @@ impl ViewerApp {
     }
 
     /// Outil de dessin actif : annotation ou mur.
-    pub(super) fn outil_dessin(&self) -> Option<OutilDessin> {
+    pub(crate) fn outil_dessin(&self) -> Option<OutilDessin> {
         self.usage_dessin().map(|(_, o)| o)
     }
 
     /// Tracé actif et son usage : dessin 2D (Documenter, vue native ouverte) ou mur
     /// (Modéliser, projet natif chargé).
-    pub(super) fn usage_dessin(&self) -> Option<(Usage, OutilDessin)> {
+    pub(crate) fn usage_dessin(&self) -> Option<(Usage, OutilDessin)> {
         use crate::zones::ruban::Outil;
         if self.dessin2d.edition_contour.is_some() {
             if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.ligne()) { return Some((Usage::Annotation, OutilDessin::Polyligne)); }
@@ -874,7 +874,7 @@ impl ViewerApp {
     }
 
     /// Un tracé a des points en cours (les raccourcis et Suppr attendent).
-    pub(super) fn trace_en_cours(&self) -> bool {
+    pub(crate) fn trace_en_cours(&self) -> bool {
         self.dessin2d.trace.as_ref().is_some_and(|t| !t.points.is_empty())
     }
 
@@ -1103,7 +1103,7 @@ impl ViewerApp {
     }
 
     /// Extrémité de mur glissée : accrochages et cote depuis l'extrémité fixe.
-    pub(super) fn point_edition_axe(&mut self,ui:&egui::Ui,rect:egui::Rect,q:egui::Pos2,maj:bool,fixe:[f64;2],_origine:[f64;2])->Option<[f64;2]> {
+    pub(crate) fn point_edition_axe(&mut self,ui:&egui::Ui,rect:egui::Rect,q:egui::Pos2,maj:bool,fixe:[f64;2],_origine:[f64;2])->Option<[f64;2]> {
         let c=self.depuis_ecran(rect,q)?;
         let fixe=DVec2::from_array(fixe);
         let mut trace=Trace::new(OutilDessin::Ligne);
@@ -1116,7 +1116,7 @@ impl ViewerApp {
         Some(point.0.to_array())
     }
 
-    pub(super) fn terminer_edition_axe(&mut self) {
+    pub(crate) fn terminer_edition_axe(&mut self) {
         self.dessin2d.trace=None;
         self.dessin2d.point=None;
         self.dessin2d.geoms=None;
@@ -1126,7 +1126,7 @@ impl ViewerApp {
         self.dessin2d.reperage.survol_accroche=None;
         self.dessin2d.saisie.clear();
     }
-    pub(super) fn etat_accrochage(&self)->serde_json::Value {
+    pub(crate) fn etat_accrochage(&self)->serde_json::Value {
         serde_json::json!({"trace":self.dessin2d.trace.as_ref().map(|t|t.points.iter().map(|p|p.to_array()).collect::<Vec<_>>()),"reference":self.dessin2d.reperage.reference.map(|p|p.to_array()),"point":self.dessin2d.point.map(|(p,a)|serde_json::json!({"position":p.to_array(),"accroche":a.libelle()}))})
     }
 

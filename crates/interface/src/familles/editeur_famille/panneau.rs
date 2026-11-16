@@ -92,16 +92,16 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             use modele::documentation::AnnotationForme;
             use modele::famille::modelee::CategorieFamille;
             let champs = match ed.famille.categorie {
-                CategorieFamille::Cartouche => crate::outils_texte::CHAMPS_FEUILLE,
-                CategorieFamille::EtiquettePiece => crate::outils_texte::CHAMPS_PIECE,
-                _ => crate::outils_texte::CHAMPS_PROJET,
+                CategorieFamille::Cartouche => crate::outils::annoter::outils_texte::CHAMPS_FEUILLE,
+                CategorieFamille::EtiquettePiece => crate::outils::annoter::outils_texte::CHAMPS_PIECE,
+                _ => crate::outils::annoter::outils_texte::CHAMPS_PROJET,
             };
             let papier = matches!(ed.famille.categorie, CategorieFamille::Cartouche | CategorieFamille::EtiquettePiece);
             let element = &mut ed.famille.elements_2d[k];
             match &mut element.forme {
                 AnnotationForme::Texte { point, texte } => {
-                    crate::outils_texte::proprietes_texte(ui, texte, point, papier, champs);
-                    crate::outils_texte::hauteur_texte(ui, &mut element.hauteur);
+                    crate::outils::annoter::outils_texte::proprietes_texte(ui, texte, point, papier, champs);
+                    crate::outils::annoter::outils_texte::hauteur_texte(ui, &mut element.hauteur);
                 }
                 AnnotationForme::Polyligne { fermee, remplissage, .. } => {
                     if ui.checkbox(fermee, "Fermée").changed() && !*fermee { *remplissage = None; }

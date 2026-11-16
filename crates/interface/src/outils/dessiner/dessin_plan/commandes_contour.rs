@@ -49,7 +49,7 @@ pub(super) fn transformer_contours(
         C::Symetrie => {
             let Some(d) = depart else { return Ok(None) };
             if (p - d).length_squared() <= 1e-12 { return Ok(None); }
-            deplacer(&|q| DVec2::from_array(crate::transformer::miroir_point(q.to_array(), d.to_array(), p.to_array())));
+            deplacer(&|q| DVec2::from_array(crate::outils::modifier::transformer::miroir_point(q.to_array(), d.to_array(), p.to_array())));
         }
         C::Tourner | C::Echelle => {
             let (Some(centre), Some(repere)) = (depart, repere) else { return Ok(None) };

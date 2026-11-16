@@ -2,12 +2,12 @@
 //! d'une poutre), puis les extrémités visées. La ligne prolongée est la ligne de
 //! justification du mur (l'axe d'une poutre) : les raccords se font sur les faces.
 use commandes::Execution;
-use super::*;
+use crate::*;
 use commandes::Commande;
 use modele::Projet;
 
 #[derive(Default)]
-pub(super) struct EtatAjustement {
+pub(crate) struct EtatAjustement {
     pub reference: Option<String>,
     /// Arête limite choisie (plan, mm).
     ligne: Option<[[f64; 2]; 2]>,
@@ -127,14 +127,14 @@ fn commande_ajuster(id: &str, reference: &str, fin: bool, angle: Option<bool>, l
 }
 
 impl ViewerApp {
-    pub(super) fn etat_ajustement(&self) -> serde_json::Value {
+    pub(crate) fn etat_ajustement(&self) -> serde_json::Value {
         let a = self.ajustement.as_ref();
         let apercu = a.and_then(|a| a.apercu.as_ref());
         serde_json::json!({"actif":self.ruban_edition.outil()==Some(crate::zones::ruban::Outil::Ajuster),"angle":self.ruban_edition.prolonger_angle,"reference":a.and_then(|a|a.reference.as_ref()),"ligne":a.and_then(|a|a.ligne),"survol":a.and_then(|a|a.survol.as_ref()),
             "apercu":apercu.and_then(|r|r.as_ref().ok()).map(|p|serde_json::json!({"id":p.id,"fin":p.fin,"point":p.point})),
             "erreur":apercu.and_then(|r|r.as_ref().err())})
     }
-    pub(super) fn preparer_outil_ajuster(&mut self) -> bool {
+    pub(crate) fn preparer_outil_ajuster(&mut self) -> bool {
         let actif = self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Ajuster)
             && self.natif.is_some()
             && self.loading.is_none();
@@ -242,7 +242,7 @@ impl ViewerApp {
             .and_then(|(_, id)| candidat(id))
     }
 
-    pub(super) fn souris_ajuster(
+    pub(crate) fn souris_ajuster(
         &mut self,
         ui: &egui::Ui,
         rect: egui::Rect,
@@ -354,7 +354,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn dessiner_ajustement(&self, ui: &egui::Ui, rect: egui::Rect) {
+    pub(crate) fn dessiner_ajustement(&self, ui: &egui::Ui, rect: egui::Rect) {
         let Some(e) = &self.ajustement else { return };
         let Some((p, _)) = &self.natif else { return };
         let painter = ui.painter().with_clip_rect(rect);

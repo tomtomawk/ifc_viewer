@@ -2,7 +2,7 @@
 //! liste des éléments à gauche (poignées pour réordonner, profil, cote, matériau propre
 //! ou global), élévation à droite où lisses, main courante et limites du remplissage se
 //! glissent à la souris.
-use super::*;
+use crate::*;
 use config::options::Dimensions;
 use modele::unite::unite;
 use modele::elements::garde_corps::{BarreauExtremite, BarreauMotif, Lisse, Section};
@@ -32,7 +32,7 @@ enum Liste {
     Motif,
 }
 
-pub(super) struct EditeurGardeCorps {
+pub(crate) struct EditeurGardeCorps {
     brouillon: TypeGardeCorps,
     occurrence: Option<String>,
     creation: bool,
@@ -85,7 +85,7 @@ fn ajouter_type(p: &Projet, mut t: TypeGardeCorps) -> (Projet, String) {
 }
 
 impl ViewerApp {
-    pub(super) fn standard_garde_corps(&self) -> TypeGardeCorps {
+    pub(crate) fn standard_garde_corps(&self) -> TypeGardeCorps {
         let remplissage = match self
             .ruban_edition
             .texte_option(Outil::GardeCorps, 2)
@@ -104,7 +104,7 @@ impl ViewerApp {
     /// Sélecteur de type, comme celui des murs : types du projet, puis types
     /// prédéfinis (vitré, barreaudé…) copiés dans le projet au choix ; modifier ou
     /// dupliquer au survol, nouveau type en fin de liste.
-    pub(super) fn selecteur_garde_corps(&mut self, ui: &mut egui::Ui, ids: &[String]) -> bool {
+    pub(crate) fn selecteur_garde_corps(&mut self, ui: &mut egui::Ui, ids: &[String]) -> bool {
         use crate::zones::ruban::selecteur;
         let Some((p, _)) = &self.natif else {
             return false;
@@ -220,7 +220,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn ouvrir_type_garde_corps(
+    pub(crate) fn ouvrir_type_garde_corps(
         &mut self,
         occurrence: Option<&str>,
         type_id: Option<&str>,
@@ -276,7 +276,7 @@ impl ViewerApp {
         });
     }
 
-    pub(super) fn fenetre_garde_corps(&mut self, ctx: &egui::Context) {
+    pub(crate) fn fenetre_garde_corps(&mut self, ctx: &egui::Context) {
         let (Some(mut ed), Some((p, _))) = (self.editeur_garde_corps.take(), &self.natif) else {
             return;
         };

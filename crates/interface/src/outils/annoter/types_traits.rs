@@ -1,6 +1,6 @@
 //! Types de trait du dessin 2D : choix du type de chaque segment d'une polyligne, et
 //! fenêtre de gestion des types du projet (nom, épaisseur, tirets en mm du papier).
-use super::*;
+use crate::*;
 use crate::zones::communes::melange;
 use glam::DVec2;
 use modele::Projet;
@@ -8,7 +8,7 @@ use modele::documentation::{AnnotationForme, TypeTrait};
 
 /// Aperçu d'un type de trait dans `r` : épaisseur et tirets à l'échelle de l'écran
 /// (1 mm du papier ≈ 4 points).
-pub(super) fn apercu_trait(ui: &egui::Ui, r: egui::Rect, t: &TypeTrait) {
+pub(crate) fn apercu_trait(ui: &egui::Ui, r: egui::Rect, t: &TypeTrait) {
     let couleur = ui.visuals().text_color();
     let trait_ = egui::Stroke::new((t.epaisseur as f32 * 4.0).clamp(0.6, 6.0), couleur);
     let (a, b) = (DVec2::new(r.left() as f64, r.center().y as f64), DVec2::new(r.right() as f64, r.center().y as f64));
@@ -53,7 +53,7 @@ pub(crate) fn choix_type_trait(ui: &mut egui::Ui, salt: impl std::hash::Hash + s
 }
 
 /// Nombre de segments d'une polyligne.
-pub(super) fn segments_polyligne(points: &[[f64; 2]], fermee: bool) -> usize {
+pub(crate) fn segments_polyligne(points: &[[f64; 2]], fermee: bool) -> usize {
     points.len().saturating_sub(1) + usize::from(fermee && points.len() > 2)
 }
 
@@ -67,7 +67,7 @@ impl ViewerApp {
 
     /// Types de trait des polylignes sélectionnées : un choix pour tous leurs segments,
     /// puis, pour une seule polyligne, un choix par segment. Retourne le projet modifié.
-    pub(super) fn traits_polylignes(&self, ui: &mut egui::Ui, projet: &Projet, ids: &[String]) -> Option<Projet> {
+    pub(crate) fn traits_polylignes(&self, ui: &mut egui::Ui, projet: &Projet, ids: &[String]) -> Option<Projet> {
         let polylignes: Vec<(&str, Vec<[f64; 2]>, bool, Vec<String>, Vec<f64>)> = projet
             .annotations
             .iter()
@@ -134,7 +134,7 @@ impl ViewerApp {
     }
 
     /// Fenêtre des types de trait du projet : nom, épaisseur, tirets, aperçu.
-    pub(super) fn fenetre_types_traits(&mut self, ctx: &egui::Context) {
+    pub(crate) fn fenetre_types_traits(&mut self, ctx: &egui::Context) {
         let id = egui::Id::unique(FENETRE);
         type Etat = (Vec<TypeTrait>, Vec<String>, Option<String>);
         let Some((mut types, mut tirets, mut erreur)) = ctx.data(|d| d.get_temp::<Etat>(id)) else { return };
@@ -229,7 +229,7 @@ impl ViewerApp {
 }
 
 /// Ouvre la fenêtre des types de trait sur ceux du projet.
-pub(super) fn ouvrir_fenetre_types(ctx: &egui::Context, projet: &Projet) {
+pub(crate) fn ouvrir_fenetre_types(ctx: &egui::Context, projet: &Projet) {
     let types = projet.types_traits.clone();
     let tirets: Vec<String> = types.iter().map(|t| t.tirets.iter().map(|x| format!("{x}")).collect::<Vec<_>>().join(" ")).collect();
     ctx.data_mut(|d| d.insert_temp(egui::Id::unique(FENETRE), (types, tirets, None::<String>)));
