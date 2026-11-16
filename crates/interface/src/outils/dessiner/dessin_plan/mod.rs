@@ -10,6 +10,7 @@ mod options;
 pub(crate) use options::boutons_trace;
 mod commandes_contour;
 mod courbures;
+mod suivre_trait;
 use crate::*;
 use moteur2d::dao::{self as d2, Accroche, OutilDessin, Trace};
 use noyau::forme2d::{Geom};

@@ -280,6 +280,14 @@ impl ViewerApp {
         if self.ruban_edition.selection_mur && self.usage_dessin().is_some_and(|(u,_)|u==Usage::Mur) {
             if self.dessin2d.dernier_usage!=Some(Usage::Mur) {self.dessin2d.vider_contours();}
             self.dessin2d.dernier_usage=Some(Usage::Mur);
+            // Suivre un trait : Ctrl seul change l'implantation suivie, Espace inverse le
+            // côté ; l'aperçu (apercu_volume_murs) les relit à l'image suivante.
+            if !ctx.egui_wants_keyboard_input() {
+                let (justifier, inverser) = super::suivre_trait::raccourcis(ctx, &mut self.dessin2d.controle_seul);
+                if justifier { self.ruban_edition.implantation_suivante(); }
+                if inverser { self.ruban_edition.sens_inverse = !self.ruban_edition.sens_inverse; }
+                if justifier || inverser { ctx.request_repaint(); }
+            }
             return;
         }
         if self.poignee_axe.is_some() || self.dessin2d.arc_glisse.is_some() {
