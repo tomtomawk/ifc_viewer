@@ -69,7 +69,7 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::Arc;
 
 enum LoadMsg {
-    Partage(Result<(Box<Scene>, modele::Projet, PathBuf, crate::collaboration::session::Session), String>, Option<usize>),
+    Partage(Result<(Box<Scene>, modele::Projet, PathBuf, ::collaboration::session::Session), String>, Option<usize>),
     Natif(Result<(Box<Scene>, modele::Projet, PathBuf), String>),
     Progress(String),
     Done(Result<Box<Scene>, String>),
@@ -428,7 +428,7 @@ impl FenetreSelection {
 struct DocumentOuvert {
     natif: Option<(modele::Projet, PathBuf)>,
     historique: commandes::historique::Historique,
-    collaboration: Option<crate::collaboration::session::Session>,
+    collaboration: Option<::collaboration::session::Session>,
     modifie: bool,
     scene: Option<Scene>,
     rvt: Option<RvtInfo>,
@@ -523,7 +523,7 @@ pub struct ViewerApp {
     confirmer_famille: bool,
     natif: Option<(modele::Projet, PathBuf)>,
     historique: commandes::historique::Historique,
-    collaboration: Option<crate::collaboration::session::Session>,
+    collaboration: Option<::collaboration::session::Session>,
     natif_modifie: bool,
     /// Repère du plan : le prochain clic choisit l'arête à mettre à l'horizontale.
     alignement_plan: bool,

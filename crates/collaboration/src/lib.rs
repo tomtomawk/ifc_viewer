@@ -19,7 +19,7 @@ pub const PROTOCOLE: u32 = 3;
 pub fn protocole_lisible(v: u32) -> bool {
     matches!(v, 1 | 2 | 3)
 }
-pub use commandes::objets::{Objets, objets};
+use commandes::objets::{Objets, objets};
 #[cfg(test)]
 use commandes::objets::COLLECTIONS;
 pub type Resultat<T> = Result<T, String>;
@@ -148,7 +148,7 @@ impl Index {
                 continue;
             }
             let mut entrees = Vec::new();
-            if cible && k.strip_prefix("@/").is_some_and(concurrence::carte_objet) {
+            if cible && k.strip_prefix("@/").is_some_and(commandes::objets::carte_objet) {
                 for (id, v) in v.as_object().into_iter().flatten() {
                     entrees.push((format!("{k}/{id}"), v, Some(id)));
                 }

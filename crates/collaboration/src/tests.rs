@@ -12,7 +12,7 @@ fn dossier() -> PathBuf {
 }
 fn exemple() -> Projet {
     let mut p =
-        Projet::lire_json(include_str!("../../../../samples/maison_native.modele.json")).unwrap();
+        Projet::lire_json(include_str!("../../../samples/maison_native.modele.json")).unwrap();
     // La fixture n'est jamais modifiée sur disque.
     p.identite = uuid();
     p.verifier().unwrap();
@@ -67,7 +67,7 @@ fn identites_distribuees_et_migration_preserve_les_objets() {
         })
         .unwrap();
     assert_ne!(a.1, b.1);
-    let ancien = include_str!("../../../../samples/maison_native.modele.json");
+    let ancien = include_str!("../../../samples/maison_native.modele.json");
     let a = Projet::lire_json(ancien).unwrap();
     let b = Projet::lire_json(ancien).unwrap();
     assert_eq!(a.identite, b.identite);
@@ -383,7 +383,7 @@ fn course_entre_deux_processus_et_controle_non_remplacable() {
             std::process::Command::new(&exe)
                 .args([
                     "--exact",
-                    "collaboration::tests::enfant_reservation",
+                    "tests::enfant_reservation",
                     "--nocapture",
                 ])
                 .env("BIMEDIT_TEST_DEPOT", &root)
@@ -456,7 +456,7 @@ fn crash_processus_aux_frontieres_et_resultat_incertain() {
         let statut = std::process::Command::new(&exe)
             .args([
                 "--exact",
-                "collaboration::tests::enfant_publication",
+                "tests::enfant_publication",
             ])
             .env("BIMEDIT_TEST_DEPOT", &root)
             .env("BIMEDIT_TEST_CRASH", point)
@@ -489,7 +489,7 @@ fn instantane_et_publication_dans_deux_processus() {
     let mut publication = std::process::Command::new(&exe)
         .args([
             "--exact",
-            "collaboration::tests::enfant_publication",
+            "tests::enfant_publication",
         ])
         .env("BIMEDIT_TEST_DEPOT", &root)
         .spawn()
@@ -497,7 +497,7 @@ fn instantane_et_publication_dans_deux_processus() {
     let mut instantane = std::process::Command::new(&exe)
         .args([
             "--exact",
-            "collaboration::tests::enfant_publication",
+            "tests::enfant_publication",
         ])
         .env("BIMEDIT_TEST_DEPOT", &root)
         .env("BIMEDIT_TEST_SNAPSHOT", "1")
@@ -1371,7 +1371,7 @@ fn abandon_refuse_pendant_synchro_et_retire_de_l_annulation() {
 
 #[test]
 fn toutes_les_collections_du_projet_ont_une_politique() {
-    let source = include_str!("../../../modele/src/lib.rs");
+    let source = include_str!("../../modele/src/lib.rs");
     let projet = source.split("pub struct Projet {").nth(1).unwrap().split("\n}").next().unwrap();
     let champs: std::collections::BTreeSet<_> = projet.lines().filter_map(|l| {
         let l = l.trim().strip_prefix("pub ")?;

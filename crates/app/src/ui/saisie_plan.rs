@@ -675,7 +675,7 @@ impl ViewerApp {
         }
         projet.verifier()?;
         // comparaison des objets : utile seulement en collaboration
-        let texte_seul = self.collaboration.is_some() && crate::collaboration::objets(&projet)? == crate::collaboration::objets(&self.natif.as_ref().unwrap().0)?;
+        let texte_seul = self.collaboration.is_some() && commandes::objets::objets(&projet)? == commandes::objets::objets(&self.natif.as_ref().unwrap().0)?;
         noyau::chrono::chrono("application : vérifications", &mut t_etape);
         let debut_geometrie=std::time::Instant::now();
         let scene_preparee = if texte_seul && self.collaboration.is_some() { None } else { Some(maillage::depuis_natif_verifie(&projet, &chemin)?) };

@@ -41,12 +41,12 @@ impl ViewerApp {
                     let _ = tx.send(LoadMsg::Progress(s));
                     ctx.request_repaint();
                 };
-                if crate::collaboration::partage::extension_partage(&path) {
+                if ::collaboration::partage::extension_partage(&path) {
                     let res=Self::charger_partage(&path,&progress);
                     let _=tx.send(LoadMsg::Partage(res,None));
                 } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")) {
                     match std::fs::read_to_string(if restaurer{&recuperation}else{&path}).map_err(|e|format!("Lecture impossible : {e}")) {
-                        Ok(json) if crate::collaboration::partage::contenu_partage(&json)=>{let _=tx.send(LoadMsg::Partage(Self::charger_partage(&path,&progress),None));},
+                        Ok(json) if ::collaboration::partage::contenu_partage(&json)=>{let _=tx.send(LoadMsg::Partage(Self::charger_partage(&path,&progress),None));},
                         texte=>{
                             let res=texte.and_then(|json|modele::Projet::lire_json(&json))
                                 .and_then(|projet|maillage::depuis_natif(&projet,&path).map(|scene|(Box::new(scene),projet,path)));

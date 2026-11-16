@@ -393,7 +393,7 @@ impl ViewerApp {
                     } else {
                         let ids: Vec<String> = lire(argument)?;
                         let p = &self.natif.as_ref().ok_or("Projet natif requis")?.0;
-                        let objets = crate::collaboration::objets(p)?;
+                        let objets = commandes::objets::objets(p)?;
                         let mut cles = Vec::new();
                         for id in ids {
                             let cle = objets

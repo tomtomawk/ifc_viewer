@@ -42,8 +42,8 @@ fn gabarit_partage_actualise_detache_et_se_recharge() {
     let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
     assert_eq!(relu.gabarit_vue(&b).unwrap().echelle, 75.0);
     assert!(relu.gabarit_vue(&a).is_none());
-    use crate::collaboration;
-    let objets = collaboration::objets(&p).unwrap();
+    use collaboration;
+    let objets = commandes::objets::objets(&p).unwrap();
     let partage = collaboration::projet(&objets).unwrap();
     assert_eq!(partage.gabarit_vue(&b).unwrap(), p.gabarit_vue(&b).unwrap());
     assert_eq!(partage.contextes_vues[&b], p.contextes_vues[&b]);

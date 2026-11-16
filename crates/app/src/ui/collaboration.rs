@@ -1,6 +1,6 @@
 //! Parcours Collaborer / Ouvrir un projet partagé et commandes du ruban Sortie.
 use super::*;
-use crate::collaboration::{self as collab, partage, session::Session};
+use ::collaboration::{partage, session::Session};
 
 impl ViewerApp {
     pub(super) fn charger_partage(
@@ -129,7 +129,7 @@ impl ViewerApp {
         let ids = self.selection_bim();
         self.natif
             .as_ref()
-            .and_then(|(p, _)| collab::objets(p).ok())
+            .and_then(|(p, _)| commandes::objets::objets(p).ok())
             .into_iter()
             .flat_map(|o| {
                 o.into_iter()
