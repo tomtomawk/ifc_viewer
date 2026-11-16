@@ -55,7 +55,7 @@ use crate::config::options::Dimensions;
 use moteur3d::camera::{Camera, MAX_PITCH};
 use moteur2d::Poche;
 use ifc_base::semantique::pretty_type;
-use crate::pilote::{self, Requete};
+use pilote::{self, Requete};
 use moteur3d::gpu::{FrameParams, ParamsPasse, Renderer, StyleVisuel};
 use formats::rvt::{self, RvtInfo};
 use scene::Scene;

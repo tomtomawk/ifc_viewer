@@ -12,13 +12,13 @@ pub mod instances;
 pub mod mcp;
 pub mod edition;
 pub mod saisie;
-pub const AIDE: &str = include_str!("../../../../docs/PILOTE.md");
+pub const AIDE: &str = include_str!("../../../docs/PILOTE.md");
 pub fn documentation(sujet: &str) -> Result<&'static str, String> {
     match sujet {
         "" | "pilote" => Ok(AIDE),
-        "edition" => Ok(include_str!("../../../../docs/EDITION.md")),
-        "modele" => Ok(include_str!("../../../../docs/MODELE.md")),
-        "commandes" => Ok(include_str!("../../../commandes/src/socle/commande.rs")),
+        "edition" => Ok(include_str!("../../../docs/EDITION.md")),
+        "modele" => Ok(include_str!("../../../docs/MODELE.md")),
+        "commandes" => Ok(include_str!("../../commandes/src/socle/commande.rs")),
         _ => Err("Sujet : pilote|edition|modele|commandes".into()),
     }
 }

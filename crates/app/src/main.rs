@@ -3,7 +3,6 @@
 mod config;
 #[cfg(test)]
 mod modele_tests;
-mod pilote;
 mod ui;
 
 use std::path::PathBuf;

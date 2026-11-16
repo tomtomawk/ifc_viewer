@@ -1,0 +1,23 @@
+[package]
+name = "pilote"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+noyau = { path = "../noyau" }
+modele = { path = "../modele" }
+maillage = { path = "../maillage" }
+commandes = { path = "../commandes" }
+moteur2d = { path = "../moteur2d" }
+echanges = { path = "../echanges" }
+collaboration = { path = "../collaboration" }
+# saisie.rs produit des egui::Event ; lib.rs prend un egui::Context (request_repaint)
+eframe.workspace = true
+png.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_ignored.workspace = true
+uuid.workspace = true
