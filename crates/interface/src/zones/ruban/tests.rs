@@ -528,6 +528,8 @@ fn un_seul_selecteur_pendant_les_creations() {
     assert!(ruban.selecteur_creation_actif());
     ruban.activer_dalle();
     assert!(ruban.selecteur_creation_actif());
+    ruban.activer_outil(Outil::Ouverture);
+    assert!(ruban.selecteur_creation_actif());
     ruban.activer_structure(true);
     assert!(!ruban.selecteur_creation_actif());
 }

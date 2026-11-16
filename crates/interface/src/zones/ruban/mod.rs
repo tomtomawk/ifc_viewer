@@ -817,10 +817,10 @@ impl RubanEdition {
     }
     pub fn outil(&self) -> Option<Outil> { self.selection }
     /// L'outil actif affiche son propre sélecteur de type dans Propriétés (mur,
-    /// éléments horizontaux) : celui de la sélection ne s'y ajoute pas, même quand
+    /// éléments horizontaux, ouvertures) : celui de la sélection ne s'y ajoute pas, même quand
     /// l'élément qui vient d'être créé reste sélectionné.
     pub fn selecteur_creation_actif(&self) -> bool {
-        self.mur_actif() || self.selection.is_some_and(|o| o.commande() == Outil::Surfaces)
+        self.mur_actif() || self.selection.is_some_and(|o| o == Outil::Ouverture || o.commande() == Outil::Surfaces)
     }
     pub fn nombre_option(&self, outil: Outil, index: usize) -> f64 {
         match self.valeurs.get(&(outil,index)) {
