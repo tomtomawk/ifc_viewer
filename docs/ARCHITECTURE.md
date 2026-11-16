@@ -122,7 +122,7 @@ cargo test -p bimedit --release --test dependances   # sens des dépendances, eg
 cargo run --release -p bimedit -- --stats samples/test_ifc4.ifc
 ```
 
-Référence de tests (lot 12) : 390 tests et 2 ignorés dans les 14 crates de bibliothèque, plus 4 du garde-fou dans `bimedit`. La somme brute des lignes « test result » est supérieure de 4 : `collaboration` relance son binaire de test en sous-processus (lignes « 1 passed »). Sans affichage, le binaire échoue au lancement de la fenêtre (`winit … DISPLAY is set`, code 1) ; les modes console et `--mcp` fonctionnent sans affichage.
+Référence de tests (lot 12) : 394 réussis et 2 ignorés (somme des crates ; 390 avant le garde-fou, +4 dans `bimedit`). Répartition : `modele` 101 (+1 ignoré), `formats` 52, `interface` 49, `collaboration` 43, `moteur2d` 40 (+1 ignoré), `commandes` 29, `echanges` 28, `pilote` 12, `moteur3d` 12, `noyau` 10, `maillage` 8, `config` 4, `bimedit` 4, `ifc_base` 2, `scene` 0. La somme brute des lignes « test result » est supérieure de 4 : `collaboration` relance son binaire de test en sous-processus (lignes « 1 passed »). Sans affichage, le binaire échoue au lancement de la fenêtre (`winit … DISPLAY is set`, code 1) ; les modes console et `--mcp` fonctionnent sans affichage.
 
 ## 7. Documents voisins
 
