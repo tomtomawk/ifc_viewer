@@ -355,7 +355,10 @@ impl ViewerApp {
                         )?
                         .into_bytes()
                     } else {
-                        moteur2d::pdf(&self.dessin_vue()?.svg("Dessin"))?
+                        match self.pdf_feuilles_affichees() {
+                            Some(pdf) => pdf?,
+                            None => moteur2d::pdf(&self.dessin_vue()?.svg("Dessin"))?,
+                        }
                     };
                     echanges::enregistrement::ecrire_atomique(&path, &bytes)?;
                     Ok(json!({"chemin":path,"octets":bytes.len()}))

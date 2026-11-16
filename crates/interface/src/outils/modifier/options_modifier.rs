@@ -277,10 +277,9 @@ impl ViewerApp {
         else {
             return;
         };
-        match self
-            .dessin_vue()
-            .and_then(|d| moteur2d::pdf(&d.svg("Dessin")))
-            .and_then(|s| echanges::enregistrement::ecrire_atomique(&path, &s))
+        // jeu de feuilles ouvert : la feuille affichée (cartouche compris), pas la vue
+        let contenu = self.pdf_feuilles_affichees().unwrap_or_else(|| self.dessin_vue().and_then(|d| moteur2d::pdf(&d.svg("Dessin"))));
+        match contenu.and_then(|s| echanges::enregistrement::ecrire_atomique(&path, &s))
         {
             Ok(()) => self.status = format!("PDF exporté : {}", path.display()),
             Err(e) => self.error = Some(e),

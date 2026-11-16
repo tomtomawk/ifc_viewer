@@ -918,6 +918,22 @@ impl ViewerApp {
         }
     }
 
+    /// PDF de ce qui est affiché quand un jeu de feuilles est ouvert : la feuille
+    /// choisie (ou celle de la vue choisie), sinon tout le jeu ; None hors jeu. Cadre,
+    /// cartouche, vues et nomenclatures à leur place, au format du papier (n° 12).
+    pub(crate) fn pdf_feuilles_affichees(&self) -> Option<Result<Vec<u8>, String>> {
+        let jeu = self.jeu_actif()?;
+        let (p, _) = self.natif.as_ref()?;
+        let choisie = match &self.feuilles.selection {
+            SelectionFeuille::Feuille(id) | SelectionFeuille::Vue(id, _) | SelectionFeuille::Cartouche(id) => p.feuilles.iter().find(|f| &f.id == id && f.jeu == jeu),
+            SelectionFeuille::Aucune => None,
+        };
+        Some(match choisie {
+            Some(f) => moteur2d::svg_feuille(p, f).and_then(|s| moteur2d::pdf(&s)),
+            None => moteur2d::pdf_jeu(p, &jeu),
+        })
+    }
+
     /// PDF du jeu `jeu` (une page par feuille) écrit dans `chemin` ; nombre de pages.
     pub(crate) fn exporter_jeu(&self, jeu: &str, chemin: &std::path::Path) -> Result<usize, String> {
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?;
