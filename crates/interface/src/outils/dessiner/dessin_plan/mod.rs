@@ -103,6 +103,8 @@ pub(crate) struct EtatDessin2D {
     pub esc_bas: Option<String>,
     pub esc_decalage_bas: f64,
     pub esc_decalage_haut: f64,
+    /// Escalier balancé : marches balancées de part et d'autre des tournants (n° 5).
+    pub esc_balance: Option<u8>,
     pub esc_haut: HautEscalier,
     pub esc_hauteur_libre: f64,
     /// Justification de la ligne tracée d'un escalier : 0 axe, 1 bord gauche, 2 bord droit.

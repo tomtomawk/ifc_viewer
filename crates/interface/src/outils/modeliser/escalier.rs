@@ -24,6 +24,7 @@ impl ViewerApp {
             largeur: self.ruban_edition.nombre_option(Outil::Escalier, 0),
             hauteur_marche: self.ruban_edition.nombre_option(Outil::Escalier, 1),
             paillasse: 150.0,
+            balance: self.dessin2d.esc_balance,
         };
         let id = self.executer_bim(Commande::Escalier { escalier })?.into_iter().next().ok_or("Escalier non créé.")?;
         let cotes = match self.ruban_edition.texte_option(Outil::Escalier, 2).as_str() {
@@ -284,6 +285,16 @@ impl ViewerApp {
         use crate::zones::ruban::Outil;
         ui.label(RichText::new("Escalier").strong());
         self.croquis_limites_escalier(ui);
+        // tournants : paliers ou marches balancées (n° 5)
+        ui.horizontal(|ui| {
+            let mut balance = self.dessin2d.esc_balance.is_some();
+            if ui.checkbox(&mut balance, "Marches balancées").on_hover_text("Aux tournants, marches tournantes balancées au lieu de paliers").changed() {
+                self.dessin2d.esc_balance = balance.then_some(5);
+            }
+            if let Some(n) = &mut self.dessin2d.esc_balance {
+                ui.add(egui::DragValue::new(n).range(1..=12)).on_hover_text("Marches balancées de part et d'autre de chaque tournant ; giron de rive d'au moins 10 cm");
+            }
+        });
         let Some((_, _, hauteur, _)) = self.base_escalier() else { return };
         if hauteur <= 1.0 {
             ui.colored_label(Color32::from_rgb(200, 40, 40), "L'escalier doit monter : limite haute au-dessus de la base.");
