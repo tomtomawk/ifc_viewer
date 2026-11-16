@@ -88,13 +88,18 @@ impl ViewerApp {
 
     /// Un message occupe l'emplacement des consignes.
     pub(crate) fn message_visible(&self) -> bool {
-        self.error.is_some() || self.message.as_ref().is_some_and(|(_, _, debut)| debut.elapsed().as_secs_f32() < DUREE)
+        self.error.is_some() || self.dessin2d.message.is_some() || self.message.as_ref().is_some_and(|(_, _, debut)| debut.elapsed().as_secs_f32() < DUREE)
     }
 
     /// Affiche le message courant : l'erreur en priorité, sinon le message temporaire.
     pub(crate) fn afficher_messages(&mut self, ui: &egui::Ui, rect: egui::Rect, bas_barre: f32) {
         if let Some(texte) = self.error.clone() {
             if afficher(ui, rect, bas_barre, Niveau::Erreur, &texte, 1.0) { self.error = None; }
+            return;
+        }
+        // Erreur de l'outil de dessin en cours : effacée par l'outil ou par ×.
+        if let Some(texte) = self.dessin2d.message.clone() {
+            if afficher(ui, rect, bas_barre, Niveau::Erreur, &texte, 1.0) { self.dessin2d.message = None; }
             return;
         }
         let Some((niveau, texte, debut)) = &self.message else { return };

@@ -771,37 +771,19 @@ impl ViewerApp {
             self.dessin2d.bas_barre = 0.0;
             return;
         }
-        let mut action = None;
-        let zone = egui::Area::new(egui::Id::unique("barre_commande"))
-            .fixed_pos(rect.left_top() + egui::vec2(8.0, 8.0))
-            .constrain_to(rect)
-            .show(ui.ctx(), |ui| {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        if edition || options_dessin || options_modifier {
-                            egui::ScrollArea::horizontal().id_salt("options_barre_commande")
-                                .max_width((rect.width() - if actif { 120.0 } else { 30.0 }).max(80.0))
-                                .max_height(75.0)
-                                .auto_shrink([true, true]).show(ui, |ui| {
-                                    if edition || options_dessin { self.options_trace(ui); }
-                                    else { self.options_modifier(ui, false); }
-                                });
-                        }
-                        if actif {
-                            if edition || options_dessin || options_modifier { ui.separator(); }
-                            if bouton_commande(ui, true, "Valider").on_hover_text("Terminer et quitter la commande").clicked() {
-                                action = Some(true);
-                            }
-                            if bouton_commande(ui, false, "Annuler").on_hover_text("Abandonner et quitter la commande").clicked() {
-                                action = Some(false);
-                            }
-                        }
-                    });
-                });
-            });
-        self.dessin2d.bas_barre = zone.response.rect.bottom() - rect.top();
-        if let Some(valider) = action {
-            if valider { self.quitter_commande(true); } else { self.annuler_commande(); }
+        use crate::outils::bandeau::{bandeau, Action, Fin};
+        let fin = if actif { Fin::COMPLETE } else { Fin::AUCUNE };
+        let retour = if edition || options_dessin || options_modifier {
+            let mut options = |ui: &mut egui::Ui| if edition || options_dessin { self.options_trace(ui); } else { self.options_modifier(ui, false); };
+            bandeau(ui, rect, "commande", fin, Some(&mut options))
+        } else {
+            bandeau(ui, rect, "commande", fin, None)
+        };
+        self.dessin2d.bas_barre = retour.bas;
+        match retour.action {
+            Some(Action::Valider) => self.quitter_commande(true),
+            Some(Action::Annuler) => self.annuler_commande(),
+            None => {}
         }
     }
 

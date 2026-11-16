@@ -8,6 +8,7 @@ Rôle : outils de la vue, rangés par métier comme `crates/commandes/src/`. L'e
 | `modifier/` | `transformer.rs` (Déplacer, Copier, Tourner, Symétrie, Réseau, Échelle, Aligner, Décaler, Scinder), `ajuster.rs`, `options_modifier.rs` (barre d'options de Modifier, jonctions, annotations natives, export IFC/PDF, fenêtre documentation) |
 | `dessiner/` | `dessin_plan/` : DAO 2D commune (tracés, accrochages, contours, courbures, options de tracé) |
 | `annoter/` | `cotation.rs`, `cotes_aretes.rs`, `outils_texte.rs`, `types_traits.rs` |
+| `bandeau.rs` | bandeau de dessin commun (`bandeau` : options, Valider/Annuler, hauteur pour les messages) ; seul composant de ce rôle, appelé par la vue, le cartouche et l'éditeur de familles |
 
 Dépendances typiques : `saisie/`, `zones/ruban/` (`Outil`), `socle/`. `annoter/` et `modeliser/escalier.rs` utilisent des éléments `pub(crate)` de `dessiner/dessin_plan/mod.rs` (`EtatDessin2D`, `vers_ecran`, `champ_valeur`, `HautEscalier`).
 

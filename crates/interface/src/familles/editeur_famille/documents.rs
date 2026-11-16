@@ -659,22 +659,24 @@ impl ViewerApp {
             let rect = ed.rect_navigation;
             let mut bas = 0.0;
             if ed.outil != OutilFamille::Selection && rect.is_positive() {
-                let mut valider = false;
+                use crate::outils::bandeau::{bandeau, Action, Fin};
                 let mut annuler = false;
-                let zone = egui::Area::new(egui::Id::unique("barre_commande_famille"))
-                    .fixed_pos(rect.left_top() + egui::vec2(8.0, 8.0)).constrain_to(rect)
-                    .show(ui.ctx(), |ui| egui::Frame::popup(ui.style()).show(ui, |ui| ui.horizontal(|ui| {
-                        if ed.outil == OutilFamille::Ligne {
-                            use moteur2d::dao::OutilDessin;
-                            let formes = [(OutilDessin::Polyligne, "Polyligne", "Cliquer les sommets ; Entrée ou clic droit pour terminer, F pour fermer.")];
-                            let (selectionner, _) = crate::outils::dessiner::dessin_plan::boutons_trace(ui, false, false, OutilDessin::Polyligne, &formes, None);
-                            if selectionner { ed.terminer_polyligne(); annuler = true; }
-                        } else {
-                            if ed.outil.est_forme() { valider = ui.button("✓ Valider").clicked(); }
-                            annuler = ui.button("✕ Annuler").clicked();
-                        }
-                    })));
-                bas = zone.response.rect.bottom() - rect.top();
+                let retour = if ed.outil == OutilFamille::Ligne {
+                    let mut selectionner = false;
+                    let mut options = |ui: &mut egui::Ui| {
+                        use moteur2d::dao::OutilDessin;
+                        let formes = [(OutilDessin::Polyligne, "Polyligne", "Cliquer les sommets ; Entrée ou clic droit pour terminer, F pour fermer.")];
+                        (selectionner, _) = crate::outils::dessiner::dessin_plan::boutons_trace(ui, false, false, OutilDessin::Polyligne, &formes, None);
+                    };
+                    let retour = bandeau(ui, rect, "famille", Fin::AUCUNE, Some(&mut options));
+                    if selectionner { ed.terminer_polyligne(); annuler = true; }
+                    retour
+                } else {
+                    bandeau(ui, rect, "famille", Fin { valider: ed.outil.est_forme(), annuler: true }, None)
+                };
+                let valider = retour.action == Some(Action::Valider);
+                annuler |= retour.action == Some(Action::Annuler);
+                bas = retour.bas;
                 if valider {
                     let construction = ed.construction.and_then(|k| ed.famille.plans_construction.get(k)).cloned();
                     ed.erreur = ed.terminer_forme(construction).err();

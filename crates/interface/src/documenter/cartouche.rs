@@ -166,12 +166,11 @@ impl EditionCartouche {
         self.rect = rect;
         if face && outil_actif == Some(Outil::Polyligne) {
             let mut selectionner = false;
-            egui::Area::new(egui::Id::unique("barre_polyligne_cartouche"))
-                .fixed_pos(rect.left_top() + egui::vec2(8.0, 8.0)).constrain_to(rect)
-                .show(ui.ctx(), |ui| egui::Frame::popup(ui.style()).show(ui, |ui| ui.horizontal(|ui| {
-                    let formes = [(OutilDessin::Polyligne, "Polyligne", "Cliquer les sommets ; Entrée ou clic droit pour terminer, F pour fermer.")];
-                    (selectionner, _) = crate::outils::dessiner::dessin_plan::boutons_trace(ui, false, false, OutilDessin::Polyligne, &formes, None);
-                })));
+            let mut options = |ui: &mut egui::Ui| {
+                let formes = [(OutilDessin::Polyligne, "Polyligne", "Cliquer les sommets ; Entrée ou clic droit pour terminer, F pour fermer.")];
+                (selectionner, _) = crate::outils::dessiner::dessin_plan::boutons_trace(ui, false, false, OutilDessin::Polyligne, &formes, None);
+            };
+            crate::outils::bandeau::bandeau(ui, rect, "cartouche", crate::outils::bandeau::Fin::AUCUNE, Some(&mut options));
             if selectionner {
                 if let Some(trace) = &mut self.trace {
                     f.formes.extend(trace.appliquer(EvenementTrace::Terminer).iter().map(F::depuis_forme_2d));

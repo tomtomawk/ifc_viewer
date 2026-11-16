@@ -657,9 +657,9 @@ impl ViewerApp {
         ligne.wrap.max_width = largeur;
         let format = |color| egui::TextFormat { font_id: police.clone(), color, ..Default::default() };
         ligne.append(&format!("{nom} — {invite}"), 0.0, format(bleu));
-        if let Some(message) = self.dessin2d.message.as_ref().or(self.dessin2d.information.as_ref()) {
-            let couleur = if self.dessin2d.message.is_some() { Color32::from_rgb(200, 50, 45) } else { bleu };
-            ligne.append(&format!(" : {message}"), 0.0, format(couleur));
+        // Les erreurs du tracé (`dessin2d.message`) passent par `socle::messages`.
+        if let Some(information) = &self.dessin2d.information {
+            ligne.append(&format!(" : {information}"), 0.0, format(bleu));
         }
         let g1 = painter.layout_job(ligne);
         let g2 = painter.layout(aide, egui::FontId::proportional(11.0), bleu.gamma_multiply(0.85), largeur);

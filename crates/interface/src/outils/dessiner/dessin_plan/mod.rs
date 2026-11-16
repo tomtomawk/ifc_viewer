@@ -1129,28 +1129,6 @@ impl ViewerApp {
 
 }
 
-/// Bouton de la barre de commande : pictogramme seul (coche verte, croix rouge), à la
-/// hauteur des autres commandes de la barre ; le libellé est dans l'infobulle.
-fn bouton_commande(ui: &mut egui::Ui, valider: bool, libelle: &str) -> egui::Response {
-    let h = ui.spacing().interact_size.y;
-    let (r, reponse) = ui.allocate_exact_size(egui::vec2(h * 1.4, h), Sense::click());
-    if reponse.hovered() {
-        ui.painter().rect_filled(r, 4.0, ui.visuals().widgets.hovered.bg_fill);
-    }
-    let c = r.center();
-    let u = h / 26.0;
-    let couleur = if valider { Color32::from_rgb(30, 150, 70) } else { Color32::from_rgb(200, 50, 45) };
-    let t = egui::Stroke::new(2.0, couleur);
-    if valider {
-        ui.painter().add(egui::Shape::line(vec![c + egui::vec2(-6.0, 0.0) * u, c + egui::vec2(-2.0, 5.0) * u, c + egui::vec2(6.0, -5.0) * u], t));
-    } else {
-        ui.painter().line_segment([c + egui::vec2(-5.0, -5.0) * u, c + egui::vec2(5.0, 5.0) * u], t);
-        ui.painter().line_segment([c + egui::vec2(-5.0, 5.0) * u, c + egui::vec2(5.0, -5.0) * u], t);
-    }
-    reponse.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, libelle));
-    reponse
-}
-
 /// Champ numérique dont la saisie n'est appliquée qu'à Entrée ou à la perte du focus :
 /// rien n'est recalculé pendant la frappe. `facteur` : unité affichée (mm → cm = 10).
 pub(crate) fn champ_valeur(ui: &mut egui::Ui, nom: &str, valeur: f64, facteur: f64, decimales: Option<usize>, largeur: f32) -> Option<f64> {
