@@ -2,7 +2,7 @@
 
 Rôle : entrées/sorties du modèle natif : import IFC et Revit vers `Projet`, export IFC, enregistrement natif atomique et récupération, rapport d'import.
 
-Dépendances internes autorisées : `noyau`, `modele`, `scene`, `formats`, `ifc_base`, `maillage` (réel : `noyau`, `modele`, `ifc_base`, `formats` ; dev : `commandes`, `maillage`, `moteur2d`). Interdit : `moteur2d`/`moteur3d` en production, `config`, `collaboration`, `pilote`, `interface`, egui, wgpu, eframe.
+Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`, `formats` (dev seulement : `commandes`, `maillage`, `moteur2d`). Interdit : `moteur2d`/`moteur3d` en production, `config`, `collaboration`, `pilote`, `interface`, egui, wgpu, eframe.
 
 ## Où travailler
 

@@ -2,7 +2,7 @@
 
 Rôle : commandes d'édition sérialisables (`Commande`, JSON `{"action": "..."}`) et leur exécution sur un `modele::Projet` ; historique, verrous, contextes (phases, sous-projets, variantes).
 
-Dépendances internes autorisées : `noyau`, `modele` (`scene`, `maillage` tolérées si indispensables). Interdit : `egui`, `eframe`, `wgpu`, et toute crate située après (`moteur2d`, `echanges`, `collaboration`, `pilote`, `config`, `interface`).
+Dépendances internes autorisées : `noyau`, `modele` (`maillage` en dev-dependency seulement). Interdit : `egui`, `eframe`, `wgpu`, et toute crate située après (`moteur2d`, `echanges`, `collaboration`, `pilote`, `config`, `interface`).
 
 ## Où travailler
 

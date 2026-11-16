@@ -2,7 +2,7 @@
 
 Rôle : transactions de valeurs persistantes partagées entre postes, indépendantes de l'interface et du transport : dépôt (journal, instantanés, verrou fichier), session locale, concurrence et réservations, fichiers `.bimpartage`, texte collaboratif (`yrs`), CLI `--collaboration`.
 
-Dépendances internes autorisées : `noyau`, `modele`, `scene`, `maillage`, `commandes`, `echanges` (réel : sans `scene`). Interdit : `moteur2d`, `moteur3d`, `config`, `pilote`, `interface`, egui, wgpu, eframe. Aucun ré-export de `commandes::objets` : appeler `commandes::objets::{objets, carte_objet}`.
+Dépendances internes autorisées : `noyau`, `modele`, `maillage`, `commandes`, `echanges` (exactement celles-ci). Interdit : `scene`, `moteur2d`, `moteur3d`, `config`, `pilote`, `interface`, egui, wgpu, eframe. Aucun ré-export de `commandes::objets` : appeler `commandes::objets::{objets, carte_objet}`.
 
 ## Où travailler
 

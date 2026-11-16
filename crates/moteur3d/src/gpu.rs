@@ -1405,6 +1405,18 @@ mod tests {
         naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all()).validate(&module).unwrap_or_else(|e| panic!("{e:?}"));
     }
 
+    /// `MAX_APPARENCES` du shader de la scène égale `noyau::constantes::MAX_APPARENCES`
+    /// (taille du tampon des apparences côté CPU).
+    #[test]
+    fn max_apparences_du_shader_egal_a_noyau() {
+        let ligne = super::SCENE
+            .lines()
+            .find(|l| l.trim_start().starts_with("const MAX_APPARENCES"))
+            .expect("const MAX_APPARENCES absente de scene.wgsl");
+        let valeur: usize = ligne.split('=').nth(1).and_then(|v| v.trim().trim_end_matches(';').trim().parse().ok()).unwrap_or_else(|| panic!("valeur illisible : {ligne}"));
+        assert_eq!(valeur, noyau::constantes::MAX_APPARENCES, "scene.wgsl et noyau::constantes::MAX_APPARENCES diffèrent");
+    }
+
     /// Le shader de la scène (avec les apparences) se lit et se valide.
     #[test]
     fn shader_scene_valide() {

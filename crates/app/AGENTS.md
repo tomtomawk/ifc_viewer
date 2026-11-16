@@ -2,7 +2,7 @@
 
 Rôle : point d'entrée. `src/main.rs` (82 lignes) lit les arguments et aiguille : `--mcp` (`pilote::mcp::servir`), commandes de `collaboration::cli` et `pilote::cli`, modes console de `src/modes/`, sinon lancement de `interface::socle::fenetre::lancer`. `build.rs` et `assets/icone.ico` : icône Windows.
 
-Dépendances internes autorisées : toutes les crates précédentes (réel : `noyau`, `modele`, `ifc_base`, `formats`, `echanges`, `collaboration`, `pilote`, `config`, `interface`). Aucun code d'interface ici.
+Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`, `formats`, `echanges`, `collaboration`, `pilote`, `config`, `interface` (exactement celles-ci). Aucun code d'interface ici.
 
 ## Où travailler
 

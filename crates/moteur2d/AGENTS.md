@@ -2,7 +2,7 @@
 
 Rôle : dessin 2D tiré de la scène triangulée : coupe par un plan (poché, hachures, contours), arêtes vues et cachées, motifs de coupe, outils de DAO (tracé, accrochage, saisie), rendu des vues et des feuilles en SVG et PDF.
 
-Dépendances internes autorisées : `noyau`, `modele`, `scene`, `maillage`, `commandes` (réel : les quatre premières). Interdit : `egui`, `eframe`, `wgpu`, et toute crate située après (`moteur3d`, `echanges`, `collaboration`, `pilote`, `config`, `interface`). Couleurs en `[u8; 4]`, épaisseurs et constantes de trait dans `noyau::aretes`.
+Dépendances internes autorisées : `noyau`, `modele`, `scene`, `maillage` (`commandes` en dev-dependency seulement). Interdit : `egui`, `eframe`, `wgpu`, et toute crate située après (`moteur3d`, `echanges`, `collaboration`, `pilote`, `config`, `interface`). Couleurs en `[u8; 4]`, épaisseurs et constantes de trait dans `noyau::aretes`.
 
 ## Où travailler
 

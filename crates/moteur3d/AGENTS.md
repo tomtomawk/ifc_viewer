@@ -2,7 +2,7 @@
 
 Rôle : vue 3D : rendu wgpu de la scène (`Renderer`), ciel physique, caméra, repère d'orientation des plans, sélection à l'écran par rectangle, shaders WGSL.
 
-Dépendances internes autorisées : `noyau`, `modele`, `scene`, `moteur2d` (réel : les trois premières ; `maillage` en dev-dependency). Interdit : `config`, `echanges`, `collaboration`, `pilote`, `interface`. `egui` et `wgpu` ne sont permis que dans cette crate et au-delà, via `eframe`.
+Dépendances internes autorisées : `noyau`, `modele`, `scene` (`maillage` en dev-dependency seulement). Interdit : `config`, `echanges`, `collaboration`, `pilote`, `interface`. `egui` et `wgpu` ne sont permis que dans cette crate et au-delà, via `eframe`.
 
 ## Où travailler
 

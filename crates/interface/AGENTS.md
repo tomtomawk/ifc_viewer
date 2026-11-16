@@ -2,7 +2,7 @@
 
 Rôle : toute l'interface egui de BIMedit (`ViewerApp` : état, boucle, ruban, panneaux, vues 2D et 3D, outils, feuilles, éditeur de familles, collaboration, paramètres) et la fenêtre native (`socle/fenetre.rs`).
 
-Dépendances internes autorisées : toutes les crates précédentes (réel : `noyau`, `modele`, `ifc_base`, `scene`, `formats`, `maillage`, `commandes`, `moteur2d`, `moteur3d`, `echanges`, `collaboration`, `pilote`, `config`). Interdit : `app`.
+Dépendances internes autorisées : les 13 crates précédentes (`noyau`, `modele`, `ifc_base`, `scene`, `formats`, `maillage`, `commandes`, `moteur2d`, `moteur3d`, `echanges`, `collaboration`, `pilote`, `config`). Interdit : `app`.
 
 ## Où travailler
 

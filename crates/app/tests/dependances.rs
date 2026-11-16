@@ -31,7 +31,7 @@ const ORDRE: [&str; 15] = [
 ];
 
 /// Dépendances internes autorisées (production et développement), §2 de ARCHITECTURE.md.
-/// Plusieurs autorisations ne sont aujourd'hui pas utilisées (voir le §2 du document).
+/// Resserrées aux dépendances réellement utilisées : en ajouter une se décide ici et au §2.
 const AUTORISEES: [(&str, &[&str]); 15] = [
     ("noyau", &[]),
     ("modele", &["noyau"]),
@@ -39,30 +39,18 @@ const AUTORISEES: [(&str, &[&str]); 15] = [
     ("scene", &["noyau", "modele", "ifc_base"]),
     ("formats", &["noyau", "ifc_base", "scene"]),
     ("maillage", &["noyau", "modele", "ifc_base", "scene", "formats"]),
-    ("commandes", &["noyau", "modele", "scene", "maillage"]),
-    ("moteur2d", &["noyau", "modele", "scene", "maillage", "commandes"]),
-    ("moteur3d", &["noyau", "modele", "scene", "moteur2d"]),
-    ("echanges", &["noyau", "modele", "ifc_base", "scene", "formats", "maillage"]),
-    ("collaboration", &["noyau", "modele", "scene", "maillage", "commandes", "echanges"]),
-    // « collaboration et en dessous, hors config et interface »
-    (
-        "pilote",
-        &["noyau", "modele", "ifc_base", "scene", "formats", "maillage", "commandes", "moteur2d", "moteur3d", "echanges", "collaboration"],
-    ),
-    // « tout ce qui précède, hors interface »
-    (
-        "config",
-        &["noyau", "modele", "ifc_base", "scene", "formats", "maillage", "commandes", "moteur2d", "moteur3d", "echanges", "collaboration", "pilote"],
-    ),
-    // « tout ce qui précède »
+    ("commandes", &["noyau", "modele"]),
+    ("moteur2d", &["noyau", "modele", "scene", "maillage"]),
+    ("moteur3d", &["noyau", "modele", "scene"]),
+    ("echanges", &["noyau", "modele", "ifc_base", "formats"]),
+    ("collaboration", &["noyau", "modele", "maillage", "commandes", "echanges"]),
+    ("pilote", &["noyau", "modele", "maillage", "commandes", "moteur2d", "echanges", "collaboration"]),
+    ("config", &["noyau", "modele", "echanges"]),
     (
         "interface",
         &["noyau", "modele", "ifc_base", "scene", "formats", "maillage", "commandes", "moteur2d", "moteur3d", "echanges", "collaboration", "pilote", "config"],
     ),
-    (
-        "app",
-        &["noyau", "modele", "ifc_base", "scene", "formats", "maillage", "commandes", "moteur2d", "moteur3d", "echanges", "collaboration", "pilote", "config", "interface"],
-    ),
+    ("app", &["noyau", "modele", "ifc_base", "formats", "echanges", "collaboration", "pilote", "config", "interface"]),
 ];
 
 /// Autorisations supplémentaires, réservées aux `[dev-dependencies]` (tests d'intégration).

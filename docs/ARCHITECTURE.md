@@ -47,17 +47,17 @@ Ce tableau est celui que vérifie `crates/app/tests/dependances.rs` (constantes 
 | scene | noyau, modele, ifc_base | les trois | |
 | formats | noyau, ifc_base, scene | les trois | |
 | maillage | noyau, modele, ifc_base, scene, formats | les cinq | |
-| commandes | noyau, modele, scene, maillage | noyau, modele | maillage |
-| moteur2d | noyau, modele, scene, maillage, commandes | noyau, modele, scene, maillage | commandes |
-| moteur3d | noyau, modele, scene, moteur2d | noyau, modele, scene | maillage |
-| echanges | noyau, modele, ifc_base, scene, formats, maillage | noyau, modele, ifc_base, formats | commandes, maillage, moteur2d |
-| collaboration | noyau, modele, scene, maillage, commandes, echanges | noyau, modele, maillage, commandes, echanges | |
-| pilote | toutes jusqu'à `collaboration` | noyau, modele, maillage, commandes, moteur2d, echanges, collaboration | |
-| config | toutes jusqu'à `pilote` (hors `interface`) | noyau, modele, echanges | |
-| interface | toutes jusqu'à `config` | les 13 | |
-| app | toutes jusqu'à `interface` | noyau, modele, ifc_base, formats, echanges, collaboration, pilote, config, interface | |
+| commandes | noyau, modele | noyau, modele | maillage |
+| moteur2d | noyau, modele, scene, maillage | les quatre | commandes |
+| moteur3d | noyau, modele, scene | les trois | maillage |
+| echanges | noyau, modele, ifc_base, formats | les quatre | commandes, maillage, moteur2d |
+| collaboration | noyau, modele, maillage, commandes, echanges | les cinq |  |
+| pilote | noyau, modele, maillage, commandes, moteur2d, echanges, collaboration | les sept |  |
+| config | noyau, modele, echanges | les trois |  |
+| interface | toutes jusqu'à `config` | les 13 |  |
+| app | noyau, modele, ifc_base, formats, echanges, collaboration, pilote, config, interface | les neuf |  |
 
-Autorisations jamais utilisées (gardées telles que le plan du chantier les a posées) : celles du tableau absentes de la colonne « Réel » en production, soit `scene` pour commandes et collaboration, `commandes` pour moteur2d, `moteur2d` pour moteur3d, `scene` et `maillage` pour echanges, `scene`, `ifc_base`, `formats` et `moteur3d` pour pilote, tout sauf `noyau`, `modele`, `echanges` pour config (son `AGENTS.md` est plus strict que le tableau), et pour app tout sauf ses 9 dépendances. Les resserrer ne demande qu'une modification du tableau et du test.
+Le tableau est resserré aux dépendances réellement utilisées (aucune autorisation inutilisée). Ajouter une dépendance interne se décide : modifier ce tableau et le test ensemble, en respectant l'ordre.
 
 Externes : `eframe` (egui, wgpu) et `wgpu` seulement dans `moteur3d`, `pilote`, `config`, `interface`, `app` ; `egui`/`wgpu` jamais dans `noyau`, `ifc_base`, `modele`, `scene`, `formats`, `maillage`, `commandes`, `moteur2d`, `echanges`, `collaboration` (vérifié par le test). `eframe` est la seule déclaration d'egui : `moteur3d` (rendu), `pilote` (`egui::Event`, `egui::Context`), `config` (`DragValue`, `ThemePreference`, `Key`), `interface` (tout).
 
@@ -108,7 +108,7 @@ Externes : `eframe` (egui, wgpu) et `wgpu` seulement dans `moteur3d`, `pilote`, 
 - **`eframe` hors de l'interface** : dans `moteur3d` (rendu wgpu), `pilote` (`egui::Event`), `config` (`DragValue`, `ThemePreference`, `Key` : adaptateurs d'interface dans une crate de configuration, à valider).
 - **`interface::projet::collaboration`** masque la crate `collaboration` dans `projet/` : écrire `::collaboration::…` pour la crate.
 - **Modes console dans `app`** : `--modele`, `--stats`, `--images`, `--decodage`, `--nomenclatures`, `--parametres` appellent `formats`, `ifc_base`, `echanges` ; ils sont rangés dans `crates/app/src/modes/` (un fichier par mode, `rvt_stats.rs` 272 lignes) mais restent dans le binaire.
-- **`moteur3d/src/scene.wgsl`** : `const MAX_APPARENCES: i32 = 32;` en dur, à garder égale à `noyau::constantes::MAX_APPARENCES` ; aucun test ne le vérifie.
+- **`moteur3d/src/scene.wgsl`** : `const MAX_APPARENCES: i32 = 32;` en dur ; l'égalité avec `noyau::constantes::MAX_APPARENCES` est vérifiée par le test `max_apparences_du_shader_egal_a_noyau` (`moteur3d`).
 - **Garde-fou** : le §2 est codé en dur dans le test, sans lecture du document ; les deux se modifient ensemble. `[dependencies.x]` (tableau TOML) n'est pas géré (le test échoue s'il en trouve).
 - **Interface graphique** : non lancée depuis le lot 11 faute d'affichage ; un essai manuel (projet, ruban, éditeur de famille, feuilles, cotation, escalier) reste à faire.
 
