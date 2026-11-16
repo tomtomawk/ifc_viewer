@@ -436,18 +436,26 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         let id = id_natif("terrain", &t.id);
         model.parent.insert(id, racine);
         model.children.entry(racine).or_default().push(id);
-        let type_terrain = projet.type_terrain(t);
-        let tris = modele::elements::terre_plein::solide_terrain(projet, t, type_terrain.epaisseur)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
-        let du_gabarit = type_terrain.materiau.as_ref().filter(|n| projet.materiau(n).is_none()).map(|n| modele::murs::assemblage::materiau_par_defaut(n));
-        let materiau = type_terrain.materiau.as_ref().and_then(|n| projet.materiau(n)).or(du_gabarit.as_ref());
-        let couleur = materiau.map_or([0.48, 0.62, 0.38, 1.0], |m| { let [r, g, b] = m.couleur.map(|c| c as f32 / 255.0); [r, g, b, 1.0] });
-        let couleur = opacite(materiau, couleur);
-        if let Some(m) = materiau {
-            let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
-            couches_coupe.push((id, coupe_materiau(projet, m, vec![neutre, neutre], noyau::aretes::TRAIT_FORT_MM)));
+        // une partie par couche (n° 14), couleur et matériau de chacune ; en coupe, la
+        // couche de surface donne le poché (les couches suivent la surface)
+        let couches = modele::elements::terre_plein::couches_terrain(projet, t)?;
+        let (mut parts, mut noms, mut rendu, mut motifs) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        for (k, (nom, tris)) in couches.parts.into_iter().enumerate() {
+            let du_gabarit = nom.as_ref().filter(|n| projet.materiau(n).is_none()).map(|n| modele::murs::assemblage::materiau_par_defaut(n));
+            let materiau = nom.as_ref().and_then(|n| projet.materiau(n)).or(du_gabarit.as_ref());
+            let couleur = materiau.map_or([0.48, 0.62, 0.38, 1.0], |m| { let [r, g, b] = m.couleur.map(|c| c as f32 / 255.0); [r, g, b, 1.0] });
+            let couleur = opacite(materiau, couleur);
+            if k == 0 && let Some(m) = materiau {
+                let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
+                couches_coupe.push((id, coupe_materiau(projet, m, vec![neutre, neutre], noyau::aretes::TRAIT_FORT_MM)));
+            }
+            noms.push(materiau.map(|m| m.nom.clone()));
+            rendu.push(materiau.map(|m| rendu_materiau(m, couleur, &mut table_apparences)));
+            motifs.push(materiau.and_then(|m| motif_surface(projet, m, &mut table_motifs)));
+            parts.push(Part { color: couleur, tris: tris.into_iter().map(|t| t.map(|v| v * 0.001)).collect() });
         }
-        materiaux_parts.push(vec![materiau.map(|m| m.nom.clone())]);
-        geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.map(|m| rendu_materiau(m, couleur, &mut table_apparences))], motifs: vec![materiau.and_then(|m| motif_surface(projet, m, &mut table_motifs))] });
+        materiaux_parts.push(noms);
+        geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu, motifs });
     }
     for l in &projet.limites_propriete {
         let id = id_natif("limite_propriete", &l.id);

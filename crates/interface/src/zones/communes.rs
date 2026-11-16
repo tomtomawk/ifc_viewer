@@ -320,7 +320,7 @@ impl ViewerApp {
             });
             ui.end_row();
             if !mixte {
-                ui.label("Épaisseur").on_hover_text("Sous la surface du terrain, pour tous les terrains de ce type");
+                ui.label("Profondeur nominale").on_hover_text("Profondeur du type : du point le plus bas du terrain naturel au fond plat, pour tous les terrains de ce type");
                 let mut e = type_actuel.epaisseur;
                 if ui.add(egui::DragValue::new(&mut e).speed(10.0).range(1.0..=1e6).dimensions()).changed() {
                     enregistrer_types(&mut p);
@@ -350,9 +350,17 @@ impl ViewerApp {
             ui.label(if terrains.len() > 1 { "Surface en plan (total)" } else { "Surface en plan" });
             ui.label(format!("{:.2} m²", surface / 1e6));
             ui.end_row();
-            // volume du solide : surface du terrain, épaisseur du type dessous
-            let volume: f64 = terrains.iter().filter_map(|t| modele::elements::terre_plein::solide_terrain(projet, t, projet.type_terrain(t).epaisseur).ok()).map(|tris| modele::volumes::geometrie::volume(&tris)).sum();
-            ui.label(if terrains.len() > 1 { "Volume (total)" } else { "Volume" }).on_hover_text("Solide du terrain : sa surface et l'épaisseur du type dessous");
+            // profondeur effective de l'instance : abaissée sous une fouille profonde (n° 14)
+            let couches: Vec<_> = terrains.iter().filter_map(|t| modele::elements::terre_plein::couches_terrain(projet, t).ok()).collect();
+            if let [c] = couches.as_slice() {
+                ui.label("Profondeur effective").on_hover_text("Profondeur de ce terrain : la nominale, ou plus pour garder 1 m sous la fouille d'un terre-plein");
+                let texte = modele::unite::unite().afficher(c.effective.round());
+                ui.label(if c.effective > c.nominale + 0.5 { RichText::new(texte).color(Color32::from_rgb(185, 35, 35)) } else { RichText::new(texte) });
+                ui.end_row();
+            }
+            // volume du solide : surface du terrain jusqu'au fond plat, toutes couches
+            let volume: f64 = couches.iter().map(|c| modele::volumes::geometrie::volume(&c.tous())).sum();
+            ui.label(if terrains.len() > 1 { "Volume (total)" } else { "Volume" }).on_hover_text("Solide du terrain : de sa surface au fond plat, toutes couches");
             ui.label(format!("{:.2} m³", volume / 1e9));
             ui.end_row();
         });

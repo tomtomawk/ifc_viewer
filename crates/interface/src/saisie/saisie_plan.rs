@@ -641,7 +641,11 @@ impl ViewerApp {
     /// cadrage, niveaux, catégories et visibilité compris. Rien ne change en cas d'erreur.
     pub(crate) fn appliquer_projet(&mut self, projet: modele::Projet) -> Result<(), String> {
         if self.partage_en_cours{return Err("Création du partage en cours ; attendre la fin de l'enregistrement".into());}
-        self.appliquer_projet_interne(projet, false)
+        // terrains : profondeur effective comparée avant / après (message n° 14)
+        let avant = self.natif.as_ref().filter(|(p, _)| !p.terrains.is_empty() || !projet.terrains.is_empty()).map(|(p, _)| p.clone());
+        self.appliquer_projet_interne(projet, false)?;
+        if let Some(avant) = avant { self.signaler_terrains_approfondis(&avant); }
+        Ok(())
     }
     pub(crate) fn appliquer_projet_interne(&mut self, mut projet: modele::Projet, distant: bool) -> Result<(), String> {
         let mut t_etape = std::time::Instant::now();

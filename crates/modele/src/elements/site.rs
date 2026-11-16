@@ -20,7 +20,9 @@ pub struct Terrain {
     pub type_terrain: Option<String>,
 }
 
-/// Type de terrain : épaisseur sous la surface (mm) et matériau.
+/// Type de terrain : profondeur nominale (mm, sous le point le plus bas du terrain
+/// naturel, jusqu'au fond plat), matériau, et couches facultatives de haut en bas
+/// (`elements::terrain_couches`).
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct TypeTerrain {
     pub id: String,
@@ -28,12 +30,14 @@ pub struct TypeTerrain {
     pub epaisseur: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub materiau: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub couches: Vec<crate::elements::terrain_couches::CoucheTerrain>,
 }
 
 impl TypeTerrain {
     /// Type des terrains d'un projet sans type de terrain.
     pub fn defaut() -> TypeTerrain {
-        TypeTerrain { id: "terrain-naturel".into(), nom: "Terrain naturel".into(), epaisseur: 1000.0, materiau: None }
+        TypeTerrain { id: "terrain-naturel".into(), nom: "Terrain naturel".into(), epaisseur: 1000.0, materiau: None, couches: Vec::new() }
     }
 }
 
@@ -102,23 +106,12 @@ impl Terrain {
         Ok(faces.into_iter().map(|t| t.map(|i| sommets[i])).collect())
     }
 
-    /// Solide du terrain dans le repère du projet : surface (cotes NGF moins `ngf`,
-    /// cote NGF de l'origine), même surface `epaisseur` plus bas, côtés le long du
-    /// contour.
+    /// Solide du terrain naturel dans le repère du projet : surface (cotes NGF moins
+    /// `ngf`, cote NGF de l'origine) jusqu'au fond plat, `epaisseur` sous son point le
+    /// plus bas.
     pub fn solide(&self, ngf: f64, epaisseur: f64) -> Result<Vec<[DVec3; 3]>, String> {
-        if !(epaisseur > 0.0 && epaisseur.is_finite()) { return Err("L'épaisseur du terrain doit être positive.".into()); }
-        let decalage = DVec3::new(0.0, 0.0, -ngf);
-        let bas = DVec3::new(0.0, 0.0, -epaisseur);
-        let dessus: Vec<[DVec3; 3]> = self.triangles()?.into_iter().map(|t| t.map(|p| p + decalage)).collect();
-        let mut tris = dessus.clone();
-        tris.extend(dessus.iter().map(|t| [t[0] + bas, t[2] + bas, t[1] + bas]));
-        let n = self.contour.len();
-        for i in 0..n {
-            let (a, b) = (DVec3::from_array(self.contour[i]) + decalage, DVec3::from_array(self.contour[(i + 1) % n]) + decalage);
-            tris.push([a, a + bas, b + bas]);
-            tris.push([a, b + bas, b]);
-        }
-        Ok(tris)
+        let t = TypeTerrain { epaisseur, ..TypeTerrain::defaut() };
+        Ok(crate::elements::terrain_couches::couches_terrain_naturel(self, &t, ngf)?.tous())
     }
 }
 

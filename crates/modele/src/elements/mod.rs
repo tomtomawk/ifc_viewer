@@ -9,3 +9,4 @@ pub mod pente;
 pub mod poutre;
 pub mod site;
 pub mod terre_plein;
+pub mod terrain_couches;

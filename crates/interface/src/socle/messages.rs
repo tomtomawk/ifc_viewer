@@ -88,6 +88,19 @@ impl ViewerApp {
         }
     }
 
+    /// Après une modification du projet : si un terrain vient de dépasser sa profondeur
+    /// nominale (fouille d'un terre-plein plus basse), message rouge, non bloquant (n° 14).
+    pub(crate) fn signaler_terrains_approfondis(&mut self, avant: &modele::Projet) {
+        let Some((p, _)) = &self.natif else { return };
+        let approfondi = |q: &modele::Projet, t: &modele::elements::site::Terrain| {
+            modele::elements::terre_plein::couches_terrain(q, t).is_ok_and(|c| c.effective > c.nominale + 0.5)
+        };
+        let nouveau = p.terrains.iter().any(|t| approfondi(p, t) && !avant.terrains.iter().find(|x| x.id == t.id).is_some_and(|x| approfondi(avant, x)));
+        if nouveau {
+            self.error = Some("Le type de terrain a été modifié".into());
+        }
+    }
+
     /// Un message occupe l'emplacement des consignes.
     pub(crate) fn message_visible(&self) -> bool {
         self.error.is_some() || self.dessin2d.message.is_some() || self.message.as_ref().is_some_and(|(_, _, debut)| debut.elapsed().as_secs_f32() < DUREE)

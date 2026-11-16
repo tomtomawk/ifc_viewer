@@ -30,7 +30,7 @@ fn site_en_phase_existant_cotes_ngf_et_epaisseur_du_type() {
     assert!((hauteur(&p).1 - 200.0).abs() < 1.0);
     // type plus épais : le dessous suit
     let mut q = p.clone();
-    q.types_terrains.push(TypeTerrain { id: "remblai".into(), nom: "Remblai".into(), epaisseur: 3000.0, materiau: None });
+    q.types_terrains.push(TypeTerrain { id: "remblai".into(), nom: "Remblai".into(), epaisseur: 3000.0, materiau: None, couches: Vec::new() });
     q.terrains[0].type_terrain = Some("remblai".into());
     q.verifier().unwrap();
     assert!((hauteur(&q).0 - (-1000.0 - 3000.0)).abs() < 1.0);

@@ -523,7 +523,7 @@ fn entre(a: &Point, b: &Point, t: f64) -> Point {
 
 type Cache<T> = Mutex<Vec<(u64, Arc<T>)>>;
 static CACHE: Cache<Remblai> = Mutex::new(Vec::new());
-static CACHE_TERRAINS: Cache<Vec<[DVec3; 3]>> = Mutex::new(Vec::new());
+static CACHE_TERRAINS: Cache<(Vec<[DVec3; 3]>, Vec<[DVec3; 3]>)> = Mutex::new(Vec::new());
 
 fn en_cache<T>(cache: &Cache<T>, cle: u64, calcul: impl FnOnce() -> Option<T>) -> Option<Arc<T>> {
     if let Some((_, r)) = cache.lock().ok()?.iter().find(|(k, _)| *k == cle) {
@@ -655,31 +655,42 @@ fn calculer(projet: &Projet, d: &Dalle) -> Option<Remblai> {
     Some(r)
 }
 
-/// Solide d'un terrain (repère du projet, mm), creusé par les terre-pleins : dans leur
-/// emprise, le dessus descend au fond du déblai (sous-face du terre-plein, talus
-/// montants, parois sur les arêtes sans talus). Le dessous reste celui du terrain.
+/// Solide d'un terrain (repère du projet, mm), toutes couches, à la profondeur nominale
+/// `epaisseur` (voir `couches_terrain`).
 pub fn solide_terrain(projet: &Projet, t: &crate::elements::site::Terrain, epaisseur: f64) -> Result<Vec<[DVec3; 3]>, String> {
+    let ty = crate::elements::site::TypeTerrain { epaisseur, ..projet.type_terrain(t) };
+    Ok(couches_avec_type(projet, t, &ty)?.tous())
+}
+
+/// Couches d'un terrain (n° 14) : surface creusée par les terre-pleins (dans leur
+/// emprise, le dessus descend au fond du déblai), fond plat continu, profondeur effective.
+pub fn couches_terrain(projet: &Projet, t: &crate::elements::site::Terrain) -> Result<crate::elements::terrain_couches::CouchesTerrain, String> {
+    couches_avec_type(projet, t, &projet.type_terrain(t))
+}
+
+fn couches_avec_type(projet: &Projet, t: &crate::elements::site::Terrain, ty: &crate::elements::site::TypeTerrain) -> Result<crate::elements::terrain_couches::CouchesTerrain, String> {
+    use crate::elements::terrain_couches::{construire, couches_terrain_naturel};
     let pleins: Vec<&Dalle> = projet.dalles.iter().filter(|d| d.sorte == SorteDalle::TerrePlein).collect();
     if pleins.is_empty() {
-        return t.solide(projet.ngf(), epaisseur);
+        return couches_terrain_naturel(t, ty, projet.ngf());
     }
-    let mut nombres = vec![projet.ngf(), epaisseur];
+    let mut nombres = vec![projet.ngf()];
     nombres.extend(pleins.iter().filter_map(|d| projet.niveau(&d.niveau).map(|n| n.altitude + d.decalage - projet.type_dalle(&d.type_dalle).map_or(0.0, |x| x.epaisseur()))));
     nombres.extend(pleins.iter().map(|d| projet.type_dalle(&d.type_dalle).map_or(0.0, |x| x.epaisseur())));
     let formes: Vec<_> = pleins.iter().map(|d| (&d.contours, &d.pentes, d.talus_dessus)).collect();
     let cle = empreinte((t, &projet.terrains, formes), &nombres).ok_or("Empreinte du terrain impossible.")?;
     let mut erreur = None;
-    let r = en_cache(&CACHE_TERRAINS, cle, || creuser_terrain(projet, t, epaisseur, &pleins).map_err(|e| erreur = Some(e)).ok());
-    match r {
-        Some(v) => Ok((*v).clone()),
-        None => Err(erreur.unwrap_or_else(|| "Terrain non valide.".into())),
-    }
+    let r = en_cache(&CACHE_TERRAINS, cle, || creuser_terrain(projet, t, &pleins).map_err(|e| erreur = Some(e)).ok());
+    let Some(r) = r else { return Err(erreur.unwrap_or_else(|| "Terrain non valide.".into())) };
+    let decalage = DVec3::new(0.0, 0.0, -projet.ngf());
+    let naturel: Vec<[DVec3; 3]> = t.triangles()?.into_iter().map(|f| f.map(|p| p + decalage)).collect();
+    let contour: Vec<DVec3> = t.contour.iter().map(|p| DVec3::from_array(*p) + decalage).collect();
+    construire(ty, &naturel, &r.0, r.1.clone(), &contour)
 }
 
-fn creuser_terrain(projet: &Projet, t: &crate::elements::site::Terrain, epaisseur: f64, pleins: &[&Dalle]) -> Result<Vec<[DVec3; 3]>, String> {
-    if !(epaisseur > 0.0 && epaisseur.is_finite()) {
-        return Err("L'épaisseur du terrain doit être positive.".into());
-    }
+/// Surface d'un terrain creusée par les terre-pleins (triangles tournés vers le haut)
+/// et parois du déblai le long des arêtes sans talus.
+fn creuser_terrain(projet: &Projet, t: &crate::elements::site::Terrain, pleins: &[&Dalle]) -> Result<(Vec<[DVec3; 3]>, Vec<[DVec3; 3]>), String> {
     let sol = Sol::nouveau(projet).ok_or("Terrain non valide.")?;
     let pfs: Vec<Plateforme> = pleins.iter().filter_map(|d| Plateforme::nouvelle(projet, d, &sol)).collect();
     let decalage = DVec3::new(0.0, 0.0, -projet.ngf());
@@ -688,10 +699,7 @@ fn creuser_terrain(projet: &Projet, t: &crate::elements::site::Terrain, epaisseu
     for pf in &pfs {
         morceaux = morceaux.into_iter().flat_map(|m| pf.creuser(m)).collect();
     }
-    // dessus creusé ; le dessous suit à l'épaisseur du type (comme une topographie
-    // Revit) : une fouille plus profonde que l'épaisseur ne traverse pas le terrain
-    let mut tris = Vec::new();
-    let bas = DVec3::new(0.0, 0.0, -epaisseur);
+    let mut surface = Vec::new();
     for m in &morceaux {
         let haut = |v: &Point| v.p.extend(v.z);
         for k in 1..m.len().saturating_sub(1) {
@@ -700,28 +708,19 @@ fn creuser_terrain(projet: &Projet, t: &crate::elements::site::Terrain, epaisseu
             if aire.abs() < 1e-3 {
                 continue;
             }
-            let [a, b, c] = if aire > 0.0 { [haut(a), haut(b), haut(c)] } else { [haut(a), haut(c), haut(b)] };
-            tris.push([a, b, c]);
-            tris.push([a + bas, c + bas, b + bas]);
+            surface.push(if aire > 0.0 { [haut(a), haut(b), haut(c)] } else { [haut(a), haut(c), haut(b)] });
         }
     }
-    let n = t.contour.len();
-    for i in 0..n {
-        let (a, b) = (DVec3::from_array(t.contour[i]) + decalage, DVec3::from_array(t.contour[(i + 1) % n]) + decalage);
-        tris.push([a, a + bas, b + bas]);
-        tris.push([a, b + bas, b]);
-    }
     // parois du déblai le long des arêtes sans talus, dans l'emprise de ce terrain
+    let mut parois = Vec::new();
     let contour: Vec<[f64; 2]> = t.contour.iter().map(|p| [p[0], p[1]]).collect();
     let z_terrain = |p: DVec2| geometrie::dedans(p.to_array(), &contour).then(|| sol.z(p)).flatten();
     for pf in &pfs {
         let dehors = |p: DVec2| z_terrain(p).map(|s| s.min(pf.deblai_ext(p)));
         let dedans = |p: DVec2| z_terrain(p).map(|s| s.min(pf.zr));
-        pf.parois(dehors, dedans, true, &mut tris);
-        // même marche sous le terrain, tournée vers l'extérieur
-        pf.parois(|p| dehors(p).map(|z| z - epaisseur), |p| dedans(p).map(|z| z - epaisseur), false, &mut tris);
+        pf.parois(dehors, dedans, true, &mut parois);
     }
-    Ok(tris)
+    Ok((surface, parois))
 }
 
 #[cfg(test)]
@@ -783,14 +782,17 @@ mod tests_deblai {
         let attendu = 100.0 + 20.0 + 4.0 / 3.0;
         assert!((r.deblai / 1e9 - attendu).abs() < 0.3, "{}", r.deblai / 1e9);
         // terrain creusé jusqu'au fond de forme (-2 m), plus profond que son épaisseur
-        // (0,5 m) : le solide reste fermé et garde son épaisseur
+        // nominale (0,5 m) : fond plat abaissé à 1 m sous la fouille (-3 m), profondeur
+        // effective 2 m (n° 14) ; le solide reste fermé
         let t = p.terrains[0].clone();
         for talus in [true, false] {
             if !talus { for k in 0..4 { p.dalles[0].definir_pente(0, k, None); } }
-            let plein = geometrie::volume(&t.solide(0.0, 500.0).unwrap()) / 1e9;
             let tris = solide_terrain(&p, &t, 500.0).unwrap();
+            let zmin = tris.iter().flatten().map(|v| v.z).fold(f64::INFINITY, f64::min);
+            assert!((zmin + 3000.0).abs() < 1.0, "fond plat : {zmin}");
             let creuse = geometrie::volume(&tris) / 1e9;
-            assert!((plein - creuse).abs() < 0.5, "{plein} {creuse}");
+            // plein de 60 × 60 × 2 m moins la fouille (environ 121 m³ avec talus)
+            assert!(creuse > 7200.0 - 130.0 && creuse < 7200.0 - 95.0, "{creuse}");
             // faces du dessus (tournées vers le haut) dans l'emprise : au fond de forme
             let dessus: Vec<f64> = tris.iter().filter(|t| (t[1] - t[0]).cross(t[2] - t[0]).z > 0.0)
                 .flatten().filter(|v| v.x > 100.0 && v.x < 9900.0 && v.y > 100.0 && v.y < 9900.0).map(|v| v.z).collect();

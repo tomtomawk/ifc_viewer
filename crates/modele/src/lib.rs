@@ -1158,7 +1158,7 @@ impl Projet {
     pub fn type_remblai(&self, d: &Dalle) -> site::TypeTerrain {
         let types = self.types_terrains_disponibles();
         let voulu = d.type_remblai.as_deref().unwrap_or("remblai");
-        types.into_iter().find(|t| t.id == voulu).unwrap_or_else(|| site::TypeTerrain { id: "remblai".into(), nom: "Remblai".into(), epaisseur: 1000.0, materiau: Some("Remblai".into()) })
+        types.into_iter().find(|t| t.id == voulu).unwrap_or_else(|| site::TypeTerrain { id: "remblai".into(), nom: "Remblai".into(), epaisseur: 1000.0, materiau: Some("Remblai".into()), couches: Vec::new() })
     }
 
     /// Types de terrain proposés : ceux du projet, sinon ceux du gabarit, sinon le type
