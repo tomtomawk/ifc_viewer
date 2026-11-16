@@ -172,25 +172,15 @@ name = "bimedit"
 version = "0.1.0"
 dependencies = [
  "collaboration",
- "commandes",
+ "config",
  "echanges",
- "eframe",
  "formats",
  "glam",
  "ifc_base",
- "maillage",
- "miniz_oxide 0.8.9",
+ "interface",
  "modele",
- "moteur2d",
- "moteur3d",
  "noyau",
  "pilote",
- "rfd",
- "scene",
- "serde",
- "serde_json",
- "uuid",
- "windows-sys 0.59.0",
  "winresource",
 ]
 
@@ -410,6 +400,7 @@ name = "commandes"
 version = "0.1.0"
 dependencies = [
  "glam",
+ "maillage",
  "modele",
  "noyau",
  "serde",
@@ -423,6 +414,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
 dependencies = [
  "crossbeam-utils",
+]
+
+[[package]]
+name = "config"
+version = "0.1.0"
+dependencies = [
+ "echanges",
+ "eframe",
+ "modele",
+ "noyau",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1324,6 +1327,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "interface"
+version = "0.1.0"
+dependencies = [
+ "collaboration",
+ "commandes",
+ "config",
+ "echanges",
+ "eframe",
+ "formats",
+ "glam",
+ "ifc_base",
+ "maillage",
+ "modele",
+ "moteur2d",
+ "moteur3d",
+ "noyau",
+ "pilote",
+ "rfd",
+ "scene",
+ "serde",
+ "serde_json",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1610,6 +1638,7 @@ dependencies = [
 name = "moteur2d"
 version = "0.1.0"
 dependencies = [
+ "commandes",
  "glam",
  "maillage",
  "modele",
@@ -1617,6 +1646,7 @@ dependencies = [
  "pdf-writer",
  "rayon",
  "scene",
+ "serde_json",
  "svg2pdf",
 ]
 
