@@ -67,6 +67,15 @@ impl Reperage {
         }
     }
 
+    /// Départ d'une distance tapée (n° 2) : le point de référence acquis, quand le point
+    /// visé suit un guide qui en part (axe, perpendiculaire, direction d'un élément).
+    /// La distance se mesure alors depuis ce point, le long du guide.
+    pub fn depart_saisie(&self, point: DVec2) -> Option<DVec2> {
+        let r = self.reference?;
+        let sur_guide = self.guides.iter().any(|(o, d)| o.distance(r) < 1e-9 && d.perp_dot(point - r).abs() < 1e-6);
+        (sur_guide && point.distance(r) > 1e-9).then_some(r)
+    }
+
     /// Oublie les références et les guides (changement d'outil, fin de commande).
     pub fn oublier(&mut self) {
         *self = Reperage::default();
@@ -206,6 +215,23 @@ mod tests {
         assert!(repere.guides.is_empty());
         repere.oublier();
         assert!(repere.droites.is_empty());
+    }
+
+    /// N° 2 : point accroché retenu comme référence, curseur sur son guide vertical :
+    /// la distance tapée part de la référence ; hors guide, du point précédent.
+    #[test]
+    fn distance_tapee_depuis_le_point_accroche() {
+        let mut repere = Reperage::default();
+        let geoms = [Geom::Segment([DVec2::ZERO, DVec2::new(100.0, 0.0)])];
+        // survol prolongé de l'extrémité : référence acquise
+        repere.calculer(DVec2::new(100.5, 0.5), 2.0, &geoms, None, false, 0.0, 0.5, 0.0, true);
+        repere.calculer(DVec2::new(100.5, 0.5), 2.0, &geoms, None, false, 1.0, 0.5, 0.0, true);
+        assert_eq!(repere.reference, Some(DVec2::new(100.0, 0.0)));
+        let (point, _) = repere.calculer(DVec2::new(100.6, 40.0), 2.0, &geoms, None, false, 1.1, 0.5, 0.0, true).unwrap();
+        assert_eq!(repere.depart_saisie(point), Some(DVec2::new(100.0, 0.0)));
+        let depart = repere.depart_saisie(point).unwrap();
+        assert_eq!(moteur2d::dao::lire_saisie("25", Some(depart), Some(point - depart), 1.0).unwrap(), DVec2::new(100.0, 25.0));
+        assert_eq!(repere.depart_saisie(DVec2::new(60.0, 40.0)), None);
     }
 }
 

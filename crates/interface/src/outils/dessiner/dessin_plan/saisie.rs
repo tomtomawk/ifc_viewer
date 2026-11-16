@@ -841,7 +841,10 @@ impl ViewerApp {
         } else if saisie.eq_ignore_ascii_case("f") {
             trace.appliquer(d2::EvenementTrace::Fermer)
         } else {
-            let precedent = trace.precedent();
+            // distance seule le long d'un guide issu du point de référence : depuis ce point
+            let depart = self.dessin2d.point.filter(|_| !saisie.starts_with(['@', '#']) && !saisie.contains(['<', '>']))
+                .and_then(|(c, _)| self.dessin2d.reperage.depart_saisie(c));
+            let precedent = depart.or(trace.precedent());
             let direction = self.dessin2d.point.zip(precedent).map(|((c, _), p)| c - p);
             match d2::lire_saisie(&saisie, precedent, direction, modele::unite::unite().facteur()) {
                 Ok(p) => trace.appliquer(d2::EvenementTrace::Point(p)),
