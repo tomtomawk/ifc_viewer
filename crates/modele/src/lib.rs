@@ -321,12 +321,15 @@ pub enum FonctionCouche {
     Structure,
     Isolation,
     Finition,
+    /// Lame d'air : la couche garde son épaisseur, mais reste vide (ni matériau ni
+    /// remplissage en 3D, ni contour propre en coupe).
+    LameAir,
     #[default]
     Autre,
 }
 
 impl FonctionCouche {
-    pub const TOUTES: [FonctionCouche; 4] = [Self::Structure, Self::Isolation, Self::Finition, Self::Autre];
+    pub const TOUTES: [FonctionCouche; 5] = [Self::Structure, Self::Isolation, Self::Finition, Self::LameAir, Self::Autre];
 
     fn est_autre(&self) -> bool {
         *self == Self::Autre
@@ -337,6 +340,7 @@ impl FonctionCouche {
             Self::Structure => "Structure",
             Self::Isolation => "Isolation",
             Self::Finition => "Finition",
+            Self::LameAir => "Lame d'air",
             Self::Autre => "Autre",
         }
     }

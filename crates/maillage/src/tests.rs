@@ -42,3 +42,33 @@ fn terrain_sous_le_mur_et_ses_traits() {
     let topo = s.objects.iter().find(|o| &*o.class == "IFCGEOGRAPHICELEMENT").unwrap();
     assert!(topo.aretes.count > 8, "{}", topo.aretes.count);
 }
+
+/// N° 20 : la lame d'air du mur à ossature du gabarit garde son épaisseur (les couches
+/// voisines restent écartées de 25 mm) mais n'a ni géométrie ni bande de coupe.
+#[test]
+fn lame_air_vide_mais_epaisse() {
+    use modele::creation::ParametresMur;
+    let mut p = Projet::depuis_gabarit("Air", &modele::gabarit::Gabarit::defaut());
+    let t = p.types_murs.iter().find(|t| t.nom == "Mur ossature bois 145").unwrap().clone();
+    assert!(t.couches.iter().any(|c| c.fonction == modele::FonctionCouche::LameAir));
+    p.ajouter_mur([0.0, 0.0], [4000.0, 0.0], &ParametresMur { type_mur: Some(t.id.clone()), ..Default::default() }).unwrap();
+    let s = depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
+    let couches = p.murs.iter().filter(|m| m.assemblage.is_some()).collect::<Vec<_>>();
+    assert_eq!(couches.len(), t.couches.len());
+    for m in &couches {
+        let air = p.type_mur(&m.type_mur).unwrap().couches[0].fonction == modele::FonctionCouche::LameAir;
+        let id = id_natif("mur", &m.id);
+        assert_eq!(s.object_of.contains_key(&id), !air, "{} : géométrie {}", m.nom, if air { "en trop" } else { "manquante" });
+        assert_eq!(s.couches_coupe.contains_key(&id), !air);
+    }
+    // les couches voisines restent à 25 mm l'une de l'autre : bardage (22) puis air (25)
+    let ys: Vec<f64> = s.objects.iter().filter(|o| couches.iter().any(|m| s.object_of.get(&id_natif("mur", &m.id)).is_some_and(|&k| std::ptr::eq(&s.objects[k as usize], *o))))
+        .flat_map(|o| [o.min.y as f64 + s.origin.y, o.max.y as f64 + s.origin.y]).collect();
+    let mut faces: Vec<i64> = ys.iter().map(|y| (y * 1000.0).round() as i64).collect();
+    faces.sort();
+    faces.dedup();
+    let total: f64 = t.couches.iter().map(|c| c.epaisseur).sum();
+    // boîtes englobantes en f32 : 1 mm de tolérance
+    assert!((faces.last().unwrap() - faces.first().unwrap() - total.round() as i64).abs() <= 1, "épaisseur totale conservée : {faces:?}");
+    assert!(faces.windows(2).any(|w| w[1] - w[0] == 25), "vide de 25 mm entre bardage et panneau : {faces:?}");
+}

@@ -406,7 +406,7 @@ impl Voisin {
                 FonctionCouche::Structure => 30,
                 FonctionCouche::Isolation => 20,
                 FonctionCouche::Finition => 10,
-                FonctionCouche::Autre => 0,
+                FonctionCouche::Autre | FonctionCouche::LameAir => 0,
             });
         (
             p.priorites_jonction.get(&m.id).copied().unwrap_or(defaut),

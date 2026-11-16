@@ -142,6 +142,10 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         model.parent.insert(id, parent);
         model.children.entry(parent).or_default().push(id);
         model.type_of.insert(id, id_natif("type-mur", &m.type_mur));
+        // lame d'air : épaisseur réservée par les autres couches, rien à mailler ni à couper
+        if let [c] = type_mur.couches.as_slice() && c.fonction == modele::FonctionCouche::LameAir {
+            continue;
+        }
         // matériau d'un mur monocouche (couche d'assemblage) : couleur et motif de coupe
         let materiau = match type_mur.couches.as_slice() {
             [c] => c.materiau.as_ref().map(|n| projet.materiau(n).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(n))),
@@ -228,6 +232,8 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         for c in &t.couches {
             let (haut, bas) = (e, e - c.epaisseur);
             e = bas;
+            // lame d'air : son épaisseur décale les couches suivantes, sans géométrie
+            if c.fonction == modele::FonctionCouche::LameAir { continue; }
             let tris = modele::elements::pente::couche(&d.contours, &plans, z0, bas, haut);
             if tris.is_empty() { continue; }
             let m = c.materiau.as_ref().map(|n| projet.materiau(n).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(n)));

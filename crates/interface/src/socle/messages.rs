@@ -9,6 +9,8 @@ const DUREE: f32 = 3.0;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Niveau {
     Information,
+    /// Premier usage prévu : modification automatique du type de terrain (n° 14).
+    #[allow(dead_code)]
     Avertissement,
     Erreur,
 }
