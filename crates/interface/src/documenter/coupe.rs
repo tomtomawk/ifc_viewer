@@ -317,14 +317,11 @@ impl ViewerApp {
                 let actif = resp.hovered() || resp.dragged();
                 painter.circle(p, if actif { 7.0 } else { 5.5 }, if actif { couleur } else { Color32::WHITE }, egui::Stroke::new(1.5, couleur));
                 if resp.dragged() {
-                    // pixels par mètre le long de la normale, à l'écran
+                    // pixels par mètre le long de la normale sortante, à l'écran : d > 0
+                    // quand on tire vers l'extérieur
                     let s = q - p;
                     let d = resp.drag_delta().dot(s) / s.length_sq().max(1e-6);
-                    if haut {
-                        nb[k] += d;
-                    } else {
-                        na[k] += d;
-                    }
+                    (na, nb) = deplacer_face(na, nb, k, haut, d);
                 }
                 if actif {
                     resp.on_hover_cursor(egui::CursorIcon::Grab);
@@ -332,7 +329,8 @@ impl ViewerApp {
             }
         }
         if (na, nb) != (a, b) {
-            self.regler_boite(na.min(nb - Vec3::splat(0.05)), nb);
+            self.boite = Some((na, nb));
+            self.coupe_dirty = true;
         }
     }
 
@@ -397,4 +395,42 @@ impl ViewerApp {
         }
     }
 
+}
+
+/// Épaisseur minimale de la zone de coupe (m).
+const EPAISSEUR_MIN_BOITE: f32 = 0.05;
+
+/// Déplace la face `k` (haute ou basse) de la boîte [a, b] de `d` mètres vers l'extérieur
+/// (d < 0 : vers l'intérieur). La face opposée ne bouge jamais ; la face déplacée s'arrête
+/// à l'épaisseur minimale (n° 21).
+pub(crate) fn deplacer_face(mut a: Vec3, mut b: Vec3, k: usize, haut: bool, d: f32) -> (Vec3, Vec3) {
+    if haut {
+        b[k] = (b[k] + d).max(a[k] + EPAISSEUR_MIN_BOITE);
+    } else {
+        a[k] = (a[k] - d).min(b[k] - EPAISSEUR_MIN_BOITE);
+    }
+    (a, b)
+}
+
+#[cfg(test)]
+mod tests_poignees_boite {
+    use super::*;
+
+    /// N° 21 : sur les six faces, tirer vers l'extérieur agrandit, vers l'intérieur
+    /// réduit, et la face opposée reste en place, même en la dépassant.
+    #[test]
+    fn six_faces_dans_le_bon_sens() {
+        let (a, b) = (Vec3::ZERO, Vec3::splat(10.0));
+        for k in 0..3 {
+            for haut in [false, true] {
+                let (na, nb) = deplacer_face(a, b, k, haut, 2.0);
+                assert!((nb[k] - na[k]) > 10.0, "face {k} {haut} : tirer vers l'extérieur doit agrandir");
+                let (na, nb) = deplacer_face(a, b, k, haut, -2.0);
+                assert!((nb[k] - na[k]) < 10.0, "face {k} {haut} : vers l'intérieur doit réduire");
+                let (na, nb) = deplacer_face(a, b, k, haut, -50.0);
+                if haut { assert_eq!(na, a); } else { assert_eq!(nb, b); }
+                assert!((nb[k] - na[k] - EPAISSEUR_MIN_BOITE).abs() < 1e-5);
+            }
+        }
+    }
 }
