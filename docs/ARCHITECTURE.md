@@ -1,6 +1,6 @@
 # Architecture : découpage en workspace Cargo
 
-État après le lot 11a (§5.18) : le dépôt est un workspace (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`). `noyau` (lot 1), `modele` (lot 2), `ifc_base` et `scene` (lot 3), `formats` (lot 4), `maillage` (lot 5), `commandes` (lot 6), `moteur2d` (lot 7), `moteur3d` (lot 8), `echanges` et `collaboration` (lot 9), `pilote` (lot 10), `config` et `interface` (lot 11a) sont extraits en `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage`, `crates/commandes`, `crates/moteur2d`, `crates/moteur3d`, `crates/echanges`, `crates/collaboration`, `crates/pilote`, `crates/config` et `crates/interface` ; `crates/app` ne garde que le binaire `bimedit` (package et binaire). Le rangement interne d'`interface` est la partie 11b (non faite). Les dépendances sont déclarées une fois dans `[workspace.dependencies]` (racine) et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine.
+État après le lot 11b (§5.19) : le dépôt est un workspace (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`). `noyau` (lot 1), `modele` (lot 2), `ifc_base` et `scene` (lot 3), `formats` (lot 4), `maillage` (lot 5), `commandes` (lot 6), `moteur2d` (lot 7), `moteur3d` (lot 8), `echanges` et `collaboration` (lot 9), `pilote` (lot 10), `config` et `interface` (lot 11a) sont extraits en `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage`, `crates/commandes`, `crates/moteur2d`, `crates/moteur3d`, `crates/echanges`, `crates/collaboration`, `crates/pilote`, `crates/config` et `crates/interface` ; `crates/app` ne garde que le binaire `bimedit` (package et binaire). Le rangement interne d'`interface` est fait (partie 11b, §5.19) ; le découpage des fichiers de plus de 600 lignes reste à faire (11c éventuel, §5.19 c). Les dépendances sont déclarées une fois dans `[workspace.dependencies]` (racine) et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine.
 
 Restent à la racine : `docs/`, `samples/`, `gabarits/`, `tools/`, `.github/`, `.mcp.json`, `README.md`, `AGENTS.md`. Les ressources embarquées (`include_str!`) pointent vers ces dossiers par des chemins relatifs depuis `crates/<crate>/src/...` (le gabarit par défaut est embarqué par `crates/modele/src/gabarit.rs`) ; les tests lisent `samples/` via `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")` (le répertoire courant d'un test est celui de sa crate ; même profondeur pour toutes les crates).
 
@@ -22,12 +22,12 @@ crates/
   collaboration/  transactions partagées : session, stockage, concurrence, partage, texte (yrs), cli
   pilote/         MCP, CLI, registre des instances, saisie (egui::Event) ; mcp.rs ~600 lignes
   config/         options utilisateur, raccourcis (egui::Key, DragValue, ThemePreference) ; fait (lot 11a)
-  interface/      egui ; UNE crate (`impl ViewerApp` réparti sur 70 fichiers, à plat : lot 11a) ;
-                  cible 11b : socle/ zones/ saisie/ outils/{modeliser,modifier,dessiner,annoter}/ documents/ familles/ projet/
+  interface/      egui ; UNE crate (`impl ViewerApp` réparti sur 81 fichiers) ; rangée au lot 11b :
+                  socle/ zones/ saisie/ outils/{modeliser,modifier,dessiner,annoter}/ documenter/ familles/ projet/
   app/            binaire `bimedit` : main.rs, build.rs, assets/icone.ico
 ```
 
-Correspondance avec les dossiers actuels (après lot 11a) : toutes les crates ci-dessus sont extraites ; `crates/app/src/config/` -> `crates/config/src/` ; `crates/app/src/ui/` -> `crates/interface/src/` (même arborescence, `mod.rs` -> `lib.rs`) ; `crates/app/src/main.rs` : reste dans app (la fenêtre native est descendue dans `interface::fenetre`) ; `modele_tests/`, `formats_tests/` et `commandes_tests/` n'existent plus (tests déplacés : §5.18 d).
+Correspondance avec les dossiers actuels (après lot 11a) : toutes les crates ci-dessus sont extraites ; `crates/app/src/config/` -> `crates/config/src/` ; `crates/app/src/ui/` -> `crates/interface/src/` (même arborescence, `mod.rs` -> `lib.rs`) ; `crates/app/src/main.rs` : reste dans app (la fenêtre native est descendue dans `interface::fenetre`, `interface::socle::fenetre` depuis le lot 11b) ; `modele_tests/`, `formats_tests/` et `commandes_tests/` n'existent plus (tests déplacés : §5.18 d).
 
 ## 2. Graphe de dépendances autorisées
 
@@ -90,7 +90,7 @@ Code « parqué » : quand une coupe fait monter du code vers une crate qui n'ex
 | 8 | moteur3d | `rendu/` hors scène | Sonnet | **fait** (aucune coupe nécessaire ; extraction `d2686d2` ; `gpu.rs` non découpé ; détail au §5.15) |
 | 9 | echanges + collaboration | `crates/app/src/echanges`, `crates/app/src/collaboration*` | Sonnet | **fait** (aucune coupe préalable nécessaire ; extraction de `echanges` `e72f601` ; extraction de `collaboration` `35fab15` ; détail au §5.16) |
 | 10 | pilote | `pilote/` | Sonnet | **fait** (aucune coupe préalable nécessaire ; extraction `5424089` ; détail au §5.17) |
-| 11 | config + interface | 11a : extraction de `config` et d'`interface` sans réorganisation, `cadre_natif` et `arriere_plan` de `main.rs` descendus dans `interface::fenetre`, 17 tests de `modele_tests` déplacés ; 11b : rangement interne `socle/ zones/ saisie/ outils/... ` | **Fable** | 11a **fait** (config `aa7c8e3` ; interface `e453298` ; tests `aeec783` ; `Cargo.lock` `3b8b124` ; docs `45da533` ; détail au §5.18) ; 11b à faire |
+| 11 | config + interface | 11a : extraction de `config` et d'`interface` sans réorganisation, `cadre_natif` et `arriere_plan` de `main.rs` descendus dans `interface::fenetre`, 17 tests de `modele_tests` déplacés ; 11b : rangement interne `socle/ zones/ saisie/ outils/... ` | **Fable** | 11a **fait** (config `aa7c8e3` ; interface `e453298` ; tests `aeec783` ; `Cargo.lock` `3b8b124` ; docs `45da533` ; détail au §5.18) ; 11b **fait** (saisie `8de17e9` ; familles `b5835c4` ; documenter `fdf2073` ; projet `b630591` ; zones `a8f6e9c` ; socle `03f35e5` ; outils `e03d548`, `c80164a` ; docs DOCS11B ; détail au §5.19) ; 11c (découpage des fichiers > 600 lignes) à décider |
 | 12 | app + docs | binaire (alléger `main.rs`), `AGENTS.md` par crate (déjà posés pour config, interface, app au 11a), README | Sonnet | à faire |
 
 ## 5. Inventaire des imports (état du lot 0)
@@ -939,3 +939,91 @@ Les 15 plus gros fichiers d'`interface` (tous au-dessus du plafond ; au total 70
 | `interface` | nom | module local `collaboration` qui masque la crate (chemins `::collaboration::`) | 11b |
 | `app/main.rs` | formats, ifc_base, echanges | modes console `--modele`, `--stats`, `--images`, `--decodage`, `--nomenclatures`, `--parametres` (~500 lignes) : pas des points d'entrée minimaux ; destination à décider (crate existante ou module dédié) | 12 |
 | `config` | egui | dépendance `eframe` (`Dimensions`, `ThemeInterface::appliquer`, `Key`) : adaptateurs d'interface dans une crate de configuration ; à garder tant que `interface` est la seule utilisatrice | 12, à valider |
+
+### 5.19 Après lot 11b (2026-11-16)
+
+Rangement interne de `crates/interface/src/` par domaine, par `git mv` et déclarations de modules, sans changement fonctionnel ni de format, sans découpage de fichier. Tests : 390 réussis, 2 ignorés, répartition identique au §5.18 (`interface` 49, `config` 4 ; somme brute des lignes « test result » : 394, dont 4 lignes de sous-processus de `collaboration`). Sorties comparées à `fd4030e` (binaire release construit dans un worktree temporaire, `CARGO_TARGET_DIR` séparé, supprimé ensuite) : `--export-ifc` et `--quantites` de `samples/maison_native.modele.json` identiques octet pour octet ; `--stats` des deux IFC de `samples/` identiques hors « Durée » ; `initialize` puis `tools/list` sur stdin de `bimedit --mcp` identiques ; sans affichage, même erreur `winit EventLoopError … DISPLAY is set`, même code 1. L'interface graphique n'a pas pu être lancée (pas d'affichage). Contrôle du contenu : pour les 70 fichiers d'origine (69 renommés, `lib.rs` modifié), après suppression des lignes `use`/`mod`, des `pub(super)`/`pub(crate)` et des préfixes de chemins `crate::`/`super::`/dossiers, et normalisation de `include_bytes!`, 0 ligne différente avec `fd4030e` (`git diff -M` : similarité 85 à 100 %, au plus 50 lignes ajoutées et 50 retirées par fichier déplacé, `saisie/saisie_plan.rs` ; `lib.rs` : +31/−70, déclarations `mod` et chemins).
+
+#### (a) Arborescence finale de `crates/interface/src/`
+
+81 fichiers `.rs` (70 + 11 `mod.rs` de dossier, qui ne contiennent que des déclarations et un commentaire `//!`), 34 340 lignes. Un `AGENTS.md` court par dossier de premier niveau.
+
+| Dossier | Fichiers (lignes) | Rôle |
+|---|---|---|
+| racine | `lib.rs` (1 143) | `ViewerApp`, boucle `update`, déclaration des 7 dossiers, imports communs (`use crate::socle::aides::*`, `use crate::saisie::accrochage::{AccrocheMur, marqueur}`) |
+| `socle/` | `documents.rs` (735), `vues.rs` (613), `viewport.rs` (661), `soleil.rs` (421), `fenetre.rs` (92), `parametres.rs` (404), `aides.rs` (384), `commandes_pilote.rs` (953), `pilotage.rs` (634), `volets.rs` (117) | documents ouverts, vues et caméra, zone de vue, fenêtre native (`pub mod`), paramètres, aides communes, pilotage MCP, volets flottants |
+| `zones/` | `ruban/` (9 fichiers, dont `mod.rs` 1 012, `icones.rs` 788, `murs.rs` 733, `tests.rs` 519), `barre_haute.rs` (669), `panneaux.rs` (535), `panneau_droit.rs` (403), `navigateur.rs` (794), `proprietes.rs` (560), `communes.rs` (438), `menu_vue.rs` (216), `vue_native.rs` (235), `vue_revit.rs` (217), `graphismes.rs` (438) | zones d'écran |
+| `saisie/` | `accrochage.rs` (130), `reperage.rs` (160), `saisie_trace.rs` (120), `saisie_plan.rs` (1 121), `selection.rs` (509), `poignees_annotation.rs` (214) | interaction commune aux outils |
+| `outils/modeliser/` | `bim.rs` (1 526, ancien `bim/mod.rs`), `murs_courbes.rs` (231), `garde_corps.rs` (816), `escalier.rs` (406, ancien `dessin_plan/escalier.rs`) | transactions du document BIM, placement d'éléments, panneau des outils de création ; murs courbes, garde-corps, escaliers |
+| `outils/modifier/` | `transformer.rs` (987), `ajuster.rs` (506), `options_modifier.rs` (367, ancien `bim/modifier.rs`) | commandes de modification à la souris, barre d'options de Modifier |
+| `outils/dessiner/` | `dessin_plan/` (`mod.rs` 1 174, `saisie.rs` 874, `affichage.rs` 764, `commandes_contour.rs` 390, `options.rs` 225, `courbures.rs` 180) | DAO 2D commune |
+| `outils/annoter/` | `cotation.rs` (84), `cotes_aretes.rs` (237) (anciens `dessin_plan/…`), `outils_texte.rs` (78), `types_traits.rs` (236) | cotation, textes, types de trait |
+| `documenter/` | `feuilles.rs` (1 060), `cartouche.rs` (492), `coupe.rs` (400), `gabarits_vues.rs` (117) | documents de sortie |
+| `familles/` | `editeur_famille/` (7 fichiers, dont `canevas.rs` 1 219, `documents.rs` 1 031, `mod.rs` 730, `panneau.rs` 658), `familles_planes.rs` (485), `document_famille.rs` (33), `profils.rs` (132), `selection_famille.rs` (162) | édition des familles |
+| `projet/` | `collaboration.rs` (315), `gestion_contextes.rs` (328) | projet partagé, phases, sous-projets, variantes |
+
+API externe : `interface::fenetre::lancer` devient `interface::socle::fenetre::lancer` (`pub mod socle`, dont seul `fenetre` est `pub`) ; `crates/app/src/main.rs` mis à jour (1 ligne). `include_bytes!("../../assets/icone.png")` dans `socle/fenetre.rs` et `zones/barre_haute.rs` ; `CARGO_MANIFEST_DIR` de `zones/ruban/tests.rs` inchangé. Le module local `projet::collaboration` garde son nom ; les chemins `::collaboration::…` visent toujours la crate (aucun chemin nu `collaboration::`).
+
+#### (b) Règle de visibilité appliquée
+
+1. Chemins : tous les `super::X` (fichier de la racine) et `super::super::X` (fichier de sous-dossier) vers un module de la racine sont devenus `crate::X` (commit `8de17e9`), puis `crate::X` -> `crate::<dossier>::X` à chaque déplacement ; les chemins nus `X::…` (rendus possibles par le glob `use super::*`) sont écrits en entier. Aucun ré-export ajouté (seul `pub(crate) use options::boutons_trace` de `dessin_plan/mod.rs` existait déjà). Une importation devenue inutile retirée (`use super::accrochage;` dans `editeur_famille/mod.rs`).
+2. En-tête des modules déplacés : `use super::*;` (glob de la racine) -> `use crate::*;` (`pub use crate::*;` dans `bim.rs`, comme avant).
+3. `pub(super)` -> `pub(crate)` dans tous les fichiers de premier niveau déplacés et dans les `mod.rs` des dossiers déplacés (`ruban/`, `dessin_plan/`, `editeur_famille/`, ancien `bim/`) : pour un module enfant de la racine, `pub(super)` valait toute la crate, donc portée inchangée. Dans les fichiers des sous-dossiers (`ruban/*.rs`, `dessin_plan/*.rs`, `editeur_famille/*.rs`), `pub(super)` est laissé : il vise toujours le même `mod.rs`.
+4. Fichiers sortis de leur dossier (`cotation.rs`, `cotes_aretes.rs`, `escalier.rs`, `options_modifier.rs`) : `pub(super)` -> `pub(crate)` ; le glob de `dessin_plan`/`bim` remplacé par des `use` explicites ; éléments privés de l'ancien parent passés en `pub(crate)` : `EtatDessin2D::{curseur, point, aretes_cote, arete_premiere, arete_survol, aretes_cache}`, `ViewerApp::{vers_ecran, ecran_3d}`, `fn champ_valeur` (`dessin_plan/mod.rs`) ; `EtatBim::{delta, priorite, tableau_cache}` (`bim.rs`).
+5. Aucun item ne devient `pub` hors `socle` (module) et `socle::fenetre` (déjà `pub`). Les champs privés de `ViewerApp` restent accessibles aux fichiers des dossiers (descendants de la racine).
+
+#### (c) Fichiers restés au-delà de 600 lignes (pour un éventuel 11c)
+
+23 fichiers :
+
+| Fichier (`crates/interface/src/`) | Lignes |
+|---|---|
+| `outils/modeliser/bim.rs` | 1 526 |
+| `familles/editeur_famille/canevas.rs` | 1 219 |
+| `outils/dessiner/dessin_plan/mod.rs` | 1 174 |
+| `lib.rs` | 1 143 |
+| `saisie/saisie_plan.rs` | 1 121 |
+| `documenter/feuilles.rs` | 1 060 |
+| `familles/editeur_famille/documents.rs` | 1 031 |
+| `zones/ruban/mod.rs` | 1 012 |
+| `outils/modifier/transformer.rs` | 987 |
+| `socle/commandes_pilote.rs` | 953 |
+| `outils/dessiner/dessin_plan/saisie.rs` | 874 |
+| `outils/modeliser/garde_corps.rs` | 816 |
+| `zones/navigateur.rs` | 794 |
+| `zones/ruban/icones.rs` | 788 |
+| `outils/dessiner/dessin_plan/affichage.rs` | 764 |
+| `socle/documents.rs` | 735 |
+| `zones/ruban/murs.rs` | 733 |
+| `familles/editeur_famille/mod.rs` | 730 |
+| `zones/barre_haute.rs` | 669 |
+| `socle/viewport.rs` | 661 |
+| `familles/editeur_famille/panneau.rs` | 658 |
+| `socle/pilotage.rs` | 634 |
+| `socle/vues.rs` | 613 |
+
+#### (d) Classements ambigus et écarts avec la cible proposée
+
+| Fichier | Classé dans | Alternative | Raison |
+|---|---|---|---|
+| dossier `documents/` | `documenter/` | `documents/` | `documents.rs` (documents ouverts) existait à la racine et va dans `socle/` ; trois modules `documents` (racine, `socle`, `editeur_famille`) prêtaient à confusion ; même nom que `commandes/src/documenter/` |
+| `bim/mod.rs` | `outils/modeliser/bim.rs` | `socle/` | mélange transactions du document (`executer_bim`, historique, enregistrer sous, import, verrous) et outils de création (`placer_*`, `panneau_bim`) ; à scinder en 11c (transactions -> `socle/`) |
+| `bim/modifier.rs` | `outils/modifier/options_modifier.rs` (renommé) | garder `modifier.rs` ; `socle/` pour l'export | contient aussi les dialogues d'export IFC/PDF et la fenêtre documentation ; renommé pour éviter `outils::modifier::modifier` |
+| `dessin_plan/escalier.rs` | `outils/modeliser/` | `outils/dessiner/dessin_plan/` | création d'escaliers et de garde-corps (modélisation) ; a demandé 1 `pub(crate)` (`champ_valeur`) |
+| `dessin_plan/cotation.rs`, `cotes_aretes.rs` | `outils/annoter/` | `outils/dessiner/dessin_plan/` | cotation = Annoter ; a demandé 8 `pub(crate)` dans `dessin_plan/mod.rs` (b 4) |
+| `soleil.rs` | `socle/` | `documenter/` | lieu, soleil, caméra de vue et mode piéton : lié à la vue 3D, pas à un document de sortie |
+| `selection_famille.rs` | `familles/` | `saisie/` | sélection des familles du projet et accès à leurs éditeurs, pas une interaction de saisie |
+| `saisie_plan.rs` | `saisie/` (comme demandé) | `outils/modeliser/` | contient la création des murs, dalles et vues natives ; à scinder en 11c |
+| `types_traits.rs` | `outils/annoter/` (comme demandé) | `outils/dessiner/` | types de trait du dessin 2D |
+| `poignees_annotation.rs` | `saisie/` (comme demandé) | `outils/annoter/` | poignées communes aux éditeurs |
+| `coupe.rs` | `documenter/` (comme demandé) | `socle/` | plan de coupe et boîte 3D de la vue autant que dessin et export de la vue |
+| `outils/dessiner/` | ne contient que `dessin_plan/` | remonter `dessin_plan/` d'un niveau | gardé pour la symétrie avec `commandes` ; renommer changerait tous les chemins |
+
+#### (e) Points à valider
+
+1. Changement de chemin public `interface::fenetre` -> `interface::socle::fenetre` (alternative : `pub use socle::fenetre;` dans `lib.rs`, refusée pour ne pas masquer les chemins).
+2. Les 12 éléments passés de privé à `pub(crate)` (b 4) ; alternative : laisser `cotation.rs`, `cotes_aretes.rs`, `escalier.rs` dans `dessin_plan/` et `modifier.rs` dans `bim/`.
+3. Nom `documenter/` au lieu de `documents/` ; renommage `bim/modifier.rs` -> `options_modifier.rs`.
+4. Classements de `bim.rs`, `soleil.rs`, `selection_famille.rs`, `saisie_plan.rs` (d).
+5. Opportunité d'un 11c pour les 23 fichiers du (c), en commençant par `bim.rs` et `saisie_plan.rs` (classement mixte).
+6. L'interface graphique n'a pas été lancée : un essai manuel (ouvrir un projet, ruban, éditeur de famille, feuilles, cotation, escalier) reste à faire sur un poste avec affichage.

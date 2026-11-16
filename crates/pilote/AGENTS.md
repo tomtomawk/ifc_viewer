@@ -13,7 +13,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `scene`, `maillage`, `com
 | `cli.rs` | `--editer`, `--export-*`, `--quantites`, `--mesurer-scene` |
 | `edition.rs`, `instances.rs`, `saisie.rs` | transactions du pilote, registre des instances, entrées egui |
 
-Les commandes reçues sont exécutées par l'interface (`crates/interface/src/commandes_pilote.rs`, `pilotage.rs`), pas ici. Les `include_str!` visent `docs/PILOTE.md`, `docs/EDITION.md`, `docs/MODELE.md` et `crates/commandes/src/socle/commande.rs` (chemins relatifs à `src/`).
+Les commandes reçues sont exécutées par l'interface (`crates/interface/src/socle/commandes_pilote.rs`, `socle/pilotage.rs`), pas ici. Les `include_str!` visent `docs/PILOTE.md`, `docs/EDITION.md`, `docs/MODELE.md` et `crates/commandes/src/socle/commande.rs` (chemins relatifs à `src/`).
 
 ## Vérifier
 
