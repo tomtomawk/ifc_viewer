@@ -88,6 +88,8 @@ fn table_zero(p: &modele::Projet, id: &str) -> Rendu {
 
 #[derive(Default)]
 pub(crate) struct EtatFeuilles {
+    /// Fenêtre d'export multiformat du jeu (n° 13).
+    pub export: Option<crate::documenter::export_jeu::ExportJeu>,
     /// Pixels par mm du papier, position écran de l'origine du jeu (coin haut gauche de
     /// la première feuille) par rapport au coin de la vue.
     zoom: f32,
@@ -908,16 +910,6 @@ impl ViewerApp {
     }
 
     /// Demande le fichier, puis exporte le jeu `jeu` en un PDF de plusieurs pages.
-    pub(crate) fn exporter_jeu_dialogue(&mut self, jeu: &str) {
-        let Some(path) = rfd::FileDialog::new().set_file_name(format!("{jeu}.pdf")).add_filter("pdf", &["pdf"]).save_file() else {
-            return;
-        };
-        match self.exporter_jeu(jeu, &path) {
-            Ok(n) => self.status = format!("Jeu « {jeu} » : {n} page(s) exportée(s) dans {}", path.display()),
-            Err(e) => self.error = Some(e),
-        }
-    }
-
     /// PDF de ce qui est affiché quand un jeu de feuilles est ouvert : la feuille
     /// choisie (ou celle de la vue choisie), sinon tout le jeu ; None hors jeu. Cadre,
     /// cartouche, vues et nomenclatures à leur place, au format du papier (n° 12).

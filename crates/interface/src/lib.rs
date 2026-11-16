@@ -1094,6 +1094,7 @@ impl eframe::App for ViewerApp {
         }
         self.traiter_action_famille();
         self.confirmation_famille(&ctx);
+        self.fenetre_export_jeu(&ctx);
         let geste = ctx.input(|i| i.pointer.any_down()) || ctx.egui_wants_keyboard_input();
         if let Some(ed) = self.famille.as_mut() {
             ed.suivre_historique(geste);

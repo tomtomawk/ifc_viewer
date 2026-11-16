@@ -212,6 +212,11 @@ pub fn svg_feuille(p: &Projet, f: &Feuille) -> Result<String, String> {
     Ok(svg)
 }
 
+/// Feuille en DXF (mm du papier, origine en bas à gauche du papier).
+pub fn dxf_feuille(p: &Projet, f: &Feuille) -> Result<String, String> {
+    Ok(crate::dxf(&feuille(p, f)?))
+}
+
 pub fn pdf(svg: &str) -> Result<Vec<u8>, String> {
     let tree = svg2pdf::usvg::Tree::from_str(svg, &svg2pdf::usvg::Options::default())
         .map_err(|e| format!("SVG : {e}"))?;
