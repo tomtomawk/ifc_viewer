@@ -434,7 +434,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             lignes_cotes.push((k, [ecran(*a + n), ecran(*b + n)]));
         }
         let textes: Vec<(glam::DVec2, String)> = match c {
-            Contrainte::Distance { valeur, .. } => g.textes.iter().map(|&(p, v)| (p, if valeur.trim().parse::<f64>().is_ok() { crate::config::options::unite().afficher(v) } else { format!("{valeur} = {}", crate::config::options::unite().afficher(v)) })).collect(),
+            Contrainte::Distance { valeur, .. } => g.textes.iter().map(|&(p, v)| (p, if valeur.trim().parse::<f64>().is_ok() { modele::unite::unite().afficher(v) } else { format!("{valeur} = {}", modele::unite::unite().afficher(v)) })).collect(),
             Contrainte::Egalite { .. } => g.textes.iter().map(|&(p, _)| (p, "EQ".to_string())).collect(),
         };
         for (p, texte) in textes {
@@ -961,7 +961,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             let mut trace = ed.trace_polyligne.take().unwrap_or_else(|| Trace::new(outil));
             let depart = ed.esquisse.last().map(|(_, p)| *p);
             let papier = matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Cartouche | modele::famille::modelee::CategorieFamille::EtiquettePiece);
-            let facteur = if papier { 1.0 } else { crate::config::options::unite().facteur() };
+            let facteur = if papier { 1.0 } else { modele::unite::unite().facteur() };
             if let Some(q) = curseur.filter(|_| resp.hovered()) {
                 let (h, v) = viser(q, depart).0;
                 let brut = glam::DVec2::new(h, v);
@@ -1147,7 +1147,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                             painter.line_segment([p - t, p + t], trait_);
                         }
                         let valeur = (pos(&nom) - pos(&ed.clics[ed.clics.len() - 1])).abs();
-                        painter.text(p0.lerp(p1, 0.5) - t * 2.0, egui::Align2::CENTER_BOTTOM, crate::config::options::unite().afficher(valeur), police.clone(), couleur);
+                        painter.text(p0.lerp(p1, 0.5) - t * 2.0, egui::Align2::CENTER_BOTTOM, modele::unite::unite().afficher(valeur), police.clone(), couleur);
                     }
                 }
             }
@@ -1210,7 +1210,7 @@ fn geometrie_mesure(genre: GenreCote, vue: VueEsquisse, pts: &[glam::DVec2], ech
     use modele::documentation as doc;
     if genre == GenreCote::Altimetrie && vue == VueEsquisse::Plan { return None; }
     let forme = genre.forme(pts, false, 2)?;
-    let unite = crate::config::options::unite();
+    let unite = modele::unite::unite();
     let longueur = |x: f64| unite.afficher(x);
     let altitude = |q: [f64; 2], _| q[1];
     let style = doc::StyleCote { oblique: 8.0 / echelle, taille: 11.0 / echelle, longueur: &longueur, altitude: &altitude };

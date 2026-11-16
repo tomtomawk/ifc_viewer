@@ -250,7 +250,7 @@ impl ViewerApp {
         egui::Window::new("Coller sur un niveau").collapsible(false).resizable(false).open(&mut ouvert).show(ctx,|ui| {
             ui.label(format!("{} élément(s) sélectionné(s) · position en plan conservée",ids.len()));
             egui::ComboBox::from_id_salt("destination_copie_niveau").selected_text(niveaux.iter().find(|n|n.0==niveau).map_or("Choisir un niveau",|n|n.1.as_str())).show_ui(ui,|ui| {
-                for (id,nom,z) in &niveaux {ui.selectable_value(&mut niveau,id.clone(),format!("{} · {}",nom,crate::config::options::unite().afficher(*z)));}
+                for (id,nom,z) in &niveaux {ui.selectable_value(&mut niveau,id.clone(),format!("{} · {}",nom,modele::unite::unite().afficher(*z)));}
             });
             valider=ui.add_enabled(!niveau.is_empty(),egui::Button::new("Coller")).clicked();
         });

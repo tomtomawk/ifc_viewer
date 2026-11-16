@@ -354,7 +354,7 @@ impl ViewerApp {
         let ordre = self.prochain_ordre_famille;
         let projet = self.natif.as_ref().map(|(p, _)| p);
         let t = t.and_then(|id| projet.and_then(|p| p.types_ouvertures.iter().find(|x| x.id == id)));
-        let u = crate::config::options::unite();
+        let u = modele::unite::unite();
         let (largeur, hauteur) = t.map_or((largeur, hauteur), |t| (t.largeur, t.hauteur));
         let genre = t.map_or(genre, |t| t.genre);
         let famille = t.and_then(|t| t.modele.clone()).unwrap_or_else(|| FamilleModelee::gabarit(genre));

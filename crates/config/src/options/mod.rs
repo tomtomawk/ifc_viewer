@@ -4,9 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 pub mod raccourcis;
 
-// Unité d'affichage : définie dans le modèle (les cotes et nomenclatures la lisent) ;
-// ré-exportée ici, où l'interface la règle et la lit (84 références).
-pub use modele::unite::{Unite, definir_unite, unite};
+use modele::unite::{Unite, unite};
 
 pub trait Dimensions<'a> {
     fn dimensions(self) -> eframe::egui::DragValue<'a>;

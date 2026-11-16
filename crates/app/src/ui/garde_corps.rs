@@ -3,7 +3,8 @@
 //! ou global), élévation à droite où lisses, main courante et limites du remplissage se
 //! glissent à la souris.
 use super::*;
-use crate::config::options::{Dimensions, unite};
+use config::options::Dimensions;
+use modele::unite::unite;
 use modele::elements::garde_corps::{BarreauExtremite, BarreauMotif, Lisse, Section};
 use modele::{Projet, Remplissage, TypeGardeCorps, identifiant};
 use crate::ui::ruban::Outil;

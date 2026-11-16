@@ -1,6 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod config;
 #[cfg(test)]
 mod modele_tests;
 mod ui;
@@ -13,7 +12,7 @@ fn main() {
         pilote::mcp::servir();
         return;
     }
-    config::options::definir_unite(config::options::Options::charger().unite);
+    modele::unite::definir_unite(config::options::Options::charger().unite);
     let args: Vec<String> = std::env::args().skip(1).collect();
     if let Some(resultat)=collaboration::cli::executer(&args){match resultat{Ok(())=>std::process::exit(0),Err(e)=>{eprintln!("{e}");std::process::exit(2);}}}
     if let Some(resultat) = pilote::cli::executer(&args) {

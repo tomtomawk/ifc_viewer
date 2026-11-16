@@ -96,7 +96,7 @@ impl ViewerApp {
     /// ses deux limites, Haut et Bas sur une ligne chacune (niveau, puis décalage de la
     /// base ou hauteur libre).
     pub(in crate::ui) fn croquis_limites_escalier(&mut self, ui: &mut egui::Ui) {
-        use crate::config::options::Dimensions;
+        use config::options::Dimensions;
         let Some((p, _)) = self.natif.as_ref() else { return };
         let niveaux: Vec<(String, String)> = p.niveaux.iter().map(|n| (n.id.clone(), n.nom.clone())).collect();
         let nom_plan = self.niveau_trace().and_then(|id| p.niveau(&id).map(|n| n.nom.clone())).unwrap_or_default();
@@ -294,7 +294,7 @@ impl ViewerApp {
         let giron = impose.unwrap_or((630.0 - 2.0 * h).max(150.0));
         let blondel = (2.0 * h + giron) / 10.0;
         let hors = !(60.0..=64.0).contains(&blondel);
-        let u = crate::config::options::unite();
+        let u = modele::unite::unite();
         let (zone, _) = ui.allocate_exact_size(egui::vec2(ui.available_width().max(220.0), 100.0), Sense::hover());
         let painter = ui.painter_at(zone);
         let trait_ = egui::Stroke::new(1.6, ui.visuals().text_color());

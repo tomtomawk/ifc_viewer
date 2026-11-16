@@ -72,7 +72,7 @@ impl RubanEdition {
             let k = self.type_surface.get(&surface).copied().unwrap_or(0).min(types.len().saturating_sub(1));
             let identique = self.surface_identique.as_ref().filter(|(o, _)| *o == surface).map(|(_, t)| t);
             let (nom_type, couches_type) = identique.map(|t| (t.nom.clone(), t.couches.clone())).or_else(|| types.get(k).cloned()).unwrap_or_default();
-            let unite = crate::config::options::unite();
+            let unite = modele::unite::unite();
             let epaisseur = |c: &[modele::Couche]| c.iter().map(|c| c.epaisseur).sum::<f64>();
             let titre = format!("{} · {nom_type}", surface.nom());
             let vignette = |p: &egui::Painter, r: egui::Rect, c: Color32| icone(p, r, surface, c);
@@ -170,7 +170,7 @@ Type des prochains éléments horizontaux."), Some(&vignette));
                         ui.label(nom);
                         // épaisseur : celle du type choisi
                         if let (Some(e), "Épaisseur") = (epaisseur_type, nom) {
-                            ui.label(crate::config::options::unite().afficher(e)).on_hover_text("Épaisseur du type (somme des couches)");
+                            ui.label(modele::unite::unite().afficher(e)).on_hover_text("Épaisseur du type (somme des couches)");
                             ui.end_row();
                             continue;
                         }

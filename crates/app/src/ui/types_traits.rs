@@ -100,7 +100,7 @@ impl ViewerApp {
                         // segment d'arc : longueur développée
                         let arc = noyau::forme2d::arc_courbure(a, b, courbures.get(k).copied().unwrap_or(0.0));
                         let longueur = arc.map_or(a.distance(b), |(_, r, _, s)| r * s.abs());
-                        ui.label(format!("{} · {}{}", k + 1, crate::config::options::unite().afficher(longueur.round()), if arc.is_some() { " · arc" } else { "" }))
+                        ui.label(format!("{} · {}{}", k + 1, modele::unite::unite().afficher(longueur.round()), if arc.is_some() { " · arc" } else { "" }))
                             .on_hover_text("Segment, depuis le premier point de la polyligne ; longueur");
                         if let Some(id) = choix_type_trait(ui, ("trait_segment", k), Some(traits.get(k).map_or("", |s| s.as_str())), &projet.types_traits) {
                             changement = Some((Some(k), id));

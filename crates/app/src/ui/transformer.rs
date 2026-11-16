@@ -538,7 +538,7 @@ impl ViewerApp {
     fn valider_decalage(&mut self, id: &str, distance: f64) {
         let copie = self.transfo.copie;
         match self.executer_bim(Commande::Decaler { id: id.to_string(), distance, copie }) {
-            Ok(_) => self.fin_commande(&format!("Décalage de {} appliqué", crate::config::options::unite().afficher(distance.abs()))),
+            Ok(_) => self.fin_commande(&format!("Décalage de {} appliqué", modele::unite::unite().afficher(distance.abs()))),
             Err(e) => self.error = Some(e),
         }
     }
@@ -595,7 +595,7 @@ impl ViewerApp {
             return;
         };
         self.transfo.saisie.clear();
-        let unite = crate::config::options::unite();
+        let unite = modele::unite::unite();
         let vers_curseur = |app: &Self, d: f64| {
             let base = app.transfo.points.first().copied()?;
             let p = point_a_distance(base, app.transfo.curseur?, d)?;
@@ -636,7 +636,7 @@ impl ViewerApp {
         let bleu = Color32::from_rgb(55, 130, 200);
         let orange = Color32::from_rgb(230, 120, 20);
         let maj = ui.input(|i| i.modifiers.shift);
-        let unite = crate::config::options::unite();
+        let unite = modele::unite::unite();
         let orthogonal = maj && matches!(outil, Outil::Deplacer | Outil::Copier | Outil::Symetrie) || maj && outil == Outil::Reseau && !self.transfo.polaire;
         let point = survol.and_then(|q| {
             let depart = match outil {

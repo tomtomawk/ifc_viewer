@@ -69,7 +69,7 @@ impl ViewerApp {
         };
         let Some(forme) = self.forme_cotation(genre, &pts) else { return };
         let taille = HAUTEUR_TEXTE * v.echelle;
-        let unite = crate::config::options::unite();
+        let unite = modele::unite::unite();
         let longueur = |x: f64| unite.afficher(x);
         let altitude = |q: [f64; 2], relatif: bool| doc::altitude_vue(p, v, q, relatif);
         let style = doc::StyleCote { oblique: taille * 0.6, taille, longueur: &longueur, altitude: &altitude };

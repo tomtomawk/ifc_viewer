@@ -93,7 +93,7 @@ impl ViewerApp {
         }
         if nom == "raccourcis" {
             return Some(Ok(
-                json!({"raccourcis":crate::config::options::raccourcis::COMMANDES.iter().map(|c|json!({"id":c.id,"nom":c.nom,"categorie":c.categorie,"defaut":c.defaut,"raccourci":self.options.raccourci(c)})).collect::<Vec<_>>()}),
+                json!({"raccourcis":config::options::raccourcis::COMMANDES.iter().map(|c|json!({"id":c.id,"nom":c.nom,"categorie":c.categorie,"defaut":c.defaut,"raccourci":self.options.raccourci(c)})).collect::<Vec<_>>()}),
             ));
         }
         if nom == "axe_selection" {

@@ -1,0 +1,16 @@
+[package]
+name = "config"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+noyau = { path = "../noyau" }
+modele = { path = "../modele" }
+echanges = { path = "../echanges" }
+# options.rs : Dimensions (egui::DragValue), ThemeInterface (egui::Context), raccourcis (Key, Modifiers)
+eframe.workspace = true
+serde.workspace = true
+serde_json.workspace = true

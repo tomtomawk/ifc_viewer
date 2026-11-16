@@ -127,13 +127,13 @@ impl ViewerApp {
         enum Cible { Assemblage(String), Mur(String), Dalle(String), Ouverture(String) }
         let mur = p.murs.iter().find(|m| &m.id == id);
         let (cible, actuel, types): (Cible, String, Vec<(String, String, String)>) = if let Some(a) = p.assemblage(id).or_else(|| mur.and_then(|m| m.assemblage.as_deref()).and_then(|a| p.assemblage(a))) {
-            let types = p.types_murs.iter().filter(|t| t.couches.len() > 1).map(|t| (t.id.clone(), t.nom.clone(), format!("{} couches · {}", t.couches.len(), crate::config::options::unite().afficher(t.epaisseur())))).collect();
+            let types = p.types_murs.iter().filter(|t| t.couches.len() > 1).map(|t| (t.id.clone(), t.nom.clone(), format!("{} couches · {}", t.couches.len(), modele::unite::unite().afficher(t.epaisseur())))).collect();
             (Cible::Assemblage(a.id.clone()), a.type_mur.clone(), types)
         } else if let Some(m) = mur {
-            let types = p.types_murs.iter().filter(|t| t.couches.len() == 1).map(|t| (t.id.clone(), t.nom.clone(), crate::config::options::unite().afficher(t.epaisseur()))).collect();
+            let types = p.types_murs.iter().filter(|t| t.couches.len() == 1).map(|t| (t.id.clone(), t.nom.clone(), modele::unite::unite().afficher(t.epaisseur()))).collect();
             (Cible::Mur(m.id.clone()), m.type_mur.clone(), types)
         } else if let Some(d) = p.dalles.iter().find(|d| &d.id == id) {
-            let types = p.types_dalles.iter().map(|t| (t.id.clone(), t.nom.clone(), crate::config::options::unite().afficher(t.epaisseur()))).collect();
+            let types = p.types_dalles.iter().map(|t| (t.id.clone(), t.nom.clone(), modele::unite::unite().afficher(t.epaisseur()))).collect();
             (Cible::Dalle(d.id.clone()), d.type_dalle.clone(), types)
         } else if let Some(o) = p.ouvertures.iter().find(|o| &o.id == id) {
             // portes et fenêtres : même objet, rangé par catégorie (libre à part)
@@ -143,7 +143,7 @@ impl ViewerApp {
             types.sort_by_key(|t| t.genre != G::Porte);
             let types = types.into_iter().map(|t| {
                 let categorie = match t.genre { G::Porte => "Porte", G::Fenetre => "Fenêtre", G::Libre => "Libre" };
-                (t.id.clone(), t.nom.clone(), format!("{categorie} · {} × {}", crate::config::options::unite().afficher(t.largeur), crate::config::options::unite().afficher(t.hauteur)))
+                (t.id.clone(), t.nom.clone(), format!("{categorie} · {} × {}", modele::unite::unite().afficher(t.largeur), modele::unite::unite().afficher(t.hauteur)))
             }).collect();
             (Cible::Ouverture(o.id.clone()), o.type_ouverture.clone().unwrap_or_default(), types)
         } else {

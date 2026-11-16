@@ -751,12 +751,12 @@ impl ViewerApp {
         ui.label(RichText::new(format!("{objet} · trait {}", i + 1)).strong());
         egui::Grid::new("segment_edition").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
             ui.label("Longueur");
-            ui.label(crate::config::options::unite().afficher(longueur.round()));
+            ui.label(modele::unite::unite().afficher(longueur.round()));
             ui.end_row();
             if let Some((_, rayon, _, _)) = arc {
                 ui.label("Rayon");
                 ui.horizontal(|ui| {
-                    ui.label(crate::config::options::unite().afficher(rayon.round()));
+                    ui.label(modele::unite::unite().afficher(rayon.round()));
                     redresser = ui.small_button("Rendre droit").on_hover_text("Remplacer cet arc par un segment droit").clicked();
                 });
                 ui.end_row();

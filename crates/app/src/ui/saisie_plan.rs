@@ -275,7 +275,7 @@ impl ViewerApp {
         }
         if self.poignee_axe.is_none() {
             let id_champ = ui.make_persistent_id(("cote_poignee_mur", &id));
-            let longueur = (b[0] - a[0]).hypot(b[1] - a[1]) / crate::config::options::unite().facteur();
+            let longueur = (b[0] - a[0]).hypot(b[1] - a[1]) / modele::unite::unite().facteur();
             let valeur = noyau::nombres::format_real(longueur);
             if self.cote_axe.as_ref().is_none_or(|(mur, _, _)| mur != &id) {
                 self.cote_axe = Some((id.clone(), true, valeur));
@@ -285,7 +285,7 @@ impl ViewerApp {
         }
         if self.poignee_axe.is_some() {
             let l = (b[0] - a[0]).hypot(b[1] - a[1]);
-            let libelle = if self.dessin2d.saisie.is_empty() { crate::config::options::unite().afficher(l) } else { format!("{}▏{}", self.dessin2d.saisie, crate::config::options::unite().suffixe()) };
+            let libelle = if self.dessin2d.saisie.is_empty() { modele::unite::unite().afficher(l) } else { format!("{}▏{}", self.dessin2d.saisie, modele::unite::unite().suffixe()) };
             let g = painter.layout_no_wrap(libelle, egui::FontId::proportional(13.0), Color32::from_gray(30));
             let cadre = egui::Rect::from_center_size(ea + (eb - ea) * 0.5 - egui::vec2(0.0, 16.0), g.size() + egui::vec2(10.0, 4.0));
             painter.rect(cadre, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 235), egui::Stroke::new(1.0, bleu), egui::StrokeKind::Inside);
@@ -296,12 +296,12 @@ impl ViewerApp {
             let (_, fin, texte) = self.cote_axe.as_mut().unwrap();
             let fin = *fin;
             let reponse = ui.put(cadre, egui::TextEdit::singleline(texte).id(ui.make_persistent_id(("cote_poignee_mur", &id))).desired_width(90.0))
-                .on_hover_text(format!("Longueur de la ligne d'implantation ({}) : saisir une valeur puis valider", crate::config::options::unite().suffixe().trim()));
-            painter.text(cadre.right_center() + egui::vec2(4.0, 0.0), egui::Align2::LEFT_CENTER, crate::config::options::unite().suffixe().trim(), egui::FontId::proportional(11.0), bleu);
+                .on_hover_text(format!("Longueur de la ligne d'implantation ({}) : saisir une valeur puis valider", modele::unite::unite().suffixe().trim()));
+            painter.text(cadre.right_center() + egui::vec2(4.0, 0.0), egui::Align2::LEFT_CENTER, modele::unite::unite().suffixe().trim(), egui::FontId::proportional(11.0), bleu);
             if reponse.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 let longueur = texte.trim().replace(',', ".").parse::<f64>().ok()
                     .filter(|v| v.is_finite() && *v > 0.0)
-                    .map(|v| v * crate::config::options::unite().facteur());
+                    .map(|v| v * modele::unite::unite().facteur());
                 let (fixe, mobile) = if fin { (a, b) } else { (b, a) };
                 let direction = glam::DVec2::from_array(mobile) - glam::DVec2::from_array(fixe);
                 if let (Some(longueur), Some(direction)) = (longueur, direction.try_normalize()) {

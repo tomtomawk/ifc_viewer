@@ -344,7 +344,7 @@ impl ViewerApp {
             let cotes = terrains.iter().flat_map(|t| t.contour.iter().chain(&t.points)).map(|p| p[2]);
             let (bas, haut) = cotes.fold((f64::MAX, f64::MIN), |(a, b), z| (a.min(z), b.max(z)));
             ui.label("Cotes NGF");
-            ui.label(format!("{} à {}", crate::config::options::unite().afficher(bas.round()), crate::config::options::unite().afficher(haut.round())));
+            ui.label(format!("{} à {}", modele::unite::unite().afficher(bas.round()), modele::unite::unite().afficher(haut.round())));
             ui.end_row();
             let surface: f64 = terrains.iter().map(|t| modele::volumes::geometrie::aire_pair_impair(&[t.contour.iter().map(|p| [p[0], p[1]]).collect()])).sum();
             ui.label(if terrains.len() > 1 { "Surface en plan (total)" } else { "Surface en plan" });
@@ -385,7 +385,7 @@ impl ViewerApp {
         egui::Grid::new("formes_2d").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
             ui.label(format!("Périmètre{total}"));
             // au mm près
-            ui.label(crate::config::options::unite().afficher(longueur.round()));
+            ui.label(modele::unite::unite().afficher(longueur.round()));
             ui.end_row();
             if !surfaces.is_empty() {
                 ui.label(format!("Surface{total}")).on_hover_text("Formes fermées : polylignes et splines fermées, cercles");

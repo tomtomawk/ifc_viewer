@@ -63,7 +63,7 @@ impl RubanEdition {
     /// liste : charger une famille depuis un fichier.
     pub fn selecteur_type_ouverture(&mut self, ui: &mut egui::Ui, projet: &modele::Projet, genre: GenreOuverture, actuel: Option<&str>, categories: &[GenreOuverture], generique: bool) -> ChoixOuverture {
         let mut sortie = ChoixOuverture::default();
-        let unite = crate::config::options::unite();
+        let unite = modele::unite::unite();
         let type_actuel = actuel.and_then(|id| projet.types_ouvertures.iter().find(|t| t.id == id));
         let genre_actuel = type_actuel.map_or(genre, |t| t.genre);
         let onglet = self.categorie_ouverture.filter(|c| categories.contains(c)).unwrap_or(genre_actuel);

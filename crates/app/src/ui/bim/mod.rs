@@ -3,7 +3,7 @@
 mod modifier;
 pub use super::*;
 use commandes::Execution;
-use crate::config::options::Dimensions;
+use config::options::Dimensions;
 impl ViewerApp {
     pub(super) fn parcourir_historique(&mut self, retablir: bool) {
         self.parcourir_historique_n(retablir, 1);
@@ -932,7 +932,7 @@ impl ViewerApp {
                                 });
                             }
                             F::CoteDiametre { centre, point } => {
-                                ui.label(format!("Diamètre : {}", crate::config::options::unite().afficher(2.0 * glam::DVec2::from(*centre).distance((*point).into()))));
+                                ui.label(format!("Diamètre : {}", modele::unite::unite().afficher(2.0 * glam::DVec2::from(*centre).distance((*point).into()))));
                                 ui.horizontal(|ui| {
                                     ui.label("Centre");
                                     for x in centre.iter_mut() {
@@ -1051,7 +1051,7 @@ impl ViewerApp {
                         ui.label(if x.fermee() { format!("{:.2} m²", x.aire() / 1e6) } else { "Non fermée".into() });
                         ui.end_row();
                         ui.label("Périmètre");
-                        ui.label(crate::config::options::unite().afficher(x.perimetre()));
+                        ui.label(modele::unite::unite().afficher(x.perimetre()));
                         ui.end_row();
                         ui.label("Étiquette");
                         change |= choix_famille_etiquette(ui, "etiquette_piece_selection", &mut x.etiquette, &p.familles_etiquettes);
@@ -1156,7 +1156,7 @@ impl ViewerApp {
                     };
                     let altitude = alts.last().map_or(0.0, |h| h + etage);
                     let nom = if p.niveaux.is_empty() { "RDC".to_string() } else { (1..).map(|k| format!("R+{k}")).find(|n| !p.niveaux.iter().any(|x| &x.nom == n)).unwrap_or_default() };
-                    if ui.button("Ajouter un niveau").on_hover_text(format!("« {nom} » à {}", crate::config::options::unite().afficher(altitude))).clicked() {
+                    if ui.button("Ajouter un niveau").on_hover_text(format!("« {nom} » à {}", modele::unite::unite().afficher(altitude))).clicked() {
                         commande = Some(Commande::Niveau { nom, altitude });
                     }
                 }

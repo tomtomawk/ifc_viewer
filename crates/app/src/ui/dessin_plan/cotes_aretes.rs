@@ -182,7 +182,7 @@ impl ViewerApp {
         let [element] = ids.as_slice() else { return };
         let Some((p, v)) = self.plan_natif() else { return };
         let (o, u, h) = doc::repere(p, v);
-        let unite = crate::config::options::unite();
+        let unite = modele::unite::unite();
         let longueur = |x: f64| unite.afficher(x);
         let altitude = |q: [f64; 2], relatif: bool| doc::altitude_vue(p, v, q, relatif);
         // (cote, position du texte à l'écran, valeur, angle ?)

@@ -170,7 +170,7 @@ pub(super) fn peindre_materiau_coupe(p: &egui::Painter, r: egui::Rect, projet: &
 
 /// Infobulle d'une couche : matériau, fonction, épaisseur.
 pub(super) fn texte_couche(c: &modele::Couche) -> String {
-    format!("{} · {} · {}", c.materiau.as_deref().unwrap_or("Sans matériau"), c.fonction.libelle(), crate::config::options::unite().afficher(c.epaisseur))
+    format!("{} · {} · {}", c.materiau.as_deref().unwrap_or("Sans matériau"), c.fonction.libelle(), modele::unite::unite().afficher(c.epaisseur))
 }
 
 /// Petit bouton à pictogramme dessiné (la police n'a pas ✕ ▾).

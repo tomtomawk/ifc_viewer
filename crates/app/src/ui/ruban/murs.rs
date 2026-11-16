@@ -63,7 +63,7 @@ impl RubanEdition {
                         ui.label("Épaisseur");
                         match self.type_mur.as_ref().and_then(|id| projet.type_mur(id)) {
                             Some(t) => {
-                                ui.label(crate::config::options::unite().afficher(t.epaisseur()))
+                                ui.label(modele::unite::unite().afficher(t.epaisseur()))
                                     .on_hover_text("Épaisseur du type (somme des couches)");
                             }
                             None => self.nombre_mur(ui, 2, 300.0),
@@ -119,7 +119,7 @@ impl RubanEdition {
         let mut editer: Option<String> = None;
         let mut dupliquer: Option<(String, Vec<modele::Couche>)> = None;
         let mut nouveau = false;
-        let unite = crate::config::options::unite();
+        let unite = modele::unite::unite();
         let epaisseur = |c: &[modele::Couche]| c.iter().map(|c| c.epaisseur).sum::<f64>();
 
         let largeur_texte = |ui: &egui::Ui, t: &str, f: &egui::FontId| ui.fonts_mut(|x| x.layout_no_wrap(t.to_string(), f.clone(), Color32::WHITE).size().x);
@@ -486,7 +486,7 @@ impl RubanEdition {
                         ed.couches.push(Couche { materiau: None, epaisseur: 50.0, fonction: FonctionCouche::Autre, plume: None, retour: false, ossature: None });
                     }
                     let total: f64 = ed.couches.iter().map(|c| c.epaisseur).sum();
-                    ui.label(format!("Épaisseur totale : {}", crate::config::options::unite().afficher(total)));
+                    ui.label(format!("Épaisseur totale : {}", modele::unite::unite().afficher(total)));
                 });
                 if let Some(e) = &ed.erreur {
                     ui.colored_label(ui.visuals().error_fg_color, e);
@@ -713,7 +713,7 @@ impl RubanEdition {
             p.text(
                 pos2((x0 + x1) * 0.5, (yh + yb) * 0.5),
                 Align2::CENTER_CENTER,
-                crate::config::options::unite().afficher(haut_z - bas_z),
+                modele::unite::unite().afficher(haut_z - bas_z),
                 FontId::proportional(8.0),
                 ui.visuals().weak_text_color(),
             );

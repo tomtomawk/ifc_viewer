@@ -179,7 +179,7 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
         if ed.construction.is_some() { ui.label("Esquisse en coordonnées locales du plan ; profondeur suivant sa normale."); }
     });
     let r = ed.resoudre();
-    let u = crate::config::options::unite();
+    let u = modele::unite::unite();
     egui::Grid::new("famille_type").num_columns(2).spacing([10.0, 5.0]).show(ui, |ui| {
         ui.label("Type");
         ui.text_edit_singleline(&mut ed.nom);

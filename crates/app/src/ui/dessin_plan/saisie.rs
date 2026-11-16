@@ -77,7 +77,7 @@ impl ViewerApp {
     pub(in crate::ui) fn point_dessin_depuis(&mut self, rect:egui::Rect,c:DVec2,maj:bool,temps:f64,precedent:Option<DVec2>)->(DVec2,Accroche) {
         let (point, accroche) = self.point_dessin_libre(rect, c, maj, temps, precedent);
         if let Some(depart) = precedent
-            && let Some(distance) = distance_saisie(&self.dessin2d.saisie, crate::config::options::unite().facteur())
+            && let Some(distance) = distance_saisie(&self.dessin2d.saisie, modele::unite::unite().facteur())
         {
             let tolerance = self.vers_ecran(rect, c).zip(self.vers_ecran(rect, c + DVec2::X * 1000.0)).map_or(200.0, |(a, b)| 12.0 * 1000.0 / (a.distance(b) as f64).max(1e-6));
             if !matches!(accroche, Accroche::Polaire(_)) && let Some(cible) = self.dessin2d.reperage.guides.iter()
@@ -99,7 +99,7 @@ impl ViewerApp {
     fn point_dessin_libre(&mut self, rect:egui::Rect,c:DVec2,maj:bool,temps:f64,precedent:Option<DVec2>)->(DVec2,Accroche) {
         // Une valeur d'angle en cours de saisie verrouille le guide dès qu'elle est lisible.
         if let Some(p) = precedent
-            && let Some((point, Some(angle))) = super::super::saisie_trace::apercu_point(&self.dessin2d.saisie, Some(p), c, crate::config::options::unite().facteur())
+            && let Some((point, Some(angle))) = super::super::saisie_trace::apercu_point(&self.dessin2d.saisie, Some(p), c, modele::unite::unite().facteur())
         {
             let direction = DVec2::from_angle(angle.to_radians());
             self.dessin2d.reperage.survol_accroche = None;
@@ -819,7 +819,7 @@ impl ViewerApp {
             && let Some(trace) = self.dessin2d.trace.as_ref().filter(|t| t.attend_courbure())
         {
             let curseur = self.dessin2d.curseur.or(self.dessin2d.point.map(|p| p.0));
-            let passage = match (distance_saisie(&saisie, crate::config::options::unite().facteur()), curseur) {
+            let passage = match (distance_saisie(&saisie, modele::unite::unite().facteur()), curseur) {
                 (Some(rayon), Some(curseur)) => trace.point_de_rayon(rayon, curseur),
                 (Some(_), None) => Err("Rayon : placer le curseur du côté où l'arc doit bomber.".into()),
                 (None, _) => Err("Rayon : valeur positive attendue.".into()),
@@ -845,7 +845,7 @@ impl ViewerApp {
         if !saisie.is_empty() && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.raccord.is_some()) {
             let precedent = self.dessin2d.trace.as_ref().and_then(Trace::precedent);
             let direction = self.dessin2d.point.zip(precedent).map(|((c, _), p)| c - p);
-            match d2::lire_saisie(&saisie, precedent, direction, crate::config::options::unite().facteur()) {
+            match d2::lire_saisie(&saisie, precedent, direction, modele::unite::unite().facteur()) {
                 Ok(p) => { self.ajouter_point_raccord(p); { self.dessin2d.message = None; self.dessin2d.information = None; }; }
                 Err(e) => self.dessin2d.message = Some(e),
             }
@@ -860,7 +860,7 @@ impl ViewerApp {
         } else {
             let precedent = trace.precedent();
             let direction = self.dessin2d.point.zip(precedent).map(|((c, _), p)| c - p);
-            match d2::lire_saisie(&saisie, precedent, direction, crate::config::options::unite().facteur()) {
+            match d2::lire_saisie(&saisie, precedent, direction, modele::unite::unite().facteur()) {
                 Ok(p) => trace.appliquer(d2::EvenementTrace::Point(p)),
                 Err(e) => {
                     self.dessin2d.message = Some(e);

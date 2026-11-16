@@ -125,7 +125,7 @@ impl ViewerApp {
                 match resultat.and_then(|p|self.appliquer_projet(p)) {
                     Ok(())=>{
                         if let Some(fixe) = fixe {
-                            let longueur = (p[0] - fixe[0]).hypot(p[1] - fixe[1]) / crate::config::options::unite().facteur();
+                            let longueur = (p[0] - fixe[0]).hypot(p[1] - fixe[1]) / modele::unite::unite().facteur();
                             self.cote_axe = Some((id, fin, noyau::nombres::format_real(longueur)));
                         }
                         self.status="Mur modifié — cliquer la cote pour saisir une longueur.".into();
@@ -510,7 +510,7 @@ impl ViewerApp {
                     if let Some(a) = self.bim.depart_structure {
                         if let (Some(x), Some(y)) = (self.ecran_plan(rect, a, alt), self.ecran_plan(rect, p, alt)) {
                             painter.line_segment([x, y], egui::Stroke::new(2.0, couleur));
-                            painter.text(x.lerp(y, 0.5) + egui::vec2(0.0, -16.0), egui::Align2::CENTER_CENTER, crate::config::options::unite().afficher((p[0]-a[0]).hypot(p[1]-a[1])), egui::FontId::proportional(13.0), couleur);
+                            painter.text(x.lerp(y, 0.5) + egui::vec2(0.0, -16.0), egui::Align2::CENTER_CENTER, modele::unite::unite().afficher((p[0]-a[0]).hypot(p[1]-a[1])), egui::FontId::proportional(13.0), couleur);
                         }
                     }
                 }

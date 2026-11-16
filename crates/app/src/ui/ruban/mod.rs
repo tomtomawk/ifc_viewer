@@ -13,7 +13,7 @@ mod barre_commandes;
 pub use barre_commandes::*;
 #[cfg(test)]
 mod tests;
-use crate::config::options::Dimensions;
+use config::options::Dimensions;
 use eframe::egui::{self, Align, Color32, RichText, Sense};
 use std::collections::BTreeMap;
 

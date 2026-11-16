@@ -73,7 +73,7 @@ impl ViewerApp {
             let fixe=points[if i==0 {2}else{0}].to_array();
             let position=self.point_edition_axe(ui,rect,q,ui.input(|i|i.modifiers.shift),fixe,fixe);
             self.dessin2d.saisie = saisie;
-            let valeur = self.dessin2d.saisie.replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0).map(|v| v * crate::config::options::unite().facteur());
+            let valeur = self.dessin2d.saisie.replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0).map(|v| v * modele::unite::unite().facteur());
             let axe = self.natif.as_ref().and_then(|(p,_)|p.trajectoire_justification(&id)).map(|(axe,_)|axe);
             if let (Some(axe), Some(position)) = (axe, position)
                 && let Ok(nouveaux) = ajuster_arc(axe, i, DVec2::from_array(position), valeur)
@@ -81,14 +81,14 @@ impl ViewerApp {
         }
         if resp.drag_stopped_by(PointerButton::Primary) {
             if let Some((id,i,pts))=self.dessin2d.arc_glisse.take() {
-                let valeur = if self.dessin2d.saisie.is_empty() { None } else { self.dessin2d.saisie.replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0).map(|v| v * crate::config::options::unite().facteur()) };
+                let valeur = if self.dessin2d.saisie.is_empty() { None } else { self.dessin2d.saisie.replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0).map(|v| v * modele::unite::unite().facteur()) };
                 let valide = if self.dessin2d.saisie.is_empty() { true } else if let (Some(valeur), Some((axe,_))) = (valeur, self.natif.as_ref().and_then(|(p,_)|p.trajectoire_justification(&id))) { ajuster_arc(axe,i,pts[i],Some(valeur)).is_ok() } else { false };
                 self.terminer_edition_axe();
                 if !valide {self.error=Some("Saisissez une valeur positive et finie.".into());return actif;}
                 match self.executer_bim(commandes::Commande::ModifierTrajectoireMur{id:id.clone(),points:pts.map(|p|p.to_array())}) {
                     Ok(_)=>{
                         if let Some((_,r,_,s))=noyau::forme2d::arc_3_points(pts[0],pts[1],pts[2]) {
-                            let facteur=crate::config::options::unite().facteur();
+                            let facteur=modele::unite::unite().facteur();
                             let formater=|v|noyau::nombres::format_real(v / facteur);
                             self.cote_arc=Some((id,i,formater(r),formater(r*s.abs())));
                         }
@@ -120,7 +120,7 @@ impl ViewerApp {
                     }
                 }
                 if self.dessin2d.arc_glisse.is_none() {
-                    let facteur = crate::config::options::unite().facteur();
+                    let facteur = modele::unite::unite().facteur();
                     let rayon_actuel = noyau::nombres::format_real(r / facteur);
                     let longueur_actuelle = noyau::nombres::format_real(r * s.abs() / facteur);
                     if self.cote_arc.as_ref().is_none_or(|(mur, _, _, _)| mur != id) {
@@ -132,7 +132,7 @@ impl ViewerApp {
                 }
                 if let Some((gid, poignee, _)) = &self.dessin2d.arc_glisse && gid == id {
                     if let Some(e) = self.ecran_plan(rect, points[*poignee].to_array(), z) {
-                        let unite = crate::config::options::unite();
+                        let unite = modele::unite::unite();
                         let (nom, valeur) = if *poignee == 1 { ("Rayon", r) } else { ("Longueur d'arc", r * s.abs()) };
                         let texte = if self.dessin2d.saisie.is_empty() { unite.afficher(valeur) } else { format!("{}▏{}", self.dessin2d.saisie, unite.suffixe()) };
                         let g = painter.layout_no_wrap(format!("{nom} : {texte}"), egui::FontId::proportional(13.0), Color32::from_gray(30));
@@ -148,17 +148,17 @@ impl ViewerApp {
                     for (k, (nom, texte)) in [("Rayon", rayon), ("Longueur", longueur)].into_iter().enumerate() {
                         let zone = egui::Rect::from_min_size(e + egui::vec2(14.0, -48.0 + k as f32 * 24.0), egui::vec2(95.0, 22.0));
                         let reponse = ui.put(zone, egui::TextEdit::singleline(texte).id(ui.make_persistent_id(("cote_arc", id, k))).desired_width(95.0))
-                            .on_hover_text(format!("{nom} ({}) : saisir une valeur puis valider", crate::config::options::unite().suffixe().trim()));
+                            .on_hover_text(format!("{nom} ({}) : saisir une valeur puis valider", modele::unite::unite().suffixe().trim()));
                         if reponse.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                             modifier = Some((id.clone(), axe, if k == 0 { 1 } else if poignee == 0 { 0 } else { 2 }, texte.clone()));
                         }
-                        painter.text(zone.right_center() + egui::vec2(4.0, 0.0), egui::Align2::LEFT_CENTER, format!("{nom} ({})", crate::config::options::unite().suffixe().trim()), egui::FontId::proportional(11.0), bleu);
+                        painter.text(zone.right_center() + egui::vec2(4.0, 0.0), egui::Align2::LEFT_CENTER, format!("{nom} ({})", modele::unite::unite().suffixe().trim()), egui::FontId::proportional(11.0), bleu);
                     }
                 }
             }
         }
         if let Some((id, axe, poignee, texte)) = modifier {
-            let valeur = texte.trim().replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0).map(|v| v * crate::config::options::unite().facteur());
+            let valeur = texte.trim().replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0).map(|v| v * modele::unite::unite().facteur());
             let resultat = valeur.ok_or_else(|| "Saisissez une valeur positive et finie.".to_string())
                 .and_then(|valeur| ajuster_arc(axe, poignee, DVec2::ZERO, Some(valeur)))
                 .and_then(|points| self.executer_bim(commandes::Commande::ModifierTrajectoireMur { id: id.clone(), points: points.map(|p|p.to_array()) }));
@@ -167,7 +167,7 @@ impl ViewerApp {
                     if let Some((axe, _)) = self.natif.as_ref().and_then(|(p,_)|p.trajectoire_justification(&id))
                         && let Some(points) = points_controle(axe)
                         && let Some((_,r,_,s)) = noyau::forme2d::arc_3_points(points[0],points[1],points[2]) {
-                        let facteur = crate::config::options::unite().facteur();
+                        let facteur = modele::unite::unite().facteur();
                         let derniere_extremite = self.cote_arc.as_ref().map_or(poignee, |(_, ancienne, _, _)| *ancienne);
                         self.cote_arc = Some((id, derniere_extremite, noyau::nombres::format_real(r/facteur), noyau::nombres::format_real(r*s.abs()/facteur)));
                     }

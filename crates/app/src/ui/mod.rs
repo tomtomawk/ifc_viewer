@@ -51,7 +51,7 @@ mod panneau_droit;
 mod vue_revit;
 mod viewport;
 mod commandes_pilote;
-use crate::config::options::Dimensions;
+use config::options::Dimensions;
 use moteur3d::camera::{Camera, MAX_PITCH};
 use moteur2d::Poche;
 use ifc_base::semantique::pretty_type;
@@ -604,7 +604,7 @@ pub struct ViewerApp {
     /// Pente donnée à une arête cochée (degrés), la dernière saisie.
     pente_defaut: f64,
     /// Options de l'application (menu Début > Options).
-    options: crate::config::options::Options,
+    options: config::options::Options,
     parametres: Option<parametres::Parametres>,
     ajustement: Option<ajuster::EtatAjustement>,
     volets: [volets::FenetreVolet;2],
@@ -832,8 +832,8 @@ impl ViewerApp {
             ajustement: None,
             volets: Default::default(),
             options: {
-                let o = crate::config::options::Options::charger();
-                crate::config::options::definir_unite(o.unite);
+                let o = config::options::Options::charger();
+                modele::unite::definir_unite(o.unite);
                 o.theme_interface.appliquer(&cc.egui_ctx);
                 // gabarit choisi : lu au démarrage, défaut s'il est illisible
                 if let Some(c) = &o.gabarit {

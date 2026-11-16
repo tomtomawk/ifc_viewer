@@ -97,10 +97,10 @@ impl ViewerApp {
                 if let Some(m)=couches.first() {
                     ui.label("Niveau de base");ui.label(projet.niveau(&m.niveau).map_or("",|n|n.nom.as_str()));ui.end_row();
                     ui.label("Contrainte haute");
-                    ui.label(match &m.haut {Haut::Libre{hauteur}=>crate::config::options::unite().afficher(*hauteur),Haut::Niveau{niveau,..}=>projet.niveau(niveau).map_or_else(||niveau.clone(),|n|n.nom.clone())});ui.end_row();
+                    ui.label(match &m.haut {Haut::Libre{hauteur}=>modele::unite::unite().afficher(*hauteur),Haut::Niveau{niveau,..}=>projet.niveau(niveau).map_or_else(||niveau.clone(),|n|n.nom.clone())});ui.end_row();
                 }
                 ui.label("Nom");ui.label(&a.nom);ui.end_row();
-                if let Some((axe,_))=projet.trajectoire_justification(&a.id) {ui.label("Longueur");ui.label(crate::config::options::unite().afficher(axe.longueur()));ui.end_row();}
+                if let Some((axe,_))=projet.trajectoire_justification(&a.id) {ui.label("Longueur");ui.label(modele::unite::unite().afficher(axe.longueur()));ui.end_row();}
                 let volume:f64=couches.iter().filter_map(|m|projet.volume_mur(m)).sum();
                 ui.label("Volume");ui.label(format!("{:.3} m³",volume/1e9));ui.end_row();
                 let ossature:f64=couches.iter().map(|m|modele::murs::ossature::lineaire_mur(projet,m)).sum();
@@ -115,7 +115,7 @@ impl ViewerApp {
                     if ui.link(nom).clicked() {
                         selection = Some(modele::identifiants::id_natif("mur", &m.id));
                     }
-                    ui.label(crate::config::options::unite().afficher(c.map_or(0.0, |c| c.epaisseur)));
+                    ui.label(modele::unite::unite().afficher(c.map_or(0.0, |c| c.epaisseur)));
                     ui.label(projet.bas_haut(m).map_or(String::new(), |(b, h)| format!("h {:.0}", h - b)));
                     ui.label(RichText::new(m.phase.as_deref().unwrap_or("")).weak());
                     ui.end_row();
@@ -177,9 +177,9 @@ impl ViewerApp {
                 ui.label("Nom");ui.label(&m.nom);ui.end_row();
                 let longueur=projet.trajectoire_justification(m.assemblage.as_deref().unwrap_or(&m.id)).map_or_else(||m.axe.longueur(),|(axe,_)|axe.longueur());
                 for (nom, valeur) in [
-                    ("Longueur", crate::config::options::unite().afficher(longueur)),
-                    ("Hauteur résultante", crate::config::options::unite().afficher(haut - bas)),
-                    ("Épaisseur", crate::config::options::unite().afficher(epaisseur)),
+                    ("Longueur", modele::unite::unite().afficher(longueur)),
+                    ("Hauteur résultante", modele::unite::unite().afficher(haut - bas)),
+                    ("Épaisseur", modele::unite::unite().afficher(epaisseur)),
                     ("Volume", format!("{:.3} m³", projet.volume_mur(&m).unwrap_or(0.0) / 1e9)),
                 ] {
                     ui.label(nom);
@@ -345,7 +345,7 @@ impl ViewerApp {
             // caractéristiques calculées et confort (Blondel)
             match e.calcul(projet) {
                 Ok(c) => {
-                    let u = crate::config::options::unite();
+                    let u = modele::unite::unite();
                     ui.label(format!("{} contremarches de {} · giron {} · {} palier(s)", c.contremarches, u.afficher(c.h), u.afficher(c.giron), c.paliers));
                     let texte = format!("Blondel 2h + g = {}", u.afficher(c.blondel));
                     if c.confortable() { ui.label(texte); } else { ui.colored_label(Color32::from_rgb(200, 120, 20), format!("{texte} : hors confort (60 à 65 cm, h ≤ 20 cm, g ≥ 22 cm)")); }
@@ -383,7 +383,7 @@ impl ViewerApp {
                 }
             });
             let hote = g.escalier.as_ref().and_then(|id| projet.escaliers.iter().find(|e| &e.id == id)).map(|e| e.nom.clone());
-            ui.label(RichText::new(match hote { Some(n) => format!("Suit l'escalier « {n} » · longueur {}", crate::config::options::unite().afficher(g.longueur())), None => format!("Longueur {}", crate::config::options::unite().afficher(g.longueur())) }).weak());
+            ui.label(RichText::new(match hote { Some(n) => format!("Suit l'escalier « {n} » · longueur {}", modele::unite::unite().afficher(g.longueur())), None => format!("Longueur {}", modele::unite::unite().afficher(g.longueur())) }).weak());
             if change {
                 let mut p = projet.clone();
                 let id = g.id.clone();
@@ -401,7 +401,7 @@ impl ViewerApp {
                         let [r, g, b] = c.materiau.as_ref().and_then(|n| projet.materiau(n)).map_or([200, 200, 196], |m| m.couleur);
                         let (q, _) = ui.allocate_exact_size(egui::vec2(16.0, 12.0), Sense::hover());
                         ui.painter().rect_filled(q, 0.0, Color32::from_rgb(r, g, b));
-                        ui.label(RichText::new(format!("{} · {}", c.materiau.as_deref().unwrap_or("Couche"), crate::config::options::unite().afficher(c.epaisseur))).small());
+                        ui.label(RichText::new(format!("{} · {}", c.materiau.as_deref().unwrap_or("Couche"), modele::unite::unite().afficher(c.epaisseur))).small());
                     });
                 }
             }
@@ -464,7 +464,7 @@ impl ViewerApp {
                 let aire = modele::volumes::geometrie::aire_pair_impair(&d.contours);
                 for (nom, valeur) in [
                     ("Aire", format!("{:.2} m²", aire / 1e6)),
-                    ("Épaisseur", crate::config::options::unite().afficher(t.map_or(0.0, |t| t.epaisseur()))),
+                    ("Épaisseur", modele::unite::unite().afficher(t.map_or(0.0, |t| t.epaisseur()))),
                     ("Volume", format!("{:.3} m³", projet.volume_dalle(&d).unwrap_or(0.0) / 1e9)),
                 ] {
                     ui.label(nom);
@@ -500,7 +500,7 @@ impl ViewerApp {
                         for k in 0..n {
                             let (a, b) = (d.contours[c][k], d.contours[c][(k + 1) % n]);
                             let nom = if d.contours.len() > 1 { format!("{}.{}", c + 1, k + 1) } else { format!("{}", k + 1) };
-                            ui.label(format!("Arête {nom} · {}", crate::config::options::unite().afficher((b[0] - a[0]).hypot(b[1] - a[1]).round())));
+                            ui.label(format!("Arête {nom} · {}", modele::unite::unite().afficher((b[0] - a[0]).hypot(b[1] - a[1]).round())));
                             change |= champs_talus(ui, &mut d, c, k);
                             ui.end_row();
                         }
@@ -517,7 +517,7 @@ impl ViewerApp {
                         for k in 0..n {
                             let (a, b) = (d.contours[c][k], d.contours[c][(k + 1) % n]);
                             let nom = if d.contours.len() > 1 { format!("{}.{}", c + 1, k + 1) } else { format!("{}", k + 1) };
-                            ui.label(format!("Arête {nom} · {}", crate::config::options::unite().afficher((b[0] - a[0]).hypot(b[1] - a[1]).round())));
+                            ui.label(format!("Arête {nom} · {}", modele::unite::unite().afficher((b[0] - a[0]).hypot(b[1] - a[1]).round())));
                             let mut pente = d.pente(c, k);
                             let mut oui = pente.is_some();
                             if ui.checkbox(&mut oui, "Pente").changed() {

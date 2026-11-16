@@ -1,5 +1,5 @@
 //! Propriétés communes des textes placés dans un document graphique.
-use crate::config::options::Dimensions;
+use config::options::Dimensions;
 use eframe::egui;
 
 /// Champs sélectionnables selon le document cible.

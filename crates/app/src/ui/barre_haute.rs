@@ -121,14 +121,14 @@ impl ViewerApp {
             let reponse=ui.add(egui::Button::new("").min_size(egui::vec2(26.0,24.0)));
             let (r,c)=(reponse.rect.shrink(5.0),ui.visuals().text_color());
             match actuel {
-                crate::config::options::ThemeInterface::Systeme=>icone_moniteur(ui.painter(),r,c),
-                crate::config::options::ThemeInterface::Clair=>icone_soleil(ui.painter(),r,c),
-                crate::config::options::ThemeInterface::Sombre=>icone_lune(ui.painter(),r,c),
+                config::options::ThemeInterface::Systeme=>icone_moniteur(ui.painter(),r,c),
+                config::options::ThemeInterface::Clair=>icone_soleil(ui.painter(),r,c),
+                config::options::ThemeInterface::Sombre=>icone_lune(ui.painter(),r,c),
             }
             let mut choix=None;
             if reponse.clicked() {choix=Some(actuel.suivant());}
             reponse.context_menu(|ui| {
-                for t in crate::config::options::ThemeInterface::TOUS {
+                for t in config::options::ThemeInterface::TOUS {
                     if ui.selectable_label(t==actuel,t.nom()).clicked() {choix=Some(t);ui.close();}
                 }
             });

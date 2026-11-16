@@ -1,7 +1,8 @@
 //! Paramètres personnels : brouillon explicite, validation puis sauvegarde.
 use super::*;
-use crate::config::options::{
-    Options, Unite,
+use modele::unite::Unite;
+use config::options::{
+    Options,
     raccourcis::{self, COMMANDES, Raccourci},
 };
 
@@ -13,7 +14,7 @@ pub(super) struct Parametres {
 }
 impl ViewerApp {
     /// Applique et enregistre le mode d'apparence (bouton de la barre haute, commande).
-    pub(super) fn changer_theme(&mut self, ctx: &egui::Context, theme: crate::config::options::ThemeInterface) {
+    pub(super) fn changer_theme(&mut self, ctx: &egui::Context, theme: config::options::ThemeInterface) {
         self.options.theme_interface = theme;
         if let Some(p) = &mut self.parametres {
             p.brouillon.theme_interface = theme;
@@ -42,7 +43,7 @@ impl ViewerApp {
         };
         o.sauver()?;
         modele::gabarit::definir(g);
-        crate::config::options::definir_unite(o.unite);
+        modele::unite::definir_unite(o.unite);
         self.options = o;
         self.coupe_dirty = true;
         self.bim.revision = self.bim.revision.wrapping_add(1);

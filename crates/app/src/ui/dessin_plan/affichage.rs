@@ -410,7 +410,7 @@ impl ViewerApp {
         let bleu = Color32::from_rgb(0, 120, 215);
         let vert = Color32::from_rgb(20, 160, 60);
         if let Some(centre) = trace.precedent().filter(|_| !trace.attend_courbure())
-            && let Some(rayon) = super::saisie::distance_saisie(&self.dessin2d.saisie, crate::config::options::unite().facteur())
+            && let Some(rayon) = super::saisie::distance_saisie(&self.dessin2d.saisie, modele::unite::unite().facteur())
         {
             let points: Vec<_> = (0..=128).filter_map(|i| {
                 let angle = std::f64::consts::TAU * i as f64 / 128.0;
@@ -443,7 +443,7 @@ impl ViewerApp {
                 }
                 // aperçu : ligne tracée, et volume pour un mur ; arc en attente : rayon
                 // tapé (du côté du curseur), sinon passage par le curseur
-                let passage = super::saisie::distance_saisie(&self.dessin2d.saisie, crate::config::options::unite().facteur())
+                let passage = super::saisie::distance_saisie(&self.dessin2d.saisie, modele::unite::unite().facteur())
                     .filter(|_| trace.attend_courbure())
                     .and_then(|rayon| trace.point_de_rayon(rayon, self.dessin2d.curseur.unwrap_or(p)).ok());
                 let apercu = trace.apercu(passage.unwrap_or(p));
@@ -508,12 +508,12 @@ impl ViewerApp {
                     // arc en attente : rayon tapé, sinon rayon de l'arc passant par le curseur
                     let n = trace.points.len();
                     let rayon = noyau::forme2d::arc_3_points(trace.points[n - 2], p, trace.points[n - 1]).map(|x| x.1);
-                    let u = crate::config::options::unite();
+                    let u = modele::unite::unite();
                     let decimales = u.facteur().log10().round().max(0.0) as usize;
                     infos.push(if saisie.is_empty() || coordonnees { rayon.map_or("R —".to_string(), |r| format!("R {:.*}{}", decimales, r / u.facteur(), u.suffixe())) } else { format!("R {saisie}▏{}", u.suffixe()) });
                 } else if let Some(prec) = trace.precedent() {
                     let v = p - prec;
-                    let u = crate::config::options::unite();
+                    let u = modele::unite::unite();
                     let decimales = u.facteur().log10().round().max(0.0) as usize;
                     let (distance, angle) = saisie.split_once(['<', '>']).map_or((saisie.as_str(), None), |(d, a)| (d, Some(a.trim_end_matches('>'))));
                     let distance = if !coordonnees && !distance.is_empty() { format!("{distance}{}", if !self.dessin2d.champ_angle { "▏" } else { "" }) } else { format!("{:.*}", decimales, v.length() / u.facteur()) };
@@ -604,7 +604,7 @@ impl ViewerApp {
             _ => None,
         }};
         if edition.is_none() && usage.is_none() && modification.is_none() { return; }
-        let u = crate::config::options::unite();
+        let u = modele::unite::unite();
         let nom = if self.orientation_nord_en_cours { "NORD DU PROJET".into() } else { match usage {
             Some((Usage::Mur, o)) => format!("MUR · {}", nom_outil(o)),
             Some((Usage::Escalier, _)) => format!("ESCALIER · LIGNE = {}", ["AXE", "BORD GAUCHE", "BORD DROIT"][self.dessin2d.justification_escalier as usize % 3]),
