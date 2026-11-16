@@ -3,3 +3,4 @@ pub(crate) mod feuilles;
 pub(crate) mod cartouche;
 pub(crate) mod coupe;
 pub(crate) mod gabarits_vues;
+pub(crate) mod aimantation;

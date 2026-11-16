@@ -95,8 +95,11 @@ pub(crate) struct EtatFeuilles {
     /// Jeu pour lequel le cadrage a été fait.
     cadre_pour: Option<String>,
     pub selection: SelectionFeuille,
-    /// Vue placée en cours de déplacement : feuille, rang, déplacement à l'écran.
+    /// Vue placée en cours de déplacement : feuille, rang, déplacement à l'écran
+    /// (aimanté aux cadres voisins).
     glisse: Option<(String, usize, egui::Vec2)>,
+    /// Déplacement brut de la souris pendant ce glissement, avant aimantation.
+    glisse_brut: egui::Vec2,
     /// Feuille glissée par son titre pour la remettre à un autre rang du jeu.
     glisse_feuille: Option<String>,
     /// Dessins des vues à leur échelle, en position nulle : (vue, échelle).
@@ -475,6 +478,7 @@ impl ViewerApp {
                 if let Some((k, j)) = depart.filter(|q| cartouche_sous(*q).is_none()).and_then(vue_sous) {
                     self.famille_selectionnee = None;
                     etat.glisse = Some((feuilles[k].id.clone(), j, egui::Vec2::ZERO));
+                    etat.glisse_brut = egui::Vec2::ZERO;
                     etat.selection = SelectionFeuille::Vue(feuilles[k].id.clone(), j);
                 } else if let Some(k) = depart.and_then(titre_sous) {
                     self.famille_selectionnee = None;
@@ -484,7 +488,22 @@ impl ViewerApp {
             }
             if resp.dragged() {
                 match &mut etat.glisse {
-                    Some((_, _, d)) => *d += resp.drag_delta(),
+                    Some((fid, j, d)) => {
+                        // bords et angles du papier, du cadre, du cartouche et des autres vues
+                        etat.glisse_brut += resp.drag_delta();
+                        *d = etat.glisse_brut;
+                        if let Some(f) = feuilles.iter().find(|f| &f.id == fid) && let Some(b) = boite(f, *j) {
+                            let (dx, dy) = ((d.x / z) as f64, -(d.y / z) as f64);
+                            let (mut xs, mut ys) = crate::documenter::aimantation::bords_feuille(f.largeur, f.hauteur, doc::MARGE);
+                            if let Some([x0, y0, x1, y1]) = doc::cadre_cartouche(p, f) { xs.extend([x0, x1]); ys.extend([y0, y1]); }
+                            for autre in (0..f.vues.len() + f.nomenclatures.len()).filter(|k| k != j).filter_map(|k| boite(f, k)) {
+                                xs.extend([autre[0], autre[2]]);
+                                ys.extend([autre[1], autre[3]]);
+                            }
+                            let [cx, cy] = crate::documenter::aimantation::aimanter([b[0] + dx, b[1] + dy, b[2] + dx, b[3] + dy], &xs, &ys, (8.0 / z) as f64);
+                            *d += egui::vec2((cx * z as f64) as f32, -(cy * z as f64) as f32);
+                        }
+                    }
                     None if etat.glisse_feuille.is_some() => {}
                     None => etat.decalage += resp.drag_delta(),
                 }
