@@ -105,7 +105,7 @@ impl ViewerApp {
     /// prédéfinis (vitré, barreaudé…) copiés dans le projet au choix ; modifier ou
     /// dupliquer au survol, nouveau type en fin de liste.
     pub(super) fn selecteur_garde_corps(&mut self, ui: &mut egui::Ui, ids: &[String]) -> bool {
-        use super::ruban::selecteur;
+        use crate::ruban::selecteur;
         let Some((p, _)) = &self.natif else {
             return false;
         };

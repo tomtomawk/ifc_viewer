@@ -4,23 +4,20 @@
 //! panneaux s'ancrent d'un côté ou flottent ; sous la vue, la boîte de visibilité par
 //! catégorie de modèle et d'annotation.
 
+mod saisie;
 pub mod fenetre;
 mod bim;
 mod communes;
 mod outils_texte;
-mod saisie_trace;
-mod poignees_annotation;
-mod reperage;
 mod types_traits;
 mod feuilles;
 mod dessin_plan;
 mod editeur_famille;
-mod accrochage;
 mod gestion_contextes;
 mod gabarits_vues;
 mod profils;
 mod ruban;
-use accrochage::{AccrocheMur, marqueur};
+use crate::saisie::accrochage::{AccrocheMur, marqueur};
 mod collaboration;
 mod pilotage;
 mod parametres;
@@ -34,14 +31,12 @@ use aides::*;
 mod documents;
 mod coupe;
 mod vue_native;
-mod selection;
 mod selection_famille;
 mod garde_corps;
 mod familles_planes;
 mod document_famille;
 mod cartouche;
 mod proprietes;
-mod saisie_plan;
 mod barre_haute;
 mod panneaux;
 mod navigateur;
@@ -671,7 +666,7 @@ pub struct ViewerApp {
     /// Poignée d'extrémité de l'axe du mur sélectionné en cours de déplacement : élément,
     /// extrémité (true : fin) et position courante (mm).
     poignee_axe: Option<(String, bool, [f64; 2])>,
-    poignee_annotation: Option<poignees_annotation::GlissementAnnotation>,
+    poignee_annotation: Option<crate::saisie::poignees_annotation::GlissementAnnotation>,
     /// Dernière poignée déplacée et cote modifiable de sa ligne d'implantation.
     cote_axe: Option<(String, bool, String)>,
     /// Dernier mur courbe modifié : poignée, rayon et longueur d'arc éditables.

@@ -38,7 +38,7 @@ fn accrocher_plan_construction(ed: &EditeurFamille, plan: &PlanConstruction, r: 
     let (h,v) = cadre.modele(q);
     let depart = points.last().copied();
     if !maj && let Some((p, _)) = moteur2d::dao::accrocher(DVec2::new(h,v), 7.0 / cadre.echelle, &geoms, depart) { return (p.x, p.y); }
-    if let Some(p) = depart && let Some((q, _)) = accrochage::contraindre(p.to_array(), [h,v], 0.0, maj, 1.0) { return (q[0], q[1]); }
+    if let Some(p) = depart && let Some((q, _)) = crate::saisie::accrochage::contraindre(p.to_array(), [h,v], 0.0, maj, 1.0) { return (q[0], q[1]); }
     (h,v)
 }
 
@@ -320,14 +320,14 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             let papier = matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Cartouche | modele::famille::modelee::CategorieFamille::EtiquettePiece);
             let taille = egui::FontId::proportional(if papier { (element.hauteur * cadre.echelle).clamp(3.0, 400.0) } else { (element.hauteur * 4.0).clamp(8.0, 48.0) } as f32);
             let couleur = if ed.choisi(&SelectionFamille::Element2D(indice)) { Color32::from_rgb(0, 100, 210) } else { Color32::from_gray(30) };
-            let apercu = super::super::outils_texte::apercu_famille(texte, projet, ed.vue.nom(), ed.famille.categorie, ed.cible_feuille.as_deref(), ed.cible_piece.as_deref());
+            let apercu = crate::outils_texte::apercu_famille(texte, projet, ed.vue.nom(), ed.famille.categorie, ed.cible_feuille.as_deref(), ed.cible_piece.as_deref());
             let rect_texte = painter.text(cadre.ecran(point[0], point[1]), egui::Align2::LEFT_BOTTOM, apercu, taille, couleur);
             textes_2d.push((indice, rect_texte.expand(5.0)));
         } else {
             let primitives = modele::documentation::forme_cartouche(projet, &element.forme);
-            let dessin = super::super::feuilles::rendu(&primitives, [0.0; 4]);
+            let dessin = crate::feuilles::rendu(&primitives, [0.0; 4]);
             let selection = ed.choisi(&SelectionFamille::Element2D(indice)).then_some(Color32::from_rgb(0, 100, 210));
-            super::super::cartouche::peindre(&painter, &cadre, dessin, selection);
+            crate::cartouche::peindre(&painter, &cadre, dessin, selection);
             if let Some(forme) = element.forme.forme_2d() {
                 for ligne in forme.polylignes() {
                     lignes_2d.push((indice, ligne.into_iter().map(|p| cadre.ecran(p.x, p.y)).collect()));
@@ -349,8 +349,8 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
         for (l, m) in seul.regions_resolues(&r, sy.vue) {
             let forme = modele::documentation::AnnotationForme::Polyligne { points: l.iter().map(|&(h,v)| [h,v]).collect(), fermee: true, courbures: Vec::new(), remplissage: Some(m), traits: Vec::new() };
             let primitives = modele::documentation::forme_cartouche(projet, &forme);
-            let dessin = super::super::feuilles::rendu(&primitives, [0.0; 4]);
-            super::super::cartouche::peindre(&painter, &cadre, dessin, None);
+            let dessin = crate::feuilles::rendu(&primitives, [0.0; 4]);
+            crate::cartouche::peindre(&painter, &cadre, dessin, None);
         }
         for l in seul.symboles_resolus(&r, sy.vue) {
             let pts: Vec<egui::Pos2> = l.into_iter().map(|(h, v)| cadre.ecran(h, v)).collect();
@@ -523,7 +523,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             };
             return ((p.x, p.y), genre);
         }
-        match depart.and_then(|a| accrochage::contraindre([a.0, a.1], [m.0, m.1], 0.0, maj, 1.0)) {
+        match depart.and_then(|a| crate::saisie::accrochage::contraindre([a.0, a.1], [m.0, m.1], 0.0, maj, 1.0)) {
             Some((p, a)) => ((p[0], p[1]), a),
             None => (m, AccrocheMur::Grille),
         }
@@ -965,7 +965,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             if let Some(q) = curseur.filter(|_| resp.hovered()) {
                 let (h, v) = viser(q, depart).0;
                 let brut = glam::DVec2::new(h, v);
-                let (point, angle) = super::super::saisie_trace::apercu_point(&ed.saisie_trace.texte, trace.precedent(), brut, facteur).unwrap_or((brut, None));
+                let (point, angle) = crate::saisie::saisie_trace::apercu_point(&ed.saisie_trace.texte, trace.precedent(), brut, facteur).unwrap_or((brut, None));
                 if angle.is_some() && let Some(debut) = trace.precedent() {
                     painter.add(egui::Shape::dashed_line(&[cadre.ecran(debut.x, debut.y), cadre.ecran(point.x, point.y)], egui::Stroke::new(1.0, Color32::from_rgb(70, 140, 210)), 6.0, 4.0));
                 }
@@ -991,7 +991,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 let curseur_modele = curseur.map(|q| {
                     let (h, v) = viser(q, depart).0;
                     let brut = glam::DVec2::new(h, v);
-                    super::super::saisie_trace::apercu_point(&ed.saisie_trace.texte, precedent, brut, facteur).map_or(brut, |(p, _)| p)
+                    crate::saisie::saisie_trace::apercu_point(&ed.saisie_trace.texte, precedent, brut, facteur).map_or(brut, |(p, _)| p)
                 });
                 match ed.saisie_trace.point(precedent, curseur_modele, facteur) {
                     Ok(p) => match (ed.plan_proche(&r, ah, p.x), ed.plan_proche(&r, av, p.y)) {

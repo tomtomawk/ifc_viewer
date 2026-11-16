@@ -86,7 +86,7 @@ impl commandes::historique::Instantane for FamillePlane {
 }
 
 pub(super) struct EditeurPlan {
-    pub(super) document_famille: super::document_famille::DocumentFamille<FamillePlane>,
+    pub(super) document_famille: crate::document_famille::DocumentFamille<FamillePlane>,
     pub contenu: FamillePlane,
     reference: FamillePlane,
     tracer: bool,
@@ -187,7 +187,7 @@ impl ViewerApp {
         self.prochain_ordre_famille += 1;
         let ordre = self.prochain_ordre_famille;
         self.familles_planes.insert(ordre, EditeurPlan {
-            document_famille: super::document_famille::DocumentFamille::nouveau(ordre, self.document_actif, autonome, chemin_fichier, contenu.clone()),
+            document_famille: crate::document_famille::DocumentFamille::nouveau(ordre, self.document_actif, autonome, chemin_fichier, contenu.clone()),
             reference: contenu.clone(), contenu, tracer: false, debut: None,
             cartouche: Default::default(),
         });
@@ -434,7 +434,7 @@ mod tests {
         ];
         for contenu in familles {
             let nom = contenu.nom().to_owned();
-            let mut ed = EditeurPlan { document_famille: super::super::document_famille::DocumentFamille::nouveau(0, 0, false, None, contenu.clone()), reference: contenu.clone(), contenu, tracer: false, debut: None, cartouche: Default::default() };
+            let mut ed = EditeurPlan { document_famille: crate::document_famille::DocumentFamille::nouveau(0, 0, false, None, contenu.clone()), reference: contenu.clone(), contenu, tracer: false, debut: None, cartouche: Default::default() };
             for suffixe in ["a", "b"] {
                 match &mut ed.contenu {
                     FamillePlane::Profil { profil, .. } => profil.nom = format!("{nom}{suffixe}"),

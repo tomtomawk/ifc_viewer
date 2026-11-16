@@ -83,7 +83,7 @@ impl ViewerApp {
         let exclus = self.ids_masques_contextes();
         // éléments masqués dans la vue : identifiants de scène calculés une fois
         let masques: HashSet<Id> = if v.elements_masques.is_empty() { HashSet::new() } else {
-            super::bim::elements_natifs(p).filter(|(_, cle)| v.elements_masques.contains(*cle)).map(|(genre, cle)| modele::identifiants::id_natif(genre, cle)).collect()
+            crate::bim::elements_natifs(p).filter(|(_, cle)| v.elements_masques.contains(*cle)).map(|(genre, cle)| modele::identifiants::id_natif(genre, cle)).collect()
         };
         let visible=s.objects.iter().enumerate().map(|(i,o)| {
             let masque_vue=masques.contains(&o.id) || s.model.parent.get(&o.id).is_some_and(|id|masques.contains(id));

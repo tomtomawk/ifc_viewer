@@ -73,7 +73,7 @@ impl ViewerApp {
             let t = ((curseur - a).dot(d) / l2).clamp(0.0, 1.0);
             let Some(q) = self.vers_ecran(rect, a + d * t) else { continue };
             let distance = q.distance(ecran);
-            if distance < crate::accrochage::RAYON && choix.as_ref().is_none_or(|(x, _)| distance < *x) {
+            if distance < crate::saisie::accrochage::RAYON && choix.as_ref().is_none_or(|(x, _)| distance < *x) {
                 choix = Some((distance, (id, k, [a, b], t)));
             }
         }

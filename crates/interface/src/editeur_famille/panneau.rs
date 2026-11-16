@@ -92,23 +92,23 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             use modele::documentation::AnnotationForme;
             use modele::famille::modelee::CategorieFamille;
             let champs = match ed.famille.categorie {
-                CategorieFamille::Cartouche => super::super::outils_texte::CHAMPS_FEUILLE,
-                CategorieFamille::EtiquettePiece => super::super::outils_texte::CHAMPS_PIECE,
-                _ => super::super::outils_texte::CHAMPS_PROJET,
+                CategorieFamille::Cartouche => crate::outils_texte::CHAMPS_FEUILLE,
+                CategorieFamille::EtiquettePiece => crate::outils_texte::CHAMPS_PIECE,
+                _ => crate::outils_texte::CHAMPS_PROJET,
             };
             let papier = matches!(ed.famille.categorie, CategorieFamille::Cartouche | CategorieFamille::EtiquettePiece);
             let element = &mut ed.famille.elements_2d[k];
             match &mut element.forme {
                 AnnotationForme::Texte { point, texte } => {
-                    super::super::outils_texte::proprietes_texte(ui, texte, point, papier, champs);
-                    super::super::outils_texte::hauteur_texte(ui, &mut element.hauteur);
+                    crate::outils_texte::proprietes_texte(ui, texte, point, papier, champs);
+                    crate::outils_texte::hauteur_texte(ui, &mut element.hauteur);
                 }
                 AnnotationForme::Polyligne { fermee, remplissage, .. } => {
                     if ui.checkbox(fermee, "Fermée").changed() && !*fermee { *remplissage = None; }
                     if *fermee {
                         ui.label("Remplissage");
                         let texte = remplissage.as_ref().map_or("Aucun".to_string(), |r| r.libelle());
-                        if let Some(choix) = super::super::communes::choisir_remplissage_2d(ui, projet, &texte) { *remplissage = choix; }
+                        if let Some(choix) = crate::communes::choisir_remplissage_2d(ui, projet, &texte) { *remplissage = choix; }
                     }
                 }
                 AnnotationForme::Cercle { rayon, .. } => {
@@ -468,7 +468,7 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 if s.fermee {
                     let texte = s.remplissage.as_ref().map_or("Aucun".to_string(), |r| r.libelle());
                     ui.push_id(("remplissage_symbole", k), |ui| {
-                        if let Some(choix) = super::super::communes::choisir_remplissage_2d(ui, projet, &texte) { changer_remplissage = Some((k, choix)); }
+                        if let Some(choix) = crate::communes::choisir_remplissage_2d(ui, projet, &texte) { changer_remplissage = Some((k, choix)); }
                     });
                 }
                 if ui.small_button("−").on_hover_text("Supprimer le symbole").clicked() {

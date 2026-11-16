@@ -1,9 +1,9 @@
 //! Sélection : clic, rectangle, cadrage sur les objets.
 use commandes::Execution;
-use super::*;
+use crate::*;
 
 impl ViewerApp {
-    pub(super) fn select(&mut self, id: Option<Id>, reveal: bool) {
+    pub(crate) fn select(&mut self, id: Option<Id>, reveal: bool) {
         self.famille_selectionnee = None;
         self.cote_axe = None;
         self.cote_arc = None;
@@ -27,7 +27,7 @@ impl ViewerApp {
     /// reconstruites d'après le type), mur seul (types à une couche), couche d'un mur
     /// composé (type du mur composé), élément horizontal, porte ou fenêtre. Projet
     /// modifié si un autre type est choisi.
-    pub(super) fn selecteur_type_selection(&mut self, ui: &mut egui::Ui) -> Option<modele::Projet> {
+    pub(crate) fn selecteur_type_selection(&mut self, ui: &mut egui::Ui) -> Option<modele::Projet> {
         use commandes::Commande;
         let ids = self.selection_bim();
         let (p, _) = self.natif.as_ref()?;
@@ -225,7 +225,7 @@ impl ViewerApp {
         let nom_actuel = types.iter().find(|t| t.0 == actuel).map_or_else(|| p.type_mur(&actuel).or_else(|| p.type_dalle(&actuel)).map_or("Type".to_string(), |t| t.nom.clone()), |t| t.1.clone());
         let mut choisi = actuel.clone();
         {
-            use super::ruban::{pile_couches, selecteur};
+            use crate::ruban::{pile_couches, selecteur};
             let couches = |id: &str| p.type_mur(id).or_else(|| p.type_dalle(id)).map(|t| t.couches.clone()).unwrap_or_default();
             let detail_actuel = types.iter().find(|t| t.0 == actuel).map(|t| t.2.clone());
             let categorie = if matches!(cible, Cible::Dalle(_)) { "Élément horizontal" } else { "Mur" };
@@ -282,7 +282,7 @@ impl ViewerApp {
     /// Élément sélectionné par un clic sur l'objet `id` : une couche d'assemblage
     /// sélectionne son assemblage, sauf si l'assemblage (ou l'une de ses couches) l'est
     /// déjà : le clic suivant entre dans l'assemblage et prend la couche.
-    pub(super) fn cible_clic(&self, id: Id) -> Id {
+    pub(crate) fn cible_clic(&self, id: Id) -> Id {
         let Some(s) = &self.scene else { return id };
         let Some(&parent) = s.model.parent.get(&id) else { return id };
         if s.model.ty(parent) != "IFCELEMENTASSEMBLY" {
@@ -294,7 +294,7 @@ impl ViewerApp {
 
     /// Tab : de l'assemblage sélectionné à sa première couche, puis couche suivante,
     /// puis retour à l'assemblage.
-    pub(super) fn couche_suivante(&self) -> Option<Id> {
+    pub(crate) fn couche_suivante(&self) -> Option<Id> {
         let s = self.scene.as_ref()?;
         let sel = self.selected?;
         let (assemblage, courant) = if s.model.ty(sel) == "IFCELEMENTASSEMBLY" {
@@ -314,14 +314,14 @@ impl ViewerApp {
         (suivant != sel).then_some(suivant)
     }
 
-    pub(super) fn tab_dans_vue(&self, ctx: &egui::Context) -> bool {
+    pub(crate) fn tab_dans_vue(&self, ctx: &egui::Context) -> bool {
         self.editeur_garde_corps.is_none()
             && !egui::Popup::is_any_open(ctx)
             && ctx.pointer_hover_pos().is_some_and(|pos| self.rect_vue.contains(pos))
     }
 
     /// Sélectionne les objets de la scène, y compris les couches des assemblages.
-    pub(super) fn objets_selectionnes(&self) -> Vec<u8> {
+    pub(crate) fn objets_selectionnes(&self) -> Vec<u8> {
         let Some(scene) = &self.scene else { return Vec::new() };
         let mut marques = vec![0; scene.objects.len()];
         let mut entites = Vec::new();
@@ -374,7 +374,7 @@ impl ViewerApp {
         marques
     }
 
-    pub(super) fn selectionner_rectangle(&mut self, vue: egui::Rect, fenetre: FenetreSelection) {
+    pub(crate) fn selectionner_rectangle(&mut self, vue: egui::Rect, fenetre: FenetreSelection) {
         let Some(scene) = &self.scene else { return };
         let rectangle = fenetre.rectangle();
         let croisement = fenetre.croisement();
@@ -462,7 +462,7 @@ impl ViewerApp {
     }
 
     /// Objets 3D d'un nœud et de ses descendants.
-    pub(super) fn objects_under(&self, id: Id) -> Vec<u32> {
+    pub(crate) fn objects_under(&self, id: Id) -> Vec<u32> {
         let Some(s) = &self.scene else { return vec![] };
         let mut out = Vec::new();
         let mut stack = vec![id];
@@ -481,7 +481,7 @@ impl ViewerApp {
         out
     }
 
-    pub(super) fn frame_objects(&mut self, objs: &[u32]) {
+    pub(crate) fn frame_objects(&mut self, objs: &[u32]) {
         let Some(s) = &self.scene else { return };
         let mut mn = Vec3::splat(f32::MAX);
         let mut mx = Vec3::splat(f32::MIN);
@@ -495,7 +495,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn fit_all(&mut self) {
+    pub(crate) fn fit_all(&mut self) {
         let Some(s) = &self.scene else { return };
         let objs: Vec<u32> = (0..s.objects.len() as u32).filter(|&i| self.visible[i as usize]).collect();
         if objs.is_empty() {

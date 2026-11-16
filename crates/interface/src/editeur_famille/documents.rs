@@ -52,7 +52,7 @@ impl ViewerApp {
                 let avant = ed.camera_3d.forward();
                 let t = (ed.camera_3d.target - origine).dot(avant) / direction.dot(avant).max(1e-6);
                 let cible = (!ed.camera_3d.ortho).then_some(origine + direction * t);
-                ed.camera_3d.zoom(1.0 / accrochage::facteur_molette(scroll) as f32, cible);
+                ed.camera_3d.zoom(1.0 / crate::saisie::accrochage::facteur_molette(scroll) as f32, cible);
             }
         }
         if response.clicked_by(PointerButton::Primary) && let Some(pos) = response.interact_pointer_pos() {
@@ -113,7 +113,7 @@ impl ViewerApp {
 
     /// Point d'entrée commun aux catégories ; les moteurs spécialisés restent des adaptateurs.
     pub(crate) fn categorie_famille_ui(&mut self, ui: &mut egui::Ui) {
-        use super::super::familles_planes::FamillePlane;
+        use crate::familles_planes::FamillePlane;
         let plane = self.famille_plane_active;
         let (actuelle, modifiable) = if let Some(ed) = plane.and_then(|i| self.familles_planes.get(&i)) {
             if ed.element_selectionne() { return; }

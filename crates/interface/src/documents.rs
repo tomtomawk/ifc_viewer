@@ -8,7 +8,7 @@ impl ViewerApp {
             // l'affichage temporaire prime sur les réglages enregistrés de la vue
             let vue = self.id_vue_contexte().and_then(|id| projet.contextes_vues.get(&id)).cloned().unwrap_or_default();
             let masques = projet.elements_masques_contextes(&self.filtres_contextes.sur(&vue));
-            super::bim::elements_natifs(projet).filter(|(_, id)| masques.contains(*id)).map(|(genre, id)| modele::identifiants::id_natif(genre, id)).collect()
+            crate::bim::elements_natifs(projet).filter(|(_, id)| masques.contains(*id)).map(|(genre, id)| modele::identifiants::id_natif(genre, id)).collect()
         }).unwrap_or_default()
     }
     pub(super) fn open(&mut self, path: PathBuf, ctx: &egui::Context) {
@@ -262,7 +262,7 @@ impl ViewerApp {
         // éléments masqués dans la vue : leurs identifiants de scène calculés une fois, puis
         // chaque objet (ou son parent) y est cherché
         let masques_vue: HashSet<Id> = self.vue_native_id().and_then(|id| self.natif.as_ref()?.0.vues.iter().find(|v| v.id == id).map(|vue| (&self.natif.as_ref().unwrap().0, vue))).filter(|(_, vue)| !vue.elements_masques.is_empty()).map(|(projet, vue)| {
-            let masques: HashSet<Id> = super::bim::elements_natifs(projet).filter(|(_, cle)| vue.elements_masques.contains(*cle)).map(|(genre, cle)| modele::identifiants::id_natif(genre, cle)).collect();
+            let masques: HashSet<Id> = crate::bim::elements_natifs(projet).filter(|(_, cle)| vue.elements_masques.contains(*cle)).map(|(genre, cle)| modele::identifiants::id_natif(genre, cle)).collect();
             scene.objects.iter().filter(|o| masques.contains(&o.id) || scene.model.parent.get(&o.id).is_some_and(|id| masques.contains(id)))
                 .map(|o| o.id).collect()
         }).unwrap_or_default();

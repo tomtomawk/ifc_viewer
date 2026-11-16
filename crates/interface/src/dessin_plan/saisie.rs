@@ -2,7 +2,7 @@
 use commandes::Execution;
 use super::*;
 
-use super::super::saisie_trace::{ajouter_caractere_saisie, effacer_caractere_saisie};
+use crate::saisie::saisie_trace::{ajouter_caractere_saisie, effacer_caractere_saisie};
 
 fn intersections_cercle_guide(centre: DVec2, rayon: f64, origine: DVec2, direction: DVec2) -> Vec<DVec2> {
     let d = direction.normalize_or_zero();
@@ -21,7 +21,7 @@ pub(super) fn distance_saisie(saisie: &str, facteur: f64) -> Option<f64> {
 }
 
 #[cfg(test)]
-use super::super::reperage::directions_au_point;
+use crate::saisie::reperage::directions_au_point;
 
 #[cfg(test)]
 mod tests_guides_perpendiculaires {
@@ -99,7 +99,7 @@ impl ViewerApp {
     fn point_dessin_libre(&mut self, rect:egui::Rect,c:DVec2,maj:bool,temps:f64,precedent:Option<DVec2>)->(DVec2,Accroche) {
         // Une valeur d'angle en cours de saisie verrouille le guide dès qu'elle est lisible.
         if let Some(p) = precedent
-            && let Some((point, Some(angle))) = super::super::saisie_trace::apercu_point(&self.dessin2d.saisie, Some(p), c, modele::unite::unite().facteur())
+            && let Some((point, Some(angle))) = crate::saisie::saisie_trace::apercu_point(&self.dessin2d.saisie, Some(p), c, modele::unite::unite().facteur())
         {
             let direction = DVec2::from_angle(angle.to_radians());
             self.dessin2d.reperage.survol_accroche = None;

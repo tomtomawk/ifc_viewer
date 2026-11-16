@@ -387,7 +387,7 @@ impl ViewerApp {
                 par_cat.entry(f.categorie.as_str()).or_default().push(f);
             }
         }
-        use super::selection_famille::FamilleCatalogue;
+        use crate::selection_famille::FamilleCatalogue;
         let familles_natives = self.natif.as_ref().map(|(p, _)| FamilleCatalogue::liste(p));
         let mut famille_choisie = None;
         let mut nouvelle_ouverture = None;

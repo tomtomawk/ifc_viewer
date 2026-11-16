@@ -1,7 +1,7 @@
 //! Types de trait du dessin 2D : choix du type de chaque segment d'une polyligne, et
 //! fenêtre de gestion des types du projet (nom, épaisseur, tirets en mm du papier).
 use super::*;
-use super::communes::melange;
+use crate::communes::melange;
 use glam::DVec2;
 use modele::Projet;
 use modele::documentation::{AnnotationForme, TypeTrait};

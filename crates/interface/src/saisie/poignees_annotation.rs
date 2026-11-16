@@ -1,5 +1,5 @@
 //! Poignées d'annotations du projet : même géométrie que les éditeurs de famille.
-use super::*;
+use crate::*;
 use glam::{DVec2, DVec3};
 use modele::documentation::Annotation;
 
@@ -8,7 +8,7 @@ enum MouvementAnnotation {
     Groupe { ids: Vec<String>, annotations: Vec<Annotation>, origine: DVec2, delta: DVec2 },
 }
 
-pub(super) struct GlissementAnnotation {
+pub(crate) struct GlissementAnnotation {
     mouvement: MouvementAnnotation,
     document: usize,
     vue: String,
@@ -63,7 +63,7 @@ impl ViewerApp {
     /// Outil Texte du projet, même parcours que dans l'éditeur de famille : un clic place
     /// le texte dans la vue, puis il reste sélectionné pour régler son contenu, ses
     /// champs, sa position et sa hauteur dans Propriétés.
-    pub(super) fn placer_texte_vue(&mut self, rect: egui::Rect, q: egui::Pos2) -> Result<(), String> {
+    pub(crate) fn placer_texte_vue(&mut self, rect: egui::Rect, q: egui::Pos2) -> Result<(), String> {
         use modele::documentation::AnnotationForme;
         let vue = self.vue_native_id().ok_or("Ouvrez un plan ou une coupe native pour annoter.")?;
         let point = self.point_annotation(rect, q).ok_or("Le plan de la vue est vu par la tranche : ouvrir un plan, une coupe ou une élévation.")?;
@@ -110,7 +110,7 @@ impl ViewerApp {
             .is_some_and(|id| ids.contains(&id))
     }
 
-    pub(super) fn suivre_poignee_annotation(&mut self, ui: &egui::Ui, rect: egui::Rect, response: &egui::Response, occupe: bool) -> bool {
+    pub(crate) fn suivre_poignee_annotation(&mut self, ui: &egui::Ui, rect: egui::Rect, response: &egui::Response, occupe: bool) -> bool {
         if self.poignee_annotation.as_ref().is_some_and(|g| g.document != self.document_actif || self.vue_native_id().as_deref() != Some(g.vue.as_str())) {
             self.poignee_annotation = None;
         }
@@ -160,7 +160,7 @@ impl ViewerApp {
         active
     }
 
-    pub(super) fn dessiner_poignees_annotation(&self, ui: &egui::Ui, rect: egui::Rect, occupe: bool) {
+    pub(crate) fn dessiner_poignees_annotation(&self, ui: &egui::Ui, rect: egui::Rect, occupe: bool) {
         if occupe && self.poignee_annotation.is_none() { return; }
         let annotations = match &self.poignee_annotation {
             Some(GlissementAnnotation { mouvement: MouvementAnnotation::Poignee { annotation, .. }, .. }) => vec![annotation.clone()],

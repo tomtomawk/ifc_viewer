@@ -3,8 +3,8 @@ use super::*;
 use moteur2d::dao::{EvenementTrace, OutilDessin, Trace};
 use noyau::forme2d::{Forme2D, Geom};
 use modele::{Projet, documentation::{self as doc, AnnotationForme as F, FamilleCartouche, TexteCartouche}};
-use super::editeur_famille::{Cadre, NavigationFamille, VueFamille};
-use super::ruban::{Menu, Outil, RubanEdition};
+use crate::editeur_famille::{Cadre, NavigationFamille, VueFamille};
+use crate::ruban::{Menu, Outil, RubanEdition};
 use glam::DVec2;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -19,8 +19,8 @@ pub(super) struct EditionCartouche {
     navigation: [NavigationFamille; 3],
     ruban: RubanEdition,
     trace: Option<Trace>,
-    saisie_trace: super::saisie_trace::SaisieTrace,
-    reperage: super::reperage::Reperage,
+    saisie_trace: crate::saisie::saisie_trace::SaisieTrace,
+    reperage: crate::saisie::reperage::Reperage,
     erreur_saisie: Option<String>,
     points_cote: Vec<DVec2>,
     selection: Option<Element>,
@@ -127,15 +127,15 @@ impl EditionCartouche {
             if let Some(F::Polyligne { fermee: true, remplissage, .. }) = f.formes.get_mut(i) {
                 ui.label("Remplissage");
                 let texte = remplissage.as_ref().map_or("Aucun".to_string(), |r| r.libelle());
-                if let Some(choix) = super::communes::choisir_remplissage_2d(ui, p, &texte) { *remplissage = choix; }
+                if let Some(choix) = crate::communes::choisir_remplissage_2d(ui, p, &texte) { *remplissage = choix; }
             }
             return;
         }
         let Some(Element::Texte(i)) = self.selection else { return };
         let Some(texte) = f.textes.get_mut(i) else { return };
         ui.separator();
-        super::outils_texte::proprietes_texte(ui, &mut texte.contenu, &mut texte.position, true, super::outils_texte::CHAMPS_FEUILLE);
-        super::outils_texte::hauteur_texte(ui, &mut texte.hauteur);
+        crate::outils_texte::proprietes_texte(ui, &mut texte.contenu, &mut texte.position, true, crate::outils_texte::CHAMPS_FEUILLE);
+        crate::outils_texte::hauteur_texte(ui, &mut texte.hauteur);
     }
 
     pub(super) fn supprimer(&mut self, f: &mut FamilleCartouche) {
@@ -170,7 +170,7 @@ impl EditionCartouche {
                 .fixed_pos(rect.left_top() + egui::vec2(8.0, 8.0)).constrain_to(rect)
                 .show(ui.ctx(), |ui| egui::Frame::popup(ui.style()).show(ui, |ui| ui.horizontal(|ui| {
                     let formes = [(OutilDessin::Polyligne, "Polyligne", "Cliquer les sommets ; Entrée ou clic droit pour terminer, F pour fermer.")];
-                    (selectionner, _) = super::dessin_plan::boutons_trace(ui, false, false, OutilDessin::Polyligne, &formes, None);
+                    (selectionner, _) = crate::dessin_plan::boutons_trace(ui, false, false, OutilDessin::Polyligne, &formes, None);
                 })));
             if selectionner {
                 if let Some(trace) = &mut self.trace {
@@ -239,7 +239,7 @@ impl EditionCartouche {
             let terminer = r.secondary_clicked() || (clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter) || i.consume_key(egui::Modifiers::NONE, egui::Key::Space)));
             if let Some(trace) = &mut self.trace {
                 let evenement = if valider_saisie || (r.clicked() && !self.saisie_trace.texte.is_empty()) {
-                    let vise = curseur.map(|q| super::saisie_trace::apercu_point(&self.saisie_trace.texte, trace.precedent(), q, 1.0).map_or(q, |(p, _)| p));
+                    let vise = curseur.map(|q| crate::saisie::saisie_trace::apercu_point(&self.saisie_trace.texte, trace.precedent(), q, 1.0).map_or(q, |(p, _)| p));
                     match self.saisie_trace.point(trace.precedent(), vise, 1.0) {
                         Ok(p) => { self.erreur_saisie = None; Some(EvenementTrace::Point(p)) },
                         Err(e) => { self.erreur_saisie = Some(e); None }
@@ -301,7 +301,7 @@ impl EditionCartouche {
                 if let Some(p) = positions_poignees(f, id).get(i).copied() {
                     let cible = (DVec2::from_array(p) + d).to_array();
                     if let Element::Forme(k) = id {
-                        if let Some(forme) = f.formes.get_mut(k) { super::dessin_plan::deplacer_poignee_forme(forme, i, cible); }
+                        if let Some(forme) = f.formes.get_mut(k) { crate::dessin_plan::deplacer_poignee_forme(forme, i, cible); }
                     } else if let Some(point) = points_modifiables(f, id).into_iter().nth(i) { *point = cible; }
                 }
             } else {
@@ -325,7 +325,7 @@ impl EditionCartouche {
         if let Some(q) = curseur {
             let ecran = |p: DVec2| cadre.ecran(p.x, p.y);
             if let Some(trace) = &self.trace {
-                let (point, angle) = super::saisie_trace::apercu_point(&self.saisie_trace.texte, trace.precedent(), q, 1.0).unwrap_or((q, None));
+                let (point, angle) = crate::saisie::saisie_trace::apercu_point(&self.saisie_trace.texte, trace.precedent(), q, 1.0).unwrap_or((q, None));
                 if angle.is_some() && let Some(debut) = trace.precedent() {
                     painter.add(egui::Shape::dashed_line(&[ecran(debut), ecran(point)], egui::Stroke::new(1.0, bleu), 6.0, 4.0));
                 }
@@ -401,7 +401,7 @@ fn touche(dessin: &feuilles::Rendu, cadre: &Cadre, q: egui::Pos2) -> bool {
 
 fn positions_poignees(f: &mut FamilleCartouche, id: Element) -> Vec<[f64; 2]> {
     if let Element::Forme(i) = id {
-        return f.formes.get(i).map(super::dessin_plan::poignees_forme).unwrap_or_default();
+        return f.formes.get(i).map(crate::dessin_plan::poignees_forme).unwrap_or_default();
     }
     points_modifiables(f, id).into_iter().map(|p| *p).collect()
 }
@@ -410,7 +410,7 @@ fn points_modifiables(f: &mut FamilleCartouche, id: Element) -> Vec<&mut [f64; 2
     match id {
         Element::Trait(i) => f.traits.get_mut(i).into_iter().flatten().collect(),
         Element::Texte(i) => f.textes.get_mut(i).map(|t| &mut t.position).into_iter().collect(),
-        Element::Forme(i) => f.formes.get_mut(i).map(super::dessin_plan::points_forme_mut).unwrap_or_default(),
+        Element::Forme(i) => f.formes.get_mut(i).map(crate::dessin_plan::points_forme_mut).unwrap_or_default(),
     }
 }
 

@@ -150,7 +150,7 @@ impl ViewerApp {
             if let Some(ed) = self.famille.as_mut() { ed.cible_feuille = feuille.clone(); }
             return;
         }
-        self.ouvrir_famille_plane(super::familles_planes::FamillePlane::Cartouche { famille, feuille, original });
+        self.ouvrir_famille_plane(crate::familles_planes::FamillePlane::Cartouche { famille, feuille, original });
     }
     /// Ouvre l'éditeur d'une famille d'étiquette de pièce : `famille` (Some("") : la
     /// standard ; None : nouvelle, copie de celle de la pièce), affectée à `piece`.
@@ -183,7 +183,7 @@ impl ViewerApp {
             if let Some(ed) = self.famille.as_mut() { ed.cible_piece = piece.clone(); }
             return;
         }
-        self.ouvrir_famille_plane(super::familles_planes::FamillePlane::Etiquette { famille: f, piece, original });
+        self.ouvrir_famille_plane(crate::familles_planes::FamillePlane::Etiquette { famille: f, piece, original });
     }
 
 
@@ -682,7 +682,7 @@ impl ViewerApp {
                 } else {
                     "Déposer une vue ou une nomenclature · Glisser le titre pour déplacer la feuille · Molette pour zoomer · Double-clic pour ouvrir une vue · Sélectionner un cartouche puis Modifier"
                 };
-                super::aides::annotation_vue(ui, rect, 0.0, aide, false);
+                crate::aides::annotation_vue(ui, rect, 0.0, aide, false);
             }
             let curseur = if etat.glisse.is_some() || etat.glisse_feuille.is_some() {
                 Some(egui::CursorIcon::Grabbing)
@@ -979,7 +979,7 @@ fn selecteur_cartouche(ui: &mut egui::Ui, p: &modele::Projet, f: &doc::Feuille) 
     let actuel = doc::famille_cartouche(p, &f.id).map(|f| f.nom.as_str()).filter(|nom| *nom != doc::NOM_CARTOUCHE_STANDARD);
     let mut choix = actuel;
     {
-        use super::ruban::selecteur;
+        use crate::ruban::selecteur;
         let titre = format!("Cartouche · {}", actuel.unwrap_or("Standard"));
         let bouton = selecteur::entete(ui, &titre, None, &format!("{titre}
 Famille de cartouche de la feuille."), None);
@@ -1038,8 +1038,8 @@ pub(super) fn dessiner_etiquette(ui: &mut egui::Ui, famille: &mut doc::FamilleEt
         let mut supprimer = None;
         for (i, t) in famille.textes.iter_mut().enumerate() {
             ui.push_id(("texte_etiquette", i), |ui| {
-                super::outils_texte::proprietes_texte(ui, &mut t.contenu, &mut t.position, true, super::outils_texte::CHAMPS_PIECE);
-                super::outils_texte::hauteur_texte(ui, &mut t.hauteur);
+                crate::outils_texte::proprietes_texte(ui, &mut t.contenu, &mut t.position, true, crate::outils_texte::CHAMPS_PIECE);
+                crate::outils_texte::hauteur_texte(ui, &mut t.hauteur);
                 if ui.small_button("✕").clicked() { supprimer = Some(i); }
             });
         }

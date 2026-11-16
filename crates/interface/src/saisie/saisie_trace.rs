@@ -2,7 +2,7 @@
 use eframe::egui;
 use glam::DVec2;
 
-pub(super) fn ajouter_caractere_saisie(saisie: &mut String, angle: &mut bool, ch: char) {
+pub(crate) fn ajouter_caractere_saisie(saisie: &mut String, angle: &mut bool, ch: char) {
     if matches!(ch, '@' | '#') && (saisie.is_empty() || saisie == "<") {
         saisie.clear();
         saisie.push(ch);
@@ -21,14 +21,14 @@ pub(super) fn ajouter_caractere_saisie(saisie: &mut String, angle: &mut bool, ch
     }
 }
 
-pub(super) fn effacer_caractere_saisie(saisie: &mut String, angle: bool) {
+pub(crate) fn effacer_caractere_saisie(saisie: &mut String, angle: bool) {
     if angle || !saisie.contains(['<', '>']) { saisie.pop(); }
     else if let Some(i) = saisie.find(['<', '>']) && i > 0 { saisie.remove(i - 1); }
 }
 
 /// Point provisoire issu de la saisie, sans effacer le texte en cours.
 /// Un angle seul projette le curseur sur son guide, comme dans le projet.
-pub(super) fn apercu_point(texte: &str, precedent: Option<DVec2>, curseur: DVec2, facteur: f64) -> Option<(DVec2, Option<f64>)> {
+pub(crate) fn apercu_point(texte: &str, precedent: Option<DVec2>, curseur: DVec2, facteur: f64) -> Option<(DVec2, Option<f64>)> {
     if texte.is_empty() { return None; }
     if let Some((distance, angle)) = texte.split_once(['<', '>']) {
         let depart = precedent?;
@@ -46,7 +46,7 @@ pub(super) fn apercu_point(texte: &str, precedent: Option<DVec2>, curseur: DVec2
 }
 
 #[derive(Default)]
-pub(super) struct SaisieTrace {
+pub(crate) struct SaisieTrace {
     pub texte: String,
     angle: bool,
 }

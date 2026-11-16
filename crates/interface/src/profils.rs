@@ -2,7 +2,7 @@
 use super::*;
 use modele::famille::profil::{FichierProfil, ParametreProfil, PointProfil, Profil};
 
-use super::familles_planes::FamillePlane;
+use crate::familles_planes::FamillePlane;
 
 impl ViewerApp {
     pub(super) fn ouvrir_profil(&mut self, id: Option<&str>) {

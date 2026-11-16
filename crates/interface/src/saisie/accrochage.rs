@@ -6,7 +6,7 @@ use eframe::egui::{self, Color32};
 
 /// Accrochage d'un point tracé.
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub(super) enum AccrocheMur {
+pub(crate) enum AccrocheMur {
     Grille,
     Extremite,
     Milieu,
@@ -22,16 +22,16 @@ pub(super) enum AccrocheMur {
 }
 
 /// Rayon d'accrochage à l'écran (px).
-pub(super) const RAYON: f32 = 10.0;
+pub(crate) const RAYON: f32 = 10.0;
 
 /// Zoom à la molette : facteur appliqué à l'échelle de la vue (> 1 : on s'approche).
-pub(super) fn facteur_molette(defilement: f32) -> f64 {
+pub(crate) fn facteur_molette(defilement: f32) -> f64 {
     (defilement as f64 * 0.0018).exp()
 }
 
 /// Candidat le plus proche de `q` à moins de [`RAYON`] ; à distance égale,
 /// l'extrémité et l'intersection l'emportent sur le milieu et l'angle.
-pub(super) fn meilleur(q: egui::Pos2, candidats: impl IntoIterator<Item = ([f64; 2], egui::Pos2, AccrocheMur)>) -> Option<([f64; 2], AccrocheMur)> {
+pub(crate) fn meilleur(q: egui::Pos2, candidats: impl IntoIterator<Item = ([f64; 2], egui::Pos2, AccrocheMur)>) -> Option<([f64; 2], AccrocheMur)> {
     let mut choix = None;
     let mut distance = RAYON;
     for (point, ecran, genre) in candidats {
@@ -46,7 +46,7 @@ pub(super) fn meilleur(q: egui::Pos2, candidats: impl IntoIterator<Item = ([f64;
 
 /// Point contraint depuis le départ `a` dans des axes tournés de `theta` : Maj,
 /// l'axe dominant ; sinon un angle rond (15°) à moins de 3°. Longueur arrondie à `pas`.
-pub(super) fn contraindre(a: [f64; 2], point: [f64; 2], theta: f64, orthogonal: bool, pas: f64) -> Option<([f64; 2], AccrocheMur)> {
+pub(crate) fn contraindre(a: [f64; 2], point: [f64; 2], theta: f64, orthogonal: bool, pas: f64) -> Option<([f64; 2], AccrocheMur)> {
     let (dx, dy) = (point[0] - a[0], point[1] - a[1]);
     let (u, v) = ([theta.cos(), theta.sin()], [-theta.sin(), theta.cos()]);
     let arrondi = |l: f64| (l / pas).round() * pas;
@@ -71,7 +71,7 @@ pub(super) fn contraindre(a: [f64; 2], point: [f64; 2], theta: f64, orthogonal: 
 
 /// Point libre depuis le départ `a` : direction gardée, longueur arrondie à `pas`, pour
 /// que la cote du segment tracé tombe ronde même si le départ ne l'est pas.
-pub(super) fn longueur_ronde(a: [f64; 2], point: [f64; 2], pas: f64) -> [f64; 2] {
+pub(crate) fn longueur_ronde(a: [f64; 2], point: [f64; 2], pas: f64) -> [f64; 2] {
     let (dx, dy) = (point[0] - a[0], point[1] - a[1]);
     let l = dx.hypot(dy);
     if l < 1e-9 {
@@ -83,7 +83,7 @@ pub(super) fn longueur_ronde(a: [f64; 2], point: [f64; 2], pas: f64) -> [f64; 2]
 
 /// Repère d'accrochage : carré (extrémité), triangle (milieu), croix (intersection),
 /// losange (angle d'un mur), cercle sinon.
-pub(super) fn marqueur(painter: &egui::Painter, q: egui::Pos2, acc: AccrocheMur, couleur: Color32, accent: Color32) {
+pub(crate) fn marqueur(painter: &egui::Painter, q: egui::Pos2, acc: AccrocheMur, couleur: Color32, accent: Color32) {
     let t = egui::Stroke::new(2.0, accent);
     let h = 7.0;
     match acc {

@@ -20,7 +20,6 @@ use canevas::*;
 mod formes;
 mod transformer;
 use super::*;
-use super::accrochage;
 use modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
 use modele::famille::modelee::FichierFamille;
 use modele::documentation::GenreCote;
@@ -165,7 +164,7 @@ struct DeplacementFamille {
 }
 
 pub(super) struct EditeurFamille {
-    pub(super) document_famille: super::document_famille::DocumentFamille<FichierFamille>,
+    pub(super) document_famille: crate::document_famille::DocumentFamille<FichierFamille>,
     /// Fenêtre d'où l'éditeur a été ouvert : elle prend le type enregistré.
     ouverture: Option<String>,
     pub(super) cible_feuille: Option<String>,
@@ -197,8 +196,8 @@ pub(super) struct EditeurFamille {
     /// Sommets de l'esquisse en cours (verrouillés et résolus).
     esquisse: Vec<(PointEsquisse, (f64, f64))>,
     trace_polyligne: Option<moteur2d::dao::Trace>,
-    saisie_trace: super::saisie_trace::SaisieTrace,
-    reperage: super::reperage::Reperage,
+    saisie_trace: crate::saisie::saisie_trace::SaisieTrace,
+    reperage: crate::saisie::reperage::Reperage,
     axe_revolution: Option<[[f64; 2]; 2]>,
     /// Points déjà cliqués par l'outil de transformation actif (repère de la vue).
     points_transfo: Vec<(f64, f64)>,
@@ -239,7 +238,7 @@ impl NavigationFamille {
         let avant=self.cadre(base);
         if molette!=0.0 {
             let point=avant.modele(curseur);
-            self.zoom=(self.zoom*super::accrochage::facteur_molette(molette)).clamp(0.05,100.0);
+            self.zoom=(self.zoom*crate::saisie::accrochage::facteur_molette(molette)).clamp(0.05,100.0);
             let apres=self.cadre(base).modele(curseur);
             self.decalage.0+=point.0-apres.0;
             self.decalage.1+=point.1-apres.1;

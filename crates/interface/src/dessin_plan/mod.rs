@@ -120,7 +120,7 @@ pub(super) struct EtatDessin2D {
     curseur: Option<DVec2>,
     point: Option<(DVec2, Accroche)>,
     geoms: Option<(u64, String, Vec<Geom>)>,
-    reperage: super::reperage::Reperage,
+    reperage: crate::saisie::reperage::Reperage,
     pub message: Option<String>,
     information: Option<String>,
     /// Contours fermés de l'élément horizontal en cours : parties et trémies, créés à la

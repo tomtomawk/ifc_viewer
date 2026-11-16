@@ -146,7 +146,7 @@ pub(super) fn peindre_materiau_coupe(p: &egui::Painter, r: egui::Rect, projet: &
     p.rect_filled(r, 0.0, Color32::from_rgb(r0, g0, b0));
     let dessiner = |motif: &MotifCoupe, couleur: [u8; 3]| {
         if let Some(definition) = projet.definition_motif(motif) {
-            super::super::aides::apercu_motif_colore(p, r, &definition, 3.0, Color32::from_rgb(couleur[0], couleur[1], couleur[2]));
+            crate::aides::apercu_motif_colore(p, r, &definition, 3.0, Color32::from_rgb(couleur[0], couleur[1], couleur[2]));
         }
     };
     if fond != MotifCoupe::Uni { dessiner(&fond, couleur); }

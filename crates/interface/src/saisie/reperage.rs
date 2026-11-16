@@ -4,7 +4,7 @@ use moteur2d::dao::{self as d2, Accroche};
 use noyau::forme2d::{Geom};
 
 /// Directions des éléments passant par un point de référence, pour leurs guides.
-pub(super) fn directions_au_point(p: DVec2, geoms: &[Geom]) -> Vec<DVec2> {
+pub(crate) fn directions_au_point(p: DVec2, geoms: &[Geom]) -> Vec<DVec2> {
     geoms.iter().filter_map(|g| match g {
         Geom::Segment([a, b]) => {
             let d = *b - *a;
@@ -23,7 +23,7 @@ pub(super) fn directions_au_point(p: DVec2, geoms: &[Geom]) -> Vec<DVec2> {
 }
 
 #[derive(Default)]
-pub(super) struct Reperage {
+pub(crate) struct Reperage {
     pub survol_accroche: Option<(DVec2, f64)>,
     pub survol_segment: Option<(DVec2, DVec2, f64, bool)>,
     pub reference: Option<DVec2>,

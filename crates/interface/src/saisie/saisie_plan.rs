@@ -1,9 +1,9 @@
 //! Saisie en plan : création, aperçus, axes, repères, accrochage aux arêtes.
 use commandes::Execution;
-use super::*;
+use crate::*;
 
 impl ViewerApp {
-    pub(super) fn ajouter_mur_natif(&mut self, debut: [f64; 2], fin: [f64; 2], options: &modele::creation::ParametresMur) -> Result<String, String> {
+    pub(crate) fn ajouter_mur_natif(&mut self, debut: [f64; 2], fin: [f64; 2], options: &modele::creation::ParametresMur) -> Result<String, String> {
         let (projet, _) = self.natif.as_ref().ok_or("Créez ou ouvrez un projet natif pour dessiner un mur.")?;
         let mut projet = projet.clone();
         let id = projet.ajouter_mur(debut, fin, options)?;
@@ -18,7 +18,7 @@ impl ViewerApp {
 
     /// Ajoute une vue au projet natif (`ajout` rend son identifiant) et l'ouvre si
     /// `ouvrir` ; elle apparaît dans l'arborescence.
-    pub(super) fn creer_vue(&mut self, ajout: impl FnOnce(&mut modele::Projet) -> Result<String, String>, ouvrir: bool) {
+    pub(crate) fn creer_vue(&mut self, ajout: impl FnOnce(&mut modele::Projet) -> Result<String, String>, ouvrir: bool) {
         let Some((projet, _)) = &self.natif else { return };
         let mut projet = projet.clone();
         let id = match ajout(&mut projet) {
@@ -42,7 +42,7 @@ impl ViewerApp {
     }
 
     /// Ouvre la vue native `id` (coupe, élévation, plan) dans le navigateur de vues.
-    pub(super) fn ouvrir_vue_native(&mut self, id: &str) {
+    pub(crate) fn ouvrir_vue_native(&mut self, id: &str) {
         let numero = modele::identifiants::numero_vue(id);
         let indice = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()?.vues.iter().position(|v| v.revit_id == numero));
         if let Some(i) = indice {
@@ -51,12 +51,12 @@ impl ViewerApp {
     }
 
     /// Crée une dalle de contour `pts` (mm) dans le projet natif et la sélectionne.
-    pub(super) fn creer_dalle(&mut self, pts: &[[f64; 2]], parametres: &modele::creation::ParametresDalle) {
+    pub(crate) fn creer_dalle(&mut self, pts: &[[f64; 2]], parametres: &modele::creation::ParametresDalle) {
         self.creer_dalle_contours(&[pts.to_vec()], parametres);
     }
 
     /// Crée une dalle de plusieurs contours (parties et trémies) et la sélectionne.
-    pub(super) fn creer_dalle_contours(&mut self, contours: &[Vec<[f64; 2]>], parametres: &modele::creation::ParametresDalle) {
+    pub(crate) fn creer_dalle_contours(&mut self, contours: &[Vec<[f64; 2]>], parametres: &modele::creation::ParametresDalle) {
         let Some((projet, _)) = &self.natif else { return };
         let mut projet = projet.clone();
         match projet.ajouter_dalle_contours(contours, parametres).and_then(|id| self.appliquer_projet(projet).map(|_| id)) {
@@ -72,7 +72,7 @@ impl ViewerApp {
     /// Altitude (mm) du plan de tracé d'une vue native : niveau du plan ouvert, sinon le
     /// premier niveau.
     /// Niveau de la vue ouverte (sinon le premier niveau).
-    pub(super) fn niveau_vue_native(&self) -> Option<String> {
+    pub(crate) fn niveau_vue_native(&self) -> Option<String> {
         let (projet, _) = self.natif.as_ref()?;
         let etage = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)?.etage);
         etage
@@ -81,7 +81,7 @@ impl ViewerApp {
             .map(|n| n.id.clone())
     }
 
-    pub(super) fn altitude_vue_native(&self) -> f64 {
+    pub(crate) fn altitude_vue_native(&self) -> f64 {
         let Some((projet, _)) = &self.natif else { return 0.0 };
         let etage = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)?.etage);
         etage
@@ -91,7 +91,7 @@ impl ViewerApp {
     }
 
     /// Projection écran d'un point du plan (mm) à l'altitude `z` (mm).
-    pub(super) fn ecran_plan(&self, rect: egui::Rect, p: [f64; 2], z: f64) -> Option<egui::Pos2> {
+    pub(crate) fn ecran_plan(&self, rect: egui::Rect, p: [f64; 2], z: f64) -> Option<egui::Pos2> {
         let s = self.scene.as_ref()?;
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
         let q = (glam::DVec3::new(p[0], p[1], z) * 0.001 - s.origin).as_vec3();
@@ -101,7 +101,7 @@ impl ViewerApp {
 
     /// Arêtes de l'élément horizontal sélectionné qui peut porter une pente (plafond,
     /// toiture) : contour, rang, milieu et direction vers l'intérieur à l'écran, pente.
-    pub(super) fn aretes_pente(&self, rect: egui::Rect) -> Vec<(usize, usize, egui::Pos2, egui::Vec2, Option<f64>)> {
+    pub(crate) fn aretes_pente(&self, rect: egui::Rect) -> Vec<(usize, usize, egui::Pos2, egui::Vec2, Option<f64>)> {
         use modele::elements::pente;
         let (Some((projet, _)), Some(sel)) = (&self.natif, self.selected) else { return Vec::new() };
         let Some(d) = projet.dalles.iter().find(|d| modele::identifiants::id_natif("dalle", &d.id) == sel && d.sorte.aretes_reglables()) else { return Vec::new() };
@@ -125,7 +125,7 @@ impl ViewerApp {
 
     /// Repères des arêtes : triangle plein et pente pour une arête qui la définit, rond
     /// creux sinon ; un clic bascule.
-    pub(super) fn dessiner_aretes_pente(&self, ui: &egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>) {
+    pub(crate) fn dessiner_aretes_pente(&self, ui: &egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>) {
         let aretes = self.aretes_pente(rect);
         if aretes.is_empty() { return; }
         let painter = ui.painter().with_clip_rect(rect);
@@ -168,7 +168,7 @@ impl ViewerApp {
 
     /// Terre-plein sélectionné : liste du talus de chaque arête, à côté de son repère
     /// dans la vue (pente en %, ou sans talus ; remblai de sa fouille).
-    pub(super) fn editer_talus(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
+    pub(crate) fn editer_talus(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
         use modele::elements::terre_plein as tp;
         let (Some((projet, _)), Some(sel)) = (&self.natif, self.selected) else { return };
         let Some(d) = projet.dalles.iter().find(|d| modele::identifiants::id_natif("dalle", &d.id) == sel && d.sorte.talus()) else { return };
@@ -220,7 +220,7 @@ impl ViewerApp {
 
     /// Mur ou assemblage natif sélectionné : identifiant, ligne d'implantation choisie
     /// (extrémités en mm), altitude de la base et écart de cette ligne à l'axe médian.
-    pub(super) fn axe_selection(&self) -> Option<(String, [f64; 2], [f64; 2], f64, f64)> {
+    pub(crate) fn axe_selection(&self) -> Option<(String, [f64; 2], [f64; 2], f64, f64)> {
         let (projet, _) = self.natif.as_ref()?;
         let ids=self.selection_bim();
         if ids.len()!=1 {return None;}
@@ -233,7 +233,7 @@ impl ViewerApp {
     /// Retrouve l'axe médian depuis le point accroché de la ligne d'implantation.
     /// L'autre extrémité médiane est fixe : la normale doit être celle du NOUVEL axe.
     #[cfg(test)]
-    pub(super) fn extremite_mediane(p:[f64;2],fixe:[f64;2],fin:bool,ecart:f64)->Result<[f64;2],String> {
+    pub(crate) fn extremite_mediane(p:[f64;2],fixe:[f64;2],fin:bool,ecart:f64)->Result<[f64;2],String> {
         let p=glam::DVec2::from_array(p);
         let v=p-glam::DVec2::from_array(fixe);
         let e=if fin {ecart}else{-ecart};
@@ -245,7 +245,7 @@ impl ViewerApp {
 
     /// Axe du mur sélectionné en tireté et ses extrémités ; pendant un déplacement, le
     /// nouvel axe et sa longueur.
-    pub(super) fn dessiner_axe(&mut self, ui: &mut egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>) {
+    pub(crate) fn dessiner_axe(&mut self, ui: &mut egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>) {
         self.dessiner_axes_courbes(ui,rect,survol);
         // sélection multiple : ligne d'implantation de chaque mur, sans poignées
         if self.bim.selection.len() > 1 && let Some((projet, _)) = &self.natif {
@@ -325,7 +325,7 @@ impl ViewerApp {
     }
 
     /// Ajoute (pente par défaut) ou retire la pente de l'arête de l'élément sélectionné.
-    pub(super) fn basculer_pente(&mut self, c: usize, k: usize) {
+    pub(crate) fn basculer_pente(&mut self, c: usize, k: usize) {
         let (Some((projet, _)), Some(sel)) = (&self.natif, self.selected) else { return };
         let mut p = projet.clone();
         let Some(d) = p.dalles.iter_mut().find(|d| modele::identifiants::id_natif("dalle", &d.id) == sel) else { return };
@@ -339,7 +339,7 @@ impl ViewerApp {
     /// visée vers la gauche de la ligne. Élévation : trait fin et, au milieu, cercle et
     /// flèche pleine dans la direction de visée. Nom, profondeur en tireté léger.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn dessiner_repere_coupe(&self, painter: &egui::Painter, rect: egui::Rect, a: [f64; 2], b: [f64; 2], z: f64, profondeur: f64, elevation: bool, nom: &str, couleur: Color32) {
+    pub(crate) fn dessiner_repere_coupe(&self, painter: &egui::Painter, rect: egui::Rect, a: [f64; 2], b: [f64; 2], z: f64, profondeur: f64, elevation: bool, nom: &str, couleur: Color32) {
         let (Some(pa), Some(pb)) = (self.ecran_plan(rect, a, z), self.ecran_plan(rect, b, z)) else { return };
         let l = (b[0] - a[0]).hypot(b[1] - a[1]).max(1e-9);
         let g = [-(b[1] - a[1]) / l, (b[0] - a[0]) / l];
@@ -376,7 +376,7 @@ impl ViewerApp {
     /// Traits invisibles de la vue native ouverte (plan, coupe), en tirets gris : contour
     /// du cadrage et origine du projet. Dessinés par-dessus la vue seulement : ni sur les
     /// feuilles ni à l'export.
-    pub(super) fn traits_invisibles(&self, ui: &egui::Ui, rect: egui::Rect) {
+    pub(crate) fn traits_invisibles(&self, ui: &egui::Ui, rect: egui::Rect) {
         let Some(id) = self.vue_native_id() else { return };
         let Some((projet, _)) = &self.natif else { return };
         let Some(vue) = projet.vues.iter().find(|v| v.id == id) else { return };
@@ -413,7 +413,7 @@ impl ViewerApp {
 
     /// Origine sélectionnée : X, Y et cote NGF à saisir à côté d'elle, dans la vue
     /// (mêmes champs que Propriétés).
-    pub(super) fn saisie_origine(&mut self, ui: &egui::Ui, rect: egui::Rect) {
+    pub(crate) fn saisie_origine(&mut self, ui: &egui::Ui, rect: egui::Rect) {
         if !self.bim.origine { return; }
         let Some(o) = self.origine_ecran(rect) else { return };
         egui::Area::new(egui::Id::unique("saisie_origine"))
@@ -429,7 +429,7 @@ impl ViewerApp {
     }
 
     /// Origine du projet à l'écran, dans une vue native (plan : à l'altitude du plan).
-    pub(super) fn origine_ecran(&self, rect: egui::Rect) -> Option<egui::Pos2> {
+    pub(crate) fn origine_ecran(&self, rect: egui::Rect) -> Option<egui::Pos2> {
         let id = self.vue_native_id()?;
         let vue = self.natif.as_ref()?.0.vues.iter().find(|v| v.id == id)?;
         let z = if matches!(vue.genre, modele::GenreVue::Plan { .. }) { self.altitude_vue_native() } else { 0.0 };
@@ -439,7 +439,7 @@ impl ViewerApp {
     /// Coordonnées de l'origine du projet : E/O, N/S et cote NGF, dans l'unité du projet ;
     /// appliquées en fin de saisie (une étape d'annulation). La cote NGF remonte ou
     /// descend le projet par rapport au terrain, dont les cotes sont NGF.
-    pub(super) fn editeur_coordonnees(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn editeur_coordonnees(&mut self, ui: &mut egui::Ui) {
         let Some(actuel) = self.natif.as_ref().map(|(p, _)| p.coordonnees_origine) else { return };
         let id = egui::Id::unique("saisie_coordonnees_origine");
         let mut c = ui.data(|d| d.get_temp::<[f64; 3]>(id)).unwrap_or(actuel);
@@ -466,7 +466,7 @@ impl ViewerApp {
     }
 
     /// Repères des coupes natives dans une vue en plan.
-    pub(super) fn reperes_coupes(&self, ui: &egui::Ui, rect: egui::Rect, z: f64) {
+    pub(crate) fn reperes_coupes(&self, ui: &egui::Ui, rect: egui::Rect, z: f64) {
         let Some((projet, _)) = &self.natif else { return };
         let masques = self.vue_native_id().and_then(|id| projet.vues.iter().find(|v| v.id == id)).map(|v| v.elements_masques.as_slice()).unwrap_or(&[]);
         let painter = ui.painter().with_clip_rect(rect);
@@ -487,7 +487,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn rectangles_annotations(&self, rect: egui::Rect) -> Vec<(String, egui::Rect)> {
+    pub(crate) fn rectangles_annotations(&self, rect: egui::Rect) -> Vec<(String, egui::Rect)> {
         let Some((p, _)) = &self.natif else { return Vec::new() };
         let Some(vue) = self.vue_native_id().and_then(|id| p.vues.iter().find(|v| v.id == id)) else { return Vec::new() };
         let Some(scene) = &self.scene else { return Vec::new() };
@@ -514,7 +514,7 @@ impl ViewerApp {
         p.annotations.iter().map(|a| &a.id).chain(p.pieces.iter().map(|x| &x.id)).filter_map(|id| rectangles.remove(&modele::identifiants::id_natif("annotation", id)).map(|r| (id.clone(),r.expand(2.0)))).collect()
     }
 
-    pub(super) fn repere_coupe_proche(&self, rect: egui::Rect, q: egui::Pos2, z: f64) -> Option<String> {
+    pub(crate) fn repere_coupe_proche(&self, rect: egui::Rect, q: egui::Pos2, z: f64) -> Option<String> {
         if !self.point_dans_cadrage(rect, q) { return None; }
         let (p, _) = self.natif.as_ref()?;
         let masques = self.vue_native_id().and_then(|id| p.vues.iter().find(|v| v.id == id)).map(|v| v.elements_masques.as_slice()).unwrap_or(&[]);
@@ -528,7 +528,7 @@ impl ViewerApp {
         }).min_by(|a,b| a.0.total_cmp(&b.0)).map(|(_, id)| id)
     }
 
-    pub(super) fn limite_propriete_proche(&self, rect: egui::Rect, q: egui::Pos2) -> Option<String> {
+    pub(crate) fn limite_propriete_proche(&self, rect: egui::Rect, q: egui::Pos2) -> Option<String> {
         if !self.point_dans_cadrage(rect, q) { return None; }
         let p = &self.natif.as_ref()?.0;
         p.limites_propriete.iter().filter_map(|l| {
@@ -547,7 +547,7 @@ impl ViewerApp {
     }
 
     /// Aperçu de la coupe en cours de tracé.
-    pub(super) fn apercu_coupe(&self, ui: &egui::Ui, rect: egui::Rect, survol: Option<([f64; 2], AccrocheMur)>, z: f64, prm: &crate::ruban::ParametresCoupe) {
+    pub(crate) fn apercu_coupe(&self, ui: &egui::Ui, rect: egui::Rect, survol: Option<([f64; 2], AccrocheMur)>, z: f64, prm: &crate::ruban::ParametresCoupe) {
         let painter = ui.painter().with_clip_rect(rect);
         let couleur = Color32::from_rgb(55, 130, 200);
         let accent = Color32::from_rgb(230, 120, 20);
@@ -563,12 +563,12 @@ impl ViewerApp {
         }
         let sorte = if prm.elevation { "Élévation" } else { "Coupe" };
         let texte = if self.coupe_depart.is_some() { format!("{sorte} : cliquer la fin de la ligne · la vue regarde vers sa gauche · Échap : annuler") } else { format!("{sorte} ({}) : cliquer le début de la ligne", prm.type_vue) };
-        if self.error.is_none() { super::aides::annotation_vue(ui, rect, self.dessin2d.bas_barre, &texte, false); }
+        if self.error.is_none() { crate::aides::annotation_vue(ui, rect, self.dessin2d.bas_barre, &texte, false); }
     }
 
     /// Comme dans Revit : sélectionner un élément du projet natif (sans outil en cours)
     /// ouvre l'onglet Modifier ; tout désélectionner rend l'onglet d'avant.
-    pub(super) fn onglet_selon_selection(&mut self) {
+    pub(crate) fn onglet_selon_selection(&mut self) {
         let ids = if self.natif.is_some() && self.jeu_actif().is_none() { self.selection_bim() } else { Vec::new() };
         let outil = self.ruban_edition.a_un_outil();
         let change = ids != self.selection_precedente;
@@ -589,7 +589,7 @@ impl ViewerApp {
     /// Niveau de base des créations (mur, éléments horizontaux, poteau, poutre) : celui
     /// du plan ouvert, repris à chaque changement de plan ; sinon le plus bas. Le choix
     /// manuel dans le ruban reste valable tant que le plan ne change pas.
-    pub(super) fn niveau_creation_courant(&mut self) {
+    pub(crate) fn niveau_creation_courant(&mut self) {
         let Some(niveau) = self.niveau_trace() else { return };
         let change = self.niveau_plan_precedent.as_ref() != Some(&niveau);
         let r = &mut self.ruban_edition;
@@ -608,7 +608,7 @@ impl ViewerApp {
     /// Saisie en cours : un champ a le clavier, ou un nombre est glissé (glisser commencé
     /// hors de la vue). À la fin de la saisie, applique en une fois les modifications
     /// faites pendant celle-ci (scène reconstruite, une étape d'historique).
-    pub(super) fn valider_saisie(&mut self, ctx: &egui::Context) {
+    pub(crate) fn valider_saisie(&mut self, ctx: &egui::Context) {
         let glisser_champ = ctx.dragged_id().is_some() && ctx.input(|i| i.pointer.press_origin()).is_some_and(|p| !self.rect_vue.contains(p));
         let etait_active = self.saisie_active;
         self.saisie_active = ctx.egui_wants_keyboard_input() || glisser_champ;
@@ -639,11 +639,11 @@ impl ViewerApp {
 
     /// Remplace le projet natif ouvert par `projet` (modifié) et reconstruit la scène,
     /// cadrage, niveaux, catégories et visibilité compris. Rien ne change en cas d'erreur.
-    pub(super) fn appliquer_projet(&mut self, projet: modele::Projet) -> Result<(), String> {
+    pub(crate) fn appliquer_projet(&mut self, projet: modele::Projet) -> Result<(), String> {
         if self.partage_en_cours{return Err("Création du partage en cours ; attendre la fin de l'enregistrement".into());}
         self.appliquer_projet_interne(projet, false)
     }
-    pub(super) fn appliquer_projet_interne(&mut self, mut projet: modele::Projet, distant: bool) -> Result<(), String> {
+    pub(crate) fn appliquer_projet_interne(&mut self, mut projet: modele::Projet, distant: bool) -> Result<(), String> {
         let mut t_etape = std::time::Instant::now();
         if !distant {
             projet.actualiser_types_murs_modifies(&self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.0)?;
@@ -774,13 +774,13 @@ impl ViewerApp {
 
     /// Angle (rad) de l'horizontale de l'écran dans le repère du modèle en vue en plan
     /// (repère du plan tourné) ; 0 ailleurs (axes du modèle).
-    pub(super) fn angle_axes_plan(&self) -> f64 {
+    pub(crate) fn angle_axes_plan(&self) -> f64 {
         if self.vue_en_plan() { moteur3d::orientation_plan::angle(&self.camera) as f64 } else { 0.0 }
     }
 
     /// Direction principale d'un objet en plan (axe d'inertie de ses sommets en x, y) :
     /// la longueur d'un mur, le grand côté d'une dalle.
-    pub(super) fn direction_principale(&self, obj: u32) -> Option<glam::Vec2> {
+    pub(crate) fn direction_principale(&self, obj: u32) -> Option<glam::Vec2> {
         let s = self.scene.as_ref()?;
         let o = s.objects.get(obj as usize)?;
         let pts: Vec<glam::Vec2> = [o.opaque, o.transparent]
@@ -810,7 +810,7 @@ impl ViewerApp {
 
     /// Arête en plan de l'objet `obj` la plus proche du curseur `p` (écran), pour Aligner.
     /// Arêtes vives de l'objet, verticales exclues.
-    pub(super) fn arete_visee(&mut self, p: egui::Pos2, rect: egui::Rect, obj: u32) -> Option<[Vec3; 2]> {
+    pub(crate) fn arete_visee(&mut self, p: egui::Pos2, rect: egui::Rect, obj: u32) -> Option<[Vec3; 2]> {
         if self.aretes_objet.as_ref().is_none_or(|(o, _)| *o != obj) {
             let s = self.scene.as_ref()?;
             let o = s.objects.get(obj as usize)?;
@@ -844,7 +844,7 @@ impl ViewerApp {
     }
 
     /// Arête visée en mode Aligner : surlignée, prolongée en pointillés (future horizontale).
-    pub(super) fn dessiner_arete_alignement(&self, ui: &egui::Ui, rect: egui::Rect) {
+    pub(crate) fn dessiner_arete_alignement(&self, ui: &egui::Ui, rect: egui::Rect) {
         let Some([a, b]) = self.arete_alignement else { return };
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
         let ecran = |q: Vec3| {
@@ -871,7 +871,7 @@ impl ViewerApp {
     }
 
     /// Trait d'annotation le plus proche du curseur, dans le repère local de la scène.
-    pub(super) fn trait_annotation_vise(&self, q: egui::Pos2, rect: egui::Rect) -> Option<[Vec3; 2]> {
+    pub(crate) fn trait_annotation_vise(&self, q: egui::Pos2, rect: egui::Rect) -> Option<[Vec3; 2]> {
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
         let ecran = |p: Vec3| {
             let c = vp * p.extend(1.0);
@@ -897,7 +897,7 @@ impl ViewerApp {
     }
 
     /// Sens du nord : l'extrémité du trait la plus proche du clic indique le nord.
-    pub(super) fn angle_nord_depuis_trait(&self, segment: [Vec3; 2], clic: egui::Pos2, rect: egui::Rect) -> Option<f64> {
+    pub(crate) fn angle_nord_depuis_trait(&self, segment: [Vec3; 2], clic: egui::Pos2, rect: egui::Rect) -> Option<f64> {
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
         let ecran = |p: Vec3| {
             let c = vp * p.extend(1.0);
@@ -909,7 +909,7 @@ impl ViewerApp {
     }
 
     /// Orientations de plan enregistrées : celles du projet natif, sinon de la session.
-    pub(super) fn positions_plan_liste(&self) -> Vec<(String, f32)> {
+    pub(crate) fn positions_plan_liste(&self) -> Vec<(String, f32)> {
         match &self.natif {
             Some((p, _)) => p.positions_plan.iter().map(|x| (x.nom.clone(), (x.angle as f32).to_radians())).collect(),
             None => self.positions_plan.clone(),
@@ -917,7 +917,7 @@ impl ViewerApp {
     }
 
     /// Boîte « Nouvelle position » : nom de l'orientation en cours, puis enregistrement.
-    pub(super) fn fenetre_position_plan(&mut self, ctx: &egui::Context) {
+    pub(crate) fn fenetre_position_plan(&mut self, ctx: &egui::Context) {
         let Some(mut nom) = self.nom_position_plan.take() else { return };
         let (mut ouverte, mut valider, mut annuler) = (true, false, false);
         egui::Window::new("Nouvelle position")
@@ -958,7 +958,7 @@ impl ViewerApp {
 
     /// Enregistre l'orientation en cours du plan sous `nom` (dans le projet natif s'il y
     /// en a un).
-    pub(super) fn enregistrer_position_plan(&mut self, nom: String) {
+    pub(crate) fn enregistrer_position_plan(&mut self, nom: String) {
         let angle = moteur3d::orientation_plan::angle(&self.camera);
         match &self.natif {
             Some((p, _)) => {
@@ -976,7 +976,7 @@ impl ViewerApp {
         self.status = format!("{nom} enregistrée ({:.1}°)", angle.to_degrees());
     }
 
-    pub(super) fn supprimer_position_plan(&mut self, i: usize) {
+    pub(crate) fn supprimer_position_plan(&mut self, i: usize) {
         match &self.natif {
             Some((p, _)) if i < p.positions_plan.len() => {
                 let mut p = p.clone();
@@ -999,7 +999,7 @@ impl ViewerApp {
     /// accrochage : extrémité ou milieu d'un mur de ce niveau, angle d'un mur (contour
     /// raccordé), sommet d'une dalle ou du contour en cours, à dix pixels près ; puis
     /// depuis `depart` : Maj (axes du plan) ou angle rond ; sinon grille de 10 mm.
-    pub(super) fn point_tracage(&self, q: egui::Pos2, rect: egui::Rect, orthogonal: bool, depart: Option<[f64; 2]>, altitude: f64) -> Option<([f64; 2], AccrocheMur)> {
+    pub(crate) fn point_tracage(&self, q: egui::Pos2, rect: egui::Rect, orthogonal: bool, depart: Option<[f64; 2]>, altitude: f64) -> Option<([f64; 2], AccrocheMur)> {
         let (projet, _) = self.natif.as_ref()?;
         let scene = self.scene.as_ref()?;
         let x = (q.x - rect.left()) / rect.width() * 2.0 - 1.0;
@@ -1093,7 +1093,7 @@ impl ViewerApp {
             Some(egui::pos2(rect.left() + (n.x + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - n.y) * 0.5 * rect.height()))
         };
         let ecrans = candidats.into_iter().filter_map(|(v, genre)| Some((v, ecran(v)?, genre)));
-        if let Some(c) = accrochage::meilleur(q, ecrans) { return Some(c); }
+        if let Some(c) = crate::saisie::accrochage::meilleur(q, ecrans) { return Some(c); }
         // sur l'arête : le point glisse le long de la face, de l'axe ou de la file visée
         let sur_arete = |cible: [f64; 2]| -> Option<[f64; 2]> {
             let c = glam::DVec2::from_array(cible);
@@ -1103,19 +1103,19 @@ impl ViewerApp {
                 if l2 < 1e-9 { return None; }
                 let proche = (a + (b - a) * ((c - a).dot(b - a) / l2).clamp(0.0, 1.0)).to_array();
                 let d = ecran(proche)?.distance(q);
-                (d <= accrochage::RAYON * 0.8).then_some((d, proche))
+                (d <= crate::saisie::accrochage::RAYON * 0.8).then_some((d, proche))
             }).min_by(|x, y| x.0.total_cmp(&y.0)).map(|(_, p)| p)
         };
         let Some(a) = depart else {
             return Some(sur_arete([p.x, p.y]).map_or((point, accroche), |p| (p, AccrocheMur::Proche)));
         };
         // Maj : l'axe imposé l'emporte sur les arêtes
-        if orthogonal && let Some(c) = accrochage::contraindre(a, point, self.angle_axes_plan(), true, 10.0) { return Some(c); }
+        if orthogonal && let Some(c) = crate::saisie::accrochage::contraindre(a, point, self.angle_axes_plan(), true, 10.0) { return Some(c); }
         if let Some(p) = sur_arete([p.x, p.y]) { return Some((p, AccrocheMur::Proche)); }
         // axes du plan tourné (repère du plan) : Maj et angles ronds suivent l'écran
-        if let Some(c) = accrochage::contraindre(a, point, self.angle_axes_plan(), orthogonal, 10.0) { return Some(c); }
+        if let Some(c) = crate::saisie::accrochage::contraindre(a, point, self.angle_axes_plan(), orthogonal, 10.0) { return Some(c); }
         // direction libre : la longueur depuis le départ tombe au centimètre
-        Some((accrochage::longueur_ronde(a, [p.x, p.y], 10.0), accroche))
+        Some((crate::saisie::accrochage::longueur_ronde(a, [p.x, p.y], 10.0), accroche))
     }
 
 }
