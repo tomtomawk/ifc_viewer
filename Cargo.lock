@@ -373,6 +373,7 @@ dependencies = [
  "noyau",
  "serde",
  "serde_json",
+ "windows-sys 0.59.0",
  "yrs",
 ]
 
