@@ -18,7 +18,10 @@ fn contour_morceau(tris: &[[[f64; 2]; 3]]) -> Vec<(glam::DVec2, glam::DVec2)> {
     let cle = |p: DVec2| ((p.x * 100.0).round() as i64, (p.y * 100.0).round() as i64);
     // L'estimation de la courbure échantillonne les arêtes dans cet ordre.
     let mut aretes: std::collections::BTreeMap<((i64, i64), (i64, i64)), (usize, DVec2, DVec2)> = std::collections::BTreeMap::new();
-    for t in tris {
+    // Triangles aplatis (épaisseur sous la résolution des clés, laissés par la découpe
+    // d'une travée) : collés contre une face, ils la feraient compter deux fois, donc
+    // passer pour une arête intérieure, et une diagonale deviendrait la plus longue face.
+    for t in tris.iter().filter(|t| !aplati(t)) {
         let t = t.map(DVec2::from_array);
         for k in 0..3 {
             let (a, b) = (t[k], t[(k + 1) % 3]);
@@ -59,6 +62,14 @@ fn contour_morceau(tris: &[[[f64; 2]; 3]]) -> Vec<(glam::DVec2, glam::DVec2)> {
         }
     }
     morceaux.values().filter(|(n, _, _)| *n == 1).map(|(_, a, b)| (*a, *b)).collect()
+}
+
+/// Triangle d'épaisseur inférieure à 0,001 (unités du dessin : mm) : aire rapportée à
+/// sa plus longue arête.
+fn aplati(t: &[[f64; 2]; 3]) -> bool {
+    let [a, b, c] = t.map(glam::DVec2::from_array);
+    let long = a.distance(b).max(b.distance(c)).max(c.distance(a));
+    (b - a).perp_dot(c - a).abs() <= 1e-3 * long
 }
 
 fn aire_morceau(tris: &[[[f64; 2]; 3]]) -> f64 {
@@ -328,5 +339,16 @@ mod tests_travee {
         let segs = super::ligne_isolation(&tris);
         assert!(!segs.is_empty());
         assert!(segs.iter().flatten().all(|q| (-10.0..565.0).contains(&q[0]) && (-10.0..155.0).contains(&q[1])), "ligne d'isolant hors de la travée");
+    }
+
+    /// N° 19 : travée d'une ossature horizontale (145 × 555 mm) découpée avec des
+    /// triangles aplatis contre ses faces ; le motif doit couvrir toute la hauteur.
+    #[test]
+    fn travee_avec_triangles_aplatis_couverte_en_entier() {
+        let tris = [[[-72.49999791383743, 1650.3834550127283], [-72.49999791383743, 1777.4999976158144], [-72.49999706858833, 1777.5000572204592]], [[-72.49999791383743, 1650.3834550127283], [-72.49999706858833, 1777.5000572204592], [-70.8966890259561, 1777.5000572204592]], [[72.49999030659419, 1777.5000572204592], [72.49999791383743, 1777.4999976158144], [72.49999791383743, 1374.480417648081]], [[72.49999030659419, 1777.5000572204592], [72.49999791383743, 1374.480417648081], [35.60533584786437, 1777.5000572204592]], [[72.49999791383743, 1374.480417648081], [72.49999791383743, 1222.5000053644183], [72.49999632316133, 1222.499990463257]], [[72.49999791383743, 1374.480417648081], [72.49999632316133, 1222.499990463257], [58.07022094752709, 1222.499990463257]], [[-72.49999773709567, 1222.499990463257], [-72.49999791383743, 1222.5000053644183], [-72.49999791383743, 1650.3834550127283]], [[-72.49999773709567, 1222.499990463257], [-72.49999791383743, 1650.3834550127283], [-68.74068419672732, 1222.499990463257]], [[-72.49999791383743, 1650.3834550127283], [-70.8966890259561, 1777.5000572204592], [35.605335847864374, 1777.5000572204592]], [[-72.49999791383743, 1650.3834550127283], [35.605335847864374, 1777.5000572204592], [72.49999791383743, 1374.480417648081]], [[72.49999791383743, 1374.480417648081], [58.0702209475271, 1222.499990463257], [-68.74068419672732, 1222.499990463257]], [[72.49999791383743, 1374.480417648081], [-68.74068419672732, 1222.499990463257], [-72.49999791383743, 1650.3834550127283]]];
+        let segs = super::ligne_isolation(&tris);
+        let (bas, haut) = segs.iter().flatten().map(|q| q[1]).fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), y| (a.min(y), b.max(y)));
+        assert!(bas < 1240.0 && haut > 1760.0, "motif limité à [{bas:.0}, {haut:.0}] dans une travée [1222, 1778]");
+        assert!(segs.iter().flatten().all(|q| (-73.0..73.0).contains(&q[0])), "motif hors de l'épaisseur");
     }
 }

@@ -381,3 +381,33 @@ fn coupe_carree() {
     let s = section([DVec3::ZERO, DVec3::new(1., 0., 2.), DVec3::new(0., 1., 2.)], DVec3::NEG_Z, 1.0).unwrap();
     assert!((s[0].z - 1.0).abs() < 1e-12 && (s[1].z - 1.0).abs() < 1e-12);
 }
+
+/// N° 19 : en coupe verticale d'un mur à ossature (lisses horizontales ou montants),
+/// sur un niveau surélevé ou non, la ligne d'isolant de chaque travée couvre toute sa
+/// hauteur et reste dedans.
+#[test]
+fn isolant_ossature_couvre_chaque_travee_en_coupe() {
+    use modele::{Couche, FonctionCouche, Materiau, Projet, TypeCompose};
+    use modele::creation::ParametresMur;
+    use modele::murs::ossature::Ossature;
+    for (horizontale, altitude) in [(false, 0.0), (true, 0.0), (true, 3000.0)] {
+        let mut projet = Projet::depuis_gabarit("Ossature", &modele::gabarit::Gabarit::defaut());
+        for n in &mut projet.niveaux { n.altitude += altitude; }
+        let couche = Couche { materiau: Some("Laine".into()), epaisseur: 145.0, fonction: FonctionCouche::Structure, ossature: Some(Ossature { materiau: Some("Sapin".into()), horizontale, ..Default::default() }), ..Default::default() };
+        projet.types_murs.push(TypeCompose { id: "mob".into(), nom: "MOB".into(), couches: vec![couche], categorie: None, couches_detaillees: true, origine: None });
+        projet.materiaux.push(Materiau { nom: "Sapin".into(), couleur: [200, 150, 90], ..Default::default() });
+        projet.materiaux.push(Materiau { nom: "Laine".into(), couleur: [250, 230, 120], motif: modele::MotifCoupe::Isolation, ..Default::default() });
+        projet.ajouter_mur([0.0, 0.0], [3000.0, 0.0], &ParametresMur { type_mur: Some("mob".into()), ..Default::default() }).unwrap();
+        let scene = maillage::depuis_natif(&projet, std::path::Path::new("test.modele.json")).unwrap();
+        let plan = Vec3::NEG_X.extend((0.3 - scene.origin.x) as f32);
+        let prims = super::coupe(&scene, &vec![true; scene.objects.len()], plan, 50.0, Poche::Hachure);
+        let etendue = |pts: Vec<DVec3>| pts.iter().map(|q| q.z + scene.origin.z).fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), z| (a.min(z), b.max(z)));
+        // travées de remplissage : surfaces hautes de plus de 10 cm
+        let travees: Vec<(f64, f64)> = prims.iter().filter(|p| p.role == Role::Poche).filter_map(|p| match &p.forme { Forme::Triangles(t) => Some(etendue(t.iter().flatten().copied().collect())), _ => None }).filter(|(a, b)| b - a > 0.1).collect();
+        let hachures: Vec<(f64, f64)> = prims.iter().filter(|p| p.role == Role::Hachure).filter_map(|p| match &p.forme { Forme::Segments(s) => Some(etendue(s.iter().flatten().copied().collect())), _ => None }).collect();
+        assert!(!travees.is_empty());
+        for (a, b) in travees {
+            assert!(hachures.iter().any(|(h0, h1)| (h0 - a).abs() < 0.02 && (h1 - b).abs() < 0.02), "horizontale={horizontale}, altitude={altitude} : travée [{a:.3}, {b:.3}] mal couverte ; hachures {hachures:?}");
+        }
+    }
+}
