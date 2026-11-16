@@ -172,6 +172,7 @@ name = "bimedit"
 version = "0.1.0"
 dependencies = [
  "commandes",
+ "echanges",
  "eframe",
  "formats",
  "glam",
@@ -608,6 +609,22 @@ checksum = "afc28d89ac6cb489f679fcf51aaa62b4667bb0fb73a30f1d4d23949069707c07"
 dependencies = [
  "itertools 0.14.0",
  "num-traits",
+]
+
+[[package]]
+name = "echanges"
+version = "0.1.0"
+dependencies = [
+ "commandes",
+ "formats",
+ "glam",
+ "ifc_base",
+ "maillage",
+ "modele",
+ "moteur2d",
+ "noyau",
+ "rayon",
+ "serde_json",
 ]
 
 [[package]]

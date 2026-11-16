@@ -47,12 +47,12 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
                 let (p, ids) = p.executer(c)?;
                 maillage::depuis_natif(&p, Path::new(entree))?;
                 let sortie = args.get(3).map_or(entree, |s| s);
-                crate::echanges::enregistrement::enregistrer_natif(&p, Path::new(sortie))?;
+                echanges::enregistrement::enregistrer_natif(&p, Path::new(sortie))?;
                 println!("{}", serde_json::to_string(&ids).unwrap());
             }
-            "--export-ifc" => crate::echanges::enregistrement::ecrire_atomique(
+            "--export-ifc" => echanges::enregistrement::ecrire_atomique(
                 Path::new(arg),
-                crate::echanges::export_ifc::exporter(&p)?.as_bytes(),
+                echanges::export_ifc::exporter(&p)?.as_bytes(),
             )?,
             "--quantites" => {
                 let n = modele::documentation::Nomenclature {
@@ -64,7 +64,7 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
                     parametres: Vec::new(),
                 };
                 let lignes = modele::documentation::tableau(&p, &n)?;
-                crate::echanges::enregistrement::ecrire_atomique(
+                echanges::enregistrement::ecrire_atomique(
                     Path::new(arg),
                     modele::documentation::csv(&lignes).as_bytes(),
                 )?;
@@ -86,7 +86,7 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
                     Some("svg") => svg.into_bytes(),
                     _ => return Err("Extension attendue : .svg ou .pdf".into()),
                 };
-                crate::echanges::enregistrement::ecrire_atomique(sortie, &b)?;
+                echanges::enregistrement::ecrire_atomique(sortie, &b)?;
             }
         };
         Ok(())

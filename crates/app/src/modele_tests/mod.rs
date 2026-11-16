@@ -4,7 +4,6 @@
 mod documentation;
 mod elements_arbre;
 mod elements_composant;
-mod elements_escalier;
 mod elements_piece;
 mod elements_site;
 mod famille_profil;

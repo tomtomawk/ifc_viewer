@@ -622,5 +622,5 @@ pub fn sauver_local(path: &Path, bytes: &[u8]) -> Resultat<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    crate::echanges::enregistrement::ecrire_atomique(path, bytes)
+    echanges::enregistrement::ecrire_atomique(path, bytes)
 }

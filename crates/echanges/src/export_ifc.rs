@@ -374,7 +374,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::echanges::depuis_ifc;
+    use crate::depuis_ifc;
     #[test]
     fn export_ifc4_relecture_geometrie_et_identifiants() {
         let (p, _) =

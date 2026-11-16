@@ -794,7 +794,7 @@ impl ViewerApp {
     pub(in crate::ui) fn enregistrer_famille_fichier(&mut self, chemin: &std::path::Path) -> Result<(), String> {
         let ed = self.famille.as_mut().ok_or("Éditeur fermé.")?;
         ed.famille.valider(ed.largeur, ed.hauteur, ed.epaisseur)?;
-        crate::echanges::enregistrement::ecrire_atomique(chemin, ed.fichier().json()?.as_bytes())?;
+        echanges::enregistrement::ecrire_atomique(chemin, ed.fichier().json()?.as_bytes())?;
         ed.document_famille.chemin_fichier = Some(chemin.to_path_buf());
         ed.marquer_enregistree();
         self.status = format!("Famille enregistrée : {}", chemin.display());

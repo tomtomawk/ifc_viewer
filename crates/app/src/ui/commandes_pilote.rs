@@ -427,8 +427,8 @@ impl ViewerApp {
                     let chemin=PathBuf::from(argument.trim().trim_matches('"'));
                     let (p,ancien)=self.natif.as_ref().unwrap();
                     if self.collaboration.is_some() && &chemin!=ancien{return erreur("La copie collaborative conserve son chemin local");}
-                    if let Err(e)=crate::echanges::enregistrement::enregistrer_natif(p,&chemin){return erreur(&e);}
-                    crate::echanges::enregistrement::effacer_recuperation(ancien);
+                    if let Err(e)=echanges::enregistrement::enregistrer_natif(p,&chemin){return erreur(&e);}
+                    echanges::enregistrement::effacer_recuperation(ancien);
                     let _=self.historique.enregistrer(p);
                     self.finaliser_enregistrement_sous(chemin);
                 } else {self.enregistrer_projet(&ctx);}
@@ -449,10 +449,10 @@ impl ViewerApp {
                 if !argument.is_empty() && argument!="abandonner" { return erreur("usage : quitter [abandonner]"); }
                 if self.natif_modifie || self.documents.values().any(|d|d.modifie) {
                     if argument!="abandonner" { return erreur("Modifications non enregistrées : enregistrer les documents ou quitter abandonner"); }
-                    if let Some((_,p))=&self.natif {crate::echanges::enregistrement::effacer_recuperation(p);}
+                    if let Some((_,p))=&self.natif {echanges::enregistrement::effacer_recuperation(p);}
                     self.natif_modifie=false;
                     for d in self.documents.values_mut() {
-                        if let Some((_,p))=&d.natif {crate::echanges::enregistrement::effacer_recuperation(p);}
+                        if let Some((_,p))=&d.natif {echanges::enregistrement::effacer_recuperation(p);}
                         d.modifie=false;
                     }
                 }

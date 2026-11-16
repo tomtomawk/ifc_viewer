@@ -34,6 +34,6 @@ fn commandes_escalier_et_garde_corps() {
     // escalier impossible refusé
     assert!(p.executer(Commande::Escalier { escalier: Escalier { trace: vec![[0.0, 0.0]], ..e } }).is_err());
     // export IFC : classes d'escalier et de garde-corps
-    let ifc = crate::echanges::export_ifc::exporter(&p).unwrap();
+    let ifc = echanges::export_ifc::exporter(&p).unwrap();
     assert!(ifc.contains("IFCSTAIR(") && ifc.contains("IFCRAILING("));
 }

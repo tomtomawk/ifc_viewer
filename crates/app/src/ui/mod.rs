@@ -74,12 +74,12 @@ enum LoadMsg {
     Progress(String),
     Done(Result<Box<Scene>, String>),
     /// Métadonnées, puis scène des murs (ou raison de son absence).
-    Revit(Result<(Box<RvtInfo>, Result<Box<Scene>, String>, crate::echanges::enregistrement::SourceRvt), String>),
+    Revit(Result<(Box<RvtInfo>, Result<Box<Scene>, String>, echanges::enregistrement::SourceRvt), String>),
 }
 
 enum SaveMsg {
     Progress(String),
-    Done(Result<crate::echanges::enregistrement::Bilan, String>),
+    Done(Result<echanges::enregistrement::Bilan, String>),
 }
 
 struct Sauvegarde {
@@ -432,7 +432,7 @@ struct DocumentOuvert {
     modifie: bool,
     scene: Option<Scene>,
     rvt: Option<RvtInfo>,
-    rvt_source: Option<crate::echanges::enregistrement::SourceRvt>,
+    rvt_source: Option<echanges::enregistrement::SourceRvt>,
     rvt_sortie: Option<PathBuf>,
     rvt_geom: Result<String, String>,
     rvt_sheet: bool,
@@ -556,7 +556,7 @@ pub struct ViewerApp {
     scene: Option<Scene>,
     /// Métadonnées du fichier Revit ouvert.
     rvt: Option<RvtInfo>,
-    rvt_source: Option<crate::echanges::enregistrement::SourceRvt>,
+    rvt_source: Option<echanges::enregistrement::SourceRvt>,
     rvt_sortie: Option<PathBuf>,
     sauvegarde: Option<Sauvegarde>,
     /// Fiche Revit affichée à la place de la vue 3D.

@@ -16,6 +16,7 @@ scene = { path = "../scene" }
 formats = { path = "../formats" }
 maillage = { path = "../maillage" }
 commandes = { path = "../commandes" }
+echanges = { path = "../echanges" }
 moteur2d = { path = "../moteur2d" }
 moteur3d = { path = "../moteur3d" }
 eframe.workspace = true

@@ -260,8 +260,8 @@ impl ViewerApp {
         else {
             return;
         };
-        match crate::echanges::export_ifc::exporter(p)
-            .and_then(|s| crate::echanges::enregistrement::ecrire_atomique(&path, s.as_bytes()))
+        match echanges::export_ifc::exporter(p)
+            .and_then(|s| echanges::enregistrement::ecrire_atomique(&path, s.as_bytes()))
         {
             Ok(()) => self.status = format!("IFC4 exporté : {}", path.display()),
             Err(e) => self.error = Some(e),
@@ -278,7 +278,7 @@ impl ViewerApp {
         match self
             .dessin_vue()
             .and_then(|d| moteur2d::pdf(&d.svg("Dessin")))
-            .and_then(|s| crate::echanges::enregistrement::ecrire_atomique(&path, &s))
+            .and_then(|s| echanges::enregistrement::ecrire_atomique(&path, &s))
         {
             Ok(()) => self.status = format!("PDF exporté : {}", path.display()),
             Err(e) => self.error = Some(e),
@@ -356,7 +356,7 @@ impl ViewerApp {
             };
             let p = &self.natif.as_ref().unwrap().0;
             let contenu = d::tableau(p, &p.nomenclatures[k]).map(|l| d::csv(&l).into_bytes());
-            match contenu.and_then(|b| crate::echanges::enregistrement::ecrire_atomique(&path, &b)) {
+            match contenu.and_then(|b| echanges::enregistrement::ecrire_atomique(&path, &b)) {
                 Ok(()) => self.status = format!("Export : {}", path.display()),
                 Err(e) => self.error = Some(e),
             }

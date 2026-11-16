@@ -765,7 +765,7 @@ impl ViewerApp {
         self.coupe_dirty = true;
         self.error = None;
         if let Some((p, chemin)) = &self.natif {
-            if let Err(e) = crate::echanges::enregistrement::recuperer_plus_tard(p, chemin) { self.error = Some(e); }
+            if let Err(e) = echanges::enregistrement::recuperer_plus_tard(p, chemin) { self.error = Some(e); }
         }
         noyau::chrono::chrono("application : listes et récupération", &mut t_etape);
         Ok(())

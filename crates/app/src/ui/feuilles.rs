@@ -907,7 +907,7 @@ impl ViewerApp {
             return Err(format!("Le jeu « {jeu} » n'a aucune feuille."));
         }
         let pdf = moteur2d::pdf_jeu(p, jeu)?;
-        crate::echanges::enregistrement::ecrire_atomique(chemin, &pdf)?;
+        echanges::enregistrement::ecrire_atomique(chemin, &pdf)?;
         Ok(n)
     }
 
@@ -918,7 +918,7 @@ impl ViewerApp {
             return;
         };
         let contenu = moteur2d::svg_feuille(p, f).and_then(|s| if extension == "pdf" { moteur2d::pdf(&s) } else { Ok(s.into_bytes()) });
-        match contenu.and_then(|b| crate::echanges::enregistrement::ecrire_atomique(&path, &b)) {
+        match contenu.and_then(|b| echanges::enregistrement::ecrire_atomique(&path, &b)) {
             Ok(()) => self.status = format!("Export : {}", path.display()),
             Err(e) => self.error = Some(e),
         }

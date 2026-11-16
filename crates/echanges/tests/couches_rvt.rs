@@ -1,5 +1,4 @@
-//! Tests de `formats` qui appellent du code d'`app` (`echanges`) et de `modele` : ils
-//! restent dans `app` tant que `echanges` n'est pas extraite (lots 5 à 9).
+//! Test de `formats` (lecture RVT) qui appelle `echanges::depuis_rvt::convertir_maquette` ; fichier d'essai hors dépôt, sauté s'il est absent.
 use formats::rvt::maquette::{lire, scene};
 use std::path::PathBuf;
 
@@ -33,7 +32,7 @@ fn couches_projet1_lecture_et_conversion() {
     let mut c = modele::Conversion::default();
     c.projet = modele::Projet::nouveau("Test couches");
     c.projet.sources.push(modele::source("s1", &p, "RVT"));
-    crate::echanges::depuis_rvt::convertir_maquette(&m, &mut c);
+    echanges::depuis_rvt::convertir_maquette(&m, &mut c);
     let detaillees: Vec<_> = c.projet.types_murs.iter().filter(|t| t.couches_detaillees && t.couches.len() > 1).collect();
     assert!(!detaillees.is_empty(), "couches perdues pendant la conversion");
     let relu = modele::Projet::lire_json(&c.projet.json().unwrap()).unwrap();

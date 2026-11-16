@@ -1,12 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod collaboration;
-#[cfg(test)]
-mod commandes_tests;
 mod config;
-mod echanges;
-#[cfg(test)]
-mod formats_tests;
 #[cfg(test)]
 mod modele_tests;
 mod pilote;
@@ -182,7 +177,7 @@ fn modele(entree: PathBuf, sortie: PathBuf) -> i32 {
         .stack_size(64 << 20)
         .spawn(move || {
             let progress = |s: String| eprintln!("{s}");
-            if formats::rvt::is_revit_path(&e) { crate::echanges::depuis_rvt::convertir(&e, &progress) } else { crate::echanges::depuis_ifc::convertir(&e, &progress) }
+            if formats::rvt::is_revit_path(&e) { echanges::depuis_rvt::convertir(&e, &progress) } else { echanges::depuis_ifc::convertir(&e, &progress) }
         })
         .unwrap();
     let (projet, mesures) = match handle.join() {
@@ -196,7 +191,7 @@ fn modele(entree: PathBuf, sortie: PathBuf) -> i32 {
             return 1;
         }
     };
-    let rapport = crate::echanges::rapport::markdown(&projet, &mesures, t0.elapsed().as_secs_f64());
+    let rapport = echanges::rapport::markdown(&projet, &mesures, t0.elapsed().as_secs_f64());
     let json = match projet.json() {
         Ok(j) => j,
         Err(e) => {

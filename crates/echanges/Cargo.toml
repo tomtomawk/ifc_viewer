@@ -1,0 +1,23 @@
+[package]
+name = "echanges"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+noyau = { path = "../noyau" }
+modele = { path = "../modele" }
+ifc_base = { path = "../ifc_base" }
+formats = { path = "../formats" }
+glam.workspace = true
+rayon.workspace = true
+
+# Les tests d'intégration (`tests/`) appellent aussi les crates situées après `modele`/`formats` :
+# leur projet de départ vient de `echanges::depuis_ifc`.
+[dev-dependencies]
+commandes = { path = "../commandes" }
+maillage = { path = "../maillage" }
+moteur2d = { path = "../moteur2d" }
+serde_json.workspace = true

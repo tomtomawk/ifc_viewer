@@ -1,6 +1,5 @@
-//! Tests déplacés de `edition/commandes/tests.rs` : leur projet de départ vient de
-//! `echanges::depuis_ifc` (et l'un d'eux appelle `echanges::export_ifc`).
-use crate::echanges::{depuis_ifc, export_ifc};
+//! Tests de `commandes` dont le projet de départ vient de `echanges::depuis_ifc` (l'un appelle aussi `echanges::export_ifc`).
+use echanges::{depuis_ifc, export_ifc};
 use commandes::*;
 use commandes::historique;
 use modele::*;

@@ -154,7 +154,7 @@ impl ViewerApp {
                 .set_file_name(format!("{}.{}.json", ed.contenu.nom(), ed.contenu.extension_fichier())).save_file()
         });
         let Some(chemin) = chemin else { return Ok(false) };
-        crate::echanges::enregistrement::ecrire_atomique(&chemin, texte.as_bytes())?;
+        echanges::enregistrement::ecrire_atomique(&chemin, texte.as_bytes())?;
         let ed = self.familles_planes.get_mut(&ordre).unwrap();
         ed.document_famille.chemin_fichier = Some(chemin.clone());
         ed.reference = ed.contenu.clone();

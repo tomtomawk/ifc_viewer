@@ -1019,7 +1019,7 @@ fn conflit_reel_preserve_les_murs_locaux_a_lecran_et_apres_reouverture() {
         assert!(!sb.travail().unwrap().murs.iter().any(|m|&m.id==id));
     }
     assert!(sb.editer(&suite,&suite).is_err());
-    crate::echanges::enregistrement::enregistrer_natif(&sb.affichage().unwrap(),&local).unwrap();
+    echanges::enregistrement::enregistrer_natif(&sb.affichage().unwrap(),&local).unwrap();
     drop(sb);
     let (visible,_,s)=partage::ouvrir(&entree,&root.join("b")).unwrap();
     assert!(s.copie.apercu_conflit.is_some());

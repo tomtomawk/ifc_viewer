@@ -115,7 +115,7 @@ impl ViewerApp {
                 }
                 let g = modele::gabarit::actif();
                 let json = serde_json::to_vec_pretty(&*g).map_err(|e| e.to_string())?;
-                crate::echanges::enregistrement::ecrire_atomique(
+                echanges::enregistrement::ecrire_atomique(
                     std::path::Path::new(argument.trim().trim_matches('"')),
                     &json,
                 )?;
@@ -172,7 +172,7 @@ impl ViewerApp {
                     } else {
                         svg.into_bytes()
                     };
-                    crate::echanges::enregistrement::ecrire_atomique(
+                    echanges::enregistrement::ecrire_atomique(
                         std::path::Path::new(path),
                         &bytes,
                     )?;
@@ -235,7 +235,7 @@ impl ViewerApp {
                         .unwrap_or("Nouveau projet");
                     let p = modele::Projet::depuis_gabarit(nom, &modele::gabarit::actif());
                     let s = maillage::depuis_natif(&p, &path)?;
-                    crate::echanges::enregistrement::enregistrer_natif(&p, &path)?;
+                    echanges::enregistrement::enregistrer_natif(&p, &path)?;
                     self.install_scene(s);
                     let _ = self.historique.enregistrer(&p);
                     self.natif = Some((p, path));
@@ -350,14 +350,14 @@ impl ViewerApp {
                         return Err("Chemin de sortie requis".into());
                     }
                     let bytes = if nom == "exporter_ifc" {
-                        crate::echanges::export_ifc::exporter(
+                        echanges::export_ifc::exporter(
                             &self.natif.as_ref().ok_or("Projet natif requis")?.0,
                         )?
                         .into_bytes()
                     } else {
                         moteur2d::pdf(&self.dessin_vue()?.svg("Dessin"))?
                     };
-                    crate::echanges::enregistrement::ecrire_atomique(&path, &bytes)?;
+                    echanges::enregistrement::ecrire_atomique(&path, &bytes)?;
                     Ok(json!({"chemin":path,"octets":bytes.len()}))
                 }
                 "nomenclature" | "exporter_csv" => {
@@ -372,7 +372,7 @@ impl ViewerApp {
                     let lignes = modele::documentation::tableau(p, n)?;
                     if nom == "exporter_csv" {
                         let path = PathBuf::from(champ(&v, "chemin")?);
-                        crate::echanges::enregistrement::ecrire_atomique(
+                        echanges::enregistrement::ecrire_atomique(
                             &path,
                             modele::documentation::csv(&lignes).as_bytes(),
                         )?;

@@ -66,7 +66,7 @@ impl ViewerApp {
             if !self.natif_modifie
                 && let Some((_, path)) = &self.natif
             {
-                crate::echanges::enregistrement::effacer_recuperation(path);
+                echanges::enregistrement::effacer_recuperation(path);
             }
             resultat
         })();
@@ -105,9 +105,9 @@ impl ViewerApp {
         if chemin.extension().is_none() {
             chemin.set_extension("modele.json");
         }
-        match crate::echanges::enregistrement::enregistrer_natif(p, &chemin) {
+        match echanges::enregistrement::enregistrer_natif(p, &chemin) {
             Ok(()) => {
-                crate::echanges::enregistrement::effacer_recuperation(ancien);
+                echanges::enregistrement::effacer_recuperation(ancien);
                 let _ = self.historique.enregistrer(p);
                 self.finaliser_enregistrement_sous(chemin);
             }
@@ -116,7 +116,7 @@ impl ViewerApp {
     }
 
     pub(super) fn finaliser_enregistrement_sous(&mut self, chemin: PathBuf) {
-        crate::echanges::enregistrement::effacer_recuperation(&chemin);
+        echanges::enregistrement::effacer_recuperation(&chemin);
         if let Some(scene) = &mut self.scene {
             scene.file_name = chemin
                 .file_name()
@@ -181,18 +181,18 @@ impl ViewerApp {
                         return Err("Choisissez une destination .json.".into());
                     }
                     let (p, mesures) = if is_revit_file(&source) {
-                        crate::echanges::depuis_rvt::convertir(&source, &progress)?
+                        echanges::depuis_rvt::convertir(&source, &progress)?
                     } else {
-                        crate::echanges::depuis_ifc::convertir(&source, &progress)?
+                        echanges::depuis_ifc::convertir(&source, &progress)?
                     };
                     let scene = maillage::depuis_natif(&p, &sortie)?;
-                    crate::echanges::enregistrement::enregistrer_natif(&p, &sortie)?;
-                    let rapport = crate::echanges::rapport::markdown(
+                    echanges::enregistrement::enregistrer_natif(&p, &sortie)?;
+                    let rapport = echanges::rapport::markdown(
                         &p,
                         &mesures,
                         debut.elapsed().as_secs_f64(),
                     );
-                    crate::echanges::enregistrement::ecrire_atomique(
+                    echanges::enregistrement::ecrire_atomique(
                         &sortie.with_extension("rapport.md"),
                         rapport.as_bytes(),
                     )?;
