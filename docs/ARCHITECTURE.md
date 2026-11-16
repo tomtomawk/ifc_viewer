@@ -1,6 +1,6 @@
 # Architecture : découpage en workspace Cargo
 
-État après le lot 6 (§5.13) : le dépôt est un workspace (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`). `noyau` (lot 1), `modele` (lot 2), `ifc_base` et `scene` (lot 3), `formats` (lot 4), `maillage` (lot 5) et `commandes` (lot 6) sont extraits en `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage` et `crates/commandes` ; le reste du code est encore dans une seule crate, `crates/app` (package et binaire `bimedit`). Les dépendances sont déclarées une fois dans `[workspace.dependencies]` (racine) et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine.
+État après le lot 7 (§5.14) : le dépôt est un workspace (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`). `noyau` (lot 1), `modele` (lot 2), `ifc_base` et `scene` (lot 3), `formats` (lot 4), `maillage` (lot 5), `commandes` (lot 6) et `moteur2d` (lot 7) sont extraits en `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage`, `crates/commandes` et `crates/moteur2d` ; le reste du code est encore dans une seule crate, `crates/app` (package et binaire `bimedit`). Les dépendances sont déclarées une fois dans `[workspace.dependencies]` (racine) et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine.
 
 Restent à la racine : `docs/`, `samples/`, `gabarits/`, `tools/`, `.github/`, `.mcp.json`, `README.md`, `AGENTS.md`. Les ressources embarquées (`include_str!`) pointent vers ces dossiers par des chemins relatifs depuis `crates/<crate>/src/...` (le gabarit par défaut est embarqué par `crates/modele/src/gabarit.rs`) ; les tests lisent `samples/` via `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")` (le répertoire courant d'un test est celui de sa crate ; même profondeur pour `crates/app` et `crates/modele`).
 
@@ -16,7 +16,7 @@ crates/
   maillage/       modèle -> scène : depuis_natif, depuis_natif_verifie (volumes et jonctions restent dans modele)
   commandes/      `Commande` et son exécution ; socle/ (exécution, historique, verrous, contextes, objets)
                   modeliser/ modifier/ annoter/ documenter/ (pas de dessiner/ : §5.13 a)
-  moteur2d/       coupe, arêtes, poché, motifs, SVG/PDF
+  moteur2d/       coupe, arêtes vues/cachées, poché, motifs, outils de DAO, rendu de vue et de feuille SVG/PDF
   moteur3d/       wgpu, shaders, caméra, ciel, sélection à l'écran
   echanges/       import IFC/RVT, export IFC, enregistrement
   collaboration/
@@ -27,7 +27,7 @@ crates/
   app/            binaire `bimedit`
 ```
 
-Correspondance avec les dossiers actuels (après lot 6) : `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage`, `crates/commandes` : extraits ; dans `crates/app/src/` : `dessin/` (dont `feuilles.rs` et `plans.rs`, rendu de vue et de feuille parqué au lot 2) -> moteur2d ; `rendu/` -> moteur3d ; `echanges/` -> echanges ; `collaboration/` et `collaboration.rs` -> collaboration ; `pilote/`, `config/` ; `ui/` -> interface ; `main.rs` -> app ; `modele_tests/`, `formats_tests/` et `commandes_tests/` : tests parqués, à répartir (§5.8 d, §5.11 d, §5.12 d, §5.13 d).
+Correspondance avec les dossiers actuels (après lot 7) : `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage`, `crates/commandes`, `crates/moteur2d` : extraits ; dans `crates/app/src/` : `rendu/` -> moteur3d ; `echanges/` -> echanges ; `collaboration/` et `collaboration.rs` -> collaboration ; `pilote/`, `config/` ; `ui/` -> interface ; `main.rs` -> app ; `modele_tests/`, `formats_tests/` et `commandes_tests/` : tests parqués, à répartir (§5.8 d, §5.11 d, §5.12 d, §5.13 d).
 
 ## 2. Graphe de dépendances autorisées
 
@@ -47,7 +47,7 @@ noyau <- modele <- ifc_base <- scene <- formats <- maillage <- commandes <- mote
 | formats | noyau, ifc_base, scene (réel : exactement ces trois ; `modele` n'est pas une dépendance directe, il n'arrive que par `scene`, §5.11) |
 | maillage | noyau, modele, ifc_base, scene, formats (réel : exactement ces cinq, toutes utilisées directement, §5.12) |
 | commandes | noyau, modele, scene, maillage (réel : `noyau` et `modele` seuls ; `scene` et `maillage` restent autorisées mais ne sont pas des dépendances, §5.13) |
-| moteur2d | noyau, modele, scene, maillage, commandes |
+| moteur2d | noyau, modele, scene, maillage, commandes (réel : `noyau`, `modele`, `scene`, `maillage` ; `commandes` reste autorisée sans être utilisée ; ni `formats` ni `ifc_base` ne sont nécessaires, §5.14) |
 | moteur3d | noyau, modele, scene, moteur2d |
 | echanges | noyau, modele, scene, formats, maillage |
 | collaboration | noyau, modele, scene, maillage, commandes, echanges |
@@ -86,7 +86,7 @@ Code « parqué » : quand une coupe fait monter du code vers une crate qui n'ex
 | 4 | formats | extraction de `ifc/` (`geom`, `assemblage`), `rvt/` ; tests croisés montés ; retrait du ré-export `formats::ifc::{step, semantique}` (§5.10 b) | Sonnet | **fait** (coupes `9e2ada7`, `7c1fa60`, `d8b818a` ; extraction `aff8d40` ; détail au §5.11) |
 | 5 | maillage | `rendu/natif.rs` seul (`depuis_natif`, `depuis_natif_verifie` ; `id_natif` et `numero_vue` sont dans `modele::identifiants` depuis le lot 2) ; les tests de `modele_tests`/`dessin` qui l'appellent restent parqués dans `app` (§5.12 d) | **Fable** | **fait** (coupe `f5c528d` ; extraction `525e9cb` ; détail au §5.12) |
 | 6 | commandes | `crates/app/src/edition` (commandes, historique, verrous, gestion des contextes ; traits d'extension de `Projet`, §5.8 b) ; décider où vont `concurrence` et `objets` (§5.5 point 5) ; rangement `modeliser/ modifier/ dessiner/ annoter/ documenter/` | **Fable** | **fait** (coupes `90be806` ; extraction `8f9e763` ; rangement par métier `0682940` ; détail au §5.13) |
-| 7 | moteur2d | `dessin/` dont le rendu de vue et de feuille parqué (`dessin/feuilles.rs`, `dessin/plans.rs`) | **Fable** | à faire |
+| 7 | moteur2d | `dessin/` dont le rendu de vue et de feuille parqué (`dessin/feuilles.rs`, `dessin/plans.rs`) | **Fable** | **fait** (aucune coupe nécessaire ; extraction `22e2c46` ; découpage de `lib.rs` `6405175` ; détail au §5.14) |
 | 8 | moteur3d | `rendu/` hors scène | Sonnet | à faire |
 | 9 | echanges + collaboration | `crates/app/src/echanges`, `crates/app/src/collaboration*` | Sonnet | à faire |
 | 10 | pilote | `pilote/` | Sonnet | à faire |
@@ -622,3 +622,61 @@ Concernant `commandes` : **aucune**. Relevé par `grep` des chemins `crate::<mod
 | `commandes_tests`, `modele_tests`, `formats_tests` | commandes, maillage, formats, echanges, collaboration, moteur2d | tests parqués (tableau (d)) | 7 à 9 |
 
 Points ouverts : (1) `scene` et `maillage` restent « autorisées » pour `commandes` au §2 sans être utilisées : à retirer du tableau si l'on veut un graphe strict ; (2) déplacement des 8 tests de `modele_tests` vers `crates/commandes/tests/` ; (3) point ouvert du §5.10 (1) inchangé.
+
+### 5.14 Après lot 7 (2026-11-16)
+
+Tests : 390 réussis, 2 ignorés, comme avant le lot ; répartition `bimedit` 165 (avant : 199 + 1 ignoré), `moteur2d` 34 (+ 1 ignoré, `mesure::sphere_500k`), `commandes` 18, `formats` 52, `modele` 101 (+ 1 ignoré), `noyau` 10, `ifc_base` 2, `maillage` 8, `scene` 0. `cargo test -p moteur2d --release` passe seul (34 + 1 ignoré). `cargo tree -p moteur2d` ne contient ni `egui`, ni `wgpu`, ni `eframe`. `grep -rn "crate::" crates/moteur2d/src` : 2 chemins internes (`crate::coupe`, `crate::Poche`, dans un test). Sorties comparées à `bf0370e` (binaire de référence construit dans un worktree temporaire) : `--export-ifc` et `--quantites` de `samples/maison_native.modele.json` identiques octet pour octet ; `--stats` des deux IFC de `samples/` identiques hors ligne « Durée » ; `--export-vue` (`plan-rdc`, `plan-etage`, `coupe`) et `--export-feuille A01` en SVG identiques après tri des lignes et des sous-chemins `M…` de chaque attribut `d` ; en PDF, le binaire de référence n'est pas déterministe (deux exécutions diffèrent, l'ordre des tracés suit celui du SVG) : les flux décompressés, triés par ligne, sont identiques entre les deux exécutions de référence et la nouvelle.
+
+#### (a) Contenu de `crates/moteur2d`
+
+Package `moteur2d` (lib, 8 fichiers, 2 713 lignes, 35 tests dont 1 ignoré). Dépendances internes : `noyau`, `modele`, `scene`, `maillage`. Externes : `glam`, `rayon`, `svg2pdf`, `pdf-writer` (ces deux dernières retirées des dépendances d'`app`, qui ne les appelle plus).
+
+| Chemin (`crates/moteur2d/src/`) | Lignes | Contenu | Origine |
+|---|---|---|---|
+| `lib.rs` | 187 | modules et ré-exports ; `Poche`, `TRAIT_FIN_MM`, `PAS_HACHURE_MM` ; `decouper`, `section` (privés) ; tests `mesure` et `test_isolant_arc` | `dessin/mod.rs` |
+| `coupe.rs` | 373 | `coupe` ; privés `coupe_par_solides`, `fusionner_materiaux` | `dessin/mod.rs` |
+| `vue.rs` | 292 | `sommets`, `sommets_boite`, `vu`, `cadrer_primitives` ; privé `maillage` | `dessin/mod.rs` |
+| `tests.rs` | 383 | module `tests` (25 tests, chemins `tests::…` inchangés) | `dessin/mod.rs` |
+| `motifs.rs` | 332 | `ligne_isolation` et aides (motif d'isolant) | `dessin/motifs.rs` |
+| `dao.rs` | 795 | outils de tracé : `Trace`, `OutilDessin`, `EvenementTrace`, `Accroche`, `accrocher`, `polaire`, `ortho`, `lire_saisie`, `perimetre_cercle`, `milieu_arc`, `courbure_3_points`, `scinder_segment` | `dessin/dao.rs` |
+| `feuilles.rs` | 274 | `dessin_vue`, `vue_placee`, `feuille`, `svg_feuille`, `pdf`, `pdf_pages`, `pdf_jeu` ; `ids_masques_vue` (`pub(super)`) | `dessin/feuilles.rs` (parqué au lot 2) |
+| `plans.rs` | 77 | `fond_plan`, `limite_haute_plan`, `pointilles_plage_haute` | `dessin/plans.rs` (parqué au lot 2) |
+
+API publique à la racine inchangée (`moteur2d::coupe`, `moteur2d::Poche`, `moteur2d::dao::Trace`, etc. : mêmes noms qu'en `crate::dessin::…`). `feuille` et `pdf_pages` sont `pub` dans un module privé et non ré-exportés, comme avant. Appelants dans `app` : `ui` (14 fichiers), `pilote/cli.rs`, `modele_tests/documentation.rs` ; 48 lignes `crate::dessin::` -> `moteur2d::` (et `use crate::dessin;` / `dessin::X` -> `moteur2d::X` dans `pilote/cli.rs` et `ui/coupe.rs`).
+
+#### (b) Décisions de frontière
+
+| # | Sujet | Décision | Pourquoi |
+|---|---|---|---|
+| 1 | Coupes préalables (commit a) | aucune, pas de commit a | `dessin` n'avait plus aucune référence `crate::` hors de lui-même (une seule, `crate::dessin::coupe` dans un test, devenue `crate::coupe`) : ni `config`, ni `rendu`, ni `echanges`, ni `collaboration`, ni `ui`, ni `pilote`, ni egui (couleurs déjà en `[u8; 4]`, plumes et constantes dans `noyau::aretes`) |
+| 2 | `formats`, `ifc_base` | non déclarées | aucun usage (`Id` vient de `noyau`, `Motif` de `noyau::motif`) |
+| 3 | `commandes` | non déclarée (reste autorisée au §2) | aucun usage en production ni dans les tests de `dessin` |
+| 4 | `maillage` | dépendance de production | `feuilles.rs` (`dessin_vue`) appelle `depuis_natif` ; les tests de `lib.rs`/`tests.rs` aussi |
+| 5 | Visibilités | aucune élargie | la compilation n'a rien exigé ; les fonctions déplacées par le découpage restent privées ou gardent leur visibilité (`decouper`, `section` restent à la racine, visibles des sous-modules) |
+| 6 | Découpage de `dessin/mod.rs` (1 226 lignes) | commit séparé `6405175` : `coupe.rs`, `vue.rs`, `tests.rs` | déplacement de fonctions entières (contrôle : toutes les lignes non vides de l'ancien fichier se retrouvent, hors `mod tests {` et son `}`) ; avertissements clippy de la crate identiques avant et après |
+
+Aucun `include_str!` dans `moteur2d`. Aucun changement fonctionnel ni de format.
+
+#### (c) Fichiers au-delà du plafond
+
+`dao.rs` (795 lignes, dont 223 de tests en 3 modules) : non découpé ; fichier déplacé tel quel, la partie de production (572 lignes) est sous le plafond, le dépassement vient des tests. Un découpage `dao/tests.rs` serait un simple déplacement, laissé hors de ce lot (non demandé, fichier non créé au lot). Aucun autre fichier de `moteur2d` ne dépasse 600 lignes.
+
+#### (d) Tests
+
+Les 35 tests de `dessin` (`mod.rs` 25 dont 1 ignoré, `dao.rs` 9, `motifs.rs` 1) ont suivi le code : ils n'appellent que `noyau`, `modele`, `scene`, `maillage` (`depuis_natif`). Aucun test n'a dû rester ou monter dans `app`.
+
+Tests parqués dans `app` qui appellent `moteur2d` : `modele_tests/documentation.rs` (14 tests, §5.8 d). 8 appellent `echanges::depuis_ifc` (accueil : echanges, lot 9) ; 6 n'utilisent que `modele`, `commandes`, `moteur2d`, `noyau`, `glam` et pourraient rejoindre `crates/moteur2d/tests/` (non fait, à valider) : `dessin_sur_feuille_suit_le_fond_la_plage_haute_et_le_style`, `coupe_sur_feuille_reste_dans_les_limites_de_la_vue`, `formes_du_cartouche_persistent_et_sont_dessinees_sur_feuille`, `famille_cartouche_partagee_est_enregistree_et_utilisee`, `polyligne_types_de_trait_par_segment`, `polyligne_segments_d_arc` (cela ferait de `commandes` une dépendance de développement de `moteur2d`).
+
+#### (e) Violations restantes (lots 8 à 11)
+
+Concernant `moteur2d` : **aucune**. Relevé par `grep` des chemins `crate::<module>` entre `rendu`, `echanges`, `collaboration`, `pilote`, `config`, `ui` (hors `ui` et `main.rs` comme sources, lot 11) :
+
+| De | Vers | Détail | Lot |
+|---|---|---|---|
+| `rendu` | — | aucune référence `crate::` vers `echanges`, `collaboration`, `pilote`, `config`, `ui` | 8 |
+| `collaboration` | echanges | 11 références ; sens autorisé | 9 |
+| `pilote` | echanges, collaboration | `cli.rs` : 5 et 1 références ; sens autorisé | 10 |
+| `config` | echanges | 1 référence (`enregistrement`) ; sens autorisé | 11 |
+| `commandes_tests`, `modele_tests`, `formats_tests` | commandes, maillage, formats, echanges, collaboration, moteur2d | tests parqués (§5.13 d, (d) ci-dessus) | 8 à 9 |
+
+Points ouverts : (1) déplacement des 6 tests de `modele_tests/documentation.rs` vers `crates/moteur2d/tests/` ; (2) `commandes` autorisée mais non utilisée par `moteur2d` au §2 (comme `scene`/`maillage` pour `commandes`, §5.13) ; (3) découpage des tests de `dao.rs`.
