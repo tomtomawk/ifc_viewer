@@ -15,3 +15,7 @@ glam.workspace = true
 rayon.workspace = true
 svg2pdf.workspace = true
 pdf-writer.workspace = true
+
+[dev-dependencies]
+commandes = { path = "../commandes" }
+serde_json.workspace = true

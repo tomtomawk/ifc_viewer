@@ -12,28 +12,13 @@ path = "src/main.rs"
 noyau = { path = "../noyau" }
 modele = { path = "../modele" }
 ifc_base = { path = "../ifc_base" }
-scene = { path = "../scene" }
 formats = { path = "../formats" }
-maillage = { path = "../maillage" }
-commandes = { path = "../commandes" }
 echanges = { path = "../echanges" }
 collaboration = { path = "../collaboration" }
 pilote = { path = "../pilote" }
 config = { path = "../config" }
 interface = { path = "../interface" }
-moteur2d = { path = "../moteur2d" }
-moteur3d = { path = "../moteur3d" }
-eframe.workspace = true
 glam.workspace = true
-miniz_oxide.workspace = true
-rfd.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-uuid.workspace = true
-
-# numéro de build de Windows (cadre de fenêtre : Windows 10 ou 11)
-[target.'cfg(windows)'.dependencies]
-windows-sys.workspace = true
 
 [target.'cfg(windows)'.build-dependencies]
 winresource.workspace = true

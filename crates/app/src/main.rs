@@ -1,7 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-#[cfg(test)]
-mod modele_tests;
 
 use std::path::PathBuf;
 
