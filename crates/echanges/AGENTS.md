@@ -2,7 +2,7 @@
 
 Rôle : entrées/sorties du modèle natif : import IFC et Revit vers `Projet`, export IFC, enregistrement natif atomique et récupération, rapport d'import.
 
-Dépendances internes autorisées : `noyau`, `modele`, `scene`, `formats`, `ifc_base`, `maillage` (réel : `noyau`, `modele`, `ifc_base`, `formats` ; dev : `commandes`, `maillage`, `moteur2d`). Interdit : `moteur2d`/`moteur3d` en production, `config`, `collaboration`, `pilote`, `ui`, egui, wgpu, eframe.
+Dépendances internes autorisées : `noyau`, `modele`, `scene`, `formats`, `ifc_base`, `maillage` (réel : `noyau`, `modele`, `ifc_base`, `formats` ; dev : `commandes`, `maillage`, `moteur2d`). Interdit : `moteur2d`/`moteur3d` en production, `config`, `collaboration`, `pilote`, `interface`, egui, wgpu, eframe.
 
 ## Où travailler
 
@@ -15,6 +15,10 @@ Dépendances internes autorisées : `noyau`, `modele`, `scene`, `formats`, `ifc_
 | `rapport.rs` | `markdown` |
 
 `tests/` : tests d'intégration dont le projet de départ vient de `depuis_ifc` (commandes, documentation, site, escalier, volumes) ; `couches_rvt.rs` lit un fichier hors dépôt (`RVT_ESSAIS`) et est sauté s'il est absent. Les `samples/` se lisent par `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")`.
+
+## Quand modifier ici
+
+Import IFC ou Revit vers le modèle natif, export IFC, enregistrement atomique, rapport d'import. La lecture bas niveau des formats est dans `formats` et `ifc_base`.
 
 ## Vérifier
 

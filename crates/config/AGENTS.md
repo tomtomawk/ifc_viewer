@@ -14,6 +14,10 @@ Dépendances internes autorisées : `noyau`, `modele`, `echanges` (réel : les t
 
 L'unité d'affichage (`Unite`, `unite()`, `definir_unite()`) est dans `modele::unite`, pas ici.
 
+## Quand modifier ici
+
+Une option utilisateur ou un raccourci clavier enregistré. Le panneau des paramètres est dans `interface/src/socle/parametres.rs`.
+
 ## Vérifier
 
 ```

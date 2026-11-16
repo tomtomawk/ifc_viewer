@@ -2,7 +2,7 @@
 
 Rôle : vue 3D : rendu wgpu de la scène (`Renderer`), ciel physique, caméra, repère d'orientation des plans, sélection à l'écran par rectangle, shaders WGSL.
 
-Dépendances internes autorisées : `noyau`, `modele`, `scene`, `moteur2d` (réel : les trois premières ; `maillage` en dev-dependency). Interdit : `config`, `echanges`, `collaboration`, `pilote`, `ui`. `egui` et `wgpu` ne sont permis que dans cette crate et au-delà, via `eframe`.
+Dépendances internes autorisées : `noyau`, `modele`, `scene`, `moteur2d` (réel : les trois premières ; `maillage` en dev-dependency). Interdit : `config`, `echanges`, `collaboration`, `pilote`, `interface`. `egui` et `wgpu` ne sont permis que dans cette crate et au-delà, via `eframe`.
 
 ## Où travailler
 
@@ -16,6 +16,10 @@ Dépendances internes autorisées : `noyau`, `modele`, `scene`, `moteur2d` (rée
 | `scene.wgsl`, `commun.wgsl`, `ao.wgsl` | shaders, lus par `include_str!` ; `scene.wgsl` et `commun.wgsl` sont concaténés |
 
 `MAX_APPARENCES` est dans `noyau::constantes` et en dur dans `scene.wgsl` : les deux valeurs doivent rester égales. Les tests `shader_*_valide` valident les shaders (naga) sans GPU. Le rendu lui-même ne se teste pas sans affichage. `gpu.rs` dépasse 600 lignes (`Renderer` à un seul `impl`) : ne pas l'agrandir.
+
+## Quand modifier ici
+
+Rendu 3D, caméra, ciel, shaders, sélection à l'écran. La disposition de la fenêtre et l'appel de `Renderer` sont dans `interface/src/socle/viewport.rs`.
 
 ## Vérifier
 

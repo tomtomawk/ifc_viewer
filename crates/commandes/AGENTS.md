@@ -25,6 +25,10 @@ Il n'y a pas de dossier `dessiner/` : un tracé 2D est une annotation (`Commande
 
 Chaque fichier d'exécution commence par `use crate::socle::interne::*;` (imports communs). Aucun changement de schéma JSON sans mise à jour de `docs/EDITION.md` (voir `docs/AGENTS.md`).
 
+## Quand modifier ici
+
+Une commande d'édition (variante, exécution, historique, verrous, contextes). Son bouton ou son outil à la souris est dans `interface/src/outils/<métier>/` ; sa description pour le pilote dans `docs/EDITION.md`.
+
 ## Vérifier
 
 ```

@@ -6,7 +6,7 @@ Dépendances internes autorisées : toutes les crates précédentes (réel : `no
 
 ## Où travailler
 
-Rangement par domaine (lot 11b, docs/ARCHITECTURE.md §5.19). Chaque dossier a un `AGENTS.md` court ; ne charger que celui de la partie à modifier.
+Rangement par domaine (lot 11b, docs/historique/ARCHITECTURE_CHANTIER_2026-11.md §5.19). Chaque dossier a un `AGENTS.md` court ; ne charger que celui de la partie à modifier.
 
 | Dossier (`src/`) | Contenu |
 |---|---|
@@ -26,6 +26,10 @@ Règles :
 - Le module local `projet::collaboration` masque la crate du même nom dans `projet/` : écrire `::collaboration::…` pour la crate.
 - 23 fichiers dépassent 600 lignes (§5.19 c) : ne pas les agrandir ; découpage prévu en 11c.
 - Les `mod.rs` des dossiers de premier niveau et d'`outils/` ne contiennent que des déclarations de modules. Ceux de `ruban/`, `dessin_plan/` et `editeur_famille/` portent du code (antérieur au lot 11b).
+
+## Quand modifier ici
+
+Un écran, un outil à la souris, le ruban, un panneau, l'éditeur de familles, les feuilles. Ne pas y mettre de logique de modèle ni de géométrie : elle va dans `modele`, `commandes` ou `moteur2d`.
 
 ## Vérifier
 

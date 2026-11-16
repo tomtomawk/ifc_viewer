@@ -1,0 +1,27 @@
+# Crate `ifc_base`
+
+Rôle : socle IFC : parseur STEP (`step`) et couche sémantique (`semantique` : produits, niveaux, matériaux, noms de types), sans géométrie ni scène.
+
+Dépendances internes autorisées : `noyau` seul. Externe : `rayon`. Interdit : `modele`, `scene`, `formats` et toute crate après, egui, wgpu.
+
+## Où travailler
+
+| Fichier (`src/`) | Contenu |
+|---|---|
+| `step.rs` | `StepFile`, `Entity`, `Value`, `IdMap` : lecture STEP |
+| `semantique.rs` | `IfcModel`, `pretty_type` et lecture des relations IFC |
+
+## Quand modifier ici
+
+Lecture d'une entité ou d'une relation IFC indépendante de la géométrie. La conversion géométrique et `load`/`assemble` sont dans `formats::ifc` ; l'import vers le modèle natif dans `echanges::depuis_ifc`.
+
+## Pièges
+
+- `scene::Scene` contient un `IfcModel` et un `IdMap` : tout changement de leur forme se répercute sur `scene`, `formats`, `maillage`.
+- Pas de ré-export : `formats::ifc` ne ré-exporte plus `step` ni `semantique`.
+
+## Vérifier
+
+```
+cargo test -p ifc_base --release
+```

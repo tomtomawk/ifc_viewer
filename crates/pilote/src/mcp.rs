@@ -1,6 +1,6 @@
 //! Serveur MCP du viewer IFC/Revit (stdio, JSON-RPC 2.0), lancé par `bimedit --mcp`.
 //!
-//! Il pilote un viewer par son canal local (voir `crates/app/src/pilote/mod.rs`) : une ligne
+//! Il pilote un viewer par son canal local (voir `crates/pilote/src/lib.rs`) : une ligne
 //! « @jeton commande argument » envoyée, une ligne JSON reçue. Les viewers ouverts, lancés
 //! par l'utilisateur ou par le pont, sont lus dans le registre des instances
 //! (`instances.rs`) ; `viewer_instances` les liste et en choisit un. Sans viewer, il en

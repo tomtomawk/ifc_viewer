@@ -15,6 +15,10 @@ Dépendances internes autorisées : `noyau`, `modele`, `scene`, `maillage`, `com
 
 Les commandes reçues sont exécutées par l'interface (`crates/interface/src/socle/commandes_pilote.rs`, `socle/pilotage.rs`), pas ici. Les `include_str!` visent `docs/PILOTE.md`, `docs/EDITION.md`, `docs/MODELE.md` et `crates/commandes/src/socle/commande.rs` (chemins relatifs à `src/`).
 
+## Quand modifier ici
+
+Outil MCP, commande en ligne non graphique (`--editer`, `--export-*`, `--quantites`), registre des instances, canal TCP. Documentation à tenir à jour : `docs/PILOTE.md`.
+
 ## Vérifier
 
 ```
