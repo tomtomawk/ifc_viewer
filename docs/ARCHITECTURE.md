@@ -1,6 +1,6 @@
 # Architecture : découpage en workspace Cargo
 
-État après le lot 7 (§5.14) : le dépôt est un workspace (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`). `noyau` (lot 1), `modele` (lot 2), `ifc_base` et `scene` (lot 3), `formats` (lot 4), `maillage` (lot 5), `commandes` (lot 6) et `moteur2d` (lot 7) sont extraits en `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage`, `crates/commandes` et `crates/moteur2d` ; le reste du code est encore dans une seule crate, `crates/app` (package et binaire `bimedit`). Les dépendances sont déclarées une fois dans `[workspace.dependencies]` (racine) et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine.
+État après le lot 9 (§5.16) : le dépôt est un workspace (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`). `noyau` (lot 1), `modele` (lot 2), `ifc_base` et `scene` (lot 3), `formats` (lot 4), `maillage` (lot 5), `commandes` (lot 6), `moteur2d` (lot 7), `moteur3d` (lot 8), `echanges` et `collaboration` (lot 9) sont extraits en `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage`, `crates/commandes`, `crates/moteur2d`, `crates/moteur3d`, `crates/echanges` et `crates/collaboration` ; le reste du code est encore dans une seule crate, `crates/app` (package et binaire `bimedit`). Les dépendances sont déclarées une fois dans `[workspace.dependencies]` (racine) et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine.
 
 Restent à la racine : `docs/`, `samples/`, `gabarits/`, `tools/`, `.github/`, `.mcp.json`, `README.md`, `AGENTS.md`. Les ressources embarquées (`include_str!`) pointent vers ces dossiers par des chemins relatifs depuis `crates/<crate>/src/...` (le gabarit par défaut est embarqué par `crates/modele/src/gabarit.rs`) ; les tests lisent `samples/` via `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")` (le répertoire courant d'un test est celui de sa crate ; même profondeur pour `crates/app` et `crates/modele`).
 
@@ -18,8 +18,8 @@ crates/
                   modeliser/ modifier/ annoter/ documenter/ (pas de dessiner/ : §5.13 a)
   moteur2d/       coupe, arêtes vues/cachées, poché, motifs, outils de DAO, rendu de vue et de feuille SVG/PDF
   moteur3d/       wgpu, shaders, caméra, ciel, sélection à l'écran
-  echanges/       import IFC/RVT, export IFC, enregistrement
-  collaboration/
+  echanges/       import IFC/RVT, export IFC, enregistrement, rapport
+  collaboration/  transactions partagées : session, stockage, concurrence, partage, texte (yrs), cli
   pilote/         MCP, CLI
   config/
   interface/      egui ; UNE crate (`impl ViewerApp` réparti sur 48 fichiers) ;
@@ -27,7 +27,7 @@ crates/
   app/            binaire `bimedit`
 ```
 
-Correspondance avec les dossiers actuels (après lot 8) : `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage`, `crates/commandes`, `crates/moteur2d`, `crates/moteur3d` : extraits ; dans `crates/app/src/` : `echanges/` -> echanges ; `collaboration/` et `collaboration.rs` -> collaboration ; `pilote/`, `config/` ; `ui/` -> interface ; `main.rs` -> app ; `modele_tests/`, `formats_tests/` et `commandes_tests/` : tests parqués, à répartir (§5.8 d, §5.11 d, §5.12 d, §5.13 d).
+Correspondance avec les dossiers actuels (après lot 9) : `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage`, `crates/commandes`, `crates/moteur2d`, `crates/moteur3d`, `crates/echanges`, `crates/collaboration` : extraits ; dans `crates/app/src/` : `pilote/`, `config/` ; `ui/` -> interface ; `main.rs` -> app ; `modele_tests/` : 17 tests parqués, accueil commandes ou moteur2d (§5.16 d) ; `formats_tests/` et `commandes_tests/` n'existent plus.
 
 ## 2. Graphe de dépendances autorisées
 
@@ -49,8 +49,8 @@ noyau <- modele <- ifc_base <- scene <- formats <- maillage <- commandes <- mote
 | commandes | noyau, modele, scene, maillage (réel : `noyau` et `modele` seuls ; `scene` et `maillage` restent autorisées mais ne sont pas des dépendances, §5.13) |
 | moteur2d | noyau, modele, scene, maillage, commandes (réel : `noyau`, `modele`, `scene`, `maillage` ; `commandes` reste autorisée sans être utilisée ; ni `formats` ni `ifc_base` ne sont nécessaires, §5.14) |
 | moteur3d | noyau, modele, scene, moteur2d (réel : `noyau`, `modele`, `scene` ; `moteur2d` reste autorisée sans être utilisée ; `maillage` en dev-dependency pour un test ; externes : `eframe` (egui, egui_wgpu, wgpu), `glam`, `image`, `earcutr`, §5.15) |
-| echanges | noyau, modele, scene, formats, maillage |
-| collaboration | noyau, modele, scene, maillage, commandes, echanges |
+| echanges | noyau, modele, scene, formats, maillage (réel : `noyau`, `modele`, `ifc_base`, `formats` ; `scene` et `maillage` restent autorisées sans être utilisées ; dev : `commandes`, `maillage`, `moteur2d` pour les tests d'intégration ; externes : `glam`, `rayon`, §5.16) |
+| collaboration | noyau, modele, scene, maillage, commandes, echanges (réel : `noyau`, `modele`, `maillage`, `commandes`, `echanges` ; `scene` reste autorisée sans être utilisée ; externes : `yrs`, `serde`, `serde_json`, `glam`, §5.16) |
 | pilote | collaboration et en dessous |
 | config | tout ce qui précède, hors interface |
 | interface | tout ce qui précède |
@@ -88,7 +88,7 @@ Code « parqué » : quand une coupe fait monter du code vers une crate qui n'ex
 | 6 | commandes | `crates/app/src/edition` (commandes, historique, verrous, gestion des contextes ; traits d'extension de `Projet`, §5.8 b) ; décider où vont `concurrence` et `objets` (§5.5 point 5) ; rangement `modeliser/ modifier/ dessiner/ annoter/ documenter/` | **Fable** | **fait** (coupes `90be806` ; extraction `8f9e763` ; rangement par métier `0682940` ; détail au §5.13) |
 | 7 | moteur2d | `dessin/` dont le rendu de vue et de feuille parqué (`dessin/feuilles.rs`, `dessin/plans.rs`) | **Fable** | **fait** (aucune coupe nécessaire ; extraction `22e2c46` ; découpage de `lib.rs` `6405175` ; détail au §5.14) |
 | 8 | moteur3d | `rendu/` hors scène | Sonnet | **fait** (aucune coupe nécessaire ; extraction `d2686d2` ; `gpu.rs` non découpé ; détail au §5.15) |
-| 9 | echanges + collaboration | `crates/app/src/echanges`, `crates/app/src/collaboration*` | Sonnet | à faire |
+| 9 | echanges + collaboration | `crates/app/src/echanges`, `crates/app/src/collaboration*` | Sonnet | **fait** (aucune coupe préalable nécessaire ; extraction de `echanges` `e72f601` ; extraction de `collaboration` `35fab15` ; détail au §5.16) |
 | 10 | pilote | `pilote/` | Sonnet | à faire |
 | 11 | config + interface | rangement interne `socle/ zones/ saisie/ outils/... ` ; `cadre_natif` et `arriere_plan` de `main.rs` | **Fable** | à faire |
 | 12 | app + docs | binaire, `AGENTS.md` par crate, README | Sonnet | à faire |
@@ -735,3 +735,88 @@ Concernant `moteur3d` : **aucune**.
 | `modele_tests`, `formats_tests`, `commandes_tests` | commandes, maillage, formats, echanges, collaboration, moteur2d | tests parqués | 9 |
 
 Points ouverts : (1) décider si `egui`/`egui-wgpu`/`wgpu` deviennent des dépendances directes au lieu d'`eframe` (point 2 ci-dessus) ; (2) découpage de `gpu.rs` si le refactor de `Renderer::new` est accepté (changement de code) ; (3) le §5.4 prévoyait 14 tests pour `rendu` ; le décompte réel est 12.
+
+### 5.16 Après lot 9 (2026-11-16)
+
+Tests : 390 réussis, 2 ignorés, comme avant le lot ; répartition `bimedit` 82 (avant : 153), `collaboration` 43, `echanges` 28, `moteur3d` 12, `moteur2d` 34 (+ 1 ignoré), `commandes` 18, `formats` 52, `modele` 101 (+ 1 ignoré), `noyau` 10, `ifc_base` 2, `maillage` 8, `scene` 0. Les 4 lignes « 1 passed » en plus sont les sorties de sous-processus des tests de `collaboration` (`course_entre_deux_processus…`, `crash_processus…`), qui relancent le binaire de test. `cargo test -p echanges --release` (9 unitaires + 19 d'intégration) et `cargo test -p collaboration --release` (41 unitaires + 2 d'intégration) passent seuls. `grep -rn "crate::" crates/echanges/src` : 4 chemins, tous internes (`crate::rapport`, `crate::depuis_rvt`, `crate::depuis_ifc`) ; `crates/collaboration/src` : aucun. `cargo tree` ne contient ni `egui`, ni `wgpu`, ni `eframe` pour les deux crates. Sorties comparées à `01c3d9f` (binaire de référence construit dans un worktree temporaire) : `--export-ifc` et `--quantites` de `samples/maison_native.modele.json` identiques octet pour octet ; `--stats` des deux IFC de `samples/` identiques hors « Durée » ; `--modele` (import IFC -> natif, rapport inclus) puis `--export-ifc`/`--quantites` du natif relu : identiques hors identifiants aléatoires (UUID du natif, GUID IFC) ; `--export-vue` identique après tri des lignes et des sous-chemins (la référence n'est pas déterministe) ; scénario `--collaboration` sans réseau (dépôt partagé = dossier local) : `associer`, `etat`, `reserver`, `editer`, `synchroniser`, `instantane`, `liberer`, `recuperer`, `auditer`, `sauvegarde`, action inconnue : sorties, codes de retour, `recuperer` et liste des fichiers du dépôt identiques (UUID masqués).
+
+#### (a) Contenu des deux crates
+
+`crates/echanges` (lib, 6 fichiers, 1 653 lignes, 9 tests unitaires + 19 d'intégration). Dépendances internes : `noyau` (`uuid`), `modele`, `ifc_base`, `formats`. Externes : `glam`, `rayon` (retirée d'`app`). Dev : `commandes`, `maillage`, `moteur2d`, `serde_json`.
+
+| Fichier (`crates/echanges/src/`) | Lignes | Contenu |
+|---|---|---|
+| `lib.rs` | 6 | modules (tous `pub`) |
+| `depuis_ifc.rs` | 358 | `convertir` : IFC -> `Projet` natif, mesures ; 2 tests |
+| `depuis_rvt.rs` | 575 | `convertir`, `convertir_maquette` : Revit -> `Projet` ; 4 tests (fichiers d'essai hors dépôt, sautés si absents) |
+| `export_ifc.rs` | 396 | `exporter` : `Projet` -> IFC ; 1 test |
+| `enregistrement.rs` | 188 | `enregistrer_natif`, `ecrire_atomique`, récupération, `SourceRvt`, `Bilan` ; 2 tests |
+| `rapport.rs` | 130 | `markdown` : rapport d'import |
+
+`crates/collaboration` (lib, 8 fichiers, 4 419 lignes, 41 tests unitaires + 2 d'intégration). Dépendances internes : `noyau` (`hash`, `uuid`), `modele`, `maillage` (`cli.rs` : `depuis_natif`), `commandes` (`objets`, `Commande`, `Execution`), `echanges` (`enregistrement`, 11 appels). Externes : `yrs` (retirée d'`app`), `serde`, `serde_json`, `glam`.
+
+| Fichier (`crates/collaboration/src/`) | Lignes | Contenu |
+|---|---|---|
+| `lib.rs` | 494 | `PROTOCOLE`, `projet`, `Transaction`, `Changement`, `Bail`, validation et fusion de transactions |
+| `session.rs` | 604 | `Session` (copie locale, synchronisation, réservations, annulation) |
+| `stockage.rs` | 626 | `Depot` (journal, instantanés, verrou fichier, reprise après crash) |
+| `concurrence.rs` | 535 | décomposition des changements, empreintes de voisinage et de zones |
+| `partage.rs` | 384 | fichiers `.bimpartage`, création et ouverture d'un projet partagé ; 5 tests |
+| `texte.rs` | 170 | `Editeur`, `EtatTexte` (texte collaboratif `yrs`) |
+| `cli.rs` | 222 | `--collaboration …` (administration reproductible, mesures) |
+| `tests.rs` | 1 384 | 36 tests (dont les 2 qui relancent le binaire de test) |
+
+#### (b) Décisions de frontière
+
+| # | Sujet | Décision | Pourquoi |
+|---|---|---|---|
+| 1 | Coupes préalables (commit a) | aucune, pas de commit a | `echanges` et `collaboration` n'avaient aucune référence `crate::` vers `config`, `ui`, `pilote`, `moteur2d`, `moteur3d` ; `echanges` ne référençait pas `collaboration` ; `collaboration::uuid`/`hash` étaient déjà dans `noyau` |
+| 2 | `commandes` dans `echanges` | dev-dependency seulement | aucun usage en production ; les 7 tests de `commandes` et les tests de `modele` déplacés l'appellent |
+| 3 | `maillage`, `moteur2d` dans `echanges` | dev-dependencies | `maillage::depuis_natif` dans des tests ; `moteur2d` pour 8 tests de `documentation` ; `scene` non déclarée |
+| 4 | `ifc_base` dans `echanges` | dépendance de production | `depuis_ifc`/`export_ifc` manipulent `StepFile`, `IfcModel` (autorisé, §2) |
+| 5 | Ré-exports de transition de `collaboration` | retirés | `pub use commandes::objets::{Objets, objets}` (lib) et `pub use commandes::objets::carte_objet` (`concurrence`) deviennent des `use` privés ; `collaboration::objets` -> `commandes::objets::objets` dans `ui/collaboration.rs`, `ui/pilotage.rs`, `ui/saisie_plan.rs` et les tests ; `concurrence::carte_objet` -> `commandes::objets::carte_objet` (lib). `collaboration::projet` reste (défini dans la crate) |
+| 6 | Noms de modules | `echanges::{depuis_ifc,…}` et `collaboration::{session,partage,cli,…}` identiques aux anciens `crate::…` | dans `ui`, un module local `ui::collaboration` masque la crate : les chemins s'y écrivent `::collaboration::…` |
+| 7 | Sous-processus des tests | `--exact "collaboration::tests::enfant_…"` -> `"tests::enfant_…"` (3 endroits de `tests.rs`) | le test est désormais à la racine de la crate : chemin de test sans préfixe |
+| 8 | `include_str!` / `samples/` | `../../../../samples/` -> `../../../samples/` (`partage.rs`, `tests.rs`) ; `../../../modele/src/lib.rs` -> `../../modele/src/lib.rs` (`tests.rs`) | fichiers un niveau plus haut ; les tests d'`echanges` gardent `CARGO_MANIFEST_DIR/../../samples` (même profondeur) |
+| 9 | Dépendances d'`app` | `yrs` et `rayon` retirées | plus aucun appel dans `app` |
+
+Aucun `pub(crate)` élargi. Aucun changement fonctionnel ni de format.
+
+#### (c) Fichiers au-delà du plafond
+
+`collaboration/src/tests.rs` (1 384), `stockage.rs` (626) et `session.rs` (604) : non découpés. `tests.rs` est un fichier de tests déplacé tel quel (36 fonctions, helpers partagés `dossier`, `exemple`). `stockage.rs` (un `impl Depot` et ses aides) et `session.rs` (un `impl Session`) : un découpage répartirait des `impl` et élargirait des visibilités, ce n'est pas un déplacement mécanique. Dans `echanges`, `depuis_rvt.rs` (575, dont ~100 de tests) et les autres fichiers sont sous 600.
+
+#### (d) Tests déplacés et parqués
+
+Déplacés vers `crates/echanges/tests/` (19 tests d'intégration, mêmes noms et assertions ; seuls les `use` changent, `crate::echanges::` -> `echanges::`) :
+
+| Fichier | Tests | Origine |
+|---|---|---|
+| `commandes.rs` | 7 : `structures_creation_copie_rotation_suppression_et_validation`, `modifier_deplacer_copier_et_supprimer_une_coupe`, `annotations_et_quadrillages_se_copient_et_se_deplacent`, `copier_assemblage_et_dependances_puis_supprimer_sans_perte`, `erreurs_atomiques_et_niveaux_utilises`, `deplacement_rotation_menuiseries_et_annulation`, `tremie_interieure_et_exterieure` | `app/src/commandes_tests/commandes.rs` (dossier supprimé) |
+| `couches_rvt.rs` | 1 : `couches_projet1_lecture_et_conversion` (fichier d'essai hors dépôt : sauté s'il est absent) | `app/src/formats_tests/mod.rs` (dossier supprimé) |
+| `documentation.rs` | 8 : `dessin_vue_applique_le_contexte_propre_a_la_vue`, `dessin_vue_suit_le_gabarit_partage`, `vue_placee_suit_echelle_vue_meme_avec_ancienne_valeur`, `vue_placee_respecte_rotation_et_limite_basse`, `vue_placee_respecte_masquage_et_cadrage`, `documents_compatibles_v0_references_et_pdf`, `polyligne_fermee_remplie`, `nomenclature_csv_et_quantites_sans_double_compte` | `modele_tests/documentation.rs` |
+| `elements_escalier.rs` | 1 : `commandes_escalier_et_garde_corps` | `modele_tests/elements_escalier.rs` (fichier supprimé) |
+| `elements_site.rs` | 1 : `creation_site_sauvegarde_export_et_suppression` | `modele_tests/elements_site.rs` |
+| `volumes_solides.rs` | 1 : `conversion_ifc_rouvre_et_indices_invalides_refuses` | `modele_tests/volumes_solides.rs` |
+
+Déplacés vers `crates/collaboration/tests/` (2 tests, aucune dev-dependency supplémentaire) : `famille_profil.rs` (`profils_du_gabarit_varient_et_survivent_au_rechargement`, de `modele_tests/famille_profil.rs`, fichier supprimé) et `gabarits_vues.rs` (`gabarit_partage_actualise_detache_et_se_recharge`, de `modele_tests/gabarits_vues.rs` ; la ligne `use collaboration;` interne est retirée). Les 36 tests de l'ancien `collaboration/tests.rs` et les 5 de `partage.rs` ont suivi le code ; aucun ne dépend de `config`, `ui` ou `pilote`.
+
+Dev-dependencies de `echanges` (`commandes`, `maillage`, `moteur2d`, `serde_json`) : acceptées pour ces tests d'intégration ; elles ne sont pas des dépendances de production (`cargo tree -p echanges` sans `--edges dev`).
+
+Parqués dans `crates/app/src/modele_tests/` (17 tests, liste vérifiée par `grep -c "#\[test\]"`) : aucun n'appelle `echanges` ni `collaboration` ; accueil possible : `commandes` (11 : `elements_arbre` 1, `elements_composant` 1, `elements_piece` 4, `murs_assemblage` 2, `elements_site` 1 (`site_en_phase_existant_cotes_ngf_et_epaisseur_du_type`, aussi `maillage`), `gabarits_vues` 1 (`invalides_et_modifications_de_phases_restent_coherentes`), `volumes_solides` 1 (`recalcul_partiel_identique_apres_modification`)) et `moteur2d` (6 de `documentation.rs`, §5.14 d). Non déplacés (à valider) ; `moteur2d` y gagnerait `commandes` en dev-dependency. `formats_tests` et `commandes_tests` n'existent plus.
+
+#### (e) Violations restantes (lots 10 et 11)
+
+Concernant `echanges` et `collaboration` : **aucune** (ni `config`, `ui`, `pilote`, `moteur2d`, `moteur3d`).
+
+| De | Vers | Détail | Lot |
+|---|---|---|---|
+| `pilote` | echanges, collaboration | `cli.rs` : 5 références à `echanges::`, 1 à `collaboration::cli::executer` ; sens autorisé | 10 |
+| `pilote` | commandes | `include_str!("../../../commandes/src/socle/commande.rs")` (`mod.rs`, `mcp.rs`) : chemin de fichier entre crates (§5.13 e) | 10 |
+| `config` | echanges | `options/mod.rs` : `echanges::enregistrement::ecrire_atomique` (1) ; sens autorisé | 11 |
+| `ui` | echanges, collaboration | 43 lignes `echanges::` (11 fichiers), 6 `::collaboration::` (3 fichiers) ; sens autorisé | 11 |
+| `main.rs` | echanges, collaboration | 2 lignes `echanges::` (`--modele`), 1 `collaboration::cli::executer` ; sens autorisé | 11 |
+| `modele_tests` | commandes, maillage, moteur2d | 17 tests parqués (d) | 10 à 11 |
+
+Points ouverts : (1) déplacement des 11 tests de `modele_tests` vers `crates/commandes/tests/` et des 6 de `documentation.rs` vers `crates/moteur2d/tests/` ; (2) `scene` autorisée mais inutilisée par `echanges` et `collaboration`, `maillage` par `echanges` (en dev seulement) au §2 ; (3) découpage de `stockage.rs` et `session.rs` ; (4) l'identifiant de test des sous-processus (`tests::enfant_…`) dépend du nom du module de tests : à garder si `tests.rs` est déplacé.
+

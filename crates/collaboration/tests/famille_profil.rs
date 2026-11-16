@@ -1,5 +1,4 @@
-//! Tests déplacés de `modele/famille/profil.rs` (`mod tests`) : ils appellent du code situé au-dessus
-//! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
+//! Test de `modele/famille/profil.rs` qui relit le projet par `collaboration::projet` (aller-retour des objets partagés).
 use modele::famille::profil::FichierProfil;
 
 #[test]
