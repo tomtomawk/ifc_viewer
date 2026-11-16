@@ -1,9 +1,9 @@
 //! Onglets d'édition des familles 2D du projet.
-use super::*;
+use crate::*;
 use modele::{documentation as doc, famille::profil::{ParametreProfil, PointProfil, Profil}};
 
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub(super) enum FamillePlane {
+pub(crate) enum FamillePlane {
     Cartouche { famille: doc::FamilleCartouche, feuille: Option<String>, original: String },
     Etiquette { famille: doc::FamilleEtiquette, piece: Option<String>, original: String },
     Profil { profil: Profil, original: Option<String> },
@@ -69,7 +69,7 @@ impl FamillePlane {
         }
     }
 
-    pub(super) fn id(&self) -> Option<String> {
+    pub(crate) fn id(&self) -> Option<String> {
         match self {
             Self::Cartouche { famille, original, .. } if !original.is_empty() => Some(famille.id.clone()),
             Self::Etiquette { original, .. } if !original.is_empty() => Some(original.clone()),
@@ -85,8 +85,8 @@ impl commandes::historique::Instantane for FamillePlane {
     fn libelle(_: &str, _: &str) -> String { "Modifier la famille".into() }
 }
 
-pub(super) struct EditeurPlan {
-    pub(super) document_famille: crate::document_famille::DocumentFamille<FamillePlane>,
+pub(crate) struct EditeurPlan {
+    pub(crate) document_famille: crate::familles::document_famille::DocumentFamille<FamillePlane>,
     pub contenu: FamillePlane,
     reference: FamillePlane,
     tracer: bool,
@@ -95,13 +95,13 @@ pub(super) struct EditeurPlan {
 }
 
 impl EditeurPlan {
-    pub(super) fn suivre_historique(&mut self, geste: bool) -> Result<(), String> {
+    pub(crate) fn suivre_historique(&mut self, geste: bool) -> Result<(), String> {
         self.document_famille.suivre(&self.contenu, geste)
     }
 
-    pub(super) fn libelles_historique(&self, retablir: bool) -> Vec<String> { self.document_famille.historique.libelles(retablir) }
+    pub(crate) fn libelles_historique(&self, retablir: bool) -> Vec<String> { self.document_famille.historique.libelles(retablir) }
 
-    pub(super) fn parcourir_historique(&mut self, retablir: bool, nombre: usize) -> Result<(), String> {
+    pub(crate) fn parcourir_historique(&mut self, retablir: bool, nombre: usize) -> Result<(), String> {
         self.contenu = self.document_famille.cible(&self.contenu, retablir, nombre)?;
         self.tracer = false;
         self.debut = None;
@@ -109,19 +109,19 @@ impl EditeurPlan {
         Ok(())
     }
 
-    pub(super) fn element_selectionne(&self) -> bool {
+    pub(crate) fn element_selectionne(&self) -> bool {
         matches!(self.contenu, FamillePlane::Cartouche { .. }) && self.cartouche.element_selectionne()
     }
-    pub(super) fn modifie(&self) -> bool { (self.document_famille.autonome && self.document_famille.chemin_fichier.is_none()) || self.contenu_modifie() }
-    pub(super) fn contenu_modifie(&self) -> bool { self.contenu != self.reference }
+    pub(crate) fn modifie(&self) -> bool { (self.document_famille.autonome && self.document_famille.chemin_fichier.is_none()) || self.contenu_modifie() }
+    pub(crate) fn contenu_modifie(&self) -> bool { self.contenu != self.reference }
 
-    pub(super) fn titre(&self) -> String {
+    pub(crate) fn titre(&self) -> String {
         format!("{} · {}{}", self.contenu.categorie(), self.contenu.nom(), if self.modifie() { " *" } else { "" })
     }
 }
 
 impl ViewerApp {
-    pub(super) fn ouvrir_famille_plane_fichier(&mut self, chemin: &std::path::Path) -> Result<(), String> {
+    pub(crate) fn ouvrir_famille_plane_fichier(&mut self, chemin: &std::path::Path) -> Result<(), String> {
         if let Some(ordre) = self.familles_planes.iter().find(|(_, ed)| ed.document_famille.autonome && ed.document_famille.chemin_fichier.as_deref() == Some(chemin)).map(|(&ordre, _)| ordre) {
             self.activer_famille(ordre);
             return Ok(());
@@ -145,7 +145,7 @@ impl ViewerApp {
     }
 
     /// Renvoie faux si le dialogue a été annulé ; aucun état n'est alors modifié.
-    pub(super) fn enregistrer_famille_plane_dialogue(&mut self, sous: bool) -> Result<bool, String> {
+    pub(crate) fn enregistrer_famille_plane_dialogue(&mut self, sous: bool) -> Result<bool, String> {
         let ordre = self.famille_plane_active.ok_or("Éditeur fermé")?;
         let ed = self.familles_planes.get(&ordre).ok_or("Famille absente")?;
         let texte = ed.contenu.json_fichier()?;
@@ -162,11 +162,11 @@ impl ViewerApp {
         Ok(true)
     }
 
-    pub(super) fn mode_famille(&self) -> bool {
+    pub(crate) fn mode_famille(&self) -> bool {
         self.famille_plane_active.is_some() || (self.famille_active && self.famille.is_some())
     }
 
-    pub(super) fn ouvrir_famille_plane(&mut self, contenu: FamillePlane) {
+    pub(crate) fn ouvrir_famille_plane(&mut self, contenu: FamillePlane) {
         let id = contenu.id();
         let existant = self.familles_planes.iter().find(|(_, ed)| {
             !ed.document_famille.autonome && ed.document_famille.document == self.document_actif && (ed.reference == contenu
@@ -187,7 +187,7 @@ impl ViewerApp {
         self.prochain_ordre_famille += 1;
         let ordre = self.prochain_ordre_famille;
         self.familles_planes.insert(ordre, EditeurPlan {
-            document_famille: crate::document_famille::DocumentFamille::nouveau(ordre, self.document_actif, autonome, chemin_fichier, contenu.clone()),
+            document_famille: crate::familles::document_famille::DocumentFamille::nouveau(ordre, self.document_actif, autonome, chemin_fichier, contenu.clone()),
             reference: contenu.clone(), contenu, tracer: false, debut: None,
             cartouche: Default::default(),
         });
@@ -195,18 +195,18 @@ impl ViewerApp {
         self.onglet_ruban = OngletRuban::FamilleCreer;
     }
 
-    pub(super) fn fermer_famille_plane(&mut self) {
+    pub(crate) fn fermer_famille_plane(&mut self) {
         if let Some(ordre) = self.famille_plane_active.take() {
             self.familles_planes.remove(&ordre);
         }
     }
 
-    pub(super) fn edition_plane_modifiee(&self, document: Option<usize>) -> Option<usize> {
+    pub(crate) fn edition_plane_modifiee(&self, document: Option<usize>) -> Option<usize> {
         self.familles_planes.iter().find(|(_, ed)| document.is_none_or(|id| !ed.document_famille.autonome && ed.document_famille.document == id) && ed.modifie())
             .map(|(&ordre, _)| ordre)
     }
 
-    pub(super) fn vue_famille_plane(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn vue_famille_plane(&mut self, ui: &mut egui::Ui) {
         let Some(ed) = self.famille_plane_active.and_then(|i| self.familles_planes.get_mut(&i)) else { return };
         if ui.input(|i| i.key_pressed(egui::Key::Escape)) && !ui.ctx().egui_wants_keyboard_input() {
             ed.tracer = false;
@@ -231,18 +231,18 @@ impl ViewerApp {
                     });
                     feuilles::dessiner_etiquette(ui, famille, exemple, ed.tracer, &mut ed.debut);
                 }
-                FamillePlane::Profil { profil, .. } => profils::dessiner_profil(ui, profil),
+                FamillePlane::Profil { profil, .. } => crate::familles::profils::dessiner_profil(ui, profil),
                 FamillePlane::Cartouche { .. } => unreachable!(),
             });
         });
     }
 
-    pub(super) fn cartouche_actif(&mut self) -> Option<&mut cartouche::EditionCartouche> {
+    pub(crate) fn cartouche_actif(&mut self) -> Option<&mut cartouche::EditionCartouche> {
         let ed = self.familles_planes.get_mut(&self.famille_plane_active?)?;
         matches!(ed.contenu, FamillePlane::Cartouche { .. }).then_some(&mut ed.cartouche)
     }
 
-    pub(super) fn panneau_famille_plane(&mut self, ui: &mut egui::Ui, panneau: Panneau) {
+    pub(crate) fn panneau_famille_plane(&mut self, ui: &mut egui::Ui, panneau: Panneau) {
         self.entete_panneau(ui, panneau, if panneau == Panneau::Proprietes { "Propriétés de la famille" } else { "Arborescence de la famille" });
         let projet_vide = modele::Projet::nouveau("Famille");
         let projet = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
@@ -265,7 +265,7 @@ impl ViewerApp {
         };
         ui.label("Nom de la famille");
         ui.add_enabled(!standard, egui::TextEdit::singleline(nom));
-        if let FamillePlane::Profil { profil, .. } = &mut ed.contenu { profils::proprietes_profil(ui, profil); }
+        if let FamillePlane::Profil { profil, .. } = &mut ed.contenu { crate::familles::profils::proprietes_profil(ui, profil); }
         if let FamillePlane::Cartouche { famille, .. } = &mut ed.contenu {
             ui.horizontal(|ui| {
                 ui.label("Largeur");
@@ -279,7 +279,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn ruban_famille_plane(&mut self, ui: &mut egui::Ui, sortie: bool) {
+    pub(crate) fn ruban_famille_plane(&mut self, ui: &mut egui::Ui, sortie: bool) {
         use crate::ruban::{bandeau, Commande as C, Icone as I};
         let Some(ordre) = self.famille_plane_active else { return };
         let Some(ed) = self.familles_planes.get_mut(&ordre) else { return };
@@ -326,7 +326,7 @@ impl ViewerApp {
                 return;
             }
             Some("copier") => self.enregistrer_famille_plane(true),
-            Some("exporter") => match &ed.contenu { FamillePlane::Profil { profil, .. } => profils::exporter_profil(profil), _ => Ok(()) },
+            Some("exporter") => match &ed.contenu { FamillePlane::Profil { profil, .. } => crate::familles::profils::exporter_profil(profil), _ => Ok(()) },
             Some("supprimer") => self.supprimer_profil_actif(),
             Some("trait") => { ed.tracer = !ed.tracer; ed.debut = None; Ok(()) }
             Some("texte") => {
@@ -352,13 +352,13 @@ impl ViewerApp {
         self.error = resultat.err();
     }
 
-    pub(super) fn navigation_cartouche(&mut self, commande: &str) -> Result<serde_json::Value, String> {
+    pub(crate) fn navigation_cartouche(&mut self, commande: &str) -> Result<serde_json::Value, String> {
         let ed = self.famille_plane_active.and_then(|i| self.familles_planes.get_mut(&i)).ok_or("Éditeur fermé.")?;
         if !matches!(ed.contenu, FamillePlane::Cartouche { .. }) { return Err("Aucune vue de cartouche ouverte.".into()); }
         ed.cartouche.navigation_pilote(commande)
     }
 
-    pub(super) fn supprimer_selection_famille_plane(&mut self) {
+    pub(crate) fn supprimer_selection_famille_plane(&mut self) {
         if let Some(ed) = self.famille_plane_active.and_then(|i| self.familles_planes.get_mut(&i))
             && let FamillePlane::Cartouche { famille, .. } = &mut ed.contenu
         {
@@ -366,7 +366,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn enregistrer_famille_plane(&mut self, copie: bool) -> Result<(), String> {
+    pub(crate) fn enregistrer_famille_plane(&mut self, copie: bool) -> Result<(), String> {
         let ordre = self.famille_plane_active.ok_or("Éditeur de famille fermé.")?;
         let ed = self.familles_planes.get(&ordre).ok_or("Famille absente.")?;
         if self.natif.is_none() { return Err("Ouvrir un projet pour y charger la famille.".into()); }
@@ -434,7 +434,7 @@ mod tests {
         ];
         for contenu in familles {
             let nom = contenu.nom().to_owned();
-            let mut ed = EditeurPlan { document_famille: crate::document_famille::DocumentFamille::nouveau(0, 0, false, None, contenu.clone()), reference: contenu.clone(), contenu, tracer: false, debut: None, cartouche: Default::default() };
+            let mut ed = EditeurPlan { document_famille: crate::familles::document_famille::DocumentFamille::nouveau(0, 0, false, None, contenu.clone()), reference: contenu.clone(), contenu, tracer: false, debut: None, cartouche: Default::default() };
             for suffixe in ["a", "b"] {
                 match &mut ed.contenu {
                     FamillePlane::Profil { profil, .. } => profil.nom = format!("{nom}{suffixe}"),

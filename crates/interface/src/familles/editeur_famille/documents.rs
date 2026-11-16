@@ -113,7 +113,7 @@ impl ViewerApp {
 
     /// Point d'entrée commun aux catégories ; les moteurs spécialisés restent des adaptateurs.
     pub(crate) fn categorie_famille_ui(&mut self, ui: &mut egui::Ui) {
-        use crate::familles_planes::FamillePlane;
+        use crate::familles::familles_planes::FamillePlane;
         let plane = self.famille_plane_active;
         let (actuelle, modifiable) = if let Some(ed) = plane.and_then(|i| self.familles_planes.get(&i)) {
             if ed.element_selectionne() { return; }
@@ -364,7 +364,7 @@ impl ViewerApp {
         self.famille_active = true;
         self.famille_plane_active = None;
         self.famille = Some(EditeurFamille {
-            document_famille: crate::document_famille::DocumentFamille::nouveau(ordre, self.document_actif, self.natif.is_none(), None, FichierFamille { format: String::new(), nom: String::new(), largeur: 0.0, hauteur: 0.0, profondeur: 300.0, famille: FamilleModelee::gabarit_fenetre() }),
+            document_famille: crate::familles::document_famille::DocumentFamille::nouveau(ordre, self.document_actif, self.natif.is_none(), None, FichierFamille { format: String::new(), nom: String::new(), largeur: 0.0, hauteur: 0.0, profondeur: 300.0, famille: FamilleModelee::gabarit_fenetre() }),
             ouverture,
             cible_feuille: None,
             cible_piece: None,

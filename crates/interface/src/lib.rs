@@ -4,6 +4,7 @@
 //! panneaux s'ancrent d'un côté ou flottent ; sous la vue, la boîte de visibilité par
 //! catégorie de modèle et d'annotation.
 
+mod familles;
 mod saisie;
 pub mod fenetre;
 mod bim;
@@ -12,10 +13,8 @@ mod outils_texte;
 mod types_traits;
 mod feuilles;
 mod dessin_plan;
-mod editeur_famille;
 mod gestion_contextes;
 mod gabarits_vues;
-mod profils;
 mod ruban;
 use crate::saisie::accrochage::{AccrocheMur, marqueur};
 mod collaboration;
@@ -31,10 +30,7 @@ use aides::*;
 mod documents;
 mod coupe;
 mod vue_native;
-mod selection_famille;
 mod garde_corps;
-mod familles_planes;
-mod document_famille;
 mod cartouche;
 mod proprietes;
 mod barre_haute;
@@ -505,16 +501,16 @@ pub struct ViewerApp {
     /// Dessin 2D (Documenter) : tracé, saisie, accrochage.
     dessin2d: dessin_plan::EtatDessin2D,
     /// Éditeur de famille de fenêtre ouvert.
-    famille: Option<editeur_famille::EditeurFamille>,
+    famille: Option<crate::familles::editeur_famille::EditeurFamille>,
     /// Onglet de l'éditeur de familles au premier plan.
     famille_active: bool,
     /// Autres familles ouvertes (onglets à l'arrière-plan).
-    familles_inactives: Vec<editeur_famille::EditeurFamille>,
-    familles_planes: BTreeMap<usize, familles_planes::EditeurPlan>,
+    familles_inactives: Vec<crate::familles::editeur_famille::EditeurFamille>,
+    familles_planes: BTreeMap<usize, crate::familles::familles_planes::EditeurPlan>,
     famille_plane_active: Option<usize>,
     prochain_ordre_famille: usize,
     /// Action des panneaux de l'éditeur de familles, traitée après leur tracé.
-    action_famille: Option<editeur_famille::ActionFamille>,
+    action_famille: Option<crate::familles::editeur_famille::ActionFamille>,
     /// Fermeture de l'onglet Famille à confirmer (modifications non chargées).
     confirmer_famille: bool,
     natif: Option<(modele::Projet, PathBuf)>,
@@ -569,7 +565,7 @@ pub struct ViewerApp {
     camera: Camera,
     selected: Option<Id>,
     selection_multiple: Vec<Id>,
-    famille_selectionnee: Option<selection_famille::FamilleCatalogue>,
+    famille_selectionnee: Option<crate::familles::selection_famille::FamilleCatalogue>,
     fenetre_selection: Option<FenetreSelection>,
     reveal: Option<Id>,
     hidden_classes: HashSet<String>,

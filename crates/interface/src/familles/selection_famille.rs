@@ -1,9 +1,9 @@
 //! Sélection des familles du projet et accès aux éditeurs.
-use super::*;
+use crate::*;
 use modele::{GenreOuverture, Projet};
 
 #[derive(Clone, PartialEq, Eq)]
-pub(super) enum FamilleCatalogue {
+pub(crate) enum FamilleCatalogue {
     Ouverture(String, GenreOuverture),
     Composant(String),
     Profil(String),
@@ -12,7 +12,7 @@ pub(super) enum FamilleCatalogue {
     GardeCorps(String),
 }
 
-pub(super) enum CibleFamille {
+pub(crate) enum CibleFamille {
     Catalogue(FamilleCatalogue),
     CartoucheFeuille(String),
     Ouverture(String),
@@ -21,7 +21,7 @@ pub(super) enum CibleFamille {
 }
 
 impl FamilleCatalogue {
-    pub(super) fn liste(p: &Projet) -> Vec<(Self, &str)> {
+    pub(crate) fn liste(p: &Projet) -> Vec<(Self, &str)> {
         let mut familles = vec![
             (Self::Cartouche(String::new()), "Cartouche standard"),
             (Self::Etiquette(String::new()), "Étiquette standard"),
@@ -38,7 +38,7 @@ impl FamilleCatalogue {
     }
 
     /// Types de la famille affichés dans l'arborescence : dimensions et nombre d'occurrences.
-    pub(super) fn types(&self, p: &Projet) -> Vec<String> {
+    pub(crate) fn types(&self, p: &Projet) -> Vec<String> {
         let occurrences = |n: usize| match n { 0 => "non utilisé".to_string(), 1 => "1 occurrence".to_string(), n => format!("{n} occurrences") };
         match self {
             Self::Ouverture(id, _) => p.types_ouvertures.iter().find(|t| &t.id == id).map(|t| {
@@ -53,7 +53,7 @@ impl FamilleCatalogue {
         }
     }
 
-    pub(super) fn categorie(&self) -> &'static str {
+    pub(crate) fn categorie(&self) -> &'static str {
         match self {
             Self::Ouverture(_, GenreOuverture::Porte) => "Portes",
             Self::Ouverture(..) => "Fenêtres",
@@ -67,14 +67,14 @@ impl FamilleCatalogue {
 }
 
 impl ViewerApp {
-    pub(super) fn selectionner_famille(&mut self, famille: FamilleCatalogue) {
+    pub(crate) fn selectionner_famille(&mut self, famille: FamilleCatalogue) {
         self.select(None, false);
         self.feuilles.selection = Default::default();
         self.famille_selectionnee = Some(famille);
         self.onglet_ruban = OngletRuban::Modifier;
     }
 
-    pub(super) fn proprietes_famille_selectionnee(&mut self, ui: &mut egui::Ui) -> bool {
+    pub(crate) fn proprietes_famille_selectionnee(&mut self, ui: &mut egui::Ui) -> bool {
         let (Some(famille), Some((p, _))) = (&self.famille_selectionnee, &self.natif) else { return false };
         let liste = FamilleCatalogue::liste(p);
         let Some((_, nom)) = liste.iter().find(|(f, _)| f == famille) else {
@@ -116,7 +116,7 @@ impl ViewerApp {
         true
     }
 
-    pub(super) fn cible_famille(&self) -> Option<CibleFamille> {
+    pub(crate) fn cible_famille(&self) -> Option<CibleFamille> {
         use FamilleCatalogue as F;
         if let Some(famille) = self.famille_selectionnee.clone() {
             return Some(CibleFamille::Catalogue(famille));
@@ -142,7 +142,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn modifier_famille_selectionnee(&mut self) {
+    pub(crate) fn modifier_famille_selectionnee(&mut self) {
         use FamilleCatalogue as F;
         use CibleFamille as C;
         match self.cible_famille() {

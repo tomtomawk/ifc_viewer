@@ -116,7 +116,7 @@ pub(super) fn bandeau_contenu_compact(ui: &mut egui::Ui, groupes: &[(&str, Vec<C
 
 /// Les familles planes gardent les commandes de volume visibles, sans les activer.
 pub(crate) fn formes_famille_planes() -> Vec<Commande> {
-    use crate::editeur_famille::catalogue::{self, Contexte};
+    use crate::familles::editeur_famille::catalogue::{self, Contexte};
     let contexte = Contexte { famille_plane: true, vue_3d: false, plan_oblique: false };
     catalogue::OUTILS.iter()
         .filter(|d| d.groupe == "Formes")

@@ -332,8 +332,8 @@ impl ViewerApp {
             "enregistrer" => {
                 if self.famille_active && self.famille.is_some() {
                     self.action_famille = Some(if self.famille.as_ref().is_some_and(|e| e.document_famille.autonome) {
-                        editeur_famille::ActionFamille::Enregistrer
-                    } else { editeur_famille::ActionFamille::Charger(self.famille.as_ref().is_some_and(|e| e.nouvelle())) });
+                        crate::familles::editeur_famille::ActionFamille::Enregistrer
+                    } else { crate::familles::editeur_famille::ActionFamille::Charger(self.famille.as_ref().is_some_and(|e| e.nouvelle())) });
                 } else {
                     self.enregistrer_projet(ctx);
                 }

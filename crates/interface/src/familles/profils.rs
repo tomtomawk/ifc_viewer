@@ -1,11 +1,11 @@
 //! Édition des familles de profils plans.
-use super::*;
+use crate::*;
 use modele::famille::profil::{FichierProfil, ParametreProfil, PointProfil, Profil};
 
-use crate::familles_planes::FamillePlane;
+use crate::familles::familles_planes::FamillePlane;
 
 impl ViewerApp {
-    pub(super) fn ouvrir_profil(&mut self, id: Option<&str>) {
+    pub(crate) fn ouvrir_profil(&mut self, id: Option<&str>) {
         if let Some((fichier, id)) = id.and_then(|id| self.natif.as_ref()?.0.profils.iter().find(|p| p.id == id)).and_then(|p| p.document_famille.as_ref().map(|f| ((**f).clone(), p.id.clone()))) {
             self.ouvrir_famille_document_projet(fichier, Some(id));
             return;
@@ -29,7 +29,7 @@ impl ViewerApp {
         self.ouvrir_famille_plane(FamillePlane::Profil { profil, original: id.map(str::to_string) });
     }
 
-    pub(super) fn charger_profil_fichier(&mut self) {
+    pub(crate) fn charger_profil_fichier(&mut self) {
         let Some(chemin) = rfd::FileDialog::new().add_filter("Profil BIMedit", &["json"]).pick_file() else { return };
         let resultat = std::fs::read_to_string(&chemin).map_err(|e| e.to_string()).and_then(|s| FichierProfil::lire(&s));
         match resultat {
@@ -46,7 +46,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn enregistrer_profil(&mut self, profil: &mut Profil, original: Option<&str>, copie: bool) -> Result<(), String> {
+    pub(crate) fn enregistrer_profil(&mut self, profil: &mut Profil, original: Option<&str>, copie: bool) -> Result<(), String> {
         let (projet, _) = self.natif.as_ref().ok_or("Aucun projet ouvert.")?;
         let mut projet = projet.clone();
         profil.nom = profil.nom.trim().to_string();
@@ -65,7 +65,7 @@ impl ViewerApp {
     }
 }
 
-pub(super) fn exporter_profil(profil: &Profil) -> Result<(), String> {
+pub(crate) fn exporter_profil(profil: &Profil) -> Result<(), String> {
     profil.valider()?;
     if let Some(chemin) = rfd::FileDialog::new().set_file_name("profil.profil.json").add_filter("Profil BIMedit", &["json"]).save_file() {
         let f = FichierProfil { format: "bimedit.profil".into(), profil: profil.clone() };
@@ -75,7 +75,7 @@ pub(super) fn exporter_profil(profil: &Profil) -> Result<(), String> {
     Ok(())
 }
 
-pub(super) fn proprietes_profil(ui: &mut egui::Ui, profil: &mut Profil) {
+pub(crate) fn proprietes_profil(ui: &mut egui::Ui, profil: &mut Profil) {
         ui.heading("Paramètres");
         egui::ScrollArea::vertical().id_salt("profil_parametres").max_height(180.0).show(ui, |ui| {
             let mut retirer = None;
@@ -111,7 +111,7 @@ pub(super) fn proprietes_profil(ui: &mut egui::Ui, profil: &mut Profil) {
         });
 }
 
-pub(super) fn dessiner_profil(ui: &mut egui::Ui, profil: &mut Profil) {
+pub(crate) fn dessiner_profil(ui: &mut egui::Ui, profil: &mut Profil) {
         ui.heading("Aperçu");
         let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width().max(100.0), 300.0), egui::Sense::hover());
         let painter = ui.painter();

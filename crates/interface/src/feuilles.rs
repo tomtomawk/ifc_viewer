@@ -150,7 +150,7 @@ impl ViewerApp {
             if let Some(ed) = self.famille.as_mut() { ed.cible_feuille = feuille.clone(); }
             return;
         }
-        self.ouvrir_famille_plane(crate::familles_planes::FamillePlane::Cartouche { famille, feuille, original });
+        self.ouvrir_famille_plane(crate::familles::familles_planes::FamillePlane::Cartouche { famille, feuille, original });
     }
     /// Ouvre l'éditeur d'une famille d'étiquette de pièce : `famille` (Some("") : la
     /// standard ; None : nouvelle, copie de celle de la pièce), affectée à `piece`.
@@ -183,7 +183,7 @@ impl ViewerApp {
             if let Some(ed) = self.famille.as_mut() { ed.cible_piece = piece.clone(); }
             return;
         }
-        self.ouvrir_famille_plane(crate::familles_planes::FamillePlane::Etiquette { famille: f, piece, original });
+        self.ouvrir_famille_plane(crate::familles::familles_planes::FamillePlane::Etiquette { famille: f, piece, original });
     }
 
 

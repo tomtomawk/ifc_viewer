@@ -12,14 +12,14 @@
 //! « Nouveau type ».
 
 mod documents;
-pub(super) mod catalogue;
+pub(crate) mod catalogue;
 mod panneau;
 use panneau::*;
 mod canevas;
 use canevas::*;
 mod formes;
 mod transformer;
-use super::*;
+use crate::*;
 use modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
 use modele::famille::modelee::FichierFamille;
 use modele::documentation::GenreCote;
@@ -27,14 +27,14 @@ use modele::GenreOuverture;
 use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum VueFamille {
+pub(crate) enum VueFamille {
     Elevation,
     Plan,
     Coupe,
 }
 
 impl VueFamille {
-    pub(super) const TOUTES: [Self; 3] = [Self::Elevation, Self::Plan, Self::Coupe];
+    pub(crate) const TOUTES: [Self; 3] = [Self::Elevation, Self::Plan, Self::Coupe];
     /// Axes horizontal et vertical de la vue.
     fn axes(self) -> (AxePlan, AxePlan) {
         match self {
@@ -50,7 +50,7 @@ impl VueFamille {
             Self::Coupe => VueEsquisse::Coupe,
         }
     }
-    pub(super) fn nom(self) -> &'static str {
+    pub(crate) fn nom(self) -> &'static str {
         match self {
             Self::Elevation => "Élévation intérieure",
             Self::Plan => "Plan",
@@ -59,7 +59,7 @@ impl VueFamille {
     }
 }
 
-pub(super) fn choisir_vue_famille(ui: &mut egui::Ui, actuelle: Option<VueFamille>, nom: impl Fn(VueFamille) -> &'static str) -> Option<VueFamille> {
+pub(crate) fn choisir_vue_famille(ui: &mut egui::Ui, actuelle: Option<VueFamille>, nom: impl Fn(VueFamille) -> &'static str) -> Option<VueFamille> {
     let mut choix = None;
     egui::CollapsingHeader::new(RichText::new("Vues").strong()).default_open(true).show(ui, |ui| {
         for vue in VueFamille::TOUTES {
@@ -70,7 +70,7 @@ pub(super) fn choisir_vue_famille(ui: &mut egui::Ui, actuelle: Option<VueFamille
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum OutilFamille {
+pub(crate) enum OutilFamille {
     /// Outil par défaut, comme dans le projet : Échap y revient.
     Selection,
     /// Plan de référence tracé par deux points ; vertical ou horizontal selon le
@@ -111,7 +111,7 @@ pub(super) enum OutilFamille {
 
 impl OutilFamille {
     fn est_revolution(self) -> bool { matches!(self, Self::Revolution | Self::RevolutionVide) }
-    pub(super) fn est_transformation(self) -> bool { matches!(self, Self::Deplacer | Self::Copier | Self::Tourner | Self::Symetrie | Self::Echelle) }
+    pub(crate) fn est_transformation(self) -> bool { matches!(self, Self::Deplacer | Self::Copier | Self::Tourner | Self::Symetrie | Self::Echelle) }
     fn outil_dessin(self) -> Option<moteur2d::dao::OutilDessin> {
         use moteur2d::dao::OutilDessin as D;
         match self { Self::Ligne => Some(D::Polyligne), Self::Arc => Some(D::Arc), Self::Spline => Some(D::Spline), Self::Cercle => Some(D::Cercle), Self::Rectangle => Some(D::Rectangle), _ => None }
@@ -149,7 +149,7 @@ enum SelectionFamille {
 
 /// Action demandée depuis les panneaux de l'éditeur, traitée après leur tracé.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum ActionFamille {
+pub(crate) enum ActionFamille {
     /// Charger dans le projet : le type édité (false) ou un nouveau type (true).
     Charger(bool),
     Enregistrer,
@@ -163,12 +163,12 @@ struct DeplacementFamille {
     avant: FamilleModelee,
 }
 
-pub(super) struct EditeurFamille {
-    pub(super) document_famille: crate::document_famille::DocumentFamille<FichierFamille>,
+pub(crate) struct EditeurFamille {
+    pub(crate) document_famille: crate::familles::document_famille::DocumentFamille<FichierFamille>,
     /// Fenêtre d'où l'éditeur a été ouvert : elle prend le type enregistré.
     ouverture: Option<String>,
-    pub(super) cible_feuille: Option<String>,
-    pub(super) cible_piece: Option<String>,
+    pub(crate) cible_feuille: Option<String>,
+    pub(crate) cible_piece: Option<String>,
     /// Type édité ; None : nouveau type.
     type_id: Option<String>,
     nom: String,
@@ -226,15 +226,15 @@ pub(super) struct EditeurFamille {
 }
 
 #[derive(Clone,Copy)]
-pub(super) struct NavigationFamille { zoom:f64, decalage:(f64,f64) }
+pub(crate) struct NavigationFamille { zoom:f64, decalage:(f64,f64) }
 impl Default for NavigationFamille {
     fn default()->Self {Self{zoom:1.0,decalage:(0.0,0.0)}}
 }
 impl NavigationFamille {
-    pub(super) fn cadre(&self,base:&Cadre)->Cadre {
+    pub(crate) fn cadre(&self,base:&Cadre)->Cadre {
         Cadre{centre:base.centre,milieu:(base.milieu.0+self.decalage.0,base.milieu.1+self.decalage.1),echelle:base.echelle*self.zoom}
     }
-    pub(super) fn naviguer(&mut self,base:&Cadre,curseur:egui::Pos2,molette:f32,pan:egui::Vec2) {
+    pub(crate) fn naviguer(&mut self,base:&Cadre,curseur:egui::Pos2,molette:f32,pan:egui::Vec2) {
         let avant=self.cadre(base);
         if molette!=0.0 {
             let point=avant.modele(curseur);
@@ -248,7 +248,7 @@ impl NavigationFamille {
         self.decalage.1+=pan.y as f64/echelle;
     }
 
-    pub(super) fn souris(&mut self, ui: &egui::Ui, vue: &egui::Response, base: &Cadre, vue_plane: bool, outil_actif: bool) {
+    pub(crate) fn souris(&mut self, ui: &egui::Ui, vue: &egui::Response, base: &Cadre, vue_plane: bool, outil_actif: bool) {
         if vue.double_clicked_by(PointerButton::Middle) {
             *self = Self::default();
             return;
@@ -271,17 +271,17 @@ impl NavigationFamille {
 }
 
 /// Transformation de la vue : repère de la famille (h, v) ↔ écran.
-pub(super) struct Cadre {
+pub(crate) struct Cadre {
     pub centre: egui::Pos2,
     pub milieu: (f64, f64),
     pub echelle: f64,
 }
 
 impl Cadre {
-    pub(super) fn ecran(&self, h: f64, v: f64) -> egui::Pos2 {
+    pub(crate) fn ecran(&self, h: f64, v: f64) -> egui::Pos2 {
         self.centre + egui::vec2(((h - self.milieu.0) * self.echelle) as f32, (-(v - self.milieu.1) * self.echelle) as f32)
     }
-    pub(super) fn modele(&self, p: egui::Pos2) -> (f64, f64) {
+    pub(crate) fn modele(&self, p: egui::Pos2) -> (f64, f64) {
         let d = p - self.centre;
         (self.milieu.0 + d.x as f64 / self.echelle, self.milieu.1 - d.y as f64 / self.echelle)
     }
@@ -306,15 +306,15 @@ impl EditeurFamille {
 
     /// Modifiée depuis le dernier chargement dans le projet ou enregistrement.
     /// Pas encore de type dans le projet.
-    pub(super) fn nouvelle(&self) -> bool {
+    pub(crate) fn nouvelle(&self) -> bool {
         self.type_id.is_none()
     }
 
-    pub(super) fn modifiee(&self) -> bool {
+    pub(crate) fn modifiee(&self) -> bool {
         (self.type_id.is_none() && self.document_famille.chemin_fichier.is_none()) || self.contenu_modifie()
     }
 
-    pub(super) fn contenu_modifie(&self) -> bool {
+    pub(crate) fn contenu_modifie(&self) -> bool {
         self.reference != (self.nom.clone(), self.largeur, self.hauteur, self.epaisseur, self.famille.clone())
     }
 
@@ -340,7 +340,7 @@ impl EditeurFamille {
 
     /// Verse la modification de l'image dans l'historique ; un geste (souris enfoncée,
     /// saisie) reste une seule étape.
-    pub(super) fn suivre_historique(&mut self, geste: bool) {
+    pub(crate) fn suivre_historique(&mut self, geste: bool) {
         let etat = self.etat();
         if let Err(e) = self.document_famille.suivre(&etat, geste) {
             self.message = Some(format!("Historique : {e}"));
@@ -353,12 +353,12 @@ impl EditeurFamille {
         self.document_famille.instantane = self.etat();
     }
 
-    pub(super) fn libelles_historique(&self, retablir: bool) -> Vec<String> {
+    pub(crate) fn libelles_historique(&self, retablir: bool) -> Vec<String> {
         self.document_famille.historique.libelles(retablir)
     }
 
     /// Annule ou rétablit `nombre` étapes de la famille.
-    pub(super) fn parcourir_historique(&mut self, retablir: bool, nombre: usize) -> Result<(), String> {
+    pub(crate) fn parcourir_historique(&mut self, retablir: bool, nombre: usize) -> Result<(), String> {
         self.abandonner_saisie();
         let actuel = self.etat();
         let cible = self.document_famille.cible(&actuel, retablir, nombre)?;
@@ -431,7 +431,7 @@ impl EditeurFamille {
 
     /// Supprime la sélection (touche Suppr dans l'onglet Famille) : objets par indice
     /// décroissant, puis les plans devenus libres.
-    pub(super) fn supprimer_selection(&mut self) {
+    pub(crate) fn supprimer_selection(&mut self) {
         let mut liste = self.selectionnes();
         if liste.is_empty() {
             self.message = Some("Supprimer : sélectionner d'abord un élément de la famille.".into());
@@ -516,7 +516,7 @@ impl EditeurFamille {
         self.multiple = liste;
     }
 
-    pub(super) fn trace_en_cours(&self) -> bool {
+    pub(crate) fn trace_en_cours(&self) -> bool {
         !self.esquisse.is_empty() || !self.clics.is_empty() || self.debut.is_some() || !self.points_transfo.is_empty()
             || !self.saisie_trace.texte.is_empty()
     }

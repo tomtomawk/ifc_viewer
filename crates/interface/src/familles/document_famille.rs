@@ -2,7 +2,7 @@
 use commandes::historique::{Historique, Instantane};
 use std::path::PathBuf;
 
-pub(super) struct DocumentFamille<T: Instantane> {
+pub(crate) struct DocumentFamille<T: Instantane> {
     pub ordre: usize,
     pub document: usize,
     pub autonome: bool,

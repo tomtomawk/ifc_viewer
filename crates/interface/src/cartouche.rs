@@ -3,7 +3,7 @@ use super::*;
 use moteur2d::dao::{EvenementTrace, OutilDessin, Trace};
 use noyau::forme2d::{Forme2D, Geom};
 use modele::{Projet, documentation::{self as doc, AnnotationForme as F, FamilleCartouche, TexteCartouche}};
-use crate::editeur_famille::{Cadre, NavigationFamille, VueFamille};
+use crate::familles::editeur_famille::{Cadre, NavigationFamille, VueFamille};
 use crate::ruban::{Menu, Outil, RubanEdition};
 use glam::DVec2;
 
@@ -69,7 +69,7 @@ impl EditionCartouche {
     }
 
     pub(super) fn arborescence(&mut self, ui: &mut egui::Ui) {
-        if let Some(vue) = editeur_famille::choisir_vue_famille(ui, Some(self.vue), Self::nom_vue) {
+        if let Some(vue) = crate::familles::editeur_famille::choisir_vue_famille(ui, Some(self.vue), Self::nom_vue) {
             self.ouvrir_vue(vue);
         }
     }
