@@ -5,7 +5,7 @@ impl ViewerApp {
     /// Crée un escalier de ligne de foulée `trace` : du niveau de tracé au niveau
     /// immédiatement au-dessus (sinon 2,80 m), avec ses garde-corps selon le ruban.
     pub(crate) fn creer_escalier(&mut self, trace: Vec<[f64; 2]>) -> Result<(), String> {
-        use crate::ruban::Outil;
+        use crate::zones::ruban::Outil;
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
         let (niveau, haut, hauteur, decalage_bas) = self.base_escalier().ok_or("Créez d'abord un niveau.")?;
         let trace = self.trace_justifie(&trace);
@@ -48,7 +48,7 @@ impl ViewerApp {
 
     /// Crée un garde-corps (réglages du ruban), hébergé ou non par un escalier.
     pub(crate) fn creer_garde_corps(&mut self, trace: Vec<[f64; 2]>, escalier: Option<String>) -> Result<String, String> {
-        use crate::ruban::Outil;
+        use crate::zones::ruban::Outil;
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
         let niveau = match escalier.as_ref().and_then(|id| p.escaliers.iter().find(|e| &e.id == id)) {
             Some(e) => e.niveau.clone(),
@@ -180,7 +180,7 @@ impl ViewerApp {
     /// Giron visé (pas de marche, jamais appliqué au dessin) : imposé, sinon celui que donne Blondel (2h + g = 630) pour la
     /// hauteur de marche choisie. Sert au magnétisme de la longueur des volées.
     pub(crate) fn giron_vise(&self) -> f64 {
-        use crate::ruban::Outil;
+        use crate::zones::ruban::Outil;
         let Some((_, _, hauteur, _)) = self.base_escalier() else { return 280.0 };
         let hauteur = hauteur.max(1.0);
         let vise = self.ruban_edition.nombre_option(Outil::Escalier, 1).max(50.0);
@@ -190,7 +190,7 @@ impl ViewerApp {
 
     /// Marches à poser (hors paliers et arrivée) pour un tracé de `sommets` points.
     pub(crate) fn marches_a_poser(&self, sommets: usize) -> i64 {
-        use crate::ruban::Outil;
+        use crate::zones::ruban::Outil;
         let Some((_, _, hauteur, _)) = self.base_escalier() else { return 0 };
         let vise = self.ruban_edition.nombre_option(Outil::Escalier, 1).max(50.0);
         let contremarches = ((hauteur.max(1.0) / vise).round() as i64).max(2);
@@ -200,7 +200,7 @@ impl ViewerApp {
     /// Volées de la ligne tracée (départ, direction, longueur) : la foulée justifiée,
     /// raccourcie de la demi-largeur à chaque palier, comme dans le modèle.
     pub(crate) fn volees_trace(&self, brut: &[[f64; 2]]) -> Vec<(DVec2, DVec2, f64)> {
-        let w = self.ruban_edition.nombre_option(crate::ruban::Outil::Escalier, 0) / 2.0;
+        let w = self.ruban_edition.nombre_option(crate::zones::ruban::Outil::Escalier, 0) / 2.0;
         let t = self.trace_justifie(brut);
         let n = t.len();
         (0..n.saturating_sub(1)).map(|i| {
@@ -246,7 +246,7 @@ impl ViewerApp {
     /// justification (axe, bord gauche, bord droit), figée quand elle est posée ; Espace
     /// ne change que celle de la volée en cours.
     pub(crate) fn trace_justifie(&self, trace: &[[f64; 2]]) -> Vec<[f64; 2]> {
-        let l = self.ruban_edition.nombre_option(crate::ruban::Outil::Escalier, 0);
+        let l = self.ruban_edition.nombre_option(crate::zones::ruban::Outil::Escalier, 0);
         let segments = trace.len().saturating_sub(1);
         let d: Vec<f64> = (0..segments).map(|i| match self.dessin2d.just_segments.get(i).copied().unwrap_or(self.dessin2d.justification_escalier) {
             1 => -l / 2.0,
@@ -278,7 +278,7 @@ impl ViewerApp {
     /// de chaque cote, son champ modifiable : giron, hauteur de marche, nombre de marches
     /// et Blondel. Un champ ne s'applique qu'à Entrée ou en le quittant.
     pub(crate) fn schema_escalier(&mut self, ui: &mut egui::Ui) {
-        use crate::ruban::Outil;
+        use crate::zones::ruban::Outil;
         ui.label(RichText::new("Escalier").strong());
         self.croquis_limites_escalier(ui);
         let Some((_, _, hauteur, _)) = self.base_escalier() else { return };
@@ -354,7 +354,7 @@ impl ViewerApp {
 
     /// Escalier en cours : emmarchement (bords de la largeur) et flèche de montée.
     pub(crate) fn apercu_escalier(&self, painter: &egui::Painter, rect: egui::Rect, lignes: &[Vec<DVec2>]) {
-        let w = self.ruban_edition.nombre_option(crate::ruban::Outil::Escalier, 0) / 2.0;
+        let w = self.ruban_edition.nombre_option(crate::zones::ruban::Outil::Escalier, 0) / 2.0;
         let couleur = Color32::from_rgb(55, 130, 200);
         let giron = self.giron_vise();
         for l in lignes.iter().filter(|l| l.len() >= 2) {

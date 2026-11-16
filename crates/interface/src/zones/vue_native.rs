@@ -1,14 +1,14 @@
 //! Propriétés et suppression des vues du modèle natif.
-use super::*;
+use crate::*;
 
 impl ViewerApp {
     /// Identifiant stable des propriétés de contexte de la vue courante.
-    pub(super) fn id_vue_contexte(&self) -> Option<String> {
+    pub(crate) fn id_vue_contexte(&self) -> Option<String> {
         self.id_vue_rendu()
     }
 
     /// Phase et variante enregistrées avec la vue, indépendamment des filtres temporaires.
-    pub(super) fn proprietes_contexte_vue(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn proprietes_contexte_vue(&mut self, ui: &mut egui::Ui) {
         let Some(id) = self.id_vue_contexte() else { return };
         let Some((projet, _)) = &self.natif else { return };
         let mut filtre = projet.contextes_vues.get(&id).cloned().unwrap_or_default();
@@ -74,7 +74,7 @@ impl ViewerApp {
 
     /// Propriétés de la vue native ouverte : nom, type, échelle, hauteur du plan de
     /// coupe (plan) ou profondeur (coupe, élévation), Retourner, Supprimer.
-    pub(super) fn proprietes_vue_native(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn proprietes_vue_native(&mut self, ui: &mut egui::Ui) {
         use modele::GenreVue;
         let Some((projet, _)) = &self.natif else { return };
         let Some(i) = self.vue_active else { return };
@@ -214,7 +214,7 @@ impl ViewerApp {
     }
 
     /// Supprime la vue native du navigateur d'indice `i` (Ctrl+Z la rétablit).
-    pub(super) fn supprimer_vue_native(&mut self, i: usize) {
+    pub(crate) fn supprimer_vue_native(&mut self, i: usize) {
         let Some((projet, _)) = &self.natif else { return };
         let Some(numero) = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()?.vues.get(i)).map(|v| v.revit_id) else { return };
         let Some(id) = projet.vues.iter().find(|v| modele::identifiants::numero_vue(&v.id) == numero).map(|v| v.id.clone()) else { return };

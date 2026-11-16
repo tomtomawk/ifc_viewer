@@ -130,12 +130,12 @@ impl ViewerApp {
     pub(super) fn etat_ajustement(&self) -> serde_json::Value {
         let a = self.ajustement.as_ref();
         let apercu = a.and_then(|a| a.apercu.as_ref());
-        serde_json::json!({"actif":self.ruban_edition.outil()==Some(crate::ruban::Outil::Ajuster),"angle":self.ruban_edition.prolonger_angle,"reference":a.and_then(|a|a.reference.as_ref()),"ligne":a.and_then(|a|a.ligne),"survol":a.and_then(|a|a.survol.as_ref()),
+        serde_json::json!({"actif":self.ruban_edition.outil()==Some(crate::zones::ruban::Outil::Ajuster),"angle":self.ruban_edition.prolonger_angle,"reference":a.and_then(|a|a.reference.as_ref()),"ligne":a.and_then(|a|a.ligne),"survol":a.and_then(|a|a.survol.as_ref()),
             "apercu":apercu.and_then(|r|r.as_ref().ok()).map(|p|serde_json::json!({"id":p.id,"fin":p.fin,"point":p.point})),
             "erreur":apercu.and_then(|r|r.as_ref().err())})
     }
     pub(super) fn preparer_outil_ajuster(&mut self) -> bool {
-        let actif = self.ruban_edition.outil() == Some(crate::ruban::Outil::Ajuster)
+        let actif = self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Ajuster)
             && self.natif.is_some()
             && self.loading.is_none();
         if actif {
@@ -266,7 +266,7 @@ impl ViewerApp {
         let t_survol = curseur.zip(survol.as_ref()).and_then(|(q, (id, _))| self.abscisse_ecran(rect, q, id));
         let prolonger = self
             .ruban_edition
-            .texte_option(crate::ruban::Outil::Ajuster, 0)
+            .texte_option(crate::zones::ruban::Outil::Ajuster, 0)
             == "Prolonger seulement";
         let Some(etat) = self.ajustement.as_mut() else {
             return;

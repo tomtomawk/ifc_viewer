@@ -280,7 +280,7 @@ impl ViewerApp {
     }
 
     pub(crate) fn ruban_famille_plane(&mut self, ui: &mut egui::Ui, sortie: bool) {
-        use crate::ruban::{bandeau, Commande as C, Icone as I};
+        use crate::zones::ruban::{bandeau, Commande as C, Icone as I};
         let Some(ordre) = self.famille_plane_active else { return };
         let Some(ed) = self.familles_planes.get_mut(&ordre) else { return };
         if !sortie && matches!(ed.contenu, FamillePlane::Cartouche { .. }) {
@@ -315,7 +315,7 @@ impl ViewerApp {
                 C::new("texte", "Texte", I::Nouveau, "Ajouter un texte à la famille", true),
             ]
         };
-        let groupes = if sortie { vec![("Sortie", commandes)] } else { vec![("Formes", crate::ruban::formes_famille_planes()), ("Créer", commandes)] };
+        let groupes = if sortie { vec![("Sortie", commandes)] } else { vec![("Formes", crate::zones::ruban::formes_famille_planes()), ("Créer", commandes)] };
         let action = bandeau(ui, &groupes)
             .into_iter().find_map(|(cle, r)| r.clicked().then_some(cle));
         let resultat = match action {

@@ -4,17 +4,16 @@
 //! panneaux s'ancrent d'un côté ou flottent ; sous la vue, la boîte de visibilité par
 //! catégorie de modèle et d'annotation.
 
+mod zones;
 mod projet;
 mod documenter;
 mod familles;
 mod saisie;
 pub mod fenetre;
 mod bim;
-mod communes;
 mod outils_texte;
 mod types_traits;
 mod dessin_plan;
-mod ruban;
 use crate::saisie::accrochage::{AccrocheMur, marqueur};
 mod pilotage;
 mod parametres;
@@ -23,20 +22,11 @@ mod volets;
 mod murs_courbes;
 mod aides;
 mod transformer;
-mod menu_vue;
 use aides::*;
 mod documents;
-mod vue_native;
 mod garde_corps;
-mod proprietes;
-mod barre_haute;
-mod panneaux;
-mod navigateur;
 mod vues;
-mod graphismes;
 mod soleil;
-mod panneau_droit;
-mod vue_revit;
 mod viewport;
 mod commandes_pilote;
 use config::options::Dimensions;
@@ -643,7 +633,7 @@ pub struct ViewerApp {
     selection_precedente: Vec<String>,
     /// Niveau du plan ouvert à la dernière image : les outils de création en héritent.
     niveau_plan_precedent: Option<String>,
-    ruban_edition: crate::ruban::RubanEdition,
+    ruban_edition: crate::zones::ruban::RubanEdition,
     editeur_garde_corps: Option<garde_corps::EditeurGardeCorps>,
     /// Zone de coupe 3D (min, max), repère de la scène ; appliquée aux vues 3D quand
     /// elle est active, modifiable par ses poignées dans toutes les vues.
@@ -720,7 +710,7 @@ pub struct ViewerApp {
     /// Commande de transformation en cours (Déplacer, Copier, Tourner, Aligner).
     transfo: transformer::Transformation,
     /// Dernière commande de modification utilisée : Entrée ou clic droit la relance.
-    derniere_commande: Option<crate::ruban::Outil>,
+    derniere_commande: Option<crate::zones::ruban::Outil>,
     /// Poignée du milieu du mur en cours de glissement : mur, départ, position courante.
     glisse_milieu: Option<(String, [f64; 2], [f64; 2])>,
     /// Captures de fenêtre demandées par le pilote et pas encore reçues : egui ne livre
@@ -1001,7 +991,7 @@ impl eframe::App for ViewerApp {
         }
         if projet_actif && self.ruban_edition.a_un_outil() && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             // Échap : la saisie, puis le mur ou la dalle en cours, puis l'outil
-            if self.ruban_edition.outil()==Some(crate::ruban::Outil::Ajuster) && self.ajustement.as_ref().is_some_and(|a|a.reference.is_some()) {
+            if self.ruban_edition.outil()==Some(crate::zones::ruban::Outil::Ajuster) && self.ajustement.as_ref().is_some_and(|a|a.reference.is_some()) {
                 self.ajustement=Some(Default::default());
                 self.status="Ajuster / prolonger : choisir une nouvelle limite, ou Échap pour terminer.".into();
             } else if self.transfo.outil.is_some() && self.transfo.reculer() {

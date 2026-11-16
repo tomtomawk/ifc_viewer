@@ -86,7 +86,7 @@ pub(super) enum HautEscalier {
 pub(super) struct EtatDessin2D {
     /// Outil de la commande en cours et profondeur de l'historique à son démarrage :
     /// la croix Annuler défait tout ce que la commande a créé.
-    commande_cle: Option<crate::ruban::Outil>,
+    commande_cle: Option<crate::zones::ruban::Outil>,
     historique_depart: Option<usize>,
     /// Bas de la barre de commande (depuis le haut de la vue) : les aides s'y alignent.
     pub bas_barre: f32,
@@ -337,8 +337,8 @@ fn nom_outil(o: OutilDessin) -> &'static str {
 }
 
 impl ViewerApp {
-    pub(super) fn commande_ruban_contour(&mut self, outil: crate::ruban::Outil) {
-        use crate::ruban::Outil;
+    pub(super) fn commande_ruban_contour(&mut self, outil: crate::zones::ruban::Outil) {
+        use crate::zones::ruban::Outil;
         if outil == Outil::Supprimer { self.supprimer_trait_edition(); return; }
         let Some(e) = self.dessin2d.edition_contour.as_mut() else { return };
         if e.dessin { self.dessin2d.message = Some("Appuyez sur Échap pour sélectionner un segment ou un sommet.".into()); return; }
@@ -611,7 +611,7 @@ impl ViewerApp {
     /// points et son type ; la validation remplace le terrain.
     fn commencer_edition_terrain(&mut self, id: &str) {
         let Some(t) = self.natif.as_ref().and_then(|(p, _)| p.terrains.iter().find(|t| t.id == id)).cloned() else { return };
-        self.ruban_edition.activer_outil(crate::ruban::Outil::Terrain);
+        self.ruban_edition.activer_outil(crate::zones::ruban::Outil::Terrain);
         self.onglet_ruban = OngletRuban::Modeliser;
         self.dessin2d.edition_contour = None;
         self.dessin2d.dalle = vec![t.contour.iter().map(|p| [p[0], p[1]]).collect()];
@@ -770,7 +770,7 @@ impl ViewerApp {
                 let mut d = d.clone();
                 if d.sorte.talus() {
                     ui.label("Talus");
-                    if ui.horizontal(|ui| crate::proprietes::champs_talus(ui, &mut d, cs, k)).inner { dalle_modifiee = Some(d); }
+                    if ui.horizontal(|ui| crate::zones::proprietes::champs_talus(ui, &mut d, cs, k)).inner { dalle_modifiee = Some(d); }
                 } else {
                     ui.label("Pente");
                     let mut pente = d.pente(cs, k);
@@ -826,7 +826,7 @@ impl ViewerApp {
     /// Tracé actif et son usage : dessin 2D (Documenter, vue native ouverte) ou mur
     /// (Modéliser, projet natif chargé).
     pub(super) fn usage_dessin(&self) -> Option<(Usage, OutilDessin)> {
-        use crate::ruban::Outil;
+        use crate::zones::ruban::Outil;
         if self.dessin2d.edition_contour.is_some() {
             if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.ligne()) { return Some((Usage::Annotation, OutilDessin::Polyligne)); }
             if let Some(usage @ (Usage::Escalier | Usage::GardeCorps | Usage::Annotation)) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.creation) { return Some((usage, OutilDessin::Polyligne)); }
@@ -893,7 +893,7 @@ impl ViewerApp {
             Some(Usage::Terrain | Usage::LimitePropriete | Usage::Cadrage) => self.niveau_trace().and_then(|n| self.natif.as_ref()?.0.niveau(&n).map(|n| n.altitude)).unwrap_or(0.0),
             Some(Usage::Escalier | Usage::GardeCorps) => {
                 let Some((p, _)) = &self.natif else { return 0.0 };
-                let decalage = if self.usage_dessin().is_some_and(|(u, _)| u == Usage::GardeCorps) { self.ruban_edition.nombre_option(crate::ruban::Outil::GardeCorps, 1) } else { 0.0 };
+                let decalage = if self.usage_dessin().is_some_and(|(u, _)| u == Usage::GardeCorps) { self.ruban_edition.nombre_option(crate::zones::ruban::Outil::GardeCorps, 1) } else { 0.0 };
                 self.niveau_trace().and_then(|n| p.niveau(&n)).map_or(0.0, |n| n.altitude) + decalage
             }
             Some(Usage::Surface) => {

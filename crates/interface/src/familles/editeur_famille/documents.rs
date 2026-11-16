@@ -891,8 +891,8 @@ impl ViewerApp {
         let id = self.charger_famille_fichier(&chemin)?;
         let Some(t) = self.natif.as_ref().and_then(|(p, _)| p.types_ouvertures.iter().find(|t| t.id == id)).cloned() else { return Ok(()) };
         if placer {
-            use crate::ruban::Outil;
-            self.ruban_edition.definir_texte_option(Outil::Ouverture, 0, crate::ruban::nom_genre(t.genre));
+            use crate::zones::ruban::Outil;
+            self.ruban_edition.definir_texte_option(Outil::Ouverture, 0, crate::zones::ruban::nom_genre(t.genre));
             self.ruban_edition.definir_nombre_option(Outil::Ouverture, 1, t.largeur);
             self.ruban_edition.definir_nombre_option(Outil::Ouverture, 2, t.hauteur);
             self.ruban_edition.ouverture_type_identique = Some(id);

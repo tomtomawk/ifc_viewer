@@ -3,7 +3,7 @@
 //! (accrochages, repérage polaire, saisie au clavier), aperçu de la cote sous le curseur.
 use super::*;
 use modele::documentation::{self as doc, GenreCote};
-use crate::ruban::Outil;
+use crate::zones::ruban::Outil;
 
 /// Hauteur papier des textes de cote (mm).
 const HAUTEUR_TEXTE: f64 = 2.5;

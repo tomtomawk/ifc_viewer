@@ -3,7 +3,7 @@
 use super::*;
 
 
-use crate::ruban::CibleTrace;
+use crate::zones::ruban::CibleTrace;
 
 /// Contours après la commande au point `p`. `Ok(None)` : il manque encore un point
 /// (départ, repère) ; `Err` : la commande ne peut pas s'appliquer ici.
@@ -115,8 +115,8 @@ impl ViewerApp {
     }
 
     /// Outil du ruban Modifier dont la commande est en cours sur le tracé.
-    pub(crate) fn outil_commande_trace(&self) -> Option<crate::ruban::Outil> {
-        use crate::ruban::Outil;
+    pub(crate) fn outil_commande_trace(&self) -> Option<crate::zones::ruban::Outil> {
+        use crate::zones::ruban::Outil;
         use CommandeContour as C;
         Some(match self.dessin2d.edition_contour.as_ref().filter(|e| !e.dessin)?.commande? {
             C::Deplacer => Outil::Deplacer,

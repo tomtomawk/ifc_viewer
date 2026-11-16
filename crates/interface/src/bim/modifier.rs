@@ -8,7 +8,7 @@ impl ViewerApp {
     /// informations de la sélection.
     pub(crate) fn options_modifier(&mut self, ui: &mut egui::Ui, selection_seule: bool) {
         use commandes::Commande;
-        use crate::ruban::Outil;
+        use crate::zones::ruban::Outil;
         let outil = self.ruban_edition.outil();
         let ids = self.selection_bim();
         let Some((p, _)) = &self.natif else { return };
@@ -199,7 +199,7 @@ impl ViewerApp {
     /// Barre d'options affichée : Modifier, projet natif, outil à réglages ou sélection
     /// avec des commandes propres.
     pub(crate) fn a_options_modifier(&self) -> bool {
-        use crate::ruban::Outil;
+        use crate::zones::ruban::Outil;
         if self.natif.is_none() { return false; }
         if self.onglet_ruban != OngletRuban::Modifier {
             return false;

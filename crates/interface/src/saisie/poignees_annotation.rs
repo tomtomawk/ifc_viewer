@@ -70,7 +70,7 @@ impl ViewerApp {
         let texte = if self.bim.texte.trim().is_empty() { "Texte".to_owned() } else { self.bim.texte.clone() };
         let hauteur = self.bim.annotation_identique.as_ref()
             .filter(|a| matches!(a.forme, AnnotationForme::Texte { .. }))
-            .map_or_else(|| self.ruban_edition.nombre_option(crate::ruban::Outil::Texte, 1), |a| a.hauteur);
+            .map_or_else(|| self.ruban_edition.nombre_option(crate::zones::ruban::Outil::Texte, 1), |a| a.hauteur);
         self.executer_bim(commandes::Commande::Annoter {
             annotation: Annotation { id: String::new(), vue, hauteur, forme: AnnotationForme::Texte { point, texte } },
         })?;

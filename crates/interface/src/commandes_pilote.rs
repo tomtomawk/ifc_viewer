@@ -273,7 +273,7 @@ impl ViewerApp {
                 match r { Ok(id) => succes(&[("id", texte(&id))]), Err(e) => erreur(&e) }
             }
             "menu" => {
-                use crate::menu_vue::ActionMenu as A;
+                use crate::zones::menu_vue::ActionMenu as A;
                 let a = match argument.trim() {
                     "repeter" => match self.derniere_commande { Some(o) => A::Repeter(o), None => return erreur("aucune commande à répéter") },
                     "identiques_vue" => A::Identiques { dans_la_vue: true },

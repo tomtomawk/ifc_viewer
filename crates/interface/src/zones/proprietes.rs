@@ -1,9 +1,9 @@
 //! Panneau des propriétés de la sélection native.
-use super::*;
+use crate::*;
 
 /// Talus d'une arête de terre-plein : pente en % (0 : sans talus) puis case Remblayer
 /// (deux cellules). Retourne vrai si l'arête a changé.
-pub(super) fn champs_talus(ui: &mut egui::Ui, d: &mut modele::Dalle, c: usize, k: usize) -> bool {
+pub(crate) fn champs_talus(ui: &mut egui::Ui, d: &mut modele::Dalle, c: usize, k: usize) -> bool {
     use modele::elements::terre_plein as tp;
     let mut change = false;
     let mut talus = d.pente(c, k);
@@ -31,7 +31,7 @@ pub(super) fn champs_talus(ui: &mut egui::Ui, d: &mut modele::Dalle, c: usize, k
 }
 
 impl ViewerApp {
-    pub(super) fn proprietes_natif(&mut self, ui: &mut egui::Ui, id: Id) -> Option<modele::Projet> {
+    pub(crate) fn proprietes_natif(&mut self, ui: &mut egui::Ui, id: Id) -> Option<modele::Projet> {
         use modele::Haut;
         let mut pente_defaut = self.pente_defaut;
         let (projet, _) = self.natif.as_ref()?;

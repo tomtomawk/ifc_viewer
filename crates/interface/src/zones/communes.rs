@@ -1,11 +1,11 @@
 //! Propriétés communes d'une sélection multiple : une section par sorte d'élément, un
 //! champ par propriété partagée ; « Varié » quand les valeurs diffèrent, et toute
 //! modification s'applique à l'ensemble de la sélection.
-use super::*;
+use crate::*;
 use modele::{Haut, Projet};
 
 /// Valeur commune (la première) et indication que les valeurs diffèrent.
-pub(super) fn melange<T: PartialEq + Clone>(valeurs: impl IntoIterator<Item = T>) -> (Option<T>, bool) {
+pub(crate) fn melange<T: PartialEq + Clone>(valeurs: impl IntoIterator<Item = T>) -> (Option<T>, bool) {
     let v: Vec<T> = valeurs.into_iter().collect();
     (v.first().cloned(), v.iter().any(|x| Some(x) != v.first()))
 }
@@ -44,7 +44,7 @@ fn nom_niveau(projet: &Projet, id: Option<&String>, mixte: bool) -> String {
 impl ViewerApp {
     /// Section de propriétés communes pour plusieurs éléments natifs sélectionnés.
     /// Retourne le projet modifié, ou une erreur de validation.
-    pub(super) fn proprietes_communes(&self, ui: &mut egui::Ui, ids: &[String]) -> Result<Option<Projet>, String> {
+    pub(crate) fn proprietes_communes(&self, ui: &mut egui::Ui, ids: &[String]) -> Result<Option<Projet>, String> {
         let Some((projet, _)) = &self.natif else { return Ok(None) };
         let mut nouveau: Option<Projet> = None;
         let mut erreur = None;
@@ -278,7 +278,7 @@ impl ViewerApp {
     /// Terrains sélectionnés : type (épaisseur, matériau : modifiés pour tous les terrains
     /// du type ; Dupliquer en crée un), cotes NGF extrêmes, surface en plan. Retourne le
     /// projet modifié.
-    pub(super) fn proprietes_terrains(&self, ui: &mut egui::Ui, ids: &[String]) -> Option<Projet> {
+    pub(crate) fn proprietes_terrains(&self, ui: &mut egui::Ui, ids: &[String]) -> Option<Projet> {
         let (projet, _) = self.natif.as_ref()?;
         let terrains: Vec<&modele::elements::site::Terrain> = projet.terrains.iter().filter(|t| ids.contains(&t.id)).collect();
         if terrains.is_empty() {
@@ -363,7 +363,7 @@ impl ViewerApp {
     /// Formes du dessin 2D sélectionnées (lignes, polylignes, splines, cercles, arcs) :
     /// périmètre et surface, cumulés sur la sélection ; remplissage des polylignes fermées.
     /// Retourne le projet modifié.
-    pub(super) fn proprietes_formes_2d(&self, ui: &mut egui::Ui, ids: &[String]) -> Option<Projet> {
+    pub(crate) fn proprietes_formes_2d(&self, ui: &mut egui::Ui, ids: &[String]) -> Option<Projet> {
         use modele::documentation::{AnnotationForme, RemplissageContour};
         let (projet, _) = self.natif.as_ref()?;
         let formes: Vec<_> = projet.annotations.iter().filter(|a| ids.contains(&a.id)).filter_map(|a| Some((a, a.forme.forme_2d()?))).collect();
@@ -418,7 +418,7 @@ impl ViewerApp {
 }
 
 /// Choix commun du remplissage d'une polyligne fermée.
-pub(super) fn choisir_remplissage_2d(ui: &mut egui::Ui, projet: &modele::Projet, texte: &str) -> Option<Option<modele::documentation::RemplissageContour>> {
+pub(crate) fn choisir_remplissage_2d(ui: &mut egui::Ui, projet: &modele::Projet, texte: &str) -> Option<Option<modele::documentation::RemplissageContour>> {
     use modele::{MotifCoupe, documentation::RemplissageContour};
     let mut choix = None;
     egui::ComboBox::from_id_salt("remplissage_formes_2d").width(150.0).truncate().selected_text(texte).show_ui(ui, |ui| {

@@ -1,9 +1,9 @@
 //! Barre de titre, barre de vue, détail, visibilité par catégorie.
-use super::*;
+use crate::*;
 
 impl ViewerApp {
     /// Ruban en haut : onglets, puis les commandes de l'onglet ouvert.
-    pub(super) fn top_bar(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn top_bar(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         let maximise = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
         // famille ouverte : son propre ruban, comme un document indépendant
@@ -21,7 +21,7 @@ impl ViewerApp {
         let titre = egui::Rect::from_min_size(barre.min, egui::vec2(108.0, barre.height()));
         let icone_id = egui::Id::unique("icone_application_texture");
         let texture = ctx.data(|d| d.get_temp::<egui::TextureHandle>(icone_id)).unwrap_or_else(|| {
-            let image = eframe::icon_data::from_png_bytes(include_bytes!("../assets/icone.png")).expect("Icône intégrée invalide");
+            let image = eframe::icon_data::from_png_bytes(include_bytes!("../../assets/icone.png")).expect("Icône intégrée invalide");
             let pixels = egui::ColorImage::from_rgba_unmultiplied([image.width as usize, image.height as usize], &image.rgba);
             let texture = ctx.load_texture("icone_application", pixels, egui::TextureOptions::LINEAR);
             ctx.data_mut(|d| d.insert_temp(icone_id, texture.clone()));
@@ -197,9 +197,9 @@ impl ViewerApp {
             return;
         }
         let edition = match self.onglet_ruban {
-            OngletRuban::Modeliser => Some(crate::ruban::Menu::Modeliser),
-            OngletRuban::Modifier => Some(crate::ruban::Menu::Modifier),
-            OngletRuban::Annoter => Some(crate::ruban::Menu::Annoter),
+            OngletRuban::Modeliser => Some(crate::zones::ruban::Menu::Modeliser),
+            OngletRuban::Modifier => Some(crate::zones::ruban::Menu::Modifier),
+            OngletRuban::Annoter => Some(crate::zones::ruban::Menu::Annoter),
             _ => None,
         };
         if let Some(menu) = edition {
@@ -225,22 +225,22 @@ impl ViewerApp {
                 egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| self.menu_jonctions(ui));
             }
             match action {
-                Some(crate::ruban::Outil::ModifierContour) => self.commencer_edition_contour(),
-                Some(crate::ruban::Outil::CopierNiveau) => {
+                Some(crate::zones::ruban::Outil::ModifierContour) => self.commencer_edition_contour(),
+                Some(crate::zones::ruban::Outil::CopierNiveau) => {
                     self.memoriser_copie_niveau(ids);
                     self.ouvrir_coller_niveau();
                 }
-                Some(crate::ruban::Outil::CreerIdentique) => {
+                Some(crate::zones::ruban::Outil::CreerIdentique) => {
                     if let Err(e) = self.creer_identique() { self.error = Some(e); }
                 }
-                Some(crate::ruban::Outil::Supprimer) => self.demander_suppression(),
-                Some(crate::ruban::Outil::Cadrer) => self.demarrer_cadrage_vue(),
-                Some(o @ (crate::ruban::Outil::Isoler | crate::ruban::Outil::Masquer | crate::ruban::Outil::MasquerVue)) => self.visibilite_selection(o),
-                Some(crate::ruban::Outil::Afficher) => self.basculer_afficher_masques(),
-                Some(crate::ruban::Outil::Verrouiller) => self.basculer_verrou_selection(),
-                Some(crate::ruban::Outil::Deverrouiller) => self.verrouiller_selection(false),
-                Some(crate::ruban::Outil::Feuilles) => self.commande_feuilles(),
-                Some(crate::ruban::Outil::Nomenclatures) => {
+                Some(crate::zones::ruban::Outil::Supprimer) => self.demander_suppression(),
+                Some(crate::zones::ruban::Outil::Cadrer) => self.demarrer_cadrage_vue(),
+                Some(o @ (crate::zones::ruban::Outil::Isoler | crate::zones::ruban::Outil::Masquer | crate::zones::ruban::Outil::MasquerVue)) => self.visibilite_selection(o),
+                Some(crate::zones::ruban::Outil::Afficher) => self.basculer_afficher_masques(),
+                Some(crate::zones::ruban::Outil::Verrouiller) => self.basculer_verrou_selection(),
+                Some(crate::zones::ruban::Outil::Deverrouiller) => self.verrouiller_selection(false),
+                Some(crate::zones::ruban::Outil::Feuilles) => self.commande_feuilles(),
+                Some(crate::zones::ruban::Outil::Nomenclatures) => {
                     if self.natif.is_some() {
                         self.bim.documentation = true;
                     } else {
@@ -253,7 +253,7 @@ impl ViewerApp {
         }
         match self.onglet_ruban {
             OngletRuban::Debut => {
-                use crate::ruban::{Commande as C, Icone as I};
+                use crate::zones::ruban::{Commande as C, Icone as I};
                 let fichier = vec![
                     C::new("nouveau", "Nouveau", I::Nouveau, "Créer un projet natif v0 (Ctrl+N)", self.loading.is_none()),
                     C::new("nouvelle_famille", "Nouvelle famille", I::Nouveau, "Créer une famille", self.loading.is_none()),
@@ -273,7 +273,7 @@ impl ViewerApp {
                     C::new("coordonnees", "Coordonnées", I::Coordonnees, "Coordonnées de l'origine du projet et cote NGF du niveau 0 : la modifier remonte ou descend le projet par rapport au terrain (aussi : cliquer l'origine dans une vue)", self.natif.is_some()),
                     C::new("contextes", "Phases et variantes", I::Options, "Gérer les phases, sous-projets et variantes du projet", self.natif.is_some()),
                 ];
-                for (cle, r) in crate::ruban::bandeau(ui, &[("Fichier", fichier), ("Réglages", reglages), ("Projet", orientation)]) {
+                for (cle, r) in crate::zones::ruban::bandeau(ui, &[("Fichier", fichier), ("Réglages", reglages), ("Projet", orientation)]) {
                     match cle {
                         "nouvelle_famille" => { if r.clicked() { self.nouvelle_famille(); } }
                         "options" => {
@@ -314,7 +314,7 @@ impl ViewerApp {
             }
             OngletRuban::Modeliser | OngletRuban::Modifier | OngletRuban::Annoter | OngletRuban::FamilleCreer | OngletRuban::FamilleModifier | OngletRuban::FamilleSortie => {}
             OngletRuban::Sortie => {
-                use crate::ruban::{Commande as C, Icone as I};
+                use crate::zones::ruban::{Commande as C, Icone as I};
                 let disponible = (self.natif.is_some() || self.rvt_source.is_some()) && self.loading.is_none() && self.sauvegarde.is_none();
                 let enregistrer = vec![
                     C::new("enregistrer", "Enregistrer", I::Enregistrer, "Enregistrer en modèle natif v0 (Ctrl+S)", disponible),
@@ -331,7 +331,7 @@ impl ViewerApp {
                     C::new("synchro","Synchro",I::Synchro,"Publier les modifications locales et recevoir celles des collègues",partage_disponible),
                     C::new("gerer_collaboration","Gérer",I::Collaborer,"Réservations, reprise explicite, instantané et textes récupérables",self.collaboration.is_some()),
                 ];
-                for (cle, r) in crate::ruban::bandeau(ui, &[("Enregistrer", enregistrer), ("Collaboration", collaboration), ("Exporter", exporter)]) {
+                for (cle, r) in crate::zones::ruban::bandeau(ui, &[("Enregistrer", enregistrer), ("Collaboration", collaboration), ("Exporter", exporter)]) {
                     if cle=="gerer_collaboration"{
                         egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui|self.menu_collaboration(ui));continue;
                     }
@@ -359,7 +359,7 @@ impl ViewerApp {
     }
 
     /// Redimensionnement natif sur les bords de la fenêtre sans décoration.
-    pub(super) fn bords_fenetre(&self, ctx: &egui::Context) {
+    pub(crate) fn bords_fenetre(&self, ctx: &egui::Context) {
         use egui::ResizeDirection::*;
         if crate::fenetre::cadre_natif() {
             return;
@@ -394,7 +394,7 @@ impl ViewerApp {
 
     /// Vue 3D : modèle libre (IFC, ou fichier Revit sans vue ouverte) ou vue 3D Revit ;
     /// pas un plan, une coupe, une élévation ni une feuille.
-    pub(super) fn vue_3d(&self) -> bool {
+    pub(crate) fn vue_3d(&self) -> bool {
         match self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)) {
             Some(v) => v.genre == "Vue 3D",
             None => true,
@@ -402,14 +402,14 @@ impl ViewerApp {
     }
 
     /// Plans Revit et vues orthographiques du modèle regardées verticalement.
-    pub(super) fn vue_en_plan(&self) -> bool {
+    pub(crate) fn vue_en_plan(&self) -> bool {
         if let Some(v) = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)) {
             return matches!(v.genre.as_str(), "Plan d'étage" | "Plan de plafond" | "Plan de structure" | "Plan de site");
         }
         self.camera.ortho && self.camera.pitch.abs() > 1.56
     }
 
-    pub(super) fn orientation_initiale_plan(&self) -> f32 {
+    pub(crate) fn orientation_initiale_plan(&self) -> f32 {
         self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i))
             .map_or(-std::f32::consts::FRAC_PI_2, |v| (-v.haut.y as f32).atan2(-v.haut.x as f32))
     }
@@ -419,7 +419,7 @@ impl ViewerApp {
     /// bouton gauche ne navigue pas (sélection, rectangle). Panoramique aux boutons
     /// gauche, droit et milieu dans une vue 2D (plan, coupe, élévation, feuille), dont
     /// l'orientation est celle de la vue Revit.
-    pub(super) fn glisser(&mut self, bouton: PointerButton, d: egui::Vec2, shift: bool, hauteur: f32) {
+    pub(crate) fn glisser(&mut self, bouton: PointerButton, d: egui::Vec2, shift: bool, hauteur: f32) {
         if self.vue_3d() {
             match bouton {
                 PointerButton::Middle if shift => self.camera.orbit(d.x, d.y),
@@ -439,7 +439,7 @@ impl ViewerApp {
     /// souris oriente le regard, W/S (Z/S en AZERTY) avancent et reculent, A/D (Q/D) vont à
     /// gauche et à droite, Q/E (A/E) descendent et montent ; Maj triple la vitesse, la
     /// molette la règle. Comme dans la vue Scène d'Unity.
-    pub(super) fn voler(&mut self, ui: &egui::Ui, resp: &egui::Response) {
+    pub(crate) fn voler(&mut self, ui: &egui::Ui, resp: &egui::Response) {
         let enfonce = self.vue_3d() && resp.is_pointer_button_down_on() && ui.input(|i| i.pointer.button_down(PointerButton::Secondary));
         if !enfonce {
             self.vol.actif = false;
@@ -489,7 +489,7 @@ impl ViewerApp {
 
     /// Barre de la vue, sous la vue comme celle de Revit : échelle (celle de la vue
     /// ouverte, qui règle aussi le dessin 2D), cadrage, projection en vue 3D.
-    pub(super) fn barre_vue(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn barre_vue(&mut self, ui: &mut egui::Ui) {
         let gabaritee = self.vue_gabaritee();
         ui.horizontal_wrapped(|ui| {
             ui.add_enabled_ui(self.scene.is_some(), |ui| {
@@ -557,7 +557,7 @@ impl ViewerApp {
     /// Niveau de détail de la vue (Faible, Moyen, Élevé), celui de la vue Revit ouverte.
     /// La visibilité des géométries des familles selon le niveau de détail n'est pas
     /// encore lue : le choix n'a pas d'effet sur l'affichage.
-    pub(super) fn choix_detail(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn choix_detail(&mut self, ui: &mut egui::Ui) {
         let (r, _) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), Sense::hover());
         icone_detail(ui.painter(), r.shrink(3.0), self.detail);
         ui.menu_button(self.detail.libelle(), |ui| {
@@ -582,12 +582,12 @@ impl ViewerApp {
     }
 
     /// Catégorie montrée : une de ses clés au moins n'est pas masquée, ni sa classe.
-    pub(super) fn categorie_visible(&self, c: &Categorie) -> bool {
+    pub(crate) fn categorie_visible(&self, c: &Categorie) -> bool {
         c.cles.iter().any(|cle| !self.hidden_classes.contains(&**cle) && !self.hidden_classes.contains(classe_cle(cle)))
     }
 
     /// Affiche ou masque la catégorie `k` de la boîte de visibilité.
-    pub(super) fn montrer_categorie(&mut self, k: usize, montrer: bool) {
+    pub(crate) fn montrer_categorie(&mut self, k: usize, montrer: bool) {
         for cle in self.categories[k].cles.clone() {
             let classe = classe_cle(&cle);
             if !montrer {
@@ -610,7 +610,7 @@ impl ViewerApp {
     /// Boîte de visibilité, au bas de la vue : catégories de modèle et d'annotation des
     /// éléments de la vue ouverte (de toute la scène hors vue Revit), à cocher une à une
     /// ou par groupe.
-    pub(super) fn fenetre_visibilite(&mut self, ctx: &egui::Context) {
+    pub(crate) fn fenetre_visibilite(&mut self, ctx: &egui::Context) {
         if !self.voir_visibilite || self.scene.is_none() {
             return;
         }

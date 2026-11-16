@@ -4,7 +4,7 @@ use moteur2d::dao::{EvenementTrace, OutilDessin, Trace};
 use noyau::forme2d::{Forme2D, Geom};
 use modele::{Projet, documentation::{self as doc, AnnotationForme as F, FamilleCartouche, TexteCartouche}};
 use crate::familles::editeur_famille::{Cadre, NavigationFamille, VueFamille};
-use crate::ruban::{Menu, Outil, RubanEdition};
+use crate::zones::ruban::{Menu, Outil, RubanEdition};
 use glam::DVec2;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -127,7 +127,7 @@ impl EditionCartouche {
             if let Some(F::Polyligne { fermee: true, remplissage, .. }) = f.formes.get_mut(i) {
                 ui.label("Remplissage");
                 let texte = remplissage.as_ref().map_or("Aucun".to_string(), |r| r.libelle());
-                if let Some(choix) = crate::communes::choisir_remplissage_2d(ui, p, &texte) { *remplissage = choix; }
+                if let Some(choix) = crate::zones::communes::choisir_remplissage_2d(ui, p, &texte) { *remplissage = choix; }
             }
             return;
         }

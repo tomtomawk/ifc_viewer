@@ -4,7 +4,7 @@
 //! sur lui se saisit dans la vue et le déplace (longueur) ou le tourne (angle).
 use super::*;
 use modele::documentation::{self as doc, GenreCote, PointCote, RefArete};
-use crate::ruban::Outil;
+use crate::zones::ruban::Outil;
 
 /// Arête de référence sous le curseur : élément, rang, segment (repère de la vue) et
 /// abscisse relative du point visé.

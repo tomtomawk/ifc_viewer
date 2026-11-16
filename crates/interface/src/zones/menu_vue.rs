@@ -1,13 +1,13 @@
 //! Clic droit dans la vue hors commande (répéter, annuler, sélection, visibilité,
 //! verrou, démolir) et poignée de déplacement au milieu du mur sélectionné.
 use commandes::{Modification, Verrous};
-use super::*;
+use crate::*;
 use commandes::Commande;
-use crate::ruban::Outil;
+use crate::zones::ruban::Outil;
 
 /// Action choisie dans le menu du clic droit.
 #[derive(Clone)]
-pub(super) enum ActionMenu {
+pub(crate) enum ActionMenu {
     Repeter(Outil),
     Annuler,
     Retablir,
@@ -24,7 +24,7 @@ pub(super) enum ActionMenu {
 }
 
 /// Catégorie d'un élément natif, pour le filtre de sélection.
-pub(super) fn categorie(p: &modele::Projet, id: &str) -> &'static str {
+pub(crate) fn categorie(p: &modele::Projet, id: &str) -> &'static str {
     if p.murs.iter().any(|x| x.id == id) || p.assemblage(id).is_some() { "Murs" }
     else if p.dalles.iter().any(|x| x.id == id) { "Dalles" }
     else if p.ouvertures.iter().any(|x| x.id == id) { "Ouvertures" }
@@ -38,7 +38,7 @@ pub(super) fn categorie(p: &modele::Projet, id: &str) -> &'static str {
 
 impl ViewerApp {
     /// Menu du clic droit dans la vue, hors commande.
-    pub(super) fn menu_contextuel(&mut self, resp: &egui::Response) {
+    pub(crate) fn menu_contextuel(&mut self, resp: &egui::Response) {
         let selection = self.selection_bim();
         let (categories, verrouilles, demolis) = match &self.natif {
             Some((p, _)) => {
@@ -91,7 +91,7 @@ impl ViewerApp {
     }
 
     /// Exécute une action du menu du clic droit (aussi appelée par le pilote).
-    pub(super) fn action_menu(&mut self, a: ActionMenu) {
+    pub(crate) fn action_menu(&mut self, a: ActionMenu) {
         let selection = self.selection_bim();
         let resultat = match a {
             ActionMenu::Repeter(o) => { self.relancer_commande(o); Ok(()) }
@@ -147,7 +147,7 @@ impl ViewerApp {
 
     /// Poignée au milieu du mur sélectionné (hors commande) : la glisser déplace le mur ;
     /// les flèches d'inversion à côté retournent son sens. Rend vrai si la souris est prise.
-    pub(super) fn poignee_milieu(&mut self, ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response, axe: &Option<(String, [f64; 2], [f64; 2], f64, f64)>) -> bool {
+    pub(crate) fn poignee_milieu(&mut self, ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response, axe: &Option<(String, [f64; 2], [f64; 2], f64, f64)>) -> bool {
         let Some((id, a, b, z, _)) = axe else {
             self.glisse_milieu = None;
             return false;

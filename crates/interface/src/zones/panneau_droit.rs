@@ -1,9 +1,9 @@
 //! Panneau droit, visibilité de la sélection, copie sur un niveau, cadrage.
-use super::*;
+use crate::*;
 
 impl ViewerApp {
     /// Propriétés de l'élément sélectionné (panneau de gauche, comme dans Revit).
-    pub(super) fn right_panel(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn right_panel(&mut self, ui: &mut egui::Ui) {
         self.fenetre_materiau(ui.ctx());
         self.fenetre_ciel(ui.ctx());
         self.fenetre_motifs(ui.ctx());
@@ -100,7 +100,7 @@ impl ViewerApp {
         // création d'un escalier : comme le mur, ses réglages remplacent les propriétés de la vue
         // (l'onglet Modifier reste ouvert pendant un tracé : le sélecteur de type y reste aussi)
         let creation = matches!(self.onglet_ruban, OngletRuban::Modeliser | OngletRuban::Modifier);
-        if creation && self.ruban_edition.outil() == Some(crate::ruban::Outil::Escalier) && self.selection_bim().is_empty() {
+        if creation && self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Escalier) && self.selection_bim().is_empty() {
             self.schema_escalier(ui);
             return;
         }
@@ -208,8 +208,8 @@ impl ViewerApp {
     }
 
     /// Cadrer, Isoler ou Masquer (ruban Modifier) : objets de la sélection courante.
-    pub(super) fn visibilite_selection(&mut self, o: crate::ruban::Outil) {
-        use crate::ruban::Outil;
+    pub(crate) fn visibilite_selection(&mut self, o: crate::zones::ruban::Outil) {
+        use crate::zones::ruban::Outil;
         if o == Outil::MasquerVue {
             if !self.masquer_elements_vue() {
                 self.status = "Masquer dans la vue : ouvrir une vue du projet (plan ou coupe).".into();
@@ -229,18 +229,18 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn memoriser_copie_niveau(&mut self,ids:Vec<String>) {
+    pub(crate) fn memoriser_copie_niveau(&mut self,ids:Vec<String>) {
         if ids.is_empty() {self.status="Sélectionnez les éléments à copier.".into();return;}
         self.copie_presse=Some((self.document_actif,ids));
         self.status="Sélection copiée : Ctrl+V pour choisir le niveau de destination.".into();
     }
-    pub(super) fn ouvrir_coller_niveau(&mut self) {
+    pub(crate) fn ouvrir_coller_niveau(&mut self) {
         if self.copie_presse.as_ref().is_none_or(|(document,_)|*document!=self.document_actif) {
             self.status="Copiez d'abord une sélection dans ce projet.".into();return;
         }
         self.copie_niveau=Some(String::new());
     }
-    pub(super) fn fenetre_coller_niveau(&mut self,ctx:&egui::Context) {
+    pub(crate) fn fenetre_coller_niveau(&mut self,ctx:&egui::Context) {
         let Some(mut niveau)=self.copie_niveau.take() else{return};
         let Some((document,ids))=self.copie_presse.clone() else{return};
         if document!=self.document_actif {return;}
@@ -262,15 +262,15 @@ impl ViewerApp {
         } else if ouvert {self.copie_niveau=Some(niveau);}
     }
 
-    pub(super) fn demarrer_cadrage_vue(&mut self) {
+    pub(crate) fn demarrer_cadrage_vue(&mut self) {
         if self.vue_en_plan() && self.vue_native_id().is_some() {
             self.reinitialiser_forme_cadrage();
-            self.ruban_edition.activer_outil(crate::ruban::Outil::Cadrer);
+            self.ruban_edition.activer_outil(crate::zones::ruban::Outil::Cadrer);
             self.status = "Tracez le contour de cadrage du plan, puis validez.".into();
         } else { self.fit_all(); }
     }
 
-    pub(super) fn retirer_cadrage_vue(&mut self) {
+    pub(crate) fn retirer_cadrage_vue(&mut self) {
         let Some(id) = self.vue_native_id() else { return };
         let Some((projet, _)) = &self.natif else { return };
         let mut copie = projet.clone();
@@ -280,7 +280,7 @@ impl ViewerApp {
         self.coupe_dirty = true;
     }
 
-    pub(super) fn masquer_elements_vue(&mut self) -> bool {
+    pub(crate) fn masquer_elements_vue(&mut self) -> bool {
         let Some(vue_id) = self.vue_native_id() else { return false };
         let ids = self.selection_bim();
         if ids.is_empty() { self.status = "Sélectionnez les éléments à masquer dans cette vue.".into(); return true; }
@@ -297,7 +297,7 @@ impl ViewerApp {
         true
     }
 
-    pub(super) fn retablir_elements_vue(&mut self) {
+    pub(crate) fn retablir_elements_vue(&mut self) {
         let Some(id) = self.vue_native_id() else { return };
         let Some((projet, _)) = &self.natif else { return };
         if projet.vues.iter().find(|v| v.id == id).is_none_or(|v| v.elements_masques.is_empty()) { return; }
@@ -307,7 +307,7 @@ impl ViewerApp {
         self.coupe_dirty = true;
     }
 
-    pub(super) fn isolate(&mut self, objs: Vec<u32>) {
+    pub(crate) fn isolate(&mut self, objs: Vec<u32>) {
         if objs.is_empty() {
             return;
         }
@@ -325,7 +325,7 @@ impl ViewerApp {
 
     /// Isolement propre à la vue ouverte (plan d'étage natif : objets de l'étage), sans
     /// isolement demandé par l'utilisateur.
-    pub(super) fn isolement_de_vue(&self) -> Option<HashSet<u32>> {
+    pub(crate) fn isolement_de_vue(&self) -> Option<HashSet<u32>> {
         let i = self.vue_active?;
         let s = self.scene.as_ref()?;
         let v = s.navigateur.as_ref()?.vues.get(i)?;
@@ -336,7 +336,7 @@ impl ViewerApp {
 
     /// Croix du cadre de visibilité temporaire : réaffiche ce qui a été masqué ou isolé
     /// temporairement ; les masquages enregistrés dans la vue restent.
-    pub(super) fn quitter_visibilite_temporaire(&mut self) {
+    pub(crate) fn quitter_visibilite_temporaire(&mut self) {
         let masques = std::mem::take(&mut self.masques_utilisateur);
         self.hidden_objects.retain(|o| !masques.contains(o));
         if std::mem::take(&mut self.isolement_utilisateur) {
@@ -346,7 +346,7 @@ impl ViewerApp {
         self.status = "Visibilité temporaire réinitialisée.".into();
     }
 
-    pub(super) fn hide(&mut self, objs: Vec<u32>) {
+    pub(crate) fn hide(&mut self, objs: Vec<u32>) {
         self.masques_utilisateur.extend(objs.iter().copied());
         self.hidden_objects.extend(objs);
         self.visibility_dirty = true;
@@ -354,7 +354,7 @@ impl ViewerApp {
     }
 
     /// Mode « Afficher les éléments masqués » : bascule.
-    pub(super) fn basculer_afficher_masques(&mut self) {
+    pub(crate) fn basculer_afficher_masques(&mut self) {
         self.afficher_masques = !self.afficher_masques;
         self.visibility_dirty = true;
         self.status = if self.afficher_masques {
@@ -366,7 +366,7 @@ impl ViewerApp {
 
     /// Mode Afficher : réaffiche l'objet masqué cliqué (temporaire ou dans la vue). Vrai si
     /// le clic a été consommé.
-    pub(super) fn reafficher(&mut self, objet: u32) -> bool {
+    pub(crate) fn reafficher(&mut self, objet: u32) -> bool {
         if !self.afficher_masques || !self.objets_masques.contains(&objet) {
             return false;
         }

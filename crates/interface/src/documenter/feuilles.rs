@@ -979,7 +979,7 @@ fn selecteur_cartouche(ui: &mut egui::Ui, p: &modele::Projet, f: &doc::Feuille) 
     let actuel = doc::famille_cartouche(p, &f.id).map(|f| f.nom.as_str()).filter(|nom| *nom != doc::NOM_CARTOUCHE_STANDARD);
     let mut choix = actuel;
     {
-        use crate::ruban::selecteur;
+        use crate::zones::ruban::selecteur;
         let titre = format!("Cartouche · {}", actuel.unwrap_or("Standard"));
         let bouton = selecteur::entete(ui, &titre, None, &format!("{titre}
 Famille de cartouche de la feuille."), None);

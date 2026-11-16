@@ -198,7 +198,7 @@ impl ViewerApp {
     }
 
     pub(crate) fn contour_cadrage_vue(&self) -> Vec<glam::Vec2> {
-        if self.ruban_edition.outil() == Some(crate::ruban::Outil::Cadrer) { return Vec::new(); }
+        if self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Cadrer) { return Vec::new(); }
         let Some(id) = self.vue_native_id() else { return Vec::new() };
         let (Some((p, _)), Some(s)) = (&self.natif, &self.scene) else { return Vec::new() };
         p.vues.iter().find(|v| v.id == id).map(|v| v.contour_cadrage.iter().map(|p| glam::Vec2::new((p[0] * 0.001 - s.origin.x) as f32, (p[1] * 0.001 - s.origin.y) as f32)).collect()).unwrap_or_default()
@@ -208,7 +208,7 @@ impl ViewerApp {
         let Some(id) = self.vue_native_id() else { return true };
         let Some((p, _)) = &self.natif else { return true };
         let Some(vue) = p.vues.iter().find(|v| v.id == id) else { return true };
-        if vue.contour_cadrage.is_empty() || self.ruban_edition.outil() == Some(crate::ruban::Outil::Cadrer) { return true; }
+        if vue.contour_cadrage.is_empty() || self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Cadrer) { return true; }
         let z = self.altitude_vue_native();
         let points: Option<Vec<[f64; 2]>> = vue.contour_cadrage.iter().map(|p| self.ecran_plan(rect, *p, z).map(|p| [p.x as f64, p.y as f64])).collect();
         points.is_none_or(|points| modele::volumes::geometrie::dedans([q.x as f64, q.y as f64], &points))

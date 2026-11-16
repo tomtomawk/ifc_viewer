@@ -7,7 +7,7 @@
 use super::*;
 use commandes::Commande;
 use modele::Axe;
-use crate::ruban::Outil;
+use crate::zones::ruban::Outil;
 
 /// Nombre d'éléments d'un réseau quand aucun n'est réglé.
 pub(super) const NOMBRE_RESEAU: usize = 4;

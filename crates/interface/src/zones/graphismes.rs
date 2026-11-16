@@ -1,11 +1,11 @@
 //! Fenêtres matériau, plumes et motifs.
-use super::*;
+use crate::*;
 
 impl ViewerApp {
     /// Graphismes d'un matériau du projet natif, comme dans Revit (sans ombrage) : motifs
     /// de surface et de coupe, chacun en premier plan et en arrière-plan (motif, couleur).
     /// L'arrière-plan est uni ou hachuré ; « Motifs… » ouvre l'éditeur de hachures.
-    pub(super) fn fenetre_materiau(&mut self, ctx: &egui::Context) {
+    pub(crate) fn fenetre_materiau(&mut self, ctx: &egui::Context) {
         use modele::MotifCoupe;
         let Some(nom) = self.materiau_edite.clone() else { return };
         let Some((projet, chemin_projet)) = &self.natif else { self.materiau_edite = None; return };
@@ -99,7 +99,7 @@ impl ViewerApp {
     /// jour les matériaux qui s'en servent.
     /// Fenêtre « Épaisseurs de traits » : épaisseur de chaque plume (mm du papier),
     /// aperçu, couches qui l'utilisent ; table du projet, ou celle du gabarit rétablie.
-    pub(super) fn fenetre_plumes(&mut self, ctx: &egui::Context) {
+    pub(crate) fn fenetre_plumes(&mut self, ctx: &egui::Context) {
         let Some(mut table) = self.editeur_plumes.take() else { return };
         let Some((projet, _)) = &self.natif else { return };
         let gabarit = modele::Projet::default().epaisseurs_plumes();
@@ -165,7 +165,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn fenetre_motifs(&mut self, ctx: &egui::Context) {
+    pub(crate) fn fenetre_motifs(&mut self, ctx: &egui::Context) {
         use modele::{DefinitionMotif, LigneMotif, MotifCoupe};
         if !self.editeur_motifs {
             return;

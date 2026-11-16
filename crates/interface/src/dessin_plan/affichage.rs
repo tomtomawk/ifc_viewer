@@ -592,7 +592,7 @@ impl ViewerApp {
     /// Instructions de la commande active : texte bleu juste sous la barre de commande.
     pub(crate) fn dessiner_instructions(&self, ui: &egui::Ui, rect: egui::Rect) {
         if self.error.is_some() { return; }
-        use crate::ruban::Outil;
+        use crate::zones::ruban::Outil;
         let painter = ui.painter().with_clip_rect(rect);
         let edition = self.dessin2d.edition_contour.as_ref();
         let usage = self.usage_dessin();

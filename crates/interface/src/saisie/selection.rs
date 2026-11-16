@@ -225,7 +225,7 @@ impl ViewerApp {
         let nom_actuel = types.iter().find(|t| t.0 == actuel).map_or_else(|| p.type_mur(&actuel).or_else(|| p.type_dalle(&actuel)).map_or("Type".to_string(), |t| t.nom.clone()), |t| t.1.clone());
         let mut choisi = actuel.clone();
         {
-            use crate::ruban::{pile_couches, selecteur};
+            use crate::zones::ruban::{pile_couches, selecteur};
             let couches = |id: &str| p.type_mur(id).or_else(|| p.type_dalle(id)).map(|t| t.couches.clone()).unwrap_or_default();
             let detail_actuel = types.iter().find(|t| t.0 == actuel).map(|t| t.2.clone());
             let categorie = if matches!(cible, Cible::Dalle(_)) { "Élément horizontal" } else { "Mur" };

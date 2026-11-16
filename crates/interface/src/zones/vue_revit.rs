@@ -1,9 +1,9 @@
 //! Vues Revit, nomenclatures, fenêtre des éléments non pris en charge.
-use super::*;
+use crate::*;
 
 impl ViewerApp {
     /// Fiche d'un fichier Revit : vignette, version, informations projet, références.
-    pub(super) fn revit_view(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn revit_view(&mut self, ui: &mut egui::Ui) {
         if self.rvt_preview.is_none() {
             if let Some(img) = self.rvt.as_ref().and_then(|i| i.preview_png.as_deref()).and_then(decode_png) {
                 self.rvt_preview = Some(ui.ctx().load_texture("rvt-preview", img, egui::TextureOptions::LINEAR));
@@ -170,7 +170,7 @@ impl ViewerApp {
 
     /// Tableau d'une nomenclature Revit, recomposé depuis les éléments lus ; les colonnes
     /// que Revit calcule (formules, pièces d'une porte…) sont signalées.
-    pub(super) fn vue_nomenclature(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn vue_nomenclature(&mut self, ui: &mut egui::Ui) {
         let Some(i) = self.nomenclature_ouverte else { return };
         let Some(v) = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|n| n.vues.get(i)) else { return };
         let Some((titres, lignes, nc, tris)) = &v.tableau else { return };
@@ -198,7 +198,7 @@ impl ViewerApp {
         });
     }
 
-    pub(super) fn unsupported_window(&mut self, ctx: &egui::Context) {
+    pub(crate) fn unsupported_window(&mut self, ctx: &egui::Context) {
         let Some(s) = &self.scene else { return };
         let mut open = self.show_unsupported;
         egui::Window::new("Entités non prises en charge").open(&mut open).show(ctx, |ui| {

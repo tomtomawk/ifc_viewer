@@ -449,7 +449,7 @@ impl ViewerApp {
     }
     /// Une porte ou une fenêtre se place toujours avec une famille du projet.
     fn verifier_type_ouverture(&self) -> Result<(), String> {
-        use crate::ruban::Outil;
+        use crate::zones::ruban::Outil;
         let libre = self.ruban_edition.texte_option(Outil::Ouverture, 0) == "Libre";
         if libre || self.ruban_edition.ouverture_type_identique.is_some() {
             Ok(())
@@ -459,7 +459,7 @@ impl ViewerApp {
     }
 
     fn commande_ouverture(&self, mur: String, abscisse: f64) -> commandes::Commande {
-        use crate::ruban::Outil;
+        use crate::zones::ruban::Outil;
         let fenetre = self.ruban_edition.texte_option(Outil::Ouverture, 0) == "Fenêtre";
         commandes::Commande::Ouverture {
             mur,
@@ -621,7 +621,7 @@ impl ViewerApp {
             self.ruban_edition.ouverture_identique(o)?;
         } else if let Some(annotation) = p.annotations.iter().find(|a| &a.id == id) {
             use modele::documentation::{AnnotationForme as F, PointCote};
-            use crate::ruban::Outil;
+            use crate::zones::ruban::Outil;
             if self.vue_native_id().as_ref() != Some(&annotation.vue) {
                 return Err("Ouvrez la vue de l'annotation pour la créer à l'identique.".into());
             }
@@ -772,7 +772,7 @@ impl ViewerApp {
 
     pub(super) fn panneau_bim(&mut self, ui: &mut egui::Ui) -> bool {
         use commandes::Commande;
-        use crate::ruban::Outil;
+        use crate::zones::ruban::Outil;
         if self.natif.is_none() {
             return false;
         }

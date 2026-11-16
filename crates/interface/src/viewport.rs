@@ -16,7 +16,7 @@ impl ViewerApp {
         }
         let aspect = rect.width() / rect.height().max(1.0);
         let mode_ajuster=self.preparer_outil_ajuster();
-        let mode_attache = self.onglet_ruban == OngletRuban::Modifier && self.ruban_edition.outil() == Some(crate::ruban::Outil::AttacherToiture) && self.natif.is_some() && self.loading.is_none();
+        let mode_attache = self.onglet_ruban == OngletRuban::Modifier && self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::AttacherToiture) && self.natif.is_some() && self.loading.is_none();
         if mode_attache && !self.bim.attache_toiture_active {
             let selection = self.selection_bim();
             let projet = &self.natif.as_ref().unwrap().0;
@@ -45,8 +45,8 @@ impl ViewerApp {
         let altitude_coupe = self.altitude_vue_native();
         let structure = if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() {
             match self.ruban_edition.outil() {
-                Some(crate::ruban::Outil::Poteau) => Some(modele::GenreBarre::Poteau),
-                Some(crate::ruban::Outil::Poutre) => Some(modele::GenreBarre::Poutre),
+                Some(crate::zones::ruban::Outil::Poteau) => Some(modele::GenreBarre::Poteau),
+                Some(crate::zones::ruban::Outil::Poutre) => Some(modele::GenreBarre::Poutre),
                 _ => None,
             }
         } else { None };
@@ -54,13 +54,13 @@ impl ViewerApp {
         // Composant (vrai) ou Pièce (faux) : un clic place l'élément au niveau de la vue
         let placement = if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() {
             match self.ruban_edition.outil() {
-                Some(crate::ruban::Outil::Composant) => Some(true),
-                Some(crate::ruban::Outil::Piece) | Some(crate::ruban::Outil::Arbre) => Some(false),
+                Some(crate::zones::ruban::Outil::Composant) => Some(true),
+                Some(crate::zones::ruban::Outil::Piece) | Some(crate::zones::ruban::Outil::Arbre) => Some(false),
                 _ => None,
             }
         } else { None };
         // arbre : placé comme une pièce (point au niveau de la vue)
-        let arbre = placement == Some(false) && self.ruban_edition.outil() == Some(crate::ruban::Outil::Arbre);
+        let arbre = placement == Some(false) && self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Arbre);
         let altitude_placement = self.altitude_vue_native() + if placement == Some(true) { self.bim.composant.decalage } else if arbre { self.bim.arbre.decalage } else { 0.0 };
         let altitude_structure = structure.and_then(|_| {
             let p = &self.natif.as_ref()?.0;
@@ -68,7 +68,7 @@ impl ViewerApp {
         });
         // Texte : un clic le place dans la vue native, comme dans l'éditeur de famille
         let texte_annotation = self.onglet_ruban == OngletRuban::Annoter && self.natif.is_some() && self.loading.is_none()
-            && self.ruban_edition.outil() == Some(crate::ruban::Outil::Texte) && self.vue_native_id().is_some();
+            && self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Texte) && self.vue_native_id().is_some();
         // Déplacer, Copier, Tourner, Aligner : socle commun (transformer.rs)
         self.suivre_transformation();
         let deplacement = self.transfo.outil;
@@ -343,7 +343,7 @@ impl ViewerApp {
                 self.transfo.cible = resp.hover_pos().and_then(|q| cible(self, q)).or_else(|| self.transfo.curseur.filter(|_| resp.hovered()).and_then(|p| self.mur_proche(p)));
                 if resp.clicked_by(PointerButton::Secondary) && !self.transfo.reculer() { self.ruban_edition.annuler(); }
                 if resp.clicked() && let Some(q) = resp.interact_pointer_pos() {
-                    use crate::ruban::Outil as O;
+                    use crate::zones::ruban::Outil as O;
                     let depart = (matches!(outil, O::Deplacer | O::Copier | O::Symetrie | O::Echelle) || (outil == O::Reseau && !self.transfo.polaire)).then(|| self.transfo.points.first().copied()).flatten();
                     if let Some((p, _)) = self.point_tracage(q, rect, shift && depart.is_some(), depart, altitude_coupe) {
                         let c = cible(self, q);
@@ -410,14 +410,14 @@ impl ViewerApp {
             } else if resp.clicked() {
                 // Plan : une arête en pointillés de la plage haute (au-dessus de la coupe)
                 // est prioritaire sur l'élément coupé ou vu dessous.
-                let haut = (self.ruban_edition.outil()!=Some(crate::ruban::Outil::Ouverture)).then(|| resp.interact_pointer_pos().and_then(|q| self.objet_plage_haute(rect, q))).flatten();
+                let haut = (self.ruban_edition.outil()!=Some(crate::zones::ruban::Outil::Ouverture)).then(|| resp.interact_pointer_pos().and_then(|q| self.objet_plage_haute(rect, q))).flatten();
                 let hit = match haut {
                     Some(obj) => Some((obj, self.scene.as_ref().map_or(Vec3::ZERO, |s| s.objects[obj as usize].min))),
                     None => resp.interact_pointer_pos().and_then(|p| pick(self, p)),
                 };
                 let id = hit.map(|(obj, _)| self.cible_clic(self.scene.as_ref().unwrap().objects[obj as usize].id));
                 self.point_clique = hit.map(|(_, p)| p.as_dvec3() + self.scene.as_ref().unwrap().origin);
-                if self.natif.is_some() && self.ruban_edition.outil()==Some(crate::ruban::Outil::Ouverture) {
+                if self.natif.is_some() && self.ruban_edition.outil()==Some(crate::zones::ruban::Outil::Ouverture) {
                     if let (Some(id),Some(p))=(id,self.point_clique) { self.placer_ouverture(id,[p.x*1000.0,p.y*1000.0]); }
                 } else if id.is_none() {
                     // Un clic bref désélectionne seulement. Le rectangle est réservé

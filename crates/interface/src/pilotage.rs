@@ -531,7 +531,7 @@ impl ViewerApp {
     }
 
     pub(super) fn activer_outil_interface(&mut self, nom: &str) -> Result<Value, String> {
-        use crate::ruban::Outil as O;
+        use crate::zones::ruban::Outil as O;
         if self.natif.is_none() {
             return Err("Projet natif requis".into());
         }

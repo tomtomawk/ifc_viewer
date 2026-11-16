@@ -385,7 +385,7 @@ impl ViewerApp {
         let plan = matches!(vue.genre, modele::GenreVue::Plan { .. });
         let z = if plan { self.altitude_vue_native() } else { 0.0 };
         // le contour s'édite avec l'outil Cadrer, qui le dessine lui-même
-        if self.ruban_edition.outil() != Some(crate::ruban::Outil::Cadrer) && vue.contour_cadrage.len() > 2
+        if self.ruban_edition.outil() != Some(crate::zones::ruban::Outil::Cadrer) && vue.contour_cadrage.len() > 2
             && let Some(mut points) = vue.contour_cadrage.iter().map(|q| self.ecran_plan(rect, *q, z)).collect::<Option<Vec<_>>>()
         {
             points.push(points[0]);
@@ -547,7 +547,7 @@ impl ViewerApp {
     }
 
     /// Aperçu de la coupe en cours de tracé.
-    pub(crate) fn apercu_coupe(&self, ui: &egui::Ui, rect: egui::Rect, survol: Option<([f64; 2], AccrocheMur)>, z: f64, prm: &crate::ruban::ParametresCoupe) {
+    pub(crate) fn apercu_coupe(&self, ui: &egui::Ui, rect: egui::Rect, survol: Option<([f64; 2], AccrocheMur)>, z: f64, prm: &crate::zones::ruban::ParametresCoupe) {
         let painter = ui.painter().with_clip_rect(rect);
         let couleur = Color32::from_rgb(55, 130, 200);
         let accent = Color32::from_rgb(230, 120, 20);
@@ -1020,7 +1020,7 @@ impl ViewerApp {
         // d'un mur composé) reste à sa place d'origine pendant le choix, elle n'attire pas le point.
         let en_deplacement = depart.is_some()
             && self.onglet_ruban == OngletRuban::Modifier
-            && matches!(self.ruban_edition.outil(), Some(crate::ruban::Outil::Deplacer | crate::ruban::Outil::Copier));
+            && matches!(self.ruban_edition.outil(), Some(crate::zones::ruban::Outil::Deplacer | crate::zones::ruban::Outil::Copier));
         let mut deplaces: std::collections::HashSet<String> = std::collections::HashSet::new();
         if en_deplacement {
             for id in self.selection_bim() {

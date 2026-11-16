@@ -6,7 +6,7 @@ impl ViewerApp {
     /// Créer), transformations de la sélection (onglet Modifier), chargement dans le
     /// projet et fichiers (onglet Sortie).
     pub(crate) fn ruban_famille(&mut self, ui: &mut egui::Ui, onglet: OngletRuban) {
-        use crate::ruban::{bandeau, bandeau_compact, Commande as C, Icone as I};
+        use crate::zones::ruban::{bandeau, bandeau_compact, Commande as C, Icone as I};
         let Some(ed) = self.famille.as_ref() else { return };
         if onglet == OngletRuban::FamilleSortie {
             let placement = ed.ouverture.is_none();
@@ -108,7 +108,7 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                     if *fermee {
                         ui.label("Remplissage");
                         let texte = remplissage.as_ref().map_or("Aucun".to_string(), |r| r.libelle());
-                        if let Some(choix) = crate::communes::choisir_remplissage_2d(ui, projet, &texte) { *remplissage = choix; }
+                        if let Some(choix) = crate::zones::communes::choisir_remplissage_2d(ui, projet, &texte) { *remplissage = choix; }
                     }
                 }
                 AnnotationForme::Cercle { rayon, .. } => {
@@ -468,7 +468,7 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 if s.fermee {
                     let texte = s.remplissage.as_ref().map_or("Aucun".to_string(), |r| r.libelle());
                     ui.push_id(("remplissage_symbole", k), |ui| {
-                        if let Some(choix) = crate::communes::choisir_remplissage_2d(ui, projet, &texte) { changer_remplissage = Some((k, choix)); }
+                        if let Some(choix) = crate::zones::communes::choisir_remplissage_2d(ui, projet, &texte) { changer_remplissage = Some((k, choix)); }
                     });
                 }
                 if ui.small_button("−").on_hover_text("Supprimer le symbole").clicked() {

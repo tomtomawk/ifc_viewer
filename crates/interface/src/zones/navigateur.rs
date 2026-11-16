@@ -1,5 +1,5 @@
 //! Navigateur de projet, matériaux, arborescence IFC.
-use super::*;
+use crate::*;
 
 type OrganisationNav = modele::OrganisationArborescence;
 
@@ -41,7 +41,7 @@ fn organisation_nav(ui: &mut egui::Ui, cle: &str, lignes: &[(String, String)], r
 impl ViewerApp {
     /// Matériaux : pastille de couleur, nom, nombre d'éléments ; clic : isoler et cadrer
     /// les éléments qui portent le matériau.
-    pub(super) fn materiaux_ui(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn materiaux_ui(&mut self, ui: &mut egui::Ui) {
         let q = self.filter.trim().to_lowercase();
         let mut isoler: Option<Vec<Id>> = None;
         let natif = self.natif.is_some();
@@ -81,7 +81,7 @@ impl ViewerApp {
     /// Navigateur de projet de Revit : vues par genre et type, nomenclatures, feuilles et
     /// vues qu'elles portent, familles par catégorie, groupes, liens. Clic : propriétés ;
     /// double-clic : ouvrir la vue (ou isoler les instances d'un type).
-    pub(super) fn navigateur_ui(&mut self, ui: &mut egui::Ui, section: LeftTab) {
+    pub(crate) fn navigateur_ui(&mut self, ui: &mut egui::Ui, section: LeftTab) {
         // projet natif : jeux de feuilles et leurs feuilles, nomenclatures ; vues
         // glissables vers une feuille
         // jeux : (nom, feuilles : (id, titre, vues placées : (numéro de vue, nom, échelle)))
@@ -601,7 +601,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn tree_roots(&self) -> Vec<Id> {
+    pub(crate) fn tree_roots(&self) -> Vec<Id> {
         let s = self.scene.as_ref().unwrap();
         let mut roots: Vec<Id> = s.model.project.into_iter().collect();
         // Produits hors arborescence spatiale.
@@ -612,7 +612,7 @@ impl ViewerApp {
         roots
     }
 
-    pub(super) fn tree_node(&mut self, ui: &mut egui::Ui, id: Id, depth: u32) {
+    pub(crate) fn tree_node(&mut self, ui: &mut egui::Ui, id: Id, depth: u32) {
         if depth > 32 {
             return;
         }
@@ -697,7 +697,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn class_group(&mut self, ui: &mut egui::Ui, parent: Id, ty: &str, items: Vec<Id>, depth: u32) {
+    pub(crate) fn class_group(&mut self, ui: &mut egui::Ui, parent: Id, ty: &str, items: Vec<Id>, depth: u32) {
         let egui_id = ui.make_persistent_id(("group", parent, ty));
         let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), egui_id, false);
         if self.reveal.is_some_and(|r| items.iter().any(|&i| i == r || self.is_ancestor(i, r))) {
@@ -714,7 +714,7 @@ impl ViewerApp {
             });
     }
 
-    pub(super) fn is_ancestor(&self, anc: Id, mut id: Id) -> bool {
+    pub(crate) fn is_ancestor(&self, anc: Id, mut id: Id) -> bool {
         let Some(s) = &self.scene else { return false };
         if anc == 0 {
             // Racine des orphelins
@@ -735,7 +735,7 @@ impl ViewerApp {
         false
     }
 
-    pub(super) fn class_list(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn class_list(&mut self, ui: &mut egui::Ui) {
         let s = self.scene.as_ref().unwrap();
         let mut counts: BTreeMap<String, usize> = BTreeMap::new();
         for o in &s.objects {
@@ -764,7 +764,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn filtered_list(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn filtered_list(&mut self, ui: &mut egui::Ui) {
         let s = self.scene.as_ref().unwrap();
         let q = self.filter.trim().to_lowercase();
         let mut hits = Vec::new();

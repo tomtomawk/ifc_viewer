@@ -274,7 +274,7 @@ impl ViewerApp {
                 self.status = "Commande précédente arrêtée.".into();
             }
             self.dessin2d.commande_cle = cle;
-            if cle != Some(crate::ruban::Outil::Escalier) { self.dessin2d.giron_impose = None; }
+            if cle != Some(crate::zones::ruban::Outil::Escalier) { self.dessin2d.giron_impose = None; }
             self.dessin2d.historique_depart = cle.map(|_| self.profondeur_historique());
         }
         if self.ruban_edition.selection_mur && self.usage_dessin().is_some_and(|(u,_)|u==Usage::Mur) {

@@ -1,9 +1,9 @@
 //! Panneaux ancrables, soleil, styles, cube d'orientation, panneau gauche.
-use super::*;
+use crate::*;
 
 impl ViewerApp {
     /// Contenu d'un panneau déplaçable.
-    pub(super) fn panneau(&mut self, ui: &mut egui::Ui, p: Panneau) {
+    pub(crate) fn panneau(&mut self, ui: &mut egui::Ui, p: Panneau) {
         // Le contenu garde une largeur lisible sans imposer cette largeur au volet.
         // Le défilement permet de retrouver les champs même dans un volet très étroit.
         if self.ancrages[p as usize]!=Ancrage::Externe {
@@ -21,7 +21,7 @@ impl ViewerApp {
             });
     }
 
-    pub(super) fn contenu_panneau(&mut self, ui: &mut egui::Ui, p: Panneau) {
+    pub(crate) fn contenu_panneau(&mut self, ui: &mut egui::Ui, p: Panneau) {
         if p == Panneau::Proprietes && self.mode_famille() { self.categorie_famille_ui(ui); }
         if self.famille_plane_active.is_some() {
             self.panneau_famille_plane(ui, p);
@@ -42,7 +42,7 @@ impl ViewerApp {
     }
 
     /// Poignée de déplacement et menu pour détacher ou réancrer le volet.
-    pub(super) fn entete_panneau(&mut self, ui: &mut egui::Ui, p: Panneau, titre: &str) {
+    pub(crate) fn entete_panneau(&mut self, ui: &mut egui::Ui, p: Panneau, titre: &str) {
         let i = p as usize;
         ui.horizontal(|ui| {
             let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 20.0), Sense::hover());
@@ -69,12 +69,12 @@ impl ViewerApp {
         });
     }
 
-    pub(super) fn cible_ancrage(&self, q: egui::Pos2) -> Option<Ancrage> {
+    pub(crate) fn cible_ancrage(&self, q: egui::Pos2) -> Option<Ancrage> {
         volets::cible_volet(self.zone_panneaux,q)
     }
 
     /// Le suivi reste actif pendant le passage d'un panneau ancré à une fenêtre flottante.
-    pub(super) fn deplacer_panneau(&mut self, ctx: &egui::Context) {
+    pub(crate) fn deplacer_panneau(&mut self, ctx: &egui::Context) {
         let Some((p,decalage,source))=self.deplacement_panneau else{return};
         // Lire le viewport où le geste a commencé, aussi bien ancré que déjà flottant.
         if let Some((position,local,enfonce))=volets::suivre_pointeur(ctx,source,decalage) {
@@ -89,7 +89,7 @@ impl ViewerApp {
         ctx.request_repaint();
     }
 
-    pub(super) fn apercu_ancrage(&self, ctx: &egui::Context) {
+    pub(crate) fn apercu_ancrage(&self, ctx: &egui::Context) {
         let Some((p, _, _)) = self.deplacement_panneau else { return };
         let Some(cible) = self.volets[p as usize].cible else { return };
         let zone = self.zone_panneaux;
@@ -103,7 +103,7 @@ impl ViewerApp {
 
     /// Ancre un panneau, ou le rend flottant au-dessus de la vue (à sa dernière place
     /// flottante, ramenée dans la vue).
-    pub(super) fn ancrer(&mut self, p: Panneau, a: Ancrage) {
+    pub(crate) fn ancrer(&mut self, p: Panneau, a: Ancrage) {
         let i = p as usize;
         if a == Ancrage::Flottant && self.ancrages[i] != a && self.pos_imposee[i].is_none() && self.rect_vue.is_positive() {
             let v = self.rect_vue;
@@ -122,7 +122,7 @@ impl ViewerApp {
     /// carte englobe sa tranche (sphère, taille fixe : pas de frémissement quand la caméra
     /// tourne), calée sur sa grille de pixels, et toute la scène en profondeur (les objets
     /// hors champ portent aussi leur ombre).
-    pub(super) fn soleil(&self, aspect: f32) -> Option<moteur3d::gpu::Ombres> {
+    pub(crate) fn soleil(&self, aspect: f32) -> Option<moteur3d::gpu::Ombres> {
         use moteur3d::gpu::{Cascade, NB_CASCADES, TAILLE_OMBRES};
         let s = self.scene.as_ref()?;
         let dir = self.direction_soleil();
@@ -181,7 +181,7 @@ impl ViewerApp {
     }
 
     /// Style visuel : bouton à l'icône du style en cours, menu des styles.
-    pub(super) fn choix_style(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn choix_style(&mut self, ui: &mut egui::Ui) {
         let mut choisi = None;
         let (reponse,_) = egui::containers::menu::MenuButton::from_button(egui::Button::new("").min_size(egui::vec2(24.0,24.0))).ui(ui, |ui| {
             for st in StyleVisuel::TOUS {
@@ -223,7 +223,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn choix_fond_plan(&mut self,ui:&mut egui::Ui) {
+    pub(crate) fn choix_fond_plan(&mut self,ui:&mut egui::Ui) {
         let Some(id)=self.vue_native_id() else{return};
         let Some((p,_))=&self.natif else{return};
         let Some(v)=p.vues.iter().find(|v|v.id==id && matches!(v.genre,modele::GenreVue::Plan{..})) else{return};
@@ -248,7 +248,7 @@ impl ViewerApp {
     /// de la verticale.
     /// Choix de la projection sous le cube : perspective, verticales droites (deux
     /// points), orthographique.
-    pub(super) fn choix_projection(&mut self, ui: &mut egui::Ui, vue: egui::Rect) {
+    pub(crate) fn choix_projection(&mut self, ui: &mut egui::Ui, vue: egui::Rect) {
         use moteur3d::camera::Projection;
         let largeur = 132.0;
         let zone = egui::Rect::from_min_size(egui::pos2(vue.right() - largeur - 8.0, vue.top() + 8.0 + 132.0 + 4.0), egui::vec2(largeur, 22.0));
@@ -304,7 +304,7 @@ impl ViewerApp {
         }
     }
 
-    pub(super) fn cube_orientation(&mut self, ui: &mut egui::Ui, vue: egui::Rect) {
+    pub(crate) fn cube_orientation(&mut self, ui: &mut egui::Ui, vue: egui::Rect) {
         use egui::{Stroke, pos2};
         let cote = 132.0;
         let zone = egui::Rect::from_min_size(pos2(vue.right() - cote - 8.0, vue.top() + 8.0), egui::vec2(cote, cote));
@@ -466,7 +466,7 @@ impl ViewerApp {
     }
 
     /// Arborescence du projet (panneau de droite, comme dans Revit).
-    pub(super) fn left_panel(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn left_panel(&mut self, ui: &mut egui::Ui) {
         let nom = self.scene.as_ref().map(|s| s.file_name.clone()).unwrap_or_default();
         let titre = if nom.is_empty() { "Arborescence du projet".to_string() } else { format!("Arborescence du projet - {nom}") };
         self.entete_panneau(ui, Panneau::Arborescence, &titre);
