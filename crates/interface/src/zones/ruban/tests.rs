@@ -531,5 +531,7 @@ fn un_seul_selecteur_pendant_les_creations() {
     ruban.activer_outil(Outil::Ouverture);
     assert!(ruban.selecteur_creation_actif());
     ruban.activer_structure(true);
+    assert!(ruban.selecteur_creation_actif(), "poutre : type choisi dans Propriétés");
+    ruban.activer_structure(false);
     assert!(!ruban.selecteur_creation_actif());
 }

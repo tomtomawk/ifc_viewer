@@ -394,7 +394,8 @@ impl ViewerApp {
                         commande = Some(Commande::Niveau { nom, altitude });
                     }
                 }
-                Some(Outil::Poteau | Outil::Poutre) => {
+                Some(Outil::Poutre) => self.panneau_poutre(ui),
+                Some(Outil::Poteau) => {
                     use modele::GenreBarre;
                     let genre = if outil == Some(Outil::Poteau) {
                         GenreBarre::Poteau

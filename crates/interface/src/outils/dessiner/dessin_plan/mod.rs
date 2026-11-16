@@ -268,6 +268,8 @@ pub(crate) enum Usage {
     Escalier,
     /// Garde-corps : tracé en plan.
     GardeCorps,
+    /// Poutres : une par segment de la polyligne ou du rectangle tracé.
+    Poutre,
     Terrain,
     LimitePropriete,
     Cadrage,
@@ -863,6 +865,10 @@ impl ViewerApp {
         if modeliser && self.ruban_edition.outil() == Some(Outil::GardeCorps) {
             return Some((Usage::GardeCorps, OutilDessin::Polyligne));
         }
+        if modeliser && self.ruban_edition.outil() == Some(Outil::Poutre) {
+            let forme = if self.ruban_edition.forme_dalle == OutilDessin::Rectangle { OutilDessin::Rectangle } else { OutilDessin::Polyligne };
+            return Some((Usage::Poutre, forme));
+        }
         if !matches!(self.onglet_ruban, OngletRuban::Annoter | OngletRuban::Modifier) || self.vue_native_id().is_none() {
             return None;
         }
@@ -914,7 +920,7 @@ impl ViewerApp {
             return Some((DVec3::new(0.0,0.0,z),DVec3::X,DVec3::Y));
         }
         match self.usage_dessin()?.0 {
-            Usage::Mur | Usage::Surface | Usage::Escalier | Usage::GardeCorps | Usage::Terrain | Usage::LimitePropriete | Usage::Cadrage => Some((DVec3::new(0.0, 0.0, self.altitude_trace()), DVec3::X, DVec3::Y)),
+            Usage::Mur | Usage::Surface | Usage::Escalier | Usage::GardeCorps | Usage::Poutre | Usage::Terrain | Usage::LimitePropriete | Usage::Cadrage => Some((DVec3::new(0.0, 0.0, self.altitude_trace()), DVec3::X, DVec3::Y)),
             Usage::Annotation => {
                 let id = self.vue_native_id()?;
                 let p = &self.natif.as_ref()?.0;

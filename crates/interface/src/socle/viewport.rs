@@ -46,7 +46,6 @@ impl ViewerApp {
         let structure = if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() {
             match self.ruban_edition.outil() {
                 Some(crate::zones::ruban::Outil::Poteau) => Some(modele::GenreBarre::Poteau),
-                Some(crate::zones::ruban::Outil::Poutre) => Some(modele::GenreBarre::Poutre),
                 _ => None,
             }
         } else { None };

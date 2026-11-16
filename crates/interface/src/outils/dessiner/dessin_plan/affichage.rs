@@ -456,6 +456,7 @@ impl ViewerApp {
                     Some(Usage::Mur) if trace.outil!=OutilDessin::Arc || trace.points.len()>=2 => self.apercu_volume_murs(&painter, rect, &apercu),
                     Some(Usage::Surface | Usage::LimitePropriete | Usage::Cadrage) => self.apercu_surface(&painter, rect, &apercu),
                     Some(Usage::Escalier) => self.apercu_escalier(&painter, rect, &apercu),
+                    Some(Usage::Poutre) => self.apercu_poutres(&painter, rect, &apercu),
                     _ => {}
                 }
                 if trace.perimetre && trace.outil==OutilDessin::Cercle {
@@ -596,7 +597,8 @@ impl ViewerApp {
 
     /// Instructions de la commande active : texte bleu juste sous la barre de commande.
     pub(crate) fn dessiner_instructions(&self, ui: &egui::Ui, rect: egui::Rect) {
-        if self.error.is_some() { return; }
+        // un message (erreur, information, avertissement) occupe la place de la consigne
+        if self.message_visible() { return; }
         use crate::zones::ruban::Outil;
         let painter = ui.painter().with_clip_rect(rect);
         let edition = self.dessin2d.edition_contour.as_ref();

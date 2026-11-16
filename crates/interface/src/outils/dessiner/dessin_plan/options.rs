@@ -40,6 +40,7 @@ fn formes_usage(usage: Usage) -> &'static [(OutilDessin, &'static str, &'static 
         Usage::Surface | Usage::LimitePropriete | Usage::Terrain => &[POLYGONE, RECTANGLE, CERCLE],
         Usage::Cadrage => &[POLYGONE, RECTANGLE],
         Usage::Escalier | Usage::GardeCorps | Usage::Annotation => &[POLYLIGNE],
+        Usage::Poutre => &[POLYLIGNE, RECTANGLE],
         Usage::Mur => &[],
     }
 }
@@ -94,6 +95,7 @@ impl ViewerApp {
         let (mut choisir_selection, mut forme_choisie) = (false, None);
         ui.horizontal(|ui| {
             (choisir_selection, forme_choisie) = boutons_trace(ui, selection, commande, outil, formes_usage(usage), raison_forme);
+            if usage == Usage::Poutre { self.options_poutre(ui); }
             if let Some(n) = copies.as_mut() {
                 ui.separator();
                 ui.label("Copies");

@@ -158,6 +158,10 @@ impl ViewerApp {
         if formes.is_empty() {
             return;
         }
+        if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Poutre) {
+            self.creer_poutres(&formes);
+            return;
+        }
         if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier || u == Usage::GardeCorps) {
             let escalier = self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier);
             for f in &formes {
@@ -370,7 +374,7 @@ impl ViewerApp {
                             lu = true;
                         } else if ch == ' ' {
                             // Espace inverse le sens d'un mur ; ailleurs, il valide comme Entrée
-                            if usage == Usage::Mur { inverser = true } else if usage == Usage::Escalier { justifier = true } else { valider = true }
+                            if usage == Usage::Mur || usage == Usage::Poutre { inverser = true } else if usage == Usage::Escalier { justifier = true } else { valider = true }
                             lu = true;
                         }
                     }
@@ -461,11 +465,12 @@ impl ViewerApp {
                 self.dessin2d.trace = None;
             }
         }
+        if usage == Usage::Poutre { self.raccourci_poutre(justifier, inverser); }
         if justifier {
             if usage == Usage::Mur { self.ruban_edition.implantation_suivante(); }
             else if usage == Usage::Escalier { self.dessin2d.justification_escalier = (self.dessin2d.justification_escalier + 1) % 3; }
         }
-        if inverser {
+        if inverser && usage == Usage::Mur {
             self.ruban_edition.sens_inverse = !self.ruban_edition.sens_inverse;
         }
         if valider {

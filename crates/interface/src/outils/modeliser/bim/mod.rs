@@ -15,6 +15,8 @@ pub(crate) struct EtatBim {
     pub(crate) delta: [f64; 3],
     abscisse: f64,
     pub(crate) barre: modele::Barre,
+    /// Réglages des prochaines poutres (outil Poutre, n° 6 à 10).
+    pub(crate) poutre: crate::outils::modeliser::poutres::ReglagesPoutre,
     pub(crate) depart_structure: Option<[f64; 2]>,
     /// Composant à placer (type vide : type par défaut) et nom des pièces créées.
     pub(crate) composant: modele::Composant,
@@ -46,6 +48,7 @@ impl Default for EtatBim {
             selection: Vec::new(),
             delta: [1000.0, 0.0, 0.0],
             abscisse: 1500.0,
+            poutre: Default::default(),
             barre: modele::Barre {
                 id: String::new(),
                 nom: "Structure".into(),
