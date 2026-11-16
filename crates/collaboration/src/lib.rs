@@ -294,6 +294,7 @@ pub fn sensible(k: &str) -> bool {
             | "escaliers"
             | "garde_corps"
             | "types_garde_corps"
+            | "types_poutres"
             | "types_terrains"
             | "materiaux"
             | "motifs"
