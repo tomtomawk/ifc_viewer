@@ -20,14 +20,14 @@ crates/
   moteur3d/       wgpu, shaders, caméra, ciel, sélection à l'écran
   echanges/       import IFC/RVT, export IFC, enregistrement, rapport
   collaboration/  transactions partagées : session, stockage, concurrence, partage, texte (yrs), cli
-  pilote/         MCP, CLI
+  pilote/         MCP, CLI, registre des instances, saisie (egui::Event) ; mcp.rs ~600 lignes
   config/
   interface/      egui ; UNE crate (`impl ViewerApp` réparti sur 48 fichiers) ;
                   socle/ zones/ saisie/ outils/{modeliser,modifier,dessiner,annoter}/ documents/ familles/ projet/
   app/            binaire `bimedit`
 ```
 
-Correspondance avec les dossiers actuels (après lot 9) : `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage`, `crates/commandes`, `crates/moteur2d`, `crates/moteur3d`, `crates/echanges`, `crates/collaboration` : extraits ; dans `crates/app/src/` : `pilote/`, `config/` ; `ui/` -> interface ; `main.rs` -> app ; `modele_tests/` : 17 tests parqués, accueil commandes ou moteur2d (§5.16 d) ; `formats_tests/` et `commandes_tests/` n'existent plus.
+Correspondance avec les dossiers actuels (après lot 10) : `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage`, `crates/commandes`, `crates/moteur2d`, `crates/moteur3d`, `crates/echanges`, `crates/collaboration`, `crates/pilote` : extraits ; dans `crates/app/src/` : `config/` ; `ui/` -> interface ; `main.rs` -> app ; `modele_tests/` : 17 tests parqués, accueil commandes ou moteur2d (§5.16 d) ; `formats_tests/` et `commandes_tests/` n'existent plus.
 
 ## 2. Graphe de dépendances autorisées
 
@@ -51,7 +51,7 @@ noyau <- modele <- ifc_base <- scene <- formats <- maillage <- commandes <- mote
 | moteur3d | noyau, modele, scene, moteur2d (réel : `noyau`, `modele`, `scene` ; `moteur2d` reste autorisée sans être utilisée ; `maillage` en dev-dependency pour un test ; externes : `eframe` (egui, egui_wgpu, wgpu), `glam`, `image`, `earcutr`, §5.15) |
 | echanges | noyau, modele, scene, formats, maillage (réel : `noyau`, `modele`, `ifc_base`, `formats` ; `scene` et `maillage` restent autorisées sans être utilisées ; dev : `commandes`, `maillage`, `moteur2d` pour les tests d'intégration ; externes : `glam`, `rayon`, §5.16) |
 | collaboration | noyau, modele, scene, maillage, commandes, echanges (réel : `noyau`, `modele`, `maillage`, `commandes`, `echanges` ; `scene` reste autorisée sans être utilisée ; externes : `yrs`, `serde`, `serde_json`, `glam`, §5.16) |
-| pilote | collaboration et en dessous |
+| pilote | collaboration et en dessous, hors `config` et `ui` (réel : `noyau`, `modele`, `maillage`, `commandes`, `moteur2d`, `echanges`, `collaboration` ; `scene`, `formats`, `ifc_base`, `moteur3d` non utilisées ; externes : `eframe` (egui seul : `egui::Event` dans `saisie.rs`, `egui::Context` dans `lib.rs`), `png`, `serde`, `serde_json`, `serde_ignored`, `uuid`, §5.17) |
 | config | tout ce qui précède, hors interface |
 | interface | tout ce qui précède |
 | app | interface (et config, pilote pour le démarrage) |
@@ -89,7 +89,7 @@ Code « parqué » : quand une coupe fait monter du code vers une crate qui n'ex
 | 7 | moteur2d | `dessin/` dont le rendu de vue et de feuille parqué (`dessin/feuilles.rs`, `dessin/plans.rs`) | **Fable** | **fait** (aucune coupe nécessaire ; extraction `22e2c46` ; découpage de `lib.rs` `6405175` ; détail au §5.14) |
 | 8 | moteur3d | `rendu/` hors scène | Sonnet | **fait** (aucune coupe nécessaire ; extraction `d2686d2` ; `gpu.rs` non découpé ; détail au §5.15) |
 | 9 | echanges + collaboration | `crates/app/src/echanges`, `crates/app/src/collaboration*` | Sonnet | **fait** (aucune coupe préalable nécessaire ; extraction de `echanges` `e72f601` ; extraction de `collaboration` `35fab15` ; détail au §5.16) |
-| 10 | pilote | `pilote/` | Sonnet | à faire |
+| 10 | pilote | `pilote/` | Sonnet | **fait** (aucune coupe préalable nécessaire ; extraction `5424089` ; détail au §5.17) |
 | 11 | config + interface | rangement interne `socle/ zones/ saisie/ outils/... ` ; `cadre_natif` et `arriere_plan` de `main.rs` | **Fable** | à faire |
 | 12 | app + docs | binaire, `AGENTS.md` par crate, README | Sonnet | à faire |
 
@@ -820,3 +820,54 @@ Concernant `echanges` et `collaboration` : **aucune** (ni `config`, `ui`, `pilot
 
 Points ouverts : (1) déplacement des 11 tests de `modele_tests` vers `crates/commandes/tests/` et des 6 de `documentation.rs` vers `crates/moteur2d/tests/` ; (2) `scene` autorisée mais inutilisée par `echanges` et `collaboration`, `maillage` par `echanges` (en dev seulement) au §2 ; (3) découpage de `stockage.rs` et `session.rs` ; (4) l'identifiant de test des sous-processus (`tests::enfant_…`) dépend du nom du module de tests : à garder si `tests.rs` est déplacé.
 
+### 5.17 Après lot 10 (2026-11-16)
+
+Tests : 390 réussis, 2 ignorés, comme avant le lot ; répartition `bimedit` 70 (avant : 82), `pilote` 12, `collaboration` 43, `echanges` 28, `moteur3d` 12, `moteur2d` 34 (+ 1 ignoré), `commandes` 18, `formats` 52, `modele` 101 (+ 1 ignoré), `noyau` 10, `ifc_base` 2, `maillage` 8, `scene` 0 (la somme brute des lignes « test result » donne 394 : 4 lignes sont des sorties de sous-processus de `collaboration`). `cargo test -p pilote --release` : 12 réussis. `grep -rn "crate::" crates/pilote/src` : une seule ligne, interne (`crate::instances` dans `mcp.rs`). Sorties comparées à `986dd4e` (binaire de référence construit dans un worktree temporaire) : `--export-ifc` et `--quantites` de `samples/maison_native.modele.json` identiques octet pour octet ; `--stats` de `test_ifc4.ifc` et `test_ifc4_murs.ifc` identiques hors « Durée » ; échange MCP sans interface (`initialize` puis `tools/list` sur stdin de `bimedit --mcp`) : sortie identique octet pour octet.
+
+#### (a) Contenu de `crates/pilote`
+
+Lib, 6 fichiers, 1 410 lignes, 12 tests. Dépendances internes : `noyau`, `modele`, `maillage`, `commandes`, `moteur2d`, `echanges`, `collaboration`. Externes : `eframe`, `png`, `serde`, `serde_json`, `serde_ignored` (retirée d'`app`), `uuid`.
+
+| Fichier (`src/`) | Lignes | Contenu |
+|---|---|---|
+| `lib.rs` | 146 | écoute TCP (`demarrer`, `Requete`, `PORT`), helpers JSON (`texte`, `objet`, `liste`, `erreur`, `succes`), `png`, `documentation` (aide, `include_str!`) |
+| `mcp.rs` | 607 | serveur MCP stdio (`bimedit --mcp`) ; 6 tests |
+| `cli.rs` | 94 | `--editer`, `--export-ifc`, `--export-vue`, `--export-feuille`, `--quantites`, `--mesurer-scene` |
+| `edition.rs` | 198 | transactions et modifications du projet natif demandées par le pilote ; 3 tests |
+| `instances.rs` | 160 | registre des instances, jeton, authentification ; 2 tests |
+| `saisie.rs` | 205 | entrées egui validées avant leur mise en file ; 1 test |
+
+#### (b) Décisions de frontière
+
+| # | Sujet | Décision | Pourquoi |
+|---|---|---|---|
+| 1 | Coupes préalables (commit a) | aucune, pas de commit a | `pilote` n'avait aucune référence `crate::` vers `config` ni `ui` ; le test cité au §5.5 (`Gabarit::defaut`) n'existe plus (`modele::gabarit`) |
+| 2 | `eframe` | dépendance de production conservée | `saisie.rs` construit des `egui::Event` (`Event::PointerButton`, `PointerMoved`, `MouseWheel`, `Key`, `Text`), `Modifiers`, `PointerButton`, `Pos2`, `Key::from_name` ; `lib.rs::demarrer` reçoit un `egui::Context` pour `request_repaint`. Un type neutre déplacerait la conversion vers `ui` : changement structurel non fait |
+| 3 | `include_str!` de `docs/` | `../../../../docs/` -> `../../../docs/` (`lib.rs`, `mcp.rs`) | crate un niveau plus haut |
+| 4 | `include_str!` de `commandes` | `../../../commandes/src/socle/commande.rs` -> `../../commandes/src/socle/commande.rs` ; pas de constante exportée par `commandes` | chemin entre crates conservé, relatif correct ; une constante serait une API nouvelle |
+| 5 | `use super::instances` | -> `use crate::instances` (`mcp.rs`) | `mod.rs` est devenu `lib.rs` |
+| 6 | Appelants | `crate::pilote::` -> `pilote::` (`main.rs`, `ui/mod.rs`) ; `mod pilote;` retiré ; `commandes_pilote.rs` et `pilotage.rs` restent dans `ui` | modules d'interface ; aucun module de `ui` ne porte le nom `pilote` : pas besoin de `::pilote::` |
+| 7 | Dépendances d'`app` | `png` et `serde_ignored` retirées | plus aucun appel dans `app` |
+
+Aucune visibilité élargie. Aucun changement fonctionnel ni de format.
+
+#### (c) Fichiers au-delà du plafond
+
+`mcp.rs` (607) : laissé entier. Les autres fichiers sont sous 600.
+
+#### (d) Tests déplacés et parqués
+
+Les 12 tests suivent le code (mêmes noms et assertions) : `edition.rs` 3, `instances.rs` 2, `mcp.rs` 6, `saisie.rs` 1 ; aucun ne dépend de `config` ni de `ui`. Aucun test de `pilote` ne reste dans `app`. Les 17 tests de `modele_tests` restent parqués (§5.16 d).
+
+#### (e) Violations restantes (lot 11)
+
+Concernant `pilote` : **aucune** (ni `config`, ni `ui`). Egui reste en dépendance de `pilote` (b 2).
+
+| De | Vers | Détail | Lot |
+|---|---|---|---|
+| `ui` | pilote | `commandes_pilote.rs`, `pilotage.rs`, `mod.rs` : `pilote::{erreur, texte, objet, succes, edition, saisie, instances, demarrer, Requete}` ; sens autorisé | 11 |
+| `main.rs` | pilote | `pilote::mcp::servir`, `pilote::cli::executer`, `pilote::instances::retirer`, `pilote::texte` ; sens autorisé | 11 |
+| `config` | echanges | `options/mod.rs` : `echanges::enregistrement::ecrire_atomique` (1) ; sens autorisé | 11 |
+| `modele_tests` | commandes, maillage, moteur2d | 17 tests parqués (§5.16 d) | 11 |
+
+Point ouvert : l'aide « commandes » du pilote embarque `commandes/src/socle/commande.rs` par chemin de fichier ; renommer ou déplacer ce fichier casse la compilation de `pilote`.

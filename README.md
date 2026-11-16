@@ -175,9 +175,9 @@ Le dépôt est un workspace Cargo : l'application (crate `bimedit`) est dans `cr
 | `crates/moteur2d/src/` | Dessin 2D, crate `moteur2d` : coupe par un plan (`coupe.rs` : poché, hachures, contours), arêtes vues et cachées et sommets GPU (`vue.rs`), motifs (`motifs.rs` : isolant), outils de DAO (`dao.rs`), rendu de vue et de feuille SVG/PDF (`feuilles.rs`, `plans.rs`) |
 | `crates/moteur3d/src/` | Vue 3D : rendu wgpu (`gpu.rs`), ciel, caméra, repère des plans, sélection à l'écran, shaders `*.wgsl` |
 | `crates/app/src/ui/` | Interface egui : état et boucle (`mod.rs`), un fichier par zone (barre haute, panneaux, navigateur, vues, viewport, propriétés, sélection…), `ruban/`, `dessin_plan/` (saisie en plan), `editeur_famille/`, `bim/` |
-| `crates/app/src/pilote/` | Canal de commande local (TCP 127.0.0.1, jeton) du serveur MCP, registre des instances (`instances.rs`) et commandes en ligne (`cli.rs`) |
+| `crates/pilote/src/` | Canal de commande local (TCP 127.0.0.1, jeton) du serveur MCP, registre des instances (`instances.rs`) et commandes en ligne (`cli.rs`) |
 | `crates/app/src/config/` | Options utilisateur, raccourcis |
-| `crates/app/src/pilote/mcp.rs` | Serveur MCP (stdio, `bimedit --mcp`) qui pilote le viewer : ouverture, vues, caméra, propriétés, captures |
+| `crates/pilote/src/mcp.rs` | Serveur MCP (stdio, `bimedit --mcp`) qui pilote le viewer : ouverture, vues, caméra, propriétés, captures |
 
 ## Pilotage par MCP
 
@@ -191,7 +191,7 @@ sur une instance, un port, un cache collaboratif et des documents temporaires is
 Chaque viewer écoute sur `127.0.0.1` (47811, sinon un port libre) des commandes d'une
 ligne précédées de son jeton, et s'inscrit dans le registre des instances : le pont
 pilote aussi un viewer ouvert à la main, et `viewer_instances` choisit entre plusieurs
-(voir [docs/PILOTE.md](docs/PILOTE.md)). `crates/app/src/pilote/mcp.rs` (mode `bimedit --mcp` du même exécutable) les expose en serveur MCP,
+(voir [docs/PILOTE.md](docs/PILOTE.md)). `crates/pilote/src/mcp.rs` (mode `bimedit --mcp` du même exécutable) les expose en serveur MCP,
 déclaré dans `.mcp.json` sous le nom `bimedit` (lancé par `target/release/bimedit.exe --mcp`, après `cargo build --release`) : un agent ouvre un fichier, choisit une
 vue Revit, règle la caméra, lit les propriétés, désigne l'objet sous un point et reçoit des
 captures PNG. La vue 3D est rendue hors écran (tampon de trame), à la taille demandée, même

@@ -1,0 +1,23 @@
+# Crate `pilote`
+
+Rôle : pilotage du viewer par un autre programme : serveur MCP stdio (`bimedit --mcp`), canal TCP local avec jeton, registre des instances, commandes en ligne non graphiques, entrées egui validées.
+
+Dépendances internes autorisées : `noyau`, `modele`, `scene`, `maillage`, `commandes`, `moteur2d`, `moteur3d`, `echanges`, `collaboration` (réel : sans `scene` ni `moteur3d`). Interdit : `config`, `ui`. `eframe` n'est là que pour `egui::Event` (`saisie.rs`) et `egui::Context` (`lib.rs`) : ne pas y ajouter d'autre usage d'egui ni de wgpu.
+
+## Où travailler
+
+| Fichier (`src/`) | Contenu |
+|---|---|
+| `lib.rs` | écoute TCP (`demarrer`, `Requete`), helpers JSON, `documentation` |
+| `mcp.rs` | serveur MCP (607 lignes : ne pas agrandir) |
+| `cli.rs` | `--editer`, `--export-*`, `--quantites`, `--mesurer-scene` |
+| `edition.rs`, `instances.rs`, `saisie.rs` | transactions du pilote, registre des instances, entrées egui |
+
+Les commandes reçues sont exécutées par l'interface (`ui/commandes_pilote.rs`, `ui/pilotage.rs`), pas ici. Les `include_str!` visent `docs/PILOTE.md`, `docs/EDITION.md`, `docs/MODELE.md` et `crates/commandes/src/socle/commande.rs` (chemins relatifs à `src/`).
+
+## Vérifier
+
+```
+cargo test -p pilote --release
+cargo tree -p pilote   # aucune crate interne hors noyau, modele, maillage, commandes, moteur2d, echanges, collaboration
+```
