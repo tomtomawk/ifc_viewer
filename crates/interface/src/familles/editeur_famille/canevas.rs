@@ -325,9 +325,9 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             textes_2d.push((indice, rect_texte.expand(5.0)));
         } else {
             let primitives = modele::documentation::forme_cartouche(projet, &element.forme);
-            let dessin = crate::feuilles::rendu(&primitives, [0.0; 4]);
+            let dessin = crate::documenter::feuilles::rendu(&primitives, [0.0; 4]);
             let selection = ed.choisi(&SelectionFamille::Element2D(indice)).then_some(Color32::from_rgb(0, 100, 210));
-            crate::cartouche::peindre(&painter, &cadre, dessin, selection);
+            crate::documenter::cartouche::peindre(&painter, &cadre, dessin, selection);
             if let Some(forme) = element.forme.forme_2d() {
                 for ligne in forme.polylignes() {
                     lignes_2d.push((indice, ligne.into_iter().map(|p| cadre.ecran(p.x, p.y)).collect()));
@@ -349,8 +349,8 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
         for (l, m) in seul.regions_resolues(&r, sy.vue) {
             let forme = modele::documentation::AnnotationForme::Polyligne { points: l.iter().map(|&(h,v)| [h,v]).collect(), fermee: true, courbures: Vec::new(), remplissage: Some(m), traits: Vec::new() };
             let primitives = modele::documentation::forme_cartouche(projet, &forme);
-            let dessin = crate::feuilles::rendu(&primitives, [0.0; 4]);
-            crate::cartouche::peindre(&painter, &cadre, dessin, None);
+            let dessin = crate::documenter::feuilles::rendu(&primitives, [0.0; 4]);
+            crate::documenter::cartouche::peindre(&painter, &cadre, dessin, None);
         }
         for l in seul.symboles_resolus(&r, sy.vue) {
             let pts: Vec<egui::Pos2> = l.into_iter().map(|(h, v)| cadre.ecran(h, v)).collect();

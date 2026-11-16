@@ -4,6 +4,7 @@
 //! panneaux s'ancrent d'un côté ou flottent ; sous la vue, la boîte de visibilité par
 //! catégorie de modèle et d'annotation.
 
+mod documenter;
 mod familles;
 mod saisie;
 pub mod fenetre;
@@ -11,10 +12,8 @@ mod bim;
 mod communes;
 mod outils_texte;
 mod types_traits;
-mod feuilles;
 mod dessin_plan;
 mod gestion_contextes;
-mod gabarits_vues;
 mod ruban;
 use crate::saisie::accrochage::{AccrocheMur, marqueur};
 mod collaboration;
@@ -28,10 +27,8 @@ mod transformer;
 mod menu_vue;
 use aides::*;
 mod documents;
-mod coupe;
 mod vue_native;
 mod garde_corps;
-mod cartouche;
 mod proprietes;
 mod barre_haute;
 mod panneaux;
@@ -497,7 +494,7 @@ impl Vol {
 pub struct ViewerApp {
     bim: bim::EtatBim,
     /// Jeu de feuilles ouvert : cadrage, sélection, dessins préparés.
-    feuilles: feuilles::EtatFeuilles,
+    feuilles: crate::documenter::feuilles::EtatFeuilles,
     /// Dessin 2D (Documenter) : tracé, saisie, accrochage.
     dessin2d: dessin_plan::EtatDessin2D,
     /// Éditeur de famille de fenêtre ouvert.
@@ -668,7 +665,7 @@ pub struct ViewerApp {
     /// Dernier mur courbe modifié : poignée, rayon et longueur d'arc éditables.
     cote_arc: Option<(String, usize, String, String)>,
     gestion_contextes: Option<gestion_contextes::GestionContextes>,
-    editeur_gabarit_vue: Option<gabarits_vues::EditeurGabaritVue>,
+    editeur_gabarit_vue: Option<crate::documenter::gabarits_vues::EditeurGabaritVue>,
     filtres_contextes: modele::contextes::FiltresContextes,
     /// Dernière variante de création dont l'affichage a été synchronisé.
     variante_creation_suivie: Option<String>,
@@ -1111,10 +1108,10 @@ impl eframe::App for ViewerApp {
         }
         noyau::chrono::chrono_lent("image : panneaux et vue", &mut t_image);
         // vue ou feuille glissée dans l'arborescence : son nom suit le curseur
-        let glissee = egui::DragAndDrop::payload::<feuilles::VueGlissee>(&ctx)
+        let glissee = egui::DragAndDrop::payload::<crate::documenter::feuilles::VueGlissee>(&ctx)
             .and_then(|g| self.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|v| v.id == g.0)).map(|v| format!("Placer : {}", v.nom)))
-            .or_else(|| egui::DragAndDrop::payload::<feuilles::NomenclatureGlissee>(&ctx).and_then(|g| self.natif.as_ref().and_then(|(p, _)| p.nomenclatures.iter().find(|n| n.id == g.0)).map(|n| format!("Poser : {}", n.nom))))
-            .or_else(|| egui::DragAndDrop::payload::<feuilles::FeuilleGlissee>(&ctx).and_then(|g| self.natif.as_ref().and_then(|(p, _)| p.feuilles.iter().find(|f| f.id == g.0)).map(|f| format!("Déplacer : {} - {}", f.numero, f.nom))));
+            .or_else(|| egui::DragAndDrop::payload::<crate::documenter::feuilles::NomenclatureGlissee>(&ctx).and_then(|g| self.natif.as_ref().and_then(|(p, _)| p.nomenclatures.iter().find(|n| n.id == g.0)).map(|n| format!("Poser : {}", n.nom))))
+            .or_else(|| egui::DragAndDrop::payload::<crate::documenter::feuilles::FeuilleGlissee>(&ctx).and_then(|g| self.natif.as_ref().and_then(|(p, _)| p.feuilles.iter().find(|f| f.id == g.0)).map(|f| format!("Déplacer : {} - {}", f.numero, f.nom))));
         if let (Some(nom), Some(q)) = (glissee, ctx.pointer_hover_pos()) {
             let peintre = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("vue_glissee")));
             let texte = peintre.layout_no_wrap(nom, egui::FontId::proportional(13.0), Color32::WHITE);

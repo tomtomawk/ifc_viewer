@@ -122,7 +122,7 @@ impl ViewerApp {
             return Some(CibleFamille::Catalogue(famille));
         }
         if self.jeu_actif().is_some() {
-            if let feuilles::SelectionFeuille::Cartouche(id) = &self.feuilles.selection {
+            if let crate::documenter::feuilles::SelectionFeuille::Cartouche(id) = &self.feuilles.selection {
                 return Some(CibleFamille::CartoucheFeuille(id.clone()));
             }
             return None;

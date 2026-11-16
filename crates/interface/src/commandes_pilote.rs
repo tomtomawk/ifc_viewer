@@ -495,23 +495,23 @@ impl ViewerApp {
                     if vue.is_some_and(|i| i >= f.vues.len() + f.nomenclatures.len()) { return erreur("indice de vue ou nomenclature placée invalide") }
                 } else if vue.is_some() { return erreur("indiquer la feuille contenant la vue") }
                 self.ouvrir_jeu(&jeu, fid.clone());
-                if let (Some(fid), Some(i)) = (fid, vue) { self.feuilles.selection = feuilles::SelectionFeuille::Vue(fid, i); }
+                if let (Some(fid), Some(i)) = (fid, vue) { self.feuilles.selection = crate::documenter::feuilles::SelectionFeuille::Vue(fid, i); }
                 self.commande(ctx, "proprietes_feuille", "")
             }
             "proprietes_feuille" => {
                 let Some(jeu) = self.jeu_actif() else { return erreur("aucun jeu de feuilles ouvert") };
                 let Some((p, _)) = &self.natif else { return erreur("aucun projet natif") };
                 let selection = match &self.feuilles.selection {
-                    feuilles::SelectionFeuille::Aucune => serde_json::json!({"type":"jeu", "nom":jeu, "nombre_feuilles":p.feuilles.iter().filter(|f| f.jeu == jeu).count()}),
-                    feuilles::SelectionFeuille::Feuille(id) => match p.feuilles.iter().find(|f| &f.id == id && f.jeu == jeu) {
+                    crate::documenter::feuilles::SelectionFeuille::Aucune => serde_json::json!({"type":"jeu", "nom":jeu, "nombre_feuilles":p.feuilles.iter().filter(|f| f.jeu == jeu).count()}),
+                    crate::documenter::feuilles::SelectionFeuille::Feuille(id) => match p.feuilles.iter().find(|f| &f.id == id && f.jeu == jeu) {
                         Some(f) => serde_json::json!({"type":"feuille", "feuille":f, "famille_cartouche": p.cartouches_feuilles.get(id).map_or("Cartouche standard", String::as_str)}),
                         None => return erreur("feuille sélectionnée introuvable"),
                     },
-                    feuilles::SelectionFeuille::Cartouche(id) => match p.feuilles.iter().find(|f| &f.id == id && f.jeu == jeu) {
+                    crate::documenter::feuilles::SelectionFeuille::Cartouche(id) => match p.feuilles.iter().find(|f| &f.id == id && f.jeu == jeu) {
                         Some(_) => serde_json::json!({"type":"cartouche", "feuille":id, "famille_cartouche": modele::documentation::famille_cartouche(p, id).map_or("Cartouche standard", |f| f.nom.as_str())}),
                         None => return erreur("feuille du cartouche introuvable"),
                     },
-                    feuilles::SelectionFeuille::Vue(id, i) => match p.feuilles.iter().find(|f| &f.id == id && f.jeu == jeu) {
+                    crate::documenter::feuilles::SelectionFeuille::Vue(id, i) => match p.feuilles.iter().find(|f| &f.id == id && f.jeu == jeu) {
                         Some(f) if *i < f.vues.len() => {
                             let mut vue = f.vues[*i].clone();
                             vue.echelle = vue.echelle_sur_feuille(p);

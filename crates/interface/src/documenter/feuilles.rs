@@ -2,24 +2,24 @@
 //! Les vues se glissent depuis l'arborescence sur une feuille, se déplacent à la souris ;
 //! feuilles et vues placées se règlent dans Propriétés, sans boîte de dialogue.
 use commandes::Execution;
-use super::*;
+use crate::*;
 use commandes::Commande;
 use modele::documentation as doc;
 use std::collections::HashMap;
 
 /// Vue glissée depuis l'arborescence : identifiant de la vue du projet.
-pub(super) struct VueGlissee(pub String);
+pub(crate) struct VueGlissee(pub String);
 
 /// Feuille glissée dans l'arborescence pour la réordonner : identifiant.
-pub(super) struct FeuilleGlissee(pub String);
+pub(crate) struct FeuilleGlissee(pub String);
 
 /// Nomenclature glissée depuis l'arborescence sur une feuille : identifiant.
-pub(super) struct NomenclatureGlissee(pub String);
+pub(crate) struct NomenclatureGlissee(pub String);
 
 /// Sélection dans le jeu ouvert : une feuille, ou un objet placé (feuille, rang : les
 /// vues placées puis les nomenclatures posées).
 #[derive(Clone, PartialEq, Default)]
-pub(super) enum SelectionFeuille {
+pub(crate) enum SelectionFeuille {
     #[default]
     Aucune,
     Feuille(String),
@@ -30,7 +30,7 @@ pub(super) enum SelectionFeuille {
 /// Dessin préparé pour l'écran : triangles et traits en mm du papier (y vers le haut),
 /// étendue du dessin [x0, y0, x1, y1].
 #[derive(Default)]
-pub(super) struct Rendu {
+pub(crate) struct Rendu {
     pub tris: Vec<([egui::Pos2; 3], Color32)>,
     /// Traits : extrémités, couleur, épaisseur (mm du papier ; 0 : un pixel).
     pub traits: Vec<([egui::Pos2; 2], Color32, f32)>,
@@ -38,7 +38,7 @@ pub(super) struct Rendu {
     erreur: Option<String>,
 }
 
-pub(super) fn rendu(prims: &[noyau::trace2d::Primitive], etendue: [f64; 4]) -> Rendu {
+pub(crate) fn rendu(prims: &[noyau::trace2d::Primitive], etendue: [f64; 4]) -> Rendu {
     let mm = |q: glam::DVec3| egui::pos2((q.x * 1000.0) as f32, (q.y * 1000.0) as f32);
     let couleur = |c: [u8; 4]| Color32::from_rgba_unmultiplied(c[0], c[1], c[2], c[3]);
     let mut r = Rendu { etendue, ..Default::default() };
@@ -87,7 +87,7 @@ fn table_zero(p: &modele::Projet, id: &str) -> Rendu {
 }
 
 #[derive(Default)]
-pub(super) struct EtatFeuilles {
+pub(crate) struct EtatFeuilles {
     /// Pixels par mm du papier, position écran de l'origine du jeu (coin haut gauche de
     /// la première feuille) par rapport au coin de la vue.
     zoom: f32,
@@ -117,20 +117,20 @@ const ECART: f32 = 24.0;
 const HAUT_FEUILLES: f32 = 64.0;
 
 impl ViewerApp {
-    pub(super) fn editer_cartouche_feuille(&mut self, id: &str) {
+    pub(crate) fn editer_cartouche_feuille(&mut self, id: &str) {
         let Some((p, _)) = &self.natif else { return };
         if !p.feuilles.iter().any(|f| f.id == id) { return; }
         let source = Some(doc::famille_cartouche(p, id).cloned().unwrap_or_default());
         self.editer_cartouche(source, Some(id.to_string()));
     }
 
-    pub(super) fn editer_cartouche_catalogue(&mut self, id: &str) {
+    pub(crate) fn editer_cartouche_catalogue(&mut self, id: &str) {
         let Some((p, _)) = &self.natif else { return };
         let source = p.familles_cartouches.iter().find(|f| f.id == id).cloned();
         self.editer_cartouche(source, None);
     }
 
-    pub(super) fn editer_cartouche(&mut self, source: Option<doc::FamilleCartouche>, feuille: Option<String>) {
+    pub(crate) fn editer_cartouche(&mut self, source: Option<doc::FamilleCartouche>, feuille: Option<String>) {
         if let Some((fichier, id)) = source.as_ref().and_then(|c| c.document_famille.as_ref().map(|f| ((**f).clone(), c.id.clone()))) {
             self.ouvrir_famille_document_projet(fichier, Some(id));
             if let Some(ed) = self.famille.as_mut() { ed.cible_feuille = feuille.clone(); }
@@ -154,7 +154,7 @@ impl ViewerApp {
     }
     /// Ouvre l'éditeur d'une famille d'étiquette de pièce : `famille` (Some("") : la
     /// standard ; None : nouvelle, copie de celle de la pièce), affectée à `piece`.
-    pub(super) fn editer_famille_etiquette(&mut self, famille: Option<String>, piece: Option<String>) {
+    pub(crate) fn editer_famille_etiquette(&mut self, famille: Option<String>, piece: Option<String>) {
         if let Some((fichier, id)) = famille.as_ref().and_then(|id| self.natif.as_ref()?.0.familles_etiquettes.iter().find(|f| &f.id == id)).and_then(|f| f.document_famille.as_ref().map(|document| ((**document).clone(), f.id.clone()))) {
             self.ouvrir_famille_document_projet(fichier, Some(id));
             if let Some(ed) = self.famille.as_mut() { ed.cible_piece = piece.clone(); }
@@ -189,7 +189,7 @@ impl ViewerApp {
 
     /// Enregistre une famille d'étiquette (nouvelle si son identifiant est vide) et
     /// l'affecte à la pièce `piece` ; rend son identifiant.
-    pub(super) fn enregistrer_famille_etiquette(&mut self, mut famille: doc::FamilleEtiquette, piece: Option<String>, original: &str) -> Result<String, String> {
+    pub(crate) fn enregistrer_famille_etiquette(&mut self, mut famille: doc::FamilleEtiquette, piece: Option<String>, original: &str) -> Result<String, String> {
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
         let nom = famille.nom.trim().to_string();
         if nom.is_empty() || nom == "Étiquette standard" || p.familles_etiquettes.iter().any(|f| f.nom == nom && f.id != original) {
@@ -210,7 +210,7 @@ impl ViewerApp {
         Ok(id)
     }
 
-    pub(super) fn enregistrer_cartouche(&mut self, famille: &doc::FamilleCartouche, feuille: Option<&str>, original: &str) -> Result<(), String> {
+    pub(crate) fn enregistrer_cartouche(&mut self, famille: &doc::FamilleCartouche, feuille: Option<&str>, original: &str) -> Result<(), String> {
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
         let nom = &famille.nom;
         if nom.is_empty() || (nom == doc::NOM_CARTOUCHE_STANDARD && original != doc::NOM_CARTOUCHE_STANDARD)
@@ -235,7 +235,7 @@ impl ViewerApp {
         self.appliquer_projet(q)
     }
 
-    pub(super) fn creer_jeu_arborescence(&mut self, source: Option<&str>) {
+    pub(crate) fn creer_jeu_arborescence(&mut self, source: Option<&str>) {
         let Some((p, _)) = &self.natif else { return };
         let existants = doc::jeux(p);
         let base = source.map_or("Jeu".to_string(), |s| format!("{s} - copie"));
@@ -270,14 +270,14 @@ impl ViewerApp {
     }
 
     /// Nom du jeu de feuilles de la vue active, s'il y en a un.
-    pub(super) fn jeu_actif(&self) -> Option<String> {
+    pub(crate) fn jeu_actif(&self) -> Option<String> {
         let i = self.vue_active?;
         let v = self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)?;
         (v.genre == "Jeu de feuilles").then(|| v.nom.clone())
     }
 
     /// Ouvre le jeu `jeu` (onglet), et amène la feuille `feuille` en haut.
-    pub(super) fn ouvrir_jeu(&mut self, jeu: &str, feuille: Option<String>) {
+    pub(crate) fn ouvrir_jeu(&mut self, jeu: &str, feuille: Option<String>) {
         let i = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()).and_then(|n| n.vues.iter().position(|v| v.genre == "Jeu de feuilles" && v.nom == jeu));
         if let Some(i) = i {
             self.famille_selectionnee = None;
@@ -294,7 +294,7 @@ impl ViewerApp {
 
     /// Nouvelle feuille à la suite du jeu : format de sa dernière feuille (A3 sinon),
     /// numéro suivant.
-    pub(super) fn nouvelle_feuille(p: &modele::Projet, jeu: &str) -> doc::Feuille {
+    pub(crate) fn nouvelle_feuille(p: &modele::Projet, jeu: &str) -> doc::Feuille {
         let derniere = p.feuilles.iter().rev().find(|f| f.jeu == jeu);
         let (largeur, hauteur) = derniere.map_or((420.0, 297.0), |f| (f.largeur, f.hauteur));
         let numero = (p.feuilles.len() + 1..).map(|n| format!("A{n:02}")).find(|n| !p.feuilles.iter().any(|f| &f.numero == n)).unwrap_or_default();
@@ -302,7 +302,7 @@ impl ViewerApp {
     }
 
     /// Ruban, Documenter → Feuilles : ouvre le premier jeu ; sans feuille, en crée une.
-    pub(super) fn commande_feuilles(&mut self) {
+    pub(crate) fn commande_feuilles(&mut self) {
         let Some((p, _)) = &self.natif else {
             self.status = "Feuilles : ouvrir un projet natif.".into();
             return;
@@ -325,7 +325,7 @@ impl ViewerApp {
     /// Vue du jeu ouvert : feuilles l'une sous l'autre, molette : zoom, glisser le fond :
     /// défiler, glisser une vue placée : la déplacer, déposer une vue de l'arborescence :
     /// la placer ; dernière page en pointillés : ajouter une feuille.
-    pub(super) fn vue_jeu(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn vue_jeu(&mut self, ui: &mut egui::Ui) {
         let Some(jeu) = self.jeu_actif() else { return };
         let mut etat = std::mem::take(&mut self.feuilles);
         let mut commandes: Vec<Commande> = Vec::new();
@@ -719,7 +719,7 @@ impl ViewerApp {
     }
 
     /// Propriétés de la sélection dans le jeu, ou du jeu si rien n'est sélectionné.
-    pub(super) fn proprietes_jeu(&mut self, ui: &mut egui::Ui, jeu: &str) {
+    pub(crate) fn proprietes_jeu(&mut self, ui: &mut egui::Ui, jeu: &str) {
         let Some((p, _)) = &self.natif else { return };
         let mut commande: Option<Commande> = None;
         let mut projet_modifie: Option<modele::Projet> = None;
@@ -889,7 +889,7 @@ impl ViewerApp {
     }
 
     /// Demande le fichier, puis exporte le jeu `jeu` en un PDF de plusieurs pages.
-    pub(super) fn exporter_jeu_dialogue(&mut self, jeu: &str) {
+    pub(crate) fn exporter_jeu_dialogue(&mut self, jeu: &str) {
         let Some(path) = rfd::FileDialog::new().set_file_name(format!("{jeu}.pdf")).add_filter("pdf", &["pdf"]).save_file() else {
             return;
         };
@@ -900,7 +900,7 @@ impl ViewerApp {
     }
 
     /// PDF du jeu `jeu` (une page par feuille) écrit dans `chemin` ; nombre de pages.
-    pub(super) fn exporter_jeu(&self, jeu: &str, chemin: &std::path::Path) -> Result<usize, String> {
+    pub(crate) fn exporter_jeu(&self, jeu: &str, chemin: &std::path::Path) -> Result<usize, String> {
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?;
         let n = p.feuilles.iter().filter(|f| f.jeu == jeu).count();
         if n == 0 {
@@ -911,7 +911,7 @@ impl ViewerApp {
         Ok(n)
     }
 
-    pub(super) fn exporter_feuille(&mut self, extension: &str, id: &str) {
+    pub(crate) fn exporter_feuille(&mut self, extension: &str, id: &str) {
         let Some((p, _)) = &self.natif else { return };
         let Some(f) = p.feuilles.iter().find(|f| f.id == id) else { return };
         let Some(path) = rfd::FileDialog::new().set_file_name(format!("{} {}.{extension}", f.numero, f.nom)).add_filter(extension, &[extension]).save_file() else {
@@ -925,7 +925,7 @@ impl ViewerApp {
     }
 
     /// Ouvre la fenêtre des nomenclatures sur la nomenclature `id`.
-    pub(super) fn ouvrir_nomenclature(&mut self, id: &str) {
+    pub(crate) fn ouvrir_nomenclature(&mut self, id: &str) {
         if let Some(k) = self.natif.as_ref().and_then(|(p, _)| p.nomenclatures.iter().position(|n| n.id == id)) {
             self.bim.nomenclature = k;
             self.bim.documentation = true;
@@ -933,7 +933,7 @@ impl ViewerApp {
     }
 
     /// Remet la feuille `id` dans le jeu `jeu`, avant la feuille `avant` (à la fin sans).
-    pub(super) fn deplacer_feuille(&mut self, id: &str, jeu: &str, avant: Option<&str>) {
+    pub(crate) fn deplacer_feuille(&mut self, id: &str, jeu: &str, avant: Option<&str>) {
         let Some((p, _)) = &self.natif else { return };
         let mut q = p.clone();
         match doc::deplacer_feuille(&mut q, id, jeu, avant).and_then(|_| self.appliquer_projet(q)) {
@@ -947,7 +947,7 @@ impl ViewerApp {
 
     /// Suppr dans un jeu de feuilles : retire la vue placée choisie, ou supprime la feuille.
     /// Faux si rien n'est choisi dans le jeu.
-    pub(super) fn supprimer_dans_jeu(&mut self) -> bool {
+    pub(crate) fn supprimer_dans_jeu(&mut self) -> bool {
         let Some(jeu) = self.jeu_actif() else { return false };
         let Some((p, _)) = &self.natif else { return false };
         let commande = match self.feuilles.selection.clone() {
@@ -1008,7 +1008,7 @@ fn piece_outil_suit(outil: &str, original: &str) -> bool {
     !original.is_empty() && outil == original
 }
 
-pub(super) fn dessiner_etiquette(ui: &mut egui::Ui, famille: &mut doc::FamilleEtiquette, exemple: Option<(&modele::Projet, &modele::Piece)>, tracer: bool, debut: &mut Option<[f64; 2]>) {
+pub(crate) fn dessiner_etiquette(ui: &mut egui::Ui, famille: &mut doc::FamilleEtiquette, exemple: Option<(&modele::Projet, &modele::Piece)>, tracer: bool, debut: &mut Option<[f64; 2]>) {
     ui.label(if tracer { "Cliquer les deux extrémités du trait · Échap pour quitter" } else { "La croix rouge indique le point de la pièce" });
     // zone de 60 × 30 mm du papier centrée sur le point
     let (demi_l, demi_h) = (30.0f32, 15.0f32);

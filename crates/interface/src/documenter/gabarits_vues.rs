@@ -1,8 +1,8 @@
 //! Éditeur des gabarits de vue du projet.
-use super::*;
+use crate::*;
 use modele::gabarits_vues::GabaritVue;
 
-pub(super) struct EditeurGabaritVue {
+pub(crate) struct EditeurGabaritVue {
     vue: String,
     gabarit: GabaritVue,
     nouveau: bool,
@@ -10,10 +10,10 @@ pub(super) struct EditeurGabaritVue {
 }
 
 impl ViewerApp {
-    pub(super) fn vue_gabaritee(&self) -> bool {
+    pub(crate) fn vue_gabaritee(&self) -> bool {
         self.id_vue_contexte().and_then(|id| self.natif.as_ref()?.0.gabarit_vue(&id)).is_some()
     }
-    pub(super) fn ouvrir_editeur_gabarit_vue(&mut self, vue: &str, editer: bool) {
+    pub(crate) fn ouvrir_editeur_gabarit_vue(&mut self, vue: &str, editer: bool) {
         let Some((projet, _)) = &self.natif else { return };
         let existant = projet.gabarit_vue(vue).cloned();
         if editer && existant.is_none() { return; }
@@ -27,14 +27,14 @@ impl ViewerApp {
         self.editeur_gabarit_vue = Some(EditeurGabaritVue { vue: vue.into(), gabarit, nouveau: !editer, erreur: None });
     }
 
-    pub(super) fn ouvrir_gabarit_par_id(&mut self, vue: &str, id: &str) {
+    pub(crate) fn ouvrir_gabarit_par_id(&mut self, vue: &str, id: &str) {
         let Some(gabarit) = self.natif.as_ref().and_then(|(p, _)| p.gabarits_vues.iter().find(|g| g.id == id)).cloned() else { return };
         self.editeur_gabarit_vue = Some(EditeurGabaritVue { vue: vue.into(), gabarit, nouveau: false, erreur: None });
     }
 
     /// Applique immédiatement les paramètres pilotés à la vue ouverte et à son état
     /// mémorisé, sans changer la caméra, les catégories ou le cadrage.
-    pub(super) fn actualiser_gabarit_vue_actif(&mut self) {
+    pub(crate) fn actualiser_gabarit_vue_actif(&mut self) {
         let Some(id) = self.id_vue_contexte() else { return };
         let Some((projet, _)) = &self.natif else { return };
         let parametres = projet.gabarit_vue(&id).map(|g| (g.echelle, Some(g.poche.as_str())))
@@ -48,7 +48,7 @@ impl ViewerApp {
         self.coupe_dirty = true;
     }
 
-    pub(super) fn fenetre_gabarit_vue(&mut self, ctx: &egui::Context) {
+    pub(crate) fn fenetre_gabarit_vue(&mut self, ctx: &egui::Context) {
         let Some(mut editeur) = self.editeur_gabarit_vue.take() else { return };
         let Some((projet, _)) = &self.natif else { return };
         if editeur.vue != "3d" && !projet.vues.iter().any(|v| v.id == editeur.vue) { return; }

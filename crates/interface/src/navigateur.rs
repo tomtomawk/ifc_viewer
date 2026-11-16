@@ -157,7 +157,7 @@ impl ViewerApp {
                 r
             }).inner;
             if let Some(id) = glissable {
-                r.dnd_set_drag_payload(feuilles::VueGlissee(id.clone()));
+                r.dnd_set_drag_payload(crate::documenter::feuilles::VueGlissee(id.clone()));
             }
             let r = if glissable.is_some() { r.on_hover_text("Double-clic : ouvrir · glisser sur une feuille d'un jeu pour la placer") } else { r };
             if let (Some(i), true) = (vue, glissable.is_some()) {
@@ -234,7 +234,7 @@ impl ViewerApp {
                     continue;
                 }
                 let r = ui.add(egui::Button::selectable(false, nom.as_str()).sense(Sense::click_and_drag())).on_hover_text("Clic : ouvrir la nomenclature · glisser sur une feuille d'un jeu pour y poser le tableau");
-                r.dnd_set_drag_payload(feuilles::NomenclatureGlissee(id.clone()));
+                r.dnd_set_drag_payload(crate::documenter::feuilles::NomenclatureGlissee(id.clone()));
                 if r.clicked() {
                     ouvrir_nomenclature = Some(id.clone());
                 }
@@ -288,10 +288,10 @@ impl ViewerApp {
                         p.rect_stroke(egui::Rect::from_min_size(rect.min + egui::vec2(7.0, 5.0), egui::vec2(9.0, 11.0)), 1.0, egui::Stroke::new(1.0, c), egui::StrokeKind::Inside);
                         if copie.on_hover_text("Dupliquer le jeu et ses feuilles").clicked() { dupliquer_jeu = Some(jeu.clone()); }
                         // feuille déposée sur le jeu : à la fin du jeu
-                        if r.dnd_hover_payload::<feuilles::FeuilleGlissee>().is_some() {
+                        if r.dnd_hover_payload::<crate::documenter::feuilles::FeuilleGlissee>().is_some() {
                             ui.painter().rect_stroke(r.rect, 3.0, egui::Stroke::new(1.5, ui.visuals().selection.stroke.color), egui::StrokeKind::Inside);
                         }
-                        if let Some(g) = r.dnd_hover_payload::<feuilles::FeuilleGlissee>().and_then(|_| r.dnd_release_payload::<feuilles::FeuilleGlissee>()) {
+                        if let Some(g) = r.dnd_hover_payload::<crate::documenter::feuilles::FeuilleGlissee>().and_then(|_| r.dnd_release_payload::<crate::documenter::feuilles::FeuilleGlissee>()) {
                             deplacer = Some((g.0.clone(), jeu.clone(), None));
                         }
                     })
@@ -342,17 +342,17 @@ impl ViewerApp {
                                     ui.close();
                                 }
                             });
-                            r.dnd_set_drag_payload(feuilles::FeuilleGlissee(fid.clone()));
+                            r.dnd_set_drag_payload(crate::documenter::feuilles::FeuilleGlissee(fid.clone()));
                             if r.clicked() {
                                 ouvrir_jeu = Some((jeu.clone(), Some(fid.clone())));
                             }
                             // dépôt : au-dessus ou au-dessous de cette feuille selon le curseur
                             let dessous = |q: Option<egui::Pos2>| q.is_some_and(|q| q.y > r.rect.center().y);
-                            if r.dnd_hover_payload::<feuilles::FeuilleGlissee>().is_some() {
+                            if r.dnd_hover_payload::<crate::documenter::feuilles::FeuilleGlissee>().is_some() {
                                 let y = if dessous(ui.input(|i| i.pointer.hover_pos())) { r.rect.bottom() } else { r.rect.top() };
                                 ui.painter().line_segment([egui::pos2(r.rect.left(), y), egui::pos2(r.rect.right(), y)], egui::Stroke::new(2.5, ui.visuals().selection.stroke.color));
                             }
-                            if let Some(g) = r.dnd_hover_payload::<feuilles::FeuilleGlissee>().and_then(|_| r.dnd_release_payload::<feuilles::FeuilleGlissee>()) {
+                            if let Some(g) = r.dnd_hover_payload::<crate::documenter::feuilles::FeuilleGlissee>().and_then(|_| r.dnd_release_payload::<crate::documenter::feuilles::FeuilleGlissee>()) {
                                 let avant = if dessous(ui.input(|i| i.pointer.hover_pos())) { fs.get(k + 1).map(|x| x.0.clone()) } else { Some(fid.clone()) };
                                 deplacer = Some((g.0.clone(), jeu.clone(), avant));
                             }

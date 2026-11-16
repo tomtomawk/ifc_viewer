@@ -1,5 +1,5 @@
 //! Édition graphique du cartouche dans les vues de sa famille.
-use super::*;
+use crate::*;
 use moteur2d::dao::{EvenementTrace, OutilDessin, Trace};
 use noyau::forme2d::{Forme2D, Geom};
 use modele::{Projet, documentation::{self as doc, AnnotationForme as F, FamilleCartouche, TexteCartouche}};
@@ -14,7 +14,7 @@ enum Element {
     Texte(usize),
 }
 
-pub(super) struct EditionCartouche {
+pub(crate) struct EditionCartouche {
     vue: VueFamille,
     navigation: [NavigationFamille; 3],
     ruban: RubanEdition,
@@ -39,7 +39,7 @@ impl Default for EditionCartouche {
 }
 
 impl EditionCartouche {
-    pub(super) fn element_selectionne(&self) -> bool { self.selection.is_some() }
+    pub(crate) fn element_selectionne(&self) -> bool { self.selection.is_some() }
     fn nom_vue(vue: VueFamille) -> &'static str {
         if vue == VueFamille::Plan { "Plan · face imprimée" } else { vue.nom() }
     }
@@ -68,13 +68,13 @@ impl EditionCartouche {
         self.poignee = None;
     }
 
-    pub(super) fn arborescence(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn arborescence(&mut self, ui: &mut egui::Ui) {
         if let Some(vue) = crate::familles::editeur_famille::choisir_vue_famille(ui, Some(self.vue), Self::nom_vue) {
             self.ouvrir_vue(vue);
         }
     }
 
-    pub(super) fn navigation_pilote(&mut self, commande: &str) -> Result<serde_json::Value, String> {
+    pub(crate) fn navigation_pilote(&mut self, commande: &str) -> Result<serde_json::Value, String> {
         match commande {
             "elevation" => self.ouvrir_vue(VueFamille::Elevation),
             "plan" | "face" => self.ouvrir_vue(VueFamille::Plan),
@@ -86,15 +86,15 @@ impl EditionCartouche {
         Ok(serde_json::json!({"vue": Self::nom_vue(self.vue), "rectangle": [self.rect.min.x, self.rect.min.y, self.rect.max.x, self.rect.max.y]}))
     }
 
-    pub(super) fn cadrer(&mut self) {
+    pub(crate) fn cadrer(&mut self) {
         self.navigation[self.vue as usize] = Default::default();
     }
 
-    pub(super) fn trace_en_cours(&self) -> bool {
+    pub(crate) fn trace_en_cours(&self) -> bool {
         self.trace.as_ref().is_some_and(|t| t.precedent().is_some())
     }
 
-    pub(super) fn barre_vue(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn barre_vue(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             ui.label("1 : 1").on_hover_text("Dimensions sur la feuille");
             ui.separator();
@@ -112,7 +112,7 @@ impl EditionCartouche {
         });
     }
 
-    pub(super) fn ruban(&mut self, ui: &mut egui::Ui, projet: Option<&Projet>) {
+    pub(crate) fn ruban(&mut self, ui: &mut egui::Ui, projet: Option<&Projet>) {
         let avant = self.ruban.outil();
         self.ruban.afficher(ui, Menu::Cartouche, projet);
         let outil = self.ruban.outil();
@@ -122,7 +122,7 @@ impl EditionCartouche {
         }
     }
 
-    pub(super) fn proprietes(&self, ui: &mut egui::Ui, p: &Projet, f: &mut FamilleCartouche) {
+    pub(crate) fn proprietes(&self, ui: &mut egui::Ui, p: &Projet, f: &mut FamilleCartouche) {
         if let Some(Element::Forme(i)) = self.selection {
             if let Some(F::Polyligne { fermee: true, remplissage, .. }) = f.formes.get_mut(i) {
                 ui.label("Remplissage");
@@ -138,7 +138,7 @@ impl EditionCartouche {
         crate::outils_texte::hauteur_texte(ui, &mut texte.hauteur);
     }
 
-    pub(super) fn supprimer(&mut self, f: &mut FamilleCartouche) {
+    pub(crate) fn supprimer(&mut self, f: &mut FamilleCartouche) {
         match self.selection.take() {
             Some(Element::Trait(i)) if i < f.traits.len() => { f.traits.remove(i); }
             Some(Element::Forme(i)) if i < f.formes.len() => { f.formes.remove(i); }
@@ -149,7 +149,7 @@ impl EditionCartouche {
         self.poignee = None;
     }
 
-    pub(super) fn canevas(&mut self, ui: &mut egui::Ui, p: &Projet, f: &mut FamilleCartouche, delai_accrochage: f64) -> egui::Rect {
+    pub(crate) fn canevas(&mut self, ui: &mut egui::Ui, p: &Projet, f: &mut FamilleCartouche, delai_accrochage: f64) -> egui::Rect {
         let face = self.vue == VueFamille::Plan;
         let mut outil_actif = self.ruban.outil();
         let invite = match outil_actif {
@@ -335,7 +335,7 @@ impl EditionCartouche {
                 }
             } else if let Some(genre) = outil_actif.and_then(Outil::genre_cote) {
                 match genre.points_apercu(&self.points_cote, q).and_then(|pts| genre.forme(&pts, false, 2)) {
-                    Some(forme) => peindre(&painter, &cadre, feuilles::rendu(&doc::forme_cartouche(p, &forme), [0.0; 4]), Some(bleu)),
+                    Some(forme) => peindre(&painter, &cadre, crate::documenter::feuilles::rendu(&doc::forme_cartouche(p, &forme), [0.0; 4]), Some(bleu)),
                     None => {
                         let mut pts: Vec<egui::Pos2> = self.points_cote.iter().map(|a| ecran(*a)).collect();
                         if !pts.is_empty() { pts.push(ecran(q)); }
@@ -356,21 +356,21 @@ fn geoms(f: &FamilleCartouche) -> Vec<Geom> {
     geoms
 }
 
-fn rendus(p: &Projet, f: &FamilleCartouche) -> Vec<(Element, feuilles::Rendu)> {
+fn rendus(p: &Projet, f: &FamilleCartouche) -> Vec<(Element, crate::documenter::feuilles::Rendu)> {
     let mut v = Vec::new();
     for (i, forme) in f.formes.iter().enumerate() {
-        v.push((Element::Forme(i), feuilles::rendu(&doc::forme_cartouche(p, forme), [0.0; 4])));
+        v.push((Element::Forme(i), crate::documenter::feuilles::rendu(&doc::forme_cartouche(p, forme), [0.0; 4])));
     }
     for (i, &trait_) in f.traits.iter().enumerate() {
-        v.push((Element::Trait(i), feuilles::rendu(&[doc::trait_cartouche(trait_)], [0.0; 4])));
+        v.push((Element::Trait(i), crate::documenter::feuilles::rendu(&[doc::trait_cartouche(trait_)], [0.0; 4])));
     }
     for (i, texte) in f.textes.iter().enumerate() {
-        v.push((Element::Texte(i), feuilles::rendu(&[doc::texte_cartouche(texte, &texte.contenu)], [0.0; 4])));
+        v.push((Element::Texte(i), crate::documenter::feuilles::rendu(&[doc::texte_cartouche(texte, &texte.contenu)], [0.0; 4])));
     }
     v
 }
 
-pub(super) fn peindre(painter: &egui::Painter, cadre: &Cadre, dessin: feuilles::Rendu, selection: Option<Color32>) {
+pub(crate) fn peindre(painter: &egui::Painter, cadre: &Cadre, dessin: crate::documenter::feuilles::Rendu, selection: Option<Color32>) {
     let ecran = |q: egui::Pos2| cadre.ecran(q.x as f64, q.y as f64);
     let mut mesh = egui::Mesh::default();
     for (t, c) in dessin.tris {
@@ -384,7 +384,7 @@ pub(super) fn peindre(painter: &egui::Painter, cadre: &Cadre, dessin: feuilles::
     }
 }
 
-fn touche(dessin: &feuilles::Rendu, cadre: &Cadre, q: egui::Pos2) -> bool {
+fn touche(dessin: &crate::documenter::feuilles::Rendu, cadre: &Cadre, q: egui::Pos2) -> bool {
     let ecran = |p: egui::Pos2| cadre.ecran(p.x as f64, p.y as f64);
     dessin.traits.iter().any(|(s, _, _)| {
         let [a, b] = s.map(ecran);

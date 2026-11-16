@@ -1,14 +1,14 @@
 //! Plan de coupe, dessin et export de la vue, boîte de sélection 3D, plage de vue.
-use super::*;
+use crate::*;
 
 impl ViewerApp {
-    pub(super) fn niveaux(&self) -> Vec<(Id, String, f32)> {
+    pub(crate) fn niveaux(&self) -> Vec<(Id, String, f32)> {
         self.liste_niveaux.clone()
     }
 
     /// Plan de la coupe horizontale du mode dessin (n, d ; repère de la scène, partie
     /// gardée sous la cote de coupe), None hors mode dessin ou sans coupe.
-    pub(super) fn plan_coupe(&self) -> Option<Vec4> {
+    pub(crate) fn plan_coupe(&self) -> Option<Vec4> {
         if !self.coupe {
             return None;
         }
@@ -24,12 +24,12 @@ impl ViewerApp {
 
     /// Poché des parties coupées : celui de la plage de vue en Graphique, la couleur des
     /// matériaux en Réaliste.
-    pub(super) fn poche_style(&self) -> Poche {
+    pub(crate) fn poche_style(&self) -> Poche {
         if self.style == StyleVisuel::Realiste { Poche::Materiau } else { self.poche }
     }
 
     /// Trait atténué d'un autre plan, projeté derrière la coupe courante.
-    pub(super) fn primitives_fond_plan(&self)->Vec<noyau::trace2d::Primitive> {
+    pub(crate) fn primitives_fond_plan(&self)->Vec<noyau::trace2d::Primitive> {
         let (Some(s), Some((projet, _)), Some(id), Some(plan)) = (&self.scene, &self.natif, self.vue_native_id(), self.plan_coupe()) else { return Vec::new() };
         let Some(vue) = projet.vues.iter().find(|v| v.id == id) else { return Vec::new() };
         moteur2d::fond_plan(projet, s, vue, plan, self.echelle)
@@ -37,13 +37,13 @@ impl ViewerApp {
 
     /// Éléments du niveau courant entièrement au-dessus de la coupe et sous la limite haute,
     /// en pointillés.
-    pub(super) fn primitives_au_dessus_plan(&self)->Vec<noyau::trace2d::Primitive> {
+    pub(crate) fn primitives_au_dessus_plan(&self)->Vec<noyau::trace2d::Primitive> {
         let Some(plan) = self.plan_coupe() else { return Vec::new(); };
         moteur2d::pointilles_plage_haute(self.aretes_au_dessus_plan(), self.echelle, plan.w as f64)
     }
 
     /// Objet de la plage haute dont une arête passe à moins de 6 px du clic (vue en plan).
-    pub(super) fn objet_plage_haute(&self,rect:egui::Rect,q:egui::Pos2)->Option<u32> {
+    pub(crate) fn objet_plage_haute(&self,rect:egui::Rect,q:egui::Pos2)->Option<u32> {
         if !self.vue_en_plan() {return None;}
         let s=self.scene.as_ref()?;
         let vp=self.camera.view_proj(rect.width()/rect.height().max(1.0));
@@ -63,7 +63,7 @@ impl ViewerApp {
     }
 
     /// Arêtes vues des éléments de la plage haute, sans pointillés.
-    pub(super) fn aretes_au_dessus_plan(&self)->Vec<noyau::trace2d::Primitive> {
+    pub(crate) fn aretes_au_dessus_plan(&self)->Vec<noyau::trace2d::Primitive> {
         let (Some(s),Some((visible,limite)))=(&self.scene,self.masque_plage_haute()) else{return Vec::new()};
         let f=self.camera.forward().as_dvec3().normalize();
         let droite=f.cross(self.camera.up().as_dvec3()).normalize();
@@ -73,7 +73,7 @@ impl ViewerApp {
 
     /// Plage haute de la vue en plan native ouverte : objets du niveau entièrement au-dessus
     /// de la coupe et sous la limite haute, et altitude de cette limite (repère de la scène).
-    pub(super) fn masque_plage_haute(&self)->Option<(Vec<bool>,f32)> {
+    pub(crate) fn masque_plage_haute(&self)->Option<(Vec<bool>,f32)> {
         let (Some(s),Some((p,_)),Some(id),Some(plan))=(&self.scene,&self.natif,self.vue_native_id(),self.plan_coupe()) else{return None};
         let v=p.vues.iter().find(|v|v.id==id)?;
         let modele::GenreVue::Plan{niveau,..}=&v.genre else{return None};
@@ -98,7 +98,7 @@ impl ViewerApp {
     }
 
     /// Recalcule le tracé de la coupe (poché, hachures, contours) s'il le faut.
-    pub(super) fn update_coupe(&mut self) {
+    pub(crate) fn update_coupe(&mut self) {
         if !self.coupe_dirty {
             return;
         }
@@ -141,7 +141,7 @@ impl ViewerApp {
 
     /// Dessin vectoriel de la vue (orthographique) : coupe, arêtes vues sans les parties
     /// cachées, éléments 2D de la vue Revit ouverte ; repère de la scène, axes de la caméra.
-    pub(super) fn dessin_vue(&self) -> Result<trace2d::Dessin, String> {
+    pub(crate) fn dessin_vue(&self) -> Result<trace2d::Dessin, String> {
         let s = self.scene.as_ref().ok_or("aucun fichier ouvert")?;
         if !self.camera.ortho {
             return Err("vue orthographique requise (bouton Ortho)".into());
@@ -177,7 +177,7 @@ impl ViewerApp {
     }
 
     /// Export SVG du dessin de la vue ; nombre de primitives écrites.
-    pub(super) fn exporter_svg(&self, chemin: &std::path::Path) -> Result<usize, String> {
+    pub(crate) fn exporter_svg(&self, chemin: &std::path::Path) -> Result<usize, String> {
         let d = self.dessin_vue()?;
         let s = self.scene.as_ref().ok_or("aucun fichier ouvert")?;
         let vue = self.vue_active.and_then(|i| s.navigateur.as_ref()?.vues.get(i)).map(|v| format!(" — {} : {}", v.genre, v.nom)).unwrap_or_default();
@@ -188,7 +188,7 @@ impl ViewerApp {
 
     /// Cadrage de la coupe ou de l'élévation native ouverte (profondeur, côtés), repère
     /// de la scène.
-    pub(super) fn cadrage_vue(&self) -> Vec<Vec4> {
+    pub(crate) fn cadrage_vue(&self) -> Vec<Vec4> {
         let Some(s) = &self.scene else { return Vec::new() };
         let Some(v) = self.vue_active.and_then(|i| s.navigateur.as_ref()?.vues.get(i)) else { return Vec::new() };
         v.cadrage.iter().map(|p| {
@@ -197,14 +197,14 @@ impl ViewerApp {
         }).collect()
     }
 
-    pub(super) fn contour_cadrage_vue(&self) -> Vec<glam::Vec2> {
+    pub(crate) fn contour_cadrage_vue(&self) -> Vec<glam::Vec2> {
         if self.ruban_edition.outil() == Some(crate::ruban::Outil::Cadrer) { return Vec::new(); }
         let Some(id) = self.vue_native_id() else { return Vec::new() };
         let (Some((p, _)), Some(s)) = (&self.natif, &self.scene) else { return Vec::new() };
         p.vues.iter().find(|v| v.id == id).map(|v| v.contour_cadrage.iter().map(|p| glam::Vec2::new((p[0] * 0.001 - s.origin.x) as f32, (p[1] * 0.001 - s.origin.y) as f32)).collect()).unwrap_or_default()
     }
 
-    pub(super) fn point_dans_cadrage(&self, rect: egui::Rect, q: egui::Pos2) -> bool {
+    pub(crate) fn point_dans_cadrage(&self, rect: egui::Rect, q: egui::Pos2) -> bool {
         let Some(id) = self.vue_native_id() else { return true };
         let Some((p, _)) = &self.natif else { return true };
         let Some(vue) = p.vues.iter().find(|v| v.id == id) else { return true };
@@ -215,12 +215,12 @@ impl ViewerApp {
     }
 
     /// Zone de coupe appliquée au rendu et à la sélection : active, vue 3D.
-    pub(super) fn boite_appliquee(&self) -> Option<(Vec3, Vec3)> {
+    pub(crate) fn boite_appliquee(&self) -> Option<(Vec3, Vec3)> {
         if self.boite_active && self.vue_3d() { self.boite } else { None }
     }
 
     /// Active la zone de coupe ; la première fois, elle entoure tout le modèle.
-    pub(super) fn activer_boite(&mut self, active: bool) {
+    pub(crate) fn activer_boite(&mut self, active: bool) {
         self.boite_active = active;
         self.coupe_dirty = true;
         if active
@@ -233,7 +233,7 @@ impl ViewerApp {
     }
 
     /// Zone de coupe dans les propriétés : bornes en coordonnées du fichier (m).
-    pub(super) fn proprietes_boite(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn proprietes_boite(&mut self, ui: &mut egui::Ui) {
         let (Some((mut a, mut b)), Some(s)) = (self.boite, &self.scene) else { return };
         // coordonnées du fichier en f64 : origine éventuellement lointaine (géoréférencement)
         let o = s.origin;
@@ -263,7 +263,7 @@ impl ViewerApp {
     }
 
     /// Nouvelles bornes de la zone de coupe, épaisseur minimale gardée.
-    pub(super) fn regler_boite(&mut self, a: Vec3, b: Vec3) {
+    pub(crate) fn regler_boite(&mut self, a: Vec3, b: Vec3) {
         let ep = 0.05;
         let b = b.max(a + Vec3::splat(ep));
         self.boite = Some((a, b));
@@ -274,7 +274,7 @@ impl ViewerApp {
     /// face vue par la tranche ou de biais (en plan : les quatre côtés ; en élévation :
     /// dessus, dessous et côtés). Glisser une poignée déplace sa face le long de sa
     /// normale.
-    pub(super) fn poignees_boite(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
+    pub(crate) fn poignees_boite(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
         let Some((a, b)) = self.boite else { return };
         if !self.boite_active || !self.vue_3d() {
             return;
@@ -338,7 +338,7 @@ impl ViewerApp {
 
     /// Plage de vue du dessin (style Lignes cachées), en tête des propriétés comme dans
     /// Revit : coupe horizontale, niveau, hauteur du plan de coupe, poché.
-    pub(super) fn plage_de_vue(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn plage_de_vue(&mut self, ui: &mut egui::Ui) {
         let niveaux = self.niveaux();
         let nom = |n: Option<Id>| n.and_then(|n| niveaux.iter().find(|x| x.0 == n)).map_or("Bas du modèle".to_string(), |x| x.1.clone());
         let mut change = false;
@@ -385,7 +385,7 @@ impl ViewerApp {
     }
 
     /// Export SVG du dessin de la vue, après choix du fichier.
-    pub(super) fn exporter_svg_dialogue(&mut self) {
+    pub(crate) fn exporter_svg_dialogue(&mut self) {
         {
             let nom = self.scene.as_ref().map(|s| s.file_name.rsplit_once('.').map_or(s.file_name.clone(), |x| x.0.to_string())).unwrap_or_default();
             if let Some(chemin) = rfd::FileDialog::new().add_filter("SVG", &["svg"]).set_file_name(format!("{nom}.svg")).save_file() {

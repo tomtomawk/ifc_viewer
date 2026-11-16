@@ -91,7 +91,7 @@ pub(crate) struct EditeurPlan {
     reference: FamillePlane,
     tracer: bool,
     debut: Option<[f64; 2]>,
-    cartouche: cartouche::EditionCartouche,
+    cartouche: crate::documenter::cartouche::EditionCartouche,
 }
 
 impl EditeurPlan {
@@ -229,7 +229,7 @@ impl ViewerApp {
                         let id = piece.as_ref()?;
                         p.pieces.iter().find(|x| &x.id == id).map(|x| (p, x))
                     });
-                    feuilles::dessiner_etiquette(ui, famille, exemple, ed.tracer, &mut ed.debut);
+                    crate::documenter::feuilles::dessiner_etiquette(ui, famille, exemple, ed.tracer, &mut ed.debut);
                 }
                 FamillePlane::Profil { profil, .. } => crate::familles::profils::dessiner_profil(ui, profil),
                 FamillePlane::Cartouche { .. } => unreachable!(),
@@ -237,7 +237,7 @@ impl ViewerApp {
         });
     }
 
-    pub(crate) fn cartouche_actif(&mut self) -> Option<&mut cartouche::EditionCartouche> {
+    pub(crate) fn cartouche_actif(&mut self) -> Option<&mut crate::documenter::cartouche::EditionCartouche> {
         let ed = self.familles_planes.get_mut(&self.famille_plane_active?)?;
         matches!(ed.contenu, FamillePlane::Cartouche { .. }).then_some(&mut ed.cartouche)
     }
