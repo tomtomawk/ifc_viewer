@@ -161,23 +161,25 @@ vue 3D (pilotes sans multiéchantillonnage).
 
 ## Architecture
 
-Le dépôt est un workspace Cargo (`crates/*`) : le binaire `bimedit` est dans `crates/app/` (point d'entrée seul) ; l'arborescence cible, les règles de découpage en crates et l'état d'avancement sont dans [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Le sens des dépendances va de `noyau` vers `app` :
-`noyau` ← `modele` ← `ifc_base` ← `scene` ← `formats` ← `maillage` ← `commandes` ← `moteur2d` ← `moteur3d` ← `echanges` ← `collaboration` ← `pilote` ← `config` ← `interface` ← `app`. Les crates avant `moteur3d` n'importent jamais egui.
+Le dépôt est un workspace Cargo de 15 crates dans `crates/` ; le binaire `bimedit` est la crate `app`. Les dépendances vont de `noyau` vers `app` (une crate n'importe que des crates situées avant elle, vérifié par `cargo test -p bimedit --release --test dependances`) ; seules `moteur3d`, `pilote`, `config`, `interface` et `app` utilisent egui. Règles, tableau des dépendances autorisées, dette technique et table « où est quoi » : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Chaque crate a un `AGENTS.md` court.
 
-| Dossier | Rôle |
+| Crate | Rôle |
 |---|---|
-| `crates/noyau/src/` | Briques sans dépendance au modèle : booléens par arbre BSP (`csg.rs`, portage de csg.js), textes en triangles (`texte.rs`), primitives 2D vectorielles et export SVG (`trace2d.rs`) |
-| `crates/formats/src/ifc/` | IFC : parseur ISO 10303-21 (`step.rs`), couche sémantique (`semantique.rs` : unités, relations, matériaux, styles), placements, profils et solides → triangles (`geom.rs`) |
-| `crates/formats/src/rvt/` | Revit : conteneur OLE et métadonnées (`mod.rs`), objets, schéma, champs, géométrie B-rep, vues, paramètres (tables dans `donnees/`), maquette (`maquette/` : lecture, conversion en scène, tests) |
-| `crates/modele/src/` | Modèle natif (format d'édition), crate `modele` : types dans `lib.rs` ; `murs/` (assemblages, jonctions, retours), `elements/` (escaliers, terrain, cadrage, pentes), `volumes/` (géométrie, solides), `famille/`, `documentation/` (annotations, feuilles, nomenclatures), `creation.rs` (création paramétrique), `validation.rs`, `gabarit.rs` (gabarit de projet) ; voir [docs/MODELE.md](docs/MODELE.md) |
-| `crates/commandes/src/` | Commandes d'édition, crate `commandes` : `socle/` (type `Commande`, exécution, historique, verrous, contextes), `modeliser/`, `modifier/`, `annoter/`, `documenter/` |
-| `crates/echanges/src/`, `crates/collaboration/src/` | Import IFC/Revit, export IFC, enregistrement, rapport ; travail partagé |
-| `crates/moteur2d/src/` | Dessin 2D, crate `moteur2d` : coupe par un plan (`coupe.rs` : poché, hachures, contours), arêtes vues et cachées et sommets GPU (`vue.rs`), motifs (`motifs.rs` : isolant), outils de DAO (`dao.rs`), rendu de vue et de feuille SVG/PDF (`feuilles.rs`, `plans.rs`) |
-| `crates/moteur3d/src/` | Vue 3D : rendu wgpu (`gpu.rs`), ciel, caméra, repère des plans, sélection à l'écran, shaders `*.wgsl` |
-| `crates/interface/src/` | Interface egui : état et boucle (`lib.rs`) ; `socle/` (documents, vues, viewport, fenêtre native `fenetre.rs`, paramètres, pilotage), `zones/` (`ruban/`, barre haute, panneaux, navigateur, propriétés…), `saisie/` (accrochage, sélection, saisie en plan), `outils/` (`modeliser/`, `modifier/`, `dessiner/dessin_plan/`, `annoter/`), `documenter/` (feuilles, cartouche, coupe), `familles/` (`editeur_famille/`…), `projet/` (collaboration, contextes) ; voir `crates/interface/AGENTS.md` |
-| `crates/pilote/src/` | Canal de commande local (TCP 127.0.0.1, jeton) du serveur MCP, registre des instances (`instances.rs`) et commandes en ligne (`cli.rs`) |
-| `crates/config/src/` | Options utilisateur, raccourcis |
-| `crates/pilote/src/mcp.rs` | Serveur MCP (stdio, `bimedit --mcp`) qui pilote le viewer : ouverture, vues, caméra, propriétés, captures |
+| `noyau` | Briques sans dépendance au modèle : booléens par arbre BSP, textes en triangles, primitives 2D et export SVG |
+| `modele` | Modèle natif (format d'édition) : types, JSON, validation, murs, éléments, volumes, familles, documentation, gabarit ; voir [docs/MODELE.md](docs/MODELE.md) |
+| `ifc_base` | Parseur IFC (ISO 10303-21) et couche sémantique (unités, relations, matériaux, styles) |
+| `scene` | Scène triangulée, navigateur de projet, sélection par rayon |
+| `formats` | Lecture IFC (placements, profils, solides vers triangles) et Revit (conteneur OLE, géométrie, vues, paramètres, maquette) |
+| `maillage` | Modèle natif vers scène triangulée |
+| `commandes` | Commandes d'édition, historique, verrous, contextes ; voir [docs/EDITION.md](docs/EDITION.md) |
+| `moteur2d` | Dessin 2D : coupe, poché, hachures, arêtes vues et cachées, DAO, rendu de vue et de feuille SVG/PDF |
+| `moteur3d` | Vue 3D : rendu wgpu, ciel, caméra, repère des plans, sélection à l'écran, shaders |
+| `echanges` | Import IFC/Revit, export IFC, enregistrement, rapport |
+| `collaboration` | Travail partagé ; voir [docs/COLLABORATION.md](docs/COLLABORATION.md) |
+| `pilote` | Serveur MCP (stdio, `bimedit --mcp`), canal de commande local (TCP 127.0.0.1, jeton), registre des instances, commandes en ligne ; voir [docs/PILOTE.md](docs/PILOTE.md) |
+| `config` | Options utilisateur, raccourcis |
+| `interface` | Interface egui : état et boucle, ruban, panneaux, outils, feuilles, éditeur de familles ; fenêtre native |
+| `app` | Binaire `bimedit` : arguments, modes console (`--stats`, `--modele`, `--parametres`…), icône Windows |
 
 ## Pilotage par MCP
 
@@ -210,7 +212,8 @@ aucun viewer n'écoute, le serveur lance `bimedit` à côté de lui, sinon `targ
 ## Tests
 
 ```
-cargo test
+cargo test --workspace --release
+cargo test -p bimedit --release --test dependances   # sens des dépendances entre crates
 cargo run --release -- --stats samples/test_ifc4.ifc
 ```
 

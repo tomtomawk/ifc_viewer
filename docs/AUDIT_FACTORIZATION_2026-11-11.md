@@ -1,3 +1,5 @@
+> Document daté : les chemins (`crates/app/src/ui/`, `modele/`, `rendu/`…) sont antérieurs au découpage en workspace ; voir `docs/ARCHITECTURE.md` pour l'arborescence actuelle.
+
 # BIMedit — revue de factorisation
 
 Date : 11 novembre 2026. Revue du code local, incluant les évolutions de l'éditeur de familles de cette session.

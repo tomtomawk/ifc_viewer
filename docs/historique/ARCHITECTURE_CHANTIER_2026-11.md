@@ -1,3 +1,30 @@
+# Journal du chantier de découpage en workspace Cargo (lots 0 à 11b, novembre 2026)
+
+> **Ce document est un journal, pas une référence : ne pas le lire pour travailler.** Pour l'état actuel du dépôt, lire [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md) et l'`AGENTS.md` de la crate concernée. Les chemins ci-dessous sont ceux de l'époque de chaque lot (`crates/app/src/ui/`, `rendu/`, `dessin/`, `modele_tests/`…) et ne sont plus valables ; les sections « état actuel » (§1, §2) sont figées au lot 11b. Le lot 12 (binaire `app`, garde-fou des dépendances, `AGENTS.md` par crate, documentation) n'a pas son inventaire ici : il est décrit dans `docs/ARCHITECTURE.md`.
+>
+> Le contenu qui suit est l'ancien `docs/ARCHITECTURE.md`, déplacé sans réécriture (état après le lot 11b, commit `e444689`).
+
+## Commits clés
+
+| Lot | Crate | Commits |
+|---|---|---|
+| 0 | workspace | `242681c` (workspace), `5a52985` (docs et chemins), `5125fe9` (plan révisé) |
+| 1 | noyau | coupes `dee72ad`, `a8bb20b`, `7746a1e`, `9b18b34` ; extraction `06f1578` ; docs `3b02a44` |
+| 2 | modele | coupes `8c74f6e`, `ef292b4`, `fe4551a`, `32e14b4`, `f82b294`, `e64d176`, `5dd76f1` ; extraction `501e119` ; docs `ee39ae9` |
+| 3 | ifc_base, scene | coupe `a069497` ; `ifc_base` `b698a58` ; `scene` `a114732` ; docs `f332780`, `250471c` |
+| 4 | formats | coupes `9e2ada7`, `7c1fa60`, `d8b818a` ; extraction `aff8d40` ; docs `8b8a920` |
+| 5 | maillage | coupe `f5c528d` ; extraction `525e9cb` ; docs `5f74354` |
+| 6 | commandes | coupe `90be806` ; extraction `8f9e763` ; rangement par métier `0682940` ; docs `bf0370e` |
+| 7 | moteur2d | extraction `22e2c46` ; découpage de `lib.rs` `6405175` ; docs `8e75985` |
+| 8 | moteur3d | extraction `d2686d2` ; docs `01c3d9f` |
+| 9 | echanges, collaboration | `echanges` `e72f601` ; `collaboration` `35fab15` ; docs `986dd4e` |
+| 10 | pilote | extraction `5424089` ; docs `3f49a51` |
+| 11a | config, interface | config `aa7c8e3` ; interface `e453298` ; tests `aeec783` ; `Cargo.lock` `3b8b124` ; docs `45da533`, `fd4030e` |
+| 11b | rangement d'interface | saisie `8de17e9` ; familles `b5835c4` ; documenter `fdf2073` ; projet `b630591` ; zones `a8f6e9c` ; socle `03f35e5` ; outils `e03d548`, `c80164a` ; docs `76b061d`, `e444689` |
+| 12 | app, garde-fou, docs | voir `git log` (préfixe « Lot 12 ») |
+
+---
+
 # Architecture : découpage en workspace Cargo
 
 État après le lot 11b (§5.19) : le dépôt est un workspace (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`). `noyau` (lot 1), `modele` (lot 2), `ifc_base` et `scene` (lot 3), `formats` (lot 4), `maillage` (lot 5), `commandes` (lot 6), `moteur2d` (lot 7), `moteur3d` (lot 8), `echanges` et `collaboration` (lot 9), `pilote` (lot 10), `config` et `interface` (lot 11a) sont extraits en `crates/noyau`, `crates/modele`, `crates/ifc_base`, `crates/scene`, `crates/formats`, `crates/maillage`, `crates/commandes`, `crates/moteur2d`, `crates/moteur3d`, `crates/echanges`, `crates/collaboration`, `crates/pilote`, `crates/config` et `crates/interface` ; `crates/app` ne garde que le binaire `bimedit` (package et binaire). Le rangement interne d'`interface` est fait (partie 11b, §5.19) ; le découpage des fichiers de plus de 600 lignes reste à faire (11c éventuel, §5.19 c). Les dépendances sont déclarées une fois dans `[workspace.dependencies]` (racine) et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine.
