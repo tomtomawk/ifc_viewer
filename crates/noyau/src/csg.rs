@@ -206,7 +206,19 @@ impl Node {
             self.polygons.extend(polys);
             return;
         }
-        let plane = *self.plane.get_or_insert(polys[0].plane);
+        let mut polys = polys.into_iter();
+        let plane = match self.plane {
+            Some(plane) => plane,
+            None => {
+                // Le polygone qui fixe le plan reste dans ce nœud : sinon, s'il n'est pas
+                // exactement plan (sommets issus de découpes), il peut repartir seul dans un
+                // fils qui reprend le même plan, indéfiniment (dépassement de pile).
+                let premier = polys.next().unwrap();
+                self.plane = Some(premier.plane);
+                self.polygons.push(premier);
+                self.plane.unwrap()
+            }
+        };
         let mut front = Vec::new();
         let mut back = Vec::new();
         for p in polys {
@@ -339,5 +351,20 @@ mod tests {
         assert!((signed_volume(&wall) - 2.4).abs() < 1e-9);
         let r = boolean(&wall, &hole, Op::Difference, 1e-7).unwrap();
         assert!((signed_volume(&r) - (2.4 - 0.2)).abs() < 1e-6);
+    }
+
+    /// Non-régression du crash au changement de rayon d'un mur en arc : un polygone
+    /// non plan (sommets issus de découpes) dont le plan le place lui-même « devant »
+    /// faisait recréer indéfiniment le même nœud BSP.
+    #[test]
+    fn polygone_non_plan_ne_boucle_pas() {
+        let a = DVec3::ZERO;
+        let plane = Plane::from_points(a, DVec3::X, DVec3::Y).unwrap();
+        let poly = Polygon { v: vec![DVec3::new(0.0, 0.0, 1e-3), DVec3::new(1.0, 0.0, 1e-3), DVec3::new(1.0, 1.0, 1e-3), DVec3::new(0.0, 1.0, 2e-3)], plane };
+        let mut ctx = Ctx { eps: 1e-7, budget: 1000 };
+        let n = Node::new(&mut ctx, vec![poly.clone(), poly]);
+        let mut out = Vec::new();
+        n.all_polygons(&mut out);
+        assert_eq!(out.len(), 2);
     }
 }

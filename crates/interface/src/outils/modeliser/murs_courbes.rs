@@ -207,6 +207,30 @@ mod tests {
     }
 
     #[test]
+    /// Non-régression du crash au changement de rayon : rayons petits et grands, modifications
+    /// successives puis retour à l'état initial, chaque état maillé.
+    fn rayons_successifs_puis_annulation_sans_crash() {
+        use {commandes::{Execution,Commande},modele::{Projet,creation::ParametresMur}};
+        let mut p=Projet::depuis_gabarit("Arc",&modele::gabarit::Gabarit::defaut());
+        let options=ParametresMur::default();
+        let id=p.ajouter_mur_axe(Axe::Arc{debut:[5000.,0.],fin:[0.,5000.],centre:[0.,0.],direct:true},&options).unwrap();
+        p.ajouter_mur_axe(Axe::Arc{debut:[5300.,0.],fin:[0.,5300.],centre:[0.,0.],direct:true},&options).unwrap();
+        p.ajouter_mur_axe(Axe::Droit{debut:[5000.,0.],fin:[9000.,0.]},&options).unwrap();
+        let original=p.json().unwrap();
+        let mut q=p.clone();
+        for r in [500.,1000.,2500.,5300.,8000.,30000.,5000.] {
+            let (axe,_)=q.trajectoire_justification(&id).unwrap();
+            let Ok(pts)=ajuster_arc(axe,1,DVec2::ZERO,Some(r)) else {continue};
+            if let Ok((suivant,_))=q.executer(Commande::ModifierTrajectoireMur{id:id.clone(),points:pts.map(|p|p.to_array())}) {
+                maillage::depuis_natif(&suivant,std::path::Path::new("arc")).unwrap();
+                q=suivant;
+            }
+        }
+        maillage::depuis_natif(&p,std::path::Path::new("arc")).unwrap();
+        assert_eq!(p.json().unwrap(),original);
+    }
+
+    #[test]
     fn modification_arc_conserve_implantation_couches_et_transaction_atomique() {
         use {commandes::{Execution,Commande},modele::{Projet,creation::{ParametresMur,Implantation}}};
         let mut p=Projet::depuis_gabarit("Arc",&modele::gabarit::Gabarit::defaut());
