@@ -217,7 +217,8 @@ fn proche(c: DVec2, g: &Geom) -> Option<DVec2> {
     }
 }
 
-fn distance(c: DVec2, g: &Geom) -> Option<f64> {
+/// Distance de `c` à la géométrie (portion tracée seulement pour un arc).
+pub fn distance(c: DVec2, g: &Geom) -> Option<f64> {
     proche(c, g).map(|p| p.distance(c))
 }
 

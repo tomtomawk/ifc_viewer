@@ -435,6 +435,11 @@ impl ViewerApp {
         if let Some(p) = self.dessin2d.reperage.reference.and_then(|p| self.vers_ecran(rect, p)) {
             painter.circle_stroke(p, 5.0, egui::Stroke::new(1.5, vert));
         }
+        // cercle support de la face courbe survolée (mur en arc) : trait de construction
+        if let Some((centre, rayon)) = self.dessin2d.reperage.cercle {
+            let points: Vec<_> = (0..=128).filter_map(|i| self.vers_ecran(rect, centre + DVec2::from_angle(std::f64::consts::TAU * i as f64 / 128.0) * rayon)).collect();
+            if points.len() == 129 { painter.add(egui::Shape::dashed_line(&points, egui::Stroke::new(1.0, vert), 6.0, 4.0)); }
+        }
         if let Some((p, accroche)) = self.dessin2d.point {
             if let Some(e) = self.vers_ecran(rect, p) {
                 // réticule

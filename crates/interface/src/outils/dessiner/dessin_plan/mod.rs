@@ -1023,16 +1023,17 @@ impl ViewerApp {
                         let direct = matches!(m.axe, modele::Axe::Arc { direct: true, .. });
                         let mut balayage = (b - o).to_angle() - a0;
                         balayage = if direct { balayage.rem_euclid(std::f64::consts::TAU) } else { -(-balayage).rem_euclid(std::f64::consts::TAU) };
-                        if selection {
-                            let e = p.type_mur(&m.type_mur).map_or(0.0, |t| t.epaisseur()) * 0.5;
-                            if r > e && e > 0.0 {
-                                for rayon in [r - e, r + e] { g.push(Geom::Arc { centre: o, rayon, depart: a0, balayage }); }
-                                for angle in [a0, a0 + balayage] {
-                                    let d = DVec2::from_angle(angle);
-                                    g.push(Geom::Segment([o + d * (r - e), o + d * (r + e)]));
-                                }
+                        // faces intérieure et extérieure (et leurs extrémités), en sélection
+                        // comme en tracé ; l'axe en plus hors sélection
+                        let e = p.type_mur(&m.type_mur).map_or(0.0, |t| t.epaisseur()) * 0.5;
+                        if r > e && e > 0.0 {
+                            for rayon in [r - e, r + e] { g.push(Geom::Arc { centre: o, rayon, depart: a0, balayage }); }
+                            for angle in [a0, a0 + balayage] {
+                                let d = DVec2::from_angle(angle);
+                                g.push(Geom::Segment([o + d * (r - e), o + d * (r + e)]));
                             }
-                        } else { g.push(Geom::Arc { centre: o, rayon: r, depart: a0, balayage }); }
+                        }
+                        if !selection { g.push(Geom::Arc { centre: o, rayon: r, depart: a0, balayage }); }
                     }
                 }
             }

@@ -29,6 +29,19 @@ pub(crate) struct Reperage {
     pub reference: Option<DVec2>,
     pub directions_reference: Vec<DVec2>,
     pub guides: Vec<(DVec2, DVec2)>,
+    /// Cercle support (centre, rayon) de l'arc survolé : trait de construction.
+    pub cercle: Option<(DVec2, f64)>,
+}
+
+/// Cercle support de l'arc ou du cercle le plus proche de `c`, à moins de `tol`.
+pub(crate) fn cercle_survole(c: DVec2, tol: f64, geoms: &[Geom]) -> Option<(DVec2, f64)> {
+    geoms.iter().filter_map(|g| match g {
+        Geom::Arc { centre, rayon, .. } | Geom::Cercle { centre, rayon } => {
+            let d = (c.distance(*centre) - rayon).abs();
+            (d < tol * 0.6 && d2::distance(c, g).is_some_and(|d| d < tol * 0.6)).then_some((d, (*centre, *rayon)))
+        }
+        _ => None,
+    }).min_by(|a, b| a.0.total_cmp(&b.0)).map(|x| x.1)
 }
 
 impl Reperage {
@@ -41,10 +54,15 @@ impl Reperage {
             painter.add(Shape::dashed_line(&[a - d * 4000.0, a + d * 4000.0], Stroke::new(1.0, couleur), 6.0, 4.0));
         }
         if let Some(p) = self.reference { painter.circle_stroke(ecran(p), 5.0, Stroke::new(1.5, couleur)); }
+        if let Some((centre, rayon)) = self.cercle {
+            let points: Vec<_> = (0..=96).map(|i| ecran(centre + DVec2::from_angle(std::f64::consts::TAU * i as f64 / 96.0) * rayon)).collect();
+            painter.add(Shape::dashed_line(&points, Stroke::new(1.0, couleur), 6.0, 4.0));
+        }
     }
 
     pub fn calculer(&mut self, c: DVec2, tol: f64, geoms: &[Geom], precedent: Option<DVec2>, maj: bool, temps: f64, delai: f64, angle_axes: f64, trace_actif: bool) -> Option<(DVec2, Accroche)> {
         self.guides.clear();
+        self.cercle = (!maj).then(|| cercle_survole(c, tol, geoms)).flatten();
         let accroche = (!maj).then(|| d2::accrocher(c, tol, geoms, precedent)).flatten();
         if let Some((p, genre)) = accroche {
             self.survol_segment = None;
@@ -156,5 +174,24 @@ mod tests {
         assert!(!repere.guides.is_empty());
         assert!(repere.calculer(DVec2::new(30.5, 30.0), 2.0, &geoms, None, true, 2.1, 0.8, 0.0, true).is_none());
         assert!(repere.guides.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod tests_cercle {
+    use super::*;
+
+    /// N° 25 : survoler une face courbe désigne son cercle support ; loin de la portion
+    /// tracée de l'arc, rien.
+    #[test]
+    fn face_courbe_survolee_donne_son_cercle() {
+        let face = Geom::Arc { centre: DVec2::ZERO, rayon: 5000.0, depart: 0.0, balayage: std::f64::consts::FRAC_PI_2 };
+        let geoms = [Geom::Segment([DVec2::new(-9000.0, 0.0), DVec2::new(-8000.0, 0.0)]), face];
+        let survol = DVec2::from_angle(0.7) * 5003.0;
+        assert_eq!(cercle_survole(survol, 20.0, &geoms), Some((DVec2::ZERO, 5000.0)));
+        assert_eq!(cercle_survole(DVec2::from_angle(3.0) * 5000.0, 20.0, &geoms), None);
+        let mut r = Reperage::default();
+        r.calculer(survol, 20.0, &geoms, None, false, 0.0, 1.0, 0.0, false);
+        assert_eq!(r.cercle, Some((DVec2::ZERO, 5000.0)));
     }
 }
