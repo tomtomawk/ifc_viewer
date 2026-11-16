@@ -31,7 +31,14 @@ pub(crate) struct Reperage {
     pub guides: Vec<(DVec2, DVec2)>,
     /// Cercle support (centre, rayon) de l'arc survolé : trait de construction.
     pub cercle: Option<(DVec2, f64)>,
+    /// Axes et faces acquis par survol : droites de guidage (origine, direction), deux
+    /// au plus. On ne s'y accroche qu'à leurs intersections, jamais en un point
+    /// quelconque de la droite.
+    pub droites: Vec<(DVec2, DVec2)>,
 }
+
+/// Nombre de droites de guidage acquises gardées (la plus ancienne cède la place).
+const DROITES_MAX: usize = 2;
 
 /// Cercle support de l'arc ou du cercle le plus proche de `c`, à moins de `tol`.
 pub(crate) fn cercle_survole(c: DVec2, tol: f64, geoms: &[Geom]) -> Option<(DVec2, f64)> {
@@ -58,6 +65,11 @@ impl Reperage {
             let points: Vec<_> = (0..=96).map(|i| ecran(centre + DVec2::from_angle(std::f64::consts::TAU * i as f64 / 96.0) * rayon)).collect();
             painter.add(Shape::dashed_line(&points, Stroke::new(1.0, couleur), 6.0, 4.0));
         }
+    }
+
+    /// Oublie les références et les guides (changement d'outil, fin de commande).
+    pub fn oublier(&mut self) {
+        *self = Reperage::default();
     }
 
     pub fn calculer(&mut self, c: DVec2, tol: f64, geoms: &[Geom], precedent: Option<DVec2>, maj: bool, temps: f64, delai: f64, angle_axes: f64, trace_actif: bool) -> Option<(DVec2, Accroche)> {
@@ -93,12 +105,17 @@ impl Reperage {
             let distance = p.distance(c);
             (distance < tol * 0.6).then_some((distance, *a, *b, p))
         }).min_by(|a, b| a.0.total_cmp(&b.0));
-        if !maj && let Some((_, a, b, p)) = segment {
+        if !maj && let Some((_, a, b, _)) = segment {
             match self.survol_segment {
                 Some((ancien_a, ancien_b, debut, verrouille)) if ancien_a == a && ancien_b == b => {
                     if !verrouille && temps - debut >= delai {
-                        self.reference = Some(p);
-                        self.directions_reference = vec![(b - a).normalize()];
+                        // l'axe ou la face devient une droite de guidage, sans point verrouillé
+                        let d = (b - a).normalize();
+                        let deja = self.droites.iter().any(|(o, e)| e.perp_dot(d).abs() < 1e-9 && e.perp_dot(a - *o).abs() < 1e-6);
+                        if !deja {
+                            self.droites.push((a, d));
+                            if self.droites.len() > DROITES_MAX { self.droites.remove(0); }
+                        }
                         self.survol_segment = Some((a, b, debut, true));
                     }
                 }
@@ -119,6 +136,10 @@ impl Reperage {
                 lignes.extend([(p, u), (p, v)]);
                 for &d in &self.directions_reference { lignes.extend([(p, d), (p, d.perp())]); }
             }
+            // droites acquises : toujours affichées, accrochables à leurs intersections
+            let projetables = lignes.len();
+            lignes.extend(self.droites.iter().copied());
+            self.guides.extend(self.droites.iter().copied());
             // Une intersection de deux guides est prioritaire sur une projection simple.
             let mut meilleur: Option<(f64, DVec2, Vec<(DVec2, DVec2)>)> = None;
             for i in 0..lignes.len() {
@@ -135,11 +156,13 @@ impl Reperage {
                 }
             }
             if let Some((_, p, guides)) = meilleur {
-                self.guides = guides;
+                for g in guides { if !self.guides.contains(&g) { self.guides.push(g); } }
                 return Some((p, Accroche::Intersection));
             }
+            // projection : seulement sur les guides issus d'un point remarquable (point
+            // précédent, référence), pas sur les droites acquises
             let mut proche = None;
-            for (a, d) in lignes {
+            for (a, d) in lignes.into_iter().take(projetables) {
                 let p = a + d * (c - a).dot(d);
                 let distance = p.distance(c);
                 if distance < tol && proche.as_ref().is_none_or(|(dist, _, _)| distance < *dist) {
@@ -147,7 +170,7 @@ impl Reperage {
                 }
             }
             if let Some((_, p, guide)) = proche {
-                self.guides.push(guide);
+                if !self.guides.contains(&guide) { self.guides.push(guide); }
                 return Some((p, Accroche::Ortho));
             }
         }
@@ -159,21 +182,30 @@ impl Reperage {
 mod tests {
     use super::*;
 
+    /// N° 23 : un segment survolé devient une droite de guidage prolongée, sans point
+    /// verrouillé ; on s'accroche à son intersection avec un autre guide, pas en un point
+    /// quelconque de la droite.
     #[test]
-    fn survol_retarde_cree_un_guide_depuis_un_segment() {
+    fn survol_retarde_acquiert_une_droite_sans_verrouillage() {
         let mut repere = Reperage::default();
         let geoms = [Geom::Segment([DVec2::ZERO, DVec2::new(100.0, 0.0)])];
         let p = DVec2::new(30.0, 0.2);
         repere.calculer(p, 2.0, &geoms, None, false, 1.0, 0.8, 0.0, true);
-        assert!(repere.reference.is_none());
+        assert!(repere.droites.is_empty());
         repere.calculer(p, 2.0, &geoms, None, false, 1.81, 0.8, 0.0, true);
-        assert_eq!(repere.reference, Some(DVec2::new(30.0, 0.0)));
-        let (point, genre) = repere.calculer(DVec2::new(30.5, 30.0), 2.0, &geoms, None, false, 2.0, 0.8, 0.0, true).unwrap();
-        assert_eq!(genre, Accroche::Ortho);
-        assert_eq!(point, DVec2::new(30.0, 30.0));
-        assert!(!repere.guides.is_empty());
-        assert!(repere.calculer(DVec2::new(30.5, 30.0), 2.0, &geoms, None, true, 2.1, 0.8, 0.0, true).is_none());
+        assert!(repere.reference.is_none(), "aucun point verrouillé");
+        assert_eq!(repere.droites, vec![(DVec2::ZERO, DVec2::X)]);
+        // prolongement de la droite, loin du segment : affichée mais pas accrochée seule
+        assert!(repere.calculer(DVec2::new(300.0, 0.5), 2.0, &geoms, None, false, 2.0, 0.8, 0.0, true).is_none());
+        assert!(repere.guides.contains(&(DVec2::ZERO, DVec2::X)));
+        // intersection avec la verticale du point précédent : accrochée
+        let (point, genre) = repere.calculer(DVec2::new(250.5, 0.8), 2.0, &geoms, Some(DVec2::new(250.0, 80.0)), false, 2.1, 0.8, 0.0, true).unwrap();
+        assert_eq!((point, genre), (DVec2::new(250.0, 0.0), Accroche::Intersection));
+        // Maj : aucun guide
+        assert!(repere.calculer(DVec2::new(250.5, 0.8), 2.0, &geoms, None, true, 2.2, 0.8, 0.0, true).is_none());
         assert!(repere.guides.is_empty());
+        repere.oublier();
+        assert!(repere.droites.is_empty());
     }
 }
 

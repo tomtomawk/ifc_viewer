@@ -298,11 +298,7 @@ impl ViewerApp {
         let Some((usage, outil)) = self.usage_dessin() else {
             self.dessin2d.dernier_usage = None;
             self.dessin2d.trace = None;
-            self.dessin2d.reperage.reference = None;
-            self.dessin2d.reperage.directions_reference.clear();
-            self.dessin2d.reperage.survol_accroche = None;
-            self.dessin2d.reperage.survol_segment = None;
-            self.dessin2d.reperage.guides.clear();
+            self.dessin2d.reperage.oublier();
             self.dessin2d.saisie.clear();
             self.dessin2d.vider_contours();
             self.reinitialiser_terrain();
@@ -315,10 +311,7 @@ impl ViewerApp {
         }
         self.dessin2d.dernier_usage = Some(usage);
         if self.dessin2d.trace.as_ref().is_none_or(|t| t.outil != outil) {
-            self.dessin2d.reperage.reference = None;
-            self.dessin2d.reperage.directions_reference.clear();
-            self.dessin2d.reperage.survol_accroche = None;
-            self.dessin2d.reperage.survol_segment = None;
+            self.dessin2d.reperage.oublier();
             if self.dessin2d.trace.is_none() && usage == Usage::Annotation {
                 self.select(None, false);
             }
