@@ -89,7 +89,7 @@ Comportement attendu de chaque fonction : `docs/MODIFICATION.md`.
 | M6 | Supprimer avec rapport des dépendants | P1 | §4 |
 | M7 | Ajuster plusieurs éléments | P2 | §2 |
 | M8 | Menu du clic droit pendant une commande (Valider / Annuler) | P2 | §1 |
-| M9 | Poignées des dalles et des poutres | P1 | §1 |
+| M9 | Poignées des poutres (extrémités : allonger, pivoter ; milieu : déplacer). Poignées des dalles : non retenu (décision du 17/11/2026 ; l'outil Modifier le contour suffit) | P1 | `docs/MODIFICATION.md` §1 |
 | M10 | Décaler et Scinder des lignes d'annotation à la souris | P2 | §2 |
 | M11 | Compléments de fonctions faites : trait de démolition dans les plans imprimés ; Joindre par clic sur la cible ; Coller aligné sur plusieurs niveaux d'un coup ; aperçu glissant de Changer d'hôte ; propriétés grisées d'un élément verrouillé | P2 | §3, §5 |
 | M21 | Options manquantes des fonctions faites : Aligner (choix de face, cadenas) ; Déplacer (Déconnecter, déplacement en Z) ; Réseau (Grouper, lié à M1) ; Symétrie (axe pris sur un élément) ; Échelle refusée sur murs, menuiseries et structures | P2 | §2 |
