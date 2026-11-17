@@ -3,6 +3,7 @@ mod site;
 mod step;
 #[cfg(test)]
 mod tests;
+mod types;
 
 use modele::*;
 use modele::{elements::pente, murs::jonctions, volumes::solides};
@@ -60,6 +61,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         ));
     }
     let mut jeux = HashMap::new();
+    let mut types_ifc = types::Types::default();
     for t in p.types_murs.iter().chain(&p.types_dalles) {
         let mut cs = Vec::new();
         for c in &t.couches {
@@ -102,6 +104,10 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             guid(&format!("mat:{}", m.id), None),
             jeux[&m.type_mur]
         ));
+        if let Some(t) = p.type_mur(&m.type_mur) {
+            let predefini = if t.categorie == Some(CategorieMur::Cloison) { "PARTITIONING" } else { "NOTDEFINED" };
+            types_ifc.lier("IFCWALLTYPE", &t.id, &t.nom, predefini, Some(jeux[&t.id]), id);
+        }
     }
     for a in &p.assemblages {
         let id = w.add(format!(
@@ -159,12 +165,20 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             guid(&format!("mat:{}", d.id), None),
             jeux[&d.type_dalle]
         ));
+        let classe_type = match classe { "IFCSLAB" => "IFCSLABTYPE", "IFCCOVERING" => "IFCCOVERINGTYPE", _ => "IFCROOFTYPE" };
+        types_ifc.lier(classe_type, &t.id, &t.nom, "NOTDEFINED", Some(jeux[&t.id]), id);
     }
     for b in &p.barres {
         let rep = w.mesh(&solides::barre(p, b)?, contexte);
-        let classe = match b.genre { GenreBarre::Poteau => "IFCCOLUMN", GenreBarre::Poutre => "IFCBEAM" };
+        let (classe, classe_type, predefini) = match b.genre {
+            GenreBarre::Poteau => ("IFCCOLUMN", "IFCCOLUMNTYPE", "COLUMN"),
+            GenreBarre::Poutre => ("IFCBEAM", "IFCBEAMTYPE", "BEAM"),
+        };
         let id = w.add(format!("{classe}('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&b.id, None), texte(&b.nom), ref_(rep)));
         contenus.entry(niveaux[&b.niveau]).or_default().push(id);
+        if let Some(t) = b.pose.type_poutre.as_deref().and_then(|t| p.type_poutre(t)) {
+            types_ifc.lier(classe_type, &t.id, &t.nom, predefini, None, id);
+        }
     }
     for c in &p.composants {
         let tris: Vec<_> = c.solides(p)?.into_iter().flat_map(|(_, t)| t).collect();
@@ -195,6 +209,9 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         let rep = w.mesh(&tris, contexte);
         let id = w.add(format!("IFCRAILING('{}',$,{},$,$,#{placement},{},$,.GUARDRAIL.)", guid(&g.id, None), texte(&g.nom), ref_(rep)));
         contenus.entry(niveaux[&g.niveau]).or_default().push(id);
+        if let Some(t) = g.type_garde_corps.as_ref().and_then(|t| p.types_garde_corps.iter().find(|x| &x.id == t)) {
+            types_ifc.lier("IFCRAILINGTYPE", &t.id, &t.nom, "GUARDRAIL", None, id);
+        }
     }
     for o in &p.ouvertures {
         let (axe, e, niveau) = solides::hote(p, &o.mur)?;
@@ -238,6 +255,10 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
                 format!("{:.6}", o.largeur)
             ));
             contenus.entry(niveaux[&niveau]).or_default().push(element);
+            if let Some(t) = o.type_ouverture.as_ref().and_then(|t| p.types_ouvertures.iter().find(|x| &x.id == t)) {
+                let (classe_type, predefini) = if classe == "IFCDOOR" { ("IFCDOORTYPE", "DOOR") } else { ("IFCWINDOWTYPE", "WINDOW") };
+                types_ifc.lier(classe_type, &t.id, &t.nom, predefini, None, element);
+            }
             w.add(format!(
                 "IFCRELFILLSELEMENT('{}',$,$,$,#{id},#{element})",
                 guid(&format!("rempl:{}", o.id), None)
@@ -282,6 +303,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             .or_default()
             .push(id);
     }
+    types_ifc.ecrire(&mut w);
     let mut contenus: Vec<_> = contenus.into_iter().collect();
     contenus.sort_by_key(|(id, _)| *id);
     for (n, ids) in contenus {

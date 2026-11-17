@@ -68,3 +68,30 @@ fn terrain_et_limite_dans_le_site() {
     assert_eq!(m.parent.get(&du_type(&m, "IFCANNOTATION").next().unwrap()), Some(&site));
 }
 
+#[test]
+fn un_type_ifc_par_type_utilise() {
+    let json = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json")).unwrap();
+    let mut p = Projet::lire_json(&json).unwrap();
+    // une porte typée, une fenêtre sans type
+    p.types_ouvertures.push(TypeOuverture { id: "porte90".into(), nom: "Porte 90".into(), genre: GenreOuverture::Porte, largeur: 900.0, hauteur: 2100.0, famille: None, modele: None, origine: None, famille_nom: None });
+    let porte = p.ouvertures.iter_mut().find(|o| o.genre == GenreOuverture::Porte).unwrap();
+    porte.type_ouverture = Some("porte90".into());
+    let s = exporter(&p).unwrap();
+    let m = ifc_base::semantique::IfcModel::new(ifc_base::step::StepFile::parse(s.as_bytes()).unwrap());
+    let types_murs: std::collections::BTreeSet<_> = p.murs.iter().map(|m| &m.type_mur).collect();
+    assert_eq!(du_type(&m, "IFCWALLTYPE").count(), types_murs.len());
+    assert_eq!(du_type(&m, "IFCDOORTYPE").count(), 1);
+    assert_eq!(du_type(&m, "IFCWINDOWTYPE").count(), 0);
+    let dalles: std::collections::BTreeSet<_> = p.dalles.iter().map(|d| (d.sorte == SorteDalle::Toiture, &d.type_dalle)).collect();
+    assert_eq!(du_type(&m, "IFCSLABTYPE").count() + du_type(&m, "IFCROOFTYPE").count() + du_type(&m, "IFCCOVERINGTYPE").count(), dalles.len());
+    // chaque mur, dalle et porte est typé, sous la classe de type qui lui correspond
+    for (classe, classe_type) in [("IFCWALL", "IFCWALLTYPE"), ("IFCSLAB", "IFCSLABTYPE"), ("IFCROOF", "IFCROOFTYPE"), ("IFCDOOR", "IFCDOORTYPE")] {
+        for id in du_type(&m, classe) {
+            let t = m.type_of.get(&id).unwrap_or_else(|| panic!("{classe} #{id} sans type"));
+            assert_eq!(m.ty(*t), classe_type);
+        }
+    }
+    assert_eq!(m.name(du_type(&m, "IFCDOORTYPE").next().unwrap()), "Porte 90");
+    // un seul IfcRelDefinesByType par type
+    assert_eq!(du_type(&m, "IFCRELDEFINESBYTYPE").count(), types_murs.len() + dalles.len() + 1);
+}
