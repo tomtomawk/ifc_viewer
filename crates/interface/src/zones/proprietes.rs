@@ -233,6 +233,7 @@ impl ViewerApp {
             ui.heading(&e.nom); ui.label(&e.categorie); ui.label("Géométrie importée"); ui.label(&e.raison);
             if let Some(n)=e.niveau.as_ref().and_then(|n|projet.niveau(n)) { ui.label(format!("Niveau : {}",n.nom)); }
             if let Some(o)=&e.origine { ui.label(format!("Source : {} · {}",o.source,o.id)); if let Some(g)=&o.guid {ui.label(g);} }
+            crate::zones::donnees_importees::afficher(ui, &e.id, &e.donnees);
         } else if let Some(o) = projet.ouvertures.iter().find(|o| modele::identifiants::id_natif("ouverture", &o.id)==id) {
             let mut o=o.clone(); let mut change=false;
             ui.heading(&o.nom);

@@ -9,6 +9,7 @@ Rôle : zones d'écran autour de la vue.
 | `panneaux.rs`, `panneau_droit.rs` | panneaux ancrables, panneau droit (`panneau`, `right_panel`) |
 | `navigateur.rs` | navigateur de projet, matériaux, arborescence IFC |
 | `proprietes.rs`, `communes.rs` | propriétés de la sélection native ; propriétés communes d'une sélection multiple |
+| `donnees_importees.rs` | propriétés, matériau et couleur lus d'un élément importé (lecture seule, appelé depuis `proprietes.rs`) |
 | `menu_vue.rs` | clic droit dans la vue, poignée de milieu de mur |
 | `vue_native.rs`, `vue_revit.rs` | propriétés des vues natives ; vues Revit, nomenclatures |
 | `graphismes.rs` | fenêtres matériau, plumes, motifs |
