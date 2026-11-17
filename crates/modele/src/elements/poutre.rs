@@ -123,6 +123,32 @@ impl Projet {
     pub fn type_poutre(&self, id: &str) -> Option<&TypePoutre> {
         self.types_poutres.iter().find(|t| t.id == id)
     }
+
+    /// Ligne tracée d'une poutre (poignées) : début, fin (mm, plan) et altitude absolue
+    /// du début.
+    pub fn ligne_poutre(&self, id: &str) -> Option<([f64; 2], [f64; 2], f64)> {
+        let b = self.barres.iter().find(|b| b.id == id && b.genre == GenreBarre::Poutre)?;
+        let z = self.niveau(&b.niveau)?.altitude + b.debut[2];
+        Some(([b.debut[0], b.debut[1]], [b.fin[0], b.fin[1]], z))
+    }
+}
+
+impl Barre {
+    /// Poutre dont une extrémité (`fin` : la fin, sinon le début) est déplacée en plan
+    /// au point `p` ; l'autre reste fixe, la hauteur de chaque extrémité est gardée.
+    pub fn avec_extremite(&self, fin: bool, p: [f64; 2]) -> Result<Barre, String> {
+        if !p.iter().all(|x| x.is_finite()) {
+            return Err("Coordonnées non finies.".into());
+        }
+        let mut b = self.clone();
+        let cible = if fin { &mut b.fin } else { &mut b.debut };
+        cible[0] = p[0];
+        cible[1] = p[1];
+        if (b.fin[0] - b.debut[0]).hypot(b.fin[1] - b.debut[1]) < 1.0 {
+            return Err("La poutre doit mesurer au moins 1 mm.".into());
+        }
+        Ok(b)
+    }
 }
 
 /// Dimensions (largeur, hauteur) et contour de la section d'une poutre (mm, x vers la
@@ -201,6 +227,24 @@ mod tests {
 
     fn poutre(p: &Projet, pose: PosePoutre, z: f64) -> Barre {
         Barre { id: "b".into(), nom: "P1".into(), genre: GenreBarre::Poutre, niveau: p.niveaux[0].id.clone(), debut: [0.0, 0.0, z], fin: [4000.0, 0.0, z], largeur: 100.0, hauteur: 100.0, rotation: 0.0, pose, origine: None }
+    }
+
+    /// Poignées : allonger, pivoter autour de l'autre extrémité, hauteurs gardées.
+    #[test]
+    fn poignees_extremites() {
+        let p = projet();
+        let mut b = poutre(&p, PosePoutre::default(), 2800.0);
+        b.fin[2] = 2900.0;
+        let l = b.avec_extremite(true, [6000.0, 0.0]).unwrap();
+        assert_eq!((l.debut, l.fin), ([0.0, 0.0, 2800.0], [6000.0, 0.0, 2900.0]));
+        let r = b.avec_extremite(false, [4000.0, 3000.0]).unwrap();
+        assert_eq!((r.debut, r.fin), ([4000.0, 3000.0, 2800.0], [4000.0, 0.0, 2900.0]));
+        assert!(b.avec_extremite(true, [0.2, 0.0]).is_err());
+        assert!(b.avec_extremite(true, [f64::NAN, 0.0]).is_err());
+        let mut q = p.clone();
+        q.barres.push(b);
+        let n = q.niveau(&q.niveaux[0].id).unwrap().altitude;
+        assert_eq!(q.ligne_poutre("b"), Some(([0.0, 0.0], [4000.0, 0.0], n + 2800.0)));
     }
 
     fn etendue(t: &[[DVec3; 3]]) -> (DVec3, DVec3) {

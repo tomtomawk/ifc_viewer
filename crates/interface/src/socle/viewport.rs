@@ -113,21 +113,14 @@ impl ViewerApp {
             self.terminer_edition_axe();
             let fixe = axe.as_ref().map(|(_, a, b, _, _)| if fin { *a } else { *b });
             if !saisie_valide { self.error = Some("Saisissez une longueur positive et finie.".into()); }
-            else if let Some((projet, _)) = &self.natif {
-                let resultat=(|| {
-                    let mut copie=projet.clone();
-                    copie.deplacer_extremite_justification(&id,fin,p)?;
-                    copie.recaler_menuiseries(projet)?;
-                    copie.verifier()?;
-                    Ok::<_,String>(copie)
-                })();
-                match resultat.and_then(|p|self.appliquer_projet(p)) {
-                    Ok(())=>{
+            else {
+                match self.deplacer_extremite_selection(&id,fin,p) {
+                    Ok(nom)=>{
                         if let Some(fixe) = fixe {
                             let longueur = (p[0] - fixe[0]).hypot(p[1] - fixe[1]) / modele::unite::unite().facteur();
                             self.cote_axe = Some((id, fin, noyau::nombres::format_real(longueur)));
                         }
-                        self.status="Mur modifié — cliquer la cote pour saisir une longueur.".into();
+                        self.status=format!("Longueur {nom} modifiée — cliquer la cote pour saisir une longueur.");
                     },
                     Err(e)=>self.error=Some(e),
                 }
