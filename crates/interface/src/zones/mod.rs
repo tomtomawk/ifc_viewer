@@ -5,6 +5,7 @@ pub(crate) mod panneaux;
 pub(crate) mod panneau_droit;
 pub(crate) mod navigateur;
 pub(crate) mod proprietes;
+pub(crate) mod donnees_importees;
 pub(crate) mod communes;
 pub(crate) mod menu_vue;
 pub(crate) mod vue_native;

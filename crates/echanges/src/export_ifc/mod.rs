@@ -1,5 +1,6 @@
 //! Export IFC4 (ReferenceView, géométrie tessellée, mm) : site, niveaux, classes, types,
 //! jeux de propriétés et quantités, matériaux à couches et couleurs.
+mod importes;
 mod materiaux;
 mod proprietes;
 mod quantites;
@@ -201,7 +202,7 @@ fn contenu(p: &Projet) -> Result<Step, String> {
             GenreBarre::Poteau => ("IFCCOLUMN", "IFCCOLUMNTYPE", "COLUMN"),
             GenreBarre::Poutre => ("IFCBEAM", "IFCBEAMTYPE", "BEAM"),
         };
-        let id = w.add(format!("{classe}('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&b.id, None), texte(&b.nom), ref_(rep)));
+        let id = w.add(format!("{classe}('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&b.id, b.origine.as_ref()), texte(&b.nom), ref_(rep)));
         contenus.entry(niveaux[&b.niveau]).or_default().push(id);
         proprietes::barre(&mut w, p, b, id);
         quantites::barre(&mut w, b, &solide, id);
@@ -321,16 +322,9 @@ fn contenu(p: &Projet) -> Result<Step, String> {
         let id = w.add(format!("IFCANNOTATION('{}',$,{},$,$,#{placement},#{rep})", guid(&limite.id, None), texte(&limite.nom)));
         contenus.entry(site).or_default().push(id);
     }
+    let mut importes = importes::Importes::default();
     for e in &p.importes {
-        let rep = w.mesh(&solides::maillage(&e.maillage)?, contexte);
-        let id = w.add(format!(
-            "IFCBUILDINGELEMENTPROXY('{}',$,{},{},{},#{placement},{},$,.NOTDEFINED.)",
-            guid(&e.id, e.origine.as_ref()),
-            texte(&e.nom),
-            texte(&e.raison),
-            texte(&e.categorie),
-            ref_(rep)
-        ));
+        let id = importes.ecrire(&mut w, contexte, placement, e, &solides::maillage(&e.maillage)?);
         contenus
             .entry(
                 e.niveau

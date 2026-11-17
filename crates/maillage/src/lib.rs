@@ -477,7 +477,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         model.children.entry(parent).or_default().push(id);
         let tris = modele::volumes::solides::maillage(&o.maillage)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
         materiaux_parts.push(vec![None]);
-        geoms.push(ProductGeom { id, parts: vec![Part { color: [0.65,0.68,0.72,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+        geoms.push(ProductGeom { id, parts: vec![Part { color: o.donnees.couleur.map_or([0.65,0.68,0.72,1.0], |c| c.map(|x| x as f32 / 255.0)), tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
     chrono("scène : autres éléments", &mut t_etape);
     // arbres et terrains : arêtes remplacées ci-dessous (silhouette, terrain lissé) ;

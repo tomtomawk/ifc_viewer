@@ -72,6 +72,14 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
 - **Début → Importer** convertit un IFC/RVT/RFA/RTE dans un nouveau document natif,
   conserve les documents ouverts et écrit le rapport `.rapport.md` à côté du JSON.
   Les murs courbes, ouvertures et maillages importés sont maintenant affichables.
+  Un élément IFC gardé en élément importé conserve ses jeux de propriétés et de
+  quantités (ceux de son type complètent ceux de l'objet), ses matériaux et sa couleur
+  (style de sa géométrie ou couleur de son matériau ; pas la couleur par défaut de sa
+  classe). Les mesures sont converties en unités SI de base (m, m², m³, kg) selon les
+  unités du fichier (`LENGTHUNIT`, `AREAUNIT`, `VOLUMEUNIT`, ou unité propre d'une
+  quantité). Les poteaux verticaux et poutres horizontales à section rectangulaire
+  extrudée deviennent des poteaux et poutres natifs (sans leurs jeux de propriétés) ;
+  les autres restent importés, avec la raison.
 - **Saisie validée** : un nom ou une valeur tapé dans un champ (propriétés, niveaux,
   matériaux, feuilles…) ou un nombre glissé n'est appliqué au modèle qu'à la fin de la
   saisie (Entrée, clic ailleurs, fin du glisser) : la scène est alors reconstruite et
@@ -441,6 +449,16 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
     du mur (représentation `Axis`) au milieu de l'épaisseur, couche extérieure à
     gauche, empilement `NEGATIVE` depuis +e/2 ; dalles sans pente depuis le dessus de
     la première couche. Toitures et dalles en pente gardent le jeu de couches seul ;
+  - les éléments importés dans leur classe IFC d'origine quand c'est une classe
+    d'élément physique à neuf attributs (`IfcBeam`, `IfcColumn`, `IfcMember`,
+    `IfcPlate`, `IfcWall`, `IfcSlab`, `IfcRoof`, `IfcCovering`, `IfcRailing`,
+    `IfcStair`, `IfcRamp`, `IfcFooting`, `IfcFurniture`…, `PredefinedType`
+    `NOTDEFINED`), sinon en `IfcBuildingElementProxy` (portes et fenêtres
+    importées, classes Revit), catégorie en `ObjectType` ; leurs jeux lus à l'import
+    réécrits tels quels (`IfcPropertySet` : mesures typées selon l'unité, `IfcReal`
+    pour un autre nombre, `IfcLabel` sinon ; `IfcElementQuantity` pour un jeu de
+    quantités), leur matériau (`IfcMaterial`, `IfcMaterialList` s'il y en a
+    plusieurs) et leur couleur (`IfcSurfaceStyle`) ;
   - l'heure UTC de l'export dans l'en-tête (`FILE_NAME`).
 
   Les GUID IFC valides de la source sont préservés ; les autres sont générés de
@@ -478,8 +496,8 @@ une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvre
   restitution des familles Revit) et ne porte que les paramètres que le modèle
   connaît : ni phases, ni démolitions, ni classement feu ou acoustique. Un mur
   multicouche est un seul solide non coloré ; ses couches sont décrites par le jeu de
-  couches. Les objets importés deviennent des `IfcBuildingElementProxy` portant leur
-  catégorie en `ObjectType`.
+  couches. Les booléens lus à l'import sont réécrits en texte (« Vrai », « Faux »),
+  et la valeur prédéfinie (`PredefinedType`) d'un élément importé n'est pas gardée.
 - Les textes PDF/SVG sont vectorisés en contours, pas en texte sélectionnable.
   Le PDF d'une feuille respecte son format exact ; l'export d'une vue seule ajoute
   une marge. Imprimer à **100 %**, sans « ajuster à la page ».

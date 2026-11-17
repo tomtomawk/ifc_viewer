@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::f64::consts::{PI, TAU};
 use std::sync::Mutex;
 
+pub mod extrusion;
 pub type Rgba = [f32; 4];
 
 #[derive(Clone)]

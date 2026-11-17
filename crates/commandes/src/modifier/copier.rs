@@ -145,6 +145,7 @@ impl ExecutionCopier for Projet {
                     .map(|b| {
                         let mut b = b.clone();
                         b.id = map[&b.id].clone();
+                        b.origine = None;
                         b
                     })
                     .collect();

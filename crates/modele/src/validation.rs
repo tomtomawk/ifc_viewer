@@ -220,6 +220,7 @@ impl Projet {
                 return Err("Élément importé : niveau absent.".into());
             }
             solides::maillage(&e.maillage)?;
+            e.donnees.verifier().map_err(|x| format!("{} : {x}", e.nom))?;
         }
         for v in &self.vues {
             if !v.limite_haute_decalage.is_finite() || v.limite_haute_niveau.as_ref().is_some_and(|id|self.niveau(id).is_none()) {return Err("Limite haute de la vue invalide.".into());}

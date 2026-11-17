@@ -15,6 +15,7 @@ pub mod famille;
 pub mod gabarit;
 pub mod gabarits_vues;
 pub mod identifiants;
+pub mod importes;
 pub mod liens;
 pub mod murs;
 pub mod soleil;
@@ -227,6 +228,7 @@ pub struct Barre {
     /// Poutre : type, justification horizontale et arase (champs à plat).
     #[serde(flatten)]
     pub pose: elements::poutre::PosePoutre,
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub origine: Option<Origine>,
 }
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -1097,6 +1099,7 @@ pub struct ElementImporte {
     /// Pourquoi l'élément n'est pas paramétrique.
     pub raison: String,
     pub origine: Option<Origine>,
+    #[serde(flatten)] pub donnees: importes::DonneesImportees,
 }
 
 /// Maillage indexé (mm).
@@ -1414,7 +1417,7 @@ impl Conversion {
         let fichier = self.projet.sources.first().map(|s| s.fichier.as_str()).unwrap_or_default();
         let cle = origine.as_ref().map(|o| o.guid.clone().unwrap_or_else(|| format!("{fichier}:{}", o.id))).unwrap_or_else(|| format!("{fichier}:{nom}"));
         let id = identifiant("importe", &cle);
-        self.projet.importes.push(ElementImporte { id, nom, categorie, niveau, maillage: Maillage::depuis_triangles(tris), raison: raison.into(), origine });
+        self.projet.importes.push(ElementImporte { id, nom, categorie, niveau, maillage: Maillage::depuis_triangles(tris), raison: raison.into(), origine, donnees: Default::default() });
     }
 
     /// Compare chaque mur et chaque dalle à sa géométrie lue ; au-delà de `ECART_MAX`,
@@ -1455,7 +1458,7 @@ impl Conversion {
                             GenreOuverture::Fenetre => "Fenêtres",
                             GenreOuverture::Libre => "Ouvertures libres",
                         };
-                        p.importes.push(ElementImporte { id: o.id, nom: o.nom, categorie: cat.into(), niveau: Some(m.niveau.clone()), maillage: r, raison: "hébergée par un mur importé".into(), origine: o.origine });
+                        p.importes.push(ElementImporte { id: o.id, nom: o.nom, categorie: cat.into(), niveau: Some(m.niveau.clone()), maillage: r, raison: "hébergée par un mur importé".into(), origine: o.origine, donnees: Default::default() });
                     }
                 }
                 (m.nom, Some(m.niveau), m.origine)
@@ -1465,7 +1468,7 @@ impl Conversion {
             } else {
                 continue;
             };
-            p.importes.push(ElementImporte { id, nom, categorie, niveau, maillage, raison, origine });
+            p.importes.push(ElementImporte { id, nom, categorie, niveau, maillage, raison, origine, donnees: Default::default() });
         }
         let murs: std::collections::HashSet<&str> = p.murs.iter().map(|m| m.type_mur.as_str()).collect();
         p.types_murs.retain(|t| murs.contains(t.id.as_str()));

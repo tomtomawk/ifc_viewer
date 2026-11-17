@@ -10,7 +10,7 @@ fn topographie_revit_importee_est_geographique() {
     let tris = [[DVec3::ZERO, DVec3::new(1000.0, 0.0, 0.0), DVec3::new(0.0, 1000.0, 500.0)]];
     for (id, classe) in [("a", "Toposolid"), ("b", "SiteSurface"), ("c", "Wall")] {
         let origine = Some(Origine { source: "rvt".into(), id: id.into(), guid: None, classe: classe.into() });
-        p.importes.push(ElementImporte { id: id.into(), nom: id.into(), categorie: "Autres".into(), niveau: None, maillage: Maillage::depuis_triangles(&tris), raison: String::new(), origine });
+        p.importes.push(ElementImporte { id: id.into(), nom: id.into(), categorie: "Autres".into(), niveau: None, maillage: Maillage::depuis_triangles(&tris), raison: String::new(), origine, donnees: Default::default() });
     }
     let s = depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
     let classe = |id: &str| &*s.objects[s.object_of[&id_natif("importe", id)] as usize].class;
@@ -71,4 +71,24 @@ fn lame_air_vide_mais_epaisse() {
     // boîtes englobantes en f32 : 1 mm de tolérance
     assert!((faces.last().unwrap() - faces.first().unwrap() - total.round() as i64).abs() <= 1, "épaisseur totale conservée : {faces:?}");
     assert!(faces.windows(2).any(|w| w[1] - w[0] == 25), "vide de 25 mm entre bardage et panneau : {faces:?}");
+}
+
+/// Élément importé : couleur lue dans la source quand il en a une, gris sinon.
+#[test]
+fn couleur_de_l_element_importe() {
+    let mut p = Projet::nouveau("T");
+    let tris = [[DVec3::ZERO, DVec3::new(1000.0, 0.0, 0.0), DVec3::new(0.0, 1000.0, 500.0)]];
+    for (id, couleur) in [("rouge", Some([204, 25, 25, 255])), ("gris", None)] {
+        let donnees = modele::importes::DonneesImportees { couleur, ..Default::default() };
+        p.importes.push(ElementImporte { id: id.into(), nom: id.into(), categorie: "Autres".into(), niveau: None, maillage: Maillage::depuis_triangles(&tris), raison: String::new(), origine: None, donnees });
+    }
+    let s = depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
+    let couleurs = |id: &str| {
+        let o = s.object_of[&id_natif("importe", id)];
+        s.vertices.iter().filter(|v| v.obj == o).map(|v| v.color).collect::<std::collections::HashSet<_>>()
+    };
+    // faces de la couleur lue (les arêtes gardent leur trait sombre)
+    assert!(couleurs("rouge").contains(&[204, 25, 25, 255]));
+    let gris = couleurs("gris");
+    assert!(!gris.is_empty() && !gris.contains(&[204, 25, 25, 255]), "{gris:?}");
 }

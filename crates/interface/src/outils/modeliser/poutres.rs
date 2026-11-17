@@ -99,6 +99,7 @@ impl ViewerApp {
                 hauteur: r.hauteur,
                 rotation: 0.0,
                 pose: PosePoutre { type_poutre: r.type_poutre.clone(), justification: r.justification, arase: r.arase },
+                origine: None,
             });
         }
         if n == 0 { return; }

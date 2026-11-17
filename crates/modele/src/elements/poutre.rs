@@ -200,7 +200,7 @@ mod tests {
     }
 
     fn poutre(p: &Projet, pose: PosePoutre, z: f64) -> Barre {
-        Barre { id: "b".into(), nom: "P1".into(), genre: GenreBarre::Poutre, niveau: p.niveaux[0].id.clone(), debut: [0.0, 0.0, z], fin: [4000.0, 0.0, z], largeur: 100.0, hauteur: 100.0, rotation: 0.0, pose }
+        Barre { id: "b".into(), nom: "P1".into(), genre: GenreBarre::Poutre, niveau: p.niveaux[0].id.clone(), debut: [0.0, 0.0, z], fin: [4000.0, 0.0, z], largeur: 100.0, hauteur: 100.0, rotation: 0.0, pose, origine: None }
     }
 
     fn etendue(t: &[[DVec3; 3]]) -> (DVec3, DVec3) {

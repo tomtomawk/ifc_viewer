@@ -9,7 +9,8 @@ Dépendances internes autorisées : `noyau` seul. Externe : `rayon`. Interdit : 
 | Fichier (`src/`) | Contenu |
 |---|---|
 | `step.rs` | `StepFile`, `Entity`, `Value`, `IdMap` : lecture STEP |
-| `semantique.rs` | `IfcModel`, `pretty_type` et lecture des relations IFC |
+| `semantique.rs` | `IfcModel`, `pretty_type` et lecture des relations IFC ; unités (`length_scale`, `area_scale`, `volume_scale`, `angle_scale`) |
+| `proprietes.rs` | `IfcModel::jeux` (propriétés et quantités structurées : valeur, unité SI de base) et `property_groups` (affichage) |
 
 ## Quand modifier ici
 
