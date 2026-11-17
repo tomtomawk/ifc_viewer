@@ -27,8 +27,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   repris sur les feuilles. Les filtres temporaires du gestionnaire s'y ajoutent.
 
 - **Gabarit de vue** : dans les propriétés de la vue, le sélecteur attribue un
-  gabarit existant et **+** en crée un à partir de la vue. Le menu **…** permet
-  de modifier ou supprimer les gabarits du projet, même sans affectation. Un
+  gabarit existant et **+** en crée un à partir de la vue. Au survol d'un gabarit,
+  le crayon ouvre son éditeur et l'icône **Dupliquer** ouvre une copie qui est
+  attribuée à la vue lors de l'enregistrement. La suppression se fait dans l'éditeur. Un
   gabarit partagé pilote l'échelle, le poché de coupe, la phase et la variante ;
   ses modifications se répercutent immédiatement sur toutes les vues liées ;
   leurs dessins sur les feuilles reprennent notamment le poché et les filtres.
