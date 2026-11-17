@@ -86,17 +86,29 @@ fn chemin() -> Option<PathBuf> {
 }
 
 impl Options {
-    pub fn charger() -> Self {
-        let mut o:Self=chemin()
-            .and_then(|c| std::fs::read_to_string(c).ok())
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_default();
-        if o.verifier().is_err() {o.raccourcis.clear();o.delai_accrochage=0.8;}
-        o
+    /// Options enregistrées, ou par défaut. L'alerte dit pourquoi des valeurs par
+    /// défaut remplacent un fichier présent (illisible, non valide) ; un fichier absent
+    /// n'est pas une alerte.
+    pub fn charger() -> (Self, Option<String>) {
+        let Some(c) = chemin() else { return (Self::default(), None) };
+        match std::fs::read_to_string(&c) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => (Self::default(), None),
+            Err(e) => (Self::default(), Some(format!("Options illisibles ({}) : {e} ; valeurs par défaut utilisées", c.display()))),
+            Ok(t) => Self::lire(&t, &c),
+        }
     }
 
-    pub fn enregistrer(&self) {
-        let _=self.sauver();
+    fn lire(t: &str, c: &std::path::Path) -> (Self, Option<String>) {
+        let mut o: Self = match serde_json::from_str(t) {
+            Ok(o) => o,
+            Err(e) => return (Self::default(), Some(format!("Options non valides ({}) : {e} ; valeurs par défaut utilisées", c.display()))),
+        };
+        let alerte = o.verifier().err().map(|e| {
+            o.raccourcis.clear();
+            o.delai_accrochage = 0.8;
+            format!("Options ({}) : {e} ; raccourcis et délai d'accrochage remis par défaut", c.display())
+        });
+        (o, alerte)
     }
     pub fn sauver(&self)->Result<(),String> {
         self.verifier()?;
@@ -112,6 +124,21 @@ impl Options {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Un fichier présent mais illisible ou non valide est signalé, pas remplacé en
+    /// silence.
+    #[test]
+    fn options_illisibles_signalees() {
+        let c = std::path::Path::new("options.json");
+        let (o, alerte) = Options::lire("{ pas du json", c);
+        assert_eq!(o, Options::default());
+        assert!(alerte.is_some_and(|a| a.contains("non valides") && a.contains("options.json")));
+        let (o, alerte) = Options::lire(r#"{"delai_accrochage":-3}"#, c);
+        assert_eq!(o.delai_accrochage, 0.8);
+        assert!(alerte.is_some_and(|a| a.contains("remis par défaut")), "valeur hors bornes signalée");
+        let (o, alerte) = Options::lire(r#"{"navigation_ifc":true}"#, c);
+        assert!(o.navigation_ifc && alerte.is_none());
+    }
 
     #[test]
     fn navigation_ifc_desactivee_par_defaut() {

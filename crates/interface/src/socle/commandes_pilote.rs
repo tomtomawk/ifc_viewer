@@ -261,7 +261,7 @@ impl ViewerApp {
             "collaborer" => match self.creer_partage(PathBuf::from(argument.trim_matches('"')),ctx){Ok(())=>succes(&[("etat",texte("Création du projet partagé en cours"))]),Err(e)=>erreur(&e)},
             "collaboration_associer" => match self.associer_collaboration(PathBuf::from(argument.trim_matches('"'))) { Ok(())=>succes(&[("etat",texte("Association locale effectuée ; synchronisation en cours"))]),Err(e)=>erreur(&e) },
             "collaboration_sync" | "collaboration_instantane" => match self.collaboration.as_mut().ok_or_else(||"Copie non associée".to_string()).and_then(|c|c.synchroniser(None,commande=="collaboration_instantane")) {Ok(())=>succes(&[("etat",texte("Synchronisation demandée"))]),Err(e)=>erreur(&e)},
-            "etat" => self.etat(),
+            "etat" => self.etat(), "journal" => self.journal.json(),
             // famille_enregistrer|famille_ouvrir|famille_charger <chemin> : fichier de famille
             "famille_enregistrer" | "famille_ouvrir" | "famille_charger" => {
                 let chemin = std::path::Path::new(argument.trim());

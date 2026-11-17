@@ -437,6 +437,18 @@ une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvre
 - Les feuilles natives s'ouvrent dans le gestionnaire de documents avec un aperçu ;
   elles ne constituent pas encore des onglets de dessin éditables comme les vues.
 
+## Messages et journal
+
+Les messages s'affichent en haut de la vue, sous le bandeau de dessin. Une information
+disparaît après 3 s. Une erreur reste affichée jusqu'à sa fermeture (×) ou jusqu'à
+l'erreur suivante, même si les commandes suivantes réussissent ; une information
+s'affiche alors en dessous. Le bouton **Journal** de la barre haute ouvre le journal
+des 200 derniers messages (erreurs, confirmations, étapes des chargements), avec
+**Copier** et **Vider** ; il compte en rouge les erreurs arrivées depuis sa dernière
+ouverture. Y entrent aussi l'échec d'écriture d'une copie de récupération, des options
+illisibles ou non valides (remplacées par les valeurs par défaut) et un gabarit
+illisible au démarrage.
+
 ## Raccourcis clavier
 
 Sans champ de texte actif, taper deux lettres à la suite : `CS` créer à l'identique,

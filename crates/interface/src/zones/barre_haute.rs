@@ -108,6 +108,7 @@ impl ViewerApp {
                 let reponse = ui.add_sized([ui.available_width().max(0.0), 24.0], egui::Label::new(texte).truncate()).on_hover_text(texte);
                 zones_deplacement.push(reponse.rect);
             }
+            self.bouton_journal(ui);
             let (libre, _) = ui.allocate_exact_size(egui::vec2(ui.available_width().max(0.0), 32.0), Sense::hover());
             zones_deplacement.push(libre);
         });

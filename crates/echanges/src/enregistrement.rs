@@ -85,6 +85,22 @@ pub fn enregistrer_rvt(source: &SourceRvt, sortie: &Path, progress: &dyn Fn(Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// L'échec d'une copie de récupération écrite en arrière-plan est rendu à
+    /// l'interface, une seule fois.
+    #[test]
+    fn echec_de_recuperation_rendu() {
+        let chemin = dossier().join("absent").join("projet.modele.json");
+        recuperer_plus_tard(&Projet::nouveau("essai"), &chemin).unwrap();
+        let debut = std::time::Instant::now();
+        let e = loop {
+            if let Some(e) = erreur_recuperation() { break e; }
+            assert!(debut.elapsed().as_secs() < 10, "aucune erreur rendue");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        };
+        assert!(e.contains("Copie de récupération non écrite") && e.contains("projet.modele.recuperation.json"), "{e}");
+        assert_eq!(erreur_recuperation(), None);
+    }
     static TEST: AtomicU64 = AtomicU64::new(0);
     fn dossier() -> PathBuf {
         let p = std::env::temp_dir().join(format!("ifc-v0-save-{}-{}",std::process::id(),TEST.fetch_add(1,Ordering::Relaxed)));
@@ -156,13 +172,25 @@ fn recuperations() -> &'static Recuperations {
                     let _verrou = r.fichier.lock().unwrap_or_else(|e| e.into_inner());
                     if r.rangs.lock().unwrap_or_else(|e| e.into_inner()).get(&chemin) != Some(&rang) { continue; }
                     if let Err(e) = enregistrer_natif(&projet, &chemin_recuperation(&chemin)) {
-                        eprintln!("Copie de récupération non écrite : {e}");
+                        *erreurs().lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("Copie de récupération non écrite ({}) : {e}", chemin_recuperation(&chemin).display()));
                     }
                 }
             }
         });
         Recuperations { rangs: Default::default(), fichier: Default::default(), envoi: std::sync::Mutex::new(envoi) }
     })
+}
+
+/// Dernier échec d'écriture d'une copie de récupération, pas encore lu.
+fn erreurs() -> &'static std::sync::Mutex<Option<String>> {
+    static E: std::sync::OnceLock<std::sync::Mutex<Option<String>>> = std::sync::OnceLock::new();
+    E.get_or_init(Default::default)
+}
+
+/// Échec de la dernière copie de récupération écrite en arrière-plan, à montrer à
+/// l'utilisateur (lu une seule fois).
+pub fn erreur_recuperation() -> Option<String> {
+    erreurs().lock().unwrap_or_else(|e| e.into_inner()).take()
 }
 
 fn rang_suivant(chemin: &Path) -> u64 {

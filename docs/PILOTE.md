@@ -38,7 +38,12 @@ zone de coupe sont en m. Les angles de caméra et de pente sont en degrés.
   l'édition et du modèle, aussi disponibles dans `viewer_aide` (argument `sujet`).
 - `etat` : chargement, enregistrement, sélection, caméra, collaboration, entrées en
   attente et rectangle de la vue (points logiques de la fenêtre).
-- `erreur_effacer` : ferme le message d'erreur courant.
+- `erreur_effacer` : ferme le message d'erreur affiché (il reste dans le journal).
+- `journal` : messages de l'interface, du plus ancien au plus récent (200 au plus) :
+  `journal` (liste de `niveau` information|avertissement|erreur, `texte`, `age_s`) et
+  `erreur_affichee` (erreur montrée dans la vue, ou `null`). Une erreur reste affichée
+  après la réussite d'une commande suivante, alors que `etat.erreur_chargement` ne
+  porte que le résultat de la dernière commande.
 - `projet_natif` : objet `projet` complet et `empreinte` de cet état.
 - `documents` ; `document <id>` : lister et activer les documents ouverts, projets
   (`"id":"3"`) et familles en édition (`"id":"famille:2"`), avec `genre`, `nom`,

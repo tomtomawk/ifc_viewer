@@ -532,6 +532,7 @@ pub struct ViewerApp {
     /// Information ou avertissement temporaire, affiché sous le bandeau de dessin.
     message: crate::socle::messages::MessageTemporaire,
     error: Option<String>,
+    journal: crate::socle::messages::Journal,
     camera: Camera,
     selected: Option<Id>,
     selection_multiple: Vec<Id>,
@@ -705,6 +706,7 @@ pub struct ViewerApp {
 impl ViewerApp {
     pub fn new(cc: &eframe::CreationContext<'_>, path: Option<PathBuf>) -> Self {
         let mut error = None;
+        let mut alertes = Vec::new();
         let renderer_famille = cc.wgpu_render_state.as_ref().and_then(|rs| Renderer::new(rs).ok());
         let renderer = match cc.wgpu_render_state.as_ref().map(Renderer::new) {
             Some(Ok(r)) => Some(r),
@@ -794,18 +796,20 @@ impl ViewerApp {
             ajustement: None,
             volets: Default::default(),
             options: {
-                let o = config::options::Options::charger();
+                let (o, alerte) = config::options::Options::charger();
+                alertes.extend(alerte);
                 modele::unite::definir_unite(o.unite);
                 o.theme_interface.appliquer(&cc.egui_ctx);
                 // gabarit choisi : lu au démarrage, défaut s'il est illisible
                 if let Some(c) = &o.gabarit {
                     match modele::gabarit::Gabarit::charger(c) {
                         Ok(g) => modele::gabarit::definir(g),
-                        Err(e) => eprintln!("{e} : gabarit par défaut utilisé"),
+                        Err(e) => alertes.push(format!("{e} : gabarit par défaut utilisé")),
                     }
                 }
                 o
             },
+            journal: crate::socle::messages::Journal::avec(alertes),
             filter: String::new(),
             show_unsupported: false,
             vue_active: None,
@@ -911,10 +915,7 @@ impl eframe::App for ViewerApp {
     }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        // tampon refusé par le GPU (modèle trop lourd pour la carte) : dit plutôt que planter
-        if let Some(alerte) = self.renderer.as_mut().and_then(|r| r.alerte_memoire()) {
-            self.error = Some(alerte);
-        }
+        self.suivre_messages(&ctx);
         // une capture de fenêtre arrive à une image ultérieure : sans souris ni clavier,
         // egui ne redessinerait plus et la capture n'aboutirait jamais
         if self.captures_en_attente.load(std::sync::atomic::Ordering::Acquire) > 0 {

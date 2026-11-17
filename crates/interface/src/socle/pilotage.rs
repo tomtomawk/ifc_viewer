@@ -219,7 +219,7 @@ impl ViewerApp {
             match nom {
                 "aide" => Ok(json!({"documentation":pilote::documentation(argument)?})),
                 "erreur_effacer" => {
-                    self.error = None;
+                    self.effacer_erreur();
                     Ok(vide)
                 }
                 "nouveau" => {
@@ -335,12 +335,12 @@ impl ViewerApp {
                     if argument == "defaut" {
                         modele::gabarit::definir(modele::gabarit::Gabarit::defaut());
                         self.options.gabarit = None;
-                        self.options.enregistrer();
+                        self.options.sauver()?;
                     } else if !argument.trim().is_empty() {
                         let path = PathBuf::from(argument.trim().trim_matches('"'));
                         modele::gabarit::definir(modele::gabarit::Gabarit::charger(&path)?);
                         self.options.gabarit = Some(path);
-                        self.options.enregistrer();
+                        self.options.sauver()?;
                     }
                     Ok(json!({"gabarit":&*modele::gabarit::actif()}))
                 }
