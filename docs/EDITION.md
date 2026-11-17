@@ -80,6 +80,12 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   quantité). Les poteaux verticaux et poutres horizontales à section rectangulaire
   extrudée deviennent des poteaux et poutres natifs (sans leurs jeux de propriétés) ;
   les autres restent importés, avec la raison.
+  Chaque `IfcSpace` devient une pièce native : numéro = `Name`, nom = `LongName`,
+  niveau de son étage, point placé à l'intérieur de son emprise au sol (même en L),
+  contour recalculé sur les murs convertis ; ses jeux (`Pset_SpaceCommon`…) sont
+  gardés en lecture seule dans Propriétés et réécrits à l'export, avec son GUID. Sans
+  contour, ou si l'aire du contour s'écarte de plus de 5 % de l'emprise de l'espace ou
+  de `NetFloorArea`, l'espace reste un élément importé transparent, avec la raison.
 - **Saisie validée** : un nom ou une valeur tapé dans un champ (propriétés, niveaux,
   matériaux, feuilles…) ou un nombre glissé n'est appliqué au modèle qu'à la fin de la
   saisie (Entrée, clic ailleurs, fin du glisser) : la scène est alors reconstruite et

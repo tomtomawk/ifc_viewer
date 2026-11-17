@@ -170,7 +170,7 @@ impl ViewerApp {
     /// Crée une pièce au point `point` (contour détecté depuis les murs du niveau de la vue).
     pub(crate) fn placer_piece(&mut self, point: [f64; 2]) -> Result<(), String> {
         let niveau = self.niveau_vue_native().ok_or("Pièce : aucun niveau.")?;
-        let piece = modele::Piece { id: String::new(), nom: self.bim.nom_piece.clone(), numero: String::new(), niveau, point, contour: Vec::new(), etiquette: self.bim.etiquette_piece.clone() };
+        let piece = modele::Piece { id: String::new(), nom: self.bim.nom_piece.clone(), numero: String::new(), niveau, point, contour: Vec::new(), etiquette: self.bim.etiquette_piece.clone(), donnees: Default::default(), origine: None };
         self.executer_bim(commandes::Commande::Piece { piece })?;
         Ok(())
     }

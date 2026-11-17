@@ -206,7 +206,7 @@ impl ExecutionCopier for Projet {
                     .collect();
                 self.contextes.extend(contextes);
                 self.barres.extend(barres);
-                let pieces: Vec<_> = self.pieces.iter().filter(|x| set.contains(&x.id)).map(|x| Piece { id: map[&x.id].clone(), ..x.clone() }).collect();
+                let pieces: Vec<_> = self.pieces.iter().filter(|x| set.contains(&x.id)).map(|x| Piece { id: map[&x.id].clone(), origine: None, ..x.clone() }).collect();
                 for mut x in pieces {
                     x.numero = self.numero_piece_suivant();
                     self.pieces.push(x);

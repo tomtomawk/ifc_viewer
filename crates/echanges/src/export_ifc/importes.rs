@@ -80,6 +80,13 @@ fn jeux(w: &mut Step, cle: &str, objet: usize, jeux: &[JeuProprietes]) {
     }
 }
 
+/// Jeux lus sur l'`IfcSpace` d'une pièce importée, sauf `Qto_SpaceBaseQuantities`,
+/// recalculé du contour natif (`quantites::piece`).
+pub(super) fn jeux_piece(w: &mut Step, x: &modele::Piece, objet: usize) {
+    let lus: Vec<JeuProprietes> = x.donnees.proprietes.iter().filter(|j| j.nom != "Qto_SpaceBaseQuantities").cloned().collect();
+    jeux(w, &x.id, objet, &lus);
+}
+
 /// Matériaux et styles des éléments importés, réutilisés d'un élément à l'autre.
 #[derive(Default)]
 pub(super) struct Importes {
