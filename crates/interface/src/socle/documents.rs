@@ -342,7 +342,7 @@ impl ViewerApp {
     }
 
     pub(crate) fn enregistrer_projet(&mut self, ctx: &egui::Context) {
-        if self.loading.is_some() || self.sauvegarde.is_some() { return; }
+        if self.loading.is_some() || self.tache_en_cours() { if self.tache.is_some() { self.error = Some("Attendre la fin de l'enregistrement ou de l'export en cours.".into()); } return; }
         if self.natif.is_none() {
             self.enregistrer_rvt_dialogue(ctx);
             return;
@@ -442,6 +442,7 @@ impl ViewerApp {
     }
 
     pub(crate) fn poll_sauvegarde(&mut self) {
+        self.suivre_tache();
         loop {
             let Some(tache) = &mut self.sauvegarde else { return };
             let message = match tache.messages.try_recv() {

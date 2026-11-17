@@ -253,8 +253,9 @@ impl ViewerApp {
             })
             .collect()
     }
-    pub(crate) fn export_ifc_dialogue(&mut self) {
-        let Some((p, _)) = &self.natif else { return };
+    /// Export IFC4, écrit en arrière-plan (`socle::taches`).
+    pub(crate) fn export_ifc_dialogue(&mut self, ctx: &egui::Context) {
+        if self.natif.is_none() { return; }
         let Some(path) = rfd::FileDialog::new()
             .set_file_name("projet.ifc")
             .add_filter("IFC4", &["ifc"])
@@ -262,14 +263,10 @@ impl ViewerApp {
         else {
             return;
         };
-        match echanges::export_ifc::exporter(p)
-            .and_then(|s| echanges::enregistrement::ecrire_atomique(&path, s.as_bytes()))
-        {
-            Ok(()) => self.status = format!("IFC4 exporté : {}", path.display()),
-            Err(e) => self.error = Some(e),
-        }
+        self.exporter_ifc_arriere_plan(ctx, path);
     }
-    pub(crate) fn export_pdf_dialogue(&mut self) {
+    /// PDF de la feuille ou du jeu affiché, sinon de la vue ; écrit en arrière-plan.
+    pub(crate) fn export_pdf_dialogue(&mut self, ctx: &egui::Context) {
         let Some(path) = rfd::FileDialog::new()
             .set_file_name("dessin.pdf")
             .add_filter("PDF", &["pdf"])
@@ -277,13 +274,7 @@ impl ViewerApp {
         else {
             return;
         };
-        // jeu de feuilles ouvert : la feuille affichée (cartouche compris), pas la vue
-        let contenu = self.pdf_feuilles_affichees().unwrap_or_else(|| self.dessin_vue().and_then(|d| moteur2d::pdf(&d.svg("Dessin"))));
-        match contenu.and_then(|s| echanges::enregistrement::ecrire_atomique(&path, &s))
-        {
-            Ok(()) => self.status = format!("PDF exporté : {}", path.display()),
-            Err(e) => self.error = Some(e),
-        }
+        self.exporter_pdf_arriere_plan(ctx, path);
     }
     /// Fenêtre des nomenclatures du projet : créer, régler (nom, catégorie, regrouper),
     /// tableau des quantités, export CSV.

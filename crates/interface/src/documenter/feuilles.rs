@@ -938,17 +938,14 @@ impl ViewerApp {
         Ok(n)
     }
 
-    pub(crate) fn exporter_feuille(&mut self, extension: &str, id: &str) {
+    /// Une feuille en SVG ou en PDF, écrite en arrière-plan (`socle::taches`).
+    pub(crate) fn exporter_feuille(&mut self, ctx: &egui::Context, extension: &str, id: &str) {
         let Some((p, _)) = &self.natif else { return };
         let Some(f) = p.feuilles.iter().find(|f| f.id == id) else { return };
         let Some(path) = rfd::FileDialog::new().set_file_name(format!("{} {}.{extension}", f.numero, f.nom)).add_filter(extension, &[extension]).save_file() else {
             return;
         };
-        let contenu = moteur2d::svg_feuille(p, f).and_then(|s| if extension == "pdf" { moteur2d::pdf(&s) } else { Ok(s.into_bytes()) });
-        match contenu.and_then(|b| echanges::enregistrement::ecrire_atomique(&path, &b)) {
-            Ok(()) => self.status = format!("Export : {}", path.display()),
-            Err(e) => self.error = Some(e),
-        }
+        self.exporter_feuille_arriere_plan(ctx, extension, id.to_string(), path);
     }
 
     /// Ouvre la fenêtre des nomenclatures sur la nomenclature `id`.

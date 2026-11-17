@@ -7,7 +7,7 @@
 mod motifs;
 pub use motifs::*;
 mod feuilles;
-pub use feuilles::{dessin_vue, dxf_feuille, pdf, pdf_jeu, svg_feuille, vue_placee};
+pub use feuilles::{dessin_vue, dxf_feuille, pdf, pdf_jeu, pdf_pages, svg_feuille, vue_placee};
 mod dxf;
 pub use dxf::dxf;
 mod plans;

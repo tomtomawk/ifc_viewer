@@ -437,6 +437,21 @@ une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvre
 - Les feuilles natives s'ouvrent dans le gestionnaire de documents avec un aperçu ;
   elles ne constituent pas encore des onglets de dessin éditables comme les vues.
 
+## Enregistrement et exports en arrière-plan
+
+**Enregistrer** (Ctrl+S) un projet natif, **Sortie → IFC4**, **Sortie → Dessin PDF**,
+l'export d'une feuille depuis l'arborescence et l'export multiformat d'un jeu de
+feuilles travaillent en arrière-plan : la fenêtre reste utilisable, la barre haute
+montre l'étape (« Feuille 3/12 », « Fichier 2/8 ») et le temps écoulé, avec un bouton
+**Annuler**. Le travail porte sur l'état du projet au moment de la demande : une
+modification faite pendant l'enregistrement reste à enregistrer (le document reste
+marqué modifié et sa copie de récupération est gardée). L'annulation agit avant
+l'écriture du fichier suivant ; un fichier n'est jamais écrit à moitié, et un export
+de plusieurs fichiers annulé dit combien sont déjà écrits. Un seul travail à la fois ;
+quitter l'application est refusé tant qu'il n'est pas fini. L'enregistrement demandé
+à la fermeture d'un document, l'enregistrement d'un fichier Revit en v0 (qui a son
+propre suivi) et les commandes du pilote restent synchrones.
+
 ## Messages et journal
 
 Les messages s'affichent en haut de la vue, sous le bandeau de dessin. Une information

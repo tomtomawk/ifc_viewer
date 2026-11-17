@@ -14,6 +14,7 @@ Rôle : état et services de l'application autour de `ViewerApp` (défini avec l
 | `aides.rs` | aides communes (icônes, libellés, réticule) ; importé en glob par `lib.rs` |
 | `commandes_pilote.rs`, `pilotage.rs` | exécution des requêtes du pilote MCP (`piloter`) |
 | `volets.rs` | palettes flottantes natives |
+| `taches.rs` | enregistrement natif et exports en arrière-plan (`Tache`, `Controle` : étape et annulation), suivi par image (`suivre_tache`), barre de progression (`barre_progression`). Les commandes du pilote restent synchrones |
 | `document_bim.rs` | transactions du document : `executer_bim(_suite)`, historique, enregistrer sous, import natif, verrous et cadenas, `elements_natifs` |
 
 Dépendances typiques : `zones/` (ruban, panneaux), `outils/modeliser/bim/` (`EtatBim`), `documenter/feuilles.rs`.

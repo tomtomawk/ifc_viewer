@@ -123,30 +123,14 @@ impl ViewerApp {
             exporter = ui.add_enabled(n > 0, egui::Button::new(format!("Exporter {n} fichier(s)…"))).clicked();
         });
         if exporter && let Some(dossier) = rfd::FileDialog::new().pick_folder() {
-            match self.ecrire_export_jeu(&etat, &feuilles, &dossier) {
-                Ok(n) => self.informer(format!("Jeu « {} » : {n} fichier(s) écrit(s) dans {}", etat.jeu, dossier.display())),
-                Err(e) => self.error = Some(e),
-            }
+            // écrit en arrière-plan, un fichier après l'autre (`socle::taches`)
+            let a_ecrire = fichiers(&etat.cases, &feuilles, &etat.jeu);
+            self.exporter_jeu_arriere_plan(ctx, etat.jeu, a_ecrire, dossier);
             return;
         }
         if ouvert { self.feuilles.export = Some(etat); }
     }
 
-    fn ecrire_export_jeu(&self, etat: &ExportJeu, feuilles: &[(String, String)], dossier: &std::path::Path) -> Result<usize, String> {
-        let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?;
-        let a_ecrire = fichiers(&etat.cases, feuilles, &etat.jeu);
-        for (nom, feuille, format) in &a_ecrire {
-            let f = feuille.as_ref().and_then(|id| p.feuilles.iter().find(|f| &f.id == id));
-            let octets = match (format, f) {
-                (Format::Ifc, _) => echanges::export_ifc::exporter(p)?.into_bytes(),
-                (Format::Pdf, Some(f)) => moteur2d::pdf(&moteur2d::svg_feuille(p, f)?)?,
-                (Format::Dxf, Some(f)) => moteur2d::dxf_feuille(p, f)?.into_bytes(),
-                _ => continue,
-            };
-            echanges::enregistrement::ecrire_atomique(&dossier.join(nom), &octets)?;
-        }
-        Ok(a_ecrire.len())
-    }
 }
 
 #[cfg(test)]

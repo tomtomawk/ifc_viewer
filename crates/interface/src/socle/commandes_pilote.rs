@@ -151,7 +151,7 @@ impl ViewerApp {
             ("fichier", self.scene.as_ref().map(|s| texte(&s.file_name)).unwrap_or_else(|| "null".into())),
             ("statut", texte(&self.status)),
             ("chargement", self.loading.is_some().to_string()),
-            ("enregistrement", self.sauvegarde.is_some().to_string()),
+            ("enregistrement", self.tache_en_cours().to_string()),
             ("sortie_v0", self.natif.as_ref().map(|n| &n.1).or(self.rvt_sortie.as_ref()).map_or("null".into(), |p| texte(&p.to_string_lossy()))),
             ("fiche_revit", (self.rvt.is_some() && self.rvt_sheet).to_string()),
         ];

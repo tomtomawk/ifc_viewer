@@ -19,7 +19,7 @@ Dernière mise à jour : 17 novembre 2026.
 | Contrôle | Résultat | Date |
 |---|---|---|
 | `cargo check --workspace --tests` | réussi, 0 avertissement (Linux x64) | 17/11/2026 |
-| `cargo test --workspace` (debug) | 429 réussis, 0 échec, 2 ignorés | 17/11/2026 |
+| `cargo test --workspace` (debug) | 436 réussis, 0 échec, 2 ignorés | 17/11/2026 |
 | `cargo test --workspace --release` | non relancé depuis le lot 12 (référence : 395 réussis, 2 ignorés) | 16/11/2026 |
 | Chargement des 13 `samples/**/*.modele.json` (`bimedit --mesurer-scene <fichier> 0`) | 13 sur 13 | 17/11/2026 |
 | Interface graphique à l'écran | non essayée depuis le lot 11 (pas d'affichage) | — |
@@ -53,7 +53,8 @@ Mesures de reconstruction de la scène (build release, `BIMEDIT_CHRONO=1`, `bime
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
 | A8 | Arêtes et assemblage de la scène refaits en entier à chaque commande (mémoire des booléens des murs déjà en place) ; second `verifier()` peut-être redondant | P1 | mesures au §1 ; `crates/maillage/src/aretes.rs`, `lib.rs`, `crates/noyau/src/csg_memoire.rs` |
-| A5 | Enregistrement natif, export IFC, export PDF et jeu de feuilles sur le fil de l'interface, sans progression ni annulation ; un chargement ne s'annule pas | P1 | `crates/interface/src/socle/documents.rs:352`, `:665`, `outils/modifier/options_modifier.rs:265`, `:281`, `documenter/feuilles.rs:142` |
+| A5b | Arrière-plan, reste : le chargement ne s'arrête pas vraiment (fermer le document abandonne son résultat, le fil finit son calcul) ; l'export SVG d'une coupe (`documenter/coupe.rs`) et l'export SVG de la vue restent sur le fil de l'interface ; l'état « en cours » et le bouton Annuler n'ont pas été vus à l'écran (enregistrement trop rapide sur les échantillons ; exports lancés par un sélecteur de fichier que le pilote ne pilote pas) | P2 | `crates/interface/src/socle/taches.rs` |
+| D3 | Sorties non déterministes : `moteur2d::svg_feuille` (donc PDF et DXF d'une feuille) émet les arêtes vues dans un ordre qui change d'un appel à l'autre ; deux exports identiques diffèrent, ce qui gêne les comparaisons et les tests | P2 | constaté par `socle::taches::tests` le 17/11/2026 |
 | A9 | Historique : instantané JSON complet par commande, plafond 100 entrées ou 64 Mo | P2 | `crates/commandes/src/socle/historique.rs:192-195` |
 | P1 | Plan ou coupe recalculé en entier après chaque édition ; envoi GPU complet | P2 | à mesurer dans l'interface (tâche A8, point 4) |
 
@@ -158,6 +159,7 @@ Le plus récent en premier. Les numéros « n° » sont ceux de la feuille de ro
 
 | Date | Fait | Commit | Vérification |
 |---|---|---|---|
+| 17/11/2026 | A5, enregistrement et exports en arrière-plan : Ctrl+S d'un projet natif, IFC4, PDF (vue, feuille ou jeu), feuille de l'arborescence, export multiformat d'un jeu ; étape, temps écoulé et bouton Annuler dans la barre haute ; copie du projet prise au lancement, document laissé modifié s'il a changé pendant l'enregistrement ; annulation avant chaque écriture, aucun fichier partiel ; un travail à la fois, sortie refusée pendant un travail ; `etat.enregistrement` du pilote couvre ces travaux | ce commit | 3 tests ajoutés (annulation sans toucher au fichier existant, export de jeu identique à l'export direct et annulable, PDF de jeu page par page) ; interface sous Xvfb : Ctrl+S sur l'immeuble de 1 920 murs, fichier écrit avec l'annotation, document non modifié, copie de récupération effacée, statut au journal ; barre haute contrôlée pendant un chargement. Non vu à l'écran : état en cours, Annuler, édition pendant l'enregistrement (A5b) |
 | 17/11/2026 | A4, journal des messages : erreurs et statuts relevés à chaque image dans un journal de 200 entrées (fenêtre Journal, Copier, Vider, compteur d'erreurs dans la barre haute ; commande `journal` du pilote) ; erreur affichée jusqu'à × ou l'erreur suivante, information en dessous ; statuts affichés hors chargement ; échec de copie de récupération, options illisibles ou non valides et gabarit illisible signalés ; `Options::enregistrer` retiré au profit de `sauver` | ce commit | 4 tests ajoutés (`interface` 2, `config` 1, `echanges` 1) ; interface lancée sous Xvfb (Vulkan logiciel) et pilotée : erreur d'une dalle trop petite gardée affichée après une annotation réussie, journal de 6 entrées, fenêtre ouverte par le bouton, captures d'écran contrôlées |
 | 17/11/2026 | A3, lecteurs bornés : imbrication STEP limitée à 256 ; arcs ramenés à un tour et paramètres non finis refusés ; B-spline validée (degré, multiplicités, nœuds) ; révolution bornée à un tour ; items mappés limités à 50 000 parties et 5 millions de triangles par produit ; décompression RVT plafonnée à 2 Go ; arc RVT limité à 720 segments | ce commit | 5 tests ajoutés (`ifc_base` 3 tests, `formats` 56, réussis en debug et en release) ; 4 fichiers IFC piégés : débordement de pile, épuisement mémoire et deux gels reproduits avec le binaire d'avant, ouverture en moins de 0,1 s après ; `--stats` identique sur `test_ifc4.ifc` et `test_ifc4_murs.ifc` ; cas RVT non essayés sur un vrai fichier |
 | 17/11/2026 | A2 : limites du `README.md` et d'`EDITION.md` revérifiées dans le code (entités IFC et surfaces Revit non décodées, seuils CSG, `.ifczip`) ; `.mcp.json` sans `.exe` | ce commit | serveur MCP démarré sous Linux (réponse à `initialize`) ; non essayé sous Windows (A2c) |

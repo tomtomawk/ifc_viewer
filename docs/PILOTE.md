@@ -36,7 +36,8 @@ zone de coupe sont en m. Les angles de caméra et de pente sont en degrés.
 
 - `aide [pilote|edition|modele|commandes]` : cette documentation ou les contrats de
   l'édition et du modèle, aussi disponibles dans `viewer_aide` (argument `sujet`).
-- `etat` : chargement, enregistrement, sélection, caméra, collaboration, entrées en
+- `etat` : chargement, enregistrement (vrai aussi pendant un enregistrement ou un
+  export lancé depuis l'interface, en arrière-plan), sélection, caméra, collaboration, entrées en
   attente et rectangle de la vue (points logiques de la fenêtre).
 - `erreur_effacer` : ferme le message d'erreur affiché (il reste dans le journal).
 - `journal` : messages de l'interface, du plus ancien au plus récent (200 au plus) :

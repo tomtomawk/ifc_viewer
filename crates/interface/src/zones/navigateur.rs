@@ -527,7 +527,7 @@ impl ViewerApp {
             }
         }
         if let Some(jeu) = exporter_jeu_nav { self.exporter_jeu_dialogue(&jeu); }
-        if let Some((extension, id)) = exporter_feuille_nav { self.exporter_feuille(extension, &id); }
+        if let Some((extension, id)) = exporter_feuille_nav { self.exporter_feuille(&ui.ctx().clone(), extension, &id); }
         if let Some((jeu, feuille)) = regler_jeu {
             self.ouvrir_jeu(&jeu, feuille);
         }

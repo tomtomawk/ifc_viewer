@@ -11,3 +11,4 @@ pub(crate) mod pilotage;
 pub(crate) mod volets;
 pub(crate) mod document_bim;
 pub(crate) mod soleil;
+pub(crate) mod taches;

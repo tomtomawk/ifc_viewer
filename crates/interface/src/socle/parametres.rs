@@ -335,7 +335,7 @@ impl ViewerApp {
                         crate::familles::editeur_famille::ActionFamille::Enregistrer
                     } else { crate::familles::editeur_famille::ActionFamille::Charger(self.famille.as_ref().is_some_and(|e| e.nouvelle())) });
                 } else {
-                    self.enregistrer_projet(ctx);
+                    self.enregistrer_projet_arriere_plan(ctx);
                 }
             }
             "annuler" => self.parcourir_historique(false),

@@ -102,12 +102,7 @@ impl ViewerApp {
                 });
             }
             if let Some((retablir, nombre)) = historique_choisi { self.parcourir_historique_n(retablir, nombre); }
-            if self.loading.is_some() || self.sauvegarde.is_some() {
-                ui.spinner();
-                let texte = self.sauvegarde.as_ref().map_or(&self.status, |s| &s.progression);
-                let reponse = ui.add_sized([ui.available_width().max(0.0), 24.0], egui::Label::new(texte).truncate()).on_hover_text(texte);
-                zones_deplacement.push(reponse.rect);
-            }
+            self.barre_progression(ui, &mut zones_deplacement);
             self.bouton_journal(ui);
             let (libre, _) = ui.allocate_exact_size(egui::vec2(ui.available_width().max(0.0), 32.0), Sense::hover());
             zones_deplacement.push(libre);
@@ -341,11 +336,11 @@ impl ViewerApp {
                     }
                     match cle {
                         "synchro" => self.demander_synchro(),
-                        "enregistrer" => self.enregistrer_projet(&ctx),
+                        "enregistrer" => self.enregistrer_projet_arriere_plan(&ctx),
                         "enregistrer_sous" => self.enregistrer_sous(),
                         "svg" => self.exporter_svg_dialogue(),
-                        "pdf" => self.export_pdf_dialogue(),
-                        "ifc" => self.export_ifc_dialogue(),
+                        "pdf" => self.export_pdf_dialogue(&ctx),
+                        "ifc" => self.export_ifc_dialogue(&ctx),
                         "jeu_pdf" => {
                             let jeu = self.jeu_actif().or_else(|| self.natif.as_ref().and_then(|(p, _)| modele::documentation::jeux(p).into_iter().next()));
                             if let Some(jeu) = jeu {

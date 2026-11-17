@@ -521,6 +521,7 @@ pub struct ViewerApp {
     rvt_source: Option<echanges::enregistrement::SourceRvt>,
     rvt_sortie: Option<PathBuf>,
     sauvegarde: Option<Sauvegarde>,
+    tache: Option<crate::socle::taches::Tache>,
     /// Fiche Revit affichée à la place de la vue 3D.
     rvt_sheet: bool,
     /// Lecture des murs du fichier Revit : résumé si la scène en vient, sinon raison de l'échec.
@@ -758,6 +759,7 @@ impl ViewerApp {
             rvt_source: None,
             rvt_sortie: None,
             sauvegarde: None,
+            tache: None,
             rvt_sheet: false,
             rvt_geom: Err(String::new()),
             rvt_preview: None,
@@ -941,9 +943,9 @@ impl eframe::App for ViewerApp {
         self.historique.geste(ctx.input(|i|i.pointer.any_down()) || self.volets.iter().any(|v|v.interaction));
         self.poll_sauvegarde();
         self.fenetre_documentation(&ctx);
-        if ctx.input(|i| i.viewport().close_requested()) && self.sauvegarde.is_some() {
+        if ctx.input(|i| i.viewport().close_requested()) && self.tache_en_cours() {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            self.error = Some("Un enregistrement est en cours ; attendez sa fin avant de quitter.".into());
+            self.error = Some("Un enregistrement ou un export est en cours ; attendez sa fin (ou annulez-le) avant de quitter.".into());
         } else if ctx.input(|i| i.viewport().close_requested()) && let Some(ordre) = self.edition_plane_modifiee(None) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.activer_famille(ordre);
