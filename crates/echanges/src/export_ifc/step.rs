@@ -5,6 +5,16 @@ use std::fmt::Write;
 
 pub(super) type Tri = [glam::DVec3; 3];
 
+/// Hauteur minimale d'un triangle exporté (mm) : 1 µm, dix fois la confusion
+/// d'OpenCascade (1e-7 m). Les booléens des murs percés laissent des aiguilles de 0,04 µm.
+const HAUTEUR_MIN: f64 = 1e-3;
+
+/// Plus petite hauteur d'un triangle (aire double / plus long côté) ; 0 s'il est réduit à un point.
+fn hauteur([a, b, c]: &Tri) -> f64 {
+    let long = (*b - *a).length().max((*c - *b).length()).max((*a - *c).length());
+    if long == 0.0 { 0.0 } else { (*b - *a).cross(*c - *a).length() / long }
+}
+
 /// Entités du fichier, numérotées à partir de 1 dans l'ordre d'ajout.
 pub(super) struct Step {
     pub(super) lignes: Vec<String>,
@@ -16,9 +26,12 @@ impl Step {
         self.lignes.len()
     }
 
-    /// Faces triangulées (mm) ; None si aucun triangle.
+    /// Faces triangulées (mm) ; None si aucun triangle. Les aiguilles (hauteur sous
+    /// `HAUTEUR_MIN`) sont écartées : IfcOpenShell (OpenCascade) rend vide tout le jeu de
+    /// faces qui en contient une (X5).
     pub(super) fn faces(&mut self, tris: &[Tri]) -> Option<usize> {
-        let m = Maillage::depuis_triangles(tris);
+        let nets: Vec<Tri> = tris.iter().filter(|t| hauteur(t) >= HAUTEUR_MIN).copied().collect();
+        let m = Maillage::depuis_triangles(&nets);
         if m.triangles.is_empty() {
             return None;
         }
@@ -139,6 +152,19 @@ pub(super) fn maintenant() -> String {
 
 #[cfg(test)]
 mod tests {
+    use glam::DVec3;
+
+    /// Une aiguille de 0,04 µm est écartée, un triangle ordinaire gardé.
+    #[test]
+    fn aiguilles_ecartees() {
+        let mut w = super::Step { lignes: Vec::new() };
+        let aiguille = [DVec3::ZERO, DVec3::new(1000.0, 0.0, 0.0), DVec3::new(500.0, 4e-5, 0.0)];
+        assert!(w.faces(&[aiguille]).is_none());
+        let t = [DVec3::ZERO, DVec3::new(1000.0, 0.0, 0.0), DVec3::new(0.0, 15.0, 0.0)];
+        assert!(w.faces(&[t, aiguille]).is_some());
+        assert!(w.lignes.last().unwrap().contains("((1,2,3))"));
+    }
+
     #[test]
     fn horodatage_iso_8601() {
         assert_eq!(super::horodatage_utc(0), "1970-01-01T00:00:00");
