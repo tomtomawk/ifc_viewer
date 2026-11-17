@@ -10,6 +10,7 @@ Dépendances internes autorisées : aucune (docs/ARCHITECTURE.md §2). Externes 
 |---|---|
 | `csg.rs`, `csg_memoire.rs` | `boolean`, `signed_volume`, `fix_orientation` sur triangles |
 | `geometrie.rs`, `trace2d.rs`, `forme2d.rs` | triangulation, tracés 2D, `Forme2D` et points d'arcs/splines |
+| `arcs2d.rs` | arcs et cercles retrouvés dans les polylignes d'annotation (exports SVG `A`, DXF `ARC`/`CIRCLE`) |
 | `texte.rs` | texte vectoriel (polices embarquées) |
 | `aretes.rs`, `motif.rs` | `Aretes`, constantes de trait ; `Motif`, `GrilleMotif`, `hachures_plan` |
 | `constantes.rs`, `nombres.rs`, `hash.rs`, `uuid.rs`, `chrono.rs` | `MAX_APPARENCES`, `format_real`, empreintes, uuid, chronomètre |

@@ -333,6 +333,10 @@ impl Dessin {
         let opacite = if c[3] < 255 { format!(r#" opacity="{:.3}""#, c[3] as f64 / 255.0) } else { String::new() };
         let epaisseur = if pr.style.epaisseur > 0.0 { pr.style.epaisseur } else { pr.role.trait_fin() };
         let element = pr.element.map(|e| format!(r#" data-element="{e}""#)).unwrap_or_default();
+        if let Some(d) = self.chemin_arcs(pr) {
+            let _ = writeln!(s, r#"<path d="{d}" fill="none" stroke="{couleur}" stroke-width="{epaisseur:.3}" stroke-linecap="butt"{opacite}{element}/>"#);
+            return;
+        }
         let pts = |ps: &[DVec3]| ps.iter().map(|p| self.papier(*p)).map(|[x, y]| format!("{x:.3},{y:.3}")).collect::<Vec<_>>().join(" ");
         // traits épais : segments à bouts francs, prolongés selon les traits rejoints
         let segments: Option<Vec<[DVec3; 2]>> = match &pr.forme {
@@ -394,6 +398,51 @@ impl Dessin {
                 let _ = writeln!(s, r#"<path d="{d}" fill="{couleur}" stroke="{couleur}" stroke-width="0.02"{opacite}{element}/>"#);
             }
         }
+    }
+}
+
+impl Dessin {
+    /// Chemin SVG (`M`, `L`, `A`) d'une polyligne d'annotation qui contient un arc ou un
+    /// cercle (`arcs2d`) ; None sinon (tracé en segments).
+    fn chemin_arcs(&self, pr: &Primitive) -> Option<String> {
+        let Forme::Polyligne { points, fermee } = &pr.forme else { return None };
+        if pr.role != Role::Annotation {
+            return None;
+        }
+        let papier: Vec<glam::DVec2> = points.iter().map(|p| glam::DVec2::from_array(self.papier(*p))).collect();
+        let morceaux = crate::arcs2d::morceaux(&papier, *fermee);
+        if morceaux.iter().all(|m| matches!(m, crate::arcs2d::Morceau::Segment(..))) {
+            return None;
+        }
+        let mut d = String::new();
+        let mut courant: Option<glam::DVec2> = None;
+        let aller = |d: &mut String, courant: Option<glam::DVec2>, p: glam::DVec2| {
+            if courant.is_none_or(|c| c.distance_squared(p) > 1e-12) {
+                let _ = write!(d, "M{:.3} {:.3}", p.x, p.y);
+            }
+        };
+        for m in morceaux {
+            match m {
+                crate::arcs2d::Morceau::Segment(a, b) => {
+                    aller(&mut d, courant, a);
+                    let _ = write!(d, "L{:.3} {:.3}", b.x, b.y);
+                    courant = Some(b);
+                }
+                crate::arcs2d::Morceau::Arc { rayon, debut, fin, balayage, .. } => {
+                    aller(&mut d, courant, debut);
+                    let (grand, sens) = (u8::from(balayage.abs() > std::f64::consts::PI), u8::from(balayage > 0.0));
+                    let _ = write!(d, "A{rayon:.3} {rayon:.3} 0 {grand} {sens} {:.3} {:.3}", fin.x, fin.y);
+                    courant = Some(fin);
+                }
+                crate::arcs2d::Morceau::Cercle { centre, rayon } => {
+                    // deux demi-cercles
+                    let (a, b) = (centre + glam::DVec2::X * rayon, centre - glam::DVec2::X * rayon);
+                    let _ = write!(d, "M{:.3} {:.3}A{rayon:.3} {rayon:.3} 0 1 1 {:.3} {:.3}A{rayon:.3} {rayon:.3} 0 1 1 {:.3} {:.3}Z", a.x, a.y, b.x, b.y, a.x, a.y);
+                    courant = Some(a);
+                }
+            }
+        }
+        Some(d)
     }
 }
 
