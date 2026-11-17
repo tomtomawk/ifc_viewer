@@ -41,7 +41,7 @@ bloquante. Concrètement :
 - **Accrochage visible** : symbole d'accrochage (extrémité, milieu, intersection, perpendiculaire, axe, face) et lignes de rappel.
 - **Cotes temporaires** : distance, angle, nombre ou facteur affichés pendant le mouvement. Un clic sur une cote temporaire permet de la saisir.
 - **Aperçu fantôme** du résultat final, copies et jonctions comprises.
-- **Poignées** sur la sélection, quand aucune commande n'est active : extrémités (prolonger), milieu (déplacer), centre de rotation (déplaçable), flèches d'inversion. Tirer une poignée équivaut à la commande correspondante.
+- **Poignées** sur la sélection, quand aucune commande n'est active : extrémités (prolonger), milieu (déplacer), centre de rotation (déplaçable), flèches d'inversion. Tirer une poignée équivaut à la commande correspondante. Murs droits et poutres (sélection d'un seul élément) : ronds aux extrémités de la ligne (implantation du mur, ligne tracée de la poutre) — glisser allonge, raccourcit ou pivote autour de l'autre extrémité, accrochages de la vue, Maj pour les axes, longueur tapée pendant le glissement ou dans la cote affichée ensuite ; carré au milieu — glisser déplace (`Deplacer`) ; flèches d'inversion pour les murs seulement. Une poutre garde la hauteur de ses extrémités et s'enregistre par `Commande::Barre` ; un glissement = une étape d'annulation (`interface/src/outils/modifier/poignees.rs`, `Barre::avec_extremite`).
 - **Les mêmes fonctions dans les trois vues** : en 3D, la saisie se fait sur le plan de travail du niveau de l'élément.
 
 Contrôle de chaque fonction : un script `tools/test-*.py` la joue par le pilote (clics simulés), puis vérifie l'aperçu, la transaction, l'annulation et Échap.

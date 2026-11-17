@@ -106,7 +106,12 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   verticaux et orientables ; les poutres sont horizontales et définies par leur axe.
   Après sélection, **Modifier → Propriétés structurelles** permet de les modifier ;
   les commandes de déplacement, rotation, copie, suppression et l'historique leur
-  sont applicables. Leurs quantités et classes `IfcColumn` / `IfcBeam` sont exportées.
+  sont applicables. Une poutre seule sélectionnée porte, comme un mur droit, des
+  poignées (plan et 3D) : un rond à chaque extrémité (glisser allonge, raccourcit ou
+  pivote autour de l'autre extrémité, avec les accrochages, Maj pour les axes et une
+  longueur tapée pendant le glissement ou dans la cote affichée ensuite) et un carré
+  au milieu (glisser déplace). Les hauteurs des extrémités sont gardées ; chaque
+  glissement est une seule étape d'annulation. Leurs quantités et classes `IfcColumn` / `IfcBeam` sont exportées.
 - **Modéliser → Terrain** : choisir le type (épaisseur, matériau), tracer un périmètre
   fermé et le fermer par clic droit, F ou en cliquant le premier sommet. Les cotes sont
   **NGF**, dans l'unité du projet, et se règlent à côté de chaque sommet (S1, S2…) et de

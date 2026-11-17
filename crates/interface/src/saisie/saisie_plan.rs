@@ -225,6 +225,7 @@ impl ViewerApp {
         let ids=self.selection_bim();
         if ids.len()!=1 {return None;}
         let id=ids[0].clone();
+        if let Some((a, b, z)) = projet.ligne_poutre(&id) { return Some((id, a, b, z, 0.0)); }
         let (_, _, z) = projet.axe_element(&id)?;
         let (a, b, ecart) = projet.ligne_justification(&id)?;
         Some((id, a, b, z, ecart))
@@ -306,16 +307,9 @@ impl ViewerApp {
                 let direction = glam::DVec2::from_array(mobile) - glam::DVec2::from_array(fixe);
                 if let (Some(longueur), Some(direction)) = (longueur, direction.try_normalize()) {
                     let point = (glam::DVec2::from_array(fixe) + direction * longueur).to_array();
-                    if let Some((projet, _)) = &self.natif {
-                        let mut copie = projet.clone();
-                        let resultat = copie.deplacer_extremite_justification(&id, fin, point)
-                            .and_then(|_| copie.recaler_menuiseries(projet))
-                            .and_then(|_| copie.verifier())
-                            .and_then(|_| self.appliquer_projet(copie));
-                        match resultat {
-                            Ok(()) => self.status = "Longueur du mur modifiée.".into(),
-                            Err(e) => self.error = Some(e),
-                        }
+                    match self.deplacer_extremite_selection(&id, fin, point) {
+                        Ok(nom) => self.status = format!("Longueur {nom} modifiée."),
+                        Err(e) => self.error = Some(e),
                     }
                 } else {
                     self.error = Some("Saisissez une longueur positive et finie.".into());

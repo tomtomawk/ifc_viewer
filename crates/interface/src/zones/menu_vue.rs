@@ -145,7 +145,7 @@ impl ViewerApp {
         }
     }
 
-    /// Poignée au milieu du mur sélectionné (hors commande) : la glisser déplace le mur ;
+    /// Poignée au milieu du mur ou de la poutre sélectionnés (hors commande) : la glisser déplace le mur ;
     /// les flèches d'inversion à côté retournent son sens. Rend vrai si la souris est prise.
     pub(crate) fn poignee_milieu(&mut self, ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response, axe: &Option<(String, [f64; 2], [f64; 2], f64, f64)>) -> bool {
         let Some((id, a, b, z, _)) = axe else {
@@ -164,15 +164,16 @@ impl ViewerApp {
         // carré de déplacement
         let c = if pres(me, 8.0) || self.glisse_milieu.is_some() { Color32::from_rgb(230, 120, 20) } else { bleu };
         painter.rect_filled(egui::Rect::from_center_size(me, egui::vec2(9.0, 9.0)), 1.0, c);
-        // flèches d'inversion
+        // flèches d'inversion (murs seulement)
+        let poutre = self.est_poutre(id);
         let c2 = if pres(fleches, 9.0) { Color32::from_rgb(230, 120, 20) } else { bleu };
         let u = (eb - ea).normalized() * 7.0;
-        for (s, k) in [(1.0f32, -1.0f32), (-1.0, 1.0)] {
+        for (s, k) in [(1.0f32, -1.0f32), (-1.0, 1.0)].into_iter().filter(|_| !poutre) {
             let base = fleches + n * 3.5 * k;
             painter.line_segment([base - u * s, base + u * s], egui::Stroke::new(1.6, c2));
             painter.line_segment([base + u * s, base + u * s * 0.4 + n * 3.0 * k], egui::Stroke::new(1.6, c2));
         }
-        if resp.clicked() && resp.interact_pointer_pos().is_some_and(|q| q.distance(fleches) <= 9.0) {
+        if !poutre && resp.clicked() && resp.interact_pointer_pos().is_some_and(|q| q.distance(fleches) <= 9.0) {
             match self.executer_bim(Commande::InverserMur { id: id.clone() }) {
                 Ok(_) => self.status = "Mur inversé — Ctrl+Z pour annuler.".into(),
                 Err(e) => self.error = Some(e),
@@ -204,7 +205,7 @@ impl ViewerApp {
                 self.glisse_milieu = None;
                 if d[0].hypot(d[1]) > 0.5 {
                     match self.executer_bim(Commande::Deplacer { ids: vec![id], delta: [d[0], d[1], 0.0] }) {
-                        Ok(_) => self.status = "Mur déplacé — Ctrl+Z pour annuler.".into(),
+                        Ok(_) => self.status = format!("{} — Ctrl+Z pour annuler.", if poutre { "Poutre déplacée" } else { "Mur déplacé" }),
                         Err(e) => self.error = Some(e),
                     }
                 }
