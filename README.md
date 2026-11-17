@@ -63,7 +63,7 @@ droite à gauche, le cadre vert sélectionne aussi les éléments touchés. Ctrl
 objet n'est plus une navigation (orbite : Maj + clic milieu) ; les objets non masqués sont sélectionnés même derrière
 d'autres objets.
 
-Modéliser comprend aussi Poteau et Poutre rectangulaires ; Escalier et Garde-corps restent à implémenter.
+Modéliser comprend aussi Poteau, Poutre (types, profils), Escalier (droit ou balancé) et Garde-corps : voir [Édition BIM](docs/EDITION.md).
 Sur une fenêtre étroite, le bouton « ... » à droite
 de la colonne de l'outil actif donne accès à ses réglages ; Éléments horizontaux conserve son
 sélecteur et ses paramètres dans Propriétés à toutes les largeurs.
@@ -194,7 +194,7 @@ Chaque viewer écoute sur `127.0.0.1` (47811, sinon un port libre) des commandes
 ligne précédées de son jeton, et s'inscrit dans le registre des instances : le pont
 pilote aussi un viewer ouvert à la main, et `viewer_instances` choisit entre plusieurs
 (voir [docs/PILOTE.md](docs/PILOTE.md)). `crates/pilote/src/mcp.rs` (mode `bimedit --mcp` du même exécutable) les expose en serveur MCP,
-déclaré dans `.mcp.json` sous le nom `bimedit` (lancé par `target/release/bimedit.exe --mcp`, après `cargo build --release`) : un agent ouvre un fichier, choisit une
+déclaré dans `.mcp.json` sous le nom `bimedit` (lancé par `target/release/bimedit.exe --mcp`, après `cargo build --release` ; ce chemin ne vaut que sous Windows, ailleurs le remplacer par `target/release/bimedit`) : un agent ouvre un fichier, choisit une
 vue Revit, règle la caméra, lit les propriétés, désigne l'objet sous un point et reçoit des
 captures PNG. La vue 3D est rendue hors écran (tampon de trame), à la taille demandée, même
 fenêtre réduite ; la capture de la fenêtre entière exige qu'elle ne soit pas réduite. Si
@@ -203,10 +203,12 @@ aucun viewer n'écoute, le serveur lance `bimedit` à côté de lui, sinon `targ
 
 ## Limites connues
 
+Ce qui est fait et ce qui reste à faire est tenu dans un seul document : [docs/SUIVI.md](docs/SUIVI.md).
+
 - Les surfaces NURBS des IfcAdvancedBrep sont approchées par leurs arêtes : les faces fortement courbes sont facettisées grossièrement.
 - La CSG est sautée pour les hôtes de plus de 6 000 triangles ou les ouvertures de plus de 3 000 triangles (performance) ; l'élément est alors affiché plein.
 - Revit : surfaces `HermiteSurf`, `ConeSurf`, `OffsetSurf` et courbes `GEllipse` non décodées ; un solide qui en porte est écarté (le reste de l'élément est affiché) et compté dans les entités ignorées. Contenu des nomenclatures et paramètres calculés par Revit (surfaces, volumes) non lus. GlobalId : IfcGUID de Revit pour les formats 2024 et suivants, synthétiques (`RVT` + ElementId) avant.
-- Dessin 2D : les coupes natives verticales sont prises en charge ; les limites de fidélité des vues Revit restent distinctes ; ni éléments au-dessus de la coupe en pointillés, ni épaisseurs de trait par catégorie, ni export DXF (export PDF désormais disponible) ; traits fins d'un pixel à l'écran ; export SVG/PDF des vues orthographiques et des feuilles natives ; les feuilles Revit ne sont pas exportées. Textes, cotes et cartouches Revit passent dans l'export en triangles (pas en texte SVG). Courbes en polylignes (pas d'arcs). En OpenGL ES (Raspberry Pi), les parties au-dessus de la coupe ne sont pas retirées, seuls les objets entièrement au-dessus le sont.
+- Dessin 2D : les coupes natives verticales sont prises en charge ; les limites de fidélité des vues Revit restent distinctes ; ni éléments au-dessus de la coupe en pointillés, ni épaisseurs de trait par catégorie ; export DXF d'un dessin ou d'une feuille en ASCII R12 (traits en LINE, surfaces pleines et glyphes en SOLID, un calque par rôle ; pas de DWG) ; traits fins d'un pixel à l'écran ; export SVG/PDF des vues orthographiques et des feuilles natives ; les feuilles Revit ne sont pas exportées. Textes, cotes et cartouches Revit passent dans l'export en triangles (pas en texte SVG). Courbes en polylignes (pas d'arcs). En OpenGL ES (Raspberry Pi), les parties au-dessus de la coupe ne sont pas retirées, seuls les objets entièrement au-dessus le sont.
 - Non pris en charge : IfcSurfaceCurveSweptAreaSolid, IfcFixedReferenceSweptAreaSolid, IfcSectionedSolid, alignements IFC4X3, textures. Les entités ignorées sont listées dans la barre d'état et dans `--stats`.
 
 ## Tests

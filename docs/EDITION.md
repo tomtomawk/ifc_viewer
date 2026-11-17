@@ -11,8 +11,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   des coordonnées des sommets, avec un aperçu du contour fermé. Enregistrer dans
   le projet, créer une copie ou exporter un fichier `.profil.json`. Le gabarit
   embarqué fournit un rectangle, une cornière, un profilé T et un profilé I.
-  Ces familles de profils sont éditables indépendamment ; leur utilisation pour
-  créer des éléments par balayage ou définir une section de poutre reste à ajouter.
+  Ces familles de profils sont éditables indépendamment ; un type de poutre peut
+  en prendre une comme section (`TypePoutre::profil`).
 
 - **Début → Phases et variantes**, ou le lien sous les champs de contexte dans
   Propriétés, ouvre le gestionnaire des phases, sous-projets et variantes. Il permet
@@ -417,8 +417,9 @@ une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvre
 - L'attachement requiert que le mur soit entièrement dans l'emprise de la toiture
   (prévoir un débord). Détacher retrouve la contrainte haute enregistrée. Supprimer
   la toiture détache ses murs sans les supprimer.
-- Le modèle est reconstruit après chaque opération : la fluidité sur des maquettes
-  volumineuses reste à optimiser. La copie de récupération n'est pas un journal
+- Après chaque opération, les opérations booléennes des murs inchangés sont reprises
+  de la mémoire (`noyau::csg_memoire`) ; les arêtes et l'assemblage de la scène sont
+  recalculés en entier (mesures et suite : [SUIVI.md](SUIVI.md) §1 et tâche A8). La copie de récupération n'est pas un journal
   incrémental ; un calcul qui n'a pas encore abouti n'y figure pas.
 - L'export IFC utilise des corps tessellés, pas une restitution des familles Revit
   ni de tous les paramètres métier. Les objets importés deviennent des
@@ -427,10 +428,11 @@ une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvre
   Le PDF d'une feuille respecte son format exact ; l'export d'une vue seule ajoute
   une marge. Imprimer à **100 %**, sans « ajuster à la page ».
 - Le cadre de porte/fenêtre natif est une représentation simple. Un configurateur
-  de familles, les escaliers/garde-corps paramétriques, les symboles,
-  légendes et altimétries, la fusion d'import et la comparaison de réimportations
-  restent des itérations suivantes. Les sections circulaires et les poutres inclinées
-  ne sont pas encore prises en charge. Les outils non raccordés sont désactivés.
+  de familles, les escaliers/garde-corps paramétriques par famille, les symboles,
+  les légendes, la fusion d'import et la comparaison de réimportations ne sont pas
+  disponibles. Les sections circulaires et les poutres inclinées ne sont pas prises
+  en charge. Les outils non raccordés sont désactivés. Le reste à faire est tenu
+  dans [SUIVI.md](SUIVI.md).
 - Les feuilles natives s'ouvrent dans le gestionnaire de documents avec un aperçu ;
   elles ne constituent pas encore des onglets de dessin éditables comme les vues.
 

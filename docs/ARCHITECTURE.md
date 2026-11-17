@@ -68,9 +68,10 @@ Externes : `eframe` (egui, wgpu) et `wgpu` seulement dans `moteur3d`, `pilote`, 
 3. Plafond d'environ 600 lignes par fichier pour tout nouveau code ; un fichier au-delà ne s'agrandit pas (§5).
 4. Un `AGENTS.md` court (≤ ~40 lignes : rôle, dépendances autorisées, points d'entrée, quand modifier ici, `cargo test -p <crate>`, pièges) dans chaque crate ; le mettre à jour avec le code. L'`AGENTS.md` racine porte la carte du dépôt.
 5. `pub(crate)` ne devient `pub` que si la compilation l'exige.
-6. Aucun changement de format sans mise à jour de la documentation (`docs/MODELE.md`, `docs/EDITION.md`) ; pas de migration des formats natifs : `docs/AGENTS.md`.
-7. Commits : un message préfixé du contexte (« Lot 12 : … », ou le sujet) qui décrit le changement ; les lignes `Co-Authored-By` et `Claude-Session` en fin de message pour le travail fait avec un agent. `cargo check --workspace --tests` avant chaque commit.
-8. Les tests de `samples/` se lisent par `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/…")` ; les `include_str!` de `docs/` et `gabarits/` sont relatifs à `crates/<crate>/src/`.
+6. Ce qui est fait et ce qui reste à faire s'écrit dans `docs/SUIVI.md`, dans le même commit que le code, et nulle part ailleurs ; les autres documents décrivent le fonctionnement.
+7. Aucun changement de format sans mise à jour de la documentation (`docs/MODELE.md`, `docs/EDITION.md`) ; pas de migration des formats natifs : `docs/AGENTS.md`.
+8. Commits : un message préfixé du contexte (« Lot 12 : … », ou le sujet) qui décrit le changement ; les lignes `Co-Authored-By` et `Claude-Session` en fin de message pour le travail fait avec un agent. `cargo check --workspace --tests` avant chaque commit.
+9. Les tests de `samples/` se lisent par `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/…")` ; les `include_str!` de `docs/` et `gabarits/` sont relatifs à `crates/<crate>/src/`.
 
 ## 4. Où est quoi
 
@@ -110,7 +111,8 @@ Externes : `eframe` (egui, wgpu) et `wgpu` seulement dans `moteur3d`, `pilote`, 
 - **Modes console dans `app`** : `--modele`, `--stats`, `--images`, `--decodage`, `--nomenclatures`, `--parametres` appellent `formats`, `ifc_base`, `echanges` ; ils sont rangés dans `crates/app/src/modes/` (un fichier par mode, `rvt_stats.rs` 272 lignes) mais restent dans le binaire.
 - **`moteur3d/src/scene.wgsl`** : `const MAX_APPARENCES: i32 = 32;` en dur ; l'égalité avec `noyau::constantes::MAX_APPARENCES` est vérifiée par le test `max_apparences_du_shader_egal_a_noyau` (`moteur3d`).
 - **Garde-fou** : le §2 est codé en dur dans le test, sans lecture du document ; les deux se modifient ensemble. `[dependencies.x]` (tableau TOML) n'est pas géré (le test échoue s'il en trouve).
-- **Interface graphique** : non lancée depuis le lot 11 faute d'affichage ; un essai manuel (projet, ruban, éditeur de famille, feuilles, cotation, escalier) reste à faire.
+
+Cette section décrit la dette ; son traitement (priorité, fait, reste à faire) est suivi dans [SUIVI.md](SUIVI.md) §2.6.
 
 ## 6. Comment vérifier
 
@@ -122,8 +124,8 @@ cargo test -p bimedit --release --test dependances   # sens des dépendances, eg
 cargo run --release -p bimedit -- --stats samples/test_ifc4.ifc
 ```
 
-Référence de tests (lot 12) : 395 réussis et 2 ignorés (somme des crates ; +1 depuis le lot 12 : test `MAX_APPARENCES` de `moteur3d`). Répartition : `modele` 101 (+1 ignoré), `formats` 52, `interface` 49, `collaboration` 43, `moteur2d` 40 (+1 ignoré), `commandes` 29, `echanges` 28, `pilote` 12, `moteur3d` 13, `noyau` 10, `maillage` 8, `config` 4, `bimedit` 4, `ifc_base` 2, `scene` 0. La somme brute des lignes « test result » est supérieure de 4 : `collaboration` relance son binaire de test en sous-processus (lignes « 1 passed »). Sans affichage, le binaire échoue au lancement de la fenêtre (`winit … DISPLAY is set`, code 1) ; les modes console et `--mcp` fonctionnent sans affichage.
+État courant des tests : [SUIVI.md](SUIVI.md) §1. Référence de tests (lot 12) : 395 réussis et 2 ignorés (somme des crates ; +1 depuis le lot 12 : test `MAX_APPARENCES` de `moteur3d`). Répartition : `modele` 101 (+1 ignoré), `formats` 52, `interface` 49, `collaboration` 43, `moteur2d` 40 (+1 ignoré), `commandes` 29, `echanges` 28, `pilote` 12, `moteur3d` 13, `noyau` 10, `maillage` 8, `config` 4, `bimedit` 4, `ifc_base` 2, `scene` 0. La somme brute des lignes « test result » est supérieure de 4 : `collaboration` relance son binaire de test en sous-processus (lignes « 1 passed »). Sans affichage, le binaire échoue au lancement de la fenêtre (`winit … DISPLAY is set`, code 1) ; les modes console et `--mcp` fonctionnent sans affichage.
 
 ## 7. Documents voisins
 
-`docs/MODELE.md` (format du modèle), `docs/EDITION.md` (commandes), `docs/MODIFICATION.md`, `docs/PILOTE.md` (MCP), `docs/COLLABORATION.md`, `docs/AGENTS.md` (politique des formats : à respecter). `docs/AUDIT_FACTORIZATION_2026-11-11.md` et `docs/PLAN_FUSION_FAMILLES.md` sont antérieurs au découpage : chemins périmés.
+`docs/MODELE.md` (format du modèle), `docs/EDITION.md` (commandes), `docs/MODIFICATION.md`, `docs/PILOTE.md` (MCP), `docs/COLLABORATION.md`, `docs/AGENTS.md` (politique des formats : à respecter). `docs/SUIVI.md` : source unique de ce qui est fait et de ce qui reste à faire. `docs/PLAN_FUSION_FAMILLES.md` (objectif et lots des familles ; antérieur au découpage : chemins périmés), `docs/ETUDES_P2.md` (évolutions étudiées). `docs/historique/` : archives (chantier du découpage, audit de factorisation du 11/11/2026, avancement des familles).

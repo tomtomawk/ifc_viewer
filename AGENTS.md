@@ -4,6 +4,8 @@ Lire et appliquer la politique des formats et des migrations dans [docs/AGENTS.m
 
 **Travailler sur une partie seulement** : lire d'abord l'`AGENTS.md` de la crate concernée et `docs/ARCHITECTURE.md` §2 (dépendances autorisées) ; ne pas charger le reste. `docs/historique/` est un journal, pas à lire. Avant de commiter : `cargo check --workspace --tests`.
 
+**Fait et reste à faire** : source unique [docs/SUIVI.md](docs/SUIVI.md). Y prendre la tâche, et dans le même commit que le code : retirer la tâche de « Reste à faire », ajouter une ligne en tête du « Journal » (date, commit, vérification réellement faite). Ne pas écrire d'état (« fait », « à faire », avancement) dans un autre document.
+
 ## Carte du dépôt (`crates/`, dans l'ordre des dépendances)
 
 | Crate | Rôle |
@@ -43,4 +45,4 @@ Lire et appliquer la politique des formats et des migrations dans [docs/AGENTS.m
 | option de ligne de commande | `crates/app/src/main.rs`, `crates/app/src/modes/` |
 | dépendances entre crates | `docs/ARCHITECTURE.md` §2 + `crates/app/tests/dependances.rs` |
 
-Règles : pas de ré-export de compatibilité ; fichiers ≤ ~600 lignes pour tout nouveau code ; un `AGENTS.md` court par crate, à tenir à jour avec le code.
+Règles : `docs/SUIVI.md` tenu à jour à chaque commit ; pas de ré-export de compatibilité ; fichiers ≤ ~600 lignes pour tout nouveau code ; un `AGENTS.md` court par crate, à tenir à jour avec le code.

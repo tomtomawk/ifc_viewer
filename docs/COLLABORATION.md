@@ -356,7 +356,9 @@ IfcOpenShell 0.9.0.post1 a produit 15 géométries et 0 erreur.
 Les tests de conversion dont les données externes sont absentes conservent les
 conditions d'exécution préexistantes du dépôt.
 
-## Qualification NAS à deux machines (reste à réaliser)
+## Qualification NAS à deux machines
+
+État de cette qualification : [SUIVI.md](SUIVI.md), tâche C1.
 
 Utiliser un dossier de qualification dédié et enregistrer modèle NAS, firmware,
 version SMB, options de cache, fichiers hors connexion désactivés et antivirus.
