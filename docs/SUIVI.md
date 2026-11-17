@@ -19,7 +19,7 @@ Dernière mise à jour : 17 novembre 2026.
 | Contrôle | Résultat | Date |
 |---|---|---|
 | `cargo check --workspace --tests` | réussi, 0 avertissement (Linux x64) | 17/11/2026 |
-| `cargo test --workspace` (debug) | 423 réussis, 1 échec (tâche A1), 2 ignorés | 17/11/2026 |
+| `cargo test --workspace` (debug) | 424 réussis, 0 échec, 2 ignorés (423 relevés avant la correction du test `suivre_trait`, relancé seul ensuite avec sa crate) | 17/11/2026 |
 | `cargo test --workspace --release` | non relancé depuis le lot 12 (référence : 395 réussis, 2 ignorés) | 16/11/2026 |
 | Chargement des 13 `samples/**/*.modele.json` (`bimedit --mesurer-scene <fichier> 0`) | 13 sur 13 | 17/11/2026 |
 | Interface graphique à l'écran | non essayée depuis le lot 11 (pas d'affichage) | — |
@@ -42,7 +42,7 @@ Mesures de reconstruction de la scène (build release, `BIMEDIT_CHRONO=1`, `bime
 
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
-| A1 | Test `interface::…::suivre_trait::tests::ctrl_seul_et_espace` en échec en debug (`debug_assert!` d'epaint, `TexturesDelta` non vidé) ; CI sans passe debug ni clippy | P0 | `crates/interface/src/outils/dessiner/dessin_plan/suivre_trait.rs:27-31`, `.github/workflows/ci.yml` |
+| A1 | CI sans passe de tests en debug ni clippy : un échec limité au mode debug n'y apparaît pas | P1 | `.github/workflows/ci.yml` |
 | A3 | Lecteurs IFC et RVT non bornés face à un fichier malformé : récursion du lecteur STEP, boucle sur paramètre de courbe, B-spline, révolution, décompression RVT, arc RVT | P0 | `crates/ifc_base/src/step.rs:333-346`, `crates/formats/src/ifc/geom.rs:863-870`, `:936-976`, `:1153-1158`, `crates/formats/src/rvt/objets.rs:66`, `rvt/geometrie.rs:515` |
 | A2b | `.mcp.json` lance `target/release/bimedit.exe` : le serveur MCP ne démarre pas hors Windows | P1 | décision à prendre, voir §3 |
 | A4 | Messages : une erreur est effacée par l'édition suivante, pas de journal, statut visible seulement pendant un chargement, échec de la copie de récupération non montré, options illisibles non signalées | P1 | `crates/interface/src/socle/messages.rs`, `saisie/saisie_plan.rs:770`, `crates/echanges/src/enregistrement.rs:159`, `crates/config/src/options/mod.rs:91-99` |
@@ -146,7 +146,7 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 
 | Sujet | Question |
 |---|---|
-| Ordre | Fiabilité (A1, A3) avant l'IFC (A6, A7), ou l'inverse ? |
+| Ordre | Fiabilité (A3) avant l'IFC (A6, A7), ou l'inverse ? |
 | A2b | Forme portable de `.mcp.json`, le poste de référence étant sous Windows |
 | A6 | Jeux de propriétés attendus par les partenaires ; représentation des phases et démolitions dans l'IFC |
 | A7 | Convertir les `IfcSpace` en pièces natives ? |
@@ -161,8 +161,9 @@ Le plus récent en premier. Les numéros « n° » sont ceux de la feuille de ro
 
 | Date | Fait | Commit | Vérification |
 |---|---|---|---|
-| 17/11/2026 | Échantillons : 11 fichiers `samples/**/*.modele.json` remis au schéma courant (opération d'extrusion explicite, remplissage de symbole, catégorie de famille, format `famille-ouverture 3`) | ce commit | 13 fichiers sur 13 chargés par `bimedit --mesurer-scene` ; non ouverts à l'écran |
-| 17/11/2026 | Documentation : ce suivi unique ; états retirés de `MODIFICATION.md`, `PLAN_FUSION_FAMILLES.md`, `ARCHITECTURE.md` ; audit du 11/11 archivé ; `README.md` et `EDITION.md` corrigés (escalier, garde-corps, DXF, section de poutre) | ce commit | relecture |
+| 17/11/2026 | Test `suivre_trait::tests::ctrl_seul_et_espace` corrigé : la sortie d'egui est vidée de ses textures avant d'être jetée (première partie de A1) | ce commit | `cargo test -p interface --lib` : 60 réussis en debug et en release |
+| 17/11/2026 | Échantillons : 11 fichiers `samples/**/*.modele.json` remis au schéma courant (opération d'extrusion explicite, remplissage de symbole, catégorie de famille, format `famille-ouverture 3`) | `ce3a404` | 13 fichiers sur 13 chargés par `bimedit --mesurer-scene` ; non ouverts à l'écran |
+| 17/11/2026 | Documentation : ce suivi unique ; états retirés de `MODIFICATION.md`, `PLAN_FUSION_FAMILLES.md`, `ARCHITECTURE.md` ; audit du 11/11 archivé ; `README.md` et `EDITION.md` corrigés (escalier, garde-corps, DXF, section de poutre) | `ce3a404` | relecture |
 | 16/11/2026 | Audit des fonctions à améliorer (tâches A1 à A12) | — | compilation, tests debug, mesures |
 | 16/11/2026 | Études : styles globaux, multiplateforme, WebAssembly (n° 15, 4, 3) | `63468c0` | étude seule |
 | 16/11/2026 | Escaliers balancés (n° 5) | `35e1c42` | — |
@@ -174,7 +175,7 @@ Le plus récent en premier. Les numéros « n° » sont ceux de la feuille de ro
 | 16/11/2026 | Export PDF de la feuille affichée, cartouche compris (n° 12) | `f36d371` | — |
 | 16/11/2026 | Aimantation des vues aux cadres des feuilles (n° 1) | `e087ffe` | — |
 | 16/11/2026 | Distance tapée depuis un point accroché (n° 2) | `cc1f127` | — |
-| 16/11/2026 | Raccourcis Ctrl et Espace en mode Suivre un trait (n° 24) | `a17dfdb` | test ajouté, en échec en debug (A1) |
+| 16/11/2026 | Raccourcis Ctrl et Espace en mode Suivre un trait (n° 24) | `a17dfdb` | test ajouté, en échec en debug jusqu'au 17/11 |
 | 16/11/2026 | Axes et faces survolés deviennent des droites de guidage (n° 23) | `66e01ea` | — |
 | 16/11/2026 | Accrochages sur les faces des murs en arc (n° 25) | `c735379` | — |
 | 16/11/2026 | Lame d'air réellement vide (n° 20) | `d74ccd5` | — |

@@ -26,7 +26,9 @@ mod tests {
 
     fn image(ctx: &egui::Context, events: Vec<egui::Event>, controle: &mut bool) -> (bool, bool) {
         let mut r = (false, false);
-        let _ = ctx.run_ui(egui::RawInput { events, ..Default::default() }, |ui| r = raccourcis(ui.ctx(), controle));
+        let mut sortie = ctx.run_ui(egui::RawInput { events, ..Default::default() }, |ui| r = raccourcis(ui.ctx(), controle));
+        // sans rendu, les textures ne sont pas appliquées : epaint refuse de les jeter en debug
+        sortie.textures_delta.clear();
         r
     }
 
