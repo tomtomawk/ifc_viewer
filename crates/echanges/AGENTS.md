@@ -22,7 +22,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`, `formats` (de
 | `enregistrement.rs` | `enregistrer_natif`, `ecrire_atomique`, récupération, `SourceRvt`, `Bilan` |
 | `rapport.rs` | `markdown` |
 
-`tests/` : tests d'intégration dont le projet de départ vient de `depuis_ifc` (commandes, documentation, site, escalier, volumes) ; `import_proprietes.rs` : données des éléments importés et aller-retour IFC -> natif -> IFC ; `import_barres.rs` : poteaux et poutres convertis ; `import_espaces.rs` : espaces convertis en pièces, repli, aller-retour IFC ; `couches_rvt.rs` lit un fichier hors dépôt (`RVT_ESSAIS`) et est sauté s'il est absent. Les `samples/` se lisent par `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")`.
+`tests/` : tests d'intégration dont le projet de départ vient de `depuis_ifc` (commandes, documentation, site, escalier, volumes) ; `import_proprietes.rs` : données des éléments importés et aller-retour IFC -> natif -> IFC ; `import_barres.rs` : poteaux et poutres convertis ; `import_espaces.rs` : espaces convertis en pièces, repli, aller-retour IFC ; `copies_guid.rs` : GlobalId uniques après copie d'éléments importés ; `couches_rvt.rs` lit un fichier hors dépôt (`RVT_ESSAIS`) et est sauté s'il est absent. Les `samples/` se lisent par `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")`.
 
 ## Quand modifier ici
 
