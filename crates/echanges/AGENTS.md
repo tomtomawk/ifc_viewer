@@ -10,7 +10,11 @@ Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`, `formats` (de
 |---|---|
 | `depuis_ifc.rs` | `convertir` : IFC -> `Projet` |
 | `depuis_rvt.rs` | `convertir`, `convertir_maquette` : Revit -> `Projet` (575 lignes : ne pas agrandir) |
-| `export_ifc.rs` | `exporter` : `Projet` -> IFC |
+| `export_ifc/mod.rs` | `exporter`, `exporter_fichier` (nom dans l'en-tête) : `Projet` -> IFC4 ; parcours des éléments |
+| `export_ifc/step.rs` | écrivain STEP : textes, GUID déterministes (`guid`, ne pas changer), faces tessellées, en-tête horodaté |
+| `export_ifc/{site,types,materiaux,styles}.rs` | `IfcSite` et `TrueNorth` ; `IfcWallType`… et `IfcRelDefinesByType` ; jeux de couches, `IfcMaterialLayerSetUsage`, axe des murs ; `IfcSurfaceStyle` par matériau |
+| `export_ifc/{proprietes,quantites}.rs` | `Pset_*Common` (seulement les valeurs connues du modèle) ; `Qto_*BaseQuantities` pris aux calculs de `modele` des nomenclatures, aucun calcul propre |
+| `export_ifc/tests.rs` | relecture, hiérarchie, types, Pset, quantités = nomenclature, styles, couches relues par l'import |
 | `enregistrement.rs` | `enregistrer_natif`, `ecrire_atomique`, récupération, `SourceRvt`, `Bilan` |
 | `rapport.rs` | `markdown` |
 
@@ -25,4 +29,6 @@ Import IFC ou Revit vers le modèle natif, export IFC, enregistrement atomique, 
 ```
 cargo test -p echanges --release
 cargo tree -p echanges   # aucune crate interne hors noyau, modele, ifc_base, formats (+ commandes, maillage, moteur2d en dev)
+cargo run --release -p bimedit -- --export-ifc samples/maison_native.modele.json target/maison.ifc
+python3 tools/valider_ifc.py --donnees target/maison.ifc   # ifcopenshell==0.9.0.post1, pytest
 ```

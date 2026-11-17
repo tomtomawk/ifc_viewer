@@ -98,7 +98,7 @@ fn ecrire_jeu(p: &modele::Projet, a_ecrire: &[(String, Option<String>, Format)],
         c.etape(format!("Fichier {}/{} : {nom}", i + 1, a_ecrire.len()));
         let f = feuille.as_ref().and_then(|id| p.feuilles.iter().find(|f| &f.id == id));
         let octets = match (format, f) {
-            (Format::Ifc, _) => echanges::export_ifc::exporter(p)?.into_bytes(),
+            (Format::Ifc, _) => echanges::export_ifc::exporter_fichier(p, nom)?.into_bytes(),
             (Format::Pdf, Some(f)) => moteur2d::pdf(&moteur2d::svg_feuille(p, f)?)?,
             (Format::Dxf, Some(f)) => moteur2d::dxf_feuille(p, f)?.into_bytes(),
             _ => continue,
@@ -154,7 +154,7 @@ impl ViewerApp {
         let Some((projet, _)) = self.natif.clone() else { return };
         self.lancer_tache(ctx, "Export IFC4", move |c| {
             c.etape("Export IFC4 : géométrie et relations…");
-            let texte = echanges::export_ifc::exporter(&projet)?;
+            let texte = echanges::export_ifc::exporter_fichier(&projet, &chemin.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned()))?;
             c.ecrire(&chemin, texte.as_bytes())?;
             Ok(Fin::Fichiers(format!("IFC4 exporté : {}", chemin.display())))
         });
@@ -322,7 +322,11 @@ mod tests {
         let d = dossier("jeu");
         let m = ecrire_jeu(&p, &a_ecrire, &d, &Controle::default()).unwrap();
         assert!(m.starts_with("3 fichier(s) écrit(s)"), "{m}");
-        assert_eq!(std::fs::read_to_string(d.join("maison.ifc")).unwrap(), echanges::export_ifc::exporter(&p).unwrap());
+        // l'en-tête porte l'heure et le nom du fichier : la section DATA est comparée
+        let donnees = |t: String| t[t.find("DATA;").unwrap()..].to_string();
+        let ifc = std::fs::read_to_string(d.join("maison.ifc")).unwrap();
+        assert!(ifc.contains("FILE_NAME('maison.ifc'"), "{}", &ifc[..300]);
+        assert_eq!(donnees(ifc), donnees(echanges::export_ifc::exporter(&p).unwrap()));
         // l'ordre des arêtes vues d'une feuille change d'un calcul à l'autre (antérieur à
         // ce module) : mêmes lignes, dans un ordre quelconque
         let lignes = |t: String| { let mut l: Vec<String> = t.lines().map(str::to_string).collect(); l.sort(); l };

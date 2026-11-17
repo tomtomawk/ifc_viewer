@@ -350,8 +350,8 @@ impl ViewerApp {
                         return Err("Chemin de sortie requis".into());
                     }
                     let bytes = if nom == "exporter_ifc" {
-                        echanges::export_ifc::exporter(
-                            &self.natif.as_ref().ok_or("Projet natif requis")?.0,
+                        echanges::export_ifc::exporter_fichier(
+                            &self.natif.as_ref().ok_or("Projet natif requis")?.0, &path.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned()),
                         )?
                         .into_bytes()
                     } else {

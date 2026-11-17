@@ -394,9 +394,40 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   modèle, déplacé à la souris, retiré par Suppr ; il est dans les exports PDF/SVG.
   Sous chaque feuille, l'arborescence liste aussi ses nomenclatures. Les
   nomenclatures posées sur les feuilles Revit ne sont pas encore lues à l'import.
-- **Sortie → IFC4** exporte niveaux, classes architecturales, compositions et
-  relations d'ouverture avec une géométrie tessellée. Les GUID IFC valides de la
-  source sont préservés ; les autres sont générés de manière stable.
+- **Sortie → IFC4** (vue ReferenceView, géométrie tessellée, longueurs en mm, aires
+  en m², volumes en m³) exporte :
+  - la hiérarchie projet → `IfcSite` → `IfcBuilding` → niveaux ; terrains et limites
+    de propriété sont contenus dans le site. Le site porte latitude et longitude si
+    le projet a un lieu, l'altitude de référence si la cote NGF de l'origine est
+    renseignée ; le nord du projet devient le `TrueNorth` du contexte. Les
+    coordonnées E/N de l'origine ne sont pas exportées (système de coordonnées non
+    connu du modèle) ;
+  - les classes architecturales, les compositions et les relations d'ouverture ;
+  - un type IFC (`IfcWallType`, `IfcSlabType`, `IfcCoveringType`, `IfcRoofType`,
+    `IfcDoorType`, `IfcWindowType`, `IfcBeamType`, `IfcColumnType`,
+    `IfcRailingType`) par type du projet utilisé, relié par `IfcRelDefinesByType` ;
+  - les jeux `Pset_*Common` réduits aux valeurs que le modèle connaît : `Reference`
+    (nom du type), `LoadBearing` faux pour un type de mur de catégorie Cloison,
+    contremarches et giron de l'escalier (`Pset_StairCommon`), hauteur du
+    garde-corps (`Pset_RailingCommon`). Rien n'est écrit pour une propriété
+    inconnue (`IsExternal`, `FireRating`…), ni de `Pset_SpaceCommon` ;
+  - les quantités `Qto_*BaseQuantities` (murs, dalles, sols, plafonds, toitures,
+    portes, fenêtres, poutres, poteaux, pièces, garde-corps), calculées comme les
+    nomenclatures : mêmes valeurs que `--quantites` et les colonnes de nomenclature ;
+  - un style de surface par matériau (couleur et transparence de l'apparence), posé
+    sur les faces des murs monocouches, de chaque couche des dalles, des poutres
+    typées et des parts de composants, garde-corps et menuiseries qui ont un
+    matériau ;
+  - les jeux de couches des murs et des dalles par `IfcMaterialLayerSetUsage` : axe
+    du mur (représentation `Axis`) au milieu de l'épaisseur, couche extérieure à
+    gauche, empilement `NEGATIVE` depuis +e/2 ; dalles sans pente depuis le dessus de
+    la première couche. Toitures et dalles en pente gardent le jeu de couches seul ;
+  - l'heure UTC de l'export dans l'en-tête (`FILE_NAME`).
+
+  Les GUID IFC valides de la source sont préservés ; les autres sont générés de
+  manière stable. `python3 tools/valider_ifc.py --donnees fichier.ifc` contrôle le
+  schéma, chaque géométrie et la présence du site, des types, de `Pset_WallCommon`
+  et de `Qto_WallBaseQuantities`.
 
 L'exemple autonome `samples/maison_native.modele.json` contient deux niveaux, huit
 murs, des ouvertures, deux planchers, une toiture, des murs attachés, des annotations,
@@ -422,9 +453,12 @@ une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvre
   de la mémoire (`noyau::csg_memoire`) ; les arêtes et l'assemblage de la scène sont
   recalculés en entier (mesures et suite : [SUIVI.md](SUIVI.md) §1 et tâche A8). La copie de récupération n'est pas un journal
   incrémental ; un calcul qui n'a pas encore abouti n'y figure pas.
-- L'export IFC utilise des corps tessellés, pas une restitution des familles Revit
-  ni de tous les paramètres métier. Les objets importés deviennent des
-  `IfcBuildingElementProxy` portant leur catégorie en `ObjectType`.
+- L'export IFC utilise des corps tessellés (pas de solides paramétriques ni de
+  restitution des familles Revit) et ne porte que les paramètres que le modèle
+  connaît : ni phases, ni démolitions, ni classement feu ou acoustique. Un mur
+  multicouche est un seul solide non coloré ; ses couches sont décrites par le jeu de
+  couches. Les objets importés deviennent des `IfcBuildingElementProxy` portant leur
+  catégorie en `ObjectType`.
 - Les textes PDF/SVG sont vectorisés en contours, pas en texte sélectionnable.
   Le PDF d'une feuille respecte son format exact ; l'export d'une vue seule ajoute
   une marge. Imprimer à **100 %**, sans « ajuster à la page ».

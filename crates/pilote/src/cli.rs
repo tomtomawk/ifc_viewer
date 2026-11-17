@@ -52,7 +52,7 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
             }
             "--export-ifc" => echanges::enregistrement::ecrire_atomique(
                 Path::new(arg),
-                echanges::export_ifc::exporter(&p)?.as_bytes(),
+                echanges::export_ifc::exporter_fichier(&p, &Path::new(arg).file_name().map_or_else(|| arg.clone(), |n| n.to_string_lossy().into_owned()))?.as_bytes(),
             )?,
             "--quantites" => {
                 let n = modele::documentation::Nomenclature {

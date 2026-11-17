@@ -1,101 +1,47 @@
-//! Export IFC4 en millimètres : classes, niveaux, matériaux et géométrie tessellée.
+//! Export IFC4 (ReferenceView, géométrie tessellée, mm) : site, niveaux, classes, types,
+//! jeux de propriétés et quantités, matériaux à couches et couleurs.
+mod materiaux;
+mod proprietes;
+mod quantites;
+mod site;
+mod step;
+mod styles;
+#[cfg(test)]
+mod tests;
+mod types;
+
 use modele::*;
 use modele::{elements::pente, murs::jonctions, volumes::solides};
 use std::collections::HashMap;
-use std::fmt::Write;
-struct Step {
-    lignes: Vec<String>,
-}
-impl Step {
-    fn add(&mut self, s: String) -> usize {
-        self.lignes.push(s);
-        self.lignes.len()
-    }
-    fn mesh(&mut self, tris: &[[glam::DVec3; 3]], contexte: usize) -> usize {
-        let m = Maillage::depuis_triangles(tris);
-        if m.triangles.is_empty() {
-            return 0;
-        }
-        let points = m
-            .sommets
-            .iter()
-            .map(|p| format!("({:.6},{:.6},{:.6})", p[0], p[1], p[2]))
-            .collect::<Vec<_>>()
-            .join(",");
-        let pts = self.add(format!("IFCCARTESIANPOINTLIST3D(({points}))"));
-        let faces = m
-            .triangles
-            .iter()
-            .map(|t| format!("({},{},{})", t[0] + 1, t[1] + 1, t[2] + 1))
-            .collect::<Vec<_>>()
-            .join(",");
-        let faces = self.add(format!("IFCTRIANGULATEDFACESET(#{pts},$,$,({faces}),$)"));
-        let rep = self.add(format!(
-            "IFCSHAPEREPRESENTATION(#{contexte},'Body','Tessellation',(#{faces}))"
-        ));
-        self.add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,(#{rep}))"))
-    }
-}
-fn texte(s: &str) -> String {
-    let mut out = String::from("'");
-    for c in s.chars() {
-        if c == '\'' {
-            out.push_str("''");
-        } else if c == '\\' || !c.is_ascii() || c.is_control() {
-            out.push_str("\\X2\\");
-            for n in c.encode_utf16(&mut [0; 2]).iter() {
-                let _ = write!(out, "{n:04X}");
-            }
-            out.push_str("\\X0\\");
-        } else {
-            out.push(c);
-        }
-    }
-    out.push('\'');
-    out
-}
-fn ref_(i: usize) -> String {
-    if i == 0 { "$".into() } else { format!("#{i}") }
-}
-fn refs(ids: &[usize]) -> String {
-    format!(
-        "({})",
-        ids.iter()
-            .map(|i| format!("#{i}"))
-            .collect::<Vec<_>>()
-            .join(",")
-    )
-}
-fn guid(cle: &str, origine: Option<&Origine>) -> String {
-    let alphabet = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$";
-    if let Some(g) = origine.and_then(|o| o.guid.as_ref()).filter(|g| {
-        g.len() == 22 && g.bytes().all(|b| alphabet.contains(&b)) && g.as_bytes()[0] <= b'3'
-    }) {
-        return g.clone();
-    }
-    let mut h = 0x6c62272e07bb014262b821756295c58du128;
-    for b in cle.bytes() {
-        h = (h ^ (b as u128)).wrapping_mul(0x1000000000000000000013b);
-    }
-    let mut s = [b'0'; 22];
-    for i in (0..22).rev() {
-        s[i] = alphabet[(h & 63) as usize];
-        h >>= 6;
-    }
-    String::from_utf8(s.to_vec()).unwrap()
+use step::{guid, ref_, refs, texte, Step};
+
+/// Export IFC4 du projet ; l'en-tête nomme le fichier `modele.ifc`.
+pub fn exporter(p: &Projet) -> Result<String, String> {
+    exporter_fichier(p, "modele.ifc")
 }
 
-pub fn exporter(p: &Projet) -> Result<String, String> {
+/// Export IFC4 du projet ; `nom_fichier` (nom seul, sans dossier) et l'heure UTC de
+/// l'export vont dans `FILE_NAME` de l'en-tête.
+pub fn exporter_fichier(p: &Projet, nom_fichier: &str) -> Result<String, String> {
+    Ok(contenu(p)?.fichier(nom_fichier, &step::maintenant()))
+}
+
+/// Entités du fichier (section DATA), sans l'en-tête.
+fn contenu(p: &Projet) -> Result<Step, String> {
     p.verifier()?;
     let mut w = Step { lignes: Vec::new() };
     let zero = w.add("IFCCARTESIANPOINT((0.,0.,0.))".into());
     let axe = w.add(format!("IFCAXIS2PLACEMENT3D(#{zero},$,$)"));
     let placement = w.add(format!("IFCLOCALPLACEMENT($,#{axe})"));
+    let nord = site::nord(p).map_or("$".into(), |d| format!("#{}", w.add(d)));
     let contexte = w.add(format!(
-        "IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,0.00001,#{axe},$)"
+        "IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,0.00001,#{axe},{nord})"
     ));
+    // longueurs en mm ; aires et volumes des quantités en m² et m³
     let unite = w.add("IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.)".into());
-    let unites = w.add(format!("IFCUNITASSIGNMENT((#{unite}))"));
+    let aire = w.add("IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.)".into());
+    let volume = w.add("IFCSIUNIT(*,.VOLUMEUNIT.,$,.CUBIC_METRE.)".into());
+    let unites = w.add(format!("IFCUNITASSIGNMENT((#{unite},#{aire},#{volume}))"));
     let projet = w.add(format!(
         "IFCPROJECT('{}',$,{},$,$,$,$,(#{contexte}),#{unites})",
         guid(&format!("projet:{}", p.nom), None),
@@ -106,9 +52,15 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         guid(&format!("bat:{}", p.nom), None),
         texte(&p.nom)
     ));
+    // projet -> site -> bâtiment -> niveaux
+    let site = site::site(&mut w, p, placement);
     w.add(format!(
-        "IFCRELAGGREGATES('{}',$,$,$,#{projet},(#{bat}))",
+        "IFCRELAGGREGATES('{}',$,$,$,#{projet},(#{site}))",
         guid("rel-projet", None)
+    ));
+    w.add(format!(
+        "IFCRELAGGREGATES('{}',$,$,$,#{site},(#{bat}))",
+        guid("rel-site", None)
     ));
     let mut niveaux = HashMap::new();
     let mut ns = Vec::new();
@@ -129,33 +81,26 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             refs(&ns)
         ));
     }
-    let mut types = HashMap::new();
-    for t in p.types_murs.iter().chain(&p.types_dalles) {
-        let mut cs = Vec::new();
-        for c in &t.couches {
-            let mat = w.add(format!(
-                "IFCMATERIAL({},$,$)",
-                texte(c.materiau.as_deref().unwrap_or("Matériau"))
-            ));
-            cs.push(w.add(format!(
-                "IFCMATERIALLAYER(#{mat},{},$,$,$,$,$)",
-                format!("{:.6}", c.epaisseur)
-            )));
-        }
-        let set = w.add(format!(
-            "IFCMATERIALLAYERSET({},{},$)",
-            refs(&cs),
-            texte(&t.nom)
-        ));
-        types.insert(t.id.clone(), set);
-    }
+    let mut types_ifc = types::Types::default();
+    let mut styles = styles::Styles::default();
+    let mut jeux_couches = materiaux::Couches::new(&mut w, p);
+    // axes des murs (lignes de référence des jeux de couches)
+    let contexte_axe = w.add(format!("IFCGEOMETRICREPRESENTATIONSUBCONTEXT('Axis','Model',*,*,*,*,#{contexte},$,.GRAPH_VIEW.,$)"));
     let mut contenus: HashMap<usize, Vec<usize>> = HashMap::new();
     let mut produits = HashMap::new();
     let jonctions = jonctions::coupes(p);
     // solides de tous les murs calculés ensemble, consommés dans l'ordre de `p.murs`
     let mut solides_murs = solides::murs(p, &jonctions).into_iter();
     for m in &p.murs {
-        let rep = w.mesh(&solides_murs.next().ok_or("Mur absent.")??, contexte);
+        let solide = solides_murs.next().ok_or("Mur absent.")??;
+        let t = p.type_mur(&m.type_mur).ok_or("Type de mur absent.")?;
+        // couleur : matériau d'un mur monocouche (comme la vue 3D)
+        let materiau = match t.couches.as_slice() {
+            [c] if c.fonction != FonctionCouche::LameAir => c.materiau.as_deref(),
+            _ => None,
+        };
+        let axe = materiaux::axe_mur(&mut w, contexte_axe, &m.axe);
+        let rep = styles.forme(&mut w, p, contexte, &[(materiau, &solide)], &[axe]);
         let id = w.add(format!(
             "IFCWALL('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)",
             guid(&m.id, m.origine.as_ref()),
@@ -167,11 +112,15 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             .or_default()
             .push(id);
         produits.insert(m.id.clone(), id);
+        proprietes::mur(&mut w, p, m, id);
+        quantites::mur(&mut w, p, m, &solide, id);
+        let materiau = jeux_couches.usage_mur(&mut w, t);
         w.add(format!(
-            "IFCRELASSOCIATESMATERIAL('{}',$,$,$,(#{id}),#{})",
-            guid(&format!("mat:{}", m.id), None),
-            types[&m.type_mur]
+            "IFCRELASSOCIATESMATERIAL('{}',$,$,$,(#{id}),#{materiau})",
+            guid(&format!("mat:{}", m.id), None)
         ));
+        let predefini = if t.categorie == Some(CategorieMur::Cloison) { "PARTITIONING" } else { "NOTDEFINED" };
+        types_ifc.lier("IFCWALLTYPE", &t.id, &t.nom, predefini, Some(jeux_couches.jeu(&t.id)), id);
     }
     for a in &p.assemblages {
         let id = w.add(format!(
@@ -204,12 +153,22 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
     for d in &p.dalles {
         let t = p.type_dalle(&d.type_dalle).unwrap();
         let z = p.niveau(&d.niveau).unwrap().altitude + d.decalage;
-        let (b, h) = d.decalages_couches(t.epaisseur());
-        let tris = pente::couche(&d.contours, &pente::plans(d), z, b, h)
-            .into_iter()
-            .map(|t| t.map(|v| v * 1000.0))
-            .collect::<Vec<_>>();
-        let rep = w.mesh(&tris, contexte);
+        // une part par couche, du dessus vers le bas, colorée par son matériau ; les lames
+        // d'air décalent les couches suivantes sans géométrie (comme la vue 3D)
+        let plans = pente::plans(d);
+        let (_, mut haut) = d.decalages_couches(t.epaisseur());
+        let dessus = z + haut;
+        let mut couches = Vec::new();
+        for c in &t.couches {
+            let bas = haut - c.epaisseur;
+            if c.fonction != FonctionCouche::LameAir {
+                let tris: Vec<_> = pente::couche(&d.contours, &plans, z, bas, haut).into_iter().map(|t| t.map(|v| v * 1000.0)).collect();
+                couches.push((c.materiau.as_deref(), tris));
+            }
+            haut = bas;
+        }
+        let parts: Vec<_> = couches.iter().map(|(m, t)| (*m, t.as_slice())).collect();
+        let rep = styles.forme(&mut w, p, contexte, &parts, &[]);
         let (classe, genre) = match d.sorte {
             SorteDalle::Dalle => ("IFCSLAB", "FLOOR"),
             SorteDalle::Sol => ("IFCCOVERING", "FLOORING"),
@@ -224,21 +183,36 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             ref_(rep)
         ));
         contenus.entry(niveaux[&d.niveau]).or_default().push(id);
+        proprietes::dalle(&mut w, p, d, classe, id);
+        quantites::dalle(&mut w, p, d, classe, id);
+        let materiau = jeux_couches.materiau_dalle(&mut w, d, classe, dessus);
         w.add(format!(
-            "IFCRELASSOCIATESMATERIAL('{}',$,$,$,(#{id}),#{})",
-            guid(&format!("mat:{}", d.id), None),
-            types[&d.type_dalle]
+            "IFCRELASSOCIATESMATERIAL('{}',$,$,$,(#{id}),#{materiau})",
+            guid(&format!("mat:{}", d.id), None)
         ));
+        let classe_type = match classe { "IFCSLAB" => "IFCSLABTYPE", "IFCCOVERING" => "IFCCOVERINGTYPE", _ => "IFCROOFTYPE" };
+        types_ifc.lier(classe_type, &t.id, &t.nom, "NOTDEFINED", Some(jeux_couches.jeu(&t.id)), id);
     }
     for b in &p.barres {
-        let rep = w.mesh(&solides::barre(p, b)?, contexte);
-        let classe = match b.genre { GenreBarre::Poteau => "IFCCOLUMN", GenreBarre::Poutre => "IFCBEAM" };
+        let solide = solides::barre(p, b)?;
+        let materiau = b.pose.type_poutre.as_deref().and_then(|t| p.type_poutre(t)).and_then(|t| t.materiau.as_deref());
+        let rep = styles.forme(&mut w, p, contexte, &[(materiau, &solide)], &[]);
+        let (classe, classe_type, predefini) = match b.genre {
+            GenreBarre::Poteau => ("IFCCOLUMN", "IFCCOLUMNTYPE", "COLUMN"),
+            GenreBarre::Poutre => ("IFCBEAM", "IFCBEAMTYPE", "BEAM"),
+        };
         let id = w.add(format!("{classe}('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&b.id, None), texte(&b.nom), ref_(rep)));
         contenus.entry(niveaux[&b.niveau]).or_default().push(id);
+        proprietes::barre(&mut w, p, b, id);
+        quantites::barre(&mut w, b, &solide, id);
+        if let Some(t) = b.pose.type_poutre.as_deref().and_then(|t| p.type_poutre(t)) {
+            types_ifc.lier(classe_type, &t.id, &t.nom, predefini, None, id);
+        }
     }
     for c in &p.composants {
-        let tris: Vec<_> = c.solides(p)?.into_iter().flat_map(|(_, t)| t).collect();
-        let rep = w.mesh(&tris, contexte);
+        let solides = c.solides(p)?;
+        let parts: Vec<_> = solides.iter().map(|(m, t)| (m.as_deref(), t.as_slice())).collect();
+        let rep = styles.forme(&mut w, p, contexte, &parts, &[]);
         let id = w.add(format!("IFCFURNITURE('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&c.id, None), texte(&c.nom), ref_(rep)));
         contenus.entry(niveaux[&c.niveau]).or_default().push(id);
     }
@@ -251,6 +225,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         let rep = w.mesh(&solides::prisme(&x.contour, z, haut), contexte);
         let id = w.add(format!("IFCSPACE('{}',$,{},$,$,#{placement},{},{},.ELEMENT.,.INTERNAL.,$)", guid(&x.id, None), texte(&x.numero), ref_(rep), texte(&x.nom)));
         espaces.entry(niveaux[&x.niveau]).or_default().push(id);
+        quantites::piece(&mut w, x, id);
     }
     for (n, ids) in espaces {
         w.add(format!("IFCRELAGGREGATES('{}',$,$,$,#{n},{})", guid(&format!("espaces:{n}"), None), refs(&ids)));
@@ -259,12 +234,19 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         let rep = w.mesh(&e.solide(p)?, contexte);
         let id = w.add(format!("IFCSTAIR('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&e.id, None), texte(&e.nom), ref_(rep)));
         contenus.entry(niveaux[&e.niveau]).or_default().push(id);
+        proprietes::escalier(&mut w, p, e, id);
     }
     for g in &p.garde_corps {
-        let tris: Vec<_> = g.solides(p)?.into_iter().flat_map(|(_, _, t)| t).collect();
-        let rep = w.mesh(&tris, contexte);
+        let solides = g.solides(p)?;
+        let parts: Vec<_> = solides.iter().map(|(m, _, t)| (m.as_deref(), t.as_slice())).collect();
+        let rep = styles.forme(&mut w, p, contexte, &parts, &[]);
         let id = w.add(format!("IFCRAILING('{}',$,{},$,$,#{placement},{},$,.GUARDRAIL.)", guid(&g.id, None), texte(&g.nom), ref_(rep)));
         contenus.entry(niveaux[&g.niveau]).or_default().push(id);
+        proprietes::garde_corps(&mut w, p, g, id);
+        quantites::garde_corps(&mut w, g, id);
+        if let Some(t) = g.type_garde_corps.as_ref().and_then(|t| p.types_garde_corps.iter().find(|x| &x.id == t)) {
+            types_ifc.lier("IFCRAILINGTYPE", &t.id, &t.nom, "GUARDRAIL", None, id);
+        }
     }
     for o in &p.ouvertures {
         let (axe, e, niveau) = solides::hote(p, &o.mur)?;
@@ -293,7 +275,9 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             produits[&o.mur]
         ));
         if o.genre != GenreOuverture::Libre {
-            let rep = w.mesh(&solides::ouverture(p, o)?, contexte);
+            let menuiserie = solides::ouverture_parts(p, o)?;
+            let parts: Vec<_> = menuiserie.iter().map(|(_, m, t)| (m.as_deref(), t.as_slice())).collect();
+            let rep = styles.forme(&mut w, p, contexte, &parts, &[]);
             let classe = if o.genre == GenreOuverture::Porte {
                 "IFCDOOR"
             } else {
@@ -308,6 +292,12 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
                 format!("{:.6}", o.largeur)
             ));
             contenus.entry(niveaux[&niveau]).or_default().push(element);
+            proprietes::ouverture(&mut w, p, o, classe == "IFCDOOR", element);
+            quantites::ouverture(&mut w, o, classe == "IFCDOOR", element);
+            if let Some(t) = o.type_ouverture.as_ref().and_then(|t| p.types_ouvertures.iter().find(|x| &x.id == t)) {
+                let (classe_type, predefini) = if classe == "IFCDOOR" { ("IFCDOORTYPE", "DOOR") } else { ("IFCWINDOWTYPE", "WINDOW") };
+                types_ifc.lier(classe_type, &t.id, &t.nom, predefini, None, element);
+            }
             w.add(format!(
                 "IFCRELFILLSELEMENT('{}',$,$,$,#{id},#{element})",
                 guid(&format!("rempl:{}", o.id), None)
@@ -318,7 +308,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         // solide de l'épaisseur du type, cotes NGF ramenées à l'origine du projet
         let rep = w.mesh(&t.solide(p.ngf(), p.type_terrain(t).epaisseur)?, contexte);
         let id = w.add(format!("IFCGEOGRAPHICELEMENT('{}',$,{},$,$,#{placement},{},$,.TERRAIN.)", guid(&t.id, None), texte(&t.nom), ref_(rep)));
-        contenus.entry(bat).or_default().push(id);
+        contenus.entry(site).or_default().push(id);
     }
     for limite in &p.limites_propriete {
         limite.verifier()?;
@@ -329,7 +319,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         let rep = w.add(format!("IFCSHAPEREPRESENTATION(#{contexte},'Annotation','Curve3D',(#{ligne}))"));
         let rep = w.add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,(#{rep}))"));
         let id = w.add(format!("IFCANNOTATION('{}',$,{},$,$,#{placement},#{rep})", guid(&limite.id, None), texte(&limite.nom)));
-        contenus.entry(bat).or_default().push(id);
+        contenus.entry(site).or_default().push(id);
     }
     for e in &p.importes {
         let rep = w.mesh(&solides::maillage(&e.maillage)?, contexte);
@@ -352,6 +342,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             .or_default()
             .push(id);
     }
+    types_ifc.ecrire(&mut w);
     let mut contenus: Vec<_> = contenus.into_iter().collect();
     contenus.sort_by_key(|(id, _)| *id);
     for (n, ids) in contenus {
@@ -361,36 +352,5 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             refs(&ids)
         ));
     }
-    let mut out = String::from(
-        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION(('ViewDefinition [ReferenceView_V1.2]'),'2;1');\nFILE_NAME('modele.ifc','',(''),(''),'bimedit','bimedit','');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n",
-    );
-    for (i, l) in w.lignes.iter().enumerate() {
-        let _ = writeln!(out, "#{}={l};", i + 1);
-    }
-    out.push_str("ENDSEC;\nEND-ISO-10303-21;\n");
-    Ok(out)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::depuis_ifc;
-    #[test]
-    fn export_ifc4_relecture_geometrie_et_identifiants() {
-        let (p, _) =
-            depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {})
-                .unwrap();
-        let s = exporter(&p).unwrap();
-        assert_eq!(s, exporter(&p).unwrap());
-        let m = ifc_base::semantique::IfcModel::new(ifc_base::step::StepFile::parse(s.as_bytes()).unwrap());
-        assert_eq!(m.file.schema, "IFC4");
-        assert!(!m.products.is_empty());
-        let stats = formats::ifc::geom::GeomStats::default();
-        let count = m
-            .products
-            .iter()
-            .filter(|&&id| formats::ifc::geom::product_geometry(&m, &stats, id).is_some())
-            .count();
-        assert!(count >= p.murs.len() + p.dalles.len() + p.importes.len());
-    }
+    Ok(w)
 }
