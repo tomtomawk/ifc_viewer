@@ -95,3 +95,27 @@ fn un_type_ifc_par_type_utilise() {
     // un seul IfcRelDefinesByType par type
     assert_eq!(du_type(&m, "IFCRELDEFINESBYTYPE").count(), types_murs.len() + dalles.len() + 1);
 }
+
+/// Groupe de propriétés ou de quantités `nom` d'un produit : (propriété, valeur affichée).
+fn groupe(m: &ifc_base::semantique::IfcModel, id: noyau::Id, nom: &str) -> Option<Vec<(String, String)>> {
+    m.property_groups(id).into_iter().find(|g| g.name == nom).map(|g| g.props)
+}
+
+#[test]
+fn jeux_de_proprietes_communs() {
+    let (p, _, m) = maison();
+    for id in du_type(&m, "IFCWALL") {
+        let mur = p.murs.iter().find(|x| x.nom == m.name(id)).unwrap();
+        let props = groupe(&m, id, "Pset_WallCommon").expect("Pset_WallCommon");
+        assert_eq!(props, vec![("Reference".to_string(), p.type_mur(&mur.type_mur).unwrap().nom.clone())]);
+    }
+    for (classe, jeu) in [("IFCSLAB", "Pset_SlabCommon"), ("IFCROOF", "Pset_RoofCommon")] {
+        for id in du_type(&m, classe) {
+            let d = p.dalles.iter().find(|x| x.nom == m.name(id)).unwrap();
+            assert_eq!(groupe(&m, id, jeu).expect(jeu)[0].1, p.type_dalle(&d.type_dalle).unwrap().nom);
+        }
+    }
+    // ouvertures sans type : aucune propriété connue, pas de jeu
+    assert!(du_type(&m, "IFCDOOR").all(|id| groupe(&m, id, "Pset_DoorCommon").is_none()));
+    assert!(!du_type(&m, "IFCPROPERTYSINGLEVALUE").any(|id| m.get(id).unwrap().arg(0).as_str() == Some("IsExternal")));
+}

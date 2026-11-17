@@ -36,4 +36,9 @@ fn commandes_escalier_et_garde_corps() {
     // export IFC : classes d'escalier et de garde-corps
     let ifc = echanges::export_ifc::exporter(&p).unwrap();
     assert!(ifc.contains("IFCSTAIR(") && ifc.contains("IFCRAILING("));
+    // jeux de propriétés : contremarches et giron calculés, hauteur du garde-corps
+    let c = p.escaliers[0].calcul(&p).unwrap();
+    assert!(ifc.contains(&format!("IFCPROPERTYSINGLEVALUE('NumberOfRiser',$,IFCCOUNTMEASURE({}),$)", c.contremarches)));
+    assert!(ifc.contains("'Pset_StairCommon'") && ifc.contains("'Pset_RailingCommon'"));
+    assert!(ifc.contains("IFCPROPERTYSINGLEVALUE('Height',$,IFCPOSITIVELENGTHMEASURE(1000.000000),$)"));
 }

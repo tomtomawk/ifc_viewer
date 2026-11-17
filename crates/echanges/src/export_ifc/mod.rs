@@ -1,4 +1,5 @@
 //! Export IFC4 en millimètres : classes, site, niveaux, matériaux et géométrie tessellée.
+mod proprietes;
 mod site;
 mod step;
 #[cfg(test)]
@@ -99,6 +100,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             .or_default()
             .push(id);
         produits.insert(m.id.clone(), id);
+        proprietes::mur(&mut w, p, m, id);
         w.add(format!(
             "IFCRELASSOCIATESMATERIAL('{}',$,$,$,(#{id}),#{})",
             guid(&format!("mat:{}", m.id), None),
@@ -160,6 +162,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             ref_(rep)
         ));
         contenus.entry(niveaux[&d.niveau]).or_default().push(id);
+        proprietes::dalle(&mut w, p, d, classe, id);
         w.add(format!(
             "IFCRELASSOCIATESMATERIAL('{}',$,$,$,(#{id}),#{})",
             guid(&format!("mat:{}", d.id), None),
@@ -176,6 +179,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         };
         let id = w.add(format!("{classe}('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&b.id, None), texte(&b.nom), ref_(rep)));
         contenus.entry(niveaux[&b.niveau]).or_default().push(id);
+        proprietes::barre(&mut w, p, b, id);
         if let Some(t) = b.pose.type_poutre.as_deref().and_then(|t| p.type_poutre(t)) {
             types_ifc.lier(classe_type, &t.id, &t.nom, predefini, None, id);
         }
@@ -203,12 +207,14 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         let rep = w.mesh(&e.solide(p)?, contexte);
         let id = w.add(format!("IFCSTAIR('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&e.id, None), texte(&e.nom), ref_(rep)));
         contenus.entry(niveaux[&e.niveau]).or_default().push(id);
+        proprietes::escalier(&mut w, p, e, id);
     }
     for g in &p.garde_corps {
         let tris: Vec<_> = g.solides(p)?.into_iter().flat_map(|(_, _, t)| t).collect();
         let rep = w.mesh(&tris, contexte);
         let id = w.add(format!("IFCRAILING('{}',$,{},$,$,#{placement},{},$,.GUARDRAIL.)", guid(&g.id, None), texte(&g.nom), ref_(rep)));
         contenus.entry(niveaux[&g.niveau]).or_default().push(id);
+        proprietes::garde_corps(&mut w, p, g, id);
         if let Some(t) = g.type_garde_corps.as_ref().and_then(|t| p.types_garde_corps.iter().find(|x| &x.id == t)) {
             types_ifc.lier("IFCRAILINGTYPE", &t.id, &t.nom, "GUARDRAIL", None, id);
         }
@@ -255,6 +261,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
                 format!("{:.6}", o.largeur)
             ));
             contenus.entry(niveaux[&niveau]).or_default().push(element);
+            proprietes::ouverture(&mut w, p, o, classe == "IFCDOOR", element);
             if let Some(t) = o.type_ouverture.as_ref().and_then(|t| p.types_ouvertures.iter().find(|x| &x.id == t)) {
                 let (classe_type, predefini) = if classe == "IFCDOOR" { ("IFCDOORTYPE", "DOOR") } else { ("IFCWINDOWTYPE", "WINDOW") };
                 types_ifc.lier(classe_type, &t.id, &t.nom, predefini, None, element);
