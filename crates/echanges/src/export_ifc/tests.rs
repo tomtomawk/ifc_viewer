@@ -120,6 +120,31 @@ fn jeux_de_proprietes_communs() {
     assert!(!du_type(&m, "IFCPROPERTYSINGLEVALUE").any(|id| m.get(id).unwrap().arg(0).as_str() == Some("IsExternal")));
 }
 
+#[test]
+fn un_style_par_materiau_reutilise() {
+    let (p, _, m) = maison();
+    // Béton (murs, dalles) et Tuiles (toiture) : un style chacun
+    let styles: Vec<_> = du_type(&m, "IFCSURFACESTYLE").map(|id| m.get(id).unwrap().arg(0).as_str().unwrap().to_string()).collect();
+    assert_eq!(styles.len(), 2);
+    for nom in ["Béton", "Tuiles"] {
+        assert!(styles.iter().any(|s| s == nom), "{nom}");
+    }
+    // couleur du matériau sur les faces des murs, lue par ifc_base
+    let beton = p.materiau("Béton").unwrap().couleur.map(|c| c as f32 / 255.0);
+    let corps = |id: noyau::Id| {
+        let pds = m.get(m.get(id).unwrap().arg(6).as_ref().unwrap()).unwrap();
+        let rep = pds.arg(2).refs().map(|r| m.get(r).unwrap()).find(|r| r.arg(1).as_str() == Some("Body")).unwrap();
+        rep.arg(3).refs().collect::<Vec<_>>()
+    };
+    for id in du_type(&m, "IFCWALL") {
+        for f in corps(id) {
+            let c = m.item_color[&f];
+            assert!((0..3).all(|i| (c[i] - beton[i]).abs() < 1e-5) && c[3] == 1.0);
+        }
+    }
+    assert_eq!(du_type(&m, "IFCSTYLEDITEM").count(), du_type(&m, "IFCTRIANGULATEDFACESET").filter(|f| m.item_color.contains_key(f)).count());
+}
+
 /// Quantités brutes (valeur écrite, unités du fichier) du jeu `nom` d'un produit.
 fn quantites(m: &ifc_base::semantique::IfcModel, id: noyau::Id, nom: &str) -> std::collections::BTreeMap<String, f64> {
     let jeu = m.property_defs[&id].iter().map(|&d| m.get(d).unwrap()).find(|e| e.is("IFCELEMENTQUANTITY") && e.arg(2).as_str() == Some(nom)).unwrap_or_else(|| panic!("{nom} absent"));

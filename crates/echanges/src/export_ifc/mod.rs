@@ -3,6 +3,7 @@ mod proprietes;
 mod quantites;
 mod site;
 mod step;
+mod styles;
 #[cfg(test)]
 mod tests;
 mod types;
@@ -67,6 +68,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
     }
     let mut jeux = HashMap::new();
     let mut types_ifc = types::Types::default();
+    let mut styles = styles::Styles::default();
     for t in p.types_murs.iter().chain(&p.types_dalles) {
         let mut cs = Vec::new();
         for c in &t.couches {
@@ -93,7 +95,12 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
     let mut solides_murs = solides::murs(p, &jonctions).into_iter();
     for m in &p.murs {
         let solide = solides_murs.next().ok_or("Mur absent.")??;
-        let rep = w.mesh(&solide, contexte);
+        // couleur : matériau d'un mur monocouche (comme la vue 3D)
+        let materiau = match p.type_mur(&m.type_mur).map(|t| t.couches.as_slice()) {
+            Some([c]) if c.fonction != FonctionCouche::LameAir => c.materiau.as_deref(),
+            _ => None,
+        };
+        let rep = styles.forme(&mut w, p, contexte, &[(materiau, &solide)], &[]);
         let id = w.add(format!(
             "IFCWALL('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)",
             guid(&m.id, m.origine.as_ref()),
@@ -148,12 +155,21 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
     for d in &p.dalles {
         let t = p.type_dalle(&d.type_dalle).unwrap();
         let z = p.niveau(&d.niveau).unwrap().altitude + d.decalage;
-        let (b, h) = d.decalages_couches(t.epaisseur());
-        let tris = pente::couche(&d.contours, &pente::plans(d), z, b, h)
-            .into_iter()
-            .map(|t| t.map(|v| v * 1000.0))
-            .collect::<Vec<_>>();
-        let rep = w.mesh(&tris, contexte);
+        // une part par couche, du dessus vers le bas, colorée par son matériau ; les lames
+        // d'air décalent les couches suivantes sans géométrie (comme la vue 3D)
+        let plans = pente::plans(d);
+        let (_, mut haut) = d.decalages_couches(t.epaisseur());
+        let mut couches = Vec::new();
+        for c in &t.couches {
+            let bas = haut - c.epaisseur;
+            if c.fonction != FonctionCouche::LameAir {
+                let tris: Vec<_> = pente::couche(&d.contours, &plans, z, bas, haut).into_iter().map(|t| t.map(|v| v * 1000.0)).collect();
+                couches.push((c.materiau.as_deref(), tris));
+            }
+            haut = bas;
+        }
+        let parts: Vec<_> = couches.iter().map(|(m, t)| (*m, t.as_slice())).collect();
+        let rep = styles.forme(&mut w, p, contexte, &parts, &[]);
         let (classe, genre) = match d.sorte {
             SorteDalle::Dalle => ("IFCSLAB", "FLOOR"),
             SorteDalle::Sol => ("IFCCOVERING", "FLOORING"),
@@ -180,7 +196,8 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
     }
     for b in &p.barres {
         let solide = solides::barre(p, b)?;
-        let rep = w.mesh(&solide, contexte);
+        let materiau = b.pose.type_poutre.as_deref().and_then(|t| p.type_poutre(t)).and_then(|t| t.materiau.as_deref());
+        let rep = styles.forme(&mut w, p, contexte, &[(materiau, &solide)], &[]);
         let (classe, classe_type, predefini) = match b.genre {
             GenreBarre::Poteau => ("IFCCOLUMN", "IFCCOLUMNTYPE", "COLUMN"),
             GenreBarre::Poutre => ("IFCBEAM", "IFCBEAMTYPE", "BEAM"),
@@ -194,8 +211,9 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         }
     }
     for c in &p.composants {
-        let tris: Vec<_> = c.solides(p)?.into_iter().flat_map(|(_, t)| t).collect();
-        let rep = w.mesh(&tris, contexte);
+        let solides = c.solides(p)?;
+        let parts: Vec<_> = solides.iter().map(|(m, t)| (m.as_deref(), t.as_slice())).collect();
+        let rep = styles.forme(&mut w, p, contexte, &parts, &[]);
         let id = w.add(format!("IFCFURNITURE('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&c.id, None), texte(&c.nom), ref_(rep)));
         contenus.entry(niveaux[&c.niveau]).or_default().push(id);
     }
@@ -220,8 +238,9 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         proprietes::escalier(&mut w, p, e, id);
     }
     for g in &p.garde_corps {
-        let tris: Vec<_> = g.solides(p)?.into_iter().flat_map(|(_, _, t)| t).collect();
-        let rep = w.mesh(&tris, contexte);
+        let solides = g.solides(p)?;
+        let parts: Vec<_> = solides.iter().map(|(m, _, t)| (m.as_deref(), t.as_slice())).collect();
+        let rep = styles.forme(&mut w, p, contexte, &parts, &[]);
         let id = w.add(format!("IFCRAILING('{}',$,{},$,$,#{placement},{},$,.GUARDRAIL.)", guid(&g.id, None), texte(&g.nom), ref_(rep)));
         contenus.entry(niveaux[&g.niveau]).or_default().push(id);
         proprietes::garde_corps(&mut w, p, g, id);
@@ -257,7 +276,9 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             produits[&o.mur]
         ));
         if o.genre != GenreOuverture::Libre {
-            let rep = w.mesh(&solides::ouverture(p, o)?, contexte);
+            let menuiserie = solides::ouverture_parts(p, o)?;
+            let parts: Vec<_> = menuiserie.iter().map(|(_, m, t)| (m.as_deref(), t.as_slice())).collect();
+            let rep = styles.forme(&mut w, p, contexte, &parts, &[]);
             let classe = if o.genre == GenreOuverture::Porte {
                 "IFCDOOR"
             } else {
