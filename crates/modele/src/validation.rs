@@ -186,6 +186,7 @@ impl Projet {
             if self.niveau(&x.niveau).is_none() || !x.point.iter().all(|v| v.is_finite()) {
                 return Err(format!("Pièce {} : niveau absent ou point non valide.", x.numero));
             }
+            x.donnees.verifier().map_err(|e| format!("Pièce {} : {e}", x.numero))?;
         }
         let mut types = std::collections::HashSet::new();
         for t in &self.types_composants {

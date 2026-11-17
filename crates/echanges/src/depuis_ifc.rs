@@ -13,6 +13,7 @@
 //! - Dalles (`IfcSlab`) prismatiques : contour du dessus, couches comme pour les murs.
 //! - Poteaux (`IfcColumn`) verticaux et poutres (`IfcBeam`) horizontales à section
 //!   rectangulaire extrudée : barres (`barres_ifc`).
+//! - Espaces (`IfcSpace`) : pièces natives, sinon éléments importés (`espaces_ifc`).
 //! - Le reste, avec une géométrie : éléments importés, avec leurs propriétés, quantités,
 //!   matériaux et couleur (`donnees_ifc`).
 
@@ -30,7 +31,7 @@ use std::path::Path;
 const MURS: &[&str] = &["IFCWALL", "IFCWALLSTANDARDCASE", "IFCWALLELEMENTEDCASE"];
 const DALLES: &[&str] = &["IFCSLAB", "IFCSLABSTANDARDCASE", "IFCSLABELEMENTEDCASE"];
 /// Produits sans équivalent physique à importer.
-const IGNORES: &[&str] = &["IFCOPENINGELEMENT", "IFCOPENINGSTANDARDCASE", "IFCSPACE", "IFCANNOTATION", "IFCVIRTUALELEMENT", "IFCGRID"];
+const IGNORES: &[&str] = &["IFCOPENINGELEMENT", "IFCOPENINGSTANDARDCASE", "IFCANNOTATION", "IFCVIRTUALELEMENT", "IFCGRID"];
 
 pub fn convertir(chemin: &Path, progress: &dyn Fn(String)) -> Result<(Projet, Vec<modele::Mesure>), String> {
     progress(format!("Lecture de {}…", chemin.display()));
@@ -66,6 +67,7 @@ pub fn convertir(chemin: &Path, progress: &dyn Fn(String)) -> Result<(Projet, Ve
     progress("Conversion…".into());
     convertir_modele(&model, &geometries, &mut c);
     c.valider();
+    crate::espaces_ifc::convertir(&model, &geometries, &couleurs, &mut c);
     crate::donnees_ifc::completer(&model, &couleurs, &mut c.projet);
     Ok((c.projet, c.mesures))
 }
@@ -311,6 +313,9 @@ pub fn convertir_modele(m: &IfcModel, geometries: &HashMap<Id, Vec<[DVec3; 3]>>,
             continue;
         }
         let ty = m.ty(id);
+        if ty == "IFCSPACE" {
+            continue; // espaces_ifc, après la validation des murs
+        }
         if IGNORES.contains(&ty) {
             *c.projet.ignores.entry(pretty_type(ty)).or_default() += 1;
             continue;

@@ -296,6 +296,7 @@ impl ViewerApp {
                             ouvrir_etiquette = Some((None, Some(x.id.clone())));
                         }
                     });
+                    crate::zones::donnees_importees::afficher(ui, &x.id, &x.donnees);
                     if change && !x.nom.trim().is_empty() && !x.numero.trim().is_empty() {
                         commande = Some(Commande::Piece { piece: x });
                     }

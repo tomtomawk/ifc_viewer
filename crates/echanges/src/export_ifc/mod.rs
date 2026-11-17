@@ -224,9 +224,10 @@ fn contenu(p: &Projet) -> Result<Step, String> {
         let haut = p.niveaux.iter().map(|n| n.altitude).filter(|a| *a > z + 1.0).fold(f64::INFINITY, f64::min);
         let haut = if haut.is_finite() { haut } else { z + 2500.0 };
         let rep = w.mesh(&solides::prisme(&x.contour, z, haut), contexte);
-        let id = w.add(format!("IFCSPACE('{}',$,{},$,$,#{placement},{},{},.ELEMENT.,.INTERNAL.,$)", guid(&x.id, None), texte(&x.numero), ref_(rep), texte(&x.nom)));
+        let id = w.add(format!("IFCSPACE('{}',$,{},$,$,#{placement},{},{},.ELEMENT.,.INTERNAL.,$)", guid(&x.id, x.origine.as_ref()), texte(&x.numero), ref_(rep), texte(&x.nom)));
         espaces.entry(niveaux[&x.niveau]).or_default().push(id);
         quantites::piece(&mut w, x, id);
+        importes::jeux_piece(&mut w, x, id);
     }
     for (n, ids) in espaces {
         w.add(format!("IFCRELAGGREGATES('{}',$,$,$,#{n},{})", guid(&format!("espaces:{n}"), None), refs(&ids)));

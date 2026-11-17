@@ -17,7 +17,7 @@ fn projet() -> Projet {
 }
 
 fn piece(p: &Projet, point: [f64; 2]) -> Piece {
-    Piece { id: String::new(), nom: "Séjour".into(), numero: String::new(), niveau: p.niveaux[0].id.clone(), point, contour: Vec::new(), etiquette: String::new() }
+    Piece { id: String::new(), nom: "Séjour".into(), numero: String::new(), niveau: p.niveaux[0].id.clone(), point, contour: Vec::new(), etiquette: String::new(), donnees: Default::default(), origine: None }
 }
 
 #[test]

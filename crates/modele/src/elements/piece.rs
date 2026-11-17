@@ -1,7 +1,8 @@
 //! Pièces : un point placé dans un espace fermé par des murs ; le contour est celui des
 //! faces intérieures des murs qui entourent ce point (murs composés compris : chaque
 //! couche est un mur), recalculé après chaque modification du projet.
-use crate::{Axe, Projet};
+use crate::importes::DonneesImportees;
+use crate::{Axe, Origine, Projet};
 use glam::DVec2;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -20,6 +21,13 @@ pub struct Piece {
     /// Famille de son étiquette (identifiant) ; vide : étiquette standard.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub etiquette: String,
+    /// Données lues dans la source (IFC : jeux de l'`IfcSpace`, dont `Pset_SpaceCommon`),
+    /// en lecture seule, réécrites à l'export IFC ; omises si vides.
+    #[serde(default, skip_serializing_if = "DonneesImportees::est_vide")]
+    pub donnees: DonneesImportees,
+    /// Élément source (IFC : `IfcSpace` et son GUID, repris à l'export).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origine: Option<Origine>,
 }
 
 impl Piece {

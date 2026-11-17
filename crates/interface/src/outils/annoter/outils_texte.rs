@@ -72,7 +72,7 @@ mod tests {
         assert_eq!(apercu_famille(texte, &projet, "Plan", C::Cartouche, None, None), texte);
         assert_eq!(apercu_famille("{projet} / {vue}", &projet, "Coupe", C::Composant, None, None), "Agence / Coupe");
         assert_eq!(apercu_famille("{projet} / {vue}", &Default::default(), "Coupe", C::Composant, None, None), "{projet} / Coupe");
-        projet.pieces.push(modele::Piece { id: "p".into(), nom: "Bureau".into(), numero: "101".into(), niveau: String::new(), point: [0.0, 0.0], contour: vec![], etiquette: String::new() });
+        projet.pieces.push(modele::Piece { id: "p".into(), nom: "Bureau".into(), numero: "101".into(), niveau: String::new(), point: [0.0, 0.0], contour: vec![], etiquette: String::new(), donnees: Default::default(), origine: None });
         assert_eq!(apercu_famille("{nom} {numero}", &projet, "Plan", C::EtiquettePiece, None, Some("p")), "Bureau 101");
     }
 }
