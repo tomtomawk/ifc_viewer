@@ -72,6 +72,12 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
 - **Début → Importer** convertit un IFC/RVT/RFA/RTE dans un nouveau document natif,
   conserve les documents ouverts et écrit le rapport `.rapport.md` à côté du JSON.
   Les murs courbes, ouvertures et maillages importés sont maintenant affichables.
+  Un élément IFC gardé en élément importé conserve ses jeux de propriétés et de
+  quantités (ceux de son type complètent ceux de l'objet), ses matériaux et sa couleur
+  (style de sa géométrie ou couleur de son matériau ; pas la couleur par défaut de sa
+  classe). Les mesures sont converties en unités SI de base (m, m², m³, kg) selon les
+  unités du fichier (`LENGTHUNIT`, `AREAUNIT`, `VOLUMEUNIT`, ou unité propre d'une
+  quantité).
 - **Saisie validée** : un nom ou une valeur tapé dans un champ (propriétés, niveaux,
   matériaux, feuilles…) ou un nombre glissé n'est appliqué au modèle qu'à la fin de la
   saisie (Entrée, clic ailleurs, fin du glisser) : la scène est alors reconstruite et

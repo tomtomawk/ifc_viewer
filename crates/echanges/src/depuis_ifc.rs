@@ -11,7 +11,8 @@
 //!   l'`IfcOpeningElement` dans le repère du mur (borné au mur) ; porte ou fenêtre selon
 //!   l'élément qui la remplit (`IfcRelFillsElement`), dont la géométrie est gardée.
 //! - Dalles (`IfcSlab`) prismatiques : contour du dessus, couches comme pour les murs.
-//! - Le reste, avec une géométrie : éléments importés.
+//! - Le reste, avec une géométrie : éléments importés, avec leurs propriétés, quantités,
+//!   matériaux et couleur (`donnees_ifc`).
 
 use modele::volumes::geometrie::{cercle, direction_principale, etendue, etendue_arc, prisme_vertical};
 use modele::{Axe, Conversion, Couche, Dalle, GenreOuverture, Haut, Mur, Niveau, Origine, Ouverture, Projet, SorteDalle, TypeCompose, identifiant, source};
@@ -39,23 +40,30 @@ pub fn convertir(chemin: &Path, progress: &dyn Fn(String)) -> Result<(Projet, Ve
     progress(format!("Géométrie de {} produits…", model.products.len()));
     let stats = GeomStats::default();
     let pool = rayon::ThreadPoolBuilder::new().stack_size(64 << 20).build().map_err(|e| e.to_string())?;
-    // triangles de chaque produit, en mm
-    let geometries: HashMap<Id, Vec<[DVec3; 3]>> = pool.install(|| {
+    // triangles de chaque produit, en mm, et couleur de sa plus grande part si elle vient
+    // d'un style ou d'un matériau (pas de la couleur par défaut de sa classe)
+    let lus: Vec<(Id, Vec<[DVec3; 3]>, Option<[f32; 4]>)> = pool.install(|| {
         model
             .products
             .par_iter()
             .filter_map(|&id| {
                 let g = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| geom::product_geometry(&model, &stats, id))).ok().flatten()?;
-                Some((id, g.parts.iter().flat_map(|p| p.tris.iter().map(|t| t.map(|v| v * 1000.0))).collect()))
+                let principale = g.parts.iter().max_by_key(|p| p.tris.len()).map(|p| p.color);
+                let materiau = model.material_of.get(&id).is_some_and(|x| model.material_rgba(*x).is_some());
+                let couleur = principale.filter(|c| materiau || *c != geom::class_color(model.ty(id)));
+                Some((id, g.parts.iter().flat_map(|p| p.tris.iter().map(|t| t.map(|v| v * 1000.0))).collect(), couleur))
             })
             .collect()
     });
+    let couleurs: HashMap<Id, [f32; 4]> = lus.iter().filter_map(|(id, _, c)| Some((*id, (*c)?))).collect();
+    let geometries: HashMap<Id, Vec<[DVec3; 3]>> = lus.into_iter().map(|(id, t, _)| (id, t)).collect();
     let nom = chemin.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let mut c = Conversion { projet: Projet::nouveau(&nom), ..Default::default() };
     c.projet.sources.push(source("s1", chemin, "IFC"));
     progress("Conversion…".into());
     convertir_modele(&model, &geometries, &mut c);
     c.valider();
+    crate::donnees_ifc::completer(&model, &couleurs, &mut c.projet);
     Ok((c.projet, c.mesures))
 }
 

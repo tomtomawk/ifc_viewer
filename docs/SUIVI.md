@@ -63,7 +63,6 @@ Mesures de reconstruction de la scène (build release, `BIMEDIT_CHRONO=1`, `bime
 
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
-| A6b | Lecture IFC : `ifc_base::semantique` affiche les `IfcQuantityArea`/`IfcQuantityVolume` à l'échelle de l'unité de longueur au carré/au cube, sans lire `AREAUNIT`/`VOLUMEUNIT` : les m² et m³ de l'export natif s'affichent divisés par 10⁶ et 10⁹ | P1 | `crates/ifc_base/src/semantique.rs` (`collect_quantity`) |
 | A6c | CI : lancer `tools/valider_ifc.py --donnees` (le nom du fichier est passé à l'en-tête depuis le 17/11/2026, fusion de A6) | P2 | `.github/workflows/ci.yml` |
 | A6d | Export IFC : données absentes du modèle — coordonnées E/N et système de coordonnées (`IfcMapConversion`), `IsExternal`, classements feu et acoustique, phases et démolitions (décision §3) | P2 | `docs/EDITION.md` « Sortie → IFC4 » |
 | X5 | Export IFC : sur `immeuble_essai_murs`, 5 couches d'enduit de 15 mm des façades longues (47,8 m, 4 290 triangles, percées de nombreuses baies : « Mur 1 · Enduit », 617, 1541, 1849, 2157) sont lues « géométrie vide » par IfcOpenShell 0.9.0.post1 ; même résultat avec l'export d'avant A6, donc défaut antérieur (maillage percé non fermé ou trop fin pour la tolérance 0,00001 du contexte ?) | P2 | `crates/echanges/src/export_ifc/`, `modele::volumes::solides` ; constaté le 17/11/2026 |

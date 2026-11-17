@@ -9,6 +9,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`, `formats` (de
 | Fichier (`src/`) | Contenu |
 |---|---|
 | `depuis_ifc.rs` | `convertir` : IFC -> `Projet` |
+| `donnees_ifc.rs` | propriétés, quantités, matériaux et couleur d'un élément IFC gardés sur l'élément importé |
 | `depuis_rvt.rs` | `convertir`, `convertir_maquette` : Revit -> `Projet` (575 lignes : ne pas agrandir) |
 | `export_ifc/mod.rs` | `exporter`, `exporter_fichier` (nom dans l'en-tête) : `Projet` -> IFC4 ; parcours des éléments |
 | `export_ifc/step.rs` | écrivain STEP : textes, GUID déterministes (`guid`, ne pas changer), faces tessellées, en-tête horodaté |

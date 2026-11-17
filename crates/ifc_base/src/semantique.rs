@@ -6,6 +6,10 @@ pub struct IfcModel {
     pub file: StepFile,
     /// Facteur longueur fichier -> mètres.
     pub length_scale: f64,
+    /// Facteurs aire fichier -> m² et volume fichier -> m³ (`AREAUNIT`, `VOLUMEUNIT` ;
+    /// à défaut, unité de longueur au carré, au cube).
+    pub area_scale: f64,
+    pub volume_scale: f64,
     /// Facteur angle plan fichier -> radians.
     pub angle_scale: f64,
     pub project: Option<Id>,
@@ -38,6 +42,8 @@ impl IfcModel {
         let mut m = IfcModel {
             file,
             length_scale: 1.0,
+            area_scale: 1.0,
+            volume_scale: 1.0,
             angle_scale: 1.0,
             project: None,
             children: IdMap::default(),
@@ -188,34 +194,42 @@ impl IfcModel {
     }
 
     fn compute_units(&mut self) {
-        let Some(proj) = self.project.and_then(|p| self.get(p)) else { return };
-        let Some(ua) = self.file.deref(proj, 8) else { return };
-        for u in ua.arg(0).refs() {
-            let Some(ue) = self.get(u) else { continue };
-            match ue.arg(1).as_enum() {
-                Some("LENGTHUNIT") => {
-                    if let Some(s) = self.unit_scale(u, 0) {
-                        self.length_scale = s;
+        let (mut aire, mut volume) = (None, None);
+        if let Some(ua) = self.project.and_then(|p| self.get(p)).and_then(|proj| self.file.deref(proj, 8)) {
+            for u in ua.arg(0).refs() {
+                let Some(ue) = self.get(u) else { continue };
+                match ue.arg(1).as_enum() {
+                    Some("LENGTHUNIT") => {
+                        if let Some(s) = self.unit_scale(u, 1, 0) {
+                            self.length_scale = s;
+                        }
                     }
-                }
-                Some("PLANEANGLEUNIT") => {
-                    if let Some(s) = self.unit_scale(u, 0) {
-                        self.angle_scale = s;
+                    Some("AREAUNIT") => aire = self.unit_scale(u, 2, 0),
+                    Some("VOLUMEUNIT") => volume = self.unit_scale(u, 3, 0),
+                    Some("PLANEANGLEUNIT") => {
+                        if let Some(s) = self.unit_scale(u, 1, 0) {
+                            self.angle_scale = s;
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
             }
         }
+        self.area_scale = aire.unwrap_or(self.length_scale * self.length_scale);
+        self.volume_scale = volume.unwrap_or(self.length_scale.powi(3));
     }
 
-    fn unit_scale(&self, id: Id, depth: u32) -> Option<f64> {
+    /// Facteur d'une unité vers l'unité SI de base. `exposant` : 1 longueur, 2 aire,
+    /// 3 volume ; le préfixe d'un `IfcSIUnit` porte sur le mètre (MILLI SQUARE_METRE =
+    /// mm²), il est élevé à cette puissance.
+    pub(crate) fn unit_scale(&self, id: Id, exposant: i32, depth: u32) -> Option<f64> {
         if depth > 4 {
             return None;
         }
         let e = self.get(id)?;
         match &*e.ty {
             "IFCSIUNIT" => {
-                let p = match e.arg(2).as_enum() {
+                let p: f64 = match e.arg(2).as_enum() {
                     Some("EXA") => 1e18,
                     Some("PETA") => 1e15,
                     Some("TERA") => 1e12,
@@ -231,12 +245,12 @@ impl IfcModel {
                     Some("NANO") => 1e-9,
                     _ => 1.0,
                 };
-                Some(p)
+                Some(p.powi(exposant))
             }
             "IFCCONVERSIONBASEDUNIT" | "IFCCONVERSIONBASEDUNITWITHOFFSET" => {
                 let mwu = self.file.deref(e, 3)?;
                 let v = mwu.arg(0).as_f64()?;
-                let base = mwu.arg(1).as_ref().and_then(|u| self.unit_scale(u, depth + 1)).unwrap_or(1.0);
+                let base = mwu.arg(1).as_ref().and_then(|u| self.unit_scale(u, exposant, depth + 1)).unwrap_or(1.0);
                 Some(v * base)
             }
             _ => None,
@@ -416,102 +430,6 @@ impl IfcModel {
             _ => vec![],
         };
         next.into_iter().find_map(|n| self.material_rgba_rec(n, depth + 1))
-    }
-
-    /// Jeux de propriétés et de quantités, y compris ceux du type.
-    pub fn property_groups(&self, id: Id) -> Vec<PropertyGroup> {
-        let mut out = Vec::new();
-        if let Some(defs) = self.property_defs.get(&id) {
-            for &d in defs {
-                if let Some(g) = self.property_group(d, "") {
-                    out.push(g);
-                }
-            }
-        }
-        if let Some(&t) = self.type_of.get(&id) {
-            if let Some(te) = self.get(t) {
-                // IfcTypeObject.HasPropertySets (index 5)
-                for d in te.arg(5).refs() {
-                    if let Some(g) = self.property_group(d, " (type)") {
-                        out.push(g);
-                    }
-                }
-            }
-            if let Some(defs) = self.property_defs.get(&t) {
-                for &d in defs {
-                    if let Some(g) = self.property_group(d, " (type)") {
-                        out.push(g);
-                    }
-                }
-            }
-        }
-        out
-    }
-
-    fn property_group(&self, id: Id, suffix: &str) -> Option<PropertyGroup> {
-        let e = self.get(id)?;
-        let name = format!("{}{}", e.arg(2).as_str().unwrap_or("?"), suffix);
-        let mut props = Vec::new();
-        match &*e.ty {
-            "IFCPROPERTYSET" => {
-                for p in e.arg(4).refs() {
-                    self.collect_property(p, "", &mut props, 0);
-                }
-            }
-            "IFCELEMENTQUANTITY" => {
-                for q in e.arg(5).refs() {
-                    self.collect_quantity(q, &mut props);
-                }
-            }
-            _ => return None,
-        }
-        Some(PropertyGroup { name, props })
-    }
-
-    fn collect_property(&self, id: Id, prefix: &str, out: &mut Vec<(String, String)>, depth: u32) {
-        let Some(e) = self.get(id) else { return };
-        let name = format!("{prefix}{}", e.arg(0).as_str().unwrap_or("?"));
-        let val = match &*e.ty {
-            "IFCPROPERTYSINGLEVALUE" => e.arg(2).display(),
-            "IFCPROPERTYENUMERATEDVALUE" | "IFCPROPERTYLISTVALUE" => e.arg(2).display(),
-            "IFCPROPERTYBOUNDEDVALUE" => format!("{} … {}", e.arg(3).display(), e.arg(2).display()),
-            "IFCPROPERTYTABLEVALUE" => format!("{} → {}", e.arg(2).display(), e.arg(3).display()),
-            "IFCPROPERTYREFERENCEVALUE" => e.arg(2).display(),
-            "IFCCOMPLEXPROPERTY" => {
-                if depth < 4 {
-                    for p in e.arg(3).refs() {
-                        self.collect_property(p, &format!("{name}."), out, depth + 1);
-                    }
-                }
-                return;
-            }
-            _ => String::new(),
-        };
-        out.push((name, val));
-    }
-
-    fn collect_quantity(&self, id: Id, out: &mut Vec<(String, String)>) {
-        let Some(e) = self.get(id) else { return };
-        let name = e.arg(0).as_str().unwrap_or("?").to_string();
-        let raw = e.arg(3).as_f64();
-        let val = match (&*e.ty, raw) {
-            ("IFCQUANTITYLENGTH", Some(v)) => format!("{} m", crate::step::format_real(v * self.length_scale)),
-            ("IFCQUANTITYAREA", Some(v)) => {
-                format!("{} m²", crate::step::format_real(v * self.length_scale * self.length_scale))
-            }
-            ("IFCQUANTITYVOLUME", Some(v)) => {
-                format!("{} m³", crate::step::format_real(v * self.length_scale.powi(3)))
-            }
-            ("IFCQUANTITYWEIGHT", Some(v)) => format!("{} kg", crate::step::format_real(v)),
-            ("IFCPHYSICALCOMPLEXQUANTITY", _) => {
-                for q in e.arg(2).refs() {
-                    self.collect_quantity(q, out);
-                }
-                return;
-            }
-            (_, _) => e.arg(3).display(),
-        };
-        out.push((name, val));
     }
 }
 
