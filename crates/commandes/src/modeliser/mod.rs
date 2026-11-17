@@ -2,6 +2,9 @@
 //! garde-corps, pièces, composants, arbres, barres, ouvertures, type de mur composé,
 //! contours et trémies de dalle).
 use crate::socle::interne::*;
+use fusion::ExecutionFusion;
+
+mod fusion;
 
 /// Exécution des commandes de modélisation.
 pub(crate) trait ExecutionModeliser {
@@ -11,6 +14,7 @@ pub(crate) trait ExecutionModeliser {
 impl ExecutionModeliser for Projet {
     fn executer_modeliser(&mut self, c: Commande) -> Result<Vec<String>, String> {
         match c {
+            Commande::Fusionner { projet, decalage } => self.fusionner(*projet, decalage),
             // éléments du site : créés dans la phase Existant
             Commande::Terrain { mut terrain } => {
                 terrain.triangles()?;

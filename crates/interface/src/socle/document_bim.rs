@@ -131,12 +131,25 @@ impl ViewerApp {
 
     pub(crate) fn importer_dialogue(&mut self, ctx: &egui::Context) {
         let Some(source) = rfd::FileDialog::new()
-            .set_title("Importer en nouveau projet natif")
+            .set_title("Importer")
             .add_filter("IFC / Revit", &["ifc", "rvt", "rfa", "rte"])
             .pick_file()
         else {
             return;
         };
+        // IFC et projet natif ouvert : fusion dans le projet ou nouveau projet
+        if self.natif.is_some() && source.extension().is_some_and(|e| e.eq_ignore_ascii_case("ifc")) {
+            let (dans, nouveau) = ("Dans le projet ouvert".to_string(), "Nouveau projet".to_string());
+            match rfd::MessageDialog::new().set_title("Importer un IFC")
+                .set_description("Importer les éléments du fichier dans le projet ouvert (une transaction, Ctrl+Z pour annuler) ou créer un nouveau projet natif ?")
+                .set_buttons(rfd::MessageButtons::YesNoCancelCustom(dans.clone(), nouveau.clone(), "Annuler".into())).show() {
+                rfd::MessageDialogResult::Custom(c) if c == dans => return self.importer_dans(ctx, source),
+                rfd::MessageDialogResult::Yes => return self.importer_dans(ctx, source),
+                rfd::MessageDialogResult::Custom(c) if c == nouveau => {}
+                rfd::MessageDialogResult::No => {}
+                _ => return,
+            }
+        }
         let nom = source.file_stem().unwrap_or_default().to_string_lossy();
         let Some(mut sortie) = rfd::FileDialog::new()
             .set_title("Destination du projet natif")

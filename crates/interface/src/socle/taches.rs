@@ -53,6 +53,8 @@ pub(crate) enum Fin {
     /// Fichier lié lu (et mis en cache) : le lien à ajouter au projet, son nombre
     /// d'éléments et une alerte de position éventuelle.
     Lien { lien: modele::liens::LienIfc, elements: usize, alerte: Option<String> },
+    /// IFC converti, à fusionner dans le projet actif (`Commande::Fusionner`).
+    Import { projet: Box<modele::Projet>, nom: String },
 }
 
 /// Distance (m) au-delà de laquelle un lien est signalé loin de l'origine du projet.
@@ -232,6 +234,22 @@ impl ViewerApp {
         });
     }
 
+    /// Import IFC dans le projet ouvert : lecture et conversion en arrière-plan, puis
+    /// fusion en une transaction annulable.
+    pub(crate) fn importer_dans(&mut self, ctx: &egui::Context, chemin: PathBuf) {
+        if self.natif.is_none() {
+            self.error = Some("Importer dans le projet : ouvrir ou créer d'abord un projet natif.".into());
+            return;
+        }
+        let nom = chemin.file_name().map_or_else(|| "IFC".into(), |n| n.to_string_lossy().into_owned());
+        self.lancer_tache(ctx, "Import IFC", move |c| {
+            let etape = c.clone();
+            let (projet, _) = echanges::depuis_ifc::convertir(&chemin, &move |t| etape.etape(t))?;
+            c.continuer()?;
+            Ok(Fin::Import { projet: Box::new(projet), nom })
+        });
+    }
+
     /// Une fois par image : fin du travail en cours.
     pub(crate) fn suivre_tache(&mut self) {
         let Some(t) = &self.tache else { return };
@@ -254,6 +272,13 @@ impl ViewerApp {
                     Err(e) => self.error = Some(e),
                 }
             }
+            Ok(Fin::Import { projet, nom }) if t.document == self.document_actif => {
+                match self.executer_bim(commandes::Commande::Fusionner { projet, decalage: [0.0; 3] }) {
+                    Ok(_) => self.status = format!("Import de {nom} dans le projet — Ctrl+Z pour annuler."),
+                    Err(e) => self.error = Some(format!("Import de {nom} refusé : {e}")),
+                }
+            }
+            Ok(Fin::Import { nom, .. }) => self.error = Some(format!("Import de {nom} non fait : le document a changé pendant la lecture.")),
             Ok(Fin::Lien { lien, .. }) => self.error = Some(format!("Lien « {} » non ajouté : le document a changé pendant la lecture.", lien.nom)),
             Err(e) if e == ANNULE => self.status = format!("{} annulé.", t.nom),
             Err(e) => self.error = Some(e),

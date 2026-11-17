@@ -10,6 +10,14 @@ pub enum Commande {
     /// Lien IFC : création (identifiant vide) ou remplacement (position, visibilité,
     /// chemin). Sa suppression passe par `Supprimer`.
     Lien { lien: liens::LienIfc },
+    /// Fusionne un projet importé (IFC converti) dans le projet ouvert : niveaux
+    /// rapprochés, types, matériaux et profils identiques réutilisés, identifiants
+    /// renouvelés, éléments décalés de `decalage` (mm, origine sur origine par défaut).
+    Fusionner {
+        projet: Box<Projet>,
+        #[serde(default)]
+        decalage: [f64; 3],
+    },
     /// Coordonnées de l'origine du projet : E/O, N/S, cote NGF (mm).
     CoordonneesOrigine { coordonnees: [f64; 3] },
     Barre {
