@@ -40,8 +40,37 @@ jobs:
         if: matrix.nom == 'linux-x64'
         run: |
           python3 -m pip install ifcopenshell==0.9.0.post1 pytest
-          python3 tools/valider_ifc.py target/maison.ifc
+          python3 tools/valider_ifc.py --donnees target/maison.ifc
+          cargo run --release -p bimedit -- --modele samples/test_ifc4_proprietes.ifc target/proprietes.modele.json
+          cargo run --release -p bimedit -- --export-ifc target/proprietes.modele.json target/proprietes.ifc
+          python3 tools/valider_ifc.py --donnees target/proprietes.ifc
       - uses: actions/upload-artifact@v6
         with:
           name: bimedit-${{ matrix.nom }}
           path: target/release/${{ matrix.artefact }}
+
+  # Tests en mode debug : les assertions de débogage (debug_assert, débordements)
+  # y sont actives, contrairement au mode release des autres tâches.
+  debug:
+    name: tests debug (linux-x64)
+    runs-on: ubuntu-latest
+    env:
+      CARGO_PROFILE_DEV_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Dépendances système
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev
+      - run: cargo test --workspace
+      # Informatif tant que les avertissements existants ne sont pas résorbés
+      # (tâche A1b du suivi) : n'échoue pas, compte les avertissements.
+      - name: Clippy (informatif)
+        continue-on-error: true
+        run: |
+          cargo clippy --workspace --tests 2>&1 | tee clippy.txt || true
+          echo "Clippy : $(grep -c '^warning' clippy.txt) avertissements, $(grep -c '^error' clippy.txt) erreurs" >> "$GITHUB_STEP_SUMMARY"
