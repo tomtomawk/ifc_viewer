@@ -640,9 +640,6 @@ impl ViewerApp {
                 self.error = Some(e);
             }
         }
-        if let Some(e) = &self.error {
-            ui.colored_label(Color32::DARK_RED, e);
-        }
         self.onglet_ruban != OngletRuban::Modifier
     }
 }
