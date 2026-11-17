@@ -63,7 +63,8 @@ Mesures de reconstruction de la scène (build release, `BIMEDIT_CHRONO=1`, `bime
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
 | A6c | CI : lancer `tools/valider_ifc.py --donnees` (le nom du fichier est passé à l'en-tête depuis le 17/11/2026, fusion de A6) | P2 | `.github/workflows/ci.yml` |
-| A6d | Export IFC : données absentes du modèle — coordonnées E/N et système de coordonnées (`IfcMapConversion`), `IsExternal`, classements feu et acoustique, phases et démolitions (décision §3) | P2 | `docs/EDITION.md` « Sortie → IFC4 » |
+| A6d | Export IFC : données absentes du modèle — coordonnées E/N et système de coordonnées (`IfcMapConversion`), `IsExternal`, classements feu et acoustique, phases et démolitions (décidé le 17/11/2026 : propriété `Status` des `Pset_*Common`, NEW / EXISTING / DEMOLISH / TEMPORARY, d'après la phase et `Projet::demolitions`, plus un jeu `BIMedit_Phase` pour le nom de la phase) (décision §3) | P2 | `docs/EDITION.md` « Sortie → IFC4 » |
+| A6e | Jeux de propriétés au-delà des `Pset_*Common` : en rester là pour le moment (décision du 17/11/2026) | P3 | — |
 | X5 | Export IFC : sur `immeuble_essai_murs`, 5 couches d'enduit de 15 mm des façades longues (47,8 m, 4 290 triangles, percées de nombreuses baies : « Mur 1 · Enduit », 617, 1541, 1849, 2157) sont lues « géométrie vide » par IfcOpenShell 0.9.0.post1 ; même résultat avec l'export d'avant A6, donc défaut antérieur (maillage percé non fermé ou trop fin pour la tolérance 0,00001 du contexte ?) | P2 | `crates/echanges/src/export_ifc/`, `modele::volumes::solides` ; constaté le 17/11/2026 |
 | A7c | Import IFC : convertir les `IfcSpace` en pièces natives (décision du 17/11/2026) : `Piece` avec numéro = `Name`, nom = `LongName`, niveau, point de placement dans l'emprise de l'espace, contour recalculé par `piece::detecter` sur les murs convertis ; si l'aire obtenue s'écarte de plus de 5 % de l'emprise ou de `NetFloorArea`, l'espace reste un élément importé transparent avec ses propriétés ; données facultatives sur `Piece` pour garder `Pset_SpaceCommon` | P1 | `crates/echanges/src/depuis_ifc.rs`, `crates/modele/src/elements/piece.rs` |
 | A7 | Import IFC, suite : toitures, escaliers et poteaux ou poutres non rectangulaires, inclinés ou à items mappés restent des maillages ; une barre convertie perd ses jeux de propriétés, son matériau et sa couleur (`Barre` n'en porte pas) ; booléens réécrits en texte et `PredefinedType` perdu à l'export d'un élément importé ; `IfcSpace` ignoré (décision §3) ; `.ifczip` refusé | P1 | `crates/echanges/src/depuis_ifc.rs`, `crates/echanges/src/barres_ifc.rs`, `crates/echanges/src/export_ifc/importes.rs` |
@@ -100,7 +101,6 @@ Comportement attendu de chaque fonction : `docs/MODIFICATION.md`.
 | M17 | Feuilles natives en onglets de dessin éditables | P2 | `docs/EDITION.md` |
 | M18 | Éléments au-dessus de la coupe en pointillés ; épaisseurs de trait par catégorie (voir E1) | P2 | `README.md` « Limites connues » |
 | M19 | Palette de commandes ; aide contextuelle | P3 | — |
-| M20 | Demandes n° 11, 18 et 26 de la feuille de route du 16/11/2026 : aucun commit ne les cite, état inconnu | ? | à préciser, voir §3 |
 
 ### 2.5 Familles
 
@@ -108,7 +108,7 @@ Objectif et lots : `docs/PLAN_FUSION_FAMILLES.md`. Avancement détaillé archiv�
 
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
-| F1 | Réunir `Symbole` et éléments 2D (ancrage facultatif aux plans, une seule liste) : changement de format à valider | P1 | archive, « deux représentations à réunir » |
+| F1 | Réunir `Symbole` et éléments 2D (ancrage facultatif aux plans, une seule liste) : changement de format accepté le 17/11/2026, à condition de remettre à jour les familles d'exemple (`samples/`) et du gabarit (`gabarits/defaut.gabarit.json`) | P1 | archive, « deux représentations à réunir » |
 | F2 | Onglet Modifier des familles : Réseau et Aligner ; accrochage du placement du texte dans le projet | P2 | plan, lot 2 |
 | F3 | Remplacer le canevas de famille par celui des vues de projet (navigation, fond, bandeau, échelle de vue du texte) | P2 | plan, « Navigation des vues de famille » |
 | F4 | Lot 6 : basculer cartouches, étiquettes et profils sur l'éditeur commun, puis retirer `familles_planes.rs`, l'éditeur de `cartouche.rs`, `profils.rs` et les formats spécialisés | P2 | plan, lot 6 |
@@ -149,11 +149,7 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 
 | Sujet | Question |
 |---|---|
-| Ordre | Après A1 à A3 : messages et arrière-plan (A4, A5) ou IFC (A6, A7) d'abord ? |
-| A6 | Jeux de propriétés attendus par les partenaires au-delà des `Pset_*Common` (valeurs à saisir dans le modèle). Phases et démolitions dans l'IFC — option 1 : propriété `Status` des `Pset_*Common` (NEW, EXISTING, DEMOLISH, TEMPORARY, selon la phase et `Projet::demolitions`), standard, lue par tous les logiciels, un seul fichier ; option 2 : un `IfcRelAssignsToControl` par phase vers un `IfcTask` (ou un fichier par phase), plus fidèle aux phases nommées mais peu lu par les visionneuses. Recommandation : option 1, avec un `Pset` maison `BIMedit_Phase` portant le nom de la phase |
-| F1 | Valider le changement de format `Symbole` / éléments 2D |
 | E1 | Emplacement partagé de la bibliothèque de styles, liste des catégories, priorité matériau / catégorie |
-| M20 | Contenu et état des demandes n° 11, 18 et 26 |
 | Style | Adopter `rustfmt` sur tout le dépôt, ou garder le style actuel ? |
 
 ## 4. Journal de ce qui est fait
@@ -162,6 +158,7 @@ Le plus récent en premier. Les numéros « n° » sont ceux de la feuille de ro
 
 | Date | Fait | Commit | Vérification |
 |---|---|---|---|
+| 17/11/2026 | Demandes n° 11, 18 et 26 de la feuille de route du 16/11/2026 : déclarées déjà faites par l'utilisateur | — | non vérifiable : aucun commit ne les cite |
 | 17/11/2026 | A7 (partie) et A6b, import IFC qui garde les données : un élément importé porte ses jeux de propriétés et de quantités (ceux du type complètent ceux de l'objet), ses matériaux et sa couleur (`importes[].proprietes`, `materiau`, `couleur`, facultatifs, vérifiés) ; couleur utilisée dans la 3D ; affichage en lecture seule dans Propriétés ; export dans la classe IFC d'origine (liste sûre de classes à neuf attributs, sinon proxy) avec ses jeux, matériaux et couleur ; poteaux et poutres à section rectangulaire extrudée convertis en barres (`Barre.origine`, GUID gardé) ; aires et volumes lus selon `AREAUNIT`/`VOLUMEUNIT` ou l'unité de la quantité (A6b) ; échantillon `test_ifc4_proprietes.ifc` | `88064b2` à ce commit | 11 tests ajoutés (`modele` 2, `ifc_base` 2, `maillage` 1, `echanges` 6 dont l'aller-retour IFC -> natif -> IFC : propriétés par jeu, classe, données relues) ; `cargo test --workspace` (debug, sans info de débogage) : 466 réussis, 0 échec, 2 ignorés ; `bimedit --modele samples/test_ifc4_proprietes.ifc` puis `--export-ifc`, `valider_ifc.py --donnees` (ifcopenshell 0.9.0.post1) : 6 géométries, 0 erreur ; mêmes contrôles sur `test_ifc4`, `test_ifc4_murs` (6 et 7 géométries, 0 erreur) et `maison_native` (15 géométries, 0 erreur). Panneau Propriétés non essayé à l'écran ; non ouvert dans un autre logiciel BIM ; après fusion : `cargo test --workspace` (debug) 469 réussis, 0 échec, 4 ignorés ; projet importé de `test_ifc4_proprietes.ifc` exporté puis validé (`valider_ifc.py --donnees` : 6 géométries, 0 erreur) ; panneau Propriétés d'un élément importé contrôlé à l'écran sous Xvfb (matériau, couleur, jeux de propriétés et de quantités avec unités) |
 | 17/11/2026 | A8, scène plus rapide : arbres et terrains exclus des arêtes jointes (leurs arêtes étaient calculées puis remplacées : 90 % du temps des arêtes sur l'îlot, à cause des feuillages) ; silhouettes des arbres gardées d'une construction à l'autre ; calcul des arêtes d'une droite par balayage (supprime un coût quadratique sur les longues droites, sans gain mesurable sur les échantillons) | ce commit | empreinte des arêtes identique avant et après sur l'îlot, l'immeuble et la maison (`cargo test -p maillage --release --test mesure_aretes -- --ignored --nocapture`) ; `bimedit --mesurer-scene`, îlot, après déplacement d'un mur : arêtes 160–195 → 7–10 ms, scène 270–340 → 80–103 ms ; immeuble inchangé (260–400 ms) ; dans l'interface sous Xvfb (BIMEDIT_CHRONO), aller-retour d'un déplacement par le pilote : îlot 137–224 ms, immeuble 390–495 ms |
 | 17/11/2026 | A9, historique plus léger : instantanés compressés (deflate rapide, 1,2 Mo → 216 Ko pour l'immeuble d'essai), état enregistré gardé en empreinte ; 10 niveaux garantis, 100 au plus ; mémoire réglable dans Début > Paramètres (option `historique_mo`, 64 Mo par défaut) ; libellé d'une étape calculé sur le texte brut de la seule collection modifiée, avec un index par identifiant (la recherche était quadratique) | ce commit | 3 tests ajoutés (libellé identique à l'ancien calcul sur des commandes réelles, annuler et rétablir exacts, plancher et plafond de niveaux) ; mesure release sur l'immeuble de 1 920 murs (`cargo test -p commandes --release --test mesure_historique -- --ignored --nocapture`) : libellé 78 → 6 ms, étape d'historique 136 → 14 ms |
