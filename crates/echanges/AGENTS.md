@@ -9,6 +9,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`, `formats` (de
 | Fichier (`src/`) | Contenu |
 |---|---|
 | `depuis_ifc.rs` | `convertir` : IFC -> `Projet` |
+| `barres_ifc.rs` | poteaux et poutres IFC à section rectangulaire extrudée -> `Barre` (sinon la raison de l'import) |
 | `donnees_ifc.rs` | propriétés, quantités, matériaux et couleur d'un élément IFC gardés sur l'élément importé |
 | `depuis_rvt.rs` | `convertir`, `convertir_maquette` : Revit -> `Projet` (575 lignes : ne pas agrandir) |
 | `export_ifc/mod.rs` | `exporter`, `exporter_fichier` (nom dans l'en-tête) : `Projet` -> IFC4 ; parcours des éléments |
@@ -20,7 +21,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`, `formats` (de
 | `enregistrement.rs` | `enregistrer_natif`, `ecrire_atomique`, récupération, `SourceRvt`, `Bilan` |
 | `rapport.rs` | `markdown` |
 
-`tests/` : tests d'intégration dont le projet de départ vient de `depuis_ifc` (commandes, documentation, site, escalier, volumes) ; `import_proprietes.rs` : données des éléments importés et aller-retour IFC -> natif -> IFC ; `couches_rvt.rs` lit un fichier hors dépôt (`RVT_ESSAIS`) et est sauté s'il est absent. Les `samples/` se lisent par `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")`.
+`tests/` : tests d'intégration dont le projet de départ vient de `depuis_ifc` (commandes, documentation, site, escalier, volumes) ; `import_proprietes.rs` : données des éléments importés et aller-retour IFC -> natif -> IFC ; `import_barres.rs` : poteaux et poutres convertis ; `couches_rvt.rs` lit un fichier hors dépôt (`RVT_ESSAIS`) et est sauté s'il est absent. Les `samples/` se lisent par `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")`.
 
 ## Quand modifier ici
 

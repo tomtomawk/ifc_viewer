@@ -11,9 +11,12 @@
 //!   l'`IfcOpeningElement` dans le repère du mur (borné au mur) ; porte ou fenêtre selon
 //!   l'élément qui la remplit (`IfcRelFillsElement`), dont la géométrie est gardée.
 //! - Dalles (`IfcSlab`) prismatiques : contour du dessus, couches comme pour les murs.
+//! - Poteaux (`IfcColumn`) verticaux et poutres (`IfcBeam`) horizontales à section
+//!   rectangulaire extrudée : barres (`barres_ifc`).
 //! - Le reste, avec une géométrie : éléments importés, avec leurs propriétés, quantités,
 //!   matériaux et couleur (`donnees_ifc`).
 
+use crate::barres_ifc;
 use modele::volumes::geometrie::{cercle, direction_principale, etendue, etendue_arc, prisme_vertical};
 use modele::{Axe, Conversion, Couche, Dalle, GenreOuverture, Haut, Mur, Niveau, Origine, Ouverture, Projet, SorteDalle, TypeCompose, identifiant, source};
 use formats::ifc::geom::{self, GeomStats};
@@ -288,6 +291,20 @@ pub fn convertir_modele(m: &IfcModel, geometries: &HashMap<Id, Vec<[DVec3; 3]>>,
         c.projet.dalles.push(Dalle { variante: None, phase: None, sous_projet: None, id: did, nom, type_dalle, niveau: niv, sorte: SorteDalle::Dalle, decalage: p.haut - alt, contours: p.contours, pentes: Vec::new(), talus_dessus: false, remblais: Vec::new(), type_remblai: None, origine: origine(id) });
     }
 
+    // poteaux et poutres à section rectangulaire extrudée
+    for &id in produits.iter().filter(|&&id| barres_ifc::POTEAUX.contains(&m.ty(id)) || barres_ifc::POUTRES.contains(&m.ty(id))) {
+        consommes.insert(id);
+        let nom = if m.name(id).is_empty() { format!("{} #{id}", pretty_type(m.ty(id))) } else { m.name(id) };
+        let Some((niv, alt)) = niveau(id) else {
+            c.importer(nom, pretty_type(m.ty(id)), None, tris(id), "pas de niveau (IfcBuildingStorey)", origine(id));
+            continue;
+        };
+        match barres_ifc::barre(m, id, ident("barre", id), nom.clone(), niv.clone(), alt, origine(id)) {
+            Ok(b) => c.projet.barres.push(b),
+            Err(raison) => c.importer(nom, pretty_type(m.ty(id)), Some(niv), tris(id), raison, origine(id)),
+        }
+    }
+
     // le reste
     for &id in &produits {
         if consommes.contains(&id) {
@@ -341,9 +358,11 @@ mod tests {
         assert_eq!(p.dalles.len(), 1);
         assert!((p.volume_dalle(&p.dalles[0]).unwrap() - 4.8e9).abs() < 1e3);
         assert!((p.dalles[0].decalage).abs() < 1e-6);
-        // poteau importé, porte consommée par son ouverture
-        assert_eq!(p.importes.len(), 1);
-        assert_eq!(p.importes[0].categorie, "IfcColumn");
+        // poteau 300 × 300 converti en barre, porte consommée par son ouverture
+        assert!(p.importes.is_empty());
+        assert_eq!(p.barres.len(), 1);
+        let b = &p.barres[0];
+        assert!(b.genre == modele::GenreBarre::Poteau && b.largeur == 300.0 && b.hauteur == 300.0 && b.debut == [3000.0, 2000.0, 0.0] && b.fin == [3000.0, 2000.0, 2700.0], "{b:?}");
         // mur droit et dalle exacts ; mur courbe : la géométrie lue est facettée, les
         // paramètres donnent l'arc exact (écart de l'ordre du pour cent)
         assert!(mesures.iter().all(|x| x.retenu), "{mesures:?}");

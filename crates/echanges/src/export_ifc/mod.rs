@@ -202,7 +202,7 @@ fn contenu(p: &Projet) -> Result<Step, String> {
             GenreBarre::Poteau => ("IFCCOLUMN", "IFCCOLUMNTYPE", "COLUMN"),
             GenreBarre::Poutre => ("IFCBEAM", "IFCBEAMTYPE", "BEAM"),
         };
-        let id = w.add(format!("{classe}('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&b.id, None), texte(&b.nom), ref_(rep)));
+        let id = w.add(format!("{classe}('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&b.id, b.origine.as_ref()), texte(&b.nom), ref_(rep)));
         contenus.entry(niveaux[&b.niveau]).or_default().push(id);
         proprietes::barre(&mut w, p, b, id);
         quantites::barre(&mut w, b, &solide, id);

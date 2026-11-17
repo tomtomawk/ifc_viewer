@@ -11,7 +11,9 @@ fn projet() -> Projet {
 }
 #[test]
 fn structures_creation_copie_rotation_suppression_et_validation() {
-    let p = projet();
+    // sans le poteau converti de l'échantillon : les barres créées ici sont les seules
+    let mut p = projet();
+    p.barres.clear();
     let n = p.niveaux[0].id.clone();
     let poteau = Barre {
         id: String::new(),
@@ -24,6 +26,7 @@ fn structures_creation_copie_rotation_suppression_et_validation() {
         hauteur: 400.0,
         rotation: 0.0,
         pose: Default::default(),
+        origine: None,
     };
     let (p, ids) = p.executer(Commande::Barre { barre: poteau }).unwrap();
     let b = &p.barres[0];
@@ -62,6 +65,7 @@ fn structures_creation_copie_rotation_suppression_et_validation() {
         hauteur: 400.0,
         rotation: 0.0,
         pose: Default::default(),
+        origine: None,
     };
     let (p, _) = p
         .executer(Commande::Barre {

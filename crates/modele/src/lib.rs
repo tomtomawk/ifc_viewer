@@ -228,6 +228,7 @@ pub struct Barre {
     /// Poutre : type, justification horizontale et arase (champs à plat).
     #[serde(flatten)]
     pub pose: elements::poutre::PosePoutre,
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub origine: Option<Origine>,
 }
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

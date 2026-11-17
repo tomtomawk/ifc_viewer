@@ -1164,6 +1164,7 @@ fn creations_independantes_barres_escaliers_gardes_terrains_importes_et_types() 
                     hauteur: 300.0,
                     rotation: 0.0,
                     pose: Default::default(),
+                    origine: None,
                 }),
                 "escalier" => q.escaliers.push(Escalier {
                     id,
