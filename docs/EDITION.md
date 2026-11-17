@@ -494,9 +494,10 @@ une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvre
   différentes ou d'arêtes sans pente sont refusées avec un message ; elles doivent
   être décomposées en plusieurs toitures. Les contours convexes gardent le calcul
   par arête existant.
-- L'attachement requiert que le mur soit entièrement dans l'emprise de la toiture
-  (prévoir un débord). Détacher retrouve la contrainte haute enregistrée. Supprimer
-  la toiture détache ses murs sans les supprimer.
+- L'attachement accepte un recouvrement partiel. Dans l'emprise de la toiture,
+  le mur suit la sous-face. En dehors de l'emprise et au droit des trémies, le mur
+  garde sa contrainte haute. Détacher rétablit cette contrainte sur l'ensemble du mur.
+  Supprimer la toiture détache ses murs.
 - Après chaque opération, les opérations booléennes des murs inchangés sont reprises
   de la mémoire (`noyau::csg_memoire`) ; les silhouettes des arbres aussi
   (`maillage::aretes::silhouette_arbre`). Les arêtes jointes par matériau et

@@ -12,7 +12,7 @@ Dépendances internes autorisées : `noyau` seul. Externes : `earcutr`, `geo-str
 | `importes.rs` | `DonneesImportees` (à plat dans `ElementImporte`, champ `donnees` de `Piece`) : propriétés, matériau et couleur lus dans la source, vérification |
 | `creation.rs` | `ParametresMur`, `ParametresDalle`, `Implantation`, création des murs, dalles et vues |
 | `murs/`, `elements/` | assemblage et jonctions des murs ; escaliers, garde-corps, pièces, site, terre-pleins, composants |
-| `volumes/` | `solides`, `geometrie` : volumes des éléments (consommés par `maillage`) |
+| `volumes/` | `solides`, `geometrie` : volumes des éléments (consommés par `maillage`) ; `attache_toiture` : volume des murs sous un toit et hors de son emprise |
 | `famille/` | familles paramétriques (`modelee`, `profil`, `edition`) |
 | `documentation/` | données des vues, feuilles, cotes, nomenclatures |
 | `liens.rs` | `LienIfc` : fichier IFC lié (chemin, décalage, rotation, visibilité) et sa transformation vers le projet |
