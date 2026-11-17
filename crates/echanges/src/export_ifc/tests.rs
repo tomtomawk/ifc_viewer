@@ -145,6 +145,42 @@ fn un_style_par_materiau_reutilise() {
     assert_eq!(du_type(&m, "IFCSTYLEDITEM").count(), du_type(&m, "IFCTRIANGULATEDFACESET").filter(|f| m.item_color.contains_key(f)).count());
 }
 
+#[test]
+fn usage_des_couches_coherent_avec_l_axe_du_mur() {
+    let json = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json")).unwrap();
+    let mut p = Projet::lire_json(&json).unwrap();
+    // mur à deux couches : enduit extérieur 20 mm puis béton 200 mm
+    let t = &mut p.types_murs[0];
+    let mut enduit = t.couches[0].clone();
+    enduit.materiau = Some("Enduit".into());
+    enduit.epaisseur = 20.0;
+    t.couches.insert(0, enduit);
+    let s = exporter(&p).unwrap();
+    assert!(s.contains(".AXIS2.,.NEGATIVE.,110.000000,$)"));
+    // dalles sans pente : usage AXIS3 au-dessus de la première couche
+    let d = p.dalles.iter().find(|d| d.sorte == SorteDalle::Dalle && d.pentes.iter().flatten().all(Option::is_none)).unwrap();
+    let dessus = p.niveau(&d.niveau).unwrap().altitude + d.decalage;
+    assert!(s.contains(&format!(".AXIS3.,.NEGATIVE.,{dessus:.6},$)")));
+    // relecture par l'import : chaque mur redevient un assemblage dont la couche
+    // extérieure est à gauche de l'axe d'origine, à 100 mm du milieu
+    let chemin = std::env::temp_dir().join(format!("bimedit-usage-{}.ifc", std::process::id()));
+    std::fs::write(&chemin, &s).unwrap();
+    let (relu, _) = depuis_ifc::convertir(&chemin, &|_| {}).unwrap();
+    let _ = std::fs::remove_file(&chemin);
+    assert_eq!(relu.assemblages.len(), p.murs.len());
+    for m in &p.murs {
+        let Axe::Droit { debut, fin } = m.axe else { continue };
+        let a = relu.assemblages.iter().find(|a| a.nom == m.nom).unwrap_or_else(|| panic!("{} non relu", m.nom));
+        let ext = relu.couches_assemblage(&a.id)[0];
+        let Axe::Droit { debut: e0, fin: e1 } = ext.axe else { panic!("axe") };
+        let (dx, dy) = (fin[0] - debut[0], fin[1] - debut[1]);
+        let l = dx.hypot(dy);
+        let gauche = [-dy / l, dx / l];
+        let milieu = [(e0[0] + e1[0]) / 2.0 - (debut[0] + fin[0]) / 2.0, (e0[1] + e1[1]) / 2.0 - (debut[1] + fin[1]) / 2.0];
+        assert!((milieu[0] * gauche[0] + milieu[1] * gauche[1] - 100.0).abs() < 1.0, "{} : couche extérieure à {:?}", m.nom, milieu);
+    }
+}
+
 /// Quantités brutes (valeur écrite, unités du fichier) du jeu `nom` d'un produit.
 fn quantites(m: &ifc_base::semantique::IfcModel, id: noyau::Id, nom: &str) -> std::collections::BTreeMap<String, f64> {
     let jeu = m.property_defs[&id].iter().map(|&d| m.get(d).unwrap()).find(|e| e.is("IFCELEMENTQUANTITY") && e.arg(2).as_str() == Some(nom)).unwrap_or_else(|| panic!("{nom} absent"));

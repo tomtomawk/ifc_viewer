@@ -1,4 +1,5 @@
 //! Export IFC4 en millimètres : classes, site, niveaux, matériaux et géométrie tessellée.
+mod materiaux;
 mod proprietes;
 mod quantites;
 mod site;
@@ -66,28 +67,11 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             refs(&ns)
         ));
     }
-    let mut jeux = HashMap::new();
     let mut types_ifc = types::Types::default();
     let mut styles = styles::Styles::default();
-    for t in p.types_murs.iter().chain(&p.types_dalles) {
-        let mut cs = Vec::new();
-        for c in &t.couches {
-            let mat = w.add(format!(
-                "IFCMATERIAL({},$,$)",
-                texte(c.materiau.as_deref().unwrap_or("Matériau"))
-            ));
-            cs.push(w.add(format!(
-                "IFCMATERIALLAYER(#{mat},{},$,$,$,$,$)",
-                format!("{:.6}", c.epaisseur)
-            )));
-        }
-        let set = w.add(format!(
-            "IFCMATERIALLAYERSET({},{},$)",
-            refs(&cs),
-            texte(&t.nom)
-        ));
-        jeux.insert(t.id.clone(), set);
-    }
+    let mut jeux_couches = materiaux::Couches::new(&mut w, p);
+    // axes des murs (lignes de référence des jeux de couches)
+    let contexte_axe = w.add(format!("IFCGEOMETRICREPRESENTATIONSUBCONTEXT('Axis','Model',*,*,*,*,#{contexte},$,.GRAPH_VIEW.,$)"));
     let mut contenus: HashMap<usize, Vec<usize>> = HashMap::new();
     let mut produits = HashMap::new();
     let jonctions = jonctions::coupes(p);
@@ -95,12 +79,14 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
     let mut solides_murs = solides::murs(p, &jonctions).into_iter();
     for m in &p.murs {
         let solide = solides_murs.next().ok_or("Mur absent.")??;
+        let t = p.type_mur(&m.type_mur).ok_or("Type de mur absent.")?;
         // couleur : matériau d'un mur monocouche (comme la vue 3D)
-        let materiau = match p.type_mur(&m.type_mur).map(|t| t.couches.as_slice()) {
-            Some([c]) if c.fonction != FonctionCouche::LameAir => c.materiau.as_deref(),
+        let materiau = match t.couches.as_slice() {
+            [c] if c.fonction != FonctionCouche::LameAir => c.materiau.as_deref(),
             _ => None,
         };
-        let rep = styles.forme(&mut w, p, contexte, &[(materiau, &solide)], &[]);
+        let axe = materiaux::axe_mur(&mut w, contexte_axe, &m.axe);
+        let rep = styles.forme(&mut w, p, contexte, &[(materiau, &solide)], &[axe]);
         let id = w.add(format!(
             "IFCWALL('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)",
             guid(&m.id, m.origine.as_ref()),
@@ -114,15 +100,13 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         produits.insert(m.id.clone(), id);
         proprietes::mur(&mut w, p, m, id);
         quantites::mur(&mut w, p, m, &solide, id);
+        let materiau = jeux_couches.usage_mur(&mut w, t);
         w.add(format!(
-            "IFCRELASSOCIATESMATERIAL('{}',$,$,$,(#{id}),#{})",
-            guid(&format!("mat:{}", m.id), None),
-            jeux[&m.type_mur]
+            "IFCRELASSOCIATESMATERIAL('{}',$,$,$,(#{id}),#{materiau})",
+            guid(&format!("mat:{}", m.id), None)
         ));
-        if let Some(t) = p.type_mur(&m.type_mur) {
-            let predefini = if t.categorie == Some(CategorieMur::Cloison) { "PARTITIONING" } else { "NOTDEFINED" };
-            types_ifc.lier("IFCWALLTYPE", &t.id, &t.nom, predefini, Some(jeux[&t.id]), id);
-        }
+        let predefini = if t.categorie == Some(CategorieMur::Cloison) { "PARTITIONING" } else { "NOTDEFINED" };
+        types_ifc.lier("IFCWALLTYPE", &t.id, &t.nom, predefini, Some(jeux_couches.jeu(&t.id)), id);
     }
     for a in &p.assemblages {
         let id = w.add(format!(
@@ -159,6 +143,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         // d'air décalent les couches suivantes sans géométrie (comme la vue 3D)
         let plans = pente::plans(d);
         let (_, mut haut) = d.decalages_couches(t.epaisseur());
+        let dessus = z + haut;
         let mut couches = Vec::new();
         for c in &t.couches {
             let bas = haut - c.epaisseur;
@@ -186,13 +171,13 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         contenus.entry(niveaux[&d.niveau]).or_default().push(id);
         proprietes::dalle(&mut w, p, d, classe, id);
         quantites::dalle(&mut w, p, d, classe, id);
+        let materiau = jeux_couches.materiau_dalle(&mut w, d, classe, dessus);
         w.add(format!(
-            "IFCRELASSOCIATESMATERIAL('{}',$,$,$,(#{id}),#{})",
-            guid(&format!("mat:{}", d.id), None),
-            jeux[&d.type_dalle]
+            "IFCRELASSOCIATESMATERIAL('{}',$,$,$,(#{id}),#{materiau})",
+            guid(&format!("mat:{}", d.id), None)
         ));
         let classe_type = match classe { "IFCSLAB" => "IFCSLABTYPE", "IFCCOVERING" => "IFCCOVERINGTYPE", _ => "IFCROOFTYPE" };
-        types_ifc.lier(classe_type, &t.id, &t.nom, "NOTDEFINED", Some(jeux[&t.id]), id);
+        types_ifc.lier(classe_type, &t.id, &t.nom, "NOTDEFINED", Some(jeux_couches.jeu(&t.id)), id);
     }
     for b in &p.barres {
         let solide = solides::barre(p, b)?;
