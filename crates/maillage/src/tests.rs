@@ -10,7 +10,7 @@ fn topographie_revit_importee_est_geographique() {
     let tris = [[DVec3::ZERO, DVec3::new(1000.0, 0.0, 0.0), DVec3::new(0.0, 1000.0, 500.0)]];
     for (id, classe) in [("a", "Toposolid"), ("b", "SiteSurface"), ("c", "Wall")] {
         let origine = Some(Origine { source: "rvt".into(), id: id.into(), guid: None, classe: classe.into() });
-        p.importes.push(ElementImporte { id: id.into(), nom: id.into(), categorie: "Autres".into(), niveau: None, maillage: Maillage::depuis_triangles(&tris), raison: String::new(), origine });
+        p.importes.push(ElementImporte { id: id.into(), nom: id.into(), categorie: "Autres".into(), niveau: None, maillage: Maillage::depuis_triangles(&tris), raison: String::new(), origine, donnees: Default::default() });
     }
     let s = depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
     let classe = |id: &str| &*s.objects[s.object_of[&id_natif("importe", id)] as usize].class;

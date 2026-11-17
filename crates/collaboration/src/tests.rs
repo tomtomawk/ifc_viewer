@@ -1217,6 +1217,7 @@ fn creations_independantes_barres_escaliers_gardes_terrains_importes_et_types() 
                     },
                     raison: "Essai de concurrence".into(),
                     origine: None,
+                    donnees: Default::default(),
                 }),
                 "niveau" => q.niveaux.push(Niveau {
                     id,
