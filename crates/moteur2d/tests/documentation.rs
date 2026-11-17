@@ -34,6 +34,52 @@ fn dessin_sur_feuille_suit_le_fond_la_plage_haute_et_le_style() {
 }
 
 #[test]
+fn plan_prolonge_en_pointilles_un_escalier_qui_traverse_la_coupe() {
+    let mut p = Projet::nouveau("Escalier en plan");
+    p.niveaux.push(modele::Niveau {
+        id: "rdc".into(), nom: "RDC".into(), altitude: 0.0, origine: None,
+    });
+    p.escaliers.push(modele::Escalier {
+        id: "e".into(), nom: "Escalier".into(), niveau: "rdc".into(), niveau_haut: None,
+        decalage_bas: 0.0, decalage_haut: 0.0, hauteur: 2800.0,
+        trace: vec![[0.0, 0.0], [6000.0, 0.0]], largeur: 1000.0,
+        hauteur_marche: 175.0, paillasse: 150.0, balance: None,
+    });
+    let id = p.ajouter_vue_plan("rdc", 1000.0).unwrap();
+    let escalier = modele::identifiants::id_natif("escalier", "e");
+    let voir = |p: &Projet| {
+        let dessin = moteur2d::dessin_vue(p, &id).unwrap();
+        let mut pointilles = Vec::new();
+        let mut trait_bas = false;
+        for pr in dessin.primitives.into_iter().filter(|pr| pr.element == Some(escalier) && pr.role == Role::Vu) {
+            let Forme::Segments(segments) = pr.forme else { continue };
+            for s in segments {
+                if s.iter().all(|q| (q.z - 0.9995).abs() < 1e-6) {
+                    assert!(s[0].distance(s[1]) <= 0.003 * dessin.echelle + 1e-6);
+                    pointilles.push(s);
+                } else if s.iter().any(|q| q.z < 0.99) {
+                    trait_bas = true;
+                }
+            }
+        }
+        (pointilles, trait_bas)
+    };
+    p.vues[0].limite_haute_decalage = 2200.0;
+    let (hauts, trait_bas) = voir(&p);
+    assert!(trait_bas && !hauts.is_empty());
+    let bout = |s: &[[glam::DVec3; 2]]| s.iter().flatten().map(|q| q.x).fold(f64::NEG_INFINITY, f64::max);
+    p.vues[0].limite_haute_decalage = 1600.0;
+    let (hauts_courts, _) = voir(&p);
+    assert!(!hauts_courts.is_empty() && bout(&hauts_courts) < bout(&hauts));
+    p.vues[0].elements_masques.push("e".into());
+    assert_eq!(voir(&p), (Vec::new(), false));
+    p.vues[0].elements_masques.clear();
+    p.vues[0].limite_haute_decalage = 1000.0;
+    let (hauts, trait_bas) = voir(&p);
+    assert!(hauts.is_empty() && trait_bas);
+}
+
+#[test]
 fn coupe_sur_feuille_reste_dans_les_limites_de_la_vue() {
     use modele::creation::ParametresMur;
     let mut p = Projet::nouveau("Coupe cadrée");

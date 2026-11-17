@@ -11,7 +11,7 @@ pub use feuilles::{dessin_vue, dxf_feuille, pdf, pdf_jeu, pdf_pages, svg_feuille
 mod dxf;
 pub use dxf::dxf;
 mod plans;
-pub use plans::{fond_plan, limite_haute_plan, pointilles_plage_haute};
+pub use plans::{aretes_plage_haute, dans_plage_haute, fond_plan, limite_haute_plan, pointilles_plage_haute};
 
 pub mod dao;
 mod coupe;

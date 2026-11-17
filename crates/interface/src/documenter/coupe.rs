@@ -35,8 +35,7 @@ impl ViewerApp {
         moteur2d::fond_plan(projet, s, vue, plan, self.echelle)
     }
 
-    /// Éléments du niveau courant entièrement au-dessus de la coupe et sous la limite haute,
-    /// en pointillés.
+    /// Éléments et parties hautes d'escaliers du niveau courant, en pointillés.
     pub(crate) fn primitives_au_dessus_plan(&self)->Vec<noyau::trace2d::Primitive> {
         let Some(plan) = self.plan_coupe() else { return Vec::new(); };
         moteur2d::pointilles_plage_haute(self.aretes_au_dessus_plan(), self.echelle, plan.w as f64)
@@ -64,15 +63,14 @@ impl ViewerApp {
 
     /// Arêtes vues des éléments de la plage haute, sans pointillés.
     pub(crate) fn aretes_au_dessus_plan(&self)->Vec<noyau::trace2d::Primitive> {
-        let (Some(s),Some((visible,limite)))=(&self.scene,self.masque_plage_haute()) else{return Vec::new()};
+        let (Some(s),Some(plan),Some((visible,limite)))=(&self.scene,self.plan_coupe(),self.masque_plage_haute()) else{return Vec::new()};
         let f=self.camera.forward().as_dvec3().normalize();
         let droite=f.cross(self.camera.up().as_dvec3()).normalize();
         let haut=droite.cross(f);
-        moteur2d::vu(s,&visible,droite,haut,-f,Some(Vec4::new(0.,0.,-1.,limite)),1024)
+        moteur2d::aretes_plage_haute(s,&visible,droite,haut,-f,plan.w,limite)
     }
 
-    /// Plage haute de la vue en plan native ouverte : objets du niveau entièrement au-dessus
-    /// de la coupe et sous la limite haute, et altitude de cette limite (repère de la scène).
+    /// Objets à dessiner en pointillés dans la plage haute et altitude de la limite haute.
     pub(crate) fn masque_plage_haute(&self)->Option<(Vec<bool>,f32)> {
         let (Some(s),Some((p,_)),Some(id),Some(plan))=(&self.scene,&self.natif,self.vue_native_id(),self.plan_coupe()) else{return None};
         let v=p.vues.iter().find(|v|v.id==id)?;
@@ -87,7 +85,7 @@ impl ViewerApp {
         };
         let visible=s.objects.iter().enumerate().map(|(i,o)| {
             let masque_vue=masques.contains(&o.id) || s.model.parent.get(&o.id).is_some_and(|id|masques.contains(id));
-            o.storey==Some(niveau_id) && !exclus.contains(&o.id) && o.min.z>coupe+1e-5 && o.min.z<limite
+            o.storey==Some(niveau_id) && !exclus.contains(&o.id) && moteur2d::dans_plage_haute(o, coupe, limite)
                 && !masque_vue && !self.hidden_classes.contains(&*o.class)
                 && !self.hidden_classes.contains(&*self.cle_objet[i])
                 && !self.hidden_objects.contains(&(i as u32))

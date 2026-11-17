@@ -614,7 +614,7 @@ impl ViewerApp {
         let u = modele::unite::unite();
         let nom = if self.orientation_nord_en_cours { "NORD DU PROJET".into() } else { match usage {
             Some((Usage::Mur, o)) => format!("MUR · {}", nom_outil(o)),
-            Some((Usage::Escalier, _)) => format!("ESCALIER · LIGNE = {}", ["AXE", "BORD GAUCHE", "BORD DROIT"][self.dessin2d.justification_escalier as usize % 3]),
+            Some((Usage::Escalier, _)) => format!("{} · LIGNE = {}", if self.dessin2d.esc_balance.is_some() { "ESCALIER BALANCÉ" } else { "ESCALIER" }, ["AXE", "BORD GAUCHE", "BORD DROIT"][self.dessin2d.justification_escalier as usize % 3]),
             Some((Usage::GardeCorps, _)) => "GARDE-CORPS".into(),
             Some((Usage::LimitePropriete, o)) => format!("LIMITE DE PROPRIÉTÉ · {}", if o == OutilDessin::Polyligne { "POLYGONE" } else { nom_outil(o) }),
             Some((Usage::Cadrage, _)) => "CADRAGE DE LA VUE".into(),
@@ -650,6 +650,7 @@ impl ViewerApp {
         else if self.ruban_edition.selection_mur && usage.is_some_and(|(u,_)|u==Usage::Mur) {"Cliquer le trait que le mur doit suivre"} else if let Some(i) = self.invite_cotation() { i } else { self.dessin2d.trace.as_ref().map_or("", |t| t.invite()) };
         let contexte = match usage.map(|(u, _)| u) {
             Some(Usage::Mur) => "Ctrl : justification · Espace : inverser le sens · ",
+            Some(Usage::Escalier) if self.dessin2d.esc_balance.is_some() => "Ctrl ou Espace : justification de la ligne · Un sommet par tournant · Entrée ou clic droit pour terminer · ",
             Some(Usage::Escalier) => "Ctrl ou Espace : justification de la ligne · Longueur magnétisée au giron · Départ, un sommet par palier · Le tracé s'arrête et se termine à la dernière marche · ",
             Some(Usage::GardeCorps) => "Cliquer les sommets · Sur un escalier, sélectionner Garde-corps dans les options · ",
             Some(Usage::Cadrage) => "Tracer un contour fermé, puis valider · ",

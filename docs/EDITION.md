@@ -222,7 +222,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
 - **Plage de vue en plan** : les propriétés distinguent Plan de coupe, Limite
   basse et Limite haute (niveau et décalage). Entre le plan de coupe et la limite
   haute, les objets non coupés du niveau de la vue sont représentés en pointillés,
-  notamment les poutres et plafonds. Les objets rattachés à un autre niveau sont
+  notamment les poutres et plafonds. Pour un escalier qui traverse le plan de coupe,
+  la portion comprise dans la plage haute est également en pointillés. Les objets rattachés à un autre niveau sont
   exclus, même si la limite haute utilise ce niveau comme référence.
 - **Barre de vue** : le cube ouvre les styles visuels et l'icône soleil donne accès
   séparément aux ombres du soleil et à l'ombre ambiante. En plan, « Cadre » propose
@@ -345,6 +346,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   hauteur libre), décalage, largeur, hauteur de marche visée, paillasse ; calcul
   affiché (contremarches, giron, paliers, Blondel 2h + g, signalé hors confort :
   60 à 65 cm, h ≤ 20 cm, g ≥ 22 cm). Le plan représente les marches et les paliers.
+  En mode **Marches balancées**, chaque sommet marque un tournant. Le tracé reste
+  libre jusqu'à Entrée ou clic droit. L'aperçu dessine les marches tournantes,
+  indique le giron réel et signale un giron de rive inférieur à 100 mm.
   Le ruban choisit les garde-corps créés avec l'escalier (deux
   côtés, gauche, droite, aucun).
 - **Garde-corps** (Modéliser) : tracé en plan (hauteur, décalage, remplissage

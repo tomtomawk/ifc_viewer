@@ -95,7 +95,7 @@ Comportement attendu de chaque fonction : `docs/MODIFICATION.md`.
 | M15 | Toitures concaves à pentes différentes par arête (aujourd'hui refusées) | P3 | `docs/EDITION.md` |
 | M16 | Poutres inclinées ; sections circulaires de poteau | P2 | `docs/EDITION.md` |
 | M17 | Feuilles natives en onglets de dessin éditables | P2 | `docs/EDITION.md` |
-| M18 | Éléments au-dessus de la coupe en pointillés ; épaisseurs de trait par catégorie (voir E1) | P2 | `README.md` « Limites connues » |
+| M18 | Épaisseurs de trait par catégorie (voir E1) | P2 | `README.md` « Limites connues » |
 | M19 | Palette de commandes ; aide contextuelle | P3 | — |
 
 ### 2.5 Familles
@@ -152,6 +152,7 @@ Le plus récent en premier. Les numéros « n° » sont ceux de la feuille de ro
 
 | Date | Fait | Commit | Vérification |
 |---|---|---|---|
+| 18/11/2026 | Escaliers balancés : tracé libre jusqu’à validation, aperçu des marches tournantes avec giron réel, tracé conservé si le giron de rive est insuffisant. En plan et sur les feuilles, partie des escaliers comprise dans la plage haute dessinée en pointillés. | ce commit | `cargo check --workspace --tests` réussi. `cargo test -p interface -p moteur2d -p modele --release` : 239 réussis, 2 ignorés. Tests du tracé libre, du giron réel, du rejet sans perte du tracé, de la limite haute et du masquage. Affichage non vérifié dans la fenêtre de BIMedit. |
 | 18/11/2026 | Sélecteur de gabarit des vues repris du sélecteur de types : crayon Modifier et icône Dupliquer au survol, création à partir de la vue en bas de liste. La copie est attribuée à la vue à l’enregistrement. | ce commit | `cargo check --workspace --tests` réussi, `cargo test -p interface --release` : 70 réussis. Clics sur les deux icônes et enregistrement d’une copie vérifiés par simulation egui. |
 | 17/11/2026 | CS reprend les réglages de tracé des poutres et active la création des escaliers, garde-corps, composants, arbres, pièces, terrains et limites de propriété. Retrait des symboles automatiques de trajectoire des escaliers en plan. | ce commit | `cargo check --workspace --tests` réussi. `cargo test -p interface -p modele --release` : 190 réussis, 1 ignoré. Deux tests simulent CS puis créent une poutre et un escalier. Le second vérifie aussi l’absence de symboles en plan. Pas de contrôle à l’écran. |
 | 17/11/2026 | Attacher toit accepte les murs partiellement couverts : ajustement à la sous-face dans l’emprise, contrainte haute conservée à l’extérieur et dans les trémies, y compris pour les couches hors emprise d’un mur composé. | ce commit | `cargo check --workspace --tests` réussi. `cargo test -p modele --release` : 122 réussis, 1 ignoré. Cas vérifiés : rehausse et recoupe, détachement, pente avec trémie, recouvrement d’une seule couche, rejet du contact sans recouvrement et du toit sous le pied du mur. Interface non essayée à l’écran. |
