@@ -119,3 +119,51 @@ fn jeux_de_proprietes_communs() {
     assert!(du_type(&m, "IFCDOOR").all(|id| groupe(&m, id, "Pset_DoorCommon").is_none()));
     assert!(!du_type(&m, "IFCPROPERTYSINGLEVALUE").any(|id| m.get(id).unwrap().arg(0).as_str() == Some("IsExternal")));
 }
+
+/// Quantités brutes (valeur écrite, unités du fichier) du jeu `nom` d'un produit.
+fn quantites(m: &ifc_base::semantique::IfcModel, id: noyau::Id, nom: &str) -> std::collections::BTreeMap<String, f64> {
+    let jeu = m.property_defs[&id].iter().map(|&d| m.get(d).unwrap()).find(|e| e.is("IFCELEMENTQUANTITY") && e.arg(2).as_str() == Some(nom)).unwrap_or_else(|| panic!("{nom} absent"));
+    jeu.arg(5).refs().map(|q| m.get(q).unwrap()).map(|q| (q.arg(0).as_str().unwrap().to_string(), q.arg(3).as_f64().unwrap())).collect()
+}
+
+/// Lignes de la nomenclature par élément (colonnes choisies), indexées par nom d'élément.
+fn nomenclature(p: &Projet, categorie: &str, colonnes: Vec<documentation::Colonne>) -> HashMap<String, Vec<String>> {
+    let n = documentation::Nomenclature { id: "q".into(), nom: "Q".into(), categorie: categorie.into(), regrouper: false, colonnes, parametres: Vec::new() };
+    let lignes = documentation::tableau(p, &n).unwrap();
+    let par_nom: HashMap<_, _> = lignes[1..].iter().map(|l| (l[0].clone(), l[1..].to_vec())).collect();
+    assert_eq!(par_nom.len(), lignes.len() - 1, "noms d'éléments en double");
+    par_nom
+}
+
+#[test]
+fn quantites_egales_a_la_nomenclature() {
+    use documentation::Colonne::*;
+    let (p, s, m) = maison();
+    assert!(s.contains("IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.)") && s.contains("IFCSIUNIT(*,.VOLUMEUNIT.,$,.CUBIC_METRE.)"));
+    // mêmes arrondis que la nomenclature : mm entiers, m² à 2 décimales, m³ à 3
+    let (mm, m2, m3) = (|v: f64| format!("{v:.0}"), |v: f64| format!("{v:.2}"), |v: f64| format!("{v:.3}"));
+    let murs = nomenclature(&p, "Murs", vec![Element, Longueur, Hauteur, Epaisseur, Surface, Volume]);
+    assert_eq!(du_type(&m, "IFCWALL").count(), murs.len());
+    for id in du_type(&m, "IFCWALL") {
+        let q = quantites(&m, id, "Qto_WallBaseQuantities");
+        let attendu = &murs[&m.name(id)];
+        assert_eq!(vec![mm(q["Length"]), mm(q["Height"]), mm(q["Width"]), m2(q["GrossSideArea"]), m3(q["NetVolume"])], *attendu);
+    }
+    let dalles = nomenclature(&p, "", vec![Element, Epaisseur, Surface, Volume]);
+    for id in du_type(&m, "IFCSLAB") {
+        let q = quantites(&m, id, "Qto_SlabBaseQuantities");
+        assert_eq!(vec![mm(q["Width"]), m2(q["NetArea"]), m3(q["NetVolume"])], dalles[&m.name(id)]);
+    }
+    let toitures: Vec<_> = du_type(&m, "IFCROOF").collect();
+    assert!(!toitures.is_empty());
+    for id in toitures {
+        assert_eq!(m2(quantites(&m, id, "Qto_RoofBaseQuantities")["ProjectedArea"]), dalles[&m.name(id)][1]);
+    }
+    let baies = nomenclature(&p, "", vec![Element, Hauteur, Largeur, Surface]);
+    for (classe, jeu) in [("IFCDOOR", "Qto_DoorBaseQuantities"), ("IFCWINDOW", "Qto_WindowBaseQuantities")] {
+        for id in du_type(&m, classe) {
+            let q = quantites(&m, id, jeu);
+            assert_eq!(vec![mm(q["Height"]), mm(q["Width"]), m2(q["Area"])], baies[&m.name(id)]);
+        }
+    }
+}
