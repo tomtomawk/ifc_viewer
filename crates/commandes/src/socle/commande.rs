@@ -7,6 +7,9 @@ use serde::Deserialize;
 pub enum Commande {
     Terrain { terrain: site::Terrain },
     LimitePropriete { limite: site::LimitePropriete },
+    /// Lien IFC : création (identifiant vide) ou remplacement (position, visibilité,
+    /// chemin). Sa suppression passe par `Supprimer`.
+    Lien { lien: liens::LienIfc },
     /// Coordonnées de l'origine du projet : E/O, N/S, cote NGF (mm).
     CoordonneesOrigine { coordonnees: [f64; 3] },
     Barre {

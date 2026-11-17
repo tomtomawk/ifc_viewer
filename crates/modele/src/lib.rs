@@ -15,6 +15,7 @@ pub mod famille;
 pub mod gabarit;
 pub mod gabarits_vues;
 pub mod identifiants;
+pub mod liens;
 pub mod murs;
 pub mod soleil;
 pub mod unite;
@@ -156,6 +157,8 @@ pub struct Projet {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub rendus_vues: BTreeMap<String, soleil::RenduVue>,
     pub importes: Vec<ElementImporte>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub liens: Vec<liens::LienIfc>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub quadrillages: Vec<documentation::Quadrillage>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

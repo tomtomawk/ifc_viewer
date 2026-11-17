@@ -40,6 +40,11 @@ zone de coupe sont en m. Les angles de caméra et de pente sont en degrés.
   export lancé depuis l'interface, en arrière-plan), sélection, caméra, collaboration, entrées en
   attente et rectangle de la vue (points logiques de la fenêtre).
 - `erreur_effacer` : ferme le message d'erreur affiché (il reste dans le journal).
+- `lier <chemin.ifc>` : lie un fichier IFC au projet natif actif, par le même parcours
+  que Modéliser → Lien IFC (lecture en arrière-plan : attendre `etat.enregistrement` à
+  faux, puis lire `projet_natif.liens`). `editer {"action":"lien","lien":{…}}` crée ou
+  modifie un lien sans lecture préalable (la scène lit alors le fichier). `ouvrir` refuse
+  un fichier IFC.
 - `journal` : messages de l'interface, du plus ancien au plus récent (200 au plus) :
   `journal` (liste de `niveau` information|avertissement|erreur, `texte`, `age_s`) et
   `erreur_affichee` (erreur montrée dans la vue, ou `null`). Une erreur reste affichée

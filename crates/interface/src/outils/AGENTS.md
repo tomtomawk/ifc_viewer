@@ -4,7 +4,7 @@ Rôle : outils de la vue, rangés par métier comme `crates/commandes/src/`. L'e
 
 | Dossier | Fichiers |
 |---|---|
-| `modeliser/` | `bim.rs` (transactions du document BIM `executer_bim`, historique, import, verrous, placement d'éléments, panneau des outils de création `panneau_bim`), `murs_courbes.rs`, `garde_corps.rs` (sélecteur et éditeur de types), `escalier.rs` (création d'escaliers et garde-corps) |
+| `modeliser/` | `bim.rs` (transactions du document BIM `executer_bim`, historique, import, verrous, placement d'éléments, panneau des outils de création `panneau_bim`), `murs_courbes.rs`, `garde_corps.rs` (sélecteur et éditeur de types), `escalier.rs` (création d'escaliers et garde-corps), `liens.rs` (Modéliser > Lien IFC, rubrique Liens de l'arborescence, refus d'ouvrir un IFC ; lecture en arrière-plan dans `socle::taches`) |
 | `modifier/` | `transformer.rs` (Déplacer, Copier, Tourner, Symétrie, Réseau, Échelle, Aligner, Décaler, Scinder), `ajuster.rs`, `options_modifier.rs` (barre d'options de Modifier, jonctions, annotations natives, export IFC/PDF, fenêtre documentation) |
 | `dessiner/` | `dessin_plan/` : DAO 2D commune (tracés, accrochages, contours, courbures, options de tracé) |
 | `annoter/` | `cotation.rs`, `cotes_aretes.rs`, `outils_texte.rs`, `types_traits.rs` |

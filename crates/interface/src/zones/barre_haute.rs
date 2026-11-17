@@ -236,6 +236,7 @@ impl ViewerApp {
                 Some(crate::zones::ruban::Outil::Verrouiller) => self.basculer_verrou_selection(),
                 Some(crate::zones::ruban::Outil::Deverrouiller) => self.verrouiller_selection(false),
                 Some(crate::zones::ruban::Outil::Feuilles) => self.commande_feuilles(),
+                Some(crate::zones::ruban::Outil::LienIfc) => self.inserer_lien_dialogue(&ctx),
                 Some(crate::zones::ruban::Outil::Nomenclatures) => {
                     if self.natif.is_some() {
                         self.bim.documentation = true;

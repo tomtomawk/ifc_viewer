@@ -93,6 +93,7 @@ pub(crate) enum Outil {
     VueCoupe,
     Feuilles,
     Nomenclatures,
+    LienIfc,
 }
 
 impl Outil {
@@ -162,6 +163,7 @@ impl Outil {
             Self::VueCoupe => "Coupe / élévation",
             Self::Feuilles => "Feuilles",
             Self::Nomenclatures => "Nomenclatures",
+            Self::LienIfc => "Lien IFC",
         }
     }
 
@@ -354,7 +356,7 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
             ("Site", &[Terrain, TerrePlein, LimitePropriete, Arbre]),
             ("Structure et accès", &[Poteau, Poutre, Escalier, GardeCorps]),
             ("Placer", &[Ouverture, Composant, Piece]),
-            ("Références", &[Niveau, Quadrillage]),
+            ("Références", &[Niveau, Quadrillage, LienIfc]),
         ],
         Menu::Modifier => &[
             ("Transformer", &[Deplacer, Copier, Tourner, Symetrie, Reseau, Echelle]),
@@ -557,7 +559,7 @@ fn champs(o: Outil) -> Vec<Champ> {
     use Champ::*;
     use Outil::*;
     match o {
-        Surfaces | Niveau | Terrain | LimitePropriete | ModifierContour | CopierNiveau | Jonctions | AttacherToiture | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | MasquerVue | Afficher | Verrouiller | Deverrouiller | Feuilles | Nomenclatures => vec![],
+        Surfaces | Niveau | Terrain | LimitePropriete | ModifierContour | CopierNiveau | Jonctions | AttacherToiture | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | MasquerVue | Afficher | Verrouiller | Deverrouiller | Feuilles | Nomenclatures | LienIfc => vec![],
         Quadrillage => vec![Saisie("Repère", "A"), Choix("Tracé", &["Droit", "Arc"])],
         Mur => vec![
             Choix(

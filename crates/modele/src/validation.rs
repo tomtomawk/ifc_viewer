@@ -37,6 +37,7 @@ impl Projet {
             .chain(self.assemblages.iter().map(|x| &x.id))
             .chain(self.ouvertures.iter().map(|x| &x.id))
             .chain(self.importes.iter().map(|x| &x.id))
+            .chain(self.liens.iter().map(|x| &x.id))
             .chain(self.vues.iter().map(|x| &x.id))
             .chain(self.annotations.iter().map(|x| &x.id))
             .chain(self.quadrillages.iter().map(|x| &x.id))
@@ -210,6 +211,9 @@ impl Projet {
                 return Err(format!("{} : niveau ou escalier hôte absent.", g.nom));
             }
             g.solides(self).map_err(|x| format!("{} : {x}", g.nom))?;
+        }
+        for l in &self.liens {
+            l.verifier()?;
         }
         for e in &self.importes {
             if e.niveau.as_ref().is_some_and(|n| self.niveau(n).is_none()) {

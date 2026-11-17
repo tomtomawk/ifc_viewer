@@ -12,6 +12,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`, `scene`, `for
 | `aretes.rs` | arêtes vives, silhouettes, terrain (`aretes_jointes`, `aretes_silhouette`) |
 | `materiaux.rs` | `rendu_materiau`, `coupe_materiau`, `motif_surface`, `opacite` |
 | `navigateur.rs` | `navigateur` : arborescence du projet pour la scène |
+| `liens.rs` | liens IFC : `charger` (lecture et cache par chemin, date, taille), placement dans la scène, rattachement aux niveaux ; arêtes calculées une fois par fichier |
 
 `tests/` : `creation.rs`, `elements_terre_plein.rs` ; `src/tests.rs` pour les tests unitaires.
 

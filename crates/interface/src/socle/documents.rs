@@ -12,6 +12,7 @@ impl ViewerApp {
         }).unwrap_or_default()
     }
     pub(crate) fn open(&mut self, path: PathBuf, ctx: &egui::Context) {
+        if crate::outils::modeliser::liens::est_ifc(&path) { self.error = Some(crate::outils::modeliser::liens::IFC_NON_OUVERT.into()); return; }
         if path.file_name().is_some_and(|n| { let nom = n.to_string_lossy().to_lowercase(); [".profil.json", ".cartouche.json", ".etiquette.json"].iter().any(|suffixe| nom.ends_with(suffixe)) }) {
             if let Err(e) = self.ouvrir_famille_plane_fichier(&path) { self.error = Some(e); }
             return;
@@ -475,10 +476,9 @@ impl ViewerApp {
 
     pub(crate) fn open_dialog(&mut self, ctx: &egui::Context) {
         if let Some(p) = rfd::FileDialog::new()
-             .add_filter("Projet BIMedit, IFC et Revit", &["bimpartage", "json", "ifc", "IFC", "rvt", "rfa", "rte", "rft"])
+             .add_filter("Projet BIMedit et Revit", &["bimpartage", "json", "rvt", "rfa", "rte", "rft"])
             .add_filter("Projet partagé BIMedit", &["bimpartage"])
             .add_filter("Modèle natif", &["json"])
-            .add_filter("IFC", &["ifc", "IFC"])
             .add_filter("Revit (murs et métadonnées)", &["rvt", "rfa", "rte", "rft"])
             .pick_file()
         {

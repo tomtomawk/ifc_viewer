@@ -1,6 +1,7 @@
 # BIMedit (Rust)
 
-Visionneuse IFC native, écrite de zéro : parseur STEP, géométrie et rendu wgpu (Vulkan, DirectX 12, Metal). Aucune dépendance IFC externe.
+Modeleur BIM natif, écrit de zéro : parseur STEP, géométrie et rendu wgpu (Vulkan, DirectX 12, Metal). Aucune dépendance IFC externe.
+Un fichier IFC ne s'ouvre pas seul : il se **lie** à un projet natif (Modéliser → Lien IFC, ou glisser le fichier dans la fenêtre), affiché en lecture seule en 3D, en plan et en coupe, ou se **convertit** en projet natif (Début → Importer).
 Ouvre aussi les fichiers Revit (`.rvt`) : murs, sols, toits, escaliers, garde-corps, portes, fenêtres, mobilier et autres familles, pièces et grilles lus directement dans le fichier, sans export IFC ; feuilles affichées avec leur cartouche, leurs vues placées, leurs titres, textes et cotes.
 
 ## Édition BIM native
@@ -23,7 +24,7 @@ cargo run --release -- samples/maison_native.modele.json
 ## Utilisation
 
 ```
-cargo run --release -- chemin\vers\fichier.ifc
+cargo run --release -- chemin\vers\projet.modele.json
 cargo run --release -- --stats chemin\vers\fichier.ifc   # mode console : comptages, volumes, entités ignorées
 cargo run --release -- chemin\vers\projet.rvt
 cargo run --release -- --stats chemin\vers\projet.rvt    # métadonnées, niveaux, éléments par catégorie, volumes, causes d'échec
@@ -147,7 +148,7 @@ vue 3D (pilotes sans multiéchantillonnage).
 
 - Zone de coupe 3D (section box) : les six faces coupées sont refermées avec la couleur de l'élément ; en style Lignes cachées, elles utilisent le poché et les hachures du dessin. Les cavités restent vides et le remplissage respecte les bornes de la boîte.
 
-- IFC2X3, IFC4, IFC4X3 (fichiers `.ifc` texte ; pas `.ifczip` ni `.ifcXML`).
+- IFC2X3, IFC4, IFC4X3 (fichiers `.ifc` texte ; pas `.ifczip` ni `.ifcXML`), lus en lien, à l'import et par `--stats`.
 - Arborescence en onglets, choisis par une barre d'icônes : pour un fichier Revit, tout le navigateur de projet ou une seule de ses sections (vues, feuilles, nomenclatures, familles, groupes, liens), matériaux (avec les éléments qui les portent : un clic les isole), modèle et classes ; pour un IFC, modèle, classes et matériaux (`IfcMaterial`).
 - Arborescence spatiale (projet > site > bâtiment > niveaux, éléments groupés par classe), visibilité par niveau et par classe, recherche par nom, classe ou GlobalId.
 - Propriétés : attributs, type, niveau, matériaux avec épaisseurs de couches, Psets et Qto (y compris ceux du type), unités converties en m / m² / m³.

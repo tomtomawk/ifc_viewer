@@ -76,6 +76,7 @@ impl Execution for Projet {
             .chain(self.garde_corps.iter().map(|x| x.id.clone()))
             .chain(self.ouvertures.iter().map(|x| x.id.clone()))
             .chain(self.importes.iter().map(|x| x.id.clone()))
+            .chain(self.liens.iter().map(|x| x.id.clone()))
             .chain(self.vues.iter().map(|x| x.id.clone()))
             .chain(self.quadrillages.iter().map(|x| x.id.clone()))
             .chain(self.annotations.iter().map(|x| x.id.clone()))
@@ -134,7 +135,8 @@ impl ExecutionInterne for Projet {
     }
     fn executer_interne(&mut self, c: Commande) -> Result<Vec<String>, String> {
         match c {
-            Commande::Terrain { .. }
+            Commande::Lien { .. }
+            | Commande::Terrain { .. }
             | Commande::LimitePropriete { .. }
             | Commande::CoordonneesOrigine { .. }
             | Commande::Escalier { .. }

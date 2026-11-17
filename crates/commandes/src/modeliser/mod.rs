@@ -26,6 +26,14 @@ impl ExecutionModeliser for Projet {
                 if let Some(l) = self.limites_propriete.iter_mut().find(|l| l.id == id) { *l = limite; } else { self.limites_propriete.push(limite); self.ranger_existant(&id); }
                 Ok(vec![id])
             }
+            // lien IFC : hors phases et sous-projets, toujours affiché s'il est visible
+            Commande::Lien { mut lien } => {
+                lien.verifier()?;
+                if lien.id.is_empty() { lien.id = identite(self, "lien"); }
+                let id = lien.id.clone();
+                if let Some(l) = self.liens.iter_mut().find(|l| l.id == id) { *l = lien; } else { self.liens.push(lien); }
+                Ok(vec![id])
+            }
             Commande::CoordonneesOrigine { coordonnees } => {
                 if !coordonnees.iter().all(|x| x.is_finite()) { return Err("Coordonnées de l'origine non valides.".into()); }
                 self.coordonnees_origine = coordonnees;
@@ -343,5 +351,32 @@ impl ExecutionModeliser for Projet {
             }
             _ => unreachable!("commande hors du métier : la répartition est faite par socle/execution.rs"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Commande, Execution};
+    use modele::liens::LienIfc;
+
+    /// Lien IFC : création, remplacement (même identifiant), refus d'un lien non
+    /// valide, suppression et verrouillage par les commandes communes.
+    #[test]
+    fn lien_cree_modifie_supprime() {
+        let p = modele::Projet::nouveau("Essai");
+        let lien = LienIfc { id: String::new(), nom: "Structure".into(), chemin: "/projets/structure.ifc".into(), decalage: [0.0; 3], rotation: 0.0, visible: true };
+        let (p, ids) = p.executer(Commande::Lien { lien: lien.clone() }).unwrap();
+        assert_eq!(p.liens.len(), 1);
+        let id = ids[0].clone();
+        let (p, _) = p.executer(Commande::Lien { lien: LienIfc { id: id.clone(), rotation: 90.0, visible: false, ..lien.clone() } }).unwrap();
+        assert_eq!((p.liens.len(), p.liens[0].rotation, p.liens[0].visible), (1, 90.0, false));
+        assert!(p.executer(Commande::Lien { lien: LienIfc { chemin: String::new(), ..lien } }).is_err());
+        let (verrouille, _) = p.executer(Commande::Verrouiller { ids: vec![id.clone()], verrou: true }).unwrap();
+        assert!(verrouille.executer(Commande::Supprimer { ids: vec![id.clone()] }).is_err(), "lien verrouillé");
+        let (p, _) = p.executer(Commande::Supprimer { ids: vec![id] }).unwrap();
+        assert!(p.liens.is_empty());
+        // le JSON du pilote
+        let c: Commande = serde_json::from_str(r#"{"action":"lien","lien":{"id":"","nom":"Fluides","chemin":"/f.ifc"}}"#).unwrap();
+        assert_eq!(p.executer(c).unwrap().0.liens[0].nom, "Fluides");
     }
 }

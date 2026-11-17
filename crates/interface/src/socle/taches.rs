@@ -50,7 +50,13 @@ pub(crate) enum Fin {
     Natif { projet: Box<modele::Projet>, chemin: PathBuf },
     /// Fichiers écrits : message de confirmation.
     Fichiers(String),
+    /// Fichier lié lu (et mis en cache) : le lien à ajouter au projet, son nombre
+    /// d'éléments et une alerte de position éventuelle.
+    Lien { lien: modele::liens::LienIfc, elements: usize, alerte: Option<String> },
 }
+
+/// Distance (m) au-delà de laquelle un lien est signalé loin de l'origine du projet.
+const LIEN_LOIN: f64 = 2000.0;
 
 /// Travail en cours.
 pub(crate) struct Tache {
@@ -208,6 +214,24 @@ impl ViewerApp {
         });
     }
 
+    /// Lien IFC : lecture du fichier (géométrie et arêtes, gardées en cache), puis ajout
+    /// ou remplacement du lien dans le projet actif, en une transaction annulable.
+    pub(crate) fn lier_ifc_arriere_plan(&mut self, ctx: &egui::Context, lien: modele::liens::LienIfc) {
+        self.lancer_tache(ctx, "Lien IFC", move |c| {
+            c.etape(format!("Lecture du lien {}…", lien.nom));
+            let f = maillage::liens::charger(Path::new(&lien.chemin))?;
+            c.continuer()?;
+            let centre = (f.min + f.max) * 0.5;
+            let alerte = if f.elements.is_empty() {
+                Some(format!("Lien « {} » : aucun élément affichable dans le fichier.", lien.nom))
+            } else {
+                let d = (lien.transformer(centre).truncate()).length();
+                (d > LIEN_LOIN).then(|| format!("Lien « {} » : son centre est à {:.1} km de l'origine du projet ; régler son décalage (arborescence > Liens).", lien.nom, d / 1000.0))
+            };
+            Ok(Fin::Lien { elements: f.elements.len(), lien, alerte })
+        });
+    }
+
     /// Une fois par image : fin du travail en cours.
     pub(crate) fn suivre_tache(&mut self) {
         let Some(t) = &self.tache else { return };
@@ -220,6 +244,17 @@ impl ViewerApp {
         match resultat {
             Ok(Fin::Fichiers(message)) => self.status = message,
             Ok(Fin::Natif { projet, chemin }) => self.fin_enregistrement(t.document, &projet, &chemin),
+            Ok(Fin::Lien { lien, elements, alerte }) if t.document == self.document_actif => {
+                let nom = lien.nom.clone();
+                match self.executer_bim(commandes::Commande::Lien { lien }) {
+                    Ok(_) => {
+                        self.status = format!("Lien « {nom} » : {elements} élément(s) — Ctrl+Z pour annuler.");
+                        if let Some(a) = alerte { self.signaler(crate::socle::messages::Niveau::Avertissement, a); }
+                    }
+                    Err(e) => self.error = Some(e),
+                }
+            }
+            Ok(Fin::Lien { lien, .. }) => self.error = Some(format!("Lien « {} » non ajouté : le document a changé pendant la lecture.", lien.nom)),
             Err(e) if e == ANNULE => self.status = format!("{} annulé.", t.nom),
             Err(e) => self.error = Some(e),
         }

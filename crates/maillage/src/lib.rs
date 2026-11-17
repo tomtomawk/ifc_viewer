@@ -10,6 +10,7 @@ use ifc_base::step::{Entity, StepFile, Value};
 use std::path::Path;
 
 mod aretes;
+pub mod liens;
 mod materiaux;
 mod navigateur;
 
@@ -481,6 +482,11 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
     chrono("scène : autres éléments", &mut t_etape);
     let mut aretes = aretes_jointes(&geoms, &materiaux_parts);
     chrono("scène : arêtes", &mut t_etape);
+    // liens IFC : géométrie et arêtes reprises du cache, placées dans le projet
+    let liens::Ajouts { geoms: geoms_liens, aretes: aretes_liens, ignores: ignores_liens } = liens::ajouter(projet, &mut model, racine);
+    geoms.extend(geoms_liens);
+    aretes.extend(aretes_liens);
+    chrono("scène : liens", &mut t_etape);
     // terrains : apparence lissée, sans arête
     for t in &projet.terrains {
         aretes.insert(id_natif("terrain", &t.id), aretes_terrain(projet, t));
@@ -507,6 +513,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         }
     }
     scene.couches_coupe.extend(couches_coupe);
+    scene.unsupported.extend(ignores_liens);
     scene.table_motifs = table_motifs.into_iter().map(|t| t.1).collect();
     // textures en chemin relatif : depuis le dossier du projet
     let dossier = path.parent().map(|d| d.to_path_buf()).unwrap_or_default();

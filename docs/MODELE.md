@@ -267,6 +267,24 @@ format en v0).
 Dans un document de famille de fenêtre ou de porte, le mur hôte du gabarit est percé par le
 vide de la famille, pas par une instance : son écart de volume le laisse importé.
 
+## Liens IFC
+
+`liens[]` (absent si vide) : fichiers IFC affichés dans le projet en lecture seule. Le
+fichier n'est pas copié ; aucune entité liée n'entre dans les autres collections.
+
+| Champ | Contenu |
+|---|---|
+| `id` | identifiant unique dans le projet (comme tout élément) |
+| `nom` | nom affiché (nom du fichier à l'insertion) |
+| `chemin` | chemin absolu du fichier `.ifc` (non vide) |
+| `decalage` | `[x, y, z]` en mm, appliqué après la rotation ; défaut `[0, 0, 0]` |
+| `rotation` | degrés autour de Z, sens trigonométrique, autour de l'origine du fichier lié ; défaut 0 |
+| `visible` | défaut `true` |
+
+Champ inconnu refusé ; `decalage` et `rotation` doivent être finis. Créé ou remplacé par
+la commande `{"action":"lien","lien":{…}}` (identifiant vide : création), retiré par
+`supprimer`. Collection partagée en collaboration (politique `Identifiee`).
+
 ## Conversion depuis IFC
 
 | Élément | Paramètres | Limites |

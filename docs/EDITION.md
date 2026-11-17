@@ -52,6 +52,23 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   tous ses contours sont fermés. Les accrochages et la saisie près du curseur restent
   disponibles pendant l'édition.
 
+- **Modéliser → Lien IFC** (groupe Références) lie un fichier IFC au projet natif :
+  maquette d'un autre intervenant (structure, fluides, existant) affichée en lecture
+  seule en 3D, en plan et en coupe, et dans les feuilles et leurs exports. Glisser un
+  fichier IFC dans la fenêtre fait de même. Le fichier est lu en arrière-plan (étape et
+  Annuler dans la barre haute), puis le lien est ajouté en une transaction annulable.
+  Il est placé origine sur origine ; un message signale un lien dont le centre est à
+  plus de 2 km de l'origine du projet. Chaque élément lié est rattaché au niveau du
+  projet le plus haut sous sa base (tolérance 30 cm), ce qui le montre dans le plan de
+  ce niveau. Les éléments liés ne se sélectionnent pas pour l'édition : aucune commande
+  ne les modifie. Volumes de pièces, réservations et annotations du fichier lié ne sont
+  pas affichés. L'arborescence (rubrique **Liens**) règle pour chaque lien : Visible,
+  décalage X, Y, Z (m), rotation (°, autour de l'origine du fichier lié), Recharger
+  (relit le fichier s'il a changé sur le disque), Changer de fichier, Retirer (le
+  fichier n'est pas touché). Un fichier introuvable est signalé en rouge, et compté
+  dans les entités ignorées, sans empêcher d'ouvrir le projet. Le chemin enregistré est
+  absolu. Un fichier IFC ne s'ouvre plus seul (Début → Ouvrir, glisser hors d'un projet
+  natif, pilote `ouvrir`) : un message renvoie vers le lien ou l'import.
 - **Début → Importer** convertit un IFC/RVT/RFA/RTE dans un nouveau document natif,
   conserve les documents ouverts et écrit le rapport `.rapport.md` à côté du JSON.
   Les murs courbes, ouvertures et maillages importés sont maintenant affichables.

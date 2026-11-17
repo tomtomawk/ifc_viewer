@@ -494,7 +494,9 @@ impl ViewerApp {
             }
         });
         let liens: Vec<String> = self.rvt.iter().flat_map(|r| r.external_refs.iter()).filter(|e| e.kind.contains("Revit")).map(|e| e.path.clone()).collect();
-        rubrique_nav(ui, LeftTab::Liens, format!("Liens ({})", liens.len()), false, &mut |ui| {
+        let liens_natifs = self.natif.as_ref().map(|(p, _)| p.liens.len());
+        rubrique_nav(ui, LeftTab::Liens, format!("Liens ({})", liens_natifs.unwrap_or(liens.len())), false, &mut |ui| {
+            if liens_natifs.is_some() { self.liens_ui(ui); return; }
             for l in &liens {
                 ui.label(l.as_str());
             }

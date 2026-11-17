@@ -93,6 +93,7 @@ pub(super) fn bouton_outil(
         Outil::Deverrouiller => "Déverrouiller la sélection (DC) ; ou clic sur un cadenas dans la vue",
         Outil::Feuilles => "Feuilles : mise en page des vues, cartouche, export SVG/PDF",
         Outil::Nomenclatures => "Nomenclatures : quantités par catégorie et par type, export CSV",
+        Outil::LienIfc => "Lien IFC : maquette d'un autre intervenant (structure, fluides, existant), affichée en lecture seule en 3D, en plan et en coupe. Réglages dans l'arborescence > Liens. Glisser un fichier IFC dans la fenêtre fait de même",
         _ => outil.nom(),
     })
 }
@@ -697,6 +698,11 @@ pub(super) fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
                 seg((0.1, y), (0.9, y));
             }
             seg((0.42, 0.12), (0.42, 0.88));
+        }
+        LienIfc => {
+            // deux maillons d'une chaîne
+            cadre(0.1, 0.36, 0.46, 0.28);
+            cadre(0.44, 0.36, 0.46, 0.28);
         }
         Cadrer => {
             // coins de cadrage autour d'un objet

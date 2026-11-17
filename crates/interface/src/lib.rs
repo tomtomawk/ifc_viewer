@@ -998,7 +998,8 @@ impl eframe::App for ViewerApp {
 
         let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
         if let Some(p) = dropped.into_iter().next() {
-            self.open(p, &ctx);
+            // IFC déposé : lié au projet natif ouvert (il ne s'ouvre pas seul)
+            if crate::outils::modeliser::liens::est_ifc(&p) && self.natif.is_some() { self.inserer_lien(&ctx, p); } else { self.open(p, &ctx); }
         }
         if std::mem::take(&mut self.bim.supprimer) { self.demander_suppression(); }
         self.clavier_raccourcis(&ctx);
