@@ -801,6 +801,7 @@ impl ViewerApp {
                 let (o, alerte) = config::options::Options::charger();
                 alertes.extend(alerte);
                 modele::unite::definir_unite(o.unite);
+                commandes::historique::definir_limite_memoire(o.historique_mo as usize);
                 o.theme_interface.appliquer(&cc.egui_ctx);
                 // gabarit choisi : lu au démarrage, défaut s'il est illisible
                 if let Some(c) = &o.gabarit {

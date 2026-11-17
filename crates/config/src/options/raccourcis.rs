@@ -142,6 +142,9 @@ impl super::Options {
         if !self.delai_accrochage.is_finite() || !(0.1..=5.0).contains(&self.delai_accrochage) {
             return Err("Le délai d'accrochage doit être compris entre 0,1 et 5 secondes".into());
         }
+        if !(16..=4096).contains(&self.historique_mo) {
+            return Err("La mémoire de l'historique doit être comprise entre 16 et 4 096 Mo".into());
+        }
         for id in self.raccourcis.keys() {
             if !COMMANDES.iter().any(|c| c.id == id) {
                 return Err(format!("Commande inconnue : {id}"));

@@ -402,6 +402,7 @@ version = "0.1.0"
 dependencies = [
  "glam",
  "maillage",
+ "miniz_oxide 0.8.9",
  "modele",
  "noyau",
  "serde",

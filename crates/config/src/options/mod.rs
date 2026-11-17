@@ -65,12 +65,15 @@ pub struct Options {
     /// Arborescence spatiale, classes et attributs IFC pour les modèles Revit et natifs.
     pub navigation_ifc: bool,
     pub unite: Unite,
+    /// Mémoire de l'historique d'annulation de chaque document (Mo) : au-delà, les étapes
+    /// les plus anciennes sont oubliées (10 restent toujours).
+    pub historique_mo: u32,
     /// Gabarit choisi (None : gabarit par défaut embarqué).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gabarit: Option<PathBuf>,
 }
 impl Default for Options {
-    fn default()->Self {Self{theme_interface:ThemeInterface::default(),navigation_ifc:false,unite:Unite::default(),gabarit:None,delai_accrochage:0.8,raccourcis:Default::default()}}
+    fn default()->Self {Self{theme_interface:ThemeInterface::default(),navigation_ifc:false,unite:Unite::default(),gabarit:None,delai_accrochage:0.8,historique_mo:64,raccourcis:Default::default()}}
 }
 
 /// `%APPDATA%\bimedit\options.json`, `$XDG_CONFIG_HOME/bimedit/options.json` ou `~/.config/bimedit/options.json`.
@@ -106,7 +109,8 @@ impl Options {
         let alerte = o.verifier().err().map(|e| {
             o.raccourcis.clear();
             o.delai_accrochage = 0.8;
-            format!("Options ({}) : {e} ; raccourcis et délai d'accrochage remis par défaut", c.display())
+            o.historique_mo = 64;
+            format!("Options ({}) : {e} ; raccourcis, délai d'accrochage et mémoire de l'historique remis par défaut", c.display())
         });
         (o, alerte)
     }

@@ -12,6 +12,7 @@ modele = { path = "../modele" }
 glam.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+miniz_oxide.workspace = true
 
 [dev-dependencies]
 # tests/elements_site.rs : maillage::depuis_natif

@@ -44,6 +44,7 @@ impl ViewerApp {
         o.sauver()?;
         modele::gabarit::definir(g);
         modele::unite::definir_unite(o.unite);
+        commandes::historique::definir_limite_memoire(o.historique_mo as usize);
         self.options = o;
         self.coupe_dirty = true;
         self.bim.revision = self.bim.revision.wrapping_add(1);
@@ -89,6 +90,9 @@ impl ViewerApp {
                                 ui.add_space(12.0);
                                 ui.checkbox(&mut p.brouillon.navigation_ifc,"Afficher la navigation IFC");
                                 ui.label(RichText::new("Arborescence spatiale, classes et attributs IFC dans les projets natifs et Revit.").small().weak());
+                                ui.add_space(12.0);
+                                ui.horizontal(|ui|{ui.label("Mémoire de l'historique (par document)");ui.add(egui::DragValue::new(&mut p.brouillon.historique_mo).range(16..=4096).speed(4).suffix(" Mo"));});
+                                ui.label(RichText::new("Étapes d'annulation gardées compressées : 100 au plus, 10 au moins quelle que soit la taille du projet.").small().weak());
                             }
                             "dessin"=>{
                                 ui.heading("Dessin et accrochages");ui.add_space(10.0);
