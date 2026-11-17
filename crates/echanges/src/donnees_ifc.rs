@@ -2,13 +2,22 @@
 //! quantités (de l'objet, complétés par ceux de son type), matériaux, couleur.
 use ifc_base::semantique::IfcModel;
 use ifc_base::step::Id;
-use modele::importes::{DonneesImportees, JeuProprietes, ProprieteImportee};
+use modele::importes::{DonneesImportees, JeuProprietes, ProprieteImportee, TypeLogique};
 use modele::Projet;
 use std::collections::HashMap;
 
 /// Couleur RGBA (0 à 1) vers 0 à 255.
 fn octets(c: [f32; 4]) -> [u8; 4] {
     c.map(|x| (x.clamp(0.0, 1.0) * 255.0).round() as u8)
+}
+
+/// Type booléen d'une valeur IFC lue.
+fn logique(t: Option<&str>) -> Option<TypeLogique> {
+    match t? {
+        "IFCBOOLEAN" => Some(TypeLogique::Booleen),
+        "IFCLOGICAL" => Some(TypeLogique::Logique),
+        _ => None,
+    }
 }
 
 /// Jeux de l'élément `id` au format du modèle : un jeu du type complète le jeu de même
@@ -33,7 +42,7 @@ pub(crate) fn jeux(m: &IfcModel, id: Id) -> Vec<JeuProprietes> {
             if p.nombre.is_some_and(|v| !v.is_finite()) || (cible.quantites && !p.nombre.is_some_and(|v| v >= 0.0)) {
                 continue;
             }
-            cible.proprietes.push(ProprieteImportee { nom: p.nom, valeur: p.valeur, unite: p.unite.map(str::to_string) });
+            cible.proprietes.push(ProprieteImportee { nom: p.nom, valeur: p.valeur, unite: p.unite.map(str::to_string), logique: logique(p.logique) });
         }
     }
     out.retain(|j| !j.proprietes.is_empty());

@@ -36,6 +36,32 @@ pub struct ProprieteImportee {
     pub valeur: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unite: Option<String>,
+    /// Type booléen de la source (IFC : `IfcBoolean`, `IfcLogical`) ; `valeur` vaut alors
+    /// « Vrai », « Faux » (ou « Inconnu » pour un logique). Omis pour un texte ou un nombre.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logique: Option<TypeLogique>,
+}
+
+/// Type d'une valeur booléenne importée.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TypeLogique {
+    /// Vrai ou faux (IFC : `IfcBoolean`).
+    Booleen,
+    /// Vrai, faux ou inconnu (IFC : `IfcLogical`).
+    Logique,
+}
+
+impl TypeLogique {
+    /// Valeur STEP (`T`, `F`, `U`) d'un texte « Vrai », « Faux », « Inconnu » admis par ce type.
+    pub fn step(self, valeur: &str) -> Option<char> {
+        match (self, valeur) {
+            (_, "Vrai") => Some('T'),
+            (_, "Faux") => Some('F'),
+            (TypeLogique::Logique, "Inconnu") => Some('U'),
+            _ => None,
+        }
+    }
 }
 
 impl ProprieteImportee {
@@ -96,6 +122,9 @@ impl DonneesImportees {
                 if p.unite.as_ref().is_some_and(|u| u.trim().is_empty()) {
                     return Err(format!("{}.{} : unité vide.", j.nom, p.nom));
                 }
+                if p.logique.is_some_and(|t| j.quantites || t.step(&p.valeur).is_none()) {
+                    return Err(format!("{}.{} : valeur booléenne non valide.", j.nom, p.nom));
+                }
                 match p.nombre() {
                     Some(v) if !v.is_finite() => return Err(format!("{}.{} : valeur non finie.", j.nom, p.nom)),
                     Some(v) if j.quantites && v < 0.0 => return Err(format!("{}.{} : quantité négative.", j.nom, p.nom)),
@@ -119,10 +148,10 @@ mod tests {
     }
 
     fn donnees() -> DonneesImportees {
-        let p = |n: &str, v: &str, u: Option<&str>| ProprieteImportee { nom: n.into(), valeur: v.into(), unite: u.map(str::to_string) };
+        let p = |n: &str, v: &str, u: Option<&str>| ProprieteImportee { nom: n.into(), valeur: v.into(), unite: u.map(str::to_string), logique: None };
         DonneesImportees {
             proprietes: vec![
-                JeuProprietes { nom: "Pset_Essai".into(), quantites: false, proprietes: vec![p("Reference", "B-01", None), p("Masse", "12.5", Some("kg"))] },
+                JeuProprietes { nom: "Pset_Essai".into(), quantites: false, proprietes: vec![p("Reference", "B-01", None), p("Masse", "12.5", Some("kg")), ProprieteImportee { logique: Some(TypeLogique::Booleen), ..p("IsExternal", "Vrai", None) }] },
                 JeuProprietes { nom: "Qto_Essai".into(), quantites: true, proprietes: vec![p("NetVolume", "0.1667", Some("m³"))] },
             ],
             materiau: Some("Béton".into()),
@@ -141,7 +170,8 @@ mod tests {
         assert!(json.contains("\"proprietes\"") && json.contains("\"couleur\"") && json.contains("\"quantites\":true"));
         let relu = Projet::lire_json(&json).unwrap();
         assert_eq!(relu.importes[0].donnees, donnees());
-        assert_eq!(relu.importes[0].donnees.nombre_proprietes(), 3);
+        assert_eq!(relu.importes[0].donnees.nombre_proprietes(), 4);
+        assert!(json.contains("\"logique\":\"booleen\""));
         let mut sans = Projet::nouveau("Essai");
         sans.importes.push(element(DonneesImportees::default()));
         let json = sans.json().unwrap();
@@ -162,6 +192,8 @@ mod tests {
             ("quantité non numérique", Box::new(|d| d.proprietes[1].proprietes[0].valeur = "beaucoup".into())),
             ("quantité négative", Box::new(|d| d.proprietes[1].proprietes[0].valeur = "-1".into())),
             ("unité vide", Box::new(|d| d.proprietes[0].proprietes[1].unite = Some(String::new()))),
+            ("booléen non valide", Box::new(|d| d.proprietes[0].proprietes[2].valeur = "Inconnu".into())),
+            ("logique sur un texte", Box::new(|d| d.proprietes[0].proprietes[0].logique = Some(TypeLogique::Logique))),
             ("matériau vide", Box::new(|d| d.materiau = Some(String::new()))),
         ];
         for (nom, modifier) in cas {
@@ -173,7 +205,7 @@ mod tests {
             assert!(p.verifier().is_err(), "{nom}");
         }
         // « NaN » et « inf » restent du texte (pas des nombres)
-        let p = ProprieteImportee { nom: "x".into(), valeur: "NaN".into(), unite: None };
+        let p = ProprieteImportee { nom: "x".into(), valeur: "NaN".into(), unite: None, logique: None };
         assert_eq!(p.nombre(), None);
     }
 }

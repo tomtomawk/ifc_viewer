@@ -2,7 +2,7 @@
 //! `IfcBuildingElementProxy`), jeux de propriétés et de quantités lus à l'import,
 //! matériaux et couleur.
 use super::step::{guid, ref_, refs, texte, Step, Tri};
-use modele::importes::{JeuProprietes, ProprieteImportee};
+use modele::importes::{JeuProprietes, ProprieteImportee, TypeLogique};
 use modele::ElementImporte;
 use std::collections::HashMap;
 
@@ -32,8 +32,11 @@ fn reel(v: f64) -> String {
 
 /// Valeur d'une propriété : mesure typée selon l'unité (longueurs remises en mm, unité du
 /// fichier), `IfcReal` pour un autre nombre, `IfcLabel` (`IfcText` au-delà de 255
-/// caractères) pour un texte.
+/// caractères) pour un texte ; `IfcBoolean` ou `IfcLogical` pour une valeur typée booléenne.
 fn valeur(p: &ProprieteImportee) -> String {
+    if let Some((t, c)) = p.logique.and_then(|t| Some((t, t.step(&p.valeur)?))) {
+        return format!("{}(.{c}.)", if t == TypeLogique::Booleen { "IFCBOOLEAN" } else { "IFCLOGICAL" });
+    }
     match (p.nombre(), p.unite.as_deref()) {
         (Some(v), Some("m")) => format!("IFCLENGTHMEASURE({})", reel(v * 1000.0)),
         (Some(v), Some("m²")) => format!("IFCAREAMEASURE({})", reel(v)),

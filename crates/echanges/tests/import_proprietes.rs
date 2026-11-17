@@ -90,6 +90,8 @@ fn aller_retour_ifc_natif_ifc() {
         assert_eq!(e.donnees.nombre_proprietes(), n, "{}", e.nom);
         assert_eq!(export.ty(b), source.ty(a), "{} : classe d'origine", e.nom);
     }
+    // booléen réécrit typé (X6)
+    assert!(texte.contains("'LoadBearing',$,IFCBOOLEAN(.T.)") && !texte.contains("IFCLABEL('Vrai')"));
     // réimport de l'export : mêmes données (valeurs, unités, matériau, couleur)
     let chemin = std::env::temp_dir().join(format!("bimedit-proprietes-{}.ifc", std::process::id()));
     std::fs::write(&chemin, &texte).unwrap();
