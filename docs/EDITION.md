@@ -343,8 +343,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   partage la longueur des volées. Propriétés : niveaux de départ et d'arrivée (ou
   hauteur libre), décalage, largeur, hauteur de marche visée, paillasse ; calcul
   affiché (contremarches, giron, paliers, Blondel 2h + g, signalé hors confort :
-  60 à 65 cm, h ≤ 20 cm, g ≥ 22 cm). En plan : ligne de foulée, rond au départ,
-  flèche à l'arrivée. Le ruban choisit les garde-corps créés avec l'escalier (deux
+  60 à 65 cm, h ≤ 20 cm, g ≥ 22 cm). Le plan représente les marches et les paliers.
+  Le ruban choisit les garde-corps créés avec l'escalier (deux
   côtés, gauche, droite, aucun).
 - **Garde-corps** (Modéliser) : tracé en plan (hauteur, décalage, remplissage
   barreaudage, panneau plein ou vitrage) ; main courante, lisse basse, montants aux
@@ -556,8 +556,10 @@ Sans champ de texte actif, taper deux lettres à la suite : `CS` créer à l'ide
 `RO` tourner, `AL` aligner, `AJ` ajuster. `Ctrl+A` sélectionne les éléments visibles ;
 Suppr demande confirmation de suppression. `CS` reprend les paramètres des murs,
 éléments horizontaux à pente uniforme, poteaux, poutres, ouvertures natives simples,
-quadrillages, coupes, élévations et annotations. Les menuiseries à géométrie importée
-et les pentes différentes par arête ne sont pas encore proposées en création identique.
+escaliers, garde-corps, composants, arbres, pièces, terrains, limites de propriété,
+quadrillages, coupes, élévations et annotations. Il ouvre l'outil correspondant pour
+un nouveau placement ou tracé. Pour un escalier, choisissez les garde-corps dans
+le ruban avant de tracer si vous souhaitez en créer.
 Les commandes Créer à l'identique et Supprimer sont aussi accessibles par leurs icônes dans l'onglet Modifier.
 Le sous-projet de base est `A` et la variante par défaut est `Principale` ; le contexte
 de la sélection est affiché dans Propriétés.

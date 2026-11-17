@@ -307,7 +307,9 @@ impl ViewerApp {
             }
             return;
         }
-        let Some((usage, outil)) = self.usage_dessin() else {
+        let usage_dessin = self.usage_dessin();
+        if !usage_dessin.is_some_and(|(usage, _)| usage == Usage::LimitePropriete) { self.bim.altitude_limite = None; }
+        let Some((usage, outil)) = usage_dessin else {
             self.dessin2d.dernier_usage = None;
             self.dessin2d.trace = None;
             self.dessin2d.reperage.oublier();

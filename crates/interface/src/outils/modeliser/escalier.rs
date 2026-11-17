@@ -23,7 +23,7 @@ impl ViewerApp {
             trace,
             largeur: self.ruban_edition.nombre_option(Outil::Escalier, 0),
             hauteur_marche: self.ruban_edition.nombre_option(Outil::Escalier, 1),
-            paillasse: 150.0,
+            paillasse: self.dessin2d.esc_paillasse.unwrap_or(150.0),
             balance: self.dessin2d.esc_balance,
         };
         let id = self.executer_bim(Commande::Escalier { escalier })?.into_iter().next().ok_or("Escalier non créé.")?;

@@ -117,7 +117,7 @@ impl EtatDessin2D {
     }
 
     /// Oublie tous les contours en cours.
-    pub(super) fn vider_contours(&mut self) {
+    pub(crate) fn vider_contours(&mut self) {
         self.dalle.clear();
         self.courbures.clear();
         self.ouverts.clear();

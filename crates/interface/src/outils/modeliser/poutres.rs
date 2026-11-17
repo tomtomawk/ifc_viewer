@@ -85,11 +85,20 @@ impl ViewerApp {
             return;
         };
         let mut q = p.clone();
+        let contexte = modele::ContexteElement {
+            phase: self.ruban_edition.phase_creation.clone(),
+            sous_projet: self.ruban_edition.sous_projet_creation.clone(),
+            variante: self.ruban_edition.variante_creation.clone(),
+        };
         let mut n = 0;
         for (a, b) in formes.iter().flat_map(segments) {
             n += 1;
+            let id = format!("poutre-{}", noyau::uuid::uuid());
+            if contexte.phase.is_some() || contexte.sous_projet.is_some() || contexte.variante.is_some() {
+                q.contextes.insert(id.clone(), contexte.clone());
+            }
             q.barres.push(modele::Barre {
-                id: format!("poutre-{}", noyau::uuid::uuid()),
+                id,
                 nom: format!("Poutre {}", q.barres.iter().filter(|b| b.genre == modele::GenreBarre::Poutre).count() + 1),
                 genre: modele::GenreBarre::Poutre,
                 niveau: niveau.clone(),
