@@ -61,3 +61,41 @@ fn couleur_seulement_si_lue() {
     assert_eq!(importe(&p, "Tétraèdre").donnees.couleur, None);
     assert_eq!(importe(&p, "Poteau").donnees.couleur, Some([204, 26, 26, 255]));
 }
+
+/// Nombre de propriétés par jeu d'un produit IFC (jeux de l'objet seulement).
+fn comptes(m: &ifc_base::semantique::IfcModel, id: noyau::Id) -> Vec<(String, usize)> {
+    let mut v: Vec<_> = m.jeux(id).into_iter().filter(|j| !j.du_type).map(|j| (j.nom, j.proprietes.len())).collect();
+    v.sort();
+    v
+}
+
+/// IFC -> natif -> IFC : chaque élément importé garde le nombre de propriétés de chacun
+/// de ses jeux, sa classe IFC d'origine, son matériau et sa couleur ; réimporté, il
+/// retrouve les mêmes données.
+#[test]
+fn aller_retour_ifc_natif_ifc() {
+    use ifc_base::semantique::IfcModel;
+    use ifc_base::step::StepFile;
+    let source = IfcModel::new(StepFile::parse(&std::fs::read(ECHANTILLON).unwrap()).unwrap());
+    let p = importer();
+    let texte = echanges::export_ifc::exporter(&p).unwrap();
+    let export = IfcModel::new(StepFile::parse(texte.as_bytes()).unwrap());
+    let par_guid = |m: &IfcModel, g: &str| m.products.iter().copied().find(|&id| m.global_id(id) == g).unwrap_or_else(|| panic!("{g} absent"));
+    assert!(!p.importes.is_empty());
+    for e in &p.importes {
+        let guid = e.origine.as_ref().and_then(|o| o.guid.clone()).unwrap();
+        let (a, b) = (par_guid(&source, &guid), par_guid(&export, &guid));
+        assert_eq!(comptes(&export, b), comptes(&source, a), "{}", e.nom);
+        let n: usize = comptes(&source, a).iter().map(|x| x.1).sum();
+        assert_eq!(e.donnees.nombre_proprietes(), n, "{}", e.nom);
+        assert_eq!(export.ty(b), source.ty(a), "{} : classe d'origine", e.nom);
+    }
+    // réimport de l'export : mêmes données (valeurs, unités, matériau, couleur)
+    let chemin = std::env::temp_dir().join(format!("bimedit-proprietes-{}.ifc", std::process::id()));
+    std::fs::write(&chemin, &texte).unwrap();
+    let (relu, _) = depuis_ifc::convertir(&chemin, &|_| {}).unwrap();
+    let _ = std::fs::remove_file(&chemin);
+    for e in &p.importes {
+        assert_eq!(importe(&relu, &e.nom).donnees, e.donnees, "{}", e.nom);
+    }
+}

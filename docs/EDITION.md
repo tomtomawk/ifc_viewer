@@ -445,6 +445,16 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
     du mur (représentation `Axis`) au milieu de l'épaisseur, couche extérieure à
     gauche, empilement `NEGATIVE` depuis +e/2 ; dalles sans pente depuis le dessus de
     la première couche. Toitures et dalles en pente gardent le jeu de couches seul ;
+  - les éléments importés dans leur classe IFC d'origine quand c'est une classe
+    d'élément physique à neuf attributs (`IfcBeam`, `IfcColumn`, `IfcMember`,
+    `IfcPlate`, `IfcWall`, `IfcSlab`, `IfcRoof`, `IfcCovering`, `IfcRailing`,
+    `IfcStair`, `IfcRamp`, `IfcFooting`, `IfcFurniture`…, `PredefinedType`
+    `NOTDEFINED`), sinon en `IfcBuildingElementProxy` (portes et fenêtres
+    importées, classes Revit), catégorie en `ObjectType` ; leurs jeux lus à l'import
+    réécrits tels quels (`IfcPropertySet` : mesures typées selon l'unité, `IfcReal`
+    pour un autre nombre, `IfcLabel` sinon ; `IfcElementQuantity` pour un jeu de
+    quantités), leur matériau (`IfcMaterial`, `IfcMaterialList` s'il y en a
+    plusieurs) et leur couleur (`IfcSurfaceStyle`) ;
   - l'heure UTC de l'export dans l'en-tête (`FILE_NAME`).
 
   Les GUID IFC valides de la source sont préservés ; les autres sont générés de
@@ -480,8 +490,8 @@ une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvre
   restitution des familles Revit) et ne porte que les paramètres que le modèle
   connaît : ni phases, ni démolitions, ni classement feu ou acoustique. Un mur
   multicouche est un seul solide non coloré ; ses couches sont décrites par le jeu de
-  couches. Les objets importés deviennent des `IfcBuildingElementProxy` portant leur
-  catégorie en `ObjectType`.
+  couches. Les booléens lus à l'import sont réécrits en texte (« Vrai », « Faux »),
+  et la valeur prédéfinie (`PredefinedType`) d'un élément importé n'est pas gardée.
 - Les textes PDF/SVG sont vectorisés en contours, pas en texte sélectionnable.
   Le PDF d'une feuille respecte son format exact ; l'export d'une vue seule ajoute
   une marge. Imprimer à **100 %**, sans « ajuster à la page ».

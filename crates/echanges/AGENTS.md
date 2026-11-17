@@ -15,11 +15,12 @@ Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`, `formats` (de
 | `export_ifc/step.rs` | écrivain STEP : textes, GUID déterministes (`guid`, ne pas changer), faces tessellées, en-tête horodaté |
 | `export_ifc/{site,types,materiaux,styles}.rs` | `IfcSite` et `TrueNorth` ; `IfcWallType`… et `IfcRelDefinesByType` ; jeux de couches, `IfcMaterialLayerSetUsage`, axe des murs ; `IfcSurfaceStyle` par matériau |
 | `export_ifc/{proprietes,quantites}.rs` | `Pset_*Common` (seulement les valeurs connues du modèle) ; `Qto_*BaseQuantities` pris aux calculs de `modele` des nomenclatures, aucun calcul propre |
+| `export_ifc/importes.rs` | éléments importés : classe IFC d'origine (liste sûre) ou proxy, jeux lus à l'import réécrits, matériaux, couleur |
 | `export_ifc/tests.rs` | relecture, hiérarchie, types, Pset, quantités = nomenclature, styles, couches relues par l'import |
 | `enregistrement.rs` | `enregistrer_natif`, `ecrire_atomique`, récupération, `SourceRvt`, `Bilan` |
 | `rapport.rs` | `markdown` |
 
-`tests/` : tests d'intégration dont le projet de départ vient de `depuis_ifc` (commandes, documentation, site, escalier, volumes) ; `couches_rvt.rs` lit un fichier hors dépôt (`RVT_ESSAIS`) et est sauté s'il est absent. Les `samples/` se lisent par `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")`.
+`tests/` : tests d'intégration dont le projet de départ vient de `depuis_ifc` (commandes, documentation, site, escalier, volumes) ; `import_proprietes.rs` : données des éléments importés et aller-retour IFC -> natif -> IFC ; `couches_rvt.rs` lit un fichier hors dépôt (`RVT_ESSAIS`) et est sauté s'il est absent. Les `samples/` se lisent par `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")`.
 
 ## Quand modifier ici
 
