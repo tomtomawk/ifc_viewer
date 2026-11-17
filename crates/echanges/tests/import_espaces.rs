@@ -85,6 +85,11 @@ fn aller_retour_ifc() {
     let jeux = m.jeux(sejour);
     let pset = jeux.iter().find(|j| j.nom == "Pset_SpaceCommon").expect("Pset_SpaceCommon réécrit");
     assert!(pset.proprietes.iter().any(|x| x.nom == "Reference" && x.valeur == "SEJ"));
+    // booléens réécrits typés (X6), pas en texte
+    let externe = pset.proprietes.iter().find(|x| x.nom == "IsExternal").expect("IsExternal réécrit");
+    assert_eq!((externe.valeur.as_str(), externe.logique), ("Faux", Some("IFCBOOLEAN")));
+    assert!(texte.contains("'IsExternal',$,IFCBOOLEAN(.F.)") && texte.contains("'HandicapAccessibleRequired',$,IFCBOOLEAN(.T.)"));
+    assert!(!texte.contains("IFCLABEL('Vrai')") && !texte.contains("IFCLABEL('Faux')"));
     assert_eq!(jeux.iter().filter(|j| j.nom == "Qto_SpaceBaseQuantities").count(), 1);
     let net = jeux.iter().flat_map(|j| &j.proprietes).find(|x| x.nom == "NetFloorArea").and_then(|x| x.nombre).unwrap();
     assert!((net - 22.04).abs() < 22.04 * 0.05, "{net}");
@@ -97,4 +102,6 @@ fn aller_retour_ifc() {
     let _ = std::fs::remove_dir_all(&dossier);
     assert_eq!(piece(&relu, "102").nom, "Bureau");
     assert!(piece(&relu, "101").donnees.proprietes.iter().any(|j| j.nom == "Pset_SpaceCommon"));
+    let pset = |q: &Projet| piece(q, "101").donnees.proprietes.iter().find(|j| j.nom == "Pset_SpaceCommon").cloned();
+    assert_eq!(pset(&relu), pset(&p), "booléens relus typés");
 }

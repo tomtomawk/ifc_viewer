@@ -14,6 +14,9 @@ pub struct Propriete {
     pub valeur: String,
     pub unite: Option<&'static str>,
     pub nombre: Option<f64>,
+    /// Type booléen de la valeur (`IFCBOOLEAN`, `IFCLOGICAL`) ; `valeur` vaut alors
+    /// « Vrai », « Faux » ou « Inconnu ».
+    pub logique: Option<&'static str>,
 }
 
 impl Propriete {
@@ -147,7 +150,12 @@ impl IfcModel {
             }
             _ => (String::new(), None, None),
         };
-        out.push(Propriete { nom, valeur, unite, nombre });
+        let logique = match e.arg(2) {
+            Value::Typed(t, v) if matches!(**v, Value::Enum(_)) && t == "IFCBOOLEAN" && e.is("IFCPROPERTYSINGLEVALUE") => Some("IFCBOOLEAN"),
+            Value::Typed(t, v) if matches!(**v, Value::Enum(_)) && t == "IFCLOGICAL" && e.is("IFCPROPERTYSINGLEVALUE") => Some("IFCLOGICAL"),
+            _ => None,
+        };
+        out.push(Propriete { nom, valeur, unite, nombre, logique });
     }
 
     fn quantite(&self, id: Id, out: &mut Vec<Propriete>, profondeur: u32) {
@@ -170,10 +178,10 @@ impl IfcModel {
         match (grandeur(&e.ty), e.arg(3).as_f64()) {
             (Some((u, exposant)), Some(v)) => {
                 let x = v * self.echelle(exposant, e.arg(2).as_ref());
-                Propriete { nom, valeur: texte_nombre(x), unite: Some(u), nombre: Some(x) }
+                Propriete { nom, valeur: texte_nombre(x), unite: Some(u), nombre: Some(x), logique: None }
             }
-            (None, Some(v)) => Propriete { nom, valeur: texte_nombre(v), unite: None, nombre: Some(v) },
-            _ => Propriete { nom, valeur: e.arg(3).display(), unite: None, nombre: None },
+            (None, Some(v)) => Propriete { nom, valeur: texte_nombre(v), unite: None, nombre: Some(v), logique: None },
+            _ => Propriete { nom, valeur: e.arg(3).display(), unite: None, nombre: None, logique: None },
         }
     }
 }
@@ -206,6 +214,7 @@ mod tests {
         let p = jeux.iter().find(|j| !j.quantites).unwrap();
         let v: Vec<_> = p.proprietes.iter().map(|p| (p.nom.as_str(), p.valeur.as_str(), p.unite)).collect();
         assert_eq!(v, vec![("Reference", "M-1", None), ("Width", "0.2", Some("m")), ("IsExternal", "Vrai", None)]);
+        assert_eq!(p.proprietes.iter().map(|p| p.logique).collect::<Vec<_>>(), vec![None, None, Some("IFCBOOLEAN")]);
     }
 
     /// Sans `AREAUNIT` ni `VOLUMEUNIT` : unité de longueur au carré, au cube.
