@@ -9,6 +9,10 @@ use std::f64::consts::{PI, TAU};
 use std::sync::Mutex;
 
 pub mod extrusion;
+mod balayage;
+mod nurbs;
+#[cfg(test)]
+mod essais;
 pub type Rgba = [f32; 4];
 
 #[derive(Clone)]
@@ -391,6 +395,8 @@ impl<'a> Geom<'a> {
                 let scale = m.x_axis.truncate().length();
                 sweep_disk(&pts, r * scale, &mut out);
             }
+            "IFCSURFACECURVESWEPTAREASOLID" | "IFCFIXEDREFERENCESWEPTAREASOLID" => return self.balayage(e, m),
+            "IFCSECTIONEDSOLIDHORIZONTAL" => return self.solide_sectionne(e, m),
             "IFCMAPPEDITEM" => {
                 let src = self.deref(e, 0)?;
                 let mm = m * self.transform_operator(e.arg(1).as_ref()) * self.axis2(src.arg(0).as_ref());
@@ -517,6 +523,10 @@ impl<'a> Geom<'a> {
         let Some(e) = self.get(id) else { return };
         for f in e.arg(0).refs() {
             let Some(face) = self.get(f) else { continue };
+            if let Some(t) = self.face_bspline(face, m) {
+                out.extend(t);
+                continue;
+            }
             let mut outer: Option<Vec<DVec3>> = None;
             let mut holes: Vec<Vec<DVec3>> = Vec::new();
             for b in face.arg(0).refs() {
