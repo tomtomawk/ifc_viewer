@@ -18,6 +18,7 @@ Lecture d'une entité ou d'une relation IFC indépendante de la géométrie. La 
 ## Pièges
 
 - `scene::Scene` contient un `IfcModel` et un `IdMap` : tout changement de leur forme se répercute sur `scene`, `formats`, `maillage`.
+- `step.rs` : l'imbrication d'une valeur est bornée (`PROFONDEUR_MAX`) ; une instance au-delà est écartée.
 - Pas de ré-export : `formats::ifc` ne ré-exporte plus `step` ni `semantique`.
 
 ## Vérifier

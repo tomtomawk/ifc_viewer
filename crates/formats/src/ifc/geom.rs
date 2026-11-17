@@ -294,7 +294,7 @@ impl<'a> Geom<'a> {
     }
 
     fn item(&self, id: Id, m: DMat4, inherited: Option<Rgba>, default: Rgba, parts: &mut Vec<Part>, depth: u32) {
-        if depth > 16 {
+        if depth > 16 || parts.len() > super::bornes::PARTIES_MAX {
             return;
         }
         let Some(e) = self.get(id) else { return };
@@ -345,7 +345,7 @@ impl<'a> Geom<'a> {
                 let ax = self.get(e.arg(2).as_ref()?)?;
                 let ap = self.point(ax.arg(0).as_ref()).unwrap_or_default();
                 let ad = self.direction(ax.arg(1).as_ref()).unwrap_or(DVec3::Z);
-                let angle = e.arg(3).as_f64()? * self.m.angle_scale;
+                let angle = super::bornes::angle_revolution(e.arg(3).as_f64()? * self.m.angle_scale)?;
                 for p in &profs {
                     revolve(p, pos, ap, ad, angle, &mut out);
                 }
@@ -394,6 +394,9 @@ impl<'a> Geom<'a> {
                 let src = self.deref(e, 0)?;
                 let mm = m * self.transform_operator(e.arg(1).as_ref()) * self.axis2(src.arg(0).as_ref());
                 for it in self.deref(src, 1)?.arg(3).refs() {
+                    if out.len() > super::bornes::TRIANGLES_MAX {
+                        break;
+                    }
                     if let Some(t) = self.solid(it, mm, depth + 1) {
                         out.extend(t);
                     }
@@ -858,16 +861,8 @@ impl<'a> Geom<'a> {
                     let par = trim_param(v).map(|t| t * self.m.angle_scale);
                     if prefer_cart { cart.or(par) } else { par.or(cart) }
                 };
-                let (t1, mut t2) = (angle(e.arg(1))?, angle(e.arg(2))?);
-                if sense {
-                    while t2 <= t1 + 1e-9 {
-                        t2 += TAU;
-                    }
-                } else {
-                    while t2 >= t1 - 1e-9 {
-                        t2 -= TAU;
-                    }
-                }
+                let t1 = angle(e.arg(1))?;
+                let t2 = super::bornes::fin_arc(t1, angle(e.arg(2))?, sense)?;
                 let n = (((t2 - t1).abs() / TAU) * CIRCLE_SEGMENTS).ceil().max(2.0) as usize;
                 Some(
                     (0..=n)
@@ -910,16 +905,8 @@ impl<'a> Geom<'a> {
             let l = inv.transform_point3(p);
             (l.y / rb).atan2(l.x / ra)
         };
-        let (t1, mut t2) = (ang(a), ang(b));
-        if same_sense {
-            while t2 <= t1 + 1e-9 {
-                t2 += TAU;
-            }
-        } else {
-            while t2 >= t1 - 1e-9 {
-                t2 -= TAU;
-            }
-        }
+        let t1 = ang(a);
+        let t2 = super::bornes::fin_arc(t1, ang(b), same_sense)?;
         let n = (((t2 - t1).abs() / TAU) * CIRCLE_SEGMENTS).ceil().max(1.0) as usize;
         let mut pts: Vec<DVec3> = (0..=n)
             .map(|i| {
@@ -933,23 +920,17 @@ impl<'a> Geom<'a> {
     }
 
     fn bspline(&self, e: &Entity) -> Option<Vec<DVec3>> {
-        let degree = e.arg(0).as_i64()? as usize;
         let ctrl: Vec<DVec3> = e.arg(1).refs().filter_map(|p| self.point(Some(p))).collect();
-        let mults: Vec<usize> = e.arg(5).as_list().iter().filter_map(|v| v.as_i64()).map(|v| v as usize).collect();
+        let mults: Vec<i64> = e.arg(5).as_list().iter().filter_map(|v| v.as_i64()).collect();
         let kv: Vec<f64> = e.arg(6).as_list().iter().filter_map(|v| v.as_f64()).collect();
         let weights: Vec<f64> = if e.is("IFCRATIONALBSPLINECURVEWITHKNOTS") {
             e.arg(8).as_list().iter().filter_map(|v| v.as_f64()).collect()
         } else {
             vec![]
         };
-        let mut knots = Vec::new();
-        for (k, mlt) in kv.iter().zip(&mults) {
-            knots.extend(std::iter::repeat_n(*k, *mlt));
-        }
         let n = ctrl.len();
-        if n < 2 || knots.len() != n + degree + 1 {
-            return Some(ctrl);
-        }
+        // degré, multiplicités ou nœuds incohérents : polygone de contrôle
+        let Some((degree, knots)) = super::bornes::noeuds(&kv, &mults, e.arg(0).as_i64()?, n) else { return Some(ctrl) };
         let (t0, t1) = (knots[degree], knots[n]);
         let samples = (n * 8).clamp(8, 256);
         let w = |i: usize| weights.get(i).copied().unwrap_or(1.0);

@@ -512,7 +512,8 @@ fn polyligne(c: &Obj) -> Option<Vec<DVec3>> {
     let n = match c.class_name() {
         "GLine" => 1,
         "GArc" => match c.get("m_endParams").and_then(Val::reals).as_deref() {
-            Some(&[t0, t1]) => (((t1 - t0).abs() / 5f64.to_radians()).ceil() as usize).max(2),
+            // paramètres lus dans le fichier : dix tours au plus
+            Some(&[t0, t1]) => (((t1 - t0).abs() / 5f64.to_radians()).ceil() as usize).clamp(2, 720),
             _ => return None,
         },
         "GHermiteSpline" => 16,

@@ -63,7 +63,18 @@ pub fn inflate(b: &[u8]) -> Result<Vec<u8>, String> {
     if !b.starts_with(&GZIP) {
         return Err("membre gzip attendu".into());
     }
-    miniz_oxide::inflate::decompress_to_vec(&b[GZIP.len()..]).map_err(|e| format!("décompression : {:?}", e.status))
+    inflate_borne(b, TAILLE_MAX)
+}
+
+/// Taille décompressée maximale d'un flux : au-delà, le fichier est refusé plutôt que
+/// d'épuiser la mémoire.
+const TAILLE_MAX: usize = 2 << 30;
+
+fn inflate_borne(b: &[u8], max: usize) -> Result<Vec<u8>, String> {
+    miniz_oxide::inflate::decompress_to_vec_with_limit(&b[GZIP.len()..], max).map_err(|e| match e.status {
+        miniz_oxide::inflate::TINFLStatus::HasMoreOutput => format!("flux décompressé de plus de {} Mo : fichier refusé", max >> 20),
+        s => format!("décompression : {s:?}"),
+    })
 }
 
 /// Flux `Global/*` : 8 octets de préfixe, puis un membre gzip.
@@ -189,6 +200,17 @@ pub fn episodes(raw: &[u8]) -> Result<Vec<[u8; 16]>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Un flux qui se décompresse au-delà de la borne est refusé avec un message.
+    #[test]
+    fn decompression_bornee() {
+        let mut b = GZIP.to_vec();
+        b.extend(miniz_oxide::deflate::compress_to_vec(&vec![0u8; 1 << 20], 6));
+        assert_eq!(inflate_borne(&b, 2 << 20).unwrap().len(), 1 << 20);
+        let e = inflate_borne(&b, 1 << 16).unwrap_err();
+        assert!(e.contains("refusé"), "{e}");
+        assert_eq!(inflate(&b).unwrap().len(), 1 << 20);
+    }
 
     #[test]
     fn unpad_tranches() {

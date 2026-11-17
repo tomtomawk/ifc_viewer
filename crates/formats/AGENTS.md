@@ -9,6 +9,7 @@ Dépendances internes autorisées : `noyau`, `ifc_base`, `scene` (exactement ces
 | Fichier (`src/`) | Contenu |
 |---|---|
 | `ifc/geom.rs` | `ProductGeom`, conversion géométrique des produits IFC |
+| `ifc/bornes.rs` | bornes des valeurs lues dans le fichier (arcs, B-splines, révolutions, items mappés) : toute taille ou durée tirée du fichier passe par là |
 | `ifc/assemblage.rs` | `load`, `assemble`, `assemble_avec` : fichier IFC -> `Scene` |
 | `rvt/mod.rs` | `load`, `is_revit_path`, lecture OLE et métadonnées (`RvtInfo`) |
 | `rvt/maquette/` | `lecture.rs` (`lire` -> `Maquette`), `vers_scene.rs` (`load_scene`), `tests.rs` |
@@ -22,6 +23,7 @@ Géométrie d'un produit IFC ou décodage d'une donnée Revit. La conversion ver
 
 - Fichiers de plus de 600 lignes à ne pas agrandir : `ifc/geom.rs`, `rvt/maquette/{lecture,mod,vers_scene,tests}.rs`, `rvt/geometrie.rs`, `rvt/mod.rs`, `rvt/vues.rs`, `rvt/parametres.rs`.
 - `crates/echanges/tests/couches_rvt.rs` lit un fichier Revit hors dépôt (`RVT_ESSAIS`) : sauté s'il est absent.
+- Fichier malformé : jamais de boucle, d'allocation ni de récursion dont la taille vient du fichier sans borne (`ifc/bornes.rs`, `rvt/objets.rs::inflate`).
 - Pas de ré-export : `ifc_base::step` et `semantique` s'importent depuis `ifc_base`.
 
 ## Vérifier

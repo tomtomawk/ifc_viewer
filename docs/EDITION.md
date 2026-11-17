@@ -66,8 +66,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   droits, visibles dans les plans natifs. Les dimensions du modèle sont saisies en
   centimètres par défaut ; Début → Options permet de choisir mm, cm ou m. Le JSON,
   les commandes CLI/MCP et les tailles sur papier restent en millimètres.
-- **Modéliser → Poteau / Poutre** crée des structures rectangulaires en saisissant
-  leurs dimensions et leur niveau. Placez un poteau par un clic dans la vue ;
+- **Modéliser → Poteau / Poutre** crée des poteaux rectangulaires et des poutres
+  (section rectangulaire ou profil de leur type) en saisissant leurs dimensions et
+  leur niveau. Placez un poteau par un clic dans la vue ;
   pour une poutre, cliquez son départ puis son arrivée. Le placement utilise les
   accrochages et Maj contraint la poutre aux axes du plan ; Échap ou clic droit
   annule un départ. La saisie par coordonnées reste disponible. Les poteaux sont

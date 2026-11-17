@@ -194,7 +194,7 @@ Chaque viewer écoute sur `127.0.0.1` (47811, sinon un port libre) des commandes
 ligne précédées de son jeton, et s'inscrit dans le registre des instances : le pont
 pilote aussi un viewer ouvert à la main, et `viewer_instances` choisit entre plusieurs
 (voir [docs/PILOTE.md](docs/PILOTE.md)). `crates/pilote/src/mcp.rs` (mode `bimedit --mcp` du même exécutable) les expose en serveur MCP,
-déclaré dans `.mcp.json` sous le nom `bimedit` (lancé par `target/release/bimedit.exe --mcp`, après `cargo build --release` ; ce chemin ne vaut que sous Windows, ailleurs le remplacer par `target/release/bimedit`) : un agent ouvre un fichier, choisit une
+déclaré dans `.mcp.json` sous le nom `bimedit` (lancé par `target/release/bimedit --mcp`, après `cargo build --release` ; chemin sans extension pour valoir sur tous les systèmes, Windows ajoutant `.exe` au lancement) : un agent ouvre un fichier, choisit une
 vue Revit, règle la caméra, lit les propriétés, désigne l'objet sous un point et reçoit des
 captures PNG. La vue 3D est rendue hors écran (tampon de trame), à la taille demandée, même
 fenêtre réduite ; la capture de la fenêtre entière exige qu'elle ne soit pas réduite. Si

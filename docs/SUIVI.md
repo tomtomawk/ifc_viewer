@@ -19,7 +19,7 @@ Dernière mise à jour : 17 novembre 2026.
 | Contrôle | Résultat | Date |
 |---|---|---|
 | `cargo check --workspace --tests` | réussi, 0 avertissement (Linux x64) | 17/11/2026 |
-| `cargo test --workspace` (debug) | 424 réussis, 0 échec, 2 ignorés (423 relevés avant la correction du test `suivre_trait`, relancé seul ensuite avec sa crate) | 17/11/2026 |
+| `cargo test --workspace` (debug) | 429 réussis, 0 échec, 2 ignorés | 17/11/2026 |
 | `cargo test --workspace --release` | non relancé depuis le lot 12 (référence : 395 réussis, 2 ignorés) | 16/11/2026 |
 | Chargement des 13 `samples/**/*.modele.json` (`bimedit --mesurer-scene <fichier> 0`) | 13 sur 13 | 17/11/2026 |
 | Interface graphique à l'écran | non essayée depuis le lot 11 (pas d'affichage) | — |
@@ -43,11 +43,10 @@ Mesures de reconstruction de la scène (build release, `BIMEDIT_CHRONO=1`, `bime
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
 | A1 | CI sans passe de tests en debug ni clippy : un échec limité au mode debug n'y apparaît pas | P1 | `.github/workflows/ci.yml` |
-| A3 | Lecteurs IFC et RVT non bornés face à un fichier malformé : récursion du lecteur STEP, boucle sur paramètre de courbe, B-spline, révolution, décompression RVT, arc RVT | P0 | `crates/ifc_base/src/step.rs:333-346`, `crates/formats/src/ifc/geom.rs:863-870`, `:936-976`, `:1153-1158`, `crates/formats/src/rvt/objets.rs:66`, `rvt/geometrie.rs:515` |
-| A2b | `.mcp.json` lance `target/release/bimedit.exe` : le serveur MCP ne démarre pas hors Windows | P1 | décision à prendre, voir §3 |
 | A4 | Messages : une erreur est effacée par l'édition suivante, pas de journal, statut visible seulement pendant un chargement, échec de la copie de récupération non montré, options illisibles non signalées | P1 | `crates/interface/src/socle/messages.rs`, `saisie/saisie_plan.rs:770`, `crates/echanges/src/enregistrement.rs:159`, `crates/config/src/options/mod.rs:91-99` |
 | A11 | Pilote : taille de message non bornée, jeton sous le dossier temporaire commun hors Windows, inscription d'instance dont l'échec est ignoré | P2 | `crates/pilote/src/lib.rs:60-71`, `instances.rs:40`, `:57-63` |
-| T1 | Tests de fichiers malformés (IFC, RVT, `.modele.json`) ; `scene` sans test, `ifc_base` 2 tests | P2 | avec A3 |
+| T1 | Tests de fichiers malformés : fait pour les cas d'A3 ; restent le balayage aléatoire (fuzzing) d'IFC et de RVT, les fichiers `rvt/{vues,feuilles,nomenclatures,parametres,annexes,zones}.rs` non relus, et `Projet::verifier()` sur un `.modele.json` malformé ; `scene` sans test | P2 | `crates/formats/src/ifc/bornes.rs` |
+| A2c | Vérifier sur le poste Windows que le serveur MCP démarre avec `.mcp.json` sans `.exe` | P0 | `.mcp.json` ; revenir à `bimedit.exe` en cas d'échec |
 | T2 | Les 20 scripts `tools/test-*.py` (clics simulés) ne tournent pas en CI | P2 | `tools/` |
 
 ### 2.2 Réactivité
@@ -146,8 +145,7 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 
 | Sujet | Question |
 |---|---|
-| Ordre | Fiabilité (A3) avant l'IFC (A6, A7), ou l'inverse ? |
-| A2b | Forme portable de `.mcp.json`, le poste de référence étant sous Windows |
+| Ordre | Après A1 à A3 : messages et arrière-plan (A4, A5) ou IFC (A6, A7) d'abord ? |
 | A6 | Jeux de propriétés attendus par les partenaires ; représentation des phases et démolitions dans l'IFC |
 | A7 | Convertir les `IfcSpace` en pièces natives ? |
 | F1 | Valider le changement de format `Symbole` / éléments 2D |
@@ -161,7 +159,9 @@ Le plus récent en premier. Les numéros « n° » sont ceux de la feuille de ro
 
 | Date | Fait | Commit | Vérification |
 |---|---|---|---|
-| 17/11/2026 | Test `suivre_trait::tests::ctrl_seul_et_espace` corrigé : la sortie d'egui est vidée de ses textures avant d'être jetée (première partie de A1) | ce commit | `cargo test -p interface --lib` : 60 réussis en debug et en release |
+| 17/11/2026 | A3, lecteurs bornés : imbrication STEP limitée à 256 ; arcs ramenés à un tour et paramètres non finis refusés ; B-spline validée (degré, multiplicités, nœuds) ; révolution bornée à un tour ; items mappés limités à 50 000 parties et 5 millions de triangles par produit ; décompression RVT plafonnée à 2 Go ; arc RVT limité à 720 segments | ce commit | 5 tests ajoutés (`ifc_base` 3 tests, `formats` 56, réussis en debug et en release) ; 4 fichiers IFC piégés : débordement de pile, épuisement mémoire et deux gels reproduits avec le binaire d'avant, ouverture en moins de 0,1 s après ; `--stats` identique sur `test_ifc4.ifc` et `test_ifc4_murs.ifc` ; cas RVT non essayés sur un vrai fichier |
+| 17/11/2026 | A2 : limites du `README.md` et d'`EDITION.md` revérifiées dans le code (entités IFC et surfaces Revit non décodées, seuils CSG, `.ifczip`) ; `.mcp.json` sans `.exe` | ce commit | serveur MCP démarré sous Linux (réponse à `initialize`) ; non essayé sous Windows (A2c) |
+| 17/11/2026 | Test `suivre_trait::tests::ctrl_seul_et_espace` corrigé : la sortie d'egui est vidée de ses textures avant d'être jetée (première partie de A1) | `4e20e43` | `cargo test -p interface --lib` : 60 réussis en debug et en release |
 | 17/11/2026 | Échantillons : 11 fichiers `samples/**/*.modele.json` remis au schéma courant (opération d'extrusion explicite, remplissage de symbole, catégorie de famille, format `famille-ouverture 3`) | `ce3a404` | 13 fichiers sur 13 chargés par `bimedit --mesurer-scene` ; non ouverts à l'écran |
 | 17/11/2026 | Documentation : ce suivi unique ; états retirés de `MODIFICATION.md`, `PLAN_FUSION_FAMILLES.md`, `ARCHITECTURE.md` ; audit du 11/11 archivé ; `README.md` et `EDITION.md` corrigés (escalier, garde-corps, DXF, section de poutre) | `ce3a404` | relecture |
 | 16/11/2026 | Audit des fonctions à améliorer (tâches A1 à A12) | — | compilation, tests debug, mesures |

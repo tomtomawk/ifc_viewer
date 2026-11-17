@@ -174,7 +174,7 @@ impl StepFile {
         for &(s, e) in &stmts {
             let st = trim_start(&data[s..e]);
             if st.starts_with(b"FILE_SCHEMA") {
-                let mut p = Parser { s: st, i: 11 };
+                let mut p = Parser { s: st, i: 11, profondeur: 0 };
                 if let Some(v) = p.value() {
                     if let Some(name) = first_str(&v) {
                         schema = name.to_uppercase();
@@ -263,7 +263,7 @@ fn split_statements(data: &[u8]) -> Vec<(usize, usize)> {
 }
 
 fn parse_instance(st: &[u8]) -> Option<(Id, &[u8], Vec<Value>)> {
-    let mut p = Parser { s: st, i: 1 };
+    let mut p = Parser { s: st, i: 1, profondeur: 0 };
     let id = p.uint()?;
     p.ws();
     if p.peek()? != b'=' {
@@ -290,7 +290,13 @@ fn parse_instance(st: &[u8]) -> Option<(Id, &[u8], Vec<Value>)> {
 struct Parser<'a> {
     s: &'a [u8],
     i: usize,
+    /// Imbrication courante des listes et valeurs typées.
+    profondeur: u32,
 }
+
+/// Imbrication maximale d'une valeur : au-delà, l'instance est écartée (un fichier
+/// malformé ne doit pas déborder la pile).
+const PROFONDEUR_MAX: u32 = 256;
 
 impl<'a> Parser<'a> {
     fn peek(&self) -> Option<u8> {
@@ -327,6 +333,16 @@ impl<'a> Parser<'a> {
     }
 
     fn value(&mut self) -> Option<Value> {
+        if self.profondeur >= PROFONDEUR_MAX {
+            return None;
+        }
+        self.profondeur += 1;
+        let v = self.valeur();
+        self.profondeur -= 1;
+        v
+    }
+
+    fn valeur(&mut self) -> Option<Value> {
         self.ws();
         let c = self.peek()?;
         match c {
@@ -531,6 +547,29 @@ fn utf8_len(c: u8) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Une valeur imbriquée sans fin écarte son instance, sans déborder la pile ; les
+    /// autres instances sont lues.
+    #[test]
+    fn imbrication_demesuree_ecartee() {
+        let fichier = |n: usize| {
+            let mut src = b"ISO-10303-21;\nHEADER;\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n#1=IFCCARTESIANPOINT((0.,0.,0.));\n#2=X(".to_vec();
+            src.extend(std::iter::repeat_n(b'(', n));
+            src.extend(std::iter::repeat_n(b')', n));
+            src.extend_from_slice(b");\n#3=IFCCARTESIANPOINT((1.,0.,0.));\nENDSEC;\nEND-ISO-10303-21;\n");
+            StepFile::parse(&src).unwrap()
+        };
+        let f = fichier(100);
+        assert!(f.get(1).is_some() && f.get(2).is_some() && f.get(3).is_some());
+        let f = fichier(2_000_000);
+        assert!(f.get(1).is_some() && f.get(3).is_some());
+        assert!(f.get(2).is_none(), "instance trop imbriquée écartée");
+        // valeurs typées en chaîne : même borne
+        let mut src = b"ISO-10303-21;\nHEADER;\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n#1=X(".to_vec();
+        src.extend(std::iter::repeat_n(b"A ".as_slice(), 2_000_000).flatten());
+        src.extend_from_slice(b"1);\nENDSEC;\nEND-ISO-10303-21;\n");
+        assert!(StepFile::parse(&src).is_err(), "seule instance écartée : fichier refusé avec un message");
+    }
 
     #[test]
     fn parse_basic() {

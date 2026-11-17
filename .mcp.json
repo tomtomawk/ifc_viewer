@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "bimedit": {
-      "command": "target/release/bimedit.exe",
+      "command": "target/release/bimedit",
       "args": ["--mcp"]
     }
   }
