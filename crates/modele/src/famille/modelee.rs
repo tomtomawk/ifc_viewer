@@ -14,6 +14,8 @@ mod revolution;
 pub use revolution::Revolution;
 mod guidage;
 pub use guidage::FormeGuidee;
+mod dessin;
+pub use dessin::{Element2DFamille, points_ancrables_mut};
 #[cfg(test)]
 mod tests_maillage;
 use crate::famille::Role;
@@ -243,22 +245,6 @@ pub struct FormeProfil {
     pub materiau_parametre: Option<String>,
 }
 
-/// Symbole 2D affiché dans les vues du projet : plan (sens d'ouverture, débattement)
-/// ou élévation (triangles d'ouverture). Arc : trois points (départ, passage, fin).
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct Symbole {
-    pub vue: VueEsquisse,
-    pub points: Vec<PointEsquisse>,
-    #[serde(default)]
-    pub arc: bool,
-    /// Polyligne fermée ; son remplissage reste facultatif.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub fermee: bool,
-    /// Région 2D : contour fermé rempli (plein ou hachuré) ; None : simple trait.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub remplissage: Option<crate::documentation::RemplissageContour>,
-}
-
 /// Cote de mesure d'une vue de l'éditeur de familles.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct CoteMesure {
@@ -394,28 +380,15 @@ fn menuiserie() -> Materiau {
 #[serde(rename_all = "snake_case")]
 pub enum CategorieFamille { Composant, Porte, Fenetre, Profil, Cartouche, EtiquettePiece }
 
-/// Élément graphique associé à une vue de la famille ; les textes et leurs
-/// dimensions utilisent les mêmes formes que les annotations du projet.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct Element2DFamille {
-    pub vue: VueEsquisse,
-    pub forme: crate::documentation::AnnotationForme,
-    /// Hauteur de texte sur le papier en millimètres.
-    pub hauteur: f64,
-}
-
-/// Contour de la vue en plan utilisé comme section d'un profil.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-#[serde(tag = "source", content = "indice", rename_all = "snake_case")]
-pub enum SectionProfil { Element2d(usize), Symbole(usize) }
-
 /// Famille commune aux catégories modélisées et documentaires.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct FamilleModelee {
     pub categorie: CategorieFamille,
-    /// Section explicitement choisie ; sans choix, un contour fermé unique est utilisé.
+    /// Indice dans `elements_2d` de la polyligne fermée en plan choisie comme section
+    /// de profil ; sans choix, un contour fermé unique est utilisé.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub section_profil: Option<SectionProfil>,
+    pub section_profil: Option<usize>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub elements_2d: Vec<Element2DFamille>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -426,8 +399,6 @@ pub struct FamilleModelee {
     pub volumes: Vec<Volume>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extrusions: Vec<FormeProfil>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub symboles: Vec<Symbole>,
     /// Cotes de mesure (angle, diamètre, altimétrie) : annotations de l'éditeur, non
     /// pilotantes, dont les points suivent les plans de référence.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -629,7 +600,7 @@ impl FamilleModelee {
         let plan = |nom: &str, axe| PlanRef { nom: nom.into(), axe, position: 0.0, fixe: true, hote: None };
         Self { categorie, section_profil: None, elements_2d: Vec::new(), plans_construction: Vec::new(), parametres: Vec::new(),
             plans: vec![plan("Origine X", AxePlan::X), plan("Origine Y", AxePlan::Y), plan("Origine Z", AxePlan::Z)],
-            contraintes: Vec::new(), volumes: Vec::new(), extrusions: Vec::new(), symboles: Vec::new(), cotes_mesure: Vec::new(), couleur: couleur_defaut(), genre }
+            contraintes: Vec::new(), volumes: Vec::new(), extrusions: Vec::new(), cotes_mesure: Vec::new(), couleur: couleur_defaut(), genre }
     }
 
     pub fn plan(&self, nom: &str) -> Option<&PlanRef> {
@@ -831,63 +802,6 @@ impl FamilleModelee {
         out
     }
 
-    /// Résout le contour explicitement désigné pour la section du profil.
-    pub fn section_resolue(&self, r: &Resolution, section: SectionProfil) -> Result<Vec<[f64; 2]>, String> {
-        use crate::documentation::AnnotationForme;
-        let points = match section {
-            SectionProfil::Element2d(i) => {
-                let e = self.elements_2d.get(i).ok_or("Section de profil introuvable.")?;
-                match &e.forme {
-                    AnnotationForme::Polyligne { points, fermee: true, .. } if e.vue == VueEsquisse::Plan => points.clone(),
-                    _ => return Err("La section doit être une polyligne fermée en plan.".into()),
-                }
-            }
-            SectionProfil::Symbole(i) => {
-                let symbole = self.symboles.get(i).ok_or("Section de profil introuvable.")?;
-                if symbole.vue != VueEsquisse::Plan || symbole.arc || !symbole.fermee { return Err("La section doit être une polyligne fermée en plan.".into()); }
-                symbole.points.iter().map(|p| { let (x, y) = self.point_esquisse(r, p); [x, y] }).collect()
-            }
-        };
-        super::profil::contour_simple(&points)?;
-        Ok(points)
-    }
-
-    /// Contenu graphique d'une vue, dans son repère local. Les symboles
-    /// paramétriques sont résolus avant d'être présentés comme annotations.
-    pub fn elements_2d_resolus(&self, r: &Resolution, vue: VueEsquisse) -> Vec<Element2DFamille> {
-        use crate::documentation::AnnotationForme;
-        let mut elements: Vec<_> = self.elements_2d.iter().filter(|e| e.vue == vue).cloned().collect();
-        for symbole in self.symboles.iter().filter(|s| s.vue == vue) {
-            let points: Vec<[f64; 2]> = symbole.points.iter().map(|p| { let (h,v) = self.point_esquisse(r,p); [h,v] }).collect();
-            let forme = if symbole.arc && points.len() == 3 {
-                AnnotationForme::Arc { points: [points[0], points[1], points[2]] }
-            } else {
-                let remplissage = symbole.remplissage.clone();
-                AnnotationForme::Polyligne { points, fermee: symbole.fermee, courbures: Vec::new(), remplissage, traits: Vec::new() }
-            };
-            elements.push(Element2DFamille { vue, forme, hauteur: 2.5 });
-        }
-        elements
-    }
-
-    /// Symboles de la vue `vue` résolus en polylignes (h, v) ; un arc est discrétisé.
-    pub fn symboles_resolus(&self, r: &Resolution, vue: VueEsquisse) -> Vec<Vec<(f64, f64)>> {
-        self.elements_2d_resolus(r, vue).into_iter()
-            .filter_map(|e| e.forme.forme_2d())
-            .flat_map(|f| f.polylignes())
-            .map(|ligne| ligne.into_iter().map(|p| (p.x, p.y)).collect())
-            .collect()
-    }
-
-    /// Régions 2D remplies de la vue `vue` : contour fermé (h, v) et remplissage.
-    pub fn regions_resolues(&self, r: &Resolution, vue: VueEsquisse) -> Vec<(Vec<(f64, f64)>, crate::documentation::RemplissageContour)> {
-        self.symboles
-            .iter()
-            .filter(|s| s.vue == vue && s.points.len() >= 3)
-            .filter_map(|s| Some((s.points.iter().map(|p| self.point_esquisse(r, p)).collect(), s.remplissage.clone()?)))
-            .collect()
-    }
-
     /// Résout le repère d'un plan à partir de son identité et des contraintes courantes.
     pub fn repere_construction(&self, id: &str, r: &Resolution) -> Option<PlanConstruction> {
         let mut plan = self.plans_construction.iter().find(|p| p.id == id)?.clone();
@@ -905,17 +819,7 @@ impl FamilleModelee {
     /// Contrôle avant enregistrement : noms uniques, références existantes, formules
     /// calculables, volumes non plats.
     pub fn valider(&self, largeur: f64, hauteur: f64, epaisseur: f64) -> Result<(), String> {
-        if let Some(section) = self.section_profil {
-            use crate::documentation::AnnotationForme;
-            let valide = match section {
-                SectionProfil::Element2d(i) => self.elements_2d.get(i).is_some_and(|e| e.vue == VueEsquisse::Plan && matches!(&e.forme, AnnotationForme::Polyligne { fermee: true, .. })),
-                SectionProfil::Symbole(i) => self.symboles.get(i).is_some_and(|s| s.vue == VueEsquisse::Plan && !s.arc && s.fermee),
-            };
-            if !valide { return Err("Section de profil absente ou non fermée en plan.".into()); }
-        }
-        for element in &self.elements_2d {
-            if !element.hauteur.is_finite() || element.hauteur <= 0.0 { return Err("Hauteur d'élément 2D invalide.".into()); }
-        }
+        self.valider_elements_2d()?;
         let mut constructions = std::collections::HashSet::new();
         let mut identites_construction = std::collections::HashSet::new();
         for plan in &self.plans_construction {
@@ -965,12 +869,6 @@ impl FamilleModelee {
             let bon = |f: &Face, axe| (e.construction.is_some() && f.plan.is_empty() && f.decalage.is_finite()) || self.plan(&f.plan).is_some_and(|p| p.axe == axe);
             if e.profil.len() < 3 || !e.profil.iter().all(|p| bon(&p.h, ah) && bon(&p.v, av)) || !e.profondeur.iter().all(|f| bon(f, ad)) {
                 return Err(format!("{} : profil d'au moins trois sommets sur des plans de la vue d'esquisse attendu.", e.nom));
-            }
-        }
-        for (i, s) in self.symboles.iter().enumerate() {
-            let (ah, av, _) = s.vue.axes();
-            if s.points.len() < 2 || (s.fermee && s.points.len() < 3) || (s.remplissage.is_some() && !s.fermee) || (s.arc && (s.points.len() != 3 || s.fermee)) || !s.points.iter().all(|p| self.plan(&p.h.plan).is_some_and(|x| x.axe == ah) && self.plan(&p.v.plan).is_some_and(|x| x.axe == av)) {
-                return Err(format!("Symbole {} : points sur des plans absents.", i + 1));
             }
         }
         for (i, c) in self.contraintes.iter().enumerate() {
@@ -1026,7 +924,6 @@ impl FamilleModelee {
         FamilleModelee {
             categorie: CategorieFamille::Fenetre,
             section_profil: None,
-            elements_2d: Vec::new(),
             plans_construction: Vec::new(),
             parametres: vec![
                 Parametre { nom: "Dormant".into(), formule: "60".into(), portee: Portee::Type, genre: GenreParametre::Longueur },
@@ -1089,11 +986,7 @@ impl FamilleModelee {
                 materiau_parametre: Some("MateriauAppui".into()),
             }],
             // ouvrant à la française, paumelles à gauche (pointe du triangle)
-            symboles: vec![Symbole {
-                vue: VueEsquisse::Elevation,
-                points: vec![point("Dormant droit", 0.0, "Dormant bas", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)],
-                arc: false, fermee: false, remplissage: None
-            }],
+            elements_2d: vec![Element2DFamille::polyligne(VueEsquisse::Elevation, vec![point("Dormant droit", 0.0, "Dormant bas", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)], false)],
             cotes_mesure: Vec::new(),
             couleur: couleur_defaut(),
             genre: crate::GenreOuverture::Fenetre,
@@ -1136,7 +1029,6 @@ impl FamilleModelee {
         FamilleModelee {
             categorie: CategorieFamille::Porte,
             section_profil: None,
-            elements_2d: Vec::new(),
             plans_construction: Vec::new(),
             parametres: vec![
                 param("Dormant", "60"),
@@ -1186,11 +1078,11 @@ impl FamilleModelee {
                 volume("Vantail", false, Materiau::Panneau, [("Dormant gauche", 2.0), ("Dormant droit", -2.0)], [("Cadre int", 0.0), ("Cadre int", 40.0)], [("Bas", 10.0), ("Dormant haut", -2.0)]),
             ],
             extrusions: Vec::new(),
-            symboles: vec![
+            elements_2d: vec![
                 // vantail ouvert à 90° vers l'intérieur et arc de débattement
-                Symbole { vue: VueEsquisse::Plan, points: vec![point("Dormant gauche", 0.0, "Cadre int", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], arc: false, fermee: false, remplissage: None },
-                Symbole { vue: VueEsquisse::Plan, points: vec![point("Dormant droit", 0.0, "Cadre int", 0.0), point("Arc x", 0.0, "Arc y", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], arc: true, fermee: false, remplissage: None },
-                Symbole { vue: VueEsquisse::Elevation, points: vec![point("Dormant droit", 0.0, "Bas", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)], arc: false, fermee: false, remplissage: None },
+                Element2DFamille::polyligne(VueEsquisse::Plan, vec![point("Dormant gauche", 0.0, "Cadre int", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], false),
+                Element2DFamille::arc(VueEsquisse::Plan, vec![point("Dormant droit", 0.0, "Cadre int", 0.0), point("Arc x", 0.0, "Arc y", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)]),
+                Element2DFamille::polyligne(VueEsquisse::Elevation, vec![point("Dormant droit", 0.0, "Bas", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)], false),
             ],
             cotes_mesure: Vec::new(),
             couleur: [190, 160, 120],
@@ -1291,7 +1183,7 @@ mod tests {
         let v = crate::volumes::geometrie::volume(&appui.tris);
         assert!(v > 0.0, "{v}");
         assert!(appui.tris.iter().flatten().all(|p| p.z <= 1e-9) && appui.tris.iter().flatten().any(|p| p.y > 150.0));
-        let s = f.symboles_resolus(&r, VueEsquisse::Elevation);
+        let s = f.lignes_2d_resolues(&r, VueEsquisse::Elevation);
         assert_eq!(s.len(), 1);
         assert!((s[0][1].0 + 640.0).abs() < 1e-9 && (s[0][1].1 - 800.0).abs() < 1e-9);
         // porte : arc de débattement d'un quart de tour, du rayon du passage
@@ -1299,7 +1191,7 @@ mod tests {
         p.valider(900.0, 2150.0, 200.0).unwrap();
         let r = p.resoudre(900.0, 2150.0, 200.0);
         assert!(r.conflits.is_empty(), "{:?}", r.conflits);
-        let arc = &p.symboles_resolus(&r, VueEsquisse::Plan)[1];
+        let arc = &p.lignes_2d_resolues(&r, VueEsquisse::Plan)[1];
         let pivot = (r.positions["Dormant gauche"], r.positions["Cadre int"]);
         for q in arc {
             assert!(((q.0 - pivot.0).hypot(q.1 - pivot.1) - 780.0).abs() < 1.0, "{q:?}");

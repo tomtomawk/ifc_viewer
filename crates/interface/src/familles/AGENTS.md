@@ -4,7 +4,7 @@ Rôle : édition des familles.
 
 | Fichier | Contenu |
 |---|---|
-| `editeur_famille/` | éditeur des familles modélisées (canevas, catalogue d'outils, documents, formes, panneau, transformer) |
+| `editeur_famille/` | éditeur des familles modélisées (ancrage des éléments 2D, canevas, catalogue d'outils, documents, formes, panneau, transformer) |
 | `familles_planes.rs` | onglets des familles 2D |
 | `document_famille.rs` | état de document commun aux familles planes et modélisées |
 | `profils.rs` | familles de profils plans |

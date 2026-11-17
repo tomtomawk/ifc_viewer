@@ -84,7 +84,8 @@ impl Transformation {
 
 /// Géométrie transformée d'un élément, calculée avant toute modification.
 enum Resultat {
-    Points(Vec<PointEsquisse>),
+    /// Élément 2D ancré : sommets raccrochés aux plans, forme (rayon mis à l'échelle).
+    Ancre { ancrage: Vec<PointEsquisse>, forme: AnnotationForme },
     Forme(AnnotationForme),
     Profil { profil: Vec<PointEsquisse>, operation: OperationForme },
     /// Faces basse et haute du volume sur les deux axes de la vue.
@@ -155,15 +156,8 @@ impl EditeurFamille {
         for s in self.selectionnes() {
             match s {
                 SelectionFamille::Element2D(k) => {
-                    let Some(forme) = self.famille.elements_2d.get(k).filter(|e| e.vue == vue).and_then(|e| e.forme.forme_2d()) else { continue };
+                    let Some(forme) = self.famille.elements_2d.get(k).filter(|e| e.vue == vue).and_then(|e| self.famille.element_resolu(r, e).forme.forme_2d()) else { continue };
                     contours.extend(forme.polylignes().into_iter().map(|ligne| ligne.into_iter().map(|p| (p.x, p.y)).collect::<Vec<_>>()));
-                }
-                SelectionFamille::Symbole(k) => {
-                    let Some(sy) = self.famille.symboles.get(k).filter(|s| s.vue == vue) else { continue };
-                    let mut ligne = resolus(&sy.points, sy.fermee && !sy.arc);
-                    // arc : départ, fin, passage — tracé dans l'ordre du parcours
-                    if sy.arc && ligne.len() == 3 { ligne.swap(1, 2); }
-                    contours.push(ligne);
                 }
                 SelectionFamille::Extrusion(k) => {
                     if let Some(e) = self.famille.extrusions.get(k).filter(|e| e.vue == vue && e.construction.is_none()) { contours.push(resolus(&e.profil, true)); }
@@ -235,11 +229,6 @@ impl EditeurFamille {
                     self.famille.elements_2d.push(copie);
                     copies.push(SelectionFamille::Element2D(self.famille.elements_2d.len() - 1));
                 }
-                SelectionFamille::Symbole(k) => {
-                    let copie = self.famille.symboles[k].clone();
-                    self.famille.symboles.push(copie);
-                    copies.push(SelectionFamille::Symbole(self.famille.symboles.len() - 1));
-                }
                 SelectionFamille::Extrusion(k) => {
                     let mut copie = self.famille.extrusions[k].clone();
                     copie.nom = nom_libre(|n| self.famille.extrusions.iter().any(|e| e.nom == n), &format!("{} copie", copie.nom));
@@ -292,7 +281,14 @@ impl EditeurFamille {
         for s in selection {
             resultats.push(match s {
                 SelectionFamille::Element2D(k) => {
-                    let mut forme = self.famille.elements_2d.get(*k).filter(|e| e.vue == vue).ok_or(AUTRE_VUE)?.forme.clone();
+                    let element = self.famille.elements_2d.get(*k).filter(|e| e.vue == vue).ok_or(AUTRE_VUE)?;
+                    let mut forme = element.forme.clone();
+                    if element.est_ancre() {
+                        // points ancrés : raccrochés aux plans les plus proches de leur image
+                        if let (AnnotationForme::Cercle { rayon, .. }, Transformation::Echelle { facteur, .. }) = (&mut forme, transformation) { *rayon *= facteur; }
+                        resultats.push(Resultat::Ancre { ancrage: lier(&element.ancrage)?, forme });
+                        continue;
+                    }
                     let sommets = crate::outils::dessiner::dessin_plan::points_forme_mut(&mut forme);
                     if sommets.is_empty() { return Err("Transformation impossible : un élément 2D sélectionné n'a pas de point modifiable.".into()); }
                     for p in sommets {
@@ -302,7 +298,6 @@ impl EditeurFamille {
                     if let (AnnotationForme::Cercle { rayon, .. }, Transformation::Echelle { facteur, .. }) = (&mut forme, transformation) { *rayon *= facteur; }
                     Resultat::Forme(forme)
                 }
-                SelectionFamille::Symbole(k) => Resultat::Points(lier(&self.famille.symboles.get(*k).filter(|s| s.vue == vue).ok_or(AUTRE_VUE)?.points)?),
                 SelectionFamille::Extrusion(k) => {
                     let e = self.famille.extrusions.get(*k).filter(|e| e.vue == vue).ok_or(AUTRE_VUE)?;
                     if e.construction.is_some() { return Err("Transformation impossible : une forme sélectionnée est esquissée sur un plan oblique.".into()); }
@@ -361,7 +356,10 @@ impl EditeurFamille {
         for (s, resultat) in selection.iter().zip(resultats) {
             match (s, resultat) {
                 (SelectionFamille::Element2D(k), Resultat::Forme(forme)) => self.famille.elements_2d[*k].forme = forme,
-                (SelectionFamille::Symbole(k), Resultat::Points(points)) => self.famille.symboles[*k].points = points,
+                (SelectionFamille::Element2D(k), Resultat::Ancre { ancrage, forme }) => {
+                    let element = &mut self.famille.elements_2d[*k];
+                    (element.ancrage, element.forme) = (ancrage, forme);
+                }
                 (SelectionFamille::Extrusion(k), Resultat::Profil { profil, operation }) => {
                     let forme = &mut self.famille.extrusions[*k];
                     (forme.profil, forme.operation) = (profil, operation);

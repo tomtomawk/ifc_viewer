@@ -19,8 +19,9 @@ mod canevas;
 use canevas::*;
 mod formes;
 mod transformer;
+mod ancrage;
 use crate::*;
-use modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, Symbole, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
+use modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
 use modele::famille::modelee::FichierFamille;
 use modele::documentation::GenreCote;
 use modele::GenreOuverture;
@@ -89,7 +90,7 @@ pub(crate) enum OutilFamille {
     ExtrusionChemin,
     Raccordement,
     RaccordementChemin,
-    /// Symbole 2D : ligne brisée, ou arc par trois points.
+    /// Polyligne 2D ancrée aux plans de référence.
     Ligne,
     Arc,
     Spline,
@@ -127,7 +128,8 @@ impl OutilFamille {
     }
 }
 
-/// Poignée déplacée dans la vue : sommet d'un profil ou d'un symbole, face d'un volume.
+/// Poignée déplacée dans la vue : sommet d'un profil (`extrusion`) ou d'un élément 2D
+/// ancré, face d'un volume, point d'un élément 2D fixe.
 #[derive(Clone, Copy, PartialEq)]
 enum Poignee {
     Sommet { extrusion: bool, k: usize, i: usize },
@@ -142,7 +144,6 @@ enum SelectionFamille {
     Volume(usize),
     Contrainte(usize),
     Extrusion(usize),
-    Symbole(usize),
     Element2D(usize),
     CoteMesure(usize),
 }
@@ -369,7 +370,6 @@ impl EditeurFamille {
             SelectionFamille::Volume(k) => *k < self.famille.volumes.len(),
             SelectionFamille::Contrainte(k) => *k < self.famille.contraintes.len(),
             SelectionFamille::Extrusion(k) => *k < self.famille.extrusions.len(),
-            SelectionFamille::Symbole(k) => *k < self.famille.symboles.len(),
             SelectionFamille::Element2D(k) => *k < self.famille.elements_2d.len(),
             SelectionFamille::CoteMesure(k) => *k < self.famille.cotes_mesure.len(),
         };
@@ -396,27 +396,19 @@ impl EditeurFamille {
                     || f.contraintes.iter().any(|c| c.plans().contains(&nom.as_str()))
                     || f.volumes.iter().any(|v| v.min.iter().chain(&v.max).any(|x| &x.plan == nom))
                     || f.extrusions.iter().any(|e| e.profil.iter().any(point) || e.profondeur.iter().any(|x| &x.plan == nom))
-                    || f.symboles.iter().any(|s| s.points.iter().any(point))
+                    || f.elements_2d.iter().any(|e| e.ancrage.iter().any(point))
                     || f.cotes_mesure.iter().any(|c| c.points.iter().any(point));
                 if utilise {
-                    return Err(format!("« {nom} » est utilisé par une contrainte, un volume, une extrusion ou un symbole."));
+                    return Err(format!("« {nom} » est utilisé par une contrainte, un volume, une extrusion ou un élément 2D."));
                 }
                 f.plans.remove(k);
             }
             SelectionFamille::Volume(k) if *k < f.volumes.len() => drop(f.volumes.remove(*k)),
             SelectionFamille::Contrainte(k) if *k < f.contraintes.len() => drop(f.contraintes.remove(*k)),
             SelectionFamille::Extrusion(k) if *k < f.extrusions.len() => drop(f.extrusions.remove(*k)),
-            SelectionFamille::Symbole(k) if *k < f.symboles.len() => {
-                use modele::famille::modelee::SectionProfil;
-                if let Some(SectionProfil::Symbole(i)) = f.section_profil {
-                    f.section_profil = if i == *k { None } else { Some(SectionProfil::Symbole(i - usize::from(i > *k))) };
-                }
-                f.symboles.remove(*k);
-            }
             SelectionFamille::Element2D(k) if *k < f.elements_2d.len() => {
-                use modele::famille::modelee::SectionProfil;
-                if let Some(SectionProfil::Element2d(i)) = f.section_profil {
-                    f.section_profil = if i == *k { None } else { Some(SectionProfil::Element2d(i - usize::from(i > *k))) };
+                if let Some(i) = f.section_profil {
+                    f.section_profil = if i == *k { None } else { Some(i - usize::from(i > *k)) };
                 }
                 f.elements_2d.remove(*k);
             }
@@ -441,7 +433,6 @@ impl EditeurFamille {
             SelectionFamille::Contrainte(k) => (0, usize::MAX - k),
             SelectionFamille::Volume(k) => (1, usize::MAX - k),
             SelectionFamille::Extrusion(k) => (2, usize::MAX - k),
-            SelectionFamille::Symbole(k) => (3, usize::MAX - k),
             SelectionFamille::CoteMesure(k) | SelectionFamille::Element2D(k) => (3, usize::MAX - k),
             _ => (4, 0),
         };
@@ -528,7 +519,6 @@ impl EditeurFamille {
         let vue = self.vue.esquisse();
         let admissible = selection.iter().all(|s| match s {
             SelectionFamille::Element2D(k) => self.famille.elements_2d.get(*k).is_some_and(|e| e.vue == vue && !crate::outils::dessiner::dessin_plan::poignees_forme(&e.forme).is_empty()),
-            SelectionFamille::Symbole(k) => self.famille.symboles.get(*k).is_some_and(|s| s.vue == vue),
             SelectionFamille::Extrusion(k) => self.famille.extrusions.get(*k).is_some_and(|e| e.vue == vue && e.construction.is_none() && matches!(e.operation, OperationForme::Extrusion)),
             SelectionFamille::Volume(k) => *k < self.famille.volumes.len(),
             _ => false,
@@ -537,8 +527,7 @@ impl EditeurFamille {
         let (ah, av) = self.vue.axes();
         for s in selection {
             match *s {
-                SelectionFamille::Element2D(k) => for p in crate::outils::dessiner::dessin_plan::points_forme_mut(&mut self.famille.elements_2d[k].forme) { p[0] += dh; p[1] += dv; },
-                SelectionFamille::Symbole(k) => for p in &mut self.famille.symboles[k].points { p.h.decalage += dh; p.v.decalage += dv; },
+                SelectionFamille::Element2D(k) => self.translater_element_2d(k, dh, dv),
                 SelectionFamille::Extrusion(k) => for p in &mut self.famille.extrusions[k].profil { p.h.decalage += dh; p.v.decalage += dv; },
                 SelectionFamille::Volume(k) => {
                     let volume = &mut self.famille.volumes[k];
@@ -557,8 +546,8 @@ impl EditeurFamille {
         let mut trace = self.trace_polyligne.take().unwrap_or_else(|| Trace::new(OutilDessin::Polyligne));
         if let Some(Forme2D::Polyligne { fermee, .. }) = trace.appliquer(EvenementTrace::Terminer).into_iter().next() {
             let points = std::mem::take(&mut self.esquisse).into_iter().map(|(p, _)| p).collect();
-            self.famille.symboles.push(Symbole { vue: self.vue.esquisse(), points, arc: false, fermee, remplissage: None });
-            self.selectionner(vec![SelectionFamille::Symbole(self.famille.symboles.len() - 1)]);
+            self.ajouter_polyligne_ancree(points, fermee);
+            self.selectionner(vec![self.selection.clone()]);
         }
     }
 
@@ -649,7 +638,7 @@ impl EditeurFamille {
         }
         let faces = f.volumes.iter_mut().flat_map(|v| v.min.iter_mut().chain(v.max.iter_mut()))
             .chain(f.extrusions.iter_mut().flat_map(|e| e.profil.iter_mut().flat_map(|p| [&mut p.h, &mut p.v]).chain(e.profondeur.iter_mut())))
-            .chain(f.symboles.iter_mut().flat_map(|s| s.points.iter_mut().flat_map(|p| [&mut p.h, &mut p.v])));
+            .chain(f.elements_2d.iter_mut().flat_map(|e| e.ancrage.iter_mut().flat_map(|p| [&mut p.h, &mut p.v])));
         for face in faces.filter(|x| x.plan == ancien) {
             face.plan = nouveau.into();
         }

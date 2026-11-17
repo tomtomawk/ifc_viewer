@@ -68,7 +68,7 @@ fn formes_du_cartouche_persistent_et_sont_dessinees_sur_feuille() {
     // Le document commun est la source du rendu ; les formes historiques ne le remplacent pas.
     use modele::famille::modelee::{Element2DFamille, VueEsquisse};
     let document = famille.document_famille.as_mut().unwrap();
-    document.famille.elements_2d.extend(famille.formes.iter().cloned().map(|forme| Element2DFamille { vue: VueEsquisse::Plan, forme, hauteur: 2.5 }));
+    document.famille.elements_2d.extend(famille.formes.iter().cloned().map(|forme| Element2DFamille::fixe(VueEsquisse::Plan, forme, 2.5)));
     p.feuilles.push(f.clone());
     p.cartouches_feuilles.insert(f.id.clone(), famille.nom.clone());
     p.familles_cartouches.push(famille.clone());

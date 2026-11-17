@@ -923,7 +923,6 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
         let Ok((axe, _, niveau)) = super::volumes::solides::hote(p, &ouv.mur) else { continue };
         match &v.genre {
             GenreVue::Plan { niveau: n, .. } if *n == niveau => {
-                for (points, r) in super::volumes::solides::remplissages_ouverture(p, ouv, VueEsquisse::Plan) { out.extend(remplissage_commun(points, r)); }
                 for (l, m) in super::volumes::solides::regions_ouverture(p, ouv, VueEsquisse::Plan) {
                     out.extend(remplissage_commun(l.into_iter().map(|q| q.with_z(o.z)).collect(), m));
                 }
@@ -944,7 +943,6 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
                 if uw.dot(DVec2::new(u.x, u.y)).abs() < 0.98 || !(-1.0..=*profondeur).contains(&profondeur_c) || !(0.0..=longueur).contains(&lateral) {
                     continue;
                 }
-                for (points, r) in super::volumes::solides::remplissages_ouverture(p, ouv, VueEsquisse::Elevation) { out.extend(remplissage_commun(points, r)); }
                 for (l, m) in super::volumes::solides::regions_ouverture(p, ouv, VueEsquisse::Elevation) {
                     out.extend(remplissage_commun(l.into_iter().map(|q| o + u * (q - o).dot(u) + h * (q - o).dot(h)).collect(), m));
                 }
@@ -1164,7 +1162,7 @@ impl FamilleEtiquette {
         };
         use crate::famille::modelee::{CategorieFamille, Element2DFamille, FamilleModelee, FichierFamille, VueEsquisse, FORMAT_FAMILLE};
         let mut famille = FamilleModelee::vide(CategorieFamille::EtiquettePiece);
-        famille.elements_2d.extend(etiquette.textes.iter().map(|t| Element2DFamille { vue: VueEsquisse::Plan, forme: AnnotationForme::Texte { point: t.position, texte: t.contenu.clone() }, hauteur: t.hauteur }));
+        famille.elements_2d.extend(etiquette.textes.iter().map(|t| Element2DFamille::fixe(VueEsquisse::Plan, AnnotationForme::Texte { point: t.position, texte: t.contenu.clone() }, t.hauteur)));
         etiquette.document_famille = Some(Box::new(FichierFamille { format: FORMAT_FAMILLE.into(), nom: etiquette.nom.clone(), largeur: 60.0, hauteur: 30.0, profondeur: 300.0, famille }));
         etiquette
     }

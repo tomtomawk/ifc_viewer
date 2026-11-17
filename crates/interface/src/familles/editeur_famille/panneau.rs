@@ -72,11 +72,8 @@ impl ViewerApp {
 
 pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele::Projet) {
     if ed.famille.categorie == modele::famille::modelee::CategorieFamille::Profil {
-        use modele::famille::modelee::SectionProfil;
-        use modele::documentation::AnnotationForme;
         let section = match ed.selection {
-            SelectionFamille::Element2D(k) if ed.famille.elements_2d.get(k).is_some_and(|e| e.vue == VueEsquisse::Plan && matches!(&e.forme, AnnotationForme::Polyligne { fermee: true, .. })) => Some(SectionProfil::Element2d(k)),
-            SelectionFamille::Symbole(k) if ed.famille.symboles.get(k).is_some_and(|s| s.vue == VueEsquisse::Plan && !s.arc && s.fermee) => Some(SectionProfil::Symbole(k)),
+            SelectionFamille::Element2D(k) if ed.famille.elements_2d.get(k).is_some_and(|e| e.vue == VueEsquisse::Plan && e.contour_ferme()) => Some(k),
             _ => None,
         };
         if let Some(section) = section {
@@ -450,39 +447,38 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
         }
     });
 
-    egui::CollapsingHeader::new(RichText::new("Symboles 2D").strong()).default_open(true).show(ui, |ui| {
+    egui::CollapsingHeader::new(RichText::new("Éléments 2D").strong()).default_open(true).show(ui, |ui| {
         let mut supprimer = None;
         let mut changer_remplissage = None;
-        for (k, s) in ed.famille.symboles.iter().enumerate() {
+        for (k, s) in ed.famille.elements_2d.iter().enumerate() {
             ui.horizontal(|ui| {
                 let vue = match s.vue {
                     VueEsquisse::Plan => "plan",
                     VueEsquisse::Elevation => "élévation",
                     VueEsquisse::Coupe => "coupe (éditeur seulement)",
                 };
-                let genre = if s.arc { "Arc" } else if s.fermee { "Polyligne fermée" } else { "Polyligne" };
-                let texte = format!("{genre} {} · {vue}", k + 1);
-                if ui.selectable_label(ed.selection == SelectionFamille::Symbole(k), texte).clicked() {
-                    ed.selection = SelectionFamille::Symbole(k);
+                let texte = format!("{} {} · {vue}{}", super::ancrage::genre_element_2d(&s.forme), k + 1, if s.est_ancre() { " · ancré" } else { "" });
+                if ui.selectable_label(ed.selection == SelectionFamille::Element2D(k), texte).clicked() {
+                    ed.selection = SelectionFamille::Element2D(k);
                 }
-                if s.fermee {
-                    let texte = s.remplissage.as_ref().map_or("Aucun".to_string(), |r| r.libelle());
+                if let modele::documentation::AnnotationForme::Polyligne { fermee: true, remplissage, .. } = &s.forme {
+                    let texte = remplissage.as_ref().map_or("Aucun".to_string(), |r| r.libelle());
                     ui.push_id(("remplissage_symbole", k), |ui| {
                         if let Some(choix) = crate::zones::communes::choisir_remplissage_2d(ui, projet, &texte) { changer_remplissage = Some((k, choix)); }
                     });
                 }
-                if ui.small_button("−").on_hover_text("Supprimer le symbole").clicked() {
+                if ui.small_button("−").on_hover_text("Supprimer l'élément 2D").clicked() {
                     supprimer = Some(k);
                 }
             });
         }
         if let Some((k, m)) = changer_remplissage {
-            ed.famille.symboles[k].remplissage = m;
+            if let Some(r) = ed.famille.elements_2d[k].remplissage_mut() { *r = m; }
         }
         if let Some(k) = supprimer {
-            ed.erreur = ed.supprimer(&SelectionFamille::Symbole(k)).err();
+            ed.erreur = ed.supprimer(&SelectionFamille::Element2D(k)).err();
         }
-        ui.label(RichText::new("Les symboles de plan et d'élévation s'affichent dans les vues du projet et sur les feuilles.").small().weak());
+        ui.label(RichText::new("Les éléments 2D de plan et d'élévation (ancrés : ils suivent les plans de référence) s'affichent dans les vues du projet et sur les feuilles.").small().weak());
         let mut supprimer_cote = None;
         for (k, c) in ed.famille.cotes_mesure.iter().enumerate() {
             ui.horizontal(|ui| {

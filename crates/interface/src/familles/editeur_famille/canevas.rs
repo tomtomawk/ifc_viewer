@@ -314,6 +314,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
     let mut lignes_2d: Vec<(usize, Vec<egui::Pos2>)> = Vec::new();
     for (indice, element) in ed.famille.elements_2d.iter().enumerate().filter(|(_, e)| e.vue == ed.vue.esquisse()) {
         use modele::documentation::AnnotationForme;
+        let element = &ed.famille.element_resolu(&r, element);
         if let AnnotationForme::Texte { point, texte } = &element.forme {
             // cartouches et étiquettes : repère en mm de papier, le texte est à l'échelle de la
             // vue ; les autres catégories n'ont pas d'échelle de vue dans l'éditeur
@@ -336,30 +337,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
         }
     }
 
-    // symboles 2D de la vue
     let marine = Color32::from_rgb(20, 40, 120);
-    let mut lignes_symboles: Vec<(usize, Vec<egui::Pos2>)> = Vec::new();
-    for (k, sy) in ed.famille.symboles.iter().enumerate() {
-        if sy.vue != ed.vue.esquisse() {
-            continue;
-        }
-        let mut seul = ed.famille.clone();
-        seul.symboles = vec![sy.clone()];
-        seul.elements_2d.clear();
-        for (l, m) in seul.regions_resolues(&r, sy.vue) {
-            let forme = modele::documentation::AnnotationForme::Polyligne { points: l.iter().map(|&(h,v)| [h,v]).collect(), fermee: true, courbures: Vec::new(), remplissage: Some(m), traits: Vec::new() };
-            let primitives = modele::documentation::forme_cartouche(projet, &forme);
-            let dessin = crate::documenter::feuilles::rendu(&primitives, [0.0; 4]);
-            crate::documenter::cartouche::peindre(&painter, &cadre, dessin, None);
-        }
-        for l in seul.symboles_resolus(&r, sy.vue) {
-            let pts: Vec<egui::Pos2> = l.into_iter().map(|(h, v)| cadre.ecran(h, v)).collect();
-            let choisi = ed.choisi(&SelectionFamille::Symbole(k));
-            painter.add(egui::Shape::line(pts.clone(), egui::Stroke::new(if choisi { 2.5 } else { 1.4 }, if choisi { orange } else { marine })));
-            lignes_symboles.push((k, pts));
-        }
-    }
-
     // cotes de mesure de la vue (angle, diamètre, altimétrie), points résolus
     let mut lignes_mesures: Vec<(usize, Vec<[egui::Pos2; 2]>)> = Vec::new();
     for (k, c) in ed.famille.cotes_mesure.iter().enumerate() {
@@ -474,18 +452,11 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             else if plan.axe == av { geoms.push(Geom::Segment([DVec2::new(h_min, valeur), DVec2::new(h_max, valeur)])); }
         }
         let vue = ed.vue.esquisse();
-        for (points, ferme) in ed.famille.extrusions.iter().filter(|e| e.construction.is_none() && e.vue == vue).map(|e| (&e.profil, true))
-            .chain(ed.famille.symboles.iter().filter(|s| s.vue == vue && !s.arc).map(|s| (&s.points, s.fermee))) {
+        for points in ed.famille.extrusions.iter().filter(|e| e.construction.is_none() && e.vue == vue).map(|e| &e.profil) {
             let pts: Vec<_> = points.iter().map(|p| { let (h, v) = ed.famille.point_esquisse(&r, p); DVec2::new(h, v) }).collect();
-            for i in 0..pts.len().saturating_sub(usize::from(!ferme)) { geoms.push(Geom::Segment([pts[i], pts[(i+1) % pts.len()]])); }
+            for i in 0..pts.len() { geoms.push(Geom::Segment([pts[i], pts[(i+1) % pts.len()]])); }
         }
-        for sy in ed.famille.symboles.iter().filter(|s| s.vue == vue && s.arc && s.points.len() == 3) {
-            let pts: Vec<_> = sy.points.iter().map(|p| { let (h,v) = ed.famille.point_esquisse(&r,p); DVec2::new(h,v) }).collect();
-            if let Some((centre, rayon, depart, balayage)) = noyau::forme2d::arc_3_points(pts[0], pts[1], pts[2]) {
-                geoms.push(Geom::Arc { centre, rayon, depart, balayage });
-            }
-        }
-        geoms.extend(ed.famille.elements_2d.iter().filter(|e| e.vue == vue)
+        geoms.extend(ed.famille.elements_2d_resolus(&r, vue).iter()
             .filter_map(|e| e.forme.forme_2d()).flat_map(|forme| forme.geoms()));
         let pts: Vec<_> = ed.esquisse.iter().map(|(_, p)| DVec2::new(p.0, p.1)).collect();
         geoms.extend(pts.windows(2).map(|w| Geom::Segment([w[0], w[1]])));
@@ -553,14 +524,9 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                         poignees.push((Poignee::Sommet { extrusion: true, k, i: i + 1 }, q.lerp(pts[(i + 1) % pts.len()], 0.5), true));
                     }
                 }
-                SelectionFamille::Symbole(k) if ed.famille.symboles.get(k).is_some_and(|s| s.vue == vue) => {
-                    let sy = &ed.famille.symboles[k];
-                    let pts: Vec<egui::Pos2> = sy.points.iter().map(ecran_pt).collect();
-                    for (i, &q) in pts.iter().enumerate() {
-                        poignees.push((Poignee::Sommet { extrusion: false, k, i }, q, false));
-                        if !sy.arc && (i + 1 < pts.len() || sy.fermee) {
-                            poignees.push((Poignee::Sommet { extrusion: false, k, i: i + 1 }, q.lerp(pts[(i + 1) % pts.len()], 0.5), true));
-                        }
+                SelectionFamille::Element2D(k) if ed.element_ancre(k).is_some() => {
+                    for (i, (h, v), milieu) in ed.poignees_ancrees(&r, k) {
+                        poignees.push((Poignee::Sommet { extrusion: false, k, i }, cadre.ecran(h, v), milieu));
                     }
                 }
                 SelectionFamille::Element2D(k) => {
@@ -594,8 +560,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             if resp.clicked_by(PointerButton::Secondary) {
                 if let Some((Poignee::Sommet { extrusion, k, i }, _, false)) = resp.interact_pointer_pos().and_then(visee) {
                     if extrusion && ed.supprimer_sommet_forme(k, i) {
-                    } else if !extrusion && !ed.famille.symboles[k].arc && ed.famille.symboles[k].points.len() > if ed.famille.symboles[k].fermee { 3 } else { 2 } {
-                        ed.famille.symboles[k].points.remove(i);
+                    } else if !extrusion && ed.supprimer_sommet_ancre(k, i) {
                     } else {
                         ed.message = Some("Sommet conservé : nombre minimal atteint.".into());
                     }
@@ -627,10 +592,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                     // milieu d'arête : un nouveau sommet est inséré puis déplacé
                     if let (true, Poignee::Sommet { extrusion, k, i }) = (milieu, p) {
                         if extrusion { ed.inserer_sommet_forme(k, i); }
-                        else {
-                            let points = &mut ed.famille.symboles[k].points;
-                            points.insert(i, points[i - 1].clone());
-                        }
+                        else { ed.inserer_sommet_ancre(k, i); }
                     }
                     ed.poignee = Some(p);
                 }
@@ -641,7 +603,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                     Poignee::Sommet { extrusion, k, i } => {
                         let (h, v) = viser(q, None).0;
                         if let (Some(fh), Some(fv)) = (ed.accrocher(&r, ah, h, tol), ed.accrocher(&r, av, v, tol)) {
-                            let points = if extrusion { &mut ed.famille.extrusions[k].profil } else { &mut ed.famille.symboles[k].points };
+                            let points = if extrusion { &mut ed.famille.extrusions[k].profil } else { &mut ed.famille.elements_2d[k].ancrage };
                             if let Some(pt) = points.get_mut(i) {
                                 *pt = PointEsquisse { h: fh, v: fv };
                             }
@@ -675,8 +637,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                     ed.deplacement_2d = Some(DeplacementFamille { selection: ed.selectionnes(), precedent: depart, avant: ed.famille.clone() });
                     garder_multiple = true;
                 } else if let Some(depart) = appui {
-                    let cible = lignes_symboles.iter().rev().find(|(k, l)| ed.choisi(&SelectionFamille::Symbole(*k)) && l.windows(2).any(|w| distance_segment(depart, w[0], w[1]) < 6.0)).map(|x| SelectionFamille::Symbole(x.0))
-                        .or_else(|| contours_ext.iter().rev().find(|(k, p)| ed.choisi(&SelectionFamille::Extrusion(*k)) && dans_polygone(depart, p)).map(|x| SelectionFamille::Extrusion(x.0)))
+                    let cible = contours_ext.iter().rev().find(|(k, p)| ed.choisi(&SelectionFamille::Extrusion(*k)) && dans_polygone(depart, p)).map(|x| SelectionFamille::Extrusion(x.0))
                         .or_else(|| { let (h, v) = cadre.modele(depart); boites.iter().find(|b| ed.choisi(&SelectionFamille::Volume(b.indice)) && (b.min[ih]..=b.max[ih]).contains(&h) && (b.min[iv]..=b.max[iv]).contains(&v)).map(|b| SelectionFamille::Volume(b.indice)) });
                     if cible.is_some() {
                         ed.deplacement_2d = Some(DeplacementFamille { selection: ed.selectionnes(), precedent: depart, avant: ed.famille.clone() });
@@ -723,8 +684,6 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                         SelectionFamille::Contrainte(*k)
                     } else if let Some((k, _)) = lignes_mesures.iter().find(|(_, l)| l.iter().any(|w| distance_segment(q, w[0], w[1]) < 6.0)) {
                         SelectionFamille::CoteMesure(*k)
-                    } else if let Some((k, _)) = lignes_symboles.iter().find(|(_, l)| l.windows(2).any(|w| distance_segment(q, w[0], w[1]) < 6.0)) {
-                        SelectionFamille::Symbole(*k)
                     } else if let Some((k, _)) = contours_ext.iter().rev().find(|(_, p)| dans_polygone(q, p)) {
                         // un objet l'emporte sur les plans qui le traversent (les plans
                         // courent sur toute la vue : on les choisit hors des objets)
@@ -772,9 +731,6 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                     }
                     for (k, pts) in &contours_ext {
                         elements.push((SelectionFamille::Extrusion(*k), fermes(pts)));
-                    }
-                    for (k, pts) in &lignes_symboles {
-                        elements.push((SelectionFamille::Symbole(*k), pts.windows(2).map(|w| [w[0], w[1]]).collect()));
                     }
                     for (k, pts) in &lignes_2d {
                         elements.push((SelectionFamille::Element2D(*k), pts.windows(2).map(|w| [w[0], w[1]]).collect()));
@@ -916,7 +872,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 let texte = if ed.outil == OutilFamille::Texte { "Texte" } else {
                     match ed.famille.categorie { CategorieFamille::Cartouche => "{numero}", CategorieFamille::EtiquettePiece => "{nom}", _ => "Libellé" }
                 };
-                ed.famille.elements_2d.push(Element2DFamille { vue: ed.vue.esquisse(), forme: AnnotationForme::Texte { point: [h, v], texte: texte.into() }, hauteur: 2.5 });
+                ed.famille.elements_2d.push(Element2DFamille::fixe(ed.vue.esquisse(), AnnotationForme::Texte { point: [h, v], texte: texte.into() }, 2.5));
                 let indice = ed.famille.elements_2d.len() - 1;
                 ed.choisir_outil(OutilFamille::Selection);
                 ed.selectionner(vec![SelectionFamille::Element2D(indice)]);
@@ -1029,11 +985,10 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 if let Some(forme) = formes.into_iter().next() {
                     if let (OutilFamille::Ligne, Forme2D::Polyligne { fermee, .. }) = (ed.outil, &forme) {
                         let points = std::mem::take(&mut ed.esquisse).into_iter().map(|(p, _)| p).collect();
-                        ed.famille.symboles.push(Symbole { vue: ed.vue.esquisse(), points, arc: false, fermee: *fermee, remplissage: None });
-                        ed.selection = SelectionFamille::Symbole(ed.famille.symboles.len() - 1);
+                        ed.ajouter_polyligne_ancree(points, *fermee);
                     } else {
                         ed.esquisse.clear();
-                        ed.famille.elements_2d.push(modele::famille::modelee::Element2DFamille { vue: ed.vue.esquisse(), forme: modele::documentation::AnnotationForme::depuis_forme_2d(&forme), hauteur: 2.5 });
+                        ed.famille.elements_2d.push(modele::famille::modelee::Element2DFamille::fixe(ed.vue.esquisse(), modele::documentation::AnnotationForme::depuis_forme_2d(&forme), 2.5));
                         ed.selection = SelectionFamille::Element2D(ed.famille.elements_2d.len() - 1);
                     }
                 } else if matches!(evenement, EvenementTrace::Terminer | EvenementTrace::Fermer) && trace.points.is_empty() {

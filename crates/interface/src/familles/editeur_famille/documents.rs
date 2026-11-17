@@ -103,7 +103,7 @@ impl ViewerApp {
             ed.nom = "Nouvelle famille".into();
             ed.famille.volumes.clear();
             ed.famille.extrusions.clear();
-            ed.famille.symboles.clear();
+            ed.famille.elements_2d.clear();
             ed.famille.cotes_mesure.clear();
             ed.marquer_enregistree();
             ed.historique_neuf();
@@ -150,7 +150,7 @@ impl ViewerApp {
             1 | 2 => {
                 self.ouvrir_editeur_famille_type(None, if choix == 1 { GenreOuverture::Porte } else { GenreOuverture::Fenetre });
                 if let Some(ed) = self.famille.as_mut() {
-                    ed.famille.volumes.clear(); ed.famille.extrusions.clear(); ed.famille.symboles.clear();
+                    ed.famille.volumes.clear(); ed.famille.extrusions.clear(); ed.famille.elements_2d.clear();
                     ed.marquer_enregistree(); ed.historique_neuf();
                 }
             }
@@ -688,7 +688,7 @@ impl ViewerApp {
     }
 
     /// Panneau Propriétés dans l'onglet « Famille » : type, paramètres, contraintes,
-    /// plans, volumes, extrusions, symboles ; état des contraintes ; chargement dans le
+    /// plans, volumes, extrusions, éléments 2D ; état des contraintes ; chargement dans le
     /// projet et fichier.
     pub(crate) fn proprietes_famille(&mut self, ui: &mut egui::Ui) {
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés de la famille");
@@ -713,7 +713,7 @@ impl ViewerApp {
     }
 
     /// Arborescence dans l'onglet « Famille » : vues de la famille (clic : ouvrir),
-    /// paramètres, plans, volumes, extrusions et symboles (clic : sélectionner), puis
+    /// paramètres, plans, volumes, extrusions et éléments 2D (clic : sélectionner), puis
     /// les éléments de la famille.
     pub(crate) fn arborescence_famille(&mut self, ui: &mut egui::Ui) {
         let titre = self.titre_famille().unwrap_or_default();
@@ -770,11 +770,11 @@ impl ViewerApp {
                     }
                 }
             });
-            egui::CollapsingHeader::new(RichText::new(format!("Symboles 2D ({})", ed.famille.symboles.len())).strong()).default_open(false).show(ui, |ui| {
-                for (k, sy) in ed.famille.symboles.iter().enumerate() {
-                    let texte = format!("{} {} · {}", if sy.arc { "Arc" } else { "Ligne" }, k + 1, match sy.vue { VueEsquisse::Plan => "plan", VueEsquisse::Elevation => "élévation", VueEsquisse::Coupe => "coupe" });
-                    if ui.selectable_label(ed.choisi(&SelectionFamille::Symbole(k)), texte).clicked() {
-                        ed.selection = SelectionFamille::Symbole(k);
+            egui::CollapsingHeader::new(RichText::new(format!("Éléments 2D ({})", ed.famille.elements_2d.len())).strong()).default_open(false).show(ui, |ui| {
+                for (k, e) in ed.famille.elements_2d.iter().enumerate() {
+                    let texte = format!("{} {} · {}", super::ancrage::genre_element_2d(&e.forme), k + 1, match e.vue { VueEsquisse::Plan => "plan", VueEsquisse::Elevation => "élévation", VueEsquisse::Coupe => "coupe" });
+                    if ui.selectable_label(ed.choisi(&SelectionFamille::Element2D(k)), texte).clicked() {
+                        ed.selection = SelectionFamille::Element2D(k);
                         ed.multiple.clear();
                     }
                 }

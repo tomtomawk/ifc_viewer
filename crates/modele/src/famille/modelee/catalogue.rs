@@ -42,8 +42,8 @@ fn volume(nom: &str, materiau: Materiau, x: Bornes, y: Bornes, z: Bornes) -> Vol
 fn baie() -> Volume {
     Volume { vide: true, ..volume("Baie", Materiau::Menuiserie, [("Gauche", 0.0), ("Droite", 0.0)], [("Intérieur", -5.0), ("Extérieur", 5.0)], [("Bas", 0.0), ("Haut", 0.0)]) }
 }
-fn trait_(vue: VueEsquisse, points: Vec<PointEsquisse>, arc: bool) -> Symbole {
-    Symbole { vue, points, arc, fermee: false, remplissage: None }
+fn trait_(vue: VueEsquisse, points: Vec<PointEsquisse>, arc: bool) -> Element2DFamille {
+    if arc { Element2DFamille::arc(vue, points) } else { Element2DFamille::polyligne(vue, points, false) }
 }
 
 impl FamilleModelee {
@@ -57,7 +57,6 @@ impl FamilleModelee {
         FamilleModelee {
             categorie: CategorieFamille::Fenetre,
             section_profil: None,
-            elements_2d: Vec::new(),
             plans_construction: Vec::new(),
             parametres: vec![
                 param("Dormant", "55"),
@@ -173,19 +172,13 @@ impl FamilleModelee {
                 visible: Some("AvecAppui".into()),
                 materiau_parametre: Some("MateriauAppui".into()),
             }],
-            symboles: vec![
+            elements_2d: vec![
                 // plan : vantaux ouverts à 90° vers l'intérieur et arcs de débattement
                 trait_(VueEsquisse::Plan, vec![point("Dormant gauche", 0.0, "Cadre int", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], false),
                 trait_(VueEsquisse::Plan, vec![point("Centre", 0.0, "Cadre int", 0.0), point("Arc gauche", 0.0, "Arc y", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], true),
                 trait_(VueEsquisse::Plan, vec![point("Dormant droit", 0.0, "Cadre int", 0.0), point("Dormant droit", 0.0, "Ouvert", 0.0)], false),
                 trait_(VueEsquisse::Plan, vec![point("Centre", 0.0, "Cadre int", 0.0), point("Arc droit", 0.0, "Arc y", 0.0), point("Dormant droit", 0.0, "Ouvert", 0.0)], true),
-                Symbole {
-                    vue: VueEsquisse::Plan,
-                    points: vec![point("Gauche", -20.0, "Cadre ext", -10.0), point("Droite", 20.0, "Cadre ext", -10.0), point("Droite", 20.0, "Nu appui", 0.0), point("Gauche", -20.0, "Nu appui", 0.0)],
-                    arc: false,
-                    fermee: true,
-                    remplissage: Some(crate::documentation::RemplissageContour::Motif { motif: crate::MotifCoupe::Diagonales }),
-                },
+                { let mut e = Element2DFamille::polyligne(VueEsquisse::Plan, vec![point("Gauche", -20.0, "Cadre ext", -10.0), point("Droite", 20.0, "Cadre ext", -10.0), point("Droite", 20.0, "Nu appui", 0.0), point("Gauche", -20.0, "Nu appui", 0.0)], true); *e.remplissage_mut().unwrap() = Some(crate::documentation::RemplissageContour::Motif { motif: crate::MotifCoupe::Diagonales }); e },
                 // élévation : pointe du triangle côté paumelles
                 trait_(VueEsquisse::Elevation, vec![point("Centre", 0.0, "Dormant bas", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Centre", 0.0, "Dormant haut", 0.0)], false),
                 trait_(VueEsquisse::Elevation, vec![point("Centre", 0.0, "Dormant bas", 0.0), point("Dormant droit", 0.0, "Mi-hauteur", 0.0), point("Centre", 0.0, "Dormant haut", 0.0)], false),
@@ -242,8 +235,8 @@ impl FamilleModelee {
             materiau_parametre: Some("MateriauSeuil".into()),
         }];
         // plan : seuil hachuré entre les tableaux
-        for s in f.symboles.iter_mut().filter(|s| s.remplissage.is_some()) {
-            s.points = vec![point("Tableau gauche", 0.0, "Cadre ext", 0.0), point("Tableau droit", 0.0, "Cadre ext", 0.0), point("Tableau droit", 0.0, "Nu appui", 0.0), point("Tableau gauche", 0.0, "Nu appui", 0.0)];
+        for s in f.elements_2d.iter_mut().filter(|s| matches!(&s.forme, crate::documentation::AnnotationForme::Polyligne { remplissage: Some(_), .. })) {
+            s.ancrage = vec![point("Tableau gauche", 0.0, "Cadre ext", 0.0), point("Tableau droit", 0.0, "Cadre ext", 0.0), point("Tableau droit", 0.0, "Nu appui", 0.0), point("Tableau gauche", 0.0, "Nu appui", 0.0)];
         }
         f
     }
@@ -258,7 +251,6 @@ impl FamilleModelee {
         FamilleModelee {
             categorie: CategorieFamille::Porte,
             section_profil: None,
-            elements_2d: Vec::new(),
             plans_construction: Vec::new(),
             parametres: vec![
                 param("Dormant", "45"),
@@ -323,15 +315,9 @@ impl FamilleModelee {
                 volume("Béquille extérieure", M, [("Dormant droit", -190.0), ("Dormant droit", -55.0)], [("Vantail ext", 45.0), ("Vantail ext", 60.0)], [("Poignée", -9.0), ("Poignée", 9.0)]),
             ],
             extrusions: Vec::new(),
-            symboles: vec![
+            elements_2d: vec![
                 // plan : vantail ouvert à 90° (aplat de son épaisseur) et arc de débattement
-                Symbole {
-                    vue: VueEsquisse::Plan,
-                    points: vec![point("Dormant gauche", 0.0, "Cadre int", 0.0), point("Dormant gauche", 40.0, "Cadre int", 0.0), point("Dormant gauche", 40.0, "Ouvert", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)],
-                    arc: false,
-                    fermee: true,
-                    remplissage: Some(crate::documentation::RemplissageContour::Motif { motif: crate::MotifCoupe::Uni }),
-                },
+                { let mut e = Element2DFamille::polyligne(VueEsquisse::Plan, vec![point("Dormant gauche", 0.0, "Cadre int", 0.0), point("Dormant gauche", 40.0, "Cadre int", 0.0), point("Dormant gauche", 40.0, "Ouvert", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], true); *e.remplissage_mut().unwrap() = Some(crate::documentation::RemplissageContour::Motif { motif: crate::MotifCoupe::Uni }); e },
                 trait_(VueEsquisse::Plan, vec![point("Dormant droit", 0.0, "Cadre int", 0.0), point("Arc x", 0.0, "Arc y", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], true),
                 trait_(VueEsquisse::Elevation, vec![point("Dormant droit", 0.0, "Pied vantail", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)], false),
             ],

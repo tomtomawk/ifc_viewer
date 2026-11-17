@@ -22,8 +22,8 @@ impl Default for FamilleCartouche {
         };
         use crate::famille::modelee::{CategorieFamille, Element2DFamille, FamilleModelee, FichierFamille, VueEsquisse, FORMAT_FAMILLE};
         let mut famille = FamilleModelee::vide(CategorieFamille::Cartouche);
-        famille.elements_2d.extend(cartouche.traits.iter().map(|t| Element2DFamille { vue: VueEsquisse::Plan, forme: AnnotationForme::Ligne { debut: t[0], fin: t[1] }, hauteur: 2.5 }));
-        famille.elements_2d.extend(cartouche.textes.iter().map(|t| Element2DFamille { vue: VueEsquisse::Plan, forme: AnnotationForme::Texte { point: t.position, texte: t.contenu.clone() }, hauteur: t.hauteur }));
+        famille.elements_2d.extend(cartouche.traits.iter().map(|t| Element2DFamille::fixe(VueEsquisse::Plan, AnnotationForme::Ligne { debut: t[0], fin: t[1] }, 2.5)));
+        famille.elements_2d.extend(cartouche.textes.iter().map(|t| Element2DFamille::fixe(VueEsquisse::Plan, AnnotationForme::Texte { point: t.position, texte: t.contenu.clone() }, t.hauteur)));
         cartouche.document_famille = Some(Box::new(FichierFamille { format: FORMAT_FAMILLE.into(), nom: cartouche.nom.clone(), largeur: cartouche.largeur, hauteur: cartouche.hauteur, profondeur: 300.0, famille }));
         cartouche
     }

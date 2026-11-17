@@ -111,28 +111,28 @@ mod tests {
     #[test]
     fn section_explicite_permet_plusieurs_contours_et_refuse_les_references_invalides() {
         use crate::documentation::AnnotationForme;
-        use crate::famille::modelee::{Element2DFamille, SectionProfil, VueEsquisse, FichierFamille};
+        use crate::famille::modelee::{Element2DFamille, VueEsquisse, FichierFamille};
         let mut profil = crate::gabarit::Gabarit::defaut().profils[0].clone();
         let attendu = profil.points().unwrap();
         let famille = &mut profil.document_famille.as_mut().unwrap().famille;
         let autre = vec![[0.0, 0.0], [20.0, 0.0], [20.0, 10.0], [0.0, 10.0]];
-        famille.elements_2d.push(Element2DFamille { vue: VueEsquisse::Plan, forme: AnnotationForme::Polyligne { points: autre.clone(), fermee: true, courbures: vec![], remplissage: None, traits: vec![] }, hauteur: 2.5 });
+        famille.elements_2d.push(Element2DFamille::fixe(VueEsquisse::Plan, AnnotationForme::Polyligne { points: autre.clone(), fermee: true, courbures: vec![], remplissage: None, traits: vec![] }, 2.5));
         assert!(profil.points().is_err());
-        profil.document_famille.as_mut().unwrap().famille.section_profil = Some(SectionProfil::Symbole(0));
+        profil.document_famille.as_mut().unwrap().famille.section_profil = Some(0);
         assert_eq!(profil.points().unwrap(), attendu);
-        profil.document_famille.as_mut().unwrap().famille.section_profil = Some(SectionProfil::Element2d(0));
+        profil.document_famille.as_mut().unwrap().famille.section_profil = Some(1);
         assert_eq!(profil.points().unwrap(), autre);
         let doc = profil.document_famille.as_ref().unwrap();
         let json = doc.json().unwrap();
-        assert!(json.contains("\"source\": \"element2d\""));
+        assert!(json.contains("\"section_profil\": 1"));
         assert_eq!(FichierFamille::lire(&json).unwrap(), **doc);
-        profil.document_famille.as_mut().unwrap().famille.section_profil = Some(SectionProfil::Element2d(99));
+        profil.document_famille.as_mut().unwrap().famille.section_profil = Some(99);
         assert!(profil.points().is_err());
         let doc = profil.document_famille.as_ref().unwrap();
         assert!(FichierFamille::lire(&doc.json().unwrap()).is_err());
         let famille = &mut profil.document_famille.as_mut().unwrap().famille;
-        famille.section_profil = Some(SectionProfil::Element2d(0));
-        if let AnnotationForme::Polyligne { points, .. } = &mut famille.elements_2d[0].forme { points.truncate(2); }
+        famille.section_profil = Some(1);
+        if let AnnotationForme::Polyligne { points, .. } = &mut famille.elements_2d[1].forme { points.truncate(2); }
         let doc = profil.document_famille.as_ref().unwrap();
         assert!(FichierFamille::lire(&doc.json().unwrap()).is_err());
     }
@@ -145,7 +145,7 @@ mod tests {
         assert!(p.valider().is_err());
         let famille = &mut p.document_famille.as_mut().unwrap().famille;
         famille.parametres[0].formule = "100".into();
-        famille.symboles[0].points.truncate(2);
+        famille.elements_2d[0].ancrage.truncate(2);
         assert!(p.valider().is_err());
     }
 }

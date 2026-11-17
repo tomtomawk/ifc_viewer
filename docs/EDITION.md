@@ -292,7 +292,7 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
     les sommets, recliquer le premier ou clic droit pour fermer), pleins
     (menuiserie, vitrage, panneau, appui) ou vides ; chaque sommet ou face se
     verrouille sur le plan le plus proche, avec un décalage au-delà de 7 px ;
-  - symboles 2D (ligne brisée, arc par trois points) en plan ou en élévation,
+  - éléments 2D (polyligne ancrée aux plans, arc par trois points, cercle, spline, texte) en plan ou en élévation,
     affichés dans les vues du projet et sur les feuilles : en plan, ceux des
     ouvertures du niveau ; en coupe ou élévation, ceux des ouvertures vues de face.
   Vues élévation intérieure, plan et coupe, ouvertes depuis l'arborescence. Comme

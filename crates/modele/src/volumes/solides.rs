@@ -524,68 +524,40 @@ fn vides_famille(p: &Projet, o: &Ouverture) -> Result<Option<Vec<Vec<Tri>>>, Str
     Ok(Some(solides_famille(p, o, f)?.into_iter().filter(|s| s.vide && s.visible).map(|s| s.tris).collect()))
 }
 
-/// Symboles 2D de la famille de l'ouverture dans le projet (mm) : vue d'esquisse
-/// `vue`, polylignes en 3D (plan : à l'altitude du bas de la baie ; élévation : dans
-/// le plan de l'axe du mur).
-pub fn symboles_ouverture(p: &Projet, o: &Ouverture, vue: crate::famille::modelee::VueEsquisse) -> Vec<Vec<DVec3>> {
-    let Some(f) = famille_modelee(p, o) else { return Vec::new() };
-    let Ok((axe, e, niveau)) = hote_ouverture(p, o) else { return Vec::new() };
-    let Some(n0) = p.niveau(&niveau) else { return Vec::new() };
-    let z = n0.altitude + o.allege;
+/// Famille, résolution et placement d'une ouverture dans le projet : point de la vue
+/// d'esquisse `vue` (h, v) vers le projet (mm ; plan : à l'altitude du bas de la baie ;
+/// élévation : dans le plan de l'axe du mur).
+fn vue_ouverture<'a>(p: &'a Projet, o: &Ouverture) -> Option<(&'a crate::famille::modelee::FamilleModelee, crate::famille::modelee::Resolution, impl Fn(crate::famille::modelee::VueEsquisse, (f64, f64)) -> DVec3)> {
+    let f = famille_modelee(p, o)?;
+    let (axe, e, niveau) = hote_ouverture(p, o).ok()?;
+    let z = p.niveau(&niveau)?.altitude + o.allege;
     let (c, u) = repere(&axe, o.abscisse);
     let n = u.perp();
-    let surcharges = p.surcharges(o);
-    let r = f.resoudre_avec(o.largeur, o.hauteur, e, &surcharges);
-    f.symboles_resolus(&r, vue)
-        .into_iter()
-        .map(|l| l.into_iter().map(|(h, v)| placer(o, c, u, n, z, vue.point(h, v, 0.0))).collect())
-        .collect()
+    let r = f.resoudre_avec(o.largeur, o.hauteur, e, &p.surcharges(o));
+    let (inversee, retournee) = (o.inversee, o.retournee);
+    Some((f, r, move |vue: crate::famille::modelee::VueEsquisse, (h, v): (f64, f64)| {
+        let q = vue.point(h, v, 0.0);
+        let (x, y) = (if inversee { -q.x } else { q.x }, if retournee { -q.y } else { q.y });
+        (c + u * x + n * y).extend(z + q.z)
+    }))
+}
+
+/// Traits 2D de la famille de l'ouverture dans le projet (mm), points ancrés résolus.
+pub fn symboles_ouverture(p: &Projet, o: &Ouverture, vue: crate::famille::modelee::VueEsquisse) -> Vec<Vec<DVec3>> {
+    let Some((f, r, placer)) = vue_ouverture(p, o) else { return Vec::new() };
+    f.lignes_2d_resolues(&r, vue).into_iter().map(|l| l.into_iter().map(|q| placer(vue, q)).collect()).collect()
 }
 
 /// Textes de la vue de famille, placés dans le repère du projet (mm).
 pub fn textes_ouverture(p: &Projet, o: &Ouverture, vue: crate::famille::modelee::VueEsquisse) -> Vec<(DVec3, String, f64)> {
-    use crate::documentation::AnnotationForme;
-    let Some(f) = famille_modelee(p, o) else { return Vec::new() };
-    let Ok((axe, _, niveau)) = hote_ouverture(p, o) else { return Vec::new() };
-    let Some(niveau) = p.niveau(&niveau) else { return Vec::new() };
-    let z = niveau.altitude + o.allege;
-    let (centre, u) = repere(&axe, o.abscisse);
-    let n = u.perp();
-    f.elements_2d.iter().filter(|e| e.vue == vue).filter_map(|e| {
-        let AnnotationForme::Texte { point, texte } = &e.forme else { return None };
-        Some((placer(o, centre, u, n, z, vue.point(point[0], point[1], 0.0)), texte.clone(), e.hauteur))
-    }).collect()
+    let Some((f, r, placer)) = vue_ouverture(p, o) else { return Vec::new() };
+    f.textes_resolus(&r, vue).into_iter().map(|(q, t, h)| (placer(vue, q), t, h)).collect()
 }
 
-/// Remplissages des annotations de famille, transformés dans le projet.
-pub fn remplissages_ouverture(p: &Projet, o: &Ouverture, vue: crate::famille::modelee::VueEsquisse) -> Vec<(Vec<DVec3>, crate::documentation::RemplissageContour)> {
-    use crate::documentation::AnnotationForme;
-    let Some(f) = famille_modelee(p, o) else { return Vec::new() };
-    let Ok((axe, _, niveau)) = hote_ouverture(p, o) else { return Vec::new() };
-    let Some(niveau) = p.niveau(&niveau) else { return Vec::new() };
-    let (centre, u) = repere(&axe, o.abscisse);
-    let n = u.perp(); let z = niveau.altitude + o.allege;
-    f.elements_2d.iter().filter(|e| e.vue == vue).filter_map(|e| {
-        let AnnotationForme::Polyligne { points, fermee: true, remplissage: Some(remplissage), .. } = &e.forme else { return None };
-        Some((points.iter().map(|p| placer(o, centre, u, n, z, vue.point(p[0], p[1], 0.0))).collect(), remplissage.clone()))
-    }).collect()
-}
-
-/// Régions 2D remplies de la famille de l'ouverture dans le projet (mm), placées comme
-/// ses symboles.
+/// Régions 2D remplies de la famille de l'ouverture dans le projet (mm).
 pub fn regions_ouverture(p: &Projet, o: &Ouverture, vue: crate::famille::modelee::VueEsquisse) -> Vec<(Vec<DVec3>, crate::documentation::RemplissageContour)> {
-    let Some(f) = famille_modelee(p, o) else { return Vec::new() };
-    let Ok((axe, e, niveau)) = hote_ouverture(p, o) else { return Vec::new() };
-    let Some(n0) = p.niveau(&niveau) else { return Vec::new() };
-    let z = n0.altitude + o.allege;
-    let (c, u) = repere(&axe, o.abscisse);
-    let n = u.perp();
-    let surcharges = p.surcharges(o);
-    let r = f.resoudre_avec(o.largeur, o.hauteur, e, &surcharges);
-    f.regions_resolues(&r, vue)
-        .into_iter()
-        .map(|(l, m)| (l.into_iter().map(|(h, v)| placer(o, c, u, n, z, vue.point(h, v, 0.0))).collect(), m))
-        .collect()
+    let Some((f, r, placer)) = vue_ouverture(p, o) else { return Vec::new() };
+    f.regions_resolues(&r, vue).into_iter().map(|(l, m)| (l.into_iter().map(|q| placer(vue, q)).collect(), m)).collect()
 }
 
 /// Valeurs affichées des paramètres de la famille modélisée d'une ouverture (type,
