@@ -1,98 +1,22 @@
-//! Export IFC4 en millimètres : classes, niveaux, matériaux et géométrie tessellée.
+//! Export IFC4 en millimètres : classes, site, niveaux, matériaux et géométrie tessellée.
+mod site;
+mod step;
+#[cfg(test)]
+mod tests;
+
 use modele::*;
 use modele::{elements::pente, murs::jonctions, volumes::solides};
 use std::collections::HashMap;
-use std::fmt::Write;
-struct Step {
-    lignes: Vec<String>,
-}
-impl Step {
-    fn add(&mut self, s: String) -> usize {
-        self.lignes.push(s);
-        self.lignes.len()
-    }
-    fn mesh(&mut self, tris: &[[glam::DVec3; 3]], contexte: usize) -> usize {
-        let m = Maillage::depuis_triangles(tris);
-        if m.triangles.is_empty() {
-            return 0;
-        }
-        let points = m
-            .sommets
-            .iter()
-            .map(|p| format!("({:.6},{:.6},{:.6})", p[0], p[1], p[2]))
-            .collect::<Vec<_>>()
-            .join(",");
-        let pts = self.add(format!("IFCCARTESIANPOINTLIST3D(({points}))"));
-        let faces = m
-            .triangles
-            .iter()
-            .map(|t| format!("({},{},{})", t[0] + 1, t[1] + 1, t[2] + 1))
-            .collect::<Vec<_>>()
-            .join(",");
-        let faces = self.add(format!("IFCTRIANGULATEDFACESET(#{pts},$,$,({faces}),$)"));
-        let rep = self.add(format!(
-            "IFCSHAPEREPRESENTATION(#{contexte},'Body','Tessellation',(#{faces}))"
-        ));
-        self.add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,(#{rep}))"))
-    }
-}
-fn texte(s: &str) -> String {
-    let mut out = String::from("'");
-    for c in s.chars() {
-        if c == '\'' {
-            out.push_str("''");
-        } else if c == '\\' || !c.is_ascii() || c.is_control() {
-            out.push_str("\\X2\\");
-            for n in c.encode_utf16(&mut [0; 2]).iter() {
-                let _ = write!(out, "{n:04X}");
-            }
-            out.push_str("\\X0\\");
-        } else {
-            out.push(c);
-        }
-    }
-    out.push('\'');
-    out
-}
-fn ref_(i: usize) -> String {
-    if i == 0 { "$".into() } else { format!("#{i}") }
-}
-fn refs(ids: &[usize]) -> String {
-    format!(
-        "({})",
-        ids.iter()
-            .map(|i| format!("#{i}"))
-            .collect::<Vec<_>>()
-            .join(",")
-    )
-}
-fn guid(cle: &str, origine: Option<&Origine>) -> String {
-    let alphabet = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$";
-    if let Some(g) = origine.and_then(|o| o.guid.as_ref()).filter(|g| {
-        g.len() == 22 && g.bytes().all(|b| alphabet.contains(&b)) && g.as_bytes()[0] <= b'3'
-    }) {
-        return g.clone();
-    }
-    let mut h = 0x6c62272e07bb014262b821756295c58du128;
-    for b in cle.bytes() {
-        h = (h ^ (b as u128)).wrapping_mul(0x1000000000000000000013b);
-    }
-    let mut s = [b'0'; 22];
-    for i in (0..22).rev() {
-        s[i] = alphabet[(h & 63) as usize];
-        h >>= 6;
-    }
-    String::from_utf8(s.to_vec()).unwrap()
-}
-
+use step::{guid, ref_, refs, texte, Step};
 pub fn exporter(p: &Projet) -> Result<String, String> {
     p.verifier()?;
     let mut w = Step { lignes: Vec::new() };
     let zero = w.add("IFCCARTESIANPOINT((0.,0.,0.))".into());
     let axe = w.add(format!("IFCAXIS2PLACEMENT3D(#{zero},$,$)"));
     let placement = w.add(format!("IFCLOCALPLACEMENT($,#{axe})"));
+    let nord = site::nord(p).map_or("$".into(), |d| format!("#{}", w.add(d)));
     let contexte = w.add(format!(
-        "IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,0.00001,#{axe},$)"
+        "IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,0.00001,#{axe},{nord})"
     ));
     let unite = w.add("IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.)".into());
     let unites = w.add(format!("IFCUNITASSIGNMENT((#{unite}))"));
@@ -106,9 +30,15 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         guid(&format!("bat:{}", p.nom), None),
         texte(&p.nom)
     ));
+    // projet -> site -> bâtiment -> niveaux
+    let site = site::site(&mut w, p, placement);
     w.add(format!(
-        "IFCRELAGGREGATES('{}',$,$,$,#{projet},(#{bat}))",
+        "IFCRELAGGREGATES('{}',$,$,$,#{projet},(#{site}))",
         guid("rel-projet", None)
+    ));
+    w.add(format!(
+        "IFCRELAGGREGATES('{}',$,$,$,#{site},(#{bat}))",
+        guid("rel-site", None)
     ));
     let mut niveaux = HashMap::new();
     let mut ns = Vec::new();
@@ -129,7 +59,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             refs(&ns)
         ));
     }
-    let mut types = HashMap::new();
+    let mut jeux = HashMap::new();
     for t in p.types_murs.iter().chain(&p.types_dalles) {
         let mut cs = Vec::new();
         for c in &t.couches {
@@ -147,7 +77,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             refs(&cs),
             texte(&t.nom)
         ));
-        types.insert(t.id.clone(), set);
+        jeux.insert(t.id.clone(), set);
     }
     let mut contenus: HashMap<usize, Vec<usize>> = HashMap::new();
     let mut produits = HashMap::new();
@@ -170,7 +100,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         w.add(format!(
             "IFCRELASSOCIATESMATERIAL('{}',$,$,$,(#{id}),#{})",
             guid(&format!("mat:{}", m.id), None),
-            types[&m.type_mur]
+            jeux[&m.type_mur]
         ));
     }
     for a in &p.assemblages {
@@ -227,7 +157,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         w.add(format!(
             "IFCRELASSOCIATESMATERIAL('{}',$,$,$,(#{id}),#{})",
             guid(&format!("mat:{}", d.id), None),
-            types[&d.type_dalle]
+            jeux[&d.type_dalle]
         ));
     }
     for b in &p.barres {
@@ -318,7 +248,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         // solide de l'épaisseur du type, cotes NGF ramenées à l'origine du projet
         let rep = w.mesh(&t.solide(p.ngf(), p.type_terrain(t).epaisseur)?, contexte);
         let id = w.add(format!("IFCGEOGRAPHICELEMENT('{}',$,{},$,$,#{placement},{},$,.TERRAIN.)", guid(&t.id, None), texte(&t.nom), ref_(rep)));
-        contenus.entry(bat).or_default().push(id);
+        contenus.entry(site).or_default().push(id);
     }
     for limite in &p.limites_propriete {
         limite.verifier()?;
@@ -329,7 +259,7 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
         let rep = w.add(format!("IFCSHAPEREPRESENTATION(#{contexte},'Annotation','Curve3D',(#{ligne}))"));
         let rep = w.add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,(#{rep}))"));
         let id = w.add(format!("IFCANNOTATION('{}',$,{},$,$,#{placement},#{rep})", guid(&limite.id, None), texte(&limite.nom)));
-        contenus.entry(bat).or_default().push(id);
+        contenus.entry(site).or_default().push(id);
     }
     for e in &p.importes {
         let rep = w.mesh(&solides::maillage(&e.maillage)?, contexte);
@@ -361,36 +291,5 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             refs(&ids)
         ));
     }
-    let mut out = String::from(
-        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION(('ViewDefinition [ReferenceView_V1.2]'),'2;1');\nFILE_NAME('modele.ifc','',(''),(''),'bimedit','bimedit','');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n",
-    );
-    for (i, l) in w.lignes.iter().enumerate() {
-        let _ = writeln!(out, "#{}={l};", i + 1);
-    }
-    out.push_str("ENDSEC;\nEND-ISO-10303-21;\n");
-    Ok(out)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::depuis_ifc;
-    #[test]
-    fn export_ifc4_relecture_geometrie_et_identifiants() {
-        let (p, _) =
-            depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {})
-                .unwrap();
-        let s = exporter(&p).unwrap();
-        assert_eq!(s, exporter(&p).unwrap());
-        let m = ifc_base::semantique::IfcModel::new(ifc_base::step::StepFile::parse(s.as_bytes()).unwrap());
-        assert_eq!(m.file.schema, "IFC4");
-        assert!(!m.products.is_empty());
-        let stats = formats::ifc::geom::GeomStats::default();
-        let count = m
-            .products
-            .iter()
-            .filter(|&&id| formats::ifc::geom::product_geometry(&m, &stats, id).is_some())
-            .count();
-        assert!(count >= p.murs.len() + p.dalles.len() + p.importes.len());
-    }
+    Ok(w.fichier("modele.ifc", ""))
 }

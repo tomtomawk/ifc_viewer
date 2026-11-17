@@ -1,0 +1,70 @@
+//! Tests de l'export IFC4 : relecture, hiérarchie spatiale, types, propriétés, quantités.
+use super::*;
+use crate::depuis_ifc;
+#[test]
+fn export_ifc4_relecture_geometrie_et_identifiants() {
+    let (p, _) =
+        depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {})
+            .unwrap();
+    let s = exporter(&p).unwrap();
+    assert_eq!(s, exporter(&p).unwrap());
+    let m = ifc_base::semantique::IfcModel::new(ifc_base::step::StepFile::parse(s.as_bytes()).unwrap());
+    assert_eq!(m.file.schema, "IFC4");
+    assert!(!m.products.is_empty());
+    let stats = formats::ifc::geom::GeomStats::default();
+    let count = m
+        .products
+        .iter()
+        .filter(|&&id| formats::ifc::geom::product_geometry(&m, &stats, id).is_some())
+        .count();
+    assert!(count >= p.murs.len() + p.dalles.len() + p.importes.len());
+}
+
+/// Projet natif de démonstration et son export relu par `ifc_base`.
+fn maison() -> (Projet, String, ifc_base::semantique::IfcModel) {
+    let json = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json")).unwrap();
+    let p = Projet::lire_json(&json).unwrap();
+    let s = exporter(&p).unwrap();
+    let m = ifc_base::semantique::IfcModel::new(ifc_base::step::StepFile::parse(s.as_bytes()).expect("relecture STEP"));
+    (p, s, m)
+}
+
+fn du_type<'a>(m: &'a ifc_base::semantique::IfcModel, ty: &'a str) -> impl Iterator<Item = noyau::Id> + 'a {
+    let mut ids: Vec<_> = m.file.entities.iter().filter(|(_, e)| e.is(ty)).map(|(&id, _)| id).collect();
+    ids.sort_unstable();
+    ids.into_iter()
+}
+
+#[test]
+fn hierarchie_projet_site_batiment_niveaux() {
+    let (p, _, m) = maison();
+    let sites: Vec<_> = du_type(&m, "IFCSITE").collect();
+    assert_eq!(sites.len(), 1);
+    let bat = du_type(&m, "IFCBUILDING").next().unwrap();
+    assert_eq!(m.parent.get(&sites[0]).copied(), m.project);
+    assert_eq!(m.parent.get(&bat), Some(&sites[0]));
+    let niveaux: Vec<_> = du_type(&m, "IFCBUILDINGSTOREY").collect();
+    assert_eq!(niveaux.len(), p.niveaux.len());
+    assert!(niveaux.iter().all(|n| m.parent.get(n) == Some(&bat)));
+    // les murs sont dans un niveau
+    assert!(du_type(&m, "IFCWALL").all(|w| m.parent.get(&w).is_some_and(|n| niveaux.contains(n))));
+}
+
+#[test]
+fn terrain_et_limite_dans_le_site() {
+    use modele::elements::site::{LimitePropriete, Terrain};
+    let mut p = Projet::nouveau("Site");
+    p.terrains.push(Terrain { id: "t".into(), nom: "Terrain".into(), contour: vec![[0., 0., 0.], [1000., 0., 100.], [1000., 1000., 200.], [0., 1000., 0.]], points: vec![], type_terrain: None });
+    p.limites_propriete.push(LimitePropriete { id: "l".into(), nom: "Parcelle".into(), altitude: 0., contour: vec![[0., 0.], [1000., 0.], [1000., 1000.]] });
+    p.lieu = Some(modele::soleil::Lieu { nom: "Rennes".into(), latitude: 48.1173, longitude: -1.6778, fuseau: 1.0, heure_ete: true });
+    p.coordonnees_origine = [0.0, 0.0, 35_000.0];
+    p.orientation_nord = std::f64::consts::FRAC_PI_2;
+    let s = exporter(&p).unwrap();
+    assert!(s.contains(".ELEMENT.,(48,7,2,280000),(-1,-40,-40,-80000),35000.000000,$,$)"));
+    assert!(s.contains("IFCDIRECTION((-1.000000,0.000000))"));
+    let m = ifc_base::semantique::IfcModel::new(ifc_base::step::StepFile::parse(s.as_bytes()).unwrap());
+    let site = du_type(&m, "IFCSITE").next().unwrap();
+    assert_eq!(m.parent.get(&du_type(&m, "IFCGEOGRAPHICELEMENT").next().unwrap()), Some(&site));
+    assert_eq!(m.parent.get(&du_type(&m, "IFCANNOTATION").next().unwrap()), Some(&site));
+}
+
