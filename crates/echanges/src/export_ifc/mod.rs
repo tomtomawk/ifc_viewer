@@ -1,4 +1,5 @@
-//! Export IFC4 en millimètres : classes, site, niveaux, matériaux et géométrie tessellée.
+//! Export IFC4 (ReferenceView, géométrie tessellée, mm) : site, niveaux, classes, types,
+//! jeux de propriétés et quantités, matériaux à couches et couleurs.
 mod materiaux;
 mod proprietes;
 mod quantites;
@@ -13,7 +14,20 @@ use modele::*;
 use modele::{elements::pente, murs::jonctions, volumes::solides};
 use std::collections::HashMap;
 use step::{guid, ref_, refs, texte, Step};
+
+/// Export IFC4 du projet ; l'en-tête nomme le fichier `modele.ifc`.
 pub fn exporter(p: &Projet) -> Result<String, String> {
+    exporter_fichier(p, "modele.ifc")
+}
+
+/// Export IFC4 du projet ; `nom_fichier` (nom seul, sans dossier) et l'heure UTC de
+/// l'export vont dans `FILE_NAME` de l'en-tête.
+pub fn exporter_fichier(p: &Projet, nom_fichier: &str) -> Result<String, String> {
+    Ok(contenu(p)?.fichier(nom_fichier, &step::maintenant()))
+}
+
+/// Entités du fichier (section DATA), sans l'en-tête.
+fn contenu(p: &Projet) -> Result<Step, String> {
     p.verifier()?;
     let mut w = Step { lignes: Vec::new() };
     let zero = w.add("IFCCARTESIANPOINT((0.,0.,0.))".into());
@@ -338,5 +352,5 @@ pub fn exporter(p: &Projet) -> Result<String, String> {
             refs(&ids)
         ));
     }
-    Ok(w.fichier("modele.ifc", ""))
+    Ok(w)
 }

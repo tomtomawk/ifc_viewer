@@ -62,7 +62,9 @@ Mesures de reconstruction de la scène (build release, `BIMEDIT_CHRONO=1`, `bime
 
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
-| A6 | Export IFC4 : ajouter `IfcSite`, types, jeux de propriétés, quantités, couleurs, `IfcMaterialLayerSetUsage`, horodatage de l'en-tête | P1 | `crates/echanges/src/export_ifc.rs` |
+| A6b | Lecture IFC : `ifc_base::semantique` affiche les `IfcQuantityArea`/`IfcQuantityVolume` à l'échelle de l'unité de longueur au carré/au cube, sans lire `AREAUNIT`/`VOLUMEUNIT` : les m² et m³ de l'export natif s'affichent divisés par 10⁶ et 10⁹ | P1 | `crates/ifc_base/src/semantique.rs` (`collect_quantity`) |
+| A6c | Export IFC : nom du fichier dans l'en-tête — `--export-ifc` et l'interface appellent encore `exporter` (« modele.ifc ») au lieu de `exporter_fichier` ; CI : lancer `tools/valider_ifc.py --donnees` | P2 | `crates/pilote/src/cli.rs`, `crates/interface/`, `.github/workflows/ci.yml` |
+| A6d | Export IFC : données absentes du modèle — coordonnées E/N et système de coordonnées (`IfcMapConversion`), `IsExternal`, classements feu et acoustique, phases et démolitions (décision §3) | P2 | `docs/EDITION.md` « Sortie → IFC4 » |
 | A7 | Import IFC : un élément importé perd propriétés, matériau et couleur ; poteaux, poutres, toitures, escaliers restent des maillages ; `IfcSpace` ignoré ; `.ifczip` refusé | P1 | `crates/echanges/src/depuis_ifc.rs`, `crates/modele/src/lib.rs` (`ElementImporte`) |
 | X1 | Revit : surfaces `HermiteSurf`, `ConeSurf`, `OffsetSurf` et courbes `GEllipse` non décodées ; contenu des nomenclatures et paramètres calculés non lus ; nomenclatures posées sur les feuilles non lues | P3 | `README.md` « Limites connues », `docs/EDITION.md` |
 | X2 | IFC : `IfcSurfaceCurveSweptAreaSolid`, `IfcFixedReferenceSweptAreaSolid`, `IfcSectionedSolid`, alignements IFC4X3, textures ; NURBS des `IfcAdvancedBrep` facettisées grossièrement | P3 | `README.md` « Limites connues » |
@@ -146,7 +148,7 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 | Sujet | Question |
 |---|---|
 | Ordre | Après A1 à A3 : messages et arrière-plan (A4, A5) ou IFC (A6, A7) d'abord ? |
-| A6 | Jeux de propriétés attendus par les partenaires ; représentation des phases et démolitions dans l'IFC |
+| A6 | Jeux de propriétés attendus par les partenaires au-delà des `Pset_*Common` (valeurs à saisir dans le modèle). Phases et démolitions dans l'IFC — option 1 : propriété `Status` des `Pset_*Common` (NEW, EXISTING, DEMOLISH, TEMPORARY, selon la phase et `Projet::demolitions`), standard, lue par tous les logiciels, un seul fichier ; option 2 : un `IfcRelAssignsToControl` par phase vers un `IfcTask` (ou un fichier par phase), plus fidèle aux phases nommées mais peu lu par les visionneuses. Recommandation : option 1, avec un `Pset` maison `BIMedit_Phase` portant le nom de la phase |
 | A7 | Convertir les `IfcSpace` en pièces natives ? |
 | F1 | Valider le changement de format `Symbole` / éléments 2D |
 | E1 | Emplacement partagé de la bibliothèque de styles, liste des catégories, priorité matériau / catégorie |
@@ -159,6 +161,7 @@ Le plus récent en premier. Les numéros « n° » sont ceux de la feuille de ro
 
 | Date | Fait | Commit | Vérification |
 |---|---|---|---|
+| 17/11/2026 | A6, export IFC4 (toujours tessellé) : `IfcSite` (lieu, cote NGF, `TrueNorth`), terrains et limites dans le site ; types IFC par type utilisé ; `Pset_*Common` limités aux valeurs connues ; `Qto_*BaseQuantities` pris aux calculs des nomenclatures, unités m² et m³ ; un `IfcSurfaceStyle` par matériau ; `IfcMaterialLayerSetUsage` des murs (axe `Axis`) et des dalles sans pente ; heure UTC et `exporter_fichier` pour l'en-tête ; `export_ifc.rs` découpé en `export_ifc/` ; `tools/valider_ifc.py --donnees`. Reste : A6b à A6d | `a5e6ac5` à ce commit | 10 tests ajoutés ; `cargo test --workspace` (debug, sans info de débogage faute de disque) : 439 réussis, 0 échec, 2 ignorés ; `cargo test -p echanges --release` : 38 réussis ; `valider_ifc.py --donnees` sur `maison.ifc` (ifcopenshell 0.9.0.post1) : 15 géométries, 0 erreur ; `immeuble_essai_murs` : 5 murs d'enduit à géométrie vide pour ifcopenshell, corps inchangé par ce lot ; noms des Pset/Qto vérifiés sur les gabarits IFC4 ADD2 d'ifcopenshell (site buildingSMART bloqué) ; non ouvert dans un autre logiciel BIM |
 | 17/11/2026 | A3, lecteurs bornés : imbrication STEP limitée à 256 ; arcs ramenés à un tour et paramètres non finis refusés ; B-spline validée (degré, multiplicités, nœuds) ; révolution bornée à un tour ; items mappés limités à 50 000 parties et 5 millions de triangles par produit ; décompression RVT plafonnée à 2 Go ; arc RVT limité à 720 segments | ce commit | 5 tests ajoutés (`ifc_base` 3 tests, `formats` 56, réussis en debug et en release) ; 4 fichiers IFC piégés : débordement de pile, épuisement mémoire et deux gels reproduits avec le binaire d'avant, ouverture en moins de 0,1 s après ; `--stats` identique sur `test_ifc4.ifc` et `test_ifc4_murs.ifc` ; cas RVT non essayés sur un vrai fichier |
 | 17/11/2026 | A2 : limites du `README.md` et d'`EDITION.md` revérifiées dans le code (entités IFC et surfaces Revit non décodées, seuils CSG, `.ifczip`) ; `.mcp.json` sans `.exe` | ce commit | serveur MCP démarré sous Linux (réponse à `initialize`) ; non essayé sous Windows (A2c) |
 | 17/11/2026 | Test `suivre_trait::tests::ctrl_seul_et_espace` corrigé : la sortie d'egui est vidée de ses textures avant d'être jetée (première partie de A1) | `4e20e43` | `cargo test -p interface --lib` : 60 réussis en debug et en release |

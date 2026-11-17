@@ -115,3 +115,34 @@ pub(super) fn guid(cle: &str, origine: Option<&Origine>) -> String {
     }
     String::from_utf8(s.to_vec()).unwrap()
 }
+
+/// Horodatage ISO 8601 UTC (`AAAA-MM-JJThh:mm:ss`) de `secondes` depuis 1970.
+pub(super) fn horodatage_utc(secondes: u64) -> String {
+    let (jours, s) = ((secondes / 86_400) as i64, secondes % 86_400);
+    // jours depuis 1970 -> date civile (algorithme de H. Hinnant)
+    let z = jours + 719_468;
+    let ere = z.div_euclid(146_097);
+    let jde = z - ere * 146_097;
+    let ade = (jde - jde / 1460 + jde / 36_524 - jde / 146_096) / 365;
+    let jda = jde - (365 * ade + ade / 4 - ade / 100);
+    let mp = (5 * jda + 2) / 153;
+    let jour = jda - (153 * mp + 2) / 5 + 1;
+    let mois = if mp < 10 { mp + 3 } else { mp - 9 };
+    let annee = ade + ere * 400 + i64::from(mois <= 2);
+    format!("{annee:04}-{mois:02}-{jour:02}T{:02}:{:02}:{:02}", s / 3600, s % 3600 / 60, s % 60)
+}
+
+/// Horodatage UTC de l'instant présent.
+pub(super) fn maintenant() -> String {
+    horodatage_utc(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn horodatage_iso_8601() {
+        assert_eq!(super::horodatage_utc(0), "1970-01-01T00:00:00");
+        assert_eq!(super::horodatage_utc(951_782_400), "2000-02-29T00:00:00");
+        assert_eq!(super::horodatage_utc(1_794_928_215), "2026-11-17T15:10:15");
+    }
+}

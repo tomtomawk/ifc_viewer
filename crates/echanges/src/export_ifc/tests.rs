@@ -7,7 +7,9 @@ fn export_ifc4_relecture_geometrie_et_identifiants() {
         depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {})
             .unwrap();
     let s = exporter(&p).unwrap();
-    assert_eq!(s, exporter(&p).unwrap());
+    // données identiques d'un export à l'autre (l'en-tête porte l'heure)
+    let donnees = |s: &str| s[s.find("DATA;").unwrap()..].to_string();
+    assert_eq!(donnees(&s), donnees(&exporter(&p).unwrap()));
     let m = ifc_base::semantique::IfcModel::new(ifc_base::step::StepFile::parse(s.as_bytes()).unwrap());
     assert_eq!(m.file.schema, "IFC4");
     assert!(!m.products.is_empty());
@@ -18,6 +20,17 @@ fn export_ifc4_relecture_geometrie_et_identifiants() {
         .filter(|&&id| formats::ifc::geom::product_geometry(&m, &stats, id).is_some())
         .count();
     assert!(count >= p.murs.len() + p.dalles.len() + p.importes.len());
+}
+
+#[test]
+fn entete_nom_et_horodatage() {
+    let s = exporter_fichier(&Projet::nouveau("Vide"), "maison.ifc").unwrap();
+    let ligne = s.lines().find(|l| l.starts_with("FILE_NAME(")).unwrap();
+    let h = &ligne["FILE_NAME('maison.ifc','".len()..][..19];
+    assert!(ligne.starts_with("FILE_NAME('maison.ifc','20"), "{ligne}");
+    let b = h.as_bytes();
+    assert!(b[4] == b'-' && b[7] == b'-' && b[10] == b'T' && b[13] == b':' && b[16] == b':', "{h}");
+    assert!(exporter(&Projet::nouveau("Vide")).unwrap().contains("FILE_NAME('modele.ifc','20"));
 }
 
 /// Projet natif de démonstration et son export relu par `ifc_base`.
