@@ -469,8 +469,10 @@ une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvre
   (prévoir un débord). Détacher retrouve la contrainte haute enregistrée. Supprimer
   la toiture détache ses murs sans les supprimer.
 - Après chaque opération, les opérations booléennes des murs inchangés sont reprises
-  de la mémoire (`noyau::csg_memoire`) ; les arêtes et l'assemblage de la scène sont
-  recalculés en entier (mesures et suite : [SUIVI.md](SUIVI.md) §1 et tâche A8). La copie de récupération n'est pas un journal
+  de la mémoire (`noyau::csg_memoire`) ; les silhouettes des arbres aussi
+  (`maillage::aretes::silhouette_arbre`). Les arêtes jointes par matériau et
+  l'assemblage de la scène sont recalculés en entier (mesures et suite :
+  [SUIVI.md](SUIVI.md) §1 et tâche A8). La copie de récupération n'est pas un journal
   incrémental ; un calcul qui n'a pas encore abouti n'y figure pas.
 - L'export IFC utilise des corps tessellés (pas de solides paramétriques ni de
   restitution des familles Revit) et ne porte que les paramètres que le modèle

@@ -480,7 +480,10 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         geoms.push(ProductGeom { id, parts: vec![Part { color: [0.65,0.68,0.72,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
     chrono("scène : autres éléments", &mut t_etape);
-    let mut aretes = aretes_jointes(&geoms, &materiaux_parts);
+    // arbres et terrains : arêtes remplacées ci-dessous (silhouette, terrain lissé) ;
+    // les joindre aux autres coûtait 90 % du temps des arêtes sur l'îlot (feuillages)
+    let exclus: std::collections::HashSet<noyau::Id> = projet.arbres.iter().map(|a| id_natif("arbre", &a.id)).chain(projet.terrains.iter().map(|t| id_natif("terrain", &t.id))).collect();
+    let mut aretes = aretes_jointes(&geoms, &materiaux_parts, &exclus);
     chrono("scène : arêtes", &mut t_etape);
     // liens IFC : géométrie et arêtes reprises du cache, placées dans le projet
     let liens::Ajouts { geoms: geoms_liens, aretes: aretes_liens, ignores: ignores_liens } = liens::ajouter(projet, &mut model, racine);
@@ -491,13 +494,19 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
     for t in &projet.terrains {
         aretes.insert(id_natif("terrain", &t.id), aretes_terrain(projet, t));
     }
-    // arbres : surfaces courbes, arêtes sur la silhouette seulement
+    // arbres : surfaces courbes, arêtes sur la silhouette seulement ; gardées d'une
+    // construction à l'autre tant que l'arbre et son niveau ne changent pas (31 arbres :
+    // 50 ms par commande sur l'îlot)
     for a in &projet.arbres {
         let z0 = projet.niveau(&a.niveau).map_or(0.0, |n| n.altitude);
-        let (t, h) = a.solides(z0);
-        let tris: Vec<[glam::DVec3; 3]> = t.into_iter().chain(h).map(|t| t.map(|v| v * 0.001)).collect();
-        aretes.insert(id_natif("arbre", &a.id), aretes_silhouette(&tris));
+        let s = aretes::silhouette_arbre(a, z0, || {
+            let (t, h) = a.solides(z0);
+            let tris: Vec<[glam::DVec3; 3]> = t.into_iter().chain(h).map(|t| t.map(|v| v * 0.001)).collect();
+            aretes_silhouette(&tris)
+        });
+        aretes.insert(id_natif("arbre", &a.id), s);
     }
+    aretes::fin_de_construction();
     let mut scene = formats::ifc::assemblage::assemble_avec(model, geoms, path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| projet.nom.clone()), aretes);
     chrono("scène : assemblage", &mut t_etape);
     for a in &projet.arbres {

@@ -13,7 +13,7 @@ pub const PAS: f64 = 1e-4;
 const PAS_DIR: f64 = 1e-4;
 
 /// Arêtes d'un maillage pour le dessin.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Aretes {
     /// Arêtes vives : toujours tracées (sauf parties cachées).
     pub vives: Vec<[DVec3; 2]>,
@@ -90,9 +90,26 @@ fn aretes_proprietaires(tris: impl Iterator<Item = ([DVec3; 3], usize)>, annuler
         bornes.sort_by(f64::total_cmp);
         bornes.dedup_by(|a, b| (*a - *b).abs() < PAS);
         let mut courant: Option<(f64, f64, usize)> = None;
+        // balayage : segments rangés par début ; un segment entre dans les actifs quand
+        // l'intervalle l'atteint et en sort pour de bon quand il se termine avant (les
+        // bornes croissent). Les actifs restent dans l'ordre d'origine, dont dépendent la
+        // normale de référence et l'élément porteur de chaque groupe. Le parcours de tous
+        // les segments à chaque intervalle était quadratique sur les longues droites
+        // (pied des façades).
+        let mut par_debut: Vec<usize> = (0..segs.len()).collect();
+        par_debut.sort_by(|&i, &j| segs[i].0.total_cmp(&segs[j].0));
+        let mut suivant = 0;
+        let mut ouverts: Vec<usize> = Vec::new();
         for w in bornes.windows(2) {
             let (a, b) = (w[0], w[1]);
-            let actifs = segs.iter().filter(|s| s.0 <= a + PAS && s.1 >= b - PAS);
+            while suivant < par_debut.len() && segs[par_debut[suivant]].0 <= a + PAS {
+                let i = par_debut[suivant];
+                let rang = ouverts.partition_point(|&k| k < i);
+                ouverts.insert(rang, i);
+                suivant += 1;
+            }
+            ouverts.retain(|&i| segs[i].1 >= b - PAS);
+            let actifs = ouverts.iter().map(|&i| &segs[i]);
             // groupes d'orientation : (normale de référence, somme des sens, normale la
             // plus écartée de la référence, élément)
             let mut groupes: Vec<(DVec3, i32, DVec3, usize)> = Vec::new();

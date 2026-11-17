@@ -7,11 +7,12 @@ use rayon::prelude::*;
 
 /// Arêtes des éléments calculées par matériau : là où deux éléments d'un même matériau se
 /// joignent (murs raccordés, dalle sous un mur), pas d'arête sur les faces qui se
-/// prolongent ; les parties sans matériau restent à part.
-pub(crate) fn aretes_jointes(geoms: &[ProductGeom], materiaux: &[Vec<Option<String>>]) -> std::collections::HashMap<Id, noyau::aretes::Aretes> {
+/// prolongent ; les parties sans matériau restent à part. Les éléments de `exclus` (arbres,
+/// terrains : leurs arêtes sont calculées autrement) ne sont pas traités.
+pub(crate) fn aretes_jointes(geoms: &[ProductGeom], materiaux: &[Vec<Option<String>>], exclus: &std::collections::HashSet<Id>) -> std::collections::HashMap<Id, noyau::aretes::Aretes> {
     use std::collections::HashMap;
     let mut groupes: HashMap<String, Vec<([DVec3; 3], usize)>> = HashMap::new();
-    for (k, (g, noms)) in geoms.iter().zip(materiaux).enumerate() {
+    for (k, (g, noms)) in geoms.iter().zip(materiaux).enumerate().filter(|(_, (g, _))| !exclus.contains(&g.id)) {
         for (i, p) in g.parts.iter().enumerate() {
             let cle = noms.get(i).cloned().flatten().map_or_else(|| format!("\u{0}{k}:{i}"), |n| n);
             groupes.entry(cle).or_default().extend(p.tris.iter().map(|t| (*t, k)));
@@ -35,6 +36,55 @@ pub(crate) fn aretes_jointes(geoms: &[ProductGeom], materiaux: &[Vec<Option<Stri
 /// partie vue sous le plan de coupe (faces blanches) ne se distingue pas du papier.
 /// Arêtes d'une surface courbe (arbre) : toutes « douces », tracées sur la silhouette
 /// seulement ; bords libres en arêtes vives.
+/// Silhouettes des arbres déjà calculées : empreinte de l'arbre et de l'altitude de son
+/// niveau, génération de dernier usage, arêtes.
+#[derive(Default)]
+struct MemoireArbres {
+    generation: u64,
+    silhouettes: std::collections::HashMap<u64, (u64, noyau::aretes::Aretes)>,
+}
+
+fn memoire_arbres() -> &'static std::sync::Mutex<MemoireArbres> {
+    static M: std::sync::OnceLock<std::sync::Mutex<MemoireArbres>> = std::sync::OnceLock::new();
+    M.get_or_init(Default::default)
+}
+
+/// Nombre de constructions pendant lesquelles une silhouette inutilisée est gardée
+/// (annuler puis rétablir la retrouvent).
+const GENERATIONS_GARDEES: u64 = 4;
+
+/// Silhouette de l'arbre `a` posé à `z0` (mm), reprise de la mémoire ou calculée.
+pub(crate) fn silhouette_arbre(a: &modele::elements::arbre::Arbre, z0: f64, calcul: impl FnOnce() -> noyau::aretes::Aretes) -> noyau::aretes::Aretes {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    // tous les paramètres de l'arbre (Debug : nombres écrits en entier)
+    format!("{a:?}").hash(&mut h);
+    z0.to_bits().hash(&mut h);
+    let cle = h.finish();
+    {
+        let mut m = memoire_arbres().lock().unwrap_or_else(|e| e.into_inner());
+        let g = m.generation;
+        if let Some(e) = m.silhouettes.get_mut(&cle) {
+            e.0 = g;
+            return e.1.clone();
+        }
+    }
+    let s = calcul();
+    let mut m = memoire_arbres().lock().unwrap_or_else(|e| e.into_inner());
+    let g = m.generation;
+    m.silhouettes.insert(cle, (g, s.clone()));
+    s
+}
+
+/// Fin d'une construction de scène : oublie les silhouettes inutilisées depuis
+/// `GENERATIONS_GARDEES` constructions.
+pub(crate) fn fin_de_construction() {
+    let mut m = memoire_arbres().lock().unwrap_or_else(|e| e.into_inner());
+    m.generation += 1;
+    let g = m.generation;
+    m.silhouettes.retain(|_, e| g - e.0 <= GENERATIONS_GARDEES);
+}
+
 pub(crate) fn aretes_silhouette(tris: &[[glam::DVec3; 3]]) -> noyau::aretes::Aretes {
     use glam::DVec3;
     let cle = |p: DVec3| (p * 10_000.0).round().as_i64vec3().to_array();
