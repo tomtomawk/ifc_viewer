@@ -1037,6 +1037,8 @@ impl eframe::App for ViewerApp {
             }
             if !famille {
                 egui::Panel::bottom("barre_vue").show(ui, |ui| self.barre_vue(ui));
+            } else {
+                egui::Panel::bottom("barre_vue_famille").show(ui, |ui| self.barre_vue_famille(ui));
             }
             egui::CentralPanel::no_frame().show(ui, |ui| {
                 let rect = ui.available_rect_before_wrap();

@@ -157,7 +157,7 @@ impl ViewerApp {
                 match argument {
                     "plan"=>ed.ouvrir_vue(VueFamille::Plan),"coupe"=>ed.ouvrir_vue(VueFamille::Coupe),"elevation"=>ed.ouvrir_vue(VueFamille::Elevation),
                     "3d"=>ed.ouvrir_vue_3d(),
-                    "cadrer"=>if ed.vue_3d { ed.cadrage_3d_initial=true; } else { ed.navigation[ed.vue as usize]=Default::default(); },
+                    "cadrer"=>if ed.vue_3d { ed.cadrage_3d_initial=true; } else { ed.navigation[ed.vue as usize].cadrer(); },
                     ""|"etat"=>{},_=>return Err("famille_navigation etat|plan|coupe|elevation|3d|cadrer".into())
                 }
                 let n=ed.navigation[ed.vue as usize];
@@ -586,7 +586,7 @@ impl ViewerApp {
 
     /// Vue centrale de l'onglet « Famille » : barre d'outils et vue de travail.
     pub(crate) fn cadrer_famille(&mut self) {
-        if let Some(ed)=self.famille.as_mut(){ if ed.vue_3d { ed.cadrage_3d_initial = true; } else { ed.navigation[ed.vue as usize]=Default::default(); } }
+        if let Some(ed)=self.famille.as_mut(){ if ed.vue_3d { ed.cadrage_3d_initial = true; } else { ed.navigation[ed.vue as usize].cadrer(); } }
     }
 
     pub(crate) fn vue_famille(&mut self, ui: &mut egui::Ui) {
@@ -594,10 +594,11 @@ impl ViewerApp {
         let projet_vide = modele::Projet::default();
         let delai_accrochage = self.options.delai_accrochage;
         let projet = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
+        let fond = couleur_fond_vue(self.style);
         let Some(ed) = self.famille.as_mut() else { return };
-        egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(6.0).show(ui, |ui| {
+        egui::Frame::new().fill(fond).show(ui, |ui| {
             ui.set_min_size(ui.available_size());
-            canevas(ui, ed, projet, delai_accrochage);
+            canevas(ui, ed, projet, delai_accrochage, fond);
             let rect = ed.rect_navigation;
             let mut bas = 0.0;
             if ed.outil != OutilFamille::Selection && rect.is_positive() {

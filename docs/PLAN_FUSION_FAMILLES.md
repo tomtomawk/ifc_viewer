@@ -24,6 +24,7 @@ Aligner le fonctionnement des vues de famille sur celui des vues de projet :
 - Retirer le nom de vue et le bouton « Cadrer » du haut du canevas ; utiliser les mêmes commandes et la même disposition que dans le projet.
 - Cadrer par double-clic sur la molette dans les vues planes et 3D, et aligner zoom, déplacement et rotation sur les gestes du projet.
 - Réserver le mur hôte aux catégories hébergées par un mur ; vérifier son affichage dans toutes les vues concernées.
+- Le canevas plan de famille reste dessiné par egui (repère h, v de la famille, `editeur_famille/navigation.rs`) : les vues de projet passent par la caméra et le rendu wgpu de la scène, qu'une famille sans projet ne fournit pas. Il partage avec elles les gestes (pas de molette commun), le fond (`navigation::fond_vue`), le bandeau de dessin (`outils/bandeau`) et une barre de vue sous le canevas portant l'échelle de la vue ; la hauteur des textes des familles modélisées suit cette échelle, celle des cartouches et étiquettes reste en mm du papier.
 
 ## Lots proposés
 

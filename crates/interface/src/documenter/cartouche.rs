@@ -1,6 +1,6 @@
 //! Peinture d'un rendu 2D de famille (cartouche, étiquette, profil) dans un cadre de vue.
 use crate::*;
-use crate::familles::editeur_famille::Cadre;
+use crate::familles::editeur_famille::navigation::Cadre;
 
 pub(crate) fn peindre(painter: &egui::Painter, cadre: &Cadre, dessin: crate::documenter::feuilles::Rendu, selection: Option<Color32>) {
     let ecran = |q: egui::Pos2| cadre.ecran(q.x as f64, q.y as f64);
