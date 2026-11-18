@@ -69,7 +69,26 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   dans les entités ignorées, sans empêcher d'ouvrir le projet. Le chemin enregistré est
   absolu. Un fichier IFC ne s'ouvre plus seul (Début → Ouvrir, glisser hors d'un projet
   natif, pilote `ouvrir`) : un message renvoie vers le lien ou l'import.
-- **Début → Importer** convertit un IFC/RVT/RFA/RTE dans un nouveau document natif,
+- **Début → Importer**, un IFC choisi alors qu'un projet natif est ouvert : la fenêtre
+  propose « Dans le projet ouvert » ou « Nouveau projet ». Dans le projet ouvert, le
+  fichier est lu et converti en arrière-plan (étape et Annuler dans la barre haute),
+  puis fusionné par la commande `fusionner`, en une seule étape d'annulation :
+  - `{"action":"fusionner","projet":{…projet natif…},"decalage":[dx,dy,dz]}`
+    (`decalage` en mm, facultatif : origine sur origine) ;
+  - niveaux rapprochés d'un niveau existant de même altitude (à 1 cm près), sinon de
+    même nom, sinon ajoutés ;
+  - matériaux (cités par leur nom), profils, types de murs, dalles, ouvertures,
+    poutres, composants et garde-corps réutilisés s'ils sont identiques (même contenu,
+    hors identifiant, nom et origine), sinon ajoutés, renommés « … (import) » si le nom
+    est pris ;
+  - tous les identifiants importés renouvelés (références internes reportées : hôtes,
+    assemblages, niveaux, types, implantations) ; sources renumérotées ;
+  - repris : éléments du modèle (murs, assemblages, ouvertures, dalles, site, barres,
+    escaliers, pièces, composants, arbres, garde-corps, éléments importés,
+    quadrillages) ; non repris : vues, feuilles, nomenclatures, liens, phases et
+    sous-projets du fichier importé ;
+  - refusée si le projet importé ne passe pas `verifier()`.
+- **Début → Importer** (nouveau projet) convertit un IFC/RVT/RFA/RTE dans un nouveau document natif,
   conserve les documents ouverts et écrit le rapport `.rapport.md` à côté du JSON.
   Les murs courbes, ouvertures et maillages importés sont maintenant affichables.
   Un élément IFC gardé en élément importé conserve ses jeux de propriétés et de

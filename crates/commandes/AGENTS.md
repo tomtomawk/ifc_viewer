@@ -9,7 +9,7 @@ Dépendances internes autorisées : `noyau`, `modele` (`maillage` en dev-depende
 | Métier | Dossier (`src/`) | Contenu |
 |---|---|---|
 | Socle | `socle/` | `commande.rs` (`enum Commande`), `execution.rs` (`Execution::executer`, répartition par métier), `historique.rs`, `verrous.rs`, `contextes.rs`, `objets.rs` |
-| Modéliser | `modeliser/` | site, escaliers, garde-corps, pièces, composants, arbres, barres, ouvertures, contours et trémies de dalle |
+| Modéliser | `modeliser/` | site, escaliers, garde-corps, pièces, composants, arbres, barres, ouvertures, contours et trémies de dalle ; `fusion.rs` : fusion d'un projet importé (`Fusionner`) |
 | Modifier | `modifier/` | `mod.rs` (déplacer, tourner, aligner, ajuster, supprimer), `copier.rs`, `composees.rs` (symétrie, échelle, réseau, décaler, scinder, démolir, reproduire), `transformations.rs` |
 | Annoter | `annoter/` | quadrillages, annotations (cotes, textes, étiquettes, tracés 2D), niveaux ; `cotes.rs` (cotes pilotantes) |
 | Documenter | `documenter/` | vues en coupe, feuilles, nomenclatures |

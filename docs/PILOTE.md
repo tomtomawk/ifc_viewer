@@ -45,6 +45,11 @@ zone de coupe sont en m. Les angles de caméra et de pente sont en degrés.
   faux, puis lire `projet_natif.liens`). `editer {"action":"lien","lien":{…}}` crée ou
   modifie un lien sans lecture préalable (la scène lit alors le fichier). `ouvrir` refuse
   un fichier IFC.
+- `importer_dans <chemin.ifc>` : importe un IFC dans le projet natif actif, par le même
+  parcours que Début → Importer → Dans le projet ouvert (lecture et conversion en
+  arrière-plan : attendre `etat.enregistrement` à faux, puis lire `projet_natif` ;
+  une étape d'annulation). La commande `editer {"action":"fusionner","projet":{…}}`
+  fusionne directement un projet natif déjà converti (voir `docs/EDITION.md`).
 - `journal` : messages de l'interface, du plus ancien au plus récent (200 au plus) :
   `journal` (liste de `niveau` information|avertissement|erreur, `texte`, `age_s`) et
   `erreur_affichee` (erreur montrée dans la vue, ou `null`). Une erreur reste affichée

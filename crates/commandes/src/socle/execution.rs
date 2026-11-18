@@ -136,6 +136,7 @@ impl ExecutionInterne for Projet {
     fn executer_interne(&mut self, c: Commande) -> Result<Vec<String>, String> {
         match c {
             Commande::Lien { .. }
+            | Commande::Fusionner { .. }
             | Commande::Terrain { .. }
             | Commande::LimitePropriete { .. }
             | Commande::CoordonneesOrigine { .. }
