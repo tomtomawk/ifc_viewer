@@ -104,7 +104,7 @@ Objectif et lots : `docs/PLAN_FUSION_FAMILLES.md`. Avancement détaillé archiv�
 
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
-| F3 | Canevas de famille, reste : dessin face à un plan de construction encore tracé par egui (repère du plan, hors des axes de la famille) | P2 | plan, « Navigation des vues de famille » ; `crates/interface/src/familles/editeur_famille/` |
+| F3 | Plan de construction, distinct des plans de référence (décision du 18/11/2026) : le plan de référence reste une droite de contrainte nommée ; le plan de construction est un plan de dessin choisi dans la barre de la vue de famille (sol de la famille, face d'un solide cliquée, ou plan défini par 3 points / décalé), affiché en 3D avec sa grille ; en vue 3D, toutes les saisies (profils, éléments 2D, cotes) sont projetées sur ce plan avec l'accrochage dans son repère ; remplace le plan oblique en vue plane et le dessin face au plan tracé par egui | P2 | `crates/interface/src/familles/editeur_famille/`, `crates/interface/src/saisie/moteur_accrochage.rs`, `crates/modele/src/famille/` |
 | T3 | `tools/test-accrochage.py` : l'étape 4 (prolongement d'un mur par sa poignée) échoue, déjà avec la version `840fcea` (avant le moteur d'accrochage commun) | P2 | `tools/test-accrochage.py` |
 | F5 | Lot 7 : suite de tests complète, 38 tests Revit, recette visuelle | P1 | plan, lot 7 |
 | F6 | Formes guidées, reste : chemin tracé hors du plan de la vue (D), raccordement sur chemin fermé, outil « Tracer le chemin » non essayé à l'écran | P3 | `docs/EDITION.md`, `docs/MODELE.md` |
