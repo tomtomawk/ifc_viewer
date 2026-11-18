@@ -116,6 +116,12 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
+| I1 | Historique par différences (état avant/après des seuls objets touchés, fusion des glissements, repli d'une commande composée) : mémoire proportionnelle au changement, et liste des éléments modifiés qui sert d'entrée à l'invalidation par élément (A8). Idée vue dans ConstructCraft (GPL-3.0 : à réécrire, ne rien recopier) | P1 | `crates/commandes/src/socle/historique.rs` |
+| I2 | Catalogue unique des commandes avec schéma JSON généré (`schemars`) et documentation `docs/commandes.md` régénérée et vérifiée par un test : un seul contrat pour interface, pilote et MCP ; base de la palette de commandes (M19). Idée ConstructCraft | P2 | `crates/commandes`, `crates/pilote` |
+| I3 | Infobulles du ruban : raccourci, raison d'indisponibilité d'un outil grisé, commande correspondante ; test que la disponibilité suit l'état. Idée ConstructCraft | P2 | `crates/interface/src/zones/ruban/` |
+| I4 | Tests d'interface sans affichage (egui_kittest : arbre d'accessibilité, comparaisons d'images à la demande) pour remplacer une partie des essais Xvfb manuels | P2 | `crates/interface` |
+| I5 | Clippy : interdire `unwrap`/`expect`/`panic` hors tests (`clippy.toml`), puis clippy bloquant (avec A1b) ; actions de la CI épinglées par SHA | P2 | `.github/workflows/ci.yml` |
+| I6 | Budget des booléens (nombre de polygones et de découpes ; au-delà, échec propre au lieu d'un blocage) et `catch_unwind` autour des triangulations | P2 | `crates/noyau/src/csg*.rs`, `noyau::trace2d` |
 | A10 | Registre des documents : `ViewerApp` (environ 150 champs) transfère 19 champs à la main à chaque changement de document | P2 | `crates/interface/src/lib.rs`, `socle/documents.rs:497-613` |
 | R1 | Catalogue unique des outils : cartouches et contrôle complet par le pilote restent à unifier | P2 | archive de l'audit du 11/11, lot 1 |
 | R5 | Contrôleur d'esquisse partagé entre canevas orthogonal et oblique | P2 | idem, lot 5 |
