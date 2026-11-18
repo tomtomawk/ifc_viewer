@@ -170,7 +170,7 @@ impl ViewerApp {
     /// Point retenu pour la commande : Décaler prend la distance tapée, du côté du curseur.
     fn point_commande(&self, commande: CommandeContour, p: DVec2) -> DVec2 {
         if commande != CommandeContour::Decaler { return p; }
-        let Some(distance) = super::saisie::distance_saisie(&self.dessin2d.saisie, modele::unite::unite().facteur()) else { return p };
+        let Some(distance) = crate::saisie::moteur_accrochage::distance_saisie(&self.dessin2d.saisie, modele::unite::unite().facteur()) else { return p };
         let Some((c, i)) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.segment) else { return p };
         let Some(points) = self.dessin2d.dalle.get(c).filter(|x| i < x.len()) else { return p };
         let (a, b) = (DVec2::from_array(points[i]), DVec2::from_array(points[(i + 1) % points.len()]));

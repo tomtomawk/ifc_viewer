@@ -126,7 +126,7 @@ impl ViewerApp {
                     ""|"etat"=>{},_=>return Err("famille_navigation etat|plan|coupe|elevation|3d|cadrer".into())
                 }
                 let c=&ed.navigation[ed.vue as usize].camera;
-                Ok(serde_json::json!({"vue":if ed.vue_3d { "Vue 3D" } else { ed.vue.nom() },"distance":c.dist,"cible":c.target.to_array(),"rectangle":[ed.rect_navigation.min.x,ed.rect_navigation.min.y,ed.rect_navigation.max.x,ed.rect_navigation.max.y],"reference":ed.reperage.reference.map(|p| p.to_array()),"guides":ed.reperage.guides.len()}))
+                Ok(serde_json::json!({"vue":if ed.vue_3d { "Vue 3D" } else { ed.vue.nom() },"distance":c.dist,"cible":c.target.to_array(),"rectangle":[ed.rect_navigation.min.x,ed.rect_navigation.min.y,ed.rect_navigation.max.x,ed.rect_navigation.max.y],"reference":ed.reperage.reference.map(|p| p.to_array()),"guides":ed.reperage.guides.len(),"vise":ed.reperage.vise.map(|(p,a)| serde_json::json!({"point":p.to_array(),"accroche":a.libelle()})),"repere_ecran":ed.reperage.repere_ecran}))
             })());
         }
         if !["famille_nouvelle","famille_document","famille_modifier","famille_charger_projet","famille_fermer"].contains(&commande) { return None; }

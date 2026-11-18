@@ -410,7 +410,7 @@ impl ViewerApp {
         let bleu = Color32::from_rgb(0, 120, 215);
         let vert = Color32::from_rgb(20, 160, 60);
         if let Some(centre) = trace.precedent().filter(|_| !trace.attend_courbure())
-            && let Some(rayon) = super::saisie::distance_saisie(&self.dessin2d.saisie, modele::unite::unite().facteur())
+            && let Some(rayon) = crate::saisie::moteur_accrochage::distance_saisie(&self.dessin2d.saisie, modele::unite::unite().facteur())
         {
             let points: Vec<_> = (0..=128).filter_map(|i| {
                 let angle = std::f64::consts::TAU * i as f64 / 128.0;
@@ -448,7 +448,7 @@ impl ViewerApp {
                 }
                 // aperçu : ligne tracée, et volume pour un mur ; arc en attente : rayon
                 // tapé (du côté du curseur), sinon passage par le curseur
-                let passage = super::saisie::distance_saisie(&self.dessin2d.saisie, modele::unite::unite().facteur())
+                let passage = crate::saisie::moteur_accrochage::distance_saisie(&self.dessin2d.saisie, modele::unite::unite().facteur())
                     .filter(|_| trace.attend_courbure())
                     .and_then(|rayon| trace.point_de_rayon(rayon, self.dessin2d.curseur.unwrap_or(p)).ok());
                 let apercu = trace.apercu(passage.unwrap_or(p));
@@ -476,32 +476,8 @@ impl ViewerApp {
                         painter.add(egui::Shape::dashed_line(&[a - dir * 4000.0, a + dir * 4000.0], egui::Stroke::new(1.0, vert), 6.0, 4.0));
                     }
                 }
-                // marque d'accrochage
-                let m = 6.0;
-                let trait_ = egui::Stroke::new(2.0, vert);
-                match accroche {
-                    Accroche::Extremite => {
-                        painter.rect_stroke(egui::Rect::from_center_size(e, egui::vec2(2.0 * m, 2.0 * m)), 0.0, trait_, egui::StrokeKind::Middle);
-                    }
-                    Accroche::Milieu => {
-                        painter.add(egui::Shape::closed_line(vec![e + egui::vec2(0.0, -m), e + egui::vec2(m, m), e + egui::vec2(-m, m)], trait_));
-                    }
-                    Accroche::Centre => {
-                        painter.circle_stroke(e, m, trait_);
-                    }
-                    Accroche::Quadrant => {
-                        painter.add(egui::Shape::closed_line(vec![e + egui::vec2(0.0, -m), e + egui::vec2(m, 0.0), e + egui::vec2(0.0, m), e + egui::vec2(-m, 0.0)], trait_));
-                    }
-                    Accroche::Intersection => {
-                        painter.line_segment([e + egui::vec2(-m, -m), e + egui::vec2(m, m)], trait_);
-                        painter.line_segment([e + egui::vec2(-m, m), e + egui::vec2(m, -m)], trait_);
-                    }
-                    Accroche::Perpendiculaire => {
-                        painter.add(egui::Shape::line(vec![e + egui::vec2(-m, -m), e + egui::vec2(-m, m), e + egui::vec2(m, m)], trait_));
-                        painter.line_segment([e + egui::vec2(-m, 0.0), e + egui::vec2(0.0, 0.0)], trait_);
-                    }
-                    _ => {}
-                }
+                // marque d'accrochage : marqueur commun à toutes les vues
+                crate::saisie::moteur_accrochage::peindre_marqueur(&painter, e, accroche);
                 // étiquettes : accrochage, longueur et angle depuis le point précédent
                 let mut infos = Vec::new();
                 let saisie = &self.dessin2d.saisie;

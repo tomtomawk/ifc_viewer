@@ -18,28 +18,28 @@ fn ferme_profil(ed: &EditeurFamille, cadre: &Cadre, q: egui::Pos2) -> bool {
     ed.esquisse.len() >= 3 && ed.esquisse.first().is_some_and(|(_, p)| cadre.ecran(p.0, p.1).distance(q) < 9.0)
 }
 
-/// Adapte les contours du plan local au moteur d'accrochage du projet.
-fn accrocher_plan_construction(ed: &EditeurFamille, plan: &PlanConstruction, r: &Resolution, cadre: &Cadre, q: egui::Pos2, exclu: Option<(usize, usize)>, maj: bool) -> (f64, f64) {
+/// Plan de construction : sa géométrie, exprimée dans le repère (h, v) du plan, est la
+/// source du moteur d'accrochage commun ; origine et axes du plan en droites.
+fn accrocher_plan_construction(ed: &EditeurFamille, plan: &PlanConstruction, r: &Resolution, cadre: &Cadre, q: egui::Pos2, exclu: Option<(usize, usize)>, maj: bool) -> ((f64, f64), moteur2d::dao::Accroche) {
     use noyau::forme2d::Geom;
     use glam::DVec2;
-    let mut geoms = vec![Geom::Segment([DVec2::ZERO, DVec2::ZERO])];
+    let mut source = crate::saisie::moteur_accrochage::Geometrie { geoms: vec![Geom::Segment([DVec2::ZERO, DVec2::ZERO])], droites: vec![(DVec2::ZERO, DVec2::X), (DVec2::ZERO, DVec2::Y)] };
     for (j, e) in ed.famille.extrusions.iter().enumerate() {
         if e.construction.as_deref() != Some(plan.id.as_str()) { continue; }
         let points: Vec<_> = e.profil.iter().map(|p| { let (h,v) = ed.famille.point_esquisse(r,p); DVec2::new(h,v) }).collect();
         for i in 0..points.len() {
             let suivant = (i + 1) % points.len();
             if exclu == Some((j, i)) || exclu == Some((j, suivant)) { continue; }
-            geoms.push(Geom::Segment([points[i], points[suivant]]));
+            source.geoms.push(Geom::Segment([points[i], points[suivant]]));
         }
     }
     let points: Vec<_> = ed.esquisse.iter().map(|(_, p)| DVec2::new(p.0,p.1)).collect();
-    geoms.extend(points.windows(2).map(|w| Geom::Segment([w[0], w[1]])));
-    if let [p] = points.as_slice() { geoms.push(Geom::Segment([*p, *p])); }
+    source.geoms.extend(points.windows(2).map(|w| Geom::Segment([w[0], w[1]])));
+    if let [p] = points.as_slice() { source.geoms.push(Geom::Segment([*p, *p])); }
     let (h,v) = cadre.modele(q);
-    let depart = points.last().copied();
-    if !maj && let Some((p, _)) = moteur2d::dao::accrocher(DVec2::new(h,v), 7.0 / cadre.echelle, &geoms, depart) { return (p.x, p.y); }
-    if let Some(p) = depart && let Some((q, _)) = crate::saisie::accrochage::contraindre(p.to_array(), [h,v], 0.0, maj, 1.0) { return (q[0], q[1]); }
-    (h,v)
+    let tol = crate::saisie::moteur_accrochage::TOLERANCE_PX / cadre.echelle;
+    let (p, a) = crate::saisie::moteur_accrochage::viser_simple(&source, DVec2::new(h,v), tol, points.last().copied(), maj, 0.0, 1.0);
+    ((p.x, p.y), a)
 }
 
 fn dessiner_axe_revolution(painter: &egui::Painter, cadre: &Cadre, ed: &EditeurFamille) {
@@ -123,7 +123,7 @@ fn canevas_construction(ui: &mut egui::Ui, ed: &mut EditeurFamille, plan: &PlanC
             }
         }
         if let (Some(Poignee::Sommet { extrusion: true, k, i }), Some(q)) = (ed.poignee, resp.interact_pointer_pos().filter(|_| resp.dragged_by(PointerButton::Primary))) {
-            let (h, v) = accrocher_plan_construction(ed, plan, &r, &cadre, q, Some((k, i)), ui.input(|i| i.modifiers.shift));
+            let (h, v) = accrocher_plan_construction(ed, plan, &r, &cadre, q, Some((k, i)), ui.input(|i| i.modifiers.shift)).0;
             if let Some(pt) = ed.famille.extrusions.get_mut(k).and_then(|e| e.profil.get_mut(i)) {
                 *pt = PointEsquisse { h: Face { plan: String::new(), decalage: h }, v: Face { plan: String::new(), decalage: v } };
             }
@@ -135,6 +135,9 @@ fn canevas_construction(ui: &mut egui::Ui, ed: &mut EditeurFamille, plan: &PlanC
     if !ed.outil.est_forme() { return; }
     let mut finir = resp.clicked_by(PointerButton::Secondary);
     if let Some(q) = resp.hover_pos() {
+        let ((h, v), accroche) = accrocher_plan_construction(ed, plan, &r, &cadre, q, None, ui.input(|i| i.modifiers.shift));
+        let q = cadre.ecran(h, v);
+        crate::saisie::moteur_accrochage::peindre_marqueur(&painter, q, accroche);
         let mut pts: Vec<_> = ed.esquisse.iter().map(|(_,p)| cadre.ecran(p.0,p.1)).collect();
         pts.push(q);
         painter.add(egui::Shape::line(pts,egui::Stroke::new(1.5,Color32::DARK_GREEN)));
@@ -142,7 +145,7 @@ fn canevas_construction(ui: &mut egui::Ui, ed: &mut EditeurFamille, plan: &PlanC
     if resp.clicked() && let Some(q) = resp.interact_pointer_pos() {
         if ferme_profil(ed, &cadre, q) { finir=true; }
         else {
-            let p=accrocher_plan_construction(ed, plan, &r, &cadre, q, None, ui.input(|i| i.modifiers.shift));
+            let p=accrocher_plan_construction(ed, plan, &r, &cadre, q, None, ui.input(|i| i.modifiers.shift)).0;
             ed.esquisse.push((PointEsquisse { h: Face {plan:String::new(),decalage:p.0}, v:Face {plan:String::new(),decalage:p.1}},p));
             if ed.capter_axe_revolution() { return; }
         }
@@ -375,74 +378,64 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             .map(|x| x.0)
     };
     let tol = 7.0 / echelle;
-    // Les plans et les contours sont des géométries du même moteur d'accrochage
-    // que le projet. Leur repère est celui de la vue de famille.
-    let geoms = {
+    // Source de géométrie de la famille pour le moteur d'accrochage commun aux vues du
+    // projet : plans de référence en droites, contours des formes, éléments 2D.
+    let source = {
         use noyau::forme2d::Geom;
         use glam::DVec2;
-        let mut geoms = Vec::new();
-        let (h_min, v_max) = cadre.modele(rect.left_top());
-        let (h_max, v_min) = cadre.modele(rect.right_bottom());
+        let mut source = crate::saisie::moteur_accrochage::Geometrie::default();
         for plan in &ed.famille.plans {
             let valeur = pos(&plan.nom);
-            if plan.axe == ah { geoms.push(Geom::Segment([DVec2::new(valeur, v_min), DVec2::new(valeur, v_max)])); }
-            else if plan.axe == av { geoms.push(Geom::Segment([DVec2::new(h_min, valeur), DVec2::new(h_max, valeur)])); }
+            if plan.axe == ah { source.droites.push((DVec2::new(valeur, 0.0), DVec2::Y)); }
+            else if plan.axe == av { source.droites.push((DVec2::new(0.0, valeur), DVec2::X)); }
         }
         let vue = ed.vue.esquisse();
+        source.geoms = super::rendu::aretes_vue(ed, &r);
         for points in ed.famille.extrusions.iter().filter(|e| e.construction.is_none() && e.vue == vue).map(|e| &e.profil) {
             let pts: Vec<_> = points.iter().map(|p| { let (h, v) = ed.famille.point_esquisse(&r, p); DVec2::new(h, v) }).collect();
-            for i in 0..pts.len() { geoms.push(Geom::Segment([pts[i], pts[(i+1) % pts.len()]])); }
+            for i in 0..pts.len() { source.geoms.push(Geom::Segment([pts[i], pts[(i+1) % pts.len()]])); }
         }
-        geoms.extend(ed.famille.elements_2d_resolus(&r, vue).iter()
+        source.geoms.extend(ed.famille.elements_2d_resolus(&r, vue).iter()
             .filter_map(|e| e.forme.forme_2d()).flat_map(|forme| forme.geoms()));
         let pts: Vec<_> = ed.esquisse.iter().map(|(_, p)| DVec2::new(p.0, p.1)).collect();
-        geoms.extend(pts.windows(2).map(|w| Geom::Segment([w[0], w[1]])));
-        if let [p] = pts.as_slice() { geoms.push(Geom::Segment([*p, *p])); }
-        geoms
+        source.geoms.extend(pts.windows(2).map(|w| Geom::Segment([w[0], w[1]])));
+        if let [p] = pts.as_slice() { source.geoms.push(Geom::Segment([*p, *p])); }
+        source
     };
+    let tol_accroche = crate::saisie::moteur_accrochage::TOLERANCE_PX / echelle;
     let maj = ui.input(|i| i.modifiers.shift);
     let depart_courant = ed.esquisse.last().map(|(_, p)| *p).or(ed.debut).or(ed.points_transfo.last().copied());
     let curseur_guide = curseur.filter(|_| resp.hovered() && ed.outil != OutilFamille::Selection);
-    let point_guide = curseur_guide.and_then(|q| {
+    let papier = matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Cartouche | modele::famille::modelee::CategorieFamille::EtiquettePiece);
+    let facteur = if papier { 1.0 } else { modele::unite::unite().facteur() };
+    let point_guide = curseur_guide.map(|q| {
         let (h, v) = cadre.modele(q);
-        ed.reperage.calculer(glam::DVec2::new(h, v), tol, &geoms,
-            depart_courant.map(|p| glam::DVec2::new(p.0, p.1)), maj, ui.input(|i| i.time), delai_accrochage, 0.0, ed.trace_polyligne.is_some())
+        let visee = crate::saisie::moteur_accrochage::Visee { tol: tol_accroche, precedent: depart_courant.map(|p| glam::DVec2::new(p.0, p.1)), maj, temps: ui.input(|i| i.time), delai: delai_accrochage, angle_axes: 0.0, trace_actif: ed.trace_polyligne.is_some(), saisie: &ed.saisie_trace.texte, facteur, pas: 1.0 };
+        crate::saisie::moteur_accrochage::viser(&mut ed.reperage, &source, glam::DVec2::new(h, v), &visee)
     });
+    let (o, h1, v1) = (cadre.ecran(0.0, 0.0), cadre.ecran(1.0, 0.0), cadre.ecran(0.0, 1.0));
+    ed.reperage.repere_ecran = [o.x, o.y, h1.x - o.x, h1.y - o.y, v1.x - o.x, v1.y - o.y];
     if curseur_guide.is_some() {
         ed.reperage.peindre(&painter, |p| cadre.ecran(p.x, p.y));
         if ed.reperage.survol_accroche.is_some() || ed.reperage.survol_segment.is_some() {
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
         }
     }
-    let viser = |q: egui::Pos2, depart: Option<(f64, f64)>| -> ((f64, f64), AccrocheMur) {
-        use moteur2d::dao::Accroche;
-        let m = cadre.modele(q);
-        let depuis = depart.map(|p| glam::DVec2::new(p.0, p.1));
-        let guide = if curseur_guide == Some(q) && depart == depart_courant { point_guide } else { None };
-        if let Some((p, a)) = guide.or_else(|| (!maj).then(|| moteur2d::dao::accrocher(glam::DVec2::new(m.0, m.1), tol, &geoms, depuis)).flatten()) {
-            let genre = match a {
-                Accroche::Extremite => AccrocheMur::Extremite,
-                Accroche::Milieu => AccrocheMur::Milieu,
-                Accroche::Intersection => AccrocheMur::Intersection,
-                Accroche::Polaire(a) => AccrocheMur::Angle(a),
-                Accroche::Ortho => AccrocheMur::Orthogonal,
-                Accroche::Libre => AccrocheMur::Grille,
-                Accroche::Centre | Accroche::Quadrant | Accroche::Perpendiculaire => AccrocheMur::Coin,
-            };
-            return ((p.x, p.y), genre);
-        }
-        match depart.and_then(|a| crate::saisie::accrochage::contraindre([a.0, a.1], [m.0, m.1], 0.0, maj, 1.0)) {
-            Some((p, a)) => ((p[0], p[1]), a),
-            None => (m, AccrocheMur::Grille),
-        }
+    let viser = |q: egui::Pos2, depart: Option<(f64, f64)>| -> ((f64, f64), moteur2d::dao::Accroche) {
+        let (p, a) = match point_guide.filter(|_| curseur_guide == Some(q) && depart == depart_courant) {
+            Some(x) => x,
+            None => {
+                let (h, v) = cadre.modele(q);
+                crate::saisie::moteur_accrochage::viser_simple(&source, glam::DVec2::new(h, v), tol_accroche, depart.map(|p| glam::DVec2::new(p.0, p.1)), maj, 0.0, 1.0)
+            }
+        };
+        ((p.x, p.y), a)
     };
-    // repère d'accrochage sous la souris (hors sélection)
+    // repère d'accrochage sous la souris (hors sélection) : marqueur commun
     if ed.outil != OutilFamille::Selection || ed.poignee.is_some() {
         if let Some(q) = curseur.filter(|_| resp.hovered() || ed.poignee.is_some()) {
             let (p, a) = viser(q, depart_courant);
-            if a != AccrocheMur::Grille {
-                marqueur(&painter, cadre.ecran(p.0, p.1), a, orange, orange);
-            }
+            crate::saisie::moteur_accrochage::peindre_marqueur(&painter, cadre.ecran(p.0, p.1), a);
         }
     }
     dessiner_axe_revolution(&painter, &cadre, ed);
@@ -861,16 +854,10 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             let outil = ed.outil.outil_dessin().expect("outil de dessin");
             let mut trace = ed.trace_polyligne.take().unwrap_or_else(|| Trace::new(outil));
             let depart = ed.esquisse.last().map(|(_, p)| *p);
-            let papier = matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Cartouche | modele::famille::modelee::CategorieFamille::EtiquettePiece);
-            let facteur = if papier { 1.0 } else { modele::unite::unite().facteur() };
             if let Some(q) = curseur.filter(|_| resp.hovered()) {
+                // angle et distance tapés : appliqués par le moteur d'accrochage
                 let (h, v) = viser(q, depart).0;
-                let brut = glam::DVec2::new(h, v);
-                let (point, angle) = crate::saisie::saisie_trace::apercu_point(&ed.saisie_trace.texte, trace.precedent(), brut, facteur).unwrap_or((brut, None));
-                if angle.is_some() && let Some(debut) = trace.precedent() {
-                    painter.add(egui::Shape::dashed_line(&[cadre.ecran(debut.x, debut.y), cadre.ecran(point.x, point.y)], egui::Stroke::new(1.0, Color32::from_rgb(70, 140, 210)), 6.0, 4.0));
-                }
-                if point != brut { painter.circle_stroke(cadre.ecran(point.x, point.y), 5.0, egui::Stroke::new(1.5, orange)); }
+                let point = glam::DVec2::new(h, v);
                 for ligne in trace.apercu(point) {
                     painter.add(egui::Shape::line(ligne.into_iter().map(|p| cadre.ecran(p.x, p.y)).collect(), egui::Stroke::new(1.5, orange)));
                 }
@@ -889,11 +876,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             let mut point_verrouille = None;
             let evenement = if valider_saisie || (resp.clicked() && !ed.saisie_trace.texte.is_empty()) {
                 let precedent = trace.precedent();
-                let curseur_modele = curseur.map(|q| {
-                    let (h, v) = viser(q, depart).0;
-                    let brut = glam::DVec2::new(h, v);
-                    crate::saisie::saisie_trace::apercu_point(&ed.saisie_trace.texte, precedent, brut, facteur).map_or(brut, |(p, _)| p)
-                });
+                let curseur_modele = curseur.map(|q| { let (h, v) = viser(q, depart).0; glam::DVec2::new(h, v) });
                 match ed.saisie_trace.point(precedent, curseur_modele, facteur) {
                     Ok(p) => match (ed.plan_proche(&r, ah, p.x), ed.plan_proche(&r, av, p.y)) {
                         (Some((h, dh)), Some((v, dv))) => {

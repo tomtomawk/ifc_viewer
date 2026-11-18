@@ -19,6 +19,7 @@ pub enum Accroche {
     Quadrant,
     Intersection,
     Perpendiculaire,
+    Proche, // point le plus proche sur une arête : il glisse le long du tracé
     /// Repérage polaire : angle (degrés) depuis le point précédent.
     Polaire(f64),
     Ortho,
@@ -34,6 +35,7 @@ impl Accroche {
             Self::Quadrant => "Quadrant".into(),
             Self::Intersection => "Intersection".into(),
             Self::Perpendiculaire => "Perpendiculaire".into(),
+            Self::Proche => "Proche".into(),
             Self::Polaire(a) => format!("Polaire {a:.0}°"),
             Self::Ortho => "Ortho".into(),
             Self::Libre => String::new(),
@@ -200,7 +202,7 @@ pub fn accrocher(c: DVec2, tol: f64, geoms: &[Geom], depuis: Option<DVec2>) -> O
 }
 
 /// Point de la géométrie le plus proche de `c`.
-fn proche(c: DVec2, g: &Geom) -> Option<DVec2> {
+pub fn proche(c: DVec2, g: &Geom) -> Option<DVec2> {
     match g {
         Geom::Segment([a, b]) => Some(sur_segment(c, *a, *b)),
         Geom::Cercle { centre, rayon } => (c.distance(*centre) > 1e-9).then(|| *centre + (c - *centre).normalize() * *rayon),
@@ -218,9 +220,7 @@ fn proche(c: DVec2, g: &Geom) -> Option<DVec2> {
 }
 
 /// Distance de `c` à la géométrie (portion tracée seulement pour un arc).
-pub fn distance(c: DVec2, g: &Geom) -> Option<f64> {
-    proche(c, g).map(|p| p.distance(c))
-}
+pub fn distance(c: DVec2, g: &Geom) -> Option<f64> { proche(c, g).map(|p| p.distance(c)) }
 
 /// Repérage polaire : si la direction depuis `depuis` est à `tol_deg` près d'un
 /// multiple de `pas_deg`, point projeté sur cette direction et son angle (degrés).

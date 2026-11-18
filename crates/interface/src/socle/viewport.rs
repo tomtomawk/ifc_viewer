@@ -471,7 +471,7 @@ impl ViewerApp {
             if let Some(alt) = altitude_structure {
                 let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.bim.depart_structure, alt));
                 if let Some((p, accroche)) = point {
-                    if let Some(q) = self.ecran_plan(rect, p, alt) { marqueur(&painter, q, accroche, couleur, Color32::from_rgb(230, 120, 20)); }
+                    if let Some(q) = self.ecran_plan(rect, p, alt) { marqueur(&painter, q, accroche); }
                     if let Some(a) = self.bim.depart_structure {
                         if let (Some(x), Some(y)) = (self.ecran_plan(rect, a, alt), self.ecran_plan(rect, p, alt)) {
                             painter.line_segment([x, y], egui::Stroke::new(2.0, couleur));
@@ -507,7 +507,7 @@ impl ViewerApp {
             let texte = if composant { "Composant : cliquer pour placer · Espace : rotation de 90° · molette : zoom" } else if arbre { "Arbre : cliquer pour planter" } else { "Pièce : cliquer dans un espace fermé par des murs" };
             if !self.message_visible() { crate::socle::messages::consigne_vue(ui, rect, self.dessin2d.bas_barre, texte); }
             if let Some((p, accroche)) = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, false, None, altitude_placement)) {
-                if let Some(q) = self.ecran_plan(rect, p, altitude_placement) { marqueur(&painter, q, accroche, couleur, Color32::from_rgb(230, 120, 20)); }
+                if let Some(q) = self.ecran_plan(rect, p, altitude_placement) { marqueur(&painter, q, accroche); }
                 if arbre {
                     // aperçu : cercle du houppier
                     let a = &self.bim.arbre;

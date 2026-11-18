@@ -10,6 +10,8 @@ Rôle : édition des familles.
 
 Toutes les catégories (porte, fenêtre, composant, profil, cartouche, étiquette de pièce) passent par `editeur_famille/` ; cartouches et étiquettes s'ouvrent depuis `documenter/feuilles.rs` (`editer_cartouche`, `editer_famille_etiquette`).
 
-Dépendances typiques : `saisie/` (accrochage, saisie_trace), `documenter/` (feuilles), `socle/projection.rs` (monde ↔ écran, molette), `outils/annoter/outils_texte.rs`, `zones/communes.rs`.
+Accrochage : pas de moteur propre ; `canevas.rs` construit la source de géométrie de la famille (plans de référence en droites, contours, éléments 2D ; repère du plan de construction) pour `saisie/moteur_accrochage.rs`.
+
+Dépendances typiques : `saisie/` (moteur_accrochage, saisie_trace), `documenter/` (feuilles), `socle/projection.rs` (monde ↔ écran, molette), `outils/annoter/outils_texte.rs`, `zones/communes.rs`.
 
 Vérifier : `cargo test -p interface --release`.

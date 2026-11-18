@@ -4,38 +4,12 @@ use super::*;
 
 use crate::saisie::saisie_trace::{ajouter_caractere_saisie, effacer_caractere_saisie};
 
-fn intersections_cercle_guide(centre: DVec2, rayon: f64, origine: DVec2, direction: DVec2) -> Vec<DVec2> {
-    let d = direction.normalize_or_zero();
-    if d == DVec2::ZERO { return Vec::new(); }
-    let pied = origine + d * (centre - origine).dot(d);
-    let h2 = rayon * rayon - pied.distance_squared(centre);
-    if h2 < 0.0 { return Vec::new(); }
-    let h = h2.sqrt();
-    vec![pied + d * h, pied - d * h]
-}
-
-pub(super) fn distance_saisie(saisie: &str, facteur: f64) -> Option<f64> {
-    if saisie.starts_with(['@', '#']) { return None; }
-    let distance = saisie.split(['<', '>']).next()?.replace(',', ".").parse::<f64>().ok()? * facteur;
-    (distance.is_finite() && distance > 0.0).then_some(distance)
-}
-
 #[cfg(test)]
 use crate::saisie::reperage::directions_au_point;
 
 #[cfg(test)]
 mod tests_guides_perpendiculaires {
     use super::*;
-
-    #[test]
-    fn distance_et_intersections_du_cercle_de_construction() {
-        assert_eq!(distance_saisie("2,5>45", 1000.0), Some(2500.0));
-        assert_eq!(distance_saisie("@2;3", 1000.0), None);
-        assert_eq!(distance_saisie("-2", 1.0), None);
-        let points = intersections_cercle_guide(DVec2::ZERO, 5.0, DVec2::new(3.0, 0.0), DVec2::Y);
-        assert_eq!(points, vec![DVec2::new(3.0, 4.0), DVec2::new(3.0, -4.0)]);
-        assert!(intersections_cercle_guide(DVec2::ZERO, 5.0, DVec2::new(6.0, 0.0), DVec2::Y).is_empty());
-    }
 
     #[test]
     fn saisie_alterne_les_champs_sans_perdre_les_valeurs() {
@@ -75,40 +49,17 @@ impl ViewerApp {
     }
 
     pub(crate) fn point_dessin_depuis(&mut self, rect:egui::Rect,c:DVec2,maj:bool,temps:f64,precedent:Option<DVec2>)->(DVec2,Accroche) {
-        let (point, accroche) = self.point_dessin_libre(rect, c, maj, temps, precedent);
-        if let Some(depart) = precedent
-            && let Some(distance) = distance_saisie(&self.dessin2d.saisie, modele::unite::unite().facteur())
-        {
-            let tolerance = self.vers_ecran(rect, c).zip(self.vers_ecran(rect, c + DVec2::X * 1000.0)).map_or(200.0, |(a, b)| 12.0 * 1000.0 / (a.distance(b) as f64).max(1e-6));
-            if !matches!(accroche, Accroche::Polaire(_)) && let Some(cible) = self.dessin2d.reperage.guides.iter()
-                .flat_map(|&(origine, direction)| intersections_cercle_guide(depart, distance, origine, direction))
-                .filter(|p| p.distance(c) <= tolerance)
-                .min_by(|a, b| a.distance(c).total_cmp(&b.distance(c)))
-            { return (cible, Accroche::Intersection); }
-            let direction = point - depart;
-            if direction.length_squared() > 1e-12 {
-                let cible = depart + direction.normalize() * distance;
-                let deplace = cible.distance(point) > 1e-6;
-                self.dessin2d.reperage.guides.retain(|(a, d)| (cible - *a).perp_dot(*d).abs() < 1e-5);
-                return (cible, if deplace && !matches!(accroche, Accroche::Polaire(_) | Accroche::Ortho) { Accroche::Libre } else { accroche });
-            }
-        }
-        (point, accroche)
+        use crate::saisie::moteur_accrochage::{viser, Geometrie, Visee};
+        // tolérance : 12 pixels en mm du plan de la vue
+        let tol = self.vers_ecran(rect, c).zip(self.vers_ecran(rect, c + DVec2::X * 1000.0)).map_or(200.0, |(a, b)| crate::saisie::moteur_accrochage::TOLERANCE_PX * 1000.0 / (a.distance(b) as f64).max(1e-6));
+        let source = Geometrie { geoms: self.geoms_trace(), droites: Vec::new() };
+        let visee = Visee { tol, precedent, maj, temps, delai: self.options.delai_accrochage, angle_axes: self.angle_axes_plan(), trace_actif: self.dessin2d.trace.is_some(), saisie: &self.dessin2d.saisie, facteur: modele::unite::unite().facteur(), pas: 10.0 };
+        viser(&mut self.dessin2d.reperage, &source, c, &visee)
     }
 
-    fn point_dessin_libre(&mut self, rect:egui::Rect,c:DVec2,maj:bool,temps:f64,precedent:Option<DVec2>)->(DVec2,Accroche) {
-        // Une valeur d'angle en cours de saisie verrouille le guide dès qu'elle est lisible.
-        if let Some(p) = precedent
-            && let Some((point, Some(angle))) = crate::saisie::saisie_trace::apercu_point(&self.dessin2d.saisie, Some(p), c, modele::unite::unite().facteur())
-        {
-            let direction = DVec2::from_angle(angle.to_radians());
-            self.dessin2d.reperage.survol_accroche = None;
-            self.dessin2d.reperage.survol_segment = None;
-            self.dessin2d.reperage.guides = vec![(p, direction)];
-            return (point, Accroche::Polaire(angle));
-        }
-        // tolérance : 12 pixels en mm du plan de la vue
-        let tol = self.vers_ecran(rect, c).zip(self.vers_ecran(rect, c + DVec2::X * 1000.0)).map_or(200.0, |(a, b)| 12.0 * 1000.0 / (a.distance(b) as f64).max(1e-6));
+    /// Source d'accrochage des vues du projet : géométrie de la vue, tracé en cours et
+    /// contours en édition.
+    fn geoms_trace(&mut self) -> Vec<Geom> {
         let mut geoms = self.geoms_dessin();
         if let Some(t) = &self.dessin2d.trace {
             let k = t.courbures();
@@ -123,27 +74,7 @@ impl ViewerApp {
                 geoms.extend(self.dessin2d.segments_contour(ci, fermee).into_iter().map(|(a, b, k)| noyau::forme2d::geom_segment(a, b, k)));
             }
         }
-        if let Some(point) = self.dessin2d.reperage.calculer(c, tol, &geoms, precedent, maj, temps, self.options.delai_accrochage, self.angle_axes_plan(), self.dessin2d.trace.is_some()) {
-            return point;
-        }
-        // repère du plan tourné : ortho et angles ronds suivent l'écran ; sans accrochage,
-        // les longueurs tracées tombent au centimètre (premier point : coordonnées)
-        let th = self.angle_axes_plan();
-        let pas = 10.0;
-        let tourner = |v: DVec2, a: f64| DVec2::from_angle(a).rotate(v);
-        let arrondi = |v: DVec2| {
-            let l = v.length();
-            if l < 1e-9 { v } else { v * ((l / pas).round() * pas / l) }
-        };
-        match precedent {
-            Some(p) if maj => (p + arrondi(tourner(d2::ortho(DVec2::ZERO, tourner(c - p, -th)), th)), Accroche::Ortho),
-            // suivi polaire : multiples de 45° seulement (15° proposait trop de directions)
-            Some(p) => match d2::polaire(DVec2::ZERO, tourner(c - p, -th), 45.0, 2.5) {
-                Some((q, a)) => (p + arrondi(tourner(q, th)), Accroche::Polaire(a)),
-                None => (p + arrondi(c - p), Accroche::Libre),
-            },
-            None => ((c / pas).round() * pas, Accroche::Libre),
-        }
+        geoms
     }
 
     /// Enregistre les formes achevées : annotations de la vue, ou murs (une étape
@@ -810,7 +741,7 @@ impl ViewerApp {
             && let Some(trace) = self.dessin2d.trace.as_ref().filter(|t| t.attend_courbure())
         {
             let curseur = self.dessin2d.curseur.or(self.dessin2d.point.map(|p| p.0));
-            let passage = match (distance_saisie(&saisie, modele::unite::unite().facteur()), curseur) {
+            let passage = match (crate::saisie::moteur_accrochage::distance_saisie(&saisie, modele::unite::unite().facteur()), curseur) {
                 (Some(rayon), Some(curseur)) => trace.point_de_rayon(rayon, curseur),
                 (Some(_), None) => Err("Rayon : placer le curseur du côté où l'arc doit bomber.".into()),
                 (None, _) => Err("Rayon : valeur positive attendue.".into()),

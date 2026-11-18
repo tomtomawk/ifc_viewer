@@ -649,7 +649,7 @@ impl ViewerApp {
         self.transfo.curseur = point.map(|(p, _)| p);
         if let (Some(q), Some((p, acc))) = (survol, point) {
             if let Some(e) = self.ecran_plan(rect, p, altitude) {
-                marqueur(&painter, e, acc, bleu, orange);
+                marqueur(&painter, e, acc);
             }
             painter.text(q + egui::vec2(16.0, 14.0), egui::Align2::LEFT_TOP, self.transfo.consigne(outil), egui::FontId::proportional(12.0), bleu);
         }

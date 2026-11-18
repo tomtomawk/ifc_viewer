@@ -2,7 +2,7 @@
 //! choix du point accroché parmi des candidats (extrémité prioritaire), contraintes
 //! depuis un point de départ (Maj : orthogonal, angles ronds de 15°), repères dessinés
 //! et sensibilité de la molette.
-use eframe::egui::{self, Color32};
+use eframe::egui;
 
 /// Accrochage d'un point tracé.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -81,33 +81,24 @@ pub(crate) fn longueur_ronde(a: [f64; 2], point: [f64; 2], pas: f64) -> [f64; 2]
     [a[0] + dx * k, a[1] + dy * k]
 }
 
-/// Repère d'accrochage : carré (extrémité), triangle (milieu), croix (intersection),
-/// losange (angle d'un mur), cercle sinon.
-pub(crate) fn marqueur(painter: &egui::Painter, q: egui::Pos2, acc: AccrocheMur, couleur: Color32, accent: Color32) {
-    let t = egui::Stroke::new(2.0, accent);
-    let h = 7.0;
-    match acc {
-        AccrocheMur::Extremite => {
-            painter.rect_stroke(egui::Rect::from_center_size(q, egui::vec2(11.0, 11.0)), 0.0, t, egui::StrokeKind::Middle);
+/// Repère d'accrochage des points de murs et d'éléments : marqueur commun
+/// ([`crate::saisie::moteur_accrochage::peindre_marqueur`]) ; angle d'un mur en losange,
+/// angle rond et grille en petit cercle.
+pub(crate) fn marqueur(painter: &egui::Painter, q: egui::Pos2, acc: AccrocheMur) {
+    use moteur2d::dao::Accroche;
+    use crate::saisie::moteur_accrochage::{peindre_marqueur, COULEUR_MARQUEUR};
+    let commun = match acc {
+        AccrocheMur::Extremite => Accroche::Extremite,
+        AccrocheMur::Milieu => Accroche::Milieu,
+        AccrocheMur::Intersection => Accroche::Intersection,
+        AccrocheMur::Coin => Accroche::Quadrant,
+        AccrocheMur::Proche => Accroche::Proche,
+        AccrocheMur::Grille | AccrocheMur::Orthogonal | AccrocheMur::Angle(_) => {
+            painter.circle_stroke(q, 4.0, egui::Stroke::new(1.5, COULEUR_MARQUEUR));
+            return;
         }
-        AccrocheMur::Milieu => {
-            painter.add(egui::Shape::closed_line(vec![q + egui::vec2(0.0, -h), q + egui::vec2(h, h * 0.8), q + egui::vec2(-h, h * 0.8)], t));
-        }
-        AccrocheMur::Intersection => {
-            painter.line_segment([q + egui::vec2(-h, -h), q + egui::vec2(h, h)], t);
-            painter.line_segment([q + egui::vec2(-h, h), q + egui::vec2(h, -h)], t);
-        }
-        AccrocheMur::Coin => {
-            painter.add(egui::Shape::closed_line(vec![q + egui::vec2(0.0, -h), q + egui::vec2(h, 0.0), q + egui::vec2(0.0, h), q + egui::vec2(-h, 0.0)], t));
-        }
-        AccrocheMur::Proche => {
-            // sablier : le point glisse sur l'arête
-            painter.add(egui::Shape::closed_line(vec![q + egui::vec2(-h, -h), q + egui::vec2(h, -h), q + egui::vec2(-h, h), q + egui::vec2(h, h)], t));
-        }
-        _ => {
-            painter.circle_stroke(q, 4.0, egui::Stroke::new(1.5, couleur));
-        }
-    }
+    };
+    peindre_marqueur(painter, q, commun);
 }
 
 #[cfg(test)]

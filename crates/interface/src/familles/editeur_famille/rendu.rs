@@ -55,6 +55,21 @@ pub(super) fn scene_famille(ed: &EditeurFamille, r: &Resolution) -> SceneFamille
     s
 }
 
+/// Arêtes vives des solides visibles projetées sur la vue de travail (mm, repère h, v
+/// de la vue) : source d'accrochage des solides.
+pub(super) fn aretes_vue(ed: &EditeurFamille, r: &Resolution) -> Vec<noyau::forme2d::Geom> {
+    let (ah, av) = ed.vue.axes();
+    let mut geoms: Vec<noyau::forme2d::Geom> = Vec::new();
+    for solide in ed.famille.solides(r).iter().filter(|s| s.visible && !s.vide) {
+        for [a, b] in noyau::aretes::aretes(&solide.tris).vives {
+            let (p, q) = (glam::DVec2::new(a[ah as usize], a[av as usize]), glam::DVec2::new(b[ah as usize], b[av as usize]));
+            let doublon = |g: &noyau::forme2d::Geom| matches!(g, noyau::forme2d::Geom::Segment([x, y]) if (x.distance(p) < 1e-6 && y.distance(q) < 1e-6) || (x.distance(q) < 1e-6 && y.distance(p) < 1e-6));
+            if p.distance(q) > 1e-6 && !geoms.iter().any(doublon) { geoms.push(noyau::forme2d::Geom::Segment([p, q])); }
+        }
+    }
+    geoms
+}
+
 /// Copie de `p` dont chaque point passe par `f`.
 fn transposer(p: &Primitive, f: &dyn Fn(DVec3) -> DVec3) -> Primitive {
     let forme = match &p.forme {

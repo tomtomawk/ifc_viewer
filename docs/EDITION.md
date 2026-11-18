@@ -341,9 +341,12 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   droite → gauche : éléments touchés ; Ctrl : ajouter) ; Suppr supprime toute la
   sélection (les plans encore utilisés restent). Les cotes ont le dessin des cotes
   du projet (attaches, traits obliques) ; glisser une cote ou son texte déplace sa
-  ligne, enregistrée dans la famille. L'accrochage est celui du projet : croisements
-  de plans (croix), sommets (carré), milieux (triangle) ; Maj : orthogonal depuis le
-  point précédent, angles ronds de 15° ; la molette zoome du même pas que les vues.
+  ligne, enregistrée dans la famille. L'accrochage est le moteur du projet
+  (`saisie/moteur_accrochage.rs`), avec les mêmes types de points, marqueurs, guides,
+  délai de repérage et saisie au clavier ; les plans de référence y sont des droites
+  (croisements, point proche, perpendiculaire), avec les contours des formes et les
+  éléments 2D de la vue ; face à un plan de construction, la géométrie est exprimée
+  dans le repère du plan ; la molette zoome du même pas que les vues.
   En sélection, l'élément choisi porte des **poignées** : sommets d'un
   profil ou d'un symbole (glisser : réaccroché au plan le plus proche ; clic droit :
   retirer), milieux d'arêtes (glisser : insérer un sommet), milieux des faces d'un
@@ -460,7 +463,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   centre, quadrant, intersection, perpendiculaire et point proche, sur les dessins
   de la vue et, en plan, sur les contours et axes des murs, les contours des éléments
   horizontaux du niveau et les quadrillages. Sans accrochage, repérage polaire tous
-  les 15° ; Maj force l'orthogonal. Au clavier, la ligne de commande en bas de la vue
+  les 45° ; Maj force l'orthogonal. Marqueurs, communs aux vues du projet et aux
+  familles : carré (extrémité), triangle (milieu), cercle (centre), losange
+  (quadrant), croix (intersection), équerre (perpendiculaire), sablier (proche). Au clavier, la ligne de commande en bas de la vue
   reçoit `x,y` ou `x;y` (absolu), `@dx,dy` (relatif), `d<angle` ou `@d<angle`
   (polaire depuis le point précédent) ou une distance seule (dans la direction du
   curseur), dans l'unité d'affichage. Chaque forme achevée devient une annotation

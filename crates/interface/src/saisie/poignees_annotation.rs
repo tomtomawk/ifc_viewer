@@ -91,22 +91,13 @@ impl ViewerApp {
     /// Survol de l'outil Texte : point accroché aux géométries de la vue (comme les
     /// traits d'annotation), repère d'accrochage et aperçu du texte à ce point.
     pub(crate) fn apercu_texte_vue(&mut self, ui: &egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>) {
-        use crate::saisie::accrochage::{marqueur, AccrocheMur};
-        use moteur2d::dao::Accroche;
         let (maj, temps) = ui.input(|i| (i.modifiers.shift, i.time));
         self.dessin2d.point = survol.and_then(|q| self.depuis_ecran(rect, q)).map(|c| self.point_dessin_depuis(rect, c, maj, temps, None));
         let Some((point, accroche)) = self.dessin2d.point else { return };
         let Some(e) = self.vers_ecran(rect, point) else { return };
         let painter = ui.painter().with_clip_rect(rect);
         let couleur = Color32::from_rgb(55, 130, 200);
-        let genre = match accroche {
-            Accroche::Libre | Accroche::Polaire(_) | Accroche::Ortho => None,
-            Accroche::Extremite => Some(AccrocheMur::Extremite),
-            Accroche::Milieu => Some(AccrocheMur::Milieu),
-            Accroche::Intersection => Some(AccrocheMur::Intersection),
-            Accroche::Centre | Accroche::Quadrant | Accroche::Perpendiculaire => Some(AccrocheMur::Proche),
-        };
-        if let Some(genre) = genre { marqueur(&painter, e, genre, couleur, Color32::from_rgb(230, 120, 20)); }
+        crate::saisie::moteur_accrochage::peindre_marqueur(&painter, e, accroche);
         // aperçu du texte, ancré comme le texte créé
         let contenu = if self.bim.texte.trim().is_empty() { "Texte" } else { self.bim.texte.as_str() };
         painter.text(e, egui::Align2::LEFT_BOTTOM, contenu, egui::FontId::proportional(12.0), couleur);

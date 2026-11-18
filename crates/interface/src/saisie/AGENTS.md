@@ -4,6 +4,7 @@ Rôle : interaction commune aux outils de la vue et aux éditeurs.
 
 | Fichier | Contenu |
 |---|---|
+| `moteur_accrochage.rs` | moteur unique d'accrochage et de repérage des tracés 2D (projet, familles, plans de construction) : `SourceAccrochage` (tracés, droites), `viser`, `viser_simple`, `peindre_marqueur`, distance tapée |
 | `accrochage.rs` | choix du point accroché, contraintes (Maj), marqueur ; `AccrocheMur` et `marqueur` importés par `lib.rs` |
 | `reperage.rs` | guides temporaires (repérage polaire) |
 | `saisie_trace.rs` | saisie clavier des points (distance, angle, coordonnées) |

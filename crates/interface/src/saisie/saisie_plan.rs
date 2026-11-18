@@ -543,7 +543,6 @@ impl ViewerApp {
     pub(crate) fn apercu_coupe(&self, ui: &egui::Ui, rect: egui::Rect, survol: Option<([f64; 2], AccrocheMur)>, z: f64, prm: &crate::zones::ruban::ParametresCoupe) {
         let painter = ui.painter().with_clip_rect(rect);
         let couleur = Color32::from_rgb(55, 130, 200);
-        let accent = Color32::from_rgb(230, 120, 20);
         if let (Some(a), Some((b, _))) = (self.coupe_depart, survol)
             && (b[0] - a[0]).hypot(b[1] - a[1]) > 1.0
         {
@@ -552,7 +551,7 @@ impl ViewerApp {
         if let Some((p, acc)) = survol
             && let Some(q) = self.ecran_plan(rect, p, z)
         {
-            marqueur(&painter, q, acc, couleur, accent);
+            marqueur(&painter, q, acc);
         }
         let sorte = if prm.elevation { "Élévation" } else { "Coupe" };
         let texte = if self.coupe_depart.is_some() { format!("{sorte} : cliquer la fin de la ligne · la vue regarde vers sa gauche · Échap : annuler") } else { format!("{sorte} ({}) : cliquer le début de la ligne", prm.type_vue) };
