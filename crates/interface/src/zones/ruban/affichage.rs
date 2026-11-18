@@ -17,7 +17,7 @@ impl RubanEdition {
         });
         // Les surfaces se règlent dans l'encart en tête de Propriétés.
         // Sans réglage (dessin 2D, actions), pas d'encart.
-        let outil_options = outil_options.filter(|o| menu != Menu::Cartouche && o.commande() != Outil::Surfaces && !champs(*o).is_empty());
+        let outil_options = outil_options.filter(|o| o.commande() != Outil::Surfaces && !champs(*o).is_empty());
         let selection_options = outil_options.map(Outil::commande);
         let compact = largeur_commandes(ui, menu, &[], false);
         let reserve = if selection_options.is_some() { LARGEUR_REGLAGES + ESPACE_COLONNES } else { 0.0 };
@@ -198,9 +198,6 @@ impl RubanEdition {
                             egui::FontId::proportional(11.0),
                             ui.visuals().weak_text_color(),
                         );
-                    }
-                    if menu == Menu::Cartouche {
-                        bandeau_contenu_compact(ui, &[("Formes", formes_famille_planes())]);
                     }
                 });
             });

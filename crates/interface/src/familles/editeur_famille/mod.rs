@@ -582,7 +582,7 @@ impl EditeurFamille {
         if outil.est_transformation() && outil != OutilFamille::Aligner && self.selection == SelectionFamille::Aucune && self.multiple.is_empty() {
             return Some("Sélectionner d'abord un ou plusieurs éléments de la famille.");
         }
-        catalogue::indisponibilite(d, &catalogue::Contexte { famille_plane: false, vue_3d: self.vue_3d, plan_oblique: self.construction.is_some() })
+        catalogue::indisponibilite(d, &catalogue::Contexte { vue_3d: self.vue_3d, plan_oblique: self.construction.is_some() })
     }
 
     /// Les deux premiers points de l'outil révolution définissent son axe.

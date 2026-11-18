@@ -6,26 +6,17 @@ pub const NOM_CARTOUCHE_STANDARD: &str = "Cartouche standard";
 
 impl Default for FamilleCartouche {
     fn default() -> Self {
-        let mut cartouche = Self {
-            document_famille: None,
-            id: noyau::uuid::uuid(),
-            nom: NOM_CARTOUCHE_STANDARD.into(), largeur: TAILLE_CARTOUCHE_STANDARD[0], hauteur: TAILLE_CARTOUCHE_STANDARD[1],
-            traits: vec![[[0.0,0.0],[180.0,0.0]], [[180.0,0.0],[180.0,40.0]], [[180.0,40.0],[0.0,40.0]], [[0.0,40.0],[0.0,0.0]], [[140.0,0.0],[140.0,40.0]], [[0.0,14.0],[140.0,14.0]], [[0.0,30.0],[140.0,30.0]]],
-            textes: vec![
-                TexteCartouche { contenu: "{projet}".into(), position: [3.0,33.0], hauteur: 3.5 },
-                TexteCartouche { contenu: "{feuille}".into(), position: [3.0,20.0], hauteur: 5.0 },
-                TexteCartouche { contenu: "{cartouche}".into(), position: [3.0,9.0], hauteur: 2.5 },
-                TexteCartouche { contenu: "{echelles}".into(), position: [3.0,3.5], hauteur: 2.5 },
-                TexteCartouche { contenu: "{numero}".into(), position: [144.0,15.0], hauteur: 9.0 },
-            ],
-            formes: Vec::new(),
-        };
         use crate::famille::modelee::{CategorieFamille, Element2DFamille, FamilleModelee, FichierFamille, VueEsquisse, FORMAT_FAMILLE};
+        let [largeur, hauteur] = TAILLE_CARTOUCHE_STANDARD;
+        let traits = [[[0.0,0.0],[180.0,0.0]], [[180.0,0.0],[180.0,40.0]], [[180.0,40.0],[0.0,40.0]], [[0.0,40.0],[0.0,0.0]], [[140.0,0.0],[140.0,40.0]], [[0.0,14.0],[140.0,14.0]], [[0.0,30.0],[140.0,30.0]]];
+        let textes = [("{projet}", [3.0,33.0], 3.5), ("{feuille}", [3.0,20.0], 5.0), ("{cartouche}", [3.0,9.0], 2.5), ("{echelles}", [3.0,3.5], 2.5), ("{numero}", [144.0,15.0], 9.0)];
         let mut famille = FamilleModelee::vide(CategorieFamille::Cartouche);
-        famille.elements_2d.extend(cartouche.traits.iter().map(|t| Element2DFamille::fixe(VueEsquisse::Plan, AnnotationForme::Ligne { debut: t[0], fin: t[1] }, 2.5)));
-        famille.elements_2d.extend(cartouche.textes.iter().map(|t| Element2DFamille::fixe(VueEsquisse::Plan, AnnotationForme::Texte { point: t.position, texte: t.contenu.clone() }, t.hauteur)));
-        cartouche.document_famille = Some(Box::new(FichierFamille { format: FORMAT_FAMILLE.into(), nom: cartouche.nom.clone(), largeur: cartouche.largeur, hauteur: cartouche.hauteur, profondeur: 300.0, famille }));
-        cartouche
+        famille.elements_2d.extend(traits.iter().map(|t| Element2DFamille::fixe(VueEsquisse::Plan, AnnotationForme::Ligne { debut: t[0], fin: t[1] }, 2.5)));
+        famille.elements_2d.extend(textes.iter().map(|(t, point, h)| Element2DFamille::fixe(VueEsquisse::Plan, AnnotationForme::Texte { point: *point, texte: (*t).into() }, *h)));
+        Self {
+            document_famille: Box::new(FichierFamille { format: FORMAT_FAMILLE.into(), nom: NOM_CARTOUCHE_STANDARD.into(), largeur, hauteur, profondeur: 300.0, famille }),
+            id: noyau::uuid::uuid(), nom: NOM_CARTOUCHE_STANDARD.into(), largeur, hauteur,
+        }
     }
 }
 
@@ -114,9 +105,8 @@ pub fn cadre_feuille(p: &Projet, f: &Feuille) -> Vec<Primitive> {
             &standard
         };
         let origine = pt_papier(x0, y0);
-        let (formes, textes) = famille.document_famille.as_ref().map_or_else(|| (famille.formes.clone(), famille.textes.clone()), |f| super::contenu_plan_famille(f, p));
+        let (formes, textes) = super::contenu_plan_famille(&famille.document_famille, p);
         v.extend(formes.iter().flat_map(|forme| forme_cartouche(p, forme)).map(|pr| pr.translater(origine)));
-        if famille.document_famille.is_none() { v.extend(famille.traits.iter().map(|t| trait_cartouche(*t).translater(origine))); }
         let mut echelles: Vec<String> = f.vues.iter().map(|x| format!("1:{}", x.echelle_sur_feuille(p))).collect();
         echelles.dedup();
         let ech = if echelles.is_empty() { String::new() } else { format!("Échelle {}", echelles.join(", ")) };

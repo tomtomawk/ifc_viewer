@@ -22,7 +22,6 @@ pub enum Menu {
     Modeliser,
     Modifier,
     Annoter,
-    Cartouche,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -372,12 +371,6 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
             DESSIN_2D,
             ("Bibliothèque", &[Symbole, Legende]),
             ("Documents", &[Feuilles, Nomenclatures]),
-        ],
-        Menu::Cartouche => &[
-            // même méthode de cote que les vues ; pas d'altimétrie sur le papier
-            ("Cotes et textes", &[Cote, CoteAngulaire, CoteDiametre, Texte, Etiquette]),
-            DESSIN_2D,
-            ("Papier", &[Rectangle]),
         ],
     }
 }

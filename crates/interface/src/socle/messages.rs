@@ -167,14 +167,9 @@ pub(crate) fn consigne_vue(ui: &egui::Ui, rect: egui::Rect, bas_barre: f32, text
     painter.galley(cadre.min + egui::vec2(4.0, 3.0), galley, couleur);
 }
 
-/// Message au premier plan (visible au-dessus des éditeurs flottants), avec un bouton ×
-/// pour une erreur. `alpha` estompe la fin d'un message temporaire. Retourne `true` si
-/// l'utilisateur l'a fermé.
-fn afficher(ui: &egui::Ui, rect: egui::Rect, bas_barre: f32, niveau: Niveau, texte: &str, alpha: f32) -> bool {
-    afficher_a(ui, rect, bas_barre, niveau, texte, alpha, 0.0).0
-}
-
-/// `afficher`, `decalage` pixels plus bas ; retourne aussi la hauteur du cadre.
+/// Message au premier plan (visible au-dessus des éditeurs flottants), `decalage` pixels
+/// plus bas, avec un bouton × pour une erreur. `alpha` estompe la fin d'un message
+/// temporaire. Retourne si l'utilisateur l'a fermé et la hauteur du cadre.
 fn afficher_a(ui: &egui::Ui, rect: egui::Rect, bas_barre: f32, niveau: Niveau, texte: &str, alpha: f32, decalage: f32) -> (bool, f32) {
     let couleur = niveau.couleur().gamma_multiply(alpha);
     let fermable = niveau == Niveau::Erreur;
@@ -197,11 +192,6 @@ fn afficher_a(ui: &egui::Ui, rect: egui::Rect, bas_barre: f32, niveau: Niveau, t
                 .on_hover_text("Effacer le message (il reste dans le journal)").clicked();
             (ferme, cadre.height())
         }).inner
-}
-
-/// Erreur propre à un éditeur (cartouche…), au même endroit que les autres messages.
-pub(crate) fn erreur_vue(ui: &egui::Ui, rect: egui::Rect, bas_barre: f32, texte: &str) -> bool {
-    afficher(ui, rect, bas_barre, Niveau::Erreur, texte, 1.0)
 }
 
 impl ViewerApp {

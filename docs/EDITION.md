@@ -6,11 +6,12 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
 
 ## Parcours disponible
 
-- **Familles → Profils** : ouvrir un profil du projet, en créer un ou charger un
-  fichier de profil. L'éditeur permet de modifier les paramètres et les formules
-  des coordonnées des sommets, avec un aperçu du contour fermé. Enregistrer dans
-  le projet, créer une copie ou exporter un fichier `.profil.json`. Le gabarit
-  embarqué fournit un rectangle, une cornière, un profilé T et un profilé I.
+- **Familles → Profils** : ouvrir un profil du projet, en créer un ou ouvrir un
+  fichier de famille. Le profil s'ouvre dans l'éditeur commun des familles, sur sa
+  vue en plan : la section est la polyligne fermée du plan (choisie dans les
+  propriétés s'il y en a plusieurs), pilotée par les plans, cotes et paramètres de
+  la famille. Charger dans le projet, ou enregistrer un fichier `.famille.json`. Le
+  gabarit embarqué fournit un rectangle, une cornière, un profilé T et un profilé I.
   Ces familles de profils sont éditables indépendamment ; un type de poutre peut
   en prendre une comme section (`TypePoutre::profil`).
 

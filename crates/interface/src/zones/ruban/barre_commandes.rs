@@ -114,16 +114,6 @@ pub(super) fn bandeau_contenu_compact(ui: &mut egui::Ui, groupes: &[(&str, Vec<C
     reponses
 }
 
-/// Les familles planes gardent les commandes de volume visibles, sans les activer.
-pub(crate) fn formes_famille_planes() -> Vec<Commande> {
-    use crate::familles::editeur_famille::catalogue::{self, Contexte};
-    let contexte = Contexte { famille_plane: true, vue_3d: false, plan_oblique: false };
-    catalogue::OUTILS.iter()
-        .filter(|d| d.groupe == "Formes")
-        .map(|d| Commande::new(d.cle, d.nom, Icone::Famille(d.cle),
-            catalogue::indisponibilite(d, &contexte).unwrap_or(d.aide), catalogue::indisponibilite(d, &contexte).is_none())).collect()
-}
-
 /// Pictogrammes génériques des commandes de fichier.
 pub(super) fn icone_commande(p: &egui::Painter, r: egui::Rect, i: Icone, c: Color32) {
     let t = egui::Stroke::new(1.4, c);

@@ -194,8 +194,7 @@ impl ViewerApp {
         }
 
         let trace = if self.mode_famille() {
-            self.cartouche_actif().is_some_and(|c| c.trace_en_cours())
-                || (self.famille_active && self.famille.as_ref().is_some_and(|ed| ed.trace_en_cours()))
+            self.famille_active && self.famille.as_ref().is_some_and(|ed| ed.trace_en_cours())
         } else {
             self.trace_en_cours()
                 || self.dessin2d.edition_contour.is_some()
@@ -234,7 +233,7 @@ impl ViewerApp {
             }
         });
         // éditeur commun de famille : mêmes séquences pour les outils de l'onglet Modifier
-        let famille_commune = self.famille_active && self.famille_plane_active.is_none() && self.loading.is_none()
+        let famille_commune = self.famille_active && self.loading.is_none()
             && self.famille.as_ref().is_some_and(|ed| ed.raccourcis_admis());
         if (modeliser || famille_commune) && !focus {
             let (temps, textes) = ctx.input(|i| {
@@ -308,22 +307,13 @@ impl ViewerApp {
         // onglet Famille : les raccourcis du projet (masquer, isoler, copier…) agiraient
         // sur la maquette masquée
         let famille = ["nouveau", "ouvrir", "fermer", "parametres", "theme_suivant", "enregistrer", "annuler", "retablir", "supprimer", "cadrer"];
-        if self.famille_active && self.famille_plane_active.is_none()
+        if self.famille_active
             && self.famille.as_mut().is_some_and(|ed| ed.raccourci_transformation(action)) {
             self.onglet_ruban = OngletRuban::FamilleModifier;
             return;
         }
         if self.mode_famille() && !famille.contains(&action) {
             return;
-        }
-        if self.famille_plane_active.is_some() {
-            match action {
-                "enregistrer" => { self.error = if self.famille_plane_active.and_then(|i| self.familles_planes.get(&i)).is_some_and(|e| e.document_famille.autonome) { self.enregistrer_famille_plane_dialogue(false).err() } else { self.enregistrer_famille_plane(false).err() }; return; }
-                "fermer" => { self.demander_fermeture_famille(); return; }
-                "supprimer" => { self.supprimer_selection_famille_plane(); return; }
-                "cadrer" => { let _ = self.navigation_cartouche("cadrer"); return; }
-                _ => {}
-            }
         }
         match action {
             "copier_presse" => self.memoriser_copie_niveau(self.selection_bim()),

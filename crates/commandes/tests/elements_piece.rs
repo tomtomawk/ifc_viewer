@@ -40,7 +40,7 @@ fn piece_dans_quatre_murs() {
 
 #[test]
 fn etiquette_famille_de_la_piece() {
-    use modele::documentation::{primitives_pieces, FamilleEtiquette, TexteCartouche};
+    use modele::documentation::{primitives_pieces, FamilleEtiquette};
     let mut p = projet();
     rectangle(&mut p, &ParametresMur { epaisseur: 200.0, ..Default::default() });
     let (mut q, ids) = p.executer(Commande::Piece { piece: piece(&p, [2500.0, 2000.0]) }).unwrap();
@@ -49,8 +49,18 @@ fn etiquette_famille_de_la_piece() {
     let vue = q.vues.iter().find(|v| v.id == vid).unwrap().clone();
     // standard : aplat et deux lignes
     assert_eq!(primitives_pieces(&q, &vue).len(), 3);
-    let t = |c: &str, y| TexteCartouche { contenu: c.into(), position: [0.0, y], hauteur: 2.0 };
-    q.familles_etiquettes.push(FamilleEtiquette { document_famille: None, formes: Vec::new(), id: "e1".into(), nom: "Cadre".into(), traits: vec![[[-10.0, -5.0], [10.0, -5.0]], [[-10.0, 5.0], [10.0, 5.0]]], textes: vec![t("{nom}", 2.0), t("N° {numero}", -1.0), t("{perimetre} · {niveau}", -4.0)] });
+    use modele::documentation::AnnotationForme;
+    use modele::famille::modelee::{Element2DFamille, VueEsquisse};
+    let mut famille = FamilleEtiquette { id: "e1".into(), nom: "Cadre".into(), ..FamilleEtiquette::standard() };
+    let elements = &mut famille.document_famille.famille.elements_2d;
+    elements.clear();
+    for (texte, y) in [("{nom}", 2.0), ("N° {numero}", -1.0), ("{perimetre} · {niveau}", -4.0)] {
+        elements.push(Element2DFamille::fixe(VueEsquisse::Plan, AnnotationForme::Texte { point: [0.0, y], texte: texte.into() }, 2.0));
+    }
+    for y in [-5.0, 5.0] {
+        elements.push(Element2DFamille::fixe(VueEsquisse::Plan, AnnotationForme::Ligne { debut: [-10.0, y], fin: [10.0, y] }, 2.0));
+    }
+    q.familles_etiquettes.push(famille);
     q.pieces[0].etiquette = "e1".into();
     assert_eq!(primitives_pieces(&q, &vue).len(), 1 + 3 + 2);
     assert_eq!(FamilleEtiquette::remplir("N° {numero} — {surface}", &q, &q.pieces[0]), "N° 1 — 18.24 m²");

@@ -433,7 +433,7 @@ mod tests {
 
     #[test]
     fn le_type_recharge_extrude_le_profil_choisi() {
-        use crate::famille::profil::{PointProfil, Profil};
+        use crate::famille::profil::Profil;
         let mut p = Projet::nouveau("Garde-corps");
         p.niveaux.push(crate::Niveau {
             id: "niv".into(),
@@ -441,18 +441,7 @@ mod tests {
             altitude: 0.0,
             origine: None,
         });
-        p.profils.push(Profil {
-            document_famille: None,
-            id: "section".into(),
-            nom: "Triangle".into(),
-            parametres: vec![],
-            contour: [(0, 0), (60, 0), (0, 30)]
-                .map(|(x, y)| PointProfil {
-                    x: x.to_string(),
-                    y: y.to_string(),
-                })
-                .to_vec(),
-        });
+        p.profils.push(Profil { id: "section".into(), ..Profil::depuis_contour("Triangle", vec![[0.0, 0.0], [60.0, 0.0], [0.0, 30.0]]) });
         let mut t = TypeGardeCorps::standard(1000.0, Remplissage::Barreaudage);
         t.id = "type".into();
         t.lisses.clear();

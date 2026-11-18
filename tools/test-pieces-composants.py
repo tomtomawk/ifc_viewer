@@ -150,8 +150,14 @@ def run(exe, captures=None):
             assert (x["nom"], x["numero"]) == ("Séjour", "101"), x
             # étiquette en famille : textes à champs et traits, affectée à la pièce
             r = commande("projet_natif")
-            famille = {"id": "etiquette-piece-1", "nom": "Encadrée", "traits": [[[-12, -4], [12, -4]], [[-12, 4], [12, 4]]],
-                       "textes": [{"contenu": "{numero}", "position": [0, -1], "hauteur": 3}, {"contenu": "{nom} · {surface}", "position": [0, -7.5], "hauteur": 2}]}
+            elements = [{"vue": "plan", "forme": {"forme": "ligne", "debut": [-12, y], "fin": [12, y]}, "hauteur": 2.5} for y in (-4, 4)]
+            elements += [{"vue": "plan", "forme": {"forme": "texte", "point": [0, y], "texte": t}, "hauteur": h}
+                         for t, y, h in (("{numero}", -1, 3), ("{nom} · {surface}", -7.5, 2))]
+            plans = [{"nom": f"Origine {a.upper()}", "axe": a, "position": 0.0, "fixe": True} for a in "xyz"]
+            document = {"format": "famille-ouverture 3", "nom": "Encadrée", "largeur": 60.0, "hauteur": 30.0, "profondeur": 300.0,
+                        "famille": {"categorie": "etiquette_piece", "elements_2d": elements, "parametres": [], "plans": plans,
+                                    "contraintes": [], "volumes": [], "genre": "libre"}}
+            famille = {"id": "etiquette-piece-1", "nom": "Encadrée", "document_famille": document}
             commande("modifier_projet", {"empreinte": r["empreinte"], "operations": [{"op": "add", "path": "/familles_etiquettes", "value": [famille]}]})
             commande("editer", {"action": "piece", "piece": dict(projet()["pieces"][0], etiquette="etiquette-piece-1")})
             assert projet()["pieces"][0]["etiquette"] == "etiquette-piece-1"

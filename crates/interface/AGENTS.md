@@ -16,7 +16,7 @@ Rangement par domaine (lot 11b, docs/historique/ARCHITECTURE_CHANTIER_2026-11.md
 | `saisie/` | accrochage, repérage, saisie clavier et en plan, sélection, poignées d'annotation |
 | `outils/` | `modeliser/` (`bim/` : état, placements, panneau ; murs courbes, garde-corps, escaliers), `modifier/` (transformer, ajuster, options de Modifier), `dessiner/dessin_plan/` (DAO 2D), `annoter/` (cotation, textes, types de trait) |
 | `documenter/` | feuilles, cartouche, coupe, gabarits de vue |
-| `familles/` | `editeur_famille/`, familles planes, document de famille, profils, sélection des familles |
+| `familles/` | `editeur_famille/` (toutes catégories), document de famille, sélection des familles et profils |
 | `projet/` | collaboration, gestion des contextes |
 | `../assets/icone.png` | icône embarquée (`include_bytes!("../../assets/icone.png")` depuis `socle/fenetre.rs` et `zones/barre_haute.rs`) |
 

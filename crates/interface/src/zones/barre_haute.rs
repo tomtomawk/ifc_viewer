@@ -9,8 +9,7 @@ impl ViewerApp {
         // famille ouverte : son propre ruban, comme un document indépendant
         let mode_famille = self.mode_famille();
         let onglet_famille = matches!(self.onglet_ruban, OngletRuban::FamilleCreer | OngletRuban::FamilleModifier | OngletRuban::FamilleSortie);
-        // l'onglet Modifier appartient à l'éditeur commun : les éditeurs plans n'en ont pas
-        if mode_famille && (!onglet_famille || (self.onglet_ruban == OngletRuban::FamilleModifier && self.famille_plane_active.is_some())) {
+        if mode_famille && !onglet_famille {
             self.onglet_ruban = OngletRuban::FamilleCreer;
         } else if !mode_famille && onglet_famille {
             self.onglet_ruban = OngletRuban::Debut;
@@ -33,11 +32,7 @@ impl ViewerApp {
         let mut zones_deplacement = vec![titre];
         let menus = egui::Rect::from_min_max(egui::pos2(titre.right() + 8.0, barre.top()), egui::pos2(barre.right() - if natif { 40.0 } else { 180.0 }, barre.bottom()));
         ui.scope_builder(egui::UiBuilder::new().id_salt("menu_fenetre").max_rect(menus).layout(egui::Layout::left_to_right(Align::Center)), |ui| {
-            let onglets: &[(OngletRuban, &str)] = if self.cartouche_actif().is_some() {
-                &[(OngletRuban::FamilleCreer, "Documenter"), (OngletRuban::FamilleSortie, "Sortie")]
-            } else if mode_famille && self.famille_plane_active.is_some() {
-                &[(OngletRuban::FamilleCreer, "Créer"), (OngletRuban::FamilleSortie, "Sortie")]
-            } else if mode_famille {
+            let onglets: &[(OngletRuban, &str)] = if mode_famille {
                 &[(OngletRuban::FamilleCreer, "Créer"), (OngletRuban::FamilleModifier, "Modifier"), (OngletRuban::FamilleSortie, "Sortie")]
             } else {
                 &[(OngletRuban::Debut, "Début"), (OngletRuban::Modeliser, "Modéliser"), (OngletRuban::Modifier, "Modifier"), (OngletRuban::Annoter, "Documenter"), (OngletRuban::Sortie, "Sortie")]
@@ -57,7 +52,7 @@ impl ViewerApp {
             let mut historique_choisi = None;
             for (retablir, titre) in [(false, "Annuler"), (true, "Rétablir")] {
                 let famille = self.famille.as_ref().filter(|_| self.famille_active);
-                let libelles = if let Some(ed) = self.famille_plane_active.and_then(|i| self.familles_planes.get(&i)) { ed.libelles_historique(retablir) } else if let Some(ed)=famille {ed.libelles_historique(retablir)} else if let Some(c)=&self.collaboration {
+                let libelles = if let Some(ed)=famille {ed.libelles_historique(retablir)} else if let Some(c)=&self.collaboration {
                     let pile=if retablir{&c.copie.retablissements}else{&c.copie.annulations};
                     pile.last().map(|t|format!("Transaction {} — {}",t.id,if c.copie.base.acceptes.contains_key(&t.id){"partagée"}else{"locale"})).into_iter().collect()
                 } else {self.historique.libelles(retablir)};
@@ -173,7 +168,7 @@ impl ViewerApp {
                     self.error = Some("Un enregistrement est en cours ; attendez sa fin avant de quitter.".into());
                     continue;
                 }
-                if k == 2 && self.edition_plane_modifiee(None).is_none() && (self.natif_modifie || self.documents.values().any(|d| d.modifie)) {
+                if k == 2 && (self.natif_modifie || self.documents.values().any(|d| d.modifie)) {
                     self.confirmer_fermeture = Some((true, self.document_actif));
                     continue;
                 }
@@ -187,9 +182,7 @@ impl ViewerApp {
         ui.separator();
         ui.set_min_height(28.0);
         if mode_famille {
-            let sortie = self.onglet_ruban == OngletRuban::FamilleSortie;
-            if self.famille_plane_active.is_some() { self.ruban_famille_plane(ui, sortie); }
-            else { self.ruban_famille(ui, self.onglet_ruban); }
+            self.ruban_famille(ui, self.onglet_ruban);
             return;
         }
         let edition = match self.onglet_ruban {
