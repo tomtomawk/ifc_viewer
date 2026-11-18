@@ -8,6 +8,7 @@ mod modifier;
 mod socle;
 pub use annoter::cotes::piloter_cote;
 pub use modifier::composees::{Modification, decaler_polygone};
+pub use modifier::supprimer::annotations_a_detacher;
 pub use socle::commande::Commande;
 pub use socle::contextes::Contextes;
 pub use socle::execution::Execution;

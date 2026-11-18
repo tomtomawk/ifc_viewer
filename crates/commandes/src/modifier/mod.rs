@@ -3,6 +3,7 @@
 //! reproduire) dans `composees`, transformation affine dans `transformations`.
 pub mod composees;
 pub mod copier;
+pub mod supprimer;
 pub mod transformations;
 use crate::socle::interne::*;
 
@@ -135,6 +136,7 @@ impl ExecutionModifier for Projet {
                         return Err("Ce niveau est encore utilisé.".into());
                     }
                 }
+                supprimer::detacher_annotations(self, &set);
                 self.murs.retain(|x| !set.contains(&x.id));
                 self.assemblages.retain(|x| !set.contains(&x.id));
                 self.ouvertures.retain(|x| !set.contains(&x.id));

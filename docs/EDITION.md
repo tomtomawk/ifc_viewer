@@ -205,7 +205,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   vue ; leurs propriétés sont accessibles dans Modifier. Les cotes liées gardent
   leurs références : leur décalage est éditable dans leurs propriétés. Supprimer (icône de
   Modifier, touche Suppr ou Retour arrière hors tracé) agit tout
-  de suite, couches et ouvertures hébergées comprises ; Ctrl+Z rétablit. Un niveau
+  de suite, couches et ouvertures hébergées comprises ; les cotes associées et
+  étiquettes de l'élément sont conservées, détachées (cote figée en points fixes,
+  étiquette devenue texte) ; Ctrl+Z rétablit. Un niveau
   encore utilisé ne peut pas être supprimé.
 - Le panneau Propriétés ne montre que les informations de la sélection (type,
   paramètres, couches, sommets d'un élément horizontal). Les commandes sont ailleurs :

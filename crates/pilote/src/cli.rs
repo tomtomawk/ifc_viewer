@@ -92,3 +92,39 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
         Ok(())
     })())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use modele::documentation::{Annotation, AnnotationForme, PointCote};
+
+    /// `--editer {"action":"supprimer"}` : mêmes annotations détachées que dans l'interface.
+    #[test]
+    fn editer_supprimer_detache_les_annotations() {
+        let mut p = Projet::nouveau("Pilote");
+        let mur = p.ajouter_mur([0.0, 0.0], [4000.0, 0.0], &modele::creation::ParametresMur::default()).unwrap();
+        let ouverture = commandes::Commande::Ouverture { mur: mur.clone(), genre: modele::GenreOuverture::Porte, type_ouverture: None, abscisse: 1000.0, largeur: 900.0, hauteur: 2100.0, allege: 0.0 };
+        let mut p = p.executer(ouverture).unwrap().0;
+        let vue = p.ajouter_vue_plan(&p.niveaux[0].id.clone(), 1200.0).unwrap();
+        for (id, forme) in [
+            ("cote", AnnotationForme::Cote { debut: PointCote::Mur { id: mur.clone(), fin: false }, fin: PointCote::Mur { id: mur.clone(), fin: true }, decalage: 500.0 }),
+            ("etiquette", AnnotationForme::Etiquette { element: mur.clone(), point: [2000.0, 500.0] }),
+        ] {
+            p = p.executer(commandes::Commande::Annoter { annotation: Annotation { id: id.into(), vue: vue.clone(), hauteur: 2.5, forme } }).unwrap().0;
+        }
+        let dossier = std::env::temp_dir().join(format!("bimedit-supprimer-{}", std::process::id()));
+        std::fs::create_dir_all(&dossier).unwrap();
+        let (entree, commande) = (dossier.join("p.modele.json"), dossier.join("c.json"));
+        std::fs::write(&entree, p.json().unwrap()).unwrap();
+        std::fs::write(&commande, format!(r#"{{"action":"supprimer","ids":["{mur}"]}}"#)).unwrap();
+        let args: Vec<String> = ["--editer".into(), entree.to_string_lossy().into_owned(), commande.to_string_lossy().into_owned()].into();
+        executer(&args).unwrap().unwrap();
+        let q = Projet::lire_json(&std::fs::read_to_string(&entree).unwrap()).unwrap();
+        let _ = std::fs::remove_dir_all(&dossier);
+        q.verifier().unwrap();
+        assert!(q.murs.is_empty() && q.ouvertures.is_empty());
+        let forme = |id: &str| q.annotations.iter().find(|a| a.id == id).map(|a| a.forme.clone());
+        assert!(matches!(forme("cote"), Some(AnnotationForme::Cote { debut: PointCote::Fixe { point: [0.0, _] }, fin: PointCote::Fixe { point: [4000.0, _] }, .. })));
+        assert!(matches!(forme("etiquette"), Some(AnnotationForme::Texte { .. })));
+    }
+}

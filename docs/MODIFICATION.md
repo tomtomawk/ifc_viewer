@@ -24,10 +24,17 @@ Options communes de la barre d'options :
 - **Multiple** : la commande reste active après validation (copies successives).
 - **Conserver les jonctions** : les murs joints suivent (déplacer, décaler) ou sont détachés (copie, symétrie).
 
+Supprimer (`Commande::Supprimer`, `crates/commandes/src/modifier/mod.rs` et `supprimer.rs`) :
+- Agit tout de suite, sans avertissement ni choix ; une seule étape d'annulation (Ctrl+Z).
+- Partent avec l'élément ses dépendants structurels (`dependances`) : couches d'un assemblage, ouvertures d'un mur, garde-corps d'un escalier.
+- Les annotations qui s'appuient sur un élément supprimé sont conservées et détachées : une cote associée (`PointCote::Mur` ou `Arete`) a ses points supprimés figés en points fixes à leur position (l'autre côté suit encore son élément) ; une cote angulaire entre arêtes est figée (sans arêtes) ; une étiquette devient un texte libre portant le nom affiché.
+- Une annotation sélectionnée part normalement ; les annotations d'une vue supprimée partent avec la vue.
+- Message d'état : « N élément(s) supprimé(s), M annotation(s) détachée(s) — Ctrl+Z pour annuler ». Le pilote (`editer {"action":"supprimer",...}`) donne le même résultat.
+
 Comportement BIM :
 - Une ouverture suit son hôte. Déplacée seule, elle glisse dans l'hôte (abscisse, allège) et ne le quitte pas.
 - Un mur composé (assemblage) se transforme d'un bloc, sauf si une couche seule est sélectionnée.
-- Les annotations liées (cotes, étiquettes) suivent leurs références ; une cote dont une référence disparaît est supprimée avec un message.
+- Les annotations liées (cotes, étiquettes) suivent leurs références. Quand une référence est supprimée, l'annotation est conservée et détachée (voir Supprimer).
 - En collaboration, la commande réserve les objets touchés avant de publier.
 
 ### Exigence : tout se fait graphiquement
@@ -60,7 +67,7 @@ Contrôle de chaque fonction : un script `tools/test-*.py` la joue par le pilote
 | 8 | **Symétrie** | SY | éléments | axe : élément existant ou 2 points | Copier (par défaut : oui) ; Symétriser les familles (sens d'ouverture des portes) |
 | 9 | **Ajuster / prolonger** | AJ · TR (en angle) | aucune préalable | 1. référence ; 2. élément, côté à conserver | Un seul / plusieurs éléments vers une même référence ; En angle (deux éléments à l'intersection) |
 | 10 | **Scinder** | SC | aucune préalable | clic sur l'élément au point de coupure | Écart (scinder avec espace) ; Supprimer le segment intérieur (2 clics) |
-| 11 | **Supprimer** | Suppr | éléments | aucune | Rapport des dépendants supprimés (ouvertures, cotes, étiquettes) avant validation |
+| 11 | **Supprimer** | Suppr | éléments | aucune | Agit tout de suite, sans avertissement ni choix ; dépendants structurels supprimés avec l'élément, annotations liées détachées (voir ci-dessous) |
 
 ## 3. Visibilité
 
@@ -96,7 +103,7 @@ Règle : le verrouillage s'applique au **modèle** (partagé en collaboration). 
 | Ajuster / prolonger | référence → côté à conserver | partie conservée en orange, partie supprimée en gris pointillé, prolongement en fantôme |
 | Prolonger en angle | élément 1 → élément 2 | les deux éléments surlignés, angle résultant en fantôme |
 | Scinder | point sur l'élément | marque de coupure suivant le curseur, cotes aux deux extrémités |
-| Supprimer | sélection → Suppr | dépendants surlignés en rouge avant validation |
+| Supprimer | sélection → Suppr | aucun : suppression immédiate, message d'état |
 | Verrouiller | sélection → bouton | cadenas sur chaque élément verrouillé ; un clic sur le cadenas déverrouille |
 | Masquer | sélection → H / HV | cadre coloré de vue temporaire |
 | Afficher | mode afficher → clic | masqués en magenta, clic pour les réafficher |

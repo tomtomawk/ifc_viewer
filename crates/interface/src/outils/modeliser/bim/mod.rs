@@ -215,11 +215,13 @@ impl ViewerApp {
             self.status = "Supprimer : sélectionner d'abord un ou plusieurs éléments.".into();
             return;
         }
-        let n = self.natif.as_ref().and_then(|(p, _)| p.dependances(&ids).ok()).map_or(ids.len(), |s| s.len());
+        let set = self.natif.as_ref().and_then(|(p, _)| p.dependances(&ids).ok().map(|s| (commandes::annotations_a_detacher(p, &s).len(), s)));
+        let (n, m) = set.map_or((ids.len(), 0), |(m, s)| (s.len(), m));
         match self.executer_bim(commandes::Commande::Supprimer { ids }) {
             Ok(_) => {
                 self.bim.selection.clear();
-                self.status = format!("{n} élément(s) supprimé(s) — Ctrl+Z pour annuler.");
+                let detachees = if m > 0 { format!(", {m} annotation(s) détachée(s)") } else { String::new() };
+                self.status = format!("{n} élément(s) supprimé(s){detachees} — Ctrl+Z pour annuler.");
             }
             Err(e) => self.error = Some(e),
         }
