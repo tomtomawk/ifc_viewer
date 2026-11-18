@@ -206,13 +206,15 @@ mod tests {
 
     fn taper_cs(app: &mut ViewerApp, ctx: &egui::Context) {
         for lettre in ["c", "s"] {
-            let _ = ctx.run_ui(
+            let mut sortie = ctx.run_ui(
                 egui::RawInput {
                     events: vec![egui::Event::Text(lettre.into())],
                     ..Default::default()
                 },
                 |ui| app.clavier_raccourcis(ui.ctx()),
             );
+            // sans rendu, les textures ne sont pas appliquées : epaint refuse de les jeter en debug
+            sortie.textures_delta.clear();
         }
     }
 

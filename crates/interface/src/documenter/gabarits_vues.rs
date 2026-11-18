@@ -49,11 +49,11 @@ mod tests {
         assert!(brouillon.gabarit.id.is_empty());
         assert_eq!(brouillon.gabarit.nom, "Plan détaillé (copie 2)");
 
-        let mut image = |events| ctx.run_ui(egui::RawInput {
+        let mut image = |events| { let mut s = ctx.run_ui(egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0))),
             events,
             ..Default::default()
-        }, |ui| app.fenetre_gabarit_vue(ui.ctx()));
+        }, |ui| app.fenetre_gabarit_vue(ui.ctx())); s.textures_delta.clear(); s };
         image(vec![]);
         let sortie = image(vec![]);
         let bouton = sortie.shapes.iter().find_map(|s| match &s.shape {

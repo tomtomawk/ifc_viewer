@@ -83,7 +83,7 @@ mod tests_gabarit {
         ] {
             let ctx = egui::Context::default();
             let mut action = None;
-            let mut image = |events| ctx.run_ui(egui::RawInput {
+            let mut image = |events| { let mut s = ctx.run_ui(egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(500.0, 500.0))),
                 events,
                 ..Default::default()
@@ -92,7 +92,7 @@ mod tests_gabarit {
                 if let Some(clic) = selecteur_gabarit_vue(ui, &projet, None) {
                     action = Some(clic);
                 }
-            });
+            }); s.textures_delta.clear(); s };
             let entete = rectangle_texte(&image(vec![]), "Gabarit de vue · Aucun").center();
             let clic = |pos, pressed| vec![egui::Event::PointerMoved(pos), egui::Event::PointerButton {
                 pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE,
