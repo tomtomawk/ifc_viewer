@@ -107,7 +107,8 @@ impl Transformation {
             Outil::Aligner => "Cliquer le segment ou la face à aligner · Échap : changer de référence".into(),
             Outil::Decaler if self.element.is_none() => "Cliquer le mur ou la dalle à décaler".into(),
             Outil::Decaler => format!("Cliquer le côté et la distance, ou taper la distance{valeur}"),
-            Outil::Scinder => "Cliquer le mur ou la poutre au point de coupure".into(),
+            Outil::Scinder if self.element.is_some() => "Tracer la coupe de bord à bord · Entrée pour scinder".into(),
+            Outil::Scinder => "Choisir une surface à découper ou cliquer un mur ou une poutre au point de coupure".into(),
             Outil::Demolir => "Cliquer les éléments à démolir (clic sur un élément démoli : annuler)".into(),
             Outil::Reproduire if self.element.is_none() => "Pipette : cliquer l'élément source".into(),
             Outil::Reproduire => "Pinceau : cliquer les éléments à mettre à jour · Échap : changer de source".into(),
@@ -192,6 +193,9 @@ impl ViewerApp {
         let outil = self.outil_transformation();
         if outil != self.transfo.outil {
             self.transfo.commencer(outil);
+            if outil == Some(Outil::Scinder) && let [id] = self.selection_bim().as_slice() && self.surface_scindable(id) {
+                self.transfo.element = Some(id.clone());
+            }
             if outil.is_some() {
                 self.derniere_commande = outil;
             }
@@ -450,6 +454,8 @@ impl ViewerApp {
                     Err(e) => self.error = Some(e),
                 }
             }
+            Outil::Scinder if self.transfo.element.is_some() => self.transfo.points.push(p),
+            Outil::Scinder if cible.as_deref().is_some_and(|id| self.surface_scindable(id)) => self.transfo.element = cible,
             Outil::Scinder => match cible.filter(|id| self.axe_mur(id).is_some() || self.natif.as_ref().is_some_and(|(p, _)| p.barres.iter().any(|b| &b.id == id && b.genre == modele::GenreBarre::Poutre))) {
                 Some(id) => {
                     let ecart = self.transfo.ecart.max(0.0);
@@ -458,7 +464,7 @@ impl ViewerApp {
                         Err(e) => self.error = Some(e),
                     }
                 }
-                None => self.status = "Scinder : cliquer sur un mur droit ou une poutre.".into(),
+                None => self.status = "Scinder : sélectionner une surface, un mur droit ou une poutre.".into(),
             },
             _ => {}
         }
@@ -549,6 +555,11 @@ impl ViewerApp {
     pub(crate) fn clavier_transformation(&mut self, ctx: &egui::Context) {
         self.suivre_transformation();
         let Some(outil) = self.transfo.outil else { return };
+        if outil == Outil::Scinder && self.transfo.element.is_some() && !self.saisie_active && !ctx.egui_wants_keyboard_input()
+            && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)) {
+            self.valider_coupe_surface();
+            return;
+        }
         if !self.transfo.attend_valeur(outil) || self.saisie_active {
             return;
         }
@@ -843,6 +854,12 @@ impl ViewerApp {
                         painter.text(q + egui::vec2(16.0, -18.0), egui::Align2::LEFT_BOTTOM, format!("{nom}{etat}"), egui::FontId::proportional(12.0), orange);
                     }
                 }
+            }
+            Outil::Scinder if self.transfo.element.is_some() => {
+                let trace: Vec<_> = self.transfo.points.iter().copied().chain(point.map(|(p, _)| p))
+                    .filter_map(|p| self.ecran_plan(rect, p, altitude)).collect();
+                for q in &trace { painter.circle_filled(*q, 3.0, orange); }
+                painter.add(egui::Shape::line(trace, egui::Stroke::new(2.0, orange)));
             }
             Outil::Scinder => {
                 let Some(id) = cible else { return };

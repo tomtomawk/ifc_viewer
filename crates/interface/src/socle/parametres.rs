@@ -203,13 +203,15 @@ impl ViewerApp {
                 || self.bim.depart_structure.is_some()
                 || !self.transfo.points.is_empty()
         };
+        let point_topo = !self.mode_famille() && self.cible_trace().0 == crate::zones::ruban::CibleTrace::PointTopo;
         let modeliser = self.natif.is_some()
             && !self.mode_famille()
-            && !trace
+            && (!trace || point_topo)
             && !self.vol.actif
             && self.loading.is_none();
         let catalogue: Vec<_> = COMMANDES
             .iter()
+            .filter(|c| !point_topo || c.categorie == "Fichiers" || matches!(c.id, "deplacer" | "copier" | "supprimer"))
             .filter_map(|c| {
                 raccourcis::analyser(self.options.raccourci(c))
                     .ok()
@@ -225,7 +227,7 @@ impl ViewerApp {
                     // touche maintenue : seules les commandes du soleil se répètent (U, I)
                     if let Some((c,_))=catalogue.iter().find(|(c,r)| matches!(r,Raccourci::Touche{key:k,modifiers:m} if key==k && modifiers.matches_exact(*m))&&(!focus||c.categorie=="Fichiers")&&(!*repeat||c.id.starts_with("soleil_"))) {
                         if (c.id != "selection_suivante" || tab_vue)
-                            && (c.categorie=="Fichiers"||(!focus&&!trace&&!self.vol.actif&&(self.scene.is_some()||self.mode_famille()||c.id=="annuler"||c.id=="retablir"))) {
+                            && (c.categorie=="Fichiers"||(!focus&&(!trace||point_topo)&&!self.vol.actif&&(self.scene.is_some()||self.mode_famille()||c.id=="annuler"||c.id=="retablir"))) {
                             actions.push(c.id);consommer.push(index);
                         }
                     }
@@ -352,6 +354,7 @@ impl ViewerApp {
             "supprimer" if self.famille_active && self.famille.is_some() => {
                 if let Some(ed) = self.famille.as_mut() { ed.supprimer_selection(); }
             }
+            "supprimer" if self.cible_trace().0 == crate::zones::ruban::CibleTrace::PointTopo => self.commande_ruban_contour(crate::zones::ruban::Outil::Supprimer),
             "supprimer" if self.natif.is_some() => self.demander_suppression(),
             "cadrer" if self.famille_active && self.famille.is_some() => self.cadrer_famille(),
             "cadrer" => match self.selected.map(|s| self.objects_under(s)) {

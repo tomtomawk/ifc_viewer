@@ -224,6 +224,7 @@ pub enum CibleTrace {
     Aucune,
     Sommet,
     Segment,
+    PointTopo,
 }
 
 /// Raison pour laquelle un outil de Modifier ne s'applique pas au tracé en cours
@@ -231,6 +232,9 @@ pub enum CibleTrace {
 /// laquelle un trait ne s'y copie pas (contour unique, surface à contours fermés).
 pub(crate) fn raison_trace(outil: Outil, cible: CibleTrace, fixe: bool, sans_copie: Option<&'static str>) -> Option<&'static str> {
     use Outil::*;
+    if cible == CibleTrace::PointTopo {
+        return (!matches!(outil, Deplacer | Copier | Supprimer)).then_some("Sélectionner un trait pour cette commande");
+    }
     match outil {
         Deplacer | Tourner | Symetrie | Echelle => (cible == CibleTrace::Aucune).then_some("Sélectionner d'abord un trait ou un sommet du tracé (bouton Sélectionner ou Échap)"),
         Copier | Reseau | CreerIdentique if sans_copie.is_some() => sans_copie,

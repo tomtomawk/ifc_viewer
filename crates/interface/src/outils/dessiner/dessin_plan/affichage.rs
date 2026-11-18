@@ -67,8 +67,8 @@ impl ViewerApp {
     }
 
     /// Terrain en cours : survol des poignées, glissé d'un sommet ou d'un point (un milieu
-    /// insère un sommet à la cote moyenne), clic droit : retirer, clic : point coté si
-    /// un clic à l'intérieur ajoute un point coté. Un glissé invalide est repris.
+    /// insère un sommet à la cote moyenne). Un clic sélectionne un point existant
+    /// ou en ajoute un dans le terrain. Un glissé invalide est repris.
     pub(crate) fn souris_terrain(&mut self, ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response) {
         let poignees = self.poignees_terrain(rect);
         let proche = |q: egui::Pos2| poignees.iter().filter(|(_, e)| e.distance(q) < 10.0).min_by(|a, b| a.1.distance(q).total_cmp(&b.1.distance(q))).map(|(p, _)| *p);
@@ -87,7 +87,15 @@ impl ViewerApp {
                 }).min_by(|a, b| a.0.total_cmp(&b.0)).map(|(_, i)| i)
             }))
         } else { None };
+        if resp.clicked() && matches!(self.dessin2d.terrain_survol, Some(PoigneeTerrain::Point(_))) {
+            if self.dessin2d.edition_contour.is_none() { self.editer_contours_en_creation(Usage::Terrain); }
+            self.onglet_ruban = OngletRuban::Modifier;
+        }
         if resp.clicked() && let Some(e) = self.dessin2d.edition_contour.as_mut() {
+            e.point_topo = match self.dessin2d.terrain_survol {
+                Some(PoigneeTerrain::Point(i)) => Some(i),
+                _ => None,
+            };
             match self.dessin2d.terrain_survol {
                 Some(PoigneeTerrain::Sommet(i)) => { e.selection = Some(0); e.sommet = Some((0, i)); e.segment = None; }
                 Some(PoigneeTerrain::Milieu(i)) => { e.selection = Some(0); e.segment = Some((0, i)); e.sommet = None; }
@@ -132,11 +140,11 @@ impl ViewerApp {
                 _ => { self.dessin2d.message = None; self.dessin2d.information = None; },
             }
         }
-        // clic droit sur une poignée : retirer le point ou le sommet (trois au moins)
+        // clic droit sur un sommet du périmètre : retirer le sommet (trois au moins)
         if resp.secondary_clicked() && let Some(p) = resp.interact_pointer_pos().and_then(proche) {
             let d = &mut self.dessin2d;
             match p {
-                PoigneeTerrain::Point(i) => { d.terrain_points.remove(i); }
+                PoigneeTerrain::Point(_) => {}
                 PoigneeTerrain::Sommet(i) if d.dalle[0].len() > 3 => {
                     let avant = (d.dalle[0].clone(), d.terrain_cotes.clone());
                     d.dalle[0].remove(i);
@@ -543,7 +551,8 @@ impl ViewerApp {
         if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain) {
             self.apercu_terrain(&painter, rect);
             for (p, q) in self.poignees_terrain(rect) {
-                let survol = self.dessin2d.terrain_survol == Some(p);
+                let selection = self.dessin2d.edition_contour.as_ref().and_then(|e| e.point_topo).map(PoigneeTerrain::Point);
+                let survol = self.dessin2d.terrain_survol == Some(p) || selection == Some(p);
                 match p {
                     PoigneeTerrain::Sommet(_) | PoigneeTerrain::Point(_) => {
                         let c = if matches!(p, PoigneeTerrain::Point(_)) { vert } else { bleu };
@@ -576,7 +585,6 @@ impl ViewerApp {
         // un message (erreur, information, avertissement) occupe la place de la consigne
         if self.message_visible() { return; }
         use crate::zones::ruban::Outil;
-        let painter = ui.painter().with_clip_rect(rect);
         let edition = self.dessin2d.edition_contour.as_ref();
         let usage = self.usage_dessin();
         let outil = self.ruban_edition.outil();
@@ -604,6 +612,9 @@ impl ViewerApp {
         }};
         let invite = if let Some(e) = edition.filter(|_| self.selection_traces_active()) {
             match (e.commande, e.depart, e.repere) {
+                (Some(CommandeContour::Copier), _, _) if e.point_topo.is_some() => "Cliquer la destination de la copie",
+                (Some(CommandeContour::Deplacer), _, _) if e.point_topo.is_some() => "Cliquer la nouvelle position du point",
+                (None, _, _) if e.point_topo.is_some() => "Point topo sélectionné · Déplacer, Copier ou Suppr",
                 (Some(CommandeContour::Decaler), _, _) => "Cliquer la nouvelle position du segment, ou taper la distance puis Entrée",
                 (Some(CommandeContour::Scinder), _, _) => "Cliquer le point de séparation du segment",
                 (Some(CommandeContour::Aligner), _, _) => "Cliquer le segment de référence : le trait vient sur sa droite, quelle que soit son orientation",
@@ -621,7 +632,7 @@ impl ViewerApp {
                 _ => "Objet sélectionné : cliquer un trait ou un sommet ; double-cliquer une extrémité pour prolonger un contour",
             }
         } else if usage.is_some_and(|(u, _)| u == Usage::Terrain) && !self.dessin2d.dalle.is_empty() {
-            "Cliquer dans le terrain pour placer un point coté · glisser un point ou un sommet · clic droit : retirer"
+            "Cliquer dans le terrain pour placer un point coté · cliquer un point pour le déplacer, le copier ou le supprimer"
         } else if let Some(m) = modification { m }
         else if self.ruban_edition.selection_mur && usage.is_some_and(|(u,_)|u==Usage::Mur) {"Cliquer le trait que le mur doit suivre"} else if let Some(i) = self.invite_cotation() { i } else { self.dessin2d.trace.as_ref().map_or("", |t| t.invite()) };
         let contexte = match usage.map(|(u, _)| u) {
@@ -634,24 +645,13 @@ impl ViewerApp {
             _ => "",
         };
         let aide = if usage.is_some() { format!("{contexte}@x;y · #dx;dy · Tab : distance / angle · distance ({}) · Maj : ortho", u.suffixe().trim()) } else { String::new() };
-        let police = egui::FontId::monospace(13.0);
-        let largeur = (rect.width() - 20.0).max(1.0);
-        let bleu = Color32::from_rgb(55, 130, 200);
-        let mut ligne = egui::text::LayoutJob::default();
-        ligne.wrap.max_width = largeur;
-        let format = |color| egui::TextFormat { font_id: police.clone(), color, ..Default::default() };
-        ligne.append(&format!("{nom} — {invite}"), 0.0, format(bleu));
-        // Les erreurs du tracé (`dessin2d.message`) passent par `socle::messages`.
+        let mut texte = nom;
+        if !invite.is_empty() { texte.push_str(" — "); texte.push_str(invite); }
         if let Some(information) = &self.dessin2d.information {
-            ligne.append(&format!(" : {information}"), 0.0, format(bleu));
+            texte.push_str(" · ");
+            texte.push_str(information);
         }
-        let g1 = painter.layout_job(ligne);
-        let g2 = painter.layout(aide, egui::FontId::proportional(11.0), bleu.gamma_multiply(0.85), largeur);
-        let h1 = g1.size().y;
-        let zone = egui::Rect::from_min_size(crate::socle::messages::origine_consigne(rect, self.dessin2d.bas_barre), egui::vec2(g1.size().x.max(g2.size().x) + 8.0, h1 + g2.size().y + 6.0));
-        painter.rect_filled(zone, 3.0, Color32::from_white_alpha(185));
-        painter.galley(zone.min + egui::vec2(4.0, 2.0), g1, bleu);
-        painter.galley(zone.min + egui::vec2(4.0, 4.0 + h1), g2, bleu);
+        crate::socle::messages::consigne_avec_aide(ui, rect, self.dessin2d.bas_barre, &texte, &aide);
     }
 
     /// Volume des murs en cours : faces au sol et en tête, séparations des couches et

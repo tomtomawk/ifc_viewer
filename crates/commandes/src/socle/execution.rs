@@ -165,6 +165,7 @@ impl ExecutionInterne for Projet {
             | Commande::Reseau { .. }
             | Commande::Decaler { .. }
             | Commande::Scinder { .. }
+            | Commande::ScinderSurface { .. }
             | Commande::Demolir { .. }
             | Commande::Reproduire { .. }
             | Commande::ChangerHote { .. }

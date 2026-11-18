@@ -159,12 +159,28 @@ pub(crate) fn origine_consigne(rect: egui::Rect, bas_barre: f32) -> egui::Pos2 {
 
 /// Consigne d'outil (texte d'aide permanent), dans le style des messages d'information.
 pub(crate) fn consigne_vue(ui: &egui::Ui, rect: egui::Rect, bas_barre: f32, texte: &str) {
+    consigne_avec_aide(ui, rect, bas_barre, texte, "");
+}
+
+/// Une ligne dans la vue ; la consigne intégrale et les raccourcis au survol.
+pub(crate) fn consigne_avec_aide(ui: &egui::Ui, rect: egui::Rect, bas_barre: f32, texte: &str, aide: &str) {
     let painter = ui.painter().with_clip_rect(rect);
     let couleur = Niveau::Information.couleur();
-    let galley = painter.layout(texte.into(), egui::FontId::proportional(13.0), couleur, (rect.width() - 24.0).max(1.0));
-    let cadre = egui::Rect::from_min_size(origine_consigne(rect, bas_barre), galley.size() + egui::vec2(8.0, 6.0));
+    let largeur = (rect.width() - 24.0).clamp(1.0, 460.0);
+    let mut ligne = egui::text::LayoutJob::simple(texte.into(), egui::FontId::proportional(12.0), couleur, largeur);
+    ligne.wrap.max_rows = 1;
+    let galley = painter.layout_job(ligne);
+    let abregee = galley.elided;
+    let cadre = egui::Rect::from_min_size(origine_consigne(rect, bas_barre), galley.size() + egui::vec2(8.0, 4.0));
     painter.rect_filled(cadre, 3.0, Color32::from_gray(250));
-    painter.galley(cadre.min + egui::vec2(4.0, 3.0), galley, couleur);
+    painter.galley(cadre.min + egui::vec2(4.0, 2.0), galley, couleur);
+    if abregee || !aide.is_empty() {
+        ui.interact(cadre.intersect(rect), ui.make_persistent_id(("aide_consigne", texte)), Sense::hover())
+            .on_hover_ui(|ui| {
+                ui.label(texte);
+                if !aide.is_empty() { ui.label(aide); }
+            });
+    }
 }
 
 /// Message au premier plan (visible au-dessus des éditeurs flottants), `decalage` pixels

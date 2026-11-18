@@ -141,7 +141,7 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   fermé et le fermer par clic droit, F ou en cliquant le premier sommet. Les cotes sont
   **NGF**, dans l'unité du projet, et se règlent à côté de chaque sommet (S1, S2…) et de
   chaque point coté. Glisser un sommet ou un point le déplace ; glisser le milieu d'un
-  côté insère un sommet ; clic droit retire un point (ou un sommet, trois au moins).
+  côté insère un sommet. Cliquer sur un point coté active Déplacer, Copier et Supprimer dans Modifier. La touche Suppr retire le point sélectionné. Le clic droit retire un sommet du périmètre si trois sommets au moins subsistent.
   « Placer des points cotés » ajoute un point à chaque clic, à la cote indiquée. L'aperçu
   se teinte selon la cote, avec ses courbes de niveau. Entrée ou Valider crée le terrain :
   un solide de l'épaisseur du type, triangulé (Delaunay contraint par le contour), à
@@ -662,6 +662,8 @@ Le sous-projet de base est `A` et la variante par défaut est `Principale` ; le 
 de la sélection est affiché dans Propriétés.
 
 ## Interfaces et commandes
+
+La commande `scinder_surface` reçoit l’identifiant `id` et une polyligne `trace` (points XY en mm). Dans Modifier → Scinder, choisir la surface, tracer de bord à bord, puis valider avec Entrée. Les dalles, sols, plafonds, toitures planes indépendantes, terre-pleins sans talus, terrains et limites de propriété peuvent être découpés. Les nouveaux éléments sont enregistrés en une opération annulable.
 
 Les commandes UI et MCP passent par les mêmes transactions. Une erreur de commande,
 validation ou reconstruction conserve le modèle précédent.

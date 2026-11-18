@@ -78,7 +78,7 @@ pub(super) fn bouton_outil(
         Outil::Echelle => "Échelle (EC) : point de base, longueur de référence, nouvelle longueur ou facteur tapé ; annotations, contours, terrains",
         Outil::Aligner => "Aligner (AL) : cliquer deux segments en plan ou deux faces en 3D",
         Outil::Decaler => "Décaler (DE) : clic sur le mur, puis côté et distance ; Copier coché par défaut",
-        Outil::Scinder => "Scinder (SC) : clic sur le mur ou la poutre au point de coupure ; écart réglable",
+        Outil::Scinder => "Scinder (SC) : cliquer un mur ou une poutre au point de coupure, ou tracer une coupe sur une surface puis valider",
         Outil::Demolir => "Démolir (DM) : clic sur l'élément, démoli dans la dernière phase ; clic à nouveau pour annuler",
         Outil::Reproduire => "Reproduire les propriétés (RP) : pipette sur la source, pinceau sur les cibles",
         Outil::ChangerHote => "Changer d'hôte (CH) : clic sur l'ouverture, puis sur le nouveau mur",

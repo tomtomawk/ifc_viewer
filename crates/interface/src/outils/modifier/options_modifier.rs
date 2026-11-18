@@ -116,6 +116,7 @@ impl ViewerApp {
                 Some(Outil::Decaler) => {
                     ui.checkbox(&mut self.transfo.copie, "Copier").on_hover_text("Créer un mur décalé ; décocher pour déplacer le mur");
                 }
+                Some(Outil::Scinder) if self.transfo.element.is_some() => { ui.label("Ligne de coupe"); }
                 Some(Outil::Scinder) => {
                     ui.label("Écart");
                     ui.add(egui::DragValue::new(&mut self.transfo.ecart).range(0.0..=10_000.0).speed(5.0).dimensions());
