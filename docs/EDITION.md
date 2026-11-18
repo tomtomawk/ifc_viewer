@@ -428,7 +428,11 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   immédiatement au-dessus (sinon 2,80 m) ; le nombre de contremarches suit la
   hauteur de marche visée du ruban, un palier compte pour une marche, le giron
   partage la longueur des volées. Propriétés : niveaux de départ et d'arrivée (ou
-  hauteur libre), décalage, largeur, hauteur de marche visée, paillasse ; calcul
+  hauteur libre), décalage, largeur, hauteur de marche visée, paillasse et sous-face.
+  Le choix **Crantée** ou **Lissée** se règle à la création ou dans les propriétés
+  d’un escalier sélectionné. En mode lissé, le dessous monte en continu sous les
+  volées, y compris les marches balancées, et reste horizontal sous les paliers.
+  Les marches restent en place et le changement est annulable. Le calcul est
   affiché (contremarches, giron, paliers, Blondel 2h + g, signalé hors confort :
   60 à 65 cm, h ≤ 20 cm, g ≥ 22 cm). Le plan représente les marches et les paliers.
   En mode **Marches balancées**, chaque sommet marque un tournant. Le tracé reste

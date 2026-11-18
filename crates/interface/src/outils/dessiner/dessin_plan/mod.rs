@@ -104,6 +104,7 @@ pub(crate) struct EtatDessin2D {
     pub esc_decalage_bas: f64,
     pub esc_decalage_haut: f64,
     pub esc_paillasse: Option<f64>,
+    pub esc_sous_face: modele::elements::escalier::SousFace,
     pub esc_balance: Option<u8>,
     pub esc_haut: HautEscalier,
     pub esc_hauteur_libre: f64,

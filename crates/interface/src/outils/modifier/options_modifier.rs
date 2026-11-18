@@ -29,9 +29,7 @@ impl ViewerApp {
         if selection_seule && escalier.is_none() && mur.is_none() && !assemblage_seul {
             return;
         }
-        // dans Propriétés (sélection seule), aligné en haut : un alignement centré prenait
-        // toute la hauteur du panneau et laissait un grand blanc
-        ui.with_layout(egui::Layout::left_to_right(if selection_seule { egui::Align::Min } else { egui::Align::Center }).with_main_wrap(selection_seule), |ui| {
+        let contenu = |ui: &mut egui::Ui| {
             if selection_seule && escalier.is_some() {
                 ui.label("Garde-corps");
                 for (nom, cotes) in [("Deux côtés", vec![0, 1]), ("Gauche", vec![0]), ("Droite", vec![1])] {
@@ -149,7 +147,12 @@ impl ViewerApp {
                 }
                 _ => {}
             }
-        });
+        };
+        if selection_seule {
+            ui.horizontal_wrapped(contenu);
+        } else {
+            ui.horizontal(contenu);
+        }
         if let Some(c) = commande {
             if let Err(e) = self.executer_bim(c) {
                 self.error = Some(e);

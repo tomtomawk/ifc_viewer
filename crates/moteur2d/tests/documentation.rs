@@ -43,7 +43,7 @@ fn plan_prolonge_en_pointilles_un_escalier_qui_traverse_la_coupe() {
         id: "e".into(), nom: "Escalier".into(), niveau: "rdc".into(), niveau_haut: None,
         decalage_bas: 0.0, decalage_haut: 0.0, hauteur: 2800.0,
         trace: vec![[0.0, 0.0], [6000.0, 0.0]], largeur: 1000.0,
-        hauteur_marche: 175.0, paillasse: 150.0, balance: None,
+        hauteur_marche: 175.0, paillasse: 150.0, sous_face: Default::default(), balance: None,
     });
     let id = p.ajouter_vue_plan("rdc", 1000.0).unwrap();
     let escalier = modele::identifiants::id_natif("escalier", "e");

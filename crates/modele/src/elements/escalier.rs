@@ -6,7 +6,7 @@
 //! franchir va de la base (niveau et décalage) au niveau supérieur, ou vaut la hauteur
 //! libre. Le nombre de contremarches découle de la hauteur de marche visée ; un palier
 //! compte comme une marche ; le giron partage la longueur des volées entre les marches
-//! restantes (la dernière contremarche arrive au plancher haut). Paillasse crantée en
+//! restantes (la dernière contremarche arrive au plancher haut). Paillasse en
 //! béton sous les marches.
 //!
 //! Un garde-corps suit un tracé en plan : main courante, lisse basse, montants (aux
@@ -16,6 +16,32 @@ use crate::*;
 use glam::{DVec2, DVec3};
 
 pub type Tri = [DVec3; 3];
+
+#[path = "escalier_sous_face.rs"]
+mod sous_face;
+use sous_face::Marche;
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SousFace {
+    #[default]
+    Crantee,
+    Lissee,
+}
+
+impl SousFace {
+    pub const CHOIX: [Self; 2] = [Self::Crantee, Self::Lissee];
+
+    pub fn nom(self) -> &'static str {
+        match self {
+            Self::Crantee => "Crantée",
+            Self::Lissee => "Lissée",
+        }
+    }
+
+    fn est_crantee(&self) -> bool { *self == Self::Crantee }
+}
+
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Escalier {
@@ -40,6 +66,8 @@ pub struct Escalier {
     pub hauteur_marche: f64,
     /// Épaisseur de la paillasse (mm).
     pub paillasse: f64,
+    #[serde(default, skip_serializing_if = "SousFace::est_crantee")]
+    pub sous_face: SousFace,
     /// Escalier balancé : marches tournantes à chaque sommet intermédiaire, balancées
     /// sur ce nombre de marches de part et d'autre du tournant ; None : paliers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -203,7 +231,7 @@ impl Escalier {
 
     /// Marches et paliers : contour en plan, altitude du dessus ; et le profil de la
     /// ligne de foulée (abscisse curviligne, altitude du nez de marche).
-    fn marches(&self, c: &CalculEscalier) -> Result<(Vec<(Vec<DVec2>, f64)>, Vec<(DVec2, f64)>), String> {
+    fn marches(&self, c: &CalculEscalier) -> Result<(Vec<Marche>, Vec<(DVec2, f64)>), String> {
         if self.balance.is_some() {
             return self.marches_balancees(c);
         }
@@ -225,7 +253,7 @@ impl Escalier {
                 let din = (s - pt(self.trace[i - 1])).normalize_or_zero();
                 let nin = din.perp() * w;
                 let z = c.base + (k + 1) as f64 * c.h;
-                out.push((vec![s - din * w - nin, s + din * w - nin, s + din * w + nin, s - din * w + nin], z));
+                out.push(Marche { contour: vec![s - din * w - nin, s + din * w - nin, s + din * w + nin, s - din * w + nin], z, arrivee: None });
                 profil.push((s, z));
                 k += 1;
             }
@@ -237,7 +265,7 @@ impl Escalier {
             for j in 0..m {
                 let (p0, p1) = (*a + d * (j as f64 * g), *a + d * ((j + 1) as f64 * g));
                 let z = c.base + (k + 1) as f64 * c.h;
-                out.push((vec![p0 - nrm, p1 - nrm, p1 + nrm, p0 + nrm], z));
+                out.push(Marche { contour: vec![p0 - nrm, p1 - nrm, p1 + nrm, p0 + nrm], z, arrivee: Some(1) });
                 profil.push((p0, z));
                 k += 1;
             }
@@ -249,17 +277,21 @@ impl Escalier {
 
     /// Contours des marches balancées pour les caractéristiques de cet escalier.
     pub fn contours_marches_balancees(&self, c: &CalculEscalier) -> Result<Vec<Vec<DVec2>>, String> {
+        Ok(self.contours_balancees_avec_arrivees(c)?.into_iter().map(|(contour, _)| contour).collect())
+    }
+
+    fn contours_balancees_avec_arrivees(&self, c: &CalculEscalier) -> Result<Vec<(Vec<DVec2>, usize)>, String> {
         let balance = self.balance.ok_or("L'escalier n'est pas balancé.")?;
         let trace: Vec<DVec2> = self.trace.iter().map(|p| pt(*p)).collect();
         let rive = |s: f64| decaler_polyligne(&self.trace, s * self.largeur / 2.0).into_iter().map(pt).collect::<Vec<_>>();
-        super::escalier_balance::marches(&trace, &rive(1.0), &rive(-1.0), c.contremarches.saturating_sub(1), balance as usize)
+        super::escalier_balance::marches_avec_arrivees(&trace, &rive(1.0), &rive(-1.0), c.contremarches.saturating_sub(1), balance as usize)
     }
 
     /// Marches tournantes balancées et profil de la foulée.
-    fn marches_balancees(&self, c: &CalculEscalier) -> Result<(Vec<(Vec<DVec2>, f64)>, Vec<(DVec2, f64)>), String> {
+    fn marches_balancees(&self, c: &CalculEscalier) -> Result<(Vec<Marche>, Vec<(DVec2, f64)>), String> {
         let trace: Vec<DVec2> = self.trace.iter().map(|p| pt(*p)).collect();
         let n = c.contremarches - 1;
-        let contours = self.contours_marches_balancees(c)?;
+        let contours = self.contours_balancees_avec_arrivees(c)?;
         let mut profil = vec![(trace[0], c.base)];
         let mut out = Vec::new();
         let mut s = 0.0;
@@ -273,22 +305,25 @@ impl Escalier {
             }
             *trace.last().unwrap()
         };
-        for (k, contour) in contours.into_iter().enumerate() {
+        for (k, (contour, arrivee)) in contours.into_iter().enumerate() {
             let z = c.base + (k + 1) as f64 * c.h;
             profil.push((point(s), z));
-            out.push((contour, z));
+            out.push(Marche { contour, z, arrivee: Some(arrivee) });
             s += total / n as f64;
         }
         profil.push((*trace.last().unwrap(), c.base + c.hauteur));
         Ok((out, profil))
     }
 
-    /// Solide de l'escalier : marches pleines sur paillasse crantée.
+    /// Solide de l'escalier : marches pleines sur paillasse crantée ou lissée.
     pub fn solide(&self, p: &Projet) -> Result<Vec<Tri>, String> {
         let c = self.calcul(p)?;
         let (marches, _) = self.marches(&c)?;
         let mut t = Vec::new();
-        for (q, z) in marches {
+        if self.sous_face == SousFace::Lissee {
+            return sous_face::lisser(&marches, c.base, self.paillasse);
+        }
+        for Marche { contour: q, z, .. } in marches {
             let bas = (z - c.h - self.paillasse).max(c.base - self.paillasse);
             if let [a, b, cc, d] = q[..] {
                 t.extend(hexaedre([a.extend(bas), b.extend(bas), cc.extend(bas), d.extend(bas), a.extend(z), b.extend(z), cc.extend(z), d.extend(z)]));
@@ -478,7 +513,7 @@ mod tests {
     }
 
     fn escalier(trace: Vec<[f64; 2]>) -> Escalier {
-        Escalier { id: "e".into(), nom: "Escalier".into(), niveau: "rdc".into(), niveau_haut: Some("r1".into()), decalage_bas: 0.0, decalage_haut: 0.0, hauteur: 2800.0, trace, largeur: 1000.0, hauteur_marche: 175.0, paillasse: 150.0, balance: None }
+        Escalier { id: "e".into(), nom: "Escalier".into(), niveau: "rdc".into(), niveau_haut: Some("r1".into()), decalage_bas: 0.0, decalage_haut: 0.0, hauteur: 2800.0, trace, largeur: 1000.0, hauteur_marche: 175.0, paillasse: 150.0, sous_face: SousFace::Crantee, balance: None }
     }
 
     #[test]
