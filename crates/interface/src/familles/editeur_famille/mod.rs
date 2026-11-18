@@ -20,7 +20,8 @@ use canevas::*;
 mod formes;
 mod transformer;
 mod ancrage;
-mod construction;
+mod plans_tournes; mod vue_3d; mod plan_actif;
+pub(crate) use plan_actif::PlanActif;
 mod reseau;
 mod aligner;
 mod chemin_trace;
@@ -28,7 +29,7 @@ pub(crate) mod apercu;
 pub(crate) mod navigation; mod rendu;
 use navigation::*; use rendu::*;
 use crate::*;
-use modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, VisibiliteElement, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
+use modele::famille::modelee::{AxePlan, Contrainte, PlanTourne, Repere, SupportForme, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, VisibiliteElement, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
 use modele::famille::modelee::FichierFamille;
 use modele::documentation::GenreCote;
 use modele::GenreOuverture;
@@ -84,7 +85,7 @@ pub(crate) enum OutilFamille {
     /// Plan de référence tracé par deux points ; vertical ou horizontal selon le
     /// tracé.
     PlanReference,
-    PlanConstruction,
+    PlanTroisPoints,
     Volume,
     Vide,
     Cote,
@@ -190,7 +191,8 @@ pub(crate) struct EditeurFamille {
     epaisseur: f64,
     famille: FamilleModelee,
     vue: VueFamille,
-    construction: Option<usize>,
+    /// Plan de dessin actif (état de l'éditeur), clic de face attendu, points de « Plan par 3 points ».
+    plan_actif: PlanActif, choix_face: bool, points_3d: Vec<glam::DVec3>,
     vue_3d: bool,
     /// Vues ouvertes dans ce document : 0 élévation, 1 plan, 2 coupe, 3 trois dimensions.
     vues_ouvertes: Vec<usize>,
@@ -199,7 +201,7 @@ pub(crate) struct EditeurFamille {
     /// Niveau de détail de la vue de famille et aperçu « comme dans le projet » (F9).
     detail: NiveauDetail,
     apercu: bool,
-    navigation: [NavigationFamille;4],
+    navigation: [NavigationFamille;3],
     rect_navigation: egui::Rect,
     outil: OutilFamille,
     selection: SelectionFamille,
@@ -321,7 +323,7 @@ impl EditeurFamille {
         (self.nom, self.largeur, self.hauteur, self.epaisseur, self.famille) = (cible.nom.clone(), cible.largeur, cible.hauteur, cible.profondeur, cible.famille.clone());
         let existe = match &self.selection {
             SelectionFamille::Aucune => true,
-            SelectionFamille::Plan(n) => self.famille.plan(n).is_some(),
+            SelectionFamille::Plan(n) => self.famille.existe_plan(n),
             SelectionFamille::Volume(k) => *k < self.famille.volumes.len(),
             SelectionFamille::Contrainte(k) => *k < self.famille.contraintes.len(),
             SelectionFamille::Extrusion(k) => *k < self.famille.extrusions.len(),
@@ -342,12 +344,13 @@ impl EditeurFamille {
         match element {
             SelectionFamille::Aucune => return Ok(()),
             SelectionFamille::Plan(nom) => {
+                if let Some(r) = self.supprimer_plan_tourne(nom) { return r; } let f = &mut self.famille;
                 let k = f.plans.iter().position(|p| &p.nom == nom).ok_or("Plan introuvable.")?;
                 if f.plans[k].hote.is_some() || f.plans[k].fixe {
                     return Err(format!("« {nom} » est un plan fixe de la famille."));
                 }
                 let point = |p: &PointEsquisse| p.h.plan == *nom || p.v.plan == *nom;
-                let utilise = f.plans_construction.iter().any(|p| p.reference.as_ref() == Some(nom))
+                let utilise = plans_tournes::porte(f, nom)
                     || f.contraintes.iter().any(|c| c.plans().contains(&nom.as_str()))
                     || f.volumes.iter().any(|v| v.min.iter().chain(&v.max).any(|x| &x.plan == nom))
                     || f.extrusions.iter().any(|e| e.profil.iter().any(point) || e.profondeur.iter().any(|x| &x.plan == nom))
@@ -408,6 +411,7 @@ impl EditeurFamille {
     fn abandonner_saisie(&mut self) {
         self.axe_revolution = None;
         self.points_transfo.clear();
+        self.points_3d.clear();
         self.modifier.reference = None;
         self.modifier.chemin = Default::default();
         self.esquisse.clear();
@@ -476,7 +480,7 @@ impl EditeurFamille {
         let vue = self.vue.esquisse();
         let admissible = selection.iter().all(|s| match s {
             SelectionFamille::Element2D(k) => self.famille.elements_2d.get(*k).is_some_and(|e| e.vue == vue && !crate::outils::dessiner::dessin_plan::poignees_forme(&e.forme).is_empty()),
-            SelectionFamille::Extrusion(k) => self.famille.extrusions.get(*k).is_some_and(|e| e.vue == vue && e.construction.is_none() && matches!(e.operation, OperationForme::Extrusion)),
+            SelectionFamille::Extrusion(k) => self.famille.extrusions.get(*k).is_some_and(|e| e.vue == vue && e.support.is_none() && matches!(e.operation, OperationForme::Extrusion)),
             SelectionFamille::Volume(k) => *k < self.famille.volumes.len(),
             _ => false,
         });
@@ -530,7 +534,7 @@ impl EditeurFamille {
         if outil.est_transformation() && outil != OutilFamille::Aligner && self.selection == SelectionFamille::Aucune && self.multiple.is_empty() {
             return Some("Sélectionner d'abord un ou plusieurs éléments de la famille.");
         }
-        catalogue::indisponibilite(d, &catalogue::Contexte { vue_3d: self.vue_3d, plan_oblique: self.construction.is_some() })
+        catalogue::indisponibilite(d, &catalogue::Contexte { vue_3d: self.vue_3d })
     }
 
     /// Les deux premiers points de l'outil révolution définissent son axe.
@@ -553,9 +557,9 @@ impl EditeurFamille {
 
     /// Ouvre une vue de la famille.
     fn ouvrir_vue(&mut self, v: VueFamille) {
-        self.construction = None;
         self.vue_3d = false;
         self.vue = v;
+        self.revoir_plan_actif();
         let indice = v as usize;
         if !self.vues_ouvertes.contains(&indice) { self.vues_ouvertes.push(indice); }
         self.choisir_outil(self.outil);
@@ -563,7 +567,6 @@ impl EditeurFamille {
 
     fn ouvrir_vue_3d(&mut self) {
         self.vue_3d = true;
-        self.construction = None;
         if !self.vues_ouvertes.contains(&3) { self.vues_ouvertes.push(3); }
         self.choisir_outil(OutilFamille::Selection);
     }
@@ -579,17 +582,17 @@ impl EditeurFamille {
     /// Renomme un plan et toutes ses références (contraintes, faces).
     fn renommer_plan(&mut self, ancien: &str, nouveau: &str) -> Result<(), String> {
         let nouveau = nouveau.trim();
-        if nouveau.is_empty() || (nouveau != ancien && self.famille.plan(nouveau).is_some()) {
+        if nouveau.is_empty() || (nouveau != ancien && self.famille.existe_plan(nouveau)) {
             return Err(format!("Nom de plan vide ou déjà pris : « {nouveau} »."));
         }
         let f = &mut self.famille;
         for p in f.plans.iter_mut().filter(|p| p.nom == ancien) {
             p.nom = nouveau.into();
         }
-        for plan in &mut f.plans_construction { if plan.reference.as_deref() == Some(ancien) { plan.reference = Some(nouveau.into()); } }
+        plans_tournes::renommer(f, &mut self.plan_actif, ancien, nouveau);
         for c in &mut f.contraintes {
             match c {
-                Contrainte::Distance { a, b, .. } => [a, b].into_iter().filter(|x| *x == ancien).for_each(|x| *x = nouveau.into()),
+                Contrainte::Distance { a, b, .. } | Contrainte::Angle { a, b, .. } => [a, b].into_iter().filter(|x| *x == ancien).for_each(|x| *x = nouveau.into()),
                 Contrainte::Egalite { a, m, b, .. } => [a, m, b].into_iter().filter(|x| *x == ancien).for_each(|x| *x = nouveau.into()),
             }
         }
@@ -620,29 +623,5 @@ impl EditeurFamille {
             .filter(|p| p.axe == axe)
             .map(|p| (p.nom.clone(), x - self.position(r, &p.nom)))
             .min_by(|a, b| a.1.abs().total_cmp(&b.1.abs()))
-    }
-
-    /// Faces d'un volume sur l'axe que la vue ne montre pas : celles du dernier volume
-    /// du même genre, sinon les faces du mur (± 5 mm pour un vide), sinon les plans
-    /// extrêmes.
-    fn faces_profondeur(&self, r: &Resolution, axe: AxePlan, vide: bool) -> [Face; 2] {
-        let k = axe as usize;
-        if let Some(e) = self.famille.extrusions.iter().rev().find(|e| e.vide == vide && e.vue.axes().2 == axe) {
-            return e.profondeur.clone();
-        }
-        if let Some(v) = self.famille.volumes.iter().rev().find(|v| v.vide == vide) {
-            return [v.min[k].clone(), v.max[k].clone()];
-        }
-        let marge = if vide { 5.0 } else { 0.0 };
-        if axe == AxePlan::Y {
-            let hote = |h| self.famille.plans.iter().find(|p| p.hote == Some(h)).map(|p| p.nom.clone());
-            if let (Some(i), Some(e)) = (hote(Hote::Interieur), hote(Hote::Exterieur)) {
-                return [Face { plan: i, decalage: -marge }, Face { plan: e, decalage: marge }];
-            }
-        }
-        let mut plans: Vec<&PlanRef> = self.famille.plans.iter().filter(|p| p.axe == axe).collect();
-        plans.sort_by(|a, b| self.position(r, &a.nom).total_cmp(&self.position(r, &b.nom)));
-        let nom = |p: Option<&&PlanRef>| p.map_or_else(String::new, |p| p.nom.clone());
-        [Face { plan: nom(plans.first()), decalage: 0.0 }, Face { plan: nom(plans.last()), decalage: 0.0 }]
     }
 }

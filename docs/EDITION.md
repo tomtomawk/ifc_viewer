@@ -345,8 +345,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   (`saisie/moteur_accrochage.rs`), avec les mêmes types de points, marqueurs, guides,
   délai de repérage et saisie au clavier ; les plans de référence y sont des droites
   (croisements, point proche, perpendiculaire), avec les contours des formes et les
-  éléments 2D de la vue ; face à un plan de construction, la géométrie est exprimée
-  dans le repère du plan ; la molette zoome du même pas que les vues.
+  éléments 2D de la vue ; en vue 3D, il travaille dans le repère du plan de dessin
+  actif ; la molette zoome du même pas que les vues.
   En sélection, l'élément choisi porte des **poignées** : sommets d'un
   profil ou d'un symbole (glisser : réaccroché au plan le plus proche ; clic droit :
   retirer), milieux d'arêtes (glisser : insérer un sommet), milieux des faces d'un
@@ -365,8 +365,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   glisse perpendiculairement jusqu'à la référence (un alignement = une annulation ;
   clic droit : changer de référence). Limites communes : un volume rectangulaire ne
   tourne que par quarts de tour et ne se reflète que par un axe horizontal ou
-  vertical ; une forme esquissée dans une autre vue ou sur un plan oblique ne se
-  transforme pas. Pilote : `famille_outil reseau 5 total` (nombre, `pas` ou `total`),
+  vertical ; une forme esquissée dans une autre vue ou posée sur un plan (`support`) ne
+  se transforme pas. Pilote : `famille_outil reseau 5 total` (nombre, `pas` ou `total`),
   `famille_outil reseau_polaire 6`, `famille_outil aligner`, puis des clics `saisie`.
   **Formes guidées** (extrusion par chemin, raccordement, raccordement par chemin) :
   le chemin se règle dans Propriétés (points H, V, D ; case « arc » : le point est
@@ -387,12 +387,19 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   abscisse curviligne) et peut être « verrouillé sur les plans » : chaque sommet suit
   un plan de référence et un décalage, donc les paramètres et formules, comme le
   profil initial. Un raccordement ne se ferme pas (ses deux profils diffèrent).
-  **Plan de construction** actif (Propriétés) : renommer, Supprimer (refusé tant que
-  des formes y sont esquissées, avec leur liste), Détacher (un plan qui suit un plan
-  de référence devient un repère fixe à sa position courante : ses formes ne bougent
-  pas et le plan de référence peut ensuite être supprimé ; un plan fixe sans forme est
-  supprimé). Les formes désignent leur plan par son identité : un renommage ne les
-  touche pas et elles suivent le plan de référence quand il se déplace.
+  **Plans tournés** (Propriétés, « Plans tournés ») : un plan de référence d'orientation
+  libre part de son hôte et pivote autour de la droite d'appui (hôte ∩ appui) d'un
+  angle dessiné ou d'une cote angulaire (bouton ∠) libellée par un paramètre ; ils
+  s'enchaînent (hôte ou appui tourné). Dans les vues planes, leur trace est tiretée
+  avec l'angle. « Plan par 3 points » (vue 3D) : trois points accrochés (sommets des
+  solides, plan actif) ; le plan devient un plan tourné autour de la droite d'appui
+  qu'il contient, sinon il est refusé. **Plan de dessin** (barre sous la vue) : Sol par
+  défaut, un plan de référence (les formes posées dessus le référencent et le suivent)
+  ou « Face d'un solide… » puis clic en vue 3D (repère figé). En vue 3D, le plan actif
+  porte une grille ; les outils de formes y saisissent le profil (clics projetés sur le
+  plan, accrochage dans son repère ; retour au premier sommet ou clic droit pour fermer).
+  Dans une vue plane, seuls Sol et les plans d'axe parallèles à la vue se choisissent
+  (refus avec message sinon) ; la profondeur des formes part du plan choisi.
   Les valeurs d'essai font fléchir la famille ; « Enregistrer le type » met à jour
   le type et ses ouvertures (et les paramètres partagés du projet), « Nouveau type »
   l'affecte à l'ouverture (ou au prochain placement). Dans la maquette, les solides

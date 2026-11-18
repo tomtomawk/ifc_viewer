@@ -173,7 +173,7 @@ impl EditeurFamille {
                 .and_then(|e| self.famille.element_resolu(r, e).forme.forme_2d())
                 .map(|forme| forme.polylignes().into_iter().map(|ligne| ligne.into_iter().map(|p| (p.x, p.y)).collect()).collect())
                 .unwrap_or_default(),
-            SelectionFamille::Extrusion(k) => self.famille.extrusions.get(k).filter(|e| e.vue == vue && e.construction.is_none())
+            SelectionFamille::Extrusion(k) => self.famille.extrusions.get(k).filter(|e| e.vue == vue && e.support.is_none())
                 .map(|e| vec![resolus(&e.profil, true)]).unwrap_or_default(),
             SelectionFamille::Volume(k) => self.famille.boites(r).into_iter().find(|b| b.indice == k).map(|b| {
                 let (a, c) = (b.min.to_array(), b.max.to_array());
@@ -287,7 +287,7 @@ impl EditeurFamille {
                 }
                 SelectionFamille::Extrusion(k) => {
                     let e = self.famille.extrusions.get(*k).filter(|e| e.vue == vue).ok_or(AUTRE_VUE)?;
-                    if e.construction.is_some() { return Err("Transformation impossible : une forme sélectionnée est esquissée sur un plan oblique.".into()); }
+                    if e.support.is_some() { return Err("Transformation impossible : une forme sélectionnée est esquissée sur un plan oblique.".into()); }
                     let mut profil = lier(&e.profil)?;
                     let contour: Vec<[f64; 2]> = profil.iter().map(|p| { let (h, v) = self.famille.point_esquisse(&r, p); [h, v] }).collect();
                     let image = |p: [f64; 2]| { let q = transformation.point((p[0], p[1])); [q.0, q.1] };

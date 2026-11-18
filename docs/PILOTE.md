@@ -266,6 +266,22 @@ modifie la visibilité d'un élément (clés `faible`, `moyen`, `eleve`, `plan`,
 travail et son cadrage (caméra de la vue plane : `distance`, `cible` en m). La molette (`saisie defiler`) et le glissement au bouton
 `milieu` utilisent la navigation réelle de l'éditeur, sans toucher au modèle.
 
+Plans tournés et plan de dessin (MCP : `viewer_famille` actions `plan_tourne`, `angle`,
+`plan_actif`, `ecran`) :
+- `famille_plan_tourne {"nom":"Incliné","hote":"Bas","appui":"Gauche","angle":30}` crée le
+  plan tourné ou modifie les champs donnés (angle dessiné en degrés), puis valide la
+  famille (refus : rien n'est changé). Réponse : `repere` (`origine`, `h`, `v`, `normale`, mm).
+- `famille_angle {"plan":"Incliné","valeur":"Pente"}` pose ou modifie la cote angulaire du
+  plan par rapport à son hôte (formule en degrés) ; `"valeur":null` la retire. Réponse :
+  `angle` résolu et `repere`.
+- `famille_plan_actif [etat|sol|plan <nom>|face]` choisit le plan de dessin (état de
+  l'éditeur, comme la barre sous la vue). Dans une vue plane, un plan non parallèle à la
+  vue est refusé ; `face` (vue 3D) attend le clic d'une face de solide (repère figé).
+- `famille_ecran <h> <v>` (vue 3D) : position écran d'un point du plan actif (mm, repère
+  local). Saisie 3D : `famille_outil extrusion` (ou une autre forme), clics `saisie` aux
+  positions rendues, retour au premier sommet ou clic droit pour fermer ; la forme porte
+  `support` (`docs/MODELE.md`). `famille_outil plan_3_points` : trois clics en 3D.
+
 `mur_trace ligne|rectangle|arc|cercle|selection` choisit le mode graphique de création
 et active l'outil Mur. Sans argument, il décrit les points acquis, l'invite et les
 poignées écran d'un mur courbe sélectionné. Le cercle de mur attend centre, rayon,

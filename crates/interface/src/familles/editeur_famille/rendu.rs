@@ -180,11 +180,10 @@ impl ViewerApp {
     pub(super) fn rendre_vue_plane_famille(&mut self, ui: &egui::Ui, fond: egui::layers::ShapeIdx) {
         let Some(ed) = self.famille.take() else { return };
         let r = ed.resoudre();
-        let construction = ed.construction.and_then(|k| ed.famille.plans_construction.get(k)).and_then(|p| ed.famille.repere_construction(&p.id, &r)).is_some();
-        let indice = if construction { INDICE_CONSTRUCTION } else { ed.vue as usize };
+        let indice = ed.vue as usize;
         let mut camera = ed.navigation[indice].camera.clone();
         let rect = ed.rect_navigation;
-        let (scene, devant, derriere) = if construction || !rect.is_positive() {
+        let (scene, devant, derriere) = if !rect.is_positive() {
             (SceneFamille::default(), Vec::new(), Vec::new())
         } else {
             let projet_vide = modele::Projet::default();

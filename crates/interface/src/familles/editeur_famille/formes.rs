@@ -9,8 +9,33 @@ impl OutilFamille {
 }
 
 impl EditeurFamille {
+    /// Faces d'un volume sur l'axe que la vue ne montre pas : celles du dernier volume
+    /// du même genre, sinon les faces du mur (± 5 mm pour un vide), sinon les plans
+    /// extrêmes.
+    pub(super) fn faces_profondeur(&self, r: &Resolution, axe: AxePlan, vide: bool) -> [Face; 2] {
+        let k = axe as usize;
+        if let Some(e) = self.famille.extrusions.iter().rev().find(|e| e.vide == vide && e.vue.axes().2 == axe) {
+            return e.profondeur.clone();
+        }
+        if let Some(v) = self.famille.volumes.iter().rev().find(|v| v.vide == vide) {
+            return [v.min[k].clone(), v.max[k].clone()];
+        }
+        let marge = if vide { 5.0 } else { 0.0 };
+        if axe == AxePlan::Y {
+            let hote = |h| self.famille.plans.iter().find(|p| p.hote == Some(h)).map(|p| p.nom.clone());
+            if let (Some(i), Some(e)) = (hote(Hote::Interieur), hote(Hote::Exterieur)) {
+                return [Face { plan: i, decalage: -marge }, Face { plan: e, decalage: marge }];
+            }
+        }
+        let mut plans: Vec<&PlanRef> = self.famille.plans.iter().filter(|p| p.axe == axe).collect();
+        plans.sort_by(|a, b| self.position(r, &a.nom).total_cmp(&self.position(r, &b.nom)));
+        let nom = |p: Option<&&PlanRef>| p.map_or_else(String::new, |p| p.nom.clone());
+        [Face { plan: nom(plans.first()), decalage: 0.0 }, Face { plan: nom(plans.last()), decalage: 0.0 }]
+    }
+
     /// Ne consomme le tracé qu'après validation ; une erreur reste corrigeable.
-    pub(super) fn terminer_forme(&mut self, construction: Option<PlanConstruction>) -> Result<(), String> {
+    /// `support` : plan de dessin actif de la vue 3D ; None : vue d'esquisse plane.
+    pub(super) fn terminer_forme(&mut self, support: Option<SupportForme>) -> Result<(), String> {
         let resolution = self.resoudre();
         let contour: Vec<_> = self.esquisse.iter().map(|(p,_)| {
             let (h,v) = self.famille.point_esquisse(&resolution,p); [h,v]
@@ -35,8 +60,10 @@ impl EditeurFamille {
         let base = if vide { format!("{base} vide") } else { base.into() };
         let nom = (1..).map(|n| format!("{base} {n}")).find(|nom| self.famille.extrusions.iter().all(|e| &e.nom != nom)).unwrap();
         let vue = self.vue.esquisse();
-        let profondeur = if construction.is_some() {
+        let profondeur = if support.is_some() {
             [Face {plan:String::new(),decalage:0.0},Face {plan:String::new(),decalage:100.0}]
+        } else if let Some(plan) = self.plan_actif_parallele() {
+            [Face {plan:plan.clone(),decalage:0.0},Face {plan,decalage:100.0}]
         } else { self.faces_profondeur(&resolution,vue.axes().2,vide) };
         let profil = std::mem::take(&mut self.esquisse).into_iter().map(|(p,_)| p).collect();
         let operation = match (guidage, revolution) {
@@ -45,7 +72,7 @@ impl EditeurFamille {
             (None, None) => OperationForme::Extrusion,
             (Some(_), Some(_)) => return Err("Opérations de construction incompatibles.".into()),
         };
-        self.famille.extrusions.push(FormeProfil { visibilite: Default::default(),operation,construction: construction.map(|p| p.id),nom,vide,materiau:Materiau::Menuiserie,vue,profil,profondeur,visible:None,materiau_parametre:None});
+        self.famille.extrusions.push(FormeProfil { visibilite: Default::default(),operation,support,nom,vide,materiau:Materiau::Menuiserie,vue,profil,profondeur,visible:None,materiau_parametre:None});
         self.choisir_outil(OutilFamille::Selection);
         self.selectionner(vec![SelectionFamille::Extrusion(self.famille.extrusions.len()-1)]);
         self.message=Some("Forme créée : régler le chemin, le second profil ou les dimensions dans Propriétés. Plein/Vide est disponible pour toutes les formes.".into());

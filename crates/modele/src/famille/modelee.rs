@@ -17,8 +17,9 @@ mod balayage;
 mod raccord;
 pub use guidage::FormeGuidee;
 mod dessin;
-mod construction;
+mod orientation;
 mod visibilite;
+pub use orientation::{intersection, tourner, PlanTourne, Repere, SupportForme};
 pub use dessin::{Element2DFamille, points_ancrables_mut};
 pub use visibilite::{Affichage, NiveauDetail, TypeVue, VisibiliteElement, PARTOUT};
 #[cfg(test)]
@@ -61,7 +62,10 @@ pub enum Hote {
     Interieur,
 }
 
+/// Plan de référence d'axe (X, Y ou Z) à une position ; les plans d'autres orientations
+/// sont des `PlanTourne`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct PlanRef {
     pub nom: String,
     pub axe: AxePlan,
@@ -182,44 +186,6 @@ pub struct PointEsquisse {
     pub v: Face,
 }
 
-/// Repère orthonormé d'une esquisse, indépendant des axes du projet.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct PlanConstruction {
-    pub id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reference: Option<String>,
-    pub nom: String,
-    pub origine: [f64; 3],
-    pub horizontal: [f64; 3],
-    pub vertical: [f64; 3],
-}
-
-impl PlanConstruction {
-    /// Les deux points sont dans la vue ; le plan est perpendiculaire à celle-ci.
-    pub fn deux_points(nom: String, vue: VueEsquisse, a: [f64; 2], b: [f64; 2]) -> Result<Self, String> {
-        let origine = vue.point(a[0], a[1], 0.0);
-        let direction = vue.point(b[0], b[1], 0.0) - origine;
-        if !origine.is_finite() || !direction.is_finite() || direction.length() < 0.1 {
-            return Err("Choisir deux points distincts pour le plan de construction.".into());
-        }
-        Ok(Self { id: noyau::uuid::uuid(), reference: None, nom, origine: origine.to_array(), horizontal: direction.normalize().to_array(), vertical: vue.point(0.0, 0.0, 1.0).to_array() })
-    }
-
-    pub fn valider(&self) -> Result<(), String> {
-        let (o, h, v) = (DVec3::from_array(self.origine), DVec3::from_array(self.horizontal), DVec3::from_array(self.vertical));
-        if self.id.trim().is_empty() || self.nom.trim().is_empty() || !o.is_finite() || !h.is_finite() || !v.is_finite()
-            || (h.length_squared() - 1.0).abs() > 1e-6 || (v.length_squared() - 1.0).abs() > 1e-6 || h.dot(v).abs() > 1e-6 {
-            return Err("Repère de construction non orthonormé ou sans nom.".into());
-        }
-        Ok(())
-    }
-
-    pub fn point(&self, h: f64, v: f64, d: f64) -> DVec3 {
-        let (u, w) = (DVec3::from_array(self.horizontal), DVec3::from_array(self.vertical));
-        DVec3::from_array(self.origine) + u * h + w * v + u.cross(w) * d
-    }
-}
-
 /// Opération unique qui construit une forme à partir de son profil.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(tag = "genre", rename_all = "snake_case")]
@@ -234,8 +200,10 @@ pub enum OperationForme {
 #[serde(deny_unknown_fields)]
 pub struct FormeProfil {
     pub operation: OperationForme,
+    /// Plan de référence ou repère figé portant l'esquisse ; absent : vue d'esquisse
+    /// `vue`, sommets verrouillés sur les plans d'axe.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub construction: Option<String>,
+    pub support: Option<SupportForme>,
     pub nom: String,
     #[serde(default)]
     pub vide: bool,
@@ -284,33 +252,43 @@ pub enum Contrainte {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ligne: Option<f64>,
     },
+    /// Cote angulaire : le plan tourné `b` fait l'angle `valeur` (degrés, expression)
+    /// avec son hôte `a`.
+    Angle {
+        a: String,
+        b: String,
+        valeur: String,
+        priorite: u8,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ligne: Option<f64>,
+    },
 }
 
 impl Contrainte {
     pub fn priorite(&self) -> u8 {
         match self {
-            Self::Distance { priorite, .. } | Self::Egalite { priorite, .. } => *priorite,
+            Self::Distance { priorite, .. } | Self::Egalite { priorite, .. } | Self::Angle { priorite, .. } => *priorite,
         }
     }
     pub fn priorite_mut(&mut self) -> &mut u8 {
         match self {
-            Self::Distance { priorite, .. } | Self::Egalite { priorite, .. } => priorite,
+            Self::Distance { priorite, .. } | Self::Egalite { priorite, .. } | Self::Angle { priorite, .. } => priorite,
         }
     }
     /// Ligne de cote déplacée dans la vue.
     pub fn ligne_mut(&mut self) -> &mut Option<f64> {
         match self {
-            Self::Distance { ligne, .. } | Self::Egalite { ligne, .. } => ligne,
+            Self::Distance { ligne, .. } | Self::Egalite { ligne, .. } | Self::Angle { ligne, .. } => ligne,
         }
     }
     pub fn ligne(&self) -> Option<f64> {
         match self {
-            Self::Distance { ligne, .. } | Self::Egalite { ligne, .. } => *ligne,
+            Self::Distance { ligne, .. } | Self::Egalite { ligne, .. } | Self::Angle { ligne, .. } => *ligne,
         }
     }
     pub fn plans(&self) -> Vec<&str> {
         match self {
-            Self::Distance { a, b, .. } => vec![a, b],
+            Self::Distance { a, b, .. } | Self::Angle { a, b, .. } => vec![a, b],
             Self::Egalite { a, m, b, .. } => vec![a, m, b],
         }
     }
@@ -401,10 +379,11 @@ pub struct FamilleModelee {
     pub section_profil: Option<usize>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub elements_2d: Vec<Element2DFamille>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub plans_construction: Vec<PlanConstruction>,
     pub parametres: Vec<Parametre>,
     pub plans: Vec<PlanRef>,
+    /// Plans de référence tournés autour d'une droite d'appui (orientation libre).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plans_tournes: Vec<PlanTourne>,
     pub contraintes: Vec<Contrainte>,
     pub volumes: Vec<Volume>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -454,6 +433,8 @@ pub struct Resolution {
     pub conflits: Vec<usize>,
     pub libres: Vec<String>,
     pub erreurs: Vec<String>,
+    /// Repères des plans tournés.
+    pub reperes: BTreeMap<String, orientation::Repere>,
 }
 
 /// Boîte d'un volume résolu, dans le repère de la famille.
@@ -610,7 +591,7 @@ impl FamilleModelee {
     pub fn vide(categorie: CategorieFamille) -> Self {
         let genre = match categorie { CategorieFamille::Porte => crate::GenreOuverture::Porte, CategorieFamille::Fenetre => crate::GenreOuverture::Fenetre, _ => crate::GenreOuverture::Libre };
         let plan = |nom: &str, axe| PlanRef { nom: nom.into(), axe, position: 0.0, fixe: true, hote: None };
-        Self { categorie, section_profil: None, elements_2d: Vec::new(), plans_construction: Vec::new(), parametres: Vec::new(),
+        Self { categorie, section_profil: None, elements_2d: Vec::new(), plans_tournes: Vec::new(), parametres: Vec::new(),
             plans: vec![plan("Origine X", AxePlan::X), plan("Origine Y", AxePlan::Y), plan("Origine Z", AxePlan::Z)],
             contraintes: Vec::new(), volumes: Vec::new(), extrusions: Vec::new(), cotes_mesure: Vec::new(), couleur: couleur_defaut(), genre }
     }
@@ -700,13 +681,14 @@ impl FamilleModelee {
                 let idx: Option<Vec<usize>> = c.plans().iter().map(|nom| indice(nom)).collect();
                 let Some(idx) = idx else {
                     // contrainte d'un autre axe (ou plans absents : signalés une fois)
-                    if axe == AxePlan::X && c.plans().iter().any(|nom| self.plan(nom).is_none()) {
+                    if axe == AxePlan::X && c.plans().iter().any(|nom| !self.existe_plan(nom)) {
                         erreurs.push(format!("Contrainte {} : plan absent.", i + 1));
                     }
                     continue;
                 };
                 let mut coefs = vec![0.0; n];
                 let rhs = match c {
+                    Contrainte::Angle { .. } => continue,
                     Contrainte::Distance { valeur, .. } => {
                         coefs[idx[1]] += 1.0;
                         coefs[idx[0]] -= 1.0;
@@ -741,6 +723,7 @@ impl FamilleModelee {
                 r.positions.insert(plans[*pivot].nom.clone(), l.rhs);
             }
         }
+        self.resoudre_orientations(&mut r, &mut erreurs);
         r.conflits.sort_unstable();
         r.erreurs = erreurs;
         r
@@ -790,8 +773,8 @@ impl FamilleModelee {
             let (d0, d1) = (pos(&e.profondeur[0]), pos(&e.profondeur[1]));
             // prisme local (h, v, d) ramené aux axes de la famille ; une permutation
             // impaire (élévation) retourne les faces
-            let construction = e.construction.as_ref().and_then(|id| self.repere_construction(id, r));
-            let impaire = construction.is_none() && e.vue == VueEsquisse::Elevation;
+            let repere = e.support.as_ref().and_then(|s| self.repere_support(s, r));
+            let impaire = repere.is_none() && e.vue == VueEsquisse::Elevation;
             let local = match &e.operation {
                 OperationForme::Guidage { guidage } => guidage.resolue(|p| self.point_esquisse(r, p)).triangles(&contour),
                 OperationForme::Revolution { revolution } => revolution.triangles(&contour),
@@ -800,7 +783,7 @@ impl FamilleModelee {
             let tris = local
                 .into_iter()
                 .map(|t| {
-                    let m = t.map(|p| construction.as_ref().map_or_else(|| e.vue.point(p.x, p.y, p.z), |c| c.point(p.x, p.y, p.z)));
+                    let m = t.map(|p| repere.as_ref().map_or_else(|| e.vue.point(p.x, p.y, p.z), |c| c.point(p.x, p.y, p.z)));
                     if impaire { [m[0], m[2], m[1]] } else { m }
                 })
                 .collect();
@@ -816,38 +799,17 @@ impl FamilleModelee {
         out
     }
 
-    /// Résout le repère d'un plan à partir de son identité et des contraintes courantes.
-    pub fn repere_construction(&self, id: &str, r: &Resolution) -> Option<PlanConstruction> {
-        let mut plan = self.plans_construction.iter().find(|p| p.id == id)?.clone();
-        if let Some(nom) = &plan.reference {
-            let source = self.plan(nom)?;
-            let vue = match source.axe { AxePlan::X => VueEsquisse::Coupe, AxePlan::Y => VueEsquisse::Elevation, AxePlan::Z => VueEsquisse::Plan };
-            let position = r.positions.get(nom).copied().unwrap_or(source.position);
-            plan.origine = vue.point(0.0, 0.0, position).to_array();
-            plan.horizontal = vue.point(1.0, 0.0, 0.0).to_array();
-            plan.vertical = vue.point(0.0, 1.0, 0.0).to_array();
-        }
-        Some(plan)
-    }
-
     /// Contrôle avant enregistrement : noms uniques, références existantes, formules
     /// calculables, volumes non plats.
     pub fn valider(&self, largeur: f64, hauteur: f64, epaisseur: f64) -> Result<(), String> {
         self.valider_elements_2d()?;
-        let mut constructions = std::collections::HashSet::new();
-        let mut identites_construction = std::collections::HashSet::new();
-        for plan in &self.plans_construction {
-            plan.valider()?;
-            if !identites_construction.insert(&plan.id) { return Err("Identité de plan de construction dupliquée.".into()); }
-            if plan.reference.as_ref().is_some_and(|nom| self.plan(nom).is_none()) { return Err(format!("{} : plan de référence absent.", plan.nom)); }
-            if !constructions.insert(&plan.nom) { return Err(format!("Plan de construction en double : {}", plan.nom)); }
-        }
         let mut noms = std::collections::HashSet::new();
-        for p in &self.plans {
-            if p.nom.trim().is_empty() || !noms.insert(p.nom.as_str()) {
-                return Err(format!("Plan de référence sans nom ou en double : « {} ».", p.nom));
+        for p in self.noms_plans() {
+            if p.trim().is_empty() || !noms.insert(p) {
+                return Err(format!("Plan de référence sans nom ou en double : « {p} »."));
             }
         }
+        self.valider_orientations()?;
         let mut params = std::collections::HashSet::from([LARGEUR, HAUTEUR, EPAISSEUR]);
         for p in &self.parametres {
             // même règle que l'évaluateur : lettre ou _ en tête, puis lettres, chiffres, _
@@ -879,18 +841,16 @@ impl FamilleModelee {
         }
         if self.elements_2d.iter().any(|e| e.visible.as_deref().is_some_and(|n| genre(n) != Some(GenreParametre::OuiNon))) { return Err("Élément 2D : la visibilité attend un paramètre oui/non.".into()); }
         for e in &self.extrusions {
-            if let Some(id) = &e.construction { if !identites_construction.contains(id) { return Err(format!("{} : plan de construction absent.", e.nom)); } }
+            match &e.support {
+                Some(SupportForme::Plan { plan }) if !self.existe_plan(plan) => return Err(format!("{} : plan de référence support « {plan} » absent.", e.nom)),
+                Some(s @ SupportForme::Repere { .. }) if self.repere_support(s, &Resolution::default()).is_none() => return Err(format!("{} : repère support non orthonormé.", e.nom)),
+                _ => {}
+            }
             let (ah, av, ad) = e.vue.axes();
-            let bon = |f: &Face, axe| (e.construction.is_some() && f.plan.is_empty() && f.decalage.is_finite()) || self.plan(&f.plan).is_some_and(|p| p.axe == axe);
+            let bon = |f: &Face, axe| if e.support.is_some() { f.plan.is_empty() && f.decalage.is_finite() } else { self.plan(&f.plan).is_some_and(|p| p.axe == axe) };
             let ancrage = match &e.operation { OperationForme::Guidage { guidage } => guidage.ancrage_fin().unwrap_or(&[]), _ => &[] };
             if e.profil.len() < 3 || !e.profil.iter().chain(ancrage).all(|p| bon(&p.h, ah) && bon(&p.v, av)) || !e.profondeur.iter().all(|f| bon(f, ad)) {
                 return Err(format!("{} : profil d'au moins trois sommets sur des plans de la vue d'esquisse attendu.", e.nom));
-            }
-        }
-        for (i, c) in self.contraintes.iter().enumerate() {
-            let axes: Vec<Option<AxePlan>> = c.plans().iter().map(|n| self.plan(n).map(|p| p.axe)).collect();
-            if axes.iter().any(Option::is_none) || axes.windows(2).any(|w| w[0] != w[1]) {
-                return Err(format!("Contrainte {} : plans absents ou d'axes différents.", i + 1));
             }
         }
         let r = self.resoudre(largeur, hauteur, epaisseur);
@@ -941,7 +901,7 @@ impl FamilleModelee {
         FamilleModelee {
             categorie: CategorieFamille::Fenetre,
             section_profil: None,
-            plans_construction: Vec::new(),
+            plans_tournes: Vec::new(),
             parametres: vec![
                 Parametre { nom: "Dormant".into(), formule: "60".into(), portee: Portee::Type, genre: GenreParametre::Longueur },
                 Parametre { nom: "Profondeur".into(), formule: "70".into(), portee: Portee::Type, genre: GenreParametre::Longueur },
@@ -992,7 +952,7 @@ impl FamilleModelee {
             // appui en pente : profil esquissé en coupe, extrudé sur la largeur
             extrusions: vec![FormeProfil { visibilite: Default::default(),
                 operation: OperationForme::Extrusion,
-                construction: None,
+                support: None,
                 nom: "Appui".into(),
                 vide: false,
                 materiau: Materiau::Appui,
@@ -1046,7 +1006,7 @@ impl FamilleModelee {
         FamilleModelee {
             categorie: CategorieFamille::Porte,
             section_profil: None,
-            plans_construction: Vec::new(),
+            plans_tournes: Vec::new(),
             parametres: vec![
                 param("Dormant", "60"),
                 param("Profondeur", "70"),
@@ -1273,51 +1233,5 @@ mod tests {
         let mut f = FamilleModelee::gabarit_fenetre();
         f.parametres.push(Parametre::nouveau("²x", "1"));
         assert!(f.valider(1400.0, 1600.0, 300.0).is_err());
-    }
-}
-
-#[cfg(test)]
-mod tests_construction {
-    use super::*;
-    #[test]
-    fn plan_oblique_repere_et_serialisation() {
-        for vue in [VueEsquisse::Plan, VueEsquisse::Coupe, VueEsquisse::Elevation] {
-            let p=PlanConstruction::deux_points("Oblique".into(),vue,[10.0,20.0],[110.0,120.0]).unwrap();
-            p.valider().unwrap();
-            let o=p.point(0.0,0.0,0.0);
-            assert!((o-vue.point(10.0,20.0,0.0)).length()<1e-8);
-            let (u,v,n)=(p.point(1.0,0.0,0.0)-o,p.point(0.0,1.0,0.0)-o,p.point(0.0,0.0,1.0)-o);
-            assert!((u.cross(v)-n).length()<1e-8);
-            assert!(u.dot(v).abs()<1e-8);
-            assert_eq!(p,serde_json::from_str::<PlanConstruction>(&serde_json::to_string(&p).unwrap()).unwrap());
-        }
-        assert!(PlanConstruction::deux_points("X".into(),VueEsquisse::Plan,[0.0,0.0],[0.0,0.0]).is_err());
-    }
-    #[test]
-    fn extrusion_oblique_volume_et_compatibilite() {
-        let mut f=FamilleModelee::gabarit_fenetre();
-        let ancien=serde_json::to_value(&f).unwrap();
-        assert!(ancien.get("plans_construction").is_none());
-        let _:FamilleModelee=serde_json::from_value(ancien).unwrap();
-        f.volumes.clear(); f.extrusions.clear();
-        let p=PlanConstruction::deux_points("Oblique".into(),VueEsquisse::Plan,[0.0,0.0],[100.0,100.0]).unwrap();
-        let face=|x| Face {plan:String::new(),decalage:x};
-        f.extrusions.push(FormeProfil { visibilite: Default::default(),operation: OperationForme::Extrusion, construction:Some(p.id.clone()),nom:"Essai".into(),vide:false,materiau:Materiau::Menuiserie,vue:VueEsquisse::Plan,profil:vec![[0.0,0.0],[100.0,0.0],[100.0,200.0],[0.0,200.0]].into_iter().map(|q| PointEsquisse {h:face(q[0]),v:face(q[1])}).collect(),profondeur:[face(0.0),face(50.0)],visible:None,materiau_parametre:None});
-        f.plans_construction.push(p);
-        f.valider(1200.0,1350.0,300.0).unwrap();
-        let solides=f.solides(&f.resoudre(1200.0,1350.0,300.0));
-        let volume:f64=solides[0].tris.iter().map(|t| t[0].dot(t[1].cross(t[2]))/6.0).sum();
-        assert!((volume.abs()-1_000_000.0).abs()<1e-5);
-        let relue:FamilleModelee=serde_json::from_str(&serde_json::to_string(&f).unwrap()).unwrap();
-        assert_eq!(f,relue);
-        f.extrusions[0].operation = OperationForme::Revolution { revolution: Revolution::nouvelle([[0.0,0.0],[0.0,200.0]]) };
-        f.extrusions[0].vide = true;
-        f.valider(1200.0,1350.0,300.0).unwrap();
-        let relue: FamilleModelee = serde_json::from_str(&serde_json::to_string(&f).unwrap()).unwrap();
-        let solides = relue.solides(&relue.resoudre(1200.0,1350.0,300.0));
-        assert!(solides[0].vide);
-        let volume: f64 = solides[0].tris.iter().map(|t| t[0].dot(t[1].cross(t[2]))/6.0).sum();
-        let attendu = std::f64::consts::PI * 100.0 * 100.0 * 200.0;
-        assert!((volume-attendu).abs()/attendu < 0.002);
     }
 }

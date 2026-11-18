@@ -2,65 +2,6 @@
 use super::*;
 
 impl ViewerApp {
-    /// Vue 3D : même moteur, même caméra et mêmes gestes que le projet, avec une caméra
-    /// propre à la famille.
-    fn vue_3d_famille(&mut self, ui: &mut egui::Ui) {
-        let rect = ui.available_rect_before_wrap();
-        let response = ui.allocate_rect(rect, Sense::click_and_drag());
-        let Some(ed) = self.famille.as_mut() else { return };
-        ed.rect_navigation = rect;
-        let r = ed.resoudre();
-        let scene = scene_famille(ed, &r);
-        if let Some((min, max)) = scene.min && (ed.cadrage_3d_initial || response.double_clicked_by(PointerButton::Middle)) {
-            ed.camera_3d.fit(min, max);
-            ed.cadrage_3d_initial = false;
-        }
-        if response.dragged_by(PointerButton::Middle) {
-            let d = response.drag_delta();
-            if ui.input(|i| i.modifiers.shift) { ed.camera_3d.orbit(d.x, d.y); }
-            else { ed.camera_3d.pan(d.x, d.y, rect.height()); }
-        }
-        if response.dragged_by(PointerButton::Secondary) {
-            let d = response.drag_delta();
-            ed.camera_3d.ortho = false;
-            ed.camera_3d.regarder(d.x, d.y);
-        }
-        if let Some(pos) = response.hover_pos() {
-            let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-            crate::socle::projection::zoom_molette(&mut ed.camera_3d, rect, pos, scroll, None);
-        }
-        if response.clicked_by(PointerButton::Primary) && let Some(pos) = response.interact_pointer_pos() {
-            let n = crate::socle::projection::ndc(rect, pos);
-            let (origine, direction) = ed.camera_3d.ray(n.x, n.y, rect.width()/rect.height().max(1.0));
-            let mut meilleur: Option<(f32, usize)> = None;
-            for (objet, solide) in ed.famille.solides(&r).iter().enumerate().filter(|(_, s)| ed.montre_solide(s) && !s.vide) {
-                for tri in &solide.tris {
-                    let [a,b,c] = tri.map(|p| (p / 1000.0).as_vec3());
-                    let e1=b-a; let e2=c-a; let h=direction.cross(e2); let det=e1.dot(h);
-                    if det.abs()<1e-8 { continue; }
-                    let f=1.0/det; let q=origine-a; let u=f*q.dot(h);
-                    if !(0.0..=1.0).contains(&u) { continue; }
-                    let v=f*direction.dot(q.cross(e1));
-                    if v<0.0 || u+v>1.0 { continue; }
-                    let t=f*e2.dot(q.cross(e1));
-                    if t>0.0 && meilleur.is_none_or(|(distance,_)| t<distance) { meilleur=Some((t,objet)); }
-                }
-            }
-            let selection = meilleur.map(|(_, k)| if k < ed.famille.volumes.len() { SelectionFamille::Volume(k) } else { SelectionFamille::Extrusion(k-ed.famille.volumes.len()) });
-            ed.selectionner(selection.into_iter().collect());
-        }
-        let selection = match ed.selection { SelectionFamille::Volume(k) => Some(k), SelectionFamille::Extrusion(k) => Some(ed.famille.volumes.len()+k), _ => None };
-        let mut camera = ed.camera_3d.clone();
-        let mm = (self.echelle / 1000.0) as f32;
-        if let Some(image) = self.rendre_famille(ui, rect, &mut camera, &scene, (&[], &[]), selection, mm) { ui.painter().add(image); }
-        // cube d'orientation du projet, sur la caméra de la famille
-        std::mem::swap(&mut self.camera, &mut camera);
-        self.cube_orientation(ui, rect);
-        std::mem::swap(&mut self.camera, &mut camera);
-        if let Some(ed) = self.famille.as_mut() { ed.camera_3d = camera; }
-        if scene.opaque.is_empty() { ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, "Aucune forme pleine visible", egui::FontId::proportional(14.0), Color32::GRAY); }
-    }
-
     pub(crate) fn nouvelle_famille(&mut self) {
         self.ouvrir_editeur_composant(None);
         if let Some(ed) = self.famille.as_mut() {
@@ -102,7 +43,7 @@ impl ViewerApp {
     }
     /// Contrat sans dialogue de l'éditeur ; même validation et chargement que le ruban.
     pub(crate) fn piloter_famille(&mut self, commande: &str, argument: &str) -> Option<Result<serde_json::Value, String>> {
-        if let Some(r) = self.piloter_apercu(commande, argument) { return Some(r); }
+        if let Some(r) = self.piloter_apercu(commande, argument).or_else(|| self.piloter_plans(commande, argument)) { return Some(r); }
         if commande == "famille_outil" {
             return Some((|| {
                 let ed = self.famille.as_mut().ok_or("Éditeur fermé")?;
@@ -305,7 +246,9 @@ impl ViewerApp {
             poignee: None,
             reference: (String::new(), 0.0, 0.0, 0.0, FamilleModelee::gabarit_fenetre()),
             vue: VueFamille::Elevation,
-            construction: None,
+            plan_actif: Default::default(),
+            choix_face: false,
+            points_3d: Vec::new(),
             vue_3d: false,
             vues_ouvertes: vec![VueFamille::Elevation as usize],
             camera_3d: Default::default(),
@@ -591,8 +534,7 @@ impl ViewerApp {
                 annuler |= retour.action == Some(Action::Annuler);
                 bas = retour.bas;
                 if valider {
-                    let construction = ed.construction.and_then(|k| ed.famille.plans_construction.get(k)).cloned();
-                    ed.erreur = ed.terminer_forme(construction).err();
+                    ed.erreur = ed.terminer_forme(None).err();
                 }
                 if annuler { ed.choisir_outil(OutilFamille::Selection); ed.message = None; }
             }
@@ -648,10 +590,12 @@ impl ViewerApp {
                     ui.label(format!("{} · {} · {}", p.nom, p.genre.nom(), p.portee.nom()));
                 }
             });
-            egui::CollapsingHeader::new(RichText::new(format!("Plans de référence ({})", ed.famille.plans.len())).strong()).default_open(false).show(ui, |ui| {
-                for p in &ed.famille.plans {
-                    if ui.selectable_label(ed.choisi(&SelectionFamille::Plan(p.nom.clone())), format!("{} · {}", p.nom, p.axe.nom())).clicked() {
-                        ed.selection = SelectionFamille::Plan(p.nom.clone());
+            egui::CollapsingHeader::new(RichText::new(format!("Plans de référence ({})", ed.famille.plans.len() + ed.famille.plans_tournes.len())).strong()).default_open(false).show(ui, |ui| {
+                let plans = ed.famille.plans.iter().map(|p| (p.nom.clone(), p.axe.nom().to_string()))
+                    .chain(ed.famille.plans_tournes.iter().map(|p| (p.nom.clone(), format!("tourné depuis {}", p.hote))));
+                for (nom, genre) in plans.collect::<Vec<_>>() {
+                    if ui.selectable_label(ed.choisi(&SelectionFamille::Plan(nom.clone())), format!("{nom} · {genre}")).clicked() {
+                        ed.selection = SelectionFamille::Plan(nom);
                         ed.multiple.clear();
                     }
                 }
@@ -674,7 +618,6 @@ impl ViewerApp {
                         ed.esquisse.clear();
                         ed.axe_revolution = None;
                         ed.outil = OutilFamille::Selection;
-                        ed.construction = e.construction.as_ref().and_then(|plan| ed.famille.plans_construction.iter().position(|p| &p.id == plan));
                         // la vue de son esquisse, pour ses poignées
                         ed.vue = match e.vue {
                             VueEsquisse::Elevation => VueFamille::Elevation,
