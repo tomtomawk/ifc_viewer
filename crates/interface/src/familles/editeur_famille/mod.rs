@@ -24,6 +24,8 @@ mod construction;
 mod reseau;
 mod aligner;
 mod chemin_trace;
+pub(crate) mod navigation;
+use navigation::*;
 use crate::*;
 use modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
 use modele::famille::modelee::FichierFamille;
@@ -235,68 +237,6 @@ pub(crate) struct EditeurFamille {
     multiple: Vec<SelectionFamille>,
     /// Fenêtre de sélection en cours (même règle que le projet).
     fenetre: Option<FenetreSelection>,
-}
-
-#[derive(Clone,Copy)]
-pub(crate) struct NavigationFamille { zoom:f64, decalage:(f64,f64) }
-impl Default for NavigationFamille {
-    fn default()->Self {Self{zoom:1.0,decalage:(0.0,0.0)}}
-}
-impl NavigationFamille {
-    pub(crate) fn cadre(&self,base:&Cadre)->Cadre {
-        Cadre{centre:base.centre,milieu:(base.milieu.0+self.decalage.0,base.milieu.1+self.decalage.1),echelle:base.echelle*self.zoom}
-    }
-    pub(crate) fn naviguer(&mut self,base:&Cadre,curseur:egui::Pos2,molette:f32,pan:egui::Vec2) {
-        let avant=self.cadre(base);
-        if molette!=0.0 {
-            let point=avant.modele(curseur);
-            self.zoom=(self.zoom*crate::saisie::accrochage::facteur_molette(molette)).clamp(0.05,100.0);
-            let apres=self.cadre(base).modele(curseur);
-            self.decalage.0+=point.0-apres.0;
-            self.decalage.1+=point.1-apres.1;
-        }
-        let echelle=base.echelle*self.zoom;
-        self.decalage.0-=pan.x as f64/echelle;
-        self.decalage.1+=pan.y as f64/echelle;
-    }
-
-    pub(crate) fn souris(&mut self, ui: &egui::Ui, vue: &egui::Response, base: &Cadre, vue_plane: bool, outil_actif: bool) {
-        if vue.double_clicked_by(PointerButton::Middle) {
-            *self = Self::default();
-            return;
-        }
-        // Les réponses de glissement lisent elles-mêmes le contexte egui.
-        let panoramique = vue.dragged_by(PointerButton::Middle)
-            || (vue_plane && !outil_actif && vue.dragged_by(PointerButton::Secondary));
-        let pan = if panoramique { vue.drag_delta() } else { egui::Vec2::ZERO };
-        let survole = vue.hovered();
-        let (molette, curseur) = ui.input_mut(|i| {
-            let molette = if survole { std::mem::take(&mut i.smooth_scroll_delta.y) } else { 0.0 };
-            let ancre = if vue_plane { base.centre } else { i.pointer.hover_pos().unwrap_or(base.centre) };
-            (molette, ancre)
-        });
-        self.naviguer(base, curseur, molette, pan);
-        if panoramique {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
-        }
-    }
-}
-
-/// Transformation de la vue : repère de la famille (h, v) ↔ écran.
-pub(crate) struct Cadre {
-    pub centre: egui::Pos2,
-    pub milieu: (f64, f64),
-    pub echelle: f64,
-}
-
-impl Cadre {
-    pub(crate) fn ecran(&self, h: f64, v: f64) -> egui::Pos2 {
-        self.centre + egui::vec2(((h - self.milieu.0) * self.echelle) as f32, (-(v - self.milieu.1) * self.echelle) as f32)
-    }
-    pub(crate) fn modele(&self, p: egui::Pos2) -> (f64, f64) {
-        let d = p - self.centre;
-        (self.milieu.0 + d.x as f64 / self.echelle, self.milieu.1 - d.y as f64 / self.echelle)
-    }
 }
 
 fn couleur_materiau(f: &FamilleModelee, m: Materiau) -> Color32 {
@@ -586,7 +526,7 @@ impl EditeurFamille {
         if outil.est_transformation() && outil != OutilFamille::Aligner && self.selection == SelectionFamille::Aucune && self.multiple.is_empty() {
             return Some("Sélectionner d'abord un ou plusieurs éléments de la famille.");
         }
-        catalogue::indisponibilite(d, &catalogue::Contexte { famille_plane: false, vue_3d: self.vue_3d, plan_oblique: self.construction.is_some() })
+        catalogue::indisponibilite(d, &catalogue::Contexte { vue_3d: self.vue_3d, plan_oblique: self.construction.is_some() })
     }
 
     /// Les deux premiers points de l'outil révolution définissent son axe.
@@ -709,24 +649,5 @@ impl EditeurFamille {
         plans.sort_by(|a, b| self.position(r, &a.nom).total_cmp(&self.position(r, &b.nom)));
         let nom = |p: Option<&&PlanRef>| p.map_or_else(String::new, |p| p.nom.clone());
         [Face { plan: nom(plans.first()), decalage: 0.0 }, Face { plan: nom(plans.last()), decalage: 0.0 }]
-    }
-}
-
-#[cfg(test)]
-mod tests_navigation_famille {
-    use super::*;
-    #[test]
-    fn zoom_conserve_le_point_sous_la_souris_et_pan_deplace_la_vue() {
-        let base=Cadre{centre:egui::pos2(500.,400.),milieu:(0.,1000.),echelle:0.2};
-        let mut n=NavigationFamille::default();
-        let q=egui::pos2(650.,250.);
-        let avant=n.cadre(&base).modele(q);
-        n.naviguer(&base,q,200.,egui::Vec2::ZERO);
-        let apres=n.cadre(&base).modele(q);
-        assert!((avant.0-apres.0).abs()<1e-9 && (avant.1-apres.1).abs()<1e-9);
-        let ecran=n.cadre(&base).ecran(avant.0,avant.1);
-        n.naviguer(&base,q,0.,egui::vec2(30.,-20.));
-        let suivant=n.cadre(&base).ecran(avant.0,avant.1);
-        assert!((suivant-ecran-egui::vec2(30.,-20.)).length()<1e-4);
     }
 }

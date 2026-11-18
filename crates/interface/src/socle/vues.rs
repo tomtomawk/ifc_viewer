@@ -287,7 +287,6 @@ impl ViewerApp {
         }
         if let Some((id, vue)) = activer.filter(|o| !est_famille(o.0)) {
             self.famille_active = false;
-            self.famille_plane_active = None;
             self.changer_document(id);
             if let Some(i) = vue {
                 self.activer_vue(i);

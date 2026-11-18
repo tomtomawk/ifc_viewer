@@ -1,4 +1,4 @@
-//! État de document commun aux familles planes et modélisées.
+//! État de document d'une famille ouverte dans l'éditeur.
 use commandes::historique::{Historique, Instantane};
 use std::path::PathBuf;
 

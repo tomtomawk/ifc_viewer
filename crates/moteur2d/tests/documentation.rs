@@ -106,15 +106,13 @@ fn formes_du_cartouche_persistent_et_sont_dessinees_sur_feuille() {
         largeur: 420.0, hauteur: 297.0, cartouche: String::new(), vues: Vec::new(), nomenclatures: Vec::new() };
     let mut famille = FamilleCartouche::default();
     famille.nom = "Cartouche test".into();
-    famille.formes = vec![
+    let formes = vec![
         AnnotationForme::Cercle { centre: [10.0, 10.0], rayon: 4.0 },
         AnnotationForme::Zone { contour: vec![[20.0, 10.0], [25.0, 10.0], [25.0, 15.0]] },
         AnnotationForme::Cote { debut: PointCote::Fixe { point: [20.0, 10.0] }, fin: PointCote::Fixe { point: [25.0, 10.0] }, decalage: 10.0 },
     ];
-    // Le document commun est la source du rendu ; les formes historiques ne le remplacent pas.
     use modele::famille::modelee::{Element2DFamille, VueEsquisse};
-    let document = famille.document_famille.as_mut().unwrap();
-    document.famille.elements_2d.extend(famille.formes.iter().cloned().map(|forme| Element2DFamille::fixe(VueEsquisse::Plan, forme, 2.5)));
+    famille.document_famille.famille.elements_2d.extend(formes.iter().cloned().map(|forme| Element2DFamille::fixe(VueEsquisse::Plan, forme, 2.5)));
     p.feuilles.push(f.clone());
     p.cartouches_feuilles.insert(f.id.clone(), famille.nom.clone());
     p.familles_cartouches.push(famille.clone());
@@ -133,7 +131,11 @@ fn famille_cartouche_partagee_est_enregistree_et_utilisee() {
     let mut g = f.clone();
     g.id = "g".into();
     p.feuilles = vec![f.clone(), g.clone()];
-    let famille = FamilleCartouche { document_famille: None, id: noyau::uuid::uuid(), nom: "Agence".into(), largeur: 80.0, hauteur: 25.0, traits: vec![[[0.0, 0.0], [80.0, 25.0]]], textes: vec![TexteCartouche { contenu: "{projet} - {numero}".into(), position: [2.0, 2.0], hauteur: 3.0 }], formes: Vec::new() };
+    use modele::famille::modelee::{CategorieFamille, Element2DFamille, FamilleModelee, FichierFamille, VueEsquisse, FORMAT_FAMILLE};
+    let mut document = FamilleModelee::vide(CategorieFamille::Cartouche);
+    document.elements_2d.push(Element2DFamille::fixe(VueEsquisse::Plan, AnnotationForme::Ligne { debut: [0.0, 0.0], fin: [80.0, 25.0] }, 2.5));
+    document.elements_2d.push(Element2DFamille::fixe(VueEsquisse::Plan, AnnotationForme::Texte { point: [2.0, 2.0], texte: "{projet} - {numero}".into() }, 3.0));
+    let famille = FamilleCartouche { document_famille: Box::new(FichierFamille { format: FORMAT_FAMILLE.into(), nom: "Agence".into(), largeur: 80.0, hauteur: 25.0, profondeur: 300.0, famille: document }), id: noyau::uuid::uuid(), nom: "Agence".into(), largeur: 80.0, hauteur: 25.0 };
     p.familles_cartouches.push(famille);
     p.cartouches_feuilles.insert(f.id.clone(), "Agence".into());
     p.cartouches_feuilles.insert(g.id.clone(), "Agence".into());

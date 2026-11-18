@@ -476,8 +476,6 @@ pub struct ViewerApp {
     famille_active: bool,
     /// Autres familles ouvertes (onglets à l'arrière-plan).
     familles_inactives: Vec<crate::familles::editeur_famille::EditeurFamille>,
-    familles_planes: BTreeMap<usize, crate::familles::familles_planes::EditeurPlan>,
-    famille_plane_active: Option<usize>,
     prochain_ordre_famille: usize,
     /// Action des panneaux de l'éditeur de familles, traitée après leur tracé.
     action_famille: Option<crate::familles::editeur_famille::ActionFamille>,
@@ -738,8 +736,6 @@ impl ViewerApp {
             famille: None,
             famille_active: false,
             familles_inactives: Vec::new(),
-            familles_planes: BTreeMap::new(),
-            famille_plane_active: None,
             prochain_ordre_famille: 0,
             action_famille: None,
             confirmer_famille: false,
@@ -947,10 +943,6 @@ impl eframe::App for ViewerApp {
         if ctx.input(|i| i.viewport().close_requested()) && self.tache_en_cours() {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.error = Some("Un enregistrement ou un export est en cours ; attendez sa fin (ou annulez-le) avant de quitter.".into());
-        } else if ctx.input(|i| i.viewport().close_requested()) && let Some(ordre) = self.edition_plane_modifiee(None) {
-            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            self.activer_famille(ordre);
-            self.demander_fermeture_famille();
         } else if ctx.input(|i| i.viewport().close_requested()) && let Some(ordre) = self.famille.iter().chain(&self.familles_inactives).find(|ed| ed.modifiee()).map(|ed| ed.document_famille.ordre) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.activer_famille(ordre);
@@ -1045,15 +1037,13 @@ impl eframe::App for ViewerApp {
             }
             if !famille {
                 egui::Panel::bottom("barre_vue").show(ui, |ui| self.barre_vue(ui));
-            } else if let Some(cartouche) = self.cartouche_actif() {
-                egui::Panel::bottom("barre_vue_cartouche").show(ui, |ui| cartouche.barre_vue(ui));
+            } else {
+                egui::Panel::bottom("barre_vue_famille").show(ui, |ui| self.barre_vue_famille(ui));
             }
             egui::CentralPanel::no_frame().show(ui, |ui| {
                 let rect = ui.available_rect_before_wrap();
                 let mut bas_barre = 0.0;
-                if self.famille_plane_active.is_some() {
-                    self.vue_famille_plane(ui);
-                } else if self.famille_active && self.famille.is_some() {
+                if self.famille_active && self.famille.is_some() {
                     self.vue_famille(ui);
                 } else if self.scene.is_some() && self.vues_ouvertes.is_empty() {
                     ui.centered_and_justified(|ui| ui.label("Ouvrir une vue depuis l’arborescence du projet."));
@@ -1103,9 +1093,6 @@ impl eframe::App for ViewerApp {
         let geste = ctx.input(|i| i.pointer.any_down()) || ctx.egui_wants_keyboard_input();
         if let Some(ed) = self.famille.as_mut() {
             ed.suivre_historique(geste);
-        }
-        if let Some(ed) = self.famille_plane_active.and_then(|i| self.familles_planes.get_mut(&i)) {
-            if let Err(e) = ed.suivre_historique(geste) { self.error = Some(format!("Historique : {e}")); }
         }
         self.suivre_document_actif();
         self.unsupported_window(&ctx);

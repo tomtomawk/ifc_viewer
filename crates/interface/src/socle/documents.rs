@@ -13,10 +13,6 @@ impl ViewerApp {
     }
     pub(crate) fn open(&mut self, path: PathBuf, ctx: &egui::Context) {
         if crate::outils::modeliser::liens::est_ifc(&path) { self.error = Some(crate::outils::modeliser::liens::IFC_NON_OUVERT.into()); return; }
-        if path.file_name().is_some_and(|n| { let nom = n.to_string_lossy().to_lowercase(); [".profil.json", ".cartouche.json", ".etiquette.json"].iter().any(|suffixe| nom.ends_with(suffixe)) }) {
-            if let Err(e) = self.ouvrir_famille_plane_fichier(&path) { self.error = Some(e); }
-            return;
-        }
         if path.file_name().is_some_and(|n| n.to_string_lossy().to_lowercase().ends_with(".famille.json")) {
             if let Err(e) = self.ouvrir_famille_fichier(&path) { self.error = Some(e); }
             return;
@@ -519,7 +515,6 @@ impl ViewerApp {
     }
 
     pub(crate) fn nouveau_document(&mut self) {
-        self.famille_plane_active = None;
         self.famille_selectionnee = None;
         self.feuilles.selection = Default::default();
         self.gestion_contextes = None;
@@ -553,7 +548,6 @@ impl ViewerApp {
         let Some(d) = self.documents.remove(&id) else { return };
         self.ruban_edition.type_garde_corps = None;
         self.editeur_garde_corps = None;
-        self.famille_plane_active = None;
         self.famille_selectionnee = None;
         self.feuilles.selection = Default::default();
         self.stocker_document();
@@ -615,11 +609,6 @@ impl ViewerApp {
     }
 
     pub(crate) fn fermer(&mut self) {
-        if let Some(ordre) = self.edition_plane_modifiee(Some(self.document_actif)) {
-            self.activer_famille(ordre);
-            self.demander_fermeture_famille();
-            return;
-        }
         if let Some(ordre) = self.famille.iter().chain(&self.familles_inactives)
             .find(|ed| !ed.document_famille.autonome && ed.document_famille.document == self.document_actif && ed.modifiee()).map(|ed| ed.document_famille.ordre) {
             self.activer_famille(ordre);
@@ -636,8 +625,6 @@ impl ViewerApp {
     }
 
     pub(crate) fn fermer_document(&mut self) {
-        self.famille_plane_active = None;
-        self.familles_planes.retain(|_, ed| ed.document_famille.autonome || ed.document_famille.document != self.document_actif);
         self.familles_inactives.retain(|ed| ed.document_famille.autonome || ed.document_famille.document != self.document_actif);
         if self.famille.as_ref().is_some_and(|ed| !ed.document_famille.autonome && ed.document_famille.document == self.document_actif) {
             self.famille = self.familles_inactives.pop();

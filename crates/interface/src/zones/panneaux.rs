@@ -23,10 +23,6 @@ impl ViewerApp {
 
     pub(crate) fn contenu_panneau(&mut self, ui: &mut egui::Ui, p: Panneau) {
         if p == Panneau::Proprietes && self.mode_famille() { self.categorie_famille_ui(ui); }
-        if self.famille_plane_active.is_some() {
-            self.panneau_famille_plane(ui, p);
-            return;
-        }
         // onglet Famille : les panneaux montrent la famille
         if self.famille_active && self.famille.is_some() {
             match p {

@@ -1,67 +1,42 @@
 //! Familles de profils plans définis par des paramètres et un contour fermé.
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashSet};
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ParametreProfil { pub nom: String, pub formule: String }
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PointProfil { pub x: String, pub y: String }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Profil {
-    /// Famille complète ; la section provient de son unique contour fermé en plan.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub document_famille: Option<Box<super::modelee::FichierFamille>>,
+    /// Famille complète ; la section provient de son contour fermé en plan
+    /// (`section_profil` le désigne quand il y en a plusieurs).
+    pub document_famille: Box<super::modelee::FichierFamille>,
     #[serde(default)] pub id: String,
     pub nom: String,
-    pub parametres: Vec<ParametreProfil>,
-    pub contour: Vec<PointProfil>,
 }
 
 impl Profil {
+    /// Profil dont la famille porte un seul contour fermé fixe en plan.
+    pub fn depuis_contour(nom: &str, points: Vec<[f64; 2]>) -> Self {
+        use super::modelee::{CategorieFamille, Element2DFamille, FamilleModelee, FichierFamille, VueEsquisse, FORMAT_FAMILLE};
+        use crate::documentation::AnnotationForme;
+        let mut famille = FamilleModelee::vide(CategorieFamille::Profil);
+        famille.elements_2d.push(Element2DFamille::fixe(VueEsquisse::Plan, AnnotationForme::Polyligne { points, fermee: true, courbures: vec![], remplissage: None, traits: vec![] }, 2.5));
+        Self { document_famille: Box::new(FichierFamille { format: FORMAT_FAMILLE.into(), nom: nom.into(), largeur: 100.0, hauteur: 100.0, profondeur: 100.0, famille }), id: String::new(), nom: nom.into() }
+    }
+
     pub fn points(&self) -> Result<Vec<[f64; 2]>, String> {
+        use super::modelee::VueEsquisse;
+        use crate::documentation::AnnotationForme;
         if self.nom.trim().is_empty() { return Err("Donnez un nom au profil.".into()); }
-        if let Some(document) = &self.document_famille {
-            use super::modelee::VueEsquisse;
-            use crate::documentation::AnnotationForme;
-            let r = document.famille.resoudre(document.largeur, document.hauteur, document.profondeur);
-            if let Some(erreur) = r.erreurs.first() { return Err(erreur.clone()); }
-            if let Some(section) = document.famille.section_profil {
-                return document.famille.section_resolue(&r, section);
-            }
-            let elements = document.famille.elements_2d_resolus(&r, VueEsquisse::Plan);
-            let mut contours = elements.into_iter().filter_map(|e| match e.forme {
-                AnnotationForme::Polyligne { points, fermee: true, .. } => Some(points),
-                _ => None,
-            });
-            let points = contours.next().ok_or("Un profil nécessite une polyligne fermée en plan.")?;
-            if contours.next().is_some() { return Err("Plusieurs contours fermés : choisissez la section dans les propriétés.".into()); }
-            contour_simple(&points)?;
-            return Ok(points);
+        let document = &self.document_famille;
+        let r = document.famille.resoudre(document.largeur, document.hauteur, document.profondeur);
+        if let Some(erreur) = r.erreurs.first() { return Err(erreur.clone()); }
+        if let Some(section) = document.famille.section_profil {
+            return document.famille.section_resolue(&r, section);
         }
-        let mut noms = HashSet::new();
-        for p in &self.parametres {
-            if p.nom.is_empty() || !p.nom.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') || p.nom.chars().next().is_some_and(|c| c.is_ascii_digit()) || !noms.insert(p.nom.to_lowercase()) {
-                return Err(format!("Nom de paramètre invalide ou dupliqué : {}.", p.nom));
-            }
-        }
-        let mut vars = BTreeMap::new();
-        let mut attente: Vec<_> = self.parametres.iter().collect();
-        while !attente.is_empty() {
-            let avant = attente.len();
-            attente.retain(|p| match super::modelee::evaluer(&p.formule, &vars) {
-                Ok(v) if v.is_finite() => { vars.insert(p.nom.clone(), v); false },
-                _ => true,
-            });
-            if attente.len() == avant { return Err(format!("Formule invalide ou référence circulaire : {}.", attente[0].nom)); }
-        }
-        let points: Vec<[f64; 2]> = self.contour.iter().map(|p| {
-            let x = super::modelee::evaluer(&p.x, &vars)?;
-            let y = super::modelee::evaluer(&p.y, &vars)?;
-            if !x.is_finite() || !y.is_finite() { return Err("Coordonnée non finie.".into()); }
-            Ok([x, y])
-        }).collect::<Result<_, String>>()?;
+        let elements = document.famille.elements_2d_resolus(&r, VueEsquisse::Plan);
+        let mut contours = elements.into_iter().filter_map(|e| match e.forme {
+            AnnotationForme::Polyligne { points, fermee: true, .. } => Some(points),
+            _ => None,
+        });
+        let points = contours.next().ok_or("Un profil nécessite une polyligne fermée en plan.")?;
+        if contours.next().is_some() { return Err("Plusieurs contours fermés : choisissez la section dans les propriétés.".into()); }
         contour_simple(&points)?;
         Ok(points)
     }
@@ -95,17 +70,6 @@ pub fn contour_simple(points: &[[f64; 2]]) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FichierProfil { pub format: String, pub profil: Profil }
-impl FichierProfil {
-    pub fn lire(s: &str) -> Result<Profil, String> {
-        let f: Self = serde_json::from_str(s).map_err(|e| format!("Fichier de profil illisible : {e}"))?;
-        if f.format != "bimedit.profil" { return Err("Ce fichier n'est pas un profil BIMedit.".into()); }
-        f.profil.valider()?;
-        Ok(f.profil)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     #[test]
@@ -114,38 +78,52 @@ mod tests {
         use crate::famille::modelee::{Element2DFamille, VueEsquisse, FichierFamille};
         let mut profil = crate::gabarit::Gabarit::defaut().profils[0].clone();
         let attendu = profil.points().unwrap();
-        let famille = &mut profil.document_famille.as_mut().unwrap().famille;
+        let famille = &mut profil.document_famille.famille;
         let autre = vec![[0.0, 0.0], [20.0, 0.0], [20.0, 10.0], [0.0, 10.0]];
         famille.elements_2d.push(Element2DFamille::fixe(VueEsquisse::Plan, AnnotationForme::Polyligne { points: autre.clone(), fermee: true, courbures: vec![], remplissage: None, traits: vec![] }, 2.5));
         assert!(profil.points().is_err());
-        profil.document_famille.as_mut().unwrap().famille.section_profil = Some(0);
+        profil.document_famille.famille.section_profil = Some(0);
         assert_eq!(profil.points().unwrap(), attendu);
-        profil.document_famille.as_mut().unwrap().famille.section_profil = Some(1);
+        profil.document_famille.famille.section_profil = Some(1);
         assert_eq!(profil.points().unwrap(), autre);
-        let doc = profil.document_famille.as_ref().unwrap();
+        let doc = &*profil.document_famille;
         let json = doc.json().unwrap();
         assert!(json.contains("\"section_profil\": 1"));
-        assert_eq!(FichierFamille::lire(&json).unwrap(), **doc);
-        profil.document_famille.as_mut().unwrap().famille.section_profil = Some(99);
+        assert_eq!(FichierFamille::lire(&json).unwrap(), *doc);
+        profil.document_famille.famille.section_profil = Some(99);
         assert!(profil.points().is_err());
-        let doc = profil.document_famille.as_ref().unwrap();
+        let doc = &*profil.document_famille;
         assert!(FichierFamille::lire(&doc.json().unwrap()).is_err());
-        let famille = &mut profil.document_famille.as_mut().unwrap().famille;
+        let famille = &mut profil.document_famille.famille;
         famille.section_profil = Some(1);
         if let AnnotationForme::Polyligne { points, .. } = &mut famille.elements_2d[1].forme { points.truncate(2); }
-        let doc = profil.document_famille.as_ref().unwrap();
+        let doc = &*profil.document_famille;
         assert!(FichierFamille::lire(&doc.json().unwrap()).is_err());
     }
 
     #[test]
     fn refuse_formule_cyclique_et_contour_invalide() {
         let mut p = crate::gabarit::Gabarit::defaut().profils[0].clone();
-        let famille = &mut p.document_famille.as_mut().unwrap().famille;
+        let famille = &mut p.document_famille.famille;
         famille.parametres[0].formule = famille.parametres[0].nom.clone();
         assert!(p.valider().is_err());
-        let famille = &mut p.document_famille.as_mut().unwrap().famille;
+        let famille = &mut p.document_famille.famille;
         famille.parametres[0].formule = "100".into();
         famille.elements_2d[0].ancrage.truncate(2);
         assert!(p.valider().is_err());
+    }
+
+    #[test]
+    fn familles_documentaires_exigent_leur_document() {
+        use crate::documentation::{FamilleCartouche, FamilleEtiquette};
+        let profil = super::Profil::depuis_contour("Triangle", vec![[0.0, 0.0], [60.0, 0.0], [0.0, 30.0]]);
+        let relu: super::Profil = serde_json::from_str(&serde_json::to_string(&profil).unwrap()).unwrap();
+        assert_eq!(relu.points().unwrap(), vec![[0.0, 0.0], [60.0, 0.0], [0.0, 30.0]]);
+        let ancien = r#"{"id":"p","nom":"P","parametres":[],"contour":[{"x":"0","y":"0"},{"x":"1","y":"0"},{"x":"0","y":"1"}]}"#;
+        assert!(serde_json::from_str::<super::Profil>(ancien).is_err());
+        let cartouche = FamilleCartouche::default();
+        assert_eq!(serde_json::from_str::<FamilleCartouche>(&serde_json::to_string(&cartouche).unwrap()).unwrap(), cartouche);
+        assert!(serde_json::from_str::<FamilleCartouche>(r#"{"id":"c","nom":"C","largeur":10,"hauteur":10,"traits":[],"textes":[]}"#).is_err());
+        assert!(serde_json::from_str::<FamilleEtiquette>(r#"{"id":"e","nom":"E","textes":[]}"#).is_err());
     }
 }

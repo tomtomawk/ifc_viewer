@@ -6,11 +6,12 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
 
 ## Parcours disponible
 
-- **Familles → Profils** : ouvrir un profil du projet, en créer un ou charger un
-  fichier de profil. L'éditeur permet de modifier les paramètres et les formules
-  des coordonnées des sommets, avec un aperçu du contour fermé. Enregistrer dans
-  le projet, créer une copie ou exporter un fichier `.profil.json`. Le gabarit
-  embarqué fournit un rectangle, une cornière, un profilé T et un profilé I.
+- **Familles → Profils** : ouvrir un profil du projet, en créer un ou ouvrir un
+  fichier de famille. Le profil s'ouvre dans l'éditeur commun des familles, sur sa
+  vue en plan : la section est la polyligne fermée du plan (choisie dans les
+  propriétés s'il y en a plusieurs), pilotée par les plans, cotes et paramètres de
+  la famille. Charger dans le projet, ou enregistrer un fichier `.famille.json`. Le
+  gabarit embarqué fournit un rectangle, une cornière, un profilé T et un profilé I.
   Ces familles de profils sont éditables indépendamment ; un type de poutre peut
   en prendre une comme section (`TypePoutre::profil`).
 
@@ -270,10 +271,16 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   l'aperçu bleu montre les deux murs. Un seul Ctrl+Z annule tout le raccord.
   Les deux murs doivent être au même niveau. Les axes parallèles et les déplacements
   qui inverseraient le mur sont refusés. Le formulaire textuel d'Ajuster est supprimé.
-- **Navigation des vues de menuiserie** : molette pour zoomer vers le curseur,
-  bouton central maintenu pour déplacer la vue, double-clic central, bouton Cadrer (ou raccourci F)
-  pour retrouver la famille. Plan, Coupe et Élévation conservent chacun leur
-  zoom et leur déplacement ; ces actions ne modifient pas la famille.
+- **Navigation des vues de famille** (toutes catégories) : mêmes gestes que les vues
+  de projet — molette pour zoomer vers le curseur, bouton central maintenu pour
+  déplacer la vue, double-clic central (ou F, ou Cadrer dans la barre de vue) pour
+  retrouver la famille — et même fond (blanc en style graphique, gris clair sinon).
+  La barre sous la vue porte l'échelle de la vue (1:20 par défaut) : les textes des
+  familles modélisées ont leur hauteur en mm du papier à cette échelle ; cartouches
+  et étiquettes sont dessinés en mm du papier (échelle 1:1, non réglable). Plan,
+  Coupe et Élévation conservent chacun leur zoom, leur déplacement et leur échelle ;
+  ces réglages ne modifient pas la famille. Les outils de dessin ont le bandeau de
+  dessin des vues de projet.
 - **Éditeur de familles d'ouvertures (à la manière de Revit)** : portes et fenêtres
   sont le même objet ; la catégorie (Porte / Fenêtre) de la famille range son type
   dans l'onglet voulu du sélecteur. Accès : « Éditer la famille… » (barre d'options

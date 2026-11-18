@@ -67,6 +67,48 @@ impl FamilleCatalogue {
 }
 
 impl ViewerApp {
+    pub(crate) fn mode_famille(&self) -> bool {
+        self.famille_active && self.famille.is_some()
+    }
+
+    /// Ouvre un profil du projet (`id`) ou un nouveau profil, copie du premier du gabarit.
+    pub(crate) fn ouvrir_profil(&mut self, id: Option<&str>) {
+        if let Some(p) = id.and_then(|id| self.natif.as_ref()?.0.profils.iter().find(|p| p.id == id)) {
+            let (fichier, id) = ((*p.document_famille).clone(), p.id.clone());
+            self.ouvrir_famille_document_projet(fichier, Some(id));
+            return;
+        }
+        let Some(profil) = modele::gabarit::actif().profils.first().cloned().or_else(|| modele::gabarit::Gabarit::defaut().profils.first().cloned()) else { return };
+        let noms: Vec<String> = self.natif.as_ref().map(|(p, _)| p.profils.iter().map(|x| x.nom.clone()).collect()).unwrap_or_default();
+        let mut document = *profil.document_famille;
+        document.nom = (1..).map(|n| format!("Profil {n}")).find(|nom| !noms.iter().any(|x| x.eq_ignore_ascii_case(nom))).unwrap();
+        self.ouvrir_famille_document_projet(document, None);
+    }
+
+    /// Ouvre un fichier de famille de profil (`.famille.json`) dans l'éditeur commun.
+    pub(crate) fn charger_profil_fichier(&mut self) {
+        let Some(chemin) = rfd::FileDialog::new().add_filter("Famille BIMedit", &["json"]).pick_file() else { return };
+        if let Err(e) = self.ouvrir_famille_fichier(&chemin) { self.error = Some(e); }
+    }
+
+    pub(crate) fn enregistrer_profil(&mut self, profil: &mut modele::famille::profil::Profil, original: Option<&str>, copie: bool) -> Result<(), String> {
+        let (projet, _) = self.natif.as_ref().ok_or("Aucun projet ouvert.")?;
+        let mut projet = projet.clone();
+        profil.nom = profil.nom.trim().to_string();
+        profil.valider()?;
+        if projet.profils.iter().any(|p| p.nom.eq_ignore_ascii_case(&profil.nom) && (copie || Some(p.id.as_str()) != original)) {
+            return Err("Un profil porte déjà ce nom. Choisissez un nom distinct.".into());
+        }
+        if copie || original.is_none() {
+            profil.id = noyau::uuid::uuid();
+            projet.profils.push(profil.clone());
+        } else {
+            let p = projet.profils.iter_mut().find(|p| Some(p.id.as_str()) == original).ok_or("Profil introuvable dans le projet.")?;
+            *p = profil.clone();
+        }
+        self.appliquer_projet(projet)
+    }
+
     pub(crate) fn selectionner_famille(&mut self, famille: FamilleCatalogue) {
         self.select(None, false);
         self.feuilles.selection = Default::default();

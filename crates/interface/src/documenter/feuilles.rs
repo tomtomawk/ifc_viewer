@@ -136,59 +136,37 @@ impl ViewerApp {
     }
 
     pub(crate) fn editer_cartouche(&mut self, source: Option<doc::FamilleCartouche>, feuille: Option<String>) {
-        if let Some((fichier, id)) = source.as_ref().and_then(|c| c.document_famille.as_ref().map(|f| ((**f).clone(), c.id.clone()))) {
-            self.ouvrir_famille_document_projet(fichier, Some(id));
-            if let Some(ed) = self.famille.as_mut() { ed.cible_feuille = feuille.clone(); }
-            return;
+        let noms: Vec<String> = self.natif.as_ref().map(|(p, _)| p.familles_cartouches.iter().map(|f| f.nom.clone()).collect()).unwrap_or_default();
+        match source {
+            Some(c) => self.ouvrir_famille_document_projet(*c.document_famille, Some(c.id)),
+            None => {
+                let mut document = *doc::FamilleCartouche::default().document_famille;
+                document.nom = (1..).map(|n| if n == 1 { "Cartouche personnalisé".into() } else { format!("Cartouche personnalisé {n}") })
+                    .find(|nom| !noms.contains(nom)).unwrap();
+                self.ouvrir_famille_document_projet(document, None);
+            }
         }
-        let projet_vide = modele::Projet::nouveau("Famille");
-        let p = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
-        let original = source.as_ref().map_or_else(String::new, |f| f.nom.clone());
-        let mut famille = source.unwrap_or_default();
-        if original.is_empty() {
-            famille.nom = (1..).map(|n| if n == 1 { "Cartouche personnalisé".into() } else { format!("Cartouche personnalisé {n}") })
-                .find(|nom| p.familles_cartouches.iter().all(|f| &f.nom != nom)).unwrap();
-        }
-        if original.is_empty() && let Some(mut document) = famille.document_famille.take() {
-            document.nom = famille.nom.clone();
-            self.ouvrir_famille_document_projet(*document, None);
-            if let Some(ed) = self.famille.as_mut() { ed.cible_feuille = feuille.clone(); }
-            return;
-        }
-        self.ouvrir_famille_plane(crate::familles::familles_planes::FamillePlane::Cartouche { famille, feuille, original });
+        if let Some(ed) = self.famille.as_mut() { ed.cible_feuille = feuille; }
     }
     /// Ouvre l'éditeur d'une famille d'étiquette de pièce : `famille` (Some("") : la
     /// standard ; None : nouvelle, copie de celle de la pièce), affectée à `piece`.
     pub(crate) fn editer_famille_etiquette(&mut self, famille: Option<String>, piece: Option<String>) {
-        if let Some((fichier, id)) = famille.as_ref().and_then(|id| self.natif.as_ref()?.0.familles_etiquettes.iter().find(|f| &f.id == id)).and_then(|f| f.document_famille.as_ref().map(|document| ((**document).clone(), f.id.clone()))) {
-            self.ouvrir_famille_document_projet(fichier, Some(id));
-            if let Some(ed) = self.famille.as_mut() { ed.cible_piece = piece.clone(); }
-            return;
-        }
         let projet_vide = modele::Projet::nouveau("Famille");
         let p = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
-        let actuelle = piece.as_ref().and_then(|id| p.pieces.iter().find(|x| &x.id == id)).map(|x| p.famille_etiquette(x));
-        let mut f = match &famille {
-            Some(id) => p.familles_etiquettes.iter().find(|f| &f.id == id).cloned().unwrap_or_else(doc::FamilleEtiquette::standard),
-            None => actuelle.unwrap_or_else(doc::FamilleEtiquette::standard),
-        };
-        let original = if famille.is_some() { f.id.clone() } else { String::new() };
-        if f.id.is_empty() {
-            // la standard ou une copie : nouvelle famille à l'enregistrement
+        let existante = famille.as_ref().and_then(|id| p.familles_etiquettes.iter().find(|f| &f.id == id)).cloned();
+        if let Some(f) = existante {
+            self.ouvrir_famille_document_projet(*f.document_famille, Some(f.id));
+        } else {
+            // la standard ou une copie de celle de la pièce : nouvelle famille à l'enregistrement
+            let actuelle = piece.as_ref().and_then(|id| p.pieces.iter().find(|x| &x.id == id)).map(|x| p.famille_etiquette(x));
+            let f = if famille.is_none() { actuelle.unwrap_or_else(doc::FamilleEtiquette::standard) } else { doc::FamilleEtiquette::standard() };
             let base = if famille.is_none() { format!("{} (copie)", f.nom) } else { "Étiquette de pièce".to_string() };
-            f.nom = (1..).map(|k| if k == 1 { base.clone() } else { format!("{base} {k}") }).find(|n| !p.familles_etiquettes.iter().any(|x| &x.nom == n)).unwrap();
-            f.id = String::new();
-        } else if famille.is_none() {
-            f.id = String::new();
-            f.nom = format!("{} (copie)", f.nom);
+            let nom = (1..).map(|k| if k == 1 { base.clone() } else { format!("{base} {k}") }).find(|n| !p.familles_etiquettes.iter().any(|x| &x.nom == n)).unwrap();
+            let mut document = *f.document_famille;
+            document.nom = nom;
+            self.ouvrir_famille_document_projet(document, None);
         }
-        if original.is_empty() && let Some(mut document) = f.document_famille.take() {
-            document.nom = f.nom.clone();
-            self.ouvrir_famille_document_projet(*document, None);
-            if let Some(ed) = self.famille.as_mut() { ed.cible_piece = piece.clone(); }
-            return;
-        }
-        self.ouvrir_famille_plane(crate::familles::familles_planes::FamillePlane::Etiquette { famille: f, piece, original });
+        if let Some(ed) = self.famille.as_mut() { ed.cible_piece = piece; }
     }
 
 
@@ -1030,55 +1008,4 @@ Famille de cartouche de la feuille."), None);
 /// L'outil Pièce suit la famille enregistrée s'il utilisait celle qu'on vient d'éditer.
 fn piece_outil_suit(outil: &str, original: &str) -> bool {
     !original.is_empty() && outil == original
-}
-
-pub(crate) fn dessiner_etiquette(ui: &mut egui::Ui, famille: &mut doc::FamilleEtiquette, exemple: Option<(&modele::Projet, &modele::Piece)>, tracer: bool, debut: &mut Option<[f64; 2]>) {
-    ui.label(if tracer { "Cliquer les deux extrémités du trait · Échap pour quitter" } else { "La croix rouge indique le point de la pièce" });
-    // zone de 60 × 30 mm du papier centrée sur le point
-    let (demi_l, demi_h) = (30.0f32, 15.0f32);
-    let largeur = ui.available_width().max(200.0);
-    let echelle = (largeur / (2.0 * demi_l)).min(240.0 / (2.0 * demi_h));
-    let (rect, reponse) = ui.allocate_exact_size(egui::vec2(largeur, 2.0 * demi_h * echelle), if tracer { Sense::click() } else { Sense::hover() });
-    let peintre = ui.painter_at(rect);
-    peintre.rect_filled(rect, 0.0, Color32::WHITE);
-    let ecran = |p: [f64; 2]| egui::pos2(rect.center().x + p[0] as f32 * echelle, rect.center().y - p[1] as f32 * echelle);
-    let rouge = egui::Stroke::new(1.0, Color32::from_rgb(220, 40, 40));
-    peintre.line_segment([rect.center() - egui::vec2(6.0, 0.0), rect.center() + egui::vec2(6.0, 0.0)], rouge);
-    peintre.line_segment([rect.center() - egui::vec2(0.0, 6.0), rect.center() + egui::vec2(0.0, 6.0)], rouge);
-    for t in &famille.traits { peintre.line_segment([ecran(t[0]), ecran(t[1])], egui::Stroke::new(1.0, Color32::BLACK)); }
-    for t in &famille.textes {
-        let texte = exemple.map_or(t.contenu.clone(), |(p, x)| doc::FamilleEtiquette::remplir(&t.contenu, p, x));
-        peintre.text(ecran(t.position), egui::Align2::CENTER_BOTTOM, texte, egui::FontId::proportional((t.hauteur as f32 * echelle).clamp(6.0, 40.0)), Color32::from_gray(30));
-    }
-    if let Some(a) = *debut { if let Some(b) = reponse.hover_pos() { peintre.line_segment([ecran(a), b], egui::Stroke::new(1.0, Color32::from_rgb(0, 120, 220))); } }
-    if reponse.clicked() {
-        if let Some(q) = reponse.interact_pointer_pos() {
-            let point = [((q.x - rect.center().x) / echelle) as f64, ((rect.center().y - q.y) / echelle) as f64];
-            if let Some(a) = debut.take() { famille.traits.push([a, point]); } else { *debut = Some(point); }
-        }
-    }
-    egui::CollapsingHeader::new("Textes et champs").default_open(true).show(ui, |ui| {
-        ui.label(format!("Champs : {}", doc::CHAMPS_ETIQUETTE));
-        let mut supprimer = None;
-        for (i, t) in famille.textes.iter_mut().enumerate() {
-            ui.push_id(("texte_etiquette", i), |ui| {
-                crate::outils::annoter::outils_texte::proprietes_texte(ui, &mut t.contenu, &mut t.position, true, crate::outils::annoter::outils_texte::CHAMPS_PIECE);
-                crate::outils::annoter::outils_texte::hauteur_texte(ui, &mut t.hauteur);
-                if ui.small_button("✕").clicked() { supprimer = Some(i); }
-            });
-        }
-        if let Some(i) = supprimer { famille.textes.remove(i); }
-        if ui.button("+ Texte").clicked() { famille.textes.push(doc::TexteCartouche { contenu: "{numero}".into(), position: [0.0, -6.0], hauteur: 2.0 }); }
-    });
-    egui::CollapsingHeader::new(format!("Traits ({})", famille.traits.len())).show(ui, |ui| {
-        let mut supprimer = None;
-        for (i, t) in famille.traits.iter_mut().enumerate() {
-            ui.horizontal(|ui| {
-                ui.label(format!("{}", i + 1));
-                for point in t { for coord in point { ui.add(egui::DragValue::new(coord).speed(0.25).max_decimals(2)); } }
-                if ui.small_button("✕").clicked() { supprimer = Some(i); }
-            });
-        }
-        if let Some(i) = supprimer { famille.traits.remove(i); }
-    });
 }

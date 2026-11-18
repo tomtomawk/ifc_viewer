@@ -564,7 +564,7 @@ pub fn primitives_pieces(p: &Projet, v: &Vue) -> Vec<Primitive> {
         }
         // étiquette : famille de la pièce, en mm du papier autour de son point
         let famille = p.famille_etiquette(x);
-        let (formes, textes) = famille.document_famille.as_ref().map_or_else(|| (famille.formes.clone(), famille.textes.clone()), |f| contenu_plan_famille(f, p));
+        let (formes, textes) = contenu_plan_famille(&famille.document_famille, p);
         // mm du papier → m du modèle
         let papier = v.echelle * 0.001;
         let centre = (o + DVec3::new(x.point[0], x.point[1], 0.0)) * 0.001;
@@ -591,13 +591,6 @@ pub fn primitives_pieces(p: &Projet, v: &Vue) -> Vec<Primitive> {
                 prim.element = element;
                 out.push(prim);
             }
-        }
-        for t in famille.traits.iter().filter(|_| famille.document_famille.is_none()) {
-            let [a, b] = t.map(|q| centre + (u * q[0] + h * q[1]) * papier);
-            let mut prim = ligne(a, b);
-            prim.style.couleur = couleur;
-            prim.element = element;
-            out.push(prim);
         }
     }
     out
@@ -1076,38 +1069,26 @@ pub const FORMATS: [(&str, f64, f64); 5] = [("A0", 1189.0, 841.0), ("A1", 841.0,
 /// Marge du cadre et taille du cartouche (mm).
 pub const MARGE: f64 = 10.0;
 
-/// Géométrie réutilisable d'un cartouche, en millimètres depuis son coin inférieur gauche.
+/// Famille de cartouche : document commun dont seuls les éléments 2D de la vue en plan
+/// sont rendus, en millimètres du papier depuis le coin inférieur gauche.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct FamilleCartouche {
-    /// Document complet de la famille ; les champs graphiques sont son rendu en plan.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub document_famille: Option<Box<crate::famille::modelee::FichierFamille>>,
+    pub document_famille: Box<crate::famille::modelee::FichierFamille>,
     #[serde(default)]
     pub id: String,
     pub nom: String,
     pub largeur: f64,
     pub hauteur: f64,
-    pub traits: Vec<[[f64; 2]; 2]>,
-    pub textes: Vec<TexteCartouche>,
-    /// Formes tracées dans le repère du papier, en millimètres.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub formes: Vec<AnnotationForme>,
 }
 
-/// Famille d'étiquette de pièce : traits et textes à champs, en mm du papier autour du
-/// point de la pièce (textes centrés sur leur position).
+/// Famille d'étiquette de pièce : document commun dont seuls les éléments 2D de la vue
+/// en plan sont rendus, en mm du papier autour du point de la pièce (textes centrés).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct FamilleEtiquette {
-    /// Document complet de la famille ; seules les annotations de plan sont rendues.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub document_famille: Option<Box<crate::famille::modelee::FichierFamille>>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub formes: Vec<AnnotationForme>,
+    pub document_famille: Box<crate::famille::modelee::FichierFamille>,
+    #[serde(default)]
     pub id: String,
     pub nom: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub traits: Vec<[[f64; 2]; 2]>,
-    pub textes: Vec<TexteCartouche>,
 }
 
 /// Prépare le rendu de la seule vue en plan d'une famille documentaire.
@@ -1136,22 +1117,13 @@ pub const CHAMPS_ETIQUETTE: &str = "{nom}, {numero}, {surface}, {perimetre}, {ni
 impl FamilleEtiquette {
     /// Étiquette standard : nom et numéro, surface dessous.
     pub fn standard() -> FamilleEtiquette {
-        let mut etiquette = FamilleEtiquette {
-            document_famille: None,
-            formes: Vec::new(),
-            id: String::new(),
-            nom: "Étiquette standard".into(),
-            traits: Vec::new(),
-            textes: vec![
-                TexteCartouche { contenu: "{nom} {numero}".into(), position: [0.0, 0.75], hauteur: 2.5 },
-                TexteCartouche { contenu: "{surface}".into(), position: [0.0, -3.0], hauteur: 2.5 },
-            ],
-        };
         use crate::famille::modelee::{CategorieFamille, Element2DFamille, FamilleModelee, FichierFamille, VueEsquisse, FORMAT_FAMILLE};
+        let nom = "Étiquette standard";
         let mut famille = FamilleModelee::vide(CategorieFamille::EtiquettePiece);
-        famille.elements_2d.extend(etiquette.textes.iter().map(|t| Element2DFamille::fixe(VueEsquisse::Plan, AnnotationForme::Texte { point: t.position, texte: t.contenu.clone() }, t.hauteur)));
-        etiquette.document_famille = Some(Box::new(FichierFamille { format: FORMAT_FAMILLE.into(), nom: etiquette.nom.clone(), largeur: 60.0, hauteur: 30.0, profondeur: 300.0, famille }));
-        etiquette
+        for (texte, y) in [("{nom} {numero}", 0.75), ("{surface}", -3.0)] {
+            famille.elements_2d.push(Element2DFamille::fixe(VueEsquisse::Plan, AnnotationForme::Texte { point: [0.0, y], texte: texte.into() }, 2.5));
+        }
+        FamilleEtiquette { id: String::new(), nom: nom.into(), document_famille: Box::new(FichierFamille { format: FORMAT_FAMILLE.into(), nom: nom.into(), largeur: 60.0, hauteur: 30.0, profondeur: 300.0, famille }) }
     }
 
     /// Texte `contenu` avec les champs de la pièce `x`.
