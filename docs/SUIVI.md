@@ -108,7 +108,7 @@ Objectif et lots : `docs/PLAN_FUSION_FAMILLES.md`. Avancement détaillé archiv�
 | F3 | Canevas de famille, reste : le canevas plan reste dessiné par egui (pas la caméra ni le rendu wgpu des vues de projet) ; libellés et textes des cotes de famille non mis à l'échelle de la vue ; pas de panoramique au clic droit ni de menu de vue ; fond de la vue 3D de famille non aligné | P2 | plan, « Navigation des vues de famille » ; `crates/interface/src/familles/editeur_famille/navigation.rs` |
 | F5 | Lot 7 : suite de tests complète, 38 tests Revit, recette visuelle | P1 | plan, lot 7 |
 | F6 | Formes guidées, reste : chemin tracé hors du plan de la vue (D), raccordement sur chemin fermé, outil « Tracer le chemin » non essayé à l'écran | P3 | `docs/EDITION.md`, `docs/MODELE.md` |
-| F8 | Configurateur de familles ; escaliers et garde-corps paramétriques par famille | P3 | `docs/EDITION.md` |
+| F8 | Escaliers et garde-corps paramétriques par famille. Configurateur de familles : abandonné (décision du 18/11/2026) | P3 | `docs/EDITION.md` |
 
 ### 2.6 Structure du code
 

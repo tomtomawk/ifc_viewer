@@ -589,8 +589,7 @@ une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvre
 - Les textes PDF/SVG sont vectorisés en contours, pas en texte sélectionnable.
   Le PDF d'une feuille respecte son format exact ; l'export d'une vue seule ajoute
   une marge. Imprimer à **100 %**, sans « ajuster à la page ».
-- Le cadre de porte/fenêtre natif est une représentation simple. Un configurateur
-  de familles, les escaliers/garde-corps paramétriques par famille, les symboles,
+- Le cadre de porte/fenêtre natif est une représentation simple. Les escaliers/garde-corps paramétriques par famille, les symboles,
   les légendes, la fusion d'import et la comparaison de réimportations ne sont pas
   disponibles. Les sections circulaires et les poutres inclinées ne sont pas prises
   en charge. Les outils non raccordés sont désactivés. Le reste à faire est tenu
