@@ -6,7 +6,7 @@ use super::*;
 /// gardé) : poché, hachures et contours en trait fort, en primitives 2D dans le plan
 /// (repère de la scène). `echelle` : dénominateur de l'échelle du dessin (pas des
 /// hachures).
-pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: Poche) -> Vec<Primitive> {
+pub fn coupe(scene: &Scene, visible: &[bool], affichage: Affichage, plan: Vec4, echelle: f64, poche: Poche) -> Vec<Primitive> {
     let n = plan.truncate().as_dvec3();
     let d = plan.w as f64 / n.length().max(1e-12);
     let n = n.normalize_or_zero();
@@ -50,11 +50,11 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
             // sans bandes de matériau : chaque solide de l'élément (pièces d'une menuiserie)
             // est sectionné à part, sinon leurs contours jointifs se chaînent mal
             if !scene.couches_coupe.contains_key(&ob.id) {
-                return coupe_par_solides(scene, ob, n, d, o, e1, e2, poche, fond, hachure, &motif, echelle);
+                return coupe_par_solides(scene, ob, affichage, n, d, o, e1, e2, poche, fond, hachure, &motif, echelle);
             }
             let mut segs = Vec::new();
             for r in [ob.opaque, ob.transparent] {
-                for t in scene.vertices[r.start as usize..(r.start + r.count) as usize].chunks_exact(3) {
+                for t in scene.primitives_montrees(r, 3, affichage) {
                     let p = [0, 1, 2].map(|k| Vec3::from(t[k].pos).as_dvec3());
                     if let Some(s) = section(p, n, d) {
                         segs.push(s.map(|q| [(q - o).dot(e1), (q - o).dot(e2)]));
@@ -158,11 +158,11 @@ pub fn coupe(scene: &Scene, visible: &[bool], plan: Vec4, echelle: f64, poche: P
 /// chaque groupe donne ses propres contours, son poché et ses hachures. Un solide
 /// translucide (vitrage) reste blanc, sans hachure, au trait fin.
 #[allow(clippy::too_many_arguments)]
-fn coupe_par_solides(scene: &Scene, ob: &scene::SceneObject, n: DVec3, d: f64, o: DVec3, e1: DVec3, e2: DVec3, poche: Poche, fond: [u8; 4], hachure: Option<[u8; 4]>, motif: &Motif, echelle: f64) -> Vec<Primitive> {
+fn coupe_par_solides(scene: &Scene, ob: &scene::SceneObject, affichage: Affichage, n: DVec3, d: f64, o: DVec3, e1: DVec3, e2: DVec3, poche: Poche, fond: [u8; 4], hachure: Option<[u8; 4]>, motif: &Motif, echelle: f64) -> Vec<Primitive> {
     let cle = |p: [f32; 3]| p.map(|x| (x as f64 * 1e4).round() as i64);
     let mut tris: Vec<(usize, bool)> = Vec::new();
     for (r, translucide) in [(ob.opaque, false), (ob.transparent, true)] {
-        tris.extend((0..r.count as usize / 3).map(|k| (r.start as usize + 3 * k, translucide)));
+        tris.extend((0..r.count as usize / 3).map(|k| (r.start as usize + 3 * k, translucide)).filter(|(k, _)| scene.montre(*k, affichage)));
     }
     // union des triangles voisins par une arête
     let mut parent: Vec<usize> = (0..tris.len()).collect();

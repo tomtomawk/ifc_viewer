@@ -37,6 +37,7 @@ pub(crate) fn navigateur(projet: &Projet) -> Navigateur {
     for v in &projet.vues {
         let mut n = vue(num(&v.id), "", &v.nom, v.echelle);
         n.type_vue = v.type_vue.clone();
+        n.detail = v.niveau_detail.revit();
         match &v.genre {
             GenreVue::Plan { niveau, coupe, bas_niveau, bas_decalage } => {
                 n.limite_basse = projet.niveau(bas_niveau).map(|l| (l.altitude + bas_decalage) / 1000.0);

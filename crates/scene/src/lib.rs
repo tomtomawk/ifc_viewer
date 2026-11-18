@@ -157,6 +157,24 @@ impl ReperePartage {
 }
 
 impl Scene {
+    /// Le sommet `k` est montré dans une vue d'affichage `a` (niveau de détail et type).
+    pub fn montre(&self, k: usize, a: modele::famille::modelee::Affichage) -> bool {
+        self.visibilite.get(k).is_none_or(|m| a.montre(*m))
+    }
+
+    /// Primitives de `n` sommets de `r` (3 : triangles, 2 : traits) montrées avec `a`.
+    pub fn primitives_montrees(&self, r: Range, n: usize, a: modele::famille::modelee::Affichage) -> impl Iterator<Item = &[Vertex]> {
+        let debut = r.start as usize;
+        self.vertices[debut..debut + r.count as usize].chunks_exact(n).enumerate().filter(move |(k, _)| self.montre(debut + k * n, a)).map(|(_, t)| t)
+    }
+
+    /// Indices des sommets de `r` montrés avec `a`, ajoutés à `out` (les sommets d'un
+    /// même triangle ou trait partagent leur masque).
+    pub fn indices_montres(&self, r: Range, a: modele::famille::modelee::Affichage, out: &mut Vec<u32>) {
+        let plage = r.start..r.start + r.count;
+        if self.visibilite.is_empty() { out.extend(plage) } else { out.extend(plage.filter(|&k| self.montre(k as usize, a))) }
+    }
+
     /// Altitude du dessus le plus haut sous (x, y) sans dépasser `z_max` (repère de la
     /// scène) : sol, dalle, marche ou terrain, pour la marche en vue piéton. Les
     /// annotations et les ouvertures sont ignorées.
@@ -247,6 +265,9 @@ pub struct Scene {
     pub couleurs_rendu: Vec<[u8; 4]>,
     /// Motif de surface de chaque sommet : [premier plan | arrière-plan << 4, r, g, b].
     pub motifs_surface: Vec<[u8; 4]>,
+    /// Masque de visibilité de chaque sommet par niveau de détail et type de vue
+    /// (`VisibiliteElement::masque`, éléments des familles) ; vide : tout visible.
+    pub visibilite: Vec<u8>,
     /// Motifs de surface de la scène, indexés par les codes des sommets (moins un) :
     /// deux familles de traits (angle en radians, pas en mm du papier).
     pub table_motifs: Vec<[f32; 4]>,

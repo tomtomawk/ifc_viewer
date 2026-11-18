@@ -18,7 +18,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`, `scene`, `for
 
 ## Quand modifier ici
 
-Ce que l'on voit d'un élément du modèle dans la scène (couleurs, matériaux, arêtes, objets). Les volumes eux-mêmes restent dans `modele::volumes`.
+Ce que l'on voit d'un élément du modèle dans la scène (couleurs, matériaux, arêtes, objets). Les parties des familles (ouvertures, composants) portent leur masque de visibilité (`ProductGeom::visibilite`) ; leurs arêtes sont alors calculées par masque à l'assemblage, pas jointes aux autres éléments. Les volumes eux-mêmes restent dans `modele::volumes`.
 
 ## Pièges
 

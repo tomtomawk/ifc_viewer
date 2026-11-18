@@ -77,7 +77,7 @@ mod tests {
         f.plans.push(PlanRef { nom: "Ref".into(), axe: AxePlan::Z, position: 400.0, fixe: false, hote: None });
         let plan = PlanConstruction { id: "c1".into(), reference: Some("Ref".into()), nom: "Référence : Ref".into(), origine: [0.0; 3], horizontal: [1.0, 0.0, 0.0], vertical: [0.0, 1.0, 0.0] };
         let face = |x| Face { plan: String::new(), decalage: x };
-        f.extrusions.push(FormeProfil {
+        f.extrusions.push(FormeProfil { visibilite: Default::default(),
             operation: OperationForme::Extrusion, construction: Some(plan.id.clone()), nom: "Tablette".into(), vide: false,
             materiau: Materiau::Menuiserie, vue: VueEsquisse::Plan,
             profil: [[0.0, 0.0], [100.0, 0.0], [100.0, 50.0], [0.0, 50.0]].into_iter().map(|q| PointEsquisse { h: face(q[0]), v: face(q[1]) }).collect(),

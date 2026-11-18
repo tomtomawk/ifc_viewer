@@ -1051,11 +1051,15 @@ pub struct Vue {
     pub limite_haute_niveau: Option<String>,
     #[serde(default = "limite_haute_defaut")]
     pub limite_haute_decalage: f64,
+    /// Niveau de détail : visibilité des éléments des familles (absent : moyen).
+    #[serde(default, skip_serializing_if = "est_moyen")]
+    pub niveau_detail: famille::modelee::NiveauDetail,
     #[serde(flatten)]
     pub genre: GenreVue,
 }
 
 fn est_zero(v: &f64) -> bool { *v == 0.0 }
+fn est_moyen(d: &famille::modelee::NiveauDetail) -> bool { *d == famille::modelee::NiveauDetail::Moyen }
 fn champ_camera_defaut() -> f64 { 50.0 }
 fn limite_haute_defaut() -> f64 { 2800.0 }
 

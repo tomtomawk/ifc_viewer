@@ -28,6 +28,9 @@ pub fn exporter_fichier(p: &Projet, nom_fichier: &str) -> Result<String, String>
 }
 
 /// Entités du fichier (section DATA), sans l'en-tête.
+/// Éléments de famille exportés : ceux d'une vue 3D de niveau de détail moyen.
+const EXPORT: modele::famille::modelee::Affichage = modele::famille::modelee::Affichage { detail: modele::famille::modelee::NiveauDetail::Moyen, vue: modele::famille::modelee::TypeVue::Vue3d };
+
 fn contenu(p: &Projet) -> Result<Step, String> {
     p.verifier()?;
     let mut w = Step { lignes: Vec::new() };
@@ -212,7 +215,7 @@ fn contenu(p: &Projet) -> Result<Step, String> {
     }
     for c in &p.composants {
         let solides = c.solides(p)?;
-        let parts: Vec<_> = solides.iter().map(|(m, t)| (m.as_deref(), t.as_slice())).collect();
+        let parts: Vec<_> = solides.iter().filter(|(_, k, _)| EXPORT.montre(*k)).map(|(m, _, t)| (m.as_deref(), t.as_slice())).collect();
         let rep = styles.forme(&mut w, p, contexte, &parts, &[]);
         let id = w.add(format!("IFCFURNITURE('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&c.id, None), texte(&c.nom), ref_(rep)));
         contenus.entry(niveaux[&c.niveau]).or_default().push(id);
@@ -278,7 +281,7 @@ fn contenu(p: &Projet) -> Result<Step, String> {
         ));
         if o.genre != GenreOuverture::Libre {
             let menuiserie = solides::ouverture_parts(p, o)?;
-            let parts: Vec<_> = menuiserie.iter().map(|(_, m, t)| (m.as_deref(), t.as_slice())).collect();
+            let parts: Vec<_> = menuiserie.iter().filter(|(_, _, k, _)| EXPORT.montre(*k)).map(|(_, m, _, t)| (m.as_deref(), t.as_slice())).collect();
             let rep = styles.forme(&mut w, p, contexte, &parts, &[]);
             let classe = if o.genre == GenreOuverture::Porte {
                 "IFCDOOR"

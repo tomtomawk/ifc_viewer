@@ -978,6 +978,7 @@ impl ViewerApp {
             use std::hash::{Hash, Hasher};
             let mut h = std::collections::hash_map::DefaultHasher::new();
             self.visible.hash(&mut h);
+            self.affichage().hash(&mut h);
             h.finish()
         } else { 0 };
         let plan_coupe = if selection { self.plan_coupe().map(|p| p.to_array().map(f32::to_bits)) } else { None };
@@ -1069,7 +1070,7 @@ impl ViewerApp {
             // Les contours réellement coupés comprennent notamment les ouvertures et
             // les éléments qui ne disposent pas d'un contour natif en plan.
             let arcs: std::collections::HashSet<_> = p.murs.iter().filter(|m| matches!(m.axe, modele::Axe::Arc { .. })).map(|m| modele::identifiants::id_natif("mur", &m.id)).collect();
-            let mut traits = moteur2d::coupe(scene, &self.visible, plan, self.echelle, moteur2d::Poche::Vide);
+            let mut traits = moteur2d::coupe(scene, &self.visible, self.affichage(), plan, self.echelle, moteur2d::Poche::Vide);
             traits.extend(self.aretes_au_dessus_plan());
             let point = |v: DVec3| (v + scene.origin).truncate() * 1000.0;
             for prim in traits {

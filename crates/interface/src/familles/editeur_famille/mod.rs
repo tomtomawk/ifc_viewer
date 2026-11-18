@@ -24,10 +24,11 @@ mod construction;
 mod reseau;
 mod aligner;
 mod chemin_trace;
+pub(crate) mod apercu;
 pub(crate) mod navigation; mod rendu;
 use navigation::*; use rendu::*;
 use crate::*;
-use modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
+use modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, VisibiliteElement, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
 use modele::famille::modelee::FichierFamille;
 use modele::documentation::GenreCote;
 use modele::GenreOuverture;
@@ -195,6 +196,9 @@ pub(crate) struct EditeurFamille {
     vues_ouvertes: Vec<usize>,
     camera_3d: moteur3d::camera::Camera,
     cadrage_3d_initial: bool,
+    /// Niveau de détail de la vue de famille et aperçu « comme dans le projet » (F9).
+    detail: NiveauDetail,
+    apercu: bool,
     navigation: [NavigationFamille;4],
     rect_navigation: egui::Rect,
     outil: OutilFamille,

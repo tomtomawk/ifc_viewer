@@ -67,7 +67,7 @@ impl ViewerApp {
         let f=self.camera.forward().as_dvec3().normalize();
         let droite=f.cross(self.camera.up().as_dvec3()).normalize();
         let haut=droite.cross(f);
-        moteur2d::aretes_plage_haute(s,&visible,droite,haut,-f,plan.w,limite)
+        moteur2d::aretes_plage_haute(s,&visible,self.affichage(),droite,haut,-f,plan.w,limite)
     }
 
     /// Objets à dessiner en pointillés dans la plage haute et altitude de la limite haute.
@@ -106,7 +106,7 @@ impl ViewerApp {
         let elevation = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).is_some_and(|v| v.genre == "Élévation" && v.plan_coupe.is_some());
         let (mut tris, mut traits) = match (&self.scene, self.plan_coupe().filter(|_| !elevation)) {
             (Some(s), Some(p)) => {
-                let prims = moteur2d::coupe(s, &self.visible, p, self.echelle, self.poche_style());
+                let prims = moteur2d::coupe(s, &self.visible, self.affichage(), p, self.echelle, self.poche_style());
                 moteur2d::sommets(&|e| s.object_of.get(&e).copied(), &prims, p.truncate().as_dvec3().normalize(), self.echelle, self.traits_fins)
             }
             _ => Default::default(),
@@ -121,7 +121,7 @@ impl ViewerApp {
         noyau::chrono::chrono_lent("coupe : fond de plan et éléments au-dessus", &mut t_etape);
         if let (Some(s), Some((a, b))) = (&self.scene, self.boite_appliquee()) {
             let poche = (self.style == StyleVisuel::Graphique).then_some(self.poche);
-            let (t, l) = moteur2d::sommets_boite(s, &self.visible, a, b, self.echelle, poche, self.style == StyleVisuel::Realiste, self.traits_fins);
+            let (t, l) = moteur2d::sommets_boite(s, &self.visible, self.affichage(), a, b, self.echelle, poche, self.style == StyleVisuel::Realiste, self.traits_fins);
             tris.extend(t);
             traits.extend(l);
         }
@@ -155,9 +155,9 @@ impl ViewerApp {
         primitives.extend(self.primitives_au_dessus_plan());
         let coupe = self.plan_coupe();
         if let Some(p) = coupe {
-            primitives.extend(moteur2d::coupe(s, &self.visible, p, self.echelle, self.poche_style()));
+            primitives.extend(moteur2d::coupe(s, &self.visible, self.affichage(), p, self.echelle, self.poche_style()));
         }
-        primitives.extend(moteur2d::vu(s, &self.visible, droite, haut, -f, coupe, 4096));
+        primitives.extend(moteur2d::vu(s, &self.visible, self.affichage(), droite, haut, -f, coupe, 4096));
         primitives = moteur2d::cadrer_primitives(primitives, &self.cadrage_vue(), -f);
         // éléments 2D de la vue Revit ouverte, s'ils sont affichés (repère du fichier →
         // repère de la scène)

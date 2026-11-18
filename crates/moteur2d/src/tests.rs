@@ -105,7 +105,7 @@ fn isolant_suit_le_mur_courbe_dans_la_coupe_native() {
     projet.completer_materiaux();
     let scene = maillage::depuis_natif(&projet, std::path::Path::new("test.modele.json")).unwrap();
     let plan = Vec3::NEG_Z.extend((1.0 - scene.origin.z) as f32);
-    let primitives = super::coupe(&scene, &vec![true; scene.objects.len()], plan, 100.0, Poche::Hachure);
+    let primitives = super::coupe(&scene, &vec![true; scene.objects.len()], TOUT, plan, 100.0, Poche::Hachure);
     let segments: Vec<_> = primitives.iter().filter(|p| p.role == Role::Hachure).flat_map(|p| match &p.forme { Forme::Segments(s) => s.clone(), _ => Vec::new() }).collect();
     assert!(segments.len() > 100, "{} segments", segments.len());
     let rayon = |p: DVec3| (p.x + scene.origin.x - 12.0).hypot(p.y + scene.origin.y + 8.0);
@@ -129,7 +129,7 @@ fn ossature_coupee_en_plan_montants_et_travees() {
     projet.ajouter_mur_axe(Axe::Arc { debut: [17000.0, -8000.0], fin: [12000.0, -3000.0], centre: [12000.0, -8000.0], direct: true }, &options).unwrap();
     let scene = maillage::depuis_natif(&projet, std::path::Path::new("test.modele.json")).unwrap();
     let plan = Vec3::NEG_Z.extend((1.0 - scene.origin.z) as f32);
-    let primitives = super::coupe(&scene, &vec![true; scene.objects.len()], plan, 100.0, Poche::Materiau);
+    let primitives = super::coupe(&scene, &vec![true; scene.objects.len()], TOUT, plan, 100.0, Poche::Materiau);
     let aire = |couleur: [u8; 4], droit: bool| -> f64 {
         primitives.iter().filter(|p| p.role == Role::Poche && p.style.couleur == couleur).flat_map(|p| match &p.forme { Forme::Triangles(t) => t.clone(), _ => Vec::new() })
             .filter(|t| ((t[0].y + scene.origin.y).abs() < 0.5) == droit)
@@ -140,7 +140,7 @@ fn ossature_coupee_en_plan_montants_et_travees() {
     assert!((bois - 6.0 * 0.045 * 0.145).abs() < 1e-6, "{bois}");
     assert!((bois + laine - 3.0 * 0.145).abs() < 1e-6, "{laine}");
     // la ligne d'isolant de chaque travée reste dans l'épaisseur du mur droit
-    let hachures = super::coupe(&scene, &vec![true; scene.objects.len()], plan, 100.0, Poche::Hachure);
+    let hachures = super::coupe(&scene, &vec![true; scene.objects.len()], TOUT, plan, 100.0, Poche::Hachure);
     let isolant: Vec<_> = hachures.iter().filter(|p| p.role == Role::Hachure).flat_map(|p| match &p.forme { Forme::Segments(s) => s.clone(), _ => Vec::new() })
         .filter(|s| (s[0].y + scene.origin.y).abs() < 0.5).collect();
     assert!(isolant.len() > 100);
@@ -166,7 +166,7 @@ fn fenetre_coupee_piece_par_piece() {
         let id = modele::identifiants::id_natif("ouverture", &format!("o{k}"));
         // coupe verticale dans un vantail, coupe horizontale à mi-hauteur
         for plan in [Vec3::NEG_X.extend((2.3 - scene.origin.x) as f32), Vec3::NEG_Z.extend((0.8 - scene.origin.z) as f32)] {
-            let prims: Vec<_> = super::coupe(&scene, &vec![true; scene.objects.len()], plan, 20.0, Poche::Hachure).into_iter().filter(|p| p.element == Some(id)).collect();
+            let prims: Vec<_> = super::coupe(&scene, &vec![true; scene.objects.len()], TOUT, plan, 20.0, Poche::Hachure).into_iter().filter(|p| p.element == Some(id)).collect();
             // chaque pièce a son contour fermé
             assert!(prims.iter().all(|p| !matches!(p.forme, Forme::Polyligne { fermee: false, .. })), "{} : contour ouvert", t.nom);
             let pieces = prims.iter().filter(|p| p.role == Role::Poche).count();
@@ -251,7 +251,7 @@ fn section_box_six_faces_pleines() {
     let s = scene_section(cube());
     let a = Vec3::splat(0.2);
     let b = Vec3::splat(0.8);
-    let (v, _) = sommets_boite(&s, &[true], a, b, 100.0, Some(Poche::Plein), false, false);
+    let (v, _) = sommets_boite(&s, &[true], TOUT, a, b, 100.0, Some(Poche::Plein), false, false);
     assert!((aire_poche(&v) - 6.0 * 0.6 * 0.6).abs() < 1e-5);
     assert!(v.iter().all(|v| { let p = Vec3::from(v.pos); p.cmpge(a - Vec3::splat(1e-6)).all() && p.cmple(b + Vec3::splat(1e-6)).all() }));
 }
@@ -261,7 +261,7 @@ fn section_box_conserve_le_vide_interieur() {
     let mut tris = cube();
     tris.extend(cube().into_iter().map(|t| t.map(|p| p * 0.5 + DVec3::splat(0.25))));
     let s = scene_section(tris);
-    let (v, _) = sommets_boite(&s, &[true], Vec3::splat(-1.0), Vec3::new(2.0, 2.0, 0.5), 100.0, Some(Poche::Plein), false, false);
+    let (v, _) = sommets_boite(&s, &[true], TOUT, Vec3::splat(-1.0), Vec3::new(2.0, 2.0, 0.5), 100.0, Some(Poche::Plein), false, false);
     assert!((aire_poche(&v) - 0.75).abs() < 1e-6, "aire {}", aire_poche(&v));
 }
 
@@ -274,14 +274,14 @@ fn section_box_couches_materiaux_et_cavite() {
         plans: vec![Vec3::X.extend(-a),Vec3::NEG_X.extend(b)], couleur, fond: [255,255,255,255], motif_fond: None, motif: None, couleur_motif: [70,70,70,255], hachure_defaut: true, isolation: false, centre_isolation: None, trait_mm: TRAIT_FORT_MM,
     };
     s.couches_coupe.insert(1,vec![bande(0.0,0.2,[190,120,120,255]),bande(0.2,1.0,[120,190,120,255])]);
-    let p = coupe(&s,&[true],Vec3::NEG_Z.extend(0.5),100.0,Poche::Hachure);
+    let p = coupe(&s,&[true], TOUT,Vec3::NEG_Z.extend(0.5),100.0,Poche::Hachure);
     let surfaces: Vec<_> = p.iter().filter(|p| p.role == Role::Poche).collect();
     assert_eq!(surfaces.len(),2);
     let aire = |p: &Primitive| p.mailler(DVec3::NEG_Z,100.0).triangles.iter().map(|t| (t[1]-t[0]).cross(t[2]-t[0]).length()*0.5).sum::<f64>();
     assert!((aire(surfaces[0])-0.2).abs()<1e-6);
     assert!((aire(surfaces[1])-0.55).abs()<1e-6);
     assert!(p.iter().any(|p| p.role == Role::Hachure));
-    let (v,_) = sommets_boite(&s,&[true],Vec3::splat(-1.0),Vec3::new(2.,2.,0.5),100.0,None,false, false);
+    let (v,_) = sommets_boite(&s,&[true], TOUT,Vec3::splat(-1.0),Vec3::new(2.,2.,0.5),100.0,None,false, false);
     assert!(v.iter().any(|v| v.color == [190,120,120,255]));
     assert!(v.iter().any(|v| v.color == [120,190,120,255]));
 }
@@ -290,7 +290,7 @@ fn section_box_couches_materiaux_et_cavite() {
 fn section_box_hachures_bornees() {
     let s = scene_section(cube());
     let (a, b) = (Vec3::splat(0.2), Vec3::splat(0.8));
-    let (_, traits) = sommets_boite(&s, &[true], a, b, 100.0, Some(Poche::Hachure), false, false);
+    let (_, traits) = sommets_boite(&s, &[true], TOUT, a, b, 100.0, Some(Poche::Hachure), false, false);
     assert!(!traits.is_empty());
     assert!(traits.iter().all(|v| { let p = Vec3::from(v.pos); p.cmpge(a - Vec3::splat(1e-6)).all() && p.cmple(b + Vec3::splat(1e-6)).all() }));
 }
@@ -299,7 +299,7 @@ fn section_box_hachures_bornees() {
 fn section_box_sans_coupe_ou_objet_masque() {
     let s = scene_section(cube());
     for (visible, a, b) in [(true, Vec3::splat(-1.0), Vec3::splat(2.0)), (false, Vec3::splat(0.2), Vec3::splat(0.8))] {
-        let (v, t) = sommets_boite(&s, &[visible], a, b, 100.0, Some(Poche::Plein), false, false);
+        let (v, t) = sommets_boite(&s, &[visible], TOUT, a, b, 100.0, Some(Poche::Plein), false, false);
         assert!(v.is_empty() && t.is_empty());
     }
 }
@@ -308,12 +308,12 @@ fn section_box_sans_coupe_ou_objet_masque() {
 fn section_box_couleur_matiere_et_modification() {
     let s = scene_section(cube());
     for rendu in [false, true] {
-        let (v, _) = sommets_boite(&s, &[true], Vec3::splat(0.2), Vec3::splat(0.8), 100.0, None, rendu, false);
+        let (v, _) = sommets_boite(&s, &[true], TOUT, Vec3::splat(0.2), Vec3::splat(0.8), 100.0, None, rendu, false);
         let couleur = if rendu { [110, 130, 150, 255] } else { [140, 160, 180, 255] };
         assert!(v.iter().any(|v| v.color == couleur));
         assert!(v.iter().all(|v| v.obj == 0));
     }
-    let (v, _) = sommets_boite(&s, &[true], Vec3::splat(0.3), Vec3::splat(0.7), 100.0, Some(Poche::Plein), false, false);
+    let (v, _) = sommets_boite(&s, &[true], TOUT, Vec3::splat(0.3), Vec3::splat(0.7), 100.0, Some(Poche::Plein), false, false);
     assert!((aire_poche(&v) - 6.0 * 0.4 * 0.4).abs() < 1e-5);
 }
 
@@ -400,7 +400,7 @@ fn isolant_ossature_couvre_chaque_travee_en_coupe() {
         projet.ajouter_mur([0.0, 0.0], [3000.0, 0.0], &ParametresMur { type_mur: Some("mob".into()), ..Default::default() }).unwrap();
         let scene = maillage::depuis_natif(&projet, std::path::Path::new("test.modele.json")).unwrap();
         let plan = Vec3::NEG_X.extend((0.3 - scene.origin.x) as f32);
-        let prims = super::coupe(&scene, &vec![true; scene.objects.len()], plan, 50.0, Poche::Hachure);
+        let prims = super::coupe(&scene, &vec![true; scene.objects.len()], TOUT, plan, 50.0, Poche::Hachure);
         let etendue = |pts: Vec<DVec3>| pts.iter().map(|q| q.z + scene.origin.z).fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), z| (a.min(z), b.max(z)));
         // travées de remplissage : surfaces hautes de plus de 10 cm
         let travees: Vec<(f64, f64)> = prims.iter().filter(|p| p.role == Role::Poche).filter_map(|p| match &p.forme { Forme::Triangles(t) => Some(etendue(t.iter().flatten().copied().collect())), _ => None }).filter(|(a, b)| b - a > 0.1).collect();
@@ -410,4 +410,35 @@ fn isolant_ossature_couvre_chaque_travee_en_coupe() {
             assert!(hachures.iter().any(|(h0, h1)| (h0 - a).abs() < 0.02 && (h1 - b).abs() < 0.02), "horizontale={horizontale}, altitude={altitude} : travée [{a:.3}, {b:.3}] mal couverte ; hachures {hachures:?}");
         }
     }
+}
+
+/// F9 : pieds de table réservés au niveau de détail élevé et plateau exclu des plans ;
+/// la coupe et les arêtes vues suivent l'affichage demandé.
+#[test]
+fn coupe_et_vu_filtrent_les_elements_de_famille() {
+    use modele::elements::composant::{type_table, Composant};
+    use modele::famille::modelee::{Affichage, NiveauDetail, TypeVue};
+    let mut p = modele::Projet::nouveau("T");
+    p.niveaux.push(modele::Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
+    let mut t = type_table();
+    for pied in &mut t.modele.volumes[1..] {
+        pied.visibilite.faible = false;
+        pied.visibilite.moyen = false;
+    }
+    t.modele.volumes[0].visibilite.plan = false;
+    p.composants.push(Composant { id: "c".into(), nom: "c".into(), type_composant: t.id.clone(), niveau: "n".into(), position: [0.0; 2], decalage: 0.0, rotation: 0.0 });
+    p.types_composants.push(t);
+    let s = maillage::depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
+    let visible = vec![true; s.objects.len()];
+    let a = |detail, vue| Affichage { detail, vue };
+    // coupe à 40 cm : seuls les pieds sont coupés
+    let plan = Vec3::NEG_Z.extend((0.4 - s.origin.z) as f32);
+    let coupees = |x| super::coupe(&s, &visible, x, plan, 50.0, Poche::Hachure).len();
+    assert!(coupees(a(NiveauDetail::Eleve, TypeVue::Plan)) > 0);
+    assert_eq!(coupees(a(NiveauDetail::Faible, TypeVue::Plan)), 0);
+    // vu de dessus : le plateau n'est pas dessiné en plan, il l'est en coupe
+    let vues = |x| super::vu(&s, &visible, x, DVec3::X, DVec3::Y, DVec3::Z, None, 256).len();
+    assert_eq!(vues(a(NiveauDetail::Faible, TypeVue::Plan)), 0);
+    assert!(vues(a(NiveauDetail::Faible, TypeVue::Coupe)) > 0);
+    assert!(vues(a(NiveauDetail::Eleve, TypeVue::Plan)) > 0);
 }

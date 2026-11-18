@@ -218,7 +218,9 @@ Raccourcis existants :
   `nuages`, `brume`, `intensite_soleil`, `intensite_ciel`, `taille_soleil`, `sol`, `exposition_auto`, `exposition` en EV).
   Style, ombres, soleil et ciel sont enregistrés par vue dans `projet.rendus_vues`.
 - `ombres portees|ambiante oui|non` ; `coupe non` ou `coupe hauteur [niveau]` ; `niveaux` ;
-  `poche hachure|plein|vide` ; `echelle denominateur`.
+  `poche hachure|plein|vide` ; `echelle denominateur` ; `niveau_detail [faible|moyen|eleve]`
+  (lit ou règle le niveau de détail de la vue ouverte, enregistré dans la vue native ;
+  réponse `niveau_detail`, `type_vue`).
 - `capture vue|fenetre [LxH] <chemin.png>` ; `taille largeur hauteur` ; `reduire` ; `restaurer`.
 - `quitter [abandonner]` : sortie sans dialogue ; refuse des documents modifiés
   sauf abandon explicite, et refuse les opérations en cours.
@@ -252,6 +254,14 @@ par des murs (refus si le contour n'est pas fermé).
 `ajuster_angle` reçoit `id`, `reference`, `fin` et `fin_reference` et modifie les deux
 murs atomiquement. `volets_etat` décrit les fenêtres natives et leurs rectangles ;
 `volets_retablir` réancre les deux volets. Fermer un volet externe conserve le projet.
+`famille_vue [etat|detail faible|moyen|eleve|apercu oui|non]` règle la barre de la vue de
+famille : niveau de détail et aperçu « comme dans le projet » (niveau de détail, type de
+la vue ouverte et paramètres « Visible si » appliqués comme à une occurrence). Réponse :
+`detail`, `apercu`, `type_vue` et `caches` (indices des `volumes`, `extrusions` et
+`elements_2d` qu'une vue du projet de même niveau et de même type cacherait).
+`famille_visibilite volume|extrusion|element_2d <indice> {"faible":false,"plan":false,"visible_si":"Param"}`
+modifie la visibilité d'un élément (clés `faible`, `moyen`, `eleve`, `plan`, `coupe`,
+`vue_3d` booléennes, `visible_si` nom d'un paramètre oui/non ou `null`) ; même réponse.
 `famille_navigation etat|elevation|plan|coupe|3d|cadrer` décrit ou choisit la vue de
 travail et son cadrage (caméra de la vue plane : `distance`, `cible` en m). La molette (`saisie defiler`) et le glissement au bouton
 `milieu` utilisent la navigation réelle de l'éditeur, sans toucher au modèle.

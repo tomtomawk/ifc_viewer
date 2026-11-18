@@ -168,7 +168,7 @@ fn guidage_famille_rechargee_et_repere_oblique() {
     famille.volumes.clear(); famille.extrusions.clear();
     let plan=PlanConstruction::deux_points("Oblique".into(),VueEsquisse::Plan,[0.0,0.0],[100.0,100.0]).unwrap();
     let face=|v| Face {plan:String::new(),decalage:v};
-    famille.extrusions.push(FormeProfil {
+    famille.extrusions.push(FormeProfil { visibilite: Default::default(),
         operation: super::super::OperationForme::Guidage { guidage: FormeGuidee::raccordement_chemin(profil().iter().map(|p| [p[0]*0.5,p[1]*0.5]).collect(),vec![[0.0;3],[0.0,0.0,1000.0]]) },construction:Some(plan.id.clone()),nom:"Guidage test".into(),vide:true,materiau:Materiau::Menuiserie,vue:VueEsquisse::Plan,
         profil:profil().iter().map(|p| PointEsquisse {h:face(p[0]),v:face(p[1])}).collect(),
         profondeur:[face(0.0),face(1000.0)],visible:None,materiau_parametre:None,
@@ -196,7 +196,7 @@ fn second_profil_pilote_par_les_plans() {
     let profil: Vec<_>=carre(100.0).iter().map(|q| pt(q[0],q[1])).collect();
     let ancrage: Vec<_>=(0..6).map(|k| { let a=(60.0*k as f64).to_radians(); pt((60.0*a.cos()).round(),(60.0*a.sin()).round()) }).collect();
     let guidage=FormeGuidee::Raccordement { profil_fin: vec![], hauteur: 500.0, ancrage_fin: Some(ancrage) };
-    famille.extrusions.push(FormeProfil { operation: OperationForme::Guidage { guidage }, construction: None, nom: "Raccord ancré".into(), vide: false, materiau: Materiau::Menuiserie,
+    famille.extrusions.push(FormeProfil { visibilite: Default::default(), operation: OperationForme::Guidage { guidage }, construction: None, nom: "Raccord ancré".into(), vide: false, materiau: Materiau::Menuiserie,
         vue: VueEsquisse::Elevation, profil, profondeur: [Face { plan: plan_d.clone(), decalage: 0.0 }, Face { plan: plan_d.clone(), decalage: 100.0 }], visible: None, materiau_parametre: None });
     famille.valider(1200.0,1350.0,300.0).unwrap();
     let r=famille.resoudre(1200.0,1350.0,300.0);

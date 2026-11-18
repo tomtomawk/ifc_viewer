@@ -3,7 +3,7 @@
 //! décalage sur chaque axe de la vue) par point de sa forme ; à la résolution, ces
 //! points sont recalculés depuis la position des plans, et la forme suit les
 //! paramètres (sens d'ouverture, débattement, tracés qui suivent largeur et hauteur).
-use super::{FamilleModelee, PointEsquisse, Resolution, VueEsquisse};
+use super::{Affichage, FamilleModelee, NiveauDetail, PointEsquisse, Resolution, TypeVue, VisibiliteElement, VueEsquisse};
 use crate::documentation::{AnnotationForme, RemplissageContour};
 use serde::{Deserialize, Serialize};
 
@@ -22,12 +22,18 @@ pub struct Element2DFamille {
     /// `points_ancrables_mut` ; vide : coordonnées fixes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ancrage: Vec<PointEsquisse>,
+    /// Paramètre oui/non qui commande l'affichage (None : toujours visible).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visible: Option<String>,
+    /// Visibilité par niveau de détail et par type de vue (absente : partout).
+    #[serde(default, skip_serializing_if = "VisibiliteElement::partout")]
+    pub visibilite: VisibiliteElement,
 }
 
 impl Element2DFamille {
     /// Élément à coordonnées fixes.
     pub fn fixe(vue: VueEsquisse, forme: AnnotationForme, hauteur: f64) -> Self {
-        Self { vue, forme, hauteur, ancrage: Vec::new() }
+        Self { vue, forme, hauteur, ancrage: Vec::new(), visible: None, visibilite: VisibiliteElement::default() }
     }
 
     /// Élément ancré : un sommet par point ancrable de la forme ; les coordonnées de
@@ -37,7 +43,7 @@ impl Element2DFamille {
         if let Some(points) = points_ancrables_mut(&mut forme) {
             for (p, a) in points.into_iter().zip(&ancrage) { *p = [a.h.decalage, a.v.decalage]; }
         }
-        Self { vue, forme, hauteur: 2.5, ancrage }
+        Self { vue, forme, hauteur: 2.5, ancrage, visible: None, visibilite: VisibiliteElement::default() }
     }
 
     /// Polyligne ancrée (ouverte ou fermée).
@@ -92,7 +98,7 @@ impl FamilleModelee {
                 *p = [h, v];
             }
         }
-        Element2DFamille::fixe(e.vue, forme, e.hauteur)
+        Element2DFamille { ancrage: Vec::new(), forme, ..e.clone() }
     }
 
     /// Contenu graphique d'une vue, dans son repère local, points ancrés résolus.
@@ -100,9 +106,16 @@ impl FamilleModelee {
         self.elements_2d.iter().filter(|e| e.vue == vue).map(|e| self.element_resolu(r, e)).collect()
     }
 
-    /// Traits de la vue `vue` résolus en polylignes (h, v) ; arcs et courbes discrétisés.
-    pub fn lignes_2d_resolues(&self, r: &Resolution, vue: VueEsquisse) -> Vec<Vec<(f64, f64)>> {
-        self.elements_2d_resolus(r, vue).into_iter()
+    /// Éléments de la vue `vue` montrés dans une vue du projet de niveau de détail
+    /// `detail` (type de vue tiré de `vue`, paramètre « Visible si » appliqué), résolus.
+    pub fn elements_2d_affiches(&self, r: &Resolution, vue: VueEsquisse, detail: NiveauDetail) -> Vec<Element2DFamille> {
+        let a = Affichage { detail, vue: TypeVue::depuis_esquisse(vue) };
+        self.elements_2d_resolus(r, vue).into_iter().filter(|e| e.visibilite.montre(a) && self.visible(r, &e.visible)).collect()
+    }
+
+    /// Traits affichés de la vue `vue` en polylignes (h, v) ; arcs et courbes discrétisés.
+    pub fn lignes_2d_resolues(&self, r: &Resolution, vue: VueEsquisse, detail: NiveauDetail) -> Vec<Vec<(f64, f64)>> {
+        self.elements_2d_affiches(r, vue, detail).into_iter()
             .filter_map(|e| e.forme.forme_2d())
             .flat_map(|f| f.polylignes())
             .map(|ligne| ligne.into_iter().map(|p| (p.x, p.y)).collect())
@@ -110,8 +123,8 @@ impl FamilleModelee {
     }
 
     /// Régions 2D remplies de la vue `vue` : contour fermé développé (h, v) et remplissage.
-    pub fn regions_resolues(&self, r: &Resolution, vue: VueEsquisse) -> Vec<(Vec<(f64, f64)>, RemplissageContour)> {
-        self.elements_2d_resolus(r, vue).into_iter().filter_map(|e| {
+    pub fn regions_resolues(&self, r: &Resolution, vue: VueEsquisse, detail: NiveauDetail) -> Vec<(Vec<(f64, f64)>, RemplissageContour)> {
+        self.elements_2d_affiches(r, vue, detail).into_iter().filter_map(|e| {
             let AnnotationForme::Polyligne { fermee: true, remplissage: Some(m), .. } = &e.forme else { return None };
             let contour = e.forme.contour_developpe()?;
             Some((contour.into_iter().map(|p| (p[0], p[1])).collect(), m.clone()))
@@ -119,8 +132,8 @@ impl FamilleModelee {
     }
 
     /// Textes de la vue `vue` résolus : position (h, v), contenu, hauteur papier.
-    pub fn textes_resolus(&self, r: &Resolution, vue: VueEsquisse) -> Vec<((f64, f64), String, f64)> {
-        self.elements_2d_resolus(r, vue).into_iter().filter_map(|e| match e.forme {
+    pub fn textes_resolus(&self, r: &Resolution, vue: VueEsquisse, detail: NiveauDetail) -> Vec<((f64, f64), String, f64)> {
+        self.elements_2d_affiches(r, vue, detail).into_iter().filter_map(|e| match e.forme {
             AnnotationForme::Texte { point, texte } => Some(((point[0], point[1]), texte, e.hauteur)),
             _ => None,
         }).collect()
@@ -191,6 +204,25 @@ mod tests {
             let AnnotationForme::Polyligne { points, .. } = &e[0].forme else { panic!() };
             assert!((points[0][0] - r.positions["Dormant gauche"]).abs() < 1e-9, "{points:?}");
         }
+    }
+
+    #[test]
+    fn elements_2d_filtres_par_detail_et_parametre() {
+        let mut f = FamilleModelee::gabarit_porte();
+        let r = f.resoudre(900.0, 2150.0, 200.0);
+        let n = f.lignes_2d_resolues(&r, VueEsquisse::Plan, NiveauDetail::Faible).len();
+        f.elements_2d[0].visibilite.faible = false;
+        assert!(f.lignes_2d_resolues(&r, VueEsquisse::Plan, NiveauDetail::Faible).len() < n);
+        assert_eq!(f.lignes_2d_resolues(&r, VueEsquisse::Plan, NiveauDetail::Eleve).len(), n);
+        f.elements_2d[0].visibilite.faible = true;
+        f.elements_2d[0].visibilite.plan = false;
+        assert!(f.lignes_2d_resolues(&r, VueEsquisse::Plan, NiveauDetail::Moyen).len() < n);
+        f.elements_2d[0].visibilite.plan = true;
+        f.parametres.push(super::super::Parametre { genre: super::super::GenreParametre::OuiNon, ..super::super::Parametre::nouveau("Montrer", "0") });
+        f.elements_2d[0].visible = Some("Montrer".into());
+        let r = f.resoudre(900.0, 2150.0, 200.0);
+        assert!(f.lignes_2d_resolues(&r, VueEsquisse::Plan, NiveauDetail::Moyen).len() < n);
+        assert_eq!(f.elements_2d_resolus(&r, VueEsquisse::Plan).len(), f.elements_2d.iter().filter(|e| e.vue == VueEsquisse::Plan).count());
     }
 
     #[test]

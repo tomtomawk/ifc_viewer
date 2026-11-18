@@ -485,7 +485,7 @@ impl ViewerApp {
             ui.add_enabled_ui(self.scene.is_some(), |ui| {
                 let feuille = self.jeu_actif().is_some();
                 let mut echelle = if feuille { 1.0 } else { self.echelle };
-                let r = ui.add_enabled(!gabaritee && !feuille, egui::DragValue::new(&mut echelle).speed(1.0).range(1.0..=10000.0).prefix("1 : "));
+                let r = crate::socle::detail::champ_echelle(ui, &mut echelle, !gabaritee && !feuille);
                 if r.on_disabled_hover_text(if feuille { "Sélectionner la vue placée pour régler son échelle dans Propriétés." } else { "Échelle contrôlée par le gabarit de vue." })
                     .on_hover_text("Échelle de la vue, y compris sur les feuilles et dans les exports.")
                     .changed() && let Err(e) = self.regler_echelle_vue(echelle) {
@@ -542,33 +542,6 @@ impl ViewerApp {
                 }
             });
         });
-    }
-
-    /// Niveau de détail de la vue (Faible, Moyen, Élevé), celui de la vue Revit ouverte.
-    /// La visibilité des géométries des familles selon le niveau de détail n'est pas
-    /// encore lue : le choix n'a pas d'effet sur l'affichage.
-    pub(crate) fn choix_detail(&mut self, ui: &mut egui::Ui) {
-        let (r, _) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), Sense::hover());
-        icone_detail(ui.painter(), r.shrink(3.0), self.detail);
-        ui.menu_button(self.detail.libelle(), |ui| {
-            for d in NiveauDetail::TOUS {
-                let (r, resp) = ui.allocate_exact_size(egui::vec2(120.0, 24.0), Sense::click());
-                let v = ui.visuals();
-                if d == self.detail {
-                    ui.painter().rect_filled(r, 3.0, v.selection.bg_fill);
-                } else if resp.hovered() {
-                    ui.painter().rect_filled(r, 3.0, v.widgets.hovered.bg_fill);
-                }
-                icone_detail(ui.painter(), egui::Rect::from_min_size(r.min + egui::vec2(5.0, 4.0), egui::vec2(16.0, 16.0)), d);
-                ui.painter().text(r.min + egui::vec2(30.0, 12.0), egui::Align2::LEFT_CENTER, d.libelle(), egui::TextStyle::Button.resolve(ui.style()), v.text_color());
-                if resp.clicked() {
-                    self.detail = d;
-                    ui.close();
-                }
-            }
-        })
-        .response
-        .on_hover_text("Niveau de détail de la vue (lu dans la vue Revit). Sans effet sur l'affichage pour l'instant : la visibilité des géométries de familles par niveau de détail n'est pas encore lue");
     }
 
     /// Catégorie montrée : une de ses clés au moins n'est pas masquée, ni sa classe.

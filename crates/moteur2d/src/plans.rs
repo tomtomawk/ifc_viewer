@@ -6,6 +6,7 @@ use modele::identifiants::id_natif;
 use scene::{Scene, SceneObject};
 use glam::{DVec3, Vec3};
 use noyau::trace2d::{Primitive, Role};
+use modele::famille::modelee::{Affichage, TypeVue};
 
 pub fn limite_haute_plan(p: &Projet, s: &Scene, v: &Vue, coupe: f32) -> Option<f32> {
     let GenreVue::Plan { niveau, .. } = &v.genre else { return None };
@@ -23,10 +24,10 @@ pub fn dans_plage_haute(objet: &SceneObject, coupe: f32, limite: f32) -> bool {
 
 /// Arêtes visibles entre le plan de coupe et la limite haute, avant la conversion en pointillés.
 pub fn aretes_plage_haute(
-    scene: &Scene, visible: &[bool], droite: DVec3, haut: DVec3, vers_oeil: DVec3, coupe: f32, limite: f32,
+    scene: &Scene, visible: &[bool], affichage: Affichage, droite: DVec3, haut: DVec3, vers_oeil: DVec3, coupe: f32, limite: f32,
 ) -> Vec<Primitive> {
     let coupes = [Vec3::Z.extend(-(coupe + 1e-5)), Vec3::NEG_Z.extend(limite)];
-    super::vue::vu_limites(scene, visible, droite, haut, vers_oeil, &coupes, 1024)
+    super::vue::vu_limites(scene, visible, affichage, droite, haut, vers_oeil, &coupes, 1024)
 }
 
 pub fn fond_plan(p: &Projet, s: &Scene, v: &Vue, plan: glam::Vec4, echelle: f64) -> Vec<Primitive> {
@@ -42,7 +43,7 @@ pub fn fond_plan(p: &Projet, s: &Scene, v: &Vue, plan: glam::Vec4, echelle: f64)
     let exclus = ids_masques_vue(p, &source);
     let visible: Vec<_> = s.objects.iter().map(|o| o.storey == Some(niveau)
         && !exclus.contains(&o.id) && !s.model.parent.get(&o.id).is_some_and(|id| exclus.contains(id))).collect();
-    let mut prims = super::coupe(s, &visible, glam::Vec3::NEG_Z.extend(z as f32), echelle, Poche::Vide);
+    let mut prims = super::coupe(s, &visible, Affichage { detail: source.niveau_detail, vue: TypeVue::Plan }, glam::Vec3::NEG_Z.extend(z as f32), echelle, Poche::Vide);
     prims.retain(|p| matches!(p.role, Role::Coupe | Role::Vu));
     prims.extend(annotations(p, &source).into_iter().filter(|p| p.role == Role::Annotation).map(|p| p.translater(-s.origin)));
     for pr in &mut prims {

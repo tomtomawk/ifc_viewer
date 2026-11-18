@@ -33,7 +33,7 @@ impl ViewerApp {
             let n = crate::socle::projection::ndc(rect, pos);
             let (origine, direction) = ed.camera_3d.ray(n.x, n.y, rect.width()/rect.height().max(1.0));
             let mut meilleur: Option<(f32, usize)> = None;
-            for (objet, solide) in ed.famille.solides(&r).iter().enumerate().filter(|(_, s)| s.visible && !s.vide) {
+            for (objet, solide) in ed.famille.solides(&r).iter().enumerate().filter(|(_, s)| ed.montre_solide(s) && !s.vide) {
                 for tri in &solide.tris {
                     let [a,b,c] = tri.map(|p| (p / 1000.0).as_vec3());
                     let e1=b-a; let e2=c-a; let h=direction.cross(e2); let det=e1.dot(h);
@@ -102,6 +102,7 @@ impl ViewerApp {
     }
     /// Contrat sans dialogue de l'éditeur ; même validation et chargement que le ruban.
     pub(crate) fn piloter_famille(&mut self, commande: &str, argument: &str) -> Option<Result<serde_json::Value, String>> {
+        if let Some(r) = self.piloter_apercu(commande, argument) { return Some(r); }
         if commande == "famille_outil" {
             return Some((|| {
                 let ed = self.famille.as_mut().ok_or("Éditeur fermé")?;
@@ -309,6 +310,8 @@ impl ViewerApp {
             vues_ouvertes: vec![VueFamille::Elevation as usize],
             camera_3d: Default::default(),
             cadrage_3d_initial: true,
+            detail: NiveauDetail::Moyen,
+            apercu: false,
             navigation: Default::default(),
             rect_navigation: egui::Rect::NOTHING,
             outil: OutilFamille::Selection,
@@ -631,6 +634,7 @@ impl ViewerApp {
         let titre = self.titre_famille().unwrap_or_default();
         self.entete_panneau(ui, Panneau::Arborescence, &format!("Arborescence - {titre}"));
         let Some(ed) = self.famille.as_mut() else { return };
+        let r = ed.resoudre();
         egui::ScrollArea::vertical().id_salt("famille_arborescence").auto_shrink([false, false]).show(ui, |ui| {
             if let Some(vue) = choisir_vue_famille(ui, (!ed.vue_3d).then_some(ed.vue), VueFamille::nom) { ed.ouvrir_vue(vue); }
             if ui.selectable_label(ed.vue_3d, "Vue 3D").clicked() {
@@ -654,7 +658,7 @@ impl ViewerApp {
             });
             egui::CollapsingHeader::new(RichText::new(format!("Volumes ({})", ed.famille.volumes.len())).strong()).default_open(true).show(ui, |ui| {
                 for (k, v) in ed.famille.volumes.iter().enumerate() {
-                    let texte = if v.vide { format!("{} (vide)", v.nom) } else { v.nom.clone() };
+                    let texte = ed.libelle_arbre(&r, apercu::ElementVisible::Volume(k), if v.vide { format!("{} (vide)", v.nom) } else { v.nom.clone() });
                     if ui.selectable_label(ed.choisi(&SelectionFamille::Volume(k)), texte).clicked() {
                         ed.selection = SelectionFamille::Volume(k);
                         ed.multiple.clear();
@@ -663,7 +667,7 @@ impl ViewerApp {
             });
             egui::CollapsingHeader::new(RichText::new(format!("Formes à profil ({})", ed.famille.extrusions.len())).strong()).default_open(true).show(ui, |ui| {
                 for (k, e) in ed.famille.extrusions.iter().enumerate() {
-                    let texte = if e.vide { format!("{} (vide)", e.nom) } else { e.nom.clone() };
+                    let texte = ed.libelle_arbre(&r, apercu::ElementVisible::Forme(k), if e.vide { format!("{} (vide)", e.nom) } else { e.nom.clone() });
                     if ui.selectable_label(ed.choisi(&SelectionFamille::Extrusion(k)), texte).clicked() {
                         ed.selection = SelectionFamille::Extrusion(k);
                         ed.multiple.clear();
@@ -684,7 +688,7 @@ impl ViewerApp {
             });
             egui::CollapsingHeader::new(RichText::new(format!("Éléments 2D ({})", ed.famille.elements_2d.len())).strong()).default_open(false).show(ui, |ui| {
                 for (k, e) in ed.famille.elements_2d.iter().enumerate() {
-                    let texte = format!("{} {} · {}", super::ancrage::genre_element_2d(&e.forme), k + 1, match e.vue { VueEsquisse::Plan => "plan", VueEsquisse::Elevation => "élévation", VueEsquisse::Coupe => "coupe" });
+                    let texte = ed.libelle_arbre(&r, apercu::ElementVisible::Element2D(k), format!("{} {} · {}", super::ancrage::genre_element_2d(&e.forme), k + 1, match e.vue { VueEsquisse::Plan => "plan", VueEsquisse::Elevation => "élévation", VueEsquisse::Coupe => "coupe" }));
                     if ui.selectable_label(ed.choisi(&SelectionFamille::Element2D(k)), texte).clicked() {
                         ed.selection = SelectionFamille::Element2D(k);
                         ed.multiple.clear();

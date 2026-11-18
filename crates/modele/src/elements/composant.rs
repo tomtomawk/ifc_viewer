@@ -43,7 +43,7 @@ pub fn famille_table() -> FamilleModelee {
     let hote = |nom: &str, h| PlanRef { nom: nom.into(), axe: Y, position: 0.0, fixe: false, hote: Some(h) };
     let dist = |a: &str, b: &str, v: &str| Contrainte::Distance { a: a.into(), b: b.into(), valeur: v.into(), priorite: 9, ligne: None };
     let face = |plan: &str, decalage| Face { plan: plan.into(), decalage };
-    let volume = |nom: &str, x: [(&str, f64); 2], y: [(&str, f64); 2], z: [(&str, f64); 2]| Volume {
+    let volume = |nom: &str, x: [(&str, f64); 2], y: [(&str, f64); 2], z: [(&str, f64); 2]| Volume { visibilite: Default::default(),
         nom: nom.into(),
         vide: false,
         materiau: Materiau::Menuiserie,
@@ -112,8 +112,9 @@ impl Composant {
     fn type_<'a>(&self, p: &'a Projet) -> Result<&'a TypeComposant, String> {
         p.types_composants.iter().find(|t| t.id == self.type_composant).ok_or_else(|| format!("{} : type de composant introuvable.", self.nom))
     }
-    /// Solides pleins visibles, triangles en mm, avec le matériau du projet éventuel.
-    pub fn solides(&self, p: &Projet) -> Result<Vec<(Option<String>, Vec<[DVec3; 3]>)>, String> {
+    /// Solides pleins visibles, triangles en mm, avec le matériau du projet éventuel et
+    /// le masque de visibilité par niveau de détail et type de vue.
+    pub fn solides(&self, p: &Projet) -> Result<Vec<(Option<String>, u8, Vec<[DVec3; 3]>)>, String> {
         let t = self.type_(p)?;
         let (o, u, n) = self.repere(p).ok_or_else(|| format!("{} : niveau introuvable.", self.nom))?;
         let r = t.modele.resoudre_occurrence(t.largeur, t.hauteur, t.profondeur, &p.parametres_partages, &Default::default());
@@ -124,7 +125,7 @@ impl Composant {
             .solides(&r)
             .into_iter()
             .filter(|s| !s.vide && s.visible)
-            .map(|s| (s.materiau_nom, s.tris.into_iter().map(|tr| tr.map(|q| Self::placer(o, u, n, q))).collect()))
+            .map(|s| (s.materiau_nom, s.visibilite.masque(), s.tris.into_iter().map(|tr| tr.map(|q| Self::placer(o, u, n, q))).collect()))
             .collect())
     }
     /// Famille du composant résolue et placement d'un point (h, v) de son plan.
@@ -135,20 +136,20 @@ impl Composant {
     }
 
     /// Remplissages des éléments 2D en plan, placés dans le projet.
-    pub fn remplissages_plan(&self, p: &Projet) -> Vec<(Vec<DVec3>, crate::documentation::RemplissageContour)> {
+    pub fn remplissages_plan(&self, p: &Projet, detail: crate::famille::modelee::NiveauDetail) -> Vec<(Vec<DVec3>, crate::documentation::RemplissageContour)> {
         let Some((f, r, placer)) = self.plan_resolu(p) else { return Vec::new() };
-        f.regions_resolues(&r, VueEsquisse::Plan).into_iter().map(|(l, m)| (l.into_iter().map(&placer).collect(), m)).collect()
+        f.regions_resolues(&r, VueEsquisse::Plan, detail).into_iter().map(|(l, m)| (l.into_iter().map(&placer).collect(), m)).collect()
     }
 
     /// Textes du plan de la famille placés dans le projet (mm).
-    pub fn textes_plan(&self, p: &Projet) -> Vec<(DVec3, String, f64)> {
+    pub fn textes_plan(&self, p: &Projet, detail: crate::famille::modelee::NiveauDetail) -> Vec<(DVec3, String, f64)> {
         let Some((f, r, placer)) = self.plan_resolu(p) else { return Vec::new() };
-        f.textes_resolus(&r, VueEsquisse::Plan).into_iter().map(|(q, t, h)| (placer(q), t, h)).collect()
+        f.textes_resolus(&r, VueEsquisse::Plan, detail).into_iter().map(|(q, t, h)| (placer(q), t, h)).collect()
     }
 
     /// Traits en plan de la famille, placés (mm, à l'altitude du niveau).
-    pub fn symboles_plan(&self, p: &Projet) -> Vec<Vec<DVec3>> {
+    pub fn symboles_plan(&self, p: &Projet, detail: crate::famille::modelee::NiveauDetail) -> Vec<Vec<DVec3>> {
         let Some((f, r, placer)) = self.plan_resolu(p) else { return Vec::new() };
-        f.lignes_2d_resolues(&r, VueEsquisse::Plan).into_iter().map(|l| l.into_iter().map(&placer).collect()).collect()
+        f.lignes_2d_resolues(&r, VueEsquisse::Plan, detail).into_iter().map(|l| l.into_iter().map(&placer).collect()).collect()
     }
 }

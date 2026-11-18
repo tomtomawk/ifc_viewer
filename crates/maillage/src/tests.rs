@@ -92,3 +92,39 @@ fn couleur_de_l_element_importe() {
     let gris = couleurs("gris");
     assert!(!gris.is_empty() && !gris.contains(&[204, 25, 25, 255]), "{gris:?}");
 }
+
+/// F9 : un volume de famille réservé au niveau de détail élevé et un autre exclu de la
+/// 3D portent leur masque dans la scène ; les indices montrés en dépendent.
+#[test]
+fn famille_visible_selon_detail_et_type_de_vue() {
+    use modele::elements::composant::{type_table, Composant};
+    use modele::famille::modelee::{Affichage, NiveauDetail, TypeVue};
+    let mut p = Projet::nouveau("T");
+    p.niveaux.push(modele::Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
+    let mut t = type_table();
+    let composant = |t: &str| Composant { id: "c".into(), nom: "c".into(), type_composant: t.into(), niveau: "n".into(), position: [0.0; 2], decalage: 0.0, rotation: 0.0 };
+    let mut q = p.clone();
+    q.types_composants.push(t.clone());
+    q.composants.push(composant(&t.id));
+    assert!(depuis_natif(&q, std::path::Path::new("t.modele.json")).unwrap().visibilite.is_empty(), "sans restriction, pas de masque");
+    t.modele.volumes[0].visibilite.faible = false;
+    t.modele.volumes[0].visibilite.moyen = false;
+    t.modele.volumes[1].visibilite.vue_3d = false;
+    p.composants.push(composant(&t.id));
+    p.types_composants.push(t);
+    let s = depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
+    assert_eq!(s.visibilite.len(), s.vertices.len());
+    let o = &s.objects[s.object_of[&id_natif("composant", "c")] as usize];
+    let compte = |detail, vue| {
+        let (mut faces, mut aretes) = (Vec::new(), Vec::new());
+        s.indices_montres(o.opaque, Affichage { detail, vue }, &mut faces);
+        s.indices_montres(o.aretes, Affichage { detail, vue }, &mut aretes);
+        (faces.len(), aretes.len())
+    };
+    let (eleve, aretes_eleve) = compte(NiveauDetail::Eleve, TypeVue::Plan);
+    let (faible, aretes_faible) = compte(NiveauDetail::Faible, TypeVue::Plan);
+    assert_eq!(eleve, o.opaque.count as usize);
+    assert!(faible < eleve && aretes_faible < aretes_eleve, "{faible} {eleve} {aretes_faible} {aretes_eleve} {}", o.aretes.count);
+    assert!(compte(NiveauDetail::Eleve, TypeVue::Vue3d).0 < eleve);
+    assert_eq!(compte(NiveauDetail::Eleve, TypeVue::Coupe).0, eleve);
+}

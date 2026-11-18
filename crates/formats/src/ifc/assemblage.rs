@@ -9,6 +9,8 @@ use rayon::prelude::*;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
+/// Masque d'une partie visible partout (`modele::famille::modelee::PARTOUT`).
+const PARTOUT: u8 = u8::MAX;
 
 pub fn load(path: &Path, progress: &dyn Fn(String)) -> Result<Scene, String> {
     let t0 = Instant::now();
@@ -79,11 +81,15 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
     let (mut rendu_o, mut rendu_t): (Vec<[u8; 4]>, Vec<[u8; 4]>) = (Vec::new(), Vec::new());
     // motifs de surface des sommets opaques et transparents (motif 0 : aucun)
     let (mut motifs_o, mut motifs_t): (Vec<[u8; 4]>, Vec<[u8; 4]>) = (Vec::new(), Vec::new());
+    // masques de visibilité (niveau de détail, type de vue) des sommets de chaque tampon
+    let (mut vis_o, mut vis_t, mut vis_l, mut vis_a): (Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>) = Default::default();
+    let masque = |g: &ProductGeom, k: usize| g.visibilite.get(k).copied().unwrap_or(PARTOUT);
     let mut objects = Vec::with_capacity(geoms.len());
     let mut triangles = 0;
     let annotation = |g: &ProductGeom| model.get(g.id).is_some_and(|e| &*e.ty == "IFCANNOTATION");
     // arêtes vives des objets du modèle (pas des annotations : textes, cotes)
-    let vives: Vec<noyau::aretes::Aretes> = geoms
+    // (par masque de visibilité quand les parties d'un objet n'ont pas toutes le même)
+    let vives: Vec<Vec<(u8, noyau::aretes::Aretes)>> = geoms
         .iter()
         .map(|g| imposees.remove(&g.id))
         .collect::<Vec<_>>()
@@ -91,13 +97,18 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
         .zip(geoms.par_iter())
         .map(|(imposee, g)| {
             if let Some(a) = imposee {
-                return a;
+                return vec![(PARTOUT, a)];
             }
             if annotation(g) {
-                return Default::default();
+                return Vec::new();
             }
-            let tris: Vec<[DVec3; 3]> = g.parts.iter().flat_map(|p| p.tris.iter().copied()).collect();
-            noyau::aretes::aretes(&tris)
+            let mut masques: Vec<u8> = (0..g.parts.len()).map(|k| masque(g, k)).collect();
+            masques.sort_unstable();
+            masques.dedup();
+            masques.into_iter().map(|m| {
+                let tris: Vec<[DVec3; 3]> = g.parts.iter().enumerate().filter(|(k, _)| masque(g, *k) == m).flat_map(|(_, p)| p.tris.iter().copied()).collect();
+                (m, noyau::aretes::aretes(&tris))
+            }).collect()
         })
         .collect();
 
@@ -124,7 +135,8 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
                 [r, v, b, if c[3] > 1.5 { c[3].clamp(128.0, 254.0) as u8 } else { 255 }]
             });
             let motif = g.motifs.get(k).copied().flatten().unwrap_or([0; 4]);
-            let (dst, dst_r, dst_m) = if p.color[3] < 0.99 { (&mut transp, &mut rendu_t, &mut motifs_t) } else { (&mut opaque, &mut rendu_o, &mut motifs_o) };
+            let m = masque(g, k);
+            let (dst, dst_r, dst_m, dst_v) = if p.color[3] < 0.99 { (&mut transp, &mut rendu_t, &mut motifs_t, &mut vis_t) } else { (&mut opaque, &mut rendu_o, &mut motifs_o, &mut vis_o) };
             for t in &p.tris {
                 let n = (t[1] - t[0]).cross(t[2] - t[0]);
                 let len = n.length();
@@ -140,13 +152,15 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
                     dst.push(Vertex { pos: p.to_array(), normal, color, obj });
                     dst_r.push(rendu);
                     dst_m.push(motif);
+                    dst_v.push(m);
                 }
                 triangles += 1;
             }
         }
-        for (p, segs) in g.parts.iter().zip(liseres) {
+        for (k, (p, segs)) in g.parts.iter().zip(liseres).enumerate() {
             let color = p.color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8);
             for v in segs.iter().flatten() {
+                vis_l.push(masque(g, k));
                 lignes.push(Vertex { pos: (*v - origin).as_vec3().to_array(), normal: [0, 0, 0, drapeau], color, obj });
             }
         }
@@ -156,25 +170,31 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
                 let p = (*v - origin).as_vec3();
                 mn = mn.min(p);
                 mx = mx.max(p);
+                vis_l.push(PARTOUT);
                 lignes.push(Vertex { pos: p.to_array(), normal: [0, 0, 0, drapeau], color, obj });
             }
         }
-        for v in vives.vives.iter().flatten() {
-            let p = (*v - origin).as_vec3();
-            aretes.push(Vertex { pos: p.to_array(), normal: [0, 0, 0, 0], color: noyau::aretes::NOIR, obj });
-        }
-        // arêtes douces : normale de la 1ʳᵉ facette, celle de la 2ᵉ dans la couleur ;
-        // 4ᵉ octet de la normale à −127 (silhouette, voir render.rs)
-        for (s, n1, n2) in &vives.douces {
-            let normal = [(n1.x * 127.0) as i8, (n1.y * 127.0) as i8, (n1.z * 127.0) as i8, -127];
-            let color = [n2.x, n2.y, n2.z].map(|c| ((c * 0.5 + 0.5) * 255.0).round().clamp(0.0, 255.0) as u8);
-            for v in s {
+        for (m, vives) in vives {
+            for v in vives.vives.iter().flatten() {
                 let p = (*v - origin).as_vec3();
-                aretes.push(Vertex { pos: p.to_array(), normal, color: [color[0], color[1], color[2], 255], obj });
+                aretes.push(Vertex { pos: p.to_array(), normal: [0, 0, 0, 0], color: noyau::aretes::NOIR, obj });
+                vis_a.push(*m);
+            }
+            // arêtes douces : normale de la 1ʳᵉ facette, celle de la 2ᵉ dans la couleur ;
+            // 4ᵉ octet de la normale à −127 (silhouette, voir render.rs)
+            for (s, n1, n2) in &vives.douces {
+                let normal = [(n1.x * 127.0) as i8, (n1.y * 127.0) as i8, (n1.z * 127.0) as i8, -127];
+                let color = [n2.x, n2.y, n2.z].map(|c| ((c * 0.5 + 0.5) * 255.0).round().clamp(0.0, 255.0) as u8);
+                for v in s {
+                    let p = (*v - origin).as_vec3();
+                    aretes.push(Vertex { pos: p.to_array(), normal, color: [color[0], color[1], color[2], 255], obj });
+                    vis_a.push(*m);
+                }
             }
         }
         if mn.x > mx.x {
             aretes.truncate(a0 as usize);
+            vis_a.truncate(a0 as usize);
             continue;
         }
         objects.push(SceneObject {
@@ -206,6 +226,11 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
     opaque.extend(transp);
     opaque.extend(lignes);
     opaque.extend(aretes);
+    vis_o.extend(vis_t);
+    vis_o.extend(vis_l);
+    vis_o.extend(vis_a);
+    // aucun élément restreint : pas de masque
+    let visibilite = if vis_o.iter().all(|m| *m == PARTOUT) { Vec::new() } else { vis_o };
     let vertices = opaque;
     let couleurs_rendu = rendu_o;
     let motifs_surface = motifs_o;
@@ -228,6 +253,7 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
         vertices,
         couleurs_rendu,
         motifs_surface,
+        visibilite,
         table_motifs: Vec::new(),
         apparences: Vec::new(),
         objects,
