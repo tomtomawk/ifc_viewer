@@ -15,6 +15,7 @@ pub use revolution::Revolution;
 mod guidage;
 pub use guidage::FormeGuidee;
 mod dessin;
+mod construction;
 pub use dessin::{Element2DFamille, points_ancrables_mut};
 #[cfg(test)]
 mod tests_maillage;

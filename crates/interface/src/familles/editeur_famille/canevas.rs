@@ -878,7 +878,11 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 ed.selectionner(vec![SelectionFamille::Element2D(indice)]);
             }
         }
-        OutilFamille::Deplacer | OutilFamille::Copier | OutilFamille::Tourner | OutilFamille::Symetrie | OutilFamille::Echelle => {
+        OutilFamille::Aligner => {
+            aligner::canevas_aligner(ed, &painter, &cadre, &r, &resp, curseur);
+            garder_multiple = true;
+        }
+        OutilFamille::Deplacer | OutilFamille::Copier | OutilFamille::Tourner | OutilFamille::Symetrie | OutilFamille::Echelle | OutilFamille::Reseau | OutilFamille::ReseauPolaire => {
             // points cliqués, puis élastique jusqu'au curseur accroché ; tourner et
             // échelle : les deux mesures partent du premier point
             let depuis_centre = ed.transformation_depuis_premier_point();

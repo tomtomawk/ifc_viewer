@@ -12,7 +12,7 @@ use modele::famille::modelee::FormeGuidee;
 
 /// Transformation plane, exprimée dans le repère de la vue active.
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum Transformation {
+pub(super) enum Transformation {
     Translation { dh: f64, dv: f64 },
     Rotation { centre: (f64, f64), angle: f64 },
     Symetrie { a: (f64, f64), b: (f64, f64) },
@@ -20,7 +20,7 @@ enum Transformation {
 }
 
 impl Transformation {
-    fn point(self, p: (f64, f64)) -> (f64, f64) {
+    pub(super) fn point(self, p: (f64, f64)) -> (f64, f64) {
         match self {
             Self::Translation { dh, dv } => (p.0 + dh, p.1 + dv),
             Self::Rotation { centre, angle } => {
@@ -64,12 +64,12 @@ impl Transformation {
     }
 
     /// Construit la transformation d'un outil à partir de ses points cliqués.
-    fn depuis_points(outil: OutilFamille, pts: &[(f64, f64)]) -> Option<Self> {
+    pub(super) fn depuis_points(outil: OutilFamille, pts: &[(f64, f64)]) -> Option<Self> {
         let distance = |a: (f64, f64), b: (f64, f64)| (b.0 - a.0).hypot(b.1 - a.1);
         match (outil, pts) {
-            (OutilFamille::Deplacer | OutilFamille::Copier, [a, b]) => Some(Self::Translation { dh: b.0 - a.0, dv: b.1 - a.1 }),
+            (OutilFamille::Deplacer | OutilFamille::Copier | OutilFamille::Reseau, [a, b]) => Some(Self::Translation { dh: b.0 - a.0, dv: b.1 - a.1 }),
             (OutilFamille::Symetrie, [a, b]) if distance(*a, *b) > 1e-9 => Some(Self::Symetrie { a: *a, b: *b }),
-            (OutilFamille::Tourner, [centre, depart, arrivee]) if distance(*centre, *depart) > 1e-9 && distance(*centre, *arrivee) > 1e-9 => {
+            (OutilFamille::Tourner | OutilFamille::ReseauPolaire, [centre, depart, arrivee]) if distance(*centre, *depart) > 1e-9 && distance(*centre, *arrivee) > 1e-9 => {
                 let direction = |q: &(f64, f64)| (q.1 - centre.1).atan2(q.0 - centre.0);
                 Some(Self::Rotation { centre: *centre, angle: direction(arrivee) - direction(depart) })
             }
@@ -94,7 +94,7 @@ enum Resultat {
 
 /// Nombre de points cliqués par un outil de transformation.
 fn points_requis(outil: OutilFamille) -> usize {
-    if matches!(outil, OutilFamille::Tourner | OutilFamille::Echelle) { 3 } else { 2 }
+    if matches!(outil, OutilFamille::Tourner | OutilFamille::Echelle | OutilFamille::ReseauPolaire) { 3 } else { 2 }
 }
 
 impl EditeurFamille {
@@ -113,6 +113,15 @@ impl EditeurFamille {
             (OutilFamille::Echelle, 0) => "Échelle : cliquer le point de base.",
             (OutilFamille::Echelle, 1) => "Échelle : cliquer la longueur de référence.",
             (OutilFamille::Echelle, _) => "Échelle : cliquer la nouvelle longueur.",
+            (OutilFamille::Reseau, 0) => "Réseau : cliquer le point de base.",
+            (OutilFamille::Reseau, _) if self.modifier.total => "Réseau : cliquer la position de la dernière copie.",
+            (OutilFamille::Reseau, _) => "Réseau : cliquer la position de la deuxième copie (pas).",
+            (OutilFamille::ReseauPolaire, 0) => "Réseau polaire : cliquer le centre.",
+            (OutilFamille::ReseauPolaire, 1) => "Réseau polaire : cliquer la direction de départ.",
+            (OutilFamille::ReseauPolaire, _) if self.modifier.total => "Réseau polaire : cliquer la direction de la dernière copie.",
+            (OutilFamille::ReseauPolaire, _) => "Réseau polaire : cliquer la direction de la deuxième copie.",
+            (OutilFamille::Aligner, _) if self.modifier.reference.is_none() => "Aligner : cliquer la référence (plan de référence ou arête).",
+            (OutilFamille::Aligner, _) => "Aligner : cliquer l'arête de l'élément à aligner ; clic droit pour changer de référence.",
             _ => "",
         }
     }
@@ -145,6 +154,13 @@ impl EditeurFamille {
         let mut pts = self.points_transfo.clone();
         pts.push(curseur);
         let Some(transformation) = Transformation::depuis_points(self.outil, &pts) else { return Vec::new() };
+        let images = if matches!(self.outil, OutilFamille::Reseau | OutilFamille::ReseauPolaire) { self.modifier.etapes(transformation) } else { vec![transformation] };
+        let contours: Vec<Vec<(f64, f64)>> = self.selectionnes().into_iter().flat_map(|s| self.contours(r, s)).collect();
+        images.into_iter().flat_map(|t| contours.iter().map(move |ligne| ligne.iter().map(|p| t.point(*p)).collect())).collect()
+    }
+
+    /// Contours dans le repère de la vue active d'un élément de cette vue (vide sinon).
+    pub(super) fn contours(&self, r: &Resolution, s: SelectionFamille) -> Vec<Vec<(f64, f64)>> {
         let vue = self.vue.esquisse();
         let (ih, iv) = { let (ah, av) = self.vue.axes(); (ah as usize, av as usize) };
         let resolus = |points: &[PointEsquisse], ferme: bool| {
@@ -152,27 +168,19 @@ impl EditeurFamille {
             if ferme && let Some(premier) = ligne.first().copied() { ligne.push(premier); }
             ligne
         };
-        let mut contours = Vec::new();
-        for s in self.selectionnes() {
-            match s {
-                SelectionFamille::Element2D(k) => {
-                    let Some(forme) = self.famille.elements_2d.get(k).filter(|e| e.vue == vue).and_then(|e| self.famille.element_resolu(r, e).forme.forme_2d()) else { continue };
-                    contours.extend(forme.polylignes().into_iter().map(|ligne| ligne.into_iter().map(|p| (p.x, p.y)).collect::<Vec<_>>()));
-                }
-                SelectionFamille::Extrusion(k) => {
-                    if let Some(e) = self.famille.extrusions.get(k).filter(|e| e.vue == vue && e.construction.is_none()) { contours.push(resolus(&e.profil, true)); }
-                }
-                SelectionFamille::Volume(k) => {
-                    if let Some(b) = self.famille.boites(r).into_iter().find(|b| b.indice == k) {
-                        let (a, c) = (b.min.to_array(), b.max.to_array());
-                        contours.push(vec![(a[ih], a[iv]), (c[ih], a[iv]), (c[ih], c[iv]), (a[ih], c[iv]), (a[ih], a[iv])]);
-                    }
-                }
-                _ => {}
-            }
+        match s {
+            SelectionFamille::Element2D(k) => self.famille.elements_2d.get(k).filter(|e| e.vue == vue)
+                .and_then(|e| self.famille.element_resolu(r, e).forme.forme_2d())
+                .map(|forme| forme.polylignes().into_iter().map(|ligne| ligne.into_iter().map(|p| (p.x, p.y)).collect()).collect())
+                .unwrap_or_default(),
+            SelectionFamille::Extrusion(k) => self.famille.extrusions.get(k).filter(|e| e.vue == vue && e.construction.is_none())
+                .map(|e| vec![resolus(&e.profil, true)]).unwrap_or_default(),
+            SelectionFamille::Volume(k) => self.famille.boites(r).into_iter().find(|b| b.indice == k).map(|b| {
+                let (a, c) = (b.min.to_array(), b.max.to_array());
+                vec![vec![(a[ih], a[iv]), (c[ih], a[iv]), (c[ih], c[iv]), (a[ih], c[iv]), (a[ih], a[iv])]]
+            }).unwrap_or_default(),
+            _ => Vec::new(),
         }
-        for ligne in &mut contours { for p in ligne.iter_mut() { *p = transformation.point(*p); } }
-        contours
     }
 
     /// Point cliqué par un outil de transformation ; le dernier point applique la
@@ -196,6 +204,7 @@ impl EditeurFamille {
         let pts = std::mem::take(&mut self.points_transfo);
         let resultat = match Transformation::depuis_points(self.outil, &pts) {
             None => Err("Points confondus : recommencer la saisie.".to_owned()),
+            Some(t) if matches!(self.outil, OutilFamille::Reseau | OutilFamille::ReseauPolaire) => self.reseau_selection(&selection, t).map(|n| format!("Réseau : {n} copie(s)")),
             Some(Transformation::Translation { dh, dv }) if self.outil == OutilFamille::Copier => self.copier_selection(&selection, dh, dv).map(|n| format!("{n} élément(s) copié(s)")),
             Some(t) => self.transformer_selection(&selection, t).map(|appliquee| match appliquee {
                 Transformation::Translation { .. } => "Sélection déplacée".to_owned(),
@@ -221,29 +230,7 @@ impl EditeurFamille {
     /// sélectionne. Rien n'est créé si un élément ne peut pas être déplacé.
     fn copier_selection(&mut self, selection: &[SelectionFamille], dh: f64, dv: f64) -> Result<usize, String> {
         self.translater_selection(selection, 0.0, 0.0)?;
-        let mut copies = Vec::with_capacity(selection.len());
-        for s in selection {
-            match *s {
-                SelectionFamille::Element2D(k) => {
-                    let copie = self.famille.elements_2d[k].clone();
-                    self.famille.elements_2d.push(copie);
-                    copies.push(SelectionFamille::Element2D(self.famille.elements_2d.len() - 1));
-                }
-                SelectionFamille::Extrusion(k) => {
-                    let mut copie = self.famille.extrusions[k].clone();
-                    copie.nom = nom_libre(|n| self.famille.extrusions.iter().any(|e| e.nom == n), &format!("{} copie", copie.nom));
-                    self.famille.extrusions.push(copie);
-                    copies.push(SelectionFamille::Extrusion(self.famille.extrusions.len() - 1));
-                }
-                SelectionFamille::Volume(k) => {
-                    let mut copie = self.famille.volumes[k].clone();
-                    copie.nom = nom_libre(|n| self.famille.volumes.iter().any(|v| v.nom == n), &format!("{} copie", copie.nom));
-                    self.famille.volumes.push(copie);
-                    copies.push(SelectionFamille::Volume(self.famille.volumes.len() - 1));
-                }
-                _ => return Err("Copie impossible : retirer les plans, contraintes et cotes de la sélection.".into()),
-            }
-        }
+        let copies = self.dupliquer(selection)?;
         self.translater_selection(&copies, dh, dv)?;
         let nombre = copies.len();
         self.selectionner(copies);
@@ -254,7 +241,7 @@ impl EditeurFamille {
     /// appliquée (recalée si la sélection contient un volume rectangulaire). Les sommets
     /// liés aux plans sont raccrochés au plan le plus proche ; toute la sélection est
     /// vérifiée avant la première modification.
-    fn transformer_selection(&mut self, selection: &[SelectionFamille], transformation: Transformation) -> Result<Transformation, String> {
+    pub(super) fn transformer_selection(&mut self, selection: &[SelectionFamille], transformation: Transformation) -> Result<Transformation, String> {
         const AUTRE_VUE: &str = "Transformation impossible : un élément sélectionné est esquissé dans une autre vue. L'ouvrir dans sa vue d'esquisse.";
         const SANS_PLAN: &str = "Aucun plan de référence disponible dans cette vue.";
         if let Transformation::Translation { dh, dv } = transformation {

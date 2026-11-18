@@ -66,7 +66,9 @@ impl ViewerApp {
     pub(crate) fn placer_texte_vue(&mut self, rect: egui::Rect, q: egui::Pos2) -> Result<(), String> {
         use modele::documentation::AnnotationForme;
         let vue = self.vue_native_id().ok_or("Ouvrez un plan ou une coupe native pour annoter.")?;
-        let point = self.point_annotation(rect, q).ok_or("Le plan de la vue est vu par la tranche : ouvrir un plan, une coupe ou une élévation.")?;
+        // point accroché au survol (accrochages de la vue), sinon point libre sous le clic
+        let accroche = self.dessin2d.point.take().map(|(p, _)| p.to_array());
+        let point = accroche.or_else(|| self.point_annotation(rect, q)).ok_or("Le plan de la vue est vu par la tranche : ouvrir un plan, une coupe ou une élévation.")?;
         let texte = if self.bim.texte.trim().is_empty() { "Texte".to_owned() } else { self.bim.texte.clone() };
         let hauteur = self.bim.annotation_identique.as_ref()
             .filter(|a| matches!(a.forme, AnnotationForme::Texte { .. }))
@@ -78,6 +80,36 @@ impl ViewerApp {
         self.ruban_edition.annuler();
         self.status = "Texte placé — contenu, champs et hauteur dans Propriétés ; Ctrl+Z pour annuler.".into();
         Ok(())
+    }
+
+    /// Outil Texte actif sur une vue native (onglet Annoter).
+    pub(crate) fn texte_annotation_actif(&self) -> bool {
+        self.onglet_ruban == OngletRuban::Annoter && self.natif.is_some() && self.loading.is_none()
+            && self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Texte) && self.vue_native_id().is_some()
+    }
+
+    /// Survol de l'outil Texte : point accroché aux géométries de la vue (comme les
+    /// traits d'annotation), repère d'accrochage et aperçu du texte à ce point.
+    pub(crate) fn apercu_texte_vue(&mut self, ui: &egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>) {
+        use crate::saisie::accrochage::{marqueur, AccrocheMur};
+        use moteur2d::dao::Accroche;
+        let (maj, temps) = ui.input(|i| (i.modifiers.shift, i.time));
+        self.dessin2d.point = survol.and_then(|q| self.depuis_ecran(rect, q)).map(|c| self.point_dessin_depuis(rect, c, maj, temps, None));
+        let Some((point, accroche)) = self.dessin2d.point else { return };
+        let Some(e) = self.vers_ecran(rect, point) else { return };
+        let painter = ui.painter().with_clip_rect(rect);
+        let couleur = Color32::from_rgb(55, 130, 200);
+        let genre = match accroche {
+            Accroche::Libre | Accroche::Polaire(_) | Accroche::Ortho => None,
+            Accroche::Extremite => Some(AccrocheMur::Extremite),
+            Accroche::Milieu => Some(AccrocheMur::Milieu),
+            Accroche::Intersection => Some(AccrocheMur::Intersection),
+            Accroche::Centre | Accroche::Quadrant | Accroche::Perpendiculaire => Some(AccrocheMur::Proche),
+        };
+        if let Some(genre) = genre { marqueur(&painter, e, genre, couleur, Color32::from_rgb(230, 120, 20)); }
+        // aperçu du texte, ancré comme le texte créé
+        let contenu = if self.bim.texte.trim().is_empty() { "Texte" } else { self.bim.texte.as_str() };
+        painter.text(e, egui::Align2::LEFT_BOTTOM, contenu, egui::FontId::proportional(12.0), couleur);
     }
 
     /// Accroche seulement les traits de la sélection et les rectangles de texte.

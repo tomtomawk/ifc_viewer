@@ -106,12 +106,10 @@ Objectif et lots : `docs/PLAN_FUSION_FAMILLES.md`. Avancement détaillé archiv�
 
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
-| F2 | Onglet Modifier des familles : Réseau et Aligner ; accrochage du placement du texte dans le projet | P2 | plan, lot 2 |
 | F3 | Remplacer le canevas de famille par celui des vues de projet (navigation, fond, bandeau, échelle de vue du texte) | P2 | plan, « Navigation des vues de famille » |
 | F4 | Lot 6 : basculer cartouches, étiquettes et profils sur l'éditeur commun, puis retirer `familles_planes.rs`, l'éditeur de `cartouche.rs`, `profils.rs` et les formats spécialisés | P2 | plan, lot 6 |
 | F5 | Lot 7 : suite de tests complète, 38 tests Revit, recette visuelle | P1 | plan, lot 7 |
 | F6 | Formes guidées : chemins courbes, chemins fermés, profils de nombres de sommets différents, dessin graphique du chemin | P3 | archive `AUDIT_FACTORIZATION_2026-11-11.md` |
-| F7 | Suppression et détachement d'un plan de construction utilisé | P2 | idem, lot 4 |
 | F8 | Configurateur de familles ; escaliers et garde-corps paramétriques par famille | P3 | `docs/EDITION.md` |
 
 ### 2.6 Structure du code
@@ -154,6 +152,8 @@ Le plus récent en premier. Les numéros « n° » sont ceux de la feuille de ro
 
 | Date | Fait | Commit | Vérification |
 |---|---|---|---|
+| 18/11/2026 | F7 : plan de construction — `FamilleModelee::supprimer_plan_construction` refuse en listant les formes portées, `detacher_plan_construction` fige le repère à sa position courante (formes immobiles, plan de référence libéré), `renommer_plan_construction` ; Propriétés de l'éditeur : nom, Supprimer, Détacher ; renommage et déplacement du plan de référence suivis (formes liées par identité) | ce commit | tests `modele` `construction::tests` (3) ; `cargo test --workspace` (debug) : 486 réussis, 0 échec, 4 ignorés ; non essayé à l'écran |
+| 18/11/2026 | F2 : onglet Modifier des familles — Réseau linéaire (2 points, pas ou longueur totale, nombre), Réseau polaire (centre, 2 directions), Aligner (référence plan ou arête, puis arêtes parallèles) ; aperçu pointillé, accrochage, clic droit, une annulation, pilote `famille_outil reseau 5 total` / `aligner` ; texte du projet placé au point accroché de la vue | ce commit | tests `reseau`, `aligner`, `transformer`, `catalogue` ; `cargo test --workspace` (debug) : 486 réussis, 0 échec, 4 ignorés ; essai Xvfb partiel (`famille_outil aligner` accepté, `reseau 3` refusé sans sélection : sélection par fenêtre du script non obtenue, capture non produite) — parcours graphique non vérifié à l'écran |
 | 18/11/2026 | Escaliers balancés : tracé libre jusqu’à validation, aperçu des marches tournantes avec giron réel, tracé conservé si le giron de rive est insuffisant. En plan et sur les feuilles, partie des escaliers comprise dans la plage haute dessinée en pointillés. | ce commit | `cargo check --workspace --tests` réussi. `cargo test -p interface -p moteur2d -p modele --release` : 239 réussis, 2 ignorés. Tests du tracé libre, du giron réel, du rejet sans perte du tracé, de la limite haute et du masquage. Affichage non vérifié dans la fenêtre de BIMedit. |
 | 18/11/2026 | Sélecteur de gabarit des vues repris du sélecteur de types : crayon Modifier et icône Dupliquer au survol, création à partir de la vue en bas de liste. La copie est attribuée à la vue à l’enregistrement. | ce commit | `cargo check --workspace --tests` réussi, `cargo test -p interface --release` : 70 réussis. Clics sur les deux icônes et enregistrement d’une copie vérifiés par simulation egui. |
 | 17/11/2026 | CS reprend les réglages de tracé des poutres et active la création des escaliers, garde-corps, composants, arbres, pièces, terrains et limites de propriété. Retrait des symboles automatiques de trajectoire des escaliers en plan. | ce commit | `cargo check --workspace --tests` réussi. `cargo test -p interface -p modele --release` : 190 réussis, 1 ignoré. Deux tests simulent CS puis créent une poutre et un escalier. Le second vérifie aussi l’absence de symboles en plan. Pas de contrôle à l’écran. |
