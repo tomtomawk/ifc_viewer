@@ -185,9 +185,12 @@ impl ViewerApp {
         if commande == "famille_outil" {
             return Some((|| {
                 let ed = self.famille.as_mut().ok_or("Éditeur fermé")?;
-                let outil = if argument == "selection" { OutilFamille::Selection } else {
-                    catalogue::OUTILS.iter().find(|d| d.cle == argument).map(|d| d.outil).ok_or("Outil de famille inconnu")?
+                // « reseau 5 total » : options de l'outil après sa clé
+                let (cle, options) = argument.split_once(' ').unwrap_or((argument, ""));
+                let outil = if cle == "selection" { OutilFamille::Selection } else {
+                    catalogue::OUTILS.iter().find(|d| d.cle == cle).map(|d| d.outil).ok_or("Outil de famille inconnu")?
                 };
+                ed.modifier.appliquer(options)?;
                 if let Some(raison) = ed.indisponibilite_outil(outil) { return Err(raison.into()); }
                 ed.choisir_outil(outil);
                 Ok(serde_json::json!({"outil": argument}))
@@ -380,6 +383,7 @@ impl ViewerApp {
             reperage: Default::default(),
             axe_revolution: None,
             points_transfo: Vec::new(),
+            modifier: Default::default(),
             partages_origine: partages.clone(),
             partages,
             materiaux_projet,

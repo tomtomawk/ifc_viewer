@@ -20,6 +20,9 @@ use canevas::*;
 mod formes;
 mod transformer;
 mod ancrage;
+mod construction;
+mod reseau;
+mod aligner;
 use crate::*;
 use modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
 use modele::famille::modelee::FichierFamille;
@@ -108,11 +111,14 @@ pub(crate) enum OutilFamille {
     Tourner,
     Symetrie,
     Echelle,
+    Reseau,
+    ReseauPolaire,
+    Aligner,
 }
 
 impl OutilFamille {
     fn est_revolution(self) -> bool { matches!(self, Self::Revolution | Self::RevolutionVide) }
-    pub(crate) fn est_transformation(self) -> bool { matches!(self, Self::Deplacer | Self::Copier | Self::Tourner | Self::Symetrie | Self::Echelle) }
+    pub(crate) fn est_transformation(self) -> bool { matches!(self, Self::Deplacer | Self::Copier | Self::Tourner | Self::Symetrie | Self::Echelle | Self::Reseau | Self::ReseauPolaire | Self::Aligner) }
     fn outil_dessin(self) -> Option<moteur2d::dao::OutilDessin> {
         use moteur2d::dao::OutilDessin as D;
         match self { Self::Ligne => Some(D::Polyligne), Self::Arc => Some(D::Arc), Self::Spline => Some(D::Spline), Self::Cercle => Some(D::Cercle), Self::Rectangle => Some(D::Rectangle), _ => None }
@@ -202,6 +208,8 @@ pub(crate) struct EditeurFamille {
     axe_revolution: Option<[[f64; 2]; 2]>,
     /// Points déjà cliqués par l'outil de transformation actif (repère de la vue).
     points_transfo: Vec<(f64, f64)>,
+    /// Options de Réseau et référence d'Aligner.
+    modifier: reseau::OptionsModifier,
     /// Paramètres partagés du projet (copie modifiable ; seules les valeurs changées
     /// sont reportées à l'enregistrement).
     partages: BTreeMap<String, f64>,
@@ -453,6 +461,7 @@ impl EditeurFamille {
     fn abandonner_saisie(&mut self) {
         self.axe_revolution = None;
         self.points_transfo.clear();
+        self.modifier.reference = None;
         self.esquisse.clear();
         self.trace_polyligne = None;
         self.saisie_trace.vider();
@@ -570,7 +579,7 @@ impl EditeurFamille {
         let Some(d) = catalogue::OUTILS.iter().find(|d| d.outil == outil) else {
             return Some("Outil de famille inconnu.");
         };
-        if outil.est_transformation() && self.selection == SelectionFamille::Aucune && self.multiple.is_empty() {
+        if outil.est_transformation() && outil != OutilFamille::Aligner && self.selection == SelectionFamille::Aucune && self.multiple.is_empty() {
             return Some("Sélectionner d'abord un ou plusieurs éléments de la famille.");
         }
         catalogue::indisponibilite(d, &catalogue::Contexte { famille_plane: false, vue_3d: self.vue_3d, plan_oblique: self.construction.is_some() })

@@ -921,7 +921,7 @@ impl ViewerApp {
             let (_,_,_,z,_)=self.axe_selection()?;
             return Some((DVec3::new(0.0,0.0,z),DVec3::X,DVec3::Y));
         }
-        match self.usage_dessin()?.0 {
+        match self.usage_dessin().map(|u| u.0).or_else(|| self.texte_annotation_actif().then_some(Usage::Annotation))? {
             Usage::Mur | Usage::Surface | Usage::Escalier | Usage::GardeCorps | Usage::Poutre | Usage::Terrain | Usage::LimitePropriete | Usage::Cadrage => Some((DVec3::new(0.0, 0.0, self.altitude_trace()), DVec3::X, DVec3::Y)),
             Usage::Annotation => {
                 let id = self.vue_native_id()?;
@@ -945,7 +945,7 @@ impl ViewerApp {
         self.ecran_3d(rect, o + u * q.x + h * q.y)
     }
 
-    fn depuis_ecran(&self, rect: egui::Rect, q: egui::Pos2) -> Option<DVec2> {
+    pub(crate) fn depuis_ecran(&self, rect: egui::Rect, q: egui::Pos2) -> Option<DVec2> {
         let (o, u, h) = self.repere_dessin()?;
         let s = self.scene.as_ref()?;
         let x = (q.x - rect.left()) / rect.width() * 2.0 - 1.0;
@@ -971,7 +971,7 @@ impl ViewerApp {
     }
 
     fn geoms_dessin_avec_mode(&mut self, selection: bool) -> Vec<Geom> {
-        let Some((usage, _)) = self.usage_dessin().or_else(||(self.poignee_axe.is_some() || self.dessin2d.arc_glisse.is_some()).then_some((Usage::Mur,OutilDessin::Ligne))) else { return Vec::new() };
+        let Some((usage, _)) = self.usage_dessin().or_else(||(self.poignee_axe.is_some() || self.dessin2d.arc_glisse.is_some()).then_some((Usage::Mur,OutilDessin::Ligne))).or_else(|| self.texte_annotation_actif().then_some((Usage::Annotation, OutilDessin::Polyligne))) else { return Vec::new() };
         let vue = self.vue_native_id();
         let altitude = if let Some((id,_,_))=&self.dessin2d.arc_glisse {self.natif.as_ref().and_then(|(p,_)|p.trajectoire_justification(id)).map_or(0.0,|a|a.1)} else if self.poignee_axe.is_some() {self.axe_selection().map_or(0.0,|a|a.3)} else {self.altitude_trace()};
         let exclu=self.poignee_axe.as_ref().map(|a|a.0.as_str()).or_else(||self.dessin2d.arc_glisse.as_ref().map(|a|a.0.as_str()));

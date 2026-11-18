@@ -66,8 +66,7 @@ impl ViewerApp {
             Some(p.niveau(&self.bim.barre.niveau)?.altitude + self.bim.barre.debut[2])
         });
         // Texte : un clic le place dans la vue native, comme dans l'éditeur de famille
-        let texte_annotation = self.onglet_ruban == OngletRuban::Annoter && self.natif.is_some() && self.loading.is_none()
-            && self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Texte) && self.vue_native_id().is_some();
+        let texte_annotation = self.texte_annotation_actif();
         // Déplacer, Copier, Tourner, Aligner : socle commun (transformer.rs)
         self.suivre_transformation();
         let deplacement = self.transfo.outil;
@@ -511,11 +510,7 @@ impl ViewerApp {
                 }
             }
         }
-        if texte_annotation && let Some(q) = resp.hover_pos() {
-            // aperçu du texte sous le curseur, ancré comme le texte créé
-            let contenu = if self.bim.texte.trim().is_empty() { "Texte" } else { self.bim.texte.as_str() };
-            ui.painter().with_clip_rect(rect).text(q, egui::Align2::LEFT_BOTTOM, contenu, egui::FontId::proportional(12.0), Color32::from_rgb(55, 130, 200));
-        }
+        if texte_annotation { self.apercu_texte_vue(ui, rect, resp.hover_pos()); }
         if let Some(composant) = placement {
             let painter = ui.painter().with_clip_rect(rect);
             let couleur = Color32::from_rgb(55, 130, 200);

@@ -40,6 +40,9 @@ pub(crate) const OUTILS: &[Descripteur] = &[
     Descripteur { outil: OutilFamille::Tourner, cle: "tourner", nom: "Tourner", aide: "Tourner (RO) la sélection : centre, direction de départ, puis direction d'arrivée", groupe: GROUPE_TRANSFORMER, plan_oblique: false, famille_plane: false },
     Descripteur { outil: OutilFamille::Symetrie, cle: "symetrie", nom: "Symétrie", aide: "Symétrie (SY) de la sélection : deux points de l'axe", groupe: GROUPE_TRANSFORMER, plan_oblique: false, famille_plane: false },
     Descripteur { outil: OutilFamille::Echelle, cle: "echelle", nom: "Échelle", aide: "Échelle (EC) de la sélection : point de base, longueur de référence, puis nouvelle longueur", groupe: GROUPE_TRANSFORMER, plan_oblique: false, famille_plane: false },
+    Descripteur { outil: OutilFamille::Reseau, cle: "reseau", nom: "Réseau", aide: "Réseau linéaire (RE) de la sélection : point de base, puis position de la deuxième copie (ou de la dernière) ; nombre dans Propriétés", groupe: GROUPE_TRANSFORMER, plan_oblique: false, famille_plane: false },
+    Descripteur { outil: OutilFamille::ReseauPolaire, cle: "reseau_polaire", nom: "Réseau polaire", aide: "Réseau polaire de la sélection : centre, direction de départ, puis direction de la deuxième copie (ou de la dernière) ; nombre dans Propriétés", groupe: GROUPE_TRANSFORMER, plan_oblique: false, famille_plane: false },
+    Descripteur { outil: OutilFamille::Aligner, cle: "aligner", nom: "Aligner", aide: "Aligner (AL) : cliquer la référence (plan ou arête), puis les arêtes des éléments à aligner dessus", groupe: GROUPE_TRANSFORMER, plan_oblique: false, famille_plane: false },
 ];
 
 /// Groupe de l'onglet Modifier : ces outils agissent sur la sélection.

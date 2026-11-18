@@ -71,6 +71,7 @@ impl ViewerApp {
 }
 
 pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele::Projet) {
+    reseau::options_reseau(ui, ed);
     if ed.famille.categorie == modele::famille::modelee::CategorieFamille::Profil {
         let section = match ed.selection {
             SelectionFamille::Element2D(k) if ed.famille.elements_2d.get(k).is_some_and(|e| e.vue == VueEsquisse::Plan && e.contour_ferme()) => Some(k),
@@ -174,6 +175,7 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
         }
         if avant != ed.construction { ed.choisir_outil(OutilFamille::Selection); ed.selectionner(Vec::new()); }
         if ed.construction.is_some() { ui.label("Esquisse en coordonnées locales du plan ; profondeur suivant sa normale."); }
+        construction::gestion_plan_construction(ui, ed);
     });
     let r = ed.resoudre();
     let u = modele::unite::unite();

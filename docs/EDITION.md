@@ -317,6 +317,28 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   retirer), milieux d'arêtes (glisser : insérer un sommet), milieux des faces d'un
   volume (glisser : reverrouiller la face). Un clic dans un objet le choisit avant
   les plans qui le traversent (les plans se choisissent hors des objets).
+  L'**onglet Modifier** agit sur la sélection par points cliqués dans la vue,
+  avec l'accrochage, l'aperçu en pointillés et le clic droit (revenir d'un point,
+  puis quitter) communs : Déplacer, Copier, Tourner, Symétrie, Échelle,
+  **Réseau** (point de base puis deuxième exemplaire, ou dernier exemplaire si
+  « longueur totale » est cochée ; nombre, original compris, dans Propriétés) et
+  **Réseau polaire** (centre, direction de départ, direction du deuxième ou du
+  dernier exemplaire). Un réseau est une seule étape d'annulation ; s'il est refusé
+  pour une copie, aucune n'est créée. **Aligner** : cliquer la référence (plan de
+  référence de la vue ou arête d'un élément, surlignée au survol), puis, clic par
+  clic, l'arête parallèle d'un volume, d'une forme ou d'un élément 2D : l'élément
+  glisse perpendiculairement jusqu'à la référence (un alignement = une annulation ;
+  clic droit : changer de référence). Limites communes : un volume rectangulaire ne
+  tourne que par quarts de tour et ne se reflète que par un axe horizontal ou
+  vertical ; une forme esquissée dans une autre vue ou sur un plan oblique ne se
+  transforme pas. Pilote : `famille_outil reseau 5 total` (nombre, `pas` ou `total`),
+  `famille_outil reseau_polaire 6`, `famille_outil aligner`, puis des clics `saisie`.
+  **Plan de construction** actif (Propriétés) : renommer, Supprimer (refusé tant que
+  des formes y sont esquissées, avec leur liste), Détacher (un plan qui suit un plan
+  de référence devient un repère fixe à sa position courante : ses formes ne bougent
+  pas et le plan de référence peut ensuite être supprimé ; un plan fixe sans forme est
+  supprimé). Les formes désignent leur plan par son identité : un renommage ne les
+  touche pas et elles suivent le plan de référence quand il se déplace.
   Les valeurs d'essai font fléchir la famille ; « Enregistrer le type » met à jour
   le type et ses ouvertures (et les paramètres partagés du projet), « Nouveau type »
   l'affecte à l'ouverture (ou au prochain placement). Dans la maquette, les solides
@@ -394,7 +416,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   Les éléments horizontaux (dalle, sol, plafond, toiture) l'utilisent aussi :
   polygone, rectangle ou cercle sur le plan de leur altitude.
 - **Documenter** crée aussi textes, zones rectangulaires, cotes et étiquettes
-  dans la vue native ouverte. Avec un mur sélectionné, une cote référence ses
+  dans la vue native ouverte. Le texte se place au clic sur le point accroché
+  aux géométries de la vue (extrémités, milieux, intersections, comme les traits
+  d'annotation ; repère orange au survol). Avec un mur sélectionné, une cote référence ses
   extrémités ; sinon ses points sont fixes. Une référence supprimée est signalée
   en rouge, sans supprimer silencieusement la cote.
 - **Feuilles** (Documenter, groupe Documents, ou l'arborescence) ouvre un jeu de

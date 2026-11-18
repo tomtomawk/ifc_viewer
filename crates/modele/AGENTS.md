@@ -13,7 +13,7 @@ Dépendances internes autorisées : `noyau` seul. Externes : `earcutr`, `geo-str
 | `creation.rs` | `ParametresMur`, `ParametresDalle`, `Implantation`, création des murs, dalles et vues |
 | `murs/`, `elements/` | assemblage et jonctions des murs ; escaliers, garde-corps, pièces, site, terre-pleins, composants |
 | `volumes/` | `solides`, `geometrie` : volumes des éléments (consommés par `maillage`) |
-| `famille/` | familles paramétriques (`modelee`, `profil`, `edition`) |
+| `famille/` | familles paramétriques (`modelee`, `profil`, `edition`) ; `modelee/construction.rs` : renommer, supprimer, détacher un plan de construction |
 | `documentation/` | données des vues, feuilles, cotes, nomenclatures |
 | `liens.rs` | `LienIfc` : fichier IFC lié (chemin, décalage, rotation, visibilité) et sa transformation vers le projet |
 | `gabarit.rs`, `gabarits_vues.rs`, `contextes.rs`, `unite.rs`, `identifiants.rs`, `validation.rs`, `soleil.rs` | gabarit par défaut (`gabarits/defaut.gabarit.json`), vues, filtres de contexte, unité d'affichage, `id_natif`, vérification, soleil |
