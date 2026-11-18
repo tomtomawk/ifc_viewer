@@ -119,11 +119,15 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   centimètres par défaut ; Début → Options permet de choisir mm, cm ou m. Le JSON,
   les commandes CLI/MCP et les tailles sur papier restent en millimètres.
 - **Modéliser → Poteau / Poutre** crée des poteaux rectangulaires et des poutres
-  (section rectangulaire ou profil de leur type) en saisissant leurs dimensions et
-  leur niveau. Placez un poteau par un clic dans la vue ;
-  pour une poutre, cliquez son départ puis son arrivée. Le placement utilise les
-  accrochages et Maj contraint la poutre aux axes du plan ; Échap ou clic droit
-  annule un départ. La saisie par coordonnées reste disponible. Les poteaux sont
+  (section rectangulaire ou profil de leur type). La palette du poteau reprend le
+  croquis Haut/Bas du mur. Réglez le niveau et le décalage de base, puis un sommet
+  libre (hauteur) ou un niveau haut avec décalage. Le niveau haut est résolu en
+  cote au placement du poteau. Les dimensions et la rotation se règlent sous le
+  croquis. Placez le poteau d’un clic dans la vue ou utilisez « Placement par
+  coordonnées ». La palette de la poutre montre sa section, l’arase et la
+  justification par rapport au tracé. Cliquez le départ puis l’arrivée de la
+  poutre avec les accrochages. Maj contraint le tracé aux axes du plan, Échap ou
+  clic droit annule un départ. Les poteaux sont
   verticaux et orientables ; les poutres sont horizontales et définies par leur axe.
   Après sélection, **Modifier → Propriétés structurelles** permet de les modifier ;
   les commandes de déplacement, rotation, copie, suppression et l'historique leur

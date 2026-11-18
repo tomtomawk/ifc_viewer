@@ -1,5 +1,4 @@
 //! Options de modification, jonctions, annotations natives, export et documentation.
-use crate::*;
 use crate::outils::modeliser::bim::*;
 use config::options::Dimensions;
 
@@ -124,10 +123,9 @@ impl ViewerApp {
                     ui.add(egui::DragValue::new(&mut self.transfo.ecart).range(0.0..=10_000.0).speed(5.0).dimensions());
                 }
                 Some(Outil::Aligner) => {
-                    match self.transfo.reference.as_deref() {
+                    match self.transfo.alignement.reference.as_ref() {
                         Some(r) => {
-                            let nom = p.murs.iter().find(|m| m.id == r).map(|m| m.nom.as_str()).or_else(|| p.assemblage(r).map(|a| a.nom.as_str())).unwrap_or("mur");
-                            ui.label(format!("Référence : axe de {nom}"));
+                            ui.label(if r.est_face() { "Référence : face" } else { "Référence : segment" });
                             if ui.button("Changer la référence").clicked() {
                                 self.transfo.reinitialiser();
                             }

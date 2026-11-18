@@ -21,8 +21,7 @@ pub(crate) struct Transformation {
     pub centre: Option<[f64; 2]>,
     /// Le prochain clic place le centre.
     pub placer_centre: bool,
-    /// Aligner : élément de référence (mur ou mur composé).
-    pub reference: Option<String>,
+    pub alignement: crate::outils::modifier::aligner::Alignement,
     /// Décaler : élément choisi.
     pub element: Option<String>,
     /// Déplacer, Tourner, Symétrie, Décaler : la transformation porte sur une copie.
@@ -54,7 +53,7 @@ impl Transformation {
             self.placer_centre = false;
         } else if self.points.pop().is_some() {
         } else if self.element.take().is_some() {
-        } else if self.reference.take().is_some() {
+        } else if self.alignement.reference.take().is_some() {
         } else {
             return false;
         }
@@ -104,8 +103,8 @@ impl Transformation {
             Outil::Echelle if self.points.is_empty() => "Cliquer le point de base (fixe)".into(),
             Outil::Echelle if self.points.len() == 1 => format!("Cliquer la longueur de référence, ou taper le facteur{valeur}"),
             Outil::Echelle => "Cliquer la nouvelle longueur".into(),
-            Outil::Aligner if self.reference.is_none() => "Cliquer la référence (axe d'un mur)".into(),
-            Outil::Aligner => "Cliquer les éléments à aligner · Échap : changer de référence".into(),
+            Outil::Aligner if self.alignement.reference.is_none() => "Cliquer la référence (segment ou face)".into(),
+            Outil::Aligner => "Cliquer le segment ou la face à aligner · Échap : changer de référence".into(),
             Outil::Decaler if self.element.is_none() => "Cliquer le mur ou la dalle à décaler".into(),
             Outil::Decaler => format!("Cliquer le côté et la distance, ou taper la distance{valeur}"),
             Outil::Scinder => "Cliquer le mur ou la poutre au point de coupure".into(),
@@ -378,21 +377,6 @@ impl ViewerApp {
                     }
                 }
             },
-            Outil::Aligner => {
-                let Some(id) = cible else {
-                    self.status = "Aligner : cliquer sur un élément.".into();
-                    return;
-                };
-                match self.transfo.reference.clone() {
-                    None if self.axe_mur(&id).is_some() => self.transfo.reference = Some(id),
-                    None => self.status = "Aligner : la référence doit être un mur droit.".into(),
-                    Some(r) if r == id => self.status = "Aligner : choisir un autre élément que la référence.".into(),
-                    Some(r) => match self.executer_bim(Commande::Aligner { ids: vec![id], reference: r }) {
-                        Ok(_) => self.status = "Élément aligné — cliquer le suivant, Ctrl+Z pour annuler.".into(),
-                        Err(e) => self.error = Some(e),
-                    },
-                }
-            }
             Outil::Decaler => match self.transfo.element.clone() {
                 None => match cible.filter(|id| self.decalable(id)) {
                     Some(id) => self.transfo.element = Some(id),
@@ -631,6 +615,7 @@ impl ViewerApp {
     /// fantôme de la sélection transformée, centre, axe, cible survolée.
     pub(crate) fn apercu_transformation(&mut self, ui: &egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>, altitude: f64) {
         let Some(outil) = self.transfo.outil else { return };
+        if outil == Outil::Aligner { return; }
         let cible = self.transfo.cible.clone();
         let painter = ui.painter().with_clip_rect(rect);
         let bleu = Color32::from_rgb(55, 130, 200);
@@ -799,14 +784,6 @@ impl ViewerApp {
                     }
                 }
             }
-            Outil::Aligner => {
-                if let Some(r) = &self.transfo.reference {
-                    trait_axe(r, bleu, 2.0);
-                }
-                if let Some(id) = cible.filter(|id| Some(id) != self.transfo.reference.as_ref()) {
-                    trait_axe(&id, if self.transfo.reference.is_some() { orange } else { bleu }, 3.0);
-                }
-            }
             Outil::Decaler => match self.transfo.element.clone() {
                 None => {
                     if let Some(id) = cible {
@@ -902,7 +879,7 @@ impl ViewerApp {
             "centre": centre,
             "centre_ecran": centre.and_then(|c| self.ecran_plan(rect, c, altitude)).map(|e| [e.x, e.y]),
             "placer_centre": self.transfo.placer_centre,
-            "reference": self.transfo.reference,
+            "reference": self.transfo.alignement.reference.as_ref().and_then(|r| r.id.as_deref()),
             "element": self.transfo.element,
             "copie": self.transfo.copie,
             "multiple": self.transfo.multiple,
@@ -964,13 +941,12 @@ mod tests {
 
     #[test]
     fn echap_recule_d_une_etape_puis_quitte() {
-        let mut t = Transformation { points: vec![[0.0, 0.0]], saisie: "12".into(), reference: Some("r".into()), copie: true, ..Default::default() };
+        let mut t = Transformation { points: vec![[0.0, 0.0]], saisie: "12".into(), element: Some("r".into()), copie: true, ..Default::default() };
         assert!(t.reculer());
         assert!(t.saisie.is_empty() && t.points.len() == 1);
         assert!(t.reculer());
         assert!(t.points.is_empty());
         assert!(t.reculer());
-        assert!(t.reference.is_none());
         assert!(!t.reculer());
         assert!(t.copie, "les options survivent");
     }

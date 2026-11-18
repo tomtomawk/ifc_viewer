@@ -4,3 +4,4 @@ pub(crate) mod transformer;
 pub(crate) mod ajuster;
 pub(crate) mod options_modifier;
 pub(crate) mod poignees;
+pub(crate) mod aligner;

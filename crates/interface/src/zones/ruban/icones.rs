@@ -76,7 +76,7 @@ pub(super) fn bouton_outil(
         Outil::Symetrie => "Symétrie (SY) : deux points de l'axe ; Copier coché par défaut",
         Outil::Reseau => "Réseau (RE) : linéaire (base puis 2ᵉ élément) ou polaire (centre, angle entre éléments)",
         Outil::Echelle => "Échelle (EC) : point de base, longueur de référence, nouvelle longueur ou facteur tapé ; annotations, contours, terrains",
-        Outil::Aligner => "Aligner (AL) : référence, puis éléments à aligner",
+        Outil::Aligner => "Aligner (AL) : cliquer deux segments en plan ou deux faces en 3D",
         Outil::Decaler => "Décaler (DE) : clic sur le mur, puis côté et distance ; Copier coché par défaut",
         Outil::Scinder => "Scinder (SC) : clic sur le mur ou la poutre au point de coupure ; écart réglable",
         Outil::Demolir => "Démolir (DM) : clic sur l'élément, démoli dans la dernière phase ; clic à nouveau pour annuler",

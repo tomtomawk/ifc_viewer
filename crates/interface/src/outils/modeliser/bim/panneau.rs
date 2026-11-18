@@ -396,37 +396,7 @@ impl ViewerApp {
                     }
                 }
                 Some(Outil::Poutre) => self.panneau_poutre(ui),
-                Some(Outil::Poteau) => {
-                    use modele::GenreBarre;
-                    let genre = if outil == Some(Outil::Poteau) {
-                        GenreBarre::Poteau
-                    } else {
-                        GenreBarre::Poutre
-                    };
-                    let b = &mut self.bim.barre;
-                    if b.genre != genre {
-                        b.genre = genre;
-                        b.fin = if genre == GenreBarre::Poteau {
-                            [b.debut[0], b.debut[1], b.debut[2] + 2800.0]
-                        } else {
-                            [b.debut[0] + 3000.0, b.debut[1], b.debut[2]]
-                        };
-                    }
-                    let niveaux = &self.natif.as_ref().unwrap().0.niveaux;
-                    if b.niveau.is_empty() {
-                        if let Some(n) = niveaux.first() {
-                            b.niveau = n.id.clone();
-                        }
-                    }
-                    ui.label(if genre == GenreBarre::Poteau { "Cliquez dans la vue pour placer le poteau." } else { "Cliquez le départ puis l'arrivée dans la vue ; Échap ou clic droit annule le départ." });
-                    barre_ui(ui, b, niveaux);
-                    if ui.button("Créer l'élément").clicked() {
-                        self.bim.depart_structure = None;
-                        let mut b = b.clone();
-                        b.id.clear();
-                        commande = Some(Commande::Barre { barre: b });
-                    }
-                }
+                Some(Outil::Poteau) => commande = self.panneau_poteau(ui),
                 Some(Outil::Composant) => {
                     let p = &self.natif.as_ref().unwrap().0;
                     let mut types = p.types_composants.clone();

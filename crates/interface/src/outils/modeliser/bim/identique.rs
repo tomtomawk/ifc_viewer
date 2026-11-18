@@ -35,6 +35,8 @@ impl ViewerApp {
                 self.bim.barre = b.clone();
                 self.bim.barre.id.clear();
                 self.bim.barre.origine = None;
+                self.bim.niveau_haut_poteau = None;
+                self.bim.decalage_haut_poteau = 0.0;
             }
             self.ruban_edition
                 .activer_structure(b.genre == modele::GenreBarre::Poutre);

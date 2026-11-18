@@ -1,6 +1,7 @@
 //! Modifier : déplacer, tourner, aligner, ajuster, attacher, supprimer ; copies dans
 //! `copier`, commandes composées (symétrie, échelle, réseau, décaler, scinder, démolir,
 //! reproduire) dans `composees`, transformation affine dans `transformations`.
+pub mod alignement;
 pub mod composees;
 pub mod copier;
 pub mod supprimer;

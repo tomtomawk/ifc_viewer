@@ -57,7 +57,7 @@ Contrôle de chaque fonction : un script `tools/test-*.py` la joue par le pilote
 
 | # | Fonction | Raccourci | Sélection | Saisie | Options |
 |---|---|---|---|---|---|
-| 1 | **Aligner** | AL | aucune préalable | 1. ligne de référence (axe, face, ligne de quadrillage) ; 2. éléments à aligner, clic par clic | Référence : axe / face extérieure / face intérieure / face du noyau ; Verrouiller l'alignement (cadenas) |
+| 1 | **Aligner** | AL | aucune préalable | 1. segment de référence en plan ou face de référence en 3D ; 2. segment ou face de l’élément à déplacer, clic par clic | Échap ou clic droit pour changer de référence |
 | 2 | **Déplacer** | MV | éléments | point de départ → point d'arrivée, ou distance saisie | Copier ; Contraindre ; Déconnecter (détacher les jonctions) ; Déplacer en Z |
 | 3 | **Décaler** | DE | murs, lignes, contours | côté par la souris + distance, ou clic de passage | Copier (par défaut : oui) ; Mesure : axe / face |
 | 4 | **Tourner** | RO | éléments | centre (sélection par défaut, déplaçable) → direction de départ → angle, ou angle saisi | Copier ; Pas angulaire |
@@ -68,6 +68,8 @@ Contrôle de chaque fonction : un script `tools/test-*.py` la joue par le pilote
 | 9 | **Ajuster / prolonger** | AJ · TR (en angle) | aucune préalable | 1. référence ; 2. élément, côté à conserver | Un seul / plusieurs éléments vers une même référence ; En angle (deux éléments à l'intersection) |
 | 10 | **Scinder** | SC | aucune préalable | clic sur l'élément au point de coupure | Écart (scinder avec espace) ; Supprimer le segment intérieur (2 clics) |
 | 11 | **Supprimer** | Suppr | éléments | aucune | Agit tout de suite, sans avertissement ni choix ; dépendants structurels supprimés avec l'élément, annotations liées détachées (voir ci-dessous) |
+
+**Aligner en plan** suit les segments du dessin, notamment les arêtes visibles, les contours de coupe, les quadrillages et les traits d’annotation. **Aligner en 3D** utilise le plan du triangle touché. Une rotation autour de l’axe vertical et une translation amènent le segment ou la face sur le support de référence. Deux faces d’inclinaisons différentes demandent une bascule hors du plan horizontal et sont refusées. Un élément IFC lié peut servir de référence. Un clic déplace l’élément du projet qui porte la géométrie visée en une seule opération annulable.
 
 ## 3. Visibilité
 
@@ -92,7 +94,7 @@ Règle : le verrouillage s'applique au **modèle** (partagé en collaboration). 
 
 | Fonction | Clics | Ce que l'écran montre |
 |---|---|---|
-| Aligner | référence → élément(s) | référence en pointillé bleu, face visée surlignée, cadenas cliquable après l'alignement |
+| Aligner | référence → élément(s) | référence en bleu, segment ou face visé en orange |
 | Déplacer | départ → arrivée | élément fantôme attaché au curseur, cote de distance, lignes d'alignement sur les autres éléments |
 | Décaler | survol → clic du côté voulu | ligne décalée en fantôme du côté du curseur, cote de décalage |
 | Tourner | centre (glissable) → direction → angle | rapporteur, arc d'angle, cote d'angle, fantôme tourné |

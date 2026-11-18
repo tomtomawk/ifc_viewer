@@ -794,7 +794,9 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
         for g in &p.quadrillages {
             if v.elements_masques.contains(&g.id) { continue; }
             let (a, b) = (pt(DVec2::from_array(g.debut)), pt(DVec2::from_array(g.fin)));
-            out.push(ligne(a, b));
+            let mut axe = ligne(a, b);
+            axe.element = Some(crate::identifiants::id_natif("quadrillage", &g.id));
+            out.push(axe);
             out.push(texte(
                 &g.nom,
                 b,
