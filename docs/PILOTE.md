@@ -253,7 +253,7 @@ par des murs (refus si le contour n'est pas fermé).
 murs atomiquement. `volets_etat` décrit les fenêtres natives et leurs rectangles ;
 `volets_retablir` réancre les deux volets. Fermer un volet externe conserve le projet.
 `famille_navigation etat|elevation|plan|coupe|3d|cadrer` décrit ou choisit la vue de
-travail et son cadrage. La molette (`saisie defiler`) et le glissement au bouton
+travail et son cadrage (caméra de la vue plane : `distance`, `cible` en m). La molette (`saisie defiler`) et le glissement au bouton
 `milieu` utilisent la navigation réelle de l'éditeur, sans toucher au modèle.
 
 `mur_trace ligne|rectangle|arc|cercle|selection` choisit le mode graphique de création

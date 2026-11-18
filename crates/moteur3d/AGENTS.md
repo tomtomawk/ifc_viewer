@@ -11,6 +11,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `scene` (`maillage` en de
 | `gpu.rs` | `Renderer`, `FrameParams`, passes, uploads, `paint`, `capture` |
 | `ciel.rs` | ciel physique (passes de tables, `couleur_soleil`) |
 | `camera.rs` | `Camera` |
+| `fond.rs` | couleur de fond des vues (seule source : projet, familles, captures) |
 | `orientation_plan.rs` | repère d'orientation des plans (egui) |
 | `selection_rectangle.rs` | sélection par rectangle (egui) |
 | `scene.wgsl`, `commun.wgsl`, `ao.wgsl` | shaders, lus par `include_str!` ; `scene.wgsl` et `commun.wgsl` sont concaténés |

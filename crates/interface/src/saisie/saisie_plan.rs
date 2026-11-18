@@ -95,8 +95,7 @@ impl ViewerApp {
         let s = self.scene.as_ref()?;
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
         let q = (glam::DVec3::new(p[0], p[1], z) * 0.001 - s.origin).as_vec3();
-        let c = vp * q.extend(1.0);
-        (c.w > 0.0).then(|| egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height()))
+        crate::socle::projection::ecran(vp, rect, q)
     }
 
     /// Arêtes de l'élément horizontal sélectionné qui peut porter une pente (plafond,

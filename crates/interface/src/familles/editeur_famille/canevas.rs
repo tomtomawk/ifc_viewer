@@ -55,18 +55,16 @@ fn dessiner_axe_revolution(painter: &egui::Painter, cadre: &Cadre, ed: &EditeurF
 }
 
 /// Dessin face au plan de construction : les points sont exprimés dans son repère.
-fn canevas_construction(ui: &mut egui::Ui, ed: &mut EditeurFamille, plan: &PlanConstruction, fond: Color32) {
+fn canevas_construction(ui: &mut egui::Ui, ed: &mut EditeurFamille, plan: &PlanConstruction) {
     ui.label(format!("Plan de construction : {}", plan.nom));
     let (rect, resp) = ui.allocate_exact_size(ui.available_size().max(egui::vec2(80.0,80.0)), Sense::click_and_drag());
     crate::socle::aides::curseur_dessin(ui, &resp, ed.outil != OutilFamille::Selection);
     ed.rect_navigation = rect;
-    let base = Cadre { centre: rect.center(), milieu: (0.0, 0.0), echelle: (rect.width().min(rect.height()) as f64 / 2000.0).max(0.001) };
-    let nav = &mut ed.navigation[ed.vue as usize];
-    nav.souris(ui, &resp, &base);
-    let cadre = nav.cadre(&base);
+    let nav = &mut ed.navigation[INDICE_CONSTRUCTION];
+    nav.souris(ui, &resp, rect);
+    let cadre = nav.preparer(rect, (0, 1), [-1000.0, 1000.0, -1000.0, 1000.0]);
     echap_esquisse(ui, &resp, ed);
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 0.0, fond);
     let origine = cadre.ecran(0.0,0.0);
     for ligne in [[egui::pos2(rect.left(),origine.y),egui::pos2(rect.right(),origine.y)], [egui::pos2(origine.x,rect.top()),egui::pos2(origine.x,rect.bottom())]] {
         painter.line_segment(ligne, egui::Stroke::new(1.0,Color32::LIGHT_GRAY));
@@ -156,9 +154,9 @@ fn canevas_construction(ui: &mut egui::Ui, ed: &mut EditeurFamille, plan: &PlanC
 
 /// Vue de travail : mur générique, volumes, vides, plans, cotes ; interactions selon
 /// l'outil.
-pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele::Projet, delai_accrochage: f64, fond: Color32) {
+pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele::Projet, delai_accrochage: f64) {
     if let Some(plan) = ed.construction.and_then(|k| ed.famille.plans_construction.get(k)).and_then(|p| ed.famille.repere_construction(&p.id, &ed.resoudre())) {
-        canevas_construction(ui, ed, &plan, fond);
+        canevas_construction(ui, ed, &plan);
         return;
     }
     let selection_avant = ed.selection.clone();
@@ -167,7 +165,6 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
     let (rect, resp) = ui.allocate_exact_size(taille, Sense::click_and_drag());
     crate::socle::aides::curseur_dessin(ui, &resp, ed.outil != OutilFamille::Selection);
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 0.0, fond);
     let r = ed.resoudre();
     let (ah, av) = ed.vue.axes();
     let pos = |nom: &str| r.positions.get(nom).copied().unwrap_or(0.0);
@@ -181,12 +178,10 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
         AxePlan::Z => [0.0, ed.hauteur],
     };
     let (h0, h1, v0, v1, marge) = cadrage_vue(ed, &r, etendue(ah, base(ah)), etendue(av, base(av)));
-    let echelle = (rect.width() as f64 / (h1 - h0)).min(rect.height() as f64 / (v1 - v0));
-    let base_cadre = Cadre { centre: rect.center(), milieu: ((h0 + h1) / 2.0, (v0 + v1) / 2.0), echelle };
     ed.rect_navigation=rect;
     let nav=&mut ed.navigation[ed.vue as usize];
-    nav.souris(ui, &resp, &base_cadre);
-    let cadre=nav.cadre(&base_cadre);
+    nav.souris(ui, &resp, rect);
+    let cadre=nav.preparer(rect, (ah as usize, av as usize), [h0, h1, v0, v1]);
     let echelle=cadre.echelle;
     let boite = |a: (f64, f64), b: (f64, f64)| egui::Rect::from_two_pos(cadre.ecran(a.0, a.1), cadre.ecran(b.0, b.1));
     let (ih, iv) = (ah as usize, av as usize);
@@ -199,25 +194,10 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
         painter.text(cadre.ecran(a[ih],a[iv]),egui::Align2::LEFT_BOTTOM,&plan.nom,egui::FontId::proportional(11.0),Color32::DARK_GREEN);
     }
 
+    // Les solides, le mur générique, les éléments 2D et les cotes de mesure sont rendus
+    // par le `Renderer` du projet (rendu.rs) ; ici ne restent que les superpositions de
+    // l'éditeur et les zones de sélection.
     if matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Porte | modele::famille::modelee::CategorieFamille::Fenetre) {
-        // mur générique : élévation pleine, plan et coupe en bande ; les vides le percent
-        let gris = Color32::from_gray(222);
-        let (mh, mv) = match ed.vue {
-            VueFamille::Elevation => ([h0, h1], [v0, v1]),
-            VueFamille::Plan => ([h0, h1], [-ed.epaisseur / 2.0, ed.epaisseur / 2.0]),
-            VueFamille::Coupe => ([-ed.epaisseur / 2.0, ed.epaisseur / 2.0], [v0, v1]),
-        };
-        let mur = boite((mh[0], mv[0]), (mh[1], mv[1]));
-        painter.rect_filled(mur, 0.0, gris);
-        for b in boites.iter().filter(|b| b.vide && ed.famille.visible(&r, &ed.famille.volumes[b.indice].visible)) {
-            let x = boite((b.min[ih], b.min[iv]), (b.max[ih], b.max[iv])).intersect(mur);
-            if x.is_positive() {
-                painter.rect_filled(x, 0.0, Color32::WHITE);
-            }
-        }
-        if ed.vue != VueFamille::Elevation {
-            painter.rect_stroke(mur, 0.0, egui::Stroke::new(1.5, Color32::from_gray(90)), egui::StrokeKind::Middle);
-        }
         let ext = match ed.vue {
             VueFamille::Elevation => None,
             VueFamille::Plan => Some((egui::Align2::CENTER_BOTTOM, cadre.ecran(0.0, ed.epaisseur / 2.0 + marge * 0.6))),
@@ -226,48 +206,29 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
         if let Some((a, p)) = ext {
             painter.text(p, a, "Extérieur", egui::FontId::proportional(12.0), Color32::from_gray(110));
         }
-
     }
 
-    // volumes pleins (du plus loin au plus proche), puis contours des vides
+    // vides : contours tiretés (ils ne sont pas des solides) ; sélection en orange
+    let orange = Color32::from_rgb(230, 120, 20);
+    // volumes pleins du plus loin au plus proche (sélection au clic : le plus proche)
     let profondeur = 3 - ih - iv;
     let mut pleins: Vec<_> = boites.iter().filter(|b| !b.vide).collect();
     pleins.sort_by(|a, b| a.min[profondeur].total_cmp(&b.min[profondeur]));
-    if ed.vue == VueFamille::Elevation {
-        // vu de l'intérieur (y négatif) : le plus proche a le y le plus petit
-        pleins.reverse();
-    }
-    let encre = egui::Stroke::new(1.0, Color32::from_gray(50));
-    let orange = Color32::from_rgb(230, 120, 20);
-    for b in &pleins {
+    if ed.vue == VueFamille::Elevation { pleins.reverse(); }
+    for b in &boites {
         let choisi = ed.choisi(&SelectionFamille::Volume(b.indice));
-        // masqué par son paramètre oui/non : estompé
-        let vol = &ed.famille.volumes[b.indice];
-        let mut couleur = ed.couleur_solide(&r, b.materiau, &vol.materiau_parametre);
-        if !ed.famille.visible(&r, &vol.visible) {
-            couleur = couleur.gamma_multiply(0.25);
-        }
-        painter.rect(boite((b.min[ih], b.min[iv]), (b.max[ih], b.max[iv])), 0.0, couleur, if choisi { egui::Stroke::new(2.5, orange) } else { encre }, egui::StrokeKind::Inside);
-    }
-    for b in boites.iter().filter(|b| b.vide) {
+        if !b.vide && !choisi { continue; }
         let r = boite((b.min[ih], b.min[iv]), (b.max[ih], b.max[iv]));
-        let choisi = ed.choisi(&SelectionFamille::Volume(b.indice));
         let pts = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
-        painter.add(egui::Shape::dashed_line(&pts, egui::Stroke::new(if choisi { 2.5 } else { 1.5 }, orange), 7.0, 4.0));
+        if b.vide { painter.add(egui::Shape::dashed_line(&pts, egui::Stroke::new(if choisi { 2.5 } else { 1.5 }, orange), 7.0, 4.0)); }
+        else { painter.add(egui::Shape::line(pts.to_vec(), egui::Stroke::new(2.5, orange))); }
     }
 
-    // extrusions : profil dans leur vue d'esquisse, emprise ailleurs
+    // extrusions : profil dans leur vue d'esquisse, emprise ailleurs (zones de sélection)
     let solides = ed.famille.solides(&r);
     let decalage_ext = ed.famille.volumes.len();
     let mut contours_ext: Vec<(usize, Vec<egui::Pos2>)> = Vec::new();
     for (k, e) in ed.famille.extrusions.iter().enumerate() {
-        if (e.construction.is_some() || !matches!(e.operation, OperationForme::Extrusion)) && let Some(s) = solides.get(decalage_ext + k) {
-            for t in &s.tris {
-                let mut pts: Vec<_> = t.iter().map(|p| {let p=p.to_array();cadre.ecran(p[ih],p[iv])}).collect();
-                pts.push(pts[0]);
-                painter.add(egui::Shape::line(pts,egui::Stroke::new(1.0,Color32::DARK_GRAY)));
-            }
-        }
         let pts: Vec<egui::Pos2> = if e.construction.is_none() && e.vue == ed.vue.esquisse() {
             e.profil.iter().map(|p| { let (h, v) = ed.famille.point_esquisse(&r, p); cadre.ecran(h, v) }).collect()
         } else {
@@ -288,64 +249,43 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             continue;
         }
         let choisi = ed.choisi(&SelectionFamille::Extrusion(k));
-        let mut ferme = pts.clone();
-        ferme.push(pts[0]);
-        if e.vide {
-            if ed.famille.visible(&r, &e.visible) {
-                remplir(&painter, &pts, Color32::WHITE);
-            }
-            painter.add(egui::Shape::dashed_line(&ferme, egui::Stroke::new(if choisi { 2.5 } else { 1.5 }, orange), 7.0, 4.0));
-        } else {
-            let mut couleur = ed.couleur_solide(&r, e.materiau, &e.materiau_parametre);
-            if !ed.famille.visible(&r, &e.visible) {
-                couleur = couleur.gamma_multiply(0.25);
-            }
-            remplir(&painter, &pts, couleur);
-            painter.add(egui::Shape::line(ferme, if choisi { egui::Stroke::new(2.5, orange) } else { encre }));
+        if e.vide || choisi {
+            let mut ferme = pts.clone();
+            ferme.push(pts[0]);
+            if e.vide { painter.add(egui::Shape::dashed_line(&ferme, egui::Stroke::new(if choisi { 2.5 } else { 1.5 }, orange), 7.0, 4.0)); }
+            else { painter.add(egui::Shape::line(ferme, egui::Stroke::new(2.5, orange))); }
         }
         contours_ext.push((k, pts));
     }
 
-    // Éléments 2D du modèle commun : même géométrie que les annotations du projet.
+    // Éléments 2D : zones de sélection (le dessin est celui des annotations du projet).
     let mut textes_2d = Vec::new();
     let mut lignes_2d: Vec<(usize, Vec<egui::Pos2>)> = Vec::new();
     for (indice, element) in ed.famille.elements_2d.iter().enumerate().filter(|(_, e)| e.vue == ed.vue.esquisse()) {
         use modele::documentation::AnnotationForme;
         let element = &ed.famille.element_resolu(&r, element);
         if let AnnotationForme::Texte { point, texte } = &element.forme {
-            // cartouches et étiquettes : repère en mm de papier ; les autres catégories :
-            // hauteur papier à l'échelle de la vue (barre de vue)
             let papier = matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Cartouche | modele::famille::modelee::CategorieFamille::EtiquettePiece);
-            let taille = egui::FontId::proportional(taille_texte(element.hauteur, papier, ed.navigation[ed.vue as usize].echelle_vue, &cadre));
-            let couleur = if ed.choisi(&SelectionFamille::Element2D(indice)) { Color32::from_rgb(0, 100, 210) } else { Color32::from_gray(30) };
+            let taille = taille_texte(element.hauteur, papier, ed.navigation[ed.vue as usize].echelle_vue, &cadre);
             let apercu = crate::outils::annoter::outils_texte::apercu_famille(texte, projet, ed.vue.nom(), ed.famille.categorie, ed.cible_feuille.as_deref(), ed.cible_piece.as_deref());
-            let rect_texte = painter.text(cadre.ecran(point[0], point[1]), if ed.famille.categorie == modele::famille::modelee::CategorieFamille::EtiquettePiece { egui::Align2::CENTER_BOTTOM } else { egui::Align2::LEFT_BOTTOM }, apercu, taille, couleur);
-            textes_2d.push((indice, rect_texte.expand(5.0)));
-        } else {
-            let primitives = modele::documentation::forme_cartouche(projet, &element.forme);
-            let dessin = crate::documenter::feuilles::rendu(&primitives, [0.0; 4]);
-            let selection = ed.choisi(&SelectionFamille::Element2D(indice)).then_some(Color32::from_rgb(0, 100, 210));
-            crate::documenter::cartouche::peindre(&painter, &cadre, dessin, selection);
-            if let Some(forme) = element.forme.forme_2d() {
-                for ligne in forme.polylignes() {
-                    lignes_2d.push((indice, ligne.into_iter().map(|p| cadre.ecran(p.x, p.y)).collect()));
-                }
+            let largeur = noyau::texte::largeur(&apercu, "Arial", taille as f64, false) as f32;
+            let p = cadre.ecran(point[0], point[1]);
+            let x0 = if ed.famille.categorie == modele::famille::modelee::CategorieFamille::EtiquettePiece { p.x - largeur / 2.0 } else { p.x };
+            textes_2d.push((indice, egui::Rect::from_min_max(egui::pos2(x0, p.y - taille), egui::pos2(x0 + largeur, p.y)).expand(5.0)));
+        } else if let Some(forme) = element.forme.forme_2d() {
+            for ligne in forme.polylignes() {
+                lignes_2d.push((indice, ligne.into_iter().map(|p| cadre.ecran(p.x, p.y)).collect()));
             }
         }
     }
 
-    let marine = Color32::from_rgb(20, 40, 120);
-    // cotes de mesure de la vue (angle, diamètre, altimétrie), points résolus
+    // cotes de mesure de la vue (angle, diamètre, altimétrie) : zones de sélection
     let mut lignes_mesures: Vec<(usize, Vec<[egui::Pos2; 2]>)> = Vec::new();
     for (k, c) in ed.famille.cotes_mesure.iter().enumerate() {
         if c.vue != ed.vue.esquisse() { continue; }
         let pts: Vec<glam::DVec2> = c.points.iter().map(|p| { let (h, v) = ed.famille.point_esquisse(&r, p); glam::DVec2::new(h, v) }).collect();
         let Some(g) = geometrie_mesure(c.genre, c.vue, &pts, echelle) else { continue };
-        let choisi = ed.choisi(&SelectionFamille::CoteMesure(k));
-        let couleur = if choisi { orange } else { marine };
         let segs: Vec<[egui::Pos2; 2]> = g.traits.iter().map(|[a, b]| [cadre.ecran(a.x, a.y), cadre.ecran(b.x, b.y)]).collect();
-        for s in &segs { painter.line_segment(*s, egui::Stroke::new(if choisi { 2.0 } else { 1.0 }, couleur)); }
-        painter.text(cadre.ecran(g.texte.0.x, g.texte.0.y), egui::Align2::CENTER_BOTTOM, &g.texte.2, egui::FontId::proportional(11.0), couleur);
         lignes_mesures.push((k, segs));
     }
 
@@ -1166,7 +1106,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
 /// commune (`GenreCote`) ; `echelle` : px par mm, pour des traits et un écart de texte
 /// constants à l'écran. Altimétrie : altitude depuis le bas de la baie, seulement en
 /// élévation et en coupe.
-fn geometrie_mesure(genre: GenreCote, vue: VueEsquisse, pts: &[glam::DVec2], echelle: f64) -> Option<modele::documentation::GeometrieMesure> {
+pub(super) fn geometrie_mesure(genre: GenreCote, vue: VueEsquisse, pts: &[glam::DVec2], echelle: f64) -> Option<modele::documentation::GeometrieMesure> {
     use modele::documentation as doc;
     if genre == GenreCote::Altimetrie && vue == VueEsquisse::Plan { return None; }
     let forme = genre.forme(pts, false, 2)?;

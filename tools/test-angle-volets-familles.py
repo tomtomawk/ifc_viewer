@@ -132,22 +132,23 @@ def run(exe, captures):
             etats={}
             for vue in ["elevation","plan","coupe"]:
                 commande("famille_navigation",vue)
+                time.sleep(.3)
                 n=commande("famille_navigation")
-                assert n["zoom"]==1.0 and n["decalage"]==[0.0,0.0],n
+                d0=n["distance"]
                 x0,y0,x1,y1=n["rectangle"];x,y=(x0+x1)/2,(y0+y1)/2
                 saisie([{"action":"defiler","x":x+40,"y":y,"dx":0,"dy":200}])
-                attendre(lambda:commande("famille_navigation")["zoom"]>1.05)
+                attendre(lambda:commande("famille_navigation")["distance"]<d0/1.05)
                 time.sleep(.3)
                 n=commande("famille_navigation")
                 saisie([{"action":"bouton","x":x,"y":y,"bouton":"milieu","appuye":True},{"action":"pointer","x":x+50,"y":y+30},{"action":"bouton","x":x+50,"y":y+30,"bouton":"milieu","appuye":False}])
                 suivant=commande("famille_navigation")
-                assert suivant["decalage"]!=n["decalage"],(n,suivant)
+                assert suivant["cible"]!=n["cible"],(n,suivant)
                 etats[vue]=suivant
                 assert commande("famille_document")["fichier"]==f0,"La navigation a modifié la famille"
             for vue,n in etats.items():
                 commande("famille_navigation",vue)
                 actuel=commande("famille_navigation")
-                assert actuel["zoom"]==n["zoom"] and actuel["decalage"]==n["decalage"]
+                assert actuel["distance"]==n["distance"] and actuel["cible"]==n["cible"]
             saisie([{"action":"touche","touche":"F"}])
             n=commande("famille_navigation")
             assert n["zoom"]==1.0 and n["decalage"]==[0.,0.],n

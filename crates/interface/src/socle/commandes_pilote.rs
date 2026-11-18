@@ -57,7 +57,7 @@ impl ViewerApp {
             view_dir: self.camera.direction_vue(),
             ortho: self.camera.ortho,
             selected: self.objets_selectionnes(),
-            background: crate::familles::editeur_famille::navigation::fond_vue(self.style),
+            background: moteur3d::fond::fond_vue(self.style),
             style: self.style,
             faces_blanches: self.faces_blanches,
             eclairage: self.eclairage,

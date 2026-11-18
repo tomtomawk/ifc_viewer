@@ -2,6 +2,7 @@
 pub(crate) mod documents;
 pub(crate) mod vues;
 pub(crate) mod viewport;
+pub(crate) mod projection;
 pub mod fenetre;
 pub(crate) mod parametres;
 pub(crate) mod aides;

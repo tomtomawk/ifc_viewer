@@ -24,8 +24,8 @@ mod construction;
 mod reseau;
 mod aligner;
 mod chemin_trace;
-pub(crate) mod navigation;
-use navigation::*;
+pub(crate) mod navigation; mod rendu;
+use navigation::*; use rendu::*;
 use crate::*;
 use modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
 use modele::famille::modelee::FichierFamille;
@@ -195,7 +195,7 @@ pub(crate) struct EditeurFamille {
     vues_ouvertes: Vec<usize>,
     camera_3d: moteur3d::camera::Camera,
     cadrage_3d_initial: bool,
-    navigation: [NavigationFamille;3],
+    navigation: [NavigationFamille;4],
     rect_navigation: egui::Rect,
     outil: OutilFamille,
     selection: SelectionFamille,
@@ -606,15 +606,6 @@ impl EditeurFamille {
     fn accrocher(&self, r: &Resolution, axe: AxePlan, x: f64, tol: f64) -> Option<Face> {
         let (plan, d) = self.plan_proche(r, axe, x)?;
         Some(Face { plan, decalage: if d.abs() <= tol { 0.0 } else { d.round() } })
-    }
-
-    /// Couleur d'un solide : matériau du projet donné par un paramètre, sinon le rôle.
-    fn couleur_solide(&self, r: &Resolution, materiau: Materiau, parametre: &Option<String>) -> Color32 {
-        let projet = parametre.as_ref().and_then(|p| r.materiaux.get(p)).and_then(|m| self.materiaux_projet.iter().find(|(n, _)| n == m));
-        match projet {
-            Some((_, [cr, cg, cb])) if materiau != Materiau::Vitrage => Color32::from_rgb(*cr, *cg, *cb),
-            _ => couleur_materiau(&self.famille, materiau),
-        }
     }
 
     /// Plan de l'axe le plus proche d'une valeur (et son écart).
