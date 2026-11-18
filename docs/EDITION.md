@@ -354,6 +354,25 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   vertical ; une forme esquissée dans une autre vue ou sur un plan oblique ne se
   transforme pas. Pilote : `famille_outil reseau 5 total` (nombre, `pas` ou `total`),
   `famille_outil reseau_polaire 6`, `famille_outil aligner`, puis des clics `saisie`.
+  **Formes guidées** (extrusion par chemin, raccordement, raccordement par chemin) :
+  le chemin se règle dans Propriétés (points H, V, D ; case « arc » : le point est
+  le passage d'un arc par trois points avec ses deux voisins, discrétisé en cordes de
+  5° au plus ; « Chemin fermé » pour l'extrusion par chemin) ou se trace dans la vue :
+  « Tracer le chemin dans la vue » (Propriétés de la forme) ou `famille_outil chemin`.
+  Le premier clic est l'origine de la section ; les clics suivants, accrochés comme
+  ailleurs, donnent H et V dans le plan de la vue (D = 0) ; A : le prochain clic est
+  un passage d'arc ; clic sur le premier point : fermer ; Entrée ou clic droit :
+  terminer ; Retour arrière : retirer le dernier point ; Échap : abandonner. Le chemin
+  tracé remplace celui de la forme (une annulation) s'il est valide, sinon le tracé
+  reste et l'erreur s'affiche. Aux changements de direction, les sections sont en
+  onglet exact (plan bissecteur) ; un virage de plus de 150° ou un profil trop grand
+  pour un tronçon (onglets qui se recouvrent) est refusé. Sur un chemin fermé non
+  plan, le vrillage du repère est réparti sur les tronçons. Le profil d'arrivée d'un
+  raccordement peut compter un autre nombre de sommets que le profil initial
+  (correspondance automatique : centres alignés, premier sommet le plus proche, puis
+  abscisse curviligne) et peut être « verrouillé sur les plans » : chaque sommet suit
+  un plan de référence et un décalage, donc les paramètres et formules, comme le
+  profil initial. Un raccordement ne se ferme pas (ses deux profils diffèrent).
   **Plan de construction** actif (Propriétés) : renommer, Supprimer (refusé tant que
   des formes y sont esquissées, avec leur liste), Détacher (un plan qui suit un plan
   de référence devient un repère fixe à sa position courante : ses formes ne bougent

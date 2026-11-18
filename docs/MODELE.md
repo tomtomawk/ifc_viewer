@@ -341,6 +341,14 @@ Un profil peut désigner sa section en plan par `famille.section_profil` : l'ind
 
 Chaque élément de `famille.extrusions` porte un objet `operation` obligatoire. `{"genre":"extrusion"}` décrit une extrusion, `{"genre":"revolution","revolution":{...}}` une révolution, et `{"genre":"guidage","guidage":{"genre":..., ...}}` une extrusion par chemin, un raccordement ou un raccordement par chemin. Le profil, le repère, le matériau et le caractère plein ou vide restent communs à la forme. Le format `famille-ouverture 3` est incompatible avec les anciens fichiers de famille ; ceux-ci sont à refaire. Les projets contenant des familles dans l'ancien schéma doivent également être refaits ou leurs familles recréées.
 
+Champs facultatifs de `guidage` (absents : valeur par défaut, omis à l'écriture ; ajout du 18/11/2026 sans conversion) :
+
+- `arcs` (`extrusion_chemin`, `raccordement_chemin`) : indices (à partir de 0) des points de `chemin` qui sont le passage d'un arc par trois points avec leurs deux voisins. Un passage doit avoir deux voisins (sur un chemin ouvert : ni le premier ni le dernier point), deux passages ne peuvent être ni confondus ni voisins, et les trois points ne doivent pas être alignés. L'arc est discrétisé en cordes de 5° au plus.
+- `ferme` (`extrusion_chemin`, booléen) : le dernier point est relié au premier, sans capuchon ; au moins trois points, sans répéter le premier. Un chemin ouvert dont les extrémités se rejoignent est refusé.
+- `ancrage_fin` (`raccordement`, `raccordement_chemin`) : profil d'arrivée en sommets `{ "h": {"plan", "decalage"}, "v": {...} }` verrouillés sur les plans de la vue d'esquisse, comme `profil` (au moins trois sommets, plans existants de l'axe voulu). Présent, il remplace `profil_fin`, recalculé à chaque résolution (la valeur écrite n'est qu'une copie).
+
+`profil_fin` peut compter un nombre de sommets différent de `profil` : la correspondance aligne les centres de surface, prend pour premier sommet d'arrivée le plus proche du premier sommet de départ, puis rééchantillonne les deux contours par abscisse curviligne. À nombre égal, la correspondance reste sommet à sommet. Les deux profils doivent être dans le même sens. Aux sommets intérieurs du chemin, la section est en onglet exact (plan bissecteur) ; un virage de plus de 150° ou des onglets qui se recouvrent sont refusés ; sur un chemin fermé non plan, le vrillage résiduel du repère est réparti sur les tronçons.
+
 Les plans de construction possèdent un `id` stable. Le champ `construction` d'une forme est cet identifiant, et non une copie du repère. Un plan associé à un plan de référence porte son nom dans `reference` : sa position est résolue à partir des contraintes courantes de la famille.
 
 ### Éléments 2D des familles

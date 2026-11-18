@@ -878,6 +878,10 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 ed.selectionner(vec![SelectionFamille::Element2D(indice)]);
             }
         }
+        OutilFamille::CheminGuidage => {
+            let vise = curseur.filter(|_| resp.hovered()).map(|q| viser(q, ed.modifier.chemin.points.last().copied()).0);
+            chemin_trace::canevas_chemin(ui, ed, &painter, &cadre, &resp, vise);
+        }
         OutilFamille::Aligner => {
             aligner::canevas_aligner(ed, &painter, &cadre, &r, &resp, curseur);
             garder_multiple = true;

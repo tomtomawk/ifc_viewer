@@ -23,6 +23,7 @@ mod ancrage;
 mod construction;
 mod reseau;
 mod aligner;
+mod chemin_trace;
 use crate::*;
 use modele::famille::modelee::{AxePlan, PlanConstruction, Contrainte, CoteMesure, FormeProfil, OperationForme, Face, FamilleModelee, GenreParametre, Hote, Materiau, Parametre, PlanRef, PointEsquisse, Portee, Resolution, VueEsquisse, Volume, EPAISSEUR, HAUTEUR, LARGEUR};
 use modele::famille::modelee::FichierFamille;
@@ -114,6 +115,8 @@ pub(crate) enum OutilFamille {
     Reseau,
     ReseauPolaire,
     Aligner,
+    /// Tracé graphique du chemin de la forme guidée choisie.
+    CheminGuidage,
 }
 
 impl OutilFamille {
@@ -462,6 +465,7 @@ impl EditeurFamille {
         self.axe_revolution = None;
         self.points_transfo.clear();
         self.modifier.reference = None;
+        self.modifier.chemin = Default::default();
         self.esquisse.clear();
         self.trace_polyligne = None;
         self.saisie_trace.vider();

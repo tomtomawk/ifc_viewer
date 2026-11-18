@@ -129,16 +129,7 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 let contour: Vec<_> = e.profil.iter().map(|p| { let (h,v)=ed.famille.point_esquisse(&r,p); [h,v] }).collect();
                 if let Err(erreur) = revolution.valider(&contour) { ui.colored_label(ui.visuals().error_fg_color, erreur); }
             }
-            if let OperationForme::Guidage { guidage } = &e.operation {
-                let r = ed.resoudre();
-                let contour: Vec<_> = e.profil.iter().map(|p| { let (h,v)=ed.famille.point_esquisse(&r,p); [h,v] }).collect();
-                let erreur = guidage.valider(&contour).err().or_else(|| guidage.triangles(&contour).is_empty().then(|| "Forme dégénérée : revoir le chemin ou les profils.".into()));
-                if let Some(erreur) = erreur { ui.colored_label(ui.visuals().error_fg_color, erreur); }
-                if guidage.profil_fin().is_some() && ui.button("Reprendre le profil initial à l'arrivée").clicked() {
-                    use modele::famille::modelee::FormeGuidee;
-                    if let OperationForme::Guidage { guidage: FormeGuidee::Raccordement { profil_fin, .. } | FormeGuidee::RaccordementChemin { profil_fin, .. } } = &mut ed.famille.extrusions[k].operation { *profil_fin=contour; }
-                }
-            }
+            if matches!(e.operation, OperationForme::Guidage { .. }) { chemin_trace::proprietes_guidage(ui, ed, k); }
             return;
         }
         SelectionFamille::Volume(k) if k < ed.famille.volumes.len() => {

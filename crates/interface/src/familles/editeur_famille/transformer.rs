@@ -310,16 +310,17 @@ impl EditeurFamille {
                             // le profil d'arrivée est dans le repère de la vue ; le chemin est
                             // relatif à la section : seule la partie linéaire s'y applique
                             let (profil_fin, chemin) = match &mut guidage {
-                                FormeGuidee::ExtrusionChemin { chemin } => (None, Some(chemin)),
+                                FormeGuidee::ExtrusionChemin { chemin, .. } => (None, Some(chemin)),
                                 FormeGuidee::Raccordement { profil_fin, .. } => (Some(profil_fin), None),
-                                FormeGuidee::RaccordementChemin { profil_fin, chemin } => (Some(profil_fin), Some(chemin)),
+                                FormeGuidee::RaccordementChemin { profil_fin, chemin, .. } => (Some(profil_fin), Some(chemin)),
                             };
                             for p in profil_fin.into_iter().flatten() { *p = image(*p); }
                             for point in chemin.into_iter().flatten() {
                                 let (h, v) = transformation.vecteur((point[0], point[1]));
                                 (point[0], point[1]) = (h, v);
                             }
-                            guidage.valider(&contour)?;
+                            if let Some(Some(ancrage)) = guidage.ancrage_fin_mut() { *ancrage = lier(ancrage)?; }
+                            guidage.resolue(|p| self.famille.point_esquisse(&r, p)).valider(&contour)?;
                             OperationForme::Guidage { guidage }
                         }
                     };

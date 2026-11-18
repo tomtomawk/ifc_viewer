@@ -24,9 +24,9 @@ impl EditeurFamille {
         let hauteur = 1000.0;
         let chemin = vec![[0.0;3],[0.0,0.0,hauteur]];
         let guidage = match self.outil {
-            OutilFamille::ExtrusionChemin => Some(FormeGuidee::ExtrusionChemin { chemin }),
-            OutilFamille::Raccordement => Some(FormeGuidee::Raccordement { profil_fin: contour.clone(), hauteur }),
-            OutilFamille::RaccordementChemin => Some(FormeGuidee::RaccordementChemin { profil_fin: contour.clone(), chemin }),
+            OutilFamille::ExtrusionChemin => Some(FormeGuidee::extrusion(chemin)),
+            OutilFamille::Raccordement => Some(FormeGuidee::raccordement(contour.clone(), hauteur)),
+            OutilFamille::RaccordementChemin => Some(FormeGuidee::raccordement_chemin(contour.clone(), chemin)),
             _ => None,
         };
         if let Some(g) = &guidage { g.valider(&contour)?; }
@@ -56,16 +56,13 @@ impl EditeurFamille {
 pub(super) fn guidage_ui(ui: &mut egui::Ui, guidage: &mut FormeGuidee) {
     ui.label(RichText::new(guidage.nom()).strong());
     ui.label("Coordonnées locales en mm : H et V dans le profil, D en profondeur. Le premier point du chemin est l'origine de la section.");
-    let (profil_fin, chemin) = match guidage {
-        FormeGuidee::ExtrusionChemin { chemin } => (None,Some(chemin)),
-        FormeGuidee::Raccordement { profil_fin, hauteur } => {
-            ui.horizontal(|ui| { ui.label("Distance entre profils"); ui.add(egui::DragValue::new(hauteur).speed(10.0).range(0.1..=1e6).dimensions()); });
-            (Some(profil_fin),None)
-        }
-        FormeGuidee::RaccordementChemin { profil_fin, chemin } => (Some(profil_fin),Some(chemin)),
-    };
-    if let Some(chemin) = chemin {
-        egui::CollapsingHeader::new("Chemin polygonal").default_open(true).show(ui, |ui| {
+    if let FormeGuidee::Raccordement { hauteur, .. } = guidage {
+        ui.horizontal(|ui| { ui.label("Distance entre profils"); ui.add(egui::DragValue::new(hauteur).speed(10.0).range(0.1..=1e6).dimensions()); });
+    }
+    let ancre = guidage.ancrage_fin().is_some();
+    if let Some((chemin, arcs, ferme)) = guidage.trace_mut() {
+        egui::CollapsingHeader::new("Chemin").default_open(true).show(ui, |ui| {
+            if let Some(ferme) = ferme { ui.checkbox(ferme, "Chemin fermé (le dernier point rejoint le premier)"); }
             let mut retirer = None;
             let suppression = chemin.len()>2;
             for (i,point) in chemin.iter_mut().enumerate() {
@@ -75,26 +72,43 @@ pub(super) fn guidage_ui(ui: &mut egui::Ui, guidage: &mut FormeGuidee) {
                         for (label,valeur) in ["H","V","D"].into_iter().zip(point) {
                             ui.label(label); ui.add(egui::DragValue::new(valeur).speed(10.0).dimensions());
                         }
+                        let mut passage = arcs.contains(&i);
+                        if ui.checkbox(&mut passage, "arc").on_hover_text("Point de passage d'un arc par trois points (avec ses deux voisins)").changed() {
+                            if passage { arcs.push(i); arcs.sort_unstable(); } else { arcs.retain(|&j| j != i); }
+                        }
                         if ui.add_enabled(suppression,egui::Button::new("−")).clicked() { retirer=Some(i); }
                     });
                 });
             }
-            if let Some(i)=retirer { chemin.remove(i); }
+            if let Some(i)=retirer {
+                chemin.remove(i);
+                *arcs = arcs.iter().filter(|&&j| j != i).map(|&j| if j > i { j - 1 } else { j }).collect();
+            }
             if ui.button("Ajouter un point").clicked() {
                 let dernier = chemin.last().copied().unwrap_or([0.0;3]);
                 chemin.push([dernier[0],dernier[1],dernier[2]+1000.0]);
             }
         });
     }
+    let profil_fin = match guidage {
+        FormeGuidee::Raccordement { profil_fin, .. } | FormeGuidee::RaccordementChemin { profil_fin, .. } if !ancre => Some(profil_fin),
+        _ => None,
+    };
     if let Some(fin) = profil_fin {
         egui::CollapsingHeader::new("Profil d'arrivée").default_open(true).show(ui, |ui| {
-            ui.label("Chaque sommet correspond au sommet de même numéro du profil initial.");
+            ui.label("Même nombre de sommets : correspondance sommet à sommet ; sinon, correspondance automatique (centres alignés, premier sommet le plus proche, abscisse curviligne).");
+            let (suppression, mut retirer) = (fin.len() > 3, None);
             for (i,point) in fin.iter_mut().enumerate() {
                 ui.push_id(("profil_fin",i), |ui| ui.horizontal(|ui| {
                     ui.label(format!("Sommet {}",i+1));
                     ui.label("H"); ui.add(egui::DragValue::new(&mut point[0]).speed(1.0).dimensions());
                     ui.label("V"); ui.add(egui::DragValue::new(&mut point[1]).speed(1.0).dimensions());
+                    if ui.add_enabled(suppression, egui::Button::new("−")).clicked() { retirer = Some(i); }
                 }));
+            }
+            if let Some(i) = retirer { fin.remove(i); }
+            if ui.button("Ajouter un sommet").clicked() && let (Some(a), Some(b)) = (fin.last().copied(), fin.first().copied()) {
+                fin.push([(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5]);
             }
         });
     }

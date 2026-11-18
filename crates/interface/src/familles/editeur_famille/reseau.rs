@@ -19,10 +19,12 @@ pub(crate) struct OptionsModifier {
     pub total: bool,
     /// Référence de l'outil Aligner : un point et la direction unitaire de la ligne.
     pub reference: Option<((f64, f64), (f64, f64))>,
+    /// Tracé en cours de l'outil « Tracer le chemin ».
+    pub chemin: super::chemin_trace::TraceChemin,
 }
 
 impl Default for OptionsModifier {
-    fn default() -> Self { Self { nombre: 3, total: false, reference: None } }
+    fn default() -> Self { Self { nombre: 3, total: false, reference: None, chemin: Default::default() } }
 }
 
 impl OptionsModifier {

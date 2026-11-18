@@ -13,6 +13,8 @@ mod catalogue;
 mod revolution;
 pub use revolution::Revolution;
 mod guidage;
+mod balayage;
+mod raccord;
 pub use guidage::FormeGuidee;
 mod dessin;
 mod construction;
@@ -781,7 +783,7 @@ impl FamilleModelee {
             let construction = e.construction.as_ref().and_then(|id| self.repere_construction(id, r));
             let impaire = construction.is_none() && e.vue == VueEsquisse::Elevation;
             let local = match &e.operation {
-                OperationForme::Guidage { guidage } => guidage.triangles(&contour),
+                OperationForme::Guidage { guidage } => guidage.resolue(|p| self.point_esquisse(r, p)).triangles(&contour),
                 OperationForme::Revolution { revolution } => revolution.triangles(&contour),
                 OperationForme::Extrusion => crate::volumes::solides::prisme(&contour, d0.min(d1), d0.max(d1)),
             };
@@ -868,7 +870,8 @@ impl FamilleModelee {
             if let Some(id) = &e.construction { if !identites_construction.contains(id) { return Err(format!("{} : plan de construction absent.", e.nom)); } }
             let (ah, av, ad) = e.vue.axes();
             let bon = |f: &Face, axe| (e.construction.is_some() && f.plan.is_empty() && f.decalage.is_finite()) || self.plan(&f.plan).is_some_and(|p| p.axe == axe);
-            if e.profil.len() < 3 || !e.profil.iter().all(|p| bon(&p.h, ah) && bon(&p.v, av)) || !e.profondeur.iter().all(|f| bon(f, ad)) {
+            let ancrage = match &e.operation { OperationForme::Guidage { guidage } => guidage.ancrage_fin().unwrap_or(&[]), _ => &[] };
+            if e.profil.len() < 3 || !e.profil.iter().chain(ancrage).all(|p| bon(&p.h, ah) && bon(&p.v, av)) || !e.profondeur.iter().all(|f| bon(f, ad)) {
                 return Err(format!("{} : profil d'au moins trois sommets sur des plans de la vue d'esquisse attendu.", e.nom));
             }
         }
@@ -894,6 +897,7 @@ impl FamilleModelee {
             let pos = |f: &Face| r.positions.get(&f.plan).copied().unwrap_or(0.0) + f.decalage;
             match &e.operation {
                 OperationForme::Guidage { guidage } => {
+                    let guidage = guidage.resolue(|p| self.point_esquisse(&r, p));
                     guidage.valider(&contour)?;
                     if guidage.triangles(&contour).is_empty() { return Err(format!("{} : raccordement dégénéré.", e.nom)); }
                 }
