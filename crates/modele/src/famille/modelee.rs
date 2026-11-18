@@ -18,7 +18,9 @@ mod raccord;
 pub use guidage::FormeGuidee;
 mod dessin;
 mod construction;
+mod visibilite;
 pub use dessin::{Element2DFamille, points_ancrables_mut};
+pub use visibilite::{Affichage, NiveauDetail, TypeVue, VisibiliteElement, PARTOUT};
 #[cfg(test)]
 mod tests_maillage;
 use crate::famille::Role;
@@ -244,6 +246,8 @@ pub struct FormeProfil {
     pub profondeur: [Face; 2],
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visible: Option<String>,
+    #[serde(default, skip_serializing_if = "VisibiliteElement::partout")]
+    pub visibilite: VisibiliteElement,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub materiau_parametre: Option<String>,
 }
@@ -364,6 +368,9 @@ pub struct Volume {
     /// Paramètre oui/non qui commande l'affichage (None : toujours visible).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visible: Option<String>,
+    /// Visibilité par niveau de détail et par type de vue (absente : partout).
+    #[serde(default, skip_serializing_if = "VisibiliteElement::partout")]
+    pub visibilite: VisibiliteElement,
     /// Paramètre matériau qui donne sa couleur dans le projet (None : celle du rôle).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub materiau_parametre: Option<String>,
@@ -426,6 +433,8 @@ pub struct SolideFamille {
     /// Faux : masqué par son paramètre oui/non (les indices restent alignés sur les
     /// volumes puis les extrusions).
     pub visible: bool,
+    /// Visibilité par niveau de détail et par type de vue de l'élément.
+    pub visibilite: VisibiliteElement,
     /// Matériau du projet donné par son paramètre matériau.
     pub materiau_nom: Option<String>,
 }
@@ -771,6 +780,7 @@ impl FamilleModelee {
                     vide: b.vide,
                     materiau: b.materiau,
                     visible: self.visible(r, &v.visible),
+                    visibilite: v.visibilite,
                     materiau_nom: v.materiau_parametre.as_ref().and_then(|n| r.materiaux.get(n)).filter(|m| !m.is_empty()).cloned(),
                 }
             })
@@ -799,6 +809,7 @@ impl FamilleModelee {
                 vide: e.vide,
                 materiau: e.materiau,
                 visible: self.visible(r, &e.visible),
+                visibilite: e.visibilite,
                 materiau_nom: e.materiau_parametre.as_ref().and_then(|n| r.materiaux.get(n)).filter(|m| !m.is_empty()).cloned(),
             });
         }
@@ -866,6 +877,7 @@ impl FamilleModelee {
                 return Err(format!("{nom} : le matériau attend un paramètre matériau."));
             }
         }
+        if self.elements_2d.iter().any(|e| e.visible.as_deref().is_some_and(|n| genre(n) != Some(GenreParametre::OuiNon))) { return Err("Élément 2D : la visibilité attend un paramètre oui/non.".into()); }
         for e in &self.extrusions {
             if let Some(id) = &e.construction { if !identites_construction.contains(id) { return Err(format!("{} : plan de construction absent.", e.nom)); } }
             let (ah, av, ad) = e.vue.axes();
@@ -917,7 +929,7 @@ impl FamilleModelee {
         let hote = |nom: &str, h| PlanRef { nom: nom.into(), axe: Y, position: 0.0, fixe: false, hote: Some(h) };
         let dist = |a: &str, b: &str, v: &str, priorite| Contrainte::Distance { a: a.into(), b: b.into(), valeur: v.into(), priorite, ligne: None };
         let face = |plan: &str, decalage| Face { plan: plan.into(), decalage };
-        let volume = |nom: &str, vide, materiau, x: [(&str, f64); 2], y: [(&str, f64); 2], z: [(&str, f64); 2]| Volume {
+        let volume = |nom: &str, vide, materiau, x: [(&str, f64); 2], y: [(&str, f64); 2], z: [(&str, f64); 2]| Volume { visibilite: Default::default(),
             nom: nom.into(),
             vide,
             materiau,
@@ -978,7 +990,7 @@ impl FamilleModelee {
                 volume("Vitrage", false, Materiau::Vitrage, [("Dormant gauche", 0.0), ("Dormant droit", 0.0)], [("Cadre int", 21.0), ("Cadre ext", -21.0)], [("Dormant bas", 0.0), ("Dormant haut", 0.0)]),
             ],
             // appui en pente : profil esquissé en coupe, extrudé sur la largeur
-            extrusions: vec![FormeProfil {
+            extrusions: vec![FormeProfil { visibilite: Default::default(),
                 operation: OperationForme::Extrusion,
                 construction: None,
                 nom: "Appui".into(),
@@ -1021,7 +1033,7 @@ impl FamilleModelee {
         let hote = |nom: &str, h| PlanRef { nom: nom.into(), axe: Y, position: 0.0, fixe: false, hote: Some(h) };
         let dist = |a: &str, b: &str, v: &str, priorite| Contrainte::Distance { a: a.into(), b: b.into(), valeur: v.into(), priorite, ligne: None };
         let face = |plan: &str, decalage| Face { plan: plan.into(), decalage };
-        let volume = |nom: &str, vide, materiau, x: [(&str, f64); 2], y: [(&str, f64); 2], z: [(&str, f64); 2]| Volume {
+        let volume = |nom: &str, vide, materiau, x: [(&str, f64); 2], y: [(&str, f64); 2], z: [(&str, f64); 2]| Volume { visibilite: Default::default(),
             nom: nom.into(),
             vide,
             materiau,
@@ -1188,7 +1200,7 @@ mod tests {
         let v = crate::volumes::geometrie::volume(&appui.tris);
         assert!(v > 0.0, "{v}");
         assert!(appui.tris.iter().flatten().all(|p| p.z <= 1e-9) && appui.tris.iter().flatten().any(|p| p.y > 150.0));
-        let s = f.lignes_2d_resolues(&r, VueEsquisse::Elevation);
+        let s = f.lignes_2d_resolues(&r, VueEsquisse::Elevation, NiveauDetail::Moyen);
         assert_eq!(s.len(), 1);
         assert!((s[0][1].0 + 640.0).abs() < 1e-9 && (s[0][1].1 - 800.0).abs() < 1e-9);
         // porte : arc de débattement d'un quart de tour, du rayon du passage
@@ -1196,7 +1208,7 @@ mod tests {
         p.valider(900.0, 2150.0, 200.0).unwrap();
         let r = p.resoudre(900.0, 2150.0, 200.0);
         assert!(r.conflits.is_empty(), "{:?}", r.conflits);
-        let arc = &p.lignes_2d_resolues(&r, VueEsquisse::Plan)[1];
+        let arc = &p.lignes_2d_resolues(&r, VueEsquisse::Plan, NiveauDetail::Moyen)[1];
         let pivot = (r.positions["Dormant gauche"], r.positions["Cadre int"]);
         for q in arc {
             assert!(((q.0 - pivot.0).hypot(q.1 - pivot.1) - 780.0).abs() < 1.0, "{q:?}");
@@ -1290,7 +1302,7 @@ mod tests_construction {
         f.volumes.clear(); f.extrusions.clear();
         let p=PlanConstruction::deux_points("Oblique".into(),VueEsquisse::Plan,[0.0,0.0],[100.0,100.0]).unwrap();
         let face=|x| Face {plan:String::new(),decalage:x};
-        f.extrusions.push(FormeProfil {operation: OperationForme::Extrusion, construction:Some(p.id.clone()),nom:"Essai".into(),vide:false,materiau:Materiau::Menuiserie,vue:VueEsquisse::Plan,profil:vec![[0.0,0.0],[100.0,0.0],[100.0,200.0],[0.0,200.0]].into_iter().map(|q| PointEsquisse {h:face(q[0]),v:face(q[1])}).collect(),profondeur:[face(0.0),face(50.0)],visible:None,materiau_parametre:None});
+        f.extrusions.push(FormeProfil { visibilite: Default::default(),operation: OperationForme::Extrusion, construction:Some(p.id.clone()),nom:"Essai".into(),vide:false,materiau:Materiau::Menuiserie,vue:VueEsquisse::Plan,profil:vec![[0.0,0.0],[100.0,0.0],[100.0,200.0],[0.0,200.0]].into_iter().map(|q| PointEsquisse {h:face(q[0]),v:face(q[1])}).collect(),profondeur:[face(0.0),face(50.0)],visible:None,materiau_parametre:None});
         f.plans_construction.push(p);
         f.valider(1200.0,1350.0,300.0).unwrap();
         let solides=f.solides(&f.resoudre(1200.0,1350.0,300.0));

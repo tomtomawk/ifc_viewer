@@ -23,6 +23,7 @@ use formats::rvt::{self, RvtInfo};
 use scene::Scene;
 use noyau::trace2d;
 use noyau::Id;
+use modele::famille::modelee::{Affichage, NiveauDetail, TypeVue};
 use eframe::egui::{self, Align, Color32, PointerButton, RichText, Sense};
 use glam::{DMat4, Mat4, Vec2, Vec3, Vec4};
 use std::collections::{BTreeMap, HashSet};
@@ -407,36 +408,6 @@ struct DocumentOuvert {
     filtre: String,
     onglet: LeftTab,
     status: String,
-}
-
-/// Niveau de détail d'une vue, comme dans Revit.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum NiveauDetail {
-    Faible,
-    Moyen,
-    Eleve,
-}
-
-impl NiveauDetail {
-    const TOUS: [NiveauDetail; 3] = [NiveauDetail::Faible, NiveauDetail::Moyen, NiveauDetail::Eleve];
-
-    fn libelle(self) -> &'static str {
-        match self {
-            NiveauDetail::Faible => "Faible",
-            NiveauDetail::Moyen => "Moyen",
-            NiveauDetail::Eleve => "Élevé",
-        }
-    }
-
-    /// Valeur du paramètre VIEW_DETAIL_LEVEL (`ViewDetailLevel` de l'API : 1, 2, 3).
-    fn depuis_revit(v: i64) -> Option<Self> {
-        match v {
-            1 => Some(NiveauDetail::Faible),
-            2 => Some(NiveauDetail::Moyen),
-            3 => Some(NiveauDetail::Eleve),
-            _ => None,
-        }
-    }
 }
 
 /// Navigation en vol façon Unity : clic droit maintenu pour regarder autour de soi,

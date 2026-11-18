@@ -621,7 +621,7 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
                 .into_iter()
                 .map(|(k, tris)| Part { color: if p.classe == "IFCSPACE" { defaut } else { m.materiaux.get(&k).map(couleur).unwrap_or(defaut) }, tris })
                 .collect();
-            geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu, motifs: Vec::new() });
+            geoms.push(ProductGeom { visibilite: Vec::new(), id, parts, lignes: Vec::new(), rendu, motifs: Vec::new() });
             // motifs de surface des matériaux (motifs de modèle), calés face par face
             let mut par_couleur: BTreeMap<[u8; 3], Vec<[DVec3; 2]>> = BTreeMap::new();
             for f in &g.faces {
@@ -645,7 +645,7 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
                 let f = b.add("IFCSURFACEFEATURE", vec![gid("RVTMOTIF", p.id), n.clone(), Value::Str(format!("Motifs de surface [{}]", p.id)), n.clone(), n.clone(), n.clone(), Value::Ref(shape)]);
                 b.add("IFCRELAGGREGATES", vec![gid("RVTAGGM", p.id), n.clone(), n.clone(), n.clone(), Value::Ref(id), Value::List(vec![Value::Ref(f)])]);
                 let lignes = par_couleur.into_iter().map(|(c, segs)| Ligne { color: [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0, 1.0], segs }).collect();
-                geoms.push(ProductGeom { id: f, parts: Vec::new(), lignes, rendu: Vec::new(), motifs: Vec::new() });
+                geoms.push(ProductGeom { visibilite: Vec::new(), id: f, parts: Vec::new(), lignes, rendu: Vec::new(), motifs: Vec::new() });
             }
         }
         if p.type_id != -1 {
@@ -953,7 +953,7 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
             }
             let parts = parts_primitives(&prims, normale, v.echelle);
             if !parts.is_empty() {
-                geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+                geoms.push(ProductGeom { visibilite: Vec::new(), id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
             }
             primitives_vues.entry(v.id).or_default().extend(prims);
             enfants.push(Value::Ref(id));
@@ -969,7 +969,7 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
             let ps = b.psets_parametres(m, o.id);
             b.definir("RVTDEF2J", o.id, id, ps);
             primitives_vues.entry(v.id).or_default().extend(primitives_parts(o.parts.clone(), Some(id)));
-            geoms.push(ProductGeom { id, parts: o.parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+            geoms.push(ProductGeom { visibilite: Vec::new(), id, parts: o.parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
             enfants.push(Value::Ref(id));
         }
         if !enfants.is_empty() {

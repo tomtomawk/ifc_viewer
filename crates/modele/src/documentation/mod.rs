@@ -889,11 +889,11 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
     let mut out = Vec::new();
     if let GenreVue::Plan { niveau, .. } = &v.genre {
         for c in p.composants.iter().filter(|c| &c.niveau == niveau && !v.elements_masques.contains(&c.id)) {
-            for (points, r) in c.remplissages_plan(p) { out.extend(remplissage_commun(points, r)); }
-            for l in c.symboles_plan(p) {
+            for (points, r) in c.remplissages_plan(p, v.niveau_detail) { out.extend(remplissage_commun(points, r)); }
+            for l in c.symboles_plan(p, v.niveau_detail) {
                 out.push(polyligne(l.into_iter().map(|q| q.with_z(o.z)).collect()));
             }
-            for (point, contenu, hauteur) in c.textes_plan(p) {
+            for (point, contenu, hauteur) in c.textes_plan(p, v.niveau_detail) {
                 out.push(texte(&remplir_champs(&contenu, &[("{projet}", &p.nom), ("{vue}", &v.nom)]), point.with_z(o.z) * 0.001, u, h, hauteur * v.echelle * 0.001, [30,30,30,255]));
             }
         }
@@ -903,13 +903,13 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
         let Ok((axe, _, niveau)) = super::volumes::solides::hote(p, &ouv.mur) else { continue };
         match &v.genre {
             GenreVue::Plan { niveau: n, .. } if *n == niveau => {
-                for (l, m) in super::volumes::solides::regions_ouverture(p, ouv, VueEsquisse::Plan) {
+                for (l, m) in super::volumes::solides::regions_ouverture(p, ouv, VueEsquisse::Plan, v.niveau_detail) {
                     out.extend(remplissage_commun(l.into_iter().map(|q| q.with_z(o.z)).collect(), m));
                 }
-                for l in super::volumes::solides::symboles_ouverture(p, ouv, VueEsquisse::Plan) {
+                for l in super::volumes::solides::symboles_ouverture(p, ouv, VueEsquisse::Plan, v.niveau_detail) {
                     out.push(polyligne(l.into_iter().map(|q| q.with_z(o.z)).collect()));
                 }
-                for (point, contenu, hauteur) in super::volumes::solides::textes_ouverture(p, ouv, VueEsquisse::Plan) {
+                for (point, contenu, hauteur) in super::volumes::solides::textes_ouverture(p, ouv, VueEsquisse::Plan, v.niveau_detail) {
                     out.push(texte(&remplir_champs(&contenu, &[("{projet}", &p.nom), ("{vue}", &v.nom)]), point.with_z(o.z) * 0.001, u, h, hauteur * v.echelle * 0.001, [30,30,30,255]));
                 }
             }
@@ -923,13 +923,13 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
                 if uw.dot(DVec2::new(u.x, u.y)).abs() < 0.98 || !(-1.0..=*profondeur).contains(&profondeur_c) || !(0.0..=longueur).contains(&lateral) {
                     continue;
                 }
-                for (l, m) in super::volumes::solides::regions_ouverture(p, ouv, VueEsquisse::Elevation) {
+                for (l, m) in super::volumes::solides::regions_ouverture(p, ouv, VueEsquisse::Elevation, v.niveau_detail) {
                     out.extend(remplissage_commun(l.into_iter().map(|q| o + u * (q - o).dot(u) + h * (q - o).dot(h)).collect(), m));
                 }
-                for l in super::volumes::solides::symboles_ouverture(p, ouv, VueEsquisse::Elevation) {
+                for l in super::volumes::solides::symboles_ouverture(p, ouv, VueEsquisse::Elevation, v.niveau_detail) {
                     out.push(polyligne(l.into_iter().map(|q| o + u * (q - o).dot(u) + h * (q - o).dot(h)).collect()));
                 }
-                for (point, contenu, hauteur) in super::volumes::solides::textes_ouverture(p, ouv, VueEsquisse::Elevation) {
+                for (point, contenu, hauteur) in super::volumes::solides::textes_ouverture(p, ouv, VueEsquisse::Elevation, v.niveau_detail) {
                     out.push(texte(&remplir_champs(&contenu, &[("{projet}", &p.nom), ("{vue}", &v.nom)]), point * 0.001, u, h, hauteur * v.echelle * 0.001, [30,30,30,255]));
                 }
             }

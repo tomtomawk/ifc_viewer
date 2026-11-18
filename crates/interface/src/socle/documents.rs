@@ -269,6 +269,7 @@ impl ViewerApp {
         let mut aretes = Vec::new();
         let mut objets_masques = HashSet::new();
         let exclus_contextes = self.ids_masques_contextes();
+        let affichage = self.affichage();
         for (i, o) in scene.objects.iter().enumerate() {
             let en_edition = self.objet_en_edition().is_some_and(|(id, annotation)| !annotation && o.id == modele::identifiants::id_natif("dalle", id))
                 || self.terrain_en_edition().is_some_and(|id| o.id == modele::identifiants::id_natif("terrain", id));
@@ -287,11 +288,12 @@ impl ViewerApp {
                 && dans_la_plage(o)
                 && (garde(o) || &*o.class == "IFCANNOTATION");
             self.visible[i] = vis;
+            // éléments des familles : selon le niveau de détail et le type de la vue
             if vis {
-                opaque.extend(o.opaque.start..o.opaque.start + o.opaque.count);
-                transp.extend(o.transparent.start..o.transparent.start + o.transparent.count);
-                lines.extend(o.lines.start..o.lines.start + o.lines.count);
-                aretes.extend(o.aretes.start..o.aretes.start + o.aretes.count);
+                scene.indices_montres(o.opaque, affichage, &mut opaque);
+                scene.indices_montres(o.transparent, affichage, &mut transp);
+                scene.indices_montres(o.lines, affichage, &mut lines);
+                scene.indices_montres(o.aretes, affichage, &mut aretes);
             }
         }
         self.objets_masques = objets_masques;

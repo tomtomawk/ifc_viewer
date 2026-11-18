@@ -424,7 +424,7 @@ fn mur_avec<'a>(
 }
 
 pub fn ouverture(p: &Projet, o: &Ouverture) -> Result<Vec<Tri>, String> {
-    Ok(ouverture_parts(p, o)?.into_iter().flat_map(|(_, _, t)| t).collect())
+    Ok(ouverture_parts(p, o)?.into_iter().flat_map(|(_, _, _, t)| t).collect())
 }
 
 /// Menuiserie d'une ouverture par rôle (dormant, ouvrant, vitrage…) quand son type
@@ -481,21 +481,21 @@ fn vue_ouverture<'a>(p: &'a Projet, o: &Ouverture) -> Option<(&'a crate::famille
 }
 
 /// Traits 2D de la famille de l'ouverture dans le projet (mm), points ancrés résolus.
-pub fn symboles_ouverture(p: &Projet, o: &Ouverture, vue: crate::famille::modelee::VueEsquisse) -> Vec<Vec<DVec3>> {
+pub fn symboles_ouverture(p: &Projet, o: &Ouverture, vue: crate::famille::modelee::VueEsquisse, detail: crate::famille::modelee::NiveauDetail) -> Vec<Vec<DVec3>> {
     let Some((f, r, placer)) = vue_ouverture(p, o) else { return Vec::new() };
-    f.lignes_2d_resolues(&r, vue).into_iter().map(|l| l.into_iter().map(|q| placer(vue, q)).collect()).collect()
+    f.lignes_2d_resolues(&r, vue, detail).into_iter().map(|l| l.into_iter().map(|q| placer(vue, q)).collect()).collect()
 }
 
 /// Textes de la vue de famille, placés dans le repère du projet (mm).
-pub fn textes_ouverture(p: &Projet, o: &Ouverture, vue: crate::famille::modelee::VueEsquisse) -> Vec<(DVec3, String, f64)> {
+pub fn textes_ouverture(p: &Projet, o: &Ouverture, vue: crate::famille::modelee::VueEsquisse, detail: crate::famille::modelee::NiveauDetail) -> Vec<(DVec3, String, f64)> {
     let Some((f, r, placer)) = vue_ouverture(p, o) else { return Vec::new() };
-    f.textes_resolus(&r, vue).into_iter().map(|(q, t, h)| (placer(vue, q), t, h)).collect()
+    f.textes_resolus(&r, vue, detail).into_iter().map(|(q, t, h)| (placer(vue, q), t, h)).collect()
 }
 
 /// Régions 2D remplies de la famille de l'ouverture dans le projet (mm).
-pub fn regions_ouverture(p: &Projet, o: &Ouverture, vue: crate::famille::modelee::VueEsquisse) -> Vec<(Vec<DVec3>, crate::documentation::RemplissageContour)> {
+pub fn regions_ouverture(p: &Projet, o: &Ouverture, vue: crate::famille::modelee::VueEsquisse, detail: crate::famille::modelee::NiveauDetail) -> Vec<(Vec<DVec3>, crate::documentation::RemplissageContour)> {
     let Some((f, r, placer)) = vue_ouverture(p, o) else { return Vec::new() };
-    f.regions_resolues(&r, vue).into_iter().map(|(l, m)| (l.into_iter().map(|q| placer(vue, q)).collect(), m)).collect()
+    f.regions_resolues(&r, vue, detail).into_iter().map(|(l, m)| (l.into_iter().map(|q| placer(vue, q)).collect(), m)).collect()
 }
 
 /// Valeurs affichées des paramètres de la famille modélisée d'une ouverture (type,
@@ -528,21 +528,22 @@ fn placer(o: &Ouverture, c: DVec2, u: DVec2, n: DVec2, z: f64, q: DVec3) -> DVec
     (c + u * x + n * y).extend(z + q.z)
 }
 
-/// Parts de la menuiserie : rôle, matériau du projet (famille modélisée pilotée par
-/// un paramètre matériau) et triangles.
-pub fn ouverture_parts(p: &Projet, o: &Ouverture) -> Result<Vec<(crate::famille::Role, Option<String>, Vec<Tri>)>, String> {
-    ouverture_parts_roles(p, o)
-}
+/// Part de menuiserie : rôle, matériau du projet (famille modélisée pilotée par un
+/// paramètre matériau), masque de visibilité par niveau de détail et type de vue
+/// (`VisibiliteElement::masque`) et triangles.
+pub type PartMenuiserie = (crate::famille::Role, Option<String>, u8, Vec<Tri>);
 
-fn ouverture_parts_roles(p: &Projet, o: &Ouverture) -> Result<Vec<(crate::famille::Role, Option<String>, Vec<Tri>)>, String> {
+/// Parts de la menuiserie, une par rôle, matériau et visibilité.
+pub fn ouverture_parts(p: &Projet, o: &Ouverture) -> Result<Vec<PartMenuiserie>, String> {
     use crate::famille::Role;
+    use crate::famille::modelee::PARTOUT;
     if let Some(f) = famille_modelee(p, o) {
-        let mut parts: Vec<(Role, Option<String>, Vec<Tri>)> = Vec::new();
+        let mut parts: Vec<PartMenuiserie> = Vec::new();
         for s in solides_famille(p, o, f)?.into_iter().filter(|s| !s.vide && s.visible) {
-            let (role, mat, tris) = (s.materiau.role(), s.materiau_nom, s.tris);
-            match parts.iter_mut().find(|(r, m, _)| *r == role && *m == mat) {
-                Some((_, _, t)) => t.extend(tris),
-                None => parts.push((role, mat, tris)),
+            let (role, mat, masque, tris) = (s.materiau.role(), s.materiau_nom, s.visibilite.masque(), s.tris);
+            match parts.iter_mut().find(|(r, m, k, _)| *r == role && *m == mat && *k == masque) {
+                Some((_, _, _, t)) => t.extend(tris),
+                None => parts.push((role, mat, masque, tris)),
             }
         }
         return Ok(parts);
@@ -554,18 +555,18 @@ fn ouverture_parts_roles(p: &Projet, o: &Ouverture) -> Result<Vec<(crate::famill
             let z = p.niveau(&niveau).ok_or("Niveau introuvable.")?.altitude + o.allege;
             let (c, u) = repere(&axe, o.abscisse);
             let n = u.perp();
-            let mut parts: Vec<(Role, Option<String>, Vec<Tri>)> = Vec::new();
+            let mut parts: Vec<PartMenuiserie> = Vec::new();
             for b in f.pieces(o.largeur, o.hauteur, e) {
                 let contour = [(b.min.x, b.min.y), (b.max.x, b.min.y), (b.max.x, b.max.y), (b.min.x, b.max.y)].map(|(x, y)| (c + u * x + n * y).to_array());
                 let tris = prisme(&contour, z + b.min.z, z + b.max.z);
-                match parts.iter_mut().find(|(r, _, _)| *r == b.role) {
-                    Some((_, _, t)) => t.extend(tris),
-                    None => parts.push((b.role, None, tris)),
+                match parts.iter_mut().find(|(r, _, _, _)| *r == b.role) {
+                    Some((_, _, _, t)) => t.extend(tris),
+                    None => parts.push((b.role, None, PARTOUT, tris)),
                 }
             }
             Ok(parts)
         }
-        _ => Ok(vec![(Role::Dormant, None, ouverture_generique(p, o)?)]),
+        _ => Ok(vec![(Role::Dormant, None, PARTOUT, ouverture_generique(p, o)?)]),
     }
 }
 

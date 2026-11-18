@@ -182,7 +182,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
                     let couleur_membrure = opacite(Some(&membrure), [r, g, b, 1.0]);
                     let en_m = |t: Vec<[glam::DVec3; 3]>| t.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
                     materiaux_parts.push(vec![Some(x.nom.clone()), Some(membrure.nom.clone())]);
-                    geoms.push(ProductGeom {
+                    geoms.push(ProductGeom { visibilite: Vec::new(),
                         id,
                         parts: vec![Part { color: couleur, tris: en_m(remplissage) }, Part { color: couleur_membrure, tris: en_m(membrures) }],
                         lignes: Vec::new(),
@@ -212,7 +212,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         }
         let tris = solide.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
         materiaux_parts.push(vec![materiau.as_ref().map(|m| m.nom.clone())]);
-        geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.as_ref().map(|m| rendu_materiau(m, couleur, &mut table_apparences))], motifs: vec![materiau.as_ref().and_then(|m| motif_surface(projet, m, &mut table_motifs))] });
+        geoms.push(ProductGeom { visibilite: Vec::new(), id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.as_ref().map(|m| rendu_materiau(m, couleur, &mut table_apparences))], motifs: vec![materiau.as_ref().and_then(|m| motif_surface(projet, m, &mut table_motifs))] });
     }
     chrono("scène : mise en objets des murs", &mut t_etape);
     // dalles : un prisme par couche, du dessus (niveau + décalage) vers le bas
@@ -289,7 +289,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         }
         if !bandes.is_empty() { bandes_dalles.push((id, bandes)); }
         materiaux_parts.push(noms);
-        geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu, motifs });
+        geoms.push(ProductGeom { visibilite: Vec::new(), id, parts, lignes: Vec::new(), rendu, motifs });
         // terre-plein : remblai sous la plate-forme et ses talus jusqu'au terrain naturel,
         // et fouilles rebouchées ; élément du site à part (sélection, volume, type de
         // terrain), couleur et poché du matériau de son type
@@ -304,7 +304,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
             couches_coupe.push((id, coupe_materiau(projet, &m, vec![neutre, neutre], noyau::aretes::TRAIT_FORT_MM)));
             materiaux_parts.push(vec![Some(m.nom.clone())]);
-            geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris: r.tris.iter().map(|t| t.map(|v| v * 0.001)).collect() }], lignes: Vec::new(), rendu: vec![Some(rendu_materiau(&m, couleur, &mut table_apparences))], motifs: vec![motif_surface(projet, &m, &mut table_motifs)] });
+            geoms.push(ProductGeom { visibilite: Vec::new(), id, parts: vec![Part { color: couleur, tris: r.tris.iter().map(|t| t.map(|v| v * 0.001)).collect() }], lignes: Vec::new(), rendu: vec![Some(rendu_materiau(&m, couleur, &mut table_apparences))], motifs: vec![motif_surface(projet, &m, &mut table_motifs)] });
         }
     }
     chrono("scène : dalles", &mut t_etape);
@@ -323,7 +323,9 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         use modele::famille::Role;
         let menuiserie = o.type_ouverture.as_ref().and_then(|t| projet.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.modele.as_ref().map(|m| m.couleur).or(t.famille.as_ref().map(|f| f.couleur)))
             .map_or([0.55, 0.40, 0.24, 1.0], |c| { let [r, g, b] = c.map(|c| c as f32 / 255.0); [r, g, b, 1.0] });
-        let parts: Vec<Part> = menuiseries.next().ok_or("Menuiserie absente.")??.into_iter().map(|(role, materiau, tris)| Part {
+        let menuiserie_parts = menuiseries.next().ok_or("Menuiserie absente.")??;
+        let visibilite = menuiserie_parts.iter().map(|(_, _, masque, _)| *masque).collect();
+        let parts: Vec<Part> = menuiserie_parts.into_iter().map(|(role, materiau, _, tris)| Part {
             // paramètre matériau : couleur du matériau du projet (le vitrage reste translucide)
             color: match (materiau.as_ref().and_then(|m| projet.materiau(m)), role) {
                 (Some(m), r) => { let [cr, cg, cb] = m.couleur.map(|c| c as f32 / 255.0); [cr, cg, cb, if r == Role::Vitrage { 0.35 } else { 1.0 }] }
@@ -334,7 +336,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             tris: tris.into_iter().map(|t| t.map(|v| v * 0.001)).collect(),
         }).collect();
         materiaux_parts.push(vec![None; parts.len()]);
-        geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+        geoms.push(ProductGeom { visibilite, id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
     chrono("scène : ouvertures", &mut t_etape);
     for b in &projet.barres {
@@ -353,11 +355,11 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
                 let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
                 couches_coupe.push((id, coupe_materiau(projet, &m, vec![neutre, neutre], noyau::aretes::TRAIT_FORT_MM)));
                 materiaux_parts.push(vec![Some(m.nom.clone())]);
-                geoms.push(ProductGeom { id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![Some(rendu_materiau(&m, couleur, &mut table_apparences))], motifs: vec![motif_surface(projet, &m, &mut table_motifs)] });
+                geoms.push(ProductGeom { visibilite: Vec::new(), id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![Some(rendu_materiau(&m, couleur, &mut table_apparences))], motifs: vec![motif_surface(projet, &m, &mut table_motifs)] });
             }
             None => {
                 materiaux_parts.push(vec![None]);
-                geoms.push(ProductGeom { id, parts: vec![Part { color: [0.65,0.68,0.72,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+                geoms.push(ProductGeom { visibilite: Vec::new(), id, parts: vec![Part { color: [0.65,0.68,0.72,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
             }
         }
     }
@@ -389,7 +391,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             parts.push(Part { color: couleur, tris: tris.into_iter().map(|t| t.map(|v| v * 0.001)).collect() });
         }
         materiaux_parts.push(vec![Some(MATERIAU_ECORCE.into()), Some(MATERIAU_FEUILLAGE.into()), Some(MATERIAU_ECORCE.into()), Some(MATERIAU_FEUILLAGE.into())]);
-        geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu, motifs });
+        geoms.push(ProductGeom { visibilite: Vec::new(), id, parts, lignes: Vec::new(), rendu, motifs });
     }
     for c in &projet.composants {
         let id = id_natif("composant", &c.id);
@@ -401,12 +403,14 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             let [r, g, b] = t.modele.couleur.map(|x| x as f32 / 255.0);
             [r, g, b, 1.0]
         });
-        let parts: Vec<Part> = c.solides(projet)?.into_iter().map(|(materiau, tris)| Part {
+        let solides = c.solides(projet)?;
+        let visibilite = solides.iter().map(|(_, masque, _)| *masque).collect();
+        let parts: Vec<Part> = solides.into_iter().map(|(materiau, _, tris)| Part {
             color: materiau.as_ref().and_then(|m| projet.materiau(m)).map_or(couleur, |m| { let [r, g, b] = m.couleur.map(|x| x as f32 / 255.0); [r, g, b, 1.0] }),
             tris: tris.into_iter().map(|t| t.map(|v| v * 0.001)).collect(),
         }).collect();
         materiaux_parts.push(vec![None; parts.len()]);
-        geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+        geoms.push(ProductGeom { visibilite, id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
     for e in &projet.escaliers {
         let id = id_natif("escalier", &e.id);
@@ -415,7 +419,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         model.children.entry(parent).or_default().push(id);
         let tris = e.solide(projet)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
         materiaux_parts.push(vec![None]);
-        geoms.push(ProductGeom { id, parts: vec![Part { color: [0.74, 0.73, 0.70, 1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+        geoms.push(ProductGeom { visibilite: Vec::new(), id, parts: vec![Part { color: [0.74, 0.73, 0.70, 1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
     for g in &projet.garde_corps {
         let id = id_natif("garde_corps", &g.id);
@@ -429,7 +433,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             Part { color: [r, v, b, if vitre { 0.35 } else { 1.0 }], tris: t.into_iter().map(|t| t.map(|v| v * 0.001)).collect() }
         }).collect();
         materiaux_parts.push(vec![None; parts.len()]);
-        geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+        geoms.push(ProductGeom { visibilite: Vec::new(), id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
     // terrains : solide de l'épaisseur du type, sous la surface (cotes NGF ramenées à
     // l'origine du projet) ; couleur et poché du matériau du type
@@ -456,7 +460,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             parts.push(Part { color: couleur, tris: tris.into_iter().map(|t| t.map(|v| v * 0.001)).collect() });
         }
         materiaux_parts.push(noms);
-        geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu, motifs });
+        geoms.push(ProductGeom { visibilite: Vec::new(), id, parts, lignes: Vec::new(), rendu, motifs });
     }
     for l in &projet.limites_propriete {
         let id = id_natif("limite_propriete", &l.id);
@@ -464,7 +468,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         model.children.entry(racine).or_default().push(id);
         let segs = (0..l.contour.len()).map(|i| [l.contour[i], l.contour[(i + 1) % l.contour.len()]].map(|p| glam::DVec3::new(p[0], p[1], l.altitude) * 0.001)).collect();
         materiaux_parts.push(Vec::new());
-        geoms.push(ProductGeom { id, parts: Vec::new(), lignes: vec![formats::ifc::geom::Ligne { color: [0.75, 0.16, 0.16, 1.0], segs }], rendu: Vec::new(), motifs: Vec::new() });
+        geoms.push(ProductGeom { visibilite: Vec::new(), id, parts: Vec::new(), lignes: vec![formats::ifc::geom::Ligne { color: [0.75, 0.16, 0.16, 1.0], segs }], rendu: Vec::new(), motifs: Vec::new() });
     }
     for o in &projet.importes {
         let id = id_natif("importe", &o.id);
@@ -477,13 +481,17 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         model.children.entry(parent).or_default().push(id);
         let tris = modele::volumes::solides::maillage(&o.maillage)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
         materiaux_parts.push(vec![None]);
-        geoms.push(ProductGeom { id, parts: vec![Part { color: o.donnees.couleur.map_or([0.65,0.68,0.72,1.0], |c| c.map(|x| x as f32 / 255.0)), tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+        geoms.push(ProductGeom { visibilite: Vec::new(), id, parts: vec![Part { color: o.donnees.couleur.map_or([0.65,0.68,0.72,1.0], |c| c.map(|x| x as f32 / 255.0)), tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
     chrono("scène : autres éléments", &mut t_etape);
     // arbres et terrains : arêtes remplacées ci-dessous (silhouette, terrain lissé) ;
     // les joindre aux autres coûtait 90 % du temps des arêtes sur l'îlot (feuillages)
     let exclus: std::collections::HashSet<noyau::Id> = projet.arbres.iter().map(|a| id_natif("arbre", &a.id)).chain(projet.terrains.iter().map(|t| id_natif("terrain", &t.id))).collect();
-    let mut aretes = aretes_jointes(&geoms, &materiaux_parts, &exclus);
+    // familles dont des parties ne sont pas visibles partout : arêtes calculées par
+    // l'assemblage, une fois par masque de visibilité
+    let restreints: std::collections::HashSet<noyau::Id> = geoms.iter().filter(|g| g.visibilite.iter().any(|m| *m != modele::famille::modelee::PARTOUT)).map(|g| g.id).collect();
+    let mut aretes = aretes_jointes(&geoms, &materiaux_parts, &exclus.union(&restreints).copied().collect());
+    aretes.retain(|id, _| !restreints.contains(id));
     chrono("scène : arêtes", &mut t_etape);
     // liens IFC : géométrie et arêtes reprises du cache, placées dans le projet
     let liens::Ajouts { geoms: geoms_liens, aretes: aretes_liens, ignores: ignores_liens } = liens::ajouter(projet, &mut model, racine);

@@ -787,7 +787,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                     max[iv] = accroche(av, a.1.max(b.1));
                     if (a.0 - b.0).abs() * echelle > 4.0 && (a.1 - b.1).abs() * echelle > 4.0 && min.iter().chain(&max).all(|f| !f.plan.is_empty()) {
                         let nom = nom_libre(|n| ed.famille.volumes.iter().any(|v| v.nom == n), if vide { "Vide" } else { "Volume" });
-                        ed.famille.volumes.push(Volume { nom, vide, materiau: Materiau::Menuiserie, min, max, visible: None, materiau_parametre: None });
+                        ed.famille.volumes.push(Volume { visibilite: Default::default(), nom, vide, materiau: Materiau::Menuiserie, min, max, visible: None, materiau_parametre: None });
                         ed.selection = SelectionFamille::Volume(ed.famille.volumes.len() - 1);
                         ed.message = Some("Faces verrouillées sur les plans les plus proches (avec décalage au-delà de 7 px).".into());
                     }

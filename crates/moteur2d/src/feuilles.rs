@@ -7,6 +7,7 @@ use maillage::depuis_natif;
 use modele::identifiants::{id_natif, numero_vue};
 use glam::{DVec2, DVec3};
 use noyau::trace2d::{Dessin, Forme, Primitive};
+use modele::famille::modelee::{Affichage, TypeVue};
 
 pub(super) fn ids_masques_vue(p: &Projet, v: &Vue) -> std::collections::HashSet<noyau::Id> {
     p.murs.iter().map(|x| ("mur", &x.id))
@@ -21,6 +22,12 @@ pub(super) fn ids_masques_vue(p: &Projet, v: &Vue) -> std::collections::HashSet<
         .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
         .filter(|(_, id)| v.elements_masques.contains(id))
         .map(|(genre, id)| id_natif(genre, id)).collect::<std::collections::HashSet<_>>()
+}
+
+/// Niveau de détail et type d'une vue du projet (éléments des familles montrés).
+pub fn affichage_vue(v: &Vue) -> Affichage {
+    let vue = if matches!(v.genre, GenreVue::Plan { .. }) { TypeVue::Plan } else { TypeVue::Coupe };
+    Affichage { detail: v.niveau_detail, vue }
 }
 
 pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
@@ -102,10 +109,11 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
         Some("materiau") => Poche::Materiau,
         _ => Poche::Hachure,
     }};
+    let affichage = affichage_vue(v);
     let mut primitives = Vec::new();
     if actif && !elevation {
         primitives.extend(fond_plan(p, &s, v, plan, v.echelle));
-        primitives.extend(coupe(&s, &visible, plan, v.echelle, poche));
+        primitives.extend(coupe(&s, &visible, affichage, plan, v.echelle, poche));
         if let Some(limite) = limite_haute_plan(p, &s, v, plan.w)
             && let GenreVue::Plan { niveau, .. } = &v.genre
         {
@@ -113,13 +121,14 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
             let au_dessus: Vec<_> = s.objects.iter().zip(&visible).map(|(obj, visible)| {
                 *visible && obj.storey == Some(niveau) && dans_plage_haute(obj, plan.w, limite)
             }).collect();
-            let aretes = aretes_plage_haute(&s, &au_dessus, u, h, oeil, plan.w, limite);
+            let aretes = aretes_plage_haute(&s, &au_dessus, affichage, u, h, oeil, plan.w, limite);
             primitives.extend(pointilles_plage_haute(aretes, v.echelle, plan.w as f64));
         }
     }
     primitives.extend(vu(
         &s,
         &visible,
+        affichage,
         u,
         h,
         oeil,

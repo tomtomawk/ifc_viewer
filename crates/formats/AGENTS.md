@@ -13,7 +13,7 @@ Dépendances internes autorisées : `noyau`, `ifc_base`, `scene` (exactement ces
 | `ifc/geom/nurbs.rs` | faces B-spline des `IfcAdvancedBrep` échantillonnées ; `ifc/geom/essais.rs` : fichier IFC de test construit en chaîne |
 | `ifc/geom/extrusion.rs` | `rectangulaire` : section rectangulaire extrudée d'un produit (poteaux, poutres convertibles) |
 | `ifc/bornes.rs` | bornes des valeurs lues dans le fichier (arcs, B-splines, révolutions, items mappés) : toute taille ou durée tirée du fichier passe par là |
-| `ifc/assemblage.rs` | `load`, `assemble`, `assemble_avec` : fichier IFC -> `Scene` |
+| `ifc/assemblage.rs` | `load`, `assemble`, `assemble_avec` : fichier IFC -> `Scene` ; masques de visibilité des parties (`ProductGeom::visibilite`) reportés sur les sommets, arêtes calculées par masque |
 | `rvt/mod.rs` | `load`, `is_revit_path`, lecture OLE et métadonnées (`RvtInfo`) |
 | `rvt/maquette/` | `lecture.rs` (`lire` -> `Maquette`), `vers_scene.rs` (`load_scene`), `tests.rs` |
 | `rvt/{geometrie,vues,feuilles,nomenclatures,parametres,formules,coordonnees,champs,annexes,medias,objets,plans,schema,zones}.rs` | une partie du décodage Revit par fichier |

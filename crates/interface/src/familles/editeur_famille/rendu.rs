@@ -23,7 +23,7 @@ pub(super) struct SceneFamille {
 pub(super) fn scene_famille(ed: &EditeurFamille, r: &Resolution) -> SceneFamille {
     let solides = ed.famille.solides(r);
     let mut s = SceneFamille { objets: solides.len(), ..Default::default() };
-    for (objet, solide) in solides.iter().enumerate().filter(|(_, s)| s.visible && !s.vide) {
+    for (objet, solide) in solides.iter().enumerate().filter(|(_, s)| ed.montre_solide(s) && !s.vide) {
         let obj = objet as u32;
         let couleur = solide.materiau_nom.as_ref().and_then(|nom| ed.materiaux_projet.iter().find(|(n, _)| n == nom).map(|(_, c)| *c)).unwrap_or([190, 198, 207]);
         let tris: Vec<[DVec3; 3]> = solide.tris.iter().map(|t| t.map(|p| p / 1000.0)).collect();
@@ -60,7 +60,7 @@ pub(super) fn scene_famille(ed: &EditeurFamille, r: &Resolution) -> SceneFamille
 pub(super) fn aretes_vue(ed: &EditeurFamille, r: &Resolution) -> Vec<noyau::forme2d::Geom> {
     let (ah, av) = ed.vue.axes();
     let mut geoms: Vec<noyau::forme2d::Geom> = Vec::new();
-    for solide in ed.famille.solides(r).iter().filter(|s| s.visible && !s.vide) {
+    for solide in ed.famille.solides(r).iter().filter(|s| ed.montre_solide(s) && !s.vide) {
         for [a, b] in noyau::aretes::aretes(&solide.tris).vives {
             let (p, q) = (glam::DVec2::new(a[ah as usize], a[av as usize]), glam::DVec2::new(b[ah as usize], b[av as usize]));
             let doublon = |g: &noyau::forme2d::Geom| matches!(g, noyau::forme2d::Geom::Segment([x, y]) if (x.distance(p) < 1e-6 && y.distance(q) < 1e-6) || (x.distance(q) < 1e-6 && y.distance(p) < 1e-6));
@@ -91,7 +91,7 @@ fn primitives_vue(ed: &EditeurFamille, r: &Resolution, projet: &modele::Projet, 
     let papier = matches!(ed.famille.categorie, C::Cartouche | C::EtiquettePiece);
     let echelle_vue = if papier { 1.0 } else { ed.navigation[ed.vue as usize].echelle_vue };
     let mut devant = Vec::new();
-    for (indice, element) in ed.famille.elements_2d.iter().enumerate().filter(|(_, e)| e.vue == ed.vue.esquisse()) {
+    for (indice, element) in ed.famille.elements_2d.iter().enumerate().filter(|(k, e)| e.vue == ed.vue.esquisse() && ed.montre_element_2d(r, *k)) {
         let element = ed.famille.element_resolu(r, element);
         let choisi = ed.choisi(&SelectionFamille::Element2D(indice));
         let mut prims = if let AnnotationForme::Texte { point, texte } = &element.forme {
@@ -131,7 +131,7 @@ fn primitives_vue(ed: &EditeurFamille, r: &Resolution, projet: &modele::Projet, 
         let (ih, iv) = ed.vue.axes();
         let (ih, iv) = (ih as usize, iv as usize);
         let mut contours = vec![rectangle(a, b, c, d)];
-        for x in ed.famille.boites(r).iter().filter(|x| x.vide && ed.famille.visible(r, &ed.famille.volumes[x.indice].visible)) {
+        for x in ed.famille.boites(r).iter().filter(|x| x.vide && ed.vide_actif(r, x.indice)) {
             let (xa, xb, xc, xd) = (x.min[ih].max(a), x.max[ih].min(b), x.min[iv].max(c), x.max[iv].min(d));
             if xa < xb && xc < xd { contours.push(rectangle(xa, xb, xc, xd)); }
         }

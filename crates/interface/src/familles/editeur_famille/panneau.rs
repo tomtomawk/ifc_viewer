@@ -95,7 +95,9 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 _ => crate::outils::annoter::outils_texte::CHAMPS_PROJET,
             };
             let papier = matches!(ed.famille.categorie, CategorieFamille::Cartouche | CategorieFamille::EtiquettePiece);
-            let element = &mut ed.famille.elements_2d[k];
+            let f = &mut ed.famille;
+            let element = &mut f.elements_2d[k];
+            egui::Grid::new(("visibilite_2d", k)).num_columns(2).show(ui, |ui| super::apercu::visibilite_ui(ui, &mut element.visible, &mut element.visibilite, &f.parametres, ("element_2d", k)));
             match &mut element.forme {
                 AnnotationForme::Texte { point, texte } => {
                     crate::outils::annoter::outils_texte::proprietes_texte(ui, texte, point, papier, champs);
@@ -512,9 +514,9 @@ pub(super) fn dans_polygone(q: egui::Pos2, p: &[egui::Pos2]) -> bool {
     dedans
 }
 
-/// Lignes de grille : visibilité commandée par un paramètre oui/non, couleur par un
-/// paramètre matériau (pas pour un vide).
-pub(super) fn pilotage_ui(ui: &mut egui::Ui, visible: &mut Option<String>, materiau: &mut Option<String>, vide: bool, parametres: &[Parametre], id: (&str, usize)) {
+/// Lignes de grille : visibilité (niveaux de détail, types de vue, paramètre oui/non),
+/// couleur par un paramètre matériau (pas pour un vide).
+pub(super) fn pilotage_ui(ui: &mut egui::Ui, (visible, visibilite): (&mut Option<String>, &mut VisibiliteElement), materiau: &mut Option<String>, vide: bool, parametres: &[Parametre], id: (&str, usize)) {
     let liste = |ui: &mut egui::Ui, choix: &mut Option<String>, genre: GenreParametre, aucun: &str, sel: (&str, &str, usize)| {
         egui::ComboBox::from_id_salt(sel).width(130.0).selected_text(choix.clone().unwrap_or_else(|| aucun.into())).show_ui(ui, |ui| {
             ui.selectable_value(choix, None, aucun);
@@ -523,9 +525,7 @@ pub(super) fn pilotage_ui(ui: &mut egui::Ui, visible: &mut Option<String>, mater
             }
         });
     };
-    ui.label("Visible si").on_hover_text("Paramètre oui/non : non masque le volume (un vide masqué ne perce plus)");
-    liste(ui, visible, GenreParametre::OuiNon, "toujours", ("visible", id.0, id.1));
-    ui.end_row();
+    super::apercu::visibilite_ui(ui, visible, visibilite, parametres, id);
     if !vide {
         ui.label("Matériau par").on_hover_text("Paramètre matériau : couleur du matériau du projet");
         liste(ui, materiau, GenreParametre::Materiau, "(rôle)", ("materiau_parametre", id.0, id.1));
@@ -554,7 +554,7 @@ pub(super) fn extrusion_ui(ui: &mut egui::Ui, e: &mut FormeProfil, plans: &[Plan
             });
             ui.end_row();
         }
-        pilotage_ui(ui, &mut e.visible, &mut e.materiau_parametre, e.vide, parametres, ("extrusion", k));
+        pilotage_ui(ui, (&mut e.visible, &mut e.visibilite), &mut e.materiau_parametre, e.vide, parametres, ("extrusion", k));
         if let OperationForme::Revolution { revolution } = &mut e.operation {
             ui.label("Angle de départ");
             ui.add(egui::DragValue::new(&mut revolution.debut).speed(1.0).suffix("°"));
@@ -614,7 +614,7 @@ pub(super) fn volume_ui(ui: &mut egui::Ui, v: &mut Volume, plans: &[PlanRef], pa
             });
             ui.end_row();
         }
-        pilotage_ui(ui, &mut v.visible, &mut v.materiau_parametre, v.vide, parametres, ("volume", k));
+        pilotage_ui(ui, (&mut v.visible, &mut v.visibilite), &mut v.materiau_parametre, v.vide, parametres, ("volume", k));
     });
     ui.label(RichText::new("Faces verrouillées (plan + décalage)").weak());
     egui::Grid::new(("faces", k)).num_columns(3).spacing([6.0, 4.0]).show(ui, |ui| {

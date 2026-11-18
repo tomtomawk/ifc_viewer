@@ -1,6 +1,7 @@
 //! Socle de l'application : documents ouverts, vues et caméra (soleil, piéton), viewport, fenêtre native (seul module public : `fenetre`), paramètres, aides communes, pilotage (MCP), volets flottants. `ViewerApp` et la boucle restent dans `lib.rs`.
 pub(crate) mod documents;
 pub(crate) mod vues;
+pub(crate) mod detail;
 pub(crate) mod viewport;
 pub(crate) mod projection;
 pub mod fenetre;

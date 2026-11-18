@@ -29,7 +29,7 @@ fn param(nom: &str, formule: &str) -> Parametre {
 }
 type Bornes<'a> = [(&'a str, f64); 2];
 fn volume(nom: &str, materiau: Materiau, x: Bornes, y: Bornes, z: Bornes) -> Volume {
-    Volume {
+    Volume { visibilite: Default::default(),
         nom: nom.into(),
         vide: false,
         materiau,
@@ -160,7 +160,7 @@ impl FamilleModelee {
                 v
             },
             // appui en pente : profil esquissé en coupe, extrudé sur la largeur
-            extrusions: vec![FormeProfil {
+            extrusions: vec![FormeProfil { visibilite: Default::default(),
                 operation: OperationForme::Extrusion,
                 construction: None,
                 nom: "Appui".into(),
@@ -222,7 +222,7 @@ impl FamilleModelee {
             panneau("Tableau droit", [("Tableau droit", 0.0), ("Droite", 0.0)], [("Bas", 0.0), ("Haut", 0.0)]),
             panneau("Tableau haut", [("Tableau gauche", 0.0), ("Tableau droit", 0.0)], [("Tableau haut", 0.0), ("Haut", 0.0)]),
         ]);
-        f.extrusions = vec![FormeProfil {
+        f.extrusions = vec![FormeProfil { visibilite: Default::default(),
                 operation: OperationForme::Extrusion,
                 construction: None,
             nom: "Seuil".into(),

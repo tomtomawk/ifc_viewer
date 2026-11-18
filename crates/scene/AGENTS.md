@@ -6,7 +6,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`. Externe : `gl
 
 ## Où travailler
 
-Un seul fichier : `src/lib.rs` (384 lignes) : structures de la scène, `Navigateur`, `ReperePartage`, `Scene::pick`, `etat_de_phase`, `decode_step_string`. Pas de test dans cette crate.
+Un seul fichier : `src/lib.rs` : structures de la scène, `Navigateur`, `ReperePartage`, `Scene::pick`, masques de visibilité des sommets (`visibilite`, `montre`, `indices_montres`, `primitives_montrees` : éléments de famille par niveau de détail et type de vue), `etat_de_phase`, `decode_step_string`. Pas de test dans cette crate.
 
 ## Quand modifier ici
 

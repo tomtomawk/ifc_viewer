@@ -105,7 +105,7 @@ impl ViewerApp {
                 )
             })());
         }
-        if let Some(r) = self.piloter_famille(nom, argument) {
+        if let Some(r) = self.piloter_famille(nom, argument).or_else(|| self.piloter_detail(nom, argument)) {
             return Some(r);
         }
         if nom == "gabarit_exporter" {

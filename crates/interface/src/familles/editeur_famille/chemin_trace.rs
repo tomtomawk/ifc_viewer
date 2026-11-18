@@ -234,7 +234,7 @@ mod tests {
         let ph = ed.famille.plans.iter().find(|p| p.axe == ah).unwrap().nom.clone();
         let pv = ed.famille.plans.iter().find(|p| p.axe == av).unwrap().nom.clone();
         let profil = [(-50.0, -50.0), (50.0, -50.0), (50.0, 50.0), (-50.0, 50.0)].map(|(h, v)| PointEsquisse { h: face(&ph, h), v: face(&pv, v) }).to_vec();
-        ed.famille.extrusions.push(FormeProfil { operation: OperationForme::Guidage { guidage: FormeGuidee::extrusion(vec![[0.0; 3], [0.0, 0.0, 1000.0]]) }, construction: None, nom: "Chemin".into(), vide: false,
+        ed.famille.extrusions.push(FormeProfil { visibilite: Default::default(), operation: OperationForme::Guidage { guidage: FormeGuidee::extrusion(vec![[0.0; 3], [0.0, 0.0, 1000.0]]) }, construction: None, nom: "Chemin".into(), vide: false,
             materiau: Materiau::Menuiserie, vue: VueEsquisse::Elevation, profil, profondeur: [face("", 0.0), face("", 100.0)], visible: None, materiau_parametre: None });
         let k = ed.famille.extrusions.len() - 1;
         for p in [(0.0, 0.0), (2000.0, 0.0), (2000.0, 2000.0), (0.0, 2000.0)] { ed.modifier.chemin.ajouter(p); }

@@ -41,7 +41,7 @@ fn maillage(p: &Primitive, normale: DVec3, echelle: f64, fins: bool, raccords: O
 /// Ferme les six faces d'une section box. La triangulation précède le découpage
 /// par les autres faces : les trous des solides restent donc des trous.
 /// Sans poché demandé, le fond reprend la couleur de l'élément coupé.
-pub fn sommets_boite(scene: &Scene, visible: &[bool], a: Vec3, b: Vec3, echelle: f64, poche: Option<Poche>, rendu: bool, fins: bool) -> (Vec<Vertex>, Vec<Vertex>) {
+pub fn sommets_boite(scene: &Scene, visible: &[bool], affichage: Affichage, a: Vec3, b: Vec3, echelle: f64, poche: Option<Poche>, rendu: bool, fins: bool) -> (Vec<Vertex>, Vec<Vertex>) {
     let (mut triangles, mut traits) = (Vec::new(), Vec::new());
     if !a.is_finite() || !b.is_finite() || a.cmpge(b).any() {
         return (triangles, traits);
@@ -49,7 +49,7 @@ pub fn sommets_boite(scene: &Scene, visible: &[bool], a: Vec3, b: Vec3, echelle:
     let plans = [Vec3::X.extend(-a.x), Vec3::NEG_X.extend(b.x), Vec3::Y.extend(-a.y), Vec3::NEG_Y.extend(b.y), Vec3::Z.extend(-a.z), Vec3::NEG_Z.extend(b.z)];
     for plan in plans {
         let normale = plan.truncate().as_dvec3();
-        let prims = coupe(scene, visible, plan, echelle, poche.unwrap_or(Poche::Vide));
+        let prims = coupe(scene, visible, affichage, plan, echelle, poche.unwrap_or(Poche::Vide));
         let raccords = (!fins).then(|| noyau::trace2d::Raccords::new(&prims, echelle));
         for mut p in prims {
             let objet = p.element.and_then(|id| scene.object_of.get(&id).copied()).unwrap_or(u32::MAX);
@@ -108,11 +108,11 @@ pub fn sommets_boite(scene: &Scene, visible: &[bool], a: Vec3, b: Vec3, echelle:
 /// tampon de profondeur calculé ici (`resolution` pixels sur le grand côté) : chaque arête
 /// est échantillonnée tous les demi-pixels et gardée là où aucune face n'est devant elle.
 /// Arêtes vives et silhouettes des surfaces courbes, une primitive par objet.
-pub fn vu(scene: &Scene, visible: &[bool], droite: DVec3, haut: DVec3, vers_oeil: DVec3, coupe: Option<Vec4>, resolution: usize) -> Vec<Primitive> {
-    vu_limites(scene, visible, droite, haut, vers_oeil, coupe.as_slice(), resolution)
+pub fn vu(scene: &Scene, visible: &[bool], affichage: Affichage, droite: DVec3, haut: DVec3, vers_oeil: DVec3, coupe: Option<Vec4>, resolution: usize) -> Vec<Primitive> {
+    vu_limites(scene, visible, affichage, droite, haut, vers_oeil, coupe.as_slice(), resolution)
 }
 
-pub(super) fn vu_limites(scene: &Scene, visible: &[bool], droite: DVec3, haut: DVec3, vers_oeil: DVec3, coupes: &[Vec4], resolution: usize) -> Vec<Primitive> {
+pub(super) fn vu_limites(scene: &Scene, visible: &[bool], affichage: Affichage, droite: DVec3, haut: DVec3, vers_oeil: DVec3, coupes: &[Vec4], resolution: usize) -> Vec<Primitive> {
     let plans: Vec<_> = coupes.iter().map(|c| (c.truncate().as_dvec3(), c.w as f64)).collect();
     let proj = |p: DVec3| DVec3::new(p.dot(droite), p.dot(haut), p.dot(vers_oeil));
     let objets: Vec<usize> = (0..scene.objects.len()).filter(|&i| visible[i] && &*scene.objects[i].class != "IFCANNOTATION").collect();
@@ -123,7 +123,7 @@ pub(super) fn vu_limites(scene: &Scene, visible: &[bool], droite: DVec3, haut: D
     for &i in &objets {
         let ob = &scene.objects[i];
         for r in [ob.opaque, ob.transparent] {
-            for t in scene.vertices[r.start as usize..(r.start + r.count) as usize].chunks_exact(3) {
+            for t in scene.primitives_montrees(r, 3, affichage) {
                 let p = [pos(&t[0]), pos(&t[1]), pos(&t[2])];
                 let mut poly = premier_plan.map_or_else(|| p.to_vec(), |(n, d)| decouper(&p, n, d));
                 for &(n, d) in suivants {
@@ -141,7 +141,7 @@ pub(super) fn vu_limites(scene: &Scene, visible: &[bool], droite: DVec3, haut: D
     for &i in &objets {
         let ob = &scene.objects[i];
         let mut segs = Vec::new();
-        'arete: for v in scene.vertices[ob.aretes.start as usize..(ob.aretes.start + ob.aretes.count) as usize].chunks_exact(2) {
+        'arete: for v in scene.primitives_montrees(ob.aretes, 2, affichage) {
             if v[0].normal[3] < 0 {
                 // arête douce : tracée sur la silhouette seulement (voir render.rs)
                 let n1 = DVec3::new(v[0].normal[0] as f64, v[0].normal[1] as f64, v[0].normal[2] as f64) / 127.0;

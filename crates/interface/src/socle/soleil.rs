@@ -195,6 +195,7 @@ impl ViewerApp {
             fond_plan: None,
             limite_haute_niveau: None,
             limite_haute_decalage: 2800.0,
+            niveau_detail: Default::default(),
             genre: modele::GenreVue::Camera { oeil: mm(self.camera.eye()), cible: mm(self.camera.target), champ: (self.camera.fov_y.to_degrees() as f64 * 10.0).round() / 10.0 },
         });
         let mut rendu = self.rendu_vue_courant();

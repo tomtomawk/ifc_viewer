@@ -20,6 +20,7 @@ mod vue;
 pub use vue::{cadrer_primitives, sommets, sommets_boite, vu};
 use noyau::motif::{GrilleMotif, Motif, hachures_plan};
 use scene::{Scene, Vertex};
+use modele::famille::modelee::Affichage;
 use noyau::trace2d::{Forme, Primitive, Role, Style};
 use glam::{DVec3, Vec3, Vec4};
 use rayon::prelude::*;
@@ -108,6 +109,10 @@ fn section(p: [DVec3; 3], n: DVec3, d: f64) -> Option<[DVec3; 2]> {
 #[cfg(test)]
 mod tests;
 
+/// Affichage des tests : tout élément de famille sans restriction est montré.
+#[cfg(test)]
+const TOUT: Affichage = Affichage { detail: modele::famille::modelee::NiveauDetail::Moyen, vue: modele::famille::modelee::TypeVue::Plan };
+
 #[cfg(test)]
 mod mesure {
     /// Sphère de 500 000 triangles : durée du calcul des arêtes.
@@ -147,7 +152,7 @@ mod mesure {
             p.ajouter_mur([5000.0, 0.0], c, &o).unwrap();
             let s = maillage::depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
             let visible = vec![true; s.objects.len()];
-            let prims = crate::coupe(&s, &visible, glam::Vec4::new(0.0, 0.0, 1.0, -1.0), 100.0, crate::Poche::Hachure);
+            let prims = crate::coupe(&s, &visible, crate::TOUT, glam::Vec4::new(0.0, 0.0, 1.0, -1.0), 100.0, crate::Poche::Hachure);
             let mut segs: Vec<[glam::DVec3; 2]> = Vec::new();
             for pr in prims.iter().filter(|p| p.role == noyau::trace2d::Role::Coupe) {
                 if let noyau::trace2d::Forme::Segments(v) = &pr.forme { segs.extend(v.iter().copied()); }
@@ -175,7 +180,7 @@ mod test_isolant_arc {
         let o = ParametresMur { type_mur: Some("t".into()), ..Default::default() };
         p.ajouter_mur_axe(Axe::Arc { debut: [5000.0, 0.0], fin: [0.0, 5000.0], centre: [0.0, 0.0], direct: true }, &o).unwrap();
         let s = maillage::depuis_natif(&p, std::path::Path::new("t.json")).unwrap();
-        let prims = super::coupe(&s, &vec![true; s.objects.len()], glam::Vec3::NEG_Z.extend(1.0), 100.0, super::Poche::Hachure);
+        let prims = super::coupe(&s, &vec![true; s.objects.len()], crate::TOUT, glam::Vec3::NEG_Z.extend(1.0), 100.0, super::Poche::Hachure);
         // la ligne d'isolant (série de boucles : la plus fournie des hachures) : elle doit couvrir l'arc
         // (corde de 5 m × √2 ≈ 6,9 m), pas un morceau droit
         let isolant = prims.iter().filter(|p| p.role == super::Role::Hachure).filter_map(|p| match &p.forme {

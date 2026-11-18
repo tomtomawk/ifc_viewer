@@ -148,8 +148,8 @@ pub(super) fn cadrage_vue(ed: &EditeurFamille, r: &Resolution, h: [f64; 2], v: [
 }
 
 impl ViewerApp {
-    /// Barre de la vue de famille, sous la vue comme celle du projet : échelle de la vue
-    /// et cadrage.
+    /// Barre de la vue de famille, sous la vue comme celle du projet (contrôles communs) :
+    /// échelle, niveau de détail, aperçu « comme dans le projet », cadrage.
     pub(crate) fn barre_vue_famille(&mut self, ui: &mut egui::Ui) {
         let Some(ed) = self.famille.as_mut() else { return };
         use modele::famille::modelee::CategorieFamille as C;
@@ -158,12 +158,16 @@ impl ViewerApp {
             let vue_plane = !ed.vue_3d;
             let nav = &mut ed.navigation[ed.vue as usize];
             let mut echelle = if papier { 1.0 } else { nav.echelle_vue };
-            let r = ui.add_enabled(vue_plane && !papier, egui::DragValue::new(&mut echelle).speed(1.0).range(1.0..=10000.0).prefix("1 : "));
+            let r = crate::socle::detail::champ_echelle(ui, &mut echelle, vue_plane && !papier);
             if r.on_disabled_hover_text(if papier { "Cartouche ou étiquette : dessin en millimètres du papier." } else { "Ouvrir une vue plane." })
                 .on_hover_text("Échelle de la vue : hauteur des textes et libellés de la famille.")
                 .changed() {
                 nav.echelle_vue = echelle;
             }
+            ui.separator();
+            crate::socle::detail::menu_niveau_detail(ui, &mut ed.detail, "Niveau de détail de la vue : éléments signalés dans l'arborescence, retirés en aperçu");
+            ui.separator();
+            ui.checkbox(&mut ed.apercu, "Aperçu comme dans le projet").on_hover_text("Montre la famille comme une occurrence du projet : niveau de détail, type de vue et paramètres « Visible si » appliqués");
             ui.separator();
             if ui.button("Cadrer").on_hover_text("Afficher toute la vue (double-clic du bouton du milieu)").clicked() {
                 if ed.vue_3d { ed.cadrage_3d_initial = true; } else { nav.cadrer(); }

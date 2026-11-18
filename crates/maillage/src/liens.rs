@@ -156,7 +156,7 @@ fn placer(lien: &LienIfc, e: &ElementLie, niveaux: &[(f64, Id)], racine: Id, mod
     model.children.entry(parent).or_default().push(id);
     let t = |v: DVec3| lien.transformer(v);
     let parts = e.parts.iter().map(|(couleur, tris)| Part { color: *couleur, tris: tris.iter().map(|tri| tri.map(t)).collect() }).collect();
-    a.geoms.push(ProductGeom { id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+    a.geoms.push(ProductGeom { visibilite: Vec::new(), id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     a.aretes.insert(id, Aretes {
         vives: e.aretes.vives.iter().map(|s| s.map(t)).collect(),
         douces: e.aretes.douces.iter().map(|(s, n1, n2)| (s.map(t), lien.tourner(*n1), lien.tourner(*n2))).collect(),

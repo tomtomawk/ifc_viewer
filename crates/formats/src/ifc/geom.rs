@@ -37,6 +37,10 @@ pub struct ProductGeom {
     /// Motif de surface de chaque partie, parallèle à `parts` : [motif (1 diagonales,
     /// 2 croisées, 3 uni), r, g, b] ; vide ou None : aucun.
     pub motifs: Vec<Option<[u8; 4]>>,
+    /// Masque de visibilité de chaque partie par niveau de détail et type de vue
+    /// (`modele::famille::modelee::VisibiliteElement::masque`), parallèle à `parts` ;
+    /// vide : visible partout.
+    pub visibilite: Vec<u8>,
 }
 
 /// Compteurs d'entités géométriques non prises en charge.
@@ -129,7 +133,7 @@ pub fn product_geometry(m: &IfcModel, stats: &GeomStats, id: Id) -> Option<Produ
         }
     }
     parts.retain(|p| !p.tris.is_empty());
-    Some(ProductGeom { id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() })
+    Some(ProductGeom { visibilite: Vec::new(), id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() })
 }
 
 /// Points (m, repère du projet) de la représentation « Axis » d'un produit : l'axe d'un

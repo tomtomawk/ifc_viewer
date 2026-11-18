@@ -13,7 +13,7 @@ fn projet() -> (Projet, String) {
 
 fn boite(p: &Projet, id: &str) -> (DVec3, DVec3) {
     let c = p.composants.iter().find(|c| c.id == id).unwrap();
-    c.solides(p).unwrap().into_iter().flat_map(|(_, t)| t).flatten().fold((DVec3::splat(f64::MAX), DVec3::splat(f64::MIN)), |(a, b), q| (a.min(q), b.max(q)))
+    c.solides(p).unwrap().into_iter().flat_map(|(_, _, t)| t).flatten().fold((DVec3::splat(f64::MAX), DVec3::splat(f64::MIN)), |(a, b), q| (a.min(q), b.max(q)))
 }
 
 #[test]
@@ -50,5 +50,5 @@ fn composant_place_transforme_copie_supprime() {
     // l'échelle est refusée ; le niveau utilisé ne se supprime pas
     assert!(p.executer(Commande::Echelle { ids: vec![id.clone()], centre: [0.0, 0.0], facteur: 2.0 }).is_err());
     assert!(p.executer(Commande::Supprimer { ids: vec![p.niveaux[0].id.clone()] }).is_err());
-    assert!(!p.composants[0].symboles_plan(&p).is_empty());
+    assert!(!p.composants[0].symboles_plan(&p, modele::famille::modelee::NiveauDetail::Moyen).is_empty());
 }
