@@ -894,19 +894,6 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
         primitives_remplissage(p, &r, &contour, v.echelle, &|q| (o + u*q.x + h*q.y) * 0.001)
     };
     let mut out = Vec::new();
-    // escaliers : ligne de foulée, rond au départ, flèche à l'arrivée
-    if let GenreVue::Plan { niveau, .. } = &v.genre {
-        for e in p.escaliers.iter().filter(|e| &e.niveau == niveau && e.trace.len() >= 2 && !v.elements_masques.contains(&e.id)) {
-            let pts: Vec<DVec3> = e.trace.iter().map(|q| DVec3::new(q[0], q[1], o.z)).collect();
-            out.push(polyligne(pts.clone()));
-            let (a, b) = (pts[pts.len() - 2], pts[pts.len() - 1]);
-            let d = (b - a).normalize_or_zero() * 150.0;
-            let n = DVec3::new(-d.y, d.x, 0.0) * 0.4;
-            out.push(polyligne(vec![b - d + n, b, b - d - n]));
-            let c = pts[0];
-            out.push(polyligne((0..=16).map(|k| { let t = std::f64::consts::TAU * k as f64 / 16.0; c + DVec3::new(t.cos(), t.sin(), 0.0) * 60.0 }).collect()));
-        }
-    }
     if let GenreVue::Plan { niveau, .. } = &v.genre {
         for c in p.composants.iter().filter(|c| &c.niveau == niveau && !v.elements_masques.contains(&c.id)) {
             for (points, r) in c.remplissages_plan(p) { out.extend(remplissage_commun(points, r)); }

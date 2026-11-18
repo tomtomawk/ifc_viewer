@@ -103,7 +103,7 @@ pub(crate) struct EtatDessin2D {
     pub esc_bas: Option<String>,
     pub esc_decalage_bas: f64,
     pub esc_decalage_haut: f64,
-    /// Escalier balancé : marches balancées de part et d'autre des tournants (n° 5).
+    pub esc_paillasse: Option<f64>,
     pub esc_balance: Option<u8>,
     pub esc_haut: HautEscalier,
     pub esc_hauteur_libre: f64,
@@ -133,10 +133,10 @@ pub(crate) struct EtatDessin2D {
     /// (cote NGF), cote des prochains points, placement de points.
     terrain_cotes: Vec<f64>,
     terrain_points: Vec<[f64; 3]>,
-    terrain_altitude: f64,
+    pub(crate) terrain_altitude: f64,
     /// Terrain existant repris par Modifier tracé (identifiant, nom), type choisi.
     terrain_modifie: Option<(String, String)>,
-    terrain_type: Option<String>,
+    pub(crate) terrain_type: Option<String>,
     /// Poignée sous le curseur, poignée glissée et état d'avant le glissé (repris si le
     /// terrain devient impossible à trianguler).
     terrain_survol: Option<PoigneeTerrain>,
@@ -566,7 +566,7 @@ impl ViewerApp {
         self.dessin2d.terrain_modifie.as_ref().filter(|_| self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain)).map(|(id, _)| id.as_str())
     }
 
-    fn reinitialiser_terrain(&mut self) {
+    pub(crate) fn reinitialiser_terrain(&mut self) {
         let d = &mut self.dessin2d;
         d.terrain_cotes.clear();
         d.terrain_points.clear();
@@ -895,13 +895,12 @@ impl ViewerApp {
     /// l'élément horizontal (dessus d'une dalle ou d'un sol, sous-face d'un plafond).
     fn altitude_trace(&self) -> f64 {
         if let Some(e) = &self.dessin2d.edition_contour { return e.altitude; }
+        let altitude_niveau = || self.niveau_trace().and_then(|n| self.natif.as_ref()?.0.niveau(&n).map(|n| n.altitude)).unwrap_or(0.0);
         match self.usage_dessin().map(|(u, _)| u) {
-            Some(Usage::Terrain | Usage::LimitePropriete | Usage::Cadrage) => self.niveau_trace().and_then(|n| self.natif.as_ref()?.0.niveau(&n).map(|n| n.altitude)).unwrap_or(0.0),
-            Some(Usage::Escalier | Usage::GardeCorps) => {
-                let Some((p, _)) = &self.natif else { return 0.0 };
-                let decalage = if self.usage_dessin().is_some_and(|(u, _)| u == Usage::GardeCorps) { self.ruban_edition.nombre_option(crate::zones::ruban::Outil::GardeCorps, 1) } else { 0.0 };
-                self.niveau_trace().and_then(|n| p.niveau(&n)).map_or(0.0, |n| n.altitude) + decalage
-            }
+            Some(Usage::Terrain | Usage::Cadrage) => altitude_niveau(),
+            Some(Usage::LimitePropriete) => self.bim.altitude_limite.unwrap_or_else(altitude_niveau),
+            Some(Usage::Escalier) => self.base_escalier().and_then(|(n, _, _, decalage)| Some(self.natif.as_ref()?.0.niveau(&n)?.altitude + decalage)).unwrap_or(0.0),
+            Some(Usage::GardeCorps) => altitude_niveau() + self.ruban_edition.nombre_option(crate::zones::ruban::Outil::GardeCorps, 1),
             Some(Usage::Surface) => {
                 let (Some((p, _)), Some(d)) = (&self.natif, self.ruban_edition.dalle_active()) else { return 0.0 };
                 d.niveau.as_ref().and_then(|id| p.niveau(id)).or_else(|| p.niveaux.first()).map_or(0.0, |n| n.altitude) + d.decalage

@@ -307,7 +307,9 @@ impl ViewerApp {
             }
             return;
         }
-        let Some((usage, outil)) = self.usage_dessin() else {
+        let usage_dessin = self.usage_dessin();
+        if !usage_dessin.is_some_and(|(usage, _)| usage == Usage::LimitePropriete) { self.bim.altitude_limite = None; }
+        let Some((usage, outil)) = usage_dessin else {
             self.dessin2d.dernier_usage = None;
             self.dessin2d.trace = None;
             self.dessin2d.reperage.oublier();
@@ -585,6 +587,7 @@ impl ViewerApp {
                     if self.dessin2d.message.is_some() { return; }
                 } else {
                     self.valider_saisie_dessin();
+                    if usage == Some(Usage::Escalier) && self.dessin2d.esc_balance.is_some() && self.dessin2d.message.is_some() { return; }
                 }
             }
         }
@@ -837,6 +840,15 @@ impl ViewerApp {
                 Ok(p) => { self.ajouter_point_raccord(p); { self.dessin2d.message = None; self.dessin2d.information = None; }; }
                 Err(e) => self.dessin2d.message = Some(e),
             }
+            return;
+        }
+        if saisie.is_empty() && self.dessin2d.esc_balance.is_some()
+            && self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier)
+            && let Some(t) = &self.dessin2d.trace
+            && !t.points.is_empty()
+            && let Err(e) = self.verifier_trace_escalier_balance(&t.points)
+        {
+            self.dessin2d.message = Some(e);
             return;
         }
         let Some(trace) = self.dessin2d.trace.as_mut() else { return };

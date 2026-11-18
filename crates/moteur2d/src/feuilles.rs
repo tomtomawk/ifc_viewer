@@ -1,6 +1,6 @@
 //! Dessin d'une vue native et de ses feuilles : scène du projet coupée et projetée,
 //! mise en page sur feuille, export SVG et PDF.
-use super::plans::{fond_plan, limite_haute_plan, pointilles_plage_haute};
+use super::plans::{aretes_plage_haute, dans_plage_haute, fond_plan, limite_haute_plan, pointilles_plage_haute};
 use super::{Poche, cadrer_primitives, coupe, vu};
 use modele::documentation::*;
 use maillage::depuis_natif;
@@ -111,9 +111,9 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
         {
             let niveau = id_natif("niveau", niveau);
             let au_dessus: Vec<_> = s.objects.iter().zip(&visible).map(|(obj, visible)| {
-                *visible && obj.storey == Some(niveau) && obj.min.z > plan.w + 1e-5 && obj.min.z < limite
+                *visible && obj.storey == Some(niveau) && dans_plage_haute(obj, plan.w, limite)
             }).collect();
-            let aretes = vu(&s, &au_dessus, u, h, oeil, Some(glam::Vec3::NEG_Z.extend(limite)), 1024);
+            let aretes = aretes_plage_haute(&s, &au_dessus, u, h, oeil, plan.w, limite);
             primitives.extend(pointilles_plage_haute(aretes, v.echelle, plan.w as f64));
         }
     }

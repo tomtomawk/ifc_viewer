@@ -108,10 +108,15 @@ pub fn sommets_boite(scene: &Scene, visible: &[bool], a: Vec3, b: Vec3, echelle:
 /// est échantillonnée tous les demi-pixels et gardée là où aucune face n'est devant elle.
 /// Arêtes vives et silhouettes des surfaces courbes, une primitive par objet.
 pub fn vu(scene: &Scene, visible: &[bool], droite: DVec3, haut: DVec3, vers_oeil: DVec3, coupe: Option<Vec4>, resolution: usize) -> Vec<Primitive> {
-    let plan = coupe.map(|c| (c.truncate().as_dvec3(), c.w as f64));
+    vu_limites(scene, visible, droite, haut, vers_oeil, coupe.as_slice(), resolution)
+}
+
+pub(super) fn vu_limites(scene: &Scene, visible: &[bool], droite: DVec3, haut: DVec3, vers_oeil: DVec3, coupes: &[Vec4], resolution: usize) -> Vec<Primitive> {
+    let plans: Vec<_> = coupes.iter().map(|c| (c.truncate().as_dvec3(), c.w as f64)).collect();
     let proj = |p: DVec3| DVec3::new(p.dot(droite), p.dot(haut), p.dot(vers_oeil));
     let objets: Vec<usize> = (0..scene.objects.len()).filter(|&i| visible[i] && &*scene.objects[i].class != "IFCANNOTATION").collect();
     let pos = |v: &Vertex| Vec3::from(v.pos).as_dvec3();
+    let (premier_plan, suivants) = plans.split_first().map_or((None, &[][..]), |(p, s)| (Some(*p), s));
     // triangles projetés, découpés par la coupe
     let mut tris: Vec<[DVec3; 3]> = Vec::new();
     for &i in &objets {
@@ -119,10 +124,11 @@ pub fn vu(scene: &Scene, visible: &[bool], droite: DVec3, haut: DVec3, vers_oeil
         for r in [ob.opaque, ob.transparent] {
             for t in scene.vertices[r.start as usize..(r.start + r.count) as usize].chunks_exact(3) {
                 let p = [pos(&t[0]), pos(&t[1]), pos(&t[2])];
-                let poly = match plan {
-                    Some((n, d)) => decouper(&p, n, d),
-                    None => p.to_vec(),
-                };
+                let mut poly = premier_plan.map_or_else(|| p.to_vec(), |(n, d)| decouper(&p, n, d));
+                for &(n, d) in suivants {
+                    if poly.len() < 3 { break; }
+                    poly = decouper(&poly, n, d);
+                }
                 for k in 1..poly.len().saturating_sub(1) {
                     tris.push([proj(poly[0]), proj(poly[k]), proj(poly[k + 1])]);
                 }
@@ -134,7 +140,7 @@ pub fn vu(scene: &Scene, visible: &[bool], droite: DVec3, haut: DVec3, vers_oeil
     for &i in &objets {
         let ob = &scene.objects[i];
         let mut segs = Vec::new();
-        for v in scene.vertices[ob.aretes.start as usize..(ob.aretes.start + ob.aretes.count) as usize].chunks_exact(2) {
+        'arete: for v in scene.vertices[ob.aretes.start as usize..(ob.aretes.start + ob.aretes.count) as usize].chunks_exact(2) {
             if v[0].normal[3] < 0 {
                 // arête douce : tracée sur la silhouette seulement (voir render.rs)
                 let n1 = DVec3::new(v[0].normal[0] as f64, v[0].normal[1] as f64, v[0].normal[2] as f64) / 127.0;
@@ -144,10 +150,10 @@ pub fn vu(scene: &Scene, visible: &[bool], droite: DVec3, haut: DVec3, vers_oeil
                 }
             }
             let (mut a, mut b) = (pos(&v[0]), pos(&v[1]));
-            if let Some((n, d)) = plan {
+            for &(n, d) in &plans {
                 let (sa, sb) = (n.dot(a) + d, n.dot(b) + d);
                 if sa < 0.0 && sb < 0.0 {
-                    continue;
+                    continue 'arete;
                 }
                 if sa < 0.0 {
                     a = a + (b - a) * (sa / (sa - sb));

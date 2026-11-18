@@ -1,5 +1,113 @@
 //! Propriétés et suppression des vues du modèle natif.
 use crate::*;
+use crate::zones::ruban::selecteur::{self, ActionType};
+
+#[derive(Debug, PartialEq, Eq)]
+enum ActionGabarit {
+    Affecter(Option<String>),
+    Creer,
+    Modifier(String),
+    Dupliquer(String),
+}
+
+fn selecteur_gabarit_vue(
+    ui: &mut egui::Ui,
+    projet: &modele::Projet,
+    actuel: Option<&str>,
+) -> Option<ActionGabarit> {
+    let gabarits = &projet.gabarits_vues;
+    let courant = gabarits.iter().find(|g| Some(g.id.as_str()) == actuel);
+    let titre = format!("Gabarit de vue · {}", courant.map_or("Aucun", |g| g.nom.as_str()));
+    let echelle = courant.map(|g| format!("1:{}", g.echelle));
+    let bouton = selecteur::entete(ui, &titre, echelle.as_deref(), &titre, None);
+    let largeur = selecteur::largeur_liste(
+        ui,
+        gabarits.iter().map(|g| g.nom.as_str()).chain(["Aucun", "Créer à partir de cette vue…"]),
+        56.0, 0, 0.0,
+    );
+    let mut action = None;
+    selecteur::liste(&bouton, largeur, 0.0, |ui| {
+        egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+            let aucun = selecteur::Ligne {
+                nom: "Aucun", courant: actuel.is_none(), etiquette: None, sous_titre: None, detail: None, actions: &[],
+            };
+            if selecteur::ligne(ui, &aucun, None).choisi {
+                action = Some(ActionGabarit::Affecter(None));
+            }
+            for g in gabarits {
+                let ligne = selecteur::Ligne {
+                    nom: &g.nom, courant: actuel == Some(g.id.as_str()), etiquette: None, sous_titre: None,
+                    detail: Some(format!("1:{}", g.echelle)),
+                    actions: &[(ActionType::Dupliquer, "Dupliquer le gabarit"), (ActionType::Modifier, "Modifier le gabarit")],
+                };
+                let clic = selecteur::ligne(ui, &ligne, None);
+                match clic.action {
+                    Some(ActionType::Modifier) => action = Some(ActionGabarit::Modifier(g.id.clone())),
+                    Some(ActionType::Dupliquer) => action = Some(ActionGabarit::Dupliquer(g.id.clone())),
+                    None if clic.choisi => action = Some(ActionGabarit::Affecter(Some(g.id.clone()))),
+                    None => {}
+                }
+            }
+        });
+        if selecteur::ligne_ajout(ui, "Créer à partir de cette vue…") {
+            action = Some(ActionGabarit::Creer);
+        }
+    });
+    action
+}
+
+#[cfg(test)]
+mod tests_gabarit {
+    use super::*;
+    use modele::gabarits_vues::GabaritVue;
+
+    fn rectangle_texte(sortie: &egui::FullOutput, libelle: &str) -> egui::Rect {
+        sortie.shapes.iter().find_map(|s| match &s.shape {
+            egui::Shape::Text(t) if t.galley.text() == libelle => {
+                Some(egui::Rect::from_min_size(t.pos, t.galley.size()))
+            }
+            _ => None,
+        }).unwrap_or_else(|| panic!("Texte absent : {libelle}"))
+    }
+
+    #[test]
+    fn les_icones_agissent_sur_le_gabarit_survole_sans_laffecter() {
+        let mut projet = modele::Projet::nouveau("Gabarits");
+        projet.enregistrer_gabarit_vue(GabaritVue {
+            id: "plan".into(), nom: "Plan détaillé".into(), echelle: 50.0,
+            poche: "plein".into(), phase: None, variante: None,
+        }).unwrap();
+        for (distance, attendu) in [
+            (19.0, ActionGabarit::Dupliquer("plan".into())),
+            (43.0, ActionGabarit::Modifier("plan".into())),
+        ] {
+            let ctx = egui::Context::default();
+            let mut action = None;
+            let mut image = |events| ctx.run_ui(egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(500.0, 500.0))),
+                events,
+                ..Default::default()
+            }, |ui| {
+                ui.set_max_width(280.0);
+                if let Some(clic) = selecteur_gabarit_vue(ui, &projet, None) {
+                    action = Some(clic);
+                }
+            });
+            let entete = rectangle_texte(&image(vec![]), "Gabarit de vue · Aucun").center();
+            let clic = |pos, pressed| vec![egui::Event::PointerMoved(pos), egui::Event::PointerButton {
+                pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE,
+            }];
+            image(clic(entete, true));
+            image(clic(entete, false));
+            let detail = rectangle_texte(&image(vec![]), "1:50");
+            let icone = egui::pos2(detail.right() + 8.0 - distance, detail.center().y);
+            image(vec![egui::Event::PointerMoved(icone)]);
+            image(clic(icone, true));
+            image(clic(icone, false));
+            assert_eq!(action, Some(attendu));
+        }
+    }
+}
 
 impl ViewerApp {
     /// Identifiant stable des propriétés de contexte de la vue courante.
@@ -13,29 +121,11 @@ impl ViewerApp {
         let Some((projet, _)) = &self.natif else { return };
         let mut filtre = projet.contextes_vues.get(&id).cloned().unwrap_or_default();
         let avant = filtre.clone();
-        let mut gabarit = projet.gabarits_vue_affectes.get(&id).cloned();
-        let gabarit_avant = gabarit.clone();
-        let mut creer_gabarit = false;
-        let mut modifier_gabarit = None;
+        let gabarit = projet.gabarits_vue_affectes.get(&id).map(String::as_str);
+        let mut action = None;
         egui::CollapsingHeader::new(RichText::new("Paramètres de la vue").strong()).id_salt("contexte_vue_native").default_open(true).show(ui, |ui| {
+            action = selecteur_gabarit_vue(ui, projet, gabarit);
             egui::Grid::new("grille_contexte_vue").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
-                ui.label("Gabarit de vue");
-                ui.horizontal(|ui| {
-                    let nom = gabarit.as_ref().and_then(|id| projet.gabarits_vues.iter().find(|g| &g.id == id)).map_or("Aucun", |g| g.nom.as_str());
-                    egui::ComboBox::from_id_salt("gabarit_vue_native").width(100.0).truncate().selected_text(nom).show_ui(ui, |ui| {
-                        ui.selectable_value(&mut gabarit, None, "Aucun");
-                        for g in &projet.gabarits_vues { ui.selectable_value(&mut gabarit, Some(g.id.clone()), &g.nom); }
-                    });
-                    if ui.small_button("+").on_hover_text("Créer un gabarit à partir de cette vue").clicked() { creer_gabarit = true; }
-                    ui.menu_button("…", |ui| {
-                        ui.label("Modifier ou supprimer un gabarit");
-                        if projet.gabarits_vues.is_empty() { ui.weak("Aucun gabarit"); }
-                        for g in &projet.gabarits_vues {
-                            if ui.button(&g.nom).clicked() { modifier_gabarit = Some(g.id.clone()); ui.close(); }
-                        }
-                    }).response.on_hover_text("Gérer les gabarits du projet");
-                });
-                ui.end_row();
                 ui.label("Phase affichée").on_hover_text("Affiche les éléments créés au plus tard dans cette phase et pas encore démolis.");
                 ui.add_enabled_ui(gabarit.is_none(), |ui| egui::ComboBox::from_id_salt("phase_vue_native").width(150.0).truncate().selected_text(filtre.phase.as_deref().unwrap_or("Toutes"))
                     .show_ui(ui, |ui| {
@@ -55,16 +145,20 @@ impl ViewerApp {
                 ui.label(RichText::new("L'affichage temporaire du gestionnaire prime sur les réglages de la vue.").small().weak());
             }
         });
-        if gabarit != gabarit_avant {
-            let mut copie = projet.clone();
-            match copie.affecter_gabarit_vue(&id, gabarit.as_deref()).and_then(|()| self.appliquer_projet(copie)) {
-                Ok(()) => { self.actualiser_gabarit_vue_actif(); self.status = "Gabarit de vue mis à jour.".into(); }
-                Err(e) => self.error = Some(e),
+        match action {
+            Some(ActionGabarit::Affecter(choix)) if choix.as_deref() != gabarit => {
+                let mut copie = projet.clone();
+                match copie.affecter_gabarit_vue(&id, choix.as_deref()).and_then(|()| self.appliquer_projet(copie)) {
+                    Ok(()) => { self.actualiser_gabarit_vue_actif(); self.status = "Gabarit de vue mis à jour.".into(); }
+                    Err(e) => self.error = Some(e),
+                }
+                return;
             }
-            return;
+            Some(ActionGabarit::Creer) => { self.ouvrir_editeur_gabarit_vue(&id); return; }
+            Some(ActionGabarit::Modifier(gabarit)) => { self.ouvrir_gabarit_par_id(&id, &gabarit, false); return; }
+            Some(ActionGabarit::Dupliquer(gabarit)) => { self.ouvrir_gabarit_par_id(&id, &gabarit, true); return; }
+            _ => {}
         }
-        if creer_gabarit { self.ouvrir_editeur_gabarit_vue(&id, false); return; }
-        if let Some(gabarit) = modifier_gabarit { self.ouvrir_gabarit_par_id(&id, &gabarit); return; }
         if filtre != avant {
             let mut copie = projet.clone();
             if filtre == Default::default() { copie.contextes_vues.remove(&id); } else { copie.contextes_vues.insert(id, filtre); }

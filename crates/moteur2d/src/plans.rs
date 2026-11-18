@@ -3,8 +3,8 @@ use super::feuilles::ids_masques_vue;
 use super::Poche;
 use modele::documentation::*;
 use modele::identifiants::id_natif;
-use scene::Scene;
-use glam::DVec3;
+use scene::{Scene, SceneObject};
+use glam::{DVec3, Vec3};
 use noyau::trace2d::{Primitive, Role};
 
 pub fn limite_haute_plan(p: &Projet, s: &Scene, v: &Vue, coupe: f32) -> Option<f32> {
@@ -12,6 +12,21 @@ pub fn limite_haute_plan(p: &Projet, s: &Scene, v: &Vue, coupe: f32) -> Option<f
     let haut = p.niveau(v.limite_haute_niveau.as_deref().unwrap_or(niveau))?;
     let limite = ((haut.altitude + v.limite_haute_decalage) * 0.001 - s.origin.z) as f32;
     (limite > coupe).then_some(limite)
+}
+
+/// Les escaliers restent d'un seul tenant dans la scène mais traversent le plan de coupe.
+pub fn dans_plage_haute(objet: &SceneObject, coupe: f32, limite: f32) -> bool {
+    let bas = coupe + 1e-5;
+    objet.min.z < limite
+        && (objet.min.z > bas || (&*objet.class == "IFCSTAIR" && objet.max.z > bas))
+}
+
+/// Arêtes visibles entre le plan de coupe et la limite haute, avant la conversion en pointillés.
+pub fn aretes_plage_haute(
+    scene: &Scene, visible: &[bool], droite: DVec3, haut: DVec3, vers_oeil: DVec3, coupe: f32, limite: f32,
+) -> Vec<Primitive> {
+    let coupes = [Vec3::Z.extend(-(coupe + 1e-5)), Vec3::NEG_Z.extend(limite)];
+    super::vue::vu_limites(scene, visible, droite, haut, vers_oeil, &coupes, 1024)
 }
 
 pub fn fond_plan(p: &Projet, s: &Scene, v: &Vue, plan: glam::Vec4, echelle: f64) -> Vec<Primitive> {

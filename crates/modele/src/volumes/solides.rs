@@ -215,73 +215,11 @@ fn mur_brut(
         .type_mur(&m.type_mur)
         .ok_or("Type de mur introuvable.")?
         .epaisseur();
-    let (bas, mut haut) = p.bas_haut(m).ok_or("Contrainte de hauteur non valide.")?;
+    let (bas, haut) = p.bas_haut(m).ok_or("Contrainte de hauteur non valide.")?;
     if ![bas, haut, e].iter().all(|v| v.is_finite()) || haut <= bas || m.axe.longueur() < 1.0 {
         return Err("Dimensions du mur non valides.".into());
     }
-    let toit = p
-        .attaches_toitures
-        .get(&m.id)
-        .or_else(|| {
-            m.assemblage
-                .as_ref()
-                .and_then(|a| p.attaches_toitures.get(a))
-        })
-        .and_then(|id| p.dalles.iter().find(|d| &d.id == id));
-    if let Some(d) = toit {
-        let z = p
-            .niveau(&d.niveau)
-            .ok_or("Niveau de toiture absent.")?
-            .altitude
-            + d.decalage;
-        haut = pente::morceaux(&d.contours, &pente::plans(d), 0.0)
-            .iter()
-            .flat_map(|(q, poly)| poly.iter().map(move |v| z + q.hauteur(*v)))
-            .fold(haut, f64::max)
-            + 1.0;
-    }
-    let contour = match m.axe {
-        Axe::Droit { .. } => crate::murs::jonctions::contour(p, m, jonctions)
-            .ok_or("Contour du mur non valide.")?
-            .to_vec(),
-        Axe::Arc { .. } => bande(&m.axe, 0.0, m.axe.longueur(), e)?,
-    };
-    if contour.iter().flatten().any(|v| !v.is_finite()) {
-        return Err("Contour non fini.".into());
-    }
-    let mut tris = prisme(&contour, bas, haut);
-    if let Some(d) = toit {
-        if contour.iter().any(|&v| {
-            d.contours
-                .iter()
-                .filter(|c| geometrie::dedans(v, c))
-                .count()
-                % 2
-                == 0
-        }) {
-            return Err(format!(
-                "{} : le mur attaché doit être entièrement sous la toiture (prévoir un débord).",
-                m.nom
-            ));
-        }
-        let z = p.niveau(&d.niveau).unwrap().altitude + d.decalage;
-        let plans = pente::plans(d);
-        let cap = pente::couche(
-            &d.contours,
-            &plans,
-            z,
-            -(haut - bas + z.abs() + bas.abs() + 1000.0),
-            0.0,
-        )
-        .into_iter()
-        .map(|t| t.map(|v| v * 1000.0))
-        .collect::<Vec<_>>();
-        tris = booleen(&tris, &cap, noyau::csg::Op::Intersection, 1e-5)
-            .ok_or("Attachement à la toiture trop complexe.")?;
-        if tris.is_empty() {
-            return Err("La toiture se trouve sous le pied du mur.".into());
-        }
-    }
+    let mut tris = super::attache_toiture::volume_mur(p, m, jonctions, (bas, haut), e, booleen)?;
     // ouvertures qui percent le mur, avec leur hôte élargi s'il est déjà calculé
     type Hote = Result<crate::murs::retours::HoteElargi, String>;
     let ouvertures: Vec<(&Ouverture, Option<&Hote>)> = match percements {
@@ -674,7 +612,7 @@ fn ouverture_generique(p: &Projet, o: &Ouverture) -> Result<Vec<Tri>, String> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
     pub fn exemple() -> Projet {
         let mut p = Projet::nouveau("Essai");

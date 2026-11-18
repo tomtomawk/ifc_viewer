@@ -11,7 +11,7 @@ Rôle : zones d'écran autour de la vue.
 | `proprietes.rs`, `communes.rs` | propriétés de la sélection native ; propriétés communes d'une sélection multiple |
 | `donnees_importees.rs` | propriétés, matériau et couleur lus d'un élément importé (lecture seule, appelé depuis `proprietes.rs`) |
 | `menu_vue.rs` | clic droit dans la vue, poignée de milieu de mur |
-| `vue_native.rs`, `vue_revit.rs` | propriétés des vues natives ; vues Revit, nomenclatures |
+| `vue_native.rs`, `vue_revit.rs` | propriétés des vues natives et sélecteur de gabarit ; vues Revit, nomenclatures |
 | `graphismes.rs` | fenêtres matériau, plumes, motifs |
 
 Dépendances typiques : `socle/`, `outils/` (barres d'options), `familles/` (sélection des familles), `documenter/` (feuilles).

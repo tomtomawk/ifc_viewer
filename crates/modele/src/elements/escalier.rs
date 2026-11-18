@@ -204,8 +204,8 @@ impl Escalier {
     /// Marches et paliers : contour en plan, altitude du dessus ; et le profil de la
     /// ligne de foulée (abscisse curviligne, altitude du nez de marche).
     fn marches(&self, c: &CalculEscalier) -> Result<(Vec<(Vec<DVec2>, f64)>, Vec<(DVec2, f64)>), String> {
-        if let Some(n) = self.balance {
-            return self.marches_balancees(c, n as usize);
+        if self.balance.is_some() {
+            return self.marches_balancees(c);
         }
         let w = self.largeur / 2.0;
         let volees = self.volees();
@@ -247,12 +247,19 @@ impl Escalier {
         Ok((out, profil))
     }
 
-    /// Marches tournantes balancées (`escalier_balance`) et profil de la foulée.
-    fn marches_balancees(&self, c: &CalculEscalier, balance: usize) -> Result<(Vec<(Vec<DVec2>, f64)>, Vec<(DVec2, f64)>), String> {
+    /// Contours des marches balancées pour les caractéristiques de cet escalier.
+    pub fn contours_marches_balancees(&self, c: &CalculEscalier) -> Result<Vec<Vec<DVec2>>, String> {
+        let balance = self.balance.ok_or("L'escalier n'est pas balancé.")?;
         let trace: Vec<DVec2> = self.trace.iter().map(|p| pt(*p)).collect();
         let rive = |s: f64| decaler_polyligne(&self.trace, s * self.largeur / 2.0).into_iter().map(pt).collect::<Vec<_>>();
+        super::escalier_balance::marches(&trace, &rive(1.0), &rive(-1.0), c.contremarches.saturating_sub(1), balance as usize)
+    }
+
+    /// Marches tournantes balancées et profil de la foulée.
+    fn marches_balancees(&self, c: &CalculEscalier) -> Result<(Vec<(Vec<DVec2>, f64)>, Vec<(DVec2, f64)>), String> {
+        let trace: Vec<DVec2> = self.trace.iter().map(|p| pt(*p)).collect();
         let n = c.contremarches - 1;
-        let contours = super::escalier_balance::marches(&trace, &rive(1.0), &rive(-1.0), n, balance)?;
+        let contours = self.contours_marches_balancees(c)?;
         let mut profil = vec![(trace[0], c.base)];
         let mut out = Vec::new();
         let mut s = 0.0;

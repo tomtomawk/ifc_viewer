@@ -6,6 +6,7 @@ pub use crate::*;
 use commandes::Execution;
 use config::options::Dimensions;
 
+mod identique;
 mod panneau;
 mod widgets;
 
@@ -22,6 +23,7 @@ pub(crate) struct EtatBim {
     pub(crate) composant: modele::Composant,
     /// Arbre à placer (essence, hauteur, houppier, décalage).
     pub(crate) arbre: modele::elements::arbre::Arbre,
+    pub(crate) altitude_limite: Option<f64>,
     pub(crate) nom_piece: String,
     /// Famille d'étiquette des pièces créées ; vide : standard.
     pub(crate) etiquette_piece: String,
@@ -66,6 +68,7 @@ impl Default for EtatBim {
             composant: modele::Composant { id: String::new(), nom: String::new(), type_composant: String::new(), niveau: String::new(), position: [0.0; 2], decalage: 0.0, rotation: 0.0 },
             arbre: modele::elements::arbre::Arbre { id: String::new(), nom: String::new(), niveau: String::new(), position: [0.0; 2], decalage: 0.0, essence: Default::default(), hauteur: 10_000.0, diametre: 7_000.0, asset: None },
             nom_piece: "Pièce".into(),
+            altitude_limite: None,
             etiquette_piece: String::new(),
             barre_editee: None,
             annotation_identique: None,
@@ -220,109 +223,6 @@ impl ViewerApp {
             }
             Err(e) => self.error = Some(e),
         }
-    }
-
-    pub(crate) fn creer_identique(&mut self) -> Result<(), String> {
-        let ids = self.selection_bim();
-        if ids.len() != 1 {
-            return Err("Sélectionnez un seul élément pour créer à l'identique.".into());
-        }
-        let (p, _) = self.natif.as_ref().ok_or("Ouvrez un projet natif.")?;
-        let id = &ids[0];
-        let mur = p.murs.iter().find(|m| &m.id == id).or_else(|| {
-            p.assemblage(id)
-                .and_then(|a| a.couches.first())
-                .and_then(|id| p.murs.iter().find(|m| &m.id == id))
-        });
-        if let Some(mur) = mur {
-            self.ruban_edition.mur_identique(p, mur)?;
-        } else if let Some(d) = p.dalles.iter().find(|d| &d.id == id) {
-            self.ruban_edition.surface_identique(p, d)?;
-        } else if let Some(b) = p.barres.iter().find(|b| &b.id == id) {
-            if let Some(c) = p.contextes.get(id) {
-                self.ruban_edition.phase_creation = c.phase.clone();
-                self.ruban_edition.sous_projet_creation = c.sous_projet.clone();
-                self.ruban_edition.variante_creation = c.variante.clone();
-            }
-            self.bim.barre = b.clone();
-            self.bim.barre.id.clear();
-            self.ruban_edition
-                .activer_structure(b.genre == modele::GenreBarre::Poutre);
-        } else if let Some(o) = p.ouvertures.iter().find(|o| &o.id == id) {
-            if let Some(c) = p.contextes.get(id) {
-                self.ruban_edition.phase_creation = c.phase.clone();
-                self.ruban_edition.sous_projet_creation = c.sous_projet.clone();
-                self.ruban_edition.variante_creation = c.variante.clone();
-            }
-            self.ruban_edition.ouverture_identique(o)?;
-        } else if let Some(annotation) = p.annotations.iter().find(|a| &a.id == id) {
-            use modele::documentation::{AnnotationForme as F, PointCote};
-            use crate::zones::ruban::Outil;
-            if self.vue_native_id().as_ref() != Some(&annotation.vue) {
-                return Err("Ouvrez la vue de l'annotation pour la créer à l'identique.".into());
-            }
-            let outil = match &annotation.forme {
-                F::Texte { point, texte } => {
-                    self.bim.points[0] = *point;
-                    self.bim.texte = texte.clone();
-                    Outil::Texte
-                }
-                // une ligne se recrée comme une polyligne d'un segment
-                F::Ligne { .. } => Outil::Polyligne,
-                F::Polyligne { .. } => Outil::Polyligne,
-                F::Spline { .. } => Outil::Spline,
-                F::Cercle { .. } => Outil::Cercle,
-                // un arc se retrace comme un segment d'arc de polyligne (Alt+clic)
-                F::Arc { .. } => Outil::Polyligne,
-                F::Zone { contour } => {
-                    if let (Some(a), Some(b)) = (contour.first(), contour.get(2)) {
-                        self.bim.points = [*a, *b];
-                    }
-                    Outil::Zone
-                }
-                F::Cote { debut, fin, .. } => {
-                    if let PointCote::Fixe { point } = debut {
-                        self.bim.points[0] = *point;
-                    }
-                    if let PointCote::Fixe { point } = fin {
-                        self.bim.points[1] = *point;
-                    }
-                    Outil::Cote
-                }
-                F::Etiquette { point, .. } => {
-                    self.bim.points[0] = *point;
-                    Outil::Etiquette
-                }
-                F::CoteAngulaire { .. } => Outil::CoteAngulaire,
-                F::CoteDiametre { .. } => Outil::CoteDiametre,
-                F::Altimetrie { .. } => Outil::Altimetrie,
-            };
-            self.bim.annotation_identique = Some(annotation.clone());
-            self.ruban_edition.activer_outil(outil);
-            self.onglet_ruban = OngletRuban::Annoter;
-            self.select(None, false);
-            self.status = "Créer à l'identique : placez la nouvelle annotation.".into();
-            return Ok(());
-        } else if let Some(vue) = p
-            .vues
-            .iter()
-            .find(|v| &v.id == id && matches!(v.genre, modele::GenreVue::Coupe { .. }))
-        {
-            self.ruban_edition.coupe_identique(vue)?;
-            self.onglet_ruban = OngletRuban::Annoter;
-            self.select(None, false);
-            self.status = "Créer à l'identique : tracez la coupe ou l'élévation.".into();
-            return Ok(());
-        } else if let Some(g) = p.quadrillages.iter().find(|g| &g.id == id) {
-            self.bim.points = [g.debut, g.fin];
-            self.ruban_edition.quadrillage_identique(&g.nom);
-        } else {
-            return Err("Créer à l'identique est disponible pour les murs, éléments horizontaux, poteaux, poutres, quadrillages, coupes, élévations et ouvertures natives.".into());
-        }
-        self.onglet_ruban = OngletRuban::Modeliser;
-        self.select(None, false);
-        self.status = "Créer à l'identique : placez le nouvel élément.".into();
-        Ok(())
     }
 
     /// Phase, sous-projet et variante de la sélection, modifiables d'ici : « Varié » quand

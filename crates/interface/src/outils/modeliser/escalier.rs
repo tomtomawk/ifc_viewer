@@ -5,14 +5,11 @@ use commandes::Commande;
 use glam::DVec2;
 
 impl ViewerApp {
-    /// Crée un escalier de ligne de foulée `trace` : du niveau de tracé au niveau
-    /// immédiatement au-dessus (sinon 2,80 m), avec ses garde-corps selon le ruban.
-    pub(crate) fn creer_escalier(&mut self, trace: Vec<[f64; 2]>) -> Result<(), String> {
+    fn escalier_du_trace(&self, trace: &[[f64; 2]]) -> Result<modele::Escalier, String> {
         use crate::zones::ruban::Outil;
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
         let (niveau, haut, hauteur, decalage_bas) = self.base_escalier().ok_or("Créez d'abord un niveau.")?;
-        let trace = self.trace_justifie(&trace);
-        let escalier = modele::Escalier {
+        Ok(modele::Escalier {
             id: String::new(),
             nom: format!("Escalier {}", p.escaliers.len() + 1),
             niveau: niveau.clone(),
@@ -20,12 +17,18 @@ impl ViewerApp {
             decalage_bas,
             decalage_haut: self.dessin2d.esc_decalage_haut,
             hauteur,
-            trace,
+            trace: self.trace_justifie(trace),
             largeur: self.ruban_edition.nombre_option(Outil::Escalier, 0),
             hauteur_marche: self.ruban_edition.nombre_option(Outil::Escalier, 1),
-            paillasse: 150.0,
+            paillasse: self.dessin2d.esc_paillasse.unwrap_or(150.0),
             balance: self.dessin2d.esc_balance,
-        };
+        })
+    }
+
+    /// Crée l'escalier et ses garde-corps selon les réglages du ruban.
+    pub(crate) fn creer_escalier(&mut self, trace: Vec<[f64; 2]>) -> Result<(), String> {
+        use crate::zones::ruban::Outil;
+        let escalier = self.escalier_du_trace(&trace)?;
         let id = self.executer_bim(Commande::Escalier { escalier })?.into_iter().next().ok_or("Escalier non créé.")?;
         let cotes = match self.ruban_edition.texte_option(Outil::Escalier, 2).as_str() {
             "Gauche" => vec![0],
@@ -162,14 +165,19 @@ impl ViewerApp {
         let niveau_trait = egui::Stroke::new(1.5, bleu);
         peintre.line_segment([egui::pos2(x0 - 4.0, yh), egui::pos2(x1 + 4.0, yh)], niveau_trait);
         peintre.line_segment([egui::pos2(x0 - 4.0, yb), egui::pos2(x1 + 4.0, yb)], niveau_trait);
-        let (dx, dy) = ((x1 - x0) / 4.0, (yb - yh) / 4.0);
-        let mut points = vec![egui::pos2(x0, yb)];
-        for _ in 0..4 {
-            let b = points[points.len() - 1];
-            points.push(b - egui::vec2(0.0, dy));
-            points.push(b + egui::vec2(dx, -dy));
+        let trait_escalier = egui::Stroke::new(1.4, ui.visuals().text_color());
+        if self.dessin2d.esc_balance.is_some() {
+            peintre.arrow(egui::pos2(x0, yb), egui::vec2(x1 - x0, yh - yb), trait_escalier);
+        } else {
+            let (dx, dy) = ((x1 - x0) / 4.0, (yb - yh) / 4.0);
+            let mut points = vec![egui::pos2(x0, yb)];
+            for _ in 0..4 {
+                let b = points[points.len() - 1];
+                points.push(b - egui::vec2(0.0, dy));
+                points.push(b + egui::vec2(dx, -dy));
+            }
+            peintre.add(egui::Shape::line(points, trait_escalier));
         }
-        peintre.add(egui::Shape::line(points, egui::Stroke::new(1.4, ui.visuals().text_color())));
         // rappels vers les lignes de limites
         let rappel = egui::Stroke::new(0.8, bleu.gamma_multiply(0.8));
         for y in [yh, yb] {
@@ -217,7 +225,7 @@ impl ViewerApp {
 
     /// Vrai quand le tracé porte toutes ses marches : rien ne peut plus s'y ajouter.
     pub(crate) fn escalier_complet(&self, points: &[DVec2]) -> bool {
-        if points.len() < 2 { return false; }
+        if self.dessin2d.esc_balance.is_some() || points.len() < 2 { return false; }
         let brut: Vec<[f64; 2]> = points.iter().map(|p| p.to_array()).collect();
         let total: f64 = self.volees_trace(&brut).iter().map(|v| v.2).sum();
         total >= self.marches_a_poser(brut.len()) as f64 * self.giron_vise() - 1.0
@@ -226,6 +234,7 @@ impl ViewerApp {
     /// Point d'une volée d'escalier : jamais plus loin que la dernière marche à poser ;
     /// `magnetiser` : la longueur tombe sur un nombre entier de marches.
     pub(crate) fn point_escalier(&self, poses: &[DVec2], p: DVec2, magnetiser: bool) -> DVec2 {
+        if self.dessin2d.esc_balance.is_some() { return p; }
         let Some(&prec) = poses.last() else { return p };
         let (l, giron) = ((p - prec).length(), self.giron_vise());
         if l < 1e-6 || giron <= 1.0 { return p; }
@@ -244,6 +253,16 @@ impl ViewerApp {
             volee = volee.min(reste);
         }
         prec + u * (volee - c).max(1.0)
+    }
+
+    /// Contrôle le giron de rive avant que la fin du tracé ne vide ses sommets.
+    pub(crate) fn verifier_trace_escalier_balance(&self, points: &[DVec2]) -> Result<(), String> {
+        let brut: Vec<_> = points.iter().map(|p| p.to_array()).collect();
+        let escalier = self.escalier_du_trace(&brut)?;
+        let (projet, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
+        let calcul = escalier.calcul(projet)?;
+        escalier.contours_marches_balancees(&calcul)?;
+        Ok(())
     }
 
     /// Ligne de foulée centrée à partir de la ligne tracée : chaque volée a sa
@@ -309,49 +328,71 @@ impl ViewerApp {
         let blondel = (2.0 * h + giron) / 10.0;
         let hors = !(60.0..=64.0).contains(&blondel);
         let u = modele::unite::unite();
-        let (zone, _) = ui.allocate_exact_size(egui::vec2(ui.available_width().max(220.0), 100.0), Sense::hover());
-        let painter = ui.painter_at(zone);
-        let trait_ = egui::Stroke::new(1.6, ui.visuals().text_color());
-        let cote = egui::Stroke::new(1.0, Color32::from_rgb(55, 130, 200));
-        // trois marches, géométrie fixe
-        let (g, hm) = (46.0_f32, 22.0_f32);
-        let x0 = zone.left() + 84.0;
-        let y0 = zone.top() + 70.0;
-        let mut points = vec![egui::pos2(x0, y0)];
-        for _ in 0..3 {
-            let b = points[points.len() - 1];
-            points.push(b - egui::vec2(0.0, hm));
-            points.push(b + egui::vec2(g, -hm));
-        }
-        painter.add(egui::Shape::line(points, trait_));
-        painter.line_segment([egui::pos2(x0 - 12.0, y0), egui::pos2(x0 + 3.0 * g + 8.0, y0)], egui::Stroke::new(1.0, ui.visuals().weak_text_color()));
-        // cote de hauteur (première contremarche) et de giron (deuxième marche)
-        painter.line_segment([egui::pos2(x0 - 6.0, y0), egui::pos2(x0 - 6.0, y0 - hm)], cote);
-        painter.line_segment([egui::pos2(x0 + g, y0 + 6.0), egui::pos2(x0 + 2.0 * g, y0 + 6.0)], cote);
-        let champ = |ui: &mut egui::Ui, rect: egui::Rect, nom: &str, v: f64, facteur: f64, decimales: Option<usize>| -> Option<f64> {
-            // new_child : n'avance pas le curseur du panneau (scope_builder le ramènerait dans le schéma)
-            let mut enfant = ui.new_child(egui::UiBuilder::new().max_rect(rect));
-            champ_valeur(&mut enfant, nom, v, facteur, decimales, rect.width())
+        let balance = self.dessin2d.esc_balance.is_some();
+        let (nouvelle_h, nouveau_giron, nouveau_nombre) = if balance {
+            let mut resultats = (None, None, None);
+            egui::Grid::new("cotes_escalier_balance").num_columns(2).show(ui, |ui| {
+                ui.label("Hauteur de marche");
+                resultats.0 = champ_valeur(ui, "esc_h", h, u.facteur(), None, 58.0);
+                ui.end_row();
+                ui.label("Giron visé");
+                resultats.1 = champ_valeur(ui, "esc_g", giron, u.facteur(), None, 58.0);
+                ui.end_row();
+                ui.label("Contremarches");
+                resultats.2 = champ_valeur(ui, "esc_n", nombre as f64, 1.0, Some(0), 58.0);
+                ui.end_row();
+                ui.label("Foulée visée");
+                ui.label(u.afficher((nombre - 1) as f64 * giron));
+                ui.end_row();
+            });
+            resultats
+        } else {
+            let (zone, _) = ui.allocate_exact_size(egui::vec2(ui.available_width().max(220.0), 100.0), Sense::hover());
+            let painter = ui.painter_at(zone);
+            let trait_ = egui::Stroke::new(1.6, ui.visuals().text_color());
+            let cote = egui::Stroke::new(1.0, Color32::from_rgb(55, 130, 200));
+            // trois marches, géométrie fixe
+            let (g, hm) = (46.0_f32, 22.0_f32);
+            let x0 = zone.left() + 84.0;
+            let y0 = zone.top() + 70.0;
+            let mut points = vec![egui::pos2(x0, y0)];
+            for _ in 0..3 {
+                let b = points[points.len() - 1];
+                points.push(b - egui::vec2(0.0, hm));
+                points.push(b + egui::vec2(g, -hm));
+            }
+            painter.add(egui::Shape::line(points, trait_));
+            painter.line_segment([egui::pos2(x0 - 12.0, y0), egui::pos2(x0 + 3.0 * g + 8.0, y0)], egui::Stroke::new(1.0, ui.visuals().weak_text_color()));
+            // cote de hauteur (première contremarche) et de giron (deuxième marche)
+            painter.line_segment([egui::pos2(x0 - 6.0, y0), egui::pos2(x0 - 6.0, y0 - hm)], cote);
+            painter.line_segment([egui::pos2(x0 + g, y0 + 6.0), egui::pos2(x0 + 2.0 * g, y0 + 6.0)], cote);
+            let champ = |ui: &mut egui::Ui, rect: egui::Rect, nom: &str, v: f64, facteur: f64, decimales: Option<usize>| -> Option<f64> {
+                // new_child : n'avance pas le curseur du panneau (scope_builder le ramènerait dans le schéma)
+                let mut enfant = ui.new_child(egui::UiBuilder::new().max_rect(rect));
+                champ_valeur(&mut enfant, nom, v, facteur, decimales, rect.width())
+            };
+            let (l, hc) = (58.0, 20.0);
+            let r_h = egui::Rect::from_min_size(egui::pos2(x0 - 12.0 - l, y0 - hm / 2.0 - hc / 2.0), egui::vec2(l, hc));
+            let r_g = egui::Rect::from_min_size(egui::pos2(x0 + 1.5 * g - l / 2.0, y0 + 10.0), egui::vec2(l, hc));
+            let r_n = egui::Rect::from_min_size(egui::pos2(x0 + 3.0 * g + 12.0, y0 - 3.0 * hm), egui::vec2(l, hc));
+            painter.text(egui::pos2(r_h.left(), r_h.top() - 1.0), egui::Align2::LEFT_BOTTOM, "hauteur", egui::FontId::proportional(10.0), cote.color);
+            painter.text(egui::pos2(r_g.right() + 4.0, r_g.center().y), egui::Align2::LEFT_CENTER, "giron", egui::FontId::proportional(10.0), cote.color);
+            painter.text(egui::pos2(r_n.left(), r_n.top() - 1.0), egui::Align2::LEFT_BOTTOM, "marches", egui::FontId::proportional(10.0), cote.color);
+            (
+                champ(ui, r_h, "esc_h", h, u.facteur(), None),
+                champ(ui, r_g, "esc_g", giron, u.facteur(), None),
+                champ(ui, r_n, "esc_n", nombre as f64, 1.0, Some(0)),
+            )
         };
-        let (l, hc) = (58.0, 20.0);
-        let r_h = egui::Rect::from_min_size(egui::pos2(x0 - 12.0 - l, y0 - hm / 2.0 - hc / 2.0), egui::vec2(l, hc));
-        let r_g = egui::Rect::from_min_size(egui::pos2(x0 + 1.5 * g - l / 2.0, y0 + 10.0), egui::vec2(l, hc));
-        let r_n = egui::Rect::from_min_size(egui::pos2(x0 + 3.0 * g + 12.0, y0 - 3.0 * hm), egui::vec2(l, hc));
-        painter.text(egui::pos2(r_h.left(), r_h.top() - 1.0), egui::Align2::LEFT_BOTTOM, "hauteur", egui::FontId::proportional(10.0), cote.color);
-        painter.text(egui::pos2(r_g.right() + 4.0, r_g.center().y), egui::Align2::LEFT_CENTER, "giron", egui::FontId::proportional(10.0), cote.color);
-        painter.text(egui::pos2(r_n.left(), r_n.top() - 1.0), egui::Align2::LEFT_BOTTOM, "marches", egui::FontId::proportional(10.0), cote.color);
-        let nouvelle_h = champ(ui, r_h, "esc_h", h, u.facteur(), None);
-        let nouveau_giron = champ(ui, r_g, "esc_g", giron, u.facteur(), None);
-        let nouveau_nombre = champ(ui, r_n, "esc_n", nombre as f64, 1.0, Some(0));
         ui.horizontal(|ui| {
-            ui.label("Blondel 2h + g");
+            ui.label(if balance { "Blondel visé" } else { "Blondel 2h + g" });
             let rouge = Color32::from_rgb(200, 40, 40);
             if hors { ui.visuals_mut().override_text_color = Some(rouge); }
             let nouveau = champ_valeur(ui, "esc_b", blondel * 10.0, 10.0, Some(1), 52.0);
             ui.label("cm");
             if hors { ui.label("hors confort (60 à 64)"); }
             if let Some(b) = nouveau { self.dessin2d.giron_impose = Some((b - 2.0 * h).max(50.0)); }
-            if impose.is_some() && ui.small_button("↺").on_hover_text("Revenir au giron calculé d'après le tracé").clicked() {
+            if impose.is_some() && ui.small_button("↺").on_hover_text("Revenir au giron visé par défaut").clicked() {
                 self.dessin2d.giron_impose = None;
             }
         });
@@ -366,12 +407,55 @@ impl ViewerApp {
         }
     }
 
+    fn apercu_escalier_balance(&self, painter: &egui::Painter, rect: egui::Rect, brut: &[[f64; 2]]) {
+        let (Some((projet, _)), Ok(escalier)) = (&self.natif, self.escalier_du_trace(brut)) else { return };
+        let Ok(calcul) = escalier.calcul(projet) else { return };
+        let marches = escalier.contours_marches_balancees(&calcul);
+        let couleur = if marches.is_ok() { Color32::from_rgb(55, 130, 200) } else { Color32::from_rgb(200, 40, 40) };
+        let trait_marche = egui::Stroke::new(1.2, couleur);
+        let projeter = |p| self.vers_ecran(rect, p);
+        if let Ok(contours) = &marches {
+            for contour in contours {
+                let points: Vec<_> = contour.iter().filter_map(|&q| projeter(q)).collect();
+                if points.len() == contour.len() {
+                    painter.add(egui::Shape::closed_line(points, trait_marche));
+                }
+            }
+        } else {
+            for d in [escalier.largeur / 2.0, -escalier.largeur / 2.0] {
+                let rive = modele::elements::escalier::decaler_polyligne(&escalier.trace, d)
+                    .into_iter().map(DVec2::from_array).filter_map(projeter).collect();
+                painter.add(egui::Shape::line(rive, trait_marche));
+            }
+        }
+        if let Some(q) = brut.last().and_then(|&p| projeter(DVec2::from_array(p))) {
+            let giron = modele::unite::unite().afficher(calcul.giron);
+            let mut texte = format!("{} marches · Giron {giron} · Blondel {:.1} cm", calcul.contremarches - 1, calcul.blondel / 10.0);
+            if let Err(erreur) = marches {
+                texte.push('\n');
+                texte.push_str(&erreur);
+            } else if !calcul.confortable() {
+                texte.push_str(" · hors confort");
+            }
+            let libelle = painter.layout(texte, egui::FontId::proportional(13.0), couleur, rect.width().min(340.0));
+            let x = (q.x + 16.0).min(rect.right() - libelle.size().x).max(rect.left());
+            let y = (q.y - 22.0 - libelle.size().y).max(rect.top());
+            painter.galley(egui::pos2(x, y), libelle, couleur);
+        }
+    }
+
     /// Escalier en cours : emmarchement (bords de la largeur) et flèche de montée.
     pub(crate) fn apercu_escalier(&self, painter: &egui::Painter, rect: egui::Rect, lignes: &[Vec<DVec2>]) {
         let w = self.ruban_edition.nombre_option(crate::zones::ruban::Outil::Escalier, 0) / 2.0;
         let couleur = Color32::from_rgb(55, 130, 200);
         let giron = self.giron_vise();
         for l in lignes.iter().filter(|l| l.len() >= 2) {
+            if self.dessin2d.esc_balance.is_some() {
+                let mut brut: Vec<_> = l.iter().map(|p| p.to_array()).collect();
+                if l[l.len() - 1].distance(l[l.len() - 2]) < 1e-6 { brut.pop(); }
+                if brut.len() >= 2 { self.apercu_escalier_balance(painter, rect, &brut); }
+                continue;
+            }
             let brut: Vec<[f64; 2]> = l.iter().map(|p| p.to_array()).collect();
             // justification : la ligne tracée est l'axe ou un bord ; la foulée est au centre
             let trace = self.trace_justifie(&brut);
@@ -413,5 +497,67 @@ impl ViewerApp {
                 painter.add(egui::Shape::convex_polygon(vec![pb, pb - d + n, pb - d - n], couleur, egui::Stroke::NONE));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::*;
+    use crate::zones::ruban::Outil;
+    use glam::DVec2;
+    use moteur2d::dao::{OutilDessin, Trace};
+
+    #[test]
+    fn escalier_balance_garde_le_trace_libre_et_valide_les_girons_reels() {
+        let ctx = egui::Context::default();
+        let mut app = ViewerApp::new(&eframe::CreationContext::_new_kittest(ctx), None);
+        let mut p = modele::Projet::nouveau("Escalier balancé");
+        p.niveaux.push(modele::Niveau {
+            id: "rdc".into(),
+            nom: "RDC".into(),
+            altitude: 0.0,
+            origine: None,
+        });
+        let chemin = std::env::temp_dir().join(format!("escalier-{}.modele.json", noyau::uuid::uuid()));
+        app.scene = Some(maillage::depuis_natif(&p, &chemin).unwrap());
+        app.natif = Some((p, chemin.clone()));
+        app.onglet_ruban = OngletRuban::Modeliser;
+        app.ruban_edition.activer_outil(Outil::Escalier);
+        app.ruban_edition.definir_nombre_option(Outil::Escalier, 0, 1000.0);
+        app.ruban_edition.definir_nombre_option(Outil::Escalier, 1, 175.0);
+        app.ruban_edition.definir_texte_option(Outil::Escalier, 2, "Aucun");
+        app.dessin2d.esc_balance = Some(5);
+        app.dessin2d.giron_impose = Some(220.0);
+
+        let virage = DVec2::new(2400.0, 0.0);
+        let points = [DVec2::ZERO, virage, DVec2::new(2400.0, 2100.0)];
+        assert_eq!(app.point_escalier(&points[..2], points[2], true), points[2]);
+        assert!(!app.escalier_complet(&points));
+
+        let mut trace = Trace::new(OutilDessin::Polyligne);
+        trace.points = vec![points[0], virage, DVec2::new(2400.0, 200.0)];
+        let points_invalides = trace.points.clone();
+        app.dessin2d.trace = Some(trace);
+        app.quitter_commande(true);
+        assert_eq!(app.dessin2d.trace.as_ref().unwrap().points, points_invalides);
+        assert!(app.dessin2d.message.as_deref().unwrap().contains("giron de rive"));
+        assert!(app.natif.as_ref().unwrap().0.escaliers.is_empty());
+
+        app.dessin2d.trace.as_mut().unwrap().points = points.to_vec();
+        app.quitter_commande(true);
+        echanges::enregistrement::effacer_recuperation(&chemin);
+        let p = &app.natif.as_ref().unwrap().0;
+        assert_eq!(p.escaliers.len(), 1, "{:?}", app.dessin2d.message);
+        let e = &p.escaliers[0];
+        let calcul = e.calcul(p).unwrap();
+        assert_eq!(calcul.paliers, 0);
+        assert!((calcul.giron - 300.0).abs() < 1e-6);
+        assert_eq!(e.trace, points.map(|p| p.to_array()));
+        let marches = e.contours_marches_balancees(&calcul).unwrap();
+        assert_eq!(marches.len(), 15);
+        assert!(marches.iter().flat_map(|m| m.windows(2)).any(|w| {
+            let d = (w[1] - w[0]).abs();
+            d.x > 1.0 && d.y > 1.0
+        }));
     }
 }

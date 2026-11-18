@@ -27,8 +27,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   repris sur les feuilles. Les filtres temporaires du gestionnaire s'y ajoutent.
 
 - **Gabarit de vue** : dans les propriétés de la vue, le sélecteur attribue un
-  gabarit existant et **+** en crée un à partir de la vue. Le menu **…** permet
-  de modifier ou supprimer les gabarits du projet, même sans affectation. Un
+  gabarit existant et **+** en crée un à partir de la vue. Au survol d'un gabarit,
+  le crayon ouvre son éditeur et l'icône **Dupliquer** ouvre une copie qui est
+  attribuée à la vue lors de l'enregistrement. La suppression se fait dans l'éditeur. Un
   gabarit partagé pilote l'échelle, le poché de coupe, la phase et la variante ;
   ses modifications se répercutent immédiatement sur toutes les vues liées ;
   leurs dessins sur les feuilles reprennent notamment le poché et les filtres.
@@ -240,7 +241,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
 - **Plage de vue en plan** : les propriétés distinguent Plan de coupe, Limite
   basse et Limite haute (niveau et décalage). Entre le plan de coupe et la limite
   haute, les objets non coupés du niveau de la vue sont représentés en pointillés,
-  notamment les poutres et plafonds. Les objets rattachés à un autre niveau sont
+  notamment les poutres et plafonds. Pour un escalier qui traverse le plan de coupe,
+  la portion comprise dans la plage haute est également en pointillés. Les objets rattachés à un autre niveau sont
   exclus, même si la limite haute utilise ce niveau comme référence.
 - **Barre de vue** : le cube ouvre les styles visuels et l'icône soleil donne accès
   séparément aux ombres du soleil et à l'ombre ambiante. En plan, « Cadre » propose
@@ -362,8 +364,11 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   partage la longueur des volées. Propriétés : niveaux de départ et d'arrivée (ou
   hauteur libre), décalage, largeur, hauteur de marche visée, paillasse ; calcul
   affiché (contremarches, giron, paliers, Blondel 2h + g, signalé hors confort :
-  60 à 65 cm, h ≤ 20 cm, g ≥ 22 cm). En plan : ligne de foulée, rond au départ,
-  flèche à l'arrivée. Le ruban choisit les garde-corps créés avec l'escalier (deux
+  60 à 65 cm, h ≤ 20 cm, g ≥ 22 cm). Le plan représente les marches et les paliers.
+  En mode **Marches balancées**, chaque sommet marque un tournant. Le tracé reste
+  libre jusqu'à Entrée ou clic droit. L'aperçu dessine les marches tournantes,
+  indique le giron réel et signale un giron de rive inférieur à 100 mm.
+  Le ruban choisit les garde-corps créés avec l'escalier (deux
   côtés, gauche, droite, aucun).
 - **Garde-corps** (Modéliser) : tracé en plan (hauteur, décalage, remplissage
   barreaudage, panneau plein ou vitrage) ; main courante, lisse basse, montants aux
@@ -513,9 +518,10 @@ une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvre
   différentes ou d'arêtes sans pente sont refusées avec un message ; elles doivent
   être décomposées en plusieurs toitures. Les contours convexes gardent le calcul
   par arête existant.
-- L'attachement requiert que le mur soit entièrement dans l'emprise de la toiture
-  (prévoir un débord). Détacher retrouve la contrainte haute enregistrée. Supprimer
-  la toiture détache ses murs sans les supprimer.
+- L'attachement accepte un recouvrement partiel. Dans l'emprise de la toiture,
+  le mur suit la sous-face. En dehors de l'emprise et au droit des trémies, le mur
+  garde sa contrainte haute. Détacher rétablit cette contrainte sur l'ensemble du mur.
+  Supprimer la toiture détache ses murs.
 - Après chaque opération, les opérations booléennes des murs inchangés sont reprises
   de la mémoire (`noyau::csg_memoire`) ; les silhouettes des arbres aussi
   (`maillage::aretes::silhouette_arbre`). Les arêtes jointes par matériau et
@@ -574,8 +580,10 @@ Sans champ de texte actif, taper deux lettres à la suite : `CS` créer à l'ide
 `RO` tourner, `AL` aligner, `AJ` ajuster. `Ctrl+A` sélectionne les éléments visibles ;
 Suppr demande confirmation de suppression. `CS` reprend les paramètres des murs,
 éléments horizontaux à pente uniforme, poteaux, poutres, ouvertures natives simples,
-quadrillages, coupes, élévations et annotations. Les menuiseries à géométrie importée
-et les pentes différentes par arête ne sont pas encore proposées en création identique.
+escaliers, garde-corps, composants, arbres, pièces, terrains, limites de propriété,
+quadrillages, coupes, élévations et annotations. Il ouvre l'outil correspondant pour
+un nouveau placement ou tracé. Pour un escalier, choisissez les garde-corps dans
+le ruban avant de tracer si vous souhaitez en créer.
 Les commandes Créer à l'identique et Supprimer sont aussi accessibles par leurs icônes dans l'onglet Modifier.
 Le sous-projet de base est `A` et la variante par défaut est `Principale` ; le contexte
 de la sélection est affiché dans Propriétés.
