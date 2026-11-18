@@ -300,14 +300,14 @@ fn deplacement_rotation_menuiseries_et_annulation() {
         })
         .unwrap();
     h.pousser(&q, &r).unwrap();
-    let retour = h.cible(false).unwrap();
-    h.confirmer(&r, false).unwrap();
+    let retour = h.cible(&r, false).unwrap();
+    h.confirmer(false).unwrap();
     assert_eq!(retour.json().unwrap(), q.json().unwrap());
-    let retour = h.cible(false).unwrap();
-    h.confirmer(&q, false).unwrap();
+    let retour = h.cible(&q, false).unwrap();
+    h.confirmer(false).unwrap();
     assert_eq!(retour.json().unwrap(), p.json().unwrap());
     assert!(!h.modifie(&retour));
-    let retabli = h.cible(true).unwrap();
+    let retabli = h.cible(&retour, true).unwrap();
     assert_eq!(retabli.json().unwrap(), q.json().unwrap());
 }
 #[test]

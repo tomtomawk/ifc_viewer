@@ -12,15 +12,21 @@ fn mesurer() {
     use commandes::{Commande, Execution};
     let mur = p.murs[0].id.clone();
     let q = p.executer(Commande::Deplacer { ids: vec![mur], delta: [10.0, 0.0, 0.0] }).unwrap().0;
-    use commandes::historique::Instantane;
-    let (ja, jb) = (p.json().unwrap(), q.json().unwrap());
     let t = std::time::Instant::now();
-    let l = <modele::Projet as Instantane>::libelle(&ja, &jb);
-    eprintln!("libellé « {l} » : {:.1} ms", t.elapsed().as_secs_f64() * 1e3);
+    let va = serde_json::to_value(&p).unwrap();
+    eprintln!("état en Value : {:.1} ms", t.elapsed().as_secs_f64() * 1e3);
+    let vb = serde_json::to_value(&q).unwrap();
+    let t = std::time::Instant::now();
+    let d = commandes::differences::calculer(&va, &vb).unwrap();
+    eprintln!("différence : {:.1} ms, {} octets en JSON", t.elapsed().as_secs_f64() * 1e3, commandes::differences::taille(&d));
     let mut h: commandes::historique::Historique = Default::default();
     let t = std::time::Instant::now();
     for _ in 0..10 { h.pousser(&p, &q).unwrap(); h.pousser(&q, &p).unwrap(); }
-    eprintln!("étape d'historique (instantanés, libellé, compression) : {:.1} ms ; mémoire pour {} étapes : {} octets", t.elapsed().as_secs_f64() * 1e3 / 20.0, h.libelles(false).len(), h.memoire());
+    eprintln!("étape d'historique (différence, libellé, compression) : {:.1} ms ; mémoire pour {} étapes : {} octets", t.elapsed().as_secs_f64() * 1e3 / 20.0, h.libelles(false).len(), h.memoire());
+    let t = std::time::Instant::now();
+    let r = h.cible(&p, false).unwrap();
+    eprintln!("annuler (application de la différence, relecture) : {:.1} ms", t.elapsed().as_secs_f64() * 1e3);
+    assert_eq!(r.json().unwrap(), q.json().unwrap());
     for niveau in [1u8, 3, 6] {
         let t = std::time::Instant::now();
         let c = miniz_oxide::deflate::compress_to_vec(json.as_bytes(), niveau);

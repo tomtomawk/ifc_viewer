@@ -25,8 +25,8 @@ impl<T: Instantane + Clone + PartialEq> DocumentFamille<T> {
     }
     pub fn cible(&mut self, actuel: &T, retablir: bool, nombre: usize) -> Result<T, String> {
         self.suivre(actuel, false)?;
-        let cible = self.historique.cible_n(retablir, nombre)?;
-        self.historique.confirmer_n(actuel, retablir, nombre)?;
+        let cible = self.historique.cible_n(actuel, retablir, nombre)?;
+        self.historique.confirmer_n(retablir, nombre)?;
         self.instantane = cible.clone();
         Ok(cible)
     }

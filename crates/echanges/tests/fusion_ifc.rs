@@ -52,7 +52,7 @@ fn fusion_additionne_rapproche_et_renouvelle() {
     let mut h = historique::Historique::default();
     h.pousser(&base, &p).unwrap();
     assert_eq!(h.libelles(false).len(), 1);
-    let retour: Projet = h.cible(false).unwrap();
+    let retour: Projet = h.cible(&p, false).unwrap();
     assert_eq!(retour.murs.len(), base.murs.len());
     // seconde fusion : types identiques réutilisés, aucun nouveau type
     let (q, _) = p.executer(commande(imp.clone(), [20000.0, 0.0, 0.0])).unwrap();

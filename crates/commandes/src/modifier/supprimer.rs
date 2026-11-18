@@ -111,7 +111,7 @@ mod tests {
         // une seule étape d'annulation restaure tout
         let mut h: Historique = Historique::default();
         h.pousser(&c.p, &q).unwrap();
-        let r = h.cible(false).unwrap();
+        let r = h.cible(&q, false).unwrap();
         assert!(r.murs.iter().any(|m| m.id == c.mur) && r.ouvertures.iter().any(|o| o.id == c.ouverture));
         assert_eq!(forme(&r, "cote-mur"), forme(&c.p, "cote-mur"));
         assert_eq!(forme(&r, "etiquette"), forme(&c.p, "etiquette"));

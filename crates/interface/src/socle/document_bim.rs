@@ -28,18 +28,13 @@ impl ViewerApp {
         self.historique.geste(false);
         self.bim.barre_editee = None;
         let resultat = (|| {
-            let cible = self.historique.cible_n(retablir, nombre)?;
-            let actuel = self
-                .natif
-                .as_ref()
-                .ok_or("Aucun document natif.")?
-                .0
-                .clone();
+            let actuel = &self.natif.as_ref().ok_or("Aucun document natif.")?.0;
+            let cible = self.historique.cible_n(actuel, retablir, nombre)?;
             // appliquer_projet reconstruit avant toute mutation ; préserver la pile.
             let mut historique = std::mem::take(&mut self.historique);
             let resultat = self
                 .appliquer_projet(cible)
-                .and_then(|_| historique.confirmer_n(&actuel, retablir, nombre));
+                .and_then(|_| historique.confirmer_n(retablir, nombre));
             self.historique = historique;
             if resultat.is_ok() {
                 if let Some((projet, _)) = &self.natif {

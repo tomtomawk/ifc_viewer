@@ -3,7 +3,9 @@
 pub mod commande;
 pub mod contextes;
 pub mod execution;
+pub mod differences;
 pub mod historique;
+mod libelles;
 pub(crate) mod interne;
 pub mod objets;
 pub mod verrous;

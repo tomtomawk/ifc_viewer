@@ -13,4 +13,4 @@ pub use socle::commande::Commande;
 pub use socle::contextes::Contextes;
 pub use socle::execution::Execution;
 pub use socle::verrous::Verrous;
-pub use socle::{contextes, historique, objets, verrous};
+pub use socle::{contextes, differences, historique, objets, verrous};
