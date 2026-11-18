@@ -234,7 +234,7 @@ impl ViewerApp {
     /// Point d'une volée d'escalier : jamais plus loin que la dernière marche à poser ;
     /// `magnetiser` : la longueur tombe sur un nombre entier de marches.
     pub(crate) fn point_escalier(&self, poses: &[DVec2], p: DVec2, magnetiser: bool) -> DVec2 {
-        if self.dessin2d.esc_balance.is_some() { return p; }
+        if self.dessin2d.esc_balance.is_some() { return self.point_escalier_balance(poses, p, magnetiser); }
         let Some(&prec) = poses.last() else { return p };
         let (l, giron) = ((p - prec).length(), self.giron_vise());
         if l < 1e-6 || giron <= 1.0 { return p; }
@@ -255,13 +255,49 @@ impl ViewerApp {
         prec + u * (volee - c).max(1.0)
     }
 
-    /// Contrôle le giron de rive avant que la fin du tracé ne vide ses sommets.
+    /// Longueur de foulée d'un escalier balancé qui respecte le giron visé : une marche par
+    /// contremarche moins une, sans palier.
+    fn foulee_balancee_visee(&self) -> f64 {
+        use crate::zones::ruban::Outil;
+        let Some((_, _, hauteur, _)) = self.base_escalier() else { return 0.0 };
+        let contremarches = ((hauteur.max(1.0) / self.ruban_edition.nombre_option(Outil::Escalier, 1).max(50.0)).round() as i64).max(2);
+        (contremarches - 1) as f64 * self.giron_vise()
+    }
+
+    /// Escalier balancé : le giron visé est verrouillé. La foulée (ligne justifiée) ne dépasse
+    /// jamais `marches × giron` et le dernier point s'y accroche à moins d'un demi-giron ;
+    /// les sommets intermédiaires (tournants) restent libres.
+    fn point_escalier_balance(&self, poses: &[DVec2], p: DVec2, magnetiser: bool) -> DVec2 {
+        let Some(&prec) = poses.last() else { return p };
+        let (l, giron) = ((p - prec).length(), self.giron_vise());
+        if l < 1e-6 || giron <= 1.0 { return p; }
+        let brut: Vec<[f64; 2]> = poses.iter().chain([&p]).map(|q| q.to_array()).collect();
+        let trace = self.trace_justifie(&brut);
+        let longueurs: Vec<f64> = trace.windows(2).map(|w| DVec2::from_array(w[0]).distance(DVec2::from_array(w[1]))).collect();
+        let Some((&derniere, avant)) = longueurs.split_last() else { return p };
+        // la volée en cours vaut la longueur tracée plus `c` (justification)
+        let c = derniere - l;
+        let reste = self.foulee_balancee_visee() - avant.iter().sum::<f64>();
+        let mut volee = derniere.min(reste);
+        if magnetiser && (reste - volee).abs() < giron * 0.5 { volee = reste; }
+        if volee < 1.0 { return p; }
+        prec + (p - prec) / l * (volee - c).max(1.0)
+    }
+
+    /// Contrôle le giron de rive et la longueur de foulée (giron visé) avant que la fin du
+    /// tracé ne vide ses sommets.
     pub(crate) fn verifier_trace_escalier_balance(&self, points: &[DVec2]) -> Result<(), String> {
         let brut: Vec<_> = points.iter().map(|p| p.to_array()).collect();
         let escalier = self.escalier_du_trace(&brut)?;
         let (projet, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
         let calcul = escalier.calcul(projet)?;
         escalier.contours_marches_balancees(&calcul)?;
+        let visee = self.foulee_balancee_visee();
+        if (calcul.volees - visee).abs() > 1.0 {
+            let u = modele::unite::unite();
+            return Err(format!("Foulée de {} pour {} attendus ({} marches de giron {}) : placer le dernier point à la distance attendue ou modifier le giron visé.",
+                u.afficher(calcul.volees), u.afficher(visee), calcul.contremarches - 1, u.afficher(self.giron_vise())));
+        }
         Ok(())
     }
 
@@ -527,11 +563,18 @@ mod tests {
         app.ruban_edition.definir_nombre_option(Outil::Escalier, 1, 175.0);
         app.ruban_edition.definir_texte_option(Outil::Escalier, 2, "Aucun");
         app.dessin2d.esc_balance = Some(5);
-        app.dessin2d.giron_impose = Some(220.0);
+        app.dessin2d.giron_impose = Some(300.0);
 
         let virage = DVec2::new(2400.0, 0.0);
         let points = [DVec2::ZERO, virage, DVec2::new(2400.0, 2100.0)];
+        // giron verrouillé : 15 marches × 300 = 4500 mm de foulée, jamais au-delà
         assert_eq!(app.point_escalier(&points[..2], points[2], true), points[2]);
+        let loin = app.point_escalier(&points[..2], DVec2::new(2400.0, 2600.0), true);
+        assert!(loin.distance(points[2]) < 1e-6, "{loin:?}");
+        let proche = app.point_escalier(&points[..2], DVec2::new(2400.0, 2000.0), true);
+        assert!(proche.distance(points[2]) < 1e-6, "{proche:?}");
+        let libre = app.point_escalier(&points[..2], DVec2::new(2400.0, 1000.0), true);
+        assert!(libre.distance(DVec2::new(2400.0, 1000.0)) < 1e-6, "{libre:?}");
         assert!(!app.escalier_complet(&points));
 
         let mut trace = Trace::new(OutilDessin::Polyligne);
@@ -541,6 +584,12 @@ mod tests {
         app.quitter_commande(true);
         assert_eq!(app.dessin2d.trace.as_ref().unwrap().points, points_invalides);
         assert!(app.dessin2d.message.as_deref().unwrap().contains("giron de rive"));
+        assert!(app.natif.as_ref().unwrap().0.escaliers.is_empty());
+
+        // foulée trop courte pour le giron visé : refus, tracé conservé
+        app.dessin2d.trace.as_mut().unwrap().points = vec![points[0], virage, DVec2::new(2400.0, 1900.0)];
+        app.quitter_commande(true);
+        assert!(app.dessin2d.message.as_deref().unwrap().contains("Foulée"), "{:?}", app.dessin2d.message);
         assert!(app.natif.as_ref().unwrap().0.escaliers.is_empty());
 
         app.dessin2d.trace.as_mut().unwrap().points = points.to_vec();
