@@ -276,7 +276,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
 - **Navigation des vues de famille** (toutes catégories) : mêmes gestes que les vues
   de projet — molette pour zoomer vers le curseur, bouton central maintenu pour
   déplacer la vue, double-clic central (ou F, ou Cadrer dans la barre de vue) pour
-  retrouver la famille — et même fond (blanc en style graphique, gris clair sinon).
+  retrouver la famille. Le rendu est celui des vues de projet (même moteur, même
+  caméra orthographique, même fond, même style visuel, mêmes traits et textes) :
+  changer le style ou le fond change aussi les vues de famille.
   La barre sous la vue porte l'échelle de la vue (1:20 par défaut) : les textes des
   familles modélisées ont leur hauteur en mm du papier à cette échelle ; cartouches
   et étiquettes sont dessinés en mm du papier (échelle 1:1, non réglable). Plan,

@@ -2,35 +2,16 @@
 use super::*;
 
 impl ViewerApp {
-    /// Même moteur et même caméra que le projet, avec des tampons et une caméra propres à la famille.
+    /// Vue 3D : même moteur, même caméra et mêmes gestes que le projet, avec une caméra
+    /// propre à la famille.
     fn vue_3d_famille(&mut self, ui: &mut egui::Ui) {
         let rect = ui.available_rect_before_wrap();
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
         let Some(ed) = self.famille.as_mut() else { return };
         ed.rect_navigation = rect;
-        let solides = ed.famille.solides(&ed.resoudre());
-        let mut vertices = Vec::new();
-        let mut indices = Vec::new();
-        let mut min = Vec3::splat(f32::MAX);
-        let mut max = Vec3::splat(f32::MIN);
-        for (objet, solide) in solides.iter().enumerate().filter(|(_, s)| s.visible && !s.vide) {
-            let couleur = solide.materiau_nom.as_ref().and_then(|nom| ed.materiaux_projet.iter().find(|(n, _)| n == nom).map(|(_, c)| *c)).unwrap_or([190, 198, 207]);
-            for tri in &solide.tris {
-                let points = tri.map(|p| (p / 1000.0).as_vec3());
-                let n = (points[1] - points[0]).cross(points[2] - points[0]).normalize_or_zero();
-                let normal = [(n.x*127.0) as i8, (n.y*127.0) as i8, (n.z*127.0) as i8, 0];
-                for p in points {
-                    min = min.min(p); max = max.max(p);
-                    indices.push(vertices.len() as u32);
-                    vertices.push(scene::Vertex { pos: p.to_array(), normal, color: [couleur[0], couleur[1], couleur[2], 255], obj: objet as u32 });
-                }
-            }
-        }
-        if ed.cadrage_3d_initial && !vertices.is_empty() {
-            ed.camera_3d.fit(min, max);
-            ed.cadrage_3d_initial = false;
-        }
-        if response.double_clicked_by(PointerButton::Middle) && !vertices.is_empty() {
+        let r = ed.resoudre();
+        let scene = scene_famille(ed, &r);
+        if let Some((min, max)) = scene.min && (ed.cadrage_3d_initial || response.double_clicked_by(PointerButton::Middle)) {
             ed.camera_3d.fit(min, max);
             ed.cadrage_3d_initial = false;
         }
@@ -46,20 +27,13 @@ impl ViewerApp {
         }
         if let Some(pos) = response.hover_pos() {
             let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-            if scroll != 0.0 {
-                let n = egui::vec2((pos.x - rect.left()) / rect.width().max(1.0) * 2.0 - 1.0, 1.0 - (pos.y - rect.top()) / rect.height().max(1.0) * 2.0);
-                let (origine, direction) = ed.camera_3d.ray(n.x, n.y, rect.width() / rect.height().max(1.0));
-                let avant = ed.camera_3d.forward();
-                let t = (ed.camera_3d.target - origine).dot(avant) / direction.dot(avant).max(1e-6);
-                let cible = (!ed.camera_3d.ortho).then_some(origine + direction * t);
-                ed.camera_3d.zoom(1.0 / crate::saisie::accrochage::facteur_molette(scroll) as f32, cible);
-            }
+            crate::socle::projection::zoom_molette(&mut ed.camera_3d, rect, pos, scroll, None);
         }
         if response.clicked_by(PointerButton::Primary) && let Some(pos) = response.interact_pointer_pos() {
-            let n = egui::vec2((pos.x-rect.left()) / rect.width()*2.0-1.0, 1.0-(pos.y-rect.top()) / rect.height()*2.0);
+            let n = crate::socle::projection::ndc(rect, pos);
             let (origine, direction) = ed.camera_3d.ray(n.x, n.y, rect.width()/rect.height().max(1.0));
             let mut meilleur: Option<(f32, usize)> = None;
-            for (objet, solide) in solides.iter().enumerate().filter(|(_, s)| s.visible && !s.vide) {
+            for (objet, solide) in ed.famille.solides(&r).iter().enumerate().filter(|(_, s)| s.visible && !s.vide) {
                 for tri in &solide.tris {
                     let [a,b,c] = tri.map(|p| (p / 1000.0).as_vec3());
                     let e1=b-a; let e2=c-a; let h=direction.cross(e2); let det=e1.dot(h);
@@ -76,24 +50,15 @@ impl ViewerApp {
             ed.selectionner(selection.into_iter().collect());
         }
         let selection = match ed.selection { SelectionFamille::Volume(k) => Some(k), SelectionFamille::Extrusion(k) => Some(ed.famille.volumes.len()+k), _ => None };
-        // Les paramètres d'affichage sont ceux du projet ; seuls la caméra et les découpes sont propres à la famille.
-        std::mem::swap(&mut self.camera, &mut ed.camera_3d);
-        let aspect = rect.width() / rect.height().max(1.0);
-        let mut params = self.frame_params(aspect);
-        params.selected = (0..solides.len()).map(|k| u8::from(selection == Some(k))).collect(); params.coupe = None; params.boite = None; params.cadrage.clear(); params.contour_vue.clear(); params.passes.clear();
-        params.soleil = None; params.table_motifs.clear();
-        if let Some(renderer) = self.renderer_famille.as_mut() {
-            renderer.upload_vertices(&vertices, &vec![[0;4]; vertices.len()], &vec![[0;4]; vertices.len()]);
-            renderer.upload_indices(&indices, &[], &[], &[]);
-            renderer.upload_coupe(&[], &[]); renderer.upload_passes(&[]);
-            let ppp = ui.ctx().pixels_per_point();
-            if let Some(id) = renderer.paint(&params, (rect.width()*ppp).max(1.0) as u32, (rect.height()*ppp).max(1.0) as u32) {
-                ui.painter().image(id, rect, egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)), Color32::WHITE);
-            }
-        }
+        let mut camera = ed.camera_3d.clone();
+        let mm = (self.echelle / 1000.0) as f32;
+        if let Some(image) = self.rendre_famille(ui, rect, &mut camera, &scene, (&[], &[]), selection, mm) { ui.painter().add(image); }
+        // cube d'orientation du projet, sur la caméra de la famille
+        std::mem::swap(&mut self.camera, &mut camera);
         self.cube_orientation(ui, rect);
-        if let Some(ed) = self.famille.as_mut() { std::mem::swap(&mut self.camera, &mut ed.camera_3d); }
-        if vertices.is_empty() { ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, "Aucune forme pleine visible", egui::FontId::proportional(14.0), Color32::GRAY); }
+        std::mem::swap(&mut self.camera, &mut camera);
+        if let Some(ed) = self.famille.as_mut() { ed.camera_3d = camera; }
+        if scene.opaque.is_empty() { ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, "Aucune forme pleine visible", egui::FontId::proportional(14.0), Color32::GRAY); }
     }
 
     pub(crate) fn nouvelle_famille(&mut self) {
@@ -160,8 +125,8 @@ impl ViewerApp {
                     "cadrer"=>if ed.vue_3d { ed.cadrage_3d_initial=true; } else { ed.navigation[ed.vue as usize].cadrer(); },
                     ""|"etat"=>{},_=>return Err("famille_navigation etat|plan|coupe|elevation|3d|cadrer".into())
                 }
-                let n=ed.navigation[ed.vue as usize];
-                Ok(serde_json::json!({"vue":if ed.vue_3d { "Vue 3D" } else { ed.vue.nom() },"zoom":n.zoom,"decalage":[n.decalage.0,n.decalage.1],"rectangle":[ed.rect_navigation.min.x,ed.rect_navigation.min.y,ed.rect_navigation.max.x,ed.rect_navigation.max.y],"reference":ed.reperage.reference.map(|p| p.to_array()),"guides":ed.reperage.guides.len()}))
+                let c=&ed.navigation[ed.vue as usize].camera;
+                Ok(serde_json::json!({"vue":if ed.vue_3d { "Vue 3D" } else { ed.vue.nom() },"distance":c.dist,"cible":c.target.to_array(),"rectangle":[ed.rect_navigation.min.x,ed.rect_navigation.min.y,ed.rect_navigation.max.x,ed.rect_navigation.max.y],"reference":ed.reperage.reference.map(|p| p.to_array()),"guides":ed.reperage.guides.len()}))
             })());
         }
         if !["famille_nouvelle","famille_document","famille_modifier","famille_charger_projet","famille_fermer"].contains(&commande) { return None; }
@@ -594,11 +559,13 @@ impl ViewerApp {
         let projet_vide = modele::Projet::default();
         let delai_accrochage = self.options.delai_accrochage;
         let projet = self.natif.as_ref().map(|(p, _)| p).unwrap_or(&projet_vide);
-        let fond = couleur_fond_vue(self.style);
+        let fond = moteur3d::fond::couleur_fond_vue(self.style);
         let Some(ed) = self.famille.as_mut() else { return };
-        egui::Frame::new().fill(fond).show(ui, |ui| {
+        let image = egui::Frame::new().fill(fond).show(ui, |ui| {
             ui.set_min_size(ui.available_size());
-            canevas(ui, ed, projet, delai_accrochage, fond);
+            // rendu du projet sous le canevas : forme réservée, remplie après la navigation
+            let image = ui.painter().add(egui::Shape::Noop);
+            canevas(ui, ed, projet, delai_accrochage);
             let rect = ed.rect_navigation;
             let mut bas = 0.0;
             if ed.outil != OutilFamille::Selection && rect.is_positive() {
@@ -627,7 +594,9 @@ impl ViewerApp {
                 if annuler { ed.choisir_outil(OutilFamille::Selection); ed.message = None; }
             }
             if let Some(m) = &ed.message { if rect.is_positive() { crate::socle::messages::consigne_vue(ui, rect, bas, m); } }
-        });
+            image
+        }).inner;
+        self.rendre_vue_plane_famille(ui, image);
     }
 
     /// Panneau Propriétés dans l'onglet « Famille » : type, paramètres, contraintes,

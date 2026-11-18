@@ -495,18 +495,6 @@ pub(super) fn evaluer_oui(formule: &str) -> bool {
     modele::famille::modelee::evaluer(formule, &BTreeMap::new()).map_or(true, |v| v.abs() > 1e-9)
 }
 
-/// Remplit un polygone quelconque (triangulé).
-pub(super) fn remplir(painter: &egui::Painter, pts: &[egui::Pos2], couleur: Color32) {
-    let mut m = egui::Mesh::default();
-    for t in noyau::texte::trianguler(vec![pts.iter().map(|p| [p.x, p.y]).collect()]) {
-        for p in t {
-            m.colored_vertex(egui::pos2(p[0], p[1]), couleur);
-        }
-    }
-    m.indices = (0..m.vertices.len() as u32).collect();
-    painter.add(egui::Shape::mesh(m));
-}
-
 pub(super) fn distance_segment(q: egui::Pos2, a: egui::Pos2, b: egui::Pos2) -> f32 {
     let ab = b - a;
     let t = if ab.length_sq() > 0.0 { ((q - a).dot(ab) / ab.length_sq()).clamp(0.0, 1.0) } else { 0.0 };

@@ -107,7 +107,7 @@ impl ViewerApp {
         let (mut tris, mut traits) = match (&self.scene, self.plan_coupe().filter(|_| !elevation)) {
             (Some(s), Some(p)) => {
                 let prims = moteur2d::coupe(s, &self.visible, p, self.echelle, self.poche_style());
-                moteur2d::sommets(s, &prims, p.truncate().as_dvec3().normalize(), self.echelle, self.traits_fins)
+                moteur2d::sommets(&|e| s.object_of.get(&e).copied(), &prims, p.truncate().as_dvec3().normalize(), self.echelle, self.traits_fins)
             }
             _ => Default::default(),
         };
@@ -115,7 +115,7 @@ impl ViewerApp {
         if let Some(s)=&self.scene {
             let mut prims=self.primitives_fond_plan();
             prims.extend(self.primitives_au_dessus_plan());
-            let (t,l)=moteur2d::sommets(s,&prims,glam::DVec3::Z,self.echelle,true);
+            let (t,l)=moteur2d::sommets(&|e| s.object_of.get(&e).copied(),&prims,glam::DVec3::Z,self.echelle,true);
             tris.extend(t);traits.extend(l);
         }
         noyau::chrono::chrono_lent("coupe : fond de plan et éléments au-dessus", &mut t_etape);
@@ -127,7 +127,7 @@ impl ViewerApp {
         }
         if let Some(s) = &self.scene {
             let prims=self.annotations_natives();
-            let (t,l)=moteur2d::sommets(s,&prims,-self.camera.forward().as_dvec3(),self.echelle,self.traits_fins);
+            let (t,l)=moteur2d::sommets(&|e| s.object_of.get(&e).copied(),&prims,-self.camera.forward().as_dvec3(),self.echelle,self.traits_fins);
             tris.extend(t); traits.extend(l);
         }
         noyau::chrono::chrono_lent("coupe : boîte et annotations", &mut t_etape);

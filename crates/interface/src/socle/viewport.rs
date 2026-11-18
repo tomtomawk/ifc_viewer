@@ -136,9 +136,7 @@ impl ViewerApp {
         if mode_trace && resp.hovered() {
             ui.ctx().set_cursor_icon(if self.selection_traces_active() { egui::CursorIcon::Default } else { egui::CursorIcon::Crosshair });
         }
-        let ndc = |p: egui::Pos2| {
-            Vec2::new((p.x - rect.left()) / rect.width() * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height() * 2.0)
-        };
+        let ndc = |p: egui::Pos2| crate::socle::projection::ndc(rect, p);
 
         let repere_plan = self.scene.is_some() && self.vue_en_plan();
         let sur_repere_plan = repere_plan && ui.input(|i| {
@@ -184,16 +182,8 @@ impl ViewerApp {
             } else if let Some(hp) = resp.hover_pos() {
                 let scroll = ui.input(|i| i.smooth_scroll_delta.y);
                 if scroll != 0.0 {
-                    let factor = 1.0 / crate::saisie::accrochage::facteur_molette(scroll) as f32;
-                    let target = pick(self, hp).map(|(_, p)| p).or_else(|| {
-                        // Point sur le plan de visée à la distance de la cible.
-                        let n = ndc(hp);
-                        let (o, dir) = self.camera.ray(n.x, n.y, aspect);
-                        let f = self.camera.forward();
-                        let t = (self.camera.target - o).dot(f) / dir.dot(f).max(1e-6);
-                        Some(o + dir * t)
-                    });
-                    self.camera.zoom(factor, if self.camera.ortho { None } else { target });
+                    let cible = pick(self, hp).map(|(_, p)| p);
+                    crate::socle::projection::zoom_molette(&mut self.camera, rect, hp, scroll, cible);
                 }
             }
 
