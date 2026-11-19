@@ -191,7 +191,8 @@ ou Start-Process -Wait, car le binaire Windows release est un exécutable graphi
 --collaboration instantane C:\PosteA\maison.json
 ```
 
-Les noms de groupes exacts sont les clés collection/identifiant des transactions.
+Les noms de groupes exacts sont les clés collection/identifiant des transactions. Le pilote
+(MCP `application_collaboration`) accepte ces clés ou l'identifiant natif seul.
 La reprise révoque la génération précédente ; elle ne republie pas automatiquement
 la proposition de l'ancien détenteur.
 

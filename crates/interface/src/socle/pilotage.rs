@@ -386,9 +386,11 @@ impl Application {
                 }
                 "collaboration_etat" => {
                     let c = self.collaboration.as_ref().ok_or("Copie non associée")?;
-                    Ok(
-                        json!({"etat":c.etat,"synchronisation":c.synchronisation_en_cours(),"copie":c.copie}),
-                    )
+                    Ok(if argument.trim() == "complet" {
+                        json!({"etat":c.etat,"synchronisation":c.synchronisation_en_cours(),"copie":c.copie})
+                    } else {
+                        crate::projet::collaboration_pilote::resume(&c.copie, &c.etat, c.synchronisation_en_cours())
+                    })
                 }
                 "collaboration_reserver" | "collaboration_liberer" | "collaboration_reprendre" => {
                     let cles = if argument.trim().is_empty() {
@@ -396,17 +398,7 @@ impl Application {
                     } else {
                         let ids: Vec<String> = lire(argument)?;
                         let p = &self.natif.as_ref().ok_or("Projet natif requis")?.0;
-                        let objets = commandes::objets::objets(p)?;
-                        let mut cles = Vec::new();
-                        for id in ids {
-                            let cle = objets
-                                .iter()
-                                .find(|(_, v)| v.get("id").and_then(Value::as_str) == Some(&id))
-                                .map(|(k, _)| k.clone())
-                                .ok_or_else(|| format!("Objet absent : {id}"))?;
-                            cles.push(cle);
-                        }
-                        cles
+                        crate::projet::collaboration_pilote::cles_objets(&commandes::objets::objets(p)?, &ids)?
                     };
                     if cles.is_empty() {
                         return Err("Sélection vide".into());
@@ -427,8 +419,8 @@ impl Application {
                 "collaboration_resoudre" => {
                     self.pilote_disponible()?;
                     let v: Value = lire(argument)?;
-                    let id = champ(&v, "transaction")?;
                     let c = self.collaboration.as_mut().ok_or("Copie non associée")?;
+                    let id = &crate::projet::collaboration_pilote::transaction(&c.copie, champ(&v, "transaction")?)?;
                     let p = match champ(&v, "choix")? {
                         "locale" => c.resoudre_locale(id)?,
                         "acceptee" => c.abandonner(id)?,

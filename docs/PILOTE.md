@@ -183,12 +183,16 @@ Raccourcis existants :
 - `collaborer <chemin.bimpartage>` : création asynchrone d'un partage.
 - `collaboration_associer <dossier central>` : association administrative.
 - `collaboration_sync` ; `collaboration_instantane` : demande de synchronisation.
-- `collaboration_etat` : copie, baux, transactions en attente, textes et conflits.
-- `collaboration_reserver ["id natif",…]` ; `collaboration_liberer […]` ;
+- `collaboration_etat` : résumé — révision, nombre d'objets, baux, propositions en attente
+  (clés touchées, réservations), conflits (versions de plus de 2 000 caractères omises).
+  `collaboration_etat complet` (MCP : `etat_complet`) : copie entière, base et aperçu de
+  conflit compris (plusieurs centaines de milliers de caractères).
+- `collaboration_reserver ["id natif" ou "collection/id",…]` ; `collaboration_liberer […]` ;
   `collaboration_reprendre […]` : réservation/libération/reprise explicite.
   Sans argument, utilise la sélection native. Consulter `collaboration_etat` :
   le succès de la commande signifie que la synchronisation est demandée.
-- `collaboration_resoudre {"transaction":"…","choix":"locale"}` : nouvelle
+- `collaboration_resoudre {"transaction":"…","choix":"locale"}` (identifiant ou préfixe
+  non ambigu d'une proposition en attente ; inconnu ou ambigu : refus) : nouvelle
   transaction validée ; `choix:"acceptee"` archive la proposition et garde l'état accepté.
 
 ## Vue et interface
