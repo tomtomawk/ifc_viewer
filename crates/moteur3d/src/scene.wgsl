@@ -234,13 +234,20 @@ fn fs_herbe(e: VarieHerbe) -> @location(0) vec4f {
     let dy = dpdy(uv);
     let k = e.rang * 22;
     let dist = length(e.pos - g.eye.xyz);
-    // brins : un par cellule de 20 mm, moins de couches gardées au loin
-    let cellule = floor(uv / 20.0);
-    let local = fract(uv / 20.0) - 0.5;
+    // brins : un par cellule de 20 mm près de la caméra ; au loin la cellule double par
+    // niveau (jusqu'à 640 mm) pour qu'un brin couvre toujours quelques pixels, passage
+    // d'un niveau au suivant tramé cellule par cellule (pas de couture nette)
+    let empreinte = max(length(dx), length(dy));
+    let niveau_f = clamp(log2(max(empreinte / 8.0, 1.0)), 0.0, 5.0);
+    let niveau0 = floor(niveau_f);
+    let niveau = niveau0 + select(0.0, 1.0, hachage(floor(uv / (20.0 * exp2(niveau0))) + vec2f(4.2, 8.6)) < niveau_f - niveau0);
+    let taille = 20.0 * exp2(niveau);
+    let cellule = floor(uv / taille);
+    // brin décalé dans sa cellule : pas de grille régulière (anneaux de moiré au loin)
+    let local = fract(uv / taille) - 0.5 - (vec2f(hachage(cellule + vec2f(1.3, 6.1)), hachage(cellule + vec2f(8.4, 2.2))) - 0.5) * 0.3;
     let hb = 0.4 + 0.6 * hachage(cellule + vec2f(2.7, 9.1));
     // brins effacés quand un brin couvre moins de 2 pixels (pas de moiré), et au loin
-    let empreinte = max(length(dx), length(dy));
-    let fondu = (1.0 - smoothstep(6.0, 30.0, empreinte)) * (1.0 - smoothstep(20.0, 50.0, dist));
+    let fondu = (1.0 - smoothstep(0.3, 1.5, empreinte / taille)) * (1.0 - smoothstep(45.0, 100.0, dist));
     let t = e.fraction / hb;
     if t > fondu {
         discard;
