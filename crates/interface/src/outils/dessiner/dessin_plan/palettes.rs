@@ -32,19 +32,11 @@ impl Application {
     /// ensuite dans Modifier).
     pub(crate) fn selecteur_trait_creation(&mut self, ui: &mut egui::Ui) {
         let Some((projet, _)) = &self.natif else { return };
-        use crate::outils::annoter::types_traits::{avec_types_du_gabarit, selecteur_type_trait, types_proposes};
-        if !types_proposes(projet).iter().any(|t| t.id == self.dessin2d.trait_creation) {
+        if !projet.types_traits.iter().any(|t| t.id == self.dessin2d.trait_creation) {
             self.dessin2d.trait_creation.clear();
         }
-        if let Some(id) = selecteur_type_trait(ui, Some(&self.dessin2d.trait_creation), projet, "Polyligne") {
-            // projet sans type de trait : le premier choix y ajoute ceux du gabarit
-            let complete = avec_types_du_gabarit(projet);
+        if let Some(id) = crate::outils::annoter::types_traits::selecteur_type_trait(ui, Some(&self.dessin2d.trait_creation), projet, "Polyligne") {
             self.dessin2d.trait_creation = id;
-            if let Some(q) = complete
-                && let Err(e) = self.appliquer_projet(q)
-            {
-                self.error = Some(e);
-            }
         }
     }
 }

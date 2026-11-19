@@ -21,22 +21,6 @@ fn apercu_trait_peintre(p: &egui::Painter, r: egui::Rect, couleur: egui::Color32
     }
 }
 
-/// Types de trait proposés : ceux du projet ou, s'il n'en a aucun (projet ancien ou importé),
-/// ceux du gabarit. Le premier choix les ajoute au projet (`avec_types_du_gabarit`).
-pub(crate) fn types_proposes(projet: &Projet) -> Vec<TypeTrait> {
-    if projet.types_traits.is_empty() { modele::gabarit::actif().types_traits.clone() } else { projet.types_traits.clone() }
-}
-
-/// Le projet complété des types du gabarit s'il n'avait aucun type de trait ; `None` sinon.
-pub(crate) fn avec_types_du_gabarit(projet: &Projet) -> Option<Projet> {
-    if !projet.types_traits.is_empty() {
-        return None;
-    }
-    let mut q = projet.clone();
-    q.types_traits = modele::gabarit::actif().types_traits.clone();
-    (!q.types_traits.is_empty()).then_some(q)
-}
-
 /// Sélecteur standard d'un type de trait : en-tête (aperçu, nom, épaisseur) et liste, comme les
 /// sélecteurs de type des autres objets. `actuel` : id du type (vide : continu fin) ; None :
 /// types variés. `objet` : ce dont c'est le trait (« Polyligne », « Polyligne · trait 3 »).
@@ -44,8 +28,7 @@ pub(crate) fn avec_types_du_gabarit(projet: &Projet) -> Option<Projet> {
 pub(crate) fn selecteur_type_trait(ui: &mut egui::Ui, actuel: Option<&str>, projet: &Projet, objet: &str) -> Option<String> {
     use crate::zones::ruban::selecteur;
     let standard = TypeTrait::standard();
-    let proposes = types_proposes(projet);
-    let types: Vec<&TypeTrait> = if proposes.is_empty() { vec![&standard] } else { proposes.iter().collect() };
+    let types: Vec<&TypeTrait> = if projet.types_traits.is_empty() { vec![&standard] } else { projet.types_traits.iter().collect() };
     let courant = actuel.map(|id| types.iter().copied().find(|t| t.id == id).unwrap_or(&standard));
     let titre = format!("{objet} · {}", courant.map_or("Types variés", |t| t.nom.as_str()));
     let detail = courant.map(|t| format!("{:.2} mm", t.epaisseur));
@@ -134,7 +117,7 @@ impl Application {
     /// Projet dont les segments choisis (`segment` : un seul, sinon tous) des polylignes de `ids`
     /// ont le type de trait `id`.
     fn avec_trait(projet: &Projet, ids: &[String], segment: Option<usize>, id: &str) -> Projet {
-        let mut q = avec_types_du_gabarit(projet).unwrap_or_else(|| projet.clone());
+        let mut q = projet.clone();
         for a in q.annotations.iter_mut().filter(|a| ids.contains(&a.id)) {
             if let AnnotationForme::Polyligne { points, fermee, traits, .. } = &mut a.forme {
                 let n = segments_polyligne(points, *fermee);
@@ -183,7 +166,7 @@ impl Application {
                     let longueur = arc.map_or(a.distance(b), |(_, r, _, s)| r * s.abs());
                     ui.label(format!("{} · {}{}", k + 1, modele::unite::unite().afficher(longueur.round()), if arc.is_some() { " · arc" } else { "" }))
                         .on_hover_text("Segment, depuis le premier point de la polyligne ; longueur");
-                    if let Some(id) = choix_type_trait(ui, ("trait_segment", k), Some(traits.get(k).map_or("", |s| s.as_str())), &types_proposes(projet)) {
+                    if let Some(id) = choix_type_trait(ui, ("trait_segment", k), Some(traits.get(k).map_or("", |s| s.as_str())), &projet.types_traits) {
                         changement = Some((k, id));
                     }
                     ui.end_row();
