@@ -339,7 +339,7 @@ fn types_coupe() -> Vec<modele::gabarit::TypeVue> {
 
 /// Pictogramme d'une coupe (trait, têtes et flèches) ou d'une élévation (cercle et
 /// flèche de visée).
-fn icone_vue(p: &egui::Painter, r: egui::Rect, elevation: bool, c: Color32) {
+pub(crate) fn icone_vue(p: &egui::Painter, r: egui::Rect, elevation: bool, c: Color32) {
     if !elevation {
         icone(p, r, Outil::VueCoupe, c);
         return;

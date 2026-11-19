@@ -220,7 +220,15 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   sont exclus. Le glissement sur un objet conserve la navigation 3D. Copier un assemblage recrée les
   identifiants de ses couches et ouvertures. Les repères de coupe/élévation et les
   quadrillages se sélectionnent aussi en plan, ainsi que les annotations dans leur
-  vue ; leurs propriétés sont accessibles dans Modifier. Les cotes liées gardent
+  vue ; en coupe et en élévation, les niveaux et les limites de propriété se
+  sélectionnent sur leur trait ; leurs propriétés sont accessibles dans Modifier.
+  Un élément 2D (trait, polyligne, cote, niveau) se vise à moins de 5 pixels de son
+  tracé, un texte dans son cadre : l'intérieur d'une polyligne ou d'une région ne
+  vise rien et laisse sélectionner ce qui est dessous ; la fenêtre de sélection
+  teste aussi les traits (croisement : un trait touché ; gauche à droite : tous les
+  traits dedans). Une coupe ou une élévation sélectionnée montre le sélecteur des
+  types de vue de sa sorte (le type choisi règle aussi l'échelle) ; un niveau, son
+  en-tête « Niveau · Générique » (pas de type de niveau), son nom et son altitude. Les cotes liées gardent
   leurs références : leur décalage est éditable dans leurs propriétés. Supprimer (icône de
   Modifier, touche Suppr ou Retour arrière hors tracé) agit tout
   de suite, couches et ouvertures hébergées comprises ; les cotes associées et

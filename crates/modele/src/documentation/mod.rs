@@ -823,7 +823,7 @@ fn trait_couleur(a: DVec3, b: DVec3, couleur: [u8; 4], epaisseur: f64) -> Primit
     }
 }
 
-/// Coupes et élévations : un repère par niveau (trait sur toute la largeur de la vue,
+/// Coupes et élévations : un repère par niveau (trait sur toute la largeur de la vue, sélectionnable : élément « annotation » du niveau,
 /// nom et cote) et un repère vertical là où une limite de propriété coupe le plan de
 /// la vue.
 fn niveaux_et_limites_en_coupe(p: &Projet, v: &Vue) -> Vec<Primitive> {
@@ -843,9 +843,9 @@ fn niveaux_et_limites_en_coupe(p: &Projet, v: &Vue) -> Vec<Primitive> {
         if v.elements_masques.contains(&n.id) {
             continue;
         }
-        let bleu = [18, 120, 170, 255];
-        out.push(trait_couleur(pt(-500.0, n.altitude), pt(longueur + 500.0, n.altitude), bleu, 0.13));
-        out.push(texte(&format!("{} ({:.2} m)", n.nom, n.altitude / 1000.0), pt(longueur + 700.0, n.altitude), u, h, taille, bleu));
+        let (bleu, element) = ([18, 120, 170, 255], Some(crate::identifiants::id_natif("annotation", &n.id)));
+        out.push(Primitive { element, ..trait_couleur(pt(-500.0, n.altitude), pt(longueur + 500.0, n.altitude), bleu, 0.13) });
+        out.push(Primitive { element, ..texte(&format!("{} ({:.2} m)", n.nom, n.altitude / 1000.0), pt(longueur + 700.0, n.altitude), u, h, taille, bleu) });
     }
     for l in &p.limites_propriete {
         if v.elements_masques.contains(&l.id) || l.contour.len() < 2 {
@@ -866,7 +866,7 @@ fn niveaux_et_limites_en_coupe(p: &Projet, v: &Vue) -> Vec<Primitive> {
             if !(0.0..=longueur).contains(&x) {
                 continue;
             }
-            out.push(trait_couleur(pt(x, l.altitude), pt(x, l.altitude + 3000.0), rouge, 0.35));
+            out.push(Primitive { element: Some(crate::identifiants::id_natif("annotation", &l.id)), ..trait_couleur(pt(x, l.altitude), pt(x, l.altitude + 3000.0), rouge, 0.35) });
         }
     }
     out

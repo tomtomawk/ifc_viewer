@@ -107,6 +107,12 @@ impl Application {
             }).collect();
             (Cible::Ouverture(o.id.clone()), o.type_ouverture.clone().unwrap_or_default(), types)
         } else {
+            // objet à fiche (annotation, pièce, niveau, coupe, quadrillage, limite, poteau) :
+            // son sélecteur est dans la fiche, pas de second en-tête
+            if p.annotations.iter().any(|x| &x.id == id) || p.pieces.iter().any(|x| &x.id == id) || p.niveaux.iter().any(|x| &x.id == id)
+                || p.vues.iter().any(|x| &x.id == id) || p.quadrillages.iter().any(|x| &x.id == id) || p.limites_propriete.iter().any(|x| &x.id == id) || p.barres.iter().any(|x| &x.id == id) {
+                return None;
+            }
             let nom = p.importes.iter().find(|e| &e.id == id).map(|e| format!("{} : {}", e.categorie, e.nom))
                 .or_else(|| self.selected.and_then(|id| self.scene.as_ref().map(|s| {
                     let nom = s.model.name(id);
@@ -395,9 +401,7 @@ impl Application {
         if let Some((p, _)) = &self.natif {
             vues.retain(|id| p.vues.iter().any(|v| v.id == *id) || p.quadrillages.iter().any(|g| g.id == *id) || p.annotations.iter().any(|a| a.id == *id) || p.pieces.iter().any(|a| a.id == *id));
         }
-        for (id, bounds) in self.rectangles_annotations(vue) {
-            if if croisement { rectangle.intersects(bounds) } else { rectangle.contains_rect(bounds) } { vues.push(id); }
-        }
+        vues.extend(self.elements_2d_fenetre(vue, rectangle, croisement));
         vues.sort(); vues.dedup();
         self.selected = ids.first().copied();
         let recherches: HashSet<Id> = ids.iter().copied().collect();

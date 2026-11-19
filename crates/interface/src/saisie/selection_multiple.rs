@@ -174,7 +174,8 @@ fn sorte(p: &Projet, id: &str) -> Option<String> {
     if let Some(a) = p.annotations.iter().find(|a| a.id == id) {
         return Some(format!("annotation:{:?}", std::mem::discriminant(&a.forme)));
     }
-    let genre = crate::socle::document_bim::elements_natifs(p).find(|(_, c)| c.as_str() == id).map(|(g, _)| g)
+    // niveaux : chacun a son altitude, rien à reporter de l'un à l'autre
+    let genre = crate::socle::document_bim::elements_natifs(p).find(|(_, c)| c.as_str() == id).map(|(g, _)| g).filter(|g| *g != "niveau")
         .or_else(|| p.pieces.iter().any(|x| x.id == id).then_some("piece"))
         .or_else(|| p.quadrillages.iter().any(|x| x.id == id).then_some("quadrillage"))
         .or_else(|| p.vues.iter().any(|x| x.id == id).then_some("vue"))?;

@@ -376,9 +376,8 @@ impl Application {
                 let selection_id = selection.iter().find_map(|cle| self.scene.as_ref()?.objects.iter().find(|o| self.cle_native(o.id).as_deref() == Some(cle)).map(|o| o.id));
                 self.select(selection_id, false);
                 self.bim.selection = selection;
-            } else if resp.clicked() && resp.interact_pointer_pos().is_some_and(|q| self.point_dans_cadrage(rect, q) && self.rectangles_annotations(rect).iter().any(|(_, r)| r.expand(4.0).contains(q))) {
-                let q = resp.interact_pointer_pos().unwrap();
-                let id = self.rectangles_annotations(rect).into_iter().find(|(_, r)| r.expand(4.0).contains(q)).unwrap().0;
+            } else if let Some(id) = resp.clicked().then(|| resp.interact_pointer_pos()).flatten().and_then(|q| self.element_2d_vise(rect, q)) {
+                // trait, texte, niveau ou limite visé de près (pas l'intérieur de son cadre)
                 let ctrl = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
                 let mut selection = if ctrl { self.selection_bim() } else { Vec::new() };
                 if let Some(i) = selection.iter().position(|x| x == &id) { selection.remove(i); } else { selection.push(id); }

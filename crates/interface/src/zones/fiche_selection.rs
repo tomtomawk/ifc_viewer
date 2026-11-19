@@ -26,6 +26,7 @@ enum Genre {
     Piece,
     Composant,
     Poteau,
+    Niveau,
 }
 
 fn genre(p: &modele::Projet, id: &str) -> Option<Genre> {
@@ -45,6 +46,8 @@ fn genre(p: &modele::Projet, id: &str) -> Option<Genre> {
         Some(Genre::Composant)
     } else if p.barres.iter().any(|x| x.id == id) {
         Some(Genre::Poteau)
+    } else if p.niveaux.iter().any(|x| x.id == id) {
+        Some(Genre::Niveau)
     } else {
         None
     }
@@ -60,6 +63,7 @@ fn fiche(g: Genre) -> Fiche {
         Genre::Piece => Fiche { selecteur: selecteur_piece, parametres: parametres_piece },
         Genre::Composant => Fiche { selecteur: deja_present, parametres: parametres_composant },
         Genre::Poteau => Fiche { selecteur: selecteur_poteau, parametres: parametres_poteau },
+        Genre::Niveau => Fiche { selecteur: selecteur_niveau, parametres: parametres_niveau },
     }
 }
 
@@ -111,9 +115,50 @@ fn selecteur_quadrillage(_: &mut Application, ui: &mut egui::Ui, _: &str) {
 fn selecteur_poteau(_: &mut Application, ui: &mut egui::Ui, _: &str) {
     entete_generique(ui, "Poteau", Some("Section rectangulaire"));
 }
+/// Coupe ou élévation : type de vue du gabarit (même liste qu'à la création, de la même
+/// sorte) ; le type choisi donne aussi son échelle.
 fn selecteur_coupe(a: &mut Application, ui: &mut egui::Ui, id: &str) {
-    let type_vue = a.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|v| v.id == id)).map(|v| v.type_vue.clone());
-    entete_generique(ui, "Coupe / élévation", type_vue.as_deref().filter(|t| !t.is_empty()));
+    let Some(vue) = a.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|v| v.id == id)).cloned() else { return };
+    let modele::GenreVue::Coupe { elevation, .. } = vue.genre else { return };
+    let types: Vec<modele::gabarit::TypeVue> = modele::gabarit::actif().types_vues.iter().filter(|t| t.elevation == elevation).cloned().collect();
+    let sorte = if elevation { "Élévation" } else { "Coupe" };
+    let nom = if vue.type_vue.is_empty() { "Générique" } else { vue.type_vue.as_str() };
+    let titre = format!("{sorte} · {nom}");
+    let vignette = |p: &egui::Painter, r: egui::Rect, c: Color32| crate::zones::ruban::icone_vue(p, r, elevation, c);
+    let bouton = selecteur::entete(ui, &titre, Some(&format!("1:{}", vue.echelle)), &format!("{titre}\nType de la vue : le choisir règle aussi son échelle."), Some(&vignette));
+    let largeur = selecteur::largeur_liste(ui, types.iter().map(|t| t.aide.as_str()), 90.0, 0, 0.0);
+    let mut choix = None;
+    selecteur::liste(&bouton, largeur, selecteur::HAUTEUR_CADRE.min(types.len().max(1) as f32 * selecteur::HAUTEUR_LIGNE_DOUBLE + 8.0), |ui| {
+        for t in &types {
+            let detail = format!("1:{}", t.echelle);
+            let l = selecteur::Ligne { nom: &t.nom, courant: t.nom == vue.type_vue, etiquette: None, sous_titre: Some(&t.aide), detail: Some(detail), actions: &[] };
+            if selecteur::ligne(ui, &l, None).choisi {
+                choix = Some(t.clone());
+                ui.close();
+            }
+        }
+    });
+    let commande = choix.filter(|t| t.nom != vue.type_vue || t.echelle != vue.echelle).map(|t| Commande::ModifierVue { vue: modele::Vue { type_vue: t.nom, echelle: t.echelle, ..vue } });
+    executer(a, commande);
+}
+/// Niveau : pas de type de niveau dans le modèle, en-tête « Générique ».
+fn selecteur_niveau(_: &mut Application, ui: &mut egui::Ui, _: &str) {
+    entete_generique(ui, "Niveau", None);
+}
+fn parametres_niveau(a: &mut Application, ui: &mut egui::Ui, id: &str) {
+    let Some(n) = a.natif.as_ref().and_then(|(p, _)| p.niveaux.iter().find(|n| n.id == id)).cloned() else { return };
+    titre_parametres(ui, "Niveau");
+    let (mut nom, mut altitude) = (n.nom.clone(), n.altitude);
+    egui::Grid::new("niveau_selection").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
+        ui.label("Nom");
+        ui.text_edit_singleline(&mut nom);
+        ui.end_row();
+        ui.label("Altitude");
+        ui.add(egui::DragValue::new(&mut altitude).speed(10.0).dimensions());
+        ui.end_row();
+    });
+    let commande = (nom != n.nom || altitude != n.altitude).then(|| Commande::ModifierNiveau { id: n.id.clone(), nom, altitude });
+    executer(a, commande);
 }
 /// Annotation : son genre. Les dessins 2D (polyligne, spline, cercle, arc) ont déjà leur sélecteur
 /// de type de trait dans `proprietes_formes_2d`.
