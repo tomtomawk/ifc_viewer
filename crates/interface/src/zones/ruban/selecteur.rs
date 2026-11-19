@@ -56,6 +56,15 @@ pub(crate) fn entete(ui: &mut egui::Ui, titre: &str, detail: Option<&str>, bulle
     bouton.on_hover_text(bulle)
 }
 
+/// En-tête du sélecteur d'un objet qui n'a pas de type : même aspect que `entete`, sans liste.
+pub(crate) fn entete_fixe(ui: &mut egui::Ui, titre: &str, bulle: &str) {
+    let (r, reponse) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 30.0), Sense::hover());
+    ui.painter().rect(r, 3.0, ui.visuals().widgets.inactive.bg_fill, ui.visuals().widgets.inactive.bg_stroke, egui::StrokeKind::Inside);
+    let zone = egui::Rect::from_min_max(egui::pos2(r.left() + 10.0, r.top()), egui::pos2(r.right() - 8.0, r.bottom()));
+    ui.painter().with_clip_rect(zone).text(egui::pos2(zone.left(), r.center().y), egui::Align2::LEFT_CENTER, titre, egui::FontId::proportional(13.0), ui.visuals().weak_text_color());
+    reponse.on_hover_text(bulle);
+}
+
 /// Liste surgissante sous l'en-tête : reste ouverte au clic sur un onglet, se ferme
 /// au clic à l'extérieur ou sur un type (`ui.close()`). `hauteur_min` : hauteur fixe
 /// pour que la liste ne saute pas d'un onglet à l'autre.

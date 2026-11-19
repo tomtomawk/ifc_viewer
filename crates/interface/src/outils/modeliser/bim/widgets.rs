@@ -4,7 +4,7 @@ use super::*;
 
 
 /// Liste des types de composants ; vrai si le choix a changé.
-pub(super) fn choix_famille_etiquette(ui: &mut egui::Ui, salt: &str, choix: &mut String, familles: &[modele::documentation::FamilleEtiquette]) -> bool {
+pub(crate) fn choix_famille_etiquette(ui: &mut egui::Ui, salt: &str, choix: &mut String, familles: &[modele::documentation::FamilleEtiquette]) -> bool {
     let avant = choix.clone();
     egui::ComboBox::from_id_salt(salt)
         .selected_text(familles.iter().find(|f| &f.id == choix).map_or("Étiquette standard", |f| f.nom.as_str()))
@@ -17,7 +17,7 @@ pub(super) fn choix_famille_etiquette(ui: &mut egui::Ui, salt: &str, choix: &mut
     *choix != avant
 }
 
-pub(super) fn choix_type_composant(ui: &mut egui::Ui, salt: &str, choix: &mut String, types: &[modele::TypeComposant]) -> bool {
+pub(crate) fn choix_type_composant(ui: &mut egui::Ui, salt: &str, choix: &mut String, types: &[modele::TypeComposant]) -> bool {
     let avant = choix.clone();
     egui::ComboBox::from_id_salt(salt)
         .selected_text(types.iter().find(|t| &t.id == choix).map_or("Choisir un type", |t| t.nom.as_str()))
@@ -29,7 +29,7 @@ pub(super) fn choix_type_composant(ui: &mut egui::Ui, salt: &str, choix: &mut St
     *choix != avant
 }
 
-pub(super) fn barre_ui(ui: &mut egui::Ui, b: &mut modele::Barre, niveaux: &[modele::Niveau]) {
+pub(crate) fn barre_ui(ui: &mut egui::Ui, b: &mut modele::Barre, niveaux: &[modele::Niveau]) {
     use modele::GenreBarre;
     ui.horizontal(|ui| {
         ui.label("Nom");
@@ -107,7 +107,7 @@ pub(super) fn barre_ui(ui: &mut egui::Ui, b: &mut modele::Barre, niveaux: &[mode
     }
 }
 
-pub(super) fn points_ui(ui: &mut egui::Ui, points: &mut [[f64; 2]; 2]) {
+pub(crate) fn points_ui(ui: &mut egui::Ui, points: &mut [[f64; 2]; 2]) {
     for (k, p) in points.iter_mut().enumerate() {
         ui.horizontal(|ui| {
             ui.label(format!("Point {}", k + 1));

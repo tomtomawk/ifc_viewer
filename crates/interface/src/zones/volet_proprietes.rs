@@ -102,7 +102,8 @@ impl Application {
         }
         // palette de création : sélecteur, schéma, paramètres (voir palette_creation.rs)
         if self.palette_creation(ui) { return; }
-        if self.panneau_bim(ui) { return; }
+        // objet sélectionné (Modifier) : sélecteur puis paramètres, comme la création
+        self.fiche_selection(ui);
         // sans navigation IFC, un modèle Revit ou natif n'expose pas ses données IFC
         let ifc = self.options.navigation_ifc || self.scene.as_ref().is_some_and(|s| s.navigateur.is_none());
         if let (Some(s), Some(id)) = (&self.scene, self.selected) {

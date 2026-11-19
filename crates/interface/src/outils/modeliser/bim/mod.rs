@@ -1,6 +1,6 @@
 //! Outils de création BIM : état des outils (`EtatBim`), placements (ouverture, arbre, composant,
 //! pièce, structure), suppression, Créer à l'identique, contexte de la sélection.
-//! Panneau d'options : `panneau.rs` ; widgets : `widgets.rs`.
+//! Emplacements de la palette de création : `palettes.rs`, `placement.rs`, `poteau.rs` ; widgets : `widgets.rs`.
 
 pub use crate::*;
 use commandes::Execution;
@@ -8,9 +8,9 @@ use config::options::Dimensions;
 
 mod identique;
 mod palettes;
-mod panneau;
+mod placement;
 mod poteau;
-mod widgets;
+pub(crate) mod widgets;
 
 
 pub(crate) struct EtatBim {
