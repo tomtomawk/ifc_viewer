@@ -6,7 +6,7 @@ Dépendances internes autorisées : les 13 crates précédentes (`noyau`, `model
 
 ## Où travailler
 
-Rangement par domaine (lot 11b, docs/historique/ARCHITECTURE_CHANTIER_2026-11.md §5.19). Chaque dossier a un `AGENTS.md` court ; ne charger que celui de la partie à modifier.
+Rangement par domaine (lot 11b, chantier du découpage §5.19 : `git show 9121974:docs/historique/ARCHITECTURE_CHANTIER_2026-11.md`). Chaque dossier a un `AGENTS.md` court ; ne charger que celui de la partie à modifier.
 
 | Dossier (`src/`) | Contenu |
 |---|---|
@@ -24,7 +24,7 @@ Règles :
 - Chemins absolus `crate::<dossier>::<module>::…` ; pas de `super::` vers un autre dossier. Les fichiers `impl Application` importent `use crate::*;` (glob de la racine : `Application`, imports communs de `lib.rs`) ; dans un sous-dossier (`ruban/`, `dessin_plan/`, `editeur_famille/`), `use super::*;` reprend le glob du `mod.rs`.
 - Visibilité : `pub(crate)` pour ce qui sert hors du dossier ; `pub(super)` seulement à l'intérieur d'un sous-dossier (`ruban/`, `dessin_plan/`, `editeur_famille/`). Rien de `pub` hors `socle::fenetre`.
 - Le module local `projet::collaboration` masque la crate du même nom dans `projet/` : écrire `::collaboration::…` pour la crate.
-- 23 fichiers dépassent 600 lignes (§5.19 c) : ne pas les agrandir ; découpage prévu en 11c.
+- 23 fichiers dépassent 600 lignes (chantier du découpage §5.19 c) : ne pas les agrandir ; découpage prévu en 11c.
 - Les `mod.rs` des dossiers de premier niveau et d'`outils/` ne contiennent que des déclarations de modules. Ceux de `ruban/`, `dessin_plan/` et `editeur_famille/` portent du code (antérieur au lot 11b).
 
 ## Quand modifier ici

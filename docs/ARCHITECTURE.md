@@ -2,7 +2,7 @@
 
 Le dépôt est un workspace Cargo (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`) de 15 crates. Les dépendances externes sont déclarées une fois dans `[workspace.dependencies]` et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine. À la racine aussi : `docs/`, `samples/`, `gabarits/`, `tools/`, `.github/`, `.mcp.json`, `README.md`, `AGENTS.md`.
 
-Pour travailler sur une partie : lire l'`AGENTS.md` de la crate (≤ 40 lignes) et le §2 ci-dessous ; ne pas charger le reste. L'historique du découpage (lots 0 à 11b) est dans [`historique/ARCHITECTURE_CHANTIER_2026-11.md`](historique/ARCHITECTURE_CHANTIER_2026-11.md) : journal, pas à lire pour travailler.
+Pour travailler sur une partie : lire l'`AGENTS.md` de la crate (≤ 40 lignes) et le §2 ci-dessous ; ne pas charger le reste. L'historique du découpage (lots 0 à 11b), supprimé du dépôt le 20/11/2026, se lit par `git show 9121974:docs/historique/ARCHITECTURE_CHANTIER_2026-11.md` : journal, pas à lire pour travailler.
 
 ## 1. Les 15 crates
 
@@ -128,4 +128,4 @@ cargo run --release -p bimedit -- --stats samples/test_ifc4.ifc
 
 ## 7. Documents voisins
 
-`docs/MODELE.md` (format du modèle), `docs/EDITION.md` (commandes), `docs/MODIFICATION.md`, `docs/PILOTE.md` (MCP), `docs/COLLABORATION.md`, `docs/AGENTS.md` (politique des formats : à respecter). `docs/ROADMAP.md` : ce qui reste à faire, objectif des familles (§5) et études des évolutions (§10) ; `docs/SUIVI.md` : ce qui est fait ou abandonné. `docs/historique/` : archives (chantier du découpage, audit de factorisation du 11/11/2026, avancement des familles).
+`docs/MODELE.md` (format du modèle), `docs/EDITION.md` (commandes), `docs/MODIFICATION.md`, `docs/PILOTE.md` (MCP), `docs/COLLABORATION.md`, `docs/AGENTS.md` (politique des formats : à respecter). `docs/ROADMAP.md` : ce qui reste à faire, objectif des familles (§5) et études des évolutions (§10) ; `docs/SUIVI.md` : ce qui est fait ou abandonné. Archives supprimées le 20/11/2026 (chantier du découpage, audit de factorisation du 11/11/2026, avancement des familles) : `git show 9121974:docs/historique/<fichier>`.

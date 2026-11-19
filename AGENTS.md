@@ -2,7 +2,7 @@
 
 Lire et appliquer la politique des formats et des migrations dans [docs/AGENTS.md](docs/AGENTS.md).
 
-**Travailler sur une partie seulement** : lire d'abord l'`AGENTS.md` de la crate concernée et `docs/ARCHITECTURE.md` §2 (dépendances autorisées) ; ne pas charger le reste. `docs/historique/` est un journal, pas à lire. Avant de commiter : `cargo check --workspace --tests`.
+**Travailler sur une partie seulement** : lire d'abord l'`AGENTS.md` de la crate concernée et `docs/ARCHITECTURE.md` §2 (dépendances autorisées) ; ne pas charger le reste. Avant de commiter : `cargo check --workspace --tests`.
 
 **À faire** : [docs/ROADMAP.md](docs/ROADMAP.md) (tâches à venir, en attente, décisions à prendre). **Fait et abandonné** : [docs/SUIVI.md](docs/SUIVI.md). Prendre la tâche dans ROADMAP ; dans le même commit que le code :
 - journaliser ce qui a été fait : une ligne en tête du Journal de SUIVI (date, ce qui a été fait, commit, vérification réellement faite ; ce qui n'a pas été vérifié est écrit tel quel) ;

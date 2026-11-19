@@ -95,7 +95,7 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 | I5 | Clippy : interdire `unwrap`/`expect`/`panic` hors tests (`clippy.toml`), puis clippy bloquant (avec A1b) ; actions de la CI épinglées par SHA | P2 | `.github/workflows/ci.yml` |
 | I6 | Budget des booléens (nombre de polygones et de découpes ; au-delà, échec propre au lieu d'un blocage) et `catch_unwind` autour des triangulations | P2 | `crates/noyau/src/csg*.rs`, `noyau::trace2d` |
 | A10 | Registre des documents : `Application` (environ 150 champs) transfère 19 champs à la main à chaque changement de document | P2 | `crates/interface/src/lib.rs`, `socle/documents.rs:497-613` |
-| R1 | Catalogue unique des outils : cartouches et contrôle complet par le pilote restent à unifier | P2 | archive de l'audit du 11/11, lot 1 |
+| R1 | Catalogue unique des outils : cartouches et contrôle complet par le pilote restent à unifier | P2 | audit du 11/11, lot 1 : `git show 9121974:docs/historique/AUDIT_FACTORIZATION_2026-11-11.md` |
 | R5 | Contrôleur d'esquisse partagé entre canevas orthogonal et oblique | P2 | idem, lot 5 |
 | R7 | Primitives de maillage, passes GPU (`gpu.rs`, un seul `impl Renderer`), dépendances collaboratives | P3 | idem, lot 7 |
 | D1 | 44 fichiers au-delà de 600 lignes : à découper quand on y touche | P3 | `docs/ARCHITECTURE.md` §5 |

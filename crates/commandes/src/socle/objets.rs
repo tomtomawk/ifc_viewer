@@ -1,6 +1,6 @@
 //! Projet vu comme une table d'objets identifiés (clé `collection/id`) : base de la
 //! comparaison de deux états du projet (verrous ici, transactions dans `collaboration`).
-//! Descendu de `collaboration` au lot 6 (docs/historique/ARCHITECTURE_CHANTIER_2026-11.md §5.13 b) ; `collaboration`
+//! Descendu de `collaboration` au lot 6 (chantier du découpage §5.13 b : `git show 9121974:docs/historique/ARCHITECTURE_CHANTIER_2026-11.md`) ; `collaboration`
 //! ré-exporte ces symboles sous leurs anciens chemins.
 use modele::Projet;
 use serde_json::Value;
