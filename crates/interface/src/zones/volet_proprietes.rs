@@ -34,15 +34,17 @@ impl Application {
         let terrain_creation = self.proprietes_terrain_creation(ui);
         if self.natif.is_some() {
             let ids = self.selection_bim();
+            let mut gerer = false;
             if ids.is_empty() {
                 let mut contexte = self.natif.as_ref().unwrap().0.clone();
                 if self.ruban_edition.contexte_creation(ui, &mut contexte) {
                     if let Err(e) = self.appliquer_projet(contexte) { self.error = Some(e); }
                 }
-            } else if let Some(projet) = self.contexte_selection(ui, &ids) {
+            } else if let Some(projet) = self.contexte_selection(ui, &ids, &mut gerer) {
                 if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
             }
-            if ui.link("Gérer phases, sous-projets et variantes…").clicked() {
+            // « Gérer les phases… » : lien en fin de chacune des listes de contexte
+            if gerer || std::mem::take(&mut self.ruban_edition.demande_gestion_contextes) {
                 self.ouvrir_gestion_contextes();
             }
             if self.filtres_contextes != Default::default() {
@@ -65,6 +67,9 @@ impl Application {
             if self.proprietes_segment_edition(ui) { return; }
             // Un seul sélecteur pendant les créations successives : celui de l'outil.
             let selecteur_creation = matches!(self.onglet_ruban, OngletRuban::Modeliser | OngletRuban::Modifier) && self.ruban_edition.selecteur_creation_actif();
+            if selecteur_creation && self.ruban_edition.mur_actif() && let Some((projet, _)) = &self.natif {
+                self.ruban_edition.selecteur_type_creation_mur(ui, projet);
+            }
             if !terrain_creation && !selecteur_creation && self.jeu_actif().is_none() && (!ids.is_empty() || !self.ruban_edition.mur_actif()) {
                 if let Some(projet)=self.selecteur_type_selection(ui) {
                     if let Err(e)=self.appliquer_projet(projet) {self.error=Some(e);}

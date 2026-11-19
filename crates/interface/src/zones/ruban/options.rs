@@ -57,6 +57,7 @@ impl RubanEdition {
             self.demande_charger_famille = true;
         }
         ui.separator();
+        self.section_parametres(ui, Outil::Ouverture, Some(projet));
         true
     }
 
@@ -215,6 +216,14 @@ Type des prochains éléments horizontaux."), Some(&vignette));
         if !(dans(menu) || (menu == Menu::Modifier && dans(Menu::Modeliser))) {
             return;
         }
+        // l'ouverture place son sélecteur de type avant ses réglages (proprietes_ouverture)
+        if outil == Outil::Ouverture {
+            return;
+        }
+        self.section_parametres(ui, outil, projet);
+    }
+
+    fn section_parametres(&mut self, ui: &mut egui::Ui, outil: Outil, projet: Option<&modele::Projet>) {
         ui.add_space(6.0);
         ui.label(RichText::new(format!("Paramètres — {}", outil.nom())).strong());
         self.options_outil(ui, outil, projet);

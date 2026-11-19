@@ -143,6 +143,20 @@ impl RubanEdition {
             self.erreur_creation = None;
             ui.close();
         }
+        if ui.button(format!("Gérer les {}…", Self::pluriel_contexte(liste))).clicked() {
+            self.demande_gestion_contextes = true;
+            ui.close();
+        }
+    }
+
+    /// Libellé pluriel de la liste, pour le lien vers la gestion des contextes.
+    pub(crate) fn pluriel_contexte(liste: modele::creation::ListeCreation) -> &'static str {
+        use modele::creation::ListeCreation;
+        match liste {
+            ListeCreation::Phase => "phases",
+            ListeCreation::SousProjet => "sous-projets",
+            ListeCreation::Variante => "variantes",
+        }
     }
 
     pub fn reinitialiser_contexte_creation(&mut self) {

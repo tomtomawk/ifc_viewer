@@ -12,6 +12,18 @@ impl RubanEdition {
         }
     }
 
+    /// Sélecteur de type des prochains murs, à la place du sélecteur standard de Propriétés.
+    pub fn selecteur_type_creation_mur(&mut self, ui: &mut egui::Ui, projet: &modele::Projet) {
+        if !self.mur_actif() {
+            return;
+        }
+        if self.type_mur.as_ref().is_some_and(|id| projet.type_mur(id).is_none()) {
+            self.type_mur = None;
+        }
+        self.selecteur_type_mur(ui, projet, true);
+        ui.add_space(2.0);
+    }
+
     /// Palette de création du mur : croquis des deux limites (haut, bas) avec leur
     /// réglage sur la même ligne, puis les propriétés du type en grille.
     pub fn proprietes_mur(
@@ -41,8 +53,6 @@ impl RubanEdition {
         egui::ScrollArea::vertical()
             .id_salt("creation_mur")
             .show(ui, |ui| {
-                self.selecteur_type_mur(ui, projet, true);
-                ui.add_space(2.0);
                 croquis::cadre(ui, |ui| self.croquis_mur_creation(ui, projet));
                 if let Err(e) = self.parametres_mur().bornes(projet) {
                     ui.colored_label(ui.visuals().error_fg_color, e);

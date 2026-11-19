@@ -229,7 +229,7 @@ impl Application {
 
     /// Phase, sous-projet et variante de la sélection, modifiables d'ici : « Varié » quand
     /// les éléments diffèrent. Retourne le projet modifié.
-    pub(crate) fn contexte_selection(&self, ui: &mut egui::Ui, ids: &[String]) -> Option<modele::Projet> {
+    pub(crate) fn contexte_selection(&self, ui: &mut egui::Ui, ids: &[String], gerer: &mut bool) -> Option<modele::Projet> {
         let (p, _) = self.natif.as_ref()?;
         // éléments portant le contexte : couches des assemblages, murs, dalles, autres
         let mut cibles: Vec<String> = Vec::new();
@@ -288,6 +288,12 @@ impl Application {
                                 if ui.selectable_label(!mixte && *c == actuel, libelle(c)).clicked() {
                                     resultat = Some((i, c.clone()));
                                 }
+                            }
+                            ui.separator();
+                            let liste = match i { 0 => modele::creation::ListeCreation::Phase, 1 => modele::creation::ListeCreation::SousProjet, _ => modele::creation::ListeCreation::Variante };
+                            if ui.button(format!("Gérer les {}…", crate::zones::ruban::RubanEdition::pluriel_contexte(liste))).clicked() {
+                                *gerer = true;
+                                ui.close();
                             }
                         });
                 });

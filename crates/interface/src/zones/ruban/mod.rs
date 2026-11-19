@@ -494,6 +494,8 @@ pub struct RubanEdition {
     /// Forme tracée par l'outil Mur (moteur du dessin 2D) : ligne, rectangle, arc, cercle.
     pub forme_mur: moteur2d::dao::OutilDessin,
     ajout_creation: Option<modele::creation::ListeCreation>,
+    /// Lien « Gérer… » choisi dans une liste de contexte : le volet ouvre la gestion.
+    pub demande_gestion_contextes: bool,
     nom_creation: String,
     jeu_creation: String,
     erreur_creation: Option<String>,

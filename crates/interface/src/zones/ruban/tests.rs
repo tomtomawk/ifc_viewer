@@ -351,59 +351,27 @@ fn selecteur_surfaces_et_reglages_independants() {
 }
 
 #[test]
-fn reglages_accessibles_en_mode_compact() {
+fn ruban_sans_reglages_deployes() {
+    // les réglages de l'outil actif sont dans Propriétés : ni bouton « ... », ni champs dans le ruban
     let ctx = egui::Context::default();
     let mut ruban = RubanEdition::default();
     ruban.activer_mur();
-    let mut afficher = |events| {
+    for largeur in [800.0, 1800.0] {
         let input = egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(
-                egui::Pos2::ZERO,
-                egui::vec2(800.0, 520.0),
-            )),
-            events,
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(largeur, 520.0))),
             ..Default::default()
         };
         let mut sortie = ctx.run_ui(input, |ui| {
-            egui::CentralPanel::default()
-                .show(ui, |ui| ruban.afficher(ui, Menu::Modeliser, Some(&modele::Projet::default())));
+            egui::CentralPanel::default().show(ui, |ui| ruban.afficher(ui, Menu::Modeliser, Some(&modele::Projet::default())));
         });
         sortie.textures_delta.clear();
-        sortie
-    };
-    let sortie = afficher(vec![]);
-    let bouton = sortie
-        .shapes
-        .iter()
-        .find_map(|s| match &s.shape {
-            egui::Shape::Text(t) if t.galley.text() == "..." => {
-                Some(t.pos + t.galley.size() / 2.0)
-            }
+        let textes: Vec<String> = sortie.shapes.iter().filter_map(|s| match &s.shape {
+            egui::Shape::Text(t) => Some(t.galley.text().to_string()),
             _ => None,
-        })
-        .expect("bouton de réglages compact");
-    afficher(vec![
-        egui::Event::PointerMoved(bouton),
-        egui::Event::PointerButton {
-            pos: bouton,
-            button: egui::PointerButton::Primary,
-            pressed: true,
-            modifiers: egui::Modifiers::NONE,
-        },
-    ]);
-    afficher(vec![egui::Event::PointerButton {
-        pos: bouton,
-        button: egui::PointerButton::Primary,
-        pressed: false,
-        modifiers: egui::Modifiers::NONE,
-    }]);
-    let sortie = afficher(vec![]);
-    assert!(
-        sortie.shapes.iter().any(
-            |s| matches!(&s.shape, egui::Shape::Text(t) if t.galley.text() == "Implantation")
-        ),
-        "le clic sur les réglages doit rendre les options Mur accessibles"
-    );
+        }).collect();
+        assert!(textes.iter().any(|t| t == "Mur"), "le bouton Mur reste affiché");
+        assert!(!textes.iter().any(|t| t == "..." || t == "Implantation"), "aucun réglage dans le ruban à {largeur} px");
+    }
 }
 
 #[test]
