@@ -270,6 +270,7 @@ impl Application {
             fenetre: None,
             trait_creation: String::new(),
             segment_trace: None,
+            cycle: None,
         });
         if let Some(ed) = self.famille.as_mut() {
             ed.marquer_enregistree();

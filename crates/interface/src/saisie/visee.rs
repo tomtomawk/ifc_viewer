@@ -98,18 +98,24 @@ impl Application {
             .collect()
     }
 
-    /// Élément 2D de la vue native ouverte visé au point écran `q` : annotation, pièce
-    /// (étiquette), niveau ou limite de propriété (coupes et élévations) ; le plus proche.
-    pub(crate) fn element_2d_vise(&self, rect: egui::Rect, q: egui::Pos2) -> Option<String> {
+    /// Éléments 2D de la vue native ouverte visés au point écran `q` (annotations, pièces
+    /// par leur étiquette, niveaux et limites des coupes) : distance et traits à l'écran,
+    /// du plus proche au plus lointain, à `TOLERANCE` près.
+    pub(crate) fn elements_2d_proches(&self, rect: egui::Rect, q: egui::Pos2) -> Vec<(f32, String, Vec<[egui::Pos2; 2]>)> {
         if !self.point_dans_cadrage(rect, q) {
-            return None;
+            return Vec::new();
         }
         let ecran = self.ecran_vue(rect);
-        self.primitives_2d(true)
-            .into_iter()
-            .filter_map(|(id, forme)| distance_primitive(&forme, q, &ecran).filter(|d| *d <= TOLERANCE).map(|d| (d, id)))
-            .min_by(|a, b| a.0.total_cmp(&b.0))
-            .map(|(_, id)| id)
+        let mut par_id: std::collections::BTreeMap<String, (f32, Vec<[egui::Pos2; 2]>)> = Default::default();
+        for (id, forme) in self.primitives_2d(true) {
+            let d = distance_primitive(&forme, q, &ecran).unwrap_or(f32::MAX);
+            let e = par_id.entry(id).or_insert((f32::MAX, Vec::new()));
+            e.0 = e.0.min(d);
+            e.1.extend(segments_ecran(&forme, &ecran));
+        }
+        let mut out: Vec<_> = par_id.into_iter().filter(|(_, (d, _))| *d <= TOLERANCE).map(|(id, (d, s))| (d, id, s)).collect();
+        out.sort_by(|a, b| a.0.total_cmp(&b.0));
+        out
     }
 
     /// Annotations et pièces prises par une fenêtre de sélection `zone` : entièrement

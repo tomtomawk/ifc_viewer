@@ -1,6 +1,6 @@
 # Crate `scene`
 
-Rôle : scène triangulée commune aux rendus : `Scene`, `SceneObject`, `Vertex`, `Range`, navigateur de projet (`Navigateur`, `NavVue`, `NavFamille`…), picking (`Scene::pick`), phases (`etat_de_phase`).
+Rôle : scène triangulée commune aux rendus : `Scene`, `SceneObject`, `Vertex`, `Range`, navigateur de projet (`Navigateur`, `NavVue`, `NavFamille`…), picking (`Scene::pick`, `Scene::pick_tous` : tous les objets du rayon, cycle Tab), phases (`etat_de_phase`).
 
 Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`. Externe : `glam`. Interdit : `formats`, `maillage` et toute crate après, egui, wgpu.
 

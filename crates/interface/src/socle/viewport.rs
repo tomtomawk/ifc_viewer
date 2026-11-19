@@ -163,6 +163,17 @@ impl Application {
                 }
             }
             let rectangle_actif = self.fenetre_selection.is_some();
+            // présélection au survol (cycle Tab) : recalculée quand la souris bouge
+            let appui = ui.input(|i| i.pointer.any_down());
+            match resp.hover_pos().filter(|_| !mode_trace && !rectangle_actif && !self.vol.actif && !appui) {
+                Some(q) => {
+                    let (contexte, mut cycle) = (self.contexte_cycle(rect), self.cycle.take());
+                    crate::saisie::cycle::actualiser(&mut cycle, q, contexte, || self.candidats_selection(rect, q));
+                    self.cycle = cycle;
+                }
+                None if !appui => self.cycle = None,
+                None => {}
+            }
             // Orbite autour du point visé (vue 3D seulement).
             if !mode_trace && !rectangle_actif && resp.drag_started_by(PointerButton::Middle) && ui.input(|i| i.modifiers.shift) && self.vue_3d() {
                 if let Some((_, p)) = resp.interact_pointer_pos().and_then(|pp| pick(self, pp)) {
@@ -368,28 +379,13 @@ impl Application {
                 // origine du projet (trait invisible) : ses coordonnées dans Propriétés
                 self.select(None, false);
                 self.bim.origine = true;
-            } else if resp.clicked() && resp.interact_pointer_pos().and_then(|q| self.limite_propriete_proche(rect, q)).is_some() {
-                let id = self.limite_propriete_proche(rect, resp.interact_pointer_pos().unwrap()).unwrap();
-                let ctrl = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
-                let mut selection = if ctrl { self.selection_bim() } else { Vec::new() };
-                if let Some(i) = selection.iter().position(|x| x == &id) { selection.remove(i); } else { selection.push(id); }
-                let selection_id = selection.iter().find_map(|cle| self.scene.as_ref()?.objects.iter().find(|o| self.cle_native(o.id).as_deref() == Some(cle)).map(|o| o.id));
-                self.select(selection_id, false);
-                self.bim.selection = selection;
-            } else if let Some(id) = resp.clicked().then(|| resp.interact_pointer_pos()).flatten().and_then(|q| self.element_2d_vise(rect, q)) {
-                // trait, texte, niveau ou limite visé de près (pas l'intérieur de son cadre)
-                let ctrl = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
-                let mut selection = if ctrl { self.selection_bim() } else { Vec::new() };
-                if let Some(i) = selection.iter().position(|x| x == &id) { selection.remove(i); } else { selection.push(id); }
-                self.select(None, false);
-                self.bim.selection = selection;
-            } else if resp.clicked() && self.vue_en_plan() && resp.interact_pointer_pos().and_then(|q| self.repere_coupe_proche(rect, q, altitude_coupe)).is_some() {
-                let id = self.repere_coupe_proche(rect, resp.interact_pointer_pos().unwrap(), altitude_coupe).unwrap();
-                let ctrl = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
-                let mut selection = if ctrl { self.selection_bim() } else { Vec::new() };
-                if let Some(i) = selection.iter().position(|x| x == &id) { selection.remove(i); } else { selection.push(id); }
-                self.select(None, false);
-                self.bim.selection = selection;
+            } else if let Some(c) = resp.clicked().then(|| resp.interact_pointer_pos()).flatten()
+                .filter(|_| self.ruban_edition.outil() != Some(crate::zones::ruban::Outil::Ouverture))
+                .and_then(|q| crate::saisie::cycle::au_clic(&self.cycle, q).or_else(|| self.candidats_selection(rect, q).into_iter().next()))
+            {
+                // candidat présélectionné (Tab), sinon le premier sous le curseur : objet à
+                // quelques pixels près, trait, texte, niveau, repère, limite
+                self.selectionner_candidat(&c, ui.input(|i| i.modifiers.ctrl || i.modifiers.command));
             } else if resp.clicked() {
                 // Plan : une arête en pointillés de la plage haute (au-dessus de la coupe)
                 // est prioritaire sur l'élément coupé ou vu dessous.
@@ -446,6 +442,9 @@ impl Application {
             ui.painter().image(id, rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
         }
         self.dessiner_poignees_annotation(ui, rect, mode_trace && !poignee_annotation);
+        if let (Some(c), Some(q)) = (&self.cycle, resp.hover_pos()) && let Some(candidat) = c.courant() {
+            crate::saisie::cycle::dessiner(&ui.painter().with_clip_rect(rect), q, &candidat.segments, c.indice, c.candidats.len(), &candidat.libelle);
+        }
         if let Some(f) = self.fenetre_selection {
             f.dessiner(&ui.painter().with_clip_rect(rect));
         }

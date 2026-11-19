@@ -178,7 +178,7 @@ impl Application {
             return;
         }
         let focus = ctx.egui_wants_keyboard_input();
-        let tab_vue = self.tab_dans_vue(ctx) && !self.mode_famille() && self.couche_suivante().is_some();
+        let tab_vue = self.tab_dans_vue(ctx) && !self.mode_famille() && (self.cycle.as_ref().is_some_and(|c| c.candidats.len() > 1) || self.couche_suivante().is_some());
         if !focus && self.parametres.is_none() && self.ruban_edition.outil().is_none()
             && !self.mode_famille() && !self.vol.actif && self.dessin2d.edition_contour.is_none()
             && self.poignee_axe.is_none() && self.dessin2d.arc_glisse.is_none()
@@ -344,6 +344,11 @@ impl Application {
                     ajouter: false,
                 },
             ),
+            // Tab : candidat suivant sous le curseur, sinon couche suivante du mur composé
+            "selection_suivante" if self.cycle.as_ref().is_some_and(|c| c.candidats.len() > 1) => {
+                if let Some(c) = self.cycle.as_mut() { c.suivant(); }
+                ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+            }
             "selection_suivante" => {
                 if let Some(id) = self.couche_suivante() {
                     self.select(Some(id), true);

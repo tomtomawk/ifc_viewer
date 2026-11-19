@@ -25,7 +25,7 @@ pub(crate) use plan_actif::PlanActif;
 mod reseau;
 mod aligner;
 mod chemin_trace;
-mod traits; mod multiple;
+mod traits; mod multiple; mod cycle_famille;
 pub(crate) mod apercu;
 pub(crate) mod navigation; mod rendu;
 use navigation::*; use rendu::*;
@@ -248,6 +248,8 @@ pub(crate) struct EditeurFamille {
     fenetre: Option<FenetreSelection>,
     /// Type de trait des polylignes créées (vide : continu fin) ; segment choisi pendant « Modifier ».
     trait_creation: String, segment_trace: Option<usize>,
+    /// Candidats sous le curseur (présélection, Tab), comme dans le projet.
+    cycle: Option<crate::saisie::cycle::Cycle<cycle_famille::CandidatFamille>>,
 }
 
 fn couleur_materiau(f: &FamilleModelee, m: Materiau) -> Color32 {

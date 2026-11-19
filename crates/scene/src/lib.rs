@@ -360,6 +360,40 @@ impl Scene {
     }
 }
 
+impl Scene {
+    /// Tous les objets visibles traversés par le rayon, du plus proche au plus lointain
+    /// (même règle de coupe et de boîte que `pick`, topographie après les autres) :
+    /// candidats du cycle de sélection (Tab).
+    pub fn pick_tous(&self, origin: Vec3, dir: Vec3, visible: &[bool], coupe: Option<Vec4>, boite: Option<(Vec3, Vec3)>) -> Vec<(u32, f32)> {
+        let inv = dir.recip();
+        let mut out: Vec<(u32, f32, bool)> = Vec::new();
+        for (i, o) in self.objects.iter().enumerate() {
+            if !visible[i] || ray_aabb(origin, inv, o.min, o.max).is_none() {
+                continue;
+            }
+            let au_fond = coupe.is_some() && &*o.class == "IFCGEOGRAPHICELEMENT";
+            let mut proche: Option<f32> = None;
+            for r in [o.opaque, o.transparent] {
+                let vs = &self.vertices[r.start as usize..(r.start + r.count) as usize];
+                for t in vs.chunks_exact(3) {
+                    let (a, b, c) = (Vec3::from(t[0].pos), Vec3::from(t[1].pos), Vec3::from(t[2].pos));
+                    let Some(d) = ray_tri(origin, dir, a, b, c) else { continue };
+                    let q = origin + dir * d;
+                    let garde = t[0].normal[3] > 0 || (coupe.is_none_or(|p| p.truncate().dot(q) + p.w >= 0.0) && boite.is_none_or(|(a, b)| q.cmpge(a).all() && q.cmple(b).all()));
+                    if garde && proche.is_none_or(|x| d < x) {
+                        proche = Some(d);
+                    }
+                }
+            }
+            if let Some(d) = proche {
+                out.push((i as u32, d, au_fond));
+            }
+        }
+        out.sort_by(|a, b| a.2.cmp(&b.2).then(a.1.total_cmp(&b.1)));
+        out.into_iter().map(|(i, d, _)| (i, d)).collect()
+    }
+}
+
 fn ray_aabb(o: Vec3, inv: Vec3, mn: Vec3, mx: Vec3) -> Option<f32> {
     let t1 = (mn - o) * inv;
     let t2 = (mx - o) * inv;

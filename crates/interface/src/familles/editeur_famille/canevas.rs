@@ -307,6 +307,11 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
     dessiner_axe_revolution(&painter, &cadre, ed);
     match ed.outil {
         OutilFamille::Selection | OutilFamille::ModifierTrace => {
+            // cycle de sélection commun au projet (présélection, Tab)
+            let zones = cycle_famille::Zones { textes_2d: &textes_2d, lignes_2d: &lignes_2d, etiquettes: &etiquettes, lignes_mesures: &lignes_mesures, contours: &contours_ext, plans: &lignes, cadre: rect,
+                volumes: pleins.iter().rev().copied().chain(boites.iter().filter(|b| b.vide)).map(|b| (b.indice, boite((b.min[ih], b.min[iv]), (b.max[ih], b.max[iv])))).collect() };
+            let o = cadre.ecran(0.0, 0.0);
+            cycle_famille::survol(ui, ed, &resp, &painter, &zones, crate::saisie::cycle::empreinte(&[o.x.to_bits() as u64, o.y.to_bits() as u64, echelle.to_bits(), ed.vue as u64, (textes_2d.len() + lignes_2d.len() + contours_ext.len() + boites.len() + lignes.len()) as u64]));
             // poignées de l'élément choisi : sommets et milieux d'arêtes (insertion) d'un
             // profil ou d'un symbole de la vue, milieux des faces d'un volume
             let vue = ed.vue.esquisse();
@@ -471,26 +476,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             }
             if resp.clicked() && !traits::clic_segment(ed, &cadre, &r, resp.interact_pointer_pos()) {
                 if let Some(q) = resp.interact_pointer_pos() {
-                    let (h, v) = cadre.modele(q);
-                    let cible = if let Some((k, _)) = textes_2d.iter().rev().find(|(_, r)| r.contains(q)) {
-                        SelectionFamille::Element2D(*k)
-                    } else if let Some((k, _)) = lignes_2d.iter().rev().find(|(_, l)| l.windows(2).any(|w| distance_segment(q, w[0], w[1]) < 6.0)) {
-                        SelectionFamille::Element2D(*k)
-                    } else if let Some((k, _)) = etiquettes.iter().find(|(_, r)| r.contains(q)) {
-                        SelectionFamille::Contrainte(*k)
-                    } else if let Some((k, _)) = lignes_mesures.iter().find(|(_, l)| l.iter().any(|w| distance_segment(q, w[0], w[1]) < 6.0)) {
-                        SelectionFamille::CoteMesure(*k)
-                    } else if let Some((k, _)) = contours_ext.iter().rev().find(|(_, p)| dans_polygone(q, p)) {
-                        // un objet l'emporte sur les plans qui le traversent (les plans
-                        // courent sur toute la vue : on les choisit hors des objets)
-                        SelectionFamille::Extrusion(*k)
-                    } else if let Some(b) = pleins.iter().rev().copied().chain(boites.iter().filter(|b| b.vide)).find(|b| (b.min[ih]..=b.max[ih]).contains(&h) && (b.min[iv]..=b.max[iv]).contains(&v)) {
-                        SelectionFamille::Volume(b.indice)
-                    } else if let Some(n) = plan_vise(q) {
-                        SelectionFamille::Plan(n)
-                    } else {
-                        SelectionFamille::Aucune
-                    };
+                    let cible = cycle_famille::au_clic(ed, &zones, q);
                     // Ctrl+clic, comme dans le projet : ajoute ou retire
                     if ui.input(|i| i.modifiers.ctrl || i.modifiers.command) {
                         let mut liste = ed.selectionnes();

@@ -324,6 +324,13 @@ impl Application {
                 if let Some(marque) = marques.get_mut(objet as usize) { *marque = 255; }
             }
         }
+        // présélection au survol (cycle Tab) : octet 192, bleu
+        if let Some(crate::saisie::candidats::Cible::Objet(id)) = self.cycle.as_ref().and_then(|c| c.courant()).map(|c| &c.cible) {
+            let objets = if scene.model.ty(*id) == "IFCELEMENTASSEMBLY" { self.objects_under(*id) } else { scene.object_of.get(id).copied().into_iter().collect() };
+            for o in objets {
+                if let Some(m) = marques.get_mut(o as usize).filter(|m| **m == 0) { *m = 192; }
+            }
+        }
         for &o in &self.objets_masques {
             if let Some(marque) = marques.get_mut(o as usize).filter(|m| **m == 0) { *marque = 128; }
         }
