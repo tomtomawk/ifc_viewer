@@ -31,7 +31,6 @@ impl Application {
                 .on_hover_text("Le fichier ouvert est en lecture seule : convertir le modèle pour modifier ses types.");
             ui.separator();
         }
-        let terrain_creation = self.proprietes_terrain_creation(ui);
         if self.natif.is_some() {
             let ids = self.selection_bim();
             let mut gerer = false;
@@ -68,7 +67,7 @@ impl Application {
             if self.proprietes_segment_edition(ui) { return; }
             // Un seul sélecteur pendant les créations successives : celui de l'outil.
             let selecteur_creation = matches!(self.onglet_ruban, OngletRuban::Modeliser | OngletRuban::Modifier) && self.ruban_edition.selecteur_creation_actif();
-            if !terrain_creation && !selecteur_creation && self.jeu_actif().is_none() && (!ids.is_empty() || !self.ruban_edition.mur_actif()) {
+            if !selecteur_creation && self.jeu_actif().is_none() && (!ids.is_empty() || !self.ruban_edition.mur_actif()) {
                 if let Some(projet)=self.selecteur_type_selection(ui) {
                     if let Err(e)=self.appliquer_projet(projet) {self.error=Some(e);}
                 }
@@ -104,14 +103,6 @@ impl Application {
         // palette de création : sélecteur, schéma, paramètres (voir palette_creation.rs)
         if self.palette_creation(ui) { return; }
         if self.panneau_bim(ui) { return; }
-        if self.onglet_ruban == OngletRuban::Annoter
-            && let Some(choix) = self.ruban_edition.proprietes_vues(ui, self.natif.as_ref().map(|(p, _)| p))
-        {
-            if let Some((niveau, hauteur)) = choix {
-                self.creer_vue(|p| p.ajouter_vue_plan(&niveau, hauteur), true);
-            }
-            return;
-        }
         // sans navigation IFC, un modèle Revit ou natif n'expose pas ses données IFC
         let ifc = self.options.navigation_ifc || self.scene.as_ref().is_some_and(|s| s.navigateur.is_none());
         if let (Some(s), Some(id)) = (&self.scene, self.selected) {

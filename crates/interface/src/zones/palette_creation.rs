@@ -27,6 +27,8 @@ pub(crate) struct Palette {
     pub selecteur: Option<Emplacement>,
     pub schema: Option<Emplacement>,
     pub parametres: Parametres,
+    /// Onglets du ruban où la palette s'affiche (Modifier : pendant un tracé de Modéliser).
+    pub menus: &'static [Menu],
     /// Vrai : la palette garde le volet quand un élément est sélectionné (le dernier créé
     /// reste sélectionné pendant les créations successives).
     pub avec_selection: bool,
@@ -38,24 +40,46 @@ pub(crate) enum Definition {
     Palette(Palette),
     /// Réglages seuls (déplacer, cote, texte…) : titre et champs, le reste du volet continue.
     Parametres,
-    /// Panneau propre, pas encore passé en palette (`panneau_bim`, vues). À migrer.
-    Heritage,
     /// Pas de panneau : action immédiate ou dessin sans réglage.
     Aucune,
 }
 
+const MODELISER: &[Menu] = &[Menu::Modeliser, Menu::Modifier];
+const ANNOTER: &[Menu] = &[Menu::Annoter];
+
+/// Palette dont les emplacements sont des méthodes de `Application` ou des adaptateurs ci-dessous.
+const fn palette(selecteur: Option<Emplacement>, schema: Option<Emplacement>, parametres: Parametres, avec_selection: bool) -> Definition {
+    Definition::Palette(Palette { selecteur, schema, parametres, menus: MODELISER, avec_selection, suite: false })
+}
+
 pub(crate) fn definition(outil: Outil) -> Definition {
     use Outil::*;
+    use Parametres::{Champs, Propres};
     match outil {
-        Mur => Definition::Palette(Palette { selecteur: Some(selecteur_mur), schema: Some(schema_mur), parametres: Parametres::Propres(parametres_mur), avec_selection: true, suite: false }),
-        Surfaces | Dalle | Sol | Toiture | Plafond | TerrePlein => Definition::Palette(Palette { selecteur: Some(selecteur_surface), schema: Some(schema_surface), parametres: Parametres::Propres(parametres_surface), avec_selection: true, suite: false }),
-        Escalier => Definition::Palette(Palette { selecteur: None, schema: Some(schema_escalier), parametres: Parametres::Champs, avec_selection: false, suite: false }),
-        GardeCorps => Definition::Palette(Palette { selecteur: Some(selecteur_garde_corps), schema: None, parametres: Parametres::Champs, avec_selection: false, suite: false }),
-        Ouverture => Definition::Palette(Palette { selecteur: Some(selecteur_ouverture), schema: None, parametres: Parametres::Champs, avec_selection: true, suite: true }),
-        Quadrillage | Deplacer | Copier | Tourner | Ajuster | Cote | CoteAngulaire | Altimetrie | Texte | Etiquette | Symbole | Legende => Definition::Parametres,
-        Niveau | Terrain | LimitePropriete | Poteau | Poutre | Composant | Piece | Arbre | Zone | VuePlan | VueCoupe => Definition::Heritage,
-        Symetrie | Reseau | Echelle | Decaler | Scinder | Demolir | Reproduire | ChangerHote | Inverser | Aligner | ModifierContour | CopierNiveau | Jonctions | AttacherToiture | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | MasquerVue | Afficher | Verrouiller | Deverrouiller | CoteDiametre | Arc | Polyligne | Rectangle | Spline | Cercle | Feuilles | Nomenclatures | LienIfc => Definition::Aucune,
+        Mur => palette(Some(selecteur_mur), Some(schema_mur), Propres(parametres_mur), true),
+        Surfaces | Dalle | Sol | Toiture | Plafond | TerrePlein => palette(Some(selecteur_surface), Some(schema_surface), Propres(parametres_surface), true),
+        Escalier => palette(None, Some(schema_escalier), Champs, false),
+        GardeCorps => palette(Some(selecteur_garde_corps), None, Champs, false),
+        Ouverture => Definition::Palette(Palette { selecteur: Some(selecteur_ouverture), schema: None, parametres: Champs, menus: MODELISER, avec_selection: true, suite: true }),
+        Poutre => palette(Some(Application::selecteur_poutre), Some(Application::schema_poutre), Propres(Application::parametres_poutre), true),
+        Poteau => palette(None, Some(Application::schema_poteau), Propres(Application::parametres_poteau), true),
+        Composant => palette(Some(Application::selecteur_composant), None, Propres(Application::parametres_composant), true),
+        Arbre => palette(Some(Application::selecteur_arbre), None, Propres(Application::parametres_arbre), true),
+        Piece => palette(Some(Application::selecteur_piece), None, Propres(Application::parametres_piece), true),
+        Niveau => palette(None, None, Propres(Application::parametres_niveau), true),
+        Quadrillage => palette(None, None, Propres(Application::parametres_quadrillage), true),
+        Terrain => palette(Some(Application::selecteur_terrain), None, Propres(Application::parametres_terrain), true),
+        VueCoupe => Definition::Palette(Palette { selecteur: Some(selecteur_coupe), schema: None, parametres: Propres(parametres_coupe), menus: ANNOTER, avec_selection: true, suite: false }),
+        VuePlan => Definition::Palette(Palette { selecteur: None, schema: None, parametres: Propres(parametres_plan), menus: ANNOTER, avec_selection: true, suite: false }),
+        Deplacer | Copier | Tourner | Ajuster | Cote | CoteAngulaire | Altimetrie | Texte | Etiquette | Symbole | Legende => Definition::Parametres,
+        LimitePropriete | Zone | Symetrie | Reseau | Echelle | Decaler | Scinder | Demolir | Reproduire | ChangerHote | Inverser | Aligner | ModifierContour | CopierNiveau | Jonctions | AttacherToiture | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | MasquerVue | Afficher | Verrouiller | Deverrouiller | CoteDiametre | Arc | Polyligne | Rectangle | Spline | Cercle | Feuilles | Nomenclatures | LienIfc => Definition::Aucune,
     }
+}
+
+/// Titre de l'emplacement « paramètres », le même pour tous les objets.
+pub(crate) fn titre_parametres(ui: &mut egui::Ui, objet: &str) {
+    ui.add_space(6.0);
+    ui.label(RichText::new(format!("Paramètres — {objet}")).strong());
 }
 
 fn selecteur_mur(a: &mut Application, ui: &mut egui::Ui) {
@@ -81,6 +105,17 @@ fn schema_surface(a: &mut Application, ui: &mut egui::Ui) {
 }
 fn parametres_surface(a: &mut Application, ui: &mut egui::Ui) {
     a.ruban_edition.parametres_surface(ui, a.natif.as_ref().map(|(p, _)| p));
+}
+fn selecteur_coupe(a: &mut Application, ui: &mut egui::Ui) {
+    a.ruban_edition.selecteur_coupe(ui);
+}
+fn parametres_coupe(a: &mut Application, ui: &mut egui::Ui) {
+    a.ruban_edition.parametres_coupe(ui);
+}
+fn parametres_plan(a: &mut Application, ui: &mut egui::Ui) {
+    if let Some((niveau, hauteur)) = a.ruban_edition.parametres_plan(ui, a.natif.as_ref().map(|(p, _)| p)) {
+        a.creer_vue(|p| p.ajouter_vue_plan(&niveau, hauteur), true);
+    }
 }
 fn schema_escalier(a: &mut Application, ui: &mut egui::Ui) {
     a.schema_escalier(ui);
@@ -119,8 +154,7 @@ impl Application {
         let Some(outil) = self.ruban_edition.outil() else { return false };
         match definition(outil) {
             Definition::Palette(p) => {
-                // pendant un tracé de Modéliser, l'onglet Modifier reste ouvert
-                if !matches!(menu, Menu::Modeliser | Menu::Modifier) || (!p.avec_selection && !self.selection_bim().is_empty()) {
+                if !p.menus.contains(&menu) || (!p.avec_selection && !self.selection_bim().is_empty()) {
                     return false;
                 }
                 egui::ScrollArea::vertical().id_salt(("palette_creation", outil)).auto_shrink([false, true]).show(ui, |ui| {
@@ -143,7 +177,7 @@ impl Application {
                 }
                 false
             }
-            Definition::Heritage | Definition::Aucune => false,
+            Definition::Aucune => false,
         }
     }
 }
@@ -152,9 +186,8 @@ impl Application {
 mod tests {
     use super::*;
 
-    /// Un outil qui a des champs doit les montrer : palette ou réglages seuls. Seuls les outils
-    /// dont le panneau propre porte déjà ces réglages (vues) ou qui n'ont pas de bouton (zone)
-    /// peuvent rester hérités.
+    /// Un outil qui a des champs doit les montrer : palette ou réglages seuls. Seule la zone
+    /// remplie, sans bouton dans le ruban, en est dispensée.
     #[test]
     fn tout_outil_avec_champs_montre_ses_parametres() {
         for &outil in Outil::TOUS {
@@ -163,8 +196,8 @@ mod tests {
             }
             let ok = match definition(outil) {
                 Definition::Palette(_) | Definition::Parametres => true,
-                Definition::Heritage => matches!(outil, Outil::VuePlan | Outil::VueCoupe | Outil::Zone),
-                Definition::Aucune => false,
+                // Zone remplie : aucun bouton dans le ruban (régions = polylignes fermées)
+                Definition::Aucune => outil == Outil::Zone,
             };
             assert!(ok, "{} a des champs mais aucune palette ne les affiche", outil.nom());
         }

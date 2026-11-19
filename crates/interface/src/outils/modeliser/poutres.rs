@@ -214,10 +214,10 @@ impl Application {
 
     /// Propriétés de l'outil Poutre : type (profil, dimensions, matériau), niveau de
     /// référence, décalage de l'arase.
-    pub(crate) fn panneau_poutre(&mut self, ui: &mut egui::Ui) {
+    /// Emplacement « sélecteur » de la poutre : type (section libre ou type du projet) et son édition.
+    pub(crate) fn selecteur_poutre(&mut self, ui: &mut egui::Ui) {
         let Some((p, _)) = &self.natif else { return };
         let (types, profils, materiaux, niveaux) = (p.types_poutres.clone(), p.profils.clone(), p.materiaux.iter().map(|m| m.nom.clone()).collect::<Vec<_>>(), p.niveaux.clone());
-        let niveau_vue = self.niveau_trace();
         let r = &mut self.bim.poutre;
         if r.type_poutre.as_ref().is_some_and(|id| !types.iter().any(|t| &t.id == id)) {
             r.type_poutre = None;
@@ -265,21 +265,6 @@ impl Application {
                 if t != avant { nouveau_type = Some(t); }
             }
         }
-        ui.separator();
-        let actuel = r.niveau.clone().or(niveau_vue.clone());
-        egui::ComboBox::from_label("Niveau de référence").selected_text(actuel.as_ref().and_then(|id| niveaux.iter().find(|n| &n.id == id)).map_or("—", |n| n.nom.as_str())).show_ui(ui, |ui| {
-            for n in &niveaux { if ui.selectable_label(actuel.as_ref() == Some(&n.id), &n.nom).clicked() { r.niveau = Some(n.id.clone()); } }
-        });
-        ui.horizontal(|ui| {
-            ui.label("Décalage");
-            ui.add(egui::DragValue::new(&mut r.decalage).speed(10.0).suffix(" mm")).on_hover_text("Cote de l'arase choisie au-dessus du niveau de référence");
-        });
-        egui::ComboBox::from_label("Arase").selected_text(r.arase.libelle()).show_ui(ui, |ui| {
-            for a in Arase::TOUTES { ui.selectable_value(&mut r.arase, a, a.libelle()); }
-        });
-        let niveau = r.niveau.as_ref().or(niveau_vue.as_ref()).and_then(|id| p.niveau(id));
-        r.croquis(ui, p, niveau);
-        ui.label(RichText::new("Tracer dans la vue : polyligne enchaînée ou rectangle ; Ctrl : justification, Espace : inverser, Entrée : terminer.").small().weak());
         if let Some(t) = nouveau_type {
             let mut q = self.natif.as_ref().unwrap().0.clone();
             match q.types_poutres.iter_mut().find(|x| x.id == t.id) {
@@ -291,6 +276,39 @@ impl Application {
                 Err(e) => self.error = Some(e),
             }
         }
+    }
+
+    /// Emplacement « schéma » de la poutre : coupe de la poutre avec ses cotes.
+    pub(crate) fn schema_poutre(&mut self, ui: &mut egui::Ui) {
+        let Some((p, _)) = &self.natif else { return };
+        let niveau_vue = self.niveau_trace();
+        let r = &mut self.bim.poutre;
+        let niveau = r.niveau.as_ref().or(niveau_vue.as_ref()).and_then(|id| p.niveau(id));
+        r.croquis(ui, p, niveau);
+    }
+
+    /// Emplacement « paramètres » de la poutre : niveau de référence, décalage, arase.
+    pub(crate) fn parametres_poutre(&mut self, ui: &mut egui::Ui) {
+        let Some((p, _)) = &self.natif else { return };
+        let niveaux = p.niveaux.clone();
+        let niveau_vue = self.niveau_trace();
+        let r = &mut self.bim.poutre;
+        if r.niveau.as_ref().is_some_and(|id| !niveaux.iter().any(|n| &n.id == id)) {
+            r.niveau = None;
+        }
+        crate::zones::palette_creation::titre_parametres(ui, "Poutre");
+        let actuel = r.niveau.clone().or(niveau_vue.clone());
+        egui::ComboBox::from_label("Niveau de référence").selected_text(actuel.as_ref().and_then(|id| niveaux.iter().find(|n| &n.id == id)).map_or("—", |n| n.nom.as_str())).show_ui(ui, |ui| {
+            for n in &niveaux { if ui.selectable_label(actuel.as_ref() == Some(&n.id), &n.nom).clicked() { r.niveau = Some(n.id.clone()); } }
+        });
+        ui.horizontal(|ui| {
+            ui.label("Décalage");
+            ui.add(egui::DragValue::new(&mut r.decalage).speed(10.0).suffix(" mm")).on_hover_text("Cote de l'arase choisie au-dessus du niveau de référence");
+        });
+        egui::ComboBox::from_label("Arase").selected_text(r.arase.libelle()).show_ui(ui, |ui| {
+            for a in Arase::TOUTES { ui.selectable_value(&mut r.arase, a, a.libelle()); }
+        });
+        ui.label(RichText::new("Tracer dans la vue : polyligne enchaînée ou rectangle ; Ctrl : justification, Espace : inverser, Entrée : terminer.").small().weak());
     }
 }
 

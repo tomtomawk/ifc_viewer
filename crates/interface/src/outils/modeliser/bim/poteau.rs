@@ -3,8 +3,9 @@ use super::*;
 use crate::outils::croquis::{self, CroquisVertical};
 
 impl Application {
-    pub(super) fn panneau_poteau(&mut self, ui: &mut egui::Ui) -> Option<commandes::Commande> {
-        let (projet, _) = self.natif.as_ref()?;
+    /// Emplacement « schéma » du poteau : section et croquis des deux limites.
+    pub(crate) fn schema_poteau(&mut self, ui: &mut egui::Ui) {
+        let Some((projet, _)) = self.natif.as_ref() else { return };
         let niveau_vue = self.niveau_trace();
         let b = &mut self.bim.barre;
         let sommet = &mut self.bim.niveau_haut_poteau;
@@ -20,118 +21,120 @@ impl Application {
             .map(|n| n.id.clone())
             .or(niveau_vue);
         let mut hauteur = b.fin[2] - b.debut[2];
-        let mut creation = false;
-        egui::ScrollArea::vertical()
-            .id_salt("creation_poteau")
-            .show(ui, |ui| {
-                ui.label(RichText::new("Section rectangulaire").strong());
-                croquis::cadre(ui, |ui| {
-                    let croquis = CroquisVertical::lignes(ui, |ui, haut| {
-                        if haut {
-                            croquis::champ_niveau(
-                                ui,
-                                "niveau_haut_poteau",
-                                &projet.niveaux,
-                                sommet,
-                                "Libre",
-                                Some("Libre (hauteur)"),
-                            );
-                        } else {
-                            croquis::champ_niveau(
-                                ui,
-                                "niveau_bas_poteau",
-                                &projet.niveaux,
-                                &mut base,
-                                "Choisir un niveau",
-                                None,
-                            );
-                        }
-                        let (valeur, info) = match (haut, sommet.is_some()) {
-                            (true, true) => {
-                                (egui::DragValue::new(decalage_haut), "Décalage du sommet")
-                            }
-                            (true, false) => (
-                                egui::DragValue::new(&mut hauteur).range(1.0..=f64::MAX),
-                                "Hauteur du poteau",
-                            ),
-                            (false, _) => {
-                                (egui::DragValue::new(&mut b.debut[2]), "Décalage de la base")
-                            }
-                        };
-                        ui.add_sized([72.0, 20.0], valeur.speed(10.0).dimensions())
-                            .on_hover_text(info);
-                    });
-                    b.niveau = base.clone().unwrap_or_default();
-                    b.fin[2] = b.debut[2] + hauteur;
-                    let calcul = sommet_poteau(projet, b, sommet.as_deref(), *decalage_haut);
-                    let [haut, bas] = croquis.references();
-                    let decalage_bas = croquis::decalage_vertical(b.debut[2]);
-                    let decalage_haut = sommet
-                        .as_ref()
-                        .map_or(decalage_bas, |_| croquis::decalage_vertical(*decalage_haut));
-                    croquis.peindre(
+        ui.label(RichText::new("Section rectangulaire").strong());
+        croquis::cadre(ui, |ui| {
+            let croquis = CroquisVertical::lignes(ui, |ui, haut| {
+                if haut {
+                    croquis::champ_niveau(
                         ui,
-                        [haut + decalage_haut, bas + decalage_bas],
-                        23.0,
-                        calcul.as_ref().ok().map(|fin| fin - b.debut[2]),
+                        "niveau_haut_poteau",
+                        &projet.niveaux,
+                        sommet,
+                        "Libre",
+                        Some("Libre (hauteur)"),
                     );
-                });
-                if let Err(erreur) = sommet_poteau(projet, b, sommet.as_deref(), *decalage_haut) {
-                    ui.colored_label(ui.visuals().error_fg_color, erreur);
+                } else {
+                    croquis::champ_niveau(
+                        ui,
+                        "niveau_bas_poteau",
+                        &projet.niveaux,
+                        &mut base,
+                        "Choisir un niveau",
+                        None,
+                    );
                 }
-                ui.add_space(4.0);
-                egui::Grid::new("grille_creation_poteau")
-                    .num_columns(2)
-                    .striped(true)
-                    .spacing([10.0, 4.0])
-                    .show(ui, |ui| {
-                        ui.label("Nom");
-                        ui.add(egui::TextEdit::singleline(&mut b.nom).desired_width(115.0));
-                        ui.end_row();
-                        for (nom, dimension) in
-                            [("Largeur", &mut b.largeur), ("Profondeur", &mut b.hauteur)]
-                        {
-                            ui.label(nom);
-                            ui.add(
-                                egui::DragValue::new(dimension)
-                                    .speed(5.0)
-                                    .range(1.0..=100_000.0)
-                                    .dimensions(),
-                            );
-                            ui.end_row();
-                        }
-                        ui.label("Rotation");
-                        ui.add(
-                            egui::DragValue::new(&mut b.rotation)
-                                .speed(1.0)
-                                .suffix(" °"),
-                        );
-                        ui.end_row();
-                    });
-                ui.label(
-                    RichText::new("Cliquez dans la vue pour placer le poteau.")
-                        .small()
-                        .weak(),
-                );
-                ui.collapsing("Placement par coordonnées", |ui| {
-                    for (nom, coordonnee) in ["X", "Y"].into_iter().zip(&mut b.debut) {
-                        ui.horizontal(|ui| {
-                            ui.label(nom);
-                            ui.add(egui::DragValue::new(coordonnee).speed(10.0).dimensions());
-                        });
+                let (valeur, info) = match (haut, sommet.is_some()) {
+                    (true, true) => {
+                        (egui::DragValue::new(decalage_haut), "Décalage du sommet")
                     }
-                    creation = ui.button("Créer le poteau").clicked();
-                });
+                    (true, false) => (
+                        egui::DragValue::new(&mut hauteur).range(1.0..=f64::MAX),
+                        "Hauteur du poteau",
+                    ),
+                    (false, _) => {
+                        (egui::DragValue::new(&mut b.debut[2]), "Décalage de la base")
+                    }
+                };
+                ui.add_sized([72.0, 20.0], valeur.speed(10.0).dimensions())
+                    .on_hover_text(info);
             });
+            b.niveau = base.clone().unwrap_or_default();
+            b.fin[2] = b.debut[2] + hauteur;
+            let calcul = sommet_poteau(projet, b, sommet.as_deref(), *decalage_haut);
+            let [haut, bas] = croquis.references();
+            let decalage_bas = croquis::decalage_vertical(b.debut[2]);
+            let decalage_haut = sommet
+                .as_ref()
+                .map_or(decalage_bas, |_| croquis::decalage_vertical(*decalage_haut));
+            croquis.peindre(
+                ui,
+                [haut + decalage_haut, bas + decalage_bas],
+                23.0,
+                calcul.as_ref().ok().map(|fin| fin - b.debut[2]),
+            );
+        });
+        if let Err(erreur) = sommet_poteau(projet, b, sommet.as_deref(), *decalage_haut) {
+            ui.colored_label(ui.visuals().error_fg_color, erreur);
+        }
+    }
+
+    /// Emplacement « paramètres » du poteau : nom, section, rotation, placement par coordonnées.
+    pub(crate) fn parametres_poteau(&mut self, ui: &mut egui::Ui) {
+        let b = &mut self.bim.barre;
+        let mut creation = false;
+        crate::zones::palette_creation::titre_parametres(ui, "Poteau");
+        egui::Grid::new("grille_creation_poteau")
+            .num_columns(2)
+            .striped(true)
+            .spacing([10.0, 4.0])
+            .show(ui, |ui| {
+                ui.label("Nom");
+                ui.add(egui::TextEdit::singleline(&mut b.nom).desired_width(115.0));
+                ui.end_row();
+                for (nom, dimension) in
+                    [("Largeur", &mut b.largeur), ("Profondeur", &mut b.hauteur)]
+                {
+                    ui.label(nom);
+                    ui.add(
+                        egui::DragValue::new(dimension)
+                            .speed(5.0)
+                            .range(1.0..=100_000.0)
+                            .dimensions(),
+                    );
+                    ui.end_row();
+                }
+                ui.label("Rotation");
+                ui.add(
+                    egui::DragValue::new(&mut b.rotation)
+                        .speed(1.0)
+                        .suffix(" °"),
+                );
+                ui.end_row();
+            });
+        ui.label(
+            RichText::new("Cliquez dans la vue pour placer le poteau.")
+                .small()
+                .weak(),
+        );
+        ui.collapsing("Placement par coordonnées", |ui| {
+            for (nom, coordonnee) in ["X", "Y"].into_iter().zip(&mut b.debut) {
+                ui.horizontal(|ui| {
+                    ui.label(nom);
+                    ui.add(egui::DragValue::new(coordonnee).speed(10.0).dimensions());
+                });
+            }
+            creation = ui.button("Créer le poteau").clicked();
+        });
         if !creation {
-            return None;
+            return;
         }
         match self.poteau_regle([self.bim.barre.debut[0], self.bim.barre.debut[1]]) {
-            Ok(barre) => Some(commandes::Commande::Barre { barre }),
-            Err(e) => {
-                self.error = Some(e);
-                None
+            Ok(barre) => {
+                if let Err(e) = self.executer_bim(commandes::Commande::Barre { barre }) {
+                    self.error = Some(e);
+                }
             }
+            Err(e) => self.error = Some(e),
         }
     }
 

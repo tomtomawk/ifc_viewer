@@ -97,6 +97,7 @@ pub(crate) enum Outil {
 
 impl Outil {
     /// Tous les outils, pour les contrôles de cohérence (palette de création).
+    #[cfg(test)]
     pub(crate) const TOUS: &'static [Outil] = &[
         Self::Niveau,
         Self::Quadrillage,
@@ -166,6 +167,7 @@ impl Outil {
     ];
 
     /// L'outil a-t-il des réglages numériques ou de choix (`champs`) ?
+    #[cfg(test)]
     pub(crate) fn a_des_champs(self) -> bool {
         !champs(self).is_empty()
     }
@@ -764,7 +766,7 @@ impl RubanEdition {
 
     /// Sélecteur de type de l'outil Coupe, comme celui des éléments horizontaux : un
     /// onglet Coupe, un onglet Élévation, leurs types (échelle, profondeur par défaut).
-    fn selecteur_coupe(&mut self, ui: &mut egui::Ui) {
+    pub fn selecteur_coupe(&mut self, ui: &mut egui::Ui) {
         let types = types_coupe();
         let k = self.type_coupe.min(types.len() - 1);
         let courant = &types[k];
@@ -798,7 +800,13 @@ impl RubanEdition {
             // profondeur par défaut du type choisi
             self.valeurs.insert((Outil::VueCoupe, 0), Valeur::Nombre(types[i].profondeur));
         }
-        ui.add_space(6.0);
+    }
+
+    /// Emplacement « paramètres » de la coupe : profondeur, échelle du type, consigne de tracé.
+    pub fn parametres_coupe(&mut self, ui: &mut egui::Ui) {
+        let types = types_coupe();
+        let k = self.type_coupe.min(types.len() - 1);
+        crate::zones::palette_creation::titre_parametres(ui, "Coupe / élévation");
         egui::Grid::new("parametres_coupe").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
             ui.label("Profondeur");
             let v = self.valeurs.entry((Outil::VueCoupe, 0)).or_insert(Valeur::Nombre(types[k].profondeur));
@@ -814,24 +822,17 @@ impl RubanEdition {
         ui.label(RichText::new("Dans une vue en plan, cliquer le début puis la fin de la ligne : la vue regarde vers sa gauche (vers le haut pour une ligne tracée de gauche à droite), sur la longueur de la ligne et la profondeur.").small().weak());
     }
 
-    /// Palette de l'outil Vue en plan : un bouton par niveau (plans existants
-    /// indiqués). Retourne le niveau et la hauteur de coupe (mm) du plan à créer.
-    pub fn proprietes_vues(&mut self, ui: &mut egui::Ui, projet: Option<&modele::Projet>) -> Option<Option<(String, f64)>> {
-        match self.selection {
-            Some(Outil::VuePlan) => {}
-            Some(Outil::VueCoupe) => {
-                self.selecteur_coupe(ui);
-                return Some(None);
-            }
-            _ => return None,
-        }
-        ui.label(RichText::new("Créer une vue en plan").strong());
+    /// Emplacement « paramètres » de la vue en plan : hauteur du plan de coupe, puis un
+    /// bouton par niveau (plans existants indiqués). Retourne le niveau et la hauteur de
+    /// coupe (mm) du plan à créer.
+    pub fn parametres_plan(&mut self, ui: &mut egui::Ui, projet: Option<&modele::Projet>) -> Option<(String, f64)> {
+        crate::zones::palette_creation::titre_parametres(ui, "Vue en plan");
         let Some(projet) = projet else {
             ui.label(RichText::new("Créez ou ouvrez un projet natif.").weak());
-            return Some(None);
+            return None;
         };
         let v = self.valeurs.entry((Outil::VuePlan, 0)).or_insert(Valeur::Nombre(1200.0));
-        let Valeur::Nombre(hauteur) = v else { return Some(None) };
+        let Valeur::Nombre(hauteur) = v else { return None };
         ui.horizontal(|ui| {
             ui.label("Hauteur du plan de coupe");
             ui.add(egui::DragValue::new(hauteur).speed(10.0).dimensions());
@@ -852,7 +853,7 @@ impl RubanEdition {
         if projet.niveaux.is_empty() {
             ui.label(RichText::new("Le projet n'a pas encore de niveau (le premier mur en crée un).").weak());
         }
-        Some(choix)
+        choix
     }
 
     /// Paramètres de l'élément horizontal à tracer (dalle, sol, plafond, toiture), si
@@ -893,7 +894,7 @@ impl RubanEdition {
     /// éléments horizontaux, ouvertures) : celui de la sélection ne s'y ajoute pas, même quand
     /// l'élément qui vient d'être créé reste sélectionné.
     pub fn selecteur_creation_actif(&self) -> bool {
-        self.mur_actif() || self.selection.is_some_and(|o| o == Outil::Ouverture || o == Outil::Poutre || o.commande() == Outil::Surfaces)
+        self.mur_actif() || self.selection.is_some_and(|o| matches!(o, Outil::Ouverture | Outil::Poutre | Outil::Terrain | Outil::Composant | Outil::Arbre | Outil::Piece | Outil::VueCoupe) || o.commande() == Outil::Surfaces)
     }
     pub fn nombre_option(&self, outil: Outil, index: usize) -> f64 {
         match self.valeurs.get(&(outil,index)) {

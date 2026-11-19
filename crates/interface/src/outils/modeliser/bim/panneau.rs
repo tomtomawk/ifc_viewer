@@ -31,7 +31,6 @@ impl Application {
         }
         let ids = self.selection_bim();
         let mut commande = None;
-        let mut ouvrir_composant: Option<Option<String>> = None;
         let mut ouvrir_etiquette: Option<(Option<String>, Option<String>)> = None;
         if self.onglet_ruban == OngletRuban::Modifier {
             if ids.len() == 1 {
@@ -356,135 +355,6 @@ impl Application {
             }
         } else if self.onglet_ruban == OngletRuban::Modeliser {
             match outil {
-                Some(Outil::Niveau) => {
-                    ui.heading("Niveaux");
-                    let p = &self.natif.as_ref().unwrap().0;
-                    for n in &p.niveaux {
-                        ui.push_id(&n.id, |ui| {
-                            let mut nom = n.nom.clone();
-                            let mut altitude = n.altitude;
-                            ui.horizontal(|ui| {
-                                // largeur relative : l'altitude reste visible quel que soit le panneau
-                                let largeur = (ui.available_width() - 90.0).clamp(40.0, 180.0);
-                                ui.add(egui::TextEdit::singleline(&mut nom).desired_width(largeur));
-                                ui.add(
-                                    egui::DragValue::new(&mut altitude).speed(10.0).dimensions(),
-                                );
-                            });
-                            if nom != n.nom || altitude != n.altitude {
-                                commande = Some(Commande::ModifierNiveau {
-                                    id: n.id.clone(),
-                                    nom,
-                                    altitude,
-                                });
-                            }
-                        });
-                    }
-                    ui.label(RichText::new("Nom et altitude : valider par Entrée ou en cliquant ailleurs.").small().weak());
-                    // nouveau niveau au-dessus du plus haut, à la hauteur du dernier étage
-                    // (3 m s'il n'y en a qu'un)
-                    let mut alts: Vec<f64> = p.niveaux.iter().map(|n| n.altitude).collect();
-                    alts.sort_by(f64::total_cmp);
-                    let etage = match alts.as_slice() {
-                        [.., a, b] if b - a > 1.0 => b - a,
-                        _ => 3000.0,
-                    };
-                    let altitude = alts.last().map_or(0.0, |h| h + etage);
-                    let nom = if p.niveaux.is_empty() { "RDC".to_string() } else { (1..).map(|k| format!("R+{k}")).find(|n| !p.niveaux.iter().any(|x| &x.nom == n)).unwrap_or_default() };
-                    if ui.button("Ajouter un niveau").on_hover_text(format!("« {nom} » à {}", modele::unite::unite().afficher(altitude))).clicked() {
-                        commande = Some(Commande::Niveau { nom, altitude });
-                    }
-                }
-                Some(Outil::Poutre) => self.panneau_poutre(ui),
-                Some(Outil::Poteau) => commande = self.panneau_poteau(ui),
-                Some(Outil::Composant) => {
-                    let p = &self.natif.as_ref().unwrap().0;
-                    let mut types = p.types_composants.clone();
-                    let defaut = modele::elements::composant::type_table();
-                    if !types.iter().any(|t| t.id == defaut.id) {
-                        types.insert(0, defaut.clone());
-                    }
-                    let c = &mut self.bim.composant;
-                    if !types.iter().any(|t| t.id == c.type_composant) {
-                        c.type_composant = types[0].id.clone();
-                    }
-                    ui.label(RichText::new("Composant").strong());
-                    egui::Grid::new("outil_composant").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
-                        ui.label("Type");
-                        choix_type_composant(ui, "type_composant_outil", &mut c.type_composant, &types);
-                        ui.end_row();
-                        ui.label("Rotation");
-                        ui.add(egui::DragValue::new(&mut c.rotation).speed(1.0).suffix(" °"));
-                        ui.end_row();
-                        ui.label("Décalage");
-                        ui.add(egui::DragValue::new(&mut c.decalage).speed(10.0).dimensions());
-                        ui.end_row();
-                    });
-                    ui.label("Cliquez dans la vue pour placer le composant (niveau de la vue) ; Espace : rotation de 90°.");
-                    let choisi = c.type_composant.clone();
-                    ui.horizontal(|ui| {
-                        if ui.button("Modifier la famille").on_hover_text("Ouvre la famille du type dans l'éditeur ; « Charger dans le projet » met à jour tous ses composants").clicked() {
-                            ouvrir_composant = Some(Some(choisi));
-                        }
-                        if ui.button("Nouvelle famille").on_hover_text("Nouvelle famille de composant dans l'éditeur, sur la base de la table").clicked() {
-                            ouvrir_composant = Some(None);
-                        }
-                    });
-                }
-                Some(Outil::Arbre) => {
-                    use modele::elements::arbre::Essence;
-                    let a = &mut self.bim.arbre;
-                    ui.label(RichText::new("Arbre").strong());
-                    egui::Grid::new("outil_arbre").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
-                        ui.label("Essence");
-                        let avant = a.essence;
-                        egui::ComboBox::from_id_salt("essence_arbre").selected_text(a.essence.nom()).show_ui(ui, |ui| {
-                            for e in Essence::TOUTES {
-                                ui.selectable_value(&mut a.essence, e, e.nom());
-                            }
-                        });
-                        if a.essence != avant {
-                            (a.hauteur, a.diametre) = a.essence.dimensions();
-                        }
-                        ui.end_row();
-                        ui.label("Hauteur");
-                        ui.add(egui::DragValue::new(&mut a.hauteur).speed(50.0).range(500.0..=60_000.0).dimensions());
-                        ui.end_row();
-                        ui.label("Houppier").on_hover_text("Diamètre du houppier");
-                        ui.add(egui::DragValue::new(&mut a.diametre).speed(50.0).range(300.0..=40_000.0).dimensions());
-                        ui.end_row();
-                        ui.label("Décalage").on_hover_text("Hauteur du pied par rapport au niveau de la vue");
-                        ui.add(egui::DragValue::new(&mut a.decalage).speed(10.0).dimensions());
-                        ui.end_row();
-                    });
-                    ui.label("Cliquez dans la vue pour planter l'arbre (niveau de la vue).");
-                }
-                Some(Outil::Piece) => {
-                    ui.label(RichText::new("Pièce").strong());
-                    ui.horizontal(|ui| {
-                        ui.label("Nom");
-                        ui.text_edit_singleline(&mut self.bim.nom_piece);
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Étiquette");
-                        let familles = self.natif.as_ref().map(|(p, _)| p.familles_etiquettes.clone()).unwrap_or_default();
-                        choix_famille_etiquette(ui, "etiquette_piece_outil", &mut self.bim.etiquette_piece, &familles);
-                        if ui.button("Modifier").on_hover_text("Éditer cette famille d'étiquette").clicked() {
-                            ouvrir_etiquette = Some((Some(self.bim.etiquette_piece.clone()), None));
-                        }
-                    });
-                    ui.label("Cliquez dans un espace fermé par des murs du niveau de la vue : le contour suit les faces intérieures ; le numéro s'incrémente.");
-                }
-                Some(Outil::Quadrillage) => {
-                    points_ui(ui, &mut self.bim.points);
-                    if ui.button("Créer le quadrillage droit").clicked() {
-                        commande = Some(Commande::Quadrillage {
-                            nom: self.ruban_edition.texte_option(Outil::Quadrillage, 0),
-                            debut: self.bim.points[0],
-                            fin: self.bim.points[1],
-                        });
-                    }
-                }
                 Some(Outil::Ouverture) => {
                     // le type à placer est dans la palette de création (selecteur_ouverture)
                     ui.label("Cliquez sur un mur pour placer l’ouverture, ou sélectionnez son hôte et saisissez l'abscisse.");
@@ -590,9 +460,6 @@ impl Application {
         }
         if let Some((famille, piece)) = ouvrir_etiquette {
             self.editer_famille_etiquette(famille, piece);
-        }
-        if let Some(t) = ouvrir_composant {
-            self.ouvrir_editeur_composant(t);
         }
         if let Some(c) = commande {
             if let Err(e) = self.executer_bim(c) {

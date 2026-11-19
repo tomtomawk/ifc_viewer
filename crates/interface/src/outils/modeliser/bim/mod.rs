@@ -7,6 +7,7 @@ use commandes::Execution;
 use config::options::Dimensions;
 
 mod identique;
+mod palettes;
 mod panneau;
 mod poteau;
 mod widgets;

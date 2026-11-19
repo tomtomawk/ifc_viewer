@@ -11,6 +11,7 @@ pub(crate) use options::boutons_trace;
 mod commandes_contour;
 mod courbures;
 mod suivre_trait;
+mod terrain_palette;
 use crate::*;
 use moteur2d::dao::{self as d2, Accroche, OutilDessin, Trace};
 use noyau::forme2d::{Geom};
@@ -607,26 +608,6 @@ impl Application {
             points: self.dessin2d.terrain_points.clone(),
             type_terrain: self.dessin2d.terrain_type.clone(),
         })
-    }
-
-    /// Sélecteur du type et cote des points pendant la création ou l'édition du terrain.
-    pub(crate) fn proprietes_terrain_creation(&mut self, ui: &mut egui::Ui) -> bool {
-        if !self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain) { return false; }
-        let Some((p, _)) = &self.natif else { return false };
-        let types = p.types_terrains_disponibles();
-        let actuel = self.dessin2d.terrain_type.as_ref().and_then(|id| types.iter().find(|t| &t.id == id)).or(types.first());
-        ui.add_space(8.0);
-        ui.label(RichText::new("Terrain").small().weak());
-        egui::ComboBox::from_id_salt("type_terrain_creation_proprietes").width((ui.available_width() - 8.0).max(1.0)).selected_text(actuel.map_or("Terrain", |t| t.nom.as_str())).show_ui(ui, |ui| {
-            for t in &types {
-                if ui.selectable_label(actuel.is_some_and(|a| a.id == t.id), &t.nom).clicked() {
-                    self.dessin2d.terrain_type = (!p.types_terrains.is_empty()).then(|| t.id.clone());
-                }
-            }
-        });
-        ui.horizontal(|ui| { ui.label("Cote NGF des points"); ui.add(egui::DragValue::new(&mut self.dessin2d.terrain_altitude).speed(10.0).dimensions()); });
-        ui.separator();
-        true
     }
 
     /// Modifier tracé d'un terrain : l'outil Terrain reprend son contour, ses cotes, ses
