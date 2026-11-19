@@ -42,3 +42,19 @@ fn site_en_phase_existant_cotes_ngf_et_epaisseur_du_type() {
     let (p, _) = p.executer(Commande::Supprimer { ids: vec![t[0].clone(), l[0].clone()] }).unwrap();
     assert!(p.contextes.is_empty());
 }
+
+/// Terrain créé avec un type du gabarit dans un projet sans types de terrain : le projet
+/// adopte les types du gabarit et les matériaux qu'ils citent.
+#[test]
+fn terrain_type_du_gabarit_adopte() {
+    use commandes::Commande;
+    let mut p = modele::Projet::nouveau("Site");
+    p.types_terrains.clear();
+    let gabarit = p.types_terrains_disponibles();
+    let t = gabarit.iter().find(|t| t.materiau.is_some()).expect("type du gabarit avec matériau").clone();
+    let terrain = Terrain { id: String::new(), nom: "Terrain".into(), contour: vec![[0.,0.,0.], [4000.,0.,0.], [4000.,4000.,0.], [0.,4000.,0.]], points: vec![], type_terrain: Some(t.id.clone()) };
+    let (p, _) = p.executer(Commande::Terrain { terrain }).unwrap();
+    assert_eq!(p.types_terrains.len(), gabarit.len());
+    assert!(p.materiau(t.materiau.as_deref().unwrap()).is_some());
+    p.verifier().unwrap();
+}

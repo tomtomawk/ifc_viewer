@@ -3,7 +3,59 @@
 //! paramètres d'une sélection multiple passent par le report commun
 //! (`commandes::report`, branché dans `appliquer_projet`).
 use crate::*;
+use crate::zones::palette_creation::titre_parametres;
+use crate::zones::ruban::selecteur;
 use modele::Projet;
+use modele::elements::site::TypeTerrain;
+
+/// Choix fait dans le sélecteur de type de terrain.
+#[derive(Default)]
+pub(crate) struct ChoixTerrain {
+    /// Type choisi dans la liste.
+    pub choisi: Option<String>,
+    /// Type à dupliquer (action au survol, ou ligne « + » : le type courant).
+    pub dupliquer: Option<String>,
+}
+
+/// Sélecteur de type de terrain, le même à la création et sur une sélection : en-tête
+/// « Terrain · nom » (« Types variés » si `courant` vaut `None`), une ligne par type
+/// (profondeur, matériau), Dupliquer au survol, « + Nouveau type de terrain… ».
+pub(crate) fn selecteur_type_terrain(ui: &mut egui::Ui, projet: &Projet, courant: Option<&str>, nombre: usize) -> ChoixTerrain {
+    let types = projet.types_terrains_disponibles();
+    let actuel = courant.and_then(|id| types.iter().find(|t| t.id == id)).or(courant.and(types.first()));
+    let detail = |t: &TypeTerrain| format!("{} · {}", modele::unite::unite().afficher(t.epaisseur), t.materiau.as_deref().unwrap_or("matériau par défaut"));
+    let details: Vec<String> = types.iter().map(detail).collect();
+    let actions: &[(selecteur::ActionType, &str)] = &[(selecteur::ActionType::Dupliquer, "Dupliquer : nouveau type d'après celui-ci")];
+    let lignes: Vec<selecteur::Ligne> = types.iter().zip(&details).map(|(t, d)| selecteur::Ligne {
+        nom: &t.nom, courant: actuel.is_some_and(|a| a.id == t.id), etiquette: None, sous_titre: None, detail: Some(d.clone()), actions,
+    }).collect();
+    let categorie = if nombre > 1 { format!("Terrains ({nombre})") } else { "Terrain".into() };
+    let titre = format!("{categorie} · {}", actuel.map_or("Types variés", |t| t.nom.as_str()));
+    let bulle = format!("{titre}\nType du terrain : profondeur sous le terrain naturel, matériau et couches.");
+    let c = selecteur::simple(ui, &titre, actuel.map(|t| modele::unite::unite().afficher(t.epaisseur)).as_deref(), &bulle, &lignes, Some("Nouveau type de terrain…"));
+    let mut choix = ChoixTerrain { choisi: c.ligne.map(|k| types[k].id.clone()), ..Default::default() };
+    if let Some((k, _)) = c.action {
+        choix.dupliquer = Some(types[k].id.clone());
+    } else if c.ajout {
+        choix.dupliquer = Some(actuel.unwrap_or(&types[0]).id.clone());
+    }
+    choix
+}
+
+/// Copie le type de terrain `source` sous un nom libre (« Terrain naturel 2 ») ; renvoie
+/// l'identifiant du nouveau type. Le type par défaut devient d'abord un type du projet.
+pub(crate) fn dupliquer_type_terrain(p: &mut Projet, source: &str) -> Option<String> {
+    p.adopter_types_terrains();
+    let modele = p.types_terrains.iter().find(|t| t.id == source)?.clone();
+    let mut k = 2;
+    let (id, nom) = loop {
+        let (id, nom) = (format!("{}-{k}", modele.id), format!("{} {k}", modele.nom));
+        if p.types_terrains.iter().all(|t| t.id != id && t.nom != nom) { break (id, nom); }
+        k += 1;
+    };
+    p.types_terrains.push(TypeTerrain { id: id.clone(), nom, ..modele });
+    Some(id)
+}
 
 /// Valeur commune (la première) et indication que les valeurs diffèrent.
 pub(crate) fn melange<T: PartialEq + Clone>(valeurs: impl IntoIterator<Item = T>) -> (Option<T>, bool) {
@@ -12,8 +64,9 @@ pub(crate) fn melange<T: PartialEq + Clone>(valeurs: impl IntoIterator<Item = T>
 }
 
 impl Application {
-    /// Terrains sélectionnés : type (épaisseur, matériau : modifiés pour tous les terrains
-    /// du type ; Dupliquer en crée un), cotes NGF extrêmes, surface en plan. Retourne le
+    /// Paramètres des terrains sélectionnés : profondeur et matériau du type (modifiés pour
+    /// tous les terrains du type), cotes NGF extrêmes, surface en plan, volume. Le type se
+    /// choisit et se duplique dans le sélecteur (`selecteur_type_terrain`). Retourne le
     /// projet modifié.
     pub(crate) fn proprietes_terrains(&self, ui: &mut egui::Ui, ids: &[String]) -> Option<Projet> {
         let (projet, _) = self.natif.as_ref()?;
@@ -21,41 +74,23 @@ impl Application {
         if terrains.is_empty() {
             return None;
         }
-        let types = projet.types_terrains_disponibles();
         let (type_actuel, mixte) = melange(terrains.iter().map(|t| projet.type_terrain(t)));
         let type_actuel = type_actuel?;
         let mut p = projet.clone();
         // le type par défaut devient un type du projet dès qu'on le modifie
-        let enregistrer_types = |p: &mut Projet| if p.types_terrains.is_empty() { p.types_terrains = types.clone(); };
+        let enregistrer_types = |p: &mut Projet| p.adopter_types_terrains();
         let mut modifie = false;
-        ui.label(RichText::new(format!("Terrain ({})", terrains.len())).strong());
+        titre_parametres(ui, if terrains.len() > 1 { "Terrains" } else { "Terrain" });
         egui::Grid::new("terrains").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
-            ui.label("Type");
-            ui.horizontal(|ui| {
-                let texte = if mixte { "Varié".to_string() } else { type_actuel.nom.clone() };
-                egui::ComboBox::from_id_salt("type_terrain_selection").width(110.0).truncate().selected_text(texte).show_ui(ui, |ui| {
-                    for t in &types {
-                        if ui.selectable_label(!mixte && t.id == type_actuel.id, &t.nom).clicked() {
-                            enregistrer_types(&mut p);
-                            p.terrains.iter_mut().filter(|x| ids.contains(&x.id)).for_each(|x| x.type_terrain = Some(t.id.clone()));
-                            modifie = true;
-                        }
-                    }
-                });
-                if ui.small_button("Dupliquer").on_hover_text("Nouveau type d'après celui-ci, affecté à la sélection").clicked() {
-                    enregistrer_types(&mut p);
-                    let mut k = 2;
-                    let (id, nom) = loop {
-                        let (id, nom) = (format!("{}-{k}", type_actuel.id), format!("{} {k}", type_actuel.nom));
-                        if p.types_terrains.iter().all(|t| t.id != id && t.nom != nom) { break (id, nom); }
-                        k += 1;
-                    };
-                    p.types_terrains.push(modele::elements::site::TypeTerrain { id: id.clone(), nom, ..type_actuel.clone() });
-                    p.terrains.iter_mut().filter(|x| ids.contains(&x.id)).for_each(|x| x.type_terrain = Some(id.clone()));
+            if let [t] = terrains.as_slice() {
+                ui.label("Nom");
+                let mut nom = t.nom.clone();
+                if ui.text_edit_singleline(&mut nom).changed() && !nom.trim().is_empty() {
+                    if let Some(x) = p.terrains.iter_mut().find(|x| x.id == t.id) { x.nom = nom; }
                     modifie = true;
                 }
-            });
-            ui.end_row();
+                ui.end_row();
+            }
             if !mixte {
                 ui.label("Profondeur nominale").on_hover_text("Profondeur du type : du point le plus bas du terrain naturel au fond plat, pour tous les terrains de ce type");
                 let mut e = type_actuel.epaisseur;
@@ -188,4 +223,32 @@ pub(crate) fn choisir_remplissage_2d(ui: &mut egui::Ui, projet: &modele::Projet,
         }
     });
     choix
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Dupliquer le type par défaut l'enregistre dans le projet, puis ajoute une copie au
+    /// nom libre ; une seconde copie prend le numéro suivant.
+    #[test]
+    fn dupliquer_type_terrain_noms_libres() {
+        let mut p = Projet::nouveau("Essai");
+        p.types_terrains.clear();
+        let source = p.types_terrains_disponibles()[0].clone();
+        let a = dupliquer_type_terrain(&mut p, &source.id).unwrap();
+        let b = dupliquer_type_terrain(&mut p, &source.id).unwrap();
+        assert_ne!(a, b);
+        let n = p.types_terrains.len();
+        assert!(n >= 3 && p.types_terrains[0].id == source.id);
+        let copies: Vec<&str> = p.types_terrains[n - 2..].iter().map(|t| t.nom.as_str()).collect();
+        assert_eq!(copies, [format!("{} 2", source.nom), format!("{} 3", source.nom)]);
+        assert!(p.types_terrains[n - 2..].iter().all(|t| t.epaisseur == source.epaisseur));
+        assert!(dupliquer_type_terrain(&mut p, "absent").is_none());
+        p.verifier().unwrap();
+        let mut m = modele::Projet::lire_json(include_str!("../../../../samples/maison_native.modele.json")).unwrap();
+        let id = m.types_terrains_disponibles()[0].id.clone();
+        dupliquer_type_terrain(&mut m, &id).unwrap();
+        m.verifier().unwrap();
+    }
 }

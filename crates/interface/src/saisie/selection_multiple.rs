@@ -80,9 +80,7 @@ fn appliquer_composants(q: &mut Projet, ids: &[String], t: Option<&str>) -> Resu
 
 fn appliquer_terrains(q: &mut Projet, ids: &[String], t: Option<&str>) -> Result<(), String> {
     // le type par défaut devient un type du projet dès qu'on l'affecte
-    if q.types_terrains.is_empty() {
-        q.types_terrains = q.types_terrains_disponibles();
-    }
+    q.adopter_types_terrains();
     q.terrains.iter_mut().filter(|x| ids.contains(&x.id)).for_each(|x| x.type_terrain = t.map(str::to_string));
     Ok(())
 }
@@ -216,14 +214,15 @@ impl Application {
             } else {
                 g.types.iter().find(|t| t.0 == commun).map_or_else(|| commun.clone().unwrap_or_else(|| "Standard".into()), |t| t.1.clone())
             };
-            ui.label(RichText::new(format!("{} ({})", g.libelle, g.cibles.len())).small().weak());
-            egui::ComboBox::from_id_salt(("types_selection_multiple", g.libelle)).width((ui.available_width() - 8.0).max(1.0)).selected_text(nom).show_ui(ui, |ui| {
-                for (id, nom) in &g.types {
-                    if ui.selectable_label(!mixte && *id == commun, nom).clicked() {
-                        choix = Some((k, id.clone()));
-                    }
-                }
-            });
+            let lignes: Vec<crate::zones::ruban::selecteur::Ligne> = g.types.iter().map(|(id, nom)| crate::zones::ruban::selecteur::Ligne {
+                nom, courant: !mixte && *id == commun, etiquette: None, sous_titre: None, detail: None, actions: &[],
+            }).collect();
+            let titre = format!("{} ({}) · {nom}", g.libelle, g.cibles.len());
+            let c = crate::zones::ruban::selecteur::simple(ui, &titre, None, &format!("{titre}\nLe type choisi s'applique à tous les éléments de cette sorte."), &lignes, None);
+            if let Some(i) = c.ligne {
+                choix = Some((k, g.types[i].0.clone()));
+            }
+            ui.add_space(4.0);
         }
         ui.separator();
         let (k, t) = choix?;

@@ -3,30 +3,29 @@
 use super::*;
 
 
-/// Liste des types de composants ; vrai si le choix a changé.
-pub(crate) fn choix_famille_etiquette(ui: &mut egui::Ui, salt: &str, choix: &mut String, familles: &[modele::documentation::FamilleEtiquette]) -> bool {
-    let avant = choix.clone();
-    egui::ComboBox::from_id_salt(salt)
-        .selected_text(familles.iter().find(|f| &f.id == choix).map_or("Étiquette standard", |f| f.nom.as_str()))
-        .show_ui(ui, |ui| {
-            ui.selectable_value(choix, String::new(), "Étiquette standard");
-            for f in familles {
-                ui.selectable_value(choix, f.id.clone(), &f.nom);
-            }
-        });
-    *choix != avant
+/// Sélecteur standard de la famille d'étiquette d'une pièce ; vrai si le choix a changé.
+pub(crate) fn choix_famille_etiquette(ui: &mut egui::Ui, choix: &mut String, familles: &[modele::documentation::FamilleEtiquette]) -> bool {
+    use crate::zones::ruban::selecteur;
+    let noms: Vec<(String, &str)> = std::iter::once((String::new(), "Étiquette standard")).chain(familles.iter().map(|f| (f.id.clone(), f.nom.as_str()))).collect();
+    let lignes: Vec<selecteur::Ligne> = noms.iter().map(|(id, nom)| selecteur::Ligne { nom, courant: id == choix, etiquette: None, sous_titre: None, detail: None, actions: &[] }).collect();
+    let titre = format!("Pièce · {}", noms.iter().find(|(id, _)| id == choix).map_or("Étiquette standard", |(_, n)| n));
+    let c = selecteur::simple(ui, &titre, None, &format!("{titre}\nFamille d'étiquette de la pièce."), &lignes, None);
+    match c.ligne {
+        Some(k) if noms[k].0 != *choix => { *choix = noms[k].0.clone(); true }
+        _ => false,
+    }
 }
 
-pub(crate) fn choix_type_composant(ui: &mut egui::Ui, salt: &str, choix: &mut String, types: &[modele::TypeComposant]) -> bool {
-    let avant = choix.clone();
-    egui::ComboBox::from_id_salt(salt)
-        .selected_text(types.iter().find(|t| &t.id == choix).map_or("Choisir un type", |t| t.nom.as_str()))
-        .show_ui(ui, |ui| {
-            for t in types {
-                ui.selectable_value(choix, t.id.clone(), &t.nom);
-            }
-        });
-    *choix != avant
+/// Sélecteur standard du type de composant ; vrai si le choix a changé.
+pub(crate) fn choix_type_composant(ui: &mut egui::Ui, choix: &mut String, types: &[modele::TypeComposant]) -> bool {
+    use crate::zones::ruban::selecteur;
+    let lignes: Vec<selecteur::Ligne> = types.iter().map(|t| selecteur::Ligne { nom: &t.nom, courant: &t.id == choix, etiquette: None, sous_titre: None, detail: None, actions: &[] }).collect();
+    let titre = format!("Composant · {}", types.iter().find(|t| &t.id == choix).map_or("Choisir un type", |t| t.nom.as_str()));
+    let c = selecteur::simple(ui, &titre, None, &format!("{titre}\nType du composant à placer."), &lignes, None);
+    match c.ligne {
+        Some(k) if types[k].id != *choix => { *choix = types[k].id.clone(); true }
+        _ => false,
+    }
 }
 
 pub(crate) fn barre_ui(ui: &mut egui::Ui, b: &mut modele::Barre, niveaux: &[modele::Niveau]) {

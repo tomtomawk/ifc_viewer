@@ -227,19 +227,24 @@ impl Application {
         }
         let mut nouveau_type = None;
         let nom = r.type_poutre.as_ref().and_then(|id| types.iter().find(|t| &t.id == id)).map_or_else(|| format!("Section {} × {} mm", r.largeur, r.hauteur), |t| t.nom.clone());
-        ui.label(RichText::new("Type de poutre").small().weak());
-        egui::ComboBox::from_id_salt("type_poutre").width((ui.available_width() - 8.0).max(1.0)).selected_text(nom).show_ui(ui, |ui| {
-            ui.selectable_value(&mut r.type_poutre, None, "Section rectangulaire libre");
-            for t in &types { ui.selectable_value(&mut r.type_poutre, Some(t.id.clone()), &t.nom); }
-        });
+        {
+            use crate::zones::ruban::selecteur;
+            let details: Vec<String> = types.iter().map(|t| format!("{} × {} mm", t.largeur, t.hauteur)).collect();
+            let mut lignes = vec![selecteur::Ligne { nom: "Section rectangulaire libre", courant: r.type_poutre.is_none(), etiquette: None, sous_titre: None, detail: Some(format!("{} × {} mm", r.largeur, r.hauteur)), actions: &[] }];
+            lignes.extend(types.iter().zip(&details).map(|(t, d)| selecteur::Ligne { nom: &t.nom, courant: r.type_poutre.as_ref() == Some(&t.id), etiquette: None, sous_titre: None, detail: Some(d.clone()), actions: &[] }));
+            let titre = format!("Poutre · {nom}");
+            if let Some(k) = selecteur::simple(ui, &titre, None, &format!("{titre}\nType de poutre : profil, dimensions, matériau."), &lignes, None).ligne {
+                r.type_poutre = k.checked_sub(1).map(|i| types[i].id.clone());
+            }
+        }
         let type_courant = r.type_poutre.as_ref().and_then(|id| types.iter().find(|t| &t.id == id)).cloned();
         match type_courant {
             None => {
                 ui.horizontal(|ui| {
                     ui.label("Section");
-                    ui.add(egui::DragValue::new(&mut r.largeur).range(10.0..=5000.0).suffix(" mm"));
+                    ui.add(egui::DragValue::new(&mut r.largeur).range(10.0..=5000.0).dimensions());
                     ui.label("×");
-                    ui.add(egui::DragValue::new(&mut r.hauteur).range(10.0..=5000.0).suffix(" mm"));
+                    ui.add(egui::DragValue::new(&mut r.hauteur).range(10.0..=5000.0).dimensions());
                 });
                 if ui.button("Créer un type d'après cette section…").clicked() {
                     nouveau_type = Some(TypePoutre { id: format!("type-poutre-{}", noyau::uuid::uuid()), nom: format!("Poutre {} × {}", r.largeur, r.hauteur), profil: None, largeur: r.largeur, hauteur: r.hauteur, materiau: None });
@@ -254,9 +259,9 @@ impl Application {
                 });
                 ui.horizontal(|ui| {
                     ui.label("Largeur");
-                    ui.add(egui::DragValue::new(&mut t.largeur).range(10.0..=5000.0).suffix(" mm"));
+                    ui.add(egui::DragValue::new(&mut t.largeur).range(10.0..=5000.0).dimensions());
                     ui.label("Hauteur");
-                    ui.add(egui::DragValue::new(&mut t.hauteur).range(10.0..=5000.0).suffix(" mm"));
+                    ui.add(egui::DragValue::new(&mut t.hauteur).range(10.0..=5000.0).dimensions());
                 });
                 egui::ComboBox::from_label("Matériau").selected_text(t.materiau.clone().unwrap_or_else(|| "Par défaut".into())).show_ui(ui, |ui| {
                     ui.selectable_value(&mut t.materiau, None, "Par défaut");
@@ -303,7 +308,7 @@ impl Application {
         });
         ui.horizontal(|ui| {
             ui.label("Décalage");
-            ui.add(egui::DragValue::new(&mut r.decalage).speed(10.0).suffix(" mm")).on_hover_text("Cote de l'arase choisie au-dessus du niveau de référence");
+            ui.add(egui::DragValue::new(&mut r.decalage).speed(10.0).dimensions()).on_hover_text("Cote de l'arase choisie au-dessus du niveau de référence");
         });
         egui::ComboBox::from_label("Arase").selected_text(r.arase.libelle()).show_ui(ui, |ui| {
             for a in Arase::TOUTES { ui.selectable_value(&mut r.arase, a, a.libelle()); }

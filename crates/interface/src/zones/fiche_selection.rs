@@ -55,7 +55,8 @@ fn genre(p: &modele::Projet, id: &str) -> Option<Genre> {
 
 fn fiche(g: Genre) -> Fiche {
     match g {
-        Genre::Terrain => Fiche { selecteur: deja_present, parametres: parametres_terrain },
+        // sélecteur et paramètres : `selecteur_type_selection` et `proprietes_terrains`
+        Genre::Terrain => Fiche { selecteur: deja_present, parametres: deja_present },
         Genre::Limite => Fiche { selecteur: selecteur_limite, parametres: parametres_limite },
         Genre::Coupe => Fiche { selecteur: selecteur_coupe, parametres: parametres_coupe },
         Genre::Quadrillage => Fiche { selecteur: selecteur_quadrillage, parametres: parametres_quadrillage },
@@ -103,7 +104,7 @@ fn entete_generique(ui: &mut egui::Ui, objet: &str, detail: Option<&str>) {
     selecteur::entete_fixe(ui, &format!("{objet} · {}", detail.unwrap_or("Générique")), "Cet objet n'a pas de type à choisir.");
 }
 
-/// Le sélecteur de type est déjà affiché plus haut (`selecteur_type_selection`).
+/// Déjà affiché plus haut (`selecteur_type_selection`, `proprietes_terrains`).
 fn deja_present(_: &mut Application, _: &mut egui::Ui, _: &str) {}
 
 fn selecteur_limite(_: &mut Application, ui: &mut egui::Ui, _: &str) {
@@ -186,13 +187,8 @@ fn selecteur_piece(a: &mut Application, ui: &mut egui::Ui, id: &str) {
     let Some((p, _)) = &a.natif else { return };
     let Some(original) = p.pieces.iter().find(|x| x.id == id) else { return };
     let mut x = original.clone();
-    ui.label(RichText::new("Étiquette").small().weak());
-    let mut change = false;
-    let mut nouvelle = false;
-    ui.horizontal(|ui| {
-        change = choix_famille_etiquette(ui, "etiquette_piece_selection", &mut x.etiquette, &p.familles_etiquettes);
-        nouvelle = ui.button("Nouvelle famille").on_hover_text("Nouvelle famille d'étiquette, sur la base de celle-ci, affectée à cette pièce").clicked();
-    });
+    let change = choix_famille_etiquette(ui, &mut x.etiquette, &p.familles_etiquettes);
+    let nouvelle = ui.button("Nouvelle famille d'étiquette").on_hover_text("Nouvelle famille d'étiquette, sur la base de celle-ci, affectée à cette pièce").clicked();
     let commande = (change && !x.nom.trim().is_empty() && !x.numero.trim().is_empty()).then(|| Commande::Piece { piece: x.clone() });
     executer(a, commande);
     if nouvelle {
@@ -259,27 +255,6 @@ fn parametres_composant(a: &mut Application, ui: &mut egui::Ui, id: &str) {
         if change {
             commande = Some(Commande::Composant { composant: x });
         }
-    }
-    executer(a, commande);
-}
-
-fn parametres_terrain(a: &mut Application, ui: &mut egui::Ui, id: &str) {
-    let mut commande: Option<Commande> = None;
-    {
-        let Some((p, _)) = &a.natif else { return };
-    if let Some(original) = p.terrains.iter().find(|t| t.id == id) {
-        let mut terrain = original.clone();
-        titre_parametres(ui, "Terrain");
-        let change = ui.text_edit_singleline(&mut terrain.nom).changed();
-        // volume du solide (épaisseur du type sous la surface) ; les cotes des
-        // sommets et points se modifient dans la vue (outil Modifier)
-        let e = p.type_terrain(&terrain).epaisseur;
-        match modele::elements::terre_plein::solide_terrain(p, &terrain, e) {
-            Ok(tris) => ui.label(format!("Volume : {:.2} m³", modele::volumes::geometrie::volume(&tris) / 1e9)),
-            Err(e) => ui.label(RichText::new(e).weak()),
-        };
-        if change { commande = Some(Commande::Terrain { terrain }); }
-    }
     }
     executer(a, commande);
 }

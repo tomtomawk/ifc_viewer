@@ -78,7 +78,7 @@ impl Application {
             ui.separator();
             if choisi != actuel.id {
                 let mut p = projet.clone();
-                if p.types_terrains.is_empty() { p.types_terrains = types; }
+                p.adopter_types_terrains();
                 if let Some(x) = p.dalles.iter_mut().find(|x| x.id == d.id) { x.type_remblai = Some(choisi); }
                 nouveau = Some(p);
             }
@@ -198,17 +198,13 @@ impl Application {
             }
             ui.separator();
         } else if let Some(arbre) = projet.arbres.iter().find(|a| modele::identifiants::id_natif("arbre", &a.id) == id) {
-            use modele::elements::arbre::Essence;
+            // essence : sélecteur en tête du volet (`selecteur_type_selection`)
             let mut a = arbre.clone();
-            ui.label(RichText::new(format!("Arbre · {}", a.nom)).strong());
+            crate::zones::palette_creation::titre_parametres(ui, "Arbre");
             let mut change = false;
             egui::Grid::new("arbre_proprietes").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
-                ui.label("Essence");
-                egui::ComboBox::from_id_salt("arbre_essence").selected_text(a.essence.nom()).show_ui(ui, |ui| {
-                    for e in Essence::TOUTES {
-                        change |= ui.selectable_value(&mut a.essence, e, e.nom()).changed();
-                    }
-                });
+                ui.label("Nom");
+                change |= ui.text_edit_singleline(&mut a.nom).changed() && !a.nom.trim().is_empty();
                 ui.end_row();
                 ui.label("Hauteur");
                 change |= ui.add(egui::DragValue::new(&mut a.hauteur).speed(50.0).range(500.0..=60_000.0).dimensions()).changed();

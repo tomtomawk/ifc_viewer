@@ -21,8 +21,7 @@ impl Application {
         if !types.iter().any(|t| t.id == c.type_composant) {
             c.type_composant = types[0].id.clone();
         }
-        ui.label(RichText::new("Type de composant").small().weak());
-        choix_type_composant(ui, "type_composant_outil", &mut c.type_composant, &types);
+        choix_type_composant(ui, &mut c.type_composant, &types);
         let choisi = c.type_composant.clone();
         let mut ouvrir: Option<Option<String>> = None;
         ui.horizontal(|ui| {
@@ -55,13 +54,14 @@ impl Application {
     pub(crate) fn selecteur_arbre(&mut self, ui: &mut egui::Ui) {
         use modele::elements::arbre::Essence;
         let a = &mut self.bim.arbre;
-        ui.label(RichText::new("Essence").small().weak());
         let avant = a.essence;
-        egui::ComboBox::from_id_salt("essence_arbre").width((ui.available_width() - 8.0).max(1.0)).selected_text(a.essence.nom()).show_ui(ui, |ui| {
-            for e in Essence::TOUTES {
-                ui.selectable_value(&mut a.essence, e, e.nom());
-            }
-        });
+        let lignes: Vec<crate::zones::ruban::selecteur::Ligne> = Essence::TOUTES.iter().map(|e| crate::zones::ruban::selecteur::Ligne {
+            nom: e.nom(), courant: *e == a.essence, etiquette: None, sous_titre: None, detail: None, actions: &[],
+        }).collect();
+        let titre = format!("Arbre · {}", a.essence.nom());
+        if let Some(k) = crate::zones::ruban::selecteur::simple(ui, &titre, None, &format!("{titre}\nEssence : elle règle la hauteur et le houppier par défaut."), &lignes, None).ligne {
+            a.essence = Essence::TOUTES[k];
+        }
         if a.essence != avant {
             (a.hauteur, a.diametre) = a.essence.dimensions();
         }
@@ -86,12 +86,8 @@ impl Application {
     /// Pièce : famille d'étiquette.
     pub(crate) fn selecteur_piece(&mut self, ui: &mut egui::Ui) {
         let familles = self.natif.as_ref().map(|(p, _)| p.familles_etiquettes.clone()).unwrap_or_default();
-        ui.label(RichText::new("Étiquette").small().weak());
-        let mut ouvrir = false;
-        ui.horizontal(|ui| {
-            choix_famille_etiquette(ui, "etiquette_piece_outil", &mut self.bim.etiquette_piece, &familles);
-            ouvrir = ui.button("Modifier").on_hover_text("Éditer cette famille d'étiquette").clicked();
-        });
+        choix_famille_etiquette(ui, &mut self.bim.etiquette_piece, &familles);
+        let ouvrir = ui.button("Modifier l'étiquette").on_hover_text("Éditer cette famille d'étiquette").clicked();
         if ouvrir {
             self.editer_famille_etiquette(Some(self.bim.etiquette_piece.clone()), None);
         }

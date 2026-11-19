@@ -68,6 +68,14 @@ Comportement attendu de chaque fonction : `docs/MODIFICATION.md`.
 | M17 | Feuilles natives en onglets de dessin éditables | P2 | `docs/EDITION.md` |
 | M18 | Épaisseurs de trait par catégorie (voir E1) | P2 | `README.md` « Limites connues » |
 | M19 | Palette de commandes ; aide contextuelle | P3 | — |
+| U2 | Revue des parcours du 20/11/2026 : Étiquette, Quadrillage et Niveau ne se placent pas dans la vue (formulaire de coordonnées, bouton « Ajouter ») ; attendu : Étiquette = clic sur l'élément puis point, Quadrillage = tracé à 2 points, Niveau = clic en coupe ou élévation | P1 | `outils/modeliser/bim/placement.rs`, `bim/palettes.rs` ; `docs/MODIFICATION.md` §1 « tout se fait graphiquement » |
+| U3 | Revue des parcours : champs de réglage affichés mais jamais lus (relevé par lecture du code, à confirmer champ par champ) — Déplacer (Distance, Contrainte), Copier (Copies, Distance), Tourner (Angle), Cote (Mode, Décalage papier), Texte (Ligne de repère, Alignement), Étiquette (Contenu, Hauteur papier), Quadrillage (Tracé) : les brancher ou les retirer | P1 | `crates/interface/src/zones/ruban/mod.rs` (`champs`) |
+| U4 | Revue des parcours : options au bandeau seulement pour les tracés et Modifier ; Cote, Altimétrie, Poteau, Composant, Arbre, Pièce, Spline, Cercle n'ont leurs réglages que dans Propriétés | P2 | `outils/dessiner/dessin_plan/saisie.rs` (`barre_commande`) |
+| U5 | Revue des parcours : consigne absente dans la vue pour Ouverture ; consigne d'Ajuster au curseur au lieu de sous le bandeau | P2 | `socle/viewport.rs`, `outils/modifier/ajuster.rs` |
+| U6 | Revue des parcours : clic droit sans effet pendant Composant, Arbre, Pièce, Poteau (Échap quitte) ; Attacher au toit : Échap quitte au lieu de revenir d'une étape | P1 | `socle/viewport.rs` |
+| U7 | Revue des parcours : Déplacer, Copier, Tourner, Symétrie, Réseau, Échelle exigent une sélection préalable ; pas d'étape « Sélectionner, Entrée pour valider » dans la commande | P2 | `outils/modifier/transformer.rs`, `docs/MODIFICATION.md` §1 |
+| U8 | Revue des parcours : Spline et Cercle sans type de trait à la création (« Générique »), alors qu'il existe à la sélection | P2 | `zones/palette_creation.rs` |
+| U9 | Sélecteurs simples (terrain, arbre, composant, pièce, poutre, sélection multiple) : vignettes ; Renommer et Dupliquer pour composant et poutre ; éditeur de type de terrain (couches) depuis le sélecteur | P3 | `zones/ruban/selecteur.rs` (`simple`) |
 
 ## 5. Familles
 

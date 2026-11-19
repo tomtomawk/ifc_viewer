@@ -1181,6 +1181,15 @@ impl Projet {
         if g.types_terrains.is_empty() { vec![site::TypeTerrain::defaut()] } else { g.types_terrains.clone() }
     }
 
+    /// Les types de terrain du gabarit deviennent ceux du projet s'il n'en a pas, avec les
+    /// matériaux qu'ils citent (à faire avant d'affecter ou de modifier un type).
+    pub fn adopter_types_terrains(&mut self) {
+        if self.types_terrains.is_empty() {
+            self.types_terrains = self.types_terrains_disponibles();
+        }
+        self.completer_materiaux();
+    }
+
     /// Range un élément du site nouvellement créé dans la phase Existant (créée au
     /// besoin, en premier), sauf s'il a déjà un contexte.
     pub fn ranger_existant(&mut self, id: &str) {

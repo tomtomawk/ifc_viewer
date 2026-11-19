@@ -198,3 +198,39 @@ pub(crate) fn ligne_ajout(ui: &mut egui::Ui, texte: &str) -> bool {
     }
     reponse.clicked()
 }
+
+/// Choix fait dans un sélecteur [`simple`].
+#[derive(Default, PartialEq, Eq, Debug)]
+pub(crate) struct Choix {
+    /// Ligne choisie (rang dans `lignes`).
+    pub ligne: Option<usize>,
+    /// Action au survol d'une ligne (rang, action).
+    pub action: Option<(usize, ActionType)>,
+    /// Ligne « + » de fin de liste cliquée.
+    pub ajout: bool,
+}
+
+/// Sélecteur complet sans vignette pour les objets aux types simples (terrain, arbre,
+/// composant, sélection multiple) : en-tête « catégorie · nom », liste des lignes, ligne
+/// « + » facultative. Même aspect que les sélecteurs de mur ou de garde-corps.
+pub(crate) fn simple(ui: &mut egui::Ui, titre: &str, detail: Option<&str>, bulle: &str, lignes: &[Ligne], ajout: Option<&str>) -> Choix {
+    let bouton = entete(ui, titre, detail, bulle, None);
+    let largeur = largeur_liste(ui, lignes.iter().map(|l| l.nom), 120.0, 0, 0.0);
+    let hauteur = lignes.iter().map(|l| if l.sous_titre.is_some() { HAUTEUR_LIGNE_DOUBLE } else { HAUTEUR_LIGNE }).sum::<f32>()
+        + if ajout.is_some() { HAUTEUR_LIGNE + 12.0 } else { 4.0 };
+    let mut choix = Choix::default();
+    liste(&bouton, largeur, hauteur, |ui| {
+        for (k, l) in lignes.iter().enumerate() {
+            let clic = ligne(ui, l, None);
+            if let Some(a) = clic.action {
+                choix.action = Some((k, a));
+            } else if clic.choisi {
+                choix.ligne = Some(k);
+            }
+        }
+        if let Some(texte) = ajout {
+            choix.ajout = ligne_ajout(ui, texte);
+        }
+    });
+    choix
+}

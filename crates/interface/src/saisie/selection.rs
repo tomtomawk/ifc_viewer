@@ -1,6 +1,7 @@
 //! Sélection : clic, rectangle, cadrage sur les objets.
 use commandes::Execution;
 use crate::*;
+use crate::zones::ruban::selecteur;
 
 impl Application {
     pub(crate) fn select(&mut self, id: Option<Id>, reveal: bool) {
@@ -38,50 +39,50 @@ impl Application {
         let [id] = ids.as_slice() else { return None };
         if let Some(arbre) = p.arbres.iter().find(|a| &a.id == id) {
             use modele::elements::arbre::Essence;
-            let mut choisi = arbre.essence;
-            ui.label(RichText::new("Arbre").small().weak());
-            egui::ComboBox::from_id_salt("essence_arbre_selection").width((ui.available_width() - 8.0).max(1.0)).selected_text(choisi.nom()).show_ui(ui, |ui| {
-                for essence in Essence::TOUTES { ui.selectable_value(&mut choisi, essence, essence.nom()); }
-            });
+            let lignes: Vec<selecteur::Ligne> = Essence::TOUTES.iter().map(|e| selecteur::Ligne {
+                nom: e.nom(), courant: *e == arbre.essence, etiquette: None, sous_titre: None, detail: None, actions: &[],
+            }).collect();
+            let titre = format!("Arbre · {}", arbre.essence.nom());
+            let choix = selecteur::simple(ui, &titre, None, &format!("{titre}\nEssence de l'arbre."), &lignes, None);
             ui.separator();
-            if choisi != arbre.essence {
-                let mut q = p.clone();
-                if let Some(a) = q.arbres.iter_mut().find(|a| &a.id == id) { a.essence = choisi; }
-                return Some(q);
+            let essence = Essence::TOUTES[choix.ligne?];
+            if essence == arbre.essence {
+                return None;
             }
-            return None;
+            let mut q = p.clone();
+            if let Some(a) = q.arbres.iter_mut().find(|a| &a.id == id) { a.essence = essence; }
+            return Some(q);
         }
         if let Some(terrain) = p.terrains.iter().find(|t| &t.id == id) {
-            let actuel = p.type_terrain(terrain);
-            let mut choisi = actuel.id.clone();
-            ui.label(RichText::new("Terrain").small().weak());
-            egui::ComboBox::from_id_salt("type_terrain_en_tete_selection").width((ui.available_width() - 8.0).max(1.0)).selected_text(&actuel.nom).show_ui(ui, |ui| {
-                if p.types_terrains.is_empty() { ui.selectable_value(&mut choisi, actuel.id.clone(), &actuel.nom); }
-                for t in &p.types_terrains { ui.selectable_value(&mut choisi, t.id.clone(), &t.nom); }
-            });
+            let actuel = p.type_terrain(terrain).id;
+            let choix = crate::zones::communes::selecteur_type_terrain(ui, p, Some(&actuel), 1);
             ui.separator();
-            if choisi != actuel.id {
-                let mut q = p.clone();
-                if let Some(t) = q.terrains.iter_mut().find(|t| &t.id == id) { t.type_terrain = Some(choisi); }
-                return Some(q);
-            }
-            return None;
+            let mut q = p.clone();
+            let nouveau = match (choix.choisi, choix.dupliquer) {
+                (_, Some(source)) => crate::zones::communes::dupliquer_type_terrain(&mut q, &source)?,
+                (Some(t), None) if t != actuel => t,
+                _ => return None,
+            };
+            q.adopter_types_terrains();
+            if let Some(t) = q.terrains.iter_mut().find(|t| &t.id == id) { t.type_terrain = Some(nouveau); }
+            return Some(q);
         }
         if let Some(composant) = p.composants.iter().find(|c| &c.id == id) {
             let actuel = composant.type_composant.clone();
             let nom = p.types_composants.iter().find(|t| t.id == actuel).map_or("Type absent", |t| t.nom.as_str());
-            let mut choisi = actuel.clone();
-            ui.label(RichText::new("Composant").small().weak());
-            egui::ComboBox::from_id_salt("type_composant_en_tete_selection").width((ui.available_width() - 8.0).max(1.0)).selected_text(nom).show_ui(ui, |ui| {
-                for t in &p.types_composants { ui.selectable_value(&mut choisi, t.id.clone(), &t.nom); }
-            });
+            let lignes: Vec<selecteur::Ligne> = p.types_composants.iter().map(|t| selecteur::Ligne {
+                nom: &t.nom, courant: t.id == actuel, etiquette: None, sous_titre: None, detail: None, actions: &[],
+            }).collect();
+            let titre = format!("Composant · {nom}");
+            let choix = selecteur::simple(ui, &titre, None, &format!("{titre}\nType du composant."), &lignes, None);
             ui.separator();
-            if choisi != actuel {
-                let mut q = p.clone();
-                if let Some(c) = q.composants.iter_mut().find(|c| &c.id == id) { c.type_composant = choisi; }
-                return Some(q);
+            let choisi = p.types_composants[choix.ligne?].id.clone();
+            if choisi == actuel {
+                return None;
             }
-            return None;
+            let mut q = p.clone();
+            if let Some(c) = q.composants.iter_mut().find(|c| &c.id == id) { c.type_composant = choisi; }
+            return Some(q);
         }
         // (élément, type actuel, types proposés (id, nom, détail), genre)
         enum Cible { Assemblage(String), Mur(String), Dalle(String), Ouverture(String) }

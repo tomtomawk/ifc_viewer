@@ -140,7 +140,10 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   longueur tapée pendant le glissement ou dans la cote affichée ensuite) et un carré
   au milieu (glisser déplace). Les hauteurs des extrémités sont gardées ; chaque
   glissement est une seule étape d'annulation. Leurs quantités et classes `IfcColumn` / `IfcBeam` sont exportées.
-- **Modéliser → Terrain** : choisir le type (épaisseur, matériau), tracer un périmètre
+- **Modéliser → Terrain** : choisir le type (épaisseur, matériau) dans le sélecteur
+  « Terrain · nom » (Dupliquer au survol d'une ligne, « + Nouveau type de terrain… » ;
+  un type du gabarit choisi dans un projet qui n'a pas encore de types de terrain les
+  fait adopter par le projet avec leurs matériaux), tracer un périmètre
   fermé et le fermer par clic droit, F ou en cliquant le premier sommet. Les cotes sont
   **NGF**, dans l'unité du projet, et se règlent à côté de chaque sommet (S1, S2…) et de
   chaque point coté. Glisser un sommet ou un point le déplace ; glisser le milieu d'un
@@ -196,7 +199,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   Le panneau Propriétés commence par le sélecteur de type de l'élément : mur composé
   (couches reconstruites d'après le type choisi ; une couche sélectionnée montre le
   type de son mur), mur seul (types à une couche), élément horizontal, porte ou
-  fenêtre (dimensions du type). Plusieurs éléments sélectionnés : un sélecteur par
+  fenêtre (dimensions du type), terrain, arbre (essence), composant. Tous ces
+  sélecteurs ont le même aspect (en-tête « catégorie · nom », liste surgissante ;
+  `zones/ruban/selecteur.rs`). Plusieurs éléments sélectionnés : un sélecteur par
   sorte d'élément présente (murs, murs composés, éléments horizontaux, portes et
   fenêtres, ouvertures libres, composants, terrains, garde-corps, arbres), même si
   la sélection en mélange plusieurs ; « Types variés » quand les types diffèrent, et

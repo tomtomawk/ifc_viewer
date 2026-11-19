@@ -18,6 +18,10 @@ impl ExecutionModeliser for Projet {
             // éléments du site : créés dans la phase Existant
             Commande::Terrain { mut terrain } => {
                 terrain.triangles()?;
+                // type du gabarit choisi dans un projet qui n'a pas encore ses types
+                if terrain.type_terrain.as_ref().is_some_and(|t| self.types_terrains.iter().all(|x| &x.id != t)) {
+                    self.adopter_types_terrains();
+                }
                 if terrain.id.is_empty() { terrain.id = identite(self, "terrain"); }
                 let id = terrain.id.clone();
                 if let Some(t) = self.terrains.iter_mut().find(|t| t.id == id) { *t = terrain; } else { self.terrains.push(terrain); self.ranger_existant(&id); }

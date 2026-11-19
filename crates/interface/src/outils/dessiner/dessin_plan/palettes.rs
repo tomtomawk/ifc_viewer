@@ -7,15 +7,20 @@ impl Application {
     pub(crate) fn selecteur_terrain(&mut self, ui: &mut egui::Ui) {
         let Some((p, _)) = &self.natif else { return };
         let types = p.types_terrains_disponibles();
-        let actuel = self.dessin2d.terrain_type.as_ref().and_then(|id| types.iter().find(|t| &t.id == id)).or(types.first());
-        ui.label(RichText::new("Type de terrain").small().weak());
-        egui::ComboBox::from_id_salt("type_terrain_creation_proprietes").width((ui.available_width() - 8.0).max(1.0)).selected_text(actuel.map_or("Terrain", |t| t.nom.as_str())).show_ui(ui, |ui| {
-            for t in &types {
-                if ui.selectable_label(actuel.is_some_and(|a| a.id == t.id), &t.nom).clicked() {
-                    self.dessin2d.terrain_type = (!p.types_terrains.is_empty()).then(|| t.id.clone());
+        let courant = self.dessin2d.terrain_type.clone().filter(|id| types.iter().any(|t| &t.id == id)).unwrap_or_else(|| types[0].id.clone());
+        let choix = crate::zones::communes::selecteur_type_terrain(ui, p, Some(&courant), 1);
+        if let Some(source) = choix.dupliquer {
+            let mut q = p.clone();
+            if let Some(id) = crate::zones::communes::dupliquer_type_terrain(&mut q, &source) {
+                match self.appliquer_projet(q) {
+                    Ok(()) => self.dessin2d.terrain_type = Some(id),
+                    Err(e) => self.error = Some(e),
                 }
             }
-        });
+        } else if let Some(id) = choix.choisi {
+            // un type du gabarit est adopté par le projet à la création du terrain
+            self.dessin2d.terrain_type = Some(id);
+        }
     }
 
     /// Emplacement « paramètres » du terrain : cote NGF donnée aux prochains points.
