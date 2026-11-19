@@ -48,7 +48,6 @@ impl Application {
             ui.text_edit_singleline(&mut self.bim.texte);
             ui.end_row();
         });
-        ui.label(RichText::new("Cliquez dans la vue pour placer le texte. Il reste sélectionné : contenu, champs, position et hauteur se règlent dans Propriétés.").small().weak());
     }
 
     pub(crate) fn parametres_etiquette(&mut self, ui: &mut egui::Ui) {
@@ -102,7 +101,6 @@ impl Application {
             }
             commande = Some(Commande::Annoter { annotation: Annotation { id: String::new(), vue, hauteur, forme } });
         }
-        ui.label(RichText::new("Une cote créée avec un mur sélectionné suit ses extrémités.").small().weak());
         self.executer_saisie(commande);
     }
 

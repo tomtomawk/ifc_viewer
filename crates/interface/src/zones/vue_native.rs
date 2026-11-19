@@ -142,7 +142,6 @@ impl Application {
                 ui.end_row();
             });
             if self.filtres_contextes != Default::default() {
-                ui.label(RichText::new("L'affichage temporaire du gestionnaire prime sur les réglages de la vue.").small().weak());
             }
         });
         match action {

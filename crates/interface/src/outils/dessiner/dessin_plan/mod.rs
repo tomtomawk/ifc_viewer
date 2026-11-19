@@ -772,9 +772,7 @@ impl Application {
             }
         });
         if reglable && arete.is_none() {
-            ui.label(RichText::new("Arête déplacée ou nouvelle : valider le tracé pour régler sa pente ou son talus.").small().weak());
         }
-        ui.label(RichText::new("Échap : désélectionner le trait et revenir aux propriétés de l'objet.").small().weak());
         ui.separator();
         self.pente_defaut = pente_defaut;
         if redresser {

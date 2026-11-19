@@ -18,7 +18,6 @@ impl Application {
         }
         if self.natif.is_some() && self.bim.origine {
             ui.label(RichText::new("Origine du projet").strong());
-            ui.label(RichText::new("Coordonnées partagées et cote NGF du niveau 0 ; les cotes du terrain sont NGF.").small().weak());
             self.editeur_coordonnees(ui);
             return;
         }

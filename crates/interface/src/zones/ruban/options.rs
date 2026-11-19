@@ -118,8 +118,6 @@ Type des prochains éléments horizontaux."), Some(&vignette));
         let projet_apercu = projet.unwrap_or(&projet_vide);
         let unite = modele::unite::unite();
         {
-            let aide = SURFACES.iter().chain(TERRE_PLEIN).find(|(o, _)| *o == surface).map_or("", |(_, aide)| *aide);
-            ui.add(egui::Label::new(RichText::new(aide).small().weak()).wrap());
             // composition du type choisi, du haut vers le bas
             let types = types_surface(surface);
             if let Some((_, couches)) = types.get(self.type_surface.get(&surface).copied().unwrap_or(0)) {

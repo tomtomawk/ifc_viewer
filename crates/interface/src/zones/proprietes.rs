@@ -107,7 +107,6 @@ impl Application {
                 if ossature>0.0 {ui.label("Ossature").on_hover_text("Longueur cumulée des montants, lisses, linteaux et appuis");ui.label(format!("{:.1} m",ossature/1000.0));ui.end_row();}
             });
             // le plan des couches est dans le sélecteur de type, juste au-dessus
-            ui.label(RichText::new("Couches, de l'extérieur vers l'intérieur (clic : sélectionner ; Tab parcourt)").small().weak());
             egui::Grid::new("couches_assemblage").num_columns(4).striped(true).spacing([8.0, 3.0]).show(ui, |ui| {
                 for m in &couches {
                     let c = projet.type_mur(&m.type_mur).and_then(|t| t.couches.first());

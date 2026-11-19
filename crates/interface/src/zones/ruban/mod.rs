@@ -793,7 +793,6 @@ impl RubanEdition {
                 }
             }
         });
-        ui.label(RichText::new(&courant.aide).small().weak());
         if let Some(i) = choix {
             self.type_coupe = i;
             self.coupe_identique = None;
@@ -819,7 +818,6 @@ impl RubanEdition {
             ui.end_row();
         });
         ui.add_space(4.0);
-        ui.label(RichText::new("Dans une vue en plan, cliquer le début puis la fin de la ligne : la vue regarde vers sa gauche (vers le haut pour une ligne tracée de gauche à droite), sur la longueur de la ligne et la profondeur.").small().weak());
     }
 
     /// Emplacement « paramètres » de la vue en plan : hauteur du plan de coupe, puis un

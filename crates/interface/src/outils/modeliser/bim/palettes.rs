@@ -49,7 +49,6 @@ impl Application {
             ui.add(egui::DragValue::new(&mut c.decalage).speed(10.0).dimensions());
             ui.end_row();
         });
-        ui.label(RichText::new("Cliquez dans la vue pour placer le composant (niveau de la vue) ; Espace : rotation de 90°.").small().weak());
     }
 
     /// Arbre : essence (elle règle la hauteur et le houppier par défaut).
@@ -82,7 +81,6 @@ impl Application {
             ui.add(egui::DragValue::new(&mut a.decalage).speed(10.0).dimensions());
             ui.end_row();
         });
-        ui.label(RichText::new("Cliquez dans la vue pour planter l'arbre (niveau de la vue).").small().weak());
     }
 
     /// Pièce : famille d'étiquette.
@@ -106,7 +104,6 @@ impl Application {
             ui.text_edit_singleline(&mut self.bim.nom_piece);
             ui.end_row();
         });
-        ui.label(RichText::new("Cliquez dans un espace fermé par des murs du niveau de la vue : le contour suit les faces intérieures ; le numéro s'incrémente.").small().weak());
     }
 
     /// Niveau : liste des niveaux (nom, altitude) et ajout d'un niveau.
@@ -129,7 +126,6 @@ impl Application {
                 }
             });
         }
-        ui.label(RichText::new("Nom et altitude : valider par Entrée ou en cliquant ailleurs.").small().weak());
         // nouveau niveau au-dessus du plus haut, à la hauteur du dernier étage (3 m s'il n'y en a qu'un)
         let mut alts: Vec<f64> = p.niveaux.iter().map(|n| n.altitude).collect();
         alts.sort_by(f64::total_cmp);

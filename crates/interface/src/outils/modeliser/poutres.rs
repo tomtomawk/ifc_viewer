@@ -308,7 +308,6 @@ impl Application {
         egui::ComboBox::from_label("Arase").selected_text(r.arase.libelle()).show_ui(ui, |ui| {
             for a in Arase::TOUTES { ui.selectable_value(&mut r.arase, a, a.libelle()); }
         });
-        ui.label(RichText::new("Tracer dans la vue : polyligne enchaînée ou rectangle ; Ctrl : justification, Espace : inverser, Entrée : terminer.").small().weak());
     }
 }
 
