@@ -224,6 +224,7 @@ pub enum CibleTrace {
     Aucune,
     Sommet,
     Segment,
+    PointTopo,
 }
 
 /// Raison pour laquelle un outil de Modifier ne s'applique pas au tracé en cours
@@ -231,6 +232,9 @@ pub enum CibleTrace {
 /// laquelle un trait ne s'y copie pas (contour unique, surface à contours fermés).
 pub(crate) fn raison_trace(outil: Outil, cible: CibleTrace, fixe: bool, sans_copie: Option<&'static str>) -> Option<&'static str> {
     use Outil::*;
+    if cible == CibleTrace::PointTopo {
+        return (!matches!(outil, Deplacer | Copier | Supprimer)).then_some("Sélectionner un trait pour cette commande");
+    }
     match outil {
         Deplacer | Tourner | Symetrie | Echelle => (cible == CibleTrace::Aucune).then_some("Sélectionner d'abord un trait ou un sommet du tracé (bouton Sélectionner ou Échap)"),
         Copier | Reseau | CreerIdentique if sans_copie.is_some() => sans_copie,
@@ -340,7 +344,7 @@ pub(crate) fn pile_couches(ui: &mut egui::Ui, r: egui::Rect, projet: &modele::Pr
 
 /// Projection indicative des limites du mur, bornée à la place disponible dans la palette.
 fn limites_croquis_mur(parametres: &modele::creation::ParametresMur, _projet: &modele::Projet, haut_reference: f32, bas_reference: f32) -> (f32, f32) {
-    let deplacement = |v: f64| if v > 0.0 { -10.0 } else if v < 0.0 { 10.0 } else { 0.0 };
+    use crate::outils::croquis::decalage_vertical as deplacement;
     let bas = deplacement(parametres.decalage);
     let haut = if parametres.niveau_haut.is_some() { deplacement(parametres.decalage_haut) } else { bas };
     (haut_reference + haut, bas_reference + bas)
@@ -610,7 +614,6 @@ fn champs(o: Outil) -> Vec<Champ> {
         Copier => vec![Nombre("Copies", 1.0, ""), Nombre("Distance", 1000.0, " mm")],
         Tourner => vec![Nombre("Angle", 90.0, " °")],
         Symetrie | Reseau | Echelle | Decaler | Scinder | Demolir | Reproduire | ChangerHote | Inverser => vec![],
-        Aligner => vec![Choix("Référence", &["Face", "Axe"])],
         Ajuster => vec![Choix("Mode", &["Ajuster ou prolonger", "Prolonger seulement"])],
         Cote => vec![
             Choix("Mode", &["Alignée", "Orthogonale"]),
@@ -646,6 +649,7 @@ fn champs(o: Outil) -> Vec<Champ> {
             &["Matériaux", "Types de murs", "Symboles"],
         )],
         VuePlan => vec![Nombre("Hauteur de coupe", 1200.0, " mm")],
+        Aligner => vec![],
         VueCoupe => vec![Nombre("Profondeur", 15_000.0, " mm")],
     }
 }

@@ -95,12 +95,25 @@ pub(super) fn transformer_contours(
     Ok(Some(r))
 }
 
+/// Travaille sur la copie de terrain du croquis, publiée après triangulation.
+fn placer_point_topo(terrain: &mut modele::elements::site::Terrain, i: usize, commande: CommandeContour, p: DVec2) -> Result<usize, String> {
+    let destination = [p.x, p.y, terrain.points[i][2]];
+    let selection = match commande {
+        CommandeContour::Deplacer => { terrain.points[i] = destination; i }
+        CommandeContour::Copier => { terrain.points.push(destination); terrain.points.len() - 1 }
+        _ => return Err("Choisissez Déplacer ou Copier pour ce point.".into()),
+    };
+    terrain.triangles()?;
+    Ok(selection)
+}
+
 impl ViewerApp {
     /// Cible des commandes du ruban Modifier dans le tracé en cours, topologie figée
     /// (pas d'ajout ni de retrait de sommet) et raison pour laquelle un trait ne s'y
     /// copie pas.
     pub(crate) fn cible_trace(&self) -> (CibleTrace, bool, Option<&'static str>) {
         let Some(e) = self.dessin2d.edition_contour.as_ref() else { return (CibleTrace::Aucune, false, None) };
+        if !e.dessin && e.point_topo.is_some() { return (CibleTrace::PointTopo, false, None); }
         let cible = if e.dessin { CibleTrace::Aucune } else if e.sommet.is_some() { CibleTrace::Sommet } else if e.segment.is_some() { CibleTrace::Segment } else { CibleTrace::Aucune };
         let fixe = matches!(e.creation, Some(Usage::Terrain | Usage::Cadrage | Usage::Escalier | Usage::GardeCorps | Usage::Annotation));
         let sans_copie = if e.ligne() || matches!(e.creation, Some(Usage::Terrain | Usage::Cadrage | Usage::Escalier | Usage::GardeCorps)) {
@@ -184,6 +197,21 @@ impl ViewerApp {
         use CommandeContour as C;
         let (repere, p) = self.points_commande(commande, p);
         let reference = if matches!(commande, C::Aligner | C::Ajuster) { curseur.and_then(|q| self.segment_reference(rect, q)) } else { None };
+        if let Some(i) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.point_topo) {
+            let Some(mut terrain) = self.terrain_courant() else { return };
+            match placer_point_topo(&mut terrain, i, commande, p) {
+                Ok(selection) => {
+                    self.dessin2d.terrain_points = terrain.points;
+                    let e = self.dessin2d.edition_contour.as_mut().unwrap();
+                    e.point_topo = Some(selection);
+                    (e.commande, e.depart) = (None, None);
+                    self.dessin2d.message = None;
+                    self.dessin2d.saisie.clear();
+                }
+                Err(message) => self.dessin2d.message = Some(message),
+            }
+            return;
+        }
         let e = self.dessin2d.edition_contour.as_mut().unwrap();
         // points préalables : départ (ou centre), puis repère d'une rotation ou d'une échelle
         if matches!(commande, C::Deplacer | C::Copier | C::Reseau(_) | C::Symetrie | C::Tourner | C::Echelle) && e.depart.is_none() {
@@ -297,7 +325,9 @@ impl ViewerApp {
             if let Some(n) = (b - a).try_normalize().map(|d| d.perp()) { valeur = Some(longueur((p - a).dot(n).abs())); }
         }
         // résultat : les contours modifiés ou ajoutés
-        if let Ok(Some(nouveaux)) = transformer_contours(&self.dessin2d.dalle, commande, e.segment, e.sommet, e.depart, repere, p, reference) {
+        if e.point_topo.is_some() {
+            painter.circle_stroke(ep, 6.0, egui::Stroke::new(2.0, orange));
+        } else if let Ok(Some(nouveaux)) = transformer_contours(&self.dessin2d.dalle, commande, e.segment, e.sommet, e.depart, repere, p, reference) {
             for (i, contour) in nouveaux.iter().enumerate() {
                 if self.dessin2d.dalle.get(i) == Some(contour) { continue; }
                 let mut pts: Vec<egui::Pos2> = contour.iter().filter_map(|q| self.vers_ecran(rect, DVec2::from_array(*q))).collect();

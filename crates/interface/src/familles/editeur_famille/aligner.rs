@@ -53,7 +53,7 @@ impl EditeurFamille {
     fn elements_vue(&self) -> Vec<SelectionFamille> {
         let vue = self.vue.esquisse();
         let e2d = self.famille.elements_2d.iter().enumerate().filter(|(_, e)| e.vue == vue).map(|(k, _)| SelectionFamille::Element2D(k));
-        let formes = self.famille.extrusions.iter().enumerate().filter(|(_, e)| e.vue == vue && e.construction.is_none()).map(|(k, _)| SelectionFamille::Extrusion(k));
+        let formes = self.famille.extrusions.iter().enumerate().filter(|(_, e)| e.vue == vue && e.support.is_none()).map(|(k, _)| SelectionFamille::Extrusion(k));
         e2d.chain(formes).chain((0..self.famille.volumes.len()).map(SelectionFamille::Volume)).collect()
     }
 

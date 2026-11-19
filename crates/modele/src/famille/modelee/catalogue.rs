@@ -57,7 +57,7 @@ impl FamilleModelee {
         FamilleModelee {
             categorie: CategorieFamille::Fenetre,
             section_profil: None,
-            plans_construction: Vec::new(),
+            plans_tournes: Vec::new(),
             parametres: vec![
                 param("Dormant", "55"),
                 param("Ouvrant", "65"),
@@ -162,7 +162,7 @@ impl FamilleModelee {
             // appui en pente : profil esquissé en coupe, extrudé sur la largeur
             extrusions: vec![FormeProfil { visibilite: Default::default(),
                 operation: OperationForme::Extrusion,
-                construction: None,
+                support: None,
                 nom: "Appui".into(),
                 vide: false,
                 materiau: Materiau::Appui,
@@ -224,7 +224,7 @@ impl FamilleModelee {
         ]);
         f.extrusions = vec![FormeProfil { visibilite: Default::default(),
                 operation: OperationForme::Extrusion,
-                construction: None,
+                support: None,
             nom: "Seuil".into(),
             vide: false,
             materiau: Materiau::Appui,
@@ -251,7 +251,7 @@ impl FamilleModelee {
         FamilleModelee {
             categorie: CategorieFamille::Porte,
             section_profil: None,
-            plans_construction: Vec::new(),
+            plans_tournes: Vec::new(),
             parametres: vec![
                 param("Dormant", "45"),
                 param("Profondeur", "72"),

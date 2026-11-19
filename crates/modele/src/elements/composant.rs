@@ -62,7 +62,7 @@ pub fn famille_table() -> FamilleModelee {
     FamilleModelee {
         categorie: crate::famille::modelee::CategorieFamille::Composant,
         section_profil: None,
-        plans_construction: Vec::new(),
+        plans_tournes: Vec::new(),
         parametres: Vec::new(),
         plans: vec![
             plan("Centre", X, 0.0, true),

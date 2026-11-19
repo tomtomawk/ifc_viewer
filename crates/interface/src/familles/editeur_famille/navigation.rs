@@ -7,8 +7,7 @@ use super::*;
 /// Échelle par défaut des vues de famille (1:20, comme les gabarits de famille Revit).
 pub(crate) const ECHELLE_VUE_FAMILLE: f64 = 20.0;
 
-/// Caméra d'une vue plane de famille (plan, élévation, coupe ; la quatrième sert au
-/// dessin face à un plan de construction).
+/// Caméra d'une vue plane de famille (plan, élévation, coupe).
 #[derive(Clone)]
 pub(crate) struct NavigationFamille {
     pub(super) camera: Camera,
@@ -21,8 +20,6 @@ pub(crate) struct NavigationFamille {
     a_cadrer: bool,
 }
 
-/// Rang de la caméra du dessin face à un plan de construction.
-pub(crate) const INDICE_CONSTRUCTION: usize = 3;
 
 impl Default for NavigationFamille {
     fn default() -> Self { Self { camera: Camera { ortho: true, ..Default::default() }, echelle_vue: ECHELLE_VUE_FAMILLE, etendue: [0.0; 4], a_cadrer: true } }
@@ -167,10 +164,12 @@ impl ViewerApp {
             ui.separator();
             crate::socle::detail::menu_niveau_detail(ui, &mut ed.detail, "Niveau de détail de la vue : éléments signalés dans l'arborescence, retirés en aperçu");
             ui.separator();
+            super::plan_actif::choix_plan_ui(ui, ed);
+            ui.separator();
             ui.checkbox(&mut ed.apercu, "Aperçu comme dans le projet").on_hover_text("Montre la famille comme une occurrence du projet : niveau de détail, type de vue et paramètres « Visible si » appliqués");
             ui.separator();
             if ui.button("Cadrer").on_hover_text("Afficher toute la vue (double-clic du bouton du milieu)").clicked() {
-                if ed.vue_3d { ed.cadrage_3d_initial = true; } else { nav.cadrer(); }
+                if ed.vue_3d { ed.cadrage_3d_initial = true; } else { ed.navigation[ed.vue as usize].cadrer(); }
             }
         });
     }

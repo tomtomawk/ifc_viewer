@@ -104,6 +104,7 @@ pub(crate) struct EtatDessin2D {
     pub esc_decalage_bas: f64,
     pub esc_decalage_haut: f64,
     pub esc_paillasse: Option<f64>,
+    pub esc_sous_face: modele::elements::escalier::SousFace,
     pub esc_balance: Option<u8>,
     pub esc_haut: HautEscalier,
     pub esc_hauteur_libre: f64,
@@ -163,6 +164,7 @@ pub(crate) struct EditionContour {
     selection: Option<usize>,
     segment: Option<(usize, usize)>,
     sommet: Option<(usize, usize)>,
+    point_topo: Option<usize>,
     commande: Option<CommandeContour>,
     depart: Option<DVec2>,
     repere: Option<DVec2>,
@@ -344,6 +346,16 @@ impl ViewerApp {
         if outil == Outil::Supprimer { self.supprimer_trait_edition(); return; }
         let Some(e) = self.dessin2d.edition_contour.as_mut() else { return };
         if e.dessin { self.dessin2d.message = Some("Appuyez sur Échap pour sélectionner un segment ou un sommet.".into()); return; }
+        if let Some(i) = e.point_topo {
+            e.commande = match outil {
+                Outil::Deplacer => Some(CommandeContour::Deplacer),
+                Outil::Copier => Some(CommandeContour::Copier),
+                _ => None,
+            };
+            e.depart = self.dessin2d.terrain_points.get(i).map(|p| DVec2::new(p[0], p[1]));
+            self.dessin2d.saisie.clear();
+            return;
+        }
         e.commande = match outil {
             Outil::Deplacer if e.segment.is_some() || e.sommet.is_some() => Some(CommandeContour::Deplacer),
             Outil::Copier | Outil::CreerIdentique if e.segment.is_some() => Some(CommandeContour::Copier),
@@ -367,6 +379,14 @@ impl ViewerApp {
         self.dessin2d.edition_contour.as_ref().map(|e| (e.id.as_str(), e.annotation.is_some()))
     }
     fn supprimer_trait_edition(&mut self) {
+        if let Some(e) = &mut self.dessin2d.edition_contour && let Some(i) = e.point_topo.take() {
+            self.dessin2d.terrain_points.remove(i);
+            self.dessin2d.terrain_survol = None;
+            (e.commande, e.depart, e.repere) = (None, None, None);
+            self.dessin2d.saisie.clear();
+            self.dessin2d.message = None;
+            return;
+        }
         // sommet sélectionné : retiré, tant que le tracé garde assez de sommets
         if let Some(e) = self.dessin2d.edition_contour.as_mut() && let (None, Some((c, i))) = (e.segment, e.sommet) {
             if matches!(e.creation, Some(Usage::Terrain | Usage::Escalier | Usage::GardeCorps | Usage::Annotation)) { return; }
@@ -681,7 +701,7 @@ impl ViewerApp {
         };
         self.dessin2d.dalle = contours;
         self.dessin2d.geoms = None;
-        self.dessin2d.edition_contour = Some(EditionContour { id: ids[0].clone(), creation: None, altitude, dessin: false, selection: None, segment: None, sommet: None, commande: None, depart: None, repere: None, glisse: None, annotation, fermees, raccord: None, element, initial });
+        self.dessin2d.edition_contour = Some(EditionContour { id: ids[0].clone(), creation: None, altitude, dessin: false, selection: None, segment: None, sommet: None, point_topo: None, commande: None, depart: None, repere: None, glisse: None, annotation, fermees, raccord: None, element, initial });
         self.dessin2d.trace = Some(Trace::new(OutilDessin::Polyligne));
         self.ruban_edition.forme_dalle = OutilDessin::Polyligne;
         self.ruban_edition.annuler();

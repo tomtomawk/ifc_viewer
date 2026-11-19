@@ -119,11 +119,15 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   centimètres par défaut ; Début → Options permet de choisir mm, cm ou m. Le JSON,
   les commandes CLI/MCP et les tailles sur papier restent en millimètres.
 - **Modéliser → Poteau / Poutre** crée des poteaux rectangulaires et des poutres
-  (section rectangulaire ou profil de leur type) en saisissant leurs dimensions et
-  leur niveau. Placez un poteau par un clic dans la vue ;
-  pour une poutre, cliquez son départ puis son arrivée. Le placement utilise les
-  accrochages et Maj contraint la poutre aux axes du plan ; Échap ou clic droit
-  annule un départ. La saisie par coordonnées reste disponible. Les poteaux sont
+  (section rectangulaire ou profil de leur type). La palette du poteau reprend le
+  croquis Haut/Bas du mur. Réglez le niveau et le décalage de base, puis un sommet
+  libre (hauteur) ou un niveau haut avec décalage. Le niveau haut est résolu en
+  cote au placement du poteau. Les dimensions et la rotation se règlent sous le
+  croquis. Placez le poteau d’un clic dans la vue ou utilisez « Placement par
+  coordonnées ». La palette de la poutre montre sa section, l’arase et la
+  justification par rapport au tracé. Cliquez le départ puis l’arrivée de la
+  poutre avec les accrochages. Maj contraint le tracé aux axes du plan, Échap ou
+  clic droit annule un départ. Les poteaux sont
   verticaux et orientables ; les poutres sont horizontales et définies par leur axe.
   Après sélection, **Modifier → Propriétés structurelles** permet de les modifier ;
   les commandes de déplacement, rotation, copie, suppression et l'historique leur
@@ -137,7 +141,7 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   fermé et le fermer par clic droit, F ou en cliquant le premier sommet. Les cotes sont
   **NGF**, dans l'unité du projet, et se règlent à côté de chaque sommet (S1, S2…) et de
   chaque point coté. Glisser un sommet ou un point le déplace ; glisser le milieu d'un
-  côté insère un sommet ; clic droit retire un point (ou un sommet, trois au moins).
+  côté insère un sommet. Cliquer sur un point coté active Déplacer, Copier et Supprimer dans Modifier. La touche Suppr retire le point sélectionné. Le clic droit retire un sommet du périmètre si trois sommets au moins subsistent.
   « Placer des points cotés » ajoute un point à chaque clic, à la cote indiquée. L'aperçu
   se teinte selon la cote, avec ses courbes de niveau. Entrée ou Valider crée le terrain :
   un solide de l'épaisseur du type, triangulé (Delaunay contraint par le contour), à
@@ -345,8 +349,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   (`saisie/moteur_accrochage.rs`), avec les mêmes types de points, marqueurs, guides,
   délai de repérage et saisie au clavier ; les plans de référence y sont des droites
   (croisements, point proche, perpendiculaire), avec les contours des formes et les
-  éléments 2D de la vue ; face à un plan de construction, la géométrie est exprimée
-  dans le repère du plan ; la molette zoome du même pas que les vues.
+  éléments 2D de la vue ; en vue 3D, il travaille dans le repère du plan de dessin
+  actif ; la molette zoome du même pas que les vues.
   En sélection, l'élément choisi porte des **poignées** : sommets d'un
   profil ou d'un symbole (glisser : réaccroché au plan le plus proche ; clic droit :
   retirer), milieux d'arêtes (glisser : insérer un sommet), milieux des faces d'un
@@ -365,8 +369,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   glisse perpendiculairement jusqu'à la référence (un alignement = une annulation ;
   clic droit : changer de référence). Limites communes : un volume rectangulaire ne
   tourne que par quarts de tour et ne se reflète que par un axe horizontal ou
-  vertical ; une forme esquissée dans une autre vue ou sur un plan oblique ne se
-  transforme pas. Pilote : `famille_outil reseau 5 total` (nombre, `pas` ou `total`),
+  vertical ; une forme esquissée dans une autre vue ou posée sur un plan (`support`) ne
+  se transforme pas. Pilote : `famille_outil reseau 5 total` (nombre, `pas` ou `total`),
   `famille_outil reseau_polaire 6`, `famille_outil aligner`, puis des clics `saisie`.
   **Formes guidées** (extrusion par chemin, raccordement, raccordement par chemin) :
   le chemin se règle dans Propriétés (points H, V, D ; case « arc » : le point est
@@ -387,12 +391,19 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   abscisse curviligne) et peut être « verrouillé sur les plans » : chaque sommet suit
   un plan de référence et un décalage, donc les paramètres et formules, comme le
   profil initial. Un raccordement ne se ferme pas (ses deux profils diffèrent).
-  **Plan de construction** actif (Propriétés) : renommer, Supprimer (refusé tant que
-  des formes y sont esquissées, avec leur liste), Détacher (un plan qui suit un plan
-  de référence devient un repère fixe à sa position courante : ses formes ne bougent
-  pas et le plan de référence peut ensuite être supprimé ; un plan fixe sans forme est
-  supprimé). Les formes désignent leur plan par son identité : un renommage ne les
-  touche pas et elles suivent le plan de référence quand il se déplace.
+  **Plans tournés** (Propriétés, « Plans tournés ») : un plan de référence d'orientation
+  libre part de son hôte et pivote autour de la droite d'appui (hôte ∩ appui) d'un
+  angle dessiné ou d'une cote angulaire (bouton ∠) libellée par un paramètre ; ils
+  s'enchaînent (hôte ou appui tourné). Dans les vues planes, leur trace est tiretée
+  avec l'angle. « Plan par 3 points » (vue 3D) : trois points accrochés (sommets des
+  solides, plan actif) ; le plan devient un plan tourné autour de la droite d'appui
+  qu'il contient, sinon il est refusé. **Plan de dessin** (barre sous la vue) : Sol par
+  défaut, un plan de référence (les formes posées dessus le référencent et le suivent)
+  ou « Face d'un solide… » puis clic en vue 3D (repère figé). En vue 3D, le plan actif
+  porte une grille ; les outils de formes y saisissent le profil (clics projetés sur le
+  plan, accrochage dans son repère ; retour au premier sommet ou clic droit pour fermer).
+  Dans une vue plane, seuls Sol et les plans d'axe parallèles à la vue se choisissent
+  (refus avec message sinon) ; la profondeur des formes part du plan choisi.
   Les valeurs d'essai font fléchir la famille ; « Enregistrer le type » met à jour
   le type et ses ouvertures (et les paramètres partagés du projet), « Nouveau type »
   l'affecte à l'ouverture (ou au prochain placement). Dans la maquette, les solides
@@ -417,7 +428,11 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   immédiatement au-dessus (sinon 2,80 m) ; le nombre de contremarches suit la
   hauteur de marche visée du ruban, un palier compte pour une marche, le giron
   partage la longueur des volées. Propriétés : niveaux de départ et d'arrivée (ou
-  hauteur libre), décalage, largeur, hauteur de marche visée, paillasse ; calcul
+  hauteur libre), décalage, largeur, hauteur de marche visée, paillasse et sous-face.
+  Le choix **Crantée** ou **Lissée** se règle à la création ou dans les propriétés
+  d’un escalier sélectionné. En mode lissé, le dessous monte en continu sous les
+  volées, y compris les marches balancées, et reste horizontal sous les paliers.
+  Les marches restent en place et le changement est annulable. Le calcul est
   affiché (contremarches, giron, paliers, Blondel 2h + g, signalé hors confort :
   60 à 65 cm, h ≤ 20 cm, g ≥ 22 cm). Le plan représente les marches et les paliers.
   En mode **Marches balancées**, chaque sommet marque un tournant. Le tracé reste
@@ -647,6 +662,8 @@ Le sous-projet de base est `A` et la variante par défaut est `Principale` ; le 
 de la sélection est affiché dans Propriétés.
 
 ## Interfaces et commandes
+
+La commande `scinder_surface` reçoit l’identifiant `id` et une polyligne `trace` (points XY en mm). Dans Modifier → Scinder, choisir la surface, tracer de bord à bord, puis valider avec Entrée. Les dalles, sols, plafonds, toitures planes indépendantes, terre-pleins sans talus, terrains et limites de propriété peuvent être découpés. Les nouveaux éléments sont enregistrés en une opération annulable.
 
 Les commandes UI et MCP passent par les mêmes transactions. Une erreur de commande,
 validation ou reconstruction conserve le modèle précédent.

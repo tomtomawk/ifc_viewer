@@ -11,10 +11,20 @@ fn points_controle(axe:Axe)->Option<[DVec2;3]> {
     Some([a,c+DVec2::from_angle(depart+balayage/2.)*a.distance(c),b])
 }
 
-/// Déplace une poignée autour du centre existant. La poignée centrale modifie le
-/// rayon ; les extrémités modifient le balayage en conservant le rayon.
+/// La poignée centrale déforme l'arc à extrémités fixes. Une cote de rayon
+/// conserve le centre et les poignées d'extrémité conservent le rayon.
 fn ajuster_arc(axe: Axe, poignee: usize, curseur: DVec2, valeur: Option<f64>) -> Result<[DVec2; 3], String> {
     let Axe::Arc { debut, fin, centre, direct } = axe else { return Err("Mur courbe requis.".into()) };
+    if poignee == 1 && valeur.is_none() {
+        let a = DVec2::from_array(debut);
+        let b = DVec2::from_array(fin);
+        let milieu = (a + b) * 0.5;
+        let normale = (b - a).normalize_or_zero().perp();
+        let sommet = milieu + normale * (curseur - milieu).dot(normale);
+        return noyau::forme2d::arc_3_points(a, sommet, b)
+            .map(|_| [a, sommet, b])
+            .ok_or_else(|| "Écartez la poignée de la ligne entre les extrémités du mur.".into());
+    }
     let centre = DVec2::from_array(centre);
     let debut = DVec2::from_array(debut) - centre;
     let fin = DVec2::from_array(fin) - centre;
@@ -68,6 +78,7 @@ impl ViewerApp {
         if ui.input(|i|i.key_pressed(egui::Key::Escape)) || resp.clicked_by(PointerButton::Secondary) {
             self.dessin2d.arc_glisse=None;self.terminer_edition_axe();return actif;
         }
+        let mut erreur_position = None;
         if let (Some((_,i,_)),Some(q))=(self.dessin2d.arc_glisse.clone(),resp.interact_pointer_pos().or(resp.hover_pos())) {
             let saisie = std::mem::take(&mut self.dessin2d.saisie);
             let fixe=points[if i==0 {2}else{0}].to_array();
@@ -75,15 +86,19 @@ impl ViewerApp {
             self.dessin2d.saisie = saisie;
             let valeur = self.dessin2d.saisie.replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0).map(|v| v * modele::unite::unite().facteur());
             let axe = self.natif.as_ref().and_then(|(p,_)|p.trajectoire_justification(&id)).map(|(axe,_)|axe);
-            if let (Some(axe), Some(position)) = (axe, position)
-                && let Ok(nouveaux) = ajuster_arc(axe, i, DVec2::from_array(position), valeur)
-                && let Some((_,_,pts))=&mut self.dessin2d.arc_glisse { *pts=nouveaux; }
+            if let (Some(axe), Some(position), Some((_, _, pts))) = (axe, position, &mut self.dessin2d.arc_glisse) {
+                match ajuster_arc(axe, i, DVec2::from_array(position), valeur) {
+                    Ok(nouveaux) => *pts = nouveaux,
+                    Err(e) => erreur_position = Some(e),
+                }
+            }
         }
         if resp.drag_stopped_by(PointerButton::Primary) {
             if let Some((id,i,pts))=self.dessin2d.arc_glisse.take() {
                 let valeur = if self.dessin2d.saisie.is_empty() { None } else { self.dessin2d.saisie.replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0).map(|v| v * modele::unite::unite().facteur()) };
                 let valide = if self.dessin2d.saisie.is_empty() { true } else if let (Some(valeur), Some((axe,_))) = (valeur, self.natif.as_ref().and_then(|(p,_)|p.trajectoire_justification(&id))) { ajuster_arc(axe,i,pts[i],Some(valeur)).is_ok() } else { false };
                 self.terminer_edition_axe();
+                if let Some(e) = erreur_position { self.error = Some(e); return actif; }
                 if !valide {self.error=Some("Saisissez une valeur positive et finie.".into());return actif;}
                 match self.executer_bim(commandes::Commande::ModifierTrajectoireMur{id:id.clone(),points:pts.map(|p|p.to_array())}) {
                     Ok(_)=>{
@@ -133,7 +148,9 @@ impl ViewerApp {
                 if let Some((gid, poignee, _)) = &self.dessin2d.arc_glisse && gid == id {
                     if let Some(e) = self.ecran_plan(rect, points[*poignee].to_array(), z) {
                         let unite = modele::unite::unite();
-                        let (nom, valeur) = if *poignee == 1 { ("Rayon", r) } else { ("Longueur d'arc", r * s.abs()) };
+                        let (nom, valeur) = if *poignee == 1 && self.dessin2d.saisie.is_empty() {
+                            ("Flèche", points[1].distance((points[0] + points[2]) * 0.5))
+                        } else if *poignee == 1 { ("Rayon", r) } else { ("Longueur d'arc", r * s.abs()) };
                         let texte = if self.dessin2d.saisie.is_empty() { unite.afficher(valeur) } else { format!("{}▏{}", self.dessin2d.saisie, unite.suffixe()) };
                         let g = painter.layout_no_wrap(format!("{nom} : {texte}"), egui::FontId::proportional(13.0), Color32::from_gray(30));
                         let cadre = egui::Rect::from_min_size(e + egui::vec2(14.0, -28.0), g.size() + egui::vec2(10.0, 4.0));
@@ -182,6 +199,23 @@ impl ViewerApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn glisser_le_milieu_conserve_les_extremites_et_inverse_la_courbure() {
+        let axe = Axe::Arc { debut: [100., 200.], fin: [700., 1000.], centre: [0., 900.], direct: true };
+        let [a, _, b] = points_controle(axe).unwrap();
+        let milieu = (a + b) * 0.5;
+        let direction = (b - a).normalize();
+        for fleche in [-800., -200., 200., 800.] {
+            let sommet = milieu + direction.perp() * fleche;
+            let pts = ajuster_arc(axe, 1, sommet + direction * 75., None).unwrap();
+            assert_eq!((pts[0], pts[2]), (a, b));
+            assert!(pts[1].distance(sommet) < 1e-9);
+            let (_, _, _, balayage) = noyau::forme2d::arc_3_points(pts[0], pts[1], pts[2]).unwrap();
+            assert_eq!(balayage.signum(), -fleche.signum());
+            assert_eq!(balayage.abs() > std::f64::consts::PI, fleche.abs() > 500.);
+        }
+        assert!(ajuster_arc(axe, 1, milieu, None).is_err());
+    }
     #[test]
     fn poignees_conservent_le_centre_et_acceptent_les_cotes() {
         for direct in [true, false] {

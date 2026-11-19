@@ -266,6 +266,11 @@ pub(super) fn icone_commande(p: &egui::Painter, r: egui::Rect, i: Icone, c: Colo
                         seg((0.3, y + 0.1), (0.7, y - 0.1));
                     }
                 }
+                "plan_3_points" => {
+                    // plan incliné passant par trois points
+                    tirets((0.06, 0.82), (0.94, 0.28));
+                    for q in [(0.2, 0.74), (0.5, 0.55), (0.8, 0.37)] { p.circle_filled(pt(q.0, q.1), r.width() * 0.07, c); }
+                }
                 "plan_ref" => {
                     // plan tracé par deux points
                     tirets((0.04, 0.5), (0.96, 0.5));

@@ -153,7 +153,12 @@ impl ViewerApp {
             self.proprietes_boite(ui);
             ui.separator();
         }
-        let (Some(_), Some(id)) = (&self.scene, self.selected) else {
+        let selection = self.selected.or_else(|| {
+            let [id] = self.bim.selection.as_slice() else { return None };
+            self.natif.as_ref()?.0.escaliers.iter().any(|e| &e.id == id)
+                .then(|| modele::identifiants::id_natif("escalier", id))
+        });
+        let (Some(_), Some(id)) = (&self.scene, selection) else {
             if self.bim.selection.is_empty() {
                 ui.label(RichText::new("Sélectionner un élément dans la vue ou l'arborescence.").weak());
             } else if self.onglet_ruban != OngletRuban::Modifier {

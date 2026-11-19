@@ -337,6 +337,9 @@ impl ViewerApp {
                     }
                 });
                 ui.end_row();
+                ui.label("Sous-face");
+                change |= crate::outils::modeliser::escalier::choix_sous_face_escalier(ui, "proprietes_sous_face", &mut e.sous_face);
+                ui.end_row();
                 for (nom, v, actif) in [("Largeur", &mut e.largeur, true), ("Hauteur de marche visée", &mut e.hauteur_marche, true), ("Paillasse", &mut e.paillasse, true)] {
                     ui.label(nom);
                     change |= ui.add_enabled(actif, egui::DragValue::new(v).dimensions().speed(5.0)).changed();

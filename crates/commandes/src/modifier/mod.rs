@@ -1,8 +1,10 @@
 //! Modifier : déplacer, tourner, aligner, ajuster, attacher, supprimer ; copies dans
 //! `copier`, commandes composées (symétrie, échelle, réseau, décaler, scinder, démolir,
 //! reproduire) dans `composees`, transformation affine dans `transformations`.
+pub mod alignement;
 pub mod composees;
 pub mod copier;
+mod scinder_surface;
 pub mod supprimer;
 pub mod transformations;
 use crate::socle::interne::*;
@@ -106,6 +108,7 @@ impl ExecutionModifier for Projet {
             Commande::Echelle { ids, centre, facteur } => self.echelle(ids, centre, facteur),
             Commande::Reseau { ids, nombre, delta, centre, angle } => self.reseau(ids, nombre, delta, centre, angle),
             Commande::Decaler { id, distance, copie } => self.decaler(id, distance, copie),
+            Commande::ScinderSurface { id, trace } => scinder_surface::executer(self, &id, &trace),
             Commande::Scinder { id, point, ecart } => self.scinder(id, point, ecart),
             Commande::Demolir { ids, phase } => self.demolir(ids, phase),
             Commande::Reproduire { source, cibles } => self.reproduire(source, cibles),

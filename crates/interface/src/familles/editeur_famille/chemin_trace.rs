@@ -156,7 +156,7 @@ pub(super) fn proprietes_guidage(ui: &mut egui::Ui, ed: &mut EditeurFamille, k: 
     }
     if guidage.profil_fin().is_none() { return; }
     let ancre = guidage.ancrage_fin().is_some();
-    let (vue, construction, profil) = (e.vue, e.construction.is_some(), e.profil.clone());
+    let (vue, sur_plan, profil) = (e.vue, e.support.is_some(), e.profil.clone());
     let plans: Vec<PlanRef> = ed.famille.plans.clone();
     let OperationForme::Guidage { guidage } = &mut ed.famille.extrusions[k].operation else { return };
     if ui.button("Reprendre le profil initial à l'arrivée").clicked() {
@@ -181,8 +181,8 @@ pub(super) fn proprietes_guidage(ui: &mut egui::Ui, ed: &mut EditeurFamille, k: 
                 ui.label(format!("{}", i + 1));
                 for (face, axe) in [(&mut p.h, ah), (&mut p.v, av)] {
                     egui::ComboBox::from_id_salt(axe.nom()).width(96.0).selected_text(if face.plan.is_empty() { "Origine" } else { face.plan.as_str() }).show_ui(ui, |ui| {
-                        if construction { ui.selectable_value(&mut face.plan, String::new(), "Origine du plan"); }
-                        for plan in plans.iter().filter(|q| !construction && q.axe == axe) { ui.selectable_value(&mut face.plan, plan.nom.clone(), &plan.nom); }
+                        if sur_plan { ui.selectable_value(&mut face.plan, String::new(), "Origine du plan"); }
+                        for plan in plans.iter().filter(|q| !sur_plan && q.axe == axe) { ui.selectable_value(&mut face.plan, plan.nom.clone(), &plan.nom); }
                     });
                     ui.add(egui::DragValue::new(&mut face.decalage).speed(1.0).dimensions());
                 }
@@ -234,7 +234,7 @@ mod tests {
         let ph = ed.famille.plans.iter().find(|p| p.axe == ah).unwrap().nom.clone();
         let pv = ed.famille.plans.iter().find(|p| p.axe == av).unwrap().nom.clone();
         let profil = [(-50.0, -50.0), (50.0, -50.0), (50.0, 50.0), (-50.0, 50.0)].map(|(h, v)| PointEsquisse { h: face(&ph, h), v: face(&pv, v) }).to_vec();
-        ed.famille.extrusions.push(FormeProfil { visibilite: Default::default(), operation: OperationForme::Guidage { guidage: FormeGuidee::extrusion(vec![[0.0; 3], [0.0, 0.0, 1000.0]]) }, construction: None, nom: "Chemin".into(), vide: false,
+        ed.famille.extrusions.push(FormeProfil { visibilite: Default::default(), operation: OperationForme::Guidage { guidage: FormeGuidee::extrusion(vec![[0.0; 3], [0.0, 0.0, 1000.0]]) }, support: None, nom: "Chemin".into(), vide: false,
             materiau: Materiau::Menuiserie, vue: VueEsquisse::Elevation, profil, profondeur: [face("", 0.0), face("", 100.0)], visible: None, materiau_parametre: None });
         let k = ed.famille.extrusions.len() - 1;
         for p in [(0.0, 0.0), (2000.0, 0.0), (2000.0, 2000.0), (0.0, 2000.0)] { ed.modifier.chemin.ajouter(p); }

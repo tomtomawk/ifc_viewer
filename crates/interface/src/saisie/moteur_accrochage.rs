@@ -1,8 +1,8 @@
 //! Moteur unique d'accrochage et de repérage des tracés 2D : vues du projet, éditeur de
-//! familles et plans de construction. Chaque contexte fournit seulement une
+//! familles et plan de dessin actif de la vue 3D des familles. Chaque contexte fournit seulement une
 //! [`SourceAccrochage`] (sa géométrie, dans le repère 2D où l'on trace) ; types de
 //! points, suivi polaire, guides, saisie de distance au clavier et marqueurs sont
-//! communs. Un plan de construction oblique trace dans son propre repère (h, v) : il
+//! communs. Le plan de dessin actif (plan tourné, face) trace dans son propre repère (h, v) : il
 //! fournit sa géométrie dans ce repère et passe par ce même moteur.
 use eframe::egui;
 use glam::DVec2;

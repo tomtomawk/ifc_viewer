@@ -127,6 +127,7 @@ impl RubanEdition {
                                     }
                                     if outil == Outil::VueCoupe { self.coupe_identique = None; }
                                     if outil == Outil::Surfaces { self.surface_identique = None; }
+                                    if menu == Menu::Modeliser { action = Some(outil); }
                                     // l'ouverture garde le dernier type choisi (comme Revit)
                                     self.selection = Some(if outil == Outil::Surfaces {
                                         let surface = self.derniere_surface.unwrap_or(Outil::Dalle);

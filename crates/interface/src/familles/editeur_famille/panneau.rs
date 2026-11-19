@@ -63,7 +63,6 @@ impl ViewerApp {
             }
             let Some(d) = catalogue::OUTILS.iter().find(|d| d.cle == cle) else { continue };
             let o = d.outil;
-            if o == OutilFamille::PlanConstruction && ed.indisponibilite_outil(o).is_none() { ed.construction = None; }
             // recliquer l'outil actif revient à la sélection
             ed.choisir_outil(if ed.outil == o { OutilFamille::Selection } else { o });
         }
@@ -140,36 +139,6 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
         }
         _ => {}
     }
-    egui::CollapsingHeader::new("Plan de construction").default_open(true).show(ui, |ui| {
-        let avant = ed.construction;
-        let mut reference = None;
-        egui::ComboBox::from_id_salt("plan_construction_actif").selected_text(ed.construction.and_then(|k| ed.famille.plans_construction.get(k)).map_or("Plan de la vue", |p| p.nom.as_str())).show_ui(ui, |ui| {
-            ui.selectable_value(&mut ed.construction, None, "Plan de la vue");
-            for (k, plan) in ed.famille.plans_construction.iter().enumerate() {
-                ui.selectable_value(&mut ed.construction, Some(k), &plan.nom);
-            }
-            ui.separator();
-            for plan in &ed.famille.plans {
-                if ui.button(format!("Référence : {}", plan.nom)).clicked() { reference = Some(plan.clone()); }
-            }
-        });
-        if let Some(p) = reference {
-            let vue = match p.axe { AxePlan::X => VueEsquisse::Coupe, AxePlan::Y => VueEsquisse::Elevation, AxePlan::Z => VueEsquisse::Plan };
-            let r = ed.resoudre();
-            let plan = PlanConstruction { id: noyau::uuid::uuid(), reference: Some(p.nom.clone()), nom: format!("Référence : {}", p.nom), origine: vue.point(0.0,0.0,r.positions.get(&p.nom).copied().unwrap_or(p.position)).to_array(), horizontal: vue.point(1.0,0.0,0.0).to_array(), vertical: vue.point(0.0,1.0,0.0).to_array() };
-            let k = ed.famille.plans_construction.iter().position(|existant| existant.reference.as_ref() == plan.reference.as_ref()).unwrap_or_else(|| {
-                let mut plan = plan;
-                let base = plan.nom.clone();
-                plan.nom = (1..).map(|n| if n == 1 { base.clone() } else { format!("{base} {n}") }).find(|nom| ed.famille.plans_construction.iter().all(|p| &p.nom != nom)).unwrap();
-                ed.famille.plans_construction.push(plan);
-                ed.famille.plans_construction.len()-1
-            });
-            ed.construction = Some(k);
-        }
-        if avant != ed.construction { ed.choisir_outil(OutilFamille::Selection); ed.selectionner(Vec::new()); }
-        if ed.construction.is_some() { ui.label("Esquisse en coordonnées locales du plan ; profondeur suivant sa normale."); }
-        construction::gestion_plan_construction(ui, ed);
-    });
     let r = ed.resoudre();
     let u = modele::unite::unite();
     egui::Grid::new("famille_type").num_columns(2).spacing([10.0, 5.0]).show(ui, |ui| {
@@ -313,15 +282,16 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 let texte = match c {
                     Contrainte::Distance { a, b, .. } => format!("{a} – {b}"),
                     Contrainte::Egalite { a, m, b, .. } => format!("EQ {a} | {m} | {b}"),
+                    Contrainte::Angle { a, b, .. } => format!("∠ {a} – {b}"),
                 };
                 let couleur = if conflit { Color32::from_rgb(200, 40, 40) } else { ui.visuals().text_color() };
                 if ui.selectable_label(choisie, RichText::new(texte).color(couleur)).on_hover_text(if conflit { "Écartée : en conflit avec une contrainte de priorité supérieure" } else { "Satisfaite" }).clicked() {
                     ed.selection = SelectionFamille::Contrainte(k);
                 }
                 match c {
-                    Contrainte::Distance { valeur, .. } => {
+                    Contrainte::Distance { valeur, .. } | Contrainte::Angle { valeur, .. } => {
                         ui.horizontal(|ui| {
-                            ui.add_sized([80.0, 20.0], egui::TextEdit::singleline(valeur)).on_hover_text("Valeur (mm) ou formule : libeller la cote par un paramètre pour la piloter");
+                            ui.add_sized([80.0, 20.0], egui::TextEdit::singleline(valeur)).on_hover_text("Valeur (mm, ou degrés pour une cote angulaire) ou formule : libeller la cote par un paramètre pour la piloter");
                             egui::ComboBox::from_id_salt(("libelle", k)).width(18.0).selected_text("").show_ui(ui, |ui| {
                                 for n in &noms_parametres {
                                     if ui.selectable_label(valeur == n, n).clicked() {
@@ -393,6 +363,8 @@ pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             etat(retour("retour exterieur")), etat(retour("retour interieur"))
         )).small().weak());
     });
+
+    super::plans_tournes::panneau_plans_tournes(ui, ed, &r);
 
     egui::CollapsingHeader::new(RichText::new("Volumes").strong()).default_open(true).show(ui, |ui| {
         let mut supprimer = None;
@@ -576,11 +548,11 @@ pub(super) fn extrusion_ui(ui: &mut egui::Ui, e: &mut FormeProfil, plans: &[Plan
         let axe = e.vue.axes().2;
         let [d0, d1] = &mut e.profondeur;
         for (cote, face) in [("début", d0), ("fin", d1)] {
-            ui.label(format!("{} {cote}", if e.construction.is_some() { "Profondeur" } else { axe.nom() }));
+            ui.label(format!("{} {cote}", if e.support.is_some() { "Profondeur" } else { axe.nom() }));
             ui.horizontal(|ui| {
                 egui::ComboBox::from_id_salt(("profondeur", k, cote)).width(120.0).selected_text(face.plan.as_str()).show_ui(ui, |ui| {
-                    if e.construction.is_some() { ui.selectable_value(&mut face.plan, String::new(), "Origine du plan"); }
-                    for p in plans.iter().filter(|p| e.construction.is_none() && p.axe == axe) {
+                    if e.support.is_some() { ui.selectable_value(&mut face.plan, String::new(), "Origine du plan"); }
+                    for p in plans.iter().filter(|p| e.support.is_none() && p.axe == axe) {
                         ui.selectable_value(&mut face.plan, p.nom.clone(), &p.nom);
                     }
                 });
@@ -590,7 +562,11 @@ pub(super) fn extrusion_ui(ui: &mut egui::Ui, e: &mut FormeProfil, plans: &[Plan
         }
     });
     if let OperationForme::Guidage { guidage } = &mut e.operation { formes::guidage_ui(ui, guidage); }
-    ui.label(RichText::new(format!("Profil esquissé en {} : sommets verrouillés sur les plans.", match e.vue { VueEsquisse::Elevation => "élévation", VueEsquisse::Plan => "plan", VueEsquisse::Coupe => "coupe" })).small().weak());
+    ui.label(RichText::new(match &e.support {
+        Some(SupportForme::Plan { plan }) => format!("Profil posé sur le plan de référence « {plan} » (coordonnées locales) : il suit ses contraintes et son angle."),
+        Some(SupportForme::Repere { .. }) => "Profil posé sur un repère figé (coordonnées locales).".into(),
+        None => format!("Profil esquissé en {} : sommets verrouillés sur les plans.", match e.vue { VueEsquisse::Elevation => "élévation", VueEsquisse::Plan => "plan", VueEsquisse::Coupe => "coupe" }),
+    }).small().weak());
 }
 
 /// Propriétés du volume choisi : nom, plein ou vide, matériau, faces verrouillées.
