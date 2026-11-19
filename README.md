@@ -268,8 +268,10 @@ diamètre du houppier, décalage ; symbole en plan, géométrie générée (vari
 l'autre), matériaux « Feuillage » et « Écorce » du projet s'ils existent. Le champ
 `asset` est réservé au remplacement par un modèle de bibliothèque dans le style Réaliste.
 
-Texture de pelouse de l'îlot (`samples/ilot_demo/textures/herbe_*.jpg`) : « Grass004 »
-d'[ambientCG](https://ambientcg.com), licence CC0.
+Texture de pelouse de l'îlot (`samples/ilot_demo/textures/herbe_*.jpg`) et du gabarit
+(`gabarits/textures/herbe_*.jpg`, réencodée en 1024 px) : « Grass004 »
+d'[ambientCG](https://ambientcg.com), licence CC0. Feuilles et écorce : textures procédurales
+(`tools/projet_demo_ilot.py`).
 
 **Apparence avancée** : anti-répétition par texture, parallaxe sur la carte de relief
 (profondeur en mm), herbe en volume (hauteur des brins) dans le style Réaliste.

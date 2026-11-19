@@ -227,6 +227,8 @@ fn polyligne_segments_d_arc() {
         assert!(p.verifier().is_err());
     }
     // refus à la lecture d'un fichier : une courbure de trop
-    let invalide = json.replacen("\"courbures\":[", "\"courbures\":[0.5,", 1);
+    // (dernière occurrence : celle de l'annotation, après les familles du gabarit)
+    let k = json.rfind("\"courbures\":[").unwrap() + "\"courbures\":[".len();
+    let invalide = format!("{}0.5,{}", &json[..k], &json[k..]);
     assert!(invalide != json && Projet::lire_json(&invalide).and_then(|q| q.verifier()).is_err());
 }

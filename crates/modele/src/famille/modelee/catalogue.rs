@@ -46,6 +46,24 @@ fn trait_(vue: VueEsquisse, points: Vec<PointEsquisse>, arc: bool) -> Element2DF
     if arc { Element2DFamille::arc(vue, points) } else { Element2DFamille::polyligne(vue, points, false) }
 }
 
+/// Volume caché dans les vues en plan (vantail fermé et quincaillerie d'une porte : le
+/// plan montre la porte ouverte).
+fn sans_plan(mut v: Volume) -> Volume {
+    v.visibilite.plan = false;
+    v
+}
+
+/// Débattement d'un vantail en plan : quart de cercle de `a` à `b` (segment de polyligne
+/// de courbure tan(90°/4), signe selon le sens), en pointillés.
+fn debattement(a: PointEsquisse, b: PointEsquisse, sens: f64) -> Element2DFamille {
+    let mut e = Element2DFamille::polyligne(VueEsquisse::Plan, vec![a, b], false);
+    if let crate::documentation::AnnotationForme::Polyligne { courbures, traits, .. } = &mut e.forme {
+        *courbures = vec![sens * std::f64::consts::FRAC_PI_8.tan()];
+        *traits = vec!["trait-pointilles".into()];
+    }
+    e
+}
+
 impl FamilleModelee {
     /// Fenêtre ouvrant à la française, deux vantaux vers l'intérieur : dormant en
     /// tableau (retrait réglable, retours d'enduit et de doublage jusqu'au dormant),
@@ -260,7 +278,6 @@ impl FamilleModelee {
                 param("Detalonnage", "10"),
                 param("HauteurPoignee", "1050"),
                 param("Passage", "Largeur - 2 * Dormant"),
-                param("Diagonale", "Passage * 0,7071"),
             ],
             plans: vec![
                 fixe("Centre", X),
@@ -268,14 +285,12 @@ impl FamilleModelee {
                 plan("Droite", X, 450.0),
                 plan("Dormant gauche", X, -405.0),
                 plan("Dormant droit", X, 405.0),
-                plan("Arc x", X, 170.0),
                 hote("Extérieur", Hote::Exterieur),
                 hote("Intérieur", Hote::Interieur),
                 plan("Cadre ext", Y, 36.0),
                 plan("Cadre int", Y, -36.0),
                 plan("Vantail ext", Y, 4.0),
                 plan("Ouvert", Y, -846.0),
-                plan("Arc y", Y, -609.0),
                 fixe("Bas", Z),
                 plan("Haut", Z, 2150.0),
                 plan("Dormant haut", Z, 2105.0),
@@ -297,28 +312,27 @@ impl FamilleModelee {
                 dist("Cadre int", "Cadre ext", "Profondeur", 5),
                 dist("Cadre int", "Vantail ext", "Vantail", 5),
                 dist("Ouvert", "Cadre int", "Passage", 5),
-                dist("Dormant gauche", "Arc x", "Diagonale", 5),
-                dist("Arc y", "Cadre int", "Diagonale", 5),
             ],
             volumes: vec![
                 baie(),
                 volume("Huisserie gauche", M, [("Gauche", 0.0), ("Dormant gauche", 0.0)], huisserie, [("Bas", 0.0), ("Haut", 0.0)]),
                 volume("Huisserie droite", M, [("Dormant droit", 0.0), ("Droite", 0.0)], huisserie, [("Bas", 0.0), ("Haut", 0.0)]),
                 volume("Huisserie haute", M, [("Dormant gauche", 0.0), ("Dormant droit", 0.0)], huisserie, [("Dormant haut", 0.0), ("Haut", 0.0)]),
-                volume("Vantail", P, [("Dormant gauche", 3.0), ("Dormant droit", -3.0)], [("Cadre int", 0.0), ("Vantail ext", 0.0)], [("Pied vantail", 0.0), ("Dormant haut", -3.0)]),
-                // béquilles et rosaces, côté intérieur puis côté extérieur du vantail
-                volume("Rosace intérieure", M, [("Dormant droit", -85.0), ("Dormant droit", -45.0)], [("Cadre int", -8.0), ("Cadre int", 0.0)], [("Poignée", -20.0), ("Poignée", 20.0)]),
-                volume("Béquille intérieure", M, [("Dormant droit", -190.0), ("Dormant droit", -55.0)], [("Cadre int", -60.0), ("Cadre int", -45.0)], [("Poignée", -9.0), ("Poignée", 9.0)]),
-                volume("Tige intérieure", M, [("Dormant droit", -72.0), ("Dormant droit", -58.0)], [("Cadre int", -45.0), ("Cadre int", -8.0)], [("Poignée", -7.0), ("Poignée", 7.0)]),
-                volume("Rosace extérieure", M, [("Dormant droit", -85.0), ("Dormant droit", -45.0)], [("Vantail ext", 0.0), ("Vantail ext", 8.0)], [("Poignée", -20.0), ("Poignée", 20.0)]),
-                volume("Tige extérieure", M, [("Dormant droit", -72.0), ("Dormant droit", -58.0)], [("Vantail ext", 8.0), ("Vantail ext", 45.0)], [("Poignée", -7.0), ("Poignée", 7.0)]),
-                volume("Béquille extérieure", M, [("Dormant droit", -190.0), ("Dormant droit", -55.0)], [("Vantail ext", 45.0), ("Vantail ext", 60.0)], [("Poignée", -9.0), ("Poignée", 9.0)]),
+                sans_plan(volume("Vantail", P, [("Dormant gauche", 3.0), ("Dormant droit", -3.0)], [("Cadre int", 0.0), ("Vantail ext", 0.0)], [("Pied vantail", 0.0), ("Dormant haut", -3.0)])),
+                // vantail fermé, béquilles et rosaces (intérieur puis extérieur) : cachés en plan
+                sans_plan(volume("Rosace intérieure", M, [("Dormant droit", -85.0), ("Dormant droit", -45.0)], [("Cadre int", -8.0), ("Cadre int", 0.0)], [("Poignée", -20.0), ("Poignée", 20.0)])),
+                sans_plan(volume("Béquille intérieure", M, [("Dormant droit", -190.0), ("Dormant droit", -55.0)], [("Cadre int", -60.0), ("Cadre int", -45.0)], [("Poignée", -9.0), ("Poignée", 9.0)])),
+                sans_plan(volume("Tige intérieure", M, [("Dormant droit", -72.0), ("Dormant droit", -58.0)], [("Cadre int", -45.0), ("Cadre int", -8.0)], [("Poignée", -7.0), ("Poignée", 7.0)])),
+                sans_plan(volume("Rosace extérieure", M, [("Dormant droit", -85.0), ("Dormant droit", -45.0)], [("Vantail ext", 0.0), ("Vantail ext", 8.0)], [("Poignée", -20.0), ("Poignée", 20.0)])),
+                sans_plan(volume("Tige extérieure", M, [("Dormant droit", -72.0), ("Dormant droit", -58.0)], [("Vantail ext", 8.0), ("Vantail ext", 45.0)], [("Poignée", -7.0), ("Poignée", 7.0)])),
+                sans_plan(volume("Béquille extérieure", M, [("Dormant droit", -190.0), ("Dormant droit", -55.0)], [("Vantail ext", 45.0), ("Vantail ext", 60.0)], [("Poignée", -9.0), ("Poignée", 9.0)])),
             ],
             extrusions: Vec::new(),
             elements_2d: vec![
-                // plan : vantail ouvert à 90° (aplat de son épaisseur) et arc de débattement
-                { let mut e = Element2DFamille::polyligne(VueEsquisse::Plan, vec![point("Dormant gauche", 0.0, "Cadre int", 0.0), point("Dormant gauche", 40.0, "Cadre int", 0.0), point("Dormant gauche", 40.0, "Ouvert", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], true); *e.remplissage_mut().unwrap() = Some(crate::documentation::RemplissageContour::Motif { motif: crate::MotifCoupe::Uni }); e },
-                trait_(VueEsquisse::Plan, vec![point("Dormant droit", 0.0, "Cadre int", 0.0), point("Arc x", 0.0, "Arc y", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], true),
+                // plan : vantail ouvert à 90° (contour de son épaisseur, sans fond) et
+                // débattement en pointillés
+                Element2DFamille::polyligne(VueEsquisse::Plan, vec![point("Dormant gauche", 0.0, "Cadre int", 0.0), point("Dormant gauche", 40.0, "Cadre int", 0.0), point("Dormant gauche", 40.0, "Ouvert", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0)], true),
+                debattement(point("Dormant droit", 0.0, "Cadre int", 0.0), point("Dormant gauche", 0.0, "Ouvert", 0.0), -1.0),
                 trait_(VueEsquisse::Elevation, vec![point("Dormant droit", 0.0, "Pied vantail", 0.0), point("Dormant gauche", 0.0, "Mi-hauteur", 0.0), point("Dormant droit", 0.0, "Dormant haut", 0.0)], false),
             ],
             cotes_mesure: Vec::new(),
@@ -340,6 +354,27 @@ mod tests {
             }
             f.valider(l * 1.5, h * 1.2, 300.0).unwrap();
         }
+    }
+
+    #[test]
+    fn porte_ouverte_en_plan() {
+        let f = FamilleModelee::porte_1_vantail();
+        for largeur in [900.0, 1200.0] {
+            let r = f.resoudre(largeur, 2150.0, 200.0);
+            let pivot = (r.positions["Dormant gauche"], r.positions["Cadre int"]);
+            let rayon = r.positions["Dormant droit"] - pivot.0;
+            let traits = f.traits_2d_affiches(&r, VueEsquisse::Plan, NiveauDetail::Moyen);
+            // débattement : quart de cercle autour du pivot, en pointillés
+            let crate::documentation::AnnotationForme::Polyligne { traits: types, .. } = &traits[1] else { panic!() };
+            assert_eq!(types, &["trait-pointilles"]);
+            let points = traits[1].forme_2d().unwrap().polylignes().concat();
+            assert!(points.len() > 4 && points.iter().all(|q| ((q.x - pivot.0).hypot(q.y - pivot.1) - rayon).abs() < 1.0), "{points:?}");
+            // vantail ouvert sans fond ; vantail fermé et quincaillerie cachés en plan
+            assert!(f.regions_resolues(&r, VueEsquisse::Plan, NiveauDetail::Moyen).is_empty());
+        }
+        let cache = |n: &str| !f.volumes.iter().find(|v| v.nom == n).unwrap().visibilite.plan;
+        assert!(["Vantail", "Béquille intérieure", "Rosace extérieure"].into_iter().all(cache));
+        assert!(!cache("Huisserie gauche"));
     }
 
     /// Écrit la section `types_ouvertures` du gabarit par défaut (une ligne par type),

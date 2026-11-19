@@ -173,6 +173,13 @@ impl FamilleModelee {
                 && (points.len() < 2 || (*fermee && points.len() < 3) || (remplissage.is_some() && !fermee)) {
                 return Err(format!("Élément 2D {n} : polyligne de moins de deux sommets, ou remplie sans être fermée."));
             }
+            // courbures et types de trait : aucun, ou un par segment (comme dans le projet)
+            if let AnnotationForme::Polyligne { points, fermee, courbures, traits, .. } = &e.forme {
+                let segments = points.len() - 1 + usize::from(*fermee && points.len() > 2);
+                if (!courbures.is_empty() && courbures.len() != segments) || courbures.iter().any(|k| !k.is_finite() || k.abs() > 1e3) || traits.len() > segments {
+                    return Err(format!("Élément 2D {n} : courbures ou types de trait en nombre différent des segments."));
+                }
+            }
             if !e.est_ancre() { continue; }
             let mut forme = e.forme.clone();
             let Some(points) = points_ancrables_mut(&mut forme) else { return Err(format!("Élément 2D {n} : forme non ancrable.")) };
@@ -268,6 +275,12 @@ mod tests {
         assert!(FichierFamille::lire(&f.json().unwrap()).is_err());
         let mut f = porte();
         f.famille.elements_2d[0].forme = AnnotationForme::Cote { debut: crate::documentation::PointCote::Fixe { point: [0.0; 2] }, fin: crate::documentation::PointCote::Fixe { point: [1.0, 0.0] }, decalage: 0.0 };
+        assert!(FichierFamille::lire(&f.json().unwrap()).is_err());
+        // courbure de trop : refusée, comme pour les annotations du projet
+        let mut f = porte();
+        if let AnnotationForme::Polyligne { points, courbures, .. } = &mut f.famille.elements_2d[0].forme {
+            *courbures = vec![0.5; points.len() + 1];
+        }
         assert!(FichierFamille::lire(&f.json().unwrap()).is_err());
         // ancien format : `symboles` n'est plus lu
         let mut ancien = serde_json::to_value(porte()).unwrap();

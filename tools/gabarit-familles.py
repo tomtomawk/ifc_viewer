@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 
 racine = Path(__file__).resolve().parent.parent
-subprocess.run(["cargo", "test", "--release", "--bin", "bimedit", "--", "--ignored", "ecrire_familles_du_gabarit"], cwd=racine, check=True, env=os.environ)
+subprocess.run(["cargo", "test", "--release", "-p", "modele", "--lib", "--", "--ignored", "ecrire_familles_du_gabarit"], cwd=racine, check=True, env=os.environ)
 lignes = (racine / "target" / "familles-gabarit.json").read_text(encoding="utf-8").splitlines()
 gabarit = racine / "gabarits" / "defaut.gabarit.json"
 texte = gabarit.read_bytes().decode("utf-8")

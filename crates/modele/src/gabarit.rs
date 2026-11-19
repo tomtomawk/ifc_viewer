@@ -86,7 +86,14 @@ pub struct FamilleMateriau {
     pub surface_motif: Option<MotifCoupe>,
     #[serde(default)]
     pub surface_couleur: Option<[u8; 3]>,
+    /// Apparence (style Réaliste) : brins d'herbe, textures (chemins `gabarit:textures/…` :
+    /// textures livrées avec le logiciel), découpe du feuillage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub apparence: Option<crate::Apparence>,
 }
+
+/// Préfixe des textures livrées avec le gabarit (dossier `gabarits/textures`).
+pub const PREFIXE_TEXTURE: &str = "gabarit:";
 
 /// Type composé : couches (murs : de l'extérieur vers l'intérieur).
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -174,7 +181,7 @@ impl Gabarit {
                 surface_fond_motif: f.surface_fond_motif.clone(),
                 surface_motif: f.surface_motif.clone(),
                 surface_couleur: f.surface_couleur,
-                apparence: Default::default(),
+                apparence: f.apparence.clone().unwrap_or_default(),
             },
             None => {
                 // couleur assez claire pour les hachures
@@ -227,6 +234,17 @@ pub fn texte_defaut() -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn herbe_et_feuillage_du_gabarit() {
+        let g = Gabarit::defaut();
+        // terrain naturel et pelouse : brins d'herbe ; feuillage découpé ; textures livrées
+        assert!(g.materiau("Terre naturelle").apparence.herbe > 0.0 && g.materiau("Pelouse").apparence.herbe > 0.0);
+        let f = g.materiau("Feuillage");
+        assert!(f.apparence.textures.contains_key(&crate::CarteTexture::Decoupe));
+        assert!(f.apparence.textures.values().chain(g.materiau("Écorce").apparence.textures.values()).all(|t| t.chemin.starts_with(PREFIXE_TEXTURE)));
+        assert_eq!(g.materiau("Béton").apparence.herbe, 0.0);
+    }
 
     #[test]
     fn gabarit_par_defaut_complet() {

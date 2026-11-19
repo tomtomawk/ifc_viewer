@@ -12,6 +12,7 @@ use std::path::Path;
 mod aretes;
 pub mod liens;
 mod materiaux;
+pub mod textures_gabarit;
 mod navigateur;
 
 use aretes::{aretes_jointes, aretes_silhouette, aretes_terrain};
@@ -377,9 +378,11 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         // motif : 1 Graphique seulement, 2 Réaliste seulement)
         let (tronc, houppier) = a.solides(z0);
         let r = a.remplacement(z0);
-        let defaut = |nom: &str, couleur: [u8; 3]| modele::Materiau { nom: nom.into(), couleur, ..Default::default() };
-        let ecorce = projet.materiau(MATERIAU_ECORCE).cloned().unwrap_or_else(|| defaut(MATERIAU_ECORCE, [92, 76, 62]));
-        let feuillage = projet.materiau(MATERIAU_FEUILLAGE).cloned().unwrap_or_else(|| defaut(MATERIAU_FEUILLAGE, a.essence.couleur()));
+        // sans ces matériaux dans le projet : ceux du gabarit (textures, feuillage découpé),
+        // le feuillage à la couleur de l'essence
+        let gabarit = |nom: &str| modele::murs::assemblage::materiau_par_defaut(nom);
+        let ecorce = projet.materiau(MATERIAU_ECORCE).cloned().unwrap_or_else(|| gabarit(MATERIAU_ECORCE));
+        let feuillage = projet.materiau(MATERIAU_FEUILLAGE).cloned().unwrap_or_else(|| modele::Materiau { couleur: a.essence.couleur(), ..gabarit(MATERIAU_FEUILLAGE) });
         let mut parts = Vec::new();
         let mut rendu = Vec::new();
         let mut motifs = Vec::new();
@@ -538,7 +541,9 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         .into_iter()
         .map(|(_, mut a)| {
             for t in a.textures.values_mut() {
-                if std::path::Path::new(&t.chemin).is_relative() {
+                if let Some(f) = textures_gabarit::chemin(&t.chemin) {
+                    t.chemin = f.to_string_lossy().into_owned();
+                } else if std::path::Path::new(&t.chemin).is_relative() {
                     t.chemin = dossier.join(&t.chemin).to_string_lossy().into_owned();
                 }
             }

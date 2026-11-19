@@ -183,7 +183,17 @@ Motifs : `diagonales`, `croisees`, `uni`, `vide`. Il faut au moins un type de co
 type d'élévation. `niveaux` (`nom`, `altitude` en mm) : niveaux d'un nouveau projet (RDC
 à 0 dans le gabarit par défaut). Les familles de `materiaux` acceptent aussi
 `surface_fond_motif`, `surface_motif`, `surface_couleur`, `coupe_couleur`, `coupe_fond`,
-`coupe_fond_motif`. `motifs` : motifs de hachures proposés (Diagonales serrées,
+`coupe_fond_motif`, et `apparence` (même forme que l'apparence d'un matériau du projet :
+`herbe`, `rugosite`, `textures`…) donnée aux matériaux créés d'après la famille ; une
+texture `gabarit:textures/<fichier>` désigne une texture livrée avec le logiciel
+(`gabarits/textures`, embarquée). Le gabarit par défaut donne des brins d'herbe de 60 mm et
+la texture de pelouse à « Terre naturelle » et « Pelouse / gazon / herbe », la texture de
+feuilles découpée (masque) à « Feuillage » et une texture à « Écorce » ; un arbre d'un
+projet sans matériau « Feuillage » ou « Écorce » prend ceux du gabarit (feuillage à la
+couleur de son essence). Un matériau déjà enregistré dans un projet garde son apparence.
+La porte intérieure du gabarit montre en plan le vantail ouvert (contour sans fond) et son
+débattement en pointillés (segment de polyligne courbe, type `trait-pointilles`) ; le
+vantail fermé et la quincaillerie sont cachés en plan (`visibilite.plan`). `motifs` : motifs de hachures proposés (Diagonales serrées,
 Horizontales, Béton, Brique, Bois (fil), Terre dans le gabarit par défaut).
 
 Éditeur de hachures (Graphismes d'un matériau > Motifs de hachures…) : liste des motifs
