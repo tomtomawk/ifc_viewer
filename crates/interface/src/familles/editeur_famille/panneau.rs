@@ -69,7 +69,12 @@ impl Application {
     }
 }
 
+/// Propriétés ; sélection multiple de même sorte : modification reportée sur tous.
 pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele::Projet) {
+    let avant = multiple::instantane(ui, ed); panneau_selection(ui, ed, projet); multiple::propager(ed, avant);
+}
+
+fn panneau_selection(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele::Projet) {
     reseau::options_reseau(ui, ed); traits::proprietes_traits(ui, ed, projet);
     if ed.famille.categorie == modele::famille::modelee::CategorieFamille::Profil {
         let section = match ed.selection {

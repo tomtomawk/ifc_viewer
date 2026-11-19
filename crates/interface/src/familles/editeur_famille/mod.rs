@@ -25,7 +25,7 @@ pub(crate) use plan_actif::PlanActif;
 mod reseau;
 mod aligner;
 mod chemin_trace;
-mod traits;
+mod traits; mod multiple;
 pub(crate) mod apercu;
 pub(crate) mod navigation; mod rendu;
 use navigation::*; use rendu::*;

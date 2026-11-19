@@ -364,6 +364,11 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   retirer), milieux d'arêtes (glisser : insérer un sommet), milieux des faces d'un
   volume (glisser : reverrouiller la face). Un clic dans un objet le choisit avant
   les plans qui le traversent (les plans se choisissent hors des objets).
+  Plusieurs éléments de même sorte sélectionnés (volumes, formes à profil, éléments
+  2D de même forme) : Propriétés montre le premier, et un paramètre modifié l'est sur
+  tous (par exemple décocher « Moyen » dans la visibilité de cinq volumes). Seul le
+  champ changé est reporté ; le nom et la géométrie de chacun (faces, profil,
+  sommets, ancrage) restent.
   Une polyligne a son **type de trait**, comme dans le projet : sélecteur de
   l'outil Polyligne 2D (et Rectangle) pour les tracés créés ; à la sélection, un
   sélecteur pour tous les segments des polylignes choisies (« Types variés » s'ils
