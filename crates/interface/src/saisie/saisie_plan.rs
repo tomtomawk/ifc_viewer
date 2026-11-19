@@ -691,7 +691,7 @@ impl Application {
             self.natif_modifie = true;
             return Ok(());
         }
-        let scene = scene_preparee.ok_or("Scène préparée absente")?;
+        let mut scene = scene_preparee.ok_or("Scène préparée absente")?; if let Some(s) = &self.scene { scene.file_name.clone_from(&s.file_name); } // même document, même nom (projet partagé : pas celui de la copie locale)
         noyau::chrono::chrono("application : scène", &mut t_etape);
         // l'instantané pris pour l'historique dit aussi si le projet diffère du fichier
         let modifie = if !distant && self.collaboration.is_none() { Some(self.historique.pousser_modifie(&self.natif.as_ref().unwrap().0, &projet)?) } else { None };

@@ -128,7 +128,7 @@ pub fn executer(args: &[String]) -> Option<Resultat<()>> {
                 println!("{} · r{}", s.etat, s.copie.base.revision);
                 break;
             }
-            if s.etat.starts_with("Hors connexion") {
+            if crate::echec(&s.etat) {
                 return Err(s.etat.clone());
             }
             if Instant::now() > limite {

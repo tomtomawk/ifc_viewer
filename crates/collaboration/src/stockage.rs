@@ -536,7 +536,7 @@ impl Autorite {
                     .is_some_and(|b| b.actif && b.proprietaire != session)
             })
         {
-            return Err("Réservé par un autre poste ; reprise explicite nécessaire".into());
+            return Err(crate::RESERVE_AILLEURS.into());
         }
         let mut baux = etat.baux.clone();
         for k in cles {

@@ -8,11 +8,11 @@ Dépendances internes autorisées : `noyau`, `modele`, `maillage`, `commandes`, 
 
 | Fichier (`src/`) | Contenu |
 |---|---|
-| `lib.rs` | `PROTOCOLE`, `projet`, `Transaction`, validation et fusion |
-| `session.rs` | `Session` (604 lignes : ne pas agrandir) |
+| `lib.rs` | `PROTOCOLE`, `projet`, `Transaction`, validation et fusion ; libellés de session (`libelle_etat`, `libelle_echec`, `echec`) |
+| `session.rs` | `Session` (599 lignes : ne pas agrandir) |
 | `stockage.rs` | `Depot` (626 lignes : ne pas agrandir) |
 | `concurrence.rs`, `partage.rs`, `texte.rs`, `cli.rs` | décomposition et empreintes, `.bimpartage`, texte `yrs`, CLI |
-| `tests.rs` | 36 tests ; `course_entre_deux_processus…` et `crash_processus…` relancent le binaire de test par `--exact "tests::enfant_…"` : garder ce chemin si le module change de nom |
+| `tests.rs` | 37 tests ; `course_entre_deux_processus…` et `crash_processus…` relancent le binaire de test par `--exact "tests::enfant_…"` : garder ce chemin si le module change de nom |
 
 `tests/` : 2 tests d'intégration (aller-retour par `collaboration::projet`). Les `include_str!` de `samples/` et de `modele/src/lib.rs` sont relatifs à `src/`.
 

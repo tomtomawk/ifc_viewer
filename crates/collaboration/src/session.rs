@@ -388,7 +388,7 @@ impl Session {
         self.messages = None;
         match resultat {
             Err(e) => {
-                self.etat = format!("Hors connexion / erreur : {e}");
+                self.etat = libelle_echec(&e);
                 Ok(None)
             }
             Ok((base, mut attente, conflits, ms, mesures)) => {
@@ -444,14 +444,7 @@ impl Session {
                         }
                     }
                 }
-                self.etat = if !self.copie.conflits.is_empty() {
-                    "Conflit — modifications locales conservées à l'écran"
-                } else if self.copie.attente.is_empty() {
-                    "Synchronisé"
-                } else {
-                    "Enregistré localement — en attente"
-                }
-                .into();
+                self.etat = libelle_etat(!self.copie.conflits.is_empty(), !self.copie.attente.is_empty()).into();
                 self.copie.apercu_conflit = (!self.copie.conflits.is_empty()).then_some(apercu);
                 self.persister()?;
                 Ok(Some(self.travail()?))
@@ -473,6 +466,7 @@ impl Session {
         self.copie.conflits.remove(id);
         self.copie.apercu_conflit = None;
         self.persister()?;
+        self.etat = libelle_etat(!self.copie.conflits.is_empty(), !self.copie.attente.is_empty()).into();
         self.travail()
     }
     pub fn resoudre_locale(&mut self, id: &str) -> Resultat<Projet> {
@@ -517,6 +511,7 @@ impl Session {
             Ok(p) => {
                 self.copie.annulations.push(resolution);
                 self.persister()?;
+                self.etat = libelle_etat(!self.copie.conflits.is_empty(), true).into();
                 Ok(p)
             }
             Err(e) => {

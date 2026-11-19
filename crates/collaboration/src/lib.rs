@@ -23,6 +23,32 @@ use commandes::objets::{Objets, objets};
 #[cfg(test)]
 use commandes::objets::COLLECTIONS;
 pub type Resultat<T> = Result<T, String>;
+
+/// Refus d'une réservation active détenue par une autre session.
+pub const RESERVE_AILLEURS: &str = "Réservé par un autre poste ; reprise explicite nécessaire";
+/// Libellé de session après un échec de synchronisation : un refus de réservation
+/// n'est pas une perte de connexion.
+pub fn libelle_echec(e: &str) -> String {
+    if e == RESERVE_AILLEURS {
+        format!("Réservation refusée : {e}")
+    } else {
+        format!("Hors connexion / erreur : {e}")
+    }
+}
+/// Le libellé décrit-il un échec (la commande en ligne s'arrête alors en erreur) ?
+pub fn echec(etat: &str) -> bool {
+    etat.starts_with("Hors connexion") || etat.starts_with("Réservation refusée")
+}
+/// Libellé de session d'après les conflits et propositions restants.
+pub fn libelle_etat(conflits: bool, attente: bool) -> &'static str {
+    if conflits {
+        "Conflit — modifications locales conservées à l'écran"
+    } else if attente {
+        "Enregistré localement — en attente"
+    } else {
+        "Synchronisé"
+    }
+}
 pub fn projet(objets: &Objets) -> Resultat<Projet> {
     let mut root = serde_json::Map::new();
     let mut collections: BTreeMap<String, Vec<Value>> = BTreeMap::new();

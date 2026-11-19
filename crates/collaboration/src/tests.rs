@@ -773,6 +773,28 @@ fn session_ancien_detenteur_ne_reacquiert_pas_silencieusement() {
     assert!(!s.copie.conflits.is_empty());
     assert_eq!(s.copie.base.revision, 0);
     assert_eq!(s.copie.base.baux[&cle].proprietaire, "b");
+    assert!(s.etat.starts_with("Conflit"), "{}", s.etat);
+    // la résolution met l'état à jour : plus de conflit ni de proposition
+    let id = s.copie.attente[0].id.clone();
+    s.abandonner(&id).unwrap();
+    assert_eq!(s.etat, "Synchronisé");
+    // réserver ce que « b » détient : refus de réservation, pas une perte de connexion
+    s.synchroniser(Some((vec![cle.clone()], false, false)), false).unwrap();
+    while s.synchronisation_en_cours() {
+        s.recevoir().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(s.etat.starts_with("Réservation refusée"), "{}", s.etat);
+    assert!(crate::echec(&s.etat));
+}
+
+#[test]
+fn libelles_de_session() {
+    assert!(crate::libelle_echec("disque absent").starts_with("Hors connexion"));
+    assert!(crate::echec(&crate::libelle_echec("disque absent")));
+    assert!(!crate::echec(crate::libelle_etat(true, true)));
+    assert_eq!(crate::libelle_etat(false, true), "Enregistré localement — en attente");
+    assert_eq!(crate::libelle_etat(false, false), "Synchronisé");
 }
 
 #[test]
