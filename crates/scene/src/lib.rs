@@ -319,9 +319,15 @@ impl Scene {
     /// coupe verticale), la topographie n'est prise que faute d'autre objet : elle passe
     /// sous les murs qu'elle recoupe au lieu de les masquer.
     pub fn pick(&self, origin: Vec3, dir: Vec3, visible: &[bool], coupe: Option<Vec4>, boite: Option<(Vec3, Vec3)>) -> Option<(u32, f32)> {
+        self.pick_triangle(origin, dir, visible, coupe, boite, None)
+            .map(|(objet, distance, _)| (objet, distance))
+    }
+
+    /// Triangle touché en premier, dans le repère recentré de la scène.
+    pub fn pick_triangle(&self, origin: Vec3, dir: Vec3, visible: &[bool], coupe: Option<Vec4>, boite: Option<(Vec3, Vec3)>, affichage: Option<modele::famille::modelee::Affichage>) -> Option<(u32, f32, [Vec3; 3])> {
         let inv = dir.recip();
-        let mut best: Option<(u32, f32)> = None;
-        let mut topo: Option<(u32, f32)> = None;
+        let mut best: Option<(u32, f32, [Vec3; 3])> = None;
+        let mut topo: Option<(u32, f32, [Vec3; 3])> = None;
         for (i, o) in self.objects.iter().enumerate() {
             if !visible[i] {
                 continue;
@@ -334,7 +340,8 @@ impl Scene {
             }
             for r in [o.opaque, o.transparent] {
                 let vs = &self.vertices[r.start as usize..(r.start + r.count) as usize];
-                for t in vs.chunks_exact(3) {
+                for (k, t) in vs.chunks_exact(3).enumerate() {
+                    if affichage.is_some_and(|a| !self.montre(r.start as usize + k * 3, a)) { continue; }
                     let (a, b, c) = (Vec3::from(t[0].pos), Vec3::from(t[1].pos), Vec3::from(t[2].pos));
                     if let Some(d) = ray_tri(origin, dir, a, b, c) {
                         let q = origin + dir * d;
@@ -342,7 +349,7 @@ impl Scene {
                         if garde {
                             let cible = if au_fond { &mut topo } else { &mut best };
                             if cible.is_none_or(|b| d < b.1) {
-                                *cible = Some((i as u32, d));
+                                *cible = Some((i as u32, d, [a, b, c]));
                             }
                         }
                     }

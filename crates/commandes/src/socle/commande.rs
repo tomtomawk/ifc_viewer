@@ -166,6 +166,8 @@ pub enum Commande {
         point: [f64; 2],
         ecart: f64,
     },
+    /// Découpe une surface le long de la polyligne dessinée en plan (mm).
+    ScinderSurface { id: String, trace: Vec<[f64; 2]> },
     /// Démolit les éléments dans `phase` (absente : annule la démolition).
     Demolir {
         ids: Vec<String>,

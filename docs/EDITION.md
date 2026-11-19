@@ -119,11 +119,15 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   centimètres par défaut ; Début → Options permet de choisir mm, cm ou m. Le JSON,
   les commandes CLI/MCP et les tailles sur papier restent en millimètres.
 - **Modéliser → Poteau / Poutre** crée des poteaux rectangulaires et des poutres
-  (section rectangulaire ou profil de leur type) en saisissant leurs dimensions et
-  leur niveau. Placez un poteau par un clic dans la vue ;
-  pour une poutre, cliquez son départ puis son arrivée. Le placement utilise les
-  accrochages et Maj contraint la poutre aux axes du plan ; Échap ou clic droit
-  annule un départ. La saisie par coordonnées reste disponible. Les poteaux sont
+  (section rectangulaire ou profil de leur type). La palette du poteau reprend le
+  croquis Haut/Bas du mur. Réglez le niveau et le décalage de base, puis un sommet
+  libre (hauteur) ou un niveau haut avec décalage. Le niveau haut est résolu en
+  cote au placement du poteau. Les dimensions et la rotation se règlent sous le
+  croquis. Placez le poteau d’un clic dans la vue ou utilisez « Placement par
+  coordonnées ». La palette de la poutre montre sa section, l’arase et la
+  justification par rapport au tracé. Cliquez le départ puis l’arrivée de la
+  poutre avec les accrochages. Maj contraint le tracé aux axes du plan, Échap ou
+  clic droit annule un départ. Les poteaux sont
   verticaux et orientables ; les poutres sont horizontales et définies par leur axe.
   Après sélection, **Modifier → Propriétés structurelles** permet de les modifier ;
   les commandes de déplacement, rotation, copie, suppression et l'historique leur
@@ -137,7 +141,7 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   fermé et le fermer par clic droit, F ou en cliquant le premier sommet. Les cotes sont
   **NGF**, dans l'unité du projet, et se règlent à côté de chaque sommet (S1, S2…) et de
   chaque point coté. Glisser un sommet ou un point le déplace ; glisser le milieu d'un
-  côté insère un sommet ; clic droit retire un point (ou un sommet, trois au moins).
+  côté insère un sommet. Cliquer sur un point coté active Déplacer, Copier et Supprimer dans Modifier. La touche Suppr retire le point sélectionné. Le clic droit retire un sommet du périmètre si trois sommets au moins subsistent.
   « Placer des points cotés » ajoute un point à chaque clic, à la cote indiquée. L'aperçu
   se teinte selon la cote, avec ses courbes de niveau. Entrée ou Valider crée le terrain :
   un solide de l'épaisseur du type, triangulé (Delaunay contraint par le contour), à
@@ -424,7 +428,11 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   immédiatement au-dessus (sinon 2,80 m) ; le nombre de contremarches suit la
   hauteur de marche visée du ruban, un palier compte pour une marche, le giron
   partage la longueur des volées. Propriétés : niveaux de départ et d'arrivée (ou
-  hauteur libre), décalage, largeur, hauteur de marche visée, paillasse ; calcul
+  hauteur libre), décalage, largeur, hauteur de marche visée, paillasse et sous-face.
+  Le choix **Crantée** ou **Lissée** se règle à la création ou dans les propriétés
+  d’un escalier sélectionné. En mode lissé, le dessous monte en continu sous les
+  volées, y compris les marches balancées, et reste horizontal sous les paliers.
+  Les marches restent en place et le changement est annulable. Le calcul est
   affiché (contremarches, giron, paliers, Blondel 2h + g, signalé hors confort :
   60 à 65 cm, h ≤ 20 cm, g ≥ 22 cm). Le plan représente les marches et les paliers.
   En mode **Marches balancées**, chaque sommet marque un tournant. Le tracé reste
@@ -654,6 +662,8 @@ Le sous-projet de base est `A` et la variante par défaut est `Principale` ; le 
 de la sélection est affiché dans Propriétés.
 
 ## Interfaces et commandes
+
+La commande `scinder_surface` reçoit l’identifiant `id` et une polyligne `trace` (points XY en mm). Dans Modifier → Scinder, choisir la surface, tracer de bord à bord, puis valider avec Entrée. Les dalles, sols, plafonds, toitures planes indépendantes, terre-pleins sans talus, terrains et limites de propriété peuvent être découpés. Les nouveaux éléments sont enregistrés en une opération annulable.
 
 Les commandes UI et MCP passent par les mêmes transactions. Une erreur de commande,
 validation ou reconstruction conserve le modèle précédent.

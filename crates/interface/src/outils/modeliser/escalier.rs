@@ -21,6 +21,7 @@ impl ViewerApp {
             largeur: self.ruban_edition.nombre_option(Outil::Escalier, 0),
             hauteur_marche: self.ruban_edition.nombre_option(Outil::Escalier, 1),
             paillasse: self.dessin2d.esc_paillasse.unwrap_or(150.0),
+            sous_face: self.dessin2d.esc_sous_face,
             balance: self.dessin2d.esc_balance,
         })
     }
@@ -120,7 +121,7 @@ impl ViewerApp {
                 for haut in [true, false] {
                     let ligne = ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 4.0;
-                        ui.add_sized([30.0, 20.0], egui::Label::new(RichText::new(if haut { "Haut" } else { "Bas" }).color(bleu)));
+                        ui.add_sized([30.0, 20.0], egui::Label::new(RichText::new(if haut { "Haut" } else { "Bas" }).color(bleu)).extend());
                         let champ = 72.0;
                         let largeur = (ui.available_width() - champ - 4.0).max(60.0);
                         if haut {
@@ -129,7 +130,7 @@ impl ViewerApp {
                                 HautEscalier::Niveau(id) => nom(id),
                                 HautEscalier::Libre => "Libre".to_string(),
                             };
-                            egui::ComboBox::from_id_salt("esc_haut").width(largeur).truncate().selected_text(texte).show_ui(ui, |ui| {
+                            egui::ComboBox::from_id_salt("esc_haut").width(largeur).wrap().selected_text(texte).show_ui(ui, |ui| {
                                 ui.selectable_value(&mut self.dessin2d.esc_haut, HautEscalier::Auto, "Niveau suivant");
                                 for (id, n) in &niveaux {
                                     ui.selectable_value(&mut self.dessin2d.esc_haut, HautEscalier::Niveau(id.clone()), n);
@@ -144,7 +145,7 @@ impl ViewerApp {
                             }
                         } else {
                             let texte = self.dessin2d.esc_bas.as_deref().map_or(nom_plan.clone(), |id| nom(id));
-                            egui::ComboBox::from_id_salt("esc_bas").width(largeur).truncate().selected_text(texte).show_ui(ui, |ui| {
+                            egui::ComboBox::from_id_salt("esc_bas").width(largeur).wrap().selected_text(texte).show_ui(ui, |ui| {
                                 ui.selectable_value(&mut self.dessin2d.esc_bas, None, format!("Niveau du plan ({nom_plan})"));
                                 for (id, n) in &niveaux {
                                     ui.selectable_value(&mut self.dessin2d.esc_bas, Some(id.clone()), n);
@@ -314,6 +315,17 @@ impl ViewerApp {
                 ui.add(egui::DragValue::new(n).range(1..=12)).on_hover_text("Marches balancées de part et d'autre de chaque tournant ; giron de rive d'au moins 10 cm");
             }
         });
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Sous-face");
+            choix_sous_face_escalier(ui, "creation_sous_face", &mut self.dessin2d.esc_sous_face);
+        });
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Paillasse");
+            let mut epaisseur = self.dessin2d.esc_paillasse.unwrap_or(150.0);
+            if ui.add(egui::DragValue::new(&mut epaisseur).range(1.0..=f64::MAX).speed(5.0).dimensions()).changed() {
+                self.dessin2d.esc_paillasse = Some(epaisseur);
+            }
+        });
         let Some((_, _, hauteur, _)) = self.base_escalier() else { return };
         if hauteur <= 1.0 {
             ui.colored_label(Color32::from_rgb(200, 40, 40), "L'escalier doit monter : limite haute au-dessus de la base.");
@@ -347,14 +359,14 @@ impl ViewerApp {
             });
             resultats
         } else {
-            let (zone, _) = ui.allocate_exact_size(egui::vec2(ui.available_width().max(220.0), 100.0), Sense::hover());
+            let (zone, _) = ui.allocate_exact_size(egui::vec2(ui.available_width().max(220.0), 116.0), Sense::hover());
             let painter = ui.painter_at(zone);
             let trait_ = egui::Stroke::new(1.6, ui.visuals().text_color());
             let cote = egui::Stroke::new(1.0, Color32::from_rgb(55, 130, 200));
             // trois marches, géométrie fixe
-            let (g, hm) = (46.0_f32, 22.0_f32);
+            let (g, hm) = (((zone.width() - 158.0) / 3.0).clamp(20.0, 46.0), 22.0);
             let x0 = zone.left() + 84.0;
-            let y0 = zone.top() + 70.0;
+            let y0 = zone.top() + 82.0;
             let mut points = vec![egui::pos2(x0, y0)];
             for _ in 0..3 {
                 let b = points[points.len() - 1];
@@ -560,4 +572,15 @@ mod tests {
             d.x > 1.0 && d.y > 1.0
         }));
     }
+}
+
+pub(crate) fn choix_sous_face_escalier(ui: &mut egui::Ui, id: &str, valeur: &mut modele::elements::escalier::SousFace) -> bool {
+    use modele::elements::escalier::SousFace;
+    let avant = *valeur;
+    egui::ComboBox::from_id_salt(id).selected_text(valeur.nom()).show_ui(ui, |ui| {
+        for option in SousFace::CHOIX {
+            ui.selectable_value(valeur, option, option.nom());
+        }
+    }).response.on_hover_text("Lissée : dessous incliné sous les marches, horizontal sous les paliers.");
+    *valeur != avant
 }

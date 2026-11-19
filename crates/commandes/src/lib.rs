@@ -7,6 +7,7 @@ mod modeliser;
 mod modifier;
 mod socle;
 pub use annoter::cotes::piloter_cote;
+pub use modifier::alignement;
 pub use modifier::composees::{Modification, decaler_polygone};
 pub use modifier::supprimer::annotations_a_detacher;
 pub use socle::commande::Commande;

@@ -10,7 +10,7 @@ Dépendances internes autorisées : `noyau`, `modele` (`maillage` en dev-depende
 |---|---|---|
 | Socle | `socle/` | `commande.rs` (`enum Commande`), `execution.rs` (`Execution::executer`, répartition par métier), `historique.rs` (piles d'annulation par différences, fusion des gestes, `modifications` : ids touchés par une étape ; tests dans `historique_tests.rs`), `differences.rs` (différence avant/après de deux états JSON, objets appariés par `id`), `libelles.rs` (libellés des étapes), `verrous.rs`, `contextes.rs`, `objets.rs` |
 | Modéliser | `modeliser/` | site, escaliers, garde-corps, pièces, composants, arbres, barres, ouvertures, contours et trémies de dalle ; `fusion.rs` : fusion d'un projet importé (`Fusionner`) |
-| Modifier | `modifier/` | `mod.rs` (déplacer, tourner, aligner, ajuster, supprimer), `supprimer.rs` (annotations détachées), `copier.rs`, `composees.rs` (symétrie, échelle, réseau, décaler, scinder, démolir, reproduire), `transformations.rs` |
+| Modifier | `modifier/` | `mod.rs` (déplacer, tourner, aligner, ajuster, supprimer), `supprimer.rs` (annotations détachées), `copier.rs`, `composees.rs` (symétrie, échelle, réseau, décaler, scinder, démolir, reproduire), `transformations.rs`, `scinder_surface.rs` (découpe de surfaces et terrains par polyligne avec `i_overlay`) |
 | Annoter | `annoter/` | quadrillages, annotations (cotes, textes, étiquettes, tracés 2D), niveaux ; `cotes.rs` (cotes pilotantes) |
 | Documenter | `documenter/` | vues en coupe, feuilles, nomenclatures |
 

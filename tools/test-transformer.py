@@ -142,18 +142,41 @@ def run(exe):
             assert proche(transfo()["centre"], [0, 0], 60), transfo()
             saisie([{"action": "touche", "touche": "Escape"}, {"action": "touche", "touche": "Escape"}])
 
-            # 7. Aligner : référence cliquée, puis élément cliqué
-            commande("outil", "aucun"); commande("selection_native", []); commande("outil", "aligner")
-            assert "référence" in transfo()["consigne"]
-            clic(milieu(axe(a)))
-            commande("outil", "aligner") if commande("etat")["outil"] != "Aligner" else None
-            attendre(lambda: transfo() and transfo()["reference"] == a)
-            bx = axe(b); commande("selection_native", [])
-            clic(milieu(bx))
-            r = axe(b)
-            assert abs(r["debut"][1]) < 1.0 and abs(r["fin"][1]) < 1.0, r
-            commande("annuler")
-            assert proche(axe(b)["debut"], bx["debut"])
+            # 7. Aligner : arête de coupe en plan, puis face de mur en 3D.
+            commande("outil", "aucun")
+            vues = commande("vues")["vues"]
+            plan = next(v for v in vues if v["genre"] == "Plan d'étage")
+            vue_3d = next(v for v in vues if v["genre"] == "Vue 3D")
+
+            def verifier_alignement(vue, face):
+                commande("outil", "aucun")
+                commande("vue", str(vue["indice"]))
+                if face:
+                    commande("camera", "ortho")
+                    commande("camera", "face")
+                commande("camera", "cadrer")
+                ax, bx = axe(a), axe(b)
+                pa, pb = milieu(ax), milieu(bx)
+                px_mm = abs(ax["fin_ecran"][0] - ax["debut_ecran"][0]) / 4000
+                assert px_mm > 0.001, ax
+                # Face à mi-hauteur en 3D, bord (100 mm de l'axe) en plan.
+                dy = -1400 * px_mm if face else math.copysign(100 * px_mm, pb[1] - pa[1])
+                commande("selection_native", [])
+                commande("outil", "aligner")
+                clic([pa[0], pa[1] + dy])
+                attendre(lambda: transfo() and transfo()["reference"] == a)
+                clic([pb[0], pb[1] + dy])
+                r = axe(b)
+                assert abs(r["debut"][1]) < 1.0 and abs(r["fin"][1]) < 1.0, r
+                commande("annuler")
+                assert proche(axe(b)["debut"], bx["debut"])
+
+            verifier_alignement(plan, False)
+            verifier_alignement(vue_3d, True)
+            commande("outil", "aucun")
+            commande("vue", str(plan["indice"]))
+            commande("camera", "cadrer")
+            bx = axe(b)
             nb = lambda: len(commande("projet_natif")["projet"]["murs"])
 
             # 8. Symétrie : axe = deux extrémités du mur B (y = 1500), copie par défaut

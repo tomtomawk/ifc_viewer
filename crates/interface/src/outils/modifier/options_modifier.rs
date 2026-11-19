@@ -1,5 +1,4 @@
 //! Options de modification, jonctions, annotations natives, export et documentation.
-use crate::*;
 use crate::outils::modeliser::bim::*;
 use config::options::Dimensions;
 
@@ -30,9 +29,7 @@ impl ViewerApp {
         if selection_seule && escalier.is_none() && mur.is_none() && !assemblage_seul {
             return;
         }
-        // dans Propriétés (sélection seule), aligné en haut : un alignement centré prenait
-        // toute la hauteur du panneau et laissait un grand blanc
-        ui.with_layout(egui::Layout::left_to_right(if selection_seule { egui::Align::Min } else { egui::Align::Center }).with_main_wrap(selection_seule), |ui| {
+        let contenu = |ui: &mut egui::Ui| {
             if selection_seule && escalier.is_some() {
                 ui.label("Garde-corps");
                 for (nom, cotes) in [("Deux côtés", vec![0, 1]), ("Gauche", vec![0]), ("Droite", vec![1])] {
@@ -119,15 +116,15 @@ impl ViewerApp {
                 Some(Outil::Decaler) => {
                     ui.checkbox(&mut self.transfo.copie, "Copier").on_hover_text("Créer un mur décalé ; décocher pour déplacer le mur");
                 }
+                Some(Outil::Scinder) if self.transfo.element.is_some() => { ui.label("Ligne de coupe"); }
                 Some(Outil::Scinder) => {
                     ui.label("Écart");
                     ui.add(egui::DragValue::new(&mut self.transfo.ecart).range(0.0..=10_000.0).speed(5.0).dimensions());
                 }
                 Some(Outil::Aligner) => {
-                    match self.transfo.reference.as_deref() {
+                    match self.transfo.alignement.reference.as_ref() {
                         Some(r) => {
-                            let nom = p.murs.iter().find(|m| m.id == r).map(|m| m.nom.as_str()).or_else(|| p.assemblage(r).map(|a| a.nom.as_str())).unwrap_or("mur");
-                            ui.label(format!("Référence : axe de {nom}"));
+                            ui.label(if r.est_face() { "Référence : face" } else { "Référence : segment" });
                             if ui.button("Changer la référence").clicked() {
                                 self.transfo.reinitialiser();
                             }
@@ -151,7 +148,12 @@ impl ViewerApp {
                 }
                 _ => {}
             }
-        });
+        };
+        if selection_seule {
+            ui.horizontal_wrapped(contenu);
+        } else {
+            ui.horizontal(contenu);
+        }
         if let Some(c) = commande {
             if let Err(e) = self.executer_bim(c) {
                 self.error = Some(e);

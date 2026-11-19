@@ -1,5 +1,6 @@
 //! Propriétés, types et croquis des murs.
 use super::*;
+use crate::outils::croquis::{self, CroquisVertical};
 
 impl RubanEdition {
     pub(crate) fn implantation_suivante(&mut self) {
@@ -42,14 +43,7 @@ impl RubanEdition {
             .show(ui, |ui| {
                 self.selecteur_type_mur(ui, projet, true);
                 ui.add_space(2.0);
-                egui::Frame::new()
-                    .fill(ui.visuals().faint_bg_color)
-                    .corner_radius(6.0)
-                    .inner_margin(egui::Margin::symmetric(8, 6))
-                    .show(ui, |ui| {
-                        ui.set_min_width(ui.available_width());
-                        self.croquis_mur_creation(ui, projet);
-                    });
+                croquis::cadre(ui, |ui| self.croquis_mur_creation(ui, projet));
                 if let Err(e) = self.parametres_mur().bornes(projet) {
                     ui.colored_label(ui.visuals().error_fg_color, e);
                 }
@@ -579,145 +573,33 @@ impl RubanEdition {
     /// une ligne chacune (niveau, puis décalage, ou hauteur si le haut est libre),
     /// rappelées par un pointillé depuis l'arête correspondante du mur.
     pub(super) fn croquis_mur_creation(&mut self, ui: &mut egui::Ui, projet: &modele::Projet) {
-        use egui::{Align2, FontId, Stroke, pos2, vec2};
-        let bleu = Color32::from_rgb(18, 158, 205);
-        let largeur_croquis = 64.0;
-        let origine = ui.cursor().min;
-        let mut centres = [0.0f32; 2];
-        let mut gauche_champs = 0.0f32;
-        // Réserver de la place autour du croquis pour les décalages des limites.
-        ui.add_space(14.0);
-        ui.horizontal_top(|ui| {
-            ui.add_space(largeur_croquis);
-            ui.vertical(|ui| {
-                ui.spacing_mut().item_spacing.y = 16.0;
-                for haut in [true, false] {
-                    let ligne = ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 4.0;
-                        ui.add_sized(
-                            [30.0, 20.0],
-                            egui::Label::new(RichText::new(if haut { "Haut" } else { "Bas" }).color(bleu)),
-                        );
-                        let niveau = if haut {
-                            &mut self.niveau_haut_mur
-                        } else {
-                            &mut self.niveau_mur
-                        };
-                        let nom = niveau
-                            .as_ref()
-                            .and_then(|id| projet.niveau(id))
-                            .or_else(|| if haut { None } else { projet.niveaux.first() })
-                            .map_or(if haut { "Libre" } else { "Niveau 0" }, |n| n.nom.as_str());
-                        let champ = 72.0;
-                        egui::ComboBox::from_id_salt(("limite_creation_mur", haut))
-                            .width((ui.available_width() - champ - 4.0).max(60.0))
-                            .truncate()
-                            .selected_text(nom)
-                            .show_ui(ui, |ui| {
-                                if haut || projet.niveaux.is_empty() {
-                                    ui.selectable_value(
-                                        niveau,
-                                        None,
-                                        if haut { "Libre (hauteur)" } else { "Niveau 0" },
-                                    );
-                                }
-                                for n in &projet.niveaux {
-                                    ui.selectable_value(niveau, Some(n.id.clone()), &n.nom);
-                                }
-                            })
-                            .response
-                            .on_hover_text(if haut {
-                                "Limite haute : un niveau, ou libre (hauteur saisie)"
-                            } else {
-                                "Limite basse : niveau de base du mur"
-                            });
-                        if haut && self.niveau_haut_mur.is_none() {
-                            // haut libre : la valeur est la hauteur, sans décalage
-                            self.decalage_haut_mur = 0.0;
-                            let v = self
-                                .valeurs
-                                .entry((Outil::Mur, 1))
-                                .or_insert(Valeur::Nombre(2800.0));
-                            if let Valeur::Nombre(v) = v {
-                                ui.add_sized(
-                                    [champ, 20.0],
-                                    egui::DragValue::new(v).speed(10.0).range(1.0..=f64::MAX).dimensions(),
-                                )
-                                .on_hover_text("Hauteur du mur");
-                            }
-                        } else {
-                            let v = if haut {
-                                &mut self.decalage_haut_mur
-                            } else {
-                                match self.valeurs.entry((Outil::Mur, 3)).or_insert(Valeur::Nombre(0.0)) {
-                                    Valeur::Nombre(v) => v,
-                                    Valeur::Texte(_) => unreachable!(),
-                                }
-                            };
-                            ui.add_sized(
-                                [champ, 20.0],
-                                egui::DragValue::new(v)
-                                    .speed(10.0)
-                                    .dimensions(),
-                            )
-                            .on_hover_text("Décalage par rapport au niveau");
-                        }
-                    });
-                    gauche_champs = ligne.response.rect.left();
-                    centres[if haut { 0 } else { 1 }] = ligne.response.rect.center().y;
-                }
-            });
+        let croquis = CroquisVertical::lignes(ui, |ui, haut| {
+            let niveau = if haut { &mut self.niveau_haut_mur } else { &mut self.niveau_mur };
+            let defaut = if haut { "Libre" } else { projet.niveaux.first().map_or("Niveau 0", |n| &n.nom) };
+            let libre = if haut { Some("Libre (hauteur)") } else { projet.niveaux.is_empty().then_some("Niveau 0") };
+            croquis::champ_niveau(ui, ("limite_creation_mur", haut), &projet.niveaux, niveau, defaut, libre);
+            let hauteur_libre = haut && niveau.is_none();
+            let (valeur, info) = if hauteur_libre {
+                self.decalage_haut_mur = 0.0;
+                (self.valeurs.entry((Outil::Mur, 1)).or_insert(Valeur::Nombre(2800.0)), "Hauteur du mur")
+            } else if haut {
+                ui.add_sized([72.0, 20.0], egui::DragValue::new(&mut self.decalage_haut_mur).speed(10.0).dimensions())
+                    .on_hover_text("Décalage par rapport au niveau");
+                return;
+            } else {
+                (self.valeurs.entry((Outil::Mur, 3)).or_insert(Valeur::Nombre(0.0)), "Décalage par rapport au niveau")
+            };
+            if let Valeur::Nombre(v) = valeur {
+                let mut champ = egui::DragValue::new(v).speed(10.0);
+                if hauteur_libre { champ = champ.range(1.0..=f64::MAX); }
+                ui.add_sized([72.0, 20.0], champ.dimensions()).on_hover_text(info);
+            }
         });
-        ui.add_space(14.0);
-        let p = ui.painter();
-        let bord = Stroke::new(1.0, bleu);
-        let profondeur = vec2(4.5, -3.0);
-        // mur vu de face (largeur), son chant à droite et son dessus
-        let x1 = origine.x + largeur_croquis - 20.0;
-        let x0 = origine.x + 16.0;
-        let (yh, yb) = limites_croquis_mur(&self.parametres_mur(), projet, centres[0] + 3.0, centres[1] + 3.0);
-        let (a, h, b, bb) = (pos2(x0, yh), pos2(x1, yh), pos2(x1, yb), pos2(x0, yb));
-        p.add(egui::Shape::convex_polygon(vec![a, h, b, bb], Color32::from_rgb(246, 251, 253), bord));
-        p.add(egui::Shape::convex_polygon(
-            vec![h, h + profondeur, b + profondeur, b],
-            Color32::from_rgb(222, 242, 249),
-            bord,
-        ));
-        p.add(egui::Shape::convex_polygon(
-            vec![a, a + profondeur, h + profondeur, h],
-            Color32::from_rgb(236, 248, 252),
-            bord,
-        ));
-        // Le mur de référence reste visible en pointillé quand ses limites sont décalées.
-        let rappel = Stroke::new(0.8, bleu.gamma_multiply(0.8));
-        if (yh - (centres[0] + 3.0)).abs() > 0.01 || (yb - (centres[1] + 3.0)).abs() > 0.01 {
-            let rh = centres[0] + 3.0;
-            let rb = centres[1] + 3.0;
-            for (de, a) in [(pos2(x0, rh), pos2(x1, rh)), (pos2(x0, rb), pos2(x1, rb)), (pos2(x0, rh), pos2(x0, rb)), (pos2(x1, rh), pos2(x1, rb))] {
-                p.add(egui::Shape::dashed_line(&[de, a], rappel, 2.5, 2.5));
-            }
-        }
-        // Les rappels des niveaux restent horizontaux, quel que soit le décalage.
-        for y in centres {
-            let fin = gauche_champs - 3.0;
-            let depuis = pos2(x1 + profondeur.x, y);
-            let mut x = depuis.x;
-            while x < fin {
-                p.line_segment([pos2(x, y), pos2((x + 2.5).min(fin), y)], rappel);
-                x += 5.0;
-            }
-            p.circle_filled(depuis, 1.5, bleu);
-        }
-        // hauteur résultante, le long du mur
-        if let Ok((bas_z, haut_z)) = self.parametres_mur().bornes(projet) {
-            p.text(
-                pos2((x0 + x1) * 0.5, (yh + yb) * 0.5),
-                Align2::CENTER_CENTER,
-                modele::unite::unite().afficher(haut_z - bas_z),
-                FontId::proportional(8.0),
-                ui.visuals().weak_text_color(),
-            );
-        }
+        let parametres = self.parametres_mur();
+        let [haut, bas] = croquis.references();
+        let (haut, bas) = limites_croquis_mur(&parametres, projet, haut, bas);
+        let mesure = parametres.bornes(projet).ok().map(|(bas, haut)| haut - bas);
+        croquis.peindre(ui, [haut, bas], 28.0, mesure);
     }
 
     pub(super) fn nombre_mur(&mut self, ui: &mut egui::Ui, cle: usize, defaut: f64) {

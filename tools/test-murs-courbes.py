@@ -86,6 +86,9 @@ def run(exe, captures):
             x,y=controle["ecran"][1];tx,ty=ecran(3800,3800)
             saisie([{"action":"bouton","x":x,"y":y,"bouton":"gauche","appuye":True},{"action":"pointer","x":tx,"y":ty},{"action":"bouton","x":tx,"y":ty,"bouton":"gauche","appuye":False}])
             assert commande("projet_natif")["empreinte"]!=avant["empreinte"],"La poignée ne modifie pas l'arc"
+            apres = commande("mur_trace")["controle_arc"]["points"]
+            for i in (0, 2):
+                assert all(abs(a-b) < 0.01 for a, b in zip(controle["points"][i], apres[i])), "Extrémité déplacée"
             commande("annuler")
             assert commande("projet_natif")["empreinte"]==avant["empreinte"]
             # Sélection d'un trait droit du dessin : l'annotation reste en place.

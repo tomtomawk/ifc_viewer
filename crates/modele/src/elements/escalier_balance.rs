@@ -77,6 +77,12 @@ fn correspondance<'a>(foulee: &'a Ligne, rive: &'a Ligne, zone: f64) -> impl Fn(
 /// Marches balancées : contour en plan de chaque marche (rive gauche puis rive droite,
 /// coins de rive compris) pour `marches` marches de giron constant sur la foulée.
 pub fn marches(trace: &[DVec2], gauche: &[DVec2], droite: &[DVec2], marches: usize, balance: usize) -> Result<Vec<Vec<DVec2>>, String> {
+    Ok(marches_avec_arrivees(trace, gauche, droite, marches, balance)?
+        .into_iter().map(|(contour, _)| contour).collect())
+}
+
+/// Indice du premier sommet du bord d’arrivée, avant les deux rives du contour.
+pub(super) fn marches_avec_arrivees(trace: &[DVec2], gauche: &[DVec2], droite: &[DVec2], marches: usize, balance: usize) -> Result<Vec<(Vec<DVec2>, usize)>, String> {
     if trace.len() < 2 || marches == 0 {
         return Err("Escalier balancé : ligne de foulée trop courte.".into());
     }
@@ -95,13 +101,14 @@ pub fn marches(trace: &[DVec2], gauche: &[DVec2], droite: &[DVec2], marches: usi
         }
         let mut contour = vec![g.point(ug0)];
         contour.extend(g.sommets_entre(ug0, ug1));
+        let arrivee = contour.len();
         contour.push(g.point(ug1));
         contour.push(d.point(ud1));
         let mut cote_droit = d.sommets_entre(ud0, ud1);
         cote_droit.reverse();
         contour.extend(cote_droit);
         contour.push(d.point(ud0));
-        out.push(contour);
+        out.push((contour, arrivee));
     }
     Ok(out)
 }
@@ -156,7 +163,7 @@ mod tests {
         use crate::{Escalier, Niveau, Projet};
         let mut p = Projet::nouveau("E");
         p.niveaux = vec![Niveau { id: "rdc".into(), nom: "RDC".into(), altitude: 0.0, origine: None }, Niveau { id: "r1".into(), nom: "R+1".into(), altitude: 2800.0, origine: None }];
-        let e = Escalier { id: "e".into(), nom: "E".into(), niveau: "rdc".into(), niveau_haut: Some("r1".into()), decalage_bas: 0.0, decalage_haut: 0.0, hauteur: 2800.0, trace: vec![[0.0, 0.0], [3000.0, 0.0], [3000.0, 3000.0]], largeur: 1000.0, hauteur_marche: 175.0, paillasse: 150.0, balance: Some(5) };
+        let e = Escalier { id: "e".into(), nom: "E".into(), niveau: "rdc".into(), niveau_haut: Some("r1".into()), decalage_bas: 0.0, decalage_haut: 0.0, hauteur: 2800.0, trace: vec![[0.0, 0.0], [3000.0, 0.0], [3000.0, 3000.0]], largeur: 1000.0, hauteur_marche: 175.0, paillasse: 150.0, sous_face: Default::default(), balance: Some(5) };
         let c = e.calcul(&p).unwrap();
         assert_eq!((c.contremarches, c.paliers), (16, 0));
         assert!((c.giron - 400.0).abs() < 1e-6);

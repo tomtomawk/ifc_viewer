@@ -11,7 +11,7 @@ fn projet() -> Projet {
 }
 
 fn escalier(trace: Vec<[f64; 2]>) -> Escalier {
-    Escalier { id: "e".into(), nom: "Escalier".into(), niveau: "rdc".into(), niveau_haut: Some("r1".into()), decalage_bas: 0.0, decalage_haut: 0.0, hauteur: 2800.0, trace, largeur: 1000.0, hauteur_marche: 175.0, paillasse: 150.0, balance: None }
+    Escalier { id: "e".into(), nom: "Escalier".into(), niveau: "rdc".into(), niveau_haut: Some("r1".into()), decalage_bas: 0.0, decalage_haut: 0.0, hauteur: 2800.0, trace, largeur: 1000.0, hauteur_marche: 175.0, paillasse: 150.0, sous_face: Default::default(), balance: None }
 }
 
 #[test]

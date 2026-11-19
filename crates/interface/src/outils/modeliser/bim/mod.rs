@@ -8,6 +8,7 @@ use config::options::Dimensions;
 
 mod identique;
 mod panneau;
+mod poteau;
 mod widgets;
 
 
@@ -16,6 +17,8 @@ pub(crate) struct EtatBim {
     pub(crate) delta: [f64; 3],
     abscisse: f64,
     pub(crate) barre: modele::Barre,
+    niveau_haut_poteau: Option<String>,
+    decalage_haut_poteau: f64,
     /// Réglages des prochaines poutres (outil Poutre, n° 6 à 10).
     pub(crate) poutre: crate::outils::modeliser::poutres::ReglagesPoutre,
     pub(crate) depart_structure: Option<[f64; 2]>,
@@ -64,6 +67,8 @@ impl Default for EtatBim {
                 pose: Default::default(),
                 origine: None,
             },
+            niveau_haut_poteau: None,
+            decalage_haut_poteau: 0.0,
             depart_structure: None,
             composant: modele::Composant { id: String::new(), nom: String::new(), type_composant: String::new(), niveau: String::new(), position: [0.0; 2], decalage: 0.0, rotation: 0.0 },
             arbre: modele::elements::arbre::Arbre { id: String::new(), nom: String::new(), niveau: String::new(), position: [0.0; 2], decalage: 0.0, essence: Default::default(), hauteur: 10_000.0, diametre: 7_000.0, asset: None },
@@ -184,22 +189,17 @@ impl ViewerApp {
         debut: [f64; 2],
         fin: Option<[f64; 2]>,
     ) -> Result<(), String> {
+        if self.bim.barre.genre == modele::GenreBarre::Poteau {
+            let barre = self.poteau_regle(debut)?;
+            self.executer_bim(commandes::Commande::Barre { barre })?;
+            return Ok(());
+        }
         let mut b = self.bim.barre.clone();
         b.id.clear();
         b.debut[0] = debut[0];
         b.debut[1] = debut[1];
-        match b.genre {
-            modele::GenreBarre::Poteau => {
-                b.fin[0] = debut[0];
-                b.fin[1] = debut[1];
-            }
-            modele::GenreBarre::Poutre => {
-                let fin = fin.ok_or("Choisissez l'arrivée de la poutre.")?;
-                b.fin[0] = fin[0];
-                b.fin[1] = fin[1];
-                b.fin[2] = b.debut[2];
-            }
-        }
+        let fin = fin.ok_or("Choisissez l'arrivée de la poutre.")?;
+        b.fin = [fin[0], fin[1], b.debut[2]];
         self.executer_bim(commandes::Commande::Barre { barre: b })?;
         Ok(())
     }

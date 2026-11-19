@@ -201,7 +201,10 @@ impl ViewerApp {
             self.ruban_edition.bouton_jonctions = None;
             let outil_avant = self.ruban_edition.outil();
             let action = self.ruban_edition.afficher(ui, menu, self.natif.as_ref().map(|n| &n.0));
-            if self.ruban_edition.edition_traces && let Some(o) = action {
+            if menu == crate::zones::ruban::Menu::Modeliser && action.is_some_and(|o| o != crate::zones::ruban::Outil::LienIfc) {
+                self.select(None, true);
+            }
+            if menu == crate::zones::ruban::Menu::Modifier && self.ruban_edition.edition_traces && let Some(o) = action {
                 if self.dessin2d.edition_contour.is_none() { self.selectionner_trace_en_creation(); }
                 self.commande_ruban_contour(o);
                 return;

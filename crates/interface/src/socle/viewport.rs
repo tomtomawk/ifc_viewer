@@ -144,6 +144,7 @@ impl ViewerApp {
             i.pointer.hover_pos().is_some_and(|p| zone.contains(p))
                 || (i.pointer.any_down() && i.pointer.press_origin().is_some_and(|p| zone.contains(p)))
         });
+        let mut saisir_alignement = false;
         if self.scene.is_some() && !sur_repere_plan {
             let pick = |app: &Self, p: egui::Pos2| -> Option<(u32, Vec3)> {
                 if !app.point_dans_cadrage(rect, p) { return None; }
@@ -317,8 +318,10 @@ impl ViewerApp {
                         Err(e) => self.error = Some(e),
                     }
                 }
+            } else if deplacement == Some(crate::zones::ruban::Outil::Aligner) {
+                saisir_alignement = true;
             } else if let Some(outil) = deplacement {
-                // élément sous le curseur : surligné avant le clic, cible d'Aligner
+                // élément sous le curseur : surligné avant le clic
                 let cible = |app: &Self, q: egui::Pos2| pick(app, q).and_then(|(obj, _)| app.scene.as_ref()?.objects.get(obj as usize).map(|o| o.id)).and_then(|id| app.cle_native(app.cible_clic(id)));
                 // même cible qu'au clic : à défaut de face touchée (plan au trait), le mur sous le curseur
                 self.transfo.cible = resp.hover_pos().and_then(|q| cible(self, q)).or_else(|| self.transfo.curseur.filter(|_| resp.hovered()).and_then(|p| self.mur_proche(p)));
@@ -559,7 +562,9 @@ impl ViewerApp {
         } else {
             self.croix_temporaire = None;
         }
-        if deplacement.is_some() {
+        if saisir_alignement {
+            self.souris_aligner(ui, rect, &resp);
+        } else if deplacement.is_some() {
             self.apercu_transformation(ui, rect, resp.hover_pos(), altitude_coupe);
         }
         if !mode_ajuster && dalle.is_none() && !mode_mur && outil_coupe.is_none() && structure.is_none() && self.dessin2d.edition_contour.is_none() {

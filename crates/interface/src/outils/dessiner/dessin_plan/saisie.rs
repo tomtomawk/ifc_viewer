@@ -376,9 +376,10 @@ impl ViewerApp {
                     self.editer_contours_en_creation(usage);
                 }
             } else if let Some(e) = self.dessin2d.edition_contour.as_mut()
-                && (e.segment.is_some() || e.sommet.is_some() || e.selection.is_some() || e.dessin)
+                && (e.point_topo.is_some() || e.segment.is_some() || e.sommet.is_some() || e.selection.is_some() || e.dessin)
             {
                 // premier Échap : retour à la sélection des segments et des sommets
+                e.point_topo = None;
                 (e.segment, e.sommet, e.selection, e.dessin) = (None, None, None, false);
             } else if let Some(e) = self.dessin2d.edition_contour.as_ref() {
                 // tracé modifié : un premier Échap prévient, un second (dans les 4 s) abandonne
@@ -434,7 +435,7 @@ impl ViewerApp {
             let ngf = self.natif.as_ref().map_or(0.0, |(p, _)| p.ngf()) + altitude;
             self.dessin2d.terrain_cotes.resize(contour.len(), ngf);
         }
-        self.dessin2d.edition_contour = Some(EditionContour { id: String::new(), creation: Some(usage), altitude, dessin: false, selection: None, segment: None, sommet: None, commande: None, depart: None, repere: None, glisse: None, annotation: None, fermees, raccord: None, element: None, initial: Vec::new() });
+        self.dessin2d.edition_contour = Some(EditionContour { id: String::new(), creation: Some(usage), altitude, dessin: false, selection: None, segment: None, sommet: None, point_topo: None, commande: None, depart: None, repere: None, glisse: None, annotation: None, fermees, raccord: None, element: None, initial: Vec::new() });
     }
 
     pub(crate) fn selectionner_trace_en_creation(&mut self) {
@@ -491,6 +492,9 @@ impl ViewerApp {
     /// puis l'outil se ferme ; Annuler : tout ce qui est en cours est abandonné, puis
     /// l'outil se ferme.
     pub(crate) fn quitter_commande(&mut self, valider: bool) {
+        if valider && self.transfo.outil == Some(crate::zones::ruban::Outil::Scinder) && self.transfo.element.is_some() {
+            if !self.valider_coupe_surface() { return; }
+        }
         if valider && !self.dessin2d.saisie.is_empty() && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.raccord.is_some()) {
             self.valider_saisie_dessin();
             if self.dessin2d.message.is_some() { return; }
@@ -657,7 +661,7 @@ impl ViewerApp {
     }
 
     /// Terrain en cours : altitude absolue de chaque sommet du contour (S1, S2…) et de
-    /// chaque point coté (1, 2… ; × le retire), modifiable à côté du point, dans l'unité
+    /// chaque point coté (1, 2…), modifiable à côté du point, dans l'unité
     /// du projet.
     pub(crate) fn cotes_terrain(&mut self, ui: &egui::Ui, rect: egui::Rect) {
         if self.dessin2d.dalle.is_empty() || !self.usage_dessin().is_some_and(|(u, _)| u == Usage::Terrain) {
@@ -666,7 +670,6 @@ impl ViewerApp {
         let (bleu, vert) = (Color32::from_rgb(0, 120, 215), Color32::from_rgb(20, 160, 60));
         let sommets: Vec<DVec2> = self.dessin2d.dalle[0].iter().map(|p| DVec2::from_array(*p)).collect();
         let points: Vec<DVec2> = self.dessin2d.terrain_points.iter().map(|p| DVec2::new(p[0], p[1])).collect();
-        let mut retrait = None;
         for (point, (nom, couleur, k)) in sommets.iter().zip((0..).map(|i| (format!("S{}", i + 1), bleu, i))).chain(points.iter().zip((0..).map(|i| (format!("{}", i + 1), vert, sommets.len() + i)))) {
             let Some(q) = self.vers_ecran(rect, *point) else { continue };
             if !rect.contains(q) {
@@ -687,15 +690,9 @@ impl ViewerApp {
                             if let Some(z) = z {
                                 ui.add(egui::DragValue::new(z).speed(10.0).dimensions()).on_hover_text("Altitude absolue");
                             }
-                            if let Some(j) = k.checked_sub(sommets.len()) && ui.small_button("×").on_hover_text("Retirer ce point").clicked() {
-                                retrait = Some(j);
-                            }
                         });
                     });
                 });
-        }
-        if let Some(j) = retrait {
-            self.dessin2d.terrain_points.remove(j);
         }
     }
 

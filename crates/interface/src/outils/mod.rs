@@ -4,3 +4,4 @@ pub(crate) mod modifier;
 pub(crate) mod dessiner;
 pub(crate) mod annoter;
 pub(crate) mod bandeau;
+pub(crate) mod croquis;

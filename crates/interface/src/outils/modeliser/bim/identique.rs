@@ -35,6 +35,8 @@ impl ViewerApp {
                 self.bim.barre = b.clone();
                 self.bim.barre.id.clear();
                 self.bim.barre.origine = None;
+                self.bim.niveau_haut_poteau = None;
+                self.bim.decalage_haut_poteau = 0.0;
             }
             self.ruban_edition
                 .activer_structure(b.genre == modele::GenreBarre::Poutre);
@@ -52,6 +54,7 @@ impl ViewerApp {
             self.dessin2d.esc_decalage_haut = e.decalage_haut;
             self.dessin2d.esc_balance = e.balance;
             self.dessin2d.esc_paillasse = Some(e.paillasse);
+            self.dessin2d.esc_sous_face = e.sous_face;
             self.dessin2d.giron_impose = None;
             self.dessin2d.justification_escalier = 0;
             self.dessin2d.just_segments.clear();
@@ -276,6 +279,7 @@ mod tests {
             largeur: 1350.0,
             hauteur_marche: 165.0,
             paillasse: 200.0,
+            sous_face: modele::elements::escalier::SousFace::Lissee,
             balance: None,
         };
         projet.escaliers.push(source.clone());
@@ -295,6 +299,7 @@ mod tests {
             (nouveau.largeur, nouveau.hauteur_marche, nouveau.paillasse),
             (source.largeur, source.hauteur_marche, source.paillasse)
         );
+        assert_eq!(nouveau.sous_face, source.sous_face);
         assert_eq!(
             (nouveau.decalage_bas, nouveau.hauteur),
             (source.decalage_bas, source.hauteur)

@@ -1178,6 +1178,7 @@ fn creations_independantes_barres_escaliers_gardes_terrains_importes_et_types() 
                     largeur: 1000.0,
                     hauteur_marche: 175.0,
                     paillasse: 150.0,
+                    sous_face: Default::default(),
                     balance: None,
                 }),
                 "garde_corps" => q.garde_corps.push(GardeCorps {

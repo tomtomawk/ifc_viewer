@@ -601,6 +601,11 @@ impl ViewerApp {
             }
         };
         self.onglet_ruban = onglet;
+        if onglet == OngletRuban::Modeliser { self.select(None, true); }
+        if matches!(o, O::Deplacer | O::Copier | O::Supprimer) && self.cible_trace().0 == crate::zones::ruban::CibleTrace::PointTopo {
+            self.commande_ruban_contour(o);
+            return lire(&self.etat());
+        }
         self.ajustement=if o==O::Ajuster {Some(Default::default())} else {None};
         self.error = None;
         match o {

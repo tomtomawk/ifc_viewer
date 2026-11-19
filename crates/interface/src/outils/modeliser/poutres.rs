@@ -25,6 +25,62 @@ impl Default for ReglagesPoutre {
     }
 }
 
+impl ReglagesPoutre {
+    fn barre(&self, niveau: String, a: DVec2, b: DVec2) -> modele::Barre {
+        modele::Barre {
+            id: String::new(),
+            nom: "Poutre".into(),
+            genre: modele::GenreBarre::Poutre,
+            niveau,
+            debut: [a.x, a.y, self.decalage],
+            fin: [b.x, b.y, self.decalage],
+            largeur: self.largeur,
+            hauteur: self.hauteur,
+            rotation: 0.0,
+            pose: PosePoutre { type_poutre: self.type_poutre.clone(), justification: self.justification, arase: self.arase },
+            origine: None,
+        }
+    }
+
+    fn croquis(&self, ui: &mut egui::Ui, projet: &modele::Projet, niveau: Option<&modele::Niveau>) {
+        use crate::outils::croquis::{cadre, BLEU};
+        let barre = self.barre(String::new(), DVec2::ZERO, DVec2::X);
+        let Ok((largeur, hauteur, contour)) = modele::elements::poutre::section(projet, &barre) else { return };
+        // Section réelle par rapport au point (ligne tracée, cote d’arase).
+        let centre_x = self.justification.decalage(largeur);
+        let centre_y = self.arase.bas(hauteur) + hauteur / 2.0;
+        let section: Vec<_> = contour.into_iter().map(|[x, y]| [x + centre_x, y + centre_y]).collect();
+        cadre(ui, |ui| {
+            ui.horizontal(|ui| {
+                let (rect, _) = ui.allocate_exact_size(egui::vec2(90.0, 76.0), egui::Sense::hover());
+                let echelle = (64.0 / largeur).min(54.0 / hauteur);
+                let point = |[x, y]: [f64; 2]| rect.center() - egui::vec2(((x - centre_x) * echelle) as f32, ((y - centre_y) * echelle) as f32);
+                let p = ui.painter();
+                let repere = point([0.0, 0.0]);
+                let axe = egui::Stroke::new(0.8, ui.visuals().weak_text_color());
+                for ligne in [
+                    [egui::pos2(rect.left() + 3.0, repere.y), egui::pos2(rect.right() - 3.0, repere.y)],
+                    [egui::pos2(repere.x, rect.top() + 3.0), egui::pos2(repere.x, rect.bottom() - 3.0)],
+                ] {
+                    p.add(egui::Shape::dashed_line(&ligne, axe, 3.0, 3.0));
+                }
+                p.add(egui::Shape::closed_line(section.iter().copied().map(point).collect(), egui::Stroke::new(1.8, BLEU)));
+                p.circle_filled(repere, 2.5, BLEU);
+                ui.vertical(|ui| {
+                    let unite = modele::unite::unite();
+                    ui.label(RichText::new("Coupe de la poutre").strong());
+                    ui.label(format!("{} × {}", unite.afficher(largeur), unite.afficher(hauteur)));
+                    ui.label(self.arase.libelle());
+                    if let Some(niveau) = niveau {
+                        let signe = if self.decalage < 0.0 { "−" } else { "+" };
+                        ui.label(format!("{} {signe} {}", niveau.nom, unite.afficher(self.decalage.abs())));
+                    }
+                });
+            });
+        });
+    }
+}
+
 /// Segments des poutres d'une forme tracée : polyligne (segments enchaînés, fermée ou
 /// non) ou contour de rectangle.
 pub(crate) fn segments(f: &noyau::forme2d::Forme2D) -> Vec<(DVec2, DVec2)> {
@@ -97,19 +153,10 @@ impl ViewerApp {
             if contexte.phase.is_some() || contexte.sous_projet.is_some() || contexte.variante.is_some() {
                 q.contextes.insert(id.clone(), contexte.clone());
             }
-            q.barres.push(modele::Barre {
-                id,
-                nom: format!("Poutre {}", q.barres.iter().filter(|b| b.genre == modele::GenreBarre::Poutre).count() + 1),
-                genre: modele::GenreBarre::Poutre,
-                niveau: niveau.clone(),
-                debut: [a.x, a.y, r.decalage],
-                fin: [b.x, b.y, r.decalage],
-                largeur: r.largeur,
-                hauteur: r.hauteur,
-                rotation: 0.0,
-                pose: PosePoutre { type_poutre: r.type_poutre.clone(), justification: r.justification, arase: r.arase },
-                origine: None,
-            });
+            let mut barre = r.barre(niveau.clone(), a, b);
+            barre.id = id;
+            barre.nom = format!("Poutre {}", q.barres.iter().filter(|b| b.genre == modele::GenreBarre::Poutre).count() + 1);
+            q.barres.push(barre);
         }
         if n == 0 { return; }
         match self.appliquer_projet(q) {
@@ -170,6 +217,12 @@ impl ViewerApp {
         let (types, profils, materiaux, niveaux) = (p.types_poutres.clone(), p.profils.clone(), p.materiaux.iter().map(|m| m.nom.clone()).collect::<Vec<_>>(), p.niveaux.clone());
         let niveau_vue = self.niveau_trace();
         let r = &mut self.bim.poutre;
+        if r.type_poutre.as_ref().is_some_and(|id| !types.iter().any(|t| &t.id == id)) {
+            r.type_poutre = None;
+        }
+        if r.niveau.as_ref().is_some_and(|id| !niveaux.iter().any(|n| &n.id == id)) {
+            r.niveau = None;
+        }
         let mut nouveau_type = None;
         let nom = r.type_poutre.as_ref().and_then(|id| types.iter().find(|t| &t.id == id)).map_or_else(|| format!("Section {} × {} mm", r.largeur, r.hauteur), |t| t.nom.clone());
         ui.label(RichText::new("Type de poutre").small().weak());
@@ -211,7 +264,7 @@ impl ViewerApp {
             }
         }
         ui.separator();
-        let actuel = r.niveau.clone().or(niveau_vue);
+        let actuel = r.niveau.clone().or(niveau_vue.clone());
         egui::ComboBox::from_label("Niveau de référence").selected_text(actuel.as_ref().and_then(|id| niveaux.iter().find(|n| &n.id == id)).map_or("—", |n| n.nom.as_str())).show_ui(ui, |ui| {
             for n in &niveaux { if ui.selectable_label(actuel.as_ref() == Some(&n.id), &n.nom).clicked() { r.niveau = Some(n.id.clone()); } }
         });
@@ -222,6 +275,8 @@ impl ViewerApp {
         egui::ComboBox::from_label("Arase").selected_text(r.arase.libelle()).show_ui(ui, |ui| {
             for a in Arase::TOUTES { ui.selectable_value(&mut r.arase, a, a.libelle()); }
         });
+        let niveau = r.niveau.as_ref().or(niveau_vue.as_ref()).and_then(|id| p.niveau(id));
+        r.croquis(ui, p, niveau);
         ui.label(RichText::new("Tracer dans la vue : polyligne enchaînée ou rectangle ; Ctrl : justification, Espace : inverser, Entrée : terminer.").small().weak());
         if let Some(t) = nouveau_type {
             let mut q = self.natif.as_ref().unwrap().0.clone();
