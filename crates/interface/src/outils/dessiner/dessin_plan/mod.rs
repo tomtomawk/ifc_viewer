@@ -780,6 +780,13 @@ impl Application {
             k[i] = 0.0;
             self.dessin2d.definir_courbures(c, k);
         }
+        // projet sans type de trait : le premier choix y ajoute ceux du gabarit
+        if choix_trait.is_some()
+            && let Some(q) = self.natif.as_ref().and_then(|(p, _)| crate::outils::annoter::types_traits::avec_types_du_gabarit(p))
+            && let Err(e) = self.appliquer_projet(q)
+        {
+            self.error = Some(e);
+        }
         if let Some(id) = choix_trait
             && let Some(AnnotationForme::Polyligne { traits, .. }) = self.dessin2d.edition_contour.as_mut().and_then(|e| e.annotation.as_mut()).map(|a| &mut a.forme)
         {
