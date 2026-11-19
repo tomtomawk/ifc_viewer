@@ -73,6 +73,13 @@ pub fn texte_cartouche(t: &TexteCartouche, contenu: &str) -> Primitive {
     texte(contenu, pt_papier(t.position[0], t.position[1]), DVec3::X, DVec3::Y, t.hauteur / 1000.0, [20, 20, 20, 255])
 }
 
+/// Primitives d'une forme dessinée (ligne, polyligne avec ses types de trait et son
+/// remplissage, spline, cercle, arc) : points de la forme passés par `pt`, tirets à
+/// l'échelle `echelle` (dénominateur ; 1 : mm du papier).
+pub fn primitives_dessin(p: &Projet, forme: &AnnotationForme, echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
+    primitives_forme_dessin(p, forme, echelle, pt)
+}
+
 pub fn forme_cartouche(p: &Projet, forme: &AnnotationForme) -> Vec<Primitive> {
     let pt = |v: DVec2| pt_papier(v.x, v.y);
     // cotes : même géométrie que dans les vues, en mm du papier (texte de 2,5 mm)

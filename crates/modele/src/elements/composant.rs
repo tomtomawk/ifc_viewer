@@ -147,9 +147,11 @@ impl Composant {
         f.textes_resolus(&r, VueEsquisse::Plan, detail).into_iter().map(|(q, t, h)| (placer(q), t, h)).collect()
     }
 
-    /// Traits en plan de la famille, placés (mm, à l'altitude du niveau).
-    pub fn symboles_plan(&self, p: &Projet, detail: crate::famille::modelee::NiveauDetail) -> Vec<Vec<DVec3>> {
+    /// Traits en plan de la famille avec leurs types de trait, placés (mm, à l'altitude
+    /// du niveau) ; tirets à l'échelle `echelle` de la vue.
+    pub fn symboles_plan(&self, p: &Projet, detail: crate::famille::modelee::NiveauDetail, echelle: f64) -> Vec<noyau::trace2d::Primitive> {
         let Some((f, r, placer)) = self.plan_resolu(p) else { return Vec::new() };
-        f.lignes_2d_resolues(&r, VueEsquisse::Plan, detail).into_iter().map(|l| l.into_iter().map(&placer).collect()).collect()
+        let pt = |q: glam::DVec2| placer((q.x, q.y));
+        f.traits_2d_affiches(&r, VueEsquisse::Plan, detail).iter().flat_map(|forme| crate::documentation::primitives_dessin(p, forme, echelle, &pt)).collect()
     }
 }

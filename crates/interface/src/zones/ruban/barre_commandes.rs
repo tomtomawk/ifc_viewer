@@ -229,7 +229,7 @@ pub(super) fn icone_commande(p: &egui::Painter, r: egui::Rect, i: Icone, c: Colo
                 "deplacer" => Some(Outil::Deplacer), "copier" => Some(Outil::Copier),
                 "tourner" => Some(Outil::Tourner), "symetrie" => Some(Outil::Symetrie),
                 "echelle" => Some(Outil::Echelle), "reseau" | "reseau_polaire" => Some(Outil::Reseau), "aligner" => Some(Outil::Aligner),
-                "supprimer" => Some(Outil::Supprimer), _ => None,
+                "supprimer" => Some(Outil::Supprimer), "modifier_trace" => Some(Outil::ModifierContour), _ => None,
             };
             if let Some(outil) = outil { super::icones::icone(p, r, outil, c); return; }
             let cadre = |x: f32, y: f32, w: f32, h: f32| {

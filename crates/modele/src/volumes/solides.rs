@@ -480,10 +480,10 @@ fn vue_ouverture<'a>(p: &'a Projet, o: &Ouverture) -> Option<(&'a crate::famille
     }))
 }
 
-/// Traits 2D de la famille de l'ouverture dans le projet (mm), points ancrés résolus.
-pub fn symboles_ouverture(p: &Projet, o: &Ouverture, vue: crate::famille::modelee::VueEsquisse, detail: crate::famille::modelee::NiveauDetail) -> Vec<Vec<DVec3>> {
-    let Some((f, r, placer)) = vue_ouverture(p, o) else { return Vec::new() };
-    f.lignes_2d_resolues(&r, vue, detail).into_iter().map(|l| l.into_iter().map(|q| placer(vue, q)).collect()).collect()
+/// Traits 2D de la famille de l'ouverture dans le projet (mm), typés (tirets à l'échelle `echelle`).
+pub fn symboles_ouverture(p: &Projet, o: &Ouverture, vue: crate::famille::modelee::VueEsquisse, detail: crate::famille::modelee::NiveauDetail, echelle: f64) -> Vec<noyau::trace2d::Primitive> {
+    let Some((f, r, placer)) = vue_ouverture(p, o) else { return Vec::new() }; let pt = |q: glam::DVec2| placer(vue, (q.x, q.y));
+    f.traits_2d_affiches(&r, vue, detail).iter().flat_map(|forme| crate::documentation::primitives_dessin(p, forme, echelle, &pt)).collect()
 }
 
 /// Textes de la vue de famille, placés dans le repère du projet (mm).

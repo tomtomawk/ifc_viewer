@@ -268,6 +268,8 @@ impl Application {
             deplacement_2d: None,
             multiple: Vec::new(),
             fenetre: None,
+            trait_creation: String::new(),
+            segment_trace: None,
         });
         if let Some(ed) = self.famille.as_mut() {
             ed.marquer_enregistree();

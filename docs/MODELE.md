@@ -366,8 +366,9 @@ Le champ facultatif `support` d'une forme (`extrusions[]`) la pose hors de sa vu
 - Sans `ancrage`, les coordonnées de la forme sont fixes dans le repère de la vue.
 - Avec `ancrage`, l'élément suit les paramètres : un sommet `{ "h": {"plan", "decalage"}, "v": {"plan", "decalage"} }` par point de la forme, dans l'ordre de ses points (polyligne, spline, zone : sommets ; arc : départ, passage, fin ; ligne : début, fin ; cercle : centre, le rayon reste fixe ; texte et libellé : point d'insertion). Les plans doivent exister et appartenir aux axes de la vue. Les coordonnées écrites dans `forme` sont recalculées à la résolution.
 - Une polyligne a au moins deux sommets, trois si elle est fermée (`fermee`) ; seule une polyligne fermée peut porter un `remplissage`. Les autres formes ne sont pas ancrables.
+- Une polyligne porte, comme celles du projet, `traits[]` : l'identifiant d'un type de trait (`types_traits[]` du projet) par segment, vide pour le continu fin ; absent si tout est en continu fin. Un identifiant inconnu du projet où la famille est chargée est dessiné en continu fin (pas de refus) : les types du gabarit (`trait-continu-fin`, `trait-tirets`, `trait-axe`…) ont les mêmes identifiants dans tous les projets.
 
-Les éléments de plan et d'élévation des portes, fenêtres et composants sont rendus dans les vues du projet et sur les feuilles (sens d'ouverture, débattement, régions remplies). Un élément 2D porte aussi `visible` (paramètre oui/non, facultatif) et `visibilite`, comme les volumes et les formes.
+Les éléments de plan et d'élévation des portes, fenêtres et composants sont rendus dans les vues du projet et sur les feuilles (sens d'ouverture, débattement, régions remplies, types de trait avec leurs tirets à l'échelle de la vue). Un élément 2D porte aussi `visible` (paramètre oui/non, facultatif) et `visibilite`, comme les volumes et les formes.
 
 ### Visibilité des éléments de famille
 

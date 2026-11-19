@@ -88,7 +88,7 @@ zone de coupe sont en m. Les angles de caméra et de pente sont en degrés.
 - `exporter_csv {"id":"…","chemin":"C:/quantites.csv"}` : export de ce tableau.
 - `familles` ; `famille_editer <id de type>` ; `famille_ouvrir <chemin>` ;
   `famille_charger <chemin>` ; `famille_enregistrer <chemin>` : éditeur/fichiers de familles.
-- `famille_outil <clé>` : choisir un outil de l’éditeur de famille modélisée (`selection`, `ligne`, `arc`, `cercle`, `spline`, `rectangle`, etc.). Les outils de l’onglet Modifier (`deplacer`, `copier`, `tourner`, `symetrie`, `echelle`) exigent une sélection ; leurs points se cliquent ensuite dans la vue.
+- `famille_outil <clé>` : choisir un outil de l’éditeur de famille modélisée (`selection`, `ligne`, `arc`, `cercle`, `spline`, `rectangle`, etc.). Les outils de l’onglet Modifier (`deplacer`, `copier`, `tourner`, `symetrie`, `echelle`) exigent une sélection ; leurs points se cliquent ensuite dans la vue. `modifier_trace` (bouton Modifier) exige un seul tracé sélectionné de la vue ouverte.
 - `famille_nouvelle porte|fenetre|composant|profil|cartouche|etiquette` ; `famille_document` : ouvrir un gabarit et lire
   le fichier de l'éditeur (`fichier`, `type`, `modifie`).
 - `famille_modifier <objet fichier complet>` : modifier et valider la famille dans

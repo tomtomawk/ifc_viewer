@@ -43,11 +43,14 @@ pub(crate) const OUTILS: &[Descripteur] = &[
     Descripteur { outil: OutilFamille::Reseau, cle: "reseau", nom: "Réseau", aide: "Réseau linéaire (RE) de la sélection : point de base, puis position de la deuxième copie (ou de la dernière) ; nombre dans Propriétés", groupe: GROUPE_TRANSFORMER, en_3d: false },
     Descripteur { outil: OutilFamille::ReseauPolaire, cle: "reseau_polaire", nom: "Réseau polaire", aide: "Réseau polaire de la sélection : centre, direction de départ, puis direction de la deuxième copie (ou de la dernière) ; nombre dans Propriétés", groupe: GROUPE_TRANSFORMER, en_3d: false },
     Descripteur { outil: OutilFamille::CheminGuidage, cle: "chemin", nom: "Tracer le chemin", aide: "Forme par chemin choisie : cliquer les points du chemin (A : arc par trois points ; premier point : fermer ; Entrée : terminer)", groupe: "Chemin", en_3d: false },
+    Descripteur { outil: OutilFamille::ModifierTrace, cle: "modifier_trace", nom: "Modifier", aide: "Modifier le tracé de l'élément sélectionné (polyligne, arc, cercle, spline, profil) : glisser un sommet, glisser un milieu d'arête pour insérer un sommet, clic droit sur un sommet pour le retirer, cliquer un segment pour choisir son type de trait ; Échap pour terminer", groupe: GROUPE_EDITION, en_3d: false },
     Descripteur { outil: OutilFamille::Aligner, cle: "aligner", nom: "Aligner", aide: "Aligner (AL) : cliquer la référence (plan ou arête), puis les arêtes des éléments à aligner dessus", groupe: GROUPE_TRANSFORMER, en_3d: false },
 ];
 
 /// Groupe de l'onglet Modifier : ces outils agissent sur la sélection.
 pub(crate) const GROUPE_TRANSFORMER: &str = "Transformer";
+/// Groupe « Édition » de l'onglet Modifier : modifier le tracé, supprimer.
+pub(crate) const GROUPE_EDITION: &str = "Édition";
 
 /// Contexte de présentation et de contrôle : la même décision sert au ruban
 /// et au contrôleur, avec la raison affichable à l'utilisateur.

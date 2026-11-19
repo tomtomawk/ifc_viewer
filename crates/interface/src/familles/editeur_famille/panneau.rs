@@ -47,8 +47,8 @@ impl Application {
         let reponses = if onglet == OngletRuban::FamilleModifier {
             let selection = ed.selection != SelectionFamille::Aucune || !ed.multiple.is_empty();
             let aide = if selection { "Supprimer la sélection (Suppr)" } else { "Sélectionner d'abord un ou plusieurs éléments de la famille." };
-            let edition = vec![C::new("supprimer", "Supprimer", I::Famille("supprimer"), aide, selection)];
-            bandeau(ui, &[(catalogue::GROUPE_TRANSFORMER, outils(catalogue::GROUPE_TRANSFORMER)), ("Édition", edition)])
+            let edition: Vec<C> = outils(catalogue::GROUPE_EDITION).into_iter().chain([C::new("supprimer", "Supprimer", I::Famille("supprimer"), aide, selection)]).collect();
+            bandeau(ui, &[(catalogue::GROUPE_TRANSFORMER, outils(catalogue::GROUPE_TRANSFORMER)), (catalogue::GROUPE_EDITION, edition)])
         } else {
             bandeau_compact(ui, &[("Références", outils("Références")), ("Cotes", outils("Cotes")), ("Formes", outils("Formes")), ("Symboles 2D", outils("Symboles 2D"))])
         };
@@ -70,7 +70,7 @@ impl Application {
 }
 
 pub(super) fn panneau(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele::Projet) {
-    reseau::options_reseau(ui, ed);
+    reseau::options_reseau(ui, ed); traits::proprietes_traits(ui, ed, projet);
     if ed.famille.categorie == modele::famille::modelee::CategorieFamille::Profil {
         let section = match ed.selection {
             SelectionFamille::Element2D(k) if ed.famille.elements_2d.get(k).is_some_and(|e| e.vue == VueEsquisse::Plan && e.contour_ferme()) => Some(k),

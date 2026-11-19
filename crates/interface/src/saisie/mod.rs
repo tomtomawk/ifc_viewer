@@ -5,4 +5,5 @@ pub(crate) mod reperage;
 pub(crate) mod saisie_trace;
 pub(crate) mod saisie_plan;
 pub(crate) mod selection;
+pub(crate) mod selection_multiple;
 pub(crate) mod poignees_annotation;

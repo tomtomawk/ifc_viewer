@@ -98,11 +98,16 @@ pub struct Maillage {
 impl Primitive {
     /// Copie déplacée de `d`.
     pub fn translater(&self, d: DVec3) -> Primitive {
+        self.transformer(|p| p + d)
+    }
+
+    /// Copie dont chaque point passe par `f`.
+    pub fn transformer(&self, f: impl Fn(DVec3) -> DVec3) -> Primitive {
         let forme = match &self.forme {
-            Forme::Polyligne { points, fermee } => Forme::Polyligne { points: points.iter().map(|p| *p + d).collect(), fermee: *fermee },
-            Forme::Segments(s) => Forme::Segments(s.iter().map(|s| s.map(|p| p + d)).collect()),
-            Forme::Surface(c) => Forme::Surface(c.iter().map(|c| c.iter().map(|p| *p + d).collect()).collect()),
-            Forme::Triangles(t) => Forme::Triangles(t.iter().map(|t| t.map(|p| p + d)).collect()),
+            Forme::Polyligne { points, fermee } => Forme::Polyligne { points: points.iter().map(|p| f(*p)).collect(), fermee: *fermee },
+            Forme::Segments(s) => Forme::Segments(s.iter().map(|s| s.map(&f)).collect()),
+            Forme::Surface(c) => Forme::Surface(c.iter().map(|c| c.iter().map(|p| f(*p)).collect()).collect()),
+            Forme::Triangles(t) => Forme::Triangles(t.iter().map(|t| t.map(&f)).collect()),
         };
         Primitive { forme, ..self.clone() }
     }

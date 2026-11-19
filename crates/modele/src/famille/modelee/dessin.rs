@@ -122,6 +122,15 @@ impl FamilleModelee {
             .collect()
     }
 
+    /// Formes tracées de la vue `vue` (lignes, polylignes avec leurs types de trait,
+    /// splines, cercles, arcs), sans remplissage (`regions_resolues` le donne à part).
+    pub fn traits_2d_affiches(&self, r: &Resolution, vue: VueEsquisse, detail: NiveauDetail) -> Vec<AnnotationForme> {
+        self.elements_2d_affiches(r, vue, detail).into_iter().filter(|e| e.forme.forme_2d().is_some()).map(|mut e| {
+            if let AnnotationForme::Polyligne { remplissage, .. } = &mut e.forme { *remplissage = None; }
+            e.forme
+        }).collect()
+    }
+
     /// Régions 2D remplies de la vue `vue` : contour fermé développé (h, v) et remplissage.
     pub fn regions_resolues(&self, r: &Resolution, vue: VueEsquisse, detail: NiveauDetail) -> Vec<(Vec<(f64, f64)>, RemplissageContour)> {
         self.elements_2d_affiches(r, vue, detail).into_iter().filter_map(|e| {
@@ -223,6 +232,30 @@ mod tests {
         let r = f.resoudre(900.0, 2150.0, 200.0);
         assert!(f.lignes_2d_resolues(&r, VueEsquisse::Plan, NiveauDetail::Moyen).len() < n);
         assert_eq!(f.elements_2d_resolus(&r, VueEsquisse::Plan).len(), f.elements_2d.iter().filter(|e| e.vue == VueEsquisse::Plan).count());
+    }
+
+    #[test]
+    fn types_de_trait_dans_le_projet() {
+        use crate::documentation::{primitives_dessin, types_traits_standard};
+        use noyau::trace2d::Forme;
+        let mut f = FamilleModelee::gabarit_porte();
+        let AnnotationForme::Polyligne { points, fermee, traits, remplissage, .. } = &mut f.elements_2d[0].forme else { panic!() };
+        let n = points.len() - 1 + usize::from(*fermee && points.len() > 2);
+        *traits = vec!["trait-tirets".into(); n];
+        *remplissage = Some(RemplissageContour::Motif { motif: crate::MotifCoupe::Uni });
+        let json = FichierFamille { famille: f.clone(), ..porte() }.json().unwrap();
+        assert!(json.contains("trait-tirets"));
+        let r = f.resoudre(900.0, 2150.0, 200.0);
+        let formes = f.traits_2d_affiches(&r, VueEsquisse::Plan, NiveauDetail::Moyen);
+        // type de trait gardé, remplissage donné à part
+        assert!(matches!(&formes[0], AnnotationForme::Polyligne { traits, remplissage: None, .. } if traits[0] == "trait-tirets"));
+        let p = crate::Projet { types_traits: types_traits_standard(), ..Default::default() };
+        let pt = |q: glam::DVec2| q.extend(0.0);
+        let prims = primitives_dessin(&p, &formes[0], 50.0, &pt);
+        assert!(prims.iter().all(|x| matches!(x.forme, Forme::Segments(_)) && (x.style.epaisseur - 0.18).abs() < 1e-9));
+        // type absent du projet : continu fin
+        let prims = primitives_dessin(&crate::Projet::default(), &formes[0], 50.0, &pt);
+        assert!(prims.iter().all(|x| matches!(x.forme, Forme::Polyligne { .. })));
     }
 
     #[test]

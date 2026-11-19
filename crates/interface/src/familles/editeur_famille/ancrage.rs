@@ -24,7 +24,7 @@ impl EditeurFamille {
     pub(super) fn ajouter_polyligne_ancree(&mut self, points: Vec<PointEsquisse>, fermee: bool) {
         let element = Element2DFamille::polyligne(self.vue.esquisse(), points, fermee);
         self.famille.elements_2d.push(element);
-        self.selection = SelectionFamille::Element2D(self.famille.elements_2d.len() - 1);
+        self.element_2d_cree();
     }
 
     /// Élément 2D ancré `k` de la vue active.

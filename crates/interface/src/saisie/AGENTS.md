@@ -9,7 +9,8 @@ Rôle : interaction commune aux outils de la vue et aux éditeurs.
 | `reperage.rs` | guides temporaires (repérage polaire) |
 | `saisie_trace.rs` | saisie clavier des points (distance, angle, coordonnées) |
 | `saisie_plan.rs` | saisie en plan : création des murs, dalles et vues natives, aperçus, axes |
-| `selection.rs` | clic, rectangle, cadrage |
+| `selection.rs` | clic, rectangle, cadrage, sélecteur de type d'un élément seul |
+| `selection_multiple.rs` | sélecteur de type de plusieurs éléments : un par sorte d'élément sélectionnée |
 | `poignees_annotation.rs` | poignées des annotations du projet |
 
 Dépendances typiques : `outils/dessiner/dessin_plan/` (tracé 2D), `zones/ruban/` (`Outil`), `outils/modeliser/bim/`, `socle/document_bim.rs`.

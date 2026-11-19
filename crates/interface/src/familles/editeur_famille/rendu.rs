@@ -70,17 +70,6 @@ pub(super) fn aretes_vue(ed: &EditeurFamille, r: &Resolution) -> Vec<noyau::form
     geoms
 }
 
-/// Copie de `p` dont chaque point passe par `f`.
-fn transposer(p: &Primitive, f: &dyn Fn(DVec3) -> DVec3) -> Primitive {
-    let forme = match &p.forme {
-        Forme::Polyligne { points, fermee } => Forme::Polyligne { points: points.iter().map(|q| f(*q)).collect(), fermee: *fermee },
-        Forme::Segments(s) => Forme::Segments(s.iter().map(|s| s.map(f)).collect()),
-        Forme::Surface(c) => Forme::Surface(c.iter().map(|c| c.iter().map(|q| f(*q)).collect()).collect()),
-        Forme::Triangles(t) => Forme::Triangles(t.iter().map(|t| t.map(f)).collect()),
-    };
-    Primitive { forme, ..p.clone() }
-}
-
 const SELECTION: [u8; 4] = [230, 120, 20, 255];
 
 /// Primitives 2D de la vue plane ouverte (repère de la vue, m : x = h, y = v) et leur
@@ -99,6 +88,9 @@ fn primitives_vue(ed: &EditeurFamille, r: &Resolution, projet: &modele::Projet, 
             let hauteur = element.hauteur * echelle_vue / 1000.0;
             let largeur = if ed.famille.categorie == C::EtiquettePiece { noyau::texte::largeur(&apercu, "Arial", hauteur, false) } else { 0.0 };
             vec![doc::texte(&apercu, pt(point[0], point[1]) - DVec3::X * (largeur / 2.0), DVec3::X, DVec3::Y, hauteur, [30, 30, 30, 255])]
+        } else if element.forme.forme_2d().is_some() {
+            // types de trait : tirets à l'échelle de la vue
+            doc::primitives_dessin(projet, &element.forme, echelle_vue, &|q| pt(q.x, q.y))
         } else {
             doc::forme_cartouche(projet, &element.forme)
         };
@@ -201,7 +193,7 @@ impl Application {
         let signe = vers_observateur[k].signum();
         let (mn, mx) = scene.min.unwrap_or((Vec3::ZERO, Vec3::ZERO));
         let (loin, pres) = if signe > 0.0 { (mn[k] - 0.01, mx[k] + 0.01) } else { (mx[k] + 0.01, mn[k] - 0.01) };
-        let placer = |prims: Vec<Primitive>, p: f32| prims.iter().map(|x| transposer(x, &|q: DVec3| point_vue(axes, q.x * 1000.0, q.y * 1000.0, p).as_dvec3())).collect::<Vec<_>>();
+        let placer = |prims: Vec<Primitive>, p: f32| prims.iter().map(|x| x.transformer(|q: DVec3| point_vue(axes, q.x * 1000.0, q.y * 1000.0, p).as_dvec3())).collect::<Vec<_>>();
         let mut prims = placer(derriere, loin);
         prims.extend(placer(devant, pres));
         let papier = matches!(ed.famille.categorie, C::Cartouche | C::EtiquettePiece);

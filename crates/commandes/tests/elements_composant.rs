@@ -50,5 +50,5 @@ fn composant_place_transforme_copie_supprime() {
     // l'échelle est refusée ; le niveau utilisé ne se supprime pas
     assert!(p.executer(Commande::Echelle { ids: vec![id.clone()], centre: [0.0, 0.0], facteur: 2.0 }).is_err());
     assert!(p.executer(Commande::Supprimer { ids: vec![p.niveaux[0].id.clone()] }).is_err());
-    assert!(!p.composants[0].symboles_plan(&p, modele::famille::modelee::NiveauDetail::Moyen).is_empty());
+    assert!(!p.composants[0].symboles_plan(&p, modele::famille::modelee::NiveauDetail::Moyen, 50.0).is_empty());
 }

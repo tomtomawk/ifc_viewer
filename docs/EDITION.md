@@ -196,7 +196,12 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   Le panneau Propriétés commence par le sélecteur de type de l'élément : mur composé
   (couches reconstruites d'après le type choisi ; une couche sélectionnée montre le
   type de son mur), mur seul (types à une couche), élément horizontal, porte ou
-  fenêtre (dimensions du type).
+  fenêtre (dimensions du type). Plusieurs éléments sélectionnés : un sélecteur par
+  sorte d'élément présente (murs, murs composés, éléments horizontaux, portes et
+  fenêtres, ouvertures libres, composants, terrains, garde-corps, arbres), même si
+  la sélection en mélange plusieurs ; « Types variés » quand les types diffèrent, et
+  le type choisi s'applique à tous les éléments de cette sorte. Les dessins 2D
+  gardent leur sélecteur de type de trait.
 - **Modifier** propose déplacement, copie, rotation, alignement des axes et
   ajustement de l'extrémité d'un mur sur l'axe d'un autre. Ctrl+clic constitue une
   sélection multiple, surlignée dans la vue. On peut aussi
@@ -359,6 +364,15 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   retirer), milieux d'arêtes (glisser : insérer un sommet), milieux des faces d'un
   volume (glisser : reverrouiller la face). Un clic dans un objet le choisit avant
   les plans qui le traversent (les plans se choisissent hors des objets).
+  Une polyligne a son **type de trait**, comme dans le projet : sélecteur de
+  l'outil Polyligne 2D (et Rectangle) pour les tracés créés ; à la sélection, un
+  sélecteur pour tous les segments des polylignes choisies (« Types variés » s'ils
+  diffèrent) et, pour une seule polyligne, le type de chaque segment.
+  **Modifier** (onglet Modifier, groupe Édition) entre dans le tracé de l'élément
+  sélectionné seul (polyligne, arc, cercle, spline ou profil d'une forme) : mêmes
+  poignées, la sélection ne change plus au clic, un clic sur un segment de
+  polyligne le choisit (surligné) et le sélecteur de Propriétés ne change que lui ;
+  Échap ou un nouveau clic sur Modifier termine.
   L'**onglet Modifier** agit sur la sélection par points cliqués dans la vue,
   avec l'accrochage, l'aperçu en pointillés et le clic droit (revenir d'un point,
   puis quitter) communs : Déplacer, Copier, Tourner, Symétrie, Échelle,

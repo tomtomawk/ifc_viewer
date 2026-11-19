@@ -25,6 +25,7 @@ pub(crate) use plan_actif::PlanActif;
 mod reseau;
 mod aligner;
 mod chemin_trace;
+mod traits;
 pub(crate) mod apercu;
 pub(crate) mod navigation; mod rendu;
 use navigation::*; use rendu::*;
@@ -119,6 +120,8 @@ pub(crate) enum OutilFamille {
     Reseau,
     ReseauPolaire,
     Aligner,
+    /// Onglet Modifier : tracé de l'élément sélectionné (sommets, trait de chaque segment).
+    ModifierTrace,
     /// Tracé graphique du chemin de la forme guidée choisie.
     CheminGuidage,
 }
@@ -243,6 +246,8 @@ pub(crate) struct EditeurFamille {
     multiple: Vec<SelectionFamille>,
     /// Fenêtre de sélection en cours (même règle que le projet).
     fenetre: Option<FenetreSelection>,
+    /// Type de trait des polylignes créées (vide : continu fin) ; segment choisi pendant « Modifier ».
+    trait_creation: String, segment_trace: Option<usize>,
 }
 
 fn couleur_materiau(f: &FamilleModelee, m: Materiau) -> Color32 {
@@ -410,7 +415,7 @@ impl EditeurFamille {
     /// Abandonne la saisie en cours (esquisse, cote, rectangle, glissement).
     fn abandonner_saisie(&mut self) {
         self.axe_revolution = None;
-        self.points_transfo.clear();
+        self.points_transfo.clear(); self.segment_trace = None;
         self.points_3d.clear();
         self.modifier.reference = None;
         self.modifier.chemin = Default::default();
@@ -519,6 +524,7 @@ impl EditeurFamille {
         if let Some(outil) = self.outil.outil_dessin() { self.trace_polyligne = Some(moteur2d::dao::Trace::new(outil)); }
         if self.outil.est_transformation() { self.message = Some(self.invite_transformation().into()); }
         else if self.outil.est_revolution() { self.message = Some("Révolution : cliquer les deux points de l'axe, puis dessiner le profil fermé d'un seul côté de l'axe.".into()); }
+        else if self.outil == OutilFamille::ModifierTrace { self.message = Some(traits::INVITE.into()); }
         else if self.outil.est_forme() { self.message = Some("Dessiner le profil fermé. Clic droit ou retour au premier sommet pour terminer ; régler ensuite la forme dans Propriétés.".into()); }
     }
 
@@ -531,6 +537,7 @@ impl EditeurFamille {
         let Some(d) = catalogue::OUTILS.iter().find(|d| d.outil == outil) else {
             return Some("Outil de famille inconnu.");
         };
+        if outil == OutilFamille::ModifierTrace && !self.trace_modifiable() { return Some(traits::SANS_TRACE); }
         if outil.est_transformation() && outil != OutilFamille::Aligner && self.selection == SelectionFamille::Aucune && self.multiple.is_empty() {
             return Some("Sélectionner d'abord un ou plusieurs éléments de la famille.");
         }

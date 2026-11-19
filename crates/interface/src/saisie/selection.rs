@@ -23,58 +23,18 @@ impl Application {
 
     /// Propriétés éditables d'un mur natif (mur seul ou couche d'assemblage) ou d'un
     /// assemblage. Retourne le projet modifié s'il a changé.
-    /// Sélecteur de type de l'élément natif sélectionné (seul) : mur composé (couches
+    /// Sélecteur de type de l'élément natif sélectionné : mur composé (couches
     /// reconstruites d'après le type), mur seul (types à une couche), couche d'un mur
     /// composé (type du mur composé), élément horizontal, porte ou fenêtre. Projet
-    /// modifié si un autre type est choisi.
+    /// modifié si un autre type est choisi. Plusieurs éléments : un sélecteur par sorte
+    /// (`selection_multiple.rs`).
     pub(crate) fn selecteur_type_selection(&mut self, ui: &mut egui::Ui) -> Option<modele::Projet> {
         use commandes::Commande;
         let ids = self.selection_bim();
-        let (p, _) = self.natif.as_ref()?;
         if ids.len() > 1 {
-            let mut choix = String::new();
-            let (libelle, actuels, types): (&str, Vec<String>, Vec<(String, String)>) = if ids.iter().all(|id| p.composants.iter().any(|c| &c.id == id)) {
-                ("Composants", ids.iter().filter_map(|id| p.composants.iter().find(|c| &c.id == id).map(|c| c.type_composant.clone())).collect(), p.types_composants.iter().map(|t| (t.id.clone(), t.nom.clone())).collect())
-            } else if ids.iter().all(|id| p.dalles.iter().any(|d| &d.id == id)) {
-                ("Éléments horizontaux", ids.iter().filter_map(|id| p.dalles.iter().find(|d| &d.id == id).map(|d| d.type_dalle.clone())).collect(), p.types_dalles.iter().map(|t| (t.id.clone(), t.nom.clone())).collect())
-            } else if ids.iter().all(|id| p.ouvertures.iter().any(|o| &o.id == id)) && {
-                let libre = p.ouvertures.iter().find(|o| o.id == ids[0]).is_some_and(|o| o.genre == modele::GenreOuverture::Libre);
-                ids.iter().all(|id| p.ouvertures.iter().find(|o| &o.id == id).is_some_and(|o| (o.genre == modele::GenreOuverture::Libre) == libre))
-            } {
-                let libre = p.ouvertures.iter().find(|o| o.id == ids[0]).is_some_and(|o| o.genre == modele::GenreOuverture::Libre);
-                ("Ouvertures", ids.iter().filter_map(|id| p.ouvertures.iter().find(|o| &o.id == id).map(|o| o.type_ouverture.clone().unwrap_or_default())).collect(), p.types_ouvertures.iter().filter(|t| (t.genre == modele::GenreOuverture::Libre) == libre).map(|t| (t.id.clone(), t.nom.clone())).collect())
-            } else if ids.iter().all(|id| p.terrains.iter().any(|t| &t.id == id)) {
-                ("Terrains", ids.iter().filter_map(|id| p.terrains.iter().find(|t| &t.id == id).map(|t| p.type_terrain(t).id)).collect(), p.types_terrains_disponibles().into_iter().map(|t| (t.id, t.nom)).collect())
-            } else {
-                ui.add_enabled(false, egui::Button::new(format!("Sélection : {} éléments", ids.len())).min_size(egui::vec2(ui.available_width(), 24.0)));
-                ui.separator();
-                return None;
-            };
-            let commun = actuels.first().filter(|a| actuels.iter().all(|b| b == *a));
-            let nom = commun.and_then(|id| types.iter().find(|t| &t.0 == id)).map_or("Types variés", |t| t.1.as_str());
-            ui.label(RichText::new(format!("{libelle} ({})", ids.len())).small().weak());
-            egui::ComboBox::from_id_salt("types_selection_multiple").width((ui.available_width() - 8.0).max(1.0)).selected_text(nom).show_ui(ui, |ui| {
-                for (id, nom) in &types { if ui.selectable_label(commun == Some(id), nom).clicked() { choix = id.clone(); } }
-            });
-            ui.separator();
-            if !choix.is_empty() && commun != Some(&choix) {
-                let mut q = p.clone();
-                match libelle {
-                    "Composants" => for c in q.composants.iter_mut().filter(|c| ids.contains(&c.id)) { c.type_composant = choix.clone(); },
-                    "Éléments horizontaux" => for d in q.dalles.iter_mut().filter(|d| ids.contains(&d.id)) { d.type_dalle = choix.clone(); },
-                    "Ouvertures" => if let Some(t) = q.types_ouvertures.iter().find(|t| t.id == choix).cloned() {
-                        for o in q.ouvertures.iter_mut().filter(|o| ids.contains(&o.id)) {
-                            o.type_ouverture = Some(t.id.clone());
-                            o.representation = None;
-                            (o.largeur, o.hauteur, o.genre) = (t.largeur, t.hauteur, t.genre);
-                        }
-                    },
-                    _ => { if q.types_terrains.is_empty() { q.types_terrains = p.types_terrains_disponibles(); } for t in q.terrains.iter_mut().filter(|t| ids.contains(&t.id)) { t.type_terrain = Some(choix.clone()); } }
-                }
-                return Some(q);
-            }
-            return None;
+            return self.selecteur_types_multiples(ui, &ids);
         }
+        let (p, _) = self.natif.as_ref()?;
         let [id] = ids.as_slice() else { return None };
         if let Some(arbre) = p.arbres.iter().find(|a| &a.id == id) {
             use modele::elements::arbre::Essence;

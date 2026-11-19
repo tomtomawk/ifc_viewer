@@ -306,7 +306,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
     }
     dessiner_axe_revolution(&painter, &cadre, ed);
     match ed.outil {
-        OutilFamille::Selection => {
+        OutilFamille::Selection | OutilFamille::ModifierTrace => {
             // poignées de l'élément choisi : sommets et milieux d'arêtes (insertion) d'un
             // profil ou d'un symbole de la vue, milieux des faces d'un volume
             let vue = ed.vue.esquisse();
@@ -343,7 +343,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 }
                 _ => {}
             }
-            for (_, q, milieu) in &poignees {
+            traits::peindre_segment(&painter, ed, &cadre, &r); for (_, q, milieu) in &poignees {
                 if *milieu {
                     painter.circle(*q, 3.5, Color32::WHITE, egui::Stroke::new(1.2, bleu));
                 } else {
@@ -424,7 +424,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             if resp.drag_stopped_by(PointerButton::Primary) {
                 ed.poignee = None;
             }
-            if resp.drag_started_by(PointerButton::Primary) && ed.poignee.is_none() && ed.cote_deplacee.is_none() {
+            if resp.drag_started_by(PointerButton::Primary) && ed.poignee.is_none() && ed.cote_deplacee.is_none() && ed.outil == OutilFamille::Selection {
                 let cible_2d = appui.and_then(|q| textes_2d.iter().rev().find(|(_, r)| r.contains(q)).map(|x| x.0)
                     .or_else(|| lignes_2d.iter().rev().find(|(_, l)| l.windows(2).any(|w| distance_segment(q, w[0], w[1]) < 6.0)).map(|x| x.0)));
                 if let (Some(k), Some(depart)) = (cible_2d, appui) {
@@ -469,7 +469,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             if resp.drag_stopped_by(PointerButton::Primary) {
                 ed.deplace = None;
             }
-            if resp.clicked() {
+            if resp.clicked() && !traits::clic_segment(ed, &cadre, &r, resp.interact_pointer_pos()) {
                 if let Some(q) = resp.interact_pointer_pos() {
                     let (h, v) = cadre.modele(q);
                     let cible = if let Some((k, _)) = textes_2d.iter().rev().find(|(_, r)| r.contains(q)) {
@@ -507,7 +507,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 }
             }
             // fenêtre de sélection : glisser hors des poignées, cotes et plans
-            if resp.drag_started_by(PointerButton::Primary) && ed.poignee.is_none() && ed.cote_deplacee.is_none() && ed.deplace.is_none() && ed.deplacement_2d.is_none() {
+            if resp.drag_started_by(PointerButton::Primary) && ed.poignee.is_none() && ed.cote_deplacee.is_none() && ed.deplace.is_none() && ed.deplacement_2d.is_none() && ed.outil == OutilFamille::Selection {
                 ed.fenetre = appui.map(|d| FenetreSelection { debut: d, fin: d, ajouter: ui.input(|i| i.modifiers.ctrl || i.modifiers.command) });
             }
             if let (Some(f), Some(q)) = (ed.fenetre.as_mut(), resp.interact_pointer_pos()) {
@@ -775,7 +775,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                     } else {
                         ed.esquisse.clear();
                         ed.famille.elements_2d.push(modele::famille::modelee::Element2DFamille::fixe(ed.vue.esquisse(), modele::documentation::AnnotationForme::depuis_forme_2d(&forme), 2.5));
-                        ed.selection = SelectionFamille::Element2D(ed.famille.elements_2d.len() - 1);
+                        ed.element_2d_cree();
                     }
                 } else if matches!(evenement, EvenementTrace::Terminer | EvenementTrace::Fermer) && trace.points.is_empty() {
                     ed.esquisse.clear();
