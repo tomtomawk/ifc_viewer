@@ -259,7 +259,7 @@ pub(crate) fn rvt_stats(path: &std::path::Path) -> i32 {
         println!("Objets illisibles : {}", m.illisibles.len());
     }
     println!("Durée géom.  : {} ms", t0.elapsed().as_millis());
-    // scène du viewer : objets, triangles, traits (motifs de surface)
+    // scène de l'application : objets, triangles, traits (motifs de surface)
     let t1 = std::time::Instant::now();
     let s = formats::rvt::maquette::scene(&m, "", String::new(), "");
     let traits: u32 = s.objects.iter().map(|o| o.lines.count / 2).sum();

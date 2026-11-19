@@ -107,7 +107,7 @@ fn placer_point_topo(terrain: &mut modele::elements::site::Terrain, i: usize, co
     Ok(selection)
 }
 
-impl ViewerApp {
+impl Application {
     /// Cible des commandes du ruban Modifier dans le tracé en cours, topologie figée
     /// (pas d'ajout ni de retrait de sommet) et raison pour laquelle un trait ne s'y
     /// copie pas.

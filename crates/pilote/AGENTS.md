@@ -1,6 +1,6 @@
 # Crate `pilote`
 
-Rôle : pilotage du viewer par un autre programme : serveur MCP stdio (`bimedit --mcp`), canal TCP local avec jeton, registre des instances, commandes en ligne non graphiques, entrées egui validées.
+Rôle : pilotage de l'instance par un autre programme : serveur MCP stdio (`bimedit --mcp`), canal TCP local avec jeton, registre des instances, commandes en ligne non graphiques, entrées egui validées.
 
 Dépendances internes autorisées : `noyau`, `modele`, `maillage`, `commandes`, `moteur2d`, `echanges`, `collaboration` (exactement celles-ci). Interdit : `config`, `interface`. `eframe` n'est là que pour `egui::Event` (`saisie.rs`) et `egui::Context` (`lib.rs`) : ne pas y ajouter d'autre usage d'egui ni de wgpu.
 

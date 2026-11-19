@@ -4,7 +4,7 @@ use crate::outils::dessiner::dessin_plan::{champ_valeur, HautEscalier};
 use commandes::Commande;
 use glam::DVec2;
 
-impl ViewerApp {
+impl Application {
     fn escalier_du_trace(&self, trace: &[[f64; 2]]) -> Result<modele::Escalier, String> {
         use crate::zones::ruban::Outil;
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
@@ -558,7 +558,7 @@ mod tests {
     #[test]
     fn escalier_balance_garde_le_trace_libre_et_valide_les_girons_reels() {
         let ctx = egui::Context::default();
-        let mut app = ViewerApp::new(&eframe::CreationContext::_new_kittest(ctx), None);
+        let mut app = Application::new(&eframe::CreationContext::_new_kittest(ctx), None);
         let mut p = modele::Projet::nouveau("Escalier balancé");
         p.niveaux.push(modele::Niveau {
             id: "rdc".into(),

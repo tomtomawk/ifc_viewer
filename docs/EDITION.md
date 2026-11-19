@@ -522,7 +522,7 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   Le pilote permet de lister les jeux
   (`feuilles`), sélectionner un jeu ou une feuille (`selection_feuille {"jeu":"Plans","feuille":"id"}` ;
   ajouter `"vue":0` pour une vue placée) et lire la sélection (`proprietes_feuille`).
-  L'outil MCP `viewer_modifier_feuille` ou `editer` permet de modifier les données
+  L'outil MCP `application_modifier_feuille` ou `editer` permet de modifier les données
   d'une feuille ; enregistrer ensuite le projet pour conserver la modification.
 - **Nomenclatures** (Documenter ou l'arborescence) : quantités par catégorie,
   regroupées par type ou détaillées par élément, colonnes au choix (catégorie, type,

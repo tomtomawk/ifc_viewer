@@ -23,7 +23,7 @@ Tailles : fichiers `.rs` et lignes de `src/` (état du lot 12). Ordre = ordre de
 | `collaboration` | transactions partagées : dépôt, session, concurrence, `.bimpartage`, texte (`yrs`), CLI | 8 | 4 419 |
 | `pilote` | serveur MCP, CLI non graphique, registre des instances, canal TCP, entrées egui | 6 | 1 410 |
 | `config` | options utilisateur et raccourcis | 3 | 343 |
-| `interface` | toute l'interface egui (`ViewerApp`) et la fenêtre native | 81 | 34 340 |
+| `interface` | toute l'interface egui (`Application`) et la fenêtre native | 81 | 34 340 |
 | `app` | binaire `bimedit` : arguments, modes console (`src/modes/`), icône Windows | 9 | 601 |
 
 Package et binaire : `bimedit` (`crates/app`, `cargo run -p bimedit`).

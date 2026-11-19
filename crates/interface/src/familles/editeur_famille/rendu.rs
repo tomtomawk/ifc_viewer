@@ -148,7 +148,7 @@ fn plan_tout_garder(camera: &Camera) -> Vec4 {
     (-camera.forward()).extend(1.0e4)
 }
 
-impl ViewerApp {
+impl Application {
     /// Rendu de la famille par le `Renderer` du projet avec `camera` (paramètres
     /// d'affichage du projet : fond, style, éclairage) ; image à placer sous les
     /// superpositions de l'éditeur.

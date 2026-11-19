@@ -1,7 +1,7 @@
 //! Zone de vue : interaction souris, rendu, superpositions.
 use crate::*;
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn viewport(&mut self, ui: &mut egui::Ui) {
         let rect = ui.available_rect_before_wrap();
         // fenêtre réduite : on garde la dernière zone, taille des captures hors écran
@@ -586,42 +586,6 @@ impl ViewerApp {
         if self.scene.is_some() {
             self.poignees_boite(ui, rect);
         }
-        if self.vol.actif {
-            ui.painter().text(
-                rect.left_bottom() + egui::vec2(10.0, -10.0),
-                egui::Align2::LEFT_BOTTOM,
-                format!("Vol · vitesse ×{:.2} (molette) · ZQSD/WASD, A/E : descendre/monter, Maj ×3", self.vol.vitesse),
-                egui::FontId::proportional(12.0),
-                ui.visuals().strong_text_color(),
-            );
-        }
-        if repere_plan {
-            let origine = self.orientation_initiale_plan();
-            let positions = self.positions_plan_liste();
-            let nord = self.natif.as_ref().map_or(0.0, |(p, _)| p.orientation_nord as f32);
-            let r = moteur3d::orientation_plan::afficher(ui, rect, &mut self.camera, origine, self.alignement_plan, &positions, nord);
-            if r.aligner {
-                self.alignement_plan = !self.alignement_plan;
-                self.orientation_nord_en_cours = false;
-                self.arete_alignement = None;
-            }
-            if r.nouvelle {
-                self.nom_position_plan = Some(format!("Position {}", positions.len() + 1));
-            }
-            if let Some(i) = r.supprimer {
-                self.supprimer_position_plan(i);
-            }
-            if r.change {
-                self.memoriser_vue();
-            }
-        } else if self.scene.is_some() && self.vue_3d() {
-            self.cube_orientation(ui, rect);
-            self.choix_projection(ui, rect);
-        }
-
-        if self.scene.is_none() {
-            let msg = if self.loading.is_some() { self.status.clone() } else { "Glisser un fichier .ifc ou .rvt ici\nou Ctrl+O".to_string() };
-            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, msg, egui::FontId::proportional(20.0), Color32::from_gray(110));
-        }
+        self.voilage_vue(ui, rect, repere_plan);
     }
 }

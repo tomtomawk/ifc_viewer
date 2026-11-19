@@ -38,7 +38,7 @@ mod tests_guides_perpendiculaires {
     }
 }
 
-impl ViewerApp {
+impl Application {
     /// Point retenu pour le curseur `c` : accrochage, sinon ortho (Maj) ou repérage
     /// polaire (tous les 15°) depuis le point précédent, sinon le point libre.
     pub(crate) fn point_dessin(&mut self, rect: egui::Rect, c: DVec2, maj: bool, temps: f64) -> (DVec2, Accroche) {

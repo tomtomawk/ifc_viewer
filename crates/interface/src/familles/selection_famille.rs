@@ -66,7 +66,7 @@ impl FamilleCatalogue {
     }
 }
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn mode_famille(&self) -> bool {
         self.famille_active && self.famille.is_some()
     }

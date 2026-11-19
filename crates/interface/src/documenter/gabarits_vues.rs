@@ -41,7 +41,7 @@ mod tests {
         }).unwrap();
 
         let ctx = egui::Context::default();
-        let mut app = ViewerApp::new(&eframe::CreationContext::_new_kittest(ctx.clone()), None);
+        let mut app = Application::new(&eframe::CreationContext::_new_kittest(ctx.clone()), None);
         let chemin = std::env::temp_dir().join(format!("gabarit-{}.modele.json", noyau::uuid::uuid()));
         app.natif = Some((projet, chemin.clone()));
         app.ouvrir_gabarit_par_id(&vue, &source.id, true);
@@ -79,7 +79,7 @@ mod tests {
     }
 }
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn vue_gabaritee(&self) -> bool {
         self.id_vue_contexte().and_then(|id| self.natif.as_ref()?.0.gabarit_vue(&id)).is_some()
     }

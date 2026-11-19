@@ -1,7 +1,7 @@
 //! Ouverture, chargement, enregistrement et onglets de documents.
 use crate::*;
 
-impl ViewerApp {
+impl Application {
     /// Identifiants de scène masqués par les filtres temporaires de contexte.
     pub(crate) fn ids_masques_contextes(&self) -> HashSet<Id> {
         self.natif.as_ref().map(|(projet, _)| {

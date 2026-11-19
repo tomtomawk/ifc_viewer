@@ -36,7 +36,7 @@ pub(crate) fn menu_niveau_detail(ui: &mut egui::Ui, detail: &mut NiveauDetail, a
     change
 }
 
-impl ViewerApp {
+impl Application {
     /// Type de la vue ouverte : plan, coupe ou élévation, 3D (sans vue : 3D).
     pub(crate) fn type_vue(&self) -> TypeVue {
         match self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).map(|v| v.genre.as_str()) {

@@ -1,6 +1,6 @@
 # `interface/src/socle/`
 
-Rôle : état et services de l'application autour de `ViewerApp` (défini avec la boucle `update` dans `../lib.rs`).
+Rôle : état et services de l'application autour de `Application` (défini avec la boucle `update` dans `../lib.rs`).
 
 | Fichier | Contenu |
 |---|---|
@@ -9,7 +9,8 @@ Rôle : état et services de l'application autour de `ViewerApp` (défini avec l
 | `detail.rs` | niveau de détail et type de la vue ouverte (`affichage`, `regler_detail_vue`, commande `niveau_detail`) ; champ d'échelle et menu du niveau de détail communs aux barres de vue du projet et des familles |
 | `viewport.rs` | zone de vue : souris, rendu, superpositions (`viewport`) |
 | `projection.rs` | monde ↔ écran et zoom à la molette, communs aux vues du projet et des familles |
-| `soleil.rs` | lieu, date et heure du soleil, caméra de vue, mode piéton |
+| `soleil.rs` | lieu, date et heure du soleil, ombres portées en cascades (`soleil`), caméra de vue, mode piéton |
+| `navigation_vue.rs` | type de la vue active (`vue_3d`, `vue_en_plan`) et navigation à la souris (`glisser`, `voler`) |
 | `fenetre.rs` | seul module public : `lancer` (appelé par `app`), `arriere_plan`, `cadre_natif` ; `include_bytes!("../../assets/icone.png")` |
 | `parametres.rs` | paramètres personnels, raccourcis clavier |
 | `messages.rs` | messages centralisés sous le bandeau de dessin : `informer`, `signaler` (information, avertissement, erreur), `afficher_messages`, `consigne_vue`, `origine_consigne` ; journal (`Journal`, `suivre_messages` une fois par image, `bouton_journal`, commande `journal` du pilote). `error` et `status` restent écrits directement partout : le journal les relève, ne pas les remplacer par des appels |

@@ -144,7 +144,7 @@ pub(super) fn cadrage_vue(ed: &EditeurFamille, r: &Resolution, h: [f64; 2], v: [
     (h0 - marge, h1 + marge, v0 - marge, v1 + marge, marge)
 }
 
-impl ViewerApp {
+impl Application {
     /// Barre de la vue de famille, sous la vue comme celle du projet (contrôles communs) :
     /// échelle, niveau de détail, aperçu « comme dans le projet », cadrage.
     pub(crate) fn barre_vue_famille(&mut self, ui: &mut egui::Ui) {

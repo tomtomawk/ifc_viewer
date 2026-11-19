@@ -116,7 +116,7 @@ fn ecrire_jeu(p: &modele::Projet, a_ecrire: &[(String, Option<String>, Format)],
     Ok(format!("{} fichier(s) écrit(s) dans {}", a_ecrire.len(), dossier.display()))
 }
 
-impl ViewerApp {
+impl Application {
     /// Lance `travail` dans un fil ; refuse si un travail ou un chargement est en cours.
     fn lancer_tache(&mut self, ctx: &egui::Context, nom: &str, travail: impl FnOnce(&Controle) -> Result<Fin, String> + Send + 'static) {
         if self.tache.is_some() || self.sauvegarde.is_some() {

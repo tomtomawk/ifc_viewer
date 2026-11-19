@@ -131,7 +131,7 @@ pub(super) fn visibilite_ui(ui: &mut egui::Ui, parametre: &mut Option<String>, v
     change
 }
 
-impl ViewerApp {
+impl Application {
     /// Pilote de la vue de famille : `famille_vue [etat|detail faible|moyen|eleve|apercu
     /// oui|non]` et `famille_visibilite volume|extrusion|element_2d <indice> <objet>`.
     pub(super) fn piloter_apercu(&mut self, commande: &str, argument: &str) -> Option<Result<serde_json::Value, String>> {

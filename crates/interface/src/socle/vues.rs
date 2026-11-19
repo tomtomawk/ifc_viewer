@@ -1,7 +1,7 @@
 //! Mémorisation, onglets et activation des vues, préparation des feuilles.
 use crate::*;
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn regler_echelle_vue(&mut self, echelle: f64) -> Result<(), String> {
         if self.vue_gabaritee() { return Err("L’échelle est pilotée par le gabarit de vue.".into()); }
         if !(echelle.is_finite() && echelle > 0.0) { return Err("L’échelle doit être positive et finie.".into()); }
@@ -608,5 +608,4 @@ impl ViewerApp {
         objets_feuille.dedup();
         self.objets_feuille = objets_feuille;
     }
-
 }

@@ -59,7 +59,7 @@ pub(crate) fn segments_polyligne(points: &[[f64; 2]], fermee: bool) -> usize {
 
 const FENETRE: &str = "fenetre_types_traits";
 
-impl ViewerApp {
+impl Application {
     /// Types de trait des polylignes sélectionnées : un choix pour tous leurs segments,
     /// puis, pour une seule polyligne, un choix par segment. Retourne le projet modifié.
     pub(crate) fn traits_polylignes(&self, ui: &mut egui::Ui, projet: &Projet, ids: &[String]) -> Option<Projet> {

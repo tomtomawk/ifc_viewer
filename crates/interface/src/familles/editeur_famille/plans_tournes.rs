@@ -164,7 +164,7 @@ fn repere_json(rep: Option<Repere>) -> Value {
     rep.map_or(Value::Null, |r| json!({"origine": r.origine.to_array(), "h": r.h.to_array(), "v": r.v.to_array(), "normale": r.normale().to_array()}))
 }
 
-impl ViewerApp {
+impl Application {
     /// Commandes du pilote sur les plans tournés et le plan de dessin actif.
     pub(crate) fn piloter_plans(&mut self, commande: &str, argument: &str) -> Option<Result<Value, String>> {
         if !["famille_plan_tourne", "famille_angle", "famille_plan_actif", "famille_ecran"].contains(&commande) { return None; }

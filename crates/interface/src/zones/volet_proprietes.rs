@@ -1,9 +1,9 @@
-//! Panneau droit, visibilité de la sélection, copie sur un niveau, cadrage.
+//! Volet Propriétés, visibilité de la sélection, copie sur un niveau, cadrage.
 use crate::*;
 
-impl ViewerApp {
-    /// Propriétés de l'élément sélectionné (panneau de gauche, comme dans Revit).
-    pub(crate) fn right_panel(&mut self, ui: &mut egui::Ui) {
+impl Application {
+    /// Propriétés de l'élément sélectionné (comme dans Revit ; emplacement au choix de l'utilisateur).
+    pub(crate) fn volet_proprietes(&mut self, ui: &mut egui::Ui) {
         self.fenetre_materiau(ui.ctx());
         self.fenetre_ciel(ui.ctx());
         self.fenetre_motifs(ui.ctx());
@@ -79,6 +79,13 @@ impl ViewerApp {
                     Ok(None) => {}
                     Err(e) => self.error = Some(e),
                 }
+            }
+        }
+        if self.natif.is_some() {
+            use crate::zones::ruban::Menu;
+            let menu = match self.onglet_ruban { OngletRuban::Modeliser => Some(Menu::Modeliser), OngletRuban::Modifier => Some(Menu::Modifier), OngletRuban::Annoter => Some(Menu::Annoter), _ => None };
+            if let Some(menu) = menu {
+                self.ruban_edition.parametres_outil(ui, menu, self.natif.as_ref().map(|(p, _)| p));
             }
         }
         if self.panneau_bim(ui) { return; }

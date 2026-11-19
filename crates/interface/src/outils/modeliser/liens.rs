@@ -13,7 +13,7 @@ pub(crate) fn est_ifc(p: &Path) -> bool {
     p.extension().is_some_and(|e| e.eq_ignore_ascii_case("ifc") || e.eq_ignore_ascii_case("ifczip"))
 }
 
-impl ViewerApp {
+impl Application {
     /// Modéliser > Lien IFC : choix du fichier, puis lecture en arrière-plan.
     pub(crate) fn inserer_lien_dialogue(&mut self, ctx: &egui::Context) {
         if self.natif.is_none() {

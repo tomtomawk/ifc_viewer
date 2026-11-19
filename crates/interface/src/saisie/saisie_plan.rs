@@ -2,7 +2,7 @@
 use commandes::Execution;
 use crate::*;
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn ajouter_mur_natif(&mut self, debut: [f64; 2], fin: [f64; 2], options: &modele::creation::ParametresMur) -> Result<String, String> {
         let (projet, _) = self.natif.as_ref().ok_or("Créez ou ouvrez un projet natif pour dessiner un mur.")?;
         let mut projet = projet.clone();

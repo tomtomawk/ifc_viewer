@@ -175,7 +175,7 @@ pub(crate) fn lire_valeur(saisie: &str) -> Option<f64> {
     saisie.replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
-impl ViewerApp {
+impl Application {
     /// Outil de modification graphique actif dans l'onglet Modifier, s'il peut s'exécuter.
     pub(crate) fn outil_transformation(&self) -> Option<Outil> {
         if self.onglet_ruban != OngletRuban::Modifier || self.natif.is_none() || self.loading.is_some() {

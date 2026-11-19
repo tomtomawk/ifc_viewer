@@ -90,7 +90,7 @@ impl Default for EtatBim {
         }
     }
 }
-impl ViewerApp {
+impl Application {
     /// Une porte ou une fenêtre se place toujours avec une famille du projet.
     fn verifier_type_ouverture(&self) -> Result<(), String> {
         use crate::zones::ruban::Outil;

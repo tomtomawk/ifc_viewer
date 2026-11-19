@@ -128,7 +128,7 @@ pub(crate) fn emprise(points: &[DVec2], largeur: f64, justification: Justificati
     }).collect()
 }
 
-impl ViewerApp {
+impl Application {
     fn largeur_poutre(&self) -> f64 {
         let r = &self.bim.poutre;
         r.type_poutre.as_ref().and_then(|t| self.natif.as_ref()?.0.type_poutre(t)).map_or(r.largeur, |t| t.largeur)

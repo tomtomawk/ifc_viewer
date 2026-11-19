@@ -2,7 +2,10 @@
 pub(crate) mod ruban;
 pub(crate) mod barre_haute;
 pub(crate) mod panneaux;
-pub(crate) mod panneau_droit;
+pub(crate) mod barre_vue;
+pub(crate) mod voilage_vue;
+pub(crate) mod volet_proprietes;
+pub(crate) mod volet_arborescence;
 pub(crate) mod navigateur;
 pub(crate) mod proprietes;
 pub(crate) mod donnees_importees;

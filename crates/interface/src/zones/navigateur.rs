@@ -38,7 +38,7 @@ fn organisation_nav(ui: &mut egui::Ui, cle: &str, lignes: &[(String, String)], r
     if options != avant { *organisation_modifiee = Some((cle.to_string(), options)); }
 }
 
-impl ViewerApp {
+impl Application {
     /// Matériaux : pastille de couleur, nom, nombre d'éléments ; clic : isoler et cadrer
     /// les éléments qui portent le matériau.
     pub(crate) fn materiaux_ui(&mut self, ui: &mut egui::Ui) {

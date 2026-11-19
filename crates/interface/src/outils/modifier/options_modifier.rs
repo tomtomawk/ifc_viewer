@@ -2,7 +2,7 @@
 use crate::outils::modeliser::bim::*;
 use config::options::Dimensions;
 
-impl ViewerApp {
+impl Application {
     /// Barre d'options de Modifier, en haut de la vue : réglages de l'outil actif
     /// (Déplacer, Copier, Tourner, Aligner, Ajuster) et commandes propres à la sélection
     /// (jonctions, mise à jour depuis le type, trémie). Propriétés ne garde que les

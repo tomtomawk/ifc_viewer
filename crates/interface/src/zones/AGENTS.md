@@ -5,8 +5,12 @@ Rôle : zones d'écran autour de la vue.
 | Fichier | Contenu |
 |---|---|
 | `ruban/` | ruban d'édition (`Outil`, `Menu`, `RubanEdition`), sélecteurs de type, icônes, propriétés des murs et ouvertures ; tests dans `ruban/tests.rs` |
-| `barre_haute.rs` | barre de titre et de vue (`top_bar`, `barre_vue`) ; `include_bytes!("../../assets/icone.png")` |
-| `panneaux.rs`, `panneau_droit.rs` | panneaux ancrables, panneau droit (`panneau`, `right_panel`) |
+| `barre_haute.rs` | barre de titre, ruban, bords de fenêtre (`top_bar`) ; `include_bytes!("../../assets/icone.png")` |
+| `barre_vue.rs` | barre du bas de la vue (`barre_vue` : aiguille vers la famille ou le projet ; sections échelle/détail, apparence, cadrage, visibilité ; styles, fond de plan, visibilité par catégorie) |
+| `voilage_vue.rs` | ce qui se dessine par-dessus la vue : cube d'orientation et projection (3D), repère d'orientation du plan (2D). Bandeau de dessin : `outils/bandeau.rs` ; messages : `socle/messages.rs` |
+| `panneaux.rs` | panneaux ancrables (`panneau`) : contenu, en-tête, ancrage |
+| `volet_proprietes.rs` | volet Propriétés (`volet_proprietes`), visibilité de la sélection |
+| `volet_arborescence.rs` | volet Arborescence (`volet_arborescence`) ; contenu des sections dans `navigateur.rs` |
 | `navigateur.rs` | navigateur de projet, matériaux, arborescence IFC |
 | `proprietes.rs`, `communes.rs` | propriétés de la sélection native ; propriétés communes d'une sélection multiple |
 | `donnees_importees.rs` | propriétés, matériau et couleur lus d'un élément importé (lecture seule, appelé depuis `proprietes.rs`) |

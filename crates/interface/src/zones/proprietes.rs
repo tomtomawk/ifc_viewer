@@ -30,7 +30,7 @@ pub(crate) fn champs_talus(ui: &mut egui::Ui, d: &mut modele::Dalle, c: usize, k
     change
 }
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn proprietes_natif(&mut self, ui: &mut egui::Ui, id: Id) -> Option<modele::Projet> {
         use modele::Haut;
         let mut pente_defaut = self.pente_defaut;

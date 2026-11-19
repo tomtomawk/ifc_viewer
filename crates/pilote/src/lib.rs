@@ -1,11 +1,11 @@
-//! Pilotage du viewer par un autre programme (serveur MCP `bimedit --mcp`, voir `mcp.rs`).
+//! Pilotage de l'instance par un autre programme (serveur MCP `bimedit --mcp`, voir `mcp.rs`).
 //!
-//! Chaque viewer écoute sur 127.0.0.1 : le port 47811 s'il est libre, sinon un port choisi
+//! Chaque instance écoute sur 127.0.0.1 : le port 47811 s'il est libre, sinon un port choisi
 //! par le système, et s'inscrit avec un jeton aléatoire dans le registre des instances
 //! (`instances.rs`). Une connexion envoie une ligne « @jeton commande argument » en UTF-8
 //! et reçoit une ligne JSON. Mode isolé (`BIMEDIT_PORT`) : port fixe, sans inscription,
 //! jeton seulement si `BIMEDIT_JETON` est défini. Les commandes sont traitées par
-//! l'application entre deux images (`ViewerApp::piloter`).
+//! l'application entre deux images (`Application::piloter`).
 
 pub mod cli;
 pub mod instances;

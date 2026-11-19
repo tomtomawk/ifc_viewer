@@ -13,7 +13,7 @@ fn heure_texte(h: f32) -> String {
     format!("{:02} h {:02}", (m / 60) % 24, m % 60)
 }
 
-impl ViewerApp {
+impl Application {
     /// Identifiant de la vue active pour ses réglages de rendu : vue du projet, ou « 3d ».
     pub(crate) fn id_vue_rendu(&self) -> Option<String> {
         let numero = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).map(|v| v.revit_id)?;
@@ -418,5 +418,69 @@ impl ViewerApp {
         if !ouvert {
             self.ciel_ouvert = false;
         }
+    }
+
+    /// Ombres portées en cascades : la vue est découpée en tranches de profondeur (de
+    /// quelques dizaines de centimètres à la fin de la scène), chacune avec sa carte
+    /// d'ombres de 4096 px, petite près de l'œil (ombres fines) et grande au loin. Chaque
+    /// carte englobe sa tranche (sphère, taille fixe : pas de frémissement quand la caméra
+    /// tourne), calée sur sa grille de pixels, et toute la scène en profondeur (les objets
+    /// hors champ portent aussi leur ombre).
+    pub(crate) fn soleil(&self, aspect: f32) -> Option<moteur3d::gpu::Ombres> {
+        use moteur3d::gpu::{Cascade, NB_CASCADES, TAILLE_OMBRES};
+        let s = self.scene.as_ref()?;
+        let dir = self.direction_soleil();
+        let c_scene = (s.min + s.max) * 0.5;
+        let r_scene = ((s.max - s.min).length() * 0.5).max(0.1) * 1.02;
+        let inv = self.camera.view_proj(aspect).inverse();
+        let proj = self.camera.proj(aspect);
+        let avant = self.camera.direction_vue();
+        let oeil = self.camera.eye();
+        // profondeurs de la vue (le long du regard) : de l'œil (ou du bord de la scène) à
+        // la fin de la scène
+        let d_scene = (c_scene - oeil).dot(avant);
+        let (n, f) = if self.camera.ortho {
+            ((d_scene - r_scene).max(0.0), d_scene + r_scene)
+        } else {
+            ((d_scene - r_scene).max(0.3), (d_scene + r_scene).clamp(5.0, 3000.0))
+        };
+        if f <= n {
+            return None;
+        }
+        // découpage « pratique » : logarithmique près de l'œil, uniforme au loin
+        let lambda = if self.camera.ortho { 0.0 } else { 0.85 };
+        let coupe = |k: usize| {
+            let t = k as f32 / NB_CASCADES as f32;
+            lambda * n * (f / n).powf(t) + (1.0 - lambda) * (n + (f - n) * t)
+        };
+        // NDC z d'une profondeur de vue
+        let ndc_z = |d: f32| {
+            let c = proj * glam::Vec4::new(0.0, 0.0, -d, 1.0);
+            c.z / c.w
+        };
+        let vue = glam::camera::rh::view::look_at_mat4(Vec3::ZERO, -dir, if dir.z.abs() > 0.99 { Vec3::Y } else { Vec3::Z });
+        let coins_scene: Vec<Vec3> = (0..8).map(|k| Vec3::new(if k & 1 == 0 { s.min.x } else { s.max.x }, if k & 2 == 0 { s.min.y } else { s.max.y }, if k & 4 == 0 { s.min.z } else { s.max.z })).collect();
+        let (zmin, zmax) = coins_scene.iter().map(|p| vue.transform_point3(*p).z).fold((f32::MAX, f32::MIN), |(a, b), z| (a.min(z), b.max(z)));
+        let mut cascades = Vec::with_capacity(NB_CASCADES);
+        for k in 0..NB_CASCADES {
+            let (d0, d1) = (coupe(k), coupe(k + 1));
+            let mut pts = Vec::with_capacity(8);
+            for d in [d0, d1] {
+                let z = ndc_z(d).clamp(-1.0, 1.0);
+                for (x, y) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+                    pts.push(inv.project_point3(Vec3::new(x, y, z)));
+                }
+            }
+            let centre = pts.iter().copied().sum::<Vec3>() / pts.len() as f32;
+            // rayon arrondi : taille de carte constante pour la tranche
+            let rayon = (pts.iter().map(|p| p.distance(centre)).fold(0.0f32, f32::max) * 16.0).ceil() / 16.0;
+            let rayon = rayon.min(r_scene).max(0.5);
+            let texel = 2.0 * rayon / TAILLE_OMBRES as f32;
+            let c = vue.transform_point3(centre);
+            let (cx, cy) = ((c.x / texel).floor() * texel, (c.y / texel).floor() * texel);
+            let ortho = glam::camera::rh::proj::opengl::orthographic(cx - rayon, cx + rayon, cy - rayon, cy + rayon, -zmax - 1.0, -zmin + 1.0);
+            cascades.push(Cascade { matrice: ortho * vue, distance: d1, biais: 1.5 * texel });
+        }
+        Some(moteur3d::gpu::Ombres { direction: dir, cascades })
     }
 }

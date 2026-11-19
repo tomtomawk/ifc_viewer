@@ -1,7 +1,7 @@
 //! Plan de coupe, dessin et export de la vue, boîte de sélection 3D, plage de vue.
 use crate::*;
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn niveaux(&self) -> Vec<(Id, String, f32)> {
         self.liste_niveaux.clone()
     }

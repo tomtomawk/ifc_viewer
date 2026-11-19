@@ -75,7 +75,7 @@ pub(crate) fn fichiers(cases: &BTreeSet<(String, Format)>, feuilles: &[(String, 
     v
 }
 
-impl ViewerApp {
+impl Application {
     /// Ouvre la fenêtre d'export du jeu `jeu`, toutes les feuilles cochées en PDF.
     pub(crate) fn exporter_jeu_dialogue(&mut self, jeu: &str) {
         let Some((p, _)) = &self.natif else { return };

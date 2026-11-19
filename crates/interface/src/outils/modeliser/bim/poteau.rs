@@ -2,7 +2,7 @@
 use super::*;
 use crate::outils::croquis::{self, CroquisVertical};
 
-impl ViewerApp {
+impl Application {
     pub(super) fn panneau_poteau(&mut self, ui: &mut egui::Ui) -> Option<commandes::Commande> {
         let (projet, _) = self.natif.as_ref()?;
         let niveau_vue = self.niveau_trace();

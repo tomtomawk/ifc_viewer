@@ -10,29 +10,10 @@ impl RubanEdition {
     ) -> Option<Outil> {
         let mut action = None;
         let largeur = ui.available_width();
-        let outil_options = self.selection.filter(|o| {
-            groupes(menu)
-                .iter()
-                .any(|(_, outils)| outils.contains(&o.commande()))
-        });
-        // Les surfaces se règlent dans l'encart en tête de Propriétés.
-        // Sans réglage (dessin 2D, actions), pas d'encart.
-        let outil_options = outil_options.filter(|o| o.commande() != Outil::Surfaces && !champs(*o).is_empty());
-        let selection_options = outil_options.map(Outil::commande);
+        // Les réglages des outils sont dans Propriétés (panneau droit), pas dans le ruban.
         let compact = largeur_commandes(ui, menu, &[], false);
-        let reserve = if selection_options.is_some() { LARGEUR_REGLAGES + ESPACE_COLONNES } else { 0.0 };
-        let serre = compact + reserve > largeur;
-        let compact = if serre { largeur_commandes(ui, menu, &[], true) } else { compact };
-        let options_inline =
-            selection_options.is_some() && compact + LARGEUR_OPTIONS + ESPACE_COLONNES <= largeur;
-        let largeur_options = if selection_options.is_none() {
-            0.0
-        } else if options_inline {
-            LARGEUR_OPTIONS + ESPACE_COLONNES
-        } else {
-            LARGEUR_REGLAGES + ESPACE_COLONNES
-        };
-        let budget = largeur - largeur_options;
+        let serre = compact > largeur;
+        let budget = largeur;
         let mut grands = Vec::new();
         // Les références et les commandes occasionnelles restent toujours empilées.
         // En réduisant la fenêtre, les outils les moins fréquents se replient d'abord.
@@ -59,14 +40,7 @@ impl RubanEdition {
                 ui.horizontal_top(|ui| {
                     for (indice, (nom, outils)) in groupes(menu).iter().enumerate() {
                         let colonnes = colonnes(ui, outils, &grands, serre);
-                        let contient_selection =
-                            selection_options.is_some_and(|o| outils.contains(&o));
-                        let largeur_groupe = largeur_groupe(ui, nom, &colonnes)
-                            + if contient_selection {
-                                largeur_options
-                            } else {
-                                0.0
-                            };
+                        let largeur_groupe = largeur_groupe(ui, nom, &colonnes);
                         let (rect, _) = ui.allocate_exact_size(
                             egui::vec2(largeur_groupe, HAUTEUR_GROUPE),
                             Sense::hover(),
@@ -139,58 +113,6 @@ impl RubanEdition {
                                 }
                             }
                             x += colonne.largeur + ESPACE_COLONNES;
-                            // Réglages directement à droite de la colonne de l'outil actif.
-                            if colonne.outils.iter().any(|o| Some(*o) == selection_options) {
-                                let outil = outil_options.unwrap();
-                                let reglages = egui::Rect::from_min_size(
-                                    egui::pos2(x, rect.top()),
-                                    egui::vec2(
-                                        if options_inline {
-                                            LARGEUR_OPTIONS
-                                        } else {
-                                            LARGEUR_REGLAGES
-                                        },
-                                        HAUTEUR_OUTILS,
-                                    ),
-                                );
-                                let mut options_ui = ui.new_child(
-                                    egui::UiBuilder::new()
-                                        .id_salt(("reglages", outil.commande()))
-                                        .max_rect(reglages)
-                                        .layout(egui::Layout::top_down(Align::Min)),
-                                );
-                                {
-                                    let ui = &mut options_ui;
-                                    ui.spacing_mut().item_spacing.x = 8.0;
-                                    if options_inline {
-                                        self.options_outil(ui, outil, projet);
-                                    } else {
-                                        let r = ui
-                                            .add_sized(
-                                                [LARGEUR_REGLAGES, HAUTEUR_OUTILS],
-                                                egui::Button::new("..."),
-                                            )
-                                            .on_hover_text(format!("Réglages — {}", outil.nom()));
-                                        egui::Popup::menu(&r)
-                                            .close_behavior(
-                                                egui::PopupCloseBehavior::CloseOnClickOutside,
-                                            )
-                                            .show(|ui| {
-                                                ui.set_width(LARGEUR_OPTIONS);
-                                                ui.label(
-                                                    RichText::new(format!(
-                                                        "Réglages — {}",
-                                                        outil.nom()
-                                                    ))
-                                                    .strong(),
-                                                );
-                                                ui.separator();
-                                                self.options_outil(ui, outil, projet);
-                                            });
-                                    }
-                                }
-                                x += largeur_options;
-                            }
                         }
                         ui.painter().text(
                             egui::pos2(rect.center().x, rect.bottom() - 8.0),

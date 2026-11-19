@@ -109,7 +109,7 @@ mod tests_gabarit {
     }
 }
 
-impl ViewerApp {
+impl Application {
     /// Identifiant stable des propriétés de contexte de la vue courante.
     pub(crate) fn id_vue_contexte(&self) -> Option<String> {
         self.id_vue_rendu()

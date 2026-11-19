@@ -1,7 +1,7 @@
 //! Documents famille : ouverture, onglets, enregistrement, pilotage.
 use super::*;
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn nouvelle_famille(&mut self) {
         self.ouvrir_editeur_composant(None);
         if let Some(ed) = self.famille.as_mut() {

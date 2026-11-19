@@ -1,6 +1,6 @@
 # Crate `interface`
 
-Rôle : toute l'interface egui de BIMedit (`ViewerApp` : état, boucle, ruban, panneaux, vues 2D et 3D, outils, feuilles, éditeur de familles, collaboration, paramètres) et la fenêtre native (`socle/fenetre.rs`).
+Rôle : toute l'interface egui de BIMedit (`Application` : état, boucle, ruban, panneaux, vues 2D et 3D, outils, feuilles, éditeur de familles, collaboration, paramètres) et la fenêtre native (`socle/fenetre.rs`).
 
 Dépendances internes autorisées : les 13 crates précédentes (`noyau`, `modele`, `ifc_base`, `scene`, `formats`, `maillage`, `commandes`, `moteur2d`, `moteur3d`, `echanges`, `collaboration`, `pilote`, `config`). Interdit : `app`.
 
@@ -10,7 +10,7 @@ Rangement par domaine (lot 11b, docs/historique/ARCHITECTURE_CHANTIER_2026-11.md
 
 | Dossier (`src/`) | Contenu |
 |---|---|
-| `lib.rs` | `ViewerApp`, boucle egui (`update`), déclaration des dossiers |
+| `lib.rs` | `Application`, boucle egui (`update`), déclaration des dossiers |
 | `socle/` | documents ouverts, vues, viewport, soleil et caméra, fenêtre native (`fenetre`, seul module public), paramètres, aides, pilotage MCP, volets |
 | `zones/` | `ruban/`, barre haute, panneaux, panneau droit, navigateur, propriétés, menu de la vue, vues natives et Revit, graphismes |
 | `saisie/` | accrochage, repérage, saisie clavier et en plan, sélection, poignées d'annotation |
@@ -21,7 +21,7 @@ Rangement par domaine (lot 11b, docs/historique/ARCHITECTURE_CHANTIER_2026-11.md
 | `../assets/icone.png` | icône embarquée (`include_bytes!("../../assets/icone.png")` depuis `socle/fenetre.rs` et `zones/barre_haute.rs`) |
 
 Règles :
-- Chemins absolus `crate::<dossier>::<module>::…` ; pas de `super::` vers un autre dossier. Les fichiers `impl ViewerApp` importent `use crate::*;` (glob de la racine : `ViewerApp`, imports communs de `lib.rs`) ; dans un sous-dossier (`ruban/`, `dessin_plan/`, `editeur_famille/`), `use super::*;` reprend le glob du `mod.rs`.
+- Chemins absolus `crate::<dossier>::<module>::…` ; pas de `super::` vers un autre dossier. Les fichiers `impl Application` importent `use crate::*;` (glob de la racine : `Application`, imports communs de `lib.rs`) ; dans un sous-dossier (`ruban/`, `dessin_plan/`, `editeur_famille/`), `use super::*;` reprend le glob du `mod.rs`.
 - Visibilité : `pub(crate)` pour ce qui sert hors du dossier ; `pub(super)` seulement à l'intérieur d'un sous-dossier (`ruban/`, `dessin_plan/`, `editeur_famille/`). Rien de `pub` hors `socle::fenetre`.
 - Le module local `projet::collaboration` masque la crate du même nom dans `projet/` : écrire `::collaboration::…` pour la crate.
 - 23 fichiers dépassent 600 lignes (§5.19 c) : ne pas les agrandir ; découpage prévu en 11c.

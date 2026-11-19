@@ -407,7 +407,7 @@ fn reglages_accessibles_en_mode_compact() {
 }
 
 #[test]
-fn commandes_et_options_tiennent_aux_largeurs_du_viewer() {
+fn commandes_et_options_tiennent_aux_largeurs_de_l_application() {
     let ctx = egui::Context::default();
     ctx.set_visuals(egui::Visuals::light());
     let projet = modele::Projet::nouveau("Ruban");

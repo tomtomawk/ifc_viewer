@@ -185,22 +185,22 @@ Le dépôt est un workspace Cargo de 15 crates dans `crates/` ; le binaire `bime
 ## Pilotage par MCP
 
 Le contrat complet est dans [docs/PILOTE.md](docs/PILOTE.md), également accessible
-par `viewer_aide` sans lancer l'application. Les outils MCP couvrent l'édition
+par `application_aide` sans lancer l'application. Les outils MCP couvrent l'édition
 native, les propriétés du projet, les fichiers sans dialogue, les exports, les
 réservations/conflits collaboratifs et la saisie graphique des outils du ruban.
 `python tools/test-pilote.py --exe target/release/bimedit.exe` vérifie le parcours
 sur une instance, un port, un cache collaboratif et des documents temporaires isolés.
 
-Chaque viewer écoute sur `127.0.0.1` (47811, sinon un port libre) des commandes d'une
+Chaque instance écoute sur `127.0.0.1` (47811, sinon un port libre) des commandes d'une
 ligne précédées de son jeton, et s'inscrit dans le registre des instances : le pont
-pilote aussi un viewer ouvert à la main, et `viewer_instances` choisit entre plusieurs
+pilote aussi une instance ouverte à la main, et `application_instances` choisit entre plusieurs
 (voir [docs/PILOTE.md](docs/PILOTE.md)). `crates/pilote/src/mcp.rs` (mode `bimedit --mcp` du même exécutable) les expose en serveur MCP,
 déclaré dans `.mcp.json` sous le nom `bimedit` (lancé par `target/release/bimedit --mcp`, après `cargo build --release` ; chemin sans extension pour valoir sur tous les systèmes, Windows ajoutant `.exe` au lancement) : un agent ouvre un fichier, choisit une
 vue Revit, règle la caméra, lit les propriétés, désigne l'objet sous un point et reçoit des
 captures PNG. La vue 3D est rendue hors écran (tampon de trame), à la taille demandée, même
 fenêtre réduite ; la capture de la fenêtre entière exige qu'elle ne soit pas réduite. Si
-aucun viewer n'écoute, le serveur lance `bimedit` à côté de lui, sinon `target/release/bimedit`
-(`bimedit.exe` sous Windows), ou `BIMEDIT_EXE`. Liste des commandes : description de l'outil `viewer_commande`.
+aucune instance n'écoute, le serveur lance `bimedit` à côté de lui, sinon `target/release/bimedit`
+(`bimedit.exe` sous Windows), ou `BIMEDIT_EXE`. Liste des commandes : description de l'outil `application_commande`.
 
 ## Limites connues
 

@@ -23,7 +23,7 @@ Lire et appliquer la politique des formats et des migrations dans [docs/AGENTS.m
 | `collaboration` | transactions partagées entre postes |
 | `pilote` | MCP, CLI non graphique, registre des instances |
 | `config` | options utilisateur, raccourcis |
-| `interface` | interface egui (`ViewerApp`) et fenêtre |
+| `interface` | interface egui (`Application`) et fenêtre |
 | `app` | binaire `bimedit`, modes console, test des dépendances |
 
 ## Je veux modifier… -> où aller

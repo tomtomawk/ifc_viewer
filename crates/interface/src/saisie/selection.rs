@@ -2,7 +2,7 @@
 use commandes::Execution;
 use crate::*;
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn select(&mut self, id: Option<Id>, reveal: bool) {
         self.famille_selectionnee = None;
         self.cote_axe = None;

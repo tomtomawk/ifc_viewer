@@ -121,7 +121,7 @@ pub(crate) struct EtatFeuilles {
 const ECART: f32 = 24.0;
 const HAUT_FEUILLES: f32 = 64.0;
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn editer_cartouche_feuille(&mut self, id: &str) {
         let Some((p, _)) = &self.natif else { return };
         if !p.feuilles.iter().any(|f| f.id == id) { return; }

@@ -1,7 +1,7 @@
 //! Aperçus, terrain, souris et dessin à l'écran.
 use super::*;
 
-impl ViewerApp {
+impl Application {
     /// Aperçu du terrain en cours, mis à jour à chaque glissé : surface teintée selon la
     /// cote (bas : vert, haut : sable), courbes de niveau à un pas rond, contour fin.
     pub(crate) fn apercu_terrain(&self, painter: &egui::Painter, rect: egui::Rect) {

@@ -36,7 +36,7 @@ pub(crate) fn categorie(p: &modele::Projet, id: &str) -> &'static str {
     else { "Autres" }
 }
 
-impl ViewerApp {
+impl Application {
     /// Menu du clic droit dans la vue, hors commande.
     pub(crate) fn menu_contextuel(&mut self, resp: &egui::Response) {
         let selection = self.selection_bim();

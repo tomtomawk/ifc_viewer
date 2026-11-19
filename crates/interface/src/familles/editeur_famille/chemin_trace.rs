@@ -225,7 +225,7 @@ mod tests {
     #[test]
     fn trace_applique_a_la_forme_avec_fermeture() {
         let ctx = egui::Context::default();
-        let mut app = crate::ViewerApp::new(&eframe::CreationContext::_new_kittest(ctx), None);
+        let mut app = crate::Application::new(&eframe::CreationContext::_new_kittest(ctx), None);
         app.ouvrir_editeur_famille_type(None, modele::GenreOuverture::Fenetre);
         let ed = app.famille.as_mut().unwrap();
         ed.famille.extrusions.clear();

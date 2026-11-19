@@ -58,7 +58,7 @@ pub(crate) fn boutons_trace(ui: &mut egui::Ui, selection: bool, commande: bool, 
     (selectionner, choix)
 }
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn reinitialiser_forme_cadrage(&mut self) {
         self.dessin2d.forme_cadrage=Some(OutilDessin::Rectangle);
         self.dessin2d.trace=None;

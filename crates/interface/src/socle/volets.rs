@@ -30,7 +30,7 @@ pub(crate) fn cible_volet(zone:egui::Rect,q:egui::Pos2)->Option<Ancrage> {
     else {None}
 }
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn menu_volet(&mut self,resp:&egui::Response,p:Panneau) {
         resp.context_menu(|ui| {
             for (a,nom) in [(Ancrage::Externe,"Détacher dans une fenêtre"),(Ancrage::Gauche,"Ancrer à gauche"),(Ancrage::Droite,"Ancrer à droite"),(Ancrage::Flottant,"Flotter dans l'application")] {

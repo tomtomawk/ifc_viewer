@@ -2,7 +2,7 @@
 //! application du glissement ou de la longueur tapée, en une seule étape d'annulation.
 use crate::*;
 
-impl ViewerApp {
+impl Application {
     /// Déplace l'extrémité `fin` (sinon le début) de la ligne de l'élément `id` au point
     /// `p` (mm, plan). Mur : ligne d'implantation, menuiseries recalées. Poutre :
     /// `Commande::Barre`, hauteurs des extrémités gardées. Rend « du mur » ou « de la

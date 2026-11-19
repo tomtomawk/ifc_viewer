@@ -87,7 +87,7 @@ fn pictogramme(ui: &mut egui::Ui, genre: Picto, actif: bool, permis: bool) -> eg
     resp
 }
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn ouvrir_gestion_contextes(&mut self) {
         if self.natif.is_some() { self.gestion_contextes = Some(GestionContextes::default()); }
     }

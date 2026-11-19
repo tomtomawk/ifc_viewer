@@ -210,7 +210,7 @@ fn afficher_a(ui: &egui::Ui, rect: egui::Rect, bas_barre: f32, niveau: Niveau, t
         }).inner
 }
 
-impl ViewerApp {
+impl Application {
     /// Information temporaire (confirmation d'une action). Un avertissement se pose de
     /// même avec `Niveau::Avertissement`.
     pub(crate) fn informer(&mut self, texte: impl Into<String>) {

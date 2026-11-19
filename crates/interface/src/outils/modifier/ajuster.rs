@@ -126,7 +126,7 @@ fn commande_ajuster(id: &str, reference: &str, fin: bool, angle: Option<bool>, l
     }
 }
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn etat_ajustement(&self) -> serde_json::Value {
         let a = self.ajustement.as_ref();
         let apercu = a.and_then(|a| a.apercu.as_ref());

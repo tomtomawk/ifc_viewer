@@ -435,7 +435,7 @@ impl Vol {
     }
 }
 
-pub struct ViewerApp {
+pub struct Application {
     bim: crate::outils::modeliser::bim::EtatBim,
     /// Jeu de feuilles ouvert : cadrage, sélection, dessins préparés.
     feuilles: crate::documenter::feuilles::EtatFeuilles,
@@ -673,7 +673,7 @@ pub struct ViewerApp {
     captures_en_attente: Arc<std::sync::atomic::AtomicUsize>,
 }
 
-impl ViewerApp {
+impl Application {
     pub fn new(cc: &eframe::CreationContext<'_>, path: Option<PathBuf>) -> Self {
         let mut error = None;
         let mut alertes = Vec::new();
@@ -689,7 +689,7 @@ impl ViewerApp {
                 None
             }
         };
-        let mut app = ViewerApp {
+        let mut app = Application {
             bim: Default::default(),
             feuilles: Default::default(),
             natif: None,
@@ -863,7 +863,7 @@ impl ViewerApp {
 
 }
 
-impl eframe::App for ViewerApp {
+impl eframe::App for Application {
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         let terminer = self.saisie_pilote_image && self.saisies_pilote.is_empty();
         self.saisie_pilote_image = !self.saisies_pilote.is_empty();
@@ -990,8 +990,6 @@ impl eframe::App for ViewerApp {
             // à droite ; chacun s'ancre d'un côté ou flotte (ancrages relevés en début
             // d'image, changés pour la suivante)
             let ancrages = self.ancrages;
-            // onglet Famille : l'éditeur a ses propres panneaux, ceux du projet se retirent
-            let famille = self.mode_famille();
             for p in Panneau::TOUS {
                 let id = egui::IdSalt::new((p.nom(), ancrages[p as usize].nom()));
                 let panneau = match ancrages[p as usize] {
@@ -1006,11 +1004,7 @@ impl eframe::App for ViewerApp {
             if self.scene.is_some() || !self.onglets_familles().is_empty() {
                 egui::Panel::top("onglets_vues").show(ui, |ui| self.onglets_vues(ui));
             }
-            if !famille {
-                egui::Panel::bottom("barre_vue").show(ui, |ui| self.barre_vue(ui));
-            } else {
-                egui::Panel::bottom("barre_vue_famille").show(ui, |ui| self.barre_vue_famille(ui));
-            }
+            egui::Panel::bottom("barre_vue").show(ui, |ui| self.barre_vue(ui));
             egui::CentralPanel::no_frame().show(ui, |ui| {
                 let rect = ui.available_rect_before_wrap();
                 let mut bas_barre = 0.0;
@@ -1096,12 +1090,12 @@ mod tests_axe_accroche {
             for ecart in [-150.0,0.0,150.0] {
                 let cible=glam::DVec2::new(3000.0,2000.0);
                 let fixe=glam::DVec2::new(0.0,150.0);
-                let median=glam::DVec2::from_array(ViewerApp::extremite_mediane(cible.to_array(),fixe.to_array(),fin,ecart).unwrap());
+                let median=glam::DVec2::from_array(Application::extremite_mediane(cible.to_array(),fixe.to_array(),fin,ecart).unwrap());
                 let u=if fin{(median-fixe).normalize()}else{(fixe-median).normalize()};
                 let retrouve=median+glam::DVec2::new(-u.y,u.x)*ecart;
                 assert!(retrouve.distance(cible)<1e-8);
             }
         }
-        assert!(ViewerApp::extremite_mediane([0.0,0.0],[0.0,0.0],true,150.0).is_err());
+        assert!(Application::extremite_mediane([0.0,0.0],[0.0,0.0],true,150.0).is_err());
     }
 }

@@ -319,7 +319,7 @@ mod tests {
     #[test]
     fn plan_actif_refuse_hors_parallele_et_profil_saisi_en_3d_suit_l_angle() {
         let ctx = egui::Context::default();
-        let mut app = crate::ViewerApp::new(&eframe::CreationContext::_new_kittest(ctx), None);
+        let mut app = crate::Application::new(&eframe::CreationContext::_new_kittest(ctx), None);
         app.ouvrir_editeur_famille_type(None, modele::GenreOuverture::Fenetre);
         let ed = app.famille.as_mut().unwrap();
         ed.ouvrir_vue(VueFamille::Elevation);

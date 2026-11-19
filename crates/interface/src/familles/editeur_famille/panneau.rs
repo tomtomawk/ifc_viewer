@@ -1,7 +1,7 @@
 //! Ruban et panneau de propriétés de l'éditeur de famille.
 use super::*;
 
-impl ViewerApp {
+impl Application {
     /// Ruban de l'éditeur de familles : outils de création en petites icônes (onglet
     /// Créer), transformations de la sélection (onglet Modifier), chargement dans le
     /// projet et fichiers (onglet Sortie).

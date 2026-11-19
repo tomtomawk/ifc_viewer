@@ -1,4 +1,4 @@
-//! Présentation des commandes d'édition. Le contrôleur du viewer consomme les
+//! Présentation des commandes d'édition. Le contrôleur de l'application consomme les
 //! paramètres des outils opérationnels ; les outils à venir sont désactivés.
 
 mod affichage;
@@ -383,8 +383,6 @@ const HAUTEUR_OUTILS: f32 = 66.0;
 const HAUTEUR_GROUPE: f32 = 86.0;
 const ESPACE_COLONNES: f32 = 4.0;
 const ESPACE_GROUPES: f32 = 16.0;
-const LARGEUR_OPTIONS: f32 = 440.0;
-const LARGEUR_REGLAGES: f32 = 34.0;
 
 struct Colonne {
     outils: Vec<Outil>,

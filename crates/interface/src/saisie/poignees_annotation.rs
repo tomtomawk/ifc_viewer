@@ -14,7 +14,7 @@ pub(crate) struct GlissementAnnotation {
     vue: String,
 }
 
-impl ViewerApp {
+impl Application {
     fn annotations_selectionnees(&self) -> Option<(Vec<String>, Vec<Annotation>)> {
         let ids = self.selection_bim();
         if ids.is_empty() { return None; }

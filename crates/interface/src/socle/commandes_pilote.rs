@@ -2,7 +2,7 @@
 use commandes::Execution;
 use crate::*;
 
-impl ViewerApp {
+impl Application {
     /// Traite les commandes du pilote ; répond aux ouvertures terminées.
     pub(crate) fn piloter(&mut self, ctx: &egui::Context) {
         if self.loading.is_none() && !self.attente_ouverture.is_empty() {
@@ -144,7 +144,7 @@ impl ViewerApp {
         });
     }
 
-    /// État du viewer : fichier, vue, caméra, visibilité, sélection.
+    /// État de l'instance : fichier, vue, caméra, visibilité, sélection.
     pub(crate) fn etat(&self) -> String {
         use pilote::{liste, objet, texte};
         let mut p = vec![

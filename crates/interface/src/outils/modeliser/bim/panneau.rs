@@ -3,7 +3,7 @@
 use super::*;
 use super::widgets::*;
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn panneau_bim(&mut self, ui: &mut egui::Ui) -> bool {
         use commandes::Commande;
         use crate::zones::ruban::Outil;

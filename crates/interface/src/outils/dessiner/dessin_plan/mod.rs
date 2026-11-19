@@ -340,7 +340,7 @@ fn nom_outil(o: OutilDessin) -> &'static str {
     }
 }
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn commande_ruban_contour(&mut self, outil: crate::zones::ruban::Outil) {
         use crate::zones::ruban::Outil;
         if outil == Outil::Supprimer { self.supprimer_trait_edition(); return; }

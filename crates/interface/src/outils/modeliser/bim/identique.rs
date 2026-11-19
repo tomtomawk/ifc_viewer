@@ -2,7 +2,7 @@
 use crate::zones::ruban::Outil;
 use crate::*;
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn creer_identique(&mut self) -> Result<(), String> {
         let ids = self.selection_bim();
         if ids.len() != 1 {
@@ -196,9 +196,9 @@ mod tests {
         projet
     }
 
-    fn app(projet: modele::Projet, id: &str) -> (ViewerApp, egui::Context) {
+    fn app(projet: modele::Projet, id: &str) -> (Application, egui::Context) {
         let ctx = egui::Context::default();
-        let mut app = ViewerApp::new(&eframe::CreationContext::_new_kittest(ctx.clone()), None);
+        let mut app = Application::new(&eframe::CreationContext::_new_kittest(ctx.clone()), None);
         app.options = Default::default();
         let chemin =
             std::env::temp_dir().join(format!("identique-{}.modele.json", noyau::uuid::uuid()));
@@ -207,7 +207,7 @@ mod tests {
         (app, ctx)
     }
 
-    fn taper_cs(app: &mut ViewerApp, ctx: &egui::Context) {
+    fn taper_cs(app: &mut Application, ctx: &egui::Context) {
         for lettre in ["c", "s"] {
             let mut sortie = ctx.run_ui(
                 egui::RawInput {

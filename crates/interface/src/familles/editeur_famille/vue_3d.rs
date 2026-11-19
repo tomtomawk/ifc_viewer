@@ -4,7 +4,7 @@
 use super::*;
 use plan_actif::Ecran3D;
 
-impl ViewerApp {
+impl Application {
     pub(super) fn vue_3d_famille(&mut self, ui: &mut egui::Ui) {
         let rect = ui.available_rect_before_wrap();
         let response = ui.allocate_rect(rect, Sense::click_and_drag());

@@ -1,7 +1,7 @@
 //! Vues Revit, nomenclatures, fenêtre des éléments non pris en charge.
 use crate::*;
 
-impl ViewerApp {
+impl Application {
     /// Fiche d'un fichier Revit : vignette, version, informations projet, références.
     pub(crate) fn revit_view(&mut self, ui: &mut egui::Ui) {
         if self.rvt_preview.is_none() {

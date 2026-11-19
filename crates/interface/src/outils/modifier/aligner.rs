@@ -65,7 +65,7 @@ fn segments_du_dessin(dessin: noyau::trace2d::Dessin) -> Vec<SegmentPlan> {
     segments
 }
 
-impl ViewerApp {
+impl Application {
     fn cle_alignement(&self, element: Id) -> Option<String> {
         self.cle_native(self.cible_clic(element)).or_else(|| {
             let projet = &self.natif.as_ref()?.0;

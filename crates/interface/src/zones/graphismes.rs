@@ -1,7 +1,7 @@
 //! Fenêtres matériau, plumes et motifs.
 use crate::*;
 
-impl ViewerApp {
+impl Application {
     /// Graphismes d'un matériau du projet natif, comme dans Revit (sans ombrage) : motifs
     /// de surface et de coupe, chacun en premier plan et en arrière-plan (motif, couleur).
     /// L'arrière-plan est uni ou hachuré ; « Motifs… » ouvre l'éditeur de hachures.

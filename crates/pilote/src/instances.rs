@@ -1,7 +1,7 @@
-//! Registre local des viewers pilotables : un fichier JSON par instance dans
+//! Registre local des instances pilotables : un fichier JSON par instance dans
 //! `%LOCALAPPDATA%\BIMedit\instances` (port, jeton, fichier ouvert). Le pont MCP le lit pour
-//! lister les instances et en choisir une ; un viewer lancé par l'utilisateur est donc
-//! joignable comme un viewer lancé par le pont.
+//! lister les instances et en choisir une ; une instance lancée par l'utilisateur est donc
+//! joignable comme une instance lancée par le pont.
 //!
 //! Mode isolé (`BIMEDIT_PORT` défini, tests et CI) : port fixe, aucune inscription, jeton
 //! seulement si `BIMEDIT_JETON` est fourni.
@@ -64,7 +64,7 @@ fn ecrire(i: &Instance) {
     }
 }
 
-/// Inscrit le viewer (mode normal seulement).
+/// Inscrit l'instance (mode normal seulement).
 pub fn inscrire(port: u16, jeton: &str) {
     let i = Instance {
         pid: std::process::id(),
@@ -89,7 +89,7 @@ pub fn publier(fichier: Option<String>, partage: Option<String>) {
     ecrire(i);
 }
 
-/// Pid et port de ce viewer, s'il est inscrit.
+/// Pid et port de cette instance, si elle est inscrite.
 pub fn courante() -> Option<(u32, u16)> {
     COURANTE.lock().unwrap().as_ref().map(|i| (i.pid, i.port))
 }

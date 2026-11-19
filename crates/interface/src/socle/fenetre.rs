@@ -26,7 +26,7 @@ pub fn lancer(path: Option<PathBuf>) -> eframe::Result<()> {
         wgpu_options: limites_gpu(),
         ..Default::default()
     };
-    eframe::run_native("BIMedit", options, Box::new(move |cc| Ok(Box::new(crate::ViewerApp::new(cc, path)))))
+    eframe::run_native("BIMedit", options, Box::new(move |cc| Ok(Box::new(crate::Application::new(cc, path)))))
 }
 
 /// `BIMEDIT_ARRIERE_PLAN=1` : la fenêtre ne passe pas devant celles de l'utilisateur.

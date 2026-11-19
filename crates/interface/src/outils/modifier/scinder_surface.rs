@@ -1,7 +1,7 @@
 use crate::*;
 use commandes::Commande;
 
-impl ViewerApp {
+impl Application {
     pub(super) fn surface_scindable(&self, id: &str) -> bool {
         self.natif.as_ref().is_some_and(|(p, _)| {
             p.dalles.iter().any(|d| d.id == id)

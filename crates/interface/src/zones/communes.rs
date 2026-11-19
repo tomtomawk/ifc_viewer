@@ -41,7 +41,7 @@ fn nom_niveau(projet: &Projet, id: Option<&String>, mixte: bool) -> String {
     id.and_then(|id| projet.niveau(id)).map_or(String::new(), |n| n.nom.clone())
 }
 
-impl ViewerApp {
+impl Application {
     /// Section de propriétés communes pour plusieurs éléments natifs sélectionnés.
     /// Retourne le projet modifié, ou une erreur de validation.
     pub(crate) fn proprietes_communes(&self, ui: &mut egui::Ui, ids: &[String]) -> Result<Option<Projet>, String> {

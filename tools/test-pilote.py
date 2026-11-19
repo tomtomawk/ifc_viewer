@@ -193,10 +193,10 @@ def run(exe):
             if True:
                 requetes = [
                     {"jsonrpc":"2.0","id":1,"method":"tools/list"},
-                    {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"viewer_projet_natif","arguments":{}}},
-                    {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"viewer_collaboration","arguments":{"action":"etat"}}},
-                    {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"viewer_editer","arguments":{"transaction":{"action":"niveau","nom":"Étage MCP","altitude":10000}}}},
-                    {"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"viewer_exporter","arguments":{"format":"ifc","chemin":str(root / "Export MCP.ifc")}}},
+                    {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"application_projet_natif","arguments":{}}},
+                    {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"application_collaboration","arguments":{"action":"etat"}}},
+                    {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"application_editer","arguments":{"transaction":{"action":"niveau","nom":"Étage MCP","altitude":10000}}}},
+                    {"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"application_exporter","arguments":{"format":"ifc","chemin":str(root / "Export MCP.ifc")}}},
                 ]
                 r = subprocess.run([str(exe.resolve()), "--mcp"], input="\n".join(json.dumps(q) for q in requetes)+"\n",capture_output=True,text=True,encoding="utf-8",env=env,check=True,timeout=60)
                 reponses = [json.loads(l) for l in r.stdout.splitlines()]

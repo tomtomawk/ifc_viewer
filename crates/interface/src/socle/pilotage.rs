@@ -13,7 +13,7 @@ fn champ<'a>(v: &'a Value, cle: &str) -> Result<&'a str, String> {
         .ok_or_else(|| format!("Champ texte requis : {cle}"))
 }
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn commande_complete(
         &mut self,
         ctx: &egui::Context,

@@ -11,7 +11,7 @@ use crate::zones::ruban::Outil;
 /// Hauteur papier des textes de cote (mm).
 const HAUTEUR_TEXTE: f64 = 2.5;
 
-impl ViewerApp {
+impl Application {
     /// Genre de cote de l'outil actif (Annoter, vue native ouverte).
     pub(crate) fn outil_cotation(&self) -> Option<GenreCote> {
         if self.onglet_ruban != OngletRuban::Annoter || self.vue_native_id().is_none() { return None; }

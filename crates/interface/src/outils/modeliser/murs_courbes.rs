@@ -53,7 +53,7 @@ fn ajuster_arc(axe: Axe, poignee: usize, curseur: DVec2, valeur: Option<f64>) ->
     Ok([depart, depart + sens * balayage * 0.5, depart + sens * balayage].map(|a| centre + DVec2::from_angle(a) * nouveau_rayon))
 }
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn arc_mur_selection(&self)->Option<(String,[DVec2;3],f64)> {
         let ids=self.selection_bim();if ids.len()!=1 {return None;}
         let (axe,z)=self.natif.as_ref()?.0.trajectoire_justification(&ids[0])?;

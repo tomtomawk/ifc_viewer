@@ -3,7 +3,7 @@
 
 use crate::*;
 use commandes::Execution;
-impl ViewerApp {
+impl Application {
     pub(crate) fn parcourir_historique(&mut self, retablir: bool) {
         self.parcourir_historique_n(retablir, 1);
     }
@@ -204,7 +204,7 @@ impl ViewerApp {
             .expect("thread d'import");
     }
 }
-impl ViewerApp {
+impl Application {
     pub(crate) fn cle_native(&self, id: Id) -> Option<String> {
         let p = &self.natif.as_ref()?.0;
         elements_natifs(p)
@@ -307,7 +307,7 @@ pub(crate) fn elements_natifs(p: &modele::Projet) -> impl Iterator<Item = (&'sta
             .chain(p.importes.iter().map(|x| ("importe", &x.id)))
             .chain(p.niveaux.iter().map(|x| ("niveau", &x.id)))
 }
-impl ViewerApp {
+impl Application {
     /// Deux commandes enchaînées (la seconde reçoit les identifiants rendus par la
     /// première), appliquées en une seule transaction : un seul Ctrl+Z.
     pub(crate) fn executer_bim_suite(

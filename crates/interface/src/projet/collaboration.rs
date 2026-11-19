@@ -2,7 +2,7 @@
 use crate::*;
 use ::collaboration::{partage, session::Session};
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn charger_partage(
         path: &std::path::Path,
         progress: &dyn Fn(String),

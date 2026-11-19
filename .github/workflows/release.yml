@@ -1,6 +1,6 @@
 name: Release
 
-# Pousser une étiquette v* compile le viewer pour les 5 cibles de la CI et publie une
+# Pousser une étiquette v* compile BIMedit pour les 5 cibles de la CI et publie une
 # release GitHub avec les exécutables :
 #   git tag v0.2.0
 #   git push origin v0.2.0

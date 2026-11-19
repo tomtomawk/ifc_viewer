@@ -12,7 +12,7 @@ pub(crate) struct Parametres {
     filtre: String,
     erreur: Option<String>,
 }
-impl ViewerApp {
+impl Application {
     /// Applique et enregistre le mode d'apparence (bouton de la barre haute, commande).
     pub(crate) fn changer_theme(&mut self, ctx: &egui::Context, theme: config::options::ThemeInterface) {
         self.options.theme_interface = theme;

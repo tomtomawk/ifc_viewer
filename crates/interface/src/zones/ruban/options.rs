@@ -203,12 +203,26 @@ Type des prochains éléments horizontaux."), Some(&vignette));
         true
     }
 
-    pub(super) fn options_outil(
-        &mut self,
-        ui: &mut egui::Ui,
-        outil: Outil,
-        projet: Option<&modele::Projet>,
-    ) {
+    /// Réglages de l'outil actif dans Propriétés (panneau droit), une ligne par champ.
+    /// Le mur, les éléments horizontaux et les vues ont leur propre palette.
+    pub fn parametres_outil(&mut self, ui: &mut egui::Ui, menu: Menu, projet: Option<&modele::Projet>) {
+        let Some(outil) = self.selection else { return };
+        if outil.commande() == Outil::Surfaces || matches!(outil, Outil::Mur | Outil::VuePlan | Outil::VueCoupe) || champs(outil).is_empty() {
+            return;
+        }
+        let dans = |m: Menu| groupes(m).iter().any(|(_, o)| o.contains(&outil));
+        // pendant un tracé de Modéliser, l'onglet Modifier reste ouvert
+        if !(dans(menu) || (menu == Menu::Modifier && dans(Menu::Modeliser))) {
+            return;
+        }
+        ui.add_space(6.0);
+        ui.label(RichText::new(format!("Paramètres — {}", outil.nom())).strong());
+        self.options_outil(ui, outil, projet);
+        ui.add_space(4.0);
+        ui.separator();
+    }
+
+    fn options_outil(&mut self, ui: &mut egui::Ui, outil: Outil, projet: Option<&modele::Projet>) {
         let fenetre = matches!(self.valeurs.get(&(Outil::Ouverture, 0)), Some(Valeur::Texte(t)) if t == "Fenêtre" || t == "Libre");
         let garde_corps_type = outil == Outil::GardeCorps && self.type_garde_corps.as_ref()
             .is_some_and(|id| projet.is_some_and(|p| p.types_garde_corps.iter().any(|t| &t.id == id)));
@@ -217,109 +231,52 @@ Type des prochains éléments horizontaux."), Some(&vignette));
             .enumerate()
             .filter(|(k, _)| outil != Outil::Ouverture || (*k != 0 && (*k != 3 || fenetre)))
             .filter(|(k, _)| !garde_corps_type || *k == 1)
-            // mur : décalage bas dans Propriétés ; hauteur seulement si le haut est libre
-            // et l'épaisseur seulement pour un mur générique (sans type)
-            .filter(|(k, _)| outil != Outil::Mur || (*k != 3 && (*k != 1 || self.niveau_haut_mur.is_none()) && (*k != 2 || self.type_mur.is_none())))
             .collect();
         let mut changement_ouverture = false;
-        for ligne in champs.chunks(2) {
-            ui.horizontal(|ui| {
-                for (k, champ) in ligne {
-                    ui.push_id(("option_ruban", outil, *k), |ui| {
-                        ui.horizontal(|ui| match champ {
-                            Champ::Choix(nom, choix) => {
-                                ui.label(*nom);
-                                let v = self
-                                    .valeurs
-                                    .entry((outil, *k))
-                                    .or_insert_with(|| Valeur::Texte(choix[0].into()));
-                                if let Valeur::Texte(v) = v {
-                                    egui::ComboBox::from_id_salt("choix")
-                                        .width(110.0)
-                                        .selected_text(&*v)
-                                        .show_ui(ui, |ui| {
-                                            for choix in *choix {
-                                                if ui.selectable_value(v, (*choix).into(), *choix).changed() && outil == Outil::Ouverture && *k == 0 {
-                                                    changement_ouverture = true;
-                                                }
-                                            }
-                                        });
+        egui::Grid::new(("parametres_outil", outil)).num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
+            for (k, champ) in &champs {
+                match champ {
+                    Champ::Choix(nom, choix) => {
+                        ui.label(*nom);
+                        let v = self.valeurs.entry((outil, *k)).or_insert_with(|| Valeur::Texte(choix[0].into()));
+                        if let Valeur::Texte(v) = v {
+                            egui::ComboBox::from_id_salt(("choix", outil, *k)).width(130.0).selected_text(&*v).show_ui(ui, |ui| {
+                                for choix in *choix {
+                                    if ui.selectable_value(v, (*choix).into(), *choix).changed() && outil == Outil::Ouverture && *k == 0 {
+                                        changement_ouverture = true;
+                                    }
                                 }
-                            }
-                            Champ::Nombre(nom, defaut, suffixe) => {
-                                ui.label(*nom);
-                                let v = self
-                                    .valeurs
-                                    .entry((outil, *k))
-                                    .or_insert(Valeur::Nombre(*defaut));
-                                if let Valeur::Nombre(v) = v {
-                                    let pas = if *suffixe == " mm" { 10.0 } else { 0.1 };
-                                    let champ = egui::DragValue::new(v).speed(pas);
-                                    ui.add(if *suffixe == " mm" && !nom.contains("papier") { champ.dimensions() } else { champ.max_decimals(2).suffix(*suffixe) });
-                                }
-                            }
-                            Champ::Case(nom) => {
-                                let v = self.valeurs.entry((outil, *k)).or_insert_with(|| Valeur::Texte("non".into()));
-                                if let Valeur::Texte(v) = v {
-                                    let mut coche = v == "oui";
-                                    if ui.checkbox(&mut coche, *nom).changed() { *v = if coche { "oui" } else { "non" }.into(); }
-                                }
-                            }
-                            Champ::Saisie(nom, defaut) => {
-                                ui.label(*nom);
-                                let v = self
-                                    .valeurs
-                                    .entry((outil, *k))
-                                    .or_insert_with(|| Valeur::Texte((*defaut).into()));
-                                if let Valeur::Texte(v) = v {
-                                    ui.add(egui::TextEdit::singleline(v).desired_width(100.0));
-                                }
-                            }
-                        });
-                    });
+                            });
+                        }
+                    }
+                    Champ::Nombre(nom, defaut, suffixe) => {
+                        ui.label(*nom);
+                        let v = self.valeurs.entry((outil, *k)).or_insert(Valeur::Nombre(*defaut));
+                        if let Valeur::Nombre(v) = v {
+                            let pas = if *suffixe == " mm" { 10.0 } else { 0.1 };
+                            let champ = egui::DragValue::new(v).speed(pas);
+                            ui.add(if *suffixe == " mm" && !nom.contains("papier") { champ.dimensions() } else { champ.max_decimals(2).suffix(*suffixe) });
+                        }
+                    }
+                    Champ::Case(nom) => {
+                        ui.label("");
+                        let v = self.valeurs.entry((outil, *k)).or_insert_with(|| Valeur::Texte("non".into()));
+                        if let Valeur::Texte(v) = v {
+                            let mut coche = v == "oui";
+                            if ui.checkbox(&mut coche, *nom).changed() { *v = if coche { "oui" } else { "non" }.into(); }
+                        }
+                    }
+                    Champ::Saisie(nom, defaut) => {
+                        ui.label(*nom);
+                        let v = self.valeurs.entry((outil, *k)).or_insert_with(|| Valeur::Texte((*defaut).into()));
+                        if let Valeur::Texte(v) = v {
+                            ui.add(egui::TextEdit::singleline(v).desired_width(130.0));
+                        }
+                    }
                 }
-            });
-        }
-        if changement_ouverture { self.ouverture_type_identique = None; }
-        if outil == Outil::Mur {
-            self.options_mur(ui, projet);
-        }
-    }
-
-    pub(super) fn options_mur(&mut self, ui: &mut egui::Ui, projet: Option<&modele::Projet>) {
-        if !self.mur_actif() {
-            return;
-        }
-        let Some(projet) = projet else {
-            ui.label(RichText::new("Créez ou ouvrez un projet natif pour dessiner un mur.").weak());
-            return;
-        };
-        if self
-            .niveau_mur
-            .as_ref()
-            .is_some_and(|id| projet.niveau(id).is_none())
-        {
-            self.niveau_mur = None;
-        }
-        ui.horizontal_wrapped(|ui| {
-            ui.label("Niveau de base");
-            let defaut = projet.niveaux.first();
-            let nom = self
-                .niveau_mur
-                .as_ref()
-                .and_then(|id| projet.niveau(id))
-                .or(defaut)
-                .map_or("Niveau 0", |n| n.nom.as_str());
-            egui::ComboBox::from_id_salt("niveau_mur")
-                .selected_text(nom)
-                .show_ui(ui, |ui| {
-                    if projet.niveaux.is_empty() {
-                        ui.selectable_value(&mut self.niveau_mur, None, "Niveau 0");
-                    }
-                    for n in &projet.niveaux {
-                        ui.selectable_value(&mut self.niveau_mur, Some(n.id.clone()), &n.nom);
-                    }
-                });
+                ui.end_row();
+            }
         });
+        if changement_ouverture { self.ouverture_type_identique = None; }
     }
 }

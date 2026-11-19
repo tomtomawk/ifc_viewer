@@ -6,15 +6,15 @@ JSON avec `ok`.
 
 ## Instances et jeton
 
-- Chaque viewer écoute sur `127.0.0.1`, port 47811 s'il est libre, sinon un port choisi
+- Chaque instance écoute sur `127.0.0.1`, port 47811 s'il est libre, sinon un port choisi
   par le système, et s'inscrit dans `%LOCALAPPDATA%\BIMedit\instances\<pid>.json`
   (`pid`, `port`, `jeton`, `fichier` ouvert, `partage` collaboratif). L'inscription
-  disparaît à la fermeture ; le pont efface celles des viewers qui ne répondent plus.
+  disparaît à la fermeture ; le pont efface celles des instances qui ne répondent plus.
 - Le jeton (32 caractères aléatoires, nouveau à chaque lancement) est exigé : une ligne
   sans `@jeton` ou avec un autre jeton est refusée.
-- `viewer_instances` (MCP) : `lister` les viewers ouverts, lancés par l'utilisateur ou
-  par le pont ; `choisir` (`pid`) celui que les autres outils pilotent ; `nouvelle` en
-  lance un et le choisit. Une seule instance ouverte est pilotée sans choix ; aucune :
+- `application_instances` (MCP) : `lister` les instances ouvertes, lancées par l'utilisateur ou
+  par le pont ; `choisir` (`pid`) celle que les autres outils pilotent ; `nouvelle` en
+  lance une et la choisit. Une seule instance ouverte est pilotée sans choix ; aucune :
   le pont en lance une ; plusieurs sans choix : les outils sont refusés.
 - Plusieurs instances sur un même projet : l'associer au même `.bimpartage` (`collaborer`
   dans l'une, `ouvrir` du `.bimpartage` dans l'autre). Chacune garde sa copie locale et
@@ -24,7 +24,7 @@ JSON avec `ok`.
   l'écran et hors de la barre des tâches. Elle reste rendue et pilotable (saisies egui,
   captures). Les scripts `tools/test*.py` l'activent par défaut ; `BIMEDIT_ARRIERE_PLAN=0`
   pour voir la fenêtre. Passé au pont MCP (bloc `env` de sa configuration), il s'applique
-  aux viewers que le pont lance.
+  aux instances que le pont lance.
 - Mode isolé (tests, CI) : `BIMEDIT_PORT` fixe le port, sans inscription ; le jeton n'est
   exigé que si `BIMEDIT_JETON` est défini (le pont lancé avec les mêmes variables le
   transmet). Les chemins simples occupent tout l'argument
@@ -35,7 +35,7 @@ zone de coupe sont en m. Les angles de caméra et de pente sont en degrés.
 ## Découverte et état
 
 - `aide [pilote|edition|modele|commandes]` : cette documentation ou les contrats de
-  l'édition et du modèle, aussi disponibles dans `viewer_aide` (argument `sujet`).
+  l'édition et du modèle, aussi disponibles dans `application_aide` (argument `sujet`).
 - `etat` : chargement, enregistrement (vrai aussi pendant un enregistrement ou un
   export lancé depuis l'interface, en arrière-plan), sélection, caméra, collaboration, entrées en
   attente et rectangle de la vue (points logiques de la fenêtre).
@@ -266,7 +266,7 @@ modifie la visibilité d'un élément (clés `faible`, `moyen`, `eleve`, `plan`,
 travail et son cadrage (caméra de la vue plane : `distance`, `cible` en m). La molette (`saisie defiler`) et le glissement au bouton
 `milieu` utilisent la navigation réelle de l'éditeur, sans toucher au modèle.
 
-Plans tournés et plan de dessin (MCP : `viewer_famille` actions `plan_tourne`, `angle`,
+Plans tournés et plan de dessin (MCP : `application_famille` actions `plan_tourne`, `angle`,
 `plan_actif`, `ecran`) :
 - `famille_plan_tourne {"nom":"Incliné","hote":"Bas","appui":"Gauche","angle":30}` crée le
   plan tourné ou modifie les champs donnés (angle dessiné en degrés), puis valide la

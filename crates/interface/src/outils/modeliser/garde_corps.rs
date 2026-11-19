@@ -84,7 +84,7 @@ fn ajouter_type(p: &Projet, mut t: TypeGardeCorps) -> (Projet, String) {
     (q, id)
 }
 
-impl ViewerApp {
+impl Application {
     pub(crate) fn standard_garde_corps(&self) -> TypeGardeCorps {
         let remplissage = match self
             .ruban_edition

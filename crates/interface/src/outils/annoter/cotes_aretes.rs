@@ -13,7 +13,7 @@ use crate::zones::ruban::Outil;
 /// abscisse relative du point visé.
 pub(crate) type AreteVisee = (String, usize, [DVec2; 2], f64);
 
-impl ViewerApp {
+impl Application {
     /// Vue en plan native ouverte et son projet.
     fn plan_natif(&self) -> Option<(&modele::Projet, &modele::Vue)> {
         let id = self.vue_native_id()?;
