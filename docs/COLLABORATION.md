@@ -359,7 +359,7 @@ conditions d'exécution préexistantes du dépôt.
 
 ## Qualification NAS à deux machines
 
-État de cette qualification : [SUIVI.md](SUIVI.md), tâche C1.
+État de cette qualification : [ROADMAP.md](ROADMAP.md), tâche C1 ; essais faits : [SUIVI.md](SUIVI.md).
 
 Utiliser un dossier de qualification dédié et enregistrer modèle NAS, firmware,
 version SMB, options de cache, fichiers hors connexion désactivés et antivirus.

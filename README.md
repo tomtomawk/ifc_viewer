@@ -204,7 +204,7 @@ aucune instance n'écoute, le serveur lance `bimedit` à côté de lui, sinon `t
 
 ## Limites connues
 
-Ce qui est fait et ce qui reste à faire est tenu dans un seul document : [docs/SUIVI.md](docs/SUIVI.md).
+Ce qui reste à faire : [docs/ROADMAP.md](docs/ROADMAP.md) ; ce qui est fait : [docs/SUIVI.md](docs/SUIVI.md).
 
 - Les faces B-spline (`IfcBSplineSurfaceWithKnots`, rationnelles) des IfcAdvancedBrep sont échantillonnées sur leur surface quand leurs bornes suivent le bord du domaine ; une face découpée (bornes intérieures au domaine) reste facettisée par ses arêtes.
 - La CSG est sautée pour les hôtes de plus de 6 000 triangles ou les ouvertures de plus de 3 000 triangles (performance) ; l'élément est alors affiché plein.

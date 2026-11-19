@@ -4,7 +4,14 @@ Lire et appliquer la politique des formats et des migrations dans [docs/AGENTS.m
 
 **Travailler sur une partie seulement** : lire d'abord l'`AGENTS.md` de la crate concernée et `docs/ARCHITECTURE.md` §2 (dépendances autorisées) ; ne pas charger le reste. `docs/historique/` est un journal, pas à lire. Avant de commiter : `cargo check --workspace --tests`.
 
-**Fait et reste à faire** : source unique [docs/SUIVI.md](docs/SUIVI.md). Y prendre la tâche, et dans le même commit que le code : retirer la tâche de « Reste à faire », ajouter une ligne en tête du « Journal » (date, commit, vérification réellement faite). Ne pas écrire d'état (« fait », « à faire », avancement) dans un autre document.
+**À faire** : [docs/ROADMAP.md](docs/ROADMAP.md) (tâches à venir, en attente, décisions à prendre). **Fait et abandonné** : [docs/SUIVI.md](docs/SUIVI.md). Prendre la tâche dans ROADMAP ; dans le même commit que le code :
+- journaliser ce qui a été fait : une ligne en tête du Journal de SUIVI (date, ce qui a été fait, commit, vérification réellement faite ; ce qui n'a pas été vérifié est écrit tel quel) ;
+- retirer la tâche de ROADMAP, ou n'y laisser que le reste ; un défaut découvert en chemin y entre avec un identifiant et une priorité ;
+- une tâche abandonnée passe de ROADMAP à « Abandonné » dans SUIVI, avec la date et la raison.
+
+Ne pas écrire d'état (« fait », « à faire », avancement) dans un autre document.
+
+**Commits** : directement sur `master`, en avance rapide (fast-forward), sans branche ni commit de fusion. Avant de commiter : `git pull --ff-only` ; si `origin/master` a avancé entre-temps, `git pull --rebase` puis vérifier à nouveau. Pousser par `git push origin master`, jamais `--force`. Un commit = un travail cohérent, code et documents (SUIVI, ROADMAP, `AGENTS.md` concernés) ensemble ; ne pas y mettre les fichiers non suivis qui ne relèvent pas du travail (`samples/` locaux, exports).
 
 ## Carte du dépôt (`crates/`, dans l'ordre des dépendances)
 
@@ -45,4 +52,4 @@ Lire et appliquer la politique des formats et des migrations dans [docs/AGENTS.m
 | option de ligne de commande | `crates/app/src/main.rs`, `crates/app/src/modes/` |
 | dépendances entre crates | `docs/ARCHITECTURE.md` §2 + `crates/app/tests/dependances.rs` |
 
-Règles : `docs/SUIVI.md` tenu à jour à chaque commit ; pas de ré-export de compatibilité ; fichiers ≤ ~600 lignes pour tout nouveau code ; un `AGENTS.md` court par crate, à tenir à jour avec le code.
+Règles : `docs/SUIVI.md` (journal) et `docs/ROADMAP.md` (à faire) tenus à jour à chaque commit ; pas de ré-export de compatibilité ; fichiers ≤ ~600 lignes pour tout nouveau code ; un `AGENTS.md` court par crate, à tenir à jour avec le code.

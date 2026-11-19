@@ -43,4 +43,4 @@ Chaque lot doit rester relisible. Le passage d'un lot au suivant ne doit pas mas
 
 ## État
 
-L'avancement et le reste à faire sont dans [SUIVI.md](SUIVI.md) §2.5. Le relevé détaillé du 11 au 13 novembre 2026 est archivé dans [historique/FAMILLES_AVANCEMENT_2026-11.md](historique/FAMILLES_AVANCEMENT_2026-11.md).
+Le reste à faire est dans [ROADMAP.md](ROADMAP.md) §5, le fait dans [SUIVI.md](SUIVI.md). Le relevé détaillé du 11 au 13 novembre 2026 est archivé dans [historique/FAMILLES_AVANCEMENT_2026-11.md](historique/FAMILLES_AVANCEMENT_2026-11.md).

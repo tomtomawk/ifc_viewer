@@ -68,7 +68,7 @@ Externes : `eframe` (egui, wgpu) et `wgpu` seulement dans `moteur3d`, `pilote`, 
 3. Plafond d'environ 600 lignes par fichier pour tout nouveau code ; un fichier au-delà ne s'agrandit pas (§5).
 4. Un `AGENTS.md` court (≤ ~40 lignes : rôle, dépendances autorisées, points d'entrée, quand modifier ici, `cargo test -p <crate>`, pièges) dans chaque crate ; le mettre à jour avec le code. L'`AGENTS.md` racine porte la carte du dépôt.
 5. `pub(crate)` ne devient `pub` que si la compilation l'exige.
-6. Ce qui est fait et ce qui reste à faire s'écrit dans `docs/SUIVI.md`, dans le même commit que le code, et nulle part ailleurs ; les autres documents décrivent le fonctionnement.
+6. Ce qui reste à faire s'écrit dans `docs/ROADMAP.md`, ce qui est fait ou abandonné dans `docs/SUIVI.md`, dans le même commit que le code, et nulle part ailleurs ; les autres documents décrivent le fonctionnement.
 7. Aucun changement de format sans mise à jour de la documentation (`docs/MODELE.md`, `docs/EDITION.md`) ; pas de migration des formats natifs : `docs/AGENTS.md`.
 8. Commits : un message préfixé du contexte (« Lot 12 : … », ou le sujet) qui décrit le changement ; les lignes `Co-Authored-By` et `Claude-Session` en fin de message pour le travail fait avec un agent. `cargo check --workspace --tests` avant chaque commit.
 9. Les tests de `samples/` se lisent par `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/…")` ; les `include_str!` de `docs/` et `gabarits/` sont relatifs à `crates/<crate>/src/`.
@@ -112,7 +112,7 @@ Externes : `eframe` (egui, wgpu) et `wgpu` seulement dans `moteur3d`, `pilote`, 
 - **`moteur3d/src/scene.wgsl`** : `const MAX_APPARENCES: i32 = 32;` en dur ; l'égalité avec `noyau::constantes::MAX_APPARENCES` est vérifiée par le test `max_apparences_du_shader_egal_a_noyau` (`moteur3d`).
 - **Garde-fou** : le §2 est codé en dur dans le test, sans lecture du document ; les deux se modifient ensemble. `[dependencies.x]` (tableau TOML) n'est pas géré (le test échoue s'il en trouve).
 
-Cette section décrit la dette ; son traitement (priorité, fait, reste à faire) est suivi dans [SUIVI.md](SUIVI.md) §2.6.
+Cette section décrit la dette ; son traitement (priorité, fait, reste à faire) est suivi dans [ROADMAP.md](ROADMAP.md) §6.
 
 ## 6. Comment vérifier
 
@@ -128,4 +128,4 @@ cargo run --release -p bimedit -- --stats samples/test_ifc4.ifc
 
 ## 7. Documents voisins
 
-`docs/MODELE.md` (format du modèle), `docs/EDITION.md` (commandes), `docs/MODIFICATION.md`, `docs/PILOTE.md` (MCP), `docs/COLLABORATION.md`, `docs/AGENTS.md` (politique des formats : à respecter). `docs/SUIVI.md` : source unique de ce qui est fait et de ce qui reste à faire. `docs/PLAN_FUSION_FAMILLES.md` (objectif et lots des familles ; antérieur au découpage : chemins périmés), `docs/ETUDES_P2.md` (évolutions étudiées). `docs/historique/` : archives (chantier du découpage, audit de factorisation du 11/11/2026, avancement des familles).
+`docs/MODELE.md` (format du modèle), `docs/EDITION.md` (commandes), `docs/MODIFICATION.md`, `docs/PILOTE.md` (MCP), `docs/COLLABORATION.md`, `docs/AGENTS.md` (politique des formats : à respecter). `docs/ROADMAP.md` : ce qui reste à faire ; `docs/SUIVI.md` : ce qui est fait ou abandonné. `docs/PLAN_FUSION_FAMILLES.md` (objectif et lots des familles ; antérieur au découpage : chemins périmés), `docs/ETUDES_P2.md` (évolutions étudiées). `docs/historique/` : archives (chantier du découpage, audit de factorisation du 11/11/2026, avancement des familles).

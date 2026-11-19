@@ -1,7 +1,7 @@
 # Fonctions de modification : modèle de fonctionnement
 
 Onglet **Modifier** du ruban. Ce document fixe le comportement attendu de chaque
-fonction ; l'état (fait, reste à faire) est dans [SUIVI.md](SUIVI.md). Les commandes existantes se lisent dans `crates/commandes/src/socle/commande.rs`
+fonction ; l'état est dans [ROADMAP.md](ROADMAP.md) (à faire) et [SUIVI.md](SUIVI.md) (fait). Les commandes existantes se lisent dans `crates/commandes/src/socle/commande.rs`
 (enum `Commande`) et dans `crates/interface/src/zones/ruban/mod.rs` (`groupes(Menu::Modifier)`).
 
 ## 1. Règles communes
@@ -131,4 +131,4 @@ Règle : le verrouillage s'applique au **modèle** (partagé en collaboration). 
 
 ## 6. État
 
-Ce qui est fait et ce qui reste à faire : [SUIVI.md](SUIVI.md) §2.4 et §4. Tests graphiques : `tools/test-transformer.py`, `tools/test-visibilite.py`, `tools/test-elements.py`, `tools/test-verrou.py`.
+Reste à faire : [ROADMAP.md](ROADMAP.md) §4 ; fait : [SUIVI.md](SUIVI.md) §3. Tests graphiques : `tools/test-transformer.py`, `tools/test-visibilite.py`, `tools/test-elements.py`, `tools/test-verrou.py`.

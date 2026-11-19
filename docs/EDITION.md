@@ -645,7 +645,7 @@ une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvre
   de la mémoire (`noyau::csg_memoire`) ; les silhouettes des arbres aussi
   (`maillage::aretes::silhouette_arbre`). Les arêtes jointes par matériau et
   l'assemblage de la scène sont recalculés en entier (mesures et suite :
-  [SUIVI.md](SUIVI.md) §1 et tâche A8). La copie de récupération n'est pas un journal
+  [SUIVI.md](SUIVI.md) §1 et tâche A8 de [ROADMAP.md](ROADMAP.md)). La copie de récupération n'est pas un journal
   incrémental ; un calcul qui n'a pas encore abouti n'y figure pas.
 - L'export IFC utilise des corps tessellés (pas de solides paramétriques ni de
   restitution des familles Revit) et ne porte que les paramètres que le modèle
@@ -660,7 +660,7 @@ une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvre
   les légendes, la fusion d'import et la comparaison de réimportations ne sont pas
   disponibles. Les sections circulaires et les poutres inclinées ne sont pas prises
   en charge. Les outils non raccordés sont désactivés. Le reste à faire est tenu
-  dans [SUIVI.md](SUIVI.md).
+  dans [ROADMAP.md](ROADMAP.md).
 - Les feuilles natives s'ouvrent dans le gestionnaire de documents avec un aperçu ;
   elles ne constituent pas encore des onglets de dessin éditables comme les vues.
 
