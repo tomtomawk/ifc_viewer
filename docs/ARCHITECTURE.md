@@ -128,4 +128,4 @@ cargo run --release -p bimedit -- --stats samples/test_ifc4.ifc
 
 ## 7. Documents voisins
 
-`docs/MODELE.md` (format du modèle), `docs/EDITION.md` (commandes), `docs/MODIFICATION.md`, `docs/PILOTE.md` (MCP), `docs/COLLABORATION.md`, `docs/AGENTS.md` (politique des formats : à respecter). `docs/ROADMAP.md` : ce qui reste à faire ; `docs/SUIVI.md` : ce qui est fait ou abandonné. `docs/PLAN_FUSION_FAMILLES.md` (objectif et lots des familles ; antérieur au découpage : chemins périmés), `docs/ETUDES_P2.md` (évolutions étudiées). `docs/historique/` : archives (chantier du découpage, audit de factorisation du 11/11/2026, avancement des familles).
+`docs/MODELE.md` (format du modèle), `docs/EDITION.md` (commandes), `docs/MODIFICATION.md`, `docs/PILOTE.md` (MCP), `docs/COLLABORATION.md`, `docs/AGENTS.md` (politique des formats : à respecter). `docs/ROADMAP.md` : ce qui reste à faire, objectif des familles (§5) et études des évolutions (§10) ; `docs/SUIVI.md` : ce qui est fait ou abandonné. `docs/historique/` : archives (chantier du découpage, audit de factorisation du 11/11/2026, avancement des familles).
