@@ -24,75 +24,62 @@ impl RubanEdition {
         ui.add_space(2.0);
     }
 
-    /// Palette de création du mur : croquis des deux limites (haut, bas) avec leur
-    /// réglage sur la même ligne, puis les propriétés du type en grille.
-    pub fn proprietes_mur(
-        &mut self,
-        ui: &mut egui::Ui,
-        projet: Option<&modele::Projet>,
-    ) -> bool {
+    /// Emplacement « schéma » du mur : croquis des deux limites (haut, bas).
+    pub fn schema_mur(&mut self, ui: &mut egui::Ui, projet: &modele::Projet) {
         if !self.mur_actif() {
-            return false;
+            return;
         }
-        let Some(projet) = projet else {
-            ui.label("Créez ou ouvrez un projet natif pour dessiner un mur.");
-            return true;
-        };
         // Un changement de document ne doit jamais réutiliser une référence étrangère.
         for niveau in [&mut self.niveau_mur, &mut self.niveau_haut_mur] {
-            if niveau
-                .as_ref()
-                .is_some_and(|id| projet.niveau(id).is_none())
-            {
+            if niveau.as_ref().is_some_and(|id| projet.niveau(id).is_none()) {
                 *niveau = None;
             }
         }
-        if self.type_mur.as_ref().is_some_and(|id| projet.type_mur(id).is_none()) {
-            self.type_mur = None;
+        croquis::cadre(ui, |ui| self.croquis_mur_creation(ui, projet));
+        if let Err(e) = self.parametres_mur().bornes(projet) {
+            ui.colored_label(ui.visuals().error_fg_color, e);
         }
-        egui::ScrollArea::vertical()
-            .id_salt("creation_mur")
+    }
+
+    /// Emplacement « paramètres » du mur : épaisseur (celle du type, ou saisie) et implantation.
+    pub fn parametres_mur_creation(&mut self, ui: &mut egui::Ui, projet: &modele::Projet) {
+        if !self.mur_actif() {
+            return;
+        }
+        ui.add_space(6.0);
+        ui.label(RichText::new("Paramètres — Mur").strong());
+        egui::Grid::new("grille_creation_mur")
+            .num_columns(2)
+            .striped(true)
+            .spacing([10.0, 4.0])
+            .min_col_width(80.0)
             .show(ui, |ui| {
-                croquis::cadre(ui, |ui| self.croquis_mur_creation(ui, projet));
-                if let Err(e) = self.parametres_mur().bornes(projet) {
-                    ui.colored_label(ui.visuals().error_fg_color, e);
+                ui.label("Épaisseur");
+                match self.type_mur.as_ref().and_then(|id| projet.type_mur(id)) {
+                    Some(t) => {
+                        ui.label(modele::unite::unite().afficher(t.epaisseur()))
+                            .on_hover_text("Épaisseur du type (somme des couches)");
+                    }
+                    None => self.nombre_mur(ui, 2, 300.0),
                 }
-                ui.add_space(6.0);
-                ui.label(RichText::new("Paramètres — Mur").strong());
-                egui::Grid::new("grille_creation_mur")
-                    .num_columns(2)
-                    .striped(true)
-                    .spacing([10.0, 4.0])
-                    .min_col_width(80.0)
-                    .show(ui, |ui| {
-                        ui.label("Épaisseur");
-                        match self.type_mur.as_ref().and_then(|id| projet.type_mur(id)) {
-                            Some(t) => {
-                                ui.label(modele::unite::unite().afficher(t.epaisseur()))
-                                    .on_hover_text("Épaisseur du type (somme des couches)");
+                ui.end_row();
+                ui.label("Implantation");
+                let v = self
+                    .valeurs
+                    .entry((Outil::Mur, 0))
+                    .or_insert_with(|| Valeur::Texte("Face extérieure".into()));
+                if let Valeur::Texte(v) = v {
+                    egui::ComboBox::from_id_salt("implantation_proprietes_mur")
+                        .width(130.0)
+                        .selected_text(v.as_str())
+                        .show_ui(ui, |ui| {
+                            for nom in ["Face extérieure", "Axe", "Face intérieure", "Axe du porteur"] {
+                                ui.selectable_value(v, nom.into(), nom);
                             }
-                            None => self.nombre_mur(ui, 2, 300.0),
-                        }
-                        ui.end_row();
-                        ui.label("Implantation");
-                        let v = self
-                            .valeurs
-                            .entry((Outil::Mur, 0))
-                            .or_insert_with(|| Valeur::Texte("Face extérieure".into()));
-                        if let Valeur::Texte(v) = v {
-                            egui::ComboBox::from_id_salt("implantation_proprietes_mur")
-                                .width(130.0)
-                                .selected_text(v.as_str())
-                                .show_ui(ui, |ui| {
-                                    for nom in ["Face extérieure", "Axe", "Face intérieure", "Axe du porteur"] {
-                                        ui.selectable_value(v, nom.into(), nom);
-                                    }
-                                });
-                        }
-                        ui.end_row();
-                    });
+                        });
+                }
+                ui.end_row();
             });
-        true
     }
 
     /// Sélecteur de type en tête de la palette, comme dans Revit : générique (épaisseur

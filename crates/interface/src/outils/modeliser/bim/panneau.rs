@@ -486,18 +486,7 @@ impl Application {
                     }
                 }
                 Some(Outil::Ouverture) => {
-                    // type à placer (et éditeur de familles), en tête comme dans Revit
-                    if self.ruban_edition.proprietes_ouverture(ui, self.natif.as_ref().map(|(p, _)| p)) {
-                        if std::mem::take(&mut self.ruban_edition.demande_charger_famille)
-                            && let Err(e) = self.charger_famille_dialogue(true)
-                        {
-                            self.error = Some(e);
-                        }
-                        if let Some(t) = self.ruban_edition.demande_famille.take() {
-                            let genre = if self.ruban_edition.texte_option(Outil::Ouverture, 0) == "Porte" { modele::GenreOuverture::Porte } else { modele::GenreOuverture::Fenetre };
-                            self.ouvrir_editeur_famille_type(t, genre);
-                        }
-                    }
+                    // le type à placer est dans la palette de création (selecteur_ouverture)
                     ui.label("Cliquez sur un mur pour placer l’ouverture, ou sélectionnez son hôte et saisissez l'abscisse.");
                     ui.add(
                         egui::DragValue::new(&mut self.bim.abscisse)

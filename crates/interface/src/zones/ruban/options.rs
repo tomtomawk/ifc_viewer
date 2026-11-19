@@ -57,13 +57,13 @@ impl RubanEdition {
             self.demande_charger_famille = true;
         }
         ui.separator();
-        self.section_parametres(ui, Outil::Ouverture, Some(projet));
         true
     }
 
-    pub fn proprietes_surfaces(&mut self, ui: &mut egui::Ui, projet: Option<&modele::Projet>) -> bool {
+    /// Emplacement « sélecteur » de l'élément horizontal : type, et sorte (onglets).
+    pub fn selecteur_surface(&mut self, ui: &mut egui::Ui, projet: Option<&modele::Projet>) {
         let Some(mut surface) = self.selection.filter(|o| o.commande() == Outil::Surfaces) else {
-            return false;
+            return;
         };
         let projet_vide = modele::Projet::default();
         let projet_apercu = projet.unwrap_or(&projet_vide);
@@ -104,6 +104,20 @@ Type des prochains éléments horizontaux."), Some(&vignette));
                 self.type_surface.insert(sorte, i);
                 self.surface_identique = None;
             }
+        }
+        self.selection = Some(surface);
+        if surface != Outil::TerrePlein { self.derniere_surface = Some(surface); }
+    }
+
+    /// Emplacement « schéma » de l'élément horizontal : composition du type choisi.
+    pub fn schema_surface(&mut self, ui: &mut egui::Ui, projet: Option<&modele::Projet>) {
+        let Some(surface) = self.selection.filter(|o| o.commande() == Outil::Surfaces) else {
+            return;
+        };
+        let projet_vide = modele::Projet::default();
+        let projet_apercu = projet.unwrap_or(&projet_vide);
+        let unite = modele::unite::unite();
+        {
             let aide = SURFACES.iter().chain(TERRE_PLEIN).find(|(o, _)| *o == surface).map_or("", |(_, aide)| *aide);
             ui.add(egui::Label::new(RichText::new(aide).small().weak()).wrap());
             // composition du type choisi, du haut vers le bas
@@ -120,8 +134,13 @@ Type des prochains éléments horizontaux."), Some(&vignette));
                 }
             }
         }
-        self.selection = Some(surface);
-        if surface != Outil::TerrePlein { self.derniere_surface = Some(surface); }
+    }
+
+    /// Emplacement « paramètres » de l'élément horizontal : niveau, pente, décalage.
+    pub fn parametres_surface(&mut self, ui: &mut egui::Ui, projet: Option<&modele::Projet>) {
+        let Some(surface) = self.selection.filter(|o| o.commande() == Outil::Surfaces) else {
+            return;
+        };
         ui.add_space(8.0);
         ui.label(RichText::new(format!("Paramètres — {}", surface.nom())).strong());
         // tracé dans la vue (projet natif), niveau et mode de tracé
@@ -200,34 +219,22 @@ Type des prochains éléments horizontaux."), Some(&vignette));
                     }
                 }
             });
-        true
     }
 
-    /// Réglages de l'outil actif dans Propriétés (panneau droit), une ligne par champ.
-    /// Le mur, les éléments horizontaux et les vues ont leur propre palette.
-    pub fn parametres_outil(&mut self, ui: &mut egui::Ui, menu: Menu, projet: Option<&modele::Projet>) {
-        let Some(outil) = self.selection else { return };
-        if outil.commande() == Outil::Surfaces || matches!(outil, Outil::Mur | Outil::VuePlan | Outil::VueCoupe) || champs(outil).is_empty() {
-            return;
-        }
+    /// Un outil du menu `menu` est-il actif ? (pendant un tracé de Modéliser, l'onglet
+    /// Modifier reste ouvert)
+    pub fn outil_actif_dans(&self, menu: Menu) -> Option<Outil> {
+        let outil = self.selection?;
         let dans = |m: Menu| groupes(m).iter().any(|(_, o)| o.contains(&outil));
-        // pendant un tracé de Modéliser, l'onglet Modifier reste ouvert
-        if !(dans(menu) || (menu == Menu::Modifier && dans(Menu::Modeliser))) {
-            return;
-        }
-        // l'ouverture et l'escalier placent leurs réglages après leur sélecteur ou leur schéma
-        if matches!(outil, Outil::Ouverture | Outil::Escalier) {
-            return;
-        }
-        self.section_parametres(ui, outil, projet);
+        (dans(menu) || (menu == Menu::Modifier && dans(Menu::Modeliser))).then_some(outil)
     }
 
-    /// Réglages d'un outil à l'endroit choisi par son propre panneau (après son schéma).
-    pub fn parametres_apres_schema(&mut self, ui: &mut egui::Ui, outil: Outil, projet: Option<&modele::Projet>) {
-        self.section_parametres(ui, outil, projet);
-    }
-
-    fn section_parametres(&mut self, ui: &mut egui::Ui, outil: Outil, projet: Option<&modele::Projet>) {
+    /// Emplacement « paramètres » commun : un titre, puis une ligne par champ de l'outil
+    /// (`champs`). Même présentation pour tous les objets.
+    pub fn section_parametres(&mut self, ui: &mut egui::Ui, outil: Outil, projet: Option<&modele::Projet>) {
+        if champs(outil).is_empty() {
+            return;
+        }
         ui.add_space(6.0);
         ui.label(RichText::new(format!("Paramètres — {}", outil.nom())).strong());
         self.options_outil(ui, outil, projet);

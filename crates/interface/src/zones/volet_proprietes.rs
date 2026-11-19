@@ -60,22 +60,14 @@ impl Application {
                 self.options_modifier(ui, true);
             }
             if !ids.is_empty() { ui.add_space(8.0); ui.separator(); ui.add_space(4.0); }
-            if self.selecteur_garde_corps(ui, &ids) {
-                // création : hauteur, décalage et remplissage sous le sélecteur de type
-                if ids.is_empty() {
-                    self.ruban_edition.parametres_outil(ui, crate::zones::ruban::Menu::Modeliser, self.natif.as_ref().map(|(p, _)| p));
-                }
-                return;
-            }
+            // occurrence sélectionnée : son type ; la création passe par la palette de création
+            if !ids.is_empty() && self.selecteur_garde_corps(ui, &ids) { return; }
             // Le type vient immédiatement après Phase / Sous-projet / Variante,
             // au même emplacement que pendant la création d'un mur.
             // tracé en cours, trait sélectionné : Propriétés montre ce trait, pas l'objet
             if self.proprietes_segment_edition(ui) { return; }
             // Un seul sélecteur pendant les créations successives : celui de l'outil.
             let selecteur_creation = matches!(self.onglet_ruban, OngletRuban::Modeliser | OngletRuban::Modifier) && self.ruban_edition.selecteur_creation_actif();
-            if selecteur_creation && self.ruban_edition.mur_actif() && let Some((projet, _)) = &self.natif {
-                self.ruban_edition.selecteur_type_creation_mur(ui, projet);
-            }
             if !terrain_creation && !selecteur_creation && self.jeu_actif().is_none() && (!ids.is_empty() || !self.ruban_edition.mur_actif()) {
                 if let Some(projet)=self.selecteur_type_selection(ui) {
                     if let Err(e)=self.appliquer_projet(projet) {self.error=Some(e);}
@@ -93,14 +85,6 @@ impl Application {
             }
         }
         if self.natif.is_some() {
-            use crate::zones::ruban::Menu;
-            let menu = match self.onglet_ruban { OngletRuban::Modeliser => Some(Menu::Modeliser), OngletRuban::Modifier => Some(Menu::Modifier), OngletRuban::Annoter => Some(Menu::Annoter), _ => None };
-            if let Some(menu) = menu {
-                self.ruban_edition.parametres_outil(ui, menu, self.natif.as_ref().map(|(p, _)| p));
-            }
-        }
-        if self.panneau_bim(ui) { return; }
-        if self.natif.is_some() {
             let projet = &self.natif.as_ref().unwrap().0;
             // éditeur de type de mur : un type déjà porté par des murs les met à jour
             let mut copie = if self.ruban_edition.editeur_type_ouvert() { projet.clone() } else { modele::Projet::default() };
@@ -117,20 +101,9 @@ impl Application {
                 if let Err(e) = r { self.error = Some(e); }
             }
         }
-        // création d'un escalier : comme le mur, ses réglages remplacent les propriétés de la vue
-        // (l'onglet Modifier reste ouvert pendant un tracé : le sélecteur de type y reste aussi)
-        let creation = matches!(self.onglet_ruban, OngletRuban::Modeliser | OngletRuban::Modifier);
-        if creation && self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Escalier) && self.selection_bim().is_empty() {
-            self.schema_escalier(ui);
-            self.ruban_edition.parametres_apres_schema(ui, crate::zones::ruban::Outil::Escalier, self.natif.as_ref().map(|(p, _)| p));
-            return;
-        }
-        if creation && self.ruban_edition.proprietes_mur(ui, self.natif.as_ref().map(|(p, _)| p)) {
-            return;
-        }
-        if creation && self.ruban_edition.proprietes_surfaces(ui, self.natif.as_ref().map(|(p, _)| p)) {
-            return;
-        }
+        // palette de création : sélecteur, schéma, paramètres (voir palette_creation.rs)
+        if self.palette_creation(ui) { return; }
+        if self.panneau_bim(ui) { return; }
         if self.onglet_ruban == OngletRuban::Annoter
             && let Some(choix) = self.ruban_edition.proprietes_vues(ui, self.natif.as_ref().map(|(p, _)| p))
         {

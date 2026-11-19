@@ -3,6 +3,7 @@ pub(crate) mod ruban;
 pub(crate) mod barre_haute;
 pub(crate) mod panneaux;
 pub(crate) mod barre_vue;
+pub(crate) mod palette_creation;
 pub(crate) mod voilage_vue;
 pub(crate) mod volet_proprietes;
 pub(crate) mod volet_arborescence;

@@ -161,7 +161,9 @@ fn afficher(
                 .exact_size(284.0)
                 .show(ui, |ui| {
                     ui.label("Propriétés");
-                    ruban.proprietes_surfaces(ui, None);
+                    ruban.selecteur_surface(ui, None);
+                    ruban.schema_surface(ui, None);
+                    ruban.parametres_surface(ui, None);
                 });
             egui::CentralPanel::default().show(ui, |_| {});
         },
@@ -238,7 +240,10 @@ fn palette_mur_affiche_contraintes_et_choix_du_document() {
                 },
                 |ui| {
                     egui::CentralPanel::default().show(ui, |ui| {
-                        assert!(ruban.proprietes_mur(ui, Some(&projet)));
+                        assert!(ruban.mur_actif());
+                        ruban.selecteur_type_creation_mur(ui, &projet);
+                        ruban.schema_mur(ui, &projet);
+                        ruban.parametres_mur_creation(ui, &projet);
                     });
                 },
             );
