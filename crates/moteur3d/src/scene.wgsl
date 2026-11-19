@@ -816,6 +816,16 @@ fn effet_apparence(r: i32, uvm: vec2f, dxm: vec2f, dym: vec2f, n0: vec3f, n: vec
     if a_carte(k, 7) {
         e.coupe = mix(1.0, carte(k, 7, uv, dx, dy).r, intensite(k, 7)) < seuil_decoupe(k, 7, dx, dy);
     }
+    // pelouse (matériau à herbe en volume) : le sol prend l'aspect des brins vus de loin,
+    // là où ils s'effacent : plus sombre (ombre entre les brins) et pommelé en touffes ;
+    // le grain fin s'efface quand un pixel couvre plus de 6 cm (pas de scintillement)
+    if p2.y > 0.0 {
+        let uv_mm = uvm * 1000.0;
+        let pied = max(length(dxm), length(dym)) * 1000.0;
+        let fin = 1.0 - smoothstep(60.0, 240.0, pied);
+        let touffes = mix(0.5, bruit_valeur(uv_mm / 300.0), fin) * 0.6 + bruit_valeur(uv_mm / 1300.0) * 0.4;
+        e.base *= 0.86 * (0.82 + 0.36 * touffes);
+    }
     // émission : luminance ramenée à 1 pour 1000 cd/m²
     let lum = clamp(p1.z / 1000.0, 0.0, 1.0);
     e.emis = e.base * lum;

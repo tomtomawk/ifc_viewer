@@ -165,7 +165,8 @@ impl Application {
             let rectangle_actif = self.fenetre_selection.is_some();
             // présélection au survol (cycle Tab) : recalculée quand la souris bouge
             let appui = ui.input(|i| i.pointer.any_down());
-            match resp.hover_pos().filter(|_| !mode_trace && !rectangle_actif && !self.vol.actif && !appui) {
+            // pas de présélection dans le style Réaliste (vue de rendu)
+            match resp.hover_pos().filter(|_| !mode_trace && !rectangle_actif && !self.vol.actif && !appui && self.style != StyleVisuel::Realiste) {
                 Some(q) => {
                     let (contexte, mut cycle) = (self.contexte_cycle(rect), self.cycle.take());
                     crate::saisie::cycle::actualiser(&mut cycle, q, contexte, || self.candidats_selection(rect, q));
