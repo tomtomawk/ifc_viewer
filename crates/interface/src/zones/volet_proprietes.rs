@@ -60,7 +60,13 @@ impl Application {
                 self.options_modifier(ui, true);
             }
             if !ids.is_empty() { ui.add_space(8.0); ui.separator(); ui.add_space(4.0); }
-            if self.selecteur_garde_corps(ui, &ids) { return; }
+            if self.selecteur_garde_corps(ui, &ids) {
+                // création : hauteur, décalage et remplissage sous le sélecteur de type
+                if ids.is_empty() {
+                    self.ruban_edition.parametres_outil(ui, crate::zones::ruban::Menu::Modeliser, self.natif.as_ref().map(|(p, _)| p));
+                }
+                return;
+            }
             // Le type vient immédiatement après Phase / Sous-projet / Variante,
             // au même emplacement que pendant la création d'un mur.
             // tracé en cours, trait sélectionné : Propriétés montre ce trait, pas l'objet
@@ -116,6 +122,7 @@ impl Application {
         let creation = matches!(self.onglet_ruban, OngletRuban::Modeliser | OngletRuban::Modifier);
         if creation && self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Escalier) && self.selection_bim().is_empty() {
             self.schema_escalier(ui);
+            self.ruban_edition.parametres_apres_schema(ui, crate::zones::ruban::Outil::Escalier, self.natif.as_ref().map(|(p, _)| p));
             return;
         }
         if creation && self.ruban_edition.proprietes_mur(ui, self.natif.as_ref().map(|(p, _)| p)) {

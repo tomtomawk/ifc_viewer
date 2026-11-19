@@ -57,7 +57,8 @@ impl RubanEdition {
                 if let Err(e) = self.parametres_mur().bornes(projet) {
                     ui.colored_label(ui.visuals().error_fg_color, e);
                 }
-                ui.add_space(4.0);
+                ui.add_space(6.0);
+                ui.label(RichText::new("Paramètres — Mur").strong());
                 egui::Grid::new("grille_creation_mur")
                     .num_columns(2)
                     .striped(true)

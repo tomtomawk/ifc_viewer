@@ -123,8 +123,7 @@ Type des prochains éléments horizontaux."), Some(&vignette));
         self.selection = Some(surface);
         if surface != Outil::TerrePlein { self.derniere_surface = Some(surface); }
         ui.add_space(8.0);
-        ui.label(RichText::new("Paramètres").strong());
-        ui.separator();
+        ui.label(RichText::new(format!("Paramètres — {}", surface.nom())).strong());
         // tracé dans la vue (projet natif), niveau et mode de tracé
         {
             match projet {
@@ -216,10 +215,15 @@ Type des prochains éléments horizontaux."), Some(&vignette));
         if !(dans(menu) || (menu == Menu::Modifier && dans(Menu::Modeliser))) {
             return;
         }
-        // l'ouverture place son sélecteur de type avant ses réglages (proprietes_ouverture)
-        if outil == Outil::Ouverture {
+        // l'ouverture et l'escalier placent leurs réglages après leur sélecteur ou leur schéma
+        if matches!(outil, Outil::Ouverture | Outil::Escalier) {
             return;
         }
+        self.section_parametres(ui, outil, projet);
+    }
+
+    /// Réglages d'un outil à l'endroit choisi par son propre panneau (après son schéma).
+    pub fn parametres_apres_schema(&mut self, ui: &mut egui::Ui, outil: Outil, projet: Option<&modele::Projet>) {
         self.section_parametres(ui, outil, projet);
     }
 
@@ -240,6 +244,8 @@ Type des prochains éléments horizontaux."), Some(&vignette));
             .enumerate()
             .filter(|(k, _)| outil != Outil::Ouverture || (*k != 0 && (*k != 3 || fenetre)))
             .filter(|(k, _)| !garde_corps_type || *k == 1)
+            // la hauteur de marche se règle dans le schéma de l'escalier
+            .filter(|(k, _)| outil != Outil::Escalier || *k != 1)
             .collect();
         let mut changement_ouverture = false;
         egui::Grid::new(("parametres_outil", outil)).num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
