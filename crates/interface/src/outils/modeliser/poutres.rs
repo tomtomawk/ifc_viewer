@@ -111,17 +111,19 @@ pub(crate) fn emprise(points: &[DVec2], largeur: f64, justification: Justificati
     let (gauche, droite) = (decaler(c + largeur / 2.0), decaler(c - largeur / 2.0));
     // intersection des côtés de deux segments consécutifs (onglet), sinon bout carré
     let joint = |l: &[(DVec2, DVec2)], i: usize| -> DVec2 {
-        let ((a, b), (c, d)) = (l[i], l[i + 1]);
+        let ((a, b), (c, d)) = (l[i], l[(i + 1) % l.len()]);
         let (u, v) = (b - a, d - c);
         let det = u.perp_dot(v);
         if det.abs() < 1e-9 { return b; }
         a + u * ((c - a).perp_dot(v) / det)
     };
+    let ferme = segs.len() >= 3 && segs[0].0.distance(segs[segs.len() - 1].1) < 1e-6;
     (0..segs.len()).map(|i| {
-        let g0 = if i > 0 { joint(&gauche, i - 1) } else { gauche[i].0 };
-        let d0 = if i > 0 { joint(&droite, i - 1) } else { droite[i].0 };
-        let g1 = if i + 1 < segs.len() { joint(&gauche, i) } else { gauche[i].1 };
-        let d1 = if i + 1 < segs.len() { joint(&droite, i) } else { droite[i].1 };
+        let precedent = (i + segs.len() - 1) % segs.len();
+        let g0 = if i > 0 || ferme { joint(&gauche, precedent) } else { gauche[i].0 };
+        let d0 = if i > 0 || ferme { joint(&droite, precedent) } else { droite[i].0 };
+        let g1 = if i + 1 < segs.len() || ferme { joint(&gauche, i) } else { gauche[i].1 };
+        let d1 = if i + 1 < segs.len() || ferme { joint(&droite, i) } else { droite[i].1 };
         [d0, d1, g1, g0]
     }).collect()
 }
@@ -316,5 +318,9 @@ mod tests {
     fn rectangle_quatre_poutres() {
         let f = noyau::forme2d::Forme2D::Polyligne { points: vec![DVec2::ZERO, DVec2::new(3000.0, 0.0), DVec2::new(3000.0, 2000.0), DVec2::new(0.0, 2000.0)], fermee: true, courbures: Vec::new() };
         assert_eq!(segments(&f).len(), 4);
+        let mut points: Vec<_> = segments(&f).into_iter().map(|s| s.0).collect();
+        points.push(points[0]);
+        let q = emprise(&points, 200.0, Justification::Axe);
+        assert_eq!((q[0][0], q[0][3]), (q[3][1], q[3][2]));
     }
 }

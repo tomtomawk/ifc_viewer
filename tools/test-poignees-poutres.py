@@ -95,6 +95,22 @@ def run(exe, capture):
             print("milieu :", b["debut"], b["fin"])
             commande("annuler")
             assert poutre(id)["debut"] == [0, 0, 2600]
+            # Repartir près d'un about hors grille : le tracé doit reprendre ses XY exacts.
+            fin = [1378, 1589, 2800]
+            commande("editer", {"action": "barre", "barre": {
+                "id": "", "nom": "Référence hors grille", "genre": "poutre", "niveau": niveau,
+                "debut": [-3222, 1589, 2800], "fin": fin, "largeur": 200, "hauteur": 400,
+                "arase": "superieure"}})
+            barres = commande("projet_natif")["projet"]["barres"]
+            commande("camera", "cadrer")
+            commande("selection_native", [barres[-1]["id"]])
+            x, y = commande("axe_selection")["fin_ecran"]
+            commande("outil", "poutre")
+            saisie([{"action": "clic", "x": x + 2, "y": y + 2}])
+            saisie([{"action": "clic", "x": x, "y": y + 70}])
+            saisie([{"action": "touche", "touche": "Enter"}])
+            nouvelles = commande("projet_natif")["projet"]["barres"]
+            assert len(nouvelles) == len(barres) + 1 and nouvelles[-1]["debut"] == fin, nouvelles
             print("OK poignées des poutres")
         finally:
             p.terminate(); p.wait(10)

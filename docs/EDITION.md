@@ -129,6 +129,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   poutre avec les accrochages. Maj contraint le tracé aux axes du plan, Échap ou
   clic droit annule un départ. Les poteaux sont
   verticaux et orientables ; les poutres sont horizontales et définies par leur axe.
+  Le tracé d’une poutre peut s’accrocher à la ligne d’implantation d’une poutre du
+  même niveau. Lorsque leurs hauteurs se recouvrent, deux abouts en angle se rejoignent
+  en onglet. En T, la branche s’arrête sur la face de la poutre traversante.
   Après sélection, **Modifier → Propriétés structurelles** permet de les modifier ;
   les commandes de déplacement, rotation, copie, suppression et l'historique leur
   sont applicables. Une poutre seule sélectionnée porte, comme un mur droit, des

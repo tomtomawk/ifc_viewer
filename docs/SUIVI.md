@@ -12,7 +12,7 @@ Règles de tenue :
 
 Priorités : **P0** défaut présent à corriger ; **P1** frein d'usage ; **P2** évolution planifiée ; **P3** plus tard.
 
-Dernière mise à jour : 17 novembre 2026.
+Dernière mise à jour : 19 novembre 2026.
 
 ## 1. État de référence
 
@@ -66,10 +66,8 @@ Mesures de reconstruction de la scène (build release, `BIMEDIT_CHRONO=1`, `bime
 | A6e | Jeux de propriétés au-delà des `Pset_*Common` : en rester là pour le moment (décision du 17/11/2026) | P3 | — |
 | A7 | Import IFC, suite : toitures, escaliers et poteaux ou poutres non rectangulaires, inclinés ou à items mappés restent des maillages ; une barre convertie perd ses jeux de propriétés, son matériau et sa couleur (`Barre` n'en porte pas) ; `PredefinedType` perdu à l'export d'un élément importé ; `.ifczip` refusé | P1 | `crates/echanges/src/depuis_ifc.rs`, `crates/echanges/src/barres_ifc.rs`, `crates/echanges/src/export_ifc/importes.rs` |
 | X1 | Revit : surfaces `HermiteSurf`, `ConeSurf`, `OffsetSurf` et courbes `GEllipse` non décodées ; contenu des nomenclatures et paramètres calculés non lus ; nomenclatures posées sur les feuilles non lues | P3 | `README.md` « Limites connues », `docs/EDITION.md` |
-| X2 | IFC : `IfcSurfaceCurveSweptAreaSolid`, `IfcFixedReferenceSweptAreaSolid`, `IfcSectionedSolid`, alignements IFC4X3, textures ; NURBS des `IfcAdvancedBrep` facettisées grossièrement | P3 | `README.md` « Limites connues » |
 | X3 | Réimport IFC : comparaison d'une réimportation avec l'import précédent et mise à jour des éléments ; décalage de l'import dans le projet ouvert non proposé à l'écran (commande seule) | P2 | `docs/EDITION.md` (Début → Importer) |
 | X2 | IFC : alignements IFC4X3, textures ; `IfcSectionedSolid` autres que `IfcSectionedSolidHorizontal` ; faces B-spline découpées (bornes intérieures au domaine) facettisées par leurs arêtes ; paramètres de début et de fin d'un balayage ignorés hors directrice `IfcPolyline` ; surface de référence non plane prise pour un plan horizontal | P3 | `README.md` « Limites connues » |
-| X3 | Importer un IFC dans le projet ouvert (fusion des niveaux, types et matériaux, en une transaction) ; aujourd'hui Début > Importer crée un nouveau projet natif. Fusion d'import et comparaison de réimportations | P2 | `docs/EDITION.md` ; décision du 17/11/2026 : lien d'abord, import ensuite |
 | L1 | Liens IFC, suite : propriétés IFC d'un élément lié dans Propriétés ; chemins relatifs au projet (un dossier de projet déplacé ou ouvert sur un autre poste perd ses liens : « Changer de fichier ») ; relecture automatique d'un fichier lié modifié ; coût de chaque reconstruction de la scène (géométrie liée recopiée et placée à chaque commande, à mesurer sur une grosse maquette liée) ; plusieurs liens d'un même fichier ; position par points de repère communs ; retrait du parcours « visionneuse IFC » devenu inutile (`LoadMsg::Done`, navigation IFC des fichiers IFC) | P2 | `crates/maillage/src/liens.rs`, `crates/interface/src/outils/modeliser/liens.rs` |
 | A12 | Textes des PDF, SVG et DXF en contours : non sélectionnables | P2 | `crates/moteur2d/` |
 | X4 | Feuilles Revit non exportées ; DWG non écrit (format fermé) ; arcs des arêtes de maillage et des vues Revit exportés en segments | P3 | `README.md` « Limites connues », `crates/moteur2d/src/dxf.rs` |
@@ -155,6 +153,7 @@ Le plus récent en premier. Les numéros « n° » sont ceux de la feuille de ro
 
 | Date | Fait | Commit | Vérification |
 |---|---|---|---|
+| 19/11/2026 | Accrochage aux lignes des poutres pendant le tracé et le déplacement d’une poignée. Abouts raccordés en angle ou en T dans le solide, fermeture du rectangle dans l’aperçu. | ce commit | `cargo check --workspace --tests`, 5 tests de poutres du modèle et le test du rectangle de l’interface réussis sous Windows le 19/11. Vérifications précédemment rapportées : 2 tests de l’interface et `tools/test-poignees-poutres.py` sur le binaire release, avec reprise exacte d’une extrémité hors grille. |
 | 18/11/2026 | Escaliers balancés : giron visé verrouillé. La foulée ne dépasse jamais (nombre de contremarches − 1) × giron visé et le dernier point s'accroche à cette distance (à un demi-giron près) ; tournants libres. Entrée refuse une foulée différente de la valeur attendue, tracé conservé. | `f73c36f` | `cargo check --workspace --tests` réussi. `cargo test -p interface --release escalier` : 2 réussis (test mis à jour : plafond, accrochage, point libre, foulée trop courte refusée). Non vérifié dans la fenêtre de BIMedit. |
 | 18/11/2026 | Déplacer, copier et supprimer les points cotés du terrain depuis Modifier. Découpe des surfaces par polyligne en plan. Désélection au lancement d’une commande de modélisation. | `e238691` | `cargo check --workspace --tests`, 113 tests unitaires de commandes et interface. Parcours en plan sur un terrain, suppression au clavier, annulation de la découpe et lancement de Mur avec sélection préalable. Coupe brisée traversant une trémie contrôlée par test. |
 | 18/11/2026 | Mur en arc déformable par sa flèche à extrémités fixes. Consigne de commande sur une ligne, texte complet et raccourcis au survol. | `e238691` | Vérification de compilation de tout le projet, 78 tests de l’interface réussis. Glissement et annulation en plan vérifiés par `tools/test-murs-courbes.py`. |

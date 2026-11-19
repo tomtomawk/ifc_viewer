@@ -1003,7 +1003,12 @@ impl ViewerApp {
         } else { 0 };
         let plan_coupe = if selection { self.plan_coupe().map(|p| p.to_array().map(f32::to_bits)) } else { None };
         let orientation = if selection { Some((self.camera.forward().to_array().map(f32::to_bits), self.camera.up().to_array().map(f32::to_bits))) } else { None };
-        let cle = format!("{usage:?}|{}|{altitude}|{exclu:?}|{selection}|{visibilite}|{plan_coupe:?}|{orientation:?}", vue.as_deref().unwrap_or(""));
+        let niveau_poutre = if usage == Usage::Poutre {
+            self.bim.poutre.niveau.clone().or_else(|| self.niveau_trace())
+        } else {
+            self.poignee_axe.as_ref().and_then(|(id, ..)| self.natif.as_ref()?.0.barres.iter().find(|b| b.id == *id).map(|b| b.niveau.clone()))
+        };
+        let cle = format!("{usage:?}|{}|{altitude}|{niveau_poutre:?}|{exclu:?}|{selection}|{visibilite}|{plan_coupe:?}|{orientation:?}", vue.as_deref().unwrap_or(""));
         if let Some((r, k, g)) = &self.dessin2d.geoms {
             if *r == self.bim.revision && *k == cle {
                 return g.clone();
@@ -1071,6 +1076,11 @@ impl ViewerApp {
                     for k in 0..c.len() {
                         g.push(seg(c[k], c[(k + 1) % c.len()]));
                     }
+                }
+            }
+            if !selection && let Some(niveau) = &niveau_poutre {
+                for b in p.barres.iter().filter(|b| b.genre == modele::GenreBarre::Poutre && &b.niveau == niveau && exclu != Some(b.id.as_str())) {
+                    g.push(seg([b.debut[0], b.debut[1]], [b.fin[0], b.fin[1]]));
                 }
             }
             for t in p.terrains.iter().filter(|t| visible("terrain", &t.id)) {

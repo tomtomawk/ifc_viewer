@@ -9,6 +9,9 @@ use crate::{Barre, GenreBarre, Projet};
 use glam::{DVec2, DVec3};
 use serde::{Deserialize, Serialize};
 
+#[path = "raccord_poutre.rs"]
+mod raccord;
+
 /// Type de poutre. Sans profil : section rectangulaire `largeur` × `hauteur` (mm). Avec
 /// profil : contour de la famille de profil, mis à l'échelle de `largeur` × `hauteur`
 /// (encombrement de la section).
@@ -209,8 +212,15 @@ pub fn solide(p: &Projet, b: &Barre) -> Result<Vec<[DVec3; 3]>, String> {
     // prisme extrudé selon +z local : contour dans le sens direct vu depuis +z
     let aire: f64 = (0..contour.len()).map(|i| { let (p, q) = (contour[i], contour[(i + 1) % contour.len()]); p[0] * q[1] - q[0] * p[1] }).sum();
     if aire < 0.0 { contour.reverse(); }
+    let debut = raccord::about(p, b, false, largeur, h);
+    let fin = raccord::about(p, b, true, largeur, h);
     Ok(crate::volumes::solides::prisme(&contour, 0.0, longueur).into_iter()
-        .map(|t| t.map(|q| origine + ux * q.x + uy * q.y + uz * q.z))
+        .map(|t| t.map(|q| {
+            let coupe = if q.z == 0.0 { debut } else { fin };
+            let fraction = q.x / largeur + 0.5;
+            let avance = coupe[0] + fraction * (coupe[1] - coupe[0]);
+            origine + ux * q.x + uy * q.y + uz * (q.z + avance)
+        }))
         .collect())
 }
 
@@ -271,6 +281,36 @@ mod tests {
         let (mn, mx) = etendue(&solide(&p, &poutre(&p, pose(Justification::Droite, Arase::Inferieure), 2500.0)).unwrap());
         assert!(mn.y.abs() < 1e-6 && (mx.y - 200.0).abs() < 1e-6);
         assert!((mn.z - 2500.0).abs() < 1e-6 && (mx.z - 3000.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn raccord_en_angle_et_en_t_sur_les_solides() {
+        let mut p = projet();
+        let a = poutre(&p, PosePoutre::default(), 2500.);
+        let mut b = a.clone();
+        b.id = "seconde".into();
+        b.largeur = 200.;
+        b.debut = a.fin;
+        b.fin = [4000., 3000., 2500.];
+        p.barres = vec![a.clone(), b.clone()];
+        for inverse in [false, true] {
+            if inverse { std::mem::swap(&mut b.debut, &mut b.fin); p.barres[1] = b.clone(); }
+            for barre in [&a, &b] {
+                let tris = solide(&p, barre).unwrap();
+                for x in [[3900., 50.], [4100., -50.]] {
+                    for z in [2450., 2550.] {
+                        assert!(tris.iter().flatten().any(|v| v.distance(DVec3::new(x[0], x[1], z)) < 1e-6));
+                    }
+                }
+            }
+        }
+        b.debut = [2000., 0., 2500.];
+        b.fin = [2000., 3000., 2500.];
+        p.barres[1] = b.clone();
+        assert_eq!(etendue(&solide(&p, &b).unwrap()).0.y, 50.);
+        b.debut[2] += 1000.;
+        b.fin[2] += 1000.;
+        assert_eq!(etendue(&solide(&p, &b).unwrap()).0.y, 0.);
     }
 
     /// Profil de famille : contour mis à l'encombrement du type ; volume positif.
