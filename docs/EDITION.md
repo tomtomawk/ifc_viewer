@@ -201,7 +201,13 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   fenêtres, ouvertures libres, composants, terrains, garde-corps, arbres), même si
   la sélection en mélange plusieurs ; « Types variés » quand les types diffèrent, et
   le type choisi s'applique à tous les éléments de cette sorte. Les dessins 2D
-  gardent leur sélecteur de type de trait.
+  gardent leur sélecteur de type de trait. Sous les sélecteurs, Propriétés montre le
+  premier élément sélectionné ; ce qui y change est reporté sur les autres éléments
+  sélectionnés de même sorte (même collection ; un mur seul et une couche de mur
+  composé diffèrent, comme deux formes d'annotation), champ par champ, en une seule
+  étape d'annulation. Le nom, l'identité, le rattachement et la géométrie propre de
+  chacun (axe, contours, tracé, position, sommets…) ne sont jamais reportés. Même
+  règle et même code (`commandes::report`) que dans l'éditeur de familles.
 - **Modifier** propose déplacement, copie, rotation, alignement des axes et
   ajustement de l'extrémité d'un mur sur l'axe d'un autre. Ctrl+clic constitue une
   sélection multiple, surlignée dans la vue. On peut aussi
@@ -368,7 +374,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   2D de même forme) : Propriétés montre le premier, et un paramètre modifié l'est sur
   tous (par exemple décocher « Moyen » dans la visibilité de cinq volumes). Seul le
   champ changé est reporté ; le nom et la géométrie de chacun (faces, profil,
-  sommets, ancrage) restent.
+  sommets, ancrage) restent. Même règle et même code que dans le projet
+  (`commandes::report`).
   Une polyligne a son **type de trait**, comme dans le projet : sélecteur de
   l'outil Polyligne 2D (et Rectangle) pour les tracés créés ; à la sélection, un
   sélecteur pour tous les segments des polylignes choisies (« Types variés » s'ils

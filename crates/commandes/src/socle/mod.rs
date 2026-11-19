@@ -8,4 +8,5 @@ pub mod historique;
 mod libelles;
 pub(crate) mod interne;
 pub mod objets;
+pub mod report;
 pub mod verrous;

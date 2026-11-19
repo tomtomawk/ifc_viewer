@@ -626,6 +626,9 @@ pub struct Application {
     /// les modifications du projet attendent sa validation (Entrée, autre clic, fin du
     /// glisser) pour être appliquées, en une seule étape d'historique.
     saisie_active: bool,
+    /// Sélection multiple pendant le tracé de Propriétés : élément principal et autres
+    /// éléments de même sorte, qui reçoivent ce qui change sur le principal.
+    report_selection: Option<(String, Vec<String>)>,
     /// Projet tel qu'avant la saisie en cours, si elle a modifié le projet.
     avant_saisie: Option<modele::Projet>,
     /// Échap pendant la saisie : elle est abandonnée, l'ancienne valeur rétablie.
@@ -820,6 +823,7 @@ impl Application {
             editeur_motifs: false,
             editeur_plumes: None,
             saisie_active: false,
+            report_selection: None,
             avant_saisie: None,
             saisie_annulee: false,
             echap_saisie: false,

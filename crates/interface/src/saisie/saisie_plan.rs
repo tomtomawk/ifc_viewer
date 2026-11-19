@@ -633,6 +633,11 @@ impl Application {
     /// cadrage, niveaux, catégories et visibilité compris. Rien ne change en cas d'erreur.
     pub(crate) fn appliquer_projet(&mut self, projet: modele::Projet) -> Result<(), String> {
         if self.partage_en_cours{return Err("Création du partage en cours ; attendre la fin de l'enregistrement".into());}
+        // sélection multiple : ce qui change sur l'élément principal vaut pour ses pareils
+        let projet = match (&self.report_selection, &self.natif) {
+            (Some((principal, autres)), Some((actuel, _))) => commandes::report::reporter_projet(actuel, projet, principal, autres)?,
+            _ => projet,
+        };
         // terrains : profondeur effective comparée avant / après (message n° 14)
         let avant = self.natif.as_ref().filter(|(p, _)| !p.terrains.is_empty() || !projet.terrains.is_empty()).map(|(p, _)| p.clone());
         self.appliquer_projet_interne(projet, false)?;

@@ -97,6 +97,30 @@ pub(crate) fn segments_polyligne(points: &[[f64; 2]], fermee: bool) -> usize {
     points.len().saturating_sub(1) + usize::from(fermee && points.len() > 2)
 }
 
+/// Type de trait de chaque segment d'une polyligne (vide : continu fin) ; projet et familles.
+pub(crate) fn traits_segments(forme: &AnnotationForme) -> Vec<String> {
+    match forme {
+        AnnotationForme::Polyligne { points, fermee, traits, .. } => (0..segments_polyligne(points, *fermee)).map(|k| traits.get(k).cloned().unwrap_or_default()).collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Donne le type `id` à un segment (`segment`) ou à tous ceux d'une polyligne ; projet et
+/// familles. Tout en continu fin : rien d'enregistré.
+pub(crate) fn definir_trait(forme: &mut AnnotationForme, segment: Option<usize>, id: &str) {
+    let AnnotationForme::Polyligne { points, fermee, traits, .. } = forme else { return };
+    let n = segments_polyligne(points, *fermee);
+    traits.resize(n, String::new());
+    match segment {
+        Some(k) if k < n => traits[k] = id.to_string(),
+        Some(_) => {}
+        None => traits.iter_mut().for_each(|t| *t = id.to_string()),
+    }
+    if traits.iter().all(String::is_empty) {
+        traits.clear();
+    }
+}
+
 const FENETRE: &str = "fenetre_types_traits";
 
 impl Application {
@@ -118,21 +142,7 @@ impl Application {
     /// ont le type de trait `id`.
     fn avec_trait(projet: &Projet, ids: &[String], segment: Option<usize>, id: &str) -> Projet {
         let mut q = projet.clone();
-        for a in q.annotations.iter_mut().filter(|a| ids.contains(&a.id)) {
-            if let AnnotationForme::Polyligne { points, fermee, traits, .. } = &mut a.forme {
-                let n = segments_polyligne(points, *fermee);
-                traits.resize(n, String::new());
-                match segment {
-                    Some(k) if k < n => traits[k] = id.to_string(),
-                    Some(_) => {}
-                    None => traits.iter_mut().for_each(|t| *t = id.to_string()),
-                }
-                // tout en continu fin : rien à enregistrer
-                if traits.iter().all(String::is_empty) {
-                    traits.clear();
-                }
-            }
-        }
+        q.annotations.iter_mut().filter(|a| ids.contains(&a.id)).for_each(|a| definir_trait(&mut a.forme, segment, id));
         q
     }
 
@@ -144,7 +154,7 @@ impl Application {
         if polylignes.is_empty() {
             return None;
         }
-        let tous: Vec<String> = polylignes.iter().flat_map(|(_, pts, f, t, _)| (0..segments_polyligne(pts, *f)).map(move |k| t.get(k).cloned().unwrap_or_default())).collect();
+        let tous: Vec<String> = projet.annotations.iter().filter(|a| ids.contains(&a.id)).flat_map(|a| traits_segments(&a.forme)).collect();
         let (premier, mixte) = melange(tous.iter().cloned());
         let objet = if polylignes.len() > 1 { format!("Polylignes ({})", polylignes.len()) } else { "Polyligne".to_string() };
         let choix = selecteur_type_trait(ui, if mixte { None } else { premier.as_deref() }, projet, &objet);

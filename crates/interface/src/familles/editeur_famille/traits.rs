@@ -3,7 +3,7 @@
 //! variés » s'ils diffèrent), type de chaque segment ; pendant « Modifier », le segment
 //! cliqué dans la vue et son seul type.
 use super::*;
-use crate::outils::annoter::types_traits::{choix_type_trait, segments_polyligne, selecteur_type_trait};
+use crate::outils::annoter::types_traits::{choix_type_trait, definir_trait, selecteur_type_trait, traits_segments};
 use glam::DVec2;
 use modele::documentation::AnnotationForme;
 
@@ -11,30 +11,6 @@ use modele::documentation::AnnotationForme;
 pub(super) const INVITE: &str = "Modifier : glisser un sommet ou un milieu d'arête, clic droit sur un sommet pour le retirer, cliquer un segment pour choisir son type de trait ; Échap pour terminer.";
 /// Raison d'indisponibilité de « Modifier ».
 pub(super) const SANS_TRACE: &str = "Sélectionner un seul tracé de la vue : polyligne, arc, cercle, spline ou profil d'une forme.";
-
-/// Type de trait de chaque segment d'une polyligne (vide : continu fin).
-fn traits_segments(forme: &AnnotationForme) -> Vec<String> {
-    match forme {
-        AnnotationForme::Polyligne { points, fermee, traits, .. } => (0..segments_polyligne(points, *fermee)).map(|k| traits.get(k).cloned().unwrap_or_default()).collect(),
-        _ => Vec::new(),
-    }
-}
-
-/// Donne le type `id` à un segment (`segment`) ou à tous ceux d'une polyligne.
-fn definir_trait(forme: &mut AnnotationForme, segment: Option<usize>, id: &str) {
-    let AnnotationForme::Polyligne { points, fermee, traits, .. } = forme else { return };
-    let n = segments_polyligne(points, *fermee);
-    traits.resize(n, String::new());
-    match segment {
-        Some(k) if k < n => traits[k] = id.to_string(),
-        Some(_) => {}
-        None => traits.iter_mut().for_each(|t| *t = id.to_string()),
-    }
-    // tout en continu fin : rien à enregistrer
-    if traits.iter().all(String::is_empty) {
-        traits.clear();
-    }
-}
 
 impl EditeurFamille {
     /// Sélectionne le dernier élément 2D créé ; une polyligne prend le type de trait de

@@ -2,8 +2,16 @@
 use crate::*;
 
 impl Application {
-    /// Propriétés de l'élément sélectionné (comme dans Revit ; emplacement au choix de l'utilisateur).
+    /// Propriétés de l'élément sélectionné (comme dans Revit ; emplacement au choix de
+    /// l'utilisateur). Plusieurs éléments de même sorte : le premier est affiché, et ce qui
+    /// y change vaut pour tous (`commandes::report`, comme dans l'éditeur de familles).
     pub(crate) fn volet_proprietes(&mut self, ui: &mut egui::Ui) {
+        self.report_selection = self.natif.as_ref().and_then(|(p, _)| crate::saisie::selection_multiple::pareils(p, &self.selection_bim()));
+        self.volet_proprietes_contenu(ui);
+        self.report_selection = None;
+    }
+
+    fn volet_proprietes_contenu(&mut self, ui: &mut egui::Ui) {
         self.fenetre_materiau(ui.ctx());
         self.fenetre_ciel(ui.ctx());
         self.fenetre_motifs(ui.ctx());
@@ -74,12 +82,8 @@ impl Application {
             if let Some(projet) = self.proprietes_formes_2d(ui, &ids).or_else(|| self.proprietes_terrains(ui, &ids)) {
                 if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
             }
-            if ids.len() > 1 {
-                match self.proprietes_communes(ui, &ids) {
-                    Ok(Some(projet)) => if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); },
-                    Ok(None) => {}
-                    Err(e) => self.error = Some(e),
-                }
+            if let Some((_, memes)) = &self.report_selection {
+                ui.label(RichText::new(format!("{} éléments de même sorte sélectionnés : une modification de l'élément affiché s'applique à tous.", memes.len())).small().weak());
             }
         }
         if self.natif.is_some() {
@@ -135,10 +139,10 @@ impl Application {
             self.proprietes_boite(ui);
             ui.separator();
         }
+        // sélection native (une ou plusieurs) : le premier élément
         let selection = self.selected.or_else(|| {
-            let [id] = self.bim.selection.as_slice() else { return None };
-            self.natif.as_ref()?.0.escaliers.iter().any(|e| &e.id == id)
-                .then(|| modele::identifiants::id_natif("escalier", id))
+            let id = self.bim.selection.first()?;
+            crate::socle::document_bim::elements_natifs(&self.natif.as_ref()?.0).find(|(_, c)| *c == id).map(|(g, c)| modele::identifiants::id_natif(g, c))
         });
         let (Some(_), Some(id)) = (&self.scene, selection) else {
             if self.bim.selection.is_empty() {

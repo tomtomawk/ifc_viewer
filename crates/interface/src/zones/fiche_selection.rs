@@ -71,7 +71,8 @@ impl Application {
         }
         let ids = self.selection_bim();
         let genre = match (ids.as_slice(), &self.natif) {
-            ([id], Some((p, _))) => genre(p, id),
+            // plusieurs éléments : le premier ; le report fait suivre les autres
+            ([id, ..], Some((p, _))) => genre(p, id),
             _ => None,
         };
         if !matches!(genre, Some(Genre::Poteau)) {
