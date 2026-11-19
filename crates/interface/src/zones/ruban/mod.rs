@@ -555,7 +555,8 @@ pub struct RubanEdition {
     pub bouton_jonctions: Option<egui::Response>,
     pub type_garde_corps: Option<String>,
     pub prolonger_angle: bool,
-    pub selection_mur: bool,
+    /// Mode « Suivre un trait » (mur, polyligne) : cliquer un trait existant le reprend.
+    pub suivre_trait: bool,
     selection: Option<Outil>,
     derniere_surface: Option<Outil>,
     valeurs: BTreeMap<(Outil, usize), Valeur>,

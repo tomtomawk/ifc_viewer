@@ -176,13 +176,13 @@ impl Application {
     /// Souris dans la vue avec un outil de dessin 2D : point accroché sous le curseur,
     /// clic gauche : point, clic droit : terminer (comme Entrée).
     pub(crate) fn souris_dessin(&mut self, ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response) {
-        if self.usage_dessin().is_some_and(|(u,_)|u==Usage::Mur) && self.ruban_edition.selection_mur {
+        if self.suivi_trait_actif() {
             self.dessin2d.point=None;
             self.dessin2d.ligne_selection=resp.hover_pos().and_then(|q|self.trait_mur_vise(rect,q));
             if resp.clicked() {
                 if let Some(f)=self.dessin2d.ligne_selection.clone() {
-                    if let noyau::forme2d::Forme2D::Cercle{centre,rayon}=f {
-                        self.ruban_edition.selection_mur=false;
+                    if let (noyau::forme2d::Forme2D::Cercle{centre,rayon}, true)=(f.clone(), self.usage_dessin().is_some_and(|(u,_)|u==Usage::Mur)) {
+                        self.ruban_edition.suivre_trait=false;
                         self.ruban_edition.forme_mur=OutilDessin::Cercle;
                         let mut t=Trace::new(OutilDessin::Cercle);t.perimetre=true;t.points=vec![centre,centre+DVec2::X*rayon];
                         self.dessin2d.trace=Some(t);
@@ -401,11 +401,13 @@ impl Application {
     /// Tracé par-dessus la vue : réticule, aperçu élastique, repérage polaire, marque et
     /// nom de l'accrochage, cote dynamique, ligne de commande.
     pub(crate) fn dessiner_dessin2d(&self, ui: &egui::Ui, rect: egui::Rect) {
-        if self.ruban_edition.selection_mur && self.usage_dessin().is_some_and(|(u,_)|u==Usage::Mur) {
+        if self.suivi_trait_actif() {
             if let Some(f)=&self.dessin2d.ligne_selection {
                 let painter=ui.painter().with_clip_rect(rect);
                 let lignes=f.polylignes();
-                self.apercu_volume_murs(&painter,rect,&lignes);
+                if self.usage_dessin().is_some_and(|(u,_)|u==Usage::Mur) {
+                    self.apercu_volume_murs(&painter,rect,&lignes);
+                }
                 for l in lignes {
                     let pts=l.iter().filter_map(|p|self.vers_ecran(rect,*p)).collect();
                     painter.add(egui::Shape::line(pts,egui::Stroke::new(2.5,Color32::from_rgb(0,120,215))));
@@ -634,7 +636,7 @@ impl Application {
         } else if usage.is_some_and(|(u, _)| u == Usage::Terrain) && !self.dessin2d.dalle.is_empty() {
             "Cliquer dans le terrain pour placer un point coté · cliquer un point pour le déplacer, le copier ou le supprimer"
         } else if let Some(m) = modification { m }
-        else if self.ruban_edition.selection_mur && usage.is_some_and(|(u,_)|u==Usage::Mur) {"Cliquer le trait que le mur doit suivre"} else if let Some(i) = self.invite_cotation() { i } else { self.dessin2d.trace.as_ref().map_or("", |t| t.invite()) };
+        else if self.suivi_trait_actif() { if usage.is_some_and(|(u,_)|u==Usage::Mur) {"Cliquer le trait que le mur doit suivre"} else {"Cliquer le trait que la polyligne doit reprendre"} } else if let Some(i) = self.invite_cotation() { i } else { self.dessin2d.trace.as_ref().map_or("", |t| t.invite()) };
         let contexte = match usage.map(|(u, _)| u) {
             Some(Usage::Mur) => "Ctrl : justification · Espace : inverser le sens · ",
             Some(Usage::Escalier) if self.dessin2d.esc_balance.is_some() => "Ctrl ou Espace : justification de la ligne · Un sommet par tournant · Entrée ou clic droit pour terminer · ",

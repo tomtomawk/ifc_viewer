@@ -93,8 +93,17 @@ impl Application {
             None
         };
         let (mut choisir_selection, mut forme_choisie) = (false, None);
+        let polyligne = usage == Usage::Annotation;
+        let suivre = polyligne && self.suivi_trait_actif();
+        let mut activer_suivi = false;
         ui.horizontal(|ui| {
-            (choisir_selection, forme_choisie) = boutons_trace(ui, selection, commande, outil, formes_usage(usage), raison_forme);
+            if polyligne {
+                activer_suivi = ui.selectable_label(suivre, "Suivre un trait").on_hover_text("Cliquer un trait existant dans la vue : la polyligne le reprend").clicked();
+                ui.separator();
+            }
+            // en mode suivi, aucune forme n'est enfoncée (comme pour le mur)
+            let outil_enfonce = if suivre { OutilDessin::Cercle } else { outil };
+            (choisir_selection, forme_choisie) = boutons_trace(ui, selection && !suivre, commande, outil_enfonce, formes_usage(usage), raison_forme);
             if usage == Usage::Poutre { self.options_poutre(ui); }
             if let Some(n) = copies.as_mut() {
                 ui.separator();
@@ -105,10 +114,16 @@ impl Application {
         if let (Some(n), Some(e)) = (copies, self.dessin2d.edition_contour.as_mut()) && matches!(e.commande, Some(CommandeContour::Reseau(_))) {
             e.commande = Some(CommandeContour::Reseau(n));
         }
+        if activer_suivi {
+            self.ruban_edition.suivre_trait = true;
+            self.terminer_edition_axe();
+        }
         if choisir_selection {
+            self.ruban_edition.suivre_trait = false;
             self.passer_en_selection();
         }
         if let Some(forme) = forme_choisie {
+            self.ruban_edition.suivre_trait = false;
             self.choisir_forme_trace(usage, outil, forme);
         }
     }
@@ -154,6 +169,17 @@ impl Application {
         }
     }
 
+    /// Mode « Suivre un trait » actif pour l'outil de dessin courant : le mur suit le trait, la
+    /// polyligne le reprend.
+    pub(crate) fn suivi_trait_actif(&self) -> bool {
+        self.ruban_edition.suivre_trait
+            && match self.usage_dessin() {
+                Some((Usage::Mur, _)) => true,
+                Some((Usage::Annotation, OutilDessin::Polyligne)) => self.outil_cotation().is_none(),
+                _ => false,
+            }
+    }
+
     /// Le trait le plus proche : conserve les arcs/cercle et choisit un segment d'une polyligne.
     pub(crate) fn trait_mur_vise(&mut self,rect:egui::Rect,q:egui::Pos2)->Option<noyau::forme2d::Forme2D> {
         if !self.vue_en_plan() || !self.point_dans_cadrage(rect,q) {return None;}
@@ -195,8 +221,8 @@ impl Application {
     /// Barre d'options de l'outil Mur, en haut de la vue : forme tracée et chaînage.
     pub(crate) fn options_trace_mur(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui.selectable_label(self.ruban_edition.selection_mur,"Suivre un trait").on_hover_text("Cliquer un trait existant dans la vue : le mur suit ce trait").clicked() {
-                self.ruban_edition.selection_mur=true;
+            if ui.selectable_label(self.ruban_edition.suivre_trait,"Suivre un trait").on_hover_text("Cliquer un trait existant dans la vue : le mur suit ce trait").clicked() {
+                self.ruban_edition.suivre_trait=true;
                 self.terminer_edition_axe();
             }
             for (forme, nom, aide) in [
@@ -205,8 +231,8 @@ impl Application {
                 (OutilDessin::Arc, "Arc", "Mur courbe : début, fin, puis courbure"),
                 (OutilDessin::Cercle, "Cercle", "Centre, rayon, début et fin du périmètre"),
             ] {
-                if ui.selectable_label(!self.ruban_edition.selection_mur && self.ruban_edition.forme_mur == forme, nom).on_hover_text(aide).clicked() {
-                    self.ruban_edition.selection_mur=false;
+                if ui.selectable_label(!self.ruban_edition.suivre_trait && self.ruban_edition.forme_mur == forme, nom).on_hover_text(aide).clicked() {
+                    self.ruban_edition.suivre_trait=false;
                     self.ruban_edition.forme_mur = forme;
                 }
             }

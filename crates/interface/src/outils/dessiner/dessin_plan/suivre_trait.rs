@@ -1,4 +1,4 @@
-//! Raccourcis clavier du mode « Suivre un trait » de l'outil Mur.
+//! Raccourcis clavier du mode « Suivre un trait » de l'outil Mur (la polyligne n'en a pas).
 use eframe::egui;
 
 /// Raccourcis du mode « Suivre un trait » : (Ctrl seul pressé puis relâché, Espace).

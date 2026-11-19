@@ -209,15 +209,18 @@ impl Application {
                 self.status = "Commande précédente arrêtée.".into();
             }
             self.dessin2d.commande_cle = cle;
+            // le mode « Suivre un trait » ne passe pas d'un outil à l'autre
+            self.ruban_edition.suivre_trait = false;
             if cle != Some(crate::zones::ruban::Outil::Escalier) { self.dessin2d.giron_impose = None; }
             self.dessin2d.historique_depart = cle.map(|_| self.profondeur_historique());
         }
-        if self.ruban_edition.selection_mur && self.usage_dessin().is_some_and(|(u,_)|u==Usage::Mur) {
-            if self.dessin2d.dernier_usage!=Some(Usage::Mur) {self.dessin2d.vider_contours();}
-            self.dessin2d.dernier_usage=Some(Usage::Mur);
+        if self.suivi_trait_actif() {
+            let usage = self.usage_dessin().map_or(Usage::Mur, |(u, _)| u);
+            if self.dessin2d.dernier_usage != Some(usage) { self.dessin2d.vider_contours(); }
+            self.dessin2d.dernier_usage = Some(usage);
             // Suivre un trait : Ctrl seul change l'implantation suivie, Espace inverse le
             // côté ; l'aperçu (apercu_volume_murs) les relit à l'image suivante.
-            if !ctx.egui_wants_keyboard_input() {
+            if usage == Usage::Mur && !ctx.egui_wants_keyboard_input() {
                 let (justifier, inverser) = super::suivre_trait::raccourcis(ctx, &mut self.dessin2d.controle_seul);
                 if justifier { self.ruban_edition.implantation_suivante(); }
                 if inverser { self.ruban_edition.sens_inverse = !self.ruban_edition.sens_inverse; }

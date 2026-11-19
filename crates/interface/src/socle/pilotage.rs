@@ -27,11 +27,11 @@ impl Application {
                     let forme=match argument {"ligne"|"selection"=>D::Ligne,"rectangle"=>D::Rectangle,"arc"=>D::Arc,"cercle"=>D::Cercle,_=>return Err("mur_trace ligne|rectangle|arc|cercle|selection".into())};
                     self.activer_outil_pilote("mur")?;
                     self.ruban_edition.forme_mur=forme;
-                    self.ruban_edition.selection_mur=argument=="selection";
+                    self.ruban_edition.suivre_trait=argument=="selection";
                     self.terminer_edition_axe();
                 }
                 let controle=self.arc_mur_selection().map(|(id,points,z)|json!({"id":id,"points":points.map(|p|p.to_array()),"ecran":points.map(|p|self.ecran_plan(self.rect_vue,p.to_array(),z).map(|p|[p.x,p.y]))}));
-                Ok(json!({"selection":self.ruban_edition.selection_mur,"invite":self.dessin2d.trace.as_ref().map(|t|t.invite()),"points":self.dessin2d.trace.as_ref().map(|t|t.points.iter().map(|p|p.to_array()).collect::<Vec<_>>()),"controle_arc":controle}))
+                Ok(json!({"selection":self.ruban_edition.suivre_trait,"invite":self.dessin2d.trace.as_ref().map(|t|t.invite()),"points":self.dessin2d.trace.as_ref().map(|t|t.points.iter().map(|p|p.to_array()).collect::<Vec<_>>()),"controle_arc":controle}))
             })());
         }
         if nom=="volets_etat" {return Some(Ok(self.etat_volets()));}
