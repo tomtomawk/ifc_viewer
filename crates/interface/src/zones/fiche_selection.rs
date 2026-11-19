@@ -114,8 +114,13 @@ fn selecteur_coupe(a: &mut Application, ui: &mut egui::Ui, id: &str) {
     let type_vue = a.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|v| v.id == id)).map(|v| v.type_vue.clone());
     entete_generique(ui, "Coupe / élévation", type_vue.as_deref().filter(|t| !t.is_empty()));
 }
+/// Annotation : son genre. Les dessins 2D (polyligne, spline, cercle, arc) ont déjà leur sélecteur
+/// de type de trait dans `proprietes_formes_2d`.
 fn selecteur_annotation(a: &mut Application, ui: &mut egui::Ui, id: &str) {
     use modele::documentation::AnnotationForme as F;
+    if a.natif.as_ref().and_then(|(p, _)| p.annotations.iter().find(|x| x.id == id)).is_some_and(|x| x.forme.forme_2d().is_some()) {
+        return;
+    }
     let nom = a.natif.as_ref().and_then(|(p, _)| p.annotations.iter().find(|x| x.id == id)).map(|x| match x.forme {
         F::Texte { .. } => "Texte",
         F::Ligne { .. } | F::Polyligne { .. } | F::Arc { .. } => "Polyligne",

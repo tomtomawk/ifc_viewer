@@ -11,7 +11,7 @@ pub(crate) use options::boutons_trace;
 mod commandes_contour;
 mod courbures;
 mod suivre_trait;
-mod terrain_palette;
+mod palettes;
 use crate::*;
 use moteur2d::dao::{self as d2, Accroche, OutilDessin, Trace};
 use noyau::forme2d::{Geom};
@@ -690,26 +690,6 @@ impl Application {
         self.coupe_dirty = true;
     }
 
-    /// Outil Polyligne actif : type de trait des polylignes créées, dans Propriétés.
-    pub(crate) fn proprietes_creation_polyligne(&mut self, ui: &mut egui::Ui) {
-        if self.dessin2d.edition_contour.is_some() || self.usage_dessin() != Some((Usage::Annotation, OutilDessin::Polyligne)) {
-            return;
-        }
-        let types = self.natif.as_ref().map(|(p, _)| p.types_traits.clone()).unwrap_or_default();
-        if !types.iter().any(|t| t.id == self.dessin2d.trait_creation) {
-            self.dessin2d.trait_creation.clear();
-        }
-        ui.label(RichText::new("Polyligne").strong());
-        egui::Grid::new("creation_polyligne").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
-            ui.label("Type de trait").on_hover_text("Type de trait des segments de la polyligne créée ; chaque segment se change ensuite dans Modifier");
-            if let Some(id) = crate::outils::annoter::types_traits::choix_type_trait(ui, "trait_creation", Some(&self.dessin2d.trait_creation), &types) {
-                self.dessin2d.trait_creation = id;
-            }
-            ui.end_row();
-        });
-        ui.separator();
-    }
-
     /// Tracé en cours, trait sélectionné : Propriétés montre ce trait à la place de
     /// l'objet (longueur ; type de trait d'une polyligne ; pente ou talus de l'arête d'un
     /// élément horizontal). Sans trait sélectionné, Propriétés reste à l'objet.
@@ -735,7 +715,6 @@ impl Application {
                 _ => dalle.as_ref().map(|d| d.sorte.nom().to_string()).or_else(|| self.ruban_edition.dalle_active().map(|d| d.sorte.nom().to_string())).unwrap_or_else(|| "Élément horizontal".into()),
             }
         };
-        let types = projet.map(|p| p.types_traits.clone()).unwrap_or_default();
         let trait_actuel = match e.annotation.as_ref().map(|a| &a.forme) {
             Some(AnnotationForme::Polyligne { traits, .. }) if c == 0 => Some(traits.get(i).cloned().unwrap_or_default()),
             _ => None,
@@ -751,7 +730,14 @@ impl Application {
         let mut choix_trait = None;
         let mut dalle_modifiee = None;
         let mut redresser = false;
-        ui.label(RichText::new(format!("{objet} · trait {}", i + 1)).strong());
+        // sélecteur : le type du trait sélectionné (modifiable dans la liste) ; un trait d'un autre
+        // objet (garde-corps, arête d'un élément horizontal…) n'a pas de type
+        let titre_trait = format!("{objet} · trait {}", i + 1);
+        match (&trait_actuel, projet) {
+            (Some(actuel), Some(p)) => choix_trait = crate::outils::annoter::types_traits::selecteur_type_trait(ui, Some(actuel), p, &titre_trait),
+            _ => crate::zones::ruban::selecteur::entete_fixe(ui, &format!("{titre_trait} · Générique"), "Ce trait n'a pas de type à choisir."),
+        }
+        crate::zones::palette_creation::titre_parametres(ui, "Trait");
         egui::Grid::new("segment_edition").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
             ui.label("Longueur");
             ui.label(modele::unite::unite().afficher(longueur.round()));
@@ -762,11 +748,6 @@ impl Application {
                     ui.label(modele::unite::unite().afficher(rayon.round()));
                     redresser = ui.small_button("Rendre droit").on_hover_text("Remplacer cet arc par un segment droit").clicked();
                 });
-                ui.end_row();
-            }
-            if let Some(actuel) = &trait_actuel {
-                ui.label("Type de trait");
-                choix_trait = crate::outils::annoter::types_traits::choix_type_trait(ui, "trait_segment_edition", Some(actuel), &types);
                 ui.end_row();
             }
             if let (Some(d), Some((cs, k))) = (&dalle, arete) {

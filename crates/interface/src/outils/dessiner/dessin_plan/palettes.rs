@@ -1,4 +1,5 @@
-//! Emplacements de la palette de création du terrain : type, puis cote NGF des points.
+//! Emplacements de la palette de création pour les tracés : terrain (type, cote NGF) et
+//! polyligne (type de trait).
 use super::*;
 
 impl Application {
@@ -25,5 +26,17 @@ impl Application {
             ui.add(egui::DragValue::new(&mut self.dessin2d.terrain_altitude).speed(10.0).dimensions());
             ui.end_row();
         });
+    }
+
+    /// Polyligne : type de trait des segments de la polyligne créée (chaque segment se change
+    /// ensuite dans Modifier).
+    pub(crate) fn selecteur_trait_creation(&mut self, ui: &mut egui::Ui) {
+        let Some((projet, _)) = &self.natif else { return };
+        if !projet.types_traits.iter().any(|t| t.id == self.dessin2d.trait_creation) {
+            self.dessin2d.trait_creation.clear();
+        }
+        if let Some(id) = crate::outils::annoter::types_traits::selecteur_type_trait(ui, Some(&self.dessin2d.trait_creation), projet, "Polyligne") {
+            self.dessin2d.trait_creation = id;
+        }
     }
 }

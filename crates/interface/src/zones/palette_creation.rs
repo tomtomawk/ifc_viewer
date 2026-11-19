@@ -76,6 +76,9 @@ pub(crate) fn definition(outil: Outil) -> Definition {
         VuePlan => palette(ANNOTER, selecteur_plan, None, Propres(parametres_plan), true),
         Texte => palette(ANNOTER, selecteur_texte, None, Propres(Application::parametres_texte), true),
         Etiquette => palette(ANNOTER, selecteur_etiquette, None, Propres(Application::parametres_etiquette), true),
+        Polyligne => palette(ANNOTER, Application::selecteur_trait_creation, None, Aucun, true),
+        Spline => palette(ANNOTER, selecteur_spline, None, Aucun, true),
+        Cercle => palette(ANNOTER, selecteur_cercle, None, Aucun, true),
         Zone => palette(ANNOTER, selecteur_zone, None, Propres(Application::parametres_zone), true),
         Cote => palette(ANNOTER, selecteur_cote, None, Champs, true),
         CoteAngulaire => palette(ANNOTER, selecteur_cote_angulaire, None, Champs, true),
@@ -84,7 +87,7 @@ pub(crate) fn definition(outil: Outil) -> Definition {
         Symbole => palette(ANNOTER, selecteur_symbole, None, Champs, true),
         Legende => palette(ANNOTER, selecteur_legende, None, Champs, true),
         Deplacer | Copier | Tourner | Ajuster => Definition::Parametres,
-        Symetrie | Reseau | Echelle | Decaler | Scinder | Demolir | Reproduire | ChangerHote | Inverser | Aligner | ModifierContour | CopierNiveau | Jonctions | AttacherToiture | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | MasquerVue | Afficher | Verrouiller | Deverrouiller | Arc | Polyligne | Rectangle | Spline | Cercle | Feuilles | Nomenclatures | LienIfc => Definition::Aucune,
+        Symetrie | Reseau | Echelle | Decaler | Scinder | Demolir | Reproduire | ChangerHote | Inverser | Aligner | ModifierContour | CopierNiveau | Jonctions | AttacherToiture | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | MasquerVue | Afficher | Verrouiller | Deverrouiller | Arc | Rectangle | Feuilles | Nomenclatures | LienIfc => Definition::Aucune,
     }
 }
 
@@ -112,6 +115,8 @@ selecteurs_generiques! {
     selecteur_texte => "Texte",
     selecteur_etiquette => "Étiquette",
     selecteur_zone => "Zone remplie",
+    selecteur_spline => "Spline",
+    selecteur_cercle => "Cercle",
     selecteur_cote => "Cote",
     selecteur_cote_angulaire => "Cote angulaire",
     selecteur_cote_diametre => "Cote de diamètre",

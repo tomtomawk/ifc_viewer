@@ -9,13 +9,53 @@ use modele::documentation::{AnnotationForme, TypeTrait};
 /// Aperçu d'un type de trait dans `r` : épaisseur et tirets à l'échelle de l'écran
 /// (1 mm du papier ≈ 4 points).
 pub(crate) fn apercu_trait(ui: &egui::Ui, r: egui::Rect, t: &TypeTrait) {
-    let couleur = ui.visuals().text_color();
+    apercu_trait_peintre(ui.painter(), r, ui.visuals().text_color(), t);
+}
+
+fn apercu_trait_peintre(p: &egui::Painter, r: egui::Rect, couleur: egui::Color32, t: &TypeTrait) {
     let trait_ = egui::Stroke::new((t.epaisseur as f32 * 4.0).clamp(0.6, 6.0), couleur);
     let (a, b) = (DVec2::new(r.left() as f64, r.center().y as f64), DVec2::new(r.right() as f64, r.center().y as f64));
     let mut phase = 0.0;
-    for [p, q] in t.decouper(a, b, 4.0, &mut phase) {
-        ui.painter().line_segment([egui::pos2(p.x as f32, p.y as f32), egui::pos2(q.x as f32, q.y as f32)], trait_);
+    for [p0, q] in t.decouper(a, b, 4.0, &mut phase) {
+        p.line_segment([egui::pos2(p0.x as f32, p0.y as f32), egui::pos2(q.x as f32, q.y as f32)], trait_);
     }
+}
+
+/// Sélecteur standard d'un type de trait : en-tête (aperçu, nom, épaisseur) et liste, comme les
+/// sélecteurs de type des autres objets. `actuel` : id du type (vide : continu fin) ; None :
+/// types variés. `objet` : ce dont c'est le trait (« Polyligne », « Polyligne · trait 3 »).
+/// Retourne l'id choisi.
+pub(crate) fn selecteur_type_trait(ui: &mut egui::Ui, actuel: Option<&str>, projet: &Projet, objet: &str) -> Option<String> {
+    use crate::zones::ruban::selecteur;
+    let standard = TypeTrait::standard();
+    let types: Vec<&TypeTrait> = if projet.types_traits.is_empty() { vec![&standard] } else { projet.types_traits.iter().collect() };
+    let courant = actuel.map(|id| types.iter().copied().find(|t| t.id == id).unwrap_or(&standard));
+    let titre = format!("{objet} · {}", courant.map_or("Types variés", |t| t.nom.as_str()));
+    let detail = courant.map(|t| format!("{:.2} mm", t.epaisseur));
+    let vignette = |p: &egui::Painter, r: egui::Rect, c: egui::Color32| {
+        if let Some(t) = courant {
+            apercu_trait_peintre(p, r.shrink2(egui::vec2(2.0, 6.0)), c, t);
+        }
+    };
+    let bouton = selecteur::entete(ui, &titre, detail.as_deref(), "Type de trait (épaisseur et tirets en mm du papier)", Some(&vignette));
+    let mut choix = None;
+    let mut gerer = false;
+    let largeur = selecteur::largeur_liste(ui, types.iter().map(|t| t.nom.as_str()), 90.0, 0, 0.0);
+    selecteur::liste(&bouton, largeur, selecteur::HAUTEUR_CADRE + types.len() as f32 * selecteur::HAUTEUR_LIGNE, |ui| {
+        for t in &types {
+            let l = selecteur::Ligne { nom: &t.nom, courant: courant.is_some_and(|c| c.id == t.id), etiquette: None, sous_titre: None, detail: Some(format!("{:.2} mm", t.epaisseur)), actions: &[] };
+            let mut v = |ui: &mut egui::Ui, r: egui::Rect| apercu_trait(ui, egui::Rect::from_center_size(r.center(), egui::vec2(r.width().min(40.0), 16.0)), t);
+            if selecteur::ligne(ui, &l, Some(&mut v)).choisi {
+                choix = Some(t.id.clone());
+                ui.close();
+            }
+        }
+        gerer = selecteur::ligne_ajout(ui, "Gérer les types de trait…");
+    });
+    if gerer {
+        ouvrir_fenetre_types(ui.ctx(), projet);
+    }
+    choix
 }
 
 /// Liste de choix d'un type de trait (id ; vide : continu fin). `actuel` None : varié.
@@ -62,8 +102,8 @@ const FENETRE: &str = "fenetre_types_traits";
 impl Application {
     /// Types de trait des polylignes sélectionnées : un choix pour tous leurs segments,
     /// puis, pour une seule polyligne, un choix par segment. Retourne le projet modifié.
-    pub(crate) fn traits_polylignes(&self, ui: &mut egui::Ui, projet: &Projet, ids: &[String]) -> Option<Projet> {
-        let polylignes: Vec<(&str, Vec<[f64; 2]>, bool, Vec<String>, Vec<f64>)> = projet
+    fn polylignes_de<'a>(projet: &'a Projet, ids: &[String]) -> Vec<(&'a str, Vec<[f64; 2]>, bool, Vec<String>, Vec<f64>)> {
+        projet
             .annotations
             .iter()
             .filter(|a| ids.contains(&a.id))
@@ -71,53 +111,21 @@ impl Application {
                 AnnotationForme::Polyligne { points, fermee, traits, courbures, .. } => Some((a.id.as_str(), points.clone(), *fermee, traits.clone(), courbures.clone())),
                 _ => None,
             })
-            .collect();
-        if polylignes.is_empty() {
-            return None;
-        }
-        // type de chaque segment (vide : continu fin)
-        let tous: Vec<String> = polylignes.iter().flat_map(|(_, pts, f, t, _)| (0..segments_polyligne(pts, *f)).map(move |k| t.get(k).cloned().unwrap_or_default())).collect();
-        let (premier, mixte) = melange(tous.iter().cloned());
-        let mut changement: Option<(Option<usize>, String)> = None;
-        egui::Grid::new("traits_polylignes").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
-            ui.label("Type de trait").on_hover_text("Type de trait de tous les segments (épaisseur et tirets)");
-            if let Some(id) = choix_type_trait(ui, "trait_tous", if mixte { None } else { premier.as_deref() }, &projet.types_traits) {
-                changement = Some((None, id));
-            }
-            ui.end_row();
-        });
-        if let [(_, pts, fermee, traits, courbures)] = polylignes.as_slice() {
-            let n = segments_polyligne(pts, *fermee);
-            egui::CollapsingHeader::new(format!("Segments ({n})")).id_salt("segments_polyligne").default_open(n <= 12).show(ui, |ui| {
-                egui::Grid::new("traits_segments").num_columns(2).striped(true).spacing([10.0, 3.0]).show(ui, |ui| {
-                    for k in 0..n {
-                        let (a, b) = (DVec2::from_array(pts[k]), DVec2::from_array(pts[(k + 1) % pts.len()]));
-                        // segment d'arc : longueur développée
-                        let arc = noyau::forme2d::arc_courbure(a, b, courbures.get(k).copied().unwrap_or(0.0));
-                        let longueur = arc.map_or(a.distance(b), |(_, r, _, s)| r * s.abs());
-                        ui.label(format!("{} · {}{}", k + 1, modele::unite::unite().afficher(longueur.round()), if arc.is_some() { " · arc" } else { "" }))
-                            .on_hover_text("Segment, depuis le premier point de la polyligne ; longueur");
-                        if let Some(id) = choix_type_trait(ui, ("trait_segment", k), Some(traits.get(k).map_or("", |s| s.as_str())), &projet.types_traits) {
-                            changement = Some((Some(k), id));
-                        }
-                        ui.end_row();
-                    }
-                });
-            });
-        }
-        if ui.button("Types de trait…").on_hover_text("Créer ou modifier les types de trait du projet").clicked() {
-            ouvrir_fenetre_types(ui.ctx(), projet);
-        }
-        let (segment, id) = changement?;
+            .collect()
+    }
+
+    /// Projet dont les segments choisis (`segment` : un seul, sinon tous) des polylignes de `ids`
+    /// ont le type de trait `id`.
+    fn avec_trait(projet: &Projet, ids: &[String], segment: Option<usize>, id: &str) -> Projet {
         let mut q = projet.clone();
         for a in q.annotations.iter_mut().filter(|a| ids.contains(&a.id)) {
             if let AnnotationForme::Polyligne { points, fermee, traits, .. } = &mut a.forme {
                 let n = segments_polyligne(points, *fermee);
                 traits.resize(n, String::new());
                 match segment {
-                    Some(k) if k < n => traits[k] = id.clone(),
+                    Some(k) if k < n => traits[k] = id.to_string(),
                     Some(_) => {}
-                    None => traits.iter_mut().for_each(|t| *t = id.clone()),
+                    None => traits.iter_mut().for_each(|t| *t = id.to_string()),
                 }
                 // tout en continu fin : rien à enregistrer
                 if traits.iter().all(String::is_empty) {
@@ -125,7 +133,48 @@ impl Application {
                 }
             }
         }
-        Some(q)
+        q
+    }
+
+    /// Emplacement « sélecteur » d'une sélection de dessins 2D : type de trait de tous les
+    /// segments des polylignes (« Types variés » s'ils diffèrent). `None` : aucune polyligne.
+    /// `Some(projet)` si un type est choisi.
+    pub(crate) fn selecteur_traits_polylignes(&self, ui: &mut egui::Ui, projet: &Projet, ids: &[String]) -> Option<Option<Projet>> {
+        let polylignes = Self::polylignes_de(projet, ids);
+        if polylignes.is_empty() {
+            return None;
+        }
+        let tous: Vec<String> = polylignes.iter().flat_map(|(_, pts, f, t, _)| (0..segments_polyligne(pts, *f)).map(move |k| t.get(k).cloned().unwrap_or_default())).collect();
+        let (premier, mixte) = melange(tous.iter().cloned());
+        let objet = if polylignes.len() > 1 { format!("Polylignes ({})", polylignes.len()) } else { "Polyligne".to_string() };
+        let choix = selecteur_type_trait(ui, if mixte { None } else { premier.as_deref() }, projet, &objet);
+        Some(choix.map(|id| Self::avec_trait(projet, ids, None, &id)))
+    }
+
+    /// Emplacement « schéma » : type de trait de chaque segment d'une polyligne seule.
+    pub(crate) fn segments_polylignes(&self, ui: &mut egui::Ui, projet: &Projet, ids: &[String]) -> Option<Projet> {
+        let polylignes = Self::polylignes_de(projet, ids);
+        let [(_, pts, fermee, traits, courbures)] = polylignes.as_slice() else { return None };
+        let mut changement: Option<(usize, String)> = None;
+        let n = segments_polyligne(pts, *fermee);
+        egui::CollapsingHeader::new(format!("Segments ({n})")).id_salt("segments_polyligne").default_open(n <= 12).show(ui, |ui| {
+            egui::Grid::new("traits_segments").num_columns(2).striped(true).spacing([10.0, 3.0]).show(ui, |ui| {
+                for k in 0..n {
+                    let (a, b) = (DVec2::from_array(pts[k]), DVec2::from_array(pts[(k + 1) % pts.len()]));
+                    // segment d'arc : longueur développée
+                    let arc = noyau::forme2d::arc_courbure(a, b, courbures.get(k).copied().unwrap_or(0.0));
+                    let longueur = arc.map_or(a.distance(b), |(_, r, _, s)| r * s.abs());
+                    ui.label(format!("{} · {}{}", k + 1, modele::unite::unite().afficher(longueur.round()), if arc.is_some() { " · arc" } else { "" }))
+                        .on_hover_text("Segment, depuis le premier point de la polyligne ; longueur");
+                    if let Some(id) = choix_type_trait(ui, ("trait_segment", k), Some(traits.get(k).map_or("", |s| s.as_str())), &projet.types_traits) {
+                        changement = Some((k, id));
+                    }
+                    ui.end_row();
+                }
+            });
+        });
+        let (k, id) = changement?;
+        Some(Self::avec_trait(projet, ids, Some(k), &id))
     }
 
     /// Fenêtre des types de trait du projet : nom, épaisseur, tirets, aperçu.

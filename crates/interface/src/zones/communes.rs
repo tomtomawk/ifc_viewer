@@ -389,7 +389,15 @@ impl Application {
             .collect();
         let total = if formes.len() > 1 { " (total)" } else { "" };
         let mut choix: Option<Option<RemplissageContour>> = None;
-        ui.label(RichText::new(format!("Dessin 2D ({})", formes.len())).strong());
+        // sélecteur : type de trait des polylignes, sinon en-tête générique
+        let trait_choisi = match self.selecteur_traits_polylignes(ui, projet, ids) {
+            Some(choix_trait) => choix_trait,
+            None => {
+                crate::zones::ruban::selecteur::entete_fixe(ui, "Dessin 2D · Générique", "Cet objet n'a pas de type à choisir.");
+                None
+            }
+        };
+        crate::zones::palette_creation::titre_parametres(ui, &format!("Dessin 2D ({})", formes.len()));
         egui::Grid::new("formes_2d").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
             ui.label(format!("Périmètre{total}"));
             // au mm près
@@ -408,12 +416,12 @@ impl Application {
                 ui.end_row();
             }
         });
-        // types de trait des segments des polylignes
-        if let Some(q) = self.traits_polylignes(ui, projet, ids) {
-            ui.separator();
+        // schéma : type de trait de chaque segment d'une polyligne seule
+        let segment_choisi = self.segments_polylignes(ui, projet, ids);
+        ui.separator();
+        if let Some(q) = trait_choisi.or(segment_choisi) {
             return Some(q);
         }
-        ui.separator();
         let choix = choix?;
         let mut p = projet.clone();
         for a in p.annotations.iter_mut().filter(|a| ids.contains(&a.id)) {
