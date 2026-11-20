@@ -155,10 +155,16 @@ pub enum AnnotationForme {
         points: Vec<[f64; 2]>,
         #[serde(default)]
         fermee: bool,
+        /// Type de trait (id d'un type du projet) ; vide : continu fin.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        type_trait: String,
     },
     Cercle {
         centre: [f64; 2],
         rayon: f64,
+        /// Type de trait (id d'un type du projet) ; vide : continu fin.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        type_trait: String,
     },
     Arc {
         points: [[f64; 2]; 3],
@@ -222,8 +228,8 @@ impl AnnotationForme {
         Some(match self {
             Self::Ligne { debut, fin } => F::Ligne([v(debut), v(fin)]),
             Self::Polyligne { points, fermee, courbures, .. } => F::Polyligne { points: points.iter().map(v).collect(), fermee: *fermee, courbures: courbures.clone() },
-            Self::Spline { points, fermee } => F::Spline { points: points.iter().map(v).collect(), fermee: *fermee },
-            Self::Cercle { centre, rayon } => F::Cercle { centre: v(centre), rayon: *rayon },
+            Self::Spline { points, fermee, .. } => F::Spline { points: points.iter().map(v).collect(), fermee: *fermee },
+            Self::Cercle { centre, rayon, .. } => F::Cercle { centre: v(centre), rayon: *rayon },
             Self::Arc { points } => F::Arc(points.map(|p| v(&p))),
             _ => return None,
         })
@@ -236,8 +242,8 @@ impl AnnotationForme {
         match f {
             F::Ligne([d, e]) => Self::Ligne { debut: a(d), fin: a(e) },
             F::Polyligne { points, fermee, courbures } => Self::Polyligne { points: points.iter().map(a).collect(), fermee: *fermee, courbures: courbures.clone(), remplissage: None, traits: Vec::new() },
-            F::Spline { points, fermee } => Self::Spline { points: points.iter().map(a).collect(), fermee: *fermee },
-            F::Cercle { centre, rayon } => Self::Cercle { centre: a(centre), rayon: *rayon },
+            F::Spline { points, fermee } => Self::Spline { points: points.iter().map(a).collect(), fermee: *fermee, type_trait: String::new() },
+            F::Cercle { centre, rayon } => Self::Cercle { centre: a(centre), rayon: *rayon, type_trait: String::new() },
             F::Arc(p) => Self::Arc { points: p.map(|q| q.to_array()) },
         }
     }
@@ -675,6 +681,22 @@ fn primitives_polyligne(p: &Projet, points: &[[f64; 2]], fermee: bool, courbures
     out
 }
 
+/// Traits d'une courbe (spline, cercle) déjà échantillonnée : continue, ou en tirets
+/// reportés d'un tronçon au suivant, selon son type de trait.
+fn primitives_courbe(p: &Projet, lignes: Vec<Vec<DVec2>>, type_trait: &str, echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
+    let t = p.type_trait(type_trait);
+    let style = Style { couleur: [30, 30, 30, 255], epaisseur: t.epaisseur };
+    lignes.into_iter().map(|l| {
+        let forme = if t.tirets.is_empty() {
+            Forme::Polyligne { points: l.iter().map(|q| pt(*q)).collect(), fermee: false }
+        } else {
+            let mut phase = 0.0;
+            Forme::Segments(l.windows(2).flat_map(|w| t.decouper(w[0], w[1], echelle, &mut phase)).map(|[a, b]| [pt(a), pt(b)]).collect())
+        };
+        Primitive { forme, style, role: Role::Annotation, element: None }
+    }).collect()
+}
+
 fn primitives_forme_dessin(p: &Projet, forme: &AnnotationForme, echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
     match forme {
         AnnotationForme::Ligne { debut, fin } => vec![ligne(pt(DVec2::from_array(*debut)), pt(DVec2::from_array(*fin)))],
@@ -692,6 +714,9 @@ fn primitives_forme_dessin(p: &Projet, forme: &AnnotationForme, echelle: f64, pt
             role: Role::Annotation,
             element: None,
         }],
+        AnnotationForme::Spline { type_trait, .. } | AnnotationForme::Cercle { type_trait, .. } => {
+            primitives_courbe(p, forme.forme_2d().map(|f| f.polylignes()).unwrap_or_default(), type_trait, echelle, pt)
+        }
         _ => forme.forme_2d().into_iter().flat_map(|f| f.polylignes()).map(|l| Primitive {
             forme: Forme::Polyligne { points: l.into_iter().map(pt).collect(), fermee: false },
             style: Style { couleur: [30, 30, 30, 255], epaisseur: 0.18 },

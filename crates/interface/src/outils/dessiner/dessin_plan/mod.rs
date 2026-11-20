@@ -36,7 +36,7 @@ pub(crate) fn points_forme_mut(forme: &mut AnnotationForme) -> Vec<&mut [f64; 2]
 
 /// Positions des poignées d'une annotation, y compris les points calculés.
 pub(crate) fn poignees_forme(forme: &AnnotationForme) -> Vec<[f64; 2]> {
-    if let AnnotationForme::Cercle { centre, rayon } = forme {
+    if let AnnotationForme::Cercle { centre, rayon, .. } = forme {
         return vec![*centre, [centre[0] + rayon, centre[1]]];
     }
     let mut copie = forme.clone();
@@ -45,7 +45,7 @@ pub(crate) fn poignees_forme(forme: &AnnotationForme) -> Vec<[f64; 2]> {
 
 /// Déplace une poignée ; le point de rayon ne déplace pas le centre du cercle.
 pub(crate) fn deplacer_poignee_forme(forme: &mut AnnotationForme, indice: usize, position: [f64; 2]) {
-    if let AnnotationForme::Cercle { centre, rayon } = forme && indice == 1 {
+    if let AnnotationForme::Cercle { centre, rayon, .. } = forme && indice == 1 {
         let r = DVec2::from_array(*centre).distance(DVec2::from_array(position));
         if r.is_finite() && r > 1e-6 { *rayon = r; }
     } else if let Some(point) = points_forme_mut(forme).into_iter().nth(indice) {
@@ -58,14 +58,14 @@ mod tests_poignees_formes {
     use super::*;
     #[test]
     fn cercle_deplace_centre_et_rayon_independamment() {
-        let mut forme = AnnotationForme::Cercle { centre: [10.0, 20.0], rayon: 5.0 };
+        let mut forme = AnnotationForme::Cercle { centre: [10.0, 20.0], rayon: 5.0, type_trait: String::new() };
         assert_eq!(poignees_forme(&forme), vec![[10.0, 20.0], [15.0, 20.0]]);
         deplacer_poignee_forme(&mut forme, 1, [10.0, 32.0]);
-        assert_eq!(forme, AnnotationForme::Cercle { centre: [10.0, 20.0], rayon: 12.0 });
+        assert_eq!(forme, AnnotationForme::Cercle { centre: [10.0, 20.0], rayon: 12.0, type_trait: String::new() });
         deplacer_poignee_forme(&mut forme, 1, [10.0, 20.0]);
-        assert_eq!(forme, AnnotationForme::Cercle { centre: [10.0, 20.0], rayon: 12.0 });
+        assert_eq!(forme, AnnotationForme::Cercle { centre: [10.0, 20.0], rayon: 12.0, type_trait: String::new() });
         deplacer_poignee_forme(&mut forme, 0, [30.0, 40.0]);
-        assert_eq!(forme, AnnotationForme::Cercle { centre: [30.0, 40.0], rayon: 12.0 });
+        assert_eq!(forme, AnnotationForme::Cercle { centre: [30.0, 40.0], rayon: 12.0, type_trait: String::new() });
     }
 }
 

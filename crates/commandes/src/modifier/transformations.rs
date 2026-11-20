@@ -191,7 +191,7 @@ impl Transformation for Projet {
                         *p = point_annotation(*p);
                     }
                 }
-                F::Cercle { centre, rayon } => {
+                F::Cercle { centre, rayon, .. } => {
                     *centre = point_annotation(*centre);
                     *rayon *= f.rapport();
                 }

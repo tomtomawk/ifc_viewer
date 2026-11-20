@@ -775,9 +775,14 @@ Collections v0 ajoutées : `quadrillages`, `annotations`, `feuilles`, `nomenclat
 Tables facultatives : `attaches_toitures` (id du mur/assemblage → id de toiture),
 `priorites_jonction` (id du mur/couche → entier). Les annotations appartiennent à une
 vue ; leurs formes : `texte`, `ligne`, `polyligne` (`points`, `fermee`, `courbures`), `spline`
-(`points` de passage, `fermee`), `cercle` (`centre`, `rayon`), `arc` (`points` :
+(`points` de passage, `fermee`, `type_trait`), `cercle` (`centre`, `rayon`, `type_trait`), `arc` (`points` :
 départ, passage, fin), `zone`, `cote`, `etiquette`, en mm dans le repère 2D de la vue ; les positions et tailles des feuilles sont en mm papier. Aucun historique
 Undo/Redo n'est sérialisé dans le projet.
+
+`type_trait` d'une spline ou d'un cercle (champ ajouté le 20/11/2026, facultatif : les
+fichiers existants restent valides) : identifiant d'un type de trait du projet, absent pour
+le continu fin ; un identifiant inconnu est refusé. Il se choisit à la création (outils
+Spline et Cercle, comme la polyligne) et sur la sélection.
 
 `courbures` d'une polyligne (changement de format : champ nouveau, absent des fichiers
 antérieurs, qui restent lisibles) : une valeur par segment, le segment `k` allant du

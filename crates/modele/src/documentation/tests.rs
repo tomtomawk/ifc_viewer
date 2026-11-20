@@ -136,3 +136,31 @@ fn methode_de_cotation_commune() {
     // ancien nom sérialisé de l'éditeur de familles
     assert_eq!(serde_json::from_str::<GenreCote>("\"angle\"").unwrap(), GenreCote::Angulaire);
 }
+
+/// Spline et cercle portent un type de trait : écrit seulement s'il est donné, rendu en
+/// tirets, refusé s'il n'existe pas dans le projet.
+#[test]
+fn type_de_trait_des_splines_et_cercles() {
+    use noyau::trace2d::Forme;
+    let mut p = Projet::nouveau("Traits");
+    p.types_traits = types_traits_standard();
+    let tirets = p.types_traits.iter().find(|t| !t.tirets.is_empty()).unwrap().id.clone();
+    let cercle = AnnotationForme::Cercle { centre: [0.0, 0.0], rayon: 1000.0, type_trait: tirets.clone() };
+    let spline = AnnotationForme::Spline { points: vec![[0.0, 0.0], [1000.0, 500.0], [2000.0, 0.0]], fermee: false, type_trait: String::new() };
+    // continu : une polyligne ; tirets : des segments
+    let pt = |q: DVec2| q.extend(0.0);
+    assert!(matches!(primitives_dessin(&p, &cercle, 100.0, &pt)[0].forme, Forme::Segments(_)));
+    assert!(matches!(primitives_dessin(&p, &spline, 100.0, &pt)[0].forme, Forme::Polyligne { .. }));
+    // écriture : champ omis quand il est vide, relu tel quel
+    let json = serde_json::to_string(&spline).unwrap();
+    assert!(!json.contains("type_trait"));
+    let relu: AnnotationForme = serde_json::from_str(&serde_json::to_string(&cercle).unwrap()).unwrap();
+    assert_eq!(relu, cercle);
+    // validation : type absent refusé
+    p.niveaux.push(crate::Niveau { id: "rdc".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
+    let vue = p.ajouter_vue_plan("rdc", 1200.0).unwrap();
+    p.annotations.push(Annotation { id: "c".into(), vue, hauteur: 2.5, forme: cercle });
+    p.verifier().unwrap();
+    if let AnnotationForme::Cercle { type_trait, .. } = &mut p.annotations[0].forme { *type_trait = "absent".into(); }
+    assert!(p.verifier().is_err());
+}

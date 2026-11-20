@@ -375,11 +375,11 @@ fn parametres_annotation(a: &mut Application, ui: &mut egui::Ui, id: &str) {
                         courbures.resize(F::segments_polyligne(points.len(), *fermee), 0.0);
                     }
                 }
-                F::Spline { points, fermee } => {
+                F::Spline { points, fermee, .. } => {
                     ui.label(format!("{} points", points.len()));
                     change |= ui.checkbox(fermee, "Fermée").changed();
                 }
-                F::Cercle { centre, rayon } => {
+                F::Cercle { centre, rayon, .. } => {
                     ui.horizontal(|ui| {
                         ui.label("Centre");
                         for x in centre.iter_mut() {

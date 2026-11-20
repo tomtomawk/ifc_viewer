@@ -87,7 +87,7 @@ fn inserer_sommet(e: &mut Element2DFamille, i: usize) {
 fn supprimer_sommet(e: &mut Element2DFamille, i: usize) -> bool {
     let (points, minimum, courbures, traits) = match &mut e.forme {
         AnnotationForme::Polyligne { points, fermee, courbures, traits, .. } => { let m = if *fermee { 3 } else { 2 }; (points, m, Some(courbures), Some(traits)) }
-        AnnotationForme::Spline { points, fermee } => { let m = if *fermee { 3 } else { 2 }; (points, m, None, None) }
+        AnnotationForme::Spline { points, fermee, .. } => { let m = if *fermee { 3 } else { 2 }; (points, m, None, None) }
         _ => return false,
     };
     if i >= e.ancrage.len() || e.ancrage.len() <= minimum { return false; }

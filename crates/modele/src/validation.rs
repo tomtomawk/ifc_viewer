@@ -296,7 +296,7 @@ impl Projet {
                 F::Ligne { debut, fin } => point(debut) && point(fin) && debut != fin,
                 F::Zone { contour } => creation::contour_valide(contour).is_ok(),
                 F::Polyligne { points, .. } | F::Spline { points, .. } => points.len() >= 2 && points.iter().all(point),
-                F::Cercle { centre, rayon } => point(centre) && rayon.is_finite() && *rayon > 0.0,
+                F::Cercle { centre, rayon, .. } => point(centre) && rayon.is_finite() && *rayon > 0.0,
                 F::Arc { points } => points.iter().all(point) && noyau::forme2d::arc_3_points(points[0].into(), points[1].into(), points[2].into()).is_some(),
                 F::Cote {
                     debut,
@@ -329,6 +329,11 @@ impl Projet {
                 if let Some(t) = traits.iter().find(|t| !t.is_empty() && !self.types_traits.iter().any(|x| &x.id == *t)) {
                     return Err(format!("Polyligne : type de trait « {t} » absent."));
                 }
+            }
+            if let F::Spline { type_trait: t, .. } | F::Cercle { type_trait: t, .. } = &a.forme
+                && !t.is_empty() && !self.types_traits.iter().any(|x| &x.id == t)
+            {
+                return Err(format!("Spline ou cercle : type de trait « {t} » absent."));
             }
             if let F::Polyligne { fermee, remplissage: Some(r), .. } = &a.forme {
                 use crate::documentation::RemplissageContour;

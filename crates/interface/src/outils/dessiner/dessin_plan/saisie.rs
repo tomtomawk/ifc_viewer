@@ -132,11 +132,9 @@ impl Application {
         let mut crees = 0;
         for f in formes {
             let mut forme = AnnotationForme::depuis_forme_2d(&f);
-            // polyligne : type de trait choisi à la création, pour tous ses segments
-            if let AnnotationForme::Polyligne { points, fermee, traits, .. } = &mut forme
-                && !self.dessin2d.trait_creation.is_empty()
-            {
-                *traits = vec![self.dessin2d.trait_creation.clone(); crate::outils::annoter::types_traits::segments_polyligne(points, *fermee)];
+            // polyligne, spline, cercle : type de trait choisi à la création (tous les segments)
+            if !self.dessin2d.trait_creation.is_empty() {
+                crate::outils::annoter::types_traits::definir_trait(&mut forme, None, &self.dessin2d.trait_creation.clone());
             }
             let annotation = Annotation { id: String::new(), vue: vue.clone(), hauteur: 2.5, forme };
             match self.executer_bim(Commande::Annoter { annotation }) {

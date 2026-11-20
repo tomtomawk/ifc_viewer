@@ -78,14 +78,15 @@ pub(super) fn peindre_segment(painter: &egui::Painter, ed: &EditeurFamille, cadr
     }
 }
 
-/// Propriétés : type de trait de création (Polyligne, Rectangle), ou des polylignes
-/// sélectionnées et de leurs segments.
+/// Propriétés : type de trait de création (Polyligne, Rectangle, Spline, Cercle), ou des
+/// tracés sélectionnés (polylignes, splines, cercles) et des segments d'une polyligne.
 pub(super) fn proprietes_traits(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele::Projet) {
-    if matches!(ed.outil, OutilFamille::Ligne | OutilFamille::Rectangle) {
+    if matches!(ed.outil, OutilFamille::Ligne | OutilFamille::Rectangle | OutilFamille::Spline | OutilFamille::Cercle) {
         if !projet.types_traits.iter().any(|t| t.id == ed.trait_creation) {
             ed.trait_creation.clear();
         }
-        if let Some(id) = selecteur_type_trait(ui, Some(&ed.trait_creation), projet, "Polyligne") {
+        let objet = match ed.outil { OutilFamille::Spline => "Spline", OutilFamille::Cercle => "Cercle", _ => "Polyligne" };
+        if let Some(id) = selecteur_type_trait(ui, Some(&ed.trait_creation), projet, objet) {
             ed.trait_creation = id;
         }
         ui.separator();
@@ -101,7 +102,7 @@ pub(super) fn proprietes_traits(ui: &mut egui::Ui, ed: &mut EditeurFamille, proj
             SelectionFamille::Element2D(k) => Some(k),
             _ => None,
         })
-        .filter(|k| matches!(ed.famille.elements_2d.get(*k).map(|e| &e.forme), Some(AnnotationForme::Polyligne { .. })))
+        .filter(|k| ed.famille.elements_2d.get(*k).is_some_and(|e| crate::outils::annoter::types_traits::a_un_trait(&e.forme)))
         .collect();
     if indices.is_empty() {
         return;
@@ -112,7 +113,9 @@ pub(super) fn proprietes_traits(ui: &mut egui::Ui, ed: &mut EditeurFamille, proj
         Some(i) => (Some(tous.get(i).cloned().unwrap_or_default()), format!("Polyligne · trait {}", i + 1)),
         None => {
             let (premier, mixte) = crate::zones::communes::melange(tous.iter().cloned());
-            let objet = if indices.len() > 1 { format!("Polylignes ({})", indices.len()) } else { "Polyligne".to_string() };
+            let objet = if indices.len() > 1 { format!("Tracés ({})", indices.len()) } else {
+                match ed.famille.elements_2d[indices[0]].forme { AnnotationForme::Spline { .. } => "Spline", AnnotationForme::Cercle { .. } => "Cercle", _ => "Polyligne" }.to_string()
+            };
             ((!mixte).then(|| premier.unwrap_or_default()), objet)
         }
     };

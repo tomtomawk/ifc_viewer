@@ -33,14 +33,19 @@ impl Application {
         });
     }
 
-    /// Polyligne : type de trait des segments de la polyligne créée (chaque segment se change
-    /// ensuite dans Modifier).
+    /// Polyligne, spline, cercle : type de trait du tracé créé (chaque segment d'une
+    /// polyligne se change ensuite dans Modifier).
     pub(crate) fn selecteur_trait_creation(&mut self, ui: &mut egui::Ui) {
         let Some((projet, _)) = &self.natif else { return };
         if !projet.types_traits.iter().any(|t| t.id == self.dessin2d.trait_creation) {
             self.dessin2d.trait_creation.clear();
         }
-        if let Some(id) = crate::outils::annoter::types_traits::selecteur_type_trait(ui, Some(&self.dessin2d.trait_creation), projet, "Polyligne") {
+        let objet = match self.ruban_edition.outil() {
+            Some(crate::zones::ruban::Outil::Spline) => "Spline",
+            Some(crate::zones::ruban::Outil::Cercle) => "Cercle",
+            _ => "Polyligne",
+        };
+        if let Some(id) = crate::outils::annoter::types_traits::selecteur_type_trait(ui, Some(&self.dessin2d.trait_creation), projet, objet) {
             self.dessin2d.trait_creation = id;
         }
     }

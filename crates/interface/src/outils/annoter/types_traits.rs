@@ -101,13 +101,24 @@ pub(crate) fn segments_polyligne(points: &[[f64; 2]], fermee: bool) -> usize {
 pub(crate) fn traits_segments(forme: &AnnotationForme) -> Vec<String> {
     match forme {
         AnnotationForme::Polyligne { points, fermee, traits, .. } => (0..segments_polyligne(points, *fermee)).map(|k| traits.get(k).cloned().unwrap_or_default()).collect(),
+        // spline, cercle : un seul type pour toute la courbe
+        AnnotationForme::Spline { type_trait, .. } | AnnotationForme::Cercle { type_trait, .. } => vec![type_trait.clone()],
         _ => Vec::new(),
     }
 }
 
-/// Donne le type `id` à un segment (`segment`) ou à tous ceux d'une polyligne ; projet et
-/// familles. Tout en continu fin : rien d'enregistré.
+/// Forme qui porte un type de trait : polyligne, spline, cercle.
+pub(crate) fn a_un_trait(forme: &AnnotationForme) -> bool {
+    matches!(forme, AnnotationForme::Polyligne { .. } | AnnotationForme::Spline { .. } | AnnotationForme::Cercle { .. })
+}
+
+/// Donne le type `id` à un segment (`segment`) ou à tous ceux d'une polyligne, ou à une
+/// spline ou un cercle entier ; projet et familles. Tout en continu fin : rien d'enregistré.
 pub(crate) fn definir_trait(forme: &mut AnnotationForme, segment: Option<usize>, id: &str) {
+    if let AnnotationForme::Spline { type_trait, .. } | AnnotationForme::Cercle { type_trait, .. } = forme {
+        if segment.is_none_or(|k| k == 0) { *type_trait = id.to_string(); }
+        return;
+    }
     let AnnotationForme::Polyligne { points, fermee, traits, .. } = forme else { return };
     let n = segments_polyligne(points, *fermee);
     traits.resize(n, String::new());
@@ -147,16 +158,22 @@ impl Application {
     }
 
     /// Emplacement « sélecteur » d'une sélection de dessins 2D : type de trait de tous les
-    /// segments des polylignes (« Types variés » s'ils diffèrent). `None` : aucune polyligne.
+    /// segments des polylignes, des splines et des cercles (« Types variés » s'ils
+    /// diffèrent). `None` : aucun de ces tracés.
     /// `Some(projet)` si un type est choisi.
     pub(crate) fn selecteur_traits_polylignes(&self, ui: &mut egui::Ui, projet: &Projet, ids: &[String]) -> Option<Option<Projet>> {
-        let polylignes = Self::polylignes_de(projet, ids);
-        if polylignes.is_empty() {
+        let traces: Vec<&AnnotationForme> = projet.annotations.iter().filter(|a| ids.contains(&a.id) && a_un_trait(&a.forme)).map(|a| &a.forme).collect();
+        if traces.is_empty() {
             return None;
         }
-        let tous: Vec<String> = projet.annotations.iter().filter(|a| ids.contains(&a.id)).flat_map(|a| traits_segments(&a.forme)).collect();
+        let tous: Vec<String> = traces.iter().flat_map(|f| traits_segments(f)).collect();
         let (premier, mixte) = melange(tous.iter().cloned());
-        let objet = if polylignes.len() > 1 { format!("Polylignes ({})", polylignes.len()) } else { "Polyligne".to_string() };
+        let nom = |f: &AnnotationForme| match f { AnnotationForme::Spline { .. } => "Spline", AnnotationForme::Cercle { .. } => "Cercle", _ => "Polyligne" };
+        let objet = match traces.as_slice() {
+            [f] => nom(f).to_string(),
+            [f, reste @ ..] if reste.iter().all(|g| nom(g) == nom(f)) => format!("{}s ({})", nom(f), traces.len()),
+            _ => format!("Tracés ({})", traces.len()),
+        };
         let choix = selecteur_type_trait(ui, if mixte { None } else { premier.as_deref() }, projet, &objet);
         Some(choix.map(|id| Self::avec_trait(projet, ids, None, &id)))
     }
